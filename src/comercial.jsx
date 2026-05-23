@@ -336,16 +336,16 @@ function CotacoesPage({ setRoute, setSubsel }) {
           <p className="page-head__sub">Solicitações enviadas aos fornecedores chineses. Link público é gerado para a fábrica preencher SEM autenticação.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="link2">Link público</Button>
-          <Button variant="primary" icon="plus">Nova Cotação</Button>
+          <Button variant="outline" icon="link2" onClick={() => window.toast("Link público — próxima fase", "info")}>Link público</Button>
+          <Button variant="primary" icon="plus" onClick={() => window.toast("Nova cotação — próxima fase", "info")}>Nova Cotação</Button>
         </div>
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Em aberto" value="23" sub="aguardando China" delta="+4" deltaDir="up" icon="clock"/>
-        <KPI label="Recebidas" value="8" sub="prontas p/ análise" delta="+2" deltaDir="up" icon="package"/>
-        <KPI label="SLA médio" value="6.2" unit="d" sub="meta 7d" delta="-0.4d" deltaDir="up" icon="trending"/>
-        <KPI label="Variação preço" value="-3.8" unit="%" sub="vs. orçado" delta="-1.2pp" deltaDir="up" icon="dollar"/>
+        <KPI label="Em aberto" value={cotacoes.filter(c => c.status === "Aguardando China").length} sub="aguardando China" icon="clock"/>
+        <KPI label="Recebidas" value={cotacoes.filter(c => c.status === "Recebida").length} sub="prontas p/ análise" icon="package"/>
+        <KPI label="SLA médio" value="—" sub="sem dados suficientes" icon="trending"/>
+        <KPI label="Variação preço" value="—" sub="sem dados suficientes" icon="dollar"/>
       </div>
 
       <div className="tbar">
@@ -441,9 +441,9 @@ function CotacaoDetail({ cot, setRoute }) {
           </div>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="download">PDF</Button>
-          <Button variant="outline" icon="link2">Copiar link público</Button>
-          <Button variant="primary" icon="check">Aprovar</Button>
+          <Button variant="outline" icon="download" onClick={() => window.toast("Geração de PDF — próxima fase", "info")}>PDF</Button>
+          <Button variant="outline" icon="link2" onClick={() => { navigator.clipboard?.writeText(`https://vp.cn/cotacao/${cot.token}`); window.toast("Link copiado!", "success"); }}>Copiar link público</Button>
+          <Button variant="primary" icon="check" onClick={() => window.toast("Aprovação de cotação — próxima fase", "info")}>Aprovar</Button>
         </div>
       </div>
 
@@ -467,6 +467,11 @@ function CotacaoDetail({ cot, setRoute }) {
                 <th className="text-right">Preço unit.</th><th className="text-right">Total</th>
               </tr></thead>
               <tbody>
+                {items.length === 0 && (
+                  <tr><td colSpan={6} style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
+                    Nenhum item cadastrado. {/* TODO: tabela de itens de cotação — fase futura */}
+                  </td></tr>
+                )}
                 {items.map((it) => (
                   <tr key={it.sku}>
                     <td><span className="sku">{it.sku}</span></td>
