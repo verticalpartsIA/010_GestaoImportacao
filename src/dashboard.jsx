@@ -79,10 +79,59 @@ const MOCK_STOCK = [
   { sku: "VP-BI-220",  name: "Barreira Infravermelha 220V",   qty: 3, min: 8, status: "danger"  },
 ];
 
+function ProjectList({ projetos }) {
+  if (!projetos.length) return (
+    <div className="muted" style={{ padding: '24px 0', textAlign: 'center', fontSize: 13 }}>Nenhum projeto cadastrado.</div>
+  );
+  return (
+    <div className="stack" style={{ gap: 0 }}>
+      {projetos.map(p => (
+        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div className="cell-main">{p.name}</div>
+            <div className="cell-sub">{p.client} · <span className="mono">{p.id}</span></div>
+          </div>
+          <Badge variant={p.status === 'Concluído' ? 'success' : 'warning'}>{p.current_phase || p.status || '—'}</Badge>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function ProjectKanban({ projetos }) {
+  const phases = ['Projeto', 'Fabricação', 'Importação', 'Instalação', 'Entrega'];
+  const byPhase = {};
+  phases.forEach(ph => { byPhase[ph] = []; });
+  projetos.forEach(p => {
+    const ph = phases.find(ph => (p.current_phase || '').includes(ph)) || phases[0];
+    byPhase[ph].push(p);
+  });
+  if (!projetos.length) return (
+    <div className="muted" style={{ padding: '24px 0', textAlign: 'center', fontSize: 13 }}>Nenhum projeto cadastrado.</div>
+  );
+  return (
+    <div style={{ display: 'flex', gap: 8, overflowX: 'auto', paddingBottom: 4 }}>
+      {phases.map(ph => (
+        <div key={ph} style={{ minWidth: 130, flex: '0 0 130px' }}>
+          <div style={{ fontSize: 9, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.08em', marginBottom: 8, color: 'var(--fg3)' }}>{ph}</div>
+          {byPhase[ph].map(p => (
+            <div key={p.id} style={{ background: 'var(--bg2)', borderRadius: 4, padding: '8px 10px', marginBottom: 6, fontSize: 12 }}>
+              <div style={{ fontWeight: 600, lineHeight: 1.3, marginBottom: 2 }}>{p.name}</div>
+              <div style={{ color: 'var(--fg3)', fontSize: 11 }}>{p.client}</div>
+            </div>
+          ))}
+          {!byPhase[ph].length && <div style={{ color: 'var(--fg3)', fontSize: 11, padding: '4px 0' }}>—</div>}
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function Dashboard({ role, setRoute }) {
   const D = window.__VP_DATA;
   const [sbData, setSbData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
+  const [projectView, setProjectView] = React.useState('gantt');
 
   React.useEffect(() => {
     if (!window.__VP_SB) { setLoading(false); return; }
@@ -127,9 +176,9 @@ function Dashboard({ role, setRoute }) {
           </p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="calendar">Hoje · {todayBtn}</Button>
-          <Button variant="secondary" icon="download">Relatório</Button>
-          <Button variant="primary" icon="plus">Novo Lead</Button>
+          <Button variant="outline" icon="calendar" onClick={() => window.toast('Filtro de período em breve.', 'info')}>Hoje · {todayBtn}</Button>
+          <Button variant="secondary" icon="download" onClick={() => window.toast('Exportação de relatório em breve.', 'info')}>Relatório</Button>
+          <Button variant="primary" icon="plus" onClick={() => setRoute('leads')}>Novo Lead</Button>
         </div>
       </div>
 
@@ -143,16 +192,18 @@ function Dashboard({ role, setRoute }) {
         <Card title="Projetos em Andamento" sub={projetos.length + " projetos · 5 fases · timeline 200 dias"}
           action={<>
             <div className="seg">
-              <button className="is-active">Gantt</button>
-              <button>Lista</button>
-              <button>Kanban</button>
+              <button className={projectView === 'gantt'  ? 'is-active' : ''} onClick={() => setProjectView('gantt')}>Gantt</button>
+              <button className={projectView === 'lista'  ? 'is-active' : ''} onClick={() => setProjectView('lista')}>Lista</button>
+              <button className={projectView === 'kanban' ? 'is-active' : ''} onClick={() => setProjectView('kanban')}>Kanban</button>
             </div>
-            <Button variant="ghost" size="sm" icon="expand"/>
+            <Button variant="ghost" size="sm" icon="expand" onClick={() => window.toast('Tela cheia em breve.', 'info')}/>
           </>}>
-          <GanttChart projetos={projetos} onClick={() => setRoute("propostas")} today={sbData?.ganttToday ?? 60}/>
+          {projectView === 'gantt'  && <GanttChart projetos={projetos} onClick={() => setRoute("propostas")} today={sbData?.ganttToday ?? 60}/>}
+          {projectView === 'lista'  && <ProjectList projetos={projetos}/>}
+          {projectView === 'kanban' && <ProjectKanban projetos={projetos}/>}
         </Card>
 
-        <Card title="Tarefas de Hoje" sub={tasks.length + " pendentes"} action={<Button variant="ghost" size="sm" icon="plus"/>}>
+        <Card title="Tarefas de Hoje" sub={tasks.length + " pendentes"} action={<Button variant="ghost" size="sm" icon="plus" onClick={() => window.toast('Adicionar tarefa em breve.', 'info')}/>}>
           <div className="stack">
             {tasks.map((t, i) => (
               <div key={i} className="task-row">
@@ -197,7 +248,7 @@ function Dashboard({ role, setRoute }) {
           <NcmDashboardWidget setRoute={setRoute}/>
           <div style={{ height: 16 }}/>
           <Card title="Estoque Crítico" sub="peças com saldo abaixo do mínimo"
-            action={<Button variant="ghost" size="sm" iconRight="arrowRight">Detalhar</Button>}>
+            action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute('compras')}>Detalhar</Button>}>
             <div className="stack">
               {stocks.map((e, i) => <StockRow key={e.sku || i} {...e}/>)}
             </div>

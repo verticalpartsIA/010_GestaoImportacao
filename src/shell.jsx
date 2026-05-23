@@ -139,7 +139,7 @@ function Header({ route, role, setRole, onSearch }) {
         <Icon.bell size={16}/>
         <span className="dot"/>
       </button>
-      <button className="header__btn" data-tip="Ajuda"><Icon.info size={16}/></button>
+      <button className="header__btn" data-tip="Ajuda" onClick={() => window.toast('Central de ajuda em breve.', 'info')}><Icon.info size={16}/></button>
     </header>
   );
 }
