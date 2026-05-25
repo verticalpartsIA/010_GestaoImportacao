@@ -96,7 +96,10 @@
 
     // ---- tarefas no formato esperado pelo Dashboard ----
     const tarefasFmt = tarefas.map(t => ({
-      t: t.title, time: t.due_time, prio: t.priority, module: t.module,
+      t: t.title,
+      time: t.due_time,
+      prio: ({ alta: 'Alta', media: 'Média', baixa: 'Baixa' }[String(t.priority || '').toLowerCase()] || t.priority || 'Média'),
+      module: t.module,
     }));
 
     // ---- métricas derivadas ----
@@ -112,8 +115,8 @@
     const comPend      = comissoes.filter(c => c.status === 'Aguardando').reduce((s, c) => s + (c.comissao || 0), 0);
     const gatProx7     = gatilhos.filter(g => (g.days_left || 0) <= 7);
     const aReceber     = contratos.filter(c => c.status !== 'Assinado').reduce((s, c) => s + (c.value || 0), 0);
-    const ncmPend      = ncm.filter(n => n.status === 'pendente').length;
-    const ncmAnalise   = ncm.filter(n => n.status === 'em_analise').length;
+    const ncmPend      = ncm.filter(n => ['NAO_INICIADO', 'EM_PREENCHIMENTO'].includes(n.status)).length;
+    const ncmAnalise   = ncm.filter(n => n.status === 'AGUARD_JURIDICO').length;
 
     // ---- KPIs por perfil ----
     const kpis = {
