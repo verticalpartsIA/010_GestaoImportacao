@@ -12,8 +12,9 @@ uploads/*.pdf
 # Thumbnail interno do Claude
 .thumbnail
 
-# Node (caso venha a ter build no futuro)
+# Node
 node_modules/
 dist/
 .env
 .env.local
+npm-debug.log*
