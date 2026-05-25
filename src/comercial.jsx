@@ -19,7 +19,7 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
     owner:'', value:'', priority:'Alta', next:'',
   });
   const [equips, setEquips] = React.useState({
-    elevador: { checked: false, qty: 1 },
+    elevador: { checked: false, qty: 1, paradas: 1 },
     escada:   { checked: false, qty: 1 },
     esteira:  { checked: false, qty: 1 },
   });
@@ -48,8 +48,14 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
     const id = 'LD-' + Date.now().toString().slice(-6);
 
     const equipItens = EQUIP_OPTS.filter(o => equips[o.key].checked)
-      .map(o => ({ tipo: o.label, quantidade: equips[o.key].qty }));
-    const equipStr = equipItens.map(i => `${i.quantidade}× ${i.tipo}`).join(', ')
+      .map(o => o.key === 'elevador'
+        ? { tipo: o.label, quantidade: equips[o.key].qty, paradas: equips.elevador.paradas }
+        : { tipo: o.label, quantidade: equips[o.key].qty });
+    const equipStr = equipItens.map(i =>
+      i.paradas !== undefined
+        ? `${i.quantidade}× ${i.tipo} (${i.paradas} paradas)`
+        : `${i.quantidade}× ${i.tipo}`
+    ).join(', ')
       + ` · ${tipoEquip}`
       + (hasElevador ? ` · ${elevSpec.carga}kg ${elevSpec.abertura}` : '');
 
@@ -105,7 +111,11 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
             <div style={{ fontWeight:700, fontSize:15 }}>{savedLead.building}</div>
             <div className="cell-sub" style={{ marginTop:4 }}>{savedLead.id}</div>
             <div className="cell-sub" style={{ marginTop:4 }}>
-              {savedLead.equipItens.map(i => `${i.quantidade}× ${i.tipo}`).join(', ')}
+              {savedLead.equipItens.map(i =>
+                i.paradas !== undefined
+                  ? `${i.quantidade}× ${i.tipo} (${i.paradas} paradas)`
+                  : `${i.quantidade}× ${i.tipo}`
+              ).join(', ')}
               {' · '}{savedLead.tipoEquip}
               {savedLead.elevSpec && ` · ${savedLead.elevSpec.carga}kg · ${savedLead.elevSpec.abertura}`}
             </div>
@@ -152,7 +162,31 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
                 style={{ fontSize:13, fontWeight:500, cursor:'pointer', flex:1 }}>
                 {label}
               </label>
-              {equips[key].checked && (
+
+              {/* Elevador marcado: dois campos com labels */}
+              {key === 'elevador' && equips.elevador.checked && (
+                <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
+                  <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                    <span style={{ fontSize:9, fontWeight:800, letterSpacing:'.07em', textTransform:'uppercase', color:'var(--fg2)', whiteSpace:'nowrap' }}>Qtd. equip.</span>
+                    <input type="number" className="input" min="1" max="99"
+                      value={equips.elevador.qty}
+                      onChange={e => setEquipField('elevador', 'qty', Math.max(1, parseInt(e.target.value) || 1))}
+                      aria-label="Quantidade de Elevadores"
+                      style={{ width:68, textAlign:'center' }}/>
+                  </div>
+                  <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
+                    <span style={{ fontSize:9, fontWeight:800, letterSpacing:'.07em', textTransform:'uppercase', color:'var(--fg2)', whiteSpace:'nowrap' }}>Qtd. paradas</span>
+                    <input type="number" className="input" min="1" max="99"
+                      value={equips.elevador.paradas}
+                      onChange={e => setEquipField('elevador', 'paradas', Math.max(1, parseInt(e.target.value) || 1))}
+                      aria-label="Quantidade de paradas do elevador"
+                      style={{ width:82, textAlign:'center' }}/>
+                  </div>
+                </div>
+              )}
+
+              {/* Outros equipamentos marcados: campo simples */}
+              {key !== 'elevador' && equips[key].checked && (
                 <input type="number" className="input" min="1" max="99"
                   value={equips[key].qty}
                   onChange={e => setEquipField(key, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
