@@ -78,10 +78,10 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
       </div>
       <div className="sidebar__foot">
         <div className="sidebar__user">
-          <div className="avatar">{ROLE_MAP[role].initials}</div>
+          <div className="avatar">{(ROLE_MAP[role] || {}).initials || "VP"}</div>
           <div className="sidebar__user-info">
-            <div className="sidebar__user-name">{ROLE_MAP[role].name}</div>
-            <div className="sidebar__user-role">{ROLE_MAP[role].title}</div>
+            <div className="sidebar__user-name">{(ROLE_MAP[role] || {}).name || "VP Gestão"}</div>
+            <div className="sidebar__user-role">{(ROLE_MAP[role] || {}).title || "Sistema"}</div>
           </div>
           <span className="chev" style={{ color: "var(--vp-gray-500)" }}><Icon.chevUp size={14}/></span>
         </div>

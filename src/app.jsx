@@ -11,18 +11,29 @@ const TWEAK_DEFAULTS = /*EDITMODE-BEGIN*/{
 
 // ---- Error Boundary — captura erros de render e mostra mensagem amigável ----
 class ErrorBoundary extends React.Component {
-  constructor(props) { super(props); this.state = { error: null }; }
+  constructor(props) { super(props); this.state = { error: null, info: null }; }
   static getDerivedStateFromError(err) { return { error: err }; }
+  componentDidCatch(err, info) { this.setState({ error: err, info: info }); }
   render() {
     if (this.state.error) {
+      const stack = this.state.info && this.state.info.componentStack
+        ? this.state.info.componentStack.trim().split('\n').slice(0, 6).join('\n')
+        : '';
       return (
-        <div style={{ padding: 48, textAlign: 'center', fontFamily: 'sans-serif' }}>
-          <div style={{ fontSize: 32, marginBottom: 12 }}>⚠️</div>
-          <div style={{ fontSize: 16, fontWeight: 700, marginBottom: 8 }}>Erro ao carregar o VP Gestão</div>
-          <div style={{ fontSize: 12, color: '#666', marginBottom: 24 }}>{String(this.state.error)}</div>
+        <div style={{ padding: 40, fontFamily: 'monospace', maxWidth: 700, margin: '0 auto' }}>
+          <div style={{ fontSize: 28, marginBottom: 8 }}>⚠️</div>
+          <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 6, fontFamily: 'sans-serif' }}>Erro ao carregar o VP Gestão</div>
+          <div style={{ fontSize: 12, color: '#c00', marginBottom: 16, wordBreak: 'break-all' }}>{String(this.state.error)}</div>
+          {stack ? (
+            <pre style={{ fontSize: 10, color: '#666', background: '#f5f5f5', padding: 12, borderRadius: 4, overflowX: 'auto', marginBottom: 20, whiteSpace: 'pre-wrap' }}>{stack}</pre>
+          ) : null}
+          <button onClick={() => { localStorage.removeItem('vpprd.role'); localStorage.removeItem('vpprd.route'); window.location.reload(); }}
+            style={{ padding: '8px 20px', background: '#f5c400', border: 'none', fontWeight: 700, cursor: 'pointer', marginRight: 8 }}>
+            Limpar cache e recarregar
+          </button>
           <button onClick={() => window.location.reload()}
-            style={{ padding: '8px 20px', background: '#f5c400', border: 'none', fontWeight: 700, cursor: 'pointer' }}>
-            Recarregar
+            style={{ padding: '8px 20px', background: '#eee', border: 'none', fontWeight: 600, cursor: 'pointer' }}>
+            Só recarregar
           </button>
         </div>
       );
