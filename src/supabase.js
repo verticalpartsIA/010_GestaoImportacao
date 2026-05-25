@@ -12,6 +12,43 @@
 
   const sb = window.supabase.createClient(URL_SB, ANON_SB);
 
+  // ---- SSO Guard — acesso exclusivo via vpsistema.com ------------------
+  // O vpsistema.com injeta sso_token + sso_refresh na URL ao abrir o card.
+  // Sem esses tokens E sem sessão Supabase salva → redireciona ao portal.
+  (function ssoGuard() {
+    const params     = new URLSearchParams(window.location.search);
+    const ssoToken   = params.get('sso_token');
+    const ssoRefresh = params.get('sso_refresh');
+
+    // Sessão Supabase salva localmente (retorno após login SSO anterior)
+    const hasLocalSession = Object.keys(localStorage)
+      .some(function (k) { return k.startsWith('sb-') && k.endsWith('-auth-token'); });
+
+    // Flag de aba corrente (sobrevive a reloads da mesma aba)
+    const hasTabFlag = sessionStorage.getItem('vpprd_sso_ok') === '1';
+
+    // Sem token SSO E sem qualquer sessão salva → bloqueia acesso direto
+    if (!ssoToken && !hasLocalSession && !hasTabFlag) {
+      window.location.replace('https://vpsistema.com');
+      return;
+    }
+
+    // Token SSO recebido → troca por sessão Supabase persistente
+    if (ssoToken && ssoRefresh) {
+      sb.auth.setSession({ access_token: ssoToken, refresh_token: ssoRefresh })
+        .then(function () {
+          sessionStorage.setItem('vpprd_sso_ok', '1');
+          // Limpa os params da URL (evita reuso acidental do token)
+          window.history.replaceState({}, '', window.location.pathname);
+        })
+        .catch(function () {
+          // Token inválido/expirado → de volta ao portal
+          sessionStorage.removeItem('vpprd_sso_ok');
+          window.location.replace('https://vpsistema.com');
+        });
+    }
+  }());
+
   // ---- helpers --------------------------------------------------------
 
   function timeAgo(ts) {
