@@ -260,10 +260,10 @@ function NcmKanbanPage({ setRoute, setSubsel }) {
                       : <div className="kanban__card-ncm muted">NCM pendente</div>}
                     <div className="kanban__card-foot">
                       <span className="who">
-                        {s.solicitante ? (
+                        {(s.solicitante || s.responsavel) ? (
                           <>
-                            <div className="avatar sm">{s.solicitante.split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}</div>
-                            {s.solicitante.split(" ")[0]}
+                            <div className="avatar sm">{(s.solicitante || s.responsavel).split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}</div>
+                            {(s.solicitante || s.responsavel).split(" ")[0]}
                           </>
                         ) : <span className="muted" style={{ fontSize: 11 }}>—</span>}
                       </span>

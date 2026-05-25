@@ -115,8 +115,8 @@ function Dashboard({ role, setRoute }) {
   const stocks      = sbData?.estoqueCritico || [];
   const alertasCrit = sbData?.alertasCriticos ?? 0;
 
-  const u         = ROLE_MAP[role];
-  const firstName = u.name.split(" ")[0];
+  const u         = (window.ROLE_MAP || {})[role] || { name: 'VP Gestão', initials: 'VP', title: 'Sistema' };
+  const firstName = (u.name || 'Usuário').split(" ")[0];
   const hour      = new Date().getHours();
   const greet     = hour < 12 ? "Bom dia" : hour < 18 ? "Boa tarde" : "Boa noite";
 
