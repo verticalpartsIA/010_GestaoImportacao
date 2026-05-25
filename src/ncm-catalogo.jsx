@@ -17,7 +17,9 @@ function ModalNovoProduto({ onClose, onSaved }) {
   const save = async () => {
     if (!f.produto.trim()) return window.toast('Denominação é obrigatória.', 'warning');
     setSaving(true);
+    const id = 'NCM-' + Date.now().toString().slice(-6);
     const { error } = await window.__VP_SB.sb.from('ncm_solicitacoes').insert({
+      id,
       produto: f.produto,
       ncm_atual: f.ncm_atual || null,
       ncm_sugerido: f.ncm_sugerido || null,

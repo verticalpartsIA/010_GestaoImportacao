@@ -12,9 +12,11 @@ function ModalNovoGatilho({ onClose, onSaved }) {
     if (!f.building.trim()) return window.toast('Prédio é obrigatório.', 'warning');
     if (!f.due_date) return window.toast('Data de vencimento é obrigatória.', 'warning');
     setSaving(true);
+    const id = 'GT-' + Date.now().toString().slice(-6);
     const { error } = await window.__VP_SB.sb.from('gatilhos').insert({
-      projeto: f.projeto || null, building: f.building,
-      trigger: f.trigger || 'Pagamento',
+      id,
+      project_id: f.projeto || null, building: f.building,
+      trigger_name: f.trigger || 'Pagamento',
       value: f.value ? parseFloat(f.value) : null,
       due_date: f.due_date, status: f.status,
       reverse_from: f.reverse_from || null, chain: [],
@@ -292,13 +294,109 @@ function ComissoesPage() {
 
 /* ---------- NOTIFICAÇÕES ---------- */
 function NotificacoesPage({ setRoute }) {
-  // TODO: conectar Supabase — tabela de notificações não mapeada ainda
+  const [notifications, setNotifications] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
   const [filter, setFilter] = React.useState("Todas");
+  const [moduleFilter, setModuleFilter] = React.useState("Todos");
+  const [prefsOpen, setPrefsOpen] = React.useState(false);
+  const [details, setDetails] = React.useState(null);
+  const [readIds, setReadIds] = React.useState(() => {
+    try { return JSON.parse(localStorage.getItem('vpprd.notificacoes.lidas') || '[]'); }
+    catch (e) { return []; }
+  });
   const filters = ["Todas", "Não lidas", "Menções", "Aprovações"];
-  const notifications = [];
-  const groups = {};
 
   const ICON_MAP = { "user-plus": "users", "check": "check", "ship": "ship", "mail": "mail", "at-sign": "at", "dollar": "dollar", "calendar": "calendar" };
+  const routeByModule = {
+    "Importação": "importacao",
+    "Jurídico": "juridico",
+    "Financeiro": "financeiro",
+    "Engenharia": "engenharia",
+    "Cotações": "cotacoes",
+    "Propostas": "propostas",
+    "Comissões": "comissoes",
+  };
+  const timeAgo = (ts) => {
+    if (!ts) return '—';
+    const diff = Date.now() - new Date(ts).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 2) return 'agora';
+    if (mins < 60) return `há ${mins}min`;
+    const h = Math.floor(mins / 60);
+    if (h < 24) return `há ${h}h`;
+    const d = Math.floor(h / 24);
+    if (d === 1) return 'ontem';
+    return `há ${d}d`;
+  };
+  const groupLabel = (n) => {
+    if ((n.time || '').includes('agora') || (n.time || '').includes('min') || (n.time || '').includes('h')) return 'Hoje';
+    if ((n.time || '') === 'ontem') return 'Ontem';
+    return 'Anteriores';
+  };
+  const iconByModule = (module) => ({
+    "Importação": "ship",
+    "Jurídico": "fileText",
+    "Financeiro": "dollar",
+    "Engenharia": "ruler",
+    "Cotações": "mail",
+    "Propostas": "proposal",
+    "Comissões": "award",
+  })[module] || "bell";
+
+  const persistReadIds = (ids) => {
+    setReadIds(ids);
+    localStorage.setItem('vpprd.notificacoes.lidas', JSON.stringify(ids));
+  };
+  const markRead = (id) => {
+    if (!readIds.includes(id)) persistReadIds([...readIds, id]);
+  };
+
+  React.useEffect(() => {
+    setLoading(true);
+    window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (error) {
+          window.toast('Erro ao carregar notificações: ' + error.message, 'error');
+          setNotifications([]);
+        } else {
+          setNotifications((data || []).map(a => ({
+            id: a.id,
+            title: a.title,
+            sub: a.sub,
+            time: timeAgo(a.created_at),
+            icon: iconByModule(a.module),
+            unread: !readIds.includes(a.id),
+            module: a.module || 'Sistema',
+            level: a.level,
+          })));
+        }
+        setLoading(false);
+      });
+  }, [readIds.join('|')]);
+
+  const modules = ["Todos", ...Array.from(new Set(notifications.map(n => n.module))).sort()];
+  const rows = notifications.filter(n => {
+    if (filter === "Não lidas" && !n.unread) return false;
+    if (filter === "Menções" && !String(n.title || '').includes('@')) return false;
+    if (filter === "Aprovações" && !/aprova|assinatura|confirm/i.test(String(n.title || ''))) return false;
+    if (moduleFilter !== "Todos" && n.module !== moduleFilter) return false;
+    return true;
+  });
+  const groups = rows.reduce((acc, n) => {
+    const key = groupLabel(n);
+    acc[key] = acc[key] || [];
+    acc[key].push(n);
+    return acc;
+  }, {});
+  const markAllRead = () => {
+    persistReadIds(Array.from(new Set([...readIds, ...notifications.map(n => n.id)])));
+    window.toast("Notificações marcadas como lidas", "success");
+  };
+  const openNotification = (n) => {
+    markRead(n.id);
+    const target = routeByModule[n.module] || "dashboard";
+    setRoute(target);
+  };
 
   return (
     <div className="page fade-in">
@@ -309,8 +407,8 @@ function NotificacoesPage({ setRoute }) {
           <p className="page-head__sub">Agrupadas por módulo · respostas rápidas inline</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="settings" onClick={() => window.open('mailto:ti@verticalparts.com.br?subject=Preferências%20de%20Notificação%20VP%20PRD', '_blank')}>Preferências</Button>
-          <Button variant="primary" icon="check" onClick={() => window.toast("Notificações marcadas como lidas", "success")}>Marcar todas como lidas</Button>
+          <Button variant="outline" icon="settings" onClick={() => setPrefsOpen(true)}>Preferências</Button>
+          <Button variant="primary" icon="check" onClick={markAllRead}>Marcar todas como lidas</Button>
         </div>
       </div>
 
@@ -319,11 +417,18 @@ function NotificacoesPage({ setRoute }) {
           {filters.map(f => <button key={f} className={filter === f ? "is-active" : ""} onClick={() => setFilter(f)}>{f}</button>)}
         </div>
         <div className="spacer"/>
-        <Button variant="outline" size="sm" icon="filter">Por módulo</Button>
+        <select className="input" style={{ width: 180, height: 30, fontSize: 12 }} value={moduleFilter} onChange={(e) => setModuleFilter(e.target.value)}>
+          {modules.map(m => <option key={m}>{m}</option>)}
+        </select>
       </div>
 
       <div className="table-wrap" style={{ padding: 0 }}>
-        {Object.entries(groups).length === 0 && (
+        {loading && (
+          <div style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
+            Carregando notificações…
+          </div>
+        )}
+        {!loading && Object.entries(groups).length === 0 && (
           <div style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
             Nenhuma notificação encontrada.
           </div>
@@ -334,7 +439,7 @@ function NotificacoesPage({ setRoute }) {
             {items.map((n) => {
               const I = Icon[ICON_MAP[n.icon] || "bell"] || Icon.bell;
               return (
-                <div key={n.id} className={"notif-row " + (n.unread ? "unread" : "")}>
+                <div key={n.id} className={"notif-row " + (n.unread ? "unread" : "")} onClick={() => setDetails(n)}>
                   <div className="notif-row__icon"><I size={16}/></div>
                   <div className="notif-row__body">
                     <div className="notif-row__title">{n.title}</div>
@@ -345,8 +450,10 @@ function NotificacoesPage({ setRoute }) {
                     </div>
                   </div>
                   <div className="row gap-2">
-                    <Button variant="ghost" size="sm" icon="check"/>
-                    <Button variant="ghost" size="sm" icon="more"/>
+                    <Button variant="ghost" size="sm" icon="check" aria-label="Marcar como lida"
+                      onClick={(e) => { e.stopPropagation(); markRead(n.id); window.toast('Notificação marcada como lida', 'success'); }}/>
+                    <Button variant="ghost" size="sm" icon="arrowRight" aria-label="Abrir origem"
+                      onClick={(e) => { e.stopPropagation(); openNotification(n); }}/>
                   </div>
                 </div>
               );
@@ -354,7 +461,62 @@ function NotificacoesPage({ setRoute }) {
           </div>
         ))}
       </div>
+      {prefsOpen && <NotificationPrefsModal onClose={() => setPrefsOpen(false)}/>}
+      {details && <Modal title="Detalhe da Notificação" onClose={() => setDetails(null)} width={520}
+        footer={<>
+          <Button variant="ghost" onClick={() => { markRead(details.id); setDetails(null); }}>Marcar como lida</Button>
+          <Button variant="primary" iconRight="arrowRight" onClick={() => openNotification(details)}>Abrir origem</Button>
+        </>}>
+        <div className="stack">
+          <Badge variant={details.level === 'danger' ? 'danger' : details.level === 'warning' ? 'warning' : 'info'} dot>{details.module}</Badge>
+          <div style={{ fontSize: 16, fontWeight: 800, lineHeight: 1.35 }}>{details.title}</div>
+          {details.sub ? <div className="muted" style={{ fontSize: 13, lineHeight: 1.5 }}>{details.sub}</div> : null}
+          <div className="mono small muted">{details.time}</div>
+        </div>
+      </Modal>}
     </div>
+  );
+}
+
+function NotificationPrefsModal({ onClose }) {
+  const [prefs, setPrefs] = React.useState(() => {
+    try {
+      return JSON.parse(localStorage.getItem('vpprd.notificacoes.preferencias') || 'null') || {
+        email: true, navegador: true, financeiro: true, operacoes: true, comercial: true,
+      };
+    } catch (e) {
+      return { email: true, navegador: true, financeiro: true, operacoes: true, comercial: true };
+    }
+  });
+  const toggle = (key) => setPrefs(p => ({ ...p, [key]: !p[key] }));
+  const save = () => {
+    localStorage.setItem('vpprd.notificacoes.preferencias', JSON.stringify(prefs));
+    window.toast('Preferências salvas', 'success');
+    onClose();
+  };
+  const row = (key, label, sub) => (
+    <label className="row sb" style={{ padding: '12px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}>
+      <span>
+        <span style={{ display: 'block', fontWeight: 700, fontSize: 13 }}>{label}</span>
+        <span className="muted" style={{ fontSize: 12 }}>{sub}</span>
+      </span>
+      <input type="checkbox" checked={!!prefs[key]} onChange={() => toggle(key)} style={{ width: 18, height: 18, accentColor: 'var(--vp-yellow)' }}/>
+    </label>
+  );
+  return (
+    <Modal title="Preferências de Notificação" onClose={onClose} width={520}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={save}>Salvar preferências</Button>
+      </>}>
+      <div className="stack">
+        {row('navegador', 'Alertas no sistema', 'Exibir notificações dentro do VP Gestão.')}
+        {row('email', 'Resumo por email', 'Receber consolidados operacionais no email cadastrado.')}
+        {row('financeiro', 'Financeiro', 'Gatilhos, comissões e pagamentos.')}
+        {row('operacoes', 'Operações', 'Importação, engenharia, NCM e instalação.')}
+        {row('comercial', 'Comercial', 'Leads, cotações e propostas.')}
+      </div>
+    </Modal>
   );
 }
 

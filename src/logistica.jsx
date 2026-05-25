@@ -16,12 +16,14 @@ function ModalNovoEmbarque({ onClose, onSaved }) {
     if (!f.client.trim()) return window.toast('Cliente é obrigatório.', 'warning');
     if (!f.eta) return window.toast('ETA é obrigatória.', 'warning');
     setSaving(true);
+    const id = 'EM-' + Date.now().toString().slice(-6);
     const { error } = await window.__VP_SB.sb.from('embarques').insert({
+      id,
       client: f.client, vessel: f.vessel || null, bl: f.bl || null,
-      line: f.line || null, from: f.from, to: f.to,
-      eta: f.eta, etaOriginal: f.eta, etd: null,
+      line: f.line || null, origin: f.from, destination: f.to,
+      eta: f.eta, eta_original: f.eta, etd: null,
       status: f.status, containers: parseInt(f.containers) || 1,
-      type: f.type, position: 0,
+      container_type: f.type, position: 0,
       lat: null, lng: null, speed: null, heading: null, channel: null,
       milestones: [], docs: [],
     });
@@ -68,75 +70,6 @@ function ModalNovoEmbarque({ onClose, onSaved }) {
           {fld('Tipo', 'type', 'text', '', ['20GP','40GP','40HC','20RF'])}
           {fld('Status', 'status', 'text', '', ['Em trânsito','Liberação aduaneira','Entregue'])}
         </div>
-      </div>
-    </Modal>
-  );
-}
-
-/* ---------- MODAL: Novo Frete ---------- */
-function ModalNovoFrete({ onClose, onSaved }) {
-  const [f, setF] = React.useState({
-    origem:'CD Guarulhos', destino:'', transportadora:'', driver:'',
-    placa:'', itens:'1', peso:'', valor:'', eta:'', status:'Aguardando coleta',
-  });
-  const [saving, setSaving] = React.useState(false);
-  const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-
-  const save = async () => {
-    if (!f.destino.trim()) return window.toast('Destino é obrigatório.', 'warning');
-    if (!f.transportadora.trim()) return window.toast('Transportadora é obrigatória.', 'warning');
-    setSaving(true);
-    const { error } = await window.__VP_SB.sb.from('fretes').insert({
-      origem: f.origem, destino: f.destino,
-      transportadora: f.transportadora, driver: f.driver || null,
-      placa: f.placa || null, itens: parseInt(f.itens) || 1,
-      peso: f.peso ? parseFloat(f.peso) : null,
-      valor: f.valor ? parseFloat(f.valor) : null,
-      eta: f.eta || null, status: f.status, ocorrencias: 0,
-    });
-    setSaving(false);
-    if (error) return window.toast('Erro: ' + error.message, 'error');
-    window.toast('Frete criado!', 'success');
-    onSaved?.(); onClose();
-  };
-
-  const fld = (label, key, type='text', ph='', opts=null) => (
-    <div className="stack" style={{ gap:4 }}>
-      <label className="up-eyebrow muted">{label}</label>
-      {opts
-        ? <select className="input" value={f[key]} onChange={e => set(key, e.target.value)}>
-            {opts.map(o => <option key={o}>{o}</option>)}
-          </select>
-        : <input className="input" type={type} value={f[key]} onChange={e => set(key, e.target.value)} placeholder={ph}/>
-      }
-    </div>
-  );
-
-  return (
-    <Modal title="Novo Frete Nacional" onClose={onClose} width={520}
-      footer={<>
-        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-        <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Criar Frete'}</Button>
-      </>}>
-      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-        <div className="grid-2" style={{ gap:12 }}>
-          {fld('Origem', 'origem', 'text', 'CD Guarulhos, Porto Santos…')}
-          {fld('Destino *', 'destino', 'text', 'Nome do condomínio / obra')}
-        </div>
-        <div className="grid-2" style={{ gap:12 }}>
-          {fld('Transportadora *', 'transportadora', 'text', 'Ex.: Patrus, TransLog SP')}
-          {fld('Placa', 'placa', 'text', 'Ex.: GFR-2244')}
-        </div>
-        <div className="grid-2" style={{ gap:12 }}>
-          {fld('Motorista', 'driver', 'text', 'Nome completo')}
-          {fld('Previsão entrega', 'eta', 'date')}
-        </div>
-        <div className="grid-3" style={{ gap:12 }}>
-          {fld('Qtd. itens', 'itens', 'number', '1')}
-          {fld('Peso (kg)', 'peso', 'number', '0')}
-          {fld('Valor frete (R$)', 'valor', 'number', '0')}
-        </div>
-        {fld('Status', 'status', 'text', '', ['Aguardando coleta','Saiu CD','Em rota','Entregue'])}
       </div>
     </Modal>
   );
@@ -579,14 +512,40 @@ function RouteAndShip({ start, end, cur, ship, isActive, onClick }) {
 function ComprasPage({ setRoute }) {
   const [fretes, setFretes] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [showFrete, setShowFrete] = React.useState(false);
   const [filter, setFilter] = React.useState("Todos");
   const filters = ["Todos", "Em rota", "Saiu CD", "Aguardando coleta", "Entregue", "Atraso"];
 
   const reloadFretes = () => {
     setLoading(true);
-    window.__VP_SB.sb.from('fretes').select('*').order('id', { ascending: false })
-      .then(({ data }) => { setFretes(data || []); setLoading(false); });
+    window.__VP_SB.sb.from('embarques').select('*').order('eta')
+      .then(({ data, error }) => {
+        if (error) {
+          window.toast('Erro ao carregar fretes nacionais: ' + error.message, 'error');
+          setFretes([]);
+        } else {
+          setFretes((data || []).map(e => {
+            const status = e.status === 'Entregue' ? 'Entregue'
+              : e.status === 'Liberação aduaneira' ? 'Aguardando coleta'
+              : e.status === 'Em trânsito' ? 'Saiu CD'
+              : e.status || 'Aguardando coleta';
+            return {
+              id: 'FN-' + e.id,
+              origem: e.to || 'Porto',
+              destino: e.client || e.projeto || 'Obra',
+              transportadora: e.line || 'Operador logístico',
+              driver: null,
+              placa: e.bl,
+              itens: e.containers || 1,
+              peso: e.containers ? e.containers * 1200 : 0,
+              valor: null,
+              eta: e.eta ? fmtDate(e.eta) : '—',
+              status,
+              ocorrencias: e.status === 'Atraso' ? 1 : 0,
+            };
+          }));
+        }
+        setLoading(false);
+      });
   };
   React.useEffect(() => { reloadFretes(); }, []);
 
@@ -606,7 +565,7 @@ function ComprasPage({ setRoute }) {
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="mail" onClick={() => setRoute("compras-email")}>Inbox</Button>
-          <Button variant="primary" icon="plus" onClick={() => setShowFrete(true)}>Novo frete</Button>
+          <Button variant="primary" icon="plus" onClick={() => setRoute("importacao")}>Novo frete via embarque</Button>
         </div>
       </div>
 
@@ -676,7 +635,6 @@ function ComprasPage({ setRoute }) {
           </tbody>
         </table>
       </div>
-      {showFrete && <ModalNovoFrete onClose={() => setShowFrete(false)} onSaved={reloadFretes}/>}
     </div>
   );
 }
