@@ -25,22 +25,63 @@ UPDATE public.contratos SET status='Em redação',            redacted=3, pages=
 UPDATE public.contratos SET status='Aguardando assinatura', redacted=0, pages=14 WHERE id='CTR-003';
 UPDATE public.contratos SET status='Em assinatura digital', redacted=4, pages=34 WHERE id='CTR-004';
 
--- Embarques (Logística/Mapa Marítimo): posição, geo, milestones e docs
-UPDATE public.embarques SET position=0.62 WHERE id='EMB-001';
-UPDATE public.embarques SET position=0.97, lat=-23.00, lng=-44.05, speed=0, heading=0 WHERE id='EMB-002';
-UPDATE public.embarques SET position=0.45 WHERE id='EMB-003';
+-- Embarques (Logística/Importação): identificadores, invoice, container,
+-- posição/geo, e timeline padrão de 9 fases do workflow de importação.
+UPDATE public.embarques SET
+  position=0.62,
+  imo='9839430', supplier='Tianjin Control Systems Co., Ltd.',
+  invoice_number='HSL-2026-0418', invoice_value=128400, invoice_currency='USD',
+  container_number='MSCU9382821', seal='SH4471092', freight_condition='FCL',
+  docs = '["BL ✓","Invoice ✓","Packing List ✓","Certificado de Origem ✓","Seguro pendente"]'::jsonb,
+  milestones = '[
+   {"label":"Produção concluída","date":"2026-04-12","state":"done"},
+   {"label":"Embarcado (gate-in / load)","date":"2026-04-18","state":"done"},
+   {"label":"Saiu do porto de origem","date":"2026-04-20","state":"done"},
+   {"label":"Em trânsito marítimo","date":"—","state":"current","note":"Atraso de ~5 dias vs. ETA original"},
+   {"label":"Chegada prevista (ETA)","date":"2026-06-02","state":"future"},
+   {"label":"Atracação","date":"—","state":"future"},
+   {"label":"Desembaraço aduaneiro","date":"—","state":"future"},
+   {"label":"Transporte nacional","date":"—","state":"future"},
+   {"label":"Entregue na obra","date":"—","state":"future"}
+  ]'::jsonb
+WHERE id='EMB-001';
 
 UPDATE public.embarques SET
-  docs = '["BL ✓","Invoice ✓","Packing List ✓","Certificado de Origem ✓","Seguro pendente"]'::jsonb,
-  milestones = '[{"label":"Booking confirmado","date":"2026-04-10","state":"done"},{"label":"Carregamento Xangai","date":"2026-04-20","state":"done"},{"label":"Saída origem (ETD)","date":"2026-04-22","state":"done"},{"label":"Trânsito marítimo","date":"—","state":"current","note":"Atraso de 5 dias"},{"label":"Chegada Santos (ETA)","date":"2026-06-02","state":"future"},{"label":"Liberação aduaneira","date":"—","state":"future"}]'::jsonb
-WHERE id='EMB-001';
-UPDATE public.embarques SET
+  position=0.97, lat=-23.00, lng=-44.05, speed=0, heading=0,
+  imo='9784271', supplier='Shanghai Vertical Tech Co., Ltd.',
+  invoice_number='SVT-2026-0502', invoice_value=246800, invoice_currency='USD',
+  container_number='COSU7741200', seal='CN8820133', freight_condition='FCL',
   docs = '["BL ✓","Invoice ✓","Packing List ✓","DI registrada"]'::jsonb,
-  milestones = '[{"label":"Booking confirmado","date":"2026-04-25","state":"done"},{"label":"Carregamento Xangai","date":"2026-05-05","state":"done"},{"label":"Saída origem (ETD)","date":"2026-05-07","state":"done"},{"label":"Chegada Itaguaí","date":"2026-06-15","state":"done"},{"label":"Liberação aduaneira","date":"—","state":"current","note":"Canal vermelho — inspeção"},{"label":"Entrega CD","date":"—","state":"future"}]'::jsonb
+  milestones = '[
+   {"label":"Produção concluída","date":"2026-04-28","state":"done"},
+   {"label":"Embarcado (gate-in / load)","date":"2026-05-03","state":"done"},
+   {"label":"Saiu do porto de origem","date":"2026-05-05","state":"done"},
+   {"label":"Em trânsito marítimo","date":"2026-05-06","state":"done"},
+   {"label":"Chegada prevista (ETA)","date":"2026-06-18","state":"done"},
+   {"label":"Atracação","date":"2026-06-18","state":"done"},
+   {"label":"Desembaraço aduaneiro","date":"—","state":"current","note":"Canal vermelho — inspeção física"},
+   {"label":"Transporte nacional","date":"—","state":"future"},
+   {"label":"Entregue na obra","date":"—","state":"future"}
+  ]'::jsonb
 WHERE id='EMB-002';
+
 UPDATE public.embarques SET
+  position=0.45,
+  imo='9461562', supplier='Hamburg Lift Components GmbH',
+  invoice_number='HLC-2026-0429', invoice_value=312500, invoice_currency='USD',
+  container_number='HLBU4421098', seal='DE5523088', freight_condition='FCL',
   docs = '["BL ✓","Invoice ✓","Packing List ✓","Origem aguardando"]'::jsonb,
-  milestones = '[{"label":"Booking confirmado","date":"2026-04-18","state":"done"},{"label":"Carregamento Hamburgo","date":"2026-04-28","state":"done"},{"label":"Saída origem (ETD)","date":"2026-04-30","state":"done"},{"label":"Trânsito marítimo","date":"—","state":"current"},{"label":"Chegada Santos (ETA)","date":"2026-06-05","state":"future"},{"label":"Liberação aduaneira","date":"—","state":"future"}]'::jsonb
+  milestones = '[
+   {"label":"Produção concluída","date":"2026-04-20","state":"done"},
+   {"label":"Embarcado (gate-in / load)","date":"2026-04-26","state":"done"},
+   {"label":"Saiu do porto de origem","date":"2026-04-28","state":"done"},
+   {"label":"Em trânsito marítimo","date":"—","state":"current"},
+   {"label":"Chegada prevista (ETA)","date":"2026-06-05","state":"future"},
+   {"label":"Atracação","date":"—","state":"future"},
+   {"label":"Desembaraço aduaneiro","date":"—","state":"future"},
+   {"label":"Transporte nacional","date":"—","state":"future"},
+   {"label":"Entregue na obra","date":"—","state":"future"}
+  ]'::jsonb
 WHERE id='EMB-003';
 
 -- Usuários: remover entradas fictícias (placeholder e duplicata mal grafada)

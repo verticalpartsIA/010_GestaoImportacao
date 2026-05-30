@@ -2,12 +2,38 @@
    logistica.jsx — Importação (ship map) + Compras Nacional + Email Inbox
    ============================================================ */
 
+/* ---------- Timeline padrão (9 fases do workflow de importação) ---------- */
+function buildMilestones(status, etd, eta) {
+  const phases = [
+    "Produção concluída",
+    "Embarcado (gate-in / load)",
+    "Saiu do porto de origem",
+    "Em trânsito marítimo",
+    "Chegada prevista (ETA)",
+    "Atracação",
+    "Desembaraço aduaneiro",
+    "Transporte nacional",
+    "Entregue na obra",
+  ];
+  // índice da fase "atual" conforme o status escolhido
+  const curIdx = status === "Entregue" ? 9
+    : status === "Aguardando liberação" ? 6   // desembaraço em andamento
+    : 3;                                        // Em trânsito → fase marítima
+  return phases.map((label, i) => ({
+    label,
+    date: i === 0 ? (etd || "—") : i === 4 ? (eta || "—") : "—",
+    state: i < curIdx ? "done" : i === curIdx ? "current" : "future",
+  }));
+}
+
 /* ---------- MODAL: Novo Embarque ---------- */
 function ModalNovoEmbarque({ onClose, onSaved }) {
   const [f, setF] = React.useState({
-    client:'', vessel:'', bl:'', line:'',
-    from:'Shanghai — China', to:'Santos — Brasil',
-    eta:'', status:'Em trânsito', containers:'1', type:'40HC',
+    client:'', supplier:'', vessel:'', imo:'', line:'',
+    bl:'', invoiceNumber:'', invoiceValue:'', invoiceCurrency:'USD',
+    containerNumber:'', seal:'', containers:'1', type:'40HC', freight:'FCL',
+    from:'Xangai, CN', to:'Santos, BR',
+    etd:'', eta:'', status:'Em trânsito',
   });
   const [saving, setSaving] = React.useState(false);
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
@@ -19,13 +45,20 @@ function ModalNovoEmbarque({ onClose, onSaved }) {
     const id = 'EM-' + Date.now().toString().slice(-6);
     const { error } = await window.__VP_SB.sb.from('embarques').insert({
       id,
-      client: f.client, vessel: f.vessel || null, bl: f.bl || null,
-      line: f.line || null, origin: f.from, destination: f.to,
-      eta: f.eta, eta_original: f.eta, etd: null,
+      client: f.client, supplier: f.supplier || null,
+      vessel: f.vessel || null, imo: f.imo || null, line: f.line || null,
+      bl: f.bl || null,
+      invoice_number: f.invoiceNumber || null,
+      invoice_value: f.invoiceValue ? parseFloat(f.invoiceValue) : null,
+      invoice_currency: f.invoiceCurrency || 'USD',
+      container_number: f.containerNumber || null, seal: f.seal || null,
+      freight_condition: f.freight,
+      origin: f.from, destination: f.to,
+      etd: f.etd || null, eta: f.eta, eta_original: f.eta,
       status: f.status, containers: parseInt(f.containers) || 1,
       container_type: f.type, position: 0,
       lat: null, lng: null, speed: null, heading: null, channel: null,
-      milestones: [], docs: [],
+      milestones: buildMilestones(f.status, f.etd, f.eta), docs: [],
     });
     setSaving(false);
     if (error) return window.toast('Erro: ' + error.message, 'error');
@@ -45,30 +78,58 @@ function ModalNovoEmbarque({ onClose, onSaved }) {
     </div>
   );
 
+  const sectionLabel = (t) => (
+    <div className="up-eyebrow muted" style={{ fontSize:9, letterSpacing:'.08em', marginTop:4 }}>{t}</div>
+  );
+
   return (
-    <Modal title="Novo Embarque" onClose={onClose} width={540}
+    <Modal title="Novo Embarque" onClose={onClose} width={600}
       footer={<>
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Criar Embarque'}</Button>
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-        {fld('Cliente *', 'client', 'text', 'Condomínio Ed. Itacolomi…')}
+        {sectionLabel('Projeto & Fornecedor')}
         <div className="grid-2" style={{ gap:12 }}>
-          {fld('Nome do navio', 'vessel', 'text', 'Ex.: MV COSCO PIRAEUS')}
-          {fld('Linha marítima', 'line', 'text', 'Ex.: COSCO, MSC, CMA CGM')}
+          {fld('Cliente *', 'client', 'text', 'Condomínio Ed. Itacolomi…')}
+          {fld('Fornecedor', 'supplier', 'text', 'Ex.: Tianjin Control Systems')}
         </div>
-        <div className="grid-2" style={{ gap:12 }}>
-          {fld('BL (Bill of Lading)', 'bl', 'text', 'Ex.: COSU6029841')}
-          {fld('ETA (previsão chegada) *', 'eta', 'date')}
+
+        {sectionLabel('Invoice')}
+        <div className="grid-3" style={{ gap:12 }}>
+          {fld('Nº Invoice', 'invoiceNumber', 'text', 'HSL-2026-0418')}
+          {fld('Valor', 'invoiceValue', 'number', '128400')}
+          {fld('Moeda', 'invoiceCurrency', 'text', '', ['USD','EUR','CNY','BRL'])}
         </div>
+
+        {sectionLabel('Navio & BL')}
+        <div className="grid-3" style={{ gap:12 }}>
+          {fld('Nome do navio', 'vessel', 'text', 'MSC ISABELLA')}
+          {fld('IMO', 'imo', 'text', '9839430')}
+          {fld('Armador / Linha', 'line', 'text', 'MSC, COSCO, Hapag…')}
+        </div>
+        {fld('BL (Bill of Lading)', 'bl', 'text', 'Ex.: COSU6789012345')}
+
+        {sectionLabel('Container')}
         <div className="grid-2" style={{ gap:12 }}>
-          {fld('Origem', 'from', 'text', 'Shanghai — China')}
-          {fld('Destino', 'to', 'text', 'Santos — Brasil')}
+          {fld('Nº do Container', 'containerNumber', 'text', 'MSCU9382821')}
+          {fld('Lacre (seal)', 'seal', 'text', 'SH4471092')}
         </div>
         <div className="grid-3" style={{ gap:12 }}>
           {fld('Qtd. containers', 'containers', 'number', '1')}
           {fld('Tipo', 'type', 'text', '', ['20GP','40GP','40HC','20RF'])}
-          {fld('Status', 'status', 'text', '', ['Em trânsito','Liberação aduaneira','Entregue'])}
+          {fld('Condição', 'freight', 'text', '', ['FCL','LCL'])}
+        </div>
+
+        {sectionLabel('Rota & Datas')}
+        <div className="grid-2" style={{ gap:12 }}>
+          {fld('Origem', 'from', 'text', 'Xangai, CN')}
+          {fld('Destino', 'to', 'text', 'Santos, BR')}
+        </div>
+        <div className="grid-3" style={{ gap:12 }}>
+          {fld('ETD (saída)', 'etd', 'date')}
+          {fld('ETA (chegada) *', 'eta', 'date')}
+          {fld('Status', 'status', 'text', '', ['Em trânsito','Aguardando liberação','Entregue'])}
         </div>
       </div>
     </Modal>
@@ -82,7 +143,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
   const [tab, setTab] = React.useState("embarques");
   const [filter, setFilter] = React.useState("Todos");
   const [showEmbarque, setShowEmbarque] = React.useState(false);
-  const filterOptions = ["Todos", "Em trânsito", "Liberação aduaneira", "Entregue"];
+  const filterOptions = ["Todos", "Em trânsito", "Aguardando liberação", "Entregue"];
 
   const reloadEmbarques = () => {
     setLoading(true);
@@ -94,6 +155,16 @@ function ImportacaoPage({ setRoute, setSubsel }) {
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
   const rows = embarques.filter(e => filter === "Todos" || e.status === filter);
+
+  // KPIs derivados
+  const emTransito = embarques.filter(e => e.status === "Em trânsito");
+  const ativos = embarques.filter(e => e.status !== "Entregue");
+  const alertasEta = embarques.filter(e => {
+    const orig = e.eta_original || e.etaOriginal;
+    return orig && e.eta && e.eta > orig;   // ETA atual atrasada vs. original (ISO compara como string)
+  });
+  const valorTransito = ativos.reduce((s, e) => s + (e.invoice_value || 0), 0);
+
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -110,10 +181,10 @@ function ImportacaoPage({ setRoute, setSubsel }) {
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Em trânsito" value={embarques.filter(e => e.status === "Em trânsito").length} sub="navios ativos" icon="ship"/>
-        <KPI label="Aguard. liberação" value={embarques.filter(e => e.status === "Liberação aduaneira").length} sub="aduana" icon="package"/>
-        <KPI label="Alertas ETA" value="—" sub="sem dados suficientes" icon="warning"/>
-        <KPI label="Valor em trânsito" value="—" sub="sem dados suficientes" icon="dollar"/>
+        <KPI label="Em trânsito" value={emTransito.length} sub="navios ativos" icon="ship"/>
+        <KPI label="Aguard. liberação" value={embarques.filter(e => e.status === "Aguardando liberação").length} sub="aduana" icon="package"/>
+        <KPI label="Alertas ETA" value={alertasEta.length} sub={alertasEta.length ? "embarques atrasados" : "no prazo"} icon="warning"/>
+        <KPI label="Valor em trânsito" value={fmtUSD(valorTransito)} sub="invoices ativas" icon="dollar"/>
       </div>
 
       <Tabs tabs={[
@@ -272,13 +343,22 @@ function ImportacaoDetail({ embarque, setRoute }) {
         </div>
 
         <div className="stack">
-          <Card title="Container" sharp>
-            <KvBlock label="BL" value={e.bl} mono/>
-            <KvBlock label="Linha" value={e.line}/>
+          <Card title="Navio & Container" sharp>
             <KvBlock label="Navio" value={e.vessel}/>
-            <KvBlock label="Quantidade" value={`${e.containers}× ${e.type || e.container_type}`}/>
-            <KvBlock label="Origem" value={e.from || e.origin}/>
-            <KvBlock label="Destino" value={e.to || e.destination}/>
+            <KvBlock label="IMO" value={e.imo} mono/>
+            <KvBlock label="Armador / Linha" value={e.line}/>
+            <KvBlock label="BL" value={e.bl} mono/>
+            <KvBlock label="Nº Container" value={e.container_number} mono/>
+            <KvBlock label="Lacre" value={e.seal} mono/>
+            <KvBlock label="Carga" value={`${e.containers}× ${e.type || e.container_type}${e.freight_condition ? " · " + e.freight_condition : ""}`}/>
+            <KvBlock label="Rota" value={`${e.from || e.origin} → ${e.to || e.destination}`}/>
+          </Card>
+
+          <Card title="Invoice & Fornecedor" sharp>
+            <KvBlock label="Fornecedor" value={e.supplier}/>
+            <KvBlock label="Nº Invoice" value={e.invoice_number} mono/>
+            <KvBlock label="Valor" value={e.invoice_value != null ? (e.invoice_currency === "BRL" ? fmtBRL(e.invoice_value) : fmtUSD(e.invoice_value)) : "—"} mono/>
+            <KvBlock label="Moeda" value={e.invoice_currency}/>
           </Card>
 
           <Card title="Datas" sharp>
