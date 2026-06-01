@@ -80,10 +80,11 @@ function ModalNovoProjeto({ onClose, onSaved }) {
 }
 
 /* ---------- MODAL: Novo Contrato ---------- */
-function ModalNovoContrato({ onClose, onSaved }) {
+function ModalNovoContrato({ onClose, onSaved, tipoDefault = 'cliente' }) {
   const [f, setF] = React.useState({
     client: '', projeto: '', lawyer: '',
     value: '', status: 'Em redação', issued_date: '',
+    tipo_contrato: tipoDefault,
   });
   const [saving, setSaving] = React.useState(false);
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
@@ -91,7 +92,8 @@ function ModalNovoContrato({ onClose, onSaved }) {
   const save = async () => {
     if (!f.client.trim()) return window.toast('Cliente é obrigatório.', 'warning');
     setSaving(true);
-    const id = 'CO-' + Date.now().toString().slice(-6);
+    const ano = new Date().getFullYear();
+    const id = 'CTR-' + String(Date.now()).slice(-4) + '/' + ano;
     const { error } = await window.__VP_SB.sb.from('contratos').insert({
       id,
       client: f.client,
@@ -100,12 +102,14 @@ function ModalNovoContrato({ onClose, onSaved }) {
       value: f.value ? parseFloat(f.value) : null,
       status: f.status,
       issued_date: f.issued_date || new Date().toISOString().slice(0, 10),
-      pages: 0,
+      pages: 16,
       days_pending: 0,
+      tipo_contrato: f.tipo_contrato,
+      dados: { numero: id, propostaRef: f.projeto },
     });
     setSaving(false);
     if (error) return window.toast('Erro: ' + error.message, 'error');
-    window.toast('Contrato criado!', 'success');
+    window.toast('Contrato criado! Preencha os dados no editor.', 'success');
     onSaved?.(); onClose();
   };
 
@@ -123,24 +127,25 @@ function ModalNovoContrato({ onClose, onSaved }) {
   );
 
   return (
-    <Modal title="Novo Contrato" onClose={onClose} width={500}
+    <Modal title="Novo Contrato" onClose={onClose} width={520}
       footer={<>
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button variant="primary" onClick={save} disabled={saving}>
-          {saving ? 'Salvando…' : 'Criar Contrato'}
+          {saving ? 'Criando…' : 'Criar e Abrir Editor'}
         </Button>
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-        {fld('Cliente *', 'client', 'text', 'Condomínio Ed. Itacolomi, Empresa XYZ…')}
+        {fld('Tipo de contrato', 'tipo_contrato', 'text', '', ['cliente','montador'])}
+        {fld('Cliente / Empresa *', 'client', 'text', 'Condomínio Ed. Itacolomi, Empresa XYZ…')}
         <div className="grid-2" style={{ gap:12 }}>
-          {fld('Projeto associado', 'projeto', 'text', 'Referência interna')}
+          {fld('Proposta de referência', 'projeto', 'text', 'PR-2026-001')}
           {fld('Advogado responsável', 'lawyer', 'text', 'Nome do advogado')}
         </div>
         <div className="grid-2" style={{ gap:12 }}>
-          {fld('Valor do contrato (R$)', 'value', 'number', '0')}
+          {fld('Valor (R$)', 'value', 'number', '0')}
           {fld('Data de emissão', 'issued_date', 'date')}
         </div>
-        {fld('Status', 'status', 'text', '', ['Em redação','Aguardando assinatura','Em assinatura digital','Assinado'])}
+        {fld('Status inicial', 'status', 'text', '', ['Em redação','Aguardando assinatura','Em assinatura digital','Assinado'])}
       </div>
     </Modal>
   );
@@ -261,6 +266,7 @@ function JuridicoPage({ setRoute }) {
   const [contratos, setContratos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [filter, setFilter] = React.useState("Todos");
+  const [tipoTab, setTipoTab] = React.useState("cliente");
   const [selectedContract, setSelectedContract] = React.useState(null);
   const [showNovoContrato, setShowNovoContrato] = React.useState(false);
   const filters = ["Todos", "Aguardando assinatura", "Em redação", "Em assinatura digital", "Assinado"];
@@ -274,34 +280,45 @@ function JuridicoPage({ setRoute }) {
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
-  const rows = contratos.filter(c => filter === "Todos" || c.status === filter);
-  const activeContract = selectedContract || rows[0];
+  // Filtra por tipo e status
+  const rows = contratos.filter(c => {
+    const tipo = c.tipo_contrato || 'cliente';
+    if (tipo !== tipoTab) return false;
+    return filter === "Todos" || c.status === filter;
+  });
+  const activeContract = selectedContract?.tipo_contrato === tipoTab ? selectedContract : rows[0] || null;
+
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Contrato · Jurídico</div>
           <h1 className="page-head__title">Contratos & Minutas</h1>
-          <p className="page-head__sub">Geração de minuta, redação automática de páginas confidenciais, envio para assinatura digital.</p>
+          <p className="page-head__sub">Minuta contratual, preenchimento, redação de páginas confidenciais e envio para assinatura digital.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="upload" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='.pdf,.docx,.doc'; inp.onchange = e => { const f = e.target.files?.[0]; if (f) window.toast(`Minuta "${f.name}" (${Math.round(f.size/1024)}kb) importada. Processando…`, 'success'); }; inp.click(); }}>Importar minuta</Button>
           <Button variant="primary" icon="plus" onClick={() => setShowNovoContrato(true)}>Novo contrato</Button>
         </div>
       </div>
 
+      {/* TABS DE TIPO — como Elevador / Escada / Esteira em Propostas */}
+      <div className="contrato-tipo-tabs">
+        <button className={"contrato-tipo-tab" + (tipoTab === "cliente" ? " is-on" : "")}
+          onClick={() => { setTipoTab("cliente"); setSelectedContract(null); }}>
+          📄 Contrato do Cliente
+        </button>
+        <button className={"contrato-tipo-tab contrato-tipo-tab--soon" + (tipoTab === "montador" ? " is-on" : "")}
+          onClick={() => { setTipoTab("montador"); setSelectedContract(null); }}
+          title="Em breve">
+          🔧 Contrato do Montador
+        </button>
+      </div>
+
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Em redação" value={contratos.filter(c => c.status === "Em redação").length} sub="aguardando" icon="edit"/>
-        <KPI label="Em assinatura" value={contratos.filter(c => c.status === "Em assinatura digital").length} sub="docusign" icon="signature"/>
-        {(() => {
-          const pend = contratos.filter(c => c.status !== "Assinado");
-          const sla  = pend.length ? (pend.reduce((s, c) => s + (c.days_pending || 0), 0) / pend.length).toFixed(1) : "0";
-          const atr  = contratos.filter(c => (c.days_pending || 0) > 7).length;
-          return <>
-            <KPI label="SLA aprovação" value={sla} unit="d" sub="contratos abertos" icon="clock"/>
-            <KPI label="Atrasados" value={String(atr)} sub="ação necessária" icon="warning"/>
-          </>;
-        })()}
+        <KPI label="Em redação" value={contratos.filter(c => (c.tipo_contrato||'cliente') === tipoTab && c.status === "Em redação").length} sub="aguardando" icon="edit"/>
+        <KPI label="Em assinatura" value={contratos.filter(c => (c.tipo_contrato||'cliente') === tipoTab && c.status === "Em assinatura digital").length} sub="aguardando cliente" icon="signature"/>
+        <KPI label="Assinados" value={contratos.filter(c => (c.tipo_contrato||'cliente') === tipoTab && c.status === "Assinado").length} sub="fase Compra liberada" icon="check"/>
+        <KPI label="Atrasados" value={String(contratos.filter(c => (c.tipo_contrato||'cliente') === tipoTab && (c.days_pending||0) > 7).length)} sub="ação necessária" icon="warning"/>
       </div>
 
       <div className="tbar">
@@ -311,8 +328,7 @@ function JuridicoPage({ setRoute }) {
           ))}
         </div>
         <div className="spacer"/>
-        <Button variant="outline" size="sm" icon="filter">Cliente</Button>
-        <Button variant="outline" size="sm" icon="filter">Advogado</Button>
+        <Button variant="outline" size="sm" icon="upload" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='.pdf,.docx,.doc'; inp.onchange = e => { const f = e.target.files?.[0]; if (f) window.toast(`Minuta "${f.name}" importada.`, 'success'); }; inp.click(); }}>Importar minuta</Button>
       </div>
 
       <div className="table-wrap" style={{ marginBottom: 24 }}>
@@ -320,36 +336,30 @@ function JuridicoPage({ setRoute }) {
           <thead><tr>
             <th>Contrato</th>
             <th>Cliente</th>
-            <th>Páginas</th>
-            <th>Redações</th>
+            <th>Proposta ref.</th>
             <th>Advogado</th>
             <th>Status</th>
             <th className="text-right">Valor</th>
-            <th>Dias parado</th>
+            <th>Dias</th>
             <th></th>
           </tr></thead>
           <tbody>
             {rows.length === 0 && (
               <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
-                Nenhum registro cadastrado.
+                Nenhum contrato cadastrado para este tipo.
+                <br/><span style={{ fontSize:11, marginTop:4, display:'block' }}>Clique em "Novo contrato" para criar.</span>
               </td></tr>
             )}
             {rows.map((c) => (
-              <tr key={c.id} style={{ cursor: "pointer", background: selectedContract?.id === c.id ? "var(--vp-gray-50)" : "" }}
+              <tr key={c.id} style={{ cursor: "pointer", background: activeContract?.id === c.id ? "var(--vp-gray-50)" : "" }}
                 onClick={() => setSelectedContract(c)}>
                 <td>
                   <div className="cell-main">{c.id}</div>
-                  <div className="cell-sub">{fmtDate(c.issued || c.issued_date)} · {c.projeto || c.project_id}</div>
+                  <div className="cell-sub">{fmtDate(c.issued || c.issued_date)}</div>
                 </td>
                 <td>{c.client}</td>
-                <td><span className="cell-num">{c.pages}</span></td>
-                <td>
-                  <span className="row gap-2" style={{ display: "inline-flex" }}>
-                    <Icon.scissors size={12} color={c.redacted > 0 ? "var(--vp-danger)" : "var(--fg3)"}/>
-                    <span className="cell-num">{c.redacted}</span>
-                  </span>
-                </td>
-                <td>{c.lawyer}</td>
+                <td><span className="cell-sub">{c.project_id || c.projeto || '—'}</span></td>
+                <td>{c.lawyer || '—'}</td>
                 <td><StatusBadge status={c.status}/></td>
                 <td className="cell-money">{fmtBRL(c.value)}</td>
                 <td>
@@ -366,22 +376,41 @@ function JuridicoPage({ setRoute }) {
         </table>
       </div>
 
+      {/* Editor do contrato selecionado */}
       {activeContract ? (
-        <Card title={`${activeContract.id} · ${activeContract.client || ""}`}
-          sub={`${activeContract.pages || "—"} páginas · ${activeContract.redacted || 0} redações · ${activeContract.lawyer || "—"}`}
-          action={<>
-            <Button variant="outline" size="sm" icon="download" onClick={() => { window.toast("Abrindo impressão — salve como PDF.", "info"); setTimeout(() => window.print(), 200); }}>Baixar PDF redigido</Button>
-            <Button variant="outline" size="sm" icon="eye" onClick={() => { window.toast("Versão original — abrindo impressão.", "info"); setTimeout(() => window.print(), 200); }}>Versão original</Button>
-            <Button variant="primary" size="sm" icon="signature" onClick={() => window.toast("Enviado para assinatura!", "success")}>Enviar p/ assinatura</Button>
-          </>}>
-          <ContractRedactor/>
-        </Card>
+        tipoTab === "cliente" ? (
+          <div>
+            <div className="row sb" style={{ marginBottom:12 }}>
+              <div>
+                <div className="cell-main">{activeContract.id} · {activeContract.client}</div>
+                <div className="cell-sub">{activeContract.project_id || activeContract.projeto || ''} · <StatusBadge status={activeContract.status}/></div>
+              </div>
+            </div>
+            <ContratoClienteEditor
+              key={activeContract.id}
+              contrato={activeContract}
+              onSaved={reloadContratos}/>
+          </div>
+        ) : (
+          /* Montador — em breve */
+          <div style={{ textAlign:'center', padding:'60px 20px', color:'var(--fg3)', fontSize:13, border:'1px dashed var(--border)' }}>
+            <div style={{ fontSize:32, marginBottom:8 }}>🔧</div>
+            <strong>Contrato do Montador</strong>
+            <p style={{ marginTop:4, fontSize:12 }}>Em construção — baseado na MINUTA DOS TERCEIROS.</p>
+          </div>
+        )
       ) : (
         <div style={{ display:'flex', alignItems:'center', justifyContent:'center', border:'1px dashed var(--border)', color:'var(--fg3)', fontSize:13, padding:'60px 20px', textAlign:'center' }}>
-          Nenhum contrato cadastrado.
+          Selecione um contrato na tabela ou crie um novo.
         </div>
       )}
-      {showNovoContrato && <ModalNovoContrato onClose={() => setShowNovoContrato(false)} onSaved={reloadContratos}/>}
+
+      {showNovoContrato && (
+        <ModalNovoContrato
+          tipoDefault={tipoTab}
+          onClose={() => setShowNovoContrato(false)}
+          onSaved={reloadContratos}/>
+      )}
     </div>
   );
 }
