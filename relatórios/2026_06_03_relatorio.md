@@ -241,8 +241,117 @@ vpprd_claudeDesigner/
 - **Tabelas criadas:** 7 (perfis, clientes, produtos, propostas, proposta_itens, contract_drafts, minutas, contratos_instalador, fichas_tecnicas)
 - **Tabela renomeada:** 1 (contratos → contratos_venda_equipamentos)
 - **Tabela dropada:** 1 (ncm_solicitacoes)
-- **Tasks concluídas:** 21
+- **Tasks concluídas:** 22
 
 ---
 
-*Relatório gerado em 03/06/2026 por Claude Opus 4.7 ao final da sessão.*
+## 🩹 Fase 7 — Fix: PDF da Ficha Técnica adapta a 1 página exata (03/06 fim do dia)
+
+### Problema reportado pelo usuário
+"Na ficha técnica em catálogo do produto dependendo do tamanho da imagem o PDF fica desconfigurado, paginas em branco em cima e páginas em branco embaixo isso é péssimo precisa ter um pdf exato e limpo. Se as fotos forem altas, por exemplo uma Porta de elevador a altura vertical da foto é alta, uma botoeira tipo totem então o documento PDF deve se moldar a isso, pense como no excel quando o usuário clica em única página ou criar uma adequação para a página."
+
+PDF de referência anexado: `ficha_tecnica/VPMAC32K.pdf` (960×540 widescreen 16:9, 1 página perfeita).
+
+### Diagnóstico (3 causas)
+
+1. **`visibility: hidden` no print mantinha espaço do app** → empurrava a ficha pra baixo no fluxo do documento, gerando páginas em branco ANTES.
+2. **`.ft-fz-frame` com `aspect-ratio: 303/200` fixo (landscape)** → imagem vertical de produto (porta, botoeira totem) ficava letterboxed, espaço desperdiçado, e o quadro ainda forçava layout landscape.
+3. **`@page { size: A4 landscape }` fixo** → conteúdo vertical não cabia, vazava pra página 2.
+
+Adicional: `.ft-ficha { width: 1040px; min-height: 585px }` conflitava com A4 — em landscape force-stretchada pra `100%` largura, altura `auto` podia ultrapassar 210mm → quebra de página.
+
+### Fix aplicado
+
+#### A. Detecção dinâmica de orientação — `src/ficha-tecnica.jsx`
+
+Hook novo `useFichaOrientation(midia)`:
+- Quando há imagem (`foto` ou `desenho`), cria um `new Image()`, mede `naturalWidth/naturalHeight`.
+- `ratio < 0.85` → `portrait` (produto vertical: porta, totem, montacargas).
+- senão → `landscape` (máquina de tração, quadro de comando, esteira).
+
+A `.ft-ficha` recebe `data-orientation={landscape|portrait}` que dispara a variante de CSS.
+
+#### B. CSS adaptativo — `styles/ficha-tecnica.css`
+
+```css
+.ft-ficha {
+  width: 297mm; height: 210mm;
+  overflow: hidden; box-sizing: border-box;
+}
+.ft-ficha[data-orientation="portrait"] {
+  width: 210mm; height: 297mm;
+}
+.ft-ficha[data-orientation="portrait"] .ft-fz-columns {
+  grid-template-columns: 1fr 1fr;
+}
+.ft-ficha[data-orientation="portrait"] .ft-fz-specs {
+  column-count: 1;  /* mais espaço pra imagem vertical */
+}
+```
+
+Frames de imagem agora se adaptam ao espaço disponível (sem aspect-ratio fixo):
+```css
+.ft-fz-frame {
+  flex: 1 1 0;       /* divide o espaço vertical entre desenho+foto */
+  min-height: 0;
+  padding: 4mm;
+}
+.ft-fz-frame img {
+  max-width: 100%; max-height: 100%;
+  object-fit: contain;
+}
+```
+
+#### C. Print CSS reescrito
+
+```css
+@media print {
+  @page { margin: 0; }   /* size injetado em runtime */
+  html, body { margin: 0 !important; background: #fff !important; }
+  /* CRÍTICO: display:none, não visibility:hidden */
+  body > *:not(.ft-ficha-overlay) { display: none !important; }
+  .ft-ficha-overlay {
+    position: static !important; inset: auto !important;
+    width: auto !important; height: auto !important;
+  }
+  .ft-fo-scroll .ft-ficha {
+    page-break-after: avoid !important;
+    page-break-inside: avoid !important;
+    break-after: avoid !important; break-inside: avoid !important;
+  }
+}
+```
+
+#### D. Injeção do `@page` no clique de "Imprimir / Salvar PDF"
+
+```js
+const ficha = document.querySelector('.ft-ficha-overlay .ft-ficha');
+const ori = ficha.getAttribute('data-orientation') || 'landscape';
+const style = document.createElement('style');
+style.id = '__ft-print-page';
+style.textContent = `@page { size: A4 ${ori}; margin: 0; }`;
+document.head.appendChild(style);
+setTimeout(() => window.print(), 60);
+```
+
+`@page size` não pode ser definido por classe CSS (não é seletor-dependente), mas pode ser substituído por injeção de stylesheet — feito a cada clique em "Imprimir".
+
+### Validação E2E
+
+| Teste | Resultado |
+|---|---|
+| Sem imagem | landscape (471×333 ratio 1.41 = A4 paisagem ✅) |
+| Imagem 200×600 (botoeira totem) | portrait (333×471 ratio 0.71 = A4 retrato ✅) |
+| Imagem 600×200 (máquina de tração) | landscape (471×333 ratio 1.41 ✅) |
+| Transição entre orientações | reativa ao remover/trocar imagem ✅ |
+
+### Commits
+
+- `829cce9` — feat: assinatura digital + ficha técnica + sidebar reorganizada (commit principal do dia, 29 arquivos, +6.815/−47)
+- `2f647cf` — fix(ficha): PDF de 1 página exata + orientação dinâmica por aspect da imagem (3 arquivos, +132/−28)
+
+Ambos enviados pra `main` no GitHub; deploy automático no Hostinger.
+
+---
+
+*Relatório atualizado em 03/06/2026 ao final do dia por Claude Opus 4.7.*
