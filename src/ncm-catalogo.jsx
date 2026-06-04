@@ -317,7 +317,6 @@ function ProdutoDetail({ p, operadores, onAct }) {
           <div className="row gap-2" style={{ flexWrap:"wrap" }}>
             {p.situacao === "rascunho" && <>
               <Button variant="primary" size="sm" icon="check" onClick={() => onAct(p, { situacao:"ativado" })}>Ativar</Button>
-              <Button variant="outline" size="sm" icon="trash" onClick={() => onAct(p, null, true)}>Excluir rascunho</Button>
             </>}
             {p.situacao === "ativado" && <>
               <Button variant="outline" size="sm" icon="edit" onClick={() => onAct(p, { versao:(p.versao||1)+1 })}>Gerar nova versão</Button>
@@ -325,6 +324,8 @@ function ProdutoDetail({ p, operadores, onAct }) {
             </>}
             {p.situacao === "desativado" &&
               <Button variant="primary" size="sm" icon="check" onClick={() => onAct(p, { situacao:"ativado", versao:(p.versao||1)+1 })}>Reativar (nova versão)</Button>}
+            {/* Excluir disponível em qualquer status — cascata pra fichas_tecnicas vinculada */}
+            <Button variant="outline" size="sm" icon="trash" onClick={() => onAct(p, null, true)}>Excluir</Button>
           </div>
         </div>
       </div>
@@ -397,9 +398,33 @@ function NcmCatalogoPage({ setRoute }) {
 
   const actProd = async (row, patch, del) => {
     if (del) {
+      // Procura se há ficha técnica vinculada a esse produto
+      const { data: fichas } = await window.__VP_SB.sb
+        .from("fichas_tecnicas")
+        .select("id, numero_documento, nome_produto")
+        .eq("produto_id", row.id);
+      const fichasVinc = fichas || [];
+      const msg = fichasVinc.length
+        ? `Excluir o produto "${row.denominacao || row.codigo}"?\n\n` +
+          `⚠️ ${fichasVinc.length === 1 ? 'A ficha técnica vinculada' : `As ${fichasVinc.length} fichas técnicas vinculadas`} também ${fichasVinc.length === 1 ? 'será removida' : 'serão removidas'}:\n` +
+          fichasVinc.map(f => `• ${f.numero_documento} — ${f.nome_produto}`).join('\n')
+        : `Excluir o produto "${row.denominacao || row.codigo}"?`;
+      if (!window.confirm(msg)) return;
+      // Apaga as fichas vinculadas (cascata manual — antes do produto)
+      if (fichasVinc.length) {
+        const { error: ferr } = await window.__VP_SB.sb
+          .from("fichas_tecnicas").delete().eq("produto_id", row.id);
+        if (ferr) return window.toast("Erro ao remover ficha: " + ferr.message, "error");
+      }
       const { error } = await window.__VP_SB.sb.from("catalogo_produtos").delete().eq("id", row.id);
       if (error) return window.toast("Erro: " + error.message, "error");
-      window.toast("Rascunho excluído.", "success"); setSelProd(null);
+      window.toast(
+        fichasVinc.length
+          ? `Produto e ${fichasVinc.length === 1 ? 'ficha técnica vinculada removidos' : `${fichasVinc.length} fichas técnicas vinculadas removidas`}.`
+          : "Produto excluído.",
+        "success"
+      );
+      setSelProd(null);
     } else {
       const { error } = await window.__VP_SB.sb.from("catalogo_produtos").update(patch).eq("id", row.id);
       if (error) return window.toast("Erro: " + error.message, "error");
