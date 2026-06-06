@@ -200,6 +200,9 @@ function App() {
 
       <ToastViewport/>
 
+      {/* Copiloto VP — bolinha global. Na Ficha Técnica o especialista de NCM (FtCopiloto) já é dono da tela. */}
+      {route !== "ficha-tecnica" && window.VpCopiloto && <window.VpCopiloto route={route} role={role}/>}
+
       <TweaksPanel title="Tweaks">
         <TweakSection label="Aparência">
           <TweakRadio
