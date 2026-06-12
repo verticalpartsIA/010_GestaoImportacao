@@ -31,7 +31,7 @@
       tempEl.style.cssText = [
         'position:fixed', 'top:-9999px', 'left:-9999px',
         'zoom:1', 'transform:none', 'width:1040px',
-        'visibility:hidden', 'pointer-events:none',
+        'pointer-events:none',
       ].join(';');
       document.body.appendChild(tempEl);
       el = tempEl;
