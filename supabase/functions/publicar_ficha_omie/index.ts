@@ -106,8 +106,8 @@ Deno.serve(async (req) => {
     const zipped = zipSync(files);
     const zippedBase64 = toBase64(zipped);
 
-    // MD5 dos bytes do ZIP (é o que está em cArquivo — o Omie valida contra isso)
-    const md5Hash = createHash("md5").update(zipped).digest("hex");
+    // Omie valida cMd5 contra a string base64 de cArquivo (não os bytes binários)
+    const md5Hash = createHash("md5").update(zippedBase64).digest("hex");
 
     // 4) Anexar o PDF ao produto
     // cCodIntAnexo: limite 20 chars → ft- (3) + 17 chars do UUID sem hífens
