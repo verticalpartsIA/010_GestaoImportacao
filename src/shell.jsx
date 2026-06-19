@@ -41,6 +41,9 @@ const NAV_GROUPS = [
     { id: "financeiro", label: "Gatilhos & Prazo", icon: "dollar", restrict: ["financeiro", "admin"] },
     { id: "comissoes", label: "Comissões", icon: "award", restrict: ["financeiro", "admin"] },
   ]},
+  { label: "Recursos Humanos", items: [
+    { id: "rh-homologacao", label: "Homologação de Parceiros", icon: "users", restrict: ["admin"] },
+  ]},
   { label: "Admin", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
     { id: "configuracoes", label: "Configurações", icon: "settings", restrict: ["admin"] },
@@ -139,6 +142,7 @@ const BREADCRUMB_MAP = {
   databook:      { module: "Instalação & Entrega", page: "Data Book & Termo", icon: "fileSearch" },
   financeiro:    { module: "Financeiro", page: "Gatilhos & Prazo Reverso", icon: "dollar" },
   comissoes:     { module: "Financeiro", page: "Comissões", icon: "award" },
+  "rh-homologacao": { module: "Recursos Humanos", page: "Homologação de Parceiros", icon: "users" },
   logs: { module: "Admin", page: "Logs de Atividade", icon: "history" },
   configuracoes: { module: "Admin", page: "Configurações", icon: "settings" },
 };

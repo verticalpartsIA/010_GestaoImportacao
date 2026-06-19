@@ -183,6 +183,7 @@ function App() {
       case "compras-email": return <EmailInbox kind="compras" setRoute={setRoute}/>;
       case "financeiro": return <FinanceiroPage/>;
       case "comissoes": return <ComissoesPage/>;
+      case "rh-homologacao": return <window.RHHomologacaoPage/>;
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
       case "logs": return <LogsAdminPage/>;
       case "configuracoes": return <ConfiguracoesPage/>;
@@ -268,6 +269,7 @@ function App() {
               { value: "compras-email", label: "📧 Inbox Compras" },
               { value: "financeiro", label: "⏰ Prazo Reverso" },
               { value: "comissoes", label: "Comissões" },
+              { value: "rh-homologacao", label: "👥 Homologação de Parceiros" },
               { value: "notificacoes", label: "🔔 Notificações" },
               { value: "configuracoes", label: "Configurações" },
             ]}/>
