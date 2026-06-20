@@ -221,13 +221,55 @@ function PropostaEditor({ setRoute }) {
   const [savedAt, setSavedAt] = React.useState(Date.now());
   const formRef = React.useRef(null);
 
-  // Debounced autosave to localStorage
+  // Save to Supabase
+  const saveToSupabase = React.useCallback(async () => {
+    if (!window.__VP_SB?.sb) return false;
+    try {
+      const user = await window.__VP_SB.sb.auth.getUser();
+      if (!user.data.user?.id) return false;
+
+      const { data: existing } = await window.__VP_SB.sb
+        .from('propostas')
+        .select('id')
+        .eq('numero', data.numero)
+        .maybeSingle();
+
+      const payload = {
+        numero: data.numero,
+        equipamento_tipo: eq,
+        dados_json: data,
+        status: 'rascunho',
+        criado_por: user.data.user.id,
+        atualizado_em: new Date().toISOString(),
+      };
+
+      if (existing?.id) {
+        const { error } = await window.__VP_SB.sb
+          .from('propostas')
+          .update(payload)
+          .eq('id', existing.id);
+        if (error) throw error;
+      } else {
+        const { error } = await window.__VP_SB.sb
+          .from('propostas')
+          .insert([payload]);
+        if (error) throw error;
+      }
+      return true;
+    } catch (e) {
+      console.error('Supabase save failed:', e);
+      return false;
+    }
+  }, [data, eq]);
+
+  // Debounced autosave to localStorage AND Supabase
   React.useEffect(() => {
     const t = setTimeout(() => {
       try { localStorage.setItem(LS_KEY, JSON.stringify(data)); setSavedAt(Date.now()); } catch (e) {}
+      saveToSupabase();
     }, 400);
     return () => clearTimeout(t);
-  }, [data]);
+  }, [data, saveToSupabase]);
 
   React.useEffect(() => {
     try { localStorage.setItem("vpprd.proposta-eq", eq); } catch (e) {}
@@ -314,7 +356,19 @@ function PropostaEditor({ setRoute }) {
             <Button variant="ghost" size="sm" icon="copy" onClick={resetProposal}>Reiniciar</Button>
             <Button variant="outline" size="sm" icon="eye" onClick={() => window.print()}>Visualizar</Button>
             <Button variant="outline" size="sm" icon="download" onClick={() => { window.toast("Abrindo diálogo de impressão / salvar PDF…", "info"); setTimeout(() => window.print(), 200); }}>Gerar PDF</Button>
-            <Button variant="primary" size="sm" icon="send" onClick={() => window.toast("Proposta enviada (simulação) — fluxo real será implementado", "success")}>Enviar p/ Cliente</Button>
+            <Button variant="primary" size="sm" icon="send" onClick={async () => {
+              window.toast("Enviando proposta...", "info");
+              const saved = await saveToSupabase();
+              if (saved && window.__VP_SB?.sb) {
+                await window.__VP_SB.sb.from('propostas')
+                  .update({ status: 'enviada', enviado_em: new Date().toISOString() })
+                  .eq('numero', data.numero);
+                window.toast("✓ Proposta enviada para o cliente!", "success");
+                setTimeout(() => setRoute("propostas"), 1500);
+              } else {
+                window.toast("⚠️ Salvo localmente. Envio via Supabase requer conexão.", "warning");
+              }
+            }}>Enviar p/ Cliente</Button>
           </div>
         </div>
 
@@ -394,8 +448,31 @@ function PropostaEditor({ setRoute }) {
               <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute("propostas")}>Voltar</Button>
               <Button variant="outline" size="sm" icon="download" onClick={() => { window.toast("Abrindo diálogo salvar PDF…", "info"); setTimeout(() => window.print(), 200); }}>Gerar PDF</Button>
               <Button variant="outline" size="sm" icon="eye" onClick={() => window.print()}>Visualizar</Button>
-              <Button variant="secondary" size="sm" icon="copy" onClick={() => window.toast("Rascunho salvo no localStorage", "success")}>Salvar rascunho</Button>
-              <Button variant="primary" size="sm" icon="send" onClick={() => window.toast("Proposta enviada (simulação) — fluxo real será implementado", "success")}>Enviar p/ Cliente</Button>
+              <Button variant="secondary" size="sm" icon="copy" onClick={async () => {
+                window.toast("Salvando proposta...", "info");
+                const saved = await saveToSupabase();
+                if (saved) {
+                  window.toast("✓ Proposta salva com sucesso em Supabase", "success");
+                } else {
+                  window.toast("⚠️ Proposta salva localmente (Supabase indisponível)", "warning");
+                }
+              }}>Salvar rascunho</Button>
+              <Button variant="primary" size="sm" icon="send" onClick={async () => {
+                window.toast("Enviando proposta...", "info");
+                const saved = await saveToSupabase();
+                if (saved) {
+                  // Update status to 'enviada'
+                  if (window.__VP_SB?.sb) {
+                    await window.__VP_SB.sb.from('propostas')
+                      .update({ status: 'enviada', enviado_em: new Date().toISOString() })
+                      .eq('numero', data.numero);
+                  }
+                  window.toast("✓ Proposta enviada para o cliente!", "success");
+                  setTimeout(() => setRoute("propostas"), 1500);
+                } else {
+                  window.toast("❌ Erro ao enviar. Verifique conexão.", "error");
+                }
+              }}>Enviar p/ Cliente</Button>
             </div>
           </div>
         </div>

@@ -434,9 +434,22 @@ function CVWizard({ onCreated, initial }) {
   const completeAll = () => {
     let all = {};
     [0, 3].forEach(i => { all = { ...all, ...validateStep(i, form) }; });
+
+    // ISSUE #6: Validar anexos obrigatórios
     if (!form.checklist.proposta || !form.checklist.desenho || !form.checklist.nrs) {
-      all.__checklist = 'Marque os 3 anexos obrigatórios.';
+      all.__checklist = 'Marque os 3 anexos obrigatórios (Proposta, Desenho, NRs).';
     }
+
+    // ISSUE #6: Validar que Dossier está vinculado
+    if (!form.dossier_id) {
+      all.__dossier = 'Contrato deve estar vinculado a um Dossier da Obra.';
+    }
+
+    // ISSUE #6: Validar valores monetários (não permitir NaN ou 0)
+    if (window.CV.parseMoney(form.valor) <= 0) {
+      all.__valor = 'Valor total deve ser maior que zero.';
+    }
+
     if (Object.keys(all).length > 0) {
       setErrors(all);
       const firstBad = Object.keys(validateStep(0, form)).length ? 0 : 3;

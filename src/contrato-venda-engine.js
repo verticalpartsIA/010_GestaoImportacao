@@ -112,6 +112,7 @@
 
   function defaultState() {
     return {
+      dossier_id: null,  // ISSUE #6: Vinculação ao Dossier da Obra
       comprador: { razao: '', cnpj: '', endereco: '', rep: '', repCargo: '', repCpf: '', email: '', tel: '' },
       tipoEquip: 'ELEVADOR', qtd: 1,
       tipo: 'Social', carga: '', paradas: '10', cargaEspecial: false,
@@ -119,6 +120,9 @@
       distancia: '', localObra: '',
       valor: '', sinalPct: 30, parcelas: 5,
       checklist: { proposta: false, desenho: false, nrs: false },
+      d0_entrada: null,      // ISSUE #6: Data de pagamento da entrada
+      d0_assinatura: null,   // ISSUE #6: Data de assinatura do contrato
+      d0_projeto: null,      // ISSUE #6: Data de aprovação do projeto
     };
   }
 
@@ -293,11 +297,28 @@
     };
   }
 
+  /* ---------- ISSUE #6: Calcular D0 ---------- */
+  function calcularD0(d0_entrada, d0_assinatura, d0_projeto) {
+    // D0 é o MÁXIMO entre:
+    // 1. Data de pagamento da entrada
+    // 2. Data de assinatura do contrato
+    // 3. Data de aprovação do projeto
+    const datas = [];
+    if (d0_entrada) datas.push(new Date(d0_entrada).getTime());
+    if (d0_assinatura) datas.push(new Date(d0_assinatura).getTime());
+    if (d0_projeto) datas.push(new Date(d0_projeto).getTime());
+
+    if (datas.length === 0) return null;
+    const d0Timestamp = Math.max(...datas);
+    return new Date(d0Timestamp).toISOString().split('T')[0];  // retorna YYYY-MM-DD
+  }
+
   /* ---------- Exporta tudo em window.CV ---------- */
   window.CV = {
     VENDEDORA, EQUIPAMENTOS,
     onlyDigits, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
     descEquipamento, defaultState,
     buildContract,
+    calcularD0,  // ISSUE #6
   };
 }());

@@ -7,6 +7,7 @@ const ROUTE_TITLE = {
   dashboard: "Dashboard",
   leads: "Pipeline de Leads",
   "lead-detail": "Detalhe de Lead",
+  "dossier-obra": "Dossier da Obra",
   cotacoes: "Cotações China",
   "cotacao-detail": "Detalhe de Cotação",
   precificacao: "Precificação",
@@ -21,6 +22,7 @@ const ROUTE_TITLE = {
   "contrato-editor": "Editor de Contrato",
   "contrato-venda-equipamentos": "Contrato Venda de Equipamentos",
   "contrato-instalador": "Contrato Instalador",
+  vistorias: "Vistorias de Obras",
   instalacao: "Instalação em Campo",
   art: "ART de Instalação",
   cronograma: "Cronograma de Instalação",
@@ -157,6 +159,7 @@ function App() {
       case "dashboard": return <Dashboard role={role} setRoute={setRoute}/>;
       case "leads": return <LeadsPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute}/>;
+      case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute}/>;
       case "cotacoes": return <CotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cotacao-detail": return <CotacaoDetail cot={subsel} setRoute={setRoute}/>;
       case "precificacao": return <PrecificacaoPage setRoute={setRoute}/>;
@@ -171,6 +174,7 @@ function App() {
       case "contrato-editor": return <ContratoEditorPage contrato={subsel} setRoute={setRoute} onSaved={() => {}} />;
       case "contrato-venda-equipamentos": return <ContratoVendaEquipamentosPage/>;
       case "contrato-instalador": return <ContratoInstaladorPage/>;
+      case "vistorias": return <VistoriasObras obraId={subsel} setRoute={setRoute}/>;
       case "instalacao": return <InstalacaoPage/>;
       case "art": return <ArtPage/>;
       case "cronograma": return <CronogramaPage/>;
@@ -245,6 +249,7 @@ function App() {
               { value: "dashboard", label: "Dashboard" },
               { value: "leads", label: "Leads" },
               { value: "lead-detail", label: "Detalhe de Lead" },
+              { value: "dossier-obra", label: "🏗 Dossier da Obra" },
               { value: "cotacoes", label: "Cotações China" },
               { value: "cotacao-detail", label: "Detalhe de Cotação" },
               { value: "precificacao", label: "Precificação (calc)" },

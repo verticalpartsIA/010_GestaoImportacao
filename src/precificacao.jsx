@@ -88,7 +88,7 @@ function PrecificacaoPage({ setRoute }) {
 
       {selectedProject !== null ? (
         <div style={{ marginTop: 20 }}>
-          <PrecificacaoDetail project={selectedProject}/>
+          <PrecificacaoDetail project={selectedProject} setRoute={setRoute}/>
         </div>
       ) : items.length > 0 && (
         <div style={{ marginTop: 20, textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13, border:'1px dashed var(--border)' }}>
@@ -99,8 +99,35 @@ function PrecificacaoPage({ setRoute }) {
   );
 }
 
-function PrecificacaoDetail({ project = {} }) {
-  // Live calculator state
+function PrecificacaoDetail({ project = {}, setRoute }) {
+  // Carregar análise técnica se existir
+  const [analise, setAnalise] = React.useState(null);
+  const [loading, setLoading] = React.useState(!!project.dossier_id);
+
+  React.useEffect(() => {
+    if (project.dossier_id && window.__ANALISE_TECNICA) {
+      (async () => {
+        try {
+          const { data } = await window.__VP_SB.sb
+            .from('analise_tecnica')
+            .select('*')
+            .eq('dossier_id', project.dossier_id)
+            .single();
+          if (data && data.status === 'aprovada') {
+            setAnalise(data);
+          }
+        } catch (e) {
+          // sem análise ainda
+        } finally {
+          setLoading(false);
+        }
+      })();
+    } else {
+      setLoading(false);
+    }
+  }, [project.dossier_id]);
+
+  // Live calculator state — COMs VALORES TÉCNICOS
   const [fobUSD, setFobUSD] = React.useState(0);
   const [usdRate, setUsdRate] = React.useState(5.20);
   const [freteUSD, setFreteUSD] = React.useState(0);
@@ -111,10 +138,52 @@ function PrecificacaoDetail({ project = {} }) {
   const [icmsPct, setIcmsPct] = React.useState(18);
   const [despAduana, setDespAduana] = React.useState(0);
   const [freteBR, setFreteBR] = React.useState(0);
+  const [custMunck, setCustMunck] = React.useState(0);
+  const [custAndaime, setCustAndaime] = React.useState(0);
+  const [custVistorias, setCustVistorias] = React.useState(0);
+  const [custInstalacao, setCustInstalacao] = React.useState(0);
+  const [custSupervisor, setCustSupervisor] = React.useState(0);
+  const [custHospedagem, setCustHospedagem] = React.useState(0);
+  const [custRisco, setCustRisco] = React.useState(0);
   const [margemPct, setMargemPct] = React.useState(32);
   const [comissaoPct, setComissaoPct] = React.useState(4);
 
-  // calc
+  // Se análise técnica existe, popula custos estimados automaticamente
+  React.useEffect(() => {
+    if (analise && analise.status === 'aprovada') {
+      // Calcular custos baseados em variáveis técnicas
+      const freteIntEstimado = analise.distancia_santos_km > 1000 ? 5000 :
+                               analise.distancia_santos_km > 500 ? 3000 : 1000;
+      setFreteBR(freteIntEstimado);
+
+      if (analise.necessidade_munck === '1-munck') setCustMunck(8000);
+      else if (analise.necessidade_munck === '2-munks') setCustMunck(16000);
+
+      if (analise.necessidade_andaime && analise.responsavel_andaime === 'VerticalParts') {
+        setCustAndaime(5000);
+      }
+
+      // Vistorias: 3 inclusas + cobrar as avulsas
+      const vistoriasAvulsas = Math.max(0, analise.vistorias_inclusas - 3);
+      setCustVistorias(vistoriasAvulsas * (analise.valor_vistoria_avulsa || 500));
+
+      // Instalação: dias × valor/dia
+      setCustInstalacao((analise.dias_instalacao_est || 5) * 1500);
+
+      if (analise.necessidade_supervisor) {
+        setCustSupervisor((analise.dias_instalacao_est || 5) * 800);
+      }
+
+      if (analise.hospedagem_necessaria) {
+        setCustHospedagem((analise.dias_hospedagem_est || 3) * 250);
+      }
+
+      // Risco genérico (5% do custo técnico)
+      setCustRisco(freteIntEstimado * 0.05);
+    }
+  }, [analise])
+
+  // calc — INCLUINDO CUSTOS TÉCNICOS
   const fobBRL = fobUSD * usdRate;
   const freteIntBRL = freteUSD * usdRate;
   const seguroBRL = (fobBRL + freteIntBRL) * (seguroPct / 100);
@@ -124,7 +193,12 @@ function PrecificacaoDetail({ project = {} }) {
   const pisCofinsBRL = (cifBRL + iiBRL + ipiBRL) * (pisCofinsPct / 100);
   const icmsBRL = (cifBRL + iiBRL + ipiBRL + pisCofinsBRL) * (icmsPct / 100);
   const totalImpostos = iiBRL + ipiBRL + pisCofinsBRL + icmsBRL;
-  const custoTotal = cifBRL + totalImpostos + despAduana + freteBR;
+
+  // Custos técnicos (engenharia/instalação)
+  const totalCustosTecnicos = custMunck + custAndaime + custVistorias + custInstalacao + custSupervisor + custHospedagem + custRisco;
+
+  // Custo TOTAL = CIF + Impostos + Despesas Locais + Custos Técnicos
+  const custoTotal = cifBRL + totalImpostos + despAduana + freteBR + totalCustosTecnicos;
   const valorComMargem = custoTotal * (1 + margemPct / 100);
   const valorFinal = valorComMargem * (1 + comissaoPct / 100);
   const margemBRL = valorFinal - custoTotal;
@@ -133,12 +207,28 @@ function PrecificacaoDetail({ project = {} }) {
     { v: 1, when: "agora", who: "Você", change: "Rascunho inicial", value: valorFinal, current: true },
   ];
 
+  if (loading) {
+    return <Card title="Carregando…">
+      <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--fg3)' }}>⏳ Buscando Análise Técnica…</div>
+    </Card>;
+  }
+
+  if (project.dossier_id && !analise) {
+    return <Card title="Análise Técnica necessária" sub="Preencha a análise técnica antes de precificar">
+      <div style={{ padding: '20px', background: '#fff8e6', border: '1px solid #ff9900', borderRadius: '6px' }}>
+        <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>⚠️ Análise Técnica não aprovada</div>
+        <p style={{ fontSize: 13, color: '#666', margin: 0 }}>Para precificar com base em variáveis técnicas, complete e aprove a Análise Técnica primeiro.</p>
+        <Button style={{ marginTop: 12 }} variant="primary" size="sm">Ir para Análise Técnica</Button>
+      </div>
+    </Card>;
+  }
+
   return (
     <Card title={project.name ? `Cálculo: ${project.name}` : "Nova Precificação"} sub={project.id ? `Lead ${project.id}` : "Preencha os campos para calcular o preço final"}
       action={<>
         <Button variant="outline" size="sm" icon="history">Versões</Button>
         <Button variant="outline" size="sm" icon="copy">Duplicar</Button>
-        <Button variant="primary" size="sm" icon="proposal">Gerar proposta</Button>
+        <Button variant="primary" size="sm" icon="proposal" onClick={() => setRoute && setRoute("proposta-editor")}>Gerar proposta</Button>
       </>}
       sharp={true}>
       <div className="split--wide split">
@@ -183,7 +273,60 @@ function PrecificacaoDetail({ project = {} }) {
             </div>
           </Section>
 
-          <Section title="3 · Despesas locais" icon="truck">
+          {analise && analise.status === 'aprovada' && (
+            <Section title="3 · Custos de Engenharia & Instalação" icon="zap">
+              {analise.necessidade_munck && (
+                <div className="calc-row">
+                  <label>Munck ({analise.necessidade_munck})</label>
+                  <input className="input" type="number" value={custMunck} onChange={(e) => setCustMunck(+e.target.value || 0)}/>
+                  <div className="total">{fmtBRL(custMunck)}</div>
+                </div>
+              )}
+              {analise.necessidade_andaime && (
+                <div className="calc-row">
+                  <label>Andaime</label>
+                  <input className="input" type="number" value={custAndaime} onChange={(e) => setCustAndaime(+e.target.value || 0)}/>
+                  <div className="total">{fmtBRL(custAndaime)}</div>
+                </div>
+              )}
+              <div className="calc-row">
+                <label>Vistorias avulsas ({Math.max(0, analise.vistorias_inclusas - 3)})</label>
+                <input className="input" type="number" value={custVistorias} onChange={(e) => setCustVistorias(+e.target.value || 0)}/>
+                <div className="total">{fmtBRL(custVistorias)}</div>
+              </div>
+              <div className="calc-row">
+                <label>Instalação ({analise.dias_instalacao_est} dias)</label>
+                <input className="input" type="number" value={custInstalacao} onChange={(e) => setCustInstalacao(+e.target.value || 0)}/>
+                <div className="total">{fmtBRL(custInstalacao)}</div>
+              </div>
+              {analise.necessidade_supervisor && (
+                <div className="calc-row">
+                  <label>Supervisor VerticalParts</label>
+                  <input className="input" type="number" value={custSupervisor} onChange={(e) => setCustSupervisor(+e.target.value || 0)}/>
+                  <div className="total">{fmtBRL(custSupervisor)}</div>
+                </div>
+              )}
+              {analise.hospedagem_necessaria && (
+                <div className="calc-row">
+                  <label>Hospedagem equipe ({analise.dias_hospedagem_est} dias)</label>
+                  <input className="input" type="number" value={custHospedagem} onChange={(e) => setCustHospedagem(+e.target.value || 0)}/>
+                  <div className="total">{fmtBRL(custHospedagem)}</div>
+                </div>
+              )}
+              <div className="calc-row">
+                <label>Risco técnico</label>
+                <input className="input" type="number" value={custRisco} onChange={(e) => setCustRisco(+e.target.value || 0)}/>
+                <div className="total">{fmtBRL(custRisco)}</div>
+              </div>
+              <div className="calc-row" style={{ background: "var(--vp-gray-50)", padding: "12px 14px", margin: "8px -14px -8px" }}>
+                <label style={{ fontWeight: 800, fontSize: 11, letterSpacing: ".1em", textTransform: "uppercase" }}>= Subtotal Técnico</label>
+                <div/>
+                <div className="total" style={{ fontSize: 15 }}>{fmtBRL(totalCustosTecnicos)}</div>
+              </div>
+            </Section>
+          )}
+
+          <Section title="4 · Despesas locais" icon="truck">
             <div className="calc-row">
               <label>Despachante + taxas aduana</label>
               <input className="input" type="number" value={despAduana} onChange={(e) => setDespAduana(+e.target.value || 0)}/>
@@ -196,7 +339,7 @@ function PrecificacaoDetail({ project = {} }) {
             </div>
           </Section>
 
-          <Section title="4 · Margem + comissão" icon="dollar">
+          <Section title="5 · Margem + comissão" icon="dollar">
             <div className="calc-row">
               <label>Margem comercial (%)</label>
               <input className="input" type="number" step="0.5" value={margemPct} onChange={(e) => setMargemPct(+e.target.value || 0)}/>
@@ -212,11 +355,14 @@ function PrecificacaoDetail({ project = {} }) {
 
         <div className="stack">
           <div className="calc-summary">
-            <div className="up-eyebrow" style={{ color: "var(--vp-yellow)" }}>Resumo · v{versions[0]?.v ?? 1} (rascunho)</div>
+            <div className="up-eyebrow" style={{ color: "var(--vp-yellow)" }}>Resumo · v{versions[0]?.v ?? 1} (rascunho) {analise && '· COM ANÁLISE TÉCNICA'}</div>
             <h3 style={{ fontFamily: "var(--font-display)", fontWeight: 800, fontSize: 22, textTransform: "uppercase", margin: "8px 0 16px", color: "#fff" }}>Preço final ao cliente</h3>
             <div className="calc-summary__row"><span>CIF (Cost+Insur+Freight)</span><b>{fmtBRL(cifBRL)}</b></div>
             <div className="calc-summary__row"><span>Impostos</span><b>{fmtBRL(totalImpostos)}</b></div>
             <div className="calc-summary__row"><span>Despesas locais</span><b>{fmtBRL(despAduana + freteBR)}</b></div>
+            {totalCustosTecnicos > 0 && (
+              <div className="calc-summary__row"><span>Custos de Engenharia & Instalação</span><b>{fmtBRL(totalCustosTecnicos)}</b></div>
+            )}
             <div className="calc-summary__row"><span>= Custo total</span><b>{fmtBRL(custoTotal)}</b></div>
             <div className="calc-summary__row"><span>+ Margem ({margemPct}%)</span><b>{fmtBRL(margemBRL - (valorFinal - valorComMargem))}</b></div>
             <div className="calc-summary__row"><span>+ Comissão ({comissaoPct}%)</span><b>{fmtBRL(valorFinal - valorComMargem)}</b></div>
@@ -225,7 +371,7 @@ function PrecificacaoDetail({ project = {} }) {
               <div className="calc-summary__final-lbl">Preço final BRL</div>
               <div className="calc-summary__final-val">{fmtBRL(valorFinal)}</div>
               <div className="row sb" style={{ marginTop: 16, fontSize: 11, color: "rgba(255,255,255,.6)", fontFamily: "var(--font-mono)" }}>
-                <span>Margem efetiva: <b style={{ color: "#fff" }}>{(margemBRL / valorFinal * 100).toFixed(1)}%</b></span>
+                <span>Margem efetiva: <b style={{ color: "#fff" }}>{valorFinal > 0 ? (margemBRL / valorFinal * 100).toFixed(1) : '—'}%</b></span>
                 <span>Câmbio: <b style={{ color: "#fff" }}>R$ {usdRate.toFixed(2)}</b></span>
               </div>
             </div>
