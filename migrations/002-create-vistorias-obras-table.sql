@@ -30,7 +30,7 @@ CREATE TABLE IF NOT EXISTS vistorias_obras (
   atualizado_em TIMESTAMP WITH TIME ZONE DEFAULT CURRENT_TIMESTAMP,
 
   -- User attribution
-  criado_por TEXT REFERENCES auth.users(id) ON DELETE SET NULL,
+  criado_por UUID REFERENCES auth.users(id) ON DELETE SET NULL,
 
   -- Foreign key constraint
   CONSTRAINT fk_obra FOREIGN KEY (obra_id) REFERENCES dossier_obra(id) ON DELETE CASCADE
