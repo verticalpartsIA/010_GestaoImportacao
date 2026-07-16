@@ -121,7 +121,7 @@ function FtFicha({ state }) {
     id.codigoProduto && { k: 'Código do Produto', v: id.codigoProduto },
     id.partNumber && { k: 'Part Number', v: id.partNumber },
   ].filter(Boolean);
-  const vazia = !d.grupos.length && idents.length === 0 && !(id.descricaoTecnica && id.descricaoTecnica.trim());
+  const vazia = !d.grupos.length && idents.length === 0 && !(id.descricaoTecnica && id.descricaoTecnica.trim()) && !(state.descricao_duimp && state.descricao_duimp.trim());
   const orientation = useFichaOrientation(d.temMidia ? d.midia : null);
 
   return (
@@ -139,6 +139,12 @@ function FtFicha({ state }) {
             <div className="ft-fz-descterm">
               <span className="ft-fz-dt-k">Descrição Técnica</span>
               <p>{id.descricaoTecnica.trim()}</p>
+            </div>
+          )}
+          {state.descricao_duimp && state.descricao_duimp.trim() && (
+            <div className="ft-fz-descterm">
+              <span className="ft-fz-dt-k">Descrição DUIMP</span>
+              <p>{state.descricao_duimp.trim()}</p>
             </div>
           )}
           {vazia ? (

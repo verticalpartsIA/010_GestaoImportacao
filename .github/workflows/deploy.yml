@@ -17,7 +17,7 @@ jobs:
           password: ${{ secrets.HOSTINGER_SSH_PASS }}
           port: 65002
           script: |
-            cd /home/u969661049/domains/vpprd.vpsistema.com/nodejs
+            cd /home/u969661049/domains/vpgestaoimportacao.vpsistema.com/nodejs
             export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
             git pull origin main
             npm install --omit=dev
