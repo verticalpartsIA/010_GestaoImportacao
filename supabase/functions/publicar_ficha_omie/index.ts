@@ -4,6 +4,8 @@
 
    API Omie é JSON-RPC:
    - ConsultarProduto  → valida que o código existe e obtém o nId
+   - ExcluirAnexo      → remove anexo anterior desta ficha (se houver),
+                          permitindo republicar substituindo o PDF antigo
    - IncluirAnexo      → sobe o PDF na tabela "produtos"
    Erros do Omie voltam como { faultstring, faultcode }.
 
@@ -96,8 +98,30 @@ Deno.serve(async (req) => {
     }
     const nIdProduto = consulta.data.codigo_produto;
 
-    // 3) Preparar arquivo: PDF → ZIP → base64 + MD5
+    // 3) Remover anexo anterior desta ficha, se existir — permite republicar
+    // substituindo o PDF em vez de duplicar (mesma cCodIntAnexo de sempre).
     const nomeArquivo = `FICHA-TECNICA-${String(codigo_produto).replace(/[^A-Za-z0-9-]/g, "")}.pdf`;
+    const cCodIntAnexo = `ft-${String(ficha_id).replace(/-/g, "").slice(0, 17)}`;
+    let foiSubstituido = false;
+    const remocao = await omieCall("geral/anexo", "ExcluirAnexo", {
+      cTabela: "produto",
+      nId: nIdProduto,
+      cCodIntAnexo,
+      cNomeArquivo: nomeArquivo,
+    });
+    if (remocao.ok) {
+      foiSubstituido = true;
+    } else {
+      const faultRemocao = remocao.data?.faultstring || "";
+      if (/redundante|REDUNDANT/i.test(faultRemocao)) {
+        const seg = faultRemocao.match(/(\d+)\s*segundos?/)?.[1] || "60";
+        return json({ error: `⏳ O Omie bloqueou chamadas repetidas — aguarde ${seg}s e clique de novo.` }, 429);
+      }
+      // qualquer outro motivo (ex.: ainda não existe anexo — primeira publicação)
+      // não bloqueia o fluxo: segue para incluir o anexo normalmente.
+    }
+
+    // 4) Preparar arquivo: PDF → ZIP → base64 + MD5
     const pdfBytes = Uint8Array.from(atob(pdf_base64), (c) => c.charCodeAt(0));
 
     // Omie exige o arquivo comprimido em ZIP
@@ -109,12 +133,12 @@ Deno.serve(async (req) => {
     // Omie valida cMd5 contra a string base64 de cArquivo (não os bytes binários)
     const md5Hash = createHash("md5").update(zippedBase64).digest("hex");
 
-    // 4) Anexar o PDF ao produto
+    // 5) Anexar o PDF ao produto
     // cCodIntAnexo: limite 20 chars → ft- (3) + 17 chars do UUID sem hífens
     const anexo = await omieCall("geral/anexo", "IncluirAnexo", {
       cTabela: "produto",
       nId: nIdProduto,
-      cCodIntAnexo: `ft-${String(ficha_id).replace(/-/g, "").slice(0, 17)}`,
+      cCodIntAnexo,
       cNomeArquivo: nomeArquivo,
       cTipoArquivo: "pdf",
       cArquivo: zippedBase64,
@@ -131,23 +155,34 @@ Deno.serve(async (req) => {
       }
       return json({ error: `Falha ao anexar no Omie: ${fault}` }, 400);
     }
+    const nIdAnexo = anexo.data?.nIdAnexo ?? null;
 
-    // 5) Auditoria (best-effort)
+    // 6) Grava status de publicação na própria ficha (best-effort)
+    const { error: statusError } = await sb.from("fichas_tecnicas").update({
+      omie_anexo_id: nIdAnexo,
+      omie_publicado_em: new Date().toISOString(),
+    }).eq("id", ficha_id);
+    if (statusError) console.warn("status omie na ficha falhou:", statusError.message);
+
+    // 7) Auditoria (best-effort)
     const { error: logError } = await sb.from("vp_logs").insert({
       ator_nome: ator_nome || "Sistema",
       ator_setor: ator_setor || "engenharia",
       modulo: "Ficha Técnica",
-      acao: "publicou ficha no Omie",
+      acao: foiSubstituido ? "republicou ficha no Omie" : "publicou ficha no Omie",
       alvo: nome_produto || numero_documento || codigo_produto,
       alvo_id: String(ficha_id),
-      detalhe: { codigo_produto, arquivo: nomeArquivo, omie_nid: nIdProduto },
+      detalhe: { codigo_produto, arquivo: nomeArquivo, omie_nid: nIdProduto, omie_anexo_id: nIdAnexo, substituido: foiSubstituido },
     });
     if (logError) console.warn("vp_logs falhou:", logError.message);
 
     return json({
       sucesso: true,
-      mensagem: `✅ Ficha anexada ao produto ${codigo_produto} no Omie (${nomeArquivo})`,
+      mensagem: foiSubstituido
+        ? `🔄 Ficha republicada — PDF substituído no produto ${codigo_produto} no Omie (${nomeArquivo})`
+        : `✅ Ficha anexada ao produto ${codigo_produto} no Omie (${nomeArquivo})`,
       codigo_produto,
+      substituido: foiSubstituido,
     });
   } catch (error) {
     console.error("Erro geral:", error);

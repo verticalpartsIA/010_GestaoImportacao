@@ -180,7 +180,7 @@ function FtFicha({ state }) {
 /* ============================================================
    SIDEBAR (categorias expansíveis + busca + templates)
    ============================================================ */
-function FtSidebar({ cats, search, setSearch, onToggle, onAddField, onAddCategory, onTemplate }) {
+function FtSidebar({ cats, search, setSearch, onToggle, onAddField, onAddCategory, onTemplate, onRemoveCategory, onRemoveField }) {
   const [open, setOpen] = _ftUS({ dimensoes: true });
   const t = search.trim().toLowerCase();
   const matchCampo = (fld) => !t || fld.nome.toLowerCase().includes(t);
@@ -206,22 +206,37 @@ function FtSidebar({ cats, search, setSearch, onToggle, onAddField, onAddCategor
           const aberto = t ? true : !!open[c.id];
           const nAtivos = c.campos.filter((fld) => fld.ativo).length;
           const campos = c.campos.filter(matchCampo);
+          const catExcluivel = c.custom && !window.FT.PROTECTED_CUSTOM_CATS.includes(c.id);
           return (
             <div className="ft-cat" key={c.id}>
-              <button className="ft-cat-head" onClick={() => setOpen((o) => ({ ...o, [c.id]: !o[c.id] }))}>
-                <svg className={'ft-chev' + (aberto ? ' on' : '')} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
-                <FtCatIcon name={c.icon}/>
-                <span className="ft-cat-nome">{c.nome}</span>
-                {nAtivos > 0 && <span className="ft-badge">{nAtivos}</span>}
-              </button>
+              <div className="ft-cat-head">
+                <button className="ft-cat-toggle" onClick={() => setOpen((o) => ({ ...o, [c.id]: !o[c.id] }))}>
+                  <svg className={'ft-chev' + (aberto ? ' on' : '')} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                  <FtCatIcon name={c.icon}/>
+                  <span className="ft-cat-nome">{c.nome}</span>
+                  {nAtivos > 0 && <span className="ft-badge">{nAtivos}</span>}
+                </button>
+                {catExcluivel && (
+                  <button className="ft-cat-rm" onClick={() => onRemoveCategory(c.id)} title="Excluir categoria" aria-label="Excluir categoria">
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+                  </button>
+                )}
+              </div>
               {aberto && (
                 <div className="ft-fields">
                   {campos.map((fld) => (
-                    <label className={'ft-fld' + (fld.ativo ? ' on' : '')} key={fld.k}>
-                      <input type="checkbox" checked={!!fld.ativo} onChange={() => onToggle(c.id, fld.k)}/>
-                      <span className="ft-fld-nome">{fld.nome}</span>
-                      {fld.unidade && <span className="ft-fld-u">{fld.unidade}</span>}
-                    </label>
+                    <div className="ft-fld-row" key={fld.k}>
+                      <label className={'ft-fld' + (fld.ativo ? ' on' : '')}>
+                        <input type="checkbox" checked={!!fld.ativo} onChange={() => onToggle(c.id, fld.k)}/>
+                        <span className="ft-fld-nome">{fld.nome}</span>
+                        {fld.unidade && <span className="ft-fld-u">{fld.unidade}</span>}
+                      </label>
+                      {fld.custom && (
+                        <button className="ft-fld-rm" onClick={() => onRemoveField(c.id, fld.k)} title="Excluir campo" aria-label="Excluir campo">
+                          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round"><path d="M3 6h18M8 6V4h8v2M6 6l1 14h10l1-14"/></svg>
+                        </button>
+                      )}
+                    </div>
                   ))}
                   <button className="ft-addfield" onClick={() => onAddField(c.id)}>
                     <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round"><path d="M12 5v14M5 12h14"/></svg>
@@ -529,12 +544,48 @@ function FtGenerator({ initial, onSaved, onCancel }) {
     }
   };
   const addCategory = (nome) => {
+    // Trava duplicidade — sem diferenciar maiúsculo/minúsculo/acento —
+    // contra as categorias já visíveis (9 nativas + biblioteca mesclada).
+    // Recalcula freshCats() na hora (em vez de confiar só em state.cats):
+    // se esta ficha foi aberta antes da biblioteca terminar de carregar,
+    // state.cats pode estar incompleto — freshCats() reflete o que está
+    // carregado agora, fechando essa brecha de corrida.
+    const norm = window.FT.normalizeNome(nome);
+    const todasCats = [...state.cats, ...window.FT.freshCats()];
+    const existe = todasCats.some((c) => window.FT.normalizeNome(c.nome) === norm);
+    if (existe) {
+      alert(`Já existe uma categoria "${nome.trim()}" — escolha outro nome.`);
+      return;
+    }
     const id = window.FT.slug(nome);
     setState((s) => ({ ...s, cats: [...s.cats, { id, nome, icon: 'folder', custom: true, campos: [] }] }));
     setModal(null);
     // Persiste a categoria na biblioteca
     if (window.FTStore && window.FTStore.saveCategoryToLibrary) {
       window.FTStore.saveCategoryToLibrary({ id, nome, icon: 'folder' }).catch((e) => console.warn('saveCat bg', e));
+    }
+  };
+  // Exclui uma categoria customizada de vez — desta ficha e da biblioteca
+  // (fichas já salvas guardam seu próprio retrato e não são afetadas).
+  const removeCategory = (catId) => {
+    const cat = state.cats.find((c) => c.id === catId);
+    if (!cat) return;
+    if (!window.confirm(`Excluir a categoria "${cat.nome}"? Ela sai desta ficha e da lista de categorias disponíveis para novas fichas.`)) return;
+    setState((s) => ({ ...s, cats: s.cats.filter((c) => c.id !== catId) }));
+    if (window.FTStore && window.FTStore.deleteCategoryFromLibrary) {
+      window.FTStore.deleteCategoryFromLibrary(catId).catch((e) => console.warn('deleteCat bg', e));
+    }
+  };
+  // Exclui um campo customizado de vez (diferente do "Remover" do editor,
+  // que só desmarca) — some da lista de campos desta categoria e da biblioteca.
+  const removeFieldDef = (catId, key) => {
+    const cat = state.cats.find((c) => c.id === catId);
+    const fld = cat && cat.campos.find((f) => f.k === key);
+    if (!fld) return;
+    if (!window.confirm(`Excluir o campo "${fld.nome}"? Ele sai desta ficha e da lista de campos disponíveis para novas fichas.`)) return;
+    setState((s) => ({ ...s, cats: s.cats.map((c) => c.id !== catId ? c : { ...c, campos: c.campos.filter((f) => f.k !== key) }) }));
+    if (window.FTStore && window.FTStore.deleteFieldFromLibrary) {
+      window.FTStore.deleteFieldFromLibrary(catId, key).catch((e) => console.warn('deleteField bg', e));
     }
   };
   const [uploadingSlot, setUploadingSlot] = _ftUS(null);
@@ -636,23 +687,31 @@ function FtGenerator({ initial, onSaved, onCancel }) {
             if (!fichaId) { window.toast?.('Salve a ficha primeiro — depois publique no Omie', 'error'); return; }
             const user = window.__VP_USER || { nome: 'Usuário', setor: 'engenharia' };
             try {
-              await window.FichaOmiePublish.publicarNoOmie(
+              const res = await window.FichaOmiePublish.publicarNoOmie(
                 fichaId,
                 state.identificacao.nomeProduto,
                 user.nome,
                 user.setor
               );
+              if (res) setState((s) => ({ ...s, omie_publicado_em: new Date().toISOString() }));
             } catch (e) { console.error('[Omie publish]', e); }
           }}
           title={(() => {
             if (!state.identificacao.nomeProduto) return '⚠️ Preencha o Nome do Produto';
             if (!state.identificacao.codigoProduto) return '⚠️ Preencha o Código do Produto (Omie)';
             if (!podeGerar) return '⚠️ Faltam campos obrigatórios marcados com * (ou descrição técnica vazia)';
-            return '✅ Publicar ficha como anexo no Omie';
+            return state.omie_publicado_em
+              ? '🔄 Republicar — substitui o PDF já anexado no Omie'
+              : '✅ Publicar ficha como anexo no Omie';
           })()}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-          Publicar no Omie
+          {state.omie_publicado_em ? 'Republicar no Omie' : 'Publicar no Omie'}
         </button>
+        {state.omie_publicado_em && (
+          <span style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap' }}>
+            Publicado no Omie em {window.FTStore.fmtDateTime(state.omie_publicado_em)}
+          </span>
+        )}
       </div>
 
       <div className="ft-gen-body">
@@ -660,7 +719,9 @@ function FtGenerator({ initial, onSaved, onCancel }) {
           onToggle={toggleField}
           onAddField={(catId) => setModal({ tipo: 'field', catId })}
           onAddCategory={() => setModal({ tipo: 'cat' })}
-          onTemplate={aplicarTemplate}/>
+          onTemplate={aplicarTemplate}
+          onRemoveCategory={removeCategory}
+          onRemoveField={removeFieldDef}/>
         <div className="ft-work">
           <FtEditor state={state} onIdent={setIdent} onValue={setValue} onRemove={removeField}
             onMedia={onMedia} onAddField={(catId) => setModal({ tipo: 'field', catId })}
@@ -1000,6 +1061,7 @@ function FichaTecnicaPage() {
       ncm_recomendado: ficha.ncm_recomendado || '',
       ncm_descricao: ficha.ncm_descricao || '',
       descricao_duimp: ficha.descricao_duimp || '',
+      omie_publicado_em: ficha.omie_publicado_em || null,
     });
     setView('nova');
   };
