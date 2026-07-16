@@ -26,6 +26,18 @@
     nome, unidade: unidade || '', tipo: tipo || 'number', ...(extra || {}),
   });
 
+  /* Categorias customizadas "adotadas" — tratadas como protegidas mesmo
+     não sendo uma das 9 nativas (não recebem botão de excluir). Hoje só
+     "Compatível com Fabricante", já estabelecida e em uso; pra proteger
+     outra categoria específica no futuro, só adicionar o id aqui. */
+  const PROTECTED_CUSTOM_CATS = ['c_madeira_test'];
+
+  /* Normaliza nome pra comparação (sem acento, minúsculo, sem espaços nas
+     pontas) — usado pra travar criação de categoria/campo duplicado. */
+  function normalizeNome(s) {
+    return String(s || '').trim().toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '');
+  }
+
   /* 9 categorias pré-configuradas */
   const LIB = [
     {
@@ -394,8 +406,8 @@
   }
 
   window.FT = {
-    UNIDADES, LIB, TEMPLATES,
-    slug, hoje, freshCats, freshState,
+    UNIDADES, LIB, TEMPLATES, PROTECTED_CUSTOM_CATS,
+    slug, hoje, freshCats, freshState, normalizeNome,
     compile, aplicarTemplate, nextOrdem, podeGerar,
     setLibraryExtras, buildSKU,
   };

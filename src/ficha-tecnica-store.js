@@ -238,10 +238,29 @@
     return row;
   }
 
+  /* Exclui uma categoria customizada da biblioteca (e os campos dela) —
+     afeta só o que fichas NOVAS vão oferecer daqui pra frente; fichas já
+     salvas guardam seu próprio retrato de categorias/campos e não mudam. */
+  async function deleteCategoryFromLibrary(catId) {
+    const c = sb(); if (!c || !catId) return;
+    const { error: e1 } = await c.from('fichas_lib_campos').delete().eq('cat_id', catId);
+    if (e1) console.warn('[FTStore] deleteCategoryFromLibrary (campos) error', e1);
+    const { error: e2 } = await c.from('fichas_lib_categorias').delete().eq('id', catId);
+    if (e2) console.warn('[FTStore] deleteCategoryFromLibrary (categoria) error', e2);
+  }
+
+  /* Exclui um campo customizado específico da biblioteca. */
+  async function deleteFieldFromLibrary(catId, k) {
+    const c = sb(); if (!c || !catId || !k) return;
+    const { error } = await c.from('fichas_lib_campos').delete().eq('cat_id', catId).eq('k', k);
+    if (error) console.warn('[FTStore] deleteFieldFromLibrary error', error);
+  }
+
   window.FTStore = {
     uuid, fmtDateTime, relative,
     listAll, getById, createDraft, update, remove,
     syncCatalogoProduto, extractNCM, buildAtributos,
     loadLibrary, saveCategoryToLibrary, saveFieldToLibrary, libFieldKey,
+    deleteCategoryFromLibrary, deleteFieldFromLibrary,
   };
 }());
