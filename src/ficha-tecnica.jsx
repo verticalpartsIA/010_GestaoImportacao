@@ -533,6 +533,16 @@ function FtGenerator({ initial, onSaved, onCancel }) {
   const setValue = (catId, key, v) => setState((s) => ({ ...s, cats: s.cats.map((c) => c.id !== catId ? c : { ...c, campos: c.campos.map((fld) => fld.k !== key ? fld : { ...fld, valor: v }) }) }));
   const removeField = (catId, key) => setState((s) => ({ ...s, cats: s.cats.map((c) => c.id !== catId ? c : { ...c, campos: c.campos.map((fld) => fld.k !== key ? fld : { ...fld, ativo: false }) }) }));
   const addField = (catId, def) => {
+    // Trava duplicidade — sem diferenciar maiúsculo/minúsculo/acento —
+    // contra os campos já existentes NESTA categoria (nativos + custom).
+    // Retorna true/false pra quem chama saber se deve fechar o modal.
+    const cat = state.cats.find((c) => c.id === catId);
+    const norm = window.FT.normalizeNome(def.nome);
+    const existe = cat && cat.campos.some((f) => window.FT.normalizeNome(f.nome) === norm);
+    if (existe) {
+      alert(`Já existe um campo "${def.nome.trim()}" nesta categoria — escolha outro nome.`);
+      return false;
+    }
     setState((s) => {
       const ord = window.FT.nextOrdem(s.cats);
       const novo = { k: window.FT.slug(def.nome), nome: def.nome, unidade: def.unidade || '', tipo: def.tipo || 'number', valor: def.valor || '', ativo: true, ordem: ord, custom: true };
@@ -542,6 +552,7 @@ function FtGenerator({ initial, onSaved, onCancel }) {
     if (window.FTStore && window.FTStore.saveFieldToLibrary) {
       window.FTStore.saveFieldToLibrary(catId, def).catch((e) => console.warn('saveField bg', e));
     }
+    return true;
   };
   const addCategory = (nome) => {
     // Trava duplicidade — sem diferenciar maiúsculo/minúsculo/acento —
@@ -738,7 +749,7 @@ function FtGenerator({ initial, onSaved, onCancel }) {
 
       {modal && modal.tipo === 'field' && (
         <FtAddFieldModal catNome={state.cats.find((c) => c.id === modal.catId)?.nome || ''}
-          onAdd={(def) => { addField(modal.catId, def); setModal(null); }}
+          onAdd={(def) => { if (addField(modal.catId, def)) setModal(null); }}
           onClose={() => setModal(null)}/>
       )}
       {modal && modal.tipo === 'cat' && (
