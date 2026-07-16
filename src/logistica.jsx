@@ -26,6 +26,14 @@ function buildMilestones(status, etd, eta) {
   }));
 }
 
+/* ---------- Diferença em dias entre 2 datas ISO (yyyy-mm-dd) ---------- */
+function diffDiasISO(a, b) {
+  if (!a || !b) return 0;
+  const da = new Date(a + 'T00:00:00');
+  const db = new Date(b + 'T00:00:00');
+  return Math.round((da - db) / 86400000);
+}
+
 /* ---------- Sincronização AIS (Edge Function ais-sync) ---------- */
 async function runAisSync() {
   const { data, error } = await window.__VP_SB.sb.functions.invoke('ais-sync');
@@ -89,10 +97,16 @@ function ModalNovoEmbarque({ onClose, onSaved }) {
     bl:'', invoiceNumber:'', invoiceValue:'', invoiceCurrency:'USD',
     containerNumber:'', seal:'', containers:'1', type:'40HC', freight:'FCL',
     from:'Xangai, CN', to:'Santos, BR',
-    etd:'', eta:'', status:'Em trânsito',
+    etd:'', eta:'', status:'Em trânsito', obraId:'',
   });
   const [saving, setSaving] = React.useState(false);
+  const [obras, setObras] = React.useState([]);
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+
+  React.useEffect(() => {
+    window.__VP_SB.sb.from('dossier_obra').select('id,client_name,building_name,city,state')
+      .then(({ data }) => setObras(data || []));
+  }, []);
 
   const save = async () => {
     if (!f.client.trim()) return window.toast('Cliente é obrigatório.', 'warning');
@@ -102,6 +116,7 @@ function ModalNovoEmbarque({ onClose, onSaved }) {
     const { error } = await window.__VP_SB.sb.from('embarques').insert({
       id,
       client: f.client, supplier: f.supplier || null,
+      project_id: f.obraId || null,
       vessel: f.vessel || null, imo: f.imo || null, line: f.line || null,
       bl: f.bl || null,
       invoice_number: f.invoiceNumber || null,
@@ -124,6 +139,8 @@ function ModalNovoEmbarque({ onClose, onSaved }) {
     if (error) return window.toast('Erro: ' + error.message, 'error');
     window.toast('Embarque criado!', 'success');
     onSaved?.(); onClose();
+    // Posiciona o navio no mapa imediatamente (sem esperar o próximo sync manual).
+    if (f.status !== 'Entregue') runAisSync();
   };
 
   const fld = (label, key, type='text', ph='', opts=null) => (
@@ -153,6 +170,15 @@ function ModalNovoEmbarque({ onClose, onSaved }) {
         <div className="grid-2" style={{ gap:12 }}>
           {fld('Cliente *', 'client', 'text', 'Condomínio Ed. Itacolomi…')}
           {fld('Fornecedor', 'supplier', 'text', 'Ex.: Tianjin Control Systems')}
+        </div>
+        <div className="stack" style={{ gap:4 }}>
+          <label className="up-eyebrow muted">Obra (Dossiê) — vincula cidade/UF p/ transporte nacional</label>
+          <select className="input" value={f.obraId} onChange={e => set('obraId', e.target.value)}>
+            <option value="">— Sem vínculo —</option>
+            {obras.map(o => (
+              <option key={o.id} value={o.id}>{o.building_name} · {o.client_name} ({o.city || '—'}/{o.state || '—'})</option>
+            ))}
+          </select>
         </div>
 
         {sectionLabel('Invoice')}
@@ -329,6 +355,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
 function ImportacaoDetail({ embarque, setRoute }) {
   const [e, setE] = React.useState(embarque);
   const [syncing, setSyncing] = React.useState(false);
+  const [reportando, setReportando] = React.useState(false);
   React.useEffect(() => { setE(embarque); }, [embarque]);
 
   const refresh = async () => {
@@ -343,6 +370,30 @@ function ImportacaoDetail({ embarque, setRoute }) {
     setE(prev => ({ ...prev, docs: newDocs }));
     const { error } = await window.__VP_SB.sb.from('embarques').update({ docs: newDocs }).eq('id', embarque.id);
     if (error) window.toast('Erro ao salvar documentos: ' + error.message, 'error');
+  };
+
+  const reportarChegada = async () => {
+    if (e.chegada_confirmada_em) return;
+    if (!window.confirm(`Confirmar chegada do navio ${e.vessel || e.id} no Brasil?\n\nIsso cria tarefas para Engenharia e Instalação prepararem o recebimento de "${e.client}".`)) return;
+    setReportando(true);
+    const now = new Date().toISOString();
+    const dueTime = now.slice(0, 16).replace('T', ' ');
+    const [{ error: errEmb }, { error: errEng }, { error: errInst }] = await Promise.all([
+      window.__VP_SB.sb.from('embarques').update({ chegada_confirmada_em: now }).eq('id', e.id),
+      window.__VP_SB.sb.from('tarefas').insert({
+        title: `Chegada confirmada: preparar recebimento — ${e.client} (${e.id})`,
+        module: 'Engenharia', priority: 'alta', due_time: dueTime, role: 'admin', done: false,
+      }),
+      window.__VP_SB.sb.from('tarefas').insert({
+        title: `Chegada confirmada: agendar instalação — ${e.client} (${e.id})`,
+        module: 'Instalação', priority: 'alta', due_time: dueTime, role: 'admin', done: false,
+      }),
+    ]);
+    setReportando(false);
+    const err = errEmb || errEng || errInst;
+    if (err) return window.toast('Erro ao reportar chegada: ' + err.message, 'error');
+    setE(prev => ({ ...prev, chegada_confirmada_em: now }));
+    window.toast('Chegada reportada — tarefas criadas para Engenharia e Instalação.', 'success');
   };
 
   if (!e) {
@@ -372,7 +423,9 @@ function ImportacaoDetail({ embarque, setRoute }) {
         <div className="page-head__r">
           <Button variant="outline" icon="globe" onClick={() => setRoute("importacao-rastreamento")}>Ver no mapa</Button>
           <Button variant="outline" icon="mail">Email fornecedor</Button>
-          <Button variant="primary" icon="package">Reportar chegada</Button>
+          <Button variant="primary" icon="package" onClick={reportarChegada} disabled={reportando || !!e.chegada_confirmada_em}>
+            {e.chegada_confirmada_em ? "Chegada confirmada ✓" : reportando ? "Reportando…" : "Reportar chegada"}
+          </Button>
         </div>
       </div>
 
@@ -452,7 +505,19 @@ function ImportacaoDetail({ embarque, setRoute }) {
             <KvBlock label="ETD" value={fmtDateLong(e.etd)}/>
             <KvBlock label="ETA original" value={fmtDateLong(e.etaOriginal || e.eta_original)}/>
             <KvBlock label="ETA atualizada" value={fmtDateLong(e.eta)}/>
-            {(e.etaOriginal || e.eta_original) && e.eta !== (e.etaOriginal || e.eta_original) ? <div className="alert danger" style={{ marginTop: 8 }}><Icon.warning/><div><div className="alert__title">Atraso detectado</div><div className="alert__sub mono">Diferença: +3 dias</div></div></div> : null}
+            {(e.etaOriginal || e.eta_original) && e.eta !== (e.etaOriginal || e.eta_original) ? (() => {
+              const dias = diffDiasISO(e.eta, e.etaOriginal || e.eta_original);
+              return (
+                <div className="alert danger" style={{ marginTop: 8 }}>
+                  <Icon.warning/>
+                  <div>
+                    <div className="alert__title">Atraso detectado</div>
+                    <div className="alert__sub mono">Diferença: {dias > 0 ? "+" : ""}{dias} dia{Math.abs(dias) !== 1 ? "s" : ""}</div>
+                    <div className="alert__sub">Pode impactar o cronograma de instalação — avise Engenharia/Instalação.</div>
+                  </div>
+                </div>
+              );
+            })() : null}
           </Card>
 
           <Card title="Trigger Financeiro" sharp>
@@ -474,6 +539,10 @@ function ImportacaoRastreamento({ setRoute }) {
   const [loading, setLoading] = React.useState(true);
   const [active, setActive] = React.useState(null);
   const [syncing, setSyncing] = React.useState(false);
+  const [filterStatus, setFilterStatus] = React.useState("Todos");
+  const [filterEta, setFilterEta] = React.useState("Todos");
+  const statusOptions = ["Todos", "Em trânsito", "Aguardando liberação", "Entregue"];
+  const etaOptions = ["Todos", "Próximos 7 dias", "Próximos 30 dias", "Atrasados"];
 
   const load = React.useCallback(() => {
     return window.__VP_SB.sb.from('embarques').select('*').order('eta')
@@ -485,7 +554,18 @@ function ImportacaoRastreamento({ setRoute }) {
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
-  const ships = embarques.filter(e => e.lat !== null && e.lat !== undefined);
+  const hoje = new Date().toISOString().slice(0, 10);
+  const ships = embarques.filter(e => e.lat !== null && e.lat !== undefined)
+    .filter(e => filterStatus === "Todos" || e.status === filterStatus)
+    .filter(e => {
+      if (filterEta === "Todos") return true;
+      if (!e.eta) return false;
+      if (filterEta === "Atrasados") return (e.eta_original || e.etaOriginal) && e.eta > (e.eta_original || e.etaOriginal);
+      const dias = diffDiasISO(e.eta, hoje);
+      if (filterEta === "Próximos 7 dias") return dias >= 0 && dias <= 7;
+      if (filterEta === "Próximos 30 dias") return dias >= 0 && dias <= 30;
+      return true;
+    });
   const activeId = active || (ships[0] && ships[0].id) || null;
   const activeShip = ships.find(s => s.id === activeId);
   const lastSync = ships.map(s => s.last_ais_sync).filter(Boolean).sort().pop();
@@ -504,6 +584,19 @@ function ImportacaoRastreamento({ setRoute }) {
         <div className="page-head__r">
           <Button variant="outline" icon="refresh" onClick={onSync} disabled={syncing}>{syncing ? 'Atualizando…' : 'Atualizar'}</Button>
           <Button variant="outline" icon="download">Exportar relatório</Button>
+        </div>
+      </div>
+
+      <div className="tbar" style={{ marginBottom: 16 }}>
+        <div className="seg">
+          {statusOptions.map(s => (
+            <button key={s} className={filterStatus === s ? "is-active" : ""} onClick={() => setFilterStatus(s)}>{s}</button>
+          ))}
+        </div>
+        <div className="seg">
+          {etaOptions.map(s => (
+            <button key={s} className={filterEta === s ? "is-active" : ""} onClick={() => setFilterEta(s)}>{s}</button>
+          ))}
         </div>
       </div>
 
@@ -692,21 +785,29 @@ function ComprasPage({ setRoute }) {
 
   const reloadFretes = () => {
     setLoading(true);
-    window.__VP_SB.sb.from('embarques').select('*').order('eta')
-      .then(({ data, error }) => {
+    Promise.all([
+      window.__VP_SB.sb.from('embarques').select('*').order('eta'),
+      window.__VP_SB.sb.from('dossier_obra').select('id,client_name,building_name,city,state'),
+    ]).then(([{ data, error }, { data: obrasData }]) => {
         if (error) {
           window.toast('Erro ao carregar fretes nacionais: ' + error.message, 'error');
           setFretes([]);
         } else {
+          const obrasById = {};
+          (obrasData || []).forEach(o => { obrasById[o.id] = o; });
           setFretes((data || []).map(e => {
             const status = e.status === 'Entregue' ? 'Entregue'
               : e.status === 'Liberação aduaneira' ? 'Aguardando coleta'
               : e.status === 'Em trânsito' ? 'Saiu CD'
               : e.status || 'Aguardando coleta';
+            const obra = e.project_id ? obrasById[e.project_id] : null;
+            const destino = obra
+              ? `${obra.building_name} — ${obra.city || '?'}/${obra.state || '?'}`
+              : (e.client || 'Obra (sem cidade/UF vinculada)');
             return {
               id: 'FN-' + e.id,
               origem: e.to || 'Porto',
-              destino: e.client || e.projeto || 'Obra',
+              destino,
               transportadora: e.line || 'Operador logístico',
               driver: null,
               placa: e.bl,
