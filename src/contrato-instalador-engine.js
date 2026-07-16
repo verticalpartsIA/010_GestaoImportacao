@@ -47,19 +47,23 @@
   const ANEXOS = [
     { id: 'pgr',   label: 'PGR (Empresa)' },
     { id: 'pcmso', label: 'PCMSO (Empresa)' },
+    { id: 'ltcat', label: 'LTCAT' },
     { id: 'ctps',  label: 'CTPS dos funcionários' },
     { id: 'nr01',  label: 'NR-01 — Ordem de serviço' },
-    { id: 'nr06',  label: 'NR-06 — EPIs' },
-    { id: 'nr12',  label: 'NR-12 — Máquinas e equipamentos' },
-    { id: 'nr18',  label: 'NR-18 — Construção' },
-    { id: 'nr35',  label: 'NR-35 — Trabalho em altura' },
-    { id: 'aso',   label: 'ASO — Atestado de saúde ocupacional' },
+    { id: 'nr06',  label: 'NR-06 — EPIs (com CA válido e ficha de entrega assinada)' },
+    { id: 'nr10',  label: 'NR-10 — Eletricidade (com CH legal)' },
+    { id: 'nr11',  label: 'NR-11 — Movimentação de carga (com CH legal)' },
+    { id: 'nr12',  label: 'NR-12 — Máquinas e equipamentos (com CH legal)' },
+    { id: 'nr18',  label: 'NR-18 — Construção civil (com CH legal)' },
+    { id: 'nr35',  label: 'NR-35 — Trabalho em altura (com CH legal)' },
+    { id: 'aso',   label: 'ASO — constando "Apto para Trabalho em Altura" e "Apto para Trabalho com Eletricidade"' },
     { id: 'apr',   label: 'APR — Análise preliminar de risco' },
   ];
 
   const ORDINAIS = [
     'PRIMEIRA','SEGUNDA','TERCEIRA','QUARTA','QUINTA','SEXTA','SÉTIMA','OITAVA','NONA','DÉCIMA',
     'DÉCIMA PRIMEIRA','DÉCIMA SEGUNDA','DÉCIMA TERCEIRA','DÉCIMA QUARTA','DÉCIMA QUINTA','DÉCIMA SEXTA',
+    'DÉCIMA SÉTIMA','DÉCIMA OITAVA','DÉCIMA NONA','VIGÉSIMA','VIGÉSIMA PRIMEIRA','VIGÉSIMA SEGUNDA',
   ];
   const ORDINAIS_REF = ORDINAIS.map(o => o.charAt(0) + o.slice(1).toLowerCase());
   const MESES = ['janeiro','fevereiro','março','abril','maio','junho','julho','agosto','setembro','outubro','novembro','dezembro'];
@@ -177,6 +181,9 @@
       valorTotal:'', formaPagamento:'2', parcelas:[],
       banco:'', agencia:'', conta:'', pix:'',
       anexos: ANEXOS.reduce((a,x) => (a[x.id]=false, a), {}),
+      garantia_meses: '6',
+      prazo_execucao: '',
+      juros_atraso_pct: '1',
       cidadeAssinatura: 'Guarulhos',
       dataDia: pad2(hoje.getDate()),
       dataMes: MESES[hoje.getMonth()],
@@ -302,6 +309,11 @@
     const conta = vBlank(s.conta, '____');
     const pix   = vBlank(s.pix, '____');
     items.push({ n:'BANK', text:'Dados bancários da CONTRATADA:', bank:{ banco, ag, conta, pix } });
+    /* C8 — Juros por atraso de pagamento (equilíbrio contratual) */
+    const jurosStr = (s.juros_atraso_pct && String(s.juros_atraso_pct).trim()) ? String(s.juros_atraso_pct).trim() : '{{juros_atraso_pct}}';
+    items.push({ n:'5.2', text:`O atraso no pagamento de qualquer parcela por parte da CONTRATANTE sujeitará o valor em mora a juros de mora de ${jurosStr}% ao mês, acrescidos de correção monetária pelo IPCA, sem prejuízo do direito de rescisão previsto neste instrumento.` });
+    /* C9 — Condição precedente (Anexo I como pré-requisito para início e 1ª parcela) */
+    items.push({ n:'5.3', text:'O início dos serviços e o pagamento da primeira parcela (item 5.1.1) ficam condicionados à entrega e aprovação prévia, pela CONTRATANTE, de toda a documentação constante do ANEXO I — Requisitos de Homologação, SST, NRs e Documentação. A ausência ou irregularidade de qualquer item do ANEXO I suspende o acesso da CONTRATADA à obra e retém o pagamento correspondente até a devida regularização, sem prejuízo das demais sanções previstas neste contrato.' });
     return items;
   }
 
@@ -323,6 +335,10 @@
       const lbl = s.modalidade === 'remocao_adequacao' ? 'Local da nova instalação' : 'Destino do equipamento removido';
       objetoItems.push({ n:'1.4', text:`${lbl}: ` + vBlank(s.destino, '(informar o destino / local)') });
     }
+    /* C6 — Prazo de execução */
+    const prazoN = isRemocao(s) ? '1.5' : '1.4';
+    const prazoVal = s.prazo_execucao && String(s.prazo_execucao).trim();
+    objetoItems.push({ n: prazoN, text: 'Prazo de execução: ' + (prazoVal ? prazoVal + ' (' + inteiroExtenso(parseInt(prazoVal, 10) || 0) + ') dias corridos a contar da data de início dos serviços, ou conforme cronograma acordado entre as partes em anexo.' : '(preencher o prazo — dias corridos ou indicar cronograma em anexo).') });
     clauses.push({ id:'objeto', titulo:'DO OBJETO', items:objetoItems });
 
     /* EQUIPAMENTO ESPECIAL (condicional) */
@@ -338,13 +354,48 @@
       });
     }
 
+    /* GARANTIA DA MONTAGEM — C3 (só Instalação e Remoção+Adequação) */
+    if (s.modalidade !== 'remocao') {
+      const gMeses = (s.garantia_meses && String(s.garantia_meses).trim()) ? String(s.garantia_meses).trim() : '{{garantia_meses}}';
+      const gExt = /^\d+$/.test(gMeses) ? inteiroExtenso(parseInt(gMeses, 10)) : gMeses;
+      clauses.push({
+        id: 'garantia',
+        titulo: 'DA GARANTIA DA MONTAGEM',
+        items: [
+          { n:'GM.1', text:`A CONTRATADA garante a montagem e os serviços executados contra vícios de execução pelo prazo de ${gMeses} (${gExt}) meses, a contar da data do aceite formal pela CONTRATANTE, obrigando-se a corrigir ou refazer, sem ônus adicionais, os serviços que apresentarem defeitos comprovadamente decorrentes de falha de execução.` },
+        ],
+      });
+    }
+
+    /* SEGURO — C4 (todas as modalidades) */
+    clauses.push({
+      id: 'seguro',
+      titulo: 'DO SEGURO',
+      items: [
+        { n:'SG.1', text:'A CONTRATADA deverá manter, durante toda a vigência deste contrato, Seguro de Responsabilidade Civil Geral e Seguro de Acidentes Pessoais em favor de todos os integrantes de sua equipe alocados na execução dos serviços.' },
+        { n:'SG.2', text:'Comprovante válido das apólices acima referidas deverá ser entregue à CONTRATANTE antes do início dos serviços, sob pena de impedimento do acesso à obra.' },
+      ],
+    });
+
+    /* ART/TRT DE INSTALAÇÃO — C5 (só Instalação e Remoção+Adequação) */
+    if (s.modalidade !== 'remocao') {
+      clauses.push({
+        id: 'art_trt',
+        titulo: 'DA ART/TRT DE INSTALAÇÃO',
+        items: [
+          { n:'AT.1', text:'A CONTRATADA é obrigada a emitir e entregar à CONTRATANTE a Anotação de Responsabilidade Técnica (ART) ou o Termo de Responsabilidade Técnica (TRT) referente à instalação objeto deste contrato, antes do início dos serviços.' },
+          { n:'AT.2', text:'A ausência da ART/TRT no prazo indicado constitui motivo de impedimento do início da obra e poderá ensejar rescisão contratual, sem prejuízo das penalidades previstas neste instrumento.' },
+        ],
+      });
+    }
+
     /* OBRIGAÇÕES DA CONTRATADA */
     clauses.push({
       id:'obrig_contratada', titulo:'DA OBRIGAÇÃO DO CONTRATADO',
       items: [
         { n:'2.1', text:'Fica responsável a CONTRATADA por todos os serviços que lhe forem apontados, durante o tempo necessário para ' + (isRemocao(s) ? 'remoção' : 'instalação') + ' e finalização do mesmo, conforme especificado no item 1.1.' },
         { n:'2.2', text:'A CONTRATADA deverá seguir as normas estabelecidas pela CONTRATANTE, como horário de funcionamento do local onde serão executados os serviços e quanto às regras de utilização de ferramentas, como a obrigatoriedade do uso de Equipamentos de Proteção Individual (EPIs).' },
-        { n:'2.3', text:'A fiscalização será exercida por pessoas expressamente designadas pela CONTRATANTE, as quais serão investidas de plenos poderes para: solicitar da CONTRATADA substituição, no prazo máximo de 24 (vinte e quatro) horas, de qualquer profissional ou operário que embarace o seu trabalho de fiscalizar; rejeitar serviços defeituosos ou materiais que não satisfaçam às exigências ora contratadas, obrigando-se a CONTRATADA a refazer os serviços, sem ônus para a CONTRATANTE e sem alteração do cronograma.' },
+        { n:'2.3', text:'A fiscalização será exercida por pessoas expressamente designadas pela CONTRATANTE, as quais serão investidas de plenos poderes para: solicitar da CONTRATADA substituição, no prazo máximo de 24 (vinte e quatro) horas, de qualquer profissional ou operário que embarace o seu trabalho de fiscalizar; rejeitar serviços defeituosos ou materiais que não satisfaçam às exigências ora contratadas, obrigando-se a CONTRATADA a refazer os serviços comprovadamente defeituosos, sem ônus para a CONTRATANTE; quando a causa do defeito não for imputável à CONTRATADA, as partes poderão acordar, por escrito, a reprogramação proporcional do prazo de execução.' },
         { n:'2.4', text:'A CONTRATADA deverá manter no local de ' + (isRemocao(s) ? 'execução' : 'instalação') + ' um Diário de Obra para anotação do andamento da execução dos serviços e de todos os eventos que possam implicar em alterações técnicas e prazos.' },
         { n:'2.5', text:'A CONTRATADA deverá manter os locais de trabalho o mais limpo possível, removendo todos os materiais, equipamentos, sobras e instalações provisórias de modo a deixar os ambientes limpos antes do início dos testes finais.' },
         { n:'2.6', text:'A CONTRATADA não deverá ' + (isRemocao(s) ? 'remover os equipamentos' : 'instalar os equipamentos na obra') + ' sem prévia fiscalização da CONTRATANTE.' },
@@ -354,7 +405,7 @@
         { n:'2.10', text:'Os contratos, informações, dados, materiais e documentos inerentes à CONTRATANTE ou a seus clientes deverão ser utilizados, pela CONTRATADA, estritamente para cumprimento dos serviços solicitados pela CONTRATANTE, sendo VEDADA a comercialização ou utilização para outros fins.' },
         { n:'2.11', text:'Garantir a execução deste contrato por sua equipe de profissionais, sendo permitida a subcontratação por parte da CONTRATADA, sob sua exclusiva responsabilidade.' },
         { n:'2.12', text:'Executar os serviços contratados através da fixação de parâmetros técnicos e a tempo certo, obedecendo ao cronograma e prazos estipulados entre as partes.' },
-        { n:'2.13', text:'É obrigação da CONTRATADA nos enviar uma cópia dos documentos e certificações exigidas pelas normas de Segurança do Trabalho para a prestação dos serviços objeto deste contrato, conforme lista abaixo, não excluindo nenhuma outra certificação que seja pertinente ao trabalho:', list: ANEXOS.map(a => a.label) },
+        { n:'2.13', text:'É obrigação da CONTRATADA entregar à CONTRATANTE cópia dos documentos, certificados e treinamentos exigidos pelas normas de Segurança do Trabalho, todos com validade legal e carga horária legalmente cumprida, conforme detalhado no ANEXO I — parte integrante e indissociável deste contrato. O ASO de cada trabalhador deverá constar expressamente "Apto para Trabalho em Altura" e "Apto para Trabalho com Eletricidade". A relação mínima de documentos exigidos é:', list: ANEXOS.map(a => a.label) },
       ],
     });
 
@@ -410,6 +461,7 @@
         'atraso ou paralisação injustificada e/ou sem comunicação à CONTRATANTE na execução dos serviços;',
         'desatendimento às determinações da fiscalização da CONTRATANTE;',
         'alteração social ou modificação da finalidade ou estrutura da CONTRATADA que impossibilite ou venha prejudicar a execução do Contrato;',
+        'falta de entrega ou irregularidade na documentação exigida pelo ANEXO I deste contrato, após notificação e prazo de regularização de 48 (quarenta e oito) horas;',
         'atraso no pagamento dos serviços superior a 30 (trinta) dias, conforme disposto na Cláusula __PAGAMENTO__.',
       ], listType:'alpha', refInList:'pagamento' },
       { n:'7.2', text:'A rescisão do Contrato poderá ser:', list:[
@@ -447,6 +499,20 @@
     clauses.push({ id:'foro', titulo:'DO FORO', items:[
       { n:'12.1', text:'As partes convencionam que o Foro para dirimir quaisquer dúvidas ou questões oriundas do presente contrato é o Foro da Comarca de Guarulhos, São Paulo, com exclusão de qualquer outro, por mais privilegiado que seja.' },
     ]});
+
+    /* ANEXO I — REQUISITOS DE HOMOLOGAÇÃO, SST, NRs E DOCUMENTAÇÃO */
+    clauses.push({
+      id: 'anexo_i',
+      titulo: 'ANEXO I — REQUISITOS DE HOMOLOGAÇÃO, SST, NRs E DOCUMENTAÇÃO',
+      items: [
+        { n:'AI.0', text:'Este Anexo é parte integrante e indissociável deste contrato. A CONTRATADA obriga-se a entregar e manter válidos todos os itens abaixo antes do início dos serviços. A não entrega ou irregularidade de qualquer item impede o início da obra, suspende pagamentos e constitui causa de rescisão, conforme Cláusula __RESCISAO__.', ref:'rescisao' },
+        { n:'AI.1', text:'REGRA 1 — EPIs E FERRAMENTAL: Ficha de Entrega de EPI assinada pelo trabalhador e CA (Certificado de Aprovação) válido para cada EPI. Itens mínimos exigidos: cinto paraquedista (talabarte duplo), linha de vida, trava-quedas e cordas para trabalho em altura; capacete com jugular, óculos de proteção (incolor e escuro), protetor auricular e luvas (pigmentada, raspa e/ou vaqueta); calçado com biqueira de aço; uniforme identificado; ferramentas com duplo isolamento elétrico.' },
+        { n:'AI.2', text:'REGRA 2 — NRs E TREINAMENTOS: Certificados válidos com carga horária legalmente exigida para todos os trabalhadores alocados: NR-10 (Eletricidade), NR-35 (Trabalho em Altura), NR-18 (Construção Civil), NR-11 (Movimentação de Carga Pesada), NR-12 (Máquinas e Equipamentos), NR-06 (Uso de EPI).' },
+        { n:'AI.3', text:'REGRA 3 — SAÚDE E SEGURANÇA OCUPACIONAL (SST): ASO — Atestado de Saúde Ocupacional ativo, constando expressamente "Apto para Trabalho em Altura" e "Apto para Trabalho com Eletricidade"; PCMSO — Programa de Controle Médico de Saúde Ocupacional; PGR — Programa de Gerenciamento de Riscos; LTCAT — Laudo Técnico das Condições Ambientais do Trabalho.' },
+        { n:'AI.4', text:'REGRA 4 — DOCUMENTAÇÃO DA EMPRESA (PJ): Cartão CNPJ; Contrato Social ou CCMEI; RG/CNH e Comprovante de Residência dos sócios; CNDs (Federal/Receita Federal, Estadual e Municipal) e CRF — Certificado de Regularidade do FGTS; Qualificação Técnica: comprovação de experiência na atividade e ART/TRT da instalação conforme cláusula específica deste contrato.' },
+        { n:'AI.5', text:'REGRA 5 — DOCUMENTAÇÃO DE AJUDANTES E FUNCIONÁRIOS (risco trabalhista): Para cada trabalhador alocado à obra: RG/CNH, Comprovante de Residência e Termo de Responsabilidade Civil, Criminal e Trabalhista assinado pelo prestador principal. Se vínculo CLT: Ficha de Registro (FRE) assinada, cópia da CTPS e comprovantes mensais de recolhimento de FGTS e INSS (GFIP/SEFIP). Se terceirizado PJ: CNPJ próprio, Contrato de Prestação de Serviços entre as partes e todos os documentos de SST, NRs e EPIs desta Regra 2.' },
+      ],
+    });
 
     /* Resolve referências cruzadas */
     const ordById = {};

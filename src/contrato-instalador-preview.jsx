@@ -56,7 +56,7 @@ function CIContractPreview({ doc, highlightConditional }) {
         <b>{cd.razao}</b>, inscrita no CNPJ sob o nº {cd.cnpj}, com sede à {cd.endereco}, neste ato representada nos termos de seu ato constitutivo por <b>{cd.responsavel}</b>, {cd.nacionalidade}, {cd.estadoCivil}, {cd.profissao}, portador da cédula de identidade RG de nº {cd.rg}, inscrito no CPF nº {cd.cpf}, residente e domiciliado na {cd.enderecoResp}, doravante denominada <b>CONTRATADA</b>,
       </p>
 
-      <p className="ci-doc-p">As partes acima identificadas têm, entre si, justo e acertado o presente Contrato de Prestação de Serviços Técnicos de Profissional Autônomo, que se regerá pelas cláusulas seguintes e pelas condições de preço, forma e termo de pagamento descritas no presente.</p>
+      <p className="ci-doc-p">As partes acima identificadas têm, entre si, justo e acertado o presente Contrato de Prestação de Serviços Técnicos Especializados, firmado entre pessoas jurídicas, que se regerá pelas cláusulas seguintes e pelas condições de preço, forma e termo de pagamento descritas no presente.</p>
 
       {doc.clauses.map((c) => (
         <section key={c.id} className={'ci-doc-clause' + (c.conditional && highlightConditional ? ' ci-doc-clause--cond' : '')}>

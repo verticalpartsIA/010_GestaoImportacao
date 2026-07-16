@@ -243,6 +243,15 @@ function CIStepObjeto({ s, set }) {
         <CITextArea label="Descrição dos serviços" value={s.descricaoServicos} onChange={(v) => set('descricaoServicos', v)} rows={3} placeholder="Detalhe os serviços (montagem, alinhamento, testes, etc.)" />
         <CITextArea label="Local do serviço" value={s.localServico} onChange={(v) => set('localServico', v)} rows={2} placeholder="Endereço completo de onde será realizado o serviço" hint="Endereço da obra onde o serviço acontece." />
       </div>
+      <div className="ci-field-group">
+        <h3 className="ci-group-title">Prazo e garantia</h3>
+        <div className="ci-grid">
+          <CIField label="Prazo de execução (dias corridos)" mono value={s.prazo_execucao} onChange={(v) => set('prazo_execucao', v.replace(/\D/g, ''))} placeholder="30" hint="Prazo para conclusão dos serviços, contado a partir do início." />
+          {s.modalidade !== 'remocao' && (
+            <CIField label="Garantia da montagem (meses)" mono value={s.garantia_meses} onChange={(v) => set('garantia_meses', v.replace(/\D/g, ''))} placeholder="6" hint="Meses de garantia contra vícios de execução após aceite formal." />
+          )}
+        </div>
+      </div>
     </div>
   );
 }
@@ -327,6 +336,12 @@ function CIStepPagamento({ s, set, errors }) {
         )}
       </div>
       <div className="ci-field-group">
+        <h3 className="ci-group-title">Mora e correção</h3>
+        <div className="ci-grid">
+          <CIField label="Juros por atraso da Contratante (% a.m.)" width="narrow" mono value={s.juros_atraso_pct} onChange={(v) => set('juros_atraso_pct', v.replace(/[^\d.,]/g, ''))} placeholder="1" hint="Taxa de mora mensal aplicada em caso de atraso no pagamento." />
+        </div>
+      </div>
+      <div className="ci-field-group">
         <h3 className="ci-group-title">Dados bancários da Contratada</h3>
         <div className="ci-grid">
           <CIField label="Banco" value={s.banco} onChange={(v) => set('banco', v)} placeholder="Banco do Brasil" />
@@ -352,9 +367,10 @@ function CIStepRevisao({ s, set }) {
       <CIStepHeader kicker="Passo 6 — Revisão" title="Anexos e assinatura" desc="Confirme os documentos obrigatórios e a data. Depois é só gerar o contrato." />
       <div className="ci-field-group">
         <div className="ci-anexos-head">
-          <h3 className="ci-group-title" style={{ margin: 0 }}>Anexos obrigatórios (Cláusula 2.13)</h3>
+          <h3 className="ci-group-title" style={{ margin: 0 }}>ANEXO I — Documentos obrigatórios (Cláusula 2.13)</h3>
           <button type="button" className="ci-link-btn" onClick={toggleAll}>{allAnexos ? 'Desmarcar todos' : 'Marcar todos'}</button>
         </div>
+        <p className="ci-step-desc" style={{ margin: '4px 0 12px' }}>Itens exigidos antes do início da obra. A entrega e aprovação de todos é condição para acesso à obra e para o pagamento da 1ª parcela (Cláusula 5.3).</p>
         <div className="ci-anexos-grid">
           {window.CI.ANEXOS.map(a => (
             <CICheckRow key={a.id} checked={!!s.anexos[a.id]} onChange={(v) => set('anexos', { ...s.anexos, [a.id]: v })} label={a.label} />
