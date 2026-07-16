@@ -636,23 +636,31 @@ function FtGenerator({ initial, onSaved, onCancel }) {
             if (!fichaId) { window.toast?.('Salve a ficha primeiro — depois publique no Omie', 'error'); return; }
             const user = window.__VP_USER || { nome: 'Usuário', setor: 'engenharia' };
             try {
-              await window.FichaOmiePublish.publicarNoOmie(
+              const res = await window.FichaOmiePublish.publicarNoOmie(
                 fichaId,
                 state.identificacao.nomeProduto,
                 user.nome,
                 user.setor
               );
+              if (res) setState((s) => ({ ...s, omie_publicado_em: new Date().toISOString() }));
             } catch (e) { console.error('[Omie publish]', e); }
           }}
           title={(() => {
             if (!state.identificacao.nomeProduto) return '⚠️ Preencha o Nome do Produto';
             if (!state.identificacao.codigoProduto) return '⚠️ Preencha o Código do Produto (Omie)';
             if (!podeGerar) return '⚠️ Faltam campos obrigatórios marcados com * (ou descrição técnica vazia)';
-            return '✅ Publicar ficha como anexo no Omie';
+            return state.omie_publicado_em
+              ? '🔄 Republicar — substitui o PDF já anexado no Omie'
+              : '✅ Publicar ficha como anexo no Omie';
           })()}>
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><path d="M17 21v-8H7v8M7 3v5h8"/></svg>
-          Publicar no Omie
+          {state.omie_publicado_em ? 'Republicar no Omie' : 'Publicar no Omie'}
         </button>
+        {state.omie_publicado_em && (
+          <span style={{ fontSize: 11, color: '#64748b', whiteSpace: 'nowrap' }}>
+            Publicado no Omie em {window.FTStore.fmtDateTime(state.omie_publicado_em)}
+          </span>
+        )}
       </div>
 
       <div className="ft-gen-body">
@@ -1000,6 +1008,7 @@ function FichaTecnicaPage() {
       ncm_recomendado: ficha.ncm_recomendado || '',
       ncm_descricao: ficha.ncm_descricao || '',
       descricao_duimp: ficha.descricao_duimp || '',
+      omie_publicado_em: ficha.omie_publicado_em || null,
     });
     setView('nova');
   };
