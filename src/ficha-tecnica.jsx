@@ -693,10 +693,14 @@ function FtGenerator({ initial, onSaved, onCancel }) {
             <span>Ficha Técnica — {state.identificacao.nomeProduto}</span>
             <div className="ft-fo-actions">
               <button className="ft-btn primary" onClick={async () => {
-                // SALVAR PDF — html2canvas + jsPDF direto, controle total.
-                // 1) html2canvas renderiza a ficha em alta resolução
-                // 2) jsPDF cria UMA página A4 (landscape ou portrait)
-                // 3) addImage ocupa 100% da página — 1 página garantida, sem branca extra
+                // SALVAR PDF — html2canvas + jsPDF, com paginação real.
+                // 1) força 1 coluna nas specs (.ft-pdf-export) — evita partir um
+                //    grupo ao meio entre 2 colunas lado a lado na hora de fatiar
+                // 2) html2canvas renderiza a ficha inteira (altura livre, sem corte)
+                // 3) decide as quebras de página andando bloco a bloco (grupo de
+                //    specs, descrição, identificação) — nunca corta um bloco ao
+                //    meio, só entre eles. 1 página se couber, 2, 3… se não couber,
+                //    sem perder conteúdo e sem órfãos.
                 if (!window.html2canvas || !window.jspdf) {
                   alert('Biblioteca PDF ainda carregando…'); return;
                 }
@@ -706,14 +710,16 @@ function FtGenerator({ initial, onSaved, onCancel }) {
                 const safeName = (state.identificacao.nomeProduto || 'ficha-tecnica')
                   .normalize('NFD').replace(/[̀-ͯ]/g, '')
                   .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+                fichaEl.classList.add('ft-pdf-export');
                 try {
+                  // aguarda o reflow da mudança pra 1 coluna antes de capturar
+                  await new Promise((r) => requestAnimationFrame(() => requestAnimationFrame(r)));
                   const canvas = await window.html2canvas(fichaEl, {
                     scale: 2,
                     useCORS: true,
                     backgroundColor: '#ffffff',
                     logging: false,
                   });
-                  const imgData = canvas.toDataURL('image/jpeg', 0.97);
                   const { jsPDF } = window.jspdf;
                   const pdf = new jsPDF({
                     unit: 'mm',
@@ -723,12 +729,83 @@ function FtGenerator({ initial, onSaved, onCancel }) {
                   });
                   const pw = pdf.internal.pageSize.getWidth();
                   const ph = pdf.internal.pageSize.getHeight();
-                  // Imagem ocupa a página inteira — sem páginas em branco
-                  pdf.addImage(imgData, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
+                  const pxPerMm = canvas.width / pw;
+                  const pageHeightPx = Math.round(ph * pxPerMm);
+
+                  // blocos "atômicos" — nunca partidos ao meio entre 2 páginas
+                  // (grupo de specs inteiro, cada bloco de descrição, a faixa
+                  // de identificação). Análogo ao break-inside:avoid do print,
+                  // só que aplicado manualmente na fatia do canvas.
+                  const fichaBox = fichaEl.getBoundingClientRect();
+                  // fichaBox está em pixels CSS (getBoundingClientRect); o canvas
+                  // do html2canvas está em pixels de verdade (CSS px × scale) —
+                  // precisa desse fator pra converter uma coordenada pra outra,
+                  // não o pxPerMm (esse é canvas-px por mm, unidade diferente).
+                  const cssToCanvas = canvas.width / fichaBox.width;
+                  const atoms = Array.from(fichaEl.querySelectorAll('.ft-fz-grp, .ft-fz-descterm, .ft-fz-ident'))
+                    .map((el) => {
+                      const r = el.getBoundingClientRect();
+                      return {
+                        top: Math.round((r.top - fichaBox.top) * cssToCanvas),
+                        bottom: Math.round((r.bottom - fichaBox.top) * cssToCanvas),
+                      };
+                    })
+                    .filter((a) => a.bottom > 0)
+                    .sort((a, b) => a.top - b.top);
+
+                  // decide onde cada página termina: percorre os blocos em ordem;
+                  // se um bloco não cabe no que resta da página atual, a página
+                  // fecha bem no topo dele (o bloco inteiro vai pra próxima) —
+                  // exceto quando o bloco sozinho já é maior que 1 página, caso em
+                  // que não tem como evitar e ele mesmo é fatiado normalmente.
+                  const cuts = [0];
+                  let pageStart = 0;
+                  for (const atom of atoms) {
+                    if (atom.top < pageStart) continue;
+                    if (atom.bottom - pageStart > pageHeightPx && atom.top > pageStart) {
+                      cuts.push(atom.top);
+                      pageStart = atom.top;
+                    }
+                  }
+                  cuts.push(canvas.height);
+
+                  // uma página nunca deve ficar maior que pageHeightPx (ex.: bloco
+                  // maior que a página) — nesse caso ela é fatiada em pedaços fixos
+                  const finalCuts = [0];
+                  for (let i = 1; i < cuts.length; i++) {
+                    let from = cuts[i - 1];
+                    const to = cuts[i];
+                    while (to - from > pageHeightPx) {
+                      from += pageHeightPx;
+                      finalCuts.push(from);
+                    }
+                    finalCuts.push(to);
+                  }
+
+                  let first = true;
+                  for (let i = 1; i < finalCuts.length; i++) {
+                    const cursor = finalCuts[i - 1];
+                    const cut = finalCuts[i];
+                    const sliceH = cut - cursor;
+                    if (sliceH <= 0) continue;
+                    const sliceCanvas = document.createElement('canvas');
+                    sliceCanvas.width = canvas.width;
+                    sliceCanvas.height = sliceH;
+                    const ctx = sliceCanvas.getContext('2d');
+                    ctx.fillStyle = '#ffffff';
+                    ctx.fillRect(0, 0, sliceCanvas.width, sliceCanvas.height);
+                    ctx.drawImage(canvas, 0, cursor, canvas.width, sliceH, 0, 0, canvas.width, sliceH);
+                    const sliceData = sliceCanvas.toDataURL('image/jpeg', 0.97);
+                    if (!first) pdf.addPage();
+                    first = false;
+                    pdf.addImage(sliceData, 'JPEG', 0, 0, pw, sliceH / pxPerMm, undefined, 'FAST');
+                  }
                   pdf.save(`Ficha-${safeName}.pdf`);
                 } catch (err) {
                   console.error('PDF error', err);
                   alert('Erro ao gerar PDF: ' + (err.message || err));
+                } finally {
+                  fichaEl.classList.remove('ft-pdf-export');
                 }
               }}>
                 <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>

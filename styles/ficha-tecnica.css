@@ -336,22 +336,25 @@
 
 /* ============================================================
    FICHA — VerticalParts style
-   Dimensões fixas (sem min-height) garantem encaixe em 1 página.
+   min-height de 1 página A4 — fichas curtas preenchem a página
+   inteira (footer fica colado embaixo); fichas com mais conteúdo
+   (ex.: Descrição DUIMP longa + muitas specs) crescem além disso
+   e viram documento de 2, 3+ páginas (ver paginação no "Salvar PDF"
+   e quebra nativa do navegador em "Imprimir").
    data-orientation="landscape" (default) → A4 paisagem 297×210mm
    data-orientation="portrait"            → A4 retrato 210×297mm
    ============================================================ */
 .ft-ficha {
-  width: 297mm; height: 210mm;
+  width: 297mm; min-height: 210mm;
   background: var(--ft-white);
   padding: 8mm 10mm 0;
   display: flex; flex-direction: column;
   color: var(--ft-fg1);
   font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif;
-  overflow: hidden;            /* nada vaza pra criar pág. 2 */
   box-sizing: border-box;
 }
 .ft-ficha[data-orientation="portrait"] {
-  width: 210mm; height: 297mm;
+  width: 210mm; min-height: 297mm;
 }
 .ft-fz-logo { margin-bottom: 10px; flex-shrink: 0; }
 .ft-fz-logo img { height: 36px; display: block; }
@@ -422,6 +425,10 @@
 .ft-ficha[data-orientation="portrait"] .ft-fz-specs {
   column-count: 1; column-gap: 16px;
 }
+/* Aplicada só durante a captura pro "Salvar PDF" (ver ficha-tecnica.jsx):
+   força 1 coluna só, pra paginar em fatias de altura fixa sem risco de
+   partir um grupo de especificação ao meio entre duas colunas lado a lado. */
+.ft-ficha.ft-pdf-export .ft-fz-specs { column-count: 1 !important; }
 .ft-fz-grp { break-inside: avoid; margin-bottom: 14px; }
 .ft-fz-grp h4 {
   font-weight: 800; font-size: 11.5px;
@@ -442,6 +449,14 @@
 }
 .ft-fz-line.solo { flex-direction: column; gap: 0; }
 .ft-fz-line.solo .ft-fz-lv { text-align: left; white-space: normal; }
+.ft-fz-zone--media {
+  /* trava a coluna de imagens na altura de 1 página — quando as
+     especificações (coluna da esquerda) crescem além disso e viram
+     página 2, 3…, a mídia não se estica junto nem se repete: fica
+     só na página 1, como o resto da página some em branco embaixo. */
+  max-height: 178mm; overflow: hidden;
+}
+.ft-ficha[data-orientation="portrait"] .ft-fz-zone--media { max-height: 265mm; }
 .ft-fz-media {
   display: flex; flex-direction: column; gap: 8px;
   flex: 1; min-height: 0;
@@ -816,13 +831,10 @@
   .ft-fo-scroll .ft-ficha {
     box-shadow: none !important;
     margin: 0 !important;
-    overflow: hidden !important;
-    /* mantém as dimensões em mm — encaixa exatamente em A4 landscape/portrait
-       conforme o @page injetado */
-    page-break-after: avoid !important;
-    page-break-inside: avoid !important;
-    break-after: avoid !important;
-    break-inside: avoid !important;
+    /* NÃO trava overflow/break-inside aqui: fichas com mais conteúdo do
+       que 1 página A4 (conforme o @page injetado) precisam poder quebrar
+       em página 2, 3… — o navegador pagina nativamente, respeitando os
+       break-inside:avoid dos grupos individuais logo abaixo. */
   }
   .ft-fz-grp { break-inside: avoid !important; page-break-inside: avoid !important; }
 }
