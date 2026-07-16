@@ -115,7 +115,7 @@ function FtFicha({ state }) {
   const id = d.identificacao;
   const nome = id.nomeProduto || 'Ficha Técnica';
   const idents = [
-    id.descricaoComercial && { k: 'Descrição', v: id.descricaoComercial },
+    id.descricaoComercial && { k: 'Descrição Comercial', v: id.descricaoComercial },
     id.categoriaProduto && { k: 'Categoria', v: id.categoriaProduto },
     id.sku && { k: 'SKU', v: id.sku },
     id.codigoProduto && { k: 'Código do Produto', v: id.codigoProduto },
