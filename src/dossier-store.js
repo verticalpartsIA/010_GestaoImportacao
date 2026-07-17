@@ -81,12 +81,18 @@ window.__DOSSIER = window.__DOSSIER || (() => {
         .order('created_at', { ascending: false })
         .limit(20);
 
+      const { data: analiseTecnica } = await sb.from('analise_tecnica')
+        .select('*')
+        .eq('dossier_id', dossierId)
+        .maybeSingle();
+
       return {
         ...dossier,
         documentos: documentos || [],
         pendencias: pendencias || [],
         responsaveis: responsaveis || [],
-        historico: historico || []
+        historico: historico || [],
+        analiseTecnica: analiseTecnica || null
       };
     },
 

@@ -544,3 +544,5 @@ function StepDocumentos({ analise, atualizar }) {
     </div>
   );
 }
+
+Object.assign(window, { AnaliseTecnicaWizard });

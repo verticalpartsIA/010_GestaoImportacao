@@ -461,7 +461,7 @@ function LeadsPage({ setRoute, setSubsel }) {
 }
 
 /* ---------- LEAD DETAIL ---------- */
-function LeadDetail({ lead, setRoute }) {
+function LeadDetail({ lead, setRoute, setSubsel }) {
   const [creatingDossier, setCreatingDossier] = React.useState(false);
 
   if (!lead) {
@@ -488,6 +488,7 @@ function LeadDetail({ lead, setRoute }) {
     try {
       const dossier = await window.__DOSSIER.criarDeDossier(lead);
       window.toast('Dossier criado com sucesso! ID: ' + dossier.id, 'success');
+      setSubsel?.(dossier.id);
       setRoute('dossier-obra');
     } catch (e) {
       window.toast('Erro: ' + e.message, 'error');

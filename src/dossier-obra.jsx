@@ -159,6 +159,16 @@ function DossierObraPage({ dossierId, setRoute }) {
           onSaved={() => { setModalOpen(null); carregarDossier(); }}
         />
       )}
+      {modalOpen === 'analise-tecnica' && (
+        <Modal title="Análise Técnica" onClose={() => setModalOpen(null)} width={900}>
+          <AnaliseTecnicaWizard
+            dossierId={dossier.id}
+            dossier={dossier}
+            onClose={() => setModalOpen(null)}
+            onAprovada={() => { setModalOpen(null); carregarDossier(); }}
+          />
+        </Modal>
+      )}
     </div>
   );
 }
@@ -188,6 +198,33 @@ function TabVisaoGeral({ dossier, setModalOpen }) {
             <><b style={{ color: '#00aa00' }}>SEM BLOQUEIOS</b> — Próximo passo liberado</>
           )}
         </div>
+      </div>
+
+      {/* ANÁLISE TÉCNICA */}
+      <div style={{
+        background: '#f5f5f5',
+        border: '1px solid #ddd',
+        borderRadius: 6,
+        padding: 16
+      }}>
+        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8 }}>Análise Técnica</div>
+        {(() => {
+          const at = dossier.analiseTecnica;
+          const statusLabel = !at ? 'Não iniciada'
+            : at.status === 'aprovada' ? 'Aprovada'
+            : at.status === 'completa' ? 'Completa (aguardando aprovação)'
+            : at.status === 'pendente_cliente' ? 'Pendente do cliente'
+            : 'Rascunho';
+          const statusColorAt = !at ? '#999' : at.status === 'aprovada' ? '#00aa00' : '#ff9900';
+          return (
+            <>
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12, color: statusColorAt }}>{statusLabel}</div>
+              <Button variant={at?.status === 'aprovada' ? 'outline' : 'primary'} size="small" onClick={() => setModalOpen('analise-tecnica')}>
+                {!at ? 'Iniciar Análise Técnica' : at.status === 'aprovada' ? 'Ver Análise Técnica' : 'Continuar Análise Técnica'}
+              </Button>
+            </>
+          );
+        })()}
       </div>
 
       {/* PRÓXIMO PASSO */}

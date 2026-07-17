@@ -3,15 +3,23 @@
    propostas.jsx — Wizard + Preview PDF
    ============================================================ */
 
-function PrecificacaoPage({ setRoute }) {
+function PrecificacaoPage({ setRoute, setSubsel }) {
   const [projetos, setProjetos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [selectedProject, setSelectedProject] = React.useState(null);
 
   React.useEffect(() => {
     // Busca clientes convertidos como base de precificação
-    window.__VP_SB.sb.from('leads').select('id,building,contact,value').eq('status', 'Convertido')
-      .then(({ data }) => { setProjetos(data || []); setLoading(false); });
+    Promise.all([
+      window.__VP_SB.sb.from('leads').select('id,building,contact,value').eq('status', 'Convertido'),
+      window.__VP_SB.sb.from('dossier_obra').select('id,lead_id'),
+    ]).then(([{ data: leads }, { data: dossies }]) => {
+      const dossieIdPorLead = {};
+      (dossies || []).forEach(d => { if (d.lead_id) dossieIdPorLead[d.lead_id] = d.id; });
+      const withDossier = (leads || []).map(l => ({ ...l, dossier_id: dossieIdPorLead[l.id] || null }));
+      setProjetos(withDossier);
+      setLoading(false);
+    });
   }, []);
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
@@ -88,7 +96,7 @@ function PrecificacaoPage({ setRoute }) {
 
       {selectedProject !== null ? (
         <div style={{ marginTop: 20 }}>
-          <PrecificacaoDetail project={selectedProject} setRoute={setRoute}/>
+          <PrecificacaoDetail project={selectedProject} setRoute={setRoute} setSubsel={setSubsel}/>
         </div>
       ) : items.length > 0 && (
         <div style={{ marginTop: 20, textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13, border:'1px dashed var(--border)' }}>
@@ -99,7 +107,7 @@ function PrecificacaoPage({ setRoute }) {
   );
 }
 
-function PrecificacaoDetail({ project = {}, setRoute }) {
+function PrecificacaoDetail({ project = {}, setRoute, setSubsel }) {
   // Carregar análise técnica se existir
   const [analise, setAnalise] = React.useState(null);
   const [loading, setLoading] = React.useState(!!project.dossier_id);
@@ -218,7 +226,7 @@ function PrecificacaoDetail({ project = {}, setRoute }) {
       <div style={{ padding: '20px', background: '#fff8e6', border: '1px solid #ff9900', borderRadius: '6px' }}>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>⚠️ Análise Técnica não aprovada</div>
         <p style={{ fontSize: 13, color: '#666', margin: 0 }}>Para precificar com base em variáveis técnicas, complete e aprove a Análise Técnica primeiro.</p>
-        <Button style={{ marginTop: 12 }} variant="primary" size="sm">Ir para Análise Técnica</Button>
+        <Button style={{ marginTop: 12 }} variant="primary" size="sm" onClick={() => { setSubsel?.(project.dossier_id); setRoute?.('dossier-obra'); }}>Ir para Análise Técnica</Button>
       </div>
     </Card>;
   }

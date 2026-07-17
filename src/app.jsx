@@ -158,11 +158,11 @@ function App() {
     switch (route) {
       case "dashboard": return <Dashboard role={role} setRoute={setRoute}/>;
       case "leads": return <LeadsPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute}/>;
+      case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute}/>;
       case "cotacoes": return <CotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cotacao-detail": return <CotacaoDetail cot={subsel} setRoute={setRoute}/>;
-      case "precificacao": return <PrecificacaoPage setRoute={setRoute}/>;
+      case "precificacao": return <PrecificacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "propostas": return <PropostasPage setRoute={setRoute}/>;
       case "proposta-editor": return <PropostaEditor setRoute={setRoute}/>;
       case "engenharia": return <EngenhariaPage setRoute={setRoute}/>;
