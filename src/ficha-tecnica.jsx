@@ -937,6 +937,7 @@ function FtDashboard({ onNew, onOpen }) {
   const [fichas, setFichas] = _ftUS([]);
   const [loading, setLoading] = _ftUS(true);
   const [query, setQuery] = _ftUS('');
+  const [delTarget, setDelTarget] = _ftUS(null);
 
   const refresh = async () => {
     setLoading(true);
@@ -953,15 +954,15 @@ function FtDashboard({ onNew, onOpen }) {
       .toLowerCase().includes(q);
   });
 
-  const handleDel = async (id, nomeProduto) => {
-    const confirmacao = window.prompt(
-      `⚠️ ATENÇÃO: Você está prestes a excluir permanentemente a ficha e o produto "${nomeProduto}".\n\nDigite o nome EXATO do produto para confirmar:\n\n${nomeProduto}`
-    );
-    if (confirmacao !== nomeProduto) {
-      if (confirmacao !== null) window.alert('Nome incorreto. Exclusão cancelada.');
-      return;
-    }
-    await window.FTStore.remove(id);
+  const confirmarExclusao = async (motivo) => {
+    const f = delTarget;
+    await window.FTStore.remove(f.id);
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Ficha Técnica', acao: 'excluiu a ficha e o produto',
+      alvo: f.nome_produto, alvo_id: f.id,
+      detalhe: { numero_documento: f.numero_documento, produto_id: f.produto_id || null, motivo },
+    });
+    setDelTarget(null);
     refresh();
   };
 
@@ -1009,7 +1010,7 @@ function FtDashboard({ onNew, onOpen }) {
                   <td className="ft-cell-time">{window.FTStore.relative(f.criado_em)}</td>
                   <td style={{textAlign:'right'}}>
                     <button className="ft-mini-btn" onClick={() => onOpen(f)}>Abrir</button>
-                    <button className="ft-mini-btn ft-mini-btn--danger" onClick={() => handleDel(f.id, f.nome_produto)}>Excluir</button>
+                    <button className="ft-mini-btn ft-mini-btn--danger" onClick={() => setDelTarget(f)}>Excluir</button>
                   </td>
                 </tr>
               ))}
@@ -1017,6 +1018,20 @@ function FtDashboard({ onNew, onOpen }) {
           </table>
         )}
       </div>
+      {delTarget && (
+        <ModalConfirmarExclusao
+          titulo="Excluir ficha técnica"
+          nome={delTarget.nome_produto}
+          meta={[
+            { label: 'Nº documento', value: delTarget.numero_documento },
+            { label: 'SKU / código', value: delTarget.sku || delTarget.codigo_produto },
+            { label: 'Categoria', value: delTarget.categoria_produto },
+          ]}
+          consequencias={delTarget.produto_id ? ['o produto vinculado no Catálogo'] : []}
+          onConfirm={confirmarExclusao}
+          onClose={() => setDelTarget(null)}
+        />
+      )}
     </div>
   );
 }

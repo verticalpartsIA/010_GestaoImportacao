@@ -393,6 +393,8 @@ function NcmCatalogoPage({ setRoute }) {
   const [previewPedido, setPreviewPedido] = React.useState(null);
   const [fichaSel, setFichaSel] = React.useState(null);      // ficha vinculada ao produto selecionado
   const [mostrarArq, setMostrarArq] = React.useState(false); // exibir arquivados?
+  const [delTarget, setDelTarget] = React.useState(null);     // produto pendente de confirmação de exclusão
+  const [fichasVincDelTarget, setFichasVincDelTarget] = React.useState([]);
 
   const reload = React.useCallback(() => {
     setLoading(true);
@@ -426,51 +428,54 @@ function NcmCatalogoPage({ setRoute }) {
 
   const actProd = async (row, patch, del) => {
     if (del) {
-      // Procura se há ficha técnica vinculada a esse produto
+      // Procura se há ficha técnica vinculada a esse produto, pra mostrar no modal de confirmação
       const { data: fichas } = await window.__VP_SB.sb
         .from("fichas_tecnicas")
         .select("id, numero_documento, nome_produto")
         .eq("produto_id", row.id);
-      const fichasVinc = fichas || [];
-      const msg = fichasVinc.length
-        ? `Excluir o produto "${row.denominacao || row.codigo}"?\n\n` +
-          `⚠️ ${fichasVinc.length === 1 ? 'A ficha técnica vinculada' : `As ${fichasVinc.length} fichas técnicas vinculadas`} também ${fichasVinc.length === 1 ? 'será removida' : 'serão removidas'}:\n` +
-          fichasVinc.map(f => `• ${f.numero_documento} — ${f.nome_produto}`).join('\n')
-        : `Excluir o produto "${row.denominacao || row.codigo}"?`;
-      if (!window.confirm(msg)) return;
-      // Apaga as fichas vinculadas (cascata manual — antes do produto)
-      if (fichasVinc.length) {
-        const { error: ferr } = await window.__VP_SB.sb
-          .from("fichas_tecnicas").delete().eq("produto_id", row.id);
-        if (ferr) return window.toast("Erro ao remover ficha: " + ferr.message, "error");
-      }
-      const { error } = await window.__VP_SB.sb.from("catalogo_produtos").delete().eq("id", row.id);
-      if (error) return window.toast("Erro: " + error.message, "error");
-      if (window.VPLog) window.VPLog.registrar({
-        modulo: "Catálogo", acao: "excluiu o produto",
-        alvo: row.denominacao || row.codigo, alvo_id: row.id,
-        detalhe: { fichas_removidas: fichasVinc.length },
-      });
-      window.toast(
-        fichasVinc.length
-          ? `Produto e ${fichasVinc.length === 1 ? 'ficha técnica vinculada removidos' : `${fichasVinc.length} fichas técnicas vinculadas removidas`}.`
-          : "Produto excluído.",
-        "success"
-      );
-      setSelProd(null);
-    } else {
-      const { error } = await window.__VP_SB.sb.from("catalogo_produtos").update(patch).eq("id", row.id);
-      if (error) return window.toast("Erro: " + error.message, "error");
-      if (window.VPLog) {
-        const acao = patch.situacao === "ativado" ? (patch.versao ? "reativou o produto" : "ativou o produto")
-          : patch.situacao === "desativado" ? "desativou o produto"
-          : patch.versao ? "gerou nova versão" : "atualizou o produto";
-        window.VPLog.registrar({ modulo: "Catálogo", acao, alvo: row.denominacao || row.codigo, alvo_id: row.id, detalhe: patch });
-      }
-      window.toast("Produto atualizado.", "success");
+      setFichasVincDelTarget(fichas || []);
+      setDelTarget(row);
+      return;
     }
+    const { error } = await window.__VP_SB.sb.from("catalogo_produtos").update(patch).eq("id", row.id);
+    if (error) return window.toast("Erro: " + error.message, "error");
+    if (window.VPLog) {
+      const acao = patch.situacao === "ativado" ? (patch.versao ? "reativou o produto" : "ativou o produto")
+        : patch.situacao === "desativado" ? "desativou o produto"
+        : patch.versao ? "gerou nova versão" : "atualizou o produto";
+      window.VPLog.registrar({ modulo: "Catálogo", acao, alvo: row.denominacao || row.codigo, alvo_id: row.id, detalhe: patch });
+    }
+    window.toast("Produto atualizado.", "success");
     reload();
   };
+
+  const confirmarExclusaoProd = async (motivo) => {
+    const row = delTarget;
+    const fichasVinc = fichasVincDelTarget;
+    if (fichasVinc.length) {
+      const { error: ferr } = await window.__VP_SB.sb
+        .from("fichas_tecnicas").delete().eq("produto_id", row.id);
+      if (ferr) return window.toast("Erro ao remover ficha: " + ferr.message, "error");
+    }
+    const { error } = await window.__VP_SB.sb.from("catalogo_produtos").delete().eq("id", row.id);
+    if (error) return window.toast("Erro: " + error.message, "error");
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: "Catálogo", acao: "excluiu o produto",
+      alvo: row.denominacao || row.codigo, alvo_id: row.id,
+      detalhe: { fichas_removidas: fichasVinc.length, motivo },
+    });
+    window.toast(
+      fichasVinc.length
+        ? `Produto e ${fichasVinc.length === 1 ? 'ficha técnica vinculada removidos' : `${fichasVinc.length} fichas técnicas vinculadas removidas`}.`
+        : "Produto excluído.",
+      "success"
+    );
+    setSelProd(null);
+    setDelTarget(null);
+    setFichasVincDelTarget([]);
+    reload();
+  };
+
   const actOp = async (row, patch) => {
     const { error } = await window.__VP_SB.sb.from("operadores_estrangeiros").update(patch).eq("id", row.id);
     if (error) return window.toast("Erro: " + error.message, "error");
@@ -647,6 +652,19 @@ function NcmCatalogoPage({ setRoute }) {
 
       {showProd && <ModalProdutoCatalogo operadores={operadores} proximoCodigo={nextCodigo(produtos)} onClose={() => setShowProd(false)} onSaved={reload}/>}
       {showOp && <ModalOperadorEstrangeiro onClose={() => setShowOp(false)} onSaved={reload}/>}
+      {delTarget && (
+        <ModalConfirmarExclusao
+          titulo="Excluir produto do catálogo"
+          nome={delTarget.denominacao || delTarget.codigo}
+          meta={[
+            { label: 'Código', value: delTarget.codigo },
+            { label: 'NCM', value: delTarget.ncm },
+          ]}
+          consequencias={fichasVincDelTarget.length ? fichasVincDelTarget.map(f => `ficha ${f.numero_documento} — ${f.nome_produto}`) : []}
+          onConfirm={confirmarExclusaoProd}
+          onClose={() => { setDelTarget(null); setFichasVincDelTarget([]); }}
+        />
+      )}
     </div>
   );
 }

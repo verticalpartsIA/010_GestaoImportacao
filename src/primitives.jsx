@@ -254,6 +254,63 @@ function Modal({ title, children, onClose, footer, width = 720 }) {
   );
 }
 
+/* ---- Modal de confirmação de exclusão — exige digitar o nome exato ----
+   Issue #12: evita exclusão acidental de dados reais em Ficha Técnica e Catálogo. */
+function ModalConfirmarExclusao({ titulo = "Confirmar exclusão", nome, meta = [], consequencias = [], onConfirm, onClose }) {
+  const [texto, setTexto] = React.useState("");
+  const [motivo, setMotivo] = React.useState("");
+  const [excluindo, setExcluindo] = React.useState(false);
+  const ok = texto.trim().length > 0 && texto.trim() === String(nome || "").trim();
+
+  const confirmar = async () => {
+    if (!ok || excluindo) return;
+    setExcluindo(true);
+    try {
+      await onConfirm(motivo.trim() || null);
+    } finally {
+      setExcluindo(false);
+    }
+  };
+
+  return (
+    <Modal title={titulo} onClose={onClose} width={480}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="danger" onClick={confirmar} disabled={!ok || excluindo}>
+          {excluindo ? "Excluindo…" : "Excluir definitivamente"}
+        </Button>
+      </>}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="alert danger">
+          <Icon.warning/>
+          <div>
+            <div className="alert__title">Esta ação não pode ser desfeita</div>
+            {consequencias.length > 0 && (
+              <div className="alert__sub">
+                Também será removido: {consequencias.join(", ")}
+              </div>
+            )}
+          </div>
+        </div>
+        {meta.map((m) => (
+          <div key={m.label} className="row sb" style={{ fontSize: 13 }}>
+            <span className="muted">{m.label}</span>
+            <span style={{ fontWeight: 600 }}>{m.value || "—"}</span>
+          </div>
+        ))}
+        <label className="stack" style={{ gap: 4 }}>
+          <span className="up-eyebrow muted">Motivo da exclusão (opcional, fica no log de auditoria)</span>
+          <input className="input" value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: cadastro duplicado, produto descontinuado…"/>
+        </label>
+        <label className="stack" style={{ gap: 4, marginTop: 4 }}>
+          <span className="up-eyebrow muted">Digite exatamente "{nome}" para confirmar</span>
+          <input className="input" value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={nome} autoFocus/>
+        </label>
+      </div>
+    </Modal>
+  );
+}
+
 /* ---- Alert row ---- */
 function AlertRow({ alert, onClick }) {
   const I = alert.level === "danger" ? Icon.warning : alert.level === "warning" ? Icon.warning : Icon.info;
@@ -286,4 +343,4 @@ function EmptyStateRedirect({ icon = "search", title, message, ctaLabel, onCta }
   );
 }
 
-Object.assign(window, { Icon, Button, Badge, StatusBadge, Card, KPI, Tabs, Modal, AlertRow, fmtBRL, fmtUSD, fmtDate, fmtDateLong, EmptyStateRedirect });
+Object.assign(window, { Icon, Button, Badge, StatusBadge, Card, KPI, Tabs, Modal, ModalConfirmarExclusao, AlertRow, fmtBRL, fmtUSD, fmtDate, fmtDateLong, EmptyStateRedirect });
