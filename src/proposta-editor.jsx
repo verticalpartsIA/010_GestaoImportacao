@@ -222,37 +222,48 @@ function PropostaEditor({ setRoute }) {
   const formRef = React.useRef(null);
 
   // Save to Supabase
+  // SSO / portas abertas: a identidade vem do vpsistema (window.__VP_USER),
+  // NÃO de um login separado. Antes exigia sb.auth.getUser() (sessão Supabase
+  // Auth), que nunca existe neste modelo — por isso a proposta nunca salvava.
+  // Aqui persiste com a anon key + identidade do SSO, mapeando para as colunas
+  // REAIS da tabela `propostas` (sem alterar o schema do banco).
   const saveToSupabase = React.useCallback(async () => {
     if (!window.__VP_SB?.sb) return false;
+    // Evita poluir a tabela real com rascunhos em branco: só persiste com cliente.
+    if (!data?.cliente?.nome?.trim()) return false;
+
+    const vpUser = window.__VP_USER || {};
+    const chave = (data.numero || '').trim() || null;   // → numero_documento (texto)
     try {
-      const user = await window.__VP_SB.sb.auth.getUser();
-      if (!user.data.user?.id) return false;
-
-      const { data: existing } = await window.__VP_SB.sb
-        .from('propostas')
-        .select('id')
-        .eq('numero', data.numero)
-        .maybeSingle();
-
       const payload = {
-        numero: data.numero,
-        equipamento_tipo: eq,
-        dados_json: data,
+        numero_documento: chave,
+        proposal_type: eq,
+        titulo: [data.cliente?.nome, data.obra?.nome].filter(Boolean).join(' · ') || chave,
+        data_json: { ...data, _vp_user: { email: vpUser.email || null, nome: vpUser.nome || null } },
         status: 'rascunho',
-        criado_por: user.data.user.id,
         atualizado_em: new Date().toISOString(),
       };
 
+      // Chave de negócio = numero_documento (texto). O `numero` (int) é
+      // auto-sequencial no banco, então não o enviamos no insert.
+      let existing = null;
+      if (chave) {
+        const { data: rows } = await window.__VP_SB.sb
+          .from('propostas')
+          .select('id')
+          .eq('numero_documento', chave)
+          .order('criado_em', { ascending: false })
+          .limit(1);
+        existing = rows && rows[0];
+      }
+
       if (existing?.id) {
         const { error } = await window.__VP_SB.sb
-          .from('propostas')
-          .update(payload)
-          .eq('id', existing.id);
+          .from('propostas').update(payload).eq('id', existing.id);
         if (error) throw error;
       } else {
         const { error } = await window.__VP_SB.sb
-          .from('propostas')
-          .insert([payload]);
+          .from('propostas').insert([payload]);
         if (error) throw error;
       }
       return true;
@@ -262,14 +273,15 @@ function PropostaEditor({ setRoute }) {
     }
   }, [data, eq]);
 
-  // Debounced autosave to localStorage AND Supabase
+  // Autosave para localStorage (instantâneo e seguro). A persistência no
+  // Supabase é feita nas ações explícitas "Salvar rascunho" / "Enviar" —
+  // assim não escrevemos na tabela real `propostas` a cada tecla digitada.
   React.useEffect(() => {
     const t = setTimeout(() => {
       try { localStorage.setItem(LS_KEY, JSON.stringify(data)); setSavedAt(Date.now()); } catch (e) {}
-      saveToSupabase();
     }, 400);
     return () => clearTimeout(t);
-  }, [data, saveToSupabase]);
+  }, [data]);
 
   React.useEffect(() => {
     try { localStorage.setItem("vpprd.proposta-eq", eq); } catch (e) {}
@@ -361,8 +373,8 @@ function PropostaEditor({ setRoute }) {
               const saved = await saveToSupabase();
               if (saved && window.__VP_SB?.sb) {
                 await window.__VP_SB.sb.from('propostas')
-                  .update({ status: 'enviada', enviado_em: new Date().toISOString() })
-                  .eq('numero', data.numero);
+                  .update({ status: 'enviada', enviada_em: new Date().toISOString() })
+                  .eq('numero_documento', data.numero);
                 window.toast("✓ Proposta enviada para o cliente!", "success");
                 setTimeout(() => setRoute("propostas"), 1500);
               } else {
@@ -464,8 +476,8 @@ function PropostaEditor({ setRoute }) {
                   // Update status to 'enviada'
                   if (window.__VP_SB?.sb) {
                     await window.__VP_SB.sb.from('propostas')
-                      .update({ status: 'enviada', enviado_em: new Date().toISOString() })
-                      .eq('numero', data.numero);
+                      .update({ status: 'enviada', enviada_em: new Date().toISOString() })
+                      .eq('numero_documento', data.numero);
                   }
                   window.toast("✓ Proposta enviada para o cliente!", "success");
                   setTimeout(() => setRoute("propostas"), 1500);
