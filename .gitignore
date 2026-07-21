@@ -21,3 +21,6 @@ npm-debug.log*
 
 # Segredos locais (service role do projeto Propostas) — NUNCA versionar
 .propostas-key.js
+
+# Gerado a cada deploy (ver .github/workflows/deploy.yml) — não versionar
+version.json

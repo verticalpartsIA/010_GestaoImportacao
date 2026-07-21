@@ -182,6 +182,20 @@ body[data-density="airy"] {
 .app[data-sidebar="collapsed"] .sidebar__brand-sub { display: none; }
 .app[data-sidebar="collapsed"] .sidebar__brand { justify-content: center; padding: 0; }
 
+.sidebar__version {
+  font-family: var(--font-mono);
+  font-size: 9.5px;
+  letter-spacing: .02em;
+  color: var(--vp-gray-500);
+  text-align: center;
+  padding: 5px 8px;
+  border-bottom: 1px solid var(--vp-gray-900);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.app[data-sidebar="collapsed"] .sidebar__version { display: none; }
+
 .sidebar__scroll {
   flex: 1;
   overflow-y: auto;

@@ -8,7 +8,7 @@
   <title>VP Gestão · VerticalParts</title>
 
   <link rel="stylesheet" href="colors_and_type.css">
-  <link rel="stylesheet" href="styles/app.css?v=3">
+  <link rel="stylesheet" href="styles/app.css?v=4">
   <link rel="stylesheet" href="styles/modules.css">
   <link rel="stylesheet" href="styles/proposta-editor.css">
   <link rel="stylesheet" href="styles/ncm.css">
@@ -48,6 +48,9 @@
   </div>
   <style>@keyframes vp-spin{to{transform:rotate(360deg)}}</style>
 
+  <!-- Verificação de versão publicada — roda o quanto antes, sem depender de nada -->
+  <script src="src/version-check.js?v=1"></script>
+
   <!-- Utilitários globais sem dados de demonstração -->
   <script src="src/utils.js?v=1"></script>
   <script src="src/ncm-data.js?v=7"></script>
@@ -64,7 +67,7 @@
   <!-- Components in dependency order -->
   <script type="text/babel" src="src/primitives.jsx?v=4"></script>
   <script type="text/babel" src="src/toast.jsx?v=3"></script>
-  <script type="text/babel" src="src/shell.jsx?v=17"></script>
+  <script type="text/babel" src="src/shell.jsx?v=18"></script>
   <script type="text/babel" src="src/dashboard.jsx?v=8"></script>
   <script type="text/babel" src="src/comercial.jsx?v=12"></script>
   <script type="text/babel" src="src/precificacao.jsx?v=7"></script>

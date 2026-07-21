@@ -142,11 +142,18 @@ app.get('/cotacao/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'cotacao.html'));
 });
 
-/* ---------- Estáticos ---------- */
+/* ---------- Estáticos ----------
+   Código (html/js/jsx/css) e version.json vão sempre com no-cache: o navegador
+   é obrigado a revalidar com o servidor antes de usar a cópia salva (ETag/
+   Last-Modified do express.static cuida disso — 304 se não mudou, conteúdo
+   novo se mudou). Sem isso, alguém que abre o site pode receber JS de até
+   1h atrás mesmo sem nunca ter aberto a aba antes. Imagens/fonts continuam
+   com cache longo — não fazem parte do bundle de código, mudam raríssimo. */
+const NO_CACHE_EXT = ['.html', '.js', '.jsx', '.css', '.json'];
 app.use(express.static(path.join(__dirname), {
   index: 'index.html',
   setHeaders(res, filePath) {
-    if (filePath.endsWith('.html')) res.setHeader('Cache-Control', 'no-cache');
+    if (NO_CACHE_EXT.some((ext) => filePath.endsWith(ext))) res.setHeader('Cache-Control', 'no-cache');
     else res.setHeader('Cache-Control', 'public, max-age=3600');
   },
 }));

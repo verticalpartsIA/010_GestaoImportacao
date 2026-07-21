@@ -58,6 +58,16 @@ const ROLE_MAP = {
   admin:       { name: "Admin",       initials: "AD", title: "Perfil Admin" },
 };
 
+/* "21/07/26 · 14:32h" — confirma visualmente que a aba está na versão
+   publicada mais recente (ver src/version-check.js). */
+function formatBuildTime(iso) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return null;
+  const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+  const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  return `${date} · ${time}h`;
+}
+
 function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   const filterVisible = (item) => !item.restrict || item.restrict.includes(role);
   /* Re-renderiza quando a identidade SSO (vpsistema) chega/é confirmada */
@@ -67,12 +77,24 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
     window.addEventListener('vpprd:user', on);
     return () => window.removeEventListener('vpprd:user', on);
   }, []);
+  /* Re-renderiza quando src/version-check.js confirma a versão publicada */
+  const [, forceVersion] = React.useState(0);
+  React.useEffect(() => {
+    const on = () => forceVersion((n) => n + 1);
+    window.addEventListener('vpprd:version', on);
+    return () => window.removeEventListener('vpprd:version', on);
+  }, []);
+  const version = window.__VP_VERSION;
+  const versionLabel = version && formatBuildTime(version.buildTime);
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
         <img src="assets/logo-mark-yellow.png" alt="" className="sidebar__brand-mark"/>
         <div className="sidebar__brand-text">VERTICAL<b>PARTS</b></div>
         <div className="sidebar__brand-sub">v2.4</div>
+      </div>
+      <div className="sidebar__version" title={version ? `commit ${version.commit}` : 'Aguardando confirmação da versão…'}>
+        {versionLabel ? `Atualizado em ${versionLabel}` : 'Verificando versão…'}
       </div>
       <button className="sidebar__collapse" onClick={onToggle} aria-label="Toggle sidebar">
         {collapsed ? <Icon.chevRight size={12}/> : <Icon.chevLeft size={12}/>}
