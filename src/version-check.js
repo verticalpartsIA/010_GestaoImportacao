@@ -21,9 +21,31 @@
    ============================================================ */
 (function () {
   const CHECK_INTERVAL_MS = 5 * 60 * 1000; // 5 minutos
+  /* Compartilhado entre abas da mesma origem — sem isso, quem tem mais de
+     uma aba aberta do site vê o mesmo aviso "loopar" de aba em aba (cada
+     aba roda esta IIFE de novo, com sua própria variável `notified` em
+     memória, mas todas comparam contra o mesmo version.json). */
+  const NOTIFIED_BUILD_KEY = 'vp_version_notified_build';
 
   let runningBuildTime = null;
   let notified = false;
+
+  function alreadyNotified(buildTime) {
+    try {
+      return localStorage.getItem(NOTIFIED_BUILD_KEY) === buildTime;
+    } catch (e) {
+      return false;
+    }
+  }
+
+  function markNotified(buildTime) {
+    try {
+      localStorage.setItem(NOTIFIED_BUILD_KEY, buildTime);
+    } catch (e) {
+      // localStorage indisponível — sem persistência, mas a checagem
+      // desta aba continua funcionando normalmente.
+    }
+  }
 
   function fetchVersion() {
     return fetch('/version.json?t=' + Date.now(), { cache: 'no-store' })
@@ -58,7 +80,12 @@
     fetchVersion().then((info) => {
       if (!info || !info.buildTime) return;
       if (info.buildTime !== runningBuildTime) {
+        if (alreadyNotified(info.buildTime)) {
+          notified = true;
+          return;
+        }
         notified = true;
+        markNotified(info.buildTime);
         if (typeof window.toast === 'function') {
           window.toast(formatUpdateMessage(info.buildTime), 'info', {
             description: 'Atualize a página para usar a versão mais recente.',
