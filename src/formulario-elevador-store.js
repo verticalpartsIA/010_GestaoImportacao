@@ -33,6 +33,38 @@
     return (data || []).map((f) => f.nome);
   }
 
+  /* ---------- Catálogo de Modelos de Elevador (Modelo → acessórios compatíveis) ---------- */
+  async function listarModelosElevador() {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.from('elevador_modelos')
+      .select('codigo, nome, tipo, cabine_descricao').eq('ativo', true).order('codigo');
+    if (error) throw error;
+    return data || [];
+  }
+
+  const FE_CATEGORIAS_OPCAO = ['teto_falso', 'piso', 'porta', 'botoeira_cabine', 'botoeira_pavimento'];
+
+  async function listarOpcoesElevador(modeloCodigo) {
+    const vazio = { teto_falso: [], piso: [], porta: [], botoeira_cabine: [], botoeira_pavimento: [] };
+    if (!modeloCodigo) return vazio;
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: modelo, error: e1 } = await c.from('elevador_modelos')
+      .select('id').eq('codigo', modeloCodigo).maybeSingle();
+    if (e1) throw e1;
+    if (!modelo) return vazio;
+    const { data, error: e2 } = await c.from('elevador_modelo_opcoes')
+      .select('elevador_opcoes(categoria, codigo, nome)').eq('modelo_id', modelo.id);
+    if (e2) throw e2;
+    const agrupado = { ...vazio };
+    (data || []).forEach((v) => {
+      const o = v.elevador_opcoes;
+      if (!o || !FE_CATEGORIAS_OPCAO.includes(o.categoria)) return;
+      agrupado[o.categoria].push({ value: o.codigo, label: `${o.codigo} — ${o.nome}` });
+    });
+    FE_CATEGORIAS_OPCAO.forEach((cat) => agrupado[cat].sort((a, b) => a.value.localeCompare(b.value)));
+    return agrupado;
+  }
+
   /* Endereço estruturado → string única pra exibição/exportação. Regra:
      CEP e cidade nunca ficam separados por vírgula (usa " - " entre eles). */
   function formatarEndereco({ logradouro, complemento, bairro, cep, cidade, estado } = {}) {
@@ -254,5 +286,6 @@
     criar, salvar, obter, obterPorToken, gerarLinkPublico, enviar, listar, listarCotacoes,
     adicionarUnidade, atualizarUnidade, removerUnidade,
     publicUrl, formatarEndereco, listarFornecedores,
+    listarModelosElevador, listarOpcoesElevador,
   };
 })();

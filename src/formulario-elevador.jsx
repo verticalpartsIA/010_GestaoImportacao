@@ -28,15 +28,16 @@ const FE_NORMAS = ['Glarie Standard', 'China Standard', 'EN81-20/50', 'EN81-20/5
 function feNovaUnidade(identificador) {
   return {
     identificador: identificador || '',
-    fornecedor: '',
+    fornecedor: '', modelo: '',
     tipo: '', capacidade_kg: '', capacidade_pessoas: '', velocidade_ms: '',
     paradas: '', pavimentos_desc: '', casa_maquinas: '', agrupamento: '', porta_oposta: '',
     estrutura_caixa: '', caixa_largura_mm: '', caixa_profundidade_mm: '',
     percurso_mm: '', overhead_mm: '', poco_mm: '',
-    cabina_largura_mm: '', cabina_profundidade_mm: '', cabina_altura_mm: '', piso_cabina: '', corrimao: '',
-    porta_tipo_abertura: '', porta_largura_mm: '', porta_altura_mm: '',
+    cabina_largura_mm: '', cabina_profundidade_mm: '', cabina_altura_mm: '', teto_falso: '', piso_cabina: '', corrimao: '',
+    porta_tipo_abertura: '', porta_modelo: '', porta_largura_mm: '', porta_altura_mm: '',
     acabamento_porta_cabina: '', acabamento_porta_pavimento: '', classe_corta_fogo: '',
     tensao_principal: '', tensao_iluminacao: '', norma_projeto: '',
+    botoeira_cabine: '', botoeira_pavimento: '',
     cop_lop_tipo: '', ard: false, camera: false, anuncio_voz: false, exigencias_especiais: '',
   };
 }
@@ -100,10 +101,25 @@ function FEEndereco({ prefix, header, setH, requiredLogradouro, onBuscarCep }) {
   );
 }
 
+const FE_OPCOES_VAZIAS = { teto_falso: [], piso: [], porta: [], botoeira_cabine: [], botoeira_pavimento: [] };
+
 /* ---------- Card de uma Unidade (um elevador) ---------- */
-function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, publicMode }) {
+function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, modelos, publicMode }) {
   const [open, setOpen] = React.useState(true);
+  const [opcoes, setOpcoes] = React.useState(FE_OPCOES_VAZIAS);
   const set = (k) => (v) => onChange({ ...unidade, [k]: v });
+
+  React.useEffect(() => {
+    let cancelado = false;
+    if (!unidade.modelo) { setOpcoes(FE_OPCOES_VAZIAS); return; }
+    window.FormularioElevadorStore.listarOpcoesElevador(unidade.modelo)
+      .then((o) => { if (!cancelado) setOpcoes(o); })
+      .catch(() => { if (!cancelado) setOpcoes(FE_OPCOES_VAZIAS); });
+    return () => { cancelado = true; };
+  }, [unidade.modelo]);
+
+  const modelosDisponiveis = (modelos || []).filter((m) => !unidade.tipo || m.tipo === unidade.tipo);
+
   return (
     <Card
       title={`Elevador ${unidade.identificador || index + 1}`}
@@ -122,9 +138,13 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, publi
             <div className={publicMode ? 'grid-3' : 'grid-4'} style={{ gap: 12 }}>
               <FEField label="Identificador (E1, E2...)"><FEInput value={unidade.identificador} onChange={set('identificador')} placeholder="E1"/></FEField>
               <FEField label="Tipo *"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>
+              <FEField label="Modelo"><FESelect value={unidade.modelo} onChange={set('modelo')} options={modelosDisponiveis.map((m) => ({ value: m.codigo, label: `${m.codigo} — ${m.nome}` }))} placeholder="— selecione o modelo —"/></FEField>
               <FEField label="Norma de projeto"><FESelect value={unidade.norma_projeto} onChange={set('norma_projeto')} options={FE_NORMAS}/></FEField>
               {!publicMode && <FEField label="Fornecedor"><FESelect value={unidade.fornecedor} onChange={set('fornecedor')} options={fornecedores || []}/></FEField>}
             </div>
+            {!unidade.modelo && (
+              <p style={{ fontSize: 12, color: 'var(--fg3)', margin: '8px 0 0' }}>Selecione o modelo do elevador para ver as opções disponíveis de teto falso, piso, porta e botoeiras.</p>
+            )}
             <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
               <FEField label="Capacidade (kg)"><FEInput type="number" value={unidade.capacidade_kg} onChange={set('capacidade_kg')} placeholder="630"/></FEField>
               <FEField label="Capacidade (passageiros)"><FEInput type="number" value={unidade.capacidade_pessoas} onChange={set('capacidade_pessoas')} placeholder="8"/></FEField>
@@ -155,7 +175,8 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, publi
               <FEField label="Largura (mm)"><FEInput type="number" value={unidade.cabina_largura_mm} onChange={set('cabina_largura_mm')}/></FEField>
               <FEField label="Profundidade (mm)"><FEInput type="number" value={unidade.cabina_profundidade_mm} onChange={set('cabina_profundidade_mm')}/></FEField>
               <FEField label="Altura (mm)"><FEInput type="number" value={unidade.cabina_altura_mm} onChange={set('cabina_altura_mm')} placeholder="2500 (padrão)"/></FEField>
-              <FEField label="Piso da cabina"><FEInput value={unidade.piso_cabina} onChange={set('piso_cabina')} placeholder="PVC / Mármore / Inox antiderrapante"/></FEField>
+              <FEField label="Teto falso"><FESelect value={unidade.teto_falso} onChange={set('teto_falso')} options={opcoes.teto_falso} placeholder="— selecione o modelo primeiro —"/></FEField>
+              <FEField label="Piso da cabina"><FESelect value={unidade.piso_cabina} onChange={set('piso_cabina')} options={opcoes.piso} placeholder="— selecione o modelo primeiro —"/></FEField>
               <FEField label="Corrimão"><FEInput value={unidade.corrimao} onChange={set('corrimao')} placeholder="Não / Sim - traseiro"/></FEField>
             </div>
           </div>
@@ -164,6 +185,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, publi
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Portas <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tipo obrigatório, resto opcional</span></div>
             <div className="grid-3" style={{ gap: 12 }}>
               <FEField label="Tipo de abertura *"><FESelect value={unidade.porta_tipo_abertura} onChange={set('porta_tipo_abertura')} options={['Central', 'Lateral', 'Telescópica']}/></FEField>
+              <FEField label="Modelo de porta"><FESelect value={unidade.porta_modelo} onChange={set('porta_modelo')} options={opcoes.porta} placeholder="— selecione o modelo primeiro —"/></FEField>
               <FEField label="Largura (mm)"><FEInput type="number" value={unidade.porta_largura_mm} onChange={set('porta_largura_mm')}/></FEField>
               <FEField label="Altura (mm)"><FEInput type="number" value={unidade.porta_altura_mm} onChange={set('porta_altura_mm')}/></FEField>
               <FEField label="Acabamento porta cabina"><FEInput value={unidade.acabamento_porta_cabina} onChange={set('acabamento_porta_cabina')}/></FEField>
@@ -181,9 +203,16 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, publi
           </div>
 
           <div>
+            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Botoeiras</div>
+            <div className="grid-3" style={{ gap: 12 }}>
+              <FEField label="Botoeira de cabine (COP)"><FESelect value={unidade.botoeira_cabine} onChange={set('botoeira_cabine')} options={opcoes.botoeira_cabine} placeholder="— selecione o modelo primeiro —"/></FEField>
+              <FEField label="Botoeira de pavimento (LOP)"><FESelect value={unidade.botoeira_pavimento} onChange={set('botoeira_pavimento')} options={opcoes.botoeira_pavimento} placeholder="— selecione o modelo primeiro —"/></FEField>
+            </div>
+          </div>
+
+          <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Opcionais <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tudo opcional</span></div>
             <div className="grid-3" style={{ gap: 12 }}>
-              <FEField label="COP/LOP — tipo"><FEInput value={unidade.cop_lop_tipo} onChange={set('cop_lop_tipo')}/></FEField>
               <div className="stack" style={{ gap: 8, justifyContent: 'center' }}>
                 <FECheck label="ARD — resgate automático" checked={unidade.ard} onChange={set('ard')}/>
                 <FECheck label="Câmera na cabine" checked={unidade.camera} onChange={set('camera')}/>
@@ -233,11 +262,16 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
   const [linkPublico, setLinkPublico] = React.useState(null);
   const [numeroCotacao, setNumeroCotacao] = React.useState(null);
   const [fornecedores, setFornecedores] = React.useState([]);
+  const [modelos, setModelos] = React.useState([]);
 
   React.useEffect(() => {
     if (publicMode) return;
     window.FormularioElevadorStore.listarFornecedores().then(setFornecedores).catch(() => {});
   }, [publicMode]);
+
+  React.useEffect(() => {
+    window.FormularioElevadorStore.listarModelosElevador().then(setModelos).catch(() => {});
+  }, []);
 
   React.useEffect(() => {
     if (!formularioId) return;
@@ -449,7 +483,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
 
       {unidades.map((u, i) => (
         <div key={u.id || i} style={{ marginTop: 16 }}>
-          <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} fornecedores={fornecedores} publicMode={publicMode}/>
+          <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} fornecedores={fornecedores} modelos={modelos} publicMode={publicMode}/>
         </div>
       ))}
 
