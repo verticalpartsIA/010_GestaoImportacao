@@ -108,7 +108,7 @@
       cpf: dados.tipo_pessoa === 'PF' ? (doc || null) : null,
       tipo_pessoa: dados.tipo_pessoa || 'PJ',
       inscricao_estadual: dados.inscricao_estadual || null,
-      contribuinte_icms: dados.contribuinte_icms ?? null,
+      contribuinte_icms: typeof dados.contribuinte_icms === 'boolean' ? dados.contribuinte_icms : null,
       endereco_logradouro: dados.endereco_logradouro || null,
       endereco_complemento: dados.endereco_complemento || null,
       endereco_bairro: dados.endereco_bairro || null,
