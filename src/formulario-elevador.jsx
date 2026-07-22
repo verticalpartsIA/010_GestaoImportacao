@@ -70,6 +70,35 @@ function FECheck({ label, checked, onChange }) {
   );
 }
 
+/* Endereço estruturado (Logradouro/Complemento/Bairro/CEP/Cidade/UF) — usado
+   tanto pro endereço do cliente (prefixo "endereco_") quanto da obra
+   (prefixo "endereco_obra_"), mesmos nomes de coluna do banco. */
+function FEEndereco({ prefix, header, setH, requiredLogradouro }) {
+  const k = (suf) => `${prefix}${suf}`;
+  return (
+    <div className="grid-3" style={{ gap: 12 }}>
+      <FEField label={`Logradouro${requiredLogradouro ? ' *' : ''}`} span="2">
+        <FEInput value={header[k('logradouro')]} onChange={setH(k('logradouro'))} placeholder="Rua São Paulo, 150"/>
+      </FEField>
+      <FEField label="Complemento">
+        <FEInput value={header[k('complemento')]} onChange={setH(k('complemento'))} placeholder="Apto 22, Bloco B"/>
+      </FEField>
+      <FEField label="Bairro">
+        <FEInput value={header[k('bairro')]} onChange={setH(k('bairro'))} placeholder="Jardim Paraíso"/>
+      </FEField>
+      <FEField label="CEP">
+        <FEInput value={header[k('cep')]} onChange={setH(k('cep'))} placeholder="07140-000"/>
+      </FEField>
+      <FEField label="Cidade">
+        <FEInput value={header[k('cidade')]} onChange={setH(k('cidade'))} placeholder="Guarulhos"/>
+      </FEField>
+      <FEField label="UF">
+        <FEInput value={header[k('estado')]} onChange={setH(k('estado'))} placeholder="SP"/>
+      </FEField>
+    </div>
+  );
+}
+
 /* ---------- Card de uma Unidade (um elevador) ---------- */
 function FEUnidadeCard({ unidade, index, onChange, onRemove }) {
   const [open, setOpen] = React.useState(true);
@@ -172,8 +201,11 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove }) {
    (ex.: `unidades`) e o update quebrava. */
 const FE_HEADER_KEYS = [
   'tipo_pessoa', 'razao_social', 'cnpj', 'cpf', 'inscricao_estadual', 'contribuinte_icms',
-  'endereco', 'telefone', 'email',
-  'local_obra_cidade', 'local_obra_estado', 'endereco_obra_diferente', 'endereco_obra', 'prazo_desejado',
+  'endereco', 'endereco_logradouro', 'endereco_complemento', 'endereco_bairro', 'endereco_cep', 'endereco_cidade', 'endereco_estado',
+  'telefone', 'email',
+  'local_obra_cidade', 'local_obra_estado', 'endereco_obra_diferente',
+  'endereco_obra', 'endereco_obra_logradouro', 'endereco_obra_complemento', 'endereco_obra_bairro', 'endereco_obra_cep', 'endereco_obra_cidade', 'endereco_obra_estado',
+  'prazo_desejado',
   'tipo_mao_de_obra', 'responsavel_entrega', 'origem_venda', 'observacoes',
 ];
 function feHeaderDefaults() {
@@ -217,7 +249,9 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
     if (!header.local_obra_cidade?.trim() || !header.local_obra_estado?.trim()) return 'Local da obra (cidade/UF) é obrigatório.';
     if (!header.tipo_mao_de_obra) return 'Tipo de mão de obra é obrigatório.';
     if (!header.responsavel_entrega) return 'Responsável pela entrega é obrigatório.';
-    if (header.endereco_obra_diferente && !header.endereco_obra?.trim()) return 'Informe o endereço da obra.';
+    if (header.endereco_obra_diferente && (!header.endereco_obra_logradouro?.trim() || !header.endereco_obra_bairro?.trim() || !header.endereco_obra_cep?.trim() || !header.endereco_obra_cidade?.trim() || !header.endereco_obra_estado?.trim())) {
+      return 'Informe o endereço completo da obra (logradouro, bairro, CEP, cidade e UF).';
+    }
     for (const u of unidades) {
       if (!u.tipo || !u.velocidade_ms || !u.paradas || !u.pavimentos_desc || !u.casa_maquinas || !u.agrupamento || !u.porta_oposta || !u.estrutura_caixa || !u.percurso_mm || !u.porta_tipo_abertura || !u.tensao_principal || !u.tensao_iluminacao) {
         return `Elevador ${u.identificador || ''}: preencha os campos obrigatórios (*).`;
@@ -313,9 +347,12 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
               : <FEField label="CNPJ"><FEInput value={header.cnpj} onChange={setH('cnpj')} placeholder="00.000.000/0000-00"/></FEField>}
             <FEField label="Inscrição Estadual"><FEInput value={header.inscricao_estadual} onChange={setH('inscricao_estadual')} disabled={header.tipo_pessoa === 'PF'}/></FEField>
             <FEField label="Contribuinte de ICMS?"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
-            <FEField label="Endereço" span="2"><FEInput value={header.endereco} onChange={setH('endereco')}/></FEField>
             <FEField label="Telefone"><FEInput value={header.telefone} onChange={setH('telefone')}/></FEField>
             <FEField label="E-mail" span="2"><FEInput type="email" value={header.email} onChange={setH('email')}/></FEField>
+          </div>
+          <div>
+            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Endereço</div>
+            <FEEndereco prefix="endereco_" header={header} setH={setH}/>
           </div>
           <div className="grid-3" style={{ gap: 12 }}>
             <FEField label="Cidade da obra *"><FEInput value={header.local_obra_cidade} onChange={setH('local_obra_cidade')}/></FEField>
@@ -339,10 +376,9 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
                 <p style={{ fontSize: 12, color: 'var(--fg3)', margin: 0 }}>A obra usará o mesmo endereço já informado acima.</p>
               )}
               {header.endereco_obra_diferente && (
-                <div className="grid-3" style={{ gap: 12 }}>
-                  <FEField label="Endereço da obra *" span="2">
-                    <FEInput value={header.endereco_obra} onChange={setH('endereco_obra')} placeholder="Endereço onde o equipamento será instalado"/>
-                  </FEField>
+                <div>
+                  <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Endereço da obra</div>
+                  <FEEndereco prefix="endereco_obra_" header={header} setH={setH} requiredLogradouro/>
                 </div>
               )}
             </div>

@@ -25,6 +25,34 @@
     return `${window.location.origin}/formulario-cliente/${encodeURIComponent(token)}`;
   }
 
+  /* Endereço estruturado → string única pra exibição/exportação. Regra:
+     CEP e cidade nunca ficam separados por vírgula (usa " - " entre eles). */
+  function formatarEndereco({ logradouro, complemento, bairro, cep, cidade, estado } = {}) {
+    const partes = [];
+    let linha1 = (logradouro || '').trim();
+    if ((complemento || '').trim()) linha1 = linha1 ? `${linha1}, ${complemento.trim()}` : complemento.trim();
+    if (linha1) partes.push(linha1);
+    if ((bairro || '').trim()) partes.push(bairro.trim());
+    let cidadeUf = '';
+    if ((cidade || '').trim() && (estado || '').trim()) cidadeUf = `${cidade.trim()}/${estado.trim()}`;
+    else cidadeUf = (cidade || estado || '').trim();
+    let linha2 = (cep || '').trim();
+    if (linha2 && cidadeUf) linha2 = `${linha2} - ${cidadeUf}`;
+    else if (cidadeUf) linha2 = cidadeUf;
+    if (linha2) partes.push(linha2);
+    return partes.join(', ');
+  }
+  function enderecoPartes(dados, prefixo) {
+    return {
+      logradouro: dados[`${prefixo}logradouro`],
+      complemento: dados[`${prefixo}complemento`],
+      bairro: dados[`${prefixo}bairro`],
+      cep: dados[`${prefixo}cep`],
+      cidade: dados[`${prefixo}cidade`],
+      estado: dados[`${prefixo}estado`],
+    };
+  }
+
   /* ---------- Cliente (fiscal) ---------- */
   async function buscarOuCriarCliente(dados) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -41,7 +69,13 @@
       tipo_pessoa: dados.tipo_pessoa || 'PJ',
       inscricao_estadual: dados.inscricao_estadual || null,
       contribuinte_icms: dados.contribuinte_icms ?? null,
-      endereco: dados.endereco || null,
+      endereco_logradouro: dados.endereco_logradouro || null,
+      endereco_complemento: dados.endereco_complemento || null,
+      endereco_bairro: dados.endereco_bairro || null,
+      endereco_cep: dados.endereco_cep || null,
+      endereco_cidade: dados.endereco_cidade || null,
+      endereco_estado: dados.endereco_estado || null,
+      endereco: formatarEndereco(enderecoPartes(dados, 'endereco_')) || null,
       email: dados.email || null,
       telefone: dados.telefone || null,
       cidade: dados.cidade || null,
@@ -57,6 +91,7 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const id = novoId('FE');
     const token = dados.canal === 'self_service' ? shortToken() : null;
+    const usaEnderecoObra = !!dados.endereco_obra_diferente;
     const { data, error } = await c.from('formularios_elevador').insert({
       id,
       lead_id: dados.lead_id || null,
@@ -66,8 +101,21 @@
       token,
       local_obra_cidade: dados.local_obra_cidade || null,
       local_obra_estado: dados.local_obra_estado || null,
-      endereco_obra_diferente: !!dados.endereco_obra_diferente,
-      endereco_obra: dados.endereco_obra_diferente ? (dados.endereco_obra || null) : (dados.endereco || null),
+      endereco_logradouro: dados.endereco_logradouro || null,
+      endereco_complemento: dados.endereco_complemento || null,
+      endereco_bairro: dados.endereco_bairro || null,
+      endereco_cep: dados.endereco_cep || null,
+      endereco_cidade: dados.endereco_cidade || null,
+      endereco_estado: dados.endereco_estado || null,
+      endereco: formatarEndereco(enderecoPartes(dados, 'endereco_')) || null,
+      endereco_obra_diferente: usaEnderecoObra,
+      endereco_obra_logradouro: usaEnderecoObra ? (dados.endereco_obra_logradouro || null) : (dados.endereco_logradouro || null),
+      endereco_obra_complemento: usaEnderecoObra ? (dados.endereco_obra_complemento || null) : (dados.endereco_complemento || null),
+      endereco_obra_bairro: usaEnderecoObra ? (dados.endereco_obra_bairro || null) : (dados.endereco_bairro || null),
+      endereco_obra_cep: usaEnderecoObra ? (dados.endereco_obra_cep || null) : (dados.endereco_cep || null),
+      endereco_obra_cidade: usaEnderecoObra ? (dados.endereco_obra_cidade || null) : (dados.endereco_cidade || null),
+      endereco_obra_estado: usaEnderecoObra ? (dados.endereco_obra_estado || null) : (dados.endereco_estado || null),
+      endereco_obra: formatarEndereco(enderecoPartes(dados, usaEnderecoObra ? 'endereco_obra_' : 'endereco_')) || null,
       prazo_desejado: dados.prazo_desejado || null,
       tipo_mao_de_obra: dados.tipo_mao_de_obra || null,
       responsavel_entrega: dados.responsavel_entrega || null,
@@ -82,9 +130,21 @@
   async function salvar(id, patch) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const resolved = { ...patch };
-    // Obra "não é endereço diferente" → mantém sincronizado com o endereço do cliente.
-    if (resolved.endereco_obra_diferente !== undefined && !resolved.endereco_obra_diferente) {
-      resolved.endereco_obra = resolved.endereco || null;
+    if (resolved.endereco_logradouro !== undefined) {
+      resolved.endereco = formatarEndereco(enderecoPartes(resolved, 'endereco_')) || null;
+    }
+    if (resolved.endereco_obra_diferente !== undefined) {
+      const usaEnderecoObra = !!resolved.endereco_obra_diferente;
+      // Obra "não é endereço diferente" → mantém sincronizado com o endereço do cliente.
+      if (!usaEnderecoObra) {
+        resolved.endereco_obra_logradouro = resolved.endereco_logradouro || null;
+        resolved.endereco_obra_complemento = resolved.endereco_complemento || null;
+        resolved.endereco_obra_bairro = resolved.endereco_bairro || null;
+        resolved.endereco_obra_cep = resolved.endereco_cep || null;
+        resolved.endereco_obra_cidade = resolved.endereco_cidade || null;
+        resolved.endereco_obra_estado = resolved.endereco_estado || null;
+      }
+      resolved.endereco_obra = formatarEndereco(enderecoPartes(resolved, usaEnderecoObra ? 'endereco_obra_' : 'endereco_')) || null;
     }
     const { error } = await c.from('formularios_elevador')
       .update({ ...resolved, updated_at: new Date().toISOString() }).eq('id', id);
@@ -160,6 +220,6 @@
     buscarOuCriarCliente,
     criar, salvar, obter, obterPorToken, gerarLinkPublico, enviar, listar,
     adicionarUnidade, atualizarUnidade, removerUnidade,
-    publicUrl,
+    publicUrl, formatarEndereco,
   };
 })();
