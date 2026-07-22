@@ -330,7 +330,7 @@ function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, enviando }) {
   );
 }
 
-function FECotacaoFornecedorModal({ formularioId, unidades, onClose }) {
+function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClose }) {
   const store = window.CotacaoElevadorFornecedorStore;
   const [cotacoes, setCotacoes] = React.useState([]);
   const [enviando, setEnviando] = React.useState(null);
@@ -356,9 +356,10 @@ function FECotacaoFornecedorModal({ formularioId, unidades, onClose }) {
     setEnviando(key);
     try {
       let cot = cotacaoDoGrupo(grupo);
-      if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor);
+      if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao);
       const url = store.cotacaoUrl(cot.token);
-      const msg = `Solicitação de cotação técnica ${cot.numero_documento} — VerticalParts\n` +
+      const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${numeroCotacao}` : '';
+      const msg = `Solicitação de cotação técnica ${cot.numero_documento}${numeroTxt} — VerticalParts\n` +
         `Segue o link com as especificações da(s) unidade(s) ${grupo.unidades.map((u) => u.identificador).join(', ')} para cotação:\n${url}`;
       if (canal === 'whatsapp') window.open(window.PFStore.whatsAppHref(recipient.telefone, msg), '_blank');
       if (canal === 'email') window.open(window.PFStore.mailtoHref(recipient.email, `Cotação técnica ${cot.numero_documento} — VerticalParts`, msg), '_blank');
@@ -380,6 +381,56 @@ function FECotacaoFornecedorModal({ formularioId, unidades, onClose }) {
       {grupos.map((g) => (
         <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}`} grupo={g} cot={cotacaoDoGrupo(g)} onEnviar={enviar} enviando={enviando}/>
       ))}
+    </Modal>
+  );
+}
+
+/* ---------- Envio do link do cliente (Canal 2 — self-service) ----------
+   Mesma regra de envio do fornecedor (WhatsApp/E-mail/Link), mas em
+   português e só com o link do formulário em branco — os dados do
+   equipamento ainda não existem, quem preenche é o próprio cliente. */
+function FELinkClienteModal({ url, numeroCotacao, header, onClose }) {
+  const [copied, setCopied] = React.useState(false);
+  const [telefone, setTelefone] = React.useState(header.telefone || '');
+  const [email, setEmail] = React.useState(header.email || '');
+
+  const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${numeroCotacao}` : '';
+  const msg = `Olá! Segue o link para preencher os dados do seu elevador${numeroTxt} — VerticalParts:\n${url}\n\n` +
+    `Assim que enviar, nossa equipe já recebe os dados automaticamente para preparar a cotação.`;
+
+  const copiarLink = async () => {
+    try { await navigator.clipboard.writeText(url); setCopied(true); setTimeout(() => setCopied(false), 1800); window.toast?.('Link copiado.', 'success'); }
+    catch (e) { window.prompt('Copie o link:', url); }
+  };
+  const enviarWhatsApp = () => window.open(window.PFStore.whatsAppHref(telefone, msg), '_blank');
+  const enviarEmail = () => window.open(window.PFStore.mailtoHref(email, `Formulário de Elevador${numeroTxt} — VerticalParts`, msg), '_blank');
+
+  return (
+    <Modal title="Enviar link para o cliente preencher" onClose={onClose} width={520}
+      footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
+      <div className="pf-portal-callout">
+        <div className="pf-portal-ico">🔗</div>
+        <div>
+          <b>Formulário online do cliente</b>
+          <p>O cliente abre o link, preenche os dados do elevador e obra, e <b>o VP Gestão recebe automaticamente</b> — sem PDF, sem digitação manual.</p>
+        </div>
+      </div>
+
+      <div className="pf-linkbox">
+        <input className="input mono small" readOnly value={url} onFocus={(e) => e.target.select()}/>
+        <Button variant="primary" size="sm" icon={copied ? 'check' : 'copy'} onClick={copiarLink}>{copied ? 'Copiado!' : 'Copiar link'}</Button>
+      </div>
+
+      <div className="grid-2" style={{ gap: 8, marginTop: 12 }}>
+        <FEField label="WhatsApp do cliente"><FEInput value={telefone} onChange={setTelefone} placeholder="(11) 99999-0000"/></FEField>
+        <FEField label="E-mail do cliente"><FEInput value={email} onChange={setEmail} placeholder="cliente@empresa.com.br"/></FEField>
+      </div>
+
+      <div className="up-eyebrow muted" style={{ margin: '14px 0 6px' }}>Enviar por</div>
+      <div className="stack" style={{ gap: 8 }}>
+        <Button variant="outline" icon="message" disabled={!telefone} onClick={enviarWhatsApp}>WhatsApp</Button>
+        <Button variant="outline" icon="mail" disabled={!email} onClick={enviarEmail}>E-mail</Button>
+      </div>
     </Modal>
   );
 }
@@ -421,6 +472,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
   const [fornecedores, setFornecedores] = React.useState([]);
   const [modelos, setModelos] = React.useState([]);
   const [showCotacaoFornecedor, setShowCotacaoFornecedor] = React.useState(false);
+  const [showLinkCliente, setShowLinkCliente] = React.useState(false);
 
   React.useEffect(() => {
     if (publicMode) return;
@@ -550,7 +602,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
     if (!id) { const ok = await salvarTudo(null); if (!ok) return; }
     const url = await window.FormularioElevadorStore.gerarLinkPublico(id);
     setLinkPublico(url);
-    navigator.clipboard?.writeText(url).then(() => window.toast?.('Link copiado!', 'success')).catch(() => {});
+    setShowLinkCliente(true);
   };
 
   if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
@@ -577,15 +629,16 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
         <div className="page-head">
           <div className="page-head__l">
             <h1 className="page-head__title">Cotação de Elevador — VerticalParts</h1>
-            <p className="page-head__sub">Preencha os dados abaixo para recebermos sua cotação.</p>
+            <p className="page-head__sub">
+              Preencha os dados abaixo para recebermos sua cotação.
+              {numeroCotacao != null && <span className="mono" style={{ marginLeft: 8 }}>· Cotação Nº {numeroCotacao}</span>}
+            </p>
           </div>
         </div>
       )}
 
-      {linkPublico && (
-        <div style={{ background: '#fffbeb', border: '1px solid #FBB039', padding: '10px 14px', marginBottom: 16, fontSize: 12 }}>
-          Link copiado: <span className="mono">{linkPublico}</span>
-        </div>
+      {!publicMode && showLinkCliente && linkPublico && (
+        <FELinkClienteModal url={linkPublico} numeroCotacao={numeroCotacao} header={header} onClose={() => setShowLinkCliente(false)}/>
       )}
 
       <Card title="Dados do cliente e da obra">
@@ -661,7 +714,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       )}
 
       {showCotacaoFornecedor && (
-        <FECotacaoFornecedorModal formularioId={id} unidades={unidades} onClose={() => setShowCotacaoFornecedor(false)}/>
+        <FECotacaoFornecedorModal formularioId={id} unidades={unidades} numeroCotacao={numeroCotacao} onClose={() => setShowCotacaoFornecedor(false)}/>
       )}
     </div>
   );

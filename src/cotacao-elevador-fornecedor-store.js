@@ -70,10 +70,11 @@
 
   /* ---------- Snapshot do que é enviado (congela os dados no momento do
      envio — edições posteriores na Unidade não alteram o que já foi mandado) ---------- */
-  function buildDadosEnvio(unidades) {
+  function buildDadosEnvio(unidades, numeroCotacao) {
     const primeira = unidades[0] || {};
     return {
       header: {
+        numero_cotacao: numeroCotacao ?? null,
         pais: 'Brazil',
         data: new Date().toISOString().slice(0, 10),
         tensao_principal: primeira.tensao_principal || '',
@@ -101,8 +102,12 @@
 
   /* ---------- Gerar cotação (rascunho) ----------
      unidades: linhas de formularios_elevador_unidades já salvas (com id), todas
-     do MESMO fornecedor e do mesmo tipo_formulario (elevator OU homelift). */
-  async function gerar(formularioElevadorId, unidades, fornecedor) {
+     do MESMO fornecedor e do mesmo tipo_formulario (elevator OU homelift).
+     numeroCotacao: o Nº da Cotação do cliente (formularios_elevador.numero_cotacao,
+     a mesma numeração que já vem sendo continuada desde a planilha histórica) —
+     é o número que identifica o projeto pro fornecedor, equivalente ao "Project
+     Name" que a Glarie usa nas próprias cotações. */
+  async function gerar(formularioElevadorId, unidades, fornecedor, numeroCotacao) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const numero_documento = await gerarNumero();
     const tipo_formulario = tipoFormularioPara(unidades[0].tipo);
@@ -113,7 +118,7 @@
       fornecedor,
       tipo_formulario,
       unidade_ids: unidades.map((u) => u.id),
-      dados_envio: buildDadosEnvio(unidades),
+      dados_envio: buildDadosEnvio(unidades, numeroCotacao),
       status: 'rascunho',
     };
     const { data, error } = await c.from('cotacoes_elevador_fornecedor').insert(row).select().single();
