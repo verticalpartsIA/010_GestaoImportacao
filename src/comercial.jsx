@@ -786,15 +786,41 @@ function ModalNovaCotacao({ onClose, onSaved, prefill = null }) {
 }
 
 /* ---------- FORMULÁRIOS (placeholder — estrutura interna vem em sessão futura) ---------- */
-function FormulariosPage({ setRoute }) {
+const FE_CATEGORIAS = [
+  { id: 'elevador', label: 'Elevador', icon: 'ruler', route: 'formulario-elevador', pronto: true },
+  { id: 'escada', label: 'Escada Rolante', icon: 'ruler', pronto: false },
+  { id: 'esteira', label: 'Esteira Rolante', icon: 'ruler', pronto: false },
+  { id: 'mod-elevador', label: 'Modernização Elevador', icon: 'tool', pronto: false },
+  { id: 'mod-er-es', label: 'Modernização Escadas e Esteiras', icon: 'tool', pronto: false },
+  { id: 'maquina-tracao', label: 'Máquina de Tração', icon: 'grid', pronto: false },
+  { id: 'quadro-comando', label: 'Quadro de Comando', icon: 'grid', pronto: false },
+  { id: 'portas', label: 'Portas', icon: 'grid', pronto: false },
+];
+
+function FormulariosPage({ setRoute, setSubsel }) {
   return (
-    <EmptyStateRedirect
-      icon="layers"
-      title="Formulários"
-      message="Coleta de dados por tipo de equipamento antes da cotação — Elevador, Escada Rolante, Esteira Rolante, Modernização Elevador, Modernização Escadas e Esteiras, Máquina de Tração, Quadro de Comando e Portas. Em construção."
-      ctaLabel="Ir para Leads"
-      onCta={() => setRoute('leads')}
-    />
+    <div className="page fade-in">
+      <div className="page-head">
+        <div className="page-head__l">
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Formulários</div>
+          <h1 className="page-head__title">Formulários</h1>
+          <p className="page-head__sub">Coleta de dados da obra e do equipamento, por categoria, antes de enviar para cotação.</p>
+        </div>
+      </div>
+      <div className="grid-4" style={{ gap: 14 }}>
+        {FE_CATEGORIAS.map((c) => (
+          <Card key={c.id} title={c.label} sub={c.pronto ? 'Disponível' : 'Em breve'}
+            style={!c.pronto ? { opacity: .55, cursor: 'not-allowed' } : { cursor: 'pointer' }}
+            action={<Icon.chevRight/>}>
+            <div
+              onClick={() => { if (c.pronto) { setSubsel && setSubsel(null); setRoute(c.route); } }}
+              style={{ minHeight: 40, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--fg2)', fontSize: 12.5 }}>
+              {c.pronto ? 'Clique para preencher um novo formulário.' : 'Estrutura prevista para fase futura.'}
+            </div>
+          </Card>
+        ))}
+      </div>
+    </div>
   );
 }
 

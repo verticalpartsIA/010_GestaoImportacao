@@ -142,6 +142,14 @@ app.get('/cotacao/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'cotacao.html'));
 });
 
+/* ---------- Formulário de Coleta de Dados — Elevadores (cliente) ----------
+   /formulario-cliente/<token> → entrega formulario-cliente.html (Canal 2,
+   self-service). O token é lido no client. Ver issue #66. */
+app.get('/formulario-cliente/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'formulario-cliente.html'));
+});
+
 /* ---------- Estáticos ----------
    Código (html/js/jsx/css) e version.json vão sempre com no-cache: o navegador
    é obrigado a revalidar com o servidor antes de usar a cópia salva (ETag/

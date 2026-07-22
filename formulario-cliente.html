@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Formulário de cotação de elevador — VerticalParts">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Formulário de Cotação · VerticalParts</title>
+
+  <link rel="stylesheet" href="/colors_and_type.css">
+  <link rel="stylesheet" href="/styles/app.css?v=4">
+  <style>
+    /* Página pública standalone — sem grid de sidebar/header do app interno,
+       então o corpo precisa rolar normalmente (app.css assume overflow:hidden
+       porque o scroll interno fica dentro de .sidebar__scroll/.main). */
+    body { overflow: auto !important; height: auto !important; background: var(--vp-gray-50); }
+    .fe-public { max-width: 900px; margin: 0 auto; padding: 32px 20px 120px; }
+    .fe-public .page-head { margin-bottom: 20px; }
+  </style>
+</head>
+<body data-density="cozy">
+  <div id="fe-root">
+    <div style="text-align:center; padding:80px 0; color:#888; font-size:13px;">Carregando…</div>
+  </div>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+
+  <!-- Supabase client (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+  <!-- Cliente Supabase público (sem SSO Guard — página pública por design) -->
+  <script>
+    (function () {
+      const URL_SB  = 'https://jxtqwzmpgofwctqajewt.supabase.co';
+      const ANON_SB = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+      window.__VP_SB = { sb: window.supabase.createClient(URL_SB, ANON_SB) };
+    }());
+  </script>
+
+  <!-- Primitivos de UI (Card/Button/Icon) + Toast, reaproveitados do app interno -->
+  <script type="text/babel" src="/src/primitives.jsx?v=4"></script>
+  <script type="text/babel" src="/src/toast.jsx?v=4"></script>
+
+  <!-- Formulário de Elevadores (store + componente compartilhado com o app interno) -->
+  <script src="/src/formulario-elevador-store.js?v=1"></script>
+  <script type="text/babel" src="/src/formulario-elevador.jsx?v=1"></script>
+
+  <!-- Mount público -->
+  <script type="text/babel" src="/src/formulario-elevador-public.jsx?v=1"></script>
+</body>
+</html>
