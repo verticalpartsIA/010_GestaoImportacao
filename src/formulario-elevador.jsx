@@ -28,6 +28,7 @@ const FE_NORMAS = ['Glarie Standard', 'China Standard', 'EN81-20/50', 'EN81-20/5
 function feNovaUnidade(identificador) {
   return {
     identificador: identificador || '',
+    fornecedor: '',
     tipo: '', capacidade_kg: '', capacidade_pessoas: '', velocidade_ms: '',
     paradas: '', pavimentos_desc: '', casa_maquinas: '', agrupamento: '', porta_oposta: '',
     estrutura_caixa: '', caixa_largura_mm: '', caixa_profundidade_mm: '',
@@ -100,7 +101,7 @@ function FEEndereco({ prefix, header, setH, requiredLogradouro, onBuscarCep }) {
 }
 
 /* ---------- Card de uma Unidade (um elevador) ---------- */
-function FEUnidadeCard({ unidade, index, onChange, onRemove }) {
+function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, publicMode }) {
   const [open, setOpen] = React.useState(true);
   const set = (k) => (v) => onChange({ ...unidade, [k]: v });
   return (
@@ -118,10 +119,13 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove }) {
         <div className="stack" style={{ gap: 18 }}>
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Identificação do elevador</div>
-            <div className="grid-3" style={{ gap: 12 }}>
+            <div className={publicMode ? 'grid-3' : 'grid-4'} style={{ gap: 12 }}>
               <FEField label="Identificador (E1, E2...)"><FEInput value={unidade.identificador} onChange={set('identificador')} placeholder="E1"/></FEField>
               <FEField label="Tipo *"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>
               <FEField label="Norma de projeto"><FESelect value={unidade.norma_projeto} onChange={set('norma_projeto')} options={FE_NORMAS}/></FEField>
+              {!publicMode && <FEField label="Fornecedor"><FESelect value={unidade.fornecedor} onChange={set('fornecedor')} options={fornecedores || []}/></FEField>}
+            </div>
+            <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
               <FEField label="Capacidade (kg)"><FEInput type="number" value={unidade.capacidade_kg} onChange={set('capacidade_kg')} placeholder="630"/></FEField>
               <FEField label="Capacidade (passageiros)"><FEInput type="number" value={unidade.capacidade_pessoas} onChange={set('capacidade_pessoas')} placeholder="8"/></FEField>
               <FEField label="Velocidade (m/s) *"><FEInput type="number" value={unidade.velocidade_ms} onChange={set('velocidade_ms')} placeholder="1.0"/></FEField>
@@ -206,7 +210,7 @@ const FE_HEADER_KEYS = [
   'local_obra_cidade', 'local_obra_estado', 'endereco_obra_diferente',
   'endereco_obra', 'endereco_obra_logradouro', 'endereco_obra_complemento', 'endereco_obra_bairro', 'endereco_obra_cep', 'endereco_obra_cidade', 'endereco_obra_estado',
   'prazo_desejado',
-  'tipo_mao_de_obra', 'responsavel_entrega', 'origem_venda', 'observacoes',
+  'tipo_mao_de_obra', 'responsavel_entrega', 'origem_venda', 'vendedor', 'observacoes',
 ];
 function feHeaderDefaults() {
   const h = {};
@@ -220,13 +224,20 @@ function feHeaderPick(obj) {
 }
 
 /* ---------- Página / componente principal ---------- */
-function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar }) {
+function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, onControleCotacoes }) {
   const [loading, setLoading] = React.useState(!!formularioId);
   const [saving, setSaving] = React.useState(false);
   const [id, setId] = React.useState(formularioId || null);
   const [header, setHeader] = React.useState(feHeaderDefaults());
   const [unidades, setUnidades] = React.useState([feNovaUnidade('E1')]);
   const [linkPublico, setLinkPublico] = React.useState(null);
+  const [numeroCotacao, setNumeroCotacao] = React.useState(null);
+  const [fornecedores, setFornecedores] = React.useState([]);
+
+  React.useEffect(() => {
+    if (publicMode) return;
+    window.FormularioElevadorStore.listarFornecedores().then(setFornecedores).catch(() => {});
+  }, [publicMode]);
 
   React.useEffect(() => {
     if (!formularioId) return;
@@ -234,6 +245,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
     window.FormularioElevadorStore.obter(formularioId).then((f) => {
       setId(f.id);
       setHeader((h) => ({ ...h, ...feHeaderPick(f) }));
+      setNumeroCotacao(f.numero_cotacao ?? null);
       if (f.unidades && f.unidades.length) setUnidades(f.unidades);
       setLoading(false);
     }).catch((e) => { window.toast?.('Erro ao carregar formulário: ' + e.message, 'error'); setLoading(false); });
@@ -319,6 +331,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
         });
         currentId = f.id;
         setId(currentId);
+        setNumeroCotacao(f.numero_cotacao ?? null);
       } else {
         await window.FormularioElevadorStore.salvar(currentId, { ...feHeaderPick(header), cliente_id: cliente?.id });
       }
@@ -357,7 +370,10 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
           <div className="page-head__l">
             <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Formulários</div>
             <h1 className="page-head__title">Formulário — Elevador</h1>
-            <p className="page-head__sub">Coleta de dados da obra e do equipamento para envio de cotação aos fornecedores.</p>
+            <p className="page-head__sub">
+              Coleta de dados da obra e do equipamento para envio de cotação aos fornecedores.
+              {numeroCotacao != null && <span className="mono" style={{ marginLeft: 8 }}>· Cotação Nº {numeroCotacao}</span>}
+            </p>
           </div>
           <div className="page-head__r">
             {onVoltar && <Button variant="ghost" icon="chevLeft" onClick={onVoltar}>Voltar</Button>}
@@ -404,6 +420,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
             <FEField label="Tipo de mão de obra *"><FESelect value={header.tipo_mao_de_obra} onChange={setH('tipo_mao_de_obra')} options={FE_MAO_DE_OBRA}/></FEField>
             <FEField label="Responsável pela entrega *"><FESelect value={header.responsavel_entrega} onChange={setH('responsavel_entrega')} options={FE_RESPONSAVEL_ENTREGA}/></FEField>
             {!publicMode && <FEField label="Origem da venda"><FESelect value={header.origem_venda} onChange={setH('origem_venda')} options={FE_ORIGEM_VENDA}/></FEField>}
+            {!publicMode && <FEField label="Vendedor"><FEInput value={header.vendedor} onChange={setH('vendedor')} placeholder="Iniciais ou nome"/></FEField>}
           </div>
 
           <div>
@@ -432,7 +449,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
 
       {unidades.map((u, i) => (
         <div key={u.id || i} style={{ marginTop: 16 }}>
-          <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)}/>
+          <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} fornecedores={fornecedores} publicMode={publicMode}/>
         </div>
       ))}
 
@@ -443,6 +460,12 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
           <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Enviar para Cotação'}</Button>
         </div>
       </div>
+
+      {!publicMode && onControleCotacoes && (
+        <div style={{ marginTop: 16, textAlign: 'center' }}>
+          <Button variant="ghost" icon="history" onClick={onControleCotacoes}>Controle de Cotações</Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -454,6 +477,7 @@ function FormularioElevadorPage({ setRoute, subsel }) {
       formularioId={typeof subsel === 'string' ? subsel : null}
       onVoltar={() => setRoute('formularios')}
       onSaved={() => {}}
+      onControleCotacoes={() => setRoute('controle-cotacoes')}
     />
   );
 }

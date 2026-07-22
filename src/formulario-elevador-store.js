@@ -25,6 +25,14 @@
     return `${window.location.origin}/formulario-cliente/${encodeURIComponent(token)}`;
   }
 
+  /* ---------- Fornecedores (cadastro expansível) ---------- */
+  async function listarFornecedores() {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.from('fornecedores_elevador').select('nome').eq('ativo', true).order('nome');
+    if (error) throw error;
+    return (data || []).map((f) => f.nome);
+  }
+
   /* Endereço estruturado → string única pra exibição/exportação. Regra:
      CEP e cidade nunca ficam separados por vírgula (usa " - " entre eles). */
   function formatarEndereco({ logradouro, complemento, bairro, cep, cidade, estado } = {}) {
@@ -120,6 +128,7 @@
       tipo_mao_de_obra: dados.tipo_mao_de_obra || null,
       responsavel_entrega: dados.responsavel_entrega || null,
       origem_venda: dados.origem_venda || null,
+      vendedor: dados.vendedor || null,
       observacoes: dados.observacoes || null,
       created_by: (window.__VP_USER || {}).email || null,
     }).select().single();
@@ -216,10 +225,34 @@
     return data || [];
   }
 
+  /* ---------- Controle de Cotações (histórico da planilha + cotações novas) ---------- */
+  async function listarCotacoes() {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const [{ data: hist, error: e1 }, { data: novos, error: e2 }] = await Promise.all([
+      c.from('cotacoes_elevador_historico').select('*'),
+      c.from('formularios_elevador').select('numero_cotacao, created_at, vendedor, origem_venda, status, local_obra_cidade, local_obra_estado, clientes(razao_social, cnpj)'),
+    ]);
+    if (e1) throw e1;
+    if (e2) throw e2;
+    const unificado = [
+      ...(hist || []).map((h) => ({
+        numero_cotacao: h.numero_cotacao, data: h.data, vendedor: h.vendedor, origem_venda: h.origem_venda,
+        nome_cliente: h.nome_cliente, cnpj_comprador: h.cnpj_comprador, estado_instalacao: h.estado_instalacao,
+        status: h.status, origem: 'historico',
+      })),
+      ...(novos || []).map((f) => ({
+        numero_cotacao: f.numero_cotacao, data: f.created_at, vendedor: f.vendedor, origem_venda: f.origem_venda,
+        nome_cliente: f.clientes?.razao_social || null, cnpj_comprador: f.clientes?.cnpj || null,
+        estado_instalacao: f.local_obra_estado, status: f.status, origem: 'formulario',
+      })),
+    ];
+    return unificado.sort((a, b) => (b.numero_cotacao || 0) - (a.numero_cotacao || 0));
+  }
+
   window.FormularioElevadorStore = {
     buscarOuCriarCliente,
-    criar, salvar, obter, obterPorToken, gerarLinkPublico, enviar, listar,
+    criar, salvar, obter, obterPorToken, gerarLinkPublico, enviar, listar, listarCotacoes,
     adicionarUnidade, atualizarUnidade, removerUnidade,
-    publicUrl, formatarEndereco,
+    publicUrl, formatarEndereco, listarFornecedores,
   };
 })();

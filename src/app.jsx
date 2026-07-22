@@ -11,6 +11,7 @@ const ROUTE_TITLE = {
   "dossier-obra": "Dossier da Obra",
   "status-obras": "Status de Obras",
   "formulario-elevador": "Formulário — Elevador",
+  "controle-cotacoes": "Controle de Cotações",
   cotacoes: "Cotações China",
   "cotacao-detail": "Detalhe de Cotação",
   precificacao: "Precificação",
@@ -165,6 +166,7 @@ function App() {
       case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formularios": return <FormulariosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formulario-elevador": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel}/>;
+      case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute}/>;
       case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute}/>;
       case "status-obras": return <ObrasStatusPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cotacoes": return <CotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
