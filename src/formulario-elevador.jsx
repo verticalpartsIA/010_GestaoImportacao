@@ -165,17 +165,34 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove }) {
   );
 }
 
+/* Únicos campos que realmente pertencem ao header (formularios_elevador) —
+   usado tanto pra filtrar o que vem do banco (obter() também traz id, token,
+   status, unidades...) quanto pra montar o payload de save. Sem esse filtro,
+   reabrir um rascunho e salvar de novo reenviava colunas inexistentes
+   (ex.: `unidades`) e o update quebrava. */
+const FE_HEADER_KEYS = [
+  'tipo_pessoa', 'razao_social', 'cnpj', 'cpf', 'inscricao_estadual', 'contribuinte_icms',
+  'endereco', 'telefone', 'email',
+  'local_obra_cidade', 'local_obra_estado', 'endereco_obra_diferente', 'endereco_obra', 'prazo_desejado',
+  'tipo_mao_de_obra', 'responsavel_entrega', 'origem_venda', 'observacoes',
+];
+function feHeaderDefaults() {
+  const h = {};
+  FE_HEADER_KEYS.forEach((k) => { h[k] = k === 'endereco_obra_diferente' ? false : ''; });
+  return h;
+}
+function feHeaderPick(obj) {
+  const h = {};
+  FE_HEADER_KEYS.forEach((k) => { if (obj[k] !== undefined) h[k] = obj[k]; });
+  return h;
+}
+
 /* ---------- Página / componente principal ---------- */
 function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar }) {
   const [loading, setLoading] = React.useState(!!formularioId);
   const [saving, setSaving] = React.useState(false);
   const [id, setId] = React.useState(formularioId || null);
-  const [header, setHeader] = React.useState({
-    tipo_pessoa: 'PJ', razao_social: '', cnpj: '', cpf: '', inscricao_estadual: '',
-    contribuinte_icms: '', endereco: '', telefone: '', email: '',
-    local_obra_cidade: '', local_obra_estado: '', endereco_obra: '', prazo_desejado: '',
-    tipo_mao_de_obra: '', responsavel_entrega: '', origem_venda: '', observacoes: '',
-  });
+  const [header, setHeader] = React.useState(feHeaderDefaults());
   const [unidades, setUnidades] = React.useState([feNovaUnidade('E1')]);
   const [linkPublico, setLinkPublico] = React.useState(null);
 
@@ -184,7 +201,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
     setLoading(true);
     window.FormularioElevadorStore.obter(formularioId).then((f) => {
       setId(f.id);
-      setHeader((h) => ({ ...h, ...f }));
+      setHeader((h) => ({ ...h, ...feHeaderPick(f) }));
       if (f.unidades && f.unidades.length) setUnidades(f.unidades);
       setLoading(false);
     }).catch((e) => { window.toast?.('Erro ao carregar formulário: ' + e.message, 'error'); setLoading(false); });
@@ -200,6 +217,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
     if (!header.local_obra_cidade?.trim() || !header.local_obra_estado?.trim()) return 'Local da obra (cidade/UF) é obrigatório.';
     if (!header.tipo_mao_de_obra) return 'Tipo de mão de obra é obrigatório.';
     if (!header.responsavel_entrega) return 'Responsável pela entrega é obrigatório.';
+    if (header.endereco_obra_diferente && !header.endereco_obra?.trim()) return 'Informe o endereço da obra.';
     for (const u of unidades) {
       if (!u.tipo || !u.velocidade_ms || !u.paradas || !u.pavimentos_desc || !u.casa_maquinas || !u.agrupamento || !u.porta_oposta || !u.estrutura_caixa || !u.percurso_mm || !u.porta_tipo_abertura || !u.tensao_principal || !u.tensao_iluminacao) {
         return `Elevador ${u.identificador || ''}: preencha os campos obrigatórios (*).`;
@@ -220,12 +238,12 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
       let currentId = id;
       if (!currentId) {
         const f = await window.FormularioElevadorStore.criar({
-          ...header, cliente_id: cliente?.id, canal: publicMode ? 'self_service' : 'assistido',
+          ...feHeaderPick(header), cliente_id: cliente?.id, canal: publicMode ? 'self_service' : 'assistido',
         });
         currentId = f.id;
         setId(currentId);
       } else {
-        await window.FormularioElevadorStore.salvar(currentId, { ...header, cliente_id: cliente?.id });
+        await window.FormularioElevadorStore.salvar(currentId, { ...feHeaderPick(header), cliente_id: cliente?.id });
       }
       // sincroniza unidades: atualiza as que já têm id, cria as que não têm
       for (const u of unidades) {
@@ -302,11 +320,32 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar })
           <div className="grid-3" style={{ gap: 12 }}>
             <FEField label="Cidade da obra *"><FEInput value={header.local_obra_cidade} onChange={setH('local_obra_cidade')}/></FEField>
             <FEField label="UF da obra *"><FEInput value={header.local_obra_estado} onChange={setH('local_obra_estado')} placeholder="SP"/></FEField>
-            <FEField label="Endereço da obra"><FEInput value={header.endereco_obra} onChange={setH('endereco_obra')}/></FEField>
             <FEField label="Prazo mínimo desejado em obra"><FEInput value={header.prazo_desejado} onChange={setH('prazo_desejado')} placeholder="3 a 4 meses"/></FEField>
             <FEField label="Tipo de mão de obra *"><FESelect value={header.tipo_mao_de_obra} onChange={setH('tipo_mao_de_obra')} options={FE_MAO_DE_OBRA}/></FEField>
             <FEField label="Responsável pela entrega *"><FESelect value={header.responsavel_entrega} onChange={setH('responsavel_entrega')} options={FE_RESPONSAVEL_ENTREGA}/></FEField>
             {!publicMode && <FEField label="Origem da venda"><FESelect value={header.origem_venda} onChange={setH('origem_venda')} options={FE_ORIGEM_VENDA}/></FEField>}
+          </div>
+
+          <div>
+            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Condições</div>
+            <div className="stack" style={{ gap: 10 }}>
+              <FEField label="Equipamento será instalado em endereço diferente?">
+                <div className="seg">
+                  <button type="button" className={!header.endereco_obra_diferente ? 'is-active' : ''} onClick={() => setH('endereco_obra_diferente')(false)}>Não</button>
+                  <button type="button" className={header.endereco_obra_diferente ? 'is-active' : ''} onClick={() => setH('endereco_obra_diferente')(true)}>Sim</button>
+                </div>
+              </FEField>
+              {!header.endereco_obra_diferente && (
+                <p style={{ fontSize: 12, color: 'var(--fg3)', margin: 0 }}>A obra usará o mesmo endereço já informado acima.</p>
+              )}
+              {header.endereco_obra_diferente && (
+                <div className="grid-3" style={{ gap: 12 }}>
+                  <FEField label="Endereço da obra *" span="2">
+                    <FEInput value={header.endereco_obra} onChange={setH('endereco_obra')} placeholder="Endereço onde o equipamento será instalado"/>
+                  </FEField>
+                </div>
+              )}
+            </div>
           </div>
           <FEField label="Observações"><textarea className="input" rows={2} value={header.observacoes || ''} onChange={(e) => setH('observacoes')(e.target.value)}/></FEField>
         </div>

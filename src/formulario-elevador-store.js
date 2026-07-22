@@ -66,7 +66,8 @@
       token,
       local_obra_cidade: dados.local_obra_cidade || null,
       local_obra_estado: dados.local_obra_estado || null,
-      endereco_obra: dados.endereco_obra || null,
+      endereco_obra_diferente: !!dados.endereco_obra_diferente,
+      endereco_obra: dados.endereco_obra_diferente ? (dados.endereco_obra || null) : (dados.endereco || null),
       prazo_desejado: dados.prazo_desejado || null,
       tipo_mao_de_obra: dados.tipo_mao_de_obra || null,
       responsavel_entrega: dados.responsavel_entrega || null,
@@ -80,8 +81,13 @@
 
   async function salvar(id, patch) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const resolved = { ...patch };
+    // Obra "não é endereço diferente" → mantém sincronizado com o endereço do cliente.
+    if (resolved.endereco_obra_diferente !== undefined && !resolved.endereco_obra_diferente) {
+      resolved.endereco_obra = resolved.endereco || null;
+    }
     const { error } = await c.from('formularios_elevador')
-      .update({ ...patch, updated_at: new Date().toISOString() }).eq('id', id);
+      .update({ ...resolved, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) throw error;
   }
 
