@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="pt-br">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="description" content="Cotação técnica de elevador — fornecedor — VerticalParts">
+  <meta name="robots" content="noindex, nofollow">
+  <title>Cotação Técnica · VerticalParts</title>
+
+  <link rel="stylesheet" href="/colors_and_type.css">
+  <link rel="stylesheet" href="/styles/cotacao.css?v=1">
+</head>
+<body>
+  <div id="cef-root">
+    <div class="co-status">
+      <div class="co-spinner"></div>
+      <h1>Carregando…</h1>
+    </div>
+  </div>
+
+  <!-- React + Babel -->
+  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js"></script>
+
+  <!-- Supabase client (CDN) -->
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
+
+  <!-- Cliente Supabase público (sem SSO Guard — página pública por design) -->
+  <script>
+    (function () {
+      const URL_SB  = 'https://jxtqwzmpgofwctqajewt.supabase.co';
+      const ANON_SB = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+      window.__VP_SB = { sb: window.supabase.createClient(URL_SB, ANON_SB) };
+    }());
+  </script>
+
+  <!-- Store (CRUD + portal público) -->
+  <script src="/src/vp-log.js?v=2"></script>
+  <script src="/src/cotacao-elevador-fornecedor-store.js?v=1"></script>
+
+  <!-- App do portal de cotação técnica -->
+  <script type="text/babel" src="/src/cotacao-elevador-fornecedor.jsx?v=1"></script>
+</body>
+</html>

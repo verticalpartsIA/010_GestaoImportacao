@@ -181,6 +181,14 @@ app.get('/formulario-cliente/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'formulario-cliente.html'));
 });
 
+/* ---------- Portal público de cotação técnica — Elevadores (fornecedor) ----------
+   /cotacao-elevador-fornecedor/<token> → entrega cotacao-elevador-fornecedor.html.
+   O token é lido no client. */
+app.get('/cotacao-elevador-fornecedor/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'cotacao-elevador-fornecedor.html'));
+});
+
 /* ---------- Estáticos ----------
    Código (html/js/jsx/css) e version.json vão sempre com no-cache: o navegador
    é obrigado a revalidar com o servidor antes de usar a cópia salva (ETag/

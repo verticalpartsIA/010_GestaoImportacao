@@ -227,6 +227,163 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, model
   );
 }
 
+/* ---------- Envio da cotação técnica a fornecedores (Glarie, por ora) ----------
+   Agrupa as Unidades salvas por (fornecedor, tipo_formulario) — tipo_formulario
+   é "elevator" ou "homelift" conforme o Tipo da unidade — e envia 1 link por
+   grupo (WhatsApp/E-mail/Link), igual ao Pedido a Fornecedor já existente. */
+const FE_TIPO_FORMULARIO_LABEL = { elevator: 'Elevator Inquiry Form', homelift: 'Homelift Inquiry Form' };
+const FE_CEF_STATUS_LABEL = { rascunho: 'Rascunho', enviado: 'Enviado', visualizado: 'Visualizado', respondido: 'Respondido', expirado: 'Expirado' };
+const FE_CEF_STATUS_COR = { rascunho: '#64748b', enviado: '#2563eb', visualizado: '#b45309', respondido: '#059669', expirado: '#9f1239' };
+function FECefStatusChip({ status }) {
+  return <span className="la-setor" style={{ background: FE_CEF_STATUS_COR[status] || '#64748b' }}>{FE_CEF_STATUS_LABEL[status] || status}</span>;
+}
+
+function FECotacaoRespostaModal({ cot, onClose }) {
+  const r = cot.respostas || {};
+  const itens = r.itens || [];
+  return (
+    <Modal title={`Resposta de ${cot.fornecedor} — ${cot.numero_documento}`} onClose={onClose} width={760}
+      footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
+      <div className="grid-3" style={{ gap: 12 }}>
+        <FEField label="Moeda"><b>{r.moeda || '—'}</b></FEField>
+        <FEField label="Incoterm / Porto"><b>{r.incoterm_porto || '—'}</b></FEField>
+        <FEField label="Validade da proposta"><b>{r.validade_dias ? `${r.validade_dias} dias` : '—'}</b></FEField>
+        <FEField label="Prazo de fabricação"><b>{r.prazo_fabricacao || '—'}</b></FEField>
+        <FEField label="Garantia"><b>{r.garantia || '—'}</b></FEField>
+        <FEField label="Container"><b>{r.container_no || '—'}</b></FEField>
+        <FEField label="Embalagem"><b>{r.embalagem || '—'}</b></FEField>
+        <FEField label="Condições de pagamento" span="2"><b>{r.condicoes_pagamento || '—'}</b></FEField>
+        <FEField label="Documentos no embarque" span="3"><b>{r.documentos_embarque || '—'}</b></FEField>
+      </div>
+      <div className="table-wrap" style={{ marginTop: 12 }}>
+        <table className="t">
+          <thead><tr><th>Unidade</th><th>Modelo (fornecedor)</th><th>Andares/Paradas/Portas</th><th>Preço unit.</th><th>Preço total</th><th>Confirmação técnica</th></tr></thead>
+          <tbody>
+            {itens.map((it, i) => (
+              <tr key={i}>
+                <td className="mono small">{it.unidade_identificador || it.unidade_id}</td>
+                <td>{it.modelo_fornecedor || '—'}</td>
+                <td>{it.floors_stops_doors || '—'}</td>
+                <td><b>{it.preco_unitario || '—'}</b></td>
+                <td><b>{it.preco_total || '—'}</b></td>
+                <td className="small muted">{it.confirmacao_tecnica || ''}</td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+      {r.observacoes_gerais && (
+        <div style={{ marginTop: 12 }}>
+          <span className="up-eyebrow muted">Observações gerais</span>
+          <p className="small" style={{ marginTop: 4 }}>{r.observacoes_gerais}</p>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, enviando }) {
+  const store = window.CotacaoElevadorFornecedorStore;
+  const suportado = grupo.fornecedor === 'Glarie';
+  const [verResp, setVerResp] = React.useState(false);
+  const [recipient, setRecipient] = React.useState(() => (
+    grupo.fornecedor === 'Glarie'
+      ? { nome: 'Kimmy (Glarie)', email: 'kimmy.kuai@glarie.com', telefone: '8618751801577' }
+      : { nome: '', email: '', telefone: '' }
+  ));
+  const setR = (k) => (v) => setRecipient((r) => ({ ...r, [k]: v }));
+  const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
+  const busy = enviando === key;
+
+  return (
+    <div className="card" style={{ padding: 14, marginBottom: 12 }}>
+      <div className="row gap-2" style={{ justifyContent: 'space-between', alignItems: 'flex-start' }}>
+        <div>
+          <b>{grupo.fornecedor}</b> <span className="muted small">· {FE_TIPO_FORMULARIO_LABEL[grupo.tipoFormulario]}</span>
+          <div className="small muted">Unidades: {grupo.unidades.map((u) => u.identificador || '—').join(', ')}</div>
+        </div>
+        {cot && <FECefStatusChip status={cot.status}/>}
+      </div>
+
+      {!suportado && <p className="small muted" style={{ marginTop: 8 }}>Formulário deste fornecedor ainda não configurado — em breve.</p>}
+
+      {suportado && cot?.status === 'respondido' ? (
+        <div style={{ marginTop: 10 }}>
+          <Button variant="outline" size="sm" icon="fileText" onClick={() => setVerResp(true)}>Ver resposta do fornecedor</Button>
+          {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}
+        </div>
+      ) : suportado && (
+        <div style={{ marginTop: 10 }}>
+          <div className="grid-3" style={{ gap: 8 }}>
+            <FEInput value={recipient.nome} onChange={setR('nome')} placeholder="Contato no fornecedor"/>
+            <FEInput value={recipient.email} onChange={setR('email')} placeholder="e-mail"/>
+            <FEInput value={recipient.telefone} onChange={setR('telefone')} placeholder="WhatsApp (DDI+DDD+número)"/>
+          </div>
+          <div className="row gap-2" style={{ marginTop: 8 }}>
+            <Button variant="outline" size="sm" icon="message" disabled={busy} onClick={() => onEnviar(grupo, 'whatsapp', recipient)}>WhatsApp</Button>
+            <Button variant="outline" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>E-mail</Button>
+            <Button variant="ghost" size="sm" icon="copy" disabled={busy} onClick={() => onEnviar(grupo, 'link', recipient)}>Copiar link</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FECotacaoFornecedorModal({ formularioId, unidades, onClose }) {
+  const store = window.CotacaoElevadorFornecedorStore;
+  const [cotacoes, setCotacoes] = React.useState([]);
+  const [enviando, setEnviando] = React.useState(null);
+
+  const reload = () => store.listarPorFormulario(formularioId).then(setCotacoes).catch(() => {});
+  React.useEffect(() => { reload(); }, [formularioId]);
+
+  const grupos = React.useMemo(() => {
+    const map = {};
+    unidades.filter((u) => u.id && u.fornecedor).forEach((u) => {
+      const tipoFormulario = store.tipoFormularioPara(u.tipo);
+      const key = `${u.fornecedor}|${tipoFormulario}`;
+      if (!map[key]) map[key] = { fornecedor: u.fornecedor, tipoFormulario, unidades: [] };
+      map[key].unidades.push(u);
+    });
+    return Object.values(map);
+  }, [unidades]);
+
+  const cotacaoDoGrupo = (g) => cotacoes.find((c) => c.fornecedor === g.fornecedor && c.tipo_formulario === g.tipoFormulario);
+
+  const enviar = async (grupo, canal, recipient) => {
+    const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
+    setEnviando(key);
+    try {
+      let cot = cotacaoDoGrupo(grupo);
+      if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor);
+      const url = store.cotacaoUrl(cot.token);
+      const msg = `Solicitação de cotação técnica ${cot.numero_documento} — VerticalParts\n` +
+        `Segue o link com as especificações da(s) unidade(s) ${grupo.unidades.map((u) => u.identificador).join(', ')} para cotação:\n${url}`;
+      if (canal === 'whatsapp') window.open(window.PFStore.whatsAppHref(recipient.telefone, msg), '_blank');
+      if (canal === 'email') window.open(window.PFStore.mailtoHref(recipient.email, `Cotação técnica ${cot.numero_documento} — VerticalParts`, msg), '_blank');
+      if (canal === 'link') { try { await navigator.clipboard.writeText(url); } catch (e) {} window.toast?.('Link copiado.', 'success'); }
+      await store.marcarEnviado(cot.id, canal, recipient);
+      await reload();
+      window.toast?.('Cotação marcada como enviada.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao enviar: ' + e.message, 'error');
+    } finally {
+      setEnviando(null);
+    }
+  };
+
+  return (
+    <Modal title="Enviar cotação técnica aos fornecedores" onClose={onClose} width={640}
+      footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
+      {grupos.length === 0 && <p className="small muted">Salve o formulário e defina o Fornecedor em pelo menos uma Unidade para enviar a cotação.</p>}
+      {grupos.map((g) => (
+        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}`} grupo={g} cot={cotacaoDoGrupo(g)} onEnviar={enviar} enviando={enviando}/>
+      ))}
+    </Modal>
+  );
+}
+
 /* Únicos campos que realmente pertencem ao header (formularios_elevador) —
    usado tanto pra filtrar o que vem do banco (obter() também traz id, token,
    status, unidades...) quanto pra montar o payload de save. Sem esse filtro,
@@ -263,6 +420,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
   const [numeroCotacao, setNumeroCotacao] = React.useState(null);
   const [fornecedores, setFornecedores] = React.useState([]);
   const [modelos, setModelos] = React.useState([]);
+  const [showCotacaoFornecedor, setShowCotacaoFornecedor] = React.useState(false);
 
   React.useEffect(() => {
     if (publicMode) return;
@@ -495,10 +653,15 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
         </div>
       </div>
 
-      {!publicMode && onControleCotacoes && (
-        <div style={{ marginTop: 16, textAlign: 'center' }}>
-          <Button variant="ghost" icon="history" onClick={onControleCotacoes}>Controle de Cotações</Button>
+      {!publicMode && (id || onControleCotacoes) && (
+        <div className="row gap-2" style={{ marginTop: 16, justifyContent: 'center' }}>
+          {id && <Button variant="ghost" icon="send" onClick={() => setShowCotacaoFornecedor(true)}>Enviar cotação a fornecedores</Button>}
+          {onControleCotacoes && <Button variant="ghost" icon="history" onClick={onControleCotacoes}>Controle de Cotações</Button>}
         </div>
+      )}
+
+      {showCotacaoFornecedor && (
+        <FECotacaoFornecedorModal formularioId={id} unidades={unidades} onClose={() => setShowCotacaoFornecedor(false)}/>
       )}
     </div>
   );
