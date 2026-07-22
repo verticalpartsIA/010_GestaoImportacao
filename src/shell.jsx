@@ -58,14 +58,14 @@ const ROLE_MAP = {
   admin:       { name: "Admin",       initials: "AD", title: "Perfil Admin" },
 };
 
-/* "21/07/26 · 14:32h" — confirma visualmente que a aba está na versão
+/* "21/07/26 14:32h" — confirma visualmente que a aba está na versão
    publicada mais recente (ver src/version-check.js). */
 function formatBuildTime(iso) {
   const d = new Date(iso);
   if (isNaN(d.getTime())) return null;
   const date = d.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
   const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
-  return `${date} · ${time}h`;
+  return `${date} ${time}h`;
 }
 
 function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
@@ -92,9 +92,6 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
         <img src="assets/logo-mark-yellow.png" alt="" className="sidebar__brand-mark"/>
         <div className="sidebar__brand-text">VERTICAL<b>PARTS</b></div>
         <div className="sidebar__brand-sub">v2.4</div>
-      </div>
-      <div className="sidebar__version" title={version ? `commit ${version.commit}` : 'Aguardando confirmação da versão…'}>
-        {versionLabel ? `Atualizado em ${versionLabel}` : 'Verificando versão…'}
       </div>
       <button className="sidebar__collapse" onClick={onToggle} aria-label="Toggle sidebar">
         {collapsed ? <Icon.chevRight size={12}/> : <Icon.chevLeft size={12}/>}
@@ -144,6 +141,9 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
             </div>
           </div>
           <span className="chev" style={{ color: "var(--vp-gray-500)" }}><Icon.chevUp size={14}/></span>
+        </div>
+        <div className="sidebar__version" title={version ? `commit ${version.commit}` : 'Aguardando confirmação da versão…'}>
+          {versionLabel ? `Última atualização: ${versionLabel}` : 'Verificando versão…'}
         </div>
       </div>
     </aside>

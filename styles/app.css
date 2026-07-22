@@ -202,8 +202,9 @@ body[data-density="airy"] {
   letter-spacing: .02em;
   color: var(--vp-gray-500);
   text-align: center;
-  padding: 5px 8px;
-  border-bottom: 1px solid var(--vp-gray-900);
+  padding: 5px 8px 0;
+  margin-top: 8px;
+  border-top: 1px solid var(--vp-gray-900);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
