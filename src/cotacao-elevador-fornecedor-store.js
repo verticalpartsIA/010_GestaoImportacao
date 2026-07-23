@@ -83,6 +83,7 @@
       },
       unidades: unidades.map((u) => ({
         unidade_id: u.id, identificador: u.identificador, tipo: u.tipo, modelo: u.modelo,
+        quantidade: u.quantidade || 1,
         capacidade_kg: u.capacidade_kg, capacidade_pessoas: u.capacidade_pessoas,
         velocidade_ms: u.velocidade_ms, paradas: u.paradas, pavimentos_desc: u.pavimentos_desc,
         casa_maquinas: u.casa_maquinas, agrupamento: u.agrupamento, porta_oposta: u.porta_oposta,

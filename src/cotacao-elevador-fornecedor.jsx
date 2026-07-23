@@ -24,6 +24,7 @@ function cefSecoesUnidade(u, tipoFormulario) {
   const isElevator = tipoFormulario === 'elevator';
   const principais = [
     ['Número do elevador', 'Lift No.', u.identificador],
+    ['Quantidade de unidades idênticas', 'Lift Units (Quantity)', u.quantidade || 1],
     isElevator && ['Modelo do elevador', 'Lift Model', store.liftModelLabel(u.tipo)],
     ['Estrutura do elevador', 'Shaft structure', u.estrutura_caixa],
     isElevator && ['Casa de máquinas', 'Machine Room Type', store.machineRoomLabel(u.casa_maquinas)],
@@ -110,7 +111,7 @@ function CefUnidadeFill({ u, val, onChange, readOnly }) {
   const f = (k) => (e) => onChange(k, e.target.value);
   return (
     <div className="co-fill" style={{ background: '#fcfcf7', borderRadius: 12, marginTop: 10 }}>
-      <b style={{ fontSize: 12 }}>Resposta — Unidade {u.identificador}</b>
+      <b style={{ fontSize: 12 }}>Resposta — Unidade {u.identificador}{u.quantidade > 1 ? ` (${u.quantidade} unidades idênticas)` : ''}</b>
       <label className="co-f">
         <span>Modelo do fornecedor / Supplier model</span>
         <input className="co-inp" value={val.modelo_fornecedor || ''} onChange={f('modelo_fornecedor')} placeholder="ex.: GEP-MRL" disabled={readOnly}/>
@@ -125,7 +126,7 @@ function CefUnidadeFill({ u, val, onChange, readOnly }) {
           <input className="co-inp" inputMode="decimal" value={val.preco_unitario || ''} onChange={f('preco_unitario')} placeholder="0.00" disabled={readOnly}/>
         </label>
         <label className="co-f">
-          <span>Preço total / Total Price</span>
+          <span>Preço total ({u.quantidade || 1} un.) / Total Price</span>
           <input className="co-inp" inputMode="decimal" value={val.preco_total || ''} onChange={f('preco_total')} placeholder="0.00" disabled={readOnly}/>
         </label>
       </div>

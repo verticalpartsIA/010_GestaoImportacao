@@ -27,7 +27,7 @@ const FE_NORMAS = ['Glarie Standard', 'China Standard', 'EN81-20/50', 'EN81-20/5
 
 function feNovaUnidade(identificador) {
   return {
-    identificador: identificador || '',
+    identificador: identificador || '', quantidade: 1,
     fornecedor: '', modelo: '',
     tipo: '', capacidade_kg: '', capacidade_pessoas: '', velocidade_ms: '',
     paradas: '', pavimentos_desc: '', casa_maquinas: '', agrupamento: '', porta_oposta: '',
@@ -79,14 +79,14 @@ function FECheck({ label, checked, onChange }) {
    898). É a referência que o vendedor vai usar depois pra criar a Proposta,
    por isso precisa de destaque próprio, não só um texto solto no subtítulo. */
 function FENumeroCotacaoBadge({ numeroCotacao }) {
-  if (numeroCotacao == null) return null;
   return (
     <div className="mono" style={{
       display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6,
-      background: '#111', color: '#FBB039', fontWeight: 700,
+      background: numeroCotacao != null ? '#111' : '#e5e5e5',
+      color: numeroCotacao != null ? '#FBB039' : '#71717a', fontWeight: 700,
       padding: '6px 12px', borderRadius: 6, fontSize: 13, letterSpacing: '.02em',
     }}>
-      Cotação Nº {numeroCotacao}
+      Cotação Nº {numeroCotacao != null ? numeroCotacao : '— (gerado ao salvar)'}
     </div>
   );
 }
@@ -231,7 +231,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, model
 
   return (
     <Card
-      title={`Elevador ${unidade.identificador || index + 1}`}
+      title={`Elevador ${unidade.identificador || index + 1}${Number(unidade.quantidade) > 1 ? ` × ${unidade.quantidade}` : ''}`}
       sub={unidade.tipo || 'Tipo não definido'}
       action={
         <div className="row gap-2">
@@ -246,14 +246,16 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, model
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Identificação do elevador</div>
             <div className={publicMode ? 'grid-3' : 'grid-4'} style={{ gap: 12 }}>
               <FEField label="Identificador (E1, E2...)"><FEInput value={unidade.identificador} onChange={set('identificador')} placeholder="E1"/></FEField>
+              <FEField label="Quantidade idêntica"><FEInput type="number" value={unidade.quantidade ?? 1} onChange={(v) => set('quantidade')(Math.max(1, Number(v) || 1))} placeholder="1"/></FEField>
               <FEField label="Tipo *"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>
               <FEField label="Modelo"><FESelect value={unidade.modelo} onChange={set('modelo')} options={modelosDisponiveis.map((m) => ({ value: m.codigo, label: `${m.codigo} — ${m.nome}` }))} placeholder="— selecione o modelo —"/></FEField>
               <FEField label="Norma de projeto"><FESelect value={unidade.norma_projeto} onChange={set('norma_projeto')} options={FE_NORMAS}/></FEField>
               {!publicMode && <FEField label="Fornecedor"><FESelect value={unidade.fornecedor} onChange={set('fornecedor')} options={fornecedores || []}/></FEField>}
             </div>
-            {!unidade.modelo && (
-              <p style={{ fontSize: 12, color: 'var(--fg3)', margin: '8px 0 0' }}>Selecione o modelo do elevador para ver as opções disponíveis de teto falso, piso, porta e botoeiras.</p>
-            )}
+            <p style={{ fontSize: 12, color: 'var(--fg3)', margin: '8px 0 0' }}>
+              Se o cliente quer vários elevadores idênticos, informe a quantidade aqui em vez de adicionar um card pra cada — use "+ Adicionar elevador diferente" abaixo só quando a especificação mudar (ex.: um modelo/tipo distinto).
+              {!unidade.modelo && ' Selecione o modelo do elevador para ver as opções disponíveis de teto falso, piso, porta e botoeiras.'}
+            </p>
             <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
               <FEField label="Capacidade (kg)"><FEInput type="number" value={unidade.capacidade_kg} onChange={set('capacidade_kg')} placeholder="630"/></FEField>
               <FEField label="Capacidade (passageiros)"><FEInput type="number" value={unidade.capacidade_pessoas} onChange={set('capacidade_pessoas')} placeholder="8"/></FEField>
@@ -814,7 +816,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       ))}
 
       <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'space-between' }}>
-        <Button variant="outline" icon="plus" onClick={addUnidade}>+ Adicionar elevador</Button>
+        <Button variant="outline" icon="plus" onClick={addUnidade}>+ Adicionar elevador diferente</Button>
         <div className="row gap-2">
           <Button variant="outline" onClick={() => salvarTudo(null)} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>
           <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Enviar para Cotação'}</Button>
