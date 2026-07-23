@@ -259,8 +259,6 @@ function App() {
               { value: "leads", label: "Leads" },
               { value: "lead-detail", label: "Detalhe de Lead" },
               { value: "dossier-obra", label: "🏗 Dossier da Obra" },
-              { value: "cotacoes", label: "Cotações China" },
-              { value: "cotacao-detail", label: "Detalhe de Cotação" },
               { value: "precificacao", label: "Precificação (calc)" },
               { value: "propostas", label: "Propostas (wizard)" },
               { value: "proposta-editor", label: "📝 Editor de Proposta (3 eq.)" },
