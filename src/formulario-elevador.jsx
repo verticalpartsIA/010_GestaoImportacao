@@ -75,6 +75,22 @@ function FECheck({ label, checked, onChange }) {
 /* Endereço estruturado (Logradouro/Complemento/Bairro/CEP/Cidade/UF) — usado
    tanto pro endereço do cliente (prefixo "endereco_") quanto da obra
    (prefixo "endereco_obra_"), mesmos nomes de coluna do banco. */
+/* Nº da Cotação — mesma numeração continuada da planilha histórica (desde
+   898). É a referência que o vendedor vai usar depois pra criar a Proposta,
+   por isso precisa de destaque próprio, não só um texto solto no subtítulo. */
+function FENumeroCotacaoBadge({ numeroCotacao }) {
+  if (numeroCotacao == null) return null;
+  return (
+    <div className="mono" style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 6,
+      background: '#111', color: '#FBB039', fontWeight: 700,
+      padding: '6px 12px', borderRadius: 6, fontSize: 13, letterSpacing: '.02em',
+    }}>
+      Cotação Nº {numeroCotacao}
+    </div>
+  );
+}
+
 function FEEndereco({ prefix, header, setH, requiredLogradouro, onBuscarCep }) {
   const k = (suf) => `${prefix}${suf}`;
   return (
@@ -98,6 +114,99 @@ function FEEndereco({ prefix, header, setH, requiredLogradouro, onBuscarCep }) {
         <FEInput value={header[k('estado')]} onChange={setH(k('estado'))} placeholder="SP"/>
       </FEField>
     </div>
+  );
+}
+
+/* ---------- Anexos (projeto civil da obra) ----------
+   O cliente (Canal 2, link público) anexa a planta/memorial/DWG do projeto
+   civil; o Comercial (Canal 1) só visualiza/baixa e extrai as medidas na
+   mão — equivale a uma "entrevista" feita por documento em vez de conversa. */
+function feFmtBytes(n) {
+  if (!n && n !== 0) return '';
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(0)} KB`;
+  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
+}
+
+function FEAnexos({ formularioId, publicMode }) {
+  const [anexos, setAnexos] = React.useState(null);
+  const [enviando, setEnviando] = React.useState(false);
+  const fileRef = React.useRef(null);
+
+  const recarregar = React.useCallback(() => {
+    if (!formularioId) return;
+    window.FormularioElevadorStore.listarAnexos(formularioId).then(setAnexos).catch(() => setAnexos([]));
+  }, [formularioId]);
+  React.useEffect(() => { recarregar(); }, [recarregar]);
+
+  const onEscolherArquivo = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setEnviando(true);
+    try {
+      await window.FormularioElevadorStore.anexarArquivo(formularioId, file);
+      recarregar();
+      window.toast?.('Arquivo anexado.', 'success');
+    } catch (err) {
+      window.toast?.('Erro ao anexar: ' + err.message, 'error');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  const abrir = async (anexo) => {
+    const url = await window.FormularioElevadorStore.urlAssinadaAnexo(anexo.path);
+    if (url) window.open(url, '_blank');
+    else window.toast?.('Não foi possível abrir o arquivo.', 'error');
+  };
+
+  const remover = async (anexo) => {
+    if (!window.confirm(`Remover "${anexo.nome_arquivo}"?`)) return;
+    try {
+      await window.FormularioElevadorStore.removerAnexo(anexo);
+      recarregar();
+    } catch (err) {
+      window.toast?.('Erro ao remover: ' + err.message, 'error');
+    }
+  };
+
+  if (!formularioId) return null;
+
+  return (
+    <Card title="Projeto Civil da Obra">
+      <p className="small muted" style={{ marginTop: -6, marginBottom: 10 }}>
+        Anexe a planta, o memorial descritivo ou o projeto civil (PDF, DWG, imagem) — a equipe usa esses dados para extrair as medidas do elevador.
+      </p>
+      {publicMode && (
+        <div style={{ marginBottom: 10 }}>
+          <input ref={fileRef} type="file" style={{ display: 'none' }} accept=".pdf,.dwg,.dxf,image/*" onChange={onEscolherArquivo}/>
+          <Button variant="outline" icon="paperclip" disabled={enviando} onClick={() => fileRef.current && fileRef.current.click()}>
+            {enviando ? 'Enviando…' : 'Anexar arquivo'}
+          </Button>
+        </div>
+      )}
+      {anexos === null ? (
+        <p className="small muted">Carregando anexos…</p>
+      ) : anexos.length === 0 ? (
+        <p className="small muted">Nenhum arquivo anexado ainda.</p>
+      ) : (
+        <div className="stack" style={{ gap: 6 }}>
+          {anexos.map((a) => (
+            <div key={a.id} className="row gap-2" style={{ justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--vp-gray-50)', borderRadius: 6 }}>
+              <div>
+                <b style={{ fontSize: 13 }}>{a.nome_arquivo}</b>
+                <div className="small muted">{feFmtBytes(a.tamanho_bytes)} · {new Date(a.created_at).toLocaleDateString('pt-BR')}</div>
+              </div>
+              <div className="row gap-2">
+                <Button variant="ghost" size="sm" icon="download" onClick={() => abrir(a)}>Ver</Button>
+                <Button variant="ghost" size="sm" icon="trash" onClick={() => remover(a)}>Remover</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
   );
 }
 
@@ -614,9 +723,9 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
           <div className="page-head__l">
             <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Formulários</div>
             <h1 className="page-head__title">Formulário — Elevador</h1>
+            <FENumeroCotacaoBadge numeroCotacao={numeroCotacao}/>
             <p className="page-head__sub">
               Coleta de dados da obra e do equipamento para envio de cotação aos fornecedores.
-              {numeroCotacao != null && <span className="mono" style={{ marginLeft: 8 }}>· Cotação Nº {numeroCotacao}</span>}
             </p>
           </div>
           <div className="page-head__r">
@@ -629,9 +738,9 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
         <div className="page-head">
           <div className="page-head__l">
             <h1 className="page-head__title">Cotação de Elevador — VerticalParts</h1>
+            <FENumeroCotacaoBadge numeroCotacao={numeroCotacao}/>
             <p className="page-head__sub">
               Preencha os dados abaixo para recebermos sua cotação.
-              {numeroCotacao != null && <span className="mono" style={{ marginLeft: 8 }}>· Cotação Nº {numeroCotacao}</span>}
             </p>
           </div>
         </div>
@@ -691,6 +800,12 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
           <FEField label="Observações"><textarea className="input" rows={2} value={header.observacoes || ''} onChange={(e) => setH('observacoes')(e.target.value)}/></FEField>
         </div>
       </Card>
+
+      {id && (
+        <div style={{ marginTop: 16 }}>
+          <FEAnexos formularioId={id} publicMode={publicMode}/>
+        </div>
+      )}
 
       {unidades.map((u, i) => (
         <div key={u.id || i} style={{ marginTop: 16 }}>

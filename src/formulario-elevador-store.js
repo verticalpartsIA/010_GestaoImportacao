@@ -281,11 +281,66 @@
     return unificado.sort((a, b) => (b.numero_cotacao || 0) - (a.numero_cotacao || 0));
   }
 
+  /* ---------- Anexos (projeto civil da obra) ----------
+     Bucket privado formulario-elevador-anexos — mesmo padrão de bucket
+     privado + URL assinada de ficha-tecnica-imagens.js (window.FTImg),
+     mas sem compressão (não são fotos, são PDF/DWG/plantas). */
+  const FEA_BUCKET = 'formulario-elevador-anexos';
+
+  function fea_slugify(s) {
+    return String(s || 'arquivo')
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9.]+/g, '-').replace(/^-|-$/g, '')
+      .slice(0, 80) || 'arquivo';
+  }
+
+  async function listarAnexos(formularioId) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.from('formularios_elevador_anexos')
+      .select('*').eq('formulario_id', formularioId).order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function anexarArquivo(formularioId, file) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const nomeSeguro = fea_slugify(file.name);
+    const path = `${formularioId}/${Date.now()}-${nomeSeguro}`;
+    const { error: upErr } = await c.storage.from(FEA_BUCKET)
+      .upload(path, file, { upsert: false, contentType: file.type || 'application/octet-stream' });
+    if (upErr) throw upErr;
+    const { data, error } = await c.from('formularios_elevador_anexos').insert({
+      formulario_id: formularioId,
+      nome_arquivo: file.name,
+      tamanho_bytes: file.size,
+      tipo_arquivo: file.type || null,
+      path,
+    }).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function urlAssinadaAnexo(path, ttlSeconds) {
+    const c = sb(); if (!c) return null;
+    const { data, error } = await c.storage.from(FEA_BUCKET).createSignedUrl(path, ttlSeconds || 3600);
+    if (error || !data) return null;
+    return data.signedUrl;
+  }
+
+  async function removerAnexo(anexo) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await c.storage.from(FEA_BUCKET).remove([anexo.path]);
+    const { error } = await c.from('formularios_elevador_anexos').delete().eq('id', anexo.id);
+    if (error) throw error;
+  }
+
   window.FormularioElevadorStore = {
     buscarOuCriarCliente,
     criar, salvar, obter, obterPorToken, gerarLinkPublico, enviar, listar, listarCotacoes,
     adicionarUnidade, atualizarUnidade, removerUnidade,
     publicUrl, formatarEndereco, listarFornecedores,
     listarModelosElevador, listarOpcoesElevador,
+    listarAnexos, anexarArquivo, urlAssinadaAnexo, removerAnexo,
   };
 })();
