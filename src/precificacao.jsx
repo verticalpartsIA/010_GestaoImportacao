@@ -3,7 +3,27 @@
    propostas.jsx — Wizard + Preview PDF
    ============================================================ */
 
+/* Aba "Precificação" tem 2 modos: Elevadores (por Cotação Nº, fluxo real
+   herdando o Formulário de Elevadores + resposta do fornecedor) e Outros
+   projetos (calculadora antiga baseada em Leads/Análise Técnica — mantida
+   como estava). */
+function PrecificacaoModoTabs({ modo, setModo }) {
+  return (
+    <div className="seg">
+      <button type="button" className={modo === 'elevador' ? 'is-active' : ''} onClick={() => setModo('elevador')}>Elevadores</button>
+      <button type="button" className={modo === 'leads' ? 'is-active' : ''} onClick={() => setModo('leads')}>Outros projetos</button>
+    </div>
+  );
+}
+
 function PrecificacaoPage({ setRoute, setSubsel }) {
+  const [modo, setModo] = React.useState('elevador');
+  return modo === 'elevador'
+    ? <window.PrecificacaoElevadorPage setRoute={setRoute} modo={modo} setModo={setModo}/>
+    : <PrecificacaoLeadsPage setRoute={setRoute} setSubsel={setSubsel} modo={modo} setModo={setModo}/>;
+}
+
+function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
   const [projetos, setProjetos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [selectedProject, setSelectedProject] = React.useState(null);
@@ -50,6 +70,7 @@ function PrecificacaoPage({ setRoute, setSubsel }) {
           <p className="page-head__sub">Calcule preço final com FOB China + impostos + frete + margem. Acesso restrito a Comercial Sr. / Financeiro / Admin.</p>
         </div>
         <div className="page-head__r">
+          <PrecificacaoModoTabs modo={modo} setModo={setModo}/>
           <Button variant="outline" icon="download" onClick={() => window.csvDownload(items.map(i => ({ id:i.id, projeto:i.name, cliente:i.client, status:i.status, margem_pct:i.margem, versoes:i.versions, valor:i.value })), 'precificacao.csv')}>Exportar planilhas</Button>
           <Button variant="primary" icon="plus" onClick={() => setSelectedProject({})}>Nova precificação</Button>
         </div>

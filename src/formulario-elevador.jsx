@@ -551,8 +551,13 @@ function FELinkClienteModal({ url, numeroCotacao, header, onClose }) {
    status, unidades...) quanto pra montar o payload de save. Sem esse filtro,
    reabrir um rascunho e salvar de novo reenviava colunas inexistentes
    (ex.: `unidades`) e o update quebrava. */
+const FE_FINALIDADE_COMPRA = [
+  { value: 'uso_consumo_ativo', label: 'Uso e Consumo / Ativo Imobilizado' },
+  { value: 'revenda', label: 'Revenda' },
+];
+
 const FE_HEADER_KEYS = [
-  'tipo_pessoa', 'razao_social', 'cnpj', 'cpf', 'inscricao_estadual', 'contribuinte_icms',
+  'tipo_pessoa', 'razao_social', 'cnpj', 'cpf', 'inscricao_estadual', 'contribuinte_icms', 'finalidade_compra',
   'endereco', 'endereco_logradouro', 'endereco_complemento', 'endereco_bairro', 'endereco_cep', 'endereco_cidade', 'endereco_estado',
   'telefone', 'email',
   'local_obra_cidade', 'local_obra_estado', 'endereco_obra_diferente',
@@ -762,9 +767,15 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
               : <FEField label="CNPJ"><FEInput value={header.cnpj} onChange={setH('cnpj')} placeholder="00.000.000/0000-00" onBlur={() => buscarCnpjEPreencher(header.cnpj)}/></FEField>}
             <FEField label="Inscrição Estadual"><FEInput value={header.inscricao_estadual} onChange={setH('inscricao_estadual')} disabled={header.tipo_pessoa === 'PF'}/></FEField>
             <FEField label="Contribuinte de ICMS?"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
+            <FEField label="Finalidade da compra"><FESelect value={header.finalidade_compra} onChange={setH('finalidade_compra')} options={FE_FINALIDADE_COMPRA}/></FEField>
             <FEField label="Telefone"><FEInput value={header.telefone} onChange={setH('telefone')}/></FEField>
             <FEField label="E-mail" span="2"><FEInput type="email" value={header.email} onChange={setH('email')}/></FEField>
           </div>
+          {header.finalidade_compra === 'revenda' && header.contribuinte_icms === false && (
+            <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #FBB039', padding: '8px 12px', margin: 0 }}>
+              Atenção: Não Contribuintes do ICMS não podem comprar mercadorias com finalidade de Revenda.
+            </p>
+          )}
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Endereço</div>
             <FEEndereco prefix="endereco_" header={header} setH={setH} onBuscarCep={buscarCepEPreencher('endereco_')}/>
