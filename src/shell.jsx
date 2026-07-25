@@ -12,7 +12,7 @@ const NAV_GROUPS = [
   { label: "Comercial", items: [
     { id: "leads", label: "Leads", icon: "flag" },
     { id: "formularios", label: "Formulários", icon: "layers" },
-    { id: "cotacoes", label: "Cotações China", icon: "globe" },
+    { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
     { id: "propostas", label: "Propostas", icon: "proposal" },
   ]},
   { label: "ADM/ Financeiro", items: [
@@ -154,7 +154,7 @@ const BREADCRUMB_MAP = {
   dashboard:     { module: "Dashboard", page: "Visão Geral", icon: "home" },
   notificacoes:  { module: "Notificações", page: "Central de Alertas", icon: "bell" },
   leads:         { module: "Comercial", page: "Leads", icon: "flag" },
-  cotacoes:      { module: "Comercial", page: "Cotações China", icon: "globe" },
+  "cotacoes-fornecedor": { module: "Comercial", page: "Cotações a Fornecedor", icon: "globe" },
   precificacao:  { module: "Comercial", page: "Precificação", icon: "calculator" },
   propostas:     { module: "Jurídico", page: "Propostas", icon: "proposal" },
   juridico:      { module: "Jurídico", page: "Jurídico", icon: "scale" },

@@ -343,10 +343,9 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, model
    é "elevator" ou "homelift" conforme o Tipo da unidade — e envia 1 link por
    grupo (WhatsApp/E-mail/Link), igual ao Pedido a Fornecedor já existente. */
 const FE_TIPO_FORMULARIO_LABEL = { elevator: 'Elevator Inquiry Form', homelift: 'Homelift Inquiry Form' };
-const FE_CEF_STATUS_LABEL = { rascunho: 'Rascunho', enviado: 'Enviado', visualizado: 'Visualizado', respondido: 'Respondido', expirado: 'Expirado' };
-const FE_CEF_STATUS_COR = { rascunho: '#64748b', enviado: '#2563eb', visualizado: '#b45309', respondido: '#059669', expirado: '#9f1239' };
 function FECefStatusChip({ status }) {
-  return <span className="la-setor" style={{ background: FE_CEF_STATUS_COR[status] || '#64748b' }}>{FE_CEF_STATUS_LABEL[status] || status}</span>;
+  const store = window.CotacaoElevadorFornecedorStore;
+  return <span className="la-setor" style={{ background: store.STATUS_COR[status] || '#64748b' }}>{store.STATUS_LABEL[status] || status}</span>;
 }
 
 function FECotacaoRespostaModal({ cot, onClose }) {

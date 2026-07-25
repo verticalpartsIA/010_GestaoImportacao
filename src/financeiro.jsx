@@ -312,7 +312,7 @@ function NotificacoesPage({ setRoute }) {
     "Jurídico": "juridico",
     "Financeiro": "financeiro",
     "Engenharia": "engenharia",
-    "Cotações": "cotacoes",
+    "Cotações": "cotacoes-fornecedor",
     "Propostas": "propostas",
     "Comissões": "comissoes",
   };

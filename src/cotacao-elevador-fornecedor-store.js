@@ -159,6 +159,60 @@
     return data || [];
   }
 
+  /* ---------- Tela "Cotações a Fornecedor" (todas categorias, todos fornecedores) ---------- */
+  async function listarTodas() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('cotacoes_elevador_fornecedor')
+      .select('*, formularios_elevador(numero_cotacao, local_obra_cidade, local_obra_estado, clientes(razao_social))')
+      .order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function getById(id) {
+    const c = sb(); if (!c) return null;
+    const { data } = await c.from('cotacoes_elevador_fornecedor').select('*').eq('id', id).maybeSingle();
+    return data || null;
+  }
+
+  /* ---------- Decisão interna pós-resposta do fornecedor: time decide seguir
+     com a compra (em_analise) e depois confirma a compra (aprovada). ---------- */
+  async function decidirComprar(id) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Cotação não encontrada.');
+    if (cur.status !== 'respondido') return cur;
+    const now = new Date().toISOString();
+    const patch = { status: 'em_analise', decidido_em: now, updated_at: now };
+    const { error } = await c.from('cotacoes_elevador_fornecedor').update(patch).eq('id', id);
+    if (error) throw error;
+    return { ...cur, ...patch };
+  }
+
+  async function aprovar(id) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Cotação não encontrada.');
+    if (cur.status !== 'em_analise') return cur;
+    const now = new Date().toISOString();
+    const patch = { status: 'aprovada', aprovado_em: now, updated_at: now };
+    const { error } = await c.from('cotacoes_elevador_fornecedor').update(patch).eq('id', id);
+    if (error) throw error;
+    return { ...cur, ...patch };
+  }
+
+  /* ---------- Rótulos/cores de status — usados tanto no modal de envio
+     (dentro do Formulário de Elevadores) quanto na tela de Cotações a
+     Fornecedor, pra não duplicar a mesma tabela em dois arquivos. ---------- */
+  const STATUS_LABEL = {
+    rascunho: 'Rascunho', enviado: 'Enviado', visualizado: 'Visualizado',
+    respondido: 'Respondido', em_analise: 'Em análise', aprovada: 'Aprovada', expirado: 'Expirado',
+  };
+  const STATUS_COR = {
+    rascunho: '#64748b', enviado: '#2563eb', visualizado: '#b45309',
+    respondido: '#059669', em_analise: '#7c3aed', aprovada: '#15803d', expirado: '#9f1239',
+  };
+
   /* ---------- Portal público (/cotacao-elevador-fornecedor/:token) ---------- */
   async function getByToken(token) {
     const c = sb(); if (!c || !token) return null;
@@ -200,8 +254,9 @@
 
   window.CotacaoElevadorFornecedorStore = {
     cotacaoUrl, tipoFormularioPara, liftModelLabel, machineRoomLabel, controleLabel,
-    CATEGORIAS_PRODUTO,
-    gerar, marcarEnviado, listarPorFormulario,
+    CATEGORIAS_PRODUTO, STATUS_LABEL, STATUS_COR,
+    gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
     getByToken, marcarVisualizado, salvarResposta, getPublicIP,
+    decidirComprar, aprovar,
   };
 }());

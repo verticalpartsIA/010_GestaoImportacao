@@ -8,8 +8,8 @@ const PRINT_SCREENS = [
   { id: "dashboard",      title: "Dashboard",                  module: "Geral",       role: "admin",      sub: "KPIs · Gantt · alertas · pipeline" },
   { id: "leads",          title: "Pipeline de Leads",          module: "Comercial",   role: "comercial",  sub: "128 leads · pipeline R$ 8.9M" },
   { id: "lead-detail",    title: "Detalhe do Lead",            module: "Comercial",   role: "comercial",  sub: "histórico · contato · próximos passos" },
-  { id: "cotacoes",       title: "Cotações China",             module: "Comercial",   role: "comercial",  sub: "link público p/ fábrica · sem auth" },
-  { id: "cotacao-detail", title: "Detalhe da Cotação",         module: "Comercial",   role: "comercial",  sub: "itens · status China · fornecedor" },
+  { id: "cotacoes-fornecedor",       title: "Cotações a Fornecedor",      module: "Comercial",   role: "comercial",  sub: "RFQ técnico · Glarie e próximos fornecedores" },
+  { id: "cotacao-fornecedor-detail", title: "Detalhe da Cotação",         module: "Comercial",   role: "comercial",  sub: "resposta do fornecedor · decisão de compra" },
   { id: "precificacao",   title: "Precificação ao Vivo",       module: "Comercial",   role: "admin",      sub: "FOB → impostos → margem · histórico v7" },
   { id: "propostas",      title: "Propostas Comerciais",       module: "Comercial",   role: "comercial",  sub: "wizard 5 etapas · pacote PDF" },
   { id: "proposta-editor", title: "Editor de Proposta",        module: "Comercial",   role: "comercial",  sub: "3 abas · preview ao vivo · capas reais" },
@@ -38,8 +38,8 @@ function renderPrintPage(scr) {
     case "dashboard":      return <Dashboard role={scr.role} setRoute={noop}/>;
     case "leads":          return <LeadsPage setRoute={noop} setSubsel={noop}/>;
     case "lead-detail":    return <LeadDetail lead={null} setRoute={noop}/>;
-    case "cotacoes":       return <CotacoesPage setRoute={noop} setSubsel={noop}/>;
-    case "cotacao-detail": return <CotacaoDetail cot={null} setRoute={noop}/>;
+    case "cotacoes-fornecedor":       return <CotacoesFornecedorPage setRoute={noop} setSubsel={noop}/>;
+    case "cotacao-fornecedor-detail": return <CotacaoFornecedorDetalhe cot={null} setRoute={noop}/>;
     case "precificacao":   return <PrecificacaoPage setRoute={noop}/>;
     case "propostas":      return <PropostasPage setRoute={noop}/>;
     case "proposta-editor": return <PropostaEditor setRoute={noop}/>;
