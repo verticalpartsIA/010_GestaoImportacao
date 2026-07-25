@@ -159,6 +159,20 @@ app.post('/api/minuta', async (req, res) => {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, propostas_proxy: PROPOSTAS_ON }));
 
+/* ---------- Config runtime: rastro de acesso cross-sistema ----------
+   Este app não tem etapa de build (React UMD + Babel standalone), então
+   não existe um mecanismo tipo VITE_* para embutir env vars no bundle do
+   client. Em vez disso, a chave fica só no servidor (env var, nunca no
+   git) e é exposta ao client em runtime por este endpoint — mesmo padrão
+   já usado aqui para /version.json. Ver src/activity-tracker.js.
+   Sem a env var configurada, devolve chave vazia e o tracker do client
+   fica inativo silenciosamente (não quebra nada). */
+const TRACK_ACTIVITY_KEY = process.env.TRACK_ACTIVITY_KEY || '';
+app.get('/api/track-config', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.json({ key: TRACK_ACTIVITY_KEY });
+});
+
 /* ---------- Rota pública de assinatura (antes do estático) ----------
    /assinar/<token> → entrega assinar.html. O token é extraído no client. */
 app.get('/assinar/:token', (_req, res) => {
