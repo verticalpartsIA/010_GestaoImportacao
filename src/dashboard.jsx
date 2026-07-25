@@ -298,7 +298,7 @@ function Dashboard({ role, setRoute }) {
               a.module === "Importação"  ? "importacao"  :
               a.module === "Jurídico"    ? "juridico"    :
               a.module === "Financeiro"  ? "financeiro"  :
-              a.module === "Engenharia"  ? "engenharia"  : "cotacoes"
+              a.module === "Engenharia"  ? "engenharia"  : "cotacoes-fornecedor"
             )}/>
           ))}
         </div>

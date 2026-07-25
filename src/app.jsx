@@ -12,8 +12,8 @@ const ROUTE_TITLE = {
   "status-obras": "Status de Obras",
   "formulario-elevador": "Formulário — Elevador",
   "controle-cotacoes": "Controle de Cotações",
-  cotacoes: "Cotações China",
-  "cotacao-detail": "Detalhe de Cotação",
+  "cotacoes-fornecedor": "Cotações a Fornecedor",
+  "cotacao-fornecedor-detail": "Detalhe de Cotação a Fornecedor",
   precificacao: "Precificação",
   propostas: "Propostas Comerciais",
   "proposta-editor": "Editor de Proposta",
@@ -169,8 +169,8 @@ function App() {
       case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute}/>;
       case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute}/>;
       case "status-obras": return <ObrasStatusPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "cotacoes": return <CotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "cotacao-detail": return <CotacaoDetail cot={subsel} setRoute={setRoute}/>;
+      case "cotacoes-fornecedor": return <CotacoesFornecedorPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "cotacao-fornecedor-detail": return <CotacaoFornecedorDetalhe cot={subsel} setRoute={setRoute}/>;
       case "precificacao": return <PrecificacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "propostas": return <PropostasPage setRoute={setRoute}/>;
       case "proposta-editor": return <PropostaEditor setRoute={setRoute} subsel={subsel}/>;
@@ -259,8 +259,8 @@ function App() {
               { value: "leads", label: "Leads" },
               { value: "lead-detail", label: "Detalhe de Lead" },
               { value: "dossier-obra", label: "🏗 Dossier da Obra" },
-              { value: "cotacoes", label: "Cotações China" },
-              { value: "cotacao-detail", label: "Detalhe de Cotação" },
+              { value: "cotacoes-fornecedor", label: "Cotações a Fornecedor" },
+              { value: "cotacao-fornecedor-detail", label: "Detalhe de Cotação a Fornecedor" },
               { value: "precificacao", label: "Precificação (calc)" },
               { value: "propostas", label: "Propostas (wizard)" },
               { value: "proposta-editor", label: "📝 Editor de Proposta (3 eq.)" },
