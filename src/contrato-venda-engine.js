@@ -113,6 +113,7 @@
   function defaultState() {
     return {
       dossier_id: null,  // ISSUE #6: Vinculação ao Dossier da Obra
+      masterId: null, propostaId: null,  // Master ID Fase 2 — herda da Proposta selecionada
       comprador: { razao: '', cnpj: '', endereco: '', rep: '', repCargo: '', repCpf: '', email: '', tel: '' },
       tipoEquip: 'ELEVADOR', qtd: 1,
       tipo: 'Social', carga: '', paradas: '10', cargaEspecial: false,

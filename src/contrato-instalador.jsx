@@ -199,13 +199,66 @@ function CIStepPartes({ s, set, errors }) {
   );
 }
 
+/* Master ID (Fase 2) — puxa uma Proposta já com Master ID (vinda da
+   Precificação) e permite marcar QUAIS ativos (elevadores individuais)
+   este contrato de instalação cobre — ex.: Instalador X monta os ativos
+   1 e 2, Instalador Y monta o ativo 3, na mesma obra. Some silenciosamente
+   se ainda não houver nenhuma Proposta com Master ID. */
+function CISeletorProposta({ propostaId, ativosIndices, onSelecionarProposta, onToggleAtivo }) {
+  const [propostas, setPropostas] = _ciUS(null);
+
+  _ciUE(() => {
+    window.__VP_SB?.sb.from('propostas')
+      .select('id, numero_documento, master_id, titulo, data_json')
+      .not('master_id', 'is', null)
+      .order('criado_em', { ascending: false }).limit(50)
+      .then(({ data }) => setPropostas(data || []));
+  }, []);
+
+  if (!propostas || !propostas.length) return null;
+  const selecionada = propostas.find((p) => p.id === propostaId);
+  const ativos = (selecionada && selecionada.data_json && selecionada.data_json.ativos) || [];
+
+  return (
+    <div className="ci-field-group">
+      <h3 className="ci-group-title">Herdar de uma Proposta (Master ID)</h3>
+      <CISelect label="Proposta" value={propostaId || ''}
+        onChange={(id) => { const p = propostas.find((x) => x.id === id); if (p) onSelecionarProposta(p); }}
+        options={[{ value: '', label: '— selecione uma proposta —' }, ...propostas.map((p) => ({ value: p.id, label: `${p.master_id} · ${p.numero_documento} · ${p.titulo || ''}` }))]}
+        width="full"/>
+      {ativos.length > 0 && (
+        <div style={{ marginTop: 10 }}>
+          <div className="ci-group-title" style={{ fontSize: 12 }}>Ativos cobertos por este contrato</div>
+          {ativos.map((a) => (
+            <CICheckRow key={a.indice} checked={(ativosIndices || []).includes(a.indice)}
+              onChange={() => onToggleAtivo(a.indice)}
+              label={`${a.codigo || a.identificador} — ${a.identificador}${a.modelo ? ' · ' + a.modelo : ''}`}/>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CIStepObjeto({ s, set }) {
   const isElevador = s.equipamento === 'elevador';
   const remocao = window.CI.isRemocao(s);
   const especial = window.CI.isCargaEspecial(s);
+
+  const aplicarProposta = (p) => {
+    set('masterId', p.master_id); set('propostaId', p.id); set('ativosIndices', []);
+    const valores = p.data_json?.elevador?.valores;
+    if (valores?.quantidade) set('quantidade', Number(valores.quantidade) || s.quantidade);
+  };
+  const toggleAtivo = (indice) => {
+    const atual = s.ativosIndices || [];
+    set('ativosIndices', atual.includes(indice) ? atual.filter((i) => i !== indice) : [...atual, indice]);
+  };
+
   return (
     <div className="ci-step">
       <CIStepHeader kicker="Passo 3 — Objeto" title="Objeto do contrato" desc="Defina o equipamento e o escopo. Os campos mudam conforme o tipo selecionado." />
+      <CISeletorProposta propostaId={s.propostaId} ativosIndices={s.ativosIndices} onSelecionarProposta={aplicarProposta} onToggleAtivo={toggleAtivo}/>
       <div className="ci-field-group">
         <h3 className="ci-group-title">Equipamento</h3>
         <CIRadioCards value={s.equipamento} onChange={(v) => set('equipamento', v)} options={window.CI.EQUIPAMENTOS} columns={3} />
