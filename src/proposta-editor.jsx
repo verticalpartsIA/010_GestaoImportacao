@@ -126,6 +126,51 @@ function makeDefaultProposta() {
   };
 }
 
+/* Propostas criadas antes deste Editor guardaram o data_json num formato
+   diferente (chaves em inglês: client/specs/elevatorUnits...). Convertemos
+   pros campos que o Editor atual usa (cliente/obra/elevador.especificacoes)
+   pra abrir com os dados reais, em vez de aparecer em branco.
+   Detecção: data_json tem `client` mas não tem `cliente`. */
+function ehPropostaSchemaLegado(dj) {
+  return !!(dj && dj.client && !dj.cliente);
+}
+function converterPropostaLegado(dj) {
+  const cli = dj.client || {};
+  const obra = dj.elevatorWork || dj.work || {};
+  const mapUnidade = (u, prefixo) => ({
+    id: u.name || prefixo, modelo: u.model || '', empreendimento: u.buildingType || '',
+    carac: u.transportChar || '', denominacao: u.denomination || '',
+    percurso: (u.travelDistance || u.rise || '').replace(/mm$/, ''),
+    capacidade: u.capacity || '', dimensoesCaixa: u.shaftDimensions || '',
+    profPoço: (u.pitDepth || '').replace(/mm$/, ''), vel: (u.speed || '').replace(/\s*m\/s$/, ''),
+    andaresParadasPortas: u.stops || '', qtd: u.quantity || 1,
+  });
+  const elevadorUnidades = dj.elevatorUnits || [];
+  const somaQtd = (arr) => String(arr.reduce((s, u) => s + (Number(u.quantity) || 0), 0)) || '1';
+
+  return {
+    numero: dj.number || '',
+    cliente: {
+      nome: cli.name || '', cnpj: cli.cnpj || '', responsavel: cli.contactPerson || '',
+      endereco: cli.address || '', numero: '', bairro: '', cidade: cli.city || '', uf: cli.state || '', cep: cli.zip || '',
+      email: cli.email || '', telefone: cli.phone || '',
+    },
+    obra: {
+      nome: obra.projectName || '', endereco: obra.address || '', numero: obra.number || '',
+      bairro: obra.neighborhood || '', cidade: obra.city || '', uf: obra.state || '', cep: obra.zip || '',
+    },
+    elevador: elevadorUnidades.length ? {
+      especificacoes: elevadorUnidades.map((u) => mapUnidade(u, 'Elevador')),
+      valores: {
+        equipamento: (dj.elevatorProducts && dj.elevatorProducts[0] && dj.elevatorProducts[0].title) || dj.specs?.type || '',
+        quantidade: somaQtd(elevadorUnidades),
+        valorUnit: String(dj.financials?.unitPrice || dj.specs?.price || ''),
+        difal: '',
+      },
+    } : undefined,
+  };
+}
+
 /* deep set/get via dot-notation */
 function setDeep(obj, path, value) {
   const keys = path.split(".");
@@ -225,6 +270,87 @@ function deepMergeProposta(base, prefill) {
   return out;
 }
 
+/* Envio por assinatura digital — mesmo padrão do Contrato Instalador/Venda
+   (link público /assinar/:token, WhatsApp ou E-mail). Reaproveita FEField/
+   FEInput (formulario-elevador.jsx, já global) pra não duplicar estilo. */
+function PropostaSendModal({ record, onClose, onSent }) {
+  const [channel, setChannel] = React.useState('whatsapp');
+  const [contact, setContact] = React.useState(record.cliente?.telefone || record.cliente?.email || '');
+  const [name, setName] = React.useState(record.cliente?.nome || '');
+  const [sent, setSent] = React.useState(false);
+  const [sending, setSending] = React.useState(false);
+  const [copied, setCopied] = React.useState(false);
+
+  const store = window.PropostaStore;
+  const url = store.signUrl(record.token);
+  const valorFmt = record.valorTotal ? `R$ ${record.valorTotal.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}` : '—';
+
+  const message = `Olá${name ? ' ' + name.split(' ')[0] : ''}! A VerticalParts enviou uma proposta comercial para sua análise e assinatura digital.\n\n` +
+    `Proposta ${record.numero_documento}\nValor: ${valorFmt}\n\n` +
+    `Acesse e assine pelo link seguro (válido por 7 dias):\n${url}`;
+
+  const copyLink = () => {
+    navigator.clipboard && navigator.clipboard.writeText(url);
+    setCopied(true); setTimeout(() => setCopied(false), 1600);
+  };
+
+  const handleSend = async () => {
+    if (sending) return;
+    setSending(true);
+    try {
+      await store.markSent(record.id, channel, { name, contact });
+      if (channel === 'whatsapp') window.open(store.whatsAppHref(contact, message), '_blank');
+      else if (channel === 'email') window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} — VerticalParts`, message), '_blank');
+      setSent(true);
+      onSent && onSent();
+    } catch (e) {
+      window.toast?.('Erro ao registrar envio: ' + (e.message || e), 'error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <Modal title={sent ? 'Enviado' : 'Enviar para assinatura'} onClose={onClose} width={560}
+      footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
+      <div className="stack" style={{ gap: 14 }}>
+        <p className="small muted" style={{ margin: 0 }}>
+          {sent ? 'A proposta está aguardando a leitura e assinatura do cliente.' : 'Gere o link seguro e escolha o canal de envio — o cliente lê, assina digitalmente e pode baixar sua própria cópia, sem precisar de cadastro.'}
+        </p>
+        <div className="card" style={{ padding: 12 }}>
+          <b>{record.numero_documento}</b> <span className="muted">· {record.cliente?.nome || 'Sem cliente'}</span>
+          <div className="row sb" style={{ marginTop: 6 }}><span className="small muted">Valor</span><b className="mono">{valorFmt}</b></div>
+        </div>
+        {!sent ? (
+          <>
+            <FEField label="Nome do destinatário"><FEInput value={name} onChange={setName} placeholder="Nome completo"/></FEField>
+            <FEField label={channel === 'whatsapp' ? 'WhatsApp (DDI+DDD+número)' : 'E-mail'}>
+              <FEInput value={contact} onChange={setContact} placeholder={channel === 'whatsapp' ? '5511999999999' : 'contato@cliente.com.br'}/>
+            </FEField>
+            <div className="row gap-2">
+              <Button variant={channel === 'whatsapp' ? 'primary' : 'outline'} size="sm" icon="message" onClick={() => setChannel('whatsapp')}>WhatsApp</Button>
+              <Button variant={channel === 'email' ? 'primary' : 'outline'} size="sm" icon="mail" onClick={() => setChannel('email')}>E-mail</Button>
+            </div>
+            <div className="row gap-2" style={{ background: 'var(--vp-gray-50)', padding: '8px 10px' }}>
+              <code className="mono small" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</code>
+              <Button variant="ghost" size="sm" icon="copy" onClick={copyLink}>{copied ? 'Copiado ✓' : 'Copiar'}</Button>
+            </div>
+            <Button variant="primary" icon="send" disabled={sending || !contact.trim()} onClick={handleSend}>{sending ? 'Enviando…' : 'Enviar e gerar link'}</Button>
+          </>
+        ) : (
+          <div className="alert info" style={{ margin: 0 }}>
+            <Icon.check/>
+            <div>
+              <div className="alert__title">Link enviado</div>
+              <div className="alert__sub mono" style={{ fontSize: 12 }}>{url}</div>
+            </div>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
 function PropostaEditor({ setRoute, subsel }) {
   const LS_KEY = "vpprd.proposta-draft";
   const prefill = subsel && subsel.__prefillFromPrecificacao ? subsel : null;
@@ -245,6 +371,7 @@ function PropostaEditor({ setRoute, subsel }) {
   const [activeSection, setActiveSection] = React.useState("proposta");
   const [collapsed, setCollapsed] = React.useState({});
   const [savedAt, setSavedAt] = React.useState(Date.now());
+  const [sendModal, setSendModal] = React.useState(null);
   const formRef = React.useRef(null);
 
   // Save to Supabase
@@ -253,10 +380,12 @@ function PropostaEditor({ setRoute, subsel }) {
   // Auth), que nunca existe neste modelo — por isso a proposta nunca salvava.
   // Aqui persiste com a anon key + identidade do SSO, mapeando para as colunas
   // REAIS da tabela `propostas` (sem alterar o schema do banco).
+  // Retorna { id, token } da linha salva (ou null em falha) — precisamos do
+  // id/token pra abrir o modal de envio por assinatura digital.
   const saveToSupabase = React.useCallback(async () => {
-    if (!window.__VP_SB?.sb) return false;
+    if (!window.__VP_SB?.sb) return null;
     // Evita poluir a tabela real com rascunhos em branco: só persiste com cliente.
-    if (!data?.cliente?.nome?.trim()) return false;
+    if (!data?.cliente?.nome?.trim()) return null;
 
     const vpUser = window.__VP_USER || {};
     const chave = (data.numero || '').trim() || null;   // → numero_documento (texto)
@@ -268,14 +397,16 @@ function PropostaEditor({ setRoute, subsel }) {
         data_json: { ...data, _vp_user: { email: vpUser.email || null, nome: vpUser.nome || null } },
         master_id: data.masterId || null,
         precificacao_id: data.precificacaoId || null,
-        status: 'rascunho',
         atualizado_em: new Date().toISOString(),
       };
 
-      // Chave de negócio = numero_documento (texto). O `numero` (int) é
-      // auto-sequencial no banco, então não o enviamos no insert.
-      let existing = null;
-      if (chave) {
+      // Alvo do update: se veio de "Editar" (editId), usa o id diretamente;
+      // senão, chave de negócio = numero_documento (texto). O `numero` (int)
+      // é auto-sequencial no banco, então não o enviamos no insert. Status
+      // só é definido na CRIAÇÃO — salvar de novo não regride o status de
+      // uma proposta já enviada/assinada.
+      let existing = editId ? { id: editId } : null;
+      if (!existing && chave) {
         const { data: rows } = await window.__VP_SB.sb
           .from('propostas')
           .select('id')
@@ -286,20 +417,33 @@ function PropostaEditor({ setRoute, subsel }) {
       }
 
       if (existing?.id) {
-        const { error } = await window.__VP_SB.sb
-          .from('propostas').update(payload).eq('id', existing.id);
+        const { data: row, error } = await window.__VP_SB.sb
+          .from('propostas').update(payload).eq('id', existing.id).select('id, token').single();
         if (error) throw error;
+        return row;
       } else {
-        const { error } = await window.__VP_SB.sb
-          .from('propostas').insert([payload]);
+        const { data: row, error } = await window.__VP_SB.sb
+          .from('propostas').insert([{ ...payload, status: 'rascunho' }]).select('id, token').single();
         if (error) throw error;
+        return row;
       }
-      return true;
     } catch (e) {
       console.error('Supabase save failed:', e);
-      return false;
+      return null;
     }
-  }, [data, eq]);
+  }, [data, eq, editId]);
+
+  // Salva e abre o modal de envio por assinatura digital — gera o link
+  // público (/assinar/:token) igual ao Contrato Instalador/Venda, em vez de
+  // só marcar status='enviada' sem nunca produzir nenhum link real.
+  const abrirEnvio = React.useCallback(async () => {
+    if (!window.PropostaStore) { window.toast?.('Store de assinatura não carregado.', 'error'); return; }
+    window.toast?.('Salvando proposta...', 'info');
+    const saved = await saveToSupabase();
+    if (!saved) { window.toast?.('❌ Não foi possível salvar a proposta. Confira se o cliente está preenchido.', 'error'); return; }
+    const token = saved.token || await window.PropostaStore.garantirToken(saved.id);
+    setSendModal({ id: saved.id, token, numero_documento: data.numero, cliente: data.cliente, valorTotal: Number(data.elevador?.valores?.valorUnit) * Number(data.elevador?.valores?.quantidade || 1) });
+  }, [data, saveToSupabase]);
 
   // Autosave para localStorage (instantâneo e seguro). A persistência no
   // Supabase é feita nas ações explícitas "Salvar rascunho" / "Enviar" —
@@ -324,7 +468,11 @@ function PropostaEditor({ setRoute, subsel }) {
     window.__VP_SB.sb.from('propostas').select('proposal_type, data_json').eq('id', editId).maybeSingle()
       .then(({ data: row }) => {
         if (cancelado || !row) return;
-        setData(row.data_json || makeDefaultProposta());
+        const dj = row.data_json || {};
+        const carregado = ehPropostaSchemaLegado(dj)
+          ? deepMergeProposta(makeDefaultProposta(), converterPropostaLegado(dj))
+          : (row.data_json || makeDefaultProposta());
+        setData(carregado);
         setEq(row.proposal_type || 'elevador');
       })
       .finally(() => { if (!cancelado) setLoadingExisting(false); });
@@ -419,19 +567,7 @@ function PropostaEditor({ setRoute, subsel }) {
             <Button variant="ghost" size="sm" icon="copy" onClick={resetProposal}>Reiniciar</Button>
             <Button variant="outline" size="sm" icon="eye" onClick={() => window.print()}>Visualizar</Button>
             <Button variant="outline" size="sm" icon="download" onClick={() => { window.toast("Abrindo diálogo de impressão / salvar PDF…", "info"); setTimeout(() => window.print(), 200); }}>Gerar PDF</Button>
-            <Button variant="primary" size="sm" icon="send" onClick={async () => {
-              window.toast("Enviando proposta...", "info");
-              const saved = await saveToSupabase();
-              if (saved && window.__VP_SB?.sb) {
-                await window.__VP_SB.sb.from('propostas')
-                  .update({ status: 'enviada', enviada_em: new Date().toISOString() })
-                  .eq('numero_documento', data.numero);
-                window.toast("✓ Proposta enviada para o cliente!", "success");
-                setTimeout(() => setRoute("propostas"), 1500);
-              } else {
-                window.toast("⚠️ Salvo localmente. Envio via Supabase requer conexão.", "warning");
-              }
-            }}>Enviar p/ Cliente</Button>
+            <Button variant="primary" size="sm" icon="send" onClick={abrirEnvio}>Enviar p/ Cliente</Button>
           </div>
         </div>
 
@@ -520,22 +656,7 @@ function PropostaEditor({ setRoute, subsel }) {
                   window.toast("⚠️ Proposta salva localmente (Supabase indisponível)", "warning");
                 }
               }}>Salvar rascunho</Button>
-              <Button variant="primary" size="sm" icon="send" onClick={async () => {
-                window.toast("Enviando proposta...", "info");
-                const saved = await saveToSupabase();
-                if (saved) {
-                  // Update status to 'enviada'
-                  if (window.__VP_SB?.sb) {
-                    await window.__VP_SB.sb.from('propostas')
-                      .update({ status: 'enviada', enviada_em: new Date().toISOString() })
-                      .eq('numero_documento', data.numero);
-                  }
-                  window.toast("✓ Proposta enviada para o cliente!", "success");
-                  setTimeout(() => setRoute("propostas"), 1500);
-                } else {
-                  window.toast("❌ Erro ao enviar. Verifique conexão.", "error");
-                }
-              }}>Enviar p/ Cliente</Button>
+              <Button variant="primary" size="sm" icon="send" onClick={abrirEnvio}>Enviar p/ Cliente</Button>
             </div>
           </div>
         </div>
@@ -543,6 +664,11 @@ function PropostaEditor({ setRoute, subsel }) {
         {/* Live PDF preview */}
         <PEPreview data={data} eq={eq}/>
       </div>
+
+      {sendModal && (
+        <PropostaSendModal record={sendModal} onClose={() => setSendModal(null)}
+          onSent={() => window.toast?.('✓ Proposta enviada — o cliente já pode ler e assinar pelo link.', 'success')}/>
+      )}
     </div>
   );
 }

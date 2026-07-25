@@ -87,7 +87,17 @@ function SgSignaturePad({ onChange }) {
 
 function SgSumRow({ k, v }) { return <div className="ci-sum-row"><span className="k">{k}</span><span className="v">{v}</span></div>; }
 
-/* Resolve a "fonte" (instalador vs venda) a partir do token */
+/* Cada tabela usa seu próprio vocabulário de status (contratos: masculino
+   rascunho/enviado/visualizado/assinado/recusado/expirado; propostas:
+   feminino rascunho/enviada/visualizada/aprovada/recusada/expirada — já
+   existia antes desta página, então reaproveitamos em vez de mudar). */
+const STATUS_ALIASES = {
+  instalador: { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
+  venda:      { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
+  proposta:   { signed: 'aprovada', refused: 'recusada', expired: 'expirada' },
+};
+
+/* Resolve a "fonte" (instalador vs venda vs proposta) a partir do token */
 async function resolveSource(token) {
   // Tenta primeiro instalador (token mais comum nesse momento)
   if (window.CIStore) {
@@ -97,6 +107,10 @@ async function resolveSource(token) {
   if (window.CVStore) {
     const r = await window.CVStore.getByToken(token);
     if (r) return { kind: 'venda', rec: r, store: window.CVStore, Preview: window.CVContractPreview, engine: window.CV };
+  }
+  if (window.PropostaStore) {
+    const r = await window.PropostaStore.getByToken(token);
+    if (r) return { kind: 'proposta', rec: r, store: window.PropostaStore, Preview: null, engine: null };
   }
   return null;
 }
@@ -129,8 +143,9 @@ function SgApp() {
       if (!src) { setLoading(false); setNotFound(true); return; }
 
       const r = src.rec;
-      if (r.status === 'assinado') { setSource(src); setPhase('done'); setLoading(false); return; }
-      if (r.status === 'recusado' || r.status === 'expirado') { setSource(src); setLoading(false); return; }
+      const st = STATUS_ALIASES[src.kind];
+      if (r.status === st.signed) { setSource(src); setPhase('done'); setLoading(false); return; }
+      if (r.status === st.refused || r.status === st.expired) { setSource(src); setLoading(false); return; }
 
       const updated = await src.store.markViewed(token);
       setSource({ ...src, rec: updated || r });
@@ -142,6 +157,7 @@ function SgApp() {
   const doc = _sgUM(() => {
     if (!source) return null;
     const rec = source.rec;
+    if (source.kind === 'proposta') return null; // PEPreview renderiza direto de rec.data_json/proposal_type
     if (source.kind === 'instalador') {
       return window.CI.buildContract(rec.form_state, rec.numero_documento);
     }
@@ -169,6 +185,8 @@ function SgApp() {
     const rec = source.rec;
     const defaultName = source.kind === 'instalador'
       ? (rec.responsavel_nome || rec.contratada_nome)
+      : source.kind === 'proposta'
+      ? (rec.data_json && rec.data_json.cliente && rec.data_json.cliente.nome)
       : (rec.responsavel_nome || rec.comprador_razao_social);
     const sig = sigMode === 'draw'
       ? { type: 'draw', data: drawData, signerName: defaultName }
@@ -181,7 +199,7 @@ function SgApp() {
 
   const handleRefuse = async () => {
     if (!source) return;
-    if (!window.confirm('Recusar a assinatura deste contrato? A Vertical Parts será notificada.')) return;
+    if (!window.confirm(`Recusar a assinatura ${source.kind === 'proposta' ? 'desta proposta' : 'deste contrato'}? A Vertical Parts será notificada.`)) return;
     const updated = await source.store.refuse(token);
     setSource({ ...source, rec: updated });
     setPhase('refused');
@@ -210,8 +228,9 @@ function SgApp() {
 
   const rec = source.rec;
   const Preview = source.Preview;
+  const st = STATUS_ALIASES[source.kind];
 
-  if (rec.status === 'expirado') {
+  if (rec.status === st.expired) {
     return (
       <div className="ci-sign-shell">
         <div className="ci-err-state">
@@ -230,13 +249,13 @@ function SgApp() {
       </div>
     );
   }
-  if (phase === 'done' || rec.status === 'assinado') {
+  if (phase === 'done' || rec.status === st.signed) {
     const a = rec.audit || {};
     return (
       <div className="ci-sign-status">
         <div className="ci-success-check">✓</div>
-        <h1>Contrato assinado!</h1>
-        <p>O contrato <b>{rec.numero_documento}</b> foi assinado com sucesso.</p>
+        <h1>{source.kind === 'proposta' ? 'Proposta assinada!' : 'Contrato assinado!'}</h1>
+        <p>{source.kind === 'proposta' ? 'A proposta' : 'O contrato'} <b>{rec.numero_documento}</b> foi assinado(a) com sucesso.</p>
         <div className="ci-protocolo">
           Protocolo: {rec.token}<br/>
           Assinado em {source.store.fmtDateTime(a.signedAt)}<br/>
@@ -246,7 +265,7 @@ function SgApp() {
       </div>
     );
   }
-  if (phase === 'refused' || rec.status === 'recusado') {
+  if (phase === 'refused' || rec.status === st.refused) {
     return (
       <div className="ci-sign-shell">
         <div className="ci-err-state">
@@ -259,10 +278,18 @@ function SgApp() {
 
   /* Resumo do card de topo varia por tipo */
   const isInstalador = source.kind === 'instalador';
-  const counterpartyName = isInstalador ? rec.contratada_nome : rec.comprador_razao_social;
-  const counterpartyLabel = isInstalador ? 'Contratada' : 'Comprador';
+  const isProposta = source.kind === 'proposta';
+  const djCliente = isProposta ? ((rec.data_json && rec.data_json.cliente) || {}) : {};
+  const counterpartyName = isInstalador ? rec.contratada_nome : isProposta ? djCliente.nome : rec.comprador_razao_social;
+  const counterpartyLabel = isInstalador ? 'Contratada' : isProposta ? 'Cliente' : 'Comprador';
+  const titulo = isProposta ? (rec.titulo || rec.numero_documento) : rec.titulo;
+  const objetoResumo = isProposta
+    ? ((rec.data_json && rec.data_json.elevador && rec.data_json.elevador.valores && rec.data_json.elevador.valores.equipamento) || 'Proposta comercial')
+    : rec.objeto_resumo;
   const valorFmt = isInstalador
     ? (rec.valor_total ? 'R$ ' + window.CI.fmtMoeda(rec.valor_total) : '—')
+    : isProposta
+    ? (rec.valor_total ? window.CV.brl(Number(rec.valor_total)) : '—')
     : (rec.valor_total_num ? window.CV.brl(rec.valor_total_num) : '—');
 
   return (
@@ -273,27 +300,29 @@ function SgApp() {
       </div>
 
       <div className="ci-sign-intro">
-        <h1>Assine seu contrato</h1>
-        <p>A Vertical Parts enviou este contrato para sua assinatura digital. Leia o documento, confirme e assine — sem precisar de cadastro.</p>
+        <h1>{isProposta ? 'Assine sua proposta' : 'Assine seu contrato'}</h1>
+        <p>A Vertical Parts enviou {isProposta ? 'esta proposta comercial' : 'este contrato'} para sua assinatura digital. Leia o documento, confirme e assine — sem precisar de cadastro.</p>
       </div>
 
       <div className="ci-sum-card">
         <div className="ci-sum-head">
           <div className="num">{rec.numero_documento}</div>
-          <div className="title">{rec.titulo}</div>
+          <div className="title">{titulo}</div>
         </div>
         <div className="ci-sum-rows">
           <SgSumRow k={isInstalador ? 'Contratante' : 'Vendedora'} v="Vertical Parts Ltda."/>
           <SgSumRow k={counterpartyLabel} v={counterpartyName}/>
-          <SgSumRow k="Objeto" v={rec.objeto_resumo}/>
+          <SgSumRow k="Objeto" v={objetoResumo}/>
           <SgSumRow k="Valor total" v={valorFmt}/>
         </div>
       </div>
 
-      <div className="ci-sign-label"><span className="n">1</span> Leia o contrato</div>
+      <div className="ci-sign-label"><span className="n">1</span> Leia {isProposta ? 'a proposta' : 'o contrato'}</div>
       <div className="ci-doc-viewer">
         <div className="ci-doc-viewer-scroll" ref={viewerRef} onScroll={onScroll}>
-          <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>
+          {isProposta
+            ? <window.PEPreview data={rec.data_json || {}} eq={rec.proposal_type || 'elevador'}/>
+            : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
         </div>
         <div className={'ci-scroll-hint' + (scrolledEnd ? ' hidden' : '')}>↓ Role até o fim para habilitar a assinatura</div>
       </div>
@@ -304,7 +333,7 @@ function SgApp() {
       <div className="ci-sign-label"><span className="n">2</span> Concordância</div>
       <div className={'ci-consent' + (consent ? ' on' : '') + (scrolledEnd ? '' : ' disabled')} onClick={() => scrolledEnd && setConsent(!consent)}>
         <div className="box">{consent && <span>✓</span>}</div>
-        <div className="txt">Declaro que li, compreendi e concordo com todos os termos deste contrato.</div>
+        <div className="txt">Declaro que li, compreendi e concordo com todos os termos {isProposta ? 'desta proposta' : 'deste contrato'}.</div>
       </div>
 
       <div className="ci-sign-label"><span className="n">3</span> Sua assinatura</div>
