@@ -163,6 +163,7 @@
       },
       unidades: unidades.map((u) => ({
         unidade_id: u.id, identificador: u.identificador, tipo: u.tipo, modelo: u.modelo,
+        indice_ativo: u.indice_ativo ?? null,
         quantidade: u.quantidade || 1,
         capacidade_kg: u.capacidade_kg, capacidade_pessoas: u.capacidade_pessoas,
         velocidade_ms: u.velocidade_ms, paradas: u.paradas, pavimentos_desc: u.pavimentos_desc,
@@ -179,6 +180,16 @@
         ard: u.ard, camera: u.camera, anuncio_voz: u.anuncio_voz, exigencias_especiais: u.exigencias_especiais,
       })),
     };
+  }
+
+  /* Código completo por equipamento (Fase 1 do Master ID): numero_documento
+     da cotação já é [base]-[revisão] — só falta somar o índice do ativo.
+     Ex.: numero_documento "VPEL-EL0902-A" + indice_ativo 1 = "VPEL-EL0902-A-1".
+     Retorna null se a Unidade ainda não tem índice atribuído (dados antigos,
+     de antes da Fase 1). */
+  function assetMasterId(cot, indiceAtivo) {
+    if (indiceAtivo == null) return null;
+    return `${cot.numero_documento}-${indiceAtivo}`;
   }
 
   /* ---------- Gerar cotação (rascunho) ----------
@@ -339,7 +350,7 @@
   window.CotacaoElevadorFornecedorStore = {
     cotacaoUrl, tipoFormularioPara, liftModelLabel, machineRoomLabel, controleLabel,
     CATEGORIAS_PRODUTO, STATUS_LABEL, STATUS_COR,
-    unitSpecSecoes, unitSpecFieldLabel,
+    unitSpecSecoes, unitSpecFieldLabel, assetMasterId,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
     getByToken, marcarVisualizado, salvarResposta, getPublicIP,
     decidirComprar, aprovar,
