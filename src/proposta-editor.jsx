@@ -228,6 +228,8 @@ function deepMergeProposta(base, prefill) {
 function PropostaEditor({ setRoute, subsel }) {
   const LS_KEY = "vpprd.proposta-draft";
   const prefill = subsel && subsel.__prefillFromPrecificacao ? subsel : null;
+  const editId = subsel && subsel.__editId ? subsel.__editId : null;
+  const [loadingExisting, setLoadingExisting] = React.useState(!!editId);
   const [eq, setEq] = React.useState(() => {
     if (prefill) return 'elevador';
     try { return localStorage.getItem("vpprd.proposta-eq") || "elevador"; } catch (e) { return "elevador"; }
@@ -313,6 +315,22 @@ function PropostaEditor({ setRoute, subsel }) {
     try { localStorage.setItem("vpprd.proposta-eq", eq); } catch (e) {}
   }, [eq]);
 
+  // Abrir uma Proposta já existente (clique em "Editar" na listagem) — carrega
+  // o data_json salvo em vez do rascunho do localStorage ou do prefill.
+  React.useEffect(() => {
+    if (!editId || !window.__VP_SB?.sb) return;
+    let cancelado = false;
+    setLoadingExisting(true);
+    window.__VP_SB.sb.from('propostas').select('proposal_type, data_json').eq('id', editId).maybeSingle()
+      .then(({ data: row }) => {
+        if (cancelado || !row) return;
+        setData(row.data_json || makeDefaultProposta());
+        setEq(row.proposal_type || 'elevador');
+      })
+      .finally(() => { if (!cancelado) setLoadingExisting(false); });
+    return () => { cancelado = true; };
+  }, [editId]);
+
   const set = React.useCallback((path, value) => {
     setData((d) => setDeep(d, path, value));
   }, []);
@@ -364,6 +382,10 @@ function PropostaEditor({ setRoute, subsel }) {
     form.addEventListener("scroll", handler, { passive: true });
     return () => form.removeEventListener("scroll", handler);
   }, [eq, sections.length]);
+
+  if (loadingExisting) {
+    return <div className="page fade-in" style={{ textAlign: 'center', padding: '80px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando proposta…</div>;
+  }
 
   return (
     <div className="page fade-in" style={{ padding: 0, maxWidth: "none" }}>
