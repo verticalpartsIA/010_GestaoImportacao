@@ -14,72 +14,9 @@ const CEF_MOEDAS = [
   { v: 'CNY', l: 'CNY · Yuan' }, { v: 'BRL', l: 'BRL · Real' },
 ];
 
-function cefSimNao(v) { return v ? 'Sim / Yes' : 'Não / No'; }
-function cefMm(v) { return (v === '' || v === null || v === undefined) ? '' : `${v}mm`; }
-
-/* Linhas de especificação bilíngues (PT / EN) de 1 unidade, agrupadas por
-   seção — mesma estrutura do "Elevator/Homelift Inquiry Form" da Glarie. */
-function cefSecoesUnidade(u, tipoFormulario) {
-  const store = window.CotacaoElevadorFornecedorStore;
-  const isElevator = tipoFormulario === 'elevator';
-  const principais = [
-    ['Número do elevador', 'Lift No.', u.identificador],
-    ['Quantidade de unidades idênticas', 'Lift Units (Quantity)', u.quantidade || 1],
-    isElevator && ['Modelo do elevador', 'Lift Model', store.liftModelLabel(u.tipo)],
-    ['Estrutura do elevador', 'Shaft structure', u.estrutura_caixa],
-    isElevator && ['Casa de máquinas', 'Machine Room Type', store.machineRoomLabel(u.casa_maquinas)],
-    ['Capacidade', 'Rated Capacity', `${u.capacidade_pessoas ? u.capacidade_pessoas + 'pass / ' : ''}${u.capacidade_kg || ''}kg`],
-    ['Velocidade', 'Rated Speed', u.velocidade_ms ? `${u.velocidade_ms}m/s` : ''],
-    ['Andares/Paradas/Portas', 'Floors/Stops/Doors', u.paradas ? `${u.paradas}/${u.paradas}/${u.paradas}` : ''],
-    ['Descrição dos pavimentos', 'Floor Marks', u.pavimentos_desc],
-    isElevator && ['Modelo de controle', 'Control Model', store.controleLabel(u.agrupamento)],
-    ['Tamanho da caixa', 'Shaft Size (W×D)', (u.caixa_largura_mm || u.caixa_profundidade_mm) ? `${u.caixa_largura_mm || '?'} x ${u.caixa_profundidade_mm || '?'} mm` : ''],
-    ['Última altura', 'Overhead', cefMm(u.overhead_mm)],
-    ['Poço', 'Shaft Pit', cefMm(u.poco_mm)],
-    ['Percurso', 'Travel Height', cefMm(u.percurso_mm)],
-    ['Porta oposta', 'Open-Through Door', u.porta_oposta],
-  ].filter(Boolean);
-
-  const cabina = [
-    ['Largura da cabina', 'Car Width', cefMm(u.cabina_largura_mm)],
-    ['Profundidade da cabina', 'Car Depth', cefMm(u.cabina_profundidade_mm)],
-    ['Altura da cabina', 'Car Height', cefMm(u.cabina_altura_mm)],
-    ['Teto falso', 'Car Ceiling', u.teto_falso],
-    ['Piso da cabina', 'Car Floor', u.piso_cabina],
-    ['Corrimão', 'Car Handrail', u.corrimao],
-  ];
-
-  const portas = [
-    ['Tipo de abertura', 'Door Opening Type', u.porta_tipo_abertura],
-    ['Modelo de porta', 'Door Model', u.porta_modelo],
-    ['Largura da porta', 'Door Width', cefMm(u.porta_largura_mm)],
-    ['Altura da porta', 'Door Height', cefMm(u.porta_altura_mm)],
-    ['Acabamento porta cabina', 'Car Door Finish', u.acabamento_porta_cabina],
-    ['Acabamento porta pavimento', 'Landing Door Finish', u.acabamento_porta_pavimento],
-    ['Classe corta-fogo', 'Fire Rating', u.classe_corta_fogo],
-  ];
-
-  const copLop = [
-    ['Botoeira de cabine (COP)', 'COP Type', u.botoeira_cabine],
-    ['Botoeira de pavimento (LOP)', 'LOP Type', u.botoeira_pavimento],
-  ];
-
-  const opcionais = [
-    ['ARD — resgate automático', 'ARD', cefSimNao(u.ard)],
-    ['Câmera na cabine', 'Camera in Car', cefSimNao(u.camera)],
-    ['Anúncio de voz', 'Voice Announcement', cefSimNao(u.anuncio_voz)],
-    u.exigencias_especiais && ['Exigências especiais', 'Special Requirements', u.exigencias_especiais],
-  ].filter(Boolean);
-
-  return [
-    { titulo: 'A. Especificações Principais / Main Specification', linhas: principais },
-    { titulo: 'B. Cabine / Car', linhas: cabina },
-    { titulo: 'C. Portas / Door', linhas: portas },
-    { titulo: 'D. COP e LOP', linhas: copLop },
-    { titulo: 'E. Opcionais / Options', linhas: opcionais },
-  ];
-}
-
+/* Tabela de leitura simples (2 colunas) — usada só nos dados gerais do
+   projeto, que não fazem sentido divergir linha a linha. A especificação
+   por Unidade (com a 3ª coluna de divergência) vem de CefSpecTableDivergente. */
 function CefSpecTable({ linhas }) {
   const preenchidas = linhas.filter((l) => l[2] !== '' && l[2] !== null && l[2] !== undefined);
   if (!preenchidas.length) return null;
@@ -92,15 +29,44 @@ function CefSpecTable({ linhas }) {
   );
 }
 
-function CefUnidadeRead({ u, tipoFormulario, idx }) {
-  const secoes = cefSecoesUnidade(u, tipoFormulario);
+/* Especificação técnica por Unidade — mesmo valor da VerticalParts na 2ª
+   coluna, e uma 3ª coluna onde o FORNECEDOR pode propor algo diferente
+   (ex.: cabine em outro tamanho). Título em PT/EN/中文 pra garantir que o
+   fornecedor chinês entenda que aquele campo é opcional e é dele. */
+function CefSpecTableDivergente({ linhas, divergencias, onChange, readOnly }) {
+  const preenchidas = linhas.filter((l) => l[3] !== '' && l[3] !== null && l[3] !== undefined);
+  if (!preenchidas.length) return null;
+  return (
+    <table className="co-specs co-specs--diverge"><tbody>
+      <tr className="co-specs-head">
+        <th></th>
+        <th>VerticalParts</th>
+        <th>Fornecedor propõe (se diferente) · Supplier proposal (if different) · 如有不同，请在此填写</th>
+      </tr>
+      {preenchidas.map(([key, pt, en, v]) => (
+        <tr key={key}>
+          <td className="co-spec-k">{pt} / {en}</td>
+          <td className="co-spec-v">{String(v)}</td>
+          <td className="co-spec-diverge">
+            <input className="co-inp" value={(divergencias && divergencias[key]) || ''}
+              onChange={(e) => onChange(key, e.target.value)} placeholder="—" disabled={readOnly}/>
+          </td>
+        </tr>
+      ))}
+    </tbody></table>
+  );
+}
+
+function CefUnidadeRead({ u, tipoFormulario, idx, divergencias, onDivergenciaChange, readOnly }) {
+  const store = window.CotacaoElevadorFornecedorStore;
+  const secoes = store.unitSpecSecoes(u, tipoFormulario);
   return (
     <div className="co-block">
       <div className="co-sec-lbl">Unidade {u.identificador || idx + 1}</div>
       {secoes.map((s) => (
         <div key={s.titulo} style={{ marginTop: 10 }}>
           <b style={{ fontSize: 12 }}>{s.titulo}</b>
-          <CefSpecTable linhas={s.linhas}/>
+          <CefSpecTableDivergente linhas={s.linhas} divergencias={divergencias} onChange={onDivergenciaChange} readOnly={readOnly}/>
         </div>
       ))}
     </div>
@@ -171,7 +137,7 @@ function CotacaoElevadorFornecedorApp() {
       if (!rec || rec.status === 'rascunho') { setLoading(false); setNotFound(true); return; }
       const unidades = (rec.dados_envio && rec.dados_envio.unidades) || [];
       const seed = {};
-      unidades.forEach((u) => { seed[u.unidade_id] = { modelo_fornecedor: '', floors_stops_doors: '', preco_unitario: '', preco_total: '', confirmacao_tecnica: '' }; });
+      unidades.forEach((u) => { seed[u.unidade_id] = { modelo_fornecedor: '', floors_stops_doors: '', preco_unitario: '', preco_total: '', confirmacao_tecnica: '', divergencias: {} }; });
       if (rec.status === 'respondido' && rec.respostas) {
         const r = rec.respostas;
         setMoeda(r.moeda || 'USD'); setIncotermPorto(r.incoterm_porto || '');
@@ -179,7 +145,7 @@ function CotacaoElevadorFornecedorApp() {
         setGarantia(r.garantia || ''); setValidadeDias(r.validade_dias || '');
         setEmbalagem(r.embalagem || ''); setContainerNo(r.container_no || '');
         setDocumentosEmbarque(r.documentos_embarque || ''); setObservacoesGerais(r.observacoes_gerais || '');
-        (r.itens || []).forEach((it) => { if (seed[it.unidade_id]) seed[it.unidade_id] = { modelo_fornecedor: it.modelo_fornecedor || '', floors_stops_doors: it.floors_stops_doors || '', preco_unitario: it.preco_unitario || '', preco_total: it.preco_total || '', confirmacao_tecnica: it.confirmacao_tecnica || '' }; });
+        (r.itens || []).forEach((it) => { if (seed[it.unidade_id]) seed[it.unidade_id] = { modelo_fornecedor: it.modelo_fornecedor || '', floors_stops_doors: it.floors_stops_doors || '', preco_unitario: it.preco_unitario || '', preco_total: it.preco_total || '', confirmacao_tecnica: it.confirmacao_tecnica || '', divergencias: it.divergencias || {} }; });
         setItemVals(seed);
         setCot(rec); setPhase('done'); setLoading(false); return;
       }
@@ -191,6 +157,9 @@ function CotacaoElevadorFornecedorApp() {
   }, [token]);
 
   const setItemVal = (uid, k, v) => setItemVals((prev) => ({ ...prev, [uid]: { ...(prev[uid] || {}), [k]: v } }));
+  const setDivergencia = (uid, key, v) => setItemVals((prev) => ({
+    ...prev, [uid]: { ...(prev[uid] || {}), divergencias: { ...((prev[uid] || {}).divergencias || {}), [key]: v } },
+  }));
 
   if (loading) return <div className="co-status"><div className="co-spinner"/><h1>Carregando cotação…</h1><p>Validando o link.</p></div>;
   if (notFound || !cot) {
@@ -283,7 +252,10 @@ function CotacaoElevadorFornecedorApp() {
 
       {unidades.map((u, i) => (
         <div key={u.unidade_id || i}>
-          <CefUnidadeRead u={u} tipoFormulario={cot.tipo_formulario} idx={i}/>
+          <CefUnidadeRead u={u} tipoFormulario={cot.tipo_formulario} idx={i}
+            divergencias={(itemVals[u.unidade_id] || {}).divergencias || {}}
+            onDivergenciaChange={(k, v) => setDivergencia(u.unidade_id, k, v)}
+            readOnly={readOnly}/>
           <CefUnidadeFill u={u} val={itemVals[u.unidade_id] || {}} onChange={(k, v) => setItemVal(u.unidade_id, k, v)} readOnly={readOnly}/>
         </div>
       ))}

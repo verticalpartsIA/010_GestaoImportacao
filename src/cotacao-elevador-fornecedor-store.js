@@ -73,6 +73,81 @@
   /* Tipo da Unidade → qual dos 2 formulários da Glarie enviar. */
   function tipoFormularioPara(tipo) { return tipo === 'Home Lift' ? 'homelift' : 'elevator'; }
 
+  /* ---------- Especificação técnica por Unidade (fonte única) — usada tanto
+     no portal público (monta a tabela PT/EN + coluna de divergência do
+     fornecedor) quanto na revisão interna (traduz a chave de uma divergência
+     de volta pro rótulo PT/EN). Cada linha tem uma `key` estável — é o campo
+     usado em respostas.itens[].divergencias quando o fornecedor propõe um
+     valor diferente do enviado pela VerticalParts. ---------- */
+  function cefMm(v) { return (v === '' || v === null || v === undefined) ? '' : `${v}mm`; }
+  function cefSimNao(v) { return v ? 'Sim / Yes' : 'Não / No'; }
+
+  const CEF_SPEC_DEFS = [
+    { key: 'numero_elevador', pt: 'Número do elevador', en: 'Lift No.', secao: 'A', get: (u) => u.identificador },
+    { key: 'qtd_unidades', pt: 'Quantidade de unidades idênticas', en: 'Lift Units (Quantity)', secao: 'A', get: (u) => u.quantidade || 1 },
+    { key: 'modelo_elevador', pt: 'Modelo do elevador', en: 'Lift Model', secao: 'A', onlyElevator: true, get: (u) => liftModelLabel(u.tipo) },
+    { key: 'estrutura', pt: 'Estrutura do elevador', en: 'Shaft structure', secao: 'A', get: (u) => u.estrutura_caixa },
+    { key: 'casa_maquinas', pt: 'Casa de máquinas', en: 'Machine Room Type', secao: 'A', onlyElevator: true, get: (u) => machineRoomLabel(u.casa_maquinas) },
+    { key: 'capacidade', pt: 'Capacidade', en: 'Rated Capacity', secao: 'A', get: (u) => `${u.capacidade_pessoas ? u.capacidade_pessoas + 'pass / ' : ''}${u.capacidade_kg || ''}kg` },
+    { key: 'velocidade', pt: 'Velocidade', en: 'Rated Speed', secao: 'A', get: (u) => u.velocidade_ms ? `${u.velocidade_ms}m/s` : '' },
+    { key: 'andares_paradas_portas', pt: 'Andares/Paradas/Portas', en: 'Floors/Stops/Doors', secao: 'A', get: (u) => u.paradas ? `${u.paradas}/${u.paradas}/${u.paradas}` : '' },
+    { key: 'pavimentos_desc', pt: 'Descrição dos pavimentos', en: 'Floor Marks', secao: 'A', get: (u) => u.pavimentos_desc },
+    { key: 'modelo_controle', pt: 'Modelo de controle', en: 'Control Model', secao: 'A', onlyElevator: true, get: (u) => controleLabel(u.agrupamento) },
+    { key: 'tamanho_caixa', pt: 'Tamanho da caixa', en: 'Shaft Size (W×D)', secao: 'A', get: (u) => (u.caixa_largura_mm || u.caixa_profundidade_mm) ? `${u.caixa_largura_mm || '?'} x ${u.caixa_profundidade_mm || '?'} mm` : '' },
+    { key: 'overhead', pt: 'Última altura', en: 'Overhead', secao: 'A', get: (u) => cefMm(u.overhead_mm) },
+    { key: 'poco', pt: 'Poço', en: 'Shaft Pit', secao: 'A', get: (u) => cefMm(u.poco_mm) },
+    { key: 'percurso', pt: 'Percurso', en: 'Travel Height', secao: 'A', get: (u) => cefMm(u.percurso_mm) },
+    { key: 'porta_oposta', pt: 'Porta oposta', en: 'Open-Through Door', secao: 'A', get: (u) => u.porta_oposta },
+
+    { key: 'cabina_largura', pt: 'Largura da cabina', en: 'Car Width', secao: 'B', get: (u) => cefMm(u.cabina_largura_mm) },
+    { key: 'cabina_profundidade', pt: 'Profundidade da cabina', en: 'Car Depth', secao: 'B', get: (u) => cefMm(u.cabina_profundidade_mm) },
+    { key: 'cabina_altura', pt: 'Altura da cabina', en: 'Car Height', secao: 'B', get: (u) => cefMm(u.cabina_altura_mm) },
+    { key: 'teto_falso', pt: 'Teto falso', en: 'Car Ceiling', secao: 'B', get: (u) => u.teto_falso },
+    { key: 'piso_cabina', pt: 'Piso da cabina', en: 'Car Floor', secao: 'B', get: (u) => u.piso_cabina },
+    { key: 'corrimao', pt: 'Corrimão', en: 'Car Handrail', secao: 'B', get: (u) => u.corrimao },
+
+    { key: 'porta_tipo_abertura', pt: 'Tipo de abertura', en: 'Door Opening Type', secao: 'C', get: (u) => u.porta_tipo_abertura },
+    { key: 'porta_modelo', pt: 'Modelo de porta', en: 'Door Model', secao: 'C', get: (u) => u.porta_modelo },
+    { key: 'porta_largura', pt: 'Largura da porta', en: 'Door Width', secao: 'C', get: (u) => cefMm(u.porta_largura_mm) },
+    { key: 'porta_altura', pt: 'Altura da porta', en: 'Door Height', secao: 'C', get: (u) => cefMm(u.porta_altura_mm) },
+    { key: 'acabamento_porta_cabina', pt: 'Acabamento porta cabina', en: 'Car Door Finish', secao: 'C', get: (u) => u.acabamento_porta_cabina },
+    { key: 'acabamento_porta_pavimento', pt: 'Acabamento porta pavimento', en: 'Landing Door Finish', secao: 'C', get: (u) => u.acabamento_porta_pavimento },
+    { key: 'classe_corta_fogo', pt: 'Classe corta-fogo', en: 'Fire Rating', secao: 'C', get: (u) => u.classe_corta_fogo },
+
+    { key: 'botoeira_cabine', pt: 'Botoeira de cabine (COP)', en: 'COP Type', secao: 'D', get: (u) => u.botoeira_cabine },
+    { key: 'botoeira_pavimento', pt: 'Botoeira de pavimento (LOP)', en: 'LOP Type', secao: 'D', get: (u) => u.botoeira_pavimento },
+
+    { key: 'ard', pt: 'ARD — resgate automático', en: 'ARD', secao: 'E', get: (u) => cefSimNao(u.ard) },
+    { key: 'camera', pt: 'Câmera na cabine', en: 'Camera in Car', secao: 'E', get: (u) => cefSimNao(u.camera) },
+    { key: 'anuncio_voz', pt: 'Anúncio de voz', en: 'Voice Announcement', secao: 'E', get: (u) => cefSimNao(u.anuncio_voz) },
+    { key: 'exigencias_especiais', pt: 'Exigências especiais', en: 'Special Requirements', secao: 'E', get: (u) => u.exigencias_especiais },
+  ];
+
+  const CEF_SECAO_TITULO = {
+    A: 'A. Especificações Principais / Main Specification',
+    B: 'B. Cabine / Car',
+    C: 'C. Portas / Door',
+    D: 'D. COP e LOP',
+    E: 'E. Opcionais / Options',
+  };
+
+  /* Retorna as seções já filtradas por tipo (elevator/homelift) e com linhas
+     [key, pt, en, valor] — key é usado como campo estável de divergência. */
+  function unitSpecSecoes(u, tipoFormulario) {
+    const isElevator = tipoFormulario === 'elevator';
+    const porSecao = {};
+    CEF_SPEC_DEFS.forEach((d) => {
+      if (d.onlyElevator && !isElevator) return;
+      (porSecao[d.secao] = porSecao[d.secao] || []).push([d.key, d.pt, d.en, d.get(u)]);
+    });
+    return Object.keys(CEF_SECAO_TITULO).filter((s) => porSecao[s]).map((s) => ({ titulo: CEF_SECAO_TITULO[s], linhas: porSecao[s] }));
+  }
+
+  function unitSpecFieldLabel(key) {
+    const def = CEF_SPEC_DEFS.find((d) => d.key === key);
+    return def ? `${def.pt} / ${def.en}` : key;
+  }
+
   /* ---------- Numeração VPEL ---------- */
   async function gerarNumero() {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -255,6 +330,7 @@
   window.CotacaoElevadorFornecedorStore = {
     cotacaoUrl, tipoFormularioPara, liftModelLabel, machineRoomLabel, controleLabel,
     CATEGORIAS_PRODUTO, STATUS_LABEL, STATUS_COR,
+    unitSpecSecoes, unitSpecFieldLabel,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
     getByToken, marcarVisualizado, salvarResposta, getPublicIP,
     decidirComprar, aprovar,
