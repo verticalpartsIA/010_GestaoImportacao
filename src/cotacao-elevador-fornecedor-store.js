@@ -148,14 +148,6 @@
     return def ? `${def.pt} / ${def.en}` : key;
   }
 
-  /* ---------- Numeração VPEL ---------- */
-  async function gerarNumero() {
-    const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { data, error } = await c.rpc('gerar_numero_cotacao_elevador_fornecedor');
-    if (error) throw error;
-    return data;
-  }
-
   /* ---------- Snapshot do que é enviado (congela os dados no momento do
      envio — edições posteriores na Unidade não alteram o que já foi mandado) ---------- */
   function buildDadosEnvio(unidades, numeroCotacao) {
@@ -171,6 +163,7 @@
       },
       unidades: unidades.map((u) => ({
         unidade_id: u.id, identificador: u.identificador, tipo: u.tipo, modelo: u.modelo,
+        indice_ativo: u.indice_ativo ?? null,
         quantidade: u.quantidade || 1,
         capacidade_kg: u.capacidade_kg, capacidade_pessoas: u.capacidade_pessoas,
         velocidade_ms: u.velocidade_ms, paradas: u.paradas, pavimentos_desc: u.pavimentos_desc,
@@ -189,23 +182,50 @@
     };
   }
 
+  /* Código completo por equipamento (Fase 1 do Master ID): numero_documento
+     da cotação já é [base]-[revisão] — só falta somar o índice do ativo.
+     Ex.: numero_documento "VPEL-EL0902-A" + indice_ativo 1 = "VPEL-EL0902-A-1".
+     Retorna null se a Unidade ainda não tem índice atribuído (dados antigos,
+     de antes da Fase 1). */
+  function assetMasterId(cot, indiceAtivo) {
+    if (indiceAtivo == null) return null;
+    return `${cot.numero_documento}-${indiceAtivo}`;
+  }
+
   /* ---------- Gerar cotação (rascunho) ----------
      unidades: linhas de formularios_elevador_unidades já salvas (com id), todas
      do MESMO fornecedor e do mesmo tipo_formulario (elevator OU homelift).
      numeroCotacao: o Nº da Cotação do cliente (formularios_elevador.numero_cotacao,
      a mesma numeração que já vem sendo continuada desde a planilha histórica) —
      é o número que identifica o projeto pro fornecedor, equivalente ao "Project
-     Name" que a Glarie usa nas próprias cotações. */
+     Name" que a Glarie usa nas próprias cotações.
+
+     numero_documento agora segue o Master ID (Fase 1): [PREFIXO-TIPO][Nº
+     da Cotação]-[REVISÃO], ex.: VPEL-EL0902, depois VPEL-EL0902-A se essa
+     mesma categoria/formulário precisar de um 2º envio (troca de
+     especificação, 2º tipo de formulário, outro fornecedor etc.) — a
+     revisão é escopada por (formulário, categoria) pra nunca colidir,
+     mesmo cobrindo motivos diferentes de reenvio. Cotações antigas
+     (VPEL-0001..0003, formato sequencial simples) não são migradas. */
   async function gerar(formularioElevadorId, unidades, fornecedor, numeroCotacao, categoriaProduto) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const numero_documento = await gerarNumero();
+    const categoria = categoriaProduto || 'elevador';
     const tipo_formulario = tipoFormularioPara(unidades[0].tipo);
+
+    const { data: existentes, error: exErr } = await c.from('cotacoes_elevador_fornecedor')
+      .select('revisao').eq('formulario_elevador_id', formularioElevadorId).eq('categoria_produto', categoria);
+    if (exErr) throw exErr;
+    const maiorRevisao = (existentes || []).reduce((max, r) => (r.revisao && r.revisao > max ? r.revisao : max), '');
+    const revisao = (existentes && existentes.length) ? window.MasterIdEngine.proximaRevisao(maiorRevisao || null) : null;
+    const numero_documento = window.MasterIdEngine.masterId({ categoriaProduto: categoria, numeroCotacao, revisao });
+
     const row = {
       numero_documento,
+      revisao,
       token: shortToken(),
       formulario_elevador_id: formularioElevadorId,
       fornecedor,
-      categoria_produto: categoriaProduto || 'elevador',
+      categoria_produto: categoria,
       tipo_formulario,
       unidade_ids: unidades.map((u) => u.id),
       dados_envio: buildDadosEnvio(unidades, numeroCotacao),
@@ -330,7 +350,7 @@
   window.CotacaoElevadorFornecedorStore = {
     cotacaoUrl, tipoFormularioPara, liftModelLabel, machineRoomLabel, controleLabel,
     CATEGORIAS_PRODUTO, STATUS_LABEL, STATUS_COR,
-    unitSpecSecoes, unitSpecFieldLabel,
+    unitSpecSecoes, unitSpecFieldLabel, assetMasterId,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
     getByToken, marcarVisualizado, salvarResposta, getPublicIP,
     decidirComprar, aprovar,

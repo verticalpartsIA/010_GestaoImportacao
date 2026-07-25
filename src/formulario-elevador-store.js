@@ -226,11 +226,18 @@
   }
 
   /* ---------- Unidades (um elevador por linha) ---------- */
+  /* indice_ativo — Master ID (Fase 1): atribuído uma única vez, na criação
+     da Unidade, e nunca reaproveitado nem trocado depois — é o "-1"/"-2"/"-3"
+     do Asset-Level ID (ex.: VPEL-EL0902-A-1), obrigatório mesmo pra pedido
+     de 1 elevador só. */
   async function adicionarUnidade(formularioId, unidade) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const id = novoId('FEU');
+    const { data: existentes } = await c.from('formularios_elevador_unidades')
+      .select('indice_ativo').eq('formulario_id', formularioId);
+    const proximoIndice = (existentes || []).reduce((max, u) => Math.max(max, u.indice_ativo || 0), 0) + 1;
     const { data, error } = await c.from('formularios_elevador_unidades').insert({
-      id, formulario_id: formularioId, ...unidade,
+      id, formulario_id: formularioId, ...unidade, indice_ativo: proximoIndice,
     }).select().single();
     if (error) throw error;
     return data;

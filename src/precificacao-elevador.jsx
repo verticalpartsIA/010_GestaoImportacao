@@ -223,8 +223,15 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Precificação</div>
           <h1 className="page-head__title">{pz.numero_documento}</h1>
-          <div className="mono" style={{ display: 'inline-flex', marginTop: 6, background: '#111', color: '#FBB039', fontWeight: 700, padding: '6px 12px', borderRadius: 6, fontSize: 13 }}>
-            Cotação Nº {pz.numero_cotacao ?? '—'}
+          <div className="row gap-2" style={{ marginTop: 6 }}>
+            <div className="mono" style={{ display: 'inline-flex', background: '#111', color: '#FBB039', fontWeight: 700, padding: '6px 12px', borderRadius: 6, fontSize: 13 }}>
+              Cotação Nº {pz.numero_cotacao ?? '—'}
+            </div>
+            {pz.numero_cotacao != null && (
+              <div className="mono small muted" style={{ display: 'inline-flex', alignItems: 'center', padding: '6px 0' }}>
+                Master ID {window.MasterIdEngine.baseId('elevador', pz.numero_cotacao)}
+              </div>
+            )}
           </div>
         </div>
         <div className="page-head__r">

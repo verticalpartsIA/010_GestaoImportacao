@@ -57,12 +57,12 @@ function CefSpecTableDivergente({ linhas, divergencias, onChange, readOnly }) {
   );
 }
 
-function CefUnidadeRead({ u, tipoFormulario, idx, divergencias, onDivergenciaChange, readOnly }) {
+function CefUnidadeRead({ u, tipoFormulario, idx, codigoAtivo, divergencias, onDivergenciaChange, readOnly }) {
   const store = window.CotacaoElevadorFornecedorStore;
   const secoes = store.unitSpecSecoes(u, tipoFormulario);
   return (
     <div className="co-block">
-      <div className="co-sec-lbl">Unidade {u.identificador || idx + 1}</div>
+      <div className="co-sec-lbl">Unidade {u.identificador || idx + 1}{codigoAtivo ? ` · ${codigoAtivo}` : ''}</div>
       {secoes.map((s) => (
         <div key={s.titulo} style={{ marginTop: 10 }}>
           <b style={{ fontSize: 12 }}>{s.titulo}</b>
@@ -253,6 +253,7 @@ function CotacaoElevadorFornecedorApp() {
       {unidades.map((u, i) => (
         <div key={u.unidade_id || i}>
           <CefUnidadeRead u={u} tipoFormulario={cot.tipo_formulario} idx={i}
+            codigoAtivo={store.assetMasterId(cot, u.indice_ativo)}
             divergencias={(itemVals[u.unidade_id] || {}).divergencias || {}}
             onDivergenciaChange={(k, v) => setDivergencia(u.unidade_id, k, v)}
             readOnly={readOnly}/>

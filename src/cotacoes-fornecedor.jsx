@@ -34,6 +34,24 @@ function cfPredioLabel(cot) {
   return fe.clientes?.razao_social || cidadeUf || '—';
 }
 
+/* Código completo por equipamento (Master ID Fase 1) — numero_documento da
+   cotação (já é base+revisão) + índice do ativo, ex.: VPEL-EL0902-A-1. */
+function CfUnidadesMasterId({ cot }) {
+  const store = window.CotacaoElevadorFornecedorStore;
+  const unidades = cot.dados_envio?.unidades || [];
+  if (!unidades.length) return <span className="muted">—</span>;
+  return (
+    <div className="stack" style={{ gap: 6 }}>
+      {unidades.map((u) => (
+        <div key={u.unidade_id} className="row gap-2" style={{ justifyContent: 'space-between' }}>
+          <span>{u.identificador}</span>
+          <span className="mono small">{store.assetMasterId(cot, u.indice_ativo) || '—'}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function CotacoesFornecedorPage({ setRoute, setSubsel }) {
   const store = window.CotacaoElevadorFornecedorStore;
   const [rows, setRows] = React.useState(null);
@@ -225,7 +243,7 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
           <KvBlock label="Fornecedor" value={cot.fornecedor}/>
           <KvBlock label="Categoria" value={cfCategoriaLabel(cot.categoria_produto)}/>
           <KvBlock label="Nº Cotação (cliente)" value={cot.dados_envio?.header?.numero_cotacao ?? '—'} mono/>
-          <KvBlock label="Unidades" value={(cot.dados_envio?.unidades || []).map((u) => u.identificador).join(', ') || '—'}/>
+          <KvBlock label="Equipamentos (Master ID)" value={<CfUnidadesMasterId cot={cot}/>}/>
         </Card>
         <Card title="Linha do tempo">
           <KvBlock label="Enviado em" value={cot.sent_at ? fmtDateLong(cot.sent_at) : '—'}/>
