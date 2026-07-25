@@ -232,7 +232,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, model
   return (
     <Card
       title={`Elevador ${unidade.identificador || index + 1}${Number(unidade.quantidade) > 1 ? ` × ${unidade.quantidade}` : ''}`}
-      sub={unidade.tipo || 'Tipo não definido'}
+      sub={`${unidade.tipo || 'Tipo não definido'}${unidade.indice_ativo ? ` · Ativo #${unidade.indice_ativo}` : ''}`}
       action={
         <div className="row gap-2">
           <Button variant="ghost" size="sm" icon={open ? 'chevUp' : 'chevDown'} onClick={() => setOpen((o) => !o)}/>
