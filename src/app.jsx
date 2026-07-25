@@ -172,7 +172,7 @@ function App() {
       case "cotacoes-fornecedor": return <CotacoesFornecedorPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cotacao-fornecedor-detail": return <CotacaoFornecedorDetalhe cot={subsel} setRoute={setRoute}/>;
       case "precificacao": return <PrecificacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "propostas": return <PropostasPage setRoute={setRoute}/>;
+      case "propostas": return <PropostasPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "proposta-editor": return <PropostaEditor setRoute={setRoute} subsel={subsel}/>;
       case "engenharia": return <EngenhariaPage setRoute={setRoute}/>;
       case "ncm-catalogo": return <NcmCatalogoPage setRoute={setRoute}/>;

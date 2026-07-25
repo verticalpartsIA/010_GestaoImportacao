@@ -461,19 +461,37 @@ function ImpostoRow({ label, pct, setPct, valor }) {
 }
 
 /* ---------- PROPOSTAS (Wizard + PDF preview) ---------- */
-function PropostasPage({ setRoute }) {
+function PropostasPage({ setRoute, setSubsel }) {
   const [list, setList] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
 
   React.useEffect(() => {
-    window.__VP_SB.sb.from('cotacoes').select('*').order('date', { ascending: false })
+    window.__VP_SB.sb.from('propostas')
+      .select('id, numero_documento, titulo, status, valor_total, master_id, proposal_type, data_json, criado_em')
+      .order('criado_em', { ascending: false }).limit(200)
       .then(({ data }) => { setList(data || []); setLoading(false); });
   }, []);
 
-  const totalValor = list.reduce((s, p) => s + (p.total || 0), 0);
+  const totalValor = list.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
   const fmtValorTotal = list.length > 0
     ? (totalValor >= 1e6 ? `R$ ${(totalValor / 1e6).toFixed(1)}M` : fmtBRL(totalValor))
     : '—';
+  const comMasterId = list.filter((p) => p.master_id).length;
+
+  const abrirNova = () => { setSubsel && setSubsel(null); setRoute("proposta-editor"); };
+  // Propostas antigas (pré-PropostaEditor) foram salvas com outro formato de
+  // data_json (chaves em inglês: client/work/specs...) — incompatível com o
+  // editor atual (cliente/obra/elevador.especificacoes). Abrir uma dessas
+  // aqui mostraria o formulário vazio, então avisamos em vez de abrir quebrado.
+  const ehLegado = (p) => !!(p.data_json && p.data_json.client && !p.data_json.cliente);
+  const abrirExistente = (p) => {
+    if (ehLegado(p)) {
+      window.toast?.('Esta proposta foi criada num formato antigo (anterior ao Editor atual) — não pode ser aberta para edição aqui.', 'warning');
+      return;
+    }
+    setSubsel && setSubsel({ __editId: p.id });
+    setRoute("proposta-editor");
+  };
 
   return (
     <div className="page fade-in">
@@ -481,19 +499,19 @@ function PropostasPage({ setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Propostas</div>
           <h1 className="page-head__title">Propostas Comerciais</h1>
-          <p className="page-head__sub">Wizard de 5 etapas · gera PDF + envia para assinatura digital · vincula contrato jurídico</p>
+          <p className="page-head__sub">Editor 3 abas · gera PDF · herda dados do Formulário + valores da Precificação (Master ID)</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="download" onClick={() => window.csvDownload(list.map(p => ({ id:p.id, building:p.building, supplier:p.supplier, status:p.status, data:p.date, total_usd:p.total })), 'propostas.csv')}>Exportar pacote</Button>
-          <Button variant="primary" icon="plus" onClick={() => setRoute("proposta-editor")}>Nova proposta</Button>
+          <Button variant="outline" icon="download" onClick={() => window.csvDownload(list.map(p => ({ id:p.id, numero_documento:p.numero_documento, titulo:p.titulo, status:p.status, master_id:p.master_id, valor_total:p.valor_total, criado_em:p.criado_em })), 'propostas.csv')}>Exportar pacote</Button>
+          <Button variant="primary" icon="plus" onClick={abrirNova}>Nova proposta</Button>
         </div>
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Propostas no ar" value={list.length} sub="aguardando cliente" icon="proposal"/>
+        <KPI label="Propostas" value={list.length} sub="total cadastrado" icon="proposal"/>
         <KPI label="Valor proposto" value={fmtValorTotal} sub="potencial" icon="dollar"/>
-        <KPI label="Conversão proposta" value="—" sub="sem dados suficientes" icon="trending"/>
-        <KPI label="Tempo médio aprovação" value="—" sub="sem dados suficientes" icon="clock"/>
+        <KPI label="Com Master ID" value={comMasterId} sub="rastreáveis à Precificação" icon="grid"/>
+        <KPI label="Aprovadas" value={list.filter((p) => p.status === 'aprovada').length} sub="fecharam negócio" icon="check"/>
       </div>
 
       <div className="grid-2" style={{ gap: 20 }}>
@@ -506,16 +524,19 @@ function PropostasPage({ setRoute }) {
               </div>
             )}
             {list.map((p) => (
-              <div key={p.id} className="card" style={{ padding: 14, cursor: "pointer" }} onClick={() => setRoute("proposta-editor")}>
+              <div key={p.id} className="card" style={{ padding: 14, cursor: "pointer" }} onClick={() => abrirExistente(p)}>
                 <div className="row sb">
                   <div>
-                    <div className="cell-main" style={{ fontSize: 14 }}>{p.origin || p.id}</div>
-                    <div className="cell-sub">{p.id} · {p.date ? new Date(p.date).toLocaleDateString('pt-BR') : '—'}</div>
+                    <div className="cell-main" style={{ fontSize: 14 }}>{p.data_json?.cliente?.nome || p.titulo || p.numero_documento}</div>
+                    <div className="cell-sub">{[p.numero_documento, p.criado_em ? new Date(p.criado_em).toLocaleDateString('pt-BR') : null, p.master_id].filter(Boolean).join(' · ')}</div>
                   </div>
-                  <StatusBadge status={p.status || "Em andamento"}/>
+                  <div className="row gap-2">
+                    {ehLegado(p) && <span className="small muted" title="Formato antigo, anterior ao Editor atual — não editável aqui">Legado</span>}
+                    <StatusBadge status={p.status || "rascunho"}/>
+                  </div>
                 </div>
                 <div className="row sb" style={{ marginTop: 10 }}>
-                  <div className="cell-money mono" style={{ fontSize: 16, fontWeight: 700 }}>{p.total ? fmtUSD(p.total) : '—'}</div>
+                  <div className="cell-money mono" style={{ fontSize: 16, fontWeight: 700 }}>{p.valor_total ? fmtBRL(p.valor_total) : '—'}</div>
                   <Button variant="ghost" size="sm" iconRight="arrowRight">Editar</Button>
                 </div>
               </div>
@@ -524,9 +545,9 @@ function PropostasPage({ setRoute }) {
         </Card>
 
         <Card title="Acesso Rápido" sub="abra o editor com um clique" sharp
-          action={<Button variant="primary" size="sm" icon="plus" onClick={() => setRoute("proposta-editor")}>Nova proposta</Button>}>
+          action={<Button variant="primary" size="sm" icon="plus" onClick={abrirNova}>Nova proposta</Button>}>
           <div className="stack" style={{ gap: 10 }}>
-            <div onClick={() => setRoute("proposta-editor")} style={{ padding: 18, background: "#000", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
+            <div onClick={abrirNova} style={{ padding: 18, background: "#000", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
               <span style={{ position: "absolute", top: 0, left: 0, width: 24, height: 3, background: "var(--vp-yellow)" }}/>
               <Icon.proposal size={28} color="var(--vp-yellow)"/>
               <div style={{ flex: 1 }}>
@@ -537,15 +558,15 @@ function PropostasPage({ setRoute }) {
             </div>
 
             <div className="grid-3" style={{ gap: 8 }}>
-              <div onClick={() => setRoute("proposta-editor")} style={{ padding: 12, background: "#fff", border: "1px solid var(--border)", cursor: "pointer", textAlign: "center", aspectRatio: "0.72", display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
+              <div onClick={abrirNova} style={{ padding: 12, background: "#fff", border: "1px solid var(--border)", cursor: "pointer", textAlign: "center", aspectRatio: "0.72", display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
                 <img src="assets/capa-elevador.png" style={{ width: "100%", aspectRatio: "0.72", objectFit: "cover", objectPosition: "top", marginTop: -12, marginLeft: -12, marginRight: -12, width: "calc(100% + 24px)" }}/>
                 <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".1em", background: "rgba(255,255,255,.92)", padding: "4px 6px" }}>Elevador</div>
               </div>
-              <div onClick={() => setRoute("proposta-editor")} style={{ padding: 12, background: "#fff", border: "1px solid var(--border)", cursor: "pointer", textAlign: "center", aspectRatio: "0.72", display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
+              <div onClick={abrirNova} style={{ padding: 12, background: "#fff", border: "1px solid var(--border)", cursor: "pointer", textAlign: "center", aspectRatio: "0.72", display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
                 <img src="assets/capa-escada-rolante.png" style={{ width: "100%", aspectRatio: "0.72", objectFit: "cover", objectPosition: "top", marginTop: -12, marginLeft: -12, marginRight: -12, width: "calc(100% + 24px)" }}/>
                 <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".1em", background: "rgba(255,255,255,.92)", padding: "4px 6px" }}>Escada</div>
               </div>
-              <div onClick={() => setRoute("proposta-editor")} style={{ padding: 12, background: "#fff", border: "1px solid var(--border)", cursor: "pointer", textAlign: "center", aspectRatio: "0.72", display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
+              <div onClick={abrirNova} style={{ padding: 12, background: "#fff", border: "1px solid var(--border)", cursor: "pointer", textAlign: "center", aspectRatio: "0.72", display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
                 <img src="assets/capa-esteira-rolante.png" style={{ width: "100%", aspectRatio: "0.72", objectFit: "cover", objectPosition: "top", marginTop: -12, marginLeft: -12, marginRight: -12, width: "calc(100% + 24px)" }}/>
                 <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".1em", background: "rgba(255,255,255,.92)", padding: "4px 6px" }}>Esteira</div>
               </div>
@@ -558,7 +579,7 @@ function PropostasPage({ setRoute }) {
 
       <Card title="Editor de Proposta — Demonstrativo" sub="exemplo do wizard de 5 etapas"
         style={{ marginTop: 20 }}
-        action={<Button variant="primary" size="sm" iconRight="arrowRight" onClick={() => setRoute("proposta-editor")}>Abrir editor completo</Button>}>
+        action={<Button variant="primary" size="sm" iconRight="arrowRight" onClick={abrirNova}>Abrir editor completo</Button>}>
         <PropostaWizard/>
       </Card>
     </div>
