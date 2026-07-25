@@ -90,13 +90,47 @@ function CVStepHeader({ kicker, title, desc }) {
   );
 }
 
+/* Master ID (Fase 2) — puxa uma Proposta já aprovada (com master_id, vindo
+   da Precificação) e herda cliente/valor/ativos sem redigitar. Se não houver
+   nenhuma Proposta com Master ID ainda, some silenciosamente — o wizard
+   continua funcionando 100% manual como sempre. */
+function CVSeletorProposta({ masterId, onSelect }) {
+  const [propostas, setPropostas] = _cvUS(null);
+  const [selecionadaId, setSelecionadaId] = _cvUS('');
+
+  _cvUE(() => {
+    window.__VP_SB?.sb.from('propostas')
+      .select('id, numero_documento, master_id, titulo, valor_total, data_json')
+      .not('master_id', 'is', null)
+      .order('criado_em', { ascending: false }).limit(50)
+      .then(({ data }) => setPropostas(data || []));
+  }, []);
+
+  if (!propostas || !propostas.length) return null;
+
+  return (
+    <div className="cv-field-group" style={{ marginBottom: 16 }}>
+      <CVSelect label="Herdar de uma Proposta (Master ID)" value={selecionadaId}
+        onChange={(id) => {
+          setSelecionadaId(id);
+          const p = propostas.find((x) => x.id === id);
+          if (p) onSelect(p);
+        }}
+        options={propostas.map((p) => ({ value: p.id, label: `${p.master_id} · ${p.numero_documento} · ${p.titulo || ''}` }))}
+        width="full"/>
+      {masterId && <div className="small muted" style={{ marginTop: 6 }}>Master ID vinculado: <b className="mono">{masterId}</b></div>}
+    </div>
+  );
+}
+
 /* ============================================================
    WIZARD STEPS
    ============================================================ */
-function CVStepCadastro({ form, setComp, errors }) {
+function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
   return (
     <div className="cv-step">
       <CVStepHeader kicker="Passo 1 — Cadastro" title="Dados do Comprador" desc="A VENDEDORA (Vertical Parts) já está fixada. Preencha a contraparte."/>
+      <CVSeletorProposta masterId={form.masterId} onSelect={onSelecionarProposta}/>
       <div className="cv-contratante-note">
         <span>VENDEDORA (fixo)</span>
         <strong>VERTICAL PARTS LTDA-ME</strong>
@@ -419,6 +453,34 @@ function CVWizard({ onCreated, initial }) {
   const set = (patch) => setForm(prev => ({ ...prev, ...patch }));
   const setComp = (patch) => setForm(prev => ({ ...prev, comprador: { ...prev.comprador, ...patch } }));
 
+  /* Master ID (Fase 2) — herda cliente + valor da Proposta selecionada,
+     sem redigitar (a Proposta já tem os dados vindos do Formulário +
+     Precificação — ver Fase 1). */
+  const aplicarProposta = (p) => {
+    const dj = p.data_json || {};
+    const cli = dj.cliente || {};
+    const obra = dj.obra || {};
+    const valores = dj.elevador?.valores || {};
+    const valorUnit = Number(valores.valorUnit) || 0;
+    const qtd = Number(valores.quantidade) || 1;
+    setForm(prev => ({
+      ...prev,
+      masterId: p.master_id, propostaId: p.id,
+      comprador: {
+        ...prev.comprador,
+        razao: cli.nome || prev.comprador.razao,
+        cnpj: cli.cnpj || prev.comprador.cnpj,
+        rep: cli.responsavel || prev.comprador.rep,
+        email: cli.email || prev.comprador.email,
+        tel: cli.telefone || prev.comprador.tel,
+        endereco: cli.endereco || prev.comprador.endereco,
+      },
+      localObra: [obra.endereco, obra.cidade, obra.uf].filter(Boolean).join(', ') || prev.localObra,
+      valor: valorUnit ? String(Math.round(valorUnit * qtd)) : prev.valor,
+      qtd: qtd || prev.qtd,
+    }));
+  };
+
   const valorNum = window.CV.parseMoney(form.valor);
   const docPreview = _cvUM(() => window.CV.buildContract({ form, comprador: form.comprador, valor: valorNum, sinalPct: form.sinalPct, parcelas: form.parcelas, numero: 'VPVE________' }), [form]);
 
@@ -474,7 +536,7 @@ function CVWizard({ onCreated, initial }) {
   };
 
   let StepComp;
-  if (step === 0) StepComp = <CVStepCadastro form={form} setComp={setComp} errors={errors}/>;
+  if (step === 0) StepComp = <CVStepCadastro form={form} setComp={setComp} errors={errors} onSelecionarProposta={aplicarProposta}/>;
   else if (step === 1) StepComp = <CVStepObjeto form={form} set={set}/>;
   else if (step === 2) StepComp = <CVStepLogistica form={form} set={set}/>;
   else if (step === 3) StepComp = <CVStepPreco form={form} set={set} errors={errors}/>;

@@ -162,10 +162,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     try {
       const [{ data: formulario }, { data: cotFornecedor }] = await Promise.all([
         c.from('formularios_elevador').select('*, clientes(*)').eq('id', pz.formulario_elevador_id).single(),
-        pz.cotacao_fornecedor_id ? c.from('cotacoes_elevador_fornecedor').select('dados_envio').eq('id', pz.cotacao_fornecedor_id).maybeSingle() : Promise.resolve({ data: null }),
+        pz.cotacao_fornecedor_id ? c.from('cotacoes_elevador_fornecedor').select('numero_documento, revisao, dados_envio').eq('id', pz.cotacao_fornecedor_id).maybeSingle() : Promise.resolve({ data: null }),
       ]);
       const cliente = (formulario && formulario.clientes) || {};
       const unidadesTec = (cotFornecedor && cotFornecedor.dados_envio && cotFornecedor.dados_envio.unidades) || [];
+      const cefStore = window.CotacaoElevadorFornecedorStore;
 
       const especificacoes = (pz.modelos || []).map((m) => {
         const tec = unidadesTec.find((u) => u.unidade_id === m.unidadeId) || {};
@@ -179,12 +180,28 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           vel: tec.velocidade_ms ? String(tec.velocidade_ms) : '',
           andaresParadasPortas: tec.paradas ? `${tec.paradas} Paradas` : '',
           qtd: m.quantidade || 1,
+          codigoAtivo: cotFornecedor ? cefStore.assetMasterId(cotFornecedor, tec.indice_ativo) : null,
         };
       });
+
+      /* Master ID (Fase 2): lista granular de ativos, pra Contrato de Venda
+         e Contrato Instalador puxarem sem redigitar — ver issue #96. */
+      const ativos = (pz.modelos || []).map((m) => {
+        const tec = unidadesTec.find((u) => u.unidade_id === m.unidadeId) || {};
+        return {
+          indice: tec.indice_ativo ?? null,
+          codigo: cotFornecedor ? cefStore.assetMasterId(cotFornecedor, tec.indice_ativo) : null,
+          identificador: m.identificador || tec.identificador || '',
+          modelo: m.modelo || '',
+        };
+      }).filter((a) => a.indice != null);
 
       const prefill = {
         __prefillFromPrecificacao: true,
         numero: `Cotação-${pz.numero_cotacao ?? pz.numero_documento}`,
+        masterId: cotFornecedor ? cotFornecedor.numero_documento : null,
+        precificacaoId: pz.id,
+        ativos,
         cliente: {
           nome: cliente.razao_social || '', cnpj: cliente.cnpj || '', responsavel: cliente.contato || '',
           endereco: cliente.endereco_logradouro || '', bairro: cliente.endereco_bairro || '',

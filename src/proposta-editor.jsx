@@ -15,6 +15,10 @@ function makeDefaultProposta() {
     numero: `VP-${anoAtual}-001`,
     dataLinha: `São Paulo, ${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${anoAtual}`,
     validade: "30 dias",
+    // Master ID (Fase 2) — rastreia de qual Cotação/Precificação essa
+    // Proposta nasceu; `ativos` é a lista granular de equipamentos
+    // (índice + código completo) que Contrato de Venda/Instalador herdam.
+    masterId: null, precificacaoId: null, ativos: [],
     vendedor: { nome: "", celular: "", fixo: "", email: "" },
     cliente: { nome: "", cnpj: "", responsavel: "",
       endereco: "", numero: "", bairro: "", cidade: "", uf: "", cep: "",
@@ -260,6 +264,8 @@ function PropostaEditor({ setRoute, subsel }) {
         proposal_type: eq,
         titulo: [data.cliente?.nome, data.obra?.nome].filter(Boolean).join(' · ') || chave,
         data_json: { ...data, _vp_user: { email: vpUser.email || null, nome: vpUser.nome || null } },
+        master_id: data.masterId || null,
+        precificacao_id: data.precificacaoId || null,
         status: 'rascunho',
         atualizado_em: new Date().toISOString(),
       };
@@ -383,6 +389,9 @@ function PropostaEditor({ setRoute, subsel }) {
                 {data.cliente.nome || "Sem cliente"} · {data.obra.nome || "Sem obra"}
               </span>
             </h1>
+            {data.masterId && (
+              <div className="mono small muted" style={{ marginTop: 4 }}>Master ID {data.masterId}</div>
+            )}
           </div>
           <div className="row gap-2">
             <Button variant="ghost" size="sm" icon="copy" onClick={resetProposal}>Reiniciar</Button>

@@ -165,6 +165,7 @@
     const hoje = new Date();
     return {
       modalidade: 'instalacao',
+      masterId: null, propostaId: null, ativosIndices: [],  // Master ID Fase 2
       c_razao:'', c_cnpj:'', c_rua:'', c_numero:'', c_bairro:'', c_cidade:'', c_estado:'', c_cep:'',
       r_nome:'', r_nacionalidade:'brasileiro(a)', r_estadoCivil:'', r_profissao:'',
       r_rg:'', r_cpf:'', r_mesmoEndereco: true,
