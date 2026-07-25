@@ -479,16 +479,7 @@ function PropostasPage({ setRoute, setSubsel }) {
   const comMasterId = list.filter((p) => p.master_id).length;
 
   const abrirNova = () => { setSubsel && setSubsel(null); setRoute("proposta-editor"); };
-  // Propostas antigas (pré-PropostaEditor) foram salvas com outro formato de
-  // data_json (chaves em inglês: client/work/specs...) — incompatível com o
-  // editor atual (cliente/obra/elevador.especificacoes). Abrir uma dessas
-  // aqui mostraria o formulário vazio, então avisamos em vez de abrir quebrado.
-  const ehLegado = (p) => !!(p.data_json && p.data_json.client && !p.data_json.cliente);
   const abrirExistente = (p) => {
-    if (ehLegado(p)) {
-      window.toast?.('Esta proposta foi criada num formato antigo (anterior ao Editor atual) — não pode ser aberta para edição aqui.', 'warning');
-      return;
-    }
     setSubsel && setSubsel({ __editId: p.id });
     setRoute("proposta-editor");
   };
@@ -530,10 +521,7 @@ function PropostasPage({ setRoute, setSubsel }) {
                     <div className="cell-main" style={{ fontSize: 14 }}>{p.data_json?.cliente?.nome || p.titulo || p.numero_documento}</div>
                     <div className="cell-sub">{[p.numero_documento, p.criado_em ? new Date(p.criado_em).toLocaleDateString('pt-BR') : null, p.master_id].filter(Boolean).join(' · ')}</div>
                   </div>
-                  <div className="row gap-2">
-                    {ehLegado(p) && <span className="small muted" title="Formato antigo, anterior ao Editor atual — não editável aqui">Legado</span>}
-                    <StatusBadge status={p.status || "rascunho"}/>
-                  </div>
+                  <StatusBadge status={p.status || "rascunho"}/>
                 </div>
                 <div className="row sb" style={{ marginTop: 10 }}>
                   <div className="cell-money mono" style={{ fontSize: 16, fontWeight: 700 }}>{p.valor_total ? fmtBRL(p.valor_total) : '—'}</div>
