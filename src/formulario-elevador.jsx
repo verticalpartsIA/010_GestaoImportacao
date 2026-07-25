@@ -348,6 +348,32 @@ function FECefStatusChip({ status }) {
   return <span className="la-setor" style={{ background: store.STATUS_COR[status] || '#64748b' }}>{store.STATUS_LABEL[status] || status}</span>;
 }
 
+function FECotacaoDivergencias({ itens }) {
+  const store = window.CotacaoElevadorFornecedorStore;
+  const comDivergencia = itens
+    .map((it) => ({ it, divs: Object.entries(it.divergencias || {}).filter(([, v]) => v !== '' && v !== null && v !== undefined) }))
+    .filter((x) => x.divs.length);
+  if (!comDivergencia.length) return null;
+  return (
+    <div className="alert warning" style={{ marginTop: 12 }}>
+      <Icon.warning/>
+      <div style={{ flex: 1 }}>
+        <div className="alert__title">O fornecedor divergiu da especificação enviada</div>
+        {comDivergencia.map(({ it, divs }) => (
+          <div key={it.unidade_id} style={{ marginTop: 6 }}>
+            <b className="small">{it.unidade_identificador || it.unidade_id}</b>
+            <ul style={{ margin: '2px 0 0', paddingLeft: 18 }}>
+              {divs.map(([key, v]) => (
+                <li key={key} className="small">{store.unitSpecFieldLabel(key)}: <b>{v}</b></li>
+              ))}
+            </ul>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FECotacaoRespostaModal({ cot, onClose }) {
   const r = cot.respostas || {};
   const itens = r.itens || [];
@@ -382,6 +408,7 @@ function FECotacaoRespostaModal({ cot, onClose }) {
           </tbody>
         </table>
       </div>
+      <FECotacaoDivergencias itens={itens}/>
       {r.observacoes_gerais && (
         <div style={{ marginTop: 12 }}>
           <span className="up-eyebrow muted">Observações gerais</span>
