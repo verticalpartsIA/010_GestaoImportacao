@@ -460,29 +460,46 @@ function ImpostoRow({ label, pct, setPct, valor }) {
   );
 }
 
-/* ---------- PROPOSTAS (Wizard + PDF preview) ---------- */
+/* ---------- PROPOSTAS ---------- */
+/* Mesmo padrão do Controle de Cotações: tabela única, filtro por status +
+   busca, clique na linha abre a proposta — sem coluna lateral. */
 function PropostasPage({ setRoute, setSubsel }) {
-  const [list, setList] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
+  const [rows, setRows] = React.useState(null);
+  const [busca, setBusca] = React.useState('');
+  const [fStatus, setFStatus] = React.useState('Todos');
 
-  React.useEffect(() => {
+  const carregar = React.useCallback(() => {
     window.__VP_SB.sb.from('propostas')
       .select('id, numero_documento, titulo, status, valor_total, master_id, proposal_type, data_json, criado_em')
-      .order('criado_em', { ascending: false }).limit(200)
-      .then(({ data }) => { setList(data || []); setLoading(false); });
+      .order('criado_em', { ascending: false }).limit(300)
+      .then(({ data }) => setRows(data || []));
   }, []);
+  React.useEffect(() => { carregar(); }, [carregar]);
 
-  const totalValor = list.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
-  const fmtValorTotal = list.length > 0
+  const statusDisponiveis = React.useMemo(() => {
+    if (!rows) return [];
+    return [...new Set(rows.map((r) => r.status).filter(Boolean))];
+  }, [rows]);
+
+  const filtradas = React.useMemo(() => {
+    if (!rows) return [];
+    const termo = busca.trim().toLowerCase();
+    return rows.filter((r) => {
+      if (fStatus !== 'Todos' && r.status !== fStatus) return false;
+      if (!termo) return true;
+      return [r.numero_documento, r.titulo, r.master_id, r.data_json?.cliente?.nome]
+        .some((v) => (v || '').toLowerCase().includes(termo));
+    });
+  }, [rows, busca, fStatus]);
+
+  const totalValor = (rows || []).reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
+  const fmtValorTotal = rows && rows.length > 0
     ? (totalValor >= 1e6 ? `R$ ${(totalValor / 1e6).toFixed(1)}M` : fmtBRL(totalValor))
     : '—';
-  const comMasterId = list.filter((p) => p.master_id).length;
+  const comMasterId = (rows || []).filter((p) => p.master_id).length;
 
   const abrirNova = () => { setSubsel && setSubsel(null); setRoute("proposta-editor"); };
-  const abrirExistente = (p) => {
-    setSubsel && setSubsel({ __editId: p.id });
-    setRoute("proposta-editor");
-  };
+  const abrirExistente = (p) => { setSubsel && setSubsel({ __editId: p.id }); setRoute("proposta-editor"); };
 
   return (
     <div className="page fade-in">
@@ -490,147 +507,63 @@ function PropostasPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Propostas</div>
           <h1 className="page-head__title">Propostas Comerciais</h1>
-          <p className="page-head__sub">Editor 3 abas · gera PDF · herda dados do Formulário + valores da Precificação (Master ID)</p>
+          <p className="page-head__sub">Clique numa proposta pra abrir — herda dados do Formulário + valores da Precificação (Master ID).</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="download" onClick={() => window.csvDownload(list.map(p => ({ id:p.id, numero_documento:p.numero_documento, titulo:p.titulo, status:p.status, master_id:p.master_id, valor_total:p.valor_total, criado_em:p.criado_em })), 'propostas.csv')}>Exportar pacote</Button>
+          <Button variant="outline" icon="download" onClick={() => window.csvDownload((rows || []).map(p => ({ id:p.id, numero_documento:p.numero_documento, titulo:p.titulo, status:p.status, master_id:p.master_id, valor_total:p.valor_total, criado_em:p.criado_em })), 'propostas.csv')}>Exportar pacote</Button>
           <Button variant="primary" icon="plus" onClick={abrirNova}>Nova proposta</Button>
         </div>
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Propostas" value={list.length} sub="total cadastrado" icon="proposal"/>
+        <KPI label="Propostas" value={rows ? rows.length : '…'} sub="total cadastrado" icon="proposal"/>
         <KPI label="Valor proposto" value={fmtValorTotal} sub="potencial" icon="dollar"/>
         <KPI label="Com Master ID" value={comMasterId} sub="rastreáveis à Precificação" icon="grid"/>
-        <KPI label="Aprovadas" value={list.filter((p) => p.status === 'aprovada').length} sub="fecharam negócio" icon="check"/>
+        <KPI label="Aprovadas" value={(rows || []).filter((p) => p.status === 'aprovada').length} sub="fecharam negócio" icon="check"/>
       </div>
 
-      <div className="grid-2" style={{ gap: 20 }}>
-        <Card title="Propostas em andamento" sub={`${list.length} registros`} action={<Button variant="ghost" size="sm" icon="filter"/>}>
-          <div className="stack" style={{ gap: 12 }}>
-            {loading && <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>}
-            {!loading && list.length === 0 && (
-              <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
-                Nenhuma proposta cadastrada.
-              </div>
+      <div className="tbar">
+        <div className="seg">
+          {['Todos'].concat(statusDisponiveis).map((s) => (
+            <button key={s} className={fStatus === s ? 'is-active' : ''} onClick={() => setFStatus(s)}>{s}</button>
+          ))}
+        </div>
+        <div className="spacer"/>
+        <div className="search">
+          <Icon.search size={12} color="var(--fg3)"/>
+          <input placeholder="Buscar por cliente, nº ou Master ID…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
+        </div>
+      </div>
+
+      <div className="table-wrap">
+        <table className="t la-table">
+          <thead><tr>
+            <th>Nº Documento</th>
+            <th>Cliente</th>
+            <th>Master ID</th>
+            <th className="text-right">Valor</th>
+            <th>Status</th>
+            <th>Data</th>
+          </tr></thead>
+          <tbody>
+            {rows === null && (
+              <tr><td colSpan={99}><div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)' }}>Carregando…</div></td></tr>
             )}
-            {list.map((p) => (
-              <div key={p.id} className="card" style={{ padding: 14, cursor: "pointer" }} onClick={() => abrirExistente(p)}>
-                <div className="row sb">
-                  <div>
-                    <div className="cell-main" style={{ fontSize: 14 }}>{p.data_json?.cliente?.nome || p.titulo || p.numero_documento}</div>
-                    <div className="cell-sub">{[p.numero_documento, p.criado_em ? new Date(p.criado_em).toLocaleDateString('pt-BR') : null, p.master_id].filter(Boolean).join(' · ')}</div>
-                  </div>
-                  <StatusBadge status={p.status || "rascunho"}/>
-                </div>
-                <div className="row sb" style={{ marginTop: 10 }}>
-                  <div className="cell-money mono" style={{ fontSize: 16, fontWeight: 700 }}>{p.valor_total ? fmtBRL(p.valor_total) : '—'}</div>
-                  <Button variant="ghost" size="sm" iconRight="arrowRight">Editar</Button>
-                </div>
-              </div>
+            {rows !== null && filtradas.length === 0 && (
+              <tr><td colSpan={99}><div className="empty"><h4>Nenhuma proposta encontrada</h4><p>Nada encontrado com os filtros atuais.</p></div></td></tr>
+            )}
+            {filtradas.map((p) => (
+              <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => abrirExistente(p)}>
+                <td><span className="mono small">{p.numero_documento || '—'}</span></td>
+                <td style={{ fontSize: 12.5 }}>{p.data_json?.cliente?.nome || p.titulo || <span className="muted">—</span>}</td>
+                <td><span className="mono small">{p.master_id || <span className="muted">—</span>}</span></td>
+                <td className="cell-money">{p.valor_total ? fmtBRL(p.valor_total) : '—'}</td>
+                <td><StatusBadge status={p.status || 'rascunho'}/></td>
+                <td><span className="mono small" style={{ whiteSpace: 'nowrap' }}>{p.criado_em ? new Date(p.criado_em).toLocaleDateString('pt-BR') : '—'}</span></td>
+              </tr>
             ))}
-          </div>
-        </Card>
-
-        <Card title="Acesso Rápido" sub="abra o editor com um clique" sharp
-          action={<Button variant="primary" size="sm" icon="plus" onClick={abrirNova}>Nova proposta</Button>}>
-          <div className="stack" style={{ gap: 10 }}>
-            <div onClick={abrirNova} style={{ padding: 18, background: "#000", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", gap: 14, position: "relative" }}>
-              <span style={{ position: "absolute", top: 0, left: 0, width: 24, height: 3, background: "var(--vp-yellow)" }}/>
-              <Icon.proposal size={28} color="var(--vp-yellow)"/>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontFamily: "var(--font-display)", fontSize: 16, fontWeight: 800, textTransform: "uppercase" }}>Abrir Editor de Proposta</div>
-                <div style={{ fontSize: 11, color: "rgba(255,255,255,.6)", fontFamily: "var(--font-mono)", marginTop: 2, letterSpacing: ".04em" }}>3 abas · Elevador · Escada · Esteira · Preview ao vivo</div>
-              </div>
-              <Icon.arrowRight color="var(--vp-yellow)"/>
-            </div>
-
-            <div className="grid-3" style={{ gap: 8 }}>
-              <div onClick={abrirNova} style={{ padding: 12, background: "#fff", border: "1px solid var(--border)", cursor: "pointer", textAlign: "center", aspectRatio: "0.72", display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
-                <img src="assets/capa-elevador.png" style={{ width: "100%", aspectRatio: "0.72", objectFit: "cover", objectPosition: "top", marginTop: -12, marginLeft: -12, marginRight: -12, width: "calc(100% + 24px)" }}/>
-                <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".1em", background: "rgba(255,255,255,.92)", padding: "4px 6px" }}>Elevador</div>
-              </div>
-              <div onClick={abrirNova} style={{ padding: 12, background: "#fff", border: "1px solid var(--border)", cursor: "pointer", textAlign: "center", aspectRatio: "0.72", display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
-                <img src="assets/capa-escada-rolante.png" style={{ width: "100%", aspectRatio: "0.72", objectFit: "cover", objectPosition: "top", marginTop: -12, marginLeft: -12, marginRight: -12, width: "calc(100% + 24px)" }}/>
-                <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".1em", background: "rgba(255,255,255,.92)", padding: "4px 6px" }}>Escada</div>
-              </div>
-              <div onClick={abrirNova} style={{ padding: 12, background: "#fff", border: "1px solid var(--border)", cursor: "pointer", textAlign: "center", aspectRatio: "0.72", display: "flex", flexDirection: "column", justifyContent: "space-between", position: "relative" }}>
-                <img src="assets/capa-esteira-rolante.png" style={{ width: "100%", aspectRatio: "0.72", objectFit: "cover", objectPosition: "top", marginTop: -12, marginLeft: -12, marginRight: -12, width: "calc(100% + 24px)" }}/>
-                <div style={{ position: "absolute", bottom: 8, left: 8, right: 8, fontSize: 11, fontWeight: 800, textTransform: "uppercase", letterSpacing: ".1em", background: "rgba(255,255,255,.92)", padding: "4px 6px" }}>Esteira</div>
-              </div>
-            </div>
-
-            <p className="small muted" style={{ marginTop: 6 }}>O editor é a forma recomendada de criar/editar propostas. O wizard antigo abaixo é apenas demonstrativo.</p>
-          </div>
-        </Card>
-      </div>
-
-      <Card title="Editor de Proposta — Demonstrativo" sub="exemplo do wizard de 5 etapas"
-        style={{ marginTop: 20 }}
-        action={<Button variant="primary" size="sm" iconRight="arrowRight" onClick={abrirNova}>Abrir editor completo</Button>}>
-        <PropostaWizard/>
-      </Card>
-    </div>
-  );
-}
-
-function PropostaWizard() {
-  const steps = ["Identificação", "Escopo", "Comercial", "Termos", "Revisão"];
-  const [step, setStep] = React.useState(2); // 0-indexed → "Comercial"
-  return (
-    <div>
-      <div style={{ display: "grid", gridTemplateColumns: `repeat(${steps.length}, 1fr)`, gap: 0, marginBottom: 18 }}>
-        {steps.map((s, i) => (
-          <div key={s} onClick={() => setStep(i)} style={{
-            padding: "10px 8px",
-            background: i === step ? "#000" : i < step ? "var(--vp-yellow)" : "var(--vp-gray-100)",
-            color: i === step ? "var(--vp-yellow)" : i < step ? "#000" : "var(--fg3)",
-            fontSize: 10, fontWeight: 800, letterSpacing: ".14em", textTransform: "uppercase",
-            textAlign: "center", cursor: "pointer",
-            display: "flex", alignItems: "center", justifyContent: "center", gap: 6,
-            borderRight: i === steps.length - 1 ? "none" : "2px solid #fff",
-          }}>
-            <span style={{ fontFamily: "var(--font-mono)" }}>{i + 1}</span>
-            <span>{s}</span>
-            {i < step ? <Icon.check size={12}/> : null}
-          </div>
-        ))}
-      </div>
-
-      <div style={{ background: "var(--vp-gray-50)", padding: 14, marginBottom: 14 }}>
-        <div className="up-eyebrow muted">Etapa atual</div>
-        <div style={{ fontFamily: "var(--font-display)", fontSize: 18, textTransform: "uppercase", marginTop: 4 }}>3 · Condições Comerciais</div>
-      </div>
-
-      <div className="stack" style={{ gap: 12 }}>
-        <div className="grid-2">
-          <div className="field"><label>Valor total</label><input className="input" defaultValue="R$ 1.840.000,00" readOnly/></div>
-          <div className="field"><label>Forma de pagamento</label>
-            <select className="input">
-              <option>30% entrada · 50% embarque · 20% instalação</option>
-              <option>50% entrada · 50% entrega</option>
-              <option>À vista (5% desconto)</option>
-            </select>
-          </div>
-        </div>
-        <div className="grid-3">
-          <div className="field"><label>Validade</label><input className="input" defaultValue="30 dias"/></div>
-          <div className="field"><label>Prazo entrega</label><input className="input" defaultValue="120 dias"/></div>
-          <div className="field"><label>Prazo instalação</label><input className="input" defaultValue="45 dias"/></div>
-        </div>
-        <div className="field"><label>Garantia</label><input className="input" defaultValue="24 meses contra defeitos de fabricação · 12 meses serviço"/></div>
-        <div className="field"><label>Observações comerciais</label>
-          <textarea className="input" rows={3} defaultValue="Frete CIF Santos incluso. Instalação por equipe própria certificada. Treinamento operacional para equipe de manutenção do hospital incluído."/>
-        </div>
-      </div>
-
-      <div className="row sb" style={{ marginTop: 16, paddingTop: 14, borderTop: "1px solid var(--border)" }}>
-        <Button variant="outline" size="sm" icon="chevLeft" onClick={() => setStep(Math.max(0, step - 1))}>Voltar</Button>
-        <div className="row gap-2">
-          <Button variant="ghost" size="sm" icon="eye">Preview PDF</Button>
-          <Button variant="ghost" size="sm" icon="download">Salvar rascunho</Button>
-          <Button variant="primary" size="sm" iconRight="arrowRight" onClick={() => setStep(Math.min(steps.length - 1, step + 1))}>Próxima etapa</Button>
-        </div>
+          </tbody>
+        </table>
       </div>
     </div>
   );
