@@ -82,10 +82,11 @@
   function prettyUrl(token) { return `verticalparts.com.br/assinar/${token}`; }
   function whatsAppHref(phone, message) {
     let p = (phone || '').replace(/\D/g, '');
-    // Número BR sem DDI (DDD + 8/9 dígitos, ex.: 12992004047) — completa com
-    // 55 automaticamente, já que o vendedor normalmente digita só o formato
-    // local, sem o código do país.
-    if (p && (p.length === 10 || p.length === 11)) p = '55' + p;
+    // Celular BR sem DDI: DDD (2) + "9" (nono dígito, prefixo de celular
+    // desde 2016, sempre na 3ª posição) + 8 dígitos = 11 dígitos. Assinatura
+    // específica pra não colidir com números internacionais de mesmo
+    // tamanho (ex.: NANP +1 212 555 1234 vira "12125551234", 3ª posição ≠ 9).
+    if (p.length === 11 && p[2] === '9') p = '55' + p;
     const base = p ? 'https://wa.me/' + p : 'https://wa.me/';
     return base + '?text=' + encodeURIComponent(message);
   }
