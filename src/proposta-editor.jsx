@@ -455,8 +455,8 @@ function PropostaSendModal({ record, onClose, onSent }) {
         {!sent ? (
           <>
             <FEField label="Nome do destinatário"><FEInput value={name} onChange={setName} placeholder="Nome completo"/></FEField>
-            <FEField label={channel === 'whatsapp' ? 'WhatsApp (DDI+DDD+número)' : 'E-mail'}>
-              <FEInput value={contact} onChange={setContact} placeholder={channel === 'whatsapp' ? '5511999999999' : 'contato@cliente.com.br'}/>
+            <FEField label={channel === 'whatsapp' ? 'WhatsApp (com DDD)' : 'E-mail'}>
+              <FEInput value={contact} onChange={setContact} placeholder={channel === 'whatsapp' ? '(12) 99200-4047' : 'contato@cliente.com.br'}/>
             </FEField>
             <div className="row gap-2">
               <Button variant={channel === 'whatsapp' ? 'primary' : 'outline'} size="sm" icon="message" onClick={() => setChannel('whatsapp')}>WhatsApp</Button>

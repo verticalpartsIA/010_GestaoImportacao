@@ -81,7 +81,11 @@
   }
   function prettyUrl(token) { return `verticalparts.com.br/assinar/${token}`; }
   function whatsAppHref(phone, message) {
-    const p = (phone || '').replace(/\D/g, '');
+    let p = (phone || '').replace(/\D/g, '');
+    // Número BR sem DDI (DDD + 8/9 dígitos, ex.: 12992004047) — completa com
+    // 55 automaticamente, já que o vendedor normalmente digita só o formato
+    // local, sem o código do país.
+    if (p && (p.length === 10 || p.length === 11)) p = '55' + p;
     const base = p ? 'https://wa.me/' + p : 'https://wa.me/';
     return base + '?text=' + encodeURIComponent(message);
   }
