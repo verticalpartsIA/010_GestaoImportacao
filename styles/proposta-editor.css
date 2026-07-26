@@ -199,6 +199,9 @@
   display: flex; flex-direction: column; align-items: center; gap: 14px;
 }
 .pe-pdf-scroll .pe__preview-pages--overlay .pe__pdf { box-shadow: 0 16px 40px rgba(0,0,0,.4); }
+/* .pe-pdf-scroll já rola e centraliza sozinho — o wrap do zoom não precisa
+   duplicar isso (evita 2 barras de rolagem aninhadas). */
+.pe-pdf-scroll .pe__preview-wrap { flex: none; overflow: visible; padding: 0; }
 
 /* ---- Impressão ----
    Sem isto, "PDF" chamava window.print() e saía a aplicação inteira
@@ -670,9 +673,6 @@ select.pe-input.is-empty {
   color: #29261b;
   overflow: hidden;
 }
-/* No overlay fullscreen (Gerar PDF) a página é lida em tamanho real —
-   bem maior que os 380px "de miniatura" da coluna lateral. */
-.pe__preview-pages--overlay .pe__pdf { max-width: 720px; }
 .pe__pdf-pgnum {
   position: absolute;
   bottom: 12px;

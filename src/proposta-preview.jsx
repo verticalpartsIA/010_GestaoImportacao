@@ -1,10 +1,13 @@
 /* ============================================================
    proposta-preview.jsx — Live PDF preview pages (right column)
    Mirrors filled-in data; uses real uploaded covers.
-   Mesmo padrão da Ficha Técnica: coluna com zoom automático
-   (ResizeObserver) pra caber e ficar legível — a leitura de verdade
-   acontece no overlay "Gerar PDF" (proposta-editor.jsx), que reusa
-   este mesmo componente em modo `overlay` (tamanho real, sem zoom).
+   Cada página (.pe__pdf) é desenhada num tamanho "de projeto" fixo
+   (380px de largura, fontes de ~7-8px) — é a base que faz o conteúdo
+   caber certinho. Pra ficar grande e legível (na coluna lateral OU no
+   overlay "Gerar PDF"), a página inteira é ampliada via `zoom` (que
+   escala texto e espaço na mesma proporção); NÃO esticamos só a
+   largura da caixa, porque aí o texto fica pequeno dentro de uma
+   caixa maior e sobra um vão em branco embaixo do conteúdo.
    ============================================================ */
 
 function PEPreview({ data, eq, overlay }) {
@@ -17,9 +20,11 @@ function PEPreview({ data, eq, overlay }) {
   const previewWrap = React.useRef(null);
   const [scale, setScale] = React.useState(1);
   React.useEffect(() => {
-    if (overlay) return; // overlay captura/imprime em tamanho real, sem zoom
     const el = previewWrap.current; if (!el) return;
-    const ro = new ResizeObserver(() => setScale(Math.max(0.5, Math.min(2.2, (el.clientWidth - 28) / 380))));
+    // Overlay tem bem mais espaço que a coluna lateral — o teto de zoom é
+    // maior (3.2) pra aproveitar isso em vez de ficar do mesmo tamanho.
+    const max = overlay ? 3.2 : 2.2;
+    const ro = new ResizeObserver(() => setScale(Math.max(0.5, Math.min(max, (el.clientWidth - 28) / 380))));
     ro.observe(el);
     return () => ro.disconnect();
   }, [overlay]);
@@ -48,9 +53,15 @@ function PEPreview({ data, eq, overlay }) {
     </>
   );
 
-  if (overlay) {
-    return <div className="pe__preview-pages pe__preview-pages--overlay" data-total={totalPaginas}>{pages}</div>;
-  }
+  const scaled = (
+    <div className="pe__preview-wrap" ref={previewWrap}>
+      <div className="pe__preview-scaler" style={{ zoom: scale }}>
+        <div className={"pe__preview-pages" + (overlay ? " pe__preview-pages--overlay" : "")} data-total={totalPaginas}>{pages}</div>
+      </div>
+    </div>
+  );
+
+  if (overlay) return scaled;
 
   return (
     <div className="pe__preview">
@@ -58,11 +69,7 @@ function PEPreview({ data, eq, overlay }) {
         <h4>Preview da Proposta</h4>
         <Badge variant="yellow">{eqName}</Badge>
       </div>
-      <div className="pe__preview-wrap" ref={previewWrap}>
-        <div className="pe__preview-scaler" style={{ zoom: scale }}>
-          <div className="pe__preview-pages" data-total={totalPaginas}>{pages}</div>
-        </div>
-      </div>
+      {scaled}
     </div>
   );
 }
