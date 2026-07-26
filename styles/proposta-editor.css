@@ -130,6 +130,29 @@
 
 .pe-top__tabs { display: flex; gap: 0; padding: 0 24px; }
 
+/* ---- Herança pelo Nº da Cotação ---- */
+.pe-heranca { display: flex; gap: 8px; align-items: stretch; }
+.pe-heranca .pe-input { max-width: 200px; }
+.pe-heranca__btn {
+  height: 36px; padding: 0 16px;
+  background: #000; color: var(--vp-yellow);
+  border: 0; cursor: pointer;
+  font-family: var(--font-display); font-size: 12px; font-weight: 800;
+  text-transform: uppercase; letter-spacing: .06em;
+  transition: opacity var(--dur-fast) var(--ease-out);
+}
+.pe-heranca__btn:hover:not(:disabled) { opacity: .85; }
+.pe-heranca__btn:disabled { background: var(--vp-gray-200); color: var(--fg3); cursor: not-allowed; }
+.pe-heranca__msg {
+  margin-top: 8px; padding: 8px 10px;
+  font-size: 12px; line-height: 1.45;
+  border-left: 3px solid var(--vp-gray-300);
+  background: var(--vp-gray-50); color: var(--fg2);
+}
+.pe-heranca__msg.is-ok { border-left-color: var(--vp-success); background: var(--vp-success-tint); color: var(--vp-success-ink); }
+.pe-heranca__msg.is-aviso { border-left-color: var(--vp-warning); background: var(--vp-warning-tint); color: var(--vp-warning-ink); }
+.pe-heranca__msg.is-erro { border-left-color: #9f1239; background: #FDE8E8; color: #9f1239; }
+
 .pe__form-end {
   margin: 4px 0 0;
   padding: 14px 0 0;
@@ -137,6 +160,44 @@
   font-size: 11px;
   color: var(--fg3);
   text-align: center;
+}
+
+/* Preview ampliado: cobre o editor pra ler a proposta em tamanho maior */
+.pe__preview.is-ampliado {
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  border-left: 0;
+}
+.pe__preview.is-ampliado .pe__pdf { max-width: 620px; }
+
+/* ---- Impressão ----
+   Sem isto, "PDF" chamava window.print() e saía a aplicação inteira
+   (sidebar, menu, formulário). Agora imprime só as páginas da proposta. */
+@media print {
+  .sidebar, .header, .pe-top, .pe__sidenav, .pe__form,
+  .pe__preview-head, .vpc-bubble, .vpc-panel, .toast-viewport { display: none !important; }
+
+  .pe-shell, .pe, .pe__main { display: block !important; height: auto !important; overflow: visible !important; }
+  .pe__preview {
+    display: block !important;
+    position: static !important;
+    background: #fff !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    border: 0 !important;
+  }
+  .pe__preview-pages { display: block !important; }
+  .pe__pdf {
+    max-width: none !important;
+    width: 100% !important;
+    aspect-ratio: auto !important;
+    box-shadow: none !important;
+    page-break-after: always;
+    break-after: page;
+  }
+  .pe__pdf:last-child { page-break-after: auto; break-after: auto; }
+  @page { size: A4; margin: 12mm; }
 }
 
 /* ---- Responsivo: as 3 colunas fixas espremiam o formulário ---- */

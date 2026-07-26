@@ -7,44 +7,50 @@ function PEPreview({ data, eq }) {
   const eqLabel = eq === "elevador" ? "elevador" : eq === "escada" ? "escada" : "esteira";
   const eqName = eq === "elevador" ? "Elevador" : eq === "escada" ? "Escada Rolante" : "Esteira Rolante";
   const ed = data[eq];
+  // Só o Elevador tem a página de Acabamentos — a contagem acompanha.
+  const totalPaginas = eqLabel === "elevador" ? 7 : 6;
+  const [ampliado, setAmpliado] = React.useState(false);
 
   return (
-    <div className="pe__preview">
+    <div className={"pe__preview" + (ampliado ? " is-ampliado" : "")}>
       <div className="pe__preview-head">
         <h4>Preview da Proposta</h4>
         <div className="row gap-2">
           <Badge variant="yellow">{eqName}</Badge>
-          <Button variant="ghost" size="sm" icon="eye" data-tip="Tela cheia"/>
-          <Button variant="ghost" size="sm" icon="download" data-tip="Gerar PDF"/>
+          <Button variant="ghost" size="sm" icon={ampliado ? "collapse" : "expand"}
+            data-tip={ampliado ? "Reduzir" : "Ampliar"}
+            onClick={() => setAmpliado((v) => !v)}/>
+          <Button variant="ghost" size="sm" icon="download" data-tip="Gerar PDF"
+            onClick={() => { window.toast?.("Abrindo diálogo de impressão / salvar PDF…", "info"); setTimeout(() => window.print(), 200); }}/>
         </div>
       </div>
 
-      <div className="pe__preview-pages">
+      <div className="pe__preview-pages" data-total={totalPaginas}>
         {/* Page 1: Capa */}
-        <PreviewCapa data={data} eq={eqLabel}/>
+        <PreviewCapa data={data} eq={eqLabel} pg={1} total={totalPaginas}/>
 
         {/* Page 2: Cliente + Obra */}
-        <PreviewClienteObra data={data} eq={eqLabel}/>
+        <PreviewClienteObra data={data} eq={eqLabel} pg={2} total={totalPaginas}/>
 
         {/* Page 3: Texto da Proposta */}
-        <PreviewTexto data={data} eq={eqLabel} eqName={eqName}/>
+        <PreviewTexto data={data} eq={eqLabel} eqName={eqName} pg={3} total={totalPaginas}/>
 
         {/* Page 4: Descrição + Especificações */}
-        <PreviewDescricaoEspec data={data} eq={eqLabel}/>
+        <PreviewDescricaoEspec data={data} eq={eqLabel} pg={4} total={totalPaginas}/>
 
-        {eqLabel === "elevador" && <PreviewAcabamentos data={data}/>}
+        {eqLabel === "elevador" && <PreviewAcabamentos data={data} pg={5} total={totalPaginas}/>}
 
         {/* Page final: Valores */}
-        <PreviewValores data={data} eq={eqLabel}/>
+        <PreviewValores data={data} eq={eqLabel} pg={eqLabel === "elevador" ? 6 : 5} total={totalPaginas}/>
 
         {/* Garantia */}
-        <PreviewGarantia data={data} eq={eqLabel}/>
+        <PreviewGarantia data={data} eq={eqLabel} pg={eqLabel === "elevador" ? 7 : 6} total={totalPaginas}/>
       </div>
     </div>
   );
 }
 
-function PreviewCapa({ data, eq }) {
+function PreviewCapa({ data, eq, pg, total }) {
   const v = data.vendedor;
   return (
     <div className="pe__pdf">
@@ -68,16 +74,16 @@ function PreviewCapa({ data, eq }) {
           </div>
         </div>
       </div>
-      <div className="pe__pdf-pgnum">Página 1 de 16</div>
+      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
     </div>
   );
 }
 
-function PreviewClienteObra({ data, eq }) {
+function PreviewClienteObra({ data, eq, pg, total }) {
   const c = data.cliente, o = data.obra;
   return (
     <div className="pe__pdf">
-      <div className="pe__pdf-pgmark">P. 02 · Identificação</div>
+      <div className="pe__pdf-pgmark">P. {String(pg).padStart(2, "0")} · Identificação</div>
       <div className="pe__pdf-inner">
         <div className="pdf-eyebrow">▎ Cliente & Obra</div>
         <h2 className="pdf-h2">Identificação</h2>
@@ -103,16 +109,16 @@ function PreviewClienteObra({ data, eq }) {
           <div><span>Bairro / Cidade / UF</span><b>{[o.bairro, o.cidade, o.uf].filter(Boolean).join(" · ") || "—"}</b></div>
         </div>
       </div>
-      <div className="pe__pdf-pgnum">Página 2 de 16</div>
+      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
     </div>
   );
 }
 
-function PreviewTexto({ data, eq, eqName }) {
+function PreviewTexto({ data, eq, eqName, pg, total }) {
   const ed = data[eq];
   return (
     <div className="pe__pdf">
-      <div className="pe__pdf-pgmark">P. 03 · Apresentação</div>
+      <div className="pe__pdf-pgmark">P. {String(pg).padStart(2, "0")} · Apresentação</div>
       <div className="pe__pdf-inner">
         <div className="pdf-eyebrow">▎ Comercial</div>
         <h2 className="pdf-h2">{eqName}</h2>
@@ -122,18 +128,18 @@ function PreviewTexto({ data, eq, eqName }) {
         <h3 className="pdf-h3">Linha de Modelos</h3>
         {ed.textoModelos ? <p>{ed.textoModelos}</p> : <p style={{ color: "var(--vp-gray-400)", fontStyle: "italic" }}>Descreva a linha do produto neste campo.</p>}
       </div>
-      <div className="pe__pdf-pgnum">Página 3 de 16</div>
+      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
     </div>
   );
 }
 
-function PreviewDescricaoEspec({ data, eq }) {
+function PreviewDescricaoEspec({ data, eq, pg, total }) {
   const ed = data[eq];
   const desc = ed.descricao || [];
   const espec = ed.especificacoes || [];
   return (
     <div className="pe__pdf">
-      <div className="pe__pdf-pgmark">P. 04 · Especificação Técnica</div>
+      <div className="pe__pdf-pgmark">P. {String(pg).padStart(2, "0")} · Especificação Técnica</div>
       <div className="pe__pdf-inner">
         <div className="pdf-eyebrow">▎ Produto</div>
         <h2 className="pdf-h2">Especificação Técnica</h2>
@@ -184,16 +190,16 @@ function PreviewDescricaoEspec({ data, eq }) {
           <p style={{ color: "var(--vp-gray-400)", fontStyle: "italic" }}>Preencha pelo menos uma descrição e uma especificação técnica.</p>
         ) : null}
       </div>
-      <div className="pe__pdf-pgnum">Página 4 de 16</div>
+      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
     </div>
   );
 }
 
-function PreviewAcabamentos({ data }) {
+function PreviewAcabamentos({ data, pg, total }) {
   const a = data.elevador.acabamentos;
   return (
     <div className="pe__pdf">
-      <div className="pe__pdf-pgmark">P. 05 · Acabamentos</div>
+      <div className="pe__pdf-pgmark">P. {String(pg).padStart(2, "0")} · Acabamentos</div>
       <div className="pe__pdf-inner">
         <div className="pdf-eyebrow">▎ Cabine & Pavimento</div>
         <h2 className="pdf-h2">Acabamentos</h2>
@@ -215,12 +221,12 @@ function PreviewAcabamentos({ data }) {
         {a.pavInox ? <p style={{ marginTop: 6 }}><b>Pavimentos inox:</b> {a.pavInox}</p> : null}
         {a.demais ? <><h3 className="pdf-h3">Demais</h3><p>{a.demais}</p></> : null}
       </div>
-      <div className="pe__pdf-pgnum">Página 5 de 16</div>
+      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
     </div>
   );
 }
 
-function PreviewValores({ data, eq }) {
+function PreviewValores({ data, eq, pg, total }) {
   const v = data[eq].valores;
   const parcelas = v.parcelas || [];
   const qtd = parseFloat(v.quantidade) || 0;
@@ -232,7 +238,7 @@ function PreviewValores({ data, eq }) {
 
   return (
     <div className="pe__pdf">
-      <div className="pe__pdf-pgmark">P. 09 · Valores</div>
+      <div className="pe__pdf-pgmark">P. {String(pg).padStart(2, "0")} · Valores</div>
       <div className="pe__pdf-inner">
         <div className="pdf-eyebrow">▎ Comercial</div>
         <h2 className="pdf-h2">Valores e Pagamento</h2>
@@ -282,16 +288,16 @@ function PreviewValores({ data, eq }) {
           Forma de pagamento: <b>{v.forma || "a definir"}</b>
         </p>
       </div>
-      <div className="pe__pdf-pgnum">Página 9 de 16</div>
+      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
     </div>
   );
 }
 
-function PreviewGarantia({ data, eq }) {
+function PreviewGarantia({ data, eq, pg, total }) {
   const g = data[eq].garantia;
   return (
     <div className="pe__pdf">
-      <div className="pe__pdf-pgmark">P. 14 · Garantia</div>
+      <div className="pe__pdf-pgmark">P. {String(pg).padStart(2, "0")} · Garantia</div>
       <div className="pe__pdf-inner">
         <div className="pdf-eyebrow">▎ Jurídico</div>
         <h2 className="pdf-h2">Garantia & Condições</h2>
@@ -306,7 +312,7 @@ function PreviewGarantia({ data, eq }) {
           <span>{data.numero || "VP-2026-XXX"}</span>
         </div>
       </div>
-      <div className="pe__pdf-pgnum">Página 14 de 16</div>
+      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
     </div>
   );
 }
