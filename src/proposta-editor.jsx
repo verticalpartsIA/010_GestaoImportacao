@@ -55,6 +55,46 @@ function makeDefaultProposta() {
       caracteristicas: ["Sistema de tração gearless de alta eficiência energética", "Comando microprocessado MAX-3000 com prioridade de chamadas inteligente"],
       recursos: ["Resgate automático em falta de energia (ARD)", "Comunicação bidirecional integrada à central 24h"],
       infraestrutura: ["Casa de máquinas dimensionada conforme NBR 16858", "Aterramento próprio para o quadro de comando"],
+      // Marketing da linha de produto — igual ao PDF de referência
+      // (Proposta_776_B): texto institucional real da VerticalParts, não
+      // específico de um equipamento, então nasce preenchido (não é dado
+      // que arrisca descrever a unidade errada).
+      beneficios: [
+        "Soluções de última geração para oferecer viagens seguras e confortáveis aos usuários.",
+        "Eficiência energética e respeito ao meio ambiente.",
+        "Componentes de maior durabilidade.",
+        "Novo design atemporal com uma gama de opções exclusivas.",
+      ],
+      diferenciais: [
+        "Piso em 12 mm de resina, modelo FR035",
+        "Segurança em relação ao espelho não ser de vidro e sim de Aço espelhado. (Não corre o risco de acidente com quebra de espelho).",
+        "Escada de acesso ao poço do elevador inclusa no projeto.",
+        "Iluminação da caixa de corrida do elevador inclusa no projeto.",
+      ],
+      caracteristicasEquip: {
+        alimentacao: "Trifásico, 220v – A tensão deverá ser confirmada por ocasião da assinatura do contrato. Na hipótese de não correção da informação, a tensão será considerada como correta e definitiva.",
+        comando: "O comando de última geração e microprocessado garante ao equipamento paradas precisas, aceleração e desaceleração confortável e tudo isso com o máximo em economia de energia.",
+        tracao: "Acionamento Elétrico com cabo de aço ou cinto de tração",
+      },
+      recursosNomeados: [
+        { nome: "Ventiladores de Cabine", desc: "Nossas cabines possuem ventiladores para refrigeração e conforto aos usuários." },
+        { nome: "Sistema de Intercomunicação", desc: "Nossas cabines são equipadas com intercomunicadores, e disponibilizamos interfones para a portaria." },
+        { nome: "Retorno Automático", desc: "Após atender todas as chamadas, o elevador retorna automaticamente ao andar pré-configurado." },
+        { nome: "Despacho de Carro Lotado", desc: "Através de pesadores de carga na cabine, o sistema sabe a quantidade de passageiros e, além de sinalizar em caso de carro lotado para evitar excesso de carga, não para a cabine para chamadas de pavimento, caso a capacidade já esteja acima de 80% quando o elevador estiver em movimento." },
+        { nome: "Resgate Manual Simplificado", desc: "Em caso de falta de energia o equipamento possui um sistema de resgate simplificado através de um botão de acionamento manual (localizado no painel de comando), onde o técnico consegue manobrar a cabine para o pavimento mais próximo e liberar a pessoa retida na cabine." },
+        { nome: "Iluminação de Emergência na Cabine", desc: "Nossas cabines são equipadas com iluminação de emergência na cabine no caso de falta de energia." },
+        { nome: "Cancelamento de Chamadas Falsas", desc: "Caso sejam feitas 3 ou mais chamadas na botoeira de cabine e nenhum passageiro entre ou saia da cabine, o sistema cancela estas chamadas, economizando energia e atendendo melhor o fluxo real de pavimento." },
+        { nome: "Indicação de Posição", desc: "Presente em todas as botoeiras de todos os pavimentos, para maior conforto do usuário." },
+      ],
+      infraestruturaNomeada: [
+        { nome: "Desenhos de Instalação", desc: "Serão fornecidos pela VerticalParts após a contratação. Os desenhos contêm todas as dimensões necessárias para instalação e funcionamento dos elevadores, bem como as cargas aplicadas nas estruturas do edifício." },
+        { nome: "Caixa de Corrida", desc: "Em alvenaria e concreto, segundo as especificações do fabricante." },
+        { nome: "Tensão de Alimentação", desc: "Deverão ser garantidas ainda no processo de montagem, dentro das especificações de projeto e normas brasileiras." },
+      ],
+      // Fotos reais do equipamento (upload) — path no Storage, mesmo
+      // padrão da Ficha Técnica (ver proposta-imagens.js). Nascem vazias:
+      // a página só aparece no PDF se pelo menos uma foto for enviada.
+      fotos: { unidade: null, teto: null, botoeira: null },
       valores: { equipamento: "", quantidade: "1", valorUnit: "", difal: "",
         forma: "40% à vista e 4 parcelas",
         parcelas: [
@@ -64,14 +104,37 @@ function makeDefaultProposta() {
           { desc: "3ª PARCELA", valor: "" },
           { desc: "4ª PARCELA", valor: "" },
         ]},
-      condicoesPagto: { venda: "", impostos: "", ajusteFrete: "", reajuste: "" },
-      ajustes: { preset: "sp", cambio: "", faturamento: "", reajuste: "Reajuste anual conforme IPCA acumulado.",
+      condicoesPagto: {
+        venda: "De acordo com os valores acima, forma de pagamento será à vista e parcelas conforme tabela de preços. A partir da data do pagamento efetivo do sinal, a cada 30 dias, vencem as parcelas subsequentes.",
+        impostos: "A porcentagem de serviços em relação ao preço total pode chegar em até 30%, dependendo de itens, como por exemplo a instalação e frete. Os impostos serão lançados na época de sua exigibilidade, e serão calculados e lançados em função do objeto e/ou serviço fornecido, na forma legal própria.",
+        ajusteFrete: "O valor do frete marítimo considerado nesta proposta é de USD 6.000 por contêiner. Caso o custo do frete marítimo aumente em mais de 8% em relação ao valor inicial estipulado, o comprador será responsável por arcar com o aumento proporcional do custo de frete. O ajuste será realizado com base no valor indicado no Bill of Lading (BL) fornecido pelo armador responsável pelo transporte no momento do embarque.",
+        reajuste: "Em caso de pagamento em prazo superior a 12 (doze) meses, conforme previsão na Lei 10.192/01, o preço do(s) equipamento(s) será reajustado com base nos índices de variação do IGP-DI coluna 2 (Índice Geral de Preços - Disponibilidade Interna), apurado e divulgado pela Fundação Getúlio Vargas, a partir do penúltimo mês anterior ao mês estabelecido para a data-base ajustada no Contrato e o penúltimo mês anterior ao mês estabelecido para o vencimento da prestação, obedecida a periodicidade mínima permitida legalmente. O preço do(s) equipamento(s) não inclui qualquer custo financeiro ou expectativa de inflação.",
+      },
+      ajustes: { preset: "sp", cambio: "", faturamento: "",
+        // Distintos de `cambio` (taxa numérica) e `faturamento` (select) acima —
+        // são os parágrafos jurídicos da página "Ajustes e Impostos" do PDF.
+        clausulaCambial: "O valor total desta proposta está baseado na taxa de câmbio (dólar americano x real) vigente na data da assinatura deste contrato. No caso de variação superior a 10% na taxa de câmbio, será realizado um ajuste proporcional no valor final do contrato.",
+        faturamentoTexto: "Venda de Equipamentos serão faturadas pela empresa VerticalParts – Indústria e Comércio Ltda, com sede na Rua Armandina Braga de Almeida, 383 - Guarulhos – SP - CEP: 07141-003.",
+        reajuste: "Reajuste anual conforme IPCA acumulado.",
         taxasIn: "II, IPI, PIS/COFINS sobre importação. ICMS interestadual.",
-        taxasOut: "ICMS final destino (DIFAL conforme localização da obra). Taxa CREA/CAU." },
+        taxasOut: "ICMS final destino (DIFAL conforme localização da obra). Taxa CREA/CAU.",
+        taxasInclusas: "Inclusos no preço todos os impostos decorrentes de Emissão de Notas Fiscais de Venda/Serviços, Montagem, Instalação dos Equipamentos, bem como ART'S.",
+        taxasExcluidas: "Não estão inclusos no preço taxas de alvará de funcionamento ou outras licenças de qualquer natureza vinculadas às obrigações do COMPRADOR, bem como majorações de taxas e impostos, a exemplo de DIFAL de ICMS e de tributos e encargos incidentes sobre a importação e nacionalização das mercadorias (incluindo, sem limitação, Imposto de Importação (II), IPI, PIS/COFINS-Importação, ICMS-importação, AFRMM e taxa SISCOMEX), havidos após a emissão desta proposta ou da NF de venda.",
+      },
       prazo: { prazo: "prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias", condCovid: "Os prazos poderão ser revisados em caso de eventos extraordinários relacionados a pandemia, escassez global de semicondutores ou bloqueios portuários." },
-      responsabilidades: { tipoServico: "", itemMontagem: "Içamento + posicionamento + comissionamento" },
-      garantia: { garantia: "24 (vinte e quatro) meses contra defeitos de fabricação + 12 meses de serviço técnico preventivo.",
-        condicoes: "Esta proposta é válida por 30 dias a contar da emissão. Quaisquer alterações no escopo deverão ser formalizadas por aditivo contratual. As partes elegem o foro da Comarca de São Paulo." },
+      responsabilidades: {
+        vendedor: ["Entrega dos materiais e equipamentos no local da instalação", "Montagem completa dos elevadores"],
+        comprador: [
+          "Preparo do(s) poço(s) e caixa(s) de acordo com as nossas indicações;",
+          "Execuções de trabalhos de concreto, ponto de içamento, alvenaria, andaimes, conserto nas paredes, recorte de pisos, mármore e granitos;",
+          "Fornecimento de energia elétrica adequada aos nossos serviços e necessidades;",
+          "Ligações de luz e força definitivas para o painel de comando e máquina no pavimento superior de acordo com Desenho Técnico fornecido;",
+          "Licenças das autoridades competentes para montagem e para o funcionamento dos equipamentos.",
+        ],
+      },
+      garantia: { garantia: "Os equipamentos da VerticalParts terão garantia das peças de 90 (noventa) dias a contar da data de assinatura do Termo de Conclusão da Instalação. Esse prazo poderá ser estendido por mais 9 (nove) meses, desde que os equipamentos estejam sob assistência técnica da VerticalParts ou de empresa por esta homologada.",
+        condicoes: "Esta proposta está sujeita a retificação em qualquer tempo. O preço cotado nesta proposta, ou o que vier a ser definido, pressupõe a contratação dos equipamentos consoante as nossas modalidades e condições normais e usuais em vigor na ocasião da negociação. Condições ou exigências especiais demandarão em revisão de preço e adequação à inovação desejada.",
+        horario: "Segunda à Sexta das 08:00 às 17:12hs" },
     },
 
     escada: {
@@ -196,12 +259,13 @@ function getSections(eq) {
   ];
   if (eq === "elevador") {
     return [...common,
-      { id: "descricao", title: "Descrição do Produto", icon: "package", group: "Produto" },
+      { id: "beneficiosDiferenciais", title: "Benefícios e Diferenciais", icon: "star", group: "Apresentação" },
       { id: "espec", title: "Especificações Técnicas", icon: "ruler", group: "Produto" },
       { id: "acabamentos", title: "Acabamentos", icon: "star", group: "Produto" },
       { id: "caracteristicas", title: "Características Principais", icon: "check", group: "Produto" },
       { id: "recursos", title: "Recursos Inclusos", icon: "list", group: "Produto" },
-      { id: "infra", title: "Infraestrutura", icon: "hardhat", group: "Produto" },
+      { id: "infra", title: "Infraestrutura e Instalação", icon: "hardhat", group: "Produto" },
+      { id: "fotos", title: "Fotos do Equipamento", icon: "package", group: "Produto" },
       { id: "valores", title: "Valores e Pagamento", icon: "dollar", group: "Comercial" },
       { id: "condicoesPagto", title: "Condições Gerais de Pagamento", icon: "scale", group: "Comercial" },
       { id: "ajustes", title: "Ajustes, Impostos e Câmbio", icon: "globe", group: "Comercial" },
@@ -230,9 +294,11 @@ function fillFor(data, eq, sectionId) {
   else if (sectionId === "cliente") target = data.cliente;
   else if (sectionId === "obra") target = data.obra;
   else if (sectionId === "texto") target = { a: ed.textoProposta, b: ed.textoModelos };
-  else if (sectionId === "caracteristicas") target = ed.caracteristicas;
-  else if (sectionId === "recursos") target = ed.recursos;
-  else if (sectionId === "infra") target = ed.infraestrutura;
+  else if (sectionId === "beneficiosDiferenciais") target = { b: ed.beneficios, d: ed.diferenciais };
+  else if (sectionId === "caracteristicas") target = ed.caracteristicasEquip || ed.caracteristicas;
+  else if (sectionId === "recursos") target = ed.recursosNomeados || ed.recursos;
+  else if (sectionId === "infra") target = ed.infraestruturaNomeada || ed.infraestrutura;
+  else if (sectionId === "fotos") target = ed.fotos;
   else target = ed[sectionId === "condicoesPagto" ? "condicoesPagto" : sectionId];
   if (!target) return { kind: "", label: "0%" };
   const arr = Array.isArray(target) ? target : Object.values(target);
@@ -681,13 +747,21 @@ function PropostaEditor({ setRoute, subsel }) {
       window.toast?.('Biblioteca de PDF ainda carregando…', 'error');
       return;
     }
-    const paginas = Array.from(document.querySelectorAll('.pe-pdf-overlay .pe__pdf'));
+    const overlayEl = document.querySelector('.pe-pdf-overlay');
+    const paginas = Array.from(overlayEl?.querySelectorAll('.pe__pdf') || []);
     if (!paginas.length) return;
     const safeName = (data.cliente?.nome || data.numero || 'proposta')
       .normalize('NFD').replace(/[̀-ͯ]/g, '')
       .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
     window.toast?.('Gerando PDF…', 'info');
     try {
+      // Fotos do equipamento (upload) só terminam de carregar depois do
+      // primeiro paint — sem isso, html2canvas podia capturar a página
+      // de fotos ainda em branco.
+      const imgs = overlayEl.querySelectorAll('img');
+      await Promise.all(Array.from(imgs).map((img) => img.complete
+        ? Promise.resolve()
+        : new Promise((res) => { img.onload = res; img.onerror = res; setTimeout(res, 5000); })));
       const { jsPDF } = window.jspdf;
       const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pw = 210, ph = 297;
@@ -954,15 +1028,11 @@ function renderSection(sid, eq, data, set, extras) {
     case "acabamentos": return <S_Acabamentos d={data} set={set}/>;
     case "especificidades": return <S_Especificidades d={data} set={set} eq={eq}/>;
 
-    case "caracteristicas":
-      return <S_RepText items={data.elevador.caracteristicas} setItems={(v) => set("elevador.caracteristicas", v)}
-        addLabel="+ Adicionar Característica" placeholder="Ex.: Sistema gearless de alta eficiência energética..."/>;
-    case "recursos":
-      return <S_RepText items={data.elevador.recursos} setItems={(v) => set("elevador.recursos", v)}
-        addLabel="+ Adicionar Recurso" placeholder="Ex.: ARD — resgate automático em falta de energia..."/>;
-    case "infra":
-      return <S_RepText items={data.elevador.infraestrutura} setItems={(v) => set("elevador.infraestrutura", v)}
-        addLabel="+ Adicionar Item de Infraestrutura" placeholder="Ex.: Casa de máquinas conforme NBR 16858..."/>;
+    case "beneficiosDiferenciais": return <S_BeneficiosDiferenciais d={data} set={set}/>;
+    case "caracteristicas": return <S_CaracteristicasEquip d={data} set={set}/>;
+    case "recursos": return <S_RecursosNomeados d={data} set={set}/>;
+    case "infra": return <S_InfraestruturaNomeada d={data} set={set}/>;
+    case "fotos": return <S_FotosEquipamento d={data} set={set}/>;
 
     case "valores": return <S_Valores d={data} set={set} eq={eq}/>;
     case "condicoesPagto": return <S_CondPagamentoElev d={data} set={set}/>;

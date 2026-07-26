@@ -552,6 +552,12 @@ function S_Ajustes({ d, set, eq }) {
         <PEField label="Reajuste" span={eq === "elevador" ? "3" : "2"}><PETextarea rows={2} value={a.reajuste} onChange={u("reajuste")} placeholder="Reajuste anual conforme IPCA acumulado..."/></PEField>
         <PEField label="Taxas e Impostos Inclusos" span="3"><PETextarea rows={2} value={a.taxasIn} onChange={u("taxasIn")} placeholder="II, IPI, PIS/COFINS sobre importação..."/></PEField>
         <PEField label="Taxas e Impostos Exclusos" span="3"><PETextarea rows={2} value={a.taxasOut} onChange={u("taxasOut")} placeholder="ICMS interestadual, taxa de inspeção CREA..."/></PEField>
+        {eq === "elevador" ? <>
+          <PEField label='Cláusula de Reajuste Cambial (página "Ajustes e Impostos")' span="3"><PETextarea rows={3} value={a.clausulaCambial} onChange={u("clausulaCambial")} placeholder="O valor total desta proposta está baseado na taxa de câmbio..."/></PEField>
+          <PEField label='Faturamento (página "Ajustes e Impostos")' span="3"><PETextarea rows={2} value={a.faturamentoTexto} onChange={u("faturamentoTexto")} placeholder="Venda de Equipamentos serão faturadas pela empresa..."/></PEField>
+          <PEField label="Taxas e Impostos Inclusos no Preço" span="3"><PETextarea rows={2} value={a.taxasInclusas} onChange={u("taxasInclusas")} placeholder="Inclusos no preço todos os impostos decorrentes de..."/></PEField>
+          <PEField label="Taxas e Impostos Excluídos do Preço" span="3"><PETextarea rows={2} value={a.taxasExcluidas} onChange={u("taxasExcluidas")} placeholder="Não estão inclusos no preço taxas de alvará..."/></PEField>
+        </> : null}
       </div>
     </>
   );
@@ -570,12 +576,15 @@ function S_PrazoEntrega({ d, set, eq }) {
 
 function S_Responsabilidades({ d, set }) {
   const r = d.elevador.responsabilidades;
-  const u = (k) => (v) => set(`elevador.responsabilidades.${k}`, v);
   return (
-    <div className="pe-grid cols-2">
-      <PEField label="Tipo de Serviço"><PESelect value={r.tipoServico} onChange={u("tipoServico")}/></PEField>
-      <PEField label="Item de Montagem"><PETextInput value={r.itemMontagem} onChange={u("itemMontagem")} placeholder="Içamento + posicionamento + comissionamento"/></PEField>
-    </div>
+    <>
+      <div className="pe-field-label" style={{ marginBottom: 6 }}>A cargo do Vendedor (VerticalParts)</div>
+      <S_RepText items={r.vendedor || []} setItems={(v) => set("elevador.responsabilidades.vendedor", v)}
+        addLabel="+ Adicionar item" placeholder="Ex.: Montagem completa dos elevadores"/>
+      <div className="pe-field-label" style={{ margin: "18px 0 6px" }}>A cargo do Comprador</div>
+      <S_RepText items={r.comprador || []} setItems={(v) => set("elevador.responsabilidades.comprador", v)}
+        addLabel="+ Adicionar item" placeholder="Ex.: Preparo do(s) poço(s) e caixa(s) de acordo com as nossas indicações"/>
+    </>
   );
 }
 
@@ -599,6 +608,7 @@ function S_GarantiaCondicoes({ d, set, eq }) {
     <div className="pe-grid cols-1">
       <PEField label="Garantia"><PETextarea rows={3} value={g.garantia} onChange={u("garantia")} placeholder="24 (vinte e quatro) meses contra defeitos de fabricação + 12 meses de serviço..."/></PEField>
       <PEField label="Condições Gerais"><PETextarea rows={4} value={g.condicoes} onChange={u("condicoes")} placeholder="Esta proposta é válida por 30 dias. Quaisquer alterações no escopo deverão ser formalizadas por aditivo..."/></PEField>
+      {eq === "elevador" ? <PEField label="Horário dos Serviços de Instalação/Montagem"><PETextInput value={g.horario} onChange={u("horario")} placeholder="Segunda à Sexta das 08:00 às 17:12hs"/></PEField> : null}
     </div>
   );
 }
@@ -612,6 +622,117 @@ function S_CondPagamentoElev({ d, set }) {
       <PEField label="Impostos e Serviços"><PETextarea rows={2} value={c.impostos} onChange={u("impostos")} placeholder="Impostos sobre prestação de serviços (ISS) faturados separadamente..."/></PEField>
       <PEField label="Ajuste de Frete Marítimo"><PETextarea rows={2} value={c.ajusteFrete} onChange={u("ajusteFrete")} placeholder="Variação cambial e frete marítimo serão reajustados conforme valor de embarque..."/></PEField>
       <PEField label="Reajuste"><PETextarea rows={2} value={c.reajuste} onChange={u("reajuste")} placeholder="Reajuste anual pelo IPCA acumulado..."/></PEField>
+    </div>
+  );
+}
+
+/* === Marketing do equipamento: Benefícios + Diferenciais (página 5 do PDF) === */
+function S_BeneficiosDiferenciais({ d, set }) {
+  const ed = d.elevador;
+  return (
+    <>
+      <div className="pe-field-label" style={{ marginBottom: 6 }}>Benefícios</div>
+      <S_RepText items={ed.beneficios || []} setItems={(v) => set("elevador.beneficios", v)}
+        addLabel="+ Adicionar benefício" placeholder="Ex.: Eficiência energética e respeito ao meio ambiente."/>
+      <div className="pe-field-label" style={{ margin: "18px 0 6px" }}>Diferenciais em Relação ao Mercado</div>
+      <S_RepText items={ed.diferenciais || []} setItems={(v) => set("elevador.diferenciais", v)}
+        addLabel="+ Adicionar diferencial" placeholder="Ex.: Piso em 12mm de resina, modelo FR035"/>
+    </>
+  );
+}
+
+/* === Características Principais: elétrica / comando / tração === */
+function S_CaracteristicasEquip({ d, set }) {
+  const c = d.elevador.caracteristicasEquip || {};
+  const u = (k) => (v) => set(`elevador.caracteristicasEquip.${k}`, v);
+  return (
+    <div className="pe-grid cols-1">
+      <PEField label="Alimentação Elétrica"><PETextarea rows={2} value={c.alimentacao} onChange={u("alimentacao")} placeholder="Trifásico, 220v..."/></PEField>
+      <PEField label="Sistema de Comando de Controle"><PETextarea rows={2} value={c.comando} onChange={u("comando")} placeholder="O comando de última geração e microprocessado garante..."/></PEField>
+      <PEField label="Máquina de Tração"><PETextarea rows={2} value={c.tracao} onChange={u("tracao")} placeholder="Acionamento Elétrico com cabo de aço ou cinto de tração"/></PEField>
+    </div>
+  );
+}
+
+/* === Item nomeado (nome + descrição) — usado em Recursos Inclusos e
+   Infraestrutura e Instalação === */
+function S_RepNomeDesc({ items, setItems, addLabel }) {
+  const update = (i, k, v) => { const arr = [...items]; arr[i] = { ...arr[i], [k]: v }; setItems(arr); };
+  const add = () => setItems([...items, { nome: "", desc: "" }]);
+  const remove = (i) => setItems(items.filter((_, j) => j !== i));
+  return (
+    <>
+      {items.map((it, i) => (
+        <div key={i} className="pe-grid cols-1" style={{ position: "relative", marginBottom: 10, paddingBottom: 10, borderBottom: "1px dashed var(--border)" }}>
+          <PEField label="Nome"><PETextInput value={it.nome} onChange={(v) => update(i, "nome", v)} placeholder="Ex.: Retorno Automático"/></PEField>
+          <PEField label="Descrição"><PETextarea rows={2} value={it.desc} onChange={(v) => update(i, "desc", v)} placeholder="Descreva o recurso..."/></PEField>
+          <button type="button" onClick={() => remove(i)} className="pe-parcela-row__del"
+            style={{ position: "absolute", top: 0, right: 0, height: 28, width: 28 }}>
+            <Icon.x size={12}/>
+          </button>
+        </div>
+      ))}
+      <PERepAdd label={addLabel} onAdd={add}/>
+    </>
+  );
+}
+
+function S_RecursosNomeados({ d, set }) {
+  return <S_RepNomeDesc items={d.elevador.recursosNomeados || []} setItems={(v) => set("elevador.recursosNomeados", v)} addLabel="+ Adicionar recurso"/>;
+}
+
+function S_InfraestruturaNomeada({ d, set }) {
+  return <S_RepNomeDesc items={d.elevador.infraestruturaNomeada || []} setItems={(v) => set("elevador.infraestruturaNomeada", v)} addLabel="+ Adicionar item"/>;
+}
+
+/* === Fotos do Equipamento (upload — mesmo padrão da Ficha Técnica) === */
+function S_FotosEquipamento({ d, set }) {
+  const fotos = d.elevador.fotos || {};
+  const [uploadingSlot, setUploadingSlot] = React.useState(null);
+  // Bucket privado: o path guardado no data_json não serve de <img src>
+  // direto — precisa resolver uma URL assinada pra mostrar a miniatura.
+  const [thumbs, setThumbs] = React.useState({});
+  const slots = [["unidade", "Unidade (foto geral)"], ["teto", "Teto da Cabine"], ["botoeira", "Botoeira"]];
+
+  React.useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!window.PropostaImagens) return;
+      const entries = await Promise.all(slots.map(async ([slot]) =>
+        [slot, fotos[slot] ? await window.PropostaImagens.signedURL(fotos[slot]) : null]));
+      if (!cancelado) setThumbs(Object.fromEntries(entries));
+    })();
+    return () => { cancelado = true; };
+  }, [fotos.unidade, fotos.teto, fotos.botoeira]);
+
+  const onFile = async (slot, e) => {
+    const file = e.target.files && e.target.files[0]; if (!file) return;
+    setUploadingSlot(slot);
+    try {
+      if (!window.PropostaImagens) throw new Error('Upload de imagens não carregado — recarregue a página.');
+      const { path } = await window.PropostaImagens.compressAndUpload(file, { propostaId: d.numero || 'rascunho', slot });
+      set(`elevador.fotos.${slot}`, path);
+    } catch (err) {
+      window.toast?.('Erro ao enviar foto: ' + (err.message || err), 'error');
+    } finally {
+      setUploadingSlot(null);
+    }
+  };
+
+  return (
+    <div className="pe-grid cols-1">
+      {slots.map(([slot, label]) => (
+        <PEField label={label} key={slot}>
+          <div style={{ display: "flex", gap: 10, alignItems: "center" }}>
+            {thumbs[slot] ? <img src={thumbs[slot]} alt={label} style={{ height: 60, borderRadius: 4, objectFit: "cover" }}/> : null}
+            <input type="file" accept="image/*" disabled={uploadingSlot === slot}
+              onChange={(e) => onFile(slot, e)}/>
+            {uploadingSlot === slot ? <span className="small muted">Enviando…</span> : null}
+            {fotos[slot] ? <Button variant="ghost" size="sm" icon="trash" onClick={() => set(`elevador.fotos.${slot}`, null)}>Remover</Button> : null}
+          </div>
+        </PEField>
+      ))}
+      <p className="small muted" style={{ margin: 0 }}>A página "Fotos do Equipamento" só aparece no PDF se pelo menos uma foto for enviada.</p>
     </div>
   );
 }
