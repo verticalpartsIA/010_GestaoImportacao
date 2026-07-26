@@ -50,5 +50,16 @@
     return id;
   }
 
-  window.MasterIdEngine = { PREFIXO_TIPO, baseId, proximaRevisao, masterId };
+  /* Aceita tanto o nº puro (898) quanto o Master ID completo (VPEL-EL0898,
+     com ou sem sufixo de revisão/ativo) — usado onde o vendedor digita a
+     referência da cotação de cabeça (ex.: herança de proposta). */
+  function parseNumeroCotacao(raw) {
+    const s = String(raw == null ? '' : raw).trim();
+    if (!s) return null;
+    if (/^\d+$/.test(s)) return parseInt(s, 10);
+    const m = s.match(/^[A-Z]+-[A-Z]+(\d+)/i);
+    return m ? parseInt(m[1], 10) : null;
+  }
+
+  window.MasterIdEngine = { PREFIXO_TIPO, baseId, proximaRevisao, masterId, parseNumeroCotacao };
 }());

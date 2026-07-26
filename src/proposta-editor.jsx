@@ -455,8 +455,8 @@ function PropostaSendModal({ record, onClose, onSent }) {
         {!sent ? (
           <>
             <FEField label="Nome do destinatário"><FEInput value={name} onChange={setName} placeholder="Nome completo"/></FEField>
-            <FEField label={channel === 'whatsapp' ? 'WhatsApp (DDI+DDD+número)' : 'E-mail'}>
-              <FEInput value={contact} onChange={setContact} placeholder={channel === 'whatsapp' ? '5511999999999' : 'contato@cliente.com.br'}/>
+            <FEField label={channel === 'whatsapp' ? 'WhatsApp (com DDD)' : 'E-mail'}>
+              <FEInput value={contact} onChange={setContact} placeholder={channel === 'whatsapp' ? '(12) 99200-4047' : 'contato@cliente.com.br'}/>
             </FEField>
             <div className="row gap-2">
               <Button variant={channel === 'whatsapp' ? 'primary' : 'outline'} size="sm" icon="message" onClick={() => setChannel('whatsapp')}>WhatsApp</Button>
@@ -562,7 +562,7 @@ function PropostaEditor({ setRoute, subsel }) {
         // Sem isto a listagem congelava no valor antigo e proposta nova ficava sem valor.
         valor_total: calcularValorTotal(data, eq),
         // Elo persistido com a cotação de origem (herança).
-        numero_cotacao: parseInt(data.numeroCotacao, 10) || null,
+        numero_cotacao: window.MasterIdEngine.parseNumeroCotacao(data.numeroCotacao),
         atualizado_em: new Date().toISOString(),
       };
 

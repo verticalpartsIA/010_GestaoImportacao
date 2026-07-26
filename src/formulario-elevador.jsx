@@ -86,7 +86,7 @@ function FENumeroCotacaoBadge({ numeroCotacao }) {
       color: numeroCotacao != null ? '#FBB039' : '#71717a', fontWeight: 700,
       padding: '6px 12px', borderRadius: 6, fontSize: 13, letterSpacing: '.02em',
     }}>
-      Cotação Nº {numeroCotacao != null ? numeroCotacao : '— (gerado ao salvar)'}
+      Cotação Nº {numeroCotacao != null ? window.MasterIdEngine.baseId('elevador', numeroCotacao) : '— (gerado ao salvar)'}
     </div>
   );
 }
@@ -495,7 +495,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
       let cot = cotacaoDoGrupo(grupo);
       if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, 'elevador');
       const url = store.cotacaoUrl(cot.token);
-      const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${numeroCotacao}` : '';
+      const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.baseId('elevador', numeroCotacao)}` : '';
       const msg = `Solicitação de cotação técnica ${cot.numero_documento}${numeroTxt} — VerticalParts\n` +
         `Segue o link com as especificações da(s) unidade(s) ${grupo.unidades.map((u) => u.identificador).join(', ')} para cotação:\n${url}`;
       if (canal === 'whatsapp') window.open(window.PFStore.whatsAppHref(recipient.telefone, msg), '_blank');
@@ -531,7 +531,7 @@ function FELinkClienteModal({ url, numeroCotacao, header, onClose }) {
   const [telefone, setTelefone] = React.useState(header.telefone || '');
   const [email, setEmail] = React.useState(header.email || '');
 
-  const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${numeroCotacao}` : '';
+  const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.baseId('elevador', numeroCotacao)}` : '';
   const msg = `Olá! Segue o link para preencher os dados do seu elevador${numeroTxt} — VerticalParts:\n${url}\n\n` +
     `Assim que enviar, nossa equipe já recebe os dados automaticamente para preparar a cotação.`;
 

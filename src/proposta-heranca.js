@@ -26,7 +26,8 @@
   async function buscarFontes(numeroCotacao) {
     const c = sb();
     if (!c) throw new Error('Supabase não carregado');
-    const numero = parseInt(numeroCotacao, 10);
+    // Aceita tanto o nº puro (898) quanto o Master ID completo (VPEL-EL0898).
+    const numero = window.MasterIdEngine.parseNumeroCotacao(numeroCotacao);
     if (!numero) throw new Error('Informe um Nº da Cotação válido.');
 
     const { data: formulario, error: errF } = await c

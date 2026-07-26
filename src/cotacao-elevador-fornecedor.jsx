@@ -218,7 +218,7 @@ function CotacaoElevadorFornecedorApp() {
       <div className="co-intro-head">
         <h1>Solicitação de Cotação Técnica · Technical Quotation Request</h1>
         <div className="co-num">
-          {cot.numero_documento}{header.numero_cotacao != null ? ` · Project / Cotação Nº ${header.numero_cotacao}` : ''} · {header.data}
+          {cot.numero_documento}{header.numero_cotacao != null ? ` · Project / Cotação Nº ${window.MasterIdEngine.baseId('elevador', header.numero_cotacao)}` : ''} · {header.data}
         </div>
         {!readOnly && (
           <p className="co-lead">
@@ -242,7 +242,7 @@ function CotacaoElevadorFornecedorApp() {
       <div className="co-block">
         <div className="co-sec-lbl">Dados gerais do projeto / Project data</div>
         <CefSpecTable linhas={[
-          ['Nº da Cotação', 'Project Name', header.numero_cotacao],
+          ['Nº da Cotação', 'Project Name', header.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', header.numero_cotacao) : header.numero_cotacao],
           ['País', 'Country', header.pais],
           ['Norma de projeto', 'Design Standard', header.norma_projeto],
           ['Voltagem — Elevador', 'Main Power', header.tensao_principal],
