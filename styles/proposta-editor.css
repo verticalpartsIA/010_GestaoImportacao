@@ -659,10 +659,15 @@ select.pe-input.is-empty {
   display: flex; flex-direction: column; gap: 14px;
   align-items: center;
 }
+/* Cada "página" tem ALTURA NATURAL (do conteúdo), não mais um retângulo
+   A4 fixo (aspect-ratio) — uma seção curta (ex.: Garantia, Acabamentos)
+   não força mais um vão em branco enorme só pra preencher uma página
+   inteira. No PDF exportado (gerarPdfArquivo, proposta-editor.jsx), várias
+   seções curtas são empacotadas juntas na mesma folha A4 física, e só
+   pula pra próxima folha quando o que falta não cabe mais. */
 .pe__pdf {
   width: 100%;
   max-width: 380px;
-  aspect-ratio: 1 / 1.414;
   background: #fff;
   box-shadow: 0 4px 12px rgba(0,0,0,.15);
   position: relative;
@@ -690,18 +695,17 @@ select.pe-input.is-empty {
   color: var(--fg3);
 }
 
-/* Capa
-   .pe__pdf-capa-img usa height:60% — precisa que o pai tenha altura
-   explícita (100%), senão a % resolve pra 0 e a imagem de capa some
-   (fica um vazio enorme no lugar dela, com o título/grid grudados no topo). */
-.pe__pdf-capa { padding: 0; height: 100%; display: flex; flex-direction: column; }
+/* Capa — a imagem tem proporção própria (aspect-ratio), não depende da
+   altura do pai (que agora é natural/auto, não mais 100% de uma altura
+   fixa) pra calcular sua altura. */
+.pe__pdf-capa { padding: 0; }
 .pe__pdf-capa-img {
-  width: 100%; height: 60%;
+  width: 100%; aspect-ratio: 16 / 10;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
 }
-.pe__pdf-capa-body { padding: 20px 28px 28px; flex: 1; display: flex; flex-direction: column; }
+.pe__pdf-capa-body { padding: 20px 28px 28px; }
 .pe__pdf-capa-title {
   font-family: var(--font-display);
   font-weight: 800;
