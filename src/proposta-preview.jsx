@@ -1,9 +1,9 @@
 /* ============================================================
    proposta-preview.jsx — Live PDF preview pages (right column)
    Mirrors filled-in data; uses real uploaded covers.
-   Cada página (.pe__pdf) é desenhada num tamanho "de projeto" fixo
-   (380px de largura, fontes de ~7-8px) — é a base que faz o conteúdo
-   caber certinho.
+   Cada página (.pe__pdf) é desenhada em tamanho FÍSICO real (210×297mm,
+   igual à Ficha Técnica) — não mais numa largura de "miniatura" — daí a
+   necessidade de encolher (nunca ampliar) pra caber na coluna lateral.
 
    IMPORTANTE: `zoom` só pode ser aplicado em quem NUNCA é capturado por
    html2canvas. Na coluna lateral (nunca capturada) o zoom automático via
@@ -15,6 +15,9 @@
    é a mesma configuração comprovadamente correta da coluna lateral antes
    do zoom entrar, só que centralizada numa tela cheia. */
 
+// 210mm em px a 96dpi (largura "de projeto" real da página — ver .pe__pdf)
+const PE_PAGE_PX = 793.7;
+
 function PEPreview({ data, eq, overlay }) {
   const eqLabel = eq === "elevador" ? "elevador" : eq === "escada" ? "escada" : "esteira";
   const eqName = eq === "elevador" ? "Elevador" : eq === "escada" ? "Escada Rolante" : "Esteira Rolante";
@@ -23,11 +26,12 @@ function PEPreview({ data, eq, overlay }) {
   const totalPaginas = eqLabel === "elevador" ? 7 : 6;
 
   const previewWrap = React.useRef(null);
-  const [scale, setScale] = React.useState(1);
+  const [scale, setScale] = React.useState(0.5);
   React.useEffect(() => {
     if (overlay) return; // overlay é capturado por html2canvas — sem zoom (ver nota acima)
     const el = previewWrap.current; if (!el) return;
-    const ro = new ResizeObserver(() => setScale(Math.max(0.5, Math.min(2.2, (el.clientWidth - 28) / 380))));
+    // Nunca amplia além do tamanho real (max 1) — só encolhe pra caber.
+    const ro = new ResizeObserver(() => setScale(Math.max(0.25, Math.min(1, (el.clientWidth - 28) / PE_PAGE_PX))));
     ro.observe(el);
     return () => ro.disconnect();
   }, [overlay]);
@@ -94,8 +98,8 @@ function PreviewCapa({ data, eq, pg, total }) {
             <dd>&nbsp;</dd>
           </dl>
           <div className="pe__pdf-capa-foot">
-            <span><Icon.message size={6}/> {v.celular || v.fixo || "(11) 2528-6473"}</span>
-            <span><Icon.pin size={6}/> Rua Armandina Braga de Almeida, 383</span>
+            <span><Icon.message size={13}/> {v.celular || v.fixo || "(11) 2528-6473"}</span>
+            <span><Icon.pin size={13}/> Rua Armandina Braga de Almeida, 383</span>
           </div>
         </div>
       </div>
@@ -309,7 +313,7 @@ function PreviewValores({ data, eq, pg, total }) {
           </>
         ) : null}
 
-        <p style={{ marginTop: 6, fontSize: 6.5, color: "var(--fg3)" }}>
+        <p style={{ marginTop: 13, fontSize: 14, color: "var(--fg3)" }}>
           Forma de pagamento: <b>{v.forma || "a definir"}</b>
         </p>
       </div>

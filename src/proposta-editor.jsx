@@ -668,17 +668,14 @@ function PropostaEditor({ setRoute, subsel }) {
     }
   }, [data.numeroCotacao]);
 
-  /* ---- Gerar PDF (overlay em tela cheia, padrão Ficha Técnica) ----
-     Cada seção (Capa, Identificação, Especificação...) tem altura NATURAL
-     (não mais uma A4 inteira fixa — ver .pe__pdf no CSS), então uma seção
-     curta (Garantia, Acabamentos) não teria por que ocupar uma folha
-     inteira sozinha. Capturamos cada seção com html2canvas e EMPACOTAMOS
-     várias seguidas na mesma folha física, só pulando pra próxima quando o
-     que falta não cabe mais — evita o vão em branco que sobrava quando
-     cada seção virava 1 página inteira à força.
-     scale:3 (era 2) — a 1ª versão capturava a 380px "de miniatura" e
-     esticava pra A4 inteira no PDF, o que saía borrado (mais visível na
-     foto da capa); com mais resolução de captura o resultado sai nítido. */
+  /* ---- Gerar PDF (overlay em tela cheia) ----
+     Cada .pe__pdf já nasce em tamanho físico real (210×297mm — ver CSS),
+     então 1 seção = 1 folha A4, sem esticar/distorcer nada — mesmo padrão
+     usado pelo sistema de referência (002_proposta_comercial): captura
+     cada bloco com html2canvas passando width/height explícitos (evita
+     qualquer ambiguidade de layout), scrollIntoView antes de cada captura
+     (garante que o bloco esteja realmente renderizado/visível) e
+     addImage sempre no tamanho cheio da folha (0,0,210,297). */
   const gerarPdfArquivo = React.useCallback(async () => {
     if (!window.html2canvas || !window.jspdf) {
       window.toast?.('Biblioteca de PDF ainda carregando…', 'error');
@@ -692,23 +689,19 @@ function PropostaEditor({ setRoute, subsel }) {
     window.toast?.('Gerando PDF…', 'info');
     try {
       const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
-      const pw = pdf.internal.pageSize.getWidth();
-      const ph = pdf.internal.pageSize.getHeight();
-      let cursorMm = 0;      // quanto da folha atual já foi usado
-      let paginaVazia = true; // a 1ª folha já existe (jsPDF cria ao construir) — só chama addPage() a partir da 2ª
+      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
+      const pw = 210, ph = 297;
       for (let i = 0; i < paginas.length; i++) {
-        const canvas = await window.html2canvas(paginas[i], { scale: 3, useCORS: true, backgroundColor: '#ffffff', logging: false });
-        const alturaMm = (canvas.height / canvas.width) * pw;
-        if (!paginaVazia && cursorMm + alturaMm > ph) {
-          pdf.addPage();
-          cursorMm = 0;
-          paginaVazia = true;
-        }
-        const img = canvas.toDataURL('image/jpeg', 0.97);
-        pdf.addImage(img, 'JPEG', 0, cursorMm, pw, alturaMm, undefined, 'FAST');
-        cursorMm += alturaMm;
-        paginaVazia = false;
+        const el = paginas[i];
+        el.scrollIntoView({ behavior: 'instant', block: 'start' });
+        await new Promise((r) => setTimeout(r, 200));
+        const canvas = await window.html2canvas(el, {
+          scale: 3, useCORS: true, allowTaint: true, backgroundColor: '#ffffff',
+          logging: false, width: el.offsetWidth, height: el.offsetHeight,
+        });
+        const img = canvas.toDataURL('image/jpeg', 0.98);
+        if (i > 0) pdf.addPage();
+        pdf.addImage(img, 'JPEG', 0, 0, pw, ph);
       }
       pdf.save(`Proposta-${safeName}.pdf`);
     } catch (e) {
