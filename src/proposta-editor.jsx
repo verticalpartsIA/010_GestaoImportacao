@@ -405,11 +405,11 @@ function PEChip({ label, value, mono, destaque }) {
    (link público /assinar/:token, WhatsApp ou E-mail). Reaproveita FEField/
    FEInput (formulario-elevador.jsx, já global) pra não duplicar estilo. */
 function PropostaSendModal({ record, onClose, onSent }) {
-  const [channel, setChannel] = React.useState('whatsapp');
-  const [contact, setContact] = React.useState(record.cliente?.telefone || record.cliente?.email || '');
+  const [telefone, setTelefone] = React.useState(record.cliente?.telefone || '');
+  const [email, setEmail] = React.useState(record.cliente?.email || '');
   const [name, setName] = React.useState(record.cliente?.nome || '');
-  const [sent, setSent] = React.useState(false);
-  const [sending, setSending] = React.useState(false);
+  const [sent, setSent] = React.useState(null);
+  const [sendingChannel, setSendingChannel] = React.useState(null);
   const [copied, setCopied] = React.useState(false);
 
   const store = window.PropostaStore;
@@ -425,19 +425,25 @@ function PropostaSendModal({ record, onClose, onSent }) {
     setCopied(true); setTimeout(() => setCopied(false), 1600);
   };
 
-  const handleSend = async () => {
-    if (sending) return;
-    setSending(true);
+  /* Botão de cada canal já dispara o envio na hora — mesmo padrão do
+     FELinkClienteModal/FECotacaoFornecedorModal (formulario-elevador.jsx):
+     sem passo intermediário de "escolher canal" + botão genérico, que
+     confundia o vendedor (parecia só gerar link, mesmo abrindo o
+     WhatsApp por baixo). */
+  const enviar = async (channel) => {
+    if (sendingChannel) return;
+    const contact = channel === 'whatsapp' ? telefone : email;
+    setSendingChannel(channel);
     try {
       await store.markSent(record.id, channel, { name, contact });
       if (channel === 'whatsapp') window.open(store.whatsAppHref(contact, message), '_blank');
       else if (channel === 'email') window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} — VerticalParts`, message), '_blank');
-      setSent(true);
+      setSent(channel);
       onSent && onSent();
     } catch (e) {
       window.toast?.('Erro ao registrar envio: ' + (e.message || e), 'error');
     } finally {
-      setSending(false);
+      setSendingChannel(null);
     }
   };
 
@@ -446,7 +452,7 @@ function PropostaSendModal({ record, onClose, onSent }) {
       footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
       <div className="stack" style={{ gap: 14 }}>
         <p className="small muted" style={{ margin: 0 }}>
-          {sent ? 'A proposta está aguardando a leitura e assinatura do cliente.' : 'Gere o link seguro e escolha o canal de envio — o cliente lê, assina digitalmente e pode baixar sua própria cópia, sem precisar de cadastro.'}
+          {sent ? 'A proposta está aguardando a leitura e assinatura do cliente.' : 'Escolha o canal de envio — o cliente lê, assina digitalmente e pode baixar sua própria cópia, sem precisar de cadastro.'}
         </p>
         <div className="card" style={{ padding: 12 }}>
           <b>{record.numero_documento}</b> <span className="muted">· {record.cliente?.nome || 'Sem cliente'}</span>
@@ -455,24 +461,26 @@ function PropostaSendModal({ record, onClose, onSent }) {
         {!sent ? (
           <>
             <FEField label="Nome do destinatário"><FEInput value={name} onChange={setName} placeholder="Nome completo"/></FEField>
-            <FEField label={channel === 'whatsapp' ? 'WhatsApp (com DDD)' : 'E-mail'}>
-              <FEInput value={contact} onChange={setContact} placeholder={channel === 'whatsapp' ? '(12) 99200-4047' : 'contato@cliente.com.br'}/>
-            </FEField>
-            <div className="row gap-2">
-              <Button variant={channel === 'whatsapp' ? 'primary' : 'outline'} size="sm" icon="message" onClick={() => setChannel('whatsapp')}>WhatsApp</Button>
-              <Button variant={channel === 'email' ? 'primary' : 'outline'} size="sm" icon="mail" onClick={() => setChannel('email')}>E-mail</Button>
-            </div>
+            <FEField label="WhatsApp (com DDD)"><FEInput value={telefone} onChange={setTelefone} placeholder="(12) 99200-4047"/></FEField>
+            <FEField label="E-mail"><FEInput value={email} onChange={setEmail} placeholder="contato@cliente.com.br"/></FEField>
             <div className="row gap-2" style={{ background: 'var(--vp-gray-50)', padding: '8px 10px' }}>
               <code className="mono small" style={{ flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</code>
               <Button variant="ghost" size="sm" icon="copy" onClick={copyLink}>{copied ? 'Copiado ✓' : 'Copiar'}</Button>
             </div>
-            <Button variant="primary" icon="send" disabled={sending || !contact.trim()} onClick={handleSend}>{sending ? 'Enviando…' : 'Enviar e gerar link'}</Button>
+            <div className="stack" style={{ gap: 8 }}>
+              <Button variant="primary" icon="message" disabled={!!sendingChannel || !telefone.trim()} onClick={() => enviar('whatsapp')}>
+                {sendingChannel === 'whatsapp' ? 'Enviando…' : 'Enviar por WhatsApp'}
+              </Button>
+              <Button variant="outline" icon="mail" disabled={!!sendingChannel || !email.trim()} onClick={() => enviar('email')}>
+                {sendingChannel === 'email' ? 'Enviando…' : 'Enviar por E-mail'}
+              </Button>
+            </div>
           </>
         ) : (
           <div className="alert info" style={{ margin: 0 }}>
             <Icon.check/>
             <div>
-              <div className="alert__title">Link enviado</div>
+              <div className="alert__title">{sent === 'whatsapp' ? 'Enviado por WhatsApp' : 'Enviado por e-mail'}</div>
               <div className="alert__sub mono" style={{ fontSize: 12 }}>{url}</div>
             </div>
           </div>
