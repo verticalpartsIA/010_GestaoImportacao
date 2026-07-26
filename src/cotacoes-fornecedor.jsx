@@ -140,7 +140,10 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
             {filtradas.map((c) => (
               <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => { setSubsel(c); setRoute('cotacao-fornecedor-detail'); }}>
                 <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{c.numero_documento}</span></td>
-                <td><span className="mono small">{c.dados_envio?.header?.numero_cotacao ?? c.formularios_elevador?.numero_cotacao ?? '—'}</span></td>
+                <td><span className="mono small">{(() => {
+                  const n = c.dados_envio?.header?.numero_cotacao ?? c.formularios_elevador?.numero_cotacao;
+                  return n != null ? window.MasterIdEngine.baseId('elevador', n) : '—';
+                })()}</span></td>
                 <td>
                   <div className="cell-main">{cfPredioLabel(c)}</div>
                   <div className="cell-sub">{c.formularios_elevador?.local_obra_cidade ? `${c.formularios_elevador.local_obra_cidade}/${c.formularios_elevador.local_obra_estado || ''}` : ''}</div>
@@ -242,7 +245,7 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
         <Card title="Dados enviados">
           <KvBlock label="Fornecedor" value={cot.fornecedor}/>
           <KvBlock label="Categoria" value={cfCategoriaLabel(cot.categoria_produto)}/>
-          <KvBlock label="Nº Cotação (cliente)" value={cot.dados_envio?.header?.numero_cotacao ?? '—'} mono/>
+          <KvBlock label="Nº Cotação (cliente)" value={cot.dados_envio?.header?.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', cot.dados_envio.header.numero_cotacao) : '—'} mono/>
           <KvBlock label="Equipamentos (Master ID)" value={<CfUnidadesMasterId cot={cot}/>}/>
         </Card>
         <Card title="Linha do tempo">
