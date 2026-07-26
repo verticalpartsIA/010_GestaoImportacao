@@ -3,21 +3,155 @@
    Form fields, repeatable blocks, presets, live PDF preview
    ============================================================ */
 
-/* ---- Layout shell ---- */
-.pe {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) 460px;
-  gap: 0;
-  height: calc(100vh - 56px);
-  position: relative;
-  margin: -28px -32px 0;
+/* ---- Layout shell ----
+   O editor ocupa exatamente a altura da área principal: o cabeçalho não
+   rola e só os painéis internos rolam. Antes o corpo era fixo em
+   calc(100vh - 56px) MAIS um cabeçalho de ~165px acima dele, o que
+   estourava a viewport e criava duas barras de rolagem concorrentes. */
+.pe-shell {
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
   background: var(--vp-gray-50);
 }
 
+.pe {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(360px, 440px);
+  gap: 0;
+  position: relative;
+  background: var(--vp-gray-50);
+}
+.pe--no-preview { grid-template-columns: minmax(0, 1fr); }
+
 .pe__main {
   display: grid;
-  grid-template-columns: 220px minmax(0, 1fr);
+  grid-template-columns: 232px minmax(0, 1fr);
   overflow: hidden;
+  min-width: 0;
+}
+
+/* ---- Topbar ---- */
+.pe-top {
+  flex-shrink: 0;
+  background: #fff;
+  border-bottom: 1px solid var(--border);
+}
+.pe-top__crumb {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 24px 0;
+  font-size: 11.5px;
+  color: var(--fg3);
+}
+.pe-top__back {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: none; border: 0; padding: 0;
+  font: inherit; color: var(--fg2); cursor: pointer;
+}
+.pe-top__back:hover { color: var(--fg1); }
+.pe-top__sep { color: var(--vp-gray-300); }
+.pe-top__crumb-cur { color: var(--fg1); font-weight: 600; }
+.pe-top__autosave {
+  display: inline-flex; align-items: center; gap: 6px;
+  font-family: var(--font-mono); font-size: 10px; color: var(--fg3);
+}
+.pe-top__autosave .dot {
+  width: 7px; height: 7px; border-radius: 50%;
+  background: var(--vp-success);
+  animation: pulse-dot 2.5s ease-in-out infinite;
+}
+
+.pe-top__main {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 20px;
+  padding: 8px 24px 12px;
+  flex-wrap: wrap;
+}
+.pe-top__id { min-width: 0; flex: 1; }
+.pe-top__id h1 {
+  margin: 0 0 6px;
+  font-family: var(--font-display);
+  font-size: 24px;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: -.005em;
+  line-height: 1.1;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pe-top__chips { display: flex; flex-wrap: wrap; gap: 6px; align-items: center; }
+.pe-top__actions { display: flex; gap: 8px; align-items: center; flex-shrink: 0; flex-wrap: wrap; }
+.pe-top__ghost {
+  display: inline-flex; align-items: center; gap: 6px;
+  height: 30px; padding: 0 10px;
+  background: none; border: 1px solid transparent;
+  font-size: 12px; color: var(--fg2); cursor: pointer;
+}
+.pe-top__ghost:hover { color: var(--fg1); background: var(--vp-gray-50); border-color: var(--border); }
+
+/* chips de contexto (Nº, Master ID, obra, total) */
+.pe-chip {
+  display: inline-flex; align-items: baseline; gap: 5px;
+  padding: 3px 8px;
+  background: var(--vp-gray-50);
+  border: 1px solid var(--border);
+  max-width: 260px;
+}
+.pe-chip__k {
+  font-size: 9px; font-weight: 800; letter-spacing: .12em;
+  text-transform: uppercase; color: var(--fg3); flex-shrink: 0;
+}
+.pe-chip__v {
+  font-size: 12px; color: var(--fg1); font-weight: 600;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.pe-chip--destaque { background: #000; border-color: #000; }
+.pe-chip--destaque .pe-chip__k { color: rgba(255,255,255,.55); }
+.pe-chip--destaque .pe-chip__v { color: var(--vp-yellow); }
+
+/* status real da proposta */
+.pe-top__status {
+  display: inline-flex; align-items: center;
+  padding: 3px 10px;
+  font-size: 9.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
+  background: var(--vp-gray-100); color: var(--fg2);
+}
+.pe-top__status.is-enviada { background: #E8F0FE; color: #1a4fa0; }
+.pe-top__status.is-visualizada { background: var(--vp-warning-tint); color: var(--vp-warning-ink); }
+.pe-top__status.is-aprovada { background: var(--vp-success-tint); color: var(--vp-success-ink); }
+.pe-top__status.is-recusada,
+.pe-top__status.is-expirada { background: #FDE8E8; color: #9f1239; }
+
+.pe-top__tabs { display: flex; gap: 0; padding: 0 24px; }
+
+.pe__form-end {
+  margin: 4px 0 0;
+  padding: 14px 0 0;
+  border-top: 1px dashed var(--border);
+  font-size: 11px;
+  color: var(--fg3);
+  text-align: center;
+}
+
+/* ---- Responsivo: as 3 colunas fixas espremiam o formulário ---- */
+@media (max-width: 1400px) {
+  .pe { grid-template-columns: minmax(0, 1fr); }
+  .pe__preview { display: none; }
+  /* nessa largura o preview não cabe, então o botão não teria efeito */
+  .pe-top__ghost--preview { display: none; }
+}
+@media (max-width: 1100px) {
+  .pe__main { grid-template-columns: minmax(0, 1fr); }
+  .pe__sidenav { display: none; }
+  .pe__form { padding: 20px 20px 64px; }
+  .pe-top__crumb, .pe-top__main, .pe-top__tabs { padding-left: 16px; padding-right: 16px; }
+  .pe-top__id h1 { font-size: 20px; }
 }
 
 .pe__sidenav {
@@ -77,33 +211,23 @@
 
 .pe__form {
   overflow-y: auto;
-  padding: 24px 32px 96px;
+  /* 96px embaixo era pra folgar a barra de ações fixa que saiu daqui */
+  padding: 20px 28px 48px;
 }
 .pe__form::-webkit-scrollbar { width: 10px; }
 .pe__form::-webkit-scrollbar-thumb { background: var(--vp-gray-300); }
 
 /* ---- Equipment tabs ---- */
-.pe__tabs {
-  display: flex;
-  gap: 0;
-  background: #fff;
-  border-bottom: 1px solid var(--border);
-  position: sticky;
-  top: 0;
-  z-index: 5;
-  margin: -24px -32px 24px;
-  padding: 0 32px;
-}
 .pe__tab {
   display: inline-flex;
   align-items: center;
   gap: 8px;
-  padding: 14px 22px 12px;
+  padding: 10px 18px 9px;
   background: transparent;
   border: 0;
   border-bottom: 3px solid transparent;
   font-family: var(--font-display);
-  font-size: 16px;
+  font-size: 14px;
   font-weight: 800;
   text-transform: uppercase;
   letter-spacing: .02em;
@@ -417,32 +541,6 @@ select.pe-input.is-empty {
 .pe-totais-row.final span { font-size: 11px; font-weight: 800; color: var(--vp-yellow); letter-spacing: .14em; text-transform: uppercase; }
 .pe-totais-row.final b { color: var(--vp-yellow); font-size: 22px; }
 
-/* ---- Action bar (bottom fixed inside editor) ---- */
-.pe__actionbar {
-  position: sticky;
-  bottom: 0;
-  left: 0;
-  background: #fff;
-  border-top: 1px solid var(--border);
-  padding: 12px 32px;
-  display: flex;
-  gap: 10px;
-  align-items: center;
-  margin: 0 -32px;
-  z-index: 4;
-}
-.pe__actionbar .pe__autosave {
-  font-family: var(--font-mono);
-  font-size: 10px;
-  color: var(--fg3);
-  display: flex; align-items: center; gap: 6px;
-}
-.pe__actionbar .pe__autosave .dot {
-  width: 8px; height: 8px;
-  background: var(--vp-success);
-  border-radius: 50%;
-  animation: pulse-dot 2.5s ease-in-out infinite;
-}
 @keyframes pulse-dot { 0%, 100% { opacity: 1; } 50% { opacity: .4; } }
 
 /* ---- PDF live preview panel ---- */
