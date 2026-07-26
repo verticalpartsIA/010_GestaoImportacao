@@ -1,50 +1,67 @@
 /* ============================================================
    proposta-preview.jsx — Live PDF preview pages (right column)
-   Mirrors filled-in data; uses real uploaded covers
+   Mirrors filled-in data; uses real uploaded covers.
+   Mesmo padrão da Ficha Técnica: coluna com zoom automático
+   (ResizeObserver) pra caber e ficar legível — a leitura de verdade
+   acontece no overlay "Gerar PDF" (proposta-editor.jsx), que reusa
+   este mesmo componente em modo `overlay` (tamanho real, sem zoom).
    ============================================================ */
 
-function PEPreview({ data, eq }) {
+function PEPreview({ data, eq, overlay }) {
   const eqLabel = eq === "elevador" ? "elevador" : eq === "escada" ? "escada" : "esteira";
   const eqName = eq === "elevador" ? "Elevador" : eq === "escada" ? "Escada Rolante" : "Esteira Rolante";
   const ed = data[eq];
   // Só o Elevador tem a página de Acabamentos — a contagem acompanha.
   const totalPaginas = eqLabel === "elevador" ? 7 : 6;
-  const [ampliado, setAmpliado] = React.useState(false);
+
+  const previewWrap = React.useRef(null);
+  const [scale, setScale] = React.useState(1);
+  React.useEffect(() => {
+    if (overlay) return; // overlay captura/imprime em tamanho real, sem zoom
+    const el = previewWrap.current; if (!el) return;
+    const ro = new ResizeObserver(() => setScale(Math.max(0.5, Math.min(2.2, (el.clientWidth - 28) / 380))));
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [overlay]);
+
+  const pages = (
+    <>
+      {/* Page 1: Capa */}
+      <PreviewCapa data={data} eq={eqLabel} pg={1} total={totalPaginas}/>
+
+      {/* Page 2: Cliente + Obra */}
+      <PreviewClienteObra data={data} eq={eqLabel} pg={2} total={totalPaginas}/>
+
+      {/* Page 3: Texto da Proposta */}
+      <PreviewTexto data={data} eq={eqLabel} eqName={eqName} pg={3} total={totalPaginas}/>
+
+      {/* Page 4: Descrição + Especificações */}
+      <PreviewDescricaoEspec data={data} eq={eqLabel} pg={4} total={totalPaginas}/>
+
+      {eqLabel === "elevador" && <PreviewAcabamentos data={data} pg={5} total={totalPaginas}/>}
+
+      {/* Page final: Valores */}
+      <PreviewValores data={data} eq={eqLabel} pg={eqLabel === "elevador" ? 6 : 5} total={totalPaginas}/>
+
+      {/* Garantia */}
+      <PreviewGarantia data={data} eq={eqLabel} pg={eqLabel === "elevador" ? 7 : 6} total={totalPaginas}/>
+    </>
+  );
+
+  if (overlay) {
+    return <div className="pe__preview-pages pe__preview-pages--overlay" data-total={totalPaginas}>{pages}</div>;
+  }
 
   return (
-    <div className={"pe__preview" + (ampliado ? " is-ampliado" : "")}>
+    <div className="pe__preview">
       <div className="pe__preview-head">
         <h4>Preview da Proposta</h4>
-        <div className="row gap-2">
-          <Badge variant="yellow">{eqName}</Badge>
-          <Button variant="ghost" size="sm" icon={ampliado ? "collapse" : "expand"}
-            data-tip={ampliado ? "Reduzir" : "Ampliar"}
-            onClick={() => setAmpliado((v) => !v)}/>
-          <Button variant="ghost" size="sm" icon="download" data-tip="Gerar PDF"
-            onClick={() => { window.toast?.("Abrindo diálogo de impressão / salvar PDF…", "info"); setTimeout(() => window.print(), 200); }}/>
-        </div>
+        <Badge variant="yellow">{eqName}</Badge>
       </div>
-
-      <div className="pe__preview-pages" data-total={totalPaginas}>
-        {/* Page 1: Capa */}
-        <PreviewCapa data={data} eq={eqLabel} pg={1} total={totalPaginas}/>
-
-        {/* Page 2: Cliente + Obra */}
-        <PreviewClienteObra data={data} eq={eqLabel} pg={2} total={totalPaginas}/>
-
-        {/* Page 3: Texto da Proposta */}
-        <PreviewTexto data={data} eq={eqLabel} eqName={eqName} pg={3} total={totalPaginas}/>
-
-        {/* Page 4: Descrição + Especificações */}
-        <PreviewDescricaoEspec data={data} eq={eqLabel} pg={4} total={totalPaginas}/>
-
-        {eqLabel === "elevador" && <PreviewAcabamentos data={data} pg={5} total={totalPaginas}/>}
-
-        {/* Page final: Valores */}
-        <PreviewValores data={data} eq={eqLabel} pg={eqLabel === "elevador" ? 6 : 5} total={totalPaginas}/>
-
-        {/* Garantia */}
-        <PreviewGarantia data={data} eq={eqLabel} pg={eqLabel === "elevador" ? 7 : 6} total={totalPaginas}/>
+      <div className="pe__preview-wrap" ref={previewWrap}>
+        <div className="pe__preview-scaler" style={{ zoom: scale }}>
+          <div className="pe__preview-pages" data-total={totalPaginas}>{pages}</div>
+        </div>
       </div>
     </div>
   );

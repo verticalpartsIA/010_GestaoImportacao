@@ -139,7 +139,55 @@
     return token;
   }
 
-  /* Marca como enviado (gera notificação interna). */
+  /* ---------- Publicar = congelar a versão oficial ----------
+     Tira uma cópia imutável do data_json. A página de assinatura passa a
+     mostrar (e o hash da assinatura a cobrir) essa cópia, não o rascunho
+     vivo — assim o cliente não assina algo diferente do que leu. Publicar
+     de novo incrementa a versão. */
+  async function publicar(id) {
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Proposta não encontrada');
+    if (!cur.data_json || !Object.keys(cur.data_json).length) {
+      throw new Error('Salve a proposta antes de publicar.');
+    }
+    const now = new Date().toISOString();
+    const jaPublicada = !!cur.publicado_em;
+    const versao = jaPublicada ? (Number(cur.version) || 1) + 1 : (Number(cur.version) || 1);
+    const log = (cur.log || []).slice();
+    log.push({ status: 'publicada', at: now, meta: { versao } });
+    const patch = {
+      versao_publicada: cur.data_json,
+      publicado_em: now,
+      publicado_por: (window.__VP_USER || {}).email || null,
+      version: versao,
+      log,
+      atualizado_em: now,
+    };
+    const { error } = await c.from('propostas').update(patch).eq('id', id);
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Proposta Comercial',
+      acao: jaPublicada ? `republicou a proposta (v${versao})` : `publicou a proposta (v${versao})`,
+      alvo: cur.numero_documento, alvo_id: cur.id,
+    });
+    return { ...cur, ...patch };
+  }
+
+  /* O que o cliente deve ver: a versão publicada quando existir; senão,
+     o rascunho (compatível com propostas antigas, nunca publicadas). */
+  function conteudoVigente(rec) {
+    if (!rec) return {};
+    return rec.versao_publicada || rec.data_json || {};
+  }
+
+  /* Marca como enviado (gera notificação interna).
+     Primeiro envio publica automaticamente (congela versao_publicada) —
+     assim o cliente sempre lê uma versão congelada, sem exigir que o
+     vendedor lembre de clicar em "Publicar" antes de enviar. Reenvios de
+     uma proposta JÁ publicada não republicam sozinhos: se o vendedor editou
+     depois de publicar, republicar é ação explícita ("Republicar"), pra não
+     trocar silenciosamente o que o cliente vai ler. */
   async function markSent(id, channel, recipient) {
     const c = sb();
     const cur = await getById(id);
@@ -148,10 +196,18 @@
     const expires = new Date(now.getTime() + 7*24*3600*1000);
     const log = (cur.log || []).slice();
     log.push({ status:'enviada', at: now.toISOString(), meta:{ channel } });
+    const primeiraPublicacao = !cur.publicado_em;
+    if (primeiraPublicacao) log.push({ status:'publicada', at: now.toISOString(), meta:{ versao: Number(cur.version) || 1, automatica: true } });
     const patch = {
       status: 'enviada', channel, recipient: recipient || cur.recipient || {},
       sent_at: now.toISOString(), expires_at: expires.toISOString(),
       enviada_em: cur.enviada_em || now.toISOString(),
+      ...(primeiraPublicacao ? {
+        versao_publicada: cur.data_json,
+        publicado_em: now.toISOString(),
+        publicado_por: (window.__VP_USER || {}).email || null,
+        version: Number(cur.version) || 1,
+      } : {}),
       log, atualizado_em: now.toISOString(),
     };
     await c.from('propostas').update(patch).eq('id', id);
@@ -190,12 +246,19 @@
     const ua = navigator.userAgent;
     const device = deviceLabel(ua);
     const now = new Date();
-    const hash = await sha256Hex(JSON.stringify(cur.data_json) + '|' + (sig.signerName || ''));
+    /* O hash cobre EXATAMENTE o que o cliente leu (a versão publicada),
+       não o rascunho vivo — senão editar depois do envio invalidava a
+       correspondência entre documento lido e documento assinado. */
+    const assinado = conteudoVigente(cur);
+    const hash = await sha256Hex(JSON.stringify(assinado) + '|' + (sig.signerName || ''));
     const audit = {
       ...(cur.audit || {}),
       signedAt: now.toISOString(), signIp: ip, signUa: ua, signDevice: device,
       signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data,
       consent: true, hash,
+      // Deixa registrado QUAL versão foi assinada (auditoria).
+      versaoAssinada: cur.publicado_em ? (Number(cur.version) || 1) : null,
+      assinouRascunho: !cur.publicado_em,
     };
     const log = (cur.log || []).slice();
     log.push({ status:'aprovada', at: now.toISOString(), meta:{ ip, ua, hash } });
@@ -227,6 +290,7 @@
     uuid, shortToken, getPublicIP,
     fmtDateTime, signUrl, prettyUrl, whatsAppHref, mailtoHref,
     getById, getByToken, garantirToken,
+    publicar, conteudoVigente,
     markSent, markViewed, markSigned, refuse,
   };
 }());

@@ -445,6 +445,14 @@ function PropostaEditor({ setRoute, subsel }) {
   // Estado da linha no banco (status/valor/token) — o header mostra a
   // situação real da proposta em vez de textos fixos.
   const [meta, setMeta] = React.useState(null);
+  // id real da linha salva — nasce do editId (abrir existente) ou do
+  // retorno do primeiro "Salvar"/"Enviar". "Publicar" precisa dele.
+  const [recordId, setRecordId] = React.useState(editId || null);
+  const [publicando, setPublicando] = React.useState(false);
+  // Overlay fullscreen do PDF (mesmo padrão da Ficha Técnica): a leitura
+  // de verdade e o "Salvar PDF"/"Imprimir" acontecem aqui, em tamanho real —
+  // a coluna lateral é só um preview em miniatura.
+  const [pdfOverlay, setPdfOverlay] = React.useState(false);
   // Preview ocupa 460px fixos; em telas menores ele espremia o formulário.
   // Agora é alternável e a escolha persiste.
   const [showPreview, setShowPreview] = React.useState(() => {
@@ -519,11 +527,13 @@ function PropostaEditor({ setRoute, subsel }) {
         const { data: row, error } = await window.__VP_SB.sb
           .from('propostas').update(payload).eq('id', existing.id).select('id, token').single();
         if (error) throw error;
+        setRecordId(row.id);
         return row;
       } else {
         const { data: row, error } = await window.__VP_SB.sb
           .from('propostas').insert([{ ...payload, status: 'rascunho' }]).select('id, token').single();
         if (error) throw error;
+        setRecordId(row.id);
         return row;
       }
     } catch (e) {
@@ -533,6 +543,34 @@ function PropostaEditor({ setRoute, subsel }) {
       return { erro: e.message || String(e) };
     }
   }, [data, eq, editId]);
+
+  /* ---- Publicar = congelar a versão oficial (ver proposta-store.js) ----
+     Salva antes se ainda não existir linha no banco. O primeiro envio já
+     publica sozinho (ver markSent) — este botão serve pra publicar antes de
+     enviar, ou pra REpublicar depois de editar uma proposta já enviada. */
+  const publicar = React.useCallback(async () => {
+    if (publicando || !window.PropostaStore) return;
+    setPublicando(true);
+    try {
+      let id = recordId;
+      if (!id) {
+        window.toast?.('Salvando proposta antes de publicar…', 'info');
+        const salvo = await saveToSupabase();
+        if (!salvo || salvo.erro) {
+          window.toast?.('❌ Não foi possível salvar: ' + ((salvo && salvo.erro) || 'erro desconhecido'), 'error');
+          return;
+        }
+        id = salvo.id;
+      }
+      const updated = await window.PropostaStore.publicar(id);
+      setMeta((m) => ({ ...(m || {}), publicado_em: updated.publicado_em, version: updated.version, publicado_por: updated.publicado_por }));
+      window.toast?.(`✓ Versão oficial publicada (v${updated.version})`, 'success');
+    } catch (e) {
+      window.toast?.('❌ ' + (e.message || String(e)), 'error');
+    } finally {
+      setPublicando(false);
+    }
+  }, [publicando, recordId, saveToSupabase]);
 
   // Salva e abre o modal de envio por assinatura digital — gera o link
   // público (/assinar/:token) igual ao Contrato Instalador/Venda, em vez de
@@ -567,7 +605,7 @@ function PropostaEditor({ setRoute, subsel }) {
     let cancelado = false;
     setLoadingExisting(true);
     window.__VP_SB.sb.from('propostas')
-      .select('proposal_type, data_json, status, numero_documento, master_id, valor_total, token, titulo, atualizado_em')
+      .select('proposal_type, data_json, status, numero_documento, master_id, valor_total, token, titulo, atualizado_em, publicado_em, publicado_por, version')
       .eq('id', editId).maybeSingle()
       .then(({ data: row }) => {
         if (cancelado || !row) return;
@@ -585,6 +623,7 @@ function PropostaEditor({ setRoute, subsel }) {
           status: row.status, numero_documento: row.numero_documento,
           master_id: row.master_id, valor_total: row.valor_total,
           token: row.token, atualizado_em: row.atualizado_em,
+          publicado_em: row.publicado_em, publicado_por: row.publicado_por, version: row.version,
         });
       })
       .finally(() => { if (!cancelado) setLoadingExisting(false); });
@@ -629,18 +668,50 @@ function PropostaEditor({ setRoute, subsel }) {
     }
   }, [data.numeroCotacao]);
 
-  /* O PDF sai das páginas do preview (regras @media print). Se o preview
-     estiver oculto ele nem existe no DOM, então a impressão sairia vazia —
-     por isso garantimos que esteja montado antes de chamar print(). */
-  const imprimirPDF = React.useCallback(() => {
-    window.toast?.("Abrindo diálogo de impressão / salvar PDF…", "info");
-    if (!showPreview) {
-      setShowPreview(true);
-      setTimeout(() => window.print(), 400);
-    } else {
-      setTimeout(() => window.print(), 200);
+  /* ---- Gerar PDF (overlay em tela cheia, padrão Ficha Técnica) ----
+     "Salvar PDF": cada página do preview já é um bloco discreto (Capa,
+     Identificação, Especificação...), então captura 1 canvas por página via
+     html2canvas e monta um PDF A4 retrato — sem precisar do algoritmo de
+     paginação por átomos da Ficha (lá o documento é um fluxo único; aqui
+     já são páginas fixas). "Imprimir" reaproveita o @media print existente. */
+  const gerarPdfArquivo = React.useCallback(async () => {
+    if (!window.html2canvas || !window.jspdf) {
+      window.toast?.('Biblioteca de PDF ainda carregando…', 'error');
+      return;
     }
-  }, [showPreview]);
+    const paginas = Array.from(document.querySelectorAll('.pe-pdf-overlay .pe__pdf'));
+    if (!paginas.length) return;
+    const safeName = (data.cliente?.nome || data.numero || 'proposta')
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
+    window.toast?.('Gerando PDF…', 'info');
+    try {
+      const { jsPDF } = window.jspdf;
+      const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
+      const pw = pdf.internal.pageSize.getWidth();
+      const ph = pdf.internal.pageSize.getHeight();
+      for (let i = 0; i < paginas.length; i++) {
+        const canvas = await window.html2canvas(paginas[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+        const img = canvas.toDataURL('image/jpeg', 0.97);
+        if (i > 0) pdf.addPage();
+        pdf.addImage(img, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
+      }
+      pdf.save(`Proposta-${safeName}.pdf`);
+    } catch (e) {
+      console.error('PDF error', e);
+      window.toast?.('Erro ao gerar PDF: ' + (e.message || e), 'error');
+    }
+  }, [data]);
+
+  const imprimirOverlay = React.useCallback(() => {
+    let inj = document.getElementById('__pe-print-page');
+    if (inj) inj.remove();
+    inj = document.createElement('style');
+    inj.id = '__pe-print-page';
+    inj.textContent = '@page { size: A4; margin: 0; }';
+    document.head.appendChild(inj);
+    setTimeout(() => window.print(), 60);
+  }, []);
 
   const resetProposal = () => {
     if (confirm("Descartar todas as alterações e reiniciar a proposta?")) {
@@ -721,6 +792,11 @@ function PropostaEditor({ setRoute, subsel }) {
               <span className={"pe-top__status is-" + (meta?.status || "rascunho")}>
                 {PE_STATUS_LABEL[meta?.status] || "Rascunho"}
               </span>
+              {meta?.publicado_em ? (
+                <span className="pe-top__publicado" title="Versão que o cliente lê e assina — editar depois não muda o que já foi publicado">
+                  <Icon.check size={11}/> Publicado {window.PropostaStore ? window.PropostaStore.fmtDateTime(meta.publicado_em) : ""} · v{meta.version || 1}
+                </span>
+              ) : null}
             </div>
           </div>
 
@@ -732,7 +808,12 @@ function PropostaEditor({ setRoute, subsel }) {
             <button className="pe-top__ghost" onClick={resetProposal} title="Descartar e recomeçar">
               <Icon.copy size={14}/> Reiniciar
             </button>
-            <Button variant="outline" size="sm" icon="download" onClick={imprimirPDF}>PDF</Button>
+            <Button variant="outline" size="sm" icon="upload" disabled={publicando}
+              title="Congela esta versão como a oficial — é o que o cliente vai ler e assinar"
+              onClick={publicar}>
+              {publicando ? "Publicando…" : (meta?.publicado_em ? "Republicar" : "Publicar")}
+            </Button>
+            <Button variant="outline" size="sm" icon="download" onClick={() => setPdfOverlay(true)}>Gerar PDF</Button>
             <Button variant="secondary" size="sm" icon="check" onClick={async () => {
               window.toast("Salvando proposta...", "info");
               const salvo = await saveToSupabase();
@@ -827,6 +908,24 @@ function PropostaEditor({ setRoute, subsel }) {
       {sendModal && (
         <PropostaSendModal record={sendModal} onClose={() => setSendModal(null)}
           onSent={() => window.toast?.('✓ Proposta enviada — o cliente já pode ler e assinar pelo link.', 'success')}/>
+      )}
+
+      {/* Overlay fullscreen do PDF — mesmo padrão da Ficha Técnica */}
+      {pdfOverlay && ReactDOM.createPortal(
+        <div className="pe-pdf-overlay" onClick={(e) => { if (e.target.classList.contains('pe-pdf-overlay')) setPdfOverlay(false); }}>
+          <div className="pe-pdf-bar">
+            <span>Proposta — {data.cliente?.nome || data.numero || 'Nova proposta'}</span>
+            <div className="pe-pdf-actions">
+              <Button variant="primary" size="sm" icon="download" onClick={gerarPdfArquivo}>Salvar PDF</Button>
+              <Button variant="outline" size="sm" icon="print" onClick={imprimirOverlay}>Imprimir</Button>
+              <Button variant="ghost" size="sm" onClick={() => setPdfOverlay(false)}>Fechar</Button>
+            </div>
+          </div>
+          <div className="pe-pdf-scroll">
+            <PEPreview data={data} eq={eq} overlay/>
+          </div>
+        </div>,
+        document.body
       )}
     </div>
   );

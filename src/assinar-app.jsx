@@ -157,7 +157,7 @@ function SgApp() {
   const doc = _sgUM(() => {
     if (!source) return null;
     const rec = source.rec;
-    if (source.kind === 'proposta') return null; // PEPreview renderiza direto de rec.data_json/proposal_type
+    if (source.kind === 'proposta') return null; // PEPreview renderiza a versão publicada (ver conteudoVigente)
     if (source.kind === 'instalador') {
       return window.CI.buildContract(rec.form_state, rec.numero_documento);
     }
@@ -186,7 +186,7 @@ function SgApp() {
     const defaultName = source.kind === 'instalador'
       ? (rec.responsavel_nome || rec.contratada_nome)
       : source.kind === 'proposta'
-      ? (rec.data_json && rec.data_json.cliente && rec.data_json.cliente.nome)
+      ? ((window.PropostaStore.conteudoVigente(rec).cliente || {}).nome)
       : (rec.responsavel_nome || rec.comprador_razao_social);
     const sig = sigMode === 'draw'
       ? { type: 'draw', data: drawData, signerName: defaultName }
@@ -279,12 +279,13 @@ function SgApp() {
   /* Resumo do card de topo varia por tipo */
   const isInstalador = source.kind === 'instalador';
   const isProposta = source.kind === 'proposta';
-  const djCliente = isProposta ? ((rec.data_json && rec.data_json.cliente) || {}) : {};
+  const djVigente = isProposta ? window.PropostaStore.conteudoVigente(rec) : {};
+  const djCliente = (djVigente && djVigente.cliente) || {};
   const counterpartyName = isInstalador ? rec.contratada_nome : isProposta ? djCliente.nome : rec.comprador_razao_social;
   const counterpartyLabel = isInstalador ? 'Contratada' : isProposta ? 'Cliente' : 'Comprador';
   const titulo = isProposta ? (rec.titulo || rec.numero_documento) : rec.titulo;
   const objetoResumo = isProposta
-    ? ((rec.data_json && rec.data_json.elevador && rec.data_json.elevador.valores && rec.data_json.elevador.valores.equipamento) || 'Proposta comercial')
+    ? (((djVigente.elevador || {}).valores || {}).equipamento || 'Proposta comercial')
     : rec.objeto_resumo;
   const valorFmt = isInstalador
     ? (rec.valor_total ? 'R$ ' + window.CI.fmtMoeda(rec.valor_total) : '—')
@@ -321,7 +322,7 @@ function SgApp() {
       <div className="ci-doc-viewer">
         <div className="ci-doc-viewer-scroll" ref={viewerRef} onScroll={onScroll}>
           {isProposta
-            ? <window.PEPreview data={rec.data_json || {}} eq={rec.proposal_type || 'elevador'}/>
+            ? <window.PEPreview data={window.PropostaStore.conteudoVigente(rec)} eq={rec.proposal_type || 'elevador'}/>
             : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
         </div>
         <div className={'ci-scroll-hint' + (scrolledEnd ? ' hidden' : '')}>↓ Role até o fim para habilitar a assinatura</div>
