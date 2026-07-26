@@ -134,7 +134,16 @@ function makeDefaultProposta() {
 function ehPropostaSchemaLegado(dj) {
   return !!(dj && dj.client && !dj.cliente);
 }
-function converterPropostaLegado(dj) {
+/* O gerador antigo gravava `client.name` vazio — o nome real do cliente só
+   sobreviveu na coluna `titulo` da linha, no formato "<Cliente> - <Equipamento>".
+   Recuperamos daí (tirando só o sufixo de equipamento) pra proposta antiga
+   não abrir como "Sem cliente". */
+function clienteDoTitulo(titulo) {
+  if (!titulo) return '';
+  return String(titulo).replace(/\s*-\s*(Elevador|Escada Rolante|Esteira Rolante)\s*$/i, '').trim();
+}
+
+function converterPropostaLegado(dj, titulo) {
   const cli = dj.client || {};
   const obra = dj.elevatorWork || dj.work || {};
   const mapUnidade = (u, prefixo) => ({
@@ -151,7 +160,7 @@ function converterPropostaLegado(dj) {
   return {
     numero: dj.number || '',
     cliente: {
-      nome: cli.name || '', cnpj: cli.cnpj || '', responsavel: cli.contactPerson || '',
+      nome: cli.name || clienteDoTitulo(titulo), cnpj: cli.cnpj || '', responsavel: cli.contactPerson || '',
       endereco: cli.address || '', numero: '', bairro: '', cidade: cli.city || '', uf: cli.state || '', cep: cli.zip || '',
       email: cli.email || '', telefone: cli.phone || '',
     },
@@ -270,6 +279,42 @@ function deepMergeProposta(base, prefill) {
   return out;
 }
 
+/* ---- Apoio ao cabeçalho do editor ---- */
+const PE_STATUS_LABEL = {
+  rascunho: 'Rascunho', enviada: 'Enviada', visualizada: 'Visualizada pelo cliente',
+  aprovada: 'Assinada', recusada: 'Recusada', expirada: 'Expirada', cancelada: 'Cancelada',
+};
+
+function tempoRelativo(ts) {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
+  if (s < 45) return 'agora';
+  const m = Math.floor(s / 60);
+  if (m < 60) return `há ${m} min`;
+  const h = Math.floor(m / 60);
+  if (h < 24) return `há ${h}h`;
+  return `há ${Math.floor(h / 24)}d`;
+}
+
+/* Total da proposta a partir do que está no formulário (preço unitário ×
+   quantidade da aba ativa) — o mesmo número que o cliente vê no PDF. */
+function fmtValorProposta(data, eq) {
+  const v = (data[eq] && data[eq].valores) || {};
+  const unit = Number(String(v.valorUnit || '').replace(/\./g, '').replace(',', '.')) || 0;
+  const qtd = Number(v.quantidade) || 1;
+  const total = unit * qtd;
+  if (!total) return '—';
+  return total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+}
+
+function PEChip({ label, value, mono, destaque }) {
+  return (
+    <span className={"pe-chip" + (destaque ? " pe-chip--destaque" : "")}>
+      <span className="pe-chip__k">{label}</span>
+      <span className={"pe-chip__v" + (mono ? " mono" : "")}>{value}</span>
+    </span>
+  );
+}
+
 /* Envio por assinatura digital — mesmo padrão do Contrato Instalador/Venda
    (link público /assinar/:token, WhatsApp ou E-mail). Reaproveita FEField/
    FEInput (formulario-elevador.jsx, já global) pra não duplicar estilo. */
@@ -372,7 +417,25 @@ function PropostaEditor({ setRoute, subsel }) {
   const [collapsed, setCollapsed] = React.useState({});
   const [savedAt, setSavedAt] = React.useState(Date.now());
   const [sendModal, setSendModal] = React.useState(null);
+  // Estado da linha no banco (status/valor/token) — o header mostra a
+  // situação real da proposta em vez de textos fixos.
+  const [meta, setMeta] = React.useState(null);
+  // Preview ocupa 460px fixos; em telas menores ele espremia o formulário.
+  // Agora é alternável e a escolha persiste.
+  const [showPreview, setShowPreview] = React.useState(() => {
+    try { return localStorage.getItem("vpprd.proposta-preview") !== "0"; } catch (e) { return true; }
+  });
+  // Faz o "salvo há Xs" andar sozinho (antes só atualizava a cada tecla).
+  const [, forceTick] = React.useState(0);
   const formRef = React.useRef(null);
+
+  React.useEffect(() => {
+    const t = setInterval(() => forceTick((n) => n + 1), 15000);
+    return () => clearInterval(t);
+  }, []);
+  React.useEffect(() => {
+    try { localStorage.setItem("vpprd.proposta-preview", showPreview ? "1" : "0"); } catch (e) {}
+  }, [showPreview]);
 
   // Save to Supabase
   // SSO / portas abertas: a identidade vem do vpsistema (window.__VP_USER),
@@ -465,15 +528,22 @@ function PropostaEditor({ setRoute, subsel }) {
     if (!editId || !window.__VP_SB?.sb) return;
     let cancelado = false;
     setLoadingExisting(true);
-    window.__VP_SB.sb.from('propostas').select('proposal_type, data_json').eq('id', editId).maybeSingle()
+    window.__VP_SB.sb.from('propostas')
+      .select('proposal_type, data_json, status, numero_documento, master_id, valor_total, token, titulo, atualizado_em')
+      .eq('id', editId).maybeSingle()
       .then(({ data: row }) => {
         if (cancelado || !row) return;
         const dj = row.data_json || {};
         const carregado = ehPropostaSchemaLegado(dj)
-          ? deepMergeProposta(makeDefaultProposta(), converterPropostaLegado(dj))
+          ? deepMergeProposta(makeDefaultProposta(), converterPropostaLegado(dj, row.titulo))
           : (row.data_json || makeDefaultProposta());
         setData(carregado);
         setEq(row.proposal_type || 'elevador');
+        setMeta({
+          status: row.status, numero_documento: row.numero_documento,
+          master_id: row.master_id, valor_total: row.valor_total,
+          token: row.token, atualizado_em: row.atualizado_em,
+        });
       })
       .finally(() => { if (!cancelado) setLoadingExisting(false); });
     return () => { cancelado = true; };
@@ -536,59 +606,73 @@ function PropostaEditor({ setRoute, subsel }) {
   }
 
   return (
-    <div className="page fade-in" style={{ padding: 0, maxWidth: "none" }}>
-      {/* Header bar */}
-      <div style={{ padding: "20px 32px 16px", background: "#fff", borderBottom: "1px solid var(--border)" }}>
-        <div className="row" style={{ marginBottom: 8 }}>
-          <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute("propostas")}>Voltar para Propostas</Button>
-          <div className="spacer" style={{ flex: 1 }}/>
-          <div className="row gap-3" style={{ fontSize: 11, fontFamily: "var(--font-mono)", color: "var(--fg3)" }}>
-            <span>Última edição: agora</span>
-            <span style={{ color: "var(--vp-success)" }}>● Salvamento automático ativo</span>
-          </div>
+    <div className="pe-shell fade-in">
+      {/* ---- Topbar: identidade + situação real + ações (sem duplicação) ---- */}
+      <header className="pe-top">
+        <div className="pe-top__crumb">
+          <button className="pe-top__back" onClick={() => setRoute("propostas")}>
+            <Icon.chevLeft size={14}/> Propostas
+          </button>
+          <span className="pe-top__sep">/</span>
+          <span className="pe-top__crumb-cur">{data.numero || "Nova proposta"}</span>
+          <div style={{ flex: 1 }}/>
+          <span className="pe-top__autosave" title="Rascunho salvo automaticamente neste navegador">
+            <span className="dot"/> rascunho salvo {tempoRelativo(savedAt)}
+          </span>
         </div>
-        <div className="row sb">
-          <div>
-            <div className="page-head__eyebrow" style={{ marginBottom: 4 }}>
-              <span className="vp-rule"/>
-              Editor de Proposta
-            </div>
-            <h1 style={{ margin: 0, fontFamily: "var(--font-display)", fontSize: 26, fontWeight: 800, textTransform: "uppercase" }}>
-              {data.numero || "Nova Proposta"}
-              <span style={{ marginLeft: 12, fontSize: 14, color: "var(--fg3)", textTransform: "none", fontFamily: "var(--font-mono)", fontWeight: 500 }}>
-                {data.cliente.nome || "Sem cliente"} · {data.obra.nome || "Sem obra"}
+
+        <div className="pe-top__main">
+          <div className="pe-top__id">
+            <h1>{data.cliente.nome || "Sem cliente"}</h1>
+            <div className="pe-top__chips">
+              <PEChip label="Nº" value={data.numero || "—"} mono/>
+              {data.masterId && <PEChip label="Master ID" value={data.masterId} mono/>}
+              <PEChip label="Obra" value={data.obra.nome || data.obra.cidade || "—"}/>
+              <PEChip label="Total" value={fmtValorProposta(data, eq)} mono destaque/>
+              <span className={"pe-top__status is-" + (meta?.status || "rascunho")}>
+                {PE_STATUS_LABEL[meta?.status] || "Rascunho"}
               </span>
-            </h1>
-            {data.masterId && (
-              <div className="mono small muted" style={{ marginTop: 4 }}>Master ID {data.masterId}</div>
-            )}
+            </div>
           </div>
-          <div className="row gap-2">
-            <Button variant="ghost" size="sm" icon="copy" onClick={resetProposal}>Reiniciar</Button>
-            <Button variant="outline" size="sm" icon="eye" onClick={() => window.print()}>Visualizar</Button>
-            <Button variant="outline" size="sm" icon="download" onClick={() => { window.toast("Abrindo diálogo de impressão / salvar PDF…", "info"); setTimeout(() => window.print(), 200); }}>Gerar PDF</Button>
+
+          <div className="pe-top__actions">
+            <button className="pe-top__ghost pe-top__ghost--preview" onClick={() => setShowPreview((v) => !v)}
+              title={showPreview ? "Ocultar pré-visualização" : "Mostrar pré-visualização"}>
+              <Icon.eye size={14}/> {showPreview ? "Ocultar preview" : "Ver preview"}
+            </button>
+            <button className="pe-top__ghost" onClick={resetProposal} title="Descartar e recomeçar">
+              <Icon.copy size={14}/> Reiniciar
+            </button>
+            <Button variant="outline" size="sm" icon="download"
+              onClick={() => { window.toast("Abrindo diálogo de impressão / salvar PDF…", "info"); setTimeout(() => window.print(), 200); }}>PDF</Button>
+            <Button variant="secondary" size="sm" icon="check" onClick={async () => {
+              window.toast("Salvando proposta...", "info");
+              const salvo = await saveToSupabase();
+              setSavedAt(Date.now());
+              window.toast(salvo ? "✓ Proposta salva" : "⚠️ Salva localmente (preencha o cliente para salvar no sistema)", salvo ? "success" : "warning");
+            }}>Salvar</Button>
             <Button variant="primary" size="sm" icon="send" onClick={abrirEnvio}>Enviar p/ Cliente</Button>
           </div>
         </div>
 
-        {/* Equipment tabs */}
-        <div style={{ display: "flex", gap: 0, marginTop: 14, marginBottom: -16 }}>
+        {/* Abas de equipamento */}
+        <nav className="pe-top__tabs">
           {[
             { id: "elevador", label: "Elevador", icon: "building", sub: "PASSAGEIROS · CARGA" },
             { id: "escada", label: "Escada Rolante", icon: "layers", sub: "30° · 35°" },
             { id: "esteira", label: "Esteira Rolante", icon: "package", sub: "MALL · AIRPORT" },
           ].map(t => (
             <button key={t.id} className={"pe__tab " + (eq === t.id ? "is-active" : "")} onClick={() => setEq(t.id)}>
-              {React.createElement(Icon[t.icon] || Icon.bolt, { size: 18 })}
+              {React.createElement(Icon[t.icon] || Icon.bolt, { size: 16 })}
               <span>{t.label}</span>
               <span className="pe__tab-sub">{t.sub}</span>
             </button>
           ))}
-        </div>
-      </div>
+        </nav>
+      </header>
 
       {/* Body */}
-      <div className="pe">
+      <div className={"pe" + (showPreview ? "" : " pe--no-preview")}>
         <div className="pe__main">
           {/* Sidenav */}
           <nav className="pe__sidenav">
@@ -641,28 +725,14 @@ function PropostaEditor({ setRoute, subsel }) {
               );
             })}
 
-            <div className="pe__actionbar">
-              <span className="pe__autosave"><span className="dot"/> Salvo automaticamente · {Math.max(0, Math.floor((Date.now() - savedAt) / 1000))}s atrás</span>
-              <div className="spacer" style={{ flex: 1 }}/>
-              <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute("propostas")}>Voltar</Button>
-              <Button variant="outline" size="sm" icon="download" onClick={() => { window.toast("Abrindo diálogo salvar PDF…", "info"); setTimeout(() => window.print(), 200); }}>Gerar PDF</Button>
-              <Button variant="outline" size="sm" icon="eye" onClick={() => window.print()}>Visualizar</Button>
-              <Button variant="secondary" size="sm" icon="copy" onClick={async () => {
-                window.toast("Salvando proposta...", "info");
-                const saved = await saveToSupabase();
-                if (saved) {
-                  window.toast("✓ Proposta salva com sucesso em Supabase", "success");
-                } else {
-                  window.toast("⚠️ Proposta salva localmente (Supabase indisponível)", "warning");
-                }
-              }}>Salvar rascunho</Button>
-              <Button variant="primary" size="sm" icon="send" onClick={abrirEnvio}>Enviar p/ Cliente</Button>
-            </div>
+            <p className="pe__form-end">
+              Fim do formulário · as ações (salvar, PDF, enviar) ficam sempre no topo da tela.
+            </p>
           </div>
         </div>
 
         {/* Live PDF preview */}
-        <PEPreview data={data} eq={eq}/>
+        {showPreview && <PEPreview data={data} eq={eq}/>}
       </div>
 
       {sendModal && (
