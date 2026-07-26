@@ -99,7 +99,7 @@ function PreviewCapa({ data, eq, pg, total }) {
           </div>
         </div>
       </div>
-      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
+      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
     </div>
   );
 }
@@ -134,7 +134,7 @@ function PreviewClienteObra({ data, eq, pg, total }) {
           <div><span>Bairro / Cidade / UF</span><b>{[o.bairro, o.cidade, o.uf].filter(Boolean).join(" · ") || "—"}</b></div>
         </div>
       </div>
-      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
+      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
     </div>
   );
 }
@@ -153,7 +153,7 @@ function PreviewTexto({ data, eq, eqName, pg, total }) {
         <h3 className="pdf-h3">Linha de Modelos</h3>
         {ed.textoModelos ? <p>{ed.textoModelos}</p> : <p style={{ color: "var(--vp-gray-400)", fontStyle: "italic" }}>Descreva a linha do produto neste campo.</p>}
       </div>
-      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
+      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
     </div>
   );
 }
@@ -215,7 +215,7 @@ function PreviewDescricaoEspec({ data, eq, pg, total }) {
           <p style={{ color: "var(--vp-gray-400)", fontStyle: "italic" }}>Preencha pelo menos uma descrição e uma especificação técnica.</p>
         ) : null}
       </div>
-      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
+      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
     </div>
   );
 }
@@ -246,7 +246,7 @@ function PreviewAcabamentos({ data, pg, total }) {
         {a.pavInox ? <p style={{ marginTop: 6 }}><b>Pavimentos inox:</b> {a.pavInox}</p> : null}
         {a.demais ? <><h3 className="pdf-h3">Demais</h3><p>{a.demais}</p></> : null}
       </div>
-      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
+      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
     </div>
   );
 }
@@ -313,7 +313,7 @@ function PreviewValores({ data, eq, pg, total }) {
           Forma de pagamento: <b>{v.forma || "a definir"}</b>
         </p>
       </div>
-      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
+      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
     </div>
   );
 }
@@ -337,7 +337,7 @@ function PreviewGarantia({ data, eq, pg, total }) {
           <span>{data.numero || "VP-2026-XXX"}</span>
         </div>
       </div>
-      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
+      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
     </div>
   );
 }

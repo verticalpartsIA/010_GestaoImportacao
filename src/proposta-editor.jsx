@@ -669,11 +669,16 @@ function PropostaEditor({ setRoute, subsel }) {
   }, [data.numeroCotacao]);
 
   /* ---- Gerar PDF (overlay em tela cheia, padrão Ficha Técnica) ----
-     "Salvar PDF": cada página do preview já é um bloco discreto (Capa,
-     Identificação, Especificação...), então captura 1 canvas por página via
-     html2canvas e monta um PDF A4 retrato — sem precisar do algoritmo de
-     paginação por átomos da Ficha (lá o documento é um fluxo único; aqui
-     já são páginas fixas). "Imprimir" reaproveita o @media print existente. */
+     Cada seção (Capa, Identificação, Especificação...) tem altura NATURAL
+     (não mais uma A4 inteira fixa — ver .pe__pdf no CSS), então uma seção
+     curta (Garantia, Acabamentos) não teria por que ocupar uma folha
+     inteira sozinha. Capturamos cada seção com html2canvas e EMPACOTAMOS
+     várias seguidas na mesma folha física, só pulando pra próxima quando o
+     que falta não cabe mais — evita o vão em branco que sobrava quando
+     cada seção virava 1 página inteira à força.
+     scale:3 (era 2) — a 1ª versão capturava a 380px "de miniatura" e
+     esticava pra A4 inteira no PDF, o que saía borrado (mais visível na
+     foto da capa); com mais resolução de captura o resultado sai nítido. */
   const gerarPdfArquivo = React.useCallback(async () => {
     if (!window.html2canvas || !window.jspdf) {
       window.toast?.('Biblioteca de PDF ainda carregando…', 'error');
@@ -690,11 +695,20 @@ function PropostaEditor({ setRoute, subsel }) {
       const pdf = new jsPDF({ unit: 'mm', format: 'a4', orientation: 'portrait', compress: true });
       const pw = pdf.internal.pageSize.getWidth();
       const ph = pdf.internal.pageSize.getHeight();
+      let cursorMm = 0;      // quanto da folha atual já foi usado
+      let paginaVazia = true; // a 1ª folha já existe (jsPDF cria ao construir) — só chama addPage() a partir da 2ª
       for (let i = 0; i < paginas.length; i++) {
-        const canvas = await window.html2canvas(paginas[i], { scale: 2, useCORS: true, backgroundColor: '#ffffff', logging: false });
+        const canvas = await window.html2canvas(paginas[i], { scale: 3, useCORS: true, backgroundColor: '#ffffff', logging: false });
+        const alturaMm = (canvas.height / canvas.width) * pw;
+        if (!paginaVazia && cursorMm + alturaMm > ph) {
+          pdf.addPage();
+          cursorMm = 0;
+          paginaVazia = true;
+        }
         const img = canvas.toDataURL('image/jpeg', 0.97);
-        if (i > 0) pdf.addPage();
-        pdf.addImage(img, 'JPEG', 0, 0, pw, ph, undefined, 'FAST');
+        pdf.addImage(img, 'JPEG', 0, cursorMm, pw, alturaMm, undefined, 'FAST');
+        cursorMm += alturaMm;
+        paginaVazia = false;
       }
       pdf.save(`Proposta-${safeName}.pdf`);
     } catch (e) {
