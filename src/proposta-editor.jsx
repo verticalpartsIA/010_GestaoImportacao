@@ -19,6 +19,9 @@ function makeDefaultProposta() {
     // Proposta nasceu; `ativos` é a lista granular de equipamentos
     // (índice + código completo) que Contrato de Venda/Instalador herdam.
     masterId: null, precificacaoId: null, ativos: [],
+    // Chave da herança: informando o Nº da Cotação, a proposta puxa
+    // cliente/obra/equipamentos/valores já coletados no pipeline.
+    numeroCotacao: "",
     vendedor: { nome: "", celular: "", fixo: "", email: "" },
     cliente: { nome: "", cnpj: "", responsavel: "",
       endereco: "", numero: "", bairro: "", cidade: "", uf: "", cep: "",
@@ -27,35 +30,32 @@ function makeDefaultProposta() {
       bairro: "", cidade: "", uf: "", cep: "" },
 
     elevador: {
-      textoProposta: "Prezado(a) cliente,\n\nÉ com satisfação que apresentamos nossa proposta comercial para o fornecimento de elevador VPELEV VP-P, com tecnologia gearless e atendimento à NBR 16858.",
-      textoModelos: "A linha VPEL-MRL-PASSAGEIROS oferece elevadores de passageiros com cabines em aço inox 304, painel de operação TFT colorido e portas automáticas com abertura central.",
-      descricao: [{ titulo: "Elevador de Passageiros VPELEV VP-P", linha: "VPEL-MRL-PASSAGEIROS", tipo: "SEM CASA DE MÁQUINAS", norma: "16858-1/2", piso: "Mármore Resinado" }],
+      /* Texto de abertura genérico: não cita modelo, pra não descrever um
+         equipamento diferente do que está sendo vendido. */
+      textoProposta: "Prezado(a) cliente,\n\nÉ com satisfação que apresentamos nossa proposta comercial para o fornecimento do(s) equipamento(s) especificado(s) a seguir, com atendimento integral às normas técnicas vigentes.",
+      textoModelos: "",
+      /* Nada de equipamento fictício aqui: estes campos descrevem o produto
+         que o CLIENTE vai receber, então nascem vazios e são preenchidos
+         pela herança do Nº da Cotação ou pelo vendedor. Antes vinha um
+         elevador residencial inventado (18 paradas, 450kg, cabine VP-228)
+         que, se ninguém percebesse, ia embora na proposta. */
+      descricao: [{ titulo: "", linha: "", tipo: "", norma: "", piso: "" }],
       especificacoes: [{
-        id: "Elevador 1",
-        modelo: "SMR - Machine Room Less",
-        empreendimento: "Residencial",
-        carac: "Passageiros",
-        denominacao: "(-1, 0, 1 à 16)",
-        percurso: "51000",
-        capacidade: "06 Passageiros x 450Kg",
-        dimensoesCaixa: "1600 x 1840mm",
-        profPoço: "1500",
-        vel: "1",
-        andaresParadasPortas: "18 Paradas (-1, 0, 1 a 16)",
-        qtd: 1,
+        id: "", modelo: "", empreendimento: "", carac: "", denominacao: "",
+        percurso: "", capacidade: "", dimensoesCaixa: "", profPoço: "", vel: "",
+        andaresParadasPortas: "", qtd: 1,
       }],
       acabamentos: {
-        modeloCabine: "VP-228", acabamentoMat: "Aço Inox - 304", subTeto: "SUB-004",
-        painelOperacao: "COP-017TFT", pisoCabina: "Mármore Resinado", medidasPiso: "1600 x 1500mm",
-        modeloPorta: "Automática Central", dimPortaCabine: "800x2100mm",
-        acabPortaCabine: "Inox", portasPavimento: "Inox", botoeirasPavimento: "LOP - 35",
-        sinalizacao: "Display TFT 4.3'' colorido", pavInox: "0 inox e demais Pintura",
-        demais: "Corrimão tubular inox · espelho 3/4 traseiro · ventilação cabine 80 m³/h",
+        modeloCabine: "", acabamentoMat: "", subTeto: "",
+        painelOperacao: "", pisoCabina: "", medidasPiso: "",
+        modeloPorta: "", dimPortaCabine: "",
+        acabPortaCabine: "", portasPavimento: "", botoeirasPavimento: "",
+        sinalizacao: "", pavInox: "", demais: "",
       },
       caracteristicas: ["Sistema de tração gearless de alta eficiência energética", "Comando microprocessado MAX-3000 com prioridade de chamadas inteligente"],
       recursos: ["Resgate automático em falta de energia (ARD)", "Comunicação bidirecional integrada à central 24h"],
       infraestrutura: ["Casa de máquinas dimensionada conforme NBR 16858", "Aterramento próprio para o quadro de comando"],
-      valores: { equipamento: "Elevador de Passageiros VPELEV VP-P", quantidade: "1", valorUnit: "", difal: "",
+      valores: { equipamento: "", quantidade: "1", valorUnit: "", difal: "",
         forma: "40% à vista e 4 parcelas",
         parcelas: [
           { desc: "Sinal de 40% na assinatura do contrato", valor: "" },
@@ -65,7 +65,7 @@ function makeDefaultProposta() {
           { desc: "4ª PARCELA", valor: "" },
         ]},
       condicoesPagto: { venda: "", impostos: "", ajusteFrete: "", reajuste: "" },
-      ajustes: { preset: "sp", cambio: "5,50", faturamento: "", reajuste: "Reajuste anual conforme IPCA acumulado.",
+      ajustes: { preset: "sp", cambio: "", faturamento: "", reajuste: "Reajuste anual conforme IPCA acumulado.",
         taxasIn: "II, IPI, PIS/COFINS sobre importação. ICMS interestadual.",
         taxasOut: "ICMS final destino (DIFAL conforme localização da obra). Taxa CREA/CAU." },
       prazo: { prazo: "prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias", condCovid: "Os prazos poderão ser revisados em caso de eventos extraordinários relacionados a pandemia, escassez global de semicondutores ou bloqueios portuários." },
@@ -76,24 +76,15 @@ function makeDefaultProposta() {
 
     escada: {
       textoProposta: "", textoModelos: "",
-      descricao: [{ titulo: "Escada Rolante - OAK", desc: "", beneficios: "" }],
+      descricao: [{ titulo: "", desc: "", beneficios: "" }],
       especificacoes: [{
-        id: "Escada 1",
-        empreendimento: "Comercial",
-        carac: "Comercial",
-        desnivel: "4500",
-        incl: "30º",
-        largDegrau: "1000mm",
-        balaustrada: "1000mm",
-        vel: "0.5 m/s",
-        alimentacao: "380V Trifásico",
-        arranjo: "Paralelo",
-        maquina: "Superior",
-        qtd: 1, valorUnit: ""
+        id: "", empreendimento: "", carac: "", desnivel: "", incl: "",
+        largDegrau: "", balaustrada: "", vel: "", alimentacao: "",
+        arranjo: "", maquina: "", qtd: 1, valorUnit: "",
       }],
       especificidades: { tipo: "", config: "", corrimao: "", acabamento: "" },
-      valores: { equipamento: "Escada Rolante - OAK", quantidade: "", valorUnit: "", difal: "", forma: "", parcelas: [] },
-      ajustes: { preset: "sp", cambio: "5,50", freteMaritimo: "3.500,00", reajuste: "", taxasIn: "", taxasOut: "" },
+      valores: { equipamento: "", quantidade: "", valorUnit: "", difal: "", forma: "", parcelas: [] },
+      ajustes: { preset: "sp", cambio: "", freteMaritimo: "", reajuste: "", taxasIn: "", taxasOut: "" },
       prazo: { prazo: "prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias", condCovid: "" },
       instalacao: { instalacao: "", lubrificacao: "", transporte: "", descarregamento: "" },
       garantia: { garantia: "", condicoes: "" },
@@ -101,24 +92,15 @@ function makeDefaultProposta() {
 
     esteira: {
       textoProposta: "", textoModelos: "",
-      descricao: [{ titulo: "Esteira Rolante SEQUOIA -12°", desc: "", beneficios: "" }],
+      descricao: [{ titulo: "", desc: "", beneficios: "" }],
       especificacoes: [{
-        id: "Esteira 1",
-        empreendimento: "Supermercado",
-        carac: "Alto Tráfego",
-        desnivelComp: "4500",
-        incl: "12º",
-        largPallet: "1000mm",
-        balaustrada: "1000mm",
-        vel: "0.5 m/s",
-        alimentacao: "Trifásico 380V",
-        arranjo: "Paralelo",
-        maquina: "Superior",
-        qtd: 1, valorUnit: ""
+        id: "", empreendimento: "", carac: "", desnivelComp: "", incl: "",
+        largPallet: "", balaustrada: "", vel: "", alimentacao: "",
+        arranjo: "", maquina: "", qtd: 1, valorUnit: "",
       }],
       especificidades: { tipo: "", config: "", corrimao: "", acabamento: "" },
-      valores: { equipamento: "Esteira Rolante SEQUOIA -12°", quantidade: "", valorUnit: "", difal: "", forma: "", parcelas: [] },
-      ajustes: { preset: "sp", cambio: "5,50", freteMaritimo: "3.500,00", fretePorContainer: "", ajusteFrete: "", reajuste: "", taxasIn: "", taxasOut: "" },
+      valores: { equipamento: "", quantidade: "", valorUnit: "", difal: "", forma: "", parcelas: [] },
+      ajustes: { preset: "sp", cambio: "", freteMaritimo: "", fretePorContainer: "", ajusteFrete: "", reajuste: "", taxasIn: "", taxasOut: "" },
       prazo: { prazo: "prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias", condCovid: "" },
       instalacao: { instalacao: "", lubrificacao: "", transporte: "", descarregamento: "" },
       garantia: { garantia: "", condicoes: "" },
@@ -279,6 +261,25 @@ function deepMergeProposta(base, prefill) {
   return out;
 }
 
+/* Merge da HERANÇA: diferente do prefill de proposta nova, aqui o vendedor
+   já pode ter digitado coisas. Só preenche o que vier com conteúdo — nunca
+   apaga um campo que já estava preenchido. */
+function deepMergeHeranca(base, prefill) {
+  const out = { ...base };
+  Object.keys(prefill).forEach((k) => {
+    if (k === '__prefillFromPrecificacao') return;
+    const v = prefill[k];
+    if (v === null || v === undefined || v === '') return;
+    if (Array.isArray(v)) { if (v.length) out[k] = v; return; }
+    if (typeof v === 'object' && base[k] && typeof base[k] === 'object' && !Array.isArray(base[k])) {
+      out[k] = deepMergeHeranca(base[k], v);
+      return;
+    }
+    out[k] = v;
+  });
+  return out;
+}
+
 /* ---- Apoio ao cabeçalho do editor ---- */
 const PE_STATUS_LABEL = {
   rascunho: 'Rascunho', enviada: 'Enviada', visualizada: 'Visualizada pelo cliente',
@@ -296,14 +297,33 @@ function tempoRelativo(ts) {
 }
 
 /* Total da proposta a partir do que está no formulário (preço unitário ×
-   quantidade da aba ativa) — o mesmo número que o cliente vê no PDF. */
-function fmtValorProposta(data, eq) {
+   quantidade da aba ativa) — o mesmo número que o cliente vê no PDF e que
+   agora também vai pra coluna valor_total, alimentando a listagem. */
+function calcularValorTotal(data, eq) {
   const v = (data[eq] && data[eq].valores) || {};
   const unit = Number(String(v.valorUnit || '').replace(/\./g, '').replace(',', '.')) || 0;
   const qtd = Number(v.quantidade) || 1;
-  const total = unit * qtd;
+  return unit * qtd;
+}
+
+function fmtValorProposta(data, eq) {
+  const total = calcularValorTotal(data, eq);
   if (!total) return '—';
   return total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
+}
+
+/* vendedor_id aponta pra public.perfis; a identidade vem do SSO (e-mail).
+   Cacheado por sessão — não faz sentido consultar a cada salvamento. */
+let _vendedorIdCache;
+async function resolverVendedorId() {
+  if (_vendedorIdCache !== undefined) return _vendedorIdCache;
+  const email = (window.__VP_USER || {}).email;
+  if (!email || !window.__VP_SB?.sb) { _vendedorIdCache = null; return null; }
+  try {
+    const { data } = await window.__VP_SB.sb.from('perfis').select('id').eq('email', email).maybeSingle();
+    _vendedorIdCache = data ? data.id : null;
+  } catch (e) { _vendedorIdCache = null; }
+  return _vendedorIdCache;
 }
 
 function PEChip({ label, value, mono, destaque }) {
@@ -397,9 +417,11 @@ function PropostaSendModal({ record, onClose, onSent }) {
 }
 
 function PropostaEditor({ setRoute, subsel }) {
-  const LS_KEY = "vpprd.proposta-draft";
   const prefill = subsel && subsel.__prefillFromPrecificacao ? subsel : null;
   const editId = subsel && subsel.__editId ? subsel.__editId : null;
+  /* Rascunho local por proposta. Antes era UMA chave só pra todas: abrir a
+     proposta A e depois clicar em "Nova proposta" trazia o conteúdo da A. */
+  const LS_KEY = editId ? `vpprd.proposta-draft:${editId}` : "vpprd.proposta-draft";
   const [loadingExisting, setLoadingExisting] = React.useState(!!editId);
   const [eq, setEq] = React.useState(() => {
     if (prefill) return 'elevador';
@@ -407,6 +429,9 @@ function PropostaEditor({ setRoute, subsel }) {
   });
   const [data, setData] = React.useState(() => {
     if (prefill) return deepMergeProposta(makeDefaultProposta(), prefill);
+    // Proposta existente: começa limpa e é substituída pelo que vem do banco,
+    // pra não piscar o conteúdo de outra proposta.
+    if (editId) return makeDefaultProposta();
     try {
       const saved = localStorage.getItem(LS_KEY);
       if (saved) return JSON.parse(saved);
@@ -446,9 +471,9 @@ function PropostaEditor({ setRoute, subsel }) {
   // Retorna { id, token } da linha salva (ou null em falha) — precisamos do
   // id/token pra abrir o modal de envio por assinatura digital.
   const saveToSupabase = React.useCallback(async () => {
-    if (!window.__VP_SB?.sb) return null;
+    if (!window.__VP_SB?.sb) return { erro: 'Sem conexão com o sistema.' };
     // Evita poluir a tabela real com rascunhos em branco: só persiste com cliente.
-    if (!data?.cliente?.nome?.trim()) return null;
+    if (!data?.cliente?.nome?.trim()) return { erro: 'Preencha o nome do cliente para salvar.' };
 
     const vpUser = window.__VP_USER || {};
     const chave = (data.numero || '').trim() || null;   // → numero_documento (texto)
@@ -460,8 +485,19 @@ function PropostaEditor({ setRoute, subsel }) {
         data_json: { ...data, _vp_user: { email: vpUser.email || null, nome: vpUser.nome || null } },
         master_id: data.masterId || null,
         precificacao_id: data.precificacaoId || null,
+        // Sem isto a listagem congelava no valor antigo e proposta nova ficava sem valor.
+        valor_total: calcularValorTotal(data, eq),
+        // Elo persistido com a cotação de origem (herança).
+        numero_cotacao: parseInt(data.numeroCotacao, 10) || null,
         atualizado_em: new Date().toISOString(),
       };
+
+      /* vendedor_id era NOT NULL e nunca era enviado — todo INSERT de
+         proposta nova falhava. Resolvemos pelo e-mail do SSO em `perfis`;
+         só mandamos quando resolve, pra um update não apagar o vendedor
+         que já estava gravado. */
+      const vendedorId = await resolverVendedorId();
+      if (vendedorId) payload.vendedor_id = vendedorId;
 
       // Alvo do update: se veio de "Editar" (editId), usa o id diretamente;
       // senão, chave de negócio = numero_documento (texto). O `numero` (int)
@@ -491,8 +527,10 @@ function PropostaEditor({ setRoute, subsel }) {
         return row;
       }
     } catch (e) {
+      // Antes o erro era engolido e o usuário via "salva localmente" — uma
+      // falha total (ex.: not-null de vendedor_id) parecia sucesso parcial.
       console.error('Supabase save failed:', e);
-      return null;
+      return { erro: e.message || String(e) };
     }
   }, [data, eq, editId]);
 
@@ -503,10 +541,10 @@ function PropostaEditor({ setRoute, subsel }) {
     if (!window.PropostaStore) { window.toast?.('Store de assinatura não carregado.', 'error'); return; }
     window.toast?.('Salvando proposta...', 'info');
     const saved = await saveToSupabase();
-    if (!saved) { window.toast?.('❌ Não foi possível salvar a proposta. Confira se o cliente está preenchido.', 'error'); return; }
+    if (!saved || saved.erro) { window.toast?.('❌ Não foi possível salvar: ' + ((saved && saved.erro) || 'erro desconhecido'), 'error'); return; }
     const token = saved.token || await window.PropostaStore.garantirToken(saved.id);
-    setSendModal({ id: saved.id, token, numero_documento: data.numero, cliente: data.cliente, valorTotal: Number(data.elevador?.valores?.valorUnit) * Number(data.elevador?.valores?.quantidade || 1) });
-  }, [data, saveToSupabase]);
+    setSendModal({ id: saved.id, token, numero_documento: data.numero, cliente: data.cliente, valorTotal: calcularValorTotal(data, eq) });
+  }, [data, eq, saveToSupabase]);
 
   // Autosave para localStorage (instantâneo e seguro). A persistência no
   // Supabase é feita nas ações explícitas "Salvar rascunho" / "Enviar" —
@@ -534,8 +572,12 @@ function PropostaEditor({ setRoute, subsel }) {
       .then(({ data: row }) => {
         if (cancelado || !row) return;
         const dj = row.data_json || {};
+        /* Proposta antiga: além de converter pro formato do editor, guardamos
+           o data_json original em __legadoOriginal. Sem isso, salvar apagava
+           de vez tudo que só existia no formato antigo (termos, recursos,
+           blocos de escada/esteira, textos jurídicos). */
         const carregado = ehPropostaSchemaLegado(dj)
-          ? deepMergeProposta(makeDefaultProposta(), converterPropostaLegado(dj, row.titulo))
+          ? { ...deepMergeProposta(makeDefaultProposta(), converterPropostaLegado(dj, row.titulo)), __legadoOriginal: dj }
           : (row.data_json || makeDefaultProposta());
         setData(carregado);
         setEq(row.proposal_type || 'elevador');
@@ -552,6 +594,53 @@ function PropostaEditor({ setRoute, subsel }) {
   const set = React.useCallback((path, value) => {
     setData((d) => setDeep(d, path, value));
   }, []);
+
+  /* ---- Herança pelo Nº da Cotação ----
+     A proposta é o fim do pipeline (Formulário → Cotação → Precificação),
+     mas não é obrigada a vir dele: sem o número, o vendedor preenche do
+     zero. Com o número, puxamos o que já existe e só COMPLETAMOS o que
+     está vazio — nada que o vendedor digitou é sobrescrito. */
+  const [herdando, setHerdando] = React.useState(false);
+  const [heranca, setHeranca] = React.useState(null);
+
+  const herdar = React.useCallback(async () => {
+    const num = String(data.numeroCotacao || '').trim();
+    if (!num) return;
+    if (!window.PropostaHeranca) {
+      setHeranca({ tipo: 'erro', texto: 'Motor de herança não carregado — recarregue a página.' });
+      return;
+    }
+    setHerdando(true);
+    setHeranca(null);
+    try {
+      const r = await window.PropostaHeranca.prefillPorNumeroCotacao(num);
+      if (!r.encontrado) {
+        setHeranca({ tipo: 'aviso', texto: `Nenhum formulário encontrado para a Cotação nº ${num}. Você pode seguir preenchendo a proposta manualmente.` });
+      } else {
+        setData((d) => deepMergeHeranca(d, r.prefill));
+        setEq('elevador');
+        setHeranca({ tipo: 'ok', texto: 'Herdado de: ' + window.PropostaHeranca.resumoFontes(r.fontes) });
+        window.toast?.(`✓ Dados herdados da cotação ${num}`, 'success');
+      }
+    } catch (e) {
+      setHeranca({ tipo: 'erro', texto: e.message || String(e) });
+    } finally {
+      setHerdando(false);
+    }
+  }, [data.numeroCotacao]);
+
+  /* O PDF sai das páginas do preview (regras @media print). Se o preview
+     estiver oculto ele nem existe no DOM, então a impressão sairia vazia —
+     por isso garantimos que esteja montado antes de chamar print(). */
+  const imprimirPDF = React.useCallback(() => {
+    window.toast?.("Abrindo diálogo de impressão / salvar PDF…", "info");
+    if (!showPreview) {
+      setShowPreview(true);
+      setTimeout(() => window.print(), 400);
+    } else {
+      setTimeout(() => window.print(), 200);
+    }
+  }, [showPreview]);
 
   const resetProposal = () => {
     if (confirm("Descartar todas as alterações e reiniciar a proposta?")) {
@@ -643,13 +732,13 @@ function PropostaEditor({ setRoute, subsel }) {
             <button className="pe-top__ghost" onClick={resetProposal} title="Descartar e recomeçar">
               <Icon.copy size={14}/> Reiniciar
             </button>
-            <Button variant="outline" size="sm" icon="download"
-              onClick={() => { window.toast("Abrindo diálogo de impressão / salvar PDF…", "info"); setTimeout(() => window.print(), 200); }}>PDF</Button>
+            <Button variant="outline" size="sm" icon="download" onClick={imprimirPDF}>PDF</Button>
             <Button variant="secondary" size="sm" icon="check" onClick={async () => {
               window.toast("Salvando proposta...", "info");
               const salvo = await saveToSupabase();
               setSavedAt(Date.now());
-              window.toast(salvo ? "✓ Proposta salva" : "⚠️ Salva localmente (preencha o cliente para salvar no sistema)", salvo ? "success" : "warning");
+              if (salvo && !salvo.erro) window.toast("✓ Proposta salva no sistema", "success");
+              else window.toast("❌ Não salvou: " + ((salvo && salvo.erro) || 'erro desconhecido'), "error");
             }}>Salvar</Button>
             <Button variant="primary" size="sm" icon="send" onClick={abrirEnvio}>Enviar p/ Cliente</Button>
           </div>
@@ -720,7 +809,7 @@ function PropostaEditor({ setRoute, subsel }) {
                   fill={f}
                   collapsed={isCollapsed}
                   onToggle={() => setCollapsed((c) => ({ ...c, [s.id]: !c[s.id] }))}>
-                  {renderSection(s.id, eq, data, set)}
+                  {renderSection(s.id, eq, data, set, { herdar, herdando, heranca })}
                 </PESection>
               );
             })}
@@ -743,9 +832,10 @@ function PropostaEditor({ setRoute, subsel }) {
   );
 }
 
-function renderSection(sid, eq, data, set) {
+function renderSection(sid, eq, data, set, extras) {
+  extras = extras || {};
   switch (sid) {
-    case "proposta": return <S_Proposta d={data} set={set}/>;
+    case "proposta": return <S_Proposta d={data} set={set} herdar={extras.herdar} herdando={extras.herdando} heranca={extras.heranca}/>;
     case "cliente": return <S_Cliente d={data} set={set}/>;
     case "obra": return <S_Obra d={data} set={set}/>;
     case "texto": return <S_TextoProposta d={data} set={set} eq={eq}/>;

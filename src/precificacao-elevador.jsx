@@ -158,75 +158,16 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
      herda os dados do cliente/obra já coletados no Formulário e os valores
      já calculados aqui, em vez de o vendedor digitar tudo de novo. */
   const gerarProposta = async () => {
-    const c = window.__VP_SB.sb;
     try {
-      const [{ data: formulario }, { data: cotFornecedor }] = await Promise.all([
-        c.from('formularios_elevador').select('*, clientes(*)').eq('id', pz.formulario_elevador_id).single(),
-        pz.cotacao_fornecedor_id ? c.from('cotacoes_elevador_fornecedor').select('numero_documento, revisao, dados_envio').eq('id', pz.cotacao_fornecedor_id).maybeSingle() : Promise.resolve({ data: null }),
-      ]);
-      const cliente = (formulario && formulario.clientes) || {};
-      const unidadesTec = (cotFornecedor && cotFornecedor.dados_envio && cotFornecedor.dados_envio.unidades) || [];
-      const cefStore = window.CotacaoElevadorFornecedorStore;
-
-      const especificacoes = (pz.modelos || []).map((m) => {
-        const tec = unidadesTec.find((u) => u.unidade_id === m.unidadeId) || {};
-        return {
-          id: m.identificador || '', modelo: m.modelo || '', empreendimento: '', carac: '',
-          denominacao: tec.pavimentos_desc || '',
-          percurso: tec.percurso_mm ? String(tec.percurso_mm) : '',
-          capacidade: tec.capacidade_kg ? `${tec.capacidade_pessoas ? tec.capacidade_pessoas + ' Passageiros x ' : ''}${tec.capacidade_kg}Kg` : '',
-          dimensoesCaixa: (tec.caixa_largura_mm || tec.caixa_profundidade_mm) ? `${tec.caixa_largura_mm || '?'} x ${tec.caixa_profundidade_mm || '?'}mm` : '',
-          profPoço: tec.poco_mm ? String(tec.poco_mm) : '',
-          vel: tec.velocidade_ms ? String(tec.velocidade_ms) : '',
-          andaresParadasPortas: tec.paradas ? `${tec.paradas} Paradas` : '',
-          qtd: m.quantidade || 1,
-          codigoAtivo: cotFornecedor ? cefStore.assetMasterId(cotFornecedor, tec.indice_ativo) : null,
-        };
-      });
-
-      /* Master ID (Fase 2): lista granular de ativos, pra Contrato de Venda
-         e Contrato Instalador puxarem sem redigitar — ver issue #96. */
-      const ativos = (pz.modelos || []).map((m) => {
-        const tec = unidadesTec.find((u) => u.unidade_id === m.unidadeId) || {};
-        return {
-          indice: tec.indice_ativo ?? null,
-          codigo: cotFornecedor ? cefStore.assetMasterId(cotFornecedor, tec.indice_ativo) : null,
-          identificador: m.identificador || tec.identificador || '',
-          modelo: m.modelo || '',
-        };
-      }).filter((a) => a.indice != null);
-
-      const prefill = {
-        __prefillFromPrecificacao: true,
-        numero: `Cotação-${pz.numero_cotacao ?? pz.numero_documento}`,
-        masterId: cotFornecedor ? cotFornecedor.numero_documento : null,
-        precificacaoId: pz.id,
-        ativos,
-        cliente: {
-          nome: cliente.razao_social || '', cnpj: cliente.cnpj || '', responsavel: cliente.contato || '',
-          endereco: cliente.endereco_logradouro || '', bairro: cliente.endereco_bairro || '',
-          cidade: cliente.endereco_cidade || '', uf: cliente.endereco_estado || '', cep: cliente.endereco_cep || '',
-          email: cliente.email || '', telefone: cliente.telefone || '',
-        },
-        obra: {
-          nome: (formulario && formulario.local_obra_cidade) || '',
-          endereco: (formulario && (formulario.endereco_obra_logradouro || formulario.endereco_logradouro)) || '',
-          bairro: (formulario && (formulario.endereco_obra_bairro || formulario.endereco_bairro)) || '',
-          cidade: (formulario && formulario.local_obra_cidade) || '',
-          uf: (formulario && formulario.local_obra_estado) || '',
-          cep: (formulario && (formulario.endereco_obra_cep || formulario.endereco_cep)) || '',
-        },
-        elevador: {
-          valores: {
-            equipamento: (pz.modelos || []).map((m) => m.modelo).filter(Boolean).join(', '),
-            quantidade: String((pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0)),
-            valorUnit: resultado ? String(Math.round(resultado.precoVendaPorEquipamento)) : '',
-            difal: (pz.difal && pz.difal.difal_aplicavel && pz.difal.responsavel_recolhimento === 'emitente_verticalparts') ? String(Math.round(pz.difal.valor_difal)) : '',
-          },
-        },
-      };
-      if (especificacoes.length) prefill.elevador.especificacoes = especificacoes;
-
+      /* Mesma engenharia da herança que o vendedor dispara pelo Nº da
+         Cotação no editor — fonte única, pra não existirem duas regras
+         divergentes de "de onde vêm os dados da proposta". */
+      const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao);
+      if (!r.encontrado) {
+        window.toast?.('Não foi possível localizar o formulário desta cotação.', 'error');
+        return;
+      }
+      const prefill = { ...r.prefill, numero: `Cotação-${pz.numero_cotacao ?? pz.numero_documento}` };
       setSubsel(prefill);
       setRoute('proposta-editor');
     } catch (e) {

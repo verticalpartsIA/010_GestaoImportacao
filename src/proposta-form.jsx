@@ -214,9 +214,28 @@ function PERepAdd({ label, onAdd }) {
    Each receives `data`, `setField(path, value)`, plus helpers
    ============================================================ */
 
-function S_Proposta({ d, set }) {
+function S_Proposta({ d, set, herdar, herdando, heranca }) {
   return (
     <div className="pe-grid cols-3">
+      {/* Porta de entrada do pipeline: com o Nº da Cotação a proposta puxa
+          cliente, obra, equipamentos e valores já coletados. Em branco, o
+          vendedor monta a proposta do zero normalmente. */}
+      <PEField label="Nº da Cotação" span="3"
+        help="Informe o nº para herdar cliente, obra, equipamentos e valores já coletados no fluxo. Deixe vazio para preencher do zero.">
+        <div className="pe-heranca">
+          <input className="pe-input" inputMode="numeric" placeholder="ex.: 902"
+            value={d.numeroCotacao || ""}
+            onChange={(e) => set("numeroCotacao", e.target.value.replace(/\D/g, ""))}
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); herdar && herdar(); } }}/>
+          <button type="button" className="pe-heranca__btn"
+            disabled={herdando || !String(d.numeroCotacao || "").trim()}
+            onClick={() => herdar && herdar()}>
+            {herdando ? "Buscando…" : "Herdar dados"}
+          </button>
+        </div>
+        {heranca ? <div className={"pe-heranca__msg is-" + heranca.tipo}>{heranca.texto}</div> : null}
+      </PEField>
+
       <PEField label="Nº da Proposta" required>
         <PETextInput value={d.numero} onChange={(v) => set("numero", v)} placeholder="VP-2025-000"/>
       </PEField>
