@@ -562,7 +562,7 @@ function PropostaEditor({ setRoute, subsel }) {
         // Sem isto a listagem congelava no valor antigo e proposta nova ficava sem valor.
         valor_total: calcularValorTotal(data, eq),
         // Elo persistido com a cotação de origem (herança).
-        numero_cotacao: parseInt(data.numeroCotacao, 10) || null,
+        numero_cotacao: window.MasterIdEngine.parseNumeroCotacao(data.numeroCotacao),
         atualizado_em: new Date().toISOString(),
       };
 

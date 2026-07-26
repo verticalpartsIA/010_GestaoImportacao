@@ -86,7 +86,7 @@ function FENumeroCotacaoBadge({ numeroCotacao }) {
       color: numeroCotacao != null ? '#FBB039' : '#71717a', fontWeight: 700,
       padding: '6px 12px', borderRadius: 6, fontSize: 13, letterSpacing: '.02em',
     }}>
-      Cotação Nº {numeroCotacao != null ? numeroCotacao : '— (gerado ao salvar)'}
+      Cotação Nº {numeroCotacao != null ? window.MasterIdEngine.baseId('elevador', numeroCotacao) : '— (gerado ao salvar)'}
     </div>
   );
 }
