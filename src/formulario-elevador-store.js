@@ -165,6 +165,11 @@
       created_by: (window.__VP_USER || {}).email || null,
     }).select().single();
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'FORMULARIO_PREENCHIDO', numeroCotacao: data.numero_cotacao,
+      alvoLabel: data.local_obra_cidade ? `${data.local_obra_cidade}/${data.local_obra_estado || ''}` : data.id,
+      alvoId: data.id,
+    });
     return data;
   }
 

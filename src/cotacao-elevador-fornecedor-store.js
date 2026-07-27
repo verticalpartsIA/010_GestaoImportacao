@@ -244,6 +244,15 @@
       sent_at: now, updated_at: now,
     }).eq('id', id);
     if (error) throw error;
+    if (window.EventosFluxo) {
+      const cot = await getById(id);
+      if (cot) window.EventosFluxo.registrar({
+        evento: 'COTACAO_ENVIADA_FORNECEDOR',
+        numeroCotacao: cot.dados_envio?.header?.numero_cotacao,
+        alvoLabel: `${cot.fornecedor || 'Fornecedor'} · ${cot.numero_documento || ''}`, alvoId: cot.id,
+        detalhe: { channel },
+      });
+    }
   }
 
   async function listarPorFormulario(formularioElevadorId) {
@@ -343,6 +352,11 @@
       ator_nome: cur.fornecedor || 'Fornecedor', ator_setor: 'fornecedor',
       modulo: 'Formulário de Elevadores', acao: 'respondeu a cotação de fornecedor',
       alvo: cur.numero_documento, alvo_id: cur.id, detalhe: { ip },
+    });
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'FORNECEDOR_RESPONDEU',
+      numeroCotacao: cur.dados_envio?.header?.numero_cotacao,
+      alvoLabel: `${cur.fornecedor || 'Fornecedor'} · ${cur.numero_documento || ''}`, alvoId: cur.id,
     });
     return { ...cur, ...patch };
   }
