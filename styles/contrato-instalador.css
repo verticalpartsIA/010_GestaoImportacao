@@ -452,3 +452,13 @@
 .ci-err-state { padding: 60px 20px; text-align: center; }
 .ci-err-state h1 { font-size: 22px; margin: 0 0 8px; }
 .ci-err-state p { font-size: 13px; color: var(--ci-fg2); }
+
+/* "Baixar cópia assinada" (window.print() em /assinar/:token) — o
+   documento fica invisível na tela de sucesso e só aparece na impressão,
+   que por sua vez esconde a telinha de sucesso. Compartilhado pelos 3
+   tipos (Instalador / Venda / Proposta), todos passam por esta página. */
+.ci-print-doc { display: none; }
+@media print {
+  .ci-sign-status { display: none !important; }
+  .ci-print-doc { display: block !important; }
+}

@@ -252,17 +252,27 @@ function SgApp() {
   if (phase === 'done' || rec.status === st.signed) {
     const a = rec.audit || {};
     return (
-      <div className="ci-sign-status">
-        <div className="ci-success-check">✓</div>
-        <h1>{source.kind === 'proposta' ? 'Proposta assinada!' : 'Contrato assinado!'}</h1>
-        <p>{source.kind === 'proposta' ? 'A proposta' : 'O contrato'} <b>{rec.numero_documento}</b> foi assinado(a) com sucesso.</p>
-        <div className="ci-protocolo">
-          Protocolo: {rec.token}<br/>
-          Assinado em {source.store.fmtDateTime(a.signedAt)}<br/>
-          Hash: {(a.hash || '').slice(0, 32)}…
+      <>
+        <div className="ci-sign-status">
+          <div className="ci-success-check">✓</div>
+          <h1>{source.kind === 'proposta' ? 'Proposta assinada!' : 'Contrato assinado!'}</h1>
+          <p>{source.kind === 'proposta' ? 'A proposta' : 'O contrato'} <b>{rec.numero_documento}</b> foi assinado(a) com sucesso.</p>
+          <div className="ci-protocolo">
+            Protocolo: {rec.token}<br/>
+            Assinado em {source.store.fmtDateTime(a.signedAt)}<br/>
+            Hash: {(a.hash || '').slice(0, 32)}…
+          </div>
+          <button className="ci-sign-btn" onClick={() => window.print()}>Baixar cópia assinada (PDF)</button>
         </div>
-        <button className="ci-sign-btn" onClick={() => window.print()}>Baixar cópia assinada (PDF)</button>
-      </div>
+        {/* Invisível na tela — só existe pra "Baixar cópia assinada" ter o que
+           imprimir. Sem isto, o botão imprimia a telinha de sucesso, nunca o
+           documento (bug real, achado ao revisar o contrato de 16 páginas). */}
+        <div className="ci-print-doc">
+          {source.kind === 'proposta'
+            ? <window.PEPreview data={window.PropostaStore.conteudoVigente(rec)} eq={rec.proposal_type || 'elevador'}/>
+            : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
+        </div>
+      </>
     );
   }
   if (phase === 'refused' || rec.status === st.refused) {

@@ -156,18 +156,27 @@
    ============================================================ */
 .cv-doc-sheet {
   background: #fff;
-  padding: 28px 36px;
+  padding: 28px 36px 20px;
   box-shadow: 0 1px 3px rgba(0,0,0,.06);
   font-family: 'Times New Roman', serif;
-  font-size: 10.5pt; line-height: 1.5; color: #111;
+  font-size: 11.5pt; line-height: 1.75; color: #111;
   max-width: 720px; margin: 0 auto;
+  border-top: 10px solid #F6D9A0;
 }
 .cv-doc-head {
   display: flex; justify-content: space-between; align-items: flex-start;
-  padding-bottom: 14px; margin-bottom: 18px;
+  padding: 12px 0 14px; margin: -12px -36px 18px; padding-left: 36px; padding-right: 36px;
+  background: #F2F2F2;
   border-bottom: 1px solid #ddd;
 }
 .cv-doc-logo { height: 36px; }
+.cv-doc-foot {
+  display: flex; flex-direction: column; align-items: center; gap: 3pt;
+  margin: 28pt -36px -20px; padding: 12pt 36px;
+  font-family: Arial, sans-serif; font-size: 8pt; color: #fff;
+  background: linear-gradient(90deg, #2B3648 50%, #F5A623 50%);
+}
+.cv-doc-foot span { opacity: .95; }
 .cv-doc-meta { display: flex; flex-direction: column; align-items: flex-end; }
 .cv-doc-meta-label { font-size: 8pt; color: #555; font-family: Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
 .cv-doc-meta-num { font-size: 11pt; font-weight: 800; font-family: 'Courier New', monospace; }
@@ -178,7 +187,7 @@
   margin: 4pt 0 14pt; letter-spacing: .02em;
 }
 
-.cv-doc-section { margin: 14pt 0; }
+.cv-doc-section { margin: 22pt 0; }
 .cv-doc-preamble { margin-top: 8pt; }
 .cv-doc-section-title {
   font-family: Arial, sans-serif;
@@ -187,7 +196,7 @@
 }
 .cv-doc-section-num { color: #E89A1F; font-weight: 800; }
 
-.cv-doc-p { text-align: justify; margin: 6pt 0; }
+.cv-doc-p { text-align: justify; margin: 9pt 0; }
 .cv-doc-p b { font-weight: 700; }
 .cv-doc-li {
   position: relative; padding-left: 18pt;
@@ -196,6 +205,11 @@
   content: '•'; position: absolute; left: 6pt; top: 0;
   color: #E89A1F; font-weight: 700;
 }
+/* Sub-cláusulas (2.1.1, 8.2.2, alíneas a/b/c, incisos i/ii...) — mesma
+   indentação da minuta oficial, sem marcador (o rótulo já vem no texto). */
+.cv-doc-indent { padding-left: 18pt; }
+.cv-doc-li.cv-doc-indent { padding-left: 30pt; }
+.cv-doc-li.cv-doc-indent::before { left: 18pt; }
 .cv-doc-callout {
   background: #fffbeb; border-left: 3px solid #FBB039;
   padding: 8pt 12pt; margin: 8pt 0;
@@ -235,3 +249,46 @@
   background: #fff; padding-top: 8pt;
 }
 .cv-mono { font-family: 'Courier New', monospace; }
+
+/* Tabela "Títulos dos Anexos" (cláusula 1.1.1) */
+.cv-doc-anexos {
+  width: 100%; border-collapse: collapse; margin: 10pt 0 14pt;
+  font-family: Arial, sans-serif; font-size: 10pt; border: 1px solid #ccc;
+}
+.cv-doc-anexos th {
+  background: #d9d9d9; color: #111; padding: 6pt 10pt; text-align: center;
+  font-weight: 700; border: 1px solid #ccc;
+}
+.cv-doc-anexos td { padding: 6pt 10pt; border: 1px solid #ccc; }
+.cv-doc-anexos td:first-child { font-weight: 700; width: 25%; }
+
+/* Bloco de assinaturas — VENDEDORA / COMPRADOR lado a lado */
+.cv-doc-signatures {
+  display: flex; gap: 40pt; margin-top: 40pt;
+  font-family: Arial, sans-serif;
+}
+.cv-doc-sign-col { flex: 1; }
+.cv-doc-sign-role { font-size: 9.5pt; font-weight: 700; margin-bottom: 22pt; }
+.cv-doc-sign-x { font-size: 20pt; font-weight: 700; line-height: 1; }
+.cv-doc-sign-line2 { border-top: 1px solid #111; margin: 2pt 0 6pt; }
+.cv-doc-sign-name { font-size: 9pt; }
+.cv-doc-sign-cpf { font-size: 9pt; }
+
+/* Página final — testemunhas, sempre numa folha nova */
+.cv-doc-witnesses { page-break-before: always; padding-top: 4pt; }
+.cv-doc-witness-row { display: flex; gap: 40pt; margin-top: 18pt; font-size: 10pt; }
+.cv-doc-witness-col { flex: 1; }
+.cv-doc-witness-line { font-family: Arial, sans-serif; margin-bottom: 6pt; }
+
+/* ---------- Impressão real (window.print() em /assinar/:token) ----------
+   Testamos cabeçalho/rodapé fixos repetindo em toda página física (como
+   na minuta original), mas o Chromium não reserva a margem do @page de
+   forma confiável com position:fixed — o título do contrato saía coberto
+   pelo cabeçalho na 1ª página. Preferimos capa + rodapé únicos (1x cada),
+   sem risco de sobreposição num documento que vai para assinatura real. */
+@media print {
+  @page { size: A4; margin: 14mm; }
+  .cv-doc-sheet { max-width: none; margin: 0; box-shadow: none; }
+  .cv-doc-head { page-break-inside: avoid; }
+  .cv-doc-signatures, .cv-doc-witnesses { break-inside: avoid-page; }
+}
