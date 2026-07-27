@@ -65,21 +65,31 @@ function ModalNovoGatilho({ onClose, onSaved }) {
   );
 }
 
-function FinanceiroPage() {
+function FinanceiroPage({ setRoute }) {
   const [gatilhos, setGatilhos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [showGatilho, setShowGatilho] = React.useState(false);
+  const [alertas, setAlertas] = React.useState([]);
 
   const reloadGatilhos = () => {
     setLoading(true);
     window.__VP_SB.sb.from('gatilhos').select('*').order('due_date')
       .then(({ data }) => { setGatilhos(data || []); setLoading(false); });
   };
-  React.useEffect(() => { reloadGatilhos(); }, []);
+  const reloadAlertas = () => {
+    window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false })
+      .then(({ data }) => setAlertas((data || []).map(a => ({ ...a, time: window.__VP_SB.timeAgo(a.created_at) }))));
+  };
+  React.useEffect(() => { reloadGatilhos(); reloadAlertas(); }, []);
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
   const urgentes = gatilhos.filter(g => (g.days_left ?? g.daysLeft ?? 99) <= 2);
+  const routeByModule = (m) =>
+    m === "Importação"  ? "importacao"  :
+    m === "Jurídico"    ? "juridico"    :
+    m === "Financeiro"  ? "financeiro"  :
+    m === "Engenharia"  ? "engenharia"  : "cotacoes-fornecedor";
 
   return (
     <div className="page fade-in">
@@ -112,6 +122,20 @@ function FinanceiroPage() {
           <Button variant="secondary" size="sm" iconRight="arrowRight">Ver agora</Button>
         </div>
       )}
+
+      <Card title="Central de Alertas" sub="ações pendentes que requerem sua atenção" style={{ marginBottom: 20 }}
+        action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute?.("notificacoes")}>Ver tudo</Button>}>
+        <div className="stack">
+          {alertas.length === 0 && (
+            <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
+              Nenhum alerta pendente.
+            </div>
+          )}
+          {alertas.map((a) => (
+            <AlertRow key={a.id} alert={a} onClick={() => setRoute?.(routeByModule(a.module))}/>
+          ))}
+        </div>
+      </Card>
 
       <Card title="Gatilhos Ativos" sub={`${gatilhos.length} projetos · prazo reverso calculado a partir da instalação`}>
         <div className="stack" style={{ gap: 14 }}>

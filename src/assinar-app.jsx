@@ -269,7 +269,7 @@ function SgApp() {
            documento (bug real, achado ao revisar o contrato de 16 páginas). */}
         <div className="ci-print-doc">
           {source.kind === 'proposta'
-            ? <window.PEPreview data={window.PropostaStore.conteudoVigente(rec)} eq={rec.proposal_type || 'elevador'}/>
+            ? <window.PEPreview data={window.PropostaStore.conteudoVigente(rec)} eq={rec.proposal_type || 'elevador'} bare/>
             : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
         </div>
       </>
@@ -332,7 +332,7 @@ function SgApp() {
       <div className="ci-doc-viewer">
         <div className="ci-doc-viewer-scroll" ref={viewerRef} onScroll={onScroll}>
           {isProposta
-            ? <window.PEPreview data={window.PropostaStore.conteudoVigente(rec)} eq={rec.proposal_type || 'elevador'}/>
+            ? <window.PEPreview data={window.PropostaStore.conteudoVigente(rec)} eq={rec.proposal_type || 'elevador'} bare/>
             : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
         </div>
         <div className={'ci-scroll-hint' + (scrolledEnd ? ' hidden' : '')}>↓ Role até o fim para habilitar a assinatura</div>
