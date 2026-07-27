@@ -701,9 +701,12 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
     return null;
   };
 
+  /* Retorna o id salvo (não um boolean) — quem chama precisa do valor real,
+     não do estado `id`, que só reflete o setId em um próximo render (issue
+     #90: gerarLink chamava gerarLinkPublico(id) com o id ainda stale). */
   const salvarTudo = async (novoStatus) => {
     const erro = validar();
-    if (novoStatus === 'enviado' && erro) { window.toast?.(erro, 'warning'); return false; }
+    if (novoStatus === 'enviado' && erro) { window.toast?.(erro, 'warning'); return null; }
     setSaving(true);
     try {
       let cliente = null;
@@ -721,28 +724,42 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       } else {
         await window.FormularioElevadorStore.salvar(currentId, { ...feHeaderPick(header), cliente_id: cliente?.id });
       }
-      // sincroniza unidades: atualiza as que já têm id, cria as que não têm
+      // Sincroniza unidades: atualiza as que já têm id, cria as que não têm —
+      // e hidrata o estado com o id real de cada unidade nova (issue #91:
+      // sem isso, unidade recém-criada ficava sem id em `unidades`, e o RFQ
+      // ao fornecedor (que casa resposta por unidade_id) saía quebrado).
+      // Sequencial de propósito: adicionarUnidade calcula indice_ativo
+      // consultando as unidades já existentes, então rodar em paralelo
+      // arriscaria duas unidades novas caírem no mesmo índice.
+      const unidadesSalvas = [];
       for (const u of unidades) {
         const payload = { ...u };
         delete payload.id; delete payload.formulario_id; delete payload.created_at;
-        if (u.id) await window.FormularioElevadorStore.atualizarUnidade(u.id, payload);
-        else await window.FormularioElevadorStore.adicionarUnidade(currentId, payload);
+        if (u.id) {
+          await window.FormularioElevadorStore.atualizarUnidade(u.id, payload);
+          unidadesSalvas.push(u);
+        } else {
+          const nova = await window.FormularioElevadorStore.adicionarUnidade(currentId, payload);
+          unidadesSalvas.push({ ...u, id: nova.id, indice_ativo: nova.indice_ativo });
+        }
       }
+      setUnidades(unidadesSalvas);
       if (novoStatus) await window.FormularioElevadorStore.enviar(currentId);
       window.toast?.(novoStatus ? 'Formulário enviado!' : 'Rascunho salvo.', 'success');
       onSaved?.(currentId);
-      return true;
+      return currentId;
     } catch (e) {
       window.toast?.('Erro ao salvar: ' + e.message, 'error');
-      return false;
+      return null;
     } finally {
       setSaving(false);
     }
   };
 
   const gerarLink = async () => {
-    if (!id) { const ok = await salvarTudo(null); if (!ok) return; }
-    const url = await window.FormularioElevadorStore.gerarLinkPublico(id);
+    let currentId = id;
+    if (!currentId) { currentId = await salvarTudo(null); if (!currentId) return; }
+    const url = await window.FormularioElevadorStore.gerarLinkPublico(currentId);
     setLinkPublico(url);
     setShowLinkCliente(true);
   };
