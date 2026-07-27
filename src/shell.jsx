@@ -8,6 +8,7 @@ const NAV_GROUPS = [
   { label: "Geral", items: [
     { id: "dashboard", label: "Dashboard", icon: "home" },
     { id: "notificacoes", label: "Notificações", icon: "bell" },
+    { id: "financeiro", label: "Gatilhos & Prazo Reverso", icon: "dollar", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Comercial", items: [
     { id: "leads", label: "Leads", icon: "flag" },
@@ -17,7 +18,6 @@ const NAV_GROUPS = [
   ]},
   { label: "ADM/ Financeiro", items: [
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
-    { id: "financeiro", label: "Gatilhos & Prazo Reverso", icon: "dollar", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Jurídico | Importação | Suprimentos", sublabel: "Contratos, Siscomex & Compras", items: [
     { id: "juridico", label: "Jurídico", icon: "scale" },
