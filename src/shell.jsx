@@ -18,6 +18,7 @@ const NAV_GROUPS = [
   ]},
   { label: "ADM/ Financeiro", items: [
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
+    { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Jurídico | Importação | Suprimentos", sublabel: "Contratos, Siscomex & Compras", items: [
     { id: "juridico", label: "Jurídico", icon: "scale" },
@@ -187,6 +188,7 @@ const BREADCRUMB_MAP = {
   databook:      { module: "Instalação & Entrega", page: "Data Book & Termo", icon: "fileSearch" },
   handover:      { module: "Instalação & Entrega", page: "Handover & Pós-venda", icon: "package" },
   financeiro:    { module: "Financeiro", page: "Gatilhos & Prazo Reverso", icon: "dollar" },
+  "aval-financeiro": { module: "Financeiro", page: "Aval Financeiro", icon: "shield" },
   comissoes:     { module: "Financeiro", page: "Comissões", icon: "award" },
   "rh-homologacao": { module: "Recursos Humanos", page: "Homologação de Parceiros", icon: "users" },
   logs: { module: "Admin", page: "Logs de Atividade", icon: "history" },

@@ -196,6 +196,7 @@ function App() {
       case "compras": return <ComprasPage setRoute={setRoute}/>;
       case "compras-email": return <EmailInbox kind="compras" setRoute={setRoute}/>;
       case "financeiro": return <FinanceiroPage setRoute={setRoute}/>;
+      case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
