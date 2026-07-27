@@ -336,12 +336,21 @@ function deepMergeHeranca(base, prefill) {
     if (k === '__prefillFromPrecificacao') return;
     const v = prefill[k];
     if (v === null || v === undefined || v === '') return;
-    if (Array.isArray(v)) { if (v.length) out[k] = v; return; }
+    if (Array.isArray(v)) {
+      // Só preenche se o vendedor ainda não tiver uma lista própria aqui —
+      // antes sobrescrevia sempre que a herança trazia algo, mesmo com
+      // especificações/ativos já digitados (issue #160).
+      if (v.length && !(Array.isArray(base[k]) && base[k].length)) out[k] = v;
+      return;
+    }
     if (typeof v === 'object' && base[k] && typeof base[k] === 'object' && !Array.isArray(base[k])) {
       out[k] = deepMergeHeranca(base[k], v);
       return;
     }
-    out[k] = v;
+    // Campo escalar: só preenche se ainda estiver vazio — antes sobrescrevia
+    // incondicionalmente, contrariando a regra "nunca apaga o que o
+    // vendedor já digitou" (issue #160).
+    if (base[k] === undefined || base[k] === null || base[k] === '') out[k] = v;
   });
   return out;
 }
