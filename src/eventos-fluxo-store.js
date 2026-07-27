@@ -23,6 +23,13 @@
     PROPOSTA_ELABORADA:          { modulo: 'Proposta Comercial',      label: 'Proposta elaborada' },
     PROPOSTA_ENVIADA:            { modulo: 'Proposta Comercial',      label: 'Proposta enviada ao cliente' },
     CLIENTE_RESPONDEU_PROPOSTA:  { modulo: 'Proposta Comercial',      label: 'Cliente respondeu a proposta' },
+    FINANCEIRO_CONSULTOU_SCORE:  { modulo: 'Aval Financeiro',         label: 'Financeiro consultou o score do cliente' },
+    FINANCEIRO_APROVOU_VENDA:    { modulo: 'Aval Financeiro',         label: 'Financeiro deu o aval pra vender' },
+    FINANCEIRO_REPROVOU_VENDA:   { modulo: 'Aval Financeiro',         label: 'Financeiro reprovou a venda' },
+    CONTRATO_VENDA_ENVIADO:      { modulo: 'Contrato de Venda',       label: 'Contrato de venda enviado' },
+    CONTRATO_VENDA_ASSINADO:     { modulo: 'Contrato de Venda',       label: 'Contrato de venda assinado' },
+    SINAL_PAGO:                  { modulo: 'Aval Financeiro',         label: 'Sinal pago pelo cliente' },
+    COMPRA_FORNECEDOR_INICIADA:  { modulo: 'Cotação a Fornecedor',    label: 'Compra do equipamento iniciada no fornecedor' },
   };
 
   /* registrar({ evento, numeroCotacao, alvoLabel, alvoId, detalhe })

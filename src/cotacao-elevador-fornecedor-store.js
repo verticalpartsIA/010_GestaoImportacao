@@ -286,10 +286,21 @@
     const cur = await getById(id);
     if (!cur) throw new Error('Cotação não encontrada.');
     if (cur.status !== 'respondido') return cur;
+    const numeroCotacao = cur.dados_envio?.header?.numero_cotacao;
+    // Gate: só inicia a compra na China depois do Financeiro confirmar o
+    // sinal pago — ver aval-financeiro-store.js.
+    if (window.AvalFinanceiroStore) {
+      const gate = await window.AvalFinanceiroStore.podeIniciarCompra(numeroCotacao);
+      if (!gate.ok) throw new Error(gate.motivo);
+    }
     const now = new Date().toISOString();
     const patch = { status: 'em_analise', decidido_em: now, updated_at: now };
     const { error } = await c.from('cotacoes_elevador_fornecedor').update(patch).eq('id', id);
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'COMPRA_FORNECEDOR_INICIADA', numeroCotacao,
+      alvoLabel: `${cur.fornecedor || 'Fornecedor'} · ${cur.numero_documento || ''}`, alvoId: cur.id,
+    });
     return { ...cur, ...patch };
   }
 
