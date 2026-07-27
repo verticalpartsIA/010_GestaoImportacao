@@ -863,14 +863,24 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
         </div>
       )}
 
-      {unidades.map((u, i) => (
-        <div key={u.id || i} style={{ marginTop: 16 }}>
-          <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} fornecedores={fornecedores} modelos={modelos} publicMode={publicMode}/>
-        </div>
-      ))}
+      {/* fieldset disabled trava toda edição de unidades (campos, select, +/-
+          adicionar/remover) enquanto salvarTudo está em voo — sem isso, dava
+          pra editar `unidades` no meio do save e o setUnidades(unidadesSalvas)
+          no final sobrescrevia essas edições com o snapshot antigo (achado
+          do Codex no PR #167, issue #91). */}
+      <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0 }}>
+        {unidades.map((u, i) => (
+          <div key={u.id || i} style={{ marginTop: 16 }}>
+            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} fornecedores={fornecedores} modelos={modelos} publicMode={publicMode}/>
+          </div>
+        ))}
 
-      <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'space-between' }}>
-        <Button variant="outline" icon="plus" onClick={addUnidade}>+ Adicionar elevador diferente</Button>
+        <div style={{ marginTop: 16 }}>
+          <Button variant="outline" icon="plus" onClick={addUnidade}>+ Adicionar elevador diferente</Button>
+        </div>
+      </fieldset>
+
+      <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <div className="row gap-2">
           <Button variant="outline" onClick={() => salvarTudo(null)} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>
           <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Enviar para Cotação'}</Button>
