@@ -617,6 +617,10 @@ function PropostaEditor({ setRoute, subsel }) {
           .from('propostas').insert([{ ...payload, status: 'rascunho' }]).select('id, token').single();
         if (error) throw error;
         setRecordId(row.id);
+        window.EventosFluxo?.registrar({
+          evento: 'PROPOSTA_ELABORADA', numeroCotacao: payload.numero_cotacao,
+          alvoLabel: payload.titulo, alvoId: row.id,
+        });
         return row;
       }
     } catch (e) {
