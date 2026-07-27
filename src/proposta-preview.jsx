@@ -24,7 +24,7 @@
 // 210mm em px a 96dpi (largura "de projeto" real da página — ver .pe__pdf)
 const PE_PAGE_PX = 793.7;
 
-function PEPreview({ data, eq, overlay }) {
+function PEPreview({ data, eq, overlay, bare }) {
   const eqLabel = eq === "elevador" ? "elevador" : eq === "escada" ? "escada" : "esteira";
   const eqName = eq === "elevador" ? "Elevador" : eq === "escada" ? "Escada Rolante" : "Esteira Rolante";
 
@@ -80,7 +80,10 @@ function PEPreview({ data, eq, overlay }) {
     </div>
   );
 
-  if (overlay) return scaled;
+  // `bare` = página pública de assinatura (assinar-app.jsx): o cliente não
+  // pode ver um cabeçalho de ferramenta interna ("Preview da Proposta" +
+  // Badge) — só o documento em si, do mesmo jeito que ele vê no overlay/PDF.
+  if (overlay || bare) return scaled;
 
   return (
     <div className="pe__preview">
