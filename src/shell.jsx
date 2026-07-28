@@ -29,7 +29,8 @@ const NAV_GROUPS = [
   ]},
   { label: "Engenharia", items: [
     { id: "engenharia", label: "Engenharia", icon: "ruler" },
-    { id: "eng-configurador", label: "Projetos Elevadores", icon: "grid" },
+    { id: "eng-projeto-elevadores", label: "Projeto de Elevadores", icon: "grid" },
+    { id: "eng-configurador", label: "Projeto de Equipamento", icon: "grid" },
     { id: "desenho-tecnico", label: "Projetos ER/Es", icon: "ruler" },
     { id: "ficha-tecnica", label: "Ficha Técnica", icon: "fileText" },
     { id: "contrato-instalador", label: "Contrato Instalador", icon: "hardhat" },
@@ -172,6 +173,7 @@ const BREADCRUMB_MAP = {
   "contrato-instalador":         { module: "Jurídico", page: "Contrato Instalador", icon: "hardhat" },
   engenharia:    { module: "Engenharia", page: "Engenharia", icon: "ruler" },
   "ncm-catalogo": { module: "Engenharia", page: "Catálogo de Produtos", icon: "fileSearch" },
+  "eng-projeto-elevadores": { module: "Engenharia", page: "Projeto de Elevadores", icon: "grid" },
   "eng-configurador": { module: "Engenharia", page: "Projeto de Equipamento", icon: "grid" },
   "desenho-tecnico": { module: "Engenharia", page: "Desenho Técnico ER | ES", icon: "ruler" },
   "ficha-tecnica":   { module: "Engenharia", page: "Ficha Técnica", icon: "fileText" },

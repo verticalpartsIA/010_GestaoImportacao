@@ -84,7 +84,7 @@
   <!-- Components in dependency order -->
   <script type="text/babel" src="src/primitives.jsx?v=4"></script>
   <script type="text/babel" src="src/toast.jsx?v=4"></script>
-  <script type="text/babel" src="src/shell.jsx?v=24"></script>
+  <script type="text/babel" src="src/shell.jsx?v=25"></script>
   <script type="text/babel" src="src/dashboard.jsx?v=10"></script>
   <script type="text/babel" src="src/comercial.jsx?v=14"></script>
 
@@ -101,13 +101,14 @@
   <script type="text/babel" src="src/controle-cotacoes.jsx?v=2"></script>
 
   <!-- Cotações a Fornecedor — substitui a antiga "Cotações China" (mock) -->
-  <script type="text/babel" src="src/cotacoes-fornecedor.jsx?v=3"></script>
+  <script src="src/tratativas-store.js?v=1"></script>
+  <script type="text/babel" src="src/cotacoes-fornecedor.jsx?v=4"></script>
 
   <!-- Precificação de Elevador (ADM/Financeiro) + DIFAL -->
   <script src="src/difal-engine.js?v=1"></script>
   <script src="src/precificacao-elevador-engine.js?v=1"></script>
   <script src="src/precificacao-elevador-store.js?v=2"></script>
-  <script type="text/babel" src="src/precificacao-elevador.jsx?v=5"></script>
+  <script type="text/babel" src="src/precificacao-elevador.jsx?v=6"></script>
 
   <script type="text/babel" src="src/precificacao.jsx?v=12"></script>
   <script type="text/babel" src="src/proposta-form.jsx?v=7"></script>
@@ -151,8 +152,12 @@
   <!-- Jurídico · Editor de Contrato do Cliente -->
   <script type="text/babel" src="src/contrato-editor.jsx?v=5"></script>
 
-  <!-- Engenharia · Configurador de Equipamentos -->
-  <script type="text/babel" src="src/engenharia-config.jsx?v=2"></script>
+  <!-- Engenharia · Configurador de Equipamentos (escada/esteira rolante) -->
+  <script type="text/babel" src="src/engenharia-config.jsx?v=3"></script>
+
+  <!-- Engenharia · Projeto de Elevadores (poço/cabine/porta, correlacionado por Nº da Cotação) -->
+  <script src="src/projeto-elevador-store.js?v=1"></script>
+  <script type="text/babel" src="src/engenharia-elevador.jsx?v=1"></script>
 
   <!-- Engenharia · Desenho Técnico ER|ES (porte Claude Designer) -->
   <script type="text/babel" src="src/desenho-tecnico.jsx?v=1"></script>
@@ -193,6 +198,6 @@
   <script type="text/babel" src="src/vp-copiloto.jsx?v=1"></script>
 
   <!-- Main app last -->
-  <script type="text/babel" src="src/app.jsx?v=28"></script>
+  <script type="text/babel" src="src/app.jsx?v=29"></script>
 </body>
 </html>
