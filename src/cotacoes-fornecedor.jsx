@@ -13,6 +13,18 @@
    window.CotacoesFornecedorPage / window.CotacaoFornecedorDetalhe
    rotas: "cotacoes-fornecedor" / "cotacao-fornecedor-detail"
    ============================================================ */
+/* fmtDateLong (primitives.jsx) espera data pura (YYYY-MM-DD); os timestamptz
+   reais do Supabase (sent_at, viewed_at, created_at…) quebram nela. */
+function cfFmtDateTime(ts) {
+  if (!ts) return '—';
+  const d = new Date(ts);
+  return d.toLocaleDateString('pt-BR') + ' às ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+}
+function cfFmtDate(ts) {
+  if (!ts) return '—';
+  return new Date(ts).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: '2-digit' });
+}
+
 const CF_AGUARDANDO = ['rascunho', 'enviado', 'visualizado'];
 const CF_TABS = [
   { key: 'todos', label: 'Todos' },
@@ -150,7 +162,7 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
                 </td>
                 <td>{c.fornecedor}</td>
                 <td>{cfCategoriaLabel(c.categoria_produto)}</td>
-                <td><span className="cell-num">{c.sent_at ? fmtDate(c.sent_at) : '—'}</span></td>
+                <td><span className="cell-num">{c.sent_at ? cfFmtDate(c.sent_at) : '—'}</span></td>
                 <td><FECefStatusChip status={c.status}/></td>
                 <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
               </tr>
@@ -212,7 +224,7 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao }) {
           <div key={m.id} style={{ border: "1px solid var(--border)", padding: "8px 10px", borderRadius: 4 }}>
             <div className="row sb" style={{ marginBottom: 4 }}>
               <b style={{ fontSize: 12 }}>{m.autor}</b>
-              <span className="muted small mono">{fmtDateLong(m.created_at)}</span>
+              <span className="muted small mono">{cfFmtDateTime(m.created_at)}</span>
             </div>
             {m.mensagem && <div style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>{m.mensagem}</div>}
             {(m.anexos || []).length > 0 && (
@@ -303,7 +315,7 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
           <div className="row gap-3" style={{ marginTop: 4 }}>
             <FECefStatusChip status={cot.status}/>
             <span className="muted small">{cfCategoriaLabel(cot.categoria_produto)}</span>
-            {cot.sent_at && <span className="muted small">Enviado em {fmtDateLong(cot.sent_at)}</span>}
+            {cot.sent_at && <span className="muted small">Enviado em {cfFmtDateTime(cot.sent_at)}</span>}
           </div>
         </div>
         <div className="page-head__r">
@@ -349,11 +361,11 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
             <KvBlock label="Equipamentos (Master ID)" value={<CfUnidadesMasterId cot={cot}/>}/>
           </Card>
           <Card title="Linha do tempo">
-            <KvBlock label="Enviado em" value={cot.sent_at ? fmtDateLong(cot.sent_at) : '—'}/>
-            <KvBlock label="Visualizado em" value={cot.viewed_at ? fmtDateLong(cot.viewed_at) : '—'}/>
-            <KvBlock label="Respondido em" value={cot.responded_at ? fmtDateLong(cot.responded_at) : '—'}/>
-            <KvBlock label="Decidido comprar em" value={cot.decidido_em ? fmtDateLong(cot.decidido_em) : '—'}/>
-            <KvBlock label="Aprovado em" value={cot.aprovado_em ? fmtDateLong(cot.aprovado_em) : '—'}/>
+            <KvBlock label="Enviado em" value={cot.sent_at ? cfFmtDateTime(cot.sent_at) : '—'}/>
+            <KvBlock label="Visualizado em" value={cot.viewed_at ? cfFmtDateTime(cot.viewed_at) : '—'}/>
+            <KvBlock label="Respondido em" value={cot.responded_at ? cfFmtDateTime(cot.responded_at) : '—'}/>
+            <KvBlock label="Decidido comprar em" value={cot.decidido_em ? cfFmtDateTime(cot.decidido_em) : '—'}/>
+            <KvBlock label="Aprovado em" value={cot.aprovado_em ? cfFmtDateTime(cot.aprovado_em) : '—'}/>
           </Card>
         </div>
       </>}
