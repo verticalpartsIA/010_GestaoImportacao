@@ -54,7 +54,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Precificação</div>
-          <h1 className="page-head__title">Precificação — Elevadores</h1>
+          <h1 className="page-head__title">Precificação — Equipamentos</h1>
           <p className="page-head__sub">Cotações já respondidas pelo fornecedor, prontas para calcular o preço de venda.</p>
         </div>
         <div className="page-head__r"><PrecificacaoModoTabs modo={modo} setModo={setModo}/></div>

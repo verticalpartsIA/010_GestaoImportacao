@@ -19,6 +19,7 @@ const ROUTE_TITLE = {
   "proposta-editor": "Editor de Proposta",
   engenharia: "Projetos de Engenharia",
   "ncm-catalogo": "Catálogo de Produtos",
+  "eng-projeto-elevadores": "Projeto de Elevadores",
   "eng-configurador": "Projeto de Equipamento",
   "desenho-tecnico": "Desenho Técnico ER | ES",
   "ficha-tecnica": "Ficha Técnica",
@@ -176,6 +177,7 @@ function App() {
       case "proposta-editor": return <PropostaEditor setRoute={setRoute} subsel={subsel}/>;
       case "engenharia": return <EngenhariaPage setRoute={setRoute}/>;
       case "ncm-catalogo": return <NcmCatalogoPage setRoute={setRoute}/>;
+      case "eng-projeto-elevadores": return <window.ProjetoElevadorPage setRoute={setRoute}/>;
       case "eng-configurador": return <ConfiguradorPage setRoute={setRoute}/>;
       case "desenho-tecnico": return <DesenhoTecnicoPage setRoute={setRoute}/>;
       case "ficha-tecnica": return <FichaTecnicaPage/>;
@@ -267,6 +269,7 @@ function App() {
               { value: "proposta-editor", label: "📝 Editor de Proposta (3 eq.)" },
               { value: "engenharia", label: "Engenharia + Laudo" },
               { value: "ncm-catalogo", label: "📋 Catálogo de Produtos" },
+              { value: "eng-projeto-elevadores", label: "🛗 Projeto de Elevadores" },
               { value: "eng-configurador", label: "🛠 Projeto de Equipamento" },
               { value: "desenho-tecnico", label: "📐 Desenho Técnico ER | ES" },
               { value: "ficha-tecnica", label: "📋 Ficha Técnica" },

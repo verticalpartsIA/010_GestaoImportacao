@@ -162,11 +162,103 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
   );
 }
 
+/* ---------- Tratativas: histórico de conversa/negociação da cotação,
+   substitui o e-mail — thread único, correlacionado pelo Nº da Cotação. ---------- */
+function CfTratativas({ cotacaoFornecedorId, numeroCotacao }) {
+  const store = window.TratativasStore;
+  const [msgs, setMsgs] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [texto, setTexto] = React.useState("");
+  const [anexos, setAnexos] = React.useState([]);
+  const [enviando, setEnviando] = React.useState(false);
+  const [uploading, setUploading] = React.useState(false);
+
+  const reload = React.useCallback(() => {
+    setLoading(true);
+    return store.listarPorCotacao(cotacaoFornecedorId).then(data => { setMsgs(data); setLoading(false); });
+  }, [cotacaoFornecedorId]);
+  React.useEffect(() => { reload(); }, [reload]);
+
+  const onFiles = async (fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    setUploading(true);
+    const novos = [];
+    for (const file of files) {
+      try { novos.push(await store.uploadAnexo(cotacaoFornecedorId, file)); }
+      catch (e) { window.toast("Falha no upload: " + e.message, "error"); }
+    }
+    setAnexos(a => [...a, ...novos]);
+    setUploading(false);
+  };
+
+  const enviar = async () => {
+    setEnviando(true);
+    try {
+      await store.enviar({ cotacaoFornecedorId, numeroCotacao, mensagem: texto, anexos });
+      setTexto(""); setAnexos([]);
+      await reload();
+    } catch (e) { window.toast("Erro: " + e.message, "error"); }
+    setEnviando(false);
+  };
+
+  if (loading) return <div style={{ textAlign: "center", padding: "40px 0", color: "var(--fg3)", fontSize: 13 }}>Carregando…</div>;
+
+  return (
+    <Card title="Tratativas" sub="Histórico de negociação com o fornecedor — fica registrado aqui, não em e-mail.">
+      <div className="stack" style={{ gap: 10, maxHeight: 420, overflowY: "auto", padding: "4px 2px" }}>
+        {msgs.length === 0 && <div className="muted small" style={{ padding: "16px 0", textAlign: "center" }}>Nenhuma mensagem ainda.</div>}
+        {msgs.map(m => (
+          <div key={m.id} style={{ border: "1px solid var(--border)", padding: "8px 10px", borderRadius: 4 }}>
+            <div className="row sb" style={{ marginBottom: 4 }}>
+              <b style={{ fontSize: 12 }}>{m.autor}</b>
+              <span className="muted small mono">{fmtDateLong(m.created_at)}</span>
+            </div>
+            {m.mensagem && <div style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>{m.mensagem}</div>}
+            {(m.anexos || []).length > 0 && (
+              <div className="row gap-2" style={{ flexWrap: "wrap", marginTop: 6 }}>
+                {m.anexos.map((a, i) => (
+                  <a key={i} href={a.url} target="_blank" rel="noreferrer" className="row gap-2"
+                    style={{ border: "1px solid var(--border)", padding: "4px 8px", fontSize: 12, alignItems: "center" }}>
+                    <Icon.fileText size={13}/>{a.nome}
+                  </a>
+                ))}
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+      <div className="stack" style={{ gap: 6, marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
+        <textarea className="input" rows={2} value={texto} onChange={e => setTexto(e.target.value)}
+          placeholder="Escreva uma mensagem para registrar o ajuste combinado…" style={{ resize: "vertical", fontFamily: "inherit" }}/>
+        {anexos.length > 0 && (
+          <div className="row gap-2" style={{ flexWrap: "wrap" }}>
+            {anexos.map((a, i) => (
+              <div key={i} className="row gap-2" style={{ border: "1px solid var(--border)", padding: "4px 8px", fontSize: 12, alignItems: "center" }}>
+                <Icon.fileText size={13}/>{a.nome}
+                <button onClick={() => setAnexos(prev => prev.filter((_, idx) => idx !== i))} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--fg3)" }}><Icon.x size={12}/></button>
+              </div>
+            ))}
+          </div>
+        )}
+        <div className="row sb">
+          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content", cursor: "pointer", border: "1px solid var(--border)", padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#fff" }}>
+            <Icon.upload size={12}/> {uploading ? "Enviando…" : "Anexar arquivo"}
+            <input type="file" multiple style={{ display: "none" }} onChange={e => onFiles(e.target.files)}/>
+          </label>
+          <Button variant="primary" icon="send" disabled={enviando || uploading} onClick={enviar}>{enviando ? "Enviando…" : "Enviar"}</Button>
+        </div>
+      </div>
+    </Card>
+  );
+}
+
 function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
   const store = window.CotacaoElevadorFornecedorStore;
   const [cot, setCot] = React.useState(cotInicial);
   const [verResp, setVerResp] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  const [tab, setTab] = React.useState('detalhes');
 
   if (!cot) {
     return <EmptyStateRedirect
@@ -223,39 +315,52 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
         </div>
       </div>
 
-      <Card style={{ marginBottom: 16 }} sharp={false}>
-        <div className="alert info" style={{ margin: 0 }}>
-          <Icon.link2/>
-          <div style={{ flex: 1 }}>
-            <div className="alert__title">Link público enviado ao fornecedor</div>
-            <div className="alert__sub mono" style={{ fontSize: 12, marginTop: 2 }}>{url}</div>
-          </div>
+      <div className="tbar">
+        <div className="seg">
+          <button className={tab === 'detalhes' ? 'is-active' : ''} onClick={() => setTab('detalhes')}>Detalhes</button>
+          <button className={tab === 'tratativas' ? 'is-active' : ''} onClick={() => setTab('tratativas')}>Tratativas</button>
         </div>
-      </Card>
+      </div>
 
-      {!temResposta && (
-        <Card sub="Ainda não há resposta registrada para esta cotação.">
-          <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>
-            Aguardando o fornecedor preencher o formulário técnico pelo link público.
+      {tab === 'detalhes' && <>
+        <Card style={{ marginBottom: 16 }} sharp={false}>
+          <div className="alert info" style={{ margin: 0 }}>
+            <Icon.link2/>
+            <div style={{ flex: 1 }}>
+              <div className="alert__title">Link público enviado ao fornecedor</div>
+              <div className="alert__sub mono" style={{ fontSize: 12, marginTop: 2 }}>{url}</div>
+            </div>
           </div>
         </Card>
-      )}
 
-      <div className="split--wide split">
-        <Card title="Dados enviados">
-          <KvBlock label="Fornecedor" value={cot.fornecedor}/>
-          <KvBlock label="Categoria" value={cfCategoriaLabel(cot.categoria_produto)}/>
-          <KvBlock label="Nº Cotação (cliente)" value={cot.dados_envio?.header?.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', cot.dados_envio.header.numero_cotacao) : '—'} mono/>
-          <KvBlock label="Equipamentos (Master ID)" value={<CfUnidadesMasterId cot={cot}/>}/>
-        </Card>
-        <Card title="Linha do tempo">
-          <KvBlock label="Enviado em" value={cot.sent_at ? fmtDateLong(cot.sent_at) : '—'}/>
-          <KvBlock label="Visualizado em" value={cot.viewed_at ? fmtDateLong(cot.viewed_at) : '—'}/>
-          <KvBlock label="Respondido em" value={cot.responded_at ? fmtDateLong(cot.responded_at) : '—'}/>
-          <KvBlock label="Decidido comprar em" value={cot.decidido_em ? fmtDateLong(cot.decidido_em) : '—'}/>
-          <KvBlock label="Aprovado em" value={cot.aprovado_em ? fmtDateLong(cot.aprovado_em) : '—'}/>
-        </Card>
-      </div>
+        {!temResposta && (
+          <Card sub="Ainda não há resposta registrada para esta cotação.">
+            <div style={{ padding: '24px 0', textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>
+              Aguardando o fornecedor preencher o formulário técnico pelo link público.
+            </div>
+          </Card>
+        )}
+
+        <div className="split--wide split">
+          <Card title="Dados enviados">
+            <KvBlock label="Fornecedor" value={cot.fornecedor}/>
+            <KvBlock label="Categoria" value={cfCategoriaLabel(cot.categoria_produto)}/>
+            <KvBlock label="Nº Cotação (cliente)" value={cot.dados_envio?.header?.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', cot.dados_envio.header.numero_cotacao) : '—'} mono/>
+            <KvBlock label="Equipamentos (Master ID)" value={<CfUnidadesMasterId cot={cot}/>}/>
+          </Card>
+          <Card title="Linha do tempo">
+            <KvBlock label="Enviado em" value={cot.sent_at ? fmtDateLong(cot.sent_at) : '—'}/>
+            <KvBlock label="Visualizado em" value={cot.viewed_at ? fmtDateLong(cot.viewed_at) : '—'}/>
+            <KvBlock label="Respondido em" value={cot.responded_at ? fmtDateLong(cot.responded_at) : '—'}/>
+            <KvBlock label="Decidido comprar em" value={cot.decidido_em ? fmtDateLong(cot.decidido_em) : '—'}/>
+            <KvBlock label="Aprovado em" value={cot.aprovado_em ? fmtDateLong(cot.aprovado_em) : '—'}/>
+          </Card>
+        </div>
+      </>}
+
+      {tab === 'tratativas' && (
+        <CfTratativas cotacaoFornecedorId={cot.id} numeroCotacao={cot.dados_envio?.header?.numero_cotacao ?? null}/>
+      )}
 
       {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}
     </div>
