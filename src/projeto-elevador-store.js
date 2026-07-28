@@ -34,7 +34,7 @@
     return data || [];
   }
 
-  async function salvar({ id, numeroCotacao, cotacaoFornecedorId, referencia, responsavel, status, unidades, anexos, observacoes }) {
+  async function salvar({ id, isNew, numeroCotacao, cotacaoFornecedorId, referencia, responsavel, status, unidades, anexos, observacoes }) {
     const c = sb(); if (!c) throw new Error('Sem conexão com o banco.');
     if (!referencia?.trim()) throw new Error('Referência (prédio/empreendimento) é obrigatória.');
     const row = {
@@ -48,9 +48,12 @@
       observacoes: observacoes || null,
       updated_at: new Date().toISOString(),
     };
-    const q = id
-      ? c.from('projetos_elevador').update(row).eq('id', id).select().single()
-      : c.from('projetos_elevador').insert({ id: uuid(), ...row }).select().single();
+    /* `id` vem sempre preenchido (pré-gerado no modal pra correlacionar
+       anexos antes do 1º save) — quem decide insert vs. update é `isNew`,
+       não a presença de `id` (senão o insert nunca acontece). */
+    const q = isNew
+      ? c.from('projetos_elevador').insert({ id: id || uuid(), ...row }).select().single()
+      : c.from('projetos_elevador').update(row).eq('id', id).select().single();
     const { data, error } = await q;
     if (error) throw new Error(error.message);
     return data;
