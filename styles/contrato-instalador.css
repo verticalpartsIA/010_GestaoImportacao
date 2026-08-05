@@ -471,12 +471,19 @@
 .ci-err-state h1 { font-size: 22px; margin: 0 0 8px; }
 .ci-err-state p { font-size: 13px; color: var(--ci-fg2); }
 
-/* "Baixar cópia assinada" (window.print() em /assinar/:token) — o
-   documento fica invisível na tela de sucesso e só aparece na impressão,
-   que por sua vez esconde a telinha de sucesso. Compartilhado pelos 3
-   tipos (Instalador / Venda / Proposta), todos passam por esta página. */
-.ci-print-doc { display: none; }
+/* "Baixar (PDF)" / "Baixar cópia assinada" (window.print() em
+   /assinar/:token) — o documento fica fora da tela (não display:none!)
+   e só volta ao fluxo normal na impressão, que por sua vez esconde o
+   resto da página. Compartilhado pelos 3 tipos (Instalador / Venda /
+   Proposta), todos passam por esta página.
+   IMPORTANTE: display:none quebrava a Proposta — PEPreview (bare) mede
+   a largura do container via ResizeObserver pra calcular o `zoom` das
+   páginas, e um elemento display:none nunca dispara ResizeObserver;
+   resultado era PDF em branco (bug real, achado ao testar o botão
+   novo). Fora da tela (position:absolute + left negativo) o elemento
+   continua tendo layout de verdade, então o ResizeObserver funciona. */
+.ci-print-doc { position: absolute; left: -9999px; top: 0; width: 900px; }
 @media print {
   .ci-sign-status, .ci-sign-shell { display: none !important; }
-  .ci-print-doc { display: block !important; }
+  .ci-print-doc { display: block !important; position: static !important; left: auto !important; width: auto !important; }
 }
