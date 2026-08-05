@@ -196,6 +196,28 @@
     return data;
   }
 
+  /* garantirNo(numeroCotacao, key) — o app permite pular etapas "formais"
+     (ex.: Proposta publicada e assinada direto pelo link, sem passar pelo
+     clique de "Enviar Proposta") — o evento de fechamento correspondente
+     nunca dispara, e o nó sucessor nasceria órfão (predecessor_id null).
+     Aqui a cadeia se auto-reconstrói: se o predecessor não existe, ele
+     nasce e fecha retroativamente (status 'ok', mesmo instante) antes do
+     nó pedido nascer — nunca deixa buraco na árvore visual. */
+  async function garantirNo(numeroCotacao, key) {
+    let row = await getRow(numeroCotacao, key);
+    if (row) {
+      if (!row.concluido_em) row = await fecharNo(numeroCotacao, nodeByKey(key), 'ok');
+      return row;
+    }
+    const node = nodeByKey(key);
+    if (!node) return null;
+    const predKey = (node.predecessores[0] || {}).key;
+    const predRow = predKey ? await garantirNo(numeroCotacao, predKey) : null;
+    row = await nascerNo(numeroCotacao, node, predRow ? predRow.id : null, predRow ? predRow.alvo_id : null);
+    if (row) row = await fecharNo(numeroCotacao, node, 'ok');
+    return row;
+  }
+
   /* onEvento({ evento, numeroCotacao, alvoId, detalhe })
      Chamada única disparada por EventosFluxo.registrar(). Nunca derruba
      o fluxo principal por falha — é automação, não obrigação transacional.
@@ -205,16 +227,16 @@
   async function onEvento({ evento, numeroCotacao, alvoId, detalhe } = {}) {
     if (numeroCotacao == null) return;
     try {
-      /* 1) fecha quem tiver esse evento como fechamento */
+      /* 1) fecha quem tiver esse evento como fechamento. Caso especial:
+         cliente recusou a proposta — AGUARDA_CLIENTE fecha como
+         "encerrado" (não "ok"), e a cadeia para aí, sem abrir
+         Contrato/Projeto. Precisa decidir o status ANTES de fechar —
+         fecharNo é idempotente e não deixa reabrir pra trocar depois. */
+      const recusada = evento === 'CLIENTE_RESPONDEU_PROPOSTA' && (detalhe || {}).resposta === 'recusada';
       for (const node of NODES) {
         if (node.fecha !== evento) continue;
-        await fecharNo(numeroCotacao, node, 'ok');
-      }
-
-      /* Caso especial: cliente recusou a proposta — encerra a cadeia
-         em AGUARDA_CLIENTE sem abrir Contrato/Projeto. */
-      if (evento === 'CLIENTE_RESPONDEU_PROPOSTA' && (detalhe || {}).resposta === 'recusada') {
-        await fecharNo(numeroCotacao, nodeByKey('AGUARDA_CLIENTE'), 'encerrado');
+        const status = recusada && node.key === 'AGUARDA_CLIENTE' ? 'encerrado' : 'ok';
+        await fecharNo(numeroCotacao, node, status);
       }
 
       /* 2) nasce quem tiver esse evento como nascimento */
@@ -222,7 +244,7 @@
         if (node.nasce !== evento) continue;
         if (node.condicaoNasce && !node.condicaoNasce(detalhe)) continue;
         const predKey = (node.predecessores[0] || {}).key;
-        const predRow = predKey ? await getRow(numeroCotacao, predKey) : null;
+        const predRow = predKey ? await garantirNo(numeroCotacao, predKey) : null;
         await nascerNo(numeroCotacao, node, predRow ? predRow.id : null, alvoId);
       }
     } catch (e) {

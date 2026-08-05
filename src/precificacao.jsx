@@ -500,7 +500,11 @@ function PropostasPage({ setRoute, setSubsel }) {
         window.toast?.('Não foi possível localizar o formulário desta cotação.', 'error');
         return;
       }
-      const prefill = { ...r.prefill, numero: `Cotação-${pz.numero_cotacao ?? pz.numero_documento}` };
+      /* Nº da Proposta pré-preenchido com o Master ID universal — VPEL-EL0904,
+         não um rótulo inventado tipo "Cotação-904". Vendedor pode editar, mas
+         o padrão precisa ser o código que todo mundo na empresa reconhece. */
+      const numero = pz.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', pz.numero_cotacao) : (pz.numero_documento || '');
+      const prefill = { ...r.prefill, numero };
       setSubsel(prefill);
       setRoute('proposta-editor');
     } catch (e) {
