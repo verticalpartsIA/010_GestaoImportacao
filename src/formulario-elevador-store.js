@@ -249,6 +249,16 @@
      da Unidade, e nunca reaproveitado nem trocado depois — é o "-1"/"-2"/"-3"
      do Asset-Level ID (ex.: VPEL-EL0902-A-1), obrigatório mesmo pra pedido
      de 1 elevador só. */
+  /* Campos numéricos/opcionais da unidade chegam como '' quando o vendedor
+     deixa em branco (ex.: dimensões da cabine) — Postgres rejeita '' em
+     coluna numeric ("invalid input syntax for type numeric"). '' vira null
+     pra qualquer coluna (texto aceita null igual). */
+  function limparVazios(obj) {
+    const out = {};
+    Object.keys(obj || {}).forEach((k) => { out[k] = obj[k] === '' ? null : obj[k]; });
+    return out;
+  }
+
   async function adicionarUnidade(formularioId, unidade) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const id = novoId('FEU');
@@ -256,7 +266,7 @@
       .select('indice_ativo').eq('formulario_id', formularioId);
     const proximoIndice = (existentes || []).reduce((max, u) => Math.max(max, u.indice_ativo || 0), 0) + 1;
     const { data, error } = await c.from('formularios_elevador_unidades').insert({
-      id, formulario_id: formularioId, ...unidade, indice_ativo: proximoIndice,
+      id, formulario_id: formularioId, ...limparVazios(unidade), indice_ativo: proximoIndice,
     }).select().single();
     if (error) throw error;
     return data;
@@ -264,7 +274,7 @@
 
   async function atualizarUnidade(unidadeId, patch) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { error } = await c.from('formularios_elevador_unidades').update(patch).eq('id', unidadeId);
+    const { error } = await c.from('formularios_elevador_unidades').update(limparVazios(patch)).eq('id', unidadeId);
     if (error) throw error;
   }
 
