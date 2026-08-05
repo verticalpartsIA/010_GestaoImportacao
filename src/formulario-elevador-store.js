@@ -213,11 +213,17 @@
 
   async function obter(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { data: header, error } = await c.from('formularios_elevador').select('*').eq('id', id).single();
+    const { data: header, error } = await c.from('formularios_elevador').select('*, clientes(*)').eq('id', id).single();
     if (error) throw error;
     const { data: unidades } = await c.from('formularios_elevador_unidades')
       .select('*').eq('formulario_id', id).order('created_at', { ascending: true });
-    return { ...header, unidades: unidades || [] };
+    // Dados de identidade do cliente (razão social, CNPJ, endereço etc.) vivem
+    // em `clientes`, não em `formularios_elevador` — sem isto o formulário
+    // reabria com esses campos em branco mesmo já tendo um cliente vinculado.
+    // `id` fica de fora do merge pra não trocar o id do formulário pelo do cliente.
+    const { clientes, ...resto } = header;
+    const { id: _clienteId, ...clienteCampos } = clientes || {};
+    return { ...resto, ...clienteCampos, unidades: unidades || [] };
   }
 
   async function obterPorToken(token) {
@@ -304,7 +310,7 @@
     if (e2) throw e2;
     const unificado = [
       ...(hist || []).map((h) => ({
-        numero_cotacao: h.numero_cotacao, data: h.data, vendedor: h.vendedor, origem_venda: h.origem_venda,
+        id: h.id, numero_cotacao: h.numero_cotacao, data: h.data, vendedor: h.vendedor, origem_venda: h.origem_venda,
         nome_cliente: h.nome_cliente, cnpj_comprador: h.cnpj_comprador, estado_instalacao: h.estado_instalacao,
         status: h.status, origem: 'historico',
       })),

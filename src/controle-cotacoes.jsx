@@ -104,8 +104,8 @@ function ControleCotacoesPage({ setRoute }) {
             {rows !== null && filtradas.length === 0 && (
               <tr><td colSpan={99}><div className="empty"><h4>Nenhuma cotação encontrada</h4><p>Nada encontrado com os filtros atuais.</p></div></td></tr>
             )}
-            {filtradas.map((r) => (
-              <tr key={`${r.origem}-${r.numero_cotacao}`}>
+            {filtradas.map((r, i) => (
+              <tr key={r.id ? `${r.origem}-${r.id}` : `${r.origem}-${r.numero_cotacao}-${i}`}>
                 <td><span className="mono small">{r.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', r.numero_cotacao) : '—'}</span></td>
                 <td><span className="mono small" style={{ whiteSpace: 'nowrap' }}>{r.data ? String(r.data).slice(0, 10) : '—'}</span></td>
                 <td style={{ fontSize: 12.5 }}>{r.nome_cliente || <span className="muted">—</span>}</td>

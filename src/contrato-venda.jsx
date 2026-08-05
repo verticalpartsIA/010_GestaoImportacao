@@ -528,8 +528,17 @@ function CVWizard({ onCreated, initial }) {
 
     if (Object.keys(all).length > 0) {
       setErrors(all);
-      const firstBad = Object.keys(validateStep(0, form)).length ? 0 : 3;
+      // Bug real: quando o único problema era checklist/dossier/valor (todos
+      // do Passo 5 — Revisão), a função só resetava o passo (sempre pra 0 ou
+      // 3) e retornava false EM SILÊNCIO — nenhum toast, nenhum alert, nada.
+      // O usuário clicava "Gerar e enviar" e nada visível acontecia.
+      const firstBad = Object.keys(validateStep(0, form)).length ? 0
+        : Object.keys(validateStep(3, form)).length ? 3
+        : 4; // __checklist / __dossier / __valor pertencem ao Passo 5 (Revisão)
       setStep(firstBad);
+      const mensagens = [all.__checklist, all.__dossier, all.__valor].filter(Boolean);
+      if (mensagens.length) alert(mensagens.join('\n'));
+      else if (firstBad !== 4) alert('Preencha os campos obrigatórios antes de gerar o contrato.');
       return false;
     }
     return true;
