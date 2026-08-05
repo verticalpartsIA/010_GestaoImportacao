@@ -377,10 +377,64 @@
     return { ...cur, ...patch };
   }
 
+  /* ---------- Anexos da resposta do Fornecedor (PDF/DWG/imagens) ----------
+     Bucket privado cotacao-fornecedor-anexos — mesmo padrão de bucket
+     privado + URL assinada de formulario-elevador-store.js (FEA_BUCKET).
+     Vinculados à cotação inteira (não por unidade). */
+  const CEF_ANEXOS_BUCKET = 'cotacao-fornecedor-anexos';
+
+  function cef_slugify(s) {
+    return String(s || 'arquivo')
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9.]+/g, '-').replace(/^-|-$/g, '')
+      .slice(0, 80) || 'arquivo';
+  }
+
+  async function listarAnexosResposta(cotacaoFornecedorId) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.from('cotacoes_elevador_fornecedor_anexos')
+      .select('*').eq('cotacao_fornecedor_id', cotacaoFornecedorId).order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function anexarArquivoResposta(cotacaoFornecedorId, file) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const nomeSeguro = cef_slugify(file.name);
+    const path = `${cotacaoFornecedorId}/${Date.now()}-${nomeSeguro}`;
+    const { error: upErr } = await c.storage.from(CEF_ANEXOS_BUCKET)
+      .upload(path, file, { upsert: false, contentType: file.type || 'application/octet-stream' });
+    if (upErr) throw upErr;
+    const { data, error } = await c.from('cotacoes_elevador_fornecedor_anexos').insert({
+      cotacao_fornecedor_id: cotacaoFornecedorId,
+      nome_arquivo: file.name,
+      tamanho_bytes: file.size,
+      tipo_arquivo: file.type || null,
+      path,
+    }).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function urlAssinadaAnexoResposta(path, ttlSeconds) {
+    const c = sb(); if (!c) return null;
+    const { data, error } = await c.storage.from(CEF_ANEXOS_BUCKET).createSignedUrl(path, ttlSeconds || 3600);
+    if (error || !data) return null;
+    return data.signedUrl;
+  }
+
+  async function removerAnexoResposta(anexo) {
+    const c = sb(); if (!c || !anexo) return;
+    if (anexo.path) await c.storage.from(CEF_ANEXOS_BUCKET).remove([anexo.path]);
+    await c.from('cotacoes_elevador_fornecedor_anexos').delete().eq('id', anexo.id);
+  }
+
   window.CotacaoElevadorFornecedorStore = {
     cotacaoUrl, tipoFormularioPara, liftModelLabel, machineRoomLabel, controleLabel,
     CATEGORIAS_PRODUTO, STATUS_LABEL, STATUS_COR,
     unitSpecSecoes, unitSpecFieldLabel, assetMasterId,
+    listarAnexosResposta, anexarArquivoResposta, urlAssinadaAnexoResposta, removerAnexoResposta,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
     getByToken, marcarVisualizado, salvarResposta, getPublicIP,
     decidirComprar, aprovar,

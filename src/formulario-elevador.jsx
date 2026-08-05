@@ -374,6 +374,36 @@ function FECotacaoDivergencias({ itens }) {
   );
 }
 
+function FECotacaoAnexosResposta({ cotacaoId }) {
+  const store = window.CotacaoElevadorFornecedorStore;
+  const [anexos, setAnexos] = React.useState([]);
+  React.useEffect(() => {
+    if (!store || !cotacaoId) return;
+    store.listarAnexosResposta(cotacaoId).then(setAnexos).catch(() => setAnexos([]));
+  }, [cotacaoId]);
+  const abrir = async (a) => {
+    const url = await store.urlAssinadaAnexoResposta(a.path);
+    if (url) window.open(url, '_blank');
+    else window.toast?.('Não foi possível gerar o link do arquivo.', 'error');
+  };
+  if (!anexos.length) return null;
+  return (
+    <div style={{ marginTop: 12 }}>
+      <span className="up-eyebrow muted">Anexos do fornecedor (PDF/DWG/imagens)</span>
+      <div className="stack" style={{ gap: 4, marginTop: 4 }}>
+        {anexos.map((a) => (
+          <div key={a.id} className="row gap-2" style={{ fontSize: 13 }}>
+            <Icon.fileText size={14}/>
+            <button className="link-btn" style={{ border: 'none', background: 'transparent', color: 'var(--vp-info)', cursor: 'pointer', padding: 0, fontSize: 13 }}
+              onClick={() => abrir(a)}>{a.nome_arquivo}</button>
+            <span className="muted small">{a.tamanho_bytes ? `(${Math.round(a.tamanho_bytes / 1024)} KB)` : ''}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function FECotacaoRespostaModal({ cot, onClose }) {
   const r = cot.respostas || {};
   const itens = r.itens || [];
@@ -415,6 +445,7 @@ function FECotacaoRespostaModal({ cot, onClose }) {
           <p className="small" style={{ marginTop: 4 }}>{r.observacoes_gerais}</p>
         </div>
       )}
+      <FECotacaoAnexosResposta cotacaoId={cot.id}/>
     </Modal>
   );
 }
