@@ -382,12 +382,30 @@
    SIGN PAGE (assinar.html)
    ============================================================ */
 .ci-sign-shell { max-width: 760px; margin: 0 auto; padding: 0 16px 80px; }
+.ci-sign-shell--split { max-width: 1180px; }
 .ci-sign-top { display: flex; justify-content: space-between; align-items: center; padding: 16px 0; background: #111; color: #fff; margin: 0 -16px 16px; padding: 14px 16px; }
 .ci-sign-top img { height: 28px; filter: brightness(0) invert(1); }
 .ci-secure { display: inline-flex; align-items: center; gap: 6px; font-size: 11px; padding: 4px 10px; background: rgba(255,255,255,.1); border-radius: 12px; }
 
 .ci-sign-intro h1 { font-size: 22px; font-weight: 800; margin: 0 0 6px; }
 .ci-sign-intro p { font-size: 13px; color: var(--ci-fg2); margin: 0 0 18px; }
+
+/* Documento à esquerda (ocupa a altura útil da tela, não uma caixinha
+   espremida) + painel de decisão fixo (sticky) à direita — o cliente
+   precisa ver a proposta inteira antes de decidir o que assinar. Em
+   telas estreitas cai pra coluna única (documento em cima). */
+.ci-sign-grid { display: block; }
+.ci-sign-side-col { margin-top: 8px; }
+@media (min-width: 900px) {
+  .ci-sign-grid { display: grid; grid-template-columns: 1fr 360px; gap: 28px; align-items: start; }
+  .ci-sign-side-col { margin-top: 0; position: sticky; top: 16px; max-height: calc(100vh - 32px); overflow-y: auto; }
+  .ci-doc-viewer-scroll { max-height: calc(100vh - 200px) !important; }
+}
+.ci-sign-alt { margin-top: 18px; padding: 12px 14px; background: #f8f8f8; border: 1px solid var(--ci-line); border-radius: 4px; }
+.ci-sign-alt-btn { width: 100%; padding: 10px; background: #fff; border: 1px solid var(--ci-line); border-radius: 3px; font-size: 12.5px; font-weight: 700; cursor: pointer; }
+.ci-sign-alt-btn:hover { background: #f0f0f0; }
+.ci-sign-alt p { font-size: 11.5px; color: var(--ci-fg3); margin: 8px 0 0; line-height: 1.5; }
+.ci-sign-alt a { color: var(--ci-dark); font-weight: 600; }
 
 .ci-sum-card { padding: 14px 16px; background: #fff; border: 1px solid var(--ci-line); border-radius: 4px; margin-bottom: 20px; }
 .ci-sum-head { display: flex; justify-content: space-between; gap: 12px; align-items: flex-start; padding-bottom: 10px; border-bottom: 1px solid var(--ci-line); margin-bottom: 10px; }
@@ -402,7 +420,7 @@
 .ci-sign-label .n { width: 22px; height: 22px; border-radius: 50%; background: var(--ci-yellow); color: #111; display: inline-flex; align-items: center; justify-content: center; font-size: 11px; font-weight: 700; }
 
 .ci-doc-viewer { background: #fff; border: 1px solid var(--ci-line); border-radius: 4px; position: relative; }
-.ci-doc-viewer-scroll { max-height: 360px; overflow-y: auto; padding: 0; }
+.ci-doc-viewer-scroll { max-height: min(65vh, 640px); overflow-y: auto; padding: 0; }
 .ci-doc-viewer-scroll .ci-doc-sheet { box-shadow: none; padding: 16px; max-width: 100%; font-size: 10.5pt; }
 .ci-scroll-hint { position: absolute; bottom: 8px; left: 50%; transform: translateX(-50%); padding: 6px 12px; background: rgba(0,0,0,.75); color: #fff; font-size: 11px; border-radius: 12px; pointer-events: none; transition: opacity .25s; }
 .ci-scroll-hint.hidden { opacity: 0; }
@@ -459,6 +477,6 @@
    tipos (Instalador / Venda / Proposta), todos passam por esta página. */
 .ci-print-doc { display: none; }
 @media print {
-  .ci-sign-status { display: none !important; }
+  .ci-sign-status, .ci-sign-shell { display: none !important; }
   .ci-print-doc { display: block !important; }
 }

@@ -303,8 +303,12 @@ function SgApp() {
     ? (rec.valor_total ? window.CV.brl(Number(rec.valor_total)) : '—')
     : (rec.valor_total_num ? window.CV.brl(rec.valor_total_num) : '—');
 
+  const docNode = isProposta
+    ? <window.PEPreview data={window.PropostaStore.conteudoVigente(rec)} eq={rec.proposal_type || 'elevador'} bare/>
+    : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>;
+
   return (
-    <div className="ci-sign-shell">
+    <div className="ci-sign-shell ci-sign-shell--split">
       <div className="ci-sign-top">
         <img src="/assets/logo-mark-yellow.png" alt="VerticalParts"/>
         <span className="ci-secure"><SgIconLock/> Seguro</span>
@@ -312,61 +316,74 @@ function SgApp() {
 
       <div className="ci-sign-intro">
         <h1>{isProposta ? 'Assine sua proposta' : 'Assine seu contrato'}</h1>
-        <p>A Vertical Parts enviou {isProposta ? 'esta proposta comercial' : 'este contrato'} para sua assinatura digital. Leia o documento, confirme e assine — sem precisar de cadastro.</p>
+        <p>A Vertical Parts enviou {isProposta ? 'esta proposta comercial' : 'este contrato'} para sua assinatura digital. Leia o documento por inteiro ao lado, confirme e assine — sem precisar de cadastro.</p>
       </div>
 
-      <div className="ci-sum-card">
-        <div className="ci-sum-head">
-          <div className="num">{rec.numero_documento}</div>
-          <div className="title">{titulo}</div>
-        </div>
-        <div className="ci-sum-rows">
-          <SgSumRow k={isInstalador ? 'Contratante' : 'Vendedora'} v="Vertical Parts Ltda."/>
-          <SgSumRow k={counterpartyLabel} v={counterpartyName}/>
-          <SgSumRow k="Objeto" v={objetoResumo}/>
-          <SgSumRow k="Valor total" v={valorFmt}/>
-        </div>
-      </div>
-
-      <div className="ci-sign-label"><span className="n">1</span> Leia {isProposta ? 'a proposta' : 'o contrato'}</div>
-      <div className="ci-doc-viewer">
-        <div className="ci-doc-viewer-scroll" ref={viewerRef} onScroll={onScroll}>
-          {isProposta
-            ? <window.PEPreview data={window.PropostaStore.conteudoVigente(rec)} eq={rec.proposal_type || 'elevador'} bare/>
-            : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
-        </div>
-        <div className={'ci-scroll-hint' + (scrolledEnd ? ' hidden' : '')}>↓ Role até o fim para habilitar a assinatura</div>
-      </div>
-      <div className={'ci-read-flag' + (scrolledEnd ? '' : ' pending')}>
-        {scrolledEnd ? '✓ Documento lido por completo' : 'Role o documento até o final'}
-      </div>
-
-      <div className="ci-sign-label"><span className="n">2</span> Concordância</div>
-      <div className={'ci-consent' + (consent ? ' on' : '') + (scrolledEnd ? '' : ' disabled')} onClick={() => scrolledEnd && setConsent(!consent)}>
-        <div className="box">{consent && <span>✓</span>}</div>
-        <div className="txt">Declaro que li, compreendi e concordo com todos os termos {isProposta ? 'desta proposta' : 'deste contrato'}.</div>
-      </div>
-
-      <div className="ci-sign-label"><span className="n">3</span> Sua assinatura</div>
-      <div className="ci-sig-tabs">
-        <button className={'ci-sig-tab' + (sigMode === 'draw' ? ' on' : '')} onClick={() => setSigMode('draw')}>Desenhar</button>
-        <button className={'ci-sig-tab' + (sigMode === 'type' ? ' on' : '')} onClick={() => setSigMode('type')}>Digitar nome</button>
-      </div>
-      {sigMode === 'draw'
-        ? <SgSignaturePad onChange={setDrawData}/>
-        : (
-          <div className="ci-sig-typed">
-            <input value={typedName} onChange={(e) => setTypedName(e.target.value)} placeholder="Digite seu nome completo"/>
-            <div className="preview">{typedName.trim() ? <span>{typedName}</span> : <span className="ph">Sua assinatura aparece aqui</span>}</div>
+      <div className="ci-sign-grid">
+        <div className="ci-sign-doc-col">
+          <div className="ci-sign-label"><span className="n">1</span> Leia {isProposta ? 'a proposta' : 'o contrato'} por inteiro</div>
+          <div className="ci-doc-viewer">
+            <div className="ci-doc-viewer-scroll" ref={viewerRef} onScroll={onScroll}>
+              {docNode}
+            </div>
+            <div className={'ci-scroll-hint' + (scrolledEnd ? ' hidden' : '')}>↓ Role até o fim para habilitar a assinatura</div>
           </div>
-        )}
-      <p className="ci-sig-meta">Ao assinar, registramos data/hora, seu IP e dispositivo para fins de auditoria, conforme a MP 2.200-2/2001 e a Lei 14.063/2020.</p>
+          <div className={'ci-read-flag' + (scrolledEnd ? '' : ' pending')}>
+            {scrolledEnd ? '✓ Documento lido por completo' : 'Role o documento até o final'}
+          </div>
+        </div>
 
-      <div className="ci-sign-actionbar">
-        <button className="ci-sign-btn" disabled={!canSign} onClick={handleSign}>Confirmar e assinar</button>
-        {!canSign && <p className="ci-req-hint">{!scrolledEnd ? 'Leia o documento até o fim' : !consent ? 'Marque a concordância' : 'Adicione sua assinatura'}</p>}
-        <button className="ci-sign-sub-action" onClick={handleRefuse}>Recusar assinatura</button>
+        <div className="ci-sign-side-col">
+          <div className="ci-sum-card">
+            <div className="ci-sum-head">
+              <div className="num">{rec.numero_documento}</div>
+              <div className="title">{titulo}</div>
+            </div>
+            <div className="ci-sum-rows">
+              <SgSumRow k={isInstalador ? 'Contratante' : 'Vendedora'} v="Vertical Parts Ltda."/>
+              <SgSumRow k={counterpartyLabel} v={counterpartyName}/>
+              <SgSumRow k="Objeto" v={objetoResumo}/>
+              <SgSumRow k="Valor total" v={valorFmt}/>
+            </div>
+          </div>
+
+          <div className="ci-sign-label"><span className="n">2</span> Concordância</div>
+          <div className={'ci-consent' + (consent ? ' on' : '') + (scrolledEnd ? '' : ' disabled')} onClick={() => scrolledEnd && setConsent(!consent)}>
+            <div className="box">{consent && <span>✓</span>}</div>
+            <div className="txt">Declaro que li, compreendi e concordo com todos os termos {isProposta ? 'desta proposta' : 'deste contrato'}.</div>
+          </div>
+
+          <div className="ci-sign-label"><span className="n">3</span> Sua assinatura</div>
+          <div className="ci-sig-tabs">
+            <button className={'ci-sig-tab' + (sigMode === 'draw' ? ' on' : '')} onClick={() => setSigMode('draw')}>Desenhar</button>
+            <button className={'ci-sig-tab' + (sigMode === 'type' ? ' on' : '')} onClick={() => setSigMode('type')}>Digitar nome</button>
+          </div>
+          {sigMode === 'draw'
+            ? <SgSignaturePad onChange={setDrawData}/>
+            : (
+              <div className="ci-sig-typed">
+                <input value={typedName} onChange={(e) => setTypedName(e.target.value)} placeholder="Digite seu nome completo"/>
+                <div className="preview">{typedName.trim() ? <span>{typedName}</span> : <span className="ph">Sua assinatura aparece aqui</span>}</div>
+              </div>
+            )}
+          <p className="ci-sig-meta">Ao assinar, registramos data/hora, seu IP e dispositivo para fins de auditoria, conforme a MP 2.200-2/2001 e a Lei 14.063/2020.</p>
+
+          <div className="ci-sign-actionbar">
+            <button className="ci-sign-btn" disabled={!canSign} onClick={handleSign}>Confirmar e assinar</button>
+            {!canSign && <p className="ci-req-hint">{!scrolledEnd ? 'Leia o documento até o fim' : !consent ? 'Marque a concordância' : 'Adicione sua assinatura'}</p>}
+            <button className="ci-sign-sub-action" onClick={handleRefuse}>Recusar assinatura</button>
+          </div>
+
+          <div className="ci-sign-alt">
+            <button type="button" className="ci-sign-alt-btn" onClick={() => window.print()}>⬇ Baixar {isProposta ? 'proposta' : 'contrato'} (PDF)</button>
+            <p>Prefere assinar à mão? Baixe {isProposta ? 'a proposta' : 'o contrato'}, assine com caneta, tire uma foto ou digitalize e envie por e-mail para <a href="mailto:comercial@verticalparts.com.br">comercial@verticalparts.com.br</a>.</p>
+          </div>
+        </div>
       </div>
+
+      {/* Invisível na tela — só existe pra "Baixar (PDF)" ter o que
+         imprimir antes da assinatura (mesmo padrão do print pós-assinatura). */}
+      <div className="ci-print-doc">{docNode}</div>
     </div>
   );
 }
