@@ -172,9 +172,27 @@
     return data;
   }
 
+  /* Colunas reais de formularios_elevador — o formulário na tela (`header`)
+     também carrega campos do CLIENTE (cnpj, razão social, telefone...) que
+     vivem só na tabela `clientes`, nunca aqui. Sem esse filtro, um spread
+     cru do patch manda esses campos pro update() e quebra com "Could not
+     find the column" (mesmo bug do 'endereco' antes — dessa vez foi o
+     'cnpj'; por isso a whitelist agora, em vez de tirar campo por campo). */
+  const FE_COLUNAS_VALIDAS = new Set([
+    'lead_id', 'dossier_id', 'cliente_id', 'canal', 'token',
+    'local_obra_cidade', 'local_obra_estado', 'endereco_obra', 'prazo_desejado',
+    'tipo_mao_de_obra', 'responsavel_entrega', 'origem_venda', 'status', 'observacoes',
+    'endereco_obra_diferente', 'endereco_logradouro', 'endereco_complemento', 'endereco_bairro',
+    'endereco_cep', 'endereco_cidade', 'endereco_estado',
+    'endereco_obra_logradouro', 'endereco_obra_complemento', 'endereco_obra_bairro',
+    'endereco_obra_cep', 'endereco_obra_cidade', 'endereco_obra_estado',
+    'vendedor', 'numero_cotacao', 'finalidade_compra',
+  ]);
+
   async function salvar(id, patch) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const resolved = { ...patch };
+    const resolved = {};
+    Object.keys(patch).forEach((k) => { if (FE_COLUNAS_VALIDAS.has(k)) resolved[k] = patch[k]; });
     if (resolved.endereco_obra_diferente !== undefined) {
       const usaEnderecoObra = !!resolved.endereco_obra_diferente;
       // Obra "não é endereço diferente" → mantém sincronizado com o endereço do cliente.
