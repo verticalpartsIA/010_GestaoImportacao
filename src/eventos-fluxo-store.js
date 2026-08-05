@@ -53,7 +53,7 @@
         detalhe: detalhe || null,
       }).select().single();
       if (error) { console.warn('[EventosFluxo] registrar falhou', error); return null; }
-      if (window.GatilhosEngine) window.GatilhosEngine.onEvento({ evento, numeroCotacao, detalhe });
+      if (window.GatilhosEngine) window.GatilhosEngine.onEvento({ evento, numeroCotacao, alvoId, detalhe });
       return data;
     } catch (e) {
       console.warn('[EventosFluxo] registrar falhou', e);

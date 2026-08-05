@@ -467,14 +467,46 @@ function PropostasPage({ setRoute, setSubsel }) {
   const [rows, setRows] = React.useState(null);
   const [busca, setBusca] = React.useState('');
   const [fStatus, setFStatus] = React.useState('Todos');
+  const [prontas, setProntas] = React.useState([]);
 
   const carregar = React.useCallback(() => {
     window.__VP_SB.sb.from('propostas')
-      .select('id, numero_documento, titulo, status, valor_total, master_id, proposal_type, data_json, criado_em')
+      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, data_json, criado_em')
       .order('criado_em', { ascending: false }).limit(300)
       .then(({ data }) => setRows(data || []));
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
+
+  /* "Prontas para enviar" — Precificação terminou o cálculo, mas quem
+     decide analisar e enviar é o Comercial, não o Financeiro. Lista toda
+     precificação calculada cujo Nº da Cotação ainda não tem proposta. */
+  const carregarProntas = React.useCallback(async () => {
+    const { data: pz } = await window.__VP_SB.sb.from('precificacoes_elevador')
+      .select('id, numero_documento, numero_cotacao').eq('status', 'calculado')
+      .order('numero_cotacao', { ascending: false });
+    const { data: props } = await window.__VP_SB.sb.from('propostas').select('numero_cotacao').not('numero_cotacao', 'is', null);
+    const jaTemProposta = new Set((props || []).map((p) => p.numero_cotacao));
+    setProntas((pz || []).filter((p) => p.numero_cotacao != null && !jaTemProposta.has(p.numero_cotacao)));
+  }, []);
+  React.useEffect(() => { carregarProntas(); }, [carregarProntas]);
+
+  /* Mesma engenharia da herança que o vendedor dispara pelo Nº da Cotação
+     no editor — fonte única, pra não existirem duas regras divergentes de
+     "de onde vêm os dados da proposta" (antes vivia em Precificação). */
+  const abrirDaPrecificacao = async (pz) => {
+    try {
+      const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao);
+      if (!r.encontrado) {
+        window.toast?.('Não foi possível localizar o formulário desta cotação.', 'error');
+        return;
+      }
+      const prefill = { ...r.prefill, numero: `Cotação-${pz.numero_cotacao ?? pz.numero_documento}` };
+      setSubsel(prefill);
+      setRoute('proposta-editor');
+    } catch (e) {
+      window.toast?.('Erro ao preparar a proposta: ' + e.message, 'error');
+    }
+  };
 
   const statusDisponiveis = React.useMemo(() => {
     if (!rows) return [];
@@ -514,6 +546,22 @@ function PropostasPage({ setRoute, setSubsel }) {
           <Button variant="primary" icon="plus" onClick={abrirNova}>Nova proposta</Button>
         </div>
       </div>
+
+      {prontas.length > 0 && (
+        <Card title="Prontas para enviar" sub={`${prontas.length} precificação(ões) aguardando análise e envio`} style={{ marginBottom: 20 }}>
+          <div className="stack" style={{ gap: 8 }}>
+            {prontas.map((pz) => (
+              <div key={pz.id} className="row sb" style={{ padding: '10px 14px', background: 'var(--vp-warning-tint)' }}>
+                <div>
+                  <b>{window.MasterIdEngine.baseId('elevador', pz.numero_cotacao)}</b> precificado — analise e envie a proposta
+                  <div className="muted small">{pz.numero_documento}</div>
+                </div>
+                <Button variant="primary" size="sm" icon="proposal" onClick={() => abrirDaPrecificacao(pz)}>Analisar e enviar</Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
         <KPI label="Propostas" value={rows ? rows.length : '…'} sub="total cadastrado" icon="proposal"/>

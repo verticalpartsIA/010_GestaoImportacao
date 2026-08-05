@@ -65,7 +65,7 @@ function ModalNovoGatilho({ onClose, onSaved }) {
   );
 }
 
-function FinanceiroPage({ setRoute }) {
+function FinanceiroPage({ setRoute, setSubsel }) {
   const [gatilhos, setGatilhos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [showGatilho, setShowGatilho] = React.useState(false);
@@ -76,6 +76,18 @@ function FinanceiroPage({ setRoute }) {
   const fecharLembrete = async (id) => {
     if (window.GatilhosEngine) await window.GatilhosEngine.fecharLembrete(id);
     reloadGatilhos();
+  };
+
+  /* Clique na linha do Gatilho leva pro objeto real (Financeiro vê
+     "Fornecedor respondeu" → cai na Precificação; Vendedor vê
+     "Precificado" → cai na Proposta). Nós sem rota ou sem resolver
+     definido (ver gatilhos-engine.js) não são clicáveis. */
+  const abrirGatilho = async (g) => {
+    if (!window.GatilhosEngine) return;
+    const alvo = await window.GatilhosEngine.navegarPara(g);
+    if (!alvo) return;
+    if (alvo.subsel !== null) setSubsel?.(alvo.subsel);
+    setRoute?.(alvo.rota);
   };
 
   const reloadGatilhos = async () => {
@@ -175,7 +187,7 @@ function FinanceiroPage({ setRoute }) {
           {Object.entries(cadeiasPorCotacao).map(([numeroCotacao, nos]) => (
             <CadeiaGatilhosCotacao key={numeroCotacao} numeroCotacao={numeroCotacao} nos={nos}
               onConfirmarSinal={setConfirmarSinalDe} onConfirmarAval={setConfirmarAvalDe}
-              onFecharLembrete={fecharLembrete}/>
+              onFecharLembrete={fecharLembrete} onAbrirGatilho={abrirGatilho}/>
           ))}
         </div>
       </Card>
@@ -208,88 +220,135 @@ function corGantt(pct) {
   return `rgb(${rgb.join(',')})`;
 }
 
-function GanttBar({ nascidoEm, prazoEm, concluidoEm }) {
+/* "faltam Xh" / "prazo estourado" / "concluído" — reaproveitado pelo
+   mini-Gantt tanto no resumo fechado quanto nas linhas da árvore aberta. */
+function labelPrazo(nascidoEm, prazoEm, concluidoEm) {
+  if (concluidoEm) return "concluído dentro do prazo";
   if (!prazoEm || !nascidoEm) return null;
-  const start = new Date(nascidoEm).getTime();
   const end = new Date(prazoEm).getTime();
-  const now = concluidoEm ? new Date(concluidoEm).getTime() : Date.now();
-  const pct = end > start ? (now - start) / (end - start) : 0;
-  const overdue = pct > 1 && !concluidoEm;
-  const cor = concluidoEm ? "var(--vp-success)" : corGantt(pct);
-  const restanteMs = end - now;
-  const label = concluidoEm ? "concluído dentro do prazo"
-    : overdue ? "prazo estourado"
-    : restanteMs > 3600000 ? `faltam ${Math.round(restanteMs / 3600000)}h`
-    : `faltam ${Math.max(0, Math.round(restanteMs / 60000))}min`;
+  const restanteMs = end - Date.now();
+  if (restanteMs <= 0) return "prazo estourado";
+  return restanteMs > 3600000 ? `faltam ${Math.round(restanteMs / 3600000)}h` : `faltam ${Math.max(0, Math.round(restanteMs / 60000))}min`;
+}
+
+/* Barra de Gantt compacta — usada no resumo fechado da cadeia e nas
+   linhas da árvore expandida. `comLabel` mostra "faltam Xh" ao lado. */
+function GanttBarMini({ nascidoEm, prazoEm, concluidoEm, encerrado, comLabel }) {
+  const barra = (cor, pct) => (
+    <div style={{ height: 4, width: 60, background: "var(--vp-gray-100)", borderRadius: 2, overflow: "hidden" }}>
+      <div style={{ width: Math.min(Math.max(pct, 0), 1) * 100 + "%", height: "100%", background: cor }}/>
+    </div>
+  );
+  let el;
+  let cor = concluidoEm ? "var(--vp-success)" : "var(--fg3)";
+  if (encerrado) {
+    el = <div style={{ height: 4, background: "var(--vp-gray-300)", borderRadius: 2, width: 60 }}/>;
+  } else if (!prazoEm || !nascidoEm) {
+    el = <div style={{ height: 4, background: concluidoEm ? "var(--vp-success)" : "var(--vp-gray-200)", borderRadius: 2, width: 60 }}/>;
+  } else {
+    const start = new Date(nascidoEm).getTime();
+    const end = new Date(prazoEm).getTime();
+    const now = concluidoEm ? new Date(concluidoEm).getTime() : Date.now();
+    const pct = end > start ? (now - start) / (end - start) : 0;
+    cor = concluidoEm ? "var(--vp-success)" : corGantt(pct);
+    el = barra(cor, pct);
+  }
+  if (!comLabel) return el;
+  const label = labelPrazo(nascidoEm, prazoEm, concluidoEm);
   return (
-    <div style={{ marginTop: 6 }}>
-      <div style={{ height: 5, background: "var(--vp-gray-100)", borderRadius: 3, overflow: "hidden" }}>
-        <div style={{ width: Math.min(Math.max(pct, 0), 1) * 100 + "%", height: "100%", background: cor, transition: "width .3s" }}/>
-      </div>
-      <div className="mono small" style={{ color: cor, marginTop: 2 }}>{label}</div>
+    <div className="row gap-2" style={{ alignItems: 'center' }}>
+      {el}
+      {label && <span className="mono small" style={{ color: cor, whiteSpace: 'nowrap' }}>{label}</span>}
     </div>
   );
 }
 
-/* ---------- Cadeia automática (GatilhosEngine) ---------- */
-function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete }) {
+/* ---------- Cadeia automática (GatilhosEngine) ----------
+   Fechada: uma linha-resumo por cotação (clicável, mini-Gantt do nó
+   atual). Aberta: árvore vertical, cada nó indentado pela profundidade
+   na cadeia (irmãos II/SS ficam no mesmo nível) — não mais cards lado
+   a lado, que não escalam quando há muitas cotações na tela. */
+function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho }) {
+  const [aberta, setAberta] = React.useState(false);
+  const engine = window.GatilhosEngine;
+
   const principais = nos.filter(g => !String(g.evento_key || '').startsWith('LEMBRETE__'))
     .sort((a, b) => new Date(a.nascido_em || 0) - new Date(b.nascido_em || 0));
   const lembretesPorPai = nos.filter(g => String(g.evento_key || '').startsWith('LEMBRETE__'))
     .reduce((acc, g) => { (acc[g.predecessor_id] = acc[g.predecessor_id] || []).push(g); return acc; }, {});
 
+  const encerrada = principais.some(g => g.status === 'encerrado');
+  const concluida = principais.every(g => g.concluido_em);
+  const noAtual = principais.find(g => !g.concluido_em) || principais[principais.length - 1];
+  const statusLabel = encerrada ? 'Encerrada (proposta recusada)' : concluida ? 'Concluída' : 'Em andamento';
+  const statusVariant = encerrada ? 'neutral' : concluida ? 'success' : 'warning';
+
   return (
     <div>
-      <div className="row sb" style={{ marginBottom: 10 }}>
-        <div className="up-eyebrow muted">Cotação Nº {numeroCotacao}</div>
-        <Badge variant={principais.some(g => g.status === 'encerrado') ? 'neutral' : principais.every(g => g.concluido_em) ? 'success' : 'warning'} dot>
-          {principais.some(g => g.status === 'encerrado') ? 'Encerrada (proposta recusada)' : principais.every(g => g.concluido_em) ? 'Concluída' : 'Em andamento'}
-        </Badge>
+      <div className="row sb" style={{ cursor: 'pointer', padding: '4px 0' }} onClick={() => setAberta((v) => !v)}>
+        <div className="row gap-3" style={{ alignItems: 'center' }}>
+          <Icon.chevRight size={12} style={{ transform: aberta ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}/>
+          <div className="up-eyebrow muted">Cotação Nº {numeroCotacao}</div>
+          {!aberta && noAtual && (
+            <>
+              <span className="small muted">{noAtual.trigger_name}</span>
+              <GanttBarMini nascidoEm={noAtual.nascido_em} prazoEm={noAtual.prazo_em} concluidoEm={noAtual.concluido_em} encerrado={encerrada}/>
+            </>
+          )}
+        </div>
+        <Badge variant={statusVariant} dot>{statusLabel}</Badge>
       </div>
-      <div className="prazo-chain">
-        {principais.map((g, i) => {
-          const isOpen = !g.concluido_em;
-          const revisao = g.status === 'revisao_necessaria';
-          const cls = g.status === 'encerrado' ? 'warning' : revisao ? 'warning' : g.concluido_em ? 'success' : 'current';
-          const podeConfirmarSinal = g.evento_key === 'AGUARDA_BOLETO' && isOpen;
-          const podeConfirmarAval = g.evento_key === 'AVAL_PAGAMENTO' && isOpen;
-          const lembretes = lembretesPorPai[g.id] || [];
-          return (
-            <div key={g.id} className={"prazo-step " + cls}>
-              <div className="prazo-step__lbl">{g.tipo_relacionamento || 'FS'}</div>
-              <div className="prazo-step__t">{g.trigger_name}</div>
-              <div className="prazo-step__d">
-                {g.concluido_em ? `Concluído ${fmtDateLong(g.concluido_em)}`
-                  : revisao ? 'Proposta requer revisão — prazo estourado'
-                  : g.conclusao_tipo === 'manual' && !g.prazo_em ? 'Aguardando confirmação manual'
-                  : 'Em andamento'}
-              </div>
-              <GanttBar nascidoEm={g.nascido_em} prazoEm={g.prazo_em} concluidoEm={g.concluido_em}/>
-              {podeConfirmarSinal && (
-                <Button size="sm" variant="primary" icon="check" style={{ marginTop: 6 }}
-                  onClick={() => onConfirmarSinal(g)}>Boleto pago</Button>
-              )}
-              {podeConfirmarAval && (
-                <Button size="sm" variant="primary" icon="check" style={{ marginTop: 6 }}
-                  onClick={() => onConfirmarAval(g)}>Dar Aval de Pagamento</Button>
-              )}
-              {lembretes.map((l) => (
-                <div key={l.id} style={{ marginTop: 8, padding: "6px 8px", background: "var(--vp-warning-tint)", fontSize: 11 }}>
-                  <div className="row sb">
+
+      {aberta && (
+        <div style={{ marginTop: 8, marginLeft: 20 }}>
+          {principais.map((g) => {
+            const isOpen = !g.concluido_em;
+            const revisao = g.status === 'revisao_necessaria';
+            const podeConfirmarSinal = g.evento_key === 'AGUARDA_BOLETO' && isOpen;
+            const podeConfirmarAval = g.evento_key === 'AVAL_PAGAMENTO' && isOpen;
+            const lembretes = lembretesPorPai[g.id] || [];
+            const nodeDef = (engine?.NODES || []).find((n) => n.key === g.evento_key);
+            const clicavel = !!(nodeDef && nodeDef.rota);
+            const nivel = engine ? engine.profundidade(g.evento_key) : 0;
+            const cor = revisao ? 'var(--vp-warning)' : g.concluido_em ? 'var(--vp-success)' : 'var(--fg2)';
+            return (
+              <div key={g.id}>
+                <div className="row gap-2" style={{
+                  alignItems: 'center', padding: '6px 8px', marginLeft: nivel * 20,
+                  borderLeft: nivel > 0 ? '2px solid var(--border)' : 'none',
+                  cursor: clicavel ? 'pointer' : 'default',
+                }} onClick={clicavel ? () => onAbrirGatilho(g) : undefined} title={clicavel ? 'Abrir' : undefined}>
+                  <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--fg3)', width: 20 }}>{g.tipo_relacionamento || 'FS'}</span>
+                  <span className="small" style={{ color: cor, fontWeight: g.concluido_em ? 400 : 700, flex: 1 }}>
+                    {g.trigger_name}
+                    {revisao ? ' — requer revisão' : ''}
+                  </span>
+                  <GanttBarMini nascidoEm={g.nascido_em} prazoEm={g.prazo_em} concluidoEm={g.concluido_em} comLabel/>
+                  {podeConfirmarSinal && (
+                    <Button size="sm" variant="primary" icon="check"
+                      onClick={(e) => { e.stopPropagation(); onConfirmarSinal(g); }}>Boleto pago</Button>
+                  )}
+                  {podeConfirmarAval && (
+                    <Button size="sm" variant="primary" icon="check"
+                      onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval</Button>
+                  )}
+                </div>
+                {lembretes.map((l) => (
+                  <div key={l.id} className="row sb" style={{
+                    marginLeft: (nivel + 1) * 20, padding: '4px 8px', fontSize: 11,
+                    background: 'var(--vp-warning-tint)', borderLeft: '2px solid var(--border)',
+                  }}>
                     <span>⚠ {l.trigger_name}</span>
                     {!l.concluido_em && (
-                      <Button variant="ghost" size="sm" onClick={() => onFecharLembrete(l.id)}>Já cobrei</Button>
+                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onFecharLembrete(l.id); }}>Já cobrei</Button>
                     )}
                   </div>
-                </div>
-              ))}
-              {i < principais.length - 1 ? (
-                <div className="prazo-step__arrow"><Icon.arrowRight size={10}/></div>
-              ) : null}
-            </div>
-          );
-        })}
-      </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
     </div>
   );
 }
