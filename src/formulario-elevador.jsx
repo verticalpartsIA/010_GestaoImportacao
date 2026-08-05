@@ -584,7 +584,7 @@ const FE_FINALIDADE_COMPRA = [
 
 const FE_HEADER_KEYS = [
   'tipo_pessoa', 'razao_social', 'cnpj', 'cpf', 'inscricao_estadual', 'contribuinte_icms', 'finalidade_compra',
-  'endereco', 'endereco_logradouro', 'endereco_complemento', 'endereco_bairro', 'endereco_cep', 'endereco_cidade', 'endereco_estado',
+  'endereco_logradouro', 'endereco_complemento', 'endereco_bairro', 'endereco_cep', 'endereco_cidade', 'endereco_estado',
   'telefone', 'email',
   'local_obra_cidade', 'local_obra_estado', 'endereco_obra_diferente',
   'endereco_obra', 'endereco_obra_logradouro', 'endereco_obra_complemento', 'endereco_obra_bairro', 'endereco_obra_cep', 'endereco_obra_cidade', 'endereco_obra_estado',
