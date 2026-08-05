@@ -2,11 +2,11 @@
    eventos-fluxo-store.js
    Trilha genérica do fluxo operacional — Formulário → Cotação a
    Fornecedor → Proposta → Cliente — correlacionada pelo Nº da Cotação.
-   Alimenta a tabela eventos_fluxo, que "Gatilhos & Prazo Reverso" vai
-   passar a ler (dashboard/linha do tempo/gráficos ficam pra depois).
-   Não é o log de auditoria (isso é o VPLog) nem os gatilhos financeiros
-   (isso é a tabela `gatilhos`) — aqui é só "o que já aconteceu nesta
-   cotação, nesta ordem".
+   Alimenta a tabela eventos_fluxo e, a cada registro, aciona o
+   GatilhosEngine (gatilhos-engine.js) — que nasce/fecha os nós da
+   cadeia de "Gatilhos & Prazo" (tabela `gatilhos`) automaticamente.
+   Não é o log de auditoria (isso é o VPLog) — aqui é só "o que já
+   aconteceu nesta cotação, nesta ordem".
    window.EventosFluxo = { EVENTOS, registrar, listarPorCotacao }
    ============================================================ */
 (function () {
@@ -28,8 +28,11 @@
     FINANCEIRO_REPROVOU_VENDA:   { modulo: 'Aval Financeiro',         label: 'Financeiro reprovou a venda' },
     CONTRATO_VENDA_ENVIADO:      { modulo: 'Contrato de Venda',       label: 'Contrato de venda enviado' },
     CONTRATO_VENDA_ASSINADO:     { modulo: 'Contrato de Venda',       label: 'Contrato de venda assinado' },
-    SINAL_PAGO:                  { modulo: 'Aval Financeiro',         label: 'Sinal pago pelo cliente' },
+    SINAL_PAGO:                  { modulo: 'Aval Financeiro',         label: 'Boleto pago pelo cliente' },
+    AVAL_PAGAMENTO_CONFIRMADO:   { modulo: 'Aval Financeiro',         label: 'Financeiro deu o Aval de Pagamento' },
     COMPRA_FORNECEDOR_INICIADA:  { modulo: 'Cotação a Fornecedor',    label: 'Compra do equipamento iniciada no fornecedor' },
+    COMPRA_FORNECEDOR_CONFIRMADA:{ modulo: 'Cotação a Fornecedor',    label: 'Compra do equipamento confirmada com o fornecedor' },
+    PROJETO_ELEVADOR_FINALIZADO: { modulo: 'Engenharia',              label: 'Projeto de Elevadores finalizado' },
   };
 
   /* registrar({ evento, numeroCotacao, alvoLabel, alvoId, detalhe })
@@ -50,6 +53,7 @@
         detalhe: detalhe || null,
       }).select().single();
       if (error) { console.warn('[EventosFluxo] registrar falhou', error); return null; }
+      if (window.GatilhosEngine) window.GatilhosEngine.onEvento({ evento, numeroCotacao, detalhe });
       return data;
     } catch (e) {
       console.warn('[EventosFluxo] registrar falhou', e);

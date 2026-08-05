@@ -72,11 +72,15 @@
   <!-- Registro central de atividades (auditoria global) -->
   <script src="src/vp-log.js?v=2"></script>
 
+  <!-- Gatilhos & Prazo — motor que nasce/fecha nós automaticamente a partir
+       dos eventos de eventos-fluxo-store.js (carrega ANTES dele) -->
+  <script src="src/gatilhos-engine.js?v=2"></script>
+
   <!-- Trilha genérica do fluxo operacional (Formulário → Fornecedor → Proposta → Cliente) -->
-  <script src="src/eventos-fluxo-store.js?v=1"></script>
+  <script src="src/eventos-fluxo-store.js?v=3"></script>
 
   <!-- Aval Financeiro — gate entre Proposta aprovada/Contrato e Contrato assinado/Compra -->
-  <script src="src/aval-financeiro-store.js?v=1"></script>
+  <script src="src/aval-financeiro-store.js?v=3"></script>
 
   <!-- Tweaks panel framework -->
   <script type="text/babel" src="src/tweaks-panel.jsx?v=3"></script>
@@ -84,7 +88,7 @@
   <!-- Components in dependency order -->
   <script type="text/babel" src="src/primitives.jsx?v=4"></script>
   <script type="text/babel" src="src/toast.jsx?v=4"></script>
-  <script type="text/babel" src="src/shell.jsx?v=25"></script>
+  <script type="text/babel" src="src/shell.jsx?v=26"></script>
   <script type="text/babel" src="src/dashboard.jsx?v=10"></script>
   <script type="text/babel" src="src/comercial.jsx?v=14"></script>
 
@@ -94,7 +98,7 @@
   <!-- Formulário de Coleta de Dados — Elevadores (Comercial) — ISSUE #66 -->
   <script src="src/enderecos-api.js?v=1"></script>
   <script src="src/formulario-elevador-store.js?v=9"></script>
-  <script src="src/cotacao-elevador-fornecedor-store.js?v=10"></script>
+  <script src="src/cotacao-elevador-fornecedor-store.js?v=11"></script>
   <script type="text/babel" src="src/formulario-elevador.jsx?v=18"></script>
 
   <!-- Controle de Cotações — histórico + Formulário de Elevadores — ISSUE #79 -->
@@ -129,7 +133,7 @@
   <script type="text/babel" src="src/ncm-catalogo.jsx?v=20"></script>
   <script type="text/babel" src="src/operacoes.jsx?v=11"></script>
   <script type="text/babel" src="src/logistica.jsx?v=14"></script>
-  <script type="text/babel" src="src/financeiro.jsx?v=11"></script>
+  <script type="text/babel" src="src/financeiro.jsx?v=13"></script>
   <script type="text/babel" src="src/aval-financeiro.jsx?v=1"></script>
 
   <!-- Dossier da Obra (entidade central) — ISSUE #2 -->
@@ -156,7 +160,7 @@
   <script type="text/babel" src="src/engenharia-config.jsx?v=3"></script>
 
   <!-- Engenharia · Projeto de Elevadores (poço/cabine/porta, correlacionado por Nº da Cotação) -->
-  <script src="src/projeto-elevador-store.js?v=1"></script>
+  <script src="src/projeto-elevador-store.js?v=2"></script>
   <script type="text/babel" src="src/engenharia-elevador.jsx?v=1"></script>
 
   <!-- Engenharia · Desenho Técnico ER|ES (porte Claude Designer) -->
@@ -198,6 +202,6 @@
   <script type="text/babel" src="src/vp-copiloto.jsx?v=1"></script>
 
   <!-- Main app last -->
-  <script type="text/babel" src="src/app.jsx?v=29"></script>
+  <script type="text/babel" src="src/app.jsx?v=30"></script>
 </body>
 </html>

@@ -313,6 +313,11 @@
     const patch = { status: 'aprovada', aprovado_em: now, updated_at: now };
     const { error } = await c.from('cotacoes_elevador_fornecedor').update(patch).eq('id', id);
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'COMPRA_FORNECEDOR_CONFIRMADA',
+      numeroCotacao: cur.dados_envio?.header?.numero_cotacao,
+      alvoLabel: `${cur.fornecedor || 'Fornecedor'} · ${cur.numero_documento || ''}`, alvoId: cur.id,
+    });
     return { ...cur, ...patch };
   }
 

@@ -61,6 +61,10 @@
     const { data, error } = await c.from('projetos_elevador')
       .update({ status: 'finalizado', updated_at: new Date().toISOString() }).eq('id', id).select().single();
     if (error) throw new Error(error.message);
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'PROJETO_ELEVADOR_FINALIZADO', numeroCotacao: data.numero_cotacao,
+      alvoLabel: data.referencia, alvoId: data.id,
+    });
     return data;
   }
 

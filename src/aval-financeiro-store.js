@@ -7,10 +7,15 @@
        -> Financeiro dá o aval (aprova ou reprova a venda)
        -> [só então o Contrato de Venda pode ser enviado — ver createDraft
           em contrato-venda-store.js]
-     Contrato assinado (Jurídico)
-       -> Financeiro confirma que o sinal foi pago
-       -> [só então a Cotação a Fornecedor pode iniciar a compra na China —
-          ver decidirComprar em cotacao-elevador-fornecedor-store.js]
+     Contrato enviado
+       -> Jurídico assina o contrato (automático, via link público)
+       -> Boleto gerado -> Financeiro confirma que foi pago (manual)
+       -> Financeiro dá o Aval de Pagamento (manual, NOVO — distinto
+          deste aval de score acima)
+       -> [só com contrato assinado + boleto pago + Aval de Pagamento
+          a Cotação a Fornecedor pode iniciar a compra na China — ver
+          decidirComprar em cotacao-elevador-fornecedor-store.js e
+          podeIniciarCompra abaixo. Ver instrucaocompra.md.]
 
    window.AvalFinanceiroStore
    ============================================================ */
@@ -146,6 +151,32 @@
     return data;
   }
 
+  /* Aval de Pagamento — checkpoint NOVO e distinto do aval de score/crédito
+     acima. Roda depois do boleto pago (confirmarSinal), antes de liberar a
+     compra ao fornecedor. Ver instrucaocompra.md. */
+  async function confirmarAvalPagamento(id, observacoes) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const now = new Date().toISOString();
+    const patch = {
+      aval_pagamento_confirmado: true,
+      aval_pagamento: {
+        observacoes: observacoes || null,
+        confirmado_por: (window.__VP_USER || {}).email || null, confirmado_em: now,
+      },
+      atualizado_em: now,
+    };
+    const { data, error } = await c.from('avais_financeiros').update(patch).eq('id', id).select().single();
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Aval Financeiro', acao: 'deu o Aval de Pagamento', alvo: data.numero_documento, alvo_id: data.id,
+    });
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'AVAL_PAGAMENTO_CONFIRMADO', numeroCotacao: data.numero_cotacao,
+      alvoLabel: data.cliente_nome || data.numero_documento, alvoId: data.id,
+    });
+    return data;
+  }
+
   /* Vincula o Contrato de Venda criado a esse aval — pra "Aval Financeiro"
      saber de qual contrato confirmar o sinal (chamado por createDraft). */
   async function vincularContrato(propostaId, contratoVendaId) {
@@ -167,15 +198,26 @@
   async function podeIniciarCompra(numeroCotacao) {
     if (numeroCotacao == null) return { ok: true }; // sem correlação — não trava
     const av = await getByNumeroCotacao(numeroCotacao);
-    if (!av || !av.sinal_pago) {
-      return { ok: false, motivo: 'O sinal do cliente ainda não foi confirmado pelo Financeiro. Confirme em "Aval Financeiro" antes de iniciar a compra no fornecedor.' };
+    const faltando = [];
+    let contratoAssinado = false;
+    if (av && av.contrato_venda_id) {
+      const c = sb();
+      const { data: contrato } = await c.from('contratos_venda_equipamentos')
+        .select('status').eq('id', av.contrato_venda_id).maybeSingle();
+      contratoAssinado = contrato?.status === 'assinado';
+    }
+    if (!contratoAssinado) faltando.push('a assinatura do contrato (Jurídico)');
+    if (!av || !av.sinal_pago) faltando.push('o pagamento do boleto pelo cliente (Financeiro)');
+    if (!av || !av.aval_pagamento_confirmado) faltando.push('o Aval de Pagamento (Financeiro)');
+    if (faltando.length) {
+      return { ok: false, motivo: `Ainda falta confirmar: ${faltando.join(', ')}. Verifique em "Aval Financeiro" antes de iniciar a compra no fornecedor.` };
     }
     return { ok: true };
   }
 
   window.AvalFinanceiroStore = {
     getById, getByPropostaId, getByNumeroCotacao, garantirRegistro, listarFila,
-    registrarConsulta, darAval, confirmarSinal, vincularContrato,
+    registrarConsulta, darAval, confirmarSinal, confirmarAvalPagamento, vincularContrato,
     podeEnviarContrato, podeIniciarCompra,
   };
 }());
