@@ -147,7 +147,6 @@
       endereco_cep: dados.endereco_cep || null,
       endereco_cidade: dados.endereco_cidade || null,
       endereco_estado: dados.endereco_estado || null,
-      endereco: formatarEndereco(enderecoPartes(dados, 'endereco_')) || null,
       endereco_obra_diferente: usaEnderecoObra,
       endereco_obra_logradouro: usaEnderecoObra ? (dados.endereco_obra_logradouro || null) : (dados.endereco_logradouro || null),
       endereco_obra_complemento: usaEnderecoObra ? (dados.endereco_obra_complemento || null) : (dados.endereco_complemento || null),
@@ -176,9 +175,6 @@
   async function salvar(id, patch) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const resolved = { ...patch };
-    if (resolved.endereco_logradouro !== undefined) {
-      resolved.endereco = formatarEndereco(enderecoPartes(resolved, 'endereco_')) || null;
-    }
     if (resolved.endereco_obra_diferente !== undefined) {
       const usaEnderecoObra = !!resolved.endereco_obra_diferente;
       // Obra "não é endereço diferente" → mantém sincronizado com o endereço do cliente.
