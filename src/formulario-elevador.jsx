@@ -808,6 +808,14 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
      não do estado `id`, que só reflete o setId em um próximo render (issue
      #90: gerarLink chamava gerarLinkPublico(id) com o id ainda stale). */
   const salvarTudo = async (novoStatus) => {
+    // Mesmo um rascunho precisa do nome — `clientes.razao_social` é NOT NULL
+    // no banco, então salvar sem isso derrubava com um 400 silencioso (sem
+    // toast nenhum), travando em "Cotação Nº — (gerado ao salvar)" pra
+    // sempre. O resto de `validar()` continua opcional pra rascunho.
+    if (!header.razao_social?.trim()) {
+      window.toast?.('Preencha o Nome/Razão Social do cliente antes de salvar.', 'warning');
+      return null;
+    }
     const erro = validar();
     if (novoStatus === 'enviado' && erro) { window.toast?.(erro, 'warning'); return null; }
     setSaving(true);
