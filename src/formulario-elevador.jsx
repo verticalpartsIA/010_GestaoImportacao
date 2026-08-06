@@ -450,7 +450,7 @@ function FECotacaoRespostaModal({ cot, onClose }) {
   );
 }
 
-function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, enviando }) {
+function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, onPedirRevisao, enviando }) {
   const store = window.CotacaoElevadorFornecedorStore;
   const suportado = grupo.fornecedor === 'Glarie';
   const [verResp, setVerResp] = React.useState(false);
@@ -477,7 +477,10 @@ function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, enviando }) {
 
       {suportado && cot?.status === 'respondido' ? (
         <div style={{ marginTop: 10 }}>
-          <Button variant="outline" size="sm" icon="fileText" onClick={() => setVerResp(true)}>Ver resposta do fornecedor</Button>
+          <div className="row gap-2">
+            <Button variant="outline" size="sm" icon="fileText" onClick={() => setVerResp(true)}>Ver resposta do fornecedor</Button>
+            <Button variant="ghost" size="sm" icon="refresh" disabled={busy} onClick={() => onPedirRevisao(grupo)}>Pedir nova revisão</Button>
+          </div>
           {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}
         </div>
       ) : suportado && (
@@ -519,6 +522,28 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
 
   const cotacaoDoGrupo = (g) => cotacoes.find((c) => c.fornecedor === g.fornecedor && c.tipo_formulario === g.tipoFormulario);
 
+  /* Pedir revisão = documento novo inteiro (mais simples por enquanto, ver
+     issue de revisão): cria uma nova cotação (revisão auto-incrementada por
+     store.gerar, ex. VPEL-EL0902 -> -A -> -B) pro MESMO fornecedor+tipo — a
+     resposta anterior não é apagada, continua acessível em Cotações a
+     Fornecedor. Depois de criada, cotacaoDoGrupo() já pega a mais recente
+     (listarPorFormulario ordena por created_at desc), então o card volta
+     sozinho pro estado "aguardando envio" com os campos de contato prontos. */
+  const pedirRevisao = async (grupo) => {
+    const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
+    if (!window.confirm(`Isso cria um novo documento de cotação (revisão) para ${grupo.fornecedor}, com um novo link. A resposta anterior continua salva e pode ser vista em Cotações a Fornecedor. Deseja continuar?`)) return;
+    setEnviando(key);
+    try {
+      await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, 'elevador');
+      await reload();
+      window.toast?.('Nova revisão criada — preencha o contato e envie.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao criar revisão: ' + e.message, 'error');
+    } finally {
+      setEnviando(null);
+    }
+  };
+
   const enviar = async (grupo, canal, recipient) => {
     const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
     setEnviando(key);
@@ -547,7 +572,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
       footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
       {grupos.length === 0 && <p className="small muted">Salve o formulário e defina o Fornecedor em pelo menos uma Unidade para enviar a cotação.</p>}
       {grupos.map((g) => (
-        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}`} grupo={g} cot={cotacaoDoGrupo(g)} onEnviar={enviar} enviando={enviando}/>
+        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}`} grupo={g} cot={cotacaoDoGrupo(g)} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando}/>
       ))}
     </Modal>
   );
