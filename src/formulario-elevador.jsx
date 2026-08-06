@@ -128,25 +128,31 @@ function feFmtBytes(n) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function FEAnexos({ formularioId, categoria, titulo, descricao, podeAnexar }) {
+function FEAnexos({ formularioId, categoria, titulo, descricao, podeAnexar, garantirSalvo }) {
   const [anexos, setAnexos] = React.useState(null);
   const [enviando, setEnviando] = React.useState(false);
   const fileRef = React.useRef(null);
 
   const recarregar = React.useCallback(() => {
-    if (!formularioId) return;
+    if (!formularioId) { setAnexos([]); return; }
     window.FormularioElevadorStore.listarAnexos(formularioId, categoria).then(setAnexos).catch(() => setAnexos([]));
   }, [formularioId, categoria]);
   React.useEffect(() => { recarregar(); }, [recarregar]);
 
+  /* Formulário novo ainda não tem id (só nasce no banco no 1º save) — sem
+     isso, não dava pra anexar nada até salvar manualmente primeiro. Salva
+     o rascunho na hora, por trás, na primeira tentativa de anexar. */
   const onEscolherArquivo = async (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!file) return;
     setEnviando(true);
     try {
-      await window.FormularioElevadorStore.anexarArquivo(formularioId, file, categoria);
-      recarregar();
+      let fid = formularioId;
+      if (!fid && garantirSalvo) fid = await garantirSalvo();
+      if (!fid) { window.toast?.('Preencha os campos obrigatórios do formulário antes de anexar.', 'warning'); return; }
+      const novo = await window.FormularioElevadorStore.anexarArquivo(fid, file, categoria);
+      setAnexos((prev) => [novo, ...(prev || [])]);
       window.toast?.('Arquivo anexado.', 'success');
     } catch (err) {
       window.toast?.('Erro ao anexar: ' + err.message, 'error');
@@ -170,8 +176,6 @@ function FEAnexos({ formularioId, categoria, titulo, descricao, podeAnexar }) {
       window.toast?.('Erro ao remover: ' + err.message, 'error');
     }
   };
-
-  if (!formularioId) return null;
 
   return (
     <Card title={titulo}>
@@ -863,6 +867,11 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
     setShowLinkCliente(true);
   };
 
+  /* Mesmo idioma de gerarLink acima — usado pelos anexos (FEAnexos) pra
+     salvar o rascunho na hora, sem exigir clique manual em "Salvar
+     Rascunho" antes de conseguir anexar um arquivo. */
+  const garantirSalvo = async () => (id ? id : await salvarTudo(null));
+
   if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   return (
@@ -956,18 +965,19 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
         </div>
       </Card>
 
-      {id && (
-        <div className="stack" style={{ gap: 16, marginTop: 16 }}>
-          <FEAnexos formularioId={id} categoria="projeto_civil" titulo="Projeto Civil da Obra"
-            descricao="Anexe a planta, o memorial descritivo ou o projeto civil (PDF, DWG, imagem) — a equipe usa esses dados para extrair as medidas do elevador."
-            podeAnexar={publicMode}/>
-          {!publicMode && (
-            <FEAnexos formularioId={id} categoria="fornecedor" titulo="Anexos para o Fornecedor"
-              descricao="PDF, DWG ou fotos que devem ir junto com a cotação técnica ao fornecedor (ex.: planta, foto do local) — aparecem no link público que o fornecedor recebe."
-              podeAnexar={true}/>
-          )}
-        </div>
-      )}
+      {/* Sem `id &&`: um formulário novo (ainda não salvo) também mostra
+          estas seções — FEAnexos salva o rascunho na hora, por trás, se o
+          vendedor tentar anexar antes do 1º "Salvar Rascunho" manual. */}
+      <div className="stack" style={{ gap: 16, marginTop: 16 }}>
+        <FEAnexos formularioId={id} categoria="projeto_civil" titulo="Projeto Civil da Obra"
+          descricao="Anexe a planta, o memorial descritivo ou o projeto civil (PDF, DWG, imagem) — a equipe usa esses dados para extrair as medidas do elevador."
+          podeAnexar={publicMode} garantirSalvo={garantirSalvo}/>
+        {!publicMode && (
+          <FEAnexos formularioId={id} categoria="fornecedor" titulo="Anexos para o Fornecedor"
+            descricao="PDF, DWG ou fotos que devem ir junto com a cotação técnica ao fornecedor (ex.: planta, foto do local) — aparecem no link público que o fornecedor recebe."
+            podeAnexar={true} garantirSalvo={garantirSalvo}/>
+        )}
+      </div>
 
       {/* fieldset disabled trava toda edição de unidades (campos, select, +/-
           adicionar/remover) enquanto salvarTudo está em voo — sem isso, dava
