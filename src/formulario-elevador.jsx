@@ -128,15 +128,15 @@ function feFmtBytes(n) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function FEAnexos({ formularioId, publicMode }) {
+function FEAnexos({ formularioId, categoria, titulo, descricao, podeAnexar }) {
   const [anexos, setAnexos] = React.useState(null);
   const [enviando, setEnviando] = React.useState(false);
   const fileRef = React.useRef(null);
 
   const recarregar = React.useCallback(() => {
     if (!formularioId) return;
-    window.FormularioElevadorStore.listarAnexos(formularioId).then(setAnexos).catch(() => setAnexos([]));
-  }, [formularioId]);
+    window.FormularioElevadorStore.listarAnexos(formularioId, categoria).then(setAnexos).catch(() => setAnexos([]));
+  }, [formularioId, categoria]);
   React.useEffect(() => { recarregar(); }, [recarregar]);
 
   const onEscolherArquivo = async (e) => {
@@ -145,7 +145,7 @@ function FEAnexos({ formularioId, publicMode }) {
     if (!file) return;
     setEnviando(true);
     try {
-      await window.FormularioElevadorStore.anexarArquivo(formularioId, file);
+      await window.FormularioElevadorStore.anexarArquivo(formularioId, file, categoria);
       recarregar();
       window.toast?.('Arquivo anexado.', 'success');
     } catch (err) {
@@ -174,11 +174,9 @@ function FEAnexos({ formularioId, publicMode }) {
   if (!formularioId) return null;
 
   return (
-    <Card title="Projeto Civil da Obra">
-      <p className="small muted" style={{ marginTop: -6, marginBottom: 10 }}>
-        Anexe a planta, o memorial descritivo ou o projeto civil (PDF, DWG, imagem) — a equipe usa esses dados para extrair as medidas do elevador.
-      </p>
-      {publicMode && (
+    <Card title={titulo}>
+      <p className="small muted" style={{ marginTop: -6, marginBottom: 10 }}>{descricao}</p>
+      {podeAnexar && (
         <div style={{ marginBottom: 10 }}>
           <input ref={fileRef} type="file" style={{ display: 'none' }} accept=".pdf,.dwg,.dxf,image/*" onChange={onEscolherArquivo}/>
           <Button variant="outline" icon="paperclip" disabled={enviando} onClick={() => fileRef.current && fileRef.current.click()}>
@@ -404,11 +402,41 @@ function FECotacaoAnexosResposta({ cotacaoId }) {
   );
 }
 
+/* Tabela de leitura da spec técnica de uma Unidade, comparando o que a
+   VerticalParts pediu (dados_envio, congelado no momento do envio) com o
+   que o fornecedor propôs (respostas.itens[].divergencias) — mesmas 3
+   colunas do formulário público, só que já respondido e read-only. Sem
+   isso o "Ver resposta" só mostrava os campos comerciais + o resumo do
+   equipamento, nunca a especificação técnica linha a linha. */
+function FECotacaoSpecCompletaTable({ linhas, divergencias }) {
+  const preenchidas = linhas.filter(([, , , v]) => v !== '' && v !== null && v !== undefined);
+  if (!preenchidas.length) return null;
+  return (
+    <table className="t" style={{ marginTop: 4 }}>
+      <thead><tr><th>Campo</th><th>VerticalParts pediu</th><th>Fornecedor propôs</th></tr></thead>
+      <tbody>
+        {preenchidas.map(([key, pt, en, v]) => {
+          const div = (divergencias || {})[key];
+          return (
+            <tr key={key}>
+              <td className="small">{pt} / {en}</td>
+              <td className="small">{String(v)}</td>
+              <td className="small">{div ? <b>{div}</b> : <span className="muted">Confirmado</span>}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 function FECotacaoRespostaModal({ cot, onClose }) {
+  const store = window.CotacaoElevadorFornecedorStore;
   const r = cot.respostas || {};
   const itens = r.itens || [];
+  const unidadesEnviadas = (cot.dados_envio && cot.dados_envio.unidades) || [];
   return (
-    <Modal title={`Resposta de ${cot.fornecedor} — ${cot.numero_documento}`} onClose={onClose} width={760}
+    <Modal title={`Resposta de ${cot.fornecedor} — ${cot.numero_documento}`} onClose={onClose} width={880}
       footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
       <div className="grid-3" style={{ gap: 12 }}>
         <FEField label="Moeda"><b>{r.moeda || '—'}</b></FEField>
@@ -421,26 +449,41 @@ function FECotacaoRespostaModal({ cot, onClose }) {
         <FEField label="Condições de pagamento" span="2"><b>{r.condicoes_pagamento || '—'}</b></FEField>
         <FEField label="Documentos no embarque" span="3"><b>{r.documentos_embarque || '—'}</b></FEField>
       </div>
-      <div className="table-wrap" style={{ marginTop: 12 }}>
-        <table className="t">
-          <thead><tr><th>Unidade</th><th>Modelo (fornecedor)</th><th>Andares/Paradas/Portas</th><th>Preço unit.</th><th>Preço total</th><th>Confirmação técnica</th></tr></thead>
-          <tbody>
-            {itens.map((it, i) => (
-              <tr key={i}>
-                <td className="mono small">{it.unidade_identificador || it.unidade_id}</td>
-                <td>{it.modelo_fornecedor || '—'}</td>
-                <td>{it.floors_stops_doors || '—'}</td>
-                <td><b>{it.preco_unitario || '—'}</b></td>
-                <td><b>{it.preco_total || '—'}</b></td>
-                <td className="small muted">{it.confirmacao_tecnica || ''}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
       <FECotacaoDivergencias itens={itens}/>
+
+      {unidadesEnviadas.map((u, i) => {
+        const item = itens.find((it) => it.unidade_id === u.unidade_id) || {};
+        const secoes = store ? store.unitSpecSecoes(u, cot.tipo_formulario) : [];
+        return (
+          <div key={u.unidade_id || i} style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+            <b style={{ fontSize: 13 }}>Unidade {u.identificador || i + 1}</b>
+            {secoes.map((s) => (
+              <div key={s.titulo} style={{ marginTop: 8 }}>
+                <span className="up-eyebrow muted">{s.titulo}</span>
+                <FECotacaoSpecCompletaTable linhas={s.linhas} divergencias={item.divergencias}/>
+              </div>
+            ))}
+            <div style={{ marginTop: 10 }}>
+              <span className="up-eyebrow muted">Resposta comercial do fornecedor</span>
+              <div className="grid-2" style={{ gap: 8, marginTop: 4 }}>
+                <FEField label="Modelo do fornecedor"><b>{item.modelo_fornecedor || '—'}</b></FEField>
+                <FEField label="Andares/Paradas/Portas confirmados"><b>{item.floors_stops_doors || '—'}</b></FEField>
+                <FEField label="Preço unitário"><b>{item.preco_unitario || '—'}</b></FEField>
+                <FEField label={`Preço total (${u.quantidade || 1} un.)`}><b>{item.preco_total || '—'}</b></FEField>
+              </div>
+              {item.confirmacao_tecnica && (
+                <div style={{ marginTop: 6 }}>
+                  <span className="up-eyebrow muted">Confirmação técnica</span>
+                  <p className="small" style={{ marginTop: 2 }}>{item.confirmacao_tecnica}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
       {r.observacoes_gerais && (
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 16 }}>
           <span className="up-eyebrow muted">Observações gerais</span>
           <p className="small" style={{ marginTop: 4 }}>{r.observacoes_gerais}</p>
         </div>
@@ -914,8 +957,15 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       </Card>
 
       {id && (
-        <div style={{ marginTop: 16 }}>
-          <FEAnexos formularioId={id} publicMode={publicMode}/>
+        <div className="stack" style={{ gap: 16, marginTop: 16 }}>
+          <FEAnexos formularioId={id} categoria="projeto_civil" titulo="Projeto Civil da Obra"
+            descricao="Anexe a planta, o memorial descritivo ou o projeto civil (PDF, DWG, imagem) — a equipe usa esses dados para extrair as medidas do elevador."
+            podeAnexar={publicMode}/>
+          {!publicMode && (
+            <FEAnexos formularioId={id} categoria="fornecedor" titulo="Anexos para o Fornecedor"
+              descricao="PDF, DWG ou fotos que devem ir junto com a cotação técnica ao fornecedor (ex.: planta, foto do local) — aparecem no link público que o fornecedor recebe."
+              podeAnexar={true}/>
+          )}
         </div>
       )}
 

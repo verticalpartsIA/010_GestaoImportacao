@@ -337,15 +337,20 @@
       .slice(0, 80) || 'arquivo';
   }
 
-  async function listarAnexos(formularioId) {
+  /* categoria: 'projeto_civil' (default, uso interno — planta/memorial) ou
+     'fornecedor' (anexos que vão junto no envio da cotação técnica, ex.:
+     plantas, DWG, fotos que o fornecedor precisa ver). Mesma tabela, mesmo
+     bucket — só filtra/rotula diferente. */
+  async function listarAnexos(formularioId, categoria) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { data, error } = await c.from('formularios_elevador_anexos')
-      .select('*').eq('formulario_id', formularioId).order('created_at', { ascending: false });
+    let q = c.from('formularios_elevador_anexos').select('*').eq('formulario_id', formularioId);
+    if (categoria) q = q.eq('categoria', categoria);
+    const { data, error } = await q.order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
   }
 
-  async function anexarArquivo(formularioId, file) {
+  async function anexarArquivo(formularioId, file, categoria) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const nomeSeguro = fea_slugify(file.name);
     const path = `${formularioId}/${Date.now()}-${nomeSeguro}`;
@@ -358,6 +363,7 @@
       tamanho_bytes: file.size,
       tipo_arquivo: file.type || null,
       path,
+      categoria: categoria || 'projeto_civil',
     }).select().single();
     if (error) throw error;
     return data;

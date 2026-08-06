@@ -430,11 +430,33 @@
     await c.from('cotacoes_elevador_fornecedor_anexos').delete().eq('id', anexo.id);
   }
 
+  /* ---------- Anexos do Formulário (VerticalParts) direcionados ao Fornecedor ----------
+     Mesma tabela/bucket de formulario-elevador-store.js (formularios_elevador_anexos
+     / bucket formulario-elevador-anexos, categoria='fornecedor') — lidos direto aqui
+     pra não precisar carregar o store inteiro do Formulário na página pública. */
+  const FORM_ANEXOS_BUCKET = 'formulario-elevador-anexos';
+
+  async function listarAnexosFormulario(formularioId) {
+    const c = sb(); if (!c || !formularioId) return [];
+    const { data, error } = await c.from('formularios_elevador_anexos')
+      .select('*').eq('formulario_id', formularioId).eq('categoria', 'fornecedor').order('created_at', { ascending: false });
+    if (error) return [];
+    return data || [];
+  }
+
+  async function urlAssinadaAnexoFormulario(path, ttlSeconds) {
+    const c = sb(); if (!c) return null;
+    const { data, error } = await c.storage.from(FORM_ANEXOS_BUCKET).createSignedUrl(path, ttlSeconds || 3600);
+    if (error || !data) return null;
+    return data.signedUrl;
+  }
+
   window.CotacaoElevadorFornecedorStore = {
     cotacaoUrl, tipoFormularioPara, liftModelLabel, machineRoomLabel, controleLabel,
     CATEGORIAS_PRODUTO, STATUS_LABEL, STATUS_COR,
     unitSpecSecoes, unitSpecFieldLabel, assetMasterId,
     listarAnexosResposta, anexarArquivoResposta, urlAssinadaAnexoResposta, removerAnexoResposta,
+    listarAnexosFormulario, urlAssinadaAnexoFormulario,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
     getByToken, marcarVisualizado, salvarResposta, getPublicIP,
     decidirComprar, aprovar,
