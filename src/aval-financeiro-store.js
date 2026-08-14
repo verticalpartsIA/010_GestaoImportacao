@@ -24,6 +24,15 @@
 
   function sb() { return (window.__VP_SB || {}).sb; }
 
+  /* Aprovação do dono/criador do sistema — mesmo poder da aprovação do CEO,
+     mas restrita por identidade (ninguém além dela pode clicar). Aceita o
+     e-mail corporativo real e o dev@localhost (bypass de ambiente local). */
+  const OWNER_EMAILS = ['gelson.simoes@verticalparts.com.br', 'dev@localhost'];
+  function isOwner() {
+    const email = ((window.__VP_USER || {}).email || '').trim().toLowerCase();
+    return OWNER_EMAILS.includes(email);
+  }
+
   async function getById(id) {
     const c = sb(); if (!c) return null;
     const { data } = await c.from('avais_financeiros').select('*').eq('id', id).maybeSingle();
@@ -195,22 +204,67 @@
     return { ok: true };
   }
 
+  /* Aprovação do CEO (Diego) e do responsável/criador do sistema (Gelson) —
+     mesmo poder entre as duas, nenhuma subordina a outra. A do CEO não tem
+     trava de identidade (não há login próprio pra ele no sistema ainda);
+     a "minha" fica restrita — ver isOwner(). */
+  async function aprovarComoCEO(numeroCotacao) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const av = await getByNumeroCotacao(numeroCotacao);
+    if (!av) throw new Error('Aval financeiro não encontrado para esta cotação.');
+    const now = new Date().toISOString();
+    const { error } = await c.from('avais_financeiros').update({
+      aprovacao_ceo_em: now, aprovacao_ceo_por: (window.__VP_USER || {}).email || 'CEO (Diego)', atualizado_em: now,
+    }).eq('id', av.id);
+    if (error) throw error;
+  }
+
+  async function aprovarComoOwner(numeroCotacao) {
+    if (!isOwner()) throw new Error('Só o responsável/criador do sistema pode dar esta aprovação.');
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const av = await getByNumeroCotacao(numeroCotacao);
+    if (!av) throw new Error('Aval financeiro não encontrado para esta cotação.');
+    const now = new Date().toISOString();
+    const { error } = await c.from('avais_financeiros').update({
+      aprovacao_owner_em: now, aprovacao_owner_por: (window.__VP_USER || {}).email || null, atualizado_em: now,
+    }).eq('id', av.id);
+    if (error) throw error;
+  }
+
+  /* Gate final antes de iniciar a compra no fornecedor. Checa, na ordem de
+     prioridade pedida (mostra sempre a PRIMEIRA condição que falta, mesmo
+     que outras também estejam pendentes): aprovação do CEO, aprovação do
+     responsável, sinal pago, Aval de Pagamento, contrato assinado, revisão
+     técnica do projeto pela Engenharia. Sinal/contrato continuam
+     acontecendo quando o cliente agir — não dependem de ordem estrita com
+     as aprovações internas, só entram todos juntos na conta final. */
   async function podeIniciarCompra(numeroCotacao) {
     if (numeroCotacao == null) return { ok: true }; // sem correlação — não trava
+    const c = sb();
     const av = await getByNumeroCotacao(numeroCotacao);
-    const faltando = [];
+
     let contratoAssinado = false;
     if (av && av.contrato_venda_id) {
-      const c = sb();
       const { data: contrato } = await c.from('contratos_venda_equipamentos')
         .select('status').eq('id', av.contrato_venda_id).maybeSingle();
       contratoAssinado = contrato?.status === 'assinado';
     }
-    if (!contratoAssinado) faltando.push('a assinatura do contrato (Jurídico)');
-    if (!av || !av.sinal_pago) faltando.push('o pagamento do boleto pelo cliente (Financeiro)');
-    if (!av || !av.aval_pagamento_confirmado) faltando.push('o Aval de Pagamento (Financeiro)');
-    if (faltando.length) {
-      return { ok: false, motivo: `Ainda falta confirmar: ${faltando.join(', ')}. Verifique em "Aval Financeiro" antes de iniciar a compra no fornecedor.` };
+
+    const { data: projeto } = await c.from('projetos_elevador')
+      .select('status').eq('numero_cotacao', numeroCotacao).order('updated_at', { ascending: false }).limit(1).maybeSingle();
+    const revisaoProjeto = projeto?.status === 'finalizado';
+
+    const checagens = [
+      { ok: !!(av && av.aprovacao_ceo_em), motivo: 'a aprovação do CEO (Diego)' },
+      { ok: !!(av && av.aprovacao_owner_em), motivo: 'a aprovação do responsável pelo sistema' },
+      { ok: !!(av && av.sinal_pago), motivo: 'o pagamento do boleto pelo cliente (Financeiro)' },
+      { ok: !!(av && av.aval_pagamento_confirmado), motivo: 'o Aval de Pagamento (Financeiro)' },
+      { ok: contratoAssinado, motivo: 'a assinatura do contrato (Jurídico)' },
+      { ok: revisaoProjeto, motivo: 'a revisão técnica do projeto (Engenharia)' },
+    ];
+    const primeiraFaltando = checagens.find((ck) => !ck.ok);
+    if (primeiraFaltando) {
+      return { ok: false, motivo: `Ainda falta confirmar: ${primeiraFaltando.motivo}. Verifique em "Aval Financeiro" antes de iniciar a compra no fornecedor.` };
     }
     return { ok: true };
   }
@@ -218,6 +272,6 @@
   window.AvalFinanceiroStore = {
     getById, getByPropostaId, getByNumeroCotacao, garantirRegistro, listarFila,
     registrarConsulta, darAval, confirmarSinal, confirmarAvalPagamento, vincularContrato,
-    podeEnviarContrato, podeIniciarCompra,
+    podeEnviarContrato, podeIniciarCompra, aprovarComoCEO, aprovarComoOwner, isOwner,
   };
 }());

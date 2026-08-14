@@ -155,33 +155,71 @@ function AFModalSinal({ row, onClose, onSaved }) {
   );
 }
 
-function AFRow({ row, onOpenModal }) {
+/* Aprovação do CEO (Diego) e do responsável pelo sistema — mesmo peso, sem
+   ordem estrita entre elas, ambas exigidas antes de "Decidir comprar"
+   (ver AvalFinanceiroStore.podeIniciarCompra). A "minha" é restrita por
+   identidade — o botão fica desabilitado pra quem não for o dono. */
+function AFAprovacoes({ row, onSaved }) {
+  const a = row.aval;
+  const [busy, setBusy] = React.useState(null);
+  const souOwner = window.AvalFinanceiroStore.isOwner();
+
+  const aprovar = async (quem) => {
+    setBusy(quem);
+    try {
+      if (quem === 'ceo') await window.AvalFinanceiroStore.aprovarComoCEO(a.numero_cotacao);
+      else await window.AvalFinanceiroStore.aprovarComoOwner(a.numero_cotacao);
+      window.toast('Aprovação registrada.', 'success');
+      onSaved();
+    } catch (e) {
+      window.toast('Erro: ' + (e.message || e), 'error');
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  return (
+    <div className="row gap-2" style={{ flexWrap: 'wrap' }}>
+      {a.aprovacao_ceo_em
+        ? <Badge variant="success" dot>CEO aprovou · {new Date(a.aprovacao_ceo_em).toLocaleDateString('pt-BR')}</Badge>
+        : <Button variant="outline" size="sm" disabled={busy === 'ceo'} onClick={() => aprovar('ceo')}>{busy === 'ceo' ? 'Salvando…' : 'Aprovação CEO (Diego)'}</Button>}
+      {a.aprovacao_owner_em
+        ? <Badge variant="success" dot>Responsável aprovou · {new Date(a.aprovacao_owner_em).toLocaleDateString('pt-BR')}</Badge>
+        : <Button variant="outline" size="sm" disabled={!souOwner || busy === 'owner'} title={!souOwner ? 'Só o responsável pelo sistema pode dar esta aprovação.' : undefined} onClick={() => aprovar('owner')}>{busy === 'owner' ? 'Salvando…' : 'Minha aprovação'}</Button>}
+    </div>
+  );
+}
+
+function AFRow({ row, onOpenModal, onSaved }) {
   const a = row.aval;
   const status = a.status;
   return (
-    <div style={{ background: '#fff', border: '1px solid var(--border)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="up-eyebrow muted">{a.numero_documento}</div>
-        <div style={{ fontSize: 15, fontWeight: 800 }}>{a.cliente_nome || '—'}</div>
-        <div className="cell-sub mono">{fmtBRL(a.valor_total)}</div>
+    <div style={{ background: '#fff', border: '1px solid var(--border)', padding: '16px 20px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <div className="up-eyebrow muted">{a.numero_documento}</div>
+          <div style={{ fontSize: 15, fontWeight: 800 }}>{a.cliente_nome || '—'}</div>
+          <div className="cell-sub mono">{fmtBRL(a.valor_total)}</div>
+        </div>
+        <AFBadge status={status}/>
+        {a.sinal_pago && <Badge variant="success" dot>Sinal pago</Badge>}
+        <div className="row gap-2">
+          {status === 'pendente_consulta' && (
+            <Button variant="primary" size="sm" onClick={() => onOpenModal('consulta', row)}>Consultar score</Button>
+          )}
+          {status === 'pendente_aval' && (
+            <>
+              <Button variant="outline" size="sm" onClick={() => onOpenModal('consulta', row)}>Refazer consulta</Button>
+              <Button variant="danger" size="sm" onClick={() => onOpenModal('reprovar', row)}>Reprovar</Button>
+              <Button variant="primary" size="sm" onClick={() => onOpenModal('aprovar', row)}>Dar aval</Button>
+            </>
+          )}
+          {status === 'aprovado' && !a.sinal_pago && (
+            <Button variant="primary" size="sm" onClick={() => onOpenModal('sinal', row)}>Confirmar sinal</Button>
+          )}
+        </div>
       </div>
-      <AFBadge status={status}/>
-      {a.sinal_pago && <Badge variant="success" dot>Sinal pago</Badge>}
-      <div className="row gap-2">
-        {status === 'pendente_consulta' && (
-          <Button variant="primary" size="sm" onClick={() => onOpenModal('consulta', row)}>Consultar score</Button>
-        )}
-        {status === 'pendente_aval' && (
-          <>
-            <Button variant="outline" size="sm" onClick={() => onOpenModal('consulta', row)}>Refazer consulta</Button>
-            <Button variant="danger" size="sm" onClick={() => onOpenModal('reprovar', row)}>Reprovar</Button>
-            <Button variant="primary" size="sm" onClick={() => onOpenModal('aprovar', row)}>Dar aval</Button>
-          </>
-        )}
-        {status === 'aprovado' && !a.sinal_pago && (
-          <Button variant="primary" size="sm" onClick={() => onOpenModal('sinal', row)}>Confirmar sinal</Button>
-        )}
-      </div>
+      {status === 'aprovado' && <AFAprovacoes row={row} onSaved={onSaved}/>}
     </div>
   );
 }
@@ -231,7 +269,7 @@ function AvalFinanceiroPage({ setRoute }) {
             </div>
           )}
           {fila.map((row) => (
-            <AFRow key={row.proposta.id} row={row} onOpenModal={(type, row) => setModal({ type, row })}/>
+            <AFRow key={row.proposta.id} row={row} onOpenModal={(type, row) => setModal({ type, row })} onSaved={reload}/>
           ))}
         </div>
       </Card>
