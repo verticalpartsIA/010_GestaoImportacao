@@ -224,16 +224,48 @@ body[data-density="airy"] {
 .sidebar__group { margin-top: 14px; }
 .sidebar__group:first-child { margin-top: 0; }
 .sidebar__group-label {
-  padding: 8px 12px 6px;
+  width: 100%;
+  padding: 8px 8px 6px 12px;
   font-size: 9.5px;
   font-weight: 800;
   letter-spacing: .2em;
   text-transform: uppercase;
   color: var(--vp-gray-500);
+  background: none;
+  border: none;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  cursor: pointer;
+  border-radius: 6px;
+  transition: background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.sidebar__group-label:hover,
+.sidebar__group-label:focus-visible { background: var(--vp-gray-850, rgba(255,255,255,.05)); color: var(--vp-gray-300); }
+.sidebar__group-label__text {
   display: flex;
   flex-direction: column;
   gap: 1px;
+  text-align: left;
 }
+.sidebar__group-toggle {
+  flex: 0 0 auto;
+  width: 20px; height: 20px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  border: 1px solid var(--vp-gray-700);
+  color: var(--vp-gray-400);
+  transition: transform var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.sidebar__group-label:hover .sidebar__group-toggle {
+  background: var(--vp-yellow);
+  border-color: var(--vp-yellow);
+  color: #000;
+}
+.sidebar__group.is-collapsed .sidebar__group-toggle { transform: rotate(-90deg); }
 .sidebar__group-sublabel {
   font-size: 8px;
   font-weight: 700;
@@ -244,16 +276,18 @@ body[data-density="airy"] {
 .app[data-sidebar="collapsed"] .sidebar__group-sublabel { display: none; }
 .app[data-sidebar="collapsed"] .sidebar__group-label {
   padding: 8px 0;
-  text-align: center;
+  justify-content: center;
   font-size: 8px;
   letter-spacing: .1em;
+  cursor: default;
 }
 .app[data-sidebar="collapsed"] .sidebar__group-label::before {
   content: "—";
   display: block;
   color: var(--vp-gray-700);
 }
-.app[data-sidebar="collapsed"] .sidebar__group-label > span { display: none; }
+.app[data-sidebar="collapsed"] .sidebar__group-label__text,
+.app[data-sidebar="collapsed"] .sidebar__group-toggle { display: none; }
 
 .nav-item {
   display: flex;

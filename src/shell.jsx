@@ -70,8 +70,23 @@ function formatBuildTime(iso) {
   return `${date} ${time}h`;
 }
 
+const GROUPS_LS_KEY = "vp_sidebar_collapsed_groups";
+
 function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   const filterVisible = (item) => !item.restrict || item.restrict.includes(role);
+  /* Módulos recolhidos individualmente (clique no título) — persiste por navegador. */
+  const [collapsedGroups, setCollapsedGroups] = React.useState(() => {
+    try { return new Set(JSON.parse(localStorage.getItem(GROUPS_LS_KEY) || "[]")); }
+    catch { return new Set(); }
+  });
+  const toggleGroup = (label) => {
+    setCollapsedGroups((prev) => {
+      const next = new Set(prev);
+      next.has(label) ? next.delete(label) : next.add(label);
+      try { localStorage.setItem(GROUPS_LS_KEY, JSON.stringify([...next])); } catch {}
+      return next;
+    });
+  };
   /* Re-renderiza quando a identidade SSO (vpsistema) chega/é confirmada */
   const [, forceUser] = React.useState(0);
   React.useEffect(() => {
@@ -105,12 +120,22 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
              mostra o label mesmo sem itens. Seção comum sem itens visíveis
              (todos ocultados pela role atual) continua oculta por completo. */
           if (!items.length && !group.empty) return null;
+          /* Só respeita o recolher por módulo quando a sidebar inteira está expandida —
+             no modo ícone (collapsed) os itens continuam visíveis, o rótulo já some por CSS. */
+          const isCollapsed = !collapsed && collapsedGroups.has(group.label);
           return (
-            <div className="sidebar__group" key={group.label}>
-              <div className="sidebar__group-label">
-                <span>{group.label}</span>
-                {group.sublabel ? <span className="sidebar__group-sublabel">{group.sublabel}</span> : null}
-              </div>
+            <div className={"sidebar__group " + (isCollapsed ? "is-collapsed" : "")} key={group.label}>
+              <button type="button" className="sidebar__group-label" onClick={() => toggleGroup(group.label)}
+                aria-expanded={!isCollapsed} title={isCollapsed ? "Expandir módulo" : "Recolher módulo"}>
+                <span className="sidebar__group-label__text">
+                  <span>{group.label}</span>
+                  {group.sublabel ? <span className="sidebar__group-sublabel">{group.sublabel}</span> : null}
+                </span>
+                <span className="sidebar__group-toggle">
+                  <Icon.chevDown size={13}/>
+                </span>
+              </button>
+              {isCollapsed ? null : <>
               {!items.length && group.empty && (
                 <div className="nav-item nav-item--empty" style={{ color: 'var(--fg3)', cursor: 'default', fontStyle: 'italic' }}>
                   <span className="nav-item__label">Em breve</span>
@@ -130,6 +155,7 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
                   </button>
                 );
               })}
+              </>}
             </div>
           );
         })}
