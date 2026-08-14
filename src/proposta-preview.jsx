@@ -161,14 +161,14 @@ function PreviewCapa({ data, eq, pg, total }) {
 }
 
 /* ---------- Página 2: Sobre a VerticalParts (institucional, fixo) ---------- */
-function PreviewSobre() {
+function PreviewSobre({ eq }) {
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
         <h1 style={{ fontFamily: "var(--font-display)", fontSize: 27, fontWeight: 800, textTransform: "uppercase", color: "#1b2a4a", margin: "0 0 25px", lineHeight: 1.15 }}>
           Elevando<br/>Você e o Seu Negócio
         </h1>
-        <div style={{ background: "#111", height: 190, marginBottom: 25 }}/>
+        <div className="pe__pdf-sobre-img" data-eq={eq}/>
         <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 17 }}>
           <img src="assets/logo-verticalparts-color.png" alt="VerticalParts" style={{ height: 26 }}/>
           <span className="pdf-sub-title" style={{ margin: 0 }}>Sobre a VerticalParts</span>
