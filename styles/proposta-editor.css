@@ -126,6 +126,7 @@
   font-size: 9.5px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase;
   background: var(--vp-gray-100); color: var(--fg2);
 }
+.pe-top__status.is-publicada { background: #EEF2FF; color: #4338CA; }
 .pe-top__status.is-enviada { background: #E8F0FE; color: #1a4fa0; }
 .pe-top__status.is-visualizada { background: var(--vp-warning-tint); color: var(--vp-warning-ink); }
 .pe-top__status.is-aprovada { background: var(--vp-success-tint); color: var(--vp-success-ink); }
