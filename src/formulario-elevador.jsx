@@ -750,7 +750,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       const dados = await window.EnderecoAPI.buscarCEP(cepRaw);
       setHeader((h) => ({
         ...h,
-        [`${prefix}logradouro`]: dados.logradouro || h[`${prefix}logradouro`],
+        [`${prefix}logradouro`]: window.EnderecoAPI.mesclarLogradouro(h[`${prefix}logradouro`], dados.logradouro),
         [`${prefix}bairro`]: dados.bairro || h[`${prefix}bairro`],
         [`${prefix}cidade`]: dados.cidade || h[`${prefix}cidade`],
         [`${prefix}estado`]: dados.estado || h[`${prefix}estado`],
@@ -771,7 +771,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
         ...h,
         razao_social: dados.razao_social || h.razao_social,
         telefone: h.telefone || dados.telefone,
-        endereco_logradouro: dados.endereco.logradouro || h.endereco_logradouro,
+        endereco_logradouro: window.EnderecoAPI.mesclarLogradouro(h.endereco_logradouro, dados.endereco.logradouro),
         endereco_complemento: dados.endereco.complemento || h.endereco_complemento,
         endereco_bairro: dados.endereco.bairro || h.endereco_bairro,
         endereco_cep: dados.endereco.cep || h.endereco_cep,
