@@ -200,8 +200,59 @@ const BREADCRUMB_MAP = {
   configuracoes: { module: "Admin", page: "Configurações", icon: "settings" },
 };
 
+/* Ajuda contextual por rota — texto curto do que a tela faz / próximos passos. */
+const HELP_TOPICS = {
+  dashboard: "Visão geral do dia: KPIs, tarefas de hoje, projetos em andamento (Gantt/Lista/Kanban) e alertas críticos.",
+  leads: "Pipeline comercial. Crie e qualifique leads; a partir do lead você abre formulário, cotação e proposta.",
+  formularios: "Formulários de intake por tipo de equipamento. O de Elevador coleta os dados que alimentam cotação e precificação.",
+  "cotacoes-fornecedor": "Cotações enviadas aos fornecedores (Glarie/Seloon…). Acompanhe status, tratativas e a decisão de compra.",
+  precificacao: "Precificação a partir da cotação respondida. Só libera depois da Análise Técnica aprovada.",
+  propostas: "Propostas comerciais geradas da precificação aprovada. Editor com PDF de 18 páginas para Elevador.",
+  engenharia: "Projetos de engenharia, configurador e catálogo NCM.",
+  "ncm-catalogo": "Catálogo de produtos para cadastro no Siscomex/Duimp. Use 'Solicitações NCM' para a fila de pendências.",
+  "ncm-kanban": "Fila de solicitações NCM por status. Abra um produto para ver a ficha e exportar para o LogComex.",
+  juridico: "Contratos e minutas. O contrato de venda nasce da proposta aprovada; contrato do instalador exige homologação.",
+  importacao: "Embarques, rastreamento de navios (AIS) e inbox. Vincule o embarque à obra do Dossiê.",
+  financeiro: "Gatilhos, prazos, comissões e aval financeiro.",
+  "rh-homologacao": "Homologação de parceiros instaladores e controle documental (NRs, ASO, PGR…).",
+};
+
+function HelpCenter({ route, bc, onClose }) {
+  const ctx = HELP_TOPICS[route];
+  return (
+    <Modal title="Central de Ajuda" onClose={onClose} width={620}
+      footer={<>
+        <Button variant="ghost" size="sm" onClick={onClose}>Fechar</Button>
+        <Button variant="primary" size="sm" icon="mail"
+          onClick={() => window.open('mailto:suporte@verticalparts.com.br?subject=' + encodeURIComponent('Ajuda VP Gestão — ' + (bc.page || '')), '_blank')}>
+          Falar com o suporte
+        </Button>
+      </>}>
+      <div className="help-ctx">
+        <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Você está em</div>
+        <div style={{ fontWeight: 600, marginBottom: 4 }}>{bc.module} · {bc.page}</div>
+        <p className="vp-small" style={{ marginTop: 0 }}>
+          {ctx || "Use o menu à esquerda para navegar entre os módulos. Cada tela tem suas próprias ações no topo e na lista."}
+        </p>
+      </div>
+      <div className="up-eyebrow muted" style={{ margin: "16px 0 8px" }}>Perguntas frequentes</div>
+      <dl className="help-faq">
+        <dt>Como faço login?</dt>
+        <dd>O acesso é via SSO do portal vpsistema.com — você entra pelo portal e o VP Gestão abre já autenticado.</dd>
+        <dt>Não encontro um módulo no menu</dt>
+        <dd>O menu respeita o seu perfil (Comercial/Engenharia/Financeiro/Admin). Troque o perfil no topo à direita se tiver permissão.</dd>
+        <dt>Um botão não fez nada</dt>
+        <dd>Alguns fluxos dependem de uma etapa anterior (ex.: precificar exige Análise Técnica aprovada). Verifique o status da obra no Dossiê.</dd>
+        <dt>Preciso de suporte humano</dt>
+        <dd>Use o botão “Falar com o suporte” abaixo — ele abre um e-mail já com a tela atual no assunto.</dd>
+      </dl>
+    </Modal>
+  );
+}
+
 function Header({ route, role, setRole, onSearch }) {
   const bc = BREADCRUMB_MAP[route] || BREADCRUMB_MAP.dashboard;
+  const [showHelp, setShowHelp] = React.useState(false);
   return (
     <header className="header">
       <div className="breadcrumb">
@@ -229,7 +280,8 @@ function Header({ route, role, setRole, onSearch }) {
         <Icon.bell size={16}/>
         <span className="dot"/>
       </button>
-      <button className="header__btn" data-tip="Ajuda" onClick={() => window.open('mailto:suporte@verticalparts.com.br?subject=Ajuda%20VP%20PRD', '_blank')}><Icon.info size={16}/></button>
+      <button className="header__btn" data-tip="Ajuda" aria-label="Central de Ajuda" onClick={() => setShowHelp(true)}><Icon.info size={16}/></button>
+      {showHelp ? <HelpCenter route={route} bc={bc} onClose={() => setShowHelp(false)}/> : null}
     </header>
   );
 }
