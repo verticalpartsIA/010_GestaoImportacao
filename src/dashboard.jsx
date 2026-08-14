@@ -47,14 +47,15 @@ function GanttChart({ projetos, onClick, today = 60 }) {
 }
 
 
-function ProjectList({ projetos }) {
+function ProjectList({ projetos, onClick }) {
   if (!projetos.length) return (
     <div className="muted" style={{ padding: '24px 0', textAlign: 'center', fontSize: 13 }}>Nenhum projeto cadastrado.</div>
   );
   return (
     <div className="stack" style={{ gap: 0 }}>
       {projetos.map(p => (
-        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)' }}>
+        <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '10px 0', borderBottom: '1px solid var(--border)', cursor: onClick ? 'pointer' : undefined }}
+          onClick={() => onClick?.(p)}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div className="cell-main">{p.name}</div>
             <div className="cell-sub">{p.client} · <span className="mono">{p.id}</span></div>
@@ -66,7 +67,7 @@ function ProjectList({ projetos }) {
   );
 }
 
-function ProjectKanban({ projetos, onMove }) {
+function ProjectKanban({ projetos, onMove, onClick }) {
   const phases = ['Projeto', 'Fabricação', 'Importação', 'Instalação', 'Entrega'];
   const byPhase = {};
   phases.forEach(ph => { byPhase[ph] = []; });
@@ -87,11 +88,12 @@ function ProjectKanban({ projetos, onMove }) {
           </div>
           <div className="kanban__col-body">
           {byPhase[ph].map(p => (
-            <div key={p.id} className="kanban__card project-kanban__card">
+            <div key={p.id} className="kanban__card project-kanban__card" style={{ cursor: onClick ? 'pointer' : undefined }}
+              onClick={() => onClick?.(p)}>
               <div className="kanban__card-eyebrow">{p.id}</div>
               <div className="kanban__card-title">{p.name}</div>
               <div className="kanban__card-ncm muted">{p.client}</div>
-              <div className="kanban__card-foot">
+              <div className="kanban__card-foot" onClick={(e) => e.stopPropagation()}>
                 <Button variant="ghost" size="sm" icon="chevLeft" aria-label={`Mover ${p.name} para fase anterior`}
                   disabled={phases.indexOf(ph) === 0}
                   onClick={() => onMove?.(p, phases[Math.max(0, phases.indexOf(ph) - 1)])}/>
@@ -174,6 +176,7 @@ function Dashboard({ role, setRoute }) {
   const [projectView, setProjectView] = React.useState('gantt');
   const [period, setPeriod] = React.useState('Hoje');
   const [showTask, setShowTask] = React.useState(false);
+  const [detalheProjeto, setDetalheProjeto] = React.useState(null);
   const periods = ['Hoje','7 dias','30 dias','90 dias'];
   const reloadDashboard = React.useCallback(() => {
     if (!window.__VP_SB) { setLoading(false); return Promise.resolve(); }
@@ -234,7 +237,12 @@ function Dashboard({ role, setRoute }) {
           <h1 className="page-head__title">{greet}, {firstName.toUpperCase()}.</h1>
           <p className="page-head__sub">
             {dateLabel}. Você tem{" "}
-            <b>{alertasCrit} alerta{alertasCrit !== 1 ? "s" : ""} crítico{alertasCrit !== 1 ? "s" : ""}</b>{" "}
+            {alertasCrit > 0
+              ? <b className="dash-alert-link" style={{ cursor: 'pointer', textDecoration: 'underline' }}
+                  onClick={() => setRoute('notificacoes')} title="Ver central de alertas">
+                  {alertasCrit} alerta{alertasCrit !== 1 ? "s" : ""} crítico{alertasCrit !== 1 ? "s" : ""}
+                </b>
+              : <b>{alertasCrit} alertas críticos</b>}{" "}
             e <b>{tasks.length} tarefa{tasks.length !== 1 ? "s" : ""}</b> hoje.
             {loading && <span className="muted" style={{ marginLeft: 8, fontSize: 11 }}>Atualizando…</span>}
           </p>
@@ -244,7 +252,10 @@ function Dashboard({ role, setRoute }) {
             {period === 'Hoje' ? `Hoje · ${todayBtn}` : period}
           </Button>
           <Button variant="secondary" icon="download" onClick={() => window.csvDownload(kpis.map(k => ({ indicador: k.label, valor: k.value, sub: k.sub || '—', delta: k.delta || '—' })), `relatorio-dashboard-${role}-${new Date().toISOString().slice(0,10)}.csv`)}>Relatório</Button>
-          <Button variant="primary" icon="plus" onClick={() => setRoute('leads')}>Novo Lead</Button>
+          {/* Vai pra listagem de Leads (não abre um "criar rápido" — não existe
+              esse fluxo hoje); rótulo honesto em vez de prometer criação direta
+              (achado #50). */}
+          <Button variant="primary" icon="plus" onClick={() => setRoute('leads')}>Ir para Leads</Button>
         </div>
       </div>
 
@@ -264,9 +275,15 @@ function Dashboard({ role, setRoute }) {
             </div>
             <Button variant="ghost" size="sm" icon="expand" onClick={() => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }}/>
           </>}>
-          {projectView === 'gantt'  && <GanttChart projetos={projetos} onClick={() => setRoute("propostas")} today={sbData?.ganttToday ?? 60}/>}
-          {projectView === 'lista'  && <ProjectList projetos={projetos}/>}
-          {projectView === 'kanban' && <ProjectKanban projetos={projetos} onMove={moveProject}/>}
+          {/* A tabela `projetos` (Gantt/Lista/Kanban) é uma origem legada,
+              sem numero_cotacao/proposta_id — não tem como abrir o
+              detalhe real de proposta/contrato daqui (achado #50: o
+              clique mandava TODO projeto pra "Propostas", sempre a mesma
+              tela, independente de qual card). Mostra os dados que o
+              próprio card já tem, honesto sobre o que existe. */}
+          {projectView === 'gantt'  && <GanttChart projetos={projetos} onClick={setDetalheProjeto} today={sbData?.ganttToday ?? 60}/>}
+          {projectView === 'lista'  && <ProjectList projetos={projetos} onClick={setDetalheProjeto}/>}
+          {projectView === 'kanban' && <ProjectKanban projetos={projetos} onMove={moveProject} onClick={setDetalheProjeto}/>}
         </Card>
 
         <Card title="Tarefas de Hoje" sub={tasks.length + " pendentes"} action={<Button variant="ghost" size="sm" icon="plus" onClick={() => setShowTask(true)}/>}>
@@ -290,6 +307,20 @@ function Dashboard({ role, setRoute }) {
       </div>
 
       {showTask && <ModalNovaTask role={role} onClose={() => setShowTask(false)} onSaved={reloadDashboard}/>}
+      {detalheProjeto && (
+        <Modal title={detalheProjeto.name || 'Projeto'} onClose={() => setDetalheProjeto(null)} width={420}
+          footer={<Button variant="ghost" onClick={() => setDetalheProjeto(null)}>Fechar</Button>}>
+          <div className="stack" style={{ gap: 10, fontSize: 13 }}>
+            <div><span className="muted">ID</span> <span className="mono">{detalheProjeto.id}</span></div>
+            <div><span className="muted">Cliente</span> {detalheProjeto.client || '—'}</div>
+            <div><span className="muted">Fase atual</span> {detalheProjeto.current_phase || detalheProjeto.status || '—'}</div>
+            <div><span className="muted">Início</span> {detalheProjeto.start_date || '—'}</div>
+            <div><span className="muted">Previsão de término</span> {detalheProjeto.end_date || '—'}</div>
+            {detalheProjeto.value != null && <div><span className="muted">Valor</span> {window.fmtBRL ? window.fmtBRL(detalheProjeto.value) : detalheProjeto.value}</div>}
+            {detalheProjeto.responsavel && <div><span className="muted">Responsável</span> {detalheProjeto.responsavel}</div>}
+          </div>
+        </Modal>
+      )}
 
       <div className="grid-3">
         <Card title="Pipeline Comercial" sub="acumulado">
