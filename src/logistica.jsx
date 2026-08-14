@@ -257,7 +257,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Importação</div>
           <h1 className="page-head__title">Importação</h1>
-          <p className="page-head__sub">Embarques em trânsito + rastreamento marítimo (MarineTraffic API) + inbox de emails sincronizada</p>
+          <p className="page-head__sub">Embarques em trânsito + rastreamento marítimo por AIS</p>
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="mail" onClick={() => setRoute("importacao-email")}>Inbox</Button>
@@ -729,7 +729,7 @@ function ShipMap({ mainShip, ships = [], onClick, active }) {
         <div className="row gap-3"><span className="sw" style={{ background: "var(--vp-yellow)", borderRadius: "50%" }}/><span>Navio ativo</span></div>
         <div className="row gap-3"><span className="sw" style={{ background: "var(--vp-yellow)", transform: "rotate(45deg)", border: "2px solid #000" }}/><span>Porto</span></div>
         <div className="row gap-3"><span className="sw" style={{ background: "linear-gradient(to right, var(--vp-yellow) 50%, transparent 50%) 0 / 8px 100%" }}/><span>Rota</span></div>
-        <div style={{ marginTop: 8, fontSize: 9, color: "rgba(255,255,255,.6)", fontFamily: "var(--font-mono)" }}>MarineTraffic · sync 8min</div>
+        <div style={{ marginTop: 8, fontSize: 9, color: "rgba(255,255,255,.6)", fontFamily: "var(--font-mono)" }}>Rastreamento AIS</div>
       </div>
 
       {/* Info card */}
@@ -917,7 +917,8 @@ function ComprasPage({ setRoute }) {
 
 /* ---------- EMAIL INBOX (Importação + Compras) ============== */
 function EmailInbox({ kind, setRoute }) {
-  // TODO: conectar Supabase — emails sincronizados via IMAP; usando array vazio por ora
+  // Integração de e-mail (IMAP) ainda não configurada. Sem mock: lista real
+  // vazia + estado honesto de "não configurado", em vez de simular caixa sincronizada.
   const emails = [];
   const [activeId, setActiveId] = React.useState(null);
   const [folder, setFolder] = React.useState("inbox");
@@ -926,7 +927,7 @@ function EmailInbox({ kind, setRoute }) {
   const folders = [
     { id: "inbox", label: "Caixa de entrada", icon: "mail", count: emails.filter(e => e.unread).length },
     { id: "sent", label: "Enviados", icon: "send" },
-    { id: "drafts", label: "Rascunhos", icon: "edit", count: 1 },
+    { id: "drafts", label: "Rascunhos", icon: "edit" },
     { id: "archive", label: "Arquivados", icon: "package" },
   ];
   const tags = kind === "compras"
@@ -942,11 +943,10 @@ function EmailInbox({ kind, setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Email · {kind === "compras" ? "Compras Nacional" : "Importação"}</div>
           <h1 className="page-head__title">Inbox {kind === "compras" ? "Compras" : "Importação"}</h1>
-          <p className="page-head__sub">Caixa dedicada sincronizada via IMAP · vincula emails a embarques/fretes automaticamente</p>
+          <p className="page-head__sub">Integração de e-mail (IMAP) ainda não configurada — quando conectada, vinculará mensagens a embarques/fretes automaticamente.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="refresh">Sincronizar</Button>
-          <Button variant="primary" icon="plus">Compor</Button>
+          <Badge variant="warning" dot>Integração não configurada</Badge>
         </div>
       </div>
 
@@ -978,8 +978,9 @@ function EmailInbox({ kind, setRoute }) {
             <span className="mono">{emails.length}</span>
           </div>
           {emails.length === 0 && (
-            <div style={{ textAlign:'center', padding:'48px 16px', color:'var(--fg3)', fontSize:13 }}>
-              Nenhuma mensagem encontrada.
+            <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
+              <div style={{ fontWeight:600, color:'var(--fg2)', marginBottom:4 }}>Integração de e-mail não configurada</div>
+              Conecte uma caixa IMAP dedicada para ver aqui as mensagens vinculadas a {kind === "compras" ? "fretes e CTes" : "embarques, BLs e invoices"}.
             </div>
           )}
           {emails.map((m) => (
