@@ -340,7 +340,9 @@ function LeadsPage({ setRoute, setSubsel }) {
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="download" onClick={() => window.csvDownload(rows.map(l => ({ id:l.id, predio:l.building, contato:l.contact, cargo:l.role, telefone:l.phone, email:l.email, equipamento:l.equip, origem:l.origin, status:l.status, responsavel:l.owner, valor:l.value, prioridade:l.priority, proxima_acao:l.next_action || l.next, data:l.date })), 'leads.csv')}>Exportar</Button>
-          <Button variant="outline" icon="filter" onClick={() => window.toast(`Filtros ativos: status="${status}", responsável="${owner}". Use os botões acima.`, 'info')}>Filtros</Button>
+          {/* Removido o botão "Filtros" (era só um toast ecoando o estado dos
+              filtros de status/responsável que já existem, visíveis e
+              funcionais, logo abaixo — CTA redundante, achado #47). */}
           <Button variant="primary" icon="plus" onClick={() => setShowLead(true)}>Novo Lead</Button>
         </div>
       </div>

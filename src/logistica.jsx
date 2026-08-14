@@ -231,6 +231,8 @@ function ImportacaoPage({ setRoute, setSubsel }) {
   const [loading, setLoading] = React.useState(true);
   const [tab, setTab] = React.useState("embarques");
   const [filter, setFilter] = React.useState("Todos");
+  const [filterPorto, setFilterPorto] = React.useState("Todos");
+  const [filterLinha, setFilterLinha] = React.useState("Todas");
   const [showEmbarque, setShowEmbarque] = React.useState(null); // null | {} (branco) | prefill
   const [aguardando, setAguardando] = React.useState([]);
   const filterOptions = ["Todos", "Em trânsito", "Aguardando liberação", "Entregue"];
@@ -248,7 +250,12 @@ function ImportacaoPage({ setRoute, setSubsel }) {
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
-  const rows = embarques.filter(e => filter === "Todos" || e.status === filter);
+  const rows = embarques
+    .filter(e => filter === "Todos" || e.status === filter)
+    .filter(e => filterPorto === "Todos" || (e.origin || e.from) === filterPorto || (e.destination || e.to) === filterPorto)
+    .filter(e => filterLinha === "Todas" || e.line === filterLinha);
+  const portosDisponiveis = ["Todos", ...new Set(embarques.flatMap(e => [e.origin || e.from, e.destination || e.to]).filter(Boolean))];
+  const linhasDisponiveis = ["Todas", ...new Set(embarques.map(e => e.line).filter(Boolean))];
 
   // KPIs derivados
   const emTransito = embarques.filter(e => e.status === "Em trânsito");
@@ -318,73 +325,124 @@ function ImportacaoPage({ setRoute, setSubsel }) {
         { key: "aduana", label: "Aduana", icon: "shield" },
       ]} active={tab} onChange={setTab}/>
 
-      <div className="tbar" style={{ marginTop: 20 }}>
-        <div className="seg">
-          {filterOptions.map(s => (
-            <button key={s} className={filter === s ? "is-active" : ""} onClick={() => setFilter(s)}>{s}</button>
-          ))}
-        </div>
-        <div className="spacer"/>
-        <Button variant="outline" size="sm" icon="filter">Porto</Button>
-        <Button variant="outline" size="sm" icon="filter">Linha</Button>
-      </div>
-
-      <div className="table-wrap">
-        <table className="t">
-          <thead><tr>
-            <th>Embarque</th>
-            <th>Navio / BL</th>
-            <th>Rota</th>
-            <th>ETA</th>
-            <th>Progresso</th>
-            <th>Aduana</th>
-            <th>Status</th>
-            <th></th>
-          </tr></thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
-                Nenhum registro cadastrado.
-              </td></tr>
-            )}
-            {rows.map((e) => (
-              <tr key={e.id} onClick={() => { setSubsel(e); setRoute("importacao-detail"); }}>
-                <td>
-                  <div className="cell-main">{e.id}</div>
-                  <div className="cell-sub">{e.client}</div>
-                </td>
-                <td>
-                  <div className="cell-main">{e.vessel}</div>
-                  <div className="cell-sub">BL {e.bl} · {e.line}</div>
-                </td>
-                <td>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
-                    <span>{(e.from || e.origin || "—").split(" ")[0]}</span>
-                    <Icon.arrowRight size={12} color="var(--vp-yellow)"/>
-                    <span>{(e.to || e.destination || "—").split(" ")[0]}</span>
-                  </div>
-                  <div className="cell-sub">{e.containers}× {e.type || e.container_type}</div>
-                </td>
-                <td>
-                  <div className="cell-num">{fmtDate(e.eta)}</div>
-                  {(e.etaOriginal || e.eta_original) && e.eta !== (e.etaOriginal || e.eta_original) ? <div className="cell-sub" style={{ color: "var(--vp-danger)" }}>antes: {fmtDate(e.etaOriginal || e.eta_original)}</div> : null}
-                </td>
-                <td style={{ width: 160 }}>
-                  <div className="progress" style={{ marginBottom: 4 }}>
-                    <span style={{ width: (e.position * 100) + "%" }}/>
-                  </div>
-                  <div className="cell-sub mono">{Math.round(e.position * 100)}%</div>
-                </td>
-                <td>
-                  {e.channel ? <Badge variant={e.channel === "Verde" ? "success" : e.channel === "Amarelo" ? "warning" : "danger"} dot>{e.channel}</Badge> : <span className="muted">—</span>}
-                </td>
-                <td><StatusBadge status={e.status}/></td>
-                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
-              </tr>
+      {tab === "embarques" && <>
+        <div className="tbar" style={{ marginTop: 20 }}>
+          <div className="seg">
+            {filterOptions.map(s => (
+              <button key={s} className={filter === s ? "is-active" : ""} onClick={() => setFilter(s)}>{s}</button>
             ))}
-          </tbody>
-        </table>
-      </div>
+          </div>
+          <div className="spacer"/>
+          <select className="input" style={{ width: 160 }} value={filterPorto} onChange={(e) => setFilterPorto(e.target.value)}>
+            {portosDisponiveis.map(p => <option key={p} value={p}>{p === "Todos" ? "Porto: Todos" : p}</option>)}
+          </select>
+          <select className="input" style={{ width: 160 }} value={filterLinha} onChange={(e) => setFilterLinha(e.target.value)}>
+            {linhasDisponiveis.map(l => <option key={l} value={l}>{l === "Todas" ? "Linha: Todas" : l}</option>)}
+          </select>
+        </div>
+
+        <div className="table-wrap">
+          <table className="t">
+            <thead><tr>
+              <th>Embarque</th>
+              <th>Navio / BL</th>
+              <th>Rota</th>
+              <th>ETA</th>
+              <th>Progresso</th>
+              <th>Aduana</th>
+              <th>Status</th>
+              <th></th>
+            </tr></thead>
+            <tbody>
+              {rows.length === 0 && (
+                <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
+                  Nenhum registro {embarques.length ? 'com esse filtro' : 'cadastrado'}.
+                </td></tr>
+              )}
+              {rows.map((e) => (
+                <tr key={e.id} onClick={() => { setSubsel(e); setRoute("importacao-detail"); }}>
+                  <td>
+                    <div className="cell-main">{e.id}</div>
+                    <div className="cell-sub">{e.client}</div>
+                  </td>
+                  <td>
+                    <div className="cell-main">{e.vessel}</div>
+                    <div className="cell-sub">BL {e.bl} · {e.line}</div>
+                  </td>
+                  <td>
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, fontSize: 12 }}>
+                      <span>{(e.from || e.origin || "—").split(" ")[0]}</span>
+                      <Icon.arrowRight size={12} color="var(--vp-yellow)"/>
+                      <span>{(e.to || e.destination || "—").split(" ")[0]}</span>
+                    </div>
+                    <div className="cell-sub">{e.containers}× {e.type || e.container_type}</div>
+                  </td>
+                  <td>
+                    <div className="cell-num">{fmtDate(e.eta)}</div>
+                    {(e.etaOriginal || e.eta_original) && e.eta !== (e.etaOriginal || e.eta_original) ? <div className="cell-sub" style={{ color: "var(--vp-danger)" }}>antes: {fmtDate(e.etaOriginal || e.eta_original)}</div> : null}
+                  </td>
+                  <td style={{ width: 160 }}>
+                    <div className="progress" style={{ marginBottom: 4 }}>
+                      <span style={{ width: (e.position * 100) + "%" }}/>
+                    </div>
+                    <div className="cell-sub mono">{Math.round(e.position * 100)}%</div>
+                  </td>
+                  <td>
+                    {e.channel ? <Badge variant={e.channel === "Verde" ? "success" : e.channel === "Amarelo" ? "warning" : "danger"} dot>{e.channel}</Badge> : <span className="muted">—</span>}
+                  </td>
+                  <td><StatusBadge status={e.status}/></td>
+                  <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </>}
+
+      {tab === "documentos" && (
+        <div className="table-wrap" style={{ marginTop: 20 }}>
+          <table className="t">
+            <thead><tr><th>Embarque</th><th>Nº Invoice</th><th>BL</th><th>Documentos anexados</th><th></th></tr></thead>
+            <tbody>
+              {embarques.length === 0 && (
+                <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>Nenhum embarque cadastrado.</td></tr>
+              )}
+              {embarques.map((e) => (
+                <tr key={e.id} onClick={() => { setSubsel(e); setRoute("importacao-detail"); }}>
+                  <td><div className="cell-main">{e.id}</div><div className="cell-sub">{e.client}</div></td>
+                  <td className="mono">{e.invoice_number || '—'}</td>
+                  <td className="mono">{e.bl || '—'}</td>
+                  <td>{(e.docs || []).length} documento{(e.docs || []).length === 1 ? '' : 's'}</td>
+                  <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {tab === "aduana" && (
+        <div className="table-wrap" style={{ marginTop: 20 }}>
+          <table className="t">
+            <thead><tr><th>Embarque</th><th>Canal</th><th>Status Siscomex</th><th>DI</th><th></th></tr></thead>
+            <tbody>
+              {embarques.length === 0 && (
+                <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>Nenhum embarque cadastrado.</td></tr>
+              )}
+              {embarques.map((e) => (
+                <tr key={e.id} onClick={() => { setSubsel(e); setRoute("importacao-detail"); }}>
+                  <td><div className="cell-main">{e.id}</div><div className="cell-sub">{e.client}</div></td>
+                  <td>{e.channel ? <Badge variant={e.channel === "Verde" ? "success" : e.channel === "Amarelo" ? "warning" : "danger"} dot>{e.channel}</Badge> : <span className="muted">—</span>}</td>
+                  <td>{e.siscomex_status || '—'}</td>
+                  <td className="mono">{e.di_number || '—'}</td>
+                  <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       {showEmbarque && <ModalNovoEmbarque prefill={showEmbarque} onClose={() => setShowEmbarque(null)} onSaved={reloadEmbarques}/>}
     </div>
   );
