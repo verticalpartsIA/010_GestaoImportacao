@@ -153,16 +153,11 @@ function NCMTab({ productId, onOpenLogComex }) {
 
       {/* BLOCO 4 — Ficha técnica e imagens */}
       <NCMSection lbl="Ficha Técnica e Imagens" sub="O time de importação fará o download para envio à Receita Federal">
-        <NCMImageSlots filled={data.imagens} onAdd={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.multiple=true; inp.onchange = e => { const files = Array.from(e.target.files||[]); if (files.length) window.toast(`${files.length} imagem(ns) selecionada(s). Upload via Supabase Storage.`, 'success'); }; inp.click(); }} onView={() => window.print()}/>
+        <NCMImageSlots filled={data.imagens} onAdd={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.multiple=true; inp.onchange = e => { const files = Array.from(e.target.files||[]); if (files.length) window.toast(`${files.length} imagem(ns) selecionada(s) — pré-visualização; o anexo definitivo é feito no fluxo de importação.`, 'info'); }; inp.click(); }} onView={() => window.print()}/>
         <div style={{ height: 16 }}/>
         <NCMPdfZone fileName={data.fichaPdf}/>
         <div className="row sb" style={{ marginTop: 14 }}>
-          <span className="small muted">Gera arquivo .zip nomeado <code>VP_NCM_{data.ncm || "______"}_img1.jpg</code>...</span>
-          <Button variant="outline" size="sm" icon="download"
-            disabled={data.imagens === 0}
-            onClick={() => window.toast(`Download iniciado — ${data.imagens} imagens exportadas`, "success")}>
-            Baixar imagens (.zip)
-          </Button>
+          <span className="small muted">O download em lote (.zip) das imagens/ficha é feito pelo time de Importação no fluxo de envio à Receita Federal.</span>
         </div>
       </NCMSection>
 
@@ -378,7 +373,6 @@ function NCMImageSlots({ filled, onAdd, onView }) {
                 <div className="ncm-slot__thumb-label">img_{String(i + 1).padStart(2, "0")}.jpg</div>
                 <div className="ncm-slot__overlay">
                   <button onClick={onView}><Icon.eye size={10}/> Ver</button>
-                  <button onClick={(e) => { e.stopPropagation(); window.toast("Imagem removida", "info"); }}><Icon.trash size={10}/></button>
                 </div>
               </>
             ) : (
@@ -404,14 +398,12 @@ function NCMPdfZone({ fileName }) {
           <div className="ncm-pdf-zone__title">{fileName}</div>
           <div className="ncm-pdf-zone__sub">PDF · 482 kb · enviado há 3d</div>
         </div>
-        <Button variant="ghost" size="sm" icon="eye" data-tip="Visualizar" onClick={() => { window.toast("Abrindo visualização PDF…", "info"); setTimeout(() => window.print(), 200); }}/>
-        <Button variant="ghost" size="sm" icon="download" data-tip="Baixar" onClick={() => window.toast("Download iniciado", "success")}/>
-        <Button variant="ghost" size="sm" icon="trash" data-tip="Remover" onClick={() => window.toast("Ficha técnica removida", "info")}/>
+        <Button variant="ghost" size="sm" icon="eye" data-tip="Visualizar" onClick={() => window.print()}/>
       </div>
     );
   }
   return (
-    <div className="ncm-pdf-zone" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='.pdf'; inp.onchange = e => { const f = e.target.files?.[0]; if (f) window.toast(`"${f.name}" (${Math.round(f.size/1024)}kb) selecionado. Upload via Supabase Storage.`, 'success'); }; inp.click(); }}>
+    <div className="ncm-pdf-zone" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='.pdf'; inp.onchange = e => { const f = e.target.files?.[0]; if (f) window.toast(`"${f.name}" selecionado — pré-visualização; o anexo definitivo é feito no fluxo de importação.`, 'info'); }; inp.click(); }}>
       <div className="ncm-pdf-zone__icon"><Icon.fileText size={20}/></div>
       <div style={{ flex: 1 }}>
         <div className="ncm-pdf-zone__title">Ficha Técnica do Fabricante (PDF)</div>
@@ -430,9 +422,6 @@ function NCMActionBar({ status, onChange, onOpenLogComex, produto }) {
     return (
       <div className="ncm-actionbar">
         <span className="row gap-2"><Icon.shield size={14} color="var(--vp-success)"/><b>Produto ativo no Siscomex</b> · disponível para uso em Duimp</span>
-        <div className="spacer" style={{ flex: 1 }}/>
-        <Button variant="outline" size="sm" icon="history" onClick={() => window.toast("Histórico de versões aberto", "info")}>Ver histórico</Button>
-        <Button variant="ghost" size="sm" icon="copy" onClick={() => window.toast("Nova versão criada como rascunho", "success")}>Nova versão</Button>
       </div>
     );
   }
@@ -447,7 +436,6 @@ function NCMActionBar({ status, onChange, onOpenLogComex, produto }) {
           </div>
         </div>
         <div className="ncm-actionbar">
-          <Button variant="ghost" size="sm" icon="eye" onClick={() => window.toast("Aprovação visualizada", "info")}>Ver aprovação</Button>
           <div className="spacer" style={{ flex: 1 }}/>
           <Button variant="secondary" size="sm" icon="externalLink" onClick={onOpenLogComex}>Exportar para LogComex →</Button>
           <Button variant="primary" size="sm" icon="check" onClick={() => { onChange("status", "CADASTRADO"); window.toast("Produto marcado como cadastrado no Siscomex", "success"); }}>Marcar como cadastrado</Button>
@@ -468,7 +456,6 @@ function NCMActionBar({ status, onChange, onOpenLogComex, produto }) {
   // EM_PREENCHIMENTO or NAO_INICIADO
   return (
     <div className="ncm-actionbar">
-      <Button variant="outline" size="sm" icon="copy" onClick={() => window.toast("Rascunho salvo", "success")}>Salvar rascunho</Button>
       <div className="spacer" style={{ flex: 1 }}/>
       <Button variant="primary" size="sm" iconRight="arrowRight"
         disabled={!produto.ncm || !produto.denominacao || produto.denominacao.length < 10}
