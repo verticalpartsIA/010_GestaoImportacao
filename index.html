@@ -30,6 +30,12 @@
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
+  <!-- Cache de compilação JSX (IndexedDB) — compila cada .jsx uma vez e reusa
+       nas cargas seguintes, em vez de rodar o Babel em ~40 arquivos toda vez.
+       Os .jsx abaixo usam type="text/vp-jsx" pra que ESTE loader os controle
+       (e o auto-runner do Babel os ignore). Ver src/jsx-loader.js. -->
+  <script src="src/jsx-loader.js?v=3"></script>
+
   <!-- Supabase JS client (CDN, sem build step) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
 
@@ -83,14 +89,14 @@
   <script src="src/aval-financeiro-store.js?v=3"></script>
 
   <!-- Tweaks panel framework -->
-  <script type="text/babel" src="src/tweaks-panel.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="src/tweaks-panel.jsx?v=3"></script>
 
   <!-- Components in dependency order -->
-  <script type="text/babel" src="src/primitives.jsx?v=4"></script>
-  <script type="text/babel" src="src/toast.jsx?v=6"></script>
-  <script type="text/babel" src="src/shell.jsx?v=29"></script>
-  <script type="text/babel" src="src/dashboard.jsx?v=10"></script>
-  <script type="text/babel" src="src/comercial.jsx?v=16"></script>
+  <script type="text/vp-jsx" src="src/primitives.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="src/toast.jsx?v=6"></script>
+  <script type="text/vp-jsx" src="src/shell.jsx?v=29"></script>
+  <script type="text/vp-jsx" src="src/dashboard.jsx?v=10"></script>
+  <script type="text/vp-jsx" src="src/comercial.jsx?v=16"></script>
 
   <!-- Padrão universal de codificação de IDs (Master ID) — Fase 1 -->
   <script src="src/master-id-engine.js?v=2"></script>
@@ -99,109 +105,109 @@
   <script src="src/enderecos-api.js?v=2"></script>
   <script src="src/formulario-elevador-store.js?v=14"></script>
   <script src="src/cotacao-elevador-fornecedor-store.js?v=13"></script>
-  <script type="text/babel" src="src/formulario-elevador.jsx?v=25"></script>
+  <script type="text/vp-jsx" src="src/formulario-elevador.jsx?v=25"></script>
 
   <!-- Controle de Cotações — histórico + Formulário de Elevadores — ISSUE #79 -->
-  <script type="text/babel" src="src/controle-cotacoes.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="src/controle-cotacoes.jsx?v=3"></script>
 
   <!-- Cotações a Fornecedor — substitui a antiga "Cotações China" (mock) -->
   <script src="src/tratativas-store.js?v=1"></script>
-  <script type="text/babel" src="src/cotacoes-fornecedor.jsx?v=7"></script>
+  <script type="text/vp-jsx" src="src/cotacoes-fornecedor.jsx?v=7"></script>
 
   <!-- Precificação de Elevador (ADM/Financeiro) + DIFAL -->
   <script src="src/difal-engine.js?v=1"></script>
   <script src="src/precificacao-elevador-engine.js?v=1"></script>
   <script src="src/precificacao-elevador-store.js?v=4"></script>
-  <script type="text/babel" src="src/precificacao-elevador.jsx?v=10"></script>
+  <script type="text/vp-jsx" src="src/precificacao-elevador.jsx?v=10"></script>
 
-  <script type="text/babel" src="src/precificacao.jsx?v=16"></script>
-  <script type="text/babel" src="src/proposta-form.jsx?v=7"></script>
-  <script type="text/babel" src="src/proposta-preview.jsx?v=11"></script>
+  <script type="text/vp-jsx" src="src/precificacao.jsx?v=16"></script>
+  <script type="text/vp-jsx" src="src/proposta-form.jsx?v=7"></script>
+  <script type="text/vp-jsx" src="src/proposta-preview.jsx?v=11"></script>
   <script src="src/proposta-store.js?v=5"></script>
   <script src="src/proposta-heranca.js?v=3"></script>
   <script src="src/proposta-imagens.js?v=1"></script>
-  <script type="text/babel" src="src/proposta-editor.jsx?v=22"></script>
-  <script type="text/babel" src="src/ncm.jsx?v=6"></script>
+  <script type="text/vp-jsx" src="src/proposta-editor.jsx?v=22"></script>
+  <script type="text/vp-jsx" src="src/ncm.jsx?v=6"></script>
 
   <!-- Funil de pré-venda por setores (workflow + histórico) — antes do Catálogo -->
   <script src="src/project-gates.js?v=1"></script>
   <script src="src/vistoria-tracker.js?v=1"></script>
   <script src="src/ficha-workflow-engine.js?v=1"></script>
   <script src="src/ficha-workflow-store.js?v=3"></script>
-  <script type="text/babel" src="src/ficha-workflow.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/ficha-workflow.jsx?v=1"></script>
 
-  <script type="text/babel" src="src/ncm-catalogo.jsx?v=22"></script>
-  <script type="text/babel" src="src/operacoes.jsx?v=13"></script>
-  <script type="text/babel" src="src/logistica.jsx?v=16"></script>
-  <script type="text/babel" src="src/financeiro.jsx?v=17"></script>
-  <script type="text/babel" src="src/aval-financeiro.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/ncm-catalogo.jsx?v=22"></script>
+  <script type="text/vp-jsx" src="src/operacoes.jsx?v=13"></script>
+  <script type="text/vp-jsx" src="src/logistica.jsx?v=16"></script>
+  <script type="text/vp-jsx" src="src/financeiro.jsx?v=17"></script>
+  <script type="text/vp-jsx" src="src/aval-financeiro.jsx?v=1"></script>
 
   <!-- Dossier da Obra (entidade central) — ISSUE #2 -->
   <script src="src/dossier-store.js?v=3"></script>
-  <script type="text/babel" src="src/dossier-obra.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="src/dossier-obra.jsx?v=4"></script>
 
   <!-- Análise Técnica (ISSUE #3) -->
   <script src="src/analise-tecnica-store.js?v=1"></script>
-  <script type="text/babel" src="src/analise-tecnica.jsx?v=2"></script>
+  <script type="text/vp-jsx" src="src/analise-tecnica.jsx?v=2"></script>
 
   <!-- Vistorias de Obras (Instalação & Entrega) -->
-  <script type="text/babel" src="src/vistorias-obras.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/vistorias-obras.jsx?v=1"></script>
 
   <!-- Etapas finais do workflow (ART, Cronograma, Data Book) -->
   <script src="src/data-book-store.js?v=1"></script>
   <script src="src/handover-manutencao.js?v=1"></script>
-  <script type="text/babel" src="src/entrega.jsx?v=5"></script>
-  <script type="text/babel" src="src/handover-manutencao.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/entrega.jsx?v=5"></script>
+  <script type="text/vp-jsx" src="src/handover-manutencao.jsx?v=1"></script>
 
   <!-- Jurídico · Editor de Contrato do Cliente -->
-  <script type="text/babel" src="src/contrato-editor.jsx?v=5"></script>
+  <script type="text/vp-jsx" src="src/contrato-editor.jsx?v=5"></script>
 
   <!-- Engenharia · Configurador de Equipamentos (escada/esteira rolante) -->
-  <script type="text/babel" src="src/engenharia-config.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="src/engenharia-config.jsx?v=4"></script>
 
   <!-- Engenharia · Projeto de Elevadores (poço/cabine/porta, correlacionado por Nº da Cotação) -->
   <script src="src/projeto-elevador-store.js?v=3"></script>
-  <script type="text/babel" src="src/engenharia-elevador.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="src/engenharia-elevador.jsx?v=3"></script>
 
   <!-- Engenharia · Desenho Técnico ER|ES (porte Claude Designer) -->
-  <script type="text/babel" src="src/desenho-tecnico.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/desenho-tecnico.jsx?v=1"></script>
 
   <!-- Recursos Humanos · Homologação de Parceiros Instaladores -->
   <script src="src/rh-homologacao-store.js?v=1"></script>
-  <script type="text/babel" src="src/rh-homologacao.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/rh-homologacao.jsx?v=1"></script>
 
   <!-- Jurídico · Contrato Instalador (wizard + dashboard + assinatura digital) -->
   <script src="src/contrato-instalador-engine.js?v=2"></script>
   <script src="src/contrato-instalador-store.js?v=5"></script>
-  <script type="text/babel" src="src/contrato-instalador-preview.jsx?v=1"></script>
-  <script type="text/babel" src="src/contrato-instalador.jsx?v=2"></script>
+  <script type="text/vp-jsx" src="src/contrato-instalador-preview.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/contrato-instalador.jsx?v=2"></script>
 
   <!-- Jurídico · Contrato Venda de Equipamentos (cliente final) -->
   <script src="src/contrato-venda-engine.js?v=4"></script>
   <script src="src/contrato-venda-store.js?v=7"></script>
-  <script type="text/babel" src="src/contrato-venda-preview.jsx?v=2"></script>
-  <script type="text/babel" src="src/contrato-venda.jsx?v=5"></script>
+  <script type="text/vp-jsx" src="src/contrato-venda-preview.jsx?v=2"></script>
+  <script type="text/vp-jsx" src="src/contrato-venda.jsx?v=5"></script>
 
   <!-- Engenharia · Ficha Técnica (gerador universal) -->
   <script src="src/ficha-tecnica-engine.js?v=9"></script>
   <script src="src/ficha-tecnica-store.js?v=4"></script>
   <script src="src/ficha-tecnica-imagens.js?v=1"></script>
   <script src="src/ficha-omie-publish.js?v=5"></script>
-  <script type="text/babel" src="src/ficha-tecnica.jsx?v=19"></script>
-  <script type="text/babel" src="src/ficha-tecnica-copiloto.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="src/ficha-tecnica.jsx?v=19"></script>
+  <script type="text/vp-jsx" src="src/ficha-tecnica-copiloto.jsx?v=3"></script>
 
   <!-- Catálogo · Pedido a Fornecedor (RFQ bilíngue PT|EN) -->
   <script src="src/pedido-fornecedor-engine.js?v=3"></script>
   <script src="src/pedido-fornecedor-store.js?v=5"></script>
-  <script type="text/babel" src="src/pedido-fornecedor.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="src/pedido-fornecedor.jsx?v=3"></script>
 
   <!-- Copiloto VP · bolinha global (chat + preenchimento + revisão) -->
   <!-- Admin: Logs de Atividade -->
-  <script type="text/babel" src="src/logs-admin.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/logs-admin.jsx?v=1"></script>
 
-  <script type="text/babel" src="src/vp-copiloto.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/vp-copiloto.jsx?v=1"></script>
 
   <!-- Main app last -->
-  <script type="text/babel" src="src/app.jsx?v=35"></script>
+  <script type="text/vp-jsx" src="src/app.jsx?v=35"></script>
 </body>
 </html>
