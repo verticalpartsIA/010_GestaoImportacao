@@ -340,13 +340,6 @@ button.nav-item {
   letter-spacing: .04em;
   font-family: var(--font-mono);
 }
-.nav-item__badge--planned {
-  background: none;
-  color: var(--vp-gray-500);
-  font-weight: 700;
-  font-style: normal;
-  border: 1px solid var(--vp-gray-700);
-}
 .app[data-sidebar="collapsed"] .nav-item { justify-content: center; padding: 11px 0; }
 .app[data-sidebar="collapsed"] .nav-item__label,
 .app[data-sidebar="collapsed"] .nav-item__badge { display: none; }
