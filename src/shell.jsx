@@ -33,6 +33,7 @@ const NAV_GROUPS = [
     { label: "Gestão Importação", subheader: true },
     { id: "pi-importacao", label: "P.I.", icon: "fileText", indent: true },
     { id: "rfq-importacao", label: "RFQ", icon: "fileSearch", indent: true },
+    { id: "ims-importacao", label: "IMS", icon: "package", indent: true },
     { id: "compras", label: "Compras Nacional", icon: "truck" },
   ]},
   { label: "Engenharia", items: [
@@ -245,6 +246,7 @@ const BREADCRUMB_MAP = {
   importacao:    { module: "Logística", page: "Importação", icon: "ship" },
   "pi-importacao": { module: "Importação", page: "Gestão Importação — P.I.", icon: "fileText" },
   "rfq-importacao": { module: "Importação", page: "Gestão Importação — RFQ", icon: "fileSearch" },
+  "ims-importacao": { module: "Importação", page: "Gestão Importação — IMS", icon: "package" },
   "importacao-detail":        { module: "Logística", page: "Detalhe de Embarque", icon: "ship" },
   "importacao-rastreamento":  { module: "Logística", page: "Rastreamento de Navios", icon: "mapIcon" },
   "importacao-email":         { module: "Logística", page: "Inbox Importação", icon: "mail" },
