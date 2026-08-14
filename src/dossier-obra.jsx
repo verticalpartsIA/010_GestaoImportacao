@@ -93,7 +93,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
                   </span>
                 </td>
                 <td>{o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '—'}</td>
-                <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
+                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
           </tbody>

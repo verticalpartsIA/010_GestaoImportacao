@@ -164,7 +164,7 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
                 <td>{cfCategoriaLabel(c.categoria_produto)}</td>
                 <td><span className="cell-num">{fmtTimestamp(c.sent_at)}</span></td>
                 <td><FECefStatusChip status={c.status}/></td>
-                <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
+                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
           </tbody>
