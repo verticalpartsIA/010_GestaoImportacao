@@ -219,7 +219,7 @@ function App() {
         role={role}
         collapsed={collapsed}
         onToggle={() => setCollapsed(c => !c)}/>
-      <Header route={route} role={role} setRole={setRole} onSearch={(r) => setRoute(r)}/>
+      <Header route={route} role={role} setRole={setRole} onSearch={(r) => setRoute(r)} onNavigate={(r, sub) => { setSubsel(sub ?? null); setRoute(r); }}/>
       <main className="main" key={route}>
         {renderPage()}
       </main>

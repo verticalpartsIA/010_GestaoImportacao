@@ -250,7 +250,103 @@ function HelpCenter({ route, bc, onClose }) {
   );
 }
 
-function Header({ route, role, setRole, onSearch }) {
+/* Busca global — consulta leads/projetos/contratos/embarques no Supabase e
+   deep-linka pro registro (mesmo objeto que as listas passam via select('*')). */
+async function runGlobalSearch(term) {
+  const sb = window.__VP_SB && window.__VP_SB.sb;
+  if (!sb) return { error: true };
+  const clean = term.replace(/[,%()]/g, " ").trim();
+  if (!clean) return { groups: [] };
+  const like = "%" + clean + "%";
+  const safe = (p) => p.then((r) => r).catch(() => ({ data: [], error: true }));
+  const [L, P, C, E] = await Promise.all([
+    safe(sb.from("leads").select("*").or(`building.ilike.${like},contact.ilike.${like},email.ilike.${like}`).limit(6)),
+    safe(sb.from("projetos").select("*").or(`name.ilike.${like},client.ilike.${like}`).limit(6)),
+    safe(sb.from("contratos_venda_equipamentos").select("*").ilike("client", like).limit(6)),
+    safe(sb.from("embarques").select("*").or(`client.ilike.${like},vessel.ilike.${like},bl.ilike.${like},container_number.ilike.${like}`).limit(6)),
+  ]);
+  const groups = [];
+  const push = (module, rows, mapFn) => {
+    const items = (rows || []).map(mapFn).filter((it) => it.title);
+    if (items.length) groups.push({ module, items });
+  };
+  push("Leads", L.data, (l) => ({ id: l.id, title: l.building, sub: l.contact || l.status, route: "lead-detail", subsel: l }));
+  push("Projetos", P.data, (p) => ({ id: p.id, title: p.name || p.client, sub: p.client || p.current_phase, route: "status-obras", subsel: null }));
+  push("Contratos", C.data, (c) => ({ id: c.id, title: c.client, sub: c.status, route: "contrato-editor", subsel: c }));
+  push("Embarques", E.data, (e) => ({ id: e.id, title: e.client, sub: e.vessel || e.bl || e.container_number, route: "importacao-detail", subsel: e }));
+  return { groups };
+}
+
+function GlobalSearch({ onNavigate }) {
+  const [q, setQ] = React.useState("");
+  const [open, setOpen] = React.useState(false);
+  const [loading, setLoading] = React.useState(false);
+  const [groups, setGroups] = React.useState([]);
+  const [err, setErr] = React.useState(false);
+  const boxRef = React.useRef(null);
+  const reqRef = React.useRef(0);
+
+  React.useEffect(() => {
+    const term = q.trim();
+    if (term.length < 2) { setGroups([]); setLoading(false); setErr(false); return; }
+    setLoading(true); setErr(false);
+    const myReq = ++reqRef.current;
+    const t = setTimeout(async () => {
+      const res = await runGlobalSearch(term);
+      if (myReq !== reqRef.current) return; // descarta resposta obsoleta
+      setLoading(false);
+      if (res.error) { setErr(true); setGroups([]); return; }
+      setGroups(res.groups);
+    }, 250);
+    return () => clearTimeout(t);
+  }, [q]);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  const go = (r) => { setOpen(false); setQ(""); setGroups([]); onNavigate(r.route, r.subsel); };
+  const total = groups.reduce((s, g) => s + g.items.length, 0);
+  const showPanel = open && q.trim().length >= 2;
+
+  return (
+    <div className="header__search-wrap" ref={boxRef}>
+      <div className="header__search">
+        <Icon.search size={14} color="var(--fg3)"/>
+        <input placeholder="Buscar leads, projetos, contratos, embarques…"
+          value={q}
+          onChange={(e) => { setQ(e.target.value); setOpen(true); }}
+          onFocus={() => setOpen(true)}/>
+        {q ? <button className="header__search-clear" aria-label="Limpar busca" onClick={() => { setQ(""); setGroups([]); }}>×</button> : null}
+      </div>
+      {showPanel && (
+        <div className="gsearch-panel" role="listbox">
+          {loading && <div className="gsearch-empty">Buscando…</div>}
+          {!loading && err && <div className="gsearch-empty">Não foi possível buscar agora. Verifique a conexão.</div>}
+          {!loading && !err && total === 0 && <div className="gsearch-empty">Nada encontrado para “{q.trim()}”.</div>}
+          {!loading && !err && groups.map((g) => (
+            <div key={g.module} className="gsearch-group">
+              <div className="gsearch-group__label">{g.module}</div>
+              {g.items.map((r) => (
+                <button key={r.route + "-" + r.id} className="gsearch-item" onClick={() => go(r)}>
+                  <span className="gsearch-item__title">{r.title}</span>
+                  {r.sub ? <span className="gsearch-item__sub">{r.sub}</span> : null}
+                </button>
+              ))}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function Header({ route, role, setRole, onSearch, onNavigate }) {
   const bc = BREADCRUMB_MAP[route] || BREADCRUMB_MAP.dashboard;
   const [showHelp, setShowHelp] = React.useState(false);
   return (
@@ -262,14 +358,7 @@ function Header({ route, role, setRole, onSearch }) {
         <span className="sep">/</span>
         <span className="cur">{bc.page}</span>
       </div>
-      <div className="header__search" data-tip="Busca global em breve" aria-disabled="true" style={{ opacity: .55, cursor: "not-allowed" }}>
-        <Icon.search size={14} color="var(--fg3)"/>
-        <input placeholder="Buscar leads, projetos, contratos, embarques…"
-          disabled aria-disabled="true"
-          style={{ cursor: "not-allowed", background: "transparent" }}
-          onFocus={(e) => e.target.blur()}/>
-        <span className="header__search-kbd" title="Em breve">EM BREVE</span>
-      </div>
+      <GlobalSearch onNavigate={onNavigate}/>
       <div className="role-switch" title="Trocar perfil ativo">
         <button className={role === "comercial" ? "is-active" : ""} onClick={() => setRole("comercial")}>Comercial</button>
         <button className={role === "engenharia" ? "is-active" : ""} onClick={() => setRole("engenharia")}>Engenharia</button>
