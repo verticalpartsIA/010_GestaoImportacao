@@ -520,14 +520,42 @@ function GatilhoCard({ g, onSaved }) {
 /* ---------- COMISSÕES ---------- */
 function ComissoesPage() {
   const [comissoes, setComissoes] = React.useState([]);
+  const [aguardandoGeracao, setAguardandoGeracao] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [busy, setBusy] = React.useState(false);
+  const [gerando, setGerando] = React.useState(null);
 
   const reload = React.useCallback(async () => {
     const { data } = await window.__VP_SB.sb.from('comissoes').select('*').order('id');
     setComissoes(data || []);
+    try {
+      setAguardandoGeracao(await window.ComissionamentoStore.listarPropostasAguardandoComissao());
+    } catch (e) { setAguardandoGeracao([]); }
   }, []);
   React.useEffect(() => { reload().finally(() => setLoading(false)); }, [reload]);
+
+  const gerarComissao = async (p) => {
+    setGerando(p.id);
+    try {
+      const linhas = await window.ComissionamentoStore.gerarComissoesDaProposta(p.id);
+      window.toast?.(`${linhas.length} comissão(ões) gerada(s) para a Proposta ${p.numero_documento || p.numero_cotacao}.`, 'success');
+      await reload();
+    } catch (e) { window.toast?.('Erro ao gerar comissão: ' + e.message, 'error'); }
+    finally { setGerando(null); }
+  };
+
+  const aprovarDiretoria = async (c) => {
+    setBusy(true);
+    try {
+      const { data, error } = await window.__VP_SB.sb.from('comissoes')
+        .update({ status: 'Aprovado' }).eq('id', c.id).select();
+      if (error) throw error;
+      if (!data || !data.length) throw new Error('sem permissão para atualizar (RLS).');
+      window.toast?.(`Comissão acima do limite aprovada por diretoria (${c.aprovador_necessario || ''}).`, 'success');
+      await reload();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setBusy(false); }
+  };
 
   /* Persiste o status na tabela `comissoes`. Verifica linhas afetadas via
      .select() — se RLS bloquear, mostra erro honesto em vez de sucesso falso. */
@@ -547,8 +575,8 @@ function ComissoesPage() {
   const pagar = (c) => setStatus(c, 'Pago', 'Pagamento liberado');
 
   const aprovarTodas = async () => {
-    const pendentes = comissoes.filter(c => c.status !== 'Aprovado' && c.status !== 'Pago');
-    if (!pendentes.length) return window.toast('Nenhuma comissão pendente de aprovação.', 'info');
+    const pendentes = comissoes.filter(c => c.status !== 'Aprovado' && c.status !== 'Pago' && !c.requer_aprovacao_diretoria);
+    if (!pendentes.length) return window.toast('Nenhuma comissão pendente de aprovação (fora as que exigem diretoria).', 'info');
     setBusy(true);
     try {
       const ids = pendentes.map(c => c.id);
@@ -588,6 +616,26 @@ function ComissoesPage() {
         <KPI label="Aguardando" value={fmtBRL(totalAguardando)} sub="trigger pendente" delta="—" deltaDir="up" icon="clock"/>
         <KPI label="Maior comissão" value={comissoes.length > 0 ? fmtBRL(Math.max(...comissoes.map(c => c.comissao || 0))) : "—"} sub="—" delta="—" deltaDir="flat" icon="award"/>
       </div>
+
+      {aguardandoGeracao.length > 0 && (
+        <Card title="Propostas assinadas aguardando geração de comissão" sub={`${aguardandoGeracao.length} proposta(s) — aplica a regra de comissionamento por origem da venda`} style={{ marginBottom: 16 }}>
+          <div className="table-wrap" style={{ border: 0 }}>
+            <table className="t">
+              <thead><tr><th>Proposta</th><th>Cotação Nº</th><th className="text-right">Valor</th><th></th></tr></thead>
+              <tbody>
+                {aguardandoGeracao.map((p) => (
+                  <tr key={p.id}>
+                    <td>{p.numero_documento || p.titulo || '—'}</td>
+                    <td className="mono">{p.numero_cotacao ?? '—'}</td>
+                    <td className="cell-money">{fmtBRL(p.valor_total)}</td>
+                    <td><Button variant="primary" size="sm" icon="award" disabled={gerando === p.id} onClick={() => gerarComissao(p)}>{gerando === p.id ? 'Gerando…' : 'Gerar comissão'}</Button></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <Card title="Resumo por vendedor" sub={`${comissoes.length} colaboradores · pagamento dia 10`}>
         <div className="table-wrap" style={{ border: 0 }}>
@@ -629,10 +677,16 @@ function ComissoesPage() {
                     </div>
                     <div className="cell-sub mono">{Math.round(c.comissao / 150000 * 100)}% meta Q</div>
                   </td>
-                  <td><StatusBadge status={c.status}/></td>
+                  <td>
+                    <StatusBadge status={c.status}/>
+                    {c.requer_aprovacao_diretoria && c.status !== 'Aprovado' && c.status !== 'Pago' && (
+                      <div className="small muted" style={{ marginTop: 2 }}>acima do limite — requer {c.aprovador_necessario || 'diretoria'}</div>
+                    )}
+                  </td>
                   <td>
                     {c.status === "Aprovado" ? <Button variant="primary" size="sm" icon="dollar" disabled={busy} onClick={() => pagar(c)}>Pagar</Button>
                      : c.status === "Pago" ? <Button variant="ghost" size="sm" icon="check" disabled/>
+                     : c.status === "Aguardando aprovação diretoria" ? <Button variant="outline" size="sm" icon="alert" disabled={busy} onClick={() => aprovarDiretoria(c)}>Aprovar (diretoria)</Button>
                      : <Button variant="outline" size="sm" icon="check" disabled={busy} onClick={() => aprovar(c)}>Aprovar</Button>}
                   </td>
                 </tr>
