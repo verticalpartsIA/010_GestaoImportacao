@@ -13,7 +13,7 @@ const PI_STATUS_PRODUCAO = ['Não iniciada', 'Em produção', 'Concluída', 'Atr
 
 function fmtDate(d) { return d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—'; }
 function fmtNum(v) { return (v == null || v === '') ? '—' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); }
-function embarqueLabel(e) { return e ? (e.bl || e.vessel || e.project_id || 'Embarque ' + e.id) : ''; }
+function embarqueLabel(e) { return e ? (e.nome_embarque || e.referencia_embarque || e.awb_bl || 'Embarque ' + e.id) : ''; }
 
 function PIField({ label, children, span }) {
   return (
@@ -336,7 +336,7 @@ function PIPage() {
 
   const reload = React.useCallback(() => {
     window.PIStore.listarTodas().then(setPis).catch(() => setPis([]));
-    window.__VP_SB?.sb?.from('embarques').select('id, bl, vessel, project_id').order('created_at', { ascending: false }).then(({ data }) => setEmbarques(data || []));
+    window.__VP_SB?.sb?.from('embarques_importacao').select('id, nome_embarque, referencia_embarque, awb_bl').order('created_at', { ascending: false }).then(({ data }) => setEmbarques(data || []));
   }, []);
   React.useEffect(() => { reload(); }, [reload]);
 
