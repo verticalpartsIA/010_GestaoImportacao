@@ -333,6 +333,42 @@
     respondido: '#059669', em_analise: '#7c3aed', aprovada: '#15803d', expirado: '#9f1239',
   };
 
+  /* ---------- Fila da Importação: compras confirmadas no fornecedor que ainda
+     não viraram embarque. O embarque (importação) nasce quando a compra ao
+     fornecedor é decidida/aprovada (em_analise/aprovada) — não no sinal pago,
+     que é só o cliente pagando a entrada. Sem esta ponte, uma compra iniciada
+     ficava invisível na Importação (achado E2E reteste D). ---------- */
+  async function listarComprasAguardandoEmbarque() {
+    const c = sb(); if (!c) return [];
+    const { data: cots } = await c.from('cotacoes_elevador_fornecedor')
+      .select('id, numero_documento, fornecedor, formulario_elevador_id, status, respostas, decidido_em, aprovado_em')
+      .in('status', ['em_analise', 'aprovada']).eq('categoria_produto', 'elevador');
+    if (!cots || !cots.length) return [];
+    const { data: emb } = await c.from('embarques').select('cotacao_fornecedor_id');
+    const comEmbarque = new Set((emb || []).map((x) => x.cotacao_fornecedor_id).filter(Boolean));
+    const pendentes = cots.filter((x) => !comEmbarque.has(x.id));
+    if (!pendentes.length) return [];
+    const formIds = [...new Set(pendentes.map((x) => x.formulario_elevador_id).filter(Boolean))];
+    const { data: forms } = await c.from('formularios_elevador')
+      .select('id, numero_cotacao, clientes(razao_social)').in('id', formIds);
+    const formById = {}; (forms || []).forEach((f) => { formById[f.id] = f; });
+    return pendentes.map((x) => {
+      const form = formById[x.formulario_elevador_id] || {};
+      const respostas = x.respostas || {};
+      const fobUsd = (respostas.itens || []).reduce((s, it) => s + (Number(it.preco_total) || 0), 0);
+      return {
+        cotacaoFornecedorId: x.id,
+        numeroDocumento: x.numero_documento,
+        numeroCotacao: form.numero_cotacao ?? null,
+        fornecedor: x.fornecedor,
+        clienteNome: (form.clientes && form.clientes.razao_social) || null,
+        fobUsd,
+        status: x.status,
+        quando: x.aprovado_em || x.decidido_em,
+      };
+    }).sort((a, b) => String(b.quando || '').localeCompare(String(a.quando || '')));
+  }
+
   /* ---------- Portal público (/cotacao-elevador-fornecedor/:token) ---------- */
   async function getByToken(token) {
     const c = sb(); if (!c || !token) return null;
@@ -459,6 +495,6 @@
     listarAnexosFormulario, urlAssinadaAnexoFormulario,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
     getByToken, marcarVisualizado, salvarResposta, getPublicIP,
-    decidirComprar, aprovar,
+    decidirComprar, aprovar, listarComprasAguardandoEmbarque,
   };
 }());

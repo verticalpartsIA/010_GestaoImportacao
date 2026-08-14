@@ -91,10 +91,11 @@ function DocsCard({ docs, onChange }) {
 }
 
 /* ---------- MODAL: Novo Embarque ---------- */
-function ModalNovoEmbarque({ onClose, onSaved }) {
+function ModalNovoEmbarque({ onClose, onSaved, prefill }) {
   const [f, setF] = React.useState({
-    client:'', supplier:'', vessel:'', imo:'', line:'',
-    bl:'', invoiceNumber:'', invoiceValue:'', invoiceCurrency:'USD',
+    client: prefill?.client || '', supplier: prefill?.supplier || '', vessel:'', imo:'', line:'',
+    bl:'', invoiceNumber: prefill?.invoiceNumber || '',
+    invoiceValue: prefill?.invoiceValue || '', invoiceCurrency: prefill?.invoiceCurrency || 'USD',
     containerNumber:'', seal:'', containers:'1', type:'40HC', freight:'FCL',
     from:'Xangai, CN', to:'Santos, BR',
     etd:'', eta:'', status:'Em trânsito', obraId:'',
@@ -117,6 +118,8 @@ function ModalNovoEmbarque({ onClose, onSaved }) {
       id,
       client: f.client, supplier: f.supplier || null,
       project_id: f.obraId || null,
+      cotacao_fornecedor_id: prefill?.cotacaoFornecedorId || null,
+      numero_cotacao: prefill?.numeroCotacao != null ? prefill.numeroCotacao : null,
       vessel: f.vessel || null, imo: f.imo || null, line: f.line || null,
       bl: f.bl || null,
       invoice_number: f.invoiceNumber || null,
@@ -228,13 +231,18 @@ function ImportacaoPage({ setRoute, setSubsel }) {
   const [loading, setLoading] = React.useState(true);
   const [tab, setTab] = React.useState("embarques");
   const [filter, setFilter] = React.useState("Todos");
-  const [showEmbarque, setShowEmbarque] = React.useState(false);
+  const [showEmbarque, setShowEmbarque] = React.useState(null); // null | {} (branco) | prefill
+  const [aguardando, setAguardando] = React.useState([]);
   const filterOptions = ["Todos", "Em trânsito", "Aguardando liberação", "Entregue"];
 
   const reloadEmbarques = () => {
     setLoading(true);
     window.__VP_SB.sb.from('embarques').select('*').order('eta')
       .then(({ data }) => { setEmbarques(data || []); setLoading(false); });
+    if (window.CotacaoElevadorFornecedorStore?.listarComprasAguardandoEmbarque) {
+      window.CotacaoElevadorFornecedorStore.listarComprasAguardandoEmbarque()
+        .then(setAguardando).catch(() => setAguardando([]));
+    }
   };
   React.useEffect(() => { reloadEmbarques(); }, []);
 
@@ -262,9 +270,40 @@ function ImportacaoPage({ setRoute, setSubsel }) {
         <div className="page-head__r">
           <Button variant="outline" icon="mail" onClick={() => setRoute("importacao-email")}>Inbox</Button>
           <Button variant="outline" icon="globe" onClick={() => setRoute("importacao-rastreamento")}>Mapa de navios</Button>
-          <Button variant="primary" icon="plus" onClick={() => setShowEmbarque(true)}>Novo embarque</Button>
+          <Button variant="primary" icon="plus" onClick={() => setShowEmbarque({})}>Novo embarque</Button>
         </div>
       </div>
+
+      {aguardando.length > 0 && (
+        <div className="card" style={{ marginBottom: 20, borderLeft: '3px solid #7c3aed', padding: 0 }}>
+          <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', borderBottom:'1px solid var(--border)' }}>
+            <div style={{ fontWeight:700, fontSize:13 }}>Compras aguardando embarque <span style={{ color:'var(--fg3)' }}>({aguardando.length})</span></div>
+            <span className="muted small">Compra confirmada no fornecedor · ainda sem embarque na Importação</span>
+          </div>
+          <div className="table-wrap">
+            <table className="t">
+              <thead><tr><th>Cotação</th><th>Fornecedor</th><th>Cliente</th><th>FOB (USD)</th><th></th></tr></thead>
+              <tbody>
+                {aguardando.map((a) => (
+                  <tr key={a.cotacaoFornecedorId}>
+                    <td><div className="cell-main">{a.numeroCotacao != null ? window.MasterIdEngine.baseId('elevador', a.numeroCotacao) : (a.numeroDocumento || '—')}</div><div className="cell-sub">{a.numeroDocumento}</div></td>
+                    <td>{a.fornecedor || '—'}</td>
+                    <td>{a.clienteNome || '—'}</td>
+                    <td className="cell-num">{a.fobUsd ? fmtUSD(a.fobUsd) : '—'}</td>
+                    <td style={{ textAlign:'right' }}>
+                      <Button variant="primary" size="sm" icon="plus" onClick={() => setShowEmbarque({
+                        cotacaoFornecedorId: a.cotacaoFornecedorId, numeroCotacao: a.numeroCotacao,
+                        client: a.clienteNome || '', supplier: a.fornecedor || '',
+                        invoiceValue: a.fobUsd ? String(a.fobUsd) : '', invoiceCurrency: 'USD',
+                      })}>Criar embarque</Button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
         <KPI label="Em trânsito" value={emTransito.length} sub="navios ativos" icon="ship"/>
@@ -346,7 +385,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
           </tbody>
         </table>
       </div>
-      {showEmbarque && <ModalNovoEmbarque onClose={() => setShowEmbarque(false)} onSaved={reloadEmbarques}/>}
+      {showEmbarque && <ModalNovoEmbarque prefill={showEmbarque} onClose={() => setShowEmbarque(null)} onSaved={reloadEmbarques}/>}
     </div>
   );
 }
@@ -770,7 +809,7 @@ function RouteAndShip({ start, end, cur, ship, isActive, onClick }) {
         <div className="map-ship__icon">
           <Icon.ship size={14} color="#000"/>
         </div>
-        <div className="map-ship__label">{ship.vessel.replace("MV ", "")}</div>
+        <div className="map-ship__label">{(ship.vessel || 'Navio a definir').replace("MV ", "")}</div>
       </div>
     </>
   );
