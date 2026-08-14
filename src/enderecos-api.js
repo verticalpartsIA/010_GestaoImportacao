@@ -69,6 +69,28 @@
     return via || d.numero || '';
   }
 
+  /* Extrai o número (+ complemento) que o usuário digitou inline no logradouro,
+     no formato documentado "Rua X, 150" (placeholder do campo). Só considera
+     um número precedido de vírgula, pra não confundir com dígitos no nome da
+     rua (ex.: "Rua 25 de Março"). */
+  function extrairNumeroLogradouro(logradouro) {
+    const m = (logradouro || '').match(/,\s*(\d[^,]*(?:,.*)?)$/);
+    return m ? m[1].trim() : '';
+  }
+
+  /* Mescla o logradouro vindo de CEP/CNPJ (geralmente só a rua, sem número)
+     com o que o usuário já digitou, preservando o número. Sem isso, o
+     autopreenchimento por CEP apagava o número do endereço em silêncio
+     (ex.: "Avenida Paulista, 1000" virava "Avenida Paulista"). */
+  function mesclarLogradouro(atual, novo) {
+    const rua = (novo || '').trim();
+    if (!rua) return (atual || '').trim();
+    const numero = extrairNumeroLogradouro(atual);
+    const novoJaTemNumero = /,\s*\d/.test(rua);
+    if (numero && !novoJaTemNumero) return `${rua}, ${numero}`;
+    return rua;
+  }
+
   async function buscarCNPJ(cnpjRaw) {
     const cnpj = sanitizeDigits(cnpjRaw);
     if (!isCnpjValido(cnpj)) throw new Error('CNPJ inválido — informe 14 dígitos.');
@@ -106,5 +128,5 @@
     };
   }
 
-  window.EnderecoAPI = { sanitizeDigits, isCepValido, isCnpjValido, buscarCEP, buscarCNPJ };
+  window.EnderecoAPI = { sanitizeDigits, isCepValido, isCnpjValido, buscarCEP, buscarCNPJ, extrairNumeroLogradouro, mesclarLogradouro };
 })();
