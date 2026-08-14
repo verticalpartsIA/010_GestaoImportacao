@@ -45,8 +45,13 @@ const NAV_GROUPS = [
   { label: "Recursos Humanos", items: [
     { id: "rh-homologacao", label: "Homologação de Parceiros Instaladores", icon: "users", restrict: ["admin"] },
   ]},
-  /* Seção nova, intencionalmente vazia — reservada para uso futuro. */
-  { label: "Logística", items: [], empty: true },
+  /* Submódulos ainda sem rota própria — apenas anunciam o que vai morar aqui,
+     sem simular navegação que não existe (ver item.planned no render). */
+  { label: "Logística", items: [
+    { label: "Almoxarifado", icon: "package", planned: true },
+    { label: "Expedição", icon: "truck", planned: true },
+    { label: "Logística", icon: "ship", planned: true },
+  ]},
   { label: "Portal Admin", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
     { id: "configuracoes", label: "Configurações do Sistema", icon: "settings", restrict: ["admin"] },
@@ -116,8 +121,8 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
       <div className="sidebar__scroll">
         {NAV_GROUPS.map((group) => {
           const items = group.items.filter(filterVisible);
-          /* Seção com `empty: true` é placeholder proposital (ex.: Logística) —
-             mostra o label mesmo sem itens. Seção comum sem itens visíveis
+          /* Seção com `empty: true` é placeholder proposital sem nenhum item —
+             mostra o label mesmo assim. Seção comum sem itens visíveis
              (todos ocultados pela role atual) continua oculta por completo. */
           if (!items.length && !group.empty) return null;
           /* Só respeita o recolher por módulo quando a sidebar inteira está expandida —
@@ -142,14 +147,26 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
                 </div>
               )}
               {items.map((item) => {
-                const Active = React.createElement(Icon[item.icon] || Icon.bolt);
+                const ItemIcon = React.createElement(Icon[item.icon] || Icon.bolt);
+                /* Sem rota própria ainda — anuncia o submódulo sem fingir navegação. */
+                if (item.planned) {
+                  return (
+                    <div className="nav-item nav-item--planned" key={item.label}
+                      style={{ color: 'var(--fg3)', cursor: 'default', fontStyle: 'italic' }}
+                      data-tooltip={item.label}>
+                      <span className="nav-item__icon">{ItemIcon}</span>
+                      <span className="nav-item__label">{item.label}</span>
+                      <span className="nav-item__badge nav-item__badge--planned">em breve</span>
+                    </div>
+                  );
+                }
                 return (
                   <button type="button" key={item.id}
                     className={"nav-item " + (route === item.id ? "is-active" : "")}
                     onClick={() => setRoute(item.id)}
                     aria-current={route === item.id ? "page" : undefined}
                     data-tooltip={item.label}>
-                    <span className="nav-item__icon">{Active}</span>
+                    <span className="nav-item__icon">{ItemIcon}</span>
                     <span className="nav-item__label">{item.label}</span>
                     {item.badge ? <span className="nav-item__badge">{item.badge}</span> : null}
                   </button>
