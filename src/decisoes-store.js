@@ -154,11 +154,43 @@
     return { ok: true };
   }
 
+  /* Contratação de mão de obra (Engenharia envia Contrato Instalador) exige
+     aprovação do CEO antes do envio pro parceiro. */
+  async function podeContratarInstalador(numeroCotacao, contexto) {
+    if (numeroCotacao == null) return { ok: true };
+    let decisoes = await listarPorCotacao(numeroCotacao);
+    let decisao = decisoes.find((d) => d.tipo === 'contratacao_mao_obra_ceo');
+    if (!decisao) {
+      decisao = await criarDecisaoSeNaoExiste({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo', numeroCotacao, contexto });
+    }
+    if (decisao.status === 'reprovada') return { ok: false, motivo: `Contratação reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador.' };
+    return { ok: true };
+  }
+
+  /* Montador entra na obra (parceiro vinculado a um dossiê) exige aprovação
+     do RH — por obra, mesmo que o parceiro já esteja homologado em geral.
+     Chave é (dossierId, parceiroId): trocar o parceiro vinculado exige uma
+     decisão nova, não reaproveita a aprovação de um montador diferente. */
+  async function podeMontadorEntrarObra(dossierId, parceiroId, contexto) {
+    if (!dossierId || !parceiroId) return { ok: true };
+    const c = sb(); if (!c) return { ok: true };
+    const { data: existentes } = await c.from('decisoes_gerenciais').select('*')
+      .eq('dossier_id', dossierId).eq('tipo', 'montador_entra_obra_rh').eq('referencia_id', parceiroId);
+    let decisao = (existentes || [])[0];
+    if (!decisao) {
+      decisao = await criarDecisao({ tipo: 'montador_entra_obra_rh', papelRequerido: 'rh', dossierId, referenciaTabela: 'parceiros_instaladores', referenciaId: parceiroId, contexto });
+    }
+    if (decisao.status === 'reprovada') return { ok: false, motivo: `Entrada na obra reprovada pelo RH (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do RH (Karla) para este montador entrar na obra.' };
+    return { ok: true };
+  }
+
   window.DecisoesStore = {
     resolverAprovadores, souAprovador,
     criarDecisao, criarDecisaoSeNaoExiste,
     listarPendentesParaMim, listarPorCotacao,
     aprovar, reprovar,
-    podeEnviarProposta,
+    podeEnviarProposta, podeContratarInstalador, podeMontadorEntrarObra,
   };
 }());

@@ -460,6 +460,13 @@ function CISendModal({ record, onClose, onSent }) {
 
   const handleSend = async () => {
     if (sending) return;
+    const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(record.master_id) ?? null;
+    if (window.DecisoesStore && numeroCotacao != null) {
+      const gate = await window.DecisoesStore.podeContratarInstalador(numeroCotacao, {
+        contratoInstaladorId: record.id, contratada: record.contratada_nome, valor: record.valor_total,
+      });
+      if (!gate.ok) { window.toast ? window.toast(gate.motivo, 'warning') : alert(gate.motivo); return; }
+    }
     setSending(true);
     try {
       const updated = await window.CIStore.markSent(record.id, channel, { name, contact });

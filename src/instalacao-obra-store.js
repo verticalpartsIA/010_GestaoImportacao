@@ -111,10 +111,20 @@
     if (error) throw error;
   }
 
+  /* Vincular um parceiro dispara a decisão do RH pra ESTE par (obra,
+     parceiro) — mesmo que ele já esteja homologado em geral, RH ainda
+     precisa liberar a entrada dele nesta obra específica (issue #9 Fase 2). */
   async function vincularParceiroInstalador(dossierId, parceiroId) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('dossier_obra').update({ parceiro_instalador_id: parceiroId || null, updated_at: new Date().toISOString() }).eq('id', dossierId);
     if (error) throw error;
+    if (parceiroId && window.DecisoesStore) {
+      const { data: dossier } = await c.from('dossier_obra').select('building_name, client_name').eq('id', dossierId).maybeSingle();
+      const { data: parceiro } = await c.from('parceiros_instaladores').select('nome').eq('id', parceiroId).maybeSingle();
+      await window.DecisoesStore.podeMontadorEntrarObra(dossierId, parceiroId, {
+        obra: dossier && dossier.building_name, cliente: dossier && dossier.client_name, parceiro: parceiro && parceiro.nome,
+      });
+    }
   }
 
   /* Soma os sinais de todos os módulos + os itens manuais num checklist único.
@@ -162,17 +172,31 @@
     const vistoriada = !!(vistoria && vistoria.liberada);
     itens.push({ chave: 'vistoria', ok: vistoriada, label: 'Obra vistoriada e liberada', detalhe: vistoriada ? fmtData(vistoria.liberada_em) : (vistoria ? `${calcularProgressoVistoria(vistoria)}% das vistorias concluídas` : 'Nenhuma vistoria iniciada') });
 
-    // 6/7. Parceiro instalador homologado + documentação trabalhista válida
-    let parceiroOk = false, parceiroDetalhe = 'Nenhum parceiro vinculado';
+    // 6. Parceiro instalador homologado (certificações válidas em geral)
+    let certOk = false, certDetalhe = 'Nenhum parceiro vinculado';
     if (dossier.parceiro_instalador_id && window.RHHomologacao) {
       const { data: parceiro } = await c.from('parceiros_instaladores').select('*').eq('id', dossier.parceiro_instalador_id).maybeSingle();
       if (parceiro) {
         const status = window.RHHomologacao.statusGeral(parceiro);
-        parceiroOk = status === 'ok';
-        parceiroDetalhe = `${parceiro.nome} — ${status}`;
+        certOk = status === 'ok';
+        certDetalhe = `${parceiro.nome} — ${status}`;
       }
     }
-    itens.push({ chave: 'parceiro', ok: parceiroOk, label: 'Parceiro instalador homologado (NRs/ASO/PCMSO/PGR válidos)', detalhe: parceiroDetalhe });
+    itens.push({ chave: 'parceiro', ok: certOk, label: 'Parceiro instalador homologado (NRs/ASO/PCMSO/PGR válidos)', detalhe: certDetalhe });
+
+    // 7. RH liberou ESTE montador pra ESTA obra (issue #9 Fase 2) — distinto
+    // da homologação geral: a certificação pode estar válida e ainda assim
+    // o RH não ter liberado a entrada dele nesta obra específica.
+    if (dossier.parceiro_instalador_id) {
+      const { data: decisaoRh } = await c.from('decisoes_gerenciais').select('*')
+        .eq('dossier_id', dossierId).eq('tipo', 'montador_entra_obra_rh').eq('referencia_id', dossier.parceiro_instalador_id).maybeSingle();
+      const rhOk = decisaoRh && decisaoRh.status === 'aprovada';
+      const rhDetalhe = !decisaoRh ? 'Aguardando RH'
+        : decisaoRh.status === 'aprovada' ? `Liberado por ${decisaoRh.decidido_por || 'RH'}`
+        : decisaoRh.status === 'reprovada' ? `Reprovado pelo RH: ${decisaoRh.motivo || 'sem motivo'}`
+        : 'Aguardando RH';
+      itens.push({ chave: 'montador_rh', ok: !!rhOk, label: 'RH liberou este montador para esta obra', detalhe: rhDetalhe });
+    }
 
     // 8. Andaime ou munck, quando aplicável
     if (dossier.andaime_munck_necessario) {
