@@ -3,53 +3,32 @@
    ART · Cronograma de pagamento da instalação · Data Book / Termo
    ============================================================ */
 
-function PlaceholderPage({ eyebrow, title, sub, planned = [], cta }) {
+function ArtPage({ setRoute }) {
+  const irObras = () => setRoute && setRoute('status-obras');
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>{eyebrow}</div>
-          <h1 className="page-head__title">{title}</h1>
-          <p className="page-head__sub">{sub}</p>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Instalação &amp; Entrega · ART</div>
+          <h1 className="page-head__title">ART de Instalação</h1>
+          <p className="page-head__sub">As ARTs e demais documentos da obra são geridos por obra, na aba Documentos do Dossiê.</p>
         </div>
-        {cta ? (
-          <div className="page-head__r">
-            <Button variant="primary" icon="plus" onClick={() => window.toast('Tela em construção — em breve.', 'info')}>{cta}</Button>
-          </div>
-        ) : null}
+        <div className="page-head__r">
+          <Button variant="primary" icon="arrowRight" onClick={irObras}>Abrir obras</Button>
+        </div>
       </div>
-      <div style={{ border: '1px dashed var(--border)', background: 'var(--vp-gray-50)', padding: '40px 32px', textAlign: 'center', maxWidth: 760, margin: '8px auto 0' }}>
-        <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.12em', textTransform: 'uppercase', color: 'var(--vp-warning-ink)', marginBottom: 8 }}>Em construção</div>
-        <p style={{ fontSize: 13, color: 'var(--fg2)', maxWidth: 520, margin: '0 auto 20px' }}>
-          Esta etapa do workflow já tem o lugar reservado no fluxo. O conteúdo operacional será implementado na próxima fase.
+      <div style={{ border: '1px solid var(--border)', background: 'var(--vp-gray-50)', padding: '32px', maxWidth: 760, margin: '8px auto 0' }}>
+        <p style={{ fontSize: 13, color: 'var(--fg1)', lineHeight: 1.8, margin: 0 }}>
+          Para guardar a ART de uma obra: emita a ART no site do CREA, baixe o PDF e anexe-o na aba
+          {' '}<b>Documentos</b> da <b>Dossiê da Obra</b> correspondente (VPEL-EL). No mesmo lugar ficam
+          {' '}Termo de Vistoria, DataBook, Alvará e Termo de Entrega Final — com checklist de prontidão por obra,
+          {' '}para quem precisar do documento só pegar e enviar.
         </p>
-        {planned.length ? (
-          <div style={{ display: 'inline-block', textAlign: 'left' }}>
-            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Conteúdo planejado</div>
-            <ul style={{ margin: 0, paddingLeft: 18, fontSize: 13, color: 'var(--fg1)', lineHeight: 1.9 }}>
-              {planned.map((p, i) => <li key={i}>{p}</li>)}
-            </ul>
-          </div>
-        ) : null}
+        <div style={{ marginTop: 16 }}>
+          <Button variant="outline" icon="briefcase" onClick={irObras}>Ir para a lista de obras</Button>
+        </div>
       </div>
     </div>
-  );
-}
-
-function ArtPage() {
-  return (
-    <PlaceholderPage
-      eyebrow="Instalação & Entrega · ART"
-      title="ART de Instalação"
-      sub="Anotação de Responsabilidade Técnica — obrigatória antes do início da instalação."
-      cta="Nova ART"
-      planned={[
-        'Emissão e vínculo da ART por projeto (responsável técnico / CREA)',
-        'Upload do comprovante e número da ART',
-        'Bloqueio da etapa de instalação enquanto a ART não estiver registrada',
-        'Histórico e situação (emitida, paga, baixada)',
-      ]}
-    />
   );
 }
 

@@ -192,7 +192,7 @@ function App() {
       case "contrato-instalador": return <ContratoInstaladorPage/>;
       case "vistorias": return <VistoriasObras obraId={subsel} setRoute={setRoute}/>;
       case "instalacao": return <InstalacaoPage/>;
-      case "art": return <ArtPage/>;
+      case "art": return <ArtPage setRoute={setRoute}/>;
       case "cronograma": return <CronogramaPage/>;
       case "databook": return <DataBookPage/>;
       case "handover": return <window.HandoverManutencaoPage/>;
