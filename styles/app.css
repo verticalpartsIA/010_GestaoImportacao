@@ -437,6 +437,34 @@ button.nav-item {
   padding: 1px 6px;
   color: var(--fg3);
 }
+/* Busca global */
+.header__search-wrap { margin-left: auto; position: relative; }
+.header__search-wrap .header__search { margin-left: 0; }
+.header__search-clear {
+  border: 0; background: transparent; cursor: pointer; color: var(--fg3);
+  font-size: 16px; line-height: 1; padding: 0 2px;
+}
+.header__search-clear:hover { color: var(--fg1); }
+.gsearch-panel {
+  position: absolute; top: calc(100% + 6px); right: 0; width: 380px; max-width: 92vw;
+  max-height: 60vh; overflow-y: auto; background: #fff; border: 1px solid var(--border);
+  box-shadow: 0 12px 32px rgba(0,0,0,.16); z-index: 60; padding: 4px;
+}
+.gsearch-empty { padding: 14px 12px; color: var(--fg3); font-size: 13px; }
+.gsearch-group { padding: 4px 0; }
+.gsearch-group + .gsearch-group { border-top: 1px solid var(--border); }
+.gsearch-group__label {
+  font-size: 10px; letter-spacing: .06em; text-transform: uppercase;
+  color: var(--fg3); padding: 6px 10px 4px; font-weight: 600;
+}
+.gsearch-item {
+  display: flex; flex-direction: column; align-items: flex-start; gap: 1px;
+  width: 100%; text-align: left; border: 0; background: transparent; cursor: pointer;
+  padding: 7px 10px; font-family: inherit;
+}
+.gsearch-item:hover, .gsearch-item:focus-visible { background: var(--vp-gray-50); outline: none; }
+.gsearch-item__title { font-size: 13px; color: var(--fg1); font-weight: 500; }
+.gsearch-item__sub { font-size: 11px; color: var(--fg3); }
 
 .header__btn {
   width: 36px;
