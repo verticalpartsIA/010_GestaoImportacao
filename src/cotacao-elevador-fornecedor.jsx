@@ -127,6 +127,8 @@ function CotacaoElevadorFornecedorApp() {
   const [embalagem, setEmbalagem] = _cefUS('');
   const [containerNo, setContainerNo] = _cefUS('');
   const [documentosEmbarque, setDocumentosEmbarque] = _cefUS('');
+  const [freteInternacionalUsd, setFreteInternacionalUsd] = _cefUS('');
+  const [taxasExtrasUsd, setTaxasExtrasUsd] = _cefUS('');
   const [observacoesGerais, setObservacoesGerais] = _cefUS('');
   const [itemVals, setItemVals] = _cefUS({});
   const [anexos, setAnexos] = _cefUS([]);
@@ -135,11 +137,21 @@ function CotacaoElevadorFornecedorApp() {
 
   _cefUE(() => {
     (async () => {
-      if (!token || !store) { setLoading(false); setNotFound(true); return; }
-      const rec = await store.getByToken(token);
+      if (!token) { setLoading(false); setNotFound(true); return; }
+      /* Página pública: Babel/Supabase/store carregam de forma assíncrona.
+         Em vez de declarar "Link inválido" numa corrida de carregamento (o
+         fornecedor via link quebrado às vezes — achado E2E), espera o store e
+         o Supabase ficarem prontos antes de decidir. */
+      let s = window.CotacaoElevadorFornecedorStore;
+      for (let i = 0; i < 40 && (!s || !window.__VP_SB); i++) {
+        await new Promise((r) => setTimeout(r, 150));
+        s = window.CotacaoElevadorFornecedorStore;
+      }
+      if (!s) { setLoading(false); setNotFound(true); return; }
+      const rec = await s.getByToken(token);
       if (!rec || rec.status === 'rascunho') { setLoading(false); setNotFound(true); return; }
-      try { setAnexos(await store.listarAnexosResposta(rec.id)); } catch (e) { /* segue sem anexos se falhar */ }
-      try { setAnexosFormulario(await store.listarAnexosFormulario(rec.formulario_elevador_id)); } catch (e) { /* segue sem anexos se falhar */ }
+      try { setAnexos(await s.listarAnexosResposta(rec.id)); } catch (e) { /* segue sem anexos se falhar */ }
+      try { setAnexosFormulario(await s.listarAnexosFormulario(rec.formulario_elevador_id)); } catch (e) { /* segue sem anexos se falhar */ }
       const unidades = (rec.dados_envio && rec.dados_envio.unidades) || [];
       const seed = {};
       unidades.forEach((u) => { seed[u.unidade_id] = { modelo_fornecedor: '', floors_stops_doors: '', preco_unitario: '', preco_total: '', confirmacao_tecnica: '', divergencias: {} }; });
@@ -150,12 +162,13 @@ function CotacaoElevadorFornecedorApp() {
         setGarantia(r.garantia || ''); setValidadeDias(r.validade_dias || '');
         setEmbalagem(r.embalagem || ''); setContainerNo(r.container_no || '');
         setDocumentosEmbarque(r.documentos_embarque || ''); setObservacoesGerais(r.observacoes_gerais || '');
+        setFreteInternacionalUsd(r.frete_internacional_usd || ''); setTaxasExtrasUsd(r.taxas_extras_usd || '');
         (r.itens || []).forEach((it) => { if (seed[it.unidade_id]) seed[it.unidade_id] = { modelo_fornecedor: it.modelo_fornecedor || '', floors_stops_doors: it.floors_stops_doors || '', preco_unitario: it.preco_unitario || '', preco_total: it.preco_total || '', confirmacao_tecnica: it.confirmacao_tecnica || '', divergencias: it.divergencias || {} }; });
         setItemVals(seed);
         setCot(rec); setPhase('done'); setLoading(false); return;
       }
       setItemVals(seed);
-      const updated = await store.marcarVisualizado(token);
+      const updated = await s.marcarVisualizado(token);
       setCot(updated || rec);
       setLoading(false);
     })();
@@ -216,6 +229,7 @@ function CotacaoElevadorFornecedorApp() {
       moeda, incoterm_porto: incotermPorto, condicoes_pagamento: condicoesPagamento,
       prazo_fabricacao: prazoFabricacao, garantia, validade_dias: validadeDias,
       embalagem, container_no: containerNo, documentos_embarque: documentosEmbarque,
+      frete_internacional_usd: freteInternacionalUsd, taxas_extras_usd: taxasExtrasUsd,
       observacoes_gerais: observacoesGerais,
       itens: unidades.map((u) => ({ unidade_id: u.unidade_id, unidade_identificador: u.identificador, ...(itemVals[u.unidade_id] || {}) })),
     };
@@ -324,6 +338,14 @@ function CotacaoElevadorFornecedorApp() {
           <label className="co-f">
             <span>Incoterm / Porto · Incoterm / Port</span>
             <input className="co-inp" value={incotermPorto} onChange={(e) => setIncotermPorto(e.target.value)} placeholder="ex.: FOB Shanghai" disabled={readOnly}/>
+          </label>
+          <label className="co-f">
+            <span>Frete internacional (USD) · International freight</span>
+            <input className="co-inp" inputMode="decimal" value={freteInternacionalUsd} onChange={(e) => setFreteInternacionalUsd(e.target.value)} placeholder="0.00" disabled={readOnly}/>
+          </label>
+          <label className="co-f">
+            <span>Outras taxas/despesas (USD) · Other fees</span>
+            <input className="co-inp" inputMode="decimal" value={taxasExtrasUsd} onChange={(e) => setTaxasExtrasUsd(e.target.value)} placeholder="0.00" disabled={readOnly}/>
           </label>
           <label className="co-f">
             <span>Prazo de fabricação · Delivery time</span>
