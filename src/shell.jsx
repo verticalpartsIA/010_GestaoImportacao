@@ -243,6 +243,22 @@ const BREADCRUMB_MAP = {
   configuracoes: { module: "Admin", page: "Configurações", icon: "settings" },
 };
 
+/* Rota "home" de cada módulo do breadcrumb — usada pra tornar o segmento
+   do meio clicável (ex.: clicar em "Engenharia" volta pro landing da Engenharia). */
+const MODULE_HOME = {
+  "Dashboard": "dashboard",
+  "Notificações": "notificacoes",
+  "Comercial": "leads",
+  "Operações": "status-obras",
+  "Jurídico": "juridico",
+  "Engenharia": "engenharia",
+  "Logística": "importacao",
+  "Instalação & Entrega": "vistorias",
+  "Financeiro": "financeiro",
+  "Recursos Humanos": "rh-homologacao",
+  "Admin": "logs",
+};
+
 /* Ajuda contextual por rota — texto curto do que a tela faz / próximos passos. */
 const HELP_TOPICS = {
   dashboard: "Visão geral do dia: KPIs, tarefas de hoje, projetos em andamento (Gantt/Lista/Kanban) e alertas críticos.",
@@ -389,25 +405,63 @@ function GlobalSearch({ onNavigate }) {
   );
 }
 
+/* Dropdown compacto pra trocar o perfil ativo — antes eram 4 botões fixos
+   sempre visíveis, competindo por espaço com a busca (ver header__search). */
+function RoleSwitch({ role, setRole }) {
+  const [open, setOpen] = React.useState(false);
+  const boxRef = React.useRef(null);
+
+  React.useEffect(() => {
+    if (!open) return;
+    const onDoc = (e) => { if (boxRef.current && !boxRef.current.contains(e.target)) setOpen(false); };
+    const onKey = (e) => { if (e.key === "Escape") setOpen(false); };
+    document.addEventListener("mousedown", onDoc);
+    document.addEventListener("keydown", onKey);
+    return () => { document.removeEventListener("mousedown", onDoc); document.removeEventListener("keydown", onKey); };
+  }, [open]);
+
+  const current = ROLE_MAP[role] || ROLE_MAP.admin;
+  return (
+    <div className="role-dropdown" ref={boxRef} title="Trocar perfil ativo">
+      <button type="button" className="role-dropdown__trigger" onClick={() => setOpen((o) => !o)} aria-expanded={open}>
+        <span className="role-dropdown__label">Visualizando como</span>
+        <span className="role-dropdown__value">{current.name}</span>
+        <Icon.chevDown size={12}/>
+      </button>
+      {open && (
+        <div className="role-dropdown__menu" role="listbox">
+          {Object.keys(ROLE_MAP).map((key) => (
+            <button type="button" key={key}
+              className={"role-dropdown__option " + (role === key ? "is-active" : "")}
+              onClick={() => { setRole(key); setOpen(false); }}>
+              {ROLE_MAP[key].name}
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Header({ route, role, setRole, onSearch, onNavigate }) {
   const bc = BREADCRUMB_MAP[route] || BREADCRUMB_MAP.dashboard;
   const [showHelp, setShowHelp] = React.useState(false);
+  const moduleHome = MODULE_HOME[bc.module];
   return (
     <header className="header">
       <div className="breadcrumb">
-        <span>vp-gestao</span>
+        <button type="button" className="breadcrumb__link" onClick={() => onNavigate("dashboard")}>vp-gestao</button>
         <span className="sep">/</span>
-        <span>{bc.module}</span>
+        {moduleHome && moduleHome !== route ? (
+          <button type="button" className="breadcrumb__link" onClick={() => onNavigate(moduleHome)}>{bc.module}</button>
+        ) : (
+          <span>{bc.module}</span>
+        )}
         <span className="sep">/</span>
         <span className="cur">{bc.page}</span>
       </div>
       <GlobalSearch onNavigate={onNavigate}/>
-      <div className="role-switch" title="Trocar perfil ativo">
-        <button className={role === "comercial" ? "is-active" : ""} onClick={() => setRole("comercial")}>Comercial</button>
-        <button className={role === "engenharia" ? "is-active" : ""} onClick={() => setRole("engenharia")}>Engenharia</button>
-        <button className={role === "financeiro" ? "is-active" : ""} onClick={() => setRole("financeiro")}>Financeiro</button>
-        <button className={role === "admin" ? "is-active" : ""} onClick={() => setRole("admin")}>Admin</button>
-      </div>
+      <RoleSwitch role={role} setRole={setRole}/>
       <button className="header__btn" data-tip="Notificações" onClick={() => onSearch?.("notificacoes")}>
         <Icon.bell size={16}/>
         <span className="dot"/>

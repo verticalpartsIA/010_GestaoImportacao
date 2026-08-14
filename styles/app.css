@@ -448,6 +448,18 @@ button.nav-item {
 }
 .breadcrumb .sep { color: var(--vp-yellow); font-weight: 700; }
 .breadcrumb .cur { color: var(--fg1); font-weight: 600; }
+.breadcrumb__link {
+  font-family: inherit;
+  font-size: inherit;
+  color: var(--fg3);
+  background: none;
+  border: 0;
+  padding: 0;
+  cursor: pointer;
+  border-radius: 3px;
+  transition: color var(--dur-fast) var(--ease-out);
+}
+.breadcrumb__link:hover, .breadcrumb__link:focus-visible { color: var(--vp-yellow-press); text-decoration: underline; }
 
 .header__search {
   margin-left: auto;
@@ -462,7 +474,10 @@ button.nav-item {
   transition: border-color var(--dur-fast) var(--ease-out);
 }
 .header__search:focus-within { border-color: var(--vp-yellow); background: #fff; }
-.header__search input { flex: 1; border: 0; outline: 0; background: transparent; font-size: 13px; color: var(--fg1); }
+.header__search input {
+  flex: 1; border: 0; outline: 0; background: transparent; font-size: 13px; color: var(--fg1);
+  min-width: 0; overflow: hidden; text-overflow: ellipsis;
+}
 .header__search-kbd {
   font-family: var(--font-mono);
   font-size: 10px;
@@ -472,7 +487,7 @@ button.nav-item {
   color: var(--fg3);
 }
 /* Busca global */
-.header__search-wrap { margin-left: auto; position: relative; min-width: 0; flex: 0 1 320px; }
+.header__search-wrap { margin-left: auto; position: relative; min-width: 200px; flex: 1 1 340px; max-width: 420px; }
 .header__search-wrap .header__search { margin-left: 0; width: 100%; }
 .header__search-clear {
   border: 0; background: transparent; cursor: pointer; color: var(--fg3);
@@ -520,30 +535,54 @@ button.nav-item {
   border: 1.5px solid #fff;
 }
 
-.role-switch {
+.role-dropdown { position: relative; flex-shrink: 0; }
+.role-dropdown__trigger {
   display: flex;
   align-items: center;
-  gap: 0;
+  gap: 6px;
+  height: 36px;
+  padding: 0 10px;
   border: 1px solid var(--border);
   background: #fff;
-  height: 36px;
+  color: var(--fg1);
+  cursor: pointer;
+  white-space: nowrap;
+  transition: border-color var(--dur-fast) var(--ease-out);
 }
-.role-switch button {
+.role-dropdown__trigger:hover, .role-dropdown__trigger[aria-expanded="true"] { border-color: var(--vp-yellow); }
+.role-dropdown__label {
+  font-size: 9.5px;
+  font-weight: 700;
+  letter-spacing: .08em;
+  text-transform: uppercase;
+  color: var(--fg3);
+}
+.role-dropdown__value { font-size: 12px; font-weight: 700; }
+.role-dropdown__menu {
+  position: absolute;
+  top: calc(100% + 6px);
+  right: 0;
+  min-width: 160px;
+  background: #fff;
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-lg);
+  z-index: 60;
+  padding: 4px;
+}
+.role-dropdown__option {
+  display: block;
+  width: 100%;
+  text-align: left;
   border: 0;
   background: transparent;
-  font-size: 10.5px;
-  font-weight: 700;
-  letter-spacing: .12em;
-  text-transform: uppercase;
-  color: var(--fg2);
-  padding: 0 10px;
-  height: 100%;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg1);
+  padding: 8px 10px;
   cursor: pointer;
-  border-right: 1px solid var(--border);
 }
-.role-switch button:last-child { border-right: 0; }
-.role-switch button.is-active { background: var(--vp-yellow); color: #000; }
-.role-switch button:hover:not(.is-active) { color: var(--fg1); background: var(--vp-gray-50); }
+.role-dropdown__option:hover { background: var(--vp-gray-50); }
+.role-dropdown__option.is-active { background: var(--vp-yellow); color: #000; }
 
 /* ========== MAIN AREA =============================================== */
 .main {
@@ -874,13 +913,12 @@ select.input { appearance: none; -webkit-appearance: none; background-image: lin
   .split, .split--wide { grid-template-columns: 1fr; }
 }
 @media (max-width: 1024px) {
-  /* header em linha fixa de 56px não cabe (breadcrumb+busca+role-switch+botões);
+  /* header em linha fixa de 56px não cabe (breadcrumb+busca+role-dropdown+botões);
      libera a altura e deixa quebrar em linhas, busca ocupa a largura toda. */
   .app { grid-template-rows: auto 1fr; }
   .header { flex-wrap: wrap; gap: 10px; padding: 8px 14px; min-height: 56px; }
-  .header__search-wrap { order: 3; margin-left: 0; flex: 1 1 100%; }
+  .header__search-wrap { order: 3; margin-left: 0; flex: 1 1 100%; max-width: none; }
   .header__search { width: 100%; }
-  .role-switch { flex-wrap: wrap; }
 }
 @media (max-width: 860px) {
   .grid-3 { grid-template-columns: repeat(2, 1fr); }
