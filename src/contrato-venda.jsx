@@ -261,7 +261,7 @@ function CVStepPreco({ form, set, errors }) {
   );
 }
 
-function CVStepRevisao({ form, set, doc }) {
+function CVStepRevisao({ form, set, doc, dossierProvisioning }) {
   const dist = parseFloat(String(form.distancia || '0').replace(',', '.')) || 0;
   const longa = dist >= 100;
   const cargaNum = parseFloat(String(form.carga || '0').replace(',', '.')) || 0;
@@ -279,6 +279,7 @@ function CVStepRevisao({ form, set, doc }) {
     ['Local / distância', `${form.localObra || '—'} · ${dist || 0} km`],
     ['Valor total', window.CV.brl(doc.meta.valor)],
     ['Pontos de atenção', conds.join(', ') || 'Nenhum'],
+    ['Dossiê da Obra', form.dossier_id || (dossierProvisioning ? 'Vinculando…' : 'Será vinculado ao gerar')],
   ];
 
   return (
@@ -535,6 +536,20 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
   const pendencias = _cvUM(() => ({ ...validateStep(0, form), ...validateStep(3, form) }), [form]);
   const nPendencias = Object.keys(pendencias).length;
 
+  /* Provisiona o Dossier da Obra assim que o usuário chega na Revisão (Passo
+     5) — antes travava em silêncio no "Gerar" sem nenhum jeito de resolver
+     (achado E2E). Criar cedo, em vez de só no submit, deixa o vínculo visível
+     na tela de revisão antes de enviar. */
+  const [dossierProvisioning, setDossierProvisioning] = _cvUS(false);
+  _cvUE(() => {
+    if (step !== 4 || form.dossier_id || dossierProvisioning) return;
+    setDossierProvisioning(true);
+    window.CVStore.garantirDossier(form)
+      .then((id) => setForm((prev) => ({ ...prev, dossier_id: id })))
+      .catch((e) => console.error('[CV] garantirDossier falhou:', e))
+      .finally(() => setDossierProvisioning(false));
+  }, [step, form.dossier_id]);
+
   const goNext = () => {
     const e = validateStep(step, form);
     setErrors(e);
@@ -544,22 +559,25 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
   const goPrev = () => { setErrors({}); if (step > 0) setStep(step - 1); };
   const goTo = (i) => { setErrors({}); setStep(i); };
 
-  const completeAll = () => {
+  const completeAll = (f) => {
+    f = f || form;
     let all = {};
-    [0, 3].forEach(i => { all = { ...all, ...validateStep(i, form) }; });
+    [0, 3].forEach(i => { all = { ...all, ...validateStep(i, f) }; });
 
     // ISSUE #6: Validar anexos obrigatórios
-    if (!form.checklist.proposta || !form.checklist.desenho || !form.checklist.nrs) {
+    if (!f.checklist.proposta || !f.checklist.desenho || !f.checklist.nrs) {
       all.__checklist = 'Marque os 3 anexos obrigatórios (Proposta, Desenho, NRs).';
     }
 
-    // ISSUE #6: Validar que Dossier está vinculado
-    if (!form.dossier_id) {
-      all.__dossier = 'Contrato deve estar vinculado a um Dossier da Obra.';
+    // Dossier da Obra — normalmente já provisionado automaticamente (ver
+    // efeito acima) assim que o usuário chega na Revisão; este check só
+    // pega o caso raro de a criação ter falhado (ex.: rede caiu).
+    if (!f.dossier_id) {
+      all.__dossier = 'Não foi possível vincular o Dossier da Obra automaticamente — tente novamente.';
     }
 
     // ISSUE #6: Validar valores monetários (não permitir NaN ou 0)
-    if (window.CV.parseMoney(form.valor) <= 0) {
+    if (window.CV.parseMoney(f.valor) <= 0) {
       all.__valor = 'Valor total deve ser maior que zero.';
     }
 
@@ -569,8 +587,8 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
       // do Passo 5 — Revisão), a função só resetava o passo (sempre pra 0 ou
       // 3) e retornava false EM SILÊNCIO — nenhum toast, nenhum alert, nada.
       // O usuário clicava "Gerar e enviar" e nada visível acontecia.
-      const firstBad = Object.keys(validateStep(0, form)).length ? 0
-        : Object.keys(validateStep(3, form)).length ? 3
+      const firstBad = Object.keys(validateStep(0, f)).length ? 0
+        : Object.keys(validateStep(3, f)).length ? 3
         : 4; // __checklist / __dossier / __valor pertencem ao Passo 5 (Revisão)
       setStep(firstBad);
       const mensagens = [all.__checklist, all.__dossier, all.__valor].filter(Boolean);
@@ -582,10 +600,19 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
   };
 
   const handleCreateAndSend = async () => {
-    if (!completeAll() || creating) return;
+    if (creating) return;
     setCreating(true);
     try {
-      const rec = await window.CVStore.createDraft(form);
+      // Fallback do efeito acima — cobre o clique acontecer antes do
+      // provisionamento automático terminar.
+      let f = form;
+      if (!f.dossier_id) {
+        const dossierId = await window.CVStore.garantirDossier(f);
+        f = { ...f, dossier_id: dossierId };
+        setForm(f);
+      }
+      if (!completeAll(f)) { setCreating(false); return; }
+      const rec = await window.CVStore.createDraft(f);
       setSendRec(rec);
       onCreated && onCreated(rec);
     } catch (e) {
@@ -600,7 +627,7 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
   else if (step === 1) StepComp = <CVStepObjeto form={form} set={set}/>;
   else if (step === 2) StepComp = <CVStepLogistica form={form} set={set}/>;
   else if (step === 3) StepComp = <CVStepPreco form={form} set={set} errors={errors}/>;
-  else StepComp = <CVStepRevisao form={form} set={set} doc={docPreview}/>;
+  else StepComp = <CVStepRevisao form={form} set={set} doc={docPreview} dossierProvisioning={dossierProvisioning}/>;
 
   return (
     <div className="ci-wiz">
