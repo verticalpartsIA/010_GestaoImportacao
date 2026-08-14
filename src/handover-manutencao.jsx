@@ -13,7 +13,7 @@ function HandoverManutencaoPage() {
 
   const reload = async () => {
     setLoading(true);
-    const { data } = await window.__VP_SB.sb.from('projetos').select('*').order('criado_em', { ascending: false });
+    const { data } = await window.__VP_SB.sb.from('projetos').select('*').order('created_at', { ascending: false });
     setProjetos(data || []);
     setLoading(false);
   };

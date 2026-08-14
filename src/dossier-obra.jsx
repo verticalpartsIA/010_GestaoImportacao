@@ -403,6 +403,11 @@ const TIPOS_DOC_OBRA = [
   { tipo: 'DataBook', label: 'DataBook (Ebook técnico)', obrigatorio: true },
   { tipo: 'Termo de Entrega', label: 'Termo de Entrega Final', obrigatorio: true },
   { tipo: 'Alvará', label: 'Alvará', obrigatorio: false },
+  { tipo: 'Contrato Instalador', label: 'Contrato VerticalParts x Parceiro Instalador', obrigatorio: false },
+  { tipo: 'NRs', label: 'NRs (NR-10/NR-35 do parceiro instalador)', obrigatorio: false },
+  { tipo: 'ASO', label: 'ASO (Atestado de Saúde Ocupacional)', obrigatorio: false },
+  { tipo: 'PCMSO/PGR', label: 'PCMSO/PGR', obrigatorio: false },
+  { tipo: 'Cronograma', label: 'Cronograma de compra, importação e montagem', obrigatorio: false },
 ];
 
 function TabDocumentos({ dossier, reload }) {
