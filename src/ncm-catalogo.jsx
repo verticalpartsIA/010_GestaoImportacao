@@ -943,7 +943,7 @@ function LogComexModal({ product, onClose }) {
           <li>Acesse <strong>plataforma.logcomex</strong> → Catálogo de Produtos → Novo Produto</li>
           <li>Cole os dados nos campos correspondentes</li>
           <li>Ative o produto e copie o Código Siscomex gerado (<strong>PRD-xxxxx</strong>)</li>
-          <li>Volte aqui e clique em <strong>"Marcar como cadastrado"</strong></li>
+          <li>Feche este modal e clique em <strong>"Marcar como cadastrado"</strong> na barra de ações do produto (ao lado de <em>Exportar para LogComex</em>)</li>
         </ol>
       </div>
     </Modal>
