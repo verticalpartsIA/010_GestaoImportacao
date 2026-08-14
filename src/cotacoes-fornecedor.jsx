@@ -271,6 +271,21 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
   const [verResp, setVerResp] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
   const [tab, setTab] = React.useState('detalhes');
+  // Pré-condições financeiras da decisão de compra (contrato assinado + sinal
+  // pago + aval), avaliadas na carga. Sem isso, o botão "Decidir comprar"
+  // parecia clicável mas falhava só num toast — e a linha do tempo mostrava
+  // "Decidido comprar em —" sem explicar por quê (achado E2E #4).
+  const [gate, setGate] = React.useState(null);
+  React.useEffect(() => {
+    let vivo = true;
+    if (!cot || cot.status !== 'respondido' || !window.AvalFinanceiroStore) { setGate(null); return; }
+    const numeroCotacao = cot.dados_envio?.header?.numero_cotacao;
+    window.AvalFinanceiroStore.podeIniciarCompra(numeroCotacao)
+      .then((g) => { if (vivo) setGate(g); })
+      .catch(() => { if (vivo) setGate(null); });
+    return () => { vivo = false; };
+  }, [cot]);
+  const bloqueadoDecisao = cot && cot.status === 'respondido' && gate && !gate.ok;
 
   if (!cot) {
     return <EmptyStateRedirect
@@ -321,7 +336,7 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
         <div className="page-head__r">
           <Button variant="outline" icon="copy" onClick={() => { navigator.clipboard?.writeText(url).then(() => window.toast('Link copiado!', 'success')).catch(() => window.toast('Link: ' + url, 'info')); }}>Copiar link público</Button>
           {temResposta && <Button variant="outline" icon="fileText" onClick={() => setVerResp(true)}>Ver resposta do fornecedor</Button>}
-          {cot.status === 'respondido' && <Button variant="primary" icon="check" disabled={busy} onClick={decidirComprar}>{busy ? 'Salvando…' : 'Decidir comprar'}</Button>}
+          {cot.status === 'respondido' && <Button variant="primary" icon="check" disabled={busy || bloqueadoDecisao} title={bloqueadoDecisao ? gate.motivo : undefined} onClick={decidirComprar}>{busy ? 'Salvando…' : 'Decidir comprar'}</Button>}
           {cot.status === 'em_analise' && <Button variant="primary" icon="check" disabled={busy} onClick={aprovar}>{busy ? 'Salvando…' : 'Aprovar compra'}</Button>}
           {cot.status === 'aprovada' && <Button variant="ghost" icon="check" disabled>Compra aprovada ✓</Button>}
         </div>
@@ -335,6 +350,17 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
       </div>
 
       {tab === 'detalhes' && <>
+        {bloqueadoDecisao && (
+          <Card style={{ marginBottom: 16 }} sharp={false}>
+            <div className="alert warning" style={{ margin: 0 }}>
+              <Icon.warning/>
+              <div style={{ flex: 1 }}>
+                <div className="alert__title">Ainda não é possível decidir a compra</div>
+                <div className="alert__sub" style={{ marginTop: 2 }}>{gate.motivo}</div>
+              </div>
+            </div>
+          </Card>
+        )}
         <Card style={{ marginBottom: 16 }} sharp={false}>
           <div className="alert info" style={{ margin: 0 }}>
             <Icon.link2/>
@@ -364,7 +390,7 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
             <KvBlock label="Enviado em" value={fmtTimestamp(cot.sent_at)}/>
             <KvBlock label="Visualizado em" value={fmtTimestamp(cot.viewed_at)}/>
             <KvBlock label="Respondido em" value={fmtTimestamp(cot.responded_at)}/>
-            <KvBlock label="Decidido comprar em" value={fmtTimestamp(cot.decidido_em)}/>
+            <KvBlock label="Decidido comprar em" value={cot.decidido_em ? fmtTimestamp(cot.decidido_em) : (bloqueadoDecisao ? 'Bloqueado — aguardando aval financeiro' : '—')}/>
             <KvBlock label="Aprovado em" value={fmtTimestamp(cot.aprovado_em)}/>
           </Card>
         </div>
