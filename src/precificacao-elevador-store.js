@@ -94,6 +94,15 @@
     const quantidadeEquipamentos = modelos.reduce((s, m) => s + m.quantidade, 0) || 1;
     const vmleUsd = itensResposta.reduce((s, it) => s + (Number(it.preco_total) || 0), 0);
 
+    /* Frete internacional + outras taxas informados pelo fornecedor (USD) —
+       agora campos estruturados na resposta — herdam pra o bucket USD de
+       frete/seguro/capatazia da precificação (antes vinham zerados e o
+       precificador tinha que digitar à mão, no campo errado). */
+    const respostas = cotFornecedor.respostas || {};
+    const freteInternacionalUsd = Number(respostas.frete_internacional_usd) || 0;
+    const taxasExtrasUsd = Number(respostas.taxas_extras_usd) || 0;
+    const freteSeguroCapataziaUsd = freteInternacionalUsd + taxasExtrasUsd;
+
     const parametros = await listarParametrosFiscais();
 
     return {
@@ -101,6 +110,7 @@
       numero_cotacao: formulario.numero_cotacao ?? null,
       cotacao_fornecedor_id: cotacaoFornecedorId,
       vmle_usd: vmleUsd,
+      frete_seguro_capatazia_usd: freteSeguroCapataziaUsd,
       modelos,
       percentual_servicos: 0.30,
       parametros_fiscais_snapshot: parametros,
