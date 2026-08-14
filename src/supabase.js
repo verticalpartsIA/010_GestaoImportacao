@@ -133,7 +133,8 @@
     const [
       lR, cotR, projR, alertR,
       tarR, embR, ctR, estR,
-      comR, gatR, fichasR, catalogoR
+      comR, gatR, fichasR, catalogoR,
+      propR, avaisR
     ] = await Promise.all([
       sb.from('leads').select('*').order('date', { ascending: false }),
       sb.from('cotacoes').select('*').order('date', { ascending: false }),
@@ -147,6 +148,12 @@
       sb.from('gatilhos').select('*').order('due_date'),
       sb.from('fichas_tecnicas').select('*').order('criado_em', { ascending: false }),
       sb.from('catalogo_produtos').select('*').order('created_at', { ascending: false }),
+      // Esteira real (Formulário→Proposta→Contrato→Aval Financeiro) — usada
+      // pra corrigir os KPIs do Dashboard Admin, que antes só liam a tabela
+      // legada/desconectada `projetos` (achado E2E: Faturamento Total R$0 e
+      // Alertas Críticos 0 com proposta assinada de R$185mil e sinal pago).
+      sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em'),
+      sb.from('avais_financeiros').select('id, numero_cotacao, status, sinal_pago, contrato_venda_id'),
     ]);
 
     const leads     = lR.data    || [];
@@ -162,6 +169,8 @@
     const fichas    = fichasR.data || [];
     const catalogo  = catalogoR.data || [];
     const ncm       = [];  // legado removido — vazio pra compat de loops abaixo
+    const propostas = propR.data  || [];
+    const avais     = avaisR.data || [];
 
     // ---- tarefas no formato esperado pelo Dashboard ----
     const tarefasFmt = tarefas.map(t => ({
@@ -179,13 +188,32 @@
     const convertidos  = leads.filter(l => l.status === 'Convertido');
     const convPct      = leads.length ? Math.round((propEnviadas.length / leads.length) * 100) : 0;
     const emTransito   = embarques.filter(e => e.status === 'Em trânsito');
-    const alertasCrit  = alertas.filter(a => a.level === 'danger');
-    const fatTotal     = projetos.reduce((s, p) => s + (p.value || 0), 0);
     const comPend      = comissoes.filter(c => c.status === 'Aguardando').reduce((s, c) => s + (c.comissao || 0), 0);
     const gatProx7     = gatilhos.filter(g => (g.days_left || 0) <= 7);
     const aReceber     = contratos.filter(c => c.status !== 'Assinado').reduce((s, c) => s + (c.value || 0), 0);
     const fichasDoMes  = fichas.filter(f => (f.criado_em || '').startsWith(mesAtual)).length;
     const catProdAtivos = catalogo.filter(p => p.situacao === 'ativado').length;
+
+    // ---- Faturamento total (esteira real) — soma das propostas assinadas
+    // pelo cliente (status 'aprovada'), não mais da tabela `projetos`
+    // (legada/desconectada, 1 linha demo — mostrava R$0 com venda fechada). ----
+    const propostasAprovadas = propostas.filter(p => p.status === 'aprovada');
+    const fatTotal = propostasAprovadas.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
+
+    // ---- Alertas críticos (esteira real) — além dos `alertas` manuais,
+    // detecta inconsistências entre módulos que o E2E encontrou escondidas
+    // (proposta assinada sem contrato, contrato com valor zerado, sinal
+    // pago sem contrato/importação vinculados). ----
+    const idsComContrato = new Set(contratos.map(c => c.proposta_id).filter(Boolean));
+    const propostasSemContrato = propostasAprovadas.filter(p => !idsComContrato.has(p.id));
+    const contratosValorZero = contratos.filter(c => !c.valor_total_num || Number(c.valor_total_num) === 0);
+    const avaisSinalSemContrato = avais.filter(a => a.sinal_pago && !a.contrato_venda_id);
+    const alertasCrit = [
+      ...alertas.filter(a => a.level === 'danger'),
+      ...propostasSemContrato.map(p => ({ tipo: 'proposta_sem_contrato', ref: p.numero_cotacao })),
+      ...contratosValorZero.map(c => ({ tipo: 'contrato_valor_zero', ref: c.id })),
+      ...avaisSinalSemContrato.map(a => ({ tipo: 'sinal_sem_contrato', ref: a.numero_cotacao })),
+    ];
 
     // ---- KPIs por perfil ----
     const kpis = {
@@ -211,18 +239,22 @@
         { label: 'Projetos ativos',       value: String(projetos.length),    unit: '',  delta: '', deltaDir: 'up', sub: 'todos módulos' },
         { label: 'Embarques em trânsito', value: String(emTransito.length),  unit: '',  delta: '', deltaDir: 'up', sub: 'Santos+Itaguaí' },
         { label: 'Alertas críticos',      value: String(alertasCrit.length), unit: '',  delta: '', deltaDir: alertasCrit.length > 0 ? 'down' : 'up', sub: 'ver central' },
-        { label: 'Faturamento total',     value: fmtBRL(fatTotal),           unit: '',  delta: '', deltaDir: 'up', sub: 'em projetos' },
+        { label: 'Faturamento (propostas assinadas)', value: fmtBRL(fatTotal), unit: '', delta: '', deltaDir: 'up', sub: `${propostasAprovadas.length} propostas` },
       ],
     };
 
-    // ---- Pipeline Funnel (real) ----
+    // ---- Pipeline Funnel (real) — esteira Leads→Proposta→Contrato, não mais
+    // a tabela órfã `cotacoes` ("Cotação China", módulo substituído pelas
+    // Cotações a Fornecedor) — achado E2E: pipeline zerava mesmo com
+    // proposta/contrato reais. Mostra volume por estágio atual (não histórico
+    // acumulado: uma proposta que virou contrato conta só em "Contrato"). ----
     const maxPipeline = leads.length || 1;
+    const propostasComContrato = propostasAprovadas.filter(p => idsComContrato.has(p.id)).length;
     const pipelineStages = [
-      { label: 'Leads',         value: leads.length,          color: '#000' },
-      { label: 'Cotação China', value: cotacoes.length,        color: 'var(--vp-gray-700)' },
-      { label: 'Precificação',  value: cotAbertas.length,      color: 'var(--vp-gray-500)' },
-      { label: 'Proposta',      value: propEnviadas.length,    color: 'var(--vp-yellow-press)' },
-      { label: 'Contrato',      value: contratos.length,       color: 'var(--vp-yellow)' },
+      { label: 'Leads',                value: leads.length,                                    color: '#000' },
+      { label: 'Propostas enviadas',   value: propostas.length,                                color: 'var(--vp-gray-700)' },
+      { label: 'Propostas assinadas',  value: propostasAprovadas.length - propostasComContrato, color: 'var(--vp-yellow-press)' },
+      { label: 'Contratos',            value: contratos.length,                                color: 'var(--vp-yellow)' },
     ];
 
     // ---- Conversão por Origem (real) ----
