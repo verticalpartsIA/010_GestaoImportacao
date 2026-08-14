@@ -8,6 +8,7 @@ const NAV_GROUPS = [
   { label: "Geral", items: [
     { id: "dashboard", label: "Dashboard", icon: "home" },
     { id: "notificacoes", label: "Notificações", icon: "bell" },
+    { id: "decisoes", label: "Central de Decisões", icon: "check" },
     { id: "financeiro", label: "Gatilhos & Prazo", icon: "dollar", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Comercial", items: [

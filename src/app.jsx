@@ -207,6 +207,7 @@ function App() {
       case "comissoes": return <ComissoesPage/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
+      case "decisoes": return <window.DecisoesPage/>;
       case "logs": return <LogsAdminPage/>;
       case "configuracoes": return <ConfiguracoesPage/>;
       default: return <Dashboard role={role} setRoute={setRoute}/>;
