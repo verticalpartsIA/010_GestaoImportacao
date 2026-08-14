@@ -24,3 +24,6 @@ npm-debug.log*
 
 # Gerado a cada deploy (ver .github/workflows/deploy.yml) — não versionar
 version.json
+
+# Material de referência local (não versionado, não é parte do produto)
+Andreia/
