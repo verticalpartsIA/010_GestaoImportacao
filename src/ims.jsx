@@ -186,7 +186,10 @@ function IMSForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
                     <Button variant="ghost" size="sm" icon="trash" onClick={() => removeFornecedor(i)}/>
                   </div>
                   <div className="grid-3" style={{ gap: 10 }}>
-                    <PIField label="Nome"><PIInput value={f.nome} onChange={(v) => updateFornecedor(i, 'nome', v)}/></PIField>
+                    <PIField label="Nome">
+                      <PIInput value={f.nome} onChange={(v) => updateFornecedor(i, 'nome', v)} list="dl-fornecedores-ims"/>
+                      <CadFornecedorDatalist id="dl-fornecedores-ims"/>
+                    </PIField>
                     <PIField label="Status"><PISelect value={f.status} onChange={(v) => updateFornecedor(i, 'status', v)} options={IMS_FORN_STATUS}/></PIField>
                     <PIField label="Valor (R$)"><PIInput type="number" step="0.01" value={f.valor} onChange={(v) => updateFornecedor(i, 'valor', v)}/></PIField>
                     <PIField label="Observações" span={3}><PIInput value={f.observacao} onChange={(v) => updateFornecedor(i, 'observacao', v)}/></PIField>

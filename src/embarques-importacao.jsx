@@ -255,7 +255,10 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             <PIField label="Pedido de booking"><PIInput type="date" value={form.pedido_booking} onChange={set('pedido_booking')}/></PIField>
             <PIField label="Aprovação do frete"><PISelect value={form.aprovacao_frete} onChange={set('aprovacao_frete')} options={['Pendente', 'Aprovado', 'Reprovado']}/></PIField>
           </div>
-          <PIField label="Agente de carga / freight forwarder"><PIInput value={form.agente_carga} onChange={set('agente_carga')}/></PIField>
+          <PIField label="Agente de carga / freight forwarder">
+            <PIInput value={form.agente_carga} onChange={set('agente_carga')} list="dl-agentes-carga-emb"/>
+            <CadFornecedorDatalist id="dl-agentes-carga-emb" categoria="Agente de Carga"/>
+          </PIField>
           <p className="small muted">Comparativo de cotações de frete entre agentes fica para uma fase seguinte — aqui o agente vencedor é registrado diretamente.</p>
         </div>
       )}
@@ -277,7 +280,10 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
       {tab === 'faturamento' && (
         <div className="stack" style={{ gap: 12, marginTop: 14 }}>
           <div className="grid-3" style={{ gap: 10 }}>
-            <PIField label="Empresa de desembaraço"><PIInput value={form.empresa_desembaraco} onChange={set('empresa_desembaraco')}/></PIField>
+            <PIField label="Empresa de desembaraço">
+              <PIInput value={form.empresa_desembaraco} onChange={set('empresa_desembaraco')} list="dl-desembaraco-emb"/>
+              <CadFornecedorDatalist id="dl-desembaraco-emb"/>
+            </PIField>
             <PIField label="Valor do faturamento (R$)"><PIInput type="number" value={form.faturamento_desembaraco} onChange={set('faturamento_desembaraco')}/></PIField>
             <PIField label="Valor do numerário (R$)"><PIInput type="number" value={form.numerario_desembaraco} onChange={set('numerario_desembaraco')}/></PIField>
             <PIField label="Valor do reembolso (R$)"><PIInput type="number" value={form.valor_reembolso} onChange={set('valor_reembolso')}/></PIField>

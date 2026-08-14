@@ -129,8 +129,9 @@ function RFQForm({ initialData, isEdit, numeroSugerido, onSubmit, onCancel, savi
           <span className="small muted">{(form.fornecedores || []).length} selecionado(s)</span>
         </div>
         <div className="row gap-2">
-          <input className="input" style={{ flex: 1 }} placeholder="Nome do fornecedor…" value={novoFornecedor}
+          <input className="input" style={{ flex: 1 }} placeholder="Nome do fornecedor…" value={novoFornecedor} list="dl-fornecedores-rfq"
             onChange={(e) => setNovoFornecedor(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && (e.preventDefault(), addFornecedor())}/>
+          <CadFornecedorDatalist id="dl-fornecedores-rfq" categoria="Fornecedor"/>
           <Button variant="outline" icon="plus" onClick={addFornecedor}>Adicionar</Button>
         </div>
         {(form.fornecedores || []).length > 0 && (
