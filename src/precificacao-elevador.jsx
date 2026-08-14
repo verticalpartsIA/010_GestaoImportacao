@@ -17,6 +17,10 @@ function PZField({ label, children, span }) {
     </div>
   );
 }
+/* Mesmos rótulos de cotacoes-fornecedor.jsx — decisão de compra é um
+   status independente do status da própria Precificação (ver #161). */
+const PZ_STATUS_COTACAO_LABEL = { respondido: 'Recebida', em_analise: 'Em análise', aprovada: 'Aprovada' };
+
 function PZInput({ value, onChange, type = 'text', placeholder, disabled }) {
   return (
     <input className="input" type={type} value={value ?? ''}
@@ -62,13 +66,13 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
 
       <div className="table-wrap">
         <table className="t">
-          <thead><tr><th>Cotação Nº</th><th>Cliente</th><th>Fornecedor</th><th>Respondido em</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Cotação Nº</th><th>Cliente</th><th>Fornecedor</th><th>Respondido em</th><th>Decisão de compra</th><th>Precificação</th><th></th></tr></thead>
           <tbody>
             {pendentes === null && (
               <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</td></tr>
             )}
             {pendentes !== null && pendentes.length === 0 && (
-              <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma cotação respondida pelo fornecedor ainda.</td></tr>
+              <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma cotação respondida, em análise ou aprovada ainda.</td></tr>
             )}
             {(pendentes || []).map((item) => (
               <tr key={item.cotacaoFornecedorId} style={{ cursor: 'pointer' }} onClick={() => abrir(item)}>
@@ -76,6 +80,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
                 <td>{item.clienteNome || '—'}</td>
                 <td>{item.fornecedor}</td>
                 <td>{item.respondedAt ? new Date(item.respondedAt).toLocaleDateString('pt-BR') : '—'}</td>
+                <td><StatusBadge status={PZ_STATUS_COTACAO_LABEL[item.statusCotacao] || item.statusCotacao}/></td>
                 <td>{item.precificacaoStatus ? <StatusBadge status={item.precificacaoStatus === 'calculado' ? 'Em análise' : item.precificacaoStatus === 'finalizado' ? 'Aprovada' : 'Recebida'}/> : <span className="muted small">Não iniciada</span>}</td>
                 <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
               </tr>

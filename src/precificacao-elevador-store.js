@@ -37,12 +37,17 @@
     };
   }
 
-  /* ---------- Lista de cotações de fornecedor já respondidas (fila da Precificação) ---------- */
+  /* ---------- Lista de cotações de fornecedor já respondidas (fila da Precificação) ----------
+     Inclui respondido/em_analise/aprovada — não só respondido — porque o time
+     comercial/ADM pode avançar a decisão de compra (ver cotacoes-fornecedor.jsx)
+     antes ou depois do Financeiro abrir a precificação. Filtrar só por
+     "respondido" fazia a cotação sumir da fila assim que alguém decidia
+     comprar, mesmo sem a precificação ter sido feita ainda (issue #161). */
   async function listarPendentes() {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data: cots, error } = await c.from('cotacoes_elevador_fornecedor')
       .select('id, numero_documento, fornecedor, formulario_elevador_id, status, responded_at, categoria_produto')
-      .eq('status', 'respondido').eq('categoria_produto', 'elevador').order('responded_at', { ascending: false });
+      .in('status', ['respondido', 'em_analise', 'aprovada']).eq('categoria_produto', 'elevador').order('responded_at', { ascending: false });
     if (error) throw error;
     const formularioIds = [...new Set((cots || []).map((c2) => c2.formulario_elevador_id))];
     if (!formularioIds.length) return [];
@@ -59,6 +64,7 @@
         formularioElevadorId: cot.formulario_elevador_id, numeroCotacao: form.numero_cotacao ?? null,
         clienteNome: (form.clientes && form.clientes.razao_social) || null, clienteCnpj: (form.clientes && form.clientes.cnpj) || null,
         respondedAt: cot.responded_at, precificacaoId: pz ? pz.id : null, precificacaoStatus: pz ? pz.status : null,
+        statusCotacao: cot.status,
       };
     });
   }

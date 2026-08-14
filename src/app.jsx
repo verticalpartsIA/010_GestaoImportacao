@@ -33,6 +33,7 @@ const ROUTE_TITLE = {
   cronograma: "Cronograma de Instalação",
   databook: "Data Book & Termo",
   handover: "Entrega Final",
+  "rh-homologacao": "Homologação de Parceiros",
   importacao: "Importação",
   "importacao-detail": "Detalhe de Embarque",
   "importacao-rastreamento": "Rastreamento de Navios",
