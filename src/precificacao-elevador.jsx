@@ -81,7 +81,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
                 <td>{item.fornecedor}</td>
                 <td>{item.respondedAt ? new Date(item.respondedAt).toLocaleDateString('pt-BR') : '—'}</td>
                 <td><StatusBadge status={PZ_STATUS_COTACAO_LABEL[item.statusCotacao] || item.statusCotacao}/></td>
-                <td>{item.precificacaoStatus ? <StatusBadge status={item.precificacaoStatus === 'calculado' ? 'Em análise' : item.precificacaoStatus === 'finalizado' ? 'Aprovada' : 'Recebida'}/> : <span className="muted small">Não iniciada</span>}</td>
+                <td>{item.precificacaoStatus ? <StatusBadge status={item.precificacaoStatus === 'finalizado' ? 'Aprovada' : item.precificacaoStatus === 'calculado' ? 'Em análise' : 'Recebida'}/> : <span className="muted small">Não iniciada</span>}</td>
                 <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
@@ -97,6 +97,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
   const [pz, setPz] = React.useState(null);
   const [calculando, setCalculando] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
+  const [aprovando, setAprovando] = React.useState(false);
   const [mostrarParametros, setMostrarParametros] = React.useState(false);
 
   const carregar = React.useCallback(() => {
@@ -175,6 +176,26 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
   const importacao = pz.resultado && pz.resultado.importacao;
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
+  const margemMinima = Number(params.margem_minima_pct) || 0;
+  const margemAbaixoMinima = !!resultado && resultado.margemFinalPct < margemMinima;
+  const aprovado = pz.status === 'finalizado';
+
+  const aprovar = async (forcar) => {
+    setAprovando(true);
+    try {
+      await window.PrecificacaoElevadorStore.aprovar(pz.id, { forcarAbaixoMinima: forcar });
+      await carregar();
+      window.toast?.('Precificação aprovada.', 'success');
+    } catch (e) {
+      if (e.margemAbaixoMinima) {
+        if (window.confirm(`${e.message}\n\nAprovar mesmo assim?`)) return aprovar(true);
+      } else {
+        window.toast?.('Erro ao aprovar: ' + e.message, 'error');
+      }
+    } finally {
+      setAprovando(false);
+    }
+  };
 
   const cambioNum = Number(pz.tx_cambial) || 0;
   const cambioForaFaixa = cambioNum > 0 && (cambioNum < CAMBIO_MIN || cambioNum > CAMBIO_MAX);
@@ -203,7 +224,15 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           <Button variant="ghost" icon="chevLeft" onClick={onVoltar}>Voltar</Button>
           <Button variant="outline" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar rascunho'}</Button>
           <Button variant="primary" icon="calculator" onClick={calcular} disabled={calculando}>{calculando ? 'Calculando…' : 'Calcular'}</Button>
-          {resultado && <span className="muted small" style={{ display: 'inline-flex', alignItems: 'center', padding: '0 4px' }}>Calculado — envie a proposta em "Propostas"</span>}
+          {resultado && !aprovado && (
+            <Button variant="outline" icon="check" onClick={() => aprovar(false)} disabled={aprovando}>{aprovando ? 'Aprovando…' : 'Aprovar precificação'}</Button>
+          )}
+          {aprovado && (
+            <span className="badge" style={{ background: 'var(--vp-success)', color: '#fff', display: 'inline-flex', alignItems: 'center', padding: '4px 10px', borderRadius: 6, fontSize: 12, fontWeight: 700 }}>
+              ✓ Aprovada {pz.aprovado_em ? `em ${new Date(pz.aprovado_em).toLocaleDateString('pt-BR')}` : ''}
+            </span>
+          )}
+          {resultado && !aprovado && <span className="muted small" style={{ display: 'inline-flex', alignItems: 'center', padding: '0 4px' }}>Calculado — aprove antes de gerar a proposta</span>}
         </div>
       </div>
 
@@ -283,6 +312,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           <PZField label="Comissão consultoria (%)"><PZInput type="number" value={pz.comissao_consultoria_pct} onChange={set('comissao_consultoria_pct')}/></PZField>
           <PZField label="Comissão vendedor (%)"><PZInput type="number" value={pz.comissao_vendedor_pct} onChange={set('comissao_vendedor_pct')}/></PZField>
           <PZField label="Comissão indicação (%)"><PZInput type="number" value={pz.comissao_indicacao_pct} onChange={set('comissao_indicacao_pct')}/></PZField>
+          <PZField label="Margem mínima (%)"><PZInput type="number" value={params.margem_minima_pct} onChange={setParam('margem_minima_pct')}/></PZField>
         </div>
 
         <Button variant="ghost" size="sm" style={{ marginTop: 12 }} onClick={() => setMostrarParametros((v) => !v)}>
@@ -328,9 +358,18 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
             <div><span className="up-eyebrow muted">Preço de venda — serviços</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultado.precoVendaServicos)}</div></div>
             <div><span className="up-eyebrow muted">Preço por equipamento</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultado.precoVendaPorEquipamento)}</div></div>
             <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultado.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultado.lucroFinal)}</div></div>
-            <div><span className="up-eyebrow muted">Margem final</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtPct2(resultado.margemFinalPct)}</div></div>
+            <div>
+              <span className="up-eyebrow muted">Margem final</span>
+              <div className="cell-money" style={{ fontSize: 16, color: margemAbaixoMinima ? 'var(--vp-warning-ink)' : undefined }}>{fmtPct2(resultado.margemFinalPct)}</div>
+              {margemMinima > 0 && <div className="small muted" style={{ marginTop: 2 }}>mínima {fmtPct2(margemMinima)}</div>}
+            </div>
             <div><span className="up-eyebrow muted">DIFAL (custo VerticalParts)</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultado.difalRs)}</div></div>
           </div>
+          {margemAbaixoMinima && (
+            <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
+              ⚠ Margem final ({fmtPct2(resultado.margemFinalPct)}) abaixo da mínima configurada ({fmtPct2(margemMinima)}). É possível aprovar mesmo assim, com confirmação.
+            </p>
+          )}
         </Card>
       )}
     </div>
