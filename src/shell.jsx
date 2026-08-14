@@ -156,7 +156,6 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
                       data-tooltip={item.label}>
                       <span className="nav-item__icon">{ItemIcon}</span>
                       <span className="nav-item__label">{item.label}</span>
-                      <span className="nav-item__badge nav-item__badge--planned">em breve</span>
                     </div>
                   );
                 }
