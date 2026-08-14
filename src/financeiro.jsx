@@ -500,11 +500,46 @@ function GatilhoCard({ g }) {
 function ComissoesPage() {
   const [comissoes, setComissoes] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [busy, setBusy] = React.useState(false);
 
-  React.useEffect(() => {
-    window.__VP_SB.sb.from('comissoes').select('*').order('id')
-      .then(({ data }) => { setComissoes(data || []); setLoading(false); });
+  const reload = React.useCallback(async () => {
+    const { data } = await window.__VP_SB.sb.from('comissoes').select('*').order('id');
+    setComissoes(data || []);
   }, []);
+  React.useEffect(() => { reload().finally(() => setLoading(false)); }, [reload]);
+
+  /* Persiste o status na tabela `comissoes`. Verifica linhas afetadas via
+     .select() — se RLS bloquear, mostra erro honesto em vez de sucesso falso. */
+  const setStatus = async (c, status, msg) => {
+    setBusy(true);
+    try {
+      const { data, error } = await window.__VP_SB.sb.from('comissoes').update({ status }).eq('id', c.id).select();
+      if (error) throw error;
+      if (!data || !data.length) throw new Error('sem permissão para atualizar (RLS).');
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Comissões', acao: msg, alvo: c.vendedor, alvo_id: c.id, detalhe: { comissao: c.comissao, status } });
+      window.toast(msg + ' — ' + (c.vendedor || ''), 'success');
+      await reload();
+    } catch (e) { window.toast('Erro: ' + (e.message || e), 'error'); }
+    finally { setBusy(false); }
+  };
+  const aprovar = (c) => setStatus(c, 'Aprovado', 'Comissão aprovada');
+  const pagar = (c) => setStatus(c, 'Pago', 'Pagamento liberado');
+
+  const aprovarTodas = async () => {
+    const pendentes = comissoes.filter(c => c.status !== 'Aprovado' && c.status !== 'Pago');
+    if (!pendentes.length) return window.toast('Nenhuma comissão pendente de aprovação.', 'info');
+    setBusy(true);
+    try {
+      const ids = pendentes.map(c => c.id);
+      const { data, error } = await window.__VP_SB.sb.from('comissoes').update({ status: 'Aprovado' }).in('id', ids).select();
+      if (error) throw error;
+      if (!data || !data.length) throw new Error('sem permissão para atualizar (RLS).');
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Comissões', acao: 'Aprovou ' + data.length + ' comissões pendentes', detalhe: { ids } });
+      window.toast(data.length + ' comissões aprovadas.', 'success');
+      await reload();
+    } catch (e) { window.toast('Erro: ' + (e.message || e), 'error'); }
+    finally { setBusy(false); }
+  };
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
@@ -522,7 +557,7 @@ function ComissoesPage() {
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="download" onClick={() => window.csvDownload(comissoes.map(c => ({ vendedor:c.vendedor, cargo:c.role, projetos:c.projetos??c.projetos_count, faturado:c.faturado, pct_comissao:c.pct, comissao:c.comissao, status:c.status })), 'folha-comissoes-q2.csv')}>Folha de pagto</Button>
-          <Button variant="primary" icon="check" onClick={() => window.toast("Todas as comissões aprovadas — Q2/26", "success")}>Aprovar todas</Button>
+          <Button variant="primary" icon="check" onClick={aprovarTodas} disabled={busy}>Aprovar todas</Button>
         </div>
       </div>
 
@@ -575,9 +610,9 @@ function ComissoesPage() {
                   </td>
                   <td><StatusBadge status={c.status}/></td>
                   <td>
-                    {c.status === "Aprovado" ? <Button variant="primary" size="sm" icon="dollar" onClick={() => window.toast(`Pagamento de ${fmtBRL(c.comissao)} para ${c.vendedor} liberado`, "success")}>Pagar</Button>
-                     : c.status === "Pago" ? <Button variant="ghost" size="sm" icon="check"/>
-                     : <Button variant="outline" size="sm" icon="check" onClick={() => window.toast(`Comissão de ${c.vendedor} aprovada`, "success")}>Aprovar</Button>}
+                    {c.status === "Aprovado" ? <Button variant="primary" size="sm" icon="dollar" disabled={busy} onClick={() => pagar(c)}>Pagar</Button>
+                     : c.status === "Pago" ? <Button variant="ghost" size="sm" icon="check" disabled/>
+                     : <Button variant="outline" size="sm" icon="check" disabled={busy} onClick={() => aprovar(c)}>Aprovar</Button>}
                   </td>
                 </tr>
               ))}
