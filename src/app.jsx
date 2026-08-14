@@ -210,6 +210,7 @@ function App() {
       case "decisoes": return <window.DecisoesPage/>;
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
       case "pi-importacao": return <window.PIPage/>;
+      case "rfq-importacao": return <window.RFQPage/>;
       case "logs": return <LogsAdminPage/>;
       case "configuracoes": return <ConfiguracoesPage/>;
       default: return <Dashboard role={role} setRoute={setRoute}/>;
