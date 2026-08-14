@@ -911,49 +911,139 @@ function ConfiguracoesPage() {
 }
 
 function ConfigUsers() {
+  const sb = window.__VP_SB.sb;
   const [users, setUsers] = React.useState([]);
+  const [convites, setConvites] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [showConvite, setShowConvite] = React.useState(false);
 
-  React.useEffect(() => {
-    window.__VP_SB.sb.from('usuarios').select('*').order('name')
-      .then(({ data }) => { setUsers(data || []); setLoading(false); });
+  const load = React.useCallback(async () => {
+    const [u, c] = await Promise.all([
+      sb.from('usuarios').select('*').order('name'),
+      sb.from('convites').select('*').eq('status', 'pendente').order('created_at', { ascending: false }),
+    ]);
+    setUsers(u.data || []); setConvites(c.data || []); setLoading(false);
   }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const revogar = async (c) => {
+    const { error } = await sb.from('convites').update({ status: 'revogado' }).eq('id', c.id);
+    if (error) return window.toast('Erro: ' + error.message, 'error');
+    window.toast('Convite revogado.', 'info'); load();
+  };
 
   if (loading) return <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
   return (
-    <Card title="Usuários" sub={`${users.length} cadastrados`}
-      action={<Button variant="primary" size="sm" icon="plus" onClick={() => window.open('mailto:ti@verticalparts.com.br?subject=Novo%20usuário%20VP%20PRD&body=Solicito%20acesso%20para:', '_blank')}>Convidar usuário</Button>}>
-      <div className="table-wrap" style={{ border: 0 }}>
-        <table className="t">
-          <thead><tr>
-            <th>Nome</th><th>Perfil</th><th>Email</th><th>Último login</th><th>Status</th><th></th>
-          </tr></thead>
-          <tbody>
-            {users.length === 0 && (
-              <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
-                Nenhum usuário cadastrado.
-              </td></tr>
-            )}
-            {users.map(u => (
-              <tr key={u.id || u.email}>
-                <td>
-                  <div className="row gap-3">
-                    <div className="avatar">{(u.name || u.email || "?").split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}</div>
-                    <span className="cell-main">{u.name || u.email}</span>
-                  </div>
-                </td>
-                <td><Badge variant="ink">{u.role || "—"}</Badge></td>
-                <td><span className="mono small">{u.email}</span></td>
-                <td><span className="mono small muted">{u.last_login ? fmtDate(u.last_login) : "—"}</span></td>
-                <td><Badge variant={u.active !== false ? "success" : "neutral"} dot>{u.active !== false ? "Ativo" : "Inativo"}</Badge></td>
-                <td><Button variant="ghost" size="sm" icon="more"/></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+    <>
+      <Card title="Usuários" sub={`${users.length} cadastrados`}
+        action={<Button variant="primary" size="sm" icon="plus" onClick={() => setShowConvite(true)}>Convidar usuário</Button>}>
+        <div className="table-wrap" style={{ border: 0 }}>
+          <table className="t">
+            <thead><tr>
+              <th>Nome</th><th>Perfil</th><th>Email</th><th>Último login</th><th>Status</th><th></th>
+            </tr></thead>
+            <tbody>
+              {users.length === 0 && (
+                <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
+                  Nenhum usuário cadastrado.
+                </td></tr>
+              )}
+              {users.map(u => (
+                <tr key={u.id || u.email}>
+                  <td>
+                    <div className="row gap-3">
+                      <div className="avatar">{(u.name || u.email || "?").split(" ").map(w => w[0]).join("").slice(0,2).toUpperCase()}</div>
+                      <span className="cell-main">{u.name || u.email}</span>
+                    </div>
+                  </td>
+                  <td><Badge variant="ink">{u.role || "—"}</Badge></td>
+                  <td><span className="mono small">{u.email}</span></td>
+                  <td><span className="mono small muted">{u.last_login ? fmtDate(u.last_login) : "—"}</span></td>
+                  <td><Badge variant={u.active !== false ? "success" : "neutral"} dot>{u.active !== false ? "Ativo" : "Inativo"}</Badge></td>
+                  <td><Button variant="ghost" size="sm" icon="more"/></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      {convites.length > 0 && (
+        <div style={{ marginTop: 16 }}>
+          <Card title="Convites pendentes" sub={`${convites.length} aguardando criação de acesso`}>
+            <div className="table-wrap" style={{ border: 0 }}>
+              <table className="t">
+                <thead><tr><th>Email</th><th>Nome</th><th>Perfil</th><th>Convidado por</th><th>Quando</th><th></th></tr></thead>
+                <tbody>
+                  {convites.map(c => (
+                    <tr key={c.id}>
+                      <td><span className="mono small">{c.email}</span></td>
+                      <td>{c.nome || '—'}</td>
+                      <td><Badge variant="ink">{c.role || '—'}</Badge></td>
+                      <td><span className="small muted">{c.convidado_por || '—'}</span></td>
+                      <td><span className="mono small muted">{c.created_at ? fmtDate(c.created_at) : '—'}</span></td>
+                      <td><Button variant="ghost" size="sm" onClick={() => revogar(c)}>Revogar</Button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </Card>
+        </div>
+      )}
+
+      {showConvite && <ModalConvidarUsuario onClose={() => setShowConvite(false)} onSaved={() => { setShowConvite(false); load(); }}/>}
+    </>
+  );
+}
+
+function ModalConvidarUsuario({ onClose, onSaved }) {
+  const [nome, setNome] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [role, setRole] = React.useState("Comercial");
+  const [saving, setSaving] = React.useState(false);
+  const roles = ["Admin", "Comercial", "Engenharia", "Financeiro", "Jurídico", "Importação", "Instalação"];
+
+  const salvar = async () => {
+    const em = email.trim();
+    if (!em || !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) return window.toast('Informe um e-mail válido.', 'warning');
+    setSaving(true);
+    try {
+      const convidadoPor = (window.__VP_USER && window.__VP_USER.email) || 'admin';
+      const { error } = await window.__VP_SB.sb.from('convites').insert({ email: em, nome: nome.trim() || null, role, convidado_por: convidadoPor });
+      if (error) throw error;
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Admin', acao: 'Convite de usuário criado', alvo: em, detalhe: { role } });
+      window.toast('Convite registrado para ' + em + '.', 'success');
+      onSaved && onSaved();
+    } catch (e) { window.toast('Erro: ' + (e.message || e), 'error'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <Modal title="Convidar usuário" onClose={onClose} width={440}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={salvar} disabled={saving}>{saving ? 'Registrando…' : 'Registrar convite'}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <div>
+          <div className="pe-field-label">E-mail <span className="pe-req">*</span></div>
+          <input className="pe-input" type="email" value={email} onChange={e => setEmail(e.target.value)} placeholder="pessoa@verticalparts.com.br"/>
+        </div>
+        <div>
+          <div className="pe-field-label">Nome</div>
+          <input className="pe-input" value={nome} onChange={e => setNome(e.target.value)} placeholder="Nome completo"/>
+        </div>
+        <div>
+          <div className="pe-field-label">Perfil</div>
+          <select className="pe-input" value={role} onChange={e => setRole(e.target.value)}>
+            {roles.map(r => <option key={r} value={r}>{r}</option>)}
+          </select>
+        </div>
+        <p className="small muted" style={{ margin: 0 }}>O convite fica registrado como pendente para acompanhamento. A criação do login em si é feita pelo time de TI (SSO do portal vpsistema).</p>
       </div>
-    </Card>
+    </Modal>
   );
 }
 
@@ -969,7 +1059,10 @@ function ConfigPermissions() {
     { role: "Instalação", access: ["-", "-", "-", "-", "-", "r", "-", "r", "r", "rwx", "-"] },
   ];
   return (
-    <Card title="Matriz de Permissões (RLS Supabase)" sub="r=leitura · w=criar/editar · x=ações restritas">
+    <Card title="Matriz de Permissões — modelo de referência" sub="r=leitura · w=criar/editar · x=ações restritas">
+      <div style={{ padding: "10px 12px", marginBottom: 14, background: "var(--vp-warning-tint, #f8eed7)", border: "1px solid var(--border)", fontSize: 12, color: "var(--fg2)" }}>
+        Este quadro documenta o <b>modelo de acesso planejado</b> por perfil. O controle por linha (RLS) ainda não é gerido por esta tela — alterações de permissão são feitas via políticas no Supabase.
+      </div>
       <div style={{ overflowX: "auto" }}>
         <table className="t" style={{ minWidth: 880 }}>
           <thead><tr>
@@ -1038,34 +1131,32 @@ function ParamRow({ label, value, mono }) {
 }
 
 function ConfigIntegrations() {
+  /* O frontend não monitora a saúde real de cada serviço externo — em vez de
+     exibir "Ativo" fixo (falsa sensação de controle), listamos as integrações
+     previstas como "Não configurado". A ativação real é feita no ambiente. */
   const integrations = [
-    { name: "MarineTraffic API", status: "Ativo", last: "—", desc: "Rastreamento de navios em tempo real" },
-    { name: "VesselFinder (fallback)", status: "Standby", last: "—", desc: "API secundária de rastreamento" },
-    { name: "IMAP — cotacoes@verticalparts.com.br", status: "Ativo", last: "—", desc: "Inbox Importação" },
-    { name: "IMAP — compras@verticalparts.com.br", status: "Ativo", last: "—", desc: "Inbox Compras Nacional" },
-    { name: "SMTP — envio transacional", status: "Ativo", last: "—", desc: "Notificações e propostas" },
-    { name: "DocuSign", status: "Ativo", last: "—", desc: "Assinatura digital de contratos" },
-    { name: "ContaAzul (faturamento)", status: "Ativo", last: "—", desc: "Sincronização NF / contas a receber" },
-    { name: "WhatsApp Business API", status: "Inativo", last: "—", desc: "Notificações para vendedores" },
+    { name: "Rastreamento marítimo (AIS)", desc: "Edge function ais-sync — posição de navios" },
+    { name: "IMAP — cotacoes@verticalparts.com.br", desc: "Inbox Importação" },
+    { name: "IMAP — compras@verticalparts.com.br", desc: "Inbox Compras Nacional" },
+    { name: "SMTP — envio transacional", desc: "Notificações e propostas" },
+    { name: "Assinatura digital", desc: "Assinatura de contratos e propostas" },
+    { name: "Omie (faturamento)", desc: "Sincronização NF / contas a receber" },
+    { name: "WhatsApp Business API", desc: "Notificações para vendedores" },
   ];
   return (
-    <Card title="Integrações Externas" sub={integrations.length + " serviços conectados"}>
+    <Card title="Integrações Externas" sub="status não é monitorado automaticamente — configure cada serviço no ambiente de deploy">
       <div className="grid-2" style={{ gap: 12 }}>
         {integrations.map((i) => (
           <div key={i.name} style={{ padding: 14, background: "#fff", border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 12 }}>
-            <div style={{ width: 36, height: 36, background: i.status === "Ativo" ? "var(--vp-success-tint)" : i.status === "Standby" ? "var(--vp-warning-tint)" : "var(--vp-gray-100)", display: "flex", alignItems: "center", justifyContent: "center", color: i.status === "Ativo" ? "var(--vp-success)" : i.status === "Standby" ? "var(--vp-warning-ink)" : "var(--fg3)" }}>
+            <div style={{ width: 36, height: 36, background: "var(--vp-gray-100)", display: "flex", alignItems: "center", justifyContent: "center", color: "var(--fg3)" }}>
               {React.createElement(Icon.globe, { size: 18 })}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="row sb">
                 <span style={{ fontWeight: 700, fontSize: 13 }}>{i.name}</span>
-                <Badge variant={i.status === "Ativo" ? "success" : i.status === "Standby" ? "warning" : "neutral"} dot>{i.status}</Badge>
+                <Badge variant="neutral" dot>Não configurado</Badge>
               </div>
               <div className="cell-sub" style={{ marginTop: 2 }}>{i.desc}</div>
-              <div className="row sb mono small" style={{ marginTop: 4, color: "var(--fg3)" }}>
-                <span>Última sync: {i.last}</span>
-                <Button variant="ghost" size="sm" icon="settings"/>
-              </div>
             </div>
           </div>
         ))}
@@ -1075,27 +1166,26 @@ function ConfigIntegrations() {
 }
 
 function ConfigBuckets() {
+  /* Buckets reais do projeto Supabase (jxtqwzmpgofwctqajewt). */
   const buckets = [
-    { name: "contratos-originais", policy: "Privado · só Jurídico" },
-    { name: "contratos-redigidos", policy: "Privado · vendedor+cliente" },
-    { name: "propostas-pdf", policy: "Privado · vendedor" },
-    { name: "engenharia-fotos", policy: "Privado · engenharia+admin" },
-    { name: "embarques-docs", policy: "Privado · log+adm" },
-    { name: "obras-laudos", policy: "Privado · cliente final" },
+    { name: "engenharia", policy: "Público", desc: "Fotos/docs de engenharia e documentos da obra (Dossiê)" },
+    { name: "tratativas", policy: "Público", desc: "Anexos das tratativas com fornecedor" },
+    { name: "cotacao-fornecedor-anexos", policy: "Privado", desc: "Anexos das cotações a fornecedor" },
+    { name: "formulario-elevador-anexos", policy: "Privado", desc: "Anexos do Formulário de Elevadores" },
+    { name: "propostas-imagens", policy: "Privado", desc: "Imagens das propostas comerciais" },
+    { name: "fichas-imagens", policy: "Privado", desc: "Imagens das fichas técnicas" },
   ];
   return (
-    <Card title="Supabase Storage Buckets" sub={`${buckets.length} buckets configurados`}>
+    <Card title="Supabase Storage Buckets" sub={`${buckets.length} buckets reais no ambiente`}>
       <div className="table-wrap" style={{ border: 0 }}>
         <table className="t">
-          <thead><tr><th>Bucket</th><th>Arquivos</th><th>Tamanho</th><th>Política</th><th></th></tr></thead>
+          <thead><tr><th>Bucket</th><th>Uso</th><th>Acesso</th></tr></thead>
           <tbody>
             {buckets.map((b) => (
               <tr key={b.name}>
                 <td><span className="mono" style={{ fontWeight: 700 }}>{b.name}</span></td>
-                <td className="cell-num muted">—</td>
-                <td className="cell-num muted">—</td>
-                <td><Badge variant="outline">{b.policy}</Badge></td>
-                <td><Button variant="ghost" size="sm" icon="more"/></td>
+                <td><span className="cell-sub">{b.desc}</span></td>
+                <td><Badge variant={b.policy === "Público" ? "warning" : "success"} dot>{b.policy}</Badge></td>
               </tr>
             ))}
           </tbody>
