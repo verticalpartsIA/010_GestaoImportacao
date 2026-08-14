@@ -475,8 +475,28 @@ function CVWizard({ onCreated, initial }) {
     const cli = dj.cliente || {};
     const obra = dj.obra || {};
     const valores = dj.elevador?.valores || {};
-    const valorUnit = Number(valores.valorUnit) || 0;
-    const qtd = Number(valores.quantidade) || 1;
+    const spec = (dj.elevador?.especificacoes || [])[0] || {};
+    const qtd = Number(spec.qtd) || Number(valores.quantidade) || 1;
+
+    /* Valor: a coluna valor_total da proposta é a fonte de verdade do total
+       do contrato; só cai pro valorUnit×qtd do data_json se ela faltar. Antes
+       lia só valorUnit e o contrato podia nascer R$ 0 (achado E2E C). */
+    const totalProposta = Number(p.valor_total) || (Number(valores.valorUnit) || 0) * qtd || 0;
+
+    /* Equipamento: antes NADA da especificação era herdado, então o objeto
+       do contrato ficava no default ("1× Elevador Social, 10 paradas") em vez
+       do equipamento real da proposta (achado E2E C). */
+    const paradasInf = (String(spec.andaresParadasPortas || '').match(/\d+/) || [])[0] || '';
+    const modeloInf = spec.modelo || valores.equipamento || '';
+    const cargaInf = (String(spec.capacidade || '').match(/(\d+)\s*kg/i) || [])[1] || '';
+    const TIPO_MAP = { passageiro: 'Social', social: 'Social', panoramico: 'Panorâmico', 'panorâmico': 'Panorâmico', carga: 'Carga', montacargas: 'Montacargas' };
+    const tipoInf = TIPO_MAP[(spec.carac || '').trim().toLowerCase()] || '';
+
+    /* Endereço: combina logradouro + número quando o número existe (registros
+       novos já preservam o número — ver EnderecoAPI.mesclarLogradouro). */
+    const endCli = [cli.endereco, cli.numero].filter(Boolean).join(', ');
+    const endObra = [[obra.endereco, obra.numero].filter(Boolean).join(', '), obra.cidade, obra.uf].filter(Boolean).join(', ');
+
     setForm(prev => ({
       ...prev,
       masterId: p.master_id, propostaId: p.id,
@@ -487,11 +507,18 @@ function CVWizard({ onCreated, initial }) {
         rep: cli.responsavel || prev.comprador.rep,
         email: cli.email || prev.comprador.email,
         tel: cli.telefone || prev.comprador.tel,
-        endereco: cli.endereco || prev.comprador.endereco,
+        endereco: endCli || prev.comprador.endereco,
       },
-      localObra: [obra.endereco, obra.cidade, obra.uf].filter(Boolean).join(', ') || prev.localObra,
-      valor: valorUnit ? String(Math.round(valorUnit * qtd)) : prev.valor,
+      localObra: endObra || prev.localObra,
+      // valor é guardado no formato mascarado pt-BR ("185.022,00") — o mesmo
+      // que o CVMoneyField produz e que parseMoney lê (dígitos como centavos).
+      // Antes gravava "185022" cru, que parseMoney lia como R$ 1.850,22 (÷100).
+      valor: totalProposta ? window.CV.maskMoney(String(Math.round(totalProposta * 100))) : prev.valor,
       qtd: qtd || prev.qtd,
+      tipo: tipoInf || prev.tipo,
+      paradas: paradasInf || prev.paradas,
+      modelo: modeloInf || prev.modelo,
+      carga: cargaInf || prev.carga,
     }));
   };
 

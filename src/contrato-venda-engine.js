@@ -119,7 +119,8 @@
     if (f.tipoEquip === 'ELEVADOR') {
       const p = f.paradas ? `, ${f.paradas} paradas` : '';
       const c = f.carga ? `, ${f.carga}kg` : '';
-      return `${qtd}× Elevador ${f.tipo || ''}${c}${p}`.replace(/\s+/g, ' ').trim();
+      const m = f.modelo ? ` ${f.modelo}` : '';
+      return `${qtd}× Elevador ${f.tipo || ''}${m}${c}${p}`.replace(/\s+/g, ' ').trim();
     }
     const m = f.modelo ? ` ${f.modelo}` : '';
     const l = f.largura ? `, ${f.largura}` : '';
