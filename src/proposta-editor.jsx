@@ -676,6 +676,11 @@ function PropostaEditor({ setRoute, subsel }) {
   // só marcar status='enviada' sem nunca produzir nenhum link real.
   const abrirEnvio = React.useCallback(async () => {
     if (!window.PropostaStore) { window.toast?.('Store de assinatura não carregado.', 'error'); return; }
+    const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(data.numeroCotacao) ?? null;
+    if (window.DecisoesStore && numeroCotacao != null) {
+      const gate = await window.DecisoesStore.podeEnviarProposta(numeroCotacao);
+      if (!gate.ok) { window.toast?.(gate.motivo, 'warning'); return; }
+    }
     window.toast?.('Salvando proposta...', 'info');
     const saved = await saveToSupabase();
     if (!saved || saved.erro) { window.toast?.('❌ Não foi possível salvar: ' + ((saved && saved.erro) || 'erro desconhecido'), 'error'); return; }
