@@ -157,6 +157,22 @@
     if (error) { console.warn('[CVStore] list error', error); return []; }
     return data || [];
   }
+  /* Propostas ASSINADAS que ainda não têm contrato — a fila "aguardando
+     contrato" do Painel. O contrato não nasce sozinho (precisa do aval do
+     Financeiro antes de fechar — ver createDraft/podeEnviarContrato), então
+     sem isto uma proposta aceita ficava invisível aqui e o Painel mostrava
+     "0 contratos" mesmo com venda ganha (achado E2E reteste B). */
+  async function listarPropostasAguardandoContrato() {
+    const c = sb(); if (!c) return [];
+    const { data: assinadas } = await c.from('propostas')
+      .select('id, master_id, numero_documento, titulo, valor_total, data_json, aprovada_em')
+      .eq('status', 'aprovada').order('aprovada_em', { ascending: false }).limit(50);
+    if (!assinadas || !assinadas.length) return [];
+    const { data: contratos } = await c.from('contratos_venda_equipamentos').select('proposta_id');
+    const comContrato = new Set((contratos || []).map((x) => x.proposta_id).filter(Boolean));
+    return assinadas.filter((p) => !comContrato.has(p.id));
+  }
+
   async function getById(id) {
     const c = sb(); if (!c) return null;
     const { data } = await c.from('contratos_venda_equipamentos').select('*').eq('id', id).maybeSingle();
@@ -416,7 +432,7 @@
     uuid, shortToken,
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
-    listAll, getById, getByToken,
+    listAll, listarPropostasAguardandoContrato, getById, getByToken,
     createDraft, updateFormState,
     markSent, markViewed, markSigned, refuse,
     sweepExpired, remove,

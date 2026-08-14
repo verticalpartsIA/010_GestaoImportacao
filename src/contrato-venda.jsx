@@ -454,7 +454,7 @@ function validateStep(idx, s) {
   return e;
 }
 
-function CVWizard({ onCreated, initial }) {
+function CVWizard({ onCreated, initial, prefillProposta }) {
   const [form, setForm] = _cvUS(initial || window.CV.defaultState());
   const [step, setStep] = _cvUS(0);
   const [errors, setErrors] = _cvUS({});
@@ -521,6 +521,10 @@ function CVWizard({ onCreated, initial }) {
       carga: cargaInf || prev.carga,
     }));
   };
+
+  /* Aberto pela fila "aguardando contrato" do Painel: já entra com a proposta
+     assinada herdada, sem o usuário reselecionar (achado E2E reteste B). */
+  _cvUE(() => { if (prefillProposta) aplicarProposta(prefillProposta); }, [prefillProposta && prefillProposta.id]);
 
   const valorNum = window.CV.parseMoney(form.valor);
   const docPreview = _cvUM(() => window.CV.buildContract({ form, comprador: form.comprador, valor: valorNum, sinalPct: form.sinalPct, parcelas: form.parcelas, numero: 'VPVE________' }), [form]);
@@ -809,18 +813,23 @@ function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
   );
 }
 
-function CVDashboard() {
+function CVDashboard({ onCriarDeProposta }) {
   const [contracts, setContracts] = _cvUS([]);
   const [loading, setLoading] = _cvUS(true);
   const [filter, setFilter] = _cvUS('todos');
   const [query, setQuery] = _cvUS('');
   const [drawerId, setDrawerId] = _cvUS(null);
   const [sendRec, setSendRec] = _cvUS(null);
+  const [aguardando, setAguardando] = _cvUS([]);
 
   const refresh = async () => {
     setLoading(true);
-    const list = await window.CVStore.listAll();
+    const [list, fila] = await Promise.all([
+      window.CVStore.listAll(),
+      window.CVStore.listarPropostasAguardandoContrato ? window.CVStore.listarPropostasAguardandoContrato() : [],
+    ]);
     setContracts(list);
+    setAguardando(fila);
     setLoading(false);
   };
 
@@ -877,6 +886,30 @@ function CVDashboard() {
         ))}
       </div>
 
+      {aguardando.length > 0 && (
+        <div className="ci-panel" style={{ marginBottom: 16, borderLeft: '3px solid #4338CA' }}>
+          <div className="ci-panel-head">
+            <h2>Propostas assinadas aguardando contrato <span className="ci-cell-num">({aguardando.length})</span></h2>
+          </div>
+          <table className="ci-table">
+            <thead><tr><th>Proposta</th><th>Cliente</th><th>Valor</th><th>Assinada</th><th style={{ textAlign: 'right' }}>Ação</th></tr></thead>
+            <tbody>
+              {aguardando.map((p) => (
+                <tr key={p.id}>
+                  <td><div className="ci-cell-num">{p.numero_documento}</div><div className="ci-cell-resp">{p.master_id || ''}</div></td>
+                  <td><div className="ci-cell-co">{p.data_json?.cliente?.nome || p.titulo || '—'}</div></td>
+                  <td className="ci-cell-val">{p.valor_total ? window.CV.brl(Number(p.valor_total)) : '—'}</td>
+                  <td className="ci-cell-time">{p.aprovada_em ? window.CVStore.relative(p.aprovada_em) : '—'}</td>
+                  <td style={{ textAlign: 'right' }}>
+                    <button className="ci-mini-btn" onClick={() => onCriarDeProposta && onCriarDeProposta(p)}>Criar contrato</button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
       <div className="ci-panel">
         <div className="ci-panel-head">
           <h2>{filter === 'todos' ? 'Todos os contratos' : window.CVStore.STATUS[filter].label}</h2>
@@ -929,6 +962,8 @@ function CVDashboard() {
    ============================================================ */
 function ContratoVendaEquipamentosPage() {
   const [tab, setTab] = _cvUS('painel');
+  const [prefillProposta, setPrefillProposta] = _cvUS(null);
+  const criarDeProposta = (p) => { setPrefillProposta(p); setTab('novo'); };
   return (
     <div className="ci-page">
       <div className="ci-page-head">
@@ -940,12 +975,14 @@ function ContratoVendaEquipamentosPage() {
         <div className="ci-page-actions-wrap">
           <div className="ci-page-actions">
             <button className={'ci-tab' + (tab === 'painel' ? ' on' : '')} onClick={() => setTab('painel')}>▦ Painel</button>
-            <button className={'ci-tab' + (tab === 'novo' ? ' on' : '')} onClick={() => setTab('novo')}>+ Novo contrato</button>
+            <button className={'ci-tab' + (tab === 'novo' ? ' on' : '')} onClick={() => { setPrefillProposta(null); setTab('novo'); }}>+ Novo contrato</button>
           </div>
         </div>
       </div>
       <div className="ci-page-body">
-        {tab === 'painel' ? <CVDashboard/> : <CVWizard onCreated={() => setTab('painel')}/>}
+        {tab === 'painel'
+          ? <CVDashboard onCriarDeProposta={criarDeProposta}/>
+          : <CVWizard prefillProposta={prefillProposta} onCreated={() => { setPrefillProposta(null); setTab('painel'); }}/>}
       </div>
     </div>
   );
