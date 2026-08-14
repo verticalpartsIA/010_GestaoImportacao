@@ -203,6 +203,33 @@ window.__DOSSIER = window.__DOSSIER || (() => {
       return id;
     },
 
+    /* ---- Anexar documento com upload de arquivo (Storage) ----
+       Sobe o PDF pro bucket público `engenharia` sob dossier-documentos/<id>
+       e grava a linha em dossier_documentos com arquivo_url. */
+    async anexarDocumento({ dossierId, tipo, file, nome }) {
+      if (!file) throw new Error('Nenhum arquivo selecionado.');
+      const id = 'DOC-' + Date.now().toString().slice(-6);
+      const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+      const path = `dossier-documentos/${dossierId}/${id}.${ext}`;
+      const { error: upErr } = await sb.storage.from('engenharia')
+        .upload(path, file, { upsert: true, contentType: file.type || undefined });
+      if (upErr) throw upErr;
+      const { data: pub } = sb.storage.from('engenharia').getPublicUrl(path);
+      const { error } = await sb.from('dossier_documentos').insert({
+        id,
+        dossier_id: dossierId,
+        tipo,
+        nome: nome || file.name,
+        status: 'anexado',
+        responsavel: window.__VP_USER?.email || 'system',
+        data_criacao: new Date().toISOString().split('T')[0],
+        arquivo_url: pub?.publicUrl || null,
+        metadata: { filename: file.name, size: file.size, path }
+      });
+      if (error) throw error;
+      return id;
+    },
+
     /* ---- Atualizar status de documento ---- */
     async atualizarDocumento(docId, updates) {
       const { error } = await sb.from('dossier_documentos')

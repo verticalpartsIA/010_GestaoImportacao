@@ -229,7 +229,7 @@ function DossierObraPage({ dossierId, setRoute }) {
       {/* ---- CONTEÚDO DAS TABS ---- */}
       <div>
         {activeTab === 'visao-geral' && <TabVisaoGeral dossier={dossier} setModalOpen={setModalOpen} />}
-        {activeTab === 'documentos' && <TabDocumentos dossier={dossier} setModalOpen={setModalOpen} />}
+        {activeTab === 'documentos' && <TabDocumentos dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'pendencias' && <TabPendencias dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'responsaveis' && <TabResponsaveis dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'historico' && <TabHistorico dossier={dossier} />}
@@ -396,52 +396,84 @@ function TabVisaoGeral({ dossier, setModalOpen }) {
   );
 }
 
-function TabDocumentos({ dossier }) {
+/* Tipos de documento exigidos por obra. Alvará é condicional (opcional). */
+const TIPOS_DOC_OBRA = [
+  { tipo: 'ART', label: 'ART (CREA)', obrigatorio: true },
+  { tipo: 'Termo de Vistoria', label: 'Termo de Vistoria', obrigatorio: true },
+  { tipo: 'DataBook', label: 'DataBook (Ebook técnico)', obrigatorio: true },
+  { tipo: 'Termo de Entrega', label: 'Termo de Entrega Final', obrigatorio: true },
+  { tipo: 'Alvará', label: 'Alvará', obrigatorio: false },
+];
+
+function TabDocumentos({ dossier, reload }) {
+  const [uploading, setUploading] = React.useState(null);
   const docs = dossier.documentos || [];
-  const docsByType = {};
-  docs.forEach(d => {
-    if (!docsByType[d.tipo]) docsByType[d.tipo] = [];
-    docsByType[d.tipo].push(d);
-  });
+  const byType = {};
+  docs.forEach(d => { (byType[d.tipo] = byType[d.tipo] || []).push(d); });
+
+  const upload = async (tipo, file) => {
+    if (!file) return;
+    setUploading(tipo);
+    try {
+      await window.__DOSSIER.anexarDocumento({ dossierId: dossier.id, tipo, file });
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Documentos', acao: 'Documento anexado — ' + tipo, alvo: dossier.building_name, alvo_id: dossier.id });
+      window.toast(tipo + ' anexado.', 'success');
+      await (reload && reload());
+    } catch (e) {
+      window.toast('Erro ao anexar: ' + (e.message || e), 'error');
+    } finally {
+      setUploading(null);
+    }
+  };
+
+  const obrig = TIPOS_DOC_OBRA.filter(t => t.obrigatorio);
+  const prontos = obrig.filter(t => (byType[t.tipo] || []).length > 0).length;
+  const extras = Object.keys(byType).filter(t => !TIPOS_DOC_OBRA.some(x => x.tipo === t));
+  const rowBox = { border: '1px solid #ddd', borderRadius: 6, padding: 14, marginBottom: 10, display: 'flex', gap: 12, alignItems: 'flex-start' };
+  const uploadBtn = { cursor: 'pointer', fontSize: 12, fontWeight: 600, color: '#0066cc', border: '1px solid #0066cc', borderRadius: 4, padding: '6px 12px', whiteSpace: 'nowrap' };
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-      {Object.entries(docsByType).map(([tipo, docs]) => (
-        <div key={tipo} style={{
-          background: '#f5f5f5',
-          border: '1px solid #ddd',
-          borderRadius: 6,
-          padding: 16
-        }}>
-          <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 12 }}>
-            {tipo}
-          </div>
-          {docs.map(d => (
-            <div key={d.id} style={{ marginBottom: 12, paddingBottom: 12, borderBottom: '1px solid #eee' }}>
-              <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 4 }}>
-                {d.nome || tipo} (v{d.versao})
-              </div>
-              <div style={{ fontSize: 11, color: '#999', marginBottom: 6 }}>
-                {d.status} · {d.responsavel}
-              </div>
-              <div style={{
-                display: 'inline-block',
-                padding: '4px 8px',
-                background: statusBg(d.status),
-                color: statusColor(d.status),
-                borderRadius: 3,
-                fontSize: 10,
-                fontWeight: 600
-              }}>
-                {d.status}
-              </div>
+    <div>
+      <div style={{ background: '#f5f7fa', border: '1px solid #dde3ea', borderRadius: 6, padding: '12px 16px', marginBottom: 16, fontSize: 13, fontWeight: 600 }}>
+        Checklist da obra — {prontos}/{obrig.length} documentos obrigatórios prontos
+      </div>
+      {TIPOS_DOC_OBRA.map(t => {
+        const items = byType[t.tipo] || [];
+        const pronto = items.length > 0;
+        const mark = pronto ? '✓' : (t.obrigatorio ? '○' : '–');
+        const markColor = pronto ? '#00aa00' : (t.obrigatorio ? '#cc7700' : '#999');
+        return (
+          <div key={t.tipo} style={rowBox}>
+            <div style={{ fontSize: 18, color: markColor, fontWeight: 700, width: 20, textAlign: 'center' }}>{mark}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{t.label}{!t.obrigatorio && <span style={{ color: '#999', fontWeight: 400 }}> · opcional</span>}</div>
+              {items.length === 0 ? (
+                <div style={{ fontSize: 12, color: markColor, marginTop: 2 }}>{t.obrigatorio ? 'Pendente' : 'Não anexado (quando aplicável)'}</div>
+              ) : items.map(d => (
+                <div key={d.id} style={{ fontSize: 12, marginTop: 4 }}>
+                  {d.arquivo_url
+                    ? <a href={d.arquivo_url} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc', fontWeight: 600 }}>⬇ {d.nome || t.label}</a>
+                    : <span style={{ fontWeight: 600 }}>{d.nome || t.label}</span>}
+                  <span style={{ color: '#999', marginLeft: 8 }}>v{d.versao} · {d.status}{d.data_criacao ? ' · ' + d.data_criacao : ''}</span>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-      ))}
-      {docs.length === 0 && (
-        <div style={{ gridColumn: '1 / -1', padding: 32, textAlign: 'center', color: '#999' }}>
-          Nenhum documento vinculado ao Dossier
+            <label style={{ ...uploadBtn, opacity: uploading === t.tipo ? 0.6 : 1 }}>
+              {uploading === t.tipo ? 'Enviando…' : (items.length ? 'Nova versão' : 'Anexar')}
+              <input type="file" style={{ display: 'none' }} disabled={uploading === t.tipo}
+                onChange={(e) => { const f = e.target.files[0]; e.target.value = ''; upload(t.tipo, f); }} />
+            </label>
+          </div>
+        );
+      })}
+      {extras.length > 0 && (
+        <div style={{ marginTop: 20 }}>
+          <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8 }}>Outros documentos vinculados</div>
+          {extras.map(tipo => (byType[tipo] || []).map(d => (
+            <div key={d.id} style={{ fontSize: 12, marginBottom: 6 }}>
+              <b>{tipo}:</b> {d.arquivo_url ? <a href={d.arquivo_url} target="_blank" rel="noopener noreferrer" style={{ color: '#0066cc' }}>{d.nome || tipo}</a> : (d.nome || tipo)} <span style={{ color: '#999' }}>· {d.status}</span>
+            </div>
+          )))}
         </div>
       )}
     </div>
