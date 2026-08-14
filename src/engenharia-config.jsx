@@ -399,7 +399,7 @@ function ConfiguradorPage({ setRoute }) {
                 <td><span className="mono small">{s.computed && s.computed.capacidade ? s.computed.capacidade.toLocaleString("pt-BR") + " p/h" : "—"}</span></td>
                 <td><span className="mono small">{(s.anexos || []).length} arq.</span></td>
                 <td><Badge variant={s.status === "finalizado" ? "success" : "warning"} dot>{s.status === "finalizado" ? "Finalizado" : "Rascunho"}</Badge></td>
-                <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
+                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
           </tbody>

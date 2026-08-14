@@ -822,7 +822,7 @@ function NcmKanbanPage({ setRoute, setSubsel }) {
                   <td>{s.solicitante || <span className="muted">—</span>}</td>
                   <td><span className="ncm-status" data-s={s.status}>{(s.status || "").replace(/_/g, " ").toLowerCase()}</span></td>
                   <td><span className="cell-sub">{s.created_at ? s.created_at.slice(0,10) : "—"}</span></td>
-                  <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
+                  <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
                 </tr>
               ))}
             </tbody>

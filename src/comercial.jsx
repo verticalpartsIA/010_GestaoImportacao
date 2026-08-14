@@ -419,7 +419,7 @@ function LeadsPage({ setRoute, setSubsel }) {
                     {({ alta: "Alta", media: "Média", baixa: "Baixa" }[String(l.priority || "").toLowerCase()] || l.priority || "—")}
                   </Badge>
                 </td>
-                <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
+                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
           </tbody>

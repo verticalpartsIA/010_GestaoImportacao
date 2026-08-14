@@ -340,7 +340,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
                   {e.channel ? <Badge variant={e.channel === "Verde" ? "success" : e.channel === "Amarelo" ? "warning" : "danger"} dot>{e.channel}</Badge> : <span className="muted">—</span>}
                 </td>
                 <td><StatusBadge status={e.status}/></td>
-                <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
+                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
           </tbody>
@@ -905,7 +905,7 @@ function ComprasPage({ setRoute }) {
                 <td className="cell-money">{fmtBRL(f.valor)}</td>
                 <td><span className="cell-num">{f.eta}</span></td>
                 <td><StatusBadge status={f.status}/></td>
-                <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
+                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
           </tbody>

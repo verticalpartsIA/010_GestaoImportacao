@@ -310,7 +310,7 @@ function CronogramaPage() {
                     <div className="progress" style={{ marginBottom: 4 }}><span style={{ width: pct + '%' }}/></div>
                     <div className="mono small" style={{ color: 'var(--fg3)' }}>{pagas}/4 fases · {pct}%</div>
                   </td>
-                  <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
+                  <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
                 </tr>
               );
             })}

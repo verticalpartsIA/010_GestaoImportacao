@@ -120,7 +120,7 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
                 <td>{p.client}</td>
                 <td className="cell-money">{fmtBRL(p.value)}</td>
                 <td><Badge variant={p.analiseAprovada ? "success" : "warning"} dot>{p.status}</Badge></td>
-                <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
+                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
           </tbody>

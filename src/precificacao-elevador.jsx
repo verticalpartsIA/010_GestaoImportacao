@@ -82,7 +82,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
                 <td>{item.respondedAt ? new Date(item.respondedAt).toLocaleDateString('pt-BR') : '—'}</td>
                 <td><StatusBadge status={PZ_STATUS_COTACAO_LABEL[item.statusCotacao] || item.statusCotacao}/></td>
                 <td>{item.precificacaoStatus ? <StatusBadge status={item.precificacaoStatus === 'calculado' ? 'Em análise' : item.precificacaoStatus === 'finalizado' ? 'Aprovada' : 'Recebida'}/> : <span className="muted small">Não iniciada</span>}</td>
-                <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
+                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
           </tbody>

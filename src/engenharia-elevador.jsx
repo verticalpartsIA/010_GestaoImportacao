@@ -250,7 +250,7 @@ function ProjetoElevadorPage({ setRoute }) {
                 <td><span className="small">{(p.unidades || []).length} unid. · {(p.unidades || []).map(u => u.identificador).join(", ")}</span></td>
                 <td><span className="mono small">{(p.anexos || []).length} arq.</span></td>
                 <td><Badge variant={p.status === "finalizado" ? "success" : "warning"} dot>{p.status === "finalizado" ? "Finalizado" : "Rascunho"}</Badge></td>
-                <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
+                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
           </tbody>
