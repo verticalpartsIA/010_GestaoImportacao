@@ -21,10 +21,17 @@ const NAV_GROUPS = [
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
     { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
   ]},
+  /* Cadastros centrais — transversal (Comercial, Importação, Engenharia usam
+     os mesmos registros). Clientes/Fornecedores têm tela própria aqui;
+     Produtos é o Catálogo de Produtos já existente, só realocado. */
+  { label: "Cadastros", items: [
+    { id: "cadastro-clientes", label: "Clientes", icon: "users" },
+    { id: "cadastro-fornecedores", label: "Fornecedores", icon: "truck" },
+    { id: "ncm-catalogo", label: "Produtos", icon: "fileSearch" },
+  ]},
   { label: "Jurídico | Importação | Suprimentos", sublabel: "Contratos, Siscomex & Compras", items: [
     { id: "juridico", label: "Jurídico", icon: "scale" },
     { id: "contrato-venda-equipamentos", label: "Contrato Venda de Equipamentos", icon: "fileText" },
-    { id: "ncm-catalogo", label: "Catálogo de Produtos", icon: "fileSearch" },
     { id: "importacao", label: "Importação", icon: "ship" },
     /* Sub-telas da Importação — consolidação de uma solução de importação
        já usada pela equipe (P.I., Embarques, RFQ, IMS), trazida pra dentro
@@ -236,8 +243,10 @@ const BREADCRUMB_MAP = {
   "contrato-editor": { module: "Jurídico", page: "Editor de Contrato", icon: "fileText" },
   "contrato-venda-equipamentos": { module: "Jurídico", page: "Contrato Venda de Equipamentos", icon: "fileText" },
   "contrato-instalador":         { module: "Jurídico", page: "Contrato Instalador", icon: "hardhat" },
+  "cadastro-clientes":     { module: "Cadastros", page: "Clientes", icon: "users" },
+  "cadastro-fornecedores": { module: "Cadastros", page: "Fornecedores", icon: "truck" },
   engenharia:    { module: "Engenharia", page: "Engenharia", icon: "ruler" },
-  "ncm-catalogo": { module: "Engenharia", page: "Catálogo de Produtos", icon: "fileSearch" },
+  "ncm-catalogo": { module: "Cadastros", page: "Produtos", icon: "fileSearch" },
   "ncm-kanban": { module: "Engenharia", page: "Solicitações NCM", icon: "fileSearch" },
   "ncm-detail": { module: "Engenharia", page: "Detalhe da Solicitação NCM", icon: "fileSearch" },
   "eng-projeto-elevadores": { module: "Engenharia", page: "Projeto de Elevadores", icon: "grid" },
