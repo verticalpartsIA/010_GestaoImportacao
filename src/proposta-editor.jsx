@@ -361,6 +361,18 @@ const PE_STATUS_LABEL = {
   aprovada: 'Assinada', recusada: 'Recusada', expirada: 'Expirada', cancelada: 'Cancelada',
 };
 
+/* Estado que o badge mostra. O `status` sozinho contava só metade da história:
+   uma proposta publicada (mas ainda não enviada) ficava 'rascunho' no banco e
+   o badge dizia "Rascunho" bem ao lado do selo "Publicado vN" — contradição
+   que o QA E2E pegou. Aqui, um rascunho já publicado vira "Publicada", e
+   qualquer estado avançado (enviada/assinada/...) manda no badge. */
+function statusVisual(meta) {
+  const st = (meta && meta.status) || 'rascunho';
+  if (st !== 'rascunho') return { cls: st, label: PE_STATUS_LABEL[st] || st };
+  if (meta && meta.publicado_em) return { cls: 'publicada', label: 'Publicada' };
+  return { cls: 'rascunho', label: 'Rascunho' };
+}
+
 function tempoRelativo(ts) {
   const s = Math.max(0, Math.floor((Date.now() - ts) / 1000));
   if (s < 45) return 'agora';
@@ -717,6 +729,30 @@ function PropostaEditor({ setRoute, subsel }) {
     return () => { cancelado = true; };
   }, [editId]);
 
+  /* Re-sincroniza o status quando a aba volta ao foco. O aceite acontece na
+     página pública /assinar (outra aba/janela); sem isto, ao voltar pro editor
+     o badge continuava "Rascunho" mesmo com a proposta já assinada no banco
+     (achado E2E). Atualiza só os campos de meta — nunca o conteúdo em edição. */
+  React.useEffect(() => {
+    if (!editId) return;
+    const refetch = () => {
+      if (document.visibilityState !== 'visible' || !window.__VP_SB?.sb) return;
+      window.__VP_SB.sb.from('propostas')
+        .select('status, publicado_em, publicado_por, version, valor_total, atualizado_em')
+        .eq('id', editId).maybeSingle()
+        .then(({ data: row }) => {
+          if (!row) return;
+          setMeta((m) => ({
+            ...(m || {}),
+            status: row.status, publicado_em: row.publicado_em, publicado_por: row.publicado_por,
+            version: row.version, valor_total: row.valor_total, atualizado_em: row.atualizado_em,
+          }));
+        });
+    };
+    document.addEventListener('visibilitychange', refetch);
+    return () => document.removeEventListener('visibilitychange', refetch);
+  }, [editId]);
+
   const set = React.useCallback((path, value) => {
     setData((d) => setDeep(d, path, value));
   }, []);
@@ -891,9 +927,9 @@ function PropostaEditor({ setRoute, subsel }) {
               {data.masterId && <PEChip label="Master ID" value={data.masterId} mono/>}
               <PEChip label="Obra" value={data.obra.nome || data.obra.cidade || "—"}/>
               <PEChip label="Total" value={fmtValorProposta(data, eq)} mono destaque/>
-              <span className={"pe-top__status is-" + (meta?.status || "rascunho")}>
-                {PE_STATUS_LABEL[meta?.status] || "Rascunho"}
-              </span>
+              {(() => { const sv = statusVisual(meta); return (
+                <span className={"pe-top__status is-" + sv.cls}>{sv.label}</span>
+              ); })()}
               {meta?.publicado_em ? (
                 <span className="pe-top__publicado" title="Versão que o cliente lê e assina — editar depois não muda o que já foi publicado">
                   <Icon.check size={11}/> Publicado {window.PropostaStore ? window.PropostaStore.fmtDateTime(meta.publicado_em) : ""} · v{meta.version || 1}
