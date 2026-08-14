@@ -34,6 +34,7 @@
       irpjVendaPct: p.irpj_venda_pct, csllVendaPct: p.csll_venda_pct, irpjAdicionalPct: p.irpj_adicional_pct,
       impostosPagarServicosPct: p.impostos_pagar_servicos_pct, markUpPct: p.mark_up_padrao_pct,
       comissaoConsultoriaPct: p.comissao_consultoria_pct, comissaoVendedorPct: p.comissao_vendedor_pct, comissaoIndicacaoPct: p.comissao_indicacao_pct,
+      margemMinimaPct: p.margem_minima_pct,
     };
   }
 
@@ -199,8 +200,44 @@
     return { resultado, difal };
   }
 
+  /* ---------- Aprovação (issue #4) ----------
+     "Calcular" só grava o resultado — nada travava preço abaixo da margem
+     mínima nem campo obrigatório vazio, e a Proposta puxava a última
+     precificação encontrada (calculada ou não) sem revisão nenhuma. Aprovar
+     congela o snapshot que a Proposta vai usar (ver proposta-heranca.js,
+     que agora prioriza status 'aprovado'). */
+  function camposObrigatoriosFaltando(pz) {
+    const faltando = [];
+    if (!(Number(pz.vmle_usd) > 0)) faltando.push('VMLE (USD)');
+    if (!(Number(pz.tx_cambial) > 0)) faltando.push('Câmbio (R$/US$)');
+    if (!(pz.modelos || []).length) faltando.push('Unidades/modelos');
+    return faltando;
+  }
+
+  async function aprovar(id, { forcarAbaixoMinima } = {}) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const pz = await obter(id);
+    if (!pz.resultado) throw new Error('Calcule a precificação antes de aprovar.');
+    const faltando = camposObrigatoriosFaltando(pz);
+    if (faltando.length) throw new Error(`Campos obrigatórios sem valor: ${faltando.join(', ')}.`);
+    const margemMinima = Number((pz.parametros_fiscais_snapshot || {}).margem_minima_pct) || 0;
+    const margemFinal = Number((pz.resultado.precificacao || {}).margemFinalPct) || 0;
+    if (margemFinal < margemMinima && !forcarAbaixoMinima) {
+      const err = new Error(`Margem final (${(margemFinal * 100).toFixed(2)}%) abaixo da margem mínima (${(margemMinima * 100).toFixed(2)}%).`);
+      err.margemAbaixoMinima = true;
+      throw err;
+    }
+    const now = new Date().toISOString();
+    // status usa o enum já existente na tabela ('rascunho'|'calculado'|'finalizado') — 'finalizado' é o estado de aprovado.
+    const { error } = await c.from('precificacoes_elevador').update({
+      status: 'finalizado', aprovado_em: now, aprovado_por: (window.__VP_USER || {}).email || null, updated_at: now,
+    }).eq('id', id);
+    if (error) throw error;
+  }
+
   window.PrecificacaoElevadorStore = {
     listarParametrosFiscais, salvarParametrosFiscais,
     listarPendentes, criar, obter, salvar, calcularEsalvar,
+    camposObrigatoriosFaltando, aprovar,
   };
 }());

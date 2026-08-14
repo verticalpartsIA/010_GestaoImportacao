@@ -49,9 +49,13 @@
 
     /* Qual cotação vale? A que o Financeiro realmente precificou — é a que
        gerou o preço que vai na proposta. Sem precificação, cai na ordem de
-       maturidade do pipeline (aprovada > em análise > respondida > última). */
+       maturidade do pipeline (aprovada > em análise > respondida > última).
+       Entre as precificações do mesmo Nº de Cotação, prioriza a que foi
+       explicitamente aprovada (issue #4) — sem isso, a Proposta podia puxar
+       um rascunho de cálculo nunca revisado só por ser o mais recente. */
     const lista = cotacoes || [];
-    const precificacao = (precificacoes || [])[0] || null;
+    const listaPz = precificacoes || [];
+    const precificacao = listaPz.find((p) => p.status === 'finalizado') || listaPz[0] || null;
     const cotacao = (precificacao && lista.find((x) => x.id === precificacao.cotacao_fornecedor_id))
       || lista.find((x) => x.status === 'aprovada')
       || lista.find((x) => x.status === 'em_analise')
