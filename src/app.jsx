@@ -19,6 +19,8 @@ const ROUTE_TITLE = {
   "proposta-editor": "Editor de Proposta",
   engenharia: "Projetos de Engenharia",
   "ncm-catalogo": "Catálogo de Produtos",
+  "ncm-kanban": "Solicitações NCM",
+  "ncm-detail": "Detalhe da Solicitação NCM",
   "eng-projeto-elevadores": "Projeto de Elevadores",
   "eng-configurador": "Projeto de Equipamento",
   "desenho-tecnico": "Desenho Técnico ER | ES",
@@ -178,6 +180,8 @@ function App() {
       case "proposta-editor": return <PropostaEditor setRoute={setRoute} subsel={subsel}/>;
       case "engenharia": return <EngenhariaPage setRoute={setRoute}/>;
       case "ncm-catalogo": return <NcmCatalogoPage setRoute={setRoute}/>;
+      case "ncm-kanban": return <NcmKanbanPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "ncm-detail": return <NcmDetailPage product={subsel?.ncmProduct} setRoute={setRoute}/>;
       case "eng-projeto-elevadores": return <window.ProjetoElevadorPage setRoute={setRoute}/>;
       case "eng-configurador": return <ConfiguradorPage setRoute={setRoute}/>;
       case "desenho-tecnico": return <DesenhoTecnicoPage setRoute={setRoute}/>;

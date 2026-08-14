@@ -269,6 +269,17 @@ body[data-density="airy"] {
   position: relative;
   transition: color var(--dur-fast) var(--ease-out), background var(--dur-fast) var(--ease-out);
 }
+/* Itens de navegação são <button> semânticos (foco/teclado nativos);
+   reset dos defaults de button preservando o visual do antigo <div>. */
+button.nav-item {
+  width: 100%;
+  text-align: left;
+  background: transparent;
+  border: none;
+  border-left: 2px solid transparent;
+  font-family: inherit;
+}
+.nav-item:focus-visible { outline: 2px solid var(--vp-yellow); outline-offset: -2px; }
 .nav-item .nav-item__icon { margin-top: 1px; }
 .nav-item:hover { color: #fff; background: rgba(255,255,255,.04); }
 .nav-item.is-active {

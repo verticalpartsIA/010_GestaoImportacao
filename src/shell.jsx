@@ -119,14 +119,15 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
               {items.map((item) => {
                 const Active = React.createElement(Icon[item.icon] || Icon.bolt);
                 return (
-                  <div key={item.id}
+                  <button type="button" key={item.id}
                     className={"nav-item " + (route === item.id ? "is-active" : "")}
                     onClick={() => setRoute(item.id)}
+                    aria-current={route === item.id ? "page" : undefined}
                     data-tooltip={item.label}>
                     <span className="nav-item__icon">{Active}</span>
                     <span className="nav-item__label">{item.label}</span>
                     {item.badge ? <span className="nav-item__badge">{item.badge}</span> : null}
-                  </div>
+                  </button>
                 );
               })}
             </div>
@@ -173,6 +174,8 @@ const BREADCRUMB_MAP = {
   "contrato-instalador":         { module: "Jurídico", page: "Contrato Instalador", icon: "hardhat" },
   engenharia:    { module: "Engenharia", page: "Engenharia", icon: "ruler" },
   "ncm-catalogo": { module: "Engenharia", page: "Catálogo de Produtos", icon: "fileSearch" },
+  "ncm-kanban": { module: "Engenharia", page: "Solicitações NCM", icon: "fileSearch" },
+  "ncm-detail": { module: "Engenharia", page: "Detalhe da Solicitação NCM", icon: "fileSearch" },
   "eng-projeto-elevadores": { module: "Engenharia", page: "Projeto de Elevadores", icon: "grid" },
   "eng-configurador": { module: "Engenharia", page: "Projeto de Equipamento", icon: "grid" },
   "desenho-tecnico": { module: "Engenharia", page: "Desenho Técnico ER | ES", icon: "ruler" },
