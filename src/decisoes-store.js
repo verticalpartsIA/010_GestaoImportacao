@@ -186,11 +186,23 @@
     return { ok: true };
   }
 
+  /* Compra de varejo pro estoque (Almoxarifado) — não é equipamento de
+     venda, é insumo/peça. Exige aprovação do Chefe de Logística (Danilo).
+     Cria a decisão vinculada ao pedido (referencia_tabela/id) na hora do
+     pedido, não sob demanda como as outras — aqui o pedido É o gatilho. */
+  async function criarDecisaoCompraVarejo(pedidoId, contexto) {
+    return criarDecisao({
+      tipo: 'compra_varejo_logistica', papelRequerido: 'logistica_lider',
+      referenciaTabela: 'pedidos_compra_varejo', referenciaId: pedidoId, contexto,
+    });
+  }
+
   window.DecisoesStore = {
     resolverAprovadores, souAprovador,
     criarDecisao, criarDecisaoSeNaoExiste,
     listarPendentesParaMim, listarPorCotacao,
     aprovar, reprovar,
     podeEnviarProposta, podeContratarInstalador, podeMontadorEntrarObra,
+    criarDecisaoCompraVarejo,
   };
 }());
