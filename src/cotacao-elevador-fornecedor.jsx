@@ -129,12 +129,17 @@ function CotacaoElevadorFornecedorApp() {
   const [documentosEmbarque, setDocumentosEmbarque] = _cefUS('');
   const [observacoesGerais, setObservacoesGerais] = _cefUS('');
   const [itemVals, setItemVals] = _cefUS({});
+  const [anexos, setAnexos] = _cefUS([]);
+  const [uploadingAnexo, setUploadingAnexo] = _cefUS(false);
+  const [anexosFormulario, setAnexosFormulario] = _cefUS([]);
 
   _cefUE(() => {
     (async () => {
       if (!token || !store) { setLoading(false); setNotFound(true); return; }
       const rec = await store.getByToken(token);
       if (!rec || rec.status === 'rascunho') { setLoading(false); setNotFound(true); return; }
+      try { setAnexos(await store.listarAnexosResposta(rec.id)); } catch (e) { /* segue sem anexos se falhar */ }
+      try { setAnexosFormulario(await store.listarAnexosFormulario(rec.formulario_elevador_id)); } catch (e) { /* segue sem anexos se falhar */ }
       const unidades = (rec.dados_envio && rec.dados_envio.unidades) || [];
       const seed = {};
       unidades.forEach((u) => { seed[u.unidade_id] = { modelo_fornecedor: '', floors_stops_doors: '', preco_unitario: '', preco_total: '', confirmacao_tecnica: '', divergencias: {} }; });
@@ -175,6 +180,35 @@ function CotacaoElevadorFornecedorApp() {
   const unidades = (cot.dados_envio && cot.dados_envio.unidades) || [];
   const header = (cot.dados_envio && cot.dados_envio.header) || {};
   const readOnly = phase === 'done';
+
+  const onAnexoFiles = async (files) => {
+    if (!files || !files.length || !cot) return;
+    setUploadingAnexo(true);
+    for (const file of Array.from(files)) {
+      try {
+        const novo = await store.anexarArquivoResposta(cot.id, file);
+        setAnexos((prev) => [novo, ...prev]);
+      } catch (e) {
+        alert('Falha no upload de ' + file.name + ': ' + (e.message || e));
+      }
+    }
+    setUploadingAnexo(false);
+  };
+
+  const removerAnexo = async (anexo) => {
+    try {
+      await store.removerAnexoResposta(anexo);
+      setAnexos((prev) => prev.filter((a) => a.id !== anexo.id));
+    } catch (e) {
+      alert('Falha ao remover: ' + (e.message || e));
+    }
+  };
+
+  const abrirAnexoFormulario = async (a) => {
+    const url = await store.urlAssinadaAnexoFormulario(a.path);
+    if (url) window.open(url, '_blank');
+    else alert('Não foi possível abrir o arquivo.');
+  };
 
   const enviar = async () => {
     setPhase('sending');
@@ -248,6 +282,23 @@ function CotacaoElevadorFornecedorApp() {
           ['Voltagem — Elevador', 'Main Power', header.tensao_principal],
           ['Voltagem — Iluminação', 'Lighting Power', header.tensao_iluminacao],
         ]}/>
+        {anexosFormulario.length > 0 && (
+          <div style={{ marginTop: 10 }}>
+            <span className="co-spec-k" style={{ display: 'block', marginBottom: 4 }}>
+              Anexos do projeto (VerticalParts) · Project attachments
+            </span>
+            <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none' }}>
+              {anexosFormulario.map((a) => (
+                <li key={a.id} style={{ fontSize: 13, padding: '3px 0' }}>
+                  📎 <button type="button" onClick={() => abrirAnexoFormulario(a)}
+                    style={{ border: 'none', background: 'transparent', color: 'var(--vp-info, #1a73e8)', cursor: 'pointer', padding: 0, fontSize: 13, textDecoration: 'underline' }}>
+                    {a.nome_arquivo}
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
       </div>
 
       {unidades.map((u, i) => (
@@ -303,6 +354,31 @@ function CotacaoElevadorFornecedorApp() {
           <span>Observações gerais · General remarks</span>
           <textarea className="co-inp" rows={2} value={observacoesGerais} onChange={(e) => setObservacoesGerais(e.target.value)} disabled={readOnly}/>
         </label>
+
+        <div className="co-f" style={{ marginTop: 14 }}>
+          <span>Anexos — PDF, DWG, imagens · Attachments — PDF, DWG, images</span>
+          {!readOnly && (
+            <label style={{ display: 'inline-block', marginTop: 6, padding: '8px 14px', border: '1px dashed #999', cursor: 'pointer', fontSize: 13 }}>
+              {uploadingAnexo ? 'Enviando… · Uploading…' : '+ Anexar arquivo · Attach file'}
+              <input type="file" multiple accept=".pdf,.dwg,.dxf,image/*" style={{ display: 'none' }}
+                disabled={uploadingAnexo} onChange={(e) => { onAnexoFiles(e.target.files); e.target.value = ''; }}/>
+            </label>
+          )}
+          {anexos.length > 0 && (
+            <ul style={{ marginTop: 8, paddingLeft: 0, listStyle: 'none' }}>
+              {anexos.map((a) => (
+                <li key={a.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '4px 0' }}>
+                  📎 {a.nome_arquivo}
+                  <span style={{ color: '#888' }}>{a.tamanho_bytes ? `(${Math.round(a.tamanho_bytes / 1024)} KB)` : ''}</span>
+                  {!readOnly && (
+                    <button type="button" onClick={() => removerAnexo(a)}
+                      style={{ border: 'none', background: 'transparent', color: '#c00', cursor: 'pointer', fontSize: 12 }}>remover</button>
+                  )}
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
       </div>
 
       {!readOnly && (

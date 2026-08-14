@@ -17,8 +17,8 @@
   <link rel="stylesheet" href="styles/proposta-editor.css?v=10">
   <link rel="stylesheet" href="styles/ncm.css">
   <link rel="stylesheet" href="styles/desenho-tecnico.css?v=1">
-  <link rel="stylesheet" href="styles/contrato-instalador.css?v=1">
-  <link rel="stylesheet" href="styles/contrato-venda.css?v=1">
+  <link rel="stylesheet" href="styles/contrato-instalador.css?v=4">
+  <link rel="stylesheet" href="styles/contrato-venda.css?v=2">
   <link rel="stylesheet" href="styles/ficha-tecnica.css?v=6">
   <link rel="stylesheet" href="styles/vp-copiloto.css?v=1">
   <link rel="stylesheet" href="styles/pedido-fornecedor.css?v=3">
@@ -72,14 +72,24 @@
   <!-- Registro central de atividades (auditoria global) -->
   <script src="src/vp-log.js?v=2"></script>
 
+  <!-- Gatilhos & Prazo — motor que nasce/fecha nós automaticamente a partir
+       dos eventos de eventos-fluxo-store.js (carrega ANTES dele) -->
+  <script src="src/gatilhos-engine.js?v=4"></script>
+
+  <!-- Trilha genérica do fluxo operacional (Formulário → Fornecedor → Proposta → Cliente) -->
+  <script src="src/eventos-fluxo-store.js?v=4"></script>
+
+  <!-- Aval Financeiro — gate entre Proposta aprovada/Contrato e Contrato assinado/Compra -->
+  <script src="src/aval-financeiro-store.js?v=3"></script>
+
   <!-- Tweaks panel framework -->
   <script type="text/babel" src="src/tweaks-panel.jsx?v=3"></script>
 
   <!-- Components in dependency order -->
   <script type="text/babel" src="src/primitives.jsx?v=4"></script>
-  <script type="text/babel" src="src/toast.jsx?v=4"></script>
-  <script type="text/babel" src="src/shell.jsx?v=22"></script>
-  <script type="text/babel" src="src/dashboard.jsx?v=9"></script>
+  <script type="text/babel" src="src/toast.jsx?v=5"></script>
+  <script type="text/babel" src="src/shell.jsx?v=26"></script>
+  <script type="text/babel" src="src/dashboard.jsx?v=10"></script>
   <script type="text/babel" src="src/comercial.jsx?v=14"></script>
 
   <!-- Padrão universal de codificação de IDs (Master ID) — Fase 1 -->
@@ -87,29 +97,30 @@
 
   <!-- Formulário de Coleta de Dados — Elevadores (Comercial) — ISSUE #66 -->
   <script src="src/enderecos-api.js?v=1"></script>
-  <script src="src/formulario-elevador-store.js?v=8"></script>
-  <script src="src/cotacao-elevador-fornecedor-store.js?v=8"></script>
-  <script type="text/babel" src="src/formulario-elevador.jsx?v=18"></script>
+  <script src="src/formulario-elevador-store.js?v=14"></script>
+  <script src="src/cotacao-elevador-fornecedor-store.js?v=13"></script>
+  <script type="text/babel" src="src/formulario-elevador.jsx?v=24"></script>
 
   <!-- Controle de Cotações — histórico + Formulário de Elevadores — ISSUE #79 -->
-  <script type="text/babel" src="src/controle-cotacoes.jsx?v=2"></script>
+  <script type="text/babel" src="src/controle-cotacoes.jsx?v=3"></script>
 
   <!-- Cotações a Fornecedor — substitui a antiga "Cotações China" (mock) -->
-  <script type="text/babel" src="src/cotacoes-fornecedor.jsx?v=3"></script>
+  <script src="src/tratativas-store.js?v=1"></script>
+  <script type="text/babel" src="src/cotacoes-fornecedor.jsx?v=5"></script>
 
   <!-- Precificação de Elevador (ADM/Financeiro) + DIFAL -->
   <script src="src/difal-engine.js?v=1"></script>
   <script src="src/precificacao-elevador-engine.js?v=1"></script>
   <script src="src/precificacao-elevador-store.js?v=3"></script>
-  <script type="text/babel" src="src/precificacao-elevador.jsx?v=6"></script>
+  <script type="text/babel" src="src/precificacao-elevador.jsx?v=8"></script>
 
-  <script type="text/babel" src="src/precificacao.jsx?v=12"></script>
+  <script type="text/babel" src="src/precificacao.jsx?v=14"></script>
   <script type="text/babel" src="src/proposta-form.jsx?v=7"></script>
-  <script type="text/babel" src="src/proposta-preview.jsx?v=10"></script>
-  <script src="src/proposta-store.js?v=4"></script>
-  <script src="src/proposta-heranca.js?v=2"></script>
+  <script type="text/babel" src="src/proposta-preview.jsx?v=11"></script>
+  <script src="src/proposta-store.js?v=5"></script>
+  <script src="src/proposta-heranca.js?v=3"></script>
   <script src="src/proposta-imagens.js?v=1"></script>
-  <script type="text/babel" src="src/proposta-editor.jsx?v=21"></script>
+  <script type="text/babel" src="src/proposta-editor.jsx?v=22"></script>
   <script type="text/babel" src="src/ncm.jsx?v=5"></script>
 
   <!-- Funil de pré-venda por setores (workflow + histórico) — antes do Catálogo -->
@@ -122,7 +133,8 @@
   <script type="text/babel" src="src/ncm-catalogo.jsx?v=20"></script>
   <script type="text/babel" src="src/operacoes.jsx?v=11"></script>
   <script type="text/babel" src="src/logistica.jsx?v=14"></script>
-  <script type="text/babel" src="src/financeiro.jsx?v=10"></script>
+  <script type="text/babel" src="src/financeiro.jsx?v=14"></script>
+  <script type="text/babel" src="src/aval-financeiro.jsx?v=1"></script>
 
   <!-- Dossier da Obra (entidade central) — ISSUE #2 -->
   <script src="src/dossier-store.js?v=2"></script>
@@ -144,8 +156,12 @@
   <!-- Jurídico · Editor de Contrato do Cliente -->
   <script type="text/babel" src="src/contrato-editor.jsx?v=5"></script>
 
-  <!-- Engenharia · Configurador de Equipamentos -->
-  <script type="text/babel" src="src/engenharia-config.jsx?v=2"></script>
+  <!-- Engenharia · Configurador de Equipamentos (escada/esteira rolante) -->
+  <script type="text/babel" src="src/engenharia-config.jsx?v=3"></script>
+
+  <!-- Engenharia · Projeto de Elevadores (poço/cabine/porta, correlacionado por Nº da Cotação) -->
+  <script src="src/projeto-elevador-store.js?v=2"></script>
+  <script type="text/babel" src="src/engenharia-elevador.jsx?v=1"></script>
 
   <!-- Engenharia · Desenho Técnico ER|ES (porte Claude Designer) -->
   <script type="text/babel" src="src/desenho-tecnico.jsx?v=1"></script>
@@ -161,10 +177,10 @@
   <script type="text/babel" src="src/contrato-instalador.jsx?v=2"></script>
 
   <!-- Jurídico · Contrato Venda de Equipamentos (cliente final) -->
-  <script src="src/contrato-venda-engine.js?v=3"></script>
-  <script src="src/contrato-venda-store.js?v=6"></script>
-  <script type="text/babel" src="src/contrato-venda-preview.jsx?v=1"></script>
-  <script type="text/babel" src="src/contrato-venda.jsx?v=3"></script>
+  <script src="src/contrato-venda-engine.js?v=4"></script>
+  <script src="src/contrato-venda-store.js?v=7"></script>
+  <script type="text/babel" src="src/contrato-venda-preview.jsx?v=2"></script>
+  <script type="text/babel" src="src/contrato-venda.jsx?v=5"></script>
 
   <!-- Engenharia · Ficha Técnica (gerador universal) -->
   <script src="src/ficha-tecnica-engine.js?v=9"></script>
@@ -186,6 +202,6 @@
   <script type="text/babel" src="src/vp-copiloto.jsx?v=1"></script>
 
   <!-- Main app last -->
-  <script type="text/babel" src="src/app.jsx?v=27"></script>
+  <script type="text/babel" src="src/app.jsx?v=32"></script>
 </body>
 </html>

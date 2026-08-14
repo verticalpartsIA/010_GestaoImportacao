@@ -128,25 +128,31 @@ function feFmtBytes(n) {
   return `${(n / (1024 * 1024)).toFixed(1)} MB`;
 }
 
-function FEAnexos({ formularioId, publicMode }) {
+function FEAnexos({ formularioId, categoria, titulo, descricao, podeAnexar, garantirSalvo }) {
   const [anexos, setAnexos] = React.useState(null);
   const [enviando, setEnviando] = React.useState(false);
   const fileRef = React.useRef(null);
 
   const recarregar = React.useCallback(() => {
-    if (!formularioId) return;
-    window.FormularioElevadorStore.listarAnexos(formularioId).then(setAnexos).catch(() => setAnexos([]));
-  }, [formularioId]);
+    if (!formularioId) { setAnexos([]); return; }
+    window.FormularioElevadorStore.listarAnexos(formularioId, categoria).then(setAnexos).catch(() => setAnexos([]));
+  }, [formularioId, categoria]);
   React.useEffect(() => { recarregar(); }, [recarregar]);
 
+  /* Formulário novo ainda não tem id (só nasce no banco no 1º save) — sem
+     isso, não dava pra anexar nada até salvar manualmente primeiro. Salva
+     o rascunho na hora, por trás, na primeira tentativa de anexar. */
   const onEscolherArquivo = async (e) => {
     const file = e.target.files && e.target.files[0];
     e.target.value = '';
     if (!file) return;
     setEnviando(true);
     try {
-      await window.FormularioElevadorStore.anexarArquivo(formularioId, file);
-      recarregar();
+      let fid = formularioId;
+      if (!fid && garantirSalvo) fid = await garantirSalvo();
+      if (!fid) { window.toast?.('Preencha os campos obrigatórios do formulário antes de anexar.', 'warning'); return; }
+      const novo = await window.FormularioElevadorStore.anexarArquivo(fid, file, categoria);
+      setAnexos((prev) => [novo, ...(prev || [])]);
       window.toast?.('Arquivo anexado.', 'success');
     } catch (err) {
       window.toast?.('Erro ao anexar: ' + err.message, 'error');
@@ -171,14 +177,10 @@ function FEAnexos({ formularioId, publicMode }) {
     }
   };
 
-  if (!formularioId) return null;
-
   return (
-    <Card title="Projeto Civil da Obra">
-      <p className="small muted" style={{ marginTop: -6, marginBottom: 10 }}>
-        Anexe a planta, o memorial descritivo ou o projeto civil (PDF, DWG, imagem) — a equipe usa esses dados para extrair as medidas do elevador.
-      </p>
-      {publicMode && (
+    <Card title={titulo}>
+      <p className="small muted" style={{ marginTop: -6, marginBottom: 10 }}>{descricao}</p>
+      {podeAnexar && (
         <div style={{ marginBottom: 10 }}>
           <input ref={fileRef} type="file" style={{ display: 'none' }} accept=".pdf,.dwg,.dxf,image/*" onChange={onEscolherArquivo}/>
           <Button variant="outline" icon="paperclip" disabled={enviando} onClick={() => fileRef.current && fileRef.current.click()}>
@@ -374,11 +376,71 @@ function FECotacaoDivergencias({ itens }) {
   );
 }
 
+function FECotacaoAnexosResposta({ cotacaoId }) {
+  const store = window.CotacaoElevadorFornecedorStore;
+  const [anexos, setAnexos] = React.useState([]);
+  React.useEffect(() => {
+    if (!store || !cotacaoId) return;
+    store.listarAnexosResposta(cotacaoId).then(setAnexos).catch(() => setAnexos([]));
+  }, [cotacaoId]);
+  const abrir = async (a) => {
+    const url = await store.urlAssinadaAnexoResposta(a.path);
+    if (url) window.open(url, '_blank');
+    else window.toast?.('Não foi possível gerar o link do arquivo.', 'error');
+  };
+  if (!anexos.length) return null;
+  return (
+    <div style={{ marginTop: 12 }}>
+      <span className="up-eyebrow muted">Anexos do fornecedor (PDF/DWG/imagens)</span>
+      <div className="stack" style={{ gap: 4, marginTop: 4 }}>
+        {anexos.map((a) => (
+          <div key={a.id} className="row gap-2" style={{ fontSize: 13 }}>
+            <Icon.fileText size={14}/>
+            <button className="link-btn" style={{ border: 'none', background: 'transparent', color: 'var(--vp-info)', cursor: 'pointer', padding: 0, fontSize: 13 }}
+              onClick={() => abrir(a)}>{a.nome_arquivo}</button>
+            <span className="muted small">{a.tamanho_bytes ? `(${Math.round(a.tamanho_bytes / 1024)} KB)` : ''}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+/* Tabela de leitura da spec técnica de uma Unidade, comparando o que a
+   VerticalParts pediu (dados_envio, congelado no momento do envio) com o
+   que o fornecedor propôs (respostas.itens[].divergencias) — mesmas 3
+   colunas do formulário público, só que já respondido e read-only. Sem
+   isso o "Ver resposta" só mostrava os campos comerciais + o resumo do
+   equipamento, nunca a especificação técnica linha a linha. */
+function FECotacaoSpecCompletaTable({ linhas, divergencias }) {
+  const preenchidas = linhas.filter(([, , , v]) => v !== '' && v !== null && v !== undefined);
+  if (!preenchidas.length) return null;
+  return (
+    <table className="t" style={{ marginTop: 4 }}>
+      <thead><tr><th>Campo</th><th>VerticalParts pediu</th><th>Fornecedor propôs</th></tr></thead>
+      <tbody>
+        {preenchidas.map(([key, pt, en, v]) => {
+          const div = (divergencias || {})[key];
+          return (
+            <tr key={key}>
+              <td className="small">{pt} / {en}</td>
+              <td className="small">{String(v)}</td>
+              <td className="small">{div ? <b>{div}</b> : <span className="muted">Confirmado</span>}</td>
+            </tr>
+          );
+        })}
+      </tbody>
+    </table>
+  );
+}
+
 function FECotacaoRespostaModal({ cot, onClose }) {
+  const store = window.CotacaoElevadorFornecedorStore;
   const r = cot.respostas || {};
   const itens = r.itens || [];
+  const unidadesEnviadas = (cot.dados_envio && cot.dados_envio.unidades) || [];
   return (
-    <Modal title={`Resposta de ${cot.fornecedor} — ${cot.numero_documento}`} onClose={onClose} width={760}
+    <Modal title={`Resposta de ${cot.fornecedor} — ${cot.numero_documento}`} onClose={onClose} width={880}
       footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
       <div className="grid-3" style={{ gap: 12 }}>
         <FEField label="Moeda"><b>{r.moeda || '—'}</b></FEField>
@@ -391,35 +453,51 @@ function FECotacaoRespostaModal({ cot, onClose }) {
         <FEField label="Condições de pagamento" span="2"><b>{r.condicoes_pagamento || '—'}</b></FEField>
         <FEField label="Documentos no embarque" span="3"><b>{r.documentos_embarque || '—'}</b></FEField>
       </div>
-      <div className="table-wrap" style={{ marginTop: 12 }}>
-        <table className="t">
-          <thead><tr><th>Unidade</th><th>Modelo (fornecedor)</th><th>Andares/Paradas/Portas</th><th>Preço unit.</th><th>Preço total</th><th>Confirmação técnica</th></tr></thead>
-          <tbody>
-            {itens.map((it, i) => (
-              <tr key={i}>
-                <td className="mono small">{it.unidade_identificador || it.unidade_id}</td>
-                <td>{it.modelo_fornecedor || '—'}</td>
-                <td>{it.floors_stops_doors || '—'}</td>
-                <td><b>{it.preco_unitario || '—'}</b></td>
-                <td><b>{it.preco_total || '—'}</b></td>
-                <td className="small muted">{it.confirmacao_tecnica || ''}</td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
       <FECotacaoDivergencias itens={itens}/>
+
+      {unidadesEnviadas.map((u, i) => {
+        const item = itens.find((it) => it.unidade_id === u.unidade_id) || {};
+        const secoes = store ? store.unitSpecSecoes(u, cot.tipo_formulario) : [];
+        return (
+          <div key={u.unidade_id || i} style={{ marginTop: 18, paddingTop: 14, borderTop: '1px solid var(--border)' }}>
+            <b style={{ fontSize: 13 }}>Unidade {u.identificador || i + 1}</b>
+            {secoes.map((s) => (
+              <div key={s.titulo} style={{ marginTop: 8 }}>
+                <span className="up-eyebrow muted">{s.titulo}</span>
+                <FECotacaoSpecCompletaTable linhas={s.linhas} divergencias={item.divergencias}/>
+              </div>
+            ))}
+            <div style={{ marginTop: 10 }}>
+              <span className="up-eyebrow muted">Resposta comercial do fornecedor</span>
+              <div className="grid-2" style={{ gap: 8, marginTop: 4 }}>
+                <FEField label="Modelo do fornecedor"><b>{item.modelo_fornecedor || '—'}</b></FEField>
+                <FEField label="Andares/Paradas/Portas confirmados"><b>{item.floors_stops_doors || '—'}</b></FEField>
+                <FEField label="Preço unitário"><b>{item.preco_unitario || '—'}</b></FEField>
+                <FEField label={`Preço total (${u.quantidade || 1} un.)`}><b>{item.preco_total || '—'}</b></FEField>
+              </div>
+              {item.confirmacao_tecnica && (
+                <div style={{ marginTop: 6 }}>
+                  <span className="up-eyebrow muted">Confirmação técnica</span>
+                  <p className="small" style={{ marginTop: 2 }}>{item.confirmacao_tecnica}</p>
+                </div>
+              )}
+            </div>
+          </div>
+        );
+      })}
+
       {r.observacoes_gerais && (
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 16 }}>
           <span className="up-eyebrow muted">Observações gerais</span>
           <p className="small" style={{ marginTop: 4 }}>{r.observacoes_gerais}</p>
         </div>
       )}
+      <FECotacaoAnexosResposta cotacaoId={cot.id}/>
     </Modal>
   );
 }
 
-function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, enviando }) {
+function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, onPedirRevisao, enviando }) {
   const store = window.CotacaoElevadorFornecedorStore;
   const suportado = grupo.fornecedor === 'Glarie';
   const [verResp, setVerResp] = React.useState(false);
@@ -446,7 +524,10 @@ function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, enviando }) {
 
       {suportado && cot?.status === 'respondido' ? (
         <div style={{ marginTop: 10 }}>
-          <Button variant="outline" size="sm" icon="fileText" onClick={() => setVerResp(true)}>Ver resposta do fornecedor</Button>
+          <div className="row gap-2">
+            <Button variant="outline" size="sm" icon="fileText" onClick={() => setVerResp(true)}>Ver resposta do fornecedor</Button>
+            <Button variant="ghost" size="sm" icon="refresh" disabled={busy} onClick={() => onPedirRevisao(grupo)}>Pedir nova revisão</Button>
+          </div>
           {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}
         </div>
       ) : suportado && (
@@ -488,6 +569,28 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
 
   const cotacaoDoGrupo = (g) => cotacoes.find((c) => c.fornecedor === g.fornecedor && c.tipo_formulario === g.tipoFormulario);
 
+  /* Pedir revisão = documento novo inteiro (mais simples por enquanto, ver
+     issue de revisão): cria uma nova cotação (revisão auto-incrementada por
+     store.gerar, ex. VPEL-EL0902 -> -A -> -B) pro MESMO fornecedor+tipo — a
+     resposta anterior não é apagada, continua acessível em Cotações a
+     Fornecedor. Depois de criada, cotacaoDoGrupo() já pega a mais recente
+     (listarPorFormulario ordena por created_at desc), então o card volta
+     sozinho pro estado "aguardando envio" com os campos de contato prontos. */
+  const pedirRevisao = async (grupo) => {
+    const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
+    if (!window.confirm(`Isso cria um novo documento de cotação (revisão) para ${grupo.fornecedor}, com um novo link. A resposta anterior continua salva e pode ser vista em Cotações a Fornecedor. Deseja continuar?`)) return;
+    setEnviando(key);
+    try {
+      await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, 'elevador');
+      await reload();
+      window.toast?.('Nova revisão criada — preencha o contato e envie.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao criar revisão: ' + e.message, 'error');
+    } finally {
+      setEnviando(null);
+    }
+  };
+
   const enviar = async (grupo, canal, recipient) => {
     const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
     setEnviando(key);
@@ -516,7 +619,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
       footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
       {grupos.length === 0 && <p className="small muted">Salve o formulário e defina o Fornecedor em pelo menos uma Unidade para enviar a cotação.</p>}
       {grupos.map((g) => (
-        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}`} grupo={g} cot={cotacaoDoGrupo(g)} onEnviar={enviar} enviando={enviando}/>
+        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}`} grupo={g} cot={cotacaoDoGrupo(g)} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando}/>
       ))}
     </Modal>
   );
@@ -584,7 +687,7 @@ const FE_FINALIDADE_COMPRA = [
 
 const FE_HEADER_KEYS = [
   'tipo_pessoa', 'razao_social', 'cnpj', 'cpf', 'inscricao_estadual', 'contribuinte_icms', 'finalidade_compra',
-  'endereco', 'endereco_logradouro', 'endereco_complemento', 'endereco_bairro', 'endereco_cep', 'endereco_cidade', 'endereco_estado',
+  'endereco_logradouro', 'endereco_complemento', 'endereco_bairro', 'endereco_cep', 'endereco_cidade', 'endereco_estado',
   'telefone', 'email',
   'local_obra_cidade', 'local_obra_estado', 'endereco_obra_diferente',
   'endereco_obra', 'endereco_obra_logradouro', 'endereco_obra_complemento', 'endereco_obra_bairro', 'endereco_obra_cep', 'endereco_obra_cidade', 'endereco_obra_estado',
@@ -705,6 +808,14 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
      não do estado `id`, que só reflete o setId em um próximo render (issue
      #90: gerarLink chamava gerarLinkPublico(id) com o id ainda stale). */
   const salvarTudo = async (novoStatus) => {
+    // Mesmo um rascunho precisa do nome — `clientes.razao_social` é NOT NULL
+    // no banco, então salvar sem isso derrubava com um 400 silencioso (sem
+    // toast nenhum), travando em "Cotação Nº — (gerado ao salvar)" pra
+    // sempre. O resto de `validar()` continua opcional pra rascunho.
+    if (!header.razao_social?.trim()) {
+      window.toast?.('Preencha o Nome/Razão Social do cliente antes de salvar.', 'warning');
+      return null;
+    }
     const erro = validar();
     if (novoStatus === 'enviado' && erro) { window.toast?.(erro, 'warning'); return null; }
     setSaving(true);
@@ -763,6 +874,11 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
     setLinkPublico(url);
     setShowLinkCliente(true);
   };
+
+  /* Mesmo idioma de gerarLink acima — usado pelos anexos (FEAnexos) pra
+     salvar o rascunho na hora, sem exigir clique manual em "Salvar
+     Rascunho" antes de conseguir anexar um arquivo. */
+  const garantirSalvo = async () => (id ? id : await salvarTudo(null));
 
   if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
@@ -857,11 +973,19 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
         </div>
       </Card>
 
-      {id && (
-        <div style={{ marginTop: 16 }}>
-          <FEAnexos formularioId={id} publicMode={publicMode}/>
-        </div>
-      )}
+      {/* Sem `id &&`: um formulário novo (ainda não salvo) também mostra
+          estas seções — FEAnexos salva o rascunho na hora, por trás, se o
+          vendedor tentar anexar antes do 1º "Salvar Rascunho" manual. */}
+      <div className="stack" style={{ gap: 16, marginTop: 16 }}>
+        <FEAnexos formularioId={id} categoria="projeto_civil" titulo="Projeto Civil da Obra"
+          descricao="Anexe a planta, o memorial descritivo ou o projeto civil (PDF, DWG, imagem) — a equipe usa esses dados para extrair as medidas do elevador."
+          podeAnexar={publicMode} garantirSalvo={garantirSalvo}/>
+        {!publicMode && (
+          <FEAnexos formularioId={id} categoria="fornecedor" titulo="Anexos para o Fornecedor"
+            descricao="PDF, DWG ou fotos que devem ir junto com a cotação técnica ao fornecedor (ex.: planta, foto do local) — aparecem no link público que o fornecedor recebe."
+            podeAnexar={true} garantirSalvo={garantirSalvo}/>
+        )}
+      </div>
 
       {/* fieldset disabled trava toda edição de unidades (campos, select, +/-
           adicionar/remover) enquanto salvarTudo está em voo — sem isso, dava

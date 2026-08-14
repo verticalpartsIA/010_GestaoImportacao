@@ -1,5 +1,5 @@
 /* ============================================================
-   financeiro.jsx — Gatilhos & Prazo Reverso, Comissões,
+   financeiro.jsx — Gatilhos & Prazo, Comissões,
                     Notificações, Configurações
    ============================================================ */
 
@@ -65,41 +65,91 @@ function ModalNovoGatilho({ onClose, onSaved }) {
   );
 }
 
-function FinanceiroPage() {
+function FinanceiroPage({ setRoute, setSubsel }) {
   const [gatilhos, setGatilhos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [showGatilho, setShowGatilho] = React.useState(false);
+  const [confirmarSinalDe, setConfirmarSinalDe] = React.useState(null);
+  const [confirmarAvalDe, setConfirmarAvalDe] = React.useState(null);
+  const [alertas, setAlertas] = React.useState([]);
 
-  const reloadGatilhos = () => {
-    setLoading(true);
-    window.__VP_SB.sb.from('gatilhos').select('*').order('due_date')
-      .then(({ data }) => { setGatilhos(data || []); setLoading(false); });
+  const fecharLembrete = async (id) => {
+    if (window.GatilhosEngine) await window.GatilhosEngine.fecharLembrete(id);
+    reloadGatilhos();
   };
-  React.useEffect(() => { reloadGatilhos(); }, []);
+
+  /* Clique na linha do Gatilho leva pro objeto real (Financeiro vê
+     "Fornecedor respondeu" → cai na Precificação; Vendedor vê
+     "Precificado" → cai na Proposta). Nós sem rota ou sem resolver
+     definido (ver gatilhos-engine.js) não são clicáveis. */
+  const abrirGatilho = async (g) => {
+    if (!window.GatilhosEngine) return;
+    const alvo = await window.GatilhosEngine.navegarPara(g);
+    if (!alvo) return;
+    if (alvo.subsel !== null) setSubsel?.(alvo.subsel);
+    setRoute?.(alvo.rota);
+  };
+
+  const reloadGatilhos = async () => {
+    setLoading(true);
+    const { data } = await window.__VP_SB.sb.from('gatilhos').select('*').order('numero_cotacao').order('nascido_em');
+    let rows = data || [];
+    /* Sem cron neste projeto — verifica lembretes/revisão de prazo toda vez
+       que a tela é aberta (ver instrucaocompra.md). */
+    if (window.GatilhosEngine) {
+      const mudou = await window.GatilhosEngine.verificarPrazos(rows);
+      if (mudou) {
+        const { data: data2 } = await window.__VP_SB.sb.from('gatilhos').select('*').order('numero_cotacao').order('nascido_em');
+        rows = data2 || rows;
+      }
+    }
+    setGatilhos(rows);
+    setLoading(false);
+  };
+  const reloadAlertas = () => {
+    window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false })
+      .then(({ data }) => setAlertas((data || []).map(a => ({ ...a, time: window.__VP_SB.timeAgo(a.created_at) }))));
+  };
+  React.useEffect(() => { reloadGatilhos(); reloadAlertas(); }, []);
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
-  const urgentes = gatilhos.filter(g => (g.days_left ?? g.daysLeft ?? 99) <= 2);
+  /* Cadeia automática (nasce/fecha sozinha via GatilhosEngine, correlacionada
+     por Nº da Cotação) separada dos gatilhos financeiros avulsos, cadastrados
+     manualmente (ex.: marcos de pagamento sem Nº da Cotação associado). */
+  const automaticos = gatilhos.filter(g => g.origem === 'automatico');
+  const manuais = gatilhos.filter(g => g.origem !== 'automatico');
+  const cadeiasPorCotacao = automaticos.reduce((acc, g) => {
+    (acc[g.numero_cotacao] = acc[g.numero_cotacao] || []).push(g);
+    return acc;
+  }, {});
+
+  const urgentes = manuais.filter(g => (g.days_left ?? g.daysLeft ?? 99) <= 2);
+  const routeByModule = (m) =>
+    m === "Importação"  ? "importacao"  :
+    m === "Jurídico"    ? "juridico"    :
+    m === "Financeiro"  ? "financeiro"  :
+    m === "Engenharia"  ? "engenharia"  : "cotacoes-fornecedor";
 
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Prazo Reverso</div>
-          <h1 className="page-head__title">Gatilhos & Prazo Reverso</h1>
-          <p className="page-head__sub">Pagamentos disparados por marcos contratuais. Cálculo de prazo reverso a partir da data de instalação.</p>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Gatilhos</div>
+          <h1 className="page-head__title">Gatilhos & Prazo</h1>
+          <p className="page-head__sub">Cada gatilho nasce automaticamente ao concluir a etapa anterior, correlacionado pelo Nº da Cotação.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="download" onClick={() => window.csvDownload(gatilhos.map(g => ({ projeto:g.projeto||g.project_id, building:g.building, trigger:g.trigger||g.trigger_name, valor:g.value, vencimento:g.due_date, dias_restantes:g.days_left, status:g.status })), 'gatilhos-fluxo.csv')}>Exportar fluxo</Button>
+          <Button variant="outline" icon="download" onClick={() => window.csvDownload(manuais.map(g => ({ projeto:g.projeto||g.project_id, building:g.building, trigger:g.trigger||g.trigger_name, valor:g.value, vencimento:g.due_date, dias_restantes:g.days_left, status:g.status })), 'gatilhos-fluxo.csv')}>Exportar fluxo</Button>
           <Button variant="primary" icon="plus" onClick={() => setShowGatilho(true)}>Novo gatilho</Button>
         </div>
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="A receber 30d" value="—" sub="contratos" delta="—" deltaDir="up" icon="dollar"/>
-        <KPI label="Gatilhos próx. 7d" value={gatilhos.filter(g => (g.days_left ?? g.daysLeft ?? 99) <= 7 && (g.days_left ?? g.daysLeft ?? 99) > 0).length} sub="atenção" delta="—" deltaDir="up" icon="zap"/>
-        <KPI label="Em atraso" value={gatilhos.filter(g => (g.days_left ?? g.daysLeft ?? 0) < 0).length} sub="ação urgente" delta="—" deltaDir="down" icon="warning"/>
-        <KPI label="Recebido (mês)" value="—" sub="—" delta="—" deltaDir="up" icon="trending"/>
+        <KPI label="Cotações em andamento" value={Object.keys(cadeiasPorCotacao).length} sub="cadeias ativas" delta="—" deltaDir="up" icon="zap"/>
+        <KPI label="Ação do Financeiro pendente" value={automaticos.filter(g => ['AGUARDA_BOLETO', 'AVAL_PAGAMENTO'].includes(g.evento_key) && !g.concluido_em).length} sub="boleto ou aval de pagamento" delta="—" deltaDir="up" icon="dollar"/>
+        <KPI label="Gatilhos manuais próx. 7d" value={manuais.filter(g => (g.days_left ?? g.daysLeft ?? 99) <= 7 && (g.days_left ?? g.daysLeft ?? 99) > 0).length} sub="atenção" delta="—" deltaDir="up" icon="clock"/>
+        <KPI label="Manuais em atraso" value={manuais.filter(g => (g.days_left ?? g.daysLeft ?? 0) < 0).length} sub="ação urgente" delta="—" deltaDir="down" icon="warning"/>
       </div>
 
       {urgentes.length > 0 && (
@@ -113,20 +163,272 @@ function FinanceiroPage() {
         </div>
       )}
 
-      <Card title="Gatilhos Ativos" sub={`${gatilhos.length} projetos · prazo reverso calculado a partir da instalação`}>
+      <Card title="Central de Alertas" sub="ações pendentes que requerem sua atenção" style={{ marginBottom: 20 }}
+        action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute?.("notificacoes")}>Ver tudo</Button>}>
+        <div className="stack">
+          {alertas.length === 0 && (
+            <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
+              Nenhum alerta pendente.
+            </div>
+          )}
+          {alertas.map((a) => (
+            <AlertRow key={a.id} alert={a} onClick={() => setRoute?.(routeByModule(a.module))}/>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Cadeia de Gatilhos por Cotação" sub={`${Object.keys(cadeiasPorCotacao).length} cotações · Formulário → Compra liberada`} style={{ marginBottom: 20 }}>
+        <div className="stack" style={{ gap: 20 }}>
+          {Object.keys(cadeiasPorCotacao).length === 0 && (
+            <div style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
+              Nenhuma cadeia automática ainda — nasce ao preencher o primeiro Formulário de Elevador.
+            </div>
+          )}
+          {Object.entries(cadeiasPorCotacao).map(([numeroCotacao, nos]) => (
+            <CadeiaGatilhosCotacao key={numeroCotacao} numeroCotacao={numeroCotacao} nos={nos}
+              onConfirmarSinal={setConfirmarSinalDe} onConfirmarAval={setConfirmarAvalDe}
+              onFecharLembrete={fecharLembrete} onAbrirGatilho={abrirGatilho}/>
+          ))}
+        </div>
+      </Card>
+
+      <Card title="Gatilhos Financeiros Avulsos" sub={`${manuais.length} registros cadastrados manualmente`}>
         <div className="stack" style={{ gap: 14 }}>
-          {gatilhos.length === 0 && (
+          {manuais.length === 0 && (
             <div style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
               Nenhum registro cadastrado.
             </div>
           )}
-          {gatilhos.map((g) => (
+          {manuais.map((g) => (
             <GatilhoCard key={g.id} g={g}/>
           ))}
         </div>
       </Card>
       {showGatilho && <ModalNovoGatilho onClose={() => setShowGatilho(false)} onSaved={reloadGatilhos}/>}
+      {confirmarSinalDe && <ModalConfirmarSinal g={confirmarSinalDe} onClose={() => setConfirmarSinalDe(null)} onSaved={reloadGatilhos}/>}
+      {confirmarAvalDe && <ModalConfirmarAvalPagamento g={confirmarAvalDe} onClose={() => setConfirmarAvalDe(null)} onSaved={reloadGatilhos}/>}
     </div>
+  );
+}
+
+/* Interpola azul (início do prazo) → vermelho (prazo estourado). */
+function corGantt(pct) {
+  const p = Math.max(0, Math.min(1, pct));
+  const de = [37, 99, 235];   // --vp-info / azul
+  const para = [220, 38, 38]; // --vp-danger / vermelho
+  const rgb = de.map((v, i) => Math.round(v + (para[i] - v) * p));
+  return `rgb(${rgb.join(',')})`;
+}
+
+/* "faltam Xh" / "prazo estourado" / "concluído" — reaproveitado pelo
+   mini-Gantt tanto no resumo fechado quanto nas linhas da árvore aberta. */
+function labelPrazo(nascidoEm, prazoEm, concluidoEm) {
+  if (concluidoEm) return "concluído dentro do prazo";
+  if (!prazoEm || !nascidoEm) return null;
+  const end = new Date(prazoEm).getTime();
+  const restanteMs = end - Date.now();
+  if (restanteMs <= 0) return "prazo estourado";
+  return restanteMs > 3600000 ? `faltam ${Math.round(restanteMs / 3600000)}h` : `faltam ${Math.max(0, Math.round(restanteMs / 60000))}min`;
+}
+
+/* Barra de Gantt compacta — usada no resumo fechado da cadeia e nas
+   linhas da árvore expandida. `comLabel` mostra "faltam Xh" ao lado. */
+function GanttBarMini({ nascidoEm, prazoEm, concluidoEm, encerrado, comLabel }) {
+  const barra = (cor, pct) => (
+    <div style={{ height: 4, width: 60, background: "var(--vp-gray-100)", borderRadius: 2, overflow: "hidden" }}>
+      <div style={{ width: Math.min(Math.max(pct, 0), 1) * 100 + "%", height: "100%", background: cor }}/>
+    </div>
+  );
+  let el;
+  let cor = concluidoEm ? "var(--vp-success)" : "var(--fg3)";
+  if (encerrado) {
+    el = <div style={{ height: 4, background: "var(--vp-gray-300)", borderRadius: 2, width: 60 }}/>;
+  } else if (!prazoEm || !nascidoEm) {
+    el = <div style={{ height: 4, background: concluidoEm ? "var(--vp-success)" : "var(--vp-gray-200)", borderRadius: 2, width: 60 }}/>;
+  } else {
+    const start = new Date(nascidoEm).getTime();
+    const end = new Date(prazoEm).getTime();
+    const now = concluidoEm ? new Date(concluidoEm).getTime() : Date.now();
+    const pct = end > start ? (now - start) / (end - start) : 0;
+    cor = concluidoEm ? "var(--vp-success)" : corGantt(pct);
+    el = barra(cor, pct);
+  }
+  if (!comLabel) return el;
+  const label = labelPrazo(nascidoEm, prazoEm, concluidoEm);
+  return (
+    <div className="row gap-2" style={{ alignItems: 'center' }}>
+      {el}
+      {label && <span className="mono small" style={{ color: cor, whiteSpace: 'nowrap' }}>{label}</span>}
+    </div>
+  );
+}
+
+/* ---------- Cadeia automática (GatilhosEngine) ----------
+   Fechada: uma linha-resumo por cotação (clicável, mini-Gantt do nó
+   atual). Aberta: árvore vertical, cada nó indentado pela profundidade
+   na cadeia (irmãos II/SS ficam no mesmo nível) — não mais cards lado
+   a lado, que não escalam quando há muitas cotações na tela. */
+function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho }) {
+  const [aberta, setAberta] = React.useState(false);
+  const engine = window.GatilhosEngine;
+
+  const principais = nos.filter(g => !String(g.evento_key || '').startsWith('LEMBRETE__'))
+    .sort((a, b) => new Date(a.nascido_em || 0) - new Date(b.nascido_em || 0));
+  const lembretesPorPai = nos.filter(g => String(g.evento_key || '').startsWith('LEMBRETE__'))
+    .reduce((acc, g) => { (acc[g.predecessor_id] = acc[g.predecessor_id] || []).push(g); return acc; }, {});
+
+  const encerrada = principais.some(g => g.status === 'encerrado');
+  const concluida = principais.every(g => g.concluido_em);
+  const noAtual = principais.find(g => !g.concluido_em) || principais[principais.length - 1];
+  const statusLabel = encerrada ? 'Encerrada (proposta recusada)' : concluida ? 'Concluída' : 'Em andamento';
+  const statusVariant = encerrada ? 'neutral' : concluida ? 'success' : 'warning';
+
+  return (
+    <div>
+      <div className="row sb" style={{ cursor: 'pointer', padding: '4px 0' }} onClick={() => setAberta((v) => !v)}>
+        <div className="row gap-3" style={{ alignItems: 'center' }}>
+          <Icon.chevRight size={12} style={{ transform: aberta ? 'rotate(90deg)' : 'none', transition: 'transform .15s' }}/>
+          <div className="up-eyebrow muted">Cotação Nº {numeroCotacao}</div>
+          {!aberta && noAtual && (
+            <>
+              <span className="small muted">{noAtual.trigger_name}</span>
+              <GanttBarMini nascidoEm={noAtual.nascido_em} prazoEm={noAtual.prazo_em} concluidoEm={noAtual.concluido_em} encerrado={encerrada}/>
+            </>
+          )}
+        </div>
+        <Badge variant={statusVariant} dot>{statusLabel}</Badge>
+      </div>
+
+      {aberta && (
+        <div style={{ marginTop: 8, marginLeft: 20 }}>
+          {principais.map((g) => {
+            const isOpen = !g.concluido_em;
+            const revisao = g.status === 'revisao_necessaria';
+            const podeConfirmarSinal = g.evento_key === 'AGUARDA_BOLETO' && isOpen;
+            const podeConfirmarAval = g.evento_key === 'AVAL_PAGAMENTO' && isOpen;
+            const lembretes = lembretesPorPai[g.id] || [];
+            const nodeDef = (engine?.NODES || []).find((n) => n.key === g.evento_key);
+            const clicavel = !!(nodeDef && nodeDef.rota);
+            const nivel = engine ? engine.profundidade(g.evento_key) : 0;
+            const cor = revisao ? 'var(--vp-warning)' : g.concluido_em ? 'var(--vp-success)' : 'var(--fg2)';
+            return (
+              <div key={g.id}>
+                <div className="row gap-2" style={{
+                  alignItems: 'center', padding: '6px 8px', marginLeft: nivel * 20,
+                  borderLeft: nivel > 0 ? '2px solid var(--border)' : 'none',
+                  cursor: clicavel ? 'pointer' : 'default',
+                }} onClick={clicavel ? () => onAbrirGatilho(g) : undefined} title={clicavel ? 'Abrir' : undefined}>
+                  <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--fg3)', width: 20 }}>{g.tipo_relacionamento || 'FS'}</span>
+                  <span className="small" style={{ color: cor, fontWeight: g.concluido_em ? 400 : 700, flex: 1 }}>
+                    {g.trigger_name}
+                    {revisao ? ' — requer revisão' : ''}
+                  </span>
+                  <GanttBarMini nascidoEm={g.nascido_em} prazoEm={g.prazo_em} concluidoEm={g.concluido_em} comLabel/>
+                  {podeConfirmarSinal && (
+                    <Button size="sm" variant="primary" icon="check"
+                      onClick={(e) => { e.stopPropagation(); onConfirmarSinal(g); }}>Boleto pago</Button>
+                  )}
+                  {podeConfirmarAval && (
+                    <Button size="sm" variant="primary" icon="check"
+                      onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval</Button>
+                  )}
+                </div>
+                {lembretes.map((l) => (
+                  <div key={l.id} className="row sb" style={{
+                    marginLeft: (nivel + 1) * 20, padding: '4px 8px', fontSize: 11,
+                    background: 'var(--vp-warning-tint)', borderLeft: '2px solid var(--border)',
+                  }}>
+                    <span>⚠ {l.trigger_name}</span>
+                    {!l.concluido_em && (
+                      <Button variant="ghost" size="sm" onClick={(e) => { e.stopPropagation(); onFecharLembrete(l.id); }}>Já cobrei</Button>
+                    )}
+                  </div>
+                ))}
+              </div>
+            );
+          })}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function ModalConfirmarSinal({ g, onClose, onSaved }) {
+  const [valor, setValor] = React.useState('');
+  const [pagoEm, setPagoEm] = React.useState(new Date().toISOString().slice(0, 10));
+  const [saving, setSaving] = React.useState(false);
+
+  const confirmar = async () => {
+    setSaving(true);
+    try {
+      const av = await window.AvalFinanceiroStore.getByNumeroCotacao(g.numero_cotacao);
+      if (!av) throw new Error('Registro de Aval Financeiro não encontrado para essa cotação.');
+      await window.AvalFinanceiroStore.confirmarSinal(av.id, { valor: valor ? parseFloat(valor) : null, pagoEm });
+      window.toast('Boleto confirmado como pago — Gatilho fechado.', 'success');
+      onSaved?.(); onClose();
+    } catch (e) {
+      window.toast('Erro: ' + e.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Confirmar Boleto Pago" onClose={onClose} width={420}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={confirmar} disabled={saving}>{saving ? 'Confirmando…' : 'Confirmar boleto pago'}</Button>
+      </>}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <div className="stack" style={{ gap: 4 }}>
+          <label className="up-eyebrow muted">Valor recebido (R$)</label>
+          <input className="input" type="number" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="0"/>
+        </div>
+        <div className="stack" style={{ gap: 4 }}>
+          <label className="up-eyebrow muted">Data do pagamento</label>
+          <input className="input" type="date" value={pagoEm} onChange={(e) => setPagoEm(e.target.value)}/>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function ModalConfirmarAvalPagamento({ g, onClose, onSaved }) {
+  const [observacoes, setObservacoes] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const confirmar = async () => {
+    setSaving(true);
+    try {
+      const av = await window.AvalFinanceiroStore.getByNumeroCotacao(g.numero_cotacao);
+      if (!av) throw new Error('Registro de Aval Financeiro não encontrado para essa cotação.');
+      await window.AvalFinanceiroStore.confirmarAvalPagamento(av.id, observacoes);
+      window.toast('Aval de Pagamento confirmado — Compra ao Fornecedor liberada.', 'success');
+      onSaved?.(); onClose();
+    } catch (e) {
+      window.toast('Erro: ' + e.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Dar Aval de Pagamento" onClose={onClose} width={420}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={confirmar} disabled={saving}>{saving ? 'Confirmando…' : 'Dar Aval de Pagamento'}</Button>
+      </>}>
+      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
+        <p className="muted" style={{ fontSize: 13 }}>
+          Checkpoint final do Financeiro antes de liberar a compra ao Fornecedor — distinto do
+          Aval Financeiro de score/crédito, que já rodou antes do contrato.
+        </p>
+        <div className="stack" style={{ gap: 4 }}>
+          <label className="up-eyebrow muted">Observações (opcional)</label>
+          <input className="input" type="text" value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Ex.: pagamento conciliado no extrato de hoje"/>
+        </div>
+      </div>
+    </Modal>
   );
 }
 

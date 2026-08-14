@@ -8,6 +8,7 @@ const NAV_GROUPS = [
   { label: "Geral", items: [
     { id: "dashboard", label: "Dashboard", icon: "home" },
     { id: "notificacoes", label: "Notificações", icon: "bell" },
+    { id: "financeiro", label: "Gatilhos & Prazo", icon: "dollar", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Comercial", items: [
     { id: "leads", label: "Leads", icon: "flag" },
@@ -17,7 +18,7 @@ const NAV_GROUPS = [
   ]},
   { label: "ADM/ Financeiro", items: [
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
-    { id: "financeiro", label: "Gatilhos & Prazo Reverso", icon: "dollar", restrict: ["financeiro", "admin"] },
+    { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Jurídico | Importação | Suprimentos", sublabel: "Contratos, Siscomex & Compras", items: [
     { id: "juridico", label: "Jurídico", icon: "scale" },
@@ -28,7 +29,8 @@ const NAV_GROUPS = [
   ]},
   { label: "Engenharia", items: [
     { id: "engenharia", label: "Engenharia", icon: "ruler" },
-    { id: "eng-configurador", label: "Projetos Elevadores", icon: "grid" },
+    { id: "eng-projeto-elevadores", label: "Projeto de Elevadores", icon: "grid" },
+    { id: "eng-configurador", label: "Projeto de Equipamento", icon: "grid" },
     { id: "desenho-tecnico", label: "Projetos ER/Es", icon: "ruler" },
     { id: "ficha-tecnica", label: "Ficha Técnica", icon: "fileText" },
     { id: "contrato-instalador", label: "Contrato Instalador", icon: "hardhat" },
@@ -171,6 +173,7 @@ const BREADCRUMB_MAP = {
   "contrato-instalador":         { module: "Jurídico", page: "Contrato Instalador", icon: "hardhat" },
   engenharia:    { module: "Engenharia", page: "Engenharia", icon: "ruler" },
   "ncm-catalogo": { module: "Engenharia", page: "Catálogo de Produtos", icon: "fileSearch" },
+  "eng-projeto-elevadores": { module: "Engenharia", page: "Projeto de Elevadores", icon: "grid" },
   "eng-configurador": { module: "Engenharia", page: "Projeto de Equipamento", icon: "grid" },
   "desenho-tecnico": { module: "Engenharia", page: "Desenho Técnico ER | ES", icon: "ruler" },
   "ficha-tecnica":   { module: "Engenharia", page: "Ficha Técnica", icon: "fileText" },
@@ -186,7 +189,8 @@ const BREADCRUMB_MAP = {
   cronograma:    { module: "Instalação & Entrega", page: "Cronograma de Instalação", icon: "clock" },
   databook:      { module: "Instalação & Entrega", page: "Data Book & Termo", icon: "fileSearch" },
   handover:      { module: "Instalação & Entrega", page: "Handover & Pós-venda", icon: "package" },
-  financeiro:    { module: "Financeiro", page: "Gatilhos & Prazo Reverso", icon: "dollar" },
+  financeiro:    { module: "Financeiro", page: "Gatilhos & Prazo", icon: "dollar" },
+  "aval-financeiro": { module: "Financeiro", page: "Aval Financeiro", icon: "shield" },
   comissoes:     { module: "Financeiro", page: "Comissões", icon: "award" },
   "rh-homologacao": { module: "Recursos Humanos", page: "Homologação de Parceiros", icon: "users" },
   logs: { module: "Admin", page: "Logs de Atividade", icon: "history" },

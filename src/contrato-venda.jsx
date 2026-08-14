@@ -154,7 +154,21 @@ function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
         <CVField label="CPF do representante" mask="maskCPF" mono value={form.comprador.repCpf} onChange={(v) => setComp({ repCpf: v })} placeholder="000.000.000-00"/>
       </div>
       <div className="cv-grid">
-        <CVField label="E-mail para assinatura" width="full" value={form.comprador.email} onChange={(v) => setComp({ email: v })} placeholder="contato@cliente.com.br" hint="Usado no envio do link de assinatura."/>
+        <CVField label="E-mail para assinatura" width="full" value={form.comprador.email} onChange={(v) => setComp({ email: v })} placeholder="contato@cliente.com.br" hint="Usado no envio do link de assinatura e como contato de comunicação (cláusula 10.1)."/>
+      </div>
+      <div className="cv-field-group">
+        <h3 className="cv-group-title">Qualificação do representante (preâmbulo do contrato)</h3>
+        <div className="cv-grid">
+          <CVField label="Nacionalidade" value={form.comprador.repNacionalidade} onChange={(v) => setComp({ repNacionalidade: v })} placeholder="ex: brasileiro"/>
+          <CVField label="Estado civil" value={form.comprador.repEstadoCivil} onChange={(v) => setComp({ repEstadoCivil: v })} placeholder="ex: casado"/>
+        </div>
+        <div className="cv-grid">
+          <CVField label="Profissão" value={form.comprador.repProfissao} onChange={(v) => setComp({ repProfissao: v })} placeholder="ex: empresário"/>
+          <CVField label="RG do representante" mono value={form.comprador.repRg} onChange={(v) => setComp({ repRg: v })} placeholder="nº e órgão emissor"/>
+        </div>
+        <div className="cv-grid">
+          <CVField label="Endereço residencial do representante" width="full" value={form.comprador.repEnderecoResidencial} onChange={(v) => setComp({ repEnderecoResidencial: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP" hint="Onde o representante reside e é domiciliado — exigido pelo preâmbulo do contrato."/>
+        </div>
       </div>
     </div>
   );
@@ -194,7 +208,7 @@ function CVStepObjeto({ form, set }) {
       {especial && (
         <div className="cv-cond-alert">
           <span className="cv-cond-dot"></span>
-          <div><b>Cláusula de Equipamento Especial será injetada.</b><br/>Carga ≥ 1.000 kg ou marcada como especial — exige reforço de estrutura, içamento diferenciado e ART específica.</div>
+          <div><b>Atenção: equipamento especial.</b><br/>Carga ≥ 1.000 kg ou marcada como especial — combine à parte com o cliente o reforço de estrutura, o içamento diferenciado e a ART específica (a minuta padrão não cobre esses pontos; trate como anexo/aditivo se necessário).</div>
         </div>
       )}
     </div>
@@ -206,7 +220,7 @@ function CVStepLogistica({ form, set }) {
   const longa = dist >= 100;
   return (
     <div className="cv-step">
-      <CVStepHeader kicker="Passo 3 — Logística" title="Local da obra e distância" desc="Regra dos 100 km: distâncias longas injetam a cláusula de deslocamento."/>
+      <CVStepHeader kicker="Passo 3 — Logística" title="Local da obra e distância" desc="Regra dos 100 km: obras distantes merecem atenção redobrada ao cronograma e custos de deslocamento."/>
       <div className="cv-grid">
         <CVTextArea label="Endereço completo do local de entrega/obra" value={form.localObra} onChange={(v) => set({ localObra: v })} rows={2} placeholder="Rua, nº, bairro, cidade/estado, CEP"/>
       </div>
@@ -216,7 +230,7 @@ function CVStepLogistica({ form, set }) {
       {longa && (
         <div className="cv-cond-alert">
           <span className="cv-cond-dot"></span>
-          <div><b>Cláusula de Logística (100 km) será injetada.</b><br/>Obra a {dist} km. Transporte, hospedagem e alimentação por conta do comprador + 2 dias úteis a cada 100 km adicionais.</div>
+          <div><b>Atenção: obra a mais de 100 km.</b><br/>Obra a {dist} km de Guarulhos/SP — alinhe à parte com o cliente quem cobre transporte, hospedagem e alimentação da equipe, e o prazo adicional de execução (a minuta padrão não cobre esses pontos; trate como anexo/aditivo se necessário).</div>
         </div>
       )}
     </div>
@@ -254,7 +268,7 @@ function CVStepRevisao({ form, set, doc }) {
   const especial = form.tipoEquip === 'ELEVADOR' && (cargaNum >= 1000 || form.cargaEspecial);
   const conds = [];
   if (especial) conds.push('Equipamento Especial');
-  if (longa) conds.push('Logística 100 km');
+  if (longa) conds.push('Obra a mais de 100 km');
 
   const setChk = (k, v) => set({ checklist: { ...form.checklist, [k]: v } });
   const allChk = form.checklist.proposta && form.checklist.desenho && form.checklist.nrs;
@@ -264,7 +278,7 @@ function CVStepRevisao({ form, set, doc }) {
     ['Objeto', doc.meta.descEq],
     ['Local / distância', `${form.localObra || '—'} · ${dist || 0} km`],
     ['Valor total', window.CV.brl(doc.meta.valor)],
-    ['Cláusulas injetadas', conds.join(', ') || 'Nenhuma'],
+    ['Pontos de atenção', conds.join(', ') || 'Nenhum'],
   ];
 
   return (
@@ -514,8 +528,17 @@ function CVWizard({ onCreated, initial }) {
 
     if (Object.keys(all).length > 0) {
       setErrors(all);
-      const firstBad = Object.keys(validateStep(0, form)).length ? 0 : 3;
+      // Bug real: quando o único problema era checklist/dossier/valor (todos
+      // do Passo 5 — Revisão), a função só resetava o passo (sempre pra 0 ou
+      // 3) e retornava false EM SILÊNCIO — nenhum toast, nenhum alert, nada.
+      // O usuário clicava "Gerar e enviar" e nada visível acontecia.
+      const firstBad = Object.keys(validateStep(0, form)).length ? 0
+        : Object.keys(validateStep(3, form)).length ? 3
+        : 4; // __checklist / __dossier / __valor pertencem ao Passo 5 (Revisão)
       setStep(firstBad);
+      const mensagens = [all.__checklist, all.__dossier, all.__valor].filter(Boolean);
+      if (mensagens.length) alert(mensagens.join('\n'));
+      else if (firstBad !== 4) alert('Preencha os campos obrigatórios antes de gerar o contrato.');
       return false;
     }
     return true;
@@ -570,8 +593,8 @@ function CVWizard({ onCreated, initial }) {
             <span className="ci-preview-bar-title">Pré-visualização</span>
             <div className="ci-preview-bar-conds">
               {docPreview.meta.especial && <span className="ci-pv-cond ci-pv-cond--warn">Equipamento Especial</span>}
-              {docPreview.meta.longa && <span className="ci-pv-cond ci-pv-cond--warn">Logística 100 km</span>}
-              {!docPreview.meta.especial && !docPreview.meta.longa && <span className="ci-pv-cond ci-pv-cond--muted">Cláusulas padrão</span>}
+              {docPreview.meta.longa && <span className="ci-pv-cond ci-pv-cond--warn">Obra a mais de 100 km</span>}
+              {!docPreview.meta.especial && !docPreview.meta.longa && <span className="ci-pv-cond ci-pv-cond--muted">Sem pontos de atenção</span>}
             </div>
           </div>
           <div className="ci-preview-scroll">

@@ -260,8 +260,8 @@ function ConfiguradorModal({ spec, onClose, onSaved }) {
           <label className="up-eyebrow muted">Tipo de equipamento</label>
           <div className="seg">
             {EQ_TIPOS.map(t => <button key={t.key} className={tipo === t.key ? "is-active" : ""} onClick={() => setTipoAndDefaults(t.key)}>{t.label}</button>)}
-            <button disabled title="Em breve" style={{ opacity: .5, cursor: "not-allowed" }}>Elevador (em breve)</button>
           </div>
+          <p className="muted small" style={{ margin: 0 }}>Elevador tem tela própria: <b>Engenharia · Projeto de Elevadores</b>.</p>
         </div>
 
         <div style={{ border: "1px solid var(--border)", background: "var(--vp-gray-50)", padding: 8 }}>

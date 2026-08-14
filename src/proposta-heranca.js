@@ -132,7 +132,7 @@
   function montarPrefill(fontes) {
     if (!fontes || !fontes.encontrado) return null;
     const { formulario, cliente, cotacao, precificacao, numeroCotacao } = fontes;
-    const resultado = (precificacao && precificacao.resultado) || null;
+    const resultado = (precificacao && precificacao.resultado && precificacao.resultado.precificacao) || null;
     const difal = (precificacao && precificacao.difal) || null;
     const especificacoes = montarEspecificacoes(fontes);
 

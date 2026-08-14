@@ -244,6 +244,15 @@
       sent_at: now, updated_at: now,
     }).eq('id', id);
     if (error) throw error;
+    if (window.EventosFluxo) {
+      const cot = await getById(id);
+      if (cot) window.EventosFluxo.registrar({
+        evento: 'COTACAO_ENVIADA_FORNECEDOR',
+        numeroCotacao: cot.dados_envio?.header?.numero_cotacao,
+        alvoLabel: `${cot.fornecedor || 'Fornecedor'} · ${cot.numero_documento || ''}`, alvoId: cot.id,
+        detalhe: { channel },
+      });
+    }
   }
 
   async function listarPorFormulario(formularioElevadorId) {
@@ -277,10 +286,21 @@
     const cur = await getById(id);
     if (!cur) throw new Error('Cotação não encontrada.');
     if (cur.status !== 'respondido') return cur;
+    const numeroCotacao = cur.dados_envio?.header?.numero_cotacao;
+    // Gate: só inicia a compra na China depois do Financeiro confirmar o
+    // sinal pago — ver aval-financeiro-store.js.
+    if (window.AvalFinanceiroStore) {
+      const gate = await window.AvalFinanceiroStore.podeIniciarCompra(numeroCotacao);
+      if (!gate.ok) throw new Error(gate.motivo);
+    }
     const now = new Date().toISOString();
     const patch = { status: 'em_analise', decidido_em: now, updated_at: now };
     const { error } = await c.from('cotacoes_elevador_fornecedor').update(patch).eq('id', id);
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'COMPRA_FORNECEDOR_INICIADA', numeroCotacao,
+      alvoLabel: `${cur.fornecedor || 'Fornecedor'} · ${cur.numero_documento || ''}`, alvoId: cur.id,
+    });
     return { ...cur, ...patch };
   }
 
@@ -293,6 +313,11 @@
     const patch = { status: 'aprovada', aprovado_em: now, updated_at: now };
     const { error } = await c.from('cotacoes_elevador_fornecedor').update(patch).eq('id', id);
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'COMPRA_FORNECEDOR_CONFIRMADA',
+      numeroCotacao: cur.dados_envio?.header?.numero_cotacao,
+      alvoLabel: `${cur.fornecedor || 'Fornecedor'} · ${cur.numero_documento || ''}`, alvoId: cur.id,
+    });
     return { ...cur, ...patch };
   }
 
@@ -344,13 +369,94 @@
       modulo: 'Formulário de Elevadores', acao: 'respondeu a cotação de fornecedor',
       alvo: cur.numero_documento, alvo_id: cur.id, detalhe: { ip },
     });
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'FORNECEDOR_RESPONDEU',
+      numeroCotacao: cur.dados_envio?.header?.numero_cotacao,
+      alvoLabel: `${cur.fornecedor || 'Fornecedor'} · ${cur.numero_documento || ''}`, alvoId: cur.id,
+    });
     return { ...cur, ...patch };
+  }
+
+  /* ---------- Anexos da resposta do Fornecedor (PDF/DWG/imagens) ----------
+     Bucket privado cotacao-fornecedor-anexos — mesmo padrão de bucket
+     privado + URL assinada de formulario-elevador-store.js (FEA_BUCKET).
+     Vinculados à cotação inteira (não por unidade). */
+  const CEF_ANEXOS_BUCKET = 'cotacao-fornecedor-anexos';
+
+  function cef_slugify(s) {
+    return String(s || 'arquivo')
+      .toLowerCase()
+      .normalize('NFD').replace(/[̀-ͯ]/g, '')
+      .replace(/[^a-z0-9.]+/g, '-').replace(/^-|-$/g, '')
+      .slice(0, 80) || 'arquivo';
+  }
+
+  async function listarAnexosResposta(cotacaoFornecedorId) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.from('cotacoes_elevador_fornecedor_anexos')
+      .select('*').eq('cotacao_fornecedor_id', cotacaoFornecedorId).order('created_at', { ascending: false });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function anexarArquivoResposta(cotacaoFornecedorId, file) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const nomeSeguro = cef_slugify(file.name);
+    const path = `${cotacaoFornecedorId}/${Date.now()}-${nomeSeguro}`;
+    const { error: upErr } = await c.storage.from(CEF_ANEXOS_BUCKET)
+      .upload(path, file, { upsert: false, contentType: file.type || 'application/octet-stream' });
+    if (upErr) throw upErr;
+    const { data, error } = await c.from('cotacoes_elevador_fornecedor_anexos').insert({
+      cotacao_fornecedor_id: cotacaoFornecedorId,
+      nome_arquivo: file.name,
+      tamanho_bytes: file.size,
+      tipo_arquivo: file.type || null,
+      path,
+    }).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function urlAssinadaAnexoResposta(path, ttlSeconds) {
+    const c = sb(); if (!c) return null;
+    const { data, error } = await c.storage.from(CEF_ANEXOS_BUCKET).createSignedUrl(path, ttlSeconds || 3600);
+    if (error || !data) return null;
+    return data.signedUrl;
+  }
+
+  async function removerAnexoResposta(anexo) {
+    const c = sb(); if (!c || !anexo) return;
+    if (anexo.path) await c.storage.from(CEF_ANEXOS_BUCKET).remove([anexo.path]);
+    await c.from('cotacoes_elevador_fornecedor_anexos').delete().eq('id', anexo.id);
+  }
+
+  /* ---------- Anexos do Formulário (VerticalParts) direcionados ao Fornecedor ----------
+     Mesma tabela/bucket de formulario-elevador-store.js (formularios_elevador_anexos
+     / bucket formulario-elevador-anexos, categoria='fornecedor') — lidos direto aqui
+     pra não precisar carregar o store inteiro do Formulário na página pública. */
+  const FORM_ANEXOS_BUCKET = 'formulario-elevador-anexos';
+
+  async function listarAnexosFormulario(formularioId) {
+    const c = sb(); if (!c || !formularioId) return [];
+    const { data, error } = await c.from('formularios_elevador_anexos')
+      .select('*').eq('formulario_id', formularioId).eq('categoria', 'fornecedor').order('created_at', { ascending: false });
+    if (error) return [];
+    return data || [];
+  }
+
+  async function urlAssinadaAnexoFormulario(path, ttlSeconds) {
+    const c = sb(); if (!c) return null;
+    const { data, error } = await c.storage.from(FORM_ANEXOS_BUCKET).createSignedUrl(path, ttlSeconds || 3600);
+    if (error || !data) return null;
+    return data.signedUrl;
   }
 
   window.CotacaoElevadorFornecedorStore = {
     cotacaoUrl, tipoFormularioPara, liftModelLabel, machineRoomLabel, controleLabel,
     CATEGORIAS_PRODUTO, STATUS_LABEL, STATUS_COR,
     unitSpecSecoes, unitSpecFieldLabel, assetMasterId,
+    listarAnexosResposta, anexarArquivoResposta, urlAssinadaAnexoResposta, removerAnexoResposta,
+    listarAnexosFormulario, urlAssinadaAnexoFormulario,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
     getByToken, marcarVisualizado, salvarResposta, getPublicIP,
     decidirComprar, aprovar,

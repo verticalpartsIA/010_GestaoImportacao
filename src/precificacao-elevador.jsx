@@ -50,7 +50,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
   };
 
   if (pzId) {
-    return <PrecificacaoElevadorDetalhe id={pzId} onVoltar={() => { setPzId(null); carregar(); }} setRoute={setRoute} setSubsel={setSubsel}/>;
+    return <PrecificacaoElevadorDetalhe id={pzId} onVoltar={() => { setPzId(null); carregar(); }}/>;
   }
 
   return (
@@ -58,7 +58,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Precificação</div>
-          <h1 className="page-head__title">Precificação — Elevadores</h1>
+          <h1 className="page-head__title">Precificação — Equipamentos</h1>
           <p className="page-head__sub">Cotações já respondidas pelo fornecedor, prontas para calcular o preço de venda.</p>
         </div>
         <div className="page-head__r"><PrecificacaoModoTabs modo={modo} setModo={setModo}/></div>
@@ -93,7 +93,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
 }
 
 /* ---------- Detalhe — motor de cálculo ---------- */
-function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
+function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
   const [pz, setPz] = React.useState(null);
   const [calculando, setCalculando] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
@@ -159,49 +159,26 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
 
-  /* "Financeiro termina a Precificação e volta para Propostas" — a Proposta
-     herda os dados do cliente/obra já coletados no Formulário e os valores
-     já calculados aqui, em vez de o vendedor digitar tudo de novo. */
-  const gerarProposta = async () => {
-    try {
-      /* Mesma engenharia da herança que o vendedor dispara pelo Nº da
-         Cotação no editor — fonte única, pra não existirem duas regras
-         divergentes de "de onde vêm os dados da proposta". */
-      const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao);
-      if (!r.encontrado) {
-        window.toast?.('Não foi possível localizar o formulário desta cotação.', 'error');
-        return;
-      }
-      const prefill = { ...r.prefill, numero: `Cotação-${pz.numero_cotacao ?? pz.numero_documento}` };
-      setSubsel(prefill);
-      setRoute('proposta-editor');
-    } catch (e) {
-      window.toast?.('Erro ao preparar a proposta: ' + e.message, 'error');
-    }
-  };
-
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Precificação</div>
-          <h1 className="page-head__title">{pz.numero_documento}</h1>
+          <h1 className="page-head__title">{pz.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', pz.numero_cotacao) : pz.numero_documento}</h1>
           <div className="row gap-2" style={{ marginTop: 6 }}>
             <div className="mono" style={{ display: 'inline-flex', background: '#111', color: '#FBB039', fontWeight: 700, padding: '6px 12px', borderRadius: 6, fontSize: 13 }}>
               Cotação Nº {pz.numero_cotacao ?? '—'}
             </div>
-            {pz.numero_cotacao != null && (
-              <div className="mono small muted" style={{ display: 'inline-flex', alignItems: 'center', padding: '6px 0' }}>
-                Master ID {window.MasterIdEngine.baseId('elevador', pz.numero_cotacao)}
-              </div>
-            )}
+            <div className="mono small muted" style={{ display: 'inline-flex', alignItems: 'center', padding: '6px 0' }}>
+              Precificação {pz.numero_documento}
+            </div>
           </div>
         </div>
         <div className="page-head__r">
           <Button variant="ghost" icon="chevLeft" onClick={onVoltar}>Voltar</Button>
           <Button variant="outline" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar rascunho'}</Button>
           <Button variant="primary" icon="calculator" onClick={calcular} disabled={calculando}>{calculando ? 'Calculando…' : 'Calcular'}</Button>
-          {resultado && <Button variant="primary" icon="proposal" onClick={gerarProposta}>Gerar Proposta</Button>}
+          {resultado && <span className="muted small" style={{ display: 'inline-flex', alignItems: 'center', padding: '0 4px' }}>Calculado — envie a proposta em "Propostas"</span>}
         </div>
       </div>
 

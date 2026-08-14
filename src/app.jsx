@@ -19,6 +19,7 @@ const ROUTE_TITLE = {
   "proposta-editor": "Editor de Proposta",
   engenharia: "Projetos de Engenharia",
   "ncm-catalogo": "Catálogo de Produtos",
+  "eng-projeto-elevadores": "Projeto de Elevadores",
   "eng-configurador": "Projeto de Equipamento",
   "desenho-tecnico": "Desenho Técnico ER | ES",
   "ficha-tecnica": "Ficha Técnica",
@@ -39,7 +40,7 @@ const ROUTE_TITLE = {
   "importacao-email": "Inbox Importação",
   compras: "Compras Nacional",
   "compras-email": "Inbox Compras",
-  financeiro: "Gatilhos & Prazo Reverso",
+  financeiro: "Gatilhos & Prazo",
   comissoes: "Comissões",
   notificacoes: "Notificações",
   logs: "Logs de Atividade",
@@ -177,6 +178,7 @@ function App() {
       case "proposta-editor": return <PropostaEditor setRoute={setRoute} subsel={subsel}/>;
       case "engenharia": return <EngenhariaPage setRoute={setRoute}/>;
       case "ncm-catalogo": return <NcmCatalogoPage setRoute={setRoute}/>;
+      case "eng-projeto-elevadores": return <window.ProjetoElevadorPage setRoute={setRoute}/>;
       case "eng-configurador": return <ConfiguradorPage setRoute={setRoute}/>;
       case "desenho-tecnico": return <DesenhoTecnicoPage setRoute={setRoute}/>;
       case "ficha-tecnica": return <FichaTecnicaPage/>;
@@ -196,7 +198,8 @@ function App() {
       case "importacao-email": return <EmailInbox kind="importacao" setRoute={setRoute}/>;
       case "compras": return <ComprasPage setRoute={setRoute}/>;
       case "compras-email": return <EmailInbox kind="compras" setRoute={setRoute}/>;
-      case "financeiro": return <FinanceiroPage/>;
+      case "financeiro": return <FinanceiroPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
@@ -267,6 +270,7 @@ function App() {
               { value: "proposta-editor", label: "📝 Editor de Proposta (3 eq.)" },
               { value: "engenharia", label: "Engenharia + Laudo" },
               { value: "ncm-catalogo", label: "📋 Catálogo de Produtos" },
+              { value: "eng-projeto-elevadores", label: "🛗 Projeto de Elevadores" },
               { value: "eng-configurador", label: "🛠 Projeto de Equipamento" },
               { value: "desenho-tecnico", label: "📐 Desenho Técnico ER | ES" },
               { value: "ficha-tecnica", label: "📋 Ficha Técnica" },
@@ -284,7 +288,7 @@ function App() {
               { value: "importacao-email", label: "📧 Inbox Importação" },
               { value: "compras", label: "Compras Nacional" },
               { value: "compras-email", label: "📧 Inbox Compras" },
-              { value: "financeiro", label: "⏰ Prazo Reverso" },
+              { value: "financeiro", label: "⏰ Gatilhos & Prazo" },
               { value: "comissoes", label: "Comissões" },
               { value: "rh-homologacao", label: "👥 Homologação de Parceiros" },
               { value: "notificacoes", label: "🔔 Notificações" },

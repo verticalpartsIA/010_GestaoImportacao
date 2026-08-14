@@ -147,7 +147,6 @@
       endereco_cep: dados.endereco_cep || null,
       endereco_cidade: dados.endereco_cidade || null,
       endereco_estado: dados.endereco_estado || null,
-      endereco: formatarEndereco(enderecoPartes(dados, 'endereco_')) || null,
       endereco_obra_diferente: usaEnderecoObra,
       endereco_obra_logradouro: usaEnderecoObra ? (dados.endereco_obra_logradouro || null) : (dados.endereco_logradouro || null),
       endereco_obra_complemento: usaEnderecoObra ? (dados.endereco_obra_complemento || null) : (dados.endereco_complemento || null),
@@ -165,15 +164,35 @@
       created_by: (window.__VP_USER || {}).email || null,
     }).select().single();
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'FORMULARIO_PREENCHIDO', numeroCotacao: data.numero_cotacao,
+      alvoLabel: data.local_obra_cidade ? `${data.local_obra_cidade}/${data.local_obra_estado || ''}` : data.id,
+      alvoId: data.id,
+    });
     return data;
   }
 
+  /* Colunas reais de formularios_elevador — o formulário na tela (`header`)
+     também carrega campos do CLIENTE (cnpj, razão social, telefone...) que
+     vivem só na tabela `clientes`, nunca aqui. Sem esse filtro, um spread
+     cru do patch manda esses campos pro update() e quebra com "Could not
+     find the column" (mesmo bug do 'endereco' antes — dessa vez foi o
+     'cnpj'; por isso a whitelist agora, em vez de tirar campo por campo). */
+  const FE_COLUNAS_VALIDAS = new Set([
+    'lead_id', 'dossier_id', 'cliente_id', 'canal', 'token',
+    'local_obra_cidade', 'local_obra_estado', 'endereco_obra', 'prazo_desejado',
+    'tipo_mao_de_obra', 'responsavel_entrega', 'origem_venda', 'status', 'observacoes',
+    'endereco_obra_diferente', 'endereco_logradouro', 'endereco_complemento', 'endereco_bairro',
+    'endereco_cep', 'endereco_cidade', 'endereco_estado',
+    'endereco_obra_logradouro', 'endereco_obra_complemento', 'endereco_obra_bairro',
+    'endereco_obra_cep', 'endereco_obra_cidade', 'endereco_obra_estado',
+    'vendedor', 'numero_cotacao', 'finalidade_compra',
+  ]);
+
   async function salvar(id, patch) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const resolved = { ...patch };
-    if (resolved.endereco_logradouro !== undefined) {
-      resolved.endereco = formatarEndereco(enderecoPartes(resolved, 'endereco_')) || null;
-    }
+    const resolved = {};
+    Object.keys(patch).forEach((k) => { if (FE_COLUNAS_VALIDAS.has(k)) resolved[k] = patch[k]; });
     if (resolved.endereco_obra_diferente !== undefined) {
       const usaEnderecoObra = !!resolved.endereco_obra_diferente;
       // Obra "não é endereço diferente" → mantém sincronizado com o endereço do cliente.
@@ -194,11 +213,17 @@
 
   async function obter(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { data: header, error } = await c.from('formularios_elevador').select('*').eq('id', id).single();
+    const { data: header, error } = await c.from('formularios_elevador').select('*, clientes(*)').eq('id', id).single();
     if (error) throw error;
     const { data: unidades } = await c.from('formularios_elevador_unidades')
       .select('*').eq('formulario_id', id).order('created_at', { ascending: true });
-    return { ...header, unidades: unidades || [] };
+    // Dados de identidade do cliente (razão social, CNPJ, endereço etc.) vivem
+    // em `clientes`, não em `formularios_elevador` — sem isto o formulário
+    // reabria com esses campos em branco mesmo já tendo um cliente vinculado.
+    // `id` fica de fora do merge pra não trocar o id do formulário pelo do cliente.
+    const { clientes, ...resto } = header;
+    const { id: _clienteId, ...clienteCampos } = clientes || {};
+    return { ...resto, ...clienteCampos, unidades: unidades || [] };
   }
 
   async function obterPorToken(token) {
@@ -230,6 +255,16 @@
      da Unidade, e nunca reaproveitado nem trocado depois — é o "-1"/"-2"/"-3"
      do Asset-Level ID (ex.: VPEL-EL0902-A-1), obrigatório mesmo pra pedido
      de 1 elevador só. */
+  /* Campos numéricos/opcionais da unidade chegam como '' quando o vendedor
+     deixa em branco (ex.: dimensões da cabine) — Postgres rejeita '' em
+     coluna numeric ("invalid input syntax for type numeric"). '' vira null
+     pra qualquer coluna (texto aceita null igual). */
+  function limparVazios(obj) {
+    const out = {};
+    Object.keys(obj || {}).forEach((k) => { out[k] = obj[k] === '' ? null : obj[k]; });
+    return out;
+  }
+
   async function adicionarUnidade(formularioId, unidade) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const id = novoId('FEU');
@@ -237,7 +272,7 @@
       .select('indice_ativo').eq('formulario_id', formularioId);
     const proximoIndice = (existentes || []).reduce((max, u) => Math.max(max, u.indice_ativo || 0), 0) + 1;
     const { data, error } = await c.from('formularios_elevador_unidades').insert({
-      id, formulario_id: formularioId, ...unidade, indice_ativo: proximoIndice,
+      id, formulario_id: formularioId, ...limparVazios(unidade), indice_ativo: proximoIndice,
     }).select().single();
     if (error) throw error;
     return data;
@@ -245,7 +280,7 @@
 
   async function atualizarUnidade(unidadeId, patch) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { error } = await c.from('formularios_elevador_unidades').update(patch).eq('id', unidadeId);
+    const { error } = await c.from('formularios_elevador_unidades').update(limparVazios(patch)).eq('id', unidadeId);
     if (error) throw error;
   }
 
@@ -275,7 +310,7 @@
     if (e2) throw e2;
     const unificado = [
       ...(hist || []).map((h) => ({
-        numero_cotacao: h.numero_cotacao, data: h.data, vendedor: h.vendedor, origem_venda: h.origem_venda,
+        id: h.id, numero_cotacao: h.numero_cotacao, data: h.data, vendedor: h.vendedor, origem_venda: h.origem_venda,
         nome_cliente: h.nome_cliente, cnpj_comprador: h.cnpj_comprador, estado_instalacao: h.estado_instalacao,
         status: h.status, origem: 'historico',
       })),
@@ -302,15 +337,20 @@
       .slice(0, 80) || 'arquivo';
   }
 
-  async function listarAnexos(formularioId) {
+  /* categoria: 'projeto_civil' (default, uso interno — planta/memorial) ou
+     'fornecedor' (anexos que vão junto no envio da cotação técnica, ex.:
+     plantas, DWG, fotos que o fornecedor precisa ver). Mesma tabela, mesmo
+     bucket — só filtra/rotula diferente. */
+  async function listarAnexos(formularioId, categoria) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { data, error } = await c.from('formularios_elevador_anexos')
-      .select('*').eq('formulario_id', formularioId).order('created_at', { ascending: false });
+    let q = c.from('formularios_elevador_anexos').select('*').eq('formulario_id', formularioId);
+    if (categoria) q = q.eq('categoria', categoria);
+    const { data, error } = await q.order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
   }
 
-  async function anexarArquivo(formularioId, file) {
+  async function anexarArquivo(formularioId, file, categoria) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const nomeSeguro = fea_slugify(file.name);
     const path = `${formularioId}/${Date.now()}-${nomeSeguro}`;
@@ -323,6 +363,7 @@
       tamanho_bytes: file.size,
       tipo_arquivo: file.type || null,
       path,
+      categoria: categoria || 'projeto_civil',
     }).select().single();
     if (error) throw error;
     return data;

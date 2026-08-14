@@ -210,7 +210,6 @@ function Dashboard({ role, setRoute }) {
 
   const kpis        = sbData?.kpis?.[role] || [];
   const tasks       = sbData?.tarefas || [];
-  const alertas     = sbData?.alertas || [];
   const projetos    = sbData?.ganttProjetos || [];
   const stocks      = sbData?.estoqueCritico || [];
   const alertasCrit = sbData?.alertasCriticos ?? 0;
@@ -289,20 +288,6 @@ function Dashboard({ role, setRoute }) {
           </div>
         </Card>
       </div>
-
-      <Card title="Central de Alertas" sub="ações pendentes que requerem sua atenção" style={{ marginBottom: 20 }}
-        action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute("notificacoes")}>Ver tudo</Button>}>
-        <div className="stack">
-          {alertas.map((a) => (
-            <AlertRow key={a.id} alert={a} onClick={() => setRoute(
-              a.module === "Importação"  ? "importacao"  :
-              a.module === "Jurídico"    ? "juridico"    :
-              a.module === "Financeiro"  ? "financeiro"  :
-              a.module === "Engenharia"  ? "engenharia"  : "cotacoes-fornecedor"
-            )}/>
-          ))}
-        </div>
-      </Card>
 
       {showTask && <ModalNovaTask role={role} onClose={() => setShowTask(false)} onSaved={reloadDashboard}/>}
 

@@ -1,18 +1,29 @@
 /* ============================================================
    toast.jsx — Global toast system
    Use via window.toast("mensagem", "info"|"success"|"warning"|"danger")
+   ---------------------------------------------------------------
+   Publica via window.dispatchEvent/addEventListener (não um array de
+   listeners em memória fechado sobre uma const de módulo) — o app carrega
+   ~100 arquivos .jsx via Babel Standalone, cada um avaliado como seu
+   próprio top-level script; achado ao vivo: um array-de-listeners
+   guardado numa `const` de topo de arquivo ficava dessincronizado do
+   `<ToastViewport/>` realmente montado (toast nunca aparecia — nem os
+   emitidos pelo próprio app, nem via chamada manual — sem erro nenhum,
+   silêncio total). Evento em `window` não depende de nenhuma closure
+   compartilhada entre scripts, só do objeto `window` em si.
    ============================================================ */
 
-const _ToastCtx = { listeners: [], counter: 0 };
+let _toastCounter = 0;
+const TOAST_EVENT = "vp:toast";
 
 window.toast = function(message, variant = "info", opts = {}) {
-  const id = ++_ToastCtx.counter;
+  const id = ++_toastCounter;
   const duration = opts.duration ?? 3200;
   const payload = { id, message, variant, duration, description: opts.description, action: opts.action };
-  _ToastCtx.listeners.forEach(fn => fn({ type: "add", payload }));
+  window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: { type: "add", payload } }));
   if (duration !== Infinity) {
     setTimeout(() => {
-      _ToastCtx.listeners.forEach(fn => fn({ type: "remove", id }));
+      window.dispatchEvent(new CustomEvent(TOAST_EVENT, { detail: { type: "remove", id } }));
     }, duration);
   }
   return id;
@@ -26,11 +37,12 @@ function ToastViewport() {
   const [toasts, setToasts] = React.useState([]);
   React.useEffect(() => {
     const fn = (ev) => {
-      if (ev.type === "add") setToasts(t => [...t, ev.payload]);
-      else if (ev.type === "remove") setToasts(t => t.filter(x => x.id !== ev.id));
+      const d = ev.detail;
+      if (d.type === "add") setToasts(t => [...t, d.payload]);
+      else if (d.type === "remove") setToasts(t => t.filter(x => x.id !== d.id));
     };
-    _ToastCtx.listeners.push(fn);
-    return () => { _ToastCtx.listeners = _ToastCtx.listeners.filter(f => f !== fn); };
+    window.addEventListener(TOAST_EVENT, fn);
+    return () => window.removeEventListener(TOAST_EVENT, fn);
   }, []);
 
   return (

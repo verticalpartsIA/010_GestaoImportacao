@@ -168,11 +168,27 @@
     return data || null;
   }
 
+  /* Contrato de Venda não guarda numero_cotacao direto — só dá pra
+     correlacionar em eventos_fluxo indo buscar na Proposta de origem. */
+  async function numeroCotacaoDaProposta(propostaId) {
+    if (!propostaId) return null;
+    const c = sb(); if (!c) return null;
+    const { data } = await c.from('propostas').select('numero_cotacao').eq('id', propostaId).maybeSingle();
+    return data ? data.numero_cotacao : null;
+  }
+
   /* Cria rascunho. Gera VPVE numero_documento via RPC */
   async function createDraft(formState, opts) {
     opts = opts || {};
     const c = sb();
     if (!c) throw new Error('Supabase indisponível');
+
+    // Gate: Financeiro precisa ter dado o aval (consultou score + aprovou a
+    // venda) antes do contrato poder nem ser gerado — ver aval-financeiro-store.js.
+    if (window.AvalFinanceiroStore && formState.propostaId) {
+      const gate = await window.AvalFinanceiroStore.podeEnviarContrato(formState.propostaId);
+      if (!gate.ok) throw new Error(gate.motivo);
+    }
 
     const { data: numRows, error: numErr } = await c.rpc('next_doc_number', { p_prefixo: 'VPVE' });
     if (numErr) throw numErr;
@@ -225,6 +241,7 @@
     const { error } = await c.from('contratos_venda_equipamentos').insert(rec);
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Contrato Venda', acao: 'criou o contrato', alvo: rec.numero_documento, alvo_id: rec.id, detalhe: { comprador: rec.comprador_razao_social } });
+    if (window.AvalFinanceiroStore && formState.propostaId) window.AvalFinanceiroStore.vincularContrato(formState.propostaId, rec.id);
     return rec;
   }
 
@@ -276,6 +293,13 @@
     await c.from('contratos_venda_equipamentos').update(patch).eq('id', id);
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'enviado', { channel });
+    if (window.EventosFluxo) {
+      const numeroCotacao = await numeroCotacaoDaProposta(updated.proposta_id);
+      window.EventosFluxo.registrar({
+        evento: 'CONTRATO_VENDA_ENVIADO', numeroCotacao,
+        alvoLabel: `${updated.comprador_razao_social || ''} · ${updated.numero_documento || ''}`, alvoId: updated.id,
+      });
+    }
     return updated;
   }
 
@@ -343,6 +367,13 @@
     await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'assinado', { ip, signerName: sig.signerName });
+    if (window.EventosFluxo) {
+      const numeroCotacao = await numeroCotacaoDaProposta(updated.proposta_id);
+      window.EventosFluxo.registrar({
+        evento: 'CONTRATO_VENDA_ASSINADO', numeroCotacao,
+        alvoLabel: `${updated.comprador_razao_social || ''} · ${updated.numero_documento || ''}`, alvoId: updated.id,
+      });
+    }
     return updated;
   }
 

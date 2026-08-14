@@ -21,7 +21,7 @@ const PRINT_SCREENS = [
   { id: "importacao-rastreamento", title: "Mapa de Navios",    module: "Logística",   role: "admin",      sub: "MarineTraffic API · rota Shanghai → Santos" },
   { id: "importacao-email", title: "Inbox Importação",         module: "Logística",   role: "admin",      sub: "IMAP · BL · invoice · aduana" },
   { id: "compras",        title: "Compras Nacional",           module: "Logística",   role: "admin",      sub: "fretes · ocorrências · CTes" },
-  { id: "financeiro",     title: "Gatilhos & Prazo Reverso",   module: "Financeiro",  role: "financeiro", sub: "pagamentos por marcos · chain" },
+  { id: "financeiro",     title: "Gatilhos & Prazo",   module: "Financeiro",  role: "financeiro", sub: "cadeia automática por Nº da Cotação" },
   { id: "comissoes",      title: "Comissões Q2/26",            module: "Financeiro",  role: "financeiro", sub: "vendedor · % · aprovação · pagamento" },
   { id: "notificacoes",   title: "Central de Notificações",    module: "Geral",       role: "admin",      sub: "estilo Linear · agrupadas" },
   { id: "configuracoes",  title: "Configurações & RLS",        module: "Admin",       role: "admin",      sub: "matriz de permissões · integrações" },

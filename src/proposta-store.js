@@ -218,6 +218,10 @@
     await c.from('propostas').update(patch).eq('id', id);
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'enviada', { channel });
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'PROPOSTA_ENVIADA', numeroCotacao: updated.numero_cotacao,
+      alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id, detalhe: { channel },
+    });
     return updated;
   }
 
@@ -274,6 +278,11 @@
     await c.from('propostas').update(patch).eq('token', token);
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'aprovada', { ip, signerName: sig.signerName });
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
+      alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
+      detalhe: { resposta: 'aprovada', signerName: sig.signerName },
+    });
     return updated;
   }
 
@@ -288,6 +297,11 @@
     await c.from('propostas').update(patch).eq('token', token);
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'recusada', {});
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
+      alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
+      detalhe: { resposta: 'recusada' },
+    });
     return updated;
   }
 
