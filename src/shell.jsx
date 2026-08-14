@@ -26,6 +26,12 @@ const NAV_GROUPS = [
     { id: "contrato-venda-equipamentos", label: "Contrato Venda de Equipamentos", icon: "fileText" },
     { id: "ncm-catalogo", label: "Catálogo de Produtos", icon: "fileSearch" },
     { id: "importacao", label: "Importação", icon: "ship" },
+    /* Sub-telas da Importação — consolidação de uma solução de importação
+       já usada pela equipe (P.I., Embarques, RFQ, IMS), trazida pra dentro
+       do VP Gestão em fases. Só P.I. está pronta; as demais entram indentadas
+       aqui conforme forem migradas. */
+    { label: "Gestão Importação", subheader: true },
+    { id: "pi-importacao", label: "P.I.", icon: "fileText", indent: true },
     { id: "compras", label: "Compras Nacional", icon: "truck" },
   ]},
   { label: "Engenharia", items: [
@@ -148,6 +154,17 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
                 </div>
               )}
               {items.map((item) => {
+                /* Rótulo indentado de sub-grupo (ex.: "Gestão Importação" dentro de
+                   Jurídico|Importação|Suprimentos) — não navega, só organiza. */
+                if (item.subheader) {
+                  return (
+                    <div className="nav-item nav-item--subheader" key={item.label}
+                      style={{ paddingLeft: 34, fontSize: 11, fontWeight: 700, letterSpacing: '.03em',
+                        textTransform: 'uppercase', color: 'var(--fg3)', cursor: 'default', marginTop: 2 }}>
+                      {item.label}
+                    </div>
+                  );
+                }
                 const ItemIcon = React.createElement(Icon[item.icon] || Icon.bolt);
                 /* Sem rota própria ainda — anuncia o submódulo sem fingir navegação. */
                 if (item.planned) {
@@ -162,7 +179,8 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
                 }
                 return (
                   <button type="button" key={item.id}
-                    className={"nav-item " + (route === item.id ? "is-active" : "")}
+                    className={"nav-item " + (item.indent ? "nav-item--indent " : "") + (route === item.id ? "is-active" : "")}
+                    style={item.indent ? { paddingLeft: 34 } : undefined}
                     onClick={() => setRoute(item.id)}
                     aria-current={route === item.id ? "page" : undefined}
                     data-tooltip={item.label}>
@@ -224,6 +242,7 @@ const BREADCRUMB_MAP = {
   "desenho-tecnico": { module: "Engenharia", page: "Desenho Técnico ER | ES", icon: "ruler" },
   "ficha-tecnica":   { module: "Engenharia", page: "Ficha Técnica", icon: "fileText" },
   importacao:    { module: "Logística", page: "Importação", icon: "ship" },
+  "pi-importacao": { module: "Importação", page: "Gestão Importação — P.I.", icon: "fileText" },
   "importacao-detail":        { module: "Logística", page: "Detalhe de Embarque", icon: "ship" },
   "importacao-rastreamento":  { module: "Logística", page: "Rastreamento de Navios", icon: "mapIcon" },
   "importacao-email":         { module: "Logística", page: "Inbox Importação", icon: "mail" },
