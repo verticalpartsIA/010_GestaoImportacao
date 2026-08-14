@@ -307,6 +307,8 @@
   gap: 20px;
   align-items: start;
 }
+/* #49: colapsa as 3 colunas fixas do contrato em telas médias/pequenas. */
+@media (max-width: 1100px) { .contract-grid { grid-template-columns: 1fr; } }
 .pg-thumbs {
   display: grid;
   grid-template-columns: repeat(2, 1fr);
