@@ -733,6 +733,16 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
     window.FormularioElevadorStore.listarFornecedores().then(setFornecedores).catch(() => {});
   }, [publicMode]);
 
+  /* Só Glarie tem o formulário técnico de cotação configurado de verdade
+     (ver FECotacaoFornecedorGrupo.suportado abaixo) — os demais cadastrados
+     em fornecedores_elevador (BST, Seelon...) apareciam no seletor lado a
+     lado com Glarie, sem nenhuma distinção, e só avisavam "ainda não
+     configurado" DEPOIS de o vendedor escolher e tentar enviar (achado #92).
+     Marca visualmente no próprio seletor quem está pronto. */
+  const fornecedoresOptions = React.useMemo(() => fornecedores.map((nome) => (
+    nome === 'Glarie' ? nome : { value: nome, label: `${nome} (RFQ ainda não configurado)` }
+  )), [fornecedores]);
+
   React.useEffect(() => {
     window.FormularioElevadorStore.listarModelosElevador().then(setModelos).catch(() => {});
   }, []);
@@ -1004,7 +1014,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0 }}>
         {unidades.map((u, i) => (
           <div key={u.id || i} style={{ marginTop: 16 }}>
-            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} fornecedores={fornecedores} modelos={modelos} publicMode={publicMode}/>
+            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode}/>
           </div>
         ))}
 
