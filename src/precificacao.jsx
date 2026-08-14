@@ -26,40 +26,54 @@ function PrecificacaoPage({ setRoute, setSubsel }) {
 function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
   const [projetos, setProjetos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
+  const [erro, setErro] = React.useState(false);
   const [selectedProject, setSelectedProject] = React.useState(null);
 
   React.useEffect(() => {
-    // Busca clientes convertidos como base de precificação
-    Promise.all([
-      window.__VP_SB.sb.from('leads').select('id,building,contact,value').eq('status', 'Convertido'),
-      window.__VP_SB.sb.from('dossier_obra').select('id,lead_id'),
-    ]).then(([{ data: leads }, { data: dossies }]) => {
-      const dossieIdPorLead = {};
-      (dossies || []).forEach(d => { if (d.lead_id) dossieIdPorLead[d.lead_id] = d.id; });
-      const withDossier = (leads || []).map(l => ({ ...l, dossier_id: dossieIdPorLead[l.id] || null }));
-      setProjetos(withDossier);
-      setLoading(false);
-    });
+    let alive = true;
+    (async () => {
+      try {
+        setLoading(true); setErro(false);
+        const sb = window.__VP_SB.sb;
+        const [{ data: leads, error: e1 }, { data: dossies, error: e2 }] = await Promise.all([
+          sb.from('leads').select('id,building,contact,value').eq('status', 'Convertido'),
+          sb.from('dossier_obra').select('id,lead_id'),
+        ]);
+        if (e1 || e2) throw (e1 || e2);
+        const dossieIdPorLead = {};
+        (dossies || []).forEach(d => { if (d.lead_id) dossieIdPorLead[d.lead_id] = d.id; });
+        const withDossier = (leads || []).map(l => ({ ...l, dossier_id: dossieIdPorLead[l.id] || null }));
+        /* Status REAL derivado da Análise Técnica aprovada — precedente
+           obrigatório da precificação (sem números inventados). */
+        const dossierIds = withDossier.map(p => p.dossier_id).filter(Boolean);
+        let aprovados = new Set();
+        if (dossierIds.length) {
+          const { data: analises } = await sb.from('analise_tecnica')
+            .select('dossier_id,status').in('dossier_id', dossierIds).eq('status', 'aprovada');
+          aprovados = new Set((analises || []).map(a => a.dossier_id));
+        }
+        const enriched = withDossier.map(p => ({ ...p, analiseAprovada: p.dossier_id ? aprovados.has(p.dossier_id) : false }));
+        if (alive) { setProjetos(enriched); setLoading(false); }
+      } catch (e) {
+        if (alive) { setErro(true); setLoading(false); }
+      }
+    })();
+    return () => { alive = false; };
   }, []);
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
+  if (erro) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--vp-danger)', fontSize:13 }}>Não foi possível carregar a precificação. Tente recarregar a página.</div>;
 
-  const statusArr = ["Em cálculo", "Versão final", "Aprovada", "Em cálculo", "Aprovada"];
-  const margemArr = [32, 28, 35, 38, 31];
-  const versionsArr = [4, 7, 3, 1, 5];
-  const items = projetos.map((p, idx) => ({
+  const statusLabel = (p) => p.analiseAprovada ? 'Pronto para precificar' : (p.dossier_id ? 'Aguardando análise técnica' : 'Sem dossiê da obra');
+  const items = projetos.map((p) => ({
     ...p,
     name: p.building || p.name,
     client: p.contact || p.client,
-    status: statusArr[idx % statusArr.length],
-    margem: margemArr[idx % margemArr.length],
-    versions: versionsArr[idx % versionsArr.length],
+    status: statusLabel(p),
   }));
 
-  const margemMedia = items.length > 0
-    ? (items.reduce((s, p) => s + p.margem, 0) / items.length).toFixed(1)
-    : '—';
-  const totalVersoes = items.reduce((s, p) => s + p.versions, 0);
+  const prontos = items.filter(i => i.analiseAprovada).length;
+  const valorPipeline = items.reduce((s, p) => s + (p.value || 0), 0);
 
   return (
     <div className="page fade-in">
@@ -71,22 +85,22 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
         </div>
         <div className="page-head__r">
           <PrecificacaoModoTabs modo={modo} setModo={setModo}/>
-          <Button variant="outline" icon="download" onClick={() => window.csvDownload(items.map(i => ({ id:i.id, projeto:i.name, cliente:i.client, status:i.status, margem_pct:i.margem, versoes:i.versions, valor:i.value })), 'precificacao.csv')}>Exportar planilhas</Button>
+          <Button variant="outline" icon="download" onClick={() => window.csvDownload(items.map(i => ({ id:i.id, projeto:i.name, cliente:i.client, status:i.status, valor:i.value })), 'precificacao.csv')}>Exportar planilhas</Button>
           <Button variant="primary" icon="plus" onClick={() => setSelectedProject({})}>Nova precificação</Button>
         </div>
       </div>
 
       <div className="grid-3" style={{ marginBottom: 20 }}>
-        <KPI label="Margem média" value={margemMedia} unit={items.length > 0 ? "%" : ""} sub="projetos convertidos" icon="trending"/>
-        <KPI label="Cálculos abertos" value={items.length} sub="ativos" icon="calculator"/>
-        <KPI label="Versões geradas" value={totalVersoes} sub={items.length > 0 ? `média ${(totalVersoes/items.length).toFixed(1)}/projeto` : "aguardando dados"} icon="history"/>
+        <KPI label="Projetos convertidos" value={items.length} sub="base para precificação" icon="calculator"/>
+        <KPI label="Com análise aprovada" value={prontos} sub={items.length > 0 ? `${prontos}/${items.length} liberados` : "aguardando"} icon="check"/>
+        <KPI label="Valor em pipeline" value={fmtBRL(valorPipeline)} sub="soma dos leads convertidos" icon="trending"/>
       </div>
 
       <div className="table-wrap">
         <table className="t">
           <thead><tr>
-            <th>Projeto</th><th>Cliente</th><th>Versões</th>
-            <th className="text-right">Valor final</th><th className="text-right">Margem</th>
+            <th>Projeto</th><th>Cliente</th>
+            <th className="text-right">Valor</th>
             <th>Status</th><th></th>
           </tr></thead>
           <tbody>
@@ -104,10 +118,8 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
                   <div className="cell-sub">{p.id}</div>
                 </td>
                 <td>{p.client}</td>
-                <td><span className="cell-num">v{p.versions}</span></td>
                 <td className="cell-money">{fmtBRL(p.value)}</td>
-                <td className="cell-money" style={{ color: p.margem >= 32 ? "var(--vp-success)" : "var(--vp-warning-ink)" }}>{p.margem}%</td>
-                <td><StatusBadge status={p.status === "Em cálculo" ? "Em análise" : p.status === "Versão final" ? "Recebida" : "Aprovada"}/></td>
+                <td><Badge variant={p.analiseAprovada ? "success" : "warning"} dot>{p.status}</Badge></td>
                 <td><Button variant="ghost" size="sm" icon="chevRight"/></td>
               </tr>
             ))}
