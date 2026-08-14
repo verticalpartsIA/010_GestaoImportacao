@@ -110,16 +110,20 @@
   <!-- Components in dependency order -->
   <script type="text/vp-jsx" src="src/primitives.jsx?v=4"></script>
   <script type="text/vp-jsx" src="src/toast.jsx?v=6"></script>
-  <script type="text/vp-jsx" src="src/shell.jsx?v=38"></script>
+  <script type="text/vp-jsx" src="src/shell.jsx?v=39"></script>
   <script type="text/vp-jsx" src="src/dashboard.jsx?v=11"></script>
   <script type="text/vp-jsx" src="src/comercial.jsx?v=17"></script>
 
   <!-- Padrão universal de codificação de IDs (Master ID) — Fase 1 -->
   <script src="src/master-id-engine.js?v=2"></script>
 
+  <!-- Cadastros — Clientes & Fornecedores (transversal: Comercial, Importação, Engenharia) -->
+  <script src="src/cadastros-clientes-store.js?v=2"></script>
+  <script src="src/cadastros-fornecedores-store.js?v=1"></script>
+
   <!-- Formulário de Coleta de Dados — Elevadores (Comercial) — ISSUE #66 -->
   <script src="src/enderecos-api.js?v=2"></script>
-  <script src="src/formulario-elevador-store.js?v=14"></script>
+  <script src="src/formulario-elevador-store.js?v=15"></script>
   <script src="src/cotacao-elevador-fornecedor-store.js?v=14"></script>
   <script type="text/vp-jsx" src="src/formulario-elevador.jsx?v=27"></script>
 
@@ -152,7 +156,7 @@
   <script src="src/ficha-workflow-store.js?v=3"></script>
   <script type="text/vp-jsx" src="src/ficha-workflow.jsx?v=1"></script>
 
-  <script type="text/vp-jsx" src="src/ncm-catalogo.jsx?v=22"></script>
+  <script type="text/vp-jsx" src="src/ncm-catalogo.jsx?v=23"></script>
   <script type="text/vp-jsx" src="src/operacoes.jsx?v=14"></script>
   <script type="text/vp-jsx" src="src/logistica.jsx?v=19"></script>
   <script src="src/comissionamento-store.js?v=1"></script>
@@ -164,6 +168,7 @@
   <script type="text/vp-jsx" src="src/rfq.jsx?v=1"></script>
   <script type="text/vp-jsx" src="src/ims.jsx?v=1"></script>
   <script type="text/vp-jsx" src="src/embarques-importacao.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/cadastros.jsx?v=1"></script>
 
   <!-- Dossier da Obra (entidade central) — ISSUE #2 -->
   <script src="src/dossier-store.js?v=3"></script>
@@ -232,6 +237,6 @@
   <script type="text/vp-jsx" src="src/vp-copiloto.jsx?v=1"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="src/app.jsx?v=41"></script>
+  <script type="text/vp-jsx" src="src/app.jsx?v=42"></script>
 </body>
 </html>

@@ -102,7 +102,9 @@
       const { data: existente } = await c.from('clientes').select('*').eq(campo, doc).maybeSingle();
       if (existente) return existente;
     }
+    const codigo = window.CadastrosClientesStore ? await window.CadastrosClientesStore.gerarCodigo() : null;
     const { data, error } = await c.from('clientes').insert({
+      codigo,
       razao_social: dados.razao_social || null,
       cnpj: dados.tipo_pessoa === 'PF' ? null : (doc || null),
       cpf: dados.tipo_pessoa === 'PF' ? (doc || null) : null,

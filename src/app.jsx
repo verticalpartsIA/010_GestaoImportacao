@@ -213,6 +213,8 @@ function App() {
       case "rfq-importacao": return <window.RFQPage/>;
       case "ims-importacao": return <window.IMSPage/>;
       case "embarques-importacao": return <window.EmbarquesImportacaoPage/>;
+      case "cadastro-clientes": return <window.CadastroClientesPage/>;
+      case "cadastro-fornecedores": return <window.CadastroFornecedoresPage/>;
       case "logs": return <LogsAdminPage/>;
       case "configuracoes": return <ConfiguracoesPage/>;
       default: return <Dashboard role={role} setRoute={setRoute}/>;
