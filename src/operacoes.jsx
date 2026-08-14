@@ -391,9 +391,24 @@ function EngenhariaPage({ setRoute }) {
               </div>
             )}
 
-            {engTab !== "gates" && engTab !== "vistoria" && (
-              <div style={{ textAlign:'center', padding:'40px 0', color:'var(--fg3)', fontSize:13 }}>
-                Conteúdo do projeto {selectedProject.id} será carregado aqui. {/* TODO: tabela de itens e laudos — fase futura */}
+            {engTab === "laudo" && (
+              <div style={{ marginTop: 20 }}>
+                <div style={{ fontSize:11, textTransform:'uppercase', letterSpacing:'.06em', color:'var(--fg3)', marginBottom:4 }}>Situação do laudo</div>
+                <div style={{ fontSize:15, fontWeight:700 }}>{selectedProject.laudo || 'Pendente'}</div>
+                <p style={{ fontSize:12, color:'var(--fg3)', marginTop:12 }}>Aprove o laudo pelo botão no topo. O laudo técnico completo é anexado na aba Documentos da Dossiê da Obra.</p>
+              </div>
+            )}
+            {engTab === "docs" && (
+              <div style={{ marginTop: 20, textAlign:'center', padding:'28px 20px', border:'1px solid var(--border)', background:'var(--vp-gray-50)' }}>
+                <p style={{ fontSize:13, color:'var(--fg1)', margin:'0 0 14px' }}>Os documentos da obra (ART, Termo de Vistoria, DataBook, Alvará, Termo de Entrega) ficam na aba <b>Documentos</b> da <b>Dossiê da Obra</b>, com upload e checklist de prontidão por obra.</p>
+                <Button variant="primary" size="sm" icon="arrowRight" onClick={() => setRoute && setRoute('status-obras')}>Abrir obras</Button>
+              </div>
+            )}
+            {(engTab === "bom" || engTab === "visita" || engTab === "ncm") && (
+              <div style={{ textAlign:'center', padding:'32px 20px', color:'var(--fg3)', fontSize:13 }}>
+                {engTab === "ncm" ? "Ficha técnica e NCM do produto ficam no Catálogo de Produtos / Solicitações NCM."
+                 : engTab === "visita" ? "As vistorias estão na aba Vistoria (1/2/3) deste projeto e no módulo Vistorias de Obras."
+                 : "A lista de materiais (BOM) vem do Projeto de Equipamento / Ficha Técnica do produto."}
               </div>
             )}
           </Card>
@@ -1026,6 +1041,74 @@ function ModalAgendarInstalacao({ onClose }) {
   );
 }
 
+/* Checklist real e persistido por equipe (tabela equipe_checklist). */
+function EquipeChecklist({ equipe }) {
+  const sb = window.__VP_SB.sb;
+  const [itens, setItens] = React.useState(null); // null = carregando
+  const [novo, setNovo] = React.useState("");
+  const [busy, setBusy] = React.useState(false);
+
+  const load = React.useCallback(async () => {
+    const { data, error } = await sb.from('equipe_checklist').select('*').eq('equipe_id', equipe.id).order('ordem').order('created_at');
+    if (error) { window.toast('Erro ao carregar checklist: ' + error.message, 'error'); setItens([]); return; }
+    setItens(data || []);
+  }, [equipe.id]);
+  React.useEffect(() => { setItens(null); load(); }, [load]);
+
+  const add = async () => {
+    const desc = novo.trim(); if (!desc) return;
+    setBusy(true);
+    try {
+      const ordem = (itens && itens.length) ? Math.max(...itens.map(i => i.ordem || 0)) + 1 : 0;
+      const { error } = await sb.from('equipe_checklist').insert({ equipe_id: equipe.id, descricao: desc, ordem });
+      if (error) throw error;
+      setNovo(""); await load();
+    } catch (e) { window.toast('Erro: ' + (e.message || e), 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const toggle = async (it) => {
+    setItens(prev => prev.map(x => x.id === it.id ? { ...x, feito: !x.feito } : x)); // otimista
+    const { error } = await sb.from('equipe_checklist').update({ feito: !it.feito, updated_at: new Date().toISOString() }).eq('id', it.id);
+    if (error) { window.toast('Erro ao salvar: ' + error.message, 'error'); load(); }
+  };
+
+  const remover = async (it) => {
+    setItens(prev => prev.filter(x => x.id !== it.id));
+    const { error } = await sb.from('equipe_checklist').delete().eq('id', it.id);
+    if (error) { window.toast('Erro ao remover: ' + error.message, 'error'); load(); }
+  };
+
+  if (itens === null) return <div style={{ padding:'24px 0', textAlign:'center', color:'var(--fg3)', fontSize:13 }}>Carregando checklist…</div>;
+  const feitos = itens.filter(i => i.feito).length;
+
+  return (
+    <div>
+      <div style={{ display:'flex', gap:8, marginBottom:14 }}>
+        <input className="pe-input" placeholder="Nova tarefa do checklist…" value={novo}
+          onChange={e => setNovo(e.target.value)} onKeyDown={e => { if (e.key === 'Enter') add(); }} style={{ flex:1 }}/>
+        <Button variant="primary" size="sm" icon="plus" onClick={add} disabled={busy || !novo.trim()}>Adicionar</Button>
+      </div>
+      {itens.length === 0 ? (
+        <div style={{ padding:'24px 0', textAlign:'center', color:'var(--fg3)', fontSize:13 }}>Nenhuma tarefa no checklist. Adicione a primeira acima.</div>
+      ) : (
+        <>
+          <div style={{ fontSize:12, color:'var(--fg2)', marginBottom:8, fontWeight:600 }}>{feitos}/{itens.length} concluídas</div>
+          <div className="stack" style={{ gap:6 }}>
+            {itens.map(it => (
+              <div key={it.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', border:'1px solid var(--border)', background:'#fff' }}>
+                <input type="checkbox" checked={!!it.feito} onChange={() => toggle(it)} style={{ width:16, height:16, cursor:'pointer' }}/>
+                <span style={{ flex:1, fontSize:13, textDecoration: it.feito ? 'line-through' : 'none', color: it.feito ? 'var(--fg3)' : 'var(--fg1)' }}>{it.descricao}</span>
+                <button onClick={() => remover(it)} title="Remover tarefa" style={{ border:0, background:'transparent', cursor:'pointer', color:'var(--fg3)', display:'flex' }}><Icon.trash size={14}/></button>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function InstalacaoPage() {
   const [equipes, setEquipes] = React.useState([]);
   const [projetos, setProjetos] = React.useState([]);
@@ -1174,9 +1257,7 @@ function InstalacaoPage() {
               <Button variant="outline" size="sm" icon="upload" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange = e => { const f = e.target.files?.[0]; if (f) window.toast(`Foto "${f.name}" selecionada. Upload via Supabase Storage.`, 'success'); }; inp.click(); }}>Foto</Button>
               <Button variant="primary" size="sm" icon="signature" onClick={() => { window.toast("Gerando laudo final — abrindo impressão.", "info"); setTimeout(() => window.print(), 200); }}>Laudo final</Button>
             </>}>
-            <div style={{ textAlign:'center', padding:'40px 0', color:'var(--fg3)', fontSize:13 }}>
-              Checklist da equipe {selectedEquipe.nome} será carregado aqui. {/* TODO: tabela de tarefas por equipe — fase futura */}
-            </div>
+            <EquipeChecklist equipe={selectedEquipe}/>
           </Card>
         ) : (
           <div style={{ display:'flex', alignItems:'center', justifyContent:'center', border:'1px dashed var(--border)', color:'var(--fg3)', fontSize:13, padding:'60px 20px', textAlign:'center' }}>
