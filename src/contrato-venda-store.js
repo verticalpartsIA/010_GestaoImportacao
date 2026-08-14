@@ -173,6 +173,11 @@
     const state = m ? m[2].toUpperCase() : null;
     const equipMap = { ELEVADOR: 'elevador', ESCADA: 'escada', ESTEIRA: 'esteira' };
     const id = 'DOS-' + Date.now().toString(36).toUpperCase();
+    // numero_cotacao é a chave que o resto da esteira usa pra correlacionar
+    // (Formulário/Cotação Fornecedor/Precificação/Proposta/Aval/Importação) —
+    // sem ela o Dossiê fica ilha, incapaz de somar sinais de outros módulos
+    // pro checklist de "obra pronta" (issue #9).
+    const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(formState.masterId) ?? null;
     const rec = {
       id,
       client_name: formState.comprador.razao || 'Cliente sem nome',
@@ -180,6 +185,7 @@
       city, state,
       equip_type: equipMap[formState.tipoEquip] || 'elevador',
       status_master: 'Dossier criado',
+      numero_cotacao: numeroCotacao,
       created_by: (window.__VP_USER || {}).email || null,
     };
     const { error } = await c.from('dossier_obra').insert(rec);

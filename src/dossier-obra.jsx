@@ -203,6 +203,7 @@ function DossierObraPage({ dossierId, setRoute }) {
         {[
           { id: 'visao-geral', label: '📊 Visão Geral' },
           { id: 'documentos', label: '📄 Documentos' },
+          { id: 'instalacao', label: '🛠️ Instalação' },
           { id: 'pendencias', label: '⚠️ Pendências' },
           { id: 'responsaveis', label: '👥 Responsáveis' },
           { id: 'historico', label: '📜 Histórico' }
@@ -230,6 +231,7 @@ function DossierObraPage({ dossierId, setRoute }) {
       <div>
         {activeTab === 'visao-geral' && <TabVisaoGeral dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'documentos' && <TabDocumentos dossier={dossier} reload={carregarDossier} />}
+        {activeTab === 'instalacao' && <TabInstalacao dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'pendencias' && <TabPendencias dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'responsaveis' && <TabResponsaveis dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'historico' && <TabHistorico dossier={dossier} />}
@@ -481,6 +483,126 @@ function TabDocumentos({ dossier, reload }) {
           )))}
         </div>
       )}
+    </div>
+  );
+}
+
+/* ---------- Instalação (issue #9, Fase 1): checklist de obra pronta + vistorias ---------- */
+function TabInstalacao({ dossier, reload }) {
+  const [checklist, setChecklist] = React.useState(null);
+  const [parceiros, setParceiros] = React.useState([]);
+  const [busy, setBusy] = React.useState(false);
+
+  const carregar = React.useCallback(async () => {
+    try {
+      const ck = await window.InstalacaoObraStore.obterChecklistObraPronta(dossier.id);
+      setChecklist(ck);
+    } catch (e) { window.toast?.('Erro ao carregar checklist: ' + e.message, 'error'); }
+    if (window.RHHomologacao) {
+      window.RHHomologacao.listarMontadores().then(setParceiros).catch(() => setParceiros([]));
+    }
+  }, [dossier.id]);
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const acao = async (fn) => {
+    setBusy(true);
+    try { await fn(); await carregar(); await (reload && reload()); }
+    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setBusy(false); }
+  };
+
+  if (!checklist) return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
+
+  const vistoria = checklist.dossier.vistoria;
+  const store = window.InstalacaoObraStore;
+
+  return (
+    <div>
+      <div style={{
+        background: checklist.pronta ? '#eafaf0' : '#fff8e6',
+        border: `1px solid ${checklist.pronta ? '#00aa00' : '#FBB039'}`,
+        borderRadius: 6, padding: '12px 16px', marginBottom: 16, fontSize: 13, fontWeight: 700,
+        color: checklist.pronta ? '#00701f' : '#8a5a00',
+      }}>
+        {checklist.pronta ? '✓ Obra pronta para instalação' : '○ Obra ainda não está pronta para instalação'}
+      </div>
+
+      <div style={{ marginBottom: 24 }}>
+        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Checklist de obra pronta</div>
+        {checklist.itens.map((item) => (
+          <div key={item.chave} style={{ display: 'flex', gap: 12, alignItems: 'flex-start', border: '1px solid #ddd', borderRadius: 6, padding: 12, marginBottom: 8 }}>
+            <div style={{ fontSize: 18, color: item.ok ? '#00aa00' : '#cc7700', fontWeight: 700, width: 20, textAlign: 'center' }}>{item.ok ? '✓' : '○'}</div>
+            <div style={{ flex: 1 }}>
+              <div style={{ fontSize: 13, fontWeight: 600 }}>{item.label}</div>
+              <div style={{ fontSize: 12, color: '#888', marginTop: 2 }}>{item.detalhe}</div>
+            </div>
+          </div>
+        ))}
+
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => acao(() => store.marcarEquipamentoEntregue(dossier.id, !checklist.dossier.equipamento_entregue))}>
+            {checklist.dossier.equipamento_entregue ? 'Desmarcar equipamento entregue' : 'Marcar equipamento entregue'}
+          </Button>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => acao(() => store.marcarAndaimeMunck(dossier.id, { necessario: !checklist.dossier.andaime_munck_necessario }))}>
+            {checklist.dossier.andaime_munck_necessario ? 'Andaime/munck: não aplicável' : 'Andaime/munck necessário'}
+          </Button>
+          {checklist.dossier.andaime_munck_necessario && (
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => acao(() => store.marcarAndaimeMunck(dossier.id, { providenciado: !checklist.dossier.andaime_munck_providenciado }))}>
+              {checklist.dossier.andaime_munck_providenciado ? 'Desmarcar providenciado' : 'Marcar andaime/munck providenciado'}
+            </Button>
+          )}
+        </div>
+
+        <div style={{ marginTop: 12 }}>
+          <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Parceiro instalador</label>
+          <select className="input" style={{ maxWidth: 360 }} disabled={busy} value={dossier.parceiro_instalador_id || ''}
+            onChange={(e) => acao(() => store.vincularParceiroInstalador(dossier.id, e.target.value || null))}>
+            <option value="">— nenhum vinculado —</option>
+            {parceiros.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+          </select>
+        </div>
+      </div>
+
+      <div>
+        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Vistorias (3 inclusas · avulsas cobradas à parte)</div>
+        {!vistoria ? (
+          <Button variant="primary" size="sm" disabled={busy} onClick={() => acao(() => store.criarVistoria(dossier.id, 0))}>Criar plano de vistorias</Button>
+        ) : (
+          <>
+            <div className="row gap-2" style={{ marginBottom: 10 }}>
+              <div className="progress" style={{ flex: 1 }}><span style={{ width: store.calcularProgressoVistoria(vistoria) + '%', background: 'var(--vp-yellow)' }} /></div>
+              <span style={{ fontSize: 12, fontWeight: 700 }}>{store.calcularProgressoVistoria(vistoria)}%</span>
+            </div>
+            {vistoria.fases.map((fase) => (
+              <div key={fase.numero} style={{ display: 'flex', gap: 12, alignItems: 'center', border: '1px solid #ddd', borderRadius: 6, padding: 10, marginBottom: 6 }}>
+                <div style={{ fontSize: 13, fontWeight: 700, width: 70 }}>Vistoria {fase.numero}</div>
+                <StatusBadge status={fase.status === 'concluida' ? 'Concluída' : 'Pendente'} />
+                <span style={{ fontSize: 12, color: '#888' }}>{fase.data ? store.fmtData(fase.data) : 'Não realizada'}</span>
+                {fase.status !== 'concluida' && (
+                  <Button variant="ghost" size="sm" disabled={busy} onClick={() => acao(() => store.atualizarFaseVistoria(dossier.id, fase.numero, { status: 'concluida', data: new Date().toISOString() }))}>
+                    Marcar concluída
+                  </Button>
+                )}
+              </div>
+            ))}
+            {vistoria.avulsas && vistoria.avulsas.length > 0 && (
+              <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
+                {vistoria.avulsas.length} vistoria(s) avulsa(s) — {store.fmtBRL(vistoria.avulsas.reduce((s, a) => s + (a.custo || 0), 0))}
+              </div>
+            )}
+            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+              <Button variant="outline" size="sm" disabled={busy} onClick={() => acao(() => store.adicionarVistoriaAvulsa(dossier.id, { custo: 0, observacoes: 'Vistoria avulsa' }))}>
+                + Registrar vistoria avulsa
+              </Button>
+              {!vistoria.liberada && (
+                <Button variant="primary" size="sm" disabled={busy} onClick={() => acao(() => store.liberarObraVistoriada(dossier.id))}>
+                  Liberar obra vistoriada
+                </Button>
+              )}
+            </div>
+          </>
+        )}
+      </div>
     </div>
   );
 }
