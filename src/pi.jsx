@@ -23,8 +23,27 @@ function PIField({ label, children, span }) {
     </div>
   );
 }
-function PIInput({ value, onChange, type = 'text', placeholder, step }) {
-  return <input className="input" type={type} step={step} value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}/>;
+function PIInput({ value, onChange, type = 'text', placeholder, step, list }) {
+  return <input className="input" type={type} step={step} list={list} value={value ?? ''} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}/>;
+}
+
+/* ---------- Sugestões do Cadastro de Fornecedores (datalist) ----------
+   Usado por P.I./RFQ/Embarques/IMS pra sugerir nomes já cadastrados sem
+   forçar FK — os campos continuam texto livre (mesmo padrão do material
+   de referência: agente de carga e empresa de desembaraço também eram
+   datalist, não select obrigatório). categoria filtra por tipo (ex.:
+   "Agente de Carga"); omitido, traz todos os fornecedores ativos. */
+function CadFornecedorDatalist({ id, categoria }) {
+  const [opcoes, setOpcoes] = React.useState([]);
+  React.useEffect(() => {
+    if (!window.CadastrosFornecedoresStore) return;
+    window.CadastrosFornecedoresStore.listarAtivos(categoria).then(setOpcoes).catch(() => setOpcoes([]));
+  }, [categoria]);
+  return (
+    <datalist id={id}>
+      {opcoes.map((f) => <option key={f.id} value={f.nome_fantasia || f.razao_social}/>)}
+    </datalist>
+  );
 }
 function PISelect({ value, onChange, options, placeholder }) {
   return (
@@ -244,7 +263,10 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
           </div>
 
           <div className="grid-2" style={{ gap: 12, border: '1px solid var(--border)', borderRadius: 6, padding: 12, background: 'var(--vp-gray-50)', marginTop: 10 }}>
-            <PIField label="Fornecedor"><PIInput value={form.fornecedor} onChange={set('fornecedor')} placeholder="Razão social do fornecedor"/></PIField>
+            <PIField label="Fornecedor">
+              <PIInput value={form.fornecedor} onChange={set('fornecedor')} placeholder="Razão social do fornecedor" list="dl-fornecedores-pi"/>
+              <CadFornecedorDatalist id="dl-fornecedores-pi" categoria="Fornecedor"/>
+            </PIField>
             <PIField label="Incoterms"><PISelect value={form.incoterms} onChange={set('incoterms')} options={PI_INCOTERMS}/></PIField>
             <PIField label="Data da solicitação de pagamento"><PIInput type="date" value={form.data_solicitacao_pagamento} onChange={set('data_solicitacao_pagamento')}/></PIField>
             <PIField label="Nº da requisição"><PIInput value={form.numero_requisicao} onChange={set('numero_requisicao')}/></PIField>
