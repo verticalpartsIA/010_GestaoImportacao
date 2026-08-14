@@ -907,8 +907,7 @@ function EngDocsContent() {
   return (
     <div className="grid-3" style={{ gap: 8 }}>
       {docs.map(d => (
-        <div key={d.n} style={{ padding: 12, background: "var(--vp-gray-50)", border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10, cursor: "pointer" }}
-          onClick={() => window.toast("Visualizando " + d.n, "info")}>
+        <div key={d.n} style={{ padding: 12, background: "var(--vp-gray-50)", border: "1px solid var(--border)", display: "flex", alignItems: "center", gap: 10 }}>
           <span style={{ background: "#000", color: "var(--vp-yellow)", padding: "3px 6px", fontFamily: "var(--font-mono)", fontSize: 9, fontWeight: 700 }}>{d.kind}</span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12, fontWeight: 500, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{d.n}</div>
