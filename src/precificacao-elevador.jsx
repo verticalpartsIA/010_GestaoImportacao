@@ -140,7 +140,24 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
     finally { setSalvando(false); }
   };
 
+  /* Travas de sanidade — garante-lixo-em-garante-lixo-fora catastrófico.
+     O câmbio (R$/US$) é o multiplicador de todo o custo importado; um valor
+     fora da faixa real (ex.: 678,91 digitado no lugar de 5,50) explode a
+     proposta pra dezenas de milhões sem nenhum aviso. */
+  const CAMBIO_MIN = 1, CAMBIO_MAX = 20;
+  const validarAntesDeCalcular = () => {
+    const cambio = Number(pz.tx_cambial) || 0;
+    if (cambio <= 0) { window.toast?.('Informe o Câmbio (R$/US$) antes de calcular.', 'warning'); return false; }
+    if (cambio < CAMBIO_MIN || cambio > CAMBIO_MAX) {
+      window.toast?.(`Câmbio ${cambio} fora da faixa esperada (${CAMBIO_MIN}–${CAMBIO_MAX} R$/US$). Verifique — parece que um valor de outro campo (taxa/frete) foi digitado no Câmbio.`, 'error');
+      return false;
+    }
+    if ((Number(pz.vmle_usd) || 0) <= 0) { window.toast?.('VMLE (USD) precisa ser maior que zero.', 'warning'); return false; }
+    return true;
+  };
+
   const calcular = async () => {
+    if (!validarAntesDeCalcular()) return;
     setCalculando(true);
     try {
       await window.PrecificacaoElevadorStore.salvar(pz.id, payloadSalvar());
@@ -158,6 +175,14 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
   const importacao = pz.resultado && pz.resultado.importacao;
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
+
+  const cambioNum = Number(pz.tx_cambial) || 0;
+  const cambioForaFaixa = cambioNum > 0 && (cambioNum < CAMBIO_MIN || cambioNum > CAMBIO_MAX);
+  /* resultado implausível: preço-venda muito acima do custo esperado do FOB
+     (FOB USD × câmbio). Pega tanto o câmbio errado quanto % digitado como
+     inteiro (ex.: markup 39,2 em vez de 0,392). */
+  const fobBrlEsperado = (Number(pz.vmle_usd) || 0) * cambioNum;
+  const resultadoImplausivel = !!resultado && (cambioForaFaixa || (fobBrlEsperado > 0 && Number(resultado.precoVendaProposta) > fobBrlEsperado * 50));
 
   return (
     <div className="page fade-in">
@@ -181,6 +206,15 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           {resultado && <span className="muted small" style={{ display: 'inline-flex', alignItems: 'center', padding: '0 4px' }}>Calculado — envie a proposta em "Propostas"</span>}
         </div>
       </div>
+
+      {(cambioForaFaixa || resultadoImplausivel) && (
+        <div style={{ margin: '0 0 16px', padding: '12px 16px', background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, color: '#991b1b', fontSize: 13 }}>
+          <b>⚠ Verifique os valores antes de enviar.</b>{' '}
+          {cambioForaFaixa
+            ? `O Câmbio informado é ${cambioNum} R$/US$ — fora da faixa real (${CAMBIO_MIN}–${CAMBIO_MAX}). Provável troca de campo (taxa/frete digitados no Câmbio). Corrija o Câmbio e recalcule.`
+            : `O preço de venda calculado (${fmtBRL2(resultado.precoVendaProposta)}) está muito acima do custo esperado do FOB (${fmtBRL2(fobBrlEsperado)}). Confira câmbio, mark-up e percentuais (devem ser decimais, ex.: 0,392 = 39,2%).`}
+        </div>
+      )}
 
       <Card title="Unidades desta cotação" sub="herdado do Formulário de Elevadores + resposta do fornecedor">
         <div className="table-wrap">
@@ -209,7 +243,10 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           <PZField label="Seguro (USD)"><PZInput type="number" value={pz.seguro_usd} onChange={set('seguro_usd')}/></PZField>
           <PZField label="Frete + Seguro + Capatazia (USD)"><PZInput type="number" value={pz.frete_seguro_capatazia_usd} onChange={set('frete_seguro_capatazia_usd')}/></PZField>
           <PZField label="Siscomex (R$)"><PZInput type="number" value={pz.siscomex_rs} onChange={set('siscomex_rs')}/></PZField>
-          <PZField label="Câmbio (R$/US$)"><PZInput type="number" value={pz.tx_cambial} onChange={set('tx_cambial')}/></PZField>
+          <PZField label="Câmbio (R$/US$)">
+            <PZInput type="number" value={pz.tx_cambial} onChange={set('tx_cambial')}/>
+            {cambioForaFaixa && <div style={{ color: '#991b1b', fontSize: 11, marginTop: 4 }}>Fora da faixa {CAMBIO_MIN}–{CAMBIO_MAX}. Confira se não digitou aqui um valor de taxa/frete.</div>}
+          </PZField>
           <PZField label="Outras despesas (R$)"><PZInput type="number" value={pz.outras_despesas_importacao_rs} onChange={set('outras_despesas_importacao_rs')}/></PZField>
         </div>
       </Card>
