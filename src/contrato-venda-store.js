@@ -157,6 +157,36 @@
     if (error) { console.warn('[CVStore] list error', error); return []; }
     return data || [];
   }
+  /* Cria (ou reaproveita) o Dossier da Obra exigido pelo Passo 5 — Revisão.
+     O fluxo Formulário → Fornecedor → Precificação → Proposta nunca passa
+     pelo pipeline de Leads (onde o Dossier normalmente nasce, ver
+     dossier-store.js), então sem isto o contrato ficava permanentemente
+     bloqueado em "Contrato deve estar vinculado a um Dossier da Obra" — não
+     havia NENHUM jeito na UI de vincular um (achado E2E). Cria um dossiê
+     real com os dados já preenchidos no wizard, em vez de travar o usuário. */
+  async function garantirDossier(formState) {
+    if (formState.dossier_id) return formState.dossier_id;
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const localObra = String(formState.localObra || '').trim();
+    const m = localObra.match(/^(.*),\s*([A-Za-z]{2})$/);
+    const city = m ? m[1].trim() : (localObra || null);
+    const state = m ? m[2].toUpperCase() : null;
+    const equipMap = { ELEVADOR: 'elevador', ESCADA: 'escada', ESTEIRA: 'esteira' };
+    const id = 'DOS-' + Date.now().toString(36).toUpperCase();
+    const rec = {
+      id,
+      client_name: formState.comprador.razao || 'Cliente sem nome',
+      building_name: formState.masterId ? `Obra ${formState.masterId}` : (formState.comprador.razao || 'Obra sem nome'),
+      city, state,
+      equip_type: equipMap[formState.tipoEquip] || 'elevador',
+      status_master: 'Dossier criado',
+      created_by: (window.__VP_USER || {}).email || null,
+    };
+    const { error } = await c.from('dossier_obra').insert(rec);
+    if (error) throw error;
+    return id;
+  }
+
   /* Propostas ASSINADAS que ainda não têm contrato — a fila "aguardando
      contrato" do Painel. O contrato não nasce sozinho (precisa do aval do
      Financeiro antes de fechar — ver createDraft/podeEnviarContrato), então
@@ -432,7 +462,7 @@
     uuid, shortToken,
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
-    listAll, listarPropostasAguardandoContrato, getById, getByToken,
+    listAll, listarPropostasAguardandoContrato, garantirDossier, getById, getByToken,
     createDraft, updateFormState,
     markSent, markViewed, markSigned, refuse,
     sweepExpired, remove,
