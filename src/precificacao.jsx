@@ -540,8 +540,15 @@ function PropostasPage({ setRoute, setSubsel }) {
     });
   }, [rows, busca, fStatus]);
 
-  const totalValor = (rows || []).reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
-  const fmtValorTotal = rows && rows.length > 0
+  // Só soma propostas com numero_documento — um rascunho sem número ainda
+  // não é um compromisso comercial identificável, e dados de demonstração
+  // legados (sem numero_documento, valores de centenas de milhões) já
+  // infl(aram o "potencial" pra R$ 6741.1M no reteste E2E. Limpamos as 203
+  // linhas de demo do banco; este filtro é a rede de segurança pra não
+  // repetir se sobrar/entrar lixo parecido de novo.
+  const propostasIdentificadas = (rows || []).filter((p) => p.numero_documento);
+  const totalValor = propostasIdentificadas.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
+  const fmtValorTotal = propostasIdentificadas.length > 0
     ? (totalValor >= 1e6 ? `R$ ${(totalValor / 1e6).toFixed(1)}M` : fmtBRL(totalValor))
     : '—';
   const comMasterId = (rows || []).filter((p) => p.master_id).length;

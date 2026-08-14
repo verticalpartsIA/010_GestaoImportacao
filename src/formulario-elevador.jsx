@@ -702,6 +702,15 @@ function feHeaderDefaults() {
 function feHeaderPick(obj) {
   const h = {};
   FE_HEADER_KEYS.forEach((k) => { if (obj[k] !== undefined) h[k] = obj[k]; });
+  // Campos com CHECK de enum no banco (só aceitam um valor da lista OU null —
+  // "" não passa). "Finalidade da compra" é opcional na UI (sem *), então
+  // salvar sem escolher nada mandava "" e quebrava com um erro cru do
+  // Postgres ("violates check constraint") em vez de simplesmente gravar
+  // "sem resposta" (achado E2E). tipo_mao_de_obra/responsavel_entrega já são
+  // obrigatórios na validação — a sanitização aqui é só rede de segurança.
+  ['finalidade_compra', 'tipo_mao_de_obra', 'responsavel_entrega'].forEach((k) => {
+    if (h[k] === '') h[k] = null;
+  });
   return h;
 }
 
