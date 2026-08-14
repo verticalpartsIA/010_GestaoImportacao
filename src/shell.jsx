@@ -49,7 +49,7 @@ const NAV_GROUPS = [
   /* Submódulos ainda sem rota própria — apenas anunciam o que vai morar aqui,
      sem simular navegação que não existe (ver item.planned no render). */
   { label: "Logística", items: [
-    { label: "Almoxarifado", icon: "package", planned: true },
+    { id: "almoxarifado", label: "Almoxarifado", icon: "package" },
     { label: "Expedição", icon: "truck", planned: true },
     { label: "Logística", icon: "ship", planned: true },
   ]},

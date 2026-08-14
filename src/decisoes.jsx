@@ -64,9 +64,11 @@ function DecCard({ decisao, onReload }) {
     <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div className="up-eyebrow muted">{DEC_TIPO_LABEL[decisao.tipo] || decisao.tipo}</div>
-        <div style={{ fontSize: 15, fontWeight: 800 }}>{ctx.cliente || ctx.titulo || `Cotação Nº ${decisao.numero_cotacao ?? '—'}`}</div>
+        <div style={{ fontSize: 15, fontWeight: 800 }}>{ctx.cliente || ctx.titulo || ctx.item || ctx.obra || `Cotação Nº ${decisao.numero_cotacao ?? '—'}`}</div>
         <div className="cell-sub mono">
           {decisao.numero_cotacao != null && <>Cotação {decisao.numero_cotacao} · </>}
+          {ctx.quantidade != null && <>{ctx.quantidade}{ctx.unidade ? ' ' + ctx.unidade : ''} · </>}
+          {ctx.solicitante && <>{ctx.solicitante} · </>}
           {ctx.valor != null ? `R$ ${Number(ctx.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}
         </div>
         <div className="small muted" style={{ marginTop: 2 }}>Aberta em {fmtDataHora(decisao.criado_em)}</div>
