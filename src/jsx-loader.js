@@ -102,6 +102,28 @@
     });
   }
 
+  // Mesma versão/integrity que o index.html usava pro <script> fixo do Babel
+  // (agora removido de lá — só entra em cena se algum .jsx não estiver em
+  // cache, ex.: 1ª carga do navegador ou 1ª carga depois de um ?v= novo).
+  var BABEL_SRC = 'https://unpkg.com/@babel/standalone@7.29.0/babel.min.js';
+  var BABEL_INTEGRITY = 'sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y';
+  var babelPromise = null;
+
+  function loadBabel() {
+    if (window.Babel) return Promise.resolve();
+    if (babelPromise) return babelPromise;
+    babelPromise = new Promise(function (resolve, reject) {
+      var s = document.createElement('script');
+      s.src = BABEL_SRC;
+      s.integrity = BABEL_INTEGRITY;
+      s.crossOrigin = 'anonymous';
+      s.onload = function () { resolve(); };
+      s.onerror = function () { babelPromise = null; reject(new Error('falha ao carregar Babel Standalone')); };
+      (document.head || document.documentElement).appendChild(s);
+    });
+    return babelPromise;
+  }
+
   /* Executa código já compilado em escopo GLOBAL (como o Babel fazia):
      um <script> inline roda sincronamente ao ser anexado. O sourceURL
      mantém o nome do arquivo no DevTools/stack traces. */
@@ -138,8 +160,6 @@
       var u = tags[i].getAttribute('src');
       if (u) urls.push(u);
     }
-    if (!window.Babel) { console.error('[jsx-loader] Babel não carregou — app não pode iniciar.'); return; }
-
     openDB().then(function (db) {
       var current = {};
       var chain = Promise.resolve();
@@ -150,15 +170,19 @@
         chain = chain.then(function () {
           return idbGet(db, key).then(function (code) {
             if (code != null) return code;
-            return fetch(url).then(function (res) {
-              if (!res.ok) throw new Error('HTTP ' + res.status);
-              return res.text();
+            // Cache-miss: só agora o Babel entra em cena (carregado 1x, reusado
+            // pelos próximos misses desta mesma leva de boot).
+            return loadBabel().then(function () {
+              return fetch(url).then(function (res) {
+                if (!res.ok) throw new Error('HTTP ' + res.status);
+                return res.text();
+              });
             }).then(function (src) {
               var out = compile(src);
               // grava sem bloquear a execução (fire-and-forget)
               idbPut(db, key, out);
               return out;
-            }).catch(function (err) { fail('fetch/compile', url, err); return null; });
+            }).catch(function (err) { fail('fetch/compile/babel', url, err); return null; });
           });
         }).then(function (code) {
           if (code == null) return;

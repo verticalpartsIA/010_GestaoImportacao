@@ -25,16 +25,19 @@
   <link rel="stylesheet" href="styles/ficha-workflow.css?v=1">
   <link rel="stylesheet" href="styles/logs-admin.css?v=1">
 
-  <!-- React + Babel pinned versions -->
+  <!-- React pinned versions. Babel Standalone NÃO carrega mais aqui — o
+       jsx-loader.js abaixo só injeta babel.min.js sob demanda, quando há
+       cache-miss (1ª carga / após um ?v= novo). Cargas seguintes com tudo
+       em cache nem baixam nem executam o Babel. -->
   <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
   <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/@babel/standalone@7.29.0/babel.min.js" integrity="sha384-m08KidiNqLdpJqLq95G/LEi8Qvjl/xUYll3QILypMoQ65QorJ9Lvtp2RXYGBFj1y" crossorigin="anonymous"></script>
 
   <!-- Cache de compilação JSX (IndexedDB) — compila cada .jsx uma vez e reusa
        nas cargas seguintes, em vez de rodar o Babel em ~40 arquivos toda vez.
        Os .jsx abaixo usam type="text/vp-jsx" pra que ESTE loader os controle
-       (e o auto-runner do Babel os ignore). Ver src/jsx-loader.js. -->
-  <script src="src/jsx-loader.js?v=3"></script>
+       (e o auto-runner do Babel os ignore, já que nem carrega mais aqui). Ver
+       src/jsx-loader.js. -->
+  <script src="src/jsx-loader.js?v=4"></script>
 
   <!-- Supabase JS client (CDN, sem build step) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
