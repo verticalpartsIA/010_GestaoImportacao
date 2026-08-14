@@ -70,13 +70,13 @@ function ProjetoElevadorModal({ projeto, onClose, onSaved }) {
     setSaving(true);
     try {
       const salvo = await store.salvar({
-        id: editing ? idRef.current : idRef.current,
+        id: idRef.current, isNew: !editing,
         numeroCotacao: numeroCotacao ? Number(numeroCotacao) : null,
         cotacaoFornecedorId: projeto?.cotacao_fornecedor_id || null,
         referencia, responsavel, unidades, anexos, observacoes,
         status: finalizar ? "finalizado" : "rascunho",
       });
-      if (finalizar) await store.finalizar(salvo.id);
+      if (finalizar && salvo) await store.finalizar(salvo.id);
       window.toast(finalizar ? "Projeto finalizado!" : "Rascunho salvo.", "success");
       onSaved?.(); onClose();
     } catch (e) { window.toast("Erro: " + e.message, "error"); }
