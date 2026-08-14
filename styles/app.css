@@ -131,7 +131,7 @@ body[data-density="airy"] {
 /* ========== APP LAYOUT ============================================ */
 .app {
   display: grid;
-  grid-template-columns: var(--sidebar-w, 240px) 1fr;
+  grid-template-columns: var(--sidebar-w, 240px) minmax(0, 1fr);
   grid-template-rows: 56px 1fr;
   grid-template-areas:
     "sidebar header"
@@ -438,8 +438,8 @@ button.nav-item {
   color: var(--fg3);
 }
 /* Busca global */
-.header__search-wrap { margin-left: auto; position: relative; }
-.header__search-wrap .header__search { margin-left: 0; }
+.header__search-wrap { margin-left: auto; position: relative; min-width: 0; flex: 0 1 320px; }
+.header__search-wrap .header__search { margin-left: 0; width: 100%; }
 .header__search-clear {
   border: 0; background: transparent; cursor: pointer; color: var(--fg3);
   font-size: 16px; line-height: 1; padding: 0 2px;
@@ -515,6 +515,11 @@ button.nav-item {
 .main {
   grid-area: main;
   overflow-y: auto;
+  /* #49: min-width:0 deixa a coluna 1fr encolher abaixo do min-content dos
+     filhos (senão uma tabela/gantt larga empurra o shell inteiro e gera scroll
+     horizontal na página). overflow-x mantém conteúdo largo dentro do main. */
+  min-width: 0;
+  overflow-x: auto;
   background: var(--vp-gray-50);
 }
 .main::-webkit-scrollbar { width: 10px; }
@@ -826,6 +831,39 @@ select.input { appearance: none; -webkit-appearance: none; background-image: lin
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--grid-gap, 16px); }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--grid-gap, 16px); }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--grid-gap, 16px); }
+
+/* ===== Responsividade global (#49) — grids, split, header, page-head =====
+   Sem breakpoints o app.css usava grids fixos (4/3 col) + split fixo + busca
+   de 320px, que comprimiam/truncavam em telas médias e pequenas. */
+@media (max-width: 1100px) {
+  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .split, .split--wide { grid-template-columns: 1fr; }
+}
+@media (max-width: 1024px) {
+  /* header em linha fixa de 56px não cabe (breadcrumb+busca+role-switch+botões);
+     libera a altura e deixa quebrar em linhas, busca ocupa a largura toda. */
+  .app { grid-template-rows: auto 1fr; }
+  .header { flex-wrap: wrap; gap: 10px; padding: 8px 14px; min-height: 56px; }
+  .header__search-wrap { order: 3; margin-left: 0; flex: 1 1 100%; }
+  .header__search { width: 100%; }
+  .role-switch { flex-wrap: wrap; }
+}
+@media (max-width: 860px) {
+  .grid-3 { grid-template-columns: repeat(2, 1fr); }
+  .page-head { flex-direction: column; align-items: stretch; gap: 12px; }
+  .page-head__l { min-width: 0; }
+  .page-head__r { display: flex; flex-wrap: wrap; gap: 8px; }
+}
+@media (max-width: 620px) {
+  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  /* sidebar de 240px consome a tela no mobile — colapsa para ícones. */
+  .app { --sidebar-w: 56px; }
+  .sidebar__brand-text, .sidebar__brand-sub, .sidebar__version,
+  .nav-item__label, .nav-item__badge, .sidebar__group-label,
+  .sidebar__group-sublabel, .sidebar__user-info { display: none; }
+  .nav-item { justify-content: center; padding: 11px 0; }
+}
+
 .row { display: flex; gap: 12px; align-items: center; }
 .row.sb { justify-content: space-between; }
 .row.wrap { flex-wrap: wrap; }
