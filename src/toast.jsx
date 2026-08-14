@@ -29,10 +29,6 @@ window.toast = function(message, variant = "info", opts = {}) {
   return id;
 };
 
-window.toastDemo = function(label) {
-  window.toast(`Ação "${label}" não disponível neste protótipo`, "info");
-};
-
 function ToastViewport() {
   const [toasts, setToasts] = React.useState([]);
   React.useEffect(() => {

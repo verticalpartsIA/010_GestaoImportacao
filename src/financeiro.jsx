@@ -200,7 +200,7 @@ function FinanceiroPage({ setRoute, setSubsel }) {
             </div>
           )}
           {manuais.map((g) => (
-            <GatilhoCard key={g.id} g={g}/>
+            <GatilhoCard key={g.id} g={g} onSaved={reloadGatilhos}/>
           ))}
         </div>
       </Card>
@@ -432,12 +432,30 @@ function ModalConfirmarAvalPagamento({ g, onClose, onSaved }) {
   );
 }
 
-function GatilhoCard({ g }) {
+function GatilhoCard({ g, onSaved }) {
+  const [saving, setSaving] = React.useState(false);
   const daysLeft = g.days_left ?? g.daysLeft ?? 0;
   const dueDate  = g.due_date  ?? g.dueDate  ?? null;
   const revFrom  = g.reverse_from ?? g.reverseFrom ?? null;
   const chain    = Array.isArray(g.chain) ? g.chain : [];
   const dueColor = daysLeft <= 2 ? "var(--vp-danger)" : daysLeft <= 7 ? "var(--vp-warning)" : "var(--vp-success)";
+  const confirmado = !!g.concluido_em;
+
+  const confirmar = async () => {
+    setSaving(true);
+    try {
+      const { data, error } = await window.__VP_SB.sb.from('gatilhos')
+        .update({ status: 'ok', concluido_em: new Date().toISOString(), conclusao_tipo: 'confirmado_manual' })
+        .eq('id', g.id).select();
+      if (error) throw error;
+      if (!data || !data.length) throw new Error('sem permissão para atualizar (RLS).');
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Gatilhos', acao: 'Gatilho confirmado', alvo: g.trigger_name || g.building, alvo_id: g.id });
+      window.toast('Gatilho confirmado.', 'success');
+      onSaved && onSaved();
+    } catch (e) { window.toast('Erro: ' + (e.message || e), 'error'); }
+    finally { setSaving(false); }
+  };
+
   return (
     <div style={{ background: "#fff", border: "1px solid var(--border)", padding: 0, position: "relative" }}>
       <span style={{ position: "absolute", top: 0, left: 0, width: 24, height: 3, background: "var(--vp-yellow)" }}/>
@@ -457,11 +475,14 @@ function GatilhoCard({ g }) {
           <div className="mono small" style={{ color: dueColor }}>{daysLeft > 0 ? `em ${daysLeft} dias` : daysLeft < 0 ? `vencido há ${-daysLeft}d` : "vence hoje"}</div>
         </div>
         <div className="row gap-2" style={{ justifyContent: "flex-end" }}>
-          {g.status === "ok" ? <Badge variant="success" dot>OK</Badge>
+          {confirmado ? <Badge variant="success" dot>Confirmado</Badge>
+           : g.status === "ok" ? <Badge variant="success" dot>OK</Badge>
            : g.status === "atencao" ? <Badge variant="warning" dot>Atenção</Badge>
            : <Badge variant="danger" dot>Pendente</Badge>}
-          <Button variant={daysLeft <= 2 ? "primary" : "outline"} size="sm" icon="check"
-            onClick={() => window.toast(`Gatilho "${g.trigger || g.trigger_name || ''}" confirmado`, "success")}>Confirmar</Button>
+          {!confirmado && (
+            <Button variant={daysLeft <= 2 ? "primary" : "outline"} size="sm" icon="check" disabled={saving}
+              onClick={confirmar}>{saving ? "Confirmando…" : "Confirmar"}</Button>
+          )}
         </div>
       </div>
 
