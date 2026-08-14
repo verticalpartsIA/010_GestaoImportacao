@@ -790,6 +790,18 @@ select.pe-input.is-empty {
 .pe__pdf-capa[data-eq="esteira"] .pe__pdf-capa-img { background-image: url("../assets/capa-esteira-rolante.png"); }
 .pe__pdf-capa-img { background-position: top center; }
 
+/* Página "Sobre a VerticalParts" — mesma foto de capa do equipamento,
+   embaixo do título "Elevando Você e o Seu Negócio". Antes era uma tarja
+   preta lisa (placeholder nunca preenchido). */
+.pe__pdf-sobre-img {
+  width: 100%; height: 190px; margin-bottom: 25px;
+  background-size: cover; background-position: center; background-repeat: no-repeat;
+  background-color: #111; /* fallback enquanto a imagem carrega / se faltar */
+}
+.pe__pdf-sobre-img[data-eq="elevador"] { background-image: url("../assets/capa-elevador.png"); }
+.pe__pdf-sobre-img[data-eq="escada"] { background-image: url("../assets/capa-escada-rolante.png"); }
+.pe__pdf-sobre-img[data-eq="esteira"] { background-image: url("../assets/capa-esteira-rolante.png"); }
+
 /* ---- Small empty placeholder ---- */
 .pe-empty {
   font-size: 11px;
