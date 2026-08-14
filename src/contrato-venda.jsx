@@ -529,6 +529,12 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
   const valorNum = window.CV.parseMoney(form.valor);
   const docPreview = _cvUM(() => window.CV.buildContract({ form, comprador: form.comprador, valor: valorNum, sinalPct: form.sinalPct, parcelas: form.parcelas, numero: 'VPVE________' }), [form]);
 
+  /* Campos obrigatórios ainda pendentes (mesma regra que bloqueia o "Gerar").
+     Sem isto, o preview dizia "Sem pontos de atenção" enquanto a validação
+     travava em "Informe o representante" — contradição pega no reteste E2E. */
+  const pendencias = _cvUM(() => ({ ...validateStep(0, form), ...validateStep(3, form) }), [form]);
+  const nPendencias = Object.keys(pendencias).length;
+
   const goNext = () => {
     const e = validateStep(step, form);
     setErrors(e);
@@ -623,9 +629,10 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
           <div className="ci-preview-bar">
             <span className="ci-preview-bar-title">Pré-visualização</span>
             <div className="ci-preview-bar-conds">
+              {nPendencias > 0 && <span className="ci-pv-cond ci-pv-cond--warn" title={Object.values(pendencias).join(' ')}>{nPendencias} campo{nPendencias > 1 ? 's' : ''} obrigatório{nPendencias > 1 ? 's' : ''} pendente{nPendencias > 1 ? 's' : ''}</span>}
               {docPreview.meta.especial && <span className="ci-pv-cond ci-pv-cond--warn">Equipamento Especial</span>}
               {docPreview.meta.longa && <span className="ci-pv-cond ci-pv-cond--warn">Obra a mais de 100 km</span>}
-              {!docPreview.meta.especial && !docPreview.meta.longa && <span className="ci-pv-cond ci-pv-cond--muted">Sem pontos de atenção</span>}
+              {nPendencias === 0 && !docPreview.meta.especial && !docPreview.meta.longa && <span className="ci-pv-cond ci-pv-cond--muted">Sem pontos de atenção</span>}
             </div>
           </div>
           <div className="ci-preview-scroll">
