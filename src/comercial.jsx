@@ -472,13 +472,39 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
       ctaLabel="Ir para Listagem de Leads"
       onCta={() => setRoute("leads")}/>;
   }
-  const history = [
-    { t: "Lead criado via Site (formulário público)", date: "12/mai 09:14", who: "Sistema", icon: "plus" },
-    { t: "Contato inicial — WhatsApp respondido pelo síndico", date: "12/mai 10:42", who: "Comercial", icon: "message" },
-    { t: "Cotação CT-2026-118 solicitada para fornecedor Suzhou Vertical", date: "12/mai 14:20", who: "Comercial", icon: "globe" },
-    { t: "Visita técnica agendada — 15/mai 14h", date: "12/mai 15:00", who: "Engenharia", icon: "calendar" },
-    { t: "Email follow-up enviado com prévia da proposta", date: "13/mai 08:30", who: "Comercial", icon: "mail" },
-  ];
+  /* Histórico real por lead: criação (intrínseca) + eventos do VPLog que
+     têm alvo_id = lead.id. Sem dados → estado vazio honesto (não mais mock). */
+  const [history, setHistory] = React.useState(null); // null = carregando
+  const fmtHistTs = (ts) => {
+    if (!ts) return "—";
+    const d = new Date(ts);
+    if (isNaN(d.getTime())) return "—";
+    const dateStr = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
+    const hasTime = typeof ts === "string" && ts.includes("T");
+    return hasTime ? dateStr + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" }) : dateStr;
+  };
+  React.useEffect(() => {
+    let alive = true;
+    (async () => {
+      const rows = [];
+      if (lead.date) rows.push({ t: "Lead criado" + (lead.origin ? " via " + lead.origin : ""), who: lead.owner || "Sistema", ts: lead.date, icon: "plus" });
+      try {
+        const sb = window.__VP_SB && window.__VP_SB.sb;
+        if (sb && lead.id != null) {
+          const { data } = await sb.from("vp_logs").select("*").eq("alvo_id", String(lead.id)).order("criado_em", { ascending: false }).limit(50);
+          (data || []).forEach((l) => rows.push({
+            t: l.acao + (l.alvo ? " — " + l.alvo : ""),
+            who: l.ator_nome + (l.ator_setor ? " · " + l.ator_setor : ""),
+            ts: l.criado_em,
+            icon: "activity",
+          }));
+        }
+      } catch (e) { /* rastro best-effort — não quebra a tela */ }
+      rows.sort((a, b) => new Date(b.ts) - new Date(a.ts));
+      if (alive) setHistory(rows);
+    })();
+    return () => { alive = false; };
+  }, [lead.id]);
 
   const criarDossier = async () => {
     if (lead.status !== "Em qualificação" && lead.status !== "Aguardando cotação") {
@@ -487,6 +513,7 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
     setCreatingDossier(true);
     try {
       const dossier = await window.__DOSSIER.criarDeDossier(lead);
+      window.VPLog && window.VPLog.registrar({ modulo: "Comercial", acao: "Lead convertido em Dossiê da Obra", alvo: lead.building, alvo_id: lead.id, detalhe: { dossier_id: dossier.id } });
       window.toast('Dossier criado com sucesso! ID: ' + dossier.id, 'success');
       setSubsel?.(dossier.id);
       setRoute('dossier-obra');
@@ -545,7 +572,12 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
             </p>
           </Card>
 
-          <Card title="Histórico de Atividades" sub={history.length + " interações"}>
+          <Card title="Histórico de Atividades" sub={history == null ? "carregando…" : history.length + (history.length === 1 ? " evento" : " eventos")}>
+            {history == null ? (
+              <div className="muted small" style={{ padding: "8px 0" }}>Carregando histórico…</div>
+            ) : history.length === 0 ? (
+              <div className="muted small" style={{ padding: "8px 0" }}>Nenhuma atividade registrada para este lead ainda.</div>
+            ) : (
             <div className="timeline">
               {history.map((h, i) => (
                 <div key={i} className={"timeline__row " + (i === 0 ? "current" : "done")}>
@@ -554,11 +586,12 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
                     <div className="timeline__title">{h.t}</div>
                     <div className="timeline__sub">por {h.who}</div>
                   </div>
-                  <div className="timeline__meta">{h.date}</div>
+                  <div className="timeline__meta">{fmtHistTs(h.ts)}</div>
                   <div className="timeline__rail"/>
                 </div>
               ))}
             </div>
+            )}
           </Card>
 
           <Card title="Próximos passos sugeridos" sub="orquestração automática">
