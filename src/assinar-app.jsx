@@ -176,6 +176,27 @@ function SgApp() {
     if (el.scrollTop + el.clientHeight >= el.scrollHeight - 24) setScrolledEnd(true);
   };
 
+  /* Se o documento couber sem rolar (doc curto, tela grande, ou o preview que
+     renderiza baixo), o onScroll nunca dispara e a assinatura ficava travada
+     pra sempre — não dava pra habilitar nem marcar a concordância (achado
+     E2E F). Libera automaticamente quando não há o que rolar, e re-checa
+     quando o conteúdo muda de tamanho (preview assíncrono). */
+  _sgUE(() => {
+    if (phase !== 'sign') return;
+    const el = viewerRef.current;
+    if (!el) return;
+    const check = () => {
+      const node = viewerRef.current;
+      if (node && node.scrollHeight <= node.clientHeight + 24) setScrolledEnd(true);
+    };
+    check();
+    let ro = null;
+    if (window.ResizeObserver) { ro = new ResizeObserver(check); ro.observe(el); }
+    const t1 = setTimeout(check, 400);
+    const t2 = setTimeout(check, 1200);
+    return () => { if (ro) ro.disconnect(); clearTimeout(t1); clearTimeout(t2); };
+  }, [phase, source]);
+
   const sigValid = sigMode === 'draw' ? !!drawData : typedName.trim().length >= 3;
   const canSign = scrolledEnd && consent && sigValid && source;
 
@@ -348,7 +369,10 @@ function SgApp() {
           </div>
 
           <div className="ci-sign-label"><span className="n">2</span> Concordância</div>
-          <div className={'ci-consent' + (consent ? ' on' : '') + (scrolledEnd ? '' : ' disabled')} onClick={() => scrolledEnd && setConsent(!consent)}>
+          <div className={'ci-consent' + (consent ? ' on' : '') + (scrolledEnd ? '' : ' disabled')}
+            role="checkbox" aria-checked={consent} aria-disabled={!scrolledEnd} tabIndex={scrolledEnd ? 0 : -1}
+            onClick={() => scrolledEnd && setConsent(!consent)}
+            onKeyDown={(e) => { if (scrolledEnd && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); setConsent(!consent); } }}>
             <div className="box">{consent && <span>✓</span>}</div>
             <div className="txt">Declaro que li, compreendi e concordo com todos os termos {isProposta ? 'desta proposta' : 'deste contrato'}.</div>
           </div>
