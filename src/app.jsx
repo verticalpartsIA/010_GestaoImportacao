@@ -211,6 +211,7 @@ function App() {
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
       case "pi-importacao": return <window.PIPage/>;
       case "rfq-importacao": return <window.RFQPage/>;
+      case "ims-importacao": return <window.IMSPage/>;
       case "logs": return <LogsAdminPage/>;
       case "configuracoes": return <ConfiguracoesPage/>;
       default: return <Dashboard role={role} setRoute={setRoute}/>;
