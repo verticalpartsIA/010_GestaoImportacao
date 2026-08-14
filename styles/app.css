@@ -280,6 +280,12 @@ button.nav-item {
   font-family: inherit;
 }
 .nav-item:focus-visible { outline: 2px solid var(--vp-yellow); outline-offset: -2px; }
+/* Central de Ajuda (modal) */
+.help-ctx { padding: 10px 12px; border: 1px solid var(--border); border-radius: 6px; }
+.help-faq { margin: 0; }
+.help-faq dt { font-weight: 600; margin-top: 12px; }
+.help-faq dt:first-child { margin-top: 0; }
+.help-faq dd { margin: 2px 0 0; color: var(--fg2, inherit); font-size: 13px; }
 .nav-item .nav-item__icon { margin-top: 1px; }
 .nav-item:hover { color: #fff; background: rgba(255,255,255,.04); }
 .nav-item.is-active {
