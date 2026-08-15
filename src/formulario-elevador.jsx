@@ -25,9 +25,177 @@ const FE_ORIGEM_VENDA = [
 ];
 const FE_NORMAS = ['Glarie Standard', 'China Standard', 'EN81-20/50', 'EN81-20/50/70', 'EN81-41'];
 
+/* 15/08 — "camaleão": card de equipamento muda de campo conforme o tipo
+   (reunião de vendedores — cotação pode ter elevador + escada + esteira
+   juntos, cada um com seus próprios ativos VPEL-EL/VPER-ER/VPES-ES). Elevador
+   continua usando as colunas reais de sempre (intocadas, zero risco pro que
+   já funciona — RFQ, precificação etc. dependem delas). Escada/esteira usam
+   `especificacoes` (jsonb) com os campos das planilhas técnicas que o
+   usuário passou — texto livre com o valor típico como placeholder (as
+   planilhas chamam de "opções típicas", não é uma lista fechada de verdade,
+   então virar <select> obrigatório inventaria uma rigidez que a spec não
+   tem). */
+const FE_TIPOS_EQUIPAMENTO = [
+  { value: 'elevador', label: 'Elevador' },
+  { value: 'escada', label: 'Escada Rolante' },
+  { value: 'esteira', label: 'Esteira Rolante' },
+];
+
+const FE_SECOES_ESCADA = [
+  { titulo: 'Dados Gerais', campos: [
+    ['tipo_edificacao', 'Tipo de edificação', 'Comercial, residencial, hospitalar, aeroporto, metrô, shopping, institucional'],
+    ['uso_previsto', 'Uso previsto', 'Público (alto tráfego) / privado (médio/baixo tráfego)'],
+    ['horario_pico', 'Horário de pico estimado', 'Passageiros/hora em cada sentido'],
+  ] },
+  { titulo: 'Dados Geométricos', campos: [
+    ['desnivel_elevacao', 'Desnível (altura de elevação)', 'ex.: 5,04 m'],
+    ['inclinacao', 'Inclinação', '27,3° / 30° / 35°'],
+    ['largura_degrau', 'Largura do degrau', '600 / 800 / 1.000 mm'],
+    ['velocidade_nominal', 'Velocidade nominal', '0,50 / 0,65 / 0,75 m/s'],
+    ['comprimento_abertura_piso', 'Comprimento da abertura no piso', ''],
+    ['largura_rasgo_laje', 'Largura do rasgo na laje', ''],
+    ['profundidade_poco_inferior', 'Profundidade do poço inferior', ''],
+    ['headroom', 'Última altura (headroom)', ''],
+    ['sentido_circulacao', 'Sentido de circulação', 'Subida / descida / reversível'],
+    ['degraus_planos_patamar', 'Nº de degraus planos no patamar', '2 ou 3'],
+    ['disposicao_espaco', 'Disposição no espaço', 'Simples / paralelas / cruzadas'],
+  ] },
+  { titulo: 'Especificações Técnicas', campos: [
+    ['tipo_acionamento', 'Tipo de acionamento', 'Motorredutor direto / VVVF'],
+    ['sistema_economia_energia', 'Sistema de economia de energia', 'Stand-by com sensor de presença'],
+    ['capacidade_transporte', 'Capacidade de transporte', '4.500 a 13.500 pessoas/hora'],
+    ['tipo_degrau', 'Tipo de degrau', 'Aço inoxidável / liga de alumínio'],
+    ['altura_degrau', 'Altura do degrau', '~200 mm, máx. 240 mm'],
+    ['profundidade_degrau', 'Profundidade do degrau', '> 380 mm'],
+    ['balaustrada', 'Balaustrada / guarda-corpo', '80cm ou 90cm — vidro/inox'],
+    ['corrimao_equip', 'Corrimão', 'Borracha preta/colorida/LED'],
+    ['protecao_lateral', 'Proteção lateral', 'Painéis de inox/vidro'],
+    ['iluminacao', 'Iluminação', 'LED balaustrada/teto/patamares'],
+    ['protecao_patamar', 'Proteção de patamar', 'Pente de alumínio/borracha'],
+    ['sistema_seguranca', 'Sistema de segurança', 'Freio serviço+segurança, sensor objeto preso'],
+    ['comunicacao', 'Comunicação', 'Intercomunicador/alarme/indicadores'],
+  ] },
+  { titulo: 'Condições Ambientais', campos: [
+    ['local_instalacao', 'Local de instalação', 'Interior / exterior / ambiente controlado'],
+    ['protecao_intemperies', 'Proteção contra intempéries', 'Cobertura / toldo / totalmente exposta'],
+    ['temp_min', 'Temperatura ambiente mínima', '°C'],
+    ['temp_max', 'Temperatura ambiente máxima', '°C'],
+    ['umidade_relativa', 'Umidade relativa', '%'],
+    ['poeira_salinidade_quimicos', 'Poeira, salinidade ou agentes químicos', 'Sim / Não'],
+    ['acesso_icamento', 'Acesso para içamento da máquina', 'Guindaste / elevador de carga / escada / manual'],
+    ['energia_obra', 'Disponibilidade de energia na obra', 'Provisória / definitiva / não há ainda'],
+    ['poco_inferior', 'Poço inferior', 'Já existe / será construído'],
+    ['caixa_corrida_rasgo', 'Caixa de corrida / rasgo no piso', 'Já executada / será executada'],
+  ] },
+  { titulo: 'Dados Elétricos', campos: [
+    ['tensao_alimentacao_equip', 'Tensão de alimentação', '220V / 380V / 440V trifásica'],
+    ['frequencia_equip', 'Frequência', '60 Hz (Brasil) / 50 Hz'],
+    ['potencia_estimada', 'Potência estimada disponível', 'kVA'],
+    ['aterramento_equip', 'Aterramento', 'Existe / será executado / tipo'],
+    ['quadro_distribuicao_proximo', 'Quadro de distribuição próximo', 'Sim/Não — distância aproximada'],
+    ['disjuntor_dedicado', 'Disjuntor dedicado', 'Sim/Não — capacidade em A'],
+    ['gerador_emergencia', 'Gerador de emergência', 'Sim / Não'],
+    ['alarme_incendio', 'Sistema de alarme de incêndio', 'Sim / Não'],
+    ['monitoramento_remoto', 'Monitoramento remoto', 'Sim / Não'],
+  ] },
+  { titulo: 'Acabamentos', campos: [
+    ['acabamento_degraus', 'Acabamento dos degraus', 'Inox escovado/polido/antiderrapante/colorido'],
+    ['acabamento_laterais', 'Acabamento das laterais', 'Inox / pintura / vidro'],
+    ['acabamento_patamares', 'Acabamento dos patamares', 'Inox / granito / porcelanato'],
+    ['cor_corrimao', 'Cor do corrimão', 'Preto / cinza / personalizado'],
+    ['iluminacao_decorativa', 'Iluminação decorativa', 'LED RGB fixo/programável/branco'],
+    ['indicadores_pavimento', 'Indicadores de pavimento', 'Display LED / LCD / simples'],
+    ['revestimento_teto', 'Revestimento do teto interno', 'Inox / pintura / outro'],
+    ['protecao_impacto_lateral', 'Proteção de impacto nas laterais', 'Sim / Não'],
+  ] },
+];
+
+const FE_SECOES_ESTEIRA = [
+  { titulo: 'Dados Gerais', campos: FE_SECOES_ESCADA[0].campos },
+  { titulo: 'Dados Geométricos', campos: [
+    ['comprimento_total', 'Comprimento total (desnível horizontal)', 'até 80m comercial / 120m público / 140m especial'],
+    ['desnivel_vertical', 'Desnível vertical (altura de elevação)', '2.500 a 8.000 mm'],
+    ['inclinacao', 'Inclinação', '0°–6° padrão / 10°/11° sob demanda / 12° inclinada'],
+    ['largura_palete', 'Largura do palete', '800/1.000mm comercial, até 1.400mm público'],
+    ['velocidade_nominal', 'Velocidade nominal', '0,50 / 0,60 / 0,75 m/s'],
+    ['comprimento_rasgo_piso', 'Comprimento do rasgo no piso', ''],
+    ['largura_rasgo_laje', 'Largura do rasgo na laje', ''],
+    ['profundidade_poco_inferior', 'Profundidade do poço inferior', ''],
+    ['headroom', 'Última altura (headroom)', ''],
+    ['sentido_circulacao', 'Sentido de circulação', 'Unidirecional / reversível'],
+    ['paletes_planos_patamar', 'Nº de paletes planos no patamar', '2 ou 3'],
+    ['disposicao_espaco', 'Disposição no espaço', 'Simples / paralelas / cruzadas / em série'],
+    ['raio_curva', 'Raio de curva (se aplicável)', 'esteiras curvas, em metros'],
+  ] },
+  { titulo: 'Especificações Técnicas', campos: [
+    ['tipo_acionamento', 'Tipo de acionamento', 'Motorredutor direto / VVVF / corrente'],
+    ['sistema_economia_energia', 'Sistema de economia de energia', 'Stand-by, baixa velocidade em vazio'],
+    ['capacidade_transporte', 'Capacidade de transporte', 'depende largura+velocidade — tabela do fabricante'],
+    ['tipo_palete', 'Tipo de palete', 'Aço inox / liga alumínio / aço carbono tratado'],
+    ['espessura_palete', 'Espessura do palete', 'mm — resistência à deformação'],
+    ['balaustrada', 'Balaustrada / guarda-corpo', '80/90/100cm — vidro/inox'],
+    ['corrimao_equip', 'Corrimão', 'Borracha preta/cinza/colorida/LED/antiderrapante'],
+    ['protecao_lateral', 'Proteção lateral', 'Painéis inox/vidro/sólidos até o piso'],
+    ['iluminacao', 'Iluminação', 'LED balaustrada/teto/patamares/piso'],
+    ['protecao_patamar', 'Proteção de patamar (pente)', 'Alumínio / borracha / inox'],
+    ['sistema_seguranca', 'Sistema de segurança', 'Freio+sensor+parada emergência+chave inspeção'],
+    ['sistema_travamento', 'Sistema de travamento', 'Trava mecânica manutenção / automática emergência'],
+    ['comunicacao', 'Comunicação', 'Intercomunicador/alarme/setas/display'],
+    ['sistema_lubrificacao', 'Sistema de lubrificação', 'Centralizado automático / manual / autolubrificante'],
+  ] },
+  { titulo: 'Condições Ambientais', campos: [
+    ...FE_SECOES_ESCADA[3].campos,
+    ['exposicao_chuva', 'Exposição à chuva direta', 'Sim/Não — determina IP elevado'],
+    ['piso_acabado_patamares', 'Piso acabado nos patamares', 'Granito/porcelanato/cerâmica/concreto'],
+  ] },
+  { titulo: 'Dados Elétricos', campos: [
+    ...FE_SECOES_ESCADA[4].campos,
+    ['controle_acesso', 'Sistema de controle de acesso', 'Sim/Não — integração com catracas/torniquetes'],
+  ] },
+  { titulo: 'Acabamentos', campos: [
+    ['acabamento_paletes', 'Acabamento dos paletes', 'Inox escovado/polido/antiderrapante/colorido'],
+    ['acabamento_laterais', 'Acabamento das laterais (frizos)', 'Inox / pintura / vidro'],
+    ['acabamento_patamares', 'Acabamento dos patamares', 'Inox / granito / porcelanato / antiderrapante'],
+    ['cor_corrimao', 'Cor do corrimão', 'Preto/cinza/azul/verde/personalizado'],
+    ['iluminacao_decorativa', 'Iluminação decorativa', 'LED RGB fixo/programável/sem'],
+    ['indicadores_direcao', 'Indicadores de direção', 'Display/LCD/setas/placas'],
+    ['revestimento_teto', 'Revestimento do teto interno', 'Inox / pintura / painel'],
+    ['protecao_impacto_lateral', 'Proteção de impacto nas laterais', 'Sim / Não'],
+    ['sinalizacao_tatil', 'Sinalização tátil', 'Sim/Não — NBR 9050'],
+    ['contraste_visual', 'Contraste visual', 'Sim/Não — deficientes visuais'],
+    ['anuncio_publicitario', 'Anúncio publicitário / branding', 'Sim / Não'],
+  ] },
+];
+
+const FE_SECOES_POR_TIPO = { escada: FE_SECOES_ESCADA, esteira: FE_SECOES_ESTEIRA };
+
+/* Campos das planilhas técnicas do usuário (escada/esteira) — texto livre,
+   sem select/obrigatoriedade: são "opções típicas", não lista fechada. */
+function FEEspecificacoesGenericas({ tipoEquipamento, especificacoes, onChange }) {
+  const secoes = FE_SECOES_POR_TIPO[tipoEquipamento] || [];
+  const set = (chave) => (v) => onChange({ ...(especificacoes || {}), [chave]: v });
+  return (
+    <div className="stack" style={{ gap: 18 }}>
+      {secoes.map((sec) => (
+        <div key={sec.titulo}>
+          <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>{sec.titulo}</div>
+          <div className="grid-3" style={{ gap: 12 }}>
+            {sec.campos.map(([chave, label, placeholder]) => (
+              <FEField key={chave} label={label}>
+                <FEInput value={(especificacoes || {})[chave]} onChange={set(chave)} placeholder={placeholder}/>
+              </FEField>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function feNovaUnidade(identificador) {
   return {
     identificador: identificador || '', quantidade: 1,
+    tipo_equipamento: 'elevador', especificacoes: {},
     fornecedor: '', modelo: '',
     tipo: '', capacidade_kg: '', capacidade_pessoas: '', velocidade_ms: '',
     paradas: '', pavimentos_desc: '', casa_maquinas: '', agrupamento: '', porta_oposta: '',
@@ -310,16 +478,18 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
   }, [unidade.modelo]);
 
   const modelosDisponiveis = (modelos || []).filter((m) => !unidade.tipo || m.tipo === unidade.tipo);
+  const tipoEquip = unidade.tipo_equipamento || 'elevador';
+  const tipoEquipLabel = (FE_TIPOS_EQUIPAMENTO.find((t) => t.value === tipoEquip) || {}).label || 'Equipamento';
 
   return (
     <Card
-      title={`Elevador ${unidade.identificador || index + 1}${Number(unidade.quantidade) > 1 ? ` × ${unidade.quantidade}` : ''}`}
-      sub={`${unidade.tipo || 'Tipo não definido'}${unidade.indice_ativo ? ` · Ativo #${unidade.indice_ativo}` : ''}`}
+      title={`${tipoEquipLabel} ${unidade.identificador || index + 1}${Number(unidade.quantidade) > 1 ? ` × ${unidade.quantidade}` : ''}`}
+      sub={`${tipoEquip === 'elevador' ? (unidade.tipo || 'Tipo não definido') : tipoEquipLabel}${unidade.indice_ativo ? ` · Ativo #${unidade.indice_ativo}` : ''}`}
       action={
         <div className="row gap-2">
           <Button variant="ghost" size="sm" icon={open ? 'chevUp' : 'chevDown'} onClick={() => setOpen((o) => !o)}/>
           {!publicMode && onDuplicate && (
-            <Button variant="outline" size="sm" icon="copy" onClick={onDuplicate} title="Copia todos os campos deste elevador pra um card novo — útil quando só muda paradas/velocidade">Duplicar</Button>
+            <Button variant="outline" size="sm" icon="copy" onClick={onDuplicate} title="Copia todos os campos deste equipamento pra um card novo — útil quando só muda paradas/velocidade">Duplicar</Button>
           )}
           <Button variant="ghost" size="sm" icon="trash" onClick={onRemove}>Remover</Button>
         </div>
@@ -328,31 +498,40 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
       {open && (
         <div className="stack" style={{ gap: 18 }}>
           <div>
-            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Identificação do elevador</div>
+            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Identificação do equipamento</div>
             <div className={publicMode ? 'grid-3' : 'grid-4'} style={{ gap: 12 }}>
               <FEField label="Identificador (E1, E2...)"><FEInput value={unidade.identificador} onChange={set('identificador')} placeholder="E1"/></FEField>
               <FEField label="Quantidade idêntica"><FEInput type="number" value={unidade.quantidade ?? 1} onChange={(v) => set('quantidade')(Math.max(1, Number(v) || 1))} placeholder="1"/></FEField>
-              <FEField label="Tipo *"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>
-              <FEField label="Modelo"><FESelect value={unidade.modelo} onChange={set('modelo')} options={modelosDisponiveis.map((m) => ({ value: m.codigo, label: `${m.codigo} — ${m.nome}` }))} placeholder="— selecione o modelo —"/></FEField>
-              <FEField label="Norma de projeto"><FESelect value={unidade.norma_projeto} onChange={set('norma_projeto')} options={FE_NORMAS}/></FEField>
+              <FEField label="Tipo de equipamento *"><FESelect value={tipoEquip} onChange={set('tipo_equipamento')} options={FE_TIPOS_EQUIPAMENTO}/></FEField>
+              {tipoEquip === 'elevador' && <FEField label="Tipo *"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>}
+              {tipoEquip === 'elevador' && <FEField label="Modelo"><FESelect value={unidade.modelo} onChange={set('modelo')} options={modelosDisponiveis.map((m) => ({ value: m.codigo, label: `${m.codigo} — ${m.nome}` }))} placeholder="— selecione o modelo —"/></FEField>}
+              {tipoEquip === 'elevador' && <FEField label="Norma de projeto"><FESelect value={unidade.norma_projeto} onChange={set('norma_projeto')} options={FE_NORMAS}/></FEField>}
               {!publicMode && <FEField label="Fornecedor"><FESelect value={unidade.fornecedor} onChange={set('fornecedor')} options={fornecedores || []}/></FEField>}
             </div>
             <p style={{ fontSize: 12, color: 'var(--fg3)', margin: '8px 0 0' }}>
-              Se o cliente quer vários elevadores idênticos, informe a quantidade aqui em vez de adicionar um card pra cada — use "+ Adicionar elevador diferente" abaixo só quando a especificação mudar (ex.: um modelo/tipo distinto).
-              {!unidade.modelo && ' Selecione o modelo do elevador para ver as opções disponíveis de teto falso, piso, porta e botoeiras.'}
+              Se o cliente quer vários equipamentos idênticos, informe a quantidade aqui em vez de adicionar um card pra cada — use "+ Adicionar equipamento diferente" abaixo só quando a especificação mudar (ex.: um modelo/tipo distinto, ou mais paradas).
+              {tipoEquip === 'elevador' && !unidade.modelo && ' Selecione o modelo do elevador para ver as opções disponíveis de teto falso, piso, porta e botoeiras.'}
             </p>
-            <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
-              <FEField label="Capacidade (kg)"><FEInput type="number" value={unidade.capacidade_kg} onChange={set('capacidade_kg')} placeholder="630"/></FEField>
-              <FEField label="Capacidade (passageiros)"><FEInput type="number" value={unidade.capacidade_pessoas} onChange={set('capacidade_pessoas')} placeholder="8"/></FEField>
-              <FEField label="Velocidade (m/s) *"><FEInput type="number" value={unidade.velocidade_ms} onChange={set('velocidade_ms')} placeholder="1.0"/></FEField>
-              <FEField label="Paradas *"><FEInput type="number" value={unidade.paradas} onChange={set('paradas')} placeholder="4"/></FEField>
-              <FEField label="Descrição dos pavimentos *" span="2"><FEInput value={unidade.pavimentos_desc} onChange={set('pavimentos_desc')} placeholder="Térreo, 1, 2, 3"/></FEField>
-              <FEField label="Casa de máquinas *"><FESelect value={unidade.casa_maquinas} onChange={set('casa_maquinas')} options={[{ value: 'com', label: 'Com casa de máquinas' }, { value: 'sem', label: 'Sem casa de máquinas (MRL)' }]}/></FEField>
-              <FEField label="Agrupamento *"><FESelect value={unidade.agrupamento} onChange={set('agrupamento')} options={[{ value: 'simplex', label: 'Simplex' }, { value: 'duplex', label: 'Duplex' }, { value: 'triplex', label: 'Triplex' }, { value: 'group', label: 'Group control' }]}/></FEField>
-              <FEField label="Porta oposta / múltiplas entradas *"><FEInput value={unidade.porta_oposta} onChange={set('porta_oposta')} placeholder="Não / Sim - 180°"/></FEField>
-            </div>
+            {tipoEquip === 'elevador' && (
+              <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
+                <FEField label="Capacidade (kg)"><FEInput type="number" value={unidade.capacidade_kg} onChange={set('capacidade_kg')} placeholder="630"/></FEField>
+                <FEField label="Capacidade (passageiros)"><FEInput type="number" value={unidade.capacidade_pessoas} onChange={set('capacidade_pessoas')} placeholder="8"/></FEField>
+                <FEField label="Velocidade (m/s) *"><FEInput type="number" value={unidade.velocidade_ms} onChange={set('velocidade_ms')} placeholder="1.0"/></FEField>
+                <FEField label="Paradas *"><FEInput type="number" value={unidade.paradas} onChange={set('paradas')} placeholder="4"/></FEField>
+                <FEField label="Descrição dos pavimentos *" span="2"><FEInput value={unidade.pavimentos_desc} onChange={set('pavimentos_desc')} placeholder="Térreo, 1, 2, 3"/></FEField>
+                <FEField label="Casa de máquinas *"><FESelect value={unidade.casa_maquinas} onChange={set('casa_maquinas')} options={[{ value: 'com', label: 'Com casa de máquinas' }, { value: 'sem', label: 'Sem casa de máquinas (MRL)' }]}/></FEField>
+                <FEField label="Agrupamento *"><FESelect value={unidade.agrupamento} onChange={set('agrupamento')} options={[{ value: 'simplex', label: 'Simplex' }, { value: 'duplex', label: 'Duplex' }, { value: 'triplex', label: 'Triplex' }, { value: 'group', label: 'Group control' }]}/></FEField>
+                <FEField label="Porta oposta / múltiplas entradas *"><FEInput value={unidade.porta_oposta} onChange={set('porta_oposta')} placeholder="Não / Sim - 180°"/></FEField>
+              </div>
+            )}
           </div>
 
+          {tipoEquip !== 'elevador' && (
+            <FEEspecificacoesGenericas tipoEquipamento={tipoEquip} especificacoes={unidade.especificacoes} onChange={set('especificacoes')}/>
+          )}
+
+          {tipoEquip === 'elevador' && (
+          <React.Fragment>
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Estrutura e dimensões da obra <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— opcional, Engenharia complementa na vistoria</span></div>
             <div className="grid-3" style={{ gap: 12 }}>
@@ -417,6 +596,8 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
               <FEField label="Exigências especiais" span="3"><textarea className="input" rows={2} value={unidade.exigencias_especiais || ''} onChange={(e) => set('exigencias_especiais')(e.target.value)}/></FEField>
             </div>
           </div>
+          </React.Fragment>
+          )}
         </div>
       )}
     </Card>
@@ -924,8 +1105,13 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       return 'Informe o endereço completo da obra (logradouro, bairro, CEP, cidade e UF).';
     }
     for (const u of unidades) {
+      // Escada/esteira usam `especificacoes` (jsonb) em texto livre, sem
+      // obrigatoriedade — a lista de campos "*" abaixo é específica do
+      // elevador (colunas reais que outros módulos, RFQ/precificação,
+      // dependem diretamente).
+      if ((u.tipo_equipamento || 'elevador') !== 'elevador') continue;
       if (!u.tipo || !u.velocidade_ms || !u.paradas || !u.pavimentos_desc || !u.casa_maquinas || !u.agrupamento || !u.porta_oposta || !u.estrutura_caixa || !u.percurso_mm || !u.porta_tipo_abertura || !u.tensao_principal || !u.tensao_iluminacao) {
-        return `Elevador ${u.identificador || ''}: preencha os campos obrigatórios (*).`;
+        return `Equipamento ${u.identificador || ''}: preencha os campos obrigatórios (*).`;
       }
     }
     return null;
@@ -1017,7 +1203,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
         <div className="page-head">
           <div className="page-head__l">
             <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Formulários</div>
-            <h1 className="page-head__title">Formulário — Elevador</h1>
+            <h1 className="page-head__title">Formulário — Equipamento</h1>
             <FENumeroCotacaoBadge numeroCotacao={numeroCotacao}/>
             <p className="page-head__sub">
               Coleta de dados da obra e do equipamento para envio de cotação aos fornecedores.
@@ -1145,7 +1331,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
         ))}
 
         <div style={{ marginTop: 16 }}>
-          <Button variant="outline" icon="plus" onClick={addUnidade}>+ Adicionar elevador diferente</Button>
+          <Button variant="outline" icon="plus" onClick={addUnidade}>+ Adicionar equipamento diferente</Button>
         </div>
       </fieldset>
 
