@@ -295,7 +295,7 @@ function FEAnexos({ formularioId, categoria, titulo, descricao, podeAnexar, gara
 const FE_OPCOES_VAZIAS = { teto_falso: [], piso: [], porta: [], botoeira_cabine: [], botoeira_pavimento: [] };
 
 /* ---------- Card de uma Unidade (um elevador) ---------- */
-function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, modelos, publicMode }) {
+function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornecedores, modelos, publicMode }) {
   const [open, setOpen] = React.useState(true);
   const [opcoes, setOpcoes] = React.useState(FE_OPCOES_VAZIAS);
   const set = (k) => (v) => onChange({ ...unidade, [k]: v });
@@ -318,6 +318,9 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, model
       action={
         <div className="row gap-2">
           <Button variant="ghost" size="sm" icon={open ? 'chevUp' : 'chevDown'} onClick={() => setOpen((o) => !o)}/>
+          {!publicMode && onDuplicate && (
+            <Button variant="outline" size="sm" icon="copy" onClick={onDuplicate} title="Copia todos os campos deste elevador pra um card novo — útil quando só muda paradas/velocidade">Duplicar</Button>
+          )}
           <Button variant="ghost" size="sm" icon="trash" onClick={onRemove}>Remover</Button>
         </div>
       }
@@ -897,6 +900,18 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
   const setUnidade = (idx) => (u) => setUnidades((arr) => arr.map((x, i) => (i === idx ? u : x)));
   const addUnidade = () => setUnidades((arr) => [...arr, feNovaUnidade(`E${arr.length + 1}`)]);
   const removeUnidade = (idx) => setUnidades((arr) => (arr.length > 1 ? arr.filter((_, i) => i !== idx) : arr));
+  /* Duplicar (15/08): copia os ~40 campos técnicos do elevador pra um card
+     novo — pedido do vendedor pra quando só muda paradas/velocidade entre
+     dois elevadores da mesma cotação (ex.: 2 MRL-4-paradas + 3
+     MRL-6-paradas). Tira id/formulario_id/created_at/indice_ativo pra
+     salvarTudo() tratar como unidade NOVA (mesma lógica de sempre: sem id
+     → adicionarUnidade), com identificador/E-número seguinte. */
+  const duplicarUnidade = (idx) => setUnidades((arr) => {
+    const origem = arr[idx];
+    const { id, formulario_id, created_at, indice_ativo, ...campos } = origem;
+    const copia = { ...campos, identificador: `E${arr.length + 1}` };
+    return [...arr.slice(0, idx + 1), copia, ...arr.slice(idx + 1)];
+  });
 
   const usaClientePicker = !publicMode && !criarClienteInline;
 
@@ -1125,7 +1140,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0 }}>
         {unidades.map((u, i) => (
           <div key={u.id || i} style={{ marginTop: 16 }}>
-            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode}/>
+            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} onDuplicate={() => duplicarUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode}/>
           </div>
         ))}
 
