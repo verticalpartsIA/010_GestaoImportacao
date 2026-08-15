@@ -4,7 +4,7 @@
 >
 > Versão navegável (com cores, legendas e melhor leitura): [artifact publicado](https://claude.ai/code/artifact/a4bcccd0-242a-4637-bf02-013a5cab6ead).
 
-**Resumo:** 44 tarefas mapeadas · 7 papéis/recursos diferentes · ~90 dias de navio em trânsito (janela pra adiantar obra) · 3 vazios da 1ª rodada, todos preenchidos · da auditoria seguinte (15/08): a fragmentação da vistoria já foi corrigida, o gate de compra (A1) segue em aberto — ver seção no fim do documento.
+**Resumo:** 45 tarefas mapeadas · 7 papéis/recursos diferentes · ~90 dias de navio em trânsito (janela pra adiantar obra) · 3 vazios da 1ª rodada, todos preenchidos · da auditoria seguinte (15/08): fragmentação da vistoria corrigida, gate de compra (A1) implementado — ver seção no fim do documento.
 
 **A descoberta que mais importa pro custo:** a Vistoria da obra e a Contratação do Instalador **não dependem de nada que aconteça no navio** — nenhuma das duas tem pré-requisito ligado ao Embarque no código. Isso significa que elas podem (e devem) rodar **durante os ~90 dias de trânsito**, não depois. Se a equipe só começa a pensar em instalador quando o equipamento chega no porto, é atraso evitável — o próprio desenho do sistema já permite rodar em paralelo.
 
@@ -19,7 +19,8 @@ Fonte: `decisoes-store.js` · `pi.jsx` · `pi-store.js`
 
 | # | Tarefa | Recurso | Duração / SLA | Onde | O que pesa no custo |
 |---|---|---|---|---|---|
-| A1 | Decisão de compra — **hoje sem gate real** (ver auditoria no fim do documento) | quem tiver acesso à P.I. | sem SLA · `manual` | P.I. (sem gate) · rótulo morto em Central de Decisões | Câmbio do dia trava aqui — quanto mais demora, mais exposto ao dólar; hoje sem controle de quem autorizou |
+| A1 | Compra do equipamento — aprovação do CEO **✅ implementado (15/08)** | CEO (Diego) | sem SLA · `manual` | Central de Decisões · dispara quando o cliente aprova a proposta | Equipamento caro (só o frete marítimo já passa de R$ 7 mil) — aprovação corre em paralelo, cedo, sem atrasar o resto |
+| A1b | Gate final antes do "start" da compra — aprovação do CEO **E** contrato assinado **E** sinal pago **E** aval financeiro confirmado | sistema | — | P.I. › bloqueia "Salvar P.I." até liberar | Trava o 1º pagamento até tudo estar de fato pronto — câmbio do dia só é gasto quando a compra é irreversível |
 | A2 | Negociação final com o fornecedor | Comercial/Importação | SLA 7 dias | Cotação a Fornecedor | Margem de negociação — preço final ainda não travado |
 | A3 | P.I. criada — nº, fornecedor, incoterm, itens, NCM | Importação | — | P.I. | Valor total do equipamento fica travado em USD/moeda de origem |
 | A4 | 1º pagamento ao fornecedor (remessa internacional) | Financeiro | — | P.I. › Pagamento | Cotação do dólar do dia registrada — é o câmbio real da compra, não estimado |
@@ -137,12 +138,16 @@ Ao investigar pra consertar, achei ainda um **quarto problema**: mesmo com o `ob
 
 **Consolidado**: `vistorias_obras` (chave = `dossier_obra.id`) agora é a única fonte de verdade. `vistorias-obras.jsx` ganhou um seletor de obras pra quando é aberta direto pelo menu, e um modo `embedded` pra aparecer dentro da aba Instalação do Dossiê sem duplicar cabeçalho. A política de RLS foi trocada pra bater com o padrão do resto do projeto (`true`/anon-permissivo, igual `dossier_obra`). O checklist "obra pronta" agora lê as 3 fases direto de `vistorias_obras`. `vistoria-tracker.js` e o mini-plano que vivia em `instalacao-obra-store.js` foram desligados da UI (arquivos continuam no repo, sem uso). Testado ao vivo: vistoria criada pela aba Instalação do Dossiê aparece idêntica ao abrir "Vistorias de Obras" pelo menu, e vice-versa; o checklist atualiza em tempo real.
 
-### ⚠️ A1 não é um gate de verdade — ainda em aberto
+### ✅ A1 não era um gate de verdade — corrigido
 
-A Central de Decisões mostra os rótulos "Compra ao fornecedor — CEO" e "— responsável" na tela (`decisoes.jsx`), mas nenhuma função em `decisoes-store.js` jamais cria uma decisão desses tipos — são `label`s sem gatilho, mortos numa tabela de lookup. Só existem de verdade: aprovação de envio de proposta, contratação de instalador, montador entrar na obra, e compra de varejo. Na prática, hoje qualquer pessoa com acesso à P.I. cria a compra e manda o 1º pagamento sem nenhuma aprovação bloqueante. Fica registrado aqui pra decisão de produto (se o gate deve mesmo existir e com que regra) antes de mexer no código.
+A Central de Decisões mostrava os rótulos "Compra ao fornecedor — CEO" e "— responsável" na tela (`decisoes.jsx`), mas nenhuma função em `decisoes-store.js` jamais criava uma decisão desses tipos — eram `label`s sem gatilho, mortos numa tabela de lookup. Na prática, qualquer pessoa com acesso à P.I. criava a compra e mandava o 1º pagamento sem nenhuma aprovação bloqueante.
+
+**Regra definida pelo usuário (15/08)**: toda compra de equipamento (elevador/escada rolante — caro demais pra deixar sem controle, só o frete marítimo já passa de R$ 7 mil) precisa da aprovação do CEO. O gatilho é assim que o **cliente aprova a proposta** — bem antes da assinatura do contrato ou do pagamento do sinal, pra não atrasar o resto do fluxo. Mas o **início real da compra** (a P.I. em si, o 1º pagamento ao fornecedor) só é liberado depois que a cadeia automática de gatilhos também fechar: contrato assinado + sinal pago + aval de pagamento confirmado.
+
+**Implementado**: `decisoes-store.js` ganhou o tipo `compra_equipamento_ceo` (função `podeComprarEquipamento`) e `verificarGateCompra`, que soma essa aprovação com o nó `COMPRA_LIBERADA` já existente em `gatilhos-engine.js`. O disparo acontece em `proposta-store.js`, no exato momento em que o cliente assina/aprova a proposta pelo link público. A P.I. ganhou um campo "Nº Cotação" — quando preenchido, `pi.jsx` mostra o status do gate ao vivo e bloqueia "Salvar P.I." até estar tudo liberado. Testado ao vivo: P.I. bloqueada com CEO pendente → aprovação simulada → ainda bloqueada (gatilhos automáticos pendentes) → gatilhos liberados → P.I. salva com sucesso. Dado de teste removido depois.
 
 ---
 
-**Fontes:** `decisoes-store.js`, `pi-store.js`, `rfq-store.js`, `embarques-importacao-store.js`, `ims-store.js`, `vistorias-obras.jsx`, `instalacao-obra-store.js`, `dossier-obra.jsx`, `rh-homologacao-store.js`, `project-gates.js`, `data-book-store.js`, `handover-manutencao.js`.
+**Fontes:** `decisoes-store.js`, `pi-store.js`, `pi.jsx`, `proposta-store.js`, `gatilhos-engine.js`, `rfq-store.js`, `embarques-importacao-store.js`, `ims-store.js`, `vistorias-obras.jsx`, `instalacao-obra-store.js`, `dossier-obra.jsx`, `rh-homologacao-store.js`, `project-gates.js`, `data-book-store.js`, `handover-manutencao.js`.
 
 Complementa o fluxograma de 4 fases (Cliente → Instalação) publicado anteriormente nesta conversa — este documento é o detalhamento tarefa a tarefa da Gestão Importação em diante.

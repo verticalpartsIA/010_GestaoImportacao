@@ -10,8 +10,7 @@ const DEC_TIPO_LABEL = {
   envio_proposta_ceo: 'Envio de proposta — aprovação do CEO',
   contratacao_mao_obra_ceo: 'Contratação de mão de obra — aprovação do CEO',
   montador_entra_obra_rh: 'Montador entra na obra — aprovação do RH',
-  compra_fornecedor_ceo: 'Compra ao fornecedor — aprovação do CEO',
-  compra_fornecedor_owner: 'Compra ao fornecedor — aprovação do responsável',
+  compra_equipamento_ceo: 'Compra do equipamento — aprovação do CEO',
   compra_varejo_logistica: 'Compra de varejo — aprovação da Logística',
 };
 

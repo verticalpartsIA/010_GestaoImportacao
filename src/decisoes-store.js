@@ -186,6 +186,42 @@
     return { ok: true };
   }
 
+  /* Compra do equipamento (elevador/escada rolante) — o pedido do usuário
+     em 15/08: TODA compra de equipamento passa pelo CEO, disparada assim
+     que o CLIENTE aprova a proposta — bem antes da assinatura do contrato
+     ou do pagamento do sinal (equipamentos caros, só o frete marítimo já
+     passa de R$ 7 mil). Ver hook em proposta-store.js (sign()). */
+  async function podeComprarEquipamento(numeroCotacao, contexto) {
+    if (numeroCotacao == null) return { ok: true };
+    let decisoes = await listarPorCotacao(numeroCotacao);
+    let decisao = decisoes.find((d) => d.tipo === 'compra_equipamento_ceo');
+    if (!decisao) {
+      decisao = await criarDecisaoSeNaoExiste({ tipo: 'compra_equipamento_ceo', papelRequerido: 'ceo', numeroCotacao, contexto });
+    }
+    if (decisao.status === 'reprovada') return { ok: false, motivo: `Compra do equipamento reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para comprar o equipamento deste pedido.' };
+    return { ok: true };
+  }
+
+  /* Gate final antes do "start" real da compra (1ª P.I. criada pro
+     fornecedor): exige a aprovação do CEO acima E que a cadeia automática
+     de gatilhos já tenha liberado a compra — nó COMPRA_LIBERADA em
+     gatilhos-engine.js, que só nasce depois de Contrato assinado + Sinal
+     pago + Aval de Pagamento confirmado. Pedido explícito do usuário:
+     aprovação do CEO é cedo (proposta aprovada), mas o start da compra em
+     si só depois dos outros gatilhos. */
+  async function verificarGateCompra(numeroCotacao) {
+    if (numeroCotacao == null) return { ok: true };
+    const c = sb(); if (!c) return { ok: true };
+    const aprovacaoCeo = await podeComprarEquipamento(numeroCotacao);
+    if (!aprovacaoCeo.ok) return aprovacaoCeo;
+    const { data } = await c.from('gatilhos').select('status').eq('numero_cotacao', numeroCotacao).eq('evento_key', 'COMPRA_LIBERADA').maybeSingle();
+    if (!data || data.status !== 'ok') {
+      return { ok: false, motivo: 'CEO já aprovou a compra do equipamento, mas o início ainda depende da cadeia automática: Contrato assinado + Sinal pago + Aval de Pagamento confirmado (nó "Compra ao Fornecedor liberada").' };
+    }
+    return { ok: true };
+  }
+
   /* Compra de varejo pro estoque (Almoxarifado) — não é equipamento de
      venda, é insumo/peça. Exige aprovação do Chefe de Logística (Danilo).
      Cria a decisão vinculada ao pedido (referencia_tabela/id) na hora do
@@ -203,6 +239,7 @@
     listarPendentesParaMim, listarPorCotacao,
     aprovar, reprovar,
     podeEnviarProposta, podeContratarInstalador, podeMontadorEntrarObra,
+    podeComprarEquipamento, verificarGateCompra,
     criarDecisaoCompraVarejo,
   };
 }());
