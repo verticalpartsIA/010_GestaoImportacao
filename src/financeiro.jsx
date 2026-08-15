@@ -946,6 +946,7 @@ function ConfiguracoesPage() {
       </div>
 
       <Tabs tabs={[
+        { key: "administracao", label: "Administração", icon: "users" },
         { key: "usuarios", label: "Usuários & Perfis", icon: "users" },
         { key: "permissoes", label: "Permissões (RLS)", icon: "shield" },
         { key: "parametros", label: "Parâmetros", icon: "settings" },
@@ -954,6 +955,7 @@ function ConfiguracoesPage() {
       ]} active={tab} onChange={setTab}/>
 
       <div style={{ marginTop: 24 }}>
+        {tab === "administracao" && <window.ColaboradoresAdminPage/>}
         {tab === "usuarios" && <ConfigUsers/>}
         {tab === "permissoes" && <ConfigPermissions/>}
         {tab === "parametros" && <ConfigParams/>}

@@ -99,6 +99,13 @@ const GROUPS_LS_KEY = "vp_sidebar_collapsed_groups";
 
 function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   const filterVisible = (item) => !item.restrict || item.restrict.includes(role);
+  /* Alocação de módulos (Administração › Configurações) — só filtra grupo
+     quando o colaborador tem pelo menos 1 alocação; sem isso, comportamento
+     de sempre (mostra tudo, igual antes desta feature existir). "Geral" é
+     nav básico e sempre aparece, independente de alocação. */
+  const gruposAlocados = (window.__VP_USER || {}).gruposAlocados;
+  const filtrarPorAlocacao = Array.isArray(gruposAlocados) && gruposAlocados.length > 0;
+  const grupoVisivel = (label) => !filtrarPorAlocacao || label === "Geral" || gruposAlocados.includes(label);
   /* Módulos recolhidos individualmente (clique no título) — persiste por navegador. */
   const [collapsedGroups, setCollapsedGroups] = React.useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(GROUPS_LS_KEY) || "[]")); }
@@ -139,7 +146,7 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
         {collapsed ? <Icon.chevRight size={12}/> : <Icon.chevLeft size={12}/>}
       </button>
       <div className="sidebar__scroll">
-        {NAV_GROUPS.map((group) => {
+        {NAV_GROUPS.filter((group) => grupoVisivel(group.label)).map((group) => {
           const items = group.items.filter(filterVisible);
           /* Seção com `empty: true` é placeholder proposital sem nenhum item —
              mostra o label mesmo assim. Seção comum sem itens visíveis
@@ -210,7 +217,9 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
       </div>
       <div className="sidebar__foot">
         <div className="sidebar__user">
-          <div className="avatar">{(window.__VP_USER || {}).iniciais || (ROLE_MAP[role] || {}).initials || "VP"}</div>
+          {window.AvatarColaborador
+            ? <window.AvatarColaborador src={(window.__VP_USER || {}).avatarUrl} nome={(window.__VP_USER || {}).nome || (ROLE_MAP[role] || {}).name}/>
+            : <div className="avatar">{(window.__VP_USER || {}).iniciais || (ROLE_MAP[role] || {}).initials || "VP"}</div>}
           <div className="sidebar__user-info">
             <div className="sidebar__user-name">{(window.__VP_USER || {}).nome || (ROLE_MAP[role] || {}).name || "VP Gestão"}</div>
             <div className="sidebar__user-role" title={(window.__VP_USER || {}).email || ""}>
