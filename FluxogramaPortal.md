@@ -4,7 +4,7 @@
 >
 > Versão navegável (com cores, legendas e melhor leitura): [artifact publicado](https://claude.ai/code/artifact/a4bcccd0-242a-4637-bf02-013a5cab6ead).
 
-**Resumo:** 44 tarefas mapeadas · 7 papéis/recursos diferentes · ~90 dias de navio em trânsito (janela pra adiantar obra) · 3 vazios reais encontrados, todos preenchidos.
+**Resumo:** 44 tarefas mapeadas · 7 papéis/recursos diferentes · ~90 dias de navio em trânsito (janela pra adiantar obra) · 3 vazios da 1ª rodada, todos preenchidos · 2 achados novos de uma auditoria seguinte (15/08), ainda não corrigidos — ver seção no fim do documento.
 
 **A descoberta que mais importa pro custo:** a Vistoria da obra e a Contratação do Instalador **não dependem de nada que aconteça no navio** — nenhuma das duas tem pré-requisito ligado ao Embarque no código. Isso significa que elas podem (e devem) rodar **durante os ~90 dias de trânsito**, não depois. Se a equipe só começa a pensar em instalador quando o equipamento chega no porto, é atraso evitável — o próprio desenho do sistema já permite rodar em paralelo.
 
@@ -19,7 +19,7 @@ Fonte: `decisoes-store.js` · `pi.jsx` · `pi-store.js`
 
 | # | Tarefa | Recurso | Duração / SLA | Onde | O que pesa no custo |
 |---|---|---|---|---|---|
-| A1 | Decisão de compra — dupla aprovação (Gestor Comercial aprova primeiro, depois CEO/Owner — nenhum decide sozinho) | Gestor Comercial → CEO/Owner | sem SLA · `manual` | Central de Decisões | Câmbio do dia trava aqui — quanto mais demora, mais exposto ao dólar |
+| A1 | Decisão de compra — **hoje sem gate real** (ver auditoria no fim do documento) | quem tiver acesso à P.I. | sem SLA · `manual` | P.I. (sem gate) · rótulo morto em Central de Decisões | Câmbio do dia trava aqui — quanto mais demora, mais exposto ao dólar; hoje sem controle de quem autorizou |
 | A2 | Negociação final com o fornecedor | Comercial/Importação | SLA 7 dias | Cotação a Fornecedor | Margem de negociação — preço final ainda não travado |
 | A3 | P.I. criada — nº, fornecedor, incoterm, itens, NCM | Importação | — | P.I. | Valor total do equipamento fica travado em USD/moeda de origem |
 | A4 | 1º pagamento ao fornecedor (remessa internacional) | Financeiro | — | P.I. › Pagamento | Cotação do dólar do dia registrada — é o câmbio real da compra, não estimado |
@@ -45,6 +45,8 @@ Fonte: `pi.jsx` · `rfq.jsx` · `embarques-importacao.jsx`
 
 *Nenhuma destas tarefas espera o embarque chegar — todas podem começar assim que o navio sai do porto de origem (algumas, até antes). É aqui que se ganha ou se perde tempo de projeto.*
 Fonte: `vistoria-tracker.js` · `instalacao-obra-store.js` · `rh-homologacao-store.js` · `decisoes-store.js`
+
+> ⚠️ C1–C4 documentam a vistoria feita **dentro do Dossiê da Obra** (aba Instalação) — é a única que o checklist "obra pronta" realmente lê. Existem outras 2 telas de vistoria no sistema ("Vistorias de Obras" e "Instalação em Campo", ambas no menu) gravando em tabelas diferentes que não alimentam este checklist — ver auditoria no fim do documento.
 
 | # | Tarefa | Recurso | Duração / SLA | Onde | O que pesa no custo |
 |---|---|---|---|---|---|
@@ -120,6 +122,18 @@ Detectados na primeira versão deste documento e implementados em seguida (PR [#
 - **D4** — a aba Aduaneiro do Embarque ganhou um bloco condicional (só aparece quando o canal não é Verde) com `conferencia_status`, `conferencia_motivo` e `conferencia_data` da conferência extra da Receita.
 
 Testado ao vivo contra o Supabase real antes do merge — inclusive um bug real pego no meio do teste: os 3 campos de conferência estavam sendo descartados silenciosamente ao salvar, porque a função que monta a linha do banco (`_payload()` em `embarques-importacao-store.js`) tinha uma lista explícita de campos que não incluía os novos. Corrigido antes do commit.
+
+---
+
+## Auditoria seguinte (15/08) — 2 achados ainda não corrigidos
+
+Conferindo o WBS direto contra o código depois do primeiro merge, achei mais dois pontos onde o site não reflete o que parecia estar documentado/implementado:
+
+**A1 não é um gate de verdade.** A Central de Decisões mostra os rótulos "Compra ao fornecedor — CEO" e "— responsável" na tela (`decisoes.jsx`), mas nenhuma função em `decisoes-store.js` jamais cria uma decisão desses tipos — são `label`s sem gatilho, mortos numa tabela de lookup. Só existem de verdade: aprovação de envio de proposta, contratação de instalador, montador entrar na obra, e compra de varejo. Na prática, hoje qualquer pessoa com acesso à P.I. cria a compra e manda o 1º pagamento sem nenhuma aprovação bloqueante.
+
+**Vistoria da obra tem 3 implementações que não se falam.** "Vistorias de Obras" no menu grava em `vistorias_obras` (a mais completa — agendamento, vistoriador, docs/imagens). "Instalação em Campo" no menu grava em `projetos.vistoria` via `vistoria-tracker.js` (modelo antigo). E a aba Instalação dentro do Dossiê da Obra — a que este WBS documenta em C1–C4 — grava em `dossier_obra.vistoria` via `instalacao-obra-store.js`. Só esta terceira alimenta o checklist "obra pronta" que efetivamente libera a instalação (`obterChecklistObraPronta`). Fazer a vistoria pelas outras duas telas do menu não aparece nesse checklist.
+
+Nenhum dos dois foi corrigido ainda — ficam registrados aqui pra decisão de produto antes de mexer no código (qual vira a tela oficial de vistoria; se o gate de compra deve mesmo existir e com que regra).
 
 ---
 
