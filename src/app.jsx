@@ -213,6 +213,9 @@ function App() {
       case "rfq-importacao": return <window.RFQPage/>;
       case "ims-importacao": return <window.IMSPage/>;
       case "embarques-importacao": return <window.EmbarquesImportacaoPage/>;
+      case "gi-painel": return <window.GIPainelPage/>;
+      case "gi-analise-precos": return <window.GIAnalisePrecosPage/>;
+      case "pedidos-acompanhamento": return <window.PedidosAcompanhamentoPage/>;
       case "cadastro-clientes": return <window.CadastroClientesPage/>;
       case "cadastro-fornecedores": return <window.CadastroFornecedoresPage/>;
       case "logs": return <LogsAdminPage/>;

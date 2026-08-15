@@ -100,6 +100,8 @@
   <script src="src/ims-store.js?v=1"></script>
   <!-- Gestão Importação — Fase 4: Embarques -->
   <script src="src/embarques-importacao-store.js?v=1"></script>
+  <!-- Pedidos — acompanhamento de status (Nacional/Importação) -->
+  <script src="src/pedidos-acompanhamento-store.js?v=1"></script>
 
   <!-- Aval Financeiro — gate entre Proposta aprovada/Contrato e Contrato assinado/Compra -->
   <script src="src/aval-financeiro-store.js?v=4"></script>
@@ -110,7 +112,7 @@
   <!-- Components in dependency order -->
   <script type="text/vp-jsx" src="src/primitives.jsx?v=4"></script>
   <script type="text/vp-jsx" src="src/toast.jsx?v=6"></script>
-  <script type="text/vp-jsx" src="src/shell.jsx?v=39"></script>
+  <script type="text/vp-jsx" src="src/shell.jsx?v=40"></script>
   <script type="text/vp-jsx" src="src/dashboard.jsx?v=11"></script>
   <script type="text/vp-jsx" src="src/comercial.jsx?v=17"></script>
 
@@ -119,7 +121,7 @@
 
   <!-- Cadastros — Clientes & Fornecedores (transversal: Comercial, Importação, Engenharia) -->
   <script src="src/cadastros-clientes-store.js?v=2"></script>
-  <script src="src/cadastros-fornecedores-store.js?v=1"></script>
+  <script src="src/cadastros-fornecedores-store.js?v=2"></script>
 
   <!-- Formulário de Coleta de Dados — Elevadores (Comercial) — ISSUE #66 -->
   <script src="src/enderecos-api.js?v=2"></script>
@@ -168,7 +170,9 @@
   <script type="text/vp-jsx" src="src/rfq.jsx?v=2"></script>
   <script type="text/vp-jsx" src="src/ims.jsx?v=2"></script>
   <script type="text/vp-jsx" src="src/embarques-importacao.jsx?v=2"></script>
-  <script type="text/vp-jsx" src="src/cadastros.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/gestao-importacao-painel.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="src/pedidos-acompanhamento.jsx?v=2"></script>
+  <script type="text/vp-jsx" src="src/cadastros.jsx?v=3"></script>
 
   <!-- Dossier da Obra (entidade central) — ISSUE #2 -->
   <script src="src/dossier-store.js?v=3"></script>
@@ -237,6 +241,6 @@
   <script type="text/vp-jsx" src="src/vp-copiloto.jsx?v=1"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="src/app.jsx?v=42"></script>
+  <script type="text/vp-jsx" src="src/app.jsx?v=43"></script>
 </body>
 </html>
