@@ -679,10 +679,13 @@ function SuggestedStep({ icon, label, sub, status }) {
 }
 
 /* ---------- FORMULÁRIOS (placeholder — estrutura interna vem em sessão futura) ---------- */
+/* 15/08 — Elevador, Escada Rolante e Esteira Rolante deixaram de ser
+   categorias/formulários separados: agora moram todos dentro do mesmo
+   Formulário — Equipamento (reunião de vendedores, uma cotação pode ter
+   vários tipos de equipamento juntos). O card único abaixo leva pro mesmo
+   formulário; lá dentro o vendedor escolhe o tipo por card de unidade. */
 const FE_CATEGORIAS = [
-  { id: 'elevador', label: 'Elevador', icon: 'ruler', route: 'formulario-elevador', pronto: true },
-  { id: 'escada', label: 'Escada Rolante', icon: 'ruler', pronto: false },
-  { id: 'esteira', label: 'Esteira Rolante', icon: 'ruler', pronto: false },
+  { id: 'equipamento', label: 'Equipamento', icon: 'ruler', route: 'formulario-elevador', pronto: true, subLabel: 'Elevador · Escada Rolante · Esteira Rolante' },
   { id: 'mod-elevador', label: 'Modernização Elevador', icon: 'tool', pronto: false },
   { id: 'mod-er-es', label: 'Modernização Escadas e Esteiras', icon: 'tool', pronto: false },
   { id: 'maquina-tracao', label: 'Máquina de Tração', icon: 'grid', pronto: false },
@@ -702,7 +705,7 @@ function FormulariosPage({ setRoute, setSubsel }) {
       </div>
       <div className="grid-4" style={{ gap: 14 }}>
         {FE_CATEGORIAS.map((c) => (
-          <Card key={c.id} title={c.label} sub={c.pronto ? 'Disponível' : 'Em breve'}
+          <Card key={c.id} title={c.label} sub={c.pronto ? (c.subLabel || 'Disponível') : 'Em breve'}
             style={!c.pronto ? { opacity: .55, cursor: 'not-allowed' } : { cursor: 'pointer' }}
             action={<Icon.chevRight/>}>
             <div
