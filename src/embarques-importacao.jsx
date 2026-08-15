@@ -11,6 +11,7 @@ const EI_TIPOS_FRETE = ['Marítimo', 'Aéreo', 'Rodoviário'];
 const EI_MODALIDADES = ['FOB', 'FCA', 'EXW'];
 const EI_CANAIS = ['Verde', 'Amarelo', 'Vermelho', 'Cinza'];
 const EI_STATUS_REEMBOLSO = ['Não solicitado', 'Solicitado', 'Em análise', 'Aprovado', 'Pago', 'Cancelado'];
+const EI_CONFERENCIA_STATUS = ['Não se aplica', 'Aguardando conferência', 'Em conferência', 'Concluída — liberada', 'Concluída — com exigência'];
 const EI_CONTAINER_TIPOS = ["20'DV", "40'DV", "40'HC", "20'RF", "40'RF", "20'OT", "40'OT", "20'FR", "40'FR", 'Outro'];
 const EI_NFE_STATUS = ['Autorizada', 'Cancelada', 'Denegada'];
 
@@ -191,6 +192,7 @@ const EI_EMPTY = {
   aprovacao_frete: 'Pendente', pedido_booking: '', transit_time: '', free_time: '',
   referencia_despachante: '', custos_estimativa: '', documentos_marimex: '', transit_time_total: '',
   di: '', data_registro_di: '', canal_parametrizacao: '', ultima_data_free_time: '', eta_santos: '', historico_eta: [],
+  conferencia_status: '', conferencia_motivo: '', conferencia_data: '',
   empresa_desembaraco: '', faturamento_desembaraco: '', numerario_desembaraco: '', valor_reembolso: '',
   status_reembolso: 'Não solicitado', data_solicitacao_reembolso: '', data_recebimento_reembolso: '', observacoes_financeiras: '',
   data_limite_entrega: '', local_entrega: '', data_carregamento: '', data_entrega: '', devolucao_container: '', nfes: [],
@@ -264,16 +266,30 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
       )}
 
       {tab === 'desembaraco' && (
-        <div className="grid-3" style={{ gap: 10, marginTop: 14 }}>
-          <PIField label="Ref. despachante"><PIInput value={form.referencia_despachante} onChange={set('referencia_despachante')}/></PIField>
-          <PIField label="Custos/estimativa (R$)"><PIInput type="number" value={form.custos_estimativa} onChange={set('custos_estimativa')}/></PIField>
-          <PIField label="Docs Marimex"><PIInput value={form.documentos_marimex} onChange={set('documentos_marimex')}/></PIField>
-          <PIField label="TT total (dias)"><PIInput type="number" value={form.transit_time_total} onChange={set('transit_time_total')}/></PIField>
-          <PIField label="DUIMP"><PIInput value={form.di} onChange={set('di')}/></PIField>
-          <PIField label="Data registro DUIMP"><PIInput type="date" value={form.data_registro_di} onChange={set('data_registro_di')}/></PIField>
-          <PIField label="Canal parametrização"><PISelect value={form.canal_parametrizacao} onChange={set('canal_parametrizacao')} options={EI_CANAIS}/></PIField>
-          <PIField label="Última data free time"><PIInput type="date" value={form.ultima_data_free_time} onChange={set('ultima_data_free_time')}/></PIField>
-          <PIField label="ETA Santos"><PIInput type="date" value={form.eta_santos} onChange={set('eta_santos')}/></PIField>
+        <div style={{ marginTop: 14 }}>
+          <div className="grid-3" style={{ gap: 10 }}>
+            <PIField label="Ref. despachante"><PIInput value={form.referencia_despachante} onChange={set('referencia_despachante')}/></PIField>
+            <PIField label="Custos/estimativa (R$)"><PIInput type="number" value={form.custos_estimativa} onChange={set('custos_estimativa')}/></PIField>
+            <PIField label="Docs Marimex"><PIInput value={form.documentos_marimex} onChange={set('documentos_marimex')}/></PIField>
+            <PIField label="TT total (dias)"><PIInput type="number" value={form.transit_time_total} onChange={set('transit_time_total')}/></PIField>
+            <PIField label="DUIMP"><PIInput value={form.di} onChange={set('di')}/></PIField>
+            <PIField label="Data registro DUIMP"><PIInput type="date" value={form.data_registro_di} onChange={set('data_registro_di')}/></PIField>
+            <PIField label="Canal parametrização"><PISelect value={form.canal_parametrizacao} onChange={set('canal_parametrizacao')} options={EI_CANAIS}/></PIField>
+            <PIField label="Última data free time"><PIInput type="date" value={form.ultima_data_free_time} onChange={set('ultima_data_free_time')}/></PIField>
+            <PIField label="ETA Santos"><PIInput type="date" value={form.eta_santos} onChange={set('eta_santos')}/></PIField>
+          </div>
+          {form.canal_parametrizacao && form.canal_parametrizacao !== 'Verde' && (
+            <div style={{ marginTop: 14, padding: 12, background: '#fff8e6', border: '1px solid #FBB039', borderRadius: 6 }}>
+              <p className="small" style={{ margin: '0 0 8px', fontWeight: 700, color: '#8a5a00' }}>
+                Canal {form.canal_parametrizacao} — conferência extra da Receita Federal
+              </p>
+              <div className="grid-3" style={{ gap: 10 }}>
+                <PIField label="Status da conferência"><PISelect value={form.conferencia_status} onChange={set('conferencia_status')} options={EI_CONFERENCIA_STATUS}/></PIField>
+                <PIField label="Data da conferência"><PIInput type="date" value={form.conferencia_data} onChange={set('conferencia_data')}/></PIField>
+                <PIField label="Motivo / exigência"><PIInput value={form.conferencia_motivo} onChange={set('conferencia_motivo')} placeholder="ex.: divergência de NCM, laudo pendente"/></PIField>
+              </div>
+            </div>
+          )}
         </div>
       )}
 

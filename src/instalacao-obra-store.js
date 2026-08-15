@@ -88,14 +88,25 @@
   function fmtData(d) { return d ? new Date(d).toLocaleDateString('pt-BR') : '—'; }
 
   /* ---------- Checklist de obra pronta ---------- */
-  /* Marca manual dos dois itens que não têm sinal em nenhum outro módulo. */
-  async function marcarEquipamentoEntregue(dossierId, entregue) {
+  /* Marca manual dos itens que não têm sinal em nenhum outro módulo.
+     `recebidoPor`/`qtdPessoas` registram quem recebeu o equipamento e com
+     quantas pessoas — vazio real detectado no WBS: a recepção mínima de
+     2 pessoas no cliente não tinha nenhum campo até aqui. */
+  async function marcarEquipamentoEntregue(dossierId, entregue, { recebidoPor, qtdPessoas } = {}) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { error } = await c.from('dossier_obra').update({
+    const patch = {
       equipamento_entregue: !!entregue,
       equipamento_entregue_em: entregue ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
-    }).eq('id', dossierId);
+    };
+    if (entregue) {
+      patch.equipamento_recebido_por = recebidoPor || null;
+      patch.equipamento_qtd_pessoas_recebimento = qtdPessoas != null && qtdPessoas !== '' ? Number(qtdPessoas) : null;
+    } else {
+      patch.equipamento_recebido_por = null;
+      patch.equipamento_qtd_pessoas_recebimento = null;
+    }
+    const { error } = await c.from('dossier_obra').update(patch).eq('id', dossierId);
     if (error) throw error;
   }
 
@@ -165,7 +176,13 @@
     itens.push({ chave: 'projeto', ok: projetoAprovado, label: 'Projeto traduzido/aprovado pela Engenharia', detalhe: projeto ? projeto.status : 'Não iniciado' });
 
     // 4. Equipamento entregue e armazenado na obra (manual)
-    itens.push({ chave: 'equipamento', ok: !!dossier.equipamento_entregue, label: 'Equipamento entregue e armazenado na obra', detalhe: dossier.equipamento_entregue ? fmtData(dossier.equipamento_entregue_em) : 'Pendente' });
+    let equipamentoDetalhe = 'Pendente';
+    if (dossier.equipamento_entregue) {
+      equipamentoDetalhe = fmtData(dossier.equipamento_entregue_em);
+      if (dossier.equipamento_recebido_por) equipamentoDetalhe += ` · recebido por ${dossier.equipamento_recebido_por}`;
+      if (dossier.equipamento_qtd_pessoas_recebimento) equipamentoDetalhe += ` · ${dossier.equipamento_qtd_pessoas_recebimento} pessoa(s) na recepção`;
+    }
+    itens.push({ chave: 'equipamento', ok: !!dossier.equipamento_entregue, label: 'Equipamento entregue e armazenado na obra', detalhe: equipamentoDetalhe });
 
     // 5. Obra vistoriada e liberada
     const vistoria = dossier.vistoria;

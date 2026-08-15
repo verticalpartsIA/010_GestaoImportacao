@@ -492,11 +492,15 @@ function TabInstalacao({ dossier, reload }) {
   const [checklist, setChecklist] = React.useState(null);
   const [parceiros, setParceiros] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
+  const [recebidoPor, setRecebidoPor] = React.useState('');
+  const [qtdPessoas, setQtdPessoas] = React.useState('');
 
   const carregar = React.useCallback(async () => {
     try {
       const ck = await window.InstalacaoObraStore.obterChecklistObraPronta(dossier.id);
       setChecklist(ck);
+      setRecebidoPor(ck.dossier.equipamento_recebido_por || '');
+      setQtdPessoas(ck.dossier.equipamento_qtd_pessoas_recebimento != null ? String(ck.dossier.equipamento_qtd_pessoas_recebimento) : '');
     } catch (e) { window.toast?.('Erro ao carregar checklist: ' + e.message, 'error'); }
     if (window.RHHomologacao) {
       window.RHHomologacao.listarMontadores().then(setParceiros).catch(() => setParceiros([]));
@@ -539,8 +543,20 @@ function TabInstalacao({ dossier, reload }) {
           </div>
         ))}
 
+        {!checklist.dossier.equipamento_entregue && (
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', marginTop: 8, alignItems: 'flex-end' }}>
+            <div>
+              <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Recebido por (nome dos responsáveis)</label>
+              <input className="input" style={{ width: 240 }} value={recebidoPor} onChange={(e) => setRecebidoPor(e.target.value)} placeholder="ex.: João Silva, Maria Souza"/>
+            </div>
+            <div>
+              <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Qtd. de pessoas na recepção</label>
+              <input className="input" type="number" min="0" style={{ width: 140 }} value={qtdPessoas} onChange={(e) => setQtdPessoas(e.target.value)} placeholder="mín. 2"/>
+            </div>
+          </div>
+        )}
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 12 }}>
-          <Button variant="outline" size="sm" disabled={busy} onClick={() => acao(() => store.marcarEquipamentoEntregue(dossier.id, !checklist.dossier.equipamento_entregue))}>
+          <Button variant="outline" size="sm" disabled={busy} onClick={() => acao(() => store.marcarEquipamentoEntregue(dossier.id, !checklist.dossier.equipamento_entregue, { recebidoPor, qtdPessoas }))}>
             {checklist.dossier.equipamento_entregue ? 'Desmarcar equipamento entregue' : 'Marcar equipamento entregue'}
           </Button>
           <Button variant="outline" size="sm" disabled={busy} onClick={() => acao(() => store.marcarAndaimeMunck(dossier.id, { necessario: !checklist.dossier.andaime_munck_necessario }))}>
