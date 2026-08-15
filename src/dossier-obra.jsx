@@ -255,6 +255,13 @@ function DossierObraPage({ dossierId, setRoute }) {
           />
         </Modal>
       )}
+      {modalOpen === 'avancar-status' && (
+        <ModalAvancarStatus
+          dossier={dossier}
+          onClose={() => setModalOpen(null)}
+          onSaved={() => { setModalOpen(null); carregarDossier(); }}
+        />
+      )}
     </div>
   );
 }
@@ -324,7 +331,7 @@ function TabVisaoGeral({ dossier, setModalOpen }) {
         <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
           {dossier.status_master}
         </div>
-        <Button variant="primary" size="small" onClick={() => alert('Fluxo de transição a implementar')}>
+        <Button variant="primary" size="small" onClick={() => setModalOpen('avancar-status')}>
           Avançar Etapa
         </Button>
       </div>
@@ -395,6 +402,61 @@ function TabVisaoGeral({ dossier, setModalOpen }) {
         </Button>
       </div>
     </div>
+  );
+}
+
+/* Avançar Etapa — o botão existia como stub ("Fluxo de transição a
+   implementar") desde antes; window.__DOSSIER.atualizarStatus() sempre
+   funcionou, só faltava uma tela chamando ele pras etapas depois da
+   Precificação (única que já tinha um caminho real, via aprovação da
+   Análise Técnica). Sugere o próximo status da sequência por padrão, mas
+   deixa escolher qualquer um — a obra real às vezes pula etapa formal
+   (mesmo comportamento já assumido em gatilhos-engine.js). */
+function ModalAvancarStatus({ dossier, onClose, onSaved }) {
+  const FLOW = window.__DOSSIER.STATUS_FLOW;
+  const indiceAtual = FLOW.indexOf(dossier.status_master);
+  const sugestao = indiceAtual >= 0 && indiceAtual < FLOW.length - 1 ? FLOW[indiceAtual + 1] : dossier.status_master;
+  const [novoStatus, setNovoStatus] = React.useState(sugestao);
+  const [notas, setNotas] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const salvar = async () => {
+    if (novoStatus === dossier.status_master) return window.toast?.('Escolha uma etapa diferente da atual.', 'warning');
+    setSaving(true);
+    try {
+      await window.__DOSSIER.atualizarStatus(dossier.id, novoStatus, notas);
+      window.toast?.(`Status atualizado para "${novoStatus}".`, 'success');
+      onSaved();
+    } catch (e) {
+      window.toast?.('Erro: ' + e.message, 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  return (
+    <Modal title="Avançar Etapa" onClose={onClose} width={480}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={salvar} disabled={saving}>{saving ? 'Salvando…' : 'Confirmar'}</Button>
+      </>}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div style={{ fontSize: 12, color: '#666' }}>
+          Etapa atual: <b>{dossier.status_master}</b>
+        </div>
+        <div className="stack" style={{ gap: 4 }}>
+          <label className="up-eyebrow muted">Nova etapa</label>
+          <select className="input" value={novoStatus} onChange={(e) => setNovoStatus(e.target.value)}>
+            {FLOW.map((s) => <option key={s} value={s}>{s}{s === sugestao ? ' (próxima)' : ''}</option>)}
+          </select>
+        </div>
+        <div className="stack" style={{ gap: 4 }}>
+          <label className="up-eyebrow muted">Observação (opcional)</label>
+          <textarea className="input" rows={3} value={notas} onChange={(e) => setNotas(e.target.value)}
+            placeholder="ex.: instalador iniciou a montagem em campo hoje"/>
+        </div>
+      </div>
+    </Modal>
   );
 }
 
