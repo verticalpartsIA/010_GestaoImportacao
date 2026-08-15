@@ -62,11 +62,18 @@
     return data || null;
   }
 
+  /* Deriva do MAIOR número já usado NO ANO, não de count(*): com contagem,
+     excluir uma RFQ fazia a próxima reusar um número existente; e a contagem
+     global também furava a sequência ao virar o ano. */
   async function gerarNumero() {
-    const c = sb(); if (!c) return 'RFQ-' + new Date().getFullYear() + '-0001';
-    const { count } = await c.from('rfq_importacao').select('id', { count: 'exact', head: true });
-    const n = (count || 0) + 1;
-    return `RFQ-${new Date().getFullYear()}-${String(n).padStart(4, '0')}`;
+    const ano = new Date().getFullYear();
+    const c = sb(); if (!c) return `RFQ-${ano}-0001`;
+    const { data } = await c.from('rfq_importacao').select('numero_rfq').like('numero_rfq', `RFQ-${ano}-%`);
+    const maior = (data || []).reduce((max, r) => {
+      const n = parseInt(String(r.numero_rfq || '').split('-').pop(), 10);
+      return isNaN(n) ? max : Math.max(max, n);
+    }, 0);
+    return `RFQ-${ano}-${String(maior + 1).padStart(4, '0')}`;
   }
 
   function _payload(form) {
