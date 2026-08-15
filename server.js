@@ -189,6 +189,14 @@ app.get('/cotacao-elevador-fornecedor/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'cotacao-elevador-fornecedor.html'));
 });
 
+/* ---------- Status público da obra (Cronograma de Instalação) ----------
+   /status-obra/<token> → entrega status-obra.html. O token é lido no
+   client (dossier_obra.link_publico_token). Somente leitura. */
+app.get('/status-obra/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'status-obra.html'));
+});
+
 /* ---------- Estáticos ----------
    Código (html/js/jsx/css) e version.json vão sempre com no-cache: o navegador
    é obrigado a revalidar com o servidor antes de usar a cópia salva (ETag/

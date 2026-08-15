@@ -79,6 +79,9 @@
       if (dossier.equipamento_entregue_em) {
         add(dossier.equipamento_entregue_em, 'Cliente', 'Equipamento recebido na obra' + (dossier.equipamento_qtd_pessoas_recebimento ? ` (${dossier.equipamento_qtd_pessoas_recebimento} pessoa(s))` : ''), dossier.equipamento_recebido_por, 'Dossiê da Obra');
       }
+
+      const { data: checklistItens } = await c.from('instalacao_checklist_itens').select('*').eq('dossier_id', dossier.id).eq('status', 'concluido');
+      (checklistItens || []).forEach((it) => add(it.concluido_em, 'Instalador', `Instalação — ${it.etapa}`, it.concluido_por, 'Cronograma de Instalação'));
     }
 
     /* 3. Decisões gerenciais (CEO/RH/Gestor) — aprovadas ou reprovadas */

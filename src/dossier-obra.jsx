@@ -204,6 +204,7 @@ function DossierObraPage({ dossierId, setRoute }) {
           { id: 'visao-geral', label: '📊 Visão Geral' },
           { id: 'documentos', label: '📄 Documentos' },
           { id: 'instalacao', label: '🛠️ Instalação' },
+          { id: 'cronograma-instalacao', label: '🏗️ Cronograma de Instalação' },
           { id: 'pendencias', label: '⚠️ Pendências' },
           { id: 'responsaveis', label: '👥 Responsáveis' },
           { id: 'historico', label: '📜 Histórico' }
@@ -232,6 +233,7 @@ function DossierObraPage({ dossierId, setRoute }) {
         {activeTab === 'visao-geral' && <TabVisaoGeral dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'documentos' && <TabDocumentos dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'instalacao' && <TabInstalacao dossier={dossier} reload={carregarDossier} />}
+        {activeTab === 'cronograma-instalacao' && <TabCronogramaInstalacao dossier={dossier} />}
         {activeTab === 'pendencias' && <TabPendencias dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'responsaveis' && <TabResponsaveis dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'historico' && <TabHistorico dossier={dossier} />}
@@ -644,6 +646,205 @@ function TabInstalacao({ dossier, reload }) {
         <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Vistorias</div>
         <VistoriasObras obraId={dossier.id} obra={{ nome: dossier.building_name }} embedded onChanged={carregar}/>
       </div>
+    </div>
+  );
+}
+
+/* Cronograma de Instalação (15/08) — checklist de execução, "camaleão"
+   por tipo de equipamento (pedido do usuário: template muda conforme
+   elevador/escada/esteira). Ordem de conclusão livre — corte civil e
+   elétrica podem rodar em paralelo na obra real, a semana é só
+   agrupamento visual. */
+function TabCronogramaInstalacao({ dossier }) {
+  const store = window.InstalacaoChecklistStore;
+  const [itens, setItens] = React.useState(null);
+  const [busy, setBusy] = React.useState(false);
+  const [linkPublico, setLinkPublico] = React.useState(null);
+  const [showAddTemplate, setShowAddTemplate] = React.useState(false);
+
+  const carregar = React.useCallback(() => {
+    store.listarPorDossier(dossier.id).then(setItens).catch(() => setItens([]));
+  }, [dossier.id]);
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const criar = async () => {
+    setBusy(true);
+    try {
+      await store.criarChecklistDossier(dossier.id, dossier.equip_type);
+      window.toast?.('Cronograma criado.', 'success');
+      carregar();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const marcar = async (item, novoStatus) => {
+    setBusy(true);
+    try { await store.marcarItem(item.id, { status: novoStatus }); carregar(); }
+    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const gerarLink = async () => {
+    try {
+      const url = await store.gerarLinkPublico(dossier.id);
+      setLinkPublico(url);
+      try { await navigator.clipboard.writeText(url); window.toast?.('Link copiado — já é público, qualquer um com o link vê o status.', 'success'); }
+      catch (e) { window.toast?.('Link gerado (copie manualmente abaixo).', 'success'); }
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+  };
+
+  if (itens === null) return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
+
+  if (itens.length === 0) {
+    return (
+      <div style={{ textAlign: 'center', padding: '48px 20px' }}>
+        <p style={{ fontSize: 13, color: 'var(--fg3)', marginBottom: 16 }}>
+          Nenhum cronograma de instalação criado ainda pra esta obra ({store.normalizarTipoEquipamento(dossier.equip_type)}).
+        </p>
+        <Button variant="primary" onClick={criar} disabled={busy}>{busy ? 'Criando…' : 'Criar Cronograma de Instalação'}</Button>
+      </div>
+    );
+  }
+
+  const total = itens.length;
+  const concluidos = itens.filter((i) => i.status === 'concluido').length;
+  const pct = Math.round((concluidos / total) * 100);
+  const semanas = [...new Set(itens.map((i) => i.semana))].sort((a, b) => a - b);
+
+  return (
+    <div>
+      <div style={{ background: '#0b1220', color: '#fff', borderRadius: 8, padding: '16px 20px', marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: '#9aa7bd' }}>Progresso</div>
+          <div style={{ fontSize: 22, fontWeight: 800 }}>{concluidos} / {total} · {pct}%</div>
+        </div>
+        <div className="row gap-2">
+          <Button variant="outline" size="sm" onClick={gerarLink}>🔗 Gerar link público</Button>
+          <Button variant="ghost" size="sm" onClick={() => setShowAddTemplate((v) => !v)}>+ Adicionar item ao template</Button>
+        </div>
+      </div>
+
+      {linkPublico && (
+        <div style={{ background: '#f0f8ff', border: '1px solid #0066cc', borderRadius: 6, padding: 10, marginBottom: 16, fontSize: 12, wordBreak: 'break-all' }}>
+          Link público (copiado): <a href={linkPublico} target="_blank" rel="noopener noreferrer">{linkPublico}</a>
+        </div>
+      )}
+
+      {showAddTemplate && (
+        <FormAdicionarItemTemplate onSaved={() => setShowAddTemplate(false)} equipTypePadrao={store.normalizarTipoEquipamento(dossier.equip_type)}/>
+      )}
+
+      {semanas.map((sem) => (
+        <div key={sem} style={{ marginBottom: 20 }}>
+          <div style={{ borderLeft: `4px solid ${store.semanaCor(sem)}`, paddingLeft: 12, marginBottom: 10 }}>
+            <div style={{ fontSize: 11, textTransform: 'uppercase', color: store.semanaCor(sem), fontWeight: 700 }}>Semana {sem}</div>
+            <div style={{ fontSize: 14, fontWeight: 700 }}>{store.semanaTitulo(sem)}</div>
+          </div>
+          {itens.filter((i) => i.semana === sem).map((item) => (
+            <div key={item.id} style={{
+              border: '1px solid ' + (item.status === 'concluido' ? '#10b981' : item.status === 'nao_aplicavel' ? '#ccc' : '#ddd'),
+              background: item.status === 'concluido' ? '#f0fdf4' : item.status === 'nao_aplicavel' ? '#fafafa' : '#fff',
+              borderRadius: 6, padding: 12, marginBottom: 8, opacity: item.status === 'nao_aplicavel' ? 0.6 : 1,
+            }}>
+              <div className="row sb" style={{ alignItems: 'flex-start' }}>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13, fontWeight: 700 }}>{item.etapa}</div>
+                  {item.servicos && item.servicos.length > 0 && (
+                    <ul style={{ margin: '6px 0', paddingLeft: 18, fontSize: 12, color: '#555' }}>
+                      {item.servicos.map((s, i) => <li key={i}>{s}</li>)}
+                    </ul>
+                  )}
+                  {item.resultado_esperado && (
+                    <div style={{ fontSize: 12, color: '#0a7a3d', marginTop: 4 }}>✓ {item.resultado_esperado}</div>
+                  )}
+                  {item.status === 'concluido' && (
+                    <div style={{ fontSize: 11, color: '#888', marginTop: 6 }}>
+                      Concluído por {item.concluido_por || '—'} em {item.concluido_em ? new Date(item.concluido_em).toLocaleString('pt-BR') : '—'}
+                    </div>
+                  )}
+                </div>
+                <div className="row gap-1" style={{ flexShrink: 0 }}>
+                  {item.status !== 'concluido' && (
+                    <Button variant="primary" size="sm" disabled={busy} onClick={() => marcar(item, 'concluido')}>✓ Concluir</Button>
+                  )}
+                  {item.status === 'concluido' && (
+                    <Button variant="outline" size="sm" disabled={busy} onClick={() => marcar(item, 'pendente')}>Desmarcar</Button>
+                  )}
+                  {item.status === 'pendente' && (
+                    <Button variant="ghost" size="sm" disabled={busy} onClick={() => marcar(item, 'nao_aplicavel')}>N/A</Button>
+                  )}
+                  {item.status === 'nao_aplicavel' && (
+                    <Button variant="ghost" size="sm" disabled={busy} onClick={() => marcar(item, 'pendente')}>Reativar</Button>
+                  )}
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* "Camaleão": qualquer usuário pode adicionar item de template pra
+   elevador, escada ou esteira — mesmo espírito da biblioteca
+   compartilhada de categorias/campos da Ficha Técnica. Item entra no
+   template geral, não neste dossiê (esta obra já tem seu snapshot). */
+function FormAdicionarItemTemplate({ onSaved, equipTypePadrao }) {
+  const [tipo, setTipo] = React.useState(equipTypePadrao || 'elevador');
+  const [semana, setSemana] = React.useState(1);
+  const [etapa, setEtapa] = React.useState('');
+  const [servicos, setServicos] = React.useState('');
+  const [resultado, setResultado] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const salvar = async () => {
+    if (!etapa.trim()) return window.toast?.('Informe o nome da etapa.', 'warning');
+    setSaving(true);
+    try {
+      await window.InstalacaoChecklistStore.adicionarItemTemplate({
+        tipoEquipamento: tipo, semana, etapa,
+        servicos: servicos.split('\n').map((s) => s.trim()).filter(Boolean),
+        resultadoEsperado: resultado,
+      });
+      window.toast?.('Item adicionado ao template — vale só pra próximos cronogramas criados.', 'success');
+      setEtapa(''); setServicos(''); setResultado('');
+      onSaved();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  return (
+    <div style={{ border: '1px dashed #999', borderRadius: 6, padding: 14, marginBottom: 18, background: '#fafafa' }}>
+      <div style={{ fontSize: 12, fontWeight: 700, marginBottom: 10 }}>Novo item de template (elevador / escada / esteira)</div>
+      <div className="grid-3" style={{ gap: 10, marginBottom: 10 }}>
+        <div>
+          <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Tipo de equipamento</label>
+          <select className="input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <option value="elevador">Elevador</option>
+            <option value="escada">Escada rolante</option>
+            <option value="esteira">Esteira rolante</option>
+          </select>
+        </div>
+        <div>
+          <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Semana</label>
+          <input className="input" type="number" min="1" value={semana} onChange={(e) => setSemana(e.target.value)}/>
+        </div>
+        <div>
+          <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Etapa</label>
+          <input className="input" value={etapa} onChange={(e) => setEtapa(e.target.value)} placeholder="ex.: Instalação dos degraus"/>
+        </div>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Serviços (um por linha)</label>
+        <textarea className="input" rows={3} value={servicos} onChange={(e) => setServicos(e.target.value)}
+          placeholder={'Fixação da estrutura\nAlinhamento e nivelamento'}/>
+      </div>
+      <div style={{ marginBottom: 10 }}>
+        <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Resultado esperado</label>
+        <input className="input" value={resultado} onChange={(e) => setResultado(e.target.value)}/>
+      </div>
+      <Button variant="primary" size="sm" onClick={salvar} disabled={saving}>{saving ? 'Salvando…' : 'Adicionar ao template'}</Button>
     </div>
   );
 }
