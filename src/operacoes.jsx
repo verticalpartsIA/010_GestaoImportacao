@@ -159,8 +159,6 @@ function EngenhariaPage({ setRoute }) {
   const [selectedProject, setSelectedProject] = React.useState(null);
   const [showNovoProjeto, setShowNovoProjeto] = React.useState(false);
   const [gates, setGates] = React.useState(null);
-  const [vistoria, setVistoria] = React.useState(null);
-  const [editingFase, setEditingFase] = React.useState(null);
   // Stable photo IDs so they don't shuffle on re-render
   const photoIds = React.useMemo(() => ([3142, 5891, 7204, 2057, 4396, 6128]), []);
 
@@ -174,25 +172,6 @@ function EngenhariaPage({ setRoute }) {
     if (window.ProjectGates && window.ProjectGates.validarGatesImportacao) {
       const result = await window.ProjectGates.validarGatesImportacao(projectId);
       setGates(result);
-    }
-  };
-
-  const carregarVistoria = async (projectId) => {
-    if (window.VistoriaTracker) {
-      const v = await window.VistoriaTracker.obterVistoria(projectId);
-      setVistoria(v);
-    }
-  };
-
-  const salvarFaseVistoria = async (numeroFase, dadosFase) => {
-    if (!selectedProject || !window.VistoriaTracker) return;
-    try {
-      const v = await window.VistoriaTracker.atualizarFaseVistoria(selectedProject.id, numeroFase, dadosFase);
-      setVistoria(v);
-      setEditingFase(null);
-      window.toast(`Fase ${numeroFase} da vistoria atualizada!`, 'success');
-    } catch (err) {
-      window.toast('Erro: ' + err.message, 'error');
     }
   };
 
@@ -230,7 +209,7 @@ function EngenhariaPage({ setRoute }) {
             )}
             {projetos.map((p) => (
               <div key={p.id} style={{ background: selectedProject?.id === p.id ? "var(--vp-gray-50)" : "#fff", border: "1px solid " + (selectedProject?.id === p.id ? "#000" : "var(--border)"), padding: 14, cursor: "pointer", position: "relative" }}
-                onClick={() => { setSelectedProject(p); validarGatesProjeto(p.id); carregarVistoria(p.id); setGates(null); setVistoria(null); }}>
+                onClick={() => { setSelectedProject(p); validarGatesProjeto(p.id); setGates(null); }}>
                 <span style={{ position: "absolute", top: 0, left: 0, width: 24, height: 3, background: "var(--vp-yellow)" }}/>
                 <div className="row sb">
                   <div>
@@ -274,85 +253,17 @@ function EngenhariaPage({ setRoute }) {
               { key: "docs", label: "Documentos", icon: "package" },
               { key: "bom", label: "BOM", icon: "list" },
               { key: "visita", label: "Visita", icon: "calendar" },
-              { key: "vistoria", label: "Vistoria (1/2/3)", icon: "checklist" },
+              { key: "vistoria", label: "Vistoria", icon: "checklist" },
               { key: "ncm", label: "NCM / Ficha Técnica", icon: "package" },
               { key: "gates", label: "Gatilhos Importação", icon: "zap" },
             ]} active={engTab} onChange={setEngTab}/>
 
             {engTab === "vistoria" && (
-              <div style={{ marginTop: 20 }}>
-                {!vistoria ? (
-                  <div style={{ textAlign:'center', padding:'40px 0', color:'var(--fg3)', fontSize:13 }}>
-                    <Button variant="primary" onClick={() => window.VistoriaTracker?.criarVistoria(selectedProject.id, 0).then(v => setVistoria(v))}>
-                      Criar Plano de Vistorias
-                    </Button>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div style={{ background: '#f3f4f6', border: '1px solid var(--border)', borderRadius: 6, padding: 14 }}>
-                      <div className="row sb" style={{ marginBottom: 10 }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 700 }}>Progresso de Vistorias</div>
-                          <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 2 }}>
-                            {window.VistoriaTracker?.calcularProgresso(vistoria) || 0}% concluído
-                          </div>
-                        </div>
-                        <span style={{ fontSize: 28, fontWeight: 800 }}>{window.VistoriaTracker?.calcularProgresso(vistoria) || 0}%</span>
-                      </div>
-                      <div className="progress" style={{ marginTop: 8 }}>
-                        <span style={{ width: (window.VistoriaTracker?.calcularProgresso(vistoria) || 0) + '%' }}/>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                      {vistoria.fases?.map((fase, i) => (
-                        <div key={fase.numero} style={{
-                          border: '1px solid ' + (fase.status === 'concluida' ? '#10b981' : 'var(--border)'),
-                          background: fase.status === 'concluida' ? '#f0fdf4' : '#fff',
-                          borderRadius: 6,
-                          padding: 12
-                        }}>
-                          <div className="row sb" style={{ marginBottom: 8 }}>
-                            <div className="up-eyebrow muted">Fase {fase.numero}</div>
-                            <span style={{ fontSize: 16 }}>
-                              {fase.status === 'concluida' ? '✅' : fase.status === 'em_progresso' ? '⏳' : '—'}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-                            {fase.data ? window.VistoriaTracker?.fmtData(fase.data) : 'Não iniciada'}
-                          </div>
-                          <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 10 }}>
-                            Custo: {window.VistoriaTracker?.fmtBRL(fase.custo)}
-                          </div>
-                          <Button variant="outline" size="sm" onClick={() => setEditingFase(fase.numero)} style={{ width: '100%' }}>
-                            {fase.data ? 'Editar' : 'Registrar'}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-
-                    {vistoria.custos_excedentes > 0 && (
-                      <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, padding: 12 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 4 }}>
-                          ⚠️ Custo excedente detectado
-                        </div>
-                        <div style={{ fontSize: 12, color: '#7f1d1d' }}>
-                          Orçamento: {window.VistoriaTracker?.fmtBRL(vistoria.orcamento_inicial)} |
-                          Total: {window.VistoriaTracker?.fmtBRL(vistoria.custo_total)} |
-                          Excedente: {window.VistoriaTracker?.fmtBRL(vistoria.custos_excedentes)}
-                        </div>
-                      </div>
-                    )}
-
-                    {editingFase && (
-                      <ModalEditarFaseVistoria
-                        fase={vistoria.fases.find(f => f.numero === editingFase)}
-                        onSave={(dados) => salvarFaseVistoria(editingFase, dados)}
-                        onCancel={() => setEditingFase(null)}
-                      />
-                    )}
-                  </div>
-                )}
+              <div style={{ marginTop: 20, textAlign:'center', padding:'28px 20px', border:'1px solid var(--border)', background:'var(--vp-gray-50)' }}>
+                <p style={{ fontSize:13, color:'var(--fg1)', margin:'0 0 14px' }}>
+                  As vistorias desta obra agora ficam num lugar só: <b>Vistorias de Obras</b>, dentro da aba <b>Instalação</b> do <b>Dossiê da Obra</b> correspondente — não mais aqui, pra não duplicar registro em duas telas diferentes.
+                </p>
+                <Button variant="primary" size="sm" icon="arrowRight" onClick={() => setRoute && setRoute('status-obras')}>Abrir obras</Button>
               </div>
             )}
 
@@ -407,7 +318,7 @@ function EngenhariaPage({ setRoute }) {
             {(engTab === "bom" || engTab === "visita" || engTab === "ncm") && (
               <div style={{ textAlign:'center', padding:'32px 20px', color:'var(--fg3)', fontSize:13 }}>
                 {engTab === "ncm" ? "Ficha técnica e NCM do produto ficam no Catálogo de Produtos / Solicitações NCM."
-                 : engTab === "visita" ? "As vistorias estão na aba Vistoria (1/2/3) deste projeto e no módulo Vistorias de Obras."
+                 : engTab === "visita" ? "As vistorias estão na aba Vistoria deste projeto — que abre o módulo Vistorias de Obras, dentro do Dossiê da Obra correspondente."
                  : "A lista de materiais (BOM) vem do Projeto de Equipamento / Ficha Técnica do produto."}
               </div>
             )}
@@ -420,58 +331,6 @@ function EngenhariaPage({ setRoute }) {
       </div>
       {showNovoProjeto && <ModalNovoProjeto onClose={() => setShowNovoProjeto(false)} onSaved={reloadProjetos}/>}
     </div>
-  );
-}
-
-function ModalEditarFaseVistoria({ fase, onSave, onCancel }) {
-  const [data, setData] = React.useState(fase?.data ? fase.data.slice(0, 10) : '');
-  const [custo, setCusto] = React.useState(fase?.custo || '');
-  const [observacoes, setObservacoes] = React.useState(fase?.observacoes || '');
-  const [status, setStatus] = React.useState(fase?.status || 'pendente');
-
-  const save = () => {
-    if (!data) return window.toast('Data é obrigatória.', 'warning');
-    onSave({ data: new Date(data).toISOString(), custo: parseFloat(custo) || 0, observacoes, status });
-  };
-
-  return (
-    <Modal title={`Editar Fase ${fase?.numero}`} onClose={onCancel} width={480}
-      footer={<>
-        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-        <Button variant="primary" onClick={save}>Salvar</Button>
-      </>}>
-      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-        <div className="stack" style={{ gap:4 }}>
-          <label className="up-eyebrow muted">Data da vistoria *</label>
-          <input className="input" type="date" value={data} onChange={e => setData(e.target.value)}/>
-        </div>
-        <div className="grid-2" style={{ gap:12 }}>
-          <div className="stack" style={{ gap:4 }}>
-            <label className="up-eyebrow muted">Status</label>
-            <select className="input" value={status} onChange={e => setStatus(e.target.value)}>
-              <option value="pendente">Pendente</option>
-              <option value="em_progresso">Em progresso</option>
-              <option value="concluida">Concluída</option>
-            </select>
-          </div>
-          <div className="stack" style={{ gap:4 }}>
-            <label className="up-eyebrow muted">Custo (R$)</label>
-            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-              <span style={{ fontSize:13, color:'var(--fg3)', fontWeight:700 }}>R$</span>
-              <input className="input" type="number" min="0" step="0.01" value={custo}
-                onChange={e => setCusto(e.target.value)} style={{ flex:1 }}/>
-            </div>
-          </div>
-        </div>
-        <div className="stack" style={{ gap:4 }}>
-          <label className="up-eyebrow muted">Observações</label>
-          <textarea className="input" rows={2} value={observacoes}
-            onChange={e => setObservacoes(e.target.value)}
-            placeholder="Notas da vistoria..."
-            style={{ resize:'vertical' }}/>
-        </div>
-      </div>
-    </Modal>
   );
 }
 

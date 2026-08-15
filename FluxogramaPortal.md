@@ -4,7 +4,7 @@
 >
 > Versão navegável (com cores, legendas e melhor leitura): [artifact publicado](https://claude.ai/code/artifact/a4bcccd0-242a-4637-bf02-013a5cab6ead).
 
-**Resumo:** 44 tarefas mapeadas · 7 papéis/recursos diferentes · ~90 dias de navio em trânsito (janela pra adiantar obra) · 3 vazios da 1ª rodada, todos preenchidos · 2 achados novos de uma auditoria seguinte (15/08), ainda não corrigidos — ver seção no fim do documento.
+**Resumo:** 44 tarefas mapeadas · 7 papéis/recursos diferentes · ~90 dias de navio em trânsito (janela pra adiantar obra) · 3 vazios da 1ª rodada, todos preenchidos · da auditoria seguinte (15/08): a fragmentação da vistoria já foi corrigida, o gate de compra (A1) segue em aberto — ver seção no fim do documento.
 
 **A descoberta que mais importa pro custo:** a Vistoria da obra e a Contratação do Instalador **não dependem de nada que aconteça no navio** — nenhuma das duas tem pré-requisito ligado ao Embarque no código. Isso significa que elas podem (e devem) rodar **durante os ~90 dias de trânsito**, não depois. Se a equipe só começa a pensar em instalador quando o equipamento chega no porto, é atraso evitável — o próprio desenho do sistema já permite rodar em paralelo.
 
@@ -44,13 +44,13 @@ Fonte: `pi.jsx` · `rfq.jsx` · `embarques-importacao.jsx`
 ## C — Enquanto o equipamento está no mar (~90 dias, roda em paralelo)
 
 *Nenhuma destas tarefas espera o embarque chegar — todas podem começar assim que o navio sai do porto de origem (algumas, até antes). É aqui que se ganha ou se perde tempo de projeto.*
-Fonte: `vistoria-tracker.js` · `instalacao-obra-store.js` · `rh-homologacao-store.js` · `decisoes-store.js`
+Fonte: `vistorias-obras.jsx` · `instalacao-obra-store.js` · `rh-homologacao-store.js` · `decisoes-store.js`
 
-> ⚠️ C1–C4 documentam a vistoria feita **dentro do Dossiê da Obra** (aba Instalação) — é a única que o checklist "obra pronta" realmente lê. Existem outras 2 telas de vistoria no sistema ("Vistorias de Obras" e "Instalação em Campo", ambas no menu) gravando em tabelas diferentes que não alimentam este checklist — ver auditoria no fim do documento.
+> ✅ C1–C4 (15/08): as 3 vistorias fragmentadas foram consolidadas em `vistorias_obras`, hoje a única fonte de verdade — acessível tanto pelo menu "Vistorias de Obras" quanto embutida na aba Instalação do Dossiê da Obra, sempre mostrando os mesmos dados. Ver auditoria no fim do documento.
 
 | # | Tarefa | Recurso | Duração / SLA | Onde | O que pesa no custo |
 |---|---|---|---|---|---|
-| C1 | Vistoria da obra — Fase 1 (3 fases inclusas no contrato; avulsas cobradas à parte) | Engenharia | — | Dossiê da Obra › Vistorias | Orçamento inicial x custo real — excedente vira custo extra rastreado |
+| C1 | Vistoria da obra — Fase 1 (3 fases inclusas no contrato; avulsas cobradas à parte) | Engenharia | — | Dossiê da Obra › Vistorias (ou menu "Vistorias de Obras") | Custo por vistoria registrado no ato — soma dá o gasto real de vistoria da obra |
 | C2 | Vistoria da obra — Fase 2 | Engenharia | — | Dossiê da Obra › Vistorias | — |
 | C3 | Vistoria da obra — Fase 3 | Engenharia | — | Dossiê da Obra › Vistorias | — |
 | C4 | Vistoria avulsa (se a obra exigir mais que 3) | Engenharia | sob demanda | Dossiê da Obra › Vistorias avulsas | Custo lançado à parte, fora do orçamento inicial — impacta margem se não for repassado |
@@ -125,18 +125,24 @@ Testado ao vivo contra o Supabase real antes do merge — inclusive um bug real 
 
 ---
 
-## Auditoria seguinte (15/08) — 2 achados ainda não corrigidos
+## Auditoria seguinte (15/08)
 
-Conferindo o WBS direto contra o código depois do primeiro merge, achei mais dois pontos onde o site não reflete o que parecia estar documentado/implementado:
+Conferindo o WBS direto contra o código depois do primeiro merge, achei mais dois pontos onde o site não refletia o que parecia estar documentado/implementado.
 
-**A1 não é um gate de verdade.** A Central de Decisões mostra os rótulos "Compra ao fornecedor — CEO" e "— responsável" na tela (`decisoes.jsx`), mas nenhuma função em `decisoes-store.js` jamais cria uma decisão desses tipos — são `label`s sem gatilho, mortos numa tabela de lookup. Só existem de verdade: aprovação de envio de proposta, contratação de instalador, montador entrar na obra, e compra de varejo. Na prática, hoje qualquer pessoa com acesso à P.I. cria a compra e manda o 1º pagamento sem nenhuma aprovação bloqueante.
+### ✅ Vistoria da obra tinha 3 implementações que não se falavam — corrigido
 
-**Vistoria da obra tem 3 implementações que não se falam.** "Vistorias de Obras" no menu grava em `vistorias_obras` (a mais completa — agendamento, vistoriador, docs/imagens). "Instalação em Campo" no menu grava em `projetos.vistoria` via `vistoria-tracker.js` (modelo antigo). E a aba Instalação dentro do Dossiê da Obra — a que este WBS documenta em C1–C4 — grava em `dossier_obra.vistoria` via `instalacao-obra-store.js`. Só esta terceira alimenta o checklist "obra pronta" que efetivamente libera a instalação (`obterChecklistObraPronta`). Fazer a vistoria pelas outras duas telas do menu não aparece nesse checklist.
+"Vistorias de Obras" no menu gravava em `vistorias_obras` (a mais completa — agendamento, vistoriador, docs/imagens), mas era inalcançável na prática: o clique no menu nunca passava o `obraId` que o componente precisa, então a tela sempre mostrava "nenhuma vistoria encontrada", sem nenhum seletor de obra. "Instalação em Campo" no menu gravava em `projetos.vistoria` via `vistoria-tracker.js` (o modelo mais antigo, de 19/06). E a aba Instalação dentro do Dossiê da Obra — a que este WBS documentava em C1–C4 — gravava num terceiro lugar, `dossier_obra.vistoria` via `instalacao-obra-store.js`, criado nesta mesma sessão sem eu checar que já existiam dois.
 
-Nenhum dos dois foi corrigido ainda — ficam registrados aqui pra decisão de produto antes de mexer no código (qual vira a tela oficial de vistoria; se o gate de compra deve mesmo existir e com que regra).
+Ao investigar pra consertar, achei ainda um **quarto problema**: mesmo com o `obraId` certo, a tabela `vistorias_obras` tinha uma política de segurança (RLS) de INSERT quebrada — comparava uma coluna da própria linha sendo inserida (`criado_por`, que o código nunca preenchia) contra `auth.uid()`, então nenhuma vistoria jamais teria sido salva ali, nem que o `obraId` estivesse certo desde o início.
+
+**Consolidado**: `vistorias_obras` (chave = `dossier_obra.id`) agora é a única fonte de verdade. `vistorias-obras.jsx` ganhou um seletor de obras pra quando é aberta direto pelo menu, e um modo `embedded` pra aparecer dentro da aba Instalação do Dossiê sem duplicar cabeçalho. A política de RLS foi trocada pra bater com o padrão do resto do projeto (`true`/anon-permissivo, igual `dossier_obra`). O checklist "obra pronta" agora lê as 3 fases direto de `vistorias_obras`. `vistoria-tracker.js` e o mini-plano que vivia em `instalacao-obra-store.js` foram desligados da UI (arquivos continuam no repo, sem uso). Testado ao vivo: vistoria criada pela aba Instalação do Dossiê aparece idêntica ao abrir "Vistorias de Obras" pelo menu, e vice-versa; o checklist atualiza em tempo real.
+
+### ⚠️ A1 não é um gate de verdade — ainda em aberto
+
+A Central de Decisões mostra os rótulos "Compra ao fornecedor — CEO" e "— responsável" na tela (`decisoes.jsx`), mas nenhuma função em `decisoes-store.js` jamais cria uma decisão desses tipos — são `label`s sem gatilho, mortos numa tabela de lookup. Só existem de verdade: aprovação de envio de proposta, contratação de instalador, montador entrar na obra, e compra de varejo. Na prática, hoje qualquer pessoa com acesso à P.I. cria a compra e manda o 1º pagamento sem nenhuma aprovação bloqueante. Fica registrado aqui pra decisão de produto (se o gate deve mesmo existir e com que regra) antes de mexer no código.
 
 ---
 
-**Fontes:** `decisoes-store.js`, `pi-store.js`, `rfq-store.js`, `embarques-importacao-store.js`, `ims-store.js`, `vistoria-tracker.js`, `instalacao-obra-store.js`, `dossier-obra.jsx`, `rh-homologacao-store.js`, `project-gates.js`, `data-book-store.js`, `handover-manutencao.js`.
+**Fontes:** `decisoes-store.js`, `pi-store.js`, `rfq-store.js`, `embarques-importacao-store.js`, `ims-store.js`, `vistorias-obras.jsx`, `instalacao-obra-store.js`, `dossier-obra.jsx`, `rh-homologacao-store.js`, `project-gates.js`, `data-book-store.js`, `handover-manutencao.js`.
 
 Complementa o fluxograma de 4 fases (Cliente → Instalação) publicado anteriormente nesta conversa — este documento é o detalhamento tarefa a tarefa da Gestão Importação em diante.
