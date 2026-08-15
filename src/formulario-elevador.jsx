@@ -117,6 +117,86 @@ function FEEndereco({ prefix, header, setH, requiredLogradouro, onBuscarCep }) {
   );
 }
 
+/* ---------- Cliente por busca (15/08) ----------
+   Vendedor busca o cliente já cadastrado em Cadastros (aba própria criada
+   ontem) em vez de redigitar CNPJ/endereço/telefone aqui de novo — reduz
+   redigitação e evita duas versões do mesmo cliente divergindo. Filtro
+   client-side (listarTodos()) — volume ainda pequeno, sem necessidade de
+   busca no servidor. */
+function FEClientePicker({ clienteId, onSelecionar, onCriarNovo }) {
+  const [busca, setBusca] = React.useState('');
+  const [todos, setTodos] = React.useState(null);
+  const [selecionado, setSelecionado] = React.useState(null);
+  const [focado, setFocado] = React.useState(false);
+
+  React.useEffect(() => {
+    window.CadastrosClientesStore?.listarTodos().then(setTodos).catch(() => setTodos([]));
+  }, []);
+
+  React.useEffect(() => {
+    if (!clienteId || !todos) { if (!clienteId) setSelecionado(null); return; }
+    const c = todos.find((t) => t.id === clienteId);
+    if (c) setSelecionado(c);
+    else window.CadastrosClientesStore?.obter(clienteId).then(setSelecionado).catch(() => {});
+  }, [clienteId, todos]);
+
+  const termo = busca.trim().toLowerCase();
+  const termoDigitos = termo.replace(/\D/g, '');
+  /* termoDigitos vazio (busca só com letras) não pode entrar no .includes()
+     de CNPJ/CPF — "qualquer coisa".includes("") é sempre true em JS, então
+     sem essa guarda a busca por nome trazia TODO MUNDO, sem filtrar nada
+     (bug pego em teste ao vivo). */
+  const resultados = termo && todos ? todos.filter((c) =>
+    (c.razao_social || '').toLowerCase().includes(termo) ||
+    (termoDigitos && (c.cnpj || '').replace(/\D/g, '').includes(termoDigitos)) ||
+    (termoDigitos && (c.cpf || '').replace(/\D/g, '').includes(termoDigitos)) ||
+    (c.codigo || '').toLowerCase().includes(termo)
+  ).slice(0, 8) : [];
+
+  if (selecionado) {
+    return (
+      <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 12, background: 'var(--vp-gray-50)' }}>
+        <div className="row sb" style={{ alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{selecionado.razao_social} <span className="mono muted small">({selecionado.codigo})</span></div>
+            <div className="small muted" style={{ marginTop: 2 }}>
+              {selecionado.cnpj || selecionado.cpf || 'sem documento'} · {selecionado.telefone || 'sem telefone'} · {selecionado.cidade}{selecionado.cidade && selecionado.estado ? '/' : ''}{selecionado.estado}
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => { setSelecionado(null); onSelecionar(null); setBusca(''); }}>Trocar</Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ position: 'relative' }}>
+        <input className="input" placeholder="Buscar cliente por nome, CNPJ/CPF ou código…" value={busca}
+          onChange={(e) => setBusca(e.target.value)} onFocus={() => setFocado(true)} onBlur={() => setTimeout(() => setFocado(false), 150)}/>
+        {focado && termo && (
+          <div style={{ position: 'absolute', zIndex: 10, top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, marginTop: 4, maxHeight: 240, overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,.1)' }}>
+            {todos === null ? (
+              <div className="small muted" style={{ padding: 10 }}>Carregando…</div>
+            ) : resultados.length === 0 ? (
+              <div className="small muted" style={{ padding: 10 }}>Nenhum cliente encontrado com "{busca}".</div>
+            ) : resultados.map((c) => (
+              <div key={c.id} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+                onMouseDown={() => { setSelecionado(c); onSelecionar(c); }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{c.razao_social}</div>
+                <div className="small muted">{c.cnpj || c.cpf || 'sem documento'} · {c.codigo}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="small muted" style={{ margin: '8px 0 0' }}>
+        Não achou? <a href="#" onClick={(e) => { e.preventDefault(); onCriarNovo(); }}>cadastrar cliente novo aqui mesmo</a> (fica salvo em Cadastros também).
+      </p>
+    </div>
+  );
+}
+
 /* ---------- Anexos (projeto civil da obra) ----------
    O cliente (Canal 2, link público) anexa a planta/memorial/DWG do projeto
    civil; o Comercial (Canal 1) só visualiza/baixa e extrai as medidas na
@@ -721,6 +801,15 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
   const [id, setId] = React.useState(formularioId || null);
   const [header, setHeader] = React.useState(feHeaderDefaults());
   const [unidades, setUnidades] = React.useState([feNovaUnidade('E1')]);
+  /* 15/08 — vendedor busca o cliente já cadastrado em Cadastros em vez de
+     redigitar tudo aqui (Cadastros existe desde ontem). `criarClienteInline`
+     é a válvula de escape: se o cliente ainda não existir lá, mostra o
+     formulário antigo (os mesmos campos de sempre) só pra esse caso — não
+     bloqueia o vendedor esperando alguém cadastrar em outra tela. Canal
+     self_service (link público pro cliente preencher sozinho) sempre usa o
+     formulário completo — não faz sentido pedir pro cliente "se buscar". */
+  const [clienteId, setClienteId] = React.useState(null);
+  const [criarClienteInline, setCriarClienteInline] = React.useState(false);
   const [linkPublico, setLinkPublico] = React.useState(null);
   const [numeroCotacao, setNumeroCotacao] = React.useState(null);
   const [fornecedores, setFornecedores] = React.useState([]);
@@ -754,6 +843,8 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       setId(f.id);
       setHeader((h) => ({ ...h, ...feHeaderPick(f) }));
       setNumeroCotacao(f.numero_cotacao ?? null);
+      setClienteId(f.cliente_id || null);
+      if (!f.cliente_id && f.razao_social) setCriarClienteInline(true); // formulário antigo, sem vínculo — mantém editável do jeito que já estava
       if (f.unidades && f.unidades.length) setUnidades(f.unidades);
       setLoading(false);
     }).catch((e) => { window.toast?.('Erro ao carregar formulário: ' + e.message, 'error'); setLoading(false); });
@@ -807,8 +898,10 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
   const addUnidade = () => setUnidades((arr) => [...arr, feNovaUnidade(`E${arr.length + 1}`)]);
   const removeUnidade = (idx) => setUnidades((arr) => (arr.length > 1 ? arr.filter((_, i) => i !== idx) : arr));
 
+  const usaClientePicker = !publicMode && !criarClienteInline;
+
   const validar = () => {
-    if (!header.razao_social?.trim()) return 'Nome/Razão Social do cliente é obrigatório.';
+    if (usaClientePicker ? !clienteId : !header.razao_social?.trim()) return 'Selecione (ou cadastre) o cliente antes de continuar.';
     if (!header.local_obra_cidade?.trim() || !header.local_obra_estado?.trim()) return 'Local da obra (cidade/UF) é obrigatório.';
     if (!header.tipo_mao_de_obra) return 'Tipo de mão de obra é obrigatório.';
     if (!header.responsavel_entrega) return 'Responsável pela entrega é obrigatório.';
@@ -831,8 +924,8 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
     // no banco, então salvar sem isso derrubava com um 400 silencioso (sem
     // toast nenhum), travando em "Cotação Nº — (gerado ao salvar)" pra
     // sempre. O resto de `validar()` continua opcional pra rascunho.
-    if (!header.razao_social?.trim()) {
-      window.toast?.('Preencha o Nome/Razão Social do cliente antes de salvar.', 'warning');
+    if (usaClientePicker ? !clienteId : !header.razao_social?.trim()) {
+      window.toast?.(usaClientePicker ? 'Selecione o cliente antes de salvar.' : 'Preencha o Nome/Razão Social do cliente antes de salvar.', 'warning');
       return null;
     }
     const erro = validar();
@@ -840,7 +933,9 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
     setSaving(true);
     try {
       let cliente = null;
-      if (!publicMode || header.cnpj || header.cpf) {
+      if (usaClientePicker) {
+        cliente = { id: clienteId };
+      } else if (!publicMode || header.cnpj || header.cpf) {
         cliente = await window.FormularioElevadorStore.buscarOuCriarCliente(header);
       }
       let currentId = id;
@@ -937,27 +1032,43 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
 
       <Card title="Dados do cliente e da obra">
         <div className="stack" style={{ gap: 14 }}>
+          <div>
+            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Cliente</div>
+            {usaClientePicker ? (
+              <FEClientePicker clienteId={clienteId} onSelecionar={(c) => setClienteId(c ? c.id : null)} onCriarNovo={() => setCriarClienteInline(true)}/>
+            ) : (
+              <>
+                <div className="grid-3" style={{ gap: 12 }}>
+                  <FEField label="Tipo de pessoa"><FESelect value={header.tipo_pessoa} onChange={setH('tipo_pessoa')} options={[{ value: 'PJ', label: 'Pessoa Jurídica' }, { value: 'PF', label: 'Pessoa Física' }]}/></FEField>
+                  <FEField label="Nome / Razão Social *" span="2"><FEInput value={header.razao_social} onChange={setH('razao_social')} placeholder="Nome do cliente"/></FEField>
+                  {header.tipo_pessoa === 'PF'
+                    ? <FEField label="CPF"><FEInput value={header.cpf} onChange={setH('cpf')} placeholder="000.000.000-00"/></FEField>
+                    : <FEField label="CNPJ"><FEInput value={header.cnpj} onChange={setH('cnpj')} placeholder="00.000.000/0000-00" onBlur={() => buscarCnpjEPreencher(header.cnpj)}/></FEField>}
+                  <FEField label="Inscrição Estadual"><FEInput value={header.inscricao_estadual} onChange={setH('inscricao_estadual')} disabled={header.tipo_pessoa === 'PF'}/></FEField>
+                  <FEField label="Contribuinte de ICMS?"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
+                  <FEField label="Telefone"><FEInput value={header.telefone} onChange={setH('telefone')}/></FEField>
+                  <FEField label="E-mail" span="2"><FEInput type="email" value={header.email} onChange={setH('email')}/></FEField>
+                </div>
+                <div style={{ marginTop: 14 }}>
+                  <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Endereço</div>
+                  <FEEndereco prefix="endereco_" header={header} setH={setH} onBuscarCep={buscarCepEPreencher('endereco_')}/>
+                </div>
+                {!publicMode && (
+                  <p className="small muted" style={{ margin: '8px 0 0' }}>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setCriarClienteInline(false); }}>voltar a buscar cliente já cadastrado</a>
+                  </p>
+                )}
+              </>
+            )}
+          </div>
           <div className="grid-3" style={{ gap: 12 }}>
-            <FEField label="Tipo de pessoa"><FESelect value={header.tipo_pessoa} onChange={setH('tipo_pessoa')} options={[{ value: 'PJ', label: 'Pessoa Jurídica' }, { value: 'PF', label: 'Pessoa Física' }]}/></FEField>
-            <FEField label="Nome / Razão Social *" span="2"><FEInput value={header.razao_social} onChange={setH('razao_social')} placeholder="Nome do cliente"/></FEField>
-            {header.tipo_pessoa === 'PF'
-              ? <FEField label="CPF"><FEInput value={header.cpf} onChange={setH('cpf')} placeholder="000.000.000-00"/></FEField>
-              : <FEField label="CNPJ"><FEInput value={header.cnpj} onChange={setH('cnpj')} placeholder="00.000.000/0000-00" onBlur={() => buscarCnpjEPreencher(header.cnpj)}/></FEField>}
-            <FEField label="Inscrição Estadual"><FEInput value={header.inscricao_estadual} onChange={setH('inscricao_estadual')} disabled={header.tipo_pessoa === 'PF'}/></FEField>
-            <FEField label="Contribuinte de ICMS?"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
             <FEField label="Finalidade da compra"><FESelect value={header.finalidade_compra} onChange={setH('finalidade_compra')} options={FE_FINALIDADE_COMPRA}/></FEField>
-            <FEField label="Telefone"><FEInput value={header.telefone} onChange={setH('telefone')}/></FEField>
-            <FEField label="E-mail" span="2"><FEInput type="email" value={header.email} onChange={setH('email')}/></FEField>
           </div>
           {header.finalidade_compra === 'revenda' && header.contribuinte_icms === false && (
             <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #FBB039', padding: '8px 12px', margin: 0 }}>
               Atenção: Não Contribuintes do ICMS não podem comprar mercadorias com finalidade de Revenda.
             </p>
           )}
-          <div>
-            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Endereço</div>
-            <FEEndereco prefix="endereco_" header={header} setH={setH} onBuscarCep={buscarCepEPreencher('endereco_')}/>
-          </div>
           <div className="grid-3" style={{ gap: 12 }}>
             <FEField label="Cidade da obra *"><FEInput value={header.local_obra_cidade} onChange={setH('local_obra_cidade')}/></FEField>
             <FEField label="UF da obra *"><FEInput value={header.local_obra_estado} onChange={setH('local_obra_estado')} placeholder="SP"/></FEField>
