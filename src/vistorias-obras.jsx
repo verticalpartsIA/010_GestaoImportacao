@@ -1,11 +1,30 @@
 /* ============================================================
    vistorias-obras.jsx
-   Módulo: Vistorias de Obras
+   Módulo: Vistorias de Obras — fonte única de verdade pra vistoria
    Descrição: Gerenciamento completo de vistorias com agendamento,
    documentação (PDF), imagens e rastreamento de vistoriadores
+
+   Consolidação (15/08): esta era uma de 3 implementações de vistoria
+   que existiam em paralelo sem se falar (achado documentado no
+   FluxogramaPortal.md). Escolhida como oficial por ser a mais completa;
+   as outras duas (vistoria-tracker.js em operacoes.jsx, e o mini-plano
+   que existia dentro de instalacao-obra-store.js) foram aposentadas.
+   `obra_id` aqui é sempre `dossier_obra.id` — a entidade central da obra.
+
+   Antes, `obraId` só chegava via prop vinda de outra tela; entrando pelo
+   menu lateral direto, obraId nunca era passado e a tela ficava sempre
+   vazia sem nenhum jeito de escolher a obra. Agora, sem obraId, mostra
+   um seletor de obras (dossier_obra) antes de carregar qualquer coisa.
+
+   `embedded`: quando true, esconde o cabeçalho de página grande — usado
+   pela aba Instalação do Dossiê da Obra, que já tem seu próprio título.
    ============================================================ */
 
-function VistoriasObras({ obraId, obra, setRoute }) {
+function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded, onChanged }) {
+  const [obraId, setObraId] = React.useState(obraIdProp || null);
+  const [obra, setObra] = React.useState(obraProp || null);
+  const [obras, setObras] = React.useState([]);
+  const [loadingObras, setLoadingObras] = React.useState(!obraIdProp);
   const [vistorias, setVistorias] = React.useState([]);
   const [selectedVistoria, setSelectedVistoria] = React.useState(null);
   const [showForm, setShowForm] = React.useState(false);
@@ -17,10 +36,26 @@ function VistoriasObras({ obraId, obra, setRoute }) {
     data_agendada: '',
     vistoriador: '',
     tipo: 'vistoria',
+    numero_fase: '',
+    custo: '',
     observacoes: '',
     documentos: [],
     imagens: [],
   });
+
+  // Sem obraId vindo de fora: carrega a lista de obras (dossier_obra) pra escolher
+  React.useEffect(() => {
+    if (obraIdProp) return;
+    const sb = window.__VP_SB?.sb;
+    if (!sb) return;
+    setLoadingObras(true);
+    sb.from('dossier_obra').select('id, building_name, client_name').order('created_at', { ascending: false })
+      .then(({ data, error }) => {
+        if (error) { console.error('Erro ao carregar obras:', error); window.toast?.('Erro ao carregar obras', 'error'); }
+        setObras(data || []);
+        setLoadingObras(false);
+      });
+  }, [obraIdProp]);
 
   // Load vistorias
   React.useEffect(() => {
@@ -68,6 +103,8 @@ function VistoriasObras({ obraId, obra, setRoute }) {
         data_agendada: form.data_agendada,
         vistoriador: form.vistoriador,
         tipo: form.tipo,
+        numero_fase: form.numero_fase ? Number(form.numero_fase) : null,
+        custo: form.custo !== '' ? Number(form.custo) : null,
         status: 'agendada',
         observacoes: form.observacoes,
         documentos: form.documentos,
@@ -87,12 +124,15 @@ function VistoriasObras({ obraId, obra, setRoute }) {
         data_agendada: '',
         vistoriador: '',
         tipo: 'vistoria',
+        numero_fase: '',
+        custo: '',
         observacoes: '',
         documentos: [],
         imagens: [],
       });
       setShowForm(false);
       await loadVistorias();
+      onChanged && onChanged();
     } catch (error) {
       console.error('Erro ao agendar vistoria:', error);
       window.toast?.('Erro ao agendar vistoria', 'error');
@@ -149,6 +189,7 @@ function VistoriasObras({ obraId, obra, setRoute }) {
       if (error) throw error;
       window.toast?.('Vistoria marcada como concluída! ✅', 'success');
       await loadVistorias();
+      onChanged && onChanged();
       setSelectedVistoria(null);
     } catch (error) {
       console.error('Erro ao completar vistoria:', error);
@@ -171,6 +212,7 @@ function VistoriasObras({ obraId, obra, setRoute }) {
       if (error) throw error;
       window.toast?.('Vistoria deletada com sucesso', 'success');
       await loadVistorias();
+      onChanged && onChanged();
       setSelectedVistoria(null);
     } catch (error) {
       console.error('Erro ao deletar vistoria:', error);
@@ -217,27 +259,103 @@ function VistoriasObras({ obraId, obra, setRoute }) {
     return <span style={{ color: config.color, fontWeight: 'bold' }}>{config.label}</span>;
   };
 
+  // Progresso das 3 fases inclusas no contrato (avulsas não contam pra liberar a obra)
+  const fasesInclusas = [1, 2, 3].map((n) => ({
+    numero: n,
+    concluida: vistorias.some((v) => v.numero_fase === n && v.status === 'concluida'),
+  }));
+  const obraLiberada = fasesInclusas.every((f) => f.concluida);
+
+  // Sem obraId (nem vindo por prop, nem escolhido ainda): mostra o seletor de obras
+  if (!obraId) {
+    return (
+      <div className="vistorias-obras">
+        {!embedded && (
+          <div className="page-header" style={{ marginBottom: '2rem' }}>
+            <div style={{ flex: 1 }}>
+              <h1 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>🏗️ Vistorias de Obras</h1>
+              <p style={{ color: 'var(--vp-gray-500)', fontSize: '0.95rem' }}>Escolha a obra pra ver e registrar as vistorias.</p>
+            </div>
+          </div>
+        )}
+        {loadingObras ? (
+          <div style={{ textAlign: 'center', padding: '2rem' }}>⏳ Carregando obras...</div>
+        ) : obras.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '3rem 2rem', background: '#f8f9fa', borderRadius: '8px', color: '#666' }}>
+            <p>Nenhuma obra cadastrada ainda (Dossiê da Obra).</p>
+          </div>
+        ) : (
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+            {obras.map((o) => (
+              <div key={o.id}
+                onClick={() => { setObraId(o.id); setObra({ nome: o.building_name }); }}
+                style={{ background: 'white', border: '1px solid #e0e0e0', borderRadius: '8px', padding: '1.25rem', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
+                <div style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{o.building_name || 'Obra sem nome'}</div>
+                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: 4 }}>{o.client_name || '—'}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    );
+  }
+
   return (
     <div className="vistorias-obras">
       {/* HEADER */}
-      <div className="page-header" style={{ marginBottom: '2rem' }}>
-        <div style={{ flex: 1 }}>
-          <h1 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>
-            🏗️ Vistorias de Obras
-          </h1>
-          {obra && (
-            <p style={{ color: 'var(--vp-gray-500)', fontSize: '0.95rem' }}>
-              Projeto: <strong>{obra.nome || 'Sem nome'}</strong>
-              {obra.endereco && ` • ${obra.endereco}`}
-            </p>
-          )}
+      {!embedded && (
+        <div className="page-header" style={{ marginBottom: '2rem' }}>
+          <div style={{ flex: 1 }}>
+            <h1 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>
+              🏗️ Vistorias de Obras
+            </h1>
+            {obra && (
+              <p style={{ color: 'var(--vp-gray-500)', fontSize: '0.95rem' }}>
+                Obra: <strong>{obra.nome || 'Sem nome'}</strong>
+                {obra.endereco && ` • ${obra.endereco}`}
+              </p>
+            )}
+          </div>
+          <button
+            className="btn btn-primary"
+            onClick={() => setShowForm(!showForm)}
+            style={{ height: '2.5rem', whiteSpace: 'nowrap' }}>
+            {showForm ? '✕ Cancelar' : '+ Agendar Vistoria'}
+          </button>
         </div>
-        <button
-          className="btn btn-primary"
-          onClick={() => setShowForm(!showForm)}
-          style={{ height: '2.5rem', whiteSpace: 'nowrap' }}>
-          {showForm ? '✕ Cancelar' : '+ Agendar Vistoria'}
-        </button>
+      )}
+      {embedded && (
+        <div className="row sb" style={{ marginBottom: 14 }}>
+          <div style={{ fontSize: 12, color: 'var(--fg3)' }}>3 fases inclusas no contrato · vistorias avulsas cobradas à parte</div>
+          <button className="btn btn-primary" onClick={() => setShowForm(!showForm)} style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
+            {showForm ? '✕ Cancelar' : '+ Agendar Vistoria'}
+          </button>
+        </div>
+      )}
+
+      {/* PROGRESSO DAS 3 FASES INCLUSAS */}
+      <div style={{
+        background: obraLiberada ? '#f0fdf4' : '#f8f9fa',
+        border: '1px solid ' + (obraLiberada ? '#86efac' : '#e0e0e0'),
+        borderRadius: '8px', padding: '1rem 1.25rem', marginBottom: '1.5rem',
+      }}>
+        <div className="row sb" style={{ marginBottom: 10 }}>
+          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: obraLiberada ? '#166534' : 'inherit' }}>
+            {obraLiberada ? '✅ Obra vistoriada e liberada (3 fases concluídas)' : 'Progresso das vistorias inclusas'}
+          </div>
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          {fasesInclusas.map((f) => (
+            <div key={f.numero} style={{
+              flex: 1, textAlign: 'center', padding: '0.6rem', borderRadius: 6,
+              background: f.concluida ? '#dcfce7' : '#fff',
+              border: '1px solid ' + (f.concluida ? '#10b981' : '#ddd'),
+              fontSize: '0.85rem', fontWeight: 600,
+            }}>
+              {f.concluida ? '✅' : '○'} Fase {f.numero}
+            </div>
+          ))}
+        </div>
       </div>
 
       {/* STATS CARDS */}
@@ -347,6 +465,36 @@ function VistoriasObras({ obraId, obra, setRoute }) {
                   <option value="insercao">Inserção</option>
                   <option value="pos_venda">Pós-Venda</option>
                 </select>
+              </div>
+
+              {/* Fase (3 inclusas no contrato + avulsa) */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                  Fase
+                </label>
+                <select
+                  value={form.numero_fase}
+                  onChange={(e) => setForm({ ...form, numero_fase: e.target.value })}
+                  style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.95rem' }}>
+                  <option value="">Avulsa (cobrada à parte)</option>
+                  <option value="1">Fase 1 (inclusa)</option>
+                  <option value="2">Fase 2 (inclusa)</option>
+                  <option value="3">Fase 3 (inclusa)</option>
+                </select>
+              </div>
+
+              {/* Custo */}
+              <div>
+                <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
+                  Custo (R$)
+                </label>
+                <input
+                  type="number"
+                  placeholder="0,00"
+                  value={form.custo}
+                  onChange={(e) => setForm({ ...form, custo: e.target.value })}
+                  style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.95rem' }}
+                />
               </div>
             </div>
 
@@ -590,13 +738,19 @@ function VistoriasObras({ obraId, obra, setRoute }) {
               <div style={{ marginBottom: '1rem' }}>
                 <div style={{ fontWeight: 'bold', fontSize: '1rem', marginBottom: '0.5rem' }}>
                   {vistoria.tipo?.toUpperCase() || 'VISTORIA'}
+                  {vistoria.numero_fase ? ` · Fase ${vistoria.numero_fase}` : ' · Avulsa'}
                 </div>
                 <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>
                   📅 {formatData(vistoria.data_agendada)}
                 </div>
-                <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: vistoria.custo != null ? '0.5rem' : 0 }}>
                   👤 {vistoria.vistoriador}
                 </div>
+                {vistoria.custo != null && (
+                  <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                    💰 {Number(vistoria.custo).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
+                  </div>
+                )}
               </div>
 
               {/* Observações */}

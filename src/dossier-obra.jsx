@@ -517,7 +517,6 @@ function TabInstalacao({ dossier, reload }) {
 
   if (!checklist) return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
-  const vistoria = checklist.dossier.vistoria;
   const store = window.InstalacaoObraStore;
 
   return (
@@ -580,44 +579,8 @@ function TabInstalacao({ dossier, reload }) {
       </div>
 
       <div>
-        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Vistorias (3 inclusas · avulsas cobradas à parte)</div>
-        {!vistoria ? (
-          <Button variant="primary" size="sm" disabled={busy} onClick={() => acao(() => store.criarVistoria(dossier.id, 0))}>Criar plano de vistorias</Button>
-        ) : (
-          <>
-            <div className="row gap-2" style={{ marginBottom: 10 }}>
-              <div className="progress" style={{ flex: 1 }}><span style={{ width: store.calcularProgressoVistoria(vistoria) + '%', background: 'var(--vp-yellow)' }} /></div>
-              <span style={{ fontSize: 12, fontWeight: 700 }}>{store.calcularProgressoVistoria(vistoria)}%</span>
-            </div>
-            {vistoria.fases.map((fase) => (
-              <div key={fase.numero} style={{ display: 'flex', gap: 12, alignItems: 'center', border: '1px solid #ddd', borderRadius: 6, padding: 10, marginBottom: 6 }}>
-                <div style={{ fontSize: 13, fontWeight: 700, width: 70 }}>Vistoria {fase.numero}</div>
-                <StatusBadge status={fase.status === 'concluida' ? 'Concluída' : 'Pendente'} />
-                <span style={{ fontSize: 12, color: '#888' }}>{fase.data ? store.fmtData(fase.data) : 'Não realizada'}</span>
-                {fase.status !== 'concluida' && (
-                  <Button variant="ghost" size="sm" disabled={busy} onClick={() => acao(() => store.atualizarFaseVistoria(dossier.id, fase.numero, { status: 'concluida', data: new Date().toISOString() }))}>
-                    Marcar concluída
-                  </Button>
-                )}
-              </div>
-            ))}
-            {vistoria.avulsas && vistoria.avulsas.length > 0 && (
-              <div style={{ marginTop: 8, fontSize: 12, color: '#888' }}>
-                {vistoria.avulsas.length} vistoria(s) avulsa(s) — {store.fmtBRL(vistoria.avulsas.reduce((s, a) => s + (a.custo || 0), 0))}
-              </div>
-            )}
-            <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-              <Button variant="outline" size="sm" disabled={busy} onClick={() => acao(() => store.adicionarVistoriaAvulsa(dossier.id, { custo: 0, observacoes: 'Vistoria avulsa' }))}>
-                + Registrar vistoria avulsa
-              </Button>
-              {!vistoria.liberada && (
-                <Button variant="primary" size="sm" disabled={busy} onClick={() => acao(() => store.liberarObraVistoriada(dossier.id))}>
-                  Liberar obra vistoriada
-                </Button>
-              )}
-            </div>
-          </>
-        )}
+        <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8, fontWeight: 600 }}>Vistorias</div>
+        <VistoriasObras obraId={dossier.id} obra={{ nome: dossier.building_name }} embedded onChanged={carregar}/>
       </div>
     </div>
   );

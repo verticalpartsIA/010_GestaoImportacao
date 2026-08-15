@@ -16,72 +16,21 @@
 
   function sb() { return (window.__VP_SB || {}).sb; }
 
-  /* ---------- Vistorias (3 fases inclusas + avulsas) ---------- */
-  async function obterVistoria(dossierId) {
-    const c = sb(); if (!c || !dossierId) return null;
-    const { data } = await c.from('dossier_obra').select('vistoria').eq('id', dossierId).maybeSingle();
-    return (data && data.vistoria) || null;
-  }
-
-  async function criarVistoria(dossierId, orcamentoInicial) {
-    const c = sb(); if (!c || !dossierId) throw new Error('dossierId inválido');
-    const vistoria = {
-      fases: [
-        { numero: 1, status: 'pendente', data: null, custo: 0, observacoes: '' },
-        { numero: 2, status: 'pendente', data: null, custo: 0, observacoes: '' },
-        { numero: 3, status: 'pendente', data: null, custo: 0, observacoes: '' },
-      ],
-      avulsas: [], // vistorias além das 3 inclusas — cobradas à parte (regra do issue #9)
-      orcamento_inicial: orcamentoInicial || 0,
-      liberada: false, liberada_em: null,
-      criado_em: new Date().toISOString(),
-      atualizado_em: new Date().toISOString(),
-    };
-    const { error } = await c.from('dossier_obra').update({ vistoria, updated_at: new Date().toISOString() }).eq('id', dossierId);
-    if (error) throw error;
-    return vistoria;
-  }
-
-  async function atualizarFaseVistoria(dossierId, numeroFase, dadosFase) {
-    const c = sb(); if (!c || !dossierId) throw new Error('dossierId inválido');
-    const vistoria = await obterVistoria(dossierId);
-    if (!vistoria) throw new Error('Nenhum plano de vistorias criado ainda.');
-    vistoria.fases = vistoria.fases.map((f) => f.numero === numeroFase ? { ...f, ...dadosFase, status: dadosFase.status || 'concluida' } : f);
-    vistoria.atualizado_em = new Date().toISOString();
-    const { error } = await c.from('dossier_obra').update({ vistoria, updated_at: new Date().toISOString() }).eq('id', dossierId);
-    if (error) throw error;
-    return vistoria;
-  }
-
-  /* Vistoria avulsa — além das 3 inclusas, cobrada à parte e registrada no dossiê. */
-  async function adicionarVistoriaAvulsa(dossierId, { data, custo, observacoes }) {
-    const c = sb(); if (!c || !dossierId) throw new Error('dossierId inválido');
-    const vistoria = await obterVistoria(dossierId);
-    if (!vistoria) throw new Error('Nenhum plano de vistorias criado ainda.');
-    vistoria.avulsas = [...(vistoria.avulsas || []), {
-      data: data || new Date().toISOString(), custo: Number(custo) || 0, observacoes: observacoes || '',
-    }];
-    vistoria.atualizado_em = new Date().toISOString();
-    const { error } = await c.from('dossier_obra').update({ vistoria, updated_at: new Date().toISOString() }).eq('id', dossierId);
-    if (error) throw error;
-    return vistoria;
-  }
-
-  async function liberarObraVistoriada(dossierId) {
-    const c = sb(); if (!c || !dossierId) throw new Error('dossierId inválido');
-    const vistoria = await obterVistoria(dossierId);
-    if (!vistoria) throw new Error('Nenhum plano de vistorias criado ainda.');
-    vistoria.liberada = true;
-    vistoria.liberada_em = new Date().toISOString();
-    const { error } = await c.from('dossier_obra').update({ vistoria, updated_at: new Date().toISOString() }).eq('id', dossierId);
-    if (error) throw error;
-    return vistoria;
-  }
-
-  function calcularProgressoVistoria(vistoria) {
-    if (!vistoria) return 0;
-    const concluidas = (vistoria.fases || []).filter((f) => f.status === 'concluida').length;
-    return Math.round((concluidas / 3) * 100);
+  /* ---------- Vistorias ----------
+     Consolidação (15/08): as 3 fases inclusas + avulsas viviam num jsonb
+     próprio (dossier_obra.vistoria), duplicando duas outras implementações
+     de vistoria que já existiam no sistema (vistorias-obras.jsx e
+     vistoria-tracker.js) sem nenhuma delas se falar — achado documentado
+     no FluxogramaPortal.md. Consolidado em `vistorias_obras`
+     (obra_id = dossier_obra.id), que agora é a única fonte de verdade. */
+  async function obterProgressoVistoria(dossierId) {
+    const c = sb(); if (!c || !dossierId) return { fases: [], liberada: false };
+    const { data } = await c.from('vistorias_obras').select('numero_fase, status').eq('obra_id', dossierId);
+    const fases = [1, 2, 3].map((n) => ({
+      numero: n,
+      concluida: (data || []).some((v) => v.numero_fase === n && v.status === 'concluida'),
+    }));
+    return { fases, liberada: fases.every((f) => f.concluida) };
   }
 
   function fmtBRL(v) { return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
@@ -184,10 +133,10 @@
     }
     itens.push({ chave: 'equipamento', ok: !!dossier.equipamento_entregue, label: 'Equipamento entregue e armazenado na obra', detalhe: equipamentoDetalhe });
 
-    // 5. Obra vistoriada e liberada
-    const vistoria = dossier.vistoria;
-    const vistoriada = !!(vistoria && vistoria.liberada);
-    itens.push({ chave: 'vistoria', ok: vistoriada, label: 'Obra vistoriada e liberada', detalhe: vistoriada ? fmtData(vistoria.liberada_em) : (vistoria ? `${calcularProgressoVistoria(vistoria)}% das vistorias concluídas` : 'Nenhuma vistoria iniciada') });
+    // 5. Obra vistoriada e liberada (3 fases inclusas concluídas em vistorias_obras)
+    const progressoVistoria = await obterProgressoVistoria(dossierId);
+    const concluidasCount = progressoVistoria.fases.filter((f) => f.concluida).length;
+    itens.push({ chave: 'vistoria', ok: progressoVistoria.liberada, label: 'Obra vistoriada e liberada', detalhe: progressoVistoria.liberada ? '3 de 3 fases concluídas' : `${concluidasCount} de 3 fases concluídas` });
 
     // 6. Parceiro instalador homologado (certificações válidas em geral)
     let certOk = false, certDetalhe = 'Nenhum parceiro vinculado';
@@ -225,7 +174,7 @@
   }
 
   window.InstalacaoObraStore = {
-    obterVistoria, criarVistoria, atualizarFaseVistoria, adicionarVistoriaAvulsa, liberarObraVistoriada, calcularProgressoVistoria,
+    obterProgressoVistoria,
     marcarEquipamentoEntregue, marcarAndaimeMunck, vincularParceiroInstalador, obterChecklistObraPronta,
     fmtBRL, fmtData,
   };
