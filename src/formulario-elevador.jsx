@@ -192,6 +192,20 @@ function FEEspecificacoesGenericas({ tipoEquipamento, especificacoes, onChange }
   );
 }
 
+/* Mapeia tipo_equipamento (chave curta usada no formulário) pra
+   categoriaProduto (chave que o MasterIdEngine espera). */
+const FE_CATEGORIA_MASTERID = { elevador: 'elevador', escada: 'escada_rolante', esteira: 'esteira_rolante' };
+
+/* Código real do equipamento (VPEL-EL0917-1, VPER-ER0917-2...) — só existe
+   depois que a cotação tem número (gerado no primeiro save) e a unidade tem
+   indice_ativo (gerado pelo INSERT). Antes disso, null — a UI mostra
+   "gerado ao salvar", igual ao badge de Nº da Cotação. */
+function feCodigoUnidade(tipoEquip, numeroCotacao, indiceAtivo) {
+  if (numeroCotacao == null || indiceAtivo == null) return null;
+  const categoria = FE_CATEGORIA_MASTERID[tipoEquip] || 'elevador';
+  return window.MasterIdEngine.masterId({ categoriaProduto: categoria, numeroCotacao, indiceAtivo });
+}
+
 function feNovaUnidade(identificador) {
   return {
     identificador: identificador || '', quantidade: 1,
@@ -463,7 +477,7 @@ function FEAnexos({ formularioId, categoria, titulo, descricao, podeAnexar, gara
 const FE_OPCOES_VAZIAS = { teto_falso: [], piso: [], porta: [], botoeira_cabine: [], botoeira_pavimento: [] };
 
 /* ---------- Card de uma Unidade (um elevador) ---------- */
-function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornecedores, modelos, publicMode }) {
+function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornecedores, modelos, publicMode, numeroCotacao }) {
   const [open, setOpen] = React.useState(true);
   const [opcoes, setOpcoes] = React.useState(FE_OPCOES_VAZIAS);
   const set = (k) => (v) => onChange({ ...unidade, [k]: v });
@@ -481,10 +495,22 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
   const tipoEquip = unidade.tipo_equipamento || 'elevador';
   const tipoEquipLabel = (FE_TIPOS_EQUIPAMENTO.find((t) => t.value === tipoEquip) || {}).label || 'Equipamento';
 
+  /* 15/08 — o "E1"/"E2" digitado à mão não dizia nada; o número da cotação
+     + indice_ativo (que o INSERT já gera) já formam o código real do
+     equipamento (VPEL-EL0917-1, VPER-ER0917-2...). Assim que os dois
+     existirem, sincroniza `identificador` pra esse código — é ele que
+     aparece em RFQ/precificação/engenharia daqui pra frente. Antes do
+     primeiro save (sem numeroCotacao/indice_ativo ainda), mantém o rótulo
+     provisório E1/E2 só pra diferenciar os cards na tela. */
+  const codigoUnidade = feCodigoUnidade(tipoEquip, numeroCotacao, unidade.indice_ativo);
+  React.useEffect(() => {
+    if (codigoUnidade && unidade.identificador !== codigoUnidade) set('identificador')(codigoUnidade);
+  }, [codigoUnidade]);
+
   return (
     <Card
-      title={`${tipoEquipLabel} ${unidade.identificador || index + 1}${Number(unidade.quantidade) > 1 ? ` × ${unidade.quantidade}` : ''}`}
-      sub={`${tipoEquip === 'elevador' ? (unidade.tipo || 'Tipo não definido') : tipoEquipLabel}${unidade.indice_ativo ? ` · Ativo #${unidade.indice_ativo}` : ''}`}
+      title={codigoUnidade || `${tipoEquipLabel} ${unidade.identificador || index + 1}${Number(unidade.quantidade) > 1 ? ` × ${unidade.quantidade}` : ''}`}
+      sub={`${tipoEquip === 'elevador' ? (unidade.tipo || 'Tipo não definido') : tipoEquipLabel}${codigoUnidade ? '' : ' · código gerado ao salvar'}`}
       action={
         <div className="row gap-2">
           <Button variant="ghost" size="sm" icon={open ? 'chevUp' : 'chevDown'} onClick={() => setOpen((o) => !o)}/>
@@ -500,7 +526,9 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Identificação do equipamento</div>
             <div className={publicMode ? 'grid-3' : 'grid-4'} style={{ gap: 12 }}>
-              <FEField label="Identificador (E1, E2...)"><FEInput value={unidade.identificador} onChange={set('identificador')} placeholder="E1"/></FEField>
+              <FEField label="Código do equipamento">
+                <FEInput value={codigoUnidade || 'Gerado ao salvar'} onChange={() => {}} disabled/>
+              </FEField>
               <FEField label="Quantidade idêntica"><FEInput type="number" value={unidade.quantidade ?? 1} onChange={(v) => set('quantidade')(Math.max(1, Number(v) || 1))} placeholder="1"/></FEField>
               <FEField label="Tipo de equipamento *"><FESelect value={tipoEquip} onChange={set('tipo_equipamento')} options={FE_TIPOS_EQUIPAMENTO}/></FEField>
               {tipoEquip === 'elevador' && <FEField label="Tipo *"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>}
@@ -1326,7 +1354,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0 }}>
         {unidades.map((u, i) => (
           <div key={u.id || i} style={{ marginTop: 16 }}>
-            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} onDuplicate={() => duplicarUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode}/>
+            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} onDuplicate={() => duplicarUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode} numeroCotacao={numeroCotacao}/>
           </div>
         ))}
 
