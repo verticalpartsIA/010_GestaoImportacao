@@ -283,6 +283,17 @@
       alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
       detalhe: { resposta: 'aprovada', signerName: sig.signerName },
     });
+    /* Cliente aprovou → dispara a aprovação do CEO pra comprar o
+       equipamento, bem antes do contrato assinado ou do sinal pago
+       (pedido do usuário em 15/08 — equipamentos caros demais pra deixar
+       sem aprovação). O "start" real da compra fica travado até os outros
+       gatilhos também liberarem — ver DecisoesStore.verificarGateCompra,
+       checado na criação da P.I. */
+    if (window.DecisoesStore && updated.numero_cotacao != null) {
+      window.DecisoesStore.podeComprarEquipamento(updated.numero_cotacao, {
+        proposta: updated.titulo || updated.numero_documento,
+      }).catch((e) => console.warn('[PropostaStore] podeComprarEquipamento falhou', e));
+    }
     return updated;
   }
 

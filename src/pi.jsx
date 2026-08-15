@@ -211,7 +211,7 @@ function PIProducaoSection({ value, onChange, piId }) {
 
 /* ---------- Formulário completo (Nova/Editar P.I.) ---------- */
 const PI_EMPTY = {
-  numero_pi: '', fornecedor: '', incoterms: '', data_solicitacao_pagamento: '', numero_requisicao: '',
+  numero_pi: '', fornecedor: '', incoterms: '', data_solicitacao_pagamento: '', numero_requisicao: '', numero_cotacao: '',
   numeros_serie: [], categorias: [], embarque_id: '', data_abertura: '', data_prontidao: '',
   status: 'Em andamento', moeda: 'USD', itens: [],
   data_primeiro_pagamento: '', valor_primeiro_pagamento: '', cotacao_dolar_primeiro_pagamento: '',
@@ -222,6 +222,8 @@ const PI_EMPTY = {
 function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) {
   const [form, setForm] = React.useState(() => (initialData ? { ...PI_EMPTY, ...initialData } : PI_EMPTY));
   const [tab, setTab] = React.useState('id');
+  const [gate, setGate] = React.useState(null); // {checking, ok, motivo} — só relevante em P.I. nova com Nº Cotação preenchido
+  const [checkingGate, setCheckingGate] = React.useState(false);
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
   const store = window.PIStore;
 
@@ -232,8 +234,26 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
   const totalPago = pago1 + pago2 + pagoAdicional;
   const percPaga = valorTotalItens > 0 ? (totalPago / valorTotalItens) * 100 : 0;
 
-  const submit = () => {
+  /* Compra de equipamento — gate do CEO + gatilhos automáticos, só faz
+     sentido conferir na criação (o "start" da compra) e quando a P.I. está
+     vinculada a uma cotação. Ver decisoes-store.js › verificarGateCompra. */
+  React.useEffect(() => {
+    if (isEdit || !form.numero_cotacao || !window.DecisoesStore) { setGate(null); return; }
+    let cancelado = false;
+    setCheckingGate(true);
+    window.DecisoesStore.verificarGateCompra(Number(form.numero_cotacao))
+      .then((r) => { if (!cancelado) setGate(r); })
+      .catch(() => { if (!cancelado) setGate(null); })
+      .finally(() => { if (!cancelado) setCheckingGate(false); });
+    return () => { cancelado = true; };
+  }, [form.numero_cotacao, isEdit]);
+
+  const submit = async () => {
     if (!form.numero_pi.trim()) return window.toast?.('Informe o número da P.I.', 'warning');
+    if (!isEdit && form.numero_cotacao && window.DecisoesStore) {
+      const r = await window.DecisoesStore.verificarGateCompra(Number(form.numero_cotacao));
+      if (!r.ok) return window.toast?.(r.motivo, 'warning');
+    }
     onSubmit(form);
   };
 
@@ -270,9 +290,23 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
             <PIField label="Incoterms"><PISelect value={form.incoterms} onChange={set('incoterms')} options={PI_INCOTERMS}/></PIField>
             <PIField label="Data da solicitação de pagamento"><PIInput type="date" value={form.data_solicitacao_pagamento} onChange={set('data_solicitacao_pagamento')}/></PIField>
             <PIField label="Nº da requisição"><PIInput value={form.numero_requisicao} onChange={set('numero_requisicao')}/></PIField>
+            <PIField label="Nº Cotação (gate de compra do CEO)"><PIInput type="number" value={form.numero_cotacao} onChange={set('numero_cotacao')} disabled={isEdit}/></PIField>
             <PIMultiText label="Nºs de série" values={form.numeros_serie} onChange={set('numeros_serie')} placeholder="Nº de série do equipamento"/>
             <PIMultiText label="Categorias" values={form.categorias} onChange={set('categorias')} placeholder="Categoria do equipamento"/>
           </div>
+
+          {!isEdit && form.numero_cotacao && (
+            <div style={{
+              padding: '10px 14px', borderRadius: 6, fontSize: 12.5,
+              background: checkingGate ? 'var(--vp-gray-50)' : gate?.ok ? '#eafaf0' : '#fff8e6',
+              border: '1px solid ' + (checkingGate ? 'var(--border)' : gate?.ok ? '#00aa00' : '#FBB039'),
+              color: checkingGate ? 'var(--fg3)' : gate?.ok ? '#00701f' : '#8a5a00',
+            }}>
+              {checkingGate ? 'Verificando aprovação do CEO e gatilhos de compra…'
+               : gate?.ok ? '✓ Compra liberada — CEO aprovou e os gatilhos automáticos (contrato + sinal + aval) já fecharam.'
+               : `○ ${gate?.motivo || 'Compra ainda não liberada.'}`}
+            </div>
+          )}
         </div>
       )}
 

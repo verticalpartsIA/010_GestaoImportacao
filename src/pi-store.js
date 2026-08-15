@@ -53,6 +53,7 @@
     return {
       numero_pi: form.numero_pi, fornecedor: form.fornecedor || null, incoterms: form.incoterms || null,
       data_solicitacao_pagamento: form.data_solicitacao_pagamento || null, numero_requisicao: form.numero_requisicao || null,
+      numero_cotacao: form.numero_cotacao !== '' && form.numero_cotacao != null ? Number(form.numero_cotacao) : null,
       numeros_serie: cleanArr(form.numeros_serie), categorias: cleanArr(form.categorias),
       embarque_id: form.embarque_id || null, data_abertura: form.data_abertura || null, data_prontidao: form.data_prontidao || null,
       status: form.status || 'Em andamento', moeda: form.moeda || 'USD',
