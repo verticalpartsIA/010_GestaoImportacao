@@ -75,6 +75,7 @@
       documentos_marimex: form.documentos_marimex || null, transit_time_total: num(form.transit_time_total),
       di: form.di || null, data_registro_di: form.data_registro_di || null, canal_parametrizacao: form.canal_parametrizacao || null,
       ultima_data_free_time: form.ultima_data_free_time || null, eta_santos: form.eta_santos || null, historico_eta: form.historico_eta || [],
+      conferencia_status: form.conferencia_status || null, conferencia_motivo: form.conferencia_motivo || null, conferencia_data: form.conferencia_data || null,
       empresa_desembaraco: form.empresa_desembaraco || null, faturamento_desembaraco: num(form.faturamento_desembaraco),
       numerario_desembaraco: num(form.numerario_desembaraco), valor_reembolso: num(form.valor_reembolso),
       status_reembolso: form.status_reembolso || 'Não solicitado', data_solicitacao_reembolso: form.data_solicitacao_reembolso || null,
