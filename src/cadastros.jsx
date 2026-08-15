@@ -173,9 +173,11 @@ const FOR_EMPTY = {
   observacoes: '', ativo: true,
 };
 
+/* Arredonda pra BAIXO de propósito: com Math.round, uma média 4,5 virava 5
+   estrelas cheias — superestima a nota. O número exato vem ao lado. */
 function cadFmtEstrelas(media) {
   if (media == null) return '—';
-  const cheias = Math.round(media);
+  const cheias = Math.floor(media);
   return '★'.repeat(cheias) + '☆'.repeat(5 - cheias) + ` (${media.toFixed(1)})`;
 }
 

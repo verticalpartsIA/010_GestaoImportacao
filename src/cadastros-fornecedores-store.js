@@ -13,10 +13,17 @@
 
   const CATEGORIAS = ['Fornecedor', 'Agente de Carga', 'Transportador', 'Prestador IMS'];
 
+  /* Deriva do MAIOR código já usado, não de count(*): com contagem, excluir
+     um fornecedor fazia o próximo cadastro reusar um código existente e
+     estourar o índice único (bug pego em teste ao vivo). */
   async function gerarCodigo() {
     const c = sb(); if (!c) return 'VPFOR-0001';
-    const { count } = await c.from('fornecedores').select('id', { count: 'exact', head: true });
-    return 'VPFOR-' + String((count || 0) + 1).padStart(4, '0');
+    const { data } = await c.from('fornecedores').select('codigo');
+    const maior = (data || []).reduce((max, r) => {
+      const n = parseInt(String(r.codigo || '').replace(/\D/g, ''), 10);
+      return isNaN(n) ? max : Math.max(max, n);
+    }, 0);
+    return 'VPFOR-' + String(maior + 1).padStart(4, '0');
   }
 
   async function listarTodos() {
