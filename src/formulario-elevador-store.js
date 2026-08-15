@@ -179,7 +179,14 @@
      vivem só na tabela `clientes`, nunca aqui. Sem esse filtro, um spread
      cru do patch manda esses campos pro update() e quebra com "Could not
      find the column" (mesmo bug do 'endereco' antes — dessa vez foi o
-     'cnpj'; por isso a whitelist agora, em vez de tirar campo por campo). */
+     'cnpj'; por isso a whitelist agora, em vez de tirar campo por campo).
+
+     `numero_cotacao` foi removido de propósito (15/08): nasce sozinho da
+     sequência do banco no INSERT (nextval) e é o "Ator principal" da linha
+     do tempo da cotação inteira — precisa nascer uma vez e nunca mais
+     morrer. Deixá-lo editável aqui permitiria sobrescrever esse número por
+     engano num patch qualquer; nenhuma tela usa isso hoje, mas o buraco
+     estava aberto. */
   const FE_COLUNAS_VALIDAS = new Set([
     'lead_id', 'dossier_id', 'cliente_id', 'canal', 'token',
     'local_obra_cidade', 'local_obra_estado', 'endereco_obra', 'prazo_desejado',
@@ -188,7 +195,7 @@
     'endereco_cep', 'endereco_cidade', 'endereco_estado',
     'endereco_obra_logradouro', 'endereco_obra_complemento', 'endereco_obra_bairro',
     'endereco_obra_cep', 'endereco_obra_cidade', 'endereco_obra_estado',
-    'vendedor', 'numero_cotacao', 'finalidade_compra',
+    'vendedor', 'finalidade_compra',
   ]);
 
   async function salvar(id, patch) {

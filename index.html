@@ -91,14 +91,14 @@
   <script src="src/gatilhos-engine.js?v=4"></script>
 
   <!-- Trilha genérica do fluxo operacional (Formulário → Fornecedor → Proposta → Cliente) -->
-  <script src="src/eventos-fluxo-store.js?v=4"></script>
+  <script src="src/eventos-fluxo-store.js?v=5"></script>
 
   <!-- Central de Decisões — decisão gerencial genérica (CEO, Owner, Gestor Comercial, RH...) -->
   <script src="src/decisoes-store.js?v=4"></script>
   <script src="src/pedidos-varejo-store.js?v=1"></script>
 
   <!-- Gestão Importação — Fase 1: P.I. (Proforma Invoice) -->
-  <script src="src/pi-store.js?v=2"></script>
+  <script src="src/pi-store.js?v=3"></script>
   <!-- Gestão Importação — Fase 2: RFQ (Request for Quotation) -->
   <script src="src/rfq-store.js?v=2"></script>
   <!-- Gestão Importação — Fase 3: IMS (recursos operacionais) -->
@@ -107,6 +107,9 @@
   <script src="src/embarques-importacao-store.js?v=2"></script>
   <!-- Pedidos — acompanhamento de status (Nacional/Importação) -->
   <script src="src/pedidos-acompanhamento-store.js?v=1"></script>
+
+  <!-- Linha do Tempo da Cotação — agrega dados de várias tabelas por Nº Cotação -->
+  <script src="src/linha-do-tempo-store.js?v=1"></script>
 
   <!-- Aval Financeiro — gate entre Proposta aprovada/Contrato e Contrato assinado/Compra -->
   <script src="src/aval-financeiro-store.js?v=4"></script>
@@ -117,9 +120,10 @@
   <!-- Components in dependency order -->
   <script type="text/vp-jsx" src="src/primitives.jsx?v=4"></script>
   <script type="text/vp-jsx" src="src/toast.jsx?v=6"></script>
-  <script type="text/vp-jsx" src="src/shell.jsx?v=41"></script>
+  <script type="text/vp-jsx" src="src/shell.jsx?v=42"></script>
   <script type="text/vp-jsx" src="src/dashboard.jsx?v=11"></script>
   <script type="text/vp-jsx" src="src/comercial.jsx?v=17"></script>
+  <script type="text/vp-jsx" src="src/linha-do-tempo.jsx?v=1"></script>
 
   <!-- Padrão universal de codificação de IDs (Master ID) — Fase 1 -->
   <script src="src/master-id-engine.js?v=2"></script>
@@ -130,7 +134,7 @@
 
   <!-- Formulário de Coleta de Dados — Elevadores (Comercial) — ISSUE #66 -->
   <script src="src/enderecos-api.js?v=2"></script>
-  <script src="src/formulario-elevador-store.js?v=15"></script>
+  <script src="src/formulario-elevador-store.js?v=16"></script>
   <script src="src/cotacao-elevador-fornecedor-store.js?v=14"></script>
   <script type="text/vp-jsx" src="src/formulario-elevador.jsx?v=27"></script>
 
@@ -247,6 +251,6 @@
   <script type="text/vp-jsx" src="src/vp-copiloto.jsx?v=1"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="src/app.jsx?v=43"></script>
+  <script type="text/vp-jsx" src="src/app.jsx?v=44"></script>
 </body>
 </html>
