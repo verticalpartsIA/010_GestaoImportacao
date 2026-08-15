@@ -173,6 +173,7 @@ function App() {
       case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute}/>;
       case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute}/>;
       case "status-obras": return <ObrasStatusPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "linha-do-tempo": return <window.LinhaDoTempoPage/>;
       case "cotacoes-fornecedor": return <CotacoesFornecedorPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cotacao-fornecedor-detail": return <CotacaoFornecedorDetalhe cot={subsel} setRoute={setRoute}/>;
       case "precificacao": return <PrecificacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;

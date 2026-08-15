@@ -99,6 +99,19 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('pi_importacao').update({ embarque_id: embarqueId || null, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) throw error;
+    /* Propaga o Nº Cotação da P.I. pro Embarque (15/08, Linha do Tempo da
+       Cotação) — o Embarque não tem como saber sozinho de qual cotação ele
+       é, quem sabe é a P.I. Só preenche se o embarque ainda não tiver um
+       (não sobrescreve um valor já definido por outra P.I. vinculada). */
+    if (embarqueId) {
+      const { data: pi } = await c.from('pi_importacao').select('numero_cotacao').eq('id', id).maybeSingle();
+      if (pi && pi.numero_cotacao != null) {
+        const { data: emb } = await c.from('embarques_importacao').select('numero_cotacao').eq('id', embarqueId).maybeSingle();
+        if (emb && emb.numero_cotacao == null) {
+          await c.from('embarques_importacao').update({ numero_cotacao: pi.numero_cotacao }).eq('id', embarqueId);
+        }
+      }
+    }
   }
 
   /* Anexos da Produção — mesmo bucket já usado por Projeto de Elevadores. */
