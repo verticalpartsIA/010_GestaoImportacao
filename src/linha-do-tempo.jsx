@@ -11,7 +11,7 @@ const LT_PAPEL_COR = {
   Importação: '#0f8a8a', CEO: '#c0392b', RH: '#c2358a',
   'Transporte marítimo': '#1f5f8a', Despachante: '#6b6b6b',
   'Transporte terrestre': '#a35a2e', Instalador: '#b5540a', Gestão: '#555',
-  Logística: '#0f8a8a', 'Gestor Comercial': '#1f6feb',
+  Logística: '#0f8a8a', 'Gestor Comercial': '#1f6feb', 'Empresa de Manutenção': '#5a8a5a',
 };
 function ltCor(papel) { return LT_PAPEL_COR[papel] || '#777'; }
 

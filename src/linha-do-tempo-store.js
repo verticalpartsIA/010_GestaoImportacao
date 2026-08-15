@@ -35,6 +35,20 @@
     compra_varejo_logistica: 'Logística',
   };
 
+  /* Papel por status_to do STATUS_FLOW (dossier-store.js) — cada transição
+     de status do Dossiê aponta pra quem tipicamente faz aquele passo.
+     Cobre justamente os dois trechos que não tinham NENHUM outro rastro
+     (Instalação e Manutenção preventiva) — desde que a tela real avance o
+     status do Dossiê por essas etapas, quando existir. */
+  const PAPEL_STATUS_DOSSIER = {
+    'Lead qualificado': 'Vendedor', 'Dossier criado': 'Vendedor',
+    'Análise técnica': 'Engenharia', 'Precificação': 'Financeiro',
+    'Proposta enviada': 'Vendedor', 'Contrato assinado': 'Cliente',
+    'Importação': 'Importação', 'Homologação instalador': 'RH',
+    'Instalação': 'Instalador', 'DataBook': 'Engenharia',
+    'Entregue': 'Cliente', 'Manutenção preventiva': 'Empresa de Manutenção',
+  };
+
   async function obterPorCotacao(numeroCotacao) {
     const c = sb();
     const vazio = { numeroCotacao, dossier: null, itens: [] };
@@ -57,7 +71,7 @@
     const { data: dossier } = await c.from('dossier_obra').select('*').eq('numero_cotacao', numeroCotacao).maybeSingle();
     if (dossier) {
       const { data: historico } = await c.from('dossier_history').select('*').eq('dossier_id', dossier.id).order('created_at', { ascending: true });
-      (historico || []).forEach((h) => add(h.created_at, 'Engenharia', `Status: ${h.status_from || '—'} → ${h.status_to}${h.notes ? ' — ' + h.notes : ''}`, h.actor, 'Dossiê da Obra'));
+      (historico || []).forEach((h) => add(h.created_at, PAPEL_STATUS_DOSSIER[h.status_to] || 'Engenharia', `Status: ${h.status_from || '—'} → ${h.status_to}${h.notes ? ' — ' + h.notes : ''}`, h.actor, 'Dossiê da Obra'));
 
       const { data: vistorias } = await c.from('vistorias_obras').select('*').eq('obra_id', dossier.id).eq('status', 'concluida');
       (vistorias || []).forEach((v) => add(v.data_conclusao || v.atualizado_em, 'Engenharia', `Vistoria ${v.numero_fase ? 'Fase ' + v.numero_fase : 'avulsa'} concluída`, v.vistoriador, 'Vistoria'));
