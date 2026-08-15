@@ -38,11 +38,14 @@ const NAV_GROUPS = [
        do VP Gestão em fases. Só P.I. está pronta; as demais entram indentadas
        aqui conforme forem migradas. */
     { label: "Gestão Importação", subheader: true },
+    { id: "gi-painel", label: "Painel", icon: "home", indent: true },
     { id: "pi-importacao", label: "P.I.", icon: "fileText", indent: true },
     { id: "rfq-importacao", label: "RFQ", icon: "fileSearch", indent: true },
     { id: "ims-importacao", label: "IMS", icon: "package", indent: true },
     { id: "embarques-importacao", label: "Embarques", icon: "ship", indent: true },
+    { id: "gi-analise-precos", label: "Análise de Preços", icon: "calculator", indent: true },
     { id: "compras", label: "Compras Nacional", icon: "truck" },
+    { id: "pedidos-acompanhamento", label: "Pedidos", icon: "package" },
   ]},
   { label: "Engenharia", items: [
     { id: "engenharia", label: "Engenharia", icon: "ruler" },
@@ -258,6 +261,9 @@ const BREADCRUMB_MAP = {
   "rfq-importacao": { module: "Importação", page: "Gestão Importação — RFQ", icon: "fileSearch" },
   "ims-importacao": { module: "Importação", page: "Gestão Importação — IMS", icon: "package" },
   "embarques-importacao": { module: "Importação", page: "Gestão Importação — Embarques", icon: "ship" },
+  "gi-painel": { module: "Importação", page: "Gestão Importação — Painel", icon: "home" },
+  "gi-analise-precos": { module: "Importação", page: "Gestão Importação — Análise de Preços", icon: "calculator" },
+  "pedidos-acompanhamento": { module: "Suprimentos", page: "Pedidos", icon: "package" },
   "importacao-detail":        { module: "Logística", page: "Detalhe de Embarque", icon: "ship" },
   "importacao-rastreamento":  { module: "Logística", page: "Rastreamento de Navios", icon: "mapIcon" },
   "importacao-email":         { module: "Logística", page: "Inbox Importação", icon: "mail" },

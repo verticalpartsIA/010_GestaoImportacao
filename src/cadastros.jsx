@@ -173,6 +173,70 @@ const FOR_EMPTY = {
   observacoes: '', ativo: true,
 };
 
+function cadFmtEstrelas(media) {
+  if (media == null) return '—';
+  const cheias = Math.round(media);
+  return '★'.repeat(cheias) + '☆'.repeat(5 - cheias) + ` (${media.toFixed(1)})`;
+}
+
+/* ---------- Avaliações de um fornecedor (só aparece editando) ---------- */
+function FornecedorAvaliacoes({ fornecedorId }) {
+  const [avaliacoes, setAvaliacoes] = React.useState(null);
+  const [nota, setNota] = React.useState(5);
+  const [comentario, setComentario] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+
+  const reload = React.useCallback(() => {
+    window.CadastrosFornecedoresStore.listarAvaliacoes(fornecedorId).then(setAvaliacoes).catch(() => setAvaliacoes([]));
+  }, [fornecedorId]);
+  React.useEffect(() => { reload(); }, [reload]);
+
+  const enviar = async () => {
+    setSaving(true);
+    try {
+      await window.CadastrosFornecedoresStore.avaliar(fornecedorId, { nota, comentario });
+      setComentario(''); setNota(5); reload();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
+  const remover = async (id) => {
+    if (!window.confirm('Remover esta avaliação?')) return;
+    await window.CadastrosFornecedoresStore.removerAvaliacao(id); reload();
+  };
+
+  if (avaliacoes === null) return null;
+  const media = avaliacoes.length ? avaliacoes.reduce((s, a) => s + a.nota, 0) / avaliacoes.length : null;
+
+  return (
+    <Card title="Avaliações" sub={avaliacoes.length ? `Média: ${cadFmtEstrelas(media)} · ${avaliacoes.length} avaliação(ões)` : 'Nenhuma avaliação ainda.'}>
+      <div className="row gap-2" style={{ alignItems: 'flex-end' }}>
+        <PIField label="Nota">
+          <PISelect value={String(nota)} onChange={(v) => setNota(Number(v))} options={['1', '2', '3', '4', '5']}/>
+        </PIField>
+        <div style={{ flex: 1 }}>
+          <label className="up-eyebrow muted">Comentário</label>
+          <input className="input" value={comentario} onChange={(e) => setComentario(e.target.value)} placeholder="Opcional"/>
+        </div>
+        <Button variant="outline" onClick={enviar} disabled={saving}>{saving ? 'Salvando…' : 'Avaliar'}</Button>
+      </div>
+      {avaliacoes.length > 0 && (
+        <div className="stack" style={{ gap: 6, marginTop: 12 }}>
+          {avaliacoes.map((a) => (
+            <div key={a.id} className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 8 }}>
+              <div className="small">
+                <b>{cadFmtEstrelas(a.nota).split(' ')[0]}</b> {a.comentario && `— ${a.comentario}`}
+                <div className="cell-sub">{a.avaliado_por || 'Sistema'} · {new Date(a.avaliado_em).toLocaleDateString('pt-BR')}</div>
+              </div>
+              <Button variant="ghost" size="sm" icon="trash" onClick={() => remover(a.id)}/>
+            </div>
+          ))}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
   const [form, setForm] = React.useState(() => (initialData ? { ...FOR_EMPTY, ...initialData } : FOR_EMPTY));
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
@@ -210,7 +274,7 @@ function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
       </div>
       <div style={{ marginTop: 14 }}>
         <label className="up-eyebrow muted">Observações</label>
-        <textarea className="input" rows={2} value={form.observacoes} onChange={(e) => set('observacoes')(e.target.value)}/>
+        <textarea className="input" rows={2} value={form.observacoes ?? ''} onChange={(e) => set('observacoes')(e.target.value)}/>
       </div>
       <label className="row gap-2" style={{ cursor: 'pointer', marginTop: 10 }}>
         <input type="checkbox" checked={form.ativo !== false} onChange={(e) => set('ativo')(e.target.checked)}/>
@@ -220,6 +284,7 @@ function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
         <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
         <Button variant="primary" onClick={submit} disabled={saving}>{saving ? 'Salvando…' : (isEdit ? 'Salvar alterações' : 'Cadastrar fornecedor')}</Button>
       </div>
+      {isEdit && <div style={{ marginTop: 16 }}><FornecedorAvaliacoes fornecedorId={initialData.id}/></div>}
     </Card>
   );
 }
@@ -232,7 +297,12 @@ function CadastroFornecedoresPage() {
   const [filterCategoria, setFilterCategoria] = React.useState('Todas');
   const [saving, setSaving] = React.useState(false);
 
-  const reload = React.useCallback(() => { window.CadastrosFornecedoresStore.listarTodos().then(setItems).catch(() => setItems([])); }, []);
+  const [medias, setMedias] = React.useState({});
+
+  const reload = React.useCallback(() => {
+    window.CadastrosFornecedoresStore.listarTodos().then(setItems).catch(() => setItems([]));
+    window.CadastrosFornecedoresStore.mediasAvaliacoes().then(setMedias).catch(() => setMedias({}));
+  }, []);
   React.useEffect(() => { reload(); }, [reload]);
 
   const salvar = async (form) => {
@@ -292,7 +362,7 @@ function CadastroFornecedoresPage() {
 
       <div className="table-wrap">
         <table className="t">
-          <thead><tr><th>Código</th><th>Razão social</th><th>Categorias</th><th>CNPJ/CPF</th><th>Contato</th><th>Status</th><th></th></tr></thead>
+          <thead><tr><th>Código</th><th>Razão social</th><th>Categorias</th><th>CNPJ/CPF</th><th>Contato</th><th>Avaliação</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {filtered.length === 0 && <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum fornecedor encontrado.</td></tr>}
             {filtered.map((f) => (
@@ -302,6 +372,7 @@ function CadastroFornecedoresPage() {
                 <td>{(f.categorias || []).map((c) => <span key={c} className="badge" style={{ marginRight: 4 }}>{c}</span>)}</td>
                 <td className="mono">{cadFmtDoc(f.cnpj || f.cpf)}</td>
                 <td>{f.contato || f.telefone || '—'}</td>
+                <td className="small">{medias[f.id] ? cadFmtEstrelas(medias[f.id].media) : '—'}</td>
                 <td>{f.ativo === false ? <span className="badge">Inativo</span> : <StatusBadge status="Ativo"/>}</td>
                 <td>
                   <div className="row gap-1">

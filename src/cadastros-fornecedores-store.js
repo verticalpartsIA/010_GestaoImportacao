@@ -84,5 +84,47 @@
     if (error) throw error;
   }
 
-  window.CadastrosFornecedoresStore = { CATEGORIAS, gerarCodigo, listarTodos, listarAtivos, obter, criar, atualizar, remover };
+  /* ---------- Avaliações — nota + comentário, histórico por fornecedor ---------- */
+  async function listarAvaliacoes(fornecedorId) {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('fornecedores_avaliacoes').select('*').eq('fornecedor_id', fornecedorId).order('avaliado_em', { ascending: false });
+    if (error) return [];
+    return data || [];
+  }
+
+  async function avaliar(fornecedorId, { nota, comentario }) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (!nota || nota < 1 || nota > 5) throw new Error('Nota deve ser de 1 a 5.');
+    const user = window.__VP_USER || {};
+    const row = { fornecedor_id: fornecedorId, nota, comentario: comentario || null, avaliado_por: user.nome || user.email || null };
+    const { data, error } = await c.from('fornecedores_avaliacoes').insert(row).select().single();
+    if (error) throw error;
+    return data;
+  }
+
+  async function removerAvaliacao(id) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { error } = await c.from('fornecedores_avaliacoes').delete().eq('id', id);
+    if (error) throw error;
+  }
+
+  /* Média + contagem por fornecedor, pra mostrar na lista sem N+1 query. */
+  async function mediasAvaliacoes() {
+    const c = sb(); if (!c) return {};
+    const { data, error } = await c.from('fornecedores_avaliacoes').select('fornecedor_id, nota');
+    if (error) return {};
+    const map = {};
+    (data || []).forEach((a) => {
+      const m = map[a.fornecedor_id] || { soma: 0, qtd: 0 };
+      m.soma += a.nota; m.qtd += 1;
+      map[a.fornecedor_id] = m;
+    });
+    Object.keys(map).forEach((k) => { map[k].media = map[k].soma / map[k].qtd; });
+    return map;
+  }
+
+  window.CadastrosFornecedoresStore = {
+    CATEGORIAS, gerarCodigo, listarTodos, listarAtivos, obter, criar, atualizar, remover,
+    listarAvaliacoes, avaliar, removerAvaliacao, mediasAvaliacoes,
+  };
 }());
