@@ -224,8 +224,31 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
   const [tab, setTab] = React.useState('id');
   const [gate, setGate] = React.useState(null); // {checking, ok, motivo} — só relevante em P.I. nova com Nº Cotação preenchido
   const [checkingGate, setCheckingGate] = React.useState(false);
+  const [cotacaoInfo, setCotacaoInfo] = React.useState(null); // {checking} | {encontrada:false} | {encontrada:true, masterId, resumo}
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
   const store = window.PIStore;
+
+  /* O Nº da Cotação precisa corresponder a uma cotação de verdade — sem
+     isso a P.I. fica "solta", sem ligação nenhuma com o que o cliente
+     pediu. Busca via o mesmo motor de herança já usado pela Proposta
+     (PropostaHeranca) e mostra o Master ID (ex.: VPEL-EL0902) confirmando
+     a cotação certa antes de seguir. */
+  React.useEffect(() => {
+    if (isEdit || !form.numero_cotacao || !window.PropostaHeranca || !window.MasterIdEngine) { setCotacaoInfo(null); return; }
+    let cancelado = false;
+    setCotacaoInfo({ checking: true });
+    window.PropostaHeranca.buscarFontes(Number(form.numero_cotacao))
+      .then((fontes) => {
+        if (cancelado) return;
+        if (!fontes.encontrado) { setCotacaoInfo({ encontrada: false }); return; }
+        const masterId = window.MasterIdEngine.baseId('elevador', fontes.numeroCotacao);
+        const cliente = (fontes.cliente || {}).razao_social || null;
+        const fornecedor = (fontes.cotacao || {}).fornecedor || null;
+        setCotacaoInfo({ encontrada: true, masterId, cliente, fornecedor });
+      })
+      .catch(() => { if (!cancelado) setCotacaoInfo({ encontrada: false }); });
+    return () => { cancelado = true; };
+  }, [form.numero_cotacao, isEdit]);
 
   const valorTotalItens = store.calcTotalGeral(form.itens);
   const pago1 = parseFloat(form.valor_primeiro_pagamento) || 0;
@@ -250,6 +273,9 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
 
   const submit = async () => {
     if (!form.numero_pi.trim()) return window.toast?.('Informe o número da P.I.', 'warning');
+    if (!isEdit && form.numero_cotacao && cotacaoInfo && cotacaoInfo.encontrada === false) {
+      return window.toast?.(`Nenhuma cotação Nº ${form.numero_cotacao} encontrada — confira o número antes de continuar.`, 'warning');
+    }
     if (!isEdit && form.numero_cotacao && window.DecisoesStore) {
       const r = await window.DecisoesStore.verificarGateCompra(Number(form.numero_cotacao));
       if (!r.ok) return window.toast?.(r.motivo, 'warning');
@@ -294,6 +320,20 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
             <PIMultiText label="Nºs de série" values={form.numeros_serie} onChange={set('numeros_serie')} placeholder="Nº de série do equipamento"/>
             <PIMultiText label="Categorias" values={form.categorias} onChange={set('categorias')} placeholder="Categoria do equipamento"/>
           </div>
+
+          {!isEdit && form.numero_cotacao && (
+            <div style={{
+              padding: '10px 14px', borderRadius: 6, fontSize: 12.5,
+              background: cotacaoInfo?.checking ? 'var(--vp-gray-50)' : cotacaoInfo?.encontrada ? '#eafaf0' : '#fdecea',
+              border: '1px solid ' + (cotacaoInfo?.checking ? 'var(--border)' : cotacaoInfo?.encontrada ? '#00aa00' : '#e04b3f'),
+              color: cotacaoInfo?.checking ? 'var(--fg3)' : cotacaoInfo?.encontrada ? '#00701f' : '#a3261a',
+            }}>
+              {cotacaoInfo?.checking ? 'Verificando se essa cotação existe…'
+               : cotacaoInfo?.encontrada
+                 ? `✓ Cotação encontrada — ${cotacaoInfo.masterId}${cotacaoInfo.cliente ? ` · ${cotacaoInfo.cliente}` : ''}${cotacaoInfo.fornecedor ? ` · Fornecedor: ${cotacaoInfo.fornecedor}` : ''}`
+                 : `✕ Nenhuma cotação Nº ${form.numero_cotacao} encontrada — confira o número antes de continuar.`}
+            </div>
+          )}
 
           {!isEdit && form.numero_cotacao && (
             <div style={{
@@ -420,7 +460,8 @@ function PIPage() {
   const filtered = pis.filter((pi) => {
     const s = search.toLowerCase();
     const embLabel = embarqueLabel(embarquesMap[pi.embarque_id]).toLowerCase();
-    const matchSearch = !s || (pi.numero_pi || '').toLowerCase().includes(s) || (pi.fornecedor || '').toLowerCase().includes(s) || embLabel.includes(s);
+    const masterId = pi.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', pi.numero_cotacao).toLowerCase() : '';
+    const matchSearch = !s || (pi.numero_pi || '').toLowerCase().includes(s) || (pi.fornecedor || '').toLowerCase().includes(s) || embLabel.includes(s) || masterId.includes(s) || String(pi.numero_cotacao ?? '').includes(s);
     const matchStatus = filterStatus === 'Todos' || pi.status === filterStatus;
     return matchSearch && matchStatus;
   });
@@ -446,7 +487,7 @@ function PIPage() {
       )}
 
       <div className="row gap-2" style={{ marginBottom: 14 }}>
-        <input className="input" style={{ flex: 1 }} placeholder="Buscar por nº PI, fornecedor ou embarque…" value={search} onChange={(e) => setSearch(e.target.value)}/>
+        <input className="input" style={{ flex: 1 }} placeholder="Buscar por nº PI, nº/Master ID da cotação, fornecedor ou embarque…" value={search} onChange={(e) => setSearch(e.target.value)}/>
         <select className="input" style={{ width: 220 }} value={filterStatus} onChange={(e) => setFilterStatus(e.target.value)}>
           <option value="Todos">Todos os status</option>
           {PI_STATUS.map((s) => <option key={s} value={s}>{s}</option>)}
@@ -456,7 +497,7 @@ function PIPage() {
       <div className="table-wrap">
         <table className="t">
           <thead><tr>
-            <th>Nº P.I.</th><th>Fornecedor</th><th>Abertura</th><th>Status</th><th>Produção</th>
+            <th>Nº P.I.</th><th>Nº Cotação</th><th>Fornecedor</th><th>Abertura</th><th>Status</th><th>Produção</th>
             <th>Valor total</th><th>Itens</th><th>% paga</th><th>Embarque</th><th></th>
           </tr></thead>
           <tbody>
@@ -473,6 +514,7 @@ function PIPage() {
               return (
                 <tr key={pi.id}>
                   <td className="mono">{pi.numero_pi}</td>
+                  <td className="mono small">{pi.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', pi.numero_cotacao) : <span className="muted">—</span>}</td>
                   <td>{pi.fornecedor || '—'}</td>
                   <td>{fmtDate(pi.data_abertura)}</td>
                   <td><StatusBadge status={pi.status}/></td>
