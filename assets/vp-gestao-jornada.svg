@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1600" height="900" viewBox="0 0 1600 900" role="img" aria-labelledby="title desc">
+<title id="title">VP Gestão — da oportunidade à entrega</title>
+<desc id="desc">Infográfico do ciclo empresarial do VP Gestão, conectando Comercial, Governança, Compra, Engenharia, Obra, Instalação, Entrega e Inteligência.</desc>
+<defs>
+  <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1"><stop offset="0" stop-color="#111111"/><stop offset="1" stop-color="#242424"/></linearGradient>
+  <filter id="shadow"><feDropShadow dx="0" dy="8" stdDeviation="10" flood-opacity=".28"/></filter>
+</defs>
+<rect width="1600" height="900" rx="32" fill="url(#bg)"/>
+<rect x="55" y="55" width="1490" height="790" rx="28" fill="#171717" stroke="#F6C900" stroke-width="2"/>
+<text x="100" y="130" fill="#F6C900" font-family="Arial,Helvetica,sans-serif" font-size="24" font-weight="700" letter-spacing="3">VERTICALPARTS • VP GESTÃO</text>
+<text x="100" y="190" fill="#FFFFFF" font-family="Arial,Helvetica,sans-serif" font-size="48" font-weight="700">Da oportunidade ao equipamento entregue</text>
+<text x="100" y="232" fill="#BDBDBD" font-family="Arial,Helvetica,sans-serif" font-size="22">Uma única jornada de dados, decisões, engenharia, suprimentos, obra e relacionamento.</text>
+
+<g font-family="Arial,Helvetica,sans-serif" filter="url(#shadow)">
+  <g transform="translate(100 305)"><rect width="310" height="150" rx="22" fill="#252525" stroke="#F6C900"/><text x="28" y="42" fill="#F6C900" font-size="17" font-weight="700">01 • OPORTUNIDADE</text><text x="28" y="78" fill="#fff" font-size="24" font-weight="700">Comercial</text><text x="28" y="110" fill="#cfcfcf" font-size="17">Lead → Formulário → Cotação</text><text x="28" y="136" fill="#cfcfcf" font-size="17">→ Tratativas</text></g>
+  <g transform="translate(455 305)"><rect width="310" height="150" rx="22" fill="#252525" stroke="#F6C900"/><text x="28" y="42" fill="#F6C900" font-size="17" font-weight="700">02 • NEGÓCIO</text><text x="28" y="78" fill="#fff" font-size="24" font-weight="700">Preço &amp; Contrato</text><text x="28" y="110" fill="#cfcfcf" font-size="17">Precificação → Proposta</text><text x="28" y="136" fill="#cfcfcf" font-size="17">→ Contrato → Gates</text></g>
+  <g transform="translate(810 305)"><rect width="310" height="150" rx="22" fill="#252525" stroke="#F6C900"/><text x="28" y="42" fill="#F6C900" font-size="17" font-weight="700">03 • COMPRA</text><text x="28" y="78" fill="#fff" font-size="24" font-weight="700">Suprimentos</text><text x="28" y="110" fill="#cfcfcf" font-size="17">P.I. → Produção → RFQ</text><text x="28" y="136" fill="#cfcfcf" font-size="17">→ IMS → Embarque</text></g>
+  <g transform="translate(1165 305)"><rect width="310" height="150" rx="22" fill="#252525" stroke="#F6C900"/><text x="28" y="42" fill="#F6C900" font-size="17" font-weight="700">04 • PRODUTO</text><text x="28" y="78" fill="#fff" font-size="24" font-weight="700">Engenharia</text><text x="28" y="110" fill="#cfcfcf" font-size="17">Projeto → NCM → DUIMP</text><text x="28" y="136" fill="#cfcfcf" font-size="17">→ Ficha Técnica → BOM</text></g>
+
+  <g transform="translate(100 510)"><rect width="310" height="150" rx="22" fill="#252525" stroke="#F6C900"/><text x="28" y="42" fill="#F6C900" font-size="17" font-weight="700">05 • OBRA</text><text x="28" y="78" fill="#fff" font-size="24" font-weight="700">Preparação</text><text x="28" y="110" fill="#cfcfcf" font-size="17">Dossiê → Vistorias → ART</text><text x="28" y="136" fill="#cfcfcf" font-size="17">→ Instalador → Homologação</text></g>
+  <g transform="translate(455 510)"><rect width="310" height="150" rx="22" fill="#252525" stroke="#F6C900"/><text x="28" y="42" fill="#F6C900" font-size="17" font-weight="700">06 • EXECUÇÃO</text><text x="28" y="78" fill="#fff" font-size="24" font-weight="700">Instalação</text><text x="28" y="110" fill="#cfcfcf" font-size="17">Recebimento → Cronograma</text><text x="28" y="136" fill="#cfcfcf" font-size="17">→ Instalação → Pendências</text></g>
+  <g transform="translate(810 510)"><rect width="310" height="150" rx="22" fill="#252525" stroke="#F6C900"/><text x="28" y="42" fill="#F6C900" font-size="17" font-weight="700">07 • ENTREGA</text><text x="28" y="78" fill="#fff" font-size="24" font-weight="700">Handover</text><text x="28" y="110" fill="#cfcfcf" font-size="17">Testes → Data Book</text><text x="28" y="136" fill="#cfcfcf" font-size="17">→ Treinamento → Termo</text></g>
+  <g transform="translate(1165 510)"><rect width="310" height="150" rx="22" fill="#F6C900"/><text x="28" y="42" fill="#111" font-size="17" font-weight="700">08 • INTELIGÊNCIA</text><text x="28" y="78" fill="#111" font-size="24" font-weight="700">Torre de Controle</text><text x="28" y="110" fill="#282828" font-size="17">Dashboard → Decisões</text><text x="28" y="136" fill="#282828" font-size="17">→ Gatilhos → Logs → KPIs</text></g>
+</g>
+
+<g stroke="#F6C900" stroke-width="4" fill="none"><path d="M410 380H455"/><path d="M765 380H810"/><path d="M1120 380H1165"/><path d="M1320 455V485H255V510"/><path d="M410 585H455"/><path d="M765 585H810"/><path d="M1120 585H1165"/></g>
+<g fill="#F6C900"><path d="M448 372l14 8-14 8z"/><path d="M803 372l14 8-14 8z"/><path d="M1158 372l14 8-14 8z"/><path d="M448 577l14 8-14 8z"/><path d="M803 577l14 8-14 8z"/><path d="M1158 577l14 8-14 8z"/></g>
+
+<rect x="100" y="715" width="1375" height="78" rx="18" fill="#202020" stroke="#444"/>
+<text x="130" y="748" fill="#F6C900" font-family="Arial,Helvetica,sans-serif" font-size="17" font-weight="700">CONTINUIDADE DO DADO</text>
+<text x="130" y="777" fill="#E0E0E0" font-family="Arial,Helvetica,sans-serif" font-size="18">Master ID acompanha os ativos • Dossiê acompanha a obra • Gates controlam passagem • Logs preservam auditoria</text>
+<text x="1470" y="820" text-anchor="end" fill="#777" font-family="Arial,Helvetica,sans-serif" font-size="14">Documentação arquitetural • 2026</text>
+</svg>
