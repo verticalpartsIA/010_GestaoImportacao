@@ -706,41 +706,47 @@ function ComissoesPage() {
 
 /* ---------- NOTIFICAÇÕES ---------- */
 function NotificacoesPage({ setRoute }) {
-  const [notifications, setNotifications] = React.useState([]);
+  const [alertasRaw, setAlertasRaw] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [filter, setFilter] = React.useState("Todas");
   const [moduleFilter, setModuleFilter] = React.useState("Todos");
   const [prefsOpen, setPrefsOpen] = React.useState(false);
   const [details, setDetails] = React.useState(null);
-  const [readIds, setReadIds] = React.useState(() => {
-    try { return JSON.parse(localStorage.getItem('vpprd.notificacoes.lidas') || '[]'); }
-    catch (e) { return []; }
-  });
+  const [readIds, setReadIds] = React.useState([]);
   const filters = ["Todas", "Não lidas"];
   const NP = window.NotificacoesProcessamento;
+  const LidasStore = window.NotificacoesLidasStore;
 
-  const persistReadIds = (ids) => {
-    setReadIds(ids);
-    localStorage.setItem('vpprd.notificacoes.lidas', JSON.stringify(ids));
-  };
-  const markRead = (id) => {
-    if (!readIds.includes(id)) persistReadIds([...readIds, id]);
-  };
-
+  // Busca de alertas e leitura do estado "lido" são independentes: carregar
+  // uma não deve refazer a outra (candidato 2 da revisão de arquitetura —
+  // antes o estado "lido" vinha do localStorage embutido na própria busca
+  // de alertas, e reabria a query toda vez que uma notificação era marcada).
   React.useEffect(() => {
     setLoading(true);
     window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false })
       .then(({ data, error }) => {
-        if (error) {
-          window.toast('Erro ao carregar notificações: ' + error.message, 'error');
-          setNotifications([]);
-        } else {
-          setNotifications(NP.processarAlertas(data, readIds));
-        }
+        if (error) { window.toast('Erro ao carregar notificações: ' + error.message, 'error'); setAlertasRaw([]); }
+        else setAlertasRaw(data || []);
         setLoading(false);
       });
-  }, [readIds.join('|')]);
+  }, []);
 
+  React.useEffect(() => { LidasStore.carregar().then(setReadIds); }, []);
+
+  const markRead = (id) => {
+    const idStr = String(id);
+    if (readIds.includes(idStr)) return;
+    setReadIds((prev) => [...prev, idStr]);
+    LidasStore.marcarLida(id);
+  };
+  const markAllRead = () => {
+    const ids = alertasRaw.map((a) => String(a.id));
+    setReadIds((prev) => Array.from(new Set([...prev, ...ids])));
+    LidasStore.marcarTodasLidas(ids);
+    window.toast("Notificações marcadas como lidas", "success");
+  };
+
+  const notifications = NP.processarAlertas(alertasRaw, readIds);
   const modules = ["Todos", ...Array.from(new Set(notifications.map(n => n.module))).sort()];
   const rows = notifications.filter(n => {
     if (filter === "Não lidas" && !n.unread) return false;
@@ -748,10 +754,6 @@ function NotificacoesPage({ setRoute }) {
     return true;
   });
   const groups = NP.agruparPorPeriodo(rows);
-  const markAllRead = () => {
-    persistReadIds(Array.from(new Set([...readIds, ...notifications.map(n => n.id)])));
-    window.toast("Notificações marcadas como lidas", "success");
-  };
   const openNotification = (n) => {
     markRead(n.id);
     setRoute(NP.rotaPara(n.module));
