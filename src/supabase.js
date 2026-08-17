@@ -120,12 +120,9 @@
     return `há ${d}d`;
   }
 
-  function fmtBRL(n) {
-    if (!n) return 'R$ 0';
-    if (n >= 1_000_000) return 'R$ ' + (n / 1_000_000).toFixed(1) + 'M';
-    if (n >= 1_000)     return 'R$ ' + Math.round(n / 1_000) + 'k';
-    return 'R$ ' + n;
-  }
+  // fmtBRL (compacto, R$ 1.2M/R$ 5k) migrou pra dentro de
+  // dashboard-metrics-financeiro.js/dashboard-metrics-admin.js — únicos
+  // lugares que ainda formatam moeda pro Dashboard.
 
   // ---- carregador principal -------------------------------------------
 
@@ -191,6 +188,12 @@
     const FM = window.FinanceiroMetrics;
     const financeiro = FM.compute({ contratos, comissoes, gatilhos });
 
+    // ---- Admin (dashboard-metrics-admin.js) — 5º e último módulo
+    // extraído. Único que COMPÕE outro módulo (ComercialMetrics), em vez
+    // de refiltrar do zero — ver comentário no próprio arquivo. ----
+    const AM = window.AdminMetrics;
+    const admin = AM.compute({ projetos, embarques, alertas, propostas, contratos, avais });
+
     // ---- tarefas no formato esperado pelo Dashboard ----
     const tarefasFmt = tarefas.map(t => ({
       t: t.title,
@@ -199,53 +202,13 @@
       module: t.module,
     }));
 
-    // ---- métricas derivadas ----
-    // (leadsDoMes/cotAbertas/propEnviadas/convertidos/convPct migraram pra
-    // ComercialMetrics; fichasDoMes/catProdAtivos/alertasEngenharia/ncm
-    // migraram pra EngenhariaMetrics; comPend/gatProx7/aReceber migraram
-    // pra FinanceiroMetrics — ver blocos acima)
-    const emTransito   = embarques.filter(e => e.status === 'Em trânsito');
-
-    // ---- Faturamento total (esteira real) — soma das propostas assinadas
-    // pelo cliente (status 'aprovada'), não mais da tabela `projetos`
-    // (legada/desconectada, 1 linha demo — mostrava R$0 com venda fechada).
-    // propostasAprovadas/idsComContrato vêm de ComercialMetrics — fonte
-    // única da definição, reaproveitada aqui em vez de refiltrar (raiz dos
-    // bugs antigos: a mesma regra escrita/mudada em lugares diferentes). ----
-    const propostasAprovadas = CM.propostasAprovadas(propostas);
-    const fatTotal = propostasAprovadas.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
-
-    // ---- Alertas críticos (esteira real) — além dos `alertas` manuais,
-    // detecta inconsistências entre módulos que o E2E encontrou escondidas
-    // (proposta assinada sem contrato, contrato com valor zerado, sinal
-    // pago sem contrato/importação vinculados). ----
-    const idsComContrato = CM.idsComContrato(contratos);
-    const propostasSemContrato = propostasAprovadas.filter(p => !idsComContrato.has(p.id));
-    const contratosValorZero = contratos.filter(c => !c.valor_total_num || Number(c.valor_total_num) === 0);
-    const avaisSinalSemContrato = avais.filter(a => a.sinal_pago && !a.contrato_venda_id);
-    const alertasCrit = [
-      ...alertas.filter(a => a.level === 'danger'),
-      ...propostasSemContrato.map(p => ({ tipo: 'proposta_sem_contrato', ref: p.numero_cotacao })),
-      ...contratosValorZero.map(c => ({ tipo: 'contrato_valor_zero', ref: c.id })),
-      ...avaisSinalSemContrato.map(a => ({ tipo: 'sinal_sem_contrato', ref: a.numero_cotacao })),
-    ];
-
     // ---- KPIs por perfil ----
     const kpis = {
       comercial: comercial.kpis,
       engenharia: engenharia.kpis,
       financeiro: financeiro.kpis,
-      admin: [
-        { label: 'Projetos ativos',       value: String(projetos.length),    unit: '',  delta: '', deltaDir: 'up', sub: 'todos módulos' },
-        { label: 'Embarques em trânsito', value: String(emTransito.length),  unit: '',  delta: '', deltaDir: 'up', sub: 'Santos+Itaguaí' },
-        { label: 'Alertas críticos',      value: String(alertasCrit.length), unit: '',  delta: '', deltaDir: alertasCrit.length > 0 ? 'down' : 'up', sub: 'ver central' },
-        { label: 'Faturamento (propostas assinadas)', value: fmtBRL(fatTotal), unit: '', delta: '', deltaDir: 'up', sub: `${propostasAprovadas.length} propostas` },
-      ],
+      admin: admin.kpis,
     };
-
-    // ---- Pipeline Funnel + Conversão por Origem: vêm de ComercialMetrics
-    // (comercial.pipelineStages / comercial.originBars), calculados lá em
-    // cima junto com os KPIs — mesma fonte, sem recomputar aqui. ----
 
     // ---- Estoque crítico ----
     const estoqueCritico = estoque
@@ -265,7 +228,7 @@
       leads, cotacoes, projetos, alertas, tarefas: tarefasFmt,
       embarques, contratos, estoque, comissoes, gatilhos, fichas, catalogo, ncm: engenharia.ncm,
       kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars, estoqueCritico,
-      alertasCriticos: alertasCrit.length,
+      alertasCriticos: admin.alertasCriticos.length,
       ganttToday: gantt.ganttToday, ganttProjetos: gantt.ganttProjetos,
     };
   }
