@@ -172,6 +172,13 @@
     const propostas = propR.data  || [];
     const avais     = avaisR.data || [];
 
+    // ---- Comercial (dashboard-metrics-comercial.js) — 1º módulo extraído
+    // da revisão de arquitetura do Dashboard. Funções puras, testadas em
+    // dashboard-metrics-comercial.test.js. Os outros perfis ainda são
+    // calculados aqui embaixo — extração incremental, um módulo por vez. ----
+    const CM = window.ComercialMetrics;
+    const comercial = CM.compute({ leads, cotacoes, propostas, contratos });
+
     // ---- tarefas no formato esperado pelo Dashboard ----
     const tarefasFmt = tarefas.map(t => ({
       t: t.title,
@@ -181,12 +188,9 @@
     }));
 
     // ---- métricas derivadas ----
+    // (leadsDoMes/cotAbertas/propEnviadas/convertidos/convPct migraram pra
+    // ComercialMetrics — ver bloco `comercial` acima)
     const mesAtual     = new Date().toISOString().slice(0, 7);
-    const leadsDoMes   = leads.filter(l => (l.date || '').startsWith(mesAtual));
-    const cotAbertas   = cotacoes.filter(c => ['Aguardando China', 'Recebida', 'Em análise'].includes(c.status));
-    const propEnviadas = leads.filter(l => l.status === 'Proposta enviada');
-    const convertidos  = leads.filter(l => l.status === 'Convertido');
-    const convPct      = leads.length ? Math.round((propEnviadas.length / leads.length) * 100) : 0;
     const emTransito   = embarques.filter(e => e.status === 'Em trânsito');
     const comPend      = comissoes.filter(c => c.status === 'Aguardando').reduce((s, c) => s + (c.comissao || 0), 0);
     const gatProx7     = gatilhos.filter(g => (g.days_left || 0) <= 7);
@@ -196,15 +200,18 @@
 
     // ---- Faturamento total (esteira real) — soma das propostas assinadas
     // pelo cliente (status 'aprovada'), não mais da tabela `projetos`
-    // (legada/desconectada, 1 linha demo — mostrava R$0 com venda fechada). ----
-    const propostasAprovadas = propostas.filter(p => p.status === 'aprovada');
+    // (legada/desconectada, 1 linha demo — mostrava R$0 com venda fechada).
+    // propostasAprovadas/idsComContrato vêm de ComercialMetrics — fonte
+    // única da definição, reaproveitada aqui em vez de refiltrar (raiz dos
+    // bugs antigos: a mesma regra escrita/mudada em lugares diferentes). ----
+    const propostasAprovadas = CM.propostasAprovadas(propostas);
     const fatTotal = propostasAprovadas.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
 
     // ---- Alertas críticos (esteira real) — além dos `alertas` manuais,
     // detecta inconsistências entre módulos que o E2E encontrou escondidas
     // (proposta assinada sem contrato, contrato com valor zerado, sinal
     // pago sem contrato/importação vinculados). ----
-    const idsComContrato = new Set(contratos.map(c => c.proposta_id).filter(Boolean));
+    const idsComContrato = CM.idsComContrato(contratos);
     const propostasSemContrato = propostasAprovadas.filter(p => !idsComContrato.has(p.id));
     const contratosValorZero = contratos.filter(c => !c.valor_total_num || Number(c.valor_total_num) === 0);
     const avaisSinalSemContrato = avais.filter(a => a.sinal_pago && !a.contrato_venda_id);
@@ -217,12 +224,7 @@
 
     // ---- KPIs por perfil ----
     const kpis = {
-      comercial: [
-        { label: 'Leads do mês',            value: String(leadsDoMes.length),   unit: '', delta: leadsDoMes.length > 0 ? `+${leadsDoMes.length}` : '0', deltaDir: 'up',   sub: 'vs. mês anterior' },
-        { label: 'Cot. em China',           value: String(cotAbertas.length),   unit: '', delta: `${cotAbertas.length}`,    deltaDir: 'up',   sub: 'abertas' },
-        { label: 'Propostas enviadas',      value: String(propEnviadas.length), unit: '', delta: '',                        deltaDir: 'up',   sub: 'no período' },
-        { label: 'Conversão Lead→Proposta', value: String(convPct),             unit: '%',delta: '',                        deltaDir: convPct >= 25 ? 'up' : 'down', sub: 'meta 25%' },
-      ],
+      comercial: comercial.kpis,
       engenharia: [
         { label: 'Projetos abertos',  value: String(projetos.length),        unit: '', delta: '', deltaDir: 'up', sub: 'ativos' },
         { label: 'Fichas técnicas',   value: String(fichas.length),          unit: '', delta: fichasDoMes > 0 ? `+${fichasDoMes}` : '0', deltaDir: 'up', sub: 'no mês' },
@@ -243,27 +245,9 @@
       ],
     };
 
-    // ---- Pipeline Funnel (real) — esteira Leads→Proposta→Contrato, não mais
-    // a tabela órfã `cotacoes` ("Cotação China", módulo substituído pelas
-    // Cotações a Fornecedor) — achado E2E: pipeline zerava mesmo com
-    // proposta/contrato reais. Mostra volume por estágio atual (não histórico
-    // acumulado: uma proposta que virou contrato conta só em "Contrato"). ----
-    const maxPipeline = leads.length || 1;
-    const propostasComContrato = propostasAprovadas.filter(p => idsComContrato.has(p.id)).length;
-    const pipelineStages = [
-      { label: 'Leads',                value: leads.length,                                    color: '#000' },
-      { label: 'Propostas enviadas',   value: propostas.length,                                color: 'var(--vp-gray-700)' },
-      { label: 'Propostas assinadas',  value: propostasAprovadas.length - propostasComContrato, color: 'var(--vp-yellow-press)' },
-      { label: 'Contratos',            value: contratos.length,                                color: 'var(--vp-yellow)' },
-    ];
-
-    // ---- Conversão por Origem (real) ----
-    const originMap = {}, originConv = {};
-    leads.forEach(l => { if (l.origin) originMap[l.origin] = (originMap[l.origin] || 0) + 1; });
-    convertidos.forEach(l => { if (l.origin) originConv[l.origin] = (originConv[l.origin] || 0) + 1; });
-    const originBars = Object.entries(originMap)
-      .map(([l, v]) => ({ l, v, conv: v > 0 ? Math.round(((originConv[l] || 0) / v) * 100) : 0 }))
-      .sort((a, b) => b.v - a.v);
+    // ---- Pipeline Funnel + Conversão por Origem: vêm de ComercialMetrics
+    // (comercial.pipelineStages / comercial.originBars), calculados lá em
+    // cima junto com os KPIs — mesma fonte, sem recomputar aqui. ----
 
     // ---- Estoque crítico ----
     const estoqueCritico = estoque
@@ -301,7 +285,7 @@
     return {
       leads, cotacoes, projetos, alertas, tarefas: tarefasFmt,
       embarques, contratos, estoque, comissoes, gatilhos, fichas, catalogo, ncm,
-      kpis, pipelineStages, originBars, estoqueCritico,
+      kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars, estoqueCritico,
       alertasCriticos: alertasCrit.length,
       ganttToday, ganttProjetos,
     };

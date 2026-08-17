@@ -76,7 +76,10 @@
   <script src="src/ncm-data.js?v=7"></script>
 
   <!-- Supabase loader + carregador de dados reais -->
-  <script src="src/supabase.js?v=11"></script>
+  <!-- Métricas do Dashboard, por perspectiva — carrega antes de supabase.js
+       (loadDashboardData chama window.ComercialMetrics.compute()). -->
+  <script src="src/dashboard-metrics-comercial.js?v=1"></script>
+  <script src="src/supabase.js?v=12"></script>
 
   <!-- Administração — espelho de colaboradores (vpsistema) + alocação de
        módulos do VP Gestão. Carrega cedo pra enriquecer window.__VP_USER
