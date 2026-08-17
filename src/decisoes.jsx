@@ -5,15 +5,6 @@
    Engenharia, Logística — ver decisoes-store.js).
    ============================================================ */
 
-const DEC_TIPO_LABEL = {
-  envio_proposta_gestor: 'Envio de proposta — aprovação do Gestor Comercial',
-  envio_proposta_ceo: 'Envio de proposta — aprovação do CEO',
-  contratacao_mao_obra_ceo: 'Contratação de mão de obra — aprovação do CEO',
-  montador_entra_obra_rh: 'Montador entra na obra — aprovação do RH',
-  compra_equipamento_ceo: 'Compra do equipamento — aprovação do CEO',
-  compra_varejo_logistica: 'Compra de varejo — aprovação da Logística',
-};
-
 function fmtDataHora(d) { return d ? new Date(d).toLocaleString('pt-BR') : '—'; }
 
 function DecModalReprovar({ decisao, onClose, onSaved }) {
@@ -36,7 +27,7 @@ function DecModalReprovar({ decisao, onClose, onSaved }) {
         <Button variant="danger" onClick={salvar} disabled={saving}>{saving ? 'Salvando…' : 'Confirmar reprovação'}</Button>
       </>}>
       <div className="stack" style={{ gap: 10 }}>
-        <p className="small muted" style={{ margin: 0 }}>{DEC_TIPO_LABEL[decisao.tipo] || decisao.tipo}</p>
+        <p className="small muted" style={{ margin: 0 }}>{window.DecisoesStore.TIPO_LABEL[decisao.tipo] || decisao.tipo}</p>
         <label className="up-eyebrow muted">Motivo</label>
         <textarea className="input" rows={3} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Explique o motivo da reprovação…"/>
       </div>
@@ -62,7 +53,7 @@ function DecCard({ decisao, onReload }) {
   return (
     <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="up-eyebrow muted">{DEC_TIPO_LABEL[decisao.tipo] || decisao.tipo}</div>
+        <div className="up-eyebrow muted">{window.DecisoesStore.TIPO_LABEL[decisao.tipo] || decisao.tipo}</div>
         <div style={{ fontSize: 15, fontWeight: 800 }}>{ctx.cliente || ctx.titulo || ctx.item || ctx.obra || `Cotação Nº ${decisao.numero_cotacao ?? '—'}`}</div>
         <div className="cell-sub mono">
           {decisao.numero_cotacao != null && <>Cotação {decisao.numero_cotacao} · </>}

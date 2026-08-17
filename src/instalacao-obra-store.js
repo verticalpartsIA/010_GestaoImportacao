@@ -154,8 +154,7 @@
     // da homologação geral: a certificação pode estar válida e ainda assim
     // o RH não ter liberado a entrada dele nesta obra específica.
     if (dossier.parceiro_instalador_id) {
-      const { data: decisaoRh } = await c.from('decisoes_gerenciais').select('*')
-        .eq('dossier_id', dossierId).eq('tipo', 'montador_entra_obra_rh').eq('referencia_id', dossier.parceiro_instalador_id).maybeSingle();
+      const decisaoRh = await window.DecisoesStore.statusMontadorObra(dossierId, dossier.parceiro_instalador_id);
       const rhOk = decisaoRh && decisaoRh.status === 'aprovada';
       const rhDetalhe = !decisaoRh ? 'Aguardando RH'
         : decisaoRh.status === 'aprovada' ? `Liberado por ${decisaoRh.decidido_por || 'RH'}`

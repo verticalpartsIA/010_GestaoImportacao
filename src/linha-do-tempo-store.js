@@ -26,15 +26,6 @@
     return isNaN(n) ? null : n;
   }
 
-  const PAPEL_TIPO_DECISAO = {
-    envio_proposta_gestor: 'Gestor Comercial',
-    envio_proposta_ceo: 'CEO',
-    compra_equipamento_ceo: 'CEO',
-    contratacao_mao_obra_ceo: 'CEO',
-    montador_entra_obra_rh: 'RH',
-    compra_varejo_logistica: 'Logística',
-  };
-
   /* Papel por status_to do STATUS_FLOW (dossier-store.js) — cada transição
      de status do Dossiê aponta pra quem tipicamente faz aquele passo.
      Cobre justamente os dois trechos que não tinham NENHUM outro rastro
@@ -85,13 +76,11 @@
     }
 
     /* 3. Decisões gerenciais (CEO/RH/Gestor) — aprovadas ou reprovadas */
-    const { data: decisoes } = await c.from('decisoes_gerenciais').select('*').eq('numero_cotacao', numeroCotacao);
-    const decisoesDossier = dossier
-      ? (await c.from('decisoes_gerenciais').select('*').eq('dossier_id', dossier.id)).data || []
-      : [];
-    [...(decisoes || []), ...decisoesDossier].forEach((d) => {
+    const decisoes = await window.DecisoesStore.listarPorCotacao(numeroCotacao);
+    const decisoesDossier = dossier ? await window.DecisoesStore.listarPorDossier(dossier.id) : [];
+    [...decisoes, ...decisoesDossier].forEach((d) => {
       if (d.status !== 'aprovada' && d.status !== 'reprovada') return;
-      const papel = PAPEL_TIPO_DECISAO[d.tipo] || 'Gestão';
+      const papel = window.DecisoesStore.PAPEL_LABEL[d.papel_requerido] || 'Gestão';
       const verbo = d.status === 'aprovada' ? 'aprovou' : 'reprovou';
       add(d.decidido_em, papel, `${papel} ${verbo}: ${d.tipo.replace(/_/g, ' ')}`, d.decidido_por, 'Central de Decisões', d.motivo ? { motivo: d.motivo } : null);
     });

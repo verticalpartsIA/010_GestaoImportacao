@@ -33,6 +33,32 @@
     logistica_lider: ['danilo@verticalparts.com.br'],
   };
 
+  /* Nome de exibição por papel — mesmas chaves de EMAILS_FIXOS. Fonte única
+     pra quem precisa mostrar "quem decide" sem expor a lista de e-mails
+     (linha-do-tempo-store.js, hoje; antes tinha seu próprio mapa
+     PAPEL_TIPO_DECISAO por tipo, que reinventava isso por fora). */
+  const PAPEL_LABEL = {
+    ceo: 'CEO',
+    owner: 'Dono do Sistema',
+    gestor_comercial: 'Gestor Comercial',
+    rh: 'RH',
+    engenharia_lider: 'Engenharia',
+    logistica_lider: 'Logística',
+  };
+
+  /* Rótulo completo por tipo de decisão — cresce a cada gate novo (Fase 1,
+     2, 3...). Fonte única: antes decisoes.jsx tinha sua própria cópia
+     (DEC_TIPO_LABEL) que precisava ser lembrada toda vez que um tipo novo
+     nascia aqui. */
+  const TIPO_LABEL = {
+    envio_proposta_gestor: 'Envio de proposta — aprovação do Gestor Comercial',
+    envio_proposta_ceo: 'Envio de proposta — aprovação do CEO',
+    contratacao_mao_obra_ceo: 'Contratação de mão de obra — aprovação do CEO',
+    montador_entra_obra_rh: 'Montador entra na obra — aprovação do RH',
+    compra_equipamento_ceo: 'Compra do equipamento — aprovação do CEO',
+    compra_varejo_logistica: 'Compra de varejo — aprovação da Logística',
+  };
+
   async function resolverAprovadores(papel) {
     if (EMAILS_FIXOS[papel]) return EMAILS_FIXOS[papel];
     return [];
@@ -87,6 +113,23 @@
     const c = sb(); if (!c || numeroCotacao == null) return [];
     const { data } = await c.from('decisoes_gerenciais').select('*').eq('numero_cotacao', numeroCotacao).order('criado_em');
     return data || [];
+  }
+
+  async function listarPorDossier(dossierId) {
+    const c = sb(); if (!c || !dossierId) return [];
+    const { data } = await c.from('decisoes_gerenciais').select('*').eq('dossier_id', dossierId).order('criado_em');
+    return data || [];
+  }
+
+  /* Status (sem side-effect) do gate de RH pra um montador numa obra —
+     mesmo filtro que podeMontadorEntrarObra usa pra criar/checar o gate,
+     exposto aqui pra quem só precisa ler (ex.: checklist de instalação)
+     sem duplicar o where. */
+  async function statusMontadorObra(dossierId, parceiroId) {
+    const c = sb(); if (!c || !dossierId || !parceiroId) return null;
+    const { data } = await c.from('decisoes_gerenciais').select('*')
+      .eq('dossier_id', dossierId).eq('tipo', 'montador_entra_obra_rh').eq('referencia_id', parceiroId).maybeSingle();
+    return data || null;
   }
 
   /* ---------- Decisão ---------- */
@@ -234,9 +277,10 @@
   }
 
   window.DecisoesStore = {
+    PAPEL_LABEL, TIPO_LABEL,
     resolverAprovadores, souAprovador,
     criarDecisao, criarDecisaoSeNaoExiste,
-    listarPendentesParaMim, listarPorCotacao,
+    listarPendentesParaMim, listarPorCotacao, listarPorDossier, statusMontadorObra,
     aprovar, reprovar,
     podeEnviarProposta, podeContratarInstalador, podeMontadorEntrarObra,
     podeComprarEquipamento, verificarGateCompra,
