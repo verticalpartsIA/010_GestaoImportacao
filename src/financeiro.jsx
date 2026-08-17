@@ -716,44 +716,8 @@ function NotificacoesPage({ setRoute }) {
     try { return JSON.parse(localStorage.getItem('vpprd.notificacoes.lidas') || '[]'); }
     catch (e) { return []; }
   });
-  const filters = ["Todas", "Não lidas", "Menções", "Aprovações"];
-
-  const ICON_MAP = { "user-plus": "users", "check": "check", "ship": "ship", "mail": "mail", "at-sign": "at", "dollar": "dollar", "calendar": "calendar" };
-  const routeByModule = {
-    "Importação": "importacao",
-    "Jurídico": "juridico",
-    "Financeiro": "financeiro",
-    "Engenharia": "engenharia",
-    "Cotações": "cotacoes-fornecedor",
-    "Propostas": "propostas",
-    "Comissões": "comissoes",
-  };
-  const timeAgo = (ts) => {
-    if (!ts) return '—';
-    const diff = Date.now() - new Date(ts).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 2) return 'agora';
-    if (mins < 60) return `há ${mins}min`;
-    const h = Math.floor(mins / 60);
-    if (h < 24) return `há ${h}h`;
-    const d = Math.floor(h / 24);
-    if (d === 1) return 'ontem';
-    return `há ${d}d`;
-  };
-  const groupLabel = (n) => {
-    if ((n.time || '').includes('agora') || (n.time || '').includes('min') || (n.time || '').includes('h')) return 'Hoje';
-    if ((n.time || '') === 'ontem') return 'Ontem';
-    return 'Anteriores';
-  };
-  const iconByModule = (module) => ({
-    "Importação": "ship",
-    "Jurídico": "fileText",
-    "Financeiro": "dollar",
-    "Engenharia": "ruler",
-    "Cotações": "mail",
-    "Propostas": "proposal",
-    "Comissões": "award",
-  })[module] || "bell";
+  const filters = ["Todas", "Não lidas"];
+  const NP = window.NotificacoesProcessamento;
 
   const persistReadIds = (ids) => {
     setReadIds(ids);
@@ -771,16 +735,7 @@ function NotificacoesPage({ setRoute }) {
           window.toast('Erro ao carregar notificações: ' + error.message, 'error');
           setNotifications([]);
         } else {
-          setNotifications((data || []).map(a => ({
-            id: a.id,
-            title: a.title,
-            sub: a.sub,
-            time: timeAgo(a.created_at),
-            icon: iconByModule(a.module),
-            unread: !readIds.includes(a.id),
-            module: a.module || 'Sistema',
-            level: a.level,
-          })));
+          setNotifications(NP.processarAlertas(data, readIds));
         }
         setLoading(false);
       });
@@ -789,25 +744,17 @@ function NotificacoesPage({ setRoute }) {
   const modules = ["Todos", ...Array.from(new Set(notifications.map(n => n.module))).sort()];
   const rows = notifications.filter(n => {
     if (filter === "Não lidas" && !n.unread) return false;
-    if (filter === "Menções" && !String(n.title || '').includes('@')) return false;
-    if (filter === "Aprovações" && !/aprova|assinatura|confirm/i.test(String(n.title || ''))) return false;
     if (moduleFilter !== "Todos" && n.module !== moduleFilter) return false;
     return true;
   });
-  const groups = rows.reduce((acc, n) => {
-    const key = groupLabel(n);
-    acc[key] = acc[key] || [];
-    acc[key].push(n);
-    return acc;
-  }, {});
+  const groups = NP.agruparPorPeriodo(rows);
   const markAllRead = () => {
     persistReadIds(Array.from(new Set([...readIds, ...notifications.map(n => n.id)])));
     window.toast("Notificações marcadas como lidas", "success");
   };
   const openNotification = (n) => {
     markRead(n.id);
-    const target = routeByModule[n.module] || "dashboard";
-    setRoute(target);
+    setRoute(NP.rotaPara(n.module));
   };
 
   return (
@@ -849,7 +796,7 @@ function NotificacoesPage({ setRoute }) {
           <div key={grp}>
             <div style={{ padding: "10px 20px", background: "var(--vp-gray-100)", fontSize: 10, fontWeight: 800, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--fg2)", borderBottom: "1px solid var(--border)" }}>{grp}</div>
             {items.map((n) => {
-              const I = Icon[ICON_MAP[n.icon] || "bell"] || Icon.bell;
+              const I = Icon[n.icon] || Icon.bell;
               return (
                 <div key={n.id} className={"notif-row " + (n.unread ? "unread" : "")} onClick={() => setDetails(n)}>
                   <div className="notif-row__icon"><I size={16}/></div>
