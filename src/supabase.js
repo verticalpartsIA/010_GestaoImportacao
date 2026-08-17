@@ -134,7 +134,7 @@
       lR, cotR, projR, alertR,
       tarR, embR, ctR, estR,
       comR, gatR, fichasR, catalogoR,
-      propR, avaisR
+      propR, avaisR, ncmR
     ] = await Promise.all([
       sb.from('leads').select('*').order('date', { ascending: false }),
       sb.from('cotacoes').select('*').order('date', { ascending: false }),
@@ -154,6 +154,9 @@
       // Alertas Críticos 0 com proposta assinada de R$185mil e sinal pago).
       sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em'),
       sb.from('avais_financeiros').select('id, numero_cotacao, status, sinal_pago, contrato_venda_id'),
+      // Issue #273: o widget "Pendências NCM" do Dashboard lia um array
+      // hardcoded vazio — puxa de verdade agora (ver dashboard-metrics-engenharia.js).
+      sb.from('ncm_solicitacoes').select('id, status, created_at'),
     ]);
 
     const leads     = lR.data    || [];
@@ -168,9 +171,9 @@
     const gatilhos  = gatR.data  || [];
     const fichas    = fichasR.data || [];
     const catalogo  = catalogoR.data || [];
-    const ncm       = [];  // legado removido — vazio pra compat de loops abaixo
     const propostas = propR.data  || [];
     const avais     = avaisR.data || [];
+    const ncmSolicitacoes = ncmR.data || [];
 
     // ---- Comercial (dashboard-metrics-comercial.js) — 1º módulo extraído
     // da revisão de arquitetura do Dashboard. Funções puras, testadas em
@@ -178,6 +181,11 @@
     // calculados aqui embaixo — extração incremental, um módulo por vez. ----
     const CM = window.ComercialMetrics;
     const comercial = CM.compute({ leads, cotacoes, propostas, contratos });
+
+    // ---- Engenharia (dashboard-metrics-engenharia.js) — 2º módulo
+    // extraído. Fecha a issue #273 (NCM sempre vazio). ----
+    const EM = window.EngenhariaMetrics;
+    const engenharia = EM.compute({ projetos, fichas, catalogo, alertas, ncmSolicitacoes });
 
     // ---- tarefas no formato esperado pelo Dashboard ----
     const tarefasFmt = tarefas.map(t => ({
@@ -189,14 +197,12 @@
 
     // ---- métricas derivadas ----
     // (leadsDoMes/cotAbertas/propEnviadas/convertidos/convPct migraram pra
-    // ComercialMetrics — ver bloco `comercial` acima)
-    const mesAtual     = new Date().toISOString().slice(0, 7);
+    // ComercialMetrics; fichasDoMes/catProdAtivos/alertasEngenharia/ncm
+    // migraram pra EngenhariaMetrics — ver blocos acima)
     const emTransito   = embarques.filter(e => e.status === 'Em trânsito');
     const comPend      = comissoes.filter(c => c.status === 'Aguardando').reduce((s, c) => s + (c.comissao || 0), 0);
     const gatProx7     = gatilhos.filter(g => (g.days_left || 0) <= 7);
     const aReceber     = contratos.filter(c => c.status !== 'Assinado').reduce((s, c) => s + (c.value || 0), 0);
-    const fichasDoMes  = fichas.filter(f => (f.criado_em || '').startsWith(mesAtual)).length;
-    const catProdAtivos = catalogo.filter(p => p.situacao === 'ativado').length;
 
     // ---- Faturamento total (esteira real) — soma das propostas assinadas
     // pelo cliente (status 'aprovada'), não mais da tabela `projetos`
@@ -225,12 +231,7 @@
     // ---- KPIs por perfil ----
     const kpis = {
       comercial: comercial.kpis,
-      engenharia: [
-        { label: 'Projetos abertos',  value: String(projetos.length),        unit: '', delta: '', deltaDir: 'up', sub: 'ativos' },
-        { label: 'Fichas técnicas',   value: String(fichas.length),          unit: '', delta: fichasDoMes > 0 ? `+${fichasDoMes}` : '0', deltaDir: 'up', sub: 'no mês' },
-        { label: 'Catálogo (ativos)', value: String(catProdAtivos),          unit: '', delta: '', deltaDir: 'up', sub: 'produtos no catálogo' },
-        { label: 'Alertas engenharia',value: String(alertas.filter(a => a.module === 'Engenharia').length), unit: '', delta: '', deltaDir: 'up', sub: 'pendentes' },
-      ],
+      engenharia: engenharia.kpis,
       financeiro: [
         { label: 'A receber',           value: fmtBRL(aReceber),     unit: '',  delta: '', deltaDir: 'up', sub: 'contratos abertos' },
         { label: 'Comissões pendentes', value: fmtBRL(comPend),      unit: '',  delta: '', deltaDir: 'up', sub: 'aguardando pagamento' },
@@ -284,7 +285,7 @@
 
     return {
       leads, cotacoes, projetos, alertas, tarefas: tarefasFmt,
-      embarques, contratos, estoque, comissoes, gatilhos, fichas, catalogo, ncm,
+      embarques, contratos, estoque, comissoes, gatilhos, fichas, catalogo, ncm: engenharia.ncm,
       kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars, estoqueCritico,
       alertasCriticos: alertasCrit.length,
       ganttToday, ganttProjetos,

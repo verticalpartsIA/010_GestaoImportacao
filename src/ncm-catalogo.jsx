@@ -954,7 +954,12 @@ function LogComexModal({ product, onClose }) {
    NCM Widget — Dashboard
    ============================================================ */
 function NcmDashboardWidget({ setRoute, ncm = [] }) {
-  const stuck = ncm.filter(p => p.status === "EM_PREENCHIMENTO").length;
+  // "+5 dias" agora é calculado de verdade (issue #273) — created_at é a
+  // única data disponível em ncm_solicitacoes (não existe coluna de
+  // transição de status), então mede desde a criação da solicitação.
+  const CINCO_DIAS_MS = 5 * 24 * 60 * 60 * 1000;
+  const agora = Date.now();
+  const stuck = ncm.filter(p => p.status === "EM_PREENCHIMENTO" && p.created_at && (agora - new Date(p.created_at).getTime()) >= CINCO_DIAS_MS).length;
   const inJur = ncm.filter(p => p.status === "AGUARD_JURIDICO").length;
   const ready = ncm.filter(p => p.status === "APROVADO").length;
 
