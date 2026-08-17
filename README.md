@@ -1,611 +1,519 @@
-# VP PRD — Plataforma de Cotação de Importação · VerticalParts
+<p align="center">
+  <img src="assets/logo-verticalparts-color.png" alt="VerticalParts" width="360">
+</p>
 
-> Sistema interno exclusivo para gestão do processo de importação de produtos da VerticalParts.
-> Acesso obrigatório via portal **vpsistema.com** (SSO). Não é público.
+<h1 align="center">VP Gestão</h1>
+<p align="center"><strong>Da oportunidade ao equipamento entregue.</strong></p>
+<p align="center">Plataforma corporativa para gestão integrada de venda, fornecimento, importação, engenharia, obra, instalação, entrega e inteligência operacional de equipamentos de transporte vertical.</p>
 
-🌐 **Produção:** [https://vpprd.vpsistema.com](https://vpprd.vpsistema.com)
-📦 **Supabase:** `jxtqwzmpgofwctqajewt`
-🚀 **Deploy:** Hostinger Node.js · branch `main`
-🔐 **Entrada:** card "Cotação Importação | PRD" no vpsistema.com
-
----
-
-## Stack
-
-| Camada     | Tecnologia                                              |
-|------------|---------------------------------------------------------|
-| Frontend   | React 18 UMD + Babel Standalone (sem build step)        |
-| Estilo     | CSS custom properties (`var(--vp-*)`) + classes utilitárias |
-| Banco      | Supabase (PostgreSQL) — projeto `jxtqwzmpgofwctqajewt` |
-| Servidor   | Express 4 (`server.js`) · serve arquivos estáticos      |
-| Deploy     | Hostinger Node.js 18.x · auto-deploy via push na `main` |
+<p align="center">
+  <a href="#-visão-executiva">Visão Executiva</a> •
+  <a href="#-jornada-ponta-a-ponta">Jornada</a> •
+  <a href="#-mapa-funcional">Módulos</a> •
+  <a href="#-arquitetura-de-negócio">Arquitetura</a> •
+  <a href="#-regras-de-governança-e-gates">Gates</a> •
+  <a href="#-guia-para-humanos-e-agentes-de-ia">Guia para IA</a>
+</p>
 
 ---
 
-## Perfis de Usuário
+## 🎯 Visão Executiva
 
-| Perfil       | Acesso                                                              |
-|--------------|---------------------------------------------------------------------|
-| `comercial`  | Dashboard, Leads, Cotações China, Propostas, Notificações          |
-| `engenharia` | Dashboard, Engenharia, NCM, Jurídico, Instalação, Notificações     |
-| `financeiro` | Dashboard + Precificação, Gatilhos & Prazo, Comissões              |
-| `admin`      | Tudo — todos os módulos + Configurações                            |
+O nome histórico do repositório, `010_GestaoImportacao`, não descreve mais sozinho o produto atual.
 
-> Itens marcados com 🔒 são restritos ao perfil indicado.
+O **VP Gestão começa antes da importação**: quando existe apenas uma oportunidade comercial. A partir dela, o sistema estrutura requisitos, solicita cotações, forma preço, gera proposta, formaliza contrato, governa a autorização de compra, acompanha P.I., produção, sourcing, embarque, engenharia, obra, instaladores, vistorias, instalação, documentação e entrega.
 
----
+> **Definição curta:** o VP Gestão é a representação digital do ciclo empresarial da VerticalParts — do primeiro lead ao handover do equipamento.
 
-## Árvore completa do site — tela a tela
+O principal ativo do sistema não é uma tela isolada. É a **continuidade do dado** entre as etapas.
 
-```
-vpprd.vpsistema.com
-│
-├── ═══════════════════════════════════════════════════════
-│   SHELL — presente em TODAS as telas
-│   ═══════════════════════════════════════════════════════
-│
-├── SIDEBAR (esquerda)
-│   ├── Logo VerticalParts + versão v2.4
-│   ├── Botão [ ‹ ] colapsar / [ › ] expandir sidebar
-│   │
-│   ├── ── GERAL ──────────────────────────────────────────
-│   │   ├── 🏠 Dashboard
-│   │   └── 🔔 Notificações
-│   │
-│   ├── ── COMERCIAL ──────────────────────────────────────
-│   │   ├── 🚩 Leads
-│   │   ├── 🌐 Cotações China
-│   │   ├── 🧮 Precificação              🔒 financeiro · admin
-│   │   └── 📄 Propostas
-│   │
-│   ├── ── OPERAÇÕES ──────────────────────────────────────
-│   │   ├── 📐 Engenharia
-│   │   ├── 📦 Solicitações NCM
-│   │   ├── ⚖️  Jurídico
-│   │   └── 🪖 Instalação
-│   │
-│   ├── ── LOGÍSTICA ──────────────────────────────────────
-│   │   ├── 🚢 Importação
-│   │   ├── 🔍 Catálogo de Produtos
-│   │   └── 🚛 Compras Nacional
-│   │
-│   ├── ── FINANCEIRO ─────────────────────────────────────
-│   │   ├── ⏱️  Gatilhos & Prazo         🔒 financeiro · admin
-│   │   └── 🏆 Comissões                🔒 financeiro · admin
-│   │
-│   └── ── ADMIN ──────────────────────────────────────────
-│       └── ⚙️  Configurações            🔒 admin
-│
-├── HEADER (topo)
-│   ├── Breadcrumb  →  vp-gestao / [Módulo] / [Página atual]
-│   ├── 🔍 Barra de busca global  (desabilitada · "EM BREVE")
-│   ├── Role switcher:  [Comercial] [Engenharia] [Financeiro] [Admin]
-│   ├── 🔔 Ícone notificações  →  vai para tela Notificações
-│   └── ❓ Ícone ajuda  →  toast "Central de ajuda em breve"
-│
-│
-├── ═══════════════════════════════════════════════════════
-│   TELAS PRINCIPAIS
-│   ═══════════════════════════════════════════════════════
-│
-│
-├── 🏠 DASHBOARD
-│   │   Dados: Supabase (11 tabelas em paralelo) · KPIs por perfil ativo
-│   │
-│   ├── KPIs (4 cards — mudam conforme perfil selecionado)
-│   │   ├── Perfil Comercial:
-│   │   │   ├── Leads do mês
-│   │   │   ├── Cotações em China
-│   │   │   ├── Propostas enviadas
-│   │   │   └── Conversão Lead → Proposta (%)
-│   │   ├── Perfil Engenharia:
-│   │   │   ├── Projetos abertos
-│   │   │   ├── NCM pendentes
-│   │   │   ├── NCM em análise
-│   │   │   └── Alertas de engenharia
-│   │   ├── Perfil Financeiro:
-│   │   │   ├── A receber (contratos abertos)
-│   │   │   ├── Comissões pendentes
-│   │   │   ├── Gatilhos próximos 7 dias
-│   │   │   └── Contratos abertos
-│   │   └── Perfil Admin:
-│   │       ├── Projetos ativos
-│   │       ├── Embarques em trânsito
-│   │       ├── Alertas críticos
-│   │       └── Faturamento total
-│   │
-│   ├── Funil Pipeline  (gráfico de barras)
-│   │   └── Estágios: Leads → Cotação China → Precificação → Proposta → Contrato
-│   │
-│   ├── Conversão por Origem  (barras horizontais com % de conversão)
-│   │
-│   ├── Gantt de Projetos  (linha do tempo)
-│   │   └── Fases: Projeto → Fabricação → Importação → Instalação → Entrega
-│   │
-│   ├── Estoque Crítico  (tabela SKUs abaixo do mínimo)
-│   │   └── Colunas: SKU · Nome · Qtd atual · Mínimo · Status (danger/warning)
-│   │
-│   ├── Central de Alertas  (cards — tabela alertas, resolved=false)
-│   │
-│   └── Minhas Tarefas  (lista · filtradas por role do perfil ativo)
-│
-│
-├── 🚩 LEADS — Pipeline de Leads
-│   │   Dados: tabela `leads` · ordenado por data desc
-│   │
-│   ├── KPIs: Leads ativos · Em qualificação · Propostas no ar · Valor pipeline
-│   │
-│   ├── Filtro de status (segmentos clicáveis):
-│   │   Todos · Em qualificação · Aguardando cotação · Proposta enviada ·
-│   │   Negociação · Convertido · Sem retorno
-│   │
-│   ├── Filtro por responsável  (select dropdown)
-│   ├── Busca  (prédio · contato · equipamento)
-│   ├── Paginação  (em breve)
-│   │
-│   ├── Tabela:
-│   │   ID · Lead/Prédio · Contato · Equipamento · Origem · Status ·
-│   │   Responsável · Valor · Próxima Ação · [→ detalhe]
-│   │
-│   └── Botões de ação:
-│       ├── [Exportar]  →  toast "em breve"
-│       ├── [Filtros avançados]  →  toast "em breve"
-│       └── [Novo Lead]  →  toast "em breve"
-│
-│   └── 📋 LEAD DETAIL  (abre ao clicar em qualquer linha da tabela)
-│       │
-│       ├── [‹ Voltar para Leads]
-│       ├── Header: ID · Origem · Prédio · Equipamento · Status badge · Prioridade badge
-│       ├── Botões: [WhatsApp] [Email] [Precificar →]
-│       │   └── "Precificar" navega direto para /precificacao
-│       │
-│       ├── Card "Resumo da oportunidade"
-│       │   ├── Valor estimado · Marca do equipamento · Quantidade
-│       │   ├── Ano construção · Tipo de serviço · Prazo desejado
-│       │   └── Descrição enviada pelo cliente (texto livre)
-│       │
-│       ├── Card "Histórico de Atividades"  (timeline cronológica)
-│       │   └── Entradas: criação · contato · cotação · visita · follow-up
-│       │
-│       ├── Card "Próximos passos sugeridos"  (orquestração automática)
-│       │   └── Passos com estado:  current (preto) · next · future (cinza)
-│       │       Ex: Aguardar cotação China → Visita técnica → Precificar → Proposta
-│       │
-│       ├── Card "Contato"
-│       │   ├── Nome · cargo · telefone · e-mail
-│       │   └── Botões: [WhatsApp] [Email]
-│       │
-│       ├── Card "Atribuição"
-│       │   └── Vendedor · Equipe · Origem · Comissão prevista (4%)
-│       │
-│       └── Card "Etiquetas"  (badges livres)
-│
-│
-├── 🌐 COTAÇÕES CHINA
-│   │   Dados: tabela `cotacoes` · ordenado por data desc
-│   │
-│   ├── KPIs: Em aberto · Recebidas · SLA médio · Variação preço
-│   │
-│   ├── Filtro de status: Todos · Aguardando China · Recebida · Em análise · Aprovada
-│   ├── Filtros: [Fornecedor] [Origem]
-│   │
-│   ├── Tabela:
-│   │   ID · Prédio/Projeto · Fornecedor · Itens · Prazo · Status ·
-│   │   Link público (token) · Total USD · [→ detalhe]
-│   │
-│   └── Botões: [Link público] [Nova Cotação]
-│
-│   └── 📋 COTAÇÃO DETAIL  (abre ao clicar em qualquer linha)
-│       │
-│       ├── [‹ Voltar para Cotações]
-│       ├── Header: ID · Fornecedor · Prédio · Status · Prazo · Data solicitação
-│       ├── Botões: [PDF] [Copiar link público] [Aprovar]
-│       │
-│       ├── Banner de link público
-│       │   └── https://vp.cn/cotacao/{token} · sem autenticação · expira 7 dias
-│       │       [Copiar link]
-│       │
-│       ├── Card "Itens solicitados"  (tabela)
-│       │   ├── Colunas: SKU · Descrição · Categoria · Qtd · Preço unit. · Total
-│       │   ├── Footer: Total FOB Shanghai
-│       │   └── [+ Adicionar item]
-│       │
-│       ├── Card "Status China"  (timeline)
-│       │   └── Etapas: Solicitação enviada → Recebido pelo fornecedor →
-│       │               Aguardando preenchimento → Aprovação interna
-│       │
-│       └── Card "Fornecedor"
-│           └── Nome · localidade · contato · WeChat · histórico de pontualidade
-│
-│
-├── 🧮 PRECIFICAÇÃO  🔒 financeiro · admin
-│   │   Dados: tabela `leads` (status = Convertido)
-│   │
-│   ├── KPIs: Margem média % · Cálculos abertos · Versões geradas
-│   │
-│   ├── Tabela de projetos:
-│   │   Projeto · Cliente · Versões · Valor final · Margem % · Status
-│   │
-│   ├── Botões: [Exportar planilhas] [Nova precificação]
-│   │
-│   └── Painel de cálculo  (abre ao clicar no projeto ou em "Nova precificação")
-│       ├── Calculadora: FOB China + II + IPI + PIS/COFINS + frete + margem → preço final
-│       └── Histórico de versões do cálculo
-│
-│
-├── 📄 PROPOSTAS
-│   │
-│   ├── Lista de propostas com status
-│   └── [Nova Proposta]  →  abre wizard
-│
-│   ├── ✏️  PROPOSTA EDITOR  (wizard 3 etapas)
-│   │   ├── Etapa 1: dados do cliente / projeto
-│   │   ├── Etapa 2: itens e valores
-│   │   ├── Etapa 3: condições e aprovação
-│   │   ├── Preview em tempo real
-│   │   └── [Gerar PDF] [Enviar por email]
-│   │
-│   └── 👁️  PROPOSTA PREVIEW  (visualização do PDF)
-│
-│
-├── 📐 ENGENHARIA — Projetos de Engenharia
-│   │   Dados: tabela `projetos`
-│   │
-│   ├── KPIs: Projetos ativos · Aguard. laudo · Visitas semana · SLA laudo
-│   ├── Botões: [Calendário visitas] [Novo projeto]
-│   │
-│   ├── Coluna esquerda — lista de projetos:
-│   │   └── Card por projeto:
-│   │       ├── ID · Prédio · Status badge
-│   │       ├── Visita técnica · Responsável · Arquivos
-│   │       └── Pendência · Badge laudo (Aprovado/Reprovado/Pendente/Em análise)
-│   │
-│   └── Coluna direita — detalhe do projeto selecionado:
-│       ├── [Anexar] [Aprovar Laudo]
-│       └── Abas internas:
-│           ├── 📄 Laudo Técnico
-│           ├── 📦 Documentos
-│           ├── 📋 BOM  (Bill of Materials)
-│           ├── 📅 Visita
-│           └── 🔢 NCM / Ficha Técnica
-│               └── (módulo NCM embutido — mesmo componente do /ncm-kanban)
-│
-│
-├── 📦 SOLICITAÇÕES NCM  (Kanban)
-│   │   Dados: tabela `ncm_solicitacoes`
-│   │
-│   ├── Colunas Kanban:
-│   │   ├── Não iniciado
-│   │   ├── Em preenchimento
-│   │   ├── Aguard. jurídico
-│   │   ├── Aprovado
-│   │   └── Cadastrado Siscomex
-│   │
-│   └── Clique em qualquer card  →  NCM DETAIL
-│
-│   └── 📋 NCM DETAIL  (abre ao clicar no card do kanban)
-│       │
-│       ├── Stepper visual  (5 etapas com descrição da etapa atual)
-│       │   Não iniciado → Em preenchimento → Aguard. jurídico → Aprovado → Cadastrado
-│       │
-│       ├── Alerta verde  (se status = CADASTRADO: código Siscomex · versão · situação ATIVO)
-│       │
-│       ├── Bloco 1 — Identificação para Receita Federal
-│       │   └── NCM selecionado · descrição oficial
-│       │
-│       ├── Bloco 2 — Denominação técnica
-│       │   └── Campo texto · máx. 150 chars · contador em tempo real
-│       │
-│       ├── Bloco 3 — Detalhamento
-│       │   └── Campo texto · máx. 500 chars · contador em tempo real
-│       │
-│       ├── Bloco 4 — Atributos dinâmicos
-│       │   └── Campos gerados automaticamente conforme o NCM selecionado
-│       │       (ex: material, espessura, comprimento, voltagem...)
-│       │
-│       ├── Bloco 5 — Status Siscomex
-│       │   └── Código · Versão · Situação · Cadastrado por · Data
-│       │
-│       └── [Enviar para LogComex]  →  Modal de confirmação LogComex
-│           └── Modal: resumo do produto · confirmação · [Cadastrar no Siscomex]
-│
-│
-├── ⚖️  JURÍDICO — Contratos & Minutas
-│   │   Dados: tabela `contratos`
-│   │
-│   ├── KPIs: Em redação · Em assinatura digital · SLA aprovação · Atrasados
-│   ├── Botões: [Importar minuta] [Novo contrato]
-│   │
-│   ├── Filtro de status:
-│   │   Todos · Aguardando assinatura · Em redação · Em assinatura digital · Assinado
-│   │
-│   ├── Tabela de contratos
-│   │
-│   └── Painel de detalhe  (ao selecionar contrato):
-│       ├── Redator automático de cláusulas confidenciais
-│       └── [Enviar para assinatura digital]
-│
-│
-├── 🪖 INSTALAÇÃO & CHECKLIST
-│   │
-│   ├── Lista de ordens de instalação por projeto
-│   ├── Checklist por etapa  (NR-18 · ABNT NBR 16858)
-│   └── Barra de progresso por projeto
-│
-│
-├── 🚢 IMPORTAÇÃO
-│   │   Dados: tabela `embarques`
-│   │
-│   ├── KPIs: Em trânsito · Aguard. liberação · Alertas ETA · Valor em trânsito
-│   │
-│   ├── Abas da página:
-│   │   ├── Embarques  (aba padrão)
-│   │   ├── Documentos & BL
-│   │   └── Aduana
-│   │
-│   ├── Filtro de status: Todos · Em trânsito · Liberação aduaneira · Entregue
-│   ├── Filtros: [Porto] [Linha]
-│   │
-│   ├── Tabela:
-│   │   Embarque · Navio/BL · Rota (origem → destino) · ETA ·
-│   │   Progresso % · Canal aduaneiro · Status · [→ detalhe]
-│   │
-│   └── Botões:
-│       ├── [Inbox]  ──────────────────────────────────→  📧 IMPORTAÇÃO EMAIL
-│       ├── [Mapa de navios]  ──────────────────────────→  🗺️  MAPA MARÍTIMO
-│       └── [Novo embarque]  →  toast "próxima fase"
-│
-│   ├── 📋 IMPORTAÇÃO DETAIL  (abre ao clicar na linha)
-│   │   │
-│   │   ├── [‹ Voltar para Importação]
-│   │   ├── Header: ID · Linha naviera · Navio · BL · containers · cliente
-│   │   │          Status badge · Canal aduaneiro badge
-│   │   ├── Botões: [Ver no mapa] [Email fornecedor] [Reportar chegada]
-│   │   │   └── "Ver no mapa"  →  /importacao-rastreamento
-│   │   │
-│   │   ├── Card "Linha do tempo do embarque"  (milestones)
-│   │   │   └── Etapas: Saída Shanghai → Transbordo → Alto mar → Aduana → Entrega
-│   │   │       Estado por etapa: done / current / future
-│   │   │
-│   │   ├── Card "Posição atual do navio"
-│   │   │   ├── Mapa SVG interativo (corredor China–Brasil)
-│   │   │   ├── [🔄 Atualizar]
-│   │   │   └── KPIs: Posição lat/lng · Velocidade (kn) · Rumo (°) · ETA atualizada
-│   │   │
-│   │   ├── Card "Documentos"  (grid de arquivos)
-│   │   │   ├── BL · Commercial Invoice · Packing List · DI · CE-Mercante
-│   │   │   └── [+ Adicionar documento]
-│   │   │
-│   │   ├── Card "Container"  (dados fixos)
-│   │   │   └── BL · Linha · Navio · Quantidade · Origem · Destino
-│   │   │
-│   │   ├── Card "Datas"
-│   │   │   ├── ETD · ETA original · ETA atualizada
-│   │   │   └── Alerta de atraso  (se ETA ≠ ETA original)
-│   │   │
-│   │   └── Card "Trigger Financeiro"
-│   │       ├── Gatilho vinculado ao embarque (ex: Pagamento 50% no embarque)
-│   │       ├── Valor do gatilho
-│   │       └── [Ver no Financeiro →]
-│   │
-│   ├── 🗺️  MAPA MARÍTIMO  (botão "Mapa de navios" ou "Ver no mapa")
-│   │   │
-│   │   ├── [‹ Voltar para Importação]
-│   │   ├── Header: n° de navios em trânsito
-│   │   ├── Botões: [🔄 Atualizar] [Exportar relatório]
-│   │   │
-│   │   ├── Mapa SVG interativo  (corredor China–Brasil · lat -50→50 / lng -75→130)
-│   │   │   └── Ícone de navio clicável por embarque (destaque no selecionado)
-│   │   │
-│   │   └── Painel lateral direito:
-│   │       ├── Lista de navios em trânsito  (card por navio)
-│   │       │   └── Vessel · progresso% · linha · BL · velocidade kn · rumo · ETA
-│   │       │       (fundo preto = selecionado · faixa amarela lateral)
-│   │       └── Card "Detalhe"  (do navio selecionado)
-│   │           ├── Cliente · Conteúdo · Trajeto · ETA
-│   │           └── [Abrir embarque →]
-│   │
-│   └── 📧 INBOX IMPORTAÇÃO  (botão "Inbox")
-│       ├── Lista de e-mails  (fornecedores · agentes · aduana)
-│       └── Painel de leitura de mensagem selecionada
-│
-│
-├── 🔍 CATÁLOGO DE PRODUTOS
-│   │   Dados: tabela `ncm_solicitacoes`
-│   │
-│   ├── Busca por SKU / descrição / NCM
-│   ├── Filtros: categoria · status NCM
-│   ├── Grid/lista de produtos com ficha técnica resumida
-│   └── Clique no produto  →  detalhe NCM embutido (mesmo componente NcmDetailPage)
-│
-│
-├── 🚛 COMPRAS NACIONAL
-│   │
-│   ├── Lista de ordens de compra nacionais
-│   ├── Filtro de status:
-│   │   Solicitado · Aprovado · Em cotação · Pedido emitido · Entregue
-│   ├── Tabela: OC · Fornecedor · Itens · Valor · Prazo · Status
-│   ├── [Nova OC]
-│   └── [Inbox]  ──────────────────────────────────────→  📧 INBOX COMPRAS
-│
-│   └── 📧 INBOX COMPRAS  (botão "Inbox")
-│       ├── Lista de e-mails  (fornecedores nacionais)
-│       └── Painel de leitura de mensagem selecionada
-│
-│
-├── ⏱️  GATILHOS & PRAZO REVERSO  🔒 financeiro · admin
-│   │   Dados: tabela `gatilhos`
-│   │
-│   ├── KPIs: A receber 30d · Gatilhos próx. 7d · Em atraso · Recebido mês
-│   │
-│   ├── Alerta de urgência  (banner vermelho — aparece se há gatilhos vencendo em ≤ 2 dias)
-│   │   └── [Ver agora →]
-│   │
-│   ├── Botões: [Exportar fluxo CSV/Excel] [Novo gatilho]
-│   │
-│   └── Card "Gatilhos Ativos"  (um bloco por projeto)
-│       ├── Cabeçalho: Projeto · Gatilho · Valor · Vencimento · cor por prazo
-│       ├── Status badge: OK (verde) · Atenção (amarelo) · Pendente (vermelho)
-│       ├── [Confirmar]  (destaque laranja se ≤ 2 dias)
-│       └── Barra "Prazo Reverso":
-│           ├── Base: data de instalação contratada
-│           └── Cadeia de etapas:
-│               Pedido ao fornecedor → Embarque → Chegada Porto →
-│               Desembaraço → Entrega obra → Instalação
-│               (cores: success = done · warning = próximo · current = hoje)
-│
-│
-├── 🏆 COMISSÕES  🔒 financeiro · admin
-│   │   Dados: tabela `comissoes`
-│   │
-│   ├── KPIs: Total Q2 · Aprovado · Aguardando · Maior comissão individual
-│   │
-│   ├── Botões: [Folha de pagamento] [Aprovar todas]
-│   │
-│   └── Tabela "Resumo por vendedor":
-│       Vendedor · Projetos fechados · Faturamento líquido · % comissão ·
-│       Comissão Q2 · Progresso (barra) · Status · [detalhe]
-│
-│
-├── 🔔 NOTIFICAÇÕES — Central de Alertas
-│   │   Dados: tabela `alertas` (resolved = false)
-│   │
-│   ├── Filtro por módulo  (Comercial · Engenharia · Financeiro · Logística)
-│   ├── Filtro por nível  (danger · warning · info)
-│   ├── Cards de alerta com timestamp
-│   └── [Marcar como resolvido]  por card
-│
-│
-└── ⚙️  CONFIGURAÇÕES  🔒 admin
-    ├── Ajustes gerais do sistema
-    ├── Gestão de perfis e permissões
-    └── Integrações  (em breve)
+```text
+Lead
+  ↓
+Formulário / Especificação
+  ↓
+Cotação a Fornecedor + Tratativas
+  ↓
+Precificação
+  ↓
+Proposta
+  ↓
+Contrato + Sinal + Aval + Decisão
+  ↓
+P.I. + Produção + RFQ + IMS
+  ↓
+Embarque / Aduana ─────────────┐
+                              ├─→ Obra / Instalação
+Engenharia / Vistorias / RH ──┘
+  ↓
+Testes + Data Book + Treinamento + Termo
+  ↓
+ENTREGUE / HANDOVER / PÓS-VENDA
 ```
 
 ---
 
-## Painel de Tweaks (modo desenvolvimento)
+## 🗺️ Jornada ponta a ponta
 
-Botão flutuante no canto inferior direito da tela:
+<p align="center">
+  <img src="assets/vp-gestao-jornada.svg" alt="Infográfico da jornada completa do VP Gestão" width="100%">
+</p>
 
+A jornada deve ser lida como um **workflow empresarial**, não como uma sequência obrigatoriamente linear de páginas. Diversas atividades acontecem em paralelo — especialmente durante produção e trânsito internacional.
+
+### Oito macroetapas
+
+| # | Macroetapa | Fluxo principal | Pergunta de negócio |
+|---|---|---|---|
+| 1 | Oportunidade | Lead → Formulário → Cotação → Tratativas | Quem pode comprar e o que precisa? |
+| 2 | Negócio | Precificação → Proposta → Contrato → Gates | Podemos vender, com que margem e condições? |
+| 3 | Compra | P.I. → Produção → RFQ → IMS → Embarque | O que comprar, de quem e como movimentar? |
+| 4 | Produto | Projeto → NCM → DUIMP → Ficha → BOM | Qual é a identidade técnica/fiscal do produto? |
+| 5 | Obra | Dossiê → Vistorias → ART → Instalador → Homologação | A obra e os parceiros estão preparados? |
+| 6 | Execução | Recebimento → Cronograma → Instalação → Pendências | O equipamento pode ser instalado com segurança e controle? |
+| 7 | Entrega | Testes → Data Book → Treinamento → Termo | A obrigação técnica e contratual foi concluída? |
+| 8 | Inteligência | Dashboard → Decisões → Gatilhos → Logs → KPIs | Onde a gestão precisa agir agora? |
+
+---
+
+## 🧭 Modelo mental de navegação
+
+A sidebar é somente a primeira camada. A arquitetura real deve ser entendida assim:
+
+```text
+Sidebar
+  └─ Módulo
+      └─ Lista / Painel
+          └─ Registro
+              └─ Detalhe
+                  ├─ Ação
+                  ├─ Modal / Wizard
+                  ├─ Documento / Preview
+                  ├─ Gate / Decisão
+                  └─ Evento / Automação → próxima etapa
 ```
-⚙ Tweaks
-├── Aparência
-│   ├── Densidade:  [Compacta] [Confortável] [Arejada]
-│   └── Sidebar colapsada:  toggle on/off
-├── Perfil ativo
-│   └── Dropdown: Comercial / Engenharia / Financeiro / Admin
-└── Navegação rápida
-    └── Dropdown com todas as telas → pula direto para qualquer rota
+
+Por isso, uma IA ou pessoa que analise apenas os itens do menu terá uma visão incompleta do produto. Rotas de detalhe, editores, wizards, inboxes, dossiês, timelines e estados internos fazem parte do domínio.
+
+---
+
+## 🧩 Mapa funcional
+
+> **Legenda:** `Operacional` = fluxo existente/documentado no produto atual. `Planejado` = item deliberadamente apresentado como futuro e que não deve ser descrito como funcionalidade concluída.
+
+### GERAL — Torre de Controle
+
+**Dashboard** — consolida KPIs e muda a leitura conforme o perfil de usuário. Comercial observa pipeline e conversão; Engenharia observa projetos e pendências técnicas; Financeiro observa compromissos, gatilhos e contratos; Admin observa a operação consolidada.
+
+**Notificações** — inbox operacional. Informa que algo ocorreu ou requer atenção. **Notificação não é decisão e não é gate.**
+
+**Central de Decisões** — concentra situações nas quais a decisão deve permanecer humana, como autorizações executivas e decisões de contratação/vinculação.
+
+**Gatilhos & Prazo** — sistema nervoso temporal do workflow. Trabalha com eventos automáticos e gatilhos manuais, vencimentos, status, prazo reverso, cadeias por cotação, alertas e confirmações financeiras.
+
+### COMERCIAL — Onde a receita começa
+
+**Leads** — pipeline de oportunidades. Registra empreendimento, contato, equipamentos, quantidades, características preliminares, origem, prioridade, responsável, valor estimado e próxima ação.
+
+**Formulários** — transforma interesse em especificação. O mesmo núcleo atende canal interno e canal público e adapta perguntas para **Elevador, Escada Rolante e Esteira Rolante**. Múltiplas unidades devem ser tratadas como ativos individualizáveis.
+
+**Cotações a Fornecedor** — substitui conceitualmente a antiga visão limitada de “Cotações China”. A arquitetura é orientada a fornecedor/categoria e pode evoluir para elevadores, escadas, esteiras, quadros, portas, cabines e outras categorias. Inclui histórico de **Tratativas** com mensagens e anexos.
+
+**Precificação** — ponte Comercial/Financeiro. Transforma resposta de fornecedor em preço comercial por meio de custos de importação, câmbio, tributos, DIFAL, serviços, instalação, markup, comissões e margem. Calcular e aprovar são estados distintos.
+
+**Propostas** — editor comercial estruturado com herança de dados, ativos, valores, condições, especificações, imagens/desenhos e preview. O objetivo é evitar redigitação e impedir especificações fictícias ou divergentes da venda.
+
+### ADM / FINANCEIRO — Proteção econômica da operação
+
+**Precificação** — protege margem e coerência fiscal antes da promessa comercial.
+
+**Aval Financeiro** — participa do gate de compra e responde se a operação está financeiramente apta a comprometer caixa.
+
+### CADASTROS — Fontes de verdade transversais
+
+**Clientes** — cadastro central utilizado por Comercial, Importação, Engenharia e demais áreas.
+
+**Fornecedores** — cadastro central utilizado por P.I., RFQ, IMS, embarques e compras; inclui avaliação e base para evolução de Supplier Scorecard.
+
+**Produtos** — catálogo associado a NCM, solicitações NCM, DUIMP, ficha técnica e dados técnicos/fiscais.
+
+### JURÍDICO — Formalização do compromisso
+
+**Contratos & Minutas** — gestão de minutas, preenchimento, redação, status e assinatura digital.
+
+**Contrato de Venda de Equipamentos** — wizard especializado que pode herdar Proposta/Master ID e conduz cadastro do comprador, objeto, logística, preço e condições contratuais.
+
+**Contrato Instalador** — módulo especializado com modalidade, partes, objeto, seleção granular de ativos, engine, preview e assinatura. Um instalador pode ser contratado para apenas parte dos equipamentos de uma proposta.
+
+### IMPORTAÇÃO / SUPRIMENTOS — Compra e movimento internacional
+
+Existem duas camadas que não devem ser confundidas:
+
+1. **Importação tradicional** — visão histórica, detalhe de embarque, rastreamento marítimo/AIS e inbox.
+2. **Gestão Importação** — fluxo operacional estruturado em Painel, P.I., RFQ, IMS, Embarques e Análise de Preços.
+
+**Painel Gestão Importação** — cockpit que consolida P.I., RFQ, IMS e embarques.
+
+**P.I. — Proforma Invoice** — fonte financeira e operacional da compra: fornecedor, Incoterm, itens, NCM, valores, pagamentos, câmbio, produção, Cargo Ready, anexos e vínculo com embarque. A criação pode ser bloqueada quando o gate de compra não estiver satisfeito.
+
+**RFQ** — matriz de sourcing com múltiplos fornecedores, moedas, itens, preços e escolha de vencedor por item ou global.
+
+**IMS** — planejamento e contratação de recursos físicos/serviços, incluindo transporte, Munck, empilhadeira, andaime, mão de obra e outros recursos, com planejamento, fornecedores e execução.
+
+**Embarques** — consolidador logístico. Herda informações das P.I.s, controla containers, NF-e, ETD original/atual, rolagens, eventos aduaneiros e etapas de entrega.
+
+**Análise de Preços** — reaproveita histórico das RFQs para transformar memória de sourcing em inteligência de compra.
+
+**Compras Nacional** — separa sourcing doméstico da aquisição internacional.
+
+**Pedidos** — abrange pedido ao fornecedor e acompanhamento do cumprimento do pedido.
+
+### ENGENHARIA — A especificação toma posse
+
+**Projetos de Engenharia** — visita, levantamento, laudo, BOM, documentos, vínculo com NCM/Ficha e gates para Importação.
+
+**Projeto de Elevadores** — engenharia especializada do equipamento elevador.
+
+**Projeto de Equipamento** — configurador técnico que transforma requisitos em especificação concreta e alimenta BOM, ficha, proposta, contrato e projeto.
+
+**Projetos ER/ES** — desenho técnico especializado para Escadas Rolantes e Esteiras Rolantes.
+
+**Ficha Técnica** — wizard universal, dashboard e impressão técnica. Permite categorias/campos extensíveis, templates, imagens, desenho técnico e sincronização com catálogo. Possui contexto de copiloto especialista próprio.
+
+### OBRA — O prontuário operacional
+
+**Status de Obras** — visão consolidada das obras e de seu Status Mestre.
+
+**Dossiê da Obra** — prontuário central da obra: visão geral, documentos, instalação, cronograma, pendências, responsáveis e histórico. É uma entidade central do domínio, mesmo não sendo apenas um item simples da sidebar.
+
+Status Mestre modela a progressão de negócio e execução, por exemplo:
+
+```text
+Lead qualificado → Dossiê criado → Análise técnica → Precificação →
+Proposta enviada → Contrato assinado → Importação → Homologação instalador →
+Instalação → Data Book → Entregue → Manutenção preventiva
+```
+
+**Vistorias de Obras** — fonte única de verdade para vistorias. Controla agendamento, vistoriador, tipo/fase, custo, observações, documentos, imagens e estados. As três fases contratuais concluídas podem liberar a obra.
+
+**ART** — responsabilidade técnica e documentação que pode ser antecipada antes da chegada física do equipamento.
+
+### RECURSOS HUMANOS — Gate operacional
+
+**Homologação de Parceiros Instaladores** — controla habilitação documental/técnica de parceiros e distingue **homologação geral** de **vínculo específico à obra**. Documentos podem incluir NR-10, NR-35, ASO, PCMSO e PGR.
+
+### INSTALAÇÃO — Encontro entre produto e obra
+
+A instalação deve respeitar gates. O fluxo mapeado considera, entre outros requisitos, contrato, liberação financeira, projeto recebido e instalador corretamente vinculado.
+
+O domínio também contempla recebimento do equipamento, responsáveis, equipe de recepção, cronograma, status, pendências, testes e linha do tempo.
+
+### ENTREGA — Encerramento técnico e contratual
+
+**Data Book & Termo** — reúne memória documental e evidências de conclusão.
+
+Uma entrega completa pode envolver:
+
+1. ART registrada/entregue;
+2. Data Book;
+3. equipamento testado e funcionando;
+4. manuais e documentação;
+5. aceite/assinatura documental;
+6. certificados;
+7. treinamento;
+8. suporte;
+9. garantia explicada;
+10. Termo de Entrega;
+11. transição para manutenção/pós-venda.
+
+> **Equipamento funcionando não é sinônimo de projeto contratualmente encerrado.**
+
+### LOGÍSTICA
+
+**Almoxarifado** — controle operacional de materiais/estoques.
+
+**Expedição** — **Planejado**. Não documentar como módulo funcional concluído enquanto permanecer marcado como planejado.
+
+**Logística** — **Planejado**. Mesma regra acima.
+
+### PORTAL ADMIN — Governança
+
+**Logs de Atividade** — trilha de auditoria: quem fez o quê, quando, onde e sobre qual objeto.
+
+**Configurações do Sistema** — parâmetros administrativos e governança de acesso/alocação de módulos por colaborador.
+
+---
+
+## 🔑 Arquitetura de negócio
+
+### Master ID
+
+Identidade persistente que permite que oportunidade/equipamento sobreviva à troca de documentos e etapas. Deve preservar rastreabilidade entre ativos, precificação, proposta, contratos e demais entidades relacionadas.
+
+### Dossiê da Obra
+
+Enquanto o **Master ID acompanha o ativo**, o **Dossiê acompanha a obra**. São conceitos complementares, não sinônimos.
+
+### Fontes de verdade
+
+O sistema deve evitar bases paralelas para o mesmo fato. Exemplos de intenção arquitetural:
+
+- P.I. como fonte financeira da compra;
+- Embarque como consolidador logístico;
+- `vistorias_obras` como fonte única das vistorias;
+- Cadastro Central como origem para clientes/fornecedores/produtos;
+- Dossiê como prontuário da obra;
+- Logs como trilha de auditoria.
+
+### Herança de dados
+
+Princípio fundamental: **não redigitar o que o pipeline já sabe**.
+
+```text
+Cliente / Obra
+   ↓
+Lead → Formulário → Cotação → Precificação → Proposta → Contrato
+                    ↓                         ↓
+                 Master ID ───────────────→ Ativos
+                    ↓
+                   P.I. → Embarque
+
+Dossiê da Obra ← Engenharia / Vistorias / ART / Instalador / Instalação
 ```
 
 ---
 
-## Banco de Dados (`jxtqwzmpgofwctqajewt`)
+## 🚦 Regras de governança e Gates
 
-| Tabela             | Alimenta                                                      |
-|--------------------|---------------------------------------------------------------|
-| `leads`            | Pipeline de Leads · Lead Detail · Precificação (convertidos) |
-| `cotacoes`         | Cotações China · Cotação Detail                               |
-| `projetos`         | Engenharia · Gantt do Dashboard                               |
-| `alertas`          | Dashboard (alertas críticos) · Notificações                   |
-| `tarefas`          | "Minhas Tarefas" no Dashboard (filtradas por role)            |
-| `embarques`        | Importação · Importação Detail · Mapa Marítimo                |
-| `contratos`        | Jurídico                                                      |
-| `estoque`          | "Estoque Crítico" no Dashboard                                |
-| `comissoes`        | Comissões                                                     |
-| `gatilhos`         | Gatilhos & Prazo Reverso · Dashboard (KPI 7d)                 |
-| `ncm_solicitacoes` | NCM Kanban · Catálogo de Produtos · Dashboard (contadores)    |
+O VP Gestão não deve tratar “próxima etapa” como um botão livre. Gates existem para impedir avanço indevido.
 
----
+### Gate de compra
 
-## SSO — Acesso exclusivo via vpsistema.com
-
-O sistema **bloqueia acesso direto por URL**. O colaborador entra obrigatoriamente
-pelo card "Cotação Importação | PRD" no portal `vpsistema.com`, que injeta
-`?sso_token=...&sso_refresh=...` na URL.
-
-O guard em `src/supabase.js` (roda antes do React montar):
-- **Token presente** → `sb.auth.setSession()` → salva sessão → limpa URL
-- **Sessão salva** (localStorage) → acesso permitido (retorno)
-- **Flag de aba** (sessionStorage) → acesso permitido (mesmo tab)
-- **Nenhum dos anteriores** → `window.location.replace('https://vpsistema.com')`
-
----
-
-## Estrutura de Arquivos
-
-```
-vpprd_claudeDesigner/
-├── index.html                  # Entry point — carrega todos os scripts em ordem
-├── server.js                   # Express — serve arquivos estáticos (Hostinger)
-├── package.json
-├── .env.example                # Documenta que não há env vars obrigatórias
-├── src/
-│   ├── supabase.js             # Client Supabase + SSO Guard + loadDashboardData()
-│   ├── data.js                 # Dados de referência estáticos
-│   ├── ncm-data.js             # Catálogo NCM + atributos por NCM + fabricantes
-│   ├── app.jsx                 # Roteador principal (switch de routes)
-│   ├── shell.jsx               # Sidebar + Header + NAV_GROUPS + role switcher
-│   ├── dashboard.jsx           # KPIs · Pipeline · Gantt · Estoque · Alertas · Tarefas
-│   ├── comercial.jsx           # LeadsPage · LeadDetail · CotacoesPage · CotacaoDetail
-│   ├── precificacao.jsx        # PrecificacaoPage · calculadora de margem
-│   ├── proposta-form.jsx       # Wizard de criação de proposta
-│   ├── proposta-preview.jsx    # Preview PDF da proposta
-│   ├── proposta-editor.jsx     # Editor completo de proposta (3 equipamentos)
-│   ├── ncm.jsx                 # NCMStepper · NCMTab · NcmKanbanPage · Modal LogComex
-│   ├── ncm-catalogo.jsx        # NcmCatalogoPage · NcmDetailPage
-│   ├── operacoes.jsx           # EngenhariaPage · JuridicoPage · InstalacaoPage
-│   ├── logistica.jsx           # ImportacaoPage · ImportacaoDetail · ImportacaoRastreamento
-│   │                           # EmailInbox · ComprasPage
-│   ├── financeiro.jsx          # FinanceiroPage · ComissoesPage ·
-│   │                           # NotificacoesPage · ConfiguracoesPage
-│   ├── primitives.jsx          # Button · Badge · KPI · Card · Tabs · StatusBadge…
-│   └── toast.jsx               # Sistema de toasts (success · warning · danger · info)
-├── styles/
-│   ├── app.css                 # Layout principal · sidebar · header · tabelas
-│   ├── modules.css             # Componentes de módulos
-│   ├── proposta-editor.css     # Editor de propostas
-│   └── ncm.css                 # Módulo NCM (stepper · cards · alertas)
-├── colors_and_type.css         # Design tokens: var(--vp-*) · tipografia
-├── assets/
-│   └── logo-mark-yellow.png
-└── .claude/
-    ├── 2026_05_24_relatorio.md # Relatório de lançamento — 24/05/2026
-    └── relatorio.md            # Guia operacional futuro
+```text
+Decisão executiva / CEO
+        AND
+Contrato assinado
+        AND
+Sinal confirmado
+        AND
+Aval financeiro
+        ↓
+COMPRA LIBERADA
 ```
 
----
+### Gate técnico / importação
 
-## Deploy
+Pré-requisitos técnicos, documentais e contratuais devem estar satisfeitos antes da liberação correspondente.
 
-```
-Plataforma:   Hostinger Node.js
-Branch:       main  (auto-deploy a cada git push)
-Node.js:      18.x
-Comando:      node server.js
-PORT:         injetada automaticamente pelo Hostinger (process.env.PORT)
-Env vars:     nenhuma necessária
-Supabase:     anon key em src/supabase.js (chave pública — seguro no frontend)
-```
+### Gate de instalação
 
-```bash
-# Deploy (qualquer push na main dispara deploy automático ~2 min)
-git add .
-git commit -m "feat: descrição da mudança"
-git push origin main
+```text
+Contrato / condição contratual
+        AND
+Liberação financeira aplicável
+        AND
+Projeto / documentação técnica
+        AND
+Instalador habilitado e vinculado
+        ↓
+INSTALAÇÃO LIBERADA
 ```
 
----
-
-*Documentação gerada em 24/05/2026 — Claude Sonnet 4.6*
+**Princípio:** automação verifica fatos; decisões empresariais relevantes permanecem explícitas e auditáveis.
 
 ---
 
-## Contributors
+## ⚡ Paralelismo operacional
 
-- Gelson Simões — criador e responsável pelas soluções VerticalParts
+Uma das maiores oportunidades de redução de lead time está no período em que equipamento está em produção ou em trânsito.
+
+Enquanto a carga cruza o oceano, podem avançar em paralelo:
+
+- engenharia e revisão técnica;
+- vistorias;
+- homologação e contratação de instaladores;
+- ART;
+- andaime, Munck e recursos IMS;
+- planejamento de recebimento;
+- preparação física da obra;
+- cronograma e mobilização.
+
+O ERP deve, portanto, **orquestrar trabalho futuro**, e não apenas registrar fatos passados.
 
 ---
 
-**Feito por Gelson Simões**
+## 🧠 Inteligência e automação
+
+**Dashboard** observa o processo.
+
+**Notificações** informam eventos.
+
+**Central de Decisões** solicita decisão humana.
+
+**Gatilhos & Prazo** encadeiam obrigações e datas.
+
+**Logs** preservam evidência.
+
+**Análise de Preços** transforma RFQs passadas em memória de sourcing.
+
+**Copiloto VP** adiciona assistência contextual; áreas especializadas podem possuir copilotos próprios.
+
+**AIS** sustenta rastreamento marítimo, separado do fluxo operacional de Embarques.
+
+**NCM / DUIMP** sustentam classificação e preparação fiscal/técnica.
+
+**Omie** pode receber/publicar dados de integração, evitando que o VP Gestão se torne uma ilha.
+
+---
+
+## 🖼️ Identidade visual e famílias de produto
+
+<p align="center">
+  <img src="assets/capa-elevador.png" alt="Elevador" width="31%">
+  <img src="assets/capa-escada-rolante.png" alt="Escada Rolante" width="31%">
+  <img src="assets/capa-esteira-rolante.png" alt="Esteira Rolante" width="31%">
+</p>
+
+> As imagens acima representam famílias de produto existentes no repositório. Capturas de tela devem ser adicionadas somente quando corresponderem à UI atual; documentação visual desatualizada é pior do que ausência de screenshot.
+
+### Padrão recomendado para screenshots
+
+Ao adicionar telas reais, salvar em `docs/screenshots/` com nomes estáveis, por exemplo:
+
+```text
+docs/screenshots/01-dashboard.png
+docs/screenshots/02-leads.png
+docs/screenshots/03-formulario-elevador.png
+docs/screenshots/04-cotacoes-fornecedor.png
+docs/screenshots/05-precificacao.png
+docs/screenshots/06-proposta.png
+docs/screenshots/07-pi.png
+docs/screenshots/08-embarques.png
+docs/screenshots/09-dossie-obra.png
+docs/screenshots/10-ficha-tecnica.png
+```
+
+---
+
+## 🛠️ Stack e execução
+
+O repositório utiliza uma arquitetura web orientada ao portal interno, com React no frontend, CSS próprio, Supabase/PostgreSQL como camada de dados e serviços/Edge Functions para integrações e automações. O servidor do projeto também contempla entrega de arquivos estáticos e integração com o ambiente corporativo.
+
+> **Importante para agentes:** antes de alterar stack, deploy, autenticação, IDs de projeto ou infraestrutura, valide o código/configuração corrente. Esta documentação privilegia o **domínio de negócio** e evita transformar detalhes voláteis de infraestrutura em premissas permanentes.
+
+### Segurança
+
+- sistema corporativo, não destinado a exposição pública irrestrita;
+- respeitar autenticação e autorização existentes;
+- nunca commitar secrets, tokens ou credenciais;
+- aplicar princípio de menor privilégio;
+- preservar RLS/políticas do Supabase quando aplicável;
+- decisões, aprovações e mudanças críticas devem ser auditáveis.
+
+---
+
+## 🤖 Guia para humanos e agentes de IA
+
+Se Você é uma pessoa, Claude Code, Codex, ChatGPT ou outro agente trabalhando neste repositório, siga estas regras antes de modificar o produto:
+
+1. **Entenda a jornada antes da tela.** Descubra de onde o dado vem e quem o consome depois.
+2. **Não crie uma segunda fonte de verdade** sem necessidade arquitetural comprovada.
+3. **Preserve Master ID, vínculos e rastreabilidade** entre ativos/documentos.
+4. **Não contorne gates** para “fazer funcionar”. Gates são controles de negócio.
+5. **Não confunda notificação, gatilho e decisão.** São conceitos distintos.
+6. **Não redigite dados existentes.** Prefira herança/vínculo entre entidades.
+7. **Diferencie estado implementado de estado planejado.** `planned` não é funcionalidade pronta.
+8. **Preserve histórico.** Negociação, rolagens de ETD, decisões, pagamentos e eventos relevantes precisam de trilha.
+9. **Trate a P.I. como fonte da compra e o Embarque como consolidador logístico**, salvo mudança arquitetural deliberada.
+10. **Trate o Dossiê como prontuário da obra** e vistorias oficiais como dados estruturados, não notas soltas.
+11. **Pense em paralelismo.** Engenharia e preparação de obra podem avançar durante produção/trânsito.
+12. **Antes de criar um módulo novo, procure componente, store, tabela, função ou rota existente** que já represente o domínio.
+13. **Atualize documentação junto com mudanças estruturais.** Se o fluxo mudou, este README não pode ficar para trás novamente.
+
+### Checklist mínimo antes de uma alteração
+
+```text
+[ ] Qual problema empresarial estou resolvendo?
+[ ] Qual entidade é a fonte de verdade?
+[ ] Existe Master ID / Dossiê / Cotação / P.I. relacionado?
+[ ] A mudança afeta algum gate?
+[ ] Há dados que podem ser herdados em vez de duplicados?
+[ ] Há impacto em permissões/RLS?
+[ ] Há impacto em logs/auditoria?
+[ ] Há impacto em documentos/PDF/assinatura?
+[ ] Há impacto em integrações (Omie, AIS, NCM/DUIMP etc.)?
+[ ] Testes e documentação foram atualizados?
+```
+
+---
+
+## 📚 Leitura do produto por volume
+
+Para documentação aprofundada, a jornada pode ser estudada em oito volumes:
+
+| Volume | Tema | Escopo |
+|---|---|---|
+| I | A oportunidade | Lead → Formulário → Cotação → Tratativas |
+| II | O negócio | Precificação → Proposta → Contrato → Decisões → Gatilhos |
+| III | A compra | P.I. → Produção → RFQ → IMS → Embarque → Aduana |
+| IV | O produto | Cadastros → Produtos → NCM → DUIMP → Ficha Técnica |
+| V | A obra | Engenharia → Projeto → Dossiê → Vistorias → ART → Instalador → Homologação |
+| VI | A execução | Recebimento → Instalação → Cronograma → Status → Pendências |
+| VII | A entrega | Data Book → Testes → Treinamento → Termo → Handover |
+| VIII | A inteligência | Dashboard → Decisões → Gatilhos → Alertas → Logs → Análise de Preços → KPIs |
+
+---
+
+## 🧾 Glossário essencial
+
+| Termo | Significado no VP Gestão |
+|---|---|
+| Master ID | Identidade persistente que conecta ativos ao longo da jornada |
+| Dossiê | Prontuário operacional/documental da obra |
+| Gate | Regra de liberação que exige pré-condições antes do avanço |
+| Gatilho | Evento/prazo derivado de uma condição anterior ou criado manualmente |
+| Notificação | Informação de que algo aconteceu ou exige atenção |
+| Decisão | Ato humano explícito que não deve ser inferido por automação |
+| P.I. | Proforma Invoice e fonte principal da compra internacional |
+| RFQ | Request for Quotation / matriz de sourcing |
+| IMS | Solicitação/gestão de recursos físicos e serviços da operação |
+| Cargo Ready | Marco de prontidão da mercadoria para embarque |
+| ETD | Estimated Time of Departure |
+| AIS | Automatic Identification System, usado no contexto de rastreamento marítimo |
+| NCM | Nomenclatura Comum do Mercosul |
+| DUIMP | Declaração Única de Importação |
+| BOM | Bill of Materials |
+| ART | Anotação de Responsabilidade Técnica |
+| Data Book | Dossiê documental técnico de entrega |
+| Handover | Transição formal do projeto entregue para cliente/pós-venda |
+
+---
+
+## 🧱 Princípio de produto
+
+> **O VP Gestão não é uma coleção de módulos. É uma cadeia de continuidade empresarial.**
+
+O cliente informado no início reaparece na proposta. A cotação reaparece na precificação. A precificação alimenta a proposta. A proposta alimenta contratos. O Master ID preserva os ativos. A P.I. alimenta o embarque. O Dossiê acompanha a obra. Vistorias alimentam liberações. Homologação protege a instalação. Data Book e Termo encerram a obrigação. Logs preservam quem participou da história.
+
+Quando essa continuidade está íntegra, o software deixa de apenas registrar a operação e passa a representar **como a VerticalParts conduz um projeto**.
+
+---
+
+## 📌 Estado desta documentação
+
+Este README foi reestruturado em **17/08/2026** para substituir a visão histórica centrada em “Cotação/Importação” por uma documentação orientada ao ciclo de vida completo do VP Gestão.
+
+O README deve ser atualizado sempre que houver mudança estrutural em:
+
+- sidebar ou rotas principais;
+- fontes de verdade;
+- Master ID / Dossiê;
+- gates e decisões;
+- etapas de compra/importação;
+- engenharia/instalação/entrega;
+- integrações críticas;
+- módulos que mudem de `planned` para operacional.
+
+---
+
+<p align="center"><strong>VerticalParts • VP Gestão</strong><br>Da oportunidade ao equipamento entregue.</p>
