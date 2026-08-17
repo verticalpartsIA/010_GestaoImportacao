@@ -81,6 +81,10 @@
       referencia_tabela: referenciaTabela ?? null, referencia_id: referenciaId ?? null,
       depende_de: dependeDe || [], status,
       aprovadores_esperados: aprovadores,
+      // Nunca lido pelo app (souAprovador só olha o array acima) — mantido
+      // porque existe idx_decisoes_aprovador em produção, sinal de que
+      // serve pra consulta SQL direta fora do app. Ver migração
+      // 20260817200000_decisoes_gerenciais_schema_doc.sql.
       aprovador_esperado_email: aprovadores[0] || null,
       contexto: contexto || {},
     };
