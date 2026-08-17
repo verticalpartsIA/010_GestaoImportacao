@@ -187,6 +187,10 @@
     const EM = window.EngenhariaMetrics;
     const engenharia = EM.compute({ projetos, fichas, catalogo, alertas, ncmSolicitacoes });
 
+    // ---- Financeiro (dashboard-metrics-financeiro.js) — 3º módulo extraído. ----
+    const FM = window.FinanceiroMetrics;
+    const financeiro = FM.compute({ contratos, comissoes, gatilhos });
+
     // ---- tarefas no formato esperado pelo Dashboard ----
     const tarefasFmt = tarefas.map(t => ({
       t: t.title,
@@ -198,11 +202,9 @@
     // ---- métricas derivadas ----
     // (leadsDoMes/cotAbertas/propEnviadas/convertidos/convPct migraram pra
     // ComercialMetrics; fichasDoMes/catProdAtivos/alertasEngenharia/ncm
-    // migraram pra EngenhariaMetrics — ver blocos acima)
+    // migraram pra EngenhariaMetrics; comPend/gatProx7/aReceber migraram
+    // pra FinanceiroMetrics — ver blocos acima)
     const emTransito   = embarques.filter(e => e.status === 'Em trânsito');
-    const comPend      = comissoes.filter(c => c.status === 'Aguardando').reduce((s, c) => s + (c.comissao || 0), 0);
-    const gatProx7     = gatilhos.filter(g => (g.days_left || 0) <= 7);
-    const aReceber     = contratos.filter(c => c.status !== 'Assinado').reduce((s, c) => s + (c.value || 0), 0);
 
     // ---- Faturamento total (esteira real) — soma das propostas assinadas
     // pelo cliente (status 'aprovada'), não mais da tabela `projetos`
@@ -232,12 +234,7 @@
     const kpis = {
       comercial: comercial.kpis,
       engenharia: engenharia.kpis,
-      financeiro: [
-        { label: 'A receber',           value: fmtBRL(aReceber),     unit: '',  delta: '', deltaDir: 'up', sub: 'contratos abertos' },
-        { label: 'Comissões pendentes', value: fmtBRL(comPend),      unit: '',  delta: '', deltaDir: 'up', sub: 'aguardando pagamento' },
-        { label: 'Gatilhos próx. 7d',   value: String(gatProx7.length), unit:'', delta: '', deltaDir: gatProx7.length > 3 ? 'down' : 'up', sub: 'atenção' },
-        { label: 'Contratos abertos',   value: String(contratos.filter(c => c.status !== 'Assinado').length), unit: '', delta: '', deltaDir: 'up', sub: 'em andamento' },
-      ],
+      financeiro: financeiro.kpis,
       admin: [
         { label: 'Projetos ativos',       value: String(projetos.length),    unit: '',  delta: '', deltaDir: 'up', sub: 'todos módulos' },
         { label: 'Embarques em trânsito', value: String(emTransito.length),  unit: '',  delta: '', deltaDir: 'up', sub: 'Santos+Itaguaí' },
