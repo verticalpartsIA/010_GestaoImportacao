@@ -255,37 +255,18 @@
         status: e.qty <= Math.floor(e.min_qty / 2) ? 'danger' : 'warning',
       }));
 
-    // ---- Gantt: hoje em dias desde o início do projeto mais antigo ----
-    const startMs = projetos.map(p => +new Date(p.start_date)).filter(Boolean);
-    const ganttStart  = startMs.length ? Math.min(...startMs) : Date.now();
-    const ganttToday  = Math.max(0, Math.floor((Date.now() - ganttStart) / 86_400_000));
-
-    // ---- Gantt: converte projetos Supabase → formato GanttChart (fases sintéticas) ----
-    const GANTT_PHASES = ['Projeto', 'Fabricação', 'Importação', 'Instalação', 'Entrega'];
-    const ganttProjetos = projetos.map(p => {
-      const pStart = p.start_date ? +new Date(p.start_date) : ganttStart;
-      const pEnd   = p.end_date   ? +new Date(p.end_date)   : pStart + 150 * 86_400_000;
-      const pDay0  = Math.max(0, Math.floor((pStart - ganttStart) / 86_400_000));
-      const totalD = Math.max(30, Math.floor((pEnd - pStart) / 86_400_000));
-      const phLen  = Math.floor(totalD / GANTT_PHASES.length);
-      const curIdx = Math.max(0, GANTT_PHASES.findIndex(ph => (p.current_phase || '').includes(ph)));
-      return {
-        ...p,
-        phases: GANTT_PHASES.map((name, i) => ({
-          name,
-          start:  pDay0 + i * phLen,
-          end:    pDay0 + (i + 1) * phLen,
-          status: i < curIdx ? 'done' : i === curIdx ? 'current' : 'future',
-        })),
-      };
-    });
+    // ---- Gantt (dashboard-metrics-gantt.js) — 4º módulo extraído.
+    // Extração comportamento-idêntica: ainda lê a tabela `projetos`
+    // legada (issue #274 / Candidato 2, fora do escopo aqui). ----
+    const GM = window.ProjetosGanttMetrics;
+    const gantt = GM.compute({ projetos });
 
     return {
       leads, cotacoes, projetos, alertas, tarefas: tarefasFmt,
       embarques, contratos, estoque, comissoes, gatilhos, fichas, catalogo, ncm: engenharia.ncm,
       kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars, estoqueCritico,
       alertasCriticos: alertasCrit.length,
-      ganttToday, ganttProjetos,
+      ganttToday: gantt.ganttToday, ganttProjetos: gantt.ganttProjetos,
     };
   }
 
