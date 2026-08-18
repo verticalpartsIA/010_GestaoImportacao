@@ -92,5 +92,31 @@
     if (error) throw error;
   }
 
-  window.CadastrosClientesStore = { gerarCodigo, listarTodos, obter, criar, atualizar, remover };
+  /* Promoção Lead → Cliente (Central de Decisões concordou: Lead continua
+     em Comercial, mas ao converter — Análise Técnica aprovada, ver
+     analise-tecnica-store.js — vira cadastro real). Idempotente por
+     leads.cliente_id: chamar de novo pro mesmo lead não duplica.
+     Lead não tem CNPJ (só captura isso lá no Formulário), então o
+     dedup aqui é por razao_social exata — best-effort, não tem doc pra
+     casar com precisão como buscarOuCriarCliente (CNPJ) já faz. */
+  async function criarOuVincularDeLead(lead) {
+    const c = sb(); if (!c || !lead) return null;
+    const { data: leadRow } = await c.from('leads').select('cliente_id').eq('id', lead.id).maybeSingle();
+    if (leadRow?.cliente_id) return leadRow.cliente_id;
+
+    const nome = (lead.building || lead.contact || '').trim();
+    if (!nome) return null;
+
+    let cliente = null;
+    const { data: existente } = await c.from('clientes').select('id').ilike('razao_social', nome).maybeSingle();
+    if (existente) {
+      cliente = existente;
+    } else {
+      cliente = await criar({ razao_social: nome, contato: lead.contact || null, telefone: lead.phone || null, email: lead.email || null });
+    }
+    await c.from('leads').update({ cliente_id: cliente.id }).eq('id', lead.id);
+    return cliente.id;
+  }
+
+  window.CadastrosClientesStore = { gerarCodigo, listarTodos, obter, criar, atualizar, remover, criarOuVincularDeLead };
 }());

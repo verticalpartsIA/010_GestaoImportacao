@@ -153,8 +153,19 @@ window.__ANALISE_TECNICA = window.__ANALISE_TECNICA || (() => {
            da análise em si — só loga. */
         const { data: dossier } = await sb.from('dossier_obra').select('lead_id').eq('id', analise.dossier_id).maybeSingle();
         if (dossier?.lead_id) {
-          const { error: errLead } = await sb.from('leads').update({ status: 'Convertido' }).eq('id', dossier.lead_id);
-          if (errLead) console.warn('[AnaliseTecnica] falha ao marcar lead como Convertido', errLead);
+          const { data: leadRow } = await sb.from('leads').select('id, building, contact, phone, email').eq('id', dossier.lead_id).maybeSingle();
+          if (leadRow) {
+            const { error: errLead } = await sb.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id);
+            if (errLead) console.warn('[AnaliseTecnica] falha ao marcar lead como Convertido', errLead);
+
+            /* Lead convertido vira cadastro real em Clientes — decisão
+               21/08: Lead continua em Comercial (é pipeline, não cadastro),
+               mas ao converter promove pra Cadastros de verdade. */
+            if (window.CadastrosClientesStore) {
+              try { await window.CadastrosClientesStore.criarOuVincularDeLead(leadRow); }
+              catch (e) { console.warn('[AnaliseTecnica] falha ao promover lead pra cliente', e); }
+            }
+          }
         }
       }
     },
