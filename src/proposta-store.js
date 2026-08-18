@@ -294,6 +294,26 @@
         proposta: updated.titulo || updated.numero_documento,
       }).catch((e) => console.warn('[PropostaStore] podeComprarEquipamento falhou', e));
     }
+    /* Cliente assinou = a venda aconteceu — é o único gatilho de conversão
+       do Lead em Cliente (decisão 21/08: visita, workshop, cotação, proposta
+       enviada... nada disso converte, só mantém o Lead em qualificação).
+       Rastreia numero_cotacao -> formularios_elevador.lead_id -> leads —
+       só existe esse vínculo quando o Formulário nasceu do "Criar Cotação
+       China" (comercial.jsx); formulário criado direto, sem Lead, não tem
+       o que converter, e tudo aqui é best-effort (não trava a assinatura). */
+    if (updated.numero_cotacao != null) {
+      (async () => {
+        try {
+          const { data: form } = await c.from('formularios_elevador').select('lead_id').eq('numero_cotacao', updated.numero_cotacao).maybeSingle();
+          if (!form?.lead_id) return;
+          const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email').eq('id', form.lead_id).maybeSingle();
+          if (!leadRow) return;
+          const { error: errLead } = await c.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id);
+          if (errLead) { console.warn('[PropostaStore] falha ao marcar lead como Convertido', errLead); return; }
+          if (window.CadastrosClientesStore) await window.CadastrosClientesStore.criarOuVincularDeLead(leadRow);
+        } catch (e) { console.warn('[PropostaStore] falha ao converter lead em cliente', e); }
+      })();
+    }
     return updated;
   }
 

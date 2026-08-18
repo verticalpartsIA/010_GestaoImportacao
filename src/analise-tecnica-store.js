@@ -143,30 +143,10 @@ window.__ANALISE_TECNICA = window.__ANALISE_TECNICA || (() => {
       // Atualiza Dossier para próxima etapa
       if (analise.dossier_id) {
         await window.__DOSSIER.atualizarStatus(analise.dossier_id, 'Precificação', 'Análise técnica aprovada');
-
-        /* Fecha o duto Lead → Precificação (achado da revisão de arquitetura
-           de 18/08): precificacao.jsx já filtra leads.status='Convertido',
-           mas nada nunca setava isso — o filtro ficava permanentemente
-           inatingível. Este é o gate exato que Precificação verifica
-           (Análise Técnica aprovada), então é aqui que o Lead deve virar
-           'Convertido'. Best-effort: se falhar, não deve travar a aprovação
-           da análise em si — só loga. */
-        const { data: dossier } = await sb.from('dossier_obra').select('lead_id').eq('id', analise.dossier_id).maybeSingle();
-        if (dossier?.lead_id) {
-          const { data: leadRow } = await sb.from('leads').select('id, building, contact, phone, email').eq('id', dossier.lead_id).maybeSingle();
-          if (leadRow) {
-            const { error: errLead } = await sb.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id);
-            if (errLead) console.warn('[AnaliseTecnica] falha ao marcar lead como Convertido', errLead);
-
-            /* Lead convertido vira cadastro real em Clientes — decisão
-               21/08: Lead continua em Comercial (é pipeline, não cadastro),
-               mas ao converter promove pra Cadastros de verdade. */
-            if (window.CadastrosClientesStore) {
-              try { await window.CadastrosClientesStore.criarOuVincularDeLead(leadRow); }
-              catch (e) { console.warn('[AnaliseTecnica] falha ao promover lead pra cliente', e); }
-            }
-          }
-        }
+        /* Análise técnica aprovada NÃO é mais o gatilho de "Convertido" —
+           decisão 21/08: conversão do Lead em Cliente fica amarrada só à
+           venda de verdade (cliente assina a Proposta), não a uma etapa
+           técnica interna. Ver proposta-store.js:markSigned(). */
       }
     },
 
