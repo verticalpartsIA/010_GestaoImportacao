@@ -34,6 +34,7 @@
     'Cotações': 'mail',
     'Propostas': 'proposal',
     'Comissões': 'award',
+    'Central de Decisões': 'check',
   };
 
   const ROTA_POR_MODULO = {
@@ -44,6 +45,7 @@
     'Cotações': 'cotacoes-fornecedor',
     'Propostas': 'propostas',
     'Comissões': 'comissoes',
+    'Central de Decisões': 'decisoes',
   };
 
   function iconePara(module) {
