@@ -11,24 +11,26 @@ const NAV_GROUPS = [
     { id: "decisoes", label: "Central de Decisões", icon: "check" },
     { id: "financeiro", label: "Gatilhos & Prazo", icon: "dollar", restrict: ["financeiro", "admin"] },
   ]},
-  { label: "Comercial", items: [
-    { id: "leads", label: "Leads", icon: "flag" },
-    { id: "formularios", label: "Formulários", icon: "layers" },
-    { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
-    { id: "propostas", label: "Propostas", icon: "proposal" },
-    { id: "controle-cotacoes", label: "Controle de Cotações", icon: "history" },
-  ]},
-  { label: "ADM/ Financeiro", items: [
-    { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
-    { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
-  ]},
   /* Cadastros centrais — transversal (Comercial, Importação, Engenharia usam
      os mesmos registros). Clientes/Fornecedores têm tela própria aqui;
-     Produtos é o Catálogo de Produtos já existente, só realocado. */
+     Produtos é o Catálogo de Produtos já existente, só realocado. Sobe
+     acima de Comercial (decisão 21/08): sem gente/empresa cadastrada,
+     nada se movimenta. */
   { label: "Cadastros", items: [
     { id: "cadastro-clientes", label: "Clientes", icon: "users" },
     { id: "cadastro-fornecedores", label: "Fornecedores", icon: "truck" },
     { id: "ncm-catalogo", label: "Produtos", icon: "fileSearch" },
+  ]},
+  { label: "Comercial", items: [
+    { id: "leads", label: "Leads", icon: "flag" },
+    { id: "formularios", label: "Formulários", icon: "layers" },
+    { id: "propostas", label: "Propostas", icon: "proposal" },
+    { id: "controle-cotacoes", label: "Controle de Cotações", icon: "history" },
+  ]},
+  { label: "ADM/ Financeiro", items: [
+    { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
+    { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
+    { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Jurídico | Importação | Suprimentos", sublabel: "Contratos, Siscomex & Compras", items: [
     { id: "juridico", label: "Jurídico", icon: "scale" },
@@ -255,7 +257,7 @@ const BREADCRUMB_MAP = {
   formularios:   { module: "Comercial", page: "Formulários", icon: "layers" },
   "formulario-elevador": { module: "Comercial", page: "Formulário — Elevador", icon: "layers" },
   "controle-cotacoes":   { module: "Comercial", page: "Controle de Cotações", icon: "history" },
-  "cotacoes-fornecedor": { module: "Comercial", page: "Cotações a Fornecedor", icon: "globe" },
+  "cotacoes-fornecedor": { module: "Financeiro", page: "Cotações a Fornecedor", icon: "globe" },
   "cotacao-fornecedor-detail": { module: "Comercial", page: "Detalhe de Cotação", icon: "globe" },
   precificacao:  { module: "Comercial", page: "Precificação", icon: "calculator" },
   propostas:     { module: "Comercial", page: "Propostas", icon: "proposal" },
