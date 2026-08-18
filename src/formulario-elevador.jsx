@@ -852,14 +852,22 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
     const map = {};
     unidades.filter((u) => u.id && u.fornecedor).forEach((u) => {
       const tipoFormulario = store.tipoFormularioPara(u.tipo);
-      const key = `${u.fornecedor}|${tipoFormulario}`;
-      if (!map[key]) map[key] = { fornecedor: u.fornecedor, tipoFormulario, unidades: [] };
+      /* categoriaProduto real da unidade (elevador/escada_rolante/
+         esteira_rolante) — antes o grupo só separava por fornecedor+
+         tipoFormulario (esse último só distingue elevador-padrão de
+         home-lift, sempre dentro de "elevador"), então unidades de
+         escada/esteira caíam no mesmo grupo que elevador e a cotação
+         nascia com categoria_produto='elevador' hardcoded, mesmo pra
+         unidade de outro tipo. */
+      const categoriaProduto = FE_CATEGORIA_MASTERID[u.tipo_equipamento || 'elevador'] || 'elevador';
+      const key = `${u.fornecedor}|${tipoFormulario}|${categoriaProduto}`;
+      if (!map[key]) map[key] = { fornecedor: u.fornecedor, tipoFormulario, categoriaProduto, unidades: [] };
       map[key].unidades.push(u);
     });
     return Object.values(map);
   }, [unidades]);
 
-  const cotacaoDoGrupo = (g) => cotacoes.find((c) => c.fornecedor === g.fornecedor && c.tipo_formulario === g.tipoFormulario);
+  const cotacaoDoGrupo = (g) => cotacoes.find((c) => c.fornecedor === g.fornecedor && c.tipo_formulario === g.tipoFormulario && c.categoria_produto === g.categoriaProduto);
 
   /* Pedir revisão = documento novo inteiro (mais simples por enquanto, ver
      issue de revisão): cria uma nova cotação (revisão auto-incrementada por
@@ -869,11 +877,11 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
      (listarPorFormulario ordena por created_at desc), então o card volta
      sozinho pro estado "aguardando envio" com os campos de contato prontos. */
   const pedirRevisao = async (grupo) => {
-    const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
+    const key = `${grupo.fornecedor}|${grupo.tipoFormulario}|${grupo.categoriaProduto}`;
     if (!window.confirm(`Isso cria um novo documento de cotação (revisão) para ${grupo.fornecedor}, com um novo link. A resposta anterior continua salva e pode ser vista em Cotações a Fornecedor. Deseja continuar?`)) return;
     setEnviando(key);
     try {
-      await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, 'elevador');
+      await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
       await reload();
       window.toast?.('Nova revisão criada — preencha o contato e envie.', 'success');
     } catch (e) {
@@ -884,11 +892,11 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
   };
 
   const enviar = async (grupo, canal, recipient) => {
-    const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
+    const key = `${grupo.fornecedor}|${grupo.tipoFormulario}|${grupo.categoriaProduto}`;
     setEnviando(key);
     try {
       let cot = cotacaoDoGrupo(grupo);
-      if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, 'elevador');
+      if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
       const url = store.cotacaoUrl(cot.token);
       const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.baseId('elevador', numeroCotacao)}` : '';
       const msg = `Solicitação de cotação técnica ${cot.numero_documento}${numeroTxt} — VerticalParts\n` +
@@ -911,7 +919,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
       footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
       {grupos.length === 0 && <p className="small muted">Salve o formulário e defina o Fornecedor em pelo menos uma Unidade para enviar a cotação.</p>}
       {grupos.map((g) => (
-        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}`} grupo={g} cot={cotacaoDoGrupo(g)} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando}/>
+        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}|${g.categoriaProduto}`} grupo={g} cot={cotacaoDoGrupo(g)} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando}/>
       ))}
     </Modal>
   );

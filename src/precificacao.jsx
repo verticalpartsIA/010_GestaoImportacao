@@ -491,10 +491,14 @@ function PropostasPage({ setRoute, setSubsel }) {
 
   /* "Prontas para enviar" — Precificação terminou o cálculo, mas quem
      decide analisar e enviar é o Comercial, não o Financeiro. Lista toda
-     precificação calculada cujo Nº da Cotação ainda não tem proposta. */
+     precificação calculada OU já aprovada (status 'finalizado' — "aprovada"
+     não é menos pronta que "calculada", é mais; antes o filtro só pegava
+     'calculado' e o item sumia daqui bem no momento em que devia estar mais
+     pronto pra virar proposta — achado da revisão de arquitetura de 18/08)
+     cujo Nº da Cotação ainda não tem proposta. */
   const carregarProntas = React.useCallback(async () => {
     const { data: pz } = await window.__VP_SB.sb.from('precificacoes_elevador')
-      .select('id, numero_documento, numero_cotacao').eq('status', 'calculado')
+      .select('id, numero_documento, numero_cotacao').in('status', ['calculado', 'finalizado'])
       .order('numero_cotacao', { ascending: false });
     const { data: props } = await window.__VP_SB.sb.from('propostas').select('numero_cotacao').not('numero_cotacao', 'is', null);
     const jaTemProposta = new Set((props || []).map((p) => p.numero_cotacao));
