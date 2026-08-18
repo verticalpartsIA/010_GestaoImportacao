@@ -488,9 +488,14 @@ function PropostasPage({ setRoute, setSubsel }) {
   const [fStatus, setFStatus] = React.useState('Todos');
   const [prontas, setProntas] = React.useState([]);
 
+  /* Não traz data_json aqui — é só pra abrir UMA proposta específica no
+     editor, não pra listar. Nas 307 migradas do site antigo (18/08) esse
+     campo tem até ~34KB cada; buscar pra todas as linhas só pra montar a
+     tabela deixava a lista lenta à toa (achado ao vivo, mesmo dia da
+     migração). */
   const carregar = React.useCallback(() => {
     window.__VP_SB.sb.from('propostas')
-      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, data_json, criado_em')
+      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em')
       .order('criado_em', { ascending: false }).limit(300)
       .then(({ data }) => setRows(data || []));
   }, []);
@@ -546,7 +551,7 @@ function PropostasPage({ setRoute, setSubsel }) {
     return rows.filter((r) => {
       if (fStatus !== 'Todos' && r.status !== fStatus) return false;
       if (!termo) return true;
-      return [r.numero_documento, r.titulo, r.master_id, r.data_json?.cliente?.nome]
+      return [r.numero_documento, r.titulo, r.master_id]
         .some((v) => (v || '').toLowerCase().includes(termo));
     });
   }, [rows, busca, fStatus]);
