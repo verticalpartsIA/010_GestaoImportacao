@@ -1064,27 +1064,118 @@ function ConfigPermissions() {
     { role: "Instalação", access: ["-", "-", "-", "-", "-", "r", "-", "r", "r", "rwx", "-"] },
   ];
   return (
-    <Card title="Matriz de Permissões — modelo de referência" sub="r=leitura · w=criar/editar · x=ações restritas">
-      <div style={{ padding: "10px 12px", marginBottom: 14, background: "var(--vp-warning-tint, #f8eed7)", border: "1px solid var(--border)", fontSize: 12, color: "var(--fg2)" }}>
-        Este quadro documenta o <b>modelo de acesso planejado</b> por perfil. O controle por linha (RLS) ainda não é gerido por esta tela — alterações de permissão são feitas via políticas no Supabase.
-      </div>
-      <div style={{ overflowX: "auto" }}>
-        <table className="t" style={{ minWidth: 880 }}>
-          <thead><tr>
-            <th style={{ position: "sticky", left: 0, background: "var(--vp-gray-50)", zIndex: 2 }}>Perfil</th>
-            {modules.map(m => <th key={m} style={{ textAlign: "center" }}>{m}</th>)}
-          </tr></thead>
-          <tbody>
-            {perms.map(p => (
-              <tr key={p.role}>
-                <td style={{ position: "sticky", left: 0, background: "#fff", zIndex: 1, fontWeight: 700 }}>{p.role}</td>
-                {p.access.map((a, i) => (
-                  <td key={i} style={{ textAlign: "center" }}>
-                    <PermCell value={a}/>
-                  </td>
+    <>
+      <ConfigVisibilidadePropostas/>
+      <div style={{ marginTop: 16 }}>
+        <Card title="Matriz de Permissões — modelo de referência" sub="r=leitura · w=criar/editar · x=ações restritas">
+          <div style={{ padding: "10px 12px", marginBottom: 14, background: "var(--vp-warning-tint, #f8eed7)", border: "1px solid var(--border)", fontSize: 12, color: "var(--fg2)" }}>
+            Este quadro documenta o <b>modelo de acesso planejado</b> por perfil. O controle por linha (RLS) ainda não é gerido por esta tela — alterações de permissão são feitas via políticas no Supabase.
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table className="t" style={{ minWidth: 880 }}>
+              <thead><tr>
+                <th style={{ position: "sticky", left: 0, background: "var(--vp-gray-50)", zIndex: 2 }}>Perfil</th>
+                {modules.map(m => <th key={m} style={{ textAlign: "center" }}>{m}</th>)}
+              </tr></thead>
+              <tbody>
+                {perms.map(p => (
+                  <tr key={p.role}>
+                    <td style={{ position: "sticky", left: 0, background: "#fff", zIndex: 1, fontWeight: 700 }}>{p.role}</td>
+                    {p.access.map((a, i) => (
+                      <td key={i} style={{ textAlign: "center" }}>
+                        <PermCell value={a}/>
+                      </td>
+                    ))}
+                  </tr>
                 ))}
-              </tr>
-            ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      </div>
+    </>
+  );
+}
+
+/* Escopo real de visibilidade de Propostas — a única linha desta tela que
+   de fato grava permissão (o resto acima é documentação estática, ver aviso
+   no card). Sem isso, "quem vê proposta de quem" ficaria hardcoded em JS e
+   dependente de uma sessão de IA toda vez que alguém trocasse de função —
+   pedido explícito do usuário em 18/08 depois da migração das 307 propostas
+   do site antigo. Regra: Administrador sempre vê tudo (perfis.nivel); pra
+   qualquer outra pessoa, o toggle grava/apaga linha em
+   proposta_visibilidade_escopo (ausência de linha = só vê as próprias). */
+function ConfigVisibilidadePropostas() {
+  const sb = window.__VP_SB.sb;
+  const [perfis, setPerfis] = React.useState(null);
+  const [escopos, setEscopos] = React.useState({});
+  const [salvandoId, setSalvandoId] = React.useState(null);
+
+  const load = React.useCallback(async () => {
+    const [{ data: p }, { data: e }] = await Promise.all([
+      sb.from('perfis').select('id, nome, email, nivel, departamento, ativo').eq('ativo', true).order('nome'),
+      sb.from('proposta_visibilidade_escopo').select('perfil_id, escopo'),
+    ]);
+    setPerfis(p || []);
+    const map = {};
+    (e || []).forEach((row) => { map[row.perfil_id] = row.escopo; });
+    setEscopos(map);
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const alternar = async (perfil, veTudo) => {
+    setSalvandoId(perfil.id);
+    try {
+      if (veTudo) {
+        const por = (window.__VP_USER || {}).email || 'admin';
+        const { error } = await sb.from('proposta_visibilidade_escopo')
+          .upsert({ perfil_id: perfil.id, escopo: 'todas', atualizado_por: por, atualizado_em: new Date().toISOString() }, { onConflict: 'perfil_id' });
+        if (error) throw error;
+      } else {
+        const { error } = await sb.from('proposta_visibilidade_escopo').delete().eq('perfil_id', perfil.id);
+        if (error) throw error;
+      }
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Admin', acao: 'Visibilidade de propostas alterada', alvo: perfil.email, detalhe: { escopo: veTudo ? 'todas' : 'proprias' } });
+      window.PropostaStore.resetEscopoVisibilidadeCache();
+      setEscopos((prev) => { const n = { ...prev }; if (veTudo) n[perfil.id] = 'todas'; else delete n[perfil.id]; return n; });
+    } catch (e) {
+      window.toast?.('Erro: ' + (e.message || e), 'error');
+    } finally {
+      setSalvandoId(null);
+    }
+  };
+
+  if (!perfis) return <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
+
+  return (
+    <Card title="Visibilidade de Propostas" sub="Quem enxerga propostas de outros vendedores, além das próprias">
+      <div style={{ padding: "10px 12px", marginBottom: 14, background: "var(--vp-warning-tint, #f8eed7)", border: "1px solid var(--border)", fontSize: 12, color: "var(--fg2)" }}>
+        Administradores sempre veem todas as propostas. Pra qualquer outra pessoa, ligue o toggle abaixo — sem isso, cada vendedor só vê as próprias.
+      </div>
+      <div className="table-wrap" style={{ border: 0 }}>
+        <table className="t">
+          <thead><tr><th>Nome</th><th>Email</th><th>Nível</th><th style={{ textAlign:'right' }}>Vê todas as propostas</th></tr></thead>
+          <tbody>
+            {perfis.map((p) => {
+              const admin = p.nivel === 'Administrador';
+              const veTudo = admin || escopos[p.id] === 'todas';
+              return (
+                <tr key={p.id}>
+                  <td><span className="cell-main">{p.nome || p.email}</span></td>
+                  <td><span className="mono small">{p.email}</span></td>
+                  <td><Badge variant="ink">{p.nivel}</Badge></td>
+                  <td style={{ textAlign:'right' }}>
+                    {admin ? (
+                      <span className="small muted">Sempre vê tudo</span>
+                    ) : (
+                      <input type="checkbox" checked={veTudo} disabled={salvandoId === p.id}
+                        onChange={(e) => alternar(p, e.target.checked)}
+                        style={{ width: 18, height: 18, accentColor: 'var(--vp-yellow)' }}/>
+                    )}
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>

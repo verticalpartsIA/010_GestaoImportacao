@@ -487,6 +487,12 @@ function PropostasPage({ setRoute, setSubsel }) {
   const [busca, setBusca] = React.useState('');
   const [fStatus, setFStatus] = React.useState('Todos');
   const [prontas, setProntas] = React.useState([]);
+  const [escopo, setEscopo] = React.useState(null);
+
+  // Escopo de visibilidade (Configurações do Sistema › Permissões) — resolve
+  // antes de carregar, pra montar a query já filtrada por vendedor_id em vez
+  // de buscar tudo e esconder na tela (dado sensível não deve nem sair do banco).
+  React.useEffect(() => { window.PropostaStore.resolverEscopoVisibilidade().then(setEscopo); }, []);
 
   /* Não traz data_json aqui — é só pra abrir UMA proposta específica no
      editor, não pra listar. Nas 307 migradas do site antigo (18/08) esse
@@ -494,11 +500,13 @@ function PropostasPage({ setRoute, setSubsel }) {
      tabela deixava a lista lenta à toa (achado ao vivo, mesmo dia da
      migração). */
   const carregar = React.useCallback(() => {
-    window.__VP_SB.sb.from('propostas')
-      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em')
-      .order('criado_em', { ascending: false }).limit(300)
+    if (!escopo) return;
+    let q = window.__VP_SB.sb.from('propostas')
+      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em');
+    if (!escopo.veTudo && escopo.vendedorId) q = q.eq('vendedor_id', escopo.vendedorId);
+    q.order('criado_em', { ascending: false }).limit(300)
       .then(({ data }) => setRows(data || []));
-  }, []);
+  }, [escopo]);
   React.useEffect(() => { carregar(); }, [carregar]);
 
   /* "Prontas para enviar" — Precificação terminou o cálculo, mas quem

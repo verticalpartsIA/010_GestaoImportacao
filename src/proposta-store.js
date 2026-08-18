@@ -357,6 +357,35 @@
     return _vendedorIdCache;
   }
 
+  /* Escopo de visibilidade — "quem vê proposta de quem" precisa ser
+     configurável por botão em Configurações do Sistema (aba Permissões),
+     nunca uma lista de e-mails fixa no código: gente troca de função e
+     ninguém pode ficar dependendo de uma sessão de IA pra atualizar isso.
+     Regra: Administrador (perfis.nivel) sempre vê tudo; qualquer outra
+     pessoa só vê tudo se tiver linha 'todas' em proposta_visibilidade_escopo
+     — ausência de linha = só vê as próprias (mesma convenção "sem linha =
+     padrão" já usada no Portal Admin pra module_permissions). */
+  let _escopoCache;
+  function resetEscopoVisibilidadeCache() { _escopoCache = undefined; }
+  async function resolverEscopoVisibilidade() {
+    if (_escopoCache !== undefined) return _escopoCache;
+    const c = sb();
+    const email = (window.__VP_USER || {}).email;
+    const aberto = { vendedorId: null, veTudo: true };
+    if (!email || !c) { _escopoCache = aberto; return aberto; }
+    try {
+      const { data: perfil } = await c.from('perfis').select('id, nivel').eq('email', email).maybeSingle();
+      if (!perfil) { _escopoCache = aberto; return aberto; }
+      if (perfil.nivel === 'Administrador') {
+        _escopoCache = { vendedorId: perfil.id, veTudo: true };
+        return _escopoCache;
+      }
+      const { data: escopo } = await c.from('proposta_visibilidade_escopo').select('escopo').eq('perfil_id', perfil.id).maybeSingle();
+      _escopoCache = { vendedorId: perfil.id, veTudo: escopo?.escopo === 'todas' };
+    } catch (e) { _escopoCache = aberto; }
+    return _escopoCache;
+  }
+
   /* data/eq: o shape completo do editor (cliente/obra/elevador|escada|
      esteira/...). valorTotal: calculado pelo editor (calcularValorTotal),
      que já entende o shape por equipamento — o store não precisa saber
@@ -428,5 +457,6 @@
     publicar, conteudoVigente,
     markSent, markViewed, markSigned, refuse,
     salvar,
+    resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
   };
 }());
