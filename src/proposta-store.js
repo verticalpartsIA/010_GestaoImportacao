@@ -336,11 +336,97 @@
     return updated;
   }
 
+  /* ---------- Criar/atualizar (rascunho) ----------
+     Movido de proposta-editor.jsx (revisão de arquitetura 18/08, candidato
+     2): o store nunca fazia insert(), só update() — quem montava a linha,
+     resolvia vendedor_id e decidia insert-vs-update era o componente de
+     UI. Agora o store é dono da forma da linha, igual aos outros stores
+     já revisados nesta sessão. */
+
+  /* vendedor_id aponta pra public.perfis; a identidade vem do SSO (e-mail).
+     Cacheado por sessão — não faz sentido consultar a cada salvamento. */
+  let _vendedorIdCache;
+  async function resolverVendedorId() {
+    if (_vendedorIdCache !== undefined) return _vendedorIdCache;
+    const email = (window.__VP_USER || {}).email;
+    if (!email || !sb()) { _vendedorIdCache = null; return null; }
+    try {
+      const { data } = await sb().from('perfis').select('id').eq('email', email).maybeSingle();
+      _vendedorIdCache = data ? data.id : null;
+    } catch (e) { _vendedorIdCache = null; }
+    return _vendedorIdCache;
+  }
+
+  /* data/eq: o shape completo do editor (cliente/obra/elevador|escada|
+     esteira/...). valorTotal: calculado pelo editor (calcularValorTotal),
+     que já entende o shape por equipamento — o store não precisa saber
+     como somar preço × quantidade de 3 formatos diferentes.
+     Retorna { id, token } da linha salva, ou { erro } em falha — nunca
+     lança, quem chama decide o que fazer com o erro (toast, etc). */
+  async function salvar({ data, eq, editId, valorTotal }) {
+    const c = sb(); if (!c) return { erro: 'Sem conexão com o sistema.' };
+    // Evita poluir a tabela real com rascunhos em branco: só persiste com cliente.
+    if (!data?.cliente?.nome?.trim()) return { erro: 'Preencha o nome do cliente para salvar.' };
+
+    const vpUser = window.__VP_USER || {};
+    const chave = (data.numero || '').trim() || null; // → numero_documento (texto)
+    try {
+      const payload = {
+        numero_documento: chave,
+        proposal_type: eq,
+        titulo: [data.cliente?.nome, data.obra?.nome].filter(Boolean).join(' · ') || chave,
+        data_json: { ...data, _vp_user: { email: vpUser.email || null, nome: vpUser.nome || null } },
+        master_id: data.masterId || null,
+        precificacao_id: data.precificacaoId || null,
+        valor_total: valorTotal,
+        numero_cotacao: window.MasterIdEngine.parseNumeroCotacao(data.numeroCotacao),
+        atualizado_em: new Date().toISOString(),
+      };
+
+      /* vendedor_id é NOT NULL — só mandamos quando resolve, pra um update
+         não apagar o vendedor que já estava gravado. */
+      const vendedorId = await resolverVendedorId();
+      if (vendedorId) payload.vendedor_id = vendedorId;
+
+      // Alvo do update: se veio de "Editar" (editId), usa o id diretamente;
+      // senão, chave de negócio = numero_documento (texto). O `numero` (int)
+      // é auto-sequencial no banco, então não o enviamos no insert. Status
+      // só é definido na CRIAÇÃO — salvar de novo não regride o status de
+      // uma proposta já enviada/assinada.
+      let existing = editId ? { id: editId } : null;
+      if (!existing && chave) {
+        const { data: rows } = await c.from('propostas').select('id')
+          .eq('numero_documento', chave).order('criado_em', { ascending: false }).limit(1);
+        existing = rows && rows[0];
+      }
+
+      if (existing?.id) {
+        const { data: row, error } = await c.from('propostas').update(payload).eq('id', existing.id).select('id, token').single();
+        if (error) throw error;
+        return row;
+      } else {
+        const { data: row, error } = await c.from('propostas').insert([{ ...payload, status: 'rascunho' }]).select('id, token').single();
+        if (error) throw error;
+        if (window.EventosFluxo) window.EventosFluxo.registrar({
+          evento: 'PROPOSTA_ELABORADA', numeroCotacao: payload.numero_cotacao,
+          alvoLabel: payload.titulo, alvoId: row.id,
+        });
+        return row;
+      }
+    } catch (e) {
+      // Antes o erro era engolido e o usuário via "salva localmente" — uma
+      // falha total (ex.: not-null de vendedor_id) parecia sucesso parcial.
+      console.error('PropostaStore.salvar falhou:', e);
+      return { erro: e.message || String(e) };
+    }
+  }
+
   window.PropostaStore = {
     uuid, shortToken, getPublicIP,
     fmtDateTime, signUrl, prettyUrl, whatsAppHref, mailtoHref,
     getById, getByToken, garantirToken,
     publicar, conteudoVigente,
     markSent, markViewed, markSigned, refuse,
+    salvar,
   };
 }());

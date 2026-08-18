@@ -531,20 +531,6 @@ function fmtValorProposta(data, eq) {
   return total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
 }
 
-/* vendedor_id aponta pra public.perfis; a identidade vem do SSO (e-mail).
-   Cacheado por sessão — não faz sentido consultar a cada salvamento. */
-let _vendedorIdCache;
-async function resolverVendedorId() {
-  if (_vendedorIdCache !== undefined) return _vendedorIdCache;
-  const email = (window.__VP_USER || {}).email;
-  if (!email || !window.__VP_SB?.sb) { _vendedorIdCache = null; return null; }
-  try {
-    const { data } = await window.__VP_SB.sb.from('perfis').select('id').eq('email', email).maybeSingle();
-    _vendedorIdCache = data ? data.id : null;
-  } catch (e) { _vendedorIdCache = null; }
-  return _vendedorIdCache;
-}
-
 function PEChip({ label, value, mono, destaque }) {
   return (
     <span className={"pe-chip" + (destaque ? " pe-chip--destaque" : "")}>
@@ -699,80 +685,17 @@ function PropostaEditor({ setRoute, subsel }) {
 
   // Save to Supabase
   // SSO / portas abertas: a identidade vem do vpsistema (window.__VP_USER),
-  // NÃO de um login separado. Antes exigia sb.auth.getUser() (sessão Supabase
-  // Auth), que nunca existe neste modelo — por isso a proposta nunca salvava.
-  // Aqui persiste com a anon key + identidade do SSO, mapeando para as colunas
-  // REAIS da tabela `propostas` (sem alterar o schema do banco).
-  // Retorna { id, token } da linha salva (ou null em falha) — precisamos do
-  // id/token pra abrir o modal de envio por assinatura digital.
+  // NÃO de um login separado — proposta-store.js persiste com a anon key +
+  // identidade do SSO, mapeando pras colunas reais da tabela `propostas`.
+  // Retorna { id, token } da linha salva (ou { erro } em falha) — precisamos
+  // do id/token pra abrir o modal de envio por assinatura digital.
+  // Montar a linha (payload, resolver vendedor_id, decidir insert-vs-update)
+  // é responsabilidade do store (PropostaStore.salvar) — revisão de
+  // arquitetura 18/08, candidato 2: isso morava aqui na UI antes.
   const saveToSupabase = React.useCallback(async () => {
-    if (!window.__VP_SB?.sb) return { erro: 'Sem conexão com o sistema.' };
-    // Evita poluir a tabela real com rascunhos em branco: só persiste com cliente.
-    if (!data?.cliente?.nome?.trim()) return { erro: 'Preencha o nome do cliente para salvar.' };
-
-    const vpUser = window.__VP_USER || {};
-    const chave = (data.numero || '').trim() || null;   // → numero_documento (texto)
-    try {
-      const payload = {
-        numero_documento: chave,
-        proposal_type: eq,
-        titulo: [data.cliente?.nome, data.obra?.nome].filter(Boolean).join(' · ') || chave,
-        data_json: { ...data, _vp_user: { email: vpUser.email || null, nome: vpUser.nome || null } },
-        master_id: data.masterId || null,
-        precificacao_id: data.precificacaoId || null,
-        // Sem isto a listagem congelava no valor antigo e proposta nova ficava sem valor.
-        valor_total: calcularValorTotal(data, eq),
-        // Elo persistido com a cotação de origem (herança).
-        numero_cotacao: window.MasterIdEngine.parseNumeroCotacao(data.numeroCotacao),
-        atualizado_em: new Date().toISOString(),
-      };
-
-      /* vendedor_id era NOT NULL e nunca era enviado — todo INSERT de
-         proposta nova falhava. Resolvemos pelo e-mail do SSO em `perfis`;
-         só mandamos quando resolve, pra um update não apagar o vendedor
-         que já estava gravado. */
-      const vendedorId = await resolverVendedorId();
-      if (vendedorId) payload.vendedor_id = vendedorId;
-
-      // Alvo do update: se veio de "Editar" (editId), usa o id diretamente;
-      // senão, chave de negócio = numero_documento (texto). O `numero` (int)
-      // é auto-sequencial no banco, então não o enviamos no insert. Status
-      // só é definido na CRIAÇÃO — salvar de novo não regride o status de
-      // uma proposta já enviada/assinada.
-      let existing = editId ? { id: editId } : null;
-      if (!existing && chave) {
-        const { data: rows } = await window.__VP_SB.sb
-          .from('propostas')
-          .select('id')
-          .eq('numero_documento', chave)
-          .order('criado_em', { ascending: false })
-          .limit(1);
-        existing = rows && rows[0];
-      }
-
-      if (existing?.id) {
-        const { data: row, error } = await window.__VP_SB.sb
-          .from('propostas').update(payload).eq('id', existing.id).select('id, token').single();
-        if (error) throw error;
-        setRecordId(row.id);
-        return row;
-      } else {
-        const { data: row, error } = await window.__VP_SB.sb
-          .from('propostas').insert([{ ...payload, status: 'rascunho' }]).select('id, token').single();
-        if (error) throw error;
-        setRecordId(row.id);
-        window.EventosFluxo?.registrar({
-          evento: 'PROPOSTA_ELABORADA', numeroCotacao: payload.numero_cotacao,
-          alvoLabel: payload.titulo, alvoId: row.id,
-        });
-        return row;
-      }
-    } catch (e) {
-      // Antes o erro era engolido e o usuário via "salva localmente" — uma
-      // falha total (ex.: not-null de vendedor_id) parecia sucesso parcial.
-      console.error('Supabase save failed:', e);
-      return { erro: e.message || String(e) };
-    }
+    const row = await window.PropostaStore.salvar({ data, eq, editId, valorTotal: calcularValorTotal(data, eq) });
+    if (row?.id) setRecordId(row.id);
+    return row;
   }, [data, eq, editId]);
 
   /* ---- Publicar = congelar a versão oficial (ver proposta-store.js) ----
