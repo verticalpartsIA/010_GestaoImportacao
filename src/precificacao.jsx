@@ -35,14 +35,21 @@ function PrecificacaoLeadsPage({ setRoute, setSubsel, modo, setModo }) {
       try {
         setLoading(true); setErro(false);
         const sb = window.__VP_SB.sb;
+        /* Não filtra mais por leads.status='Convertido' — desde 21/08 esse
+           status só passa a existir depois que o cliente assina a Proposta
+           (venda fechada), bem mais tarde do que "pronto pra calcular
+           preço". O gate de verdade pra essa fila é ter Dossiê com Análise
+           Técnica aprovada — igual já era antes de 'Convertido' existir. */
         const [{ data: leads, error: e1 }, { data: dossies, error: e2 }] = await Promise.all([
-          sb.from('leads').select('id,building,contact,value').eq('status', 'Convertido'),
+          sb.from('leads').select('id,building,contact,value'),
           sb.from('dossier_obra').select('id,lead_id'),
         ]);
         if (e1 || e2) throw (e1 || e2);
         const dossieIdPorLead = {};
         (dossies || []).forEach(d => { if (d.lead_id) dossieIdPorLead[d.lead_id] = d.id; });
-        const withDossier = (leads || []).map(l => ({ ...l, dossier_id: dossieIdPorLead[l.id] || null }));
+        const withDossier = (leads || [])
+          .map(l => ({ ...l, dossier_id: dossieIdPorLead[l.id] || null }))
+          .filter(l => l.dossier_id);
         /* Status REAL derivado da Análise Técnica aprovada — precedente
            obrigatório da precificação (sem números inventados). */
         const dossierIds = withDossier.map(p => p.dossier_id).filter(Boolean);
