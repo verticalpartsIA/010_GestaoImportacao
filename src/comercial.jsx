@@ -73,8 +73,9 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
     if (error) return window.toast('Erro: ' + error.message, 'error');
     onSaved?.();
     setSavedLead({
-      id, building: f.building, equipItens, tipoEquip,
-      elevSpec: hasElevador ? { ...elevSpec } : null,
+      id, building: f.building, contact: f.contact, role: f.role, phone: f.phone, email: f.email,
+      equipItens, tipoEquip,
+      elevSpec: hasElevador ? { ...elevSpec, qty: equips.elevador.qty, paradas: equips.elevador.paradas } : null,
       totalEquip: equipItens.reduce((s, i) => s + i.quantidade, 0),
     });
   };
@@ -284,8 +285,6 @@ function LeadsPage({ setRoute, setSubsel }) {
   const [search, setSearch] = React.useState("");
   const [owner, setOwner] = React.useState("Todos");
   const [showLead, setShowLead] = React.useState(false);
-  const [cotacaoPrefill, setCotacaoPrefill] = React.useState(null);
-  const [showCotFromLead, setShowCotFromLead] = React.useState(false);
   const [page, setPage] = React.useState(0);
   const PAGE_SIZE = 15;
 
@@ -443,19 +442,16 @@ function LeadsPage({ setRoute, setSubsel }) {
           onSaved={reloadLeads}
           onCreateCotacao={(lead) => {
             setShowLead(false);
-            setCotacaoPrefill(lead);
-            setShowCotFromLead(true);
+            /* "Criar Cotação China →" apontava pro fluxo antigo (tabela
+               `cotacoes`, órfã — já substituída em todo o resto do app por
+               Cotação a Fornecedor, alimentada pelo Formulário do Elevador).
+               Mesmo padrão de handoff já usado em outros pontos (setSubsel +
+               setRoute) — Formulário aceita { __prefillFromLead } no subsel
+               e pré-preenche telefone/e-mail/observações + 1ª unidade com as
+               specs do elevador que o Lead já capturou. */
+            setSubsel({ __prefillFromLead: lead });
+            setRoute('formulario-elevador');
           }}
-        />
-      )}
-      {showCotFromLead && (
-        <ModalNovaCotacao
-          onClose={() => { setShowCotFromLead(false); setCotacaoPrefill(null); }}
-          onSaved={() => {
-            reloadLeads();
-            window.toast('Cotação criada! Acesse Comercial → Cotações China.', 'success');
-          }}
-          prefill={cotacaoPrefill}
         />
       )}
     </div>

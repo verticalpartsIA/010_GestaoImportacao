@@ -1007,7 +1007,7 @@ function feHeaderPick(obj) {
 }
 
 /* ---------- Página / componente principal ---------- */
-function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, onControleCotacoes }) {
+function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onSaved, onVoltar, onControleCotacoes }) {
   const [loading, setLoading] = React.useState(!!formularioId);
   const [saving, setSaving] = React.useState(false);
   const [id, setId] = React.useState(formularioId || null);
@@ -1061,6 +1061,37 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       setLoading(false);
     }).catch((e) => { window.toast?.('Erro ao carregar formulário: ' + e.message, 'error'); setLoading(false); });
   }, [formularioId]);
+
+  /* Handoff vindo do Lead ("Criar Cotação China →", comercial.jsx) — só
+     preenche telefone/e-mail/observações e a 1ª unidade (quando o Lead
+     tinha Elevador marcado); nome/razão social continua exigindo o
+     cliente-picker normal, não dá pra inventar isso a partir do prédio.
+     Editável, não trava nada — mesmo espírito do autopreenchimento por
+     CEP/CNPJ já existente aqui. */
+  React.useEffect(() => {
+    if (formularioId || !prefillFromLead) return;
+    const lead = prefillFromLead;
+    setHeader((h) => ({
+      ...h,
+      telefone: lead.phone || h.telefone,
+      email: lead.email || h.email,
+      observacoes: [
+        `Originado do Lead ${lead.id} (${lead.building || ''}).`,
+        lead.contact ? `Contato: ${lead.contact}${lead.role ? ' — ' + lead.role : ''}.` : null,
+      ].filter(Boolean).join(' '),
+    }));
+    if (lead.elevSpec) {
+      setUnidades([{
+        ...feNovaUnidade('E1'),
+        quantidade: lead.elevSpec.qty || 1,
+        paradas: lead.elevSpec.paradas != null ? String(lead.elevSpec.paradas) : '',
+        capacidade_kg: lead.elevSpec.carga || '',
+        porta_largura_mm: lead.elevSpec.vao || '',
+        porta_tipo_abertura: lead.elevSpec.abertura || '',
+        acabamento_porta_cabina: lead.elevSpec.acabamento || '',
+      }]);
+    }
+  }, [formularioId, prefillFromLead]);
 
   const setH = (k) => (v) => setHeader((h) => ({ ...h, [k]: v }));
 
@@ -1171,6 +1202,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       if (!currentId) {
         const f = await window.FormularioElevadorStore.criar({
           ...feHeaderPick(header), cliente_id: cliente?.id, canal: publicMode ? 'self_service' : 'assistido',
+          lead_id: prefillFromLead?.id || null,
         });
         currentId = f.id;
         setId(currentId);
@@ -1386,9 +1418,11 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
 
 /* ---------- Wrapper interno (rota "formulario-elevador") ---------- */
 function FormularioElevadorPage({ setRoute, subsel }) {
+  const prefillFromLead = subsel && typeof subsel === 'object' ? subsel.__prefillFromLead : null;
   return (
     <FormularioElevadorForm
       formularioId={typeof subsel === 'string' ? subsel : null}
+      prefillFromLead={prefillFromLead}
       onVoltar={() => setRoute('formularios')}
       onSaved={() => {}}
       onControleCotacoes={() => setRoute('controle-cotacoes')}
