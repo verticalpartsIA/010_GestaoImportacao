@@ -17,10 +17,6 @@ function PZField({ label, children, span }) {
     </div>
   );
 }
-/* Mesmos rótulos de cotacoes-fornecedor.jsx — decisão de compra é um
-   status independente do status da própria Precificação (ver #161). */
-const PZ_STATUS_COTACAO_LABEL = { respondido: 'Recebida', em_analise: 'Em análise', aprovada: 'Aprovada' };
-
 function PZInput({ value, onChange, type = 'text', placeholder, disabled }) {
   return (
     <input className="input" type={type} value={value ?? ''}
@@ -80,7 +76,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
                 <td>{item.clienteNome || '—'}</td>
                 <td>{item.fornecedor}</td>
                 <td>{item.respondedAt ? new Date(item.respondedAt).toLocaleDateString('pt-BR') : '—'}</td>
-                <td><StatusBadge status={PZ_STATUS_COTACAO_LABEL[item.statusCotacao] || item.statusCotacao}/></td>
+                <td><StatusBadge status={window.CotacaoElevadorFornecedorStore.statusGroupLabel(item.statusCotacao)}/></td>
                 <td>{item.precificacaoStatus ? <StatusBadge status={item.precificacaoStatus === 'finalizado' ? 'Aprovada' : item.precificacaoStatus === 'calculado' ? 'Em análise' : 'Recebida'}/> : <span className="muted small">Não iniciada</span>}</td>
                 <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>

@@ -333,6 +333,18 @@
     respondido: '#059669', em_analise: '#7c3aed', aprovada: '#15803d', expirado: '#9f1239',
   };
 
+  /* Rótulo agrupado (spec 3.3.1 — "Ciclo de status"): rascunho/enviado/
+     visualizado colapsam em "Aguardando", os demais viram seu próprio
+     grupo. Fonte única — antes cotacoes-fornecedor.jsx (CF_AGUARDANDO) e
+     precificacao-elevador.jsx (PZ_STATUS_COTACAO_LABEL) mantinham cada um
+     sua própria cópia, esse último com um comentário admitindo a
+     duplicata sem resolvê-la. */
+  const STATUS_GROUP_LABEL = {
+    rascunho: 'Aguardando', enviado: 'Aguardando', visualizado: 'Aguardando',
+    respondido: 'Recebida', em_analise: 'Em análise', aprovada: 'Aprovada',
+  };
+  function statusGroupLabel(status) { return STATUS_GROUP_LABEL[status] || STATUS_LABEL[status] || status; }
+
   /* ---------- Fila da Importação: compras confirmadas no fornecedor que ainda
      não viraram embarque. O embarque (importação) nasce quando a compra ao
      fornecedor é decidida/aprovada (em_analise/aprovada) — não no sinal pago,
@@ -489,7 +501,7 @@
 
   window.CotacaoElevadorFornecedorStore = {
     cotacaoUrl, tipoFormularioPara, liftModelLabel, machineRoomLabel, controleLabel,
-    CATEGORIAS_PRODUTO, STATUS_LABEL, STATUS_COR,
+    CATEGORIAS_PRODUTO, STATUS_LABEL, STATUS_COR, STATUS_GROUP_LABEL, statusGroupLabel,
     unitSpecSecoes, unitSpecFieldLabel, assetMasterId,
     listarAnexosResposta, anexarArquivoResposta, urlAssinadaAnexoResposta, removerAnexoResposta,
     listarAnexosFormulario, urlAssinadaAnexoFormulario,

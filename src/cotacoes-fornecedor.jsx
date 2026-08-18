@@ -25,7 +25,13 @@ function fmtTimestamp(ts) {
   if (isNaN(d.getTime())) return '—';
   return d.toLocaleDateString('pt-BR');
 }
-const CF_AGUARDANDO = ['rascunho', 'enviado', 'visualizado'];
+/* Grupo "Aguardando" vem de CotacaoElevadorFornecedorStore.STATUS_GROUP_LABEL
+   (fonte única — antes esse array vivia só aqui, precificacao-elevador.jsx
+   tinha sua própria cópia do rótulo agrupado). */
+const CF_AGUARDANDO = (window.CotacaoElevadorFornecedorStore
+  ? Object.keys(window.CotacaoElevadorFornecedorStore.STATUS_GROUP_LABEL).filter(
+      (k) => window.CotacaoElevadorFornecedorStore.STATUS_GROUP_LABEL[k] === 'Aguardando')
+  : ['rascunho', 'enviado', 'visualizado']);
 const CF_TABS = [
   { key: 'todos', label: 'Todos' },
   { key: 'aguardando', label: 'Aguardando' },
