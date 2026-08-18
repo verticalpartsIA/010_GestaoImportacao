@@ -100,6 +100,14 @@ const GROUPS_LS_KEY = "vp_sidebar_collapsed_groups";
 
 function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   const filterVisible = (item) => !item.restrict || item.restrict.includes(role);
+  /* Badge de decisões pendentes — o dado já existia em DecisoesStore
+     (listarPendentesParaMim, usado por decisoes.jsx), só nunca tinha sido
+     plugado no nav. Sidebar já re-renderiza a cada navegação (recebe
+     `route`), reaproveita isso pra recalcular ao sair de /decisoes. */
+  const [pendentesDecisoes, setPendentesDecisoes] = React.useState(0);
+  React.useEffect(() => {
+    window.DecisoesStore?.listarPendentesParaMim().then((l) => setPendentesDecisoes(l.length)).catch(() => {});
+  }, [route]);
   /* Alocação de módulos (Administração › Configurações) — só filtra grupo
      quando o colaborador tem pelo menos 1 alocação; sem isso, comportamento
      de sempre (mostra tudo, igual antes desta feature existir). "Geral" é
@@ -207,7 +215,8 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
                     data-tooltip={item.label}>
                     <span className="nav-item__icon">{ItemIcon}</span>
                     <span className="nav-item__label">{item.label}</span>
-                    {item.badge ? <span className="nav-item__badge">{item.badge}</span> : null}
+                    {(item.id === 'decisoes' ? pendentesDecisoes : item.badge)
+                      ? <span className="nav-item__badge">{item.id === 'decisoes' ? pendentesDecisoes : item.badge}</span> : null}
                   </button>
                 );
               })}

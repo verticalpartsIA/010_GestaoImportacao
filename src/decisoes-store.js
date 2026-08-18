@@ -136,6 +136,30 @@
     return data || null;
   }
 
+  /* ---------- Notificação de resultado ---------- */
+  /* `alertas` não tem coluna de destinatário — todo alerta é visível pra
+     todo mundo na Central de Notificações (decisão consciente, candidato 2
+     da revisão de arquitetura de hoje: mudar isso reabriria o módulo de
+     Notificações fechado na mesma sessão). Isso ainda fecha o duto que
+     faltava: antes, aprovar/reprovar não deixava rastro nenhum fora de
+     `decisoes_gerenciais` — quem pediu tinha que clicar de novo e torcer. */
+  async function notificarResultado(c, decisao, statusFinal) {
+    const ctx = decisao.contexto || {};
+    const alvo = ctx.cliente || ctx.titulo || ctx.item || ctx.obra
+      || (decisao.numero_cotacao != null ? `Cotação Nº ${decisao.numero_cotacao}` : null);
+    const verbo = statusFinal === 'aprovada' ? 'aprovada' : 'reprovada';
+    const row = {
+      id: 'dec_' + decisao.id + '_' + Date.now(),
+      level: statusFinal === 'aprovada' ? 'info' : 'warning',
+      title: `${TIPO_LABEL[decisao.tipo] || decisao.tipo} — ${verbo}`,
+      sub: [alvo, decisao.motivo].filter(Boolean).join(' · ') || null,
+      module: 'Central de Decisões',
+      resolved: false,
+    };
+    const { error } = await c.from('alertas').insert(row);
+    if (error) console.warn('[DecisoesStore] notificarResultado falhou', error);
+  }
+
   /* ---------- Decisão ---------- */
   async function desbloquearDependentes(c, decisaoId) {
     const { data: dependentes } = await c.from('decisoes_gerenciais')
@@ -161,6 +185,7 @@
     }).eq('id', id);
     if (error) throw error;
     await desbloquearDependentes(c, id);
+    await notificarResultado(c, { ...decisao, motivo: motivo || null }, 'aprovada');
   }
 
   async function reprovar(id, motivo) {
@@ -175,6 +200,7 @@
       status: 'reprovada', decidido_por: meuEmail(), decidido_em: now, motivo: motivo.trim(), atualizado_em: now,
     }).eq('id', id);
     if (error) throw error;
+    await notificarResultado(c, { ...decisao, motivo: motivo.trim() }, 'reprovada');
   }
 
   /* ---------- Gates ---------- */
