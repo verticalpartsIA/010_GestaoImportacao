@@ -752,6 +752,7 @@ function PreviewValoresSimples({ data, eq, pg, total }) {
   const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
   const totalEq = qtd * unit;
   const totalDifal = totalEq + difal;
+  const totalParcelado = parcelas.reduce((s, p) => s + (parseFloat((p.valor || "0").toString().replace(/\./g, "").replace(",", ".")) || 0), 0);
   const fmt = (n) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (
     <div className="pe__pdf">
@@ -778,7 +779,10 @@ function PreviewValoresSimples({ data, eq, pg, total }) {
             <h3 className="pdf-h3" style={{ marginTop: 10 }}>Parcelamento</h3>
             <table className="pdf-table">
               <thead><tr><th>#</th><th>Descrição</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
-              <tbody>{parcelas.map((p, i) => <tr key={i}><td style={{ width: 18 }}>{i + 1}</td><td>{p.desc || "—"}</td><td style={{ textAlign: "right", fontFamily: "var(--font-mono)" }}>{p.valor ? "R$ " + p.valor : "—"}</td></tr>)}</tbody>
+              <tbody>
+                {parcelas.map((p, i) => <tr key={i}><td style={{ width: 18 }}>{i + 1}</td><td>{p.desc || "—"}</td><td style={{ textAlign: "right", fontFamily: "var(--font-mono)" }}>{p.valor ? "R$ " + p.valor : "—"}</td></tr>)}
+                <tr><td colSpan={2} style={{ fontWeight: 700 }}>Total Parcelado</td><td style={{ textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 700 }}>{fmt(totalParcelado)}</td></tr>
+              </tbody>
             </table>
           </>
         ) : null}

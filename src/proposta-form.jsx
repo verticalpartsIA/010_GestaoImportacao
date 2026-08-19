@@ -477,6 +477,12 @@ function S_Valores({ d, set, eq }) {
   const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
   const totalEq = qtd * unit;
   const totalDifal = totalEq + difal;
+  /* Parcelas eram digitadas aqui mas a soma delas nunca aparecia nem era
+     conferida contra o Total com DIFAL — vendedor só descobria a conta
+     errada depois, olhando o PDF (achado real, 19/08). */
+  const totalParcelado = parcelas.reduce((s, p) => s + (parseFloat((p.valor || "0").toString().replace(/\./g, "").replace(",", ".")) || 0), 0);
+  const diferencaParcelas = totalDifal - totalParcelado;
+  const parcelasBatem = parcelas.length === 0 || Math.abs(diferencaParcelas) < 0.01;
 
   const formatBR = (n) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -525,6 +531,12 @@ function S_Valores({ d, set, eq }) {
           <span>Total com DIFAL</span>
           <b>R$ {formatBR(totalDifal)}</b>
         </div>
+        {parcelas.length > 0 && (
+          <div className="pe-totais-row" style={parcelasBatem ? undefined : { color: 'var(--vp-danger, #c62828)' }}>
+            <span>Total Parcelado {parcelasBatem ? '' : `— diferença de R$ ${formatBR(Math.abs(diferencaParcelas))}`}</span>
+            <b>R$ {formatBR(totalParcelado)}</b>
+          </div>
+        )}
       </div>
     </>
   );
