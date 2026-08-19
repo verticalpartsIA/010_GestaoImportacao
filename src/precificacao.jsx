@@ -502,7 +502,7 @@ function PropostasPage({ setRoute, setSubsel }) {
   const carregar = React.useCallback(() => {
     if (!escopo) return;
     let q = window.__VP_SB.sb.from('propostas')
-      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em, revisao_texto');
+      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em, revisao_texto, clientes(razao_social, cnpj), perfis(nome, email)');
     if (!escopo.veTudo && escopo.vendedorId) q = q.eq('vendedor_id', escopo.vendedorId);
     q.order('criado_em', { ascending: false }).limit(300)
       .then(({ data }) => setRows(data || []));
@@ -553,14 +553,24 @@ function PropostasPage({ setRoute, setSubsel }) {
     return [...new Set(rows.map((r) => r.status).filter(Boolean))];
   }, [rows]);
 
+  const EQUIPAMENTO_LABEL = { elevador: 'Elevador', escada: 'Escada Rolante', esteira: 'Esteira Rolante' };
+
   const filtradas = React.useMemo(() => {
     if (!rows) return [];
     const termo = busca.trim().toLowerCase();
     return rows.filter((r) => {
       if (fStatus !== 'Todos' && r.status !== fStatus) return false;
       if (!termo) return true;
-      return [r.numero_documento, r.titulo, r.master_id]
-        .some((v) => (v || '').toLowerCase().includes(termo));
+      // Código, cliente, CNPJ, equipamento, Nº da cotação e vendedor — o
+      // vendedor é o mais pedido: puxa TODAS as propostas daquele vendedor
+      // (nome ou email) numa busca só, sem precisar de filtro separado.
+      return [
+        r.numero_documento, r.titulo, r.master_id,
+        r.clientes?.razao_social, r.clientes?.cnpj,
+        EQUIPAMENTO_LABEL[r.proposal_type] || r.proposal_type,
+        r.numero_cotacao != null ? String(r.numero_cotacao) : null,
+        r.perfis?.nome, r.perfis?.email,
+      ].some((v) => (v || '').toString().toLowerCase().includes(termo));
     });
   }, [rows, busca, fStatus]);
 
@@ -642,7 +652,7 @@ function PropostasPage({ setRoute, setSubsel }) {
         <div className="spacer"/>
         <div className="search">
           <Icon.search size={12} color="var(--fg3)"/>
-          <input placeholder="Buscar por cliente, nº ou Master ID…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
+          <input placeholder="Buscar por código, cliente, CNPJ, equipamento, cotação ou vendedor…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
         </div>
       </div>
 
@@ -651,6 +661,7 @@ function PropostasPage({ setRoute, setSubsel }) {
           <thead><tr>
             <th>Nº Documento</th>
             <th>Cliente</th>
+            <th>Vendedor</th>
             <th>Master ID</th>
             <th className="text-right">Valor</th>
             <th>Status</th>
@@ -666,7 +677,8 @@ function PropostasPage({ setRoute, setSubsel }) {
             {filtradas.map((p) => (
               <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => abrirExistente(p)}>
                 <td><span className="mono small">{p.numero_documento || '—'}</span></td>
-                <td style={{ fontSize: 12.5 }}>{p.data_json?.cliente?.nome || p.titulo || <span className="muted">—</span>}</td>
+                <td style={{ fontSize: 12.5 }}>{p.clientes?.razao_social || p.titulo || <span className="muted">—</span>}</td>
+                <td style={{ fontSize: 12.5 }}>{p.perfis?.nome || <span className="muted">—</span>}</td>
                 <td><span className="mono small">{p.master_id || <span className="muted">—</span>}</span></td>
                 <td className="cell-money">{p.valor_total ? fmtBRL(p.valor_total) : '—'}</td>
                 <td><StatusBadge status={p.status || 'rascunho'}/></td>
