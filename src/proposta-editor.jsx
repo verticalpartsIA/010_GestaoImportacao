@@ -477,6 +477,33 @@ function PropostaEditor({ setRoute, subsel }) {
   // retorno do primeiro "Salvar"/"Enviar". "Publicar" precisa dele.
   const [recordId, setRecordId] = React.useState(editId || null);
   const [publicando, setPublicando] = React.useState(false);
+
+  /* Trava por aprovação: proposta 'aprovada' sem destravada_em bloqueia
+     Salvar/Enviar/Publicar (mesma checagem que o store faz de novo antes
+     de gravar). podeDestravar só é resolvido se a proposta estiver
+     travada — não faz sentido consultar alçada em proposta nova. */
+  const [podeDestravar, setPodeDestravar] = React.useState(false);
+  const [destravando, setDestravando] = React.useState(false);
+  const travada = meta?.status === 'aprovada' && !meta?.destravada_em;
+  React.useEffect(() => {
+    if (!travada) { setPodeDestravar(false); return; }
+    let cancelado = false;
+    window.PropostaStore.temCapacidade('propostas', 'destravar_aprovada').then((v) => { if (!cancelado) setPodeDestravar(v); });
+    return () => { cancelado = true; };
+  }, [travada]);
+  const destravarAgora = async () => {
+    if (!recordId) return;
+    setDestravando(true);
+    try {
+      const r = await window.PropostaStore.destravar(recordId);
+      setMeta((m) => ({ ...(m || {}), destravada_em: r.destravada_em, destravada_por: r.destravada_por }));
+      window.toast?.('Proposta destravada — fica editável até o próximo Salvar.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao destravar: ' + (e.message || e), 'error');
+    } finally {
+      setDestravando(false);
+    }
+  };
   // Overlay fullscreen do PDF (mesmo padrão da Ficha Técnica): a leitura
   // de verdade e o "Salvar PDF"/"Imprimir" acontecem aqui, em tamanho real —
   // a coluna lateral é só um preview em miniatura.
@@ -579,7 +606,7 @@ function PropostaEditor({ setRoute, subsel }) {
     let cancelado = false;
     setLoadingExisting(true);
     window.__VP_SB.sb.from('propostas')
-      .select('proposal_type, data_json, status, numero_documento, master_id, valor_total, token, titulo, atualizado_em, publicado_em, publicado_por, version, revisao_texto, revisao_solicitada_em')
+      .select('proposal_type, data_json, status, numero_documento, master_id, valor_total, token, titulo, atualizado_em, publicado_em, publicado_por, version, revisao_texto, revisao_solicitada_em, destravada_em, destravada_por')
       .eq('id', editId).maybeSingle()
       .then(({ data: row }) => {
         if (cancelado || !row) return;
@@ -599,6 +626,7 @@ function PropostaEditor({ setRoute, subsel }) {
           token: row.token, atualizado_em: row.atualizado_em,
           publicado_em: row.publicado_em, publicado_por: row.publicado_por, version: row.version,
           revisao_texto: row.revisao_texto, revisao_solicitada_em: row.revisao_solicitada_em,
+          destravada_em: row.destravada_em, destravada_por: row.destravada_por,
         });
       })
       .finally(() => { if (!cancelado) setLoadingExisting(false); });
@@ -614,7 +642,7 @@ function PropostaEditor({ setRoute, subsel }) {
     const refetch = () => {
       if (document.visibilityState !== 'visible' || !window.__VP_SB?.sb) return;
       window.__VP_SB.sb.from('propostas')
-        .select('status, publicado_em, publicado_por, version, valor_total, atualizado_em, revisao_texto, revisao_solicitada_em')
+        .select('status, publicado_em, publicado_por, version, valor_total, atualizado_em, revisao_texto, revisao_solicitada_em, destravada_em, destravada_por')
         .eq('id', editId).maybeSingle()
         .then(({ data: row }) => {
           if (!row) return;
@@ -623,6 +651,7 @@ function PropostaEditor({ setRoute, subsel }) {
             status: row.status, publicado_em: row.publicado_em, publicado_por: row.publicado_por,
             version: row.version, valor_total: row.valor_total, atualizado_em: row.atualizado_em,
             revisao_texto: row.revisao_texto, revisao_solicitada_em: row.revisao_solicitada_em,
+            destravada_em: row.destravada_em, destravada_por: row.destravada_por,
           }));
         });
     };
@@ -812,10 +841,25 @@ function PropostaEditor({ setRoute, subsel }) {
                   <Icon.check size={11}/> Publicado {window.PropostaStore ? window.PropostaStore.fmtDateTime(meta.publicado_em) : ""} · v{meta.version || 1}
                 </span>
               ) : null}
+              {travada && (
+                <span className="pe-top__publicado" title="Cliente já aprovou. Peça destrave a quem tem essa alçada pra editar de novo.">
+                  <Icon.warning size={11}/> Travada
+                </span>
+              )}
+              {meta?.destravada_em && meta?.status === 'aprovada' && (
+                <span className="pe-top__publicado" title={"Destravada por " + (meta.destravada_por || '—')}>
+                  <Icon.check size={11}/> Destravada — edite e salve
+                </span>
+              )}
             </div>
           </div>
 
           <div className="pe-top__actions">
+            {travada && podeDestravar && (
+              <Button variant="outline" size="sm" icon="warning" disabled={destravando} onClick={destravarAgora}>
+                {destravando ? "Destravando…" : "Destravar"}
+              </Button>
+            )}
             <button className="pe-top__ghost pe-top__ghost--preview" onClick={() => setShowPreview((v) => !v)}
               title={showPreview ? "Ocultar pré-visualização" : "Mostrar pré-visualização"}>
               <Icon.eye size={14}/> {showPreview ? "Ocultar preview" : "Ver preview"}
@@ -823,20 +867,27 @@ function PropostaEditor({ setRoute, subsel }) {
             <button className="pe-top__ghost" onClick={resetProposal} title="Descartar e recomeçar">
               <Icon.copy size={14}/> Reiniciar
             </button>
-            <Button variant="outline" size="sm" icon="upload" disabled={publicando}
-              title="Congela esta versão como a oficial — é o que o cliente vai ler e assinar"
+            <Button variant="outline" size="sm" icon="upload" disabled={publicando || travada}
+              title={travada ? "Proposta travada — peça destrave" : "Congela esta versão como a oficial — é o que o cliente vai ler e assinar"}
               onClick={publicar}>
               {publicando ? "Publicando…" : (meta?.publicado_em ? "Republicar" : "Publicar")}
             </Button>
             <Button variant="outline" size="sm" icon="download" onClick={() => setPdfOverlay(true)}>Gerar PDF</Button>
-            <Button variant="secondary" size="sm" icon="check" onClick={async () => {
+            <Button variant="secondary" size="sm" icon="check" disabled={travada}
+              title={travada ? "Proposta travada — peça destrave" : undefined}
+              onClick={async () => {
               window.toast("Salvando proposta...", "info");
               const salvo = await saveToSupabase();
               setSavedAt(Date.now());
-              if (salvo && !salvo.erro) window.toast("✓ Proposta salva no sistema", "success");
+              if (salvo && !salvo.erro) {
+                window.toast("✓ Proposta salva no sistema", "success");
+                if (meta?.destravada_em) setMeta((m) => ({ ...(m || {}), destravada_em: null, destravada_por: null }));
+              }
               else window.toast("❌ Não salvou: " + ((salvo && salvo.erro) || 'erro desconhecido'), "error");
             }}>Salvar</Button>
-            <Button variant="primary" size="sm" icon="send" onClick={abrirEnvio}>Enviar p/ Cliente</Button>
+            <Button variant="primary" size="sm" icon="send" disabled={travada}
+              title={travada ? "Proposta travada — peça destrave" : undefined}
+              onClick={abrirEnvio}>Enviar p/ Cliente</Button>
           </div>
         </div>
 

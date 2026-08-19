@@ -390,33 +390,95 @@
     return _vendedorIdCache;
   }
 
-  /* Escopo de visibilidade — "quem vê proposta de quem" precisa ser
-     configurável por botão em Configurações do Sistema (aba Permissões),
-     nunca uma lista de e-mails fixa no código: gente troca de função e
-     ninguém pode ficar dependendo de uma sessão de IA pra atualizar isso.
-     Regra: Administrador (perfis.nivel) sempre vê tudo; qualquer outra
-     pessoa só vê tudo se tiver linha 'todas' em proposta_visibilidade_escopo
-     — ausência de linha = só vê as próprias (mesma convenção "sem linha =
-     padrão" já usada no Portal Admin pra module_permissions). */
-  let _escopoCache;
-  function resetEscopoVisibilidadeCache() { _escopoCache = undefined; }
-  async function resolverEscopoVisibilidade() {
-    if (_escopoCache !== undefined) return _escopoCache;
+  /* ---------- Alçadas ----------
+     Sistema genérico de permissões delegáveis (pedido do usuário, 19/08):
+     nada de lista de e-mail fixa no código nem regra que só eu consigo
+     mudar. Cada linha em alcadas_capacidade é "esta pessoa TEM esta
+     capacidade neste módulo" — ausência de linha = não tem (mesma
+     convenção "sem linha = padrão" do Portal Admin). A capacidade
+     especial modulo='admin' capacidade='conceder_alcadas' é recursiva:
+     quem tem ela pode conceder QUALQUER capacidade pra QUALQUER pessoa,
+     inclusive conceder essa mesma capacidade pra outra pessoa — é assim
+     que Diego/Gelson repassam o poder pra Bianca/Juliana/Guilherme sem
+     precisar de código novo. Administrador (perfis.nivel) sempre tem
+     todas as capacidades — não dá pra se autoexcluir por engano. */
+  let _perfilAtualCache;
+  async function resolverPerfilAtual() {
+    if (_perfilAtualCache !== undefined) return _perfilAtualCache;
     const c = sb();
     const email = (window.__VP_USER || {}).email;
-    const aberto = { vendedorId: null, veTudo: true };
-    if (!email || !c) { _escopoCache = aberto; return aberto; }
+    if (!email || !c) { _perfilAtualCache = null; return null; }
     try {
-      const { data: perfil } = await c.from('perfis').select('id, nivel').eq('email', email).maybeSingle();
-      if (!perfil) { _escopoCache = aberto; return aberto; }
-      if (perfil.nivel === 'Administrador') {
-        _escopoCache = { vendedorId: perfil.id, veTudo: true };
-        return _escopoCache;
-      }
-      const { data: escopo } = await c.from('proposta_visibilidade_escopo').select('escopo').eq('perfil_id', perfil.id).maybeSingle();
-      _escopoCache = { vendedorId: perfil.id, veTudo: escopo?.escopo === 'todas' };
-    } catch (e) { _escopoCache = aberto; }
-    return _escopoCache;
+      const { data } = await c.from('perfis').select('id, nivel, nome, email').eq('email', email).maybeSingle();
+      _perfilAtualCache = data || null;
+    } catch (e) { _perfilAtualCache = null; }
+    return _perfilAtualCache;
+  }
+
+  const _capacidadeCache = {};
+  function resetAlcadasCache() { _perfilAtualCache = undefined; Object.keys(_capacidadeCache).forEach((k) => delete _capacidadeCache[k]); }
+  async function temCapacidade(modulo, capacidade) {
+    const perfil = await resolverPerfilAtual();
+    if (!perfil) return false;
+    if (perfil.nivel === 'Administrador') return true;
+    const chave = modulo + '.' + capacidade;
+    if (_capacidadeCache[chave] !== undefined) return _capacidadeCache[chave];
+    const c = sb();
+    try {
+      const { data } = await c.from('alcadas_capacidade').select('id')
+        .eq('perfil_id', perfil.id).eq('modulo', modulo).eq('capacidade', capacidade).maybeSingle();
+      _capacidadeCache[chave] = !!data;
+    } catch (e) { _capacidadeCache[chave] = false; }
+    return _capacidadeCache[chave];
+  }
+  async function podeConcederAlcadas() { return temCapacidade('admin', 'conceder_alcadas'); }
+
+  /* Escopo de visibilidade de Propostas — agora é só mais uma capacidade
+     (modulo='propostas', capacidade='ver_todas') dentro do sistema geral
+     de alçadas acima. Nome da função mantido (chamado por precificacao.jsx). */
+  function resetEscopoVisibilidadeCache() { resetAlcadasCache(); }
+  async function resolverEscopoVisibilidade() {
+    const perfil = await resolverPerfilAtual();
+    if (!perfil) return { vendedorId: null, veTudo: true };
+    const veTudo = await temCapacidade('propostas', 'ver_todas');
+    return { vendedorId: perfil.id, veTudo };
+  }
+
+  /* Painel de administração (Configurações do Sistema › Alçadas) — lista
+     todo mundo com o que já tem concedido, pra montar a grade de toggles. */
+  async function listarAlcadas() {
+    const c = sb(); if (!c) return { perfis: [], concedidas: [] };
+    const [{ data: perfis }, { data: concedidas }] = await Promise.all([
+      c.from('perfis').select('id, nome, email, nivel, departamento, ativo').eq('ativo', true).order('nome'),
+      c.from('alcadas_capacidade').select('perfil_id, modulo, capacidade'),
+    ]);
+    return { perfis: perfis || [], concedidas: concedidas || [] };
+  }
+  async function concederAlcada(perfilId, modulo, capacidade, conceder) {
+    const c = sb(); if (!c) return;
+    if (conceder) {
+      const por = (window.__VP_USER || {}).email || null;
+      await c.from('alcadas_capacidade').upsert(
+        { perfil_id: perfilId, modulo, capacidade, concedido_por: por, concedido_em: new Date().toISOString() },
+        { onConflict: 'perfil_id,modulo,capacidade' },
+      );
+    } else {
+      await c.from('alcadas_capacidade').delete().eq('perfil_id', perfilId).eq('modulo', modulo).eq('capacidade', capacidade);
+    }
+    resetAlcadasCache();
+  }
+
+  /* ---------- Trava por aprovação ----------
+     Cliente aprovou = editor trava pro vendedor. Quem tem a capacidade
+     'destravar_aprovada' pode reabrir — fica editável até o próximo
+     Salvar, que retrava sozinho (não fica aberto pra sempre). */
+  async function destravar(id) {
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const por = (window.__VP_USER || {}).email || null;
+    const now = new Date().toISOString();
+    const { error } = await c.from('propostas').update({ destravada_em: now, destravada_por: por }).eq('id', id);
+    if (error) throw error;
+    return { destravada_em: now, destravada_por: por };
   }
 
   /* data/eq: o shape completo do editor (cliente/obra/elevador|escada|
@@ -433,6 +495,18 @@
     const vpUser = window.__VP_USER || {};
     const chave = (data.numero || '').trim() || null; // → numero_documento (texto)
     try {
+      /* Trava por aprovação: editar uma proposta aprovada exige destrave
+         prévio (capacidade 'destravar_aprovada'). Checagem aqui, não só na
+         UI — quem chama salvar() direto não deveria conseguir passar por
+         cima do botão desabilitado. Ao salvar, retrava sozinho na hora. */
+      let destravadaAgora = false;
+      if (editId) {
+        const { data: atual } = await c.from('propostas').select('status, destravada_em').eq('id', editId).maybeSingle();
+        if (atual && atual.status === 'aprovada' && !atual.destravada_em) {
+          return { erro: 'Proposta aprovada está travada para edição. Peça destrave a quem tem essa alçada.' };
+        }
+        if (atual && atual.destravada_em) destravadaAgora = true;
+      }
       const payload = {
         numero_documento: chave,
         proposal_type: eq,
@@ -443,6 +517,7 @@
         valor_total: valorTotal,
         numero_cotacao: window.MasterIdEngine.parseNumeroCotacao(data.numeroCotacao),
         atualizado_em: new Date().toISOString(),
+        ...(destravadaAgora ? { destravada_em: null, destravada_por: null } : {}),
       };
 
       /* vendedor_id é NOT NULL — só mandamos quando resolve, pra um update
@@ -491,5 +566,7 @@
     markSent, markViewed, markSigned, refuse, solicitarRevisao,
     salvar,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
+    resolverPerfilAtual, temCapacidade, podeConcederAlcadas, resetAlcadasCache,
+    listarAlcadas, concederAlcada, destravar,
   };
 }());
