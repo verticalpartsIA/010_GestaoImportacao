@@ -1429,7 +1429,16 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
                     const r = await window.PropostaHeranca.prefillPorNumeroCotacao(numeroCotacao);
                     if (r.encontrado) {
                       const numero = window.MasterIdEngine.baseId('elevador', numeroCotacao);
-                      const salvo = await window.PropostaStore.salvar({ data: { ...r.prefill, numero }, eq: 'elevador', editId: null, valorTotal: 0 });
+                      /* r.prefill é só o pedaço colhido do Formulário/Cotação/
+                         Precificação — precisa entrar por cima da "forma
+                         completa" de uma proposta (acabamentos, condições,
+                         garantia, textos padrão...), senão salva faltando
+                         chave e a tela de preview quebra ao reabrir (achado
+                         ao vivo, 19/08 — proposta 921 crashava com "Cannot
+                         read properties of undefined (reading 'modeloCabine')").
+                         Mesma mistura que herdar() já faz no editor. */
+                      const dadosCompletos = deepMergeHeranca(makeDefaultProposta(), { ...r.prefill, numero });
+                      const salvo = await window.PropostaStore.salvar({ data: dadosCompletos, eq: 'elevador', editId: null, valorTotal: 0 });
                       if (salvo?.erro) window.toast?.('Enviado, mas não consegui criar a Proposta agora: ' + salvo.erro, 'warning');
                       else window.toast?.('Proposta criada, aguardando preço.', 'success');
                     } else {
