@@ -122,6 +122,7 @@
         { chave: 'ver_todas', label: 'Vê propostas de outros vendedores' },
         { chave: 'precificar_manual', label: 'Precifica manualmente' },
         { chave: 'destravar_aprovada', label: 'Destrava proposta aprovada' },
+        { chave: 'excluir', label: 'Exclui propostas' },
       ]},
       { modulo: 'controle-cotacoes', label: 'Controle de Cotações' },
     ]},

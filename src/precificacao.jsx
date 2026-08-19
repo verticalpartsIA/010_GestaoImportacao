@@ -488,11 +488,14 @@ function PropostasPage({ setRoute, setSubsel }) {
   const [fStatus, setFStatus] = React.useState('Todos');
   const [prontas, setProntas] = React.useState([]);
   const [escopo, setEscopo] = React.useState(null);
+  const [podeExcluir, setPodeExcluir] = React.useState(false);
+  const [excluindoId, setExcluindoId] = React.useState(null);
 
   // Escopo de visibilidade (Configurações do Sistema › Permissões) — resolve
   // antes de carregar, pra montar a query já filtrada por vendedor_id em vez
   // de buscar tudo e esconder na tela (dado sensível não deve nem sair do banco).
   React.useEffect(() => { window.PropostaStore.resolverEscopoVisibilidade().then(setEscopo); }, []);
+  React.useEffect(() => { window.PropostaStore.temCapacidade('propostas', 'excluir').then(setPodeExcluir); }, []);
 
   /* Não traz data_json aqui — é só pra abrir UMA proposta específica no
      editor, não pra listar. Nas 307 migradas do site antigo (18/08) esse
@@ -590,6 +593,21 @@ function PropostasPage({ setRoute, setSubsel }) {
   const abrirNova = () => { setSubsel && setSubsel(null); setRoute("proposta-editor"); };
   const abrirExistente = (p) => { setSubsel && setSubsel({ __editId: p.id }); setRoute("proposta-editor"); };
 
+  const excluirProposta = async (p, e) => {
+    e.stopPropagation();
+    if (!window.confirm(`Excluir a proposta ${p.numero_documento || p.titulo}? Isso apaga de vez, sem volta.`)) return;
+    setExcluindoId(p.id);
+    try {
+      await window.PropostaStore.excluir(p.id);
+      window.toast?.('Proposta excluída.', 'success');
+      setRows((prev) => (prev || []).filter((r) => r.id !== p.id));
+    } catch (err) {
+      window.toast?.('Erro ao excluir: ' + (err.message || err), 'error');
+    } finally {
+      setExcluindoId(null);
+    }
+  };
+
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -666,6 +684,7 @@ function PropostasPage({ setRoute, setSubsel }) {
             <th className="text-right">Valor</th>
             <th>Status</th>
             <th>Data</th>
+            {podeExcluir && <th></th>}
           </tr></thead>
           <tbody>
             {rows === null && (
@@ -683,6 +702,12 @@ function PropostasPage({ setRoute, setSubsel }) {
                 <td className="cell-money">{p.valor_total ? fmtBRL(p.valor_total) : '—'}</td>
                 <td><StatusBadge status={p.status || 'rascunho'}/></td>
                 <td><span className="mono small" style={{ whiteSpace: 'nowrap' }}>{p.criado_em ? new Date(p.criado_em).toLocaleDateString('pt-BR') : '—'}</span></td>
+                {podeExcluir && (
+                  <td>
+                    <Button variant="ghost" size="sm" icon="trash" disabled={excluindoId === p.id}
+                      title="Excluir proposta" onClick={(e) => excluirProposta(p, e)}/>
+                  </td>
+                )}
               </tr>
             ))}
           </tbody>

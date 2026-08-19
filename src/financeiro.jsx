@@ -1109,6 +1109,7 @@ const ALCADAS_PROPOSTAS = [
   { modulo: 'propostas', capacidade: 'ver_todas', label: 'Vê todas as propostas', hint: 'Sem isso, só vê as próprias.' },
   { modulo: 'propostas', capacidade: 'precificar_manual', label: 'Precifica manualmente', hint: 'Preço combinado por fora (CEO/Financeiro), sem depender de Cotação + Precificação formal.' },
   { modulo: 'propostas', capacidade: 'destravar_aprovada', label: 'Destrava proposta aprovada', hint: 'Reabre pra edição uma proposta já aprovada pelo cliente.' },
+  { modulo: 'propostas', capacidade: 'excluir', label: 'Exclui propostas', hint: 'Apaga a proposta de vez — sem volta.' },
   { modulo: 'admin', capacidade: 'conceder_alcadas', label: 'Concede alçadas', hint: 'Pode dar (ou tirar) qualquer uma destas capacidades pra qualquer pessoa.' },
 ];
 

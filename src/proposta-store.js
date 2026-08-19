@@ -481,6 +481,20 @@
     return { destravada_em: now, destravada_por: por };
   }
 
+  /* Excluir — pedido do usuário 19/08, fase de muito teste no ar: precisa
+     de um jeito rápido de limpar propostas de teste. Gate pela mesma
+     alçada 'excluir' (módulo 'propostas'), não hardcoded — quem não tem
+     não passa daqui, mesmo chamando a função direto. Hard delete mesmo
+     (não é soft-delete) — é exatamente o que a fase de teste pede. */
+  async function excluir(id) {
+    const pode = await temCapacidade('propostas', 'excluir');
+    if (!pode) throw new Error('Você não tem a alçada "Excluir" em Propostas.');
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const { error } = await c.from('propostas').delete().eq('id', id);
+    if (error) throw error;
+    return true;
+  }
+
   /* data/eq: o shape completo do editor (cliente/obra/elevador|escada|
      esteira/...). valorTotal: calculado pelo editor (calcularValorTotal),
      que já entende o shape por equipamento — o store não precisa saber
@@ -567,6 +581,6 @@
     salvar,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
     resolverPerfilAtual, temCapacidade, podeConcederAlcadas, resetAlcadasCache,
-    listarAlcadas, concederAlcada, destravar,
+    listarAlcadas, concederAlcada, destravar, excluir,
   };
 }());
