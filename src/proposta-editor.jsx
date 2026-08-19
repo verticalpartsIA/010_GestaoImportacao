@@ -741,8 +741,8 @@ function PropostaEditor({ setRoute, subsel }) {
         ? Promise.resolve()
         : new Promise((res) => { img.onload = res; img.onerror = res; setTimeout(res, 5000); })));
       const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
       const pw = 210, ph = 297;
+      let pdf = null;
       for (let i = 0; i < paginas.length; i++) {
         const el = paginas[i];
         el.scrollIntoView({ behavior: 'instant', block: 'start' });
@@ -752,8 +752,20 @@ function PropostaEditor({ setRoute, subsel }) {
           logging: false, width: el.offsetWidth, height: el.offsetHeight,
         });
         const img = canvas.toDataURL('image/jpeg', 0.98);
-        if (i > 0) pdf.addPage();
-        pdf.addImage(img, 'JPEG', 0, 0, pw, ph);
+        /* .pe__pdf usa min-height (não height fixo) de propósito — seções
+           longas (termos, muitas parcelas/especificações) crescem em vez
+           de cortar conteúdo. Isso significa que a altura real capturada
+           pode passar de 297mm. Forçar addImage(0,0,210,297) sempre
+           esmagava essas páginas verticalmente — "PDF deformando" (achado
+           real, 19/08). Página nasce do tamanho real da captura (nunca
+           menor que A4), sem distorcer nada. */
+        const alturaReal = Math.max(ph, pw * (canvas.height / canvas.width));
+        if (!pdf) {
+          pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pw, alturaReal] });
+        } else {
+          pdf.addPage([pw, alturaReal], 'portrait');
+        }
+        pdf.addImage(img, 'JPEG', 0, 0, pw, alturaReal);
       }
       pdf.save(`Proposta-${safeName}.pdf`);
     } catch (e) {
