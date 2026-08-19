@@ -20,6 +20,7 @@ const NAV_GROUPS = [
     { id: "cadastro-clientes", label: "Clientes", icon: "users" },
     { id: "cadastro-fornecedores", label: "Fornecedores", icon: "truck" },
     { id: "ncm-catalogo", label: "Produtos", icon: "fileSearch" },
+    { id: "rh-homologacao", label: "Instaladores", icon: "hardhat" },
   ]},
   { label: "Comercial", items: [
     { id: "leads", label: "Leads", icon: "flag" },
@@ -65,9 +66,6 @@ const NAV_GROUPS = [
     { id: "cronograma", label: "Cronograma", icon: "clock" },
     { id: "databook", label: "Data Book & Termo", icon: "fileSearch" },
     { id: "handover", label: "Entrega Final", icon: "package" },
-  ]},
-  { label: "Recursos Humanos", items: [
-    { id: "rh-homologacao", label: "Homologação de Parceiros Instaladores", icon: "users", restrict: ["admin"] },
   ]},
   /* Submódulos ainda sem rota própria — apenas anunciam o que vai morar aqui,
      sem simular navegação que não existe (ver item.planned no render). */
@@ -301,7 +299,7 @@ const BREADCRUMB_MAP = {
   financeiro:    { module: "Financeiro", page: "Gatilhos & Prazo", icon: "dollar" },
   "aval-financeiro": { module: "Financeiro", page: "Aval Financeiro", icon: "shield" },
   comissoes:     { module: "Financeiro", page: "Comissões", icon: "award" },
-  "rh-homologacao": { module: "Recursos Humanos", page: "Homologação de Parceiros", icon: "users" },
+  "rh-homologacao": { module: "Cadastros", page: "Instaladores", icon: "hardhat" },
   logs: { module: "Admin", page: "Logs de Atividade", icon: "history" },
   configuracoes: { module: "Admin", page: "Configurações", icon: "settings" },
 };
@@ -311,6 +309,7 @@ const BREADCRUMB_MAP = {
 const MODULE_HOME = {
   "Dashboard": "dashboard",
   "Notificações": "notificacoes",
+  "Cadastros": "cadastro-clientes",
   "Comercial": "leads",
   "Operações": "status-obras",
   "Jurídico": "juridico",
@@ -318,7 +317,6 @@ const MODULE_HOME = {
   "Logística": "importacao",
   "Instalação & Entrega": "vistorias",
   "Financeiro": "financeiro",
-  "Recursos Humanos": "rh-homologacao",
   "Admin": "logs",
 };
 

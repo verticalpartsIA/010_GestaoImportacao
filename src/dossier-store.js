@@ -51,6 +51,38 @@ window.__DOSSIER = window.__DOSSIER || (() => {
       return { id, ...data?.[0] };
     },
 
+    /* ---- Criar Dossier a partir de uma Proposta aprovada ----
+       Pedido do usuário 19/08: mesma lógica de "Formulário gera Proposta
+       sozinho" — agora "Proposta ganha gera Obra sozinha". Chamado por
+       PropostaStore.markSigned() assim que o cliente assina. Idempotente
+       por numero_cotacao — reabrir/reassinar não duplica o Dossiê. */
+    async criarDeProposta(proposta) {
+      if (!proposta || proposta.numero_cotacao == null) return null;
+      const { data: existente } = await sb.from('dossier_obra')
+        .select('id').eq('numero_cotacao', proposta.numero_cotacao).maybeSingle();
+      if (existente) return existente;
+
+      const dj = proposta.data_json || {};
+      const cliente = dj.cliente || {};
+      const obra = dj.obra || {};
+      const id = 'DOS-' + Date.now().toString().slice(-6);
+
+      const { error } = await sb.from('dossier_obra').insert({
+        id,
+        client_name: cliente.nome || proposta.titulo || 'Cliente',
+        building_name: obra.nome || proposta.titulo || '—',
+        city: obra.cidade || null,
+        state: obra.uf || null,
+        equip_type: proposta.proposal_type || null,
+        numero_cotacao: proposta.numero_cotacao,
+        status_master: 'Contrato assinado',
+        created_by: window.__VP_USER?.email || 'system',
+      });
+      if (error) throw error;
+      await this.registrarHistorico(id, 'Proposta enviada', 'Contrato assinado', 'Proposta aprovada e assinada pelo cliente — Dossiê da Obra criado automaticamente');
+      return { id };
+    },
+
     /* ---- Buscar Dossier com todas as relações ---- */
     async obter(dossierId) {
       const { data: dossier, error: errDossier } = await sb
@@ -262,6 +294,45 @@ window.__DOSSIER = window.__DOSSIER || (() => {
 
       if (error) throw error;
       return data || [];
-    }
+    },
+
+    /* ---- Equipamentos da obra ----
+       Pedido do usuário 19/08: campos da planilha manual de Instalações
+       (Mauricio) que não existiam estruturados em lugar nenhum — nº de
+       série, ART, alvará (instalação/funcionamento) com datas reais de
+       início/término, prazo de instalação, previsão × real, chegada de
+       material. Um equipamento por linha (obra pode ter mais de um
+       elevador/escada). parceiro_instalador_id aponta pro cadastro único
+       em Cadastros › Instaladores (parceiros_instaladores) — nunca texto
+       livre, pra não repetir a fragmentação que já existia em Vistorias/
+       Cronograma/Contrato Instalador. */
+    async listarEquipamentos(dossierId) {
+      const { data, error } = await sb.from('equipamentos_obra')
+        .select('*, parceiros_instaladores(id, nome)')
+        .eq('dossier_id', dossierId).order('criado_em', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+
+    async criarEquipamento(dossierId, campos) {
+      const id = 'EQO-' + Date.now().toString().slice(-6);
+      const { error } = await sb.from('equipamentos_obra').insert({
+        id, dossier_id: dossierId, ...campos,
+        criado_por: window.__VP_USER?.email || 'system',
+      });
+      if (error) throw error;
+      return id;
+    },
+
+    async atualizarEquipamento(id, patch) {
+      const { error } = await sb.from('equipamentos_obra')
+        .update({ ...patch, atualizado_em: new Date().toISOString() }).eq('id', id);
+      if (error) throw error;
+    },
+
+    async excluirEquipamento(id) {
+      const { error } = await sb.from('equipamentos_obra').delete().eq('id', id);
+      if (error) throw error;
+    },
   };
 })();

@@ -22,7 +22,7 @@
   const GRUPOS_MODULO = [
     'Geral', 'Comercial', 'ADM/ Financeiro', 'Cadastros',
     'Jurídico | Importação | Suprimentos', 'Engenharia',
-    'Recursos Humanos', 'Logística', 'Portal Admin',
+    'Logística', 'Portal Admin',
   ];
 
   async function listarColaboradores() {
@@ -114,6 +114,7 @@
       { modulo: 'cadastro-clientes', label: 'Clientes' },
       { modulo: 'cadastro-fornecedores', label: 'Fornecedores' },
       { modulo: 'ncm-catalogo', label: 'Produtos' },
+      { modulo: 'rh-homologacao', label: 'Instaladores' },
     ]},
     { grupo: 'Comercial', itens: [
       { modulo: 'leads', label: 'Leads' },
@@ -159,9 +160,6 @@
       { modulo: 'cronograma', label: 'Cronograma' },
       { modulo: 'databook', label: 'Data Book & Termo' },
       { modulo: 'handover', label: 'Entrega Final' },
-    ]},
-    { grupo: 'Recursos Humanos', itens: [
-      { modulo: 'rh-homologacao', label: 'Homologação de Parceiros Instaladores' },
     ]},
     { grupo: 'Logística', itens: [
       { modulo: 'almoxarifado', label: 'Almoxarifado' },

@@ -296,6 +296,12 @@
         proposta: updated.titulo || updated.numero_documento,
       }).catch((e) => console.warn('[PropostaStore] podeComprarEquipamento falhou', e));
     }
+    /* Proposta ganha → Dossiê da Obra nasce sozinho (pedido do usuário
+       19/08, mesmo padrão de Formulário→Proposta). Best-effort — nunca
+       trava a assinatura por isso. */
+    if (window.__DOSSIER && updated.numero_cotacao != null) {
+      window.__DOSSIER.criarDeProposta(updated).catch((e) => console.warn('[PropostaStore] criarDeProposta (Dossiê) falhou', e));
+    }
     /* Cliente assinou = a venda aconteceu — é o único gatilho de conversão
        do Lead em Cliente (decisão 21/08: visita, workshop, cotação, proposta
        enviada... nada disso converte, só mantém o Lead em qualificação).

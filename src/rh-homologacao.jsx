@@ -59,9 +59,9 @@ function RHHomologacaoPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Recursos Humanos</div>
-          <h1 className="page-head__title">Homologação de Parceiros Instaladores</h1>
-          <p className="page-head__sub">Validação de certificações de segurança: NR-10, NR-35, ASO, PCMSO, PGR.</p>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Cadastros · Instaladores</div>
+          <h1 className="page-head__title">Instaladores</h1>
+          <p className="page-head__sub">Cadastro único de parceiros instaladores — o código gerado aqui (ex.: MNT-000123) é o mesmo referenciado em Contratos, RH e Obras. Inclui validação de certificações de segurança: NR-10, NR-35, ASO, PCMSO, PGR.</p>
         </div>
         <div className="page-head__r">
           <Button variant="primary" icon="plus" onClick={() => setShowNovo(true)}>Novo parceiro</Button>

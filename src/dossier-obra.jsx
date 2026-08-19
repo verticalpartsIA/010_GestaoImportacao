@@ -204,6 +204,7 @@ function DossierObraPage({ dossierId, setRoute }) {
           { id: 'visao-geral', label: '📊 Visão Geral' },
           { id: 'documentos', label: '📄 Documentos' },
           { id: 'instalacao', label: '🛠️ Instalação' },
+          { id: 'equipamentos', label: '🏢 Equipamentos' },
           { id: 'cronograma-instalacao', label: '🏗️ Cronograma de Instalação' },
           { id: 'pendencias', label: '⚠️ Pendências' },
           { id: 'responsaveis', label: '👥 Responsáveis' },
@@ -233,6 +234,7 @@ function DossierObraPage({ dossierId, setRoute }) {
         {activeTab === 'visao-geral' && <TabVisaoGeral dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'documentos' && <TabDocumentos dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'instalacao' && <TabInstalacao dossier={dossier} reload={carregarDossier} />}
+        {activeTab === 'equipamentos' && <TabEquipamentos dossier={dossier} />}
         {activeTab === 'cronograma-instalacao' && <TabCronogramaInstalacao dossier={dossier} />}
         {activeTab === 'pendencias' && <TabPendencias dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'responsaveis' && <TabResponsaveis dossier={dossier} setModalOpen={setModalOpen} />}
@@ -552,6 +554,183 @@ function TabDocumentos({ dossier, reload }) {
 }
 
 /* ---------- Instalação (issue #9, Fase 1): checklist de obra pronta + vistorias ---------- */
+/* ---- Equipamentos da Obra ----
+   Pedido do usuário 19/08, a partir da planilha manual de Instalações do
+   Mauricio: nº de série, ART, alvará (instalação/funcionamento) com datas
+   reais, prazo, previsão × real, chegada de material — nada disso
+   existia estruturado em lugar nenhum antes. parceiro_instalador_id
+   sempre aponta pro cadastro único (Cadastros › Instaladores), nunca
+   texto livre. */
+const EO_STATUS_DOC = [
+  { value: 'pendente', label: 'Pendente' },
+  { value: 'solicitada', label: 'Solicitada' },
+  { value: 'em_processo', label: 'Em processo' },
+  { value: 'assinada', label: 'Assinada' },
+  { value: 'emitido', label: 'Emitido' },
+  { value: 'vencida', label: 'Vencida' },
+  { value: 'vencido', label: 'Vencido' },
+  { value: 'nao_precisa', label: 'Não precisa' },
+];
+
+function EOField({ label, children }) {
+  return (
+    <div className="stack" style={{ gap: 4 }}>
+      <label className="up-eyebrow muted" style={{ fontSize: 10 }}>{label}</label>
+      {children}
+    </div>
+  );
+}
+
+function EquipamentoCard({ equip, parceiros, onSalvar, onExcluir }) {
+  const [aberto, setAberto] = React.useState(false);
+  const [f, setF] = React.useState(equip);
+  const [salvando, setSalvando] = React.useState(false);
+  const set = (k) => (e) => setF((p) => ({ ...p, [k]: e?.target ? e.target.value : e }));
+
+  const salvar = async () => {
+    setSalvando(true);
+    try { await onSalvar(equip.id, f); window.toast?.('Equipamento salvo.', 'success'); }
+    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setSalvando(false); }
+  };
+
+  return (
+    <div style={{ border: '1px solid var(--border)', borderRadius: 6, marginBottom: 8, background: '#fff' }}>
+      <div className="row sb" style={{ padding: '10px 14px', cursor: 'pointer' }} onClick={() => setAberto((v) => !v)}>
+        <div className="row gap-3" style={{ alignItems: 'center' }}>
+          <Icon.chevRight size={12} style={{ transform: aberto ? 'rotate(90deg)' : 'none' }}/>
+          <b style={{ fontSize: 13 }}>{equip.numero_serie || 'Sem nº de série'}</b>
+          <span className="small muted">{equip.tipo || '—'}</span>
+        </div>
+        <Button variant="ghost" size="sm" icon="trash" onClick={(e) => { e.stopPropagation(); onExcluir(equip.id); }}/>
+      </div>
+      {aberto && (
+        <div style={{ padding: '4px 14px 16px' }}>
+          <div className="grid-3" style={{ gap: 10, marginBottom: 12 }}>
+            <EOField label="Nº de série"><input className="input" value={f.numero_serie || ''} onChange={set('numero_serie')}/></EOField>
+            <EOField label="Tipo"><input className="input" value={f.tipo || ''} onChange={set('tipo')} placeholder="Elevador, Escada..."/></EOField>
+            <EOField label="Descrição"><input className="input" value={f.descricao || ''} onChange={set('descricao')}/></EOField>
+          </div>
+          <div className="grid-2" style={{ gap: 10, marginBottom: 12 }}>
+            <EOField label="Empresa de montagem (Cadastros › Instaladores)">
+              <select className="input" value={f.parceiro_instalador_id || ''} onChange={set('parceiro_instalador_id')}>
+                <option value="">— nenhuma —</option>
+                {parceiros.map((p) => <option key={p.id} value={p.id}>{p.nome} ({p.id})</option>)}
+              </select>
+            </EOField>
+            <EOField label="Vistoriador"><input className="input" value={f.vistoriador || ''} onChange={set('vistoriador')}/></EOField>
+          </div>
+
+          <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>ART</div>
+          <div className="grid-3" style={{ gap: 10, marginBottom: 12 }}>
+            <EOField label="Status">
+              <select className="input" value={f.art_status || 'pendente'} onChange={set('art_status')}>
+                {EO_STATUS_DOC.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </EOField>
+            <EOField label="Início do processo"><input className="input" type="date" value={f.art_data_inicio || ''} onChange={set('art_data_inicio')}/></EOField>
+            <EOField label="Término"><input className="input" type="date" value={f.art_data_termino || ''} onChange={set('art_data_termino')}/></EOField>
+          </div>
+
+          <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Alvará de Instalação</div>
+          <div className="grid-3" style={{ gap: 10, marginBottom: 12 }}>
+            <EOField label="Status">
+              <select className="input" value={f.alvara_instalacao_status || 'pendente'} onChange={set('alvara_instalacao_status')}>
+                {EO_STATUS_DOC.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </EOField>
+            <EOField label="Início do processo"><input className="input" type="date" value={f.alvara_instalacao_inicio || ''} onChange={set('alvara_instalacao_inicio')}/></EOField>
+            <EOField label="Término"><input className="input" type="date" value={f.alvara_instalacao_termino || ''} onChange={set('alvara_instalacao_termino')}/></EOField>
+          </div>
+
+          <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Alvará de Funcionamento</div>
+          <div className="grid-3" style={{ gap: 10, marginBottom: 12 }}>
+            <EOField label="Status">
+              <select className="input" value={f.alvara_funcionamento_status || 'pendente'} onChange={set('alvara_funcionamento_status')}>
+                {EO_STATUS_DOC.map((s) => <option key={s.value} value={s.value}>{s.label}</option>)}
+              </select>
+            </EOField>
+            <EOField label="Início do processo"><input className="input" type="date" value={f.alvara_funcionamento_inicio || ''} onChange={set('alvara_funcionamento_inicio')}/></EOField>
+            <EOField label="Término"><input className="input" type="date" value={f.alvara_funcionamento_termino || ''} onChange={set('alvara_funcionamento_termino')}/></EOField>
+          </div>
+
+          <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Prazo de instalação</div>
+          <div className="grid-3" style={{ gap: 10, marginBottom: 12 }}>
+            <EOField label="Prazo (dias)"><input className="input" type="number" value={f.prazo_instalacao_dias || ''} onChange={set('prazo_instalacao_dias')}/></EOField>
+            <EOField label="Previsão início"><input className="input" type="date" value={f.previsao_inicio || ''} onChange={set('previsao_inicio')}/></EOField>
+            <EOField label="Previsão término"><input className="input" type="date" value={f.previsao_termino || ''} onChange={set('previsao_termino')}/></EOField>
+            <EOField label="Início real"><input className="input" type="date" value={f.data_real_inicio || ''} onChange={set('data_real_inicio')}/></EOField>
+            <EOField label="Término real"><input className="input" type="date" value={f.data_real_termino || ''} onChange={set('data_real_termino')}/></EOField>
+          </div>
+
+          <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Material</div>
+          <div className="grid-2" style={{ gap: 10, marginBottom: 12 }}>
+            <EOField label="Previsão de chegada"><input className="input" type="date" value={f.previsao_chegada_material || ''} onChange={set('previsao_chegada_material')}/></EOField>
+            <EOField label="Chegada real"><input className="input" type="date" value={f.chegada_real_material || ''} onChange={set('chegada_real_material')}/></EOField>
+          </div>
+
+          <EOField label="Observações"><textarea className="input" rows={2} value={f.observacoes || ''} onChange={set('observacoes')} style={{ resize: 'vertical' }}/></EOField>
+
+          <div style={{ marginTop: 12, textAlign: 'right' }}>
+            <Button variant="primary" size="sm" icon="check" disabled={salvando} onClick={salvar}>{salvando ? 'Salvando…' : 'Salvar'}</Button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function TabEquipamentos({ dossier }) {
+  const [equipamentos, setEquipamentos] = React.useState(null);
+  const [parceiros, setParceiros] = React.useState([]);
+
+  const carregar = React.useCallback(() => {
+    window.__DOSSIER.listarEquipamentos(dossier.id).then(setEquipamentos).catch((e) => { window.toast?.('Erro: ' + e.message, 'error'); setEquipamentos([]); });
+  }, [dossier.id]);
+  React.useEffect(() => { carregar(); }, [carregar]);
+  React.useEffect(() => {
+    if (window.RHHomologacao) window.RHHomologacao.listarMontadores().then(setParceiros).catch(() => setParceiros([]));
+  }, []);
+
+  const adicionar = async () => {
+    try {
+      await window.__DOSSIER.criarEquipamento(dossier.id, { tipo: dossier.equip_type || '' });
+      carregar();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+  };
+
+  const salvar = async (id, campos) => {
+    const { parceiros_instaladores, id: _id, dossier_id, criado_em, criado_por, atualizado_em, ...patch } = campos;
+    await window.__DOSSIER.atualizarEquipamento(id, patch);
+    carregar();
+  };
+
+  const excluir = async (id) => {
+    if (!window.confirm('Excluir este equipamento da obra?')) return;
+    try { await window.__DOSSIER.excluirEquipamento(id); carregar(); }
+    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+  };
+
+  if (equipamentos === null) return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
+
+  return (
+    <div>
+      <p className="small muted" style={{ marginTop: 0 }}>
+        Um equipamento por linha — nº de série, ART, alvarás e prazos ficam aqui, cada um com seu próprio acompanhamento.
+      </p>
+      {equipamentos.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--fg3)', fontSize: 13, border: '1px dashed var(--border)', borderRadius: 6, marginBottom: 12 }}>
+          Nenhum equipamento cadastrado nesta obra ainda.
+        </div>
+      )}
+      {equipamentos.map((eq) => (
+        <EquipamentoCard key={eq.id} equip={eq} parceiros={parceiros} onSalvar={salvar} onExcluir={excluir}/>
+      ))}
+      <Button variant="outline" size="sm" icon="plus" onClick={adicionar}>+ Adicionar equipamento</Button>
+    </div>
+  );
+}
+
 function TabInstalacao({ dossier, reload }) {
   const [checklist, setChecklist] = React.useState(null);
   const [parceiros, setParceiros] = React.useState([]);
