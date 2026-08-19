@@ -16,11 +16,65 @@ function CcStatusChip({ status }) {
   return <span className="la-setor" style={{ background: cor }}>{status}</span>;
 }
 
-function ControleCotacoesPage({ setRoute }) {
+/* Reabre a cadeia de tratativas (Formulário → Cotação a Fornecedor →
+   Precificação → Proposta) de uma cotação viva do Formulário digital, num
+   modal — reaproveita CadeiaGatilhosCotacao (financeiro.jsx), o mesmo
+   componente da tela "Gatilhos & Prazo", em vez de duplicar a árvore/
+   navegação aqui. Linhas de origem "historico" (planilha legada) não têm
+   cadeia por trás — não abrem nada, pedido explícito do usuário. */
+function ModalCadeiaCotacao({ numeroCotacao, setRoute, setSubsel, onClose }) {
+  const [nos, setNos] = React.useState(null);
+  const [confirmarSinalDe, setConfirmarSinalDe] = React.useState(null);
+  const [confirmarAvalDe, setConfirmarAvalDe] = React.useState(null);
+
+  const carregar = React.useCallback(async () => {
+    const { data } = await window.__VP_SB.sb.from('gatilhos').select('*')
+      .eq('numero_cotacao', numeroCotacao).eq('origem', 'automatico').order('nascido_em');
+    setNos(data || []);
+  }, [numeroCotacao]);
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const abrirGatilho = async (g) => {
+    if (!window.GatilhosEngine) return;
+    const alvo = await window.GatilhosEngine.navegarPara(g);
+    if (!alvo) return;
+    if (alvo.subsel !== null) setSubsel?.(alvo.subsel);
+    setRoute?.(alvo.rota);
+    onClose();
+  };
+
+  const fecharLembrete = async (id) => {
+    if (window.GatilhosEngine) await window.GatilhosEngine.fecharLembrete(id);
+    carregar();
+  };
+
+  return (
+    <Modal title={`Tratativas — Cotação Nº ${numeroCotacao}`} onClose={onClose} width={640}>
+      {nos === null && (
+        <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>
+      )}
+      {nos !== null && nos.length === 0 && (
+        <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--fg3)', fontSize: 13 }}>
+          Nenhuma cadeia automática encontrada pra essa cotação.
+        </div>
+      )}
+      {nos !== null && nos.length > 0 && (
+        <CadeiaGatilhosCotacao numeroCotacao={numeroCotacao} nos={nos} defaultOpen
+          onConfirmarSinal={setConfirmarSinalDe} onConfirmarAval={setConfirmarAvalDe}
+          onFecharLembrete={fecharLembrete} onAbrirGatilho={abrirGatilho}/>
+      )}
+      {confirmarSinalDe && <ModalConfirmarSinal g={confirmarSinalDe} onClose={() => setConfirmarSinalDe(null)} onSaved={carregar}/>}
+      {confirmarAvalDe && <ModalConfirmarAvalPagamento g={confirmarAvalDe} onClose={() => setConfirmarAvalDe(null)} onSaved={carregar}/>}
+    </Modal>
+  );
+}
+
+function ControleCotacoesPage({ setRoute, setSubsel }) {
   const [rows, setRows] = React.useState(null);
   const [busca, setBusca] = React.useState('');
   const [fStatus, setFStatus] = React.useState('Todos');
   const [refreshing, setRefreshing] = React.useState(false);
+  const [cadeiaDe, setCadeiaDe] = React.useState(null);
 
   const carregar = React.useCallback(async () => {
     setRefreshing(true);
@@ -104,20 +158,29 @@ function ControleCotacoesPage({ setRoute }) {
             {rows !== null && filtradas.length === 0 && (
               <tr><td colSpan={99}><div className="empty"><h4>Nenhuma cotação encontrada</h4><p>Nada encontrado com os filtros atuais.</p></div></td></tr>
             )}
-            {filtradas.map((r, i) => (
-              <tr key={r.id ? `${r.origem}-${r.id}` : `${r.origem}-${r.numero_cotacao}-${i}`}>
-                <td><span className="mono small">{r.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', r.numero_cotacao) : '—'}</span></td>
-                <td><span className="mono small" style={{ whiteSpace: 'nowrap' }}>{r.data ? String(r.data).slice(0, 10) : '—'}</span></td>
-                <td style={{ fontSize: 12.5 }}>{r.nome_cliente || <span className="muted">—</span>}</td>
-                <td>{r.vendedor || <span className="muted">—</span>}</td>
-                <td>{r.estado_instalacao || <span className="muted">—</span>}</td>
-                <td><CcStatusChip status={r.status}/></td>
-                <td className="small" style={{ color: 'var(--fg2)' }}>{r.origem === 'historico' ? 'Planilha' : 'Formulário'}</td>
-              </tr>
-            ))}
+            {filtradas.map((r, i) => {
+              const clicavel = r.origem === 'formulario' && r.numero_cotacao != null;
+              return (
+                <tr key={r.id ? `${r.origem}-${r.id}` : `${r.origem}-${r.numero_cotacao}-${i}`}
+                  style={clicavel ? { cursor: 'pointer' } : undefined}
+                  title={clicavel ? 'Abrir tratativas desta cotação' : undefined}
+                  onClick={clicavel ? () => setCadeiaDe(r.numero_cotacao) : undefined}>
+                  <td><span className="mono small">{r.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', r.numero_cotacao) : '—'}</span></td>
+                  <td><span className="mono small" style={{ whiteSpace: 'nowrap' }}>{r.data ? String(r.data).slice(0, 10) : '—'}</span></td>
+                  <td style={{ fontSize: 12.5 }}>{r.nome_cliente || <span className="muted">—</span>}</td>
+                  <td>{r.vendedor || <span className="muted">—</span>}</td>
+                  <td>{r.estado_instalacao || <span className="muted">—</span>}</td>
+                  <td><CcStatusChip status={r.status}/></td>
+                  <td className="small" style={{ color: 'var(--fg2)' }}>{r.origem === 'historico' ? 'Planilha' : 'Formulário'}</td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
+      {cadeiaDe != null && (
+        <ModalCadeiaCotacao numeroCotacao={cadeiaDe} setRoute={setRoute} setSubsel={setSubsel} onClose={() => setCadeiaDe(null)}/>
+      )}
     </div>
   );
 }

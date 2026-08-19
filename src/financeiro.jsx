@@ -268,8 +268,8 @@ function GanttBarMini({ nascidoEm, prazoEm, concluidoEm, encerrado, comLabel }) 
    atual). Aberta: árvore vertical, cada nó indentado pela profundidade
    na cadeia (irmãos II/SS ficam no mesmo nível) — não mais cards lado
    a lado, que não escalam quando há muitas cotações na tela. */
-function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho }) {
-  const [aberta, setAberta] = React.useState(false);
+function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho, defaultOpen }) {
+  const [aberta, setAberta] = React.useState(!!defaultOpen);
   const engine = window.GatilhosEngine;
 
   const principais = nos.filter(g => !String(g.evento_key || '').startsWith('LEMBRETE__'))
