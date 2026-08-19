@@ -502,7 +502,7 @@ function PropostasPage({ setRoute, setSubsel }) {
   const carregar = React.useCallback(() => {
     if (!escopo) return;
     let q = window.__VP_SB.sb.from('propostas')
-      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em');
+      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em, revisao_texto');
     if (!escopo.veTudo && escopo.vendedorId) q = q.eq('vendedor_id', escopo.vendedorId);
     q.order('criado_em', { ascending: false }).limit(300)
       .then(({ data }) => setRows(data || []));
@@ -604,6 +604,22 @@ function PropostasPage({ setRoute, setSubsel }) {
                   <div className="muted small">{pz.numero_documento}</div>
                 </div>
                 <Button variant="primary" size="sm" icon="proposal" onClick={() => abrirDaPrecificacao(pz)}>Analisar e enviar</Button>
+              </div>
+            ))}
+          </div>
+        </Card>
+      )}
+
+      {rows && rows.some((p) => p.status === 'revisao_solicitada') && (
+        <Card title="Pedidos de revisão" sub="cliente leu e pediu ajuste — analise, edite e reenvie" style={{ marginBottom: 20 }}>
+          <div className="stack" style={{ gap: 8 }}>
+            {rows.filter((p) => p.status === 'revisao_solicitada').map((p) => (
+              <div key={p.id} className="row sb" style={{ padding: '10px 14px', background: 'var(--vp-warning-tint)' }}>
+                <div>
+                  <b>{p.numero_documento || p.titulo}</b>
+                  <div className="muted small">"{p.revisao_texto}"</div>
+                </div>
+                <Button variant="primary" size="sm" icon="edit" onClick={() => abrirExistente(p)}>Analisar e reenviar</Button>
               </div>
             ))}
           </div>

@@ -132,6 +132,7 @@
 .pe-top__status.is-aprovada { background: var(--vp-success-tint); color: var(--vp-success-ink); }
 .pe-top__status.is-recusada,
 .pe-top__status.is-expirada { background: #FDE8E8; color: #9f1239; }
+.pe-top__status.is-revisao_solicitada { background: var(--vp-warning-tint); color: var(--vp-warning-ink); }
 
 /* "Publicar" congelou uma versão oficial — sinal visual separado do status
    de envio/assinatura, porque são coisas diferentes (uma proposta pode
@@ -204,9 +205,16 @@
 /* ---- Impressão ----
    Sem isto, "PDF" chamava window.print() e saía a aplicação inteira
    (sidebar, menu, formulário). Agora imprime só as páginas da proposta —
-   tanto pelo overlay quanto pela coluna lateral, se ela estiver visível. */
+   tanto pelo overlay quanto pela coluna lateral, se ela estiver visível.
+   `body:has(.pe-pdf-overlay)` é obrigatório: este CSS também é carregado
+   em assinar.html (página pública de assinatura), que reaproveita o
+   preview da proposta mas nunca renderiza `.pe-pdf-overlay`. Sem o
+   :has(), a regra escondia `#ci-sign-root` inteiro (único filho de
+   body ali, e não bate com `.pe-pdf-overlay`) — incluindo o
+   `.ci-print-doc` que o botão "Baixar (PDF)" da página pública precisa
+   pra imprimir, o que gerava PDF em branco (achado 19/08). */
 @media print {
-  body > *:not(.pe-pdf-overlay) { display: none !important; }
+  body:has(.pe-pdf-overlay) > *:not(.pe-pdf-overlay) { display: none !important; }
   .pe-pdf-overlay {
     position: static !important; inset: auto !important; background: #fff !important;
   }

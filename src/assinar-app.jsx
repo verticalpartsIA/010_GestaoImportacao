@@ -127,7 +127,10 @@ function SgApp() {
   const [source, setSource] = _sgUS(null); // { kind, rec, store, Preview, engine }
   const [loading, setLoading] = _sgUS(true);
   const [notFound, setNotFound] = _sgUS(false);
-  const [phase, setPhase] = _sgUS('sign'); // sign | processing | done | refused
+  const [phase, setPhase] = _sgUS('sign'); // sign | processing | done | refused | revisao
+  const [showRevisao, setShowRevisao] = _sgUS(false);
+  const [textoRevisao, setTextoRevisao] = _sgUS('');
+  const [enviandoRevisao, setEnviandoRevisao] = _sgUS(false);
   const [scrolledEnd, setScrolledEnd] = _sgUS(false);
   const [consent, setConsent] = _sgUS(false);
   const [sigMode, setSigMode] = _sgUS('draw');
@@ -146,6 +149,7 @@ function SgApp() {
       const st = STATUS_ALIASES[src.kind];
       if (r.status === st.signed) { setSource(src); setPhase('done'); setLoading(false); return; }
       if (r.status === st.refused || r.status === st.expired) { setSource(src); setLoading(false); return; }
+      if (r.status === 'revisao_solicitada') { setSource(src); setPhase('revisao'); setLoading(false); return; }
 
       const updated = await src.store.markViewed(token);
       setSource({ ...src, rec: updated || r });
@@ -218,20 +222,42 @@ function SgApp() {
     setPhase('done');
   };
 
+  const isPropostaSrc = source && source.kind === 'proposta';
+
   const handleRefuse = async () => {
     if (!source) return;
-    if (!window.confirm(`Recusar a assinatura ${source.kind === 'proposta' ? 'desta proposta' : 'deste contrato'}? A Vertical Parts será notificada.`)) return;
+    const pergunta = isPropostaSrc
+      ? 'Confirma que não tem interesse nesta proposta? A VerticalParts será notificada.'
+      : 'Recusar a assinatura deste contrato? A VerticalParts será notificada.';
+    if (!window.confirm(pergunta)) return;
     const updated = await source.store.refuse(token);
     setSource({ ...source, rec: updated });
     setPhase('refused');
+  };
+
+  const handleSolicitarRevisao = async () => {
+    if (!source) return;
+    const txt = textoRevisao.trim();
+    if (!txt) { window.alert('Descreva o que você gostaria de revisar.'); return; }
+    setEnviandoRevisao(true);
+    try {
+      const updated = await source.store.solicitarRevisao(token, txt);
+      setSource({ ...source, rec: updated });
+      setShowRevisao(false);
+      setPhase('revisao');
+    } catch (e) {
+      window.alert('Não foi possível enviar o pedido: ' + (e.message || e));
+    } finally {
+      setEnviandoRevisao(false);
+    }
   };
 
   if (loading) {
     return (
       <div className="ci-sign-status">
         <div className="ci-spinner"></div>
-        <h1>Carregando contrato…</h1>
-        <p>Validando o link de assinatura.</p>
+        <h1>Carregando…</h1>
+        <p>Validando o link de acesso.</p>
       </div>
     );
   }
@@ -241,7 +267,7 @@ function SgApp() {
       <div className="ci-sign-shell">
         <div className="ci-err-state">
           <h1>Link inválido</h1>
-          <p>Este link de assinatura não foi encontrado ou expirou. Solicite um novo link à Vertical Parts.</p>
+          <p>Este link de assinatura não foi encontrado ou expirou. Solicite um novo link à VerticalParts.</p>
         </div>
       </div>
     );
@@ -256,7 +282,7 @@ function SgApp() {
       <div className="ci-sign-shell">
         <div className="ci-err-state">
           <h1>Link expirado</h1>
-          <p>Este link expirou (validade de 7 dias). Solicite o reenvio à Vertical Parts.</p>
+          <p>Este link expirou (validade de 7 dias). Solicite o reenvio à VerticalParts.</p>
         </div>
       </div>
     );
@@ -270,14 +296,24 @@ function SgApp() {
       </div>
     );
   }
+  if (phase === 'revisao' || rec.status === 'revisao_solicitada') {
+    return (
+      <div className="ci-sign-shell">
+        <div className="ci-err-state">
+          <h1>Pedido de revisão enviado</h1>
+          <p>Recebemos sua solicitação. A VerticalParts vai analisar e te enviar uma proposta revisada em breve.</p>
+        </div>
+      </div>
+    );
+  }
   if (phase === 'done' || rec.status === st.signed) {
     const a = rec.audit || {};
     return (
       <>
         <div className="ci-sign-status">
           <div className="ci-success-check">✓</div>
-          <h1>{source.kind === 'proposta' ? 'Proposta assinada!' : 'Contrato assinado!'}</h1>
-          <p>{source.kind === 'proposta' ? 'A proposta' : 'O contrato'} <b>{rec.numero_documento}</b> foi assinado(a) com sucesso.</p>
+          <h1>{source.kind === 'proposta' ? 'Proposta aprovada!' : 'Contrato assinado!'}</h1>
+          <p>{source.kind === 'proposta' ? 'A proposta' : 'O contrato'} <b>{rec.numero_documento}</b> foi {source.kind === 'proposta' ? 'aprovada e assinada' : 'assinado(a)'} com sucesso.</p>
           <div className="ci-protocolo">
             Protocolo: {rec.token}<br/>
             Assinado em {source.store.fmtDateTime(a.signedAt)}<br/>
@@ -301,7 +337,7 @@ function SgApp() {
       <div className="ci-sign-shell">
         <div className="ci-err-state">
           <h1>Assinatura recusada</h1>
-          <p>Obrigado pelo retorno. A Vertical Parts foi notificada e entrará em contato em breve.</p>
+          <p>Obrigado pelo retorno. A VerticalParts foi notificada e entrará em contato em breve.</p>
         </div>
       </div>
     );
@@ -336,8 +372,8 @@ function SgApp() {
       </div>
 
       <div className="ci-sign-intro">
-        <h1>{isProposta ? 'Assine sua proposta' : 'Assine seu contrato'}</h1>
-        <p>A Vertical Parts enviou {isProposta ? 'esta proposta comercial' : 'este contrato'} para sua assinatura digital. Leia o documento por inteiro ao lado, confirme e assine — sem precisar de cadastro.</p>
+        <h1>{isProposta ? 'Analise sua proposta' : 'Assine seu contrato'}</h1>
+        <p>A VerticalParts enviou {isProposta ? 'esta proposta comercial para sua análise' : 'este contrato para sua assinatura digital'}. Leia o documento por inteiro ao lado{isProposta ? ' e aprove, peça uma revisão ou recuse' : ', confirme e assine'} — sem precisar de cadastro.</p>
       </div>
 
       <div className="ci-sign-grid">
@@ -361,7 +397,7 @@ function SgApp() {
               <div className="title">{titulo}</div>
             </div>
             <div className="ci-sum-rows">
-              <SgSumRow k={isInstalador ? 'Contratante' : 'Vendedora'} v="Vertical Parts Ltda."/>
+              <SgSumRow k={isInstalador ? 'Contratante' : 'Vendedora'} v="VerticalParts Ltda."/>
               <SgSumRow k={counterpartyLabel} v={counterpartyName}/>
               <SgSumRow k="Objeto" v={objetoResumo}/>
               <SgSumRow k="Valor total" v={valorFmt}/>
@@ -393,9 +429,12 @@ function SgApp() {
           <p className="ci-sig-meta">Ao assinar, registramos data/hora, seu IP e dispositivo para fins de auditoria, conforme a MP 2.200-2/2001 e a Lei 14.063/2020.</p>
 
           <div className="ci-sign-actionbar">
-            <button className="ci-sign-btn" disabled={!canSign} onClick={handleSign}>Confirmar e assinar</button>
+            <button className="ci-sign-btn" disabled={!canSign} onClick={handleSign}>{isProposta ? 'Aprovar proposta' : 'Confirmar e assinar'}</button>
             {!canSign && <p className="ci-req-hint">{!scrolledEnd ? 'Leia o documento até o fim' : !consent ? 'Marque a concordância' : 'Adicione sua assinatura'}</p>}
-            <button className="ci-sign-sub-action" onClick={handleRefuse}>Recusar assinatura</button>
+            <div className="ci-sign-actionbar-row">
+              {isProposta && <button className="ci-sign-sub-action ci-sign-sub-action--neutral" onClick={() => setShowRevisao(true)}>Pedir revisão</button>}
+              <button className="ci-sign-sub-action" onClick={handleRefuse}>{isProposta ? 'Não tenho interesse' : 'Recusar assinatura'}</button>
+            </div>
           </div>
 
           <div className="ci-sign-alt">
@@ -408,6 +447,30 @@ function SgApp() {
       {/* Invisível na tela — só existe pra "Baixar (PDF)" ter o que
          imprimir antes da assinatura (mesmo padrão do print pós-assinatura). */}
       <div className="ci-print-doc">{docNode}</div>
+
+      {showRevisao && (
+        <div className="ci-modal-backdrop" onClick={() => !enviandoRevisao && setShowRevisao(false)}>
+          <div className="ci-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>Pedir revisão da proposta</h2>
+            <p className="small">Descreva o que você gostaria de ajustar — valor, acabamento, prazo, especificações... A VerticalParts vai analisar e te enviar uma proposta revisada.</p>
+            <textarea
+              className="ci-modal-textarea"
+              rows={5}
+              value={textoRevisao}
+              onChange={(e) => setTextoRevisao(e.target.value)}
+              placeholder="Ex.: gostaria de revisar o acabamento da cabine e o prazo de entrega."
+              disabled={enviandoRevisao}
+              autoFocus
+            />
+            <div className="ci-modal-actions">
+              <button className="ci-sign-sub-action" disabled={enviandoRevisao} onClick={() => setShowRevisao(false)}>Cancelar</button>
+              <button className="ci-sign-btn" disabled={enviandoRevisao || !textoRevisao.trim()} onClick={handleSolicitarRevisao}>
+                {enviandoRevisao ? 'Enviando…' : 'Enviar pedido de revisão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

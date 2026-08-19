@@ -95,6 +95,7 @@
         visualizada: { acao: 'cliente visualizou a proposta', ator: contraparte, setor: 'externo' },
         aprovada:    { acao: 'proposta assinada', ator: (meta && meta.signerName) || contraparte, setor: 'externo' },
         recusada:    { acao: 'assinatura da proposta recusada', ator: contraparte, setor: 'externo' },
+        revisao_solicitada: { acao: 'cliente pediu revisão da proposta', ator: contraparte, setor: 'externo' },
       };
       const m = MAP[newStatus];
       if (m) window.VPLog.registrar({
@@ -110,6 +111,7 @@
         visualizada: { level: 'warning', title: `Proposta ${rec.numero_documento} foi VISUALIZADA`, sub: `Aberta por ${(rec.recipient && rec.recipient.name) || ''} · ${meta && meta.ip ? 'IP ' + meta.ip + ' · ' : ''}${fmtDateTime(Date.now())}` },
         aprovada:    { level: 'info',    title: `Proposta ${rec.numero_documento} ASSINADA`, sub: `Por ${meta && meta.signerName ? meta.signerName : ''} · ${meta && meta.ip ? 'IP ' + meta.ip : ''}` },
         recusada:    { level: 'danger',  title: `Proposta ${rec.numero_documento} foi RECUSADA`, sub: `Recusada pelo cliente em ${fmtDateTime(Date.now())}` },
+        revisao_solicitada: { level: 'warning', title: `Proposta ${rec.numero_documento} — cliente pediu revisão`, sub: (meta && meta.texto) ? meta.texto.slice(0, 140) : `Em ${fmtDateTime(Date.now())}` },
       };
       const cfg = map[newStatus];
       if (!cfg) return;
@@ -336,6 +338,37 @@
     return updated;
   }
 
+  /* ---------- Pedido de revisão ----------
+     Terceira saída da página pública, além de aprovar/recusar (pedido do
+     usuário, 19/08): o cliente ainda não recusou, só quer ajuste (preço,
+     acabamento, prazo...) — texto livre, sem sugestões prontas na tela
+     (ex.: nunca oferecer "desconto" como opção, isso o cliente pede por
+     fora se quiser). Volta pro vendedor decidir/renegociar e reenviar;
+     markSent já recoloca em 'enviada' normalmente, sem tratamento especial. */
+  async function solicitarRevisao(token, texto) {
+    const c = sb();
+    const cur = await getByToken(token);
+    if (!cur) return null;
+    const txt = String(texto || '').trim();
+    if (!txt) throw new Error('Descreva o que você gostaria de revisar.');
+    const now = new Date();
+    const log = (cur.log || []).slice();
+    log.push({ status: 'revisao_solicitada', at: now.toISOString(), meta: { texto: txt } });
+    const patch = {
+      status: 'revisao_solicitada', revisao_texto: txt, revisao_solicitada_em: now.toISOString(),
+      log, atualizado_em: now.toISOString(),
+    };
+    await c.from('propostas').update(patch).eq('token', token);
+    const updated = { ...cur, ...patch };
+    await pushNotification(updated, 'revisao_solicitada', { texto: txt });
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
+      alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
+      detalhe: { resposta: 'revisao_solicitada', texto: txt },
+    });
+    return updated;
+  }
+
   /* ---------- Criar/atualizar (rascunho) ----------
      Movido de proposta-editor.jsx (revisão de arquitetura 18/08, candidato
      2): o store nunca fazia insert(), só update() — quem montava a linha,
@@ -455,7 +488,7 @@
     fmtDateTime, signUrl, prettyUrl, whatsAppHref, mailtoHref,
     getById, getByToken, garantirToken,
     publicar, conteudoVigente,
-    markSent, markViewed, markSigned, refuse,
+    markSent, markViewed, markSigned, refuse, solicitarRevisao,
     salvar,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
   };

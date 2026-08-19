@@ -305,6 +305,7 @@ function deepMergeHeranca(base, prefill) {
 const PE_STATUS_LABEL = {
   rascunho: 'Rascunho', enviada: 'Enviada', visualizada: 'Visualizada pelo cliente',
   aprovada: 'Assinada', recusada: 'Recusada', expirada: 'Expirada', cancelada: 'Cancelada',
+  revisao_solicitada: 'Revisão solicitada',
 };
 
 /* Estado que o badge mostra. O `status` sozinho contava só metade da história:
@@ -578,7 +579,7 @@ function PropostaEditor({ setRoute, subsel }) {
     let cancelado = false;
     setLoadingExisting(true);
     window.__VP_SB.sb.from('propostas')
-      .select('proposal_type, data_json, status, numero_documento, master_id, valor_total, token, titulo, atualizado_em, publicado_em, publicado_por, version')
+      .select('proposal_type, data_json, status, numero_documento, master_id, valor_total, token, titulo, atualizado_em, publicado_em, publicado_por, version, revisao_texto, revisao_solicitada_em')
       .eq('id', editId).maybeSingle()
       .then(({ data: row }) => {
         if (cancelado || !row) return;
@@ -597,6 +598,7 @@ function PropostaEditor({ setRoute, subsel }) {
           master_id: row.master_id, valor_total: row.valor_total,
           token: row.token, atualizado_em: row.atualizado_em,
           publicado_em: row.publicado_em, publicado_por: row.publicado_por, version: row.version,
+          revisao_texto: row.revisao_texto, revisao_solicitada_em: row.revisao_solicitada_em,
         });
       })
       .finally(() => { if (!cancelado) setLoadingExisting(false); });
@@ -612,7 +614,7 @@ function PropostaEditor({ setRoute, subsel }) {
     const refetch = () => {
       if (document.visibilityState !== 'visible' || !window.__VP_SB?.sb) return;
       window.__VP_SB.sb.from('propostas')
-        .select('status, publicado_em, publicado_por, version, valor_total, atualizado_em')
+        .select('status, publicado_em, publicado_por, version, valor_total, atualizado_em, revisao_texto, revisao_solicitada_em')
         .eq('id', editId).maybeSingle()
         .then(({ data: row }) => {
           if (!row) return;
@@ -620,6 +622,7 @@ function PropostaEditor({ setRoute, subsel }) {
             ...(m || {}),
             status: row.status, publicado_em: row.publicado_em, publicado_por: row.publicado_por,
             version: row.version, valor_total: row.valor_total, atualizado_em: row.atualizado_em,
+            revisao_texto: row.revisao_texto, revisao_solicitada_em: row.revisao_solicitada_em,
           }));
         });
     };
@@ -852,6 +855,20 @@ function PropostaEditor({ setRoute, subsel }) {
           ))}
         </nav>
       </header>
+
+      {/* Cliente pediu revisão na página pública (/assinar) — mostra o texto
+         livre que ele digitou pra quem for renegociar não precisar caçar em
+         log/notificação. Some sozinho quando o vendedor reenvia (markSent
+         recoloca em 'enviada', tirando a proposta desse estado). */}
+      {meta?.status === 'revisao_solicitada' && (
+        <div className="alert info" style={{ margin: '16px 24px 0' }}>
+          <Icon.warning/>
+          <div style={{ flex: 1 }}>
+            <div className="alert__title">Cliente pediu revisão desta proposta</div>
+            <div className="alert__sub">"{meta.revisao_texto}"{meta.revisao_solicitada_em ? ` — ${window.PropostaStore ? window.PropostaStore.fmtDateTime(meta.revisao_solicitada_em) : ''}` : ''}</div>
+          </div>
+        </div>
+      )}
 
       {/* Body */}
       <div className={"pe" + (showPreview ? "" : " pe--no-preview")}>
