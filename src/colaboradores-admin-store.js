@@ -80,6 +80,120 @@
     if (error) throw error;
   }
 
+  /* ---------- Alçadas granulares (módulo → submódulo → ação) ----------
+     Pedido do usuário 19/08: "Alocar em Módulo" não pode parar no grupo
+     (Engenharia sim/não) — precisa entrar em cada submódulo (Ficha
+     Técnica, Projeto de Elevadores...) e dentro dele dizer Criar/Editar/
+     Excluir pra QUALQUER pessoa da empresa, não só vendedor. Catálogo é
+     cópia estática dos itens navegáveis de NAV_GROUPS (shell.jsx) pelo
+     mesmo motivo do GRUPOS_MODULO acima: não acoplar ordem de carga.
+     Itens 'planned' (sem rota ainda) ficam de fora — não faz sentido dar
+     alçada pra tela que não existe. Ações default cobrem o pedido
+     explícito (Criar/Editar/Salvar~Editar/Excluir); Propostas mantém as
+     3 capacidades específicas já em uso real (ver_todas,
+     precificar_manual, destravar_aprovada — ver proposta-store.js). */
+  const ACOES_PADRAO = [
+    { chave: 'ver', label: 'Ver' },
+    { chave: 'criar', label: 'Criar' },
+    { chave: 'editar', label: 'Editar' },
+    { chave: 'excluir', label: 'Excluir' },
+  ];
+  const CATALOGO_MODULOS = [
+    { grupo: 'Administração geral', itens: [
+      { modulo: 'admin', label: 'Conceder alçadas a outras pessoas', capacidades: [
+        { chave: 'conceder_alcadas', label: 'Pode conceder (ou tirar) qualquer alçada de qualquer pessoa' },
+      ]},
+    ]},
+    { grupo: 'Geral', itens: [
+      { modulo: 'dashboard', label: 'Dashboard' },
+      { modulo: 'notificacoes', label: 'Notificações' },
+      { modulo: 'decisoes', label: 'Central de Decisões' },
+      { modulo: 'financeiro', label: 'Gatilhos & Prazo' },
+    ]},
+    { grupo: 'Cadastros', itens: [
+      { modulo: 'cadastro-clientes', label: 'Clientes' },
+      { modulo: 'cadastro-fornecedores', label: 'Fornecedores' },
+      { modulo: 'ncm-catalogo', label: 'Produtos' },
+    ]},
+    { grupo: 'Comercial', itens: [
+      { modulo: 'leads', label: 'Leads' },
+      { modulo: 'formularios', label: 'Formulários' },
+      { modulo: 'propostas', label: 'Propostas', capacidades: [
+        { chave: 'ver_todas', label: 'Vê propostas de outros vendedores' },
+        { chave: 'precificar_manual', label: 'Precifica manualmente' },
+        { chave: 'destravar_aprovada', label: 'Destrava proposta aprovada' },
+      ]},
+      { modulo: 'controle-cotacoes', label: 'Controle de Cotações' },
+    ]},
+    { grupo: 'ADM/ Financeiro', itens: [
+      { modulo: 'cotacoes-fornecedor', label: 'Cotações a Fornecedor' },
+      { modulo: 'precificacao', label: 'Precificação' },
+      { modulo: 'aval-financeiro', label: 'Aval Financeiro' },
+    ]},
+    { grupo: 'Jurídico | Importação | Suprimentos', itens: [
+      { modulo: 'juridico', label: 'Jurídico' },
+      { modulo: 'contrato-venda-equipamentos', label: 'Contrato Venda de Equipamentos' },
+      { modulo: 'importacao', label: 'Importação' },
+      { modulo: 'gi-painel', label: 'Painel (Gestão Importação)' },
+      { modulo: 'pi-importacao', label: 'P.I.' },
+      { modulo: 'rfq-importacao', label: 'RFQ' },
+      { modulo: 'ims-importacao', label: 'IMS' },
+      { modulo: 'embarques-importacao', label: 'Embarques' },
+      { modulo: 'gi-analise-precos', label: 'Análise de Preços' },
+      { modulo: 'compras', label: 'Compras Nacional' },
+      { modulo: 'pedidos-acompanhamento', label: 'Pedidos' },
+    ]},
+    { grupo: 'Engenharia', itens: [
+      { modulo: 'engenharia', label: 'Engenharia' },
+      { modulo: 'eng-projeto-elevadores', label: 'Projeto de Elevadores' },
+      { modulo: 'eng-configurador', label: 'Projeto de Equipamento' },
+      { modulo: 'desenho-tecnico', label: 'Projetos ER/Es' },
+      { modulo: 'ficha-tecnica', label: 'Ficha Técnica' },
+      { modulo: 'contrato-instalador', label: 'Contrato Instalador' },
+      { modulo: 'vistorias', label: 'Vistorias de Obras' },
+      { modulo: 'instalacao', label: 'Instalação em Campo' },
+      { modulo: 'status-obras', label: 'Status de Obras' },
+      { modulo: 'linha-do-tempo', label: 'Linha do Tempo da Cotação' },
+      { modulo: 'art', label: 'ART' },
+      { modulo: 'cronograma', label: 'Cronograma' },
+      { modulo: 'databook', label: 'Data Book & Termo' },
+      { modulo: 'handover', label: 'Entrega Final' },
+    ]},
+    { grupo: 'Recursos Humanos', itens: [
+      { modulo: 'rh-homologacao', label: 'Homologação de Parceiros Instaladores' },
+    ]},
+    { grupo: 'Logística', itens: [
+      { modulo: 'almoxarifado', label: 'Almoxarifado' },
+    ]},
+    { grupo: 'Portal Admin', itens: [
+      { modulo: 'logs', label: 'Logs de Atividade' },
+    ]},
+  ];
+
+  async function listarCapacidadesConcedidas() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('alcadas_capacidade').select('perfil_id, modulo, capacidade');
+    if (error) return [];
+    return data || [];
+  }
+
+  async function concederCapacidade(colaboradorId, modulo, capacidade, conceder) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (conceder) {
+      const por = (window.__VP_USER || {}).email || null;
+      const { error } = await c.from('alcadas_capacidade').upsert(
+        { perfil_id: colaboradorId, modulo, capacidade, concedido_por: por, concedido_em: new Date().toISOString() },
+        { onConflict: 'perfil_id,modulo,capacidade' },
+      );
+      if (error) throw error;
+    } else {
+      const { error } = await c.from('alcadas_capacidade').delete()
+        .eq('perfil_id', colaboradorId).eq('modulo', modulo).eq('capacidade', capacidade);
+      if (error) throw error;
+    }
+    if (window.PropostaStore) window.PropostaStore.resetAlcadasCache();
+  }
+
   /* Roda quando a identidade chega (evento 'vpprd:user' de supabase.js) —
      acha o colaborador correspondente pelo id (vem do JWT do vpsistema,
      mesmo id de profiles/colaboradores_vpsistema) e enriquece
@@ -104,5 +218,6 @@
   window.ColaboradoresAdminStore = {
     GRUPOS_MODULO, listarColaboradores, listarAlocacoes, arvoreDepartamentos,
     alocar, desalocar, removerTodasAlocacoes, enriquecerUsuarioLogado,
+    ACOES_PADRAO, CATALOGO_MODULOS, listarCapacidadesConcedidas, concederCapacidade,
   };
 }());
