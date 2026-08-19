@@ -712,76 +712,35 @@ function PropostaEditor({ setRoute, subsel }) {
     herdar();
   }, [loadingExisting, data.numeroCotacao, herdar]);
 
-  /* ---- Gerar PDF (overlay em tela cheia) ----
-     Cada .pe__pdf já nasce em tamanho físico real (210×297mm — ver CSS),
-     então 1 seção = 1 folha A4, sem esticar/distorcer nada — mesmo padrão
-     usado pelo sistema de referência (002_proposta_comercial): captura
-     cada bloco com html2canvas passando width/height explícitos (evita
-     qualquer ambiguidade de layout), scrollIntoView antes de cada captura
-     (garante que o bloco esteja realmente renderizado/visível) e
-     addImage sempre no tamanho cheio da folha (0,0,210,297). */
-  const gerarPdfArquivo = React.useCallback(async () => {
-    if (!window.html2canvas || !window.jspdf) {
-      window.toast?.('Biblioteca de PDF ainda carregando…', 'error');
-      return;
-    }
-    const overlayEl = document.querySelector('.pe-pdf-overlay');
-    const paginas = Array.from(overlayEl?.querySelectorAll('.pe__pdf') || []);
-    if (!paginas.length) return;
-    const safeName = (data.cliente?.nome || data.numero || 'proposta')
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
-    window.toast?.('Gerando PDF…', 'info');
-    try {
-      // Fotos do equipamento (upload) só terminam de carregar depois do
-      // primeiro paint — sem isso, html2canvas podia capturar a página
-      // de fotos ainda em branco.
-      const imgs = overlayEl.querySelectorAll('img');
-      await Promise.all(Array.from(imgs).map((img) => img.complete
-        ? Promise.resolve()
-        : new Promise((res) => { img.onload = res; img.onerror = res; setTimeout(res, 5000); })));
-      const { jsPDF } = window.jspdf;
-      const pw = 210, ph = 297;
-      let pdf = null;
-      for (let i = 0; i < paginas.length; i++) {
-        const el = paginas[i];
-        el.scrollIntoView({ behavior: 'instant', block: 'start' });
-        await new Promise((r) => setTimeout(r, 200));
-        const canvas = await window.html2canvas(el, {
-          scale: 3, useCORS: true, allowTaint: true, backgroundColor: '#ffffff',
-          logging: false, width: el.offsetWidth, height: el.offsetHeight,
-        });
-        const img = canvas.toDataURL('image/jpeg', 0.98);
-        /* .pe__pdf usa min-height (não height fixo) de propósito — seções
-           longas (termos, muitas parcelas/especificações) crescem em vez
-           de cortar conteúdo. Isso significa que a altura real capturada
-           pode passar de 297mm. Forçar addImage(0,0,210,297) sempre
-           esmagava essas páginas verticalmente — "PDF deformando" (achado
-           real, 19/08). Página nasce do tamanho real da captura (nunca
-           menor que A4), sem distorcer nada. */
-        const alturaReal = Math.max(ph, pw * (canvas.height / canvas.width));
-        if (!pdf) {
-          pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: [pw, alturaReal] });
-        } else {
-          pdf.addPage([pw, alturaReal], 'portrait');
-        }
-        pdf.addImage(img, 'JPEG', 0, 0, pw, alturaReal);
-      }
-      pdf.save(`Proposta-${safeName}.pdf`);
-    } catch (e) {
-      console.error('PDF error', e);
-      window.toast?.('Erro ao gerar PDF: ' + (e.message || e), 'error');
-    }
-  }, [data]);
-
-  const imprimirOverlay = React.useCallback(() => {
+  /* ---- Salvar PDF / Imprimir ----
+     Era html2canvas + jsPDF: capturava cada seção como FOTO e colava no
+     PDF. Resultado: arquivo gigante (6,7MB pra 16 páginas), texto não
+     selecionável/pesquisável, e distorção vertical em qualquer seção mais
+     longa que 297mm (`.pe__pdf` usa min-height de propósito, pra não
+     cortar conteúdo). O usuário descreveu certo: "age como um GoFullPage,
+     desce tirando fotos" — não era isso que se queria (19/08).
+     Agora usa a impressão nativa do navegador: PDF vetorial de verdade,
+     texto real, sem distorção, arquivo leve. O usuário escolhe "Salvar
+     como PDF" no destino da caixa de impressão. */
+  const imprimirOverlay = React.useCallback(async () => {
     let inj = document.getElementById('__pe-print-page');
     if (inj) inj.remove();
     inj = document.createElement('style');
     inj.id = '__pe-print-page';
+    /* @page precisa vir do runtime: ficha-tecnica.css também declara um
+       @page global e a última declaração vence — injetar aqui garante que
+       a Proposta imprima com a régua dela. margin 0 porque .pe__pdf já
+       tem a margem interna própria (padding do .pe__pdf-inner). */
     inj.textContent = '@page { size: A4; margin: 0; }';
     document.head.appendChild(inj);
-    setTimeout(() => window.print(), 60);
+    /* Fotos do equipamento só terminam de carregar depois do primeiro
+       paint — imprimir antes disso saía com espaço em branco no lugar. */
+    const overlayEl = document.querySelector('.pe-pdf-overlay');
+    const imgs = overlayEl ? overlayEl.querySelectorAll('img') : [];
+    await Promise.all(Array.from(imgs).map((img) => img.complete
+      ? Promise.resolve()
+      : new Promise((res) => { img.onload = res; img.onerror = res; setTimeout(res, 5000); })));
+    setTimeout(() => window.print(), 80);
   }, []);
 
   const resetProposal = () => {
@@ -1023,8 +982,10 @@ function PropostaEditor({ setRoute, subsel }) {
           <div className="pe-pdf-bar">
             <span>Proposta — {data.cliente?.nome || data.numero || 'Nova proposta'}</span>
             <div className="pe-pdf-actions">
-              <Button variant="primary" size="sm" icon="download" onClick={gerarPdfArquivo}>Salvar PDF</Button>
-              <Button variant="outline" size="sm" icon="print" onClick={imprimirOverlay}>Imprimir</Button>
+              <Button variant="primary" size="sm" icon="print" onClick={imprimirOverlay}
+                title="Abre a impressão do navegador — escolha 'Salvar como PDF' para baixar o arquivo">
+                Salvar PDF / Imprimir
+              </Button>
               <Button variant="ghost" size="sm" onClick={() => setPdfOverlay(false)}>Fechar</Button>
             </div>
           </div>

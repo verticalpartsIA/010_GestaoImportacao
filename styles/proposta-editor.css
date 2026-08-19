@@ -222,11 +222,19 @@
   .pe-pdf-scroll {
     display: block !important; padding: 0 !important; overflow: visible !important;
   }
+  /* O overlay renderiza o preview com zoom 0.5 (ver proposta-preview.jsx:
+     em overlay o ResizeObserver não roda e o estado inicial fica em 0.5).
+     Sem zerar isso aqui, a impressão nativa sairia na METADE do tamanho —
+     o antigo gerador via html2canvas não sofria disso porque lia
+     offsetWidth, que ignora zoom (achado 19/08). */
+  .pe__preview-scaler { zoom: 1 !important; width: auto !important; }
+  .pe__preview-wrap, .pe__preview-pages { display: block !important; }
   .pe__pdf {
     max-width: none !important;
     width: 100% !important;
     aspect-ratio: auto !important;
     box-shadow: none !important;
+    overflow: visible !important;
     page-break-after: always;
     break-after: page;
   }
