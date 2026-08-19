@@ -697,6 +697,21 @@ function PropostaEditor({ setRoute, subsel }) {
     }
   }, [data.numeroCotacao]);
 
+  /* Auto-herda uma vez ao abrir — pedido do usuário 19/08: "conforme os
+     inputs forem acontecendo a proposta vai se auto preenchendo". Uma
+     Proposta nascida direto do Formulário (sem preço ainda) só ganha o
+     valor quando alguém digita na mão OU quando reabre esta tela depois
+     que uma Precificação foi calculada em algum outro lugar — o herdar()
+     acima já só completa campo vazio, nunca sobrescreve, então repetir
+     aqui é seguro. Só roda depois que o carregamento (se for edição)
+     termina, e só uma vez por sessão de tela. */
+  const autoHerdadoRef = React.useRef(false);
+  React.useEffect(() => {
+    if (autoHerdadoRef.current || loadingExisting || !data.numeroCotacao) return;
+    autoHerdadoRef.current = true;
+    herdar();
+  }, [loadingExisting, data.numeroCotacao, herdar]);
+
   /* ---- Gerar PDF (overlay em tela cheia) ----
      Cada .pe__pdf já nasce em tamanho físico real (210×297mm — ver CSS),
      então 1 seção = 1 folha A4, sem esticar/distorcer nada — mesmo padrão

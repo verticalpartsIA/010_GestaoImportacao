@@ -1414,13 +1414,28 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         <div className="row gap-2" style={{ marginTop: 16, justifyContent: 'center' }}>
           {id && <Button variant="ghost" icon="send" onClick={() => setShowCotacaoFornecedor(true)}>Enviar cotação a fornecedores</Button>}
           {id && (
-            <Button variant="ghost" icon="calculator" title="Preço já combinado por fora (CEO/Financeiro) — pula a Cotação a Fornecedor e vai direto pra fila do Financeiro precificar"
+            <Button variant="ghost" icon="calculator" title="Preço já combinado por fora (CEO/Financeiro) — a Proposta já nasce agora, com o preço em aberto pra preencher"
               onClick={async () => {
                 if (!unidades.length) { window.toast?.('Adicione ao menos um equipamento antes de enviar.', 'warning'); return; }
-                if (!window.confirm('Enviar direto para Precificação, sem passar por Cotação a Fornecedor? Use isso só quando o preço já foi combinado por fora.')) return;
+                if (!window.confirm('A proposta nasce agora, mesmo sem preço — alguém preenche o valor depois (na própria Proposta ou pela fila de Precificação). Confirma?')) return;
                 try {
                   await window.FormularioElevadorStore.enviarDiretoParaPrecificacao(id);
-                  window.toast?.('Enviado direto para o Financeiro precificar.', 'success');
+                  /* Proposta nasce na hora, já com cliente/obra/equipamento —
+                     preço fica em aberto (0) até alguém preencher, na própria
+                     Proposta ou via Precificação depois (herdar() no editor
+                     "auto-preenche" quando reaberta, sem sobrescrever o que
+                     já foi digitado — pedido do usuário, 19/08). */
+                  if (window.PropostaHeranca && numeroCotacao) {
+                    const r = await window.PropostaHeranca.prefillPorNumeroCotacao(numeroCotacao);
+                    if (r.encontrado) {
+                      const numero = window.MasterIdEngine.baseId('elevador', numeroCotacao);
+                      const salvo = await window.PropostaStore.salvar({ data: { ...r.prefill, numero }, eq: 'elevador', editId: null, valorTotal: 0 });
+                      if (salvo?.erro) window.toast?.('Enviado, mas não consegui criar a Proposta agora: ' + salvo.erro, 'warning');
+                      else window.toast?.('Proposta criada, aguardando preço.', 'success');
+                    } else {
+                      window.toast?.('Enviado — não consegui montar a Proposta agora, mas ela pode ser criada depois.', 'warning');
+                    }
+                  }
                 } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
               }}>Enviar direto para Precificação</Button>
           )}
