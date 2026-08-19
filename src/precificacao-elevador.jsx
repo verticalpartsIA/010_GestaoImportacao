@@ -55,7 +55,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Precificação</div>
           <h1 className="page-head__title">Precificação — Equipamentos</h1>
-          <p className="page-head__sub">Cotações já respondidas pelo fornecedor, prontas para calcular o preço de venda.</p>
+          <p className="page-head__sub">Cotações já respondidas pelo fornecedor, ou formulários enviados direto (preço já combinado por fora) — prontas para calcular o preço de venda.</p>
         </div>
         <div className="page-head__r"><PrecificacaoModoTabs modo={modo} setModo={setModo}/></div>
       </div>
@@ -68,15 +68,15 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
               <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</td></tr>
             )}
             {pendentes !== null && pendentes.length === 0 && (
-              <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma cotação respondida, em análise ou aprovada ainda.</td></tr>
+              <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma cotação respondida nem formulário enviado direto ainda.</td></tr>
             )}
             {(pendentes || []).map((item) => (
-              <tr key={item.cotacaoFornecedorId} style={{ cursor: 'pointer' }} onClick={() => abrir(item)}>
+              <tr key={item.cotacaoFornecedorId || ('direto-' + item.formularioElevadorId)} style={{ cursor: 'pointer' }} onClick={() => abrir(item)}>
                 <td className="mono">{item.numeroCotacao ?? '—'}</td>
                 <td>{item.clienteNome || '—'}</td>
-                <td>{item.fornecedor}</td>
+                <td>{item.direto ? <span className="small" title="Preço combinado por fora — sem Cotação a Fornecedor">Direto (sem fornecedor)</span> : item.fornecedor}</td>
                 <td>{item.respondedAt ? new Date(item.respondedAt).toLocaleDateString('pt-BR') : '—'}</td>
-                <td><StatusBadge status={window.CotacaoElevadorFornecedorStore.statusGroupLabel(item.statusCotacao)}/></td>
+                <td>{item.direto ? <span className="muted small">—</span> : <StatusBadge status={window.CotacaoElevadorFornecedorStore.statusGroupLabel(item.statusCotacao)}/>}</td>
                 <td>{item.precificacaoStatus ? <StatusBadge status={item.precificacaoStatus === 'finalizado' ? 'Aprovada' : item.precificacaoStatus === 'calculado' ? 'Em análise' : 'Recebida'}/> : <span className="muted small">Não iniciada</span>}</td>
                 <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>

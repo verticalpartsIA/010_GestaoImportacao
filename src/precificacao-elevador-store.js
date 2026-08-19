@@ -50,14 +50,25 @@
       .select('id, numero_documento, fornecedor, formulario_elevador_id, status, responded_at, categoria_produto')
       .in('status', ['respondido', 'em_analise', 'aprovada']).eq('categoria_produto', 'elevador').order('responded_at', { ascending: false });
     if (error) throw error;
+
+    /* "Direto pra Precificação" (pedido do usuário, 19/08): preço já veio
+       combinado por fora, formulário nunca passa por Cotação a Fornecedor.
+       São formulários marcados com envio_direto_precificacao_em que ainda
+       não viraram uma precificacoes_elevador. */
+    const { data: diretos } = await c.from('formularios_elevador')
+      .select('id, numero_cotacao, cliente_id, clientes(razao_social, cnpj), envio_direto_precificacao_em')
+      .not('envio_direto_precificacao_em', 'is', null).order('envio_direto_precificacao_em', { ascending: false });
+
     const formularioIds = [...new Set((cots || []).map((c2) => c2.formulario_elevador_id))];
-    if (!formularioIds.length) return [];
-    const { data: forms } = await c.from('formularios_elevador')
-      .select('id, numero_cotacao, cliente_id, clientes(razao_social, cnpj)').in('id', formularioIds);
-    const { data: precificacoes } = await c.from('precificacoes_elevador').select('id, cotacao_fornecedor_id, status');
+    const { data: forms } = formularioIds.length
+      ? await c.from('formularios_elevador').select('id, numero_cotacao, cliente_id, clientes(razao_social, cnpj)').in('id', formularioIds)
+      : { data: [] };
+    const { data: precificacoes } = await c.from('precificacoes_elevador').select('id, cotacao_fornecedor_id, formulario_elevador_id, status');
     const formPorId = {}; (forms || []).forEach((f) => { formPorId[f.id] = f; });
     const pzPorCotacao = {}; (precificacoes || []).forEach((p) => { if (p.cotacao_fornecedor_id) pzPorCotacao[p.cotacao_fornecedor_id] = p; });
-    return (cots || []).map((cot) => {
+    const pzPorFormulario = {}; (precificacoes || []).forEach((p) => { if (!p.cotacao_fornecedor_id) pzPorFormulario[p.formulario_elevador_id] = p; });
+
+    const daCotacao = (cots || []).map((cot) => {
       const form = formPorId[cot.formulario_elevador_id] || {};
       const pz = pzPorCotacao[cot.id];
       return {
@@ -65,51 +76,81 @@
         formularioElevadorId: cot.formulario_elevador_id, numeroCotacao: form.numero_cotacao ?? null,
         clienteNome: (form.clientes && form.clientes.razao_social) || null, clienteCnpj: (form.clientes && form.clientes.cnpj) || null,
         respondedAt: cot.responded_at, precificacaoId: pz ? pz.id : null, precificacaoStatus: pz ? pz.status : null,
-        statusCotacao: cot.status,
+        statusCotacao: cot.status, direto: false,
       };
     });
+    const diretosResultado = (diretos || [])
+      .filter((form) => !pzPorFormulario[form.id]) // já virou precificação → some daqui, aparece na lista normal de precificações
+      .map((form) => ({
+        cotacaoFornecedorId: null, numeroDocumentoFornecedor: null, fornecedor: null,
+        formularioElevadorId: form.id, numeroCotacao: form.numero_cotacao ?? null,
+        clienteNome: (form.clientes && form.clientes.razao_social) || null, clienteCnpj: (form.clientes && form.clientes.cnpj) || null,
+        respondedAt: form.envio_direto_precificacao_em, precificacaoId: null, precificacaoStatus: null,
+        statusCotacao: null, direto: true,
+      }));
+    return [...diretosResultado, ...daCotacao];
   }
 
   /* ---------- Monta o snapshot inicial (modelos, quantidade, VMLE) a partir do
-     Formulário + resposta do fornecedor — ponto de entrada "herdar o Cotação Nº" ---------- */
+     Formulário + resposta do fornecedor — ponto de entrada "herdar o Cotação Nº".
+     cotacaoFornecedorId nulo = caminho "direto pra Precificação" (pedido do
+     usuário, 19/08): preço já veio combinado por fora (CEO/Financeiro por
+     e-mail, telefone etc.), não faz sentido esperar resposta de fornecedor
+     que nunca vai chegar. Modelos nascem das próprias unidades do
+     Formulário, com valor zerado — o Financeiro digita à mão na tela de
+     cálculo de sempre, igual já faz com VMLE/frete quando falta algo. */
   async function montarRascunho(formularioElevadorId, cotacaoFornecedorId) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data: formulario, error: e1 } = await c.from('formularios_elevador').select('*').eq('id', formularioElevadorId).single();
     if (e1) throw e1;
-    const { data: cotFornecedor, error: e2 } = await c.from('cotacoes_elevador_fornecedor').select('*').eq('id', cotacaoFornecedorId).single();
-    if (e2) throw e2;
 
-    const unidades = (cotFornecedor.dados_envio && cotFornecedor.dados_envio.unidades) || [];
-    const itensResposta = (cotFornecedor.respostas && cotFornecedor.respostas.itens) || [];
-    const itemPorUnidade = {}; itensResposta.forEach((it) => { itemPorUnidade[it.unidade_id] = it; });
+    let modelos, vmleUsd, freteSeguroCapataziaUsd;
+    if (!cotacaoFornecedorId) {
+      const { data: unidadesForm, error: e3 } = await c.from('formularios_elevador_unidades')
+        .select('id, identificador, modelo, quantidade').eq('formulario_id', formularioElevadorId).order('indice_ativo');
+      if (e3) throw e3;
+      modelos = (unidadesForm || []).map((u) => ({
+        unidadeId: u.id, identificador: u.identificador,
+        modelo: u.modelo || '', quantidade: Number(u.quantidade) || 1,
+        valorUnitarioUsd: 0,
+      }));
+      vmleUsd = 0;
+      freteSeguroCapataziaUsd = 0;
+    } else {
+      const { data: cotFornecedor, error: e2 } = await c.from('cotacoes_elevador_fornecedor').select('*').eq('id', cotacaoFornecedorId).single();
+      if (e2) throw e2;
 
-    const modelos = unidades.map((u) => {
-      const item = itemPorUnidade[u.unidade_id] || {};
-      return {
-        unidadeId: u.unidade_id, identificador: u.identificador,
-        modelo: item.modelo_fornecedor || u.modelo || '',
-        quantidade: Number(u.quantidade) || 1,
-        valorUnitarioUsd: Number(item.preco_unitario) || 0,
-      };
-    });
-    const quantidadeEquipamentos = modelos.reduce((s, m) => s + m.quantidade, 0) || 1;
-    const vmleUsd = itensResposta.reduce((s, it) => s + (Number(it.preco_total) || 0), 0);
+      const unidades = (cotFornecedor.dados_envio && cotFornecedor.dados_envio.unidades) || [];
+      const itensResposta = (cotFornecedor.respostas && cotFornecedor.respostas.itens) || [];
+      const itemPorUnidade = {}; itensResposta.forEach((it) => { itemPorUnidade[it.unidade_id] = it; });
 
-    /* Frete internacional + outras taxas informados pelo fornecedor (USD) —
-       agora campos estruturados na resposta — herdam pra o bucket USD de
-       frete/seguro/capatazia da precificação (antes vinham zerados e o
-       precificador tinha que digitar à mão, no campo errado). */
-    const respostas = cotFornecedor.respostas || {};
-    const freteInternacionalUsd = Number(respostas.frete_internacional_usd) || 0;
-    const taxasExtrasUsd = Number(respostas.taxas_extras_usd) || 0;
-    const freteSeguroCapataziaUsd = freteInternacionalUsd + taxasExtrasUsd;
+      modelos = unidades.map((u) => {
+        const item = itemPorUnidade[u.unidade_id] || {};
+        return {
+          unidadeId: u.unidade_id, identificador: u.identificador,
+          modelo: item.modelo_fornecedor || u.modelo || '',
+          quantidade: Number(u.quantidade) || 1,
+          valorUnitarioUsd: Number(item.preco_unitario) || 0,
+        };
+      });
+      vmleUsd = itensResposta.reduce((s, it) => s + (Number(it.preco_total) || 0), 0);
+
+      /* Frete internacional + outras taxas informados pelo fornecedor (USD) —
+         agora campos estruturados na resposta — herdam pra o bucket USD de
+         frete/seguro/capatazia da precificação (antes vinham zerados e o
+         precificador tinha que digitar à mão, no campo errado). */
+      const respostas = cotFornecedor.respostas || {};
+      const freteInternacionalUsd = Number(respostas.frete_internacional_usd) || 0;
+      const taxasExtrasUsd = Number(respostas.taxas_extras_usd) || 0;
+      freteSeguroCapataziaUsd = freteInternacionalUsd + taxasExtrasUsd;
+    }
 
     const parametros = await listarParametrosFiscais();
 
     return {
       formulario_elevador_id: formularioElevadorId,
       numero_cotacao: formulario.numero_cotacao ?? null,
-      cotacao_fornecedor_id: cotacaoFornecedorId,
+      cotacao_fornecedor_id: cotacaoFornecedorId || null,
       vmle_usd: vmleUsd,
       frete_seguro_capatazia_usd: freteSeguroCapataziaUsd,
       modelos,

@@ -1413,6 +1413,17 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       {!publicMode && (id || onControleCotacoes) && (
         <div className="row gap-2" style={{ marginTop: 16, justifyContent: 'center' }}>
           {id && <Button variant="ghost" icon="send" onClick={() => setShowCotacaoFornecedor(true)}>Enviar cotação a fornecedores</Button>}
+          {id && (
+            <Button variant="ghost" icon="calculator" title="Preço já combinado por fora (CEO/Financeiro) — pula a Cotação a Fornecedor e vai direto pra fila do Financeiro precificar"
+              onClick={async () => {
+                if (!unidades.length) { window.toast?.('Adicione ao menos um equipamento antes de enviar.', 'warning'); return; }
+                if (!window.confirm('Enviar direto para Precificação, sem passar por Cotação a Fornecedor? Use isso só quando o preço já foi combinado por fora.')) return;
+                try {
+                  await window.FormularioElevadorStore.enviarDiretoParaPrecificacao(id);
+                  window.toast?.('Enviado direto para o Financeiro precificar.', 'success');
+                } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+              }}>Enviar direto para Precificação</Button>
+          )}
           {onControleCotacoes && <Button variant="ghost" icon="history" onClick={onControleCotacoes}>Controle de Cotações</Button>}
         </div>
       )}

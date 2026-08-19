@@ -195,7 +195,7 @@
     'endereco_cep', 'endereco_cidade', 'endereco_estado',
     'endereco_obra_logradouro', 'endereco_obra_complemento', 'endereco_obra_bairro',
     'endereco_obra_cep', 'endereco_obra_cidade', 'endereco_obra_estado',
-    'vendedor', 'finalidade_compra',
+    'vendedor', 'finalidade_compra', 'envio_direto_precificacao_em',
   ]);
 
   async function salvar(id, patch) {
@@ -257,6 +257,15 @@
 
   async function enviar(id) {
     await salvar(id, { status: 'enviado' });
+  }
+
+  /* "Enviar direto para Precificação" — pedido do usuário 19/08: preço já
+     veio combinado por fora (CEO/Financeiro), não faz sentido esperar
+     resposta de Cotação a Fornecedor que nunca vai chegar. Só marca a
+     data — quem lê isso e decide o que fazer é
+     PrecificacaoElevadorStore.listarPendentes() (precificacao-elevador-store.js). */
+  async function enviarDiretoParaPrecificacao(id) {
+    await salvar(id, { status: 'enviado', envio_direto_precificacao_em: new Date().toISOString() });
   }
 
   /* ---------- Unidades (um elevador por linha) ---------- */
@@ -394,7 +403,7 @@
 
   window.FormularioElevadorStore = {
     buscarOuCriarCliente,
-    criar, salvar, obter, obterPorToken, gerarLinkPublico, enviar, listar, listarCotacoes,
+    criar, salvar, obter, obterPorToken, gerarLinkPublico, enviar, enviarDiretoParaPrecificacao, listar, listarCotacoes,
     adicionarUnidade, atualizarUnidade, removerUnidade,
     publicUrl, formatarEndereco, listarFornecedores,
     listarModelosElevador, listarOpcoesElevador,
