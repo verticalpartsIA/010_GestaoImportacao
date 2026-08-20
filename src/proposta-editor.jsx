@@ -757,6 +757,29 @@ function PropostaEditor({ setRoute, subsel }) {
     setTimeout(() => window.print(), 80);
   }, [data]);
 
+  /* ---- Baixar PDF (react-pdf) — Fase 2 da migração (plano aprovado 20/08) ----
+     Só Elevador por enquanto: é o fluxo de referência (17 páginas), o
+     mesmo que sofreu 3 rodadas de bug de paginação na impressão nativa
+     (grid, aspect-ratio, conteúdo maior que a página — todos achados
+     reais, cross-browser). react-pdf pagina sozinho, de forma
+     determinística, sem depender do motor de impressão de nenhum
+     navegador — a mesma abordagem já provada no RFQ (Fase 1). Escada/
+     Esteira continuam no fluxo antigo (impressão nativa) por enquanto. */
+  const [baixandoPdf, setBaixandoPdf] = React.useState(false);
+  const baixarPdfReactPdf = React.useCallback(async () => {
+    if (!window.PropostaReactPdf) { window.toast?.('Motor de PDF ainda carregando — tente de novo em instantes.', 'warning'); return; }
+    setBaixandoPdf(true);
+    try {
+      const cliente = (data.cliente?.nome || '').trim();
+      const filename = (['Proposta', data.numero, cliente].filter(Boolean).join(' - ') || 'Proposta VerticalParts') + '.pdf';
+      await window.PropostaReactPdf.baixar(data, filename);
+    } catch (e) {
+      window.toast?.('❌ Erro ao gerar PDF: ' + (e.message || String(e)), 'error');
+    } finally {
+      setBaixandoPdf(false);
+    }
+  }, [data]);
+
   const resetProposal = () => {
     if (confirm("Descartar todas as alterações e reiniciar a proposta?")) {
       setData(makeDefaultProposta());
@@ -999,10 +1022,23 @@ function PropostaEditor({ setRoute, subsel }) {
           <div className="pe-pdf-bar">
             <span>Proposta — {data.cliente?.nome || data.numero || 'Nova proposta'}</span>
             <div className="pe-pdf-actions">
-              <Button variant="primary" size="sm" icon="print" onClick={imprimirOverlay}
-                title="Abre a impressão do navegador — escolha 'Salvar como PDF' para baixar o arquivo">
-                Salvar PDF / Imprimir
-              </Button>
+              {eq === 'elevador' ? (
+                <>
+                  <Button variant="primary" size="sm" icon="download" onClick={baixarPdfReactPdf} disabled={baixandoPdf}
+                    title="Gera e baixa o PDF direto — sem diálogo de impressão">
+                    {baixandoPdf ? 'Gerando…' : 'Baixar PDF'}
+                  </Button>
+                  <Button variant="outline" size="sm" icon="print" onClick={imprimirOverlay}
+                    title="Alternativa via impressão do navegador (motor antigo)">
+                    Imprimir
+                  </Button>
+                </>
+              ) : (
+                <Button variant="primary" size="sm" icon="print" onClick={imprimirOverlay}
+                  title="Abre a impressão do navegador — escolha 'Salvar como PDF' para baixar o arquivo">
+                  Salvar PDF / Imprimir
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={() => setPdfOverlay(false)}>Fechar</Button>
             </div>
           </div>
