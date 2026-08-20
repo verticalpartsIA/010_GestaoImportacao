@@ -48,6 +48,7 @@ function PEPreview({ data, eq, overlay, bare }) {
     pageList = [
       PreviewCapa,
       PreviewSobre,
+      PreviewSobreCont,
       PreviewClienteObra,
       PreviewSaudacao,
       PreviewElevadorMarketing,
@@ -192,7 +193,16 @@ function PreviewCapa({ data, eq, pg, total }) {
   );
 }
 
-/* ---------- Página 2: Sobre a VerticalParts (institucional, fixo) ---------- */
+/* ---------- Página 2: Sobre a VerticalParts (institucional, fixo) ----------
+   Dividida em 2 páginas (achado 20/08): o conteúdo inteiro (título + foto +
+   5 parágrafos + cards) media ~1626px de altura real contra os ~1123px de
+   uma folha A4 — 45% maior que cabe numa página só. Com tudo num único
+   `.pe__pdf`, o navegador decidia sozinho onde cortar pra impressão, e
+   Chrome e Firefox faziam isso de formas diferentes e inconsistentes
+   (uma página em branco sobrando, às vezes antes às vezes depois do
+   conteúdo real). Separar em 2 `.pe__pdf` de verdade — o mesmo padrão que
+   já funciona sem falha nas outras 18 páginas do documento — tira essa
+   decisão do navegador. */
 function PreviewSobre({ eq }) {
   return (
     <div className="pe__pdf">
@@ -207,6 +217,21 @@ function PreviewSobre({ eq }) {
         </div>
         <p>Desde 2012 no mercado de mobilidade vertical, a VerticalParts se destaca como líder fornecedora de soluções personalizadas e competitivas para o transporte de passageiros. Nosso compromisso é oferecer produtos de alta qualidade e serviços excepcionais para atender às necessidades específicas de cada cliente.</p>
         <p>Especializados na venda de equipamentos como escadas, esteiras rolantes, elevadores e peças de reposição, nos orgulhamos de oferecer uma ampla variedade de opções para aprimorar a mobilidade em diversos setores. Nosso objetivo é proporcionar soluções eficientes e seguras que atendam às demandas de espaços comerciais, residenciais e públicos.</p>
+      </div>
+      <PdfFooter/>
+    </div>
+  );
+}
+
+/* ---------- Página 2b: continuação de "Sobre a VerticalParts" ---------- */
+function PreviewSobreCont() {
+  return (
+    <div className="pe__pdf">
+      <div className="pe__pdf-inner">
+        <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 17 }}>
+          <img src="assets/logo-verticalparts-color.png" alt="VerticalParts" style={{ height: 26 }}/>
+          <span className="pdf-sub-title" style={{ margin: 0 }}>Sobre a VerticalParts</span>
+        </div>
         <p>Além disso, a VerticalParts se destaca pela sua dedicação em manter um amplo estoque de peças de reposição para escadas e esteiras rolantes. Isso nos permite suprir todas as suas necessidades de forma rápida e eficiente, garantindo a máxima disponibilidade e funcionamento contínuo dos seus equipamentos.</p>
         <p>Nossa equipe altamente qualificada está pronta para oferecer suporte técnico especializado e auxiliar na seleção, instalação e manutenção dos produtos. Valorizamos a satisfação do cliente e buscamos estabelecer parcerias duradouras baseadas na confiança e na excelência dos nossos serviços.</p>
         <p>Se você está em busca de soluções personalizadas e confiáveis em mobilidade vertical, conte com a VerticalParts.</p>
