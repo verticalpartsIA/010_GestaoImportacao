@@ -8,12 +8,18 @@
     "dev": "node server.js",
     "lint": "echo 'Lint: sem erros (projeto UMD — sem bundler)' && exit 0",
     "test": "node scripts/run-tests.js",
-    "build": "echo 'Build: sem etapa de build (UMD via Babel standalone)' && exit 0"
+    "build": "echo 'Build: sem etapa de build (UMD via Babel standalone)' && exit 0",
+    "build:pdf": "vite build --config pdf-bundle/vite.config.js"
   },
   "dependencies": {
     "express": "^4.19.2"
   },
   "engines": {
     "node": ">=18.0.0"
+  },
+  "devDependencies": {
+    "@react-pdf/renderer": "^4.6.1",
+    "@vitejs/plugin-react": "^6.1.0",
+    "vite": "^8.2.2"
   }
 }

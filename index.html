@@ -253,7 +253,19 @@
   <!-- Catálogo · Pedido a Fornecedor (RFQ bilíngue PT|EN) -->
   <script src="src/pedido-fornecedor-engine.js?v=3"></script>
   <script src="src/pedido-fornecedor-store.js?v=5"></script>
-  <script type="text/vp-jsx" src="src/pedido-fornecedor.jsx?v=3"></script>
+  <!-- Fase 1 da migração pra @react-pdf/renderer (plano aprovado 20/08) —
+       Caminho A (CDN ESM sem bundler) travou de verdade em pdf().toBlob()
+       ["Cannot read properties of null (reading 'props')"], em esm.sh E
+       jsDelivr, com e sem instância de React pareada — falha conhecida do
+       próprio pacote fora de um bundler real. Este arquivo é gerado por
+       `npm run build:pdf` (pdf-bundle/vite.config.js) a partir de
+       pdf-bundle/pedido-fornecedor-reactpdf.entry.js — React/ReactDOM
+       ficam "external", usam o window.React já carregado abaixo, sem
+       segunda cópia. É um <script> comum daqui pra frente, igual
+       jsPDF/html2canvas — só a GERAÇÃO dele usa Vite, o app servido
+       continua sem build step. -->
+  <script src="src/pedido-fornecedor-reactpdf.bundle.js?v=3"></script>
+  <script type="text/vp-jsx" src="src/pedido-fornecedor.jsx?v=4"></script>
 
   <!-- Copiloto VP · bolinha global (chat + preenchimento + revisão) -->
   <!-- Admin: Logs de Atividade -->

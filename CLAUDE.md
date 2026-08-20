@@ -19,7 +19,8 @@ Todo `<script>`/`<link>` do `index.html` é servido com `?v=N` (ex.: `ficha-tecn
 
 - React 18 UMD + Babel Standalone + Supabase JS + jsPDF + html2canvas, todos via **CDN** (unpkg, jsdelivr, cdnjs) — **sem build step**.
 - `node server.js` sobe um Express simples servindo estático em `:3000`. `npm install` primeiro (node_modules não commitado).
-- **Ambiente sandbox sem acesso a CDNs externos nem ao Supabase real** (só a hosts específicos como npm registry/pypi — REST calls do Supabase a partir do browser falham silenciosamente, capturadas pelos próprios catch/warn do código). Para testar o app de verdade com Playwright/Chromium neste tipo de ambiente:
+- **Atualização 20/08**: a suposição abaixo ("sandbox sem acesso a CDNs/Supabase real") não é mais verdadeira nesta sessão — CDNs externos (unpkg, esm.sh, jsDelivr, cdnjs) e o Supabase real do projeto responderam normalmente via `mcp__Claude_Browser__*` e via `curl`/`WebSearch`. Pode ter sido uma limitação de um ambiente/sessão anterior, não uma regra permanente — **confirme de novo antes de assumir uma limitação de rede**, não herde isso cegamente. O passo a passo do Playwright abaixo continua útil se algum dia a rede estiver bloqueada de novo.
+- Ambiente sandbox sem acesso a CDNs externos nem ao Supabase real (suposição antiga — ver atualização acima) — REST calls do Supabase a partir do browser falhariam silenciosamente, capturadas pelos próprios catch/warn do código. Para testar o app de verdade com Playwright/Chromium nesse cenário:
   1. `npm install` localmente as libs equivalentes (react, react-dom, @babel/standalone, @supabase/supabase-js, jspdf, html2canvas) numa pasta de scratch.
   2. Usar `page.route()` no Playwright pra interceptar as 6 URLs de CDN do `index.html` e servir os arquivos locais no lugar. Cuidado com a ordem de registro das rotas — Playwright roda a ÚLTIMA registrada primeiro; usar `route.fallback()` (não `route.continue()`) se precisar cair pra uma rota registrada antes.
   3. Tirar `integrity=`/`crossorigin=` do HTML servido (senão o SRI barra os arquivos locais, que não batem o hash).
@@ -27,6 +28,19 @@ Todo `<script>`/`<link>` do `index.html` é servido com `?v=N` (ex.: `ficha-tecn
   5. `src/supabase.js` tem bypass de auth para `localhost`/`127.0.0.1` — cria um `dev@localhost` fake, não precisa de SSO real.
   6. Como o Supabase real é inalcançável, qualquer teste que dependa de dados da "biblioteca" compartilhada (ver seção Ficha Técnica abaixo) precisa injetar mock direto via `page.evaluate(() => window.FT.setLibraryExtras({cats:[...], campos:[...]}))` depois do load — sem isso, `state.cats` só terá as 9 categorias nativas.
 - Isso vale o esforço: peguei vários bugs reais (não hipotéticos) só rodando o app de verdade em vez de confiar na leitura do código.
+
+## ⚠️ Única exceção ao "sem build step": `pdf-bundle/` (Vite)
+
+Migração de geração de PDF pra `@react-pdf/renderer` (plano aprovado pelo usuário 20/08, Fase 1 = RFQ/Solicitação de Cotação). **Caminho A (CDN ESM sem bundler, ex. esm.sh/jsDelivr) foi testado e travou de verdade** — `pdf().toBlob()` sempre falhava com `Cannot read properties of null (reading 'props')`, em 2 CDNs diferentes, com e sem instância de React pareada (falha conhecida do próprio `@react-pdf/renderer` v4 fora de um bundler real — ver `diegomura/react-pdf` issues #3223/#3156). O usuário escolheu então o Caminho B.
+
+- `pdf-bundle/pedido-fornecedor-reactpdf.entry.js` — fonte real (JSX/ES modules, `@react-pdf/renderer` importado normal via npm).
+- `pdf-bundle/vite.config.js` — build em modo lib, formato `iife`, `react`/`react-dom` como **external** (resolvidos pro `window.React` que o app já carrega via CDN — sem isso, duas cópias de React coexistindo quebram o reconciler do react-pdf).
+- Rodar `npm run build:pdf` sempre que editar o `.entry.js` — gera `src/pedido-fornecedor-reactpdf.bundle.js` (~1.3MB), que é **commitado** (é o asset estático servido, igual jsPDF/html2canvas — o app em produção continua sem build step nenhum, só a *geração* desse um arquivo usa Vite localmente).
+- Pegadinhas reais encontradas (documentadas como comentário no `.entry.js` também):
+  - O reconciler do react-pdf **não ignora `null`** num array de filhos como o React DOM faz — `cond ? h(...) : null` sobrevivendo no array quebra com `Cannot read properties of null (reading 'props')`. Sempre filtrar (`.filter(Boolean)`) antes de passar array de filhos.
+  - Saída IIFE sem processo Node por trás — precisa de `define: {'process.env.NODE_ENV': ...}` no `vite.config.js`, senão quebra com `process is not defined` assim que carrega.
+  - `@fontsource/inter` (CDN jsDelivr, URLs estáveis/versionadas — melhor que gstatic direto, que muda hash) não publica arquivo itálico — registrar só os pesos/estilos que existem de verdade, senão `Font.register` falha silenciosamente até o render (`Could not resolve font`).
+- Próximas fases (Ficha Técnica, depois Contrato Venda+Instalador juntos via `assinar-app.jsx`, Proposta por último) devem reusar esse mesmo padrão de `pdf-bundle/<nome>.entry.js` + entrada em `vite.config.js` ou `package.json#scripts`.
 
 ## Módulo Ficha Técnica (`src/ficha-tecnica.jsx` + `-engine.js` + `-store.js` + `styles/ficha-tecnica.css`)
 
