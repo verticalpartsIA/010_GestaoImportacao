@@ -765,11 +765,16 @@ select.pe-input.is-empty {
   color: var(--fg3);
 }
 
-/* Capa — a imagem tem proporção própria (aspect-ratio), não depende da
-   altura do pai pra calcular sua altura. */
+/* Capa — a foto usa altura fixa (mm), não aspect-ratio: é a ÚNICA página
+   do documento com aspect-ratio, e era a ÚNICA que perdia conteúdo na
+   impressão do Firefox mesmo depois de trocar o grid da grade por flex
+   (achado 20/08) — sinal de que a causa real era aspect-ratio dentro de
+   um contexto de paginação, não grid em si. 118mm ≈ 210mm × 9/16,
+   mesma proporção visual de antes, só que sem a propriedade que o
+   Firefox mistrata ao paginar. */
 .pe__pdf-capa { padding: 0; }
 .pe__pdf-capa-img {
-  width: 100%; aspect-ratio: 16 / 9;
+  width: 100%; height: 118mm;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
