@@ -93,6 +93,14 @@ window.__DOSSIER = window.__DOSSIER || (() => {
 
       if (errDossier) throw errDossier;
 
+      let propostaVinculada = null;
+      if (dossier.proposta_id) {
+        const { data: p } = await sb.from('propostas')
+          .select('id, numero_documento, titulo, status')
+          .eq('id', dossier.proposta_id).maybeSingle();
+        propostaVinculada = p || null;
+      }
+
       const { data: documentos } = await sb.from('dossier_documentos')
         .select('*')
         .eq('dossier_id', dossierId)
@@ -120,6 +128,7 @@ window.__DOSSIER = window.__DOSSIER || (() => {
 
       return {
         ...dossier,
+        propostaVinculada,
         documentos: documentos || [],
         pendencias: pendencias || [],
         responsaveis: responsaveis || [],

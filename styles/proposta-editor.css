@@ -214,6 +214,16 @@
    `.ci-print-doc` que o botão "Baixar (PDF)" da página pública precisa
    pra imprimir, o que gerava PDF em branco (achado 19/08). */
 @media print {
+  /* Sem isto o Chrome descarta background-image/background-color na
+     impressão nativa por padrão (a menos que o usuário marque manualmente
+     "Imprimir gráficos de plano de fundo" no diálogo) — é o que apagava a
+     foto de capa e a foto de "Sobre a VerticalParts" (ambas via CSS
+     background-image, não <img>), deixando vão em branco no lugar
+     (achado 20/08, comparado com print real gerado em produção). */
+  .pe-pdf-overlay * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
   body:has(.pe-pdf-overlay) > *:not(.pe-pdf-overlay) { display: none !important; }
   .pe-pdf-overlay {
     position: static !important; inset: auto !important; background: #fff !important;
@@ -759,12 +769,16 @@ select.pe-input.is-empty {
    altura do pai pra calcular sua altura. */
 .pe__pdf-capa { padding: 0; }
 .pe__pdf-capa-img {
-  width: 100%; aspect-ratio: 16 / 10;
+  width: 100%; aspect-ratio: 16 / 9;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
 }
-.pe__pdf-capa-body { padding: 42px 58px 58px; }
+/* padding-bottom reduzido de 58 pra 34: a capa (foto + título + grid +
+   rodapé de contato) estava passando de 297mm em produção — o rodapé de
+   contato vazava pra uma 2ª página quase em branco antes da página "Sobre
+   a VerticalParts" (achado 20/08, comparando PDF real gerado x código). */
+.pe__pdf-capa-body { padding: 34px 58px 34px; }
 .pe__pdf-capa-title {
   font-family: var(--font-display);
   font-weight: 800;

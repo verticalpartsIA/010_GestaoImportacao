@@ -158,6 +158,16 @@ function DossierObraPage({ dossierId, setRoute }) {
               {dossier.city && dossier.state ? `${dossier.city}, ${dossier.state}` : 'Localização não informada'}
               {dossier.equip_type && ` · ${dossier.equip_type}`}
             </div>
+            {dossier.propostaVinculada ? (
+              <div style={{ fontSize: 12, opacity: 0.9, marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6,
+                background: 'rgba(255,255,255,0.15)', padding: '3px 10px', borderRadius: 12 }}>
+                🔗 Vinculado à Proposta <b>{dossier.propostaVinculada.numero_documento}</b> ({dossier.propostaVinculada.status})
+              </div>
+            ) : (
+              <div style={{ fontSize: 12, opacity: 0.75, marginTop: 6 }}>
+                Sem Proposta correspondente no sistema (obra órfã)
+              </div>
+            )}
           </div>
           <div style={{ textAlign: 'right' }}>
             <div style={{ fontSize: 12, opacity: 0.8 }}>Dossier ID</div>
