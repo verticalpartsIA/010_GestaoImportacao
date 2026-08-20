@@ -557,18 +557,38 @@
         existing = rows && rows[0];
       }
 
+      /* precificacao_id pendurado: um rascunho salvo no navegador (ver
+         "rascunho salvo automaticamente" no editor) pode carregar um
+         precificacaoId de uma herança antiga cuja Precificação foi
+         apagada do banco depois — a proposta nunca mais salva, sempre
+         com "violates foreign key constraint propostas_precificacao_id_
+         fkey" (achado 20/08, cotação-teste 903). Em vez de travar o
+         vendedor pra sempre, se o vínculo estiver morto salva sem ele
+         (a proposta continua completa, só perde o rastreio automático
+         até a Precificação) e avisa quem chamou. */
+      const ehFkPrecificacaoMorta = (err) => /precificacao_id_fkey/i.test(err?.message || '');
+      let precificacaoOrfa = false;
+
       if (existing?.id) {
-        const { data: row, error } = await c.from('propostas').update(payload).eq('id', existing.id).select('id, token').single();
+        let { data: row, error } = await c.from('propostas').update(payload).eq('id', existing.id).select('id, token').single();
+        if (error && ehFkPrecificacaoMorta(error)) {
+          precificacaoOrfa = true;
+          ({ data: row, error } = await c.from('propostas').update({ ...payload, precificacao_id: null }).eq('id', existing.id).select('id, token').single());
+        }
         if (error) throw error;
-        return row;
+        return { ...row, precificacaoOrfa };
       } else {
-        const { data: row, error } = await c.from('propostas').insert([{ ...payload, status: 'rascunho' }]).select('id, token').single();
+        let { data: row, error } = await c.from('propostas').insert([{ ...payload, status: 'rascunho' }]).select('id, token').single();
+        if (error && ehFkPrecificacaoMorta(error)) {
+          precificacaoOrfa = true;
+          ({ data: row, error } = await c.from('propostas').insert([{ ...payload, precificacao_id: null, status: 'rascunho' }]).select('id, token').single());
+        }
         if (error) throw error;
         if (window.EventosFluxo) window.EventosFluxo.registrar({
           evento: 'PROPOSTA_ELABORADA', numeroCotacao: payload.numero_cotacao,
           alvoLabel: payload.titulo, alvoId: row.id,
         });
-        return row;
+        return { ...row, precificacaoOrfa };
       }
     } catch (e) {
       // Antes o erro era engolido e o usuário via "salva localmente" — uma

@@ -556,6 +556,9 @@ function PropostaEditor({ setRoute, subsel }) {
           window.toast?.('❌ Não foi possível salvar: ' + ((salvo && salvo.erro) || 'erro desconhecido'), 'error');
           return;
         }
+        if (salvo.precificacaoOrfa) {
+          window.toast?.('⚠ O vínculo com a Precificação original não existe mais — proposta salva sem ele (nada foi perdido nos dados).', 'warning');
+        }
         id = salvo.id;
       }
       const updated = await window.PropostaStore.publicar(id);
@@ -878,6 +881,9 @@ function PropostaEditor({ setRoute, subsel }) {
               setSavedAt(Date.now());
               if (salvo && !salvo.erro) {
                 window.toast("✓ Proposta salva no sistema", "success");
+                if (salvo.precificacaoOrfa) {
+                  window.toast('⚠ O vínculo com a Precificação original não existe mais — proposta salva sem ele (nada foi perdido nos dados).', 'warning');
+                }
                 if (meta?.destravada_em) setMeta((m) => ({ ...(m || {}), destravada_em: null, destravada_por: null }));
               }
               else window.toast("❌ Não salvou: " + ((salvo && salvo.erro) || 'erro desconhecido'), "error");
