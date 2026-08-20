@@ -789,12 +789,22 @@ select.pe-input.is-empty {
   color: #29261b;
   margin: 0 0 28px;
 }
+/* flex, não grid: o Firefox (cairo) descarta em silêncio conteúdo em
+   display:grid que ultrapassa a página na impressão, em vez de deixar
+   passar pra próxima como o Chrome faz — foi assim que a grade
+   Nº da Proposta/Vendedor/Contato inteira sumiu de um PDF gerado no
+   Firefox (achado 20/08, comparando com o mesmo PDF gerado no Chrome,
+   onde a grade aparece normal). flex-wrap com os itens a 50% reproduz
+   a mesma disposição 2 colunas × 4 linhas do grid original. */
 .pe__pdf-capa-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 13px 38px;
   font-size: 17px;
   line-height: 1.4;
+}
+.pe__pdf-capa-grid dt, .pe__pdf-capa-grid dd {
+  flex: 0 0 calc(50% - 19px);
 }
 .pe__pdf-capa-grid dt {
   font-weight: 800;
