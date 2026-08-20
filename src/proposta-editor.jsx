@@ -740,8 +740,19 @@ function PropostaEditor({ setRoute, subsel }) {
     await Promise.all(Array.from(imgs).map((img) => img.complete
       ? Promise.resolve()
       : new Promise((res) => { img.onload = res; img.onerror = res; setTimeout(res, 5000); })));
+
+    /* O Chrome usa document.title como nome do arquivo E como Título do
+       PDF. Sem isto o cliente recebia "Editor de Proposta · VP Gestão.pdf"
+       — nome de tela interna do sistema (achado 20/08). */
+    const tituloOriginal = document.title;
+    const cliente = (data.cliente?.nome || '').trim();
+    document.title = ['Proposta', data.numero, cliente].filter(Boolean).join(' - ') || 'Proposta VerticalParts';
+    const restaurar = () => { document.title = tituloOriginal; window.removeEventListener('afterprint', restaurar); };
+    window.addEventListener('afterprint', restaurar);
+    setTimeout(restaurar, 60000); // rede de segurança se afterprint não disparar
+
     setTimeout(() => window.print(), 80);
-  }, []);
+  }, [data]);
 
   const resetProposal = () => {
     if (confirm("Descartar todas as alterações e reiniciar a proposta?")) {

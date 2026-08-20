@@ -229,18 +229,56 @@
      offsetWidth, que ignora zoom (achado 19/08). */
   .pe__preview-scaler { zoom: 1 !important; width: auto !important; }
   .pe__preview-wrap, .pe__preview-pages { display: block !important; }
+
+  /* ---- Paginação sem páginas fantasma ----
+     O layout de tela reserva 130px de padding no rodapé de `.pe__pdf-inner`
+     porque `.pdf-page-footer` é absoluto (bottom: 0). Na impressão isso
+     virava altura VAZIA além dos 297mm da folha: uma seção que terminava
+     em 280mm virava caixa de ~314mm, e os 17mm de puro padding
+     transbordavam pra uma segunda folha só com o fundo — as "páginas
+     fantasma" (2 e 20 do PDF analisado em 20/08). O mesmo efeito, com
+     conteúdo real curto sobrando, produzia a "página órfã" (uma linha
+     solta + rodapé, pág. 12).
+     Correção: na impressão a página vira flex-column, o rodapé entra no
+     fluxo empurrado por margin-top:auto (continua colado embaixo) e o
+     padding reservado some. Assim a caixa só passa de 297mm quando há
+     CONTEÚDO de verdade transbordando — nunca por espaço vazio. Também
+     troco break-after (depois) por break-before (antes) na página
+     seguinte: `break-after: always` na última página gerava uma folha
+     extra em branco no fim. */
   .pe__pdf {
     max-width: none !important;
     width: 100% !important;
+    height: auto !important;
+    min-height: 297mm !important;
     aspect-ratio: auto !important;
     box-shadow: none !important;
     overflow: visible !important;
-    page-break-after: always;
-    break-after: page;
+    display: flex !important;
+    flex-direction: column !important;
+    break-after: auto !important;
+    page-break-after: auto !important;
+    break-inside: auto;
   }
-  .pe__pdf:last-child { page-break-after: auto; break-after: auto; }
-  @page { size: A4; margin: 12mm; }
+  .pe__pdf + .pe__pdf { break-before: page; page-break-before: always; }
+  .pe__pdf-inner { padding-bottom: 25px !important; flex: 1 1 auto !important; }
+  .pe__pdf-capa { flex: 1 1 auto !important; }
+  .pdf-page-footer {
+    position: static !important;
+    margin-top: auto !important;
+  }
+  /* Blocos que nunca devem partir no meio entre duas folhas. */
+  .pdf-table, .pdf-table2, .pdf-total, .pdf-spec-grid,
+  .pdf-page-header, .pdf-page-footer { break-inside: avoid; }
+
+  /* Instrução interna some; texto neutro pro cliente aparece. */
+  .pe-vazio-tela { display: none !important; }
+  .pe-vazio-print { display: block !important; }
+  @page { size: A4; margin: 0; }
 }
+
+/* Fora da impressão é o contrário: o vendedor vê a instrução. */
+.pe-vazio-print { display: none; }
 
 /* ---- Responsivo: as 3 colunas fixas espremiam o formulário ---- */
 @media (max-width: 1400px) {

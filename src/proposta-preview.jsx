@@ -125,9 +125,42 @@ function PdfFooter() {
   );
 }
 
-/* Placeholder consistente pra campo ainda vazio */
-function Vazio({ children }) {
-  return <p style={{ color: "var(--vp-gray-400)", fontStyle: "italic" }}>{children}</p>;
+/* CNPJ/CPF do cadastro vem só com dígitos ("88818299000137") e ia cru
+   pro documento do cliente. Formata pra máscara oficial; se não tiver o
+   tamanho esperado, devolve como está (não inventa formato). */
+function fmtDoc(v) {
+  const d = String(v || "").replace(/\D/g, "");
+  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+  return v || "";
+}
+
+/* O nome do cliente às vezes vem digitado já com o CNPJ colado dentro
+   ("Fulano - Prefeitura X, CNPJ 888182990001-37"), e aí o documento
+   mostrava o CNPJ duas vezes — uma no nome, outra no campo próprio
+   (achado na análise do PDF de 20/08, pág. 5). Limpa o sufixo do nome
+   quando o campo CNPJ já existe. */
+function nomeSemDoc(nome, doc) {
+  if (!nome || !doc) return nome || "";
+  return String(nome)
+    .replace(/[,;–-]?\s*(CNPJ|CPF)\s*:?\s*[\d./-]+\s*$/i, "")
+    .trim()
+    .replace(/[,;–-]\s*$/, "");
+}
+
+/* Placeholder de campo vazio. O texto que o VENDEDOR lê ("Preencha os
+   acabamentos na aba...") é instrução interna do sistema e não pode
+   chegar ao cliente — saía impresso no PDF entregue (achado real na
+   análise do PDF de 20/08, pág. 9: "ACABAMENTO — Preencha os acabamentos
+   na aba Acabamentos"). Na tela mostra a instrução; no PDF/impressão
+   mostra só "A definir.", que é o que faz sentido pro cliente ler. */
+function Vazio({ children, print = "A definir." }) {
+  return (
+    <>
+      <p className="pe-vazio-tela" style={{ color: "var(--vp-gray-400)", fontStyle: "italic" }}>{children}</p>
+      <p className="pe-vazio-print" style={{ color: "#777", fontStyle: "italic" }}>{print}</p>
+    </>
+  );
 }
 
 /* ---------- Página 1: Capa ---------- */
@@ -143,10 +176,10 @@ function PreviewCapa({ data, eq, pg, total }) {
             <dt>Nº da Proposta</dt>
             <dt>Vendedor</dt>
             <dd>{data.numero || <span style={{ color: "var(--vp-gray-300)" }}>VP-2026-XXX</span>}</dd>
-            <dd>{v.nome || <span style={{ color: "var(--vp-gray-300)" }}>—</span>}</dd>
+            <dd>{v.nome || <span style={{ color: "var(--vp-gray-300)" }}>Equipe Comercial</span>}</dd>
             <dt>Contato</dt>
             <dt>&nbsp;</dt>
-            <dd>{v.email || <span style={{ color: "var(--vp-gray-300)" }}>@verticalparts.com.br</span>}</dd>
+            <dd>{v.email || "comercial@verticalparts.com.br"}</dd>
             <dd>&nbsp;</dd>
           </dl>
           <div className="pe__pdf-capa-foot">
@@ -155,7 +188,6 @@ function PreviewCapa({ data, eq, pg, total }) {
           </div>
         </div>
       </div>
-      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
     </div>
   );
 }
@@ -205,8 +237,8 @@ function PreviewClienteObra({ data }) {
 
         <h2 className="pdf-sub-title">Dados do Cliente</h2>
         <div className="pdf-box">
-          <p><b>{c.nome || "—"}</b></p>
-          {c.cnpj ? <p>CNPJ: {c.cnpj}</p> : null}
+          <p><b>{nomeSemDoc(c.nome, c.cnpj) || c.nome || "—"}</b></p>
+          {c.cnpj ? <p>CNPJ: {fmtDoc(c.cnpj)}</p> : null}
           {c.responsavel ? <p>A/C: {c.responsavel}</p> : null}
           <p>{[c.endereco, c.numero].filter(Boolean).join(", ") || "—"}</p>
           <p>{[c.bairro, c.cidade, c.uf].filter(Boolean).join(" - ") || "—"}</p>
