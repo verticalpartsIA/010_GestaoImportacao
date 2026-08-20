@@ -53,7 +53,7 @@ function LinhaDoTempoPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Engenharia · Dossiê da Obra</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Engenharia · Linha do Tempo da Cotação</div>
           <h1 className="page-head__title">Linha do Tempo da Cotação</h1>
           <p className="page-head__sub">Do primeiro contato do cliente até a entrega — quem fez o quê, em ordem, numa cotação só.</p>
         </div>
