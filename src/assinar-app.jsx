@@ -174,26 +174,36 @@ function SgApp() {
     });
   }, [source]);
 
+  /* ---- podeReactPdf: única fonte de verdade de "esta proposta usa o
+     motor novo?" — decidida UMA vez aqui, não recalculada em cada lugar
+     que precisa saber (era assim antes: baixarDocumento tinha sua
+     própria cópia da conta, e o resto do componente não sabia). eq vem
+     de conteudoRenderizavel (deduzido do conteúdo real), NUNCA de
+     proposal_type — que está nulo em 290 das 311 propostas. */
+  const eqResolvido = _sgUM(() => {
+    if (!source || source.kind !== 'proposta') return null;
+    return window.PropostaStore.conteudoRenderizavel(source.rec).eq;
+  }, [source]);
+  const podeReactPdf = !!source && source.kind === 'proposta'
+    && eqResolvido === 'elevador' && !!window.PropostaReactPdf;
+
   /* ---- Download do documento pelo CLIENTE ----
      Definido AQUI (antes dos early returns de phase 'done'/'refused')
      porque os dois botões de baixar — o de antes de assinar e o
      "Baixar cópia assinada" — precisam dele.
      Proposta de Elevador usa o motor react-pdf, o mesmo do editor: PDF
      vetorial, paginação determinística, sem a página em branco que a
-     impressão do navegador produzia. Antes disto o CLIENTE recebia um
-     PDF pior que o do vendedor, porque esta página nem carregava o
-     motor novo (achado 21/08). Contratos e Escada/Esteira ainda não
-     foram migrados e seguem na impressão nativa. */
+     impressão do navegador produzia, e sem precisar do documento
+     escondido na página (o gerador monta o PDF direto dos dados, não
+     lê o DOM). Antes disto o CLIENTE recebia um PDF pior que o do
+     vendedor, porque esta página nem carregava o motor novo (achado
+     21/08). Contratos e Escada/Esteira ainda não foram migrados e
+     seguem na impressão nativa — essa continua precisando do DOM. */
   const baixarDocumento = _sgUC(async () => {
-    const src = source;
-    if (!src) { window.print(); return; }
-    const r = src.rec;
-    /* eq vem de conteudoRenderizavel (deduzido do conteúdo real), NUNCA
-       de proposal_type — que está nulo em 290 das 311 propostas. */
-    const { data: dj, eq } = window.PropostaStore.conteudoRenderizavel(r);
-    const podeReactPdf = src.kind === 'proposta' && eq === 'elevador' && !!window.PropostaReactPdf;
     if (!podeReactPdf) { window.print(); return; }
+    const r = source.rec;
     try {
+      const dj = window.PropostaStore.conteudoRenderizavel(r).data;
       const nomeCliente = ((dj && dj.cliente && dj.cliente.nome) || '').trim();
       const nome = ['Proposta', r.numero_documento, nomeCliente].filter(Boolean).join(' - ') + '.pdf';
       await window.PropostaReactPdf.baixar(dj, nome);
@@ -201,7 +211,7 @@ function SgApp() {
       console.error('PDF vetorial falhou, caindo pra impressão do navegador:', e);
       window.print();
     }
-  }, [source]);
+  }, [podeReactPdf, source]);
 
   const onScroll = () => {
     const el = viewerRef.current;
@@ -352,12 +362,17 @@ function SgApp() {
         </div>
         {/* Invisível na tela — só existe pra "Baixar cópia assinada" ter o que
            imprimir. Sem isto, o botão imprimia a telinha de sucesso, nunca o
-           documento (bug real, achado ao revisar o contrato de 16 páginas). */}
-        <div className="ci-print-doc">
-          {source.kind === 'proposta'
-            ? <window.PEPreview {...window.PropostaStore.conteudoRenderizavel(rec)} bare/>
-            : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
-        </div>
+           documento (bug real, achado ao revisar o contrato de 16 páginas).
+           Proposta de Elevador NÃO precisa disto — o react-pdf monta o PDF
+           direto dos dados, sem ler o DOM — então nem renderiza: essa cópia
+           dobrava o número de páginas na tela à toa (achado 21/08). */}
+        {!podeReactPdf && (
+          <div className="ci-print-doc">
+            {source.kind === 'proposta'
+              ? <window.PEPreview {...window.PropostaStore.conteudoRenderizavel(rec)} bare/>
+              : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
+          </div>
+        )}
       </>
     );
   }
@@ -474,8 +489,12 @@ function SgApp() {
       </div>
 
       {/* Invisível na tela — só existe pra "Baixar (PDF)" ter o que
-         imprimir antes da assinatura (mesmo padrão do print pós-assinatura). */}
-      <div className="ci-print-doc">{docNode}</div>
+         imprimir antes da assinatura (mesmo padrão do print pós-assinatura).
+         Proposta de Elevador não precisa: o react-pdf monta o PDF direto dos
+         dados. Sem este `if`, toda proposta de Elevador renderizava o
+         documento duas vezes na página (a visível pra leitura + esta cópia
+         escondida) — 34 páginas no DOM pra um documento de 17 (achado 21/08). */}
+      {!podeReactPdf && <div className="ci-print-doc">{docNode}</div>}
 
       {showRevisao && (
         <div className="ci-modal-backdrop" onClick={() => !enviandoRevisao && setShowRevisao(false)}>
