@@ -188,6 +188,72 @@
     return rec.versao_publicada || rec.data_json || {};
   }
 
+  /* ---------- Tipo de equipamento (eq) de uma proposta ----------
+     NÃO confie em `proposal_type`: das 311 propostas, 290 (as importadas
+     do sistema antigo) têm esse campo NULO, e as 21 restantes gravaram em
+     3 formatos diferentes ("elevador", "Elevador de Passageiros",
+     "Escada Rolante"). Como todo mundo fazia `proposal_type || 'elevador'`,
+     16 propostas de Escada e 23 de Esteira abriam e geravam PDF com o
+     layout de ELEVADOR (achado 21/08, conferindo título x campo no banco).
+
+     Ordem de confiança:
+       1) o conteúdo já convertido — se tem .escada/.esteira preenchido,
+          é isso e ponto (o conversor legado sabe distinguir, só não
+          contava pra ninguém);
+       2) proposal_type normalizado (aceita os 3 formatos gravados);
+       3) o título ("... - Escada"), última pista das legadas;
+       4) elevador como padrão. */
+  function normalizarEq(valor) {
+    const t = String(valor || '').toLowerCase();
+    if (!t) return null;
+    if (t.includes('escada')) return 'escada';
+    if (t.includes('esteira') || t.includes('rolante esteira')) return 'esteira';
+    if (t.includes('elevador')) return 'elevador';
+    if (t === 'escalator') return 'escada';
+    if (t === 'walkway') return 'esteira';
+    return null;
+  }
+
+  /* Critério deliberadamente ESTREITO: só conta como "tem equipamento" se
+     houver UNIDADE cadastrada. É o mesmo critério do conversor legado
+     (`if (!unidades.length) return null`), e é o único seguro aqui: toda
+     proposta nova nasce com os três equipamentos preenchidos de textos
+     padrão (garantia, condições...), então qualquer teste mais frouxo
+     acusaria "tem escada" numa proposta de elevador. */
+  function temUnidade(o) {
+    if (!o || typeof o !== 'object') return false;
+    const u = o.especificacoes || o.unidades;
+    return Array.isArray(u) && u.length > 0;
+  }
+
+  function resolverEq(rec, dadosConvertidos) {
+    const d = dadosConvertidos;
+    if (d) {
+      /* MESMA ORDEM do converterPropostaLegado (elevador → escada →
+         esteira). Inverter aqui daria resultado diferente do conversor
+         nas legadas, que trazem os 3 blocos no mesmo registro. */
+      if (temUnidade(d.elevador)) return 'elevador';
+      if (temUnidade(d.escada)) return 'escada';
+      if (temUnidade(d.esteira)) return 'esteira';
+    }
+    return normalizarEq(rec && rec.proposal_type)
+      || normalizarEq(rec && rec.titulo)
+      || 'elevador';
+  }
+
+  /* Conteúdo pronto pra renderizar: converte o formato legado quando
+     preciso e devolve junto o eq correto. Antes disto só o editor
+     convertia — a página pública /assinar entregava o formato antigo
+     cru pro PEPreview, que não o entende. */
+  function conteudoRenderizavel(rec) {
+    const bruto = conteudoVigente(rec);
+    const legado = !!(window.PropostaLegado && window.PropostaLegado.ehPropostaSchemaLegado(bruto));
+    const data = legado
+      ? window.PropostaLegado.converterPropostaLegado(bruto, rec && rec.titulo)
+      : bruto;
+    return { data, eq: resolverEq(rec, data), legado };
+  }
+
   /* Marca como enviado (gera notificação interna).
      Primeiro envio publica automaticamente (congela versao_publicada) —
      assim o cliente sempre lê uma versão congelada, sem exigir que o
@@ -602,7 +668,7 @@
     uuid, shortToken, getPublicIP,
     fmtDateTime, signUrl, prettyUrl, whatsAppHref, mailtoHref,
     getById, getByToken, garantirToken,
-    publicar, conteudoVigente,
+    publicar, conteudoVigente, conteudoRenderizavel, resolverEq, normalizarEq,
     markSent, markViewed, markSigned, refuse, solicitarRevisao,
     salvar,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,

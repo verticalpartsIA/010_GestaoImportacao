@@ -618,11 +618,20 @@ function PropostaEditor({ setRoute, subsel }) {
            o data_json original em __legadoOriginal. Sem isso, salvar apagava
            de vez tudo que só existia no formato antigo (termos, recursos,
            blocos de escada/esteira, textos jurídicos). */
-        const carregado = window.PropostaLegado.ehPropostaSchemaLegado(dj)
-          ? { ...deepMergeProposta(makeDefaultProposta(), window.PropostaLegado.converterPropostaLegado(dj, row.titulo)), __legadoOriginal: dj }
+        const ehLegado = window.PropostaLegado.ehPropostaSchemaLegado(dj);
+        const convertido = ehLegado ? window.PropostaLegado.converterPropostaLegado(dj, row.titulo) : null;
+        const carregado = ehLegado
+          ? { ...deepMergeProposta(makeDefaultProposta(), convertido), __legadoOriginal: dj }
           : (row.data_json || makeDefaultProposta());
         setData(carregado);
-        setEq(row.proposal_type || 'elevador');
+        /* eq deduzido do conteúdo, não de proposal_type: o campo está NULO
+           em 290 das 311 propostas (todas as importadas), e o antigo
+           `proposal_type || 'elevador'` fazia 16 propostas de Escada e 23 de
+           Esteira abrirem com o layout de Elevador (achado 21/08).
+           Passa `convertido` (não `carregado`): o merge com o default
+           preenche .elevador mesmo numa proposta de escada, o que
+           enganaria a detecção. */
+        setEq(window.PropostaStore.resolverEq(row, convertido));
         setMeta({
           status: row.status, numero_documento: row.numero_documento,
           master_id: row.master_id, valor_total: row.valor_total,

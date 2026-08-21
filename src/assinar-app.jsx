@@ -188,12 +188,12 @@ function SgApp() {
     const src = source;
     if (!src) { window.print(); return; }
     const r = src.rec;
-    const podeReactPdf = src.kind === 'proposta'
-      && (r.proposal_type || 'elevador') === 'elevador'
-      && !!window.PropostaReactPdf;
+    /* eq vem de conteudoRenderizavel (deduzido do conteúdo real), NUNCA
+       de proposal_type — que está nulo em 290 das 311 propostas. */
+    const { data: dj, eq } = window.PropostaStore.conteudoRenderizavel(r);
+    const podeReactPdf = src.kind === 'proposta' && eq === 'elevador' && !!window.PropostaReactPdf;
     if (!podeReactPdf) { window.print(); return; }
     try {
-      const dj = window.PropostaStore.conteudoVigente(r);
       const nomeCliente = ((dj && dj.cliente && dj.cliente.nome) || '').trim();
       const nome = ['Proposta', r.numero_documento, nomeCliente].filter(Boolean).join(' - ') + '.pdf';
       await window.PropostaReactPdf.baixar(dj, nome);
@@ -240,7 +240,7 @@ function SgApp() {
     const defaultName = source.kind === 'instalador'
       ? (rec.responsavel_nome || rec.contratada_nome)
       : source.kind === 'proposta'
-      ? ((window.PropostaStore.conteudoVigente(rec).cliente || {}).nome)
+      ? ((window.PropostaStore.conteudoRenderizavel(rec).data.cliente || {}).nome)
       : (rec.responsavel_nome || rec.comprador_razao_social);
     const sig = sigMode === 'draw'
       ? { type: 'draw', data: drawData, signerName: defaultName }
@@ -355,7 +355,7 @@ function SgApp() {
            documento (bug real, achado ao revisar o contrato de 16 páginas). */}
         <div className="ci-print-doc">
           {source.kind === 'proposta'
-            ? <window.PEPreview data={window.PropostaStore.conteudoVigente(rec)} eq={rec.proposal_type || 'elevador'} bare/>
+            ? <window.PEPreview {...window.PropostaStore.conteudoRenderizavel(rec)} bare/>
             : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
         </div>
       </>
@@ -375,7 +375,7 @@ function SgApp() {
   /* Resumo do card de topo varia por tipo */
   const isInstalador = source.kind === 'instalador';
   const isProposta = source.kind === 'proposta';
-  const djVigente = isProposta ? window.PropostaStore.conteudoVigente(rec) : {};
+  const djVigente = isProposta ? window.PropostaStore.conteudoRenderizavel(rec).data : {};
   const djCliente = (djVigente && djVigente.cliente) || {};
   const counterpartyName = isInstalador ? rec.contratada_nome : isProposta ? djCliente.nome : rec.comprador_razao_social;
   const counterpartyLabel = isInstalador ? 'Contratada' : isProposta ? 'Cliente' : 'Comprador';
@@ -390,7 +390,7 @@ function SgApp() {
     : (rec.valor_total_num ? window.CV.brl(rec.valor_total_num) : '—');
 
   const docNode = isProposta
-    ? <window.PEPreview data={window.PropostaStore.conteudoVigente(rec)} eq={rec.proposal_type || 'elevador'} bare/>
+    ? <window.PEPreview {...window.PropostaStore.conteudoRenderizavel(rec)} bare/>
     : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>;
 
   return (
