@@ -772,7 +772,13 @@ function PropostaEditor({ setRoute, subsel }) {
     try {
       const cliente = (data.cliente?.nome || '').trim();
       const filename = (['Proposta', data.numero, cliente].filter(Boolean).join(' - ') || 'Proposta VerticalParts') + '.pdf';
-      await window.PropostaReactPdf.baixar(data, filename);
+      const r = await window.PropostaReactPdf.baixar(data, filename);
+      /* Sem este aviso, uma falha de carregamento de imagem produzia um
+         PDF completo mas SEM logo nem foto de capa, e ninguém ficava
+         sabendo até abrir o arquivo (achado 20/08). */
+      if (r && r.falhasDeImagem && r.falhasDeImagem.length) {
+        window.toast?.('⚠ PDF gerado, mas sem imagens: ' + r.falhasDeImagem.join('; '), 'warning');
+      }
     } catch (e) {
       window.toast?.('❌ Erro ao gerar PDF: ' + (e.message || String(e)), 'error');
     } finally {

@@ -159,6 +159,41 @@ function montarStyles() {
   });
 }
 
+/* ---------- Carregamento de imagem ----------
+   O react-pdf recebia o caminho RELATIVO ('assets/capa-elevador.png') e
+   resolvia de um jeito diferente do navegador: em produção não achou
+   nenhuma imagem e gerou o PDF inteiro SEM elas, sem erro nenhum —
+   17 páginas certas, 0 imagens, 83KB em vez de 1.4MB (achado 20/08, a
+   partir do PDF VP-2026-580 enviado pelo usuário; os arquivos estavam
+   no ar, HTTP 200, o problema era só a resolução do caminho).
+
+   Aqui o carregamento passa a ser explícito: busca o arquivo com URL
+   ABSOLUTA (window.location.origin) e converte pra data URI antes de
+   entregar ao react-pdf. Assim não depende de como a lib resolve
+   caminho, e — mais importante — a falha deixa de ser silenciosa:
+   quem chamar sabe quais imagens não vieram. */
+/* Imagens já resolvidas em data URI, preenchidas por montarDocumento()
+   antes de qualquer página ser montada. As funções de página leem daqui
+   em vez de receber mais um parâmetro em 13 assinaturas. */
+const IMG = { logo: null, capa: null };
+
+const _imgCache = new Map();
+async function carregarImagem(caminho) {
+  if (_imgCache.has(caminho)) return _imgCache.get(caminho);
+  const url = new URL(caminho, window.location.origin + '/').href;
+  const resp = await fetch(url);
+  if (!resp.ok) throw new Error(`${caminho} → HTTP ${resp.status}`);
+  const blob = await resp.blob();
+  const dataUri = await new Promise((ok, err) => {
+    const fr = new FileReader();
+    fr.onload = () => ok(fr.result);
+    fr.onerror = () => err(new Error('falha ao ler ' + caminho));
+    fr.readAsDataURL(blob);
+  });
+  _imgCache.set(caminho, dataUri);
+  return dataUri;
+}
+
 /* ---------- helpers de dado (idênticos a proposta-preview.jsx) ---------- */
 function fmtDoc(v) {
   const d = String(v || '').replace(/\D/g, '');
@@ -177,7 +212,7 @@ function numBR(s) { return parseFloat((s || '0').toString().replace(/\./g, '').r
 function PdfHeader(S, numero) {
   return h(View, { style: S.pageHeader }, [
     h(View, { key: 'l' }, [
-      h(Image, { key: 'logo', src: 'assets/logo-verticalparts-color.png', style: S.headerLogo }),
+      IMG.logo ? h(Image, { key: 'logo', src: IMG.logo, style: S.headerLogo }) : null,
       h(Text, { style: S.headerTag, key: 't' }, 'Elevando você e o seu negócio'),
     ]),
     h(View, { key: 'r' }, [
@@ -219,7 +254,7 @@ function Tabela2(S, cols, linhas, key) {
 function PgCapa(S, data, eq) {
   const v = data.vendedor || {};
   return h(Page, { size: 'A4', style: S.pageNoPad }, [
-    h(Image, { key: 'img', src: `assets/capa-${eq === 'elevador' ? 'elevador' : eq === 'escada' ? 'escada-rolante' : 'esteira-rolante'}.png`, style: S.capaImg }),
+    IMG.capa ? h(Image, { key: 'img', src: IMG.capa, style: S.capaImg }) : null,
     h(View, { style: S.capaBody, key: 'body' }, [
       h(Text, { style: S.capaTitle, key: 't' }, 'Proposta\nComercial'),
       h(View, { style: S.capaGrid, key: 'grid' }, [
@@ -239,9 +274,9 @@ function PgCapa(S, data, eq) {
 function PgSobre(S, eq) {
   return h(Page, { size: 'A4', style: S.page }, [
     h(Text, { style: [S.capaTitle, { fontSize: pt(27), color: NAVY, marginBottom: pt(25) }], key: 't' }, 'Elevando\nVocê e o Seu Negócio'),
-    h(Image, { key: 'img', src: `assets/capa-${eq === 'elevador' ? 'elevador' : eq === 'escada' ? 'escada-rolante' : 'esteira-rolante'}.png`, style: S.sobreImg }),
+    IMG.capa ? h(Image, { key: 'img', src: IMG.capa, style: S.sobreImg }) : null,
     h(View, { style: { flexDirection: 'row', alignItems: 'center', marginBottom: pt(17) }, key: 'l' }, [
-      h(Image, { key: 'logo', src: 'assets/logo-verticalparts-color.png', style: S.logoInline }),
+      IMG.logo ? h(Image, { key: 'logo', src: IMG.logo, style: S.logoInline }) : null,
       h(Text, { style: { fontSize: pt(16), fontWeight: 800, textTransform: 'uppercase', color: NAVY }, key: 't' }, 'Sobre a VerticalParts'),
     ]),
     h(Text, { style: S.p, key: 'p1' }, 'Desde 2012 no mercado de mobilidade vertical, a VerticalParts se destaca como líder fornecedora de soluções personalizadas e competitivas para o transporte de passageiros. Nosso compromisso é oferecer produtos de alta qualidade e serviços excepcionais para atender às necessidades específicas de cada cliente.'),
@@ -253,7 +288,7 @@ function PgSobre(S, eq) {
 function PgSobreCont(S) {
   return h(Page, { size: 'A4', style: S.page }, [
     h(View, { style: { flexDirection: 'row', alignItems: 'center', marginBottom: pt(17) }, key: 'l' }, [
-      h(Image, { key: 'logo', src: 'assets/logo-verticalparts-color.png', style: S.logoInline }),
+      IMG.logo ? h(Image, { key: 'logo', src: IMG.logo, style: S.logoInline }) : null,
       h(Text, { style: { fontSize: pt(16), fontWeight: 800, textTransform: 'uppercase', color: NAVY }, key: 't' }, 'Sobre a VerticalParts'),
     ]),
     h(Text, { style: S.p, key: 'p1' }, 'Além disso, a VerticalParts se destaca pela sua dedicação em manter um amplo estoque de peças de reposição para escadas e esteiras rolantes. Isso nos permite suprir todas as suas necessidades de forma rápida e eficiente, garantindo a máxima disponibilidade e funcionamento contínuo dos seus equipamentos.'),
@@ -517,6 +552,19 @@ async function montarDocumento(data) {
     urls = Object.fromEntries(entries);
   }
 
+  /* Logo e foto de capa viram data URI ANTES de montar qualquer página —
+     ver comentário em carregarImagem(). Falha aqui é reportada de volta
+     (montarDocumento.ultimasFalhas) em vez de gerar um PDF sem imagem
+     em silêncio, que foi o defeito de 20/08. */
+  montarDocumento.ultimasFalhas = [];
+  const capaArquivo = `assets/capa-${eq === 'elevador' ? 'elevador' : eq === 'escada' ? 'escada-rolante' : 'esteira-rolante'}.png`;
+  await Promise.all([
+    carregarImagem('assets/logo-verticalparts-color.png').then((u) => { IMG.logo = u; })
+      .catch((e) => { IMG.logo = null; montarDocumento.ultimasFalhas.push(e.message); }),
+    carregarImagem(capaArquivo).then((u) => { IMG.capa = u; })
+      .catch((e) => { IMG.capa = null; montarDocumento.ultimasFalhas.push(e.message); }),
+  ]);
+
   const pages = [
     PgCapa(S, data, eq),
     PgSobre(S, eq),
@@ -549,6 +597,7 @@ async function baixar(data, filename) {
   a.href = url; a.download = filename;
   document.body.appendChild(a); a.click(); document.body.removeChild(a);
   setTimeout(() => URL.revokeObjectURL(url), 10000);
+  return { falhasDeImagem: montarDocumento.ultimasFalhas || [] };
 }
 
 window.PropostaReactPdf = { baixar, montarDocumento };
