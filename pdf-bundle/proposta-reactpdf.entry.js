@@ -71,7 +71,18 @@ function montarStyles() {
     pageNoPad: { fontFamily: 'Inter', padding: 0 },
 
     // Capa
-    capaImg: { width: '100%', height: '118mm' },
+    /* objectFit:'cover' equivale ao `background-size: cover` do CSS
+       original. SEM ele o <Image> do react-pdf ESTICA a foto pra
+       preencher exatamente width×height — e aqui isso era brutal: as
+       fotos de capa são RETRATO (545×767, proporção 0.71) e a caixa é
+       PAISAGEM (595×334, proporção 1.78), ou seja 2.5x de deformação
+       na capa e 5x na página "Sobre" (achado 20/08, medindo as
+       dimensões nativas dos PNGs contra as caixas de destino).
+       objectPositionY:'0%' replica o `background-position: top center`
+       do CSS — sem isso o corte pegaria a faixa central da foto em vez
+       do topo, que é o enquadramento escolhido no design original. */
+    capaImg: { width: '100%', height: '118mm', objectFit: 'cover', objectPositionY: '0%' },
+    sobreImg: { width: '100%', height: pt(190), marginBottom: pt(25), objectFit: 'cover' },
     capaBody: { padding: `${pt(34)}pt ${pt(58)}pt ${pt(34)}pt` },
     capaTitle: { fontFamily: 'Barlow Condensed', fontWeight: 800, fontSize: pt(66), lineHeight: 0.95, textTransform: 'uppercase', color: CAPA_TXT, marginBottom: pt(28) },
     capaGrid: { flexDirection: 'row', flexWrap: 'wrap', marginTop: pt(4) },
@@ -83,7 +94,14 @@ function montarStyles() {
 
     // header/footer internas
     pageHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', paddingBottom: pt(13), marginBottom: pt(25), borderBottom: '1pt solid #ddd' },
-    headerLogo: { height: pt(30) },
+    /* Logo: SEMPRE width+height explícitos na proporção nativa
+       (1866x388 = 4.809) + objectFit contain. Dar só `height` dentro de
+       um flex row deixou o flex esticar a largura e o logo saiu 44%
+       mais largo do que devia nas páginas "Sobre" (proporção desenhada
+       6.949 contra 4.809 real — achado 20/08 lendo a matriz de
+       transformação direto do content stream do PDF gerado). */
+    headerLogo: { width: pt(30 * 4.809), height: pt(30), objectFit: 'contain' },
+    logoInline: { width: pt(26 * 4.809), height: pt(26), marginRight: pt(13), objectFit: 'contain' },
     headerTag: { fontSize: pt(11), fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: '#777', marginTop: pt(6) },
     headerNumLbl: { fontSize: pt(11), fontWeight: 700, letterSpacing: 0.4, textTransform: 'uppercase', color: '#777', textAlign: 'right' },
     headerNumVal: { fontSize: pt(19), fontWeight: 800, color: NAVY, marginTop: pt(4), textAlign: 'right' },
@@ -130,7 +148,14 @@ function montarStyles() {
     assinaturaB: { fontSize: pt(14), color: NAVY, fontWeight: 700 },
     assinaturaSpan: { fontSize: pt(13), color: '#777' },
 
-    vazio: { fontSize: pt(15), color: '#777', fontStyle: 'italic', marginBottom: pt(8) },
+    /* SEM fontStyle:'italic' — @fontsource/inter NÃO publica arquivo
+       itálico, e react-pdf só sabe usar variante que foi registrada em
+       Font.register: pedir itálico derruba a geração inteira com
+       "Could not resolve font for Inter, fontWeight 400, fontStyle
+       italic". Mesmíssimo erro já cometido e documentado na Fase 1
+       (RFQ) e repetido aqui por descuido — se algum dia precisar de
+       itálico de verdade, registre o arquivo antes de usar. */
+    vazio: { fontSize: pt(15), color: '#777', marginBottom: pt(8) },
   });
 }
 
@@ -214,9 +239,9 @@ function PgCapa(S, data, eq) {
 function PgSobre(S, eq) {
   return h(Page, { size: 'A4', style: S.page }, [
     h(Text, { style: [S.capaTitle, { fontSize: pt(27), color: NAVY, marginBottom: pt(25) }], key: 't' }, 'Elevando\nVocê e o Seu Negócio'),
-    h(Image, { key: 'img', src: `assets/capa-${eq === 'elevador' ? 'elevador' : eq === 'escada' ? 'escada-rolante' : 'esteira-rolante'}.png`, style: { width: '100%', height: pt(190), marginBottom: pt(25) } }),
+    h(Image, { key: 'img', src: `assets/capa-${eq === 'elevador' ? 'elevador' : eq === 'escada' ? 'escada-rolante' : 'esteira-rolante'}.png`, style: S.sobreImg }),
     h(View, { style: { flexDirection: 'row', alignItems: 'center', marginBottom: pt(17) }, key: 'l' }, [
-      h(Image, { key: 'logo', src: 'assets/logo-verticalparts-color.png', style: { height: pt(26), marginRight: pt(13) } }),
+      h(Image, { key: 'logo', src: 'assets/logo-verticalparts-color.png', style: S.logoInline }),
       h(Text, { style: { fontSize: pt(16), fontWeight: 800, textTransform: 'uppercase', color: NAVY }, key: 't' }, 'Sobre a VerticalParts'),
     ]),
     h(Text, { style: S.p, key: 'p1' }, 'Desde 2012 no mercado de mobilidade vertical, a VerticalParts se destaca como líder fornecedora de soluções personalizadas e competitivas para o transporte de passageiros. Nosso compromisso é oferecer produtos de alta qualidade e serviços excepcionais para atender às necessidades específicas de cada cliente.'),
@@ -228,7 +253,7 @@ function PgSobre(S, eq) {
 function PgSobreCont(S) {
   return h(Page, { size: 'A4', style: S.page }, [
     h(View, { style: { flexDirection: 'row', alignItems: 'center', marginBottom: pt(17) }, key: 'l' }, [
-      h(Image, { key: 'logo', src: 'assets/logo-verticalparts-color.png', style: { height: pt(26), marginRight: pt(13) } }),
+      h(Image, { key: 'logo', src: 'assets/logo-verticalparts-color.png', style: S.logoInline }),
       h(Text, { style: { fontSize: pt(16), fontWeight: 800, textTransform: 'uppercase', color: NAVY }, key: 't' }, 'Sobre a VerticalParts'),
     ]),
     h(Text, { style: S.p, key: 'p1' }, 'Além disso, a VerticalParts se destaca pela sua dedicação em manter um amplo estoque de peças de reposição para escadas e esteiras rolantes. Isso nos permite suprir todas as suas necessidades de forma rápida e eficiente, garantindo a máxima disponibilidade e funcionamento contínuo dos seus equipamentos.'),

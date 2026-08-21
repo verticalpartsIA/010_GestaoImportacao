@@ -1022,17 +1022,16 @@ function PropostaEditor({ setRoute, subsel }) {
           <div className="pe-pdf-bar">
             <span>Proposta — {data.cliente?.nome || data.numero || 'Nova proposta'}</span>
             <div className="pe-pdf-actions">
+              {/* Elevador: SÓ "Baixar PDF" (react-pdf). O botão de imprimir
+                  foi removido de propósito — era ele que produzia a página
+                  em branco que o usuário reportou repetidamente, e manter
+                  os dois caminhos só mantinha o defeito vivo. Escada/Esteira
+                  ainda não foram migradas, então lá a impressão continua. */}
               {eq === 'elevador' ? (
-                <>
-                  <Button variant="primary" size="sm" icon="download" onClick={baixarPdfReactPdf} disabled={baixandoPdf}
-                    title="Gera e baixa o PDF direto — sem diálogo de impressão">
-                    {baixandoPdf ? 'Gerando…' : 'Baixar PDF'}
-                  </Button>
-                  <Button variant="outline" size="sm" icon="print" onClick={imprimirOverlay}
-                    title="Alternativa via impressão do navegador (motor antigo)">
-                    Imprimir
-                  </Button>
-                </>
+                <Button variant="primary" size="sm" icon="download" onClick={baixarPdfReactPdf} disabled={baixandoPdf}
+                  title="Gera e baixa o PDF direto — sem diálogo de impressão">
+                  {baixandoPdf ? 'Gerando…' : 'Baixar PDF'}
+                </Button>
               ) : (
                 <Button variant="primary" size="sm" icon="print" onClick={imprimirOverlay}
                   title="Abre a impressão do navegador — escolha 'Salvar como PDF' para baixar o arquivo">
