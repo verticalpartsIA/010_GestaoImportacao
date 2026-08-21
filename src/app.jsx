@@ -99,6 +99,35 @@ function EmConstrucaoPage({ titulo, descricao }) {
   );
 }
 
+/* ---- Roteamento por URL (Fase 1 da série de roteirização, issue #279) ----
+   `subsel` normalmente é o objeto inteiro já carregado em memória pela
+   tela de lista (ex.: lead-detail recebe `lead={subsel}`), não um ID
+   simples — então ainda não dá pra reidratar essas telas só a partir da
+   URL (isso é a Fase 2, issue #280: fetch por ID). Duas rotas já fogem
+   dessa regra porque SEMPRE receberam um ID puro, não objeto — essas já
+   funcionam com deep link de verdade nesta fase. */
+const ID_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias"]);
+
+/* Demais rotas de detalhe: se a URL apontar direto pra elas sem o objeto
+   em memória (link direto, refresh, voltar do navegador), não tem como
+   renderizar — caem pra rota de lista correspondente em vez de quebrar. */
+const SUBSEL_FALLBACK_ROUTE = {
+  "lead-detail": "leads",
+  "formulario-elevador": "formularios",
+  "cotacao-fornecedor-detail": "cotacoes-fornecedor",
+  "proposta-editor": "propostas",
+  "contrato-editor": "juridico",
+  "ncm-detail": "ncm-kanban",
+  "importacao-detail": "importacao",
+};
+
+function deriveIdForRoute(route, subsel) {
+  if (subsel == null) return null;
+  if (typeof subsel === "string" || typeof subsel === "number") return subsel;
+  if (route === "ncm-detail") return subsel.ncmProduct && subsel.ncmProduct.id;
+  return subsel.id != null ? subsel.id : null;
+}
+
 function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
 
@@ -111,19 +140,57 @@ function App() {
     try { localStorage.setItem("vpprd." + k, JSON.stringify(v)); } catch (e) {}
   };
 
+  // Estado inicial: URL manda, se tiver uma rota reconhecível (deep link,
+  // refresh); senão cai no localStorage de sempre (comportamento antigo,
+  // preservado durante a transição).
+  const initialLoc = (window.VpRouter && window.VpRouter.parseLocation()) || { route: null, id: null };
+  const initialRouteFromUrl = initialLoc.route && !SUBSEL_FALLBACK_ROUTE[initialLoc.route] ? initialLoc.route : null;
+  const initialSubselFromUrl = initialLoc.route && ID_PASSTHROUGH_ROUTES.has(initialLoc.route) ? initialLoc.id : null;
+  // Rota de detalhe sem objeto em memória (ex.: acesso direto por link) —
+  // já nasce redirecionada pra lista correspondente, sem tela quebrada.
+  const initialFallbackRoute = initialLoc.route && SUBSEL_FALLBACK_ROUTE[initialLoc.route]
+    ? SUBSEL_FALLBACK_ROUTE[initialLoc.route] : null;
+
   const [role, setRole] = React.useState(() => readLS("role", t.initialRole));
-  const [route, setRoute] = React.useState(() => readLS("route", t.initialRoute));
+  const [route, setRoute] = React.useState(() => initialRouteFromUrl || initialFallbackRoute || readLS("route", t.initialRoute));
   // Auto-collapse below 1024px
   const [collapsed, setCollapsed] = React.useState(() => {
     if (typeof window !== "undefined" && window.innerWidth < 1024) return true;
     return readLS("sidebarCollapsed", t.sidebarCollapsed);
   });
-  const [subsel, setSubsel] = React.useState(null);
+  const [subsel, setSubsel] = React.useState(() => initialSubselFromUrl);
 
   // Persist navigation state
   React.useEffect(() => writeLS("role", role), [role]);
   React.useEffect(() => writeLS("route", route), [route]);
   React.useEffect(() => writeLS("sidebarCollapsed", collapsed), [collapsed]);
+
+  // Espelha route/subsel na URL (pushState) e escuta voltar/avançar do
+  // navegador (popstate). Sem-op se a URL já bate com o estado atual —
+  // evita loop entre este effect e o handler de popstate abaixo.
+  React.useEffect(() => {
+    if (!window.VpRouter) return;
+    // O id entra na URL mesmo pras rotas ainda sem fetch-by-id (Fase 2) —
+    // deixa o endereço honesto sobre "qual registro" está na tela; só não
+    // dá pra reidratar a partir dele ainda (ver SUBSEL_FALLBACK_ROUTE).
+    window.VpRouter.navigate(route, deriveIdForRoute(route, subsel));
+  }, [route, subsel]);
+
+  React.useEffect(() => {
+    if (!window.VpRouter) return;
+    return window.VpRouter.subscribe((loc) => {
+      if (!loc.route) return;
+      if (SUBSEL_FALLBACK_ROUTE[loc.route]) {
+        // Voltar/avançar caiu numa rota de detalhe sem objeto em memória
+        // (ex.: usuário voltou 2x) — mesma degradação graciosa do mount.
+        setSubsel(null);
+        setRoute(SUBSEL_FALLBACK_ROUTE[loc.route]);
+        return;
+      }
+      setSubsel(ID_PASSTHROUGH_ROUTES.has(loc.route) ? loc.id : null);
+      setRoute(loc.route);
+    });
+  }, []);
 
   // Auto-collapse on resize
   React.useEffect(() => {

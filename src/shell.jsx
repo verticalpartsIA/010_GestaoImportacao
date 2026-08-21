@@ -303,6 +303,9 @@ const BREADCRUMB_MAP = {
   logs: { module: "Admin", page: "Logs de Atividade", icon: "history" },
   configuracoes: { module: "Admin", page: "Configurações", icon: "settings" },
 };
+// Exposto pra src/router.js montar o prefixo de módulo na URL (Fase 1
+// da roteirização, issue #279) sem duplicar este mapa.
+window.BREADCRUMB_MAP = BREADCRUMB_MAP;
 
 /* Rota "home" de cada módulo do breadcrumb — usada pra tornar o segmento
    do meio clicável (ex.: clicar em "Engenharia" volta pro landing da Engenharia). */
