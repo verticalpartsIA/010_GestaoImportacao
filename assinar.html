@@ -61,9 +61,15 @@
   <script src="/src/dossier-store.js?v=5"></script>
   <script src="/src/proposta-store.js?v=14"></script>
   <script src="/src/proposta-imagens.js?v=1"></script>
+  <!-- Motor de PDF da Proposta (react-pdf). Esta página é a que o CLIENTE
+       abre — sem isto o botão "Baixar proposta (PDF)" daqui caía na
+       impressão do navegador, justamente o caminho que gerava a página em
+       branco (achado 21/08: o cliente recebia um PDF pior que o do
+       vendedor). Ver pdf-bundle/proposta-reactpdf.entry.js. -->
+  <script src="/src/proposta-reactpdf.bundle.js?v=7"></script>
   <script type="text/babel" src="/src/proposta-preview.jsx?v=15"></script>
 
   <!-- App unificado de assinatura (auto-detecta o tipo pelo token) -->
-  <script type="text/babel" src="/src/assinar-app.jsx?v=8"></script>
+  <script type="text/babel" src="/src/assinar-app.jsx?v=9"></script>
 </body>
 </html>

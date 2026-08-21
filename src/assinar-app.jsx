@@ -174,6 +174,35 @@ function SgApp() {
     });
   }, [source]);
 
+  /* ---- Download do documento pelo CLIENTE ----
+     Definido AQUI (antes dos early returns de phase 'done'/'refused')
+     porque os dois botões de baixar — o de antes de assinar e o
+     "Baixar cópia assinada" — precisam dele.
+     Proposta de Elevador usa o motor react-pdf, o mesmo do editor: PDF
+     vetorial, paginação determinística, sem a página em branco que a
+     impressão do navegador produzia. Antes disto o CLIENTE recebia um
+     PDF pior que o do vendedor, porque esta página nem carregava o
+     motor novo (achado 21/08). Contratos e Escada/Esteira ainda não
+     foram migrados e seguem na impressão nativa. */
+  const baixarDocumento = _sgUC(async () => {
+    const src = source;
+    if (!src) { window.print(); return; }
+    const r = src.rec;
+    const podeReactPdf = src.kind === 'proposta'
+      && (r.proposal_type || 'elevador') === 'elevador'
+      && !!window.PropostaReactPdf;
+    if (!podeReactPdf) { window.print(); return; }
+    try {
+      const dj = window.PropostaStore.conteudoVigente(r);
+      const nomeCliente = ((dj && dj.cliente && dj.cliente.nome) || '').trim();
+      const nome = ['Proposta', r.numero_documento, nomeCliente].filter(Boolean).join(' - ') + '.pdf';
+      await window.PropostaReactPdf.baixar(dj, nome);
+    } catch (e) {
+      console.error('PDF vetorial falhou, caindo pra impressão do navegador:', e);
+      window.print();
+    }
+  }, [source]);
+
   const onScroll = () => {
     const el = viewerRef.current;
     if (!el) return;
@@ -319,7 +348,7 @@ function SgApp() {
             Assinado em {source.store.fmtDateTime(a.signedAt)}<br/>
             Hash: {(a.hash || '').slice(0, 32)}…
           </div>
-          <button className="ci-sign-btn" onClick={() => window.print()}>Baixar cópia assinada (PDF)</button>
+          <button className="ci-sign-btn" onClick={baixarDocumento}>Baixar cópia assinada (PDF)</button>
         </div>
         {/* Invisível na tela — só existe pra "Baixar cópia assinada" ter o que
            imprimir. Sem isto, o botão imprimia a telinha de sucesso, nunca o
@@ -438,7 +467,7 @@ function SgApp() {
           </div>
 
           <div className="ci-sign-alt">
-            <button type="button" className="ci-sign-alt-btn" onClick={() => window.print()}>⬇ Baixar {isProposta ? 'proposta' : 'contrato'} (PDF)</button>
+            <button type="button" className="ci-sign-alt-btn" onClick={baixarDocumento}>⬇ Baixar {isProposta ? 'proposta' : 'contrato'} (PDF)</button>
             <p>Prefere assinar à mão? Baixe {isProposta ? 'a proposta' : 'o contrato'}, assine com caneta, tire uma foto ou digitalize e envie por e-mail para <a href="mailto:comercial@verticalparts.com.br">comercial@verticalparts.com.br</a>.</p>
           </div>
         </div>
