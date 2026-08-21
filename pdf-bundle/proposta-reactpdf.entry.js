@@ -184,12 +184,33 @@ async function carregarImagem(caminho) {
   const resp = await fetch(url);
   if (!resp.ok) throw new Error(`${caminho} → HTTP ${resp.status}`);
   const blob = await resp.blob();
-  const dataUri = await new Promise((ok, err) => {
-    const fr = new FileReader();
-    fr.onload = () => ok(fr.result);
-    fr.onerror = () => err(new Error('falha ao ler ' + caminho));
-    fr.readAsDataURL(blob);
-  });
+
+  /* ⚠️ NUNCA entregue o blob cru do servidor pro react-pdf.
+     A Hostinger converte as imagens pra WEBP automaticamente quando
+     quem pede é um navegador (Accept: image/webp) — os .png do /assets
+     chegam como image/webp em produção. E o @react-pdf/renderer só
+     entende PNG e JPEG: ao receber webp ele DESCARTA a imagem sem
+     erro nenhum, gerando o documento inteiro sem logo e sem capa
+     (achado 21/08, medindo o content-type real dentro do navegador
+     logado em produção).
+     Por que isso enganou os testes anteriores: `curl` não manda
+     Accept: image/webp, então via o PNG original e dava "200
+     image/png"; e o servidor local de dev (Express) não converte
+     nada, então localmente sempre funcionou.
+     Aqui o blob é redesenhado num canvas e re-serializado em PNG —
+     assim, seja qual for o formato que o servidor resolva mandar
+     (webp, avif, o que for), o react-pdf sempre recebe PNG. */
+  const bitmap = await createImageBitmap(blob);
+  const canvas = document.createElement('canvas');
+  canvas.width = bitmap.width;
+  canvas.height = bitmap.height;
+  canvas.getContext('2d').drawImage(bitmap, 0, 0);
+  bitmap.close?.();
+  const dataUri = canvas.toDataURL('image/png');
+  if (!dataUri.startsWith('data:image/png')) {
+    throw new Error(`${caminho} → não virou PNG (veio ${blob.type})`);
+  }
+
   _imgCache.set(caminho, dataUri);
   return dataUri;
 }
@@ -545,18 +566,34 @@ async function montarDocumento(data) {
   const ed = data.elevador || {};
   const fotos = ed.fotos || {};
   const temFotos = !!(fotos.unidade || fotos.teto || fotos.botoeira);
+  montarDocumento.ultimasFalhas = [];
+
   let urls = {};
   if (temFotos && window.PropostaImagens) {
     const slots = ['unidade', 'teto', 'botoeira'];
-    const entries = await Promise.all(slots.map(async (k) => [k, fotos[k] ? await window.PropostaImagens.signedURL(fotos[k]) : null]));
+    /* As fotos do equipamento também passam por carregarImagem(): vêm
+       do Storage do Supabase e podem chegar em qualquer formato — se
+       vier webp, o react-pdf descartaria em silêncio igual às de
+       /assets (ver comentário em carregarImagem). */
+    const entries = await Promise.all(slots.map(async (k) => {
+      if (!fotos[k]) return [k, null];
+      try {
+        const assinada = await window.PropostaImagens.signedURL(fotos[k]);
+        return [k, assinada ? await carregarImagem(assinada) : null];
+      } catch (e) {
+        montarDocumento.ultimasFalhas.push(`foto ${k}: ${e.message}`);
+        return [k, null];
+      }
+    }));
     urls = Object.fromEntries(entries);
   }
 
   /* Logo e foto de capa viram data URI ANTES de montar qualquer página —
      ver comentário em carregarImagem(). Falha aqui é reportada de volta
      (montarDocumento.ultimasFalhas) em vez de gerar um PDF sem imagem
-     em silêncio, que foi o defeito de 20/08. */
-  montarDocumento.ultimasFalhas = [];
+     em silêncio, que foi o defeito de 20/08.
+     (a lista já foi zerada lá em cima, antes das fotos — não zerar de
+     novo aqui, senão as falhas de foto seriam apagadas) */
   const capaArquivo = `assets/capa-${eq === 'elevador' ? 'elevador' : eq === 'escada' ? 'escada-rolante' : 'esteira-rolante'}.png`;
   await Promise.all([
     carregarImagem('assets/logo-verticalparts-color.png').then((u) => { IMG.logo = u; })
