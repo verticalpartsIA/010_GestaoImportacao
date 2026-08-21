@@ -99,23 +99,46 @@ function EmConstrucaoPage({ titulo, descricao }) {
   );
 }
 
-/* ---- Roteamento por URL (Fase 1 da série de roteirização, issue #279) ----
-   `subsel` normalmente é o objeto inteiro já carregado em memória pela
-   tela de lista (ex.: lead-detail recebe `lead={subsel}`), não um ID
-   simples — então ainda não dá pra reidratar essas telas só a partir da
-   URL (isso é a Fase 2, issue #280: fetch por ID). Duas rotas já fogem
-   dessa regra porque SEMPRE receberam um ID puro, não objeto — essas já
-   funcionam com deep link de verdade nesta fase. */
-const ID_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias"]);
+/* ---- Roteamento por URL — Fase 2 (issue #280): deep link real por ID ----
+   Três formas como uma rota de detalhe recebe seu registro via `subsel`:
 
-/* Demais rotas de detalhe: se a URL apontar direto pra elas sem o objeto
-   em memória (link direto, refresh, voltar do navegador), não tem como
-   renderizar — caem pra rota de lista correspondente em vez de quebrar. */
+   1. SYNC_PASSTHROUGH_ROUTES — subsel É o id (string), e o componente já
+      sabia buscar por conta própria antes desta Fase existir (dossier-obra,
+      vistorias) ou aprende a fazer isso só de receber o id (formulario-
+      elevador, via FormularioElevadorStore.obter — nenhuma mudança de
+      componente precisou ser feita).
+   2. WRAPPED_ID_KEY — subsel é um objeto-envelope com o id numa chave
+      conhecida (proposta-editor usa `{__editId}`, convenção que o próprio
+      editor já lia pra herdar proposta existente).
+   3. ASYNC_FETCH_ROUTES — subsel é o registro inteiro, sem suporte a id
+      solto no componente; app.jsx busca no Supabase e só then popula
+      subsel (renderPage mostra "Carregando…" enquanto isso). */
+const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador"]);
+const WRAPPED_ID_KEY = { "proposta-editor": "__editId" };
+
+/* Cada fetcher recebe o id da URL e resolve pro registro (ou null se não
+   encontrado) — nunca rejeita, pra sempre cair no fallback em vez de
+   quebrar a tela. */
+const ASYNC_FETCH_ROUTES = {
+  "lead-detail": (id) => window.__VP_SB.sb.from("leads").select("*").eq("id", id).maybeSingle()
+    .then((r) => r.data || null).catch(() => null),
+  "cotacao-fornecedor-detail": (id) => window.CotacaoElevadorFornecedorStore
+    ? window.CotacaoElevadorFornecedorStore.getById(id).catch(() => null)
+    : Promise.resolve(null),
+  "contrato-editor": (id) => window.__VP_SB.sb.from("contratos_venda_equipamentos").select("*").eq("id", id).maybeSingle()
+    .then((r) => r.data || null).catch(() => null),
+  "importacao-detail": (id) => window.__VP_SB.sb.from("embarques").select("*").eq("id", id).maybeSingle()
+    .then((r) => r.data || null).catch(() => null),
+};
+
+/* Pra onde cair quando não dá pra montar a tela de detalhe: id ausente na
+   URL, registro não encontrado, ou rota sem fetcher — caso de "ncm-detail",
+   que continua sem deep link porque a tabela que o alimenta
+   (`ncm_solicitacoes`) foi dropada do banco (issue #273); implementar o
+   fetch aqui reidrataria de uma tabela morta. */
 const SUBSEL_FALLBACK_ROUTE = {
   "lead-detail": "leads",
-  "formulario-elevador": "formularios",
   "cotacao-fornecedor-detail": "cotacoes-fornecedor",
-  "proposta-editor": "propostas",
   "contrato-editor": "juridico",
   "ncm-detail": "ncm-kanban",
   "importacao-detail": "importacao",
@@ -124,8 +147,24 @@ const SUBSEL_FALLBACK_ROUTE = {
 function deriveIdForRoute(route, subsel) {
   if (subsel == null) return null;
   if (typeof subsel === "string" || typeof subsel === "number") return subsel;
+  if (WRAPPED_ID_KEY[route]) return subsel[WRAPPED_ID_KEY[route]] != null ? subsel[WRAPPED_ID_KEY[route]] : null;
   if (route === "ncm-detail") return subsel.ncmProduct && subsel.ncmProduct.id;
   return subsel.id != null ? subsel.id : null;
+}
+
+/* Traduz { route, id } (vindo da URL, no mount ou de um popstate) pro trio
+   que o App precisa: rota final a renderizar, subsel pronto pra usar (ou
+   null) e um id pendente de fetch (ou null). Usada nos dois pontos onde
+   uma navegação "de fora" chega — nunca duplica a decisão. */
+function resolveIncomingLocation(loc) {
+  const r = loc && loc.route;
+  const id = loc && loc.id;
+  if (!r) return { route: null, subsel: null, pendingFetchId: null };
+  if (SYNC_PASSTHROUGH_ROUTES.has(r)) return { route: r, subsel: id, pendingFetchId: null };
+  if (WRAPPED_ID_KEY[r]) return { route: r, subsel: id ? { [WRAPPED_ID_KEY[r]]: id } : null, pendingFetchId: null };
+  if (ASYNC_FETCH_ROUTES[r] && id) return { route: r, subsel: null, pendingFetchId: id };
+  if (SUBSEL_FALLBACK_ROUTE[r]) return { route: SUBSEL_FALLBACK_ROUTE[r], subsel: null, pendingFetchId: null };
+  return { route: r, subsel: null, pendingFetchId: null };
 }
 
 function App() {
@@ -144,21 +183,20 @@ function App() {
   // refresh); senão cai no localStorage de sempre (comportamento antigo,
   // preservado durante a transição).
   const initialLoc = (window.VpRouter && window.VpRouter.parseLocation()) || { route: null, id: null };
-  const initialRouteFromUrl = initialLoc.route && !SUBSEL_FALLBACK_ROUTE[initialLoc.route] ? initialLoc.route : null;
-  const initialSubselFromUrl = initialLoc.route && ID_PASSTHROUGH_ROUTES.has(initialLoc.route) ? initialLoc.id : null;
-  // Rota de detalhe sem objeto em memória (ex.: acesso direto por link) —
-  // já nasce redirecionada pra lista correspondente, sem tela quebrada.
-  const initialFallbackRoute = initialLoc.route && SUBSEL_FALLBACK_ROUTE[initialLoc.route]
-    ? SUBSEL_FALLBACK_ROUTE[initialLoc.route] : null;
+  const initialResolved = resolveIncomingLocation(initialLoc);
 
   const [role, setRole] = React.useState(() => readLS("role", t.initialRole));
-  const [route, setRoute] = React.useState(() => initialRouteFromUrl || initialFallbackRoute || readLS("route", t.initialRoute));
+  const [route, setRoute] = React.useState(() => initialResolved.route || readLS("route", t.initialRoute));
   // Auto-collapse below 1024px
   const [collapsed, setCollapsed] = React.useState(() => {
     if (typeof window !== "undefined" && window.innerWidth < 1024) return true;
     return readLS("sidebarCollapsed", t.sidebarCollapsed);
   });
-  const [subsel, setSubsel] = React.useState(() => initialSubselFromUrl);
+  const [subsel, setSubsel] = React.useState(() => initialResolved.route ? initialResolved.subsel : null);
+  // Id ainda sendo buscado no Supabase pra uma ASYNC_FETCH_ROUTE — enquanto
+  // não resolve, `subsel` continua null e renderPage mostra "Carregando…"
+  // em vez de tentar montar a tela de detalhe sem dado nenhum.
+  const [pendingFetchId, setPendingFetchId] = React.useState(() => initialResolved.route ? initialResolved.pendingFetchId : null);
 
   // Persist navigation state
   React.useEffect(() => writeLS("role", role), [role]);
@@ -167,30 +205,49 @@ function App() {
 
   // Espelha route/subsel na URL (pushState) e escuta voltar/avançar do
   // navegador (popstate). Sem-op se a URL já bate com o estado atual —
-  // evita loop entre este effect e o handler de popstate abaixo.
+  // evita loop entre este effect e o handler de popstate abaixo. Usa
+  // pendingFetchId como id quando subsel ainda não chegou, pra não perder
+  // o link original da barra de endereço enquanto o fetch está em voo.
   React.useEffect(() => {
     if (!window.VpRouter) return;
-    // O id entra na URL mesmo pras rotas ainda sem fetch-by-id (Fase 2) —
-    // deixa o endereço honesto sobre "qual registro" está na tela; só não
-    // dá pra reidratar a partir dele ainda (ver SUBSEL_FALLBACK_ROUTE).
-    window.VpRouter.navigate(route, deriveIdForRoute(route, subsel));
-  }, [route, subsel]);
+    const id = deriveIdForRoute(route, subsel);
+    window.VpRouter.navigate(route, id != null ? id : pendingFetchId);
+  }, [route, subsel, pendingFetchId]);
 
   React.useEffect(() => {
     if (!window.VpRouter) return;
     return window.VpRouter.subscribe((loc) => {
       if (!loc.route) return;
-      if (SUBSEL_FALLBACK_ROUTE[loc.route]) {
-        // Voltar/avançar caiu numa rota de detalhe sem objeto em memória
-        // (ex.: usuário voltou 2x) — mesma degradação graciosa do mount.
-        setSubsel(null);
-        setRoute(SUBSEL_FALLBACK_ROUTE[loc.route]);
-        return;
-      }
-      setSubsel(ID_PASSTHROUGH_ROUTES.has(loc.route) ? loc.id : null);
-      setRoute(loc.route);
+      const resolved = resolveIncomingLocation(loc);
+      setSubsel(resolved.subsel);
+      setPendingFetchId(resolved.pendingFetchId);
+      setRoute(resolved.route);
     });
   }, []);
+
+  // Busca de verdade das ASYNC_FETCH_ROUTES — dispara sempre que há um id
+  // pendente pra rota atual (mount com deep link, ou popstate landing numa
+  // dessas rotas). Nunca deixa a tela quebrada: sem resultado ou com erro,
+  // cai na rota de lista correspondente.
+  React.useEffect(() => {
+    if (!pendingFetchId) return;
+    const loader = ASYNC_FETCH_ROUTES[route];
+    if (!loader) { setPendingFetchId(null); return; }
+    let vivo = true;
+    loader(pendingFetchId).then((registro) => {
+      if (!vivo) return;
+      setPendingFetchId(null);
+      if (registro) { setSubsel(registro); return; }
+      window.toast?.("Registro não encontrado.", "warning");
+      setRoute(SUBSEL_FALLBACK_ROUTE[route] || "dashboard");
+    }).catch(() => {
+      if (!vivo) return;
+      setPendingFetchId(null);
+      window.toast?.("Erro ao carregar o registro.", "error");
+      setRoute(SUBSEL_FALLBACK_ROUTE[route] || "dashboard");
+    });
+    return () => { vivo = false; };
+  }, [route, pendingFetchId]);
 
   // Auto-collapse on resize
   React.useEffect(() => {
@@ -231,6 +288,11 @@ function App() {
   }, [role, route]); // react em mudança de role E de rota
 
   const renderPage = () => {
+    // Deep link numa ASYNC_FETCH_ROUTE ainda buscando o registro no
+    // Supabase — subsel só chega quando o fetch (effect acima) resolver.
+    if (pendingFetchId && ASYNC_FETCH_ROUTES[route]) {
+      return <div style={{ textAlign: "center", padding: "60px 0", color: "var(--fg3)", fontSize: 13 }}>Carregando…</div>;
+    }
     switch (route) {
       case "dashboard": return <Dashboard role={role} setRoute={setRoute}/>;
       case "leads": return <LeadsPage setRoute={setRoute} setSubsel={setSubsel}/>;
