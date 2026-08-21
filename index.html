@@ -84,6 +84,11 @@
   <script src="src/dashboard-metrics-gantt.js?v=1"></script>
   <script src="src/dashboard-metrics-admin.js?v=1"></script>
   <script src="src/supabase.js?v=16"></script>
+  <!-- Roteamento por URL (Fase 1 da roteirização, issue #279) — carrega
+       depois do guard de SSO (mexe só na query string, nunca no pathname)
+       e antes de shell.jsx/app.jsx, que o consomem. -->
+  <script src="src/router.js?v=1"></script>
+
   <script src="src/notificacoes-processamento.js?v=2"></script>
   <script src="src/notificacoes-lidas-store.js?v=1"></script>
 
@@ -130,7 +135,7 @@
   <!-- Components in dependency order -->
   <script type="text/vp-jsx" src="src/primitives.jsx?v=4"></script>
   <script type="text/vp-jsx" src="src/toast.jsx?v=6"></script>
-  <script type="text/vp-jsx" src="src/shell.jsx?v=48"></script>
+  <script type="text/vp-jsx" src="src/shell.jsx?v=49"></script>
   <script type="text/vp-jsx" src="src/dashboard.jsx?v=11"></script>
   <script type="text/vp-jsx" src="src/comercial.jsx?v=19"></script>
   <script type="text/vp-jsx" src="src/linha-do-tempo.jsx?v=3"></script>
@@ -278,6 +283,6 @@
   <script type="text/vp-jsx" src="src/vp-copiloto.jsx?v=1"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="src/app.jsx?v=45"></script>
+  <script type="text/vp-jsx" src="src/app.jsx?v=46"></script>
 </body>
 </html>
