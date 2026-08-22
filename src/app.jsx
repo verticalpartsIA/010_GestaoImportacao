@@ -129,13 +129,16 @@ const ASYNC_FETCH_ROUTES = {
     .then((r) => r.data || null).catch(() => null),
   "importacao-detail": (id) => window.__VP_SB.sb.from("embarques").select("*").eq("id", id).maybeSingle()
     .then((r) => r.data || null).catch(() => null),
+  // `ncm_solicitacoes` foi dropada (issue #273) e recriada depois (achado
+  // "Urgente #1" da auditoria de código) — NcmDetailPage espera o registro
+  // dentro de `{ ncmProduct }`, mesma forma que NcmKanbanPage já usa em
+  // setSubsel({ ncmProduct: s }), então o fetcher embrulha aqui.
+  "ncm-detail": (id) => window.__VP_SB.sb.from("ncm_solicitacoes").select("*").eq("id", id).maybeSingle()
+    .then((r) => (r.data ? { ncmProduct: r.data } : null)).catch(() => null),
 };
 
 /* Pra onde cair quando não dá pra montar a tela de detalhe: id ausente na
-   URL, registro não encontrado, ou rota sem fetcher — caso de "ncm-detail",
-   que continua sem deep link porque a tabela que o alimenta
-   (`ncm_solicitacoes`) foi dropada do banco (issue #273); implementar o
-   fetch aqui reidrataria de uma tabela morta. */
+   URL, registro não encontrado, ou fetch com erro. */
 const SUBSEL_FALLBACK_ROUTE = {
   "lead-detail": "leads",
   "cotacao-fornecedor-detail": "cotacoes-fornecedor",
