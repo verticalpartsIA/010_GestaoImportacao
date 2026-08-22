@@ -26,8 +26,14 @@
     return (cotacoes || []).filter((c) => ['Aguardando China', 'Recebida', 'Em análise'].includes(c.status));
   }
 
-  function propostasEnviadas(leads) {
-    return (leads || []).filter((l) => l.status === 'Proposta enviada');
+  /* Antes filtrava leads.status === 'Proposta enviada' — número sem
+     relação com a tabela real `propostas` (achado "Importante" da
+     auditoria de código: o Funil Pipeline, na mesma tela, já usava
+     `propostas` corretamente; o KPI de topo contava outra coisa com o
+     mesmo rótulo). Fonte única agora: qualquer status além de rascunho
+     já saiu de "ainda não enviada". */
+  function propostasEnviadas(propostas) {
+    return (propostas || []).filter((p) => p.status !== 'rascunho');
   }
 
   function leadsConvertidos(leads) {
@@ -67,12 +73,13 @@
      ainda) → Contratos. Volume por estágio ATUAL, não histórico acumulado:
      uma proposta que virou contrato conta só em "Contrato". */
   function pipeline({ leads, propostas, contratos }) {
+    const enviadas = propostasEnviadas(propostas);
     const aprovadas = propostasAprovadas(propostas);
     const comContrato = idsComContrato(contratos);
     const aprovadasComContrato = aprovadas.filter((p) => comContrato.has(p.id)).length;
     return [
       { label: 'Leads', value: (leads || []).length, color: '#000' },
-      { label: 'Propostas enviadas', value: (propostas || []).length, color: 'var(--vp-gray-700)' },
+      { label: 'Propostas enviadas', value: enviadas.length, color: 'var(--vp-gray-700)' },
       { label: 'Propostas assinadas', value: aprovadas.length - aprovadasComContrato, color: 'var(--vp-yellow-press)' },
       { label: 'Contratos', value: (contratos || []).length, color: 'var(--vp-yellow)' },
     ];
@@ -88,7 +95,7 @@
   }
 
   function compute({ leads, cotacoes, propostas, contratos }) {
-    const propEnviadas = propostasEnviadas(leads);
+    const propEnviadas = propostasEnviadas(propostas);
     const convPct = conversaoLeadProposta(leads, propEnviadas);
     return {
       kpis: kpis({ leads, cotacoes, propEnviadas, convPct }),
