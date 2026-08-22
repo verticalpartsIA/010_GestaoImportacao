@@ -277,6 +277,7 @@ function App() {
   const RESTRICTED = {
     precificacao: ["financeiro", "admin"],
     financeiro: ["financeiro", "admin"],
+    "aval-financeiro": ["financeiro", "admin"],
     comissoes: ["financeiro", "admin"],
     logs: ["admin"],
     configuracoes: ["admin"],
