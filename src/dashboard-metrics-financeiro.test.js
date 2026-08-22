@@ -35,6 +35,24 @@ test('gatilhosProximos — filtra por days_left, default 7 dias', () => {
   assert.equal(M.gatilhosProximos(gatilhos, 30).length, 3);
 });
 
+test('diasRestantes — recalcula ao vivo a partir de due_date, ignora days_left congelado', () => {
+  const agora = new Date('2026-08-22T12:00:00Z');
+  // days_left gravado (2) na criação do gatilho, mas due_date já passou —
+  // valor real tem que ser negativo (atrasado), não o congelado.
+  const g = { due_date: '2026-08-21', days_left: 2 };
+  assert.equal(M.diasRestantes(g, agora), -1);
+});
+
+test('diasRestantes — sem due_date, cai no days_left gravado', () => {
+  assert.equal(M.diasRestantes({ due_date: null, days_left: 5 }, new Date()), 5);
+});
+
+test('gatilhosProximos — regressão: gatilho atrasado (days_left congelado positivo) continua entrando no filtro', () => {
+  const agora = new Date('2026-08-22T12:00:00Z');
+  const gatilhos = [{ due_date: '2026-08-21', days_left: 2 }]; // atrasado de verdade
+  assert.equal(M.gatilhosProximos(gatilhos, 7, agora).length, 1);
+});
+
 test('kpis — formato compacto de moeda (R$ 1.2M / R$ 5k), não o "cheio"', () => {
   const out = M.kpis({
     contratos: [{ status: 'Em análise', value: 1_250_000 }],
