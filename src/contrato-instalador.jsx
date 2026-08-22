@@ -143,6 +143,39 @@ function CIStepModalidade({ s, set }) {
   );
 }
 
+/* Aviso de homologação (achado "Melhoria" da auditoria de código):
+   a seleção de parceiro instalador no Contrato Instalador não checava
+   RHHomologacao — o alerta só existia rio abaixo, na liberação da
+   Instalação (InstalacaoObraStore). Aqui é aviso, não bloqueio: uma
+   contratação pode legitimamente começar antes da homologação estar
+   completa, mas quem está criando o contrato precisa ver isso na hora,
+   não só quando a obra já estiver pronta pra começar. */
+function CIHomologacaoAviso({ cnpj }) {
+  const [match, setMatch] = React.useState(null); // null | {found:false} | {found:true, nome, status}
+
+  React.useEffect(() => {
+    let vivo = true;
+    if (!window.CI.isCNPJValid(cnpj) || !window.RHHomologacao) { setMatch(null); return; }
+    const digits = window.CI.onlyDigits(cnpj);
+    window.RHHomologacao.listarMontadores().then((lista) => {
+      if (!vivo) return;
+      const m = (lista || []).find((p) => window.CI.onlyDigits(p.cnpj || '') === digits);
+      if (!m) { setMatch({ found: false }); return; }
+      setMatch({ found: true, nome: m.nome, status: window.RHHomologacao.statusGeral(m) });
+    }).catch(() => { if (vivo) setMatch(null); });
+    return () => { vivo = false; };
+  }, [cnpj]);
+
+  if (!match) return null;
+  if (!match.found) {
+    return <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Este CNPJ não está cadastrado em Homologação de Parceiros Instaladores — o contrato pode ser criado, mas a obra só libera com parceiro homologado.</div>;
+  }
+  if (match.status !== 'ok') {
+    return <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Parceiro "{match.nome}" encontrado em Homologação, mas o status está <b>{match.status}</b> — confira certificações antes de iniciar a obra.</div>;
+  }
+  return null;
+}
+
 function CIStepPartes({ s, set, errors }) {
   return (
     <div className="ci-step">
@@ -158,6 +191,7 @@ function CIStepPartes({ s, set, errors }) {
           <CIField label="Razão social" required width="full" value={s.c_razao} onChange={(v) => set('c_razao', v)} placeholder="Ex.: Montagem Vertical Serviços Ltda." error={errors.c_razao} />
           <CIField label="CNPJ" required mask="maskCNPJ" mono value={s.c_cnpj} onChange={(v) => set('c_cnpj', v)} placeholder="00.000.000/0000-00" error={errors.c_cnpj} />
         </div>
+        <CIHomologacaoAviso cnpj={s.c_cnpj} />
         <div className="ci-grid">
           <CIField label="Logradouro (Rua/Av.)" width="wide" value={s.c_rua} onChange={(v) => set('c_rua', v)} placeholder="Rua Exemplo" />
           <CIField label="Número" width="narrow" value={s.c_numero} onChange={(v) => set('c_numero', v)} placeholder="123" />
