@@ -328,7 +328,7 @@ function App() {
       case "instalacao": return <InstalacaoPage/>;
       case "art": return <ArtPage setRoute={setRoute}/>;
       case "cronograma": return <CronogramaPage/>;
-      case "databook": return <DataBookPage/>;
+      case "databook": return <DataBookPage setRoute={setRoute}/>;
       case "handover": return <window.HandoverManutencaoPage/>;
       case "importacao": return <ImportacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "importacao-detail": return <ImportacaoDetail embarque={subsel} setRoute={setRoute}/>;

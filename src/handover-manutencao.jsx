@@ -11,9 +11,11 @@ function HandoverManutencaoPage() {
   const [showNovoHandover, setShowNovoHandover] = React.useState(false);
   const [editandoChecklist, setEditandoChecklist] = React.useState(false);
 
+  // Fonte trocada de `projetos` (legada — issue #274) pra `dossier_obra`
+  // (esteira real, achado "Importante" da auditoria de código).
   const reload = async () => {
     setLoading(true);
-    const { data } = await window.__VP_SB.sb.from('projetos').select('*').order('created_at', { ascending: false });
+    const { data } = await window.__VP_SB.sb.from('dossier_obra').select('*').order('created_at', { ascending: false });
     setProjetos(data || []);
     setLoading(false);
   };
@@ -31,7 +33,7 @@ function HandoverManutencaoPage() {
   const handleRegistrarHandover = async (dados) => {
     if (!selected || !window.HandoverManutencao) return;
     try {
-      const h = await window.HandoverManutencao.registrarHandover(selected.id, selected.building, dados);
+      const h = await window.HandoverManutencao.registrarHandover(selected.id, selected.building_name, dados);
       setHandover(h);
       setShowNovoHandover(false);
       window.toast('Handover registrado com sucesso!', 'success');
@@ -100,8 +102,8 @@ function HandoverManutencaoPage() {
                   <span style={{ position: "absolute", top: 0, left: 0, width: 24, height: 3, background: "var(--vp-yellow)" }}/>
                   <div className="row sb" style={{ marginBottom: 8 }}>
                     <div>
-                      <div className="cell-main" style={{ fontSize: 14 }}>{p.building}</div>
-                      <div className="cell-sub">{p.id} · {p.projeto}</div>
+                      <div className="cell-main" style={{ fontSize: 14 }}>{p.building_name}</div>
+                      <div className="cell-sub">{p.id} · {p.client_name || '—'}</div>
                     </div>
                     <span style={{ fontSize: 20 }}>{statusIcon}</span>
                   </div>
@@ -117,7 +119,7 @@ function HandoverManutencaoPage() {
         </Card>
 
         {selected ? (
-          <Card title={`Handover & Pós-venda · ${selected.id}`} sub={selected.building}>
+          <Card title={`Handover & Pós-venda · ${selected.id}`} sub={selected.building_name}>
             {!handover ? (
               <div style={{
                 textAlign: 'center',
@@ -317,7 +319,7 @@ function ModalEditarChecklist({ handover, projectId, onSaved, onCancel }) {
 
   const save = async () => {
     try {
-      const { error } = await window.__VP_SB.sb.from('projetos')
+      const { error } = await window.__VP_SB.sb.from('dossier_obra')
         .update({ handover: { ...handover, checklists_concluidos: Array.from(checklistSelecionados) } })
         .eq('id', projectId);
       if (error) throw error;

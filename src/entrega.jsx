@@ -32,185 +32,36 @@ function ArtPage({ setRoute }) {
   );
 }
 
-function DataBookPage() {
-  const [projetos, setProjetos] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [selected, setSelected] = React.useState(null);
-  const [dataBook, setDataBook] = React.useState(null);
-  const [uploading, setUploading] = React.useState(false);
-
-  const reload = async () => {
-    setLoading(true);
-    const { data } = await window.__VP_SB.sb.from('projetos').select('*').order('created_at', { ascending: false });
-    setProjetos(data || []);
-    setLoading(false);
-  };
-
-  React.useEffect(() => { reload(); }, []);
-
-  const loadDataBook = async (projectId) => {
-    if (window.DataBookStore) {
-      const book = await window.DataBookStore.getDataBook(projectId);
-      setDataBook(book);
-    }
-  };
-
-  const handleProjectSelect = async (p) => {
-    setSelected(p);
-    await loadDataBook(p.id);
-  };
-
-  const handleFileSelect = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file || !selected) return;
-
-    setUploading(true);
-    try {
-      const result = await window.DataBookStore.uploadDataBook(selected.id, file);
-      setDataBook(result);
-      window.toast('Data Book enviado com sucesso!', 'success');
-    } catch (err) {
-      window.toast('Erro ao enviar: ' + err.message, 'error');
-    } finally {
-      setUploading(false);
-    }
-  };
-
-  const handleDelete = async () => {
-    if (!selected) return;
-    if (!window.confirm('Tem certeza que deseja remover este Data Book?')) return;
-
-    try {
-      await window.DataBookStore.deleteDataBook(selected.id);
-      setDataBook(null);
-      window.toast('Data Book removido.', 'success');
-    } catch (err) {
-      window.toast('Erro: ' + err.message, 'error');
-    }
-  };
-
-  if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
-
+/* Antes lia/gravava a tabela legada `projetos` (issue #274, desconectada
+   da esteira real) — duplicava, pior, o que o Dossiê da Obra já faz: a
+   aba Documentos já trata "DataBook" como um dos tipos de documento
+   obrigatórios da obra (TIPOS_DOC_OBRA em dossier-obra.jsx), com
+   checklist de prontidão. Vira redirect, mesmo padrão já usado por
+   ArtPage acima — achado "Importante" da auditoria de código. */
+function DataBookPage({ setRoute }) {
+  const irObras = () => setRoute && setRoute('status-obras');
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Instalação & Entrega · Encerramento</div>
           <h1 className="page-head__title">Data Book & Termo de Conclusão</h1>
-          <p className="page-head__sub">Documentação técnica final, manuais técnicos, certificados e entrega formal ao cliente.</p>
+          <p className="page-head__sub">O Data Book de cada obra é gerido por obra, na aba Documentos do Dossiê.</p>
+        </div>
+        <div className="page-head__r">
+          <Button variant="primary" icon="arrowRight" onClick={irObras}>Abrir obras</Button>
         </div>
       </div>
-
-      <div className="grid-2" style={{ gap: 20 }}>
-        <Card title="Projetos e Data Books" sub={`${projetos.length} projetos`}>
-          <div className="stack" style={{ gap: 12 }}>
-            {projetos.length === 0 && (
-              <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
-                Nenhum projeto cadastrado.
-              </div>
-            )}
-            {projetos.map((p) => (
-              <div key={p.id} style={{
-                background: selected?.id === p.id ? "var(--vp-gray-50)" : "#fff",
-                border: "1px solid " + (selected?.id === p.id ? "#000" : "var(--border)"),
-                padding: 14,
-                cursor: "pointer",
-                position: "relative"
-              }} onClick={() => handleProjectSelect(p)}>
-                <span style={{ position: "absolute", top: 0, left: 0, width: 24, height: 3, background: "var(--vp-yellow)" }}/>
-                <div className="row sb" style={{ marginBottom: 8 }}>
-                  <div>
-                    <div className="cell-main" style={{ fontSize: 14 }}>{p.building}</div>
-                    <div className="cell-sub">{p.id} · {p.projeto}</div>
-                  </div>
-                  {p.data_book && (
-                    <span style={{ background: 'var(--vp-success)', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11, fontWeight: 700 }}>✓ Data Book</span>
-                  )}
-                </div>
-                <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Status: <b>{p.status}</b></div>
-              </div>
-            ))}
-          </div>
-        </Card>
-
-        {selected ? (
-          <Card title={`Data Book · ${selected.id}`} sub={`${selected.building} · ${selected.projeto || '—'}`}>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-              {dataBook ? (
-                <div style={{
-                  padding: 16,
-                  background: '#f0fdf4',
-                  border: '1px solid #bbf7d0',
-                  borderRadius: 6
-                }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 12 }}>
-                    <span style={{ fontSize: 24 }}>📄</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 700, fontSize: 13 }}>{dataBook.nome_arquivo}</div>
-                      <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 2 }}>
-                        {window.DataBookStore.fmtFileSize(dataBook.tamanho_bytes)} · {new Date(dataBook.enviado_em).toLocaleDateString('pt-BR')}
-                      </div>
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', gap: 10 }}>
-                    <Button variant="outline" size="sm" icon="download" onClick={() => window.open(dataBook.url_publica, '_blank')}>
-                      Baixar
-                    </Button>
-                    <Button variant="outline" size="sm" icon="upload" onClick={() => {
-                      const inp = document.createElement('input');
-                      inp.type = 'file';
-                      inp.accept = '.pdf,.doc,.docx,.xlsx,.jpg,.jpeg,.png';
-                      inp.onchange = handleFileSelect;
-                      inp.click();
-                    }}>
-                      Substituir
-                    </Button>
-                    <Button variant="outline" size="sm" icon="trash" onClick={handleDelete}>
-                      Remover
-                    </Button>
-                  </div>
-                </div>
-              ) : (
-                <div style={{
-                  padding: 24,
-                  background: '#fef3c7',
-                  border: '1px solid #fbbf24',
-                  borderRadius: 6,
-                  textAlign: 'center'
-                }}>
-                  <div style={{ fontSize: 28, marginBottom: 12 }}>📚</div>
-                  <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 4 }}>Nenhum Data Book enviado</div>
-                  <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 14 }}>
-                    Envie a documentação técnica, manuais e certificados para este projeto.
-                  </div>
-                  <Button variant="primary" icon="upload" disabled={uploading} onClick={() => {
-                    const inp = document.createElement('input');
-                    inp.type = 'file';
-                    inp.accept = '.pdf,.doc,.docx,.xlsx,.jpg,.jpeg,.png';
-                    inp.onchange = handleFileSelect;
-                    inp.click();
-                  }}>
-                    {uploading ? 'Enviando…' : 'Enviar Data Book'}
-                  </Button>
-                </div>
-              )}
-
-              <div style={{ marginTop: 12, padding: 12, background: 'var(--vp-gray-50)', border: '1px solid var(--border)', borderRadius: 4 }}>
-                <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Próximas etapas</div>
-                <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--fg1)', lineHeight: 2 }}>
-                  <li>Data Book compilado e enviado ao cliente</li>
-                  <li>Termo de conclusão assinado digitalmente</li>
-                  <li>Transição para período de garantia / pós-venda</li>
-                  <li>Liberação dos gatilhos financeiros finais</li>
-                </ul>
-              </div>
-            </div>
-          </Card>
-        ) : (
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', border:'1px dashed var(--border)', color:'var(--fg3)', fontSize:13, padding:'60px 20px', textAlign:'center' }}>
-            Selecione um projeto à esquerda para gerenciar seu Data Book.
-          </div>
-        )}
+      <div style={{ border: '1px solid var(--border)', background: 'var(--vp-gray-50)', padding: '32px', maxWidth: 760, margin: '8px auto 0' }}>
+        <p style={{ fontSize: 13, color: 'var(--fg1)', lineHeight: 1.8, margin: 0 }}>
+          Para guardar o Data Book de uma obra: compile a documentação técnica final, manuais e
+          {' '}certificados, e anexe na aba <b>Documentos</b> da <b>Dossiê da Obra</b> correspondente
+          {' '}(tipo "DataBook (Ebook técnico)"). O checklist de prontidão da obra mostra se esse e os
+          {' '}demais documentos obrigatórios (ART, Termo de Vistoria, Termo de Entrega) já foram anexados.
+        </p>
+        <div style={{ marginTop: 16 }}>
+          <Button variant="outline" icon="briefcase" onClick={irObras}>Ir para a lista de obras</Button>
+        </div>
       </div>
     </div>
   );
