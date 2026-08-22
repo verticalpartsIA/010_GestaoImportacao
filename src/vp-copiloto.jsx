@@ -140,7 +140,13 @@ function VpCopiloto({ route, role }) {
   const [input, setInput] = _vpUS('');
   const [loading, setLoading] = _vpUS(false);
   const [pendingMode, setPendingMode] = _vpUS(null); // 'fill' enquanto há perguntas em aberto
+  // Preenchimento sugerido pelo Copiloto, ainda não aplicado na tela —
+  // achado "Melhoria" da auditoria de código: antes vpcApplyFills rodava
+  // direto na resposta da IA, sem o usuário ver o que ia mudar. Agora só
+  // aplica quando confirmar em confirmarFill().
+  const [pendingFill, setPendingFill] = _vpUS(null); // null | { fills, preview }
   const elsRef = _vpUR([]);
+  const fieldsRef = _vpUR([]);
   const bodyRef = _vpUR(null);
 
   _vpUE(() => { try { localStorage.setItem(VPC_LS_OPEN, open ? '1' : '0'); } catch (e) {} }, [open]);
@@ -156,6 +162,7 @@ function VpCopiloto({ route, role }) {
     try {
       const { fields, els } = vpcScanPage();
       elsRef.current = els;
+      fieldsRef.current = fields;
       const body = {
         mode,
         message: userText,
@@ -167,14 +174,20 @@ function VpCopiloto({ route, role }) {
       };
       if (mode === 'analyze') body.documentText = vpcDocText();
       const resp = await vpcCall(body);
-      let filled = 0;
-      if (resp.fills && resp.fills.length) filled = vpcApplyFills(resp.fills, elsRef.current);
+      if (resp.fills && resp.fills.length) {
+        const preview = resp.fills.map(f => ({
+          idx: f.idx,
+          label: (fieldsRef.current[f.idx] && fieldsRef.current[f.idx].label) || ('Campo ' + f.idx),
+          value: f.value,
+        }));
+        setPendingFill({ fills: resp.fills, preview });
+      }
       setMsgs(m => [...m, {
         role: 'assistant',
         content: resp.reply || '',
         questions: resp.questions || [],
         issues: resp.issues || [],
-        filled,
+        filled: 0,
       }]);
       setPendingMode(resp.questions && resp.questions.length ? 'fill' : null);
     } catch (e) {
@@ -185,6 +198,17 @@ function VpCopiloto({ route, role }) {
   };
 
   const onSubmit = (e) => { e.preventDefault(); send(pendingMode || 'chat'); };
+
+  const confirmarFill = () => {
+    if (!pendingFill) return;
+    const n = vpcApplyFills(pendingFill.fills, elsRef.current);
+    setMsgs(m => [...m, { role: 'assistant', content: '', filled: n }]);
+    setPendingFill(null);
+  };
+  const descartarFill = () => {
+    setMsgs(m => [...m, { role: 'assistant', content: 'Ok, não apliquei essas mudanças.' }]);
+    setPendingFill(null);
+  };
 
   if (!open) {
     return (
@@ -235,9 +259,26 @@ function VpCopiloto({ route, role }) {
         {loading && <div className="vpc-msg vpc-msg--assistant"><div className="vpc-typing"><i /><i /><i /></div></div>}
       </div>
 
+      {pendingFill && (
+        <div className="vpc-confirm">
+          <div className="vpc-confirm-title">
+            Aplicar {pendingFill.preview.length} {pendingFill.preview.length === 1 ? 'alteração' : 'alterações'} na tela?
+          </div>
+          <ul className="vpc-confirm-list">
+            {pendingFill.preview.map((p, i) => (
+              <li key={i}><b>{p.label}</b>: {String(p.value).trim() ? String(p.value).slice(0, 60) : '(vazio)'}</li>
+            ))}
+          </ul>
+          <div className="vpc-confirm-actions">
+            <button className="vpc-act vpc-act--ghost" disabled={loading} onClick={descartarFill}>Descartar</button>
+            <button className="vpc-act vpc-act--primary" disabled={loading} onClick={confirmarFill}>Aplicar</button>
+          </div>
+        </div>
+      )}
+
       <div className="vpc-actions">
-        <button className="vpc-act" disabled={loading} onClick={() => send('fill')}>✨ Preencher página</button>
-        <button className="vpc-act" disabled={loading} onClick={() => send('analyze')}>🔍 Revisar erros</button>
+        <button className="vpc-act" disabled={loading || !!pendingFill} onClick={() => send('fill')}>✨ Preencher página</button>
+        <button className="vpc-act" disabled={loading || !!pendingFill} onClick={() => send('analyze')}>🔍 Revisar erros</button>
       </div>
 
       <form className="vpc-input-row" onSubmit={onSubmit}>
