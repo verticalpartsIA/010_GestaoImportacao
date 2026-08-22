@@ -32,6 +32,7 @@ const NAV_GROUPS = [
     { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
     { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
+    { id: "comissoes", label: "Comissões", icon: "award", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Jurídico | Importação | Suprimentos", sublabel: "Contratos, Siscomex & Compras", items: [
     { id: "juridico", label: "Jurídico", icon: "scale" },
