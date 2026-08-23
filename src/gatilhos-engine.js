@@ -87,7 +87,7 @@
       nasce: 'PROPOSTA_ELABORADA', fecha: 'PROPOSTA_ENVIADA',
       fechamentoTipo: 'manual', rota: 'proposta-editor', resolverSubsel: resolverEditProposta },
 
-    { key: 'AGUARDA_CLIENTE', label: 'Aguardando resposta do Cliente (SLA 15 dias)',
+    { key: 'AGUARDA_CLIENTE', label: 'Aguardando resposta do Cliente (SLA 10 dias)',
       predecessores: [{ key: 'PROPOSTA_PREP', rel: 'FS' }],
       nasce: 'PROPOSTA_ENVIADA', fecha: 'CLIENTE_RESPONDEU_PROPOSTA',
       fechamentoTipo: 'automatico', rota: 'proposta-editor', resolverSubsel: resolverEditProposta },
