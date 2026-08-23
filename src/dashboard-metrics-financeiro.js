@@ -39,13 +39,27 @@
     return comissoesPendentes(comissoes).reduce((s, c) => s + (c.comissao || 0), 0);
   }
 
-  function gatilhosProximos(gatilhos, dias) {
-    const limite = dias == null ? 7 : dias;
-    return (gatilhos || []).filter((g) => (g.days_left || 0) <= limite);
+  /* Recalcula "dias restantes" ao vivo a partir de due_date — antes o
+     KPI lia gatilhos.days_left, coluna gravada só no momento em que o
+     gatilho nasce e nunca mais atualizada (achado "Importante" da
+     auditoria: um gatilho já vencido continuava marcado com os dias
+     congelados de quando foi criado). Mesmo cálculo que
+     src/financeiro.jsx já faz ao vivo pra tela de Gatilhos & Prazo —
+     só não estava replicado aqui. Sem due_date (gatilho ainda sem
+     prazo definido), cai no valor já gravado — mesmo comportamento de
+     antes pra esse caso. */
+  function diasRestantes(g, agora) {
+    if (!g.due_date) return g.days_left || 0;
+    return Math.round((new Date(g.due_date) - (agora || new Date())) / 86_400_000);
   }
 
-  function kpis({ contratos, comissoes, gatilhos }) {
-    const gatProx7 = gatilhosProximos(gatilhos, 7);
+  function gatilhosProximos(gatilhos, dias, agora) {
+    const limite = dias == null ? 7 : dias;
+    return (gatilhos || []).filter((g) => diasRestantes(g, agora) <= limite);
+  }
+
+  function kpis({ contratos, comissoes, gatilhos, agora }) {
+    const gatProx7 = gatilhosProximos(gatilhos, 7, agora);
     return [
       { label: 'A receber', value: fmtBRL(aReceber(contratos)), unit: '', delta: '', deltaDir: 'up', sub: 'contratos abertos' },
       { label: 'Comissões pendentes', value: fmtBRL(comissoesPendentesValor(comissoes)), unit: '', delta: '', deltaDir: 'up', sub: 'aguardando pagamento' },
@@ -54,11 +68,11 @@
     ];
   }
 
-  function compute({ contratos, comissoes, gatilhos }) {
-    return { kpis: kpis({ contratos, comissoes, gatilhos }) };
+  function compute({ contratos, comissoes, gatilhos, agora }) {
+    return { kpis: kpis({ contratos, comissoes, gatilhos, agora }) };
   }
 
   window.FinanceiroMetrics = {
-    contratosAbertos, aReceber, comissoesPendentes, comissoesPendentesValor, gatilhosProximos, kpis, compute,
+    contratosAbertos, aReceber, comissoesPendentes, comissoesPendentesValor, diasRestantes, gatilhosProximos, kpis, compute,
   };
 }());

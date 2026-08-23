@@ -52,6 +52,21 @@
     try { window.dispatchEvent(new CustomEvent('vpprd:user', { detail: u })); } catch (e) {}
   }
 
+  // Link direto perdido no round-trip do SSO (issue #279/#281): o card do
+  // vpsistema.com sempre abre a raiz do app, então um deep link
+  // (/comercial/lead-detail/42) acessado sem sessão ativa virava sempre
+  // dashboard depois do login. Guardamos o path pretendido antes de sair
+  // e restauramos assim que o token confirmar a volta — funciona mesmo
+  // sem nenhuma cooperação do vpsistema.com (é outro sistema, fora deste
+  // repo; não dá pra garantir que ele devolva algo). ?vp_return= vai
+  // junto por via das dúvidas, best-effort, caso o portal algum dia passe
+  // a repassar esse parâmetro — não é o mecanismo principal.
+  const PENDING_DEEPLINK_KEY = 'vpprd_pending_deeplink';
+  function currentDeepLinkPath() {
+    const p = window.location.pathname;
+    return p && p !== '/' ? p : null; // raiz não é link específico de nada
+  }
+
   (function ssoGuard() {
     const params   = new URLSearchParams(window.location.search);
     const ssoToken = params.get('sso_token');
@@ -64,7 +79,12 @@
 
     // Sem token SSO E sem flag de aba E não está em localhost → acesso direto bloqueado
     if (!ssoToken && !hasTabFlag && !isLocalhost) {
-      window.location.replace('https://vpsistema.com');
+      const pending = currentDeepLinkPath();
+      if (pending) {
+        try { localStorage.setItem(PENDING_DEEPLINK_KEY, pending); } catch (e) {}
+      }
+      const returnParam = pending ? '?vp_return=' + encodeURIComponent(pending) : '';
+      window.location.replace('https://vpsistema.com' + returnParam);
       return;
     }
 
@@ -101,7 +121,18 @@
         })
         .catch(function () { /* offline/expirado: mantém o decode local */ });
 
-      window.history.replaceState({}, '', window.location.pathname);
+      // Restaura o link pretendido, se algum ficou guardado antes do
+      // redirecionamento pro login — senão mantém o pathname atual
+      // (comportamento de sempre: vpsistema.com manda pra raiz).
+      let voltarPara = window.location.pathname;
+      try {
+        const pendente = localStorage.getItem(PENDING_DEEPLINK_KEY);
+        if (pendente) {
+          voltarPara = pendente;
+          localStorage.removeItem(PENDING_DEEPLINK_KEY);
+        }
+      } catch (e) {}
+      window.history.replaceState({}, '', voltarPara);
     }
   }());
 

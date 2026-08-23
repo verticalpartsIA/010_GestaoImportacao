@@ -104,6 +104,16 @@
     const dt = (d instanceof Date) ? d : new Date(d);
     return dt.toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' });
   }
+  /* Escapa entidades HTML — os parágrafos com `{ html: true }` misturam
+     marcação estática (<b>) com dados do comprador digitados em formulário
+     (razão social, endereço...); sem isso, um campo com `<script>` ou
+     `<img onerror=...>` executa na prévia/PDF do contrato (XSS armazenado). */
+  function esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
+  }
+
   function extenso(n) {
     /* Sem lib de números por extenso — a minuta oficial sempre traz o valor
        por extenso ao lado do numérico; aqui deixamos o campo para o
@@ -195,8 +205,8 @@
       id: 'preambulo', kind: 'preamble',
       body: [
         p('Pelo presente instrumento particular e na melhor forma de direito, as partes a seguir nomeadas:'),
-        p(`<b>VENDEDORA:</b> ${V.razao}, inscrita no CNPJ sob o nº ${V.cnpj}, com sede à ${V.endereco}, neste ato representada nos termos de seu Contrato social por <b>${V.rep}</b>, ${V.repQualif}, com escritório no endereço acima mencionado e;`, { html: true }),
-        p(`<b>COMPRADOR:</b> ${compRazao}, inscrito no CNPJ sob o nº ${compCnpj}, com sede à ${compEnd}, neste ato representada nos termos de seu ato constitutivo por <b>${compRep}</b>, ${compNac}, ${compEstCivil}, ${compProf}, portador da cédula de identidade RG de nº ${compRg}, inscrito no CPF nº ${compCpf}, residente e domiciliado na ${compEndResp}.`, { html: true }),
+        p(`<b>VENDEDORA:</b> ${esc(V.razao)}, inscrita no CNPJ sob o nº ${esc(V.cnpj)}, com sede à ${esc(V.endereco)}, neste ato representada nos termos de seu Contrato social por <b>${esc(V.rep)}</b>, ${esc(V.repQualif)}, com escritório no endereço acima mencionado e;`, { html: true }),
+        p(`<b>COMPRADOR:</b> ${esc(compRazao)}, inscrito no CNPJ sob o nº ${esc(compCnpj)}, com sede à ${esc(compEnd)}, neste ato representada nos termos de seu ato constitutivo por <b>${esc(compRep)}</b>, ${esc(compNac)}, ${esc(compEstCivil)}, ${esc(compProf)}, portador da cédula de identidade RG de nº ${esc(compRg)}, inscrito no CPF nº ${esc(compCpf)}, residente e domiciliado na ${esc(compEndResp)}.`, { html: true }),
         p('Têm, entre si, certo e ajustado o presente Contrato de compra e venda de equipamento, o qual se regerá pelas disposições do Código Civil e demais condições abaixo, às quais as partes mutuamente se obrigam.'),
       ],
     });
@@ -206,12 +216,12 @@
       id: 's1', num: '1', title: 'OBJETO DO CONTRATO',
       body: [
         p('<b>1.1 Objeto.</b> O objeto deste Contrato consiste no descrito a seguir, observados e respeitados os termos e as condições estabelecidos neste instrumento contratual:', { html: true }),
-        p(`Compra e venda de <b>${descEq}</b> (DESCREVER CONFORME PROPOSTA COMERCIAL), denominado equipamentos, conforme especificações dos Anexos I e II.`, { html: true, li: true }),
+        p(`Compra e venda de <b>${esc(descEq)}</b> (DESCREVER CONFORME PROPOSTA COMERCIAL), denominado equipamentos, conforme especificações dos Anexos I e II.`, { html: true, li: true }),
         p('Modalidade: "CIF" (Cost, Insurance and Freight).', { li: true }),
         p('Instalação dos equipamentos mencionados acima de forma a entregá-los ao COMPRADOR em condições de uso imediato ("turn key"). A instalação compreende as seguintes atividades:', { li: true }),
         p('Frete (transporte e desembarque);', { li: true, indent: true }),
         p('Entrega, Instalação e montagem dos equipamentos ocorrerão no endereço abaixo e qualquer alteração no CEP do local de entrega poderá sofrer reajuste de preço.', { li: true, indent: true }),
-        p(`<b>LOCAL DE ENTREGA:</b> ${localObra}.`, { html: true, callout: true }),
+        p(`<b>LOCAL DE ENTREGA:</b> ${esc(localObra)}.`, { html: true, callout: true }),
         p('<b>1.1.1</b> Os seguintes anexos a este Contrato constituem parte indissociável e podem servir para complementar os termos e as condições firmadas neste instrumento contratual.', { html: true }),
         p(null, { anexos: [
           ['Anexo I', 'Proposta Comercial nº ' + numero],
@@ -364,7 +374,7 @@
       id: 's10', num: '10', title: 'DISPOSIÇÕES FINAIS',
       body: [
         p('<b>10.1 Dados para comunicação.</b> Fica estabelecido que o relacionamento entre as Partes, visando resguardar responsabilidades, será normalmente pela forma escrita (inclusive via e-mail) através de consultas e respostas. As partes deverão utilizar os dados para contato dispostos abaixo a fim de manterem comunicação entre si. É de responsabilidade de cada parte manter os seus dados atualizados e informados à outra parte.', { html: true }),
-        p(`<b>Dados do COMPRADOR:</b><br/>Nome: ${contatoCompradorNome}<br/>Cargo: ${contatoCompradorCargo}<br/>E-mail: ${contatoCompradorEmail}`, { html: true, callout: true }),
+        p(`<b>Dados do COMPRADOR:</b><br/>Nome: ${esc(contatoCompradorNome)}<br/>Cargo: ${esc(contatoCompradorCargo)}<br/>E-mail: ${esc(contatoCompradorEmail)}`, { html: true, callout: true }),
         p(`<b>Dados da VENDEDORA</b><br/>${contatosVpHtml}`, { html: true, callout: true }),
         p('<b>10.2 Manutenção do direito e novação.</b> A tolerância de qualquer das Partes quanto a qualquer violação a dispositivos deste contrato será sempre entendida como mera liberalidade, não constituindo ou configurando desistência, transigência ou novação, podendo, a qualquer momento, exercer a plenitude de seus direitos.', { html: true }),
         p('<b>10.3 Cessão do Contrato.</b> As Partes não poderão ceder e/ou transferir os direitos e obrigações decorrentes do presente Contrato ou aliená-los, a qualquer título, sem que tenha prévia e expressa anuência por escrito da VENDEDORA e desde que esteja em dia com todas as obrigações assumidas.', { html: true }),

@@ -92,6 +92,28 @@ test('pipeline — proposta aprovada COM contrato sai de "assinadas" e conta em 
   assert.equal(contratosStage.value, 1);
 });
 
+test('propostasEnviadas — conta da tabela propostas, não de leads.status', () => {
+  const propostas = [
+    { id: 'p1', status: 'enviada' },
+    { id: 'p2', status: 'rascunho' }, // ainda não enviada — não conta
+    { id: 'p3', status: 'aprovada' }, // já saiu de rascunho — conta
+  ];
+  assert.deepEqual(M.propostasEnviadas(propostas).map((p) => p.id), ['p1', 'p3']);
+});
+
+test('KPI "Propostas enviadas" e o Funil Pipeline concordam (regressão do achado da auditoria)', () => {
+  const leads = [{ id: 1 }];
+  const propostas = [
+    { id: 'p1', status: 'enviada' },
+    { id: 'p2', status: 'rascunho' },
+  ];
+  const out = M.compute({ leads, cotacoes: [], propostas, contratos: [] });
+  const kpi = out.kpis.find((k) => k.label === 'Propostas enviadas');
+  const funil = out.pipelineStages.find((s) => s.label === 'Propostas enviadas');
+  assert.equal(kpi.value, '1');
+  assert.equal(funil.value, 1);
+});
+
 test('origemBars — volume e conversão por origem, ordenado por volume desc', () => {
   const leads = [
     { origin: 'Site', status: 'Convertido' },

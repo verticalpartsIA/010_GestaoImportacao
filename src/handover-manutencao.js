@@ -19,12 +19,17 @@
     { id: 'assinatura_cliente', label: 'Assinatura do cliente no Termo de Entrega', categoria: 'legal' },
   ];
 
-  async function registrarHandover(projectId, clienteNome, dadosHandover) {
+  /* Fonte trocada de `projetos` (legada, desconectada — issue #274) pra
+     `dossier_obra` (esteira real). Coluna `handover` (jsonb) criada na
+     migração add_handover_to_dossier_obra, mesmo padrão da coluna
+     `vistoria` que já existe na mesma tabela. Achado "Importante" da
+     auditoria de código. */
+  async function registrarHandover(dossierId, clienteNome, dadosHandover) {
     const c = sb();
-    if (!c || !projectId) throw new Error('projectId inválido');
+    if (!c || !dossierId) throw new Error('dossierId inválido');
 
     const handover = {
-      projeto_id: projectId,
+      dossier_id: dossierId,
       cliente_nome: clienteNome,
       data_entrega: new Date().toISOString(),
       checklists_concluidos: dadosHandover.checklists || [],
@@ -39,37 +44,37 @@
       atualizado_em: new Date().toISOString(),
     };
 
-    const { data: proj, error } = await c.from('projetos')
+    const { data: dossier, error } = await c.from('dossier_obra')
       .update({ handover })
-      .eq('id', projectId).select().single();
+      .eq('id', dossierId).select('numero_cotacao, building_name').single();
 
     if (error) throw error;
     if (window.EventosFluxo) window.EventosFluxo.registrar({
-      evento: 'HANDOVER_CONCLUIDO', numeroCotacao: proj?.numero_cotacao ?? null,
-      alvoLabel: proj?.building, alvoId: projectId,
+      evento: 'HANDOVER_CONCLUIDO', numeroCotacao: dossier?.numero_cotacao ?? null,
+      alvoLabel: dossier?.building_name || clienteNome, alvoId: dossierId,
     });
     return handover;
   }
 
-  async function obterHandover(projectId) {
+  async function obterHandover(dossierId) {
     const c = sb();
-    if (!c || !projectId) return null;
+    if (!c || !dossierId) return null;
 
-    const { data } = await c.from('projetos')
+    const { data } = await c.from('dossier_obra')
       .select('handover')
-      .eq('id', projectId)
+      .eq('id', dossierId)
       .single();
 
     return data?.handover || null;
   }
 
-  async function transferirParaEscamax(projectId) {
+  async function transferirParaEscamax(dossierId) {
     const c = sb();
-    if (!c || !projectId) throw new Error('projectId inválido');
+    if (!c || !dossierId) throw new Error('dossierId inválido');
 
-    const { data } = await c.from('projetos')
+    const { data } = await c.from('dossier_obra')
       .select('handover')
-      .eq('id', projectId)
+      .eq('id', dossierId)
       .single();
 
     const handover = data?.handover;
@@ -77,14 +82,14 @@
       handover.escamax_transferido = true;
       handover.data_transferencia_escamax = new Date().toISOString();
 
-      const { data: proj, error } = await c.from('projetos')
+      const { data: proj, error } = await c.from('dossier_obra')
         .update({ handover })
-        .eq('id', projectId).select().single();
+        .eq('id', dossierId).select('numero_cotacao, building_name').single();
 
       if (error) throw error;
       if (window.EventosFluxo) window.EventosFluxo.registrar({
         evento: 'POS_VENDA_ATIVADO', numeroCotacao: proj?.numero_cotacao ?? null,
-        alvoLabel: proj?.building, alvoId: projectId,
+        alvoLabel: proj?.building_name, alvoId: dossierId,
       });
     }
 

@@ -32,6 +32,7 @@ const NAV_GROUPS = [
     { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
     { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
+    { id: "comissoes", label: "Comissões", icon: "award", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Jurídico | Importação | Suprimentos", sublabel: "Contratos, Siscomex & Compras", items: [
     { id: "juridico", label: "Jurídico", icon: "scale" },
@@ -303,6 +304,9 @@ const BREADCRUMB_MAP = {
   logs: { module: "Admin", page: "Logs de Atividade", icon: "history" },
   configuracoes: { module: "Admin", page: "Configurações", icon: "settings" },
 };
+// Exposto pra src/router.js montar o prefixo de módulo na URL (Fase 1
+// da roteirização, issue #279) sem duplicar este mapa.
+window.BREADCRUMB_MAP = BREADCRUMB_MAP;
 
 /* Rota "home" de cada módulo do breadcrumb — usada pra tornar o segmento
    do meio clicável (ex.: clicar em "Engenharia" volta pro landing da Engenharia). */
