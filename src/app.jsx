@@ -309,7 +309,7 @@ function App() {
       case "linha-do-tempo": return <window.LinhaDoTempoPage/>;
       case "cotacoes-fornecedor": return <CotacoesFornecedorPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cotacao-fornecedor-detail": return <CotacaoFornecedorDetalhe cot={subsel} setRoute={setRoute}/>;
-      case "precificacao": return <PrecificacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "precificacao": return <PrecificacaoPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
       case "propostas": return <PropostasPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "proposta-editor": return <PropostaEditor setRoute={setRoute} subsel={subsel}/>;
       case "engenharia": return <EngenhariaPage setRoute={setRoute}/>;

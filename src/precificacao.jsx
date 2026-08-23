@@ -16,10 +16,10 @@ function PrecificacaoModoTabs({ modo, setModo }) {
   );
 }
 
-function PrecificacaoPage({ setRoute, setSubsel }) {
+function PrecificacaoPage({ setRoute, setSubsel, subsel }) {
   const [modo, setModo] = React.useState('elevador');
   return modo === 'elevador'
-    ? <window.PrecificacaoElevadorPage setRoute={setRoute} setSubsel={setSubsel} modo={modo} setModo={setModo}/>
+    ? <window.PrecificacaoElevadorPage setRoute={setRoute} setSubsel={setSubsel} modo={modo} setModo={setModo} subsel={subsel}/>
     : <PrecificacaoLeadsPage setRoute={setRoute} setSubsel={setSubsel} modo={modo} setModo={setModo}/>;
 }
 

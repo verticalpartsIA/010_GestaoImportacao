@@ -86,6 +86,21 @@ function FinanceiroPage({ setRoute, setSubsel }) {
     if (!window.GatilhosEngine) return;
     const alvo = await window.GatilhosEngine.navegarPara(g);
     if (!alvo) return;
+    /* 23/08 (achado real, Gelson): cotação 903 tem o nó "Financeiro
+       precificando" fechado, mas nasceu via garantirNo (backfill retroativo
+       de etapa pulada) — nunca existiu precificacoes_elevador de verdade.
+       Sem essa checagem o clique caía direto na lista genérica sem
+       explicação. Nó com resolverSubsel que não achou nada = ser honesto,
+       não fingir que existe documento. */
+    if (alvo.subsel === null) {
+      const node = window.GatilhosEngine.NODES.find(
+        (n) => n.key === String(g.evento_key || '').replace(/^LEMBRETE__/, '')
+      );
+      if (node?.resolverSubsel) {
+        alert('Não há documento real para esta etapa — provavelmente foi registrada retroativamente (etapa pulada no fluxo) e nunca teve um documento gerado de verdade.');
+        return;
+      }
+    }
     if (alvo.subsel !== null) setSubsel?.(alvo.subsel);
     setRoute?.(alvo.rota);
   };

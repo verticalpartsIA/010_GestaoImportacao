@@ -26,9 +26,13 @@ function PZInput({ value, onChange, type = 'text', placeholder, disabled }) {
 }
 
 /* ---------- Lista — cotações de fornecedor já respondidas ---------- */
-function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo }) {
+function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }) {
   const [pendentes, setPendentes] = React.useState(null);
-  const [pzId, setPzId] = React.useState(null);
+  /* 23/08 (achado real, Gelson): clicar no nó "Financeiro precificando" da
+     Cadeia de Gatilhos caía na lista genérica, não no documento da cotação.
+     pzId agora pode nascer do subsel (id de precificacoes_elevador vindo
+     do deep-link), não só do clique manual na lista. */
+  const [pzId, setPzId] = React.useState(subsel && typeof subsel === 'string' ? subsel : null);
 
   const carregar = React.useCallback(() => {
     window.PrecificacaoElevadorStore.listarPendentes().then(setPendentes).catch(() => setPendentes([]));

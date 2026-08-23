@@ -58,6 +58,19 @@
      declara `rota` — clique pousa na lista, sem subsel. */
   const resolverIdDireto = async (alvoId) => alvoId || null;
   const resolverEditProposta = async (alvoId) => (alvoId ? { __editId: alvoId } : null);
+  /* 23/08 (achado real, Gelson): clicar em "Financeiro precificando" caía
+     na lista genérica de Precificação, não no documento da cotação — a
+     rota não tinha resolverSubsel. precificacoes_elevador.cotacao_
+     fornecedor_id é o mesmo id gravado como alvo_id neste nó (nasce em
+     FORNECEDOR_RESPONDEU, cujo alvoId é a cotação a fornecedor). */
+  const resolverPrecificacaoElevador = async (alvoId) => {
+    const c = sb(); if (!c || !alvoId) return null;
+    try {
+      const { data } = await c.from('precificacoes_elevador').select('id')
+        .eq('cotacao_fornecedor_id', alvoId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      return data ? data.id : null;
+    } catch (e) { console.warn('[GatilhosEngine] resolverPrecificacaoElevador falhou', e); return null; }
+  };
   const resolverCotacaoFornecedor = async (alvoId) => {
     if (!alvoId || !window.CotacaoElevadorFornecedorStore) return null;
     try { return await window.CotacaoElevadorFornecedorStore.getById(alvoId); }
@@ -80,7 +93,7 @@
     { key: 'PRECIFICACAO', label: 'Financeiro precificando (SLA 5h)',
       predecessores: [{ key: 'SLA_FORNECEDOR', rel: 'FS' }],
       nasce: 'FORNECEDOR_RESPONDEU', fecha: 'PROPOSTA_ELABORADA',
-      fechamentoTipo: 'automatico', rota: 'precificacao' },
+      fechamentoTipo: 'automatico', rota: 'precificacao', resolverSubsel: resolverPrecificacaoElevador },
 
     { key: 'PROPOSTA_PREP', label: 'Proposta pronta — aguardando envio manual',
       predecessores: [{ key: 'PRECIFICACAO', rel: 'FS' }],
