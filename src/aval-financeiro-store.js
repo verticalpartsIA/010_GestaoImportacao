@@ -220,9 +220,16 @@
       .order('updated_at', { ascending: false }).limit(1).maybeSingle();
     const precificacao = pz?.resultado?.precificacao;
     if (!precificacao) return null;
+    /* 23/08 (Gelson): teto inclui comissão do vendedor — "todos os custos
+       pensáveis", dinheiro real saindo do caixa da cotação, mesma lógica
+       de ART/frete/instalador. custoTotalMercadorias (bens/frete/impostos)
+       já vem separado da comissão no motor de cálculo — soma aqui. */
+    const custoBase = Number(precificacao.custoTotalMercadorias) || 0;
+    const comissaoVendedor = Number(precificacao.comissaoVendedorRs) || 0;
+    const custoTeto = custoBase + comissaoVendedor;
     return {
-      custo_teto: precificacao.custoTotalMercadorias ?? null,
-      margem_aceita: (precificacao.precoVendaProposta ?? 0) - (precificacao.custoTotalMercadorias ?? 0),
+      custo_teto: custoTeto,
+      margem_aceita: (Number(precificacao.precoVendaProposta) || 0) - custoTeto,
     };
   }
 

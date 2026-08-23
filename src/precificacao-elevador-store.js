@@ -259,6 +259,11 @@
        entraram na conta), e o alerta de estouro vira ruído. Por isso passa
        a ser obrigatório listar pelo menos 1 item aqui antes de aprovar. */
     if (!(pz.itens_instalacao_montagem || []).length) faltando.push('Custos de instalação/montagem (ART, andaime/munck, frete, instalador…)');
+    /* 23/08 (Gelson): comissão de vendedor é regra clara (padrão 2%, ver
+       parametros_fiscais_elevador), mas nada impedia zerar sem querer —
+       e ela agora conta pro teto de custo do CEO (ver
+       aval-financeiro-store.js), então precisa estar preenchida. */
+    if (!(Number(pz.comissao_vendedor_pct) > 0)) faltando.push('Comissão do vendedor (%)');
     return faltando;
   }
 

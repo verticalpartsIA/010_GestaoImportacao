@@ -73,9 +73,13 @@
     if (providenciado != null) {
       patch.andaime_munck_providenciado = !!providenciado;
       patch.andaime_munck_em = providenciado ? new Date().toISOString() : null;
-      /* 23/08 (Gelson): valor não informado aqui é um buraco conhecido — a
-         regra futura é bloquear e apontar pro CEO (Diego) quando isso
-         acontecer. Ainda não implementado; hoje só grava null e segue. */
+      /* 23/08 (Gelson) — correção do entendimento inicial: não é uma regra
+         especial deste campo. Não informar valor aqui é normal (pode ser
+         que a obra nem precise contratar de verdade). A regra real é
+         genérica — se ALGUÉM gastar de verdade em qualquer coisa (aqui
+         incluso) e isso estourar o teto da cotação, o AvalFinanceiroStore.
+         registrarCustoReal() já alerta o CEO sozinho, sem precisar de nada
+         especial aqui. Esse campo só registra o valor quando existir. */
       patch.andaime_munck_valor = providenciado ? (valor != null && valor !== '' ? Number(valor) : null) : null;
     }
     const { data: dossier, error } = await c.from('dossier_obra').update(patch).eq('id', dossierId)
