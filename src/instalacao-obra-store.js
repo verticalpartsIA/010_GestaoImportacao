@@ -66,16 +66,27 @@
     }
   }
 
-  async function marcarAndaimeMunck(dossierId, { necessario, providenciado }) {
+  async function marcarAndaimeMunck(dossierId, { necessario, providenciado, valor }) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const patch = { updated_at: new Date().toISOString() };
     if (necessario != null) patch.andaime_munck_necessario = !!necessario;
     if (providenciado != null) {
       patch.andaime_munck_providenciado = !!providenciado;
       patch.andaime_munck_em = providenciado ? new Date().toISOString() : null;
+      /* 23/08 (Gelson): valor não informado aqui é um buraco conhecido — a
+         regra futura é bloquear e apontar pro CEO (Diego) quando isso
+         acontecer. Ainda não implementado; hoje só grava null e segue. */
+      patch.andaime_munck_valor = providenciado ? (valor != null && valor !== '' ? Number(valor) : null) : null;
     }
-    const { error } = await c.from('dossier_obra').update(patch).eq('id', dossierId);
+    const { data: dossier, error } = await c.from('dossier_obra').update(patch).eq('id', dossierId)
+      .select('numero_cotacao, building_name').single();
     if (error) throw error;
+    if (providenciado && window.AvalFinanceiroStore && dossier?.numero_cotacao != null && valor != null && valor !== '') {
+      window.AvalFinanceiroStore.registrarCustoReal({
+        numeroCotacao: dossier.numero_cotacao, origem: 'andaime_munck',
+        descricao: 'Andaime/Munck — ' + (dossier.building_name || dossierId), valor,
+      });
+    }
   }
 
   /* Vincular um parceiro dispara a decisão do RH pra ESTE par (obra,

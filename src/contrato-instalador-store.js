@@ -256,6 +256,10 @@
       evento: 'CONTRATO_INSTALADOR_GERADO', numeroCotacao: formState.numeroCotacao ?? null,
       alvoLabel: rec.numero_documento, alvoId: rec.id,
     });
+    if (window.AvalFinanceiroStore && formState.numeroCotacao != null) window.AvalFinanceiroStore.registrarCustoReal({
+      numeroCotacao: formState.numeroCotacao, origem: 'contrato_instalador',
+      descricao: 'Contrato Instalador ' + rec.numero_documento, valor: valorTotal,
+    });
     return rec;
   }
 

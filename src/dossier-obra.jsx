@@ -496,9 +496,17 @@ function TabDocumentos({ dossier, reload }) {
 
   const upload = async (tipo, file) => {
     if (!file) return;
+    /* Valor do custo real (23/08, Gelson) — só pedido pra ART hoje, onde
+       existe custo de verdade associado. window.prompt é pragmático aqui;
+       se algum dia isso precisar de mais campos junto, vira um modal. */
+    let valor = null;
+    if (tipo === 'ART') {
+      const resp = window.prompt('Valor da ART (R$) — opcional, deixe em branco se não souber agora:');
+      if (resp && resp.trim() && !isNaN(Number(resp.replace(',', '.')))) valor = Number(resp.replace(',', '.'));
+    }
     setUploading(tipo);
     try {
-      await window.__DOSSIER.anexarDocumento({ dossierId: dossier.id, tipo, file });
+      await window.__DOSSIER.anexarDocumento({ dossierId: dossier.id, tipo, file, valor });
       if (window.VPLog) window.VPLog.registrar({ modulo: 'Documentos', acao: 'Documento anexado — ' + tipo, alvo: dossier.building_name, alvo_id: dossier.id });
       window.toast(tipo + ' anexado.', 'success');
       await (reload && reload());
@@ -821,6 +829,7 @@ function TabInstalacao({ dossier, reload }) {
   const [busy, setBusy] = React.useState(false);
   const [recebidoPor, setRecebidoPor] = React.useState('');
   const [qtdPessoas, setQtdPessoas] = React.useState('');
+  const [valorAndaimeMunck, setValorAndaimeMunck] = React.useState('');
 
   const carregar = React.useCallback(async () => {
     try {
@@ -888,9 +897,20 @@ function TabInstalacao({ dossier, reload }) {
           <Button variant="outline" size="sm" disabled={busy} onClick={() => acao(() => store.marcarAndaimeMunck(dossier.id, { necessario: !checklist.dossier.andaime_munck_necessario }))}>
             {checklist.dossier.andaime_munck_necessario ? 'Andaime/munck: não aplicável' : 'Andaime/munck necessário'}
           </Button>
-          {checklist.dossier.andaime_munck_necessario && (
-            <Button variant="outline" size="sm" disabled={busy} onClick={() => acao(() => store.marcarAndaimeMunck(dossier.id, { providenciado: !checklist.dossier.andaime_munck_providenciado }))}>
-              {checklist.dossier.andaime_munck_providenciado ? 'Desmarcar providenciado' : 'Marcar andaime/munck providenciado'}
+          {checklist.dossier.andaime_munck_necessario && !checklist.dossier.andaime_munck_providenciado && (
+            <>
+              <input className="input" type="number" min="0" step="0.01" style={{ width: 140 }}
+                value={valorAndaimeMunck} onChange={(e) => setValorAndaimeMunck(e.target.value)}
+                placeholder="Valor (R$)" title="Valor da locação — se ficar em branco, entra sem custo registrado"/>
+              <Button variant="outline" size="sm" disabled={busy}
+                onClick={() => acao(() => store.marcarAndaimeMunck(dossier.id, { providenciado: true, valor: valorAndaimeMunck }))}>
+                Marcar andaime/munck providenciado
+              </Button>
+            </>
+          )}
+          {checklist.dossier.andaime_munck_necessario && checklist.dossier.andaime_munck_providenciado && (
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => acao(() => store.marcarAndaimeMunck(dossier.id, { providenciado: false }))}>
+              Desmarcar providenciado {checklist.dossier.andaime_munck_valor != null ? `(R$ ${Number(checklist.dossier.andaime_munck_valor).toLocaleString('pt-BR')})` : '(sem valor informado)'}
             </Button>
           )}
         </div>

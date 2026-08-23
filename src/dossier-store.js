@@ -268,7 +268,7 @@ window.__DOSSIER = window.__DOSSIER || (() => {
     /* ---- Anexar documento com upload de arquivo (Storage) ----
        Sobe o PDF pro bucket público `engenharia` sob dossier-documentos/<id>
        e grava a linha em dossier_documentos com arquivo_url. */
-    async anexarDocumento({ dossierId, tipo, file, nome }) {
+    async anexarDocumento({ dossierId, tipo, file, nome, valor }) {
       if (!file) throw new Error('Nenhum arquivo selecionado.');
       const id = 'DOC-' + Date.now().toString().slice(-6);
       const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
@@ -286,15 +286,22 @@ window.__DOSSIER = window.__DOSSIER || (() => {
         responsavel: window.__VP_USER?.email || 'system',
         data_criacao: new Date().toISOString().split('T')[0],
         arquivo_url: pub?.publicUrl || null,
+        valor: valor != null ? Number(valor) : null,
         metadata: { filename: file.name, size: file.size, path }
       });
       if (error) throw error;
-      if (window.EventosFluxo && (tipo === 'ART' || tipo === 'DataBook')) {
+      if (tipo === 'ART' || tipo === 'DataBook') {
         const { data: dossier } = await sb.from('dossier_obra').select('numero_cotacao, building_name').eq('id', dossierId).maybeSingle();
-        window.EventosFluxo.registrar({
+        if (window.EventosFluxo) window.EventosFluxo.registrar({
           evento: tipo === 'ART' ? 'ART_EMITIDA' : 'DATABOOK_MONTADO',
           numeroCotacao: dossier?.numero_cotacao ?? null, alvoLabel: dossier?.building_name, alvoId: dossierId,
         });
+        if (tipo === 'ART' && valor != null && window.AvalFinanceiroStore && dossier?.numero_cotacao != null) {
+          window.AvalFinanceiroStore.registrarCustoReal({
+            numeroCotacao: dossier.numero_cotacao, origem: 'art',
+            descricao: 'ART — ' + (dossier.building_name || dossierId), valor,
+          });
+        }
       }
       return id;
     },

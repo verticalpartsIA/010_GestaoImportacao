@@ -252,6 +252,13 @@
     if (!(Number(pz.vmle_usd) > 0)) faltando.push('VMLE (USD)');
     if (!(Number(pz.tx_cambial) > 0)) faltando.push('Câmbio (R$/US$)');
     if (!(pz.modelos || []).length) faltando.push('Unidades/modelos');
+    /* 23/08 (Gelson): o custoTotalMercadorias calculado aqui vira o "teto de
+       custo" que o CEO aprova mais adiante (ver aval-financeiro-store.js) —
+       se a lista de custos de instalação/montagem estiver vazia, o teto
+       fica artificialmente baixo (ART, Andaime/Munck, Frete etc. nunca
+       entraram na conta), e o alerta de estouro vira ruído. Por isso passa
+       a ser obrigatório listar pelo menos 1 item aqui antes de aprovar. */
+    if (!(pz.itens_instalacao_montagem || []).length) faltando.push('Custos de instalação/montagem (ART, andaime/munck, frete, instalador…)');
     return faltando;
   }
 

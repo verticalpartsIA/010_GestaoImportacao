@@ -208,18 +208,72 @@
      mesmo poder entre as duas, nenhuma subordina a outra. A do CEO não tem
      trava de identidade (não há login próprio pra ele no sistema ainda);
      a "minha" fica restrita — ver isOwner(). */
+  /* Teto de custo (23/08, Gelson) — no momento em que o CEO aprova, tira a
+     "foto" do custo/margem calculados na Precificação e congela em
+     avais_financeiros. Daqui pra frente, cada gasto real que entrar via
+     registrarCustoReal() é comparado contra esse teto — nunca contra um
+     número recalculado depois, senão o teto "foge" junto com o gasto. */
+  async function _snapshotTetoCusto(numeroCotacao) {
+    const c = sb();
+    const { data: pz } = await c.from('precificacoes_elevador')
+      .select('resultado').eq('numero_cotacao', numeroCotacao).eq('status', 'aprovado')
+      .order('updated_at', { ascending: false }).limit(1).maybeSingle();
+    const precificacao = pz?.resultado?.precificacao;
+    if (!precificacao) return null;
+    return {
+      custo_teto: precificacao.custoTotalMercadorias ?? null,
+      margem_aceita: (precificacao.precoVendaProposta ?? 0) - (precificacao.custoTotalMercadorias ?? 0),
+    };
+  }
+
   async function aprovarComoCEO(numeroCotacao) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const av = await getByNumeroCotacao(numeroCotacao);
     if (!av) throw new Error('Aval financeiro não encontrado para esta cotação.');
     const now = new Date().toISOString();
+    const teto = await _snapshotTetoCusto(numeroCotacao);
     const { error } = await c.from('avais_financeiros').update({
       aprovacao_ceo_em: now, aprovacao_ceo_por: (window.__VP_USER || {}).email || 'CEO (Diego)', atualizado_em: now,
+      ...(teto || {}),
     }).eq('id', av.id);
     if (error) throw error;
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'FINANCEIRO_APROVOU_CEO', numeroCotacao, alvoLabel: av.cliente_nome || av.numero_documento, alvoId: av.id,
     });
+  }
+
+  /* Extrato de gasto real (23/08, Gelson) — chamada por qualquer módulo que
+     incorre custo real numa cotação já aprovada pelo CEO (Contrato
+     Instalador, Andaime/Munck, ART…). Grava a linha, soma o acumulado, e
+     se estourar o teto congelado em aprovarComoCEO, dispara um alerta novo
+     — nunca bloqueia o módulo que gerou o gasto (decisão de 23/08: só
+     alerta, o CEO toma ciência depois). Se a cotação nunca teve teto
+     definido (não passou por aprovarComoCEO ainda), só registra o gasto,
+     sem comparar com nada. */
+  async function registrarCustoReal({ numeroCotacao, origem, descricao, valor }) {
+    const c = sb(); if (!c || numeroCotacao == null || !(Number(valor) > 0)) return null;
+    const id = 'CCR-' + Date.now().toString().slice(-6);
+    const { error } = await c.from('cotacao_custos_reais').insert({
+      id, numero_cotacao: numeroCotacao, origem, descricao: descricao || null,
+      valor: Number(valor), criado_por: (window.__VP_USER || {}).email || null,
+    });
+    if (error) { console.warn('[AvalFinanceiroStore] registrarCustoReal falhou', error); return null; }
+
+    const av = await getByNumeroCotacao(numeroCotacao);
+    if (!av || av.custo_teto == null) return { alertou: false }; // sem teto definido — só registrou
+
+    const { data: linhas } = await c.from('cotacao_custos_reais').select('valor').eq('numero_cotacao', numeroCotacao);
+    const acumulado = (linhas || []).reduce((s, l) => s + Number(l.valor || 0), 0);
+    if (acumulado <= Number(av.custo_teto)) return { alertou: false, acumulado };
+
+    const estouro = acumulado - Number(av.custo_teto);
+    await c.from('alertas').insert({
+      id: 'estouro-' + id, level: 'danger',
+      title: `Cotação ${numeroCotacao} estourou o teto de custo`,
+      sub: `Acumulado R$ ${acumulado.toLocaleString('pt-BR')} · teto R$ ${Number(av.custo_teto).toLocaleString('pt-BR')} · estouro de R$ ${estouro.toLocaleString('pt-BR')} — último gasto: ${descricao || origem} (R$ ${Number(valor).toLocaleString('pt-BR')})`,
+      module: 'Financeiro', resolved: false,
+    });
+    return { alertou: true, acumulado, estouro };
   }
 
   async function aprovarComoOwner(numeroCotacao) {
@@ -279,5 +333,6 @@
     getById, getByPropostaId, getByNumeroCotacao, garantirRegistro, listarFila,
     registrarConsulta, darAval, confirmarSinal, confirmarAvalPagamento, vincularContrato,
     podeEnviarContrato, podeIniciarCompra, aprovarComoCEO, aprovarComoOwner, isOwner,
+    registrarCustoReal,
   };
 }());
