@@ -93,14 +93,16 @@ function ProjectKanban({ projetos, onMove, onClick }) {
               <div className="kanban__card-eyebrow">{p.id}</div>
               <div className="kanban__card-title">{p.name}</div>
               <div className="kanban__card-ncm muted">{p.client}</div>
-              <div className="kanban__card-foot" onClick={(e) => e.stopPropagation()}>
-                <Button variant="ghost" size="sm" icon="chevLeft" aria-label={`Mover ${p.name} para fase anterior`}
-                  disabled={phases.indexOf(ph) === 0}
-                  onClick={() => onMove?.(p, phases[Math.max(0, phases.indexOf(ph) - 1)])}/>
-                <Button variant="ghost" size="sm" icon="chevRight" aria-label={`Mover ${p.name} para próxima fase`}
-                  disabled={phases.indexOf(ph) === phases.length - 1}
-                  onClick={() => onMove?.(p, phases[Math.min(phases.length - 1, phases.indexOf(ph) + 1)])}/>
-              </div>
+              {onMove && (
+                <div className="kanban__card-foot" onClick={(e) => e.stopPropagation()}>
+                  <Button variant="ghost" size="sm" icon="chevLeft" aria-label={`Mover ${p.name} para fase anterior`}
+                    disabled={phases.indexOf(ph) === 0}
+                    onClick={() => onMove?.(p, phases[Math.max(0, phases.indexOf(ph) - 1)])}/>
+                  <Button variant="ghost" size="sm" icon="chevRight" aria-label={`Mover ${p.name} para próxima fase`}
+                    disabled={phases.indexOf(ph) === phases.length - 1}
+                    onClick={() => onMove?.(p, phases[Math.min(phases.length - 1, phases.indexOf(ph) + 1)])}/>
+                </div>
+              )}
             </div>
           ))}
           {!byPhase[ph].length && <div style={{ color: 'var(--fg3)', fontSize: 11, padding: 18, textAlign: 'center' }}>vazio</div>}
@@ -195,22 +197,6 @@ function Dashboard({ role, setRoute, setSubsel }) {
     reloadDashboard();
   }, [reloadDashboard]);
 
-  const moveProject = async (project, phase) => {
-    if (!project || !phase || project.current_phase === phase) return;
-    const before = sbData;
-    setSbData(prev => ({
-      ...prev,
-      ganttProjetos: (prev?.ganttProjetos || []).map(p => p.id === project.id ? { ...p, current_phase: phase } : p),
-    }));
-    const { error } = await window.__VP_SB.sb.from('projetos').update({ current_phase: phase }).eq('id', project.id);
-    if (error) {
-      setSbData(before);
-      return window.toast('Erro ao mover projeto: ' + error.message, 'error');
-    }
-    window.toast(`${project.name} movido para ${phase}`, 'success');
-    reloadDashboard();
-  };
-
   const kpis        = sbData?.kpis?.[role] || [];
   const tasks       = sbData?.tarefas || [];
   const projetos    = sbData?.ganttProjetos || [];
@@ -274,15 +260,15 @@ function Dashboard({ role, setRoute, setSubsel }) {
             </div>
             <Button variant="ghost" size="sm" icon="expand" onClick={() => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }}/>
           </>}>
-          {/* A tabela `projetos` (Gantt/Lista/Kanban) é uma origem legada,
-              sem numero_cotacao/proposta_id — não tem como abrir o
-              detalhe real de proposta/contrato daqui (achado #50: o
-              clique mandava TODO projeto pra "Propostas", sempre a mesma
-              tela, independente de qual card). Mostra os dados que o
-              próprio card já tem, honesto sobre o que existe. */}
+          {/* 23/08 (issue #274): "projetos" agora vem da esteira real
+              (gatilhos + formulários), não da tabela legada `projetos`
+              (0 linhas em produção). A fase é derivada do gatilho aberto
+              mais antigo de cada cotação — muda sozinha quando a etapa
+              real fecha, por isso não há mais botão de "mover fase"
+              manual (não existe ação real por trás disso agora). */}
           {projectView === 'gantt'  && <GanttChart projetos={projetos} onClick={setDetalheProjeto} today={sbData?.ganttToday ?? 60}/>}
           {projectView === 'lista'  && <ProjectList projetos={projetos} onClick={setDetalheProjeto}/>}
-          {projectView === 'kanban' && <ProjectKanban projetos={projetos} onMove={moveProject} onClick={setDetalheProjeto}/>}
+          {projectView === 'kanban' && <ProjectKanban projetos={projetos} onClick={setDetalheProjeto}/>}
         </Card>
 
         <Card title="Tarefas de Hoje" sub={tasks.length + " pendentes"} action={<Button variant="ghost" size="sm" icon="plus" onClick={() => setShowTask(true)}/>}>

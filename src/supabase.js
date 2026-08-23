@@ -162,7 +162,8 @@
       lR, cotR, projR, alertR,
       tarR, embR, ctR, estR,
       comR, gatR, fichasR, catalogoR,
-      propR, avaisR, ncmR
+      propR, avaisR, ncmR,
+      formR, cliR
     ] = await Promise.all([
       sb.from('leads').select('*').order('date', { ascending: false }),
       sb.from('cotacoes').select('*').order('date', { ascending: false }),
@@ -185,6 +186,12 @@
       // Issue #273: o widget "Pendências NCM" do Dashboard lia um array
       // hardcoded vazio — puxa de verdade agora (ver dashboard-metrics-engenharia.js).
       sb.from('ncm_solicitacoes').select('id, status, created_at'),
+      // Issue #274 (23/08): "Projetos em Andamento" (Gantt/Kanban/Lista) lia
+      // só a tabela `projetos`, legada e sempre vazia em produção. cliente/
+      // obra por numero_cotacao vêm daqui pra montar o projeto sintético
+      // real em dashboard-metrics-gantt.js (projetosDaEsteira).
+      sb.from('formularios_elevador').select('numero_cotacao, cliente_id, local_obra_cidade'),
+      sb.from('clientes').select('id, nome_fantasia, razao_social'),
     ]);
 
     const leads     = lR.data    || [];
@@ -202,6 +209,9 @@
     const propostas = propR.data  || [];
     const avais     = avaisR.data || [];
     const ncmSolicitacoes = ncmR.data || [];
+    const formularios = formR.data || [];
+    const clientesPorId = {};
+    (cliR.data || []).forEach((c) => { clientesPorId[c.id] = c; });
 
     // ---- Comercial (dashboard-metrics-comercial.js) — 1º módulo extraído
     // da revisão de arquitetura do Dashboard. Funções puras, testadas em
@@ -219,11 +229,19 @@
     const FM = window.FinanceiroMetrics;
     const financeiro = FM.compute({ contratos, comissoes, gatilhos });
 
+    // ---- Gantt (dashboard-metrics-gantt.js) — 4º módulo extraído.
+    // Issue #274 fechada em 23/08: projeta a esteira real (gatilhos +
+    // formulários) em vez da tabela `projetos` legada/sempre vazia.
+    // Calculado aqui (antes do Admin) porque o KPI "Projetos ativos" do
+    // Admin também precisa desse mesmo array reconciliado. ----
+    const GM = window.ProjetosGanttMetrics;
+    const projetosReais = GM.projetosDaEsteira({ gatilhos, formularios, clientesPorId });
+
     // ---- Admin (dashboard-metrics-admin.js) — 5º e último módulo
     // extraído. Único que COMPÕE outro módulo (ComercialMetrics), em vez
     // de refiltrar do zero — ver comentário no próprio arquivo. ----
     const AM = window.AdminMetrics;
-    const admin = AM.compute({ projetos, embarques, alertas, propostas, contratos, avais, comissoes });
+    const admin = AM.compute({ projetos: projetosReais, embarques, alertas, propostas, contratos, avais, comissoes });
 
     // ---- tarefas no formato esperado pelo Dashboard ----
     const tarefasFmt = tarefas.map(t => ({
@@ -249,11 +267,7 @@
         status: e.qty <= Math.floor(e.min_qty / 2) ? 'danger' : 'warning',
       }));
 
-    // ---- Gantt (dashboard-metrics-gantt.js) — 4º módulo extraído.
-    // Extração comportamento-idêntica: ainda lê a tabela `projetos`
-    // legada (issue #274 / Candidato 2, fora do escopo aqui). ----
-    const GM = window.ProjetosGanttMetrics;
-    const gantt = GM.compute({ projetos });
+    const gantt = GM.compute({ projetos: projetosReais });
 
     return {
       leads, cotacoes, projetos, alertas, tarefas: tarefasFmt,

@@ -72,8 +72,10 @@
     const crit = alertasCriticos({ alertas, propostas, contratos, avais });
     const aprovadas = CM.propostasAprovadas(propostas);
     return [
-      // "Projetos ativos" ainda lê a tabela legada `projetos` (issue #274
-      // / Candidato 2 da revisão de arquitetura — fora do escopo aqui).
+      // Issue #274 fechada em 23/08: `projetos` aqui é o array já
+      // reconciliado com a esteira real (ver GM.projetosDaEsteira em
+      // dashboard-metrics-gantt.js, chamado por supabase.js antes deste
+      // compute) — não é mais a tabela legada `projetos` (sempre 0 linhas).
       { label: 'Projetos ativos', value: String((projetos || []).length), unit: '', delta: '', deltaDir: 'up', sub: 'todos módulos' },
       { label: 'Embarques em trânsito', value: String(embarquesEmTransito(embarques).length), unit: '', delta: '', deltaDir: 'up', sub: 'Santos+Itaguaí' },
       { label: 'Alertas críticos', value: String(crit.length), unit: '', delta: '', deltaDir: crit.length > 0 ? 'down' : 'up', sub: 'ver central' },

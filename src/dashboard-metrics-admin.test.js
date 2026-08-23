@@ -69,8 +69,8 @@ test('kpis — Faturamento reflete proposta aprovada real (regressão "R$0 com v
   assert.equal(faturamento.value, 'R$ 185k');
 });
 
-test('compute — devolve kpis (4 itens) e alertasCriticos (array)', () => {
-  const out = M.compute({ projetos: [], embarques: [], alertas: [], propostas: [], contratos: [], avais: [] });
-  assert.equal(out.kpis.length, 4);
+test('compute — devolve kpis (5 itens, com Comissões) e alertasCriticos (array)', () => {
+  const out = M.compute({ projetos: [], embarques: [], alertas: [], propostas: [], contratos: [], avais: [], comissoes: [] });
+  assert.equal(out.kpis.length, 5);
   assert.ok(Array.isArray(out.alertasCriticos));
 });

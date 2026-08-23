@@ -52,3 +52,40 @@ test('compute — devolve ganttToday e ganttProjetos juntos', () => {
   assert.equal(typeof out.ganttToday, 'number');
   assert.equal(out.ganttProjetos.length, 1);
 });
+
+test('projetosDaEsteira — só inclui cotações com gatilho ainda aberto (issue #274)', () => {
+  const gatilhos = [
+    { numero_cotacao: 1, evento_key: 'FORMULARIO', nascido_em: '2026-08-01T00:00:00Z', concluido_em: '2026-08-01T01:00:00Z' },
+    { numero_cotacao: 1, evento_key: 'SLA_FORNECEDOR', nascido_em: '2026-08-01T01:00:00Z', concluido_em: null },
+    { numero_cotacao: 2, evento_key: 'FORMULARIO', nascido_em: '2026-08-02T00:00:00Z', concluido_em: '2026-08-02T01:00:00Z' },
+  ];
+  const r = M.projetosDaEsteira({ gatilhos, formularios: [], clientesPorId: {} });
+  assert.equal(r.length, 1); // cotação 2 tem tudo fechado — não entra
+  assert.equal(r[0].id, 1);
+});
+
+test('projetosDaEsteira — fase atual vem do gatilho aberto mais antigo (o gargalo)', () => {
+  const gatilhos = [
+    { numero_cotacao: 5, evento_key: 'FORMULARIO', nascido_em: '2026-08-01T00:00:00Z', concluido_em: '2026-08-01T01:00:00Z' },
+    { numero_cotacao: 5, evento_key: 'PRECIFICACAO', nascido_em: '2026-08-01T01:00:00Z', concluido_em: null },
+  ];
+  const r = M.projetosDaEsteira({ gatilhos, formularios: [], clientesPorId: {} });
+  assert.equal(r[0].current_phase, M.FASE_POR_NODE.PRECIFICACAO);
+});
+
+test('projetosDaEsteira — ignora linhas de lembrete (LEMBRETE__*)', () => {
+  const gatilhos = [
+    { numero_cotacao: 7, evento_key: 'LEMBRETE__PRECIFICACAO', nascido_em: '2026-08-01T00:00:00Z', concluido_em: null },
+  ];
+  const r = M.projetosDaEsteira({ gatilhos, formularios: [], clientesPorId: {} });
+  assert.equal(r.length, 0);
+});
+
+test('projetosDaEsteira — usa nome do cliente via formulário quando disponível', () => {
+  const gatilhos = [{ numero_cotacao: 9, evento_key: 'FORMULARIO', nascido_em: '2026-08-01T00:00:00Z', concluido_em: null }];
+  const formularios = [{ numero_cotacao: 9, cliente_id: 'c1', local_obra_cidade: 'Juiz de Fora' }];
+  const clientesPorId = { c1: { nome_fantasia: null, razao_social: 'Cliente Teste LTDA' } };
+  const r = M.projetosDaEsteira({ gatilhos, formularios, clientesPorId });
+  assert.equal(r[0].client, 'Cliente Teste LTDA');
+  assert.match(r[0].name, /Cliente Teste LTDA/);
+});
