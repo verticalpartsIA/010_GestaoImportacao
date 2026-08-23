@@ -25,7 +25,13 @@
   const SLA_HORAS = {
     SLA_FORNECEDOR: 48,
     PRECIFICACAO: 5,
-    AGUARDA_CLIENTE: 15 * 24,      // 360h
+    /* 10 dias (23/08, Gelson) — não é mais só um SLA informativo: é o
+       limiar do "Cemitério". Depois disso, verificarPrazos() marca
+       status 'revisao_necessaria' e a tela de Gatilhos destaca "parado
+       há Xd sem resposta do cliente", com botão pro vendedor investigar
+       e fechar o ciclo com motivo (fecharComMotivo) — só o cliente tem
+       poder de matar o fluxo; até lá, ninguém mais fecha essa etapa. */
+    AGUARDA_CLIENTE: 10 * 24,      // 240h — limiar do Cemitério
     CONTRATO_ENVIADO: 24,
     PROJETO_ENVIADO: 24,
     AGUARDA_ASSINATURA: 5 * 24,    // 120h
@@ -591,6 +597,22 @@
     return mudou;
   }
 
+  /* Fecha manualmente um gatilho que nunca vai receber o evento normal de
+     conclusão — hoje só o "Cemitério" (AGUARDA_CLIENTE parado há mais de
+     10 dias, ver SLA_HORAS acima): o cliente sumiu, o vendedor investigou
+     por fora e decide encerrar o ciclo com uma justificativa em texto
+     livre (23/08, Gelson — "só o cliente mata o fluxo", então isso é
+     sempre uma decisão humana registrada, nunca automática). */
+  async function fecharComMotivo(id, motivo) {
+    const c = sb(); if (!c) return null;
+    if (!motivo || !motivo.trim()) throw new Error('Motivo é obrigatório.');
+    const { data, error } = await c.from('gatilhos').update({
+      concluido_em: new Date().toISOString(), status: 'encerrado', motivo_fechamento: motivo.trim(),
+    }).eq('id', id).select().single();
+    if (error) { console.warn('[GatilhosEngine] fecharComMotivo falhou', error); throw error; }
+    return data;
+  }
+
   /* Fecha um gatilho-filho de lembrete manualmente ("marquei que já cobrei o cliente"). */
   async function fecharLembrete(id) {
     const c = sb(); if (!c) return null;
@@ -601,5 +623,5 @@
     return data;
   }
 
-  window.GatilhosEngine = { NODES, SLA_HORAS, LEMBRETES, onEvento, verificarPrazos, fecharLembrete, navegarPara, profundidade };
+  window.GatilhosEngine = { NODES, SLA_HORAS, LEMBRETES, onEvento, verificarPrazos, fecharLembrete, fecharComMotivo, navegarPara, profundidade };
 }());

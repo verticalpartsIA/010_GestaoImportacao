@@ -187,7 +187,7 @@ function FinanceiroPage({ setRoute, setSubsel }) {
           {Object.entries(cadeiasPorCotacao).map(([numeroCotacao, nos]) => (
             <CadeiaGatilhosCotacao key={numeroCotacao} numeroCotacao={numeroCotacao} nos={nos}
               onConfirmarSinal={setConfirmarSinalDe} onConfirmarAval={setConfirmarAvalDe}
-              onFecharLembrete={fecharLembrete} onAbrirGatilho={abrirGatilho}/>
+              onFecharLembrete={fecharLembrete} onAbrirGatilho={abrirGatilho} onFecharComMotivo={reloadGatilhos}/>
           ))}
         </div>
       </Card>
@@ -263,24 +263,85 @@ function GanttBarMini({ nascidoEm, prazoEm, concluidoEm, encerrado, comLabel }) 
   );
 }
 
+/* "levou 2h" / "levou 3d 4h" — tempo REAL que uma etapa concluída levou,
+   registrado depois do fato (nascido_em → concluido_em). Sem SLA nenhum
+   envolvido — decisão de 23/08: nada de prazo previsto pras etapas novas,
+   só o fato consumado. Depois de 4-6 casos reais dá pra pensar em prazo
+   fixo; hoje é só observação. */
+function fmtDuracao(ms) {
+  if (ms == null || ms < 0) return null;
+  const horas = ms / 3600000;
+  if (horas < 1) return `${Math.max(1, Math.round(ms / 60000))}min`;
+  if (horas < 24) return `${Math.round(horas)}h`;
+  const dias = Math.floor(horas / 24);
+  const restoHoras = Math.round(horas % 24);
+  return restoHoras > 0 ? `${dias}d ${restoHoras}h` : `${dias}d`;
+}
+
+/* Modal de fechamento manual — hoje só usado pelo "Cemitério" (Aguardando
+   Cliente parado há mais de 10 dias, ver SLA_HORAS.AGUARDA_CLIENTE em
+   gatilhos-engine.js). Só o cliente tem poder de matar o fluxo (decisão
+   de 23/08) — este botão é o vendedor registrando o que descobriu por
+   fora (ligou, sumiu, concorrente, etc.), nunca um fechamento automático. */
+function ModalFecharComMotivo({ g, onClose, onSaved }) {
+  const [motivo, setMotivo] = React.useState('');
+  const [salvando, setSalvando] = React.useState(false);
+
+  const salvar = async () => {
+    if (!motivo.trim()) return window.toast('Descreva o motivo antes de fechar.', 'warning');
+    setSalvando(true);
+    try {
+      await window.GatilhosEngine.fecharComMotivo(g.id, motivo);
+      window.toast('Ciclo encerrado.', 'success');
+      onSaved?.();
+    } catch (e) {
+      window.toast('Erro: ' + (e.message || e), 'error');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <Modal title="Fechar ciclo com motivo" onClose={onClose} width={480}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Encerrar ciclo'}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 10 }}>
+        <div className="small muted">{g.trigger_name} — Cotação Nº {g.numero_cotacao}</div>
+        <label className="up-eyebrow muted">O que aconteceu?</label>
+        <textarea className="input" rows={4} value={motivo} onChange={(e) => setMotivo(e.target.value)}
+          placeholder="Ex.: cliente não responde há 3 semanas, liguei e caiu na caixa postal duas vezes…" autoFocus/>
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Cadeia automática (GatilhosEngine) ----------
    Fechada: uma linha-resumo por cotação (clicável, mini-Gantt do nó
-   atual). Aberta: árvore vertical, cada nó indentado pela profundidade
-   na cadeia (irmãos II/SS ficam no mesmo nível) — não mais cards lado
-   a lado, que não escalam quando há muitas cotações na tela. */
-function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho, defaultOpen }) {
+   atual). Aberta: percorre as 47 etapas da engine (não só as que já
+   nasceram na tabela `gatilhos`) — decisão de 23/08: a cadeia inteira
+   fica sempre visível, concluídas mostram tempo real que levaram, a(s)
+   etapa(s) atual(is) ficam destacadas, e o resto aparece opaco (sem
+   número inventado) até chegar a vez. Etapas com `fecha: null` (sem
+   ponto de ação real no código ainda, ver gatilhos-engine.js) ganham
+   rótulo "sem rastreio automático" em vez de fingir monitoramento. */
+function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho, onFecharComMotivo, defaultOpen }) {
   const [aberta, setAberta] = React.useState(!!defaultOpen);
+  const [fechandoMotivo, setFechandoMotivo] = React.useState(null);
   const engine = window.GatilhosEngine;
+  const NODES = engine?.NODES || [];
 
   const principais = nos.filter(g => !String(g.evento_key || '').startsWith('LEMBRETE__'))
     .sort((a, b) => new Date(a.nascido_em || 0) - new Date(b.nascido_em || 0));
   const lembretesPorPai = nos.filter(g => String(g.evento_key || '').startsWith('LEMBRETE__'))
     .reduce((acc, g) => { (acc[g.predecessor_id] = acc[g.predecessor_id] || []).push(g); return acc; }, {});
+  const porChave = principais.reduce((acc, g) => { acc[g.evento_key] = g; return acc; }, {});
 
   const encerrada = principais.some(g => g.status === 'encerrado');
-  const concluida = principais.every(g => g.concluido_em);
+  const concluida = principais.length > 0 && principais.every(g => g.concluido_em);
   const noAtual = principais.find(g => !g.concluido_em) || principais[principais.length - 1];
-  const statusLabel = encerrada ? 'Encerrada (proposta recusada)' : concluida ? 'Concluída' : 'Em andamento';
+  const statusLabel = encerrada ? 'Encerrada' : concluida ? 'Concluída' : 'Em andamento';
   const statusVariant = encerrada ? 'neutral' : concluida ? 'success' : 'warning';
 
   return (
@@ -301,29 +362,57 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
 
       {aberta && (
         <div style={{ marginTop: 8, marginLeft: 20 }}>
-          {principais.map((g) => {
+          {NODES.map((node) => {
+            const g = porChave[node.key];
+            const nivel = engine ? engine.profundidade(node.key) : 0;
+            const semAutomacao = node.fecha == null;
+
+            /* Etapa futura — ainda não nasceu na tabela `gatilhos`.
+               Aparece opaca, sem número de prazo inventado. */
+            if (!g) {
+              return (
+                <div key={node.key} className="row gap-2" style={{
+                  alignItems: 'center', padding: '5px 8px', marginLeft: nivel * 20, opacity: 0.4,
+                }}>
+                  <span className="mono" style={{ fontSize: 9, fontWeight: 700, width: 20 }}>{(node.predecessores[0] || {}).rel || 'FS'}</span>
+                  <span className="small" style={{ flex: 1 }}>{node.label}</span>
+                  {semAutomacao && <span className="mono" style={{ fontSize: 9 }}>sem rastreio automático</span>}
+                </div>
+              );
+            }
+
             const isOpen = !g.concluido_em;
-            const revisao = g.status === 'revisao_necessaria';
+            const cemiterio = isOpen && g.status === 'revisao_necessaria';
             const podeConfirmarSinal = g.evento_key === 'AGUARDA_BOLETO' && isOpen;
             const podeConfirmarAval = g.evento_key === 'AVAL_PAGAMENTO' && isOpen;
             const lembretes = lembretesPorPai[g.id] || [];
-            const nodeDef = (engine?.NODES || []).find((n) => n.key === g.evento_key);
-            const clicavel = !!(nodeDef && nodeDef.rota);
-            const nivel = engine ? engine.profundidade(g.evento_key) : 0;
-            const cor = revisao ? 'var(--vp-warning)' : g.concluido_em ? 'var(--vp-success)' : 'var(--fg2)';
+            const clicavel = !!node.rota;
+            const duracao = g.concluido_em && g.nascido_em ? fmtDuracao(new Date(g.concluido_em) - new Date(g.nascido_em)) : null;
+            const cor = cemiterio ? 'var(--vp-warning)' : g.status === 'encerrado' ? 'var(--fg3)' : g.concluido_em ? 'var(--vp-success)' : 'var(--fg1)';
+            const diasParado = cemiterio && g.nascido_em ? Math.floor((Date.now() - new Date(g.nascido_em).getTime()) / 86400000) : null;
+
             return (
               <div key={g.id}>
                 <div className="row gap-2" style={{
                   alignItems: 'center', padding: '6px 8px', marginLeft: nivel * 20,
                   borderLeft: nivel > 0 ? '2px solid var(--border)' : 'none',
+                  background: isOpen && !cemiterio ? 'var(--vp-gray-50)' : 'transparent',
                   cursor: clicavel ? 'pointer' : 'default',
                 }} onClick={clicavel ? () => onAbrirGatilho(g) : undefined} title={clicavel ? 'Abrir' : undefined}>
                   <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--fg3)', width: 20 }}>{g.tipo_relacionamento || 'FS'}</span>
-                  <span className="small" style={{ color: cor, fontWeight: g.concluido_em ? 400 : 700, flex: 1 }}>
+                  <span className="small" style={{ color: cor, fontWeight: isOpen ? 700 : 400, flex: 1 }}>
                     {g.trigger_name}
-                    {revisao ? ' — requer revisão' : ''}
+                    {g.status === 'encerrado' && g.motivo_fechamento ? ` — encerrado: "${g.motivo_fechamento}"` : g.status === 'encerrado' ? ' — encerrado' : ''}
                   </span>
-                  <GanttBarMini nascidoEm={g.nascido_em} prazoEm={g.prazo_em} concluidoEm={g.concluido_em} comLabel/>
+                  {g.concluido_em ? (
+                    <span className="mono small" style={{ color: cor, whiteSpace: 'nowrap' }}>
+                      {g.status === 'encerrado' ? (g.motivo_fechamento ? 'fechado manualmente' : 'encerrado') : duracao ? `concluído · levou ${duracao}` : 'concluído'}
+                    </span>
+                  ) : cemiterio ? (
+                    <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setFechandoMotivo(g); }}>Fechar com motivo</Button>
+                  ) : (
+                    <GanttBarMini nascidoEm={g.nascido_em} prazoEm={g.prazo_em} concluidoEm={null} comLabel/>
+                  )}
                   {podeConfirmarSinal && (
                     <Button size="sm" variant="primary" icon="check"
                       onClick={(e) => { e.stopPropagation(); onConfirmarSinal(g); }}>Boleto pago</Button>
@@ -333,6 +422,11 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
                       onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval</Button>
                   )}
                 </div>
+                {cemiterio && (
+                  <div style={{ marginLeft: (nivel + 1) * 20, padding: '4px 8px', fontSize: 11, color: 'var(--vp-warning)' }}>
+                    ⚠ Parado há {diasParado} dia{diasParado === 1 ? '' : 's'} sem resposta do cliente — investigue e feche o ciclo, ou deixe em aberto se ainda faz sentido esperar.
+                  </div>
+                )}
                 {lembretes.map((l) => (
                   <div key={l.id} className="row sb" style={{
                     marginLeft: (nivel + 1) * 20, padding: '4px 8px', fontSize: 11,
@@ -348,6 +442,11 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
             );
           })}
         </div>
+      )}
+
+      {fechandoMotivo && (
+        <ModalFecharComMotivo g={fechandoMotivo} onClose={() => setFechandoMotivo(null)}
+          onSaved={() => { setFechandoMotivo(null); onFecharComMotivo?.(); }}/>
       )}
     </div>
   );
