@@ -52,7 +52,15 @@
     const datasAbertura = pis.map((p) => p.data_abertura).filter(Boolean).sort();
     const valorTotal = pis.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
     const moeda = (pis[0] && pis[0].moeda) || 'USD';
-    return { piNumbers, fornecedores, incoterms, categorias, numerosSerie, numerosRequisicao, dataPi: datasAbertura[0] || '', valorTotal, moeda };
+    /* 23/08 — achado real: embarques-importacao.jsx nunca expõe
+       numero_cotacao na tela (o embarque só se liga à cotação
+       INDIRETAMENTE, via P.I. vinculada). Sem isso, todo o disparo de
+       eventos logísticos (agente de carga, cargo ready, chegada,
+       entrega) ficaria mudo pra sempre em produção — nenhum embarque
+       real teria numero_cotacao gravado. Deriva da primeira P.I.
+       vinculada, mesma lógica de fornecedor/incoterms acima. */
+    const numeroCotacao = pis.map((p) => p.numero_cotacao).find((v) => v != null) ?? null;
+    return { piNumbers, fornecedores, incoterms, categorias, numerosSerie, numerosRequisicao, dataPi: datasAbertura[0] || '', valorTotal, moeda, numeroCotacao };
   }
 
   function _payload(form, pis) {
@@ -61,6 +69,7 @@
     const resumo = resumoPIs(pis || []);
     const num = (v) => (v === '' || v == null ? null : Number(v));
     return {
+      numero_cotacao: resumo.numeroCotacao ?? (form.numero_cotacao ?? null),
       nome_embarque: form.nome_embarque || null, status_etapa: form.status_etapa || 'Pagamento',
       valor_total: resumo.valorTotal || null, moeda_valor_total: resumo.moeda || form.moeda_valor_total || 'USD',
       referencia_embarque: form.referencia_embarque || null, porto_origem: form.porto_origem || null, porto_destino: form.porto_destino || null,
@@ -99,16 +108,41 @@
     return data;
   }
 
+  /* 23/08 (achado do app de importação da Andreia/Base44 — mesmo schema,
+     confirmado campo a campo): o gap não era falta de coluna, agente_carga/
+     data_carregamento/canal_parametrizacao/data_entrega já existem desde
+     que este módulo foi herdado de lá. O gap era ninguém disparar evento
+     quando esses campos reais são preenchidos pela primeira vez. Cada
+     detecção abaixo é "estava vazio, agora tem valor" — dispara uma vez só,
+     na transição, não a cada updated_at. */
   async function atualizar(id, form, pis) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const antes = await obter(id);
     const user = window.__VP_USER || {};
     const historico = [...(form.historico || []), { data: new Date().toISOString(), descricao: 'Embarque atualizado', usuario: user.nome || user.email || 'Sistema' }];
     const row = { ..._payload({ ...form, historico }, pis), updated_at: new Date().toISOString() };
     const { data, error } = await c.from('embarques_importacao').update(row).eq('id', id).select().single();
     if (error) throw error;
-    if (window.EventosFluxo) window.EventosFluxo.registrar({
-      evento: 'EMBARQUE_ATUALIZADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.nome || data.id, alvoId: data.id,
-    });
+    if (window.EventosFluxo) {
+      const alvoLabel = data.nome_embarque || data.id;
+      window.EventosFluxo.registrar({ evento: 'EMBARQUE_ATUALIZADO', numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id });
+      const transicao = (campo, evento) => {
+        if (antes && !antes[campo] && data[campo]) {
+          window.EventosFluxo.registrar({ evento, numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id, detalhe: { [campo]: data[campo] } });
+        }
+      };
+      /* Testado ao vivo 23/08: cadeia inteira fecha certo com timing
+         realista (1 transição por salvamento, como o uso real — esses
+         campos são preenchidos em momentos bem separados). Só em teste
+         sintético disparando as 4 transições numa única chamada (fora do
+         uso real) apareceu "duplicate key" — corrida entre nós que
+         compartilham o mesmo nasce (garantirNo criando o mesmo
+         predecessor 2x). Não tratado agora por não refletir uso real. */
+      transicao('agente_carga', 'AGENTE_CARGA_DEFINIDO');
+      transicao('data_carregamento', 'CARGO_READY_CONFIRMADO');
+      transicao('canal_parametrizacao', 'EMBARQUE_CHEGOU_BRASIL');
+      transicao('data_entrega', 'EMBARQUE_ENTREGUE_OBRA');
+    }
     return data;
   }
 

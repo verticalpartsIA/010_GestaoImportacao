@@ -286,10 +286,13 @@
        (acima), que fecha em COMPRA_FORNECEDOR_CONFIRMADA — não duplicado. */
 
     { key: 'CARGO_READY', label: 'Aguardando Cargo Ready',
+      /* 23/08 — resolvido: o app de importação da Andreia (Base44) confirmou
+         que embarques_importacao.data_carregamento é o campo certo (mesmo
+         schema herdado de lá). Fecha na transição vazio→preenchido, ver
+         embarques-importacao-store.js:atualizar. */
       predecessores: [{ key: 'NEGOCIACAO_COMPRA', rel: 'FS' }],
-      nasce: 'COMPRA_FORNECEDOR_CONFIRMADA',
-      fecha: null /* provável campo de data em pi_importacao/embarques_importacao, não uma ação clicável hoje */,
-      fechamentoTipo: 'manual', rota: 'pi-importacao' },
+      nasce: 'COMPRA_FORNECEDOR_CONFIRMADA', fecha: 'CARGO_READY_CONFIRMADO',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
 
     { key: 'RFQ_FRETE', label: 'RFQ de frete enviado',
       /* (Gelson me deve instrução: hoje disparo em CIMA de qualquer RFQ
@@ -300,13 +303,12 @@
       fechamentoTipo: 'automatico', rota: 'rfq-importacao' },
 
     { key: 'AGENTE_DEFINIDO', label: 'Agente de carga definido',
-      /* (Gelson me deve instrução: não existe campo "agente de carga"
-         estruturado em nenhuma tabela hoje — preciso saber onde/como esse
-         dado deveria ser registrado antes de wiring.) */
+      /* 23/08 — resolvido: embarques_importacao.agente_carga já existe
+         (texto — mesmo campo do app de referência da Andreia, que também
+         não usa FK aqui, só texto). Fecha na transição vazio→preenchido. */
       predecessores: [{ key: 'RFQ_FRETE', rel: 'FS' }],
-      nasce: 'RFQ_FRETE_ENVIADO',
-      fecha: null /* sem campo estruturado de "agente de carga" hoje — ver documento de fluxo */,
-      fechamentoTipo: 'manual', rota: 'rfq-importacao' },
+      nasce: 'RFQ_FRETE_ENVIADO', fecha: 'AGENTE_CARGA_DEFINIDO',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
 
     { key: 'EMBARQUE_CRIADO', label: 'Embarque criado',
       predecessores: [{ key: 'AGENTE_DEFINIDO', rel: 'FS' }],
@@ -316,6 +318,22 @@
     { key: 'EMBARQUE_ATUALIZADO', label: 'Embarque em acompanhamento',
       predecessores: [{ key: 'EMBARQUE_CRIADO', rel: 'FS' }],
       nasce: 'EMBARQUE_CRIADO', fecha: 'EMBARQUE_ATUALIZADO',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
+
+    /* 23/08 — 2 nós novos, resolvidos pelo mesmo achado (campos reais já
+       existentes em embarques_importacao, só faltava disparar evento na
+       transição): chegada = canal_parametrizacao preenchido pela primeira
+       vez (só acontece depois que a carga chega e a DUIMP é registrada —
+       sinal mais confiável que eta_santos, que é só estimativa). Entrega
+       na obra = data_entrega preenchida. */
+    { key: 'EMBARQUE_CHEGADA_BRASIL', label: 'Embarque chegou no Brasil (canal aduaneiro atribuído)',
+      predecessores: [{ key: 'EMBARQUE_ATUALIZADO', rel: 'FS' }],
+      nasce: 'EMBARQUE_CRIADO', fecha: 'EMBARQUE_CHEGOU_BRASIL',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
+
+    { key: 'EMBARQUE_ENTREGA_OBRA', label: 'Equipamento entregue na obra',
+      predecessores: [{ key: 'EMBARQUE_CHEGADA_BRASIL', rel: 'FS' }],
+      nasce: 'EMBARQUE_CHEGOU_BRASIL', fecha: 'EMBARQUE_ENTREGUE_OBRA',
       fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
 
     /* ---- 48-51: Dossiê + Vistoria ---- */

@@ -57,6 +57,8 @@
     CARGO_READY_CONFIRMADO:       { modulo: 'Embarques',              label: 'Cargo Ready confirmado',                       papel: 'Importação' },
     RFQ_FRETE_ENVIADO:            { modulo: 'RFQ',                    label: 'RFQ de frete enviado',                         papel: 'Importação' },
     AGENTE_CARGA_DEFINIDO:        { modulo: 'Embarques',              label: 'Agente de carga definido',                     papel: 'Importação' },
+    EMBARQUE_CHEGOU_BRASIL:       { modulo: 'Embarques',              label: 'Embarque chegou no Brasil (canal aduaneiro atribuído)', papel: 'Importação' },
+    EMBARQUE_ENTREGUE_OBRA:       { modulo: 'Embarques',              label: 'Equipamento entregue na obra (embarque)',      papel: 'Importação' },
     EMBARQUE_CRIADO:              { modulo: 'Embarques',              label: 'Embarque criado',                              papel: 'Importação' },
     EMBARQUE_ATUALIZADO:          { modulo: 'Embarques',              label: 'Embarque atualizado',                          papel: 'Importação' },
     DOSSIE_CRIADO:                { modulo: 'Dossiê da Obra',         label: 'Dossiê da Obra criado',                        papel: 'Engenharia' },
