@@ -81,6 +81,15 @@
     TERMO_ASSINADO:               { modulo: 'Termo de Entrega',       label: 'Termo de Entrega assinado',                    papel: 'Cliente' },
     HANDOVER_CONCLUIDO:           { modulo: 'Handover',               label: 'Handover concluído',                           papel: 'Engenharia' },
     POS_VENDA_ATIVADO:            { modulo: 'Pós-venda',              label: 'Pós-venda ativado (Escamax)',                  papel: 'Pós-venda' },
+
+    /* ---- Subcircuito de revisão de proposta (23/08, achado do Dossiê PCB) —
+       antes só existia CLIENTE_RESPONDEU_PROPOSTA com detalhe.resposta=
+       'revisao_solicitada', sem decisão interna formal. Isso separa
+       "cliente pediu revisão" de "VerticalParts aceita/recusa o pedido",
+       pra nunca confundir recusa do cliente com recusa interna. */
+    VERTICALPARTS_ACEITOU_REVISAO: { modulo: 'Proposta Comercial',    label: 'VerticalParts aceitou a revisão pedida',       papel: 'Comercial' },
+    VERTICALPARTS_RECUSOU_REVISAO: { modulo: 'Proposta Comercial',    label: 'VerticalParts recusou a revisão internamente', papel: 'Comercial' },
+    PROPOSTA_REENVIADA:            { modulo: 'Proposta Comercial',    label: 'Proposta revisada reenviada ao cliente',       papel: 'Comercial' },
   };
 
   /* registrar({ evento, numeroCotacao, alvoLabel, alvoId, detalhe })

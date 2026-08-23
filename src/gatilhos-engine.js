@@ -179,6 +179,28 @@
       nasce: 'FINANCEIRO_CONSULTOU_SCORE', fecha: 'FINANCEIRO_APROVOU_VENDA',
       fechamentoTipo: 'manual', rota: 'aval-financeiro' },
 
+    /* ---- Subcircuito de revisão de proposta (23/08, achado do Dossiê PCB) —
+       separa "cliente pediu revisão" de "VerticalParts aceita/recusa o
+       pedido". O desfecho de recusa é tratado como caso especial em
+       onEvento() (ver acima) — este nó fecha oficialmente em
+       VERTICALPARTS_ACEITOU_REVISAO, mas VERTICALPARTS_RECUSOU_REVISAO
+       também o encerra, como 'encerrado'. Loop de múltiplas rodadas de
+       revisão (sugestão do documento: máx. 3 sem decisão gerencial) NÃO
+       implementado nesta primeira passada — cada rodada nova de revisão
+       hoje reabriria o mesmo AGUARDA_CLIENTE por cima, o que já funciona
+       (fecharNo é idempotente, não quebra), só não tem alerta de "3ª vez
+       sem decisão" ainda. */
+    { key: 'REVISAO_INTERNA', label: 'VerticalParts decidindo sobre a revisão pedida pelo cliente',
+      predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
+      nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
+      condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'revisao_solicitada',
+      fecha: 'VERTICALPARTS_ACEITOU_REVISAO', fechamentoTipo: 'manual', rota: 'proposta-editor', resolverSubsel: resolverEditProposta },
+
+    { key: 'PROPOSTA_REVISADA_REENVIO', label: 'Proposta revisada — aguardando reenvio ao cliente',
+      predecessores: [{ key: 'REVISAO_INTERNA', rel: 'FS' }],
+      nasce: 'VERTICALPARTS_ACEITOU_REVISAO', fecha: 'PROPOSTA_REENVIADA',
+      fechamentoTipo: 'automatico', rota: 'proposta-editor', resolverSubsel: resolverEditProposta },
+
     /* ---- Gates 27/28 (CEO + Owner) — mesmo padrão: evento já existia
        (aprovarComoCEO/aprovarComoOwner em aval-financeiro-store.js,
        parte do gate podeIniciarCompra), só faltava o nó. Nascem junto
@@ -516,6 +538,16 @@
          Contrato/Projeto. Precisa decidir o status ANTES de fechar —
          fecharNo é idempotente e não deixa reabrir pra trocar depois. */
       const recusada = evento === 'CLIENTE_RESPONDEU_PROPOSTA' && (detalhe || {}).resposta === 'recusada';
+      /* Recusa INTERNA de revisão (23/08) — mesmo padrão da recusa do
+         cliente acima, mas fecha o nó REVISAO_INTERNA como 'encerrado' em
+         vez do nó cujo `fecha` bate literalmente com o evento (esse nó
+         fecha oficialmente em VERTICALPARTS_ACEITOU_REVISAO — a recusa é
+         o outro desfecho possível do mesmo nó, não um evento que ele
+         "escuta" via campo fecha). */
+      if (evento === 'VERTICALPARTS_RECUSOU_REVISAO') {
+        const revisaoNode = nodeByKey('REVISAO_INTERNA');
+        if (revisaoNode) await fecharNo(numeroCotacao, revisaoNode, 'encerrado');
+      }
       for (const node of NODES) {
         if (node.fecha !== evento) continue;
         const status = recusada && node.key === 'AGUARDA_CLIENTE' ? 'encerrado' : 'ok';

@@ -478,6 +478,29 @@ function PropostaEditor({ setRoute, subsel }) {
   const [recordId, setRecordId] = React.useState(editId || null);
   const [publicando, setPublicando] = React.useState(false);
 
+  /* Subcircuito de revisão de proposta (23/08, achado do Dossiê PCB §9.6) —
+     decisão INTERNA da VerticalParts sobre o pedido de revisão do cliente,
+     distinta de aceitar/recusar a proposta em si. */
+  const [decidindoRevisao, setDecidindoRevisao] = React.useState(false);
+  const [mostrarRecusaRevisao, setMostrarRecusaRevisao] = React.useState(false);
+  const [motivoRecusaRevisao, setMotivoRecusaRevisao] = React.useState('');
+
+  const decidirRevisao = async (aceita, motivo) => {
+    if (!recordId) return;
+    setDecidindoRevisao(true);
+    try {
+      const updated = await window.PropostaStore.decidirRevisao(recordId, aceita, motivo);
+      setMeta((m) => ({ ...(m || {}), ...updated }));
+      setMostrarRecusaRevisao(false);
+      setMotivoRecusaRevisao('');
+      window.toast(aceita ? 'Revisão aceita — edite e reenvie a proposta.' : 'Revisão recusada internamente.', 'success');
+    } catch (e) {
+      window.toast('Erro: ' + (e.message || e), 'error');
+    } finally {
+      setDecidindoRevisao(false);
+    }
+  };
+
   /* Trava por aprovação: proposta 'aprovada' sem destravada_em bloqueia
      Salvar/Enviar/Publicar (mesma checagem que o store faz de novo antes
      de gravar). podeDestravar só é resolvido se a proposta estiver
@@ -609,7 +632,7 @@ function PropostaEditor({ setRoute, subsel }) {
     let cancelado = false;
     setLoadingExisting(true);
     window.__VP_SB.sb.from('propostas')
-      .select('proposal_type, data_json, status, numero_documento, master_id, valor_total, token, titulo, atualizado_em, publicado_em, publicado_por, version, revisao_texto, revisao_solicitada_em, destravada_em, destravada_por')
+      .select('proposal_type, data_json, status, numero_documento, master_id, valor_total, token, titulo, atualizado_em, publicado_em, publicado_por, version, revisao_texto, revisao_solicitada_em, destravada_em, destravada_por, revisao_decisao, revisao_decidida_em, revisao_decidida_por, motivo_recusa_interna')
       .eq('id', editId).maybeSingle()
       .then(({ data: row }) => {
         if (cancelado || !row) return;
@@ -639,6 +662,8 @@ function PropostaEditor({ setRoute, subsel }) {
           publicado_em: row.publicado_em, publicado_por: row.publicado_por, version: row.version,
           revisao_texto: row.revisao_texto, revisao_solicitada_em: row.revisao_solicitada_em,
           destravada_em: row.destravada_em, destravada_por: row.destravada_por,
+          revisao_decisao: row.revisao_decisao, revisao_decidida_em: row.revisao_decidida_em,
+          revisao_decidida_por: row.revisao_decidida_por, motivo_recusa_interna: row.motivo_recusa_interna,
         });
       })
       .finally(() => { if (!cancelado) setLoadingExisting(false); });
@@ -654,7 +679,7 @@ function PropostaEditor({ setRoute, subsel }) {
     const refetch = () => {
       if (document.visibilityState !== 'visible' || !window.__VP_SB?.sb) return;
       window.__VP_SB.sb.from('propostas')
-        .select('status, publicado_em, publicado_por, version, valor_total, atualizado_em, revisao_texto, revisao_solicitada_em, destravada_em, destravada_por')
+        .select('status, publicado_em, publicado_por, version, valor_total, atualizado_em, revisao_texto, revisao_solicitada_em, destravada_em, destravada_por, revisao_decisao, revisao_decidida_em, revisao_decidida_por, motivo_recusa_interna')
         .eq('id', editId).maybeSingle()
         .then(({ data: row }) => {
           if (!row) return;
@@ -664,6 +689,8 @@ function PropostaEditor({ setRoute, subsel }) {
             version: row.version, valor_total: row.valor_total, atualizado_em: row.atualizado_em,
             revisao_texto: row.revisao_texto, revisao_solicitada_em: row.revisao_solicitada_em,
             destravada_em: row.destravada_em, destravada_por: row.destravada_por,
+            revisao_decisao: row.revisao_decisao, revisao_decidida_em: row.revisao_decidida_em,
+            revisao_decidida_por: row.revisao_decidida_por, motivo_recusa_interna: row.motivo_recusa_interna,
           }));
         });
     };
@@ -952,12 +979,55 @@ function PropostaEditor({ setRoute, subsel }) {
          livre que ele digitou pra quem for renegociar não precisar caçar em
          log/notificação. Some sozinho quando o vendedor reenvia (markSent
          recoloca em 'enviada', tirando a proposta desse estado). */}
-      {meta?.status === 'revisao_solicitada' && (
+      {meta?.status === 'revisao_solicitada' && !meta.revisao_decisao && (
+        <div className="alert info" style={{ margin: '16px 24px 0', flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+          <div className="row gap-2" style={{ alignItems: 'flex-start' }}>
+            <Icon.warning/>
+            <div style={{ flex: 1 }}>
+              <div className="alert__title">Cliente pediu revisão desta proposta</div>
+              <div className="alert__sub">"{meta.revisao_texto}"{meta.revisao_solicitada_em ? ` — ${window.PropostaStore ? window.PropostaStore.fmtDateTime(meta.revisao_solicitada_em) : ''}` : ''}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--fg3)' }}>
+            Decisão da VerticalParts: aceitar (edite e reenvie normalmente) ou recusar internamente (a proposta original segue valendo, sem alteração).
+          </div>
+          {!mostrarRecusaRevisao ? (
+            <div className="row gap-2">
+              <Button variant="primary" size="sm" disabled={decidindoRevisao} onClick={() => decidirRevisao(true, null)}>Aceitar revisão</Button>
+              <Button variant="outline" size="sm" disabled={decidindoRevisao} onClick={() => setMostrarRecusaRevisao(true)}>Recusar internamente</Button>
+            </div>
+          ) : (
+            <div className="stack" style={{ gap: 8 }}>
+              <textarea className="input" rows={2} value={motivoRecusaRevisao} onChange={(e) => setMotivoRecusaRevisao(e.target.value)}
+                placeholder="Motivo da recusa (ex.: fora de norma, margem insuficiente, prazo inviável…)" autoFocus/>
+              <div className="row gap-2">
+                <Button variant="danger" size="sm" disabled={decidindoRevisao} onClick={() => decidirRevisao(false, motivoRecusaRevisao)}>Confirmar recusa</Button>
+                <Button variant="ghost" size="sm" onClick={() => { setMostrarRecusaRevisao(false); setMotivoRecusaRevisao(''); }}>Cancelar</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {meta?.status === 'revisao_solicitada' && meta.revisao_decisao === 'aceita' && (
         <div className="alert info" style={{ margin: '16px 24px 0' }}>
-          <Icon.warning/>
+          <Icon.check/>
           <div style={{ flex: 1 }}>
-            <div className="alert__title">Cliente pediu revisão desta proposta</div>
-            <div className="alert__sub">"{meta.revisao_texto}"{meta.revisao_solicitada_em ? ` — ${window.PropostaStore ? window.PropostaStore.fmtDateTime(meta.revisao_solicitada_em) : ''}` : ''}</div>
+            <div className="alert__title">Revisão aceita — edite e reenvie a proposta</div>
+            <div className="alert__sub">"{meta.revisao_texto}"</div>
+          </div>
+        </div>
+      )}
+
+      {meta?.status === 'revisao_solicitada' && meta.revisao_decisao === 'recusada_interna' && (
+        <div className="alert" style={{ margin: '16px 24px 0' }}>
+          <Icon.info/>
+          <div style={{ flex: 1 }}>
+            <div className="alert__title">Revisão recusada internamente — proposta original segue valendo</div>
+            <div className="alert__sub">
+              Pedido do cliente: "{meta.revisao_texto}" — Motivo da recusa: "{meta.motivo_recusa_interna}"
+              {meta.revisao_decidida_por ? ` · por ${meta.revisao_decidida_por}` : ''}
+            </div>
           </div>
         </div>
       )}

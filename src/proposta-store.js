@@ -265,10 +265,18 @@
     const c = sb();
     const cur = await getById(id);
     if (!cur) return null;
+    /* 23/08 (Dossiê PCB §9.6): reenvio depois de revisão ACEITA é um
+       desfecho distinto de "primeiro envio" — fecha PROPOSTA_REVISADA_
+       REENVIO em vez de nascer AGUARDA_CLIENTE do zero (esse já existe
+       e reabre sozinho pelo mesmo CLIENTE_RESPONDEU_PROPOSTA de sempre).
+       Só conta como reenvio-pós-revisão se a revisão foi ACEITA — reenviar
+       sem decisão registrada (recusada_interna nunca chega aqui, o editor
+       não deixa editar) continua dando PROPOSTA_ENVIADA normal. */
+    const foiRevisaoAceita = cur.status === 'revisao_solicitada' && cur.revisao_decisao === 'aceita';
     const now = new Date();
     const expires = new Date(now.getTime() + 7*24*3600*1000);
     const log = (cur.log || []).slice();
-    log.push({ status:'enviada', at: now.toISOString(), meta:{ channel } });
+    log.push({ status:'enviada', at: now.toISOString(), meta:{ channel, apos_revisao: foiRevisaoAceita || undefined } });
     const primeiraPublicacao = !cur.publicado_em;
     if (primeiraPublicacao) log.push({ status:'publicada', at: now.toISOString(), meta:{ versao: Number(cur.version) || 1, automatica: true } });
     const patch = {
@@ -287,7 +295,7 @@
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'enviada', { channel });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
-      evento: 'PROPOSTA_ENVIADA', numeroCotacao: updated.numero_cotacao,
+      evento: foiRevisaoAceita ? 'PROPOSTA_REENVIADA' : 'PROPOSTA_ENVIADA', numeroCotacao: updated.numero_cotacao,
       alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id, detalhe: { channel },
     });
     return updated;
@@ -437,6 +445,46 @@
       evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
       alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
       detalhe: { resposta: 'revisao_solicitada', texto: txt },
+    });
+    return updated;
+  }
+
+  /* ---------- Decisão INTERNA da VerticalParts sobre a revisão pedida ----------
+     23/08 (achado do Dossiê PCB, §9.6): antes disso, "cliente pediu revisão"
+     e "vendedor decide o que fazer" eram a mesma ação implícita — não tinha
+     decisão formal, nem distinção entre "revisão aceitável" e "cliente
+     pediu algo fora do combinado". Nunca confundir com recusar() acima:
+     aquilo é o CLIENTE recusando a proposta original; isto é a
+     VERTICALPARTS recusando um PEDIDO DE AJUSTE do cliente.
+     `aceita=true`: só registra a decisão, o vendedor edita e reenvia
+     normalmente (markSent, mais abaixo, fecha o ciclo).
+     `aceita=false`: motivo é obrigatório, encerra o ciclo de revisão —
+     a proposta ORIGINAL continua o que está valendo (não é uma recusa da
+     proposta em si, só do pedido de ajuste). */
+  async function decidirRevisao(id, aceita, motivo) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Proposta não encontrada.');
+    if (cur.status !== 'revisao_solicitada') throw new Error('Esta proposta não está com revisão pendente.');
+    if (!aceita && !(motivo || '').trim()) throw new Error('Descreva o motivo da recusa interna.');
+    const now = new Date();
+    const patch = {
+      revisao_decisao: aceita ? 'aceita' : 'recusada_interna',
+      revisao_decidida_em: now.toISOString(),
+      revisao_decidida_por: (window.__VP_USER || {}).email || null,
+      motivo_recusa_interna: aceita ? null : motivo.trim(),
+      atualizado_em: now.toISOString(),
+    };
+    await c.from('propostas').update(patch).eq('id', id);
+    const updated = { ...cur, ...patch };
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Proposta Comercial', acao: aceita ? 'aceitou a revisão pedida pelo cliente' : 'recusou internamente a revisão pedida',
+      alvo: updated.numero_documento, alvo_id: id, detalhe: aceita ? null : { motivo: patch.motivo_recusa_interna },
+    });
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: aceita ? 'VERTICALPARTS_ACEITOU_REVISAO' : 'VERTICALPARTS_RECUSOU_REVISAO',
+      numeroCotacao: updated.numero_cotacao, alvoLabel: updated.titulo || updated.numero_documento, alvoId: id,
+      detalhe: aceita ? null : { motivo: patch.motivo_recusa_interna },
     });
     return updated;
   }
@@ -669,7 +717,7 @@
     fmtDateTime, signUrl, prettyUrl, whatsAppHref, mailtoHref,
     getById, getByToken, garantirToken,
     publicar, conteudoVigente, conteudoRenderizavel, resolverEq, normalizarEq,
-    markSent, markViewed, markSigned, refuse, solicitarRevisao,
+    markSent, markViewed, markSigned, refuse, solicitarRevisao, decidirRevisao,
     salvar,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
     resolverPerfilAtual, temCapacidade, podeConcederAlcadas, resetAlcadasCache,
