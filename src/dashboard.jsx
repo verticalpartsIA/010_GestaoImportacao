@@ -170,7 +170,7 @@ function ModalNovaTask({ role, onClose, onSaved }) {
   );
 }
 
-function Dashboard({ role, setRoute }) {
+function Dashboard({ role, setRoute, setSubsel }) {
   const [sbData, setSbData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [projectView, setProjectView] = React.useState('gantt');
@@ -214,7 +214,6 @@ function Dashboard({ role, setRoute }) {
   const kpis        = sbData?.kpis?.[role] || [];
   const tasks       = sbData?.tarefas || [];
   const projetos    = sbData?.ganttProjetos || [];
-  const stocks      = sbData?.estoqueCritico || [];
   const alertasCrit = sbData?.alertasCriticos ?? 0;
 
   const u         = (window.ROLE_MAP || {})[role] || { name: 'VP Gestão', initials: 'VP', title: 'Sistema' };
@@ -329,18 +328,7 @@ function Dashboard({ role, setRoute }) {
         <Card title="Conversão por Origem" sub="todos os leads">
           <OriginBars data={sbData?.originBars}/>
         </Card>
-        <div>
-          <NcmDashboardWidget setRoute={setRoute} ncm={sbData?.ncm || []}/>
-          <div style={{ height: 16 }}/>
-          <Card title="Estoque Crítico" sub="peças com saldo abaixo do mínimo"
-            action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute('compras')}>Detalhar</Button>}>
-            <div className="stack">
-              {stocks.length === 0
-              ? <div className="muted" style={{ padding: '16px 0', textAlign: 'center', fontSize: 13 }}>Nenhum item abaixo do mínimo.</div>
-              : stocks.map((e, i) => <StockRow key={e.sku || i} {...e}/>)}
-            </div>
-          </Card>
-        </div>
+        <OndeParouWidget gatilhos={sbData?.gatilhos || []} setRoute={setRoute} setSubsel={setSubsel}/>
       </div>
     </div>
   );
@@ -398,19 +386,51 @@ function OriginBars({ data }) {
   );
 }
 
-function StockRow({ sku, name, qty, min, status }) {
+/* ---- "Onde Parou" (23/08) — substitui Pendências NCM (lia tabela
+   dropada, sempre vazio) e Estoque Crítico. Mostra as cotações com
+   gatilho aberto e prazo estourado — quem tem a bola agora, não só
+   "está verde/vermelho". Fonte: tabela `gatilhos`, já carregada pelo
+   Dashboard (supabase.js), motor em gatilhos-engine.js. */
+function OndeParouWidget({ gatilhos, setRoute, setSubsel }) {
+  const agora = Date.now();
+  const atrasados = (gatilhos || [])
+    .filter((g) => !g.concluido_em && g.prazo_em && new Date(g.prazo_em).getTime() < agora
+      && !String(g.evento_key || '').startsWith('LEMBRETE__'))
+    .map((g) => ({ ...g, diasAtraso: Math.floor((agora - new Date(g.prazo_em).getTime()) / 86400000) }))
+    .sort((a, b) => b.diasAtraso - a.diasAtraso)
+    .slice(0, 6);
+
+  const abrir = async (g) => {
+    if (!window.GatilhosEngine) return;
+    const dest = await window.GatilhosEngine.navegarPara(g);
+    if (dest?.rota) {
+      if (dest.subsel != null && setSubsel) setSubsel(dest.subsel);
+      setRoute(dest.rota);
+    }
+  };
+
   return (
-    <div className="stock-row">
-      <div className="status-dot" style={{ background: status === "danger" ? "var(--vp-danger)" : status === "warning" ? "var(--vp-warning)" : "var(--vp-success)" }}/>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="cell-main" style={{ fontSize: 12 }}>{name}</div>
-        <div className="cell-sub">{sku} · min {min}</div>
+    <Card title="Onde Parou" sub="cotações com etapa atrasada — quem tem a bola agora"
+      action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute('financeiro')}>Ver Gatilhos & Prazo</Button>}>
+      <div className="stack">
+        {atrasados.length === 0
+          ? <div className="muted" style={{ padding: '16px 0', textAlign: 'center', fontSize: 13 }}>Nada atrasado agora. 🎉</div>
+          : atrasados.map((g) => (
+            <div key={g.id} className="row sb" style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
+              onClick={() => abrir(g)}>
+              <div style={{ minWidth: 0 }}>
+                <div className="cell-main" style={{ fontSize: 12 }}>{g.trigger_name || g.evento_key}</div>
+                <div className="cell-sub">Cotação {g.numero_cotacao ?? '—'}</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--vp-danger, #c0392b)' }}>
+                  {g.diasAtraso}d atrasado
+                </span>
+              </div>
+            </div>
+          ))}
       </div>
-      <div style={{ textAlign: "right" }}>
-        <div className="mono tabular" style={{ fontSize: 16, fontWeight: 700 }}>{qty}</div>
-        <div className="cell-sub">em estoque</div>
-      </div>
-    </div>
+    </Card>
   );
 }
 

@@ -39,6 +39,48 @@
     COMPRA_FORNECEDOR_INICIADA:  { modulo: 'Cotação a Fornecedor',    label: 'Compra do equipamento iniciada no fornecedor', papel: 'Importação' },
     COMPRA_FORNECEDOR_CONFIRMADA:{ modulo: 'Cotação a Fornecedor',    label: 'Compra do equipamento confirmada com o fornecedor', papel: 'Fornecedor' },
     PROJETO_ELEVADOR_FINALIZADO: { modulo: 'Engenharia',              label: 'Projeto de Elevadores finalizado',             papel: 'Engenharia' },
+
+    /* ---- Extensão 23/08 — checklist completo de 73 etapas (Gatilhos.md).
+       Itens 1-32 já cobertos acima; daqui pra baixo é Engenharia final,
+       Compra/Embarque, Dossiê/Vistoria, RH/Instalador, Instalação,
+       Documentação final. Ver comentário em gatilhos-engine.js NODES
+       pra saber quais destes já têm ponto de disparo real no código e
+       quais ainda não (fecha:null = evento existe, ninguém dispara). */
+    FINANCEIRO_APROVOU_CEO:       { modulo: 'Aval Financeiro',        label: 'CEO aprovou',                                   papel: 'Financeiro' },
+    FINANCEIRO_APROVOU_OWNER:     { modulo: 'Aval Financeiro',        label: 'Responsável pelo sistema aprovou',              papel: 'Financeiro' },
+    PROJETO_ELEVADOR_CRIADO:      { modulo: 'Engenharia',             label: 'Projeto de Elevadores criado',                 papel: 'Engenharia' },
+    PROJETO_APROVADO_CLIENTE:     { modulo: 'Engenharia',             label: 'Cliente aprovou o Projeto',                    papel: 'Cliente' },
+    FICHA_TECNICA_CRIADA:         { modulo: 'Ficha Técnica',          label: 'Ficha técnica criada',                         papel: 'Engenharia' },
+    PI_CRIADA:                    { modulo: 'P.I.',                   label: 'P.I. criada',                                  papel: 'Importação' },
+    PAGAMENTO_FORNECEDOR_1_SOLICITADO:  { modulo: 'P.I.',             label: '1º pagamento ao fornecedor solicitado',        papel: 'Financeiro' },
+    PAGAMENTO_FORNECEDOR_1_CONFIRMADO:  { modulo: 'P.I.',             label: '1º pagamento ao fornecedor confirmado',        papel: 'Financeiro' },
+    CARGO_READY_CONFIRMADO:       { modulo: 'Embarques',              label: 'Cargo Ready confirmado',                       papel: 'Importação' },
+    RFQ_FRETE_ENVIADO:            { modulo: 'RFQ',                    label: 'RFQ de frete enviado',                         papel: 'Importação' },
+    AGENTE_CARGA_DEFINIDO:        { modulo: 'Embarques',              label: 'Agente de carga definido',                     papel: 'Importação' },
+    EMBARQUE_CRIADO:              { modulo: 'Embarques',              label: 'Embarque criado',                              papel: 'Importação' },
+    EMBARQUE_ATUALIZADO:          { modulo: 'Embarques',              label: 'Embarque atualizado',                          papel: 'Importação' },
+    DOSSIE_CRIADO:                { modulo: 'Dossiê da Obra',         label: 'Dossiê da Obra criado',                        papel: 'Engenharia' },
+    VISTORIA_AGENDADA:            { modulo: 'Vistorias',              label: 'Vistoria agendada',                            papel: 'Engenharia' },
+    VISTORIA_REALIZADA:           { modulo: 'Vistorias',              label: 'Vistoria realizada',                           papel: 'Engenharia' },
+    PENDENCIA_RESOLVIDA:          { modulo: 'Dossiê da Obra',         label: 'Pendência resolvida',                          papel: 'Engenharia' },
+    RECURSOS_OBRA_VERIFICADOS:    { modulo: 'Instalação',             label: 'Recursos da obra verificados',                 papel: 'Engenharia' },
+    IMS_CONTRATADO:               { modulo: 'IMS',                    label: 'Recurso IMS contratado',                       papel: 'Importação' },
+    INSTALADOR_HOMOLOGADO:        { modulo: 'RH Homologação',         label: 'Instalador homologado',                        papel: 'RH' },
+    INSTALADOR_VINCULADO:         { modulo: 'Instalação',             label: 'Instalador vinculado à obra',                  papel: 'Engenharia' },
+    CONTRATO_INSTALADOR_GERADO:   { modulo: 'Contrato Instalador',    label: 'Contrato Instalador gerado',                   papel: 'Jurídico' },
+    CONTRATO_INSTALADOR_ASSINADO: { modulo: 'Contrato Instalador',    label: 'Contrato Instalador assinado',                 papel: 'Instalador' },
+    EQUIPAMENTO_RECEBIDO:         { modulo: 'Instalação',             label: 'Equipamento recebido na obra',                 papel: 'Instalador' },
+    EQUIPAMENTO_CONFERIDO:        { modulo: 'Instalação',             label: 'Equipamento conferido',                        papel: 'Instalador' },
+    INSTALACAO_INICIADA:          { modulo: 'Instalação',             label: 'Instalação iniciada',                          papel: 'Instalador' },
+    PENDENCIA_INSTALACAO_REGISTRADA: { modulo: 'Instalação',          label: 'Pendência de instalação registrada',           papel: 'Instalador' },
+    INSTALACAO_CONCLUIDA:         { modulo: 'Instalação',             label: 'Instalação concluída',                         papel: 'Instalador' },
+    ART_EMITIDA:                  { modulo: 'Documentação',           label: 'ART emitida',                                  papel: 'Engenharia' },
+    TESTES_REALIZADOS:            { modulo: 'Instalação',             label: 'Testes realizados',                            papel: 'Instalador' },
+    DATABOOK_MONTADO:             { modulo: 'Data Book',              label: 'Data Book montado',                            papel: 'Engenharia' },
+    TERMO_PREPARADO:              { modulo: 'Termo de Entrega',       label: 'Termo de Entrega preparado (link gerado)',     papel: 'Engenharia' },
+    TERMO_ASSINADO:               { modulo: 'Termo de Entrega',       label: 'Termo de Entrega assinado',                    papel: 'Cliente' },
+    HANDOVER_CONCLUIDO:           { modulo: 'Handover',               label: 'Handover concluído',                           papel: 'Engenharia' },
+    POS_VENDA_ATIVADO:            { modulo: 'Pós-venda',              label: 'Pós-venda ativado (Escamax)',                  papel: 'Pós-venda' },
   };
 
   /* registrar({ evento, numeroCotacao, alvoLabel, alvoId, detalhe })

@@ -165,7 +165,7 @@ function App() {
 
   const renderPage = () => {
     switch (route) {
-      case "dashboard": return <Dashboard role={role} setRoute={setRoute}/>;
+      case "dashboard": return <Dashboard role={role} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "leads": return <LeadsPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formularios": return <FormulariosPage setRoute={setRoute} setSubsel={setSubsel}/>;

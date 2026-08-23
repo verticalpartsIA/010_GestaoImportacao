@@ -217,6 +217,9 @@
       aprovacao_ceo_em: now, aprovacao_ceo_por: (window.__VP_USER || {}).email || 'CEO (Diego)', atualizado_em: now,
     }).eq('id', av.id);
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'FINANCEIRO_APROVOU_CEO', numeroCotacao, alvoLabel: av.cliente_nome || av.numero_documento, alvoId: av.id,
+    });
   }
 
   async function aprovarComoOwner(numeroCotacao) {
@@ -229,6 +232,9 @@
       aprovacao_owner_em: now, aprovacao_owner_por: (window.__VP_USER || {}).email || null, atualizado_em: now,
     }).eq('id', av.id);
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'FINANCEIRO_APROVOU_OWNER', numeroCotacao, alvoLabel: av.cliente_nome || av.numero_documento, alvoId: av.id,
+    });
   }
 
   /* Gate final antes de iniciar a compra no fornecedor. Checa, na ordem de

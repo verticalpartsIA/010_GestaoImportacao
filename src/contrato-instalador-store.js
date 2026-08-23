@@ -252,6 +252,10 @@
     const { error } = await c.from('contratos_instalador').insert(_packToRow(rec));
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Contrato Instalador', acao: 'criou o contrato', alvo: rec.numero_documento, alvo_id: rec.id, detalhe: { contratada: rec.contratada_nome } });
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'CONTRATO_INSTALADOR_GERADO', numeroCotacao: formState.numeroCotacao ?? null,
+      alvoLabel: rec.numero_documento, alvoId: rec.id,
+    });
     return rec;
   }
 
@@ -366,6 +370,10 @@
     await c.from('contratos_instalador').update(patch).eq('token', token);
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'assinado', { ip, signerName: sig.signerName });
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'CONTRATO_INSTALADOR_ASSINADO', numeroCotacao: cur.form_state?.numeroCotacao ?? null,
+      alvoLabel: cur.numero_documento, alvoId: cur.id,
+    });
     return updated;
   }
 

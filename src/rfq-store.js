@@ -93,6 +93,9 @@
     const row = { ..._payload(form), created_by: (window.__VP_USER || {}).email || null };
     const { data, error } = await c.from('rfq_importacao').insert(row).select().single();
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'RFQ_FRETE_ENVIADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.numero_rfq, alvoId: data.id,
+    });
     return data;
   }
 

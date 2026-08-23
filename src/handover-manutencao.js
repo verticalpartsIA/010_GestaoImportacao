@@ -39,11 +39,15 @@
       atualizado_em: new Date().toISOString(),
     };
 
-    const { error } = await c.from('projetos')
+    const { data: proj, error } = await c.from('projetos')
       .update({ handover })
-      .eq('id', projectId);
+      .eq('id', projectId).select().single();
 
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'HANDOVER_CONCLUIDO', numeroCotacao: proj?.numero_cotacao ?? null,
+      alvoLabel: proj?.building, alvoId: projectId,
+    });
     return handover;
   }
 
@@ -73,11 +77,15 @@
       handover.escamax_transferido = true;
       handover.data_transferencia_escamax = new Date().toISOString();
 
-      const { error } = await c.from('projetos')
+      const { data: proj, error } = await c.from('projetos')
         .update({ handover })
-        .eq('id', projectId);
+        .eq('id', projectId).select().single();
 
       if (error) throw error;
+      if (window.EventosFluxo) window.EventosFluxo.registrar({
+        evento: 'POS_VENDA_ATIVADO', numeroCotacao: proj?.numero_cotacao ?? null,
+        alvoLabel: proj?.building, alvoId: projectId,
+      });
     }
 
     return handover;

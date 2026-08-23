@@ -559,6 +559,80 @@ function TabDocumentos({ dossier, reload }) {
           )))}
         </div>
       )}
+
+      <TermoEntregaPanel dossier={dossier} reload={reload}/>
+    </div>
+  );
+}
+
+/* ---- Termo de Entrega — assinatura digital ----
+   Gera o link público (/termo-entrega/<token>) pro cliente assinar sozinho
+   (self_service) ou pro supervisor + cliente assinarem juntos no mesmo
+   celular (presencial). Ao concluir, o assinador (termo-entrega-store.js)
+   já anexa o PDF em dossier_documentos com tipo:'Termo de Entrega', então
+   o checklist acima marca ✓ sozinho — esse painel só cuida de gerar/copiar
+   o link e mostrar o status atual. */
+function TermoEntregaPanel({ dossier, reload }) {
+  const [modo, setModo] = React.useState('self_service');
+  const [gerando, setGerando] = React.useState(false);
+  const [link, setLink] = React.useState(null);
+  const termo = dossier.termo_entrega || null;
+
+  const gerarLink = async () => {
+    setGerando(true);
+    try {
+      const url = await window.TermoEntregaStore.gerarLink(dossier.id, modo);
+      setLink(url);
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Documentos', acao: 'Link do Termo de Entrega gerado — ' + modo, alvo: dossier.building_name, alvo_id: dossier.id });
+      await (reload && reload());
+    } catch (e) {
+      window.toast?.('Erro ao gerar link: ' + (e.message || e), 'error');
+    } finally {
+      setGerando(false);
+    }
+  };
+
+  const copiar = (url) => {
+    navigator.clipboard?.writeText(url);
+    window.toast?.('Link copiado.', 'success');
+  };
+
+  return (
+    <div style={{ marginTop: 20, background: '#f5f7fa', border: '1px solid #dde3ea', borderRadius: 6, padding: 14 }}>
+      <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 8 }}>Termo de Entrega — assinatura digital</div>
+
+      {termo?.status === 'concluido' ? (
+        <div style={{ fontSize: 12.5, color: '#00aa00' }}>
+          ✓ Assinado em {termo.concluido_em ? new Date(termo.concluido_em).toLocaleString('pt-BR') : '—'}
+          {termo.assinaturas?.cliente && <span> · Cliente: {termo.assinaturas.cliente.nome}</span>}
+          {termo.assinaturas?.supervisor && <span> · Supervisor: {termo.assinaturas.supervisor.nome}</span>}
+        </div>
+      ) : (
+        <>
+          {termo?.status === 'pendente' && (
+            <div style={{ fontSize: 12, color: '#cc7700', marginBottom: 10 }}>
+              Aguardando assinatura{termo.modo === 'presencial' ? ' (cliente + supervisor)' : ' do cliente'} —
+              gerado em {termo.gerado_em ? new Date(termo.gerado_em).toLocaleString('pt-BR') : '—'}.
+              {termo.assinaturas?.cliente && <span> Cliente já assinou.</span>}
+            </div>
+          )}
+          <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+            <select className="input" value={modo} onChange={(e) => setModo(e.target.value)} style={{ maxWidth: 260 }}>
+              <option value="self_service">Self-service — cliente assina sozinho pelo link</option>
+              <option value="presencial">Presencial — cliente + supervisor assinam juntos</option>
+            </select>
+            <Button variant="primary" size="sm" onClick={gerarLink} disabled={gerando}>
+              {gerando ? 'Gerando…' : (termo ? 'Gerar novo link' : 'Gerar link')}
+            </Button>
+          </div>
+          {dossier.termo_entrega_token && (
+            <div style={{ marginTop: 10, display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input className="input" readOnly value={link || window.TermoEntregaStore.publicUrl(dossier.termo_entrega_token)} style={{ flex: 1, fontSize: 12 }}/>
+              <Button variant="outline" size="sm" onClick={() => copiar(link || window.TermoEntregaStore.publicUrl(dossier.termo_entrega_token))}>Copiar</Button>
+            </div>
+          )}
+        </>
+      )}
     </div>
   );
 }

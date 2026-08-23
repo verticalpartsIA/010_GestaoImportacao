@@ -57,6 +57,13 @@
     }
     const { error } = await c.from('dossier_obra').update(patch).eq('id', dossierId);
     if (error) throw error;
+    if (entregue && window.EventosFluxo) {
+      const { data: dossier } = await c.from('dossier_obra').select('numero_cotacao, building_name').eq('id', dossierId).maybeSingle();
+      window.EventosFluxo.registrar({
+        evento: 'EQUIPAMENTO_RECEBIDO', numeroCotacao: dossier?.numero_cotacao ?? null,
+        alvoLabel: dossier?.building_name, alvoId: dossierId,
+      });
+    }
   }
 
   async function marcarAndaimeMunck(dossierId, { necessario, providenciado }) {
@@ -78,11 +85,17 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('dossier_obra').update({ parceiro_instalador_id: parceiroId || null, updated_at: new Date().toISOString() }).eq('id', dossierId);
     if (error) throw error;
-    if (parceiroId && window.DecisoesStore) {
-      const { data: dossier } = await c.from('dossier_obra').select('building_name, client_name').eq('id', dossierId).maybeSingle();
-      const { data: parceiro } = await c.from('parceiros_instaladores').select('nome').eq('id', parceiroId).maybeSingle();
-      await window.DecisoesStore.podeMontadorEntrarObra(dossierId, parceiroId, {
-        obra: dossier && dossier.building_name, cliente: dossier && dossier.client_name, parceiro: parceiro && parceiro.nome,
+    if (parceiroId) {
+      const { data: dossier } = await c.from('dossier_obra').select('numero_cotacao, building_name, client_name').eq('id', dossierId).maybeSingle();
+      if (window.DecisoesStore) {
+        const { data: parceiro } = await c.from('parceiros_instaladores').select('nome').eq('id', parceiroId).maybeSingle();
+        await window.DecisoesStore.podeMontadorEntrarObra(dossierId, parceiroId, {
+          obra: dossier && dossier.building_name, cliente: dossier && dossier.client_name, parceiro: parceiro && parceiro.nome,
+        });
+      }
+      if (window.EventosFluxo) window.EventosFluxo.registrar({
+        evento: 'INSTALADOR_VINCULADO', numeroCotacao: dossier?.numero_cotacao ?? null,
+        alvoLabel: dossier?.building_name, alvoId: dossierId,
       });
     }
   }

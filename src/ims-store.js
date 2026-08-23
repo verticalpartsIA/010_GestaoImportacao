@@ -84,6 +84,9 @@
     const row = { ..._payload({ ...form, historico }), created_by: user.email || null };
     const { data, error } = await c.from('ims_importacao').insert(row).select().single();
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'IMS_CONTRATADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.projeto, alvoId: data.id,
+    });
     return data;
   }
 

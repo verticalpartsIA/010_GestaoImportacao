@@ -119,6 +119,14 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
 
       if (error) throw error;
 
+      if (window.EventosFluxo) {
+        const { data: dossier } = await sb.from('dossier_obra').select('numero_cotacao, building_name').eq('id', obraId).maybeSingle();
+        window.EventosFluxo.registrar({
+          evento: 'VISTORIA_AGENDADA', numeroCotacao: dossier?.numero_cotacao ?? null,
+          alvoLabel: dossier?.building_name, alvoId: obraId,
+        });
+      }
+
       window.toast?.('Vistoria agendada com sucesso! 📋', 'success');
       setForm({
         data_agendada: '',
@@ -181,12 +189,21 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
       const sb = window.__VP_SB?.sb;
       if (!sb) return;
 
-      const { error } = await sb
+      const { data: v, error } = await sb
         .from('vistorias_obras')
         .update({ status: 'concluida', atualizado_em: new Date().toISOString() })
-        .eq('id', vistoriaId);
+        .eq('id', vistoriaId).select().single();
 
       if (error) throw error;
+
+      if (window.EventosFluxo && v?.obra_id) {
+        const { data: dossier } = await sb.from('dossier_obra').select('numero_cotacao, building_name').eq('id', v.obra_id).maybeSingle();
+        window.EventosFluxo.registrar({
+          evento: 'VISTORIA_REALIZADA', numeroCotacao: dossier?.numero_cotacao ?? null,
+          alvoLabel: dossier?.building_name, alvoId: v.obra_id,
+        });
+      }
+
       window.toast?.('Vistoria marcada como concluída! ✅', 'success');
       await loadVistorias();
       onChanged && onChanged();

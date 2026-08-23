@@ -93,6 +93,9 @@
     const row = { ..._payload({ ...form, historico }, pis), created_by: user.email || null };
     const { data, error } = await c.from('embarques_importacao').insert(row).select().single();
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'EMBARQUE_CRIADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.nome || data.id, alvoId: data.id,
+    });
     return data;
   }
 
@@ -103,6 +106,9 @@
     const row = { ..._payload({ ...form, historico }, pis), updated_at: new Date().toISOString() };
     const { data, error } = await c.from('embarques_importacao').update(row).eq('id', id).select().single();
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'EMBARQUE_ATUALIZADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.nome || data.id, alvoId: data.id,
+    });
     return data;
   }
 

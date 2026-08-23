@@ -130,6 +130,283 @@
       predecessores: [{ key: 'NEGOCIACAO_COMPRA', rel: 'FS' }],
       nasce: 'COMPRA_FORNECEDOR_CONFIRMADA', fecha: null /* ainda sem evento — logística não é wired em eventos_fluxo */,
       fechamentoTipo: 'manual', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
+
+    /* ==========================================================
+       Extensão 23/08 — checklist completo de 73 etapas (ver Gatilhos.md
+       do usuário). Cobre os itens que a versão original da engine (acima)
+       deixava de fora: gates 21/22/27/28 (existiam como evento, sem nó),
+       e 33-73 inteiros (Engenharia final, Compra/Embarque, Dossiê/Vistoria,
+       RH/Instalador, Instalação, Documentação final/Handover).
+
+       `fecha: null` = o evento existe no catálogo (eventos-fluxo-store.js)
+       mas NENHUM lugar do código dispara ele ainda — ou porque a ação não
+       tem tela/campo hoje (ex.: aprovação do Projeto pelo Cliente), ou
+       porque é um dado sem ponto de ação claro (ex.: Cargo Ready, hoje
+       provavelmente só uma data digitada, não um clique). Isso é
+       intencional: fica visível no checklist como "planejado, não
+       automatizado" em vez de fingir que existe.
+       ========================================================== */
+
+    /* ---- Gates 21/22 (Score + Aval de Venda) — evento já existia
+       (aval-financeiro-store.js), só faltava o nó. Nasce junto com
+       Contrato/Projeto Enviado (mesmo gatilho de disparo: proposta
+       aprovada pelo cliente).
+
+       Nuance registrada por Gelson (23/08), ainda não modelada no código:
+       Score só é *obrigatório* consultar se o cliente é NOVO; cliente
+       recorrente já é "VerticalParts" e o Score pode ou não ser
+       reconsultado. Hoje o nó FIN_SCORE trata os dois casos igual
+       (nasce sempre, fecha manual sempre) — não há campo "cliente novo vs
+       recorrente" em `clientes` pra diferenciar automaticamente ainda.
+       Refinamento futuro: se esse campo existir, FIN_SCORE deveria
+       condicionar `condicaoNasce` a cliente novo, e "Financeiro Responde
+       Sim" cobrir as duas respostas (Score + Sinal) num fluxo só quando
+       recorrente. */
+    { key: 'FIN_SCORE', label: 'Financeiro consultando score do cliente',
+      predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
+      nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
+      condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
+      fecha: 'FINANCEIRO_CONSULTOU_SCORE', fechamentoTipo: 'manual', rota: 'aval-financeiro' },
+
+    { key: 'FIN_AVAL_VENDA', label: 'Financeiro decidindo o Aval de Venda',
+      predecessores: [{ key: 'FIN_SCORE', rel: 'FS' }],
+      nasce: 'FINANCEIRO_CONSULTOU_SCORE', fecha: 'FINANCEIRO_APROVOU_VENDA',
+      fechamentoTipo: 'manual', rota: 'aval-financeiro' },
+
+    /* ---- Gates 27/28 (CEO + Owner) — mesmo padrão: evento já existia
+       (aprovarComoCEO/aprovarComoOwner em aval-financeiro-store.js,
+       parte do gate podeIniciarCompra), só faltava o nó. Nascem junto
+       com o Aval de Pagamento, quando o sinal é pago.
+
+       ESPECIFICAÇÃO PENDENTE (23/08, Gelson) — o CEO_APROVOU aqui é só o
+       gate único pré-compra que já existe hoje. Existe uma segunda coisa,
+       AINDA NÃO IMPLEMENTADA, que não é este nó: um TETO DE CUSTO contínuo
+       por cotação.
+         - O Formulário de Precificação precisa listar TODOS os custos
+           previstos da cotação (equipamento, ART, frete, locação de
+           andaime/munck, contrato instalador etc.) — isso vira o teto
+           (ex.: custo 100k, venda 135k → 35k de margem é o teto de gasto
+           extra aceito sem aviso).
+         - Cada ação que gera custo real ao longo da cotação (compra ao
+           fornecedor, emissão de ART, contratação de frete/munck,
+           Contrato Instalador assinado, IMS contratado etc.) precisa
+           SOMAR ao acumulado da cotação e comparar contra o teto.
+         - Se o acumulado ULTRAPASSAR o teto em qualquer ponto (não só na
+           liberação da compra) — mesmo passado o CEO_APROVOU inicial —
+           um alerta novo precisa acionar o CEO de novo, especificando
+           qual compra estourou e por quanto.
+       Isso exige: (1) campos de custo obrigatórios no formulário de
+       precificação, hoje inexistentes; (2) uma "conta corrente" por
+       numero_cotacao somando custo real vs. teto; (3) um alerta disparado
+       no ponto de cada compra, não só um gate único no início. Não
+       construí isso ainda — precisa de mais instrução sua sobre onde essa
+       conta corrente deve morar (nova tabela? campo em avais_financeiros?)
+       antes de desenhar. */
+    { key: 'CEO_APROVOU', label: 'Aguardando aprovação do CEO',
+      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'SS' }],
+      nasce: 'SINAL_PAGO', fecha: 'FINANCEIRO_APROVOU_CEO',
+      fechamentoTipo: 'manual', rota: 'aval-financeiro' },
+
+    { key: 'OWNER_APROVOU', label: 'Aguardando aprovação do responsável pelo sistema',
+      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'SS' }],
+      nasce: 'SINAL_PAGO', fecha: 'FINANCEIRO_APROVOU_OWNER',
+      fechamentoTipo: 'manual', rota: 'aval-financeiro' },
+
+    /* ---- 33-37: Engenharia final + Ficha Técnica ---- */
+    { key: 'PROJETO_CRIADO', label: 'Projeto de Elevadores criado',
+      predecessores: [{ key: 'AGUARDA_ASSINATURA', rel: 'FS' }],
+      nasce: 'CONTRATO_VENDA_ASSINADO', fecha: 'PROJETO_ELEVADOR_CRIADO',
+      fechamentoTipo: 'automatico', rota: 'eng-projeto-elevadores' },
+
+    { key: 'PROJETO_APROVADO', label: 'Aguardando Cliente aprovar o Projeto',
+      predecessores: [{ key: 'PROJETO_CRIADO', rel: 'FS' }],
+      nasce: 'PROJETO_ELEVADOR_CRIADO',
+      fecha: null /* sem fluxo de aprovação do projeto pelo cliente hoje — item pendente de decisão de produto */,
+      fechamentoTipo: 'manual', rota: 'eng-projeto-elevadores' },
+    /* Item 36 "Engenharia Finalizou Projeto" já é coberto pelo nó
+       PROJETO_ENVIADO (acima), que fecha em PROJETO_ELEVADOR_FINALIZADO —
+       não duplicado aqui de propósito. */
+
+    { key: 'FICHA_CRIADA', label: 'Ficha Técnica criada',
+      predecessores: [{ key: 'PROJETO_CRIADO', rel: 'SS' }],
+      nasce: 'PROJETO_ELEVADOR_CRIADO',
+      fecha: null /* Ficha Técnica é por PRODUTO (catalogo_produtos), sem numero_cotacao — não dá pra fechar
+                     um nó de cotação a partir dela sem redesenhar o schema. Mesma limitação de Instalador
+                     Homologado (52). Evento FICHA_TECNICA_CRIADA fica no catálogo, sem call-site. */,
+      fechamentoTipo: 'manual', rota: 'ficha-tecnica' },
+
+    /* ---- 38-47: Compra / Embarque (38 = COMPRA_LIBERADA, já existe acima) ----
+       PI_CRIADA nasce direto do Projeto (não da Ficha) — ver nota acima
+       sobre por que a Ficha não fecha nada nesta cadeia. */
+    { key: 'PI_CRIADA', label: 'P.I. criada',
+      predecessores: [{ key: 'PROJETO_CRIADO', rel: 'SS' }],
+      nasce: 'PROJETO_ELEVADOR_CRIADO', fecha: 'PI_CRIADA',
+      fechamentoTipo: 'automatico', rota: 'pi-importacao' },
+
+    { key: 'PAGAMENTO_1_SOLICITADO', label: '1º pagamento ao fornecedor — solicitar',
+      predecessores: [{ key: 'PI_CRIADA', rel: 'FS' }],
+      nasce: 'PI_CRIADA',
+      fecha: null /* sem campo/ação distinta em pi-store.js hoje */,
+      fechamentoTipo: 'manual', rota: 'pi-importacao' },
+
+    { key: 'PAGAMENTO_1_CONFIRMADO', label: '1º pagamento ao fornecedor — confirmar',
+      predecessores: [{ key: 'PAGAMENTO_1_SOLICITADO', rel: 'FS' }],
+      nasce: 'PAGAMENTO_FORNECEDOR_1_SOLICITADO',
+      fecha: null /* idem — depende do nó anterior nunca fechar sozinho hoje */,
+      fechamentoTipo: 'manual', rota: 'pi-importacao' },
+    /* Item 42 "Produção Acompanhada" já é coberto pelo nó NEGOCIACAO_COMPRA
+       (acima), que fecha em COMPRA_FORNECEDOR_CONFIRMADA — não duplicado. */
+
+    { key: 'CARGO_READY', label: 'Aguardando Cargo Ready',
+      predecessores: [{ key: 'NEGOCIACAO_COMPRA', rel: 'FS' }],
+      nasce: 'COMPRA_FORNECEDOR_CONFIRMADA',
+      fecha: null /* provável campo de data em pi_importacao/embarques_importacao, não uma ação clicável hoje */,
+      fechamentoTipo: 'manual', rota: 'pi-importacao' },
+
+    { key: 'RFQ_FRETE', label: 'RFQ de frete enviado',
+      /* (Gelson me deve instrução: hoje disparo em CIMA de qualquer RFQ
+         criado, não só RFQ de frete especificamente — rfq-importacao não
+         distingue tipo de RFQ. Confirmar se precisa separar.) */
+      predecessores: [{ key: 'CARGO_READY', rel: 'SS' }],
+      nasce: 'COMPRA_FORNECEDOR_CONFIRMADA', fecha: 'RFQ_FRETE_ENVIADO',
+      fechamentoTipo: 'automatico', rota: 'rfq-importacao' },
+
+    { key: 'AGENTE_DEFINIDO', label: 'Agente de carga definido',
+      /* (Gelson me deve instrução: não existe campo "agente de carga"
+         estruturado em nenhuma tabela hoje — preciso saber onde/como esse
+         dado deveria ser registrado antes de wiring.) */
+      predecessores: [{ key: 'RFQ_FRETE', rel: 'FS' }],
+      nasce: 'RFQ_FRETE_ENVIADO',
+      fecha: null /* sem campo estruturado de "agente de carga" hoje — ver documento de fluxo */,
+      fechamentoTipo: 'manual', rota: 'rfq-importacao' },
+
+    { key: 'EMBARQUE_CRIADO', label: 'Embarque criado',
+      predecessores: [{ key: 'AGENTE_DEFINIDO', rel: 'FS' }],
+      nasce: 'AGENTE_CARGA_DEFINIDO', fecha: 'EMBARQUE_CRIADO',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
+
+    { key: 'EMBARQUE_ATUALIZADO', label: 'Embarque em acompanhamento',
+      predecessores: [{ key: 'EMBARQUE_CRIADO', rel: 'FS' }],
+      nasce: 'EMBARQUE_CRIADO', fecha: 'EMBARQUE_ATUALIZADO',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
+
+    /* ---- 48-51: Dossiê + Vistoria ---- */
+    { key: 'DOSSIE_CRIADO', label: 'Dossiê da Obra criado',
+      predecessores: [{ key: 'AGUARDA_ASSINATURA', rel: 'FS' }],
+      nasce: 'CONTRATO_VENDA_ASSINADO', fecha: 'DOSSIE_CRIADO',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+
+    { key: 'VISTORIA_AGENDADA', label: 'Vistoria agendada',
+      predecessores: [{ key: 'DOSSIE_CRIADO', rel: 'FS' }],
+      nasce: 'DOSSIE_CRIADO', fecha: 'VISTORIA_AGENDADA',
+      fechamentoTipo: 'automatico', rota: 'vistorias', resolverSubsel: resolverIdDireto },
+
+    { key: 'VISTORIA_REALIZADA', label: 'Vistoria realizada',
+      predecessores: [{ key: 'VISTORIA_AGENDADA', rel: 'FS' }],
+      nasce: 'VISTORIA_AGENDADA', fecha: 'VISTORIA_REALIZADA',
+      fechamentoTipo: 'automatico', rota: 'vistorias', resolverSubsel: resolverIdDireto },
+
+    { key: 'PENDENCIAS_RESOLVIDAS', label: 'Pendências da obra resolvidas',
+      predecessores: [{ key: 'VISTORIA_REALIZADA', rel: 'FS' }],
+      nasce: 'VISTORIA_REALIZADA', fecha: 'PENDENCIA_RESOLVIDA',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+    /* Item 52 "Instalador Homologado" NÃO virou nó aqui de propósito: é
+       uma qualificação do PARCEIRO (parceiros_instaladores), não uma
+       etapa por Nº de Cotação — não encaixa no modelo de `gatilhos`
+       (chave numero_cotacao). Evento fica no catálogo pra uso futuro
+       (ex.: um painel separado por instalador), sem nó na cadeia. */
+
+    /* ---- 53-55: Instalador ---- */
+    { key: 'INSTALADOR_VINCULADO', label: 'Instalador vinculado à obra',
+      predecessores: [{ key: 'PENDENCIAS_RESOLVIDAS', rel: 'FS' }],
+      nasce: 'PENDENCIA_RESOLVIDA', fecha: 'INSTALADOR_VINCULADO',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+
+    { key: 'CI_GERADO', label: 'Contrato Instalador gerado',
+      predecessores: [{ key: 'INSTALADOR_VINCULADO', rel: 'FS' }],
+      nasce: 'INSTALADOR_VINCULADO', fecha: 'CONTRATO_INSTALADOR_GERADO',
+      fechamentoTipo: 'automatico', rota: 'contrato-instalador' },
+
+    { key: 'CI_ASSINADO', label: 'Contrato Instalador assinado',
+      predecessores: [{ key: 'CI_GERADO', rel: 'FS' }],
+      nasce: 'CONTRATO_INSTALADOR_GERADO', fecha: 'CONTRATO_INSTALADOR_ASSINADO',
+      fechamentoTipo: 'automatico', rota: 'contrato-instalador' },
+
+    /* ---- 56-63: Recursos + Instalação ---- */
+    { key: 'IMS_CONTRATADO', label: 'Recursos IMS contratados',
+      predecessores: [{ key: 'CI_ASSINADO', rel: 'FS' }],
+      nasce: 'CONTRATO_INSTALADOR_ASSINADO', fecha: 'IMS_CONTRATADO',
+      fechamentoTipo: 'automatico', rota: 'ims-importacao' },
+    /* Item 56 "Recursos Verificados" não virou nó — não achei ação
+       distinta de "contratar" (IMS_CONTRATADO acima) no código; evento
+       fica no catálogo, sem nó, mesmo motivo de itens acima. */
+
+    { key: 'EQUIPAMENTO_RECEBIDO', label: 'Equipamento recebido na obra',
+      predecessores: [{ key: 'IMS_CONTRATADO', rel: 'FS' }],
+      nasce: 'IMS_CONTRATADO', fecha: 'EQUIPAMENTO_RECEBIDO',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+    /* Item 59 "Equipamento Conferido" não virou nó — instalacao-obra-store
+       só tem marcarEquipamentoEntregue, sem campo de conferência distinto
+       de recebimento; mesmo call-site cobre os dois hoje. */
+
+    { key: 'INSTALACAO_INICIADA', label: 'Instalação iniciada',
+      predecessores: [{ key: 'EQUIPAMENTO_RECEBIDO', rel: 'FS' }],
+      nasce: 'EQUIPAMENTO_RECEBIDO', fecha: 'INSTALACAO_INICIADA',
+      fechamentoTipo: 'automatico', rota: 'instalacao' },
+
+    { key: 'PENDENCIA_INSTALACAO', label: 'Pendência de instalação em aberto',
+      predecessores: [{ key: 'INSTALACAO_INICIADA', rel: 'SS' }],
+      nasce: 'INSTALACAO_INICIADA', fecha: 'PENDENCIA_INSTALACAO_REGISTRADA',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+
+    { key: 'INSTALACAO_CONCLUIDA', label: 'Instalação concluída',
+      predecessores: [{ key: 'INSTALACAO_INICIADA', rel: 'FS' }],
+      nasce: 'INSTALACAO_INICIADA', fecha: 'INSTALACAO_CONCLUIDA',
+      fechamentoTipo: 'automatico', rota: 'instalacao' },
+
+    /* ---- 64-68: ART, testes, Data Book ---- */
+    { key: 'ART_EMITIDA', label: 'ART emitida',
+      predecessores: [{ key: 'INSTALACAO_CONCLUIDA', rel: 'FS' }],
+      nasce: 'INSTALACAO_CONCLUIDA', fecha: 'ART_EMITIDA',
+      fechamentoTipo: 'automatico', rota: 'art' },
+
+    { key: 'TESTES_REALIZADOS', label: 'Testes realizados',
+      predecessores: [{ key: 'INSTALACAO_CONCLUIDA', rel: 'SS' }],
+      nasce: 'INSTALACAO_CONCLUIDA',
+      fecha: null /* sem checklist/campo distinto de "teste" hoje — costuma estar embutido no checklist geral de instalação */,
+      fechamentoTipo: 'manual', rota: 'instalacao' },
+
+    { key: 'DATABOOK_MONTADO', label: 'Data Book montado',
+      predecessores: [{ key: 'ART_EMITIDA', rel: 'FS' }],
+      nasce: 'ART_EMITIDA', fecha: 'DATABOOK_MONTADO',
+      fechamentoTipo: 'automatico', rota: 'databook' },
+    /* Itens 67/68 "Data Book Enviado" / "Cliente Aprovou Data Book" não
+       viraram nó — hoje só existe o upload (item 66, acima); não há
+       envio/aprovação distintos rastreados. */
+
+    /* ---- 69-73: Termo de Entrega + Handover (construído nesta mesma sessão) ---- */
+    { key: 'TERMO_PREPARADO', label: 'Termo de Entrega — link gerado',
+      predecessores: [{ key: 'DATABOOK_MONTADO', rel: 'FS' }],
+      nasce: 'DATABOOK_MONTADO', fecha: 'TERMO_PREPARADO',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+    /* Item 70 "Termo Enviado" não virou nó separado — gerar o link (69) e
+       "enviar" são o mesmo clique hoje (o link sai por WhatsApp fora do
+       sistema, não há botão de "enviar" distinto). */
+
+    { key: 'TERMO_ASSINADO', label: 'Termo de Entrega assinado',
+      predecessores: [{ key: 'TERMO_PREPARADO', rel: 'FS' }],
+      nasce: 'TERMO_PREPARADO', fecha: 'TERMO_ASSINADO',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+
+    { key: 'HANDOVER_CONCLUIDO', label: 'Handover concluído',
+      predecessores: [{ key: 'TERMO_ASSINADO', rel: 'FS' }],
+      nasce: 'TERMO_ASSINADO', fecha: 'HANDOVER_CONCLUIDO',
+      fechamentoTipo: 'automatico', rota: 'handover' },
+
+    { key: 'POS_VENDA_ATIVADO', label: 'Pós-venda ativado',
+      predecessores: [{ key: 'HANDOVER_CONCLUIDO', rel: 'FS' }],
+      nasce: 'HANDOVER_CONCLUIDO', fecha: 'POS_VENDA_ATIVADO',
+      fechamentoTipo: 'automatico', rota: 'handover' },
   ];
 
   function nodeByKey(key) { return NODES.find((n) => n.key === key); }

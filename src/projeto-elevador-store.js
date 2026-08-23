@@ -57,6 +57,10 @@
       : c.from('projetos_elevador').update(row).eq('id', id).select().single();
     const { data, error } = await q;
     if (error) throw new Error(error.message);
+    if (isNew && window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'PROJETO_ELEVADOR_CRIADO', numeroCotacao: data.numero_cotacao,
+      alvoLabel: data.referencia, alvoId: data.id,
+    });
     return data;
   }
 

@@ -78,6 +78,9 @@
     const row = { ..._payload(form), created_by: (window.__VP_USER || {}).email || null };
     const { data, error } = await c.from('pi_importacao').insert(row).select().single();
     if (error) throw error;
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'PI_CRIADA', numeroCotacao: data.numero_cotacao, alvoLabel: data.numero_pi, alvoId: data.id,
+    });
     return data;
   }
 

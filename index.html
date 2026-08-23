@@ -97,23 +97,23 @@
 
   <!-- Gatilhos & Prazo — motor que nasce/fecha nós automaticamente a partir
        dos eventos de eventos-fluxo-store.js (carrega ANTES dele) -->
-  <script src="src/gatilhos-engine.js?v=4"></script>
+  <script src="src/gatilhos-engine.js?v=6"></script>
 
   <!-- Trilha genérica do fluxo operacional (Formulário → Fornecedor → Proposta → Cliente) -->
-  <script src="src/eventos-fluxo-store.js?v=5"></script>
+  <script src="src/eventos-fluxo-store.js?v=6"></script>
 
   <!-- Central de Decisões — decisão gerencial genérica (CEO, Owner, Gestor Comercial, RH...) -->
   <script src="src/decisoes-store.js?v=7"></script>
   <script src="src/pedidos-varejo-store.js?v=1"></script>
 
   <!-- Gestão Importação — Fase 1: P.I. (Proforma Invoice) -->
-  <script src="src/pi-store.js?v=3"></script>
+  <script src="src/pi-store.js?v=4"></script>
   <!-- Gestão Importação — Fase 2: RFQ (Request for Quotation) -->
-  <script src="src/rfq-store.js?v=2"></script>
+  <script src="src/rfq-store.js?v=3"></script>
   <!-- Gestão Importação — Fase 3: IMS (recursos operacionais) -->
-  <script src="src/ims-store.js?v=1"></script>
+  <script src="src/ims-store.js?v=2"></script>
   <!-- Gestão Importação — Fase 4: Embarques -->
-  <script src="src/embarques-importacao-store.js?v=2"></script>
+  <script src="src/embarques-importacao-store.js?v=3"></script>
   <!-- Pedidos — acompanhamento de status (Nacional/Importação) -->
   <script src="src/pedidos-acompanhamento-store.js?v=1"></script>
 
@@ -122,7 +122,7 @@
   <script src="src/instalacao-checklist-store.js?v=1"></script>
 
   <!-- Aval Financeiro — gate entre Proposta aprovada/Contrato e Contrato assinado/Compra -->
-  <script src="src/aval-financeiro-store.js?v=4"></script>
+  <script src="src/aval-financeiro-store.js?v=5"></script>
 
   <!-- Tweaks panel framework -->
   <script type="text/vp-jsx" src="src/tweaks-panel.jsx?v=3"></script>
@@ -131,7 +131,7 @@
   <script type="text/vp-jsx" src="src/primitives.jsx?v=4"></script>
   <script type="text/vp-jsx" src="src/toast.jsx?v=6"></script>
   <script type="text/vp-jsx" src="src/shell.jsx?v=48"></script>
-  <script type="text/vp-jsx" src="src/dashboard.jsx?v=11"></script>
+  <script type="text/vp-jsx" src="src/dashboard.jsx?v=12"></script>
   <script type="text/vp-jsx" src="src/comercial.jsx?v=19"></script>
   <script type="text/vp-jsx" src="src/linha-do-tempo.jsx?v=3"></script>
 
@@ -200,19 +200,20 @@
   <script type="text/vp-jsx" src="src/cadastros.jsx?v=4"></script>
 
   <!-- Dossier da Obra (entidade central) — ISSUE #2 -->
-  <script src="src/dossier-store.js?v=5"></script>
-  <script type="text/vp-jsx" src="src/dossier-obra.jsx?v=13"></script>
+  <script src="src/dossier-store.js?v=6"></script>
+  <script src="src/termo-entrega-store.js?v=2"></script>
+  <script type="text/vp-jsx" src="src/dossier-obra.jsx?v=14"></script>
 
   <!-- Análise Técnica (ISSUE #3) -->
   <script src="src/analise-tecnica-store.js?v=4"></script>
   <script type="text/vp-jsx" src="src/analise-tecnica.jsx?v=2"></script>
 
   <!-- Vistorias de Obras (Instalação & Entrega) -->
-  <script type="text/vp-jsx" src="src/vistorias-obras.jsx?v=2"></script>
+  <script type="text/vp-jsx" src="src/vistorias-obras.jsx?v=3"></script>
 
   <!-- Etapas finais do workflow (ART, Cronograma, Data Book) -->
   <script src="src/data-book-store.js?v=1"></script>
-  <script src="src/handover-manutencao.js?v=1"></script>
+  <script src="src/handover-manutencao.js?v=2"></script>
   <script type="text/vp-jsx" src="src/entrega.jsx?v=6"></script>
   <script type="text/vp-jsx" src="src/handover-manutencao.jsx?v=2"></script>
 
@@ -223,7 +224,7 @@
   <script type="text/vp-jsx" src="src/engenharia-config.jsx?v=4"></script>
 
   <!-- Engenharia · Projeto de Elevadores (poço/cabine/porta, correlacionado por Nº da Cotação) -->
-  <script src="src/projeto-elevador-store.js?v=3"></script>
+  <script src="src/projeto-elevador-store.js?v=4"></script>
   <script type="text/vp-jsx" src="src/engenharia-elevador.jsx?v=3"></script>
 
   <!-- Engenharia · Desenho Técnico ER|ES (porte Claude Designer) -->
@@ -231,12 +232,12 @@
 
   <!-- Recursos Humanos · Homologação de Parceiros Instaladores -->
   <script src="src/rh-homologacao-store.js?v=1"></script>
-  <script src="src/instalacao-obra-store.js?v=5"></script>
+  <script src="src/instalacao-obra-store.js?v=6"></script>
   <script type="text/vp-jsx" src="src/rh-homologacao.jsx?v=2"></script>
 
   <!-- Jurídico · Contrato Instalador (wizard + dashboard + assinatura digital) -->
   <script src="src/contrato-instalador-engine.js?v=2"></script>
-  <script src="src/contrato-instalador-store.js?v=5"></script>
+  <script src="src/contrato-instalador-store.js?v=6"></script>
   <script type="text/vp-jsx" src="src/contrato-instalador-preview.jsx?v=1"></script>
   <script type="text/vp-jsx" src="src/contrato-instalador.jsx?v=3"></script>
 
@@ -278,6 +279,6 @@
   <script type="text/vp-jsx" src="src/vp-copiloto.jsx?v=1"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="src/app.jsx?v=45"></script>
+  <script type="text/vp-jsx" src="src/app.jsx?v=46"></script>
 </body>
 </html>

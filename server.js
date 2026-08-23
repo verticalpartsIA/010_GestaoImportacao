@@ -197,6 +197,15 @@ app.get('/status-obra/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'status-obra.html'));
 });
 
+/* ---------- Termo de Entrega (assinatura digital) ----------
+   /termo-entrega/<token> → entrega termo-entrega.html. O token é lido no
+   client (dossier_obra.termo_entrega_token). Cliente e/ou supervisor
+   assinam sem login — ver termo-entrega-store.js. */
+app.get('/termo-entrega/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'termo-entrega.html'));
+});
+
 /* ---------- Estáticos ----------
    Código (html/js/jsx/css) e version.json vão sempre com no-cache: o navegador
    é obrigado a revalidar com o servidor antes de usar a cópia salva (ETag/

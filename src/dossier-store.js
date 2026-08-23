@@ -48,6 +48,9 @@ window.__DOSSIER = window.__DOSSIER || (() => {
 
       if (error) throw error;
       await this.registrarHistorico(id, 'Lead qualificado', 'Dossier criado', 'Criação automática');
+      if (window.EventosFluxo) window.EventosFluxo.registrar({
+        evento: 'DOSSIE_CRIADO', numeroCotacao: data?.[0]?.numero_cotacao ?? null, alvoLabel: lead.building, alvoId: id,
+      });
       return { id, ...data?.[0] };
     },
 
@@ -80,6 +83,9 @@ window.__DOSSIER = window.__DOSSIER || (() => {
       });
       if (error) throw error;
       await this.registrarHistorico(id, 'Proposta enviada', 'Contrato assinado', 'Proposta aprovada e assinada pelo cliente — Dossiê da Obra criado automaticamente');
+      if (window.EventosFluxo) window.EventosFluxo.registrar({
+        evento: 'DOSSIE_CRIADO', numeroCotacao: proposta.numero_cotacao, alvoLabel: obra.nome || proposta.titulo, alvoId: id,
+      });
       return { id };
     },
 
@@ -160,6 +166,14 @@ window.__DOSSIER = window.__DOSSIER || (() => {
 
       if (error) throw error;
       await this.registrarHistorico(dossierId, statusAnterior, novoStatus, notas);
+      if (window.EventosFluxo) {
+        if (novoStatus === 'Instalação') window.EventosFluxo.registrar({
+          evento: 'INSTALACAO_INICIADA', numeroCotacao: dossier.numero_cotacao, alvoLabel: dossier.building_name, alvoId: dossierId,
+        });
+        if (novoStatus === 'DataBook') window.EventosFluxo.registrar({
+          evento: 'INSTALACAO_CONCLUIDA', numeroCotacao: dossier.numero_cotacao, alvoLabel: dossier.building_name, alvoId: dossierId,
+        });
+      }
     },
 
     /* ---- Registrar no histórico ---- */
@@ -217,14 +231,21 @@ window.__DOSSIER = window.__DOSSIER || (() => {
 
     /* ---- Resolver pendência ---- */
     async resolverPendencia(pendenciaId, resolvePor = null) {
-      const { error } = await sb.from('dossier_pendencias')
+      const { data: pend, error } = await sb.from('dossier_pendencias')
         .update({
           resolved_at: new Date().toISOString(),
           resolved_by: resolvePor || window.__VP_USER?.email || 'system'
         })
-        .eq('id', pendenciaId);
+        .eq('id', pendenciaId).select().single();
 
       if (error) throw error;
+      if (window.EventosFluxo && pend?.dossier_id) {
+        const { data: dossier } = await sb.from('dossier_obra').select('numero_cotacao, building_name').eq('id', pend.dossier_id).maybeSingle();
+        window.EventosFluxo.registrar({
+          evento: 'PENDENCIA_RESOLVIDA', numeroCotacao: dossier?.numero_cotacao ?? null,
+          alvoLabel: dossier?.building_name, alvoId: pend.dossier_id,
+        });
+      }
     },
 
     /* ---- Vincular documento (proposta/contrato/etc) ---- */
@@ -268,6 +289,13 @@ window.__DOSSIER = window.__DOSSIER || (() => {
         metadata: { filename: file.name, size: file.size, path }
       });
       if (error) throw error;
+      if (window.EventosFluxo && (tipo === 'ART' || tipo === 'DataBook')) {
+        const { data: dossier } = await sb.from('dossier_obra').select('numero_cotacao, building_name').eq('id', dossierId).maybeSingle();
+        window.EventosFluxo.registrar({
+          evento: tipo === 'ART' ? 'ART_EMITIDA' : 'DATABOOK_MONTADO',
+          numeroCotacao: dossier?.numero_cotacao ?? null, alvoLabel: dossier?.building_name, alvoId: dossierId,
+        });
+      }
       return id;
     },
 
