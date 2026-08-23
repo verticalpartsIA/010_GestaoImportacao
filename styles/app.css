@@ -909,12 +909,13 @@ select.input { appearance: none; -webkit-appearance: none; background-image: lin
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--grid-gap, 16px); }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--grid-gap, 16px); }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--grid-gap, 16px); }
+.grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--grid-gap, 16px); }
 
 /* ===== Responsividade global (#49) — grids, split, header, page-head =====
    Sem breakpoints o app.css usava grids fixos (4/3 col) + split fixo + busca
    de 320px, que comprimiam/truncavam em telas médias e pequenas. */
 @media (max-width: 1100px) {
-  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-4, .grid-5 { grid-template-columns: repeat(2, 1fr); }
   .split, .split--wide { grid-template-columns: 1fr; }
 }
 @media (max-width: 1024px) {
@@ -932,7 +933,7 @@ select.input { appearance: none; -webkit-appearance: none; background-image: lin
   .page-head__r { display: flex; flex-wrap: wrap; gap: 8px; }
 }
 @media (max-width: 620px) {
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .grid-2, .grid-3, .grid-4, .grid-5 { grid-template-columns: 1fr; }
   /* sidebar de 240px consome a tela no mobile — colapsa para ícones. */
   .app { --sidebar-w: 56px; }
   .sidebar__brand-text, .sidebar__brand-sub, .sidebar__version,

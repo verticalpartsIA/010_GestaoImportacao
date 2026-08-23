@@ -58,7 +58,16 @@
     ];
   }
 
-  function kpis({ projetos, embarques, alertas, propostas, contratos, avais }) {
+  /* Comissão é custo (23/08, Gelson) — o ERP Omie já trata como despesa;
+     aqui é só exibição, soma todos os registros de `comissoes` (mesma
+     tabela que a página Gatilhos & Prazo já usa pra "Comissões
+     pendentes", ver dashboard-metrics-financeiro.js — aqui é o total,
+     não só o pendente). */
+  function comissaoTotal(comissoes) {
+    return (comissoes || []).reduce((s, c) => s + (Number(c.comissao) || 0), 0);
+  }
+
+  function kpis({ projetos, embarques, alertas, propostas, contratos, avais, comissoes }) {
     const CM = window.ComercialMetrics;
     const crit = alertasCriticos({ alertas, propostas, contratos, avais });
     const aprovadas = CM.propostasAprovadas(propostas);
@@ -69,6 +78,7 @@
       { label: 'Embarques em trânsito', value: String(embarquesEmTransito(embarques).length), unit: '', delta: '', deltaDir: 'up', sub: 'Santos+Itaguaí' },
       { label: 'Alertas críticos', value: String(crit.length), unit: '', delta: '', deltaDir: crit.length > 0 ? 'down' : 'up', sub: 'ver central' },
       { label: 'Faturamento (propostas assinadas)', value: fmtBRL(faturamentoTotal(propostas)), unit: '', delta: '', deltaDir: 'up', sub: `${aprovadas.length} propostas` },
+      { label: 'Comissões (custo)', value: fmtBRL(comissaoTotal(comissoes)), unit: '', delta: '', deltaDir: 'down', sub: `${(comissoes || []).length} registros` },
     ];
   }
 
@@ -81,15 +91,15 @@
     return 'R$ ' + n;
   }
 
-  function compute({ projetos, embarques, alertas, propostas, contratos, avais }) {
+  function compute({ projetos, embarques, alertas, propostas, contratos, avais, comissoes }) {
     return {
-      kpis: kpis({ projetos, embarques, alertas, propostas, contratos, avais }),
+      kpis: kpis({ projetos, embarques, alertas, propostas, contratos, avais, comissoes }),
       alertasCriticos: alertasCriticos({ alertas, propostas, contratos, avais }),
     };
   }
 
   window.AdminMetrics = {
     embarquesEmTransito, faturamentoTotal, propostasSemContrato, contratosValorZero,
-    avaisSinalSemContrato, alertasCriticos, kpis, compute,
+    avaisSinalSemContrato, alertasCriticos, comissaoTotal, kpis, compute,
   };
 }());

@@ -223,7 +223,7 @@
     // extraído. Único que COMPÕE outro módulo (ComercialMetrics), em vez
     // de refiltrar do zero — ver comentário no próprio arquivo. ----
     const AM = window.AdminMetrics;
-    const admin = AM.compute({ projetos, embarques, alertas, propostas, contratos, avais });
+    const admin = AM.compute({ projetos, embarques, alertas, propostas, contratos, avais, comissoes });
 
     // ---- tarefas no formato esperado pelo Dashboard ----
     const tarefasFmt = tarefas.map(t => ({

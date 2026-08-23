@@ -258,7 +258,7 @@ function Dashboard({ role, setRoute, setSubsel }) {
         </div>
       </div>
 
-      <div className="grid-4" style={{ marginBottom: 20 }}>
+      <div className="grid-5" style={{ marginBottom: 20 }}>
         {kpis.map((k, i) => (
           <KPI key={i} {...k} icon={["flag","globe","proposal","trending","ruler","fileText","calendar","clock","dollar","award","zap","trending","briefcase","ship","warning","trending"][i % 16]}/>
         ))}
