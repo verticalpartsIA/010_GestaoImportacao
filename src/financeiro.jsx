@@ -103,6 +103,10 @@ function FinanceiroPage({ setRoute, setSubsel }) {
         rows = data2 || rows;
       }
     }
+    /* Vistorias não agendadas dentro do prazo (23/08) — mesmo padrão sem
+       cron, roda toda vez que a tela abre. Não altera `rows`, só gera
+       alertas em `alertas` (recarregados por reloadAlertas logo abaixo). */
+    if (window.InstalacaoObraStore) window.InstalacaoObraStore.verificarPrazoVistorias().then(() => reloadAlertas());
     setGatilhos(rows);
     setLoading(false);
   };

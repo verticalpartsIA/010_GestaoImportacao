@@ -36,6 +36,77 @@
   function fmtBRL(v) { return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
   function fmtData(d) { return d ? new Date(d).toLocaleDateString('pt-BR') : '—'; }
 
+  /* ---------- Prazo de agendamento das Vistorias (23/08, Gelson) ----------
+     "logo após a importação" = quando o gatilho NEGOCIACAO_COMPRA fecha
+     (evento COMPRA_FORNECEDOR_CONFIRMADA, ver gatilhos-engine.js), a
+     Engenharia tem que MARCAR (agendar) as 3 vistorias obrigatórias
+     (numero_fase 1/2/3 em vistorias_obras — agendamento é sempre manual,
+     isso aqui só cobra o prazo, não agenda sozinho). Dois limiares:
+       10 dias sem as 3 agendadas → alerta pro líder do departamento
+         Engenharia (hoje Arilene, mas é dinâmico via
+         colaboradores_vpsistema.is_department_lead).
+       15 dias → alerta pro CEO (departamento 'CEO').
+     Sem cron neste projeto — chamada sob demanda quando a tela de
+     Gatilhos & Prazo ou Vistorias abre, mesmo padrão de verificarPrazos()
+     em gatilhos-engine.js. O disparo de WhatsApp em si ainda não existe
+     (ver memória whatsapp-alertas-gestores-planejado) — hoje só grava em
+     `alertas`, que já aparece na Central de Alertas (Dashboard/
+     Financeiro) com cor por nível (warning/danger). */
+  async function _liderDepartamento(departamentoLike) {
+    const c = sb(); if (!c) return null;
+    const { data } = await c.from('colaboradores_vpsistema')
+      .select('nome, email').ilike('departamento', `%${departamentoLike}%`)
+      .eq('is_department_lead', true).eq('is_active', true).limit(1).maybeSingle();
+    return data;
+  }
+
+  async function verificarPrazoVistorias() {
+    const c = sb(); if (!c) return false;
+    const agora = Date.now();
+
+    const { data: dossiers } = await c.from('dossier_obra')
+      .select('id, numero_cotacao, building_name, vistorias_alerta_10d_em, vistorias_alerta_15d_em')
+      .not('numero_cotacao', 'is', null).is('vistorias_alerta_15d_em', null);
+    if (!dossiers || !dossiers.length) return false;
+
+    let mudou = false;
+    for (const d of dossiers) {
+      const { data: gCompra } = await c.from('gatilhos')
+        .select('concluido_em').eq('numero_cotacao', d.numero_cotacao).eq('evento_key', 'NEGOCIACAO_COMPRA')
+        .not('concluido_em', 'is', null).maybeSingle();
+      if (!gCompra || !gCompra.concluido_em) continue;
+
+      const { data: vistorias } = await c.from('vistorias_obras').select('numero_fase').eq('obra_id', d.id);
+      const fasesAgendadas = new Set((vistorias || []).map((v) => v.numero_fase));
+      if (fasesAgendadas.size >= 3) continue; // as 3 já foram agendadas, nada a alertar
+
+      const diasPassados = Math.floor((agora - new Date(gCompra.concluido_em).getTime()) / 86400000);
+
+      if (diasPassados >= 15 && !d.vistorias_alerta_15d_em) {
+        const ceo = await _liderDepartamento('CEO');
+        await c.from('alertas').insert({
+          id: 'vist15-' + d.id, level: 'danger',
+          title: `Cotação ${d.numero_cotacao} — vistorias não agendadas há ${diasPassados} dias`,
+          sub: `${d.building_name || d.id} · faltam ${3 - fasesAgendadas.size} de 3 vistorias obrigatórias · CEO${ceo ? ' (' + ceo.nome + ')' : ''} precisa saber o motivo`,
+          module: 'Engenharia', resolved: false,
+        });
+        await c.from('dossier_obra').update({ vistorias_alerta_15d_em: new Date().toISOString() }).eq('id', d.id);
+        mudou = true;
+      } else if (diasPassados >= 10 && !d.vistorias_alerta_10d_em) {
+        const lider = await _liderDepartamento('Engenharia');
+        await c.from('alertas').insert({
+          id: 'vist10-' + d.id, level: 'warning',
+          title: `Cotação ${d.numero_cotacao} — vistorias não agendadas há ${diasPassados} dias`,
+          sub: `${d.building_name || d.id} · faltam ${3 - fasesAgendadas.size} de 3 vistorias obrigatórias · ${lider ? lider.nome : 'líder da Engenharia'} precisa agendar`,
+          module: 'Engenharia', resolved: false,
+        });
+        await c.from('dossier_obra').update({ vistorias_alerta_10d_em: new Date().toISOString() }).eq('id', d.id);
+        mudou = true;
+      }
+    }
+    return mudou;
+  }
+
   /* ---------- Checklist de obra pronta ---------- */
   /* Marca manual dos itens que não têm sinal em nenhum outro módulo.
      `recebidoPor`/`qtdPessoas` registram quem recebeu o equipamento e com
@@ -203,6 +274,7 @@
   window.InstalacaoObraStore = {
     obterProgressoVistoria,
     marcarEquipamentoEntregue, marcarAndaimeMunck, vincularParceiroInstalador, obterChecklistObraPronta,
+    verificarPrazoVistorias,
     fmtBRL, fmtData,
   };
 }());
