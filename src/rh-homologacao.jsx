@@ -8,6 +8,7 @@ function RHHomologacaoPage() {
   const [loading, setLoading] = React.useState(true);
   const [selected, setSelected] = React.useState(null);
   const [showNovo, setShowNovo] = React.useState(false);
+  const [editingDados, setEditingDados] = React.useState(false);
   const [editingCert, setEditingCert] = React.useState(null);
 
   const reload = async () => {
@@ -118,7 +119,13 @@ function RHHomologacaoPage() {
         </Card>
 
         {selected ? (
-          <Card title={`Certificações · ${selected.nome}`} sub={`${selected.id} · ${selected.cnpj || '—'}`}>
+          <Card title={`Certificações · ${selected.nome}`} sub={`${selected.id} · ${selected.cnpj || '—'}`}
+            action={<Button variant="outline" size="sm" icon="edit" onClick={() => setEditingDados(true)}>Editar dados</Button>}>
+            <div className="small muted" style={{ marginBottom: 12 }}>
+              {selected.contato ? `Contato: ${selected.contato} · ` : ''}
+              {selected.telefone || 'sem telefone'} · {selected.email || 'sem e-mail'}
+              {selected.endereco_cidade ? ` · ${selected.endereco_cidade}/${selected.endereco_estado || ''}` : ''}
+            </div>
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
               {Object.entries(window.RHHomologacao.CERTIFICACOES).map(([chave, def]) => {
                 const cert = selected.certificacoes?.[chave];
@@ -176,17 +183,37 @@ function RHHomologacaoPage() {
       </div>
 
       {showNovo && <ModalNovoMontador onClose={() => setShowNovo(false)} onSaved={reload}/>}
+      {editingDados && selected && (
+        <ModalNovoMontador
+          initialData={selected}
+          isEdit
+          onClose={() => setEditingDados(false)}
+          onSaved={async () => {
+            await reload();
+            const full = await window.RHHomologacao.obterMontador(selected.id);
+            setSelected(full);
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function ModalNovoMontador({ onClose, onSaved }) {
-  const [f, setF] = React.useState({
-    nome: '', cnpj: '', email: '', telefone: '',
-    endereco: '', contato: '',
-  });
+const MNT_ENDERECO_EMPTY = {
+  endereco_logradouro: '', endereco_complemento: '', endereco_bairro: '',
+  endereco_cep: '', endereco_cidade: '', endereco_estado: '',
+};
+
+function ModalNovoMontador({ initialData, isEdit, onClose, onSaved }) {
+  const [f, setF] = React.useState(() => ({
+    nome: '', cnpj: '', email: '', telefone: '', contato: '',
+    ...MNT_ENDERECO_EMPTY,
+    ...(initialData || {}),
+  }));
   const [saving, setSaving] = React.useState(false);
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+  // CadEnderecoFields (definido em cadastros.jsx) espera set(field) => (v) => ...
+  const setField = (k) => (v) => set(k, v);
 
   const save = async () => {
     if (!f.nome.trim()) return window.toast('Nome é obrigatório.', 'warning');
@@ -195,9 +222,9 @@ function ModalNovoMontador({ onClose, onSaved }) {
     try {
       await window.RHHomologacao.salvarMontador({
         ...f,
-        certificacoes: {}
+        certificacoes: f.certificacoes || {},
       });
-      window.toast('Parceiro criado com sucesso!', 'success');
+      window.toast(isEdit ? 'Dados atualizados com sucesso!' : 'Parceiro criado com sucesso!', 'success');
       onSaved?.();
       onClose();
     } catch (err) {
@@ -210,17 +237,17 @@ function ModalNovoMontador({ onClose, onSaved }) {
   const fld = (label, key, type = 'text', ph = '') => (
     <div className="stack" style={{ gap: 4 }}>
       <label className="up-eyebrow muted">{label}</label>
-      <input className="input" type={type} value={f[key]}
+      <input className="input" type={type} value={f[key] || ''}
         onChange={e => set(key, e.target.value)} placeholder={ph}/>
     </div>
   );
 
   return (
-    <Modal title="Novo Parceiro Instalador" onClose={onClose} width={540}
+    <Modal title={isEdit ? `Editar dados · ${f.nome || ''}` : 'Novo Parceiro Instalador'} onClose={onClose} width={560}
       footer={<>
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button variant="primary" onClick={save} disabled={saving}>
-          {saving ? 'Salvando…' : 'Criar parceiro'}
+          {saving ? 'Salvando…' : (isEdit ? 'Salvar alterações' : 'Criar parceiro')}
         </Button>
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
@@ -231,9 +258,12 @@ function ModalNovoMontador({ onClose, onSaved }) {
         </div>
         <div className="grid-2" style={{ gap:12 }}>
           {fld('Email', 'email', 'email', 'contato@empresa.com')}
-          {fld('Telefone', 'telefone', 'tel', '(11) 99999-9999')}
+          {fld('Telefone / WhatsApp', 'telefone', 'tel', '(11) 99999-9999')}
         </div>
-        {fld('Endereço', 'endereco', 'text', 'Rua, número, cidade')}
+        <div>
+          <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>Endereço</h4>
+          <CadEnderecoFields form={f} set={setField}/>
+        </div>
       </div>
     </Modal>
   );
