@@ -9,6 +9,34 @@
 
   function sb() { return (window.__VP_SB || {}).sb; }
 
+  const ANEXOS_BUCKET = 'parceiros-instaladores-anexos';
+
+  /* Documento/imagem da certificação (curso NR-10 etc.) — 1 arquivo por
+     certificação, upsert substitui o anterior direto no mesmo path. */
+  async function uploadCertificadoArquivo(montadorId, chave, file) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+    const path = `${montadorId}/${chave}.${ext}`;
+    const { error } = await c.storage.from(ANEXOS_BUCKET).upload(path, file, { upsert: true });
+    if (error) throw error;
+    return { path, nome: file.name, tipo: file.type || null, tamanho: file.size, enviado_em: new Date().toISOString() };
+  }
+
+  async function urlCertificadoArquivo(path, ttlSeconds) {
+    const c = sb();
+    if (!c || !path) return null;
+    const { data, error } = await c.storage.from(ANEXOS_BUCKET).createSignedUrl(path, ttlSeconds || 3600);
+    if (error) throw error;
+    return data.signedUrl;
+  }
+
+  async function removerCertificadoArquivo(path) {
+    const c = sb();
+    if (!c || !path) return;
+    await c.storage.from(ANEXOS_BUCKET).remove([path]);
+  }
+
   const CERTIFICACOES = {
     nr10: { label: 'NR-10: Segurança em Instalações Elétricas', categoria: 'seguranca' },
     nr35: { label: 'NR-35: Trabalho em Altura', categoria: 'seguranca' },
@@ -122,5 +150,8 @@
     statusGeral,
     statusVariant,
     fmtData,
+    uploadCertificadoArquivo,
+    urlCertificadoArquivo,
+    removerCertificadoArquivo,
   };
 })();

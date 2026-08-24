@@ -157,6 +157,17 @@ function RHHomologacaoPage() {
                           )}
                         </div>
                       )}
+                      {cert?.arquivo && (
+                        <div style={{ fontSize: 12, marginTop: 2 }}>
+                          📎 <a href="#" onClick={async (e) => {
+                            e.preventDefault();
+                            try {
+                              const url = await window.RHHomologacao.urlCertificadoArquivo(cert.arquivo.path);
+                              window.open(url, '_blank');
+                            } catch (err) { window.toast('Erro ao abrir arquivo: ' + err.message, 'error'); }
+                          }}>{cert.arquivo.nome}</a>
+                        </div>
+                      )}
                     </div>
                     <Button variant="outline" size="sm" icon="edit" onClick={() => setEditingCert(chave)}>
                       {cert?.data_validade ? 'Editar' : 'Adicionar'}
@@ -167,6 +178,7 @@ function RHHomologacaoPage() {
 
               {editingCert && (
                 <ModalEditarCertificacao
+                  montadorId={selected.id}
                   chave={editingCert}
                   certificacao={selected.certificacoes?.[editingCert]}
                   onSave={(data) => handleSaveCertificacao(editingCert, data)}
@@ -269,23 +281,43 @@ function ModalNovoMontador({ initialData, isEdit, onClose, onSaved }) {
   );
 }
 
-function ModalEditarCertificacao({ chave, certificacao, onSave, onCancel }) {
+function ModalEditarCertificacao({ montadorId, chave, certificacao, onSave, onCancel }) {
   const [data_validade, setDataValidade] = React.useState(
     certificacao?.data_validade ? certificacao.data_validade.slice(0, 10) : ''
   );
   const [numero_registro, setNumeroRegistro] = React.useState(certificacao?.numero_registro || '');
   const [observacoes, setObservacoes] = React.useState(certificacao?.observacoes || '');
+  const [arquivo, setArquivo] = React.useState(certificacao?.arquivo || null);
+  const [arquivoNovo, setArquivoNovo] = React.useState(null);
+  const [saving, setSaving] = React.useState(false);
 
-  const save = () => {
+  const removerArquivo = async () => {
+    if (arquivo?.path) await window.RHHomologacao.removerCertificadoArquivo(arquivo.path).catch(() => {});
+    setArquivo(null);
+    setArquivoNovo(null);
+  };
+
+  const save = async () => {
     if (!data_validade) return window.toast('Data de validade é obrigatória.', 'warning');
-    onSave({ data_validade, numero_registro, observacoes });
+    setSaving(true);
+    try {
+      let arquivoFinal = arquivo;
+      if (arquivoNovo) {
+        arquivoFinal = await window.RHHomologacao.uploadCertificadoArquivo(montadorId, chave, arquivoNovo);
+      }
+      onSave({ data_validade, numero_registro, observacoes, arquivo: arquivoFinal || null });
+    } catch (err) {
+      window.toast('Erro ao salvar: ' + err.message, 'error');
+    } finally {
+      setSaving(false);
+    }
   };
 
   return (
     <Modal title={`Editar: ${window.RHHomologacao.CERTIFICACOES[chave].label}`} onClose={onCancel} width={480}
       footer={<>
         <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-        <Button variant="primary" onClick={save}>Salvar</Button>
+        <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</Button>
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
         <div className="stack" style={{ gap:4 }}>
@@ -298,6 +330,20 @@ function ModalEditarCertificacao({ chave, certificacao, onSave, onCancel }) {
           <input className="input" value={numero_registro}
             onChange={e => setNumeroRegistro(e.target.value)}
             placeholder="Ex: 123456"/>
+        </div>
+        <div className="stack" style={{ gap:4 }}>
+          <label className="up-eyebrow muted">Documento (PDF ou imagem do curso/certificado)</label>
+          {arquivo && !arquivoNovo && (
+            <div className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 8 }}>
+              <span className="small">📎 {arquivo.nome}</span>
+              <Button variant="ghost" size="sm" icon="trash" onClick={removerArquivo}/>
+            </div>
+          )}
+          {arquivoNovo && (
+            <div className="small muted">Novo arquivo selecionado: {arquivoNovo.name} (substitui ao salvar)</div>
+          )}
+          <input className="input" type="file" accept="application/pdf,image/*"
+            onChange={e => setArquivoNovo(e.target.files?.[0] || null)}/>
         </div>
         <div className="stack" style={{ gap:4 }}>
           <label className="up-eyebrow muted">Observações</label>
