@@ -35,7 +35,7 @@ const ROUTE_TITLE = {
   cronograma: "Cronograma de Instalação",
   databook: "Data Book & Termo",
   handover: "Entrega Final",
-  "rh-homologacao": "Homologação de Parceiros",
+  "rh-homologacao": "Homologação de Instaladores",
   importacao: "Importação",
   "importacao-detail": "Detalhe de Embarque",
   "importacao-rastreamento": "Rastreamento de Navios",
@@ -439,7 +439,7 @@ function App() {
               { value: "compras-email", label: "📧 Inbox Compras" },
               { value: "financeiro", label: "⏰ Gatilhos & Prazo" },
               { value: "comissoes", label: "Comissões" },
-              { value: "rh-homologacao", label: "👥 Homologação de Parceiros" },
+              { value: "rh-homologacao", label: "👥 Homologação de Instaladores" },
               { value: "notificacoes", label: "🔔 Notificações" },
               { value: "configuracoes", label: "Configurações" },
             ]}/>

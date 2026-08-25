@@ -20,7 +20,6 @@ const NAV_GROUPS = [
     { id: "cadastro-clientes", label: "Clientes", icon: "users" },
     { id: "cadastro-fornecedores", label: "Fornecedores", icon: "truck" },
     { id: "ncm-catalogo", label: "Produtos", icon: "fileSearch" },
-    { id: "rh-homologacao", label: "Instaladores", icon: "hardhat" },
   ]},
   { label: "Comercial", items: [
     { id: "leads", label: "Leads", icon: "flag" },
@@ -67,6 +66,9 @@ const NAV_GROUPS = [
     { id: "cronograma", label: "Cronograma", icon: "clock" },
     { id: "databook", label: "Data Book & Termo", icon: "fileSearch" },
     { id: "handover", label: "Entrega Final", icon: "package" },
+  ]},
+  { label: "RH Operacional", items: [
+    { id: "rh-homologacao", label: "Homologação de Instaladores", icon: "hardhat" },
   ]},
   /* Submódulos ainda sem rota própria — apenas anunciam o que vai morar aqui,
      sem simular navegação que não existe (ver item.planned no render). */
@@ -300,7 +302,7 @@ const BREADCRUMB_MAP = {
   financeiro:    { module: "Financeiro", page: "Gatilhos & Prazo", icon: "dollar" },
   "aval-financeiro": { module: "Financeiro", page: "Aval Financeiro", icon: "shield" },
   comissoes:     { module: "Financeiro", page: "Comissões", icon: "award" },
-  "rh-homologacao": { module: "Cadastros", page: "Instaladores", icon: "hardhat" },
+  "rh-homologacao": { module: "RH Operacional", page: "Homologação de Instaladores", icon: "hardhat" },
   logs: { module: "Admin", page: "Logs de Atividade", icon: "history" },
   configuracoes: { module: "Admin", page: "Configurações", icon: "settings" },
 };
@@ -317,6 +319,7 @@ const MODULE_HOME = {
   "Comercial": "leads",
   "Jurídico": "juridico",
   "Engenharia": "engenharia",
+  "RH Operacional": "rh-homologacao",
   "Logística": "importacao",
   "Instalação & Entrega": "vistorias",
   "Financeiro": "financeiro",

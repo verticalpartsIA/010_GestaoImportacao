@@ -60,7 +60,7 @@
     'Suprimentos': 'logistica',
     'Instalação & Entrega': 'engenharia',
     'Financeiro': 'adm-financeiro',
-    'Recursos Humanos': 'rh',
+    'RH Operacional': 'rh',
     'Admin': 'admin',
   };
   const DEFAULT_MODULE_SLUG = 'geral';
