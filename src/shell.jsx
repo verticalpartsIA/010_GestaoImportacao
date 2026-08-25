@@ -33,9 +33,12 @@ const NAV_GROUPS = [
     { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
     { id: "comissoes", label: "Comissões", icon: "award", restrict: ["financeiro", "admin"] },
   ]},
-  { label: "Jurídico | Importação | Suprimentos", sublabel: "Contratos, Siscomex & Compras", items: [
-    { id: "juridico", label: "Jurídico", icon: "scale" },
+  { label: "Jurídico", items: [
     { id: "contrato-venda-equipamentos", label: "Contrato Venda de Equipamentos", icon: "fileText" },
+    { id: "contrato-instalador", label: "Contrato Instalador", icon: "hardhat" },
+    { id: "juridico", label: "Contratos & Minutas", icon: "scale" },
+  ]},
+  { label: "Importação | Suprimentos", sublabel: "Siscomex & Compras", items: [
     { id: "importacao", label: "Importação", icon: "ship" },
     /* Sub-telas da Importação — consolidação de uma solução de importação
        já usada pela equipe (P.I., Embarques, RFQ, IMS), trazida pra dentro
@@ -57,7 +60,6 @@ const NAV_GROUPS = [
     { id: "eng-configurador", label: "Projeto de Equipamento", icon: "grid" },
     { id: "desenho-tecnico", label: "Projetos ER/Es", icon: "ruler" },
     { id: "ficha-tecnica", label: "Ficha Técnica", icon: "fileText" },
-    { id: "contrato-instalador", label: "Contrato Instalador", icon: "hardhat" },
     { id: "vistorias", label: "Vistorias de Obras", icon: "search" },
     { id: "instalacao", label: "Instalação em Campo", icon: "hardhat" },
     { id: "status-obras", label: "Status de Obras", icon: "building" },
@@ -266,7 +268,7 @@ const BREADCRUMB_MAP = {
   "dossier-obra":  { module: "Engenharia", page: "Dossiê da Obra", icon: "briefcase" },
   "status-obras":  { module: "Engenharia", page: "Status de Obras", icon: "building" },
   "linha-do-tempo": { module: "Engenharia", page: "Linha do Tempo da Cotação", icon: "clock" },
-  juridico:      { module: "Jurídico", page: "Jurídico", icon: "scale" },
+  juridico:      { module: "Jurídico", page: "Contratos & Minutas", icon: "scale" },
   "contrato-editor": { module: "Jurídico", page: "Editor de Contrato", icon: "fileText" },
   "contrato-venda-equipamentos": { module: "Jurídico", page: "Contrato Venda de Equipamentos", icon: "fileText" },
   "contrato-instalador":         { module: "Jurídico", page: "Contrato Instalador", icon: "hardhat" },

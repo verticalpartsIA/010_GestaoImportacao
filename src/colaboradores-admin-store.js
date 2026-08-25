@@ -21,7 +21,7 @@
      acoplar a ordem de carregamento dos dois arquivos. */
   const GRUPOS_MODULO = [
     'Geral', 'Comercial', 'ADM/ Financeiro', 'Cadastros',
-    'Jurídico | Importação | Suprimentos', 'Engenharia',
+    'Jurídico', 'Importação | Suprimentos', 'Engenharia',
     'RH Operacional', 'Logística', 'Portal Admin',
   ];
 
@@ -131,9 +131,12 @@
       { modulo: 'precificacao', label: 'Precificação' },
       { modulo: 'aval-financeiro', label: 'Aval Financeiro' },
     ]},
-    { grupo: 'Jurídico | Importação | Suprimentos', itens: [
-      { modulo: 'juridico', label: 'Jurídico' },
+    { grupo: 'Jurídico', itens: [
       { modulo: 'contrato-venda-equipamentos', label: 'Contrato Venda de Equipamentos' },
+      { modulo: 'contrato-instalador', label: 'Contrato Instalador' },
+      { modulo: 'juridico', label: 'Contratos & Minutas' },
+    ]},
+    { grupo: 'Importação | Suprimentos', itens: [
       { modulo: 'importacao', label: 'Importação' },
       { modulo: 'gi-painel', label: 'Painel (Gestão Importação)' },
       { modulo: 'pi-importacao', label: 'P.I.' },
@@ -150,7 +153,6 @@
       { modulo: 'eng-configurador', label: 'Projeto de Equipamento' },
       { modulo: 'desenho-tecnico', label: 'Projetos ER/Es' },
       { modulo: 'ficha-tecnica', label: 'Ficha Técnica' },
-      { modulo: 'contrato-instalador', label: 'Contrato Instalador' },
       { modulo: 'vistorias', label: 'Vistorias de Obras' },
       { modulo: 'instalacao', label: 'Instalação em Campo' },
       { modulo: 'status-obras', label: 'Status de Obras' },
