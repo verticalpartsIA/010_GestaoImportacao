@@ -125,7 +125,7 @@ function CVContractPreview({ doc, highlightInjected }) {
   return (
     <div className="cv-doc-sheet" id="cv-contract-doc">
       <div className="cv-doc-head">
-        <img className="cv-doc-logo" src="assets/logo-verticalparts-color.png" alt="VerticalParts"/>
+        <img className="cv-doc-logo" src="/assets/logo-verticalparts-color.png" alt="VerticalParts"/>
         <div className="cv-doc-meta">
           <span className="cv-doc-meta-label">Nº do Contrato</span>
           <span className="cv-doc-meta-num">{doc.numero}</span>

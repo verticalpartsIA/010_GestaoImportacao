@@ -62,7 +62,7 @@ function renderPrintPage(scr) {
 function PrintHeader({ scr, idx, total }) {
   return (
     <div className="print-page__head">
-      <img className="brand" src="assets/logo-verticalparts-white.png" alt="VerticalParts"/>
+      <img className="brand" src="/assets/logo-verticalparts-white.png" alt="VerticalParts"/>
       <span className="pgnum">{String(idx).padStart(2, "0")}</span>
       <span className="pgnum-total">/ {String(total).padStart(2, "0")}</span>
       <div style={{ display: "flex", flexDirection: "column", gap: 2, marginLeft: 8 }}>
@@ -83,8 +83,8 @@ function PrintApp() {
       <div className="print-cover">
         <div className="print-cover__body">
           <div className="print-cover__brand">
-            <img src="assets/logo-mark-yellow.png" alt="" style={{ height: 64 }}/>
-            <img src="assets/logo-verticalparts-white.png" alt="VerticalParts" style={{ height: 38 }}/>
+            <img src="/assets/logo-mark-yellow.png" alt="" style={{ height: 64 }}/>
+            <img src="/assets/logo-verticalparts-white.png" alt="VerticalParts" style={{ height: 38 }}/>
           </div>
           <span className="print-cover__eyebrow">▎ Sistema interno · Protótipo Hi-Fi</span>
           <h1 className="print-cover__title">VP Gestão<br/><b>Tour Completo</b></h1>

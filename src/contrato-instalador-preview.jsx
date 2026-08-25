@@ -37,7 +37,7 @@ function CIContractPreview({ doc, highlightConditional }) {
   return (
     <div className="ci-doc-sheet" id="ci-contract-doc">
       <div className="ci-doc-head">
-        <img className="ci-doc-logo" src="assets/logo-black-yellow.png" alt="VerticalParts" />
+        <img className="ci-doc-logo" src="/assets/logo-black-yellow.png" alt="VerticalParts" />
         <div className="ci-doc-meta">
           <span className="ci-doc-meta-label">Nº do Contrato</span>
           <span className="ci-doc-meta-num">{doc.numero}</span>

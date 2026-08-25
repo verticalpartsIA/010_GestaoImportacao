@@ -157,7 +157,7 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
-        <img src="assets/logo-mark-yellow.png" alt="" className="sidebar__brand-mark"/>
+        <img src="/assets/logo-mark-yellow.png" alt="" className="sidebar__brand-mark"/>
         <div className="sidebar__brand-text">VERTICAL<b>PARTS</b></div>
         <div className="sidebar__brand-sub">v2.4</div>
       </div>

@@ -126,7 +126,7 @@ function FtFicha({ state }) {
 
   return (
     <div className="ft-ficha" data-orientation={orientation} data-has-media={d.temMidia ? '1' : '0'}>
-      <div className="ft-fz-logo"><img src="assets/logo-verticalparts-color.png" alt="VerticalParts"/></div>
+      <div className="ft-fz-logo"><img src="/assets/logo-verticalparts-color.png" alt="VerticalParts"/></div>
       <div className={'ft-fz-columns' + (d.temMidia ? '' : ' no-media')}>
         <div className="ft-fz-zone ft-fz-zone--text">
           <div className="ft-fz-titlebar ft-tb-yellow">Ficha de Dados : {nome}</div>

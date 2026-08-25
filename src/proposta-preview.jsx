@@ -102,7 +102,7 @@ function PdfHeader({ numero }) {
   return (
     <div className="pdf-page-header">
       <div className="pdf-page-header-brand">
-        <img src="assets/logo-verticalparts-color.png" alt="VerticalParts"/>
+        <img src="/assets/logo-verticalparts-color.png" alt="VerticalParts"/>
         <span>Elevando você e o seu negócio</span>
       </div>
       <div className="pdf-page-header-num">
@@ -212,7 +212,7 @@ function PreviewSobre({ eq }) {
         </h1>
         <div className="pe__pdf-sobre-img" data-eq={eq}/>
         <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 17 }}>
-          <img src="assets/logo-verticalparts-color.png" alt="VerticalParts" style={{ height: 26 }}/>
+          <img src="/assets/logo-verticalparts-color.png" alt="VerticalParts" style={{ height: 26 }}/>
           <span className="pdf-sub-title" style={{ margin: 0 }}>Sobre a VerticalParts</span>
         </div>
         <p>Desde 2012 no mercado de mobilidade vertical, a VerticalParts se destaca como líder fornecedora de soluções personalizadas e competitivas para o transporte de passageiros. Nosso compromisso é oferecer produtos de alta qualidade e serviços excepcionais para atender às necessidades específicas de cada cliente.</p>
@@ -229,7 +229,7 @@ function PreviewSobreCont() {
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
         <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 17 }}>
-          <img src="assets/logo-verticalparts-color.png" alt="VerticalParts" style={{ height: 26 }}/>
+          <img src="/assets/logo-verticalparts-color.png" alt="VerticalParts" style={{ height: 26 }}/>
           <span className="pdf-sub-title" style={{ margin: 0 }}>Sobre a VerticalParts</span>
         </div>
         <p>Além disso, a VerticalParts se destaca pela sua dedicação em manter um amplo estoque de peças de reposição para escadas e esteiras rolantes. Isso nos permite suprir todas as suas necessidades de forma rápida e eficiente, garantindo a máxima disponibilidade e funcionamento contínuo dos seus equipamentos.</p>
