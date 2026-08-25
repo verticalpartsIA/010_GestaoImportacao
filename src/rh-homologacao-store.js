@@ -141,6 +141,112 @@
     return new Date(dateStr).toLocaleDateString('pt-BR');
   }
 
+  /* ---------- Colaboradores (pessoa física, dentro de uma empresa) ---------- */
+
+  async function listarColaboradoresTodos() {
+    const c = sb();
+    if (!c) return [];
+    const { data } = await c.from('parceiros_colaboradores').select('*').order('nome_completo');
+    return data || [];
+  }
+
+  async function listarColaboradoresPorEmpresa(empresaId) {
+    const c = sb();
+    if (!c || !empresaId) return [];
+    const { data } = await c.from('parceiros_colaboradores')
+      .select('*').eq('empresa_id', empresaId).order('nome_completo');
+    return data || [];
+  }
+
+  async function obterColaborador(colaboradorId) {
+    const c = sb();
+    if (!c || !colaboradorId) return null;
+    const { data } = await c.from('parceiros_colaboradores').select('*').eq('id', colaboradorId).single();
+    return data || null;
+  }
+
+  async function salvarColaborador(dados) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    if (!dados.id) dados.id = 'COLAB-' + Date.now().toString().slice(-8);
+    const { error } = await c.from('parceiros_colaboradores').upsert(dados);
+    if (error) throw error;
+    return dados.id;
+  }
+
+  async function excluirColaborador(colaboradorId) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    const { error } = await c.from('parceiros_colaboradores').delete().eq('id', colaboradorId);
+    if (error) throw error;
+  }
+
+  /* ---------- Catálogo de documentos (79 tipos: colaborador/empresa/obra) ---------- */
+
+  let _catalogoCache = null;
+  async function listarDocCatalogo() {
+    if (_catalogoCache) return _catalogoCache;
+    const c = sb();
+    if (!c) return [];
+    const { data } = await c.from('parceiros_doc_catalogo').select('*').order('nome');
+    _catalogoCache = data || [];
+    return _catalogoCache;
+  }
+
+  /* ---------- Documentos por colaborador (com vencimento real) ---------- */
+
+  async function listarDocumentosColaborador(colaboradorId) {
+    const c = sb();
+    if (!c || !colaboradorId) return [];
+    const { data } = await c.from('parceiros_documentos_colaborador')
+      .select('*, parceiros_doc_catalogo(nome, periodicidade, obrigatorio)')
+      .eq('colaborador_id', colaboradorId)
+      .order('data_vencimento', { ascending: true, nullsFirst: false });
+    return data || [];
+  }
+
+  async function salvarDocumentoColaborador(dados) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    if (!dados.id) dados.id = 'DOCCOL-' + Date.now().toString().slice(-8);
+    const { error } = await c.from('parceiros_documentos_colaborador').upsert(dados);
+    if (error) throw error;
+    return dados.id;
+  }
+
+  /* Resumo de status (vencido/válido/N-A) por empresa — 1 query, agrupado no
+     cliente. Usado pra pintar a lista de empresas sem precisar de N+1. */
+  async function resumoDocumentosPorEmpresa() {
+    const c = sb();
+    if (!c) return {};
+    const { data } = await c
+      .from('parceiros_documentos_colaborador')
+      .select('status, colaborador:parceiros_colaboradores!inner(empresa_id)');
+    const map = {};
+    (data || []).forEach((r) => {
+      const eid = r.colaborador?.empresa_id;
+      if (!eid) return;
+      const m = map[eid] || { vencido: 0, valido: 0, na: 0, total: 0 };
+      m.total += 1;
+      if (r.status === 'VENCIDO') m.vencido += 1;
+      else if (r.status === 'VALIDO') m.valido += 1;
+      else m.na += 1;
+      map[eid] = m;
+    });
+    return map;
+  }
+
+  function uploadDocumentoColaboradorArquivo(colaboradorId, documentoId, file) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+    const path = `colaboradores/${colaboradorId}/${documentoId}.${ext}`;
+    return c.storage.from(ANEXOS_BUCKET).upload(path, file, { upsert: true }).then(({ error }) => {
+      if (error) throw error;
+      return { path, nome: file.name, tipo: file.type || null, tamanho: file.size, enviado_em: new Date().toISOString() };
+    });
+  }
+
   window.RHHomologacao = {
     CERTIFICACOES,
     salvarMontador,
@@ -153,5 +259,15 @@
     uploadCertificadoArquivo,
     urlCertificadoArquivo,
     removerCertificadoArquivo,
+    listarColaboradoresTodos,
+    listarColaboradoresPorEmpresa,
+    obterColaborador,
+    salvarColaborador,
+    excluirColaborador,
+    listarDocCatalogo,
+    listarDocumentosColaborador,
+    salvarDocumentoColaborador,
+    resumoDocumentosPorEmpresa,
+    uploadDocumentoColaboradorArquivo,
   };
 })();

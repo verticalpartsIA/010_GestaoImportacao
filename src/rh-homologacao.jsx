@@ -1,216 +1,203 @@
 /* ============================================================
-   rh-homologacao.jsx — Gestão de Parceiros Instaladores
-   Validação de certificações e qualificações de segurança
+   rh-homologacao.jsx — RH Operacional · Homologação de Instaladores
+   Navega Empresa → Colaborador → Documentos (catálogo real de 79 tipos,
+   vencimento por pessoa). Cadastro raso da empresa (nome/CNPJ/endereço)
+   e do colaborador (nome/CPF/RG) vive em Cadastros → Empresas
+   Instaladoras (cadastro-instaladores.jsx) — esta tela só trata
+   compliance documental.
    ============================================================ */
 
 function RHHomologacaoPage() {
-  const [montadores, setMontadores] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [selected, setSelected] = React.useState(null);
-  const [showNovo, setShowNovo] = React.useState(false);
-  const [editingDados, setEditingDados] = React.useState(false);
-  const [editingCert, setEditingCert] = React.useState(null);
+  const [empresas, setEmpresas] = React.useState(null);
+  const [resumo, setResumo] = React.useState({});
+  const [search, setSearch] = React.useState('');
+  const [selectedEmpresa, setSelectedEmpresa] = React.useState(null);
+  const [colaboradores, setColaboradores] = React.useState([]);
+  const [selectedColaborador, setSelectedColaborador] = React.useState(null);
+  const [documentos, setDocumentos] = React.useState([]);
+  const [catalogo, setCatalogo] = React.useState([]);
+  const [editingDoc, setEditingDoc] = React.useState(null); // { doc } | { novo: true }
 
-  const reload = async () => {
-    setLoading(true);
-    const list = await window.RHHomologacao.listarMontadores();
-    setMontadores(list);
-    setLoading(false);
+  const reload = React.useCallback(async () => {
+    const [list, res] = await Promise.all([
+      window.RHHomologacao.listarMontadores(),
+      window.RHHomologacao.resumoDocumentosPorEmpresa(),
+    ]);
+    setEmpresas(list);
+    setResumo(res);
+  }, []);
+  React.useEffect(() => { reload(); }, [reload]);
+  React.useEffect(() => { window.RHHomologacao.listarDocCatalogo().then(setCatalogo); }, []);
+
+  const selectEmpresa = async (emp) => {
+    setSelectedEmpresa(emp);
+    setSelectedColaborador(null);
+    setDocumentos([]);
+    const list = await window.RHHomologacao.listarColaboradoresPorEmpresa(emp.id);
+    setColaboradores(list);
   };
 
-  React.useEffect(() => { reload(); }, []);
-
-  const handleSelectMontador = async (m) => {
-    const full = await window.RHHomologacao.obterMontador(m.id);
-    setSelected(full);
-    setEditingCert(null);
+  const selectColaborador = async (col) => {
+    setSelectedColaborador(col);
+    const docs = await window.RHHomologacao.listarDocumentosColaborador(col.id);
+    setDocumentos(docs);
   };
 
-  const handleSaveCertificacao = async (chave, data) => {
-    if (!selected) return;
-
-    const updated = {
-      ...selected,
-      certificacoes: {
-        ...(selected.certificacoes || {}),
-        [chave]: { ...data, atualizado_em: new Date().toISOString() }
-      }
-    };
-
-    try {
-      await window.RHHomologacao.salvarMontador(updated);
-      setSelected(updated);
-      setEditingCert(null);
-      window.toast('Certificação salva com sucesso!', 'success');
-      reload();
-    } catch (err) {
-      window.toast('Erro: ' + err.message, 'error');
-    }
+  const reloadDocumentos = async () => {
+    if (!selectedColaborador) return;
+    const docs = await window.RHHomologacao.listarDocumentosColaborador(selectedColaborador.id);
+    setDocumentos(docs);
+    reload();
   };
 
-  if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
+  if (empresas === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
-  const statusSummary = montadores.reduce((acc, m) => {
-    const status = window.RHHomologacao.statusGeral(m);
-    acc[status] = (acc[status] || 0) + 1;
-    return acc;
-  }, {});
+  const totais = Object.values(resumo).reduce((acc, r) => ({
+    vencido: acc.vencido + r.vencido, valido: acc.valido + r.valido, na: acc.na + r.na,
+  }), { vencido: 0, valido: 0, na: 0 });
+
+  const filtered = empresas.filter((e) => {
+    const q = search.toLowerCase();
+    return !q || (e.nome || '').toLowerCase().includes(q) || (e.cnpj || '').includes(q);
+  });
+
+  const catalogoColaborador = catalogo.filter((c) => c.escopo === 'colaborador');
 
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>RH Operacional · Homologação de Instaladores</div>
+          <div className="page-head__eyebrow"><span className="vp-rule" />RH Operacional · Homologação de Instaladores</div>
           <h1 className="page-head__title">Homologação de Instaladores</h1>
-          <p className="page-head__sub">Cadastro único de parceiros instaladores — o código gerado aqui (ex.: MNT-000123) é o mesmo referenciado em Contratos, RH e Obras. Inclui validação de certificações de segurança: NR-10, NR-35, ASO, PCMSO, PGR.</p>
-        </div>
-        <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => setShowNovo(true)}>Novo parceiro</Button>
+          <p className="page-head__sub">Compliance documental por colaborador — RG, CNH, ASO, NRs e demais documentos do catálogo, com vencimento real. Cadastro da empresa/colaborador fica em Cadastros → Empresas Instaladoras.</p>
         </div>
       </div>
 
-      <div className="grid-5" style={{ marginBottom: 20 }}>
-        <KPI label="Total de parceiros" value={String(montadores.length)} sub="instaladores" icon="users"/>
-        <KPI label="Homologados" value={String(statusSummary.ok || 0)} sub="100% certificados" icon="check"/>
-        <KPI label="Atenção" value={String((statusSummary.atencao || 0) + (statusSummary.incompleto || 0))} sub="certificações vencendo" icon="alert"/>
-        <KPI label="Expirado" value={String(statusSummary.expirado || 0)} sub="certificações vencidas" icon="alertTriangle"/>
-        <KPI label="Sem cadastro" value={String(statusSummary.vazio || 0)} sub="dados incompletos" icon="minus"/>
+      <div className="grid-4" style={{ marginBottom: 20 }}>
+        <KPI label="Empresas" value={String(empresas.length)} sub="parceiros cadastrados" icon="users" />
+        <KPI label="Documentos vencidos" value={String(totais.vencido)} sub="ação necessária" icon="alertTriangle" />
+        <KPI label="Documentos válidos" value={String(totais.valido)} sub="em dia" icon="check" />
+        <KPI label="Sem vencimento (N/A)" value={String(totais.na)} sub="documento existe, sem data" icon="minus" />
       </div>
 
-      <div className="grid-2" style={{ gap: 20 }}>
-        <Card title="Parceiros Instaladores" sub={`${montadores.length} registros`}>
-          <div className="stack" style={{ gap: 12 }}>
-            {montadores.length === 0 && (
-              <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
-                Nenhum parceiro cadastrado.
-              </div>
+      <input className="input" style={{ marginBottom: 14 }} placeholder="Buscar empresa por nome ou CNPJ…" value={search} onChange={(e) => setSearch(e.target.value)} />
+
+      <div className="grid-3" style={{ gap: 16 }}>
+        <Card title="Empresas" sub={`${filtered.length} registros`}>
+          <div className="stack" style={{ gap: 10 }}>
+            {filtered.length === 0 && (
+              <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma empresa encontrada.</div>
             )}
-            {montadores.map((m) => {
-              const status = window.RHHomologacao.statusGeral(m);
-              const statusLabel = status === 'ok' ? '✅ Homologado'
-                : status === 'expirado' ? '❌ Expirado'
-                : status === 'atencao' ? '⚠️ Atenção'
-                : status === 'incompleto' ? '⚠️ Incompleto'
-                : '—';
-
+            {filtered.map((e) => {
+              const r = resumo[e.id];
               return (
-                <div key={m.id} style={{
-                  background: selected?.id === m.id ? "var(--vp-gray-50)" : "#fff",
-                  border: "1px solid " + (selected?.id === m.id ? "#000" : "var(--border)"),
-                  padding: 14,
-                  cursor: "pointer",
-                  position: "relative"
-                }} onClick={() => handleSelectMontador(m)}>
-                  <span style={{ position: "absolute", top: 0, left: 0, width: 24, height: 3, background: "var(--vp-yellow)" }}/>
-                  <div className="row sb" style={{ marginBottom: 8 }}>
-                    <div>
-                      <div className="cell-main" style={{ fontSize: 14 }}>{m.nome}</div>
-                      <div className="cell-sub">{m.id} · {m.cnpj || '—'}</div>
+                <div key={e.id} style={{
+                  background: selectedEmpresa?.id === e.id ? "var(--vp-gray-50)" : "#fff",
+                  border: "1px solid " + (selectedEmpresa?.id === e.id ? "#000" : "var(--border)"),
+                  padding: 12, cursor: "pointer", position: "relative",
+                }} onClick={() => selectEmpresa(e)}>
+                  <span style={{ position: "absolute", top: 0, left: 0, width: 20, height: 3, background: "var(--vp-yellow)" }} />
+                  <div className="cell-main" style={{ fontSize: 13 }}>{e.nome}</div>
+                  <div className="cell-sub" style={{ marginBottom: 6 }}>{e.id}</div>
+                  {r ? (
+                    <div className="row gap-1" style={{ flexWrap: 'wrap' }}>
+                      {r.vencido > 0 && <Badge variant="danger">{r.vencido} vencido{r.vencido > 1 ? 's' : ''}</Badge>}
+                      {r.valido > 0 && <Badge variant="success">{r.valido} válido{r.valido > 1 ? 's' : ''}</Badge>}
                     </div>
-                    <Badge variant={window.RHHomologacao.statusVariant(status)}>{statusLabel}</Badge>
-                  </div>
-                  <div style={{ fontSize: 12, color: 'var(--fg3)' }}>
-                    {m.email || m.telefone || '—'}
-                  </div>
+                  ) : <span className="small muted">sem documentos lançados</span>}
                 </div>
               );
             })}
           </div>
         </Card>
 
-        {selected ? (
-          <Card title={`Certificações · ${selected.nome}`} sub={`${selected.id} · ${selected.cnpj || '—'}`}
-            action={<Button variant="outline" size="sm" icon="edit" onClick={() => setEditingDados(true)}>Editar dados</Button>}>
-            <div className="small muted" style={{ marginBottom: 12 }}>
-              {selected.contato ? `Contato: ${selected.contato} · ` : ''}
-              {selected.telefone || 'sem telefone'} · {selected.email || 'sem e-mail'}
-              {selected.endereco_cidade ? ` · ${selected.endereco_cidade}/${selected.endereco_estado || ''}` : ''}
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-              {Object.entries(window.RHHomologacao.CERTIFICACOES).map(([chave, def]) => {
-                const cert = selected.certificacoes?.[chave];
-                const validacao = window.RHHomologacao.validarCertificacoes({ [chave]: cert });
-                const status = validacao.expiradas.length > 0 ? 'expirado'
-                  : validacao.vencendoEm30Dias.length > 0 ? 'atencao'
-                  : cert && cert.data_validade ? 'ok' : 'falta';
-
-                return (
-                  <div key={chave} style={{
-                    padding: 12,
-                    border: '1px solid ' + (status === 'ok' ? '#10b981' : status === 'expirado' ? '#dc2626' : status === 'atencao' ? '#f59e0b' : 'var(--border)'),
-                    background: status === 'ok' ? '#f0fdf4' : status === 'expirado' ? '#fef2f2' : status === 'atencao' ? '#fefce8' : '#fff',
-                    borderRadius: 4,
-                    display: 'flex',
-                    alignItems: 'center',
-                    gap: 12
-                  }}>
-                    <span style={{ fontSize: 16 }}>
-                      {status === 'ok' ? '✅' : status === 'expirado' ? '❌' : status === 'atencao' ? '⚠️' : '⏳'}
-                    </span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontWeight: 600, fontSize: 13 }}>{def.label}</div>
-                      {cert?.data_validade && (
-                        <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 2 }}>
-                          Válido até {window.RHHomologacao.fmtData(cert.data_validade)}
-                          {validacao.vencendoEm30Dias.length > 0 && validacao.vencendoEm30Dias[0].diasRestantes > 0 && (
-                            <span style={{ color: '#f59e0b', marginLeft: 8 }}>· {validacao.vencendoEm30Dias[0].diasRestantes} dias</span>
-                          )}
-                        </div>
-                      )}
-                      {cert?.arquivo && (
-                        <div style={{ fontSize: 12, marginTop: 2 }}>
-                          📎 <a href="#" onClick={async (e) => {
-                            e.preventDefault();
-                            try {
-                              const url = await window.RHHomologacao.urlCertificadoArquivo(cert.arquivo.path);
-                              window.open(url, '_blank');
-                            } catch (err) { window.toast('Erro ao abrir arquivo: ' + err.message, 'error'); }
-                          }}>{cert.arquivo.nome}</a>
-                        </div>
-                      )}
-                    </div>
-                    <Button variant="outline" size="sm" icon="edit" onClick={() => setEditingCert(chave)}>
-                      {cert?.data_validade ? 'Editar' : 'Adicionar'}
-                    </Button>
-                  </div>
-                );
-              })}
-
-              {editingCert && (
-                <ModalEditarCertificacao
-                  montadorId={selected.id}
-                  chave={editingCert}
-                  certificacao={selected.certificacoes?.[editingCert]}
-                  onSave={(data) => handleSaveCertificacao(editingCert, data)}
-                  onCancel={() => setEditingCert(null)}
-                />
+        {selectedEmpresa ? (
+          <Card title="Colaboradores" sub={`${colaboradores.length} pessoa(s) · ${selectedEmpresa.nome}`}>
+            <div className="stack" style={{ gap: 8 }}>
+              {colaboradores.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>
+                  Nenhum colaborador cadastrado — adicione em Cadastros → Empresas Instaladoras.
+                </div>
               )}
+              {colaboradores.map((col) => (
+                <div key={col.id} style={{
+                  background: selectedColaborador?.id === col.id ? "var(--vp-gray-50)" : "#fff",
+                  border: "1px solid " + (selectedColaborador?.id === col.id ? "#000" : "var(--border)"),
+                  padding: 10, cursor: "pointer",
+                }} onClick={() => selectColaborador(col)}>
+                  <div className="cell-main" style={{ fontSize: 13 }}>{col.nome_completo}</div>
+                  <div className="cell-sub">{col.cpf || col.cnh || '—'}</div>
+                </div>
+              ))}
             </div>
           </Card>
         ) : (
-          <div style={{ display:'flex', alignItems:'center', justifyContent:'center', border:'1px dashed var(--border)', color:'var(--fg3)', fontSize:13, padding:'60px 20px', textAlign:'center' }}>
-            Selecione um parceiro à esquerda para gerenciar suas certificações.
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', color: 'var(--fg3)', fontSize: 13, padding: '40px 16px', textAlign: 'center' }}>
+            Selecione uma empresa pra ver os colaboradores.
+          </div>
+        )}
+
+        {selectedColaborador ? (
+          <Card title="Documentos" sub={selectedColaborador.nome_completo}
+            action={<Button variant="outline" size="sm" icon="plus" onClick={() => setEditingDoc({ novo: true })}>Adicionar</Button>}>
+            <div className="stack" style={{ gap: 10 }}>
+              {documentos.length === 0 && (
+                <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum documento lançado.</div>
+              )}
+              {documentos.map((doc) => {
+                const status = doc.status || 'N/A';
+                const cor = status === 'VENCIDO' ? '#dc2626' : status === 'VALIDO' ? '#10b981' : 'var(--border)';
+                const bg = status === 'VENCIDO' ? '#fef2f2' : status === 'VALIDO' ? '#f0fdf4' : '#fff';
+                const icone = status === 'VENCIDO' ? '❌' : status === 'VALIDO' ? '✅' : '⏳';
+                return (
+                  <div key={doc.id} style={{ padding: 10, border: `1px solid ${cor}`, background: bg, borderRadius: 4, display: 'flex', alignItems: 'flex-start', gap: 10 }}>
+                    <span style={{ fontSize: 15 }}>{icone}</span>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontWeight: 600, fontSize: 13 }}>{doc.parceiros_doc_catalogo?.nome || doc.documento_id}</div>
+                      <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 2 }}>
+                        {doc.data_vencimento ? `Vence em ${window.RHHomologacao.fmtData(doc.data_vencimento)}` : 'Sem data de vencimento'}
+                      </div>
+                      {doc.arquivo_link && (
+                        <div style={{ fontSize: 12, marginTop: 2 }}>
+                          📎 <a href="#" onClick={async (ev) => {
+                            ev.preventDefault();
+                            try {
+                              const url = await window.RHHomologacao.urlCertificadoArquivo(doc.arquivo_link);
+                              window.open(url, '_blank');
+                            } catch (err) { window.toast('Erro ao abrir arquivo: ' + err.message, 'error'); }
+                          }}>abrir documento</a>
+                        </div>
+                      )}
+                      {doc.observacao && <div className="small muted" style={{ marginTop: 2 }}>{doc.observacao}</div>}
+                    </div>
+                    <Button variant="ghost" size="sm" icon="edit" onClick={() => setEditingDoc({ doc })} />
+                  </div>
+                );
+              })}
+            </div>
+          </Card>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', color: 'var(--fg3)', fontSize: 13, padding: '40px 16px', textAlign: 'center' }}>
+            Selecione um colaborador pra ver os documentos.
           </div>
         )}
       </div>
 
-      {showNovo && <ModalNovoMontador onClose={() => setShowNovo(false)} onSaved={reload}/>}
-      {editingDados && selected && (
-        <ModalNovoMontador
-          initialData={selected}
-          isEdit
-          onClose={() => setEditingDados(false)}
-          onSaved={async () => {
-            await reload();
-            const full = await window.RHHomologacao.obterMontador(selected.id);
-            setSelected(full);
-          }}
+      {editingDoc && selectedColaborador && (
+        <ModalDocumentoColaborador
+          colaboradorId={selectedColaborador.id}
+          documento={editingDoc.doc || null}
+          catalogo={catalogoColaborador}
+          onSave={async () => { setEditingDoc(null); await reloadDocumentos(); }}
+          onCancel={() => setEditingDoc(null)}
         />
       )}
     </div>
   );
 }
 
+/* Reaproveitado por Cadastros → Empresas Instaladoras (cadastro-instaladores.jsx,
+   carregado depois deste arquivo) pra criar/editar o cadastro raso da empresa. */
 const MNT_ENDERECO_EMPTY = {
   endereco_logradouro: '', endereco_complemento: '', endereco_bairro: '',
   endereco_cep: '', endereco_cidade: '', endereco_estado: '',
@@ -281,31 +268,39 @@ function ModalNovoMontador({ initialData, isEdit, onClose, onSaved }) {
   );
 }
 
-function ModalEditarCertificacao({ montadorId, chave, certificacao, onSave, onCancel }) {
-  const [data_validade, setDataValidade] = React.useState(
-    certificacao?.data_validade ? certificacao.data_validade.slice(0, 10) : ''
-  );
-  const [numero_registro, setNumeroRegistro] = React.useState(certificacao?.numero_registro || '');
-  const [observacoes, setObservacoes] = React.useState(certificacao?.observacoes || '');
-  const [arquivo, setArquivo] = React.useState(certificacao?.arquivo || null);
+function ModalDocumentoColaborador({ colaboradorId, documento, catalogo, onSave, onCancel }) {
+  const isEdit = !!documento;
+  const [documentoId, setDocumentoId] = React.useState(documento?.documento_id || (catalogo[0]?.id || ''));
+  const [dataVencimento, setDataVencimento] = React.useState(documento?.data_vencimento ? documento.data_vencimento.slice(0, 10) : '');
+  const [observacao, setObservacao] = React.useState(documento?.observacao || '');
+  const [arquivoAtual, setArquivoAtual] = React.useState(documento?.arquivo_link || null);
   const [arquivoNovo, setArquivoNovo] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
 
-  const removerArquivo = async () => {
-    if (arquivo?.path) await window.RHHomologacao.removerCertificadoArquivo(arquivo.path).catch(() => {});
-    setArquivo(null);
-    setArquivoNovo(null);
-  };
+  const nomeDoc = documento?.parceiros_doc_catalogo?.nome || catalogo.find((c) => c.id === documentoId)?.nome || documentoId;
 
   const save = async () => {
-    if (!data_validade) return window.toast('Data de validade é obrigatória.', 'warning');
+    if (!documentoId) return window.toast('Selecione o tipo de documento.', 'warning');
     setSaving(true);
     try {
-      let arquivoFinal = arquivo;
+      let arquivoPath = arquivoAtual;
       if (arquivoNovo) {
-        arquivoFinal = await window.RHHomologacao.uploadCertificadoArquivo(montadorId, chave, arquivoNovo);
+        const up = await window.RHHomologacao.uploadDocumentoColaboradorArquivo(colaboradorId, documentoId, arquivoNovo);
+        arquivoPath = up.path;
       }
-      onSave({ data_validade, numero_registro, observacoes, arquivo: arquivoFinal || null });
+      const hoje = new Date(new Date().toDateString());
+      const status = !dataVencimento ? 'N/A' : (new Date(dataVencimento) < hoje ? 'VENCIDO' : 'VALIDO');
+      await window.RHHomologacao.salvarDocumentoColaborador({
+        id: documento?.id,
+        colaborador_id: colaboradorId,
+        documento_id: documentoId,
+        data_vencimento: dataVencimento || null,
+        status,
+        arquivo_link: arquivoPath || null,
+        observacao: observacao || null,
+      });
+      window.toast('Documento salvo!', 'success');
+      onSave?.();
     } catch (err) {
       window.toast('Erro ao salvar: ' + err.message, 'error');
     } finally {
@@ -314,43 +309,39 @@ function ModalEditarCertificacao({ montadorId, chave, certificacao, onSave, onCa
   };
 
   return (
-    <Modal title={`Editar: ${window.RHHomologacao.CERTIFICACOES[chave].label}`} onClose={onCancel} width={480}
+    <Modal title={isEdit ? `Editar: ${nomeDoc}` : 'Adicionar documento'} onClose={onCancel} width={480}
       footer={<>
         <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
         <Button variant="primary" onClick={save} disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</Button>
       </>}>
-      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-        <div className="stack" style={{ gap:4 }}>
-          <label className="up-eyebrow muted">Data de validade *</label>
-          <input className="input" type="date" value={data_validade}
-            onChange={e => setDataValidade(e.target.value)}/>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        {!isEdit && (
+          <div className="stack" style={{ gap: 4 }}>
+            <label className="up-eyebrow muted">Tipo de documento *</label>
+            <select className="input" value={documentoId} onChange={(e) => setDocumentoId(e.target.value)}>
+              {catalogo.map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+        )}
+        <div className="stack" style={{ gap: 4 }}>
+          <label className="up-eyebrow muted">Data de vencimento</label>
+          <input className="input" type="date" value={dataVencimento} onChange={(e) => setDataVencimento(e.target.value)} />
+          <div className="small muted">Deixe em branco se o documento não tem vencimento (fica marcado N/A).</div>
         </div>
-        <div className="stack" style={{ gap:4 }}>
-          <label className="up-eyebrow muted">Número de registro / certificado</label>
-          <input className="input" value={numero_registro}
-            onChange={e => setNumeroRegistro(e.target.value)}
-            placeholder="Ex: 123456"/>
-        </div>
-        <div className="stack" style={{ gap:4 }}>
-          <label className="up-eyebrow muted">Documento (PDF ou imagem do curso/certificado)</label>
-          {arquivo && !arquivoNovo && (
+        <div className="stack" style={{ gap: 4 }}>
+          <label className="up-eyebrow muted">Documento (PDF ou imagem)</label>
+          {arquivoAtual && !arquivoNovo && (
             <div className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 8 }}>
-              <span className="small">📎 {arquivo.nome}</span>
-              <Button variant="ghost" size="sm" icon="trash" onClick={removerArquivo}/>
+              <span className="small">📎 arquivo já enviado</span>
+              <Button variant="ghost" size="sm" icon="trash" onClick={() => setArquivoAtual(null)} />
             </div>
           )}
-          {arquivoNovo && (
-            <div className="small muted">Novo arquivo selecionado: {arquivoNovo.name} (substitui ao salvar)</div>
-          )}
-          <input className="input" type="file" accept="application/pdf,image/*"
-            onChange={e => setArquivoNovo(e.target.files?.[0] || null)}/>
+          {arquivoNovo && <div className="small muted">Novo arquivo selecionado: {arquivoNovo.name} (substitui ao salvar)</div>}
+          <input className="input" type="file" accept="application/pdf,image/*" onChange={(e) => setArquivoNovo(e.target.files?.[0] || null)} />
         </div>
-        <div className="stack" style={{ gap:4 }}>
+        <div className="stack" style={{ gap: 4 }}>
           <label className="up-eyebrow muted">Observações</label>
-          <textarea className="input" rows={2} value={observacoes}
-            onChange={e => setObservacoes(e.target.value)}
-            placeholder="Notas adicionais sobre a certificação"
-            style={{ resize:'vertical' }}/>
+          <textarea className="input" rows={2} value={observacao} onChange={(e) => setObservacao(e.target.value)} style={{ resize: 'vertical' }} />
         </div>
       </div>
     </Modal>

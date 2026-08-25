@@ -36,6 +36,7 @@ const ROUTE_TITLE = {
   databook: "Data Book & Termo",
   handover: "Entrega Final",
   "rh-homologacao": "Homologação de Instaladores",
+  "cadastro-instaladores": "Empresas Instaladoras",
   importacao: "Importação",
   "importacao-detail": "Detalhe de Embarque",
   "importacao-rastreamento": "Rastreamento de Navios",
@@ -340,6 +341,7 @@ function App() {
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
+      case "cadastro-instaladores": return <window.CadastroInstaladoresPage/>;
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
       case "decisoes": return <window.DecisoesPage/>;
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
@@ -440,6 +442,7 @@ function App() {
               { value: "financeiro", label: "⏰ Gatilhos & Prazo" },
               { value: "comissoes", label: "Comissões" },
               { value: "rh-homologacao", label: "👥 Homologação de Instaladores" },
+              { value: "cadastro-instaladores", label: "🏢 Empresas Instaladoras" },
               { value: "notificacoes", label: "🔔 Notificações" },
               { value: "configuracoes", label: "Configurações" },
             ]}/>

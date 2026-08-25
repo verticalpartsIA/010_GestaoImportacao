@@ -114,6 +114,7 @@
       { modulo: 'cadastro-clientes', label: 'Clientes' },
       { modulo: 'cadastro-fornecedores', label: 'Fornecedores' },
       { modulo: 'ncm-catalogo', label: 'Produtos' },
+      { modulo: 'cadastro-instaladores', label: 'Empresas Instaladoras' },
     ]},
     { grupo: 'Comercial', itens: [
       { modulo: 'leads', label: 'Leads' },
