@@ -39,17 +39,20 @@ const NAV_GROUPS = [
     { id: "juridico", label: "Contratos & Minutas", icon: "scale" },
   ]},
   { label: "Importação | Suprimentos", sublabel: "Siscomex & Compras", items: [
-    { id: "importacao", label: "Importação", icon: "ship" },
     /* Sub-telas da Importação — consolidação de uma solução de importação
        já usada pela equipe (P.I., Embarques, RFQ, IMS), trazida pra dentro
        do VP Gestão em fases. Só P.I. está pronta; as demais entram indentadas
-       aqui conforme forem migradas. */
+       aqui conforme forem migradas. "Importação" (legado — embarques em
+       trânsito + AIS) fica logo após Embarques por decisão do usuário
+       (25/08); sobreposição de conteúdo entre as duas telas é assunto
+       para outra rodada, não resolvida aqui. */
     { label: "Gestão Importação", subheader: true },
     { id: "gi-painel", label: "Painel", icon: "home", indent: true },
     { id: "pi-importacao", label: "P.I.", icon: "fileText", indent: true },
     { id: "rfq-importacao", label: "RFQ", icon: "fileSearch", indent: true },
     { id: "ims-importacao", label: "IMS", icon: "package", indent: true },
     { id: "embarques-importacao", label: "Embarques", icon: "ship", indent: true },
+    { id: "importacao", label: "Importação", icon: "ship", indent: true },
     { id: "gi-analise-precos", label: "Análise de Preços", icon: "calculator", indent: true },
     { id: "compras", label: "Compras Nacional", icon: "truck" },
     { id: "pedidos-acompanhamento", label: "Pedidos", icon: "package" },
@@ -190,7 +193,7 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
               )}
               {items.map((item) => {
                 /* Rótulo indentado de sub-grupo (ex.: "Gestão Importação" dentro de
-                   Jurídico|Importação|Suprimentos) — não navega, só organiza. */
+                   Importação | Suprimentos) — não navega, só organiza. */
                 if (item.subheader) {
                   return (
                     <div className="nav-item nav-item--subheader" key={item.label}

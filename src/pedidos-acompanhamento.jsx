@@ -96,7 +96,7 @@ function PedidosAcompanhamentoPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Jurídico · Importação · Suprimentos</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Importação · Suprimentos</div>
           <h1 className="page-head__title">Pedidos</h1>
           <p className="page-head__sub">Acompanhamento de status de pedidos de compra — Nacional e Importação.</p>
         </div>

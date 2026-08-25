@@ -434,7 +434,7 @@ function EmbarquesImportacaoPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Jurídico · Importação · Gestão Importação</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Importação · Gestão Importação</div>
           <h1 className="page-head__title">Embarques</h1>
           <p className="page-head__sub">Controle de processos de importação — identificação, logística, aduaneiro, faturamento e entrega.</p>
         </div>

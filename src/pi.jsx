@@ -470,7 +470,7 @@ function PIPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Jurídico · Importação · Gestão Importação</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Importação · Gestão Importação</div>
           <h1 className="page-head__title">Proforma Invoices (P.I.)</h1>
           <p className="page-head__sub">Gerencie todas as P.I. e vincule-as aos embarques.</p>
         </div>

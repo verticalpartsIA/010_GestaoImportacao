@@ -33,7 +33,7 @@ function GIPainelPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Jurídico · Importação · Gestão Importação</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Importação · Gestão Importação</div>
           <h1 className="page-head__title">Painel</h1>
           <p className="page-head__sub">Visão geral de P.I., RFQ, IMS e Embarques.</p>
         </div>
@@ -98,7 +98,7 @@ function GIAnalisePrecosPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Jurídico · Importação · Gestão Importação</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Importação · Gestão Importação</div>
           <h1 className="page-head__title">Análise de Preços</h1>
           <p className="page-head__sub">Comparativo de preços por item, a partir do histórico de todas as RFQs.</p>
         </div>

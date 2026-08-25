@@ -333,7 +333,7 @@ function RFQPage() {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Jurídico · Importação · Gestão Importação</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Importação · Gestão Importação</div>
           <h1 className="page-head__title">RFQ</h1>
           <p className="page-head__sub">Request for Quotation — cotação comparativa de produtos com fornecedores.</p>
         </div>
