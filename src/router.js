@@ -75,22 +75,28 @@
     return KNOWN_ROUTES_SET.has(routeId);
   }
 
-  function buildPath(routeId, id) {
+  /* `tab` é um 3º segmento opcional — só faz sentido junto com `id`, pra
+     páginas de detalhe com abas internas (ex.: Dossiê da Obra: visao-geral,
+     documentos, instalacao...). Páginas sem aba nunca passam esse argumento
+     e o comportamento fica idêntico ao de antes. */
+  function buildPath(routeId, id, tab) {
     if (!routeId || !isKnownRoute(routeId)) return '/';
     let path = '/' + moduleSlugFor(routeId) + '/' + routeId;
     if (id !== undefined && id !== null && id !== '') path += '/' + encodeURIComponent(String(id));
+    if (tab !== undefined && tab !== null && tab !== '') path += '/' + encodeURIComponent(String(tab));
     return path;
   }
 
-  /* Lê a URL atual -> { route, id }. `route` só vem preenchido se for
+  /* Lê a URL atual -> { route, id, tab }. `route` só vem preenchido se for
      uma rota conhecida (protege contra path arbitrário/digitado à mão). */
   function parseLocation() {
     const parts = window.location.pathname.split('/').filter(Boolean);
-    if (parts.length < 2) return { route: null, id: null };
+    if (parts.length < 2) return { route: null, id: null, tab: null };
     const routeId = parts[1];
-    if (!isKnownRoute(routeId)) return { route: null, id: null };
+    if (!isKnownRoute(routeId)) return { route: null, id: null, tab: null };
     const id = parts.length > 2 ? decodeURIComponent(parts[2]) : null;
-    return { route: routeId, id: id };
+    const tab = parts.length > 3 ? decodeURIComponent(parts[3]) : null;
+    return { route: routeId, id: id, tab: tab };
   }
 
   let listeners = [];
@@ -105,9 +111,9 @@
      já está de posse do estado novo. Sem-op se a URL já é a mesma,
      o que também evita loop quando esta função é chamada em reação a
      um popstate que o próprio browser já aplicou. */
-  function navigate(routeId, id, opts) {
+  function navigate(routeId, id, tab, opts) {
     opts = opts || {};
-    const path = buildPath(routeId, id);
+    const path = buildPath(routeId, id, tab);
     if (path === window.location.pathname) return;
     if (opts.replace) window.history.replaceState({}, '', path);
     else window.history.pushState({}, '', path);

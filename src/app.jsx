@@ -216,7 +216,13 @@ function App() {
   React.useEffect(() => {
     if (!window.VpRouter) return;
     const id = deriveIdForRoute(route, subsel);
-    window.VpRouter.navigate(route, id != null ? id : pendingFetchId);
+    // Preserva a aba (3º segmento) se a URL atual já é dessa mesma rota —
+    // páginas com abas internas (ex.: dossier-obra) escrevem seu próprio
+    // 3º segmento; sem isso, este efeito genérico apagaria a aba assim
+    // que rodasse (ex.: no mount de um deep link .../DOS-M034/documentos).
+    const atual = window.VpRouter.parseLocation();
+    const tabAtual = atual.route === route ? atual.tab : null;
+    window.VpRouter.navigate(route, id != null ? id : pendingFetchId, tabAtual);
   }, [route, subsel, pendingFetchId]);
 
   React.useEffect(() => {
@@ -272,10 +278,12 @@ function App() {
     if (t.sidebarCollapsed !== collapsed) setCollapsed(t.sidebarCollapsed);
   }, [t.sidebarCollapsed]);
 
-  // Atualiza document.title ao mudar de rota
+  // Atualiza document.title ao mudar de rota — sem sufixo "· VP Gestão"
+  // genérico; dossier-obra.jsx assume o próprio título (obra + aba ativa).
   React.useEffect(() => {
+    if (route === "dossier-obra") return;
     const label = ROUTE_TITLE[route];
-    document.title = label ? label + " · VP Gestão" : "VP Gestão · VerticalParts";
+    document.title = label || "VP Gestão";
   }, [route]);
 
   // AuthZ — impede acesso a rotas restritas independente de como a navegação ocorreu

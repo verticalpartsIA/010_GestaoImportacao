@@ -103,15 +103,41 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
   );
 }
 
+const DOSSIER_TAB_LABEL = {
+  'visao-geral': 'Visão Geral', documentos: 'Documentos', instalacao: 'Instalação',
+  equipamentos: 'Equipamentos', 'cronograma-instalacao': 'Cronograma de Instalação',
+  pendencias: 'Pendências', responsaveis: 'Responsáveis', historico: 'Histórico',
+};
+
 function DossierObraPage({ dossierId, setRoute }) {
   const [dossier, setDossier] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
-  const [activeTab, setActiveTab] = React.useState('visao-geral');
+  /* Aba inicial vem da URL quando é deep link (ex.: .../dossier-obra/DOS-M034/documentos);
+     senão cai no padrão. */
+  const [activeTab, setActiveTab] = React.useState(() =>
+    (window.VpRouter && window.VpRouter.parseLocation().tab) || 'visao-geral');
   const [modalOpen, setModalOpen] = React.useState(null);
 
   React.useEffect(() => {
     carregarDossier();
   }, [dossierId]);
+
+  /* Espelha a aba ativa no 3º segmento da URL — replace (não push) pra não
+     lotar o histórico do navegador a cada clique de aba. Roda independente
+     do efeito de sincronização de rota/subsel em app.jsx (que não reage a
+     mudança de aba), então não há corrida entre os dois. */
+  React.useEffect(() => {
+    if (!window.VpRouter || !dossierId) return;
+    window.VpRouter.navigate('dossier-obra', dossierId, activeTab, { replace: true });
+  }, [dossierId, activeTab]);
+
+  /* Título da aba do navegador some "· VP Gestão" genérico e mostra onde o
+     usuário realmente está: nome da obra + aba ativa (app.jsx pula o título
+     genérico pra esta rota — ver guard em app.jsx). */
+  React.useEffect(() => {
+    const nomeObra = (dossier && (dossier.client_name || dossier.building_name)) || 'Dossiê da Obra';
+    document.title = `${nomeObra} · ${DOSSIER_TAB_LABEL[activeTab] || 'Visão Geral'}`;
+  }, [dossier, activeTab]);
 
   const carregarDossier = async () => {
     try {
