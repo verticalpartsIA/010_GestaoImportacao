@@ -856,9 +856,45 @@ function TabEquipamentos({ dossier }) {
   );
 }
 
+/* União dos dois vínculos possíveis (obra inteira + por equipamento) numa
+   lista única "quem monta essa obra" — pedido do usuário depois de ver que
+   uma obra pode ter mais de uma instaladora, mas isso ficava escondido
+   dentro de cada card de equipamento, um por vez. Sem mudar schema: só
+   agrupa o que já existe. */
+function InstaladorasDaObraPanel({ dossier, equipamentos }) {
+  const grupos = {};
+  let semInstalador = 0;
+  equipamentos.forEach((eq) => {
+    const emp = eq.parceiros_instaladores;
+    if (!emp?.id) { semInstalador += 1; return; }
+    if (!grupos[emp.id]) grupos[emp.id] = { nome: emp.nome, equipamentos: [] };
+    grupos[emp.id].equipamentos.push(eq.tipo || eq.descricao || eq.id);
+  });
+  const lista = Object.entries(grupos);
+
+  if (equipamentos.length === 0) {
+    return <div style={{ fontSize: 12, color: '#999', marginBottom: 12 }}>Nenhum equipamento cadastrado ainda — cadastre na aba Equipamentos pra ver as instaladoras aqui.</div>;
+  }
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Instaladoras desta obra</div>
+      {lista.length === 0 && <div style={{ fontSize: 12, color: '#999' }}>Nenhum equipamento tem instalador vinculado ainda.</div>}
+      {lista.map(([empId, g]) => (
+        <div key={empId} style={{ fontSize: 13, marginBottom: 4 }}>
+          🏢 <b>{g.nome}</b> — {g.equipamentos.length} equipamento{g.equipamentos.length !== 1 ? 's' : ''}
+          {empId === dossier.parceiro_instalador_id && <span style={{ marginLeft: 6, fontSize: 11, color: '#0066cc', fontWeight: 700 }}>★ vínculo principal da obra</span>}
+        </div>
+      ))}
+      {semInstalador > 0 && <div style={{ fontSize: 12, color: '#cc7700', marginTop: 4 }}>⚠ {semInstalador} equipamento{semInstalador !== 1 ? 's' : ''} sem instalador vinculado.</div>}
+    </div>
+  );
+}
+
 function TabInstalacao({ dossier, reload }) {
   const [checklist, setChecklist] = React.useState(null);
   const [parceiros, setParceiros] = React.useState([]);
+  const [equipamentos, setEquipamentos] = React.useState([]);
   const [busy, setBusy] = React.useState(false);
   const [recebidoPor, setRecebidoPor] = React.useState('');
   const [qtdPessoas, setQtdPessoas] = React.useState('');
@@ -871,6 +907,10 @@ function TabInstalacao({ dossier, reload }) {
       setRecebidoPor(ck.dossier.equipamento_recebido_por || '');
       setQtdPessoas(ck.dossier.equipamento_qtd_pessoas_recebimento != null ? String(ck.dossier.equipamento_qtd_pessoas_recebimento) : '');
     } catch (e) { window.toast?.('Erro ao carregar checklist: ' + e.message, 'error'); }
+    try {
+      const eqs = await window.__DOSSIER.listarEquipamentos(dossier.id);
+      setEquipamentos(eqs);
+    } catch (e) { setEquipamentos([]); }
     if (window.RHHomologacao) {
       window.RHHomologacao.listarMontadores().then(setParceiros).catch(() => setParceiros([]));
     }
@@ -949,12 +989,16 @@ function TabInstalacao({ dossier, reload }) {
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Parceiro instalador</label>
+          <InstaladorasDaObraPanel dossier={dossier} equipamentos={equipamentos} />
+          <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Parceiro instalador (vínculo principal da obra)</label>
           <select className="input" style={{ maxWidth: 360 }} disabled={busy} value={dossier.parceiro_instalador_id || ''}
             onChange={(e) => acao(() => store.vincularParceiroInstalador(dossier.id, e.target.value || null))}>
             <option value="">— nenhum vinculado —</option>
             {parceiros.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
           </select>
+          <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+            Pra vincular uma empresa diferente num equipamento específico (obra com mais de uma instaladora), use a aba Equipamentos.
+          </div>
         </div>
       </div>
 
