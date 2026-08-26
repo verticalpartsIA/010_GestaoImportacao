@@ -31,6 +31,7 @@ const ROUTE_TITLE = {
   "contrato-instalador": "Contrato Instalador",
   vistorias: "Vistorias de Obras",
   instalacao: "Instalação em Campo",
+  "central-documentos": "Central de Documentos",
   art: "ART de Instalação",
   cronograma: "Cronograma de Instalação",
   databook: "Data Book & Termo",
@@ -327,6 +328,8 @@ function App() {
       case "contrato-instalador": return <ContratoInstaladorPage/>;
       case "vistorias": return <VistoriasObras obraId={subsel} setRoute={setRoute}/>;
       case "instalacao": return <InstalacaoPage/>;
+      case "central-documentos": return <EmConstrucaoPage titulo="Central de Documentos"
+        descricao="Em construção — vai consolidar Dados Coletados na Obra (vistoria), ART e Documentação do Montador (empresa + colaboradores) num só lugar, com Historograma do fluxo de envio."/>;
       case "art": return <ArtPage setRoute={setRoute}/>;
       case "cronograma": return <CronogramaPage/>;
       case "databook": return <DataBookPage setRoute={setRoute}/>;
@@ -429,6 +432,7 @@ function App() {
               { value: "contrato-venda-equipamentos", label: "📄 Contrato Venda de Equipamentos" },
               { value: "contrato-instalador", label: "👷 Contrato Instalador" },
               { value: "instalacao", label: "Instalação + Checklist" },
+              { value: "central-documentos", label: "📁 Central de Documentos" },
               { value: "art", label: "ART de Instalação" },
               { value: "cronograma", label: "Cronograma de Instalação" },
               { value: "databook", label: "Data Book & Termo" },
