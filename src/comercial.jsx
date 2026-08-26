@@ -2,81 +2,85 @@
    comercial.jsx — Leads, Cotações, Precificação, Propostas
    ============================================================ */
 
-/* ---------- MODAL: Novo Lead ---------- */
-/* ---------- constantes do formulário de equipamentos ---------- */
-const EQUIP_OPTS = [
-  { key: 'elevador', label: 'Elevador' },
-  { key: 'escada',   label: 'Escada Rolante' },
-  { key: 'esteira',  label: 'Esteira' },
-];
-const TIPO_EQUIP_OPTS = ['Residencial','Comercial','Escritório','Escola','Hospital','Industrial','Local Público','Outro'];
-const ABERTURA_OPTS   = ['Central','Telescópica Direita','Telescópica Esquerda'];
-
-function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
+/* ---------- MODAL: Novo Lead ----------
+   15/08 → revisão do fluxo Lead→Formulário: o cadastro de Lead NÃO coleta
+   mais equipamento (elevador/escada/esteira) — isso ficava preso a um
+   único item, obrigava specs cedo demais e nunca virava dado estruturado
+   de verdade (era um texto solto em `leads.equip`). Lead agora é só
+   identificação do cliente (CNPJ + contato); a alocação de quantos
+   equipamentos/tipos forem necessários acontece no Formulário, chamado
+   a partir daqui ou da tela de Detalhe do Lead. */
+function ModalNovoLead({ onClose, onSaved, onOpenFormulario }) {
   const [f, setF] = React.useState({
     building:'', contact:'', role:'', phone:'', email:'',
+    cnpj:'', razaoSocial:'',
     origin:'Site', status:'Em qualificação',
     owner:'', value:'', priority:'Alta', next:'',
   });
-  const [equips, setEquips] = React.useState({
-    elevador: { checked: false, qty: 1, paradas: 1 },
-    escada:   { checked: false, qty: 1 },
-    esteira:  { checked: false, qty: 1 },
-  });
-  const [tipoEquip, setTipoEquip] = React.useState('');
-  const [elevSpec, setElevSpec] = React.useState({ carga: '', abertura: 'Central', vao: '', acabamento: 'Inox' });
+  const [buscandoCnpj, setBuscandoCnpj] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [savedLead, setSavedLead] = React.useState(null);
 
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-  const setElev = (k, v) => setElevSpec(p => ({ ...p, [k]: v }));
-  const setEquipField = (key, field, value) => setEquips(p => ({ ...p, [key]: { ...p[key], [field]: value } }));
 
-  const hasEquip    = Object.values(equips).some(e => e.checked);
-  const hasElevador = equips.elevador.checked;
+  const buscarCnpj = async () => {
+    if (!window.EnderecoAPI?.isCnpjValido(f.cnpj)) return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
+    setBuscandoCnpj(true);
+    try {
+      const dados = await window.EnderecoAPI.buscarCNPJ(f.cnpj);
+      setF(p => ({ ...p, razaoSocial: dados.razao_social || p.razaoSocial, phone: p.phone || dados.telefone || p.phone }));
+      window.toast('Dados do CNPJ preenchidos automaticamente.', 'success');
+    } catch (e) {
+      window.toast(e.message, 'warning');
+    } finally {
+      setBuscandoCnpj(false);
+    }
+  };
 
   const save = async () => {
     if (!f.building.trim()) return window.toast('Prédio é obrigatório.', 'warning');
     if (!f.contact.trim())  return window.toast('Contato é obrigatório.', 'warning');
-    if (!hasEquip)          return window.toast('Selecione ao menos um equipamento.', 'warning');
-    if (!tipoEquip)         return window.toast('Tipo de empreendimento é obrigatório.', 'warning');
-    if (hasElevador) {
-      if (!elevSpec.carga) return window.toast('Informe a carga do elevador (kg).', 'warning');
-      if (!elevSpec.vao)   return window.toast('Informe o vão de porta (cm).', 'warning');
-    }
+    const cnpjDigits = (f.cnpj || '').replace(/\D/g, '');
+    if (cnpjDigits && !window.EnderecoAPI?.isCnpjValido(cnpjDigits)) return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
     setSaving(true);
     const id = 'LD-' + Date.now().toString().slice(-6);
-
-    const equipItens = EQUIP_OPTS.filter(o => equips[o.key].checked)
-      .map(o => o.key === 'elevador'
-        ? { tipo: o.label, quantidade: equips[o.key].qty, paradas: equips.elevador.paradas }
-        : { tipo: o.label, quantidade: equips[o.key].qty });
-    const equipStr = equipItens.map(i =>
-      i.paradas !== undefined
-        ? `${i.quantidade}× ${i.tipo} (${i.paradas} paradas)`
-        : `${i.quantidade}× ${i.tipo}`
-    ).join(', ')
-      + ` · ${tipoEquip}`
-      + (hasElevador ? ` · ${elevSpec.carga}kg ${elevSpec.abertura}` : '');
 
     const { error } = await window.__VP_SB.sb.from('leads').insert({
       id,
       building: f.building, contact: f.contact, role: f.role || null,
-      phone: f.phone || null, email: f.email || null, equip: equipStr,
+      phone: f.phone || null, email: f.email || null,
       origin: f.origin, status: f.status, owner: f.owner || null,
       value: f.value ? parseFloat(f.value) : null,
       priority: ({ 'Alta': 'alta', 'Média': 'media', 'Baixa': 'baixa' }[f.priority] || 'media'),
       next_action: f.next || null,
       date: new Date().toISOString().slice(0, 10),
     });
+    if (error) { setSaving(false); return window.toast('Erro: ' + error.message, 'error'); }
+
+    /* CNPJ informado → resolve/cria o cliente (mesma dedup por CNPJ do
+       Formulário, window.FormularioElevadorStore.buscarOuCriarCliente) e
+       já vincula leads.cliente_id — assim o Formulário, quando chamar
+       este Lead, abre com o cliente pronto, sem redigitar CNPJ. */
+    let clienteId = null;
+    if (cnpjDigits) {
+      try {
+        const cliente = await window.FormularioElevadorStore.buscarOuCriarCliente({
+          cnpj: cnpjDigits, tipo_pessoa: 'PJ',
+          razao_social: f.razaoSocial || f.building,
+          contato: f.contact, telefone: f.phone || null, email: f.email || null,
+        });
+        clienteId = cliente.id;
+        await window.__VP_SB.sb.from('leads').update({ cliente_id: clienteId }).eq('id', id);
+      } catch (e) {
+        window.toast('Lead criado, mas falhou ao vincular cliente: ' + e.message, 'warning');
+      }
+    }
+
     setSaving(false);
-    if (error) return window.toast('Erro: ' + error.message, 'error');
     onSaved?.();
     setSavedLead({
       id, building: f.building, contact: f.contact, role: f.role, phone: f.phone, email: f.email,
-      equipItens, tipoEquip,
-      elevSpec: hasElevador ? { ...elevSpec, qty: equips.elevador.qty, paradas: equips.elevador.paradas } : null,
-      totalEquip: equipItens.reduce((s, i) => s + i.quantidade, 0),
+      cliente_id: clienteId, razaoSocial: f.razaoSocial,
     });
   };
 
@@ -104,16 +108,16 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
     }
   }, [savedLead, onClose]);
 
-  /* ---- pós-save: confirmar criação de cotação ---- */
+  /* ---- pós-save: seguir pro Formulário (aloca equipamento lá) ---- */
   if (savedLead) {
     return (
       <Modal title="✓ Lead Criado! (fechará em 4s)" onClose={() => { setSavedLead(null); onClose(); }} width={500}
         footer={<>
           <Button variant="ghost" onClick={onClose}>Fechar</Button>
-          {onCreateCotacao && (
-            <Button variant="primary" icon="globe"
-              onClick={() => { onClose(); onCreateCotacao(savedLead); }}>
-              Criar Cotação China →
+          {onOpenFormulario && (
+            <Button variant="primary" icon="ruler"
+              onClick={() => { onClose(); onOpenFormulario(savedLead); }}>
+              Abrir Formulário →
             </Button>
           )}
         </>}>
@@ -122,18 +126,12 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
             <div className="up-eyebrow muted" style={{ marginBottom:6 }}>Lead criado com sucesso</div>
             <div style={{ fontWeight:700, fontSize:15 }}>{savedLead.building}</div>
             <div className="cell-sub" style={{ marginTop:4 }}>{savedLead.id}</div>
-            <div className="cell-sub" style={{ marginTop:4 }}>
-              {savedLead.equipItens.map(i =>
-                i.paradas !== undefined
-                  ? `${i.quantidade}× ${i.tipo} (${i.paradas} paradas)`
-                  : `${i.quantidade}× ${i.tipo}`
-              ).join(', ')}
-              {' · '}{savedLead.tipoEquip}
-              {savedLead.elevSpec && ` · ${savedLead.elevSpec.carga}kg · ${savedLead.elevSpec.abertura}`}
-            </div>
+            {savedLead.cliente_id
+              ? <div className="cell-sub" style={{ marginTop:4 }}>Cliente vinculado: {savedLead.razaoSocial || savedLead.building}</div>
+              : <div className="cell-sub" style={{ marginTop:4, color:'var(--vp-orange, #b45309)' }}>Sem CNPJ vinculado ainda — pode ser resolvido no Formulário.</div>}
           </div>
           <p style={{ fontSize:13, color:'var(--fg2)', margin:0 }}>
-            Deseja criar uma cotação China para este lead agora?
+            Deseja abrir o Formulário agora e alocar os equipamentos deste lead?
           </p>
         </div>
       </Modal>
@@ -159,109 +157,28 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
           {fld('Email', 'email', 'email', 'contato@email.com')}
         </div>
 
-        {/* ---- EQUIPAMENTO ---- */}
+        {/* ---- CLIENTE (CNPJ) ---- */}
         <div style={{ border:'1px solid var(--border)', padding:'12px 14px', display:'flex', flexDirection:'column', gap:10 }}>
-          <label className="up-eyebrow muted">Equipamento *</label>
-
-          {/* checkboxes + qty */}
-          {EQUIP_OPTS.map(({ key, label }) => (
-            <div key={key} style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <input type="checkbox" id={`eq-${key}`}
-                checked={equips[key].checked}
-                onChange={e => setEquipField(key, 'checked', e.target.checked)}
-                style={{ width:16, height:16, accentColor:'#f5c400', cursor:'pointer', flexShrink:0 }}/>
-              <label htmlFor={`eq-${key}`}
-                style={{ fontSize:13, fontWeight:500, cursor:'pointer', flex:1 }}>
-                {label}
-              </label>
-
-              {/* Elevador marcado: dois campos com labels */}
-              {key === 'elevador' && equips.elevador.checked && (
-                <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
-                  <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                    <span style={{ fontSize:9, fontWeight:800, letterSpacing:'.07em', textTransform:'uppercase', color:'var(--fg2)', whiteSpace:'nowrap' }}>Qtd. equip.</span>
-                    <input type="number" className="input" min="1" max="99"
-                      value={equips.elevador.qty}
-                      onChange={e => setEquipField('elevador', 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                      aria-label="Quantidade de Elevadores"
-                      style={{ width:68, textAlign:'center' }}/>
-                  </div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                    <span style={{ fontSize:9, fontWeight:800, letterSpacing:'.07em', textTransform:'uppercase', color:'var(--fg2)', whiteSpace:'nowrap' }}>Qtd. paradas</span>
-                    <input type="number" className="input" min="1" max="99"
-                      value={equips.elevador.paradas}
-                      onChange={e => setEquipField('elevador', 'paradas', Math.max(1, parseInt(e.target.value) || 1))}
-                      aria-label="Quantidade de paradas do elevador"
-                      style={{ width:82, textAlign:'center' }}/>
-                  </div>
-                </div>
-              )}
-
-              {/* Outros equipamentos marcados: campo simples */}
-              {key !== 'elevador' && equips[key].checked && (
-                <input type="number" className="input" min="1" max="99"
-                  value={equips[key].qty}
-                  onChange={e => setEquipField(key, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                  placeholder="Qtd"
-                  aria-label={`Quantidade de ${label}`}
-                  style={{ width:72, textAlign:'center' }}/>
-              )}
+          <label className="up-eyebrow muted">Cliente (CNPJ)</label>
+          <div className="row gap-2" style={{ alignItems:'flex-end' }}>
+            <div className="stack" style={{ gap:4, flex:1 }}>
+              <label className="up-eyebrow muted">CNPJ</label>
+              <input className="input" type="text" value={f.cnpj}
+                onChange={e => set('cnpj', e.target.value)} placeholder="00.000.000/0000-00"/>
             </div>
-          ))}
-
-          {/* tipo de empreendimento — aparece ao selecionar ao menos 1 */}
-          {hasEquip && (
-            <div className="stack" style={{ gap:4, marginTop:2 }}>
-              <label className="up-eyebrow muted">Tipo de empreendimento *</label>
-              <select className="input" value={tipoEquip} onChange={e => setTipoEquip(e.target.value)}>
-                <option value="">Selecione…</option>
-                {TIPO_EQUIP_OPTS.map(o => <option key={o}>{o}</option>)}
-              </select>
-            </div>
-          )}
-
-          {/* especificações do elevador — aparece quando elevador marcado */}
-          {hasElevador && (
-            <div style={{ background:'var(--vp-gray-50)', border:'1px solid var(--border)', padding:'10px 12px', marginTop:2 }}>
-              <div style={{ fontSize:11, fontWeight:800, letterSpacing:'.1em', textTransform:'uppercase', marginBottom:10 }}>
-                Especificações do Elevador
-              </div>
-              <div className="grid-2" style={{ gap:10 }}>
-                <div className="stack" style={{ gap:4 }}>
-                  <label className="up-eyebrow muted">Carga (kg) *</label>
-                  <input className="input" type="number"
-                    value={elevSpec.carga} onChange={e => setElev('carga', e.target.value)}
-                    placeholder="Ex: 450, 600, 1000"/>
-                </div>
-                <div className="stack" style={{ gap:4 }}>
-                  <label className="up-eyebrow muted">Vão de porta (cm) *</label>
-                  <input className="input" type="text"
-                    value={elevSpec.vao} onChange={e => setElev('vao', e.target.value)}
-                    placeholder="Ex: 90, 100, 110"/>
-                </div>
-                <div className="stack" style={{ gap:4 }}>
-                  <label className="up-eyebrow muted">Tipo de abertura *</label>
-                  <select className="input" value={elevSpec.abertura} onChange={e => setElev('abertura', e.target.value)}>
-                    {ABERTURA_OPTS.map(o => <option key={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div className="stack" style={{ gap:4 }}>
-                  <label className="up-eyebrow muted">Acabamento *</label>
-                  <div style={{ display:'flex', gap:20, alignItems:'center', height:32 }}>
-                    {['Bege','Inox'].map(op => (
-                      <label key={op} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:13 }}>
-                        <input type="radio" name="elev-acabamento" value={op}
-                          checked={elevSpec.acabamento === op}
-                          onChange={() => setElev('acabamento', op)}
-                          style={{ accentColor:'#f5c400' }}/>
-                        {op}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
-            </div>
-          )}
+            <Button variant="outline" onClick={buscarCnpj} disabled={buscandoCnpj}>
+              {buscandoCnpj ? 'Buscando…' : 'Buscar CNPJ'}
+            </Button>
+          </div>
+          <div className="stack" style={{ gap:4 }}>
+            <label className="up-eyebrow muted">Razão Social</label>
+            <input className="input" type="text" value={f.razaoSocial}
+              onChange={e => set('razaoSocial', e.target.value)} placeholder="Preenchido automaticamente pelo CNPJ"/>
+          </div>
+          <p style={{ fontSize:11.5, color:'var(--fg3)', margin:0 }}>
+            Sem CNPJ ainda? Pode deixar em branco e completar depois — direto no Formulário
+            (busca o mesmo jeito, e evita duplicar cliente).
+          </p>
         </div>
 
         <div className="grid-2" style={{ gap:12 }}>
@@ -440,15 +357,12 @@ function LeadsPage({ setRoute, setSubsel }) {
         <ModalNovoLead
           onClose={() => setShowLead(false)}
           onSaved={reloadLeads}
-          onCreateCotacao={(lead) => {
+          onOpenFormulario={(lead) => {
             setShowLead(false);
-            /* "Criar Cotação China →" apontava pro fluxo antigo (tabela
-               `cotacoes`, órfã — já substituída em todo o resto do app por
-               Cotação a Fornecedor, alimentada pelo Formulário do Elevador).
-               Mesmo padrão de handoff já usado em outros pontos (setSubsel +
-               setRoute) — Formulário aceita { __prefillFromLead } no subsel
-               e pré-preenche telefone/e-mail/observações + 1ª unidade com as
-               specs do elevador que o Lead já capturou. */
+            /* Formulário aceita { __prefillFromLead } no subsel e
+               pré-preenche telefone/e-mail/observações + cliente (quando o
+               Lead já tem cliente_id) — equipamento é sempre alocado lá
+               dentro, nunca herdado do Lead. */
             setSubsel({ __prefillFromLead: lead });
             setRoute('formulario-elevador');
           }}
@@ -470,6 +384,22 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
       ctaLabel="Ir para Listagem de Leads"
       onCta={() => setRoute("leads")}/>;
   }
+  /* Cliente vinculado (CNPJ) — busca real via lead.cliente_id. Sem vínculo
+     ainda → null, e a tela oferece "Abrir Formulário" pra completar lá
+     (mesma busca por CNPJ, sem duplicar cliente). */
+  const [cliente, setCliente] = React.useState(undefined); // undefined = carregando, null = sem vínculo
+  React.useEffect(() => {
+    let alive = true;
+    if (!lead.cliente_id) { setCliente(null); return; }
+    window.CadastrosClientesStore?.obter(lead.cliente_id).then((c) => { if (alive) setCliente(c || null); });
+    return () => { alive = false; };
+  }, [lead.cliente_id]);
+
+  const abrirFormulario = () => {
+    setSubsel({ __prefillFromLead: lead });
+    setRoute('formulario-elevador');
+  };
+
   /* Histórico real por lead: criação (intrínseca) + eventos do VPLog que
      têm alvo_id = lead.id. Sem dados → estado vazio honesto (não mais mock). */
   const [history, setHistory] = React.useState(null); // null = carregando
@@ -531,7 +461,10 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>{lead.id} · {lead.origin}</div>
           <h1 className="page-head__title">{lead.building}</h1>
-          <p className="page-head__sub">{lead.equip}</p>
+          <p className="page-head__sub">
+            {cliente ? `${cliente.razao_social}${cliente.cnpj ? ' · ' + (window.cadFmtDoc ? window.cadFmtDoc(cliente.cnpj) : cliente.cnpj) : ''}`
+              : lead.equip || 'Sem cliente (CNPJ) vinculado ainda'}
+          </p>
           <div className="row gap-3" style={{ marginTop: 4 }}>
             <StatusBadge status={lead.status}/>
             <Badge variant={String(lead.priority).toLowerCase() === "alta" ? "danger" : "warning"} dot>
@@ -543,6 +476,7 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
         <div className="page-head__r">
           <Button variant="outline" icon="message" onClick={() => { const p = (lead.phone || '').replace(/\D/g,''); p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
           <Button variant="outline" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
+          <Button variant="outline" icon="ruler" onClick={abrirFormulario}>Abrir Formulário</Button>
           <Button variant="primary" icon="zap" onClick={criarDossier} disabled={creatingDossier}>
             {creatingDossier ? 'Criando…' : 'Qualificar → Dossier'}
           </Button>
@@ -551,23 +485,25 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
 
       <div className="split">
         <div className="stack">
-          <Card title="Resumo da oportunidade" sub="dados do prédio + escopo">
-            <div className="grid-3" style={{ gap: 24 }}>
-              <KvBlock label="Valor estimado" value={fmtBRL(lead.value)} mono/>
-              <KvBlock label="Marca do equipamento" value="Atlas Schindler 9300AE"/>
-              <KvBlock label="Quantidade" value="4 elevadores + 2 esc."/>
-              <KvBlock label="Ano construção prédio" value="1998"/>
-              <KvBlock label="Tipo serviço" value="Modernização total"/>
-              <KvBlock label="Prazo desejado" value="Q3 2026"/>
-            </div>
-            <div className="hr"/>
-            <div className="up-eyebrow muted">Descrição enviada pelo cliente</div>
-            <p className="vp-small" style={{ marginTop: 8 }}>
-              "Estamos buscando proposta para modernização completa dos 4 elevadores Schindler 9300AE
-              (incluindo botoeiras, displays, quadro de comando e cabos de tração). Prioridade alta —
-              os elevadores apresentam falhas frequentes e estamos com reclamações dos moradores.
-              Por favor, agendar visita técnica o quanto antes."
-            </p>
+          <Card title="Cliente" sub="identificação — equipamento é alocado no Formulário">
+            {cliente === undefined ? (
+              <div className="muted small" style={{ padding: "8px 0" }}>Carregando…</div>
+            ) : cliente ? (
+              <div className="grid-3" style={{ gap: 24 }}>
+                <KvBlock label="Razão social" value={cliente.razao_social}/>
+                <KvBlock label="CNPJ" value={window.cadFmtDoc ? window.cadFmtDoc(cliente.cnpj) : cliente.cnpj} mono/>
+                <KvBlock label="Valor estimado" value={fmtBRL(lead.value)} mono/>
+              </div>
+            ) : (
+              <div className="stack" style={{ gap: 10 }}>
+                <p className="vp-small muted" style={{ margin: 0 }}>
+                  Este lead ainda não tem CNPJ/cliente vinculado.
+                </p>
+                <Button variant="outline" size="sm" icon="ruler" onClick={abrirFormulario} style={{ alignSelf: 'flex-start' }}>
+                  Abrir Formulário e vincular cliente
+                </Button>
+              </div>
+            )}
           </Card>
 
           <Card title="Histórico de Atividades" sub={history == null ? "carregando…" : history.length + (history.length === 1 ? " evento" : " eventos")}>
@@ -592,12 +528,11 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
             )}
           </Card>
 
-          <Card title="Próximos passos sugeridos" sub="orquestração automática">
+          <Card title="Próximo passo" sub="fluxo Lead → Formulário → Cotação">
             <div className="stack" style={{ gap: 10 }}>
-              <SuggestedStep icon="globe" label="Aguardar retorno cotação China" sub="CT-2026-118 · prazo 17/mai" status="current"/>
-              <SuggestedStep icon="ruler" label="Visita técnica e laudo preliminar" sub="agendado 15/mai · Engenharia" status="next"/>
-              <SuggestedStep icon="calculator" label="Calcular precificação final" sub="após laudo + cotação" status="future"/>
-              <SuggestedStep icon="proposal" label="Enviar proposta + minuta jurídica" sub="estimativa 22/mai" status="future"/>
+              <SuggestedStep icon="ruler" label="Abrir Formulário e alocar equipamento(s)"
+                sub={cliente ? 'Cliente já vinculado — abre pronto' : 'Ainda sem CNPJ — resolve lá dentro'}
+                status="current"/>
             </div>
           </Card>
         </div>
@@ -620,19 +555,9 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
           </Card>
 
           <Card title="Atribuição">
-            <KvBlock label="Vendedor" value={lead.owner}/>
-            <KvBlock label="Equipe" value="Comercial Capital"/>
+            <KvBlock label="Vendedor" value={lead.owner || '—'}/>
             <KvBlock label="Origem" value={lead.origin}/>
-            <KvBlock label="Comissão prevista" value={fmtBRL(lead.value * 0.04, { decimals: 0 }) + " (4%)"} mono/>
-          </Card>
-
-          <Card title="Etiquetas">
-            <div className="row wrap gap-2">
-              <Badge variant="outline">Modernização</Badge>
-              <Badge variant="outline">Schindler</Badge>
-              <Badge variant="yellow">+R$ 400k</Badge>
-              <Badge variant="info">Capital SP</Badge>
-            </div>
+            {lead.value ? <KvBlock label="Comissão prevista" value={fmtBRL(lead.value * 0.04, { decimals: 0 }) + " (4%)"} mono/> : null}
           </Card>
         </div>
       </div>

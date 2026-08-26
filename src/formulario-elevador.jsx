@@ -1070,10 +1070,13 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
     }).catch((e) => { window.toast?.('Erro ao carregar formulário: ' + e.message, 'error'); setLoading(false); });
   }, [formularioId]);
 
-  /* Handoff vindo do Lead ("Criar Cotação China →", comercial.jsx) — só
-     preenche telefone/e-mail/observações e a 1ª unidade (quando o Lead
-     tinha Elevador marcado); nome/razão social continua exigindo o
-     cliente-picker normal, não dá pra inventar isso a partir do prédio.
+  /* Handoff vindo do Lead ("Abrir Formulário", comercial.jsx) — preenche
+     telefone/e-mail/observações e, quando o Lead já tem cliente_id
+     (CNPJ resolvido no cadastro do Lead), seleciona o cliente direto no
+     picker — sem precisar redigitar CNPJ. Equipamento NÃO vem do Lead:
+     é sempre alocado aqui dentro, podendo ter quantos itens/tipos o
+     vendedor precisar (é o motivo do Lead ter parado de coletar
+     equipamento — revisão do fluxo Lead→Formulário).
      Editável, não trava nada — mesmo espírito do autopreenchimento por
      CEP/CNPJ já existente aqui. */
   React.useEffect(() => {
@@ -1088,17 +1091,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         lead.contact ? `Contato: ${lead.contact}${lead.role ? ' — ' + lead.role : ''}.` : null,
       ].filter(Boolean).join(' '),
     }));
-    if (lead.elevSpec) {
-      setUnidades([{
-        ...feNovaUnidade('E1'),
-        quantidade: lead.elevSpec.qty || 1,
-        paradas: lead.elevSpec.paradas != null ? String(lead.elevSpec.paradas) : '',
-        capacidade_kg: lead.elevSpec.carga || '',
-        porta_largura_mm: lead.elevSpec.vao || '',
-        porta_tipo_abertura: lead.elevSpec.abertura || '',
-        acabamento_porta_cabina: lead.elevSpec.acabamento || '',
-      }]);
-    }
+    if (lead.cliente_id) setClienteId(lead.cliente_id);
   }, [formularioId, prefillFromLead]);
 
   const setH = (k) => (v) => setHeader((h) => ({ ...h, [k]: v }));
