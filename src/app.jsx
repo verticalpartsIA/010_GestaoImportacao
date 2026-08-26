@@ -328,8 +328,7 @@ function App() {
       case "contrato-instalador": return <ContratoInstaladorPage/>;
       case "vistorias": return <VistoriasObras obraId={subsel} setRoute={setRoute}/>;
       case "instalacao": return <InstalacaoPage/>;
-      case "central-documentos": return <EmConstrucaoPage titulo="Central de Documentos"
-        descricao="Em construção — vai consolidar Dados Coletados na Obra (vistoria), ART e Documentação do Montador (empresa + colaboradores) num só lugar, com Historograma do fluxo de envio."/>;
+      case "central-documentos": return <window.CentralDocumentosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "art": return <ArtPage setRoute={setRoute}/>;
       case "cronograma": return <CronogramaPage/>;
       case "databook": return <DataBookPage setRoute={setRoute}/>;
