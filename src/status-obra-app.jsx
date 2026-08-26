@@ -111,7 +111,7 @@
 
   function StatusObraApp() {
     const [estado, setEstado] = React.useState(null); // null=carregando, 'not-found', {dossier, itens}
-    const [sessaoAdmin, setSessaoAdmin] = React.useState([]);
+    const [sessaoAdmin, setSessaoAdmin] = React.useState(null); // null=carregando
     const [anotacoes, setAnotacoes] = React.useState({});
     const modo = modoDoPath();
 
@@ -201,8 +201,16 @@
                 </div>
                 <div style={{ flex: 1 }}>
                   <div style={{ fontSize: 13.5, fontWeight: 700 }}>{item.etapa}</div>
+                  {item.servicos && item.servicos.length > 0 && (
+                    <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12, color: '#555', lineHeight: 1.5 }}>
+                      {item.servicos.map((s, i) => <li key={i}>{s}</li>)}
+                    </ul>
+                  )}
+                  {item.resultado_esperado && (
+                    <div style={{ fontSize: 12, color: '#0a7a3d', marginTop: 4 }}>✓ {item.resultado_esperado}</div>
+                  )}
                   {item.status === 'concluido' && (
-                    <div style={{ fontSize: 11.5, color: '#888', marginTop: 3 }}>Concluído em {fmtData(item.concluido_em)}</div>
+                    <div style={{ fontSize: 11.5, color: '#888', marginTop: 6 }}>Concluído em {fmtData(item.concluido_em)}</div>
                   )}
                 </div>
               </div>
@@ -210,7 +218,10 @@
           </div>
         ))}
 
-        {sessaoAdmin.length > 0 && (
+        {sessaoAdmin === null && (
+          <div style={{ marginTop: 28, fontSize: 12, color: '#999' }}>Carregando Sessão Administrativa…</div>
+        )}
+        {sessaoAdmin !== null && sessaoAdmin.length > 0 && (
           <SessaoAdministrativa dossier={dossier} itens={sessaoAdmin} modo={modo} anotacoes={anotacoes} onSalvarAnotacao={salvarAnotacaoItem} />
         )}
 
