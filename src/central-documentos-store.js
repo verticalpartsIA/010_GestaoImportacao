@@ -51,10 +51,18 @@
       const key = r.client_name || '(sem cliente)';
       if (!map[key]) map[key] = { client_name: key, dossierIds: [], equipamentos: [], parceiroInstaladorIds: [], status_master: r.status_master };
       map[key].dossierIds.push(r.id);
-      map[key].equipamentos.push({ id: r.id, building_name: r.building_name, numero_cotacao: r.numero_cotacao });
+      map[key].equipamentos.push({ id: r.id, building_name: r.building_name, numero_cotacao: r.numero_cotacao, status_master: r.status_master });
       if (r.parceiro_instalador_id && !map[key].parceiroInstaladorIds.includes(r.parceiro_instalador_id)) {
         map[key].parceiroInstaladorIds.push(r.parceiro_instalador_id);
       }
+    });
+    /* "Montando agora" / "concluída" pra rotular a Documentação do Montador —
+       qualquer equipamento em instalação já conta como "montando agora";
+       só é "concluída" se TODOS os equipamentos já passaram dessa fase. */
+    const CONCLUIDOS = new Set(['Entregue', 'Manutenção preventiva']);
+    Object.values(map).forEach((o) => {
+      o.instalandoAgora = o.equipamentos.some((e) => e.status_master === 'Instalação');
+      o.concluida = o.equipamentos.length > 0 && o.equipamentos.every((e) => CONCLUIDOS.has(e.status_master));
     });
     return Object.values(map);
   }

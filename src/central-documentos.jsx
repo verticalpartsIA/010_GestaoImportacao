@@ -148,7 +148,11 @@
                 ))}
               </Secao>
 
-              <Secao titulo="Documentação do Montador" subtitulo="Empresa instaladora vinculada e documentos de cada colaborador">
+              <Secao titulo="Documentação do Montador" subtitulo={<>
+                Empresa instaladora vinculada e documentos de cada colaborador
+                {obraSelecionada?.instalandoAgora && <span style={{ marginLeft: 8, color: '#cc7700', fontWeight: 700 }}>· 🔧 Montando agora</span>}
+                {!obraSelecionada?.instalandoAgora && obraSelecionada?.concluida && <span style={{ marginLeft: 8, color: '#00aa00', fontWeight: 700 }}>· ✅ Instalação concluída</span>}
+              </>}>
                 {checklist.montador.length === 0 && (
                   <div style={{ fontSize: 12, color: '#999', marginBottom: 8 }}>
                     Nenhum instalador vinculado a esta obra ainda.{' '}

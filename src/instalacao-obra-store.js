@@ -171,6 +171,13 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('dossier_obra').update({ parceiro_instalador_id: parceiroId || null, updated_at: new Date().toISOString() }).eq('id', dossierId);
     if (error) throw error;
+    /* Preenche como padrão os equipamentos que ainda não têm instalador
+       próprio — nunca sobrescreve um equipamento que já tem um valor
+       explícito (obra pode legitimamente ter mais de um instalador). */
+    if (parceiroId) {
+      await c.from('equipamentos_obra').update({ parceiro_instalador_id: parceiroId })
+        .eq('dossier_id', dossierId).is('parceiro_instalador_id', null);
+    }
     if (parceiroId) {
       const { data: dossier } = await c.from('dossier_obra').select('numero_cotacao, building_name, client_name').eq('id', dossierId).maybeSingle();
       if (window.DecisoesStore) {

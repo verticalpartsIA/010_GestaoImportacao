@@ -273,6 +273,24 @@
     return { status: 'ok', detalhe: `${colaboradores.length} colaborador(es), documentação em dia` };
   }
 
+  /* Obras vinculadas a este instalador — une os dois vínculos que existem
+     hoje (dossier_obra.parceiro_instalador_id, a nível de obra inteira, e
+     equipamentos_obra.parceiro_instalador_id, por equipamento individual),
+     dedupe por obra. Usado pela aba "Obras" em Cadastros → Empresas
+     Instaladoras (Empresa → quais obras montou/está montando). */
+  async function listarObrasPorInstalador(empresaId) {
+    const c = sb();
+    if (!c || !empresaId) return [];
+    const [{ data: diretas }, { data: viaEquip }] = await Promise.all([
+      c.from('dossier_obra').select('id, client_name, building_name, status_master').eq('parceiro_instalador_id', empresaId),
+      c.from('equipamentos_obra').select('dossier_obra(id, client_name, building_name, status_master)').eq('parceiro_instalador_id', empresaId),
+    ]);
+    const map = {};
+    (diretas || []).forEach((o) => { map[o.id] = o; });
+    (viaEquip || []).forEach((e) => { const o = e.dossier_obra; if (o && !map[o.id]) map[o.id] = o; });
+    return Object.values(map);
+  }
+
   function uploadDocumentoColaboradorArquivo(colaboradorId, documentoId, file) {
     const c = sb();
     if (!c) throw new Error('Supabase indisponível');
@@ -306,6 +324,7 @@
     salvarDocumentoColaborador,
     resumoDocumentosPorEmpresa,
     statusGeralPorColaboradores,
+    listarObrasPorInstalador,
     uploadDocumentoColaboradorArquivo,
   };
 })();

@@ -157,11 +157,16 @@ function CIHomologacaoAviso({ cnpj }) {
     let vivo = true;
     if (!window.CI.isCNPJValid(cnpj) || !window.RHHomologacao) { setMatch(null); return; }
     const digits = window.CI.onlyDigits(cnpj);
-    window.RHHomologacao.listarMontadores().then((lista) => {
+    window.RHHomologacao.listarMontadores().then(async (lista) => {
       if (!vivo) return;
       const m = (lista || []).find((p) => window.CI.onlyDigits(p.cnpj || '') === digits);
       if (!m) { setMatch({ found: false }); return; }
-      setMatch({ found: true, nome: m.nome, status: window.RHHomologacao.statusGeral(m) });
+      // statusGeralPorColaboradores lê parceiros_documentos_colaborador (schema
+      // pós-migração 25/08) — statusGeral() antigo lia certificacoes (jsonb
+      // obsoleto, ninguém mais grava nele desde a migração).
+      const { status } = await window.RHHomologacao.statusGeralPorColaboradores(m.id);
+      if (!vivo) return;
+      setMatch({ found: true, nome: m.nome, status });
     }).catch(() => { if (vivo) setMatch(null); });
     return () => { vivo = false; };
   }, [cnpj]);

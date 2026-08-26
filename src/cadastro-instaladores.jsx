@@ -6,10 +6,15 @@
    isso é RH Operacional → Homologação de Instaladores.
    ============================================================ */
 
-function CadastroInstaladoresPage() {
+/* status_master de dossier_obra (STATUS_FLOW em dossier-store.js) — usado
+   só pra classificar cada obra vinculada nos 3 baldes da aba Obras. */
+const CI_OBRA_CONCLUIDA = new Set(['Entregue', 'Manutenção preventiva']);
+
+function CadastroInstaladoresPage({ setRoute, setSubsel }) {
   const [empresas, setEmpresas] = React.useState(null);
   const [selected, setSelected] = React.useState(null);
   const [colaboradores, setColaboradores] = React.useState([]);
+  const [obras, setObras] = React.useState(null);
   const [showEmpresaModal, setShowEmpresaModal] = React.useState(false);
   const [editingEmpresa, setEditingEmpresa] = React.useState(null);
   const [showColaboradorModal, setShowColaboradorModal] = React.useState(false);
@@ -26,9 +31,20 @@ function CadastroInstaladoresPage() {
     setColaboradores(list);
   }, []);
 
+  const reloadObras = React.useCallback(async (empresaId) => {
+    setObras(null);
+    const list = await window.RHHomologacao.listarObrasPorInstalador(empresaId);
+    setObras(list);
+  }, []);
+
   const selectEmpresa = async (emp) => {
     setSelected(emp);
-    await reloadColaboradores(emp.id);
+    await Promise.all([reloadColaboradores(emp.id), reloadObras(emp.id)]);
+  };
+
+  const abrirObra = (obraId) => {
+    setSubsel && setSubsel(obraId);
+    setRoute && setRoute('dossier-obra');
   };
 
   if (empresas === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
@@ -54,7 +70,7 @@ function CadastroInstaladoresPage() {
       <input className="input" style={{ marginBottom: 14 }} placeholder="Buscar por nome ou CNPJ…" value={search} onChange={(e) => setSearch(e.target.value)} />
       <div className="small muted" style={{ marginBottom: 10 }}>{filtered.length} empresa(s) encontrada(s)</div>
 
-      <div className="grid-2" style={{ gap: 20 }}>
+      <div className="grid-3" style={{ gap: 20 }}>
         <Card title="Empresas Instaladoras" sub={`${empresas.length} registros`}>
           <div className="stack" style={{ gap: 12 }}>
             {filtered.length === 0 && (
@@ -109,6 +125,16 @@ function CadastroInstaladoresPage() {
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', color: 'var(--fg3)', fontSize: 13, padding: '60px 20px', textAlign: 'center' }}>
             Selecione uma empresa à esquerda pra ver/gerenciar os colaboradores.
+          </div>
+        )}
+
+        {selected ? (
+          <Card title="Obras" sub={obras ? `${obras.length} vinculada(s)` : 'Carregando…'}>
+            <CIObrasList obras={obras} onAbrir={abrirObra} />
+          </Card>
+        ) : (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', color: 'var(--fg3)', fontSize: 13, padding: '60px 20px', textAlign: 'center' }}>
+            Selecione uma empresa pra ver em quais obras ela está montando ou já montou.
           </div>
         )}
       </div>
@@ -205,6 +231,55 @@ function ModalColaborador({ empresaId, initialData, isEdit, onClose, onSaved }) 
         </div>
       </div>
     </Modal>
+  );
+}
+
+function CIObraRow({ obra, onAbrir }) {
+  return (
+    <div className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 10, cursor: 'pointer' }}
+      onClick={() => onAbrir(obra.id)}>
+      <div>
+        <div className="cell-main" style={{ fontSize: 13 }}>{obra.client_name || '—'}</div>
+        <div className="cell-sub">{obra.building_name}</div>
+      </div>
+      <Icon.chevRight size={14} />
+    </div>
+  );
+}
+
+/* Atual (instalando agora) / Concluídas (histórico) / Outras (vinculado mas
+   ainda não chegou na fase de instalação) — os dois vínculos possíveis
+   (obra inteira ou por equipamento) já vêm unidos por
+   listarObrasPorInstalador. */
+function CIObrasList({ obras, onAbrir }) {
+  if (obras === null) return <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
+  if (obras.length === 0) return <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma obra vinculada a esta empresa ainda.</div>;
+
+  const atuais = obras.filter((o) => o.status_master === 'Instalação');
+  const concluidas = obras.filter((o) => CI_OBRA_CONCLUIDA.has(o.status_master));
+  const outras = obras.filter((o) => o.status_master !== 'Instalação' && !CI_OBRA_CONCLUIDA.has(o.status_master));
+
+  return (
+    <div className="stack" style={{ gap: 16 }}>
+      {atuais.length > 0 && (
+        <div>
+          <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Instalando agora ({atuais.length})</div>
+          <div className="stack" style={{ gap: 8 }}>{atuais.map((o) => <CIObraRow key={o.id} obra={o} onAbrir={onAbrir} />)}</div>
+        </div>
+      )}
+      {concluidas.length > 0 && (
+        <div>
+          <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Concluídas ({concluidas.length})</div>
+          <div className="stack" style={{ gap: 8 }}>{concluidas.map((o) => <CIObraRow key={o.id} obra={o} onAbrir={onAbrir} />)}</div>
+        </div>
+      )}
+      {outras.length > 0 && (
+        <div>
+          <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Vinculada, instalação ainda não iniciada ({outras.length})</div>
+          <div className="stack" style={{ gap: 8 }}>{outras.map((o) => <CIObraRow key={o.id} obra={o} onAbrir={onAbrir} />)}</div>
+        </div>
+      )}
+    </div>
   );
 }
 

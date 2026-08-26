@@ -812,7 +812,14 @@ function TabEquipamentos({ dossier }) {
 
   const adicionar = async () => {
     try {
-      await window.__DOSSIER.criarEquipamento(dossier.id, { tipo: dossier.equip_type || '' });
+      /* Herda o instalador vinculado à obra (Visão Geral) como padrão do
+         equipamento novo — evita a divergência silenciosa entre os dois
+         vínculos independentes. Continua 100% editável no card logo
+         abaixo, pra obras que legitimamente têm mais de um instalador. */
+      await window.__DOSSIER.criarEquipamento(dossier.id, {
+        tipo: dossier.equip_type || '',
+        parceiro_instalador_id: dossier.parceiro_instalador_id || null,
+      });
       carregar();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
   };

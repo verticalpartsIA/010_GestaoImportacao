@@ -351,7 +351,7 @@ function App() {
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
-      case "cadastro-instaladores": return <window.CadastroInstaladoresPage/>;
+      case "cadastro-instaladores": return <window.CadastroInstaladoresPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
       case "decisoes": return <window.DecisoesPage/>;
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
