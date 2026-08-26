@@ -236,6 +236,43 @@
     return map;
   }
 
+  /* Homologação real da empresa via parceiros_documentos_colaborador (schema
+     pós-migração 25/08) — NÃO usa parceiros_instaladores.certificacoes (jsonb
+     de 5 certs fixas), que ficou obsoleto: a tela RH Homologação não grava
+     mais nele desde a migração, então um gate que lesse esse campo nunca
+     seria satisfeito por documentos anexados hoje. Usado pelo gate "obra
+     pronta pra instalação" (instalacao-obra-store.js).
+     Status: 'vazio' (sem colaborador cadastrado), 'expirado' (algum
+     documento VENCIDO), 'incompleto' (falta algum documento obrigatório em
+     algum colaborador), 'ok' (documentação completa e em dia). */
+  async function statusGeralPorColaboradores(empresaId) {
+    const c = sb();
+    if (!c || !empresaId) return { status: 'vazio', detalhe: 'Supabase indisponível' };
+
+    const { data: colaboradores } = await c.from('parceiros_colaboradores')
+      .select('id, nome_completo').eq('empresa_id', empresaId);
+    if (!colaboradores || colaboradores.length === 0) {
+      return { status: 'vazio', detalhe: 'Nenhum colaborador cadastrado' };
+    }
+
+    const catalogo = await listarDocCatalogo();
+    const catalogoObrig = catalogo.filter((t) => t.escopo === 'colaborador' && t.obrigatorio);
+
+    let vencidos = 0;
+    let faltando = 0;
+    for (const col of colaboradores) {
+      const { data: docs } = await c.from('parceiros_documentos_colaborador')
+        .select('documento_id, status').eq('colaborador_id', col.id);
+      const tiposPresentes = new Set((docs || []).map((d) => d.documento_id));
+      vencidos += (docs || []).filter((d) => d.status === 'VENCIDO').length;
+      faltando += catalogoObrig.filter((t) => !tiposPresentes.has(t.id)).length;
+    }
+
+    if (vencidos > 0) return { status: 'expirado', detalhe: `${vencidos} documento(s) vencido(s)` };
+    if (faltando > 0) return { status: 'incompleto', detalhe: `${faltando} documento(s) obrigatório(s) faltando` };
+    return { status: 'ok', detalhe: `${colaboradores.length} colaborador(es), documentação em dia` };
+  }
+
   function uploadDocumentoColaboradorArquivo(colaboradorId, documentoId, file) {
     const c = sb();
     if (!c) throw new Error('Supabase indisponível');
@@ -268,6 +305,7 @@
     listarDocumentosColaborador,
     salvarDocumentoColaborador,
     resumoDocumentosPorEmpresa,
+    statusGeralPorColaboradores,
     uploadDocumentoColaboradorArquivo,
   };
 })();

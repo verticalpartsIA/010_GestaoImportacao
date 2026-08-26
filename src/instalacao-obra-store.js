@@ -237,17 +237,20 @@
     const concluidasCount = progressoVistoria.fases.filter((f) => f.concluida).length;
     itens.push({ chave: 'vistoria', ok: progressoVistoria.liberada, label: 'Obra vistoriada e liberada', detalhe: progressoVistoria.liberada ? '3 de 3 fases concluídas' : `${concluidasCount} de 3 fases concluídas` });
 
-    // 6. Parceiro instalador homologado (certificações válidas em geral)
+    // 6. Parceiro instalador homologado — lê parceiros_documentos_colaborador
+    // (schema pós-migração 25/08), não mais parceiros_instaladores.certificacoes
+    // (jsonb de 5 certs fixas, obsoleto: a tela RH Homologação não grava mais
+    // nele, então esse gate nunca refletia documento anexado de verdade).
     let certOk = false, certDetalhe = 'Nenhum parceiro vinculado';
     if (dossier.parceiro_instalador_id && window.RHHomologacao) {
-      const { data: parceiro } = await c.from('parceiros_instaladores').select('*').eq('id', dossier.parceiro_instalador_id).maybeSingle();
+      const { data: parceiro } = await c.from('parceiros_instaladores').select('id, nome').eq('id', dossier.parceiro_instalador_id).maybeSingle();
       if (parceiro) {
-        const status = window.RHHomologacao.statusGeral(parceiro);
+        const { status, detalhe } = await window.RHHomologacao.statusGeralPorColaboradores(parceiro.id);
         certOk = status === 'ok';
-        certDetalhe = `${parceiro.nome} — ${status}`;
+        certDetalhe = `${parceiro.nome} — ${detalhe}`;
       }
     }
-    itens.push({ chave: 'parceiro', ok: certOk, label: 'Parceiro instalador homologado (NRs/ASO/PCMSO/PGR válidos)', detalhe: certDetalhe });
+    itens.push({ chave: 'parceiro', ok: certOk, label: 'Parceiro instalador homologado (documentação dos colaboradores em dia)', detalhe: certDetalhe });
 
     // 7. RH liberou ESTE montador pra ESTA obra (issue #9 Fase 2) — distinto
     // da homologação geral: a certificação pode estar válida e ainda assim
