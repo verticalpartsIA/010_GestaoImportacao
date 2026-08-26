@@ -32,21 +32,30 @@ async function vpcCall(body) {
 /* ---------- Leitura da página (DOM → campos) ---------- */
 function vpcClean(s) { return (s || '').replace(/\s+/g, ' ').replace(/\*\s*$/, '').trim(); }
 
-function vpcLabelFor(el) {
+/* Texto cru do <label> associado (sem limpar o "*"), usado tanto pro
+   rótulo exibido (vpcLabelFor, que limpa) quanto pra detectar obrigatório
+   por convenção de UI (vpcRequired, que olha o "*" antes de limpar). */
+function vpcRawLabelText(el) {
   if (el.id) {
     try {
       const sel = 'label[for="' + (window.CSS && CSS.escape ? CSS.escape(el.id) : el.id) + '"]';
       const l = document.querySelector(sel);
-      if (l) return vpcClean(l.textContent);
+      if (l) return l.textContent || '';
     } catch (e) {}
   }
-  const aria = el.getAttribute('aria-label');
-  if (aria) return vpcClean(aria);
   let p = el.parentElement;
   for (let d = 0; d < 4 && p; d++, p = p.parentElement) {
     const lab = p.querySelector('label');
-    if (lab) return vpcClean(lab.textContent);
+    if (lab) return lab.textContent || '';
   }
+  return '';
+}
+
+function vpcLabelFor(el) {
+  const raw = vpcRawLabelText(el);
+  if (raw) return vpcClean(raw);
+  const aria = el.getAttribute('aria-label');
+  if (aria) return vpcClean(aria);
   return vpcClean(el.getAttribute('placeholder') || el.name || '');
 }
 
@@ -54,6 +63,9 @@ function vpcRequired(el) {
   if (el.required) return true;
   const f = el.closest('.cv-field, .ci-field, .pe-field, .ft-field, .field');
   if (f && f.querySelector('.cv-req, .ci-req, .pe-req, .req, .required')) return true;
+  // Convenção visual mais comum no app: rótulo termina com "*"
+  // (ex.: "Cidade da obra *"), sem atributo/classe formal de obrigatório.
+  if (/\*\s*$/.test(vpcRawLabelText(el).trim())) return true;
   return false;
 }
 
@@ -148,9 +160,58 @@ function VpCopiloto({ route, role }) {
   const elsRef = _vpUR([]);
   const fieldsRef = _vpUR([]);
   const bodyRef = _vpUR(null);
+  // Campos sublinhados por "Revisar erros" (issues com idx) — limpos a
+  // cada nova análise/troca de tela, e individualmente quando o usuário
+  // preenche o campo (o sublinhado deixa de fazer sentido).
+  const highlightedRef = _vpUR([]); // [{ el, handler }]
+
+  const vpcClearHighlights = () => {
+    for (const h of highlightedRef.current) {
+      try {
+        h.el.classList.remove('vpc-underline', 'vpc-underline--required', 'vpc-underline--optional');
+        h.el.removeEventListener('input', h.handler);
+      } catch (e) {}
+    }
+    highlightedRef.current = [];
+  };
+
+  const vpcHighlightIssues = (issues, els, fields) => {
+    vpcClearHighlights();
+    const next = [];
+    for (const it of issues) {
+      const idxs = Array.isArray(it.idxs) ? it.idxs : [];
+      for (const idx of idxs) {
+        if (typeof idx !== 'number') continue;
+        const el = els[idx];
+        if (!el || next.some(h => h.el === el)) continue;
+        const required = !!(fields[idx] && fields[idx].required);
+        const cls = required ? 'vpc-underline--required' : 'vpc-underline--optional';
+        el.classList.add('vpc-underline', cls);
+        const handler = () => {
+          el.classList.remove('vpc-underline', 'vpc-underline--required', 'vpc-underline--optional');
+          el.removeEventListener('input', handler);
+        };
+        el.addEventListener('input', handler);
+        next.push({ el, handler });
+      }
+    }
+    highlightedRef.current = next;
+  };
+
+  const vpcJumpTo = (idx) => {
+    const el = elsRef.current[idx];
+    if (!el) return;
+    try {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el.classList.add('vpc-flash');
+      setTimeout(() => el.classList.remove('vpc-flash'), 1600);
+    } catch (e) {}
+  };
 
   _vpUE(() => { try { localStorage.setItem(VPC_LS_OPEN, open ? '1' : '0'); } catch (e) {} }, [open]);
   _vpUE(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight; }, [msgs, loading, open]);
+  // Troca de tela → os elementos sublinhados não existem mais no DOM novo.
+  _vpUE(() => { vpcClearHighlights(); }, [route]);
 
   const send = async (mode, text) => {
     const userText = (text != null ? text : input).trim();
@@ -190,6 +251,7 @@ function VpCopiloto({ route, role }) {
         filled: 0,
       }]);
       setPendingMode(resp.questions && resp.questions.length ? 'fill' : null);
+      if (mode === 'analyze') vpcHighlightIssues(resp.issues || [], els, fields);
     } catch (e) {
       setMsgs(m => [...m, { role: 'assistant', content: '⚠️ Não consegui responder agora: ' + e.message }]);
     } finally {
@@ -242,7 +304,9 @@ function VpCopiloto({ route, role }) {
 
             {m.issues && m.issues.length > 0 && (
               <div className="vpc-issues">
-                {m.issues.map((it, j) => (
+                {m.issues.map((it, j) => {
+                  const idxs = (Array.isArray(it.idxs) ? it.idxs : []).filter(idx => typeof idx === 'number' && !!elsRef.current[idx]);
+                  return (
                   <div key={j} className={'vpc-issue vpc-issue--' + (it.severity || 'media')}>
                     <div className="vpc-issue-head">
                       <span className="vpc-sev">{it.severity || 'media'}</span>
@@ -250,8 +314,19 @@ function VpCopiloto({ route, role }) {
                     </div>
                     <div className="vpc-issue-prob">{it.problem}</div>
                     {it.suggestion && <div className="vpc-issue-sug">💡 {it.suggestion}</div>}
+                    {idxs.length > 0 && (
+                      <div className="vpc-issue-jumps">
+                        {idxs.map(idx => (
+                          <button key={idx} type="button" className="vpc-jump" onClick={() => vpcJumpTo(idx)}
+                            title="Clique para ir até o campo na tela">
+                            ↳ {(fieldsRef.current[idx] && fieldsRef.current[idx].label) || ('Campo ' + idx)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

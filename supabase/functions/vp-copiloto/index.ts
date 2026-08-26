@@ -10,7 +10,12 @@
 //
 // Contrato de resposta (JSON):
 //   { reply, fills?:[{idx,label,value}], questions?:[{id,text}],
-//     issues?:[{severity,where,problem,suggestion}] }
+//     issues?:[{severity,where,problem,suggestion,idxs}] }
+//   issues[].idxs: idx(s) de page.fields que esse achado se refere (mesmos
+//   idx usados em fills) — [] quando o achado é sobre o documento/texto em
+//   geral, sem campo específico. Um achado pode juntar vários campos (ex.:
+//   [5,6]). O frontend usa isso pra sublinhar cada campo na tela
+//   (vp-copiloto.jsx).
 // ============================================================
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -62,7 +67,14 @@ Comporte-se conforme "mode":
     valores suspeitos (datas, CNPJ, moeda), cláusulas problemáticas ou ambíguas, riscos.
   - Para cada achado gere um item em "issues" com:
     severity ("alta"|"media"|"baixa"), where (onde está), problem (o que está errado),
-    suggestion (sugestão concreta de melhoria — pode propor um texto melhor).
+    suggestion (sugestão concreta de melhoria — pode propor um texto melhor),
+    idxs (lista dos "idx" de page.fields a que o achado se refere — os MESMOS
+    números usados em "fills" — quando o achado for sobre um ou mais campos
+    específicos vazios/incorretos; ex.: [5,6] se o achado junta 2 campos.
+    Use [] (lista vazia) quando for sobre o documento/texto em geral, sem
+    campo correspondente). O frontend usa "idxs" pra sublinhar CADA campo
+    citado na tela, então SEMPRE inclua todo idx real mencionado no "where"
+    ou "problem" — nunca cite "idx N" no texto sem também colocar N em "idxs".
   - Se estiver tudo certo, devolva issues vazio e diga isso em "reply".
   - Liste no máximo os ~10 achados MAIS RELEVANTES (prioridade alta > média > baixa),
     para manter a resposta concisa e dentro do limite de tokens.
@@ -70,7 +82,7 @@ Comporte-se conforme "mode":
 REGRAS DE SAÍDA (obrigatórias):
 - Responda APENAS com um único JSON válido, sem nenhum texto fora dele, sem markdown, sem cercas.
 - Formato:
-  {"reply":"...","fills":[{"idx":0,"label":"...","value":"..."}],"questions":[{"id":"cnpj","text":"..."}],"issues":[{"severity":"alta","where":"...","problem":"...","suggestion":"..."}]}
+  {"reply":"...","fills":[{"idx":0,"label":"...","value":"..."}],"questions":[{"id":"cnpj","text":"..."}],"issues":[{"severity":"alta","where":"...","problem":"...","suggestion":"...","idxs":[43]}]}
 - Inclua somente as chaves relevantes ao modo. "reply" é SEMPRE obrigatório (1 a 3 frases).
 - Nunca invente CNPJ, valores, nomes ou datas: o que não souber, pergunte.`;
 
@@ -148,6 +160,12 @@ Deno.serve(async (req: Request) => {
     reply: typeof out.reply === "string" ? out.reply : "",
     fills: Array.isArray(out.fills) ? out.fills : [],
     questions: Array.isArray(out.questions) ? out.questions : [],
-    issues: Array.isArray(out.issues) ? out.issues : [],
+    issues: Array.isArray(out.issues) ? out.issues.map((it: any) => ({
+      severity: typeof it?.severity === "string" ? it.severity : "media",
+      where: typeof it?.where === "string" ? it.where : "",
+      problem: typeof it?.problem === "string" ? it.problem : "",
+      suggestion: typeof it?.suggestion === "string" ? it.suggestion : "",
+      idxs: Array.isArray(it?.idxs) ? it.idxs.filter((n: any) => typeof n === "number") : [],
+    })) : [],
   });
 });
