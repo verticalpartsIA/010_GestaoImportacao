@@ -51,9 +51,10 @@
     );
   }
 
-  function CentralDocumentosPage({ setRoute, setSubsel }) {
+  function CentralDocumentosPage({ setRoute, setSubsel, subsel }) {
     const [obras, setObras] = React.useState([]);
-    const [obraId, setObraId] = React.useState('');
+    const obraId = subsel || '';
+    const setObraId = (clientName) => { setSubsel && setSubsel(clientName || null); };
     const [checklist, setChecklist] = React.useState(null);
     const [loading, setLoading] = React.useState(false);
     const [busca, setBusca] = React.useState('');

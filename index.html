@@ -87,7 +87,7 @@
   <!-- Roteamento por URL (Fase 1 da roteirização, issue #279) — carrega
        depois do guard de SSO (mexe só na query string, nunca no pathname)
        e antes de shell.jsx/app.jsx, que o consomem. -->
-  <script src="/src/router.js?v=3"></script>
+  <script src="/src/router.js?v=4"></script>
 
   <script src="/src/notificacoes-processamento.js?v=2"></script>
   <script src="/src/notificacoes-lidas-store.js?v=1"></script>
@@ -217,7 +217,7 @@
 
   <!-- Central de Documentos (Biblioteca Virtual) — Fase 1: leitura agregada -->
   <script src="/src/central-documentos-store.js?v=4"></script>
-  <script type="text/vp-jsx" src="/src/central-documentos.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="/src/central-documentos.jsx?v=5"></script>
 
   <!-- Etapas finais do workflow (ART, Cronograma, Data Book) -->
   <script src="/src/handover-manutencao.js?v=2"></script>
@@ -287,6 +287,6 @@
   <script type="text/vp-jsx" src="/src/vp-copiloto.jsx?v=2"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="/src/app.jsx?v=57"></script>
+  <script type="text/vp-jsx" src="/src/app.jsx?v=58"></script>
 </body>
 </html>
