@@ -179,17 +179,17 @@
       }
     }
 
-    // Contrato de Venda — best-effort, campo dossier_id nem sempre vinculado
-    // (e a tabela não tem policy de leitura anônima — falha silenciosa aqui
-    // é esperada, não é bug: o item só some da Sessão Administrativa).
-    let contrato = null;
-    try {
-      const r = await c.from('contrato_venda_equipamentos').select('status, criado_em, criado_por').eq('dossier_id', dossier.id).maybeSingle();
-      contrato = r.data;
-    } catch (e) { contrato = null; }
-    if (contrato) {
-      const enviado = ['enviado', 'visualizado', 'assinado'].includes(contrato.status);
-      itens.push({ chave: 'contrato', titulo: 'Envio de Contrato', concluido: enviado, pessoa: contrato.criado_por || null, data: enviado ? contrato.criado_em : null });
+    // Contrato de Venda — tabela real é "contratos_venda_equipamentos" (plural,
+    // sem "dossier_id" — o vínculo de verdade é por proposta_id, que o
+    // dossiê também carrega). Sem campo de "quem enviou" nessa tabela, só
+    // status + sent_at.
+    if (dossier.proposta_id) {
+      const { data: contrato } = await c.from('contratos_venda_equipamentos')
+        .select('status, sent_at').eq('proposta_id', dossier.proposta_id).maybeSingle();
+      if (contrato) {
+        const enviado = ['enviado', 'visualizado', 'assinado'].includes(contrato.status);
+        itens.push({ chave: 'contrato', titulo: 'Envio de Contrato', concluido: enviado, pessoa: null, data: enviado ? contrato.sent_at : null });
+      }
     }
 
     // 3 vistorias inclusas
