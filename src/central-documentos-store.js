@@ -43,17 +43,21 @@
     const c = sb();
     if (!c) return [];
     const { data } = await c.from('dossier_obra')
-      .select('id, building_name, client_name, numero_cotacao, status_master, parceiro_instalador_id')
+      .select('id, building_name, client_name, numero_cotacao, status_master, parceiro_instalador_id, doc_instalador_enviado_em, doc_instalador_enviado_por')
       .order('client_name', { ascending: true });
 
     const map = {};
     (data || []).forEach((r) => {
       const key = r.client_name || '(sem cliente)';
-      if (!map[key]) map[key] = { client_name: key, dossierIds: [], equipamentos: [], parceiroInstaladorIds: [], status_master: r.status_master };
+      if (!map[key]) map[key] = { client_name: key, dossierIds: [], equipamentos: [], parceiroInstaladorIds: [], status_master: r.status_master, docInstaladorEnviadoEm: null, docInstaladorEnviadoPor: null };
       map[key].dossierIds.push(r.id);
       map[key].equipamentos.push({ id: r.id, building_name: r.building_name, numero_cotacao: r.numero_cotacao, status_master: r.status_master });
       if (r.parceiro_instalador_id && !map[key].parceiroInstaladorIds.includes(r.parceiro_instalador_id)) {
         map[key].parceiroInstaladorIds.push(r.parceiro_instalador_id);
+      }
+      if (r.doc_instalador_enviado_em && !map[key].docInstaladorEnviadoEm) {
+        map[key].docInstaladorEnviadoEm = r.doc_instalador_enviado_em;
+        map[key].docInstaladorEnviadoPor = r.doc_instalador_enviado_por;
       }
     });
     /* "Montando agora" / "concluída" pra rotular a Documentação do Montador —

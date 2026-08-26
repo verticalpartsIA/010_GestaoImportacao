@@ -1020,6 +1020,7 @@ function TabCronogramaInstalacao({ dossier }) {
   const [itens, setItens] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
   const [linkPublico, setLinkPublico] = React.useState(null);
+  const [linkInterno, setLinkInterno] = React.useState(null);
   const [showAddTemplate, setShowAddTemplate] = React.useState(false);
 
   const carregar = React.useCallback(() => {
@@ -1053,6 +1054,15 @@ function TabCronogramaInstalacao({ dossier }) {
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
   };
 
+  const gerarLinkI = async () => {
+    try {
+      const url = await store.gerarLinkInterno(dossier.id);
+      setLinkInterno(url);
+      try { await navigator.clipboard.writeText(url); window.toast?.('Link interno copiado — permite anotar em reunião.', 'success'); }
+      catch (e) { window.toast?.('Link gerado (copie manualmente abaixo).', 'success'); }
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+  };
+
   if (itens === null) return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   if (itens.length === 0) {
@@ -1079,14 +1089,20 @@ function TabCronogramaInstalacao({ dossier }) {
           <div style={{ fontSize: 22, fontWeight: 800 }}>{concluidos} / {total} · {pct}%</div>
         </div>
         <div className="row gap-2">
-          <Button variant="outline" size="sm" onClick={gerarLink}>🔗 Gerar link público</Button>
+          <Button variant="outline" size="sm" onClick={gerarLink}>🔗 Link público (Cliente)</Button>
+          <Button variant="outline" size="sm" onClick={gerarLinkI}>🔒 Link interno (VerticalParts)</Button>
           <Button variant="ghost" size="sm" onClick={() => setShowAddTemplate((v) => !v)}>+ Adicionar item ao template</Button>
         </div>
       </div>
 
       {linkPublico && (
-        <div style={{ background: '#f0f8ff', border: '1px solid #0066cc', borderRadius: 6, padding: 10, marginBottom: 16, fontSize: 12, wordBreak: 'break-all' }}>
-          Link público (copiado): <a href={linkPublico} target="_blank" rel="noopener noreferrer">{linkPublico}</a>
+        <div style={{ background: '#f0f8ff', border: '1px solid #0066cc', borderRadius: 6, padding: 10, marginBottom: 8, fontSize: 12, wordBreak: 'break-all' }}>
+          Link público — Cliente (copiado): <a href={linkPublico} target="_blank" rel="noopener noreferrer">{linkPublico}</a>
+        </div>
+      )}
+      {linkInterno && (
+        <div style={{ background: '#fff8e6', border: '1px solid #cc7700', borderRadius: 6, padding: 10, marginBottom: 16, fontSize: 12, wordBreak: 'break-all' }}>
+          Link interno — VerticalParts, permite anotar (copiado): <a href={linkInterno} target="_blank" rel="noopener noreferrer">{linkInterno}</a>
         </div>
       )}
 

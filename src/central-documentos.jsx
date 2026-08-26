@@ -80,6 +80,15 @@
     };
     const irParaHomologacao = () => { setRoute && setRoute('rh-homologacao'); };
 
+    const marcarDocEnviado = async (obra) => {
+      if (!obra) return;
+      for (const id of obra.dossierIds) {
+        await window.InstalacaoChecklistStore.marcarDocInstaladorEnviado(id);
+      }
+      const fresh = await window.CentralDocumentos.listarObras();
+      setObras(fresh);
+    };
+
     const obrasFiltradas = React.useMemo(() => {
       const q = busca.trim().toLowerCase();
       if (!q) return obras;
@@ -167,6 +176,18 @@
                     style={{ fontSize: 12, color: '#0066cc', fontWeight: 600, background: 'none', border: 'none', cursor: 'pointer', padding: 0, marginBottom: 10 }}>
                     📎 Anexar ou atualizar em Homologação de Instaladores →
                   </button>
+                )}
+                {checklist.montador.length > 0 && (
+                  obraSelecionada?.docInstaladorEnviadoEm ? (
+                    <div style={{ fontSize: 11, color: '#00aa00', marginBottom: 10 }}>
+                      ✓ Documentação enviada por {obraSelecionada.docInstaladorEnviadoPor} em {new Date(obraSelecionada.docInstaladorEnviadoEm).toLocaleString('pt-BR')}
+                    </div>
+                  ) : (
+                    <button type="button" onClick={() => marcarDocEnviado(obraSelecionada)}
+                      style={{ fontSize: 12, color: '#cc7700', fontWeight: 600, background: 'none', border: '1px solid #cc7700', borderRadius: 4, padding: '4px 10px', cursor: 'pointer', marginBottom: 10 }}>
+                      📤 Marcar documentação do instalador como enviada
+                    </button>
+                  )
                 )}
                 {checklist.montador.map(({ empresa, colaboradores }) => (
                   <div key={empresa.id} style={{ marginBottom: 14 }}>

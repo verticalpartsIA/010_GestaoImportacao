@@ -7,8 +7,13 @@
 (function () {
   'use strict';
 
+  /* Duas rotas, mesmo arquivo: /status-obra/<token> (cliente, só leitura)
+     e /status-obra-interno/<token> (equipe, com anotação). */
+  function modoDoPath() {
+    return window.location.pathname.startsWith('/status-obra-interno/') ? 'interno' : 'cliente';
+  }
   function tokenDoPath() {
-    const m = window.location.pathname.match(/\/status-obra\/([^/]+)/);
+    const m = window.location.pathname.match(/\/status-obra(?:-interno)?\/([^/]+)/);
     return m ? decodeURIComponent(m[1]) : null;
   }
 
@@ -17,17 +22,121 @@
     const d = new Date(ts);
     return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR');
   }
+  function fmtDataHora(ts) {
+    if (!ts) return '—';
+    const d = new Date(ts);
+    return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR') + ', ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }
+
+  /* Sessão Administrativa — mesmos itens nos dois modos; anotação (não se
+     aplica / previsão de data) só é editável no modo interno. Sem SSO
+     nessa página, então quem anota digita o próprio nome na hora. */
+  function SessaoAdministrativa({ dossier, itens, modo, anotacoes, onSalvarAnotacao }) {
+    const [editando, setEditando] = React.useState(null); // chave do item em edição
+    const [nomeQuemAnota, setNomeQuemAnota] = React.useState('');
+    const [rascunho, setRascunho] = React.useState({});
+
+    const abrirEdicao = (item) => {
+      const a = anotacoes[item.chave] || {};
+      setRascunho({ naoAplicavel: !!a.nao_aplicavel, previsaoData: a.previsao_data || '', nota: a.nota || '' });
+      setEditando(item.chave);
+    };
+    const salvar = async (chave) => {
+      await onSalvarAnotacao(chave, { ...rascunho, atualizadoPor: nomeQuemAnota || 'Equipe' });
+      setEditando(null);
+    };
+
+    return (
+      <div style={{ marginTop: 28 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, marginBottom: 12 }}>📋 Sessão Administrativa</div>
+        {itens.map((item) => {
+          const a = anotacoes[item.chave];
+          const naoAplicavel = a?.nao_aplicavel;
+          const ok = item.informativo || item.concluido;
+          return (
+            <div key={item.chave} style={{
+              background: '#fff', border: '1px solid ' + (naoAplicavel ? '#ccc' : ok ? '#10b981' : '#e5e5e5'),
+              borderRadius: 8, padding: '12px 16px', marginBottom: 8, opacity: naoAplicavel ? 0.55 : 1,
+            }}>
+              <div style={{ display: 'flex', gap: 12, alignItems: 'flex-start' }}>
+                <div style={{ fontSize: 18, marginTop: 1 }}>{item.informativo ? '👤' : naoAplicavel ? '➖' : item.concluido ? '✅' : '⬜'}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 13.5, fontWeight: 700 }}>{item.titulo}</div>
+                  {item.informativo && <div style={{ fontSize: 12, color: '#444', marginTop: 3 }}>{item.pessoa}</div>}
+                  {!item.informativo && item.concluido && (
+                    <div style={{ fontSize: 11.5, color: '#888', marginTop: 3 }}>
+                      Concluído {item.pessoa ? `por ${item.pessoa} ` : ''}em {fmtDataHora(item.data)}
+                    </div>
+                  )}
+                  {!item.informativo && !item.concluido && naoAplicavel && (
+                    <div style={{ fontSize: 11.5, color: '#888', marginTop: 3 }}>Não se aplica a esta obra{a?.nota ? ` — ${a.nota}` : ''}</div>
+                  )}
+                  {!item.informativo && !item.concluido && !naoAplicavel && a?.previsao_data && (
+                    <div style={{ fontSize: 11.5, color: '#b5540a', marginTop: 3 }}>Previsão: {fmtData(a.previsao_data)}{a?.nota ? ` — ${a.nota}` : ''}</div>
+                  )}
+                  {!item.informativo && !item.concluido && !naoAplicavel && !a?.previsao_data && a?.nota && (
+                    <div style={{ fontSize: 11.5, color: '#666', marginTop: 3 }}>📝 {a.nota}</div>
+                  )}
+                </div>
+                {modo === 'interno' && !item.informativo && !item.concluido && (
+                  <button onClick={() => abrirEdicao(item)} style={{ fontSize: 11, color: '#0066cc', background: 'none', border: '1px solid #0066cc', borderRadius: 4, padding: '3px 8px', cursor: 'pointer' }}>Anotar</button>
+                )}
+              </div>
+              {editando === item.chave && (
+                <div style={{ marginTop: 10, paddingTop: 10, borderTop: '1px solid #eee', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                  <input placeholder="Seu nome" value={nomeQuemAnota} onChange={(e) => setNomeQuemAnota(e.target.value)} style={{ fontSize: 12, padding: 6, border: '1px solid #ddd', borderRadius: 4 }} />
+                  <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>
+                    <input type="checkbox" checked={rascunho.naoAplicavel} onChange={(e) => setRascunho((r) => ({ ...r, naoAplicavel: e.target.checked }))} />
+                    Não se aplica a esta obra
+                  </label>
+                  {!rascunho.naoAplicavel && (
+                    <div>
+                      <label style={{ fontSize: 11, color: '#666' }}>Previsão de conclusão</label>
+                      <input type="date" value={rascunho.previsaoData} onChange={(e) => setRascunho((r) => ({ ...r, previsaoData: e.target.value }))} style={{ display: 'block', fontSize: 12, padding: 6, border: '1px solid #ddd', borderRadius: 4 }} />
+                    </div>
+                  )}
+                  <textarea placeholder="Nota (opcional)" rows={2} value={rascunho.nota} onChange={(e) => setRascunho((r) => ({ ...r, nota: e.target.value }))} style={{ fontSize: 12, padding: 6, border: '1px solid #ddd', borderRadius: 4, resize: 'vertical' }} />
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <button onClick={() => salvar(item.chave)} style={{ fontSize: 12, background: '#0066cc', color: '#fff', border: 'none', borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>Salvar</button>
+                    <button onClick={() => setEditando(null)} style={{ fontSize: 12, background: 'none', border: '1px solid #ccc', borderRadius: 4, padding: '6px 12px', cursor: 'pointer' }}>Cancelar</button>
+                  </div>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
 
   function StatusObraApp() {
     const [estado, setEstado] = React.useState(null); // null=carregando, 'not-found', {dossier, itens}
+    const [sessaoAdmin, setSessaoAdmin] = React.useState([]);
+    const [anotacoes, setAnotacoes] = React.useState({});
+    const modo = modoDoPath();
 
     React.useEffect(() => {
       const token = tokenDoPath();
       if (!token) { setEstado('not-found'); return; }
-      window.InstalacaoChecklistStore.obterPorToken(token)
-        .then((r) => setEstado(r || 'not-found'))
+      const store = window.InstalacaoChecklistStore;
+      const fetchFn = modo === 'interno' ? store.obterPorTokenInterno : store.obterPorToken;
+      fetchFn(token)
+        .then(async (r) => {
+          setEstado(r || 'not-found');
+          if (r) {
+            store.obterSessaoAdministrativa(r.dossier).then(setSessaoAdmin);
+            if (modo === 'interno') store.listarAnotacoes(r.dossier.id).then(setAnotacoes);
+          }
+        })
         .catch(() => setEstado('not-found'));
     }, []);
+
+    const salvarAnotacaoItem = async (itemChave, patch) => {
+      if (estado === null || estado === 'not-found') return;
+      await window.InstalacaoChecklistStore.salvarAnotacao(estado.dossier.id, itemChave, patch);
+      const fresh = await window.InstalacaoChecklistStore.listarAnotacoes(estado.dossier.id);
+      setAnotacoes(fresh);
+    };
 
     if (estado === null) {
       return <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh', color: '#666', fontSize: 14 }}>Carregando…</div>;
@@ -52,7 +161,10 @@
     return (
       <div style={{ maxWidth: 860, margin: '0 auto', padding: '32px 20px 60px' }}>
         <div style={{ background: 'linear-gradient(135deg, #0066cc 0%, #0052a3 100%)', color: '#fff', borderRadius: 10, padding: '28px 28px', marginBottom: 24 }}>
-          <div style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', opacity: 0.8 }}>Status da Instalação</div>
+          <div style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', opacity: 0.8, display: 'flex', gap: 8, alignItems: 'center' }}>
+            Status da Instalação
+            {modo === 'interno' && <span style={{ background: 'rgba(255,255,255,.2)', padding: '1px 8px', borderRadius: 10, fontSize: 10 }}>🔒 uso interno</span>}
+          </div>
           <div style={{ fontSize: 26, fontWeight: 800, marginTop: 4 }}>{dossier.building_name || 'Obra'}</div>
           <div style={{ fontSize: 14, opacity: 0.9, marginTop: 4 }}>Cliente: {dossier.client_name}</div>
           {total > 0 && (
@@ -97,6 +209,10 @@
             ))}
           </div>
         ))}
+
+        {sessaoAdmin.length > 0 && (
+          <SessaoAdministrativa dossier={dossier} itens={sessaoAdmin} modo={modo} anotacoes={anotacoes} onSalvarAnotacao={salvarAnotacaoItem} />
+        )}
 
         <div style={{ textAlign: 'center', marginTop: 32, fontSize: 11, color: '#aaa' }}>Vertical Parts</div>
       </div>

@@ -197,6 +197,15 @@ app.get('/status-obra/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'status-obra.html'));
 });
 
+/* /status-obra-interno/<token> — mesma página, mesmo arquivo (o JS decide
+   o modo lendo o pathname); token é outro campo (link_interno_token),
+   revogável independente do link do cliente. Habilita anotações
+   (não se aplica / previsão de data) que o link do cliente não tem. */
+app.get('/status-obra-interno/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'status-obra.html'));
+});
+
 /* ---------- Termo de Entrega (assinatura digital) ----------
    /termo-entrega/<token> → entrega termo-entrega.html. O token é lido no
    client (dossier_obra.termo_entrega_token). Cliente e/ou supervisor

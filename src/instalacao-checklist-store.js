@@ -134,10 +134,125 @@
     return { dossier, itens };
   }
 
+  /* Link interno (VerticalParts) — mesma mecânica do link público, token
+     próprio (link_interno_token) pra poder revogar um sem mexer no outro.
+     Usado em reunião com a equipe: além de ler, permite anotar a Sessão
+     Administrativa (ver salvarAnotacao). */
+  async function gerarLinkInterno(dossierId) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: atual } = await c.from('dossier_obra').select('link_interno_token').eq('id', dossierId).maybeSingle();
+    let token = atual && atual.link_interno_token;
+    if (!token) {
+      token = gtId();
+      const { error } = await c.from('dossier_obra').update({ link_interno_token: token }).eq('id', dossierId);
+      if (error) throw error;
+    }
+    return `${window.location.origin}/status-obra-interno/${encodeURIComponent(token)}`;
+  }
+
+  async function obterPorTokenInterno(token) {
+    const c = sb(); if (!c || !token) return null;
+    const { data: dossier } = await c.from('dossier_obra').select('*').eq('link_interno_token', token).maybeSingle();
+    if (!dossier) return null;
+    const itens = await listarPorDossier(dossier.id);
+    return { dossier, itens };
+  }
+
+  /* Sessão Administrativa — agrega dado que já existe em outras tabelas
+     (não duplica nada): vendedor (leads.owner via proposta), status do
+     Contrato Venda (rascunho/enviado/assinado — dossier_id nem sempre
+     preenchido lá, item some se não achar), as 3 vistorias inclusas
+     (vistorias_obras.numero_fase), envio da doc. do instalador (campo
+     simples em dossier_obra, controlado pela Central de Documentos) e os
+     documentos VerticalParts anexados (dossier_documentos, já grava quem
+     e quando). */
+  async function obterSessaoAdministrativa(dossier) {
+    const c = sb(); if (!c) return [];
+    const itens = [];
+
+    // Vendedor — via proposta vinculada -> lead
+    if (dossier.proposta_id) {
+      const { data: prop } = await c.from('propostas').select('lead_id').eq('id', dossier.proposta_id).maybeSingle();
+      if (prop && prop.lead_id) {
+        const { data: lead } = await c.from('leads').select('owner').eq('id', prop.lead_id).maybeSingle();
+        if (lead && lead.owner) itens.push({ chave: 'vendedor', titulo: 'Vendedor', pessoa: lead.owner, data: null, informativo: true });
+      }
+    }
+
+    // Contrato de Venda — best-effort, campo dossier_id nem sempre vinculado
+    // (e a tabela não tem policy de leitura anônima — falha silenciosa aqui
+    // é esperada, não é bug: o item só some da Sessão Administrativa).
+    let contrato = null;
+    try {
+      const r = await c.from('contrato_venda_equipamentos').select('status, criado_em, criado_por').eq('dossier_id', dossier.id).maybeSingle();
+      contrato = r.data;
+    } catch (e) { contrato = null; }
+    if (contrato) {
+      const enviado = ['enviado', 'visualizado', 'assinado'].includes(contrato.status);
+      itens.push({ chave: 'contrato', titulo: 'Envio de Contrato', concluido: enviado, pessoa: contrato.criado_por || null, data: enviado ? contrato.criado_em : null });
+    }
+
+    // 3 vistorias inclusas
+    const { data: vistorias } = await c.from('vistorias_obras').select('numero_fase, vistoriador, status, atualizado_em').eq('obra_id', dossier.id).in('numero_fase', [1, 2, 3]);
+    [1, 2, 3].forEach((n) => {
+      const v = (vistorias || []).find((x) => x.numero_fase === n && x.status === 'concluida');
+      itens.push({ chave: `vistoria_${n}`, titulo: `Vistoria Nº ${n}`, concluido: !!v, pessoa: v?.vistoriador || null, data: v?.atualizado_em || null });
+    });
+
+    // Envio da documentação do instalador — controle simples (botão em
+    // Central de Documentos), sem pipeline/anexo.
+    itens.push({
+      chave: 'doc_instalador', titulo: 'Envio da Documentação do Instalador',
+      concluido: !!dossier.doc_instalador_enviado_em,
+      pessoa: dossier.doc_instalador_enviado_por || null, data: dossier.doc_instalador_enviado_em || null,
+    });
+
+    // Documentos VerticalParts (ART, Termo de Entrega, DataBook)
+    const { data: docs } = await c.from('dossier_documentos').select('tipo, responsavel, data_criacao').eq('dossier_id', dossier.id).in('tipo', ['ART', 'Termo de Entrega', 'DataBook']);
+    ['ART', 'Termo de Entrega', 'DataBook'].forEach((tipo) => {
+      const d = (docs || []).find((x) => x.tipo === tipo);
+      itens.push({ chave: `doc_vp_${tipo}`, titulo: `Envio — ${tipo}`, concluido: !!d, pessoa: d?.responsavel || null, data: d?.data_criacao || null });
+    });
+
+    return itens;
+  }
+
+  async function marcarDocInstaladorEnviado(dossierId) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const user = window.__VP_USER || {};
+    const { error } = await c.from('dossier_obra').update({
+      doc_instalador_enviado_em: new Date().toISOString(),
+      doc_instalador_enviado_por: user.nome || user.email || 'system',
+    }).eq('id', dossierId);
+    if (error) throw error;
+  }
+
+  async function listarAnotacoes(dossierId) {
+    const c = sb(); if (!c || !dossierId) return {};
+    const { data } = await c.from('status_obra_anotacoes').select('*').eq('dossier_id', dossierId);
+    const map = {};
+    (data || []).forEach((a) => { map[a.item_chave] = a; });
+    return map;
+  }
+
+  /* Só chamada a partir do link interno (não-SSO) — pessoa se identifica
+     digitando o nome na hora (não tem login nessa página). */
+  async function salvarAnotacao(dossierId, itemChave, { naoAplicavel, previsaoData, nota, atualizadoPor }) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { error } = await c.from('status_obra_anotacoes').upsert({
+      dossier_id: dossierId, item_chave: itemChave,
+      nao_aplicavel: !!naoAplicavel, previsao_data: previsaoData || null, nota: nota || null,
+      atualizado_por: atualizadoPor || null, atualizado_em: new Date().toISOString(),
+    }, { onConflict: 'dossier_id,item_chave' });
+    if (error) throw error;
+  }
+
   window.InstalacaoChecklistStore = {
     normalizarTipoEquipamento, semanaTitulo, semanaCor,
     listarTemplate, adicionarItemTemplate,
     criarChecklistDossier, listarPorDossier, marcarItem,
+    gerarLinkInterno, obterPorTokenInterno, obterSessaoAdministrativa,
+    marcarDocInstaladorEnviado, listarAnotacoes, salvarAnotacao,
     gerarLinkPublico, obterPorToken,
   };
 }());
