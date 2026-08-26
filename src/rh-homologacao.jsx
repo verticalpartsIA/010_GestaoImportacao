@@ -268,6 +268,23 @@ function ModalNovoMontador({ initialData, isEdit, onClose, onSaved }) {
   );
 }
 
+/* Carteira de Vacinação (DOC-080) — a carteira em si não expira (é só um
+   scan), quem expira é cada vacina dentro dela. Por isso, ao escolher esse
+   tipo, a UI troca 1 campo de data por um checklist de vacinas reais
+   (pesquisa fornecida pelo usuário 26/08), cada uma com data opcional —
+   e o save grava várias linhas em parceiros_documentos_colaborador (uma
+   por vacina marcada + uma pra carteira em si), não uma só. */
+const VACINAS_CATALOGO = [
+  'DOC-081', 'DOC-082', 'DOC-083', 'DOC-084', 'DOC-085', 'DOC-086', 'DOC-087',
+];
+const CARTEIRA_VACINACAO_ID = 'DOC-080';
+
+function statusPorData(data) {
+  if (!data) return 'N/A';
+  const hoje = new Date(new Date().toDateString());
+  return new Date(data) < hoje ? 'VENCIDO' : 'VALIDO';
+}
+
 function ModalDocumentoColaborador({ colaboradorId, documento, catalogo, onSave, onCancel }) {
   const isEdit = !!documento;
   const [documentoId, setDocumentoId] = React.useState(documento?.documento_id || (catalogo[0]?.id || ''));
@@ -276,30 +293,53 @@ function ModalDocumentoColaborador({ colaboradorId, documento, catalogo, onSave,
   const [arquivoAtual, setArquivoAtual] = React.useState(documento?.arquivo_link || null);
   const [arquivoNovo, setArquivoNovo] = React.useState(null);
   const [saving, setSaving] = React.useState(false);
+  const [vacinas, setVacinas] = React.useState({}); // { [docId]: { aplicada, data } }
 
   const nomeDoc = documento?.parceiros_doc_catalogo?.nome || catalogo.find((c) => c.id === documentoId)?.nome || documentoId;
+  const tipoSelecionado = catalogo.find((c) => c.id === documentoId);
+  const isCarteiraVacinacao = !isEdit && documentoId === CARTEIRA_VACINACAO_ID;
+  const toggleVacina = (id, patch) => setVacinas((p) => ({ ...p, [id]: { ...(p[id] || { aplicada: false, data: '' }), ...patch } }));
 
   const save = async () => {
     if (!documentoId) return window.toast('Selecione o tipo de documento.', 'warning');
     setSaving(true);
     try {
-      let arquivoPath = arquivoAtual;
-      if (arquivoNovo) {
-        const up = await window.RHHomologacao.uploadDocumentoColaboradorArquivo(colaboradorId, documentoId, arquivoNovo);
-        arquivoPath = up.path;
+      if (isCarteiraVacinacao) {
+        let arquivoPath = null;
+        if (arquivoNovo) {
+          const up = await window.RHHomologacao.uploadDocumentoColaboradorArquivo(colaboradorId, CARTEIRA_VACINACAO_ID, arquivoNovo);
+          arquivoPath = up.path;
+        }
+        await window.RHHomologacao.salvarDocumentoColaborador({
+          colaborador_id: colaboradorId, documento_id: CARTEIRA_VACINACAO_ID,
+          data_vencimento: null, status: 'N/A', arquivo_link: arquivoPath, observacao: observacao || null,
+        });
+        const marcadas = VACINAS_CATALOGO.filter((id) => vacinas[id]?.aplicada);
+        for (const vid of marcadas) {
+          const data = vacinas[vid].data || '';
+          await window.RHHomologacao.salvarDocumentoColaborador({
+            colaborador_id: colaboradorId, documento_id: vid,
+            data_vencimento: data || null, status: statusPorData(data), arquivo_link: null, observacao: null,
+          });
+        }
+        window.toast(`Carteira salva — ${marcadas.length} vacina(s) registrada(s).`, 'success');
+      } else {
+        let arquivoPath = arquivoAtual;
+        if (arquivoNovo) {
+          const up = await window.RHHomologacao.uploadDocumentoColaboradorArquivo(colaboradorId, documentoId, arquivoNovo);
+          arquivoPath = up.path;
+        }
+        await window.RHHomologacao.salvarDocumentoColaborador({
+          id: documento?.id,
+          colaborador_id: colaboradorId,
+          documento_id: documentoId,
+          data_vencimento: dataVencimento || null,
+          status: statusPorData(dataVencimento),
+          arquivo_link: arquivoPath || null,
+          observacao: observacao || null,
+        });
+        window.toast('Documento salvo!', 'success');
       }
-      const hoje = new Date(new Date().toDateString());
-      const status = !dataVencimento ? 'N/A' : (new Date(dataVencimento) < hoje ? 'VENCIDO' : 'VALIDO');
-      await window.RHHomologacao.salvarDocumentoColaborador({
-        id: documento?.id,
-        colaborador_id: colaboradorId,
-        documento_id: documentoId,
-        data_vencimento: dataVencimento || null,
-        status,
-        arquivo_link: arquivoPath || null,
-        observacao: observacao || null,
-      });
-      window.toast('Documento salvo!', 'success');
       onSave?.();
     } catch (err) {
       window.toast('Erro ao salvar: ' + err.message, 'error');
@@ -323,13 +363,44 @@ function ModalDocumentoColaborador({ colaboradorId, documento, catalogo, onSave,
             </select>
           </div>
         )}
+
+        {isCarteiraVacinacao ? (
+          <div className="stack" style={{ gap: 6 }}>
+            <label className="up-eyebrow muted">Vacinas aplicadas</label>
+            <div className="small muted" style={{ marginBottom: 2 }}>Marque as que o colaborador tem e, se souber, a data de vencimento de cada uma. A carteira em si não expira.</div>
+            {VACINAS_CATALOGO.map((vid) => {
+              const cat = catalogo.find((c) => c.id === vid);
+              const v = vacinas[vid] || { aplicada: false, data: '' };
+              return (
+                <div key={vid} style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 8 }}>
+                  <label className="row" style={{ gap: 8, alignItems: 'center', cursor: 'pointer' }}>
+                    <input type="checkbox" checked={v.aplicada} onChange={(e) => toggleVacina(vid, { aplicada: e.target.checked })} />
+                    <span style={{ fontSize: 13, fontWeight: 600 }}>{cat?.nome || vid}</span>
+                  </label>
+                  {v.aplicada && (
+                    <div style={{ marginTop: 6, marginLeft: 24 }}>
+                      <label className="small muted" style={{ display: 'block', marginBottom: 2 }}>Quando expira essa vacina? (opcional)</label>
+                      <input className="input" type="date" style={{ maxWidth: 200 }} value={v.data} onChange={(e) => toggleVacina(vid, { data: e.target.value })} />
+                    </div>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        ) : (
+          <div className="stack" style={{ gap: 4 }}>
+            <label className="up-eyebrow muted">Quando expira esse documento?</label>
+            <input className="input" type="date" value={dataVencimento} onChange={(e) => setDataVencimento(e.target.value)} />
+            <div className="small muted">
+              {tipoSelecionado?.periodicidade === 'indeterminado'
+                ? 'Este documento normalmente não expira — pode deixar em branco (fica marcado N/A).'
+                : 'Deixe em branco se o documento não tem vencimento (fica marcado N/A).'}
+            </div>
+          </div>
+        )}
+
         <div className="stack" style={{ gap: 4 }}>
-          <label className="up-eyebrow muted">Data de vencimento</label>
-          <input className="input" type="date" value={dataVencimento} onChange={(e) => setDataVencimento(e.target.value)} />
-          <div className="small muted">Deixe em branco se o documento não tem vencimento (fica marcado N/A).</div>
-        </div>
-        <div className="stack" style={{ gap: 4 }}>
-          <label className="up-eyebrow muted">Documento (PDF ou imagem)</label>
+          <label className="up-eyebrow muted">{isCarteiraVacinacao ? 'Scan da carteira (PDF ou imagem)' : 'Documento (PDF ou imagem)'}</label>
           {arquivoAtual && !arquivoNovo && (
             <div className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 8 }}>
               <span className="small">📎 arquivo já enviado</span>
