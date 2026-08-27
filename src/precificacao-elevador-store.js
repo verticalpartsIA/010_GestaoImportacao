@@ -249,6 +249,7 @@
       freteInternoRs: pz.frete_interno_rs, armazenagemRs: pz.armazenagem_rs,
       itensInstalacaoMontagem: pz.itens_instalacao_montagem || [],
       containers: pz.containers || [],
+      itensDespesasExtras: pz.itens_despesas_extras || [],
       quantidadeEquipamentos: (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1,
       percentualServicos: pz.percentual_servicos, modelos: pz.modelos || [],
       markUpPct: pz.mark_up_pct, comissaoConsultoriaPct: pz.comissao_consultoria_pct,

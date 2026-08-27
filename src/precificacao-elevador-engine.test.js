@@ -112,6 +112,17 @@ test('calcular — containers somam no mesmo bucket que Instalação e Montagem 
   closeTo(semContainers.precificacao.lucroFinal - comContainers.precificacao.lucroFinal, 800, 0.01, 'lucro final deveria cair exatamente o valor dos containers');
 });
 
+test('calcular — itens avulsos de "Despesas Extras" somam no mesmo bucket que Instalação e Montagem/Containers', () => {
+  const sem = E.calcular(inputsBase);
+  const com = E.calcular({
+    ...inputsBase,
+    itensDespesasExtras: [{ descricao: 'Taxa bancária', valor: 120 }, { descricao: 'Seguro adicional', valor: 80 }],
+  });
+  closeTo(com.importacao.itensDespesasExtrasRs, 200, 0.01, 'itensDespesasExtrasRs deveria ser 120 + 80');
+  closeTo(com.importacao.despesasExtrasTotal - sem.importacao.despesasExtrasTotal, 200, 0.01, 'itens avulsos deveriam entrar no total de despesas extras/operacionais');
+  closeTo(sem.precificacao.lucroFinal - com.precificacao.lucroFinal, 200, 0.01, 'lucro final deveria cair exatamente o valor dos itens avulsos');
+});
+
 test('calcular — rateio por modelo soma 100% do preço de venda proposto', () => {
   const out = E.calcular({
     ...inputsBase,
