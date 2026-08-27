@@ -120,7 +120,7 @@ test('obterChecklistObraPronta — sem parceiro vinculado, item "parceiro" fica 
 });
 
 test('obterChecklistObraPronta — com parceiro homologado e liberado pelo RH, marca pronta', async () => {
-  window.RHHomologacao = { statusGeral: () => 'ok' };
+  window.RHHomologacao = { statusGeralPorColaboradores: async () => ({ status: 'ok', detalhe: 'Documentação completa e em dia' }) };
   window.DecisoesStore = { statusMontadorObra: async () => ({ status: 'aprovada', decidido_por: 'Fulano' }) };
   window.__VP_SB.sb = mockSb({
     dossier_obra: { data: {
