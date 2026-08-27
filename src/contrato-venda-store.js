@@ -245,6 +245,13 @@
     const { data: numRows, error: numErr } = await c.rpc('next_doc_number', { p_prefixo: 'VPVE' });
     if (numErr) throw numErr;
     const num = (Array.isArray(numRows) ? numRows[0] : numRows) || {};
+    /* Nº exibido (revisão 27/08): reaproveita o Nº da Cotação da Proposta de
+       origem (VPCV-0950), em vez da sequência mensal própria "VPVE-...".
+       seq_mes/ano_mes continuam vindo do RPC — só usados pro id legado
+       (idText abaixo), não mudam. Sem propostaId (raro/legado), mantém o
+       número gerado pelo RPC como está. */
+    const numeroCotacaoOrigem = await numeroCotacaoDaProposta(formState.propostaId);
+    if (numeroCotacaoOrigem != null) num.numero_documento = window.MasterIdEngine.etapaId('contrato_venda', numeroCotacaoOrigem);
 
     const valor = window.CV.parseMoney(formState.valor);
     const doc = window.CV.buildContract({

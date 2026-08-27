@@ -166,18 +166,24 @@
     };
   }
 
-  async function gerarNumero() {
-    const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { data, error } = await c.rpc('gerar_numero_precificacao_elevador');
-    if (error) throw error;
-    return data;
-  }
-
+  /* Nº do documento (revisão 27/08): a Precificação NÃO tem mais numeração
+     própria (RPC gerar_numero_precificacao_elevador, sequência independente
+     "VPPZ-000X") — reaproveita o MESMO Nº da Cotação, só trocando o
+     prefixo de etapa (VPPC-0950). Um único número acompanha o negócio do
+     início ao fim; a sequência antiga fica só como fallback raríssimo
+     (formulário sem numero_cotacao, o que não deveria acontecer). */
   async function criar(formularioElevadorId, cotacaoFornecedorId) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const rascunho = await montarRascunho(formularioElevadorId, cotacaoFornecedorId);
     delete rascunho._formulario;
-    const numero_documento = await gerarNumero();
+    let numero_documento;
+    if (rascunho.numero_cotacao != null) {
+      numero_documento = window.MasterIdEngine.etapaId('precificacao', rascunho.numero_cotacao);
+    } else {
+      const { data, error } = await c.rpc('gerar_numero_precificacao_elevador');
+      if (error) throw error;
+      numero_documento = data;
+    }
     const { data, error } = await c.from('precificacoes_elevador').insert({ ...rascunho, numero_documento }).select().single();
     if (error) throw error;
     return data;
@@ -288,6 +294,35 @@
       status: 'finalizado', aprovado_em: now, aprovado_por: (window.__VP_USER || {}).email || null, updated_at: now,
     }).eq('id', id);
     if (error) throw error;
+
+    /* Proposta nasce sozinha ao aprovar (pedido do usuário, 27/08) — puxa
+       Lead/Cliente + o preço já calculado na Precificação (resultado.
+       precoVendaPorEquipamento, via PropostaHeranca.montarPrefill, que já
+       fazia isso pro fluxo manual). Nasce EDITÁVEL, pronta pra o vendedor
+       revisar/ajustar e disparar manualmente — a trava (won_editable/
+       destravada_em) só entra quando a PROPOSTA em si for aprovada, igual
+       já funciona hoje. Idempotente: não duplica se já existe proposta
+       pra esse Nº de Cotação (ex.: alguém já criou manualmente antes).
+       Falha aqui não desfaz a aprovação da Precificação — só avisa. */
+    try {
+      await criarPropostaAutomatica({ ...pz, numero_cotacao: pz.numero_cotacao });
+    } catch (e) {
+      console.warn('[PrecificacaoElevadorStore] Falha ao criar proposta automática ao aprovar:', e);
+    }
+  }
+
+  async function criarPropostaAutomatica(pz) {
+    const c = sb();
+    if (!c || pz.numero_cotacao == null || !window.PropostaHeranca || !window.PropostaStore || !window.MasterIdEngine) return;
+    const { data: existente } = await c.from('propostas').select('id').eq('numero_cotacao', pz.numero_cotacao).maybeSingle();
+    if (existente) return; // já tem proposta pra essa cotação — não duplica
+    const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao);
+    if (!r.encontrado) return;
+    const numero = window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao);
+    const valorUnit = Number((r.prefill.elevador || {}).valores?.valorUnit) || 0;
+    const quantidade = Number((r.prefill.elevador || {}).valores?.quantidade) || 1;
+    const dadosCompletos = window.deepMergeHeranca(window.makeDefaultProposta(), { ...r.prefill, numero });
+    await window.PropostaStore.salvar({ data: dadosCompletos, eq: 'elevador', editId: null, valorTotal: valorUnit * quantidade });
   }
 
   /* ---------- Ressincroniza modelos/vmle a partir da resposta do fornecedor ----------

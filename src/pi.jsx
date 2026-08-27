@@ -241,7 +241,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
       .then((fontes) => {
         if (cancelado) return;
         if (!fontes.encontrado) { setCotacaoInfo({ encontrada: false }); return; }
-        const masterId = window.MasterIdEngine.baseId('elevador', fontes.numeroCotacao);
+        const masterId = window.MasterIdEngine.etapaId('cotacao', fontes.numeroCotacao);
         const cliente = (fontes.cliente || {}).razao_social || null;
         const fornecedor = (fontes.cotacao || {}).fornecedor || null;
         setCotacaoInfo({ encontrada: true, masterId, cliente, fornecedor });
@@ -460,7 +460,7 @@ function PIPage() {
   const filtered = pis.filter((pi) => {
     const s = search.toLowerCase();
     const embLabel = embarqueLabel(embarquesMap[pi.embarque_id]).toLowerCase();
-    const masterId = pi.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', pi.numero_cotacao).toLowerCase() : '';
+    const masterId = pi.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', pi.numero_cotacao).toLowerCase() : '';
     const matchSearch = !s || (pi.numero_pi || '').toLowerCase().includes(s) || (pi.fornecedor || '').toLowerCase().includes(s) || embLabel.includes(s) || masterId.includes(s) || String(pi.numero_cotacao ?? '').includes(s);
     const matchStatus = filterStatus === 'Todos' || pi.status === filterStatus;
     return matchSearch && matchStatus;
@@ -514,7 +514,7 @@ function PIPage() {
               return (
                 <tr key={pi.id}>
                   <td className="mono">{pi.numero_pi}</td>
-                  <td className="mono small">{pi.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', pi.numero_cotacao) : <span className="muted">—</span>}</td>
+                  <td className="mono small">{pi.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', pi.numero_cotacao) : <span className="muted">—</span>}</td>
                   <td>{pi.fornecedor || '—'}</td>
                   <td>{fmtDate(pi.data_abertura)}</td>
                   <td><StatusBadge status={pi.status}/></td>

@@ -1,11 +1,29 @@
 /* ============================================================
    master-id-engine.js — Padrão universal de codificação de IDs
-   (Fase 1: Cotação a Fornecedor + Precificação).
 
-   Formato: [PREFIXO-TIPO][Nº DA COTAÇÃO]-[REVISÃO]-[ATIVO]
-     Base .......... VPEL-EL0902        (reaproveita formularios_elevador.numero_cotacao)
-     Com revisão ... VPEL-EL0902-A      (reenvio ao fornecedor por mudança de especificação)
-     Com ativo ..... VPEL-EL0902-A-1    (elevador nº 1 daquela cotação/revisão)
+   DOIS níveis, propositalmente separados (revisão de fluxo, 27/08):
+
+   1) Nº DA COTAÇÃO — um único número (formularios_elevador.numero_cotacao)
+      acompanha o negócio do início ao fim. Cada ETAPA do fluxo mostra esse
+      MESMO número, só trocando o prefixo de 2 letras (etapaId):
+        Cotação .......... VPCT-0950
+        Precificação ..... VPPC-0950
+        Proposta ......... VPPR-0950
+        Contrato Venda ... VPCV-0950
+        Contrato Montagem  VPCM-0950
+        Obra ............. VPOB-0950
+      "0950" NUNCA leva letra de tipo de equipamento — isso é ambíguo (uma
+      cotação pode ter elevador + escada juntos) e não é o número da etapa,
+      é o número DELA (o negócio).
+
+   2) ID DE EQUIPAMENTO — dentro de uma cotação/obra, cada unidade alocada
+      no Formulário (elevador, escada rolante, esteira rolante) tem seu
+      próprio código alfanumérico (baseId/masterId), sim com o tipo:
+        Base .......... VPEL-EL0950        (elevador)
+        Com revisão ... VPEL-EL0950-A      (reenvio ao fornecedor por mudança de especificação)
+        Com ativo ..... VPEL-EL0950-A-1    (elevador nº 1 daquela cotação/revisão)
+        Escada rolante  VPER-ER0950-1
+        Esteira rolante VPES-ES0950-1
 
    Cotações antigas (VPEL-0001..0003, formato sequencial simples) NÃO são
    migradas — o padrão novo vale só a partir daqui. window.MasterIdEngine
@@ -13,9 +31,9 @@
 (function () {
   'use strict';
 
-  /* PREFIXO-TIPO por categoria de produto. Só "elevador" está em uso hoje
-     (Glarie); escada/esteira ficam prontos pro dia que os fornecedores
-     entrarem, sem precisar mexer no motor de novo. */
+  /* PREFIXO-TIPO por categoria de produto (nível 2 — ID DE EQUIPAMENTO).
+     Só "elevador" está em uso hoje (Glarie); escada/esteira ficam prontos
+     pro dia que os fornecedores entrarem, sem precisar mexer no motor de novo. */
   const PREFIXO_TIPO = {
     elevador: 'VPEL-EL',
     escada_rolante: 'VPER-ER',
@@ -27,6 +45,25 @@
     if (!prefixo) throw new Error(`Master ID: sem PREFIXO-TIPO definido para categoria "${categoriaProduto}"`);
     if (numeroCotacao == null) throw new Error('Master ID: numeroCotacao é obrigatório');
     return `${prefixo}${String(numeroCotacao).padStart(4, '0')}`;
+  }
+
+  /* PREFIXO-ETAPA (nível 1 — Nº DA COTAÇÃO, mesmo número em toda etapa).
+     2 letras só, sem acento (nunca "Ç" — quebraria o parse de
+     parseNumeroCotacao e outros usos de texto/URL/arquivo). */
+  const PREFIXO_ETAPA = {
+    cotacao: 'VPCT',
+    precificacao: 'VPPC',
+    proposta: 'VPPR',
+    contrato_venda: 'VPCV',
+    contrato_montagem: 'VPCM',
+    obra: 'VPOB',
+  };
+
+  function etapaId(etapa, numero) {
+    const prefixo = PREFIXO_ETAPA[etapa];
+    if (!prefixo) throw new Error(`Master ID: sem PREFIXO-ETAPA definido para etapa "${etapa}"`);
+    if (numero == null) throw new Error('Master ID: numero é obrigatório');
+    return `${prefixo}-${String(numero).padStart(4, '0')}`;
   }
 
   /* 1º envio ao fornecedor não tem sufixo de revisão. Cada reenvio (troca de
@@ -57,9 +94,11 @@
     const s = String(raw == null ? '' : raw).trim();
     if (!s) return null;
     if (/^\d+$/.test(s)) return parseInt(s, 10);
-    const m = s.match(/^[A-Z]+-[A-Z]+(\d+)/i);
+    // Cobre os dois formatos: etapa "VPCT-0950" (sem letra após o traço) e
+    // equipamento "VPEL-EL0950" (com letra de tipo após o traço).
+    const m = s.match(/^VP[A-Z]{2}-[A-Z]*(\d+)/i);
     return m ? parseInt(m[1], 10) : null;
   }
 
-  window.MasterIdEngine = { PREFIXO_TIPO, baseId, proximaRevisao, masterId, parseNumeroCotacao };
+  window.MasterIdEngine = { PREFIXO_TIPO, baseId, proximaRevisao, masterId, parseNumeroCotacao, PREFIXO_ETAPA, etapaId };
 }());

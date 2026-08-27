@@ -293,7 +293,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
               <tbody>
                 {aguardando.map((a) => (
                   <tr key={a.cotacaoFornecedorId}>
-                    <td><div className="cell-main">{a.numeroCotacao != null ? window.MasterIdEngine.baseId('elevador', a.numeroCotacao) : (a.numeroDocumento || '—')}</div><div className="cell-sub">{a.numeroDocumento}</div></td>
+                    <td><div className="cell-main">{a.numeroCotacao != null ? window.MasterIdEngine.etapaId('cotacao', a.numeroCotacao) : (a.numeroDocumento || '—')}</div><div className="cell-sub">{a.numeroDocumento}</div></td>
                     <td>{a.fornecedor || '—'}</td>
                     <td>{a.clienteNome || '—'}</td>
                     <td className="cell-num">{a.fobUsd ? fmtUSD(a.fobUsd) : '—'}</td>

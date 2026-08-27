@@ -61,7 +61,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
       <div className="table-wrap">
         <table className="t">
           <thead><tr>
-            <th>ID</th>
+            <th>Obra Nº</th>
             <th>Prédio / Obra</th>
             <th>Cliente</th>
             <th>Equipamento</th>
@@ -78,7 +78,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
             )}
             {rows.map((o) => (
               <tr key={o.id} onClick={() => abrirDossier(o)} style={{ cursor: 'pointer' }}>
-                <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{o.id}</span></td>
+                <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id}</span></td>
                 <td className="cell-main">{o.building_name || '—'}</td>
                 <td>{o.client_name || '—'}</td>
                 <td style={{ textTransform: 'capitalize' }}>{o.equip_type || '—'}</td>
@@ -177,6 +177,11 @@ function DossierObraPage({ dossierId, setRoute }) {
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', marginBottom: 16 }}>
           <div>
             <div style={{ fontSize: 32, fontWeight: 700, marginBottom: 8 }}>{dossier.building_name}</div>
+            {dossier.numero_cotacao != null && (
+              <div className="mono" style={{ fontSize: 12, opacity: 0.85, marginBottom: 6 }}>
+                Obra Nº {window.MasterIdEngine.etapaId('obra', dossier.numero_cotacao)}
+              </div>
+            )}
             <div style={{ fontSize: 14, opacity: 0.9 }}>
               Cliente: <b>{dossier.client_name}</b>
             </div>

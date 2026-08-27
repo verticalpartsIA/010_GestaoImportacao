@@ -214,6 +214,14 @@
     const { data: numRows, error: numErr } = await c.rpc('next_doc_number', { p_prefixo: 'VPNI' });
     if (numErr) throw numErr;
     const num = (Array.isArray(numRows) ? numRows[0] : numRows) || {};
+    /* Nº exibido (revisão 27/08): reaproveita o Nº da Cotação da Proposta de
+       origem (VPCM-0950 — Contrato de Montagem), em vez da sequência
+       própria "VPNI-...". Sem propostaId (raro/legado), mantém o número
+       gerado pelo RPC como está. */
+    if (formState.propostaId) {
+      const { data: prop } = await c.from('propostas').select('numero_cotacao').eq('id', formState.propostaId).maybeSingle();
+      if (prop && prop.numero_cotacao != null) num.numero_documento = window.MasterIdEngine.etapaId('contrato_montagem', prop.numero_cotacao);
+    }
 
     const valorTotal = window.CI.moedaParaNumero(formState.valorTotal);
     const eq = (window.CI.EQUIPAMENTOS.find(e => e.id === formState.equipamento) || {}).label || '';

@@ -539,10 +539,11 @@ function PropostasPage({ setRoute, setSubsel }) {
         window.toast?.('Não foi possível localizar o formulário desta cotação.', 'error');
         return;
       }
-      /* Nº da Proposta pré-preenchido com o Master ID universal — VPEL-EL0904,
-         não um rótulo inventado tipo "Cotação-904". Vendedor pode editar, mas
-         o padrão precisa ser o código que todo mundo na empresa reconhece. */
-      const numero = pz.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', pz.numero_cotacao) : (pz.numero_documento || '');
+      /* Nº da Proposta pré-preenchido com o Master ID universal de ETAPA
+         (VPPR-0950 — mesmo número da cotação, prefixo da Proposta), não um
+         rótulo inventado. Vendedor pode editar, mas o padrão precisa ser o
+         código que todo mundo na empresa reconhece. */
+      const numero = pz.numero_cotacao != null ? window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao) : (pz.numero_documento || '');
       const prefill = { ...r.prefill, numero };
       setSubsel(prefill);
       setRoute('proposta-editor');
@@ -628,7 +629,7 @@ function PropostasPage({ setRoute, setSubsel }) {
             {prontas.map((pz) => (
               <div key={pz.id} className="row sb" style={{ padding: '10px 14px', background: 'var(--vp-warning-tint)' }}>
                 <div>
-                  <b>{window.MasterIdEngine.baseId('elevador', pz.numero_cotacao)}</b> precificado — analise e envie a proposta
+                  <b>{window.MasterIdEngine.etapaId('cotacao', pz.numero_cotacao)}</b> precificado — analise e envie a proposta
                   <div className="muted small">{pz.numero_documento}</div>
                 </div>
                 <Button variant="primary" size="sm" icon="proposal" onClick={() => abrirDaPrecificacao(pz)}>Analisar e enviar</Button>

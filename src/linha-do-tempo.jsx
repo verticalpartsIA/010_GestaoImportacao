@@ -47,7 +47,7 @@ function LinhaDoTempoPage() {
     }
   };
 
-  const masterIdLabel = (numero) => (window.MasterIdEngine ? window.MasterIdEngine.baseId('elevador', numero) : String(numero));
+  const masterIdLabel = (numero) => (window.MasterIdEngine ? window.MasterIdEngine.etapaId('cotacao', numero) : String(numero));
 
   return (
     <div className="page fade-in">

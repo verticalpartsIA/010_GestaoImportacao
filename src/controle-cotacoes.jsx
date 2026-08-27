@@ -101,7 +101,7 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
     return rows.filter((r) => {
       if (fStatus !== 'Todos' && r.status !== fStatus) return false;
       if (!termo) return true;
-      const masterId = r.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', r.numero_cotacao) : '';
+      const masterId = r.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', r.numero_cotacao) : '';
       return [r.nome_cliente, r.vendedor, r.cnpj_comprador, String(r.numero_cotacao || ''), masterId]
         .some((v) => (v || '').toLowerCase().includes(termo));
     });
@@ -123,7 +123,7 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
 
       <div className="grid-3" style={{ margin: '20px 0' }}>
         <KPI label="Cotações (filtro atual)" value={rows ? filtradas.length : '…'} sub={`de ${rows ? rows.length : '…'} no total`} icon="history"/>
-        <KPI label="Nº mais recente" value={rows && rows.length ? window.MasterIdEngine.baseId('elevador', rows[0].numero_cotacao) : '—'} sub="maior Nº Cotação registrado" icon="grid"/>
+        <KPI label="Nº mais recente" value={rows && rows.length ? window.MasterIdEngine.etapaId('cotacao', rows[0].numero_cotacao) : '—'} sub="maior Nº Cotação registrado" icon="grid"/>
         <KPI label="Conquistadas" value={rows ? rows.filter((r) => r.status === 'Conquistado').length : '…'} sub="status Conquistado" icon="check"/>
       </div>
 
@@ -165,7 +165,7 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
                   style={clicavel ? { cursor: 'pointer' } : undefined}
                   title={clicavel ? 'Abrir tratativas desta cotação' : undefined}
                   onClick={clicavel ? () => setCadeiaDe(r.numero_cotacao) : undefined}>
-                  <td><span className="mono small">{r.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', r.numero_cotacao) : '—'}</span></td>
+                  <td><span className="mono small">{r.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', r.numero_cotacao) : '—'}</span></td>
                   <td><span className="mono small" style={{ whiteSpace: 'nowrap' }}>{r.data ? String(r.data).slice(0, 10) : '—'}</span></td>
                   <td style={{ fontSize: 12.5 }}>{r.nome_cliente || <span className="muted">—</span>}</td>
                   <td>{r.vendedor || <span className="muted">—</span>}</td>

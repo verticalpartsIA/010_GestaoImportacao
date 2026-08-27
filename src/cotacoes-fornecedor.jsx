@@ -207,7 +207,7 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
                 <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{c.numero_documento}</span></td>
                 <td><span className="mono small">{(() => {
                   const n = c.dados_envio?.header?.numero_cotacao ?? c.formularios_elevador?.numero_cotacao;
-                  return n != null ? window.MasterIdEngine.baseId('elevador', n) : '—';
+                  return n != null ? window.MasterIdEngine.etapaId('cotacao', n) : '—';
                 })()}</span></td>
                 <td>
                   <div className="cell-main">{cfPredioLabel(c)}</div>
@@ -461,7 +461,7 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
           <Card title="Dados enviados">
             <KvBlock label="Fornecedor" value={cot.fornecedor}/>
             <KvBlock label="Categoria" value={cfCategoriaLabel(cot.categoria_produto)}/>
-            <KvBlock label="Nº Cotação (cliente)" value={cot.dados_envio?.header?.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', cot.dados_envio.header.numero_cotacao) : '—'} mono/>
+            <KvBlock label="Nº Cotação (cliente)" value={cot.dados_envio?.header?.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', cot.dados_envio.header.numero_cotacao) : '—'} mono/>
             <KvBlock label="Equipamentos (Master ID)" value={<CfUnidadesMasterId cot={cot}/>}/>
           </Card>
           <Card title="Linha do tempo">

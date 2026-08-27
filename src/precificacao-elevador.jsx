@@ -230,7 +230,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Precificação</div>
-          <h1 className="page-head__title">{pz.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', pz.numero_cotacao) : pz.numero_documento}</h1>
+          <h1 className="page-head__title">{pz.numero_documento}</h1>
           <div className="row gap-2" style={{ marginTop: 6 }}>
             <div className="mono" style={{ display: 'inline-flex', background: '#111', color: '#FBB039', fontWeight: 700, padding: '6px 12px', borderRadius: 6, fontSize: 13 }}>
               Cotação Nº {pz.numero_cotacao ?? '—'}
