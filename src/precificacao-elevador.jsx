@@ -24,6 +24,17 @@ function PZInput({ value, onChange, type = 'text', placeholder, disabled }) {
       placeholder={placeholder} disabled={disabled}/>
   );
 }
+function PZSelect({ value, onChange, options, placeholder }) {
+  return (
+    <select className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
+      <option value="">{placeholder || '—'}</option>
+      {options.map((o) => <option key={o} value={o}>{o}</option>)}
+    </select>
+  );
+}
+// Mesmo vocabulário de tamanhos usado depois no embarque físico (ver
+// EI_CONTAINER_TIPOS em embarques-importacao.jsx).
+const PZ_CONTAINER_TIPOS = ["20'DV", "40'DV", "40'HC", "20'RF", "40'RF", "20'OT", "40'OT", "20'FR", "40'FR", 'Outro'];
 
 /* ---------- Lista — cotações de fornecedor já respondidas ---------- */
 function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }) {
@@ -143,12 +154,21 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
   });
   const removeItemInstalacao = (i) => setPz((p) => ({ ...p, itens_instalacao_montagem: (p.itens_instalacao_montagem || []).filter((_, idx) => idx !== i) }));
 
+  const addContainer = () => setPz((p) => ({ ...p, containers: [...(p.containers || []), { tipo_tamanho: '', quantidade: 1, preco_rs: 0 }] }));
+  const setContainer = (i, k) => (v) => setPz((p) => {
+    const arr = [...(p.containers || [])];
+    arr[i] = { ...arr[i], [k]: v };
+    return { ...p, containers: arr };
+  });
+  const removeContainer = (i) => setPz((p) => ({ ...p, containers: (p.containers || []).filter((_, idx) => idx !== i) }));
+  const containersTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.preco_rs) || 0), 0);
+
   const payloadSalvar = () => ({
     vmle_usd: pz.vmle_usd, seguro_usd: pz.seguro_usd, frete_seguro_capatazia_usd: pz.frete_seguro_capatazia_usd,
     siscomex_rs: pz.siscomex_rs, tx_cambial: pz.tx_cambial, outras_despesas_importacao_rs: pz.outras_despesas_importacao_rs,
     despachante_desembaraco_rs: pz.despachante_desembaraco_rs, demurrage_rs: pz.demurrage_rs,
     frete_interno_rs: pz.frete_interno_rs, armazenagem_rs: pz.armazenagem_rs,
-    itens_instalacao_montagem: pz.itens_instalacao_montagem, percentual_servicos: pz.percentual_servicos,
+    itens_instalacao_montagem: pz.itens_instalacao_montagem, containers: pz.containers, percentual_servicos: pz.percentual_servicos,
     modelos: pz.modelos, parametros_fiscais_snapshot: pz.parametros_fiscais_snapshot,
     mark_up_pct: pz.mark_up_pct, comissao_consultoria_pct: pz.comissao_consultoria_pct,
     comissao_vendedor_pct: pz.comissao_vendedor_pct, comissao_indicacao_pct: pz.comissao_indicacao_pct,
@@ -328,19 +348,13 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
             {cambioVivo === 'erro' && <div className="muted small" style={{ marginTop: 4 }}>Câmbio ao vivo indisponível agora.</div>}
           </PZField>
           <PZField label="Outras despesas (R$)"><PZInput type="number" value={pz.outras_despesas_importacao_rs} onChange={set('outras_despesas_importacao_rs')}/></PZField>
+          <PZField label="Despachante + Desembaraço (R$)"><PZInput type="number" value={pz.despachante_desembaraco_rs} onChange={set('despachante_desembaraco_rs')}/></PZField>
+          <PZField label="Demurrage (R$)"><PZInput type="number" value={pz.demurrage_rs} onChange={set('demurrage_rs')}/></PZField>
         </div>
       </Card>
 
-      <Card title="Despesas extras" style={{ marginTop: 16 }}>
-        <div className="grid-3" style={{ gap: 12 }}>
-          <PZField label="Despachante + Desembaraço (R$)"><PZInput type="number" value={pz.despachante_desembaraco_rs} onChange={set('despachante_desembaraco_rs')}/></PZField>
-          <PZField label="Demurrage (R$)"><PZInput type="number" value={pz.demurrage_rs} onChange={set('demurrage_rs')}/></PZField>
-          <PZField label="Frete interno (R$)"><PZInput type="number" value={pz.frete_interno_rs} onChange={set('frete_interno_rs')}/></PZField>
-          <PZField label="Armazenagem (R$)"><PZInput type="number" value={pz.armazenagem_rs} onChange={set('armazenagem_rs')}/></PZField>
-          <PZField label="% de Serviços"><PZInput type="number" value={pz.percentual_servicos} onChange={set('percentual_servicos')}/></PZField>
-        </div>
-
-        <div style={{ marginTop: 14 }}>
+      <Card title="Despesas Operacionais" sub="custos itemizados — instalação/montagem, containers e o que mais entrar aqui no futuro" style={{ marginTop: 16 }}>
+        <div>
           <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
             Instalação e Montagem <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— itens de outros departamentos (Engenharia/Logística), preenchimento avulso por enquanto</span>
           </div>
@@ -354,6 +368,32 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
             ))}
           </div>
           <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addItemInstalacao}>+ Adicionar item</Button>
+        </div>
+
+        <div style={{ marginTop: 20 }}>
+          <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
+            Containers <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tamanho/quantidade herdados da resposta do fornecedor quando possível; preço do frete por container, digitado pelo Financeiro</span>
+          </div>
+          <div className="stack" style={{ gap: 8 }}>
+            {(pz.containers || []).map((ct, i) => (
+              <div key={i} className="row gap-2">
+                <div style={{ width: 140 }}><PZSelect value={ct.tipo_tamanho} onChange={setContainer(i, 'tipo_tamanho')} options={PZ_CONTAINER_TIPOS} placeholder="Tamanho"/></div>
+                <input className="input" style={{ width: 100 }} type="number" value={ct.quantidade ?? 1} onChange={(e) => setContainer(i, 'quantidade')(Number(e.target.value) || 0)} placeholder="Qtd"/>
+                <input className="input" style={{ width: 160 }} type="number" value={ct.preco_rs ?? 0} onChange={(e) => setContainer(i, 'preco_rs')(Number(e.target.value) || 0)} placeholder="Preço (R$)"/>
+                <Button variant="ghost" size="sm" icon="trash" onClick={() => removeContainer(i)}/>
+              </div>
+            ))}
+          </div>
+          <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addContainer}>+ Adicionar container</Button>
+          {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b></div>}
+        </div>
+      </Card>
+
+      <Card title="Despesas Extras" sub="catch-all — recorrentes ou planejadas que ainda não têm seção própria" style={{ marginTop: 16 }}>
+        <div className="grid-3" style={{ gap: 12 }}>
+          <PZField label="Frete interno (R$)"><PZInput type="number" value={pz.frete_interno_rs} onChange={set('frete_interno_rs')}/></PZField>
+          <PZField label="Armazenagem (R$)"><PZInput type="number" value={pz.armazenagem_rs} onChange={set('armazenagem_rs')}/></PZField>
+          <PZField label="% de Serviços"><PZInput type="number" value={pz.percentual_servicos} onChange={set('percentual_servicos')}/></PZField>
         </div>
       </Card>
 

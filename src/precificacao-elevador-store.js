@@ -10,6 +10,29 @@
 
   function sb() { return (window.__VP_SB || {}).sb; }
 
+  /* Parse best-effort do texto livre respostas.container_no (ex.: "1x40HC +
+     1x20GP") em linhas estruturadas pro card "Despesas Operacionais" —
+     preço sempre nasce 0 (o fornecedor do elevador não cota frete, só
+     tamanho/quantidade de container; o preço vem depois do despachante).
+     GP (General Purpose) mapeia pro mesmo tipo que EI_CONTAINER_TIPOS
+     (embarques-importacao.jsx) chama de "DV" (Dry Van) — mesmo vocabulário
+     usado depois no embarque físico. Trecho sem match reconhecível vira
+     "Outro" com quantidade 1, pro Financeiro corrigir na mão.
+     Exportado (window.PrecificacaoElevadorStore.parseContainerNo) só pra
+     permitir teste unitário isolado. */
+  function parseContainerNo(raw) {
+    const txt = String(raw || '').trim();
+    if (!txt) return [];
+    const SUFIXO = { GP: 'DV', DV: 'DV', HC: 'HC', RF: 'RF', OT: 'OT', FR: 'FR' };
+    return txt.split(/\s*\+\s*/).filter(Boolean).map((parte) => {
+      const m = parte.match(/(\d+)\s*[xX]\s*(\d+)\s*'?\s*([A-Za-z]+)/);
+      if (!m) return { tipo_tamanho: 'Outro', quantidade: 1, preco_rs: 0 };
+      const quantidade = Number(m[1]) || 1;
+      const sufixo = SUFIXO[m[3].toUpperCase()];
+      return { tipo_tamanho: sufixo ? `${m[2]}'${sufixo}` : 'Outro', quantidade, preco_rs: 0 };
+    });
+  }
+
   async function listarParametrosFiscais() {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data, error } = await c.from('parametros_fiscais_elevador').select('*').eq('id', 'default').single();
@@ -104,7 +127,7 @@
     const { data: formulario, error: e1 } = await c.from('formularios_elevador').select('*').eq('id', formularioElevadorId).single();
     if (e1) throw e1;
 
-    let modelos, vmleUsd, freteSeguroCapataziaUsd;
+    let modelos, vmleUsd, freteSeguroCapataziaUsd, containersSeed = [];
     if (!cotacaoFornecedorId) {
       const { data: unidadesForm, error: e3 } = await c.from('formularios_elevador_unidades')
         .select('id, identificador, modelo, quantidade').eq('formulario_id', formularioElevadorId).order('indice_ativo');
@@ -144,6 +167,8 @@
       const freteInternacionalUsd = Number(respostas.frete_internacional_usd) || 0;
       const taxasExtrasUsd = Number(respostas.taxas_extras_usd) || 0;
       freteSeguroCapataziaUsd = freteInternacionalUsd + taxasExtrasUsd;
+
+      containersSeed = parseContainerNo(respostas.container_no);
     }
 
     const parametros = await listarParametrosFiscais();
@@ -155,6 +180,7 @@
       cambio_na_cotacao_usd_brl: typeof cambioNaCotacao !== 'undefined' ? cambioNaCotacao : null,
       vmle_usd: vmleUsd,
       frete_seguro_capatazia_usd: freteSeguroCapataziaUsd,
+      containers: containersSeed,
       modelos,
       percentual_servicos: 0.30,
       parametros_fiscais_snapshot: parametros,
@@ -222,6 +248,7 @@
       despachanteDesembaracoRs: pz.despachante_desembaraco_rs, demurrageRs: pz.demurrage_rs,
       freteInternoRs: pz.frete_interno_rs, armazenagemRs: pz.armazenagem_rs,
       itensInstalacaoMontagem: pz.itens_instalacao_montagem || [],
+      containers: pz.containers || [],
       quantidadeEquipamentos: (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1,
       percentualServicos: pz.percentual_servicos, modelos: pz.modelos || [],
       markUpPct: pz.mark_up_pct, comissaoConsultoriaPct: pz.comissao_consultoria_pct,
@@ -365,5 +392,6 @@
     listarParametrosFiscais, salvarParametrosFiscais,
     listarPendentes, criar, obter, salvar, calcularEsalvar,
     camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,
+    parseContainerNo,
   };
 }());

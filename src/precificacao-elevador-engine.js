@@ -19,6 +19,7 @@
        vmleUsd, seguroUsd, freteSeguroCapataziaUsd, siscomexRs, txCambial, outrasDespesasImportacaoRs,
        despachanteDesembaracoRs, demurrageRs, freteInternoRs, armazenagemRs,
        itensInstalacaoMontagem: [{descricao, valor}],
+       containers: [{tipo_tamanho, quantidade, preco_rs}],
        quantidadeEquipamentos, percentualServicos,
        modelos: [{unidadeId, identificador, modelo, quantidade, valorUnitarioUsd}],
        parametros: { regimeTributario, icmsImportacaoPct, ipiImportacaoPct, pisImportacaoPct, cofinsImportacaoPct,
@@ -47,6 +48,11 @@
     const K8_demurrageRs = Number(inputs.demurrageRs) || 0;
     const K9_freteInternoRs = Number(inputs.freteInternoRs) || 0;
     const K10_armazenagemRs = Number(inputs.armazenagemRs) || 0;
+    // K13_containersRs não é célula original da planilha — extensão (28/08) pro
+    // card "Despesas Operacionais" (Containers), soma no mesmo bucket que
+    // Instalação e Montagem já usava (K11).
+    const containers = Array.isArray(inputs.containers) ? inputs.containers : [];
+    const K13_containersRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.preco_rs) || 0), 0);
 
     // ---------- VMLE/Seguro/Frete convertidos p/ R$ (Q20:S23) ----------
     const S20_vmleRs = D6_vmleUsd * D12_txCambial;
@@ -55,7 +61,7 @@
     const S23_vmldRs = S20_vmleRs + S21_seguroRs + S22_freteRs;
 
     const K7_adValoremRs = S23_vmldRs * 0.001; // Ad-Valorem = VMLD * 0,1%
-    const K12_despesasExtrasTotalRs = K6_despachanteRs + K7_adValoremRs + K8_demurrageRs + K9_freteInternoRs + K10_armazenagemRs + K11_instalacaoMontagemRs;
+    const K12_despesasExtrasTotalRs = K6_despachanteRs + K7_adValoremRs + K8_demurrageRs + K9_freteInternoRs + K10_armazenagemRs + K11_instalacaoMontagemRs + K13_containersRs;
 
     // ---------- Cascata de impostos na importação (M24:S30) ----------
     const M24_bcII = S23_vmldRs;
@@ -171,7 +177,7 @@
         totalNotaFiscal: U31_totalNotaFiscal, despesasInstalacaoMontagem: U32_despesasInstalacaoMontagem,
         totalDesembolso: U33_totalDesembolso, creditos: U34_creditos,
         custoTotalMercadorias: U35_custoTotalMercadorias, custoPorEquipamento: U36_custoPorEquipamento,
-        afrmm: D11_afrmmRs, adValorem: K7_adValoremRs, despesasExtrasTotal: K12_despesasExtrasTotalRs,
+        afrmm: D11_afrmmRs, adValorem: K7_adValoremRs, despesasExtrasTotal: K12_despesasExtrasTotalRs, containersRs: K13_containersRs,
       },
       modelos: modelosComRateio,
       precificacao: {

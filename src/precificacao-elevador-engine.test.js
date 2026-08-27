@@ -100,6 +100,18 @@ test('calcular — regime Simples não aproveita crédito de ICMS, custo da merc
   assert.ok(simples.importacao.custoTotalMercadorias > presumido.importacao.custoTotalMercadorias, 'sem crédito de ICMS, o custo total da mercadoria deveria ser maior no Simples');
 });
 
+test('calcular — containers somam no mesmo bucket que Instalação e Montagem (reduz lucro, não muda preço de venda)', () => {
+  const semContainers = E.calcular(inputsBase);
+  const comContainers = E.calcular({
+    ...inputsBase,
+    containers: [{ tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 500 }, { tipo_tamanho: "20'DV", quantidade: 1, preco_rs: 300 }],
+  });
+  closeTo(comContainers.importacao.containersRs, 800, 0.01, 'containersRs deveria ser 1×500 + 1×300');
+  closeTo(comContainers.importacao.despesasExtrasTotal - semContainers.importacao.despesasExtrasTotal, 800, 0.01, 'containers deveriam entrar no total de despesas extras/operacionais');
+  closeTo(comContainers.precificacao.precoVendaProposta, semContainers.precificacao.precoVendaProposta, 0.01, 'preço de venda não deveria mudar com containers (igual instalação/montagem)');
+  closeTo(semContainers.precificacao.lucroFinal - comContainers.precificacao.lucroFinal, 800, 0.01, 'lucro final deveria cair exatamente o valor dos containers');
+});
+
 test('calcular — rateio por modelo soma 100% do preço de venda proposto', () => {
   const out = E.calcular({
     ...inputsBase,
