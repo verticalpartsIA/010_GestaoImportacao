@@ -271,15 +271,25 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
             {ressincronizando ? 'Ressincronizando…' : 'Ressincronizar do fornecedor'}
           </Button>
         )}>
+        {pz.cotacao_fornecedor_id && (
+          <div className="row gap-3" style={{ marginBottom: 10, flexWrap: 'wrap' }}>
+            <span className="mono small muted">
+              Câmbio no dia da cotação (congelado): {pz.cambio_na_cotacao_usd_brl != null ? fmtBRL2(pz.cambio_na_cotacao_usd_brl) : '— (fornecedor respondeu antes dessa feature existir)'}
+            </span>
+            <span className="mono small muted">
+              Câmbio agora: {cambioVivo && cambioVivo !== 'erro' ? fmtBRL2(cambioVivo.valor) : 'indisponível'}
+            </span>
+          </div>
+        )}
         <div className="table-wrap">
           <table className="t">
             <thead><tr>
-              <th>Unidade</th><th>Modelo (fornecedor)</th><th>Quantidade</th><th>Valor unitário (USD)</th>
-              <th>Valor unitário (R$) hoje</th>
+              <th>Unidade</th><th>Modelo (fornecedor)</th><th>Quantidade</th><th>Custo Fornecedor (USD)</th>
+              <th>R$ no dia da cotação</th><th>R$ agora (ao vivo)</th>
             </tr></thead>
             <tbody>
               {(pz.modelos || []).length === 0 && (
-                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma unidade encontrada.</td></tr>
+                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma unidade encontrada.</td></tr>
               )}
               {(pz.modelos || []).map((m, i) => (
                 <tr key={m.unidadeId || i}>
@@ -287,7 +297,10 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
                   <td><PZInput value={m.modelo} onChange={setModelo(i, 'modelo')}/></td>
                   <td><PZInput type="number" value={m.quantidade} onChange={setModelo(i, 'quantidade')}/></td>
                   <td><PZInput type="number" value={m.valorUnitarioUsd} onChange={setModelo(i, 'valorUnitarioUsd')}/></td>
-                  <td className="mono muted" title="Referência — não é o valor usado no cálculo oficial (esse usa o Câmbio abaixo)">
+                  <td className="mono muted" title="Câmbio congelado no dia em que o fornecedor respondeu × custo em USD — não é o valor usado no cálculo oficial (esse usa o Câmbio abaixo)">
+                    {pz.cambio_na_cotacao_usd_brl != null ? fmtBRL2((Number(m.valorUnitarioUsd) || 0) * pz.cambio_na_cotacao_usd_brl) : '—'}
+                  </td>
+                  <td className="mono muted" title="Câmbio de agora × custo em USD — referência de quanto custaria hoje, não é o valor usado no cálculo oficial (esse usa o Câmbio abaixo)">
                     {cambioVivo && cambioVivo !== 'erro' ? fmtBRL2((Number(m.valorUnitarioUsd) || 0) * cambioVivo.valor) : '—'}
                   </td>
                 </tr>

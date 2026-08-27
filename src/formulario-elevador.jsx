@@ -771,6 +771,11 @@ function FECotacaoRespostaModal({ cot, onClose }) {
                 <div style={{ marginTop: 6 }}>
                   <span className="up-eyebrow muted">Confirmação técnica</span>
                   <p className="small" style={{ marginTop: 2 }}>{item.confirmacao_tecnica}</p>
+                  {item.confirmacao_tecnica_pt && (
+                    <p className="small" style={{ marginTop: 2, color: 'var(--fg2)', fontStyle: 'italic' }}>
+                      🌐 {item.confirmacao_tecnica_pt}
+                    </p>
+                  )}
                 </div>
               )}
             </div>

@@ -41,7 +41,11 @@
   <!-- window.parseMoeda — sanitiza preço digitado pelo fornecedor (aceita
        "$18,990", "18.990,50" etc.) antes de salvar, pra nunca mais virar
        string crua que zera na Precificação (bug achado 27/08). -->
-  <script src="/src/utils.js?v=1"></script>
+  <script src="/src/utils.js?v=2"></script>
+
+  <!-- Câmbio USD/BRL — captura o câmbio congelado no momento em que o
+       fornecedor responde (ver salvarResposta em cotacao-elevador-fornecedor-store.js). -->
+  <script src="/src/cambio-api.js?v=1"></script>
 
   <!-- Store (CRUD + portal público) -->
   <script src="/src/vp-log.js?v=2"></script>
@@ -50,7 +54,7 @@
        evento que o fornecedor dispara (respondeu) não avança a cadeia. -->
   <script src="/src/gatilhos-engine.js?v=11"></script>
   <script src="/src/eventos-fluxo-store.js?v=8"></script>
-  <script src="/src/cotacao-elevador-fornecedor-store.js?v=16"></script>
+  <script src="/src/cotacao-elevador-fornecedor-store.js?v=17"></script>
 
   <!-- App do portal de cotação técnica -->
   <script type="text/babel" src="/src/cotacao-elevador-fornecedor.jsx?v=11"></script>

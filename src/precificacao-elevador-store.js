@@ -119,6 +119,7 @@
     } else {
       const { data: cotFornecedor, error: e2 } = await c.from('cotacoes_elevador_fornecedor').select('*').eq('id', cotacaoFornecedorId).single();
       if (e2) throw e2;
+      var cambioNaCotacao = cotFornecedor.cambio_na_resposta_usd_brl ?? null;
 
       const unidades = (cotFornecedor.dados_envio && cotFornecedor.dados_envio.unidades) || [];
       const itensResposta = (cotFornecedor.respostas && cotFornecedor.respostas.itens) || [];
@@ -151,6 +152,7 @@
       formulario_elevador_id: formularioElevadorId,
       numero_cotacao: formulario.numero_cotacao ?? null,
       cotacao_fornecedor_id: cotacaoFornecedorId || null,
+      cambio_na_cotacao_usd_brl: typeof cambioNaCotacao !== 'undefined' ? cambioNaCotacao : null,
       vmle_usd: vmleUsd,
       frete_seguro_capatazia_usd: freteSeguroCapataziaUsd,
       modelos,
@@ -313,7 +315,14 @@
       return { ...m, modelo: item.modelo_fornecedor || m.modelo, valorUnitarioUsd: window.parseMoeda(item.preco_unitario) };
     });
     const vmleUsd = itensResposta.reduce((s, it) => s + window.parseMoeda(it.preco_total), 0);
-    await salvar(precificacaoId, { modelos, vmle_usd: vmleUsd });
+    // Câmbio congelado: só preenche se ainda não tinha (precificação nasceu
+    // antes dessa coluna existir, ou antes do fornecedor ter câmbio salvo) —
+    // depois de setado uma vez, nunca reescreve (é congelado por definição).
+    const patch = { modelos, vmle_usd: vmleUsd };
+    if (pz.cambio_na_cotacao_usd_brl == null && cotFornecedor.cambio_na_resposta_usd_brl != null) {
+      patch.cambio_na_cotacao_usd_brl = cotFornecedor.cambio_na_resposta_usd_brl;
+    }
+    await salvar(precificacaoId, patch);
     return { modelos, vmle_usd: vmleUsd };
   }
 

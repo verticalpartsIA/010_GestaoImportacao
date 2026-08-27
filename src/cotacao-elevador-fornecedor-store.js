@@ -268,9 +268,35 @@
     const c = sb(); if (!c) return [];
     const { data, error } = await c.from('cotacoes_elevador_fornecedor')
       .select('*, formularios_elevador(numero_cotacao, local_obra_cidade, local_obra_estado, clientes(razao_social))')
+      .is('excluido_em', null)
       .order('created_at', { ascending: false });
     if (error) throw error;
     return data || [];
+  }
+
+  /* ---------- Exclusão com motivo (soft delete) ----------
+     Nunca DELETE de verdade: precificacoes_elevador, tratativas_cotacao,
+     projetos_elevador e cotacoes_elevador_fornecedor_anexos referenciam
+     esta linha por FK — apagar quebraria ou arrastaria esses registros.
+     "Excluir" aqui marca excluido_em/motivo_exclusao e a linha some da
+     listagem (listarTodas já filtra), mas os dados ficam preservados
+     pra auditoria. Pedido do usuário (27/08): exige justificativa antes
+     de excluir. */
+  async function excluirComMotivo(id, motivo) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (!motivo || !motivo.trim()) throw new Error('Informe o motivo da exclusão.');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Cotação não encontrada.');
+    const now = new Date().toISOString();
+    const { error } = await c.from('cotacoes_elevador_fornecedor').update({
+      excluido_em: now, excluido_por: (window.__VP_USER || {}).email || null,
+      motivo_exclusao: motivo.trim(), updated_at: now,
+    }).eq('id', id);
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cotações a Fornecedor', acao: 'Excluiu cotação',
+      alvo: cur.numero_documento, alvo_id: id, detalhe: { motivo: motivo.trim(), fornecedor: cur.fornecedor },
+    });
   }
 
   async function getById(id) {
@@ -443,7 +469,16 @@
     const ip = await getPublicIP();
     const now = new Date().toISOString();
     const payload = { ...respostas, _meta: { ip, ua: navigator.userAgent, respondido_em: now } };
-    const patch = { status: 'respondido', respostas: payload, responded_at: now, updated_at: now };
+    /* Câmbio USD/BRL congelado no exato momento em que o fornecedor
+       respondeu (pedido do usuário, 27/08) — base pra comparar depois
+       "câmbio no dia da cotação" vs. "câmbio agora" na Precificação.
+       Nunca bloqueia o envio se a API de câmbio falhar. */
+    let cambioNaResposta = null;
+    try { cambioNaResposta = (await window.CambioAPI.buscarUsdBrl()).valor; } catch (e) { /* segue sem — Precificação fica sem o congelado */ }
+    const patch = {
+      status: 'respondido', respostas: payload, responded_at: now, updated_at: now,
+      cambio_na_resposta_usd_brl: cambioNaResposta,
+    };
     await c.from('cotacoes_elevador_fornecedor').update(patch).eq('token', token);
     if (window.VPLog) window.VPLog.registrar({
       ator_nome: cur.fornecedor || 'Fornecedor', ator_setor: 'fornecedor',
