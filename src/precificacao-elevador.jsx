@@ -351,24 +351,6 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           <PZField label="Despachante + Desembaraço (R$)"><PZInput type="number" value={pz.despachante_desembaraco_rs} onChange={set('despachante_desembaraco_rs')}/></PZField>
           <PZField label="Demurrage (R$)"><PZInput type="number" value={pz.demurrage_rs} onChange={set('demurrage_rs')}/></PZField>
         </div>
-      </Card>
-
-      <Card title="Despesas Operacionais" sub="custos itemizados — instalação/montagem, containers e o que mais entrar aqui no futuro" style={{ marginTop: 16 }}>
-        <div>
-          <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
-            Instalação e Montagem <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— itens de outros departamentos (Engenharia/Logística), preenchimento avulso por enquanto</span>
-          </div>
-          <div className="stack" style={{ gap: 8 }}>
-            {(pz.itens_instalacao_montagem || []).map((it, i) => (
-              <div key={i} className="row gap-2">
-                <input className="input" style={{ flex: 1 }} value={it.descricao || ''} onChange={(e) => setItemInstalacao(i, 'descricao')(e.target.value)} placeholder="ex.: Guincho, Andaime, Mão de obra..."/>
-                <input className="input" style={{ width: 160 }} type="number" value={it.valor || 0} onChange={(e) => setItemInstalacao(i, 'valor')(Number(e.target.value) || 0)} placeholder="0,00"/>
-                <Button variant="ghost" size="sm" icon="trash" onClick={() => removeItemInstalacao(i)}/>
-              </div>
-            ))}
-          </div>
-          <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addItemInstalacao}>+ Adicionar item</Button>
-        </div>
 
         <div style={{ marginTop: 20 }}>
           <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
@@ -386,6 +368,24 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           </div>
           <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addContainer}>+ Adicionar container</Button>
           {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b></div>}
+        </div>
+      </Card>
+
+      <Card title="Despesas Operacionais" sub="custos itemizados — instalação/montagem e o que mais entrar aqui no futuro" style={{ marginTop: 16 }}>
+        <div>
+          <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
+            Instalação e Montagem <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— itens de outros departamentos (Engenharia/Logística), preenchimento avulso por enquanto</span>
+          </div>
+          <div className="stack" style={{ gap: 8 }}>
+            {(pz.itens_instalacao_montagem || []).map((it, i) => (
+              <div key={i} className="row gap-2">
+                <input className="input" style={{ flex: 1 }} value={it.descricao || ''} onChange={(e) => setItemInstalacao(i, 'descricao')(e.target.value)} placeholder="ex.: Guincho, Andaime, Mão de obra..."/>
+                <input className="input" style={{ width: 160 }} type="number" value={it.valor || 0} onChange={(e) => setItemInstalacao(i, 'valor')(Number(e.target.value) || 0)} placeholder="0,00"/>
+                <Button variant="ghost" size="sm" icon="trash" onClick={() => removeItemInstalacao(i)}/>
+              </div>
+            ))}
+          </div>
+          <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addItemInstalacao}>+ Adicionar item</Button>
         </div>
       </Card>
 
