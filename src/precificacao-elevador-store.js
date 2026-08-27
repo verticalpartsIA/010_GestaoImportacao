@@ -130,10 +130,10 @@
           unidadeId: u.unidade_id, identificador: u.identificador,
           modelo: item.modelo_fornecedor || u.modelo || '',
           quantidade: Number(u.quantidade) || 1,
-          valorUnitarioUsd: Number(item.preco_unitario) || 0,
+          valorUnitarioUsd: window.parseMoeda(item.preco_unitario),
         };
       });
-      vmleUsd = itensResposta.reduce((s, it) => s + (Number(it.preco_total) || 0), 0);
+      vmleUsd = itensResposta.reduce((s, it) => s + window.parseMoeda(it.preco_total), 0);
 
       /* Frete internacional + outras taxas informados pelo fornecedor (USD) —
          agora campos estruturados na resposta — herdam pra o bucket USD de
@@ -288,9 +288,38 @@
     if (error) throw error;
   }
 
+  /* ---------- Ressincroniza modelos/vmle a partir da resposta do fornecedor ----------
+     Cobre o caso comum: a precificação nasceu ANTES do fornecedor responder
+     (ou a resposta veio em formato de texto tipo "$18,990" — bug corrigido
+     27/08, ver window.parseMoeda), então valorUnitarioUsd ficou zerado e
+     nunca foi atualizado sozinho depois. Só reescreve valorUnitarioUsd (por
+     unidade, casando por unidadeId) e vmle_usd — preserva tudo mais que o
+     Financeiro já tenha digitado (câmbio, frete, percentuais). Sem
+     cotacao_fornecedor_id (fluxo "direto pra Precificação") não há o que
+     ressincronizar — lança erro claro em vez de silenciar. */
+  async function ressincronizarDoFornecedor(precificacaoId) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const pz = await obter(precificacaoId);
+    if (!pz.cotacao_fornecedor_id) throw new Error('Esta precificação não veio de uma Cotação a Fornecedor — nada para ressincronizar.');
+    const { data: cotFornecedor, error } = await c.from('cotacoes_elevador_fornecedor').select('*').eq('id', pz.cotacao_fornecedor_id).single();
+    if (error) throw error;
+    const itensResposta = (cotFornecedor.respostas && cotFornecedor.respostas.itens) || [];
+    if (!itensResposta.length) throw new Error('O fornecedor ainda não respondeu esta cotação.');
+    const itemPorUnidade = {}; itensResposta.forEach((it) => { itemPorUnidade[it.unidade_id] = it; });
+
+    const modelos = (pz.modelos || []).map((m) => {
+      const item = itemPorUnidade[m.unidadeId];
+      if (!item) return m;
+      return { ...m, modelo: item.modelo_fornecedor || m.modelo, valorUnitarioUsd: window.parseMoeda(item.preco_unitario) };
+    });
+    const vmleUsd = itensResposta.reduce((s, it) => s + window.parseMoeda(it.preco_total), 0);
+    await salvar(precificacaoId, { modelos, vmle_usd: vmleUsd });
+    return { modelos, vmle_usd: vmleUsd };
+  }
+
   window.PrecificacaoElevadorStore = {
     listarParametrosFiscais, salvarParametrosFiscais,
     listarPendentes, criar, obter, salvar, calcularEsalvar,
-    camposObrigatoriosFaltando, aprovar,
+    camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,
   };
 }());

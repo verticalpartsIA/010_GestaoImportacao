@@ -72,7 +72,7 @@
   <script src="/src/version-check.js?v=3"></script>
 
   <!-- Utilitários globais sem dados de demonstração -->
-  <script src="/src/utils.js?v=1"></script>
+  <script src="/src/utils.js?v=2"></script>
   <script src="/src/ncm-data.js?v=7"></script>
 
   <!-- Supabase loader + carregador de dados reais -->
@@ -149,9 +149,12 @@
 
   <!-- Formulário de Coleta de Dados — Elevadores (Comercial) — ISSUE #66 -->
   <script src="/src/enderecos-api.js?v=2"></script>
+  <!-- Câmbio USD/BRL ao vivo (AwesomeAPI) — usado pela Precificação de
+       Elevador pra comparar o câmbio congelado da cotação com o de hoje. -->
+  <script src="/src/cambio-api.js?v=1"></script>
   <script src="/src/formulario-elevador-store.js?v=17"></script>
-  <script src="/src/cotacao-elevador-fornecedor-store.js?v=15"></script>
-  <script type="text/vp-jsx" src="/src/formulario-elevador.jsx?v=38"></script>
+  <script src="/src/cotacao-elevador-fornecedor-store.js?v=16"></script>
+  <script type="text/vp-jsx" src="/src/formulario-elevador.jsx?v=39"></script>
 
   <!-- Controle de Cotações — histórico + Formulário de Elevadores — ISSUE #79 -->
   <script type="text/vp-jsx" src="/src/controle-cotacoes.jsx?v=4"></script>
@@ -163,8 +166,8 @@
   <!-- Precificação de Elevador (ADM/Financeiro) + DIFAL -->
   <script src="/src/difal-engine.js?v=1"></script>
   <script src="/src/precificacao-elevador-engine.js?v=1"></script>
-  <script src="/src/precificacao-elevador-store.js?v=8"></script>
-  <script type="text/vp-jsx" src="/src/precificacao-elevador.jsx?v=14"></script>
+  <script src="/src/precificacao-elevador-store.js?v=9"></script>
+  <script type="text/vp-jsx" src="/src/precificacao-elevador.jsx?v=15"></script>
 
   <script type="text/vp-jsx" src="/src/precificacao.jsx?v=25"></script>
   <script type="text/vp-jsx" src="/src/proposta-form.jsx?v=8"></script>

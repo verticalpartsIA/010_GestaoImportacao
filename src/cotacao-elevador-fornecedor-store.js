@@ -367,7 +367,7 @@
     return pendentes.map((x) => {
       const form = formById[x.formulario_elevador_id] || {};
       const respostas = x.respostas || {};
-      const fobUsd = (respostas.itens || []).reduce((s, it) => s + (Number(it.preco_total) || 0), 0);
+      const fobUsd = (respostas.itens || []).reduce((s, it) => s + window.parseMoeda(it.preco_total), 0);
       return {
         cotacaoFornecedorId: x.id,
         numeroDocumento: x.numero_documento,
@@ -399,14 +399,47 @@
     return { ...cur, ...patch };
   }
 
+  /* Traduz a "Confirmação técnica" do fornecedor pra português — chamado
+     no momento de salvar a resposta (uma vez só, fica gravado). Devolve
+     null quando o texto já está em PT-BR (a Edge Function decide isso),
+     ou quando a tradução falha — nesse caso NÃO bloqueia o envio, o
+     fornecedor não pode ficar travado por causa de um serviço de IA
+     instável, só fica sem a linha traduzida. */
+  const VP_TRANSLATE_URL = 'https://jxtqwzmpgofwctqajewt.supabase.co/functions/v1/vp-translate-to-pt';
+  const VP_TRANSLATE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+  async function traduzirConfirmacaoTecnica(text) {
+    if (!text || !text.trim()) return null;
+    try {
+      const res = await fetch(VP_TRANSLATE_URL, {
+        method: 'POST',
+        headers: { Authorization: 'Bearer ' + VP_TRANSLATE_ANON_KEY, 'Content-Type': 'application/json' },
+        body: JSON.stringify({ text }),
+      });
+      if (!res.ok) return null;
+      const data = await res.json();
+      return data.translated || null;
+    } catch (e) {
+      return null;
+    }
+  }
+
   /* respostas = { moeda, incoterm_porto, condicoes_pagamento, prazo_fabricacao,
      garantia, validade_dias, embalagem, container_no, documentos_embarque,
      observacoes_gerais, itens:[{unidade_id, modelo_fornecedor, floors_stops_doors,
-     preco_unitario, preco_total, confirmacao_tecnica}] } */
+     preco_unitario, preco_total, confirmacao_tecnica, confirmacao_tecnica_pt}] } */
   async function salvarResposta(token, respostas) {
     const c = sb();
     const cur = await getByToken(token);
     if (!cur) return null;
+    // Traduz cada "confirmação técnica" em paralelo — não atrasa o envio
+    // sequencialmente item a item, e nunca bloqueia se a IA falhar.
+    if (Array.isArray(respostas.itens) && respostas.itens.length) {
+      await Promise.all(respostas.itens.map(async (it) => {
+        if (it && it.confirmacao_tecnica) {
+          it.confirmacao_tecnica_pt = await traduzirConfirmacaoTecnica(it.confirmacao_tecnica);
+        }
+      }));
+    }
     const ip = await getPublicIP();
     const now = new Date().toISOString();
     const payload = { ...respostas, _meta: { ip, ua: navigator.userAgent, respondido_em: now } };

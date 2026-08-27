@@ -231,7 +231,14 @@ function CotacaoElevadorFornecedorApp() {
       embalagem, container_no: containerNo, documentos_embarque: documentosEmbarque,
       frete_internacional_usd: freteInternacionalUsd, taxas_extras_usd: taxasExtrasUsd,
       observacoes_gerais: observacoesGerais,
-      itens: unidades.map((u) => ({ unidade_id: u.unidade_id, unidade_identificador: u.identificador, ...(itemVals[u.unidade_id] || {}) })),
+      itens: unidades.map((u) => {
+        const it = itemVals[u.unidade_id] || {};
+        return {
+          unidade_id: u.unidade_id, unidade_identificador: u.identificador, ...it,
+          preco_unitario: it.preco_unitario ? window.parseMoeda(it.preco_unitario) : '',
+          preco_total: it.preco_total ? window.parseMoeda(it.preco_total) : '',
+        };
+      }),
     };
     try {
       const updated = await store.salvarResposta(token, respostas);

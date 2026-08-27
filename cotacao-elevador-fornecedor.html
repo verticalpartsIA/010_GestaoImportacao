@@ -38,6 +38,11 @@
   <!-- Padrão universal de codificação de IDs (Master ID) — Fase 1 -->
   <script src="/src/master-id-engine.js?v=2"></script>
 
+  <!-- window.parseMoeda — sanitiza preço digitado pelo fornecedor (aceita
+       "$18,990", "18.990,50" etc.) antes de salvar, pra nunca mais virar
+       string crua que zera na Precificação (bug achado 27/08). -->
+  <script src="/src/utils.js?v=1"></script>
+
   <!-- Store (CRUD + portal público) -->
   <script src="/src/vp-log.js?v=2"></script>
   <!-- Gatilhos & Prazo — motor precisa estar carregado ANTES de
@@ -45,9 +50,9 @@
        evento que o fornecedor dispara (respondeu) não avança a cadeia. -->
   <script src="/src/gatilhos-engine.js?v=11"></script>
   <script src="/src/eventos-fluxo-store.js?v=8"></script>
-  <script src="/src/cotacao-elevador-fornecedor-store.js?v=14"></script>
+  <script src="/src/cotacao-elevador-fornecedor-store.js?v=16"></script>
 
   <!-- App do portal de cotação técnica -->
-  <script type="text/babel" src="/src/cotacao-elevador-fornecedor.jsx?v=10"></script>
+  <script type="text/babel" src="/src/cotacao-elevador-fornecedor.jsx?v=11"></script>
 </body>
 </html>

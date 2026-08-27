@@ -99,11 +99,31 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
   const [salvando, setSalvando] = React.useState(false);
   const [aprovando, setAprovando] = React.useState(false);
   const [mostrarParametros, setMostrarParametros] = React.useState(false);
+  const [ressincronizando, setRessincronizando] = React.useState(false);
+  // Câmbio USD/BRL ao vivo — só referência/comparação (ver cambio-api.js).
+  // Não substitui tx_cambial sozinho; o Financeiro aplica clicando "Usar".
+  const [cambioVivo, setCambioVivo] = React.useState(null); // null | { valor, timestamp } | 'erro'
 
   const carregar = React.useCallback(() => {
     window.PrecificacaoElevadorStore.obter(id).then(setPz);
   }, [id]);
   React.useEffect(() => { carregar(); }, [carregar]);
+  React.useEffect(() => {
+    window.CambioAPI.buscarUsdBrl().then(setCambioVivo).catch(() => setCambioVivo('erro'));
+  }, []);
+
+  const ressincronizarDoFornecedor = async () => {
+    setRessincronizando(true);
+    try {
+      await window.PrecificacaoElevadorStore.ressincronizarDoFornecedor(pz.id);
+      await carregar();
+      window.toast?.('Valores do fornecedor ressincronizados.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao ressincronizar: ' + e.message, 'error');
+    } finally {
+      setRessincronizando(false);
+    }
+  };
 
   if (!pz) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
@@ -245,13 +265,21 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
         </div>
       )}
 
-      <Card title="Unidades desta cotação" sub="herdado do Formulário de Elevadores + resposta do fornecedor">
+      <Card title="Unidades desta cotação" sub="herdado do Formulário de Elevadores + resposta do fornecedor"
+        action={pz.cotacao_fornecedor_id && (
+          <Button variant="outline" size="sm" icon="refresh" onClick={ressincronizarDoFornecedor} disabled={ressincronizando}>
+            {ressincronizando ? 'Ressincronizando…' : 'Ressincronizar do fornecedor'}
+          </Button>
+        )}>
         <div className="table-wrap">
           <table className="t">
-            <thead><tr><th>Unidade</th><th>Modelo (fornecedor)</th><th>Quantidade</th><th>Valor unitário (USD)</th></tr></thead>
+            <thead><tr>
+              <th>Unidade</th><th>Modelo (fornecedor)</th><th>Quantidade</th><th>Valor unitário (USD)</th>
+              <th>Valor unitário (R$) hoje</th>
+            </tr></thead>
             <tbody>
               {(pz.modelos || []).length === 0 && (
-                <tr><td colSpan={4} style={{ textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma unidade encontrada.</td></tr>
+                <tr><td colSpan={5} style={{ textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma unidade encontrada.</td></tr>
               )}
               {(pz.modelos || []).map((m, i) => (
                 <tr key={m.unidadeId || i}>
@@ -259,6 +287,9 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
                   <td><PZInput value={m.modelo} onChange={setModelo(i, 'modelo')}/></td>
                   <td><PZInput type="number" value={m.quantidade} onChange={setModelo(i, 'quantidade')}/></td>
                   <td><PZInput type="number" value={m.valorUnitarioUsd} onChange={setModelo(i, 'valorUnitarioUsd')}/></td>
+                  <td className="mono muted" title="Referência — não é o valor usado no cálculo oficial (esse usa o Câmbio abaixo)">
+                    {cambioVivo && cambioVivo !== 'erro' ? fmtBRL2((Number(m.valorUnitarioUsd) || 0) * cambioVivo.valor) : '—'}
+                  </td>
                 </tr>
               ))}
             </tbody>
@@ -275,6 +306,13 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           <PZField label="Câmbio (R$/US$)">
             <PZInput type="number" value={pz.tx_cambial} onChange={set('tx_cambial')}/>
             {cambioForaFaixa && <div style={{ color: '#991b1b', fontSize: 11, marginTop: 4 }}>Fora da faixa {CAMBIO_MIN}–{CAMBIO_MAX}. Confira se não digitou aqui um valor de taxa/frete.</div>}
+            {cambioVivo && cambioVivo !== 'erro' && (
+              <div className="row gap-2" style={{ marginTop: 4, alignItems: 'center' }}>
+                <span className="mono small muted">Dólar agora: {fmtBRL2(cambioVivo.valor)}</span>
+                <Button variant="ghost" size="sm" onClick={() => set('tx_cambial')(cambioVivo.valor)}>Usar</Button>
+              </div>
+            )}
+            {cambioVivo === 'erro' && <div className="muted small" style={{ marginTop: 4 }}>Câmbio ao vivo indisponível agora.</div>}
           </PZField>
           <PZField label="Outras despesas (R$)"><PZInput type="number" value={pz.outras_despesas_importacao_rs} onChange={set('outras_despesas_importacao_rs')}/></PZField>
         </div>
