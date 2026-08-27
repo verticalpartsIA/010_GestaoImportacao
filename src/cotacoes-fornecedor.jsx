@@ -76,6 +76,12 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
   const [tab, setTab] = React.useState('todos');
   const [fFornecedor, setFFornecedor] = React.useState('Todos');
   const [fCategoria, setFCategoria] = React.useState('Todos');
+  // Seleção p/ exclusão em lote — exige justificativa antes de excluir de
+  // verdade (pedido do usuário, 27/08). Ver excluirComMotivo (soft delete).
+  const [selecionadas, setSelecionadas] = React.useState(() => new Set());
+  const [showExcluir, setShowExcluir] = React.useState(false);
+  const [motivoExclusao, setMotivoExclusao] = React.useState('');
+  const [excluindo, setExcluindo] = React.useState(false);
 
   const carregar = React.useCallback(async () => {
     try {
@@ -87,6 +93,29 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
     }
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
+
+  const toggleSelecionada = (id) => setSelecionadas((prev) => {
+    const next = new Set(prev);
+    if (next.has(id)) next.delete(id); else next.add(id);
+    return next;
+  });
+
+  const confirmarExclusao = async () => {
+    if (!motivoExclusao.trim()) return window.toast?.('Informe o motivo da exclusão.', 'warning');
+    setExcluindo(true);
+    try {
+      for (const id of selecionadas) await store.excluirComMotivo(id, motivoExclusao);
+      window.toast?.(`${selecionadas.size} cotação(ões) excluída(s).`, 'success');
+      setSelecionadas(new Set());
+      setMotivoExclusao('');
+      setShowExcluir(false);
+      await carregar();
+    } catch (e) {
+      window.toast?.('Erro ao excluir: ' + e.message, 'error');
+    } finally {
+      setExcluindo(false);
+    }
+  };
 
   const fornecedores = React.useMemo(() => (rows ? [...new Set(rows.map((r) => r.fornecedor))] : []), [rows]);
 
@@ -137,9 +166,23 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
         </select>
       </div>
 
+      {selecionadas.size > 0 && (
+        <div className="row gap-2" style={{ marginBottom: 10, padding: '8px 12px', background: 'var(--vp-gray-50)', border: '1px solid var(--border)', alignItems: 'center' }}>
+          <span className="small" style={{ fontWeight: 600 }}>{selecionadas.size} selecionada(s)</span>
+          <div className="spacer"/>
+          <Button variant="outline" size="sm" onClick={() => setSelecionadas(new Set())}>Limpar seleção</Button>
+          <Button variant="danger" size="sm" icon="trash" onClick={() => setShowExcluir(true)}>Excluir selecionadas</Button>
+        </div>
+      )}
+
       <div className="table-wrap">
         <table className="t">
           <thead><tr>
+            <th style={{ width: 32 }}>
+              <input type="checkbox" aria-label="Selecionar todas"
+                checked={filtradas.length > 0 && filtradas.every((c) => selecionadas.has(c.id))}
+                onChange={(e) => setSelecionadas(e.target.checked ? new Set(filtradas.map((c) => c.id)) : new Set())}/>
+            </th>
             <th>Nº Documento</th>
             <th>Nº Cotação</th>
             <th>Prédio / Cliente</th>
@@ -157,6 +200,10 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
             )}
             {filtradas.map((c) => (
               <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => { setSubsel(c); setRoute('cotacao-fornecedor-detail'); }}>
+                <td onClick={(e) => e.stopPropagation()}>
+                  <input type="checkbox" aria-label={`Selecionar ${c.numero_documento}`}
+                    checked={selecionadas.has(c.id)} onChange={() => toggleSelecionada(c.id)}/>
+                </td>
                 <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{c.numero_documento}</span></td>
                 <td><span className="mono small">{(() => {
                   const n = c.dados_envio?.header?.numero_cotacao ?? c.formularios_elevador?.numero_cotacao;
@@ -176,6 +223,31 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
           </tbody>
         </table>
       </div>
+
+      {showExcluir && (
+        <Modal title={`Excluir ${selecionadas.size} cotação(ões)`}
+          onClose={() => { if (!excluindo) { setShowExcluir(false); setMotivoExclusao(''); } }}
+          width={480}
+          footer={<>
+            <Button variant="ghost" onClick={() => { setShowExcluir(false); setMotivoExclusao(''); }} disabled={excluindo}>Cancelar</Button>
+            <Button variant="danger" onClick={confirmarExclusao} disabled={excluindo || !motivoExclusao.trim()}>
+              {excluindo ? 'Excluindo…' : 'Confirmar exclusão'}
+            </Button>
+          </>}>
+          <div className="stack" style={{ gap: 10 }}>
+            <p className="small" style={{ margin: 0 }}>
+              A cotação sai da listagem, mas os dados ficam preservados (auditoria) — inclusive se já tiver
+              precificação, tratativas ou projeto vinculados. Esta ação não pode ser desfeita pela tela.
+            </p>
+            <div className="stack" style={{ gap: 4 }}>
+              <label className="up-eyebrow muted">Motivo da exclusão *</label>
+              <textarea className="input" rows={4} value={motivoExclusao}
+                onChange={(e) => setMotivoExclusao(e.target.value)}
+                placeholder="Ex.: cotação duplicada, fornecedor errado, formulário cancelado…" autoFocus/>
+            </div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }

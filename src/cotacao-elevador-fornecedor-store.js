@@ -575,6 +575,6 @@
     listarAnexosFormulario, urlAssinadaAnexoFormulario,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
     getByToken, marcarVisualizado, salvarResposta, getPublicIP,
-    decidirComprar, aprovar, listarComprasAguardandoEmbarque,
+    decidirComprar, aprovar, listarComprasAguardandoEmbarque, excluirComMotivo,
   };
 }());
