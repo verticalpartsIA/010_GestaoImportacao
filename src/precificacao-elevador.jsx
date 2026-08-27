@@ -163,12 +163,21 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
   const removeContainer = (i) => setPz((p) => ({ ...p, containers: (p.containers || []).filter((_, idx) => idx !== i) }));
   const containersTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.preco_rs) || 0), 0);
 
+  const addItemExtra = () => setPz((p) => ({ ...p, itens_despesas_extras: [...(p.itens_despesas_extras || []), { descricao: '', valor: 0 }] }));
+  const setItemExtra = (i, k) => (v) => setPz((p) => {
+    const arr = [...(p.itens_despesas_extras || [])];
+    arr[i] = { ...arr[i], [k]: v };
+    return { ...p, itens_despesas_extras: arr };
+  });
+  const removeItemExtra = (i) => setPz((p) => ({ ...p, itens_despesas_extras: (p.itens_despesas_extras || []).filter((_, idx) => idx !== i) }));
+
   const payloadSalvar = () => ({
     vmle_usd: pz.vmle_usd, seguro_usd: pz.seguro_usd, frete_seguro_capatazia_usd: pz.frete_seguro_capatazia_usd,
     siscomex_rs: pz.siscomex_rs, tx_cambial: pz.tx_cambial, outras_despesas_importacao_rs: pz.outras_despesas_importacao_rs,
     despachante_desembaraco_rs: pz.despachante_desembaraco_rs, demurrage_rs: pz.demurrage_rs,
     frete_interno_rs: pz.frete_interno_rs, armazenagem_rs: pz.armazenagem_rs,
-    itens_instalacao_montagem: pz.itens_instalacao_montagem, containers: pz.containers, percentual_servicos: pz.percentual_servicos,
+    itens_instalacao_montagem: pz.itens_instalacao_montagem, containers: pz.containers,
+    itens_despesas_extras: pz.itens_despesas_extras, percentual_servicos: pz.percentual_servicos,
     modelos: pz.modelos, parametros_fiscais_snapshot: pz.parametros_fiscais_snapshot,
     mark_up_pct: pz.mark_up_pct, comissao_consultoria_pct: pz.comissao_consultoria_pct,
     comissao_vendedor_pct: pz.comissao_vendedor_pct, comissao_indicacao_pct: pz.comissao_indicacao_pct,
@@ -394,6 +403,22 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           <PZField label="Frete interno (R$)"><PZInput type="number" value={pz.frete_interno_rs} onChange={set('frete_interno_rs')}/></PZField>
           <PZField label="Armazenagem (R$)"><PZInput type="number" value={pz.armazenagem_rs} onChange={set('armazenagem_rs')}/></PZField>
           <PZField label="% de Serviços"><PZInput type="number" value={pz.percentual_servicos} onChange={set('percentual_servicos')}/></PZField>
+        </div>
+
+        <div style={{ marginTop: 20 }}>
+          <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
+            Itens avulsos <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— despesas recorrentes ou planejadas sem campo próprio ainda</span>
+          </div>
+          <div className="stack" style={{ gap: 8 }}>
+            {(pz.itens_despesas_extras || []).map((it, i) => (
+              <div key={i} className="row gap-2">
+                <input className="input" style={{ flex: 1 }} value={it.descricao || ''} onChange={(e) => setItemExtra(i, 'descricao')(e.target.value)} placeholder="ex.: Seguro adicional, taxa bancária..."/>
+                <input className="input" style={{ width: 160 }} type="number" value={it.valor || 0} onChange={(e) => setItemExtra(i, 'valor')(Number(e.target.value) || 0)} placeholder="0,00"/>
+                <Button variant="ghost" size="sm" icon="trash" onClick={() => removeItemExtra(i)}/>
+              </div>
+            ))}
+          </div>
+          <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addItemExtra}>+ Adicionar item</Button>
         </div>
       </Card>
 
