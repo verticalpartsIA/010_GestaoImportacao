@@ -43,23 +43,28 @@ test('buildPath — rota desconhecida cai na raiz', () => {
 
 test('parseLocation — reconhece rota conhecida com e sem id', () => {
   const R = loadRouter('/comercial/leads');
-  assert.deepEqual(R.parseLocation(), { route: 'leads', id: null });
+  assert.deepEqual(R.parseLocation(), { route: 'leads', id: null, tab: null });
 });
 
 test('parseLocation — id vem decodificado', () => {
   const R = loadRouter('/comercial/lead-detail/42%20b');
-  assert.deepEqual(R.parseLocation(), { route: 'lead-detail', id: '42 b' });
+  assert.deepEqual(R.parseLocation(), { route: 'lead-detail', id: '42 b', tab: null });
 });
 
 test('parseLocation — path desconhecido/raiz não vira rota', () => {
   const R = loadRouter('/');
-  assert.deepEqual(R.parseLocation(), { route: null, id: null });
+  assert.deepEqual(R.parseLocation(), { route: null, id: null, tab: null });
 });
 
 test('parseLocation — segmento de módulo errado não impede reconhecer a rota', () => {
   // O 1º segmento é cosmético (deriva de BREADCRUMB_MAP); só o 2º importa.
   const R = loadRouter('/qualquer-coisa/dashboard');
-  assert.deepEqual(R.parseLocation(), { route: 'dashboard', id: null });
+  assert.deepEqual(R.parseLocation(), { route: 'dashboard', id: null, tab: null });
+});
+
+test('parseLocation — reconhece o 3º segmento (tab) decodificado', () => {
+  const R = loadRouter('/engenharia/dossier-obra/42/documentos%20anexos');
+  assert.deepEqual(R.parseLocation(), { route: 'dossier-obra', id: '42', tab: 'documentos anexos' });
 });
 
 test('navigate — não escreve na URL se já é a mesma (evita loop com popstate)', () => {
