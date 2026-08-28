@@ -99,12 +99,18 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
        resolve/cria o cliente (mesma dedup por documento do Formulário,
        window.FormularioElevadorStore.buscarOuCriarCliente) e já vincula
        leads.cliente_id — assim o Formulário, quando chamar este Lead,
-       abre com o cliente pronto, sem redigitar CNPJ/CPF. Na edição, se o
-       Lead já tinha cliente_id, `clienteIdProvisorio` faz o store
-       atualizar esse mesmo registro em vez de criar um novo. */
+       abre com o cliente pronto, sem redigitar CNPJ/CPF.
+
+       Na edição, se o Lead JÁ tem cliente_id, sincroniza esse registro
+       sempre — mesmo sem CNPJ/CPF ainda (documento pendente) — senão editar
+       só a Razão Social de um cliente provisório fecha com "Lead
+       atualizado" mas descarta a edição em silêncio (achado real via
+       review). `clienteIdProvisorio` faz o store atualizar esse mesmo
+       registro em vez de criar um novo. */
     const docDigits = f.tipoPessoa === 'PF' ? cpfDigits : cnpjDigits;
     let clienteId = isEdit ? (lead.cliente_id || null) : null;
-    if (!f.documentoPendente && docDigits) {
+    let clienteAtualizado = null;
+    if ((isEdit && lead.cliente_id) || (!f.documentoPendente && docDigits)) {
       try {
         const cliente = await window.FormularioElevadorStore.buscarOuCriarCliente({
           [f.tipoPessoa === 'PF' ? 'cpf' : 'cnpj']: docDigits, tipo_pessoa: f.tipoPessoa,
@@ -113,6 +119,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
           clienteIdProvisorio: isEdit ? (lead.cliente_id || null) : null,
         });
         clienteId = cliente.id;
+        clienteAtualizado = cliente;
         if (clienteId !== (isEdit ? lead.cliente_id : null)) {
           await window.__VP_SB.sb.from('leads').update({ cliente_id: clienteId }).eq('id', id);
         }
@@ -124,7 +131,12 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     setSaving(false);
     if (isEdit) {
       window.toast('Lead atualizado.', 'success');
-      onSaved?.({ ...lead, ...payload, cliente_id: clienteId });
+      /* Passa o cliente sincronizado de volta — a tela de Detalhe do Lead
+         depende só de lead.cliente_id pra refazer essa busca, e esse id não
+         muda quando só os DADOS do cliente (razão social, CNPJ...) mudam,
+         então sem isso o card "Cliente" ficava com dado velho até recarregar
+         a página (2º achado do review). */
+      onSaved?.({ ...lead, ...payload, cliente_id: clienteId }, clienteAtualizado);
       onClose();
       return;
     }
@@ -646,7 +658,14 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
         <ModalNovoLead
           lead={lead}
           onClose={() => setShowEditLead(false)}
-          onSaved={(updated) => setSubsel?.(updated)}
+          onSaved={(updatedLead, clienteAtualizado) => {
+            setSubsel?.(updatedLead);
+            // lead.cliente_id pode não mudar (só os DADOS do cliente
+            // mudaram, ex.: razão social) — o efeito acima só refaz a busca
+            // quando o id muda, então atualiza aqui direto pra não deixar
+            // o card "Cliente" com dado velho até recarregar a página.
+            if (clienteAtualizado) setCliente(clienteAtualizado);
+          }}
         />
       )}
     </div>
