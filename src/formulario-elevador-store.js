@@ -94,21 +94,17 @@
   }
 
   /* ---------- Cliente (fiscal) ---------- */
-  async function buscarOuCriarCliente(dados) {
-    const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const doc = (dados.cnpj || dados.cpf || '').replace(/\D/g, '');
-    if (doc) {
-      const campo = dados.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj';
-      const { data: existente } = await c.from('clientes').select('*').eq(campo, doc).maybeSingle();
-      if (existente) return existente;
-    }
-    const codigo = window.CadastrosClientesStore ? await window.CadastrosClientesStore.gerarCodigo() : null;
-    const { data, error } = await c.from('clientes').insert({
-      codigo,
-      razao_social: dados.razao_social || null,
+  // Sem CNPJ/CPF ainda (documento "será inserido depois") — razao_social é
+  // NOT NULL no banco, então usa Contato ou Prédio/Empreendimento como
+  // identificação provisória, e marca documento_pendente pra aparecer em
+  // Cadastros/Clientes como pendente de completar.
+  function _camposCliente(dados, doc) {
+    return {
+      razao_social: dados.razao_social || dados.predio_empreendimento || dados.contato || null,
       cnpj: dados.tipo_pessoa === 'PF' ? null : (doc || null),
       cpf: dados.tipo_pessoa === 'PF' ? (doc || null) : null,
       tipo_pessoa: dados.tipo_pessoa || 'PJ',
+      documento_pendente: !doc,
       inscricao_estadual: dados.inscricao_estadual || null,
       contribuinte_icms: typeof dados.contribuinte_icms === 'boolean' ? dados.contribuinte_icms : null,
       endereco_logradouro: dados.endereco_logradouro || null,
@@ -123,7 +119,33 @@
       cidade: dados.cidade || null,
       estado: dados.estado || null,
       contato: dados.contato || null,
-    }).select().single();
+    };
+  }
+
+  async function buscarOuCriarCliente(dados) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const doc = (dados.cnpj || dados.cpf || '').replace(/\D/g, '');
+    /* `clienteIdProvisorio` (passado pelo Formulário quando ainda não tem
+       CNPJ/CPF) identifica um cliente provisório já criado numa chamada
+       anterior desta mesma sessão de rascunho — atualiza esse registro em
+       vez de inserir de novo. Sem isso, cada "Salvar Rascunho" sem
+       documento (fluxo que este mesmo commit passou a incentivar, via
+       Contato/Prédio-Empreendimento) criaria um `clientes` duplicado. Tem
+       prioridade sobre a busca por doc: se o CNPJ/CPF acabou de ser
+       preenchido nesta sessão, o provisório vira o registro definitivo em
+       vez de nascer um cliente novo e orfanar o provisório. */
+    if (dados.clienteIdProvisorio) {
+      const { data: atualizado, error: erroUpdate } = await c.from('clientes')
+        .update(_camposCliente(dados, doc)).eq('id', dados.clienteIdProvisorio).select().single();
+      if (!erroUpdate && atualizado) return atualizado;
+    }
+    if (doc) {
+      const campo = dados.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj';
+      const { data: existente } = await c.from('clientes').select('*').eq(campo, doc).maybeSingle();
+      if (existente) return existente;
+    }
+    const codigo = window.CadastrosClientesStore ? await window.CadastrosClientesStore.gerarCodigo() : null;
+    const { data, error } = await c.from('clientes').insert({ codigo, ..._camposCliente(dados, doc) }).select().single();
     if (error) throw error;
     return data;
   }
@@ -141,6 +163,9 @@
       cliente_id: dados.cliente_id || null,
       canal: dados.canal || 'assistido',
       token,
+      status: dados.status || undefined,
+      origem_historico_id: dados.origem_historico_id || null,
+      predio_empreendimento: dados.predio_empreendimento || null,
       local_obra_cidade: dados.local_obra_cidade || null,
       local_obra_estado: dados.local_obra_estado || null,
       endereco_logradouro: dados.endereco_logradouro || null,
@@ -188,7 +213,7 @@
      engano num patch qualquer; nenhuma tela usa isso hoje, mas o buraco
      estava aberto. */
   const FE_COLUNAS_VALIDAS = new Set([
-    'lead_id', 'dossier_id', 'cliente_id', 'canal', 'token',
+    'lead_id', 'dossier_id', 'cliente_id', 'canal', 'token', 'predio_empreendimento',
     'local_obra_cidade', 'local_obra_estado', 'endereco_obra', 'prazo_desejado',
     'tipo_mao_de_obra', 'responsavel_entrega', 'origem_venda', 'status', 'observacoes',
     'endereco_obra_diferente', 'endereco_logradouro', 'endereco_complemento', 'endereco_bairro',
@@ -322,23 +347,84 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const [{ data: hist, error: e1 }, { data: novos, error: e2 }] = await Promise.all([
       c.from('cotacoes_elevador_historico').select('*'),
-      c.from('formularios_elevador').select('numero_cotacao, created_at, vendedor, origem_venda, status, local_obra_cidade, local_obra_estado, clientes(razao_social, cnpj)'),
+      c.from('formularios_elevador').select('id, numero_cotacao, created_at, vendedor, origem_venda, status, local_obra_cidade, local_obra_estado, clientes(razao_social, cnpj)'),
     ]);
     if (e1) throw e1;
     if (e2) throw e2;
     const unificado = [
-      ...(hist || []).map((h) => ({
+      // Linha de planilha já "ressuscitada" (formulario_id preenchido) some
+      // daqui — o Formulário que ela virou já aparece abaixo, com Nº novo.
+      ...(hist || []).filter((h) => !h.formulario_id).map((h) => ({
         id: h.id, numero_cotacao: h.numero_cotacao, data: h.data, vendedor: h.vendedor, origem_venda: h.origem_venda,
         nome_cliente: h.nome_cliente, cnpj_comprador: h.cnpj_comprador, estado_instalacao: h.estado_instalacao,
         status: h.status, origem: 'historico',
       })),
       ...(novos || []).map((f) => ({
-        numero_cotacao: f.numero_cotacao, data: f.created_at, vendedor: f.vendedor, origem_venda: f.origem_venda,
+        id: f.id, numero_cotacao: f.numero_cotacao, data: f.created_at, vendedor: f.vendedor, origem_venda: f.origem_venda,
         nome_cliente: f.clientes?.razao_social || null, cnpj_comprador: f.clientes?.cnpj || null,
         estado_instalacao: f.local_obra_estado, status: f.status, origem: 'formulario',
       })),
     ];
     return unificado.sort((a, b) => (b.numero_cotacao || 0) - (a.numero_cotacao || 0));
+  }
+
+  /* "Abrir no Formulário" pra uma linha de planilha (controle-cotacoes.jsx) —
+     ressuscita a cotação histórica como um Formulário de verdade, com Nº
+     novo (nextval, igual a qualquer Formulário criado do zero) — a antiga
+     nunca é sobrescrita, só ganha `formulario_id` marcando que já virou
+     outra coisa (evita reconverter/duplicar num segundo clique). Cliente é
+     resolvido/criado a partir do CNPJ (ou nome, se o CNPJ vier vazio/sujo —
+     comum na planilha antiga); 1 unidade nasce com a descrição original em
+     texto livre, pra o vendedor completar os campos estruturados e
+     adicionar/remover quantas quiser a partir daí. */
+  const HIST_STATUS_MAP = { Conquistado: 'concluido', Perdido: 'concluido', Suspenso: 'concluido' };
+
+  async function abrirOuConverterHistorico(historicoId) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: atual, error: e0 } = await c.from('cotacoes_elevador_historico').select('*').eq('id', historicoId).single();
+    if (e0) throw e0;
+    if (atual.formulario_id) return atual.formulario_id;
+
+    const cnpjDigits = (atual.cnpj_comprador || '').replace(/\D/g, '');
+    const cliente = await buscarOuCriarCliente({
+      cnpj: cnpjDigits, tipo_pessoa: 'PJ',
+      razao_social: atual.nome_cliente || atual.nome_instalacao || atual.nome_contato || null,
+      predio_empreendimento: atual.nome_instalacao || null,
+      contato: atual.nome_contato || null,
+      telefone: atual.telefone_contato || null,
+      email: atual.email_contato || null,
+    });
+
+    const observacoes = [
+      `Ressuscitada da Cotação Nº ${atual.numero_cotacao} (planilha).`,
+      atual.status ? `Status original: ${atual.status}.` : null,
+      atual.motivo ? `Motivo: ${atual.motivo}.` : null,
+      atual.valor_conquistado ? `Valor conquistado: ${atual.valor_conquistado}.` : null,
+      atual.endereco_instalacao ? `Endereço da obra (original): ${atual.endereco_instalacao}.` : null,
+    ].filter(Boolean).join(' ');
+
+    const novo = await criar({
+      cliente_id: cliente.id,
+      canal: 'extracao',
+      status: HIST_STATUS_MAP[atual.status] || 'enviado',
+      predio_empreendimento: atual.nome_instalacao || null,
+      local_obra_estado: atual.estado_instalacao || null,
+      vendedor: atual.vendedor || null,
+      origem_venda: atual.origem_venda || null,
+      observacoes,
+      origem_historico_id: atual.id,
+    });
+
+    await adicionarUnidade(novo.id, {
+      tipo_equipamento: 'elevador',
+      quantidade: 1,
+      exigencias_especiais: atual.descricao_equipamento ? `Descrição original (planilha): ${atual.descricao_equipamento}` : null,
+    });
+
+    const { error: e1 } = await c.from('cotacoes_elevador_historico').update({ formulario_id: novo.id }).eq('id', atual.id);
+    if (e1) throw e1;
+
+    return novo.id;
   }
 
   /* ---------- Anexos (projeto civil da obra) ----------
@@ -404,6 +490,7 @@
   window.FormularioElevadorStore = {
     buscarOuCriarCliente,
     criar, salvar, obter, obterPorToken, gerarLinkPublico, enviar, enviarDiretoParaPrecificacao, listar, listarCotacoes,
+    abrirOuConverterHistorico,
     adicionarUnidade, atualizarUnidade, removerUnidade,
     publicUrl, formatarEndereco, listarFornecedores,
     listarModelosElevador, listarOpcoesElevador,

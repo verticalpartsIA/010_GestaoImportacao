@@ -11,6 +11,7 @@
   }
   function isCepValido(cep) { return sanitizeDigits(cep).length === 8; }
   function isCnpjValido(cnpj) { return sanitizeDigits(cnpj).length === 14; }
+  function isCpfValido(cpf) { return sanitizeDigits(cpf).length === 11; }
 
   async function fetchComTimeout(url, ms) {
     const controller = new AbortController();
@@ -128,5 +129,5 @@
     };
   }
 
-  window.EnderecoAPI = { sanitizeDigits, isCepValido, isCnpjValido, buscarCEP, buscarCNPJ, extrairNumeroLogradouro, mesclarLogradouro };
+  window.EnderecoAPI = { sanitizeDigits, isCepValido, isCnpjValido, isCpfValido, buscarCEP, buscarCNPJ, extrairNumeroLogradouro, mesclarLogradouro };
 })();
