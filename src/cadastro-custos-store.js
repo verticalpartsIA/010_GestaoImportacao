@@ -88,14 +88,21 @@
   async function salvarContainer(row) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const payload = { ...row, atualizado_em: new Date().toISOString(), atualizado_por: quemAtualizou() };
+    if (!payload.id) delete payload.id;
     const { data, error } = await c.from('custos_containers').upsert(payload).select().single();
     if (error) throw error;
     return data;
   }
 
+  async function removerContainer(id) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { error } = await c.from('custos_containers').delete().eq('id', id);
+    if (error) throw error;
+  }
+
   window.CadastroCustosStore = {
     listarCustosElevador, salvarCustoElevador, removerCustoElevador, buscarCustoElevador,
     listarCustosEscadaEsteira, salvarCustoEscadaEsteira, buscarCustoEscadaEsteira,
-    listarContainers, salvarContainer,
+    listarContainers, salvarContainer, removerContainer,
   };
 }());
