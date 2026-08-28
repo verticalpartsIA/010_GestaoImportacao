@@ -123,6 +123,90 @@ test('calcular — itens avulsos de "Despesas Extras" somam no mesmo bucket que 
   closeTo(sem.precificacao.lucroFinal - com.precificacao.lucroFinal, 200, 0.01, 'lucro final deveria cair exatamente o valor dos itens avulsos');
 });
 
+/* ============================================================
+   V2 — bug replicado + correção (issue "Precificação real")
+   ============================================================ */
+
+test('BUG V1 — markup positivo pode conviver com margem/lucro negativo quando a instalação é cara', () => {
+  // custoTotalMercadorias = 5000; markup 20% -> precoVenda = 6250, e o
+  // crédito de ICMS da compra (~1097,56) ainda soma ao lucro (S46). Uma
+  // instalação de 5000 (bem maior que 6250-5000+1097,56 = 2342,56) já
+  // vira lucro negativo: o V1 subtrai a instalação do lucro DEPOIS de
+  // formado o preço, sem ela ter entrado na base.
+  const out = E.calcular({
+    ...inputsBase,
+    itensInstalacaoMontagem: [{ descricao: 'Instalação', valor: 5000 }],
+  });
+  closeTo(out.precificacao.precoVendaProposta, 6250, 0.01, 'precoVendaProposta não deveria mudar com a instalação (é o bug)');
+  assert.ok(out.precificacao.lucroFinal < 0, 'BUG: lucro final negativo mesmo com markup de 20% positivo');
+  assert.ok(out.precificacao.margemFinalPct < 0, 'BUG: margem final negativa mesmo com markup de 20% positivo');
+});
+
+test('V2 margem_sobre_venda — mesmo cenário do bug agora forma preço cobrindo a instalação, margem bate com a desejada', () => {
+  const out = E.calcularV2({
+    ...inputsBase,
+    itensInstalacaoMontagem: [{ descricao: 'Instalação', valor: 2000 }],
+    modoFormacaoPreco: 'margem_sobre_venda',
+    margemDesejadaPct: 0.2,
+  });
+  // 5000 (mercadoria) + 2000 (instalação) + 5 (ad-valorem = VMLD*0,1%)
+  closeTo(out.custoEconomicoCompleto, 7005, 0.01, 'custoEconomicoCompleto = 5000 (mercadoria) + 2000 (instalação) + 5 (ad-valorem)');
+  // precoVenda = 7005 / (1 - 0.2) = 8756.25
+  closeTo(out.precificacao.precoVendaProposta, 8756.25, 0.01, 'preço de venda deveria cobrir custo completo + margem desejada');
+  closeTo(out.precificacao.margemEfetivaPct, 0.2, 0.001, 'margem efetiva deveria bater com a margem desejada (sem impostos/comissões no cenário)');
+  assert.ok(out.precificacao.lucroFinal > 0, 'lucro final deveria ser positivo — instalação já está na base do preço');
+});
+
+test('V2 markup_sobre_custo — preço cobre custo completo × (1+markup), diferente do modo margem', () => {
+  const inputsComInstalacao = { ...inputsBase, itensInstalacaoMontagem: [{ descricao: 'Instalação', valor: 2000 }] };
+  const markup = E.calcularV2({ ...inputsComInstalacao, modoFormacaoPreco: 'markup_sobre_custo', markUpPct: 0.2 });
+  const margem = E.calcularV2({ ...inputsComInstalacao, modoFormacaoPreco: 'margem_sobre_venda', margemDesejadaPct: 0.2 });
+  // custoEconomicoCompleto = 7005 (5000 mercadoria + 2000 instalação + 5 ad-valorem)
+  // markup: 7005 * 1.2 = 8406 | margem: 7005 / 0.8 = 8756.25 — resultados diferentes por desenho
+  closeTo(markup.precificacao.precoVendaProposta, 8406, 0.01, 'modo markup: custo completo * (1+markup)');
+  assert.notStrictEqual(markup.precificacao.precoVendaProposta, margem.precificacao.precoVendaProposta, 'markup e margem devem produzir preços diferentes pro mesmo percentual');
+});
+
+test('V2 — divisor inválido (margem >= 100%) não gera preço, sinaliza divisorValido=false', () => {
+  const out = E.calcularV2({ ...inputsBase, modoFormacaoPreco: 'margem_sobre_venda', margemDesejadaPct: 1 });
+  assert.equal(out.divisorValido, false, 'margem desejada de 100% deveria invalidar o divisor');
+  assert.equal(out.precificacao.precoVendaProposta, 0, 'sem divisor válido, não deveria devolver preço calculado');
+});
+
+test('V2 — custo econômico completo soma containers e itens avulsos, não só instalação', () => {
+  const out = E.calcularV2({
+    ...inputsBase,
+    itensInstalacaoMontagem: [{ descricao: 'Instalação', valor: 1000 }],
+    containers: [{ tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 500 }],
+    itensDespesasExtras: [{ descricao: 'Taxa', valor: 300 }],
+    modoFormacaoPreco: 'margem_sobre_venda', margemDesejadaPct: 0.2,
+  });
+  // 5000 (mercadoria) + 1000 (instalação) + 500 (containers) + 300 (itens avulsos) + 5 (ad-valorem)
+  closeTo(out.custoEconomicoCompleto, 6805, 0.01, 'custoEconomicoCompleto = 5000 + 1000 + 500 + 300 + 5 (ad-valorem)');
+});
+
+test('V2 — contingência e outros custos não recuperáveis entram na base do preço', () => {
+  const out = E.calcularV2({
+    ...inputsBase,
+    contingenciaValor: 500,
+    outrosCustosNaoRecuperaveisRs: 250,
+    modoFormacaoPreco: 'margem_sobre_venda', margemDesejadaPct: 0.2,
+  });
+  // 5000 (mercadoria) + 5 (ad-valorem) + 500 (contingência) + 250 (outros custos)
+  closeTo(out.custoEconomicoCompleto, 5755, 0.01, 'custoEconomicoCompleto = 5000 + 5 (ad-valorem) + 500 + 250');
+});
+
+test('V2 — comissões e impostos de venda entram no divisor (percentuaisSobreVenda), não são contados 2x', () => {
+  const out = E.calcularV2({
+    ...inputsBase,
+    parametros: { ...inputsBase.parametros, icmsVendaPct: 0.1, comissaoVendedorPct: 0.05 },
+    modoFormacaoPreco: 'margem_sobre_venda', margemDesejadaPct: 0.2,
+  });
+  closeTo(out.precificacao.percentuaisSobreVenda, 0.15, 0.001, 'percentuaisSobreVenda = icmsVenda(10%) + comissaoVendedor(5%)');
+  // custoEconomicoCompleto = 5000 + 5 (ad-valorem) = 5005; divisor = 1 - 0.2 - 0.15 = 0.65 -> preco = 5005/0.65
+  closeTo(out.precificacao.precoVendaProposta, 5005 / 0.65, 0.01, 'preço deveria usar o divisor completo (margem + percentuais de venda)');
+});
+
 test('calcular — rateio por modelo soma 100% do preço de venda proposto', () => {
   const out = E.calcular({
     ...inputsBase,

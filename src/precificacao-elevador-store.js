@@ -33,6 +33,88 @@
     });
   }
 
+  /* ============================================================
+     Busca automática de mão de obra (issue "Precificação real" Fase 3).
+     custos_instalacao_elevador é indexada por tração × faixa de
+     capacidade × paradas (ver cadastro-custos-store.js). Aqui só
+     classificamos o resultado dessa busca: função pura, testável sem
+     Supabase — window.PrecificacaoElevadorStore.classificarMaoDeObraUnidade.
+     Situações seguem o vocabulário do documento de origem (regras_
+     precificacao_real.json): confirmado (achou na tabela), pendente
+     (falta tração/capacidade/paradas na Unidade) — projeto_especial=true
+     quando a config existe mas caiu fora da cobertura da tabela (não
+     retorna preço confirmado automaticamente, nunca extrapola). */
+  function classificarMaoDeObraUnidade(modelo, custoTabela) {
+    const unidadeId = modelo.unidadeId ?? null;
+    const identificador = modelo.identificador ?? null;
+    const tracao = modelo.tracao || null;
+    const capacidadeKg = modelo.capacidadeKg != null && modelo.capacidadeKg !== '' ? Number(modelo.capacidadeKg) : null;
+    const paradas = modelo.paradas != null && modelo.paradas !== '' ? Number(modelo.paradas) : null;
+    const base = { unidadeId, identificador, tracao, capacidadeKg, paradas };
+
+    if (!tracao || !paradas || !(capacidadeKg > 0)) {
+      return {
+        ...base, origem: 'manual', situacao: 'pendente', valorRs: 0,
+        regraUsada: null, diasMontagem: null, qtdMontadores: null, dataBase: null,
+        projetoEspecial: false,
+        motivo: 'Falta tração, capacidade (kg) e/ou paradas na Unidade — preencha o Formulário de Elevadores.',
+      };
+    }
+    if (!custoTabela) {
+      return {
+        ...base, origem: 'tabela_referencia', situacao: 'pendente', valorRs: 0,
+        regraUsada: null, diasMontagem: null, qtdMontadores: null, dataBase: null,
+        projetoEspecial: true,
+        motivo: `Fora da cobertura da tabela de MO (tração ${tracao}, ${capacidadeKg}kg, ${paradas} paradas) — trate como projeto especial: exige estimativa versionada, justificativa e aprovação técnica/financeira antes de aprovar a precificação.`,
+      };
+    }
+    return {
+      ...base, origem: 'tabela_referencia', situacao: 'confirmado',
+      valorRs: Number(custoTabela.valor_reajustado_rs) || 0,
+      regraUsada: `tração ${tracao} × ${custoTabela.capacidade_min_kg}-${custoTabela.capacidade_max_kg}kg × ${paradas} paradas`,
+      diasMontagem: custoTabela.dias_montagem ?? null,
+      qtdMontadores: custoTabela.qtd_montadores ?? null,
+      dataBase: custoTabela.atualizado_em || null,
+      projetoEspecial: false,
+      motivo: null,
+    };
+  }
+
+  /* Orquestra a busca real (CadastroCustosStore.buscarCustoElevador, já
+     existe desde Cadastros → Atualização de Custos) unidade por unidade
+     e devolve a lista classificada — pronta pra virar o card "Mão de
+     obra" da Precificação (Fase 4) e pra alimentar o motor V2
+     (custo_economico_completo). Nunca lança: unidade sem tabela vira
+     projeto especial, não erro. */
+  async function buscarMaoDeObraAutomatica(modelos) {
+    const store = window.CadastroCustosStore;
+    const lista = Array.isArray(modelos) ? modelos : [];
+    const resultados = [];
+    for (const m of lista) {
+      const capacidadeKg = m.capacidadeKg != null && m.capacidadeKg !== '' ? Number(m.capacidadeKg) : null;
+      if (!store || !m.tracao || !m.paradas || !(capacidadeKg > 0)) {
+        resultados.push(classificarMaoDeObraUnidade(m, null));
+        continue;
+      }
+      let custoTabela = null;
+      try { custoTabela = await store.buscarCustoElevador(m.tracao, capacidadeKg, Number(m.paradas)); }
+      catch (e) { console.warn('[PrecificacaoElevadorStore] buscarMaoDeObraAutomatica falhou pra unidade', m.unidadeId, e); }
+      resultados.push(classificarMaoDeObraUnidade(m, custoTabela));
+    }
+    return resultados;
+  }
+
+  /* Re-roda a busca sob demanda (ex.: Financeiro atualizou a tabela de MO
+     em Cadastros e quer refletir numa precificação já criada, sem recriar
+     tudo do zero). Só grava mo_lookup — não mexe em itens_instalacao_
+     montagem (lista manual, V1) nem dispara recálculo sozinho. */
+  async function atualizarMaoDeObra(id) {
+    const pz = await obter(id);
+    const moLookup = await buscarMaoDeObraAutomatica(pz.modelos || []);
+    await salvar(id, { mo_lookup: moLookup });
+    return moLookup;
+  }
+
   async function listarParametrosFiscais() {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data, error } = await c.from('parametros_fiscais_elevador').select('*').eq('id', 'default').single();
@@ -130,12 +212,15 @@
     let modelos, vmleUsd, freteSeguroCapataziaUsd, containersSeed = [];
     if (!cotacaoFornecedorId) {
       const { data: unidadesForm, error: e3 } = await c.from('formularios_elevador_unidades')
-        .select('id, identificador, modelo, quantidade').eq('formulario_id', formularioElevadorId).order('indice_ativo');
+        .select('id, identificador, modelo, quantidade, tracao, capacidade_kg, paradas').eq('formulario_id', formularioElevadorId).order('indice_ativo');
       if (e3) throw e3;
       modelos = (unidadesForm || []).map((u) => ({
         unidadeId: u.id, identificador: u.identificador,
         modelo: u.modelo || '', quantidade: Number(u.quantidade) || 1,
         valorUnitarioUsd: 0,
+        tracao: u.tracao || null,
+        capacidadeKg: u.capacidade_kg != null ? Number(u.capacidade_kg) : null,
+        paradas: u.paradas != null ? Number(u.paradas) : null,
       }));
       vmleUsd = 0;
       freteSeguroCapataziaUsd = 0;
@@ -155,6 +240,9 @@
           modelo: item.modelo_fornecedor || u.modelo || '',
           quantidade: Number(u.quantidade) || 1,
           valorUnitarioUsd: window.parseMoeda(item.preco_unitario),
+          tracao: u.tracao || null,
+          capacidadeKg: u.capacidade_kg != null ? Number(u.capacidade_kg) : null,
+          paradas: u.paradas != null ? Number(u.paradas) : null,
         };
       });
       vmleUsd = itensResposta.reduce((s, it) => s + window.parseMoeda(it.preco_total), 0);
@@ -172,6 +260,7 @@
     }
 
     const parametros = await listarParametrosFiscais();
+    const moLookup = await buscarMaoDeObraAutomatica(modelos);
 
     return {
       formulario_elevador_id: formularioElevadorId,
@@ -182,9 +271,15 @@
       frete_seguro_capatazia_usd: freteSeguroCapataziaUsd,
       containers: containersSeed,
       modelos,
+      mo_lookup: moLookup,
       percentual_servicos: 0.30,
       parametros_fiscais_snapshot: parametros,
       mark_up_pct: parametros.mark_up_padrao_pct,
+      // V2 (custo econômico completo) — nasce em modo margem_sobre_venda,
+      // com a margem desejada padrão herdada da margem mínima configurada
+      // (ver Alavancas do Financeiro); Financeiro troca livremente na tela.
+      modo_formacao_preco: 'margem_sobre_venda',
+      margem_desejada_pct: Number(parametros.margem_minima_pct) || 0.2,
       comissao_consultoria_pct: parametros.comissao_consultoria_pct,
       comissao_vendedor_pct: parametros.comissao_vendedor_pct,
       comissao_indicacao_pct: parametros.comissao_indicacao_pct,
@@ -273,8 +368,19 @@
     // 2ª passada — já com o custo do DIFAL (quando é da VerticalParts) refletido no lucro.
     const resultado = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs });
 
-    await salvar(id, { resultado, difal, status: 'calculado' });
-    return { resultado, difal };
+    // V2 (custo econômico completo) roda lado a lado, mesmo baseInputs +
+    // DIFAL da 2ª passada — nunca substitui o V1 (`resultado`, ainda o
+    // motor oficial), só grava pra comparação/auditoria (Fase 4/5).
+    const resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({
+      ...baseInputs, difalCustoRs,
+      modoFormacaoPreco: pz.modo_formacao_preco,
+      margemDesejadaPct: pz.margem_desejada_pct,
+      contingenciaValor: pz.contingencia_valor,
+      outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
+    });
+
+    await salvar(id, { resultado, resultado_v2: resultadoV2, difal, status: 'calculado' });
+    return { resultado, resultadoV2, difal };
   }
 
   /* ---------- Aprovação (issue #4) ----------
@@ -394,5 +500,6 @@
     listarPendentes, criar, obter, salvar, calcularEsalvar,
     camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,
     parseContainerNo,
+    classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra,
   };
 }());

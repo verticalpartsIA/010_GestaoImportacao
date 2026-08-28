@@ -205,5 +205,100 @@
     };
   }
 
-  window.PrecificacaoElevadorEngine = { calcular, creditoElegivel };
+  /* ============================================================
+     calcularV2 — motor de custo econômico completo (issue: "Precificação
+     real"). Corrige a fragilidade herdada da planilha: despesas
+     operacionais/instalação (K12/U32 no V1) só entravam no lucro depois de
+     formado o preço, então markup positivo podia conviver com margem
+     negativa (ver precificacao-elevador-engine.test.js, bloco "V2 — bug
+     replicado"). V2 reusa a cascata de importação/créditos do V1 (mesma
+     fonte de verdade fiscal) e muda apenas a BASE e o DIVISOR do preço:
+     custo_economico_completo entra inteiro na base, e markup/margem viram
+     modos explícitos e mutuamente exclusivos. Não substitui calcular() —
+     os dois convivem pra permitir comparação lado a lado (V1 x V2) até a
+     migração ser aceita pelo Financeiro. */
+  function calcularV2(inputs) {
+    const v1 = calcular(inputs);
+    const p = inputs.parametros || {};
+
+    const modoFormacaoPreco = inputs.modoFormacaoPreco === 'markup_sobre_custo' ? 'markup_sobre_custo' : 'margem_sobre_venda';
+    const markUpPct = Number(inputs.markUpPct ?? p.markUpPct) || 0;
+    const margemDesejadaPct = Number(inputs.margemDesejadaPct) || 0;
+    const contingenciaValor = Number(inputs.contingenciaValor) || 0;
+    const outrosCustosNaoRecuperaveisRs = Number(inputs.outrosCustosNaoRecuperaveisRs) || 0;
+
+    // custo_economico_completo = custo_liquido_importacao + despesas_operacionais
+    // (despachante + ad-valorem + demurrage + frete interno + armazenagem +
+    // instalação/montagem + containers + itens avulsos — já unificados em
+    // U32 no V1) + contingência + outros custos não recuperáveis.
+    const custoLiquidoImportacao = v1.importacao.custoTotalMercadorias;
+    const despesasOperacionais = v1.importacao.despesasInstalacaoMontagem;
+    const custoEconomicoCompleto = custoLiquidoImportacao + despesasOperacionais + contingenciaValor + outrosCustosNaoRecuperaveisRs;
+
+    const impostosPagarProdutoPct = v1.precificacao.impostosPagarProdutoPct;
+    const comissaoConsultoriaPct = Number(inputs.comissaoConsultoriaPct ?? p.comissaoConsultoriaPct) || 0;
+    const comissaoVendedorPct = Number(inputs.comissaoVendedorPct ?? p.comissaoVendedorPct) || 0;
+    const comissaoIndicacaoPct = Number(inputs.comissaoIndicacaoPct ?? p.comissaoIndicacaoPct) || 0;
+    // Percentuais que incidem sobre o preço de venda (não sobre o custo) —
+    // entram no divisor pra não serem contados duas vezes, conforme regra
+    // financeira principal do documento de origem.
+    const percentuaisSobreVenda = impostosPagarProdutoPct + comissaoConsultoriaPct + comissaoVendedorPct + comissaoIndicacaoPct;
+
+    let divisor, precoVendaProposta;
+    if (modoFormacaoPreco === 'markup_sobre_custo') {
+      // preco_antes_despesas_percentuais = custo_economico_completo * (1 + markup_pct);
+      // resolvido pelo divisor pra não contar os percentuais de venda 2x.
+      divisor = 1 - percentuaisSobreVenda;
+      precoVendaProposta = divisor > 0 ? (custoEconomicoCompleto * (1 + markUpPct)) / divisor : 0;
+    } else {
+      // preco_venda = custos_fixos_totais / (1 - margem_desejada_pct - percentuais_incidentes_sobre_venda)
+      divisor = 1 - margemDesejadaPct - percentuaisSobreVenda;
+      precoVendaProposta = divisor > 0 ? custoEconomicoCompleto / divisor : 0;
+    }
+    const divisorValido = divisor > 0;
+
+    const quantidadeEquipamentos = Number(inputs.quantidadeEquipamentos) || 1;
+    const percentualServicos = Number(inputs.percentualServicos) || 0;
+    const precoVendaProduto = precoVendaProposta * (1 - percentualServicos);
+    const precoVendaServicos = precoVendaProposta * percentualServicos;
+    const impostosPagarProdutoRs = precoVendaProduto * impostosPagarProdutoPct;
+    const impostosPagarServicosPct = Number(p.impostosPagarServicosPct) || 0;
+    const impostosPagarServicosRs = precoVendaServicos * impostosPagarServicosPct;
+    const comissaoConsultoriaRs = precoVendaProposta * comissaoConsultoriaPct;
+    const comissaoVendedorRs = precoVendaProposta * comissaoVendedorPct;
+    const comissaoIndicacaoRs = precoVendaProposta * comissaoIndicacaoPct;
+    const totalComissaoRs = comissaoVendedorRs + comissaoIndicacaoRs;
+    const difalRs = Number(inputs.difalCustoRs) || 0;
+
+    // Diferente do V1 (S71), despesasOperacionais NÃO é subtraída de novo
+    // aqui — ela já está dentro de custoEconomicoCompleto, que é o que o
+    // preço foi formado pra cobrir. Subtrair de novo seria contar 2x.
+    const lucroFinal = precoVendaProposta - custoEconomicoCompleto - impostosPagarProdutoRs - impostosPagarServicosRs - comissaoConsultoriaRs - totalComissaoRs - difalRs;
+    const margemEfetivaPct = precoVendaProposta > 0 ? lucroFinal / precoVendaProposta : 0;
+
+    return {
+      versaoMotor: '2.0.0',
+      modoFormacaoPreco,
+      divisorValido,
+      custoEconomicoCompleto,
+      componentes: { custoLiquidoImportacao, despesasOperacionais, contingenciaValor, outrosCustosNaoRecuperaveisRs },
+      importacao: v1.importacao,
+      precificacao: {
+        precoVendaProposta, precoVendaProduto, precoVendaServicos,
+        precoVendaPorEquipamento: precoVendaProposta / quantidadeEquipamentos,
+        percentuaisSobreVenda, impostosPagarProdutoPct, markUpPct, margemDesejadaPct,
+        impostosPagarProdutoRs, impostosPagarServicosRs,
+        comissaoConsultoriaRs, comissaoVendedorRs, comissaoIndicacaoRs, totalComissaoRs,
+        difalRs, lucroFinal, margemEfetivaPct,
+        lucroPorEquipamento: lucroFinal / quantidadeEquipamentos,
+      },
+      v1Comparacao: {
+        precoVendaProposta: v1.precificacao.precoVendaProposta,
+        lucroFinal: v1.precificacao.lucroFinal,
+        margemFinalPct: v1.precificacao.margemFinalPct,
+      },
+    };
+  }
+
+  window.PrecificacaoElevadorEngine = { calcular, calcularV2, creditoElegivel };
 }());

@@ -8,6 +8,11 @@
    ============================================================ */
 
 const FE_TIPOS = ['Passageiro', 'Carga', 'Hospitalar', 'Panorâmico', 'Home Lift'];
+// Tração (2:1/4:1) — mesmos 2 valores de custos_instalacao_elevador.tracao
+// (Cadastros → Atualização de Custos). Pré-requisito pra busca automática
+// de mão de obra na Precificação (issue "Precificação real" Fase 3):
+// sem isso o sistema não sabe qual coluna da tabela MO consultar.
+const FE_TRACOES = ['2:1', '4:1'];
 // Renomeado de "Tipo de mão de obra" pra "Instalação Será" (pedido do
 // usuário, 28/08) — valores viram 'verticalparts'/'cliente', mesmo padrão
 // de FE_RESPONSAVEL_ENTREGA (campo distinto: aqui é quem INSTALA, lá é quem
@@ -216,7 +221,7 @@ function feNovaUnidade(identificador) {
     identificador: identificador || '', quantidade: 1,
     tipo_equipamento: 'elevador', especificacoes: {},
     fornecedor: '', modelo: '',
-    tipo: '', capacidade_kg: '', capacidade_pessoas: '', velocidade_ms: '',
+    tipo: '', tracao: '', capacidade_kg: '', capacidade_pessoas: '', velocidade_ms: '',
     paradas: '', pavimentos_desc: '', casa_maquinas: '', agrupamento: '', porta_oposta: '',
     estrutura_caixa: '', caixa_largura_mm: '', caixa_profundidade_mm: '',
     percurso_mm: '', overhead_mm: '', poco_mm: '',
@@ -567,6 +572,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
             </p>
             {tipoEquip === 'elevador' && (
               <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
+                <FEField label="Tração *"><FESelect value={unidade.tracao} onChange={set('tracao')} options={FE_TRACOES} placeholder="— selecione —"/></FEField>
                 <FEField label="Capacidade (kg)"><FEInput type="number" value={unidade.capacidade_kg} onChange={set('capacidade_kg')} placeholder="630"/></FEField>
                 <FEField label="Capacidade (passageiros)"><FEInput type="number" value={unidade.capacidade_pessoas} onChange={set('capacidade_pessoas')} placeholder="8"/></FEField>
                 <FEField label="Velocidade (m/s) *"><FEInput type="number" value={unidade.velocidade_ms} onChange={set('velocidade_ms')} placeholder="1.0"/></FEField>
@@ -1213,7 +1219,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       // elevador (colunas reais que outros módulos, RFQ/precificação,
       // dependem diretamente).
       if ((u.tipo_equipamento || 'elevador') !== 'elevador') continue;
-      if (!u.tipo || !u.velocidade_ms || !u.paradas || !u.pavimentos_desc || !u.casa_maquinas || !u.agrupamento || !u.porta_oposta || !u.estrutura_caixa || !u.percurso_mm || !u.porta_tipo_abertura || !u.tensao_principal || !u.tensao_iluminacao) {
+      if (!u.tipo || !u.tracao || !u.velocidade_ms || !u.paradas || !u.pavimentos_desc || !u.casa_maquinas || !u.agrupamento || !u.porta_oposta || !u.estrutura_caixa || !u.percurso_mm || !u.porta_tipo_abertura || !u.tensao_principal || !u.tensao_iluminacao) {
         return `Equipamento ${u.identificador || ''}: preencha os campos obrigatórios (*).`;
       }
     }

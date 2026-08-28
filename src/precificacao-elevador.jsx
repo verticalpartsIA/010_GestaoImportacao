@@ -163,6 +163,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
   const [aprovando, setAprovando] = React.useState(false);
   const [mostrarParametros, setMostrarParametros] = React.useState(false);
   const [ressincronizando, setRessincronizando] = React.useState(false);
+  const [atualizandoMo, setAtualizandoMo] = React.useState(false);
   // Câmbio USD/BRL ao vivo — só referência/comparação (ver cambio-api.js).
   // Não substitui tx_cambial sozinho; o Financeiro aplica clicando "Usar".
   const [cambioVivo, setCambioVivo] = React.useState(null); // null | { valor, timestamp } | 'erro'
@@ -185,6 +186,19 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
       window.toast?.('Erro ao ressincronizar: ' + e.message, 'error');
     } finally {
       setRessincronizando(false);
+    }
+  };
+
+  const atualizarMaoDeObra = async () => {
+    setAtualizandoMo(true);
+    try {
+      await window.PrecificacaoElevadorStore.atualizarMaoDeObra(pz.id);
+      await carregar();
+      window.toast?.('Mão de obra recalculada a partir da tabela de referência.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao recalcular mão de obra: ' + e.message, 'error');
+    } finally {
+      setAtualizandoMo(false);
     }
   };
 
@@ -233,6 +247,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
     modelos: pz.modelos, parametros_fiscais_snapshot: pz.parametros_fiscais_snapshot,
     mark_up_pct: pz.mark_up_pct, comissao_consultoria_pct: pz.comissao_consultoria_pct,
     comissao_vendedor_pct: pz.comissao_vendedor_pct, comissao_indicacao_pct: pz.comissao_indicacao_pct,
+    modo_formacao_preco: pz.modo_formacao_preco, margem_desejada_pct: pz.margem_desejada_pct,
+    contingencia_valor: pz.contingencia_valor, outros_custos_nao_recuperaveis_rs: pz.outros_custos_nao_recuperaveis_rs,
   });
 
   const salvar = async () => {
@@ -285,6 +301,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
 
   const resultado = pz.resultado && pz.resultado.precificacao;
   const importacao = pz.resultado && pz.resultado.importacao;
+  const resultadoV2 = pz.resultado_v2 && pz.resultado_v2.precificacao ? pz.resultado_v2 : null;
+  const margemEfetivaV2Negativa = !!resultadoV2 && resultadoV2.precificacao.margemEfetivaPct < 0;
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
   const margemMinima = Number(params.margem_minima_pct) || 0;
@@ -369,43 +387,81 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
             {ressincronizando ? 'Ressincronizando…' : 'Ressincronizar do fornecedor'}
           </Button>
         )}>
-        {pz.cotacao_fornecedor_id && (
-          <div className="row gap-3" style={{ marginBottom: 10, flexWrap: 'wrap' }}>
-            <span className="mono small muted">
-              Câmbio no dia da cotação (congelado): {pz.cambio_na_cotacao_usd_brl != null ? fmtBRL2(pz.cambio_na_cotacao_usd_brl) : '— (fornecedor respondeu antes dessa feature existir)'}
-            </span>
-            <span className="mono small muted">
-              Câmbio agora: {cambioVivo && cambioVivo !== 'erro' ? fmtBRL2(cambioVivo.valor) : 'indisponível'}
-            </span>
-          </div>
-        )}
         <div className="table-wrap">
           <table className="t">
             <thead><tr>
-              <th>Unidade</th><th>Modelo (fornecedor)</th><th>Quantidade</th><th>Custo Fornecedor (USD)</th>
+              <th>UNIDADE</th><th>Modelo (fornecedor)</th><th>Quantidade</th>
+              <th>(USD) PTAX No dia da Cotação</th><th>(USD) PTAX Agora</th><th>Custo Fornecedor (USD)</th>
               <th>R$ no dia da cotação</th><th>R$ agora (ao vivo)</th>
             </tr></thead>
             <tbody>
               {(pz.modelos || []).length === 0 && (
-                <tr><td colSpan={6} style={{ textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma unidade encontrada.</td></tr>
+                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma unidade encontrada.</td></tr>
               )}
-              {(pz.modelos || []).map((m, i) => (
-                <tr key={m.unidadeId || i}>
-                  <td>{m.identificador}</td>
-                  <td><PZInput value={m.modelo} onChange={setModelo(i, 'modelo')}/></td>
-                  <td><PZInput type="number" value={m.quantidade} onChange={setModelo(i, 'quantidade')}/></td>
-                  <td><PZCurrencyInput moeda="USD" value={m.valorUnitarioUsd} onChange={setModelo(i, 'valorUnitarioUsd')}/></td>
-                  <td className="mono muted" title="Câmbio congelado no dia em que o fornecedor respondeu × custo em USD — não é o valor usado no cálculo oficial (esse usa o Câmbio abaixo)">
-                    {pz.cambio_na_cotacao_usd_brl != null ? fmtBRL2((Number(m.valorUnitarioUsd) || 0) * pz.cambio_na_cotacao_usd_brl) : '—'}
-                  </td>
-                  <td className="mono muted" title="Câmbio de agora × custo em USD — referência de quanto custaria hoje, não é o valor usado no cálculo oficial (esse usa o Câmbio abaixo)">
-                    {cambioVivo && cambioVivo !== 'erro' ? fmtBRL2((Number(m.valorUnitarioUsd) || 0) * cambioVivo.valor) : '—'}
-                  </td>
-                </tr>
-              ))}
+              {(pz.modelos || []).map((m, i) => {
+                const custoUsd = Number(m.valorUnitarioUsd) || 0;
+                const ptaxCotacao = pz.cambio_na_cotacao_usd_brl;
+                const ptaxAgora = cambioVivo && cambioVivo !== 'erro' ? cambioVivo.valor : null;
+
+                return (
+                  <tr key={m.unidadeId || i}>
+                    <td>{m.identificador}</td>
+                    <td><PZInput value={m.modelo} onChange={setModelo(i, 'modelo')}/></td>
+                    <td><PZInput type="number" value={m.quantidade} onChange={setModelo(i, 'quantidade')}/></td>
+                    <td className="mono muted" title="PTAX congelada no dia em que o fornecedor respondeu.">
+                      {ptaxCotacao != null ? fmtBRL2(ptaxCotacao) : '—'}
+                    </td>
+                    <td className="mono muted" title="PTAX consultada agora, para referência ao vivo.">
+                      {ptaxAgora != null ? fmtBRL2(ptaxAgora) : 'indisponível'}
+                    </td>
+                    <td><PZInput type="number" value={m.valorUnitarioUsd} onChange={setModelo(i, 'valorUnitarioUsd')}/></td>
+                    <td className="mono muted" title="PTAX do dia da cotação × custo em USD — referência; o cálculo oficial continua usando o Câmbio abaixo.">
+                      {ptaxCotacao != null ? fmtBRL2(custoUsd * ptaxCotacao) : '—'}
+                    </td>
+                    <td className="mono muted" title="PTAX de agora × custo em USD — referência ao vivo; o cálculo oficial continua usando o Câmbio abaixo.">
+                      {ptaxAgora != null ? fmtBRL2(custoUsd * ptaxAgora) : '—'}
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
+      </Card>
+
+      <Card title="Mão de obra — busca automática" sub="tração × capacidade × paradas em Cadastros → Atualização de Custos"
+        style={{ marginTop: 16 }}
+        action={<Button variant="outline" size="sm" icon="refresh" onClick={atualizarMaoDeObra} disabled={atualizandoMo}>{atualizandoMo ? 'Recalculando…' : 'Recalcular'}</Button>}>
+        {!(pz.mo_lookup || []).length && <p className="small muted" style={{ margin: 0 }}>Nenhuma unidade elevador com dados suficientes ainda.</p>}
+        {!!(pz.mo_lookup || []).length && (
+          <div className="table-wrap">
+            <table className="t">
+              <thead><tr><th>Unidade</th><th>Tração</th><th>Capacidade</th><th>Paradas</th><th>Situação</th><th>Regra usada</th><th>Valor (R$)</th></tr></thead>
+              <tbody>
+                {pz.mo_lookup.map((mo, i) => (
+                  <tr key={mo.unidadeId || i}>
+                    <td>{mo.identificador || '—'}</td>
+                    <td>{mo.tracao || '—'}</td>
+                    <td>{mo.capacidadeKg != null ? `${mo.capacidadeKg} kg` : '—'}</td>
+                    <td>{mo.paradas != null ? mo.paradas : '—'}</td>
+                    <td>
+                      {mo.situacao === 'confirmado' && <span className="badge" style={{ background: 'var(--vp-success)', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Confirmado</span>}
+                      {mo.projetoEspecial && <span className="badge" style={{ background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Projeto especial</span>}
+                      {mo.situacao === 'pendente' && !mo.projetoEspecial && <span className="badge" style={{ background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Pendente</span>}
+                    </td>
+                    <td className="small muted" title={mo.motivo || ''}>{mo.regraUsada || mo.motivo || '—'}</td>
+                    <td className="mono">{mo.valorRs ? fmtBRL2(mo.valorRs) : '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {(pz.mo_lookup || []).some((mo) => mo.projetoEspecial) && (
+          <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
+            ⚠ Uma ou mais unidades caíram fora da cobertura da tabela de MO — trate como projeto especial (estimativa não confirmada, exige justificativa e aprovação técnica/financeira antes de aprovar a precificação). O valor não entra sozinho na conta — adicione manualmente em "Instalação e Montagem" abaixo quando tiver uma cotação de instalador/engenharia.
+          </p>
+        )}
       </Card>
 
       <Card title="Despesas de importação" style={{ marginTop: 16 }}>
@@ -472,7 +528,10 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           <PZField label="Frete interno (R$)"><PZCurrencyInput moeda="BRL" value={pz.frete_interno_rs} onChange={set('frete_interno_rs')}/></PZField>
           <PZField label="Armazenagem (R$)"><PZCurrencyInput moeda="BRL" value={pz.armazenagem_rs} onChange={set('armazenagem_rs')}/></PZField>
           <PZField label="% de Serviços"><PZPercentInput value={pz.percentual_servicos} onChange={set('percentual_servicos')}/></PZField>
+          <PZField label="Contingência (R$)"><PZCurrencyInput moeda="BRL" value={pz.contingencia_valor} onChange={set('contingencia_valor')}/></PZField>
+          <PZField label="Outros custos não recuperáveis (R$)"><PZCurrencyInput moeda="BRL" value={pz.outros_custos_nao_recuperaveis_rs} onChange={set('outros_custos_nao_recuperaveis_rs')}/></PZField>
         </div>
+        <p className="small muted" style={{ marginTop: 8 }}>Contingência e outros custos não recuperáveis só entram no motor V2 (custo econômico completo) — ver "Formação do Preço" abaixo. O V1 (oficial) ignora esses dois campos.</p>
 
         <div style={{ marginTop: 20 }}>
           <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
@@ -493,9 +552,9 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
 
       <Card title="Alavancas do Financeiro" style={{ marginTop: 16 }}>
         <div className="grid-3" style={{ gap: 12 }}>
-          <PZField label="Mark-up (%)">
+          <PZField label="Markup sobre o custo (%)">
             <PZPercentInput value={pz.mark_up_pct} onChange={set('mark_up_pct')}/>
-            {markUpForaFaixa && <div style={{ color: '#991b1b', fontSize: 11, marginTop: 4 }}>Mark-up de {fmtPct2(pz.mark_up_pct)} parece implausível — confira o valor (zera o preço de venda).</div>}
+            {markUpForaFaixa && <div style={{ color: '#991b1b', fontSize: 11, marginTop: 4 }}>Markup de {fmtPct2(pz.mark_up_pct)} parece implausível — confira o valor (zera o preço de venda no V1).</div>}
           </PZField>
           <PZField label="Comissão consultoria (%)"><PZPercentInput value={pz.comissao_consultoria_pct} onChange={set('comissao_consultoria_pct')}/></PZField>
           <PZField label="Comissão vendedor (%)"><PZPercentInput value={pz.comissao_vendedor_pct} onChange={set('comissao_vendedor_pct')}/></PZField>
@@ -536,8 +595,54 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
         </Card>
       )}
 
+      <Card title="Formação do Preço — V2 (custo econômico completo)"
+        sub="corrige o V1: instalação/frete interno/armazenagem entram na BASE do preço, não só no lucro depois — roda em paralelo pra comparação, ainda não é o motor oficial"
+        style={{ marginTop: 16 }}>
+        <div className="grid-3" style={{ gap: 12 }}>
+          <PZField label="Modo de formação do preço">
+            <select className="input" value={pz.modo_formacao_preco || 'margem_sobre_venda'} onChange={(e) => set('modo_formacao_preco')(e.target.value)}>
+              <option value="margem_sobre_venda">Margem desejada sobre a venda</option>
+              <option value="markup_sobre_custo">Markup sobre o custo</option>
+            </select>
+          </PZField>
+          {pz.modo_formacao_preco !== 'markup_sobre_custo' && (
+            <PZField label="Margem desejada sobre a venda (%)"><PZPercentInput value={pz.margem_desejada_pct} onChange={set('margem_desejada_pct')}/></PZField>
+          )}
+        </div>
+        <p className="small muted" style={{ marginTop: 8, marginBottom: 0 }}>
+          Markup sobre o custo usa o mesmo % de "Markup sobre o custo" das Alavancas do Financeiro, acima. Contingência e outros custos não recuperáveis vêm do card "Despesas Extras".
+        </p>
+
+        {resultadoV2 && (
+          <>
+            <div className="grid-3" style={{ gap: 16, marginTop: 16 }}>
+              <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
+              <div><span className="up-eyebrow muted">Preço de venda (V2)</span><div className="cell-money" style={{ fontSize: 18, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
+              <div>
+                <span className="up-eyebrow muted">Margem efetiva calculada (%)</span>
+                <div className="cell-money" style={{ fontSize: 16, color: margemEfetivaV2Negativa ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}</div>
+              </div>
+              <div><span className="up-eyebrow muted">Lucro final (V2)</span><div className="cell-money" style={{ fontSize: 16, color: resultadoV2.precificacao.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultadoV2.precificacao.lucroFinal)}</div></div>
+              <div><span className="up-eyebrow muted">Preço de venda (V1, oficial)</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.v1Comparacao.precoVendaProposta)}</div></div>
+              <div><span className="up-eyebrow muted">Diferença V2 − V1</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta - resultadoV2.v1Comparacao.precoVendaProposta)}</div></div>
+            </div>
+            {!resultadoV2.divisorValido && (
+              <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
+                ⚠ Divisor inválido (markup/margem + impostos + comissões somam 100% ou mais) — não é possível formar preço nesse cenário. Reduza o markup/margem desejada ou os percentuais de venda.
+              </p>
+            )}
+            {resultadoV2.divisorValido && margemEfetivaV2Negativa && (
+              <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
+                ⚠ Margem efetiva (V2) negativa — este cenário não deveria ser aprovado como está. Revise custos operacionais, markup/margem ou comissões.
+              </p>
+            )}
+          </>
+        )}
+        {!resultadoV2 && <p className="small muted" style={{ marginTop: 12, marginBottom: 0 }}>Clique em "Calcular" pra ver o resultado do V2.</p>}
+      </Card>
+
       {resultado && (
-        <Card title="Resultado" style={{ marginTop: 16 }}>
+        <Card title="Resultado — V1 (oficial)" style={{ marginTop: 16 }}>
           <div className="grid-3" style={{ gap: 16 }}>
             <div><span className="up-eyebrow muted">Custo total mercadorias</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(importacao.custoTotalMercadorias)}</div></div>
             <div><span className="up-eyebrow muted">Custo por equipamento</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(importacao.custoPorEquipamento)}</div></div>
