@@ -75,6 +75,7 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
   const [fStatus, setFStatus] = React.useState('Todos');
   const [refreshing, setRefreshing] = React.useState(false);
   const [cadeiaDe, setCadeiaDe] = React.useState(null);
+  const [abrindo, setAbrindo] = React.useState(null);
 
   const carregar = React.useCallback(async () => {
     setRefreshing(true);
@@ -89,6 +90,31 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
   }, []);
 
   React.useEffect(() => { carregar(); }, [carregar]);
+
+  /* Abre o Formulário — Equipamento pra editar. Linha de "Formulário" já tem
+     o registro real (r.id = formularios_elevador.id), abre direto. Linha de
+     "Planilha" ainda não tem Formulário por trás — a primeira vez que
+     alguém clica, "ressuscita" a cotação histórica como um Formulário de
+     verdade (Nº novo, cliente resolvido pelo CNPJ/nome, 1 equipamento com a
+     descrição original pra completar/duplicar/remover à vontade). Cliques
+     seguintes na mesma cotação (já convertida) só reabrem o mesmo Formulário. */
+  const abrirNoFormulario = async (r) => {
+    setAbrindo(r.id);
+    try {
+      const formularioId = r.origem === 'formulario'
+        ? r.id
+        : await window.FormularioElevadorStore.abrirOuConverterHistorico(r.id);
+      if (r.origem !== 'formulario') {
+        window.toast?.('Cotação da planilha ressuscitada como Formulário — novo Nº atribuído.', 'success');
+      }
+      setSubsel(formularioId);
+      setRoute('formulario-elevador');
+    } catch (e) {
+      window.toast?.('Erro ao abrir Formulário: ' + e.message, 'error');
+    } finally {
+      setAbrindo(null);
+    }
+  };
 
   const statusDisponiveis = React.useMemo(() => {
     if (!rows) return [];
@@ -150,6 +176,7 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
             <th style={{ width: 60 }}>UF</th>
             <th style={{ width: 110 }}>Status</th>
             <th style={{ width: 90 }}>Origem</th>
+            <th style={{ width: 150 }}></th>
           </tr></thead>
           <tbody>
             {rows === null && (
@@ -172,6 +199,12 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
                   <td>{r.estado_instalacao || <span className="muted">—</span>}</td>
                   <td><CcStatusChip status={r.status}/></td>
                   <td className="small" style={{ color: 'var(--fg2)' }}>{r.origem === 'historico' ? 'Planilha' : 'Formulário'}</td>
+                  <td onClick={(e) => e.stopPropagation()}>
+                    <Button variant="outline" size="sm" icon="ruler" disabled={abrindo === r.id}
+                      onClick={() => abrirNoFormulario(r)}>
+                      {abrindo === r.id ? 'Abrindo…' : 'Abrir no Formulário'}
+                    </Button>
+                  </td>
                 </tr>
               );
             })}
