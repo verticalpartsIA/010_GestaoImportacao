@@ -46,10 +46,12 @@ function PZPercentInput({ value, onChange, disabled, placeholder }) {
   );
 }
 /* Todo campo de "Preço"/valor monetário precisa mostrar o formato da
-   própria moeda — R$ 1.234,56 (vírgula decimal) pro que é BRL, US$
-   1,234.56 (ponto decimal) pro que é USD — em vez do número cru que
-   <input type="number"> força (nunca mostra símbolo, separador de
-   milhar nem 2 casas fixas). Foco = edição crua (facilita apagar/
+   própria moeda. BRL usa vírgula decimal + ponto de milhar (R$ 1.234,56,
+   padrão brasileiro). USD (pedido explícito do usuário, 28/08: só o
+   ponto decimal, sem separador de milhar — "vírgula e ponto não existe")
+   usa só ponto decimal e nada mais: US$ 33580.00, não US$ 33,580.00. Em
+   vez do número cru que <input type="number"> força (nunca mostra
+   símbolo nem 2 casas fixas). Foco = edição crua (facilita apagar/
    digitar); blur = reformata. `value`/onChange continuam número puro
    por baixo (mesmo formato que motor de cálculo e banco sempre
    usaram) — só a exibição muda, igual PZPercentInput fez pra "%".
@@ -58,9 +60,10 @@ function PZPercentInput({ value, onChange, disabled, placeholder }) {
 function PZCurrencyInput({ value, onChange, moeda = 'BRL', disabled }) {
   const [editando, setEditando] = React.useState(false);
   const [bruto, setBruto] = React.useState('');
-  const locale = moeda === 'USD' ? 'en-US' : 'pt-BR';
   const prefixo = moeda === 'USD' ? 'US$' : 'R$';
-  const formatado = (Number(value) || 0).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  const formatado = moeda === 'USD'
+    ? (Number(value) || 0).toFixed(2)
+    : (Number(value) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (
     <div style={{ position: 'relative' }}>
       <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg3)', fontSize: 13, pointerEvents: 'none' }}>{prefixo}</span>
