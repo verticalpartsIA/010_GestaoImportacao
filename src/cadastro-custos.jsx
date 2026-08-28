@@ -80,7 +80,7 @@ function CCElevadorTab() {
                       <td className="mono">{r.paradas}</td>
                       <td><CCInputNum value={r.dias_montagem} width={90} onBlurSave={(v) => salvarCampo(r, 'dias_montagem', v)}/></td>
                       <td><CCInputNum value={r.qtd_montadores} width={90} onBlurSave={(v) => salvarCampo(r, 'qtd_montadores', v)}/></td>
-                      <td className="text-right"><CCInputNum value={r.valor_reajustado_rs} width={130} onBlurSave={(v) => salvarCampo(r, 'valor_reajustado_rs', v ?? 0)}/></td>
+                      <td className="text-right"><PZCurrencyInput moeda="BRL" value={r.valor_reajustado_rs} onChange={(v) => salvarCampo(r, 'valor_reajustado_rs', v ?? 0)}/></td>
                     </tr>
                   ))}
                 </tbody>
@@ -126,8 +126,8 @@ function CCEscadaEsteiraTab() {
             {rows.map((r) => (
               <tr key={r.id} style={{ opacity: saving === r.id ? .5 : 1 }}>
                 <td>{labelTipo[r.tipo] || r.tipo}</td>
-                <td className="text-right"><CCInputNum value={r.valor_sao_paulo_rs} width={130} onBlurSave={(v) => salvarCampo(r, 'valor_sao_paulo_rs', v)}/></td>
-                <td className="text-right"><CCInputNum value={r.valor_outros_estados_rs} placeholder="preencher" width={130} onBlurSave={(v) => salvarCampo(r, 'valor_outros_estados_rs', v)}/></td>
+                <td className="text-right"><PZCurrencyInput moeda="BRL" value={r.valor_sao_paulo_rs} onChange={(v) => salvarCampo(r, 'valor_sao_paulo_rs', v)}/></td>
+                <td className="text-right"><PZCurrencyInput moeda="BRL" value={r.valor_outros_estados_rs} onChange={(v) => salvarCampo(r, 'valor_outros_estados_rs', v)}/></td>
               </tr>
             ))}
           </tbody>
@@ -175,8 +175,8 @@ function CCContainersTab() {
                 <td className="mono small">{r.comprimento_m ?? '—'}</td>
                 <td className="small">{r.altura_desc || '—'}</td>
                 <td className="mono small">{r.capacidade_m3 ?? '—'}</td>
-                <td className="text-right"><CCInputNum value={r.preco_usd} onBlurSave={(v) => salvarCampo(r, 'preco_usd', v)}/></td>
-                <td className="text-right"><CCInputNum value={r.preco_rs} onBlurSave={(v) => salvarCampo(r, 'preco_rs', v)}/></td>
+                <td className="text-right"><PZCurrencyInput moeda="USD" value={r.preco_usd} onChange={(v) => salvarCampo(r, 'preco_usd', v)}/></td>
+                <td className="text-right"><PZCurrencyInput moeda="BRL" value={r.preco_rs} onChange={(v) => salvarCampo(r, 'preco_rs', v)}/></td>
                 <td>
                   <input className="input" type="date" style={{ width: 140 }} value={r.data_cotacao || ''}
                     onChange={(e) => salvarCampo(r, 'data_cotacao', e.target.value || null)}/>
