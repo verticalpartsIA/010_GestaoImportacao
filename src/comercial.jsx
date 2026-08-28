@@ -10,8 +10,17 @@
    identificação do cliente (CNPJ + contato); a alocação de quantos
    equipamentos/tipos forem necessários acontece no Formulário, chamado
    a partir daqui ou da tela de Detalhe do Lead. */
-function ModalNovoLead({ onClose, onSaved, onOpenFormulario }) {
-  const [f, setF] = React.useState({
+function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
+  const isEdit = !!lead;
+  const [f, setF] = React.useState(() => isEdit ? {
+    building: lead.building || '', contact: lead.contact || '', role: lead.role || '',
+    phone: lead.phone || '', email: lead.email || '',
+    tipoPessoa: 'PJ', cnpj: '', cpf: '', documentoPendente: !!lead.documento_pendente, razaoSocial: '',
+    origin: lead.origin || 'Site', status: lead.status || 'Em qualificação',
+    owner: lead.owner || '', value: lead.value != null ? String(lead.value) : '',
+    priority: ({ alta: 'Alta', media: 'Média', baixa: 'Baixa' }[String(lead.priority || '').toLowerCase()] || lead.priority || 'Alta'),
+    next: lead.next_action || lead.next || '',
+  } : {
     building:'', contact:'', role:'', phone:'', email:'',
     tipoPessoa:'PJ', cnpj:'', cpf:'', documentoPendente:false, razaoSocial:'',
     origin:'Site', status:'Em qualificação',
@@ -22,6 +31,26 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario }) {
   const [savedLead, setSavedLead] = React.useState(null);
 
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
+
+  /* Edição: o CNPJ/CPF/Razão Social não vivem no Lead — só no `clientes`
+     vinculado (lead.cliente_id). Busca depois do mount (não trava a
+     abertura do modal esperando essa consulta) e preenche por cima do
+     estado inicial, só quando os dados chegam. */
+  React.useEffect(() => {
+    if (!isEdit || !lead.cliente_id) return;
+    let alive = true;
+    window.CadastrosClientesStore?.obter(lead.cliente_id).then((c) => {
+      if (!alive || !c) return;
+      setF((p) => ({
+        ...p,
+        tipoPessoa: c.tipo_pessoa || p.tipoPessoa,
+        cnpj: c.cnpj || p.cnpj,
+        cpf: c.cpf || p.cpf,
+        razaoSocial: c.razao_social || p.razaoSocial,
+      }));
+    });
+    return () => { alive = false; };
+  }, [isEdit, lead?.cliente_id]);
 
   const buscarCnpj = async () => {
     if (!window.EnderecoAPI?.isCnpjValido(f.cnpj)) return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
@@ -50,43 +79,67 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario }) {
       }
     }
     setSaving(true);
-    const id = 'LD-' + Date.now().toString().slice(-6);
-
-    const { error } = await window.__VP_SB.sb.from('leads').insert({
-      id,
+    const id = isEdit ? lead.id : 'LD-' + Date.now().toString().slice(-6);
+    const payload = {
       building: f.building, contact: f.contact, role: f.role || null,
       phone: f.phone || null, email: f.email || null,
       origin: f.origin, status: f.status, owner: f.owner || null,
       value: f.value ? parseFloat(f.value) : null,
       priority: ({ 'Alta': 'alta', 'Média': 'media', 'Baixa': 'baixa' }[f.priority] || 'media'),
       next_action: f.next || null,
-      date: new Date().toISOString().slice(0, 10),
       documento_pendente: f.documentoPendente,
-    });
+    };
+
+    const { error } = isEdit
+      ? await window.__VP_SB.sb.from('leads').update(payload).eq('id', id)
+      : await window.__VP_SB.sb.from('leads').insert({ id, ...payload, date: new Date().toISOString().slice(0, 10) });
     if (error) { setSaving(false); return window.toast('Erro: ' + error.message, 'error'); }
 
     /* CNPJ/CPF informado (e não marcado como "será inserido depois") →
        resolve/cria o cliente (mesma dedup por documento do Formulário,
        window.FormularioElevadorStore.buscarOuCriarCliente) e já vincula
        leads.cliente_id — assim o Formulário, quando chamar este Lead,
-       abre com o cliente pronto, sem redigitar CNPJ/CPF. */
+       abre com o cliente pronto, sem redigitar CNPJ/CPF.
+
+       Na edição, se o Lead JÁ tem cliente_id, sincroniza esse registro
+       sempre — mesmo sem CNPJ/CPF ainda (documento pendente) — senão editar
+       só a Razão Social de um cliente provisório fecha com "Lead
+       atualizado" mas descarta a edição em silêncio (achado real via
+       review). `clienteIdProvisorio` faz o store atualizar esse mesmo
+       registro em vez de criar um novo. */
     const docDigits = f.tipoPessoa === 'PF' ? cpfDigits : cnpjDigits;
-    let clienteId = null;
-    if (!f.documentoPendente && docDigits) {
+    let clienteId = isEdit ? (lead.cliente_id || null) : null;
+    let clienteAtualizado = null;
+    if ((isEdit && lead.cliente_id) || (!f.documentoPendente && docDigits)) {
       try {
         const cliente = await window.FormularioElevadorStore.buscarOuCriarCliente({
           [f.tipoPessoa === 'PF' ? 'cpf' : 'cnpj']: docDigits, tipo_pessoa: f.tipoPessoa,
           razao_social: f.razaoSocial || f.building,
           contato: f.contact, telefone: f.phone || null, email: f.email || null,
+          clienteIdProvisorio: isEdit ? (lead.cliente_id || null) : null,
         });
         clienteId = cliente.id;
-        await window.__VP_SB.sb.from('leads').update({ cliente_id: clienteId }).eq('id', id);
+        clienteAtualizado = cliente;
+        if (clienteId !== (isEdit ? lead.cliente_id : null)) {
+          await window.__VP_SB.sb.from('leads').update({ cliente_id: clienteId }).eq('id', id);
+        }
       } catch (e) {
-        window.toast('Lead criado, mas falhou ao vincular cliente: ' + e.message, 'warning');
+        window.toast((isEdit ? 'Lead atualizado, mas' : 'Lead criado, mas') + ' falhou ao vincular cliente: ' + e.message, 'warning');
       }
     }
 
     setSaving(false);
+    if (isEdit) {
+      window.toast('Lead atualizado.', 'success');
+      /* Passa o cliente sincronizado de volta — a tela de Detalhe do Lead
+         depende só de lead.cliente_id pra refazer essa busca, e esse id não
+         muda quando só os DADOS do cliente (razão social, CNPJ...) mudam,
+         então sem isso o card "Cliente" ficava com dado velho até recarregar
+         a página (2º achado do review). */
+      onSaved?.({ ...lead, ...payload, cliente_id: clienteId }, clienteAtualizado);
+      onClose();
+      return;
+    }
     onSaved?.();
     setSavedLead({
       id, building: f.building, contact: f.contact, role: f.role, phone: f.phone, email: f.email,
@@ -149,11 +202,11 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario }) {
   }
 
   return (
-    <Modal title="Novo Lead" onClose={onClose} width={600}
+    <Modal title={isEdit ? 'Editar Lead' : 'Novo Lead'} onClose={onClose} width={600}
       footer={<>
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button variant="primary" onClick={save} disabled={saving}>
-          {saving ? 'Salvando…' : 'Criar Lead'}
+          {saving ? 'Salvando…' : (isEdit ? 'Salvar Alterações' : 'Criar Lead')}
         </Button>
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
@@ -412,6 +465,7 @@ function LeadsPage({ setRoute, setSubsel }) {
 /* ---------- LEAD DETAIL ---------- */
 function LeadDetail({ lead, setRoute, setSubsel }) {
   const [creatingDossier, setCreatingDossier] = React.useState(false);
+  const [showEditLead, setShowEditLead] = React.useState(false);
 
   if (!lead) {
     return <EmptyStateRedirect
@@ -513,6 +567,7 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
         <div className="page-head__r">
           <Button variant="outline" icon="message" onClick={() => { const p = (lead.phone || '').replace(/\D/g,''); p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
           <Button variant="outline" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
+          <Button variant="outline" icon="edit" onClick={() => setShowEditLead(true)}>Editar Lead</Button>
           <Button variant="outline" icon="ruler" onClick={abrirFormulario}>Abrir Formulário</Button>
           <Button variant="primary" icon="zap" onClick={criarDossier} disabled={creatingDossier}>
             {creatingDossier ? 'Criando…' : 'Qualificar → Dossier'}
@@ -598,6 +653,21 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
           </Card>
         </div>
       </div>
+
+      {showEditLead && (
+        <ModalNovoLead
+          lead={lead}
+          onClose={() => setShowEditLead(false)}
+          onSaved={(updatedLead, clienteAtualizado) => {
+            setSubsel?.(updatedLead);
+            // lead.cliente_id pode não mudar (só os DADOS do cliente
+            // mudaram, ex.: razão social) — o efeito acima só refaz a busca
+            // quando o id muda, então atualiza aqui direto pra não deixar
+            // o card "Cliente" com dado velho até recarregar a página.
+            if (clienteAtualizado) setCliente(clienteAtualizado);
+          }}
+        />
+      )}
     </div>
   );
 }
