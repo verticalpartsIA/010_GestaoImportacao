@@ -104,14 +104,48 @@
     return resultados;
   }
 
-  /* Re-roda a busca sob demanda (ex.: Financeiro atualizou a tabela de MO
-     em Cadastros e quer refletir numa precificação já criada, sem recriar
-     tudo do zero). Só grava mo_lookup — não mexe em itens_instalacao_
-     montagem (lista manual, V1) nem dispara recálculo sozinho. */
+  /* pz.modelos é um snapshot congelado em montarRascunho() na hora em que a
+     precificação foi criada — igual pz.dados_envio congela o que foi
+     mandado pro fornecedor. Uma precificação criada antes de tracao/
+     capacidade_kg/paradas entrarem em montarRascunho (ou antes do vendedor
+     preencher isso no Formulário) fica com esses campos ausentes pra
+     sempre, mesmo que o Formulário seja completado depois — "Recalcular"
+     rodando só em cima do snapshot nunca via o dado novo. Esta função
+     busca o valor ATUAL direto em formularios_elevador_unidades (fonte
+     viva, não o snapshot) casando por unidadeId, antes de rodar a busca de
+     MO — é o que faz o botão "Recalcular" (e reabrir depois de editar o
+     Formulário) realmente refletir o que está lá agora. */
+  async function refrescarSpecUnidades(modelos) {
+    const c = sb(); if (!c) return modelos;
+    const unidadeIds = (modelos || []).map((m) => m.unidadeId).filter(Boolean);
+    if (!unidadeIds.length) return modelos;
+    const { data: unidadesForm, error } = await c.from('formularios_elevador_unidades')
+      .select('id, tracao, capacidade_kg, paradas').in('id', unidadeIds);
+    if (error) { console.warn('[PrecificacaoElevadorStore] refrescarSpecUnidades falhou', error); return modelos; }
+    const porId = {}; (unidadesForm || []).forEach((u) => { porId[u.id] = u; });
+    return modelos.map((m) => {
+      const u = porId[m.unidadeId];
+      if (!u) return m;
+      return {
+        ...m,
+        tracao: u.tracao || null,
+        capacidadeKg: u.capacidade_kg != null ? Number(u.capacidade_kg) : null,
+        paradas: u.paradas != null ? Number(u.paradas) : null,
+      };
+    });
+  }
+
+  /* Re-roda a busca sob demanda (ex.: vendedor completou tração/capacidade/
+     paradas no Formulário depois da precificação já criada, ou Financeiro
+     atualizou a tabela de MO em Cadastros) — sem recriar tudo do zero.
+     Também atualiza pz.modelos com a spec fresca (ver refrescarSpecUnidades)
+     antes de buscar; não mexe em itens_instalacao_montagem (lista manual,
+     V1) nem dispara recálculo de preço sozinho. */
   async function atualizarMaoDeObra(id) {
     const pz = await obter(id);
-    const moLookup = await buscarMaoDeObraAutomatica(pz.modelos || []);
-    await salvar(id, { mo_lookup: moLookup });
+    const modelos = await refrescarSpecUnidades(pz.modelos || []);
+    const moLookup = await buscarMaoDeObraAutomatica(modelos);
+    await salvar(id, { modelos, mo_lookup: moLookup });
     return moLookup;
   }
 
