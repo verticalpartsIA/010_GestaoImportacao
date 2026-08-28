@@ -8,10 +8,14 @@
    ============================================================ */
 
 const FE_TIPOS = ['Passageiro', 'Carga', 'Hospitalar', 'Panorâmico', 'Home Lift'];
-const FE_MAO_DE_OBRA = [
-  { value: 'local', label: 'Mão de Obra Local' },
-  { value: 'sao_paulo', label: 'Mão de Obra de São Paulo' },
-  { value: 'sem_mao_de_obra', label: 'Sem Mão de Obra' },
+// Renomeado de "Tipo de mão de obra" pra "Instalação Será" (pedido do
+// usuário, 28/08) — valores viram 'verticalparts'/'cliente', mesmo padrão
+// de FE_RESPONSAVEL_ENTREGA (campo distinto: aqui é quem INSTALA, lá é quem
+// é responsável pela ENTREGA). A coluna no banco continua se chamando
+// tipo_mao_de_obra (ver migration) — só a UI mudou de nome/opções.
+const FE_INSTALACAO_SERA = [
+  { value: 'verticalparts', label: 'VerticalParts' },
+  { value: 'cliente', label: 'Cliente' },
 ];
 const FE_RESPONSAVEL_ENTREGA = [
   { value: 'cliente', label: 'Cliente' },
@@ -22,6 +26,7 @@ const FE_ORIGEM_VENDA = [
   'Indicação VerticalParts',
   'Indicação Escamax + Vendedor',
   'Indicação Terceiros',
+  'Site VerticalParts',
 ];
 const FE_NORMAS = ['Glarie Standard', 'China Standard', 'EN81-20/50', 'EN81-20/50/70', 'EN81-41'];
 
@@ -244,6 +249,26 @@ function FESelect({ value, onChange, options, placeholder, disabled }) {
         ? <option key={o} value={o}>{o}</option>
         : <option key={o.value} value={o.value}>{o.label}</option>)}
     </select>
+  );
+}
+/* Lista de Fornecedores (fornecedores_elevador) é grande demais pra um
+   <select> nativo — ele só pula pro primeiro item que começa com a letra
+   digitada, não filtra de verdade. Texto + <datalist> filtra por qualquer
+   trecho digitado (ex.: "G" mostra todos os fornecedores com G), pedido do
+   usuário 28/08. Continua texto livre por baixo (mesmo padrão de
+   CadFornecedorDatalist em pi.jsx) — o campo já alimenta o agrupamento por
+   nome exato em Cotação a Fornecedor, então o vendedor deve escolher da
+   lista, não inventar um nome novo. */
+function FEFornecedorInput({ value, onChange, fornecedores, disabled }) {
+  const listId = React.useId();
+  return (
+    <>
+      <input className="input" list={listId} value={value ?? ''} onChange={(e) => onChange(e.target.value)}
+        placeholder="Digite pra filtrar (ex.: G)" disabled={disabled}/>
+      <datalist id={listId}>
+        {(fornecedores || []).map((f) => <option key={f} value={f}/>)}
+      </datalist>
+    </>
   );
 }
 function FECheck({ label, checked, onChange }) {
@@ -534,7 +559,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
               {tipoEquip === 'elevador' && <FEField label="Tipo *"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>}
               {tipoEquip === 'elevador' && <FEField label="Modelo"><FESelect value={unidade.modelo} onChange={set('modelo')} options={modelosDisponiveis.map((m) => ({ value: m.codigo, label: `${m.codigo} — ${m.nome}` }))} placeholder="— selecione o modelo —"/></FEField>}
               {tipoEquip === 'elevador' && <FEField label="Norma de projeto"><FESelect value={unidade.norma_projeto} onChange={set('norma_projeto')} options={FE_NORMAS}/></FEField>}
-              {!publicMode && <FEField label="Fornecedor"><FESelect value={unidade.fornecedor} onChange={set('fornecedor')} options={fornecedores || []}/></FEField>}
+              {!publicMode && <FEField label="Fornecedor"><FEFornecedorInput value={unidade.fornecedor} onChange={set('fornecedor')} fornecedores={fornecedores}/></FEField>}
             </div>
             <p style={{ fontSize: 12, color: 'var(--fg3)', margin: '8px 0 0' }}>
               Se o cliente quer vários equipamentos idênticos, informe a quantidade aqui em vez de adicionar um card pra cada — use "+ Adicionar equipamento diferente" abaixo só quando a especificação mudar (ex.: um modelo/tipo distinto, ou mais paradas).
@@ -1177,7 +1202,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
   const validar = () => {
     if (usaClientePicker ? !clienteId : !temIdentificacaoMinima()) return 'Informe Nome/Razão Social, Contato ou Prédio/Empreendimento antes de continuar.';
     if (!header.local_obra_cidade?.trim() || !header.local_obra_estado?.trim()) return 'Local da obra (cidade/UF) é obrigatório.';
-    if (!header.tipo_mao_de_obra) return 'Tipo de mão de obra é obrigatório.';
+    if (!header.tipo_mao_de_obra) return 'Instalação Será é obrigatório.';
     if (!header.responsavel_entrega) return 'Responsável pela entrega é obrigatório.';
     if (header.endereco_obra_diferente && (!header.endereco_obra_logradouro?.trim() || !header.endereco_obra_bairro?.trim() || !header.endereco_obra_cep?.trim() || !header.endereco_obra_cidade?.trim() || !header.endereco_obra_estado?.trim())) {
       return 'Informe o endereço completo da obra (logradouro, bairro, CEP, cidade e UF).';
@@ -1363,7 +1388,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
             <FEField label="Cidade da obra *"><FEInput value={header.local_obra_cidade} onChange={setH('local_obra_cidade')}/></FEField>
             <FEField label="UF da obra *"><FEInput value={header.local_obra_estado} onChange={setH('local_obra_estado')} placeholder="SP"/></FEField>
             <FEField label="Prazo mínimo desejado em obra"><FEInput value={header.prazo_desejado} onChange={setH('prazo_desejado')} placeholder="3 a 4 meses"/></FEField>
-            <FEField label="Tipo de mão de obra *"><FESelect value={header.tipo_mao_de_obra} onChange={setH('tipo_mao_de_obra')} options={FE_MAO_DE_OBRA}/></FEField>
+            <FEField label="Instalação Será *"><FESelect value={header.tipo_mao_de_obra} onChange={setH('tipo_mao_de_obra')} options={FE_INSTALACAO_SERA}/></FEField>
             <FEField label="Responsável pela entrega *"><FESelect value={header.responsavel_entrega} onChange={setH('responsavel_entrega')} options={FE_RESPONSAVEL_ENTREGA}/></FEField>
             {!publicMode && <FEField label="Origem da venda"><FESelect value={header.origem_venda} onChange={setH('origem_venda')} options={FE_ORIGEM_VENDA}/></FEField>}
             {!publicMode && <FEField label="Vendedor"><FEInput value={header.vendedor} onChange={setH('vendedor')} placeholder="Iniciais ou nome"/></FEField>}
