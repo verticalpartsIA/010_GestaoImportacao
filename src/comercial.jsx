@@ -13,7 +13,7 @@
 function ModalNovoLead({ onClose, onSaved, onOpenFormulario }) {
   const [f, setF] = React.useState({
     building:'', contact:'', role:'', phone:'', email:'',
-    cnpj:'', razaoSocial:'',
+    tipoPessoa:'PJ', cnpj:'', cpf:'', documentoPendente:false, razaoSocial:'',
     origin:'Site', status:'Em qualificação',
     owner:'', value:'', priority:'Alta', next:'',
   });
@@ -41,7 +41,14 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario }) {
     if (!f.building.trim()) return window.toast('Prédio é obrigatório.', 'warning');
     if (!f.contact.trim())  return window.toast('Contato é obrigatório.', 'warning');
     const cnpjDigits = (f.cnpj || '').replace(/\D/g, '');
-    if (cnpjDigits && !window.EnderecoAPI?.isCnpjValido(cnpjDigits)) return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
+    const cpfDigits = (f.cpf || '').replace(/\D/g, '');
+    if (!f.documentoPendente) {
+      if (f.tipoPessoa === 'PF') {
+        if (cpfDigits && !window.EnderecoAPI?.isCpfValido(cpfDigits)) return window.toast('CPF inválido — informe 11 dígitos.', 'warning');
+      } else if (cnpjDigits && !window.EnderecoAPI?.isCnpjValido(cnpjDigits)) {
+        return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
+      }
+    }
     setSaving(true);
     const id = 'LD-' + Date.now().toString().slice(-6);
 
@@ -54,18 +61,21 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario }) {
       priority: ({ 'Alta': 'alta', 'Média': 'media', 'Baixa': 'baixa' }[f.priority] || 'media'),
       next_action: f.next || null,
       date: new Date().toISOString().slice(0, 10),
+      documento_pendente: f.documentoPendente,
     });
     if (error) { setSaving(false); return window.toast('Erro: ' + error.message, 'error'); }
 
-    /* CNPJ informado → resolve/cria o cliente (mesma dedup por CNPJ do
-       Formulário, window.FormularioElevadorStore.buscarOuCriarCliente) e
-       já vincula leads.cliente_id — assim o Formulário, quando chamar
-       este Lead, abre com o cliente pronto, sem redigitar CNPJ. */
+    /* CNPJ/CPF informado (e não marcado como "será inserido depois") →
+       resolve/cria o cliente (mesma dedup por documento do Formulário,
+       window.FormularioElevadorStore.buscarOuCriarCliente) e já vincula
+       leads.cliente_id — assim o Formulário, quando chamar este Lead,
+       abre com o cliente pronto, sem redigitar CNPJ/CPF. */
+    const docDigits = f.tipoPessoa === 'PF' ? cpfDigits : cnpjDigits;
     let clienteId = null;
-    if (cnpjDigits) {
+    if (!f.documentoPendente && docDigits) {
       try {
         const cliente = await window.FormularioElevadorStore.buscarOuCriarCliente({
-          cnpj: cnpjDigits, tipo_pessoa: 'PJ',
+          [f.tipoPessoa === 'PF' ? 'cpf' : 'cnpj']: docDigits, tipo_pessoa: f.tipoPessoa,
           razao_social: f.razaoSocial || f.building,
           contato: f.contact, telefone: f.phone || null, email: f.email || null,
         });
@@ -128,7 +138,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario }) {
             <div className="cell-sub" style={{ marginTop:4 }}>{savedLead.id}</div>
             {savedLead.cliente_id
               ? <div className="cell-sub" style={{ marginTop:4 }}>Cliente vinculado: {savedLead.razaoSocial || savedLead.building}</div>
-              : <div className="cell-sub" style={{ marginTop:4, color:'var(--vp-orange, #b45309)' }}>Sem CNPJ vinculado ainda — pode ser resolvido no Formulário.</div>}
+              : <div className="cell-sub" style={{ marginTop:4, color:'var(--vp-orange, #b45309)' }}>Sem CNPJ/CPF vinculado ainda — pode ser resolvido no Formulário.</div>}
           </div>
           <p style={{ fontSize:13, color:'var(--fg2)', margin:0 }}>
             Deseja abrir o Formulário agora e alocar os equipamentos deste lead?
@@ -157,27 +167,49 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario }) {
           {fld('Email', 'email', 'email', 'contato@email.com')}
         </div>
 
-        {/* ---- CLIENTE (CNPJ) ---- */}
+        {/* ---- CLIENTE (CNPJ/CPF) ---- */}
         <div style={{ border:'1px solid var(--border)', padding:'12px 14px', display:'flex', flexDirection:'column', gap:10 }}>
-          <label className="up-eyebrow muted">Cliente (CNPJ)</label>
+          <label className="up-eyebrow muted">Cliente (CNPJ/CPF)</label>
+          <div className="grid-2" style={{ gap:12 }}>
+            <div className="stack" style={{ gap:4 }}>
+              <label className="up-eyebrow muted">Tipo de pessoa</label>
+              <select className="input" value={f.tipoPessoa} onChange={e => set('tipoPessoa', e.target.value)}>
+                <option value="PJ">Pessoa Jurídica</option>
+                <option value="PF">Pessoa Física</option>
+              </select>
+            </div>
+          </div>
           <div className="row gap-2" style={{ alignItems:'flex-end' }}>
             <div className="stack" style={{ gap:4, flex:1 }}>
-              <label className="up-eyebrow muted">CNPJ</label>
-              <input className="input" type="text" value={f.cnpj}
-                onChange={e => set('cnpj', e.target.value)} placeholder="00.000.000/0000-00"/>
+              <label className="up-eyebrow muted">{f.tipoPessoa === 'PF' ? 'CPF' : 'CNPJ'}</label>
+              <input className="input" type="text"
+                value={f.tipoPessoa === 'PF' ? f.cpf : f.cnpj}
+                onChange={e => set(f.tipoPessoa === 'PF' ? 'cpf' : 'cnpj', e.target.value)}
+                placeholder={f.tipoPessoa === 'PF' ? '000.000.000-00' : '00.000.000/0000-00'}
+                disabled={f.documentoPendente}/>
             </div>
-            <Button variant="outline" onClick={buscarCnpj} disabled={buscandoCnpj}>
-              {buscandoCnpj ? 'Buscando…' : 'Buscar CNPJ'}
-            </Button>
+            {f.tipoPessoa !== 'PF' && (
+              <Button variant="outline" onClick={buscarCnpj} disabled={buscandoCnpj || f.documentoPendente}>
+                {buscandoCnpj ? 'Buscando…' : 'Buscar CNPJ'}
+              </Button>
+            )}
           </div>
+          <label className="row gap-2" style={{ alignItems:'center', fontSize:12.5, cursor:'pointer' }}>
+            <input type="checkbox" checked={f.documentoPendente}
+              onChange={e => {
+                const checked = e.target.checked;
+                setF(p => ({ ...p, documentoPendente: checked, ...(checked ? { cnpj:'', cpf:'' } : {}) }));
+              }}/>
+            CPF ou CNPJ será inserido depois
+          </label>
           <div className="stack" style={{ gap:4 }}>
             <label className="up-eyebrow muted">Razão Social</label>
             <input className="input" type="text" value={f.razaoSocial}
               onChange={e => set('razaoSocial', e.target.value)} placeholder="Preenchido automaticamente pelo CNPJ"/>
           </div>
           <p style={{ fontSize:11.5, color:'var(--fg3)', margin:0 }}>
-            Sem CNPJ ainda? Pode deixar em branco e completar depois — direto no Formulário
-            (busca o mesmo jeito, e evita duplicar cliente).
+            Sem CNPJ/CPF ainda? Marque a opção acima, ou deixe em branco e complete depois — direto no
+            Formulário (busca o mesmo jeito, e evita duplicar cliente).
           </p>
         </div>
 
@@ -205,8 +237,13 @@ function LeadsPage({ setRoute, setSubsel }) {
   const [page, setPage] = React.useState(0);
   const PAGE_SIZE = 15;
 
+  // Não reseta `leads` pra null aqui: fazer isso re-renderiza LeadsPage no
+  // branch de "carregando" (que não inclui o modal na árvore) e desmonta
+  // qualquer ModalNovoLead aberto no meio do save — a tela "✓ Lead Criado!"
+  // nunca chegava a aparecer, reabria um modal novo em branco (bug real,
+  // achado testando o fluxo completo). `leads` já nasce null no useState
+  // inicial, então a primeira carga continua mostrando o esqueleto normal.
   const reloadLeads = () => {
-    setLeads(null);
     window.__VP_SB.sb.from('leads').select('*').order('date', { ascending: false })
       .then(({ data }) => setLeads(data || []));
   };

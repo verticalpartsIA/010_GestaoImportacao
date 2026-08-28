@@ -94,21 +94,17 @@
   }
 
   /* ---------- Cliente (fiscal) ---------- */
-  async function buscarOuCriarCliente(dados) {
-    const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const doc = (dados.cnpj || dados.cpf || '').replace(/\D/g, '');
-    if (doc) {
-      const campo = dados.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj';
-      const { data: existente } = await c.from('clientes').select('*').eq(campo, doc).maybeSingle();
-      if (existente) return existente;
-    }
-    const codigo = window.CadastrosClientesStore ? await window.CadastrosClientesStore.gerarCodigo() : null;
-    const { data, error } = await c.from('clientes').insert({
-      codigo,
-      razao_social: dados.razao_social || null,
+  // Sem CNPJ/CPF ainda (documento "será inserido depois") — razao_social é
+  // NOT NULL no banco, então usa Contato ou Prédio/Empreendimento como
+  // identificação provisória, e marca documento_pendente pra aparecer em
+  // Cadastros/Clientes como pendente de completar.
+  function _camposCliente(dados, doc) {
+    return {
+      razao_social: dados.razao_social || dados.predio_empreendimento || dados.contato || null,
       cnpj: dados.tipo_pessoa === 'PF' ? null : (doc || null),
       cpf: dados.tipo_pessoa === 'PF' ? (doc || null) : null,
       tipo_pessoa: dados.tipo_pessoa || 'PJ',
+      documento_pendente: !doc,
       inscricao_estadual: dados.inscricao_estadual || null,
       contribuinte_icms: typeof dados.contribuinte_icms === 'boolean' ? dados.contribuinte_icms : null,
       endereco_logradouro: dados.endereco_logradouro || null,
@@ -123,7 +119,33 @@
       cidade: dados.cidade || null,
       estado: dados.estado || null,
       contato: dados.contato || null,
-    }).select().single();
+    };
+  }
+
+  async function buscarOuCriarCliente(dados) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const doc = (dados.cnpj || dados.cpf || '').replace(/\D/g, '');
+    /* `clienteIdProvisorio` (passado pelo Formulário quando ainda não tem
+       CNPJ/CPF) identifica um cliente provisório já criado numa chamada
+       anterior desta mesma sessão de rascunho — atualiza esse registro em
+       vez de inserir de novo. Sem isso, cada "Salvar Rascunho" sem
+       documento (fluxo que este mesmo commit passou a incentivar, via
+       Contato/Prédio-Empreendimento) criaria um `clientes` duplicado. Tem
+       prioridade sobre a busca por doc: se o CNPJ/CPF acabou de ser
+       preenchido nesta sessão, o provisório vira o registro definitivo em
+       vez de nascer um cliente novo e orfanar o provisório. */
+    if (dados.clienteIdProvisorio) {
+      const { data: atualizado, error: erroUpdate } = await c.from('clientes')
+        .update(_camposCliente(dados, doc)).eq('id', dados.clienteIdProvisorio).select().single();
+      if (!erroUpdate && atualizado) return atualizado;
+    }
+    if (doc) {
+      const campo = dados.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj';
+      const { data: existente } = await c.from('clientes').select('*').eq(campo, doc).maybeSingle();
+      if (existente) return existente;
+    }
+    const codigo = window.CadastrosClientesStore ? await window.CadastrosClientesStore.gerarCodigo() : null;
+    const { data, error } = await c.from('clientes').insert({ codigo, ..._camposCliente(dados, doc) }).select().single();
     if (error) throw error;
     return data;
   }
@@ -141,6 +163,7 @@
       cliente_id: dados.cliente_id || null,
       canal: dados.canal || 'assistido',
       token,
+      predio_empreendimento: dados.predio_empreendimento || null,
       local_obra_cidade: dados.local_obra_cidade || null,
       local_obra_estado: dados.local_obra_estado || null,
       endereco_logradouro: dados.endereco_logradouro || null,
@@ -188,7 +211,7 @@
      engano num patch qualquer; nenhuma tela usa isso hoje, mas o buraco
      estava aberto. */
   const FE_COLUNAS_VALIDAS = new Set([
-    'lead_id', 'dossier_id', 'cliente_id', 'canal', 'token',
+    'lead_id', 'dossier_id', 'cliente_id', 'canal', 'token', 'predio_empreendimento',
     'local_obra_cidade', 'local_obra_estado', 'endereco_obra', 'prazo_desejado',
     'tipo_mao_de_obra', 'responsavel_entrega', 'origem_venda', 'status', 'observacoes',
     'endereco_obra_diferente', 'endereco_logradouro', 'endereco_complemento', 'endereco_bairro',

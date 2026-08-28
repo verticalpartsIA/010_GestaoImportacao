@@ -991,7 +991,7 @@ const FE_FINALIDADE_COMPRA = [
 ];
 
 const FE_HEADER_KEYS = [
-  'tipo_pessoa', 'razao_social', 'cnpj', 'cpf', 'inscricao_estadual', 'contribuinte_icms', 'finalidade_compra',
+  'tipo_pessoa', 'razao_social', 'contato', 'predio_empreendimento', 'cnpj', 'cpf', 'inscricao_estadual', 'contribuinte_icms', 'finalidade_compra',
   'endereco_logradouro', 'endereco_complemento', 'endereco_bairro', 'endereco_cep', 'endereco_cidade', 'endereco_estado',
   'telefone', 'email',
   'local_obra_cidade', 'local_obra_estado', 'endereco_obra_diferente',
@@ -1069,7 +1069,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       setHeader((h) => ({ ...h, ...feHeaderPick(f) }));
       setNumeroCotacao(f.numero_cotacao ?? null);
       setClienteId(f.cliente_id || null);
-      if (!f.cliente_id && f.razao_social) setCriarClienteInline(true); // formulário antigo, sem vínculo — mantém editável do jeito que já estava
+      if (!f.cliente_id && (f.razao_social || f.contato || f.predio_empreendimento)) setCriarClienteInline(true); // formulário antigo, sem vínculo — mantém editável do jeito que já estava
       if (f.unidades && f.unidades.length) setUnidades(f.unidades);
       setLoading(false);
     }).catch((e) => { window.toast?.('Erro ao carregar formulário: ' + e.message, 'error'); setLoading(false); });
@@ -1091,12 +1091,18 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       ...h,
       telefone: lead.phone || h.telefone,
       email: lead.email || h.email,
+      contato: lead.contact || h.contato,
+      predio_empreendimento: lead.building || h.predio_empreendimento,
       observacoes: [
         `Originado do Lead ${lead.id} (${lead.building || ''}).`,
         lead.contact ? `Contato: ${lead.contact}${lead.role ? ' — ' + lead.role : ''}.` : null,
       ].filter(Boolean).join(' '),
     }));
     if (lead.cliente_id) setClienteId(lead.cliente_id);
+    // Lead ainda sem CNPJ/CPF vinculado (ex.: veio do "será inserido depois")
+    // → mostra direto os campos de cliente (Contato/Prédio já preenchidos)
+    // em vez do buscador de cliente cadastrado, que não teria o que achar.
+    else setCriarClienteInline(true);
   }, [formularioId, prefillFromLead]);
 
   const setH = (k) => (v) => setHeader((h) => ({ ...h, [k]: v }));
@@ -1161,8 +1167,15 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
 
   const usaClientePicker = !publicMode && !criarClienteInline;
 
+  // Sem CNPJ/CPF ainda (comum quando o Lead marcou "documento será inserido
+  // depois") — Nome/Razão Social deixou de ser o único jeito de identificar o
+  // cliente aqui: Contato ou Prédio/Empreendimento bastam pra gerar a
+  // cotação, e o resto (CNPJ/CPF, razão social) é completado depois.
+  const temIdentificacaoMinima = () =>
+    !!(header.razao_social?.trim() || header.contato?.trim() || header.predio_empreendimento?.trim());
+
   const validar = () => {
-    if (usaClientePicker ? !clienteId : !header.razao_social?.trim()) return 'Selecione (ou cadastre) o cliente antes de continuar.';
+    if (usaClientePicker ? !clienteId : !temIdentificacaoMinima()) return 'Informe Nome/Razão Social, Contato ou Prédio/Empreendimento antes de continuar.';
     if (!header.local_obra_cidade?.trim() || !header.local_obra_estado?.trim()) return 'Local da obra (cidade/UF) é obrigatório.';
     if (!header.tipo_mao_de_obra) return 'Tipo de mão de obra é obrigatório.';
     if (!header.responsavel_entrega) return 'Responsável pela entrega é obrigatório.';
@@ -1190,8 +1203,8 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
     // no banco, então salvar sem isso derrubava com um 400 silencioso (sem
     // toast nenhum), travando em "Cotação Nº — (gerado ao salvar)" pra
     // sempre. O resto de `validar()` continua opcional pra rascunho.
-    if (usaClientePicker ? !clienteId : !header.razao_social?.trim()) {
-      window.toast?.(usaClientePicker ? 'Selecione o cliente antes de salvar.' : 'Preencha o Nome/Razão Social do cliente antes de salvar.', 'warning');
+    if (usaClientePicker ? !clienteId : !temIdentificacaoMinima()) {
+      window.toast?.(usaClientePicker ? 'Selecione o cliente antes de salvar.' : 'Preencha Nome/Razão Social, Contato ou Prédio/Empreendimento antes de salvar.', 'warning');
       return null;
     }
     const erro = validar();
@@ -1202,7 +1215,11 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       if (usaClientePicker) {
         cliente = { id: clienteId };
       } else if (!publicMode || header.cnpj || header.cpf) {
-        cliente = await window.FormularioElevadorStore.buscarOuCriarCliente(header);
+        // clienteIdProvisorio: se um cliente já foi criado numa chamada
+        // anterior desta mesma sessão de rascunho (sem CNPJ/CPF ainda), o
+        // store atualiza esse registro em vez de duplicar a cada save.
+        cliente = await window.FormularioElevadorStore.buscarOuCriarCliente({ ...header, clienteIdProvisorio: clienteId });
+        setClienteId(cliente.id);
       }
       let currentId = id;
       if (!currentId) {
@@ -1307,7 +1324,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
               <>
                 <div className="grid-3" style={{ gap: 12 }}>
                   <FEField label="Tipo de pessoa"><FESelect value={header.tipo_pessoa} onChange={setH('tipo_pessoa')} options={[{ value: 'PJ', label: 'Pessoa Jurídica' }, { value: 'PF', label: 'Pessoa Física' }]}/></FEField>
-                  <FEField label="Nome / Razão Social *" span="2"><FEInput value={header.razao_social} onChange={setH('razao_social')} placeholder="Nome do cliente"/></FEField>
+                  <FEField label="Nome / Razão Social" span="2"><FEInput value={header.razao_social} onChange={setH('razao_social')} placeholder="Nome do cliente"/></FEField>
                   {header.tipo_pessoa === 'PF'
                     ? <FEField label="CPF"><FEInput value={header.cpf} onChange={setH('cpf')} placeholder="000.000.000-00"/></FEField>
                     : <FEField label="CNPJ"><FEInput value={header.cnpj} onChange={setH('cnpj')} placeholder="00.000.000/0000-00" onBlur={() => buscarCnpjEPreencher(header.cnpj)}/></FEField>}
@@ -1315,7 +1332,13 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
                   <FEField label="Contribuinte de ICMS?"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
                   <FEField label="Telefone"><FEInput value={header.telefone} onChange={setH('telefone')}/></FEField>
                   <FEField label="E-mail" span="2"><FEInput type="email" value={header.email} onChange={setH('email')}/></FEField>
+                  <FEField label="Contato"><FEInput value={header.contato} onChange={setH('contato')} placeholder="Nome do síndico / responsável"/></FEField>
+                  <FEField label="Prédio / Empreendimento" span="2"><FEInput value={header.predio_empreendimento} onChange={setH('predio_empreendimento')} placeholder="Ed. Itacolomi, Shopping Vila Olímpia…"/></FEField>
                 </div>
+                <p className="small muted" style={{ margin: '8px 0 0' }}>
+                  Sem Nome/Razão Social, CNPJ ou CPF ainda? Informe pelo menos o Contato ou o
+                  Prédio/Empreendimento acima — dá pra completar o resto depois, aqui mesmo.
+                </p>
                 <div style={{ marginTop: 14 }}>
                   <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Endereço</div>
                   <FEEndereco prefix="endereco_" header={header} setH={setH} onBuscarCep={buscarCepEPreencher('endereco_')}/>
