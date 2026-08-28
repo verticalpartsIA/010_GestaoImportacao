@@ -24,6 +24,27 @@ function PZInput({ value, onChange, type = 'text', placeholder, disabled }) {
       placeholder={placeholder} disabled={disabled}/>
   );
 }
+/* Todo campo "(%)" nesta tela guarda fração (0,175) por baixo — é o
+   formato que o motor de cálculo e o banco sempre usaram (ver
+   precificacao-elevador-engine.js e o teste de regressão em
+   precificacao-elevador-engine.test.js). Mas digitar fração manualmente
+   não é como humano pensa em porcentagem, e digitar "22" pensando em
+   22% sem perceber que precisava ser "0,22" zerava o preço de venda em
+   silêncio (achado real, sessão 27/08 — ver validarAntesDeCalcular/
+   markUpForaFaixa mais abaixo). Este input mostra/recebe ponto
+   percentual (17,5 = 17,5%) e converte pra fração só na borda — value/
+   onChange continuam em fração pro resto do código nem perceber.
+   round() evita cauda de ponto flutuante (0.175*100 → 17.499999999999996
+   em alguns casos) sem cortar a precisão que essa tela realmente usa. */
+function round(n, decimais) { const f = Math.pow(10, decimais); return Math.round(n * f) / f; }
+function PZPercentInput({ value, onChange, disabled, placeholder }) {
+  const display = value === '' || value === null || value === undefined || Number.isNaN(Number(value)) ? '' : round(Number(value) * 100, 4);
+  return (
+    <input className="input" type="number" step="0.01" value={display}
+      onChange={(e) => onChange(e.target.value === '' ? '' : round(Number(e.target.value) / 100, 6))}
+      placeholder={placeholder} disabled={disabled}/>
+  );
+}
 function PZSelect({ value, onChange, options, placeholder }) {
   return (
     <select className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
@@ -203,14 +224,14 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
       return false;
     }
     if ((Number(pz.vmle_usd) || 0) <= 0) { window.toast?.('VMLE (USD) precisa ser maior que zero.', 'warning'); return false; }
-    /* Mark-up (%) precisa ser decimal (0,22 = 22%), igual todo % nessa tela.
-       Digitar "22" (ponto percentual inteiro) zera o preço de venda em
-       silêncio — K65_precoVendaPct = 1 - impostos - markUp fica ≤ 0, o
-       motor devolve precoVendaProposta = 0, e o único sintoma visível era
-       "Margem final 0,00% abaixo da mínima", sem explicar a causa real
-       (achado real, sessão 27/08). */
+    /* Mark-up ≥ 100% é implausível pra esse negócio e sempre zera o preço
+       de venda (K65_precoVendaPct = 1 - impostos - markUp fica ≤ 0) — fica
+       como trava de sanidade mesmo com o campo já em ponto percentual
+       (PZPercentInput), pra pegar dado antigo já salvo errado de antes
+       dessa conversão, ou um "100" digitado por engano (achado real,
+       sessão 27/08). */
     if (markUpForaFaixa) {
-      window.toast?.(`Mark-up ${pz.mark_up_pct} está fora do formato decimal — o sistema interpreta como ${fmtPct2(pz.mark_up_pct)}, o que zera o preço de venda. Use decimal (ex.: 0,22 para 22%).`, 'error');
+      window.toast?.(`Mark-up de ${fmtPct2(pz.mark_up_pct)} é implausível e zera o preço de venda calculado. Confira o valor.`, 'error');
       return false;
     }
     return true;
@@ -258,16 +279,14 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
 
   const cambioNum = Number(pz.tx_cambial) || 0;
   const cambioForaFaixa = cambioNum > 0 && (cambioNum < CAMBIO_MIN || cambioNum > CAMBIO_MAX);
-  /* Mark-up (%) ≥ 1 (100%) só faz sentido como ponto percentual inteiro
-     digitado no campo decimal (ex.: "22" em vez de "0,22") — nesse formato
-     o motor sempre devolve precoVendaProposta = 0 (K65_precoVendaPct fica
-     ≤ 0), e o sintoma visível vira "Margem final 0,00% abaixo da mínima",
-     sem apontar a causa real (achado real, sessão 27/08). */
+  /* Mark-up ≥ 100% é implausível pra esse negócio e sempre zera o preço de
+     venda (K65_precoVendaPct = 1 - impostos - markUp fica ≤ 0) — sintoma
+     visível era "Margem final 0,00% abaixo da mínima", sem apontar a causa
+     real (achado real, sessão 27/08). Todo campo "(%)" agora é digitado em
+     ponto percentual (PZPercentInput), então isso só deveria disparar com
+     dado antigo salvo de antes dessa mudança, ou erro de digitação grosseiro. */
   const markUpForaFaixa = Number(pz.mark_up_pct) >= 1;
-  /* resultado implausível: preço-venda muito acima do custo esperado do FOB
-     (FOB USD × câmbio) — pega % digitado como inteiro em vez de decimal
-     quando ainda sobra preço de venda positivo (ex.: markup 0,392 digitado
-     como 39,2 — dez vezes maior, mas não necessariamente ≥ 1). */
+  // resultado implausível: preço-venda muito acima do custo esperado do FOB (FOB USD × câmbio).
   const fobBrlEsperado = (Number(pz.vmle_usd) || 0) * cambioNum;
   const resultadoImplausivel = !!resultado && (cambioForaFaixa || markUpForaFaixa || (fobBrlEsperado > 0 && Number(resultado.precoVendaProposta) > fobBrlEsperado * 50));
 
@@ -308,8 +327,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           {cambioForaFaixa
             ? `O Câmbio informado é ${cambioNum} R$/US$ — fora da faixa real (${CAMBIO_MIN}–${CAMBIO_MAX}). Provável troca de campo (taxa/frete digitados no Câmbio). Corrija o Câmbio e recalcule.`
             : markUpForaFaixa
-            ? `Mark-up ${pz.mark_up_pct} está fora do formato decimal (o sistema interpreta como ${fmtPct2(pz.mark_up_pct)}) — isso zera o preço de venda calculado. Use decimal, ex.: 0,22 para 22%.`
-            : `O preço de venda calculado (${fmtBRL2(resultado.precoVendaProposta)}) está muito acima do custo esperado do FOB (${fmtBRL2(fobBrlEsperado)}). Confira câmbio, mark-up e percentuais (devem ser decimais, ex.: 0,392 = 39,2%).`}
+            ? `Mark-up de ${fmtPct2(pz.mark_up_pct)} é implausível — isso zera o preço de venda calculado. Confira o valor.`
+            : `O preço de venda calculado (${fmtBRL2(resultado.precoVendaProposta)}) está muito acima do custo esperado do FOB (${fmtBRL2(fobBrlEsperado)}). Confira câmbio, mark-up e percentuais.`}
         </div>
       )}
 
@@ -421,7 +440,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
         <div className="grid-3" style={{ gap: 12 }}>
           <PZField label="Frete interno (R$)"><PZInput type="number" value={pz.frete_interno_rs} onChange={set('frete_interno_rs')}/></PZField>
           <PZField label="Armazenagem (R$)"><PZInput type="number" value={pz.armazenagem_rs} onChange={set('armazenagem_rs')}/></PZField>
-          <PZField label="% de Serviços"><PZInput type="number" value={pz.percentual_servicos} onChange={set('percentual_servicos')}/></PZField>
+          <PZField label="% de Serviços"><PZPercentInput value={pz.percentual_servicos} onChange={set('percentual_servicos')}/></PZField>
         </div>
 
         <div style={{ marginTop: 20 }}>
@@ -444,13 +463,13 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
       <Card title="Alavancas do Financeiro" style={{ marginTop: 16 }}>
         <div className="grid-3" style={{ gap: 12 }}>
           <PZField label="Mark-up (%)">
-            <PZInput type="number" value={pz.mark_up_pct} onChange={set('mark_up_pct')}/>
-            {markUpForaFaixa && <div style={{ color: '#991b1b', fontSize: 11, marginTop: 4 }}>Formato decimal — use 0,22 para 22%, não 22 (senão o preço de venda zera).</div>}
+            <PZPercentInput value={pz.mark_up_pct} onChange={set('mark_up_pct')}/>
+            {markUpForaFaixa && <div style={{ color: '#991b1b', fontSize: 11, marginTop: 4 }}>Mark-up de {fmtPct2(pz.mark_up_pct)} parece implausível — confira o valor (zera o preço de venda).</div>}
           </PZField>
-          <PZField label="Comissão consultoria (%)"><PZInput type="number" value={pz.comissao_consultoria_pct} onChange={set('comissao_consultoria_pct')}/></PZField>
-          <PZField label="Comissão vendedor (%)"><PZInput type="number" value={pz.comissao_vendedor_pct} onChange={set('comissao_vendedor_pct')}/></PZField>
-          <PZField label="Comissão indicação (%)"><PZInput type="number" value={pz.comissao_indicacao_pct} onChange={set('comissao_indicacao_pct')}/></PZField>
-          <PZField label="Margem mínima (%)"><PZInput type="number" value={params.margem_minima_pct} onChange={setParam('margem_minima_pct')}/></PZField>
+          <PZField label="Comissão consultoria (%)"><PZPercentInput value={pz.comissao_consultoria_pct} onChange={set('comissao_consultoria_pct')}/></PZField>
+          <PZField label="Comissão vendedor (%)"><PZPercentInput value={pz.comissao_vendedor_pct} onChange={set('comissao_vendedor_pct')}/></PZField>
+          <PZField label="Comissão indicação (%)"><PZPercentInput value={pz.comissao_indicacao_pct} onChange={set('comissao_indicacao_pct')}/></PZField>
+          <PZField label="Margem mínima (%)"><PZPercentInput value={params.margem_minima_pct} onChange={setParam('margem_minima_pct')}/></PZField>
         </div>
 
         <Button variant="ghost" size="sm" style={{ marginTop: 12 }} onClick={() => setMostrarParametros((v) => !v)}>
@@ -459,17 +478,17 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
         {mostrarParametros && (
           <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
             <PZField label="Regime tributário"><PZInput value={params.regime_tributario} onChange={setParam('regime_tributario')}/></PZField>
-            <PZField label="ICMS importação (%)"><PZInput type="number" value={params.icms_importacao_pct} onChange={setParam('icms_importacao_pct')}/></PZField>
-            <PZField label="IPI importação (%)"><PZInput type="number" value={params.ipi_importacao_pct} onChange={setParam('ipi_importacao_pct')}/></PZField>
-            <PZField label="PIS importação (%)"><PZInput type="number" value={params.pis_importacao_pct} onChange={setParam('pis_importacao_pct')}/></PZField>
-            <PZField label="COFINS importação (%)"><PZInput type="number" value={params.cofins_importacao_pct} onChange={setParam('cofins_importacao_pct')}/></PZField>
-            <PZField label="II importação (%)"><PZInput type="number" value={params.ii_importacao_pct} onChange={setParam('ii_importacao_pct')}/></PZField>
-            <PZField label="ICMS venda (%)"><PZInput type="number" value={params.icms_venda_pct} onChange={setParam('icms_venda_pct')}/></PZField>
-            <PZField label="PIS venda (%)"><PZInput type="number" value={params.pis_venda_pct} onChange={setParam('pis_venda_pct')}/></PZField>
-            <PZField label="COFINS venda (%)"><PZInput type="number" value={params.cofins_venda_pct} onChange={setParam('cofins_venda_pct')}/></PZField>
-            <PZField label="IRPJ venda (%)"><PZInput type="number" value={params.irpj_venda_pct} onChange={setParam('irpj_venda_pct')}/></PZField>
-            <PZField label="CSLL venda (%)"><PZInput type="number" value={params.csll_venda_pct} onChange={setParam('csll_venda_pct')}/></PZField>
-            <PZField label="Impostos a pagar — serviços (%)"><PZInput type="number" value={params.impostos_pagar_servicos_pct} onChange={setParam('impostos_pagar_servicos_pct')}/></PZField>
+            <PZField label="ICMS importação (%)"><PZPercentInput value={params.icms_importacao_pct} onChange={setParam('icms_importacao_pct')}/></PZField>
+            <PZField label="IPI importação (%)"><PZPercentInput value={params.ipi_importacao_pct} onChange={setParam('ipi_importacao_pct')}/></PZField>
+            <PZField label="PIS importação (%)"><PZPercentInput value={params.pis_importacao_pct} onChange={setParam('pis_importacao_pct')}/></PZField>
+            <PZField label="COFINS importação (%)"><PZPercentInput value={params.cofins_importacao_pct} onChange={setParam('cofins_importacao_pct')}/></PZField>
+            <PZField label="II importação (%)"><PZPercentInput value={params.ii_importacao_pct} onChange={setParam('ii_importacao_pct')}/></PZField>
+            <PZField label="ICMS venda (%)"><PZPercentInput value={params.icms_venda_pct} onChange={setParam('icms_venda_pct')}/></PZField>
+            <PZField label="PIS venda (%)"><PZPercentInput value={params.pis_venda_pct} onChange={setParam('pis_venda_pct')}/></PZField>
+            <PZField label="COFINS venda (%)"><PZPercentInput value={params.cofins_venda_pct} onChange={setParam('cofins_venda_pct')}/></PZField>
+            <PZField label="IRPJ venda (%)"><PZPercentInput value={params.irpj_venda_pct} onChange={setParam('irpj_venda_pct')}/></PZField>
+            <PZField label="CSLL venda (%)"><PZPercentInput value={params.csll_venda_pct} onChange={setParam('csll_venda_pct')}/></PZField>
+            <PZField label="Impostos a pagar — serviços (%)"><PZPercentInput value={params.impostos_pagar_servicos_pct} onChange={setParam('impostos_pagar_servicos_pct')}/></PZField>
             <p className="small muted" style={{ gridColumn: 'span 3', margin: 0 }}>
               Esses % são regulatórios (lei federal/estadual) e mudam com o tempo — editar aqui afeta só esta precificação. Para mudar o padrão do sistema, atualize em Parâmetros Fiscais.
             </p>
