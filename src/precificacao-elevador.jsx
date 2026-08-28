@@ -45,6 +45,34 @@ function PZPercentInput({ value, onChange, disabled, placeholder }) {
       placeholder={placeholder} disabled={disabled}/>
   );
 }
+/* Todo campo de "Preço"/valor monetário precisa mostrar o formato da
+   própria moeda — R$ 1.234,56 (vírgula decimal) pro que é BRL, US$
+   1,234.56 (ponto decimal) pro que é USD — em vez do número cru que
+   <input type="number"> força (nunca mostra símbolo, separador de
+   milhar nem 2 casas fixas). Foco = edição crua (facilita apagar/
+   digitar); blur = reformata. `value`/onChange continuam número puro
+   por baixo (mesmo formato que motor de cálculo e banco sempre
+   usaram) — só a exibição muda, igual PZPercentInput fez pra "%".
+   window.parseMoeda (utils.js) já é tolerante a "," ou "." como
+   decimal, então aceita o que o financeiro digitar. */
+function PZCurrencyInput({ value, onChange, moeda = 'BRL', disabled }) {
+  const [editando, setEditando] = React.useState(false);
+  const [bruto, setBruto] = React.useState('');
+  const locale = moeda === 'USD' ? 'en-US' : 'pt-BR';
+  const prefixo = moeda === 'USD' ? 'US$' : 'R$';
+  const formatado = (Number(value) || 0).toLocaleString(locale, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (
+    <div style={{ position: 'relative' }}>
+      <span style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: 'var(--fg3)', fontSize: 13, pointerEvents: 'none' }}>{prefixo}</span>
+      <input className="input" style={{ paddingLeft: 38 }} type="text" inputMode="decimal"
+        value={editando ? bruto : formatado}
+        onFocus={() => { setBruto(value === '' || value === null || value === undefined ? '' : String(value).replace('.', moeda === 'USD' ? '.' : ',')); setEditando(true); }}
+        onChange={(e) => setBruto(e.target.value)}
+        onBlur={() => { setEditando(false); onChange(window.parseMoeda(bruto)); }}
+        disabled={disabled}/>
+    </div>
+  );
+}
 function PZSelect({ value, onChange, options, placeholder }) {
   return (
     <select className="input" value={value ?? ''} onChange={(e) => onChange(e.target.value)}>
@@ -363,7 +391,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
                   <td>{m.identificador}</td>
                   <td><PZInput value={m.modelo} onChange={setModelo(i, 'modelo')}/></td>
                   <td><PZInput type="number" value={m.quantidade} onChange={setModelo(i, 'quantidade')}/></td>
-                  <td><PZInput type="number" value={m.valorUnitarioUsd} onChange={setModelo(i, 'valorUnitarioUsd')}/></td>
+                  <td><PZCurrencyInput moeda="USD" value={m.valorUnitarioUsd} onChange={setModelo(i, 'valorUnitarioUsd')}/></td>
                   <td className="mono muted" title="Câmbio congelado no dia em que o fornecedor respondeu × custo em USD — não é o valor usado no cálculo oficial (esse usa o Câmbio abaixo)">
                     {pz.cambio_na_cotacao_usd_brl != null ? fmtBRL2((Number(m.valorUnitarioUsd) || 0) * pz.cambio_na_cotacao_usd_brl) : '—'}
                   </td>
@@ -379,10 +407,10 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
 
       <Card title="Despesas de importação" style={{ marginTop: 16 }}>
         <div className="grid-3" style={{ gap: 12 }}>
-          <PZField label="VMLE (USD)"><PZInput type="number" value={pz.vmle_usd} onChange={set('vmle_usd')}/></PZField>
-          <PZField label="Seguro (USD)"><PZInput type="number" value={pz.seguro_usd} onChange={set('seguro_usd')}/></PZField>
-          <PZField label="Frete + Seguro + Capatazia (USD)"><PZInput type="number" value={pz.frete_seguro_capatazia_usd} onChange={set('frete_seguro_capatazia_usd')}/></PZField>
-          <PZField label="Siscomex (R$)"><PZInput type="number" value={pz.siscomex_rs} onChange={set('siscomex_rs')}/></PZField>
+          <PZField label="VMLE (USD)"><PZCurrencyInput moeda="USD" value={pz.vmle_usd} onChange={set('vmle_usd')}/></PZField>
+          <PZField label="Seguro (USD)"><PZCurrencyInput moeda="USD" value={pz.seguro_usd} onChange={set('seguro_usd')}/></PZField>
+          <PZField label="Frete + Seguro + Capatazia (USD)"><PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd} onChange={set('frete_seguro_capatazia_usd')}/></PZField>
+          <PZField label="Siscomex (R$)"><PZCurrencyInput moeda="BRL" value={pz.siscomex_rs} onChange={set('siscomex_rs')}/></PZField>
           <PZField label="Câmbio (R$/US$)">
             <PZInput type="number" value={pz.tx_cambial} onChange={set('tx_cambial')}/>
             {cambioForaFaixa && <div style={{ color: '#991b1b', fontSize: 11, marginTop: 4 }}>Fora da faixa {CAMBIO_MIN}–{CAMBIO_MAX}. Confira se não digitou aqui um valor de taxa/frete.</div>}
@@ -394,9 +422,9 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
             )}
             {cambioVivo === 'erro' && <div className="muted small" style={{ marginTop: 4 }}>Câmbio ao vivo indisponível agora.</div>}
           </PZField>
-          <PZField label="Outras despesas (R$)"><PZInput type="number" value={pz.outras_despesas_importacao_rs} onChange={set('outras_despesas_importacao_rs')}/></PZField>
-          <PZField label="Despachante + Desembaraço (R$)"><PZInput type="number" value={pz.despachante_desembaraco_rs} onChange={set('despachante_desembaraco_rs')}/></PZField>
-          <PZField label="Demurrage (R$)"><PZInput type="number" value={pz.demurrage_rs} onChange={set('demurrage_rs')}/></PZField>
+          <PZField label="Outras despesas (R$)"><PZCurrencyInput moeda="BRL" value={pz.outras_despesas_importacao_rs} onChange={set('outras_despesas_importacao_rs')}/></PZField>
+          <PZField label="Despachante + Desembaraço (R$)"><PZCurrencyInput moeda="BRL" value={pz.despachante_desembaraco_rs} onChange={set('despachante_desembaraco_rs')}/></PZField>
+          <PZField label="Demurrage (R$)"><PZCurrencyInput moeda="BRL" value={pz.demurrage_rs} onChange={set('demurrage_rs')}/></PZField>
         </div>
 
         <div style={{ marginTop: 20 }}>
@@ -408,7 +436,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
               <div key={i} className="row gap-2">
                 <div style={{ width: 140 }}><PZSelect value={ct.tipo_tamanho} onChange={setContainer(i, 'tipo_tamanho')} options={PZ_CONTAINER_TIPOS} placeholder="Tamanho"/></div>
                 <input className="input" style={{ width: 100 }} type="number" value={ct.quantidade ?? 1} onChange={(e) => setContainer(i, 'quantidade')(Number(e.target.value) || 0)} placeholder="Qtd"/>
-                <input className="input" style={{ width: 160 }} type="number" value={ct.preco_rs ?? 0} onChange={(e) => setContainer(i, 'preco_rs')(Number(e.target.value) || 0)} placeholder="Preço (R$)"/>
+                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.preco_rs} onChange={setContainer(i, 'preco_rs')}/></div>
                 <Button variant="ghost" size="sm" icon="trash" onClick={() => removeContainer(i)}/>
               </div>
             ))}
@@ -427,7 +455,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
             {(pz.itens_instalacao_montagem || []).map((it, i) => (
               <div key={i} className="row gap-2">
                 <input className="input" style={{ flex: 1 }} value={it.descricao || ''} onChange={(e) => setItemInstalacao(i, 'descricao')(e.target.value)} placeholder="ex.: Guincho, Andaime, Mão de obra..."/>
-                <input className="input" style={{ width: 160 }} type="number" value={it.valor || 0} onChange={(e) => setItemInstalacao(i, 'valor')(Number(e.target.value) || 0)} placeholder="0,00"/>
+                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={it.valor} onChange={setItemInstalacao(i, 'valor')}/></div>
                 <Button variant="ghost" size="sm" icon="trash" onClick={() => removeItemInstalacao(i)}/>
               </div>
             ))}
@@ -438,8 +466,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
 
       <Card title="Despesas Extras" sub="catch-all — recorrentes ou planejadas que ainda não têm seção própria" style={{ marginTop: 16 }}>
         <div className="grid-3" style={{ gap: 12 }}>
-          <PZField label="Frete interno (R$)"><PZInput type="number" value={pz.frete_interno_rs} onChange={set('frete_interno_rs')}/></PZField>
-          <PZField label="Armazenagem (R$)"><PZInput type="number" value={pz.armazenagem_rs} onChange={set('armazenagem_rs')}/></PZField>
+          <PZField label="Frete interno (R$)"><PZCurrencyInput moeda="BRL" value={pz.frete_interno_rs} onChange={set('frete_interno_rs')}/></PZField>
+          <PZField label="Armazenagem (R$)"><PZCurrencyInput moeda="BRL" value={pz.armazenagem_rs} onChange={set('armazenagem_rs')}/></PZField>
           <PZField label="% de Serviços"><PZPercentInput value={pz.percentual_servicos} onChange={set('percentual_servicos')}/></PZField>
         </div>
 
@@ -451,7 +479,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
             {(pz.itens_despesas_extras || []).map((it, i) => (
               <div key={i} className="row gap-2">
                 <input className="input" style={{ flex: 1 }} value={it.descricao || ''} onChange={(e) => setItemExtra(i, 'descricao')(e.target.value)} placeholder="ex.: Seguro adicional, taxa bancária..."/>
-                <input className="input" style={{ width: 160 }} type="number" value={it.valor || 0} onChange={(e) => setItemExtra(i, 'valor')(Number(e.target.value) || 0)} placeholder="0,00"/>
+                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={it.valor} onChange={setItemExtra(i, 'valor')}/></div>
                 <Button variant="ghost" size="sm" icon="trash" onClick={() => removeItemExtra(i)}/>
               </div>
             ))}
