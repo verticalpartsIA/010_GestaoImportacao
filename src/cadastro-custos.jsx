@@ -95,9 +95,9 @@ function CCElevadorTab() {
           </Button>
         ))}
       </div>
-      <div className="table-wrap">
+      <div className="table-wrap" style={{ maxHeight: 560, overflowY: 'auto' }}>
         <table className="t">
-          <thead><tr>
+          <thead style={{ position: 'sticky', top: 0, zIndex: 1, background: '#fff', boxShadow: '0 1px 0 var(--border, #e5e5e5)' }}><tr>
             <th>Capacidade mín. (kg)</th><th>Capacidade máx. (kg)</th><th>Paradas</th>
             <th>Dias p/ montagem</th><th>Qtd. montadores</th><th className="text-right">Valor reajustado (R$)</th><th></th>
           </tr></thead>
@@ -258,9 +258,24 @@ function CCContainersTab() {
   );
 }
 
-/* ---------- Página ---------- */
-function CadastroCustosPage() {
-  const [aba, setAba] = React.useState('elevador');
+/* ---------- Página ----------
+   Cada aba tem sua própria URL (/cadastros/cadastro-custos/<slug>) — rota
+   registrada como SYNC_PASSTHROUGH em app.jsx, subsel É o slug (string),
+   sem fetch nenhum. Link direto/recarregar/compartilhar já abre na aba
+   certa; sem subsel ainda (1º acesso pelo menu), populamos o slug padrão
+   na URL pra ela nunca ficar "sem aba" pra quem copiar o link depois. */
+const CC_SLUG_TO_ABA = { 'instalacao-elevadores': 'elevador', 'instalacao-escada-esteira': 'escada', 'containers': 'containers' };
+const CC_ABA_TO_SLUG = { elevador: 'instalacao-elevadores', escada: 'instalacao-escada-esteira', containers: 'containers' };
+
+function CadastroCustosPage({ setSubsel, subsel }) {
+  const aba = CC_SLUG_TO_ABA[subsel] || 'elevador';
+
+  React.useEffect(() => {
+    if (!CC_SLUG_TO_ABA[subsel]) setSubsel?.(CC_ABA_TO_SLUG.elevador);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const irPara = (chave) => setSubsel?.(CC_ABA_TO_SLUG[chave]);
 
   return (
     <div className="page fade-in">
@@ -277,9 +292,9 @@ function CadastroCustosPage() {
 
       <div className="tbar" style={{ marginBottom: 16 }}>
         <div className="seg">
-          <button className={aba === 'elevador' ? 'is-active' : ''} onClick={() => setAba('elevador')}>Instalação — Elevadores</button>
-          <button className={aba === 'escada' ? 'is-active' : ''} onClick={() => setAba('escada')}>Instalação — Escada/Esteira</button>
-          <button className={aba === 'containers' ? 'is-active' : ''} onClick={() => setAba('containers')}>Containers</button>
+          <button className={aba === 'elevador' ? 'is-active' : ''} onClick={() => irPara('elevador')}>Instalação — Elevadores</button>
+          <button className={aba === 'escada' ? 'is-active' : ''} onClick={() => irPara('escada')}>Instalação — Escada/Esteira</button>
+          <button className={aba === 'containers' ? 'is-active' : ''} onClick={() => irPara('containers')}>Containers</button>
         </div>
       </div>
 
