@@ -306,7 +306,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
   const margemMinima = Number(params.margem_minima_pct) || 0;
-  const margemAbaixoMinima = !!resultado && resultado.margemFinalPct < margemMinima;
+  // V2 é o motor oficial (decisão 29/08) — a trava de aprovação usa a
+  // margem dele; cai pro V1 só quando ainda não existe resultado_v2
+  // (precificação nunca recalculada desde a migração).
+  const margemOficialPct = pz.resultado_v2 && pz.resultado_v2.precificacao ? pz.resultado_v2.precificacao.margemEfetivaPct : (resultado ? resultado.margemFinalPct : null);
+  const margemAbaixoMinima = margemOficialPct != null && margemOficialPct < margemMinima;
   const aprovado = pz.status === 'finalizado';
 
   const aprovar = async (forcar) => {
@@ -531,7 +535,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           <PZField label="Contingência (R$)"><PZCurrencyInput moeda="BRL" value={pz.contingencia_valor} onChange={set('contingencia_valor')}/></PZField>
           <PZField label="Outros custos não recuperáveis (R$)"><PZCurrencyInput moeda="BRL" value={pz.outros_custos_nao_recuperaveis_rs} onChange={set('outros_custos_nao_recuperaveis_rs')}/></PZField>
         </div>
-        <p className="small muted" style={{ marginTop: 8 }}>Contingência e outros custos não recuperáveis só entram no motor V2 (custo econômico completo) — ver "Formação do Preço" abaixo. O V1 (oficial) ignora esses dois campos.</p>
+        <p className="small muted" style={{ marginTop: 8 }}>Contingência e outros custos não recuperáveis entram no motor oficial (custo econômico completo) — ver "Formação do Preço" abaixo. O V1 (legado, só referência) ignora esses dois campos.</p>
 
         <div style={{ marginTop: 20 }}>
           <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
@@ -595,14 +599,14 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
         </Card>
       )}
 
-      <Card title="Formação do Preço — V2 (custo econômico completo)"
-        sub="corrige o V1: instalação/frete interno/armazenagem entram na BASE do preço, não só no lucro depois — roda em paralelo pra comparação, ainda não é o motor oficial"
+      <Card title="Formação do Preço — motor oficial"
+        sub="custo econômico completo: instalação/frete interno/armazenagem entram na BASE do preço, não só no lucro depois — trava aprovação e alimenta a Proposta"
         style={{ marginTop: 16 }}>
         <div className="grid-3" style={{ gap: 12 }}>
           <PZField label="Modo de formação do preço">
-            <select className="input" value={pz.modo_formacao_preco || 'margem_sobre_venda'} onChange={(e) => set('modo_formacao_preco')(e.target.value)}>
-              <option value="margem_sobre_venda">Margem desejada sobre a venda</option>
+            <select className="input" value={pz.modo_formacao_preco || 'markup_sobre_custo'} onChange={(e) => set('modo_formacao_preco')(e.target.value)}>
               <option value="markup_sobre_custo">Markup sobre o custo</option>
+              <option value="margem_sobre_venda">Margem desejada sobre a venda</option>
             </select>
           </PZField>
           {pz.modo_formacao_preco !== 'markup_sobre_custo' && (
@@ -617,14 +621,15 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           <>
             <div className="grid-3" style={{ gap: 16, marginTop: 16 }}>
               <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
-              <div><span className="up-eyebrow muted">Preço de venda (V2)</span><div className="cell-money" style={{ fontSize: 18, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
+              <div><span className="up-eyebrow muted">Preço de venda na proposta</span><div className="cell-money" style={{ fontSize: 18, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
               <div>
                 <span className="up-eyebrow muted">Margem efetiva calculada (%)</span>
-                <div className="cell-money" style={{ fontSize: 16, color: margemEfetivaV2Negativa ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}</div>
+                <div className="cell-money" style={{ fontSize: 16, color: margemAbaixoMinima ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}</div>
+                {margemMinima > 0 && <div className="small muted" style={{ marginTop: 2 }}>mínima {fmtPct2(margemMinima)}</div>}
               </div>
-              <div><span className="up-eyebrow muted">Lucro final (V2)</span><div className="cell-money" style={{ fontSize: 16, color: resultadoV2.precificacao.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultadoV2.precificacao.lucroFinal)}</div></div>
-              <div><span className="up-eyebrow muted">Preço de venda (V1, oficial)</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.v1Comparacao.precoVendaProposta)}</div></div>
-              <div><span className="up-eyebrow muted">Diferença V2 − V1</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta - resultadoV2.v1Comparacao.precoVendaProposta)}</div></div>
+              <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultadoV2.precificacao.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultadoV2.precificacao.lucroFinal)}</div></div>
+              <div><span className="up-eyebrow muted">Preço de venda (V1, legado)</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.v1Comparacao.precoVendaProposta)}</div></div>
+              <div><span className="up-eyebrow muted">Diferença oficial − V1</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta - resultadoV2.v1Comparacao.precoVendaProposta)}</div></div>
             </div>
             {!resultadoV2.divisorValido && (
               <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
@@ -633,16 +638,21 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
             )}
             {resultadoV2.divisorValido && margemEfetivaV2Negativa && (
               <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
-                ⚠ Margem efetiva (V2) negativa — este cenário não deveria ser aprovado como está. Revise custos operacionais, markup/margem ou comissões.
+                ⚠ Margem efetiva negativa — este cenário não deveria ser aprovado como está. Revise custos operacionais, markup/margem ou comissões.
+              </p>
+            )}
+            {resultadoV2.divisorValido && !margemEfetivaV2Negativa && margemAbaixoMinima && (
+              <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
+                ⚠ Margem efetiva ({fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}) abaixo da mínima configurada ({fmtPct2(margemMinima)}). É possível aprovar mesmo assim, com confirmação.
               </p>
             )}
           </>
         )}
-        {!resultadoV2 && <p className="small muted" style={{ marginTop: 12, marginBottom: 0 }}>Clique em "Calcular" pra ver o resultado do V2.</p>}
+        {!resultadoV2 && <p className="small muted" style={{ marginTop: 12, marginBottom: 0 }}>Clique em "Calcular" pra ver o resultado.</p>}
       </Card>
 
       {resultado && (
-        <Card title="Resultado — V1 (oficial)" style={{ marginTop: 16 }}>
+        <Card title="Resultado — V1 (legado, referência)" sub="mantido só pra comparação — não trava mais aprovação nem alimenta a Proposta" style={{ marginTop: 16 }}>
           <div className="grid-3" style={{ gap: 16 }}>
             <div><span className="up-eyebrow muted">Custo total mercadorias</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(importacao.custoTotalMercadorias)}</div></div>
             <div><span className="up-eyebrow muted">Custo por equipamento</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(importacao.custoPorEquipamento)}</div></div>
@@ -651,18 +661,9 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
             <div><span className="up-eyebrow muted">Preço de venda — serviços</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultado.precoVendaServicos)}</div></div>
             <div><span className="up-eyebrow muted">Preço por equipamento</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultado.precoVendaPorEquipamento)}</div></div>
             <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultado.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultado.lucroFinal)}</div></div>
-            <div>
-              <span className="up-eyebrow muted">Margem final</span>
-              <div className="cell-money" style={{ fontSize: 16, color: margemAbaixoMinima ? 'var(--vp-warning-ink)' : undefined }}>{fmtPct2(resultado.margemFinalPct)}</div>
-              {margemMinima > 0 && <div className="small muted" style={{ marginTop: 2 }}>mínima {fmtPct2(margemMinima)}</div>}
-            </div>
+            <div><span className="up-eyebrow muted">Margem final (V1)</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtPct2(resultado.margemFinalPct)}</div></div>
             <div><span className="up-eyebrow muted">DIFAL (custo VerticalParts)</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultado.difalRs)}</div></div>
           </div>
-          {margemAbaixoMinima && (
-            <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
-              ⚠ Margem final ({fmtPct2(resultado.margemFinalPct)}) abaixo da mínima configurada ({fmtPct2(margemMinima)}). É possível aprovar mesmo assim, com confirmação.
-            </p>
-          )}
         </Card>
       )}
     </div>

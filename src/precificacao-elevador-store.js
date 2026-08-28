@@ -275,10 +275,14 @@
       percentual_servicos: 0.30,
       parametros_fiscais_snapshot: parametros,
       mark_up_pct: parametros.mark_up_padrao_pct,
-      // V2 (custo econômico completo) — nasce em modo margem_sobre_venda,
-      // com a margem desejada padrão herdada da margem mínima configurada
-      // (ver Alavancas do Financeiro); Financeiro troca livremente na tela.
-      modo_formacao_preco: 'margem_sobre_venda',
+      // V2 (custo econômico completo) — motor oficial desde 29/08 (decisão
+      // registrada em conversa, sem necessidade de aval formal do
+      // Financeiro por enquanto). Nasce em modo markup_sobre_custo: mesma
+      // alavanca de sempre (Markup sobre o custo, acima), só que aplicada
+      // sobre o custo completo em vez de só a mercadoria — "aplicar 22%
+      // precisa ser real". margem_desejada_pct fica preenchida como
+      // referência caso o Financeiro troque de modo na tela.
+      modo_formacao_preco: 'markup_sobre_custo',
       margem_desejada_pct: Number(parametros.margem_minima_pct) || 0.2,
       comissao_consultoria_pct: parametros.comissao_consultoria_pct,
       comissao_vendedor_pct: parametros.comissao_vendedor_pct,
@@ -371,10 +375,16 @@
     // V2 (custo econômico completo) roda lado a lado, mesmo baseInputs +
     // DIFAL da 2ª passada — nunca substitui o V1 (`resultado`, ainda o
     // motor oficial), só grava pra comparação/auditoria (Fase 4/5).
+    // margem_desejada_pct fica null em toda precificação criada antes desta
+    // coluna existir (a migration não tem default — só montarRascunho seta
+    // pra registro novo); sem este fallback, calcularV2 tratava null como
+    // 0% de margem desejada (Number(null)||0) e o preço/margem V2 saía
+    // artificialmente baixo, sem o usuário nunca ter escolhido isso.
+    const margemDesejadaPct = pz.margem_desejada_pct != null ? pz.margem_desejada_pct : (params.margemMinimaPct || 0.2);
     const resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({
       ...baseInputs, difalCustoRs,
       modoFormacaoPreco: pz.modo_formacao_preco,
-      margemDesejadaPct: pz.margem_desejada_pct,
+      margemDesejadaPct,
       contingenciaValor: pz.contingencia_valor,
       outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
     });
@@ -416,9 +426,15 @@
     const faltando = camposObrigatoriosFaltando(pz);
     if (faltando.length) throw new Error(`Campos obrigatórios sem valor: ${faltando.join(', ')}.`);
     const margemMinima = Number((pz.parametros_fiscais_snapshot || {}).margem_minima_pct) || 0;
-    const margemFinal = Number((pz.resultado.precificacao || {}).margemFinalPct) || 0;
+    // Motor oficial desde 29/08 é o V2 (custo econômico completo) — o V1
+    // deixava markup positivo conviver com margem real negativa (issue
+    // "Precificação real"). Precificação sem resultado_v2 ainda (nunca
+    // recalculada após a migração) cai pro V1, não trava aprovação por
+    // um dado que nunca existiu pra ela.
+    const margemV2 = pz.resultado_v2 && pz.resultado_v2.precificacao ? Number(pz.resultado_v2.precificacao.margemEfetivaPct) : null;
+    const margemFinal = margemV2 != null ? margemV2 : Number((pz.resultado.precificacao || {}).margemFinalPct) || 0;
     if (margemFinal < margemMinima && !forcarAbaixoMinima) {
-      const err = new Error(`Margem final (${(margemFinal * 100).toFixed(2)}%) abaixo da margem mínima (${(margemMinima * 100).toFixed(2)}%).`);
+      const err = new Error(`Margem ${margemV2 != null ? 'efetiva (V2)' : 'final (V1)'} (${(margemFinal * 100).toFixed(2)}%) abaixo da margem mínima (${(margemMinima * 100).toFixed(2)}%).`);
       err.margemAbaixoMinima = true;
       throw err;
     }

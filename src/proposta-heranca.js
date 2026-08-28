@@ -136,7 +136,11 @@
   function montarPrefill(fontes) {
     if (!fontes || !fontes.encontrado) return null;
     const { formulario, cliente, cotacao, precificacao, numeroCotacao } = fontes;
-    const resultado = (precificacao && precificacao.resultado && precificacao.resultado.precificacao) || null;
+    // V2 (custo econômico completo) é o motor oficial desde 29/08 — usa o
+    // preço dele; cai pro V1 só em precificação antiga que nunca rodou o
+    // V2 (nunca recalculada desde a migração).
+    const resultado = (precificacao && precificacao.resultado_v2 && precificacao.resultado_v2.precificacao)
+      || (precificacao && precificacao.resultado && precificacao.resultado.precificacao) || null;
     const difal = (precificacao && precificacao.difal) || null;
     const especificacoes = montarEspecificacoes(fontes);
 
