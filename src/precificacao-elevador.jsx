@@ -113,7 +113,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
   };
 
   if (pzId) {
-    return <PrecificacaoElevadorDetalhe id={pzId} onVoltar={() => { setPzId(null); carregar(); }}/>;
+    return <PrecificacaoElevadorDetalhe id={pzId} onVoltar={() => { setPzId(null); carregar(); }} setRoute={setRoute} setSubsel={setSubsel}/>;
   }
 
   return (
@@ -156,7 +156,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
 }
 
 /* ---------- Detalhe — motor de cálculo ---------- */
-function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
+function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const [pz, setPz] = React.useState(null);
   const [calculando, setCalculando] = React.useState(false);
   const [salvando, setSalvando] = React.useState(false);
@@ -187,6 +187,12 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
     } finally {
       setRessincronizando(false);
     }
+  };
+
+  const irParaFormulario = () => {
+    if (!pz.formulario_elevador_id) return;
+    setSubsel?.(pz.formulario_elevador_id);
+    setRoute?.('formulario-elevador');
   };
 
   const atualizarMaoDeObra = async () => {
@@ -440,7 +446,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
         {!!(pz.mo_lookup || []).length && (
           <div className="table-wrap">
             <table className="t">
-              <thead><tr><th>Unidade</th><th>Tração</th><th>Capacidade</th><th>Paradas</th><th>Situação</th><th>Regra usada</th><th>Valor (R$)</th></tr></thead>
+              <thead><tr><th>Unidade</th><th>Tração</th><th>Capacidade</th><th>Paradas</th><th>Situação</th><th>Regra usada</th><th>Valor (R$)</th><th></th></tr></thead>
               <tbody>
                 {pz.mo_lookup.map((mo, i) => (
                   <tr key={mo.unidadeId || i}>
@@ -455,6 +461,13 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
                     </td>
                     <td className="small muted" title={mo.motivo || ''}>{mo.regraUsada || mo.motivo || '—'}</td>
                     <td className="mono">{mo.valorRs ? fmtBRL2(mo.valorRs) : '—'}</td>
+                    <td>
+                      {mo.origem === 'manual' && (
+                        <Button variant="ghost" size="sm" icon="chevRight" title="Preencher tração/capacidade/paradas no Formulário de Elevadores" onClick={irParaFormulario}>
+                          Preencher no Formulário
+                        </Button>
+                      )}
+                    </td>
                   </tr>
                 ))}
               </tbody>
