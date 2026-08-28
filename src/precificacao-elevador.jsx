@@ -203,6 +203,16 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
       return false;
     }
     if ((Number(pz.vmle_usd) || 0) <= 0) { window.toast?.('VMLE (USD) precisa ser maior que zero.', 'warning'); return false; }
+    /* Mark-up (%) precisa ser decimal (0,22 = 22%), igual todo % nessa tela.
+       Digitar "22" (ponto percentual inteiro) zera o preço de venda em
+       silêncio — K65_precoVendaPct = 1 - impostos - markUp fica ≤ 0, o
+       motor devolve precoVendaProposta = 0, e o único sintoma visível era
+       "Margem final 0,00% abaixo da mínima", sem explicar a causa real
+       (achado real, sessão 27/08). */
+    if (markUpForaFaixa) {
+      window.toast?.(`Mark-up ${pz.mark_up_pct} está fora do formato decimal — o sistema interpreta como ${fmtPct2(pz.mark_up_pct)}, o que zera o preço de venda. Use decimal (ex.: 0,22 para 22%).`, 'error');
+      return false;
+    }
     return true;
   };
 
@@ -248,11 +258,18 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
 
   const cambioNum = Number(pz.tx_cambial) || 0;
   const cambioForaFaixa = cambioNum > 0 && (cambioNum < CAMBIO_MIN || cambioNum > CAMBIO_MAX);
+  /* Mark-up (%) ≥ 1 (100%) só faz sentido como ponto percentual inteiro
+     digitado no campo decimal (ex.: "22" em vez de "0,22") — nesse formato
+     o motor sempre devolve precoVendaProposta = 0 (K65_precoVendaPct fica
+     ≤ 0), e o sintoma visível vira "Margem final 0,00% abaixo da mínima",
+     sem apontar a causa real (achado real, sessão 27/08). */
+  const markUpForaFaixa = Number(pz.mark_up_pct) >= 1;
   /* resultado implausível: preço-venda muito acima do custo esperado do FOB
-     (FOB USD × câmbio). Pega tanto o câmbio errado quanto % digitado como
-     inteiro (ex.: markup 39,2 em vez de 0,392). */
+     (FOB USD × câmbio) — pega % digitado como inteiro em vez de decimal
+     quando ainda sobra preço de venda positivo (ex.: markup 0,392 digitado
+     como 39,2 — dez vezes maior, mas não necessariamente ≥ 1). */
   const fobBrlEsperado = (Number(pz.vmle_usd) || 0) * cambioNum;
-  const resultadoImplausivel = !!resultado && (cambioForaFaixa || (fobBrlEsperado > 0 && Number(resultado.precoVendaProposta) > fobBrlEsperado * 50));
+  const resultadoImplausivel = !!resultado && (cambioForaFaixa || markUpForaFaixa || (fobBrlEsperado > 0 && Number(resultado.precoVendaProposta) > fobBrlEsperado * 50));
 
   return (
     <div className="page fade-in">
@@ -290,6 +307,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
           <b>⚠ Verifique os valores antes de enviar.</b>{' '}
           {cambioForaFaixa
             ? `O Câmbio informado é ${cambioNum} R$/US$ — fora da faixa real (${CAMBIO_MIN}–${CAMBIO_MAX}). Provável troca de campo (taxa/frete digitados no Câmbio). Corrija o Câmbio e recalcule.`
+            : markUpForaFaixa
+            ? `Mark-up ${pz.mark_up_pct} está fora do formato decimal (o sistema interpreta como ${fmtPct2(pz.mark_up_pct)}) — isso zera o preço de venda calculado. Use decimal, ex.: 0,22 para 22%.`
             : `O preço de venda calculado (${fmtBRL2(resultado.precoVendaProposta)}) está muito acima do custo esperado do FOB (${fmtBRL2(fobBrlEsperado)}). Confira câmbio, mark-up e percentuais (devem ser decimais, ex.: 0,392 = 39,2%).`}
         </div>
       )}
@@ -424,7 +443,10 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar }) {
 
       <Card title="Alavancas do Financeiro" style={{ marginTop: 16 }}>
         <div className="grid-3" style={{ gap: 12 }}>
-          <PZField label="Mark-up (%)"><PZInput type="number" value={pz.mark_up_pct} onChange={set('mark_up_pct')}/></PZField>
+          <PZField label="Mark-up (%)">
+            <PZInput type="number" value={pz.mark_up_pct} onChange={set('mark_up_pct')}/>
+            {markUpForaFaixa && <div style={{ color: '#991b1b', fontSize: 11, marginTop: 4 }}>Formato decimal — use 0,22 para 22%, não 22 (senão o preço de venda zera).</div>}
+          </PZField>
           <PZField label="Comissão consultoria (%)"><PZInput type="number" value={pz.comissao_consultoria_pct} onChange={set('comissao_consultoria_pct')}/></PZField>
           <PZField label="Comissão vendedor (%)"><PZInput type="number" value={pz.comissao_vendedor_pct} onChange={set('comissao_vendedor_pct')}/></PZField>
           <PZField label="Comissão indicação (%)"><PZInput type="number" value={pz.comissao_indicacao_pct} onChange={set('comissao_indicacao_pct')}/></PZField>
