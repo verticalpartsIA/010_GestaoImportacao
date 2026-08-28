@@ -115,6 +115,7 @@
       { modulo: 'cadastro-fornecedores', label: 'Fornecedores' },
       { modulo: 'ncm-catalogo', label: 'Produtos' },
       { modulo: 'cadastro-instaladores', label: 'Empresas Instaladoras' },
+      { modulo: 'cadastro-custos', label: 'Atualização de Custos' },
     ]},
     { grupo: 'Comercial', itens: [
       { modulo: 'leads', label: 'Leads' },

@@ -38,6 +38,7 @@ const ROUTE_TITLE = {
   handover: "Entrega Final",
   "rh-homologacao": "Homologação de Instaladores",
   "cadastro-instaladores": "Empresas Instaladoras",
+  "cadastro-custos": "Atualização de Custos",
   importacao: "Importação",
   "importacao-detail": "Detalhe de Embarque",
   "importacao-rastreamento": "Rastreamento de Navios",
@@ -352,6 +353,7 @@ function App() {
       case "comissoes": return <ComissoesPage/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
       case "cadastro-instaladores": return <window.CadastroInstaladoresPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "cadastro-custos": return <window.CadastroCustosPage/>;
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
       case "decisoes": return <window.DecisoesPage/>;
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
@@ -454,6 +456,7 @@ function App() {
               { value: "comissoes", label: "Comissões" },
               { value: "rh-homologacao", label: "👥 Homologação de Instaladores" },
               { value: "cadastro-instaladores", label: "🏢 Empresas Instaladoras" },
+              { value: "cadastro-custos", label: "💰 Atualização de Custos" },
               { value: "notificacoes", label: "🔔 Notificações" },
               { value: "configuracoes", label: "Configurações" },
             ]}/>

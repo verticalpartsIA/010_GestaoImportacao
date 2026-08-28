@@ -21,6 +21,7 @@ const NAV_GROUPS = [
     { id: "cadastro-fornecedores", label: "Fornecedores", icon: "truck" },
     { id: "ncm-catalogo", label: "Produtos", icon: "fileSearch" },
     { id: "cadastro-instaladores", label: "Empresas Instaladoras", icon: "hardhat" },
+    { id: "cadastro-custos", label: "Atualização de Custos", icon: "calculator" },
   ]},
   { label: "Comercial", items: [
     { id: "leads", label: "Leads", icon: "flag" },
@@ -283,6 +284,7 @@ const BREADCRUMB_MAP = {
   engenharia:    { module: "Engenharia", page: "Engenharia", icon: "ruler" },
   "ncm-catalogo": { module: "Cadastros", page: "Produtos", icon: "fileSearch" },
   "cadastro-instaladores": { module: "Cadastros", page: "Empresas Instaladoras", icon: "hardhat" },
+  "cadastro-custos": { module: "Cadastros", page: "Atualização de Custos", icon: "calculator" },
   "ncm-kanban": { module: "Engenharia", page: "Solicitações NCM", icon: "fileSearch" },
   "ncm-detail": { module: "Engenharia", page: "Detalhe da Solicitação NCM", icon: "fileSearch" },
   "eng-projeto-elevadores": { module: "Engenharia", page: "Projeto de Elevadores", icon: "grid" },
