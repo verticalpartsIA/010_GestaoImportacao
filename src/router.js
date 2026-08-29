@@ -56,7 +56,7 @@
     'Cadastros': 'cadastros',
     'Engenharia': 'engenharia',
     'Logística': 'logistica',
-    'Importação': 'logistica',
+    'Importação': 'gestao-importacao',
     'Suprimentos': 'logistica',
     'Instalação & Entrega': 'engenharia',
     'Financeiro': 'adm-financeiro',
