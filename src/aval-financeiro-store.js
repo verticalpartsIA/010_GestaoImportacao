@@ -208,28 +208,40 @@
      mesmo poder entre as duas, nenhuma subordina a outra. A do CEO não tem
      trava de identidade (não há login próprio pra ele no sistema ainda);
      a "minha" fica restrita — ver isOwner(). */
-  /* Teto de custo (23/08, Gelson) — no momento em que o CEO aprova, tira a
-     "foto" do custo/margem calculados na Precificação e congela em
-     avais_financeiros. Daqui pra frente, cada gasto real que entrar via
-     registrarCustoReal() é comparado contra esse teto — nunca contra um
-     número recalculado depois, senão o teto "foge" junto com o gasto. */
+  /* Teto de custo — no momento em que o CEO aprova, tira a "foto" do preço
+     calculado na Precificação e congela em avais_financeiros. Daqui pra
+     frente, cada gasto real que entrar via registrarCustoReal() é
+     comparado contra esse teto — nunca contra um número recalculado
+     depois, senão o teto "foge" junto com o gasto.
+
+     Reescrito 29/08 (Gelson) — a versão de 23/08 tinha 2 bugs que juntos
+     deixavam a função sempre voltar null (teto nunca era gravado, o
+     alerta de estouro nunca disparava):
+       1. filtrava status='aprovado', valor que não existe no enum de
+          precificacoes_elevador (é 'rascunho'|'calculado'|'finalizado');
+       2. lia custoTotalMercadorias de dentro de `resultado.precificacao`,
+          mas esse campo só existe em `resultado.importacao`.
+     Fórmula nova (decisão do usuário, 29/08): teto = preço de venda ×
+     (1 − margem mínima configurada). Ex.: venda R$130, margem mínima 30%
+     → teto R$91. Mais simples e não depende de recompor "custo total" a
+     partir de vários campos do motor — só preço de venda (motor V2,
+     oficial) e a margem mínima já configurada em Alavancas do Financeiro
+     (mesmo número que trava a aprovação da Precificação). */
   async function _snapshotTetoCusto(numeroCotacao) {
     const c = sb();
     const { data: pz } = await c.from('precificacoes_elevador')
-      .select('resultado').eq('numero_cotacao', numeroCotacao).eq('status', 'aprovado')
+      .select('resultado, resultado_v2, parametros_fiscais_snapshot').eq('numero_cotacao', numeroCotacao).eq('status', 'finalizado')
       .order('updated_at', { ascending: false }).limit(1).maybeSingle();
-    const precificacao = pz?.resultado?.precificacao;
-    if (!precificacao) return null;
-    /* 23/08 (Gelson): teto inclui comissão do vendedor — "todos os custos
-       pensáveis", dinheiro real saindo do caixa da cotação, mesma lógica
-       de ART/frete/instalador. custoTotalMercadorias (bens/frete/impostos)
-       já vem separado da comissão no motor de cálculo — soma aqui. */
-    const custoBase = Number(precificacao.custoTotalMercadorias) || 0;
-    const comissaoVendedor = Number(precificacao.comissaoVendedorRs) || 0;
-    const custoTeto = custoBase + comissaoVendedor;
+    if (!pz) return null;
+    // V2 é o motor oficial — cai pro V1 só se a precificação nunca rodou o V2.
+    const precificacaoV2 = pz.resultado_v2 && pz.resultado_v2.precificacao;
+    const precoVenda = Number((precificacaoV2 || (pz.resultado || {}).precificacao || {}).precoVendaProposta) || 0;
+    if (!precoVenda) return null;
+    const margemMinima = Number((pz.parametros_fiscais_snapshot || {}).margem_minima_pct) || 0;
+    const custoTeto = precoVenda * (1 - margemMinima);
     return {
       custo_teto: custoTeto,
-      margem_aceita: (Number(precificacao.precoVendaProposta) || 0) - custoTeto,
+      margem_aceita: precoVenda - custoTeto,
     };
   }
 
