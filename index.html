@@ -47,6 +47,10 @@
        o canvas e adicionamos como 1 imagem num PDF A4 — 1 página garantida. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <!-- Leaflet — mapa real (tiles) do popup "Ver mapa" em Importação/Logística. -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
 </head>
 <body class="vp" data-density="cozy">
   <div id="root"></div>
@@ -191,7 +195,7 @@
 
   <script type="text/vp-jsx" src="/src/ncm-catalogo.jsx?v=24"></script>
   <script type="text/vp-jsx" src="/src/operacoes.jsx?v=15"></script>
-  <script type="text/vp-jsx" src="/src/logistica.jsx?v=20"></script>
+  <script type="text/vp-jsx" src="/src/logistica.jsx?v=25"></script>
   <script src="/src/comissionamento-store.js?v=1"></script>
   <script type="text/vp-jsx" src="/src/colaboradores-admin.jsx?v=2"></script>
   <script type="text/vp-jsx" src="/src/financeiro.jsx?v=28"></script>

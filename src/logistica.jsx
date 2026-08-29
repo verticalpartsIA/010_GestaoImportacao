@@ -2,6 +2,25 @@
    logistica.jsx — Importação (ship map) + Compras Nacional + Email Inbox
    ============================================================ */
 
+/* ---------- Armadores suportados pela Sinay/Safecube Container Tracking API
+   (código SCAC = parâmetro "sealine" da API) — lista das principais linhas
+   globais citadas na doc; a API cobre 170+, isso aqui é só o que o time usa. */
+const EI_SEALINES = [
+  { code: 'MAEU', name: 'Maersk' },
+  { code: 'MSCU', name: 'MSC' },
+  { code: 'CMDU', name: 'CMA CGM' },
+  { code: 'HLCU', name: 'Hapag-Lloyd' },
+  { code: 'COSU', name: 'COSCO' },
+  { code: 'EGLV', name: 'Evergreen' },
+  { code: 'ONEY', name: 'ONE (Ocean Network Express)' },
+  { code: 'YMLU', name: 'Yang Ming' },
+  { code: 'HDMU', name: 'HMM' },
+  { code: 'ZIMU', name: 'ZIM' },
+  { code: 'PABV', name: 'Pan Ocean' },
+  { code: 'WHLC', name: 'Wan Hai' },
+];
+function eiSealineName(code) { return (EI_SEALINES.find(s => s.code === code) || {}).name || code || ''; }
+
 /* ---------- Timeline padrão (9 fases do workflow de importação) ---------- */
 function buildMilestones(status, etd, eta) {
   const phases = [
@@ -93,7 +112,7 @@ function DocsCard({ docs, onChange }) {
 /* ---------- MODAL: Novo Embarque ---------- */
 function ModalNovoEmbarque({ onClose, onSaved, prefill }) {
   const [f, setF] = React.useState({
-    client: prefill?.client || '', supplier: prefill?.supplier || '', vessel:'', imo:'', line:'',
+    client: prefill?.client || '', supplier: prefill?.supplier || '', vessel:'', imo:'', sealine:'',
     bl:'', invoiceNumber: prefill?.invoiceNumber || '',
     invoiceValue: prefill?.invoiceValue || '', invoiceCurrency: prefill?.invoiceCurrency || 'USD',
     containerNumber:'', seal:'', containers:'1', type:'40HC', freight:'FCL',
@@ -120,7 +139,8 @@ function ModalNovoEmbarque({ onClose, onSaved, prefill }) {
       project_id: f.obraId || null,
       cotacao_fornecedor_id: prefill?.cotacaoFornecedorId || null,
       numero_cotacao: prefill?.numeroCotacao != null ? prefill.numeroCotacao : null,
-      vessel: f.vessel || null, imo: f.imo || null, line: f.line || null,
+      vessel: f.vessel || null, imo: f.imo || null,
+      line: f.sealine ? eiSealineName(f.sealine) : null, sealine: f.sealine || null,
       bl: f.bl || null,
       invoice_number: f.invoiceNumber || null,
       invoice_value: f.invoiceValue ? parseFloat(f.invoiceValue) : null,
@@ -195,7 +215,13 @@ function ModalNovoEmbarque({ onClose, onSaved, prefill }) {
         <div className="grid-3" style={{ gap:12 }}>
           {fld('Nome do navio', 'vessel', 'text', 'MSC ISABELLA')}
           {fld('IMO', 'imo', 'text', '9839430')}
-          {fld('Armador / Linha', 'line', 'text', 'MSC, COSCO, Hapag…')}
+          <div className="stack" style={{ gap:4 }}>
+            <label className="up-eyebrow muted">Armador (SCAC) — p/ rastreio automático</label>
+            <select className="input" value={f.sealine} onChange={e => set('sealine', e.target.value)}>
+              <option value="">— Selecione —</option>
+              {EI_SEALINES.map(s => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}
+            </select>
+          </div>
         </div>
         {fld('BL (Bill of Lading)', 'bl', 'text', 'Ex.: COSU6789012345')}
 
@@ -453,6 +479,8 @@ function ImportacaoDetail({ embarque, setRoute }) {
   const [e, setE] = React.useState(embarque);
   const [syncing, setSyncing] = React.useState(false);
   const [reportando, setReportando] = React.useState(false);
+  const [mapaAberto, setMapaAberto] = React.useState(false);
+  const [mostrarTodosEventos, setMostrarTodosEventos] = React.useState(false);
   React.useEffect(() => { setE(embarque); }, [embarque]);
 
   const refresh = async () => {
@@ -518,7 +546,7 @@ function ImportacaoDetail({ embarque, setRoute }) {
           </div>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="globe" onClick={() => setRoute("importacao-rastreamento")}>Ver no mapa</Button>
+          <Button variant="outline" icon="globe" onClick={() => setMapaAberto(true)}>Ver mapa</Button>
           <Button variant="outline" icon="mail">Email fornecedor</Button>
           <Button variant="primary" icon="package" onClick={reportarChegada} disabled={reportando || !!e.chegada_confirmada_em}>
             {e.chegada_confirmada_em ? "Chegada confirmada ✓" : reportando ? "Reportando…" : "Reportar chegada"}
@@ -528,23 +556,56 @@ function ImportacaoDetail({ embarque, setRoute }) {
 
       <div className="split--wide split">
         <div className="stack">
-          <Card title="Linha do tempo do embarque" sub={(e.from || e.origin || "—") + " → " + (e.to || e.destination || "—")}>
-            <div className="timeline">
-              {(e.milestones || []).map((m, i) => (
-                <div key={i} className={"timeline__row " + m.state}>
-                  <div className="timeline__node"/>
-                  <div>
-                    <div className="timeline__title">{m.label}</div>
-                    {m.note ? <div className="timeline__sub" style={{ color: "var(--vp-warning-ink)" }}>{m.note}</div> : null}
-                  </div>
-                  <div className="timeline__meta">{m.date}</div>
-                  {i < (e.milestones || []).length - 1 ? <div className="timeline__rail"/> : null}
+          {(e.tracking_events || []).length > 0 ? (
+            <Card title="Linha Do Tempo De Eventos" sub={`Rastreio Sinay/Safecube · ${(e.origin || e.from || "—")} → ${(e.destination || e.to || "—")}`}
+              action={<Button variant="outline" size="sm" icon="globe" onClick={() => setMapaAberto(true)}>Ver mapa</Button>}>
+              <div className="table-wrap">
+                <table className="t">
+                  <thead><tr>
+                    <th>Data</th><th>Descrição</th><th>Localização</th><th>Navio</th>
+                  </tr></thead>
+                  <tbody>
+                    {(mostrarTodosEventos ? e.tracking_events : e.tracking_events.slice(0, 3)).map((ev, i) => (
+                      <tr key={i}>
+                        <td className="mono small">{evDateTime(ev.date)}</td>
+                        <td>{ev.description || "—"}</td>
+                        <td>{ev.location || "—"}</td>
+                        <td>{ev.vessel || "—"}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+              {e.tracking_events.length > 3 ? (
+                <div style={{ textAlign: "center", marginTop: 10 }}>
+                  <Button variant="ghost" size="sm" onClick={() => setMostrarTodosEventos((v) => !v)}>
+                    {mostrarTodosEventos ? "Mostrar menos" : `Mostrar mais (${e.tracking_events.length - 3})`}
+                  </Button>
                 </div>
-              ))}
-            </div>
-          </Card>
+              ) : null}
+            </Card>
+          ) : (
+            <Card title="Linha do tempo do embarque" sub={(e.from || e.origin || "—") + " → " + (e.to || e.destination || "—")}>
+              <div className="timeline">
+                {(e.milestones || []).map((m, i) => (
+                  <div key={i} className={"timeline__row " + m.state}>
+                    <div className="timeline__node"/>
+                    <div>
+                      <div className="timeline__title">{m.label}</div>
+                      {m.note ? <div className="timeline__sub" style={{ color: "var(--vp-warning-ink)" }}>{m.note}</div> : null}
+                    </div>
+                    <div className="timeline__meta">{m.date}</div>
+                    {i < (e.milestones || []).length - 1 ? <div className="timeline__rail"/> : null}
+                  </div>
+                ))}
+              </div>
+              <p className="small muted" style={{ marginTop: 10 }}>
+                Linha do tempo genérica — vira eventos reais (Container Arrival, Gate-In etc.) assim que a Sinay/Safecube sincronizar este embarque.
+              </p>
+            </Card>
+          )}
 
-          <Card title="Posição atual do navio" sub={"Sincronização AIS · " + (e.last_ais_sync ? "atualizado " + window.__VP_SB.timeAgo(e.last_ais_sync) : "aguardando 1ª sync")}
+          <Card title="Posição atual do navio" sub={(e.tracking_provider === 'sinay' ? "Rastreio Sinay/Safecube · " : "Simulação · ") + (e.last_ais_sync ? "atualizado " + window.__VP_SB.timeAgo(e.last_ais_sync) : "aguardando 1ª sync")}
             action={<Button variant="ghost" size="sm" icon="refresh" onClick={refresh} disabled={syncing}>{syncing ? "Atualizando…" : "Atualizar"}</Button>}>
             <div className="map-frame" style={{ height: 360 }}>
               <ShipMap mainShip={e}/>
@@ -555,6 +616,14 @@ function ImportacaoDetail({ embarque, setRoute }) {
               <KvBlock label="Rumo" value={e.heading ? `${e.heading}°` : "—"} mono/>
               <KvBlock label="ETA atualizada" value={fmtDateLong(e.eta)}/>
             </div>
+            {e.tracking_provider === 'sinay'
+              ? <div className="grid-2" style={{ marginTop: 10 }}>
+                  <KvBlock label="Status Sinay" value={e.tracking_status || '—'} mono/>
+                  <KvBlock label="Atualizado (Sinay)" value={e.tracking_updated_at ? window.__VP_SB.timeAgo(e.tracking_updated_at) : '—'}/>
+                </div>
+              : (e.bl || e.container_number) && e.sealine
+                ? <p className="small muted" style={{ marginTop: 10 }}>Ainda não sincronizado com a Sinay — clique "Atualizar" ou aguarde a sincronização diária.</p>
+                : <p className="small muted" style={{ marginTop: 10 }}>Preencha BL/Container + Armador (SCAC) para habilitar rastreio real via Sinay/Safecube.</p>}
           </Card>
 
           <DocsCard docs={e.docs} onChange={onDocsChange}/>
@@ -564,7 +633,7 @@ function ImportacaoDetail({ embarque, setRoute }) {
           <Card title="Navio & Container" sharp>
             <KvBlock label="Navio" value={e.vessel}/>
             <KvBlock label="IMO" value={e.imo} mono/>
-            <KvBlock label="Armador / Linha" value={e.line}/>
+            <KvBlock label="Armador / Linha" value={e.line ? `${e.line}${e.sealine ? ' (' + e.sealine + ')' : ''}` : (e.sealine || '—')}/>
             <KvBlock label="BL" value={e.bl} mono/>
             <KvBlock label="Nº Container" value={e.container_number} mono/>
             <KvBlock label="Lacre" value={e.seal} mono/>
@@ -626,6 +695,8 @@ function ImportacaoDetail({ embarque, setRoute }) {
           </Card>
         </div>
       </div>
+
+      {mapaAberto ? <EmbarqueMapaModal embarque={e} onClose={() => setMapaAberto(false)}/> : null}
     </div>
   );
 }
@@ -745,6 +816,221 @@ function ImportacaoRastreamento({ setRoute }) {
               <Button variant="primary" size="sm" iconRight="arrowRight" style={{ width: "100%", marginTop: 8 }} onClick={() => setRoute("importacao")}>Abrir embarque</Button>
             </Card>
           ) : null}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* ---------- Portos conhecidos (espelho client-side do PORTS da edge
+   function ais-sync — só pra desenhar origem/destino no mapa real). ------ */
+const EI_PORTS = {
+  shanghai: [31.2, 121.5], xangai: [31.2, 121.5],
+  ningbo: [29.8, 121.5], qingdao: [36.0, 120.4],
+  hamburg: [53.55, 9.99], hamburgo: [53.55, 9.99],
+  santos: [-23.95, -46.3], itaguai: [-22.86, -43.75], "itaguaí": [-22.86, -43.75],
+};
+function eiPortCoords(nome) {
+  if (!nome) return null;
+  const k = nome.toLowerCase();
+  for (const p in EI_PORTS) if (k.includes(p)) return EI_PORTS[p];
+  return null;
+}
+
+/* ---------- Waypoints de rota marítima real (não em linha reta!) ---------
+   Uma reta lat/lng entre Xangai e Santos corta direto o continente africano
+   — navio não anda em terra seca. Os pontos abaixo seguem corredores de
+   navegação reais (Estreito de Malaca → Oceano Índico → Cabo da Boa
+   Esperança → Atlântico Sul), permanecendo sempre sobre água. */
+function eiRouteWaypoints(origin, destino) {
+  if (!origin || !destino) return [origin, destino].filter(Boolean);
+  const isAsia = (p) => p[1] > 90;
+  const isBrasil = (p) => p[0] < 5 && p[1] < -30;
+  const isEuropa = (p) => p[0] > 40 && p[1] > -15 && p[1] < 35;
+
+  if ((isAsia(origin) && isBrasil(destino)) || (isBrasil(origin) && isAsia(destino))) {
+    const asia = isAsia(origin) ? origin : destino;
+    const brasil = isBrasil(origin) ? origin : destino;
+    // Estreito de Malaca → Índico → Cabo da Boa Esperança → Atlântico Sul.
+    const chain = [asia, [1.3, 103.8], [-6, 78], [-34.8, 20], [-25, -8], brasil];
+    return isAsia(origin) ? chain : chain.slice().reverse();
+  }
+  if ((isEuropa(origin) && isBrasil(destino)) || (isBrasil(origin) && isEuropa(destino))) {
+    const europa = isEuropa(origin) ? origin : destino;
+    const brasil = isBrasil(origin) ? origin : destino;
+    const chain = [europa, [43, -10], [15, -22], brasil];
+    return isEuropa(origin) ? chain : chain.slice().reverse();
+  }
+  return [origin, destino];
+}
+
+/* ---------- Formata datetime de evento real da Sinay (ISO completo ou
+   só data) no padrão "AAAA-MM-DD HH:mm" que o Safecube usa. ------------- */
+function evDateTime(v) {
+  if (!v) return "—";
+  const d = new Date(v);
+  if (isNaN(d.getTime())) return String(v).slice(0, 16).replace("T", " ");
+  const pad = (n) => String(n).padStart(2, "0");
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`;
+}
+
+/* ---------- Modal grande: mapa real (Leaflet) com trocador de estilo
+   Claro/Escuro/Ruas/Satélite — engenharia reversa do "Ver mapa" do
+   Safecube/Sinay (fornecedor da nossa API de rastreio). ------------------ */
+const EI_MAP_STYLES = [
+  { key: "claro", label: "Claro",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Light_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles © Esri — Esri, HERE, Garmin, FAO, NOAA, USGS", tms: false, routeColor: "#334155" },
+  { key: "escuro", label: "Escuro",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/Canvas/World_Dark_Gray_Base/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles © Esri — Esri, HERE, Garmin, FAO, NOAA, USGS", tms: false, routeColor: "#e5e7eb" },
+  { key: "ruas", label: "Ruas",
+    url: "https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png",
+    attribution: "© OpenStreetMap contributors", subdomains: "abc", routeColor: "#1d4ed8" },
+  { key: "satelite", label: "Satélite",
+    url: "https://server.arcgisonline.com/ArcGIS/rest/services/World_Imagery/MapServer/tile/{z}/{y}/{x}",
+    attribution: "Tiles © Esri — Source: Esri, Maxar, Earthstar Geographics", routeColor: "#facc15" },
+];
+
+function EmbarqueMapaModal({ embarque: e, onClose }) {
+  const mapElRef = React.useRef(null);
+  const shellRef = React.useRef(null);
+  const mapRef = React.useRef(null);
+  const layerRef = React.useRef(null);
+  const routeRef = React.useRef(null);
+  const [styleKey, setStyleKey] = React.useState("escuro");
+  const [pickerOpen, setPickerOpen] = React.useState(false);
+  const [fullscreen, setFullscreen] = React.useState(false);
+
+  React.useEffect(() => {
+    const fn = (ev) => { if (ev.key === "Escape") onClose?.(); };
+    window.addEventListener("keydown", fn);
+    return () => window.removeEventListener("keydown", fn);
+  }, [onClose]);
+
+  // Cria o mapa uma única vez.
+  React.useEffect(() => {
+    if (!window.L || !mapElRef.current || mapRef.current) return;
+    const map = window.L.map(mapElRef.current, { zoomControl: true, attributionControl: true });
+    mapRef.current = map;
+
+    const origin = eiPortCoords(e.origin || e.from);
+    const destino = eiPortCoords(e.destination || e.to);
+    const atual = (e.lat != null && e.lng != null) ? [e.lat, e.lng] : null;
+    const rota = eiRouteWaypoints(origin, destino);
+    const pontos = [...rota, atual].filter(Boolean);
+
+    const shipIcon = window.L.divIcon({
+      className: "", html: '<div style="font-size:20px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚢</div>',
+      iconSize: [22, 22], iconAnchor: [11, 11],
+    });
+    const portIcon = (cor) => window.L.divIcon({
+      className: "", html: `<div style="width:12px;height:12px;border-radius:50%;background:${cor};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.3)"></div>`,
+      iconSize: [12, 12], iconAnchor: [6, 6],
+    });
+
+    if (origin) window.L.marker(origin, { icon: portIcon("#334155") }).addTo(map).bindTooltip(e.origin || e.from || "Origem");
+    if (destino) window.L.marker(destino, { icon: portIcon("#dc2626") }).addTo(map).bindTooltip(e.destination || e.to || "Destino");
+    if (atual) window.L.marker(atual, { icon: shipIcon, zIndexOffset: 1000 }).addTo(map).bindTooltip(e.vessel || "Navio", { permanent: false });
+
+    if (pontos.length >= 2) map.fitBounds(window.L.latLngBounds(pontos), { padding: [60, 60] });
+    else if (pontos.length === 1) map.setView(pontos[0], 4);
+    else map.setView([10, 30], 2);
+
+    return () => { map.remove(); mapRef.current = null; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  // Troca de tile layer + cor da rota conforme o estilo escolhido.
+  React.useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !window.L) return;
+    const cfg = EI_MAP_STYLES.find((s) => s.key === styleKey) || EI_MAP_STYLES[0];
+
+    if (layerRef.current) map.removeLayer(layerRef.current);
+    layerRef.current = window.L.tileLayer(cfg.url, {
+      attribution: cfg.attribution, subdomains: cfg.subdomains || "abc", maxZoom: 19,
+    }).addTo(map);
+    layerRef.current.bringToBack();
+
+    if (routeRef.current) map.removeLayer(routeRef.current);
+    const origin = eiPortCoords(e.origin || e.from);
+    const destino = eiPortCoords(e.destination || e.to);
+    if (origin && destino) {
+      routeRef.current = window.L.polyline(eiRouteWaypoints(origin, destino), {
+        color: cfg.routeColor, weight: 2, opacity: 0.85, dashArray: "1 8", lineCap: "round", smoothFactor: 2,
+      }).addTo(map);
+    }
+  }, [styleKey]);
+
+  // Reflow do mapa quando o modal terminou de animar/redimensionar.
+  React.useEffect(() => {
+    const t = setTimeout(() => mapRef.current?.invalidateSize(), 120);
+    return () => clearTimeout(t);
+  }, [fullscreen]);
+
+  const toggleFullscreen = () => {
+    const el = shellRef.current;
+    if (!el) return;
+    if (!document.fullscreenElement) { el.requestFullscreen?.(); setFullscreen(true); }
+    else { document.exitFullscreen?.(); setFullscreen(false); }
+  };
+  React.useEffect(() => {
+    const fn = () => setFullscreen(!!document.fullscreenElement);
+    document.addEventListener("fullscreenchange", fn);
+    return () => document.removeEventListener("fullscreenchange", fn);
+  }, []);
+
+  return (
+    <div className="modal-shroud" onClick={onClose}>
+      <div ref={shellRef} onClick={(ev) => ev.stopPropagation()}
+        style={{
+          width: "min(1180px, 94vw)", height: "min(760px, 90vh)",
+          background: "#0b1220", display: "flex", flexDirection: "column",
+          overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,.45)",
+        }}>
+        <div className="row sb" style={{ padding: "14px 18px", background: "#111a2e", flex: "0 0 auto" }}>
+          <div>
+            <div className="up-eyebrow" style={{ color: "#94a3b8" }}>{e.id} · {e.line || e.sealine}</div>
+            <div style={{ color: "#fff", fontWeight: 600, fontSize: 15 }}>{e.vessel || "Rastreamento marítimo"}</div>
+          </div>
+          <div className="row gap-2">
+            <span className="mono small" style={{ color: "#94a3b8" }}>
+              {(e.origin || e.from || "—")} → {(e.destination || e.to || "—")}
+            </span>
+            <button onClick={onClose} title="Fechar"
+              style={{ border: "none", background: "rgba(255,255,255,.08)", color: "#fff", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <Icon.x size={16}/>
+            </button>
+          </div>
+        </div>
+
+        <div style={{ position: "relative", flex: "1 1 auto", minHeight: 0 }}>
+          <div ref={mapElRef} style={{ position: "absolute", inset: 0 }}/>
+
+          <div style={{ position: "absolute", top: 12, right: 12, zIndex: 400 }}>
+            <button onClick={() => setPickerOpen((o) => !o)} title="Estilo do mapa"
+              style={{ width: 34, height: 34, border: "none", background: "#111a2e", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.4)" }}>
+              <Icon.layers size={16}/>
+            </button>
+            {pickerOpen ? (
+              <div style={{ marginTop: 6, background: "#111a2e", boxShadow: "0 8px 24px rgba(0,0,0,.5)", minWidth: 120, overflow: "hidden" }}>
+                {EI_MAP_STYLES.map((s) => (
+                  <div key={s.key} onClick={() => { setStyleKey(s.key); setPickerOpen(false); }}
+                    style={{
+                      padding: "9px 14px", fontSize: 13, cursor: "pointer", color: "#fff",
+                      background: styleKey === s.key ? "#2b3a5c" : "transparent",
+                    }}>
+                    {s.label}
+                  </div>
+                ))}
+              </div>
+            ) : null}
+            <button onClick={toggleFullscreen} title={fullscreen ? "Sair da tela cheia" : "Tela cheia"}
+              style={{ marginTop: 6, width: 34, height: 34, border: "none", background: "#111a2e", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.4)" }}>
+              <Icon.expand size={15}/>
+            </button>
+          </div>
         </div>
       </div>
     </div>

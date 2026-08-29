@@ -3,15 +3,20 @@
 // ------------------------------------------------------------
 // Backend do spec de Importação: "Calcula progresso, status, ETA dinâmico"
 //
-// Dois modos, escolhidos automaticamente:
-//   • AIS REAL  → quando os secrets AIS_API_KEY + AIS_PROVIDER_URL existem,
-//                 busca a posição por IMO no provedor (MarineTraffic,
-//                 VesselFinder, Datalastic, etc.) e persiste.
-//   • SIMULAÇÃO → sem chave, interpola a rota porto-origem → porto-destino
-//                 e avança posição/rumo/velocidade (mantém o demo "vivo").
+// Três modos, escolhidos automaticamente por embarque:
+//   • SINAY REAL → quando o secret SINAY_API_KEY existe E o embarque tem
+//                  bl ou container_number preenchido. Consulta a Sinay/
+//                  Safecube Container Tracking API (rastreio real, por
+//                  BL/container/booking) e persiste posição, ETA e status.
+//   • AIS GENÉRICO → sem BL/container mas com IMO + secrets AIS_API_KEY/
+//                  AIS_PROVIDER_URL (integração antiga, mantida por
+//                  compatibilidade).
+//   • SIMULAÇÃO   → sem nenhuma chave, interpola a rota porto-origem →
+//                  porto-destino (mantém o demo "vivo").
 //
-// Para ativar AIS real, basta configurar os secrets (nenhuma mudança de código):
-//   supabase secrets set AIS_API_KEY=...  AIS_PROVIDER_URL="https://.../vessel?imo={imo}"
+// Para ativar o rastreio real via Sinay, configure o secret:
+//   supabase secrets set SINAY_API_KEY=...
+// (ou via Dashboard → Project Settings → Edge Functions → Secrets)
 // ============================================================
 import "jsr:@supabase/functions-js/edge-runtime.d.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -40,7 +45,87 @@ function bearing(a: [number, number], b: [number, number]): number {
   return (toDeg(Math.atan2(y, x)) + 360) % 360;
 }
 
-// Provider-agnostic: ajuste o mapeamento aos campos do seu provedor.
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+// ---------- Sinay / Safecube Container Tracking API ----------
+// Docs: https://documentation.safecube.ai/reference/getting-started-with-container-tracking-api
+// GET https://api.sinay.ai/container-tracking/api/v2/shipment
+//   ?shipmentNumber=<BL|container|booking>&shipmentType=<BL|CT|BK>&sealine=<SCAC>
+// Header: API_KEY: <chave>
+// Rate limit: 10 req / 10s por chave — por isso os embarques são processados
+// em série com um pequeno intervalo entre chamadas.
+async function fetchSinay(
+  shipmentNumber: string,
+  shipmentType: "BL" | "CT",
+  sealine: string | null,
+): Promise<Record<string, unknown> | null> {
+  const key = Deno.env.get("SINAY_API_KEY");
+  if (!key) return null;
+  const params = new URLSearchParams({ shipmentNumber, shipmentType });
+  if (sealine) params.set("sealine", sealine);
+  const url = `https://api.sinay.ai/container-tracking/api/v2/shipment?${params.toString()}`;
+  try {
+    const resp = await fetch(url, { headers: { API_KEY: key } });
+    if (resp.status === 429) return { __rateLimited: true };
+    if (!resp.ok) return { __error: `HTTP ${resp.status}` };
+    return await resp.json();
+  } catch (e) {
+    return { __error: String(e) };
+  }
+}
+
+// Extrai {lat,lng,eta,etd,vessel,imo,status} de um response da Sinay.
+function mapSinayResponse(j: Record<string, unknown>) {
+  const metadata = (j.metadata ?? {}) as Record<string, unknown>;
+  const route = (j.route ?? {}) as Record<string, unknown>;
+  const pol = (route.pol ?? {}) as Record<string, unknown>;
+  const pod = (route.pod ?? {}) as Record<string, unknown>;
+  const vessels = (j.vessels ?? []) as Array<Record<string, unknown>>;
+  const vessel = vessels[0];
+  const containers = (j.containers ?? []) as Array<Record<string, unknown>>;
+  const events = (containers[0]?.events ?? []) as Array<Record<string, unknown>>;
+
+  const isoDate = (v: unknown) => (typeof v === "string" && v.length >= 10 ? v.slice(0, 10) : null);
+  const coordsOf = (loc: unknown) => (loc as Record<string, unknown> | undefined)?.coordinates as
+    { lat?: number; lng?: number } | undefined;
+
+  // A Sinay nem sempre devolve o bloco top-level "coordinates" (posição AIS
+  // ao vivo do navio). Quando falta, usamos a localização do último evento
+  // confirmado (isActual=true) como posição aproximada — melhor que nada.
+  let coords = j.coordinates as { lat?: number; lng?: number } | undefined;
+  if (!coords?.lat) {
+    const lastActual = [...events].reverse().find((ev) => ev.isActual);
+    coords = coordsOf(lastActual?.location) ?? coordsOf((pol as Record<string, unknown>)?.location);
+  }
+
+  // Linha do tempo de eventos reais (Container Arrival / Departure / Gate-In /
+  // Gate-Out etc.) — mesmo dado que o Safecube exibe em "Linha Do Tempo De
+  // Eventos". Mais recente primeiro, como o front espera renderizar.
+  const timeline = events
+    .map((ev) => ({
+      date: (ev.eventDateTime as string) ?? (ev.date as string) ?? null,
+      description: (ev.description as string) ?? (ev.eventCode as string) ?? null,
+      location: ((ev.location as Record<string, unknown>)?.name as string) ?? null,
+      vessel: ((ev.vessel as Record<string, unknown>)?.name as string) ?? null,
+      isActual: !!ev.isActual,
+    }))
+    .filter((ev) => ev.date && ev.description)
+    .sort((a, b) => (b.date as string).localeCompare(a.date as string));
+
+  return {
+    shippingStatus: (metadata.shippingStatus as string) ?? null,
+    sinayUpdatedAt: (metadata.updatedAt as string) ?? null,
+    lat: coords?.lat ?? null,
+    lng: coords?.lng ?? null,
+    eta: isoDate((pod as Record<string, unknown>)?.date),
+    etd: isoDate((pol as Record<string, unknown>)?.date),
+    vessel: (vessel?.name as string) ?? null,
+    imo: vessel?.imo != null ? String(vessel.imo) : null,
+    timeline,
+  };
+}
+
+// Provider-agnostic legado: ajuste o mapeamento aos campos do seu provedor.
 async function fetchAis(imo: string | null): Promise<Record<string, unknown> | null> {
   const key = Deno.env.get("AIS_API_KEY");
   const base = Deno.env.get("AIS_PROVIDER_URL"); // ex.: https://api.provider.com/vessel?imo={imo}
@@ -77,7 +162,9 @@ Deno.serve(async (req) => {
     Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
   );
 
-  const mode = Deno.env.get("AIS_API_KEY") ? "ais" : "simulação";
+  const hasSinay = !!Deno.env.get("SINAY_API_KEY");
+  const hasGenericAis = !!Deno.env.get("AIS_API_KEY");
+
   const { data: ships, error } = await supabase
     .from("embarques").select("*").neq("status", "Entregue");
 
@@ -88,20 +175,60 @@ Deno.serve(async (req) => {
   }
 
   let updated = 0;
+  let sinayCount = 0;
   const now = new Date().toISOString();
 
   for (const e of ships ?? []) {
-    const start = portOf(e.origin, [31.2, 121.5]);
-    const end = portOf(e.destination, [-23.95, -46.3]);
     let patch: Record<string, unknown> = { last_ais_sync: now };
+    let handled = false;
 
-    const real = mode === "ais" ? await fetchAis(e.imo) : null;
+    // 1) Rastreio real via Sinay — precisa de BL ou nº do container.
+    const shipmentNumber = e.bl || e.container_number;
+    if (hasSinay && shipmentNumber) {
+      const shipmentType = e.bl ? "BL" : "CT";
+      const raw = await fetchSinay(shipmentNumber, shipmentType, e.sealine || null);
+      await sleep(1100); // respeita o rate limit de 10 req/10s da Sinay
 
-    if (real && real.lat != null && real.lng != null) {
-      patch = { ...patch, lat: real.lat, lng: real.lng, speed: real.speed, heading: real.heading };
-      if (real.eta) patch.eta = real.eta;
-    } else {
-      // Atracado/aguardando aduana: navio parado — não navega, mantém coords.
+      if (raw && !raw.__rateLimited && !raw.__error) {
+        const mapped = mapSinayResponse(raw);
+        patch = {
+          ...patch,
+          tracking_provider: "sinay",
+          tracking_status: mapped.shippingStatus,
+          tracking_updated_at: mapped.sinayUpdatedAt || now,
+          tracking_raw: raw,
+        };
+        if (mapped.lat != null && mapped.lng != null) {
+          patch.lat = mapped.lat;
+          patch.lng = mapped.lng;
+        }
+        if (mapped.eta) patch.eta = mapped.eta;
+        if (mapped.etd) patch.etd = mapped.etd;
+        if (mapped.vessel) patch.vessel = mapped.vessel;
+        if (mapped.imo) patch.imo = mapped.imo;
+        if (mapped.timeline && mapped.timeline.length) patch.tracking_events = mapped.timeline;
+        handled = true;
+      } else if (raw) {
+        // Rate limit ou erro pontual — não sobrescreve dados já persistidos,
+        // só registra a tentativa para não travar a fila de sincronização.
+        patch.tracking_status = raw.__rateLimited ? "RATE_LIMITED" : "ERROR";
+      }
+    }
+
+    // 2) Fallback: AIS genérico por IMO (integração antiga).
+    if (!handled && hasGenericAis && e.imo) {
+      const real = await fetchAis(e.imo);
+      if (real && real.lat != null && real.lng != null) {
+        patch = { ...patch, lat: real.lat, lng: real.lng, speed: real.speed, heading: real.heading };
+        if (real.eta) patch.eta = real.eta;
+        handled = true;
+      }
+    }
+
+    // 3) Simulação — mantém o demo "vivo" quando não há integração real.
+    if (!handled) {
+      const start = portOf(e.origin, [31.2, 121.5]);
+      const end = portOf(e.destination, [-23.95, -46.3]);
       const arrived = e.status === "Aguardando liberação" || (e.position ?? 0) >= 0.99;
       if (arrived) {
         patch = { ...patch, speed: 0 };
@@ -119,13 +246,16 @@ Deno.serve(async (req) => {
           speed: Math.round((14 + Math.random() * 4) * 10) / 10,
         };
       }
+    } else {
+      sinayCount++;
     }
 
     const { error: upErr } = await supabase.from("embarques").update(patch).eq("id", e.id);
     if (!upErr) updated++;
   }
 
-  return new Response(JSON.stringify({ ok: true, mode, updated }), {
+  const mode = sinayCount > 0 ? "sinay" : hasGenericAis ? "ais" : "simulação";
+  return new Response(JSON.stringify({ ok: true, mode, updated, sinayCount }), {
     headers: JSON_HEADERS,
   });
 });
