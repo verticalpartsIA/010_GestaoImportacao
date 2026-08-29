@@ -687,11 +687,19 @@ function ImportacaoDetail({ embarque, setRoute }) {
           </Card>
 
           <Card title="Trigger Financeiro" sharp>
-            <div className="up-eyebrow muted">Gatilho próximo</div>
-            <div style={{ fontSize: 13, fontWeight: 600, margin: "4px 0 8px" }}>Pagamento 50% no embarque</div>
-            <div className="cell-money mono" style={{ fontSize: 18, fontWeight: 700 }}>R$ 620.000</div>
-            <p className="small muted" style={{ marginTop: 8 }}>Será ativado automaticamente quando o BL for confirmado.</p>
-            <Button variant="outline" size="sm" iconRight="arrowRight" style={{ width: "100%", marginTop: 8 }}>Ver no Financeiro</Button>
+            <div className="up-eyebrow muted">Gatilho de pagamento</div>
+            <p className="small muted" style={{ marginTop: 4 }}>
+              Ainda não existe gatilho financeiro automático ligado a embarques — o módulo de Gatilhos hoje cobre só a etapa comercial (formulário, precificação, proposta, fornecedor).
+            </p>
+            {e.invoice_value != null ? (
+              <div style={{ marginTop: 10 }}>
+                <div className="up-eyebrow muted">Valor da invoice (referência)</div>
+                <div className="cell-money mono" style={{ fontSize: 16, fontWeight: 700 }}>
+                  {e.invoice_currency === "BRL" ? fmtBRL(e.invoice_value) : fmtUSD(e.invoice_value)}
+                </div>
+              </div>
+            ) : null}
+            <Button variant="outline" size="sm" iconRight="arrowRight" style={{ width: "100%", marginTop: 10 }} onClick={() => setRoute("financeiro")}>Ver no Financeiro</Button>
           </Card>
         </div>
       </div>
