@@ -245,6 +245,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
   const payloadSalvar = () => ({
     vmle_usd: pz.vmle_usd, seguro_usd: pz.seguro_usd, frete_seguro_capatazia_usd: pz.frete_seguro_capatazia_usd,
+    frete_seguro_capatazia_usd_expresso: pz.frete_seguro_capatazia_usd_expresso,
     siscomex_rs: pz.siscomex_rs, tx_cambial: pz.tx_cambial, outras_despesas_importacao_rs: pz.outras_despesas_importacao_rs,
     despachante_desembaraco_rs: pz.despachante_desembaraco_rs, demurrage_rs: pz.demurrage_rs,
     frete_interno_rs: pz.frete_interno_rs, armazenagem_rs: pz.armazenagem_rs,
@@ -309,6 +310,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const importacao = pz.resultado && pz.resultado.importacao;
   const resultadoV2 = pz.resultado_v2 && pz.resultado_v2.precificacao ? pz.resultado_v2 : null;
   const margemEfetivaV2Negativa = !!resultadoV2 && resultadoV2.precificacao.margemEfetivaPct < 0;
+  const resultadoV2Expresso = pz.resultado_v2_expresso && pz.resultado_v2_expresso.precificacao ? pz.resultado_v2_expresso : null;
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
   const margemMinima = Number(params.margem_minima_pct) || 0;
@@ -485,7 +487,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         <div className="grid-3" style={{ gap: 12 }}>
           <PZField label="VMLE (USD)"><PZCurrencyInput moeda="USD" value={pz.vmle_usd} onChange={set('vmle_usd')}/></PZField>
           <PZField label="Seguro (USD)"><PZCurrencyInput moeda="USD" value={pz.seguro_usd} onChange={set('seguro_usd')}/></PZField>
-          <PZField label="Frete + Seguro + Capatazia (USD)"><PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd} onChange={set('frete_seguro_capatazia_usd')}/></PZField>
+          <PZField label="Frete + Seguro + Capatazia — Padrão 120d, container compartilhado (USD)"><PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd} onChange={set('frete_seguro_capatazia_usd')}/></PZField>
+          <PZField label="Frete + Seguro + Capatazia — Expresso 90d, container exclusivo (USD)">
+            <PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd_expresso} onChange={set('frete_seguro_capatazia_usd_expresso')}/>
+            <div className="small muted" style={{ marginTop: 4 }}>Deixe em branco/zero se o cliente não pediu a opção expressa.</div>
+          </PZField>
           <PZField label="Siscomex (R$)"><PZCurrencyInput moeda="BRL" value={pz.siscomex_rs} onChange={set('siscomex_rs')}/></PZField>
           <PZField label="Câmbio (R$/US$)">
             <PZInput type="number" value={pz.tx_cambial} onChange={set('tx_cambial')}/>
@@ -634,7 +640,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <>
             <div className="grid-3" style={{ gap: 16, marginTop: 16 }}>
               <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
-              <div><span className="up-eyebrow muted">Preço de venda na proposta</span><div className="cell-money" style={{ fontSize: 18, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
+              <div><span className="up-eyebrow muted">Preço de venda — Padrão (120 dias)</span><div className="cell-money" style={{ fontSize: 18, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
               <div>
                 <span className="up-eyebrow muted">Margem efetiva calculada (%)</span>
                 <div className="cell-money" style={{ fontSize: 16, color: margemAbaixoMinima ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}</div>
@@ -663,6 +669,27 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         )}
         {!resultadoV2 && <p className="small muted" style={{ marginTop: 12, marginBottom: 0 }}>Clique em "Calcular" pra ver o resultado.</p>}
       </Card>
+
+      {resultadoV2Expresso && (
+        <Card title="Entrega expressa — 90 dias (container exclusivo)"
+          sub="mesmo custo econômico completo do cenário padrão, só o frete internacional muda — pra apresentar as duas opções ao cliente na mesma conversa"
+          style={{ marginTop: 16 }}>
+          <div className="grid-3" style={{ gap: 16 }}>
+            <div><span className="up-eyebrow muted">Preço de venda — Expresso (90 dias)</span><div className="cell-money" style={{ fontSize: 18, fontWeight: 800 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta)}</div></div>
+            <div>
+              <span className="up-eyebrow muted">Margem efetiva (%)</span>
+              <div className="cell-money" style={{ fontSize: 16, color: resultadoV2Expresso.precificacao.margemEfetivaPct < margemMinima ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2Expresso.precificacao.margemEfetivaPct)}</div>
+            </div>
+            <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultadoV2Expresso.precificacao.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultadoV2Expresso.precificacao.lucroFinal)}</div></div>
+            <div><span className="up-eyebrow muted">Diferença Expresso − Padrão</span><div className="cell-money" style={{ fontSize: 16 }}>{resultadoV2 ? fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta - resultadoV2.precificacao.precoVendaProposta) : '—'}</div></div>
+          </div>
+          {resultadoV2Expresso.precificacao.margemEfetivaPct < 0 && (
+            <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
+              ⚠ Margem efetiva negativa no cenário expresso — mesmo cobrindo o frete mais caro, confira se o preço faz sentido antes de oferecer ao cliente.
+            </p>
+          )}
+        </Card>
+      )}
 
       {resultado && (
         <Card title="Resultado — V1 (legado, referência)" sub="mantido só pra comparação — não trava mais aprovação nem alimenta a Proposta" style={{ marginTop: 16 }}>

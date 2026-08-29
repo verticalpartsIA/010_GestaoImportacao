@@ -415,16 +415,31 @@
     // 0% de margem desejada (Number(null)||0) e o preço/margem V2 saía
     // artificialmente baixo, sem o usuário nunca ter escolhido isso.
     const margemDesejadaPct = pz.margem_desejada_pct != null ? pz.margem_desejada_pct : (params.margemMinimaPct || 0.2);
-    const resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({
-      ...baseInputs, difalCustoRs,
+    const v2Extras = {
       modoFormacaoPreco: pz.modo_formacao_preco,
       margemDesejadaPct,
       contingenciaValor: pz.contingencia_valor,
       outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
-    });
+    };
+    const resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras });
 
-    await salvar(id, { resultado, resultado_v2: resultadoV2, difal, status: 'calculado' });
-    return { resultado, resultadoV2, difal };
+    /* Duas modalidades de entrega (issue "Precificação real"): 90 dias
+       (container exclusivo, frete mais caro) × 120 dias (container
+       compartilhado, o frete_seguro_capatazia_usd de sempre). Só o frete
+       muda — reaproveita o mesmo custoEconomicoCompleto/markup/comissões
+       via calcularV2, só trocando freteSeguroCapataziaUsd. DIFAL não é
+       recalculado pro cenário expresso (a diferença de preço não muda o
+       UF/regra de DIFAL, só o valor-base — aproximação aceitável pra uma
+       cotação comparativa, não uma aprovação final). Sem frete expresso
+       preenchido, resultado_v2_expresso fica vazio — não força a
+       modalidade pra quem não precisa dela. */
+    const freteExpressoUsd = Number(pz.frete_seguro_capatazia_usd_expresso) || 0;
+    const resultadoV2Expresso = freteExpressoUsd > 0
+      ? window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, freteSeguroCapataziaUsd: freteExpressoUsd, difalCustoRs, ...v2Extras })
+      : {};
+
+    await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, status: 'calculado' });
+    return { resultado, resultadoV2, resultadoV2Expresso, difal };
   }
 
   /* ---------- Aprovação (issue #4) ----------
