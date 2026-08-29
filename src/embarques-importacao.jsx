@@ -1,9 +1,14 @@
 /* ============================================================
    embarques-importacao.jsx — Gestão Importação · Embarques
-   Fase 4 da consolidação de importação dentro do VP Gestão. NÃO é o
-   "Mapa de navios" (rastreamento AIS, tabela `embarques`) — esse
-   continua separado e intocado. Este é o Embarques rico, vinculado às
-   P.I. (pi_importacao.embarque_id).
+   Fase 4 da consolidação de importação dentro do VP Gestão.
+
+   29/08 — deixou de ser "intocado" em relação à tabela `embarques`
+   (rastreamento AIS/Sinay, mapa de navios): agora, quando este embarque
+   tem AWB/BL preenchido, EmbarquesImportacaoStore.criar/atualizar
+   sincroniza automaticamente um registro em `embarques` (via
+   origem_embarque_importacao_id) pra alimentar o rastreio real —
+   ver embarques-importacao-store.js. Este continua sendo o cadastro
+   rico (fonte da verdade); `embarques` só espelha o necessário pro mapa.
    ============================================================ */
 
 const EI_STATUS = ['Pagamento', 'Produção', 'Embarque', 'Desembaraço', 'Entrega', 'Concluído'];
@@ -14,6 +19,17 @@ const EI_STATUS_REEMBOLSO = ['Não solicitado', 'Solicitado', 'Em análise', 'Ap
 const EI_CONFERENCIA_STATUS = ['Não se aplica', 'Aguardando conferência', 'Em conferência', 'Concluída — liberada', 'Concluída — com exigência'];
 const EI_CONTAINER_TIPOS = ["20'DV", "40'DV", "40'HC", "20'RF", "40'RF", "20'OT", "40'OT", "20'FR", "40'FR", 'Outro'];
 const EI_NFE_STATUS = ['Autorizada', 'Cancelada', 'Denegada'];
+
+/* Armadores (SCAC) — mesma lista de src/logistica.jsx (EI_SEALINES), mas
+   com nome próprio: ambos os arquivos rodam como <script> clássico no
+   mesmo escopo global, então reusar o identificador "EI_SEALINES" daria
+   SyntaxError de redeclaração. */
+const EIM_SEALINES = [
+  { code: 'MAEU', name: 'Maersk' }, { code: 'MSCU', name: 'MSC' }, { code: 'CMDU', name: 'CMA CGM' },
+  { code: 'HLCU', name: 'Hapag-Lloyd' }, { code: 'COSU', name: 'COSCO' }, { code: 'EGLV', name: 'Evergreen' },
+  { code: 'ONEY', name: 'ONE (Ocean Network Express)' }, { code: 'YMLU', name: 'Yang Ming' },
+  { code: 'HDMU', name: 'HMM' }, { code: 'ZIMU', name: 'ZIM' }, { code: 'PABV', name: 'Pan Ocean' }, { code: 'WHLC', name: 'Wan Hai' },
+];
 
 function eiFmtDate(d) { return d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—'; }
 function eiFmtMoeda(v, moeda) { return (v == null || v === '' || isNaN(v)) ? '—' : `${moeda || 'BRL'} ${Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}`; }
@@ -186,7 +202,7 @@ function EIRolagens({ form, set }) {
 /* ---------- Formulário completo ---------- */
 const EI_EMPTY = {
   nome_embarque: '', status_etapa: 'Pagamento', referencia_embarque: '', porto_origem: '', porto_destino: '',
-  navio: '', awb_bl: '', redestinacao: '', data_pedido_redestinacao: '',
+  navio: '', awb_bl: '', sealine: '', redestinacao: '', data_pedido_redestinacao: '',
   etd_original: '', etd_atual: '', houve_rolagem: false, historico_rolagens: [], containers: [],
   tipo_frete: '', modalidade_frete: '', agente_carga: '', cotacao_frete: '', moeda_frete: 'USD',
   aprovacao_frete: 'Pendente', pedido_booking: '', transit_time: '', free_time: '',
@@ -237,9 +253,21 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             <PIField label="Porto de destino"><PIInput value={form.porto_destino} onChange={set('porto_destino')}/></PIField>
             <PIField label="Navio"><PIInput value={form.navio} onChange={set('navio')}/></PIField>
             <PIField label="AWB/BL"><PIInput value={form.awb_bl} onChange={set('awb_bl')}/></PIField>
+            <PIField label="Armador (SCAC) — p/ rastreio automático">
+              <select className="input" value={form.sealine ?? ''} onChange={(e) => set('sealine')(e.target.value)}>
+                <option value="">— Selecione —</option>
+                {EIM_SEALINES.map((s) => <option key={s.code} value={s.code}>{s.name} ({s.code})</option>)}
+              </select>
+            </PIField>
             <PIField label="Redestinação"><PIInput value={form.redestinacao} onChange={set('redestinacao')}/></PIField>
             <PIField label="Data pedido redestinação"><PIInput type="date" value={form.data_pedido_redestinacao} onChange={set('data_pedido_redestinacao')}/></PIField>
           </div>
+          {form.awb_bl ? (
+            <p className="small muted">
+              📍 Com AWB/BL preenchido, este embarque alimenta automaticamente o rastreio real (mapa + linha do tempo) em
+              <b> Gestão Importação → Importação</b>.
+            </p>
+          ) : null}
           <EIRolagens form={form} set={set}/>
           <EIContainers containers={form.containers} onChange={set('containers')}/>
         </div>

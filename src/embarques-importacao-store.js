@@ -73,7 +73,7 @@
       nome_embarque: form.nome_embarque || null, status_etapa: form.status_etapa || 'Pagamento',
       valor_total: resumo.valorTotal || null, moeda_valor_total: resumo.moeda || form.moeda_valor_total || 'USD',
       referencia_embarque: form.referencia_embarque || null, porto_origem: form.porto_origem || null, porto_destino: form.porto_destino || null,
-      navio: form.navio || null, awb_bl: form.awb_bl || null, redestinacao: form.redestinacao || null,
+      navio: form.navio || null, awb_bl: form.awb_bl || null, sealine: form.sealine || null, redestinacao: form.redestinacao || null,
       data_pedido_redestinacao: form.data_pedido_redestinacao || null,
       etd_original: form.etd_original || null, etd_atual: form.etd_atual || null, houve_rolagem: !!form.houve_rolagem,
       historico_rolagens: form.historico_rolagens || [], containers,
@@ -95,6 +95,47 @@
     };
   }
 
+  /* Espelha este embarque (Gestão Importação) em `embarques` (rastreamento
+     AIS/Sinay) quando há AWB/BL preenchido — Embarques é a fonte da
+     verdade, `embarques` só existe pra alimentar o mapa/timeline reais.
+     Não confundir com a tabela `embarques` intocada por decisão antiga:
+     essa decisão (comentário no topo do arquivo) foi revista em 29/08,
+     nesta integração — ver Opção 1 discutida com o usuário. */
+  async function _sincronizarRastreio(embarqueImportacaoId, saved) {
+    const c = sb(); if (!c) return;
+    const bl = saved.awb_bl || null;
+    const containerNumero = (saved.containers && saved.containers[0] && saved.containers[0].numero) || null;
+    if (!bl && !containerNumero) return; // nada pra rastrear ainda
+
+    const STATUS_MAP = { Embarque: 'Em trânsito', Desembaraço: 'Aguardando liberação', Entrega: 'Aguardando liberação', Concluído: 'Entregue' };
+    const status = STATUS_MAP[saved.status_etapa] || 'Em trânsito';
+
+    const patch = {
+      client: saved.nome_embarque || saved.referencia_embarque || 'Gestão Importação',
+      vessel: saved.navio || null, bl, sealine: saved.sealine || null,
+      container_number: containerNumero, containers: (saved.containers || []).length || 1,
+      container_type: (saved.containers && saved.containers[0] && saved.containers[0].tipo_tamanho) || null,
+      origin: saved.porto_origem || null, destination: saved.porto_destino || null,
+      etd: saved.etd_atual || saved.etd_original || null,
+      eta: saved.eta_santos || null, eta_original: saved.eta_santos || null,
+      status, numero_cotacao: saved.numero_cotacao || null,
+    };
+
+    try {
+      const { data: existente } = await c.from('embarques').select('id')
+        .eq('origem_embarque_importacao_id', embarqueImportacaoId).maybeSingle();
+      if (existente) {
+        await c.from('embarques').update(patch).eq('id', existente.id);
+      } else {
+        const id = 'EM-' + Date.now().toString().slice(-6);
+        await c.from('embarques').insert({ id, position: 0, docs: [], milestones: [], ...patch, origem_embarque_importacao_id: embarqueImportacaoId });
+        c.functions.invoke('ais-sync').catch(() => {}); // popula posição/timeline já na criação
+      }
+    } catch (e) {
+      console.warn('[EmbarquesImportacaoStore] _sincronizarRastreio falhou (não bloqueia o salvamento do embarque)', e);
+    }
+  }
+
   async function criar(form, pis) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const user = window.__VP_USER || {};
@@ -105,6 +146,7 @@
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'EMBARQUE_CRIADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.nome || data.id, alvoId: data.id,
     });
+    await _sincronizarRastreio(data.id, data);
     return data;
   }
 
@@ -143,6 +185,7 @@
       transicao('canal_parametrizacao', 'EMBARQUE_CHEGOU_BRASIL');
       transicao('data_entrega', 'EMBARQUE_ENTREGUE_OBRA');
     }
+    await _sincronizarRastreio(data.id, data);
     return data;
   }
 
