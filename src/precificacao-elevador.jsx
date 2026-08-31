@@ -197,6 +197,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const [salvando, setSalvando] = React.useState(false);
   const [aprovando, setAprovando] = React.useState(false);
   const [mostrarParametros, setMostrarParametros] = React.useState(false);
+  const [mostrarV1, setMostrarV1] = React.useState(false);
   const [ressincronizando, setRessincronizando] = React.useState(false);
   const [atualizandoMo, setAtualizandoMo] = React.useState(false);
   const [editandoMoUnidade, setEditandoMoUnidade] = React.useState(null);
@@ -768,9 +769,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         </Card>
       )}
 
-      <Card title="Formação do Preço — motor oficial"
-        sub="custo econômico completo: instalação/frete interno/armazenagem entram na BASE do preço, não só no lucro depois — trava aprovação e alimenta a Proposta"
-        style={{ marginTop: 16 }}>
+      <Card title="Formação do Preço" sub="como o preço de venda é calculado a partir do custo" style={{ marginTop: 16 }}>
         <div className="grid-3" style={{ gap: 12 }}>
           <PZField label="Modo de formação do preço">
             <select className="input" value={pz.modo_formacao_preco || 'markup_sobre_custo'} onChange={(e) => set('modo_formacao_preco')(e.target.value)}>
@@ -785,20 +784,23 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         <p className="small muted" style={{ marginTop: 8, marginBottom: 0 }}>
           Markup sobre o custo usa o mesmo % de "Markup sobre o custo" das Alavancas do Financeiro, acima. Contingência e outros custos não recuperáveis vêm do card "Despesas Extras".
         </p>
+        {!resultadoV2 && <p className="small muted" style={{ marginTop: 12, marginBottom: 0 }}>Clique em "Calcular" pra ver o preço de venda.</p>}
+      </Card>
 
-        {resultadoV2 && (
-          <>
-            <div className="grid-3" style={{ gap: 16, marginTop: 16 }}>
-              <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
-              <div><span className="up-eyebrow muted">Preço de venda — Padrão (120 dias)</span><div className="cell-money" style={{ fontSize: 18, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
-              <div>
-                <span className="up-eyebrow muted">Margem efetiva calculada (%)</span>
-                <div className="cell-money" style={{ fontSize: 16, color: margemAbaixoMinima ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}</div>
-                {margemMinima > 0 && <div className="small muted" style={{ marginTop: 2 }}>mínima {fmtPct2(margemMinima)}</div>}
+      {resultadoV2 && (
+        <div className={resultadoV2Expresso ? 'grid-2' : ''} style={{ gap: 16, marginTop: 16 }}>
+          <Card title="Preço de venda — 120 dias (Compartilhado)" sub="container compartilhado, prazo padrão">
+            <div className="stack" style={{ gap: 12 }}>
+              <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
+              <div><span className="up-eyebrow muted">Preço de venda</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
+              <div className="row gap-3">
+                <div>
+                  <span className="up-eyebrow muted">Margem efetiva</span>
+                  <div className="cell-money" style={{ fontSize: 16, color: margemAbaixoMinima ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}</div>
+                  {margemMinima > 0 && <div className="small muted" style={{ marginTop: 2 }}>mínima {fmtPct2(margemMinima)}</div>}
+                </div>
+                <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultadoV2.precificacao.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultadoV2.precificacao.lucroFinal)}</div></div>
               </div>
-              <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultadoV2.precificacao.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultadoV2.precificacao.lucroFinal)}</div></div>
-              <div><span className="up-eyebrow muted">Preço de venda (V1, legado)</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.v1Comparacao.precoVendaProposta)}</div></div>
-              <div><span className="up-eyebrow muted">Diferença oficial − V1</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta - resultadoV2.v1Comparacao.precoVendaProposta)}</div></div>
             </div>
             {!resultadoV2.divisorValido && (
               <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
@@ -815,34 +817,41 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                 ⚠ Margem efetiva ({fmtPct2(resultadoV2.precificacao.margemEfetivaPct)}) abaixo da mínima configurada ({fmtPct2(margemMinima)}). É possível aprovar mesmo assim, com confirmação.
               </p>
             )}
-          </>
-        )}
-        {!resultadoV2 && <p className="small muted" style={{ marginTop: 12, marginBottom: 0 }}>Clique em "Calcular" pra ver o resultado.</p>}
-      </Card>
+          </Card>
 
-      {resultadoV2Expresso && (
-        <Card title="Entrega expressa — 90 dias (container exclusivo)"
-          sub="mesmo custo econômico completo do cenário padrão, só o frete internacional muda — pra apresentar as duas opções ao cliente na mesma conversa"
-          style={{ marginTop: 16 }}>
-          <div className="grid-3" style={{ gap: 16 }}>
-            <div><span className="up-eyebrow muted">Preço de venda — Expresso (90 dias)</span><div className="cell-money" style={{ fontSize: 18, fontWeight: 800 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta)}</div></div>
-            <div>
-              <span className="up-eyebrow muted">Margem efetiva (%)</span>
-              <div className="cell-money" style={{ fontSize: 16, color: resultadoV2Expresso.precificacao.margemEfetivaPct < margemMinima ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2Expresso.precificacao.margemEfetivaPct)}</div>
-            </div>
-            <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultadoV2Expresso.precificacao.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultadoV2Expresso.precificacao.lucroFinal)}</div></div>
-            <div><span className="up-eyebrow muted">Diferença Expresso − Padrão</span><div className="cell-money" style={{ fontSize: 16 }}>{resultadoV2 ? fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta - resultadoV2.precificacao.precoVendaProposta) : '—'}</div></div>
-          </div>
-          {resultadoV2Expresso.precificacao.margemEfetivaPct < 0 && (
-            <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
-              ⚠ Margem efetiva negativa no cenário expresso — mesmo cobrindo o frete mais caro, confira se o preço faz sentido antes de oferecer ao cliente.
-            </p>
+          {resultadoV2Expresso && (
+            <Card title="Preço de venda — 90 dias (Exclusivo)" sub="container exclusivo, entrega mais rápida">
+              <div className="stack" style={{ gap: 12 }}>
+                <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2Expresso.custoEconomicoCompleto)}</div></div>
+                <div><span className="up-eyebrow muted">Preço de venda</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta)}</div></div>
+                <div className="row gap-3">
+                  <div>
+                    <span className="up-eyebrow muted">Margem efetiva</span>
+                    <div className="cell-money" style={{ fontSize: 16, color: resultadoV2Expresso.precificacao.margemEfetivaPct < margemMinima ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2Expresso.precificacao.margemEfetivaPct)}</div>
+                  </div>
+                  <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultadoV2Expresso.precificacao.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultadoV2Expresso.precificacao.lucroFinal)}</div></div>
+                </div>
+                <div className="small muted">{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta - resultadoV2.precificacao.precoVendaProposta)} a mais que os 120 dias</div>
+              </div>
+              {resultadoV2Expresso.precificacao.margemEfetivaPct < 0 && (
+                <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
+                  ⚠ Margem efetiva negativa no cenário expresso — mesmo cobrindo o frete mais caro, confira se o preço faz sentido antes de oferecer ao cliente.
+                </p>
+              )}
+            </Card>
           )}
-        </Card>
+        </div>
       )}
 
       {resultado && (
-        <Card title="Resultado — V1 (legado, referência)" sub="mantido só pra comparação — não trava mais aprovação nem alimenta a Proposta" style={{ marginTop: 16 }}>
+        <div style={{ marginTop: 16, textAlign: 'right' }}>
+          <Button variant="ghost" size="sm" onClick={() => setMostrarV1((v) => !v)}>
+            {mostrarV1 ? 'Ocultar' : 'Ver'} comparação técnica (motor antigo)
+          </Button>
+        </div>
+      )}
+      {resultado && mostrarV1 && (
+        <Card title="Comparação técnica — motor antigo (V1)" sub="mantido só pra auditoria — não trava aprovação nem alimenta a Proposta" style={{ marginTop: 8 }}>
           <div className="grid-3" style={{ gap: 16 }}>
             <div><span className="up-eyebrow muted">Custo total mercadorias</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(importacao.custoTotalMercadorias)}</div></div>
             <div><span className="up-eyebrow muted">Custo por equipamento</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(importacao.custoPorEquipamento)}</div></div>
@@ -853,6 +862,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultado.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultado.lucroFinal)}</div></div>
             <div><span className="up-eyebrow muted">Margem final (V1)</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtPct2(resultado.margemFinalPct)}</div></div>
             <div><span className="up-eyebrow muted">DIFAL (custo VerticalParts)</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultado.difalRs)}</div></div>
+            <div><span className="up-eyebrow muted">Diferença motor atual − V1 (120 dias)</span><div className="cell-money" style={{ fontSize: 16 }}>{resultadoV2 ? fmtBRL2(resultadoV2.precificacao.precoVendaProposta - resultado.precoVendaProposta) : '—'}</div></div>
           </div>
         </Card>
       )}
