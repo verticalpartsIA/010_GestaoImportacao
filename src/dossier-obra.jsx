@@ -831,6 +831,10 @@ function TabEquipamentos({ dossier }) {
 
   const salvar = async (id, campos) => {
     const { parceiros_instaladores, id: _id, dossier_id, criado_em, criado_por, atualizado_em, ...patch } = campos;
+    // Select manda '' pra "— nenhuma —" — a coluna é FK, '' não é um id
+    // válido (nem null), então o update falhava em silêncio pro usuário
+    // (o toast de erro existe, mas passava despercebido).
+    if (patch.parceiro_instalador_id === '') patch.parceiro_instalador_id = null;
     await window.__DOSSIER.atualizarEquipamento(id, patch);
     carregar();
   };
@@ -866,7 +870,12 @@ function TabEquipamentos({ dossier }) {
    uma obra pode ter mais de uma instaladora, mas isso ficava escondido
    dentro de cada card de equipamento, um por vez. Sem mudar schema: só
    agrupa o que já existe. */
-function InstaladorasDaObraPanel({ dossier, equipamentos }) {
+function InstaladorasDaObraPanel({ dossier, equipamentos, parceiros, onVincular }) {
+  const [vinculando, setVinculando] = React.useState(false);
+  const [equipEscolhido, setEquipEscolhido] = React.useState('');
+  const [empresaEscolhida, setEmpresaEscolhida] = React.useState('');
+  const [salvando, setSalvando] = React.useState(false);
+
   const grupos = {};
   let semInstalador = 0;
   equipamentos.forEach((eq) => {
@@ -876,6 +885,18 @@ function InstaladorasDaObraPanel({ dossier, equipamentos }) {
     grupos[emp.id].equipamentos.push(eq.tipo || eq.descricao || eq.id);
   });
   const lista = Object.entries(grupos);
+
+  const abrirVinculo = () => {
+    setEquipEscolhido(equipamentos[0]?.id || '');
+    setEmpresaEscolhida('');
+    setVinculando(true);
+  };
+  const salvarVinculo = async () => {
+    if (!equipEscolhido || !empresaEscolhida) return;
+    setSalvando(true);
+    try { await onVincular(equipEscolhido, empresaEscolhida); setVinculando(false); }
+    finally { setSalvando(false); }
+  };
 
   if (equipamentos.length === 0) {
     return <div style={{ fontSize: 12, color: '#999', marginBottom: 12 }}>Nenhum equipamento cadastrado ainda — cadastre na aba Equipamentos pra ver as instaladoras aqui.</div>;
@@ -892,6 +913,28 @@ function InstaladorasDaObraPanel({ dossier, equipamentos }) {
         </div>
       ))}
       {semInstalador > 0 && <div style={{ fontSize: 12, color: '#cc7700', marginTop: 4 }}>⚠ {semInstalador} equipamento{semInstalador !== 1 ? 's' : ''} sem instalador vinculado.</div>}
+
+      {!vinculando ? (
+        <Button variant="ghost" size="sm" icon="plus" onClick={abrirVinculo} style={{ marginTop: 6 }}>+ Vincular mais uma empresa</Button>
+      ) : (
+        <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--border)', borderRadius: 6, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 200 }}>
+            <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4, fontSize: 10 }}>Equipamento</label>
+            <select className="input" value={equipEscolhido} onChange={(e) => setEquipEscolhido(e.target.value)}>
+              {equipamentos.map((eq) => <option key={eq.id} value={eq.id}>{eq.numero_serie ? `${eq.tipo || eq.id} — nº ${eq.numero_serie}` : (eq.descricao || eq.tipo || eq.id)}</option>)}
+            </select>
+          </div>
+          <div style={{ minWidth: 200 }}>
+            <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4, fontSize: 10 }}>Empresa</label>
+            <select className="input" value={empresaEscolhida} onChange={(e) => setEmpresaEscolhida(e.target.value)}>
+              <option value="">— selecione —</option>
+              {parceiros.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+          </div>
+          <Button variant="primary" size="sm" onClick={salvarVinculo} disabled={salvando || !equipEscolhido || !empresaEscolhida}>{salvando ? 'Salvando…' : 'Vincular'}</Button>
+          <Button variant="ghost" size="sm" onClick={() => setVinculando(false)}>Cancelar</Button>
+        </div>
+      )}
     </div>
   );
 }
@@ -994,7 +1037,11 @@ function TabInstalacao({ dossier, reload }) {
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <InstaladorasDaObraPanel dossier={dossier} equipamentos={equipamentos} />
+          <InstaladorasDaObraPanel dossier={dossier} equipamentos={equipamentos} parceiros={parceiros}
+            onVincular={async (equipId, empresaId) => {
+              await window.__DOSSIER.atualizarEquipamento(equipId, { parceiro_instalador_id: empresaId });
+              carregar();
+            }} />
           <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Parceiro instalador (vínculo principal da obra)</label>
           <select className="input" style={{ maxWidth: 360 }} disabled={busy} value={dossier.parceiro_instalador_id || ''}
             onChange={(e) => acao(() => store.vincularParceiroInstalador(dossier.id, e.target.value || null))}>
