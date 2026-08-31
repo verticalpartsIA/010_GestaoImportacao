@@ -6,6 +6,11 @@
    (DifalEngine). Lista as cotações respondidas + tela de cálculo.
    ============================================================ */
 
+/* Mesma lista de formulario-elevador.jsx (FE_TRACOES), com nome próprio:
+   ambos rodam como <script> clássico no mesmo escopo global — reusar o
+   identificador "FE_TRACOES" daria SyntaxError de redeclaração. */
+const PZ_TRACOES = ['2:1', '4:1'];
+
 function fmtBRL2(v) { return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 function fmtPct2(v) { return ((Number(v) || 0) * 100).toFixed(2) + '%'; }
 
@@ -164,6 +169,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const [mostrarParametros, setMostrarParametros] = React.useState(false);
   const [ressincronizando, setRessincronizando] = React.useState(false);
   const [atualizandoMo, setAtualizandoMo] = React.useState(false);
+  const [editandoMoUnidade, setEditandoMoUnidade] = React.useState(null);
+  const [moSpecEdit, setMoSpecEdit] = React.useState({ tracao: '', capacidadeKg: '', paradas: '' });
   // Câmbio USD/BRL ao vivo — só referência/comparação (ver cambio-api.js).
   // Não substitui tx_cambial sozinho; o Financeiro aplica clicando "Usar".
   const [cambioVivo, setCambioVivo] = React.useState(null); // null | { valor, timestamp } | 'erro'
@@ -189,12 +196,6 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     }
   };
 
-  const irParaFormulario = () => {
-    if (!pz.formulario_elevador_id) return;
-    setSubsel?.(pz.formulario_elevador_id);
-    setRoute?.('formulario-elevador');
-  };
-
   const atualizarMaoDeObra = async () => {
     setAtualizandoMo(true);
     try {
@@ -203,6 +204,32 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       window.toast?.('Mão de obra recalculada a partir da tabela de referência.', 'success');
     } catch (e) {
       window.toast?.('Erro ao recalcular mão de obra: ' + e.message, 'error');
+    } finally {
+      setAtualizandoMo(false);
+    }
+  };
+
+  /* Edição inline de tração/capacidade/paradas direto na tabela de MO —
+     usuário pode ter escolhido a tração errada, ou querer testar outra
+     capacidade/paradas pra ver se cai dentro da cobertura da tabela, sem
+     sair da Precificação pra editar no Formulário. Escreve na fonte da
+     verdade (formularios_elevador_unidades, mesma tabela que o Formulário
+     edita) e reusa atualizarMaoDeObra() pra re-classificar com o dado
+     novo — nunca guarda uma cópia divergente aqui. */
+  const salvarSpecUnidade = async (unidadeId) => {
+    setAtualizandoMo(true);
+    try {
+      await window.FormularioElevadorStore.atualizarUnidade(unidadeId, {
+        tracao: moSpecEdit.tracao || null,
+        capacidade_kg: moSpecEdit.capacidadeKg === '' ? null : Number(moSpecEdit.capacidadeKg),
+        paradas: moSpecEdit.paradas === '' ? null : Number(moSpecEdit.paradas),
+      });
+      await window.PrecificacaoElevadorStore.atualizarMaoDeObra(pz.id);
+      await carregar();
+      setEditandoMoUnidade(null);
+      window.toast?.('Especificação atualizada — mão de obra recalculada.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao salvar: ' + e.message, 'error');
     } finally {
       setAtualizandoMo(false);
     }
@@ -450,28 +477,65 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             <table className="t">
               <thead><tr><th>Unidade</th><th>Tração</th><th>Capacidade</th><th>Paradas</th><th>Situação</th><th>Regra usada</th><th>Valor (R$)</th><th></th></tr></thead>
               <tbody>
-                {pz.mo_lookup.map((mo, i) => (
-                  <tr key={mo.unidadeId || i}>
-                    <td>{mo.identificador || '—'}</td>
-                    <td>{mo.tracao || '—'}</td>
-                    <td>{mo.capacidadeKg != null ? `${mo.capacidadeKg} kg` : '—'}</td>
-                    <td>{mo.paradas != null ? mo.paradas : '—'}</td>
-                    <td>
-                      {mo.situacao === 'confirmado' && <span className="badge" style={{ background: 'var(--vp-success)', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Confirmado</span>}
-                      {mo.projetoEspecial && <span className="badge" style={{ background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Projeto especial</span>}
-                      {mo.situacao === 'pendente' && !mo.projetoEspecial && <span className="badge" style={{ background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Pendente</span>}
-                    </td>
-                    <td className="small muted" title={mo.motivo || ''}>{mo.regraUsada || mo.motivo || '—'}</td>
-                    <td className="mono">{mo.valorRs ? fmtBRL2(mo.valorRs) : '—'}</td>
-                    <td>
-                      {mo.origem === 'manual' && (
-                        <Button variant="ghost" size="sm" icon="chevRight" title="Preencher tração/capacidade/paradas no Formulário de Elevadores" onClick={irParaFormulario}>
-                          Preencher no Formulário
-                        </Button>
-                      )}
-                    </td>
-                  </tr>
-                ))}
+                {pz.mo_lookup.map((mo, i) => {
+                  const editando = editandoMoUnidade && editandoMoUnidade === mo.unidadeId;
+                  if (editando) {
+                    return (
+                      <tr key={mo.unidadeId || i} style={{ background: 'var(--vp-gray-50)' }}>
+                        <td>{mo.identificador || '—'}</td>
+                        <td>
+                          <select className="input" style={{ minWidth: 90 }} value={moSpecEdit.tracao}
+                            onChange={(e) => setMoSpecEdit((s) => ({ ...s, tracao: e.target.value }))}>
+                            <option value="">— selecione —</option>
+                            {PZ_TRACOES.map((t) => <option key={t} value={t}>{t}</option>)}
+                          </select>
+                        </td>
+                        <td>
+                          <input className="input" type="number" style={{ width: 100 }} value={moSpecEdit.capacidadeKg}
+                            onChange={(e) => setMoSpecEdit((s) => ({ ...s, capacidadeKg: e.target.value }))} placeholder="kg"/>
+                        </td>
+                        <td>
+                          <input className="input" type="number" style={{ width: 70 }} value={moSpecEdit.paradas}
+                            onChange={(e) => setMoSpecEdit((s) => ({ ...s, paradas: e.target.value }))}/>
+                        </td>
+                        <td colSpan={2} className="small muted">Muda aqui atualiza o Formulário de Elevadores desta unidade.</td>
+                        <td/>
+                        <td>
+                          <div className="row gap-1">
+                            <Button variant="primary" size="sm" icon="check" disabled={atualizandoMo} onClick={() => salvarSpecUnidade(mo.unidadeId)}>Salvar</Button>
+                            <Button variant="ghost" size="sm" icon="x" onClick={() => setEditandoMoUnidade(null)}/>
+                          </div>
+                        </td>
+                      </tr>
+                    );
+                  }
+                  return (
+                    <tr key={mo.unidadeId || i}>
+                      <td>{mo.identificador || '—'}</td>
+                      <td>{mo.tracao || '—'}</td>
+                      <td>{mo.capacidadeKg != null ? `${mo.capacidadeKg} kg` : '—'}</td>
+                      <td>{mo.paradas != null ? mo.paradas : '—'}</td>
+                      <td>
+                        {mo.situacao === 'confirmado' && <span className="badge" style={{ background: 'var(--vp-success)', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Confirmado</span>}
+                        {mo.projetoEspecial && <span className="badge" style={{ background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Projeto especial</span>}
+                        {mo.situacao === 'pendente' && !mo.projetoEspecial && <span className="badge" style={{ background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Pendente</span>}
+                      </td>
+                      <td className="small muted" title={mo.motivo || ''}>{mo.regraUsada || mo.motivo || '—'}</td>
+                      <td className="mono">{mo.valorRs ? fmtBRL2(mo.valorRs) : '—'}</td>
+                      <td>
+                        {mo.unidadeId && (
+                          <Button variant="ghost" size="sm" icon="edit" title="Trocar tração/capacidade/paradas desta unidade"
+                            onClick={() => {
+                              setMoSpecEdit({ tracao: mo.tracao || '', capacidadeKg: mo.capacidadeKg ?? '', paradas: mo.paradas ?? '' });
+                              setEditandoMoUnidade(mo.unidadeId);
+                            }}>
+                            Trocar
+                          </Button>
+                        )}
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
