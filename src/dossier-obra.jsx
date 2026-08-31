@@ -21,15 +21,28 @@ const DOSSIER_STATUS_COLOR = {
 /* ---------- Status de Obras — visão consolidada de todos os Dossiês ---------- */
 function ObrasStatusPage({ setRoute, setSubsel }) {
   const [obras, setObras] = React.useState([]);
+  const [equipPorObra, setEquipPorObra] = React.useState({}); // dossier_id -> [numero_serie,...]
   const [loading, setLoading] = React.useState(true);
   const [statusFiltro, setStatusFiltro] = React.useState('Todos');
+  const [busca, setBusca] = React.useState('');
   const statusFlow = (window.__DOSSIER && window.__DOSSIER.STATUS_FLOW) || [];
   const statuses = ['Todos', ...statusFlow];
 
   const reload = () => {
     setLoading(true);
-    window.__DOSSIER.listar()
-      .then((data) => setObras(data || []))
+    Promise.all([
+      window.__DOSSIER.listar(),
+      window.__VP_SB.sb.from('equipamentos_obra').select('dossier_id, numero_serie'),
+    ])
+      .then(([data, eqRes]) => {
+        setObras(data || []);
+        const map = {};
+        (eqRes.data || []).forEach((e) => {
+          if (!e.numero_serie) return;
+          (map[e.dossier_id] = map[e.dossier_id] || []).push(e.numero_serie);
+        });
+        setEquipPorObra(map);
+      })
       .catch((e) => window.toast('Erro ao carregar obras: ' + e.message, 'error'))
       .finally(() => setLoading(false));
   };
@@ -37,7 +50,16 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
 
   if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
-  const rows = obras.filter((o) => statusFiltro === 'Todos' || o.status_master === statusFiltro);
+  const q = busca.trim().toLowerCase();
+  const rows = obras.filter((o) => {
+    if (statusFiltro !== 'Todos' && o.status_master !== statusFiltro) return false;
+    if (!q) return true;
+    const obraNo = o.numero_cotacao != null ? window.MasterIdEngine.etapaId('obra', o.numero_cotacao) : o.id;
+    const seriais = (equipPorObra[o.id] || []).join(' ');
+    const alvo = [o.client_name, o.building_name, o.id, obraNo, o.parceiros_instaladores?.nome, seriais]
+      .filter(Boolean).join(' ').toLowerCase();
+    return alvo.includes(q);
+  });
   const abrirDossier = (o) => { setSubsel && setSubsel(o.id); setRoute('dossier-obra'); };
 
   return (
@@ -49,6 +71,10 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
           <p className="page-head__sub">Visão consolidada de todas as obras em andamento — onde cada uma está parada e quem é o responsável.</p>
         </div>
       </div>
+
+      <input className="input" style={{ marginBottom: 12 }}
+        placeholder="Buscar por cliente, instalador, obra, nº de série…"
+        value={busca} onChange={(e) => setBusca(e.target.value)} />
 
       <div className="tbar">
         <div className="seg" style={{ flexWrap: 'wrap' }}>

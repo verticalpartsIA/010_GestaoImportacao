@@ -321,7 +321,7 @@ window.__DOSSIER = window.__DOSSIER || (() => {
 
     /* ---- Listar dossiers com filtro ---- */
     async listar(filtros = {}) {
-      let query = sb.from('dossier_obra').select('*');
+      let query = sb.from('dossier_obra').select('*, parceiros_instaladores(nome)');
 
       if (filtros.status_master) {
         query = query.eq('status_master', filtros.status_master);
