@@ -86,6 +86,131 @@ REGRAS DE SAÍDA (obrigatórias):
 - Inclua somente as chaves relevantes ao modo. "reply" é SEMPRE obrigatório (1 a 3 frases).
 - Nunca invente CNPJ, valores, nomes ou datas: o que não souber, pergunte.`;
 
+// ============================================================
+// ROUTE_DOCS — conhecimento específico por tela (chave = page.route,
+// mesmo id de src/router.js KNOWN_ROUTES). Injetado no contexto da IA
+// só quando bate com a tela atual — não polui token de telas que não
+// têm nada a ver. Pedido do usuário (31/08): Copiloto precisa saber
+// "100%" sobre cada tela, não só os labels de campo que o scanner
+// genérico já lê sozinho — aqui entra a REGRA DE NEGÓCIO por trás dos
+// campos/badges/botões, que nenhum scanner de DOM adivinha.
+// Convenção de cada entrada: o que a tela faz, cada seção/campo/botão
+// importante, e as regras de negócio que um usuário perguntaria "por
+// que isso está assim?". Mantenha atualizado a cada mudança real na
+// tela (ver commits de 29-31/08 pra o histórico da Precificação).
+// ============================================================
+const ROUTE_DOCS: Record<string, string> = {
+  precificacao: `TELA: Precificação de Elevador (Financeiro).
+
+LISTAGEM (antes de abrir uma cotação): mostra cotações de fornecedor já
+respondidas (ou formulários enviados direto com preço combinado por
+fora), prontas para calcular o preço de venda. Clicar numa linha abre o
+detalhe/cálculo.
+
+DETALHE — DE CIMA PRA BAIXO:
+
+1. "Unidades desta cotação" — herdado do Formulário de Elevadores +
+   resposta do fornecedor (custo em USD por unidade, PTAX no dia da
+   cotação vs. PTAX agora ao vivo). Botão "Ressincronizar do Fornecedor"
+   busca de novo a resposta mais recente do fornecedor.
+
+2. "Mão de obra — busca automática" — tração × capacidade × paradas
+   casados contra a tabela de referência em Cadastros → Atualização de
+   Custos (custos_instalacao_elevador). Botão "Recalcular" refaz a busca
+   pra TODAS as unidades a partir do dado mais atual do Formulário
+   (útil se alguém corrigiu tração/capacidade/paradas lá depois).
+   Situação de cada linha:
+   - "Confirmado" (verde) — achou uma linha REAL da tabela (cotação de
+     instalador de verdade) pra essa tração+capacidade+paradas exatas.
+   - "Estimativa — não confirmada" (amarelo) — achou uma linha, mas o
+     valor foi gerado por regressão estatística (extrapolação sobre
+     linhas reais da mesma tração), não é cotação real de instalador.
+     Exige aprovação técnica/financeira igual "Projeto especial" antes
+     de aprovar a precificação — não é preço garantido.
+   - "Projeto especial" (vermelho) — a combinação tração+capacidade+
+     paradas está fora de qualquer faixa cadastrada. O valor NÃO entra
+     sozinho em lugar nenhum — precisa digitar manualmente em
+     "Instalação e Montagem" quando tiver uma cotação real de
+     instalador/engenharia.
+   - "Pendente" (amarelo) — falta tração, capacidade ou paradas no
+     Formulário de Elevadores dessa unidade.
+   Botão "Trocar" em qualquer linha abre edição inline de tração/
+   capacidade/paradas — grava direto no Formulário de Elevadores da
+   unidade (fonte da verdade) e já recalcula a busca de MO na hora. Útil
+   quando a tração escolhida está errada ou pra testar outra config.
+
+3. "Despesas de Importação" — VMLE, Seguro, Frete+Seguro+Capatazia em
+   USD (dois campos separados: "Padrão 120d, container compartilhado" e
+   "Expresso 90d, container exclusivo" — deixar o expresso em
+   branco/zero se o cliente não pediu essa opção), Siscomex, Câmbio
+   (com atalho "Usar" pro dólar ao vivo), Outras despesas, Despachante +
+   Desembaraço, Demurrage, e Containers (tamanho/quantidade herdados da
+   resposta do fornecedor quando possível, preço do frete digitado pelo
+   Financeiro).
+
+4. "Instalação e Montagem" — lista FIXA de 7 itens, sempre nesta ordem
+   (não dá pra adicionar/remover item): Mão de Obra, Custos Engenharia,
+   ART, Andaime, Talha, Empilhadeira, Ajudantes. "Mão de Obra" é
+   SOMENTE LEITURA — herda automaticamente a soma de TODAS as linhas da
+   tabela "Mão de obra — busca automática" acima (Confirmado +
+   Estimativa somados juntos). Os outros 6 continuam digitados à mão
+   pelo Financeiro (preenchimento avulso de Engenharia/Logística).
+
+5. "Despesas Extras" — catch-all: Frete interno (Brasil), Armazenagem,
+   % de Serviços, Contingência, Outros custos não recuperáveis (esses
+   dois últimos só entram no motor oficial V2, o V1 legado ignora), e
+   Itens avulsos (lista livre, pode adicionar/remover).
+
+6. "Resumo de Custos" — visão consolidada, cada linha soma campos das
+   seções acima, nada digitado aqui: Custos Equipamentos (VMLE×câmbio),
+   Custos com Frete (Seguro+Frete/Capatazia padrão, em R$), Mão de Obra
+   (mesmo valor do item 1 da lista fixa acima), Custos Operacionais
+   (soma dos outros 6 itens da lista fixa — Empilhadeira, Munck etc.),
+   Frete Interno (Brasil), Custos Imposto (II+IPI+PIS+COFINS+ICMS — só
+   aparece depois de clicar "Calcular" pelo menos uma vez, porque
+   precisa da cascata fiscal completa; antes disso mostra "—", nunca
+   zero fingindo que não há imposto), e Soma (total).
+
+7. "Alavancas do Financeiro" — Markup sobre custo, comissões
+   (consultoria/vendedor/indicação), Margem mínima configurada. Link
+   "Ver/editar parâmetros fiscais" expande regime tributário e
+   alíquotas de importação/venda (ICMS/IPI/PIS/COFINS/IRPJ/CSLL).
+
+8. "Formação do Preço" — escolhe o MODO: "Markup sobre o custo" (usa o
+   % das Alavancas acima) ou "Margem desejada sobre a venda" (% próprio
+   deste card). Depois de "Calcular", aparecem dois cards lado a lado:
+   - "Preço de venda — 120 dias (Compartilhado)": custo econômico
+     completo (= custo líquido de importação + despesas operacionais +
+     contingência + outros custos não recuperáveis — TUDO isso entra na
+     BASE do preço, não só descontado do lucro depois, decisão de
+     29/08), preço de venda, margem efetiva (compara com a mínima
+     configurada — fica laranja/aviso se abaixo), lucro final. Avisos
+     possíveis: "divisor inválido" (markup/margem+impostos+comissões
+     somam 100%+, impossível formar preço), "margem efetiva negativa"
+     (não deveria aprovar assim), "margem abaixo da mínima" (pode
+     aprovar mesmo assim, com confirmação).
+   - "Preço de venda — 90 dias (Exclusivo)" — só aparece se o campo
+     "Frete... Expresso 90d" (item 3) tiver valor. MESMO custo base,
+     só o frete internacional muda (container exclusivo é mais caro) —
+     é OUTRO custo econômico completo, não o mesmo número do card de
+     120 dias. Serve pra oferecer as duas opções ao cliente na mesma
+     conversa. Mostra "R$X a mais que os 120 dias".
+   Link "Ver comparação técnica (motor antigo)" no fim — abre um card
+   com o resultado do motor V1 (legado, fórmula antiga da planilha
+   Excel original). Só existe pra auditoria/comparação: NÃO trava mais
+   aprovação nem alimenta a Proposta desde 29/08 (decisão do usuário) —
+   antes disso o V1 subprecificava porque não colocava instalação/
+   operacional na base do preço, só descontava do lucro depois (podia
+   dar markup positivo com margem real negativa, bug corrigido).
+
+BOTÕES DO TOPO: "Salvar rascunho" (grava sem calcular), "Calcular"
+(roda o motor, popula Resumo de Custos → Imposto e Formação do Preço),
+"Aprovar Precificação" (trava o registro, usa a margem do motor V2
+oficial — cai pro V1 só se a precificação nunca foi recalculada desde a
+migração —, permite aprovar abaixo da margem mínima com confirmação
+explícita).`,
+};
+
 function extractJson(text: string): any {
   const a = text.indexOf("{");
   const b = text.lastIndexOf("}");
@@ -118,10 +243,13 @@ Deno.serve(async (req: Request) => {
     if (content) messages.push({ role, content });
   }
 
+  const routeDoc = typeof page.route === "string" ? ROUTE_DOCS[page.route] : undefined;
+
   const ctx =
     `MODO: ${mode}\n` +
     `TELA ATUAL: ${JSON.stringify({ route: page.route ?? "", title: page.title ?? "" })}\n` +
-    `CAMPOS DA TELA:\n${JSON.stringify(page.fields ?? [], null, 1)}\n` +
+    (routeDoc ? `\nCONHECIMENTO DESTA TELA (use pra responder qualquer pergunta sobre o que ela faz, campos, botões e regras de negócio — não é opcional, é a fonte de verdade):\n${routeDoc}\n` : "") +
+    `\nCAMPOS DA TELA:\n${JSON.stringify(page.fields ?? [], null, 1)}\n` +
     (documentText ? `\nTEXTO DO DOCUMENTO NA TELA:\n"""${documentText}"""\n` : "") +
     `\nMENSAGEM DO USUÁRIO:\n${message || "(sem texto — use o modo e o contexto acima)"}`;
   messages.push({ role: "user", content: ctx });
