@@ -12,6 +12,7 @@ const CC_TRACOES = ['2:1', '4:1'];
    (é o que a tabela custos_instalacao_elevador usa). */
 function ccTracaoToSlug(t) { return (t || '').replace(':', '-'); }
 function ccSlugToTracao(s) { return (s || '').replace('-', ':'); }
+function ccFmtBRL(v) { return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 
 function CCInputNum({ value, onBlurSave, placeholder, width }) {
   const [local, setLocal] = React.useState(value == null ? '' : String(value));
@@ -24,6 +25,37 @@ function CCInputNum({ value, onBlurSave, placeholder, width }) {
         const n = local === '' ? null : Number(local);
         if (n !== value) onBlurSave(n);
       }}/>
+  );
+}
+
+/* Sugestão de valor por regressão (extrapolação estatística sobre as
+   linhas REAIS já cotadas da mesma tração) — só aparece quando a linha
+   ainda não tem valor digitado e já tem paradas/dias/montadores o
+   suficiente pra calcular. Nunca preenche sozinha: sempre precisa do
+   clique em "Usar" — e o valor resultante fica marcado como estimativa
+   (badge amarelo), nunca como preço confirmado. */
+function CCEstimativaSugestao({ row, tracao, onUsar, saving }) {
+  const [estimativa, setEstimativa] = React.useState(null);
+  const capacidadeKg = ((Number(row.capacidade_min_kg) || 0) + (Number(row.capacidade_max_kg) || 0)) / 2;
+  const pronta = row.paradas > 0 && row.dias_montagem > 0 && row.qtd_montadores > 0 && capacidadeKg > 0;
+
+  React.useEffect(() => {
+    if (!pronta) { setEstimativa(null); return; }
+    let vivo = true;
+    window.CadastroCustosStore.estimarValorElevador(tracao, {
+      capacidadeKg, paradas: Number(row.paradas), diasMontagem: Number(row.dias_montagem), qtdMontadores: Number(row.qtd_montadores),
+    }).then((r) => { if (vivo) setEstimativa(r); });
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tracao, capacidadeKg, row.paradas, row.dias_montagem, row.qtd_montadores]);
+
+  if (!pronta || !estimativa) return null;
+  return (
+    <div className="small" style={{ marginTop: 4, color: 'var(--fg3)' }}>
+      Sugestão (estimativa, {estimativa.baseadoEmLinhas} linhas reais{estimativa.usouCapacidade ? '' : ' — sem base real de capacidade nesta tração'}):{' '}
+      <b>{ccFmtBRL(estimativa.valor)}</b>{' '}
+      <Button variant="ghost" size="sm" disabled={saving} onClick={() => onUsar(estimativa.valor)}>Usar</Button>
+    </div>
   );
 }
 
@@ -59,10 +91,27 @@ function CCElevadorTab() {
   const salvarCampo = async (row, campo, valor) => {
     setSaving(row.id);
     try {
-      await window.CadastroCustosStore.salvarCustoElevador({ ...row, [campo]: valor });
+      // Editou o valor com a própria mão → deixa de ser estimativa (agora é
+      // um número que a pessoa escolheu conscientemente, não mais o palpite
+      // estatístico que era antes).
+      const patch = { ...row, [campo]: valor };
+      if (campo === 'valor_reajustado_rs') patch.is_estimativa = false;
+      await window.CadastroCustosStore.salvarCustoElevador(patch);
       await reload();
     } catch (e) {
       window.toast?.('Erro ao salvar: ' + e.message, 'error');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  const usarEstimativa = async (row, valorEstimado) => {
+    setSaving(row.id);
+    try {
+      await window.CadastroCustosStore.salvarCustoElevador({ ...row, valor_reajustado_rs: valorEstimado, is_estimativa: true });
+      await reload();
+    } catch (e) {
+      window.toast?.('Erro ao salvar estimativa: ' + e.message, 'error');
     } finally {
       setSaving(null);
     }
@@ -130,7 +179,16 @@ function CCElevadorTab() {
                 <td><CCInputNum value={r.paradas} width={80} onBlurSave={(v) => salvarCampo(r, 'paradas', v ?? 1)}/></td>
                 <td><CCInputNum value={r.dias_montagem} width={90} onBlurSave={(v) => salvarCampo(r, 'dias_montagem', v)}/></td>
                 <td><CCInputNum value={r.qtd_montadores} width={90} onBlurSave={(v) => salvarCampo(r, 'qtd_montadores', v)}/></td>
-                <td className="text-right"><PZCurrencyInput moeda="BRL" value={r.valor_reajustado_rs} onChange={(v) => salvarCampo(r, 'valor_reajustado_rs', v ?? 0)}/></td>
+                <td className="text-right">
+                  <div className="row gap-2" style={{ justifyContent: 'flex-end', alignItems: 'center' }}>
+                    {r.is_estimativa ? <span className="badge" style={{ background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Estimativa</span> : null}
+                    <PZCurrencyInput moeda="BRL" value={r.valor_reajustado_rs} onChange={(v) => salvarCampo(r, 'valor_reajustado_rs', v ?? 0)}/>
+                  </div>
+                  {(!r.valor_reajustado_rs || Number(r.valor_reajustado_rs) === 0) && (
+                    <CCEstimativaSugestao row={r} tracao={tracao} saving={saving === r.id}
+                      onUsar={(v) => usarEstimativa(r, v)}/>
+                  )}
+                </td>
                 <td><Button variant="ghost" size="sm" icon="trash" title="Remover linha" onClick={() => removerLinha(r)} disabled={removendo === r.id}/></td>
               </tr>
             ))}

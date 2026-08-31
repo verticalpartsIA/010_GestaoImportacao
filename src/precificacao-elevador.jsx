@@ -516,7 +516,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                       <td>{mo.capacidadeKg != null ? `${mo.capacidadeKg} kg` : '—'}</td>
                       <td>{mo.paradas != null ? mo.paradas : '—'}</td>
                       <td>
-                        {mo.situacao === 'confirmado' && <span className="badge" style={{ background: 'var(--vp-success)', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Confirmado</span>}
+                        {mo.situacao === 'confirmado' && !mo.estimativa && <span className="badge" style={{ background: 'var(--vp-success)', color: '#fff', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Confirmado</span>}
+                        {mo.estimativa && <span className="badge" style={{ background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Estimativa — não confirmada</span>}
                         {mo.projetoEspecial && <span className="badge" style={{ background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Projeto especial</span>}
                         {mo.situacao === 'pendente' && !mo.projetoEspecial && <span className="badge" style={{ background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Pendente</span>}
                       </td>
@@ -543,6 +544,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         {(pz.mo_lookup || []).some((mo) => mo.projetoEspecial) && (
           <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
             ⚠ Uma ou mais unidades caíram fora da cobertura da tabela de MO — trate como projeto especial (estimativa não confirmada, exige justificativa e aprovação técnica/financeira antes de aprovar a precificação). O valor não entra sozinho na conta — adicione manualmente em "Instalação e Montagem" abaixo quando tiver uma cotação de instalador/engenharia.
+          </p>
+        )}
+        {(pz.mo_lookup || []).some((mo) => mo.estimativa) && (
+          <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
+            ⚠ Uma ou mais unidades usam valor de MO <b>estimado por extrapolação estatística</b> (Cadastros → Atualização de Custos), não uma cotação real de instalador — exige a mesma aprovação técnica/financeira de um projeto especial antes de aprovar a precificação.
           </p>
         )}
       </Card>

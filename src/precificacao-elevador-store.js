@@ -68,8 +68,24 @@
         motivo: `Fora da cobertura da tabela de MO (tração ${tracao}, ${capacidadeKg}kg, ${paradas} paradas) — trate como projeto especial: exige estimativa versionada, justificativa e aprovação técnica/financeira antes de aprovar a precificação.`,
       };
     }
+    /* 29/08 — is_estimativa (extrapolação estatística em Cadastros >
+       Atualização de Custos, nunca uma cotação real de instalador) precisa
+       do MESMO tratamento que projetoEspecial: não pode entrar sozinho na
+       conta, exige aprovação antes de virar preço de venda. */
+    if (custoTabela.is_estimativa) {
+      return {
+        ...base, origem: 'tabela_referencia', situacao: 'confirmado', estimativa: true,
+        valorRs: Number(custoTabela.valor_reajustado_rs) || 0,
+        regraUsada: `tração ${tracao} × ${custoTabela.capacidade_min_kg}-${custoTabela.capacidade_max_kg}kg × ${paradas} paradas`,
+        diasMontagem: custoTabela.dias_montagem ?? null,
+        qtdMontadores: custoTabela.qtd_montadores ?? null,
+        dataBase: custoTabela.atualizado_em || null,
+        projetoEspecial: false,
+        motivo: 'Valor de MO estimado por extrapolação estatística (Cadastros > Atualização de Custos), não é cotação real de instalador — exige a mesma aprovação técnica/financeira de um projeto especial antes de aprovar a precificação.',
+      };
+    }
     return {
-      ...base, origem: 'tabela_referencia', situacao: 'confirmado',
+      ...base, origem: 'tabela_referencia', situacao: 'confirmado', estimativa: false,
       valorRs: Number(custoTabela.valor_reajustado_rs) || 0,
       regraUsada: `tração ${tracao} × ${custoTabela.capacidade_min_kg}-${custoTabela.capacidade_max_kg}kg × ${paradas} paradas`,
       diasMontagem: custoTabela.dias_montagem ?? null,
