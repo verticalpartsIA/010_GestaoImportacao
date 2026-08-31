@@ -32,6 +32,23 @@
     return data;
   }
 
+  /* 31/08 — bug real: salvarCustoElevador (acima) usa upsert, que sempre
+     tenta um INSERT primeiro — mesmo em edição de linha já existente,
+     Postgres valida as colunas NOT NULL do INSERT (tracao, capacidade_*,
+     paradas, valor_reajustado_rs) ANTES de sequer chegar no ON CONFLICT DO
+     UPDATE. Um payload parcial (só {id, paradas} por exemplo) falha com
+     "null value in column tracao violates not-null constraint" — mesmo a
+     linha já existindo com tracao preenchida. Pra editar 1-2 campos de uma
+     linha que já existe (o caso de toda edição célula-a-célula da tabela),
+     usar UPDATE de verdade — nunca precisa das outras colunas. */
+  async function atualizarCampoElevador(id, patch) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const payload = { ...patch, atualizado_em: new Date().toISOString(), atualizado_por: quemAtualizou() };
+    const { data, error } = await c.from('custos_instalacao_elevador').update(payload).eq('id', id).select().single();
+    if (error) throw error;
+    return data;
+  }
+
   async function removerCustoElevador(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('custos_instalacao_elevador').delete().eq('id', id);
@@ -186,7 +203,7 @@
   }
 
   window.CadastroCustosStore = {
-    listarCustosElevador, salvarCustoElevador, removerCustoElevador, buscarCustoElevador, estimarValorElevador,
+    listarCustosElevador, salvarCustoElevador, atualizarCampoElevador, removerCustoElevador, buscarCustoElevador, estimarValorElevador,
     listarCustosEscadaEsteira, salvarCustoEscadaEsteira, buscarCustoEscadaEsteira,
     listarContainers, salvarContainer, removerContainer,
   };

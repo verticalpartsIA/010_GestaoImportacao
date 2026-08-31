@@ -72,7 +72,11 @@ function CCElevadorTab() {
   const [removendo, setRemovendo] = React.useState(null);
   const [adicionando, setAdicionando] = React.useState(false);
 
-  const reload = () => { setRows(null); window.CadastroCustosStore.listarCustosElevador().then(setRows); };
+  /* Sem setRows(null) aqui de propósito — isso limpava a tabela inteira
+     (tela "Carregando…") a cada campo editado, o que empurrava o usuário a
+     editar o próximo campo rápido demais, antes do reload anterior
+     terminar — gatilho real do bug abaixo. */
+  const reload = () => window.CadastroCustosStore.listarCustosElevador().then(setRows);
   React.useEffect(() => { reload(); }, []);
 
   /* Espelha a tração escolhida no 3º segmento da URL — replace:true pra
@@ -88,15 +92,33 @@ function CCElevadorTab() {
       .sort((a, b) => (a.capacidade_min_kg - b.capacidade_min_kg) || (a.paradas - b.paradas)),
     [rows, tracao]);
 
+  /* 31/08 — bug real encontrado pelo usuário (paradas "travando" em 1):
+     original fazia `{ ...row, [campo]: valor }` — a linha INTEIRA, não só
+     o campo mudado. Editar 2+ campos em sequência rápida (ex.: capacidade,
+     depois paradas, depois dias) disparava saves concorrentes, cada um
+     ainda com a cópia da linha de ANTES do save anterior terminar — o save
+     mais lento a voltar sobrescrevia os campos que o save mais rápido já
+     tinha salvo, revertendo pro valor antigo (aconteceu de verdade: uma
+     linha real de tração 4:1/2 paradas teve dias_montagem trocado de 30
+     pra 50 por engano num teste em sequência).
+     1ª correção (errada) mandava só {id, campo} pro salvarCustoElevador
+     (upsert) — piorou: upsert sempre tenta um INSERT primeiro, e Postgres
+     valida as colunas NOT NULL (tracao, capacidade_*, paradas...) do
+     INSERT antes de sequer olhar o ON CONFLICT — payload parcial falhava
+     com "null value in column tracao violates not-null constraint" pra
+     TODA edição de campo único. Corrigido de vez usando
+     atualizarCampoElevador (UPDATE de verdade, não upsert) — nunca precisa
+     das outras colunas E nunca sobrescreve edição concorrente, porque cada
+     chamada só toca o(s) campo(s) do patch. */
   const salvarCampo = async (row, campo, valor) => {
     setSaving(row.id);
     try {
+      const patch = { [campo]: valor };
       // Editou o valor com a própria mão → deixa de ser estimativa (agora é
       // um número que a pessoa escolheu conscientemente, não mais o palpite
       // estatístico que era antes).
-      const patch = { ...row, [campo]: valor };
       if (campo === 'valor_reajustado_rs') patch.is_estimativa = false;
-      await window.CadastroCustosStore.salvarCustoElevador(patch);
+      await window.CadastroCustosStore.atualizarCampoElevador(row.id, patch);
       await reload();
     } catch (e) {
       window.toast?.('Erro ao salvar: ' + e.message, 'error');
@@ -108,7 +130,7 @@ function CCElevadorTab() {
   const usarEstimativa = async (row, valorEstimado) => {
     setSaving(row.id);
     try {
-      await window.CadastroCustosStore.salvarCustoElevador({ ...row, valor_reajustado_rs: valorEstimado, is_estimativa: true });
+      await window.CadastroCustosStore.atualizarCampoElevador(row.id, { valor_reajustado_rs: valorEstimado, is_estimativa: true });
       await reload();
     } catch (e) {
       window.toast?.('Erro ao salvar estimativa: ' + e.message, 'error');
