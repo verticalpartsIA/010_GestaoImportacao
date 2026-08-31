@@ -7,6 +7,11 @@
    ============================================================ */
 
 const CC_TRACOES = ['2:1', '4:1'];
+/* URL não aceita ":" de forma limpa num segmento de path — "2:1" vira
+   "2-1" (e volta) só na borda da URL; o valor interno continua "2:1"
+   (é o que a tabela custos_instalacao_elevador usa). */
+function ccTracaoToSlug(t) { return (t || '').replace(':', '-'); }
+function ccSlugToTracao(s) { return (s || '').replace('-', ':'); }
 
 function CCInputNum({ value, onBlurSave, placeholder, width }) {
   const [local, setLocal] = React.useState(value == null ? '' : String(value));
@@ -25,13 +30,26 @@ function CCInputNum({ value, onBlurSave, placeholder, width }) {
 /* ---------- Instalação — Elevadores ---------- */
 function CCElevadorTab() {
   const [rows, setRows] = React.useState(null);
-  const [tracao, setTracao] = React.useState('2:1');
+  /* Tração vem da URL quando é deep link (ex.: .../instalacao-elevadores/4-1)
+     — mesmo padrão de dossier-obra.jsx pra aba interna. */
+  const [tracao, setTracao] = React.useState(() => {
+    const t = ccSlugToTracao((window.VpRouter && window.VpRouter.parseLocation().tab) || '');
+    return CC_TRACOES.includes(t) ? t : '2:1';
+  });
   const [saving, setSaving] = React.useState(null); // id em salvamento
   const [removendo, setRemovendo] = React.useState(null);
   const [adicionando, setAdicionando] = React.useState(false);
 
   const reload = () => { setRows(null); window.CadastroCustosStore.listarCustosElevador().then(setRows); };
   React.useEffect(() => { reload(); }, []);
+
+  /* Espelha a tração escolhida no 3º segmento da URL — replace:true pra
+     não empilhar histórico a cada clique (mesma lógica de dossier-obra.jsx). */
+  React.useEffect(() => {
+    if (!window.VpRouter) return;
+    const atual = window.VpRouter.parseLocation();
+    window.VpRouter.navigate('cadastro-custos', atual.id, ccTracaoToSlug(tracao), { replace: true });
+  }, [tracao]);
 
   const rowsTracao = React.useMemo(() =>
     (rows || []).filter((r) => r.tracao === tracao)
@@ -274,6 +292,15 @@ function CadastroCustosPage({ setSubsel, subsel }) {
     if (!CC_SLUG_TO_ABA[subsel]) setSubsel?.(CC_ABA_TO_SLUG.elevador);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  /* Fora da aba Elevadores não existe tração — some com um "/2-1" ou "/4-1"
+     que tenha sobrado na URL (o efeito genérico de app.jsx preservaria essa
+     aba antiga, já que a rota "cadastro-custos" continua a mesma). */
+  React.useEffect(() => {
+    if (!window.VpRouter || aba === 'elevador') return;
+    const atual = window.VpRouter.parseLocation();
+    if (atual.tab) window.VpRouter.navigate('cadastro-custos', subsel, null, { replace: true });
+  }, [aba, subsel]);
 
   const irPara = (chave) => setSubsel?.(CC_ABA_TO_SLUG[chave]);
 
