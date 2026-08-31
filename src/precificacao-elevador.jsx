@@ -675,6 +675,54 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         </div>
       </Card>
 
+      {(() => {
+        /* 31/08 — pedido do usuário: resumo consolidado por categoria.
+           Cada linha soma direto dos campos que já existem nas seções
+           acima — nada novo é digitado aqui, é só reagrupamento visual.
+           "Custos Imposto" é a única que depende do motor fiscal completo
+           (cascata II/IPI/PIS/COFINS/ICMS, precisa de "Calcular" já ter
+           rodado pelo menos uma vez) — antes disso mostra "—", nunca zero
+           fingindo que não há imposto. */
+        const txCambial = Number(pz.tx_cambial) || 0;
+        const custosEquipamentosRs = (Number(pz.vmle_usd) || 0) * txCambial;
+        const custosFreteRs = ((Number(pz.seguro_usd) || 0) + (Number(pz.frete_seguro_capatazia_usd) || 0)) * txCambial;
+        const itensInst = pz.itens_instalacao_montagem || [];
+        const moRs = Number(itensInst[0] ? itensInst[0].valor : 0) || 0;
+        const custosOperacionaisRs = itensInst.slice(1).reduce((s, it) => s + (Number(it.valor) || 0), 0);
+        const freteInternoRs = Number(pz.frete_interno_rs) || 0;
+        const impImportacao = (pz.resultado_v2 || pz.resultado || {}).importacao;
+        const custosImpostoRs = impImportacao
+          ? (Number(impImportacao.ii) || 0) + (Number(impImportacao.ipi) || 0) + (Number(impImportacao.pis) || 0)
+            + (Number(impImportacao.cofins) || 0) + (Number(impImportacao.icms) || 0)
+          : null;
+        const somaRs = custosEquipamentosRs + custosFreteRs + moRs + custosOperacionaisRs + freteInternoRs + (custosImpostoRs || 0);
+        const linha = (label, valor) => (
+          <div className="row sb" style={{ padding: '4px 0' }}>
+            <span className="small">{label}</span>
+            <span className="mono">{valor == null ? '—' : fmtBRL2(valor)}</span>
+          </div>
+        );
+        return (
+          <Card title="Resumo de Custos" sub="visão consolidada — cada linha soma os campos já preenchidos nas seções acima" style={{ marginTop: 16 }}>
+            <div className="stack" style={{ gap: 2 }}>
+              {linha('Custos Equipamentos', custosEquipamentosRs)}
+              {linha('Custos com Frete', custosFreteRs)}
+              {linha('Mão de Obra', moRs)}
+              {linha('Custos Operacionais (Empilhadeira, Munck...)', custosOperacionaisRs)}
+              {linha('Frete Interno (no Brasil)', freteInternoRs)}
+              {linha('Custos Imposto', custosImpostoRs)}
+              <div className="row sb" style={{ borderTop: '2px solid var(--border)', paddingTop: 10, marginTop: 6 }}>
+                <span style={{ fontWeight: 700 }}>Soma{custosImpostoRs == null ? ' (parcial — falta Custos Imposto)' : ''}</span>
+                <span className="mono" style={{ fontWeight: 700, fontSize: 16 }}>{fmtBRL2(somaRs)}</span>
+              </div>
+            </div>
+            {custosImpostoRs == null && (
+              <p className="small muted" style={{ marginTop: 8 }}>Custos Imposto aparece depois de clicar em "Calcular" — usa a cascata fiscal completa (II/IPI/PIS/COFINS/ICMS).</p>
+            )}
+          </Card>
+        );
+      })()}
+
       <Card title="Alavancas do Financeiro" style={{ marginTop: 16 }}>
         <div className="grid-3" style={{ gap: 12 }}>
           <PZField label="Markup sobre o custo (%)">
