@@ -1,7 +1,7 @@
 /* ============================================================
    decisoes.jsx — Central de Decisões (Fase 1)
    Caixa de entrada pessoal: cada usuário logado vê só as decisões
-   gerenciais que esperam por ele (CEO, Owner, Gestor Comercial, RH,
+   gerenciais que esperam por ele (CEO, Owner, Gestor Comercial,
    Engenharia, Logística — ver decisoes-store.js).
    ============================================================ */
 

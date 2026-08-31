@@ -28,7 +28,7 @@
     ceo: ['diego@verticalparts.com.br'],
     owner: ['gelson.simoes@verticalparts.com.br'],
     gestor_comercial: ['regiane.rocha@verticalparts.com.br', 'guilherme@verticalparts.com.br'],
-    rh: ['karla.silva@verticalparts.com.br'],
+    rh: ['arilene.avila@verticalparts.com.br'],
     engenharia_lider: ['arilene.avila@verticalparts.com.br'],
     logistica_lider: ['danilo@verticalparts.com.br'],
   };
@@ -41,7 +41,7 @@
     ceo: 'CEO',
     owner: 'Dono do Sistema',
     gestor_comercial: 'Gestor Comercial',
-    rh: 'RH',
+    rh: 'Engenharia',
     engenharia_lider: 'Engenharia',
     logistica_lider: 'Logística',
   };
@@ -54,7 +54,7 @@
     envio_proposta_gestor: 'Envio de proposta — aprovação do Gestor Comercial',
     envio_proposta_ceo: 'Envio de proposta — aprovação do CEO',
     contratacao_mao_obra_ceo: 'Contratação de mão de obra — aprovação do CEO',
-    montador_entra_obra_rh: 'Montador entra na obra — aprovação do RH',
+    montador_entra_obra_rh: 'Montador entra na obra — aprovação da Engenharia',
     compra_equipamento_ceo: 'Compra do equipamento — aprovação do CEO',
     compra_varejo_logistica: 'Compra de varejo — aprovação da Logística',
   };
@@ -254,8 +254,8 @@
     if (!decisao) {
       decisao = await criarDecisao({ tipo: 'montador_entra_obra_rh', papelRequerido: 'rh', dossierId, referenciaTabela: 'parceiros_instaladores', referenciaId: parceiroId, contexto });
     }
-    if (decisao.status === 'reprovada') return { ok: false, motivo: `Entrada na obra reprovada pelo RH (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
-    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do RH (Karla) para este montador entrar na obra.' };
+    if (decisao.status === 'reprovada') return { ok: false, motivo: `Entrada na obra reprovada pela Engenharia (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação da Engenharia (Arilene) para este montador entrar na obra.' };
     return { ok: true };
   }
 
