@@ -11,6 +11,36 @@
    identificador "FE_TRACOES" daria SyntaxError de redeclaração. */
 const PZ_TRACOES = ['2:1', '4:1'];
 
+/* 31/08 — pedido do usuário: "Instalação e Montagem" deixa de ser lista
+   livre (adicionar/remover qualquer item) e passa a ser uma lista FIXA de
+   7 itens — o conjunto que já estava em uso real na VPPC-0950 no momento
+   do pedido. "MÃO DE OBRA" deixa de ser digitado à mão: herda a soma de
+   TODAS as unidades da tabela "Mão de obra — busca automática" (Confirmado
+   + Estimativa — confirmado com o usuário: numa cotação com 2 equipamentos,
+   o valor esperado é a soma dos dois, não só das confirmadas). Os outros 6
+   continuam manuais — preenchimento avulso de Engenharia/Logística. */
+const PZ_ITENS_INSTALACAO_FIXOS = ['MÃO DE OBRA', 'CUSTOS ENGENHARIA', 'ART', 'ANDAIME', 'TALHA', 'EMPILHADEIRA', 'AJUDANTES'];
+
+function pzMoTotalRs(pz) {
+  return (pz.mo_lookup || []).reduce((s, mo) => s + (Number(mo.valorRs) || 0), 0);
+}
+
+/* Reconcilia itens_instalacao_montagem (que pode vir do banco com nomes
+   livres/antigos) pra sempre bater com PZ_ITENS_INSTALACAO_FIXOS, na
+   mesma ordem — casando por descrição (trim + maiúsculas) pra não perder
+   valor já digitado em precificações antigas. Item sem correspondência
+   nasce com valor 0 — nunca inventa número. */
+function pzNormalizarItensInstalacao(pz) {
+  const existentes = pz.itens_instalacao_montagem || [];
+  const moTotal = pzMoTotalRs(pz);
+  const itens = PZ_ITENS_INSTALACAO_FIXOS.map((label) => {
+    if (label === 'MÃO DE OBRA') return { descricao: label, valor: moTotal };
+    const achado = existentes.find((it) => (it.descricao || '').trim().toUpperCase() === label);
+    return { descricao: label, valor: achado ? achado.valor : 0 };
+  });
+  return { ...pz, itens_instalacao_montagem: itens };
+}
+
 function fmtBRL2(v) { return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 function fmtPct2(v) { return ((Number(v) || 0) * 100).toFixed(2) + '%'; }
 
@@ -176,7 +206,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const [cambioVivo, setCambioVivo] = React.useState(null); // null | { valor, timestamp } | 'erro'
 
   const carregar = React.useCallback(() => {
-    window.PrecificacaoElevadorStore.obter(id).then(setPz);
+    window.PrecificacaoElevadorStore.obter(id).then((data) => setPz(pzNormalizarItensInstalacao(data)));
   }, [id]);
   React.useEffect(() => { carregar(); }, [carregar]);
   React.useEffect(() => {
@@ -245,13 +275,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     return { ...p, modelos: arr };
   });
 
-  const addItemInstalacao = () => setPz((p) => ({ ...p, itens_instalacao_montagem: [...(p.itens_instalacao_montagem || []), { descricao: '', valor: 0 }] }));
   const setItemInstalacao = (i, k) => (v) => setPz((p) => {
     const arr = [...(p.itens_instalacao_montagem || [])];
     arr[i] = { ...arr[i], [k]: v };
     return { ...p, itens_instalacao_montagem: arr };
   });
-  const removeItemInstalacao = (i) => setPz((p) => ({ ...p, itens_instalacao_montagem: (p.itens_instalacao_montagem || []).filter((_, idx) => idx !== i) }));
 
   const addContainer = () => setPz((p) => ({ ...p, containers: [...(p.containers || []), { tipo_tamanho: '', quantidade: 1, preco_rs: 0 }] }));
   const setContainer = (i, k) => (v) => setPz((p) => {
@@ -601,18 +629,22 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       <Card title="Despesas Operacionais" sub="custos itemizados — instalação/montagem e o que mais entrar aqui no futuro" style={{ marginTop: 16 }}>
         <div>
           <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
-            Instalação e Montagem <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— itens de outros departamentos (Engenharia/Logística), preenchimento avulso por enquanto</span>
+            Instalação e Montagem <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— lista fixa; Mão de obra herda a soma da tabela acima, o resto é preenchimento avulso de Engenharia/Logística</span>
           </div>
           <div className="stack" style={{ gap: 8 }}>
             {(pz.itens_instalacao_montagem || []).map((it, i) => (
-              <div key={i} className="row gap-2">
-                <input className="input" style={{ flex: 1 }} value={it.descricao || ''} onChange={(e) => setItemInstalacao(i, 'descricao')(e.target.value)} placeholder="ex.: Guincho, Andaime, Mão de obra..."/>
-                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={it.valor} onChange={setItemInstalacao(i, 'valor')}/></div>
-                <Button variant="ghost" size="sm" icon="trash" onClick={() => removeItemInstalacao(i)}/>
+              <div key={it.descricao || i} className="row gap-2" style={{ alignItems: 'center' }}>
+                <div style={{ flex: 1, fontSize: 13, fontWeight: 600 }}>{it.descricao}</div>
+                {i === 0 ? (
+                  <div style={{ width: 160, textAlign: 'right' }} className="mono" title="Soma automática da tabela de Mão de obra acima — Confirmado + Estimativa">
+                    {fmtBRL2(it.valor)}
+                  </div>
+                ) : (
+                  <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={it.valor} onChange={setItemInstalacao(i, 'valor')}/></div>
+                )}
               </div>
             ))}
           </div>
-          <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addItemInstalacao}>+ Adicionar item</Button>
         </div>
       </Card>
 
