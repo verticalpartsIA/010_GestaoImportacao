@@ -442,6 +442,39 @@ function CIStepLogistica({ s, set }) {
   );
 }
 
+/* Pré-preenche banco/agência/conta/PIX a partir do cadastro da empresa
+   (Cadastros → Empresas Instaladoras / RH Operacional → Homologação —
+   mesma tabela parceiros_instaladores) pelo CNPJ já digitado no Passo 2.
+   Só preenche se os 4 campos ainda estiverem vazios — nunca sobrescreve o
+   que o usuário já digitou nesse contrato (reabrir rascunho, editar,
+   corrigir dado desatualizado do cadastro etc.). Sem dado bancário
+   cadastrado na empresa, some silenciosamente — comportamento de hoje
+   (digitar na mão) continua igual. */
+function CIBancoPrefill({ cnpj, s, set }) {
+  const [status, setStatus] = _ciUS(null); // null | 'found'
+
+  _ciUE(() => {
+    let vivo = true;
+    if (!window.CI.isCNPJValid(cnpj) || !window.RHHomologacao) return;
+    if (s.banco || s.agencia || s.conta || s.pix) return;
+    const digits = window.CI.onlyDigits(cnpj);
+    window.RHHomologacao.listarMontadores().then((lista) => {
+      if (!vivo) return;
+      const m = (lista || []).find((p) => window.CI.onlyDigits(p.cnpj || '') === digits);
+      if (!m || (!m.banco && !m.agencia && !m.conta && !m.pix)) return;
+      set('banco', m.banco || '');
+      set('agencia', m.agencia || '');
+      set('conta', m.conta || '');
+      set('pix', m.pix || '');
+      setStatus('found');
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, [cnpj]);
+
+  if (status !== 'found') return null;
+  return <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Dados bancários preenchidos automaticamente a partir do cadastro da empresa (Cadastros → Empresas Instaladoras). Confira antes de gerar o contrato.</div>;
+}
+
 function CIStepPagamento({ s, set, errors }) {
   const addParcela = () => set('parcelas', [...(s.parcelas || []), { valor: '', data: '', descricao: '' }]);
   const updateParcela = (i, k, v) => {
@@ -484,6 +517,7 @@ function CIStepPagamento({ s, set, errors }) {
       </div>
       <div className="ci-field-group">
         <h3 className="ci-group-title">Dados bancários da Contratada</h3>
+        <CIBancoPrefill cnpj={s.c_cnpj} s={s} set={set} />
         <div className="ci-grid">
           <CIField label="Banco" value={s.banco} onChange={(v) => set('banco', v)} placeholder="Banco do Brasil" />
           <CIField label="Agência" width="narrow" mono value={s.agencia} onChange={(v) => set('agencia', v)} placeholder="0000" />
