@@ -3,20 +3,59 @@
    Módulo: Vistorias de Obras (rota `vistorias-envio`)
 
    Fase 1: builder do motor de questionários (Questionário -> Categoria
-   -> Pergunta, com ramo condicional). Consome window.VistoriasQuestionariosStore
+   -> Pergunta, com ramo condicional). Fase 2: despacho — cria uma
+   Atividade (obra + equipamento + técnico + questionário) com um
+   token/link único. Consome window.VistoriasQuestionariosStore
    (vistorias-questionarios-store.js). Estrutura de criação apenas —
    nasce vazia, sem dados importados de nenhum sistema externo (ver
    dossiê de engenharia reversa do Btime no README.md pro modelo de
    referência).
 
-   Ainda não implementado aqui (fases futuras, ver README):
-   disparo pro celular do técnico (Fase 2), execução mobile (Fase 3),
-   resultado alimentando src/vistorias-obras.jsx (Fase 4).
+   O link gerado no despacho ainda não abre nada (a página pública de
+   execução no celular é a Fase 3, não construída aqui) — o que existe
+   até aqui é só o registro da Atividade + o link/token pra ela.
+   Fase 4: resultado alimentando src/vistorias-obras.jsx.
    ============================================================ */
 
 function VistoriasEnvio({ setRoute }) {
-  const [questionarios, setQuestionarios] = React.useState(null);
+  const [aba, setAba] = React.useState('questionarios');
   const [questionarioAberto, setQuestionarioAberto] = React.useState(null);
+
+  if (questionarioAberto) {
+    return <QuestionarioEditor questionario={questionarioAberto} onVoltar={() => setQuestionarioAberto(null)}/>;
+  }
+
+  return (
+    <div className="page fade-in">
+      <div className="page-head">
+        <div className="page-head__l">
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Engenharia · Vistorias de Obras</div>
+          <h1 className="page-head__title">Vistorias de Obras</h1>
+          <p className="page-head__sub">Monte os questionários e despache vistorias pro técnico. A execução no celular ainda é a próxima fase.</p>
+        </div>
+      </div>
+
+      <Tabs
+        tabs={[
+          { key: 'questionarios', label: 'Questionários', icon: 'fileText' },
+          { key: 'despacho', label: 'Despachar', icon: 'send' },
+        ]}
+        active={aba}
+        onChange={setAba}
+      />
+
+      <div style={{ marginTop: 16 }}>
+        {aba === 'questionarios'
+          ? <ListaQuestionarios onAbrir={setQuestionarioAberto}/>
+          : <DespacharVistoria/>}
+      </div>
+    </div>
+  );
+}
+
+/* ---- Aba "Questionários": lista + criar/excluir/ativar ---- */
+function ListaQuestionarios({ onAbrir }) {
+  const [questionarios, setQuestionarios] = React.useState(null);
   const [showNovo, setShowNovo] = React.useState(false);
 
   const carregarLista = React.useCallback(() => {
@@ -25,9 +64,6 @@ function VistoriasEnvio({ setRoute }) {
       .catch((e) => { window.toast?.('Erro ao carregar questionários: ' + e.message, 'error'); setQuestionarios([]); });
   }, []);
   React.useEffect(() => { carregarLista(); }, [carregarLista]);
-
-  const abrirQuestionario = (q) => setQuestionarioAberto(q);
-  const voltarParaLista = () => { setQuestionarioAberto(null); carregarLista(); };
 
   const excluirQuestionario = async (q) => {
     if (!window.confirm(`Excluir o questionário "${q.nome}"? Todas as categorias e perguntas dele vão junto.`)) return;
@@ -45,18 +81,10 @@ function VistoriasEnvio({ setRoute }) {
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
   };
 
-  if (questionarioAberto) {
-    return <QuestionarioEditor questionario={questionarioAberto} onVoltar={voltarParaLista} onAtualizado={(patch) => setQuestionarioAberto((q) => ({ ...q, ...patch }))}/>;
-  }
-
   return (
-    <div className="page fade-in">
-      <div className="page-head">
-        <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Engenharia · Vistorias de Obras</div>
-          <h1 className="page-head__title">Vistorias de Obras</h1>
-          <p className="page-head__sub">Monte os questionários de vistoria aqui. O envio pro celular do técnico é a próxima fase — por enquanto, esta tela é só o construtor do checklist.</p>
-        </div>
+    <div>
+      <div className="row sb" style={{ marginBottom: 14 }}>
+        <div className="small muted">Molde das perguntas — nenhuma vistoria é executada aqui ainda.</div>
         <Button variant="primary" icon="plus" onClick={() => setShowNovo(true)}>Novo Questionário</Button>
       </div>
 
@@ -80,7 +108,7 @@ function VistoriasEnvio({ setRoute }) {
             </tr></thead>
             <tbody>
               {questionarios.map((q) => (
-                <tr key={q.id} onClick={() => abrirQuestionario(q)} style={{ cursor: 'pointer' }}>
+                <tr key={q.id} onClick={() => onAbrir(q)} style={{ cursor: 'pointer' }}>
                   <td className="cell-main">{q.nome}</td>
                   <td style={{ textTransform: 'capitalize' }}>{q.tipo}</td>
                   <td onClick={(e) => e.stopPropagation()}>
@@ -92,7 +120,7 @@ function VistoriasEnvio({ setRoute }) {
                   <td className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{q.atualizado_em ? new Date(q.atualizado_em).toLocaleDateString('pt-BR') : '—'}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div className="row" style={{ gap: 4, justifyContent: 'flex-end' }}>
-                      <Button variant="ghost" size="sm" icon="chevRight" onClick={() => abrirQuestionario(q)}>Abrir</Button>
+                      <Button variant="ghost" size="sm" icon="chevRight" onClick={() => onAbrir(q)}>Abrir</Button>
                       <Button variant="ghost" size="sm" icon="trash" title="Excluir" aria-label="Excluir" onClick={() => excluirQuestionario(q)}/>
                     </div>
                   </td>
@@ -106,7 +134,7 @@ function VistoriasEnvio({ setRoute }) {
       {showNovo && (
         <NovoQuestionarioModal
           onClose={() => setShowNovo(false)}
-          onCriado={(q) => { setShowNovo(false); carregarLista(); abrirQuestionario(q); }}
+          onCriado={(q) => { setShowNovo(false); carregarLista(); onAbrir(q); }}
         />
       )}
     </div>
@@ -412,6 +440,183 @@ function PerguntaForm({ categoriaId, pergunta, candidatasRegra, onCancelar, onSa
           <Button variant="primary" size="sm" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : editando ? 'Salvar' : 'Adicionar'}</Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/* ---- Aba "Despachar": obra + equipamento + questionário + técnico -> Atividade ---- */
+const STATUS_ATIVIDADE = {
+  pendente: { label: 'Pendente', variant: 'warning' },
+  em_execucao: { label: 'Em execução', variant: 'info' },
+  concluida: { label: 'Concluída', variant: 'success' },
+  cancelada: { label: 'Cancelada', variant: 'neutral' },
+};
+
+function DespacharVistoria() {
+  const [obras, setObras] = React.useState(null);
+  const [equipPorObra, setEquipPorObra] = React.useState({});
+  const [questionarios, setQuestionarios] = React.useState(null);
+  const [tecnicos, setTecnicos] = React.useState(null);
+  const [despachos, setDespachos] = React.useState(null);
+  const [form, setForm] = React.useState({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '' });
+  const [salvando, setSalvando] = React.useState(false);
+  const [ultimoDespacho, setUltimoDespacho] = React.useState(null);
+  const Store = window.VistoriasQuestionariosStore;
+
+  const carregar = React.useCallback(() => {
+    const sb = window.__VP_SB?.sb;
+    if (!sb) return;
+    Promise.all([
+      sb.from('dossier_obra').select('id, client_name, building_name').order('client_name'),
+      sb.from('equipamentos_obra').select('id, dossier_id, numero_serie'),
+      Store.listarQuestionarios(),
+      sb.from('colaboradores_vpsistema').select('id, nome').eq('is_active', true).order('nome'),
+      Store.listarAtividades(),
+    ]).then(([obrasRes, eqRes, qs, tecRes, ativ]) => {
+      setObras(obrasRes.data || []);
+      const map = {};
+      (eqRes.data || []).forEach((e) => { (map[e.dossier_id] = map[e.dossier_id] || []).push(e); });
+      setEquipPorObra(map);
+      setQuestionarios((qs || []).filter((q) => q.ativo));
+      setTecnicos(tecRes.data || []);
+      setDespachos(ativ);
+    }).catch((e) => window.toast?.('Erro ao carregar: ' + e.message, 'error'));
+  }, []);
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const equipamentosDaObra = form.dossierId ? (equipPorObra[form.dossierId] || []) : [];
+
+  const despachar = async () => {
+    if (!form.dossierId) { window.toast?.('Escolha a obra', 'warning'); return; }
+    if (!form.questionarioId) { window.toast?.('Escolha o questionário', 'warning'); return; }
+    setSalvando(true);
+    try {
+      const atividade = await Store.criarAtividade({
+        questionarioId: form.questionarioId,
+        dossierId: form.dossierId,
+        equipamentoId: form.equipamentoId || null,
+        tecnicoId: form.tecnicoId || null,
+      });
+      const link = window.location.origin + '/vistoria/' + atividade.token;
+      const questionario = questionarios.find((q) => q.id === form.questionarioId);
+      const obra = obras.find((o) => o.id === form.dossierId);
+      setUltimoDespacho({ link, questionarioNome: questionario?.nome, obraNome: obra?.building_name });
+      setForm({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '' });
+      window.toast?.('Vistoria despachada', 'success');
+      carregar();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setSalvando(false); }
+  };
+
+  const copiarLink = (link) => {
+    navigator.clipboard?.writeText(link)
+      .then(() => window.toast?.('Link copiado', 'success'))
+      .catch(() => window.toast?.('Não deu pra copiar — selecione o link manualmente', 'warning'));
+  };
+
+  const abrirWhatsApp = (link, questionarioNome, obraNome) => {
+    const msg = `Vistoria "${questionarioNome}" — ${obraNome}. Abra no celular pra preencher: ${link}`;
+    window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(msg), '_blank');
+  };
+
+  if (obras === null) return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
+
+  return (
+    <div className="stack" style={{ gap: 16 }}>
+      <Card title="Nova vistoria" sub="Obra e questionário são obrigatórios — equipamento e técnico são opcionais.">
+        <div className="stack" style={{ gap: 12 }}>
+          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+            <label className="stack" style={{ gap: 4, flex: 1, minWidth: 220 }}>
+              <span className="up-eyebrow muted">Obra</span>
+              <select className="input" value={form.dossierId}
+                onChange={(e) => setForm((f) => ({ ...f, dossierId: e.target.value, equipamentoId: '' }))}>
+                <option value="">Selecione…</option>
+                {obras.map((o) => <option key={o.id} value={o.id}>{o.client_name} — {o.building_name || 'sem nome'}</option>)}
+              </select>
+            </label>
+            <label className="stack" style={{ gap: 4, flex: 1, minWidth: 180 }}>
+              <span className="up-eyebrow muted">Equipamento (opcional)</span>
+              <select className="input" value={form.equipamentoId} disabled={!form.dossierId}
+                onChange={(e) => setForm((f) => ({ ...f, equipamentoId: e.target.value }))}>
+                <option value="">Vistoria geral da obra</option>
+                {equipamentosDaObra.map((e) => <option key={e.id} value={e.id}>{e.numero_serie || e.id}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+            <label className="stack" style={{ gap: 4, flex: 1, minWidth: 220 }}>
+              <span className="up-eyebrow muted">Questionário</span>
+              <select className="input" value={form.questionarioId}
+                onChange={(e) => setForm((f) => ({ ...f, questionarioId: e.target.value }))}>
+                <option value="">Selecione…</option>
+                {questionarios.map((q) => <option key={q.id} value={q.id}>{q.nome}</option>)}
+              </select>
+              {questionarios.length === 0 && <span className="small muted">Nenhum questionário ativo — crie um na aba Questionários.</span>}
+            </label>
+            <label className="stack" style={{ gap: 4, flex: 1, minWidth: 180 }}>
+              <span className="up-eyebrow muted">Técnico (opcional)</span>
+              <select className="input" value={form.tecnicoId}
+                onChange={(e) => setForm((f) => ({ ...f, tecnicoId: e.target.value }))}>
+                <option value="">A definir</option>
+                {(tecnicos || []).map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+              </select>
+            </label>
+          </div>
+          <div className="row" style={{ justifyContent: 'flex-end' }}>
+            <Button variant="primary" icon="send" onClick={despachar} disabled={salvando}>{salvando ? 'Despachando…' : 'Despachar'}</Button>
+          </div>
+        </div>
+      </Card>
+
+      {ultimoDespacho && (
+        <div className="alert info">
+          <Icon.send/>
+          <div style={{ flex: 1 }}>
+            <div className="alert__title">Vistoria despachada — link pronto pra enviar</div>
+            <div className="alert__sub" style={{ wordBreak: 'break-all' }}>{ultimoDespacho.link}</div>
+            <div className="row" style={{ gap: 8, marginTop: 8 }}>
+              <Button variant="outline" size="sm" icon="copy" onClick={() => copiarLink(ultimoDespacho.link)}>Copiar link</Button>
+              <Button variant="outline" size="sm" icon="message" onClick={() => abrirWhatsApp(ultimoDespacho.link, ultimoDespacho.questionarioNome, ultimoDespacho.obraNome)}>Enviar por WhatsApp</Button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <Card title="Últimas vistorias despachadas">
+        {despachos === null ? (
+          <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>
+        ) : despachos.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '20px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma vistoria despachada ainda.</div>
+        ) : (
+          <div className="table-wrap">
+            <table className="t">
+              <thead><tr>
+                <th>Obra</th>
+                <th>Equipamento</th>
+                <th>Questionário</th>
+                <th>Técnico</th>
+                <th>Status</th>
+                <th>Enviado</th>
+              </tr></thead>
+              <tbody>
+                {despachos.map((a) => {
+                  const st = STATUS_ATIVIDADE[a.status] || { label: a.status, variant: 'neutral' };
+                  return (
+                    <tr key={a.id}>
+                      <td className="cell-main">{a.dossier_obra?.client_name} — {a.dossier_obra?.building_name || '—'}</td>
+                      <td>{a.equipamentos_obra?.numero_serie || '—'}</td>
+                      <td>{a.vistorias_questionarios?.nome || '—'}</td>
+                      <td>{a.colaboradores_vpsistema?.nome || 'A definir'}</td>
+                      <td><Badge variant={st.variant}>{st.label}</Badge></td>
+                      <td className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{a.enviado_em ? new Date(a.enviado_em).toLocaleString('pt-BR') : '—'}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </div>
   );
 }

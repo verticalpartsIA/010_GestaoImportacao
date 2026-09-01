@@ -121,5 +121,33 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
       const { error: e2 } = await sb().from('vistorias_perguntas').update({ ordem: perguntaA.ordem }).eq('id', perguntaB.id);
       if (e2) throw e2;
     },
+
+    /* ---- Atividades (Fase 2: despacho) ----
+       O token vira o link mandado pro técnico; a página que ele abre
+       (execução no celular) é a Fase 3, ainda não construída. */
+    async criarAtividade({ questionarioId, dossierId, equipamentoId, tecnicoId }) {
+      const token = (window.crypto?.randomUUID ? window.crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)));
+      const { data, error } = await sb().from('vistorias_atividades').insert({
+        questionario_id: questionarioId,
+        dossier_id: dossierId,
+        equipamento_id: equipamentoId || null,
+        tecnico_id: tecnicoId || null,
+        token,
+        status: 'pendente',
+        enviado_em: new Date().toISOString(),
+        criado_por: window.__VP_USER?.email || 'system',
+      }).select().single();
+      if (error) throw error;
+      return data;
+    },
+
+    async listarAtividades() {
+      const { data, error } = await sb().from('vistorias_atividades')
+        .select('*, dossier_obra(client_name, building_name), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome)')
+        .order('criado_em', { ascending: false })
+        .limit(50);
+      if (error) throw error;
+      return data || [];
+    },
   };
 })();
