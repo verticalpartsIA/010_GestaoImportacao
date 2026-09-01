@@ -91,7 +91,7 @@
   <!-- Roteamento por URL (Fase 1 da roteirização, issue #279) — carrega
        depois do guard de SSO (mexe só na query string, nunca no pathname)
        e antes de shell.jsx/app.jsx, que o consomem. -->
-  <script src="/src/router.js?v=7"></script>
+  <script src="/src/router.js?v=8"></script>
 
   <script src="/src/notificacoes-processamento.js?v=2"></script>
   <script src="/src/notificacoes-lidas-store.js?v=1"></script>
@@ -109,7 +109,7 @@
   <script src="/src/gatilhos-engine.js?v=12"></script>
 
   <!-- Trilha genérica do fluxo operacional (Formulário → Fornecedor → Proposta → Cliente) -->
-  <script src="/src/eventos-fluxo-store.js?v=9"></script>
+  <script src="/src/eventos-fluxo-store.js?v=10"></script>
 
   <!-- Central de Decisões — decisão gerencial genérica (CEO, Owner, Gestor Comercial, RH...) -->
   <script src="/src/decisoes-store.js?v=8"></script>
@@ -139,7 +139,7 @@
   <!-- Components in dependency order -->
   <script type="text/vp-jsx" src="/src/primitives.jsx?v=4"></script>
   <script type="text/vp-jsx" src="/src/toast.jsx?v=6"></script>
-  <script type="text/vp-jsx" src="/src/shell.jsx?v=57"></script>
+  <script type="text/vp-jsx" src="/src/shell.jsx?v=58"></script>
   <script type="text/vp-jsx" src="/src/dashboard.jsx?v=14"></script>
   <script type="text/vp-jsx" src="/src/comercial.jsx?v=22"></script>
   <script type="text/vp-jsx" src="/src/linha-do-tempo.jsx?v=4"></script>
@@ -245,10 +245,10 @@
   <script type="text/vp-jsx" src="/src/desenho-tecnico.jsx?v=1"></script>
 
   <!-- Recursos Humanos · Homologação de Parceiros Instaladores -->
-  <script src="/src/rh-homologacao-store.js?v=7"></script>
+  <script src="/src/rh-homologacao-store.js?v=8"></script>
   <script src="/src/instalacao-obra-store.js?v=11"></script>
   <script type="text/vp-jsx" src="/src/rh-homologacao.jsx?v=7"></script>
-  <script type="text/vp-jsx" src="/src/cadastro-instaladores.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="/src/cadastro-instaladores.jsx?v=5"></script>
 
   <!-- Cadastros · Atualização de Custos (Instalação Elevador/Escada·Esteira + Containers) —
        herança automática pra Precificação, ver cadastro-custos-store.js -->
@@ -256,10 +256,12 @@
   <script type="text/vp-jsx" src="/src/cadastro-custos.jsx?v=8"></script>
 
   <!-- Jurídico · Contrato Instalador (wizard + dashboard + assinatura digital) -->
-  <script src="/src/contrato-instalador-engine.js?v=2"></script>
-  <script src="/src/contrato-instalador-store.js?v=8"></script>
+  <script src="/src/contrato-instalador-engine.js?v=3"></script>
+  <script src="/src/contrato-instalador-parcelas-store.js?v=1"></script>
+  <script src="/src/contrato-instalador-store.js?v=9"></script>
   <script type="text/vp-jsx" src="/src/contrato-instalador-preview.jsx?v=1"></script>
-  <script type="text/vp-jsx" src="/src/contrato-instalador.jsx?v=5"></script>
+  <script type="text/vp-jsx" src="/src/contrato-instalador.jsx?v=7"></script>
+  <script type="text/vp-jsx" src="/src/pagamentos-instalador.jsx?v=1"></script>
 
   <!-- Jurídico · Contrato Venda de Equipamentos (cliente final) -->
   <script src="/src/contrato-venda-engine.js?v=6"></script>
@@ -299,6 +301,6 @@
   <script type="text/vp-jsx" src="/src/vp-copiloto.jsx?v=5"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="/src/app.jsx?v=64"></script>
+  <script type="text/vp-jsx" src="/src/app.jsx?v=65"></script>
 </body>
 </html>

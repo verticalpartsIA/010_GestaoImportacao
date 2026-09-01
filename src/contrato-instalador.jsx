@@ -279,6 +279,65 @@ function CISeletorProposta({ propostaId, ativosIndices, onSelecionarProposta, on
   );
 }
 
+/* Vínculo real com dossier_obra (Trilha B, 01/09) — sem isso, as parcelas
+   do contrato não têm como saber qual checklist observar pra liberar
+   pagamento automaticamente. Busca simples por cliente/obra/id; múltiplos
+   dossiês cobertos pelo mesmo contrato (ex.: instalador monta 2 elevadores
+   da mesma obra sob um único contrato). */
+function CISeletorObras({ dossierIds, onToggle }) {
+  const [busca, setBusca] = _ciUS('');
+  const [resultados, setResultados] = _ciUS([]);
+  const [selecionados, setSelecionados] = _ciUS([]);
+
+  _ciUE(() => {
+    if (!dossierIds || !dossierIds.length) { setSelecionados([]); return; }
+    window.__VP_SB?.sb.from('dossier_obra').select('id, client_name, building_name').in('id', dossierIds)
+      .then(({ data }) => setSelecionados(data || []));
+  }, [JSON.stringify(dossierIds || [])]);
+
+  _ciUE(() => {
+    const q = busca.trim();
+    if (q.length < 2) { setResultados([]); return; }
+    const t = setTimeout(() => {
+      window.__VP_SB?.sb.from('dossier_obra').select('id, client_name, building_name')
+        .or(`client_name.ilike.%${q}%,building_name.ilike.%${q}%,id.ilike.%${q}%`)
+        .limit(15).then(({ data }) => setResultados(data || []));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [busca]);
+
+  return (
+    <div className="ci-field-group">
+      <h3 className="ci-group-title">Obra / Dossiê vinculado</h3>
+      <p className="ci-field-hint" style={{ marginBottom: 8 }}>
+        Vincule o(s) dossiê(s)/equipamento(s) reais cobertos por este contrato — é o que libera as parcelas automaticamente conforme a instalação avança.
+      </p>
+      {selecionados.length > 0 && (
+        <div style={{ marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {selecionados.map((d) => (
+            <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0f8f0', border: '1px solid #cce6cc', borderRadius: 6, padding: '6px 10px', fontSize: 13 }}>
+              <span>✓ {d.id} — {d.building_name || d.client_name}</span>
+              <button type="button" className="ci-btn ci-btn--ghost" onClick={() => onToggle(d.id)}>remover</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <input className="ci-input" placeholder="Buscar por cliente, obra ou nº do dossiê (DOS-...)" value={busca} onChange={(e) => setBusca(e.target.value)} />
+      {resultados.length > 0 && (
+        <div style={{ marginTop: 6, border: '1px solid #ddd', borderRadius: 6 }}>
+          {resultados.map((d) => (
+            <div key={d.id} style={{ padding: 8, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', fontSize: 13 }}
+              onClick={() => { onToggle(d.id); setBusca(''); setResultados([]); }}>
+              <span>{d.id} — {d.building_name || d.client_name}</span>
+              {(dossierIds || []).includes(d.id) && <span>✓</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CIStepObjeto({ s, set }) {
   const isElevador = s.equipamento === 'elevador';
   const remocao = window.CI.isRemocao(s);
@@ -293,10 +352,15 @@ function CIStepObjeto({ s, set }) {
     const atual = s.ativosIndices || [];
     set('ativosIndices', atual.includes(indice) ? atual.filter((i) => i !== indice) : [...atual, indice]);
   };
+  const toggleDossier = (dossierId) => {
+    const atual = s.dossierIds || [];
+    set('dossierIds', atual.includes(dossierId) ? atual.filter((i) => i !== dossierId) : [...atual, dossierId]);
+  };
 
   return (
     <div className="ci-step">
       <CIStepHeader kicker="Passo 3 — Objeto" title="Objeto do contrato" desc="Defina o equipamento e o escopo. Os campos mudam conforme o tipo selecionado." />
+      <CISeletorObras dossierIds={s.dossierIds} onToggle={toggleDossier} />
       <CISeletorProposta propostaId={s.propostaId} ativosIndices={s.ativosIndices} onSelecionarProposta={aplicarProposta} onToggleAtivo={toggleAtivo}/>
       <div className="ci-field-group">
         <h3 className="ci-group-title">Equipamento</h3>
@@ -610,7 +674,7 @@ const CI_WIZ_STEPS = [
   { id: 'revisao', label: 'Revisão', sub: 'Anexos & assinatura' },
 ];
 
-function validateStep(idx, s) {
+function ciValidateStep(idx, s) {
   const e = {};
   if (idx === 1) {
     if (!s.c_razao || !s.c_razao.trim()) e.c_razao = 'Informe a razão social.';
@@ -640,7 +704,7 @@ function CIWizard({ onCreated, initial }) {
   const conds = window.CI.activeConditionals(s);
 
   const goNext = () => {
-    const e = validateStep(step, s);
+    const e = ciValidateStep(step, s);
     setErrors(e);
     if (Object.keys(e).length > 0) return;
     if (step < CI_WIZ_STEPS.length - 1) setStep(step + 1);
@@ -650,10 +714,10 @@ function CIWizard({ onCreated, initial }) {
 
   const completeAll = () => {
     let all = {};
-    [1, 4].forEach(i => { all = { ...all, ...validateStep(i, s) }; });
+    [1, 4].forEach(i => { all = { ...all, ...ciValidateStep(i, s) }; });
     if (Object.keys(all).length > 0) {
       setErrors(all);
-      const firstBad = Object.keys(validateStep(1, s)).length ? 1 : 4;
+      const firstBad = Object.keys(ciValidateStep(1, s)).length ? 1 : 4;
       setStep(firstBad);
       return false;
     }

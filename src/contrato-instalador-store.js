@@ -171,6 +171,7 @@
       master_id: rec.master_id || null,
       proposta_id: rec.proposta_id || null,
       ativos_indices: rec.ativos_indices || [],
+      dossier_ids: rec.dossier_ids || [],
       status: rec.status,
       channel: rec.channel,
       recipient: rec.recipient || {},
@@ -247,6 +248,7 @@
       master_id: formState.masterId || null,
       proposta_id: formState.propostaId || null,
       ativos_indices: formState.ativosIndices || [],
+      dossier_ids: formState.dossierIds || [],
       status: 'rascunho',
       channel: null,
       recipient: { name: doc.contratada.responsavel, contact: '' },
@@ -259,6 +261,10 @@
 
     const { error } = await c.from('contratos_instalador').insert(_packToRow(rec));
     if (error) throw error;
+    if (window.ContratoInstaladorParcelasStore) {
+      try { await window.ContratoInstaladorParcelasStore.criarParcelas(rec.id, formState); }
+      catch (e) { console.warn('[CIStore] criarParcelas falhou', e); }
+    }
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Contrato Instalador', acao: 'criou o contrato', alvo: rec.numero_documento, alvo_id: rec.id, detalhe: { contratada: rec.contratada_nome } });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CONTRATO_INSTALADOR_GERADO', numeroCotacao: formState.numeroCotacao ?? null,

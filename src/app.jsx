@@ -47,6 +47,7 @@ const ROUTE_TITLE = {
   "compras-email": "Inbox Compras",
   financeiro: "Gatilhos & Prazo",
   comissoes: "Comissões",
+  "pagamentos-instalador": "Pagamentos a Instaladores",
   notificacoes: "Notificações",
   logs: "Logs de Atividade",
   configuracoes: "Configurações",
@@ -293,6 +294,7 @@ function App() {
     financeiro: ["financeiro", "admin"],
     "aval-financeiro": ["financeiro", "admin"],
     comissoes: ["financeiro", "admin"],
+    "pagamentos-instalador": ["financeiro", "admin"],
     logs: ["admin"],
     configuracoes: ["admin"],
   };
@@ -351,6 +353,7 @@ function App() {
       case "financeiro": return <FinanceiroPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
+      case "pagamentos-instalador": return <PagamentosInstaladorPage/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
       case "cadastro-instaladores": return <window.CadastroInstaladoresPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cadastro-custos": return <window.CadastroCustosPage setSubsel={setSubsel} subsel={subsel}/>;
@@ -454,6 +457,7 @@ function App() {
               { value: "compras-email", label: "📧 Inbox Compras" },
               { value: "financeiro", label: "⏰ Gatilhos & Prazo" },
               { value: "comissoes", label: "Comissões" },
+              { value: "pagamentos-instalador", label: "Pagamentos a Instaladores" },
               { value: "rh-homologacao", label: "👥 Homologação de Instaladores" },
               { value: "cadastro-instaladores", label: "🏢 Empresas Instaladoras" },
               { value: "cadastro-custos", label: "💰 Atualização de Custos" },

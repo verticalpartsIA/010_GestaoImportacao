@@ -34,6 +34,7 @@ const NAV_GROUPS = [
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
     { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
     { id: "comissoes", label: "Comissões", icon: "award", restrict: ["financeiro", "admin"] },
+    { id: "pagamentos-instalador", label: "Pagamentos a Instaladores", icon: "dollar", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Jurídico", items: [
     { id: "contrato-venda-equipamentos", label: "Contrato Venda de Equipamentos", icon: "fileText" },
@@ -313,6 +314,7 @@ const BREADCRUMB_MAP = {
   financeiro:    { module: "Financeiro", page: "Gatilhos & Prazo", icon: "dollar" },
   "aval-financeiro": { module: "Financeiro", page: "Aval Financeiro", icon: "shield" },
   comissoes:     { module: "Financeiro", page: "Comissões", icon: "award" },
+  "pagamentos-instalador": { module: "Financeiro", page: "Pagamentos a Instaladores", icon: "dollar" },
   "rh-homologacao": { module: "RH Operacional", page: "Homologação de Instaladores", icon: "hardhat" },
   logs: { module: "Admin", page: "Logs de Atividade", icon: "history" },
   configuracoes: { module: "Admin", page: "Configurações", icon: "settings" },

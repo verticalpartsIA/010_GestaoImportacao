@@ -38,7 +38,7 @@
     'art', 'cronograma', 'databook', 'handover',
     'rh-homologacao',
     'almoxarifado',
-    'logs', 'configuracoes', 'comissoes',
+    'logs', 'configuracoes', 'comissoes', 'pagamentos-instalador',
   ];
   const KNOWN_ROUTES_SET = new Set(KNOWN_ROUTES);
 

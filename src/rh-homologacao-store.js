@@ -328,10 +328,21 @@
       dossierIds.forEach((id) => { porDossierChecklist[id] = window.InstalacaoChecklistStore.resumoProgresso(agrupado[id] || []); });
     }
 
+    /* Situação de pagamento (Trilha B) — pra badge "Obra Concluída" quando
+       checklist 100% E todas as parcelas do contrato que cobre esse
+       dossiê já estão pagas. Sem contrato vinculado, fica null (badge
+       cai pro comportamento da Trilha A). */
+    let porDossierPagamento = {};
+    if (dossierIds.length && window.ContratoInstaladorParcelasStore) {
+      porDossierPagamento = await window.ContratoInstaladorParcelasStore.resumoPagamentoPorDossier(dossierIds);
+    }
+
     const porCliente = {};
     Object.values(porDossier).forEach((o) => {
       const chave = o.client_name || '(sem cliente)';
-      (porCliente[chave] = porCliente[chave] || []).push({ ...o, checklist: porDossierChecklist[o.id] || null });
+      (porCliente[chave] = porCliente[chave] || []).push({
+        ...o, checklist: porDossierChecklist[o.id] || null, pagamento: porDossierPagamento[o.id] || null,
+      });
     });
     return Object.entries(porCliente)
       .map(([cliente, obras]) => ({ cliente, obras }))

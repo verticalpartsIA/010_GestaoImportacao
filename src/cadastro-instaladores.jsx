@@ -241,10 +241,22 @@ function ModalColaborador({ empresaId, initialData, isEdit, onClose, onSaved }) 
    dois com status_master="Instalação" mas um já com itens concluídos e o
    outro com zero, ver achado de 01/09). Sem checklist criado ainda,
    cai pro status_master puro (mesma classificação de antes). */
-function CIObraStatusBadge({ statusMaster, checklist }) {
+function CIObraStatusBadge({ statusMaster, checklist, pagamento }) {
   const concluida = CI_OBRA_CONCLUIDA.has(statusMaster);
   if (checklist && checklist.criado) {
-    if (checklist.pct >= 100) return <span style={{ fontSize: 11, fontWeight: 600, color: '#00aa00' }}>Concluída · 100%</span>;
+    if (checklist.pct >= 100) {
+      /* "Obra Concluída" (Trilha B, 01/09) = instalação 100% E as
+         parcelas do contrato que cobre este dossiê já estão 100% pagas —
+         sem contrato vinculado ou com parcela pendente, fica no estado
+         intermediário "Instalação concluída". */
+      if (pagamento && pagamento.temContrato && pagamento.tudoPago) {
+        return <span style={{ fontSize: 11, fontWeight: 600, color: '#00aa00' }}>🏁 Obra Concluída</span>;
+      }
+      if (pagamento && pagamento.temContrato && !pagamento.tudoPago) {
+        return <span style={{ fontSize: 11, fontWeight: 600, color: '#cc7700' }}>Instalação concluída · pagamento pendente</span>;
+      }
+      return <span style={{ fontSize: 11, fontWeight: 600, color: '#00aa00' }}>Concluída · 100%</span>;
+    }
     return <span style={{ fontSize: 11, fontWeight: 600, color: '#cc7700' }}>Instalando — {checklist.pct}%</span>;
   }
   if (statusMaster === 'Instalação') return <span style={{ fontSize: 11, fontWeight: 600, color: '#999' }}>Não iniciado</span>;
@@ -295,7 +307,7 @@ function CIHierarquiaClientes({ clientes, onAbrir }) {
                   <CIMarcosTecnicos checklist={o.checklist} />
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <CIObraStatusBadge statusMaster={o.status_master} checklist={o.checklist} />
+                  <CIObraStatusBadge statusMaster={o.status_master} checklist={o.checklist} pagamento={o.pagamento} />
                   <Icon.chevRight size={14} />
                 </div>
               </div>

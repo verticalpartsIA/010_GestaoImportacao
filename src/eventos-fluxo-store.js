@@ -120,6 +120,14 @@
       }).select().single();
       if (error) { console.warn('[EventosFluxo] registrar falhou', error); return null; }
       if (window.GatilhosEngine) window.GatilhosEngine.onEvento({ evento, numeroCotacao, alvoId, detalhe });
+      /* Trilha B (01/09) — os 3 eventos de instalação também podem
+         liberar parcela de pagamento ao instalador (contrato vinculado
+         a este dossiê via alvoId). Nunca derruba o registro do evento
+         por falha aqui (mesma proteção do restante desta função). */
+      if (window.ContratoInstaladorParcelasStore && alvoId &&
+          ['INSTALACAO_INICIADA', 'INSTALACAO_METADE_EXECUCAO', 'INSTALACAO_CONCLUIDA'].includes(evento)) {
+        await window.ContratoInstaladorParcelasStore.verificarLiberacaoParcelas(alvoId, evento);
+      }
       return data;
     } catch (e) {
       console.warn('[EventosFluxo] registrar falhou', e);
