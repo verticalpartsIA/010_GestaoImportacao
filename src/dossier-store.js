@@ -358,6 +358,23 @@ window.__DOSSIER = window.__DOSSIER || (() => {
       return data || [];
     },
 
+    /* Equipamentos de outros dossiês do MESMO cliente — cada obra migrada é
+       1 equipamento por dossiê (issue real: cliente com 9 elevadores vira
+       9 dossiê separados), então quem está vendo um deles não enxergava os
+       "irmãos". Só leitura aqui — editar continua sendo por dossiê. */
+    async listarEquipamentosDoCliente(clientName, excludeDossierId) {
+      if (!clientName) return [];
+      const { data: siblings } = await sb.from('dossier_obra')
+        .select('id, building_name').eq('client_name', clientName);
+      const ids = (siblings || []).map((s) => s.id).filter((id) => id !== excludeDossierId);
+      if (ids.length === 0) return [];
+      const { data: equipamentos } = await sb.from('equipamentos_obra')
+        .select('*, parceiros_instaladores(id, nome)').in('dossier_id', ids);
+      const buildingById = {};
+      (siblings || []).forEach((s) => { buildingById[s.id] = s.building_name; });
+      return (equipamentos || []).map((e) => ({ ...e, dossier_building_name: buildingById[e.dossier_id] }));
+    },
+
     async criarEquipamento(dossierId, campos) {
       const id = 'EQO-' + Date.now().toString().slice(-6);
       const { error } = await sb.from('equipamentos_obra').insert({

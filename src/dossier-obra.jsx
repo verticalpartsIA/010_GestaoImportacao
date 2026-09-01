@@ -135,7 +135,7 @@ const DOSSIER_TAB_LABEL = {
   pendencias: 'Pendências', responsaveis: 'Responsáveis', historico: 'Histórico',
 };
 
-function DossierObraPage({ dossierId, setRoute }) {
+function DossierObraPage({ dossierId, setRoute, setSubsel }) {
   const [dossier, setDossier] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   /* Aba inicial vem da URL quando é deep link (ex.: .../dossier-obra/DOS-M034/documentos);
@@ -301,7 +301,7 @@ function DossierObraPage({ dossierId, setRoute }) {
         {activeTab === 'visao-geral' && <TabVisaoGeral dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'documentos' && <TabDocumentos dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'instalacao' && <TabInstalacao dossier={dossier} reload={carregarDossier} />}
-        {activeTab === 'equipamentos' && <TabEquipamentos dossier={dossier} />}
+        {activeTab === 'equipamentos' && <TabEquipamentos dossier={dossier} setRoute={setRoute} setSubsel={setSubsel} />}
         {activeTab === 'cronograma-instalacao' && <TabCronogramaInstalacao dossier={dossier} />}
         {activeTab === 'pendencias' && <TabPendencias dossier={dossier} setModalOpen={setModalOpen} />}
         {activeTab === 'responsaveis' && <TabResponsaveis dossier={dossier} setModalOpen={setModalOpen} />}
@@ -829,14 +829,17 @@ function EquipamentoCard({ equip, parceiros, onSalvar, onExcluir }) {
   );
 }
 
-function TabEquipamentos({ dossier }) {
+function TabEquipamentos({ dossier, setRoute, setSubsel }) {
   const [equipamentos, setEquipamentos] = React.useState(null);
+  const [equipamentosCliente, setEquipamentosCliente] = React.useState(null);
   const [parceiros, setParceiros] = React.useState([]);
 
   const carregar = React.useCallback(() => {
     window.__DOSSIER.listarEquipamentos(dossier.id).then(setEquipamentos).catch((e) => { window.toast?.('Erro: ' + e.message, 'error'); setEquipamentos([]); });
-  }, [dossier.id]);
+    window.__DOSSIER.listarEquipamentosDoCliente(dossier.client_name, dossier.id).then(setEquipamentosCliente).catch(() => setEquipamentosCliente([]));
+  }, [dossier.id, dossier.client_name]);
   React.useEffect(() => { carregar(); }, [carregar]);
+  const abrirDossier = (id) => { setSubsel && setSubsel(id); setRoute && setRoute('dossier-obra'); };
   React.useEffect(() => {
     if (window.RHHomologacao) window.RHHomologacao.listarMontadores().then(setParceiros).catch(() => setParceiros([]));
   }, []);
@@ -887,6 +890,28 @@ function TabEquipamentos({ dossier }) {
         <EquipamentoCard key={eq.id} equip={eq} parceiros={parceiros} onSalvar={salvar} onExcluir={excluir}/>
       ))}
       <Button variant="outline" size="sm" icon="plus" onClick={adicionar}>+ Adicionar equipamento</Button>
+
+      {equipamentosCliente === null ? null : equipamentosCliente.length > 0 && (
+        <div style={{ marginTop: 24 }}>
+          <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
+            Outros equipamentos de {dossier.client_name} ({equipamentosCliente.length}) — conciliados e ainda por conciliar
+          </div>
+          {equipamentosCliente.map((eq) => (
+            <div key={eq.id} className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 10, marginBottom: 6 }}>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{eq.numero_serie || eq.tipo || eq.id}</div>
+                <div style={{ fontSize: 11, color: 'var(--fg3)' }}>{eq.dossier_building_name}</div>
+              </div>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                {eq.parceiros_instaladores?.nome
+                  ? <span style={{ fontSize: 11, color: '#00aa00', fontWeight: 600 }}>✓ {eq.parceiros_instaladores.nome}</span>
+                  : <span style={{ fontSize: 11, color: '#cc7700', fontWeight: 600 }}>○ sem instalador ainda</span>}
+                <Button variant="ghost" size="sm" icon="chevRight" onClick={() => abrirDossier(eq.dossier_id)}>Abrir</Button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }

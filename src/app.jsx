@@ -315,7 +315,7 @@ function App() {
       case "formularios": return <FormulariosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formulario-elevador": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel}/>;
       case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute}/>;
+      case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "status-obras": return <ObrasStatusPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "linha-do-tempo": return <window.LinhaDoTempoPage/>;
       case "cotacoes-fornecedor": return <CotacoesFornecedorPage setRoute={setRoute} setSubsel={setSubsel}/>;
