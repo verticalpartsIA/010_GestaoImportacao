@@ -178,7 +178,6 @@
       logResponsavel:'contratada', logModo:'despesas', logDiasExtra:'',
       valorTotal:'', formaPagamento:'2', parcelas:[],
       banco:'', agencia:'', conta:'', pix:'',
-      anexos: ANEXOS.reduce((a,x) => (a[x.id]=false, a), {}),
       cidadeAssinatura: 'Guarulhos',
       dataDia: pad2(hoje.getDate()),
       dataMes: MESES[hoje.getMonth()],
