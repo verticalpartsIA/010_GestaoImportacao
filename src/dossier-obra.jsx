@@ -916,17 +916,74 @@ function TabEquipamentos({ dossier, setRoute, setSubsel }) {
   );
 }
 
-/* União dos dois vínculos possíveis (obra inteira + por equipamento) numa
-   lista única "quem monta essa obra" — pedido do usuário depois de ver que
-   uma obra pode ter mais de uma instaladora, mas isso ficava escondido
-   dentro de cada card de equipamento, um por vez. Sem mudar schema: só
-   agrupa o que já existe. */
-function InstaladorasDaObraPanel({ dossier, equipamentos, parceiros, onVincular }) {
-  const [vinculando, setVinculando] = React.useState(false);
-  const [equipEscolhido, setEquipEscolhido] = React.useState('');
+/* Cadastro de empresas que passaram pela obra — N pra N, sem exigir
+   equipamento (pedido do usuário: "essa tela é o cadastro das empresas
+   no cliente apenas isso... os equipamentos são vinculados na aba
+   Equipamentos"). Tabela própria (dossier_obra_instaladores), separada
+   de equipamentos_obra.parceiro_instalador_id. */
+function EmpresasDaObraRoster({ dossierId, parceiros }) {
+  const [roster, setRoster] = React.useState(null);
+  const [adicionando, setAdicionando] = React.useState(false);
   const [empresaEscolhida, setEmpresaEscolhida] = React.useState('');
   const [salvando, setSalvando] = React.useState(false);
 
+  const carregar = React.useCallback(() => {
+    window.__DOSSIER.listarInstaladoresRoster(dossierId).then(setRoster).catch(() => setRoster([]));
+  }, [dossierId]);
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const adicionar = async () => {
+    if (!empresaEscolhida) return;
+    setSalvando(true);
+    try {
+      await window.__DOSSIER.vincularInstaladorRoster(dossierId, empresaEscolhida);
+      setEmpresaEscolhida(''); setAdicionando(false); carregar();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setSalvando(false); }
+  };
+  const remover = async (id) => {
+    try { await window.__DOSSIER.removerInstaladorRoster(id); carregar(); }
+    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+  };
+
+  if (roster === null) return <div style={{ fontSize: 12, color: '#999', marginBottom: 12 }}>Carregando…</div>;
+
+  const jaVinculadas = new Set(roster.map((r) => r.parceiro_instalador_id));
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Empresas vinculadas à obra</div>
+      {roster.length === 0 && <div style={{ fontSize: 12, color: '#999' }}>Nenhuma empresa vinculada ainda.</div>}
+      {roster.map((r) => (
+        <div key={r.id} className="row sb" style={{ fontSize: 13, marginBottom: 4, alignItems: 'center' }}>
+          <div>🏢 <b>{r.parceiros_instaladores?.nome || r.parceiro_instalador_id}</b></div>
+          <Button variant="ghost" size="sm" icon="trash" title="Remover" aria-label="Remover" onClick={() => remover(r.id)} />
+        </div>
+      ))}
+
+      {!adicionando ? (
+        <Button variant="ghost" size="sm" icon="plus" onClick={() => setAdicionando(true)} style={{ marginTop: 6 }}>+ Vincular empresa</Button>
+      ) : (
+        <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--border)', borderRadius: 6, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
+          <div style={{ minWidth: 220 }}>
+            <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4, fontSize: 10 }}>Empresa</label>
+            <select className="input" value={empresaEscolhida} onChange={(e) => setEmpresaEscolhida(e.target.value)}>
+              <option value="">— selecione —</option>
+              {parceiros.filter((p) => !jaVinculadas.has(p.id)).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+          </div>
+          <Button variant="primary" size="sm" onClick={adicionar} disabled={salvando || !empresaEscolhida}>{salvando ? 'Salvando…' : 'Vincular'}</Button>
+          <Button variant="ghost" size="sm" onClick={() => setAdicionando(false)}>Cancelar</Button>
+        </div>
+      )}
+      <div style={{ fontSize: 11, color: '#999', marginTop: 6 }}>Aqui é só o cadastro de quem passou pela obra. Pra dizer qual empresa montou qual equipamento, use a aba Equipamentos.</div>
+    </div>
+  );
+}
+
+/* Agrupamento por equipamento — informativo, mostra quem monta cada
+   equipamento (aba Equipamentos é quem edita isso). */
+function InstaladorasDaObraPanel({ equipamentos }) {
   const grupos = {};
   let semInstalador = 0;
   equipamentos.forEach((eq) => {
@@ -937,55 +994,20 @@ function InstaladorasDaObraPanel({ dossier, equipamentos, parceiros, onVincular 
   });
   const lista = Object.entries(grupos);
 
-  const abrirVinculo = () => {
-    setEquipEscolhido(equipamentos[0]?.id || '');
-    setEmpresaEscolhida('');
-    setVinculando(true);
-  };
-  const salvarVinculo = async () => {
-    if (!equipEscolhido || !empresaEscolhida) return;
-    setSalvando(true);
-    try { await onVincular(equipEscolhido, empresaEscolhida); setVinculando(false); }
-    finally { setSalvando(false); }
-  };
-
   if (equipamentos.length === 0) {
-    return <div style={{ fontSize: 12, color: '#999', marginBottom: 12 }}>Nenhum equipamento cadastrado ainda — cadastre na aba Equipamentos pra ver as instaladoras aqui.</div>;
+    return <div style={{ fontSize: 12, color: '#999', marginBottom: 12 }}>Nenhum equipamento cadastrado ainda — cadastre na aba Equipamentos pra ver quem monta cada um.</div>;
   }
 
   return (
     <div style={{ marginBottom: 16 }}>
-      <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Instaladoras desta obra</div>
+      <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Quem monta cada equipamento</div>
       {lista.length === 0 && <div style={{ fontSize: 12, color: '#999' }}>Nenhum equipamento tem instalador vinculado ainda.</div>}
       {lista.map(([empId, g]) => (
         <div key={empId} style={{ fontSize: 13, marginBottom: 4 }}>
           🏢 <b>{g.nome}</b> — {g.equipamentos.length} equipamento{g.equipamentos.length !== 1 ? 's' : ''}
-          {empId === dossier.parceiro_instalador_id && <span style={{ marginLeft: 6, fontSize: 11, color: '#0066cc', fontWeight: 700 }}>★ vínculo principal da obra</span>}
         </div>
       ))}
       {semInstalador > 0 && <div style={{ fontSize: 12, color: '#cc7700', marginTop: 4 }}>⚠ {semInstalador} equipamento{semInstalador !== 1 ? 's' : ''} sem instalador vinculado.</div>}
-
-      {!vinculando ? (
-        <Button variant="ghost" size="sm" icon="plus" onClick={abrirVinculo} style={{ marginTop: 6 }}>+ Vincular mais uma empresa</Button>
-      ) : (
-        <div style={{ marginTop: 8, padding: 10, border: '1px solid var(--border)', borderRadius: 6, display: 'flex', gap: 8, alignItems: 'flex-end', flexWrap: 'wrap' }}>
-          <div style={{ minWidth: 200 }}>
-            <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4, fontSize: 10 }}>Equipamento</label>
-            <select className="input" value={equipEscolhido} onChange={(e) => setEquipEscolhido(e.target.value)}>
-              {equipamentos.map((eq) => <option key={eq.id} value={eq.id}>{eq.numero_serie ? `${eq.tipo || eq.id} — nº ${eq.numero_serie}` : (eq.descricao || eq.tipo || eq.id)}</option>)}
-            </select>
-          </div>
-          <div style={{ minWidth: 200 }}>
-            <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4, fontSize: 10 }}>Empresa</label>
-            <select className="input" value={empresaEscolhida} onChange={(e) => setEmpresaEscolhida(e.target.value)}>
-              <option value="">— selecione —</option>
-              {parceiros.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </select>
-          </div>
-          <Button variant="primary" size="sm" onClick={salvarVinculo} disabled={salvando || !equipEscolhido || !empresaEscolhida}>{salvando ? 'Salvando…' : 'Vincular'}</Button>
-          <Button variant="ghost" size="sm" onClick={() => setVinculando(false)}>Cancelar</Button>
-        </div>
-      )}
     </div>
   );
 }
@@ -1088,11 +1110,8 @@ function TabInstalacao({ dossier, reload }) {
         </div>
 
         <div style={{ marginTop: 12 }}>
-          <InstaladorasDaObraPanel dossier={dossier} equipamentos={equipamentos} parceiros={parceiros}
-            onVincular={async (equipId, empresaId) => {
-              await window.__DOSSIER.atualizarEquipamento(equipId, { parceiro_instalador_id: empresaId });
-              carregar();
-            }} />
+          <EmpresasDaObraRoster dossierId={dossier.id} parceiros={parceiros} />
+          <InstaladorasDaObraPanel equipamentos={equipamentos} />
           <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Parceiro instalador (vínculo principal da obra)</label>
           <select className="input" style={{ maxWidth: 360 }} disabled={busy} value={dossier.parceiro_instalador_id || ''}
             onChange={(e) => acao(() => store.vincularParceiroInstalador(dossier.id, e.target.value || null))}>

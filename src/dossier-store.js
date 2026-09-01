@@ -375,6 +375,32 @@ window.__DOSSIER = window.__DOSSIER || (() => {
       return (equipamentos || []).map((e) => ({ ...e, dossier_building_name: buildingById[e.dossier_id] }));
     },
 
+    /* Empresas que passaram pela obra — cadastro simples (obra ↔ empresa,
+       N pra N), separado de qual equipamento cada uma montou. "Quantas
+       empresas forem necessárias", sem exigir escolher equipamento. */
+    async listarInstaladoresRoster(dossierId) {
+      const { data, error } = await sb.from('dossier_obra_instaladores')
+        .select('id, parceiro_instalador_id, vinculado_em, vinculado_por, parceiros_instaladores(id, nome)')
+        .eq('dossier_id', dossierId).order('vinculado_em', { ascending: true });
+      if (error) throw error;
+      return data || [];
+    },
+
+    async vincularInstaladorRoster(dossierId, parceiroId) {
+      const id = 'DOI-' + Date.now().toString().slice(-8);
+      const { error } = await sb.from('dossier_obra_instaladores').insert({
+        id, dossier_id: dossierId, parceiro_instalador_id: parceiroId,
+        vinculado_por: window.__VP_USER?.email || 'system',
+      });
+      if (error) throw error;
+      return id;
+    },
+
+    async removerInstaladorRoster(id) {
+      const { error } = await sb.from('dossier_obra_instaladores').delete().eq('id', id);
+      if (error) throw error;
+    },
+
     async criarEquipamento(dossierId, campos) {
       const id = 'EQO-' + Date.now().toString().slice(-6);
       const { error } = await sb.from('equipamentos_obra').insert({
