@@ -93,7 +93,7 @@ window.__DOSSIER = window.__DOSSIER || (() => {
     async obter(dossierId) {
       const { data: dossier, error: errDossier } = await sb
         .from('dossier_obra')
-        .select('*')
+        .select('*, clientes(id, razao_social, nome_fantasia)')
         .eq('id', dossierId)
         .single();
 
@@ -189,6 +189,15 @@ window.__DOSSIER = window.__DOSSIER || (() => {
       });
 
       if (error) console.error('Erro ao registrar histórico:', error);
+    },
+
+    /* ---- Vincular obra a um cliente do Cadastro (client_name é texto
+       livre, sem ligação nenhuma com a tabela clientes — esse é o
+       vínculo manual, já que os nomes raramente batem sozinhos) ---- */
+    async vincularCliente(dossierId, clienteId) {
+      const { error } = await sb.from('dossier_obra')
+        .update({ cliente_id: clienteId || null, updated_at: new Date().toISOString() }).eq('id', dossierId);
+      if (error) throw error;
     },
 
     /* ---- Atribuir responsável por etapa ---- */

@@ -298,7 +298,7 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
 
       {/* ---- CONTEÚDO DAS TABS ---- */}
       <div>
-        {activeTab === 'visao-geral' && <TabVisaoGeral dossier={dossier} setModalOpen={setModalOpen} />}
+        {activeTab === 'visao-geral' && <TabVisaoGeral dossier={dossier} setModalOpen={setModalOpen} reload={carregarDossier} />}
         {activeTab === 'documentos' && <TabDocumentos dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'instalacao' && <TabInstalacao dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'equipamentos' && <TabEquipamentos dossier={dossier} setRoute={setRoute} setSubsel={setSubsel} />}
@@ -337,7 +337,37 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
   );
 }
 
-function TabVisaoGeral({ dossier, setModalOpen }) {
+/* Vínculo manual obra -> Cadastro de Clientes — client_name é texto
+   livre (veio da migração da planilha), sem ligação com a tabela
+   clientes; raramente o nome bate sozinho, então o vínculo é manual. */
+function ClienteVinculoField({ dossier, reload }) {
+  const [clientes, setClientes] = React.useState(null);
+  const [salvando, setSalvando] = React.useState(false);
+  React.useEffect(() => { window.CadastrosClientesStore.listarTodos().then(setClientes).catch(() => setClientes([])); }, []);
+
+  const salvar = async (clienteId) => {
+    setSalvando(true);
+    try { await window.__DOSSIER.vincularCliente(dossier.id, clienteId || null); await reload?.(); }
+    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setSalvando(false); }
+  };
+
+  return (
+    <div style={{ marginTop: 10 }}>
+      <label className="up-eyebrow muted" style={{ display: 'block', marginBottom: 4 }}>Cliente (Cadastro)</label>
+      <select className="input" style={{ maxWidth: 360 }} disabled={salvando || clientes === null}
+        value={dossier.cliente_id || ''} onChange={(e) => salvar(e.target.value)}>
+        <option value="">— nenhum vinculado —</option>
+        {(clientes || []).map((c) => <option key={c.id} value={c.id}>{c.nome_fantasia || c.razao_social}</option>)}
+      </select>
+      <div style={{ fontSize: 11, color: '#999', marginTop: 4 }}>
+        Nome digitado na obra: "{dossier.client_name}" — vincule ao cadastro correto se o nome não bater sozinho.
+      </div>
+    </div>
+  );
+}
+
+function TabVisaoGeral({ dossier, setModalOpen, reload }) {
   const pendenciasAtivas = dossier.pendencias?.filter(p => !p.resolved_at) || [];
   const pendenciaBloqueante = pendenciasAtivas.some(p => p.bloqueante);
   const documentsCount = dossier.documentos?.length || 0;
@@ -362,6 +392,7 @@ function TabVisaoGeral({ dossier, setModalOpen }) {
             <><b style={{ color: '#00aa00' }}>SEM BLOQUEIOS</b> — Próximo passo liberado</>
           )}
         </div>
+        <ClienteVinculoField dossier={dossier} reload={reload} />
       </div>
 
       {/* ANÁLISE TÉCNICA */}
