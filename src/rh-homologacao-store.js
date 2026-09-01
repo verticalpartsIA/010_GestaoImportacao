@@ -235,6 +235,32 @@
     return dados.id;
   }
 
+  /* Status real dos documentos ESCOPO EMPRESA (PGR, PCMSO, NRs da empresa
+     etc.) de um parceiro instalador, cruzando o catálogo completo com o
+     que já foi de fato registrado em parceiros_documentos_empresa. Criada
+     01/09 pro Contrato Instalador (Cláusula 2.13 do wizard) parar de usar
+     um checklist manual solto e mostrar o status real de homologação —
+     mesma ideia de statusGeralPorColaboradores, mas pro escopo empresa
+     (que aquela função não cobre). Tabela parceiros_documentos_empresa
+     ainda tem poucos registros reais (migração de planilha antiga,
+     25/08) — "sem_registro" pra maioria dos documentos hoje é esperado e
+     reflete a realidade, não um bug. */
+  async function statusDocumentosEmpresa(empresaId) {
+    const c = sb();
+    if (!c || !empresaId) return [];
+    const catalogo = await listarDocCatalogo();
+    const catEmpresa = catalogo.filter((t) => t.escopo === 'empresa');
+    const { data: docs } = await c.from('parceiros_documentos_empresa')
+      .select('documento_id, status, data_vencimento').eq('empresa_id', empresaId);
+    const porTipo = {};
+    (docs || []).forEach((d) => { porTipo[d.documento_id] = d; });
+    return catEmpresa.map((t) => {
+      const d = porTipo[t.id];
+      const status = !d ? 'sem_registro' : (d.status === 'VENCIDO' ? 'vencido' : 'entregue');
+      return { documento_id: t.id, nome: t.nome, obrigatorio: t.obrigatorio, status, data_vencimento: d ? d.data_vencimento : null };
+    }).sort((a, b) => a.nome.localeCompare(b.nome));
+  }
+
   /* Resumo de status (vencido/válido/N-A) por empresa — 1 query, agrupado no
      cliente. Usado pra pintar a lista de empresas sem precisar de N+1. */
   async function resumoDocumentosPorEmpresa() {
@@ -405,6 +431,7 @@
     salvarDocumentoColaborador,
     resumoDocumentosPorEmpresa,
     statusGeralPorColaboradores,
+    statusDocumentosEmpresa,
     listarObrasPorInstalador,
     listarHierarquiaClientesDoInstalador,
     uploadDocumentoColaboradorArquivo,

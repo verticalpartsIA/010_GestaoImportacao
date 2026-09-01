@@ -442,6 +442,39 @@ function CIStepLogistica({ s, set }) {
   );
 }
 
+/* Pré-preenche banco/agência/conta/PIX a partir do cadastro da empresa
+   (Cadastros → Empresas Instaladoras / RH Operacional → Homologação —
+   mesma tabela parceiros_instaladores) pelo CNPJ já digitado no Passo 2.
+   Só preenche se os 4 campos ainda estiverem vazios — nunca sobrescreve o
+   que o usuário já digitou nesse contrato (reabrir rascunho, editar,
+   corrigir dado desatualizado do cadastro etc.). Sem dado bancário
+   cadastrado na empresa, some silenciosamente — comportamento de hoje
+   (digitar na mão) continua igual. */
+function CIBancoPrefill({ cnpj, s, set }) {
+  const [status, setStatus] = _ciUS(null); // null | 'found'
+
+  _ciUE(() => {
+    let vivo = true;
+    if (!window.CI.isCNPJValid(cnpj) || !window.RHHomologacao) return;
+    if (s.banco || s.agencia || s.conta || s.pix) return;
+    const digits = window.CI.onlyDigits(cnpj);
+    window.RHHomologacao.listarMontadores().then((lista) => {
+      if (!vivo) return;
+      const m = (lista || []).find((p) => window.CI.onlyDigits(p.cnpj || '') === digits);
+      if (!m || (!m.banco && !m.agencia && !m.conta && !m.pix)) return;
+      set('banco', m.banco || '');
+      set('agencia', m.agencia || '');
+      set('conta', m.conta || '');
+      set('pix', m.pix || '');
+      setStatus('found');
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, [cnpj]);
+
+  if (status !== 'found') return null;
+  return <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Dados bancários preenchidos automaticamente a partir do cadastro da empresa (Cadastros → Empresas Instaladoras). Confira antes de gerar o contrato.</div>;
+}
+
 function CIStepPagamento({ s, set, errors }) {
   const addParcela = () => set('parcelas', [...(s.parcelas || []), { valor: '', data: '', descricao: '' }]);
   const updateParcela = (i, k, v) => {
@@ -484,6 +517,7 @@ function CIStepPagamento({ s, set, errors }) {
       </div>
       <div className="ci-field-group">
         <h3 className="ci-group-title">Dados bancários da Contratada</h3>
+        <CIBancoPrefill cnpj={s.c_cnpj} s={s} set={set} />
         <div className="ci-grid">
           <CIField label="Banco" value={s.banco} onChange={(v) => set('banco', v)} placeholder="Banco do Brasil" />
           <CIField label="Agência" width="narrow" mono value={s.agencia} onChange={(v) => set('agencia', v)} placeholder="0000" />
@@ -495,28 +529,70 @@ function CIStepPagamento({ s, set, errors }) {
   );
 }
 
+/* Anexos obrigatórios (Cláusula 2.13) — até 01/09 era um checklist manual
+   solto (`s.anexos`, 10 itens fixos), sem nenhuma ligação com o status real
+   de homologação da Contratada — marcar/desmarcar aqui não refletia (nem
+   alimentava) parceiros_documentos_empresa/-colaborador. Vira leitura
+   automática, somente leitura: busca a empresa pelo CNPJ do Passo 2 e
+   mostra o status real (escopo empresa) vindo do catálogo completo via
+   RHHomologacao.statusDocumentosEmpresa. Não bloqueia gerar o contrato
+   mesmo com pendência — mesmo espírito não-bloqueante do aviso do Passo 2
+   (CIHomologacaoAviso): quem está montando o contrato precisa VER o real,
+   a decisão de seguir ou não é dela. */
+function CIAnexosStatus({ cnpj }) {
+  const [estado, setEstado] = _ciUS(null); // null=carregando | 'sem-cnpj' | 'nao-cadastrada' | {docs:[...]}
+
+  _ciUE(() => {
+    let vivo = true;
+    if (!window.CI.isCNPJValid(cnpj) || !window.RHHomologacao) { setEstado('sem-cnpj'); return; }
+    setEstado(null);
+    const digits = window.CI.onlyDigits(cnpj);
+    window.RHHomologacao.listarMontadores().then(async (lista) => {
+      if (!vivo) return;
+      const m = (lista || []).find((p) => window.CI.onlyDigits(p.cnpj || '') === digits);
+      if (!m) { setEstado('nao-cadastrada'); return; }
+      const docs = await window.RHHomologacao.statusDocumentosEmpresa(m.id);
+      if (vivo) setEstado({ nome: m.nome, docs });
+    }).catch(() => { if (vivo) setEstado('nao-cadastrada'); });
+    return () => { vivo = false; };
+  }, [cnpj]);
+
+  const ICON = { entregue: '✓', vencido: '⚠', sem_registro: '—' };
+  const COR = { entregue: '#00aa00', vencido: '#cc2222', sem_registro: '#999' };
+  const LABEL = { entregue: 'Entregue', vencido: 'Vencido', sem_registro: 'Sem registro' };
+
+  return (
+    <div className="ci-field-group">
+      <h3 className="ci-group-title">Anexos obrigatórios (Cláusula 2.13)</h3>
+      {estado === null && <p className="ci-field-hint">Carregando status real de homologação…</p>}
+      {estado === 'sem-cnpj' && <p className="ci-field-hint">Preencha o CNPJ da Contratada no Passo 2 pra ver o status real dos documentos.</p>}
+      {estado === 'nao-cadastrada' && (
+        <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Empresa não encontrada em Homologação — cadastre em Cadastros → Empresas Instaladoras pra rastrear os documentos aqui. O contrato pode ser gerado mesmo assim; a lista de anexos exigidos continua na Cláusula 2.13.</div>
+      )}
+      {estado && typeof estado === 'object' && (
+        <>
+          <p className="ci-field-hint" style={{ marginBottom: 8 }}>Status real de homologação de <b>{estado.nome}</b> — não bloqueia gerar o contrato, é só pra você ver o que falta antes de enviar.</p>
+          <div className="ci-anexos-grid">
+            {estado.docs.map((d) => (
+              <div key={d.documento_id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '4px 0' }}>
+                <span style={{ color: COR[d.status], fontWeight: 700, width: 16, textAlign: 'center' }}>{ICON[d.status]}</span>
+                <span>{d.nome}{!d.obrigatorio && <span style={{ color: '#999' }}> · opcional</span>}</span>
+                <span style={{ color: COR[d.status], marginLeft: 'auto', fontSize: 11 }}>{LABEL[d.status]}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
 function CIStepRevisao({ s, set }) {
-  const allAnexos = window.CI.ANEXOS.every(a => s.anexos[a.id]);
-  const toggleAll = () => {
-    const next = {};
-    window.CI.ANEXOS.forEach(a => next[a.id] = !allAnexos);
-    set('anexos', next);
-  };
   const conds = window.CI.activeConditionals(s);
   return (
     <div className="ci-step">
       <CIStepHeader kicker="Passo 6 — Revisão" title="Anexos e assinatura" desc="Confirme os documentos obrigatórios e a data. Depois é só gerar o contrato." />
-      <div className="ci-field-group">
-        <div className="ci-anexos-head">
-          <h3 className="ci-group-title" style={{ margin: 0 }}>Anexos obrigatórios (Cláusula 2.13)</h3>
-          <button type="button" className="ci-link-btn" onClick={toggleAll}>{allAnexos ? 'Desmarcar todos' : 'Marcar todos'}</button>
-        </div>
-        <div className="ci-anexos-grid">
-          {window.CI.ANEXOS.map(a => (
-            <CICheckRow key={a.id} checked={!!s.anexos[a.id]} onChange={(v) => set('anexos', { ...s.anexos, [a.id]: v })} label={a.label} />
-          ))}
-        </div>
-      </div>
+      <CIAnexosStatus cnpj={s.c_cnpj} />
       <div className="ci-field-group">
         <h3 className="ci-group-title">Local e data</h3>
         <div className="ci-grid">

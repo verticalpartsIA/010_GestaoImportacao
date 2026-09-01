@@ -9,7 +9,7 @@ function CI_ClauseItem({ it }) {
   if (it.bank) {
     return (
       <div className="ci-doc-item ci-doc-bank">
-        <p><span className="ci-doc-n">{it.n === 'BANK' ? '5.1.3' : it.n}</span>{it.text}</p>
+        <p><span className="ci-doc-n">{it.n}</span>{it.text}</p>
         <div className="ci-doc-bank-grid">
           <div><span>Banco</span><b>{it.bank.banco}</b></div>
           <div><span>Agência</span><b>{it.bank.ag}</b></div>

@@ -1,7 +1,11 @@
 /* ============================================================
    pedido-fornecedor-store.js
    CRUD + serviços do "Pedido a Fornecedor" (RFQ).
-   - Numeração VPPC (RPC next_doc_number)
+   - Numeração VPRF (RPC next_doc_number) — até 01/09 usava "VPPC", que
+     colide com o prefixo que master-id-engine.js reserva pra etapa
+     "Precificação" (VPPC-0950). VPRF ("Requisição/Pedido Fornecedor")
+     não é usado por mais nenhuma etapa do fluxo VPCT/VPPC/VPPR/VPCV/VPCM/
+     VPOB, então não colide com nada.
    - Foto vinda da Ficha Técnica vinculada (produto_id)
    - Tradução PT→EN via Edge Function vp-translate
    window.PFStore
@@ -94,10 +98,10 @@
     } catch (e) { console.warn('[PFStore] notification failed', e); }
   }
 
-  /* ---------- Numeração VPPC ---------- */
+  /* ---------- Numeração VPRF ---------- */
   async function gerarNumero() {
     const c = sb(); if (!c) throw new Error('Supabase indisponível');
-    const { data, error } = await c.rpc('next_doc_number', { p_prefixo: 'VPPC' });
+    const { data, error } = await c.rpc('next_doc_number', { p_prefixo: 'VPRF' });
     if (error) throw error;
     const row = Array.isArray(data) ? data[0] : data;
     return { numero_documento: row.numero_documento, seq_mes: row.seq_mes, ano_mes: row.ano_mes };

@@ -206,6 +206,7 @@ const MNT_ENDERECO_EMPTY = {
 function ModalNovoMontador({ initialData, isEdit, onClose, onSaved }) {
   const [f, setF] = React.useState(() => ({
     nome: '', cnpj: '', email: '', telefone: '', contato: '',
+    banco: '', agencia: '', conta: '', pix: '',
     ...MNT_ENDERECO_EMPTY,
     ...(initialData || {}),
   }));
@@ -262,6 +263,22 @@ function ModalNovoMontador({ initialData, isEdit, onClose, onSaved }) {
         <div>
           <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>Endereço</h4>
           <CadEnderecoFields form={f} set={setField}/>
+        </div>
+        <div>
+          {/* Dados bancários da empresa (01/09) — fonte única de verdade
+              pro Contrato Instalador: CIStepPagamento pré-preenche o Passo 5
+              a partir daqui pelo CNPJ, em vez de digitar do zero em cada
+              contrato (ver contrato-instalador.jsx). */}
+          <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>Dados bancários</h4>
+          <p className="small muted" style={{ margin: '0 0 8px' }}>Usados pra pré-preencher o pagamento no Contrato Instalador (Jurídico).</p>
+          <div className="grid-2" style={{ gap: 12 }}>
+            {fld('Banco', 'banco', 'text', 'Banco do Brasil')}
+            {fld('Agência', 'agencia', 'text', '0000')}
+          </div>
+          <div className="grid-2" style={{ gap: 12, marginTop: 12 }}>
+            {fld('Conta', 'conta', 'text', '00000-0')}
+            {fld('Chave PIX', 'pix', 'text', 'CNPJ, e-mail, telefone ou chave aleatória')}
+          </div>
         </div>
       </div>
     </Modal>

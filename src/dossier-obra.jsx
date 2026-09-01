@@ -298,7 +298,7 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
 
       {/* ---- CONTEÚDO DAS TABS ---- */}
       <div>
-        {activeTab === 'visao-geral' && <TabVisaoGeral dossier={dossier} setModalOpen={setModalOpen} reload={carregarDossier} />}
+        {activeTab === 'visao-geral' && <TabVisaoGeral dossier={dossier} setModalOpen={setModalOpen} reload={carregarDossier} setRoute={setRoute} />}
         {activeTab === 'documentos' && <TabDocumentos dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'instalacao' && <TabInstalacao dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'equipamentos' && <TabEquipamentos dossier={dossier} setRoute={setRoute} setSubsel={setSubsel} />}
@@ -367,7 +367,62 @@ function ClienteVinculoField({ dossier, reload }) {
   );
 }
 
-function TabVisaoGeral({ dossier, setModalOpen, reload }) {
+/* Card "Contrato Instalador" (01/09) — até aqui o Dossiê da Obra não tinha
+   nenhuma referência ao contrato do instalador vinculado; quem estava na
+   obra não via status de assinatura nem de pagamento das parcelas, só dava
+   pra ver isso no painel de Jurídico (por número/CNPJ) ou no badge da
+   listagem de Cadastros → Empresas Instaladoras. Busca direto por
+   dossier_ids (mesmo vínculo que contrato-instalador-parcelas-store.js usa
+   pra liberar parcela por evento de instalação). Sem contrato vinculado a
+   esta obra, o card simplesmente não aparece — não é obrigatório todo
+   dossiê ter um. */
+function CardContratoInstalador({ dossier, setRoute }) {
+  const [contratos, setContratos] = React.useState(null); // null = carregando
+
+  React.useEffect(() => {
+    let vivo = true;
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c) { setContratos([]); return; }
+    c.from('contratos_instalador').select('id, numero_documento, contratada_nome, status, valor_total')
+      .contains('dossier_ids', [dossier.id])
+      .then(async ({ data }) => {
+        if (!vivo) return;
+        const lista = data || [];
+        if (!lista.length) { setContratos([]); return; }
+        const comParcelas = await Promise.all(lista.map(async (ct) => {
+          const parcelas = window.ContratoInstaladorParcelasStore
+            ? await window.ContratoInstaladorParcelasStore.listarParcelas(ct.id) : [];
+          return { ...ct, parcelasPagas: parcelas.filter((p) => p.status === 'paga').length, parcelasTotal: parcelas.length };
+        }));
+        if (vivo) setContratos(comParcelas);
+      });
+    return () => { vivo = false; };
+  }, [dossier.id]);
+
+  if (!contratos || contratos.length === 0) return null;
+
+  return (
+    <div style={{ background: '#f5f5f5', border: '1px solid #ddd', borderRadius: 6, padding: 16 }}>
+      <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 8 }}>Contrato Instalador</div>
+      {contratos.map((ct) => {
+        const st = (window.CIStore && window.CIStore.STATUS[ct.status]) || { label: ct.status };
+        const valorFmt = ct.valor_total != null ? 'R$ ' + (window.CI ? window.CI.fmtMoeda(ct.valor_total) : ct.valor_total) : '—';
+        return (
+          <div key={ct.id} style={{ marginBottom: 10, paddingBottom: 10, borderBottom: '1px solid #e5e5e5' }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{ct.numero_documento} <span style={{ fontWeight: 400, color: '#666' }}>· {ct.contratada_nome}</span></div>
+            <div style={{ fontSize: 12, color: '#666', marginTop: 2 }}>
+              {st.label} · {valorFmt}
+              {ct.parcelasTotal > 0 && <> · {ct.parcelasPagas}/{ct.parcelasTotal} parcela(s) paga(s)</>}
+            </div>
+          </div>
+        );
+      })}
+      <Button variant="outline" size="small" onClick={() => setRoute && setRoute('contrato-instalador')}>Abrir no Jurídico →</Button>
+    </div>
+  );
+}
+
+function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
   const pendenciasAtivas = dossier.pendencias?.filter(p => !p.resolved_at) || [];
   const pendenciaBloqueante = pendenciasAtivas.some(p => p.bloqueante);
   const documentsCount = dossier.documentos?.length || 0;
@@ -472,6 +527,8 @@ function TabVisaoGeral({ dossier, setModalOpen, reload }) {
           )}
         </div>
       </div>
+
+      <CardContratoInstalador dossier={dossier} setRoute={setRoute} />
 
       {/* PENDÊNCIAS */}
       <div style={{
