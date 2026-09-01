@@ -163,7 +163,18 @@ function SgApp() {
     const rec = source.rec;
     if (source.kind === 'proposta') return null; // PEPreview renderiza a versão publicada (ver conteudoVigente)
     if (source.kind === 'instalador') {
-      return window.CI.buildContract(rec.form_state, rec.numero_documento);
+      /* Usa o snapshot já persistido em rec.doc (gravado uma única vez em
+         createDraft — CI não tem edição pós-envio, updateFormState nunca é
+         chamado pra este tipo) em vez de reconstruir com buildContract
+         toda vez. Reconstruir ao vivo parecia inofensivo (form_state não
+         muda depois de criado), mas prende o documento já visualizado/
+         assinado ao código ATUAL do engine — uma correção de numeração de
+         cláusulas como a de 01/09 mudaria retroativamente a aparência de
+         contratos já assinados antes do deploy, sem que o hash de
+         auditoria (que só cobre form_state + signerName) acusasse
+         qualquer diferença. Fallback pro rebuild ao vivo só pra registro
+         antigo/malformado sem doc persistido. */
+      return (rec.doc && rec.doc.clauses) ? rec.doc : window.CI.buildContract(rec.form_state, rec.numero_documento);
     }
     // venda
     return window.CV.buildContract({
