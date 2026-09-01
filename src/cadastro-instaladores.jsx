@@ -47,6 +47,34 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
     setRoute && setRoute('dossier-obra');
   };
 
+  const excluirEmpresa = async (emp) => {
+    if (!window.confirm(`Excluir a empresa "${emp.nome}"? Isso não pode ser desfeito.`)) return;
+    try {
+      await window.RHHomologacao.excluirMontador(emp.id);
+      window.toast?.('Empresa excluída.', 'success');
+      if (selected?.id === emp.id) { setSelected(null); setColaboradores([]); setObras(null); }
+      reloadEmpresas();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+  };
+
+  const excluirColab = async (col) => {
+    if (!window.confirm(`Excluir o colaborador "${col.nome_completo}"?`)) return;
+    try {
+      await window.RHHomologacao.excluirColaborador(col.id);
+      window.toast?.('Colaborador excluído.', 'success');
+      reloadColaboradores(selected.id);
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+  };
+
+  const desvincularObra = async (obra) => {
+    if (!window.confirm('Desvincular esta empresa deste equipamento/obra?')) return;
+    try {
+      await window.RHHomologacao.desvincularDaObra(selected.id, obra.id);
+      window.toast?.('Vínculo removido.', 'success');
+      reloadObras(selected.id);
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+  };
+
   if (empresas === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const filtered = empresas.filter((e) => {
@@ -92,7 +120,10 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
                     <div className="cell-main" style={{ fontSize: 14 }}>{e.nome}</div>
                     <div className="cell-sub">{e.id} · {e.cnpj || '—'}</div>
                   </div>
-                  <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={(ev) => { ev.stopPropagation(); setEditingEmpresa(e); setShowEmpresaModal(true); }} />
+                  <div className="row gap-1">
+                    <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={(ev) => { ev.stopPropagation(); setEditingEmpresa(e); setShowEmpresaModal(true); }} />
+                    <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => { ev.stopPropagation(); excluirEmpresa(e); }} />
+                  </div>
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 6 }}>
                   {e.email || e.telefone || '—'}
@@ -117,7 +148,10 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
                     <div className="cell-main" style={{ fontSize: 13 }}>{col.nome_completo}</div>
                     <div className="cell-sub">{col.cpf || col.cnh || '—'}{col.status && col.status !== 'Ativo' ? ` · ${col.status}` : ''}</div>
                   </div>
-                  <Button variant="ghost" size="sm" icon="edit" onClick={() => { setEditingColaborador(col); setShowColaboradorModal(true); }} />
+                  <div className="row gap-1">
+                    <Button variant="ghost" size="sm" icon="edit" onClick={() => { setEditingColaborador(col); setShowColaboradorModal(true); }} />
+                    <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={() => excluirColab(col)} />
+                  </div>
                 </div>
               ))}
             </div>
@@ -130,7 +164,7 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
 
         {selected ? (
           <Card title="Clientes atendidos" sub={obras ? `${obras.length} cliente(s)` : 'Carregando…'}>
-            <CIHierarquiaClientes clientes={obras} onAbrir={abrirObra} />
+            <CIHierarquiaClientes clientes={obras} onAbrir={abrirObra} onDesvincular={desvincularObra} />
           </Card>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', color: 'var(--fg3)', fontSize: 13, padding: '60px 20px', textAlign: 'center' }}>
@@ -288,7 +322,7 @@ function CIMarcosTecnicos({ checklist }) {
    Equipamentos. Uma empresa pode chegar a uma obra por 3 vínculos
    diferentes (principal, roster, por equipamento) — já vêm unidos e
    deduplicados por listarHierarquiaClientesDoInstalador. */
-function CIHierarquiaClientes({ clientes, onAbrir }) {
+function CIHierarquiaClientes({ clientes, onAbrir, onDesvincular }) {
   if (clientes === null) return <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
   if (clientes.length === 0) return <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum cliente vinculado a esta empresa ainda.</div>;
 
@@ -308,6 +342,8 @@ function CIHierarquiaClientes({ clientes, onAbrir }) {
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <CIObraStatusBadge statusMaster={o.status_master} checklist={o.checklist} pagamento={o.pagamento} />
+                  <Button variant="ghost" size="sm" icon="trash" title="Desvincular"
+                    onClick={(ev) => { ev.stopPropagation(); onDesvincular?.(o); }} />
                   <Icon.chevRight size={14} />
                 </div>
               </div>
