@@ -303,8 +303,36 @@
     const ag    = vBlank(s.agencia, '____');
     const conta = vBlank(s.conta, '____');
     const pix   = vBlank(s.pix, '____');
-    items.push({ n:'BANK', text:'Dados bancários da CONTRATADA:', bank:{ banco, ag, conta, pix } });
+    /* Nº do item bancário calculado a partir do último item de fato (não
+       fixo em "5.1.3") — senão desalinha sempre que a forma de pagamento
+       não é a de 2 parcelas (3 parcelas usa até 5.1.3, personalizado usa
+       um número de itens variável). */
+    const lastN = items.length ? items[items.length - 1].n : '5.1';
+    items.push({ n: bumpItemNumber(lastN), text:'Dados bancários da CONTRATADA:', bank:{ banco, ag, conta, pix } });
     return items;
+  }
+
+  function bumpItemNumber(n) {
+    const parts = String(n).split('.');
+    const last = parseInt(parts[parts.length - 1], 10);
+    parts[parts.length - 1] = String((isNaN(last) ? 0 : last) + 1);
+    return parts.join('.');
+  }
+
+  /* Os números "n" dos itens (ex.: "2.1", "5.1.2") nascem hardcoded
+     assumindo a ordem-base do contrato SEM nenhuma cláusula condicional
+     (Equipamento Especial / Logística). Quando uma condicional entra, ela
+     é inserida no meio do array sem número de cláusula próprio (usa EE./LG.),
+     empurrando o ORDINAL (c.ord, "CLÁUSULA TERCEIRA...") de tudo que vem
+     depois — mas o número dos itens ficava parado no valor hardcoded,
+     desalinhando cabeçalho x corpo (ex.: "CLÁUSULA TERCEIRA" com itens
+     "2.1, 2.2..."). renumClauseItems corrige isso reescrevendo só o
+     primeiro segmento do "n" (o número da cláusula) pro valor real da
+     posição, preservando o resto (".1", ".13" etc.). */
+  function renumClauseItems(clause, actualNum) {
+    if (!clause.baseNum || clause.baseNum === actualNum) return;
+    const re = new RegExp('^' + clause.baseNum + '(?=[.\\D]|$)');
+    clause.items.forEach(it => { if (it.n) it.n = it.n.replace(re, String(actualNum)); });
   }
 
   /* Monta o documento completo. Recebe o estado do form + o numero_documento já gerado.
@@ -325,7 +353,7 @@
       const lbl = s.modalidade === 'remocao_adequacao' ? 'Local da nova instalação' : 'Destino do equipamento removido';
       objetoItems.push({ n:'1.4', text:`${lbl}: ` + vBlank(s.destino, '(informar o destino / local)') });
     }
-    clauses.push({ id:'objeto', titulo:'DO OBJETO', items:objetoItems });
+    clauses.push({ id:'objeto', titulo:'DO OBJETO', baseNum:1, items:objetoItems });
 
     /* EQUIPAMENTO ESPECIAL (condicional) */
     if (isCargaEspecial(s)) {
@@ -342,7 +370,7 @@
 
     /* OBRIGAÇÕES DA CONTRATADA */
     clauses.push({
-      id:'obrig_contratada', titulo:'DA OBRIGAÇÃO DO CONTRATADO',
+      id:'obrig_contratada', titulo:'DA OBRIGAÇÃO DO CONTRATADO', baseNum:2,
       items: [
         { n:'2.1', text:'Fica responsável a CONTRATADA por todos os serviços que lhe forem apontados, durante o tempo necessário para ' + (isRemocao(s) ? 'remoção' : 'instalação') + ' e finalização do mesmo, conforme especificado no item 1.1.' },
         { n:'2.2', text:'A CONTRATADA deverá seguir as normas estabelecidas pela CONTRATANTE, como horário de funcionamento do local onde serão executados os serviços e quanto às regras de utilização de ferramentas, como a obrigatoriedade do uso de Equipamentos de Proteção Individual (EPIs).' },
@@ -362,7 +390,7 @@
 
     /* OBRIGAÇÕES DA CONTRATANTE */
     clauses.push({
-      id:'obrig_contratante', titulo:'DAS OBRIGAÇÕES DA CONTRATANTE',
+      id:'obrig_contratante', titulo:'DAS OBRIGAÇÕES DA CONTRATANTE', baseNum:3,
       items: [
         { n:'3.1', text:'Prestar as informações e os esclarecimentos que venham a ser solicitados pela CONTRATADA, desde que necessários para a prestação dos serviços ora contratados.' },
         { n:'3.2', text:'A CONTRATANTE se responsabiliza a prestar todo apoio técnico necessário para que a CONTRATADA realize os serviços acordados neste instrumento.' },
@@ -372,7 +400,7 @@
 
     /* RESPONSABILIDADE DA CONTRATADA */
     clauses.push({
-      id:'resp_contratada', titulo:'DA RESPONSABILIDADE DA CONTRATADA',
+      id:'resp_contratada', titulo:'DA RESPONSABILIDADE DA CONTRATADA', baseNum:4,
       items: [
         { n:'4.1', text:'A CONTRATADA responderá pelos encargos trabalhistas, fiscais, comerciais e previdenciários resultantes da execução deste contrato, não transferindo à CONTRATANTE, em caso de inadimplência da CONTRATADA com referência a esses encargos, a responsabilidade por seu pagamento, nem podendo onerar o objeto deste contrato.' },
         { n:'4.2', text:'Caberão à CONTRATADA os prejuízos causados à CONTRATANTE ou a terceiros, por atos de sua responsabilidade e decorrentes da execução dos serviços estipulados neste contrato, por culpa ou dolo, excluídos os casos em que a CONTRATANTE der causa, seja por sua ação ou omissão.' },
@@ -380,7 +408,7 @@
     });
 
     /* PAGAMENTO */
-    clauses.push({ id:'pagamento', titulo:'DO PAGAMENTO', items: buildPagamentoItems(s) });
+    clauses.push({ id:'pagamento', titulo:'DO PAGAMENTO', baseNum:5, items: buildPagamentoItems(s) });
 
     /* LOGÍSTICA (condicional) */
     if (isLongaDistancia(s)) {
@@ -401,12 +429,12 @@
     }
 
     /* CESSÃO */
-    clauses.push({ id:'cessao', titulo:'DA CESSÃO OU TRANSFERÊNCIA', items:[
+    clauses.push({ id:'cessao', titulo:'DA CESSÃO OU TRANSFERÊNCIA', baseNum:6, items:[
       { n:'6.1', text:'O contrato não poderá ser objeto de cessão ou transferência, no todo ou em parte, a não ser com prévio e expresso consentimento da CONTRATANTE, sob pena de imediata rescisão do mesmo.' },
     ]});
 
     /* RESCISÃO */
-    clauses.push({ id:'rescisao', titulo:'DA RESCISÃO', items:[
+    clauses.push({ id:'rescisao', titulo:'DA RESCISÃO', baseNum:7, items:[
       { n:'7.1', text:'Constituem motivos para a rescisão deste contrato:', list:[
         'não cumprimento de cláusulas, especificações e prazos;',
         'atraso ou paralisação injustificada e/ou sem comunicação à CONTRATANTE na execução dos serviços;',
@@ -422,23 +450,23 @@
     ]});
 
     /* VIGÊNCIA */
-    clauses.push({ id:'vigencia', titulo:'DA VIGÊNCIA', items:[
+    clauses.push({ id:'vigencia', titulo:'DA VIGÊNCIA', baseNum:8, items:[
       { n:'8.1', text:'Para efeito deste contrato, a vigência terá seu início na data de assinatura deste instrumento e se findará automaticamente com a finalização dos serviços ora contratados.' },
       { n:'8.2', text:'Este contrato é válido até o término do serviço objeto deste contrato, vide Cláusula __OBJETO__, não ficando as partes isentas de seus compromissos éticos após a invalidação do mesmo, podendo ser prorrogado e/ou alterado por acordo entre as partes, mediante termo aditivo.', ref:'objeto' },
     ]});
 
     /* PENALIDADES */
-    clauses.push({ id:'penalidades', titulo:'DAS PENALIDADES', items:[
+    clauses.push({ id:'penalidades', titulo:'DAS PENALIDADES', baseNum:9, items:[
       { n:'9.1', text:'Em caso de rescisão sem justo motivo por uma das partes antes do prazo final do contrato, ou de qualquer uma das ocorrências previstas na Cláusula __RESCISAO__ deste instrumento, este Contrato será rescindido automaticamente e caberá à parte infratora multa equivalente a 20% (vinte por cento) sobre o total do contrato, a ser paga em até 5 (cinco) dias corridos da rescisão.', ref:'rescisao' },
     ]});
 
     /* TOLERÂNCIA */
-    clauses.push({ id:'tolerancia', titulo:'DA TOLERÂNCIA', items:[
+    clauses.push({ id:'tolerancia', titulo:'DA TOLERÂNCIA', baseNum:10, items:[
       { n:'10.1', text:'A eventual tolerância, pela CONTRATANTE, com relação ao descumprimento de qualquer termo ou condição aqui ajustado, não será considerada como desistência em exigir o cumprimento de disposição nele contida, nem representará novação com relação à obrigação passada, presente ou futura, no tocante ao termo ou condição cujo descumprimento foi tolerado.' },
     ]});
 
     /* DISPOSIÇÕES GERAIS */
-    clauses.push({ id:'disposicoes', titulo:'DAS DISPOSIÇÕES GERAIS', items:[
+    clauses.push({ id:'disposicoes', titulo:'DAS DISPOSIÇÕES GERAIS', baseNum:11, items:[
       { n:'11.1', text:'Este é um contrato típico de prestação de serviços, conforme nomeado pelo Código Civil, e no caso de qualquer omissão deste contrato serão aplicáveis as regras previstas na Legislação.' },
       { n:'11.2', text:'A execução deste contrato será acompanhada e fiscalizada por empregado da CONTRATANTE, o qual será também responsável pelo recebimento dos serviços, avaliação e aceite.' },
       { n:'11.3', text:'A CONTRATANTE não será responsável por eventual prejuízo sofrido e/ou causado pelos profissionais da CONTRATADA em decorrência deste contrato, bem como não terá qualquer responsabilidade por eventuais danos e/ou encargos fiscais, trabalhistas, civis, securitários e/ou sociais relacionados com a execução do objeto contratual pela CONTRATADA.' },
@@ -446,13 +474,17 @@
     ]});
 
     /* FORO */
-    clauses.push({ id:'foro', titulo:'DO FORO', items:[
+    clauses.push({ id:'foro', titulo:'DO FORO', baseNum:12, items:[
       { n:'12.1', text:'As partes convencionam que o Foro para dirimir quaisquer dúvidas ou questões oriundas do presente contrato é o Foro da Comarca de Guarulhos, São Paulo, com exclusão de qualquer outro, por mais privilegiado que seja.' },
     ]});
 
     /* Resolve referências cruzadas */
     const ordById = {};
-    clauses.forEach((c, i) => { ordById[c.id] = ORDINAIS_REF[i] || ('#'+(i+1)); c.ord = ORDINAIS[i] || ('#'+(i+1)); });
+    clauses.forEach((c, i) => {
+      ordById[c.id] = ORDINAIS_REF[i] || ('#'+(i+1));
+      c.ord = ORDINAIS[i] || ('#'+(i+1));
+      renumClauseItems(c, i + 1);
+    });
     clauses.forEach(c => c.items.forEach(it => {
       if (it.ref) it.text = it.text.replace(`__${it.ref.toUpperCase()}__`, ordById[it.ref] || '____');
       if (it.refInList && it.list) it.list = it.list.map(li => li.replace(`__${it.refInList.toUpperCase()}__`, ordById[it.refInList] || '____'));
