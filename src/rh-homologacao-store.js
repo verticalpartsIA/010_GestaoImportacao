@@ -85,6 +85,27 @@
     return data || [];
   }
 
+  async function excluirMontador(montadorId) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    const { error } = await c.from('parceiros_instaladores').delete().eq('id', montadorId);
+    if (error) throw error;
+  }
+
+  /* Desvincula uma empresa de uma obra na hierarquia "Clientes atendidos"
+     (cadastro-instaladores.jsx) — zera os 3 vínculos possíveis de uma vez
+     (principal, roster, por equipamento), já que a lista ali é a união
+     deduplicada dos três e o usuário não escolhe qual tipo remover. */
+  async function desvincularDaObra(empresaId, dossierId) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    await Promise.all([
+      c.from('dossier_obra').update({ parceiro_instalador_id: null }).eq('id', dossierId).eq('parceiro_instalador_id', empresaId),
+      c.from('dossier_obra_instaladores').delete().eq('dossier_id', dossierId).eq('parceiro_instalador_id', empresaId),
+      c.from('equipamentos_obra').update({ parceiro_instalador_id: null }).eq('dossier_id', dossierId).eq('parceiro_instalador_id', empresaId),
+    ]);
+  }
+
   function validarCertificacoes(certificacoes) {
     const hoje = new Date();
     const resultado = {
@@ -391,6 +412,8 @@
     salvarMontador,
     obterMontador,
     listarMontadores,
+    excluirMontador,
+    desvincularDaObra,
     validarCertificacoes,
     statusGeral,
     statusVariant,
