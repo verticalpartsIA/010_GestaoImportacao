@@ -39,6 +39,35 @@
     return data || null;
   }
 
+  /* "Vida do Cliente" — canal de entrada + vendedor vêm de leads.cliente_id
+     (vínculo real, já usado pelo Detalhe de Lead); obras/equipamentos/
+     instaladores vêm de dossier_obra.cliente_id (vínculo manual, recém
+     criado — só aparece o que já foi vinculado). Score fica pra depois:
+     precisa de regra de negócio que ainda não foi definida. */
+  async function historicoCliente(clienteId) {
+    const c = sb(); if (!c || !clienteId) return null;
+
+    const { data: leads } = await c.from('leads')
+      .select('id, building, origin, owner, status, date').eq('cliente_id', clienteId)
+      .order('date', { ascending: true });
+
+    const { data: obras } = await c.from('dossier_obra')
+      .select('id, building_name, status_master, created_at').eq('cliente_id', clienteId)
+      .order('created_at', { ascending: true });
+
+    const dossierIds = (obras || []).map((o) => o.id);
+    let equipamentos = [], roster = [];
+    if (dossierIds.length > 0) {
+      const [{ data: eq }, { data: rost }] = await Promise.all([
+        c.from('equipamentos_obra').select('dossier_id, numero_serie, parceiros_instaladores(nome)').in('dossier_id', dossierIds),
+        c.from('dossier_obra_instaladores').select('dossier_id, parceiros_instaladores(nome)').in('dossier_id', dossierIds),
+      ]);
+      equipamentos = eq || []; roster = rost || [];
+    }
+
+    return { leads: leads || [], obras: obras || [], equipamentos, roster };
+  }
+
   function formatarEndereco(p) {
     const partes = [p.logradouro, p.complemento, p.bairro, p.cidade && p.estado ? `${p.cidade}/${p.estado}` : (p.cidade || p.estado), p.cep].filter(Boolean);
     return partes.join(', ') || null;
@@ -118,5 +147,5 @@
     return cliente.id;
   }
 
-  window.CadastrosClientesStore = { gerarCodigo, listarTodos, obter, criar, atualizar, remover, criarOuVincularDeLead };
+  window.CadastrosClientesStore = { gerarCodigo, listarTodos, obter, criar, atualizar, remover, criarOuVincularDeLead, historicoCliente };
 }());

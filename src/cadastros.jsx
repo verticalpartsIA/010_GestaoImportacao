@@ -84,6 +84,7 @@ function CadastroClientesPage() {
   const [editing, setEditing] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const [historicoDe, setHistoricoDe] = React.useState(null);
 
   const reload = React.useCallback(() => { window.CadastrosClientesStore.listarTodos().then(setItems).catch(() => setItems([])); }, []);
   React.useEffect(() => { reload(); }, [reload]);
@@ -150,6 +151,7 @@ function CadastroClientesPage() {
                 <td>{c.ativo === false ? <span className="badge">Inativo</span> : <StatusBadge status="Ativo"/>}</td>
                 <td>
                   <div className="row gap-1">
+                    <Button variant="ghost" size="sm" icon="history" title="Histórico" onClick={() => setHistoricoDe(c)}/>
                     <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => { setEditing(c); setShowForm(true); }}/>
                     <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={() => excluir(c)}/>
                   </div>
@@ -159,7 +161,58 @@ function CadastroClientesPage() {
           </tbody>
         </table>
       </div>
+
+      {historicoDe && <ClienteHistoricoModal cliente={historicoDe} onClose={() => setHistoricoDe(null)} />}
     </div>
+  );
+}
+
+/* "Vida do Cliente" — timeline: canal de entrada + vendedor (leads),
+   obras/equipamentos/instaladores (dossier_obra.cliente_id, vínculo
+   manual — só mostra o que já foi ligado). Score fica pra uma fase
+   futura, precisa de regra de negócio ainda não definida. */
+function ClienteHistoricoModal({ cliente, onClose }) {
+  const [dados, setDados] = React.useState(null);
+  React.useEffect(() => {
+    window.CadastrosClientesStore.historicoCliente(cliente.id).then(setDados).catch(() => setDados({ leads: [], obras: [], equipamentos: [], roster: [] }));
+  }, [cliente.id]);
+
+  const montadoresPorObra = React.useMemo(() => {
+    if (!dados) return {};
+    const map = {};
+    dados.equipamentos.forEach((e) => { if (e.parceiros_instaladores?.nome) (map[e.dossier_id] = map[e.dossier_id] || new Set()).add(e.parceiros_instaladores.nome); });
+    dados.roster.forEach((r) => { if (r.parceiros_instaladores?.nome) (map[r.dossier_id] = map[r.dossier_id] || new Set()).add(r.parceiros_instaladores.nome); });
+    return map;
+  }, [dados]);
+
+  return (
+    <Modal title={`Histórico · ${cliente.razao_social}`} onClose={onClose} width={640}
+      footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
+      {!dados ? <div style={{ textAlign: 'center', padding: 30, color: 'var(--fg3)' }}>Carregando…</div> : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          <div>
+            <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Canal de entrada / Vendedor ({dados.leads.length})</div>
+            {dados.leads.length === 0 && <div className="small muted">Nenhum lead vinculado a este cliente ainda.</div>}
+            {dados.leads.map((l) => (
+              <div key={l.id} style={{ fontSize: 13, marginBottom: 4 }}>
+                📅 {l.date || '—'} · <b>{l.origin || 'canal não informado'}</b> · vendedor: {l.owner || '—'} · {l.building}
+              </div>
+            ))}
+          </div>
+          <div>
+            <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Obras e equipamentos ({dados.obras.length})</div>
+            {dados.obras.length === 0 && <div className="small muted">Nenhuma obra vinculada a este cliente ainda — vincule em Engenharia → Dossiê da Obra → Visão Geral.</div>}
+            {dados.obras.map((o) => (
+              <div key={o.id} style={{ fontSize: 13, marginBottom: 6, borderLeft: '2px solid var(--border)', paddingLeft: 8 }}>
+                <div><b>{o.building_name}</b> — {o.status_master || '—'} <span className="small muted">({o.created_at ? new Date(o.created_at).toLocaleDateString('pt-BR') : '—'})</span></div>
+                {montadoresPorObra[o.id] && <div className="small muted">🏢 {Array.from(montadoresPorObra[o.id]).join(', ')}</div>}
+              </div>
+            ))}
+          </div>
+          <div className="small muted">Score de relacionamento: ainda não implementado — depende de definir a regra de negócio (frequência, valor, satisfação?).</div>
+        </div>
+      )}
+    </Modal>
   );
 }
 
