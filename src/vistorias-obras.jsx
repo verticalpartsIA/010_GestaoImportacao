@@ -24,7 +24,10 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
   const [obraId, setObraId] = React.useState(obraIdProp || null);
   const [obra, setObra] = React.useState(obraProp || null);
   const [obras, setObras] = React.useState([]);
+  const [equipPorObra, setEquipPorObra] = React.useState({}); // dossier_id -> [numero_serie,...]
   const [loadingObras, setLoadingObras] = React.useState(!obraIdProp);
+  const [buscaObra, setBuscaObra] = React.useState('');
+  const [clienteAberto, setClienteAberto] = React.useState(null);
   const [vistorias, setVistorias] = React.useState([]);
   const [selectedVistoria, setSelectedVistoria] = React.useState(null);
   const [showForm, setShowForm] = React.useState(false);
@@ -49,10 +52,19 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
     const sb = window.__VP_SB?.sb;
     if (!sb) return;
     setLoadingObras(true);
-    sb.from('dossier_obra').select('id, building_name, client_name').order('created_at', { ascending: false })
-      .then(({ data, error }) => {
+    Promise.all([
+      sb.from('dossier_obra').select('id, building_name, client_name').order('created_at', { ascending: false }),
+      sb.from('equipamentos_obra').select('dossier_id, numero_serie'),
+    ])
+      .then(([{ data, error }, eqRes]) => {
         if (error) { console.error('Erro ao carregar obras:', error); window.toast?.('Erro ao carregar obras', 'error'); }
         setObras(data || []);
+        const map = {};
+        (eqRes.data || []).forEach((e) => {
+          if (!e.numero_serie) return;
+          (map[e.dossier_id] = map[e.dossier_id] || []).push(e.numero_serie);
+        });
+        setEquipPorObra(map);
         setLoadingObras(false);
       });
   }, [obraIdProp]);
@@ -302,16 +314,15 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
             <p>Nenhuma obra cadastrada ainda (Dossiê da Obra).</p>
           </div>
         ) : (
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
-            {obras.map((o) => (
-              <div key={o.id}
-                onClick={() => { setObraId(o.id); setObra({ nome: o.building_name }); }}
-                style={{ background: 'white', border: '1px solid #e0e0e0', borderRadius: '8px', padding: '1.25rem', cursor: 'pointer', boxShadow: '0 2px 8px rgba(0,0,0,0.06)' }}>
-                <div style={{ fontWeight: 'bold', fontSize: '0.95rem' }}>{o.building_name || 'Obra sem nome'}</div>
-                <div style={{ fontSize: '0.85rem', color: '#666', marginTop: 4 }}>{o.client_name || '—'}</div>
-              </div>
-            ))}
-          </div>
+          <SeletorObrasPorCliente
+            obras={obras}
+            equipPorObra={equipPorObra}
+            busca={buscaObra}
+            setBusca={setBuscaObra}
+            clienteAberto={clienteAberto}
+            setClienteAberto={setClienteAberto}
+            onEscolher={(o) => { setObraId(o.id); setObra({ nome: o.building_name }); }}
+          />
         )}
       </div>
     );
@@ -1043,6 +1054,92 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
               </button>
             </div>
           </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Seletor de obra agrupado por Cliente — lista indentada e recolhível,
+   substitui a antiga grade de cards (um card gigante por obra, difícil
+   de escanear quando o cliente tem várias obras/equipamentos). Clicar
+   no cliente expande/recolhe as obras dele; clicar numa obra escolhe. */
+function SeletorObrasPorCliente({ obras, equipPorObra, busca, setBusca, clienteAberto, setClienteAberto, onEscolher }) {
+  const q = busca.trim().toLowerCase();
+  const filtradas = !q ? obras : obras.filter((o) => {
+    const seriais = (equipPorObra[o.id] || []).join(' ');
+    return [o.client_name, o.building_name, seriais].filter(Boolean).join(' ').toLowerCase().includes(q);
+  });
+
+  const porCliente = {};
+  filtradas.forEach((o) => {
+    const cliente = o.client_name || 'Sem cliente';
+    (porCliente[cliente] = porCliente[cliente] || []).push(o);
+  });
+  const clientes = Object.keys(porCliente).sort((a, b) => a.localeCompare(b, 'pt-BR'));
+
+  // Com busca ativa, ou só 1 cliente no total, abre tudo sozinho pra não esconder resultado
+  const forcarAberto = !!q || clientes.length <= 1;
+
+  return (
+    <div>
+      <input
+        className="input"
+        placeholder="Buscar por cliente, obra ou nº de série…"
+        value={busca}
+        onChange={(e) => setBusca(e.target.value)}
+        style={{ width: '100%', padding: '0.65rem 0.85rem', border: '1px solid #ddd', borderRadius: 6, fontSize: '0.9rem', marginBottom: '1rem' }}
+      />
+      {clientes.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>Nenhuma obra encontrada.</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {clientes.map((cliente) => {
+            const lista = porCliente[cliente];
+            const aberto = forcarAberto || clienteAberto === cliente;
+            return (
+              <div key={cliente} style={{ border: '1px solid #e0e0e0', borderRadius: 8, background: 'white', overflow: 'hidden' }}>
+                <div
+                  onClick={() => setClienteAberto(clienteAberto === cliente ? null : cliente)}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: 8, padding: '0.75rem 1rem',
+                    cursor: 'pointer', fontWeight: 700, fontSize: '0.92rem', userSelect: 'none',
+                  }}>
+                  <span style={{ display: 'inline-block', transition: 'transform .15s', transform: aberto ? 'rotate(90deg)' : 'rotate(0deg)' }}>▸</span>
+                  🏢 {cliente}
+                  <span style={{ fontWeight: 400, color: '#888', fontSize: '0.82rem' }}>({lista.length})</span>
+                </div>
+                {aberto && (
+                  <div style={{ padding: '0 0.75rem 0.75rem', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                    {lista.map((o) => {
+                      const seriais = equipPorObra[o.id] || [];
+                      return (
+                        <div key={o.id}
+                          onClick={() => onEscolher(o)}
+                          style={{
+                            marginLeft: '1.5rem', padding: '0.6rem 0.85rem', borderRadius: 6,
+                            border: '1px solid #eee', cursor: 'pointer', display: 'flex',
+                            justifyContent: 'space-between', alignItems: 'center', gap: 8,
+                          }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = '#f8f9fa'; }}
+                          onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
+                          <div>
+                            <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{o.building_name || 'Obra sem nome'}</div>
+                            {seriais.length > 0 && (
+                              <div style={{ fontSize: '0.78rem', color: '#888', marginTop: 2 }}>
+                                🔧 {seriais.join(', ')}
+                              </div>
+                            )}
+                          </div>
+                          <span style={{ color: '#aaa', fontSize: '0.85rem' }}>›</span>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
