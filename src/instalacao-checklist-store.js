@@ -48,6 +48,42 @@
   function semanaTitulo(n) { return (SEMANA_META[n] || {}).titulo || `Semana ${n}`; }
   function semanaCor(n) { return (SEMANA_META[n] || {}).cor || '#555'; }
 
+  /* Marcos técnicos (rollup dos itens granulares do checklist, pedido do
+     usuário 01/09) — pra Central de Instaladores mostrar progresso por
+     equipamento sem precisar listar as ~28 etapas. Só elevador tem itens
+     tagueados hoje (ver migração checklist_instalacao_marcos_tecnicos). */
+  const MARCOS = [
+    { id: 'guias', label: 'Guias' },
+    { id: 'cabina', label: 'Cabina' },
+    { id: 'portas', label: 'Portas' },
+    { id: 'eletrica', label: 'Elétrica' },
+    { id: 'entrega', label: 'Entrega' },
+  ];
+
+  /* Cálculo puro (sem I/O) a partir de uma lista de itens já carregada —
+     usado tanto na aba Cronograma quanto na hierarquia da Central de
+     Instaladores. iniciadoEm = primeiro item concluído (qualquer marco);
+     cada marco só ganha data quando TODOS os itens daquele marco estão
+     concluídos (data = o mais recente entre eles). */
+  function resumoProgresso(itens) {
+    const lista = itens || [];
+    const total = lista.length;
+    const concluidos = lista.filter((i) => i.status === 'concluido');
+    const pct = total ? Math.round((concluidos.length / total) * 100) : 0;
+    const datas = concluidos.map((i) => i.concluido_em).filter(Boolean).sort();
+    const iniciadoEm = datas[0] || null;
+    const marcos = MARCOS.map((m) => {
+      const doMarco = lista.filter((i) => i.marco === m.id);
+      const concluidosDoMarco = doMarco.filter((i) => i.status === 'concluido');
+      const completo = doMarco.length > 0 && concluidosDoMarco.length === doMarco.length;
+      const dataConclusao = completo
+        ? concluidosDoMarco.map((i) => i.concluido_em).filter(Boolean).sort().slice(-1)[0] || null
+        : null;
+      return { ...m, completo, dataConclusao };
+    });
+    return { criado: total > 0, total, concluidos: concluidos.length, pct, iniciadoEm, marcos };
+  }
+
   async function listarTemplate(tipoEquipamento) {
     const c = sb(); if (!c) return [];
     const { data, error } = await c.from('instalacao_checklist_templates')
@@ -83,6 +119,7 @@
     const rows = template.map((t) => ({
       dossier_id: dossierId, tipo_equipamento: tipo, semana: t.semana, ordem: t.ordem,
       etapa: t.etapa, servicos: t.servicos, resultado_esperado: t.resultado_esperado,
+      marco: t.marco || null,
       status: 'pendente',
     }));
     const { data, error } = await c.from('instalacao_checklist_itens').insert(rows).select();
@@ -105,8 +142,34 @@
     if (status === 'concluido') { patch.concluido_em = new Date().toISOString(); patch.concluido_por = user.nome || user.email || null; }
     else { patch.concluido_em = null; patch.concluido_por = null; }
     Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
-    const { error } = await c.from('instalacao_checklist_itens').update(patch).eq('id', itemId);
+    const { data: item, error } = await c.from('instalacao_checklist_itens').update(patch).eq('id', itemId).select('dossier_id').single();
     if (error) throw error;
+    if (status === 'concluido' && item?.dossier_id) await _checarMetadeExecucao(item.dossier_id);
+  }
+
+  /* Dispara INSTALACAO_METADE_EXECUCAO (gatilhos-engine.js) na primeira
+     vez que o checklist do dossiê bate ≥50% concluído — alimenta a 2ª
+     parcela do contrato de instalador (formatos de 2/3 parcelas, ver
+     contrato-instalador-engine.js:buildPagamentoItems). Idempotente via
+     checagem prévia em eventos_fluxo (não recalcula "antes/depois",
+     só evita duplicar o evento se já foi registrado). Nunca derruba o
+     fluxo de marcar item por falha aqui — é gatilho, não obrigação. */
+  async function _checarMetadeExecucao(dossierId) {
+    try {
+      const c = sb(); if (!c || !window.EventosFluxo) return;
+      const itens = await listarPorDossier(dossierId);
+      if (!itens.length) return;
+      const pct = itens.filter((i) => i.status === 'concluido').length / itens.length;
+      if (pct < 0.5) return;
+      const label = window.EventosFluxo.EVENTOS.INSTALACAO_METADE_EXECUCAO.label;
+      const { data: existe } = await c.from('eventos_fluxo').select('id').eq('alvo_id', dossierId).eq('evento', label).maybeSingle();
+      if (existe) return;
+      const { data: dossier } = await c.from('dossier_obra').select('numero_cotacao, building_name').eq('id', dossierId).maybeSingle();
+      await window.EventosFluxo.registrar({
+        evento: 'INSTALACAO_METADE_EXECUCAO', numeroCotacao: dossier?.numero_cotacao ?? null,
+        alvoLabel: dossier?.building_name, alvoId: dossierId,
+      });
+    } catch (e) { console.warn('[InstalacaoChecklistStore] checar metade execução falhou', e); }
   }
 
   function gtId() { return 'stt-' + Math.random().toString(36).slice(2, 10); }
@@ -249,6 +312,7 @@
 
   window.InstalacaoChecklistStore = {
     normalizarTipoEquipamento, semanaTitulo, semanaCor,
+    MARCOS, resumoProgresso,
     listarTemplate, adicionarItemTemplate,
     criarChecklistDossier, listarPorDossier, marcarItem,
     gerarLinkInterno, obterPorTokenInterno, obterSessaoAdministrativa,

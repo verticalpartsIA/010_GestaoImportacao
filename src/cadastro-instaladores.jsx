@@ -234,14 +234,42 @@ function ModalColaborador({ empresaId, initialData, isEdit, onClose, onSaved }) 
   );
 }
 
-/* Status de cada obra dentro da árvore do cliente — mesma classificação
-   já usada em Central de Documentos/Obras Status. */
-function CIObraStatusBadge({ statusMaster }) {
+/* Status de cada obra dentro da árvore do cliente. Quando dá pra saber o
+   progresso real do Cronograma de Instalação (checklist por dossiê,
+   window.InstalacaoChecklistStore.resumoProgresso), usa ele — é mais fiel
+   que o status_master genérico (ex.: dois equipamentos podem estar os
+   dois com status_master="Instalação" mas um já com itens concluídos e o
+   outro com zero, ver achado de 01/09). Sem checklist criado ainda,
+   cai pro status_master puro (mesma classificação de antes). */
+function CIObraStatusBadge({ statusMaster, checklist }) {
   const concluida = CI_OBRA_CONCLUIDA.has(statusMaster);
+  if (checklist && checklist.criado) {
+    if (checklist.pct >= 100) return <span style={{ fontSize: 11, fontWeight: 600, color: '#00aa00' }}>Concluída · 100%</span>;
+    return <span style={{ fontSize: 11, fontWeight: 600, color: '#cc7700' }}>Instalando — {checklist.pct}%</span>;
+  }
+  if (statusMaster === 'Instalação') return <span style={{ fontSize: 11, fontWeight: 600, color: '#999' }}>Não iniciado</span>;
   const instalando = statusMaster === 'Instalação';
   const cor = concluida ? '#00aa00' : instalando ? '#cc7700' : '#999';
   const label = concluida ? 'Concluída' : instalando ? 'Instalando agora' : (statusMaster || '—');
   return <span style={{ fontSize: 11, fontWeight: 600, color: cor }}>{label}</span>;
+}
+
+function CIFmtData(iso) { return iso ? new Date(iso).toLocaleDateString('pt-BR') : '—'; }
+
+/* Linha de marcos técnicos (Iniciou / Guias / Cabina / Portas / Elétrica /
+   Entrega) — só aparece quando o cronograma já foi criado pra essa obra
+   (checklist.criado), pra não poluir a lista com "—" repetido nas obras
+   que ainda nem começaram. */
+function CIMarcosTecnicos({ checklist }) {
+  if (!checklist || !checklist.criado) return null;
+  return (
+    <div className="small muted" style={{ marginTop: 4, display: 'flex', flexWrap: 'wrap', gap: '4px 12px' }}>
+      <span>Iniciou {CIFmtData(checklist.iniciadoEm)}</span>
+      {checklist.marcos.map((m) => (
+        <span key={m.id}>{m.label} {m.completo ? CIFmtData(m.dataConclusao) : '—'}</span>
+      ))}
+    </div>
+  );
 }
 
 /* "Vida da Instaladora" — Empresa (já selecionada acima) -> Cliente ->
@@ -259,14 +287,15 @@ function CIHierarquiaClientes({ clientes, onAbrir }) {
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>🏢 {cliente} <span className="small muted">({obras.length})</span></div>
           <div className="stack" style={{ gap: 6, marginLeft: 12 }}>
             {obras.map((o) => (
-              <div key={o.id} className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 10, cursor: 'pointer' }}
+              <div key={o.id} className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 10, cursor: 'pointer', alignItems: 'flex-start' }}
                 onClick={() => onAbrir(o.id)}>
                 <div>
                   <div className="cell-main" style={{ fontSize: 13 }}>{o.numero_serie ? `Nº ${o.numero_serie}` : (o.building_name || '—')}</div>
                   {o.numero_serie && <div className="cell-sub">{o.building_name}</div>}
+                  <CIMarcosTecnicos checklist={o.checklist} />
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
-                  <CIObraStatusBadge statusMaster={o.status_master} />
+                  <CIObraStatusBadge statusMaster={o.status_master} checklist={o.checklist} />
                   <Icon.chevRight size={14} />
                 </div>
               </div>

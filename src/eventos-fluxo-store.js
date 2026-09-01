@@ -74,6 +74,7 @@
     EQUIPAMENTO_RECEBIDO:         { modulo: 'Instalação',             label: 'Equipamento recebido na obra',                 papel: 'Instalador' },
     EQUIPAMENTO_CONFERIDO:        { modulo: 'Instalação',             label: 'Equipamento conferido',                        papel: 'Instalador' },
     INSTALACAO_INICIADA:          { modulo: 'Instalação',             label: 'Instalação iniciada',                          papel: 'Instalador' },
+    INSTALACAO_METADE_EXECUCAO:   { modulo: 'Instalação',             label: 'Metade da execução da instalação',             papel: 'Instalador' },
     PENDENCIA_INSTALACAO_REGISTRADA: { modulo: 'Instalação',          label: 'Pendência de instalação registrada',           papel: 'Instalador' },
     INSTALACAO_CONCLUIDA:         { modulo: 'Instalação',             label: 'Instalação concluída',                         papel: 'Instalador' },
     ART_EMITIDA:                  { modulo: 'Documentação',           label: 'ART emitida',                                  papel: 'Engenharia' },

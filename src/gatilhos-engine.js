@@ -413,6 +413,17 @@
       nasce: 'EQUIPAMENTO_RECEBIDO', fecha: 'INSTALACAO_INICIADA',
       fechamentoTipo: 'automatico', rota: 'instalacao' },
 
+    /* Nasce junto com INSTALACAO_INICIADA (não bloqueia a aresta pra
+       INSTALACAO_CONCLUIDA) — fecha sozinho quando o Cronograma de
+       Instalação (checklist por dossiê) bate ~50% dos itens concluídos.
+       Existe pra alimentar a 2ª parcela do contrato de instalador nos
+       formatos de 2/3 parcelas ("metade da execução") — disparado em
+       instalacao-checklist-store.js:marcarItem. */
+    { key: 'INSTALACAO_METADE_EXECUCAO', label: 'Metade da execução da instalação',
+      predecessores: [{ key: 'INSTALACAO_INICIADA', rel: 'SS' }],
+      nasce: 'INSTALACAO_INICIADA', fecha: 'INSTALACAO_METADE_EXECUCAO',
+      fechamentoTipo: 'automatico', rota: 'instalacao' },
+
     { key: 'PENDENCIA_INSTALACAO', label: 'Pendência de instalação em aberto',
       predecessores: [{ key: 'INSTALACAO_INICIADA', rel: 'SS' }],
       nasce: 'INSTALACAO_INICIADA', fecha: 'PENDENCIA_INSTALACAO_REGISTRADA',

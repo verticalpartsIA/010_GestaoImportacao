@@ -314,10 +314,24 @@
       porDossier[o.id] = { ...o, numero_serie: e.numero_serie || porDossier[o.id]?.numero_serie || null };
     });
 
+    /* Progresso real do checklist por dossiê (não o status_master
+       genérico) — 1 query em lote pra todos os dossiês da empresa, não
+       N+1. Sem InstalacaoChecklistStore carregado (ordem de load-time
+       improvável, mas defensivo) cai pro badge antigo (checklist=null). */
+    const dossierIds = Object.keys(porDossier);
+    let porDossierChecklist = {};
+    if (dossierIds.length && window.InstalacaoChecklistStore) {
+      const { data: itens } = await c.from('instalacao_checklist_itens')
+        .select('dossier_id, status, marco, concluido_em').in('dossier_id', dossierIds);
+      const agrupado = {};
+      (itens || []).forEach((i) => { (agrupado[i.dossier_id] = agrupado[i.dossier_id] || []).push(i); });
+      dossierIds.forEach((id) => { porDossierChecklist[id] = window.InstalacaoChecklistStore.resumoProgresso(agrupado[id] || []); });
+    }
+
     const porCliente = {};
     Object.values(porDossier).forEach((o) => {
       const chave = o.client_name || '(sem cliente)';
-      (porCliente[chave] = porCliente[chave] || []).push(o);
+      (porCliente[chave] = porCliente[chave] || []).push({ ...o, checklist: porDossierChecklist[o.id] || null });
     });
     return Object.entries(porCliente)
       .map(([cliente, obras]) => ({ cliente, obras }))
