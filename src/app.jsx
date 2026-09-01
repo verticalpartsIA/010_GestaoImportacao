@@ -337,6 +337,7 @@ function App() {
       case "contrato-editor": return <ContratoEditorPage contrato={subsel} setRoute={setRoute} onSaved={() => {}} />;
       case "contrato-venda-equipamentos": return <ContratoVendaEquipamentosPage/>;
       case "contrato-instalador": return <ContratoInstaladorPage/>;
+      case "vistorias-envio": return <VistoriasEnvio setRoute={setRoute}/>;
       case "vistorias": return <VistoriasObras obraId={subsel} setRoute={setRoute}/>;
       case "instalacao": return <InstalacaoPage/>;
       case "central-documentos": return <window.CentralDocumentosPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;

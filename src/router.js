@@ -34,7 +34,7 @@
     'compras', 'compras-email', 'pedidos-acompanhamento',
     'engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'ficha-tecnica',
     'ncm-kanban', 'ncm-detail',
-    'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias', 'instalacao',
+    'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias-envio', 'vistorias', 'instalacao',
     'art', 'cronograma', 'databook', 'handover',
     'rh-homologacao',
     'almoxarifado',

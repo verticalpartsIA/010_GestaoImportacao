@@ -18,6 +18,14 @@
 
    `embedded`: quando true, esconde o cabeçalho de página grande — usado
    pela aba Instalação do Dossiê da Obra, que já tem seu próprio título.
+
+   Renomeado (01/09) pra "Resultado Vistorias de Obras" na sidebar/rota
+   `vistorias` — continua sendo o CRUD/histórico real de vistorias
+   (agendar, concluir, anexar). O rótulo "Vistorias de Obras" (rota nova
+   `vistorias-envio`, ver src/vistorias-envio.jsx) fica reservado pra a
+   futura solução de disparo de vistoria pro celular do técnico; quando
+   essa solução existir, o fluxo deve ser: vistorias-envio dispara →
+   técnico executa no celular → resultado cai aqui.
    ============================================================ */
 
 function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded, onChanged }) {
@@ -302,7 +310,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
         {!embedded && (
           <div className="page-header" style={{ marginBottom: '2rem' }}>
             <div style={{ flex: 1 }}>
-              <h1 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>🏗️ Vistorias de Obras</h1>
+              <h1 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>🏗️ Resultado Vistorias de Obras</h1>
               <p style={{ color: 'var(--vp-gray-500)', fontSize: '0.95rem' }}>Escolha a obra pra ver e registrar as vistorias.</p>
             </div>
           </div>
@@ -335,7 +343,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
         <div className="page-header" style={{ marginBottom: '2rem' }}>
           <div style={{ flex: 1 }}>
             <h1 style={{ fontSize: '1.8rem', marginBottom: '0.5rem' }}>
-              🏗️ Vistorias de Obras
+              🏗️ Resultado Vistorias de Obras
             </h1>
             {obra && (
               <p style={{ color: 'var(--vp-gray-500)', fontSize: '0.95rem' }}>
