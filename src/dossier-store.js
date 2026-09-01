@@ -200,20 +200,23 @@ window.__DOSSIER = window.__DOSSIER || (() => {
       if (error) throw error;
     },
 
-    /* ---- Atribuir responsável por etapa ---- */
+    /* ---- Atribuir responsável por etapa (upsert: "Alterar" substitui o
+       responsável da mesma etapa em vez de duplicar linha — onConflict
+       dossier_id,etapa) ---- */
     async atribuirResponsavel(dossierId, etapa, responsavel, notas = '') {
       if (!['comercial', 'engenharia', 'financeiro', 'juridico', 'rh', 'instalacao'].includes(etapa)) {
         throw new Error(`Etapa inválida: ${etapa}`);
       }
 
       const id = 'RESP-' + Date.now().toString().slice(-6);
-      const { error } = await sb.from('dossier_responsaveis').insert({
+      const { error } = await sb.from('dossier_responsaveis').upsert({
         id,
         dossier_id: dossierId,
         etapa,
         responsavel,
-        notes: notas || null
-      });
+        notes: notas || null,
+        assigned_at: new Date().toISOString()
+      }, { onConflict: 'dossier_id,etapa' });
 
       if (error) throw error;
     },

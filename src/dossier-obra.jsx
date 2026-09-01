@@ -303,8 +303,8 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
         {activeTab === 'instalacao' && <TabInstalacao dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'equipamentos' && <TabEquipamentos dossier={dossier} setRoute={setRoute} setSubsel={setSubsel} />}
         {activeTab === 'cronograma-instalacao' && <TabCronogramaInstalacao dossier={dossier} />}
-        {activeTab === 'pendencias' && <TabPendencias dossier={dossier} setModalOpen={setModalOpen} />}
-        {activeTab === 'responsaveis' && <TabResponsaveis dossier={dossier} setModalOpen={setModalOpen} />}
+        {activeTab === 'pendencias' && <TabPendencias dossier={dossier} setModalOpen={setModalOpen} reload={carregarDossier} />}
+        {activeTab === 'responsaveis' && <TabResponsaveis dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'historico' && <TabHistorico dossier={dossier} />}
       </div>
 
@@ -1378,13 +1378,28 @@ function FormAdicionarItemTemplate({ onSaved, equipTypePadrao }) {
   );
 }
 
-function TabPendencias({ dossier }) {
+function TabPendencias({ dossier, setModalOpen, reload }) {
   const pendencias = dossier.pendencias || [];
   const ativas = pendencias.filter(p => !p.resolved_at);
   const resolvidas = pendencias.filter(p => p.resolved_at);
 
+  const resolver = async (id) => {
+    try {
+      await window.__DOSSIER.resolverPendencia(id);
+      window.toast('Pendência resolvida', 'success');
+      reload?.();
+    } catch (e) {
+      window.toast('Erro: ' + e.message, 'error');
+    }
+  };
+
   return (
     <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 16 }}>
+        <Button variant="primary" size="small" onClick={() => setModalOpen?.('adionar-pendencia')}>
+          + Adicionar Pendência
+        </Button>
+      </div>
       <div style={{ marginBottom: 32 }}>
         <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>🟡 Pendências Ativas ({ativas.length})</div>
         {ativas.length > 0 ? (
@@ -1403,7 +1418,7 @@ function TabPendencias({ dossier }) {
                     Tipo: <b>{p.tipo}</b> {p.etapa && `· Etapa: ${p.etapa}`}
                   </div>
                 </div>
-                <Button variant="outline" size="small">
+                <Button variant="outline" size="small" onClick={() => resolver(p.id)}>
                   Resolver
                 </Button>
               </div>
@@ -1438,39 +1453,82 @@ function TabPendencias({ dossier }) {
   );
 }
 
-function TabResponsaveis({ dossier }) {
+function TabResponsaveis({ dossier, reload }) {
   const responsaveis = dossier.responsaveis || [];
   const etapas = ['comercial', 'engenharia', 'financeiro', 'juridico', 'rh', 'instalacao'];
+  const [editando, setEditando] = React.useState(null);
 
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
-      {etapas.map(etapa => {
-        const resp = responsaveis.find(r => r.etapa === etapa);
-        return (
-          <div key={etapa} style={{
-            background: '#f5f5f5',
-            border: '1px solid #ddd',
-            borderRadius: 6,
-            padding: 16
-          }}>
-            <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 12 }}>
-              {etapa}
-            </div>
-            <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
-              {resp?.responsavel || '—'}
-            </div>
-            {resp?.notes && (
-              <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
-                {resp.notes}
+    <div>
+      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 16 }}>
+        {etapas.map(etapa => {
+          const resp = responsaveis.find(r => r.etapa === etapa);
+          return (
+            <div key={etapa} style={{
+              background: '#f5f5f5',
+              border: '1px solid #ddd',
+              borderRadius: 6,
+              padding: 16
+            }}>
+              <div style={{ fontSize: 12, color: '#666', textTransform: 'uppercase', marginBottom: 12 }}>
+                {etapa}
               </div>
-            )}
-            <Button variant="outline" size="small">
-              {resp ? 'Alterar' : 'Atribuir'}
-            </Button>
-          </div>
-        );
-      })}
+              <div style={{ fontSize: 14, fontWeight: 600, marginBottom: 12 }}>
+                {resp?.responsavel || '—'}
+              </div>
+              {resp?.notes && (
+                <div style={{ fontSize: 12, color: '#666', marginBottom: 12 }}>
+                  {resp.notes}
+                </div>
+              )}
+              <Button variant="outline" size="small" onClick={() => setEditando(etapa)}>
+                {resp ? 'Alterar' : 'Atribuir'}
+              </Button>
+            </div>
+          );
+        })}
+      </div>
+      {editando && (
+        <ModalAtribuirResponsavel
+          dossierId={dossier.id}
+          etapa={editando}
+          respAtual={responsaveis.find(r => r.etapa === editando)}
+          onClose={() => setEditando(null)}
+          onSaved={() => { setEditando(null); reload?.(); }}
+        />
+      )}
     </div>
+  );
+}
+
+function ModalAtribuirResponsavel({ dossierId, etapa, respAtual, onClose, onSaved }) {
+  const [responsavel, setResponsavel] = React.useState(respAtual?.responsavel || '');
+  const [notas, setNotas] = React.useState(respAtual?.notes || '');
+
+  const save = async () => {
+    if (!responsavel.trim()) return window.toast('Informe o nome do responsável', 'warning');
+    try {
+      await window.__DOSSIER.atribuirResponsavel(dossierId, etapa, responsavel.trim(), notas.trim());
+      window.toast('Responsável atribuído', 'success');
+      onSaved?.();
+    } catch (e) {
+      window.toast('Erro: ' + e.message, 'error');
+    }
+  };
+
+  return (
+    <Modal title={`Atribuir responsável · ${etapa}`} onClose={onClose} width={440}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={save}>Salvar</Button>
+      </>}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+        <label className="up-eyebrow muted">Responsável *</label>
+        <input className="input" value={responsavel} onChange={e => setResponsavel(e.target.value)} placeholder="Nome da pessoa"/>
+        <label className="up-eyebrow muted">Notas</label>
+        <textarea className="input" rows={2} value={notas} onChange={e => setNotas(e.target.value)} placeholder="Opcional"/>
+      </div>
+    </Modal>
   );
 }
 

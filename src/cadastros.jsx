@@ -171,6 +171,34 @@ function CadastroClientesPage() {
    obras/equipamentos/instaladores (dossier_obra.cliente_id, vínculo
    manual — só mostra o que já foi ligado). Score fica pra uma fase
    futura, precisa de regra de negócio ainda não definida. */
+/* Regra do Score de Relacionamento — classificação em faixas (não nota
+   numérica: não temos dado de valor financeiro nem satisfação ligado ao
+   cliente hoje, um número "0-100" seria arbitrário). Usa só o que
+   historicoCliente() já traz: volume de obras/equipamentos e recência. */
+function calcularScoreRelacionamento(dados) {
+  const nObras = dados.obras.length;
+  const nEquip = dados.equipamentos.length;
+  const datas = [...dados.leads.map(l => l.date), ...dados.obras.map(o => o.created_at)]
+    .filter(Boolean).map(d => new Date(d)).filter(d => !isNaN(d));
+  const maisRecente = datas.length ? new Date(Math.max(...datas.map(d => d.getTime()))) : null;
+  const dozeMesesAtras = new Date(); dozeMesesAtras.setMonth(dozeMesesAtras.getMonth() - 12);
+  const dormente = !!(maisRecente && maisRecente < dozeMesesAtras);
+
+  if (dormente) {
+    return { faixa: 'Dormente', cor: '#888', motivo: `Sem obra ou lead novo desde ${maisRecente.toLocaleDateString('pt-BR')} (mais de 12 meses)` };
+  }
+  if (nObras >= 3 || nEquip >= 5) {
+    return { faixa: 'Estratégico', cor: '#0066cc', motivo: `${nObras} obra(s) e ${nEquip} equipamento(s) vinculados` };
+  }
+  if (nObras >= 2) {
+    return { faixa: 'Recorrente', cor: '#2e7d32', motivo: `${nObras} obras vinculadas` };
+  }
+  return {
+    faixa: 'Novo', cor: '#b8860b',
+    motivo: nObras === 1 ? '1 obra vinculada até agora' : 'Ainda sem obra vinculada — só lead(s)'
+  };
+}
+
 function ClienteHistoricoModal({ cliente, onClose }) {
   const [dados, setDados] = React.useState(null);
   React.useEffect(() => {
@@ -184,6 +212,8 @@ function ClienteHistoricoModal({ cliente, onClose }) {
     dados.roster.forEach((r) => { if (r.parceiros_instaladores?.nome) (map[r.dossier_id] = map[r.dossier_id] || new Set()).add(r.parceiros_instaladores.nome); });
     return map;
   }, [dados]);
+
+  const score = React.useMemo(() => (dados ? calcularScoreRelacionamento(dados) : null), [dados]);
 
   return (
     <Modal title={`Histórico · ${cliente.razao_social}`} onClose={onClose} width={640}
@@ -209,7 +239,13 @@ function ClienteHistoricoModal({ cliente, onClose }) {
               </div>
             ))}
           </div>
-          <div className="small muted">Score de relacionamento: ainda não implementado — depende de definir a regra de negócio (frequência, valor, satisfação?).</div>
+          <div>
+            <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Score de relacionamento</div>
+            <div style={{ fontSize: 13 }}>
+              <span className="badge" style={{ background: score.cor, color: '#fff' }}>{score.faixa}</span>
+              <span className="small muted" style={{ marginLeft: 8 }}>{score.motivo}</span>
+            </div>
+          </div>
         </div>
       )}
     </Modal>
