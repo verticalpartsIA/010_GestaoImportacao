@@ -33,7 +33,7 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
 
   const reloadObras = React.useCallback(async (empresaId) => {
     setObras(null);
-    const list = await window.RHHomologacao.listarObrasPorInstalador(empresaId);
+    const list = await window.RHHomologacao.listarHierarquiaClientesDoInstalador(empresaId);
     setObras(list);
   }, []);
 
@@ -129,12 +129,12 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
         )}
 
         {selected ? (
-          <Card title="Obras" sub={obras ? `${obras.length} vinculada(s)` : 'Carregando…'}>
-            <CIObrasList obras={obras} onAbrir={abrirObra} />
+          <Card title="Clientes atendidos" sub={obras ? `${obras.length} cliente(s)` : 'Carregando…'}>
+            <CIHierarquiaClientes clientes={obras} onAbrir={abrirObra} />
           </Card>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', color: 'var(--fg3)', fontSize: 13, padding: '60px 20px', textAlign: 'center' }}>
-            Selecione uma empresa pra ver em quais obras ela está montando ou já montou.
+            Selecione uma empresa pra ver quais clientes ela atendeu e o que montou em cada um.
           </div>
         )}
       </div>
@@ -234,51 +234,46 @@ function ModalColaborador({ empresaId, initialData, isEdit, onClose, onSaved }) 
   );
 }
 
-function CIObraRow({ obra, onAbrir }) {
-  return (
-    <div className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 10, cursor: 'pointer' }}
-      onClick={() => onAbrir(obra.id)}>
-      <div>
-        <div className="cell-main" style={{ fontSize: 13 }}>{obra.client_name || '—'}</div>
-        <div className="cell-sub">{obra.building_name}</div>
-      </div>
-      <Icon.chevRight size={14} />
-    </div>
-  );
+/* Status de cada obra dentro da árvore do cliente — mesma classificação
+   já usada em Central de Documentos/Obras Status. */
+function CIObraStatusBadge({ statusMaster }) {
+  const concluida = CI_OBRA_CONCLUIDA.has(statusMaster);
+  const instalando = statusMaster === 'Instalação';
+  const cor = concluida ? '#00aa00' : instalando ? '#cc7700' : '#999';
+  const label = concluida ? 'Concluída' : instalando ? 'Instalando agora' : (statusMaster || '—');
+  return <span style={{ fontSize: 11, fontWeight: 600, color: cor }}>{label}</span>;
 }
 
-/* Atual (instalando agora) / Concluídas (histórico) / Outras (vinculado mas
-   ainda não chegou na fase de instalação) — os dois vínculos possíveis
-   (obra inteira ou por equipamento) já vêm unidos por
-   listarObrasPorInstalador. */
-function CIObrasList({ obras, onAbrir }) {
-  if (obras === null) return <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
-  if (obras.length === 0) return <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma obra vinculada a esta empresa ainda.</div>;
-
-  const atuais = obras.filter((o) => o.status_master === 'Instalação');
-  const concluidas = obras.filter((o) => CI_OBRA_CONCLUIDA.has(o.status_master));
-  const outras = obras.filter((o) => o.status_master !== 'Instalação' && !CI_OBRA_CONCLUIDA.has(o.status_master));
+/* "Vida da Instaladora" — Empresa (já selecionada acima) -> Cliente ->
+   Equipamentos. Uma empresa pode chegar a uma obra por 3 vínculos
+   diferentes (principal, roster, por equipamento) — já vêm unidos e
+   deduplicados por listarHierarquiaClientesDoInstalador. */
+function CIHierarquiaClientes({ clientes, onAbrir }) {
+  if (clientes === null) return <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
+  if (clientes.length === 0) return <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum cliente vinculado a esta empresa ainda.</div>;
 
   return (
     <div className="stack" style={{ gap: 16 }}>
-      {atuais.length > 0 && (
-        <div>
-          <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Instalando agora ({atuais.length})</div>
-          <div className="stack" style={{ gap: 8 }}>{atuais.map((o) => <CIObraRow key={o.id} obra={o} onAbrir={onAbrir} />)}</div>
+      {clientes.map(({ cliente, obras }) => (
+        <div key={cliente}>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>🏢 {cliente} <span className="small muted">({obras.length})</span></div>
+          <div className="stack" style={{ gap: 6, marginLeft: 12 }}>
+            {obras.map((o) => (
+              <div key={o.id} className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 10, cursor: 'pointer' }}
+                onClick={() => onAbrir(o.id)}>
+                <div>
+                  <div className="cell-main" style={{ fontSize: 13 }}>{o.numero_serie ? `Nº ${o.numero_serie}` : (o.building_name || '—')}</div>
+                  {o.numero_serie && <div className="cell-sub">{o.building_name}</div>}
+                </div>
+                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                  <CIObraStatusBadge statusMaster={o.status_master} />
+                  <Icon.chevRight size={14} />
+                </div>
+              </div>
+            ))}
+          </div>
         </div>
-      )}
-      {concluidas.length > 0 && (
-        <div>
-          <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Concluídas ({concluidas.length})</div>
-          <div className="stack" style={{ gap: 8 }}>{concluidas.map((o) => <CIObraRow key={o.id} obra={o} onAbrir={onAbrir} />)}</div>
-        </div>
-      )}
-      {outras.length > 0 && (
-        <div>
-          <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Vinculada, instalação ainda não iniciada ({outras.length})</div>
-          <div className="stack" style={{ gap: 8 }}>{outras.map((o) => <CIObraRow key={o.id} obra={o} onAbrir={onAbrir} />)}</div>
-        </div>
-      )}
+      ))}
     </div>
   );
 }

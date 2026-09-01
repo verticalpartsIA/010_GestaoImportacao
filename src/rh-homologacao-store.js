@@ -291,6 +291,39 @@
     return Object.values(map);
   }
 
+  /* Hierarquia Empresa -> Cliente -> Equipamentos ("Vida da Instaladora").
+     Une os 3 vínculos possíveis (obra principal, roster
+     dossier_obra_instaladores, por equipamento) numa lista única por
+     obra, dedupe por dossier_id (prioriza o dado mais específico —
+     nº de série vem do vínculo por equipamento quando existe), depois
+     agrupa por client_name pra virar a árvore. */
+  async function listarHierarquiaClientesDoInstalador(empresaId) {
+    const c = sb();
+    if (!c || !empresaId) return [];
+    const [{ data: diretas }, { data: viaRoster }, { data: viaEquip }] = await Promise.all([
+      c.from('dossier_obra').select('id, client_name, building_name, status_master').eq('parceiro_instalador_id', empresaId),
+      c.from('dossier_obra_instaladores').select('dossier_obra(id, client_name, building_name, status_master)').eq('parceiro_instalador_id', empresaId),
+      c.from('equipamentos_obra').select('numero_serie, dossier_obra(id, client_name, building_name, status_master)').eq('parceiro_instalador_id', empresaId),
+    ]);
+
+    const porDossier = {};
+    (diretas || []).forEach((o) => { porDossier[o.id] = { ...o, numero_serie: null }; });
+    (viaRoster || []).forEach((r) => { const o = r.dossier_obra; if (o && !porDossier[o.id]) porDossier[o.id] = { ...o, numero_serie: null }; });
+    (viaEquip || []).forEach((e) => {
+      const o = e.dossier_obra; if (!o) return;
+      porDossier[o.id] = { ...o, numero_serie: e.numero_serie || porDossier[o.id]?.numero_serie || null };
+    });
+
+    const porCliente = {};
+    Object.values(porDossier).forEach((o) => {
+      const chave = o.client_name || '(sem cliente)';
+      (porCliente[chave] = porCliente[chave] || []).push(o);
+    });
+    return Object.entries(porCliente)
+      .map(([cliente, obras]) => ({ cliente, obras }))
+      .sort((a, b) => a.cliente.localeCompare(b.cliente));
+  }
+
   function uploadDocumentoColaboradorArquivo(colaboradorId, documentoId, file) {
     const c = sb();
     if (!c) throw new Error('Supabase indisponível');
@@ -325,6 +358,7 @@
     resumoDocumentosPorEmpresa,
     statusGeralPorColaboradores,
     listarObrasPorInstalador,
+    listarHierarquiaClientesDoInstalador,
     uploadDocumentoColaboradorArquivo,
   };
 })();
