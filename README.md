@@ -12,7 +12,8 @@
   <a href="#-mapa-funcional">Módulos</a> •
   <a href="#-arquitetura-de-negócio">Arquitetura</a> •
   <a href="#-regras-de-governança-e-gates">Gates</a> •
-  <a href="#-guia-para-humanos-e-agentes-de-ia">Guia para IA</a>
+  <a href="#-guia-para-humanos-e-agentes-de-ia">Guia para IA</a> •
+  <a href="#-btime--vistorias-em-equipamentos-sistema-externo">Btime</a>
 </p>
 
 ---
@@ -499,9 +500,82 @@ Quando essa continuidade está íntegra, o software deixa de apenas registrar a 
 
 ---
 
+## 🌳 Btime — Vistorias em Equipamentos (sistema externo)
+
+> **O que é isto:** documentação de engenharia reversa de um sistema **de terceiros**, não código deste repositório. O VP Gestão não integra com o Btime hoje (nenhuma tabela, edge function ou rota chama `btime.io`) — isto é um mapa de reconhecimento para orientar uma futura integração ou migração de conteúdo. Levantado em 01/09/2026 por navegação manual da conta `gelson.simoes@verticalparts.com.br` em `verticalparts.btime.io` (build v6.317.21), sem acesso a banco de dados ou API do produto.
+
+O Btime é onde a VerticalParts hoje **executa e audita o trabalho de campo**: vistorias de elevador, entrega de equipamento, comissionamento de quadro de comando, ordens de serviço gerais. É o sistema que guarda, com muito mais granularidade do que `vistorias_obras`/`instalacao-checklist-store.js` hoje, o checklist técnico completo de entrega/vistoria de elevador (~90 perguntas). Tenant único: *Vertical Parts Indústria Com. de Peças Escadas e Esteiras Rolantes e Elevadores Ltda*, 9 usuários (grupo Instalação/Engenharia), 894 atividades registradas, 155 locais cadastrados, 30 questionários configurados. Tem app mobile companheiro (um checklist exige validação por QR Code do local).
+
+### 🌱 Raiz — a cadeia de dados
+
+```text
+Local (cadastro)               ── Nome, Endereço, Tipo de serviço/visita, aba Ativos, aba Níveis
+   ↓
+Atividade (execução)           ── Código nnnnnn/ano, Responsável, SLA, Prioridade,
+   ↓                              Check-in/out com GPS, Status, Auditoria, Linha do tempo
+Questionário (template)        ── Categorias → Perguntas, 21 tipos de campo, ramos condicionais
+   ↓                              (também publicável como "Formulário", versão compartilhável/pública)
+Plano de Ação (exceção)        ── disparado por resposta fora do padrão, alimenta "não conformidades"
+```
+
+Equivalência aproximada com o VP Gestão — **não há chave estrangeira real entre os dois sistemas**, o vínculo hoje só existiria por nome/endereço:
+
+| Btime | VP Gestão |
+|---|---|
+| Local | `dossier_obra` |
+| Ativos (aba do Local) | `equipamentos_obra` |
+| Atividade + Questionário | `vistorias_obras` / checklist de instalação (hoje sem motor de perguntas nem ramos condicionais) |
+
+### 🌳 Tronco — os 6 módulos (galhos principais)
+
+- **Dashboard** (`/home`) — KPIs de produtividade, ranking, eficiência, formulários, com filtro por mês.
+- **Atividades** (`/service-orders`) — lista mestra de tarefas de campo, 894 registros; cada linha é a execução de um Questionário num Local.
+- **Formulários** (`/forms`) — versão compartilhável/pública de um Questionário (ex.: *Termo de Entrega Elevador*).
+- **Questionários** — o construtor dos checklists: categorias, perguntas, tipos de campo, lógica condicional.
+- **Locais** — 155 cadastros (clientes/obras/pontos de visita), cada um com sua lista de Ativos (equipamentos).
+- **Usuários** — 9 contas + 1 conta de integração (ver achado abaixo).
+
+### 🍃 Folhas — o motor de questionários
+
+21 tipos de campo disponíveis: `Texto`, `Numérico`, `Decimal`, `Data`, `Data e Hora`, `Coordenadas`, `Endereço`, `Local`, `Ativo`, `Usuário`, `Múltipla escolha`, `Seleção única`, `Sim ou Não`, `Anexos`, `Assinatura`, `Bloco`, `Cálculo`, `Código de validação`, `Estoque`, `Informativa`, `Integração`.
+
+Estudo de caso — questionário **"6. Checklist de Entrega de Elevador"** (tipo *Vistoria*, usado em Formulários + Atividades + Plano de Ação), 11 categorias e ~90 perguntas:
+
+| Categoria | Perguntas |
+|---|---|
+| Identificação do Cliente / Elevador | 7 |
+| Casa de Máquinas / Quadro de Comando | 30 |
+| Pavimentos | 6 |
+| Cabina | 13 |
+| Sobre a Cabina / Caixa de Corrida | 25 |
+| Contrapeso | 3 |
+| Poço | 14 |
+| Testes Finais | 3 |
+| Resultado da Inspeção | 1 |
+| Dados do Vistoriador / Assinatura | 3 |
+
+Tem ramificação condicional real (ex.: *"O limitador de velocidade instalado é o especificado?"* Sim/Não → só abre a sub-pergunta *"Velocidade do limitador é a mesma do elevador?"* se a resposta for Sim).
+
+### 🔗 Raiz cruzada — achado: integração "Command Center" já iniciada
+
+Existe uma conta **`Command Center (integração)`** (`command-center+verticalparts@btime.io`), com um perfil próprio (`Integração · Command Center`) que nenhum dos outros 8 usuários tem, **criada em 28/08/2026** — poucos dias antes deste levantamento e muito depois da configuração normal do restante da conta. Isso indica fortemente que **já existe, ou foi iniciada recentemente, uma integração programática entre o Btime e algo chamado "Command Center"** — possivelmente o próprio VP Gestão, possivelmente outra ferramenta. A tela de edição do usuário não expõe chave de API/token/webhook, então a credencial real (se existir) está guardada fora do Btime.
+
+> ⚠️ **Antes de desenhar qualquer integração nova**, confirmar com o time (Ari Avila é a administradora do Btime) o que é esse "Command Center", para não duplicar trabalho já em andamento.
+
+### 🧭 Próximos passos sugeridos
+
+1. Confirmar com o time o que é o "Command Center" ligado à conta de integração do Btime.
+2. Decidir a direção: Btime como fonte de verdade dos checklists técnicos (VP Gestão só lê/espelha) **vs.** migrar o conteúdo dos 30 questionários para dentro do VP Gestão.
+3. Se for espelhar: mapear `Local ↔ dossier_obra` e `Ativo ↔ equipamentos_obra` por nome/endereço, com revisão manual (sem chave compartilhada hoje).
+4. Se for migrar: os ~90 itens do checklist de elevador são um roteiro pronto para enriquecer as fases de vistoria/entrega já existentes em `vistorias-obras.jsx`.
+
+---
+
 ## 📌 Estado desta documentação
 
 Este README foi reestruturado em **17/08/2026** para substituir a visão histórica centrada em “Cotação/Importação” por uma documentação orientada ao ciclo de vida completo do VP Gestão.
+
+Em **01/09/2026** foi adicionada a seção [Btime — Vistorias em Equipamentos](#-btime--vistorias-em-equipamentos-sistema-externo), documentando por engenharia reversa um sistema externo de terceiros usado pela operação (checklists de vistoria/entrega de campo) — ainda sem integração real com o VP Gestão, mas com achado de uma conta de integração (`Command Center`) criada recentemente no Btime que merece confirmação com o time antes de qualquer trabalho de integração.
 
 O README deve ser atualizado sempre que houver mudança estrutural em:
 
