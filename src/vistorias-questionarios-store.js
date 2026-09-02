@@ -125,13 +125,14 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     /* ---- Atividades (Fase 2: despacho) ----
        O token vira o link mandado pro técnico; a página que ele abre
        (execução no celular) é a Fase 3, ainda não construída. */
-    async criarAtividade({ questionarioId, dossierId, equipamentoId, tecnicoId }) {
+    async criarAtividade({ questionarioId, dossierId, equipamentoId, tecnicoId, agendadoPara }) {
       const token = (window.crypto?.randomUUID ? window.crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)));
       const { data, error } = await sb().from('vistorias_atividades').insert({
         questionario_id: questionarioId,
         dossier_id: dossierId,
         equipamento_id: equipamentoId || null,
         tecnico_id: tecnicoId || null,
+        agendado_para: agendadoPara || null,
         token,
         status: 'pendente',
         enviado_em: new Date().toISOString(),
@@ -146,6 +147,16 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
         .select('*, dossier_obra(client_name, building_name), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome)')
         .order('criado_em', { ascending: false })
         .limit(50);
+      if (error) throw error;
+      return data || [];
+    },
+
+    /* ---- Calendário/Agenda (Módulo ADM) — todas as atividades com data marcada ---- */
+    async listarAtividadesAgendadas() {
+      const { data, error } = await sb().from('vistorias_atividades')
+        .select('*, dossier_obra(client_name, building_name), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome)')
+        .not('agendado_para', 'is', null)
+        .order('agendado_para', { ascending: true });
       if (error) throw error;
       return data || [];
     },

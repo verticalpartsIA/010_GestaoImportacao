@@ -39,15 +39,16 @@ function VistoriasEnvio({ setRoute }) {
         tabs={[
           { key: 'questionarios', label: 'Questionários', icon: 'fileText' },
           { key: 'despacho', label: 'Despachar', icon: 'send' },
+          { key: 'calendario', label: 'Calendário', icon: 'calendar' },
         ]}
         active={aba}
         onChange={setAba}
       />
 
       <div style={{ marginTop: 16 }}>
-        {aba === 'questionarios'
-          ? <ListaQuestionarios onAbrir={setQuestionarioAberto}/>
-          : <DespacharVistoria/>}
+        {aba === 'questionarios' && <ListaQuestionarios onAbrir={setQuestionarioAberto}/>}
+        {aba === 'despacho' && <DespacharVistoria/>}
+        {aba === 'calendario' && <CalendarioVistorias/>}
       </div>
     </div>
   );
@@ -458,7 +459,7 @@ function DespacharVistoria() {
   const [questionarios, setQuestionarios] = React.useState(null);
   const [tecnicos, setTecnicos] = React.useState(null);
   const [despachos, setDespachos] = React.useState(null);
-  const [form, setForm] = React.useState({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '' });
+  const [form, setForm] = React.useState({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '' });
   const [salvando, setSalvando] = React.useState(false);
   const [ultimoDespacho, setUltimoDespacho] = React.useState(null);
   const [masterIdInput, setMasterIdInput] = React.useState('');
@@ -500,12 +501,13 @@ function DespacharVistoria() {
         dossierId: form.dossierId,
         equipamentoId: form.equipamentoId || null,
         tecnicoId: form.tecnicoId || null,
+        agendadoPara: form.agendadoPara ? new Date(form.agendadoPara).toISOString() : null,
       });
       const link = window.location.origin + '/vistoria/' + atividade.token;
       const questionario = questionarios.find((q) => q.id === form.questionarioId);
       const obra = obras.find((o) => o.id === form.dossierId);
       setUltimoDespacho({ link, questionarioNome: questionario?.nome, obraNome: obra?.building_name });
-      setForm({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '' });
+      setForm({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '' });
       setMasterIdInput('');
       setHidratado(null);
       window.toast?.('Vistoria despachada', 'success');
@@ -621,6 +623,14 @@ function DespacharVistoria() {
               </select>
             </label>
           </div>
+          <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+            <label className="stack" style={{ gap: 4, flex: 1, minWidth: 220 }}>
+              <span className="up-eyebrow muted">Agendar para (opcional)</span>
+              <input className="input" type="datetime-local" value={form.agendadoPara}
+                onChange={(e) => setForm((f) => ({ ...f, agendadoPara: e.target.value }))}/>
+              <span className="small muted">Sem data, a vistoria já entra na fila do vistoriador pra execução imediata.</span>
+            </label>
+          </div>
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <Button variant="primary" icon="send" onClick={despachar} disabled={salvando}>{salvando ? 'Despachando…' : 'Despachar'}</Button>
           </div>
@@ -655,6 +665,7 @@ function DespacharVistoria() {
                 <th>Questionário</th>
                 <th>Técnico</th>
                 <th>Status</th>
+                <th>Agendado</th>
                 <th>Enviado</th>
               </tr></thead>
               <tbody>
@@ -667,6 +678,7 @@ function DespacharVistoria() {
                       <td>{a.vistorias_questionarios?.nome || '—'}</td>
                       <td>{a.colaboradores_vpsistema?.nome || 'A definir'}</td>
                       <td><Badge variant={st.variant}>{st.label}</Badge></td>
+                      <td className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{a.agendado_para ? new Date(a.agendado_para).toLocaleString('pt-BR') : '—'}</td>
                       <td className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{a.enviado_em ? new Date(a.enviado_em).toLocaleString('pt-BR') : '—'}</td>
                     </tr>
                   );
@@ -676,6 +688,111 @@ function DespacharVistoria() {
           </div>
         )}
       </Card>
+    </div>
+  );
+}
+
+/* ---- Aba "Calendário": visão mensal do agendamento (Módulo ADM) ----
+   Só mostra atividades com agendado_para preenchido — despachos sem
+   data (fila imediata) não aparecem aqui, ficam só na aba Despachar. */
+const DIAS_SEMANA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
+const MESES = ['Janeiro', 'Fevereiro', 'Março', 'Abril', 'Maio', 'Junho', 'Julho', 'Agosto', 'Setembro', 'Outubro', 'Novembro', 'Dezembro'];
+
+function CalendarioVistorias() {
+  const hoje = React.useMemo(() => new Date(), []);
+  const [mesRef, setMesRef] = React.useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
+  const [atividades, setAtividades] = React.useState(null);
+  const [detalhe, setDetalhe] = React.useState(null);
+
+  React.useEffect(() => {
+    window.VistoriasQuestionariosStore.listarAtividadesAgendadas()
+      .then(setAtividades)
+      .catch(() => setAtividades([]));
+  }, []);
+
+  const porDia = React.useMemo(() => {
+    const mapa = {};
+    (atividades || []).forEach((a) => {
+      const d = new Date(a.agendado_para);
+      const chave = `${d.getFullYear()}-${d.getMonth()}-${d.getDate()}`;
+      (mapa[chave] = mapa[chave] || []).push(a);
+    });
+    return mapa;
+  }, [atividades]);
+
+  const primeiroDiaSemana = new Date(mesRef.getFullYear(), mesRef.getMonth(), 1).getDay();
+  const diasNoMes = new Date(mesRef.getFullYear(), mesRef.getMonth() + 1, 0).getDate();
+  const celulas = [];
+  for (let i = 0; i < primeiroDiaSemana; i++) celulas.push(null);
+  for (let d = 1; d <= diasNoMes; d++) celulas.push(d);
+
+  const mudarMes = (delta) => setMesRef((m) => new Date(m.getFullYear(), m.getMonth() + delta, 1));
+
+  return (
+    <div>
+      <div className="row sb" style={{ marginBottom: 14 }}>
+        <div className="row" style={{ gap: 8 }}>
+          <Button variant="ghost" size="sm" icon="chevLeft" aria-label="Mês anterior" onClick={() => mudarMes(-1)}/>
+          <div style={{ fontWeight: 700, fontSize: 15, minWidth: 160, textAlign: 'center' }}>{MESES[mesRef.getMonth()]} {mesRef.getFullYear()}</div>
+          <Button variant="ghost" size="sm" icon="chevRight" aria-label="Próximo mês" onClick={() => mudarMes(1)}/>
+        </div>
+        <Button variant="outline" size="sm" onClick={() => setMesRef(new Date(hoje.getFullYear(), hoje.getMonth(), 1))}>Hoje</Button>
+      </div>
+
+      {atividades === null ? (
+        <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>
+      ) : (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 6, overflow: 'hidden' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)', background: 'var(--surface-2, #f6f6f6)' }}>
+            {DIAS_SEMANA.map((d) => (
+              <div key={d} style={{ padding: '8px 6px', fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: 'var(--fg3)', textAlign: 'center' }}>{d}</div>
+            ))}
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7, 1fr)' }}>
+            {celulas.map((d, idx) => {
+              if (d === null) return <div key={'v' + idx} style={{ minHeight: 90, borderTop: '1px solid var(--border)', borderRight: '1px solid var(--border)', background: 'var(--surface-2, #fafafa)' }}/>;
+              const chave = `${mesRef.getFullYear()}-${mesRef.getMonth()}-${d}`;
+              const doDia = porDia[chave] || [];
+              const ehHoje = hoje.getFullYear() === mesRef.getFullYear() && hoje.getMonth() === mesRef.getMonth() && hoje.getDate() === d;
+              return (
+                <div key={d} style={{ minHeight: 90, padding: 4, borderTop: '1px solid var(--border)', borderRight: '1px solid var(--border)' }}>
+                  <div style={{
+                    fontSize: 11, fontWeight: ehHoje ? 800 : 600, color: ehHoje ? 'var(--vp-primary, #0066ff)' : 'var(--fg2)',
+                    marginBottom: 3,
+                  }}>{d}</div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+                    {doDia.slice(0, 3).map((a) => {
+                      const st = STATUS_ATIVIDADE[a.status] || { variant: 'neutral' };
+                      const cor = { warning: '#b45309', info: '#1d4ed8', success: '#15803d', neutral: '#666' }[st.variant] || '#666';
+                      const hora = new Date(a.agendado_para).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+                      return (
+                        <div key={a.id} onClick={() => setDetalhe(a)}
+                          title={`${hora} · ${a.dossier_obra?.building_name || ''}`}
+                          style={{ fontSize: 10, padding: '2px 4px', borderRadius: 3, background: cor + '20', color: cor, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          {hora} {a.dossier_obra?.building_name || a.dossier_obra?.client_name || '—'}
+                        </div>
+                      );
+                    })}
+                    {doDia.length > 3 && <div style={{ fontSize: 10, color: 'var(--fg3)' }}>+{doDia.length - 3}</div>}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+
+      {detalhe && (
+        <Modal title={detalhe.vistorias_questionarios?.nome || 'Vistoria agendada'} onClose={() => setDetalhe(null)} width={440}>
+          <div className="stack" style={{ gap: 6, fontSize: 13 }}>
+            <div><b>Obra:</b> {detalhe.dossier_obra?.client_name} — {detalhe.dossier_obra?.building_name || '—'}</div>
+            {detalhe.equipamentos_obra?.numero_serie && <div><b>Equipamento:</b> {detalhe.equipamentos_obra.numero_serie}</div>}
+            <div><b>Técnico:</b> {detalhe.colaboradores_vpsistema?.nome || 'A definir'}</div>
+            <div><b>Agendado para:</b> {new Date(detalhe.agendado_para).toLocaleString('pt-BR')}</div>
+            <div><b>Status:</b> {(STATUS_ATIVIDADE[detalhe.status] || {}).label || detalhe.status}</div>
+          </div>
+        </Modal>
+      )}
     </div>
   );
 }
