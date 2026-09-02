@@ -394,6 +394,9 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
         </div>
       </div>
 
+      {/* CHECKLISTS DIGITAIS DESPACHADOS (Fase 4 — resultado de Vistorias de Obras/vistorias-envio.jsx) */}
+      <ChecklistsDigitaisObra obraId={obraId}/>
+
       {/* STATS CARDS */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
         <div style={{
@@ -1065,6 +1068,134 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
         </div>
       )}
     </div>
+  );
+}
+
+/* Checklists digitais despachados (Fase 4) — mostra o resultado das
+   Atividades criadas na aba Despachar de vistorias-envio.jsx e
+   preenchidas pelo técnico em vistoria-execucao.jsx. Fonte separada de
+   `vistorias_obras` (agendamento manual, que continua existindo em
+   paralelo) — aqui é só leitura do que já foi respondido/anexado. */
+const STATUS_ATIVIDADE_RESULTADO = {
+  pendente: { label: 'Pendente', variant: 'warning' },
+  em_execucao: { label: 'Em execução', variant: 'info' },
+  concluida: { label: 'Concluída', variant: 'success' },
+  cancelada: { label: 'Cancelada', variant: 'neutral' },
+};
+
+function ChecklistsDigitaisObra({ obraId }) {
+  const [atividades, setAtividades] = React.useState(null);
+  const [detalhe, setDetalhe] = React.useState(null);
+
+  React.useEffect(() => {
+    window.VistoriasQuestionariosStore.listarAtividadesPorDossier(obraId)
+      .then(setAtividades)
+      .catch(() => setAtividades([]));
+  }, [obraId]);
+
+  // Sem dado ou obra sem nenhum checklist digital ainda — não polui a
+  // tela com uma seção vazia antes que a Fase 2/3 sejam usadas de fato.
+  if (!atividades || atividades.length === 0) return null;
+
+  return (
+    <div style={{ marginBottom: '1.5rem' }}>
+      <div style={{ fontSize: '0.9rem', fontWeight: 700, marginBottom: 10 }}>📲 Checklists digitais despachados</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {atividades.map((a) => {
+          const st = STATUS_ATIVIDADE_RESULTADO[a.status] || { label: a.status, variant: 'neutral' };
+          return (
+            <div key={a.id} onClick={() => setDetalhe(a)}
+              style={{ background: 'white', border: '1px solid #e0e0e0', borderRadius: 8, padding: '0.75rem 1rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              <div>
+                <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{a.vistorias_questionarios?.nome}</div>
+                <div style={{ fontSize: '0.78rem', color: '#888', marginTop: 2 }}>
+                  {a.equipamentos_obra?.numero_serie ? `${a.equipamentos_obra.numero_serie} · ` : ''}
+                  {a.colaboradores_vpsistema?.nome || 'Técnico a definir'}
+                  {a.concluido_em ? ` · concluída em ${new Date(a.concluido_em).toLocaleDateString('pt-BR')}` : ''}
+                </div>
+              </div>
+              <Badge variant={st.variant}>{st.label}</Badge>
+            </div>
+          );
+        })}
+      </div>
+      {detalhe && <ResultadoAtividadeModal atividade={detalhe} onClose={() => setDetalhe(null)}/>}
+    </div>
+  );
+}
+
+/* Modal read-only com o checklist inteiro respondido — mesma lógica de
+   visibilidade condicional de vistoria-execucao.jsx (esconde perguntas
+   cujo gatilho não foi disparado, pra mostrar exatamente o que o
+   técnico viu). */
+function ResultadoAtividadeModal({ atividade, onClose }) {
+  const [estrutura, setEstrutura] = React.useState(null);
+  const [respostas, setRespostas] = React.useState(null);
+
+  React.useEffect(() => {
+    Promise.all([
+      window.VistoriasQuestionariosStore.carregarEstrutura(atividade.questionario_id),
+      window.VistoriasQuestionariosStore.listarRespostas(atividade.id),
+    ]).then(([est, resp]) => {
+      setEstrutura(est);
+      const mapa = {};
+      resp.forEach((r) => { mapa[r.pergunta_id] = r; });
+      setRespostas(mapa);
+    }).catch((e) => window.toast?.('Erro: ' + e.message, 'error'));
+  }, [atividade.id]);
+
+  const visivel = (p) => !p.regra_pai_pergunta_id || respostas?.[p.regra_pai_pergunta_id]?.valor === p.regra_valor_gatilho;
+
+  const formatarValor = (pergunta, r) => {
+    if (pergunta.tipo_campo === 'foto' || pergunta.tipo_campo === 'assinatura') {
+      return r?.anexo_url
+        ? <img src={r.anexo_url} alt={pergunta.texto} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid #eee' }}/>
+        : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+    }
+    if (pergunta.tipo_campo === 'multipla_escolha') {
+      return (r?.valor_lista || []).length ? r.valor_lista.join(', ') : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+    }
+    return r?.valor ? r.valor : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+  };
+
+  const linkMapa = (lat, lng) => (lat != null && lng != null) ? `https://www.google.com/maps?q=${lat},${lng}` : null;
+
+  return (
+    <Modal title={atividade.vistorias_questionarios?.nome || 'Checklist'} onClose={onClose} width={620}>
+      <div style={{ marginBottom: 14, fontSize: 13, color: '#666', display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <div>Técnico: <b>{atividade.colaboradores_vpsistema?.nome || 'a definir'}</b></div>
+        {atividade.checkin_em && (
+          <div>Check-in: {new Date(atividade.checkin_em).toLocaleString('pt-BR')}
+            {linkMapa(atividade.checkin_lat, atividade.checkin_lng) && <> · <a href={linkMapa(atividade.checkin_lat, atividade.checkin_lng)} target="_blank" rel="noreferrer">ver no mapa</a></>}
+          </div>
+        )}
+        {atividade.concluido_em && (
+          <div>Concluída: {new Date(atividade.concluido_em).toLocaleString('pt-BR')}
+            {linkMapa(atividade.checkout_lat, atividade.checkout_lng) && <> · <a href={linkMapa(atividade.checkout_lat, atividade.checkout_lng)} target="_blank" rel="noreferrer">ver no mapa</a></>}
+          </div>
+        )}
+      </div>
+
+      {estrutura === null ? (
+        <div style={{ textAlign: 'center', padding: 24, color: '#888' }}>Carregando…</div>
+      ) : (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
+          {estrutura.map((categoria) => (
+            <div key={categoria.id}>
+              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, textTransform: 'uppercase', color: '#555' }}>{categoria.nome}</div>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {categoria.perguntas.filter(visivel).map((p) => (
+                  <div key={p.id} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
+                    <div style={{ fontSize: 13, color: '#333', marginBottom: 4 }}>{p.texto}</div>
+                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>{formatarValor(p, respostas[p.id])}</div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </Modal>
   );
 }
 

@@ -149,5 +149,21 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
       if (error) throw error;
       return data || [];
     },
+
+    /* ---- Resultado (Fase 4): checklists digitais de UMA obra ---- */
+    async listarAtividadesPorDossier(dossierId) {
+      const { data, error } = await sb().from('vistorias_atividades')
+        .select('*, equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome)')
+        .eq('dossier_id', dossierId)
+        .order('criado_em', { ascending: false });
+      if (error) throw error;
+      return data || [];
+    },
+
+    async listarRespostas(atividadeId) {
+      const { data, error } = await sb().from('vistorias_respostas').select('*').eq('atividade_id', atividadeId);
+      if (error) throw error;
+      return data || [];
+    },
   };
 })();
