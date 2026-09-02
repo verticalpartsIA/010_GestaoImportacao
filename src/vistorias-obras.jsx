@@ -1128,6 +1128,83 @@ function ChecklistsDigitaisObra({ obraId }) {
    visibilidade condicional de vistoria-execucao.jsx (esconde perguntas
    cujo gatilho não foi disparado, pra mostrar exatamente o que o
    técnico viu). */
+/* ---- Edição de uma resposta pelo operador (dentro do "Ver resultado") —
+   um controle por tipo_campo, cada mudança salva na hora via onSalvar.
+   Assinatura fica só leitura (reassinar não faz sentido pra quem não
+   é o vistoriador/responsável); foto permite editar legenda e remover,
+   sem upload novo (isso é papel do vistoriador em campo). */
+function CampoEditavel({ pergunta, resposta, onSalvar }) {
+  const [textoLocal, setTextoLocal] = React.useState(resposta?.valor ?? '');
+  React.useEffect(() => { setTextoLocal(resposta?.valor ?? ''); }, [pergunta.id, resposta?.valor]);
+
+  if (pergunta.tipo_campo === 'informativa') return null;
+  const salvarTexto = () => onSalvar({ valor: textoLocal });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+      {pergunta.tipo_campo === 'texto' && (
+        <input className="input" value={textoLocal} onChange={(e) => setTextoLocal(e.target.value)} onBlur={salvarTexto}/>
+      )}
+      {pergunta.tipo_campo === 'numerico' && (
+        <input className="input" type="number" value={textoLocal} onChange={(e) => setTextoLocal(e.target.value)} onBlur={salvarTexto}/>
+      )}
+      {pergunta.tipo_campo === 'data' && (
+        <input className="input" type="date" value={textoLocal} onChange={(e) => { setTextoLocal(e.target.value); onSalvar({ valor: e.target.value }); }}/>
+      )}
+      {pergunta.tipo_campo === 'sim_nao' && (
+        <div className="row" style={{ gap: 6 }}>
+          {['Sim', 'Não'].map((op) => (
+            <Button key={op} size="sm" variant={resposta?.valor === op ? 'primary' : 'outline'} onClick={() => onSalvar({ valor: op })}>{op}</Button>
+          ))}
+        </div>
+      )}
+      {pergunta.tipo_campo === 'selecao_unica' && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {(pergunta.opcoes || []).map((op) => (
+            <Button key={op} size="sm" variant={resposta?.valor === op ? 'primary' : 'outline'} onClick={() => onSalvar({ valor: op })}>{op}</Button>
+          ))}
+        </div>
+      )}
+      {pergunta.tipo_campo === 'multipla_escolha' && (
+        <div className="row" style={{ gap: 6, flexWrap: 'wrap' }}>
+          {(pergunta.opcoes || []).map((op) => {
+            const marcado = (resposta?.valor_lista || []).includes(op);
+            return (
+              <Button key={op} size="sm" variant={marcado ? 'primary' : 'outline'} onClick={() => {
+                const atual = resposta?.valor_lista || [];
+                onSalvar({ valor_lista: marcado ? atual.filter((v) => v !== op) : atual.concat([op]) });
+              }}>{op}</Button>
+            );
+          })}
+        </div>
+      )}
+      {pergunta.tipo_campo === 'foto' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {(resposta?.anexos || []).length ? resposta.anexos.map((a, i) => (
+            <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
+              <img src={a.url} alt="" style={{ width: 70, height: 52, objectFit: 'cover', borderRadius: 4, border: '1px solid #eee', flexShrink: 0 }}/>
+              <div style={{ flex: 1 }}>
+                <input className="input" style={{ fontSize: 12 }} defaultValue={a.legenda || ''} placeholder="Legenda"
+                  onBlur={(e) => onSalvar({ anexos: resposta.anexos.map((x, idx) => (idx === i ? { ...x, legenda: e.target.value } : x)) })}/>
+                <Button size="sm" variant="ghost" onClick={() => onSalvar({ anexos: resposta.anexos.filter((_, idx) => idx !== i) })}>Remover foto</Button>
+              </div>
+            </div>
+          )) : <span style={{ color: '#bbb', fontSize: 13 }}>— sem fotos —</span>}
+        </div>
+      )}
+      {pergunta.tipo_campo === 'assinatura' && (
+        resposta?.anexo_url
+          ? <img src={resposta.anexo_url} alt="" style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid #eee' }}/>
+          : <span style={{ color: '#bbb', fontSize: 13 }}>— sem assinatura — (não editável aqui)</span>
+      )}
+      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#b91c1c', cursor: 'pointer' }}>
+        <input type="checkbox" checked={!!resposta?.pendencia} onChange={(e) => onSalvar({ pendencia: e.target.checked })}/>
+        Marcar como pendência
+      </label>
+    </div>
+  );
+}
+
 function ResultadoAtividadeModal({ atividade, onClose }) {
   const [estrutura, setEstrutura] = React.useState(null);
   const [respostas, setRespostas] = React.useState(null);
@@ -1175,6 +1252,18 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
     return r?.valor ? r.valor : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
   };
 
+  const [editando, setEditando] = React.useState(false);
+  const salvarResposta = async (perguntaId, pav, campos) => {
+    const k = chave(perguntaId, pav);
+    setRespostas((prev) => ({ ...prev, [k]: { ...(prev[k] || {}), pergunta_id: perguntaId, pavimento_index: pav || 0, ...campos } }));
+    try {
+      const sb = window.__VP_SB.sb;
+      const { error } = await sb.from('vistorias_respostas')
+        .upsert({ atividade_id: atividade.id, pergunta_id: perguntaId, pavimento_index: pav || 0, ...campos }, { onConflict: 'atividade_id,pergunta_id,pavimento_index' });
+      if (error) throw error;
+    } catch (e) { window.toast?.('Erro ao salvar: ' + e.message, 'error'); }
+  };
+
   const [baixandoPdf, setBaixandoPdf] = React.useState(false);
   const baixarPdf = async () => {
     if (!window.VistoriaReactPdf) { window.toast?.('Motor de PDF ainda carregando — tente de novo em instantes.', 'warning'); return; }
@@ -1205,7 +1294,14 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
 
   return (
     <Modal title={atividade.vistorias_questionarios?.nome || 'Checklist'} onClose={onClose} width={620}
-      footer={<Button variant="primary" icon="download" onClick={baixarPdf} disabled={baixandoPdf || estrutura === null}>{baixandoPdf ? 'Gerando PDF…' : 'Baixar PDF'}</Button>}>
+      footer={(
+        <div className="row" style={{ gap: 8, justifyContent: 'flex-end', width: '100%' }}>
+          <Button variant={editando ? 'primary' : 'outline'} icon="edit" onClick={() => setEditando((v) => !v)} disabled={estrutura === null}>
+            {editando ? 'Concluir edição' : 'Editar respostas'}
+          </Button>
+          <Button variant="primary" icon="download" onClick={baixarPdf} disabled={baixandoPdf || estrutura === null}>{baixandoPdf ? 'Gerando PDF…' : 'Baixar PDF'}</Button>
+        </div>
+      )}>
       <div style={{ marginBottom: 14, fontSize: 13, color: '#666', display: 'flex', flexDirection: 'column', gap: 3 }}>
         <div>Técnico: <b>{atividade.colaboradores_vpsistema?.nome || 'a definir'}</b></div>
         {atividade.checkin_em && (
@@ -1234,14 +1330,19 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
                     {categoria.repete_por_pavimento && <div style={{ fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', marginBottom: 6 }}>Pavimento {pav}</div>}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {categoria.perguntas.filter((p) => visivel(p, pav)).map((p) => {
+                        if (p.tipo_campo === 'informativa') return null;
                         const r = respostas[chave(p.id, pav)];
                         return (
                           <div key={p.id + ':' + pav} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
                             <div style={{ fontSize: 13, color: '#333', marginBottom: 4 }}>{p.texto}</div>
-                            <div style={{ fontSize: 13.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
-                              {formatarValor(p, r)}
-                              {r?.pendencia && <Badge variant="warning">Pendência</Badge>}
-                            </div>
+                            {editando ? (
+                              <CampoEditavel pergunta={p} resposta={r} onSalvar={(campos) => salvarResposta(p.id, pav, campos)}/>
+                            ) : (
+                              <div style={{ fontSize: 13.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                                {formatarValor(p, r)}
+                                {r?.pendencia && <Badge variant="warning">Pendência</Badge>}
+                              </div>
+                            )}
                           </div>
                         );
                       })}
