@@ -185,16 +185,33 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
 
     async resolverPorMasterId(raw) {
       const parsed = this.parseMasterId(raw);
-      if (!parsed) throw new Error('ID não reconhecido — use um formato tipo VPOB-0950 ou VPEL-EL0950-1');
+      const OBRA_SELECT = 'id, client_name, building_name, city, state, numero_cotacao, equip_type';
 
-      const { data: obra, error: eObra } = await sb().from('dossier_obra')
-        .select('id, client_name, building_name, city, state, numero_cotacao, equip_type')
-        .eq('numero_cotacao', parsed.numero).maybeSingle();
-      if (eObra) throw eObra;
-      if (!obra) throw new Error(`Nenhuma obra encontrada para o nº ${parsed.numero}`);
+      let obra = null;
+      if (parsed) {
+        const { data, error } = await sb().from('dossier_obra')
+          .select(OBRA_SELECT).eq('numero_cotacao', parsed.numero).maybeSingle();
+        if (error) throw error;
+        obra = data;
+      }
+
+      /* Fallback pra obras legadas (migradas direto pro dossier_obra, nunca
+         passaram pelo funil Lead->Formulário->Cotação->Proposta — não têm
+         numero_cotacao porque nunca existiu cotação nenhuma pra elas).
+         Aceita o ID interno da obra (ex.: "DOS-M045") como o próprio Master
+         ID. Sem cotação, não há como buscar specs em formularios_elevador. */
+      if (!obra) {
+        const s = String(raw || '').trim();
+        const { data, error } = await sb().from('dossier_obra')
+          .select(OBRA_SELECT).in('id', [s, s.toUpperCase()]).limit(1).maybeSingle();
+        if (error) throw error;
+        obra = data;
+      }
+
+      if (!obra) throw new Error(`Nenhuma obra encontrada para "${raw}"`);
 
       let unidade = null;
-      if (parsed.indiceAtivo != null) {
+      if (parsed && parsed.indiceAtivo != null) {
         const { data: formularios, error: eForm } = await sb().from('formularios_elevador')
           .select('id').eq('numero_cotacao', parsed.numero);
         if (eForm) throw eForm;

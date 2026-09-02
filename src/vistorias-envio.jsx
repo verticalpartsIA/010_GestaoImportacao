@@ -548,7 +548,7 @@ function DespacharVistoria() {
           <label className="stack" style={{ gap: 4 }}>
             <span className="up-eyebrow muted">Buscar por Master ID (opcional)</span>
             <div className="row" style={{ gap: 8 }}>
-              <input className="input" style={{ flex: 1 }} placeholder="Ex.: VPOB-0950 ou VPEL-EL0950-1"
+              <input className="input" style={{ flex: 1 }} placeholder="Ex.: VPOB-0950, VPEL-EL0950-1 ou o ID da obra (DOS-M045)"
                 value={masterIdInput} onChange={(e) => setMasterIdInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') resolverMasterId(); }}/>
               <Button variant="outline" onClick={resolverMasterId} disabled={resolvendo || !masterIdInput.trim()}>{resolvendo ? 'Buscando…' : 'Buscar'}</Button>
@@ -575,7 +575,11 @@ function DespacharVistoria() {
                   {hidratado.unidade.tensao_principal && <Badge variant="neutral">{hidratado.unidade.tensao_principal}</Badge>}
                 </div>
               ) : (
-                <div className="small muted" style={{ marginTop: 4 }}>Só a obra foi identificada — inclua o índice do ativo no ID (ex.: -1) pra trazer as especificações técnicas.</div>
+                <div className="small muted" style={{ marginTop: 4 }}>
+                  {hidratado.parsed
+                    ? 'Só a obra foi identificada — inclua o índice do ativo no ID (ex.: -1) pra trazer as especificações técnicas.'
+                    : 'Obra legada (migrada direto, sem cotação vinculada) — sem especificações técnicas pra trazer aqui.'}
+                </div>
               )}
             </div>
           )}
