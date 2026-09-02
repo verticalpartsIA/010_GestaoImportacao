@@ -17,8 +17,16 @@
    Fase 4: resultado alimentando src/vistorias-obras.jsx.
    ============================================================ */
 
+/* VPOB-0950 quando a obra tem numero_cotacao (funil normal); cai pro ID
+   interno (obras legadas, sem cotação — ver resolverPorMasterId) senão. */
+function veVpobLabel(obra) {
+  if (!obra) return '';
+  if (obra.numero_cotacao != null) return 'VPOB-' + String(obra.numero_cotacao).padStart(4, '0');
+  return obra.id;
+}
+
 function VistoriasEnvio({ setRoute }) {
-  const [aba, setAba] = React.useState('questionarios');
+  const [aba, setAba] = React.useState('despacho');
   const [questionarioAberto, setQuestionarioAberto] = React.useState(null);
 
   if (questionarioAberto) {
@@ -282,10 +290,22 @@ function CategoriaCard({ categoria, todasPerguntas, onExcluirCategoria, onMudou 
     catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
   };
 
+  const alternarRepetePorPavimento = async () => {
+    try { await Store.atualizarCategoria(categoria.id, { repete_por_pavimento: !categoria.repete_por_pavimento }); onMudou(); }
+    catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+  };
+
   return (
     <Card
       title={categoria.nome}
-      sub={`${perguntasOrdenadas.length} pergunta${perguntasOrdenadas.length === 1 ? '' : 's'}`}
+      sub={
+        <label className="row" style={{ gap: 6, cursor: 'pointer' }} onClick={(e) => e.stopPropagation()}>
+          <span>{perguntasOrdenadas.length} pergunta{perguntasOrdenadas.length === 1 ? '' : 's'}</span>
+          <span style={{ color: 'var(--fg3)' }}>·</span>
+          <input type="checkbox" checked={!!categoria.repete_por_pavimento} onChange={alternarRepetePorPavimento}/>
+          <span style={{ fontSize: 12 }}>Repetir por pavimento</span>
+        </label>
+      }
       action={<Button variant="ghost" size="sm" icon="trash" title="Excluir categoria" aria-label="Excluir categoria" onClick={onExcluirCategoria}/>}>
       <div className="stack" style={{ gap: 6 }}>
         {perguntasOrdenadas.map((p, idx) => (
@@ -459,7 +479,7 @@ function DespacharVistoria() {
   const [questionarios, setQuestionarios] = React.useState(null);
   const [tecnicos, setTecnicos] = React.useState(null);
   const [despachos, setDespachos] = React.useState(null);
-  const [form, setForm] = React.useState({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '' });
+  const [form, setForm] = React.useState({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '', paradas: '' });
   const [salvando, setSalvando] = React.useState(false);
   const [ultimoDespacho, setUltimoDespacho] = React.useState(null);
   const [masterIdInput, setMasterIdInput] = React.useState('');
@@ -472,7 +492,7 @@ function DespacharVistoria() {
     const sb = window.__VP_SB?.sb;
     if (!sb) return;
     Promise.all([
-      sb.from('dossier_obra').select('id, client_name, building_name').order('client_name'),
+      sb.from('dossier_obra').select('id, client_name, building_name, numero_cotacao').order('client_name'),
       sb.from('equipamentos_obra').select('id, dossier_id, numero_serie'),
       Store.listarQuestionarios(),
       sb.from('colaboradores_vpsistema').select('id, nome').eq('is_active', true).order('nome'),
@@ -502,12 +522,16 @@ function DespacharVistoria() {
         equipamentoId: form.equipamentoId || null,
         tecnicoId: form.tecnicoId || null,
         agendadoPara: form.agendadoPara ? new Date(form.agendadoPara).toISOString() : null,
+        paradas: form.paradas ? parseInt(form.paradas, 10) : null,
       });
       const link = window.location.origin + '/vistoria/' + atividade.token;
       const questionario = questionarios.find((q) => q.id === form.questionarioId);
       const obra = obras.find((o) => o.id === form.dossierId);
-      setUltimoDespacho({ link, questionarioNome: questionario?.nome, obraNome: obra?.building_name });
-      setForm({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '' });
+      setUltimoDespacho({
+        link, questionarioNome: questionario?.nome, obraNome: obra?.building_name,
+        numeroLabel: `${atividade.numero_sequencial}ª Vistoria ${veVpobLabel(obra)}`,
+      });
+      setForm({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '', paradas: '' });
       setMasterIdInput('');
       setHidratado(null);
       window.toast?.('Vistoria despachada', 'success');
@@ -524,7 +548,7 @@ function DespacharVistoria() {
       const resultado = await Store.resolverPorMasterId(masterIdInput);
       const obraExiste = obras.some((o) => o.id === resultado.obra.id);
       if (!obraExiste) throw new Error('Obra encontrada no Master ID, mas não está na lista de obras carregada — recarregue a página.');
-      setForm((f) => ({ ...f, dossierId: resultado.obra.id, equipamentoId: '' }));
+      setForm((f) => ({ ...f, dossierId: resultado.obra.id, equipamentoId: '', paradas: resultado.unidade?.paradas ? String(resultado.unidade.paradas) : f.paradas }));
       setHidratado(resultado);
     } catch (e) { setErroMasterId(e.message); setHidratado(null); }
     finally { setResolvendo(false); }
@@ -630,6 +654,12 @@ function DespacharVistoria() {
                 onChange={(e) => setForm((f) => ({ ...f, agendadoPara: e.target.value }))}/>
               <span className="small muted">Sem data, a vistoria já entra na fila do vistoriador pra execução imediata.</span>
             </label>
+            <label className="stack" style={{ gap: 4, flex: 1, minWidth: 180 }}>
+              <span className="up-eyebrow muted">Nº de paradas (opcional)</span>
+              <input className="input" type="number" min="1" value={form.paradas}
+                onChange={(e) => setForm((f) => ({ ...f, paradas: e.target.value }))} placeholder="Ex.: 5"/>
+              <span className="small muted">Ajusta o checklist pra repetir as seções por pavimento. A busca por Master ID já preenche sozinha quando acha a especificação.</span>
+            </label>
           </div>
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <Button variant="primary" icon="send" onClick={despachar} disabled={salvando}>{salvando ? 'Despachando…' : 'Despachar'}</Button>
@@ -641,7 +671,7 @@ function DespacharVistoria() {
         <div className="alert info">
           <Icon.send/>
           <div style={{ flex: 1 }}>
-            <div className="alert__title">Vistoria despachada — link pronto pra enviar</div>
+            <div className="alert__title">{ultimoDespacho.numeroLabel} despachada — link pronto pra enviar</div>
             <div className="alert__sub" style={{ wordBreak: 'break-all' }}>{ultimoDespacho.link}</div>
             <div className="row" style={{ gap: 8, marginTop: 8 }}>
               <Button variant="outline" size="sm" icon="copy" onClick={() => copiarLink(ultimoDespacho.link)}>Copiar link</Button>
@@ -660,6 +690,7 @@ function DespacharVistoria() {
           <div className="table-wrap">
             <table className="t">
               <thead><tr>
+                <th>Nº</th>
                 <th>Obra</th>
                 <th>Equipamento</th>
                 <th>Questionário</th>
@@ -673,6 +704,7 @@ function DespacharVistoria() {
                   const st = STATUS_ATIVIDADE[a.status] || { label: a.status, variant: 'neutral' };
                   return (
                     <tr key={a.id}>
+                      <td className="mono" style={{ fontSize: 11 }}>{a.numero_sequencial ? `${a.numero_sequencial}ª · ${veVpobLabel(a.dossier_obra)}` : '—'}</td>
                       <td className="cell-main">{a.dossier_obra?.client_name} — {a.dossier_obra?.building_name || '—'}</td>
                       <td>{a.equipamentos_obra?.numero_serie || '—'}</td>
                       <td>{a.vistorias_questionarios?.nome || '—'}</td>
@@ -787,6 +819,7 @@ function CalendarioVistorias() {
           <div className="stack" style={{ gap: 6, fontSize: 13 }}>
             <div><b>Obra:</b> {detalhe.dossier_obra?.client_name} — {detalhe.dossier_obra?.building_name || '—'}</div>
             {detalhe.equipamentos_obra?.numero_serie && <div><b>Equipamento:</b> {detalhe.equipamentos_obra.numero_serie}</div>}
+            {detalhe.numero_sequencial && <div><b>Vistoria:</b> {detalhe.numero_sequencial}ª · {veVpobLabel(detalhe.dossier_obra)}</div>}
             <div><b>Técnico:</b> {detalhe.colaboradores_vpsistema?.nome || 'A definir'}</div>
             <div><b>Agendado para:</b> {new Date(detalhe.agendado_para).toLocaleString('pt-BR')}</div>
             <div><b>Status:</b> {(STATUS_ATIVIDADE[detalhe.status] || {}).label || detalhe.status}</div>

@@ -88,6 +88,11 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
       if (error) throw error;
     },
 
+    async atualizarCategoria(id, patch) {
+      const { error } = await sb().from('vistorias_categorias').update(patch).eq('id', id);
+      if (error) throw error;
+    },
+
     async excluirCategoria(id) {
       const { error } = await sb().from('vistorias_categorias').delete().eq('id', id);
       if (error) throw error;
@@ -125,14 +130,19 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     /* ---- Atividades (Fase 2: despacho) ----
        O token vira o link mandado pro técnico; a página que ele abre
        (execução no celular) é a Fase 3, ainda não construída. */
-    async criarAtividade({ questionarioId, dossierId, equipamentoId, tecnicoId, agendadoPara }) {
+    async criarAtividade({ questionarioId, dossierId, equipamentoId, tecnicoId, agendadoPara, paradas }) {
       const token = (window.crypto?.randomUUID ? window.crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)));
+      const { count, error: eCount } = await sb().from('vistorias_atividades')
+        .select('id', { count: 'exact', head: true }).eq('dossier_id', dossierId);
+      if (eCount) throw eCount;
       const { data, error } = await sb().from('vistorias_atividades').insert({
         questionario_id: questionarioId,
         dossier_id: dossierId,
         equipamento_id: equipamentoId || null,
         tecnico_id: tecnicoId || null,
         agendado_para: agendadoPara || null,
+        paradas: paradas || null,
+        numero_sequencial: (count || 0) + 1,
         token,
         status: 'pendente',
         enviado_em: new Date().toISOString(),
@@ -144,7 +154,7 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
 
     async listarAtividades() {
       const { data, error } = await sb().from('vistorias_atividades')
-        .select('*, dossier_obra(client_name, building_name), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome)')
+        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome)')
         .order('criado_em', { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -154,7 +164,7 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     /* ---- Calendário/Agenda (Módulo ADM) — todas as atividades com data marcada ---- */
     async listarAtividadesAgendadas() {
       const { data, error } = await sb().from('vistorias_atividades')
-        .select('*, dossier_obra(client_name, building_name), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome)')
+        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome)')
         .not('agendado_para', 'is', null)
         .order('agendado_para', { ascending: true });
       if (error) throw error;

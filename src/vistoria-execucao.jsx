@@ -28,9 +28,15 @@ function veRespostaPreenchida(tipoCampo, r) {
   return r.valor !== null && r.valor !== undefined && String(r.valor).trim() !== '';
 }
 
-function vePerguntaVisivel(pergunta, respostas) {
+function veChave(perguntaId, pav) { return perguntaId + ':' + (pav || 0); }
+
+/* `pav` só importa quando a pergunta-pai também está numa categoria que
+   repete por pavimento — nesse caso a condicional é por andar (a
+   pergunta do 2º andar só olha a resposta do 2º andar). Se a pergunta-pai
+   não tiver resposta nesse `pav` (não repete), cai pro pav 0. */
+function vePerguntaVisivel(pergunta, respostas, pav) {
   if (!pergunta.regra_pai_pergunta_id) return true;
-  const r = respostas[pergunta.regra_pai_pergunta_id];
+  const r = respostas[veChave(pergunta.regra_pai_pergunta_id, pav)] || respostas[veChave(pergunta.regra_pai_pergunta_id, 0)];
   return !!r && r.valor === pergunta.regra_valor_gatilho;
 }
 
@@ -120,7 +126,7 @@ function VePergunta({ pergunta, resposta, onResponder, atividadeId, sb }) {
     );
   }
 
-  const salvarTexto = () => onResponder(pergunta.id, { valor: textoLocal });
+  const salvarTexto = () => onResponder({ valor: textoLocal });
 
   const enviarFoto = async (e) => {
     const file = e.target.files?.[0];
@@ -129,17 +135,17 @@ function VePergunta({ pergunta, resposta, onResponder, atividadeId, sb }) {
     try {
       const ext = (file.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
       const url = await veUploadArquivo(sb, atividadeId, pergunta.id, file, ext);
-      onResponder(pergunta.id, { anexo_url: url });
+      onResponder({ anexo_url: url });
     } catch (err) { alert('Erro ao enviar a foto: ' + err.message); }
     finally { setEnviandoArquivo(false); e.target.value = ''; }
   };
 
   const salvarAssinatura = async (blobOuNull) => {
-    if (!blobOuNull) { onResponder(pergunta.id, { anexo_url: null }); return; }
+    if (!blobOuNull) { onResponder({ anexo_url: null }); return; }
     setEnviandoArquivo(true);
     try {
       const url = await veUploadArquivo(sb, atividadeId, pergunta.id, blobOuNull, 'png');
-      onResponder(pergunta.id, { anexo_url: url });
+      onResponder({ anexo_url: url });
     } catch (err) { alert('Erro ao salvar a assinatura: ' + err.message); }
     finally { setEnviandoArquivo(false); }
   };
@@ -155,14 +161,14 @@ function VePergunta({ pergunta, resposta, onResponder, atividadeId, sb }) {
         <input className="ve-input" type="number" inputMode="decimal" value={textoLocal} onChange={(e) => setTextoLocal(e.target.value)} onBlur={salvarTexto} placeholder="0"/>
       )}
       {(pergunta.tipo_campo === 'data') && (
-        <input className="ve-input" type="date" value={textoLocal} onChange={(e) => { setTextoLocal(e.target.value); onResponder(pergunta.id, { valor: e.target.value }); }}/>
+        <input className="ve-input" type="date" value={textoLocal} onChange={(e) => { setTextoLocal(e.target.value); onResponder({ valor: e.target.value }); }}/>
       )}
 
       {(pergunta.tipo_campo === 'sim_nao') && (
         <div className="ve-pills">
           {['Sim', 'Não'].map((op) => (
             <button key={op} type="button" className={'ve-pill' + (resposta?.valor === op ? ' is-active' : '')}
-              onClick={() => onResponder(pergunta.id, { valor: op })}>{op}</button>
+              onClick={() => onResponder({ valor: op })}>{op}</button>
           ))}
         </div>
       )}
@@ -171,7 +177,7 @@ function VePergunta({ pergunta, resposta, onResponder, atividadeId, sb }) {
         <div className="ve-pills">
           {(pergunta.opcoes || []).map((op) => (
             <button key={op} type="button" className={'ve-pill' + (resposta?.valor === op ? ' is-active' : '')}
-              onClick={() => onResponder(pergunta.id, { valor: op })}>{op}</button>
+              onClick={() => onResponder({ valor: op })}>{op}</button>
           ))}
         </div>
       )}
@@ -185,7 +191,7 @@ function VePergunta({ pergunta, resposta, onResponder, atividadeId, sb }) {
                 onClick={() => {
                   const atual = resposta?.valor_lista || [];
                   const novo = marcado ? atual.filter((v) => v !== op) : [...atual, op];
-                  onResponder(pergunta.id, { valor_lista: novo });
+                  onResponder({ valor_lista: novo });
                 }}>{op}</button>
             );
           })}
@@ -243,7 +249,7 @@ function VistoriaExecucaoApp() {
         if (eResp) throw eResp;
 
         const mapa = {};
-        (resp || []).forEach((r) => { mapa[r.pergunta_id] = r; });
+        (resp || []).forEach((r) => { mapa[veChave(r.pergunta_id, r.pavimento_index)] = r; });
 
         let ativAtualizada = ativ;
         if (ativ.status === 'pendente') {
@@ -270,24 +276,36 @@ function VistoriaExecucaoApp() {
     })();
   }, [token]);
 
-  const onResponder = async (perguntaId, campos) => {
-    setRespostas((prev) => ({ ...prev, [perguntaId]: { ...(prev[perguntaId] || {}), pergunta_id: perguntaId, ...campos } }));
+  const onResponder = async (perguntaId, campos, pav) => {
+    const chave = veChave(perguntaId, pav);
+    setRespostas((prev) => ({ ...prev, [chave]: { ...(prev[chave] || {}), pergunta_id: perguntaId, pavimento_index: pav || 0, ...campos } }));
     try {
       const { error } = await sb.from('vistorias_respostas')
-        .upsert({ atividade_id: atividade.id, pergunta_id: perguntaId, ...campos }, { onConflict: 'atividade_id,pergunta_id' });
+        .upsert({ atividade_id: atividade.id, pergunta_id: perguntaId, pavimento_index: pav || 0, ...campos }, { onConflict: 'atividade_id,pergunta_id,pavimento_index' });
       if (error) throw error;
     } catch (e) { setErro('Não deu pra salvar essa resposta: ' + e.message); }
   };
 
-  const todasPerguntas = _veUM(() => estrutura.flatMap((c) => c.perguntas), [estrutura]);
-  const perguntasVisiveis = _veUM(() => todasPerguntas.filter((p) => vePerguntaVisivel(p, respostas)), [todasPerguntas, respostas]);
-  const obrigatoriasVisiveis = _veUM(() => perguntasVisiveis.filter((p) => p.obrigatoria && p.tipo_campo !== 'informativa'), [perguntasVisiveis]);
-  const obrigatoriasRespondidas = obrigatoriasVisiveis.filter((p) => veRespostaPreenchida(p.tipo_campo, respostas[p.id]));
+  /* Achata categoria×pergunta em (pergunta, pav) — categorias marcadas
+     repete_por_pavimento viram N cópias (N = atividade.paradas, mínimo 1
+     quando não informado, pra nunca sumir a seção). */
+  const itensExpandidos = _veUM(() => {
+    const n = (c) => (c.repete_por_pavimento ? Math.max(1, atividade?.paradas || 1) : 1);
+    return estrutura.flatMap((c) => {
+      const reps = n(c);
+      const pavs = c.repete_por_pavimento ? Array.from({ length: reps }, (_, i) => i + 1) : [0];
+      return pavs.flatMap((pav) => c.perguntas.map((p) => ({ pergunta: p, pav, categoria: c })));
+    });
+  }, [estrutura, atividade?.paradas]);
+
+  const itensVisiveis = _veUM(() => itensExpandidos.filter((it) => vePerguntaVisivel(it.pergunta, respostas, it.pav)), [itensExpandidos, respostas]);
+  const obrigatoriosVisiveis = _veUM(() => itensVisiveis.filter((it) => it.pergunta.obrigatoria && it.pergunta.tipo_campo !== 'informativa'), [itensVisiveis]);
+  const obrigatoriosRespondidos = obrigatoriosVisiveis.filter((it) => veRespostaPreenchida(it.pergunta.tipo_campo, respostas[veChave(it.pergunta.id, it.pav)]));
 
   const concluir = async () => {
-    const faltando = obrigatoriasVisiveis.filter((p) => !veRespostaPreenchida(p.tipo_campo, respostas[p.id]));
+    const faltando = obrigatoriosVisiveis.filter((it) => !veRespostaPreenchida(it.pergunta.tipo_campo, respostas[veChave(it.pergunta.id, it.pav)]));
     if (faltando.length > 0) {
-      setErro(`Faltam ${faltando.length} pergunta(s) obrigatória(s): ${faltando.slice(0, 3).map((p) => p.texto).join('; ')}${faltando.length > 3 ? '…' : ''}`);
+      setErro(`Faltam ${faltando.length} pergunta(s) obrigatória(s): ${faltando.slice(0, 3).map((it) => it.pergunta.texto).join('; ')}${faltando.length > 3 ? '…' : ''}`);
       return;
     }
     setConcluindo(true);
@@ -327,7 +345,10 @@ function VistoriaExecucaoApp() {
       <header className="ve-header">
         <div className="ve-header__eyebrow">VerticalParts · Vistoria</div>
         <h1>{atividade.vistorias_questionarios?.nome}</h1>
-        <div className="ve-header__meta">{obraNome}{atividade.equipamentos_obra?.numero_serie ? ` · ${atividade.equipamentos_obra.numero_serie}` : ''}</div>
+        <div className="ve-header__meta">
+          {atividade.numero_sequencial ? `${atividade.numero_sequencial}ª vistoria · ` : ''}
+          {obraNome}{atividade.equipamentos_obra?.numero_serie ? ` · ${atividade.equipamentos_obra.numero_serie}` : ''}
+        </div>
       </header>
 
       {atividade.status === 'concluida' ? (
@@ -344,18 +365,28 @@ function VistoriaExecucaoApp() {
       ) : (
         <>
           <div className="ve-progresso">
-            <div className="ve-progresso__bar"><div style={{ width: `${obrigatoriasVisiveis.length ? (obrigatoriasRespondidas.length / obrigatoriasVisiveis.length) * 100 : 100}%` }}/></div>
-            <span>{obrigatoriasRespondidas.length}/{obrigatoriasVisiveis.length} obrigatórias</span>
+            <div className="ve-progresso__bar"><div style={{ width: `${obrigatoriosVisiveis.length ? (obrigatoriosRespondidos.length / obrigatoriosVisiveis.length) * 100 : 100}%` }}/></div>
+            <span>{obrigatoriosRespondidos.length}/{obrigatoriosVisiveis.length} obrigatórias</span>
           </div>
 
-          {estrutura.map((categoria) => (
-            <section key={categoria.id} className="ve-categoria">
-              <h3>{categoria.nome}</h3>
-              {categoria.perguntas.filter((p) => vePerguntaVisivel(p, respostas)).map((p) => (
-                <VePergunta key={p.id} pergunta={p} resposta={respostas[p.id]} onResponder={onResponder} atividadeId={atividade.id} sb={sb}/>
-              ))}
-            </section>
-          ))}
+          {estrutura.map((categoria) => {
+            const n = categoria.repete_por_pavimento ? Math.max(1, atividade?.paradas || 1) : 1;
+            const pavs = categoria.repete_por_pavimento ? Array.from({ length: n }, (_, i) => i + 1) : [0];
+            return (
+              <section key={categoria.id} className="ve-categoria">
+                <h3>{categoria.nome}</h3>
+                {pavs.map((pav) => (
+                  <div key={pav}>
+                    {categoria.repete_por_pavimento && <div className="ve-pavimento-label">Pavimento {pav}</div>}
+                    {categoria.perguntas.filter((p) => vePerguntaVisivel(p, respostas, pav)).map((p) => (
+                      <VePergunta key={p.id + ':' + pav} pergunta={p} resposta={respostas[veChave(p.id, pav)]}
+                        onResponder={(campos) => onResponder(p.id, campos, pav)} atividadeId={atividade.id} sb={sb}/>
+                    ))}
+                  </div>
+                ))}
+              </section>
+            );
+          })}
 
           {erro && <div className="ve-erro">{erro}</div>}
 
