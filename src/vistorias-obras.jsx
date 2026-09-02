@@ -1139,12 +1139,17 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
     ]).then(([est, resp]) => {
       setEstrutura(est);
       const mapa = {};
-      resp.forEach((r) => { mapa[r.pergunta_id] = r; });
+      resp.forEach((r) => { mapa[r.pergunta_id + ':' + (r.pavimento_index || 0)] = r; });
       setRespostas(mapa);
     }).catch((e) => window.toast?.('Erro: ' + e.message, 'error'));
   }, [atividade.id]);
 
-  const visivel = (p) => !p.regra_pai_pergunta_id || respostas?.[p.regra_pai_pergunta_id]?.valor === p.regra_valor_gatilho;
+  const chave = (perguntaId, pav) => perguntaId + ':' + (pav || 0);
+  const visivel = (p, pav) => {
+    if (!p.regra_pai_pergunta_id) return true;
+    const r = respostas?.[chave(p.regra_pai_pergunta_id, pav)] || respostas?.[chave(p.regra_pai_pergunta_id, 0)];
+    return !!r && r.valor === p.regra_valor_gatilho;
+  };
 
   const formatarValor = (pergunta, r) => {
     if (pergunta.tipo_campo === 'foto' || pergunta.tipo_campo === 'assinatura') {
@@ -1180,19 +1185,33 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
         <div style={{ textAlign: 'center', padding: 24, color: '#888' }}>Carregando…</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
-          {estrutura.map((categoria) => (
-            <div key={categoria.id}>
-              <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, textTransform: 'uppercase', color: '#555' }}>{categoria.nome}</div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                {categoria.perguntas.filter(visivel).map((p) => (
-                  <div key={p.id} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
-                    <div style={{ fontSize: 13, color: '#333', marginBottom: 4 }}>{p.texto}</div>
-                    <div style={{ fontSize: 13.5, fontWeight: 600 }}>{formatarValor(p, respostas[p.id])}</div>
+          {estrutura.map((categoria) => {
+            const pavs = window.VistoriasQuestionariosStore.pavsDaCategoria(categoria, atividade.paradas);
+            return (
+              <div key={categoria.id}>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, textTransform: 'uppercase', color: '#555' }}>{categoria.nome}</div>
+                {pavs.map((pav) => (
+                  <div key={pav} style={{ marginBottom: pavs.length > 1 ? 10 : 0 }}>
+                    {categoria.repete_por_pavimento && <div style={{ fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', marginBottom: 6 }}>Pavimento {pav}</div>}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      {categoria.perguntas.filter((p) => visivel(p, pav)).map((p) => {
+                        const r = respostas[chave(p.id, pav)];
+                        return (
+                          <div key={p.id + ':' + pav} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
+                            <div style={{ fontSize: 13, color: '#333', marginBottom: 4 }}>{p.texto}</div>
+                            <div style={{ fontSize: 13.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {formatarValor(p, r)}
+                              {r?.pendencia && <Badge variant="warning">Pendência</Badge>}
+                            </div>
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 ))}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       )}
     </Modal>

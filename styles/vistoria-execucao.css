@@ -21,6 +21,7 @@ html, body { margin: 0; padding: 0; background: var(--bg-muted); font-family: va
 @keyframes ve-spin { to { transform: rotate(360deg); } }
 
 .ve-page { max-width: 560px; margin: 0 auto; padding: 0 0 100px; }
+@media (max-width: 700px) { .ve-page { max-width: 100%; } }
 
 .ve-header {
   background: var(--vp-black); color: var(--fg-on-dark); padding: 20px 18px 18px; position: sticky; top: 0; z-index: 5;
@@ -46,6 +47,9 @@ html, body { margin: 0; padding: 0; background: var(--bg-muted); font-family: va
 .ve-pergunta--info p { margin: 0; font-size: var(--fs-small); color: var(--fg2); }
 .ve-pergunta__texto { font-size: var(--fs-body); font-weight: 600; margin-bottom: 8px; line-height: 1.35; }
 .ve-obrig { color: var(--vp-danger); margin-left: 4px; }
+
+.ve-pendencia { display: flex; align-items: center; gap: 6px; margin-top: 8px; font-size: var(--fs-meta); color: var(--vp-danger-ink); cursor: pointer; }
+.ve-pendencia input { width: 16px; height: 16px; accent-color: var(--vp-danger); }
 
 .ve-input {
   width: 100%; padding: 12px 14px; font-size: 16px; border: 1.5px solid var(--border-strong);

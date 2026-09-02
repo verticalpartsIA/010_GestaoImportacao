@@ -217,6 +217,11 @@ function VePergunta({ pergunta, resposta, onResponder, atividadeId, sb }) {
       {(pergunta.tipo_campo === 'assinatura') && (
         <VeAssinaturaPad valorAtual={resposta?.anexo_url} onSalvar={salvarAssinatura} salvando={enviandoArquivo}/>
       )}
+
+      <label className="ve-pendencia">
+        <input type="checkbox" checked={!!resposta?.pendencia} onChange={(e) => onResponder({ pendencia: e.target.checked })}/>
+        Marcar como pendência
+      </label>
     </div>
   );
 }
@@ -290,10 +295,8 @@ function VistoriaExecucaoApp() {
      repete_por_pavimento viram N cópias (N = atividade.paradas, mínimo 1
      quando não informado, pra nunca sumir a seção). */
   const itensExpandidos = _veUM(() => {
-    const n = (c) => (c.repete_por_pavimento ? Math.max(1, atividade?.paradas || 1) : 1);
     return estrutura.flatMap((c) => {
-      const reps = n(c);
-      const pavs = c.repete_por_pavimento ? Array.from({ length: reps }, (_, i) => i + 1) : [0];
+      const pavs = window.VistoriasQuestionariosStore.pavsDaCategoria(c, atividade?.paradas);
       return pavs.flatMap((pav) => c.perguntas.map((p) => ({ pergunta: p, pav, categoria: c })));
     });
   }, [estrutura, atividade?.paradas]);
@@ -370,8 +373,7 @@ function VistoriaExecucaoApp() {
           </div>
 
           {estrutura.map((categoria) => {
-            const n = categoria.repete_por_pavimento ? Math.max(1, atividade?.paradas || 1) : 1;
-            const pavs = categoria.repete_por_pavimento ? Array.from({ length: n }, (_, i) => i + 1) : [0];
+            const pavs = window.VistoriasQuestionariosStore.pavsDaCategoria(categoria, atividade?.paradas);
             return (
               <section key={categoria.id} className="ve-categoria">
                 <h3>{categoria.nome}</h3>

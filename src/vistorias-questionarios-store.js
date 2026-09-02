@@ -119,6 +119,22 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
       if (error) throw error;
     },
 
+    /* Lista de pavimentos que uma categoria repete, dado o nº de paradas da
+       atividade. 'todos' (ou null) = 1..N. 'intermediarios' = 2..N-1 (usado
+       pra "Pavimentos Intermediários", que não repete no 1º nem no último
+       piso — esses têm categoria própria, não-repetida). Usado tanto na
+       execução pública (vistoria-execucao.jsx) quanto no resultado
+       (vistorias-obras.jsx), pra nunca divergir. */
+    pavsDaCategoria(categoria, paradas) {
+      if (!categoria.repete_por_pavimento) return [0];
+      const n = Math.max(1, paradas || 1);
+      if (categoria.repete_modo === 'intermediarios') {
+        const len = Math.max(0, n - 2);
+        return Array.from({ length: len }, (_, i) => i + 2);
+      }
+      return Array.from({ length: n }, (_, i) => i + 1);
+    },
+
     /* Troca a `ordem` de duas perguntas da mesma categoria (mover pra cima/baixo) */
     async reordenarPerguntas(perguntaA, perguntaB) {
       const { error: e1 } = await sb().from('vistorias_perguntas').update({ ordem: perguntaB.ordem }).eq('id', perguntaA.id);
