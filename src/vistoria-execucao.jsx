@@ -24,7 +24,8 @@ function veExtractToken() {
 function veRespostaPreenchida(tipoCampo, r) {
   if (!r) return false;
   if (tipoCampo === 'multipla_escolha') return Array.isArray(r.valor_lista) && r.valor_lista.length > 0;
-  if (tipoCampo === 'foto' || tipoCampo === 'assinatura') return !!r.anexo_url;
+  if (tipoCampo === 'foto') return Array.isArray(r.anexos) && r.anexos.length > 0;
+  if (tipoCampo === 'assinatura') return !!r.anexo_url;
   return r.valor !== null && r.valor !== undefined && String(r.valor).trim() !== '';
 }
 
@@ -41,7 +42,7 @@ function vePerguntaVisivel(pergunta, respostas, pav) {
 }
 
 async function veUploadArquivo(sb, atividadeId, perguntaId, blob, ext) {
-  const path = `${atividadeId}/${perguntaId}-${Date.now()}.${ext}`;
+  const path = `${atividadeId}/${perguntaId}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
   const { error } = await sb.storage.from(VE_BUCKET).upload(path, blob, { upsert: true, contentType: blob.type });
   if (error) throw error;
   const { data } = sb.storage.from(VE_BUCKET).getPublicUrl(path);
@@ -111,6 +112,174 @@ function VeAssinaturaPad({ valorAtual, onSalvar, salvando }) {
   );
 }
 
+/* ---- Anotador — desenha traço livre ou seta sobre uma foto já enviada,
+   pra apontar o problema. Achata tudo num PNG novo ao salvar (substitui
+   a foto original pela marcada — mantém simples, sem guardar as duas
+   versões). ---- */
+function VeFotoAnotador({ url, onSalvar, onCancelar, salvando }) {
+  const canvasRef = _veUR(null);
+  const imgRef = _veUR(null);
+  const [ferramenta, setFerramenta] = _veUS('livre');
+  const formasRef = _veUR([]);
+  const desenhandoRef = _veUR(false);
+  const inicioRef = _veUR(null);
+  const [pronto, setPronto] = _veUS(false);
+
+  _veUE(() => {
+    const img = new Image();
+    img.crossOrigin = 'anonymous';
+    img.onload = () => {
+      const c = canvasRef.current;
+      const escala = Math.min(1, 340 / img.naturalWidth);
+      c.width = img.naturalWidth * escala;
+      c.height = img.naturalHeight * escala;
+      imgRef.current = img;
+      redesenhar();
+      setPronto(true);
+    };
+    img.src = url;
+  }, [url]);
+
+  const redesenhar = (extra) => {
+    const c = canvasRef.current;
+    const ctx = c.getContext('2d');
+    ctx.clearRect(0, 0, c.width, c.height);
+    if (imgRef.current) ctx.drawImage(imgRef.current, 0, 0, c.width, c.height);
+    ctx.strokeStyle = '#ef4444';
+    ctx.lineWidth = 3;
+    ctx.lineCap = 'round';
+    formasRef.current.concat(extra ? [extra] : []).forEach((f) => {
+      ctx.beginPath();
+      if (f.tipo === 'livre') {
+        f.pontos.forEach(([x, y], i) => (i === 0 ? ctx.moveTo(x, y) : ctx.lineTo(x, y)));
+        ctx.stroke();
+      } else {
+        const [x1, y1] = f.de; const [x2, y2] = f.para;
+        ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
+        const ang = Math.atan2(y2 - y1, x2 - x1);
+        ctx.beginPath();
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - 12 * Math.cos(ang - 0.5), y2 - 12 * Math.sin(ang - 0.5));
+        ctx.moveTo(x2, y2);
+        ctx.lineTo(x2 - 12 * Math.cos(ang + 0.5), y2 - 12 * Math.sin(ang + 0.5));
+        ctx.stroke();
+      }
+    });
+  };
+
+  const posicao = (e) => {
+    const rect = canvasRef.current.getBoundingClientRect();
+    return [e.clientX - rect.left, e.clientY - rect.top];
+  };
+
+  const iniciar = (e) => {
+    desenhandoRef.current = true;
+    const p = posicao(e);
+    inicioRef.current = p;
+    if (ferramenta === 'livre') formasRef.current = formasRef.current.concat([{ tipo: 'livre', pontos: [p] }]);
+  };
+  const mover = (e) => {
+    if (!desenhandoRef.current) return;
+    const p = posicao(e);
+    if (ferramenta === 'livre') {
+      formasRef.current[formasRef.current.length - 1].pontos.push(p);
+      redesenhar();
+    } else {
+      redesenhar({ tipo: 'seta', de: inicioRef.current, para: p });
+    }
+  };
+  const soltar = (e) => {
+    if (!desenhandoRef.current) return;
+    desenhandoRef.current = false;
+    if (ferramenta === 'seta') {
+      formasRef.current = formasRef.current.concat([{ tipo: 'seta', de: inicioRef.current, para: posicao(e) }]);
+      redesenhar();
+    }
+  };
+
+  const limpar = () => { formasRef.current = []; redesenhar(); };
+
+  const salvar = () => canvasRef.current.toBlob((blob) => onSalvar(blob), 'image/png');
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.7)', zIndex: 50, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 10, padding: 16 }}>
+      {!pronto && <div style={{ color: '#fff' }}>Carregando…</div>}
+      <canvas ref={canvasRef} style={{ maxWidth: '100%', touchAction: 'none', borderRadius: 8, background: '#000' }}
+        onPointerDown={iniciar} onPointerMove={mover} onPointerUp={soltar} onPointerLeave={soltar}/>
+      <div className="row" style={{ gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+        <button type="button" className={'ve-pill' + (ferramenta === 'livre' ? ' is-active' : '')} onClick={() => setFerramenta('livre')}>Traço livre</button>
+        <button type="button" className={'ve-pill' + (ferramenta === 'seta' ? ' is-active' : '')} onClick={() => setFerramenta('seta')}>Seta</button>
+        <button type="button" className="ve-btn-ghost" style={{ color: '#fff', borderColor: '#fff' }} onClick={limpar}>Limpar marcações</button>
+      </div>
+      <div className="row" style={{ gap: 8 }}>
+        <button type="button" className="ve-btn-ghost" style={{ color: '#fff', borderColor: '#fff' }} onClick={onCancelar} disabled={salvando}>Cancelar</button>
+        <button type="button" className="ve-btn-primary" onClick={salvar} disabled={salvando || !pronto}>{salvando ? 'Salvando…' : 'Salvar marcação'}</button>
+      </div>
+    </div>
+  );
+}
+
+/* ---- Múltiplas fotos por pergunta, cada uma com legenda opcional e
+   marcação (VeFotoAnotador). resposta.anexos = [{url, legenda}]. */
+function VeFotoMultipla({ pergunta, resposta, onResponder, atividadeId, sb }) {
+  const [enviando, setEnviando] = _veUS(false);
+  const [anotando, setAnotando] = _veUS(null); // índice da foto sendo marcada
+  const anexos = resposta?.anexos || [];
+
+  const salvarAnexos = (novo) => onResponder({ anexos: novo });
+
+  const adicionarFoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEnviando(true);
+    try {
+      const ext = (file.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+      const url = await veUploadArquivo(sb, atividadeId, pergunta.id, file, ext);
+      salvarAnexos(anexos.concat([{ url, legenda: '' }]));
+    } catch (err) { alert('Erro ao enviar a foto: ' + err.message); }
+    finally { setEnviando(false); e.target.value = ''; }
+  };
+
+  const removerFoto = (i) => salvarAnexos(anexos.filter((_, idx) => idx !== i));
+  const mudarLegenda = (i, legenda) => salvarAnexos(anexos.map((a, idx) => (idx === i ? { ...a, legenda } : a)));
+
+  const salvarMarcacao = async (blob) => {
+    setEnviando(true);
+    try {
+      const url = await veUploadArquivo(sb, atividadeId, pergunta.id, blob, 'png');
+      salvarAnexos(anexos.map((a, idx) => (idx === anotando ? { ...a, url } : a)));
+      setAnotando(null);
+    } catch (err) { alert('Erro ao salvar a marcação: ' + err.message); }
+    finally { setEnviando(false); }
+  };
+
+  return (
+    <div>
+      {anexos.map((a, i) => (
+        <div key={i} style={{ marginBottom: 10 }}>
+          <div className="ve-foto-ok">
+            <img src={a.url} alt={`Foto ${i + 1}`}/>
+          </div>
+          <input className="ve-input" style={{ marginTop: 6 }} placeholder="Legenda desta foto (opcional)"
+            defaultValue={a.legenda || ''} onBlur={(e) => mudarLegenda(i, e.target.value)}/>
+          <div className="row" style={{ gap: 8, marginTop: 6 }}>
+            <button type="button" className="ve-btn-ghost" onClick={() => setAnotando(i)}>Riscar/marcar foto</button>
+            <button type="button" className="ve-btn-ghost" onClick={() => removerFoto(i)}>Remover</button>
+          </div>
+        </div>
+      ))}
+      <label className="ve-btn-primary">
+        {enviando ? 'Enviando…' : (anexos.length ? 'Adicionar outra foto' : 'Tirar foto')}
+        <input type="file" accept="image/*" capture="environment" onChange={adicionarFoto} hidden disabled={enviando}/>
+      </label>
+      {anotando != null && (
+        <VeFotoAnotador url={anexos[anotando].url} salvando={enviando}
+          onSalvar={salvarMarcacao} onCancelar={() => setAnotando(null)}/>
+      )}
+    </div>
+  );
+}
+
 /* ---- Uma pergunta — escolhe o campo certo pelo tipo_campo ---- */
 function VePergunta({ pergunta, resposta, onResponder, atividadeId, sb }) {
   const [enviandoArquivo, setEnviandoArquivo] = _veUS(false);
@@ -127,18 +296,6 @@ function VePergunta({ pergunta, resposta, onResponder, atividadeId, sb }) {
   }
 
   const salvarTexto = () => onResponder({ valor: textoLocal });
-
-  const enviarFoto = async (e) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    setEnviandoArquivo(true);
-    try {
-      const ext = (file.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
-      const url = await veUploadArquivo(sb, atividadeId, pergunta.id, file, ext);
-      onResponder({ anexo_url: url });
-    } catch (err) { alert('Erro ao enviar a foto: ' + err.message); }
-    finally { setEnviandoArquivo(false); e.target.value = ''; }
-  };
 
   const salvarAssinatura = async (blobOuNull) => {
     if (!blobOuNull) { onResponder({ anexo_url: null }); return; }
@@ -199,19 +356,7 @@ function VePergunta({ pergunta, resposta, onResponder, atividadeId, sb }) {
       )}
 
       {(pergunta.tipo_campo === 'foto') && (
-        <div>
-          {resposta?.anexo_url ? (
-            <div className="ve-foto-ok">
-              <img src={resposta.anexo_url} alt="Foto enviada"/>
-              <label className="ve-btn-ghost">Trocar foto<input type="file" accept="image/*" capture="environment" onChange={enviarFoto} hidden/></label>
-            </div>
-          ) : (
-            <label className="ve-btn-primary">
-              {enviandoArquivo ? 'Enviando…' : 'Tirar foto'}
-              <input type="file" accept="image/*" capture="environment" onChange={enviarFoto} hidden disabled={enviandoArquivo}/>
-            </label>
-          )}
-        </div>
+        <VeFotoMultipla pergunta={pergunta} resposta={resposta} onResponder={onResponder} atividadeId={atividadeId} sb={sb}/>
       )}
 
       {(pergunta.tipo_campo === 'assinatura') && (

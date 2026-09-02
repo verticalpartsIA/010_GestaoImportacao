@@ -1152,7 +1152,19 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
   };
 
   const formatarValor = (pergunta, r) => {
-    if (pergunta.tipo_campo === 'foto' || pergunta.tipo_campo === 'assinatura') {
+    if (pergunta.tipo_campo === 'foto') {
+      return (r?.anexos || []).length ? (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
+          {r.anexos.map((a, i) => (
+            <div key={i}>
+              <img src={a.url} alt={pergunta.texto} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid #eee', display: 'block' }}/>
+              {a.legenda && <div style={{ fontSize: 11, color: '#888', maxWidth: 160 }}>{a.legenda}</div>}
+            </div>
+          ))}
+        </div>
+      ) : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+    }
+    if (pergunta.tipo_campo === 'assinatura') {
       return r?.anexo_url
         ? <img src={r.anexo_url} alt={pergunta.texto} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid #eee' }}/>
         : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
