@@ -127,6 +127,18 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
       if (e2) throw e2;
     },
 
+    /* wa.me com o número já preenchido — mesmo padrão de
+       proposta-store.js/contrato-instalador-store.js/contrato-venda-store.js/
+       pedido-fornecedor-store.js (cada store tem sua cópia, é a convenção
+       do projeto). Sem número, cai pro wa.me genérico (abre o seletor de
+       contato do WhatsApp Web/app). */
+    whatsAppHref(phone, message) {
+      let p = (phone || '').replace(/\D/g, '');
+      if (p.length === 11 && p[2] === '9') p = '55' + p;
+      const base = p ? 'https://wa.me/' + p : 'https://wa.me/';
+      return base + '?text=' + encodeURIComponent(message);
+    },
+
     /* ---- Atividades (Fase 2: despacho) ----
        O token vira o link mandado pro técnico; a página que ele abre
        (execução no celular) é a Fase 3, ainda não construída. */

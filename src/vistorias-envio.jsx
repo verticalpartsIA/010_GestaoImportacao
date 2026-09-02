@@ -486,6 +486,7 @@ function DespacharVistoria() {
   const [resolvendo, setResolvendo] = React.useState(false);
   const [erroMasterId, setErroMasterId] = React.useState(null);
   const [hidratado, setHidratado] = React.useState(null); // { obra, unidade } — última resolução via Master ID
+  const [telefoneEnvio, setTelefoneEnvio] = React.useState('');
   const Store = window.VistoriasQuestionariosStore;
 
   const carregar = React.useCallback(() => {
@@ -534,6 +535,7 @@ function DespacharVistoria() {
       setForm({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '', paradas: '' });
       setMasterIdInput('');
       setHidratado(null);
+      setTelefoneEnvio('');
       window.toast?.('Vistoria despachada', 'success');
       carregar();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
@@ -560,9 +562,9 @@ function DespacharVistoria() {
       .catch(() => window.toast?.('Não deu pra copiar — selecione o link manualmente', 'warning'));
   };
 
-  const abrirWhatsApp = (link, questionarioNome, obraNome) => {
+  const abrirWhatsApp = (link, questionarioNome, obraNome, telefone) => {
     const msg = `Vistoria "${questionarioNome}" — ${obraNome}. Abra no celular pra preencher: ${link}`;
-    window.open('https://api.whatsapp.com/send?text=' + encodeURIComponent(msg), '_blank');
+    window.open(Store.whatsAppHref(telefone, msg), '_blank');
   };
 
   if (obras === null) return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
@@ -673,9 +675,13 @@ function DespacharVistoria() {
           <div style={{ flex: 1 }}>
             <div className="alert__title">{ultimoDespacho.numeroLabel} despachada — link pronto pra enviar</div>
             <div className="alert__sub" style={{ wordBreak: 'break-all' }}>{ultimoDespacho.link}</div>
-            <div className="row" style={{ gap: 8, marginTop: 8 }}>
+            <div className="row" style={{ gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'center' }}>
               <Button variant="outline" size="sm" icon="copy" onClick={() => copiarLink(ultimoDespacho.link)}>Copiar link</Button>
-              <Button variant="outline" size="sm" icon="message" onClick={() => abrirWhatsApp(ultimoDespacho.link, ultimoDespacho.questionarioNome, ultimoDespacho.obraNome)}>Enviar por WhatsApp</Button>
+              <input className="input" style={{ maxWidth: 180 }} placeholder="WhatsApp do vistoriador"
+                value={telefoneEnvio} onChange={(e) => setTelefoneEnvio(e.target.value)}/>
+              <Button variant="outline" size="sm" icon="message" onClick={() => abrirWhatsApp(ultimoDespacho.link, ultimoDespacho.questionarioNome, ultimoDespacho.obraNome, telefoneEnvio)}>
+                {telefoneEnvio.trim() ? 'Enviar por WhatsApp' : 'Abrir WhatsApp (escolher contato)'}
+              </Button>
             </div>
           </div>
         </div>
