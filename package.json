@@ -10,7 +10,8 @@
     "test": "node scripts/run-tests.js",
     "build": "echo 'Build: sem etapa de build (UMD via Babel standalone)' && exit 0",
     "build:pdf": "cross-env PDF_ENTRY=pedido vite build --config pdf-bundle/vite.config.js",
-    "build:pdf:proposta": "cross-env PDF_ENTRY=proposta vite build --config pdf-bundle/vite.config.js"
+    "build:pdf:proposta": "cross-env PDF_ENTRY=proposta vite build --config pdf-bundle/vite.config.js",
+    "build:pdf:vistoria": "cross-env PDF_ENTRY=vistoria vite build --config pdf-bundle/vite.config.js"
   },
   "dependencies": {
     "express": "^4.19.2"

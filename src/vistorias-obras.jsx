@@ -1175,10 +1175,37 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
     return r?.valor ? r.valor : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
   };
 
+  const [baixandoPdf, setBaixandoPdf] = React.useState(false);
+  const baixarPdf = async () => {
+    if (!window.VistoriaReactPdf) { window.toast?.('Motor de PDF ainda carregando — tente de novo em instantes.', 'warning'); return; }
+    setBaixandoPdf(true);
+    try {
+      const dadosPdf = {
+        atividade: {
+          numeroLabel: atividade.numero_sequencial ? `${atividade.numero_sequencial}ª vistoria` : '—',
+          obraNome: atividade.dossier_obra?.building_name || atividade.dossier_obra?.client_name,
+          clienteNome: atividade.dossier_obra?.client_name,
+          equipamentoSerie: atividade.equipamentos_obra?.numero_serie,
+          tecnicoNome: atividade.colaboradores_vpsistema?.nome,
+          checkinTxt: atividade.checkin_em ? new Date(atividade.checkin_em).toLocaleString('pt-BR') : null,
+          concluidoTxt: atividade.concluido_em ? new Date(atividade.concluido_em).toLocaleString('pt-BR') : null,
+          paradas: atividade.paradas,
+        },
+        estrutura,
+        respostas,
+      };
+      const nome = ['Vistoria', atividade.numero_sequencial ? `${atividade.numero_sequencial}ª` : null, atividade.dossier_obra?.building_name || atividade.dossier_obra?.client_name].filter(Boolean).join(' - ') + '.pdf';
+      const r = await window.VistoriaReactPdf.baixar(dadosPdf, nome);
+      if (r?.falhasDeImagem?.length) window.toast?.('⚠ PDF gerado, mas com falha em alguma imagem: ' + r.falhasDeImagem.join('; '), 'warning');
+    } catch (e) { window.toast?.('Erro ao gerar PDF: ' + e.message, 'error'); }
+    finally { setBaixandoPdf(false); }
+  };
+
   const linkMapa = (lat, lng) => (lat != null && lng != null) ? `https://www.google.com/maps?q=${lat},${lng}` : null;
 
   return (
-    <Modal title={atividade.vistorias_questionarios?.nome || 'Checklist'} onClose={onClose} width={620}>
+    <Modal title={atividade.vistorias_questionarios?.nome || 'Checklist'} onClose={onClose} width={620}
+      footer={<Button variant="primary" icon="download" onClick={baixarPdf} disabled={baixandoPdf || estrutura === null}>{baixandoPdf ? 'Gerando PDF…' : 'Baixar PDF'}</Button>}>
       <div style={{ marginBottom: 14, fontSize: 13, color: '#666', display: 'flex', flexDirection: 'column', gap: 3 }}>
         <div>Técnico: <b>{atividade.colaboradores_vpsistema?.nome || 'a definir'}</b></div>
         {atividade.checkin_em && (
