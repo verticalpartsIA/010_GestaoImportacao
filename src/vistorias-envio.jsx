@@ -461,6 +461,10 @@ function DespacharVistoria() {
   const [form, setForm] = React.useState({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '' });
   const [salvando, setSalvando] = React.useState(false);
   const [ultimoDespacho, setUltimoDespacho] = React.useState(null);
+  const [masterIdInput, setMasterIdInput] = React.useState('');
+  const [resolvendo, setResolvendo] = React.useState(false);
+  const [erroMasterId, setErroMasterId] = React.useState(null);
+  const [hidratado, setHidratado] = React.useState(null); // { obra, unidade } — última resolução via Master ID
   const Store = window.VistoriasQuestionariosStore;
 
   const carregar = React.useCallback(() => {
@@ -502,10 +506,26 @@ function DespacharVistoria() {
       const obra = obras.find((o) => o.id === form.dossierId);
       setUltimoDespacho({ link, questionarioNome: questionario?.nome, obraNome: obra?.building_name });
       setForm({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '' });
+      setMasterIdInput('');
+      setHidratado(null);
       window.toast?.('Vistoria despachada', 'success');
       carregar();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setSalvando(false); }
+  };
+
+  const resolverMasterId = async () => {
+    if (!masterIdInput.trim()) return;
+    setResolvendo(true);
+    setErroMasterId(null);
+    try {
+      const resultado = await Store.resolverPorMasterId(masterIdInput);
+      const obraExiste = obras.some((o) => o.id === resultado.obra.id);
+      if (!obraExiste) throw new Error('Obra encontrada no Master ID, mas não está na lista de obras carregada — recarregue a página.');
+      setForm((f) => ({ ...f, dossierId: resultado.obra.id, equipamentoId: '' }));
+      setHidratado(resultado);
+    } catch (e) { setErroMasterId(e.message); setHidratado(null); }
+    finally { setResolvendo(false); }
   };
 
   const copiarLink = (link) => {
@@ -525,11 +545,46 @@ function DespacharVistoria() {
     <div className="stack" style={{ gap: 16 }}>
       <Card title="Nova vistoria" sub="Obra e questionário são obrigatórios — equipamento e técnico são opcionais.">
         <div className="stack" style={{ gap: 12 }}>
+          <label className="stack" style={{ gap: 4 }}>
+            <span className="up-eyebrow muted">Buscar por Master ID (opcional)</span>
+            <div className="row" style={{ gap: 8 }}>
+              <input className="input" style={{ flex: 1 }} placeholder="Ex.: VPOB-0950 ou VPEL-EL0950-1"
+                value={masterIdInput} onChange={(e) => setMasterIdInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter') resolverMasterId(); }}/>
+              <Button variant="outline" onClick={resolverMasterId} disabled={resolvendo || !masterIdInput.trim()}>{resolvendo ? 'Buscando…' : 'Buscar'}</Button>
+            </div>
+            <span className="small muted">Preenche Obra e mostra as especificações técnicas do ativo (quando o ID trouxer o índice do equipamento).</span>
+          </label>
+          {erroMasterId && <div className="alert warning"><Icon.warning/><div className="alert__title">{erroMasterId}</div></div>}
+          {hidratado && (
+            <div style={{ background: '#f0fdf4', border: '1px solid #86efac', borderRadius: 6, padding: '0.75rem 1rem' }}>
+              <div style={{ fontWeight: 700, fontSize: 13 }}>{hidratado.obra.client_name} — {hidratado.obra.building_name || 'sem nome'}</div>
+              {hidratado.obra.city && <div className="small muted">{hidratado.obra.city}{hidratado.obra.state ? `/${hidratado.obra.state}` : ''}</div>}
+              {hidratado.unidade ? (
+                <div className="row" style={{ gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                  {hidratado.unidade.paradas != null && <Badge variant="info">{hidratado.unidade.paradas} paradas</Badge>}
+                  {hidratado.unidade.percurso_mm != null && <Badge variant="neutral">Percurso {hidratado.unidade.percurso_mm}mm</Badge>}
+                  {hidratado.unidade.overhead_mm != null && <Badge variant="neutral">Overhead {hidratado.unidade.overhead_mm}mm</Badge>}
+                  {hidratado.unidade.poco_mm != null && <Badge variant="neutral">Poço {hidratado.unidade.poco_mm}mm</Badge>}
+                  {(hidratado.unidade.caixa_largura_mm != null || hidratado.unidade.caixa_profundidade_mm != null) && (
+                    <Badge variant="neutral">Caixa {hidratado.unidade.caixa_largura_mm ?? '—'}×{hidratado.unidade.caixa_profundidade_mm ?? '—'}mm</Badge>
+                  )}
+                  {(hidratado.unidade.porta_largura_mm != null || hidratado.unidade.porta_altura_mm != null) && (
+                    <Badge variant="neutral">Porta {hidratado.unidade.porta_largura_mm ?? '—'}×{hidratado.unidade.porta_altura_mm ?? '—'}mm</Badge>
+                  )}
+                  {hidratado.unidade.tensao_principal && <Badge variant="neutral">{hidratado.unidade.tensao_principal}</Badge>}
+                </div>
+              ) : (
+                <div className="small muted" style={{ marginTop: 4 }}>Só a obra foi identificada — inclua o índice do ativo no ID (ex.: -1) pra trazer as especificações técnicas.</div>
+              )}
+            </div>
+          )}
+
           <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
             <label className="stack" style={{ gap: 4, flex: 1, minWidth: 220 }}>
               <span className="up-eyebrow muted">Obra</span>
               <select className="input" value={form.dossierId}
-                onChange={(e) => setForm((f) => ({ ...f, dossierId: e.target.value, equipamentoId: '' }))}>
+                onChange={(e) => { setForm((f) => ({ ...f, dossierId: e.target.value, equipamentoId: '' })); setHidratado(null); }}>
                 <option value="">Selecione…</option>
                 {obras.map((o) => <option key={o.id} value={o.id}>{o.client_name} — {o.building_name || 'sem nome'}</option>)}
               </select>

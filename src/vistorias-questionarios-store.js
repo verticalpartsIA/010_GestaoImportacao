@@ -165,5 +165,48 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
       if (error) throw error;
       return data || [];
     },
+
+    /* ---- Hidratação por Master ID ----
+       Aceita VPOB-0950 (obra), VPEL-EL0950 / -A / -1 / -A-1 (equipamento)
+       ou o número puro. Resolve a obra (dossier_obra por numero_cotacao)
+       e, se o ID trouxer índice de ativo, a especificação técnica em
+       formularios_elevador_unidades (paradas, dimensões, tensão etc. —
+       preenchidas lá no Formulário/Cotação, não recadastradas aqui). */
+    parseMasterId(raw) {
+      const s = String(raw || '').trim().toUpperCase();
+      if (!s) return null;
+      let m = s.match(/^VP[A-Z]{2}-[A-Z]+(\d+)(?:-([A-Z]+))?(?:-(\d+))?$/);
+      if (m) return { numero: parseInt(m[1], 10), revisao: m[2] || null, indiceAtivo: m[3] ? parseInt(m[3], 10) : null };
+      m = s.match(/^VP[A-Z]{2}-(\d+)$/);
+      if (m) return { numero: parseInt(m[1], 10), revisao: null, indiceAtivo: null };
+      if (/^\d+$/.test(s)) return { numero: parseInt(s, 10), revisao: null, indiceAtivo: null };
+      return null;
+    },
+
+    async resolverPorMasterId(raw) {
+      const parsed = this.parseMasterId(raw);
+      if (!parsed) throw new Error('ID não reconhecido — use um formato tipo VPOB-0950 ou VPEL-EL0950-1');
+
+      const { data: obra, error: eObra } = await sb().from('dossier_obra')
+        .select('id, client_name, building_name, city, state, numero_cotacao, equip_type')
+        .eq('numero_cotacao', parsed.numero).maybeSingle();
+      if (eObra) throw eObra;
+      if (!obra) throw new Error(`Nenhuma obra encontrada para o nº ${parsed.numero}`);
+
+      let unidade = null;
+      if (parsed.indiceAtivo != null) {
+        const { data: formularios, error: eForm } = await sb().from('formularios_elevador')
+          .select('id').eq('numero_cotacao', parsed.numero);
+        if (eForm) throw eForm;
+        const formIds = (formularios || []).map((f) => f.id);
+        if (formIds.length > 0) {
+          const { data: unidades, error: eUn } = await sb().from('formularios_elevador_unidades')
+            .select('*').in('formulario_id', formIds).eq('indice_ativo', parsed.indiceAtivo);
+          if (eUn) throw eUn;
+          unidade = (unidades || [])[0] || null;
+        }
+      }
+      return { parsed, obra, unidade };
+    },
   };
 })();
