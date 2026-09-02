@@ -189,6 +189,15 @@ app.get('/cotacao-elevador-fornecedor/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'cotacao-elevador-fornecedor.html'));
 });
 
+/* ---------- Execução de vistoria pelo técnico (Vistorias de Obras, Fase 3) ----------
+   /vistoria/<token> → entrega vistoria-execucao.html. O token é lido no
+   client (vistorias_atividades.token). Sem SSO — link enviado direto
+   pro celular do técnico. */
+app.get('/vistoria/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'vistoria-execucao.html'));
+});
+
 /* ---------- Status público da obra (Cronograma de Instalação) ----------
    /status-obra/<token> → entrega status-obra.html. O token é lido no
    client (dossier_obra.link_publico_token). Somente leitura. */
