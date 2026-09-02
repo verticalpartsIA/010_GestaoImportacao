@@ -487,6 +487,7 @@ function DespacharVistoria() {
   const [erroMasterId, setErroMasterId] = React.useState(null);
   const [hidratado, setHidratado] = React.useState(null); // { obra, unidade } — última resolução via Master ID
   const [telefoneEnvio, setTelefoneEnvio] = React.useState('');
+  const [detalhe, setDetalhe] = React.useState(null); // atividade aberta no modal de resultado (ResultadoAtividadeModal, definido em vistorias-obras.jsx — mesmo escopo global do resto dos módulos)
   const Store = window.VistoriasQuestionariosStore;
 
   const carregar = React.useCallback(() => {
@@ -704,6 +705,7 @@ function DespacharVistoria() {
                 <th>Status</th>
                 <th>Agendado</th>
                 <th>Enviado</th>
+                <th></th>
               </tr></thead>
               <tbody>
                 {despachos.map((a) => {
@@ -718,6 +720,7 @@ function DespacharVistoria() {
                       <td><Badge variant={st.variant}>{st.label}</Badge></td>
                       <td className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{a.agendado_para ? new Date(a.agendado_para).toLocaleString('pt-BR') : '—'}</td>
                       <td className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{a.enviado_em ? new Date(a.enviado_em).toLocaleString('pt-BR') : '—'}</td>
+                      <td><Button variant="ghost" size="sm" icon="eye" onClick={() => setDetalhe(a)}>Ver resultado</Button></td>
                     </tr>
                   );
                 })}
@@ -726,6 +729,8 @@ function DespacharVistoria() {
           </div>
         )}
       </Card>
+
+      {detalhe && <ResultadoAtividadeModal atividade={detalhe} onClose={() => setDetalhe(null)}/>}
     </div>
   );
 }
