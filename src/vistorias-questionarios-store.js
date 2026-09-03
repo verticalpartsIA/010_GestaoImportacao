@@ -213,6 +213,31 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
       if (error) throw error;
     },
 
+    /* Igual preencherMedidasProjeto, mas pra medidas que variam por
+       pavimento (entre-pisos) — cada pavimento intermediário grava sua
+       própria linha em pavimento_index; última parada/overhead são
+       únicos (pavimento_index 0), da categoria "Último Piso". */
+    async preencherMedidasPorPavimento(atividadeId, questionarioId, { entrePisos, ultimaParada, overhead } = {}) {
+      const estrutura = await this.carregarEstrutura(questionarioId);
+      const porTexto = {};
+      estrutura.forEach((c) => c.perguntas.forEach((p) => { porTexto[p.texto] = p.id; }));
+      const linhas = [];
+      const idEntrePisos = porTexto['Percurso esperado desta parada, conforme projeto (mm)'];
+      if (idEntrePisos && entrePisos) {
+        Object.entries(entrePisos).forEach(([pav, valor]) => {
+          if (valor !== '' && valor != null) linhas.push({ atividade_id: atividadeId, pergunta_id: idEntrePisos, pavimento_index: parseInt(pav, 10), valor: String(valor) });
+        });
+      }
+      const idUltima = porTexto['Percurso esperado da última parada, conforme projeto (mm)'];
+      if (idUltima && ultimaParada) linhas.push({ atividade_id: atividadeId, pergunta_id: idUltima, pavimento_index: 0, valor: String(ultimaParada) });
+      const idOverhead = porTexto['Overhead esperado, conforme projeto (mm)'];
+      if (idOverhead && overhead) linhas.push({ atividade_id: atividadeId, pergunta_id: idOverhead, pavimento_index: 0, valor: String(overhead) });
+      if (!linhas.length) return;
+      const { error } = await sb().from('vistorias_respostas')
+        .upsert(linhas, { onConflict: 'atividade_id,pergunta_id,pavimento_index' });
+      if (error) throw error;
+    },
+
     /* ---- Atividades (Fase 2: despacho) ----
        O token vira o link mandado pro técnico; a página que ele abre
        (execução no celular) é a Fase 3, ainda não construída. */

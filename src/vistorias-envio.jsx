@@ -481,6 +481,7 @@ function DespacharVistoria() {
   const [despachos, setDespachos] = React.useState(null);
   const [form, setForm] = React.useState({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '', paradas: '' });
   const [medidas, setMedidas] = React.useState({ hw: '', hd: '', s: '', p: '', sow: '', soh: '', gancho: '', viga: '' });
+  const [medidasPav, setMedidasPav] = React.useState({ entrePisos: {}, ultimaParada: '', overhead: '' });
   const [trocandoAtividade, setTrocandoAtividade] = React.useState(null);
   const [salvando, setSalvando] = React.useState(false);
   const [ultimoDespacho, setUltimoDespacho] = React.useState(null);
@@ -533,6 +534,11 @@ function DespacharVistoria() {
         try { await Store.preencherMedidasProjeto(atividade.id, form.questionarioId, medidas); }
         catch (e) { window.toast?.('Vistoria despachada, mas as medidas de projeto não salvaram: ' + e.message, 'warning'); }
       }
+      const temMedidaPav = Object.values(medidasPav.entrePisos).some((v) => (v || '').trim() !== '') || medidasPav.ultimaParada.trim() !== '' || medidasPav.overhead.trim() !== '';
+      if (temMedidaPav) {
+        try { await Store.preencherMedidasPorPavimento(atividade.id, form.questionarioId, medidasPav); }
+        catch (e) { window.toast?.('Vistoria despachada, mas as medidas por pavimento não salvaram: ' + e.message, 'warning'); }
+      }
       const link = window.location.origin + '/vistoria/' + atividade.token;
       const questionario = questionarios.find((q) => q.id === form.questionarioId);
       const obra = obras.find((o) => o.id === form.dossierId);
@@ -542,6 +548,7 @@ function DespacharVistoria() {
       });
       setForm({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '', paradas: '' });
       setMedidas({ hw: '', hd: '', s: '', p: '', sow: '', soh: '', gancho: '', viga: '' });
+      setMedidasPav({ entrePisos: {}, ultimaParada: '', overhead: '' });
       setMasterIdInput('');
       setHidratado(null);
       setTelefoneEnvio('');
@@ -721,6 +728,32 @@ function DespacharVistoria() {
               </label>
             </div>
           </div>
+
+          {Number(form.paradas) >= 2 && (
+            <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+              <span className="up-eyebrow muted">Medidas por pavimento (opcional)</span>
+              <span className="small muted">Distância entre pisos esperada, conforme projeto — um valor por pavimento intermediário, mais a última parada e o overhead.</span>
+              <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+                {Store.pavsDaCategoria({ repete_por_pavimento: true, repete_modo: 'intermediarios' }, Number(form.paradas)).map((pav) => (
+                  <label key={pav} className="stack" style={{ gap: 4, flex: 1, minWidth: 150 }}>
+                    <span className="small muted">Entre pisos — pavimento {pav} (mm)</span>
+                    <input className="input" type="number" value={medidasPav.entrePisos[pav] || ''}
+                      onChange={(e) => setMedidasPav((m) => ({ ...m, entrePisos: { ...m.entrePisos, [pav]: e.target.value } }))}/>
+                  </label>
+                ))}
+                <label className="stack" style={{ gap: 4, flex: 1, minWidth: 150 }}>
+                  <span className="small muted">Percurso última parada (mm)</span>
+                  <input className="input" type="number" value={medidasPav.ultimaParada}
+                    onChange={(e) => setMedidasPav((m) => ({ ...m, ultimaParada: e.target.value }))}/>
+                </label>
+                <label className="stack" style={{ gap: 4, flex: 1, minWidth: 150 }}>
+                  <span className="small muted">Overhead (mm)</span>
+                  <input className="input" type="number" value={medidasPav.overhead}
+                    onChange={(e) => setMedidasPav((m) => ({ ...m, overhead: e.target.value }))}/>
+                </label>
+              </div>
+            </div>
+          )}
 
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <Button variant="primary" icon="send" onClick={despachar} disabled={salvando}>{salvando ? 'Despachando…' : 'Despachar'}</Button>
