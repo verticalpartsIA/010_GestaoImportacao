@@ -19,6 +19,8 @@ jobs:
           script: |
             cd /home/u969661049/domains/vpgestaoimportacao.vpsistema.com/nodejs
             export PATH=/opt/alt/alt-nodejs22/root/usr/bin:$PATH
+            set -e
+            git checkout -- package-lock.json 2>/dev/null || true
             git pull origin main
             npm install --omit=dev
             echo "{\"buildTime\":\"$(date -u +%Y-%m-%dT%H:%M:%SZ)\",\"commit\":\"$(git rev-parse HEAD)\"}" > version.json
