@@ -575,14 +575,14 @@ function DespacharVistoria() {
       <Card title="Nova vistoria" sub="Obra e questionário são obrigatórios — equipamento e técnico são opcionais.">
         <div className="stack" style={{ gap: 12 }}>
           <label className="stack" style={{ gap: 4 }}>
-            <span className="up-eyebrow muted">Buscar por Master ID (opcional)</span>
+            <span className="up-eyebrow muted">Buscar por Master ID, cliente ou nº de série (opcional)</span>
             <div className="row" style={{ gap: 8 }}>
-              <input className="input" style={{ flex: 1 }} placeholder="Ex.: VPOB-0950, VPEL-EL0950-1 ou o ID da obra (DOS-M045)"
+              <input className="input" style={{ flex: 1 }} placeholder="Ex.: VPOB-0950, nome do cliente ou nº de série do equipamento (500.0371)"
                 value={masterIdInput} onChange={(e) => setMasterIdInput(e.target.value)}
                 onKeyDown={(e) => { if (e.key === 'Enter') resolverMasterId(); }}/>
               <Button variant="outline" onClick={resolverMasterId} disabled={resolvendo || !masterIdInput.trim()}>{resolvendo ? 'Buscando…' : 'Buscar'}</Button>
             </div>
-            <span className="small muted">Preenche Obra e mostra as especificações técnicas do ativo (quando o ID trouxer o índice do equipamento).</span>
+            <span className="small muted">Preenche Obra e mostra as especificações técnicas do ativo quando achar. Sem Master ID, também busca por nome de cliente/obra ou nº de série do equipamento.</span>
           </label>
           {erroMasterId && <div className="alert warning"><Icon.warning/><div className="alert__title">{erroMasterId}</div></div>}
           {hidratado && (

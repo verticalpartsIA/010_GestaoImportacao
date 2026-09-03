@@ -257,6 +257,40 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
         obra = data;
       }
 
+      /* Fallback pra quando o operador digita o nº de série do equipamento
+         (ex.: "500.0371") em vez de um Master ID — comum, já que é o que
+         está gravado na placa/plaqueta do equipamento em campo. */
+      if (!obra) {
+        const s = String(raw || '').trim();
+        const { data: equipData, error: eEquip } = await sb().from('equipamentos_obra')
+          .select('dossier_id').ilike('numero_serie', s).limit(2);
+        if (eEquip) throw eEquip;
+        if ((equipData || []).length === 1) {
+          const { data, error } = await sb().from('dossier_obra').select(OBRA_SELECT).eq('id', equipData[0].dossier_id).maybeSingle();
+          if (error) throw error;
+          obra = data;
+        } else if ((equipData || []).length > 1) {
+          throw new Error(`Mais de um equipamento com nº de série "${raw}" — busque pela obra em vez disso.`);
+        }
+      }
+
+      /* Fallback final: nome do cliente ou da obra (busca parcial,
+         sem acentuação/case). Só resolve sozinho quando dá exatamente 1
+         resultado — com mais de um, pede pra refinar em vez de arriscar
+         escolher a obra errada. */
+      if (!obra) {
+        const s = String(raw || '').trim();
+        const { data: candidatos, error } = await sb().from('dossier_obra')
+          .select(OBRA_SELECT).or(`client_name.ilike.%${s}%,building_name.ilike.%${s}%`).limit(6);
+        if (error) throw error;
+        if ((candidatos || []).length === 1) {
+          obra = candidatos[0];
+        } else if ((candidatos || []).length > 1) {
+          const nomes = candidatos.map((o) => `${o.client_name} — ${o.building_name || o.id}`).join('; ');
+          throw new Error(`${candidatos.length} obras encontradas pra "${raw}": ${nomes}. Escolha direto no campo Obra.`);
+        }
+      }
+
       if (!obra) throw new Error(`Nenhuma obra encontrada para "${raw}"`);
 
       let unidade = null;
