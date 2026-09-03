@@ -155,6 +155,64 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
       return base + '?text=' + encodeURIComponent(message);
     },
 
+    /* Troca o vistoriador de uma atividade já despachada e gera um token
+       novo — o link antigo (já visto/começado pelo vistoriador anterior)
+       para de funcionar de verdade, então precisa de um link novo pra
+       mandar pro substituto. Mantém as respostas já preenchidas; reseta
+       status/check-in pra o novo vistoriador começar do zero visualmente. */
+    async trocarVistoriadorEReenviar(atividadeId, novoTecnicoId) {
+      const token = (window.crypto?.randomUUID ? window.crypto.randomUUID() : (Date.now().toString(36) + Math.random().toString(36).slice(2)));
+      const { data, error } = await sb().from('vistorias_atividades').update({
+        tecnico_id: novoTecnicoId || null,
+        token,
+        status: 'pendente',
+        checkin_em: null, checkin_lat: null, checkin_lng: null,
+        enviado_em: new Date().toISOString(),
+      }).eq('id', atividadeId).select().single();
+      if (error) throw error;
+      return data;
+    },
+
+    async excluirAtividade(atividadeId) {
+      const { error: e1 } = await sb().from('vistorias_respostas').delete().eq('atividade_id', atividadeId);
+      if (e1) throw e1;
+      const { error: e2 } = await sb().from('vistorias_atividades').delete().eq('id', atividadeId);
+      if (e2) throw e2;
+    },
+
+    /* Casa os campos "esperado" digitados pelo operador no Despacho com as
+       perguntas reais do questionário (por texto — cada questionário tem
+       seu próprio pergunta_id, então não dá pra fixar UUID). Só grava o
+       que o operador realmente preencheu; sem match (ex.: questionário
+       diferente do de elevador), ignora em silêncio esse campo. */
+    MEDIDAS_PROJETO_MAP: [
+      { campo: 'hw', texto: 'Largura esperada da caixa de corrida, conforme projeto (mm)' },
+      { campo: 'hd', texto: 'Profundidade esperada da caixa de corrida, conforme projeto (mm)' },
+      { campo: 's', texto: 'Profundidade esperada do poço, conforme projeto (mm)' },
+      { campo: 'p', texto: 'Percurso total esperado, conforme projeto (mm)' },
+      { campo: 'sow', texto: 'Largura esperada do vão de portas, conforme projeto (mm)' },
+      { campo: 'soh', texto: 'Altura esperada do vão de portas, conforme projeto (mm)' },
+      { campo: 'gancho', texto: 'Capacidade esperada do gancho de içamento, conforme projeto (kg)' },
+      { campo: 'viga', texto: 'Viga intermediária — seção esperada, conforme projeto (ex.: 300x200mm)' },
+    ],
+    async preencherMedidasProjeto(atividadeId, questionarioId, medidas) {
+      const preenchidos = Object.entries(medidas || {}).filter(([, v]) => v !== '' && v != null);
+      if (!preenchidos.length) return;
+      const estrutura = await this.carregarEstrutura(questionarioId);
+      const porTexto = {};
+      estrutura.forEach((c) => c.perguntas.forEach((p) => { porTexto[p.texto] = p.id; }));
+      const linhas = [];
+      preenchidos.forEach(([campo, valor]) => {
+        const item = this.MEDIDAS_PROJETO_MAP.find((m) => m.campo === campo);
+        const perguntaId = item && porTexto[item.texto];
+        if (perguntaId) linhas.push({ atividade_id: atividadeId, pergunta_id: perguntaId, pavimento_index: 0, valor: String(valor) });
+      });
+      if (!linhas.length) return;
+      const { error } = await sb().from('vistorias_respostas')
+        .upsert(linhas, { onConflict: 'atividade_id,pergunta_id,pavimento_index' });
+      if (error) throw error;
+    },
+
     /* ---- Atividades (Fase 2: despacho) ----
        O token vira o link mandado pro técnico; a página que ele abre
        (execução no celular) é a Fase 3, ainda não construída. */

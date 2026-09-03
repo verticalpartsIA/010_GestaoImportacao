@@ -480,6 +480,8 @@ function DespacharVistoria() {
   const [tecnicos, setTecnicos] = React.useState(null);
   const [despachos, setDespachos] = React.useState(null);
   const [form, setForm] = React.useState({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '', paradas: '' });
+  const [medidas, setMedidas] = React.useState({ hw: '', hd: '', s: '', p: '', sow: '', soh: '', gancho: '', viga: '' });
+  const [trocandoAtividade, setTrocandoAtividade] = React.useState(null);
   const [salvando, setSalvando] = React.useState(false);
   const [ultimoDespacho, setUltimoDespacho] = React.useState(null);
   const [masterIdInput, setMasterIdInput] = React.useState('');
@@ -526,6 +528,11 @@ function DespacharVistoria() {
         agendadoPara: form.agendadoPara ? new Date(form.agendadoPara).toISOString() : null,
         paradas: form.paradas ? parseInt(form.paradas, 10) : null,
       });
+      const temMedida = Object.values(medidas).some((v) => v.trim() !== '');
+      if (temMedida) {
+        try { await Store.preencherMedidasProjeto(atividade.id, form.questionarioId, medidas); }
+        catch (e) { window.toast?.('Vistoria despachada, mas as medidas de projeto não salvaram: ' + e.message, 'warning'); }
+      }
       const link = window.location.origin + '/vistoria/' + atividade.token;
       const questionario = questionarios.find((q) => q.id === form.questionarioId);
       const obra = obras.find((o) => o.id === form.dossierId);
@@ -534,6 +541,7 @@ function DespacharVistoria() {
         numeroLabel: `${atividade.numero_sequencial}ª Vistoria ${veVpobLabel(obra)}`,
       });
       setForm({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '', paradas: '' });
+      setMedidas({ hw: '', hd: '', s: '', p: '', sow: '', soh: '', gancho: '', viga: '' });
       setMasterIdInput('');
       setHidratado(null);
       setTelefoneEnvio('');
@@ -541,6 +549,16 @@ function DespacharVistoria() {
       carregar();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setSalvando(false); }
+  };
+
+  const excluirDespacho = async (a) => {
+    const nome = `${a.dossier_obra?.client_name || ''} — ${a.dossier_obra?.building_name || a.dossier_id}`;
+    if (!confirm(`Excluir a vistoria de "${nome}"? Isso apaga também todas as respostas já preenchidas. Não dá pra desfazer.`)) return;
+    try {
+      await Store.excluirAtividade(a.id);
+      window.toast?.('Vistoria excluída', 'success');
+      carregar();
+    } catch (e) { window.toast?.('Erro ao excluir: ' + e.message, 'error'); }
   };
 
   const resolverMasterId = async () => {
@@ -553,6 +571,18 @@ function DespacharVistoria() {
       if (!obraExiste) throw new Error('Obra encontrada no Master ID, mas não está na lista de obras carregada — recarregue a página.');
       setForm((f) => ({ ...f, dossierId: resultado.obra.id, equipamentoId: '', paradas: resultado.unidade?.paradas ? String(resultado.unidade.paradas) : f.paradas }));
       setHidratado(resultado);
+      const u = resultado.unidade;
+      if (u) {
+        setMedidas((m) => ({
+          ...m,
+          s: u.poco_mm != null ? String(u.poco_mm) : m.s,
+          hw: u.caixa_largura_mm != null ? String(u.caixa_largura_mm) : m.hw,
+          hd: u.caixa_profundidade_mm != null ? String(u.caixa_profundidade_mm) : m.hd,
+          p: u.percurso_mm != null ? String(u.percurso_mm) : m.p,
+          sow: u.porta_largura_mm != null ? String(u.porta_largura_mm) : m.sow,
+          soh: u.porta_altura_mm != null ? String(u.porta_altura_mm) : m.soh,
+        }));
+      }
     } catch (e) { setErroMasterId(e.message); setHidratado(null); }
     finally { setResolvendo(false); }
   };
@@ -664,6 +694,34 @@ function DespacharVistoria() {
               <span className="small muted">Ajusta o checklist pra repetir as seções por pavimento. A busca por Master ID já preenche sozinha quando acha a especificação.</span>
             </label>
           </div>
+
+          <div className="stack" style={{ gap: 8, borderTop: '1px solid var(--border)', paddingTop: 12 }}>
+            <span className="up-eyebrow muted">Medidas de projeto (opcional)</span>
+            <span className="small muted">Preenchidas pelo operador a partir do desenho técnico — o vistoriador chega com o "esperado" já preenchido e só mede o "real" pra comparar.</span>
+            <div className="row" style={{ gap: 10, flexWrap: 'wrap' }}>
+              {[
+                ['hw', 'HW — Largura da caixa de corrida (mm)'],
+                ['hd', 'HD — Profundidade da caixa de corrida (mm)'],
+                ['s', 'S — Profundidade do poço (mm)'],
+                ['p', 'P — Percurso total (mm)'],
+                ['sow', 'SOW — Largura da porta (mm)'],
+                ['soh', 'SOH — Altura da porta (mm)'],
+                ['gancho', 'Capacidade do gancho (kg)'],
+              ].map(([campo, label]) => (
+                <label key={campo} className="stack" style={{ gap: 4, flex: 1, minWidth: 150 }}>
+                  <span className="small muted">{label}</span>
+                  <input className="input" type="number" value={medidas[campo]}
+                    onChange={(e) => setMedidas((m) => ({ ...m, [campo]: e.target.value }))}/>
+                </label>
+              ))}
+              <label className="stack" style={{ gap: 4, flex: 1, minWidth: 200 }}>
+                <span className="small muted">Viga intermediária — seção (ex.: 300x200mm)</span>
+                <input className="input" value={medidas.viga}
+                  onChange={(e) => setMedidas((m) => ({ ...m, viga: e.target.value }))}/>
+              </label>
+            </div>
+          </div>
+
           <div className="row" style={{ justifyContent: 'flex-end' }}>
             <Button variant="primary" icon="send" onClick={despachar} disabled={salvando}>{salvando ? 'Despachando…' : 'Despachar'}</Button>
           </div>
@@ -720,7 +778,15 @@ function DespacharVistoria() {
                       <td><Badge variant={st.variant}>{st.label}</Badge></td>
                       <td className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{a.agendado_para ? new Date(a.agendado_para).toLocaleString('pt-BR') : '—'}</td>
                       <td className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{a.enviado_em ? new Date(a.enviado_em).toLocaleString('pt-BR') : '—'}</td>
-                      <td><Button variant="ghost" size="sm" icon="eye" onClick={() => setDetalhe(a)}>Ver resultado</Button></td>
+                      <td>
+                        <div className="row" style={{ gap: 4 }}>
+                          <Button variant="ghost" size="sm" icon="eye" onClick={() => setDetalhe(a)}>Ver resultado</Button>
+                          {a.status !== 'concluida' && (
+                            <Button variant="ghost" size="sm" icon="refresh" title="Trocar vistoriador / reenviar link" onClick={() => setTrocandoAtividade(a)}/>
+                          )}
+                          <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={() => excluirDespacho(a)}/>
+                        </div>
+                      </td>
                     </tr>
                   );
                 })}
@@ -731,7 +797,78 @@ function DespacharVistoria() {
       </Card>
 
       {detalhe && <ResultadoAtividadeModal atividade={detalhe} onClose={() => setDetalhe(null)}/>}
+      {trocandoAtividade && (
+        <TrocarVistoriadorModal atividade={trocandoAtividade} tecnicos={tecnicos}
+          onClose={() => setTrocandoAtividade(null)} onTrocado={carregar}/>
+      )}
     </div>
+  );
+}
+
+/* ---- Modal de "Trocar vistoriador / reenviar link" — pra quando o
+   vistoriador escolhido avisa que não vai poder fazer a vistoria. Gera
+   token novo (o link antigo para de funcionar de verdade) mantendo as
+   respostas já preenchidas. ---- */
+function TrocarVistoriadorModal({ atividade, tecnicos, onClose, onTrocado }) {
+  const [tecnicoId, setTecnicoId] = React.useState(atividade.tecnico_id || '');
+  const [salvando, setSalvando] = React.useState(false);
+  const [novoLink, setNovoLink] = React.useState(null);
+  const [telefone, setTelefone] = React.useState('');
+  const Store = window.VistoriasQuestionariosStore;
+
+  const confirmar = async () => {
+    setSalvando(true);
+    try {
+      const atualizada = await Store.trocarVistoriadorEReenviar(atividade.id, tecnicoId || null);
+      setNovoLink(window.location.origin + '/vistoria/' + atualizada.token);
+      onTrocado?.();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setSalvando(false); }
+  };
+
+  const copiarLink = () => {
+    navigator.clipboard?.writeText(novoLink)
+      .then(() => window.toast?.('Link copiado', 'success'))
+      .catch(() => window.toast?.('Não deu pra copiar — selecione o link manualmente', 'warning'));
+  };
+  const abrirWhatsApp = () => {
+    const msg = `Vistoria "${atividade.vistorias_questionarios?.nome}" reenviada — abra no celular pra preencher: ${novoLink}`;
+    window.open(Store.whatsAppHref(telefone, msg), '_blank');
+  };
+
+  return (
+    <Modal title="Trocar vistoriador / reenviar link" onClose={onClose} width={480}>
+      {!novoLink ? (
+        <div className="stack" style={{ gap: 12 }}>
+          <p className="small muted">Gera um link novo pra essa vistoria — o link antigo deixa de funcionar. As respostas já preenchidas continuam salvas.</p>
+          <label className="stack" style={{ gap: 4 }}>
+            <span className="up-eyebrow muted">Vistoriador</span>
+            <select className="input" value={tecnicoId} onChange={(e) => setTecnicoId(e.target.value)}>
+              <option value="">A definir</option>
+              {(tecnicos || []).map((t) => <option key={t.id} value={t.id}>{t.nome}</option>)}
+            </select>
+          </label>
+          <div className="row" style={{ justifyContent: 'flex-end' }}>
+            <Button variant="primary" onClick={confirmar} disabled={salvando}>{salvando ? 'Gerando…' : 'Gerar novo link'}</Button>
+          </div>
+        </div>
+      ) : (
+        <div className="stack" style={{ gap: 10 }}>
+          <div className="small" style={{ wordBreak: 'break-all' }}>{novoLink}</div>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+            <Button variant="outline" size="sm" icon="copy" onClick={copiarLink}>Copiar link</Button>
+            <input className="input" style={{ maxWidth: 180 }} placeholder="WhatsApp do vistoriador"
+              value={telefone} onChange={(e) => setTelefone(e.target.value)}/>
+            <Button variant="outline" size="sm" icon="message" onClick={abrirWhatsApp}>
+              {telefone.trim() ? 'Enviar por WhatsApp' : 'Abrir WhatsApp'}
+            </Button>
+          </div>
+          <div className="row" style={{ justifyContent: 'flex-end' }}>
+            <Button variant="ghost" onClick={onClose}>Fechar</Button>
+          </div>
+        </div>
+      )}
+    </Modal>
   );
 }
 
