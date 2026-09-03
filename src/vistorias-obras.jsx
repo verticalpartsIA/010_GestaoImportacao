@@ -1131,11 +1131,29 @@ function ChecklistsDigitaisObra({ obraId }) {
 /* ---- Edição de uma resposta pelo operador (dentro do "Ver resultado") —
    um controle por tipo_campo, cada mudança salva na hora via onSalvar.
    Assinatura fica só leitura (reassinar não faz sentido pra quem não
-   é o vistoriador/responsável); foto permite editar legenda e remover,
-   sem upload novo (isso é papel do vistoriador em campo). */
-function CampoEditavel({ pergunta, resposta, onSalvar }) {
+   é o vistoriador/responsável); foto permite editar legenda, remover E
+   enviar foto nova (ex.: o operador tem uma foto melhor que o
+   vistoriador não mandou, ou quer complementar o registro). */
+function CampoEditavel({ pergunta, resposta, onSalvar, atividadeId }) {
   const [textoLocal, setTextoLocal] = React.useState(resposta?.valor ?? '');
+  const [enviandoFoto, setEnviandoFoto] = React.useState(false);
   React.useEffect(() => { setTextoLocal(resposta?.valor ?? ''); }, [pergunta.id, resposta?.valor]);
+
+  const adicionarFoto = async (e) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setEnviandoFoto(true);
+    try {
+      const sb = window.__VP_SB.sb;
+      const ext = (file.type.split('/')[1] || 'jpg').replace('jpeg', 'jpg');
+      const path = `${atividadeId}/${pergunta.id}-${Date.now()}-${Math.random().toString(36).slice(2, 7)}.${ext}`;
+      const { error: eUp } = await sb.storage.from('vistorias-anexos').upload(path, file, { upsert: true, contentType: file.type });
+      if (eUp) throw eUp;
+      const { data } = sb.storage.from('vistorias-anexos').getPublicUrl(path);
+      onSalvar({ anexos: (resposta?.anexos || []).concat([{ url: data.publicUrl, legenda: '' }]) });
+    } catch (err) { window.toast?.('Erro ao enviar a foto: ' + err.message, 'error'); }
+    finally { setEnviandoFoto(false); e.target.value = ''; }
+  };
 
   if (pergunta.tipo_campo === 'informativa') return null;
   const salvarTexto = () => onSalvar({ valor: textoLocal });
@@ -1190,6 +1208,10 @@ function CampoEditavel({ pergunta, resposta, onSalvar }) {
               </div>
             </div>
           )) : <span style={{ color: '#bbb', fontSize: 13 }}>— sem fotos —</span>}
+          <label className="btn btn--outline btn--sm" style={{ alignSelf: 'flex-start', cursor: 'pointer' }}>
+            {enviandoFoto ? 'Enviando…' : 'Adicionar foto'}
+            <input type="file" accept="image/*" onChange={adicionarFoto} hidden disabled={enviandoFoto}/>
+          </label>
         </div>
       )}
       {pergunta.tipo_campo === 'assinatura' && (
@@ -1336,7 +1358,7 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
                           <div key={p.id + ':' + pav} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
                             <div style={{ fontSize: 13, color: '#333', marginBottom: 4 }}>{p.texto}</div>
                             {editando ? (
-                              <CampoEditavel pergunta={p} resposta={r} onSalvar={(campos) => salvarResposta(p.id, pav, campos)}/>
+                              <CampoEditavel pergunta={p} resposta={r} atividadeId={atividade.id} onSalvar={(campos) => salvarResposta(p.id, pav, campos)}/>
                             ) : (
                               <div style={{ fontSize: 13.5, fontWeight: 600, display: 'flex', alignItems: 'center', gap: 8 }}>
                                 {formatarValor(p, r)}
