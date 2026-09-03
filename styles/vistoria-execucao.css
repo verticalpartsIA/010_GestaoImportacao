@@ -20,8 +20,13 @@ html, body { margin: 0; padding: 0; background: var(--bg-muted); font-family: va
 }
 @keyframes ve-spin { to { transform: rotate(360deg); } }
 
-.ve-page { max-width: 560px; margin: 0 auto; padding: 0 0 100px; }
-@media (max-width: 700px) { .ve-page { max-width: 100%; } }
+/* Full width por padrão — celulares com viewport CSS maior que o normal
+   (relatado com print real: borda branca sobrando mesmo em telas
+   estreitas) ficavam presos no max-width:560 antigo, que só cedia
+   abaixo de 700px. Agora só limita a largura acima de 900px, faixa
+   que já é desktop/tablet de verdade, nunca celular. */
+.ve-page { width: 100%; margin: 0 auto; padding: 0 0 100px; }
+@media (min-width: 900px) { .ve-page { max-width: 640px; } }
 
 .ve-header {
   background: var(--vp-black); color: var(--fg-on-dark); padding: 20px 18px 18px; position: sticky; top: 0; z-index: 5;
