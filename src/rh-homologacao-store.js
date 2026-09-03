@@ -85,6 +85,44 @@
     return data || [];
   }
 
+  /* Estatísticas rápidas por empresa pro Card "Empresas Instaladoras"
+     (pedido do usuário 01/09) — funcionários e elevadores são contagens
+     reais (batch de 4 queries, não N+1 por empresa); "Pagamentos" fica
+     de fora por enquanto — depende do motor de pagamento (Trilha B),
+     combinado pra ligar numa próxima rodada. Elevadores = dossiê único
+     (união dos 3 vínculos possíveis, mesma dedupe de
+     listarHierarquiaClientesDoInstalador), não linha de equipamento —
+     dossier_obra é 1 linha por equipamento nesta base. */
+  async function estatisticasTodasEmpresas() {
+    const c = sb();
+    if (!c) return {};
+    const [{ data: colabs }, { data: principal }, { data: roster }, { data: porEquip }] = await Promise.all([
+      c.from('parceiros_colaboradores').select('empresa_id'),
+      c.from('dossier_obra').select('id, parceiro_instalador_id').not('parceiro_instalador_id', 'is', null),
+      c.from('dossier_obra_instaladores').select('dossier_id, parceiro_instalador_id'),
+      c.from('equipamentos_obra').select('dossier_id, parceiro_instalador_id').not('parceiro_instalador_id', 'is', null),
+    ]);
+
+    const funcionariosPorEmpresa = {};
+    (colabs || []).forEach((r) => { if (r.empresa_id) funcionariosPorEmpresa[r.empresa_id] = (funcionariosPorEmpresa[r.empresa_id] || 0) + 1; });
+
+    const dossiersPorEmpresa = {};
+    const addDossier = (empresaId, dossierId) => {
+      if (!empresaId || !dossierId) return;
+      (dossiersPorEmpresa[empresaId] = dossiersPorEmpresa[empresaId] || new Set()).add(dossierId);
+    };
+    (principal || []).forEach((r) => addDossier(r.parceiro_instalador_id, r.id));
+    (roster || []).forEach((r) => addDossier(r.parceiro_instalador_id, r.dossier_id));
+    (porEquip || []).forEach((r) => addDossier(r.parceiro_instalador_id, r.dossier_id));
+
+    const empresaIds = new Set([...Object.keys(funcionariosPorEmpresa), ...Object.keys(dossiersPorEmpresa)]);
+    const resultado = {};
+    empresaIds.forEach((id) => {
+      resultado[id] = { funcionarios: funcionariosPorEmpresa[id] || 0, elevadores: dossiersPorEmpresa[id]?.size || 0 };
+    });
+    return resultado;
+  }
+
   async function excluirMontador(montadorId) {
     const c = sb();
     if (!c) throw new Error('Supabase indisponível');
@@ -414,6 +452,7 @@
     listarMontadores,
     excluirMontador,
     desvincularDaObra,
+    estatisticasTodasEmpresas,
     validarCertificacoes,
     statusGeral,
     statusVariant,

@@ -20,11 +20,15 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
   const [showColaboradorModal, setShowColaboradorModal] = React.useState(false);
   const [editingColaborador, setEditingColaborador] = React.useState(null);
   const [search, setSearch] = React.useState('');
+  const [estatisticas, setEstatisticas] = React.useState({});
 
   const reloadEmpresas = React.useCallback(() => {
     window.RHHomologacao.listarMontadores().then(setEmpresas).catch(() => setEmpresas([]));
   }, []);
   React.useEffect(() => { reloadEmpresas(); }, [reloadEmpresas]);
+  React.useEffect(() => {
+    window.RHHomologacao.estatisticasTodasEmpresas().then(setEstatisticas).catch(() => setEstatisticas({}));
+  }, []);
 
   const reloadColaboradores = React.useCallback(async (empresaId) => {
     const list = await window.RHHomologacao.listarColaboradoresPorEmpresa(empresaId);
@@ -127,6 +131,11 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 6 }}>
                   {e.email || e.telefone || '—'}
+                </div>
+                <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 8, display: 'flex', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                  <span>👥 Funcionários: <b>{estatisticas[e.id]?.funcionarios ?? 0}</b></span>
+                  <span>🛗 Elevadores: <b>{estatisticas[e.id]?.elevadores ?? 0}</b></span>
+                  <span>💰 Pagamentos: <b>—</b></span>
                 </div>
               </div>
             ))}
@@ -339,6 +348,10 @@ function CIHierarquiaClientes({ clientes, onAbrir, onDesvincular }) {
                   <div className="cell-main" style={{ fontSize: 13 }}>{o.numero_serie ? `Nº ${o.numero_serie}` : (o.building_name || '—')}</div>
                   {o.numero_serie && <div className="cell-sub">{o.building_name}</div>}
                   <CIMarcosTecnicos checklist={o.checklist} />
+                  <div className="small muted" style={{ marginTop: 4, display: 'flex', gap: 12 }}>
+                    <span>Valor da instalação: —</span>
+                    <span>Pago: —%</span>
+                  </div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                   <CIObraStatusBadge statusMaster={o.status_master} checklist={o.checklist} pagamento={o.pagamento} />
