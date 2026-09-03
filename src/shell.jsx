@@ -2,53 +2,53 @@
    shell.jsx — Sidebar + Header + role switcher
    ============================================================ */
 
-/* Ordem segue o workflow operacional: pré-venda → contrato/importação/suprimentos →
-   engenharia → RH → logística → admin. ADM/Financeiro é transversal. */
+/* Reorganização IA Fase 1 (auditoria 2026-09-03, "não commitar/Imagens da
+   tela/Auditoria_Sidebar..."): grupos passam de organograma departamental
+   para jornada operacional. Só rótulo/agrupamento/ordem mudou — nenhum
+   `id` de rota foi alterado (preserva URLs, ver router.js/MODULE_SLUG,
+   que lê de BREADCRUMB_MAP, não deste array). Rótulos de grupo também
+   controlam permissão via alocação de colaborador (ver grupoVisivel
+   abaixo e colaboradores-admin-store.js/GRUPOS_MODULO) — renomear um
+   label aqui exige migrar colaborador_alocacoes junto (feito em 2026-09-03). */
 const NAV_GROUPS = [
   { label: "Geral", items: [
     { id: "dashboard", label: "Dashboard", icon: "home" },
     { id: "notificacoes", label: "Notificações", icon: "bell" },
     { id: "decisoes", label: "Central de Decisões", icon: "check" },
-    { id: "financeiro", label: "Gatilhos & Prazo", icon: "dollar", restrict: ["financeiro", "admin"] },
+    { id: "financeiro", label: "Prazos & Pendências", icon: "dollar", restrict: ["financeiro", "admin"] },
   ]},
-  /* Cadastros centrais — transversal (Comercial, Importação, Engenharia usam
-     os mesmos registros). Clientes/Fornecedores têm tela própria aqui;
-     Produtos é o Catálogo de Produtos já existente, só realocado. Sobe
-     acima de Comercial (decisão 21/08): sem gente/empresa cadastrada,
-     nada se movimenta. */
-  { label: "Cadastros", items: [
+  /* Só os cadastros mestres de verdade (usados por múltiplos domínios) ficam
+     aqui. Produtos, Empresas Instaladoras e Atualização de Custos migraram
+     pro domínio que efetivamente os usa. */
+  { label: "Cadastros Mestres", items: [
     { id: "cadastro-clientes", label: "Clientes", icon: "users" },
     { id: "cadastro-fornecedores", label: "Fornecedores", icon: "truck" },
-    { id: "ncm-catalogo", label: "Produtos", icon: "fileSearch" },
-    { id: "cadastro-instaladores", label: "Empresas Instaladoras", icon: "hardhat" },
-    { id: "cadastro-custos", label: "Atualização de Custos", icon: "calculator" },
   ]},
-  { label: "Comercial", items: [
+  { label: "Comercial | Pré-venda", items: [
     { id: "leads", label: "Leads", icon: "flag" },
     { id: "formularios", label: "Formulários", icon: "layers" },
-    { id: "propostas", label: "Propostas", icon: "proposal" },
     { id: "controle-cotacoes", label: "Controle de Cotações", icon: "history" },
-  ]},
-  { label: "ADM/ Financeiro", items: [
     { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
+    { id: "propostas", label: "Propostas", icon: "proposal" },
+  ]},
+  { label: "Financeiro & Preços", items: [
+    { id: "cadastro-custos", label: "Atualização de Custos", icon: "calculator" },
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
     { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
     { id: "comissoes", label: "Comissões", icon: "award", restrict: ["financeiro", "admin"] },
-    { id: "pagamentos-instalador", label: "Pagamentos a Instaladores", icon: "dollar", restrict: ["financeiro", "admin"] },
   ]},
-  { label: "Jurídico", items: [
+  { label: "Contratos & Jurídico", items: [
     { id: "contrato-venda-equipamentos", label: "Contrato Venda de Equipamentos", icon: "fileText" },
-    { id: "contrato-instalador", label: "Contrato Instalador", icon: "hardhat" },
     { id: "juridico", label: "Contratos & Minutas", icon: "scale" },
   ]},
-  { label: "Importação | Suprimentos", sublabel: "Siscomex & Compras", items: [
+  { label: "Suprimentos & Importação", sublabel: "Siscomex & Compras", items: [
     /* Sub-telas da Importação — consolidação de uma solução de importação
        já usada pela equipe (P.I., Embarques, RFQ, IMS), trazida pra dentro
        do VP Gestão em fases. Só P.I. está pronta; as demais entram indentadas
        aqui conforme forem migradas. "Importação" (legado — embarques em
        trânsito + AIS) fica logo após Embarques por decisão do usuário
        (25/08); sobreposição de conteúdo entre as duas telas é assunto
-       para outra rodada, não resolvida aqui. */
+       para outra rodada, não resolvida aqui (Fase 2 da reorganização). */
     { label: "Gestão Importação", subheader: true },
     { id: "gi-painel", label: "Painel", icon: "home", indent: true },
     { id: "pi-importacao", label: "P.I.", icon: "fileText", indent: true },
@@ -60,34 +60,53 @@ const NAV_GROUPS = [
     { id: "compras", label: "Compras Nacional", icon: "truck" },
     { id: "pedidos-acompanhamento", label: "Pedidos", icon: "package" },
   ]},
-  { label: "Engenharia", items: [
+  /* Só o que define/projeta o produto. Vistoria, instalação, entrega e
+     documentação saíram daqui — Engenharia parava de ser "gaveta de tudo". */
+  { label: "Engenharia & Produto", items: [
     { id: "engenharia", label: "Engenharia", icon: "ruler" },
     { id: "eng-projeto-elevadores", label: "Projeto de Elevadores", icon: "grid" },
     { id: "eng-configurador", label: "Projeto de Equipamento", icon: "grid" },
     { id: "desenho-tecnico", label: "Projetos ER/Es", icon: "ruler" },
     { id: "ficha-tecnica", label: "Ficha Técnica", icon: "fileText" },
+    { id: "ncm-catalogo", label: "Produtos", icon: "fileSearch" },
+    { id: "linha-do-tempo", label: "Linha do Tempo da Cotação", icon: "clock" },
+  ]},
+  /* Novo grupo — execução da obra. "Dossiês de Obras" é a tela que já lista
+     as obras e abre o Dossiê de cada uma (ObrasStatusPage, ex-"Status de
+     Obras"); só o rótulo mudou pra deixar isso descobrível (Achado 01 da
+     auditoria). Vistorias de Obras/Resultado seguem como 2 itens — fundi-los
+     numa aba só é Fase 2, não Fase 1. */
+  { label: "Obras & Instalação", items: [
+    { id: "status-obras", label: "Dossiês de Obras", icon: "building" },
     { id: "vistorias-envio", label: "Vistorias de Obras", icon: "send" },
     { id: "vistorias", label: "Resultado Vistorias de Obras", icon: "history" },
     { id: "instalacao", label: "Instalação em Campo", icon: "hardhat" },
-    { id: "status-obras", label: "Status de Obras", icon: "building" },
-    { id: "linha-do-tempo", label: "Linha do Tempo da Cotação", icon: "clock" },
-    { id: "central-documentos", label: "Central de Documentos", icon: "fileSearch" },
-    { id: "art", label: "ART", icon: "scale" },
     { id: "cronograma", label: "Cronograma", icon: "clock" },
+    { id: "art", label: "ART", icon: "scale" },
+  ]},
+  /* Novo grupo — fechamento documental/entrega, separado de execução de obra. */
+  { label: "Entrega & Documentação", items: [
+    { id: "central-documentos", label: "Central de Documentos", icon: "fileSearch" },
     { id: "databook", label: "Data Book & Termo", icon: "fileSearch" },
     { id: "handover", label: "Entrega Final", icon: "package" },
   ]},
-  { label: "RH Operacional", items: [
+  /* Novo grupo — o ciclo inteiro do parceiro instalador (cadastro → homologação
+     → contrato → pagamento) num só lugar. Permissão de edição continua
+     separada por item (RH edita homologação, Jurídico edita contrato,
+     Financeiro edita pagamento) — só a localização visual mudou. Substitui
+     o antigo grupo "RH Operacional" (1 item só). */
+  { label: "Parceiros & Instaladores", items: [
+    { id: "cadastro-instaladores", label: "Empresas Instaladoras", icon: "hardhat" },
     { id: "rh-homologacao", label: "Homologação de Instaladores", icon: "hardhat" },
+    { id: "contrato-instalador", label: "Contrato Instalador", icon: "hardhat" },
+    { id: "pagamentos-instalador", label: "Pagamentos a Instaladores", icon: "dollar", restrict: ["financeiro", "admin"] },
   ]},
-  /* Submódulos ainda sem rota própria — apenas anunciam o que vai morar aqui,
-     sem simular navegação que não existe (ver item.planned no render). */
-  { label: "Logística", items: [
+  /* Placeholders sem rota própria (Expedição/Logística) ocultados — item
+     visível deve significar "posso entrar e fazer algo" (Achado 12). */
+  { label: "Logística Interna", items: [
     { id: "almoxarifado", label: "Almoxarifado", icon: "package" },
-    { label: "Expedição", icon: "truck", planned: true },
-    { label: "Logística", icon: "ship", planned: true },
   ]},
-  { label: "Portal Admin", items: [
+  { label: "Administração", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
     { id: "configuracoes", label: "Configurações do Sistema", icon: "settings", restrict: ["admin"] },
   ]},

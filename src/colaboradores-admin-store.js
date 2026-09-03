@@ -18,11 +18,14 @@
 
   /* Mesma lista de labels usada em NAV_GROUPS (shell.jsx) — é o que existe
      pra alocar. Mantido aqui como cópia estática de propósito: evita
-     acoplar a ordem de carregamento dos dois arquivos. */
+     acoplar a ordem de carregamento dos dois arquivos. Atualizado junto
+     com a reorganização IA Fase 1 (2026-09-03) — labels antigos migrados
+     em colaborador_alocacoes na mesma mudança, ver commit. */
   const GRUPOS_MODULO = [
-    'Geral', 'Comercial', 'ADM/ Financeiro', 'Cadastros',
-    'Jurídico', 'Importação | Suprimentos', 'Engenharia',
-    'RH Operacional', 'Logística', 'Portal Admin',
+    'Geral', 'Cadastros Mestres', 'Comercial | Pré-venda', 'Financeiro & Preços',
+    'Contratos & Jurídico', 'Suprimentos & Importação', 'Engenharia & Produto',
+    'Obras & Instalação', 'Entrega & Documentação', 'Parceiros & Instaladores',
+    'Logística Interna', 'Administração',
   ];
 
   async function listarColaboradores() {
