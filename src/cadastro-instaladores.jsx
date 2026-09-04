@@ -21,6 +21,10 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
   const [editingColaborador, setEditingColaborador] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [estatisticas, setEstatisticas] = React.useState({});
+  const [pagamentosPorEmpresa, setPagamentosPorEmpresa] = React.useState({});
+  const [pagamentosPorObra, setPagamentosPorObra] = React.useState({});
+  const [ultimoSync, setUltimoSync] = React.useState(null);
+  const [sincronizando, setSincronizando] = React.useState(false);
 
   const reloadEmpresas = React.useCallback(() => {
     window.RHHomologacao.listarMontadores().then(setEmpresas).catch(() => setEmpresas([]));
@@ -29,6 +33,25 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
   React.useEffect(() => {
     window.RHHomologacao.estatisticasTodasEmpresas().then(setEstatisticas).catch(() => setEstatisticas({}));
   }, []);
+
+  const reloadPagamentos = React.useCallback(() => {
+    window.OmiePagamentosStore?.resumoPorEmpresa().then(setPagamentosPorEmpresa).catch(() => setPagamentosPorEmpresa({}));
+    window.OmiePagamentosStore?.ultimoSync().then(setUltimoSync).catch(() => setUltimoSync(null));
+  }, []);
+  React.useEffect(() => { reloadPagamentos(); }, [reloadPagamentos]);
+
+  const sincronizarOmie = async () => {
+    setSincronizando(true);
+    try {
+      const r = await window.OmiePagamentosStore.sincronizar();
+      window.toast?.(`Pagamentos atualizados — ${r.titulos_gravados} título(s) do Omie.`, 'success');
+      reloadPagamentos();
+    } catch (e) {
+      window.toast?.('Erro ao sincronizar com o Omie: ' + e.message, 'error');
+    } finally {
+      setSincronizando(false);
+    }
+  };
 
   const reloadColaboradores = React.useCallback(async (empresaId) => {
     const list = await window.RHHomologacao.listarColaboradoresPorEmpresa(empresaId);
@@ -39,6 +62,8 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
     setObras(null);
     const list = await window.RHHomologacao.listarHierarquiaClientesDoInstalador(empresaId);
     setObras(list);
+    const dossierIds = list.flatMap(({ obras: os }) => os.map((o) => o.id));
+    window.OmiePagamentosStore?.resumoPorDossier(dossierIds).then(setPagamentosPorObra).catch(() => setPagamentosPorObra({}));
   }, []);
 
   const selectEmpresa = async (emp) => {
@@ -95,6 +120,17 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
           <p className="page-head__sub">Cadastro completo dos parceiros de instalação — dados da empresa e colaboradores. Certificações e vencimento de documentos ficam em RH Operacional → Homologação de Instaladores.</p>
         </div>
         <div className="page-head__r">
+          <div className="stack" style={{ alignItems: 'flex-end', gap: 4 }}>
+            <Button variant="outline" icon="refresh" onClick={sincronizarOmie} disabled={sincronizando}>
+              {sincronizando ? 'Sincronizando…' : 'Atualizar pagamentos (Omie)'}
+            </Button>
+            {ultimoSync?.concluido_em && (
+              <span className="small muted">
+                Última sinc.: {new Date(ultimoSync.concluido_em).toLocaleString('pt-BR')}
+                {ultimoSync.erro ? ` · ⚠️ ${ultimoSync.erro}` : ''}
+              </span>
+            )}
+          </div>
           <Button variant="primary" icon="plus" onClick={() => { setEditingEmpresa(null); setShowEmpresaModal(true); }}>Nova empresa</Button>
         </div>
       </div>
@@ -132,10 +168,14 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
                 <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 6 }}>
                   {e.email || e.telefone || '—'}
                 </div>
-                <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 8, display: 'flex', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 6 }}>
+                <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 8, display: 'flex', gap: 12, borderTop: '1px solid var(--border)', paddingTop: 6, flexWrap: 'wrap' }}>
                   <span>👥 Funcionários: <b>{estatisticas[e.id]?.funcionarios ?? 0}</b></span>
                   <span>🛗 Elevadores: <b>{estatisticas[e.id]?.elevadores ?? 0}</b></span>
-                  <span>💰 Pagamentos: <b>—</b></span>
+                  <span>
+                    💰 Pagamentos: {pagamentosPorEmpresa[e.id] ? (
+                      <b>{window.OmiePagamentosStore.fmtMoeda(pagamentosPorEmpresa[e.id].valorPago)} pago · {window.OmiePagamentosStore.fmtMoeda(pagamentosPorEmpresa[e.id].valorTotal)} previsto</b>
+                    ) : <b>—</b>}
+                  </span>
                 </div>
               </div>
             ))}
@@ -173,7 +213,7 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
 
         {selected ? (
           <Card title="Clientes atendidos" sub={obras ? `${obras.length} cliente(s)` : 'Carregando…'}>
-            <CIHierarquiaClientes clientes={obras} onAbrir={abrirObra} onDesvincular={desvincularObra} />
+            <CIHierarquiaClientes clientes={obras} onAbrir={abrirObra} onDesvincular={desvincularObra} pagamentosPorObra={pagamentosPorObra} />
           </Card>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', color: 'var(--fg3)', fontSize: 13, padding: '60px 20px', textAlign: 'center' }}>
@@ -335,7 +375,7 @@ function CIMarcosTecnicos({ checklist }) {
    Equipamentos. Uma empresa pode chegar a uma obra por 3 vínculos
    diferentes (principal, roster, por equipamento) — já vêm unidos e
    deduplicados por listarHierarquiaClientesDoInstalador. */
-function CIHierarquiaClientes({ clientes, onAbrir, onDesvincular }) {
+function CIHierarquiaClientes({ clientes, onAbrir, onDesvincular, pagamentosPorObra }) {
   if (clientes === null) return <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
   if (clientes.length === 0) return <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum cliente vinculado a esta empresa ainda.</div>;
 
@@ -353,8 +393,17 @@ function CIHierarquiaClientes({ clientes, onAbrir, onDesvincular }) {
                   {o.numero_serie && <div className="cell-sub">{o.building_name}</div>}
                   <CIMarcosTecnicos checklist={o.checklist} />
                   <div className="small muted" style={{ marginTop: 4, display: 'flex', gap: 12 }}>
-                    <span>Valor da instalação: —</span>
-                    <span>Pago: —%</span>
+                    {pagamentosPorObra?.[o.id] ? (
+                      <>
+                        <span>Valor da instalação: {window.OmiePagamentosStore.fmtMoeda(pagamentosPorObra[o.id].valorTotal)}</span>
+                        <span>Pago: {pagamentosPorObra[o.id].pctPago}%</span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Valor da instalação: —</span>
+                        <span>Pago: —%</span>
+                      </>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
