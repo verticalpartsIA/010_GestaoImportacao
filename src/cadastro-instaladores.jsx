@@ -416,6 +416,9 @@ function CIHierarquiaClientes({ clientes, onAbrir, onDesvincular, pagamentosPorO
                       <>
                         <span>Valor da instalação: {window.OmiePagamentosStore.fmtMoeda(pagamentosPorObra[o.id].valorTotal)}</span>
                         <span>Pago: {pagamentosPorObra[o.id].pctPago}%</span>
+                        {pagamentosPorObra[o.id].ultimoPagamento && (
+                          <span>Último pagamento: {CIFmtData(pagamentosPorObra[o.id].ultimoPagamento)}</span>
+                        )}
                       </>
                     ) : (
                       <>

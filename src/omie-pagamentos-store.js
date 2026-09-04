@@ -17,11 +17,21 @@
   const fmtMoeda = (v) => (v || v === 0) ? Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }) : '—';
 
   /* {empresaId: {valorTotal, valorPago, pctPago}} pra todas as empresas
-     de uma vez (card "Empresas Instaladoras" — sem N+1). */
+     de uma vez (card "Empresas Instaladoras" — sem N+1).
+
+     Quem manda aqui são as obras: só soma títulos já casados com um
+     dossier_id (equipamento/obra conciliada no sistema) — pedido do
+     usuário 04/09, "o card principal" deve refletir o que nasceu de
+     uma conciliação empresa↔equipamento, não tudo que o Omie tem pra
+     aquele CNPJ/CPF (que pode incluir jobs antigos sem obra aqui).
+     Esses "órfãos" continuam visíveis, só que à parte, em
+     naoVinculadosPorEmpresa — pra não sumir dinheiro real da tela. */
   async function resumoPorEmpresa() {
     const c = sb();
     if (!c) return {};
-    const { data } = await c.from('omie_pagamentos_cache').select('empresa_id, valor_documento, pago');
+    const { data } = await c.from('omie_pagamentos_cache')
+      .select('empresa_id, valor_documento, pago')
+      .not('dossier_id', 'is', null);
     const porEmpresa = {};
     (data || []).forEach((r) => {
       if (!r.empresa_id) return;
@@ -40,14 +50,17 @@
     const c = sb();
     if (!c || !dossierIds || !dossierIds.length) return {};
     const { data } = await c.from('omie_pagamentos_cache')
-      .select('dossier_id, valor_documento, pago')
+      .select('dossier_id, valor_documento, pago, data_pagamento')
       .in('dossier_id', dossierIds);
     const porDossier = {};
     (data || []).forEach((r) => {
       if (!r.dossier_id) return;
-      const d = (porDossier[r.dossier_id] = porDossier[r.dossier_id] || { valorTotal: 0, valorPago: 0 });
+      const d = (porDossier[r.dossier_id] = porDossier[r.dossier_id] || { valorTotal: 0, valorPago: 0, ultimoPagamento: null });
       d.valorTotal += Number(r.valor_documento) || 0;
-      if (r.pago) d.valorPago += Number(r.valor_documento) || 0;
+      if (r.pago) {
+        d.valorPago += Number(r.valor_documento) || 0;
+        if (r.data_pagamento && (!d.ultimoPagamento || r.data_pagamento > d.ultimoPagamento)) d.ultimoPagamento = r.data_pagamento;
+      }
     });
     Object.values(porDossier).forEach((d) => { d.pctPago = d.valorTotal > 0 ? Math.round((d.valorPago / d.valorTotal) * 100) : 0; });
     return porDossier;
