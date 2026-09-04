@@ -101,8 +101,12 @@
 
   /* itensHoje: [{ item_id, fotos: [url,...] }]. Add-only: itens já
      flegados são ignorados aqui (o Montador não consegue re-enviar um
-     item já travado — a tela pública já filtra, isto é defesa extra). */
-  async function registrarLancamento(dossierId, itensHoje, observacao) {
+     item já travado — a tela pública já filtra, isto é defesa extra).
+     flegadoPor: null/undefined = veio do link do Montador (padrão);
+     e-mail/label do operador quando flegado de dentro do sistema (ver
+     flegarItensOperador) — grava em acompanhamento_obra_status.flegado_por
+     pra manter o rastro de quem flegou cada item. */
+  async function registrarLancamento(dossierId, itensHoje, observacao, flegadoPor) {
     const c = sb();
     if (!itensHoje || !itensHoje.length) throw new Error('Selecione ao menos 1 item feito hoje.');
     const semFoto = itensHoje.find((i) => !i.fotos || !i.fotos.length);
@@ -116,7 +120,7 @@
 
     const agora = new Date().toISOString();
     await Promise.all(novos.map((i) => c.from('acompanhamento_obra_status')
-      .upsert({ dossier_id: dossierId, item_id: i.item_id, flegado: true, flegado_em: agora, fotos: i.fotos, desflegado_por: null, desflegado_em: null }, { onConflict: 'dossier_id,item_id' })));
+      .upsert({ dossier_id: dossierId, item_id: i.item_id, flegado: true, flegado_em: agora, fotos: i.fotos, flegado_por: flegadoPor || null, desflegado_por: null, desflegado_em: null }, { onConflict: 'dossier_id,item_id' })));
 
     const { error } = await c.from('acompanhamento_obra_lancamentos').insert({
       dossier_id: dossierId,
@@ -126,6 +130,16 @@
     });
     if (error) throw error;
     return novos.length;
+  }
+
+  /* Flegar de dentro do sistema (não pelo link do Montador) — pedido do
+     usuário 04/09: operador com a alçada instalacao.editar_status_obra
+     também pode flegar (não só desflegar) itens que o Montador ainda não
+     marcou (esquecimento, atraso no envio, etc.). Mesma exigência de
+     foto por item; a origem fica registrada em flegado_por e a
+     observação do lançamento deixa claro que foi manual. */
+  async function flegarItensOperador(dossierId, itensHoje, operadorEmail) {
+    return registrarLancamento(dossierId, itensHoje, 'Flegado manualmente pelo operador' + (operadorEmail ? ` (${operadorEmail})` : ''), operadorEmail || 'Operador');
   }
 
   async function desflegarItem(dossierId, itemId, operadorEmail) {
@@ -178,6 +192,6 @@
 
   window.AcompanhamentoObraStore = {
     listarItens, obterLink, criarOuObterLink, obterEstadoDossier, obterEstadoPorToken,
-    uploadFoto, registrarLancamento, desflegarItem, resumoProgresso, resumoProgressoBatch,
+    uploadFoto, registrarLancamento, flegarItensOperador, desflegarItem, resumoProgresso, resumoProgressoBatch,
   };
 }());

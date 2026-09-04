@@ -1450,6 +1450,8 @@ function TabAcompanhamentoObra({ dossier }) {
   const [link, setLink] = React.useState(null);
   const [podeEditar, setPodeEditar] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
+  const [selecionados, setSelecionados] = React.useState({});
+  const [fotos, setFotos] = React.useState({});
 
   const carregar = React.useCallback(() => {
     Promise.all([store.obterEstadoDossier(dossier.id), store.obterLink(dossier.id)])
@@ -1485,11 +1487,48 @@ function TabAcompanhamentoObra({ dossier }) {
     finally { setBusy(false); }
   };
 
+  const toggleSelecionar = (itemId) => {
+    setSelecionados((p) => { const n = { ...p }; if (n[itemId]) delete n[itemId]; else n[itemId] = true; return n; });
+  };
+
+  const onFotos = (itemId, fileList) => {
+    const files = Array.from(fileList || []);
+    if (!files.length) return;
+    const previews = files.map((f) => ({ file: f, preview: URL.createObjectURL(f) }));
+    setFotos((p) => ({ ...p, [itemId]: [...(p[itemId] || []), ...previews] }));
+  };
+
+  /* Pedido do usuário 04/09: operador com a alçada também pode flegar
+     (não só desflegar) — pro caso do Montador esquecer de enviar algo
+     que já foi feito em campo. Mesma exigência de foto por item; a
+     origem fica registrada (acompanhamento_obra_status.flegado_por). */
+  const flegarSelecionados = async () => {
+    const ids = Object.keys(selecionados);
+    if (!ids.length) return;
+    const semFoto = ids.find((id) => !(fotos[id] || []).length);
+    if (semFoto) return window.toast?.('Toda atividade marcada precisa de ao menos 1 foto.', 'warning');
+    setBusy(true);
+    try {
+      const itensHoje = [];
+      for (const itemId of ids) {
+        const urls = [];
+        for (const f of fotos[itemId]) urls.push(await store.uploadFoto(dossier.id, itemId, f.file));
+        itensHoje.push({ item_id: itemId, fotos: urls });
+      }
+      await store.flegarItensOperador(dossier.id, itensHoje, window.__VP_USER?.email);
+      window.toast?.('Atividade(s) flegada(s).', 'success');
+      setSelecionados({}); setFotos({});
+      carregar();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setBusy(false); }
+  };
+
   if (estado === null) return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const linkUrl = link ? window.location.origin + '/diario-obra/' + link.token : null;
   const resumo = store.resumoProgresso(estado.status);
   const statusOrdenado = [...estado.status].sort((a, b) => (a.acompanhamento_obra_itens?.ordem || 0) - (b.acompanhamento_obra_itens?.ordem || 0));
+  const qtdSelecionados = Object.keys(selecionados).length;
 
   return (
     <div>
@@ -1521,37 +1560,65 @@ function TabAcompanhamentoObra({ dossier }) {
       {link && (
         <>
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Checklist ({statusOrdenado.filter((s) => s.flegado).length}/{statusOrdenado.length})</div>
+          {podeEditar && (
+            <div style={{ fontSize: 12, color: '#888', marginBottom: 10 }}>
+              Você tem alçada pra flegar atividades direto por aqui (ex.: o Montador esqueceu de enviar) — marque, anexe a foto e envie.
+            </div>
+          )}
           <div style={{ marginBottom: 24 }}>
             {statusOrdenado.map((s) => {
               const item = s.acompanhamento_obra_itens || {};
+              const selecionado = !!selecionados[item.id];
+              const fotosItem = fotos[item.id] || [];
               return (
                 <div key={s.id} style={{
-                  border: '1px solid ' + (s.flegado ? '#10b981' : '#ddd'),
-                  background: s.flegado ? '#f0fdf4' : '#fff',
+                  border: '1px solid ' + (s.flegado ? '#10b981' : selecionado ? '#0066cc' : '#ddd'),
+                  background: s.flegado ? '#f0fdf4' : selecionado ? '#f0f8ff' : '#fff',
                   borderRadius: 6, padding: 10, marginBottom: 6,
                 }}>
                   <div className="row sb" style={{ alignItems: 'flex-start' }}>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ fontSize: 13, fontWeight: 600 }}>{s.flegado ? '✅' : '⬜'} {item.texto} <span style={{ fontWeight: 400, color: '#999' }}>({item.peso}%)</span></div>
-                      {s.flegado && (
-                        <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
-                          Flegado em {s.flegado_em ? new Date(s.flegado_em).toLocaleString('pt-BR') : '—'}
-                        </div>
+                    <div style={{ flex: 1, display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+                      {!s.flegado && podeEditar && (
+                        <input type="checkbox" checked={selecionado} disabled={busy}
+                          onChange={() => toggleSelecionar(item.id)} style={{ marginTop: 3, width: 16, height: 16 }} />
                       )}
-                      {s.desflegado_em && !s.flegado && (
-                        <div style={{ fontSize: 11, color: '#cc7700', marginTop: 4 }}>
-                          Desflegado por {s.desflegado_por || '—'} em {new Date(s.desflegado_em).toLocaleString('pt-BR')}
-                        </div>
-                      )}
-                      {s.fotos && s.fotos.length > 0 && (
-                        <div className="row gap-1" style={{ marginTop: 6, flexWrap: 'wrap' }}>
-                          {s.fotos.map((url, i) => (
-                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
-                              <img src={url} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #ddd' }} />
-                            </a>
-                          ))}
-                        </div>
-                      )}
+                      <div style={{ flex: 1 }}>
+                        <div style={{ fontSize: 13, fontWeight: 600 }}>{s.flegado ? '✅' : '⬜'} {item.texto} <span style={{ fontWeight: 400, color: '#999' }}>({item.peso}%)</span></div>
+                        {s.flegado && (
+                          <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                            Flegado em {s.flegado_em ? new Date(s.flegado_em).toLocaleString('pt-BR') : '—'}
+                            {s.flegado_por ? ` · por ${s.flegado_por}` : ' · pelo Montador'}
+                          </div>
+                        )}
+                        {s.desflegado_em && !s.flegado && (
+                          <div style={{ fontSize: 11, color: '#cc7700', marginTop: 4 }}>
+                            Desflegado por {s.desflegado_por || '—'} em {new Date(s.desflegado_em).toLocaleString('pt-BR')}
+                          </div>
+                        )}
+                        {s.fotos && s.fotos.length > 0 && (
+                          <div className="row gap-1" style={{ marginTop: 6, flexWrap: 'wrap' }}>
+                            {s.fotos.map((url, i) => (
+                              <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                                <img src={url} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #ddd' }} />
+                              </a>
+                            ))}
+                          </div>
+                        )}
+                        {!s.flegado && selecionado && (
+                          <div style={{ marginTop: 8 }}>
+                            <label style={{ fontSize: 11, color: '#0066cc', border: '1px solid #0066cc', borderRadius: 6, padding: '4px 8px', display: 'inline-block', cursor: 'pointer' }}>
+                              📷 {fotosItem.length > 0 ? `${fotosItem.length} foto(s) anexada(s)` : 'Anexar foto (obrigatório)'}
+                              <input type="file" accept="image/*" multiple hidden disabled={busy}
+                                onChange={(e) => onFotos(item.id, e.target.files)} />
+                            </label>
+                            {fotosItem.length > 0 && (
+                              <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
+                                {fotosItem.map((f, i) => <img key={i} src={f.preview} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} />)}
+                              </div>
+                            )}
+                          </div>
+                        )}
+                      </div>
                     </div>
                     {s.flegado && podeEditar && (
                       <Button variant="ghost" size="sm" disabled={busy} onClick={() => desflegar(item.id)}>Desflegar</Button>
@@ -1564,7 +1631,7 @@ function TabAcompanhamentoObra({ dossier }) {
 
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Linha do tempo ({estado.lancamentos.length} envio{estado.lancamentos.length === 1 ? '' : 's'})</div>
           {estado.lancamentos.length === 0 && (
-            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>O Montador ainda não enviou nenhum dia.</div>
+            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum envio registrado ainda.</div>
           )}
           {estado.lancamentos.map((l) => (
             <div key={l.id} style={{ border: '1px solid #ddd', borderRadius: 6, padding: 10, marginBottom: 8 }}>
@@ -1578,6 +1645,14 @@ function TabAcompanhamentoObra({ dossier }) {
             </div>
           ))}
         </>
+      )}
+
+      {podeEditar && qtdSelecionados > 0 && (
+        <div style={{ position: 'sticky', bottom: 0, background: '#fff', borderTop: '1px solid #ddd', padding: 12, marginTop: 16 }}>
+          <Button variant="primary" onClick={flegarSelecionados} disabled={busy} style={{ width: '100%' }}>
+            {busy ? 'Enviando…' : `Flegar selecionado(s) (${qtdSelecionados})`}
+          </Button>
+        </div>
       )}
     </div>
   );
