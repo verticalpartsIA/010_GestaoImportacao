@@ -43,27 +43,66 @@
     return porEmpresa;
   }
 
-  /* {dossierId: {valorTotal, valorPago, pctPago}} — só pros títulos que
-     conseguimos casar com uma obra (dossier_id não nulo); melhor
-     esforço, ver comentário no matching da Edge Function. */
+  /* {dossierId: {valorTotal, valorPago, pctPago, ultimoPagamento, parcelas}}
+     — só pros títulos que conseguimos casar com uma obra (dossier_id não
+     nulo); melhor esforço, ver comentário no matching da Edge Function.
+     parcelas: cada título vira uma linha da "planilhinha" do card (04/09)
+     — numero (do numero_pedido do Omie, "001/003"), pctDoValor (fatia
+     desta parcela sobre o valor total da obra, não confundir com
+     progresso físico), valor, pago, dataPagamento. */
   async function resumoPorDossier(dossierIds) {
     const c = sb();
     if (!c || !dossierIds || !dossierIds.length) return {};
     const { data } = await c.from('omie_pagamentos_cache')
-      .select('dossier_id, valor_documento, pago, data_pagamento')
+      .select('dossier_id, valor_documento, pago, data_pagamento, numero_pedido, codigo_lancamento_omie')
       .in('dossier_id', dossierIds);
     const porDossier = {};
     (data || []).forEach((r) => {
       if (!r.dossier_id) return;
-      const d = (porDossier[r.dossier_id] = porDossier[r.dossier_id] || { valorTotal: 0, valorPago: 0, ultimoPagamento: null });
-      d.valorTotal += Number(r.valor_documento) || 0;
+      const d = (porDossier[r.dossier_id] = porDossier[r.dossier_id] || { valorTotal: 0, valorPago: 0, ultimoPagamento: null, parcelas: [] });
+      const valor = Number(r.valor_documento) || 0;
+      d.valorTotal += valor;
       if (r.pago) {
-        d.valorPago += Number(r.valor_documento) || 0;
+        d.valorPago += valor;
         if (r.data_pagamento && (!d.ultimoPagamento || r.data_pagamento > d.ultimoPagamento)) d.ultimoPagamento = r.data_pagamento;
       }
+      d.parcelas.push({ numero: r.numero_pedido, valor, pago: r.pago, dataPagamento: r.data_pagamento, chave: r.codigo_lancamento_omie });
     });
-    Object.values(porDossier).forEach((d) => { d.pctPago = d.valorTotal > 0 ? Math.round((d.valorPago / d.valorTotal) * 100) : 0; });
+    Object.values(porDossier).forEach((d) => {
+      d.pctPago = d.valorTotal > 0 ? Math.round((d.valorPago / d.valorTotal) * 100) : 0;
+      d.parcelas.sort((a, b) => (a.numero || '').localeCompare(b.numero || ''));
+      d.parcelas.forEach((p) => { p.pctDoValor = d.valorTotal > 0 ? Math.round((p.valor / d.valorTotal) * 100) : 0; });
+    });
     return porDossier;
+  }
+
+  /* Cruza dinheiro pago (%) com progresso físico real da obra
+     (checklist.pct, vindo do Diário de Obra/Acompanhamento de Obra) —
+     pedido do usuário 04/09: "isso vai dizer ao gestor se um montador
+     recebeu mais do que a porcentagem da obra". Os marcos físicos são
+     sempre 50/75/100 (AcompanhamentoObraStore); os valores pagos podem
+     não bater exatamente com isso (parcelas contratuais têm valores
+     próprios) — o que importa é a direção do desvio:
+       - pago > progresso físico → alerta (pagou adiantado, sem lastro
+         de obra concluída pra justificar).
+       - progresso físico bateu um marco (50/75/100) que o pago ainda
+         não alcançou → sugestão de pagamento, mas nunca automática:
+         precisa do aval do supervisor, não da palavra do montador.
+     Retorna null quando não há nada a dizer (dentro do esperado). */
+  function comparaPagoComProgresso(pctPago, checklist) {
+    if (!checklist || !checklist.criado) return null;
+    const pctObra = checklist.pct || 0;
+    if (pctPago > pctObra + 1) {
+      return { tipo: 'alerta', texto: `Pago ${pctPago}% acima do progresso físico da obra (${pctObra}%)` };
+    }
+    const marcoAlcancado = [...(checklist.marcos || [])].reverse().find((m) => m.completo);
+    if (marcoAlcancado) {
+      const alvo = parseInt(marcoAlcancado.label, 10);
+      if (alvo > pctPago + 1) {
+        return { tipo: 'sugestao', texto: `Obra atingiu ${marcoAlcancado.label} — sugere pagamento até lá (aguarda aval do supervisor)` };
+      }
+    }
+    return null;
   }
 
   /* Títulos do fornecedor (empresa + colaboradores) que o Omie tem mas
@@ -133,5 +172,5 @@
     sincronizar(empresaId).catch((e) => console.warn('[OmiePagamentosStore] sync pós-vínculo falhou', e.message));
   }
 
-  window.OmiePagamentosStore = { resumoPorEmpresa, resumoPorDossier, naoVinculadosPorEmpresa, ultimoSync, sincronizar, dispararSyncSilencioso, fmtMoeda };
+  window.OmiePagamentosStore = { resumoPorEmpresa, resumoPorDossier, naoVinculadosPorEmpresa, comparaPagoComProgresso, ultimoSync, sincronizar, dispararSyncSilencioso, fmtMoeda };
 }());

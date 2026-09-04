@@ -374,6 +374,78 @@ function CIObraStatusBadge({ statusMaster, checklist, pagamento }) {
 
 function CIFmtData(iso) { return iso ? new Date(iso).toLocaleDateString('pt-BR') : '—'; }
 
+/* Barra comparativa "dinheiro pago" (amarelo) × "progresso físico da
+   obra" (traço preto) — pedido do usuário 04/09: dar uma cara de
+   gráfico ao card, e deixar visualmente óbvio quando o pago passou do
+   traço (pagou adiantado) ou o traço passou do amarelo (obra andou
+   mais que o pagamento, marco batido pede atenção do supervisor). */
+function CIBarraPagoProgresso({ pctPago, checklist }) {
+  if (!checklist || !checklist.criado) return null;
+  const pctObra = checklist.pct || 0;
+  return (
+    <div style={{ padding: '8px 10px 6px' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 10, color: 'var(--fg3)', marginBottom: 3, fontWeight: 600 }}>
+        <span>💰 Pago {pctPago}%</span>
+        <span>🏗️ Obra {pctObra}%</span>
+      </div>
+      <div style={{ position: 'relative', height: 8, background: '#eee', borderRadius: 4, overflow: 'visible' }}>
+        <div style={{ position: 'absolute', inset: 0, width: Math.min(pctPago, 100) + '%', background: 'var(--vp-yellow, #f5c518)', borderRadius: 4 }} />
+        <div title={`Progresso físico: ${pctObra}%`} style={{ position: 'absolute', top: -2, bottom: -2, left: `calc(${Math.min(pctObra, 100)}% - 1px)`, width: 2, background: '#333', borderRadius: 1 }} />
+      </div>
+    </div>
+  );
+}
+
+/* "Planilhinha" de parcelas do card de obra (04/09) — cada título do
+   Omie vinculado a este dossier vira 1 linha, listrada de amarelo
+   quando paga. Junto vem a barra comparativa e, quando faz sentido, um
+   aviso: dinheiro à frente do progresso físico (alerta) ou obra bateu
+   marco que o pagamento ainda não alcançou (sugestão — nunca some
+   automaticamente: precisa do aval do supervisor). */
+function CITabelaPagamentos({ pagamento, checklist }) {
+  const fmt = window.OmiePagamentosStore?.fmtMoeda || ((v) => v);
+  if (!pagamento || !pagamento.parcelas?.length) {
+    return <div className="small muted" style={{ marginTop: 4 }}>Valor da instalação: — · Pago: —%</div>;
+  }
+  const alerta = window.OmiePagamentosStore?.comparaPagoComProgresso(pagamento.pctPago, checklist);
+  return (
+    <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden', fontSize: 11 }} onClick={(ev) => ev.stopPropagation()}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '6px 10px', background: 'var(--vp-gray-50)', borderBottom: '1px solid var(--border)', fontWeight: 700 }}>
+        <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}><Icon.dollar size={12} /> Valor da instalação</span>
+        <span>{fmt(pagamento.valorTotal)}</span>
+      </div>
+      <div>
+        {pagamento.parcelas.map((p, i) => (
+          <div key={p.chave || i} style={{
+            display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px',
+            background: p.pago ? '#fff8d6' : '#fff',
+            borderBottom: i < pagamento.parcelas.length - 1 ? '1px solid var(--border)' : 'none',
+          }}>
+            <span style={{ flex: '0 0 68px', color: 'var(--fg3)' }}>{i + 1}ª parcela</span>
+            <span style={{ flex: '0 0 36px', textAlign: 'right', color: 'var(--fg3)' }}>{p.pctDoValor}%</span>
+            <span style={{ flex: '1', textAlign: 'right', fontWeight: 600 }}>{fmt(p.valor)}</span>
+            <span style={{ flex: '0 0 84px', textAlign: 'right', display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end', color: p.pago ? '#8a6d00' : 'var(--fg3)' }}>
+              {p.pago ? <><Icon.check size={10} /> {CIFmtData(p.dataPagamento)}</> : <><Icon.calendar size={10} /> —</>}
+            </span>
+          </div>
+        ))}
+      </div>
+      <CIBarraPagoProgresso pctPago={pagamento.pctPago} checklist={checklist} />
+      {alerta && (
+        <div style={{
+          display: 'flex', alignItems: 'center', gap: 6, padding: '6px 10px',
+          background: alerta.tipo === 'alerta' ? '#fdecec' : '#eaf2ff',
+          color: alerta.tipo === 'alerta' ? '#a33333' : '#224488',
+          borderTop: '1px solid var(--border)', fontWeight: 600, fontSize: 11,
+        }}>
+          {alerta.tipo === 'alerta' ? <Icon.warning size={12} /> : <Icon.info size={12} />}
+          {alerta.texto}
+        </div>
+      )}
+    </div>
+  );
+}
+
 /* Linha de marcos técnicos (Iniciou / Guias / Cabina / Portas / Elétrica /
    Entrega) — só aparece quando o cronograma já foi criado pra essa obra
    (checklist.criado), pra não poluir a lista com "—" repetido nas obras
@@ -405,35 +477,23 @@ function CIHierarquiaClientes({ clientes, onAbrir, onDesvincular, pagamentosPorO
           <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 6 }}>🏢 {cliente} <span className="small muted">({obras.length})</span></div>
           <div className="stack" style={{ gap: 6, marginLeft: 12 }}>
             {obras.map((o) => (
-              <div key={o.id} className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 10, cursor: 'pointer', alignItems: 'flex-start' }}
+              <div key={o.id} style={{ border: '1px solid var(--border)', borderRadius: 4, padding: 10, cursor: 'pointer' }}
                 onClick={() => onAbrir(o.id)}>
-                <div>
-                  <div className="cell-main" style={{ fontSize: 13 }}>{o.numero_serie ? `Nº ${o.numero_serie}` : (o.building_name || '—')}</div>
-                  {o.numero_serie && <div className="cell-sub">{o.building_name}</div>}
-                  <CIMarcosTecnicos checklist={o.checklist} />
-                  <div className="small muted" style={{ marginTop: 4, display: 'flex', gap: 12 }}>
-                    {pagamentosPorObra?.[o.id] ? (
-                      <>
-                        <span>Valor da instalação: {window.OmiePagamentosStore.fmtMoeda(pagamentosPorObra[o.id].valorTotal)}</span>
-                        {pagamentosPorObra[o.id].ultimoPagamento ? (
-                          <span>{CIFmtData(pagamentosPorObra[o.id].ultimoPagamento)}: {pagamentosPorObra[o.id].pctPago}% | {window.OmiePagamentosStore.fmtMoeda(pagamentosPorObra[o.id].valorPago)}</span>
-                        ) : (
-                          <span>Pago: {window.OmiePagamentosStore.fmtMoeda(pagamentosPorObra[o.id].valorPago)} ({pagamentosPorObra[o.id].pctPago}%)</span>
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <span>Valor da instalação: —</span>
-                        <span>Pago: —%</span>
-                      </>
-                    )}
+                <div className="row sb" style={{ alignItems: 'flex-start' }}>
+                  <div>
+                    <div className="cell-main" style={{ fontSize: 13 }}>{o.numero_serie ? `Nº ${o.numero_serie}` : (o.building_name || '—')}</div>
+                    {o.numero_serie && <div className="cell-sub">{o.building_name}</div>}
+                  </div>
+                  <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                    <Button variant="ghost" size="sm" icon="trash" title="Desvincular"
+                      onClick={(ev) => { ev.stopPropagation(); onDesvincular?.(o); }} />
+                    <Icon.chevRight size={14} />
                   </div>
                 </div>
-                <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
+                <CIMarcosTecnicos checklist={o.checklist} />
+                <CITabelaPagamentos pagamento={pagamentosPorObra?.[o.id]} checklist={o.checklist} />
+                <div style={{ marginTop: 8 }}>
                   <CIObraStatusBadge statusMaster={o.status_master} checklist={o.checklist} pagamento={o.pagamento} />
-                  <Button variant="ghost" size="sm" icon="trash" title="Desvincular"
-                    onClick={(ev) => { ev.stopPropagation(); onDesvincular?.(o); }} />
-                  <Icon.chevRight size={14} />
                 </div>
               </div>
             ))}
