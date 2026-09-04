@@ -202,6 +202,8 @@
         evento: 'INSTALADOR_VINCULADO', numeroCotacao: dossier?.numero_cotacao ?? null,
         alvoLabel: dossier?.building_name, alvoId: dossierId,
       });
+      // Conciliação empresa↔obra nasceu — provoca a busca de pagamentos no Omie sozinha (04/09).
+      window.OmiePagamentosStore?.dispararSyncSilencioso(parceiroId);
     }
   }
 

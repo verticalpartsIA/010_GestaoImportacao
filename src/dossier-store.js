@@ -405,6 +405,8 @@ window.__DOSSIER = window.__DOSSIER || (() => {
         vinculado_por: window.__VP_USER?.email || 'system',
       });
       if (error) throw error;
+      // Conciliação empresa↔obra nasceu — provoca a busca de pagamentos no Omie sozinha (04/09).
+      window.OmiePagamentosStore?.dispararSyncSilencioso(parceiroId);
       return id;
     },
 

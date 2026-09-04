@@ -119,5 +119,19 @@
     return data;
   }
 
-  window.OmiePagamentosStore = { resumoPorEmpresa, resumoPorDossier, naoVinculadosPorEmpresa, ultimoSync, sincronizar, fmtMoeda };
+  /* Fire-and-forget pra chamar logo depois que um vínculo empresa↔obra/
+     equipamento nasce (instalacao-obra-store.js:vincularParceiroInstalador,
+     dossier-store.js:vincularInstaladorRoster, dossier-obra.jsx:
+     TabEquipamentos ao setar parceiro num equipamento) — pedido do
+     usuário 04/09: a conciliação deve provocar a busca no Omie sozinha,
+     sem esperar o botão manual. Nunca lança erro pra quem chamou (a
+     ação de vincular já terminou com sucesso; se o Omie falhar ou
+     estiver com rate-limit, só loga — o botão "Atualizar pagamentos"
+     continua disponível como fallback manual). */
+  function dispararSyncSilencioso(empresaId) {
+    if (!empresaId) return;
+    sincronizar(empresaId).catch((e) => console.warn('[OmiePagamentosStore] sync pós-vínculo falhou', e.message));
+  }
+
+  window.OmiePagamentosStore = { resumoPorEmpresa, resumoPorDossier, naoVinculadosPorEmpresa, ultimoSync, sincronizar, dispararSyncSilencioso, fmtMoeda };
 }());

@@ -945,6 +945,8 @@ function TabEquipamentos({ dossier, setRoute, setSubsel }) {
         tipo: dossier.equip_type || '',
         parceiro_instalador_id: dossier.parceiro_instalador_id || null,
       });
+      // Card do equipamento nasceu já com instalador — provoca a busca de pagamentos no Omie (04/09).
+      window.OmiePagamentosStore?.dispararSyncSilencioso(dossier.parceiro_instalador_id);
       carregar();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
   };
@@ -956,6 +958,8 @@ function TabEquipamentos({ dossier, setRoute, setSubsel }) {
     // (o toast de erro existe, mas passava despercebido).
     if (patch.parceiro_instalador_id === '') patch.parceiro_instalador_id = null;
     await window.__DOSSIER.atualizarEquipamento(id, patch);
+    // Empresa conciliada com este equipamento — provoca a busca de pagamentos no Omie (04/09).
+    if (patch.parceiro_instalador_id) window.OmiePagamentosStore?.dispararSyncSilencioso(patch.parceiro_instalador_id);
     carregar();
   };
 
