@@ -99,9 +99,11 @@
     return data.publicUrl;
   }
 
-  /* itensHoje: [{ item_id, fotos: [url,...] }]. Add-only: itens já
-     flegados são ignorados aqui (o Montador não consegue re-enviar um
-     item já travado — a tela pública já filtra, isto é defesa extra).
+  /* itensHoje: [{ item_id, fotos: [url,...], observacao? }]. observacao é
+     opcional — texto livre de quem flegou (ex.: dificuldade encontrada),
+     nunca bloqueia o envio. Add-only: itens já flegados são ignorados
+     aqui (o Montador não consegue re-enviar um item já travado — a tela
+     pública já filtra, isto é defesa extra).
      flegadoPor: null/undefined = veio do link do Montador (padrão);
      e-mail/label do operador quando flegado de dentro do sistema (ver
      flegarItensOperador) — grava em acompanhamento_obra_status.flegado_por
@@ -120,7 +122,7 @@
 
     const agora = new Date().toISOString();
     await Promise.all(novos.map((i) => c.from('acompanhamento_obra_status')
-      .upsert({ dossier_id: dossierId, item_id: i.item_id, flegado: true, flegado_em: agora, fotos: i.fotos, flegado_por: flegadoPor || null, desflegado_por: null, desflegado_em: null }, { onConflict: 'dossier_id,item_id' })));
+      .upsert({ dossier_id: dossierId, item_id: i.item_id, flegado: true, flegado_em: agora, fotos: i.fotos, observacao: i.observacao || null, flegado_por: flegadoPor || null, desflegado_por: null, desflegado_em: null }, { onConflict: 'dossier_id,item_id' })));
 
     const { error } = await c.from('acompanhamento_obra_lancamentos').insert({
       dossier_id: dossierId,

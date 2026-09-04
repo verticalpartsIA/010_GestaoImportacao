@@ -21,7 +21,7 @@
     return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR') + ', ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   }
 
-  function ItemLinha({ item, status, selecionado, fotos, enviando, onToggle, onFotos }) {
+  function ItemLinha({ item, status, selecionado, fotos, observacao, enviando, onToggle, onFotos, onObservacao }) {
     const flegado = status && status.flegado;
     return (
       <div style={{
@@ -42,6 +42,9 @@
                 {status.fotos.map((url, i) => <img key={i} src={url} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4 }} />)}
               </div>
             )}
+            {flegado && status.observacao && (
+              <div style={{ fontSize: 12, color: '#555', marginTop: 6 }}>📝 {status.observacao}</div>
+            )}
             {!flegado && selecionado && (
               <div style={{ marginTop: 8 }}>
                 <label style={{ fontSize: 12, color: '#0066cc', border: '1px solid #0066cc', borderRadius: 6, padding: '6px 10px', display: 'inline-block', cursor: 'pointer' }}>
@@ -54,6 +57,14 @@
                     {fotos.map((f, i) => <img key={i} src={f.preview} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4 }} />)}
                   </div>
                 )}
+                <textarea
+                  value={observacao}
+                  onChange={(e) => onObservacao(item.id, e.target.value)}
+                  disabled={enviando}
+                  placeholder="Observação (opcional) — descreva se teve alguma dificuldade nessa tarefa"
+                  rows={2}
+                  style={{ marginTop: 8, width: '100%', fontSize: 13, padding: 8, border: '1px solid #ddd', borderRadius: 6, resize: 'vertical', boxSizing: 'border-box' }}
+                />
               </div>
             )}
           </div>
@@ -67,6 +78,7 @@
     const [estado, setEstado] = React.useState(undefined);
     const [selecionados, setSelecionados] = React.useState({});
     const [fotos, setFotos] = React.useState({});
+    const [observacoes, setObservacoes] = React.useState({});
     const [enviando, setEnviando] = React.useState(false);
 
     const carregar = React.useCallback(() => {
@@ -100,6 +112,10 @@
       setFotos((p) => ({ ...p, [itemId]: [...(p[itemId] || []), ...previews] }));
     };
 
+    const onObservacao = (itemId, texto) => {
+      setObservacoes((p) => ({ ...p, [itemId]: texto }));
+    };
+
     const enviar = async () => {
       const idsSelecionados = Object.keys(selecionados);
       if (!idsSelecionados.length) { window.alert('Marque ao menos 1 atividade feita hoje.'); return; }
@@ -115,11 +131,11 @@
             const url = await window.AcompanhamentoObraStore.uploadFoto(estado.link.dossier_id, itemId, f.file);
             urls.push(url);
           }
-          itensHoje.push({ item_id: itemId, fotos: urls });
+          itensHoje.push({ item_id: itemId, fotos: urls, observacao: (observacoes[itemId] || '').trim() || null });
         }
         await window.AcompanhamentoObraStore.registrarLancamento(estado.link.dossier_id, itensHoje, null);
         window.alert('Enviado! Obrigado — até amanhã.');
-        setSelecionados({}); setFotos({});
+        setSelecionados({}); setFotos({}); setObservacoes({});
         carregar();
       } catch (e) {
         window.alert('Erro ao enviar: ' + e.message);
@@ -145,8 +161,8 @@
 
         {itens.map((item) => (
           <ItemLinha key={item.id} item={item} status={statusPorItem[item.id]}
-            selecionado={!!selecionados[item.id]} fotos={fotos[item.id] || []} enviando={enviando}
-            onToggle={toggle} onFotos={onFotos} />
+            selecionado={!!selecionados[item.id]} fotos={fotos[item.id] || []} observacao={observacoes[item.id] || ''} enviando={enviando}
+            onToggle={toggle} onFotos={onFotos} onObservacao={onObservacao} />
         ))}
 
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid #ddd', padding: 12 }}>

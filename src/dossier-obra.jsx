@@ -1452,6 +1452,7 @@ function TabAcompanhamentoObra({ dossier }) {
   const [busy, setBusy] = React.useState(false);
   const [selecionados, setSelecionados] = React.useState({});
   const [fotos, setFotos] = React.useState({});
+  const [observacoes, setObservacoes] = React.useState({});
 
   const carregar = React.useCallback(() => {
     Promise.all([store.obterEstadoDossier(dossier.id), store.obterLink(dossier.id)])
@@ -1498,6 +1499,10 @@ function TabAcompanhamentoObra({ dossier }) {
     setFotos((p) => ({ ...p, [itemId]: [...(p[itemId] || []), ...previews] }));
   };
 
+  const onObservacao = (itemId, texto) => {
+    setObservacoes((p) => ({ ...p, [itemId]: texto }));
+  };
+
   /* Pedido do usuário 04/09: operador com a alçada também pode flegar
      (não só desflegar) — pro caso do Montador esquecer de enviar algo
      que já foi feito em campo. Mesma exigência de foto por item; a
@@ -1513,11 +1518,11 @@ function TabAcompanhamentoObra({ dossier }) {
       for (const itemId of ids) {
         const urls = [];
         for (const f of fotos[itemId]) urls.push(await store.uploadFoto(dossier.id, itemId, f.file));
-        itensHoje.push({ item_id: itemId, fotos: urls });
+        itensHoje.push({ item_id: itemId, fotos: urls, observacao: (observacoes[itemId] || '').trim() || null });
       }
       await store.flegarItensOperador(dossier.id, itensHoje, window.__VP_USER?.email);
       window.toast?.('Atividade(s) flegada(s).', 'success');
-      setSelecionados({}); setFotos({});
+      setSelecionados({}); setFotos({}); setObservacoes({});
       carregar();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setBusy(false); }
@@ -1604,6 +1609,9 @@ function TabAcompanhamentoObra({ dossier }) {
                             ))}
                           </div>
                         )}
+                        {s.flegado && s.observacao && (
+                          <div style={{ fontSize: 12, color: '#555', marginTop: 6 }}>📝 {s.observacao}</div>
+                        )}
                         {!s.flegado && selecionado && (
                           <div style={{ marginTop: 8 }}>
                             <label style={{ fontSize: 11, color: '#0066cc', border: '1px solid #0066cc', borderRadius: 6, padding: '4px 8px', display: 'inline-block', cursor: 'pointer' }}>
@@ -1616,6 +1624,14 @@ function TabAcompanhamentoObra({ dossier }) {
                                 {fotosItem.map((f, i) => <img key={i} src={f.preview} alt="" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4 }} />)}
                               </div>
                             )}
+                            <textarea
+                              value={observacoes[item.id] || ''}
+                              onChange={(e) => onObservacao(item.id, e.target.value)}
+                              disabled={busy}
+                              placeholder="Observação (opcional) — descreva se teve alguma dificuldade nessa tarefa"
+                              rows={2}
+                              style={{ marginTop: 8, width: '100%', fontSize: 12, padding: 6, border: '1px solid #ddd', borderRadius: 6, resize: 'vertical', boxSizing: 'border-box' }}
+                            />
                           </div>
                         )}
                       </div>
@@ -1638,7 +1654,10 @@ function TabAcompanhamentoObra({ dossier }) {
               <div style={{ fontSize: 12, fontWeight: 700 }}>{new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR')} <span style={{ fontWeight: 400, color: '#888' }}>· enviado {new Date(l.enviado_em).toLocaleTimeString('pt-BR')}</span></div>
               <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12 }}>
                 {(l.itens || []).map((it, i) => (
-                  <li key={i}>{(statusOrdenado.find((s) => s.acompanhamento_obra_itens?.id === it.item_id)?.acompanhamento_obra_itens?.texto) || it.item_id}</li>
+                  <li key={i}>
+                    {(statusOrdenado.find((s) => s.acompanhamento_obra_itens?.id === it.item_id)?.acompanhamento_obra_itens?.texto) || it.item_id}
+                    {it.observacao && <span style={{ color: '#555' }}> — 📝 {it.observacao}</span>}
+                  </li>
                 ))}
               </ul>
               {l.observacao && <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>{l.observacao}</div>}
