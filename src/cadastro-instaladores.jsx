@@ -23,6 +23,7 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
   const [estatisticas, setEstatisticas] = React.useState({});
   const [pagamentosPorEmpresa, setPagamentosPorEmpresa] = React.useState({});
   const [pagamentosPorObra, setPagamentosPorObra] = React.useState({});
+  const [naoVinculados, setNaoVinculados] = React.useState(null);
   const [ultimoSync, setUltimoSync] = React.useState(null);
   const [sincronizando, setSincronizando] = React.useState(false);
 
@@ -60,10 +61,12 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
 
   const reloadObras = React.useCallback(async (empresaId) => {
     setObras(null);
+    setNaoVinculados(null);
     const list = await window.RHHomologacao.listarHierarquiaClientesDoInstalador(empresaId);
     setObras(list);
     const dossierIds = list.flatMap(({ obras: os }) => os.map((o) => o.id));
     window.OmiePagamentosStore?.resumoPorDossier(dossierIds).then(setPagamentosPorObra).catch(() => setPagamentosPorObra({}));
+    window.OmiePagamentosStore?.naoVinculadosPorEmpresa(empresaId).then(setNaoVinculados).catch(() => setNaoVinculados(null));
   }, []);
 
   const selectEmpresa = async (emp) => {
@@ -214,6 +217,22 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
         {selected ? (
           <Card title="Clientes atendidos" sub={obras ? `${obras.length} cliente(s)` : 'Carregando…'}>
             <CIHierarquiaClientes clientes={obras} onAbrir={abrirObra} onDesvincular={desvincularObra} pagamentosPorObra={pagamentosPorObra} />
+            {naoVinculados && naoVinculados.itens.length > 0 && (
+              <div style={{ marginTop: 16, padding: 10, background: '#fff8e6', border: '1px solid #f0d787', borderRadius: 4, fontSize: 12 }}>
+                <div style={{ fontWeight: 700, marginBottom: 4 }}>
+                  ⚠️ {window.OmiePagamentosStore.fmtMoeda(naoVinculados.valorTotal)} no Omie pra este fornecedor sem obra vinculada aqui no sistema
+                  {' '}(por isso a soma acima do card não bate com a soma das obras abaixo):
+                </div>
+                <div className="stack" style={{ gap: 2 }}>
+                  {naoVinculados.itens.map((it) => (
+                    <div key={it.texto} className="row sb" style={{ color: 'var(--fg3)' }}>
+                      <span>{it.texto}</span>
+                      <span>{window.OmiePagamentosStore.fmtMoeda(it.valorPago)} pago · {window.OmiePagamentosStore.fmtMoeda(it.valorTotal)} previsto</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
           </Card>
         ) : (
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', border: '1px dashed var(--border)', color: 'var(--fg3)', fontSize: 13, padding: '60px 20px', textAlign: 'center' }}>

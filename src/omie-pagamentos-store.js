@@ -53,6 +53,34 @@
     return porDossier;
   }
 
+  /* Títulos do fornecedor (empresa + colaboradores) que o Omie tem mas
+     que não conseguimos casar com nenhuma obra do sistema — existem de
+     verdade (dinheiro pago pra esse CNPJ/CPF), só não têm dossier_id.
+     Sem mostrar isso, a soma do card da empresa (todos os títulos) não
+     bate com a soma dos cards de obra (só os vinculados) e parece erro
+     de conta — ver 04/09, usuário reportou a diferença exata de um job
+     antigo (FUNCEF ENGECOP) sem obra correspondente aqui. Agrupado por
+     texto do Projeto pra não listar cada parcela solta. */
+  async function naoVinculadosPorEmpresa(empresaId) {
+    const c = sb();
+    if (!c || !empresaId) return { valorTotal: 0, valorPago: 0, itens: [] };
+    const { data } = await c.from('omie_pagamentos_cache')
+      .select('projeto_texto, valor_documento, pago')
+      .eq('empresa_id', empresaId)
+      .is('dossier_id', null);
+    const porTexto = {};
+    (data || []).forEach((r) => {
+      const key = r.projeto_texto || '(sem descrição no Omie)';
+      const it = (porTexto[key] = porTexto[key] || { texto: key, valorTotal: 0, valorPago: 0 });
+      it.valorTotal += Number(r.valor_documento) || 0;
+      if (r.pago) it.valorPago += Number(r.valor_documento) || 0;
+    });
+    const itens = Object.values(porTexto).sort((a, b) => b.valorTotal - a.valorTotal);
+    const valorTotal = itens.reduce((s, i) => s + i.valorTotal, 0);
+    const valorPago = itens.reduce((s, i) => s + i.valorPago, 0);
+    return { valorTotal, valorPago, itens };
+  }
+
   async function ultimoSync() {
     const c = sb();
     if (!c) return null;
@@ -78,5 +106,5 @@
     return data;
   }
 
-  window.OmiePagamentosStore = { resumoPorEmpresa, resumoPorDossier, ultimoSync, sincronizar, fmtMoeda };
+  window.OmiePagamentosStore = { resumoPorEmpresa, resumoPorDossier, naoVinculadosPorEmpresa, ultimoSync, sincronizar, fmtMoeda };
 }());
