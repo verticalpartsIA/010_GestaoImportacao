@@ -215,6 +215,16 @@ app.get('/status-obra-interno/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'status-obra.html'));
 });
 
+/* ---------- Diário de Obra (Acompanhamento de Obra) ----------
+   /diario-obra/<token> → entrega diario-obra.html. O token é lido no
+   client (acompanhamento_obra_links.token). Link fixo por dossiê,
+   mandado ao Montador junto com o contrato — sem SSO, ele só acrescenta
+   (flega + foto), nunca desmarca. */
+app.get('/diario-obra/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'diario-obra.html'));
+});
+
 /* ---------- Termo de Entrega (assinatura digital) ----------
    /termo-entrega/<token> → entrega termo-entrega.html. O token é lido no
    client (dossier_obra.termo_entrega_token). Cliente e/ou supervisor

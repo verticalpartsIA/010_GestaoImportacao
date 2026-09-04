@@ -399,18 +399,18 @@
       porDossier[o.id] = { ...o, numero_serie: e.numero_serie || porDossier[o.id]?.numero_serie || null };
     });
 
-    /* Progresso real do checklist por dossiê (não o status_master
-       genérico) — 1 query em lote pra todos os dossiês da empresa, não
-       N+1. Sem InstalacaoChecklistStore carregado (ordem de load-time
-       improvável, mas defensivo) cai pro badge antigo (checklist=null). */
+    /* Progresso real do Diário de Obra (Acompanhamento de Obra) por
+       dossiê (não o status_master genérico) — 1 query em lote pra
+       todos os dossiês da empresa, não N+1. Sem
+       AcompanhamentoObraStore carregado (ordem de load-time
+       improvável, mas defensivo) cai pro badge antigo (checklist=null).
+       Trocado de InstalacaoChecklistStore pra este em 04/09 — o card
+       agora é alimentado pelos flags datados que o Montador envia pelo
+       link fixo do diário, não pelo Cronograma de Instalação interno. */
     const dossierIds = Object.keys(porDossier);
     let porDossierChecklist = {};
-    if (dossierIds.length && window.InstalacaoChecklistStore) {
-      const { data: itens } = await c.from('instalacao_checklist_itens')
-        .select('dossier_id, status, marco, concluido_em').in('dossier_id', dossierIds);
-      const agrupado = {};
-      (itens || []).forEach((i) => { (agrupado[i.dossier_id] = agrupado[i.dossier_id] || []).push(i); });
-      dossierIds.forEach((id) => { porDossierChecklist[id] = window.InstalacaoChecklistStore.resumoProgresso(agrupado[id] || []); });
+    if (dossierIds.length && window.AcompanhamentoObraStore) {
+      porDossierChecklist = await window.AcompanhamentoObraStore.resumoProgressoBatch(dossierIds);
     }
 
     /* Situação de pagamento (Trilha B) — pra badge "Obra Concluída" quando

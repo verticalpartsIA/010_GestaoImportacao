@@ -278,12 +278,16 @@ function ModalColaborador({ empresaId, initialData, isEdit, onClose, onSaved }) 
 }
 
 /* Status de cada obra dentro da árvore do cliente. Quando dá pra saber o
-   progresso real do Cronograma de Instalação (checklist por dossiê,
-   window.InstalacaoChecklistStore.resumoProgresso), usa ele — é mais fiel
-   que o status_master genérico (ex.: dois equipamentos podem estar os
-   dois com status_master="Instalação" mas um já com itens concluídos e o
-   outro com zero, ver achado de 01/09). Sem checklist criado ainda,
-   cai pro status_master puro (mesma classificação de antes). */
+   progresso real do Diário de Obra / Acompanhamento de Obra (flags
+   datados que o Montador envia pelo link fixo, ponderados pelos pesos
+   de "não commitar/AcompanhamentoObra.md",
+   window.AcompanhamentoObraStore.resumoProgresso — trocado de
+   InstalacaoChecklistStore em 04/09), usa ele — é mais fiel que o
+   status_master genérico (ex.: dois equipamentos podem estar os dois
+   com status_master="Instalação" mas um já com itens concluídos e o
+   outro com zero, ver achado de 01/09). Sem link do diário gerado
+   ainda (checklist.criado===false), cai pro status_master puro (mesma
+   classificação de antes). */
 function CIObraStatusBadge({ statusMaster, checklist, pagamento }) {
   const concluida = CI_OBRA_CONCLUIDA.has(statusMaster);
   if (checklist && checklist.criado) {

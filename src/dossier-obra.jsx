@@ -132,6 +132,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
 const DOSSIER_TAB_LABEL = {
   'visao-geral': 'Visão Geral', documentos: 'Documentos', instalacao: 'Instalação',
   equipamentos: 'Equipamentos', 'cronograma-instalacao': 'Cronograma de Instalação',
+  'acompanhamento-obra': 'Acompanhamento de Obra',
   pendencias: 'Pendências', responsaveis: 'Responsáveis', historico: 'Histórico',
 };
 
@@ -273,6 +274,7 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
           { id: 'instalacao', label: '🛠️ Instalação' },
           { id: 'equipamentos', label: '🏢 Equipamentos' },
           { id: 'cronograma-instalacao', label: '🏗️ Cronograma de Instalação' },
+          { id: 'acompanhamento-obra', label: '📔 Acompanhamento de Obra' },
           { id: 'pendencias', label: '⚠️ Pendências' },
           { id: 'responsaveis', label: '👥 Responsáveis' },
           { id: 'historico', label: '📜 Histórico' }
@@ -303,6 +305,7 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
         {activeTab === 'instalacao' && <TabInstalacao dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'equipamentos' && <TabEquipamentos dossier={dossier} setRoute={setRoute} setSubsel={setSubsel} />}
         {activeTab === 'cronograma-instalacao' && <TabCronogramaInstalacao dossier={dossier} />}
+        {activeTab === 'acompanhamento-obra' && <TabAcompanhamentoObra dossier={dossier} />}
         {activeTab === 'pendencias' && <TabPendencias dossier={dossier} setModalOpen={setModalOpen} reload={carregarDossier} />}
         {activeTab === 'responsaveis' && <TabResponsaveis dossier={dossier} reload={carregarDossier} />}
         {activeTab === 'historico' && <TabHistorico dossier={dossier} />}
@@ -1431,6 +1434,151 @@ function FormAdicionarItemTemplate({ onSaved, equipTypePadrao }) {
         <input className="input" value={resultado} onChange={(e) => setResultado(e.target.value)}/>
       </div>
       <Button variant="primary" size="sm" onClick={salvar} disabled={saving}>{saving ? 'Salvando…' : 'Adicionar ao template'}</Button>
+    </div>
+  );
+}
+
+/* Diário de Obra (Acompanhamento de Obra) — visão interna. Diferente do
+   Cronograma de Instalação acima: aqui quem preenche é o Montador, por
+   um link FIXO gerado uma vez (mandado no contrato); cada envio dele
+   vira uma linha datada em "lançamentos" (a linha do tempo real da
+   obra). O operador só pode DESFLEGAR (nunca flegar) — gated pela
+   alçada instalacao.editar_status_obra. */
+function TabAcompanhamentoObra({ dossier }) {
+  const store = window.AcompanhamentoObraStore;
+  const [estado, setEstado] = React.useState(null);
+  const [link, setLink] = React.useState(null);
+  const [podeEditar, setPodeEditar] = React.useState(false);
+  const [busy, setBusy] = React.useState(false);
+
+  const carregar = React.useCallback(() => {
+    Promise.all([store.obterEstadoDossier(dossier.id), store.obterLink(dossier.id)])
+      .then(([e, l]) => { setEstado(e); setLink(l); })
+      .catch(() => setEstado({ status: [], lancamentos: [] }));
+  }, [dossier.id]);
+  React.useEffect(() => { carregar(); }, [carregar]);
+  React.useEffect(() => {
+    window.PropostaStore?.temCapacidade('instalacao', 'editar_status_obra').then(setPodeEditar).catch(() => setPodeEditar(false));
+  }, []);
+
+  const gerarLink = async () => {
+    setBusy(true);
+    try {
+      const l = await store.criarOuObterLink(dossier.id, window.__VP_USER?.email, dossier.equip_type || 'elevador');
+      const url = window.location.origin + '/diario-obra/' + l.token;
+      setLink(l);
+      try { await navigator.clipboard.writeText(url); window.toast?.('Link do Diário de Obra copiado — envie pro Montador (WhatsApp/contrato).', 'success'); }
+      catch (e) { window.toast?.('Link gerado (copie manualmente abaixo).', 'success'); }
+      carregar();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const desflegar = async (itemId) => {
+    if (!window.confirm('Desflegar esta atividade? O link do Montador vai refletir isso na hora.')) return;
+    setBusy(true);
+    try {
+      await store.desflegarItem(dossier.id, itemId, window.__VP_USER?.email);
+      window.toast?.('Atividade desflegada.', 'success');
+      carregar();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setBusy(false); }
+  };
+
+  if (estado === null) return <div style={{ textAlign: 'center', padding: '40px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
+
+  const linkUrl = link ? window.location.origin + '/diario-obra/' + link.token : null;
+  const resumo = store.resumoProgresso(estado.status);
+  const statusOrdenado = [...estado.status].sort((a, b) => (a.acompanhamento_obra_itens?.ordem || 0) - (b.acompanhamento_obra_itens?.ordem || 0));
+
+  return (
+    <div>
+      <div style={{ background: '#0b1220', color: '#fff', borderRadius: 8, padding: '16px 20px', marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
+        <div>
+          <div style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: '#9aa7bd' }}>Progresso ponderado</div>
+          <div style={{ fontSize: 22, fontWeight: 800 }}>{resumo.pct}%</div>
+          <div style={{ fontSize: 11, color: '#9aa7bd', marginTop: 2 }}>
+            {resumo.marcos.map((m) => `${m.label}${m.completo ? ' ✓' : ''}`).join(' · ')}
+          </div>
+        </div>
+        <Button variant="outline" size="sm" onClick={gerarLink} disabled={busy}>
+          {link ? '🔗 Copiar link do Montador' : '🔗 Gerar link do Diário de Obra'}
+        </Button>
+      </div>
+
+      {linkUrl && (
+        <div style={{ background: '#f0f8ff', border: '1px solid #0066cc', borderRadius: 6, padding: 10, marginBottom: 18, fontSize: 12, wordBreak: 'break-all' }}>
+          Link fixo do Montador (mande junto com o contrato): <a href={linkUrl} target="_blank" rel="noopener noreferrer">{linkUrl}</a>
+        </div>
+      )}
+
+      {!link && (
+        <div style={{ textAlign: 'center', padding: '32px 20px', color: 'var(--fg3)', fontSize: 13 }}>
+          Ainda não foi gerado o link do Diário de Obra pra esta obra.
+        </div>
+      )}
+
+      {link && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Checklist ({statusOrdenado.filter((s) => s.flegado).length}/{statusOrdenado.length})</div>
+          <div style={{ marginBottom: 24 }}>
+            {statusOrdenado.map((s) => {
+              const item = s.acompanhamento_obra_itens || {};
+              return (
+                <div key={s.id} style={{
+                  border: '1px solid ' + (s.flegado ? '#10b981' : '#ddd'),
+                  background: s.flegado ? '#f0fdf4' : '#fff',
+                  borderRadius: 6, padding: 10, marginBottom: 6,
+                }}>
+                  <div className="row sb" style={{ alignItems: 'flex-start' }}>
+                    <div style={{ flex: 1 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600 }}>{s.flegado ? '✅' : '⬜'} {item.texto} <span style={{ fontWeight: 400, color: '#999' }}>({item.peso}%)</span></div>
+                      {s.flegado && (
+                        <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>
+                          Flegado em {s.flegado_em ? new Date(s.flegado_em).toLocaleString('pt-BR') : '—'}
+                        </div>
+                      )}
+                      {s.desflegado_em && !s.flegado && (
+                        <div style={{ fontSize: 11, color: '#cc7700', marginTop: 4 }}>
+                          Desflegado por {s.desflegado_por || '—'} em {new Date(s.desflegado_em).toLocaleString('pt-BR')}
+                        </div>
+                      )}
+                      {s.fotos && s.fotos.length > 0 && (
+                        <div className="row gap-1" style={{ marginTop: 6, flexWrap: 'wrap' }}>
+                          {s.fotos.map((url, i) => (
+                            <a key={i} href={url} target="_blank" rel="noopener noreferrer">
+                              <img src={url} alt="" style={{ width: 48, height: 48, objectFit: 'cover', borderRadius: 4, border: '1px solid #ddd' }} />
+                            </a>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                    {s.flegado && podeEditar && (
+                      <Button variant="ghost" size="sm" disabled={busy} onClick={() => desflegar(item.id)}>Desflegar</Button>
+                    )}
+                  </div>
+                </div>
+              );
+            })}
+          </div>
+
+          <div style={{ fontSize: 13, fontWeight: 700, marginBottom: 10 }}>Linha do tempo ({estado.lancamentos.length} envio{estado.lancamentos.length === 1 ? '' : 's'})</div>
+          {estado.lancamentos.length === 0 && (
+            <div style={{ textAlign: 'center', padding: '24px 0', color: 'var(--fg3)', fontSize: 13 }}>O Montador ainda não enviou nenhum dia.</div>
+          )}
+          {estado.lancamentos.map((l) => (
+            <div key={l.id} style={{ border: '1px solid #ddd', borderRadius: 6, padding: 10, marginBottom: 8 }}>
+              <div style={{ fontSize: 12, fontWeight: 700 }}>{new Date(l.data + 'T00:00:00').toLocaleDateString('pt-BR')} <span style={{ fontWeight: 400, color: '#888' }}>· enviado {new Date(l.enviado_em).toLocaleTimeString('pt-BR')}</span></div>
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18, fontSize: 12 }}>
+                {(l.itens || []).map((it, i) => (
+                  <li key={i}>{(statusOrdenado.find((s) => s.acompanhamento_obra_itens?.id === it.item_id)?.acompanhamento_obra_itens?.texto) || it.item_id}</li>
+                ))}
+              </ul>
+              {l.observacao && <div style={{ fontSize: 12, color: '#555', marginTop: 4 }}>{l.observacao}</div>}
+            </div>
+          ))}
+        </>
+      )}
     </div>
   );
 }

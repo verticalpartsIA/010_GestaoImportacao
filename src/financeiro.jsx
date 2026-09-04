@@ -1229,6 +1229,7 @@ const ALCADAS_PROPOSTAS = [
   { modulo: 'propostas', capacidade: 'destravar_aprovada', label: 'Destrava proposta aprovada', hint: 'Reabre pra edição uma proposta já aprovada pelo cliente.' },
   { modulo: 'propostas', capacidade: 'excluir', label: 'Exclui propostas', hint: 'Apaga a proposta de vez — sem volta.' },
   { modulo: 'admin', capacidade: 'conceder_alcadas', label: 'Concede alçadas', hint: 'Pode dar (ou tirar) qualquer uma destas capacidades pra qualquer pessoa.' },
+  { modulo: 'instalacao', capacidade: 'editar_status_obra', label: 'Edita status do Acompanhamento de Obra', hint: 'Pode desflegar uma atividade do Diário de Obra e avançar/reverter manualmente o status do card em Cadastro de Instaladores.' },
 ];
 
 function ConfigAlcadasPropostas() {
