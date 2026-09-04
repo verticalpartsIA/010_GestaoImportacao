@@ -41,6 +41,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
   const [showForm, setShowForm] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [filterStatus, setFilterStatus] = React.useState('todas');
+  const [progressoReal, setProgressoReal] = React.useState({ fases: [1, 2, 3].map((n) => ({ numero: n, concluida: false })), liberada: false, concluidas: 0 });
 
   // Form state
   const [form, setForm] = React.useState({
@@ -82,6 +83,15 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
     if (!obraId) return;
     loadVistorias();
   }, [obraId]);
+
+  /* Progresso real (04/09) — trocado de `vistorias` (vistorias_obras,
+     agendador manual obsoleto) pra window.InstalacaoObraStore, que agora
+     lê `vistorias_atividades` (módulo real de campo). Ver comentário em
+     instalacao-obra-store.js:obterProgressoVistoria. */
+  React.useEffect(() => {
+    if (!obraId || !window.InstalacaoObraStore) return;
+    window.InstalacaoObraStore.obterProgressoVistoria(obraId).then(setProgressoReal).catch(() => {});
+  }, [obraId, vistorias]);
 
   const loadVistorias = async () => {
     try {
@@ -296,12 +306,10 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
     return <span style={{ color: config.color, fontWeight: 'bold' }}>{config.label}</span>;
   };
 
-  // Progresso das 3 fases inclusas no contrato (avulsas não contam pra liberar a obra)
-  const fasesInclusas = [1, 2, 3].map((n) => ({
-    numero: n,
-    concluida: vistorias.some((v) => v.numero_fase === n && v.status === 'concluida'),
-  }));
-  const obraLiberada = fasesInclusas.every((f) => f.concluida);
+  // Progresso real (04/09): vem de vistorias_atividades via InstalacaoObraStore,
+  // não mais do agendador manual vistorias_obras — ver efeito acima.
+  const fasesInclusas = progressoReal.fases;
+  const obraLiberada = progressoReal.liberada;
 
   // Sem obraId (nem vindo por prop, nem escolhido ainda): mostra o seletor de obras
   if (!obraId) {
@@ -362,14 +370,17 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
       )}
       {embedded && (
         <div className="row sb" style={{ marginBottom: 14 }}>
-          <div style={{ fontSize: 12, color: 'var(--fg3)' }}>3 fases inclusas no contrato · vistorias avulsas cobradas à parte</div>
+          <div style={{ fontSize: 12, color: 'var(--fg3)' }}>3 vistorias inclusas no contrato · vistorias avulsas cobradas à parte · agendamento manual abaixo é opcional, o que libera a obra são as vistorias concluídas em "Checklists digitais despachados"</div>
           <button className="btn btn-primary" onClick={() => setShowForm(!showForm)} style={{ padding: '0.5rem 1rem', fontSize: '0.85rem' }}>
             {showForm ? '✕ Cancelar' : '+ Agendar Vistoria'}
           </button>
         </div>
       )}
 
-      {/* PROGRESSO DAS 3 FASES INCLUSAS */}
+      {/* PROGRESSO DAS 3 VISTORIAS INCLUSAS — 04/09: fonte real é
+          vistorias_atividades (progressoReal), não mais o agendamento
+          manual desta tela. Sem conceito de "fase" numerada na vistoria
+          de campo, então cada quadro é só a Nª vistoria concluída. */}
       <div style={{
         background: obraLiberada ? '#f0fdf4' : '#f8f9fa',
         border: '1px solid ' + (obraLiberada ? '#86efac' : '#e0e0e0'),
@@ -377,7 +388,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
       }}>
         <div className="row sb" style={{ marginBottom: 10 }}>
           <div style={{ fontSize: '0.9rem', fontWeight: 700, color: obraLiberada ? '#166534' : 'inherit' }}>
-            {obraLiberada ? '✅ Obra vistoriada e liberada (3 fases concluídas)' : 'Progresso das vistorias inclusas'}
+            {obraLiberada ? '✅ Obra vistoriada e liberada (3 vistorias concluídas)' : `Progresso das vistorias inclusas — ${progressoReal.concluidas} de 3 concluídas`}
           </div>
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
@@ -388,7 +399,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
               border: '1px solid ' + (f.concluida ? '#10b981' : '#ddd'),
               fontSize: '0.85rem', fontWeight: 600,
             }}>
-              {f.concluida ? '✅' : '○'} Fase {f.numero}
+              {f.concluida ? '✅' : '○'} {f.numero}ª vistoria
             </div>
           ))}
         </div>

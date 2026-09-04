@@ -52,32 +52,34 @@ test('fmtData — sem data retorna travessão', () => {
 
 test('obterProgressoVistoria — sem dossierId retorna não liberada, sem fases', async () => {
   const r = await S.obterProgressoVistoria(null);
-  assert.deepEqual(r, { fases: [], liberada: false });
+  assert.deepEqual(r, { fases: [], liberada: false, concluidas: 0 });
 });
 
-test('obterProgressoVistoria — 3 de 3 fases concluídas libera', async () => {
+test('obterProgressoVistoria — 3+ vistorias concluídas na obra libera', async () => {
   window.__VP_SB.sb = mockSb({
-    vistorias_obras: { data: [
-      { numero_fase: 1, status: 'concluida' },
-      { numero_fase: 2, status: 'concluida' },
-      { numero_fase: 3, status: 'concluida' },
+    vistorias_atividades: { data: [
+      { status: 'concluida' },
+      { status: 'concluida' },
+      { status: 'concluida' },
     ] },
   });
   const r = await S.obterProgressoVistoria('D1');
   assert.equal(r.liberada, true);
+  assert.equal(r.concluidas, 3);
   assert.equal(r.fases.length, 3);
   assert.ok(r.fases.every((f) => f.concluida));
 });
 
-test('obterProgressoVistoria — fase pendente não libera', async () => {
+test('obterProgressoVistoria — menos de 3 concluídas não libera', async () => {
   window.__VP_SB.sb = mockSb({
-    vistorias_obras: { data: [
-      { numero_fase: 1, status: 'concluida' },
-      { numero_fase: 2, status: 'pendente' },
+    vistorias_atividades: { data: [
+      { status: 'concluida' },
+      { status: 'em_execucao' },
     ] },
   });
   const r = await S.obterProgressoVistoria('D1');
   assert.equal(r.liberada, false);
+  assert.equal(r.concluidas, 1);
   assert.deepEqual(r.fases.map((f) => f.concluida), [true, false, false]);
 });
 
@@ -103,10 +105,10 @@ test('obterChecklistObraPronta — sem parceiro vinculado, item "parceiro" fica 
     contratos_venda_equipamentos: { data: { signed_at: '2026-08-02T00:00:00Z' } },
     avais_financeiros: { data: { sinal_pago: true } },
     projetos_elevador: { data: { status: 'finalizado' } },
-    vistorias_obras: { data: [
-      { numero_fase: 1, status: 'concluida' },
-      { numero_fase: 2, status: 'concluida' },
-      { numero_fase: 3, status: 'concluida' },
+    vistorias_atividades: { data: [
+      { status: 'concluida' },
+      { status: 'concluida' },
+      { status: 'concluida' },
     ] },
   });
   const r = await S.obterChecklistObraPronta('D1');
@@ -133,10 +135,10 @@ test('obterChecklistObraPronta — com parceiro homologado e liberado pelo RH, m
     contratos_venda_equipamentos: { data: { signed_at: '2026-08-02T00:00:00Z' } },
     avais_financeiros: { data: { sinal_pago: true } },
     projetos_elevador: { data: { status: 'finalizado' } },
-    vistorias_obras: { data: [
-      { numero_fase: 1, status: 'concluida' },
-      { numero_fase: 2, status: 'concluida' },
-      { numero_fase: 3, status: 'concluida' },
+    vistorias_atividades: { data: [
+      { status: 'concluida' },
+      { status: 'concluida' },
+      { status: 'concluida' },
     ] },
     parceiros_instaladores: { data: { id: 'PARC-1', nome: 'Instaladora XP' } },
   });
@@ -160,7 +162,7 @@ test('obterChecklistObraPronta — contrato não assinado, sinal pendente e proj
     propostas: { data: null },
     avais_financeiros: { data: null },
     projetos_elevador: { data: null },
-    vistorias_obras: { data: [] },
+    vistorias_atividades: { data: [] },
   });
   const r = await S.obterChecklistObraPronta('D1');
   assert.equal(r.pronta, false);
@@ -185,10 +187,10 @@ test('obterChecklistObraPronta — andaime/munck só entra na conta quando neces
     contratos_venda_equipamentos: { data: { signed_at: '2026-08-02T00:00:00Z' } },
     avais_financeiros: { data: { sinal_pago: true } },
     projetos_elevador: { data: { status: 'finalizado' } },
-    vistorias_obras: { data: [
-      { numero_fase: 1, status: 'concluida' },
-      { numero_fase: 2, status: 'concluida' },
-      { numero_fase: 3, status: 'concluida' },
+    vistorias_atividades: { data: [
+      { status: 'concluida' },
+      { status: 'concluida' },
+      { status: 'concluida' },
     ] },
   });
   const r = await S.obterChecklistObraPronta('D1');

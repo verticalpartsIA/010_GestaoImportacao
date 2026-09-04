@@ -21,16 +21,24 @@
      próprio (dossier_obra.vistoria), duplicando duas outras implementações
      de vistoria que já existiam no sistema (vistorias-obras.jsx e
      vistoria-tracker.js) sem nenhuma delas se falar — achado documentado
-     no FluxogramaPortal.md. Consolidado em `vistorias_obras`
-     (obra_id = dossier_obra.id), que agora é a única fonte de verdade. */
+     no FluxogramaPortal.md. Consolidado em `vistorias_obras`.
+
+     2ª consolidação (04/09): `vistorias_obras` era um agendador manual
+     (status marcado à mão, nunca preenchido pelo técnico de verdade) —
+     ficou obsoleto quando o módulo real de vistorias de campo
+     (`vistorias_atividades`/vistorias-envio.jsx, dispatch por Master ID,
+     questionário digital, fotos, PDF) foi construído, e os dois nunca se
+     falaram: essa tela achava "obra não vistoriada" mesmo com vistorias de
+     verdade concluídas. Fonte de verdade agora é `vistorias_atividades`
+     (dossier_id) — sem conceito formal de "fase 1/2/3" nessa tabela, então
+     "liberada" passa a ser "3 ou mais vistorias concluídas nesta obra"
+     (qualquer questionário), não mais 3 números de fase específicos. */
   async function obterProgressoVistoria(dossierId) {
-    const c = sb(); if (!c || !dossierId) return { fases: [], liberada: false };
-    const { data } = await c.from('vistorias_obras').select('numero_fase, status').eq('obra_id', dossierId);
-    const fases = [1, 2, 3].map((n) => ({
-      numero: n,
-      concluida: (data || []).some((v) => v.numero_fase === n && v.status === 'concluida'),
-    }));
-    return { fases, liberada: fases.every((f) => f.concluida) };
+    const c = sb(); if (!c || !dossierId) return { fases: [], liberada: false, concluidas: 0 };
+    const { data } = await c.from('vistorias_atividades').select('status').eq('dossier_id', dossierId);
+    const concluidas = (data || []).filter((a) => a.status === 'concluida').length;
+    const fases = [1, 2, 3].map((n) => ({ numero: n, concluida: concluidas >= n }));
+    return { fases, liberada: concluidas >= 3, concluidas };
   }
 
   function fmtBRL(v) { return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
@@ -76,9 +84,13 @@
         .not('concluido_em', 'is', null).maybeSingle();
       if (!gCompra || !gCompra.concluido_em) continue;
 
-      const { data: vistorias } = await c.from('vistorias_obras').select('numero_fase').eq('obra_id', d.id);
-      const fasesAgendadas = new Set((vistorias || []).map((v) => v.numero_fase));
-      if (fasesAgendadas.size >= 3) continue; // as 3 já foram agendadas, nada a alertar
+      /* 04/09: trocado de vistorias_obras (agendador manual obsoleto) pra
+         vistorias_atividades — dispatch (Despachar em vistorias-envio.jsx)
+         já É o ato de agendar, então "agendada" aqui é "existe uma
+         atividade despachada", independente do status dela ainda. */
+      const { data: vistorias } = await c.from('vistorias_atividades').select('id').eq('dossier_id', d.id);
+      const qtdAgendadas = (vistorias || []).length;
+      if (qtdAgendadas >= 3) continue; // as 3 já foram agendadas, nada a alertar
 
       const diasPassados = Math.floor((agora - new Date(gCompra.concluido_em).getTime()) / 86400000);
 
@@ -87,7 +99,7 @@
         await c.from('alertas').insert({
           id: 'vist15-' + d.id, level: 'danger',
           title: `Cotação ${d.numero_cotacao} — vistorias não agendadas há ${diasPassados} dias`,
-          sub: `${d.building_name || d.id} · faltam ${3 - fasesAgendadas.size} de 3 vistorias obrigatórias · CEO${ceo ? ' (' + ceo.nome + ')' : ''} precisa saber o motivo`,
+          sub: `${d.building_name || d.id} · faltam ${3 - qtdAgendadas} de 3 vistorias obrigatórias · CEO${ceo ? ' (' + ceo.nome + ')' : ''} precisa saber o motivo`,
           module: 'Engenharia', resolved: false,
         });
         await c.from('dossier_obra').update({ vistorias_alerta_15d_em: new Date().toISOString() }).eq('id', d.id);
@@ -97,7 +109,7 @@
         await c.from('alertas').insert({
           id: 'vist10-' + d.id, level: 'warning',
           title: `Cotação ${d.numero_cotacao} — vistorias não agendadas há ${diasPassados} dias`,
-          sub: `${d.building_name || d.id} · faltam ${3 - fasesAgendadas.size} de 3 vistorias obrigatórias · ${lider ? lider.nome : 'líder da Engenharia'} precisa agendar`,
+          sub: `${d.building_name || d.id} · faltam ${3 - qtdAgendadas} de 3 vistorias obrigatórias · ${lider ? lider.nome : 'líder da Engenharia'} precisa agendar`,
           module: 'Engenharia', resolved: false,
         });
         await c.from('dossier_obra').update({ vistorias_alerta_10d_em: new Date().toISOString() }).eq('id', d.id);
