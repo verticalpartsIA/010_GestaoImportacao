@@ -396,6 +396,14 @@ function CIBarraPagoProgresso({ pctPago, checklist }) {
   );
 }
 
+/* Regra de negócio do usuário (04/09): todo contrato de instalação tem
+   SEMPRE 4 parcelas — Entrada (sinal), 50%, 75%, 100% — mesmo que
+   alguma ainda não tenha sido lançada no Omie. A tabela sempre mostra
+   as 4 linhas; o que faltar aparece vazio/pendente, nunca some. Se por
+   algum motivo houver mais de 4 títulos vinculados (raro), os extras
+   aparecem depois com numeração genérica em vez de sumir dado real. */
+const CI_PARCELA_LABELS = ['Entrada (sinal)', '50%', '75%', '100%'];
+
 /* "Planilhinha" de parcelas do card de obra (04/09) — cada título do
    Omie vinculado a este dossier vira 1 linha, listrada de amarelo
    quando paga. Junto vem a barra comparativa e, quando faz sentido, um
@@ -404,9 +412,12 @@ function CIBarraPagoProgresso({ pctPago, checklist }) {
    automaticamente: precisa do aval do supervisor). */
 function CITabelaPagamentos({ pagamento, checklist }) {
   const fmt = window.OmiePagamentosStore?.fmtMoeda || ((v) => v);
-  if (!pagamento || !pagamento.parcelas?.length) {
+  if (!pagamento) {
     return <div className="small muted" style={{ marginTop: 4 }}>Valor da instalação: — · Pago: —%</div>;
   }
+  const parcelasReais = pagamento.parcelas || [];
+  const totalLinhas = Math.max(CI_PARCELA_LABELS.length, parcelasReais.length);
+  const linhas = Array.from({ length: totalLinhas }, (_, i) => parcelasReais[i] || null);
   const alerta = window.OmiePagamentosStore?.comparaPagoComProgresso(pagamento.pctPago, checklist);
   return (
     <div style={{ marginTop: 8, border: '1px solid var(--border)', borderRadius: 4, overflow: 'hidden', fontSize: 11 }} onClick={(ev) => ev.stopPropagation()}>
@@ -415,17 +426,18 @@ function CITabelaPagamentos({ pagamento, checklist }) {
         <span>{fmt(pagamento.valorTotal)}</span>
       </div>
       <div>
-        {pagamento.parcelas.map((p, i) => (
-          <div key={p.chave || i} style={{
+        {linhas.map((p, i) => (
+          <div key={p?.chave || `vazia-${i}`} style={{
             display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px',
-            background: p.pago ? '#fff8d6' : '#fff',
-            borderBottom: i < pagamento.parcelas.length - 1 ? '1px solid var(--border)' : 'none',
+            background: p?.pago ? '#fff8d6' : '#fff',
+            borderBottom: i < linhas.length - 1 ? '1px solid var(--border)' : 'none',
+            opacity: p ? 1 : 0.55,
           }}>
-            <span style={{ flex: '0 0 68px', color: 'var(--fg3)' }}>{i + 1}ª parcela</span>
-            <span style={{ flex: '0 0 36px', textAlign: 'right', color: 'var(--fg3)' }}>{p.pctDoValor}%</span>
-            <span style={{ flex: '1', textAlign: 'right', fontWeight: 600 }}>{fmt(p.valor)}</span>
-            <span style={{ flex: '0 0 84px', textAlign: 'right', display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end', color: p.pago ? '#8a6d00' : 'var(--fg3)' }}>
-              {p.pago ? <><Icon.check size={10} /> {CIFmtData(p.dataPagamento)}</> : <><Icon.calendar size={10} /> —</>}
+            <span style={{ flex: '0 0 90px', color: 'var(--fg3)' }}>{CI_PARCELA_LABELS[i] || `${i + 1}ª parcela`}</span>
+            <span style={{ flex: '0 0 36px', textAlign: 'right', color: 'var(--fg3)' }}>{p ? `${p.pctDoValor}%` : '—'}</span>
+            <span style={{ flex: '1', textAlign: 'right', fontWeight: 600 }}>{p ? fmt(p.valor) : '—'}</span>
+            <span style={{ flex: '0 0 84px', textAlign: 'right', display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end', color: p?.pago ? '#8a6d00' : 'var(--fg3)' }}>
+              {p ? (p.pago ? <><Icon.check size={10} /> {CIFmtData(p.dataPagamento)}</> : <><Icon.calendar size={10} /> —</>) : <><Icon.calendar size={10} /> não lançado</>}
             </span>
           </div>
         ))}
