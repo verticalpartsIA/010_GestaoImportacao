@@ -137,7 +137,7 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Formulários</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Controle de Cotações</div>
           <h1 className="page-head__title">Controle de Cotações</h1>
           <p className="page-head__sub">Histórico completo de cotações de elevadores — planilha legada + cotações do Formulário digital.</p>
         </div>
