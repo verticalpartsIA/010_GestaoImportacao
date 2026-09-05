@@ -402,7 +402,7 @@ function CIBarraPagoProgresso({ pctPago, checklist }) {
    as 4 linhas; o que faltar aparece vazio/pendente, nunca some. Se por
    algum motivo houver mais de 4 títulos vinculados (raro), os extras
    aparecem depois com numeração genérica em vez de sumir dado real. */
-const CI_PARCELA_LABELS = ['Entrada (sinal)', '50%', '75%', '100%'];
+const CI_PARCELA_LABELS = ['Entrada (sinal)', '2ª parcela', '3ª parcela', '4ª parcela'];
 
 /* "Planilhinha" de parcelas do card de obra (04/09) — cada título do
    Omie vinculado a este dossier vira 1 linha, listrada de amarelo
