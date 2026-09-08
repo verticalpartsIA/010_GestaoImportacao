@@ -233,9 +233,15 @@
     return dados.id;
   }
 
+  /* Excluir direto quebrava com FK violation (parceiros_documentos_colaborador
+     referencia colaborador_id, sem ON DELETE CASCADE) — usuário Felipe
+     reportou 08/09 com print do erro. Apaga os documentos do colaborador
+     primeiro. */
   async function excluirColaborador(colaboradorId) {
     const c = sb();
     if (!c) throw new Error('Supabase indisponível');
+    const { error: errDocs } = await c.from('parceiros_documentos_colaborador').delete().eq('colaborador_id', colaboradorId);
+    if (errDocs) throw errDocs;
     const { error } = await c.from('parceiros_colaboradores').delete().eq('id', colaboradorId);
     if (error) throw error;
   }
