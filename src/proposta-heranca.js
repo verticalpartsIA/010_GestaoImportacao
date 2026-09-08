@@ -188,6 +188,22 @@
     if (difal && difal.difal_aplicavel && difal.responsavel_recolhimento === 'emitente_verticalparts') {
       valores.difal = String(Math.round(difal.valor_difal));
     }
+    /* Mais de 1 equipamento na cotação: monta uma linha por unidade (não só
+       o agregado acima) pra Preview mostrar cada equipamento separado, em
+       vez de uma linha só somando tudo (bug real na cotação 950 — 2
+       elevadores viravam 1 linha "GEF, GEP" com quantidade errada).
+       precoVendaPorEquipamento já é uma média (motor de precificação não
+       diferencia por modelo — ver Frente 3, não feita ainda), então todo
+       item nasce com o mesmo valorUnit por ora. */
+    if (especificacoes.length > 1 && resultado && resultado.precoVendaPorEquipamento) {
+      const unit = Math.round(resultado.precoVendaPorEquipamento);
+      valores.itens = especificacoes.map((e, i) => ({
+        id: e.id || e.codigoAtivo || `Equipamento ${i + 1}`,
+        equipamento: e.modelo || equipamentos || 'Elevador de Passageiros',
+        quantidade: String(Number(e.qtd) || 1),
+        valorUnit: String(unit),
+      }));
+    }
     if (especificacoes.length || Object.keys(valores).length) {
       prefill.elevador = {};
       if (especificacoes.length) prefill.elevador.especificacoes = especificacoes;

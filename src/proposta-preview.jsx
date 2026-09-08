@@ -348,33 +348,42 @@ function PreviewElevadorMarketing({ data }) {
 /* ---------- Página 6: Especificações Técnicas (tabela) ---------- */
 function PreviewEspecTabela({ data }) {
   const ed = data.elevador;
-  const s = (ed.especificacoes || [])[0] || {};
-  const linhas = [
-    ["Tipo de Empreendimento", s.empreendimento],
-    ["Característica de Transporte", s.carac],
-    ["Denominação", s.denominacao],
-    ["Percurso", s.percurso && `${s.percurso}mm`],
-    ["Capacidade", s.capacidade],
-    ["Caixa de Corrida", s.dimensoesCaixa],
-    ["Poço", s.profPoço && `${s.profPoço}mm`],
-    ["Velocidade", s.vel && `${s.vel} m/s`],
-    ["Paradas", s.andaresParadasPortas],
-    ["Modelo", s.modelo],
-    ["Quantidade", s.qtd],
-  ].filter(([, v]) => v);
+  /* Uma tabela por equipamento — antes só lia especificacoes[0], então a 2ª
+     unidade em diante (cotação com mais de 1 elevador) nunca aparecia aqui,
+     mesmo com o dado certo (bug real na cotação 950). */
+  const lista = (ed.especificacoes && ed.especificacoes.length) ? ed.especificacoes : [{}];
+  const blocos = lista.map((s) => ({
+    id: s.id,
+    linhas: [
+      ["Tipo de Empreendimento", s.empreendimento],
+      ["Característica de Transporte", s.carac],
+      ["Denominação", s.denominacao],
+      ["Percurso", s.percurso && `${s.percurso}mm`],
+      ["Capacidade", s.capacidade],
+      ["Caixa de Corrida", s.dimensoesCaixa],
+      ["Poço", s.profPoço && `${s.profPoço}mm`],
+      ["Velocidade", s.vel && `${s.vel} m/s`],
+      ["Paradas", s.andaresParadasPortas],
+      ["Modelo", s.modelo],
+      ["Quantidade", s.qtd],
+    ].filter(([, v]) => v),
+  }));
+  const temConteudo = blocos.some((b) => b.linhas.length);
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
         <PdfHeader numero={data.numero}/>
         <h2 className="pdf-sec-title">Especificações Técnicas</h2>
         <div className="pdf-sec-rule"/>
-        <h3 className="pdf-sub-title">Características Principais</h3>
-        {linhas.length ? (
-          <table className="pdf-table2">
-            <thead><tr><th>Característica</th><th>{s.id || "Elevador de Passageiros"}</th></tr></thead>
-            <tbody>{linhas.map(([k, v], i) => <tr key={i}><td>{k}</td><td>{v}</td></tr>)}</tbody>
-          </table>
-        ) : <Vazio>Preencha as especificações técnicas na aba "Especificações Técnicas".</Vazio>}
+        {temConteudo ? blocos.map((b, i) => b.linhas.length ? (
+          <div key={i}>
+            <h3 className="pdf-sub-title">{blocos.length > 1 ? (b.id || `Equipamento ${i + 1}`) : "Características Principais"}</h3>
+            <table className="pdf-table2">
+              <thead><tr><th>Característica</th><th>{b.id || "Elevador de Passageiros"}</th></tr></thead>
+              <tbody>{b.linhas.map(([k, v], j) => <tr key={j}><td>{k}</td><td>{v}</td></tr>)}</tbody>
+            </table>
+          </div>
+        ) : null) : <Vazio>Preencha as especificações técnicas na aba "Especificações Técnicas".</Vazio>}
       </div>
       <PdfFooter/>
     </div>
@@ -524,13 +533,21 @@ function PreviewFotos({ data }) {
 function PreviewValoresTabelas({ data }) {
   const v = data.elevador.valores;
   const parcelas = v.parcelas || [];
-  const qtd = parseFloat(v.quantidade) || 0;
-  const unit = parseFloat((v.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
   const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
-  const totalEq = qtd * unit;
-  const totalGeral = totalEq + difal;
   const fmt = (n) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const totalParcelas = parcelas.reduce((s, p) => s + (parseFloat((p.valor || "0").toString().replace(/\./g, "").replace(",", ".")) || 0), 0);
+
+  /* v.itens (mais de 1 equipamento na cotação): uma linha por unidade em vez
+     de uma linha só somando tudo — sem isso 2 elevadores viravam "GEF, GEP"
+     numa linha única (bug real na cotação 950). Sem itens (caso de sempre,
+     proposta com 1 equipamento só), cai no formato antigo de sempre. */
+  const linhas = (Array.isArray(v.itens) && v.itens.length ? v.itens : [v]).map((it) => {
+    const qtd = parseFloat(it.quantidade) || 0;
+    const unit = parseFloat((it.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
+    return { equipamento: it.equipamento, qtd, unit, total: qtd * unit };
+  });
+  const totalEq = linhas.reduce((s, l) => s + l.total, 0);
+  const totalGeral = totalEq + difal;
 
   return (
     <div className="pe__pdf">
@@ -543,12 +560,14 @@ function PreviewValoresTabelas({ data }) {
         <table className="pdf-table2">
           <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Qtd</th><th style={{ textAlign: "right" }}>Valor Unit.</th><th style={{ textAlign: "right" }}>Total</th></tr></thead>
           <tbody>
-            <tr>
-              <td>{v.equipamento || "Elevador de Passageiros"}</td>
-              <td style={{ textAlign: "right" }}>{qtd || "—"}</td>
-              <td style={{ textAlign: "right" }}>{unit ? fmt(unit) : "—"}</td>
-              <td style={{ textAlign: "right", fontWeight: 700 }}>{totalEq ? fmt(totalEq) : "—"}</td>
-            </tr>
+            {linhas.map((l, i) => (
+              <tr key={i}>
+                <td>{l.equipamento || "Elevador de Passageiros"}</td>
+                <td style={{ textAlign: "right" }}>{l.qtd || "—"}</td>
+                <td style={{ textAlign: "right" }}>{l.unit ? fmt(l.unit) : "—"}</td>
+                <td style={{ textAlign: "right", fontWeight: 700 }}>{l.total ? fmt(l.total) : "—"}</td>
+              </tr>
+            ))}
             {difal ? <tr><td colSpan={3}>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(difal)}</td></tr> : null}
             <tr className="pdf-total-row"><td colSpan={3}>Total Equipamentos</td><td style={{ textAlign: "right" }}>{fmt(totalGeral)}</td></tr>
           </tbody>

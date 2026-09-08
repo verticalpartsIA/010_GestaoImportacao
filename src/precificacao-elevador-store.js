@@ -536,7 +536,11 @@
     const numero = window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao);
     const valorUnit = Number((r.prefill.elevador || {}).valores?.valorUnit) || 0;
     const quantidade = Number((r.prefill.elevador || {}).valores?.quantidade) || 1;
-    const dadosCompletos = window.deepMergeHeranca(window.makeDefaultProposta(), { ...r.prefill, numero });
+    /* deepMergeProposta (não deepMergeHeranca): proposta nova (editId: null),
+       sem digitação de vendedor pra proteger. deepMergeHeranca tratava o
+       placeholder do makeDefaultProposta() como conteúdo real e descartava a
+       herança quando havia mais de 1 equipamento (achado na cotação 950). */
+    const dadosCompletos = window.deepMergeProposta(window.makeDefaultProposta(), { ...r.prefill, numero });
     await window.PropostaStore.salvar({ data: dadosCompletos, eq: 'elevador', editId: null, valorTotal: valorUnit * quantidade });
   }
 

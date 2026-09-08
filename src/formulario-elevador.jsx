@@ -1489,7 +1489,13 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
                          ao vivo, 19/08 — proposta 921 crashava com "Cannot
                          read properties of undefined (reading 'modeloCabine')").
                          Mesma mistura que herdar() já faz no editor. */
-                      const dadosCompletos = deepMergeHeranca(makeDefaultProposta(), { ...r.prefill, numero });
+                      /* deepMergeProposta (não deepMergeHeranca): esta é sempre uma
+                         proposta nova (editId: null) — não existe "digitação do
+                         vendedor" pra proteger aqui. deepMergeHeranca tratava o
+                         array/objeto placeholder do makeDefaultProposta() como se
+                         já fosse conteúdo real e descartava a herança de verdade
+                         quando havia mais de 1 equipamento (achado na cotação 950). */
+                      const dadosCompletos = deepMergeProposta(makeDefaultProposta(), { ...r.prefill, numero });
                       const salvo = await window.PropostaStore.salvar({ data: dadosCompletos, eq: 'elevador', editId: null, valorTotal: 0 });
                       if (salvo?.erro) window.toast?.('Enviado, mas não consegui criar a Proposta agora: ' + salvo.erro, 'warning');
                       else window.toast?.('Proposta criada, aguardando preço.', 'success');
