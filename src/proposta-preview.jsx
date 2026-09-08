@@ -392,23 +392,30 @@ function PreviewEspecTabela({ data }) {
 
 /* ---------- Página 7: Acabamento (tabela) ---------- */
 function PreviewAcabamentoTabela({ data }) {
-  const a = data.elevador.acabamentos;
-  const linhas = [
-    ["Modelo da Cabine", a.modeloCabine],
-    ["Acabamentos", a.acabamentoMat],
-    ["Sub-teto", a.subTeto],
-    ["Botoeira de Cabine", a.painelOperacao],
-    ["Piso", a.pisoCabina],
-    ["Medidas", a.medidasPiso],
-    ["Porta de Cabine", a.modeloPorta],
-    ["Medidas Porta de Cabine", a.dimPortaCabine],
-    ["Modelo de Porta", a.acabPortaCabine],
-    ["Portas de Pavimento", a.portasPavimento],
-    ["Botoeiras de Pavimento", a.botoeirasPavimento],
-    ["Sinalização", a.sinalizacao],
-    ["Pavimentos Inox", a.pavInox],
-    ["Demais", a.demais],
-  ].filter(([, v]) => v);
+  const ed = data.elevador;
+  /* acabamentosCats (novo, dinâmico — categorias/campos com checkbox
+     "ativo", igual à Ficha Técnica): só entra no PDF o que está marcado.
+     Sem acabamentosCats (proposta antiga, nunca reaberta no editor novo):
+     cai no formato fixo de sempre — mostra o que estiver preenchido. */
+  const a = ed.acabamentos || {};
+  const linhas = (Array.isArray(ed.acabamentosCats) && ed.acabamentosCats.length)
+    ? ed.acabamentosCats.flatMap((c) => c.campos.filter((f) => f.ativo && f.valor).map((f) => [f.nome, f.valor]))
+    : [
+        ["Modelo da Cabine", a.modeloCabine],
+        ["Acabamentos", a.acabamentoMat],
+        ["Sub-teto", a.subTeto],
+        ["Botoeira de Cabine", a.painelOperacao],
+        ["Piso", a.pisoCabina],
+        ["Medidas", a.medidasPiso],
+        ["Porta de Cabine", a.modeloPorta],
+        ["Medidas Porta de Cabine", a.dimPortaCabine],
+        ["Modelo de Porta", a.acabPortaCabine],
+        ["Portas de Pavimento", a.portasPavimento],
+        ["Botoeiras de Pavimento", a.botoeirasPavimento],
+        ["Sinalização", a.sinalizacao],
+        ["Pavimentos Inox", a.pavInox],
+        ["Demais", a.demais],
+      ].filter(([, v]) => v);
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">

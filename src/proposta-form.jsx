@@ -415,30 +415,178 @@ function S_EspecElevador({ d, set }) {
   );
 }
 
-function S_Acabamentos({ d, set, eq = "elevador" }) {
-  const a = d.elevador.acabamentos;
-  const u = (k) => (v) => set(`elevador.acabamentos.${k}`, v);
+/* ---- Acabamentos: campo com checkbox "ativo" (só o marcado entra no PDF)
+   + valor inline quando marcado — mesmo padrão da Ficha Técnica. ---- */
+function S_AcabField({ fld, onToggle, onValue, onRemove }) {
+  const opts = fld.opcoesKey ? OPTIONS[fld.opcoesKey] : null;
   return (
-    <div className="pe-grid cols-2">
-      <PEField label="Modelo da Cabine"><PESelect value={a.modeloCabine} onChange={u("modeloCabine")} options={OPTIONS.modeloCabine}/></PEField>
-      <PEField label="Acabamento (material)"><PESelect value={a.acabamentoMat} onChange={u("acabamentoMat")} options={OPTIONS.acabamentoMaterial}/></PEField>
-      <PEField label="Sub-teto"><PESelect value={a.subTeto} onChange={u("subTeto")} options={OPTIONS.subTeto}/></PEField>
-      <PEField label="Painel de Operação / Botoeira de Cabine"><PESelect value={a.painelOperacao} onChange={u("painelOperacao")} options={OPTIONS.painelOperacao}/></PEField>
+    <div className="pe-acab-row">
+      <label className={"pe-acab-check" + (fld.ativo ? " on" : "")}>
+        <input type="checkbox" checked={!!fld.ativo} onChange={onToggle}/>
+        <span>{fld.nome}</span>
+      </label>
+      {fld.custom && (
+        <button type="button" className="pe-acab-rm" onClick={onRemove} title="Excluir campo" aria-label="Excluir campo">×</button>
+      )}
+      {fld.ativo && (
+        <div className="pe-acab-value">
+          {fld.tipo === "select"
+            ? <PESelect value={fld.valor} onChange={onValue} options={opts || []}/>
+            : fld.tipo === "textarea"
+              ? <PETextarea rows={2} value={fld.valor} onChange={onValue}/>
+              : <PETextInput value={fld.valor} onChange={onValue}/>}
+        </div>
+      )}
+    </div>
+  );
+}
 
-      <PEField label="Piso da Cabina"><PESelect value={a.pisoCabina} onChange={u("pisoCabina")} options={OPTIONS.pisoCabina}/></PEField>
-      <PEField label="Medidas do Piso"><PETextInput value={a.medidasPiso} onChange={u("medidasPiso")} placeholder="800 x 2100mm"/></PEField>
+/* Reaproveita o Modal/Button globais (mesmo padrão do PropostaSendModal em
+   proposta-editor.jsx) em vez de css/markup de modal próprio. */
+function S_AcabAddFieldModal({ onAdd, onClose }) {
+  const [nome, setNome] = React.useState("");
+  const [tipo, setTipo] = React.useState("text");
+  return (
+    <Modal title="Novo campo de acabamento" onClose={onClose} width={420}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={() => nome.trim() && onAdd({ nome: nome.trim(), tipo })}>Adicionar</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <PEField label="Nome do campo"><PETextInput value={nome} onChange={setNome} placeholder="Ex.: Corrimão"/></PEField>
+        <PEField label="Tipo">
+          <select className="pe-input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <option value="text">Texto curto</option>
+            <option value="textarea">Texto longo</option>
+          </select>
+        </PEField>
+      </div>
+    </Modal>
+  );
+}
 
-      <PEField label="Modelo de Porta"><PESelect value={a.modeloPorta} onChange={u("modeloPorta")} options={OPTIONS.modeloPorta}/></PEField>
-      <PEField label="Dimensão da Porta de Cabine" tag="mm"><PETextInput value={a.dimPortaCabine} onChange={u("dimPortaCabine")} placeholder="800x2100mm"/></PEField>
+function S_AcabAddCategoryModal({ onAdd, onClose }) {
+  const [nome, setNome] = React.useState("");
+  return (
+    <Modal title="Nova categoria de acabamento" onClose={onClose} width={420}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={() => nome.trim() && onAdd(nome.trim())}>Criar</Button>
+      </>}>
+      <PEField label="Nome da categoria"><PETextInput value={nome} onChange={setNome} placeholder="Ex.: Sinalização de Emergência"/></PEField>
+    </Modal>
+  );
+}
 
-      <PEField label="Acabamento Porta Cabine"><PESelect value={a.acabPortaCabine} onChange={u("acabPortaCabine")} options={OPTIONS.acabPortaCabine}/></PEField>
-      <PEField label="Portas de Pavimento"><PESelect value={a.portasPavimento} onChange={u("portasPavimento")} options={OPTIONS.portasPavimento}/></PEField>
+/* Categorias/campos dinâmicos com checkbox "ativo" — mesmo padrão da Ficha
+   Técnica (engenharia/ficha-tecnica): o vendedor marca o que quer que entre
+   na proposta e pode criar campo/categoria novos, que ficam disponíveis
+   pras próximas propostas via biblioteca compartilhada (tabelas
+   propostas_lib_categorias/propostas_lib_campos, PropostaAcabamentosStore).
+   Os 13 campos que já existiam viram a categoria nativa "Acabamentos" —
+   proposta salva antes dessa mudança migra sozinha, sem perder valor. */
+function S_Acabamentos({ d, set }) {
+  const engine = window.PropostaAcabamentosEngine;
+  const store = window.PropostaAcabamentosStore;
+  const [libLoaded, setLibLoaded] = React.useState(false);
+  const [modal, setModal] = React.useState(null); // { type: 'campo'|'categoria', catId? }
 
-      <PEField label="Botoeiras de Pavimento"><PESelect value={a.botoeirasPavimento} onChange={u("botoeirasPavimento")} options={OPTIONS.botoeirasPavimento}/></PEField>
-      <PEField label="Sinalização"><PETextInput value={a.sinalizacao} onChange={u("sinalizacao")} placeholder="Display TFT 4.3'' colorido"/></PEField>
+  React.useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!store || !engine) return;
+      const lib = await store.loadLibrary();
+      if (cancelado) return;
+      engine.setLibraryExtras(lib);
+      setLibLoaded((n) => !n); // força recomputar cats com a lib carregada
+    })();
+    return () => { cancelado = true; };
+  }, []);
 
-      <PEField label="Pavimentos com acabamento Inox" span="2" help="Demais pavimentos receberão pintura padrão."><PETextInput value={a.pavInox} onChange={u("pavInox")} placeholder="0 inox e demais Pintura"/></PEField>
-      <PEField label="Demais acabamentos" span="2"><PETextarea rows={2} value={a.demais} onChange={u("demais")} placeholder="Corrimão tubular inox, espelho 3/4, ventilação 80m³/h..."/></PEField>
+  const cats = engine ? engine.garantirCats(d.elevador) : [];
+
+  /* Só na 1ª vez (proposta ainda sem acabamentosCats): grava o resultado da
+     migração como estado real, pra não ficar recalculando do legado a
+     cada render. */
+  React.useEffect(() => {
+    if (engine && !(Array.isArray(d.elevador.acabamentosCats) && d.elevador.acabamentosCats.length)) {
+      set("elevador.acabamentosCats", cats);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libLoaded]);
+
+  if (!engine) return <div className="pe-hint">Carregando…</div>;
+
+  const updateCats = (novo) => set("elevador.acabamentosCats", novo);
+
+  const toggleField = (catId, k) => updateCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, ativo: !f.ativo }),
+  }));
+  const setFieldValue = (catId, k, valor) => updateCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, valor }),
+  }));
+  const removeField = (catId, k) => {
+    updateCats(cats.map((c) => c.id !== catId ? c : { ...c, campos: c.campos.filter((f) => f.k !== k) }));
+    store && store.deleteFieldFromLibrary(catId, k);
+  };
+  const removeCategory = (catId) => {
+    updateCats(cats.filter((c) => c.id !== catId));
+    store && store.deleteCategoryFromLibrary(catId);
+  };
+  const addField = (catId, def) => {
+    const cat = cats.find((c) => c.id === catId);
+    if (cat && cat.campos.some((f) => engine.normalizeNome(f.nome) === engine.normalizeNome(def.nome))) {
+      window.toast?.("Já existe um campo com esse nome nessa categoria.", "warning");
+      return;
+    }
+    const k = engine.fieldKey(def.nome);
+    updateCats(cats.map((c) => c.id !== catId ? c : {
+      ...c, campos: [...c.campos, { k, nome: def.nome, tipo: def.tipo, opcoesKey: null, valor: "", ativo: true, ordem: c.campos.length, custom: true }],
+    }));
+    store && store.saveFieldToLibrary(catId, def);
+  };
+  const addCategory = (nome) => {
+    if (cats.some((c) => engine.normalizeNome(c.nome) === engine.normalizeNome(nome))) {
+      window.toast?.("Já existe uma categoria com esse nome.", "warning");
+      return;
+    }
+    const id = engine.slugCategoria(nome);
+    updateCats([...cats, { id, nome, custom: true, campos: [] }]);
+    store && store.saveCategoryToLibrary({ id, nome });
+  };
+
+  return (
+    <div className="pe-acab">
+      {cats.map((c) => (
+        <div className="pe-acab-cat" key={c.id}>
+          <div className="pe-acab-cat-head">
+            <span className="pe-acab-cat-nome">{c.nome}</span>
+            {c.custom && (
+              <button type="button" className="pe-acab-rm" onClick={() => removeCategory(c.id)} title="Excluir categoria" aria-label="Excluir categoria">×</button>
+            )}
+          </div>
+          <div className="pe-acab-fields">
+            {c.campos.map((fld) => (
+              <S_AcabField
+                key={fld.k}
+                fld={fld}
+                onToggle={() => toggleField(c.id, fld.k)}
+                onValue={(v) => setFieldValue(c.id, fld.k, v)}
+                onRemove={() => removeField(c.id, fld.k)}
+              />
+            ))}
+          </div>
+          <button type="button" className="pe-acab-addfield" onClick={() => setModal({ type: "campo", catId: c.id })}>+ Adicionar campo</button>
+        </div>
+      ))}
+      <button type="button" className="pe-acab-addcat" onClick={() => setModal({ type: "categoria" })}>+ Nova categoria</button>
+
+      {modal?.type === "campo" && (
+        <S_AcabAddFieldModal onClose={() => setModal(null)} onAdd={(def) => { addField(modal.catId, def); setModal(null); }}/>
+      )}
+      {modal?.type === "categoria" && (
+        <S_AcabAddCategoryModal onClose={() => setModal(null)} onAdd={(nome) => { addCategory(nome); setModal(null); }}/>
+      )}
     </div>
   );
 }

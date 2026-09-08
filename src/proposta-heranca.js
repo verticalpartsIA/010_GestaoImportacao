@@ -94,11 +94,17 @@
       const largura = u.caixa_largura_mm || tec.caixa_largura_mm;
       const prof = u.caixa_profundidade_mm || tec.caixa_profundidade_mm;
       const paradas = u.paradas || tec.paradas;
+      const tipo = u.tipo || tec.tipo || '';
+      /* Elevador de Carga também pode ter capacidade de passageiros (não é
+         exclusividade do tipo Passageiro) — o "4000 Passageiros" visto na
+         cotação 950 era só o vendedor tendo digitado o número errado no
+         Formulário (corrigido pra 53 depois), não uma regra de categoria.
+         Não suprimir por tipo aqui. */
       return {
         id: u.identificador || tec.identificador || '',
         modelo: mod.modelo || u.modelo || tec.modelo || '',
         empreendimento: '',
-        carac: u.tipo || tec.tipo || '',
+        carac: tipo,
         denominacao: u.pavimentos_desc || tec.pavimentos_desc || '',
         percurso: String(u.percurso_mm || tec.percurso_mm || ''),
         capacidade: capKg ? `${capPass ? capPass + ' Passageiros x ' : ''}${capKg}Kg` : '',
@@ -199,7 +205,9 @@
       const unit = Math.round(resultado.precoVendaPorEquipamento);
       valores.itens = especificacoes.map((e, i) => ({
         id: e.id || e.codigoAtivo || `Equipamento ${i + 1}`,
-        equipamento: e.modelo || equipamentos || 'Elevador de Passageiros',
+        /* Só o Nº do equipamento (VPEL-EL0950-1) — combinado é esse, sem
+           anexar o código interno de modelo do fabricante junto. */
+        equipamento: e.id || equipamentos || 'Elevador de Passageiros',
         quantidade: String(Number(e.qtd) || 1),
         valorUnit: String(unit),
       }));

@@ -969,3 +969,39 @@ select.pe-input.is-empty {
 .pdf-assinatura-linha { border-top: 1px solid #999; margin-bottom: 8px; }
 .pdf-assinatura b { display: block; font-size: 14px; color: #1b2a4a; }
 .pdf-assinatura span { font-size: 13px; color: #777; }
+
+/* ============================================================
+   Acabamentos dinâmicos (categorias/campos com checkbox "ativo" —
+   mesmo padrão da Ficha Técnica, engenharia/ficha-tecnica.css)
+   ============================================================ */
+.pe-hint { font-size: 12px; color: var(--fg3); padding: 8px 0; }
+
+.pe-acab-cat { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.pe-acab-cat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.pe-acab-cat-nome { font-size: 13px; font-weight: 600; color: var(--fg1); }
+
+.pe-acab-fields { display: flex; flex-direction: column; gap: 2px; }
+.pe-acab-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 4px 6px; border-radius: 8px; }
+.pe-acab-row:hover { background: var(--vp-gray-50); }
+
+.pe-acab-check { display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; min-width: 220px; }
+.pe-acab-check input { accent-color: var(--vp-yellow); width: 14px; height: 14px; cursor: pointer; }
+.pe-acab-check span { font-size: 12.5px; color: var(--fg2); }
+.pe-acab-check.on span { color: var(--fg1); font-weight: 600; }
+
+.pe-acab-value { flex-basis: 100%; padding-left: 22px; }
+.pe-acab-value .pe-input { max-width: 360px; }
+
+.pe-acab-rm {
+  border: none; background: none; color: var(--fg3); cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 2px 6px; border-radius: 6px;
+}
+.pe-acab-rm:hover { color: var(--vp-danger); background: var(--vp-gray-100); }
+
+.pe-acab-addfield, .pe-acab-addcat {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px dashed var(--border); background: none; color: var(--fg2);
+  font-size: 12px; padding: 7px 12px; border-radius: 8px; cursor: pointer; margin-top: 8px;
+}
+.pe-acab-addfield:hover, .pe-acab-addcat:hover { background: var(--vp-gray-50); border-color: var(--fg3); }
+.pe-acab-addcat { border-style: solid; }
