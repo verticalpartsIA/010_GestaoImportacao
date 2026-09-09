@@ -1091,7 +1091,7 @@ function PropostaEditor({ setRoute, subsel }) {
                   fill={f}
                   collapsed={isCollapsed}
                   onToggle={() => setCollapsed((c) => ({ ...c, [s.id]: !c[s.id] }))}>
-                  {renderSection(s.id, eq, data, set, { herdar, herdando, heranca })}
+                  {renderSection(s.id, eq, data, set, { herdar, herdando, heranca, recordId })}
                 </PESection>
               );
             })}
@@ -1168,7 +1168,7 @@ function renderSection(sid, eq, data, set, extras) {
     case "infra": return <S_InfraestruturaNomeada d={data} set={set}/>;
     case "fotos": return <S_FotosEquipamento d={data} set={set}/>;
 
-    case "valores": return <S_Valores d={data} set={set} eq={eq} recordId={recordId}/>;
+    case "valores": return <S_Valores d={data} set={set} eq={eq} recordId={extras.recordId}/>;
     case "condicoesPagto": return <S_CondPagamentoElev d={data} set={set}/>;
     case "ajustes": return <S_Ajustes d={data} set={set} eq={eq}/>;
     case "prazo": return <S_PrazoEntrega d={data} set={set} eq={eq}/>;
