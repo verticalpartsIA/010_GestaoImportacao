@@ -1302,9 +1302,11 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
     if (!window.VistoriaReactPdf) { window.toast?.('Motor de PDF ainda carregando — tente de novo em instantes.', 'warning'); return; }
     setBaixandoPdf(true);
     try {
+      const tipoLabel = window.VistoriasQuestionariosStore.TIPO_LABEL[atividade.vistorias_questionarios?.tipo] || 'Vistoria';
       const dadosPdf = {
         atividade: {
-          numeroLabel: atividade.numero_sequencial ? `${atividade.numero_sequencial}ª vistoria` : '—',
+          numeroLabel: atividade.numero_sequencial ? `${atividade.numero_sequencial}ª` : '—',
+          tipoLabel,
           obraNome: atividade.dossier_obra?.building_name || atividade.dossier_obra?.client_name,
           clienteNome: atividade.dossier_obra?.client_name,
           equipamentoSerie: atividade.equipamentos_obra?.numero_serie,
@@ -1316,7 +1318,7 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
         estrutura,
         respostas,
       };
-      const nome = ['Vistoria', atividade.numero_sequencial ? `${atividade.numero_sequencial}ª` : null, atividade.dossier_obra?.building_name || atividade.dossier_obra?.client_name].filter(Boolean).join(' - ') + '.pdf';
+      const nome = [tipoLabel, atividade.numero_sequencial ? `${atividade.numero_sequencial}ª` : null, atividade.dossier_obra?.building_name || atividade.dossier_obra?.client_name].filter(Boolean).join(' - ') + '.pdf';
       const r = await window.VistoriaReactPdf.baixar(dadosPdf, nome);
       if (r?.falhasDeImagem?.length) window.toast?.('⚠ PDF gerado, mas com falha em alguma imagem: ' + r.falhasDeImagem.join('; '), 'warning');
     } catch (e) { window.toast?.('Erro ao gerar PDF: ' + e.message, 'error'); }

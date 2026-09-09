@@ -556,9 +556,10 @@ function DespacharVistoria() {
       const link = window.location.origin + '/vistoria/' + atividade.token;
       const questionario = questionarios.find((q) => q.id === form.questionarioId);
       const obra = obras.find((o) => o.id === form.dossierId);
+      const tipoLabel = Store.TIPO_LABEL[questionario?.tipo] || 'Vistoria';
       setUltimoDespacho({
         link, questionarioNome: questionario?.nome, obraNome: obra?.building_name,
-        numeroLabel: `${atividade.numero_sequencial}ª Vistoria ${veVpobLabel(obra)}`,
+        numeroLabel: `${atividade.numero_sequencial}ª ${tipoLabel} ${veVpobLabel(obra)}`,
       });
       setForm({ dossierId: '', equipamentoId: '', questionarioId: '', tecnicoId: '', agendadoPara: '', paradas: '' });
       setMedidas({ hw: '', hd: '', s: '', p: '', sow: '', soh: '', gancho: '', viga: '' });

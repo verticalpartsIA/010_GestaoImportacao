@@ -40,11 +40,22 @@ html, body { margin: 0; padding: 0; background: var(--bg-muted); font-family: va
 .ve-progresso__bar > div { height: 100%; background: var(--vp-yellow); transition: width var(--dur-base) var(--ease-out); }
 .ve-progresso span { font-size: var(--fs-meta); color: var(--fg3); white-space: nowrap; }
 
-.ve-categoria { padding: 18px; border-bottom: 8px solid var(--bg-muted); background: var(--bg); }
-.ve-categoria h3 { font-family: var(--font-display); font-size: var(--fs-h4); text-transform: uppercase; letter-spacing: .02em; margin: 0 0 14px; }
-
-.ve-pavimento-label { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .04em; color: var(--vp-yellow-press); margin: 14px 0 8px; padding-top: 10px; border-top: 1px dashed var(--border); }
-.ve-pavimento-label:first-child { border-top: none; padding-top: 0; margin-top: 0; }
+/* Bloco colapsável (1 categoria × 1 pavimento) — checklists de 300+ itens
+   não cabem numa rolagem contínua; abre um bloco por vez. */
+.ve-bloco { border-bottom: 8px solid var(--bg-muted); background: var(--bg); }
+.ve-bloco__header {
+  width: 100%; display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 16px 18px; background: none; border: none; text-align: left; cursor: pointer; font: inherit; color: inherit;
+}
+.ve-bloco__titulo { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; min-width: 0; }
+.ve-bloco__titulo h3 { font-family: var(--font-display); font-size: var(--fs-h4); text-transform: uppercase; letter-spacing: .02em; margin: 0; }
+.ve-bloco__progresso { font-size: var(--fs-meta); font-weight: 700; color: var(--fg3); white-space: nowrap; }
+.ve-bloco--completo .ve-bloco__progresso { color: var(--vp-success-ink); }
+.ve-bloco__chevron { font-size: 14px; color: var(--fg3); transition: transform var(--dur-base) var(--ease-out); flex-shrink: 0; }
+.ve-bloco__chevron.is-aberto { transform: rotate(180deg); }
+.ve-bloco__corpo { padding: 0 18px 18px; }
+.ve-bloco__bulk { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 16px; padding-bottom: 14px; border-bottom: 1px dashed var(--border); }
+.ve-bloco__bulk span:first-child { font-size: var(--fs-meta); color: var(--fg3); }
 
 .ve-pergunta { margin-bottom: 20px; }
 .ve-pergunta:last-child { margin-bottom: 0; }
