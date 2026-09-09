@@ -394,15 +394,19 @@
     const [{ data: diretas }, { data: viaRoster }, { data: viaEquip }] = await Promise.all([
       c.from('dossier_obra').select('id, client_name, building_name, status_master').eq('parceiro_instalador_id', empresaId),
       c.from('dossier_obra_instaladores').select('dossier_obra(id, client_name, building_name, status_master)').eq('parceiro_instalador_id', empresaId),
-      c.from('equipamentos_obra').select('numero_serie, dossier_obra(id, client_name, building_name, status_master)').eq('parceiro_instalador_id', empresaId),
+      c.from('equipamentos_obra').select('numero_serie, montador_responsavel:parceiros_colaboradores(nome_completo), dossier_obra(id, client_name, building_name, status_master)').eq('parceiro_instalador_id', empresaId),
     ]);
 
     const porDossier = {};
-    (diretas || []).forEach((o) => { porDossier[o.id] = { ...o, numero_serie: null }; });
-    (viaRoster || []).forEach((r) => { const o = r.dossier_obra; if (o && !porDossier[o.id]) porDossier[o.id] = { ...o, numero_serie: null }; });
+    (diretas || []).forEach((o) => { porDossier[o.id] = { ...o, numero_serie: null, montador_responsavel_nome: null }; });
+    (viaRoster || []).forEach((r) => { const o = r.dossier_obra; if (o && !porDossier[o.id]) porDossier[o.id] = { ...o, numero_serie: null, montador_responsavel_nome: null }; });
     (viaEquip || []).forEach((e) => {
       const o = e.dossier_obra; if (!o) return;
-      porDossier[o.id] = { ...o, numero_serie: e.numero_serie || porDossier[o.id]?.numero_serie || null };
+      porDossier[o.id] = {
+        ...o,
+        numero_serie: e.numero_serie || porDossier[o.id]?.numero_serie || null,
+        montador_responsavel_nome: e.montador_responsavel?.nome_completo || porDossier[o.id]?.montador_responsavel_nome || null,
+      };
     });
 
     /* Progresso real do Diário de Obra (Acompanhamento de Obra) por

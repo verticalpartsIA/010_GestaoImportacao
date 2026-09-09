@@ -825,7 +825,27 @@ function EquipamentoCard({ equip, parceiros, onSalvar, onExcluir }) {
   const [aberto, setAberto] = React.useState(false);
   const [f, setF] = React.useState(equip);
   const [salvando, setSalvando] = React.useState(false);
+  const [montadores, setMontadores] = React.useState([]);
   const set = (k) => (e) => setF((p) => ({ ...p, [k]: e?.target ? e.target.value : e }));
+
+  /* Montador Responsável é uma pessoa (parceiros_colaboradores) dentro da
+     Empresa de Montagem escolhida — recarrega a lista sempre que a empresa
+     muda e limpa a seleção anterior se ela não pertencer mais à empresa
+     nova (evita ficar apontando pro colaborador da empresa trocada). */
+  React.useEffect(() => {
+    if (!f.parceiro_instalador_id || !window.RHHomologacao) { setMontadores([]); return; }
+    let vivo = true;
+    window.RHHomologacao.listarColaboradoresPorEmpresa(f.parceiro_instalador_id)
+      .then((lista) => { if (vivo) setMontadores(lista); })
+      .catch(() => { if (vivo) setMontadores([]); });
+    return () => { vivo = false; };
+  }, [f.parceiro_instalador_id]);
+
+  React.useEffect(() => {
+    if (f.montador_responsavel_id && montadores.length && !montadores.some((m) => m.id === f.montador_responsavel_id)) {
+      setF((p) => ({ ...p, montador_responsavel_id: '' }));
+    }
+  }, [montadores, f.montador_responsavel_id]);
 
   const salvar = async () => {
     setSalvando(true);
@@ -851,11 +871,17 @@ function EquipamentoCard({ equip, parceiros, onSalvar, onExcluir }) {
             <EOField label="Tipo"><input className="input" value={f.tipo || ''} onChange={set('tipo')} placeholder="Elevador, Escada..."/></EOField>
             <EOField label="Descrição"><input className="input" value={f.descricao || ''} onChange={set('descricao')}/></EOField>
           </div>
-          <div className="grid-2" style={{ gap: 10, marginBottom: 12 }}>
+          <div className="grid-3" style={{ gap: 10, marginBottom: 12 }}>
             <EOField label="Empresa de montagem (Cadastros › Instaladores)">
               <select className="input" value={f.parceiro_instalador_id || ''} onChange={set('parceiro_instalador_id')}>
                 <option value="">— nenhuma —</option>
                 {parceiros.map((p) => <option key={p.id} value={p.id}>{p.nome} ({p.id})</option>)}
+              </select>
+            </EOField>
+            <EOField label="Montador Responsável">
+              <select className="input" value={f.montador_responsavel_id || ''} onChange={set('montador_responsavel_id')} disabled={!f.parceiro_instalador_id}>
+                <option value="">{f.parceiro_instalador_id ? '— nenhum —' : 'Escolha a empresa primeiro'}</option>
+                {montadores.map((m) => <option key={m.id} value={m.id}>{m.nome_completo}{m.cpf ? ` (${m.cpf})` : ''}</option>)}
               </select>
             </EOField>
             <EOField label="Vistoriador"><input className="input" value={f.vistoriador || ''} onChange={set('vistoriador')}/></EOField>
