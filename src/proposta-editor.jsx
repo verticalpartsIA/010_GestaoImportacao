@@ -205,18 +205,18 @@ function getSections(eq) {
   ];
   if (eq === "elevador") {
     return [...common,
-      { id: "beneficiosDiferenciais", title: "Benefícios e Diferenciais", icon: "star", group: "Apresentação" },
       { id: "espec", title: "Especificações Técnicas", icon: "ruler", group: "Produto" },
       { id: "acabamentos", title: "Acabamentos", icon: "star", group: "Produto" },
-      { id: "caracteristicas", title: "Características Principais", icon: "check", group: "Produto" },
-      { id: "recursos", title: "Recursos Inclusos", icon: "list", group: "Produto" },
-      { id: "infra", title: "Infraestrutura e Instalação", icon: "hardhat", group: "Produto" },
+      /* Conteúdo dinâmico (Frente A) — substitui os 5 blocos antigos de
+         Benefícios/Diferenciais/Características/Recursos/Infraestrutura/
+         Responsabilidades: menu de categorias com checkbox, igual à Ficha
+         Técnica, biblioteca compartilhada entre propostas. */
+      { id: "conteudo", title: "Conteúdo da Proposta", icon: "star", group: "Produto" },
       { id: "fotos", title: "Fotos do Equipamento", icon: "package", group: "Produto" },
       { id: "valores", title: "Valores e Pagamento", icon: "dollar", group: "Comercial" },
       { id: "condicoesPagto", title: "Condições Gerais de Pagamento", icon: "scale", group: "Comercial" },
       { id: "ajustes", title: "Ajustes, Impostos e Câmbio", icon: "globe", group: "Comercial" },
       { id: "prazo", title: "Prazo e Entrega", icon: "truck", group: "Operacional" },
-      { id: "responsabilidades", title: "Responsabilidades", icon: "shield", group: "Operacional" },
       { id: "garantia", title: "Garantia e Condições", icon: "award", group: "Operacional" },
     ];
   }
@@ -1162,17 +1162,13 @@ function renderSection(sid, eq, data, set, extras) {
     case "acabamentos": return <S_Acabamentos d={data} set={set}/>;
     case "especificidades": return <S_Especificidades d={data} set={set} eq={eq}/>;
 
-    case "beneficiosDiferenciais": return <S_BeneficiosDiferenciais d={data} set={set}/>;
-    case "caracteristicas": return <S_CaracteristicasEquip d={data} set={set}/>;
-    case "recursos": return <S_RecursosNomeados d={data} set={set}/>;
-    case "infra": return <S_InfraestruturaNomeada d={data} set={set}/>;
+    case "conteudo": return <S_Conteudo d={data} set={set}/>;
     case "fotos": return <S_FotosEquipamento d={data} set={set}/>;
 
     case "valores": return <S_Valores d={data} set={set} eq={eq} recordId={extras.recordId}/>;
     case "condicoesPagto": return <S_CondPagamentoElev d={data} set={set}/>;
     case "ajustes": return <S_Ajustes d={data} set={set} eq={eq}/>;
     case "prazo": return <S_PrazoEntrega d={data} set={set} eq={eq}/>;
-    case "responsabilidades": return <S_Responsabilidades d={data} set={set}/>;
     case "instalacao": return <S_InstalacaoMontagem d={data} set={set} eq={eq}/>;
     case "garantia": return <S_GarantiaCondicoes d={data} set={set} eq={eq}/>;
     default: return null;

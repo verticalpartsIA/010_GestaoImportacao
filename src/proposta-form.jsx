@@ -908,6 +908,186 @@ function S_PrazoEntrega({ d, set, eq }) {
   );
 }
 
+/* ---- Conteúdo da Proposta (Frente A): categorias/campos dinâmicos com
+   checkbox "ativo", igual à Ficha Técnica e aos Acabamentos — substitui
+   Benefícios/Diferenciais/Características/Recursos/Infraestrutura/
+   Responsabilidades. Reaproveita PropostaAcabamentosStore (mesmas 2
+   tabelas de biblioteca — genéricas o bastante pra servir os dois). ---- */
+function S_ContField({ fld, onToggle, onValue, onNome, onRemove }) {
+  return (
+    <div className="pe-acab-row">
+      <label className={"pe-acab-check" + (fld.ativo ? " on" : "")}>
+        <input type="checkbox" checked={!!fld.ativo} onChange={onToggle}/>
+        <span>{fld.nome}</span>
+      </label>
+      {fld.custom && (
+        <button type="button" className="pe-acab-rm" onClick={onRemove} title="Excluir campo" aria-label="Excluir campo">×</button>
+      )}
+      {fld.ativo && (
+        <div className="pe-acab-value">
+          {fld.tipo === "nome_desc" ? (
+            <div className="stack" style={{ gap: 6 }}>
+              <PETextInput value={fld.nome} onChange={onNome} placeholder="Nome do item"/>
+              <PETextarea rows={2} value={fld.valor} onChange={onValue} placeholder="Descrição"/>
+            </div>
+          ) : fld.tipo === "textarea"
+            ? <PETextarea rows={2} value={fld.valor} onChange={onValue}/>
+            : <PETextInput value={fld.valor} onChange={onValue}/>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function S_ContAddFieldModal({ onAdd, onClose }) {
+  const [nome, setNome] = React.useState("");
+  const [tipo, setTipo] = React.useState("texto");
+  return (
+    <Modal title="Novo campo" onClose={onClose} width={420}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={() => nome.trim() && onAdd({ nome: nome.trim(), tipo })}>Adicionar</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <PEField label="Nome / texto do campo"><PETextInput value={nome} onChange={setNome} placeholder="Ex.: Garantia estendida disponível"/></PEField>
+        <PEField label="Tipo">
+          <select className="pe-input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <option value="texto">Texto curto (bullet único)</option>
+            <option value="textarea">Texto longo</option>
+            <option value="nome_desc">Nome + descrição (ex.: recurso, item de infra)</option>
+          </select>
+        </PEField>
+      </div>
+    </Modal>
+  );
+}
+
+function S_ContAddCategoryModal({ onAdd, onClose }) {
+  const [nome, setNome] = React.useState("");
+  return (
+    <Modal title="Nova categoria" onClose={onClose} width={420}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={() => nome.trim() && onAdd(nome.trim())}>Criar</Button>
+      </>}>
+      <PEField label="Nome da categoria"><PETextInput value={nome} onChange={setNome} placeholder="Ex.: Diferenciais de Instalação"/></PEField>
+    </Modal>
+  );
+}
+
+function S_Conteudo({ d, set }) {
+  const engine = window.PropostaConteudoEngine;
+  const store = window.PropostaAcabamentosStore; // biblioteca genérica, reaproveitada
+  const [libLoaded, setLibLoaded] = React.useState(false);
+  const [modal, setModal] = React.useState(null);
+
+  React.useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!store || !engine) return;
+      const lib = await store.loadLibrary();
+      if (cancelado) return;
+      engine.setLibraryExtras(lib);
+      setLibLoaded((n) => !n);
+    })();
+    return () => { cancelado = true; };
+  }, []);
+
+  const cats = engine ? engine.garantirCats(d.elevador) : [];
+
+  const persistirCats = (novosCats) => {
+    set("elevador.conteudoCats", novosCats);
+    if (!engine) return;
+    const legado = engine.derivarLegado(novosCats);
+    Object.keys(legado).forEach((k) => set(`elevador.${k}`, legado[k]));
+  };
+
+  React.useEffect(() => {
+    if (engine && !(Array.isArray(d.elevador.conteudoCats) && d.elevador.conteudoCats.length)) {
+      persistirCats(cats);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libLoaded]);
+
+  if (!engine) return <div className="pe-hint">Carregando…</div>;
+
+  const toggleField = (catId, k) => persistirCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, ativo: !f.ativo }),
+  }));
+  const setFieldValor = (catId, k, valor) => persistirCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, valor }),
+  }));
+  const setFieldNome = (catId, k, nome) => persistirCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, nome }),
+  }));
+  const removeField = (catId, k) => {
+    persistirCats(cats.map((c) => c.id !== catId ? c : { ...c, campos: c.campos.filter((f) => f.k !== k) }));
+    store && store.deleteFieldFromLibrary(catId, k);
+  };
+  const removeCategory = (catId) => {
+    persistirCats(cats.filter((c) => c.id !== catId));
+    store && store.deleteCategoryFromLibrary(catId);
+  };
+  const addField = (catId, defIn) => {
+    const cat = cats.find((c) => c.id === catId);
+    if (cat && cat.campos.some((f) => engine.normalizeNome(f.nome) === engine.normalizeNome(defIn.nome))) {
+      window.toast?.("Já existe um campo com esse nome nessa categoria.", "warning");
+      return;
+    }
+    const k = engine.fieldKey(defIn.nome) + "_" + Date.now();
+    const novoValor = defIn.tipo === "nome_desc" ? "" : defIn.nome;
+    persistirCats(cats.map((c) => c.id !== catId ? c : {
+      ...c, campos: [...c.campos, { k, nome: defIn.nome, tipo: defIn.tipo, valor: novoValor, ativo: true, ordem: c.campos.length, custom: true }],
+    }));
+    store && store.saveFieldToLibrary(catId, defIn);
+  };
+  const addCategory = (nome) => {
+    if (cats.some((c) => engine.normalizeNome(c.nome) === engine.normalizeNome(nome))) {
+      window.toast?.("Já existe uma categoria com esse nome.", "warning");
+      return;
+    }
+    const id = engine.slugCategoria(nome);
+    persistirCats([...cats, { id, nome, custom: true, campos: [] }]);
+    store && store.saveCategoryToLibrary({ id, nome });
+  };
+
+  return (
+    <div className="pe-acab">
+      {cats.map((c) => (
+        <div className="pe-acab-cat" key={c.id}>
+          <div className="pe-acab-cat-head">
+            <span className="pe-acab-cat-nome">{c.nome}</span>
+            {c.custom && (
+              <button type="button" className="pe-acab-rm" onClick={() => removeCategory(c.id)} title="Excluir categoria" aria-label="Excluir categoria">×</button>
+            )}
+          </div>
+          <div className="pe-acab-fields">
+            {c.campos.map((fld) => (
+              <S_ContField
+                key={fld.k}
+                fld={fld}
+                onToggle={() => toggleField(c.id, fld.k)}
+                onValue={(v) => setFieldValor(c.id, fld.k, v)}
+                onNome={(v) => setFieldNome(c.id, fld.k, v)}
+                onRemove={() => removeField(c.id, fld.k)}
+              />
+            ))}
+          </div>
+          <button type="button" className="pe-acab-addfield" onClick={() => setModal({ type: "campo", catId: c.id })}>+ Adicionar campo</button>
+        </div>
+      ))}
+      <button type="button" className="pe-acab-addcat" onClick={() => setModal({ type: "categoria" })}>+ Nova categoria</button>
+
+      {modal?.type === "campo" && (
+        <S_ContAddFieldModal onClose={() => setModal(null)} onAdd={(def) => { addField(modal.catId, def); setModal(null); }}/>
+      )}
+      {modal?.type === "categoria" && (
+        <S_ContAddCategoryModal onClose={() => setModal(null)} onAdd={(nome) => { addCategory(nome); setModal(null); }}/>
+      )}
+    </div>
+  );
+}
+
 function S_Responsabilidades({ d, set }) {
   const r = d.elevador.responsabilidades;
   return (
