@@ -781,6 +781,20 @@ function S_Valores({ d, set, eq, recordId }) {
 
   const propostaRef = { id: recordId, numeroCotacao: d.numeroCotacao, cliente: d.cliente, titulo: d.cliente?.nome };
 
+  /* Solicitar/remover desconto precisa ficar salvo na hora, não só no state
+     local — senão o pedido pendente (e a decisão já criada de verdade na
+     Central de Decisões) se perde ao sair da tela sem clicar em "Salvar"
+     antes (achado real testando ao vivo, 09/09). set() sozinho não basta
+     porque o React ainda não comitou o novo state no momento da chamada —
+     monta o objeto final na mão e salva direto, sem depender de closure. */
+  const persistirItens = (novosItens) => {
+    set(`${eq}.valores.itens`, novosItens);
+    if (!window.PropostaStore) return;
+    const novoData = { ...d, [eq]: { ...d[eq], valores: { ...d[eq].valores, itens: novosItens } } };
+    const valorTotal = typeof calcularValorTotal === "function" ? calcularValorTotal(novoData, eq) : undefined;
+    window.PropostaStore.salvar({ data: novoData, eq, editId: recordId, valorTotal });
+  };
+
   return (
     <>
       {temItens ? (
@@ -788,7 +802,7 @@ function S_Valores({ d, set, eq, recordId }) {
           eq={eq}
           itens={v.itens}
           proposta={propostaRef}
-          onChangeItens={(novos) => set(`${eq}.valores.itens`, novos)}
+          onChangeItens={persistirItens}
         />
       ) : (
         <div className="pe-grid cols-4">
