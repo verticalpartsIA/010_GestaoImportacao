@@ -1499,9 +1499,12 @@ function TabAcompanhamentoObra({ dossier }) {
     try {
       const l = await store.criarOuObterLink(dossier.id, window.__VP_USER?.email, dossier.equip_type || 'elevador');
       const url = window.location.origin + '/diario-obra/' + l.token;
+      const numsEquip = (estado?.equipamentos || []).map((e) => e.numero_serie).filter(Boolean).join(' + ');
       setLink(l);
-      try { await navigator.clipboard.writeText(url); window.toast?.('Link do Diário de Obra copiado — envie pro Montador (WhatsApp/contrato).', 'success'); }
-      catch (e) { window.toast?.('Link gerado (copie manualmente abaixo).', 'success'); }
+      try {
+        await navigator.clipboard.writeText(url);
+        window.toast?.('Link copiado' + (numsEquip ? ` — Equipamento ${numsEquip}` : '') + ' — envie pro Montador (WhatsApp/contrato).', 'success');
+      } catch (e) { window.toast?.('Link gerado (copie manualmente abaixo).', 'success'); }
       carregar();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setBusy(false); }
@@ -1567,6 +1570,11 @@ function TabAcompanhamentoObra({ dossier }) {
 
   return (
     <div>
+      {(estado.equipamentos || []).length > 0 && (
+        <div style={{ marginBottom: 12, display: 'inline-block', background: '#dcfce7', color: '#166534', fontWeight: 800, fontSize: 13, padding: '5px 12px', borderRadius: 6 }}>
+          Nº do Equipamento: {estado.equipamentos.map((e) => e.numero_serie || '—').join(' + ')}
+        </div>
+      )}
       <div style={{ background: '#0b1220', color: '#fff', borderRadius: 8, padding: '16px 20px', marginBottom: 18, display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 10 }}>
         <div>
           <div style={{ fontSize: 11, letterSpacing: '.08em', textTransform: 'uppercase', color: '#9aa7bd' }}>Progresso ponderado</div>

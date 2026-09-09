@@ -73,12 +73,19 @@
 
   async function obterEstadoDossier(dossierId) {
     const c = sb();
-    const [{ data: status }, { data: lancamentos }, { data: dossier }] = await Promise.all([
+    const [{ data: status }, { data: lancamentos }, { data: dossier }, { data: equipamentos }] = await Promise.all([
       c.from('acompanhamento_obra_status').select('*, acompanhamento_obra_itens(id, texto, ordem, peso)').eq('dossier_id', dossierId),
       c.from('acompanhamento_obra_lancamentos').select('*').eq('dossier_id', dossierId).order('data', { ascending: false }).order('enviado_em', { ascending: false }),
       c.from('dossier_obra').select('id, client_name, building_name, equip_type').eq('id', dossierId).maybeSingle(),
+      /* Nº do Equipamento (Master ID) no cabeçalho — pedido do usuário
+         04/09: mesmo cliente/prédio pode ter 2+ dossiês (1 elevador por
+         dossiê) com a MESMA instaladora — client_name/building_name saem
+         idênticos, então o montador não conseguia diferenciar qual link
+         de qual obra. numero_serie desambigua sem mexer no schema de
+         status/lançamentos (continuam por dossiê, 1 elevador = 1 dossiê). */
+      c.from('equipamentos_obra').select('id, numero_serie, tipo').eq('dossier_id', dossierId),
     ]);
-    return { dossier, status: status || [], lancamentos: lancamentos || [] };
+    return { dossier, status: status || [], lancamentos: lancamentos || [], equipamentos: equipamentos || [] };
   }
 
   async function obterEstadoPorToken(token) {

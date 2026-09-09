@@ -149,6 +149,11 @@
         <div style={{ background: '#0b1220', color: '#fff', borderRadius: 10, padding: '18px 16px', marginBottom: 16 }}>
           <div style={{ fontSize: 12, opacity: 0.75 }}>Diário de Obra</div>
           <div style={{ fontSize: 17, fontWeight: 700, marginTop: 2 }}>{estado.dossier?.building_name || estado.dossier?.client_name || '—'}</div>
+          {(estado.equipamentos || []).length > 0 && (
+            <div style={{ marginTop: 8, display: 'inline-block', background: '#22c55e', color: '#04240f', fontWeight: 800, fontSize: 14, padding: '5px 12px', borderRadius: 6 }}>
+              Nº do Equipamento: {estado.equipamentos.map((e) => e.numero_serie || '—').join(' + ')}
+            </div>
+          )}
           <div style={{ marginTop: 10, background: 'rgba(255,255,255,.15)', height: 6, borderRadius: 3, overflow: 'hidden' }}>
             <div style={{ background: '#22c55e', height: '100%', width: pct + '%' }} />
           </div>
