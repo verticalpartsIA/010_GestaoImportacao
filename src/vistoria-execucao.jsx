@@ -29,6 +29,13 @@ function veRespostaPreenchida(tipoCampo, r) {
   return r.valor !== null && r.valor !== undefined && String(r.valor).trim() !== '';
 }
 
+/* Pergunta "resultado" de um item de checklist (C/NC/NA/NV) — distingue de
+   outras selecao_unica (ex.: Suspensão, Parecer final) que não devem
+   receber o "marcar tudo" do bloco. */
+function veEhPerguntaResultado(p) {
+  return p.tipo_campo === 'selecao_unica' && Array.isArray(p.opcoes) && p.opcoes.includes('Conforme') && p.opcoes.includes('Não conforme');
+}
+
 function veChave(perguntaId, pav) { return perguntaId + ':' + (pav || 0); }
 
 /* `pav` só importa quando a pergunta-pai também está numa categoria que
@@ -381,13 +388,15 @@ function VistoriaExecucaoApp() {
   const [respostas, setRespostas] = _veUS({});
   const [concluindo, setConcluindo] = _veUS(false);
   const [erro, setErro] = _veUS(null);
+  const [blocoAbertoKey, setBlocoAbertoKey] = _veUS(null);
+  const primeiroBlocoAbertoRef = _veUR(false);
 
   _veUE(() => {
     if (!token) { setNaoEncontrada(true); setCarregando(false); return; }
     (async () => {
       try {
         const { data: ativ, error: eAtiv } = await sb.from('vistorias_atividades')
-          .select('*, dossier_obra(client_name, building_name), equipamentos_obra(numero_serie), vistorias_questionarios(id, nome)')
+          .select('*, dossier_obra(client_name, building_name), equipamentos_obra(numero_serie), vistorias_questionarios(id, nome, tipo)')
           .eq('token', token).maybeSingle();
         if (eAtiv) throw eAtiv;
         if (!ativ) { setNaoEncontrada(true); setCarregando(false); return; }
@@ -450,6 +459,70 @@ function VistoriaExecucaoApp() {
   const obrigatoriosVisiveis = _veUM(() => itensVisiveis.filter((it) => it.pergunta.obrigatoria && it.pergunta.tipo_campo !== 'informativa'), [itensVisiveis]);
   const obrigatoriosRespondidos = obrigatoriosVisiveis.filter((it) => veRespostaPreenchida(it.pergunta.tipo_campo, respostas[veChave(it.pergunta.id, it.pav)]));
 
+  /* Cada (categoria × pavimento) vira um bloco colapsável — checklist de
+     320+ itens é inviável numa rolagem contínua só. Um bloco por vez fica
+     aberto (acordeão); ao concluir os obrigatórios de um bloco, avança
+     sozinho pro próximo. */
+  const blocos = _veUM(() => {
+    const out = [];
+    estrutura.forEach((categoria) => {
+      const pavs = window.VistoriasQuestionariosStore.pavsDaCategoria(categoria, atividade?.paradas);
+      pavs.forEach((pav) => {
+        out.push({
+          key: categoria.id + ':' + pav,
+          categoria, pav,
+          perguntas: categoria.perguntas.filter((p) => vePerguntaVisivel(p, respostas, pav)),
+        });
+      });
+    });
+    return out;
+  }, [estrutura, atividade?.paradas, respostas]);
+
+  _veUE(() => {
+    if (!primeiroBlocoAbertoRef.current && blocos.length) {
+      primeiroBlocoAbertoRef.current = true;
+      setBlocoAbertoKey(blocos[0].key);
+    }
+  }, [blocos]);
+
+  const avancarSeBlocoCompleto = (bloco, respostasAtualizadas) => {
+    const obrig = bloco.perguntas.filter((p) => p.obrigatoria && p.tipo_campo !== 'informativa');
+    if (!obrig.length) return;
+    const completo = obrig.every((p) => veRespostaPreenchida(p.tipo_campo, respostasAtualizadas[veChave(p.id, bloco.pav)]));
+    if (!completo) return;
+    const idx = blocos.findIndex((b) => b.key === bloco.key);
+    const prox = blocos[idx + 1];
+    if (prox && blocoAbertoKey === bloco.key) setBlocoAbertoKey(prox.key);
+  };
+
+  const responderNoBloco = (bloco, perguntaId, campos) => {
+    const chave = veChave(perguntaId, bloco.pav);
+    const respostasAtualizadas = { ...respostas, [chave]: { ...(respostas[chave] || {}), pergunta_id: perguntaId, pavimento_index: bloco.pav || 0, ...campos } };
+    onResponder(perguntaId, campos, bloco.pav);
+    avancarSeBlocoCompleto(bloco, respostasAtualizadas);
+  };
+
+  /* "Marcar tudo" — só nas perguntas de resultado (C/NC/NA/NV) do bloco
+     aberto, num upsert só. Agiliza os blocos onde tudo está ok (ex.:
+     "Última Altura" inteira conforme) ou onde o bloco inteiro não se
+     aplica (ex.: seções de casa de máquinas quando o elevador não tem). */
+  const marcarTudoNoBloco = async (bloco, valor) => {
+    const alvo = bloco.perguntas.filter(veEhPerguntaResultado);
+    if (!alvo.length) return;
+    const linhas = alvo.map((p) => ({ atividade_id: atividade.id, pergunta_id: p.id, pavimento_index: bloco.pav || 0, valor }));
+    const respostasAtualizadas = { ...respostas };
+    linhas.forEach((l) => {
+      const chave = veChave(l.pergunta_id, l.pavimento_index);
+      respostasAtualizadas[chave] = { ...(respostas[chave] || {}), pergunta_id: l.pergunta_id, pavimento_index: l.pavimento_index, valor };
+    });
+    setRespostas(respostasAtualizadas);
+    try {
+      const { error } = await sb.from('vistorias_respostas').upsert(linhas, { onConflict: 'atividade_id,pergunta_id,pavimento_index' });
+      if (error) throw error;
+    } catch (e) { setErro('Não deu pra marcar tudo: ' + e.message); }
+    avancarSeBlocoCompleto(bloco, respostasAtualizadas);
+  };
+
   const concluir = async () => {
     const faltando = obrigatoriosVisiveis.filter((it) => !veRespostaPreenchida(it.pergunta.tipo_campo, respostas[veChave(it.pergunta.id, it.pav)]));
     if (faltando.length > 0) {
@@ -491,10 +564,10 @@ function VistoriaExecucaoApp() {
   return (
     <div className="ve-page">
       <header className="ve-header">
-        <div className="ve-header__eyebrow">VerticalParts · Vistoria</div>
+        <div className="ve-header__eyebrow">VerticalParts · {window.VistoriasQuestionariosStore.TIPO_LABEL[atividade.vistorias_questionarios?.tipo] || 'Vistoria'}</div>
         <h1>{atividade.vistorias_questionarios?.nome}</h1>
         <div className="ve-header__meta">
-          {atividade.numero_sequencial ? `${atividade.numero_sequencial}ª vistoria · ` : ''}
+          {atividade.numero_sequencial ? `${atividade.numero_sequencial}ª ${(window.VistoriasQuestionariosStore.TIPO_LABEL[atividade.vistorias_questionarios?.tipo] || 'Vistoria').toLowerCase()} · ` : ''}
           {obraNome}{atividade.equipamentos_obra?.numero_serie ? ` · ${atividade.equipamentos_obra.numero_serie}` : ''}
         </div>
       </header>
@@ -517,20 +590,36 @@ function VistoriaExecucaoApp() {
             <span>{obrigatoriosRespondidos.length}/{obrigatoriosVisiveis.length} obrigatórias</span>
           </div>
 
-          {estrutura.map((categoria) => {
-            const pavs = window.VistoriasQuestionariosStore.pavsDaCategoria(categoria, atividade?.paradas);
+          {blocos.map((bloco) => {
+            const obrig = bloco.perguntas.filter((p) => p.obrigatoria && p.tipo_campo !== 'informativa');
+            const respondidos = obrig.filter((p) => veRespostaPreenchida(p.tipo_campo, respostas[veChave(p.id, bloco.pav)]));
+            const completo = obrig.length > 0 && respondidos.length === obrig.length;
+            const aberto = blocoAbertoKey === bloco.key;
+            const temResultado = bloco.perguntas.some(veEhPerguntaResultado);
             return (
-              <section key={categoria.id} className="ve-categoria">
-                <h3>{categoria.nome}</h3>
-                {pavs.map((pav) => (
-                  <div key={pav}>
-                    {categoria.repete_por_pavimento && <div className="ve-pavimento-label">Pavimento {pav}</div>}
-                    {categoria.perguntas.filter((p) => vePerguntaVisivel(p, respostas, pav)).map((p) => (
-                      <VePergunta key={p.id + ':' + pav} pergunta={p} resposta={respostas[veChave(p.id, pav)]}
-                        onResponder={(campos) => onResponder(p.id, campos, pav)} atividadeId={atividade.id} sb={sb}/>
+              <section key={bloco.key} className={'ve-bloco' + (completo ? ' ve-bloco--completo' : '')}>
+                <button type="button" className="ve-bloco__header" onClick={() => setBlocoAbertoKey(aberto ? null : bloco.key)}>
+                  <span className="ve-bloco__titulo">
+                    <h3>{bloco.categoria.nome}{bloco.categoria.repete_por_pavimento ? ` — Pavimento ${bloco.pav}` : ''}</h3>
+                    {obrig.length > 0 && <span className="ve-bloco__progresso">{completo ? '✓ completo' : `${respondidos.length}/${obrig.length}`}</span>}
+                  </span>
+                  <span className={'ve-bloco__chevron' + (aberto ? ' is-aberto' : '')}>▾</span>
+                </button>
+                {aberto && (
+                  <div className="ve-bloco__corpo">
+                    {temResultado && (
+                      <div className="ve-bloco__bulk">
+                        <span>Marcar tudo neste bloco:</span>
+                        <button type="button" className="ve-pill" onClick={() => marcarTudoNoBloco(bloco, 'Conforme')}>Conforme</button>
+                        <button type="button" className="ve-pill" onClick={() => marcarTudoNoBloco(bloco, 'Não se aplica')}>Não se aplica</button>
+                      </div>
+                    )}
+                    {bloco.perguntas.map((p) => (
+                      <VePergunta key={p.id + ':' + bloco.pav} pergunta={p} resposta={respostas[veChave(p.id, bloco.pav)]}
+                        onResponder={(campos) => responderNoBloco(bloco, p.id, campos)} atividadeId={atividade.id} sb={sb}/>
                     ))}
                   </div>
-                ))}
+                )}
               </section>
             );
           })}

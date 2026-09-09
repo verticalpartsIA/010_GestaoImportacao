@@ -131,7 +131,7 @@ function PdfHeader(S, atividade) {
       h(Text, { style: S.headerTag, key: 't' }, 'Elevando você e o seu negócio'),
     ]),
     h(View, { key: 'r' }, [
-      h(Text, { style: S.headerNumLbl, key: 'l' }, 'Vistoria'),
+      h(Text, { style: S.headerNumLbl, key: 'l' }, atividade.tipoLabel || 'Vistoria'),
       h(Text, { style: S.headerNumVal, key: 'v' }, atividade.numeroLabel || '—'),
     ]),
   ]);

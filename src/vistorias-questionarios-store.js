@@ -25,9 +25,17 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
   ];
   const TIPOS_CAMPO_COM_OPCOES = ['selecao_unica', 'multipla_escolha'];
 
+  /* Rótulo de exibição por tipo de questionário — usado em vez de escrever
+     "Vistoria" fixo nos lugares que mostram o nº sequencial (despacho,
+     execução mobile, PDF de resultado), já que o mesmo motor agora também
+     serve questionários tipo 'entrega' (ex.: Checklist de Entrega de
+     Elevador) e 'servico'. */
+  const TIPO_LABEL = { vistoria: 'Vistoria', entrega: 'Entrega', servico: 'Serviço' };
+
   return {
     TIPOS_CAMPO,
     TIPOS_CAMPO_COM_OPCOES,
+    TIPO_LABEL,
 
     /* ---- Questionários ---- */
     async listarQuestionarios() {
@@ -265,7 +273,7 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
 
     async listarAtividades() {
       const { data, error } = await sb().from('vistorias_atividades')
-        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome)')
+        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome, tipo)')
         .order('criado_em', { ascending: false })
         .limit(50);
       if (error) throw error;
@@ -275,7 +283,7 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     /* ---- Calendário/Agenda (Módulo ADM) — todas as atividades com data marcada ---- */
     async listarAtividadesAgendadas() {
       const { data, error } = await sb().from('vistorias_atividades')
-        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome)')
+        .select('*, dossier_obra(id, client_name, building_name, numero_cotacao), equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome, tipo)')
         .not('agendado_para', 'is', null)
         .order('agendado_para', { ascending: true });
       if (error) throw error;
@@ -285,7 +293,7 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     /* ---- Resultado (Fase 4): checklists digitais de UMA obra ---- */
     async listarAtividadesPorDossier(dossierId) {
       const { data, error } = await sb().from('vistorias_atividades')
-        .select('*, equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome)')
+        .select('*, equipamentos_obra(numero_serie), colaboradores_vpsistema(nome), vistorias_questionarios(nome, tipo)')
         .eq('dossier_id', dossierId)
         .order('criado_em', { ascending: false });
       if (error) throw error;
