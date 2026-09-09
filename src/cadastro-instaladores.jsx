@@ -495,6 +495,7 @@ function CIHierarquiaClientes({ clientes, onAbrir, onDesvincular, pagamentosPorO
                   <div>
                     <div className="cell-main" style={{ fontSize: 13 }}>{o.numero_serie ? `Nº ${o.numero_serie}` : (o.building_name || '—')}</div>
                     {o.numero_serie && <div className="cell-sub">{o.building_name}</div>}
+                    {o.montador_responsavel_nome && <div className="cell-sub">👷 {o.montador_responsavel_nome}</div>}
                   </div>
                   <div style={{ display: 'flex', gap: 10, alignItems: 'center' }}>
                     <Button variant="ghost" size="sm" icon="trash" title="Desvincular"
