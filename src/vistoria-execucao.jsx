@@ -36,6 +36,16 @@ function veEhPerguntaResultado(p) {
   return p.tipo_campo === 'selecao_unica' && Array.isArray(p.opcoes) && p.opcoes.includes('Conforme') && p.opcoes.includes('Não conforme');
 }
 
+/* Valores oferecidos pelo "marcar tudo" do bloco — só entra na lista um
+   valor que TODAS as perguntas de resultado do bloco realmente têm nas
+   opções (um questionário montado no builder pode ter perguntas de
+   resultado com opções diferentes entre si). */
+const VE_BULK_VALORES = ['Conforme', 'Não se aplica'];
+function veValoresBulkDoBloco(perguntasResultado) {
+  if (!perguntasResultado.length) return [];
+  return VE_BULK_VALORES.filter((v) => perguntasResultado.every((p) => (p.opcoes || []).includes(v)));
+}
+
 function veChave(perguntaId, pav) { return perguntaId + ':' + (pav || 0); }
 
 /* `pav` só importa quando a pergunta-pai também está numa categoria que
@@ -486,7 +496,12 @@ function VistoriaExecucaoApp() {
   }, [blocos]);
 
   const avancarSeBlocoCompleto = (bloco, respostasAtualizadas) => {
-    const obrig = bloco.perguntas.filter((p) => p.obrigatoria && p.tipo_campo !== 'informativa');
+    /* Recalcula visibilidade com respostasAtualizadas (não com bloco.perguntas,
+       que reflete o `respostas` de antes desta resposta) — senão uma pergunta
+       condicional que acabou de aparecer por causa desta resposta ficaria de
+       fora da checagem e o bloco seria avançado sem ela ser respondida. */
+    const visiveisAgora = bloco.categoria.perguntas.filter((p) => vePerguntaVisivel(p, respostasAtualizadas, bloco.pav));
+    const obrig = visiveisAgora.filter((p) => p.obrigatoria && p.tipo_campo !== 'informativa');
     if (!obrig.length) return;
     const completo = obrig.every((p) => veRespostaPreenchida(p.tipo_campo, respostasAtualizadas[veChave(p.id, bloco.pav)]));
     if (!completo) return;
@@ -507,9 +522,14 @@ function VistoriaExecucaoApp() {
      "Última Altura" inteira conforme) ou onde o bloco inteiro não se
      aplica (ex.: seções de casa de máquinas quando o elevador não tem). */
   const marcarTudoNoBloco = async (bloco, valor) => {
-    const alvo = bloco.perguntas.filter(veEhPerguntaResultado);
+    // só marca em lote perguntas cujas opções realmente incluem esse valor —
+    // um questionário com perguntas de resultado heterogêneas (algumas sem
+    // "Não se aplica" nas opções, por exemplo) não pode receber um valor que
+    // não existe pra elas.
+    const alvo = bloco.perguntas.filter((p) => veEhPerguntaResultado(p) && (p.opcoes || []).includes(valor));
     if (!alvo.length) return;
     const linhas = alvo.map((p) => ({ atividade_id: atividade.id, pergunta_id: p.id, pavimento_index: bloco.pav || 0, valor }));
+    const respostasAnteriores = respostas;
     const respostasAtualizadas = { ...respostas };
     linhas.forEach((l) => {
       const chave = veChave(l.pergunta_id, l.pavimento_index);
@@ -519,7 +539,14 @@ function VistoriaExecucaoApp() {
     try {
       const { error } = await sb.from('vistorias_respostas').upsert(linhas, { onConflict: 'atividade_id,pergunta_id,pavimento_index' });
       if (error) throw error;
-    } catch (e) { setErro('Não deu pra marcar tudo: ' + e.message); }
+    } catch (e) {
+      // upsert falhou — reverte o otimista, senão o bloco/progresso aparece
+      // "respondido" sem nada de fato salvo (e a vistoria poderia ser
+      // concluída sem essas respostas existirem no banco).
+      setErro('Não deu pra marcar tudo: ' + e.message);
+      setRespostas(respostasAnteriores);
+      return;
+    }
     avancarSeBlocoCompleto(bloco, respostasAtualizadas);
   };
 
@@ -595,7 +622,7 @@ function VistoriaExecucaoApp() {
             const respondidos = obrig.filter((p) => veRespostaPreenchida(p.tipo_campo, respostas[veChave(p.id, bloco.pav)]));
             const completo = obrig.length > 0 && respondidos.length === obrig.length;
             const aberto = blocoAbertoKey === bloco.key;
-            const temResultado = bloco.perguntas.some(veEhPerguntaResultado);
+            const valoresBulk = veValoresBulkDoBloco(bloco.perguntas.filter(veEhPerguntaResultado));
             return (
               <section key={bloco.key} className={'ve-bloco' + (completo ? ' ve-bloco--completo' : '')}>
                 <button type="button" className="ve-bloco__header" onClick={() => setBlocoAbertoKey(aberto ? null : bloco.key)}>
@@ -607,11 +634,12 @@ function VistoriaExecucaoApp() {
                 </button>
                 {aberto && (
                   <div className="ve-bloco__corpo">
-                    {temResultado && (
+                    {valoresBulk.length > 0 && (
                       <div className="ve-bloco__bulk">
                         <span>Marcar tudo neste bloco:</span>
-                        <button type="button" className="ve-pill" onClick={() => marcarTudoNoBloco(bloco, 'Conforme')}>Conforme</button>
-                        <button type="button" className="ve-pill" onClick={() => marcarTudoNoBloco(bloco, 'Não se aplica')}>Não se aplica</button>
+                        {valoresBulk.map((v) => (
+                          <button key={v} type="button" className="ve-pill" onClick={() => marcarTudoNoBloco(bloco, v)}>{v}</button>
+                        ))}
                       </div>
                     )}
                     {bloco.perguntas.map((p) => (
