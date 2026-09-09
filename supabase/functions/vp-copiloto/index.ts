@@ -3,14 +3,20 @@
 // Assistente global do VP Gestão. Acompanha o usuário em TODAS as telas.
 // IA: Anthropic Claude (secret ANTHROPIC_API_KEY). Mesmo padrão da ncm-duimp-assist.
 //
-// 3 modos (campo "mode"):
-//   • chat    → responde perguntas sobre a tela/sistema
-//   • fill    → lê os campos da tela e devolve o que preencher; pergunta o que falta
-//   • analyze → revisa o documento/preenchimento e aponta erros + sugestões
+// 4 modos (campo "mode"):
+//   • chat        → responde perguntas sobre a tela/sistema
+//   • fill        → lê os campos da tela e devolve o que preencher; pergunta o que falta
+//   • analyze     → revisa o documento/preenchimento e aponta erros + sugestões
+//   • questionario → monta/edita um Questionário de Vistoria (categorias/perguntas)
+//                    a partir de um comando em texto (vistorias-envio.jsx). Nunca
+//                    escreve direto no banco — devolve "opsQuestionario", que o
+//                    frontend mostra em prévia e só aplica se o usuário confirmar
+//                    (mesmo princípio do "fills").
 //
 // Contrato de resposta (JSON):
 //   { reply, fills?:[{idx,label,value}], questions?:[{id,text}],
-//     issues?:[{severity,where,problem,suggestion,idxs}] }
+//     issues?:[{severity,where,problem,suggestion,idxs}],
+//     opsQuestionario?:[{op,...}] }
 //   issues[].idxs: idx(s) de page.fields que esse achado se refere (mesmos
 //   idx usados em fills) — [] quando o achado é sobre o documento/texto em
 //   geral, sem campo específico. Um achado pode juntar vários campos (ex.:
@@ -79,10 +85,42 @@ Comporte-se conforme "mode":
   - Liste no máximo os ~10 achados MAIS RELEVANTES (prioridade alta > média > baixa),
     para manter a resposta concisa e dentro do limite de tokens.
 
+• mode "questionario":
+  O usuário quer ACRESCENTAR ou EDITAR perguntas/categorias de um Questionário de
+  Vistoria (vistorias-envio.jsx). Você recebe em "QUESTIONÁRIO ABERTO" a estrutura
+  completa atual: categorias (id, nome) e, dentro de cada uma, as perguntas
+  (id, texto, tipo_campo, opcoes, obrigatoria, regra_pai_pergunta_id/regra_valor_gatilho).
+  - REGRA DE OURO: "Mantenha o conteúdo" significa NÃO reescrever nem remover nada que
+    já existe — só ACRESCENTE ou edite exatamente o que foi pedido. Nunca proponha
+    excluir uma pergunta/categoria a menos que o usuário peça isso explicitamente.
+  - tipo_campo válido: texto, numerico, data, sim_nao, selecao_unica, multipla_escolha,
+    foto, assinatura, informativa. "opcoes" (array de strings) só faz sentido pra
+    selecao_unica/multipla_escolha.
+  - Perguntas condicionais (só aparecem se a resposta de outra pergunta bater um
+    valor): use regraPaiTexto = o TEXTO EXATO de uma pergunta já existente na
+    estrutura recebida (nunca invente um texto de pergunta-pai que não existe) e
+    regraValorGatilho = o valor que dispara (ex.: "Sim"). Sem isso, a pergunta é
+    incondicional.
+  - Cada operação vira um item em "opsQuestionario":
+    · {"op":"add_categoria","nome":"..."} — cria categoria nova.
+    · {"op":"add_pergunta","categoriaNome":"...","texto":"...","tipoCampo":"...",
+       "opcoes":["..."]?,"obrigatoria":true,"regraPaiTexto":"..."?,"regraValorGatilho":"..."?}
+      — "categoriaNome" pode ser de uma categoria JÁ EXISTENTE (bata o nome exato) ou
+      de uma categoria sendo criada NESTE MESMO "opsQuestionario" (nesse caso ela é
+      aplicada primeiro, na ordem do array).
+    · {"op":"editar_pergunta","perguntaId":"...","patch":{...campos a mudar...}}
+    · {"op":"excluir_pergunta","perguntaId":"..."} — só quando pedido explicitamente.
+    · {"op":"excluir_categoria","categoriaId":"..."} — só quando pedido explicitamente.
+  - "reply": resuma em 1-3 frases o que você propõe adicionar/mudar — o frontend
+    mostra a lista detalhada de "opsQuestionario" pro usuário confirmar, então não
+    precisa listar cada campo na resposta em texto.
+  - Sem "QUESTIONÁRIO ABERTO" no contexto, devolva opsQuestionario vazio e peça pro
+    usuário abrir/criar um questionário primeiro.
+
 REGRAS DE SAÍDA (obrigatórias):
 - Responda APENAS com um único JSON válido, sem nenhum texto fora dele, sem markdown, sem cercas.
 - Formato:
-  {"reply":"...","fills":[{"idx":0,"label":"...","value":"..."}],"questions":[{"id":"cnpj","text":"..."}],"issues":[{"severity":"alta","where":"...","problem":"...","suggestion":"...","idxs":[43]}]}
+  {"reply":"...","fills":[{"idx":0,"label":"...","value":"..."}],"questions":[{"id":"cnpj","text":"..."}],"issues":[{"severity":"alta","where":"...","problem":"...","suggestion":"...","idxs":[43]}],"opsQuestionario":[{"op":"add_pergunta","categoriaNome":"...","texto":"...","tipoCampo":"sim_nao"}]}
 - Inclua somente as chaves relevantes ao modo. "reply" é SEMPRE obrigatório (1 a 3 frases).
 - Nunca invente CNPJ, valores, nomes ou datas: o que não souber, pergunte.`;
 
@@ -969,7 +1007,7 @@ Deno.serve(async (req: Request) => {
   let payload: any;
   try { payload = await req.json(); } catch { return json({ error: "JSON inválido" }, 400); }
 
-  const mode: string = ["chat", "fill", "analyze"].includes(payload?.mode) ? payload.mode : "chat";
+  const mode: string = ["chat", "fill", "analyze", "questionario"].includes(payload?.mode) ? payload.mode : "chat";
   const message: string = typeof payload?.message === "string" ? payload.message : "";
   const history: any[] = Array.isArray(payload?.history) ? payload.history.slice(-12) : [];
   const page = payload?.page ?? {};
@@ -985,6 +1023,7 @@ Deno.serve(async (req: Request) => {
   }
 
   const routeDoc = typeof page.route === "string" ? ROUTE_DOCS[page.route] : undefined;
+  const questionarioContext = payload?.questionarioContext ?? null;
 
   const ctx =
     `MODO: ${mode}\n` +
@@ -992,6 +1031,9 @@ Deno.serve(async (req: Request) => {
     (routeDoc ? `\nCONHECIMENTO DESTA TELA (use pra responder qualquer pergunta sobre o que ela faz, campos, botões e regras de negócio — não é opcional, é a fonte de verdade):\n${routeDoc}\n` : "") +
     `\nCAMPOS DA TELA:\n${JSON.stringify(page.fields ?? [], null, 1)}\n` +
     (documentText ? `\nTEXTO DO DOCUMENTO NA TELA:\n"""${documentText}"""\n` : "") +
+    (mode === "questionario"
+      ? `\nQUESTIONÁRIO ABERTO:\n${questionarioContext ? JSON.stringify(questionarioContext, null, 1) : "(nenhum questionário aberto)"}\n`
+      : "") +
     `\nMENSAGEM DO USUÁRIO:\n${message || "(sem texto — use o modo e o contexto acima)"}`;
   messages.push({ role: "user", content: ctx });
 
@@ -1036,5 +1078,8 @@ Deno.serve(async (req: Request) => {
       suggestion: typeof it?.suggestion === "string" ? it.suggestion : "",
       idxs: Array.isArray(it?.idxs) ? it.idxs.filter((n: any) => typeof n === "number") : [],
     })) : [],
+    opsQuestionario: Array.isArray(out.opsQuestionario)
+      ? out.opsQuestionario.filter((o: any) => o && typeof o.op === "string")
+      : [],
   });
 });

@@ -141,6 +141,82 @@ function vpcApplyFills(fills, els) {
   return n;
 }
 
+/* ---------- Questionário (mode 'questionario') ---------- */
+/* Resolve id→rótulo lendo window.__VPC_QUESTIONARIO (mesma estrutura que foi
+   mandada pra IA), pra prévia ficar legível mesmo quando a op só tem id. */
+function vpcRotuloPergunta(id) {
+  const ctx = window.__VPC_QUESTIONARIO;
+  if (!ctx) return id;
+  for (const c of (ctx.estrutura || [])) {
+    const p = (c.perguntas || []).find((p) => p.id === id);
+    if (p) return p.texto;
+  }
+  return id;
+}
+function vpcRotuloCategoria(id) {
+  const ctx = window.__VPC_QUESTIONARIO;
+  if (!ctx) return id;
+  const c = (ctx.estrutura || []).find((c) => c.id === id);
+  return c ? c.nome : id;
+}
+
+function vpcPreviewOpsQuestionario(ops) {
+  return ops.map((op) => {
+    if (op.op === 'add_categoria') return `+ Categoria "${op.nome}"`;
+    if (op.op === 'add_pergunta') {
+      const cond = op.regraPaiTexto ? ` — só aparece se "${op.regraPaiTexto}" = "${op.regraValorGatilho}"` : '';
+      const opcoes = op.opcoes && op.opcoes.length ? ` [${op.opcoes.join(', ')}]` : '';
+      return `+ Pergunta em "${op.categoriaNome}": "${op.texto}" (${op.tipoCampo})${opcoes}${cond}`;
+    }
+    if (op.op === 'editar_pergunta') return `✎ Editar "${vpcRotuloPergunta(op.perguntaId)}": ${JSON.stringify(op.patch || {})}`;
+    if (op.op === 'excluir_pergunta') return `🗑 Excluir pergunta "${vpcRotuloPergunta(op.perguntaId)}"`;
+    if (op.op === 'excluir_categoria') return `🗑 Excluir categoria "${vpcRotuloCategoria(op.categoriaId)}" (e todas as perguntas dela)`;
+    return `? ${op.op}`;
+  });
+}
+
+/* Aplica em sequência via VistoriasQuestionariosStore — nomeToId/textoToId
+   crescem conforme categorias/perguntas novas são criadas, pra uma op
+   seguinte poder referenciar algo que acabou de ser criado nesta mesma
+   leva (ex.: pergunta condicional cujo pai foi criado 2 ops antes). */
+async function vpcAplicarOpsQuestionario(ops) {
+  const store = window.VistoriasQuestionariosStore;
+  const ctx = window.__VPC_QUESTIONARIO;
+  if (!store || !ctx) throw new Error('Nenhum questionário aberto nesta tela.');
+
+  const nomeToId = {};
+  (ctx.estrutura || []).forEach((c) => { nomeToId[c.nome.trim().toLowerCase()] = c.id; });
+  const textoToId = {};
+  (ctx.estrutura || []).forEach((c) => (c.perguntas || []).forEach((p) => { textoToId[p.texto.trim().toLowerCase()] = p.id; }));
+
+  let aplicadas = 0;
+  for (const op of ops) {
+    if (op.op === 'add_categoria') {
+      const nova = await store.criarCategoria(ctx.questionarioId, op.nome);
+      nomeToId[String(op.nome).trim().toLowerCase()] = nova.id;
+    } else if (op.op === 'add_pergunta') {
+      const catId = nomeToId[String(op.categoriaNome || '').trim().toLowerCase()];
+      if (!catId) throw new Error(`Categoria "${op.categoriaNome}" não encontrada (${aplicadas} op(s) já aplicada(s)).`);
+      const campos = { texto: op.texto, tipo_campo: op.tipoCampo, obrigatoria: op.obrigatoria !== false };
+      if (op.opcoes && op.opcoes.length) campos.opcoes = op.opcoes;
+      if (op.regraPaiTexto) {
+        const paiId = textoToId[String(op.regraPaiTexto).trim().toLowerCase()];
+        if (paiId) { campos.regra_pai_pergunta_id = paiId; campos.regra_valor_gatilho = op.regraValorGatilho || null; }
+      }
+      const nova = await store.criarPergunta(catId, campos);
+      textoToId[String(op.texto).trim().toLowerCase()] = nova.id;
+    } else if (op.op === 'editar_pergunta') {
+      await store.atualizarPergunta(op.perguntaId, op.patch || {});
+    } else if (op.op === 'excluir_pergunta') {
+      await store.excluirPergunta(op.perguntaId);
+    } else if (op.op === 'excluir_categoria') {
+      await store.excluirCategoria(op.categoriaId);
+    }
+    aplicadas++;
+  }
+  return aplicadas;
+}
+
 /* ============================================================
    Componente
    ============================================================ */
@@ -157,6 +233,10 @@ function VpCopiloto({ route, role }) {
   // direto na resposta da IA, sem o usuário ver o que ia mudar. Agora só
   // aplica quando confirmar em confirmarFill().
   const [pendingFill, setPendingFill] = _vpUS(null); // null | { fills, preview }
+  // Prévia de "opsQuestionario" (mode 'questionario') — mesmo princípio do
+  // pendingFill: a IA nunca escreve direto no banco, só propõe; só aplica
+  // via VistoriasQuestionariosStore se o usuário confirmar em confirmarOpsQuestionario().
+  const [pendingOpsQuestionario, setPendingOpsQuestionario] = _vpUS(null); // null | { ops, preview }
   const elsRef = _vpUR([]);
   const fieldsRef = _vpUR([]);
   const bodyRef = _vpUR(null);
@@ -210,8 +290,12 @@ function VpCopiloto({ route, role }) {
 
   _vpUE(() => { try { localStorage.setItem(VPC_LS_OPEN, open ? '1' : '0'); } catch (e) {} }, [open]);
   _vpUE(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight; }, [msgs, loading, open]);
-  // Troca de tela → os elementos sublinhados não existem mais no DOM novo.
-  _vpUE(() => { vpcClearHighlights(); }, [route]);
+  // Troca de tela → os elementos sublinhados não existem mais no DOM novo,
+  // e o modo "questionario" grudado não faz mais sentido fora de vistorias-envio.
+  _vpUE(() => {
+    vpcClearHighlights();
+    setPendingMode((p) => (p === 'questionario' && route !== 'vistorias-envio' ? null : p));
+  }, [route]);
 
   const send = async (mode, text) => {
     const userText = (text != null ? text : input).trim();
@@ -234,6 +318,7 @@ function VpCopiloto({ route, role }) {
         page: { route, title: document.title.replace(' · VP Gestão', ''), fields },
       };
       if (mode === 'analyze') body.documentText = vpcDocText();
+      if (mode === 'questionario') body.questionarioContext = window.__VPC_QUESTIONARIO || null;
       const resp = await vpcCall(body);
       if (resp.fills && resp.fills.length) {
         const preview = resp.fills.map(f => ({
@@ -243,6 +328,9 @@ function VpCopiloto({ route, role }) {
         }));
         setPendingFill({ fills: resp.fills, preview });
       }
+      if (resp.opsQuestionario && resp.opsQuestionario.length) {
+        setPendingOpsQuestionario({ ops: resp.opsQuestionario, preview: vpcPreviewOpsQuestionario(resp.opsQuestionario) });
+      }
       setMsgs(m => [...m, {
         role: 'assistant',
         content: resp.reply || '',
@@ -250,7 +338,10 @@ function VpCopiloto({ route, role }) {
         issues: resp.issues || [],
         filled: 0,
       }]);
-      setPendingMode(resp.questions && resp.questions.length ? 'fill' : null);
+      // 'questionario' fica "grudado" enquanto o usuário continua digitando
+      // comandos — cada mensagem seguinte ainda é tratada como pedido de
+      // ajuste do MESMO questionário aberto, até ele trocar de tela.
+      setPendingMode(resp.questions && resp.questions.length ? 'fill' : (mode === 'questionario' ? 'questionario' : null));
       if (mode === 'analyze') vpcHighlightIssues(resp.issues || [], els, fields);
     } catch (e) {
       setMsgs(m => [...m, { role: 'assistant', content: '⚠️ Não consegui responder agora: ' + e.message }]);
@@ -270,6 +361,25 @@ function VpCopiloto({ route, role }) {
   const descartarFill = () => {
     setMsgs(m => [...m, { role: 'assistant', content: 'Ok, não apliquei essas mudanças.' }]);
     setPendingFill(null);
+  };
+
+  const confirmarOpsQuestionario = async () => {
+    if (!pendingOpsQuestionario) return;
+    setLoading(true);
+    try {
+      const n = await vpcAplicarOpsQuestionario(pendingOpsQuestionario.ops);
+      window.dispatchEvent(new CustomEvent('vpc-questionario-atualizado'));
+      setMsgs(m => [...m, { role: 'assistant', content: `✓ Apliquei ${n} ${n === 1 ? 'mudança' : 'mudanças'} no questionário.` }]);
+    } catch (e) {
+      setMsgs(m => [...m, { role: 'assistant', content: '⚠️ Parei no meio: ' + e.message }]);
+    } finally {
+      setPendingOpsQuestionario(null);
+      setLoading(false);
+    }
+  };
+  const descartarOpsQuestionario = () => {
+    setMsgs(m => [...m, { role: 'assistant', content: 'Ok, não mudei o questionário.' }]);
+    setPendingOpsQuestionario(null);
   };
 
   if (!open) {
@@ -351,9 +461,27 @@ function VpCopiloto({ route, role }) {
         </div>
       )}
 
+      {pendingOpsQuestionario && (
+        <div className="vpc-confirm">
+          <div className="vpc-confirm-title">
+            Aplicar {pendingOpsQuestionario.preview.length} {pendingOpsQuestionario.preview.length === 1 ? 'mudança' : 'mudanças'} no questionário?
+          </div>
+          <ul className="vpc-confirm-list">
+            {pendingOpsQuestionario.preview.map((p, i) => <li key={i}>{p}</li>)}
+          </ul>
+          <div className="vpc-confirm-actions">
+            <button className="vpc-act vpc-act--ghost" disabled={loading} onClick={descartarOpsQuestionario}>Descartar</button>
+            <button className="vpc-act vpc-act--primary" disabled={loading} onClick={confirmarOpsQuestionario}>Aplicar</button>
+          </div>
+        </div>
+      )}
+
       <div className="vpc-actions">
         <button className="vpc-act" disabled={loading || !!pendingFill} onClick={() => send('fill')}>✨ Preencher página</button>
         <button className="vpc-act" disabled={loading || !!pendingFill} onClick={() => send('analyze')}>🔍 Revisar erros</button>
+        {route === 'vistorias-envio' && (
+          <button className="vpc-act" disabled={loading || !!pendingOpsQuestionario} onClick={() => send('questionario')}>🧩 Editar questionário</button>
+        )}
       </div>
 
       <form className="vpc-input-row" onSubmit={onSubmit}>
@@ -361,7 +489,9 @@ function VpCopiloto({ route, role }) {
           className="vpc-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={pendingMode === 'fill' ? 'Responda para eu continuar preenchendo…' : 'Pergunte ou peça algo…'}
+          placeholder={pendingMode === 'fill' ? 'Responda para eu continuar preenchendo…'
+            : pendingMode === 'questionario' ? 'Descreva o que mudar no questionário…'
+            : 'Pergunte ou peça algo…'}
           disabled={loading}
         />
         <button className="vpc-send" type="submit" disabled={loading || !input.trim()} aria-label="Enviar">➤</button>

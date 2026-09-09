@@ -201,6 +201,20 @@ function QuestionarioEditor({ questionario, onVoltar, onAtualizado }) {
     Store.carregarEstrutura(questionario.id).then(setEstrutura)
       .catch((e) => { window.toast?.('Erro: ' + e.message, 'error'); setEstrutura([]); });
   }, [questionario.id]);
+
+  /* Copiloto (mode "questionario", vp-copiloto.jsx) lê este questionário
+     aberto pra propor mudanças por chat — nunca escreve direto, só depois
+     que o usuário confirma a prévia, e ao aplicar dispara
+     "vpc-questionario-atualizado" pra este editor recarregar. */
+  React.useEffect(() => {
+    window.__VPC_QUESTIONARIO = { questionarioId: questionario.id, estrutura };
+    return () => { delete window.__VPC_QUESTIONARIO; };
+  }, [questionario.id, estrutura]);
+  React.useEffect(() => {
+    const onAtualizado = () => carregar();
+    window.addEventListener('vpc-questionario-atualizado', onAtualizado);
+    return () => window.removeEventListener('vpc-questionario-atualizado', onAtualizado);
+  }, [carregar]);
   React.useEffect(() => { carregar(); }, [carregar]);
 
   const adicionarCategoria = async () => {
