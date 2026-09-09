@@ -1230,10 +1230,12 @@ function CampoEditavel({ pergunta, resposta, onSalvar, atividadeId }) {
           ? <img src={resposta.anexo_url} alt="" style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid #eee' }}/>
           : <span style={{ color: '#bbb', fontSize: 13 }}>— sem assinatura — (não editável aqui)</span>
       )}
-      <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#b91c1c', cursor: 'pointer' }}>
-        <input type="checkbox" checked={!!resposta?.pendencia} onChange={(e) => onSalvar({ pendencia: e.target.checked })}/>
-        Marcar como pendência
-      </label>
+      {!window.VistoriasQuestionariosStore.ehPerguntaCompanion(pergunta) && (
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#b91c1c', cursor: 'pointer' }}>
+          <input type="checkbox" checked={!!resposta?.pendencia} onChange={(e) => onSalvar({ pendencia: e.target.checked })}/>
+          Marcar como pendência
+        </label>
+      )}
     </div>
   );
 }
