@@ -551,7 +551,12 @@ function PreviewValoresTabelas({ data }) {
   const linhas = (Array.isArray(v.itens) && v.itens.length ? v.itens : [v]).map((it) => {
     const qtd = parseFloat(it.quantidade) || 0;
     const unit = parseFloat((it.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
-    return { equipamento: it.equipamento, qtd, unit, total: qtd * unit };
+    /* Desconto ativo (Frentes B+C): mostra o valor original riscado ao lado
+       do atual — histórico visível pro cliente e pra VerticalParts, mesmo
+       reabrindo a proposta depois. */
+    const original = it.valorOriginal != null ? parseFloat(String(it.valorOriginal).replace(/\./g, "").replace(",", ".")) || 0 : null;
+    const temDesconto = it.desconto && original != null && original > unit;
+    return { equipamento: it.equipamento, qtd, unit, original: temDesconto ? original : null, total: qtd * unit };
   });
   const totalEq = linhas.reduce((s, l) => s + l.total, 0);
   const totalGeral = totalEq + difal;
@@ -571,7 +576,10 @@ function PreviewValoresTabelas({ data }) {
               <tr key={i}>
                 <td>{l.equipamento || "Elevador de Passageiros"}</td>
                 <td style={{ textAlign: "right" }}>{l.qtd || "—"}</td>
-                <td style={{ textAlign: "right" }}>{l.unit ? fmt(l.unit) : "—"}</td>
+                <td style={{ textAlign: "right" }}>
+                  {l.original != null && <span style={{ textDecoration: "line-through", opacity: 0.6, marginRight: 6 }}>{fmt(l.original)}</span>}
+                  {l.unit ? fmt(l.unit) : "—"}
+                </td>
                 <td style={{ textAlign: "right", fontWeight: 700 }}>{l.total ? fmt(l.total) : "—"}</td>
               </tr>
             ))}

@@ -614,16 +614,159 @@ function S_RepText({ items, setItems, addLabel, placeholder, single = false }) {
   );
 }
 
-function S_Valores({ d, set, eq }) {
+/* ---- Desconto por equipamento (Frentes B + C do estudo do editor de
+   Proposta) — só aparece quando a cotação tem mais de 1 equipamento
+   (v.itens existe, ver proposta-heranca.js). Pedido de desconto vira uma
+   decisão pendente na Central de Decisões (≤7% Gestor Comercial, >7% só
+   CEO) — nada muda de preço até alguém com a alçada certa aprovar. ---- */
+function S_ItemDescontoModal({ item, onClose, onSolicitar }) {
+  const [tipo, setTipo] = React.useState("percentual");
+  const [valor, setValor] = React.useState("");
+  const [motivo, setMotivo] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const engine = window.PropostaDesconto;
+  const pct = engine ? engine.pctDoDesconto(item, tipo, valor) : 0;
+  const papel = engine ? engine.papelParaPct(pct) : null;
+  const submit = async () => {
+    setSaving(true);
+    try { await onSolicitar({ tipo, valor, motivo }); onClose(); }
+    catch (e) { window.toast?.("Erro: " + (e.message || e), "error"); }
+    finally { setSaving(false); }
+  };
+  return (
+    <Modal title={`Solicitar desconto — ${item.id || item.equipamento}`} onClose={onClose} width={440}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={submit} disabled={saving || !(Number(valor) > 0)}>{saving ? "Enviando…" : "Enviar para aprovação"}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <PEField label="Tipo de desconto">
+          <select className="pe-input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <option value="percentual">Percentual (%)</option>
+            <option value="valor">Valor fixo (R$)</option>
+          </select>
+        </PEField>
+        <PEField label={tipo === "percentual" ? "Desconto (%)" : "Desconto (R$)"}>
+          <PETextInput value={valor} onChange={setValor} placeholder={tipo === "percentual" ? "5" : "15.000,00"}/>
+        </PEField>
+        <PEField label="Motivo"><PETextarea rows={2} value={motivo} onChange={setMotivo} placeholder="Ex.: pedido do cliente na revisão da proposta"/></PEField>
+        {Number(valor) > 0 && (
+          <div className="small muted" style={{ padding: "8px 10px", background: "var(--vp-gray-50)", borderRadius: 6 }}>
+            Equivale a {(pct * 100).toFixed(1)}% do valor original — precisa de aprovação do{" "}
+            <b>{papel === "ceo" ? "CEO (acima de 7%)" : "Gestor Comercial"}</b>.
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function S_ItemDescontoLog({ log }) {
+  const [aberto, setAberto] = React.useState(false);
+  if (!log || !log.length) return null;
+  const ACAO_LABEL = { solicitado: "Solicitado", aprovado: "Aprovado", reprovado: "Reprovado", removido: "Removido" };
+  return (
+    <div style={{ marginTop: 4 }}>
+      <button type="button" className="pe-acab-addfield" style={{ marginTop: 0, fontSize: 11 }} onClick={() => setAberto((v) => !v)}>
+        {aberto ? "Ocultar histórico" : `Ver histórico (${log.length})`}
+      </button>
+      {aberto && (
+        <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 11.5, color: "var(--fg2)" }}>
+          {log.slice().reverse().map((l, i) => (
+            <li key={i}>
+              {ACAO_LABEL[l.acao] || l.acao} por <b>{l.por || "—"}</b> em {l.em ? new Date(l.em).toLocaleString("pt-BR") : "—"}
+              {l.tipo && l.valor != null ? ` — ${l.tipo === "percentual" ? l.valor + "%" : "R$ " + l.valor}` : ""}
+              {l.motivo ? ` (${l.motivo})` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
+  const [modalItem, setModalItem] = React.useState(null);
+  const engine = window.PropostaDesconto;
+  const fmt = (n) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Reconcilia pedidos pendentes ao abrir a seção — se alguém já decidiu na
+  // Central de Decisões, aplica (ou descarta) sem o vendedor precisar fazer nada.
+  React.useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!engine) return;
+      const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(proposta.numeroCotacao) ?? null;
+      const pendentes = itens.some((it) => it.descontoPendente);
+      if (!pendentes) return;
+      const atualizados = await Promise.all(itens.map((it) => engine.reconciliar(it, numeroCotacao)));
+      if (!cancelado && atualizados.some((it, i) => it !== itens[i])) onChangeItens(atualizados);
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const solicitar = async (item, payload) => {
+    const atualizado = await engine.solicitar(proposta, item, payload);
+    onChangeItens(itens.map((it) => (it.id === item.id ? atualizado : it)));
+    window.toast?.("Pedido de desconto enviado para aprovação.", "success");
+  };
+  const remover = (item) => {
+    const atualizado = engine.removerDesconto(item);
+    onChangeItens(itens.map((it) => (it.id === item.id ? atualizado : it)));
+  };
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {itens.map((it) => {
+        const original = engine ? engine.parseNum(it.valorOriginal ?? it.valorUnit) : Number(it.valorUnit) || 0;
+        const atual = engine ? engine.parseNum(it.valorUnit) : Number(it.valorUnit) || 0;
+        const temDesconto = it.desconto && atual < original;
+        return (
+          <div key={it.id} className="pe-acab-cat">
+            <div className="pe-acab-cat-head">
+              <span className="pe-acab-cat-nome">{it.id || it.equipamento}</span>
+              <span className="small muted">Qtd. {it.quantidade || 1}</span>
+            </div>
+            <div className="row gap-2" style={{ alignItems: "baseline", flexWrap: "wrap" }}>
+              {temDesconto && <span className="small muted" style={{ textDecoration: "line-through" }}>{fmt(original)}</span>}
+              <b style={{ fontSize: 16 }}>{fmt(atual)}</b>
+              {it.descontoPendente && <span className="pe-tag" style={{ background: "var(--vp-warning-tint, #f8eed7)" }}>Aguardando aprovação ({it.descontoPendente.papel === "ceo" ? "CEO" : "Gestor Comercial"})</span>}
+            </div>
+            <div className="row gap-2" style={{ marginTop: 8 }}>
+              {!it.descontoPendente && (
+                <button type="button" className="pe-acab-addfield" onClick={() => setModalItem(it)}>
+                  {temDesconto ? "Alterar desconto" : "Solicitar desconto"}
+                </button>
+              )}
+              {temDesconto && !it.descontoPendente && (
+                <button type="button" className="pe-acab-addfield" onClick={() => remover(it)}>Remover desconto</button>
+              )}
+            </div>
+            <S_ItemDescontoLog log={it.descontoLog}/>
+          </div>
+        );
+      })}
+      {modalItem && (
+        <S_ItemDescontoModal item={modalItem} onClose={() => setModalItem(null)} onSolicitar={(payload) => solicitar(modalItem, payload)}/>
+      )}
+    </div>
+  );
+}
+
+function S_Valores({ d, set, eq, recordId }) {
   const v = d[eq].valores;
   const u = (k) => (val) => set(`${eq}.valores.${k}`, val);
   const parcelas = v.parcelas || [];
   const setParcelas = (arr) => set(`${eq}.valores.parcelas`, arr);
+  const temItens = Array.isArray(v.itens) && v.itens.length > 0;
 
   const qtd = parseFloat(v.quantidade) || 0;
   const unit = parseFloat((v.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
   const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
-  const totalEq = qtd * unit;
+  const totalEq = temItens
+    ? v.itens.reduce((s, it) => s + (parseFloat((it.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0) * (Number(it.quantidade) || 1), 0)
+    : qtd * unit;
   const totalDifal = totalEq + difal;
   /* Parcelas eram digitadas aqui mas a soma delas nunca aparecia nem era
      conferida contra o Total com DIFAL — vendedor só descobria a conta
@@ -636,21 +779,38 @@ function S_Valores({ d, set, eq }) {
 
   const formaPagLabel = eq === "esteira" ? "Condições de Pagamento" : "Forma de Pagamento";
 
+  const propostaRef = { id: recordId, numeroCotacao: d.numeroCotacao, cliente: d.cliente, titulo: d.cliente?.nome };
+
   return (
     <>
-      <div className="pe-grid cols-4">
-        <PEField label="Equipamento" span="2">
-          <PETextInput value={v.equipamento} onChange={u("equipamento")} placeholder={
-            eq === "elevador" ? "Elevador VB 2405 — Configuração A" :
-            eq === "escada" ? "Escada Rolante VP-ER 4000" :
-            "Esteira Rolante VP-ET 6000"
-          }/>
-        </PEField>
-        <PEField label="Quantidade"><PENumber value={v.quantidade} onChange={u("quantidade")} placeholder="1"/></PEField>
-        <PEField label="Valor Unitário"><PECurrency value={v.valorUnit} onChange={u("valorUnit")} placeholder="480.000,00"/></PEField>
-        <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
-        <PEField label={formaPagLabel} span="3"><PESelect value={v.forma} onChange={u("forma")}/></PEField>
-      </div>
+      {temItens ? (
+        <S_ItensValores
+          eq={eq}
+          itens={v.itens}
+          proposta={propostaRef}
+          onChangeItens={(novos) => set(`${eq}.valores.itens`, novos)}
+        />
+      ) : (
+        <div className="pe-grid cols-4">
+          <PEField label="Equipamento" span="2">
+            <PETextInput value={v.equipamento} onChange={u("equipamento")} placeholder={
+              eq === "elevador" ? "Elevador VB 2405 — Configuração A" :
+              eq === "escada" ? "Escada Rolante VP-ER 4000" :
+              "Esteira Rolante VP-ET 6000"
+            }/>
+          </PEField>
+          <PEField label="Quantidade"><PENumber value={v.quantidade} onChange={u("quantidade")} placeholder="1"/></PEField>
+          <PEField label="Valor Unitário"><PECurrency value={v.valorUnit} onChange={u("valorUnit")} placeholder="480.000,00"/></PEField>
+          <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
+          <PEField label={formaPagLabel} span="3"><PESelect value={v.forma} onChange={u("forma")}/></PEField>
+        </div>
+      )}
+      {temItens && (
+        <div className="pe-grid cols-4">
+          <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
+          <PEField label={formaPagLabel} span="3"><PESelect value={v.forma} onChange={u("forma")}/></PEField>
+        </div>
+      )}
 
       <div style={{ marginTop: 18, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
         <div className="pe-field-label">Parcelas <span className="pe-tag">{parcelas.length} parcela{parcelas.length !== 1 ? "s" : ""}</span></div>

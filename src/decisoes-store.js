@@ -57,11 +57,30 @@
     montador_entra_obra_rh: 'Montador entra na obra — aprovação da Engenharia',
     compra_equipamento_ceo: 'Compra do equipamento — aprovação do CEO',
     compra_varejo_logistica: 'Compra de varejo — aprovação da Logística',
+    desconto_proposta: 'Desconto em proposta',
   };
 
+  /* Além dos e-mails fixos, qualquer papel pode ganhar aprovadores extras
+     concedidos via admin (alcadas_capacidade, modulo='decisoes', capacidade=
+     <papel>) — mesmo padrão genérico/delegável já usado em "Alçadas de
+     Propostas" (financeiro.jsx), sem precisar hardcodar e-mail novo no
+     código. Ex.: dar poder de CEO ao Gelson só pra teste, revogável, sem
+     deploy. Só afeta decisões CRIADAS depois da concessão — o snapshot em
+     aprovadores_esperados já gravado numa decisão pendente não muda sozinho. */
+  async function extrasPorAlcada(papel) {
+    const c = sb(); if (!c) return [];
+    const { data: concedidas } = await c.from('alcadas_capacidade').select('perfil_id')
+      .eq('modulo', 'decisoes').eq('capacidade', papel);
+    if (!concedidas || !concedidas.length) return [];
+    const { data: perfis } = await c.from('perfis').select('email').in('id', concedidas.map((r) => r.perfil_id));
+    return (perfis || []).map((p) => (p.email || '').trim().toLowerCase()).filter(Boolean);
+  }
+
   async function resolverAprovadores(papel) {
-    if (EMAILS_FIXOS[papel]) return EMAILS_FIXOS[papel];
-    return [];
+    const fixos = EMAILS_FIXOS[papel] || [];
+    const extras = await extrasPorAlcada(papel);
+    if (!fixos.length && !extras.length) return [];
+    return [...new Set([...fixos, ...extras])];
   }
 
   function souAprovador(decisao) {

@@ -335,6 +335,16 @@ function tempoRelativo(ts) {
    agora também vai pra coluna valor_total, alimentando a listagem. */
 function calcularValorTotal(data, eq) {
   const v = (data[eq] && data[eq].valores) || {};
+  /* Mais de 1 equipamento (v.itens): soma item a item, pra refletir na
+     hora um desconto aprovado nalgum deles — senão o total ficava preso
+     no valor agregado antigo, sem contar o desconto. */
+  if (Array.isArray(v.itens) && v.itens.length) {
+    return v.itens.reduce((s, it) => {
+      const unit = Number(String(it.valorUnit || '').replace(/\./g, '').replace(',', '.')) || 0;
+      const qtd = Number(it.quantidade) || 1;
+      return s + unit * qtd;
+    }, 0);
+  }
   const unit = Number(String(v.valorUnit || '').replace(/\./g, '').replace(',', '.')) || 0;
   const qtd = Number(v.quantidade) || 1;
   return unit * qtd;
@@ -1158,7 +1168,7 @@ function renderSection(sid, eq, data, set, extras) {
     case "infra": return <S_InfraestruturaNomeada d={data} set={set}/>;
     case "fotos": return <S_FotosEquipamento d={data} set={set}/>;
 
-    case "valores": return <S_Valores d={data} set={set} eq={eq}/>;
+    case "valores": return <S_Valores d={data} set={set} eq={eq} recordId={recordId}/>;
     case "condicoesPagto": return <S_CondPagamentoElev d={data} set={set}/>;
     case "ajustes": return <S_Ajustes d={data} set={set} eq={eq}/>;
     case "prazo": return <S_PrazoEntrega d={data} set={set} eq={eq}/>;

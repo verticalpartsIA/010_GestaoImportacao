@@ -210,6 +210,10 @@
         equipamento: e.id || equipamentos || 'Elevador de Passageiros',
         quantidade: String(Number(e.qtd) || 1),
         valorUnit: String(unit),
+        /* valorOriginal: congelado no nascimento — nunca sobrescrito por um
+           desconto (proposta-desconto.js só mexe em valorUnit/desconto*). */
+        valorOriginal: String(unit),
+        desconto: null, descontoPendente: null, descontoLog: [],
       }));
     }
     if (especificacoes.length || Object.keys(valores).length) {
