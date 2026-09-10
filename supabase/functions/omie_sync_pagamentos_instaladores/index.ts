@@ -21,7 +21,12 @@
    obrigação real).
 
    MODO DEBUG: ver ramos abaixo (debug_cpf_cnpj, debug_consultar,
-   debug_projeto, debug_buscar_projeto, debug_cliente_codigo).
+   debug_projeto, debug_buscar_projeto, debug_cliente_codigo) — exigem
+   header x-debug-key igual ao secret OMIE_SYNC_DEBUG_KEY (função roda
+   com verify_jwt:false de propósito, pro botão do frontend, então sem
+   esse gate qualquer chamador com a ANON_SB conseguia puxar Contas a
+   Pagar/Projetos/Clientes crus de qualquer CPF/CNPJ — achado do review
+   bot, PR #349). Sem a secret configurada, debug fica sempre desligado.
    SYNC COMPLETO: POST {} (ou { empresa_id: "..." } pra só uma).
    ============================================================ */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -30,6 +35,14 @@ const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
 const omieKey = Deno.env.get("OMIE_API_KEY") || "";
 const omieSecret = Deno.env.get("OMIE_API_SECRET") || "";
+// Gate pros ramos debug_* — sem isso, qualquer chamador com a ANON_SB
+// (a função roda com verify_jwt:false, de propósito, pro botão
+// "Atualizar pagamentos" do frontend) conseguia arrancar Contas a
+// Pagar/Projetos/Clientes crus do Omie de qualquer CPF/CNPJ, sem
+// precisar nem ser desta empresa (achado do review bot, PR #349).
+// Sem OMIE_SYNC_DEBUG_KEY configurada, os ramos de debug ficam sempre
+// desligados (não tem fallback aberto).
+const debugKey = Deno.env.get("OMIE_SYNC_DEBUG_KEY") || "";
 
 const sb = createClient(supabaseUrl, supabaseServiceKey);
 
@@ -138,38 +151,45 @@ Deno.serve(async (req) => {
 
     const body = await req.json().catch(() => ({}));
     const { debug_cpf_cnpj, debug_consultar, empresa_id } = body;
-
-    if (debug_cpf_cnpj) {
-      const doc = soDigitos(debug_cpf_cnpj);
-      const titulos = await listarContasPagarPorDoc(doc);
-      return json({ doc, total: titulos.length, titulos });
-    }
-
-    if (debug_consultar) {
-      const resp = await omieCall("financas/contapagar", "ConsultarContaPagar", { codigo_lancamento_omie: debug_consultar });
-      return json(resp.data);
-    }
-
     const debug_projeto = body.debug_projeto;
-    if (debug_projeto) {
-      const resp = await omieCall("financas/contapagar", "ListarContasPagar", {
-        pagina: 1, registros_por_pagina: 50, filtrar_por_projeto: debug_projeto,
-      });
-      return json(resp.data);
-    }
-
     const debug_buscar_projeto = body.debug_buscar_projeto;
-    if (debug_buscar_projeto) {
-      const resp = await omieCall("geral/projetos", "ListarProjetos", {
-        pagina: 1, registros_por_pagina: 20, nome_projeto: debug_buscar_projeto,
-      });
-      return json(resp.data);
-    }
-
     const debug_cliente_codigo = body.debug_cliente_codigo;
-    if (debug_cliente_codigo) {
-      const resp = await omieCall("geral/clientes", "ConsultarCliente", { codigo_cliente_omie: debug_cliente_codigo });
-      return json(resp.data);
+    const pediuDebug = debug_cpf_cnpj || debug_consultar || debug_projeto || debug_buscar_projeto || debug_cliente_codigo;
+
+    if (pediuDebug) {
+      if (!debugKey || req.headers.get("x-debug-key") !== debugKey) {
+        return json({ error: "Não autorizado" }, 403);
+      }
+
+      if (debug_cpf_cnpj) {
+        const doc = soDigitos(debug_cpf_cnpj);
+        const titulos = await listarContasPagarPorDoc(doc);
+        return json({ doc, total: titulos.length, titulos });
+      }
+
+      if (debug_consultar) {
+        const resp = await omieCall("financas/contapagar", "ConsultarContaPagar", { codigo_lancamento_omie: debug_consultar });
+        return json(resp.data);
+      }
+
+      if (debug_projeto) {
+        const resp = await omieCall("financas/contapagar", "ListarContasPagar", {
+          pagina: 1, registros_por_pagina: 50, filtrar_por_projeto: debug_projeto,
+        });
+        return json(resp.data);
+      }
+
+      if (debug_buscar_projeto) {
+        const resp = await omieCall("geral/projetos", "ListarProjetos", {
+          pagina: 1, registros_por_pagina: 20, nome_projeto: debug_buscar_projeto,
+        });
+        return json(resp.data);
+      }
+
+      if (debug_cliente_codigo) {
+        const resp = await omieCall("geral/clientes", "ConsultarCliente", { codigo_cliente_omie: debug_cliente_codigo });
+        return json(resp.data);
+      }
     }
 
     // ---- Sync completo ----
@@ -275,6 +295,21 @@ Deno.serve(async (req) => {
       await sleep(350);
     }
 
+    // Títulos que o Omie já marcou CANCELADO nesta rodada não entram no
+    // upsert (não são mais uma obrigação real) — mas se um título que já
+    // estava no cache como aberto/pago virar CANCELADO depois, o upsert
+    // sozinho nunca ia tocar essa linha (ela só recebe update quando volta
+    // nos resultados do ListarContasPagar, e um cancelado é filtrado antes
+    // de chegar lá). Sem apagar explicitamente, a linha antiga ficava pra
+    // sempre inflando total/pago (achado do review bot, PR #349).
+    const canceladosKeys = Array.from(
+      new Map(
+        brutos
+          .filter(({ t }) => isCancelado((t.status_titulo || "") as string))
+          .map(({ t, doc }) => [`${t.codigo_lancamento_omie}|${doc}`, { codigo: t.codigo_lancamento_omie, doc }]),
+      ).values(),
+    );
+
     const rows = brutos
       .filter(({ t }) => !isCancelado((t.status_titulo || "") as string))
       .map(({ t, doc, empresaId, colaboradorId, fonte }) => {
@@ -341,6 +376,17 @@ Deno.serve(async (req) => {
         else gravados += lote.length;
       }
     }
+    let removidos = 0;
+    for (const k of canceladosKeys) {
+      const { error } = await sb
+        .from("omie_pagamentos_cache")
+        .delete()
+        .eq("codigo_lancamento_omie", k.codigo)
+        .eq("cpf_cnpj_consultado", k.doc);
+      if (error) { console.warn("delete de cancelado falhou", error.message); errosGravacao.push(error.message); }
+      else removidos++;
+    }
+
     const partesErro = [
       erroGeral,
       errosGravacao.length ? errosGravacao.join(" | ") : null,
@@ -362,6 +408,7 @@ Deno.serve(async (req) => {
       empresas_consultadas: (empresas || []).length,
       colaboradores_consultados: (colaboradores || []).length,
       titulos_gravados: gravados,
+      titulos_cancelados_removidos: removidos,
       falhas: falhasFinais,
       erro: erroFinal,
     });
