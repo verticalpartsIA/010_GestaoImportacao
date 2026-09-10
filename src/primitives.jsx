@@ -112,9 +112,9 @@ function Button({ variant = "outline", size, icon, iconRight, children, "aria-la
 }
 
 /* ---- Badge ---- */
-function Badge({ variant = "neutral", dot, children, style }) {
+function Badge({ variant = "neutral", dot, children, style, onClick }) {
   return (
-    <span className={"badge badge--" + variant} style={style}>
+    <span className={"badge badge--" + variant} style={style} onClick={onClick}>
       {dot ? <span className="dot"/> : null}
       {children}
     </span>

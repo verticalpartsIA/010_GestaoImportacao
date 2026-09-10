@@ -959,7 +959,10 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
         let enviouDireto = false;
         if (sb) {
           const { error: emailError } = await sb.functions.invoke('send-email', {
-            body: { to: recipient.email, subject: `Cotação técnica ${cot.numero_documento} — VerticalParts`, text: msg },
+            body: {
+              to: recipient.email, subject: `Cotação técnica ${cot.numero_documento} — VerticalParts`, text: msg,
+              numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
+            },
           });
           if (!emailError) enviouDireto = true;
           else console.warn('[FormularioElevador] send-email falhou, caindo pro mailto:', emailError);

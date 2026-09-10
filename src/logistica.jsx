@@ -1315,7 +1315,7 @@ function ComprasPage({ setRoute }) {
    "Inbox" dentro de Importação/Compras aponta pra cá também (mesma rota).
    Sem categorização automática por módulo ainda (não fabrica um filtro
    que não existe). Sem cron: busca só quando a tela abre/atualiza. */
-function EmailInbox({ setRoute }) {
+function EmailInbox({ setRoute, setSubsel }) {
   const [emails, setEmails] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState(null);
@@ -1332,6 +1332,12 @@ function EmailInbox({ setRoute }) {
     }).catch((e) => setErro(e.message || String(e))).finally(() => setLoading(false));
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
+
+  const verNaLinhaDoTempo = (e, numeroCotacao) => {
+    e.stopPropagation();
+    if (setSubsel) setSubsel(numeroCotacao);
+    setRoute('linha-do-tempo');
+  };
 
   const folders = [
     { id: "inbox", label: "Caixa de entrada", icon: "mail", count: emails.filter(e => e.unread).length },
@@ -1397,6 +1403,11 @@ function EmailInbox({ setRoute }) {
               </div>
               <div className="subj">{m.subject}</div>
               <div className="preview">{m.preview}</div>
+              {m.numeroCotacao != null && (
+                <Badge variant={m.vinculoConfianca === 'certo' ? 'success' : 'warning'} onClick={(ev) => verNaLinhaDoTempo(ev, m.numeroCotacao)} style={{ cursor: 'pointer', marginTop: 4 }}>
+                  <Icon.link2 size={10}/> Cotação Nº {m.numeroCotacao}{m.vinculoConfianca === 'provavel' ? ' (provável)' : ''}
+                </Badge>
+              )}
             </div>
           ))}
         </div>
@@ -1406,6 +1417,11 @@ function EmailInbox({ setRoute }) {
             <>
               <div className="inbox__msg-head">
                 <h3 className="inbox__msg-subj">{active.subject}</h3>
+                {active.numeroCotacao != null && (
+                  <Badge variant={active.vinculoConfianca === 'certo' ? 'success' : 'warning'} onClick={(ev) => verNaLinhaDoTempo(ev, active.numeroCotacao)} style={{ cursor: 'pointer', marginTop: 6 }}>
+                    <Icon.link2 size={10}/> Ver na Linha do Tempo — Cotação Nº {active.numeroCotacao}{active.vinculoConfianca === 'provavel' ? ' (vínculo provável)' : ''}
+                  </Badge>
+                )}
                 <div className="inbox__msg-meta">
                   <div className="avatar">{(active.fromName || active.from || "").split(/[\s.\-_]/).filter(Boolean).slice(0,2).map(w => (w[0]||"").toUpperCase()).join("") || "?"}</div>
                   <div>

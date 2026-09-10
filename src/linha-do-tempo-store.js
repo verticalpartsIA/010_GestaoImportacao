@@ -103,6 +103,23 @@
       add(e.data_entrega, 'Transporte terrestre', 'Equipamento entregue no endereço do cliente', null, 'Embarque');
     });
 
+    /* 6. E-mails vinculados a este projeto (emails_projeto — send-email/
+       read-inbox, 10/09) — entrada e saída da mesma caixa suporte@
+       vpsistema.com, vinculadas por Message-ID (vinculo_confianca
+       'certo') ou por regex no assunto ('provavel'). Não distingue papel
+       real do remetente de e-mails de entrada (poderia ser fornecedor,
+       cliente, despachante...) — usa 'Fornecedor' como aproximação mais
+       comum hoje (RFQ técnico é o fluxo que mais gera e-mail vinculado),
+       o nome real do remetente sempre aparece em `ator`. */
+    const { data: emails } = await c.from('emails_projeto').select('*').eq('numero_cotacao', numeroCotacao).order('data_mensagem', { ascending: true });
+    (emails || []).forEach((e) => {
+      const saida = e.direcao === 'saida';
+      add(e.data_mensagem || e.criado_em, saida ? 'Vendedor' : 'Fornecedor',
+        (saida ? 'E-mail enviado: ' : 'E-mail recebido: ') + (e.assunto || '(sem assunto)'),
+        saida ? (e.de_nome || 'VerticalParts') : (e.de_nome || e.de_email), 'E-mail',
+        e.corpo_texto ? { preview: e.corpo_texto.slice(0, 200) } : null);
+    });
+
     itens.sort((a, b) => new Date(a.ts) - new Date(b.ts));
     return { numeroCotacao, dossier: dossier || null, itens };
   }

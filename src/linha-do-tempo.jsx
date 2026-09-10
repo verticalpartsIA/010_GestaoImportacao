@@ -27,13 +27,13 @@ function ltFmtData(ts) {
   return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR');
 }
 
-function LinhaDoTempoPage() {
-  const [busca, setBusca] = React.useState('');
+function LinhaDoTempoPage({ subsel }) {
+  const [busca, setBusca] = React.useState(subsel != null ? String(subsel) : '');
   const [loading, setLoading] = React.useState(false);
   const [resultado, setResultado] = React.useState(null); // { numeroCotacao, dossier, itens } | 'not-found' | null
 
-  const buscar = async () => {
-    const numero = window.LinhaDoTempoStore.resolverNumero(busca);
+  const buscar = async (valorForcado) => {
+    const numero = window.LinhaDoTempoStore.resolverNumero(valorForcado != null ? valorForcado : busca);
     if (numero == null) return window.toast?.('Digite um Nº Cotação válido (ex.: 902 ou VPEL-EL0902).', 'warning');
     setLoading(true);
     try {
@@ -46,6 +46,8 @@ function LinhaDoTempoPage() {
       setLoading(false);
     }
   };
+
+  React.useEffect(() => { if (subsel != null) buscar(String(subsel)); }, [subsel]);
 
   const masterIdLabel = (numero) => (window.MasterIdEngine ? window.MasterIdEngine.etapaId('cotacao', numero) : String(numero));
 

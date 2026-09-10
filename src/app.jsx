@@ -325,7 +325,7 @@ function App() {
     }
     switch (route) {
       case "dashboard": return <Dashboard role={role} setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "inbox": return <EmailInbox setRoute={setRoute}/>;
+      case "inbox": return <EmailInbox setRoute={setRoute} setSubsel={setSubsel}/>;
       case "leads": return <LeadsPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formularios": return <FormulariosPage setRoute={setRoute} setSubsel={setSubsel}/>;
@@ -333,7 +333,7 @@ function App() {
       case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "status-obras": return <ObrasStatusPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "linha-do-tempo": return <window.LinhaDoTempoPage/>;
+      case "linha-do-tempo": return <window.LinhaDoTempoPage subsel={subsel}/>;
       case "cotacoes-fornecedor": return <CotacoesFornecedorPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cotacao-fornecedor-detail": return <CotacaoFornecedorDetalhe cot={subsel} setRoute={setRoute}/>;
       case "precificacao": return <PrecificacaoPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
