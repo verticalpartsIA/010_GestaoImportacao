@@ -950,7 +950,22 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
         `This same link was sent via WhatsApp and Email — please reply through either one, no need to repeat.\n` +
         `此链接已通过WhatsApp和邮件发送 — 您可以通过任一方式回复，无需重复填写。`;
       if (canal === 'whatsapp') window.open(window.PFStore.whatsAppHref(recipient.telefone, msg), '_blank');
-      if (canal === 'email') window.open(window.PFStore.mailtoHref(recipient.email, `Cotação técnica ${cot.numero_documento} — VerticalParts`, msg), '_blank');
+      if (canal === 'email') {
+        /* 10/09 — envio direto via SMTP (send-email edge function), sem abrir
+           Outlook/cliente local. Se o SMTP ainda não tiver os secrets
+           configurados (ou a chamada falhar por qualquer motivo), cai pro
+           mailto: como estava antes — nunca deixa o vendedor sem alternativa. */
+        const sb = window.__VP_SB && window.__VP_SB.sb;
+        let enviouDireto = false;
+        if (sb) {
+          const { error: emailError } = await sb.functions.invoke('send-email', {
+            body: { to: recipient.email, subject: `Cotação técnica ${cot.numero_documento} — VerticalParts`, text: msg },
+          });
+          if (!emailError) enviouDireto = true;
+          else console.warn('[FormularioElevador] send-email falhou, caindo pro mailto:', emailError);
+        }
+        if (!enviouDireto) window.open(window.PFStore.mailtoHref(recipient.email, `Cotação técnica ${cot.numero_documento} — VerticalParts`, msg), '_blank');
+      }
       if (canal === 'link') { try { await navigator.clipboard.writeText(url); } catch (e) {} window.toast?.('Link copiado.', 'success'); }
       await store.marcarEnviado(cot.id, canal, recipient);
       await reload();
