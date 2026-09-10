@@ -144,33 +144,18 @@
     Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
     const { data: item, error } = await c.from('instalacao_checklist_itens').update(patch).eq('id', itemId).select('dossier_id').single();
     if (error) throw error;
-    if (status === 'concluido' && item?.dossier_id) await _checarMetadeExecucao(item.dossier_id);
   }
 
-  /* Dispara INSTALACAO_METADE_EXECUCAO (gatilhos-engine.js) na primeira
-     vez que o checklist do dossiê bate ≥50% concluído — alimenta a 2ª
-     parcela do contrato de instalador (formatos de 2/3 parcelas, ver
-     contrato-instalador-engine.js:buildPagamentoItems). Idempotente via
-     checagem prévia em eventos_fluxo (não recalcula "antes/depois",
-     só evita duplicar o evento se já foi registrado). Nunca derruba o
-     fluxo de marcar item por falha aqui — é gatilho, não obrigação. */
-  async function _checarMetadeExecucao(dossierId) {
-    try {
-      const c = sb(); if (!c || !window.EventosFluxo) return;
-      const itens = await listarPorDossier(dossierId);
-      if (!itens.length) return;
-      const pct = itens.filter((i) => i.status === 'concluido').length / itens.length;
-      if (pct < 0.5) return;
-      const label = window.EventosFluxo.EVENTOS.INSTALACAO_METADE_EXECUCAO.label;
-      const { data: existe } = await c.from('eventos_fluxo').select('id').eq('alvo_id', dossierId).eq('evento', label).maybeSingle();
-      if (existe) return;
-      const { data: dossier } = await c.from('dossier_obra').select('numero_cotacao, building_name').eq('id', dossierId).maybeSingle();
-      await window.EventosFluxo.registrar({
-        evento: 'INSTALACAO_METADE_EXECUCAO', numeroCotacao: dossier?.numero_cotacao ?? null,
-        alvoLabel: dossier?.building_name, alvoId: dossierId,
-      });
-    } catch (e) { console.warn('[InstalacaoChecklistStore] checar metade execução falhou', e); }
-  }
+  /* Achado A10 da auditoria (não commitar/tour.md, 10/09/2026): este
+     checklist de TEMPLATE disparava INSTALACAO_METADE_EXECUCAO por conta
+     própria, desconectado do Acompanhamento de Obra (o diário com foto
+     que o usuário confirmou ser a fonte real de status da obra em
+     campo). Decisão de negócio: o diário passa a ser a fonte única
+     desse evento — gatilho movido para acompanhamento-obra-store.js
+     (_checarMetadeExecucao lá, com progresso ponderado por peso em vez
+     de contagem simples de itens). Este checklist continua existindo
+     como o cronograma operacional por semana/etapa; só não dispara mais
+     o evento de pagamento sozinho. */
 
   function gtId() { return 'stt-' + Math.random().toString(36).slice(2, 10); }
 
