@@ -547,7 +547,7 @@ function ImportacaoDetail({ embarque, setRoute }) {
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="globe" onClick={() => setMapaAberto(true)}>Ver mapa</Button>
-          <Button variant="outline" icon="mail">Email fornecedor</Button>
+          <Button variant="outline" icon="mail" disabled title="Em desenvolvimento — ainda não envia e-mail ao fornecedor">Email fornecedor</Button>
           <Button variant="primary" icon="package" onClick={reportarChegada} disabled={reportando || !!e.chegada_confirmada_em}>
             {e.chegada_confirmada_em ? "Chegada confirmada ✓" : reportando ? "Reportando…" : "Reportar chegada"}
           </Button>
@@ -710,7 +710,7 @@ function ImportacaoDetail({ embarque, setRoute }) {
 }
 
 /* ---------- IMPORTAÇÃO · MAPA DE NAVIOS ====================== */
-function ImportacaoRastreamento({ setRoute }) {
+function ImportacaoRastreamento({ setRoute, setSubsel }) {
   const [embarques, setEmbarques] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [active, setActive] = React.useState(null);
@@ -759,7 +759,7 @@ function ImportacaoRastreamento({ setRoute }) {
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="refresh" onClick={onSync} disabled={syncing}>{syncing ? 'Atualizando…' : 'Atualizar'}</Button>
-          <Button variant="outline" icon="download">Exportar relatório</Button>
+          <Button variant="outline" icon="download" disabled title="Em desenvolvimento — exportação do mapa ainda não implementada">Exportar relatório</Button>
         </div>
       </div>
 
@@ -821,7 +821,7 @@ function ImportacaoRastreamento({ setRoute }) {
               <KvBlock label="Conteúdo" value={`${activeShip.containers}× ${activeShip.type || activeShip.container_type}`}/>
               <KvBlock label="Trajeto" value={`${activeShip.from || activeShip.origin} → ${activeShip.to || activeShip.destination}`}/>
               <KvBlock label="ETA" value={fmtDateLong(activeShip.eta)}/>
-              <Button variant="primary" size="sm" iconRight="arrowRight" style={{ width: "100%", marginTop: 8 }} onClick={() => setRoute("importacao")}>Abrir embarque</Button>
+              <Button variant="primary" size="sm" iconRight="arrowRight" style={{ width: "100%", marginTop: 8 }} onClick={() => { setSubsel?.(activeShip); setRoute("importacao-detail"); }}>Abrir embarque</Button>
             </Card>
           ) : null}
         </div>
@@ -1252,7 +1252,7 @@ function ComprasPage({ setRoute }) {
           ))}
         </div>
         <div className="spacer"/>
-        <Button variant="outline" size="sm" icon="filter">Transportadora</Button>
+        <Button variant="outline" size="sm" icon="filter" disabled title="Em desenvolvimento — filtro por transportadora ainda não implementado">Transportadora</Button>
       </div>
 
       <div className="table-wrap">
@@ -1408,9 +1408,9 @@ function EmailInbox({ kind, setRoute }) {
                   </div>
                   <div className="from-email">{active.date} · {active.time} BRT</div>
                   <div className="inbox__msg-actions">
-                    <Button variant="outline" size="sm" icon="reply">Responder</Button>
-                    <Button variant="ghost" size="sm" icon="link2">Vincular</Button>
-                    <Button variant="ghost" size="sm" icon="more"/>
+                    <Button variant="outline" size="sm" icon="reply" disabled title="Em desenvolvimento — inbox ainda não integrado a um serviço de e-mail real">Responder</Button>
+                    <Button variant="ghost" size="sm" icon="link2" disabled title="Em desenvolvimento — vínculo com embarque ainda não implementado">Vincular</Button>
+                    <Button variant="ghost" size="sm" icon="more" disabled title="Em desenvolvimento"/>
                   </div>
                 </div>
                 <div className="row gap-2" style={{ marginTop: 12 }}>
@@ -1434,11 +1434,11 @@ function EmailInbox({ kind, setRoute }) {
                 </div>
               ) : null}
               <div className="inbox__compose">
-                <Button variant="primary" size="sm" icon="reply">Responder</Button>
-                <Button variant="outline" size="sm" icon="reply">Responder a todos</Button>
-                <Button variant="outline" size="sm" icon="arrowRight">Encaminhar</Button>
+                <Button variant="primary" size="sm" icon="reply" disabled title="Em desenvolvimento — inbox ainda não integrado a um serviço de e-mail real">Responder</Button>
+                <Button variant="outline" size="sm" icon="reply" disabled title="Em desenvolvimento — inbox ainda não integrado a um serviço de e-mail real">Responder a todos</Button>
+                <Button variant="outline" size="sm" icon="arrowRight" disabled title="Em desenvolvimento — inbox ainda não integrado a um serviço de e-mail real">Encaminhar</Button>
                 <div className="spacer" style={{ flex: 1 }}/>
-                <Button variant="ghost" size="sm" icon="zap">Sugerir resposta (AI)</Button>
+                <Button variant="ghost" size="sm" icon="zap" disabled title="Em desenvolvimento — sugestão de resposta por IA ainda não implementada">Sugerir resposta (AI)</Button>
               </div>
             </>
           ) : null}

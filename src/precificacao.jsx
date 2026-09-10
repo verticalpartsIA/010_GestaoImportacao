@@ -274,8 +274,8 @@ function PrecificacaoDetail({ project = {}, setRoute, setSubsel }) {
   return (
     <Card title={project.name ? `Cálculo: ${project.name}` : "Nova Precificação"} sub={project.id ? `Lead ${project.id}` : "Preencha os campos para calcular o preço final"}
       action={<>
-        <Button variant="outline" size="sm" icon="history">Versões</Button>
-        <Button variant="outline" size="sm" icon="copy">Duplicar</Button>
+        <Button variant="outline" size="sm" icon="history" disabled title="Em desenvolvimento — histórico de versões ainda não implementado">Versões</Button>
+        <Button variant="outline" size="sm" icon="copy" disabled title="Em desenvolvimento — duplicar cálculo ainda não implementado">Duplicar</Button>
         <Button variant="primary" size="sm" icon="proposal" onClick={() => setRoute && setRoute("proposta-editor")}>Gerar proposta</Button>
       </>}
       sharp={true}>

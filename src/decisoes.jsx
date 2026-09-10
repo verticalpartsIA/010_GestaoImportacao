@@ -74,9 +74,11 @@ function DecCard({ decisao, onReload }) {
 
 function DecisoesPage() {
   const [pendentes, setPendentes] = React.useState(null);
+  const [erro, setErro] = React.useState(false);
 
   const reload = React.useCallback(() => {
-    window.DecisoesStore.listarPendentesParaMim().then(setPendentes).catch(() => setPendentes([]));
+    setErro(false);
+    window.DecisoesStore.listarPendentesParaMim().then(setPendentes).catch(() => { setErro(true); setPendentes([]); });
   }, []);
   React.useEffect(() => { reload(); }, [reload]);
 
@@ -94,7 +96,13 @@ function DecisoesPage() {
 
       <Card title="Aguardando você" sub={`${pendentes.length} decisão(ões) pendente(s)`}>
         <div className="stack" style={{ gap: 10 }}>
-          {pendentes.length === 0 && (
+          {pendentes.length === 0 && erro && (
+            <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>
+              Não foi possível carregar suas decisões pendentes agora.
+              <div style={{ marginTop: 10 }}><Button variant="outline" size="sm" onClick={reload}>Tentar novamente</Button></div>
+            </div>
+          )}
+          {pendentes.length === 0 && !erro && (
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>
               Nenhuma decisão pendente pra você no momento.
             </div>

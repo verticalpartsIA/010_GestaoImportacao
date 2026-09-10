@@ -161,9 +161,9 @@ function StatusBadge({ status }) {
 }
 
 /* ---- Card ---- */
-function Card({ title, sub, action, children, sharp = true, style, className = "", padding }) {
+function Card({ id, title, sub, action, children, sharp = true, style, className = "", padding }) {
   return (
-    <div className={(sharp ? "card sharp " : "card ") + className} style={{ padding: padding, ...style }}>
+    <div id={id} className={(sharp ? "card sharp " : "card ") + className} style={{ padding: padding, ...style }}>
       {(title || action) ? (
         <div className="card__head">
           <div>

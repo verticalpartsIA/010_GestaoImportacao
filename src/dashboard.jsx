@@ -275,7 +275,12 @@ function Dashboard({ role, setRoute, setSubsel }) {
           <div className="stack">
             {tasks.map((t, i) => (
               <div key={i} className="task-row">
-                <input type="checkbox"/>
+                <input type="checkbox" checked={false} onChange={async () => {
+                  if (!t.id) return;
+                  const { error } = await window.__VP_SB.sb.from('tarefas').update({ done: true }).eq('id', t.id);
+                  if (error) return window.toast('Erro: ' + error.message, 'error');
+                  reloadDashboard();
+                }}/>
                 <div className="task-row__body">
                   <div className="task-row__title">{t.t}</div>
                   <div className="task-row__meta">

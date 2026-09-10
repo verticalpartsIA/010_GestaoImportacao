@@ -21,7 +21,14 @@ function GIPainelPage() {
 
   const { pis, rfqs, ims, embarques } = dados;
   const pisAbertas = pis.filter((p) => !['Concluída', 'Cancelada'].includes(p.status));
-  const valorPisAbertas = pisAbertas.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
+  const valorPisAbertasPorMoeda = {};
+  pisAbertas.forEach((p) => {
+    const moeda = p.moeda || 'USD';
+    valorPisAbertasPorMoeda[moeda] = (valorPisAbertasPorMoeda[moeda] || 0) + (Number(p.valor_total) || 0);
+  });
+  const subPisAbertas = Object.keys(valorPisAbertasPorMoeda).length
+    ? Object.entries(valorPisAbertasPorMoeda).map(([moeda, v]) => window.PIStore.fmtMoeda(v, moeda)).join(' + ')
+    : window.PIStore.fmtMoeda(0, 'USD');
   const rfqsAbertas = rfqs.filter((r) => r.status === 'Aberta' || r.status === 'Em análise');
   const imsPendentes = ims.filter((s) => s.aprovado === false && !s.arquivado);
   const imsAtrasados = ims.filter((s) => window.IMSStore.estaAtrasado(s));
@@ -40,7 +47,7 @@ function GIPainelPage() {
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="P.I. abertas" value={pisAbertas.length} sub={window.PIStore.fmtMoeda(valorPisAbertas, pisAbertas[0]?.moeda || 'USD')} icon="fileText"/>
+        <KPI label="P.I. abertas" value={pisAbertas.length} sub={subPisAbertas} icon="fileText"/>
         <KPI label="RFQ abertas" value={rfqsAbertas.length} sub="aguardando/analisando" icon="fileSearch"/>
         <KPI label="IMS pendentes" value={imsPendentes.length} sub={imsAtrasados.length ? `${imsAtrasados.length} atrasada(s)` : 'nenhuma atrasada'} icon="package"/>
         <KPI label="Embarques ativos" value={embarquesAtivos.length} sub="em andamento" icon="ship"/>

@@ -361,7 +361,7 @@ function App() {
       case "handover": return <window.HandoverManutencaoPage/>;
       case "importacao": return <ImportacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "importacao-detail": return <ImportacaoDetail embarque={subsel} setRoute={setRoute}/>;
-      case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={setRoute}/>;
+      case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={setRoute} setSubsel={setSubsel}/>;
       case "importacao-email": return <EmailInbox kind="importacao" setRoute={setRoute}/>;
       case "compras": return <ComprasPage setRoute={setRoute}/>;
       case "compras-email": return <EmailInbox kind="compras" setRoute={setRoute}/>;

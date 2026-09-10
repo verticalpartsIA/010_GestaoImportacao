@@ -48,7 +48,7 @@ function renderPrintPage(scr) {
     case "instalacao":     return <InstalacaoPage/>;
     case "importacao":     return <ImportacaoPage setRoute={noop} setSubsel={noop}/>;
     case "importacao-detail": return <ImportacaoDetail embarque={null} setRoute={noop}/>;
-    case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={noop}/>;
+    case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={noop} setSubsel={noop}/>;
     case "importacao-email": return <EmailInbox kind="importacao" setRoute={noop}/>;
     case "compras":        return <ComprasPage setRoute={noop}/>;
     case "financeiro":     return <FinanceiroPage/>;
