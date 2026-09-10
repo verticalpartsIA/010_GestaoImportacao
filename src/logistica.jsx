@@ -1323,6 +1323,13 @@ function EmailInbox({ setRoute, setSubsel }) {
   const [folder, setFolder] = React.useState("inbox");
   const active = emails.find(e => e.id === activeId);
 
+  const [respondendo, setRespondendo] = React.useState(false);
+  const [respostaTexto, setRespostaTexto] = React.useState('');
+  const [enviandoResposta, setEnviandoResposta] = React.useState(false);
+  const [vinculando, setVinculando] = React.useState(false);
+  const [vincularInput, setVincularInput] = React.useState('');
+  const [salvandoVinculo, setSalvandoVinculo] = React.useState(false);
+
   const carregar = React.useCallback(() => {
     setLoading(true); setErro(null);
     window.__VP_SB.sb.functions.invoke('read-inbox', { body: { limit: 25 } }).then(({ data, error }) => {
@@ -1332,11 +1339,67 @@ function EmailInbox({ setRoute, setSubsel }) {
     }).catch((e) => setErro(e.message || String(e))).finally(() => setLoading(false));
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
+  React.useEffect(() => { setRespondendo(false); setRespostaTexto(''); setVinculando(false); setVincularInput(''); }, [activeId]);
 
   const verNaLinhaDoTempo = (e, numeroCotacao) => {
     e.stopPropagation();
     if (setSubsel) setSubsel(numeroCotacao);
     setRoute('linha-do-tempo');
+  };
+
+  /* 10/09 — "Responder"/"Vincular" eram botões desabilitados desde que o
+     Inbox foi criado, só com título "em desenvolvimento". Pedido do
+     usuário (com print do site em produção): precisa funcionar de
+     verdade. Responder reusa a mesma send-email (mesma caixa suporte@
+     vpsistema.com); se o e-mail original já estava vinculado a uma
+     cotação, a resposta herda o vínculo automaticamente. */
+  const enviarResposta = async () => {
+    if (!active || !respostaTexto.trim()) return;
+    setEnviandoResposta(true);
+    try {
+      const sb = window.__VP_SB.sb;
+      const subject = /^re:/i.test(active.subject || '') ? active.subject : `Re: ${active.subject || ''}`;
+      const { error } = await sb.functions.invoke('send-email', {
+        body: {
+          to: active.from, subject, text: respostaTexto,
+          numeroCotacao: active.numeroCotacao ?? undefined,
+          referenciaTipo: active.numeroCotacao != null ? 'resposta_inbox' : undefined,
+        },
+      });
+      if (error) throw error;
+      window.toast?.('Resposta enviada.', 'success');
+      setRespondendo(false); setRespostaTexto('');
+      carregar();
+    } catch (e) {
+      window.toast?.('Erro ao enviar: ' + (e.message || e), 'error');
+    } finally {
+      setEnviandoResposta(false);
+    }
+  };
+
+  /* Vínculo manual — cobre o caso do vínculo automático (Message-ID ou
+     regex no assunto) não ter achado nada, ou ter achado errado. Marca
+     como 'certo' porque é confirmação humana, mais confiável que
+     qualquer heurística automática. */
+  const salvarVinculo = async () => {
+    if (!active) return;
+    const numero = parseInt(String(vincularInput).replace(/\D/g, ''), 10);
+    if (!numero) { window.toast?.('Digite um Nº Cotação válido (ex.: 950).', 'warning'); return; }
+    setSalvandoVinculo(true);
+    try {
+      const sb = window.__VP_SB.sb;
+      const { data: existe } = await sb.from('formularios_elevador').select('numero_cotacao').eq('numero_cotacao', numero).maybeSingle();
+      if (!existe) { window.toast?.(`Não existe Cotação Nº ${numero} no sistema.`, 'error'); return; }
+      const { error } = await sb.from('emails_projeto').update({ numero_cotacao: numero, vinculo_confianca: 'certo' }).eq('id', active.id);
+      if (error) throw error;
+      window.toast?.(`Vinculado à Cotação Nº ${numero}.`, 'success');
+      setVinculando(false); setVincularInput('');
+      carregar();
+    } catch (e) {
+      window.toast?.('Erro ao vincular: ' + (e.message || e), 'error');
+    } finally {
+      setSalvandoVinculo(false);
+    }
   };
 
   const folders = [
@@ -1430,18 +1493,39 @@ function EmailInbox({ setRoute, setSubsel }) {
                   </div>
                   <div className="from-email">{active.date ? new Date(active.date).toLocaleString('pt-BR') : ''}</div>
                   <div className="inbox__msg-actions">
-                    <Button variant="outline" size="sm" icon="reply" disabled title="Em desenvolvimento — responder de dentro do site ainda não implementado">Responder</Button>
-                    <Button variant="ghost" size="sm" icon="link2" disabled title="Em desenvolvimento — vínculo com embarque ainda não implementado">Vincular</Button>
+                    <Button variant="outline" size="sm" icon="reply" onClick={() => { setRespondendo(r => !r); setVinculando(false); }}>Responder</Button>
+                    <Button variant="ghost" size="sm" icon="link2" onClick={() => { setVinculando(v => !v); setRespondendo(false); setVincularInput(active.numeroCotacao != null ? String(active.numeroCotacao) : ''); }}>Vincular</Button>
                   </div>
                 </div>
+                {vinculando && (
+                  <div className="row gap-2" style={{ marginTop: 10, alignItems: 'center' }}>
+                    <input className="input" style={{ maxWidth: 180 }} placeholder="Nº Cotação (ex.: 950)" value={vincularInput}
+                      onChange={(e) => setVincularInput(e.target.value)} onKeyDown={(e) => e.key === 'Enter' && salvarVinculo()}/>
+                    <Button variant="primary" size="sm" disabled={salvandoVinculo} onClick={salvarVinculo}>{salvandoVinculo ? 'Salvando…' : 'Salvar vínculo'}</Button>
+                    <Button variant="ghost" size="sm" onClick={() => setVinculando(false)}>Cancelar</Button>
+                  </div>
+                )}
               </div>
               <div className="inbox__msg-body">
                 <EmailBody active={active}/>
               </div>
+              {respondendo && (
+                <div style={{ padding: '0 16px 12px' }}>
+                  <textarea className="input" rows={5} style={{ width: '100%', resize: 'vertical' }}
+                    placeholder={`Respondendo a ${active.fromName || active.from}…`}
+                    value={respostaTexto} onChange={(e) => setRespostaTexto(e.target.value)} autoFocus/>
+                  <div className="row gap-2" style={{ marginTop: 8 }}>
+                    <Button variant="primary" size="sm" icon="send" disabled={enviandoResposta || !respostaTexto.trim()} onClick={enviarResposta}>
+                      {enviandoResposta ? 'Enviando…' : 'Enviar resposta'}
+                    </Button>
+                    <Button variant="ghost" size="sm" onClick={() => { setRespondendo(false); setRespostaTexto(''); }}>Cancelar</Button>
+                  </div>
+                </div>
+              )}
               <div className="inbox__compose">
-                <Button variant="primary" size="sm" icon="reply" disabled title="Em desenvolvimento — responder/encaminhar de dentro do site ainda não implementado (leitura já é real via IMAP)">Responder</Button>
-                <Button variant="outline" size="sm" icon="reply" disabled title="Em desenvolvimento — responder/encaminhar de dentro do site ainda não implementado (leitura já é real via IMAP)">Responder a todos</Button>
-                <Button variant="outline" size="sm" icon="arrowRight" disabled title="Em desenvolvimento — responder/encaminhar de dentro do site ainda não implementado (leitura já é real via IMAP)">Encaminhar</Button>
+                <Button variant="primary" size="sm" icon="reply" onClick={() => { setRespondendo(r => !r); setVinculando(false); }}>Responder</Button>
+                <Button variant="outline" size="sm" icon="reply" disabled title="Em desenvolvimento — responder a todos os destinatários ainda não implementado">Responder a todos</Button>
+                <Button variant="outline" size="sm" icon="arrowRight" disabled title="Em desenvolvimento — encaminhar ainda não implementado">Encaminhar</Button>
                 <div className="spacer" style={{ flex: 1 }}/>
                 <Button variant="ghost" size="sm" icon="zap" disabled title="Em desenvolvimento — sugestão de resposta por IA ainda não implementada">Sugerir resposta (AI)</Button>
               </div>
