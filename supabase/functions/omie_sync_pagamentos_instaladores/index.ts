@@ -154,11 +154,22 @@ Deno.serve(async (req) => {
     const debug_projeto = body.debug_projeto;
     const debug_buscar_projeto = body.debug_buscar_projeto;
     const debug_cliente_codigo = body.debug_cliente_codigo;
-    const pediuDebug = debug_cpf_cnpj || debug_consultar || debug_projeto || debug_buscar_projeto || debug_cliente_codigo;
+    // TEMPORÁRIO (10/09, investigação do "Pago Parcialmente" que financas/
+    // contapagar não reflete — ver PR #349): passthrough genérico pra
+    // qualquer endpoint/call do Omie, só pra eu não precisar de um deploy
+    // por tentativa enquanto exploro financas/contacorrentelancamentos.
+    // Remover depois que a investigação terminar.
+    const debug_raw = body.debug_raw;
+    const pediuDebug = debug_cpf_cnpj || debug_consultar || debug_projeto || debug_buscar_projeto || debug_cliente_codigo || debug_raw;
 
     if (pediuDebug) {
       if (!debugKey || req.headers.get("x-debug-key") !== debugKey) {
         return json({ error: "Não autorizado" }, 403);
+      }
+
+      if (debug_raw && debug_raw.endpoint && debug_raw.call) {
+        const resp = await omieCall(debug_raw.endpoint, debug_raw.call, debug_raw.param || {});
+        return json(resp.data);
       }
 
       if (debug_cpf_cnpj) {
