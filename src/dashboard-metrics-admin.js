@@ -67,20 +67,32 @@
     return (comissoes || []).reduce((s, c) => s + (Number(c.comissao) || 0), 0);
   }
 
-  function kpis({ projetos, embarques, alertas, propostas, contratos, avais, comissoes }) {
+  /* projetosPeriodo/propostasPeriodo/comissoesPeriodo (opcionais, default =
+     array completo) — recortes já filtrados por período (Hoje/7/30/90 dias)
+     que supabase.js monta a partir de start_date/aprovada_em/created_at.
+     Só afetam os 3 KPIs abaixo com data limpa e sem função de checagem de
+     consistência (Embarques em trânsito é foto do status atual; Alertas
+     críticos mistura achados sem data — nenhum dos dois faz sentido
+     "no período" sem inventar semântica nova, então continuam usando o
+     universo completo). Achado A02 da auditoria: o seletor de período
+     mudava de rótulo sem filtrar nada. */
+  function kpis({ projetos, embarques, alertas, propostas, contratos, avais, comissoes, projetosPeriodo, propostasPeriodo, comissoesPeriodo }) {
     const CM = window.ComercialMetrics;
     const crit = alertasCriticos({ alertas, propostas, contratos, avais });
-    const aprovadas = CM.propostasAprovadas(propostas);
+    const propostasFat = propostasPeriodo || propostas;
+    const projetosCount = projetosPeriodo || projetos;
+    const comissoesSoma = comissoesPeriodo || comissoes;
+    const aprovadas = CM.propostasAprovadas(propostasFat);
     return [
       // Issue #274 fechada em 23/08: `projetos` aqui é o array já
       // reconciliado com a esteira real (ver GM.projetosDaEsteira em
       // dashboard-metrics-gantt.js, chamado por supabase.js antes deste
       // compute) — não é mais a tabela legada `projetos` (sempre 0 linhas).
-      { label: 'Projetos ativos', value: String((projetos || []).length), unit: '', delta: '', deltaDir: 'up', sub: 'todos módulos' },
+      { label: 'Projetos ativos', value: String((projetosCount || []).length), unit: '', delta: '', deltaDir: 'up', sub: 'todos módulos' },
       { label: 'Embarques em trânsito', value: String(embarquesEmTransito(embarques).length), unit: '', delta: '', deltaDir: 'up', sub: 'Santos+Itaguaí' },
       { label: 'Alertas críticos', value: String(crit.length), unit: '', delta: '', deltaDir: crit.length > 0 ? 'down' : 'up', sub: 'ver central' },
-      { label: 'Faturamento (propostas assinadas)', value: fmtBRL(faturamentoTotal(propostas)), unit: '', delta: '', deltaDir: 'up', sub: `${aprovadas.length} propostas` },
-      { label: 'Comissões (custo)', value: fmtBRL(comissaoTotal(comissoes)), unit: '', delta: '', deltaDir: 'down', sub: `${(comissoes || []).length} registros` },
+      { label: 'Faturamento (propostas assinadas)', value: fmtBRL(faturamentoTotal(propostasFat)), unit: '', delta: '', deltaDir: 'up', sub: `${aprovadas.length} propostas` },
+      { label: 'Comissões (custo)', value: fmtBRL(comissaoTotal(comissoesSoma)), unit: '', delta: '', deltaDir: 'down', sub: `${(comissoesSoma || []).length} registros` },
     ];
   }
 
@@ -93,9 +105,9 @@
     return 'R$ ' + n;
   }
 
-  function compute({ projetos, embarques, alertas, propostas, contratos, avais, comissoes }) {
+  function compute({ projetos, embarques, alertas, propostas, contratos, avais, comissoes, projetosPeriodo, propostasPeriodo, comissoesPeriodo }) {
     return {
-      kpis: kpis({ projetos, embarques, alertas, propostas, contratos, avais, comissoes }),
+      kpis: kpis({ projetos, embarques, alertas, propostas, contratos, avais, comissoes, projetosPeriodo, propostasPeriodo, comissoesPeriodo }),
       alertasCriticos: alertasCriticos({ alertas, propostas, contratos, avais }),
     };
   }

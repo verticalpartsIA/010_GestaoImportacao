@@ -188,10 +188,10 @@ function Dashboard({ role, setRoute, setSubsel }) {
       setSbData({ kpis: {}, tarefas: [], alertas: [], ganttProjetos: [], estoqueCritico: [], alertasCriticos: 0 });
       setLoading(false);
     }, 3000);
-    return window.__VP_SB.loadDashboardData(role)
+    return window.__VP_SB.loadDashboardData(role, period)
       .then(data => { clearTimeout(timeoutId); setSbData(data); setLoading(false); })
       .catch((err) => { clearTimeout(timeoutId); setLoading(false); window.toast?.('Erro ao atualizar dashboard: ' + err.message, 'error'); });
-  }, [role]);
+  }, [role, period]);
 
   React.useEffect(() => {
     reloadDashboard();

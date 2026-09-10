@@ -157,7 +157,20 @@
 
   // ---- carregador principal -------------------------------------------
 
-  async function loadDashboardData(role) {
+  /* Achado A02 da auditoria: o seletor Hoje/7/30/90 dias do Dashboard
+     mudava o rótulo do botão sem filtrar nenhum dado. period vem como o
+     rótulo exato mostrado na tela; undefined preserva o comportamento
+     antigo (sem filtro) pra não quebrar chamadas existentes. */
+  function periodoParaData(period) {
+    if (!period) return null;
+    const agora = new Date();
+    if (period === 'Hoje') { const d = new Date(agora); d.setHours(0, 0, 0, 0); return d; }
+    const dias = { '7 dias': 7, '30 dias': 30, '90 dias': 90 }[period];
+    if (!dias) return null;
+    return new Date(agora.getTime() - dias * 24 * 60 * 60 * 1000);
+  }
+
+  async function loadDashboardData(role, period) {
     const [
       lR, cotR, projR, alertR,
       tarR, embR, ctR, estR,
@@ -241,7 +254,11 @@
     // extraído. Único que COMPÕE outro módulo (ComercialMetrics), em vez
     // de refiltrar do zero — ver comentário no próprio arquivo. ----
     const AM = window.AdminMetrics;
-    const admin = AM.compute({ projetos: projetosReais, embarques, alertas, propostas, contratos, avais, comissoes });
+    const desde = periodoParaData(period);
+    const projetosPeriodo = desde ? projetosReais.filter(p => p.start_date && new Date(p.start_date) >= desde) : undefined;
+    const propostasPeriodo = desde ? propostas.filter(p => p.aprovada_em && new Date(p.aprovada_em) >= desde) : undefined;
+    const comissoesPeriodo = desde ? comissoes.filter(c => c.created_at && new Date(c.created_at) >= desde) : undefined;
+    const admin = AM.compute({ projetos: projetosReais, embarques, alertas, propostas, contratos, avais, comissoes, projetosPeriodo, propostasPeriodo, comissoesPeriodo });
 
     // ---- tarefas no formato esperado pelo Dashboard ----
     const tarefasFmt = tarefas.map(t => ({

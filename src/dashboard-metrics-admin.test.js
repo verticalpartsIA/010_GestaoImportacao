@@ -74,3 +74,43 @@ test('compute — devolve kpis (5 itens, com Comissões) e alertasCriticos (arra
   assert.equal(out.kpis.length, 5);
   assert.ok(Array.isArray(out.alertasCriticos));
 });
+
+// A02 (auditoria 10/09): seletor de período do Dashboard mudava o rótulo
+// sem filtrar nada. projetosPeriodo/propostasPeriodo/comissoesPeriodo são
+// opcionais (default = array completo, mantém as 8 chamadas acima intactas).
+test('kpis — sem *Periodo, usa os arrays completos (compat)', () => {
+  const out = M.kpis({
+    projetos: [{ id: 1 }, { id: 2 }], embarques: [], alertas: [],
+    propostas: [{ status: 'aprovada', valor_total: 100 }], contratos: [], avais: [],
+    comissoes: [{ comissao: 10 }, { comissao: 20 }],
+  });
+  assert.equal(out.find((k) => k.label === 'Projetos ativos').value, '2');
+  assert.equal(out.find((k) => k.label.startsWith('Comissões')).sub, '2 registros');
+});
+
+test('kpis — com *Periodo, usa só o recorte filtrado (Projetos/Faturamento/Comissões)', () => {
+  const out = M.kpis({
+    projetos: [{ id: 1 }, { id: 2 }, { id: 3 }], embarques: [], alertas: [],
+    propostas: [{ status: 'aprovada', valor_total: 999999 }], contratos: [], avais: [],
+    comissoes: [{ comissao: 10 }, { comissao: 20 }, { comissao: 30 }],
+    projetosPeriodo: [{ id: 1 }],
+    propostasPeriodo: [{ status: 'aprovada', valor_total: 100000 }],
+    comissoesPeriodo: [{ comissao: 10 }],
+  });
+  assert.equal(out.find((k) => k.label === 'Projetos ativos').value, '1');
+  assert.equal(out.find((k) => k.label.startsWith('Faturamento')).value, 'R$ 100k');
+  assert.equal(out.find((k) => k.label.startsWith('Comissões')).sub, '1 registros');
+});
+
+test('kpis — Embarques em trânsito e Alertas críticos ignoram *Periodo de propósito (foto do estado atual)', () => {
+  const out = M.kpis({
+    projetos: [], embarques: [{ status: 'Em trânsito' }], alertas: [],
+    propostas: [{ id: 'p1', status: 'aprovada', numero_cotacao: 1, valor_total: 500 }],
+    contratos: [], avais: [],
+    comissoes: [],
+    propostasPeriodo: [], // faturamento zerado no período, mas o alerta de "sem contrato" continua
+  });
+  assert.equal(out.find((k) => k.label === 'Embarques em trânsito').value, '1');
+  assert.equal(out.find((k) => k.label === 'Alertas críticos').value, '1');
+  assert.equal(out.find((k) => k.label.startsWith('Faturamento')).value, 'R$ 0');
+});
