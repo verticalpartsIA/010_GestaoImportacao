@@ -831,7 +831,7 @@ function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, onPedirRevisao, envian
   const [verResp, setVerResp] = React.useState(false);
   const [recipient, setRecipient] = React.useState(() => (
     grupo.fornecedor === 'Glarie'
-      ? { nome: 'Kimmy (Glarie)', email: 'kimmy.kuai@glarie.com', telefone: '8618751801577' }
+      ? { nome: 'Kimmy (Glarie)', email: 'kimmy.kuai@glarie.com, carrie.han@glarie.com, sam.zhang@glarie.com', telefone: '8618751801577' }
       : { nome: '', email: '', telefone: '' }
   ));
   const setR = (k) => (v) => setRecipient((r) => ({ ...r, [k]: v }));
@@ -936,7 +936,10 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
       const url = store.cotacaoUrl(cot.token);
       const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.etapaId('cotacao', numeroCotacao)}` : '';
       const msg = `Solicitação de cotação técnica ${cot.numero_documento}${numeroTxt} — VerticalParts\n` +
-        `Segue o link com as especificações da(s) unidade(s) ${grupo.unidades.map((u) => u.identificador).join(', ')} para cotação:\n${url}`;
+        `Segue o link com as especificações da(s) unidade(s) ${grupo.unidades.map((u) => u.identificador).join(', ')} para cotação:\n${url}\n\n` +
+        `Este mesmo link foi enviado por WhatsApp e E-mail — responda por qualquer um dos dois, sem precisar repetir.\n` +
+        `This same link was sent via WhatsApp and Email — please reply through either one, no need to repeat.\n` +
+        `此链接已通过WhatsApp和邮件发送 — 您可以通过任一方式回复，无需重复填写。`;
       if (canal === 'whatsapp') window.open(window.PFStore.whatsAppHref(recipient.telefone, msg), '_blank');
       if (canal === 'email') window.open(window.PFStore.mailtoHref(recipient.email, `Cotação técnica ${cot.numero_documento} — VerticalParts`, msg), '_blank');
       if (canal === 'link') { try { await navigator.clipboard.writeText(url); } catch (e) {} window.toast?.('Link copiado.', 'success'); }

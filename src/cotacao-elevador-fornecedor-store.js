@@ -237,12 +237,22 @@
     return data;
   }
 
+  /* 10/09 — bug real: channel/recipient são campos únicos, sobrescritos a
+     cada chamada. Enviar por WhatsApp pra um contato e depois por E-mail
+     pra outro apagava o rastro do primeiro envio — quem checasse depois
+     "pra quem foi enviado" via só o último clique. `envios` (jsonb array,
+     migração cotacao_elevador_fornecedor_envios_historico) acumula todos;
+     channel/recipient continuam gravando só o último, mantidos por
+     compatibilidade (nada mais no código lê os dois hoje, mas não custa
+     preservar). */
   async function marcarEnviado(id, channel, recipient) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const now = new Date().toISOString();
+    const { data: cur } = await c.from('cotacoes_elevador_fornecedor').select('envios').eq('id', id).maybeSingle();
+    const envios = [...((cur && cur.envios) || []), { channel: channel || null, recipient: recipient || null, sent_at: now }];
     const { error } = await c.from('cotacoes_elevador_fornecedor').update({
       status: 'enviado', channel: channel || null, recipient: recipient || null,
-      sent_at: now, updated_at: now,
+      envios, sent_at: now, updated_at: now,
     }).eq('id', id);
     if (error) throw error;
     if (window.EventosFluxo) {
