@@ -1088,6 +1088,144 @@ function S_Conteudo({ d, set }) {
   );
 }
 
+/* Versão "menu lateral" do Conteúdo da Proposta — mesmo padrão de árvore
+   (categoria expansível + checkbox por campo) que a Ficha Técnica usa na
+   barra lateral dela. Roda a mesma lógica de persistência de S_Conteudo
+   (acima), só que renderizado dentro do pe__sidenav em vez do painel
+   principal — os dois ficam sincronizados via d/set (mesmo dado). */
+function S_ContSidebarNav({ d, set, isActive, icon, onHeaderClick }) {
+  const engine = window.PropostaConteudoEngine;
+  const store = window.PropostaAcabamentosStore;
+  const [libLoaded, setLibLoaded] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(false);
+  const [openCat, setOpenCat] = React.useState({});
+  const [modal, setModal] = React.useState(null);
+
+  React.useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!store || !engine) return;
+      const lib = await store.loadLibrary();
+      if (cancelado) return;
+      engine.setLibraryExtras(lib);
+      setLibLoaded((n) => !n);
+    })();
+    return () => { cancelado = true; };
+  }, []);
+
+  const cats = engine ? engine.garantirCats(d.elevador) : [];
+
+  const persistirCats = (novosCats) => {
+    set("elevador.conteudoCats", novosCats);
+    if (!engine) return;
+    const legado = engine.derivarLegado(novosCats);
+    Object.keys(legado).forEach((k) => set(`elevador.${k}`, legado[k]));
+  };
+
+  React.useEffect(() => {
+    if (engine && !(Array.isArray(d.elevador.conteudoCats) && d.elevador.conteudoCats.length)) {
+      persistirCats(cats);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libLoaded]);
+
+  if (!engine) return null;
+
+  const toggleField = (catId, k) => persistirCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, ativo: !f.ativo }),
+  }));
+  const removeField = (catId, k) => {
+    persistirCats(cats.map((c) => c.id !== catId ? c : { ...c, campos: c.campos.filter((f) => f.k !== k) }));
+    store && store.deleteFieldFromLibrary(catId, k);
+  };
+  const removeCategory = (catId) => {
+    persistirCats(cats.filter((c) => c.id !== catId));
+    store && store.deleteCategoryFromLibrary(catId);
+  };
+  const addField = (catId, defIn) => {
+    const cat = cats.find((c) => c.id === catId);
+    if (cat && cat.campos.some((f) => engine.normalizeNome(f.nome) === engine.normalizeNome(defIn.nome))) {
+      window.toast?.("Já existe um campo com esse nome nessa categoria.", "warning");
+      return;
+    }
+    const k = engine.fieldKey(defIn.nome) + "_" + Date.now();
+    const novoValor = defIn.tipo === "nome_desc" ? "" : defIn.nome;
+    persistirCats(cats.map((c) => c.id !== catId ? c : {
+      ...c, campos: [...c.campos, { k, nome: defIn.nome, tipo: defIn.tipo, valor: novoValor, ativo: true, ordem: c.campos.length, custom: true }],
+    }));
+    store && store.saveFieldToLibrary(catId, defIn);
+  };
+  const addCategory = (nome) => {
+    if (cats.some((c) => engine.normalizeNome(c.nome) === engine.normalizeNome(nome))) {
+      window.toast?.("Já existe uma categoria com esse nome.", "warning");
+      return;
+    }
+    const id = engine.slugCategoria(nome);
+    persistirCats([...cats, { id, nome, custom: true, campos: [] }]);
+    store && store.saveCategoryToLibrary({ id, nome });
+  };
+
+  const IconComp = icon || Icon.bolt;
+  const totalAtivos = cats.reduce((s, c) => s + c.campos.filter((f) => f.ativo).length, 0);
+
+  return (
+    <div className="pe__conttree">
+      <div className={"pe__sidenav-item" + (isActive ? " is-active" : "")}
+        onClick={() => { onHeaderClick(); setExpanded((e) => !e); }}>
+        <span className="pe__sidenav-icon"><IconComp/></span>
+        <span style={{ flex: 1 }}>Conteúdo da Proposta</span>
+        {totalAtivos > 0 && <span className="pe__conttree-badge">{totalAtivos}</span>}
+        <svg className={"pe__conttree-chev" + (expanded ? " on" : "")} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      </div>
+      {expanded && (
+        <div className="pe__conttree-body">
+          {cats.map((c) => {
+            const aberto = !!openCat[c.id];
+            const nAtivos = c.campos.filter((f) => f.ativo).length;
+            return (
+              <div className="pe__conttree-cat" key={c.id}>
+                <div className="pe__conttree-cathead-row">
+                  <button type="button" className="pe__conttree-cathead" onClick={() => setOpenCat((o) => ({ ...o, [c.id]: !o[c.id] }))}>
+                    <svg className={"pe__conttree-chev sm" + (aberto ? " on" : "")} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    <span>{c.nome}</span>
+                    {nAtivos > 0 && <span className="pe__conttree-badge sm">{nAtivos}</span>}
+                  </button>
+                  {c.custom && (
+                    <button type="button" className="pe__conttree-rm" onClick={() => removeCategory(c.id)} title="Excluir categoria" aria-label="Excluir categoria">×</button>
+                  )}
+                </div>
+                {aberto && (
+                  <div className="pe__conttree-fields">
+                    {c.campos.map((f) => (
+                      <div className="pe__conttree-fldrow" key={f.k}>
+                        <label className={"pe__conttree-fld" + (f.ativo ? " on" : "")}>
+                          <input type="checkbox" checked={!!f.ativo} onChange={() => toggleField(c.id, f.k)}/>
+                          <span>{f.nome || "(sem nome)"}</span>
+                        </label>
+                        {f.custom && (
+                          <button type="button" className="pe__conttree-rm sm" onClick={() => removeField(c.id, f.k)} title="Excluir campo" aria-label="Excluir campo">×</button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" className="pe__conttree-addfield" onClick={() => setModal({ type: "campo", catId: c.id })}>+ Adicionar campo</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <button type="button" className="pe__conttree-addcat" onClick={() => setModal({ type: "categoria" })}>+ Nova categoria</button>
+        </div>
+      )}
+      {modal?.type === "campo" && (
+        <S_ContAddFieldModal onClose={() => setModal(null)} onAdd={(def) => { addField(modal.catId, def); setModal(null); }}/>
+      )}
+      {modal?.type === "categoria" && (
+        <S_ContAddCategoryModal onClose={() => setModal(null)} onAdd={(nome) => { addCategory(nome); setModal(null); }}/>
+      )}
+    </div>
+  );
+}
+
 function S_Responsabilidades({ d, set }) {
   const r = d.elevador.responsabilidades;
   return (

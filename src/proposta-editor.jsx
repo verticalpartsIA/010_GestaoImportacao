@@ -1063,6 +1063,12 @@ function PropostaEditor({ setRoute, subsel }) {
                   const I = Icon[s.icon] || Icon.bolt;
                   const isActive = activeSection === s.id;
                   const isDone = f.kind === "full";
+                  if (s.id === "conteudo") {
+                    return (
+                      <S_ContSidebarNav key={s.id} d={data} set={set} isActive={isActive} icon={I}
+                        onHeaderClick={() => jump(s.id)}/>
+                    );
+                  }
                   return (
                     <div key={s.id} className={"pe__sidenav-item " + (isActive ? "is-active" : "") + (isDone && !isActive ? " is-done" : "")}
                       onClick={() => jump(s.id)}>
