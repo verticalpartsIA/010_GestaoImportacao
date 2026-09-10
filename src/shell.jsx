@@ -16,6 +16,7 @@ const NAV_GROUPS = [
     { id: "notificacoes", label: "Notificações", icon: "bell" },
     { id: "decisoes", label: "Central de Decisões", icon: "check" },
     { id: "financeiro", label: "Prazos & Pendências", icon: "dollar", restrict: ["financeiro", "admin"] },
+    { id: "inbox", label: "Inbox", icon: "mail" },
   ]},
   /* Só os cadastros mestres de verdade (usados por múltiplos domínios) ficam
      aqui. Produtos, Empresas Instaladoras e Atualização de Custos migraram
@@ -29,7 +30,6 @@ const NAV_GROUPS = [
     { id: "formularios", label: "Formulários", icon: "layers" },
     { id: "controle-cotacoes", label: "Controle de Cotações", icon: "history" },
     { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
-    { id: "comercial-email", label: "Inbox", icon: "mail" },
     { id: "propostas", label: "Propostas", icon: "proposal" },
   ]},
   { label: "Financeiro & Preços", items: [
@@ -283,12 +283,12 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
 const BREADCRUMB_MAP = {
   dashboard:     { module: "Dashboard", page: "Visão Geral", icon: "home" },
   notificacoes:  { module: "Notificações", page: "Central de Alertas", icon: "bell" },
+  inbox:         { module: "Geral", page: "Inbox", icon: "mail" },
   leads:         { module: "Comercial", page: "Leads", icon: "flag" },
   "lead-detail": { module: "Comercial", page: "Detalhe de Lead", icon: "flag" },
   formularios:   { module: "Comercial", page: "Formulários", icon: "layers" },
   "formulario-elevador": { module: "Comercial", page: "Formulário — Elevador", icon: "layers" },
   "controle-cotacoes":   { module: "Comercial", page: "Controle de Cotações", icon: "history" },
-  "comercial-email":     { module: "Comercial", page: "Inbox Comercial", icon: "mail" },
   "cotacoes-fornecedor": { module: "Financeiro", page: "Cotações a Fornecedor", icon: "globe" },
   "cotacao-fornecedor-detail": { module: "Comercial", page: "Detalhe de Cotação", icon: "globe" },
   precificacao:  { module: "Comercial", page: "Precificação", icon: "calculator" },
@@ -324,9 +324,7 @@ const BREADCRUMB_MAP = {
   "pedidos-acompanhamento": { module: "Suprimentos", page: "Pedidos", icon: "package" },
   "importacao-detail":        { module: "Importação", page: "Gestão Importação — Detalhe de Embarque", icon: "ship" },
   "importacao-rastreamento":  { module: "Importação", page: "Gestão Importação — Rastreamento de Navios", icon: "mapIcon" },
-  "importacao-email":         { module: "Importação", page: "Gestão Importação — Inbox Importação", icon: "mail" },
   compras:       { module: "Logística", page: "Compras Nacional", icon: "truck" },
-  "compras-email": { module: "Logística", page: "Inbox Compras", icon: "mail" },
   "vistorias-envio": { module: "Instalação & Entrega", page: "Vistorias de Obras", icon: "send" },
   vistorias:     { module: "Instalação & Entrega", page: "Resultado Vistorias de Obras", icon: "history" },
   instalacao:    { module: "Instalação & Entrega", page: "Instalação em Campo", icon: "hardhat" },

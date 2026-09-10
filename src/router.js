@@ -23,15 +23,15 @@
      também (checklist já existe pro ?v= do index.html; este é o mesmo
      tipo de lembrete). */
   const KNOWN_ROUTES = [
-    'dashboard', 'notificacoes', 'decisoes', 'financeiro',
-    'leads', 'lead-detail', 'formularios', 'formulario-elevador', 'controle-cotacoes', 'comercial-email',
+    'dashboard', 'notificacoes', 'decisoes', 'financeiro', 'inbox',
+    'leads', 'lead-detail', 'formularios', 'formulario-elevador', 'controle-cotacoes',
     'cotacoes-fornecedor', 'cotacao-fornecedor-detail', 'precificacao', 'propostas', 'proposta-editor',
     'aval-financeiro',
     'cadastro-clientes', 'cadastro-fornecedores', 'ncm-catalogo', 'cadastro-instaladores', 'cadastro-custos',
     'juridico', 'contrato-venda-equipamentos', 'contrato-instalador', 'contrato-editor',
-    'importacao', 'importacao-detail', 'importacao-rastreamento', 'importacao-email',
+    'importacao', 'importacao-detail', 'importacao-rastreamento',
     'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos',
-    'compras', 'compras-email', 'pedidos-acompanhamento',
+    'compras', 'pedidos-acompanhamento',
     'engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'ficha-tecnica',
     'ncm-kanban', 'ncm-detail',
     'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias-envio', 'vistorias', 'instalacao',

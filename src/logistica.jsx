@@ -301,7 +301,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
           <p className="page-head__sub">Embarques em trânsito + rastreamento marítimo por AIS</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="mail" onClick={() => setRoute("importacao-email")}>Inbox</Button>
+          <Button variant="outline" icon="mail" onClick={() => setRoute("inbox")}>Inbox</Button>
           <Button variant="outline" icon="globe" onClick={() => setRoute("importacao-rastreamento")}>Mapa de navios</Button>
           <Button variant="primary" icon="plus" onClick={() => setShowEmbarque({})}>Novo embarque</Button>
         </div>
@@ -1231,7 +1231,7 @@ function ComprasPage({ setRoute }) {
           <p className="page-head__sub">Movimentação entre CD Guarulhos, portos e obras. Ocorrências e CTes integrados.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="mail" onClick={() => setRoute("compras-email")}>Inbox</Button>
+          <Button variant="outline" icon="mail" onClick={() => setRoute("inbox")}>Inbox</Button>
           <Button variant="primary" icon="plus" onClick={() => setRoute("importacao")}>Novo frete via embarque</Button>
         </div>
       </div>
@@ -1308,12 +1308,14 @@ function ComprasPage({ setRoute }) {
 
 /* ---------- EMAIL INBOX (Importação + Compras) ============== */
 /* 10/09 — IMAP conectado de verdade (Edge Function read-inbox, mesma
-   caixa suporte@vpsistema.com usada pra enviar em send-email). Compras e
-   Importação compartilham a mesma caixa hoje — não existe ainda
-   categorização real por assunto/remetente que separe as duas, então as
-   duas telas mostram o mesmo conteúdo (honesto, não fabrica um filtro
+   caixa suporte@vpsistema.com usada pra enviar em send-email). Movida do
+   módulo Comercial pro módulo Geral no mesmo dia — pedido do usuário: é
+   uma caixa só, compartilhada por Comercial/Compras/Importação/quem mais
+   precisar, não faz sentido morar dentro de um módulo específico. Botão
+   "Inbox" dentro de Importação/Compras aponta pra cá também (mesma rota).
+   Sem categorização automática por módulo ainda (não fabrica um filtro
    que não existe). Sem cron: busca só quando a tela abre/atualiza. */
-function EmailInbox({ kind, setRoute }) {
+function EmailInbox({ setRoute }) {
   const [emails, setEmails] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState(null);
@@ -1341,14 +1343,14 @@ function EmailInbox({ kind, setRoute }) {
   return (
     <div className="page fade-in" style={{ paddingBottom: 0, paddingRight: 24, paddingLeft: 24 }}>
       <div className="row" style={{ marginBottom: 14 }}>
-        <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute(kind === "compras" ? "compras" : kind === "comercial" ? "formularios" : "importacao")}>Voltar</Button>
+        <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute("dashboard")}>Voltar</Button>
       </div>
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>{kind === "comercial" ? "Comercial" : "Logística"} · Email · {kind === "compras" ? "Compras Nacional" : kind === "comercial" ? "Pré-venda" : "Importação"}</div>
-          <h1 className="page-head__title">Inbox {kind === "compras" ? "Compras" : kind === "comercial" ? "Comercial" : "Importação"}</h1>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Geral · Email</div>
+          <h1 className="page-head__title">Inbox</h1>
           <p className="page-head__sub">
-            {erro ? `Falha ao conectar: ${erro}` : 'Caixa suporte@vpsistema.com — mesma caixa usada por Comercial, Compras e Importação, sem separação automática por assunto ainda.'}
+            {erro ? `Falha ao conectar: ${erro}` : 'Caixa suporte@vpsistema.com — compartilhada por Comercial, Compras e Importação, sem separação automática por assunto ainda.'}
           </p>
         </div>
         <div className="page-head__r row gap-2">

@@ -5,6 +5,7 @@
 /* Títulos por rota — atualiza document.title ao navegar */
 const ROUTE_TITLE = {
   dashboard: "Dashboard",
+  inbox: "Inbox",
   decisoes: "Central de Decisões",
   "cadastro-clientes": "Clientes",
   "cadastro-fornecedores": "Fornecedores",
@@ -26,7 +27,6 @@ const ROUTE_TITLE = {
   "status-obras": "Status de Obras",
   "formulario-elevador": "Formulário — Elevador",
   "controle-cotacoes": "Controle de Cotações",
-  "comercial-email": "Inbox Comercial",
   "cotacoes-fornecedor": "Cotações a Fornecedor",
   "cotacao-fornecedor-detail": "Detalhe de Cotação a Fornecedor",
   precificacao: "Precificação",
@@ -57,9 +57,7 @@ const ROUTE_TITLE = {
   importacao: "Importação",
   "importacao-detail": "Detalhe de Embarque",
   "importacao-rastreamento": "Rastreamento de Navios",
-  "importacao-email": "Inbox Importação",
   compras: "Compras Nacional",
-  "compras-email": "Inbox Compras",
   financeiro: "Gatilhos & Prazo",
   comissoes: "Comissões",
   "pagamentos-instalador": "Pagamentos a Instaladores",
@@ -327,12 +325,12 @@ function App() {
     }
     switch (route) {
       case "dashboard": return <Dashboard role={role} setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "inbox": return <EmailInbox setRoute={setRoute}/>;
       case "leads": return <LeadsPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formularios": return <FormulariosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formulario-elevador": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel}/>;
       case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "comercial-email": return <EmailInbox kind="comercial" setRoute={setRoute}/>;
       case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "status-obras": return <ObrasStatusPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "linha-do-tempo": return <window.LinhaDoTempoPage/>;
@@ -364,9 +362,7 @@ function App() {
       case "importacao": return <ImportacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "importacao-detail": return <ImportacaoDetail embarque={subsel} setRoute={setRoute}/>;
       case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "importacao-email": return <EmailInbox kind="importacao" setRoute={setRoute}/>;
       case "compras": return <ComprasPage setRoute={setRoute}/>;
-      case "compras-email": return <EmailInbox kind="compras" setRoute={setRoute}/>;
       case "financeiro": return <FinanceiroPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
@@ -469,9 +465,8 @@ function App() {
               { value: "importacao", label: "Importação (lista)" },
               { value: "importacao-detail", label: "Detalhe de Embarque" },
               { value: "importacao-rastreamento", label: "🛰️ Mapa de Navios" },
-              { value: "importacao-email", label: "📧 Inbox Importação" },
               { value: "compras", label: "Compras Nacional" },
-              { value: "compras-email", label: "📧 Inbox Compras" },
+              { value: "inbox", label: "📧 Inbox" },
               { value: "financeiro", label: "⏰ Gatilhos & Prazo" },
               { value: "comissoes", label: "Comissões" },
               { value: "pagamentos-instalador", label: "Pagamentos a Instaladores" },

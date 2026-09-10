@@ -19,7 +19,7 @@ const PRINT_SCREENS = [
   { id: "importacao",     title: "Importação",                 module: "Logística",   role: "admin",      sub: "embarques · BL · ETA tracking" },
   { id: "importacao-detail", title: "Embarque — Detalhe",      module: "Logística",   role: "admin",      sub: "navio · timeline · documentos" },
   { id: "importacao-rastreamento", title: "Mapa de Navios",    module: "Logística",   role: "admin",      sub: "MarineTraffic API · rota Shanghai → Santos" },
-  { id: "importacao-email", title: "Inbox Importação",         module: "Logística",   role: "admin",      sub: "IMAP · BL · invoice · aduana" },
+  { id: "inbox",           title: "Inbox",                     module: "Geral",       role: "admin",      sub: "IMAP · caixa compartilhada suporte@vpsistema.com" },
   { id: "compras",        title: "Compras Nacional",           module: "Logística",   role: "admin",      sub: "fretes · ocorrências · CTes" },
   { id: "financeiro",     title: "Gatilhos & Prazo",   module: "Financeiro",  role: "financeiro", sub: "cadeia automática por Nº da Cotação" },
   { id: "comissoes",      title: "Comissões Q2/26",            module: "Financeiro",  role: "financeiro", sub: "vendedor · % · aprovação · pagamento" },
@@ -49,7 +49,7 @@ function renderPrintPage(scr) {
     case "importacao":     return <ImportacaoPage setRoute={noop} setSubsel={noop}/>;
     case "importacao-detail": return <ImportacaoDetail embarque={null} setRoute={noop}/>;
     case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={noop} setSubsel={noop}/>;
-    case "importacao-email": return <EmailInbox kind="importacao" setRoute={noop}/>;
+    case "inbox": return <EmailInbox setRoute={noop}/>;
     case "compras":        return <ComprasPage setRoute={noop}/>;
     case "financeiro":     return <FinanceiroPage/>;
     case "comissoes":      return <ComissoesPage/>;
