@@ -1,28 +1,26 @@
 // ============================================================
 // read-inbox — Edge Function (vpprd)
 // Lê as mensagens mais recentes da caixa suporte@vpsistema.com via IMAP,
-// persiste em emails_projeto (idempotente por UID) e tenta vincular cada
-// uma a um projeto (numero_cotacao).
+// persiste em emails_projeto (idempotente por UID), extrai anexos reais
+// pro bucket emails-anexos, e tenta vincular cada uma a um projeto
+// (numero_cotacao).
 //
 // 10/09 — a lib npm "imapflow" fecha a conexão logo após o TLS neste
 // runtime ("ClosedAfterConnectTLS") — confirmado via teste isolado que a
-// rede/host/porta estão corretos (Deno.connectTls cru lê o banner normal).
-// Então o protocolo IMAP é falado à mão aqui, só com Deno.connectTls —
-// sem dependência nenhuma de socket de terceiro. mailparser também foi
-// evitado de propósito (mesma família de risco de incompatibilidade) —
-// o parser MIME abaixo é mínimo mas autocontido.
+// rede/host/porta estão corretos (Deno.connectTls cru lê o banner
+// normal). Então o protocolo IMAP é falado à mão aqui, só com
+// Deno.connectTls — sem dependência nenhuma de socket de terceiro.
+// mailparser também foi evitado de propósito (mesma família de risco de
+// incompatibilidade) — o parser MIME abaixo é mínimo mas autocontido.
 //
 // Vínculo a projeto (duas camadas, nunca finge certeza que não tem):
 //   'certo'    — In-Reply-To/References da mensagem bate com o
-//                 message_id de um e-mail que o PRÓPRIO site mandou
-//                 (emails_projeto, direcao='saida' — gravado por
-//                 send-email).
-//   'provavel' — fallback por regex no assunto (padrões VPCT-/VPEL-EL/
-//                 "Cotação Nº"), validado contra numero_cotacao real
-//                 existente em formularios_elevador.
+//                 message_id de um e-mail que o PRÓPRIO site mandou.
+//   'provavel' — fallback por regex no assunto, validado contra
+//                 numero_cotacao real existente.
 //
 // Secrets: IMAP_HOST, IMAP_PORT (default 993), reaproveita SMTP_USER/
-// SMTP_PASS (mesma caixa do envio). Body opcional: { limit?: number }
+// SMTP_PASS. Body opcional: { limit?: number }
 // ============================================================
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -80,13 +78,6 @@ async function readUntilTagged(c: ImapConn, tag: string): Promise<string[]> {
   }
 }
 
-/* 10/09 — bug real corrigido: a linha "* N FETCH (UID x FLAGS (...) BODY[]
-   {1234}" tem UID/FLAGS E o marcador de literal na MESMA linha. A versão
-   anterior só extraía UID/FLAGS em linhas SEM literal (por causa de um
-   `continue` antecipado assim que achava o `{n}`) — uid ficava sempre
-   vazio, o call-site descartava toda mensagem (`!uid` → continue), e o
-   Inbox voltava vazio mesmo com e-mail real na caixa. Agora extrai
-   UID/FLAGS de QUALQUER linha, antes de decidir se tem literal. */
 async function readFetchOne(c: ImapConn, tag: string): Promise<{ flags: string; uid: string; source: Uint8Array | null }> {
   let flags = "", uid = "", source: Uint8Array | null = null;
   while (true) {
@@ -134,6 +125,13 @@ function decodeHeaderValue(v: string): string {
     } catch { return data; }
   });
 }
+/* RFC 2231 (filename*=UTF-8''nome.pdf) além do RFC 2047 comum — clientes
+   modernos usam um ou outro pro nome de anexo com acento/espaço. */
+function decodeFilename(v: string): string {
+  const m = v.match(/^[^']*'[^']*'(.+)$/);
+  if (m) { try { return decodeURIComponent(m[1]); } catch { return m[1]; } }
+  return decodeHeaderValue(v.replace(/^"|"$/g, ""));
+}
 function parseHeaders(headerText: string): Record<string, string> {
   const lines = headerText.split(/\r\n/);
   const headers: Record<string, string> = {};
@@ -157,31 +155,47 @@ function parsePart(raw: string) {
   const charset = ct.match(/charset="?([^";]+)"?/i)?.[1] || "utf-8";
   const boundary = ct.match(/boundary="?([^";]+)"?/i)?.[1];
   const encoding = (headers["content-transfer-encoding"] || "7bit").toLowerCase();
-  return { contentType, charset, encoding, boundary, headers, body };
+  const cd = headers["content-disposition"] || "";
+  const filenameRaw = cd.match(/filename\*?=\s*"?([^";]+)"?/i)?.[1] || ct.match(/name\*?=\s*"?([^";]+)"?/i)?.[1] || null;
+  return { contentType, charset, boundary, encoding, headers, body, isAttachment: /attachment/i.test(cd), filename: filenameRaw ? decodeFilename(filenameRaw) : null };
 }
 function splitBody(body: string, boundary: string): string[] {
   const delim = "--" + boundary;
   return body.split(delim).slice(1, -1).map((p) => p.replace(/^\r\n/, ""));
 }
-function extractText(raw: string, depth = 0): { text: string; html: string } {
-  if (depth > 4) return { text: "", html: "" };
+
+type Extracted = { text: string; html: string; attachments: { filename: string; contentType: string; bytes: Uint8Array }[] };
+/* 10/09 — unifica a extração de texto/HTML com a de anexos (antes só
+   extractText existia) — um único passe pela árvore MIME, evita duplicar
+   a lógica de multipart/split. Uma parte é anexo se tiver
+   Content-Disposition: attachment OU tiver filename mas não for
+   text/plain nem text/html (alguns clientes mandam imagem inline sem
+   marcar "attachment" explicitamente). */
+function extractParts(raw: string, depth = 0): Extracted {
+  if (depth > 6) return { text: "", html: "", attachments: [] };
   const part = parsePart(raw);
   if (part.contentType.startsWith("multipart/") && part.boundary) {
     let text = "", html = "";
+    const attachments: Extracted["attachments"] = [];
     for (const sp of splitBody(part.body, part.boundary)) {
-      const r = extractText(sp, depth + 1);
+      const r = extractParts(sp, depth + 1);
       if (r.text && !text) text = r.text;
       if (r.html && !html) html = r.html;
+      attachments.push(...r.attachments);
     }
-    return { text, html };
+    return { text, html, attachments };
   }
   let decoded: Uint8Array;
   if (part.encoding === "base64") decoded = base64ToBytes(part.body);
   else if (part.encoding === "quoted-printable") decoded = quotedPrintableToBytes(part.body);
   else decoded = latin1ToBytes(part.body);
+
+  const ehAnexo = part.filename && (part.isAttachment || !part.contentType.startsWith("text/"));
+  if (ehAnexo) return { text: "", html: "", attachments: [{ filename: part.filename!, contentType: part.contentType, bytes: decoded }] };
+
   let content = "";
   try { content = new TextDecoder(part.charset).decode(decoded); } catch { try { content = new TextDecoder("utf-8").decode(decoded); } catch { content = part.body; } }
-  return part.contentType === "text/html" ? { text: "", html: content } : { text: content, html: "" };
+  return part.contentType === "text/html" ? { text: "", html: content, attachments: [] } : { text: content, html: "", attachments: [] };
 }
 function parseFromHeader(v: string): { email: string; name: string } {
   const m = v.match(/<([^>]+)>/);
@@ -196,11 +210,6 @@ function parseReferenciaId(headers: Record<string, string>): string | null {
   if (refs) { const all = refs.match(/<[^>]+>/g); if (all && all.length) return all[all.length - 1]; }
   return null;
 }
-/* Padrões reais usados no sistema pro código de projeto aparecer no
-   assunto: MasterIdEngine gera VPCT-0950 (cotação) e cotacoes_elevador_
-   fornecedor.numero_documento vira VPEL-EL0954 — confirmado que o número
-   final em ambos os formatos é o MESMO numero_cotacao do formulário pai
-   (não precisa de lookup extra). "Cotação Nº 950" cobre texto solto. */
 function extrairNumeroCotacaoDoAssunto(subject: string): number | null {
   const m1 = subject.match(/VP[A-Z]{2,4}-(?:[A-Z]{1,3})?0*(\d{2,6})/);
   if (m1) return parseInt(m1[1], 10);
@@ -255,7 +264,7 @@ Deno.serve(async (req: Request) => {
         if (!source || !uid) continue;
         const rawLatin1 = new TextDecoder("latin1").decode(source);
         const top = parsePart(rawLatin1);
-        const { text, html } = extractText(rawLatin1);
+        const { text, html, attachments } = extractParts(rawLatin1);
         const fromParsed = parseFromHeader(top.headers["from"] || "");
         const subject = decodeHeaderValue(top.headers["subject"] || "(sem assunto)");
         const dataMsg = top.headers["date"] ? new Date(top.headers["date"]) : null;
@@ -278,6 +287,16 @@ Deno.serve(async (req: Request) => {
           }
         }
 
+        // ---- upload de anexos reais pro Storage (bucket emails-anexos) ----
+        const anexosSalvos: { filename: string; content_type: string; size: number; path: string }[] = [];
+        for (const a of attachments) {
+          const path = `entrada/${uid}/${a.filename}`;
+          const { error: upErrAnexo } = await supabase.storage.from("emails-anexos")
+            .upload(path, a.bytes, { contentType: a.contentType || "application/octet-stream", upsert: true });
+          if (upErrAnexo) { console.warn("[read-inbox] upload anexo falhou", a.filename, upErrAnexo); continue; }
+          anexosSalvos.push({ filename: a.filename, content_type: a.contentType, size: a.bytes.length, path });
+        }
+
         const row = {
           numero_cotacao: numeroCotacao,
           direcao: "entrada",
@@ -293,10 +312,18 @@ Deno.serve(async (req: Request) => {
           vinculo_confianca: vinculo,
           lido: /\\Seen/.test(flags),
           data_mensagem: dataMsg ? dataMsg.toISOString() : null,
+          anexos: anexosSalvos,
         };
         const { data: salvo, error: upErr } = await supabase.from("emails_projeto")
           .upsert(row, { onConflict: "imap_uid" }).select().maybeSingle();
         if (upErr) console.warn("[read-inbox] upsert falhou", uid, upErr);
+
+        // Links assinados (7 dias) pros anexos já salvos — poupa o frontend
+        // de pedir um por um.
+        const anexosComUrl = await Promise.all(anexosSalvos.map(async (a) => {
+          const { data: signed } = await supabase.storage.from("emails-anexos").createSignedUrl(a.path, 60 * 60 * 24 * 7);
+          return { ...a, url: signed?.signedUrl || null };
+        }));
 
         mensagens.push({
           id: (salvo && salvo.id) || uid,
@@ -309,6 +336,7 @@ Deno.serve(async (req: Request) => {
           html: html ? html.slice(0, 20000) : null,
           numeroCotacao,
           vinculoConfianca: vinculo,
+          anexos: anexosComUrl,
         });
       }
     }

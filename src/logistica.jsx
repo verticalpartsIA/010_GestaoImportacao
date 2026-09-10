@@ -1329,6 +1329,7 @@ function EmailInbox({ setRoute, setSubsel }) {
   const [vinculando, setVinculando] = React.useState(false);
   const [vincularInput, setVincularInput] = React.useState('');
   const [salvandoVinculo, setSalvandoVinculo] = React.useState(false);
+  const [anexosResposta, setAnexosResposta] = React.useState([]);
 
   const carregar = React.useCallback(() => {
     setLoading(true); setErro(null);
@@ -1339,7 +1340,29 @@ function EmailInbox({ setRoute, setSubsel }) {
     }).catch((e) => setErro(e.message || String(e))).finally(() => setLoading(false));
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
-  React.useEffect(() => { setRespondendo(false); setRespostaTexto(''); setVinculando(false); setVincularInput(''); }, [activeId]);
+  React.useEffect(() => { setRespondendo(false); setRespostaTexto(''); setVinculando(false); setVincularInput(''); setAnexosResposta([]); }, [activeId]);
+
+  const MAX_ANEXO_TOTAL = 8 * 1024 * 1024; // espelha o limite de send-email
+  const lerArquivoBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const anexarArquivos = async (fileList) => {
+    const arquivos = Array.from(fileList || []);
+    if (!arquivos.length) return;
+    const totalAtual = anexosResposta.reduce((s, a) => s + a.size, 0);
+    const totalNovo = arquivos.reduce((s, f) => s + f.size, 0);
+    if (totalAtual + totalNovo > MAX_ANEXO_TOTAL) {
+      window.toast?.(`Anexos somam mais de ${MAX_ANEXO_TOTAL / 1024 / 1024}MB — remova algum antes de adicionar mais.`, 'warning');
+      return;
+    }
+    const novos = await Promise.all(arquivos.map(async (f) => ({
+      filename: f.name, contentType: f.type || 'application/octet-stream', size: f.size, base64: await lerArquivoBase64(f),
+    })));
+    setAnexosResposta((prev) => [...prev, ...novos]);
+  };
 
   const verNaLinhaDoTempo = (e, numeroCotacao) => {
     e.stopPropagation();
@@ -1364,11 +1387,12 @@ function EmailInbox({ setRoute, setSubsel }) {
           to: active.from, subject, text: respostaTexto,
           numeroCotacao: active.numeroCotacao ?? undefined,
           referenciaTipo: active.numeroCotacao != null ? 'resposta_inbox' : undefined,
+          attachments: anexosResposta.length ? anexosResposta.map((a) => ({ filename: a.filename, contentType: a.contentType, base64: a.base64 })) : undefined,
         },
       });
       if (error) throw error;
       window.toast?.('Resposta enviada.', 'success');
-      setRespondendo(false); setRespostaTexto('');
+      setRespondendo(false); setRespostaTexto(''); setAnexosResposta([]);
       carregar();
     } catch (e) {
       window.toast?.('Erro ao enviar: ' + (e.message || e), 'error');
@@ -1464,7 +1488,7 @@ function EmailInbox({ setRoute, setSubsel }) {
                 <span>{m.fromName || m.from}</span>
                 <span className="time">{m.date ? new Date(m.date).toLocaleString('pt-BR') : ''}</span>
               </div>
-              <div className="subj">{m.subject}</div>
+              <div className="subj">{m.subject}{m.anexos && m.anexos.length > 0 ? <Icon.paperclip size={11} style={{ marginLeft: 6, verticalAlign: 'middle', opacity: .6 }}/> : null}</div>
               <div className="preview">{m.preview}</div>
               {m.numeroCotacao != null && (
                 <Badge variant={m.vinculoConfianca === 'certo' ? 'success' : 'warning'} onClick={(ev) => verNaLinhaDoTempo(ev, m.numeroCotacao)} style={{ cursor: 'pointer', marginTop: 4 }}>
@@ -1509,16 +1533,45 @@ function EmailInbox({ setRoute, setSubsel }) {
               <div className="inbox__msg-body">
                 <EmailBody active={active}/>
               </div>
+              {active.anexos && active.anexos.length > 0 && (
+                <div style={{ padding: '0 16px 12px', display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  {active.anexos.map((a, i) => (
+                    a.url ? (
+                      <a key={i} href={a.url} target="_blank" rel="noreferrer" className="badge badge--outline" style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <Icon.paperclip size={10}/> {a.filename} <span className="muted small">({Math.round((a.size || 0) / 1024)}kb)</span>
+                      </a>
+                    ) : (
+                      <span key={i} className="badge badge--outline" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                        <Icon.paperclip size={10}/> {a.filename}
+                      </span>
+                    )
+                  ))}
+                </div>
+              )}
               {respondendo && (
                 <div style={{ padding: '0 16px 12px' }}>
                   <textarea className="input" rows={5} style={{ width: '100%', resize: 'vertical' }}
                     placeholder={`Respondendo a ${active.fromName || active.from}…`}
                     value={respostaTexto} onChange={(e) => setRespostaTexto(e.target.value)} autoFocus/>
+                  {anexosResposta.length > 0 && (
+                    <div className="row gap-2" style={{ marginTop: 6, flexWrap: 'wrap' }}>
+                      {anexosResposta.map((a, i) => (
+                        <span key={i} className="badge badge--outline" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                          <Icon.paperclip size={10}/> {a.filename} <span className="muted small">({Math.round(a.size / 1024)}kb)</span>
+                          <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setAnexosResposta((prev) => prev.filter((_, idx) => idx !== i))}>×</span>
+                        </span>
+                      ))}
+                    </div>
+                  )}
                   <div className="row gap-2" style={{ marginTop: 8 }}>
                     <Button variant="primary" size="sm" icon="send" disabled={enviandoResposta || !respostaTexto.trim()} onClick={enviarResposta}>
                       {enviandoResposta ? 'Enviando…' : 'Enviar resposta'}
                     </Button>
-                    <Button variant="ghost" size="sm" onClick={() => { setRespondendo(false); setRespostaTexto(''); }}>Cancelar</Button>
+                    <label className="btn btn--outline btn--sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                      <Icon.paperclip size={12}/> Anexar
+                      <input type="file" multiple style={{ display: 'none' }} onChange={(e) => { anexarArquivos(e.target.files); e.target.value = ''; }}/>
+                    </label>
+                    <Button variant="ghost" size="sm" onClick={() => { setRespondendo(false); setRespostaTexto(''); setAnexosResposta([]); }}>Cancelar</Button>
                   </div>
                 </div>
               )}

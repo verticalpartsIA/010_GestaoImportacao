@@ -6,17 +6,21 @@
 //
 // 10/09 — e-mails vinculados a projeto (numero_cotacao): quando o
 // chamador passa numeroCotacao, geramos um Message-ID nosso e gravamos a
-// linha de saída em emails_projeto. Isso é o "vínculo certo" — se o
-// destinatário responder citando esse Message-ID (In-Reply-To/References,
-// que praticamente todo cliente de e-mail preserva ao responder),
-// read-inbox casa com certeza absoluta. Sem numeroCotacao, o e-mail é
-// só enviado normal, sem persistência (uso genérico/avulso).
+// linha de saída em emails_projeto. "Vínculo certo" se o destinatário
+// responder citando esse Message-ID.
+//
+// 10/09 (2) — suporte a anexo: body.attachments = [{filename,
+// contentType, base64}]. Cada anexo é (a) mandado de verdade no SMTP via
+// denomailer e (b) salvo no bucket emails-anexos e referenciado em
+// emails_projeto.anexos, pro mesmo anexo aparecer também na Linha do
+// Tempo/Inbox sem precisar reabrir o e-mail.
 //
 // Secrets: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS. Opcional:
 // SMTP_FROM_NAME.
 //
 // Body: { to, subject, text?, html?, replyTo?, numeroCotacao?,
-//         referenciaTipo?, referenciaId? }
+//         referenciaTipo?, referenciaId?, attachments?: [{filename,
+//         contentType, base64}] }
 // ============================================================
 import { SMTPClient } from "https://deno.land/x/denomailer@1.6.0/mod.ts";
 import { createClient } from "jsr:@supabase/supabase-js@2";
@@ -39,6 +43,16 @@ function parseDestinatarios(to: unknown): string[] {
   if (typeof to === "string") return to.split(",").map((x) => x.trim()).filter(Boolean);
   return [];
 }
+
+function base64ToBytes(b64: string): Uint8Array {
+  const clean = String(b64 || "").replace(/^data:[^,]*,/, "").replace(/[^A-Za-z0-9+/=]/g, "");
+  const bin = atob(clean);
+  const arr = new Uint8Array(bin.length);
+  for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
+  return arr;
+}
+
+const MAX_ANEXO_TOTAL_BYTES = 8 * 1024 * 1024; // 8MB — limite de body de Edge Function
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
@@ -65,10 +79,21 @@ Deno.serve(async (req: Request) => {
   const numeroCotacao = Number.isFinite(Number(payload?.numeroCotacao)) && payload?.numeroCotacao != null ? Number(payload.numeroCotacao) : null;
   const referenciaTipo = typeof payload?.referenciaTipo === "string" ? payload.referenciaTipo : null;
   const referenciaId = payload?.referenciaId != null ? String(payload.referenciaId) : null;
+  const anexosIn: any[] = Array.isArray(payload?.attachments) ? payload.attachments : [];
 
   if (!destinatarios.length) return json({ error: "Nenhum destinatário válido em \"to\"." }, 400);
   if (!subject) return json({ error: "Assunto (\"subject\") é obrigatório." }, 400);
   if (!text && !html) return json({ error: "Informe \"text\" ou \"html\"." }, 400);
+
+  const anexosBytes = anexosIn.map((a) => ({
+    filename: String(a?.filename || "anexo"),
+    contentType: String(a?.contentType || "application/octet-stream"),
+    bytes: base64ToBytes(a?.base64 || ""),
+  }));
+  const totalBytes = anexosBytes.reduce((s, a) => s + a.bytes.length, 0);
+  if (totalBytes > MAX_ANEXO_TOTAL_BYTES) {
+    return json({ error: `Anexos somam ${(totalBytes / 1024 / 1024).toFixed(1)}MB — limite de ${MAX_ANEXO_TOTAL_BYTES / 1024 / 1024}MB por envio.` }, 400);
+  }
 
   const messageId = `<${crypto.randomUUID()}@vpsistema.com>`;
 
@@ -89,20 +114,25 @@ Deno.serve(async (req: Request) => {
       subject,
       content: text || "Ver versão HTML.",
       html: html || undefined,
-      // 10/09 — tentativa de fixar nosso próprio Message-ID via headers
-      // customizados do denomailer. Não documentado com certeza absoluta
-      // nesta versão — se o servidor SMTP substituir por um Message-ID
-      // próprio, o vínculo "certo" por In-Reply-To simplesmente não
-      // acontece nessa mensagem específica; read-inbox tem fallback por
-      // regex no assunto ("provável") que não depende disso. Nunca falha
-      // o envio por causa disso.
       headers: { "Message-ID": messageId },
+      attachments: anexosBytes.length
+        ? anexosBytes.map((a) => ({ filename: a.filename, content: a.bytes, contentType: a.contentType }))
+        : undefined,
     } as any);
     await client.close();
 
+    let anexosSalvos: { filename: string; content_type: string; size: number; path: string }[] = [];
     if (numeroCotacao != null) {
       try {
         const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const grupoId = crypto.randomUUID();
+        for (const a of anexosBytes) {
+          const path = `saida/${grupoId}/${a.filename}`;
+          const { error: upErrAnexo } = await supabase.storage.from("emails-anexos")
+            .upload(path, a.bytes, { contentType: a.contentType, upsert: true });
+          if (upErrAnexo) { console.warn("[send-email] upload anexo falhou", a.filename, upErrAnexo); continue; }
+          anexosSalvos.push({ filename: a.filename, content_type: a.contentType, size: a.bytes.length, path });
+        }
         await supabase.from("emails_projeto").insert({
           numero_cotacao: numeroCotacao,
           referencia_tipo: referenciaTipo,
@@ -116,6 +146,7 @@ Deno.serve(async (req: Request) => {
           corpo_html: html || null,
           message_id: messageId,
           data_mensagem: new Date().toISOString(),
+          anexos: anexosSalvos,
         });
       } catch (e) {
         // Nunca derruba o envio (já aconteceu) por falha de persistência.
