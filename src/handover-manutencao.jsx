@@ -57,6 +57,7 @@ function HandoverManutencaoPage() {
 
   const comHandover = projetos.filter(p => p.handover).length;
   const transferidosEscamax = projetos.filter(p => p.handover?.escamax_transferido).length;
+  const emGarantia = projetos.filter(p => p.handover && !p.handover.escamax_transferido && window.HandoverManutencao?.estaEmGarantia(p.handover.data_fim_garantia)).length;
 
   return (
     <div className="page fade-in">
@@ -73,7 +74,7 @@ function HandoverManutencaoPage() {
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
         <KPI label="Projetos entregues" value={String(comHandover)} sub="com handover registrado" icon="check"/>
-        <KPI label="Em garantia" value={String(comHandover - transferidosEscamax)} sub="período ativo" icon="shield"/>
+        <KPI label="Em garantia" value={String(emGarantia)} sub="período ativo" icon="shield"/>
         <KPI label="Transferidos" value={String(transferidosEscamax)} sub="para Escamax" icon="arrow"/>
         <KPI label="Total de projetos" value={String(projetos.length)} sub="gerenciados" icon="home"/>
       </div>

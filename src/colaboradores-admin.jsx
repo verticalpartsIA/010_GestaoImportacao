@@ -179,7 +179,11 @@ function ColabRow({ colaborador, onEditar, onExcluir }) {
           <div className="cell-sub">
             {colaborador.email || '—'}{colaborador.nivel ? ` · ${colaborador.nivel}` : ''}
           </div>
-          {colaborador.alocacoes.length > 0 && (
+          {colaborador.alocacoes.includes('__acesso_restrito__') ? (
+            <div className="row gap-1" style={{ flexWrap: 'wrap', marginTop: 4 }}>
+              <span className="badge" style={{ fontSize: 10 }} title="Acesso removido — só vê Geral até ser alocado de novo">🔒 Acesso bloqueado</span>
+            </div>
+          ) : colaborador.alocacoes.length > 0 && (
             <div className="row gap-1" style={{ flexWrap: 'wrap', marginTop: 4 }}>
               {colaborador.alocacoes.map((g) => <span key={g} className="badge" style={{ fontSize: 10 }}>{g}</span>)}
             </div>

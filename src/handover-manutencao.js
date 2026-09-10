@@ -115,6 +115,11 @@
     return diasRestantes > 0 ? diasRestantes : 0;
   }
 
+  function estaEmGarantia(dataFimGarantia) {
+    if (!dataFimGarantia) return false;
+    return new Date(dataFimGarantia).getTime() > Date.now();
+  }
+
   window.HandoverManutencao = {
     CHECKLIST_ENTREGA,
     registrarHandover,
@@ -122,6 +127,7 @@
     transferirParaEscamax,
     getProgressoChecklist,
     fmtData,
+    estaEmGarantia,
     tempoRestanteGarantia,
   };
 })();

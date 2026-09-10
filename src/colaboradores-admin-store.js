@@ -60,17 +60,34 @@
       .map((dep) => ({ departamento: dep, colaboradores: grupos[dep] }));
   }
 
+  /* Marcador reservado (não é um label real de GRUPOS_MODULO) — gravado em
+     colaborador_alocacoes por removerTodasAlocacoes para diferenciar
+     "acesso removido de propósito" de "nunca configurado" (achado A12 da
+     auditoria: lista vazia = shell.jsx mostrava o menu inteiro por engano).
+     Como nunca bate com nenhum label real, grupoVisivel() em shell.jsx já
+     trata como "só Geral visível" sem precisar mudar nada lá. */
+  const ACESSO_RESTRITO_MARCADOR = '__acesso_restrito__';
+
   async function alocar(colaboradorId, grupoModulo) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const user = window.__VP_USER || {};
     const { error } = await c.from('colaborador_alocacoes').insert({ colaborador_id: colaboradorId, grupo_modulo: grupoModulo, alocado_por: user.email || null });
     if (error && error.code !== '23505') throw error; // 23505 = já alocado, idempotente
+    // Conceder um módulo real levanta a restrição anterior, se houver.
+    await c.from('colaborador_alocacoes').delete().eq('colaborador_id', colaboradorId).eq('grupo_modulo', ACESSO_RESTRITO_MARCADOR);
   }
 
   async function desalocar(colaboradorId, grupoModulo) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('colaborador_alocacoes').delete().eq('colaborador_id', colaboradorId).eq('grupo_modulo', grupoModulo);
     if (error) throw error;
+    // Se essa era a última alocação real, grava o marcador — desmarcar o
+    // último módulo manualmente deve bloquear igual ao botão "Remover acesso".
+    const { data: restantes } = await c.from('colaborador_alocacoes').select('grupo_modulo').eq('colaborador_id', colaboradorId).neq('grupo_modulo', ACESSO_RESTRITO_MARCADOR);
+    if (!restantes || restantes.length === 0) {
+      const user = window.__VP_USER || {};
+      await c.from('colaborador_alocacoes').insert({ colaborador_id: colaboradorId, grupo_modulo: ACESSO_RESTRITO_MARCADOR, alocado_por: user.email || null });
+    }
   }
 
   /* "Excluir" na tela de Administração — remove todas as alocações do
@@ -81,6 +98,10 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('colaborador_alocacoes').delete().eq('colaborador_id', colaboradorId);
     if (error) throw error;
+    // Grava o marcador de restrição — sem isso, lista vazia = "nunca configurado"
+    // e o shell mostraria o menu inteiro mesmo depois de "remover acesso" (A12).
+    const user = window.__VP_USER || {};
+    await c.from('colaborador_alocacoes').insert({ colaborador_id: colaboradorId, grupo_modulo: ACESSO_RESTRITO_MARCADOR, alocado_por: user.email || null });
   }
 
   /* ---------- Alçadas granulares (módulo → submódulo → ação) ----------
