@@ -30,14 +30,14 @@
     const c = sb();
     if (!c) return {};
     const { data } = await c.from('omie_pagamentos_cache')
-      .select('empresa_id, valor_documento, pago')
+      .select('empresa_id, valor_documento, valor_pago')
       .not('dossier_id', 'is', null);
     const porEmpresa = {};
     (data || []).forEach((r) => {
       if (!r.empresa_id) return;
       const e = (porEmpresa[r.empresa_id] = porEmpresa[r.empresa_id] || { valorTotal: 0, valorPago: 0 });
       e.valorTotal += Number(r.valor_documento) || 0;
-      if (r.pago) e.valorPago += Number(r.valor_documento) || 0;
+      e.valorPago += Number(r.valor_pago) || 0;
     });
     Object.values(porEmpresa).forEach((e) => { e.pctPago = e.valorTotal > 0 ? Math.round((e.valorPago / e.valorTotal) * 100) : 0; });
     return porEmpresa;
@@ -54,19 +54,26 @@
     const c = sb();
     if (!c || !dossierIds || !dossierIds.length) return {};
     const { data } = await c.from('omie_pagamentos_cache')
-      .select('dossier_id, valor_documento, pago, data_pagamento, numero_pedido, codigo_lancamento_omie')
+      .select('dossier_id, valor_documento, valor_pago, valor_a_pagar, pago, data_pagamento, numero_pedido, codigo_lancamento_omie')
       .in('dossier_id', dossierIds);
     const porDossier = {};
     (data || []).forEach((r) => {
       if (!r.dossier_id) return;
       const d = (porDossier[r.dossier_id] = porDossier[r.dossier_id] || { valorTotal: 0, valorPago: 0, ultimoPagamento: null, parcelas: [] });
       const valor = Number(r.valor_documento) || 0;
+      const valorPago = Number(r.valor_pago) || 0;
       d.valorTotal += valor;
-      if (r.pago) {
-        d.valorPago += valor;
-        if (r.data_pagamento && (!d.ultimoPagamento || r.data_pagamento > d.ultimoPagamento)) d.ultimoPagamento = r.data_pagamento;
-      }
-      d.parcelas.push({ numero: r.numero_pedido, valor, pago: r.pago, dataPagamento: r.data_pagamento, chave: r.codigo_lancamento_omie });
+      d.valorPago += valorPago;
+      if (r.pago && r.data_pagamento && (!d.ultimoPagamento || r.data_pagamento > d.ultimoPagamento)) d.ultimoPagamento = r.data_pagamento;
+      d.parcelas.push({
+        numero: r.numero_pedido,
+        valor,
+        valorPago,
+        valorAPagar: Number(r.valor_a_pagar) || 0,
+        pago: !!r.pago,
+        dataPagamento: r.data_pagamento,
+        chave: r.codigo_lancamento_omie,
+      });
     });
     Object.values(porDossier).forEach((d) => {
       d.pctPago = d.valorTotal > 0 ? Math.round((d.valorPago / d.valorTotal) * 100) : 0;
@@ -117,7 +124,7 @@
     const c = sb();
     if (!c || !empresaId) return { valorTotal: 0, valorPago: 0, itens: [] };
     const { data } = await c.from('omie_pagamentos_cache')
-      .select('projeto_texto, valor_documento, pago')
+      .select('projeto_texto, valor_documento, valor_pago')
       .eq('empresa_id', empresaId)
       .is('dossier_id', null);
     const porTexto = {};
@@ -125,7 +132,7 @@
       const key = r.projeto_texto || '(sem descrição no Omie)';
       const it = (porTexto[key] = porTexto[key] || { texto: key, valorTotal: 0, valorPago: 0 });
       it.valorTotal += Number(r.valor_documento) || 0;
-      if (r.pago) it.valorPago += Number(r.valor_documento) || 0;
+      it.valorPago += Number(r.valor_pago) || 0;
     });
     const itens = Object.values(porTexto).sort((a, b) => b.valorTotal - a.valorTotal);
     const valorTotal = itens.reduce((s, i) => s + i.valorTotal, 0);

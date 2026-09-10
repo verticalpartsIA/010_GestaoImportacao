@@ -426,21 +426,30 @@ function CITabelaPagamentos({ pagamento, checklist }) {
         <span>{fmt(pagamento.valorTotal)}</span>
       </div>
       <div>
-        {linhas.map((p, i) => (
-          <div key={p?.chave || `vazia-${i}`} style={{
-            display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px',
-            background: p?.pago ? '#fff8d6' : '#fff',
-            borderBottom: i < linhas.length - 1 ? '1px solid var(--border)' : 'none',
-            opacity: p ? 1 : 0.55,
-          }}>
-            <span style={{ flex: '0 0 90px', color: 'var(--fg3)' }}>{CI_PARCELA_LABELS[i] || `${i + 1}ª parcela`}</span>
-            <span style={{ flex: '0 0 36px', textAlign: 'right', color: 'var(--fg3)' }}>{p ? `${p.pctDoValor}%` : '—'}</span>
-            <span style={{ flex: '1', textAlign: 'right', fontWeight: 600 }}>{p ? fmt(p.valor) : '—'}</span>
-            <span style={{ flex: '0 0 84px', textAlign: 'right', display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end', color: p?.pago ? '#8a6d00' : 'var(--fg3)' }}>
-              {p ? (p.pago ? <><Icon.check size={10} /> {CIFmtData(p.dataPagamento)}</> : <><Icon.calendar size={10} /> —</>) : <><Icon.calendar size={10} /> não lançado</>}
-            </span>
-          </div>
-        ))}
+        {linhas.map((p, i) => {
+          /* Parcial = já tem baixa no Omie (valorPago > 0) mas o título
+             ainda não fechou (pago === false, sobra valorAPagar) — antes
+             disso existir (10/09), esse caso virava "—" como se nada
+             tivesse sido pago; agora mostra o valor real já recebido. */
+          const parcial = p && !p.pago && p.valorPago > 0;
+          return (
+            <div key={p?.chave || `vazia-${i}`} style={{
+              display: 'flex', alignItems: 'center', gap: 8, padding: '5px 10px',
+              background: p?.pago ? '#fff8d6' : parcial ? '#fffbe0' : '#fff',
+              borderBottom: i < linhas.length - 1 ? '1px solid var(--border)' : 'none',
+              opacity: p ? 1 : 0.55,
+            }}>
+              <span style={{ flex: '0 0 90px', color: 'var(--fg3)' }}>{CI_PARCELA_LABELS[i] || `${i + 1}ª parcela`}</span>
+              <span style={{ flex: '0 0 36px', textAlign: 'right', color: 'var(--fg3)' }}>{p ? `${p.pctDoValor}%` : '—'}</span>
+              <span style={{ flex: '1', textAlign: 'right', fontWeight: 600 }}>{p ? fmt(p.valor) : '—'}</span>
+              <span style={{ flex: '0 0 110px', textAlign: 'right', display: 'flex', alignItems: 'center', gap: 3, justifyContent: 'flex-end', color: (p?.pago || parcial) ? '#8a6d00' : 'var(--fg3)' }}>
+                {!p && <><Icon.calendar size={10} /> não lançado</>}
+                {p?.pago && <><Icon.check size={10} /> {CIFmtData(p.dataPagamento)}</>}
+                {p && !p.pago && (parcial ? `${fmt(p.valorPago)} pago` : <><Icon.calendar size={10} /> —</>)}
+              </span>
+            </div>
+          );
+        })}
       </div>
       <CIBarraPagoProgresso pctPago={pagamento.pctPago} checklist={checklist} />
       {alerta && (
