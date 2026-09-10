@@ -825,14 +825,23 @@ function FECotacaoRespostaModal({ cot, onClose }) {
   );
 }
 
+/* 10/09 — bug real: RFQ só estava "pronto" pra Glarie (achado #92, comentário
+   em fornecedoresOptions abaixo). Cotação VPCT-0954 pro fornecedor
+   "VERTICALPARTS" (fornecedor interno real, cadastrado com a Victória como
+   contato) nunca teve botão de envio — o modal só mostrava "ainda não
+   configurado", silenciosamente, sem erro. FE_RFQ_CONTATOS_PADRAO cresce
+   conforme mais fornecedores forem confirmados prontos; suportado deriva
+   das chaves desse mapa em vez de comparar string solta feito antes. */
+const FE_RFQ_CONTATOS_PADRAO = {
+  Glarie: { nome: 'Kimmy (Glarie)', email: 'kimmy.kuai@glarie.com, carrie.han@glarie.com, sam.zhang@glarie.com', telefone: '8618751801577' },
+  VERTICALPARTS: { nome: 'Victória (VerticalParts)', email: 'victoria@verticalparts.com.br', telefone: '11995578519' },
+};
 function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, onPedirRevisao, enviando }) {
   const store = window.CotacaoElevadorFornecedorStore;
-  const suportado = grupo.fornecedor === 'Glarie';
+  const suportado = Object.prototype.hasOwnProperty.call(FE_RFQ_CONTATOS_PADRAO, grupo.fornecedor);
   const [verResp, setVerResp] = React.useState(false);
   const [recipient, setRecipient] = React.useState(() => (
-    grupo.fornecedor === 'Glarie'
-      ? { nome: 'Kimmy (Glarie)', email: 'kimmy.kuai@glarie.com, carrie.han@glarie.com, sam.zhang@glarie.com', telefone: '8618751801577' }
-      : { nome: '', email: '', telefone: '' }
+    FE_RFQ_CONTATOS_PADRAO[grupo.fornecedor] || { nome: '', email: '', telefone: '' }
   ));
   const setR = (k) => (v) => setRecipient((r) => ({ ...r, [k]: v }));
   const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
@@ -1088,7 +1097,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
      configurado" DEPOIS de o vendedor escolher e tentar enviar (achado #92).
      Marca visualmente no próprio seletor quem está pronto. */
   const fornecedoresOptions = React.useMemo(() => fornecedores.map((nome) => (
-    nome === 'Glarie' ? nome : { value: nome, label: `${nome} (RFQ ainda não configurado)` }
+    Object.prototype.hasOwnProperty.call(FE_RFQ_CONTATOS_PADRAO, nome) ? nome : { value: nome, label: `${nome} (RFQ ainda não configurado)` }
   )), [fornecedores]);
 
   React.useEffect(() => {
