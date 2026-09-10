@@ -1307,13 +1307,29 @@ function ComprasPage({ setRoute }) {
 }
 
 /* ---------- EMAIL INBOX (Importação + Compras) ============== */
+/* 10/09 — IMAP conectado de verdade (Edge Function read-inbox, mesma
+   caixa suporte@vpsistema.com usada pra enviar em send-email). Compras e
+   Importação compartilham a mesma caixa hoje — não existe ainda
+   categorização real por assunto/remetente que separe as duas, então as
+   duas telas mostram o mesmo conteúdo (honesto, não fabrica um filtro
+   que não existe). Sem cron: busca só quando a tela abre/atualiza. */
 function EmailInbox({ kind, setRoute }) {
-  // Integração de e-mail (IMAP) ainda não configurada. Sem mock: lista real
-  // vazia + estado honesto de "não configurado", em vez de simular caixa sincronizada.
-  const emails = [];
+  const [emails, setEmails] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [erro, setErro] = React.useState(null);
   const [activeId, setActiveId] = React.useState(null);
   const [folder, setFolder] = React.useState("inbox");
   const active = emails.find(e => e.id === activeId);
+
+  const carregar = React.useCallback(() => {
+    setLoading(true); setErro(null);
+    window.__VP_SB.sb.functions.invoke('read-inbox', { body: { limit: 25 } }).then(({ data, error }) => {
+      if (error) { setErro(error.message || String(error)); setEmails([]); return; }
+      if (data && data.error) { setErro(data.error); setEmails([]); return; }
+      setEmails((data && data.messages) || []);
+    }).catch((e) => setErro(e.message || String(e))).finally(() => setLoading(false));
+  }, []);
+  React.useEffect(() => { carregar(); }, [carregar]);
 
   const folders = [
     { id: "inbox", label: "Caixa de entrada", icon: "mail", count: emails.filter(e => e.unread).length },
@@ -1321,9 +1337,6 @@ function EmailInbox({ kind, setRoute }) {
     { id: "drafts", label: "Rascunhos", icon: "edit" },
     { id: "archive", label: "Arquivados", icon: "package" },
   ];
-  const tags = kind === "compras"
-    ? [{ id: "frete", label: "Fretes", color: "var(--vp-info)" }, { id: "ocorrencia", label: "Ocorrências", color: "var(--vp-danger)" }, { id: "cte", label: "CTes", color: "var(--vp-success)" }]
-    : [{ id: "bl", label: "BLs", color: "var(--vp-yellow-press)" }, { id: "invoice", label: "Invoices", color: "var(--vp-info)" }, { id: "aduana", label: "Aduana", color: "var(--vp-warning-ink)" }, { id: "fornec", label: "Fornecedores", color: "var(--vp-success)" }];
 
   return (
     <div className="page fade-in" style={{ paddingBottom: 0, paddingRight: 24, paddingLeft: 24 }}>
@@ -1334,10 +1347,13 @@ function EmailInbox({ kind, setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Email · {kind === "compras" ? "Compras Nacional" : "Importação"}</div>
           <h1 className="page-head__title">Inbox {kind === "compras" ? "Compras" : "Importação"}</h1>
-          <p className="page-head__sub">Integração de e-mail (IMAP) ainda não configurada — quando conectada, vinculará mensagens a embarques/fretes automaticamente.</p>
+          <p className="page-head__sub">
+            {erro ? `Falha ao conectar: ${erro}` : 'Caixa suporte@vpsistema.com — Compras e Importação ainda compartilham a mesma caixa, sem separação automática por assunto.'}
+          </p>
         </div>
-        <div className="page-head__r">
-          <Badge variant="warning" dot>Integração não configurada</Badge>
+        <div className="page-head__r row gap-2">
+          {erro ? <Badge variant="danger" dot>Erro na conexão</Badge> : <Badge variant="success" dot>Conectado</Badge>}
+          <Button variant="outline" size="sm" icon="refresh" disabled={loading} onClick={carregar}>{loading ? 'Atualizando…' : 'Atualizar'}</Button>
         </div>
       </div>
 
@@ -1353,14 +1369,6 @@ function EmailInbox({ kind, setRoute }) {
               </div>
             );
           })}
-          <div className="hr"/>
-          <div className="up-eyebrow muted" style={{ padding: "8px 16px 4px", fontSize: 9 }}>Tags</div>
-          {tags.map(t => (
-            <div key={t.id} className="inbox__folder">
-              <span style={{ width: 10, height: 10, background: t.color, borderRadius: "50%" }}/>
-              <span>{t.label}</span>
-            </div>
-          ))}
         </div>
 
         <div className="inbox__list">
@@ -1368,26 +1376,25 @@ function EmailInbox({ kind, setRoute }) {
             <span>{folder === "inbox" ? "Caixa de entrada" : folder}</span>
             <span className="mono">{emails.length}</span>
           </div>
-          {emails.length === 0 && (
+          {folder !== "inbox" && (
             <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
-              <div style={{ fontWeight:600, color:'var(--fg2)', marginBottom:4 }}>Integração de e-mail não configurada</div>
-              Conecte uma caixa IMAP dedicada para ver aqui as mensagens vinculadas a {kind === "compras" ? "fretes e CTes" : "embarques, BLs e invoices"}.
+              Esta pasta ainda não está implementada — só a Caixa de entrada lê de verdade.
             </div>
           )}
-          {emails.map((m) => (
+          {folder === "inbox" && !loading && emails.length === 0 && (
+            <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
+              <div style={{ fontWeight:600, color:'var(--fg2)', marginBottom:4 }}>{erro ? 'Não foi possível carregar' : 'Nenhuma mensagem'}</div>
+              {erro || 'A caixa está vazia.'}
+            </div>
+          )}
+          {folder === "inbox" && emails.map((m) => (
             <div key={m.id} className={"inbox__item " + (m.unread ? "unread " : "") + (activeId === m.id ? "is-active" : "")} onClick={() => setActiveId(m.id)}>
               <div className="from">
-                <span>{m.from}</span>
-                <span className="time">{m.time}</span>
+                <span>{m.fromName || m.from}</span>
+                <span className="time">{m.date ? new Date(m.date).toLocaleString('pt-BR') : ''}</span>
               </div>
               <div className="subj">{m.subject}</div>
               <div className="preview">{m.preview}</div>
-              <div className="tags">
-                {m.tags.map((t) => (
-                  <span key={t} className={"tag " + (t === "Urgente" ? "urgent" : "")}>{t}</span>
-                ))}
-                {m.attached ? <span className="clip mono"><Icon.paperclip size={10} style={{ verticalAlign: "middle" }}/> {m.attached}</span> : null}
-              </div>
             </div>
           ))}
         </div>
@@ -1398,45 +1405,25 @@ function EmailInbox({ kind, setRoute }) {
               <div className="inbox__msg-head">
                 <h3 className="inbox__msg-subj">{active.subject}</h3>
                 <div className="inbox__msg-meta">
-                  <div className="avatar">{(active.from || "").split("@")[0].split(/[.\-_]/).slice(0,2).map(w => (w[0]||"").toUpperCase()).join("") || "?"}</div>
+                  <div className="avatar">{(active.fromName || active.from || "").split(/[\s.\-_]/).filter(Boolean).slice(0,2).map(w => (w[0]||"").toUpperCase()).join("") || "?"}</div>
                   <div>
-                    <div className="from-name">{(active.from || "").split("@")[0]}</div>
+                    <div className="from-name">{active.fromName || active.from}</div>
                     <div className="from-email">{active.from}</div>
                   </div>
-                  <div className="from-name" style={{ marginLeft: 12 }}>
-                    para: <span className="mono">cotacoes@verticalparts.com.br</span>
-                  </div>
-                  <div className="from-email">{active.date} · {active.time} BRT</div>
+                  <div className="from-email">{active.date ? new Date(active.date).toLocaleString('pt-BR') : ''}</div>
                   <div className="inbox__msg-actions">
-                    <Button variant="outline" size="sm" icon="reply" disabled title="Em desenvolvimento — inbox ainda não integrado a um serviço de e-mail real">Responder</Button>
+                    <Button variant="outline" size="sm" icon="reply" disabled title="Em desenvolvimento — responder de dentro do site ainda não implementado">Responder</Button>
                     <Button variant="ghost" size="sm" icon="link2" disabled title="Em desenvolvimento — vínculo com embarque ainda não implementado">Vincular</Button>
-                    <Button variant="ghost" size="sm" icon="more" disabled title="Em desenvolvimento"/>
                   </div>
-                </div>
-                <div className="row gap-2" style={{ marginTop: 12 }}>
-                  {active.tags.map((t) => <Badge key={t} variant={t === "Urgente" ? "danger" : "outline"}>{t}</Badge>)}
-                  <div className="spacer" style={{ flex: 1 }}/>
-                  <Badge variant="yellow"><Icon.link2 size={10}/> Vinculado a EMB-2026-009</Badge>
                 </div>
               </div>
               <div className="inbox__msg-body">
-                <EmailBody kind={kind} id={active.id}/>
+                <EmailBody active={active}/>
               </div>
-              {active.attached ? (
-                <div className="inbox__msg-attach">
-                  {Array.from({ length: active.attached }, (_, i) => (
-                    <div key={i} className="att">
-                      <Icon.paperclip size={12}/>
-                      <span>{["BL_COSU6029841.pdf", "Invoice_HSL.pdf", "Packing_List.xlsx", "CO_Origin.pdf", "Photo_loading.jpg", "Pre-shipment.pdf", "AWB.pdf", "Seguro.pdf"][i]}</span>
-                      <span className="mono small muted" style={{ marginLeft: 6 }}>{[124, 64, 48, 22, 1840, 88, 14, 12][i]}kb</span>
-                    </div>
-                  ))}
-                </div>
-              ) : null}
               <div className="inbox__compose">
-                <Button variant="primary" size="sm" icon="reply" disabled title="Em desenvolvimento — inbox ainda não integrado a um serviço de e-mail real">Responder</Button>
-                <Button variant="outline" size="sm" icon="reply" disabled title="Em desenvolvimento — inbox ainda não integrado a um serviço de e-mail real">Responder a todos</Button>
-                <Button variant="outline" size="sm" icon="arrowRight" disabled title="Em desenvolvimento — inbox ainda não integrado a um serviço de e-mail real">Encaminhar</Button>
+                <Button variant="primary" size="sm" icon="reply" disabled title="Em desenvolvimento — responder/encaminhar de dentro do site ainda não implementado (leitura já é real via IMAP)">Responder</Button>
+                <Button variant="outline" size="sm" icon="reply" disabled title="Em desenvolvimento — responder/encaminhar de dentro do site ainda não implementado (leitura já é real via IMAP)">Responder a todos</Button>
+                <Button variant="outline" size="sm" icon="arrowRight" disabled title="Em desenvolvimento — responder/encaminhar de dentro do site ainda não implementado (leitura já é real via IMAP)">Encaminhar</Button>
                 <div className="spacer" style={{ flex: 1 }}/>
                 <Button variant="ghost" size="sm" icon="zap" disabled title="Em desenvolvimento — sugestão de resposta por IA ainda não implementada">Sugerir resposta (AI)</Button>
               </div>
@@ -1448,59 +1435,19 @@ function EmailInbox({ kind, setRoute }) {
   );
 }
 
-function EmailBody({ kind, id }) {
-  // Just deliver some realistic looking body content based on email id
-  if (kind === "importacao") {
-    if (id === "em-1") return (
-      <>
-        <p>Dear Customer,</p>
-        <p>Please be informed that vessel <b>MV LIANJIANG</b> (Voy. 218S, BL <b>COSU6029841</b>) has experienced a 3-day delay
-          due to adverse weather conditions in the Indian Ocean. The vessel is currently routing through the South Atlantic
-          and we expect arrival at Santos terminal on <b>2026-06-12</b> instead of the original ETA of 2026-06-09.</p>
-        <p>Current vessel position: <span className="mono">-8.4°, -34.2°</span> · speed 16.2 kn · course 235°.</p>
-        <p>We will provide further updates every 24h. Should you require any additional information, please reach out to your designated contact.</p>
-        <p>Best regards,<br/><b>COSCO SHIPPING — Customer Service</b><br/>freight.ops@cosco.com</p>
-        <div className="quote">
-          <p>--- Histórico ---</p>
-          <p>Em 11/mai, ops@verticalparts.com.br escreveu:</p>
-          <p>Olá COSCO, gostaria de uma atualização sobre a posição do MV LIANJIANG referente ao nosso BL COSU6029841...</p>
-        </div>
-      </>
-    );
-    if (id === "em-2") return (
-      <>
-        <p>Hi Bruno,</p>
-        <p>Attached please find the updated Proforma Invoice with the additional 5% supplier discount we discussed yesterday.
-          The new total is <b>USD 96,440.00</b> FOB Shanghai for the 3 items of the CT-2026-116 quotation (Ed. Faria Lima Plaza retrofit).</p>
-        <p>Could you please confirm by end of day Beijing time so we can lock production slot for the first week of June?</p>
-        <p>Best regards,<br/><b>Liu Mei</b> · Sales Manager<br/>Tianjin Control Systems Co., Ltd.</p>
-      </>
-    );
-    return <p>Nenhuma mensagem encontrada.</p>;
+/* 10/09 — antes 100% mockado por kind/id, mas nunca renderizava de
+   verdade (a lista de e-mails era sempre []). Agora recebe a mensagem
+   real (vinda de read-inbox) e mostra o corpo de verdade: HTML dentro de
+   um iframe sandboxed (sandbox="" desativa script/form/popup — é a forma
+   segura de renderizar HTML de terceiro, o fornecedor pode mandar
+   qualquer coisa no corpo do e-mail) com fallback pro texto puro. */
+function EmailBody({ active }) {
+  if (!active) return null;
+  if (active.html) {
+    return <iframe title="corpo do e-mail" sandbox="" srcDoc={active.html}
+      style={{ width: '100%', minHeight: 420, border: 'none', background: '#fff' }}/>;
   }
-  if (id === "em-6") return (
-    <>
-      <p>Boa tarde Cláudia,</p>
-      <p>Confirmando que o motorista <b>Carlos Vieira</b> (placa GFR-2244) já está a caminho do CD Guarulhos para a coleta do
-        frete <b>FR-2026-050</b>. Previsão de coleta às 11h e entrega no Hospital São Luiz Morumbi por volta das 18h.</p>
-      <p>Total: <b>4 volumes</b> · 110kg · peças importadas para retrofit Gen2.</p>
-      <p>Qualquer alteração eu aviso imediatamente.</p>
-      <p>Att,<br/><b>Carlos Vieira</b> · Coord. Operações<br/>Patrus Transportes</p>
-    </>
-  );
-  if (id === "em-7") return (
-    <>
-      <p>Prezados,</p>
-      <p>Informamos que durante o transporte do frete <b>FR-2026-047</b> (destino Cond. Park Tower Itaim), registramos
-        avaria leve em <b>2 caixas</b> (de um total de 8) contendo botoeiras de cabine. As caixas apresentaram danos
-        externos sem aparente comprometimento do conteúdo, mas para resguardo da garantia, recomendamos inspeção
-        prévia antes da assinatura do recebimento.</p>
-      <p>Fotos em anexo (6 imagens) para registro.</p>
-      <p>Aguardamos orientação sobre como proceder.</p>
-      <p>Att,<br/><b>Setor de Ocorrências — TransLog SP</b></p>
-    </>
-  );
-  return <p>Nenhuma mensagem encontrada.</p>;
+  return <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 13, margin: 0 }}>{active.preview || 'Mensagem sem conteúdo de texto.'}</pre>;
 }
 
 Object.assign(window, { ImportacaoPage, ImportacaoDetail, ImportacaoRastreamento, ComprasPage, EmailInbox });
