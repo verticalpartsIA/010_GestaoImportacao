@@ -178,7 +178,7 @@ function FinanceiroPage({ setRoute, setSubsel }) {
             <div className="alert__title">{urgentes.length} gatilho{urgentes.length > 1 ? 's' : ''} vence{urgentes.length === 1 ? '' : 'm'} em até 2 dias</div>
             <div className="alert__sub">Verifique os gatilhos abaixo e confirme os pagamentos pendentes.</div>
           </div>
-          <Button variant="secondary" size="sm" iconRight="arrowRight">Ver agora</Button>
+          <Button variant="secondary" size="sm" iconRight="arrowRight" onClick={() => document.getElementById('cadeia-gatilhos-cotacao')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Ver agora</Button>
         </div>
       )}
 
@@ -196,7 +196,7 @@ function FinanceiroPage({ setRoute, setSubsel }) {
         </div>
       </Card>
 
-      <Card title="Cadeia de Gatilhos por Cotação" sub={`${Object.keys(cadeiasPorCotacao).length} cotações · Formulário → Compra liberada`} style={{ marginBottom: 20 }}>
+      <Card id="cadeia-gatilhos-cotacao" title="Cadeia de Gatilhos por Cotação" sub={`${Object.keys(cadeiasPorCotacao).length} cotações · Formulário → Compra liberada`} style={{ marginBottom: 20 }}>
         <div className="stack" style={{ gap: 20 }}>
           {Object.keys(cadeiasPorCotacao).length === 0 && (
             <div style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
@@ -1084,7 +1084,7 @@ function ConfigUsers() {
                   <td><span className="mono small">{u.email}</span></td>
                   <td><span className="mono small muted">{u.last_login ? fmtDate(u.last_login) : "—"}</span></td>
                   <td><Badge variant={u.active !== false ? "success" : "neutral"} dot>{u.active !== false ? "Ativo" : "Inativo"}</Badge></td>
-                  <td><Button variant="ghost" size="sm" icon="more"/></td>
+                  <td><Button variant="ghost" size="sm" icon="more" disabled title="Em desenvolvimento — ações do usuário ainda não implementadas"/></td>
                 </tr>
               ))}
             </tbody>

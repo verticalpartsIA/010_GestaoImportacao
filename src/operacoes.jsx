@@ -361,7 +361,7 @@ function JuridicoPage({ setRoute, setSubsel }) {
           <p className="page-head__sub">Minuta contratual, preenchimento, redação de páginas confidenciais e envio para assinatura digital.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="upload" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='.pdf,.docx'; inp.onchange = e => { const f=e.target.files?.[0]; if(f) window.toast(`Minuta "${f.name}" importada.`,'success'); }; inp.click(); }}>Importar minuta</Button>
+          <Button variant="outline" icon="upload" disabled title="Em desenvolvimento — upload de minuta ainda não persiste o arquivo">Importar minuta</Button>
           <Button variant="primary" icon="plus" onClick={() => setShowNovo(true)}>Novo contrato</Button>
         </div>
       </div>
@@ -990,7 +990,7 @@ function InstalacaoPage() {
           <Card title={`Checklist · ${selectedEquipe.nome}`}
             sub={selectedEquipe.lider || ""}
             action={<>
-              <Button variant="outline" size="sm" icon="upload" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange = e => { const f = e.target.files?.[0]; if (f) window.toast(`Foto "${f.name}" selecionada. Upload via Supabase Storage.`, 'success'); }; inp.click(); }}>Foto</Button>
+              <Button variant="outline" size="sm" icon="upload" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange = e => { const f = e.target.files?.[0]; if (f) window.toast(`"${f.name}" selecionada (${Math.round(f.size/1024)}kb). Upload via Supabase Storage — configurar bucket.`, 'info'); }; inp.click(); }}>Foto</Button>
               <Button variant="primary" size="sm" icon="signature" onClick={() => { window.toast("Gerando laudo final — abrindo impressão.", "info"); setTimeout(() => window.print(), 200); }}>Laudo final</Button>
             </>}>
             <EquipeChecklist equipe={selectedEquipe}/>

@@ -245,6 +245,7 @@
 
     // ---- tarefas no formato esperado pelo Dashboard ----
     const tarefasFmt = tarefas.map(t => ({
+      id: t.id,
       t: t.title,
       time: t.due_time,
       prio: ({ alta: 'Alta', media: 'Média', baixa: 'Baixa' }[String(t.priority || '').toLowerCase()] || t.priority || 'Média'),

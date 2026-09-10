@@ -559,7 +559,7 @@ function TabVisaoGeral({ dossier, setModalOpen, reload, setRoute }) {
         ) : (
           <div style={{ color: '#999' }}>Sem pendências bloqueantes</div>
         )}
-        <Button variant="outline" size="small" style={{ marginTop: 12 }} onClick={() => alert('Adicionar pendência')}>
+        <Button variant="outline" size="small" style={{ marginTop: 12 }} onClick={() => setModalOpen?.('adionar-pendencia')}>
           + Adicionar Pendência
         </Button>
       </div>
