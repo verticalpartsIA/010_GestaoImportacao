@@ -24,7 +24,7 @@
      tipo de lembrete). */
   const KNOWN_ROUTES = [
     'dashboard', 'notificacoes', 'decisoes', 'financeiro',
-    'leads', 'lead-detail', 'formularios', 'formulario-elevador', 'controle-cotacoes',
+    'leads', 'lead-detail', 'formularios', 'formulario-elevador', 'controle-cotacoes', 'comercial-email',
     'cotacoes-fornecedor', 'cotacao-fornecedor-detail', 'precificacao', 'propostas', 'proposta-editor',
     'aval-financeiro',
     'cadastro-clientes', 'cadastro-fornecedores', 'ncm-catalogo', 'cadastro-instaladores', 'cadastro-custos',

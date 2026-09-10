@@ -26,6 +26,7 @@ const ROUTE_TITLE = {
   "status-obras": "Status de Obras",
   "formulario-elevador": "Formulário — Elevador",
   "controle-cotacoes": "Controle de Cotações",
+  "comercial-email": "Inbox Comercial",
   "cotacoes-fornecedor": "Cotações a Fornecedor",
   "cotacao-fornecedor-detail": "Detalhe de Cotação a Fornecedor",
   precificacao: "Precificação",
@@ -331,6 +332,7 @@ function App() {
       case "formularios": return <FormulariosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formulario-elevador": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel}/>;
       case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "comercial-email": return <EmailInbox kind="comercial" setRoute={setRoute}/>;
       case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "status-obras": return <ObrasStatusPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "linha-do-tempo": return <window.LinhaDoTempoPage/>;

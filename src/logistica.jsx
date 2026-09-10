@@ -1341,14 +1341,14 @@ function EmailInbox({ kind, setRoute }) {
   return (
     <div className="page fade-in" style={{ paddingBottom: 0, paddingRight: 24, paddingLeft: 24 }}>
       <div className="row" style={{ marginBottom: 14 }}>
-        <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute(kind === "compras" ? "compras" : "importacao")}>Voltar</Button>
+        <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute(kind === "compras" ? "compras" : kind === "comercial" ? "formularios" : "importacao")}>Voltar</Button>
       </div>
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Email · {kind === "compras" ? "Compras Nacional" : "Importação"}</div>
-          <h1 className="page-head__title">Inbox {kind === "compras" ? "Compras" : "Importação"}</h1>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>{kind === "comercial" ? "Comercial" : "Logística"} · Email · {kind === "compras" ? "Compras Nacional" : kind === "comercial" ? "Pré-venda" : "Importação"}</div>
+          <h1 className="page-head__title">Inbox {kind === "compras" ? "Compras" : kind === "comercial" ? "Comercial" : "Importação"}</h1>
           <p className="page-head__sub">
-            {erro ? `Falha ao conectar: ${erro}` : 'Caixa suporte@vpsistema.com — Compras e Importação ainda compartilham a mesma caixa, sem separação automática por assunto.'}
+            {erro ? `Falha ao conectar: ${erro}` : 'Caixa suporte@vpsistema.com — mesma caixa usada por Comercial, Compras e Importação, sem separação automática por assunto ainda.'}
           </p>
         </div>
         <div className="page-head__r row gap-2">

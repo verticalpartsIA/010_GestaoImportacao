@@ -29,6 +29,7 @@ const NAV_GROUPS = [
     { id: "formularios", label: "Formulários", icon: "layers" },
     { id: "controle-cotacoes", label: "Controle de Cotações", icon: "history" },
     { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
+    { id: "comercial-email", label: "Inbox", icon: "mail" },
     { id: "propostas", label: "Propostas", icon: "proposal" },
   ]},
   { label: "Financeiro & Preços", items: [
@@ -287,6 +288,7 @@ const BREADCRUMB_MAP = {
   formularios:   { module: "Comercial", page: "Formulários", icon: "layers" },
   "formulario-elevador": { module: "Comercial", page: "Formulário — Elevador", icon: "layers" },
   "controle-cotacoes":   { module: "Comercial", page: "Controle de Cotações", icon: "history" },
+  "comercial-email":     { module: "Comercial", page: "Inbox Comercial", icon: "mail" },
   "cotacoes-fornecedor": { module: "Financeiro", page: "Cotações a Fornecedor", icon: "globe" },
   "cotacao-fornecedor-detail": { module: "Comercial", page: "Detalhe de Cotação", icon: "globe" },
   precificacao:  { module: "Comercial", page: "Precificação", icon: "calculator" },
