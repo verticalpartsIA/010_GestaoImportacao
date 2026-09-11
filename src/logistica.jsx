@@ -53,6 +53,33 @@ function diffDiasISO(a, b) {
   return Math.round((da - db) / 86400000);
 }
 
+/* 11/09 — achado real: quando uma Edge Function responde com status de
+   erro (4xx/5xx), o cliente supabase-js devolve um `error` com mensagem
+   SEMPRE genérica ("Edge Function returned a non-2xx status code") —
+   o JSON de erro de verdade que a função manda (ex.: "Falha ao enviar
+   e-mail via SMTP", "Nenhum destinatário válido") fica escondido dentro
+   de `error.context` (a Response crua), e o toast mostrava só a
+   mensagem genérica, inútil pro usuário entender o que deu errado. Esta
+   função lê o corpo real quando existe. */
+async function extrairErroFuncao(error) {
+  if (!error) return 'Erro desconhecido';
+  try {
+    if (error.context && typeof error.context.json === 'function') {
+      const body = await error.context.clone().json();
+      if (body && body.error) return body.error + (body.detail ? ' — ' + body.detail : '');
+    }
+  } catch (e) { /* corpo não era JSON — segue pro fallback abaixo */ }
+  return error.message || String(error);
+}
+const EMAIL_VALIDO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+function validarEmails(destinatariosStr) {
+  const lista = String(destinatariosStr || '').split(',').map((s) => s.trim()).filter(Boolean);
+  if (!lista.length) return 'Digite ao menos um e-mail de destino.';
+  const invalido = lista.find((e) => !EMAIL_VALIDO_RE.test(e));
+  if (invalido) return `"${invalido}" não parece um e-mail válido (formato esperado: nome@dominio.com).`;
+  return null;
+}
+
 /* ---------- Sincronização AIS (Edge Function ais-sync) ---------- */
 async function runAisSync() {
   const { data, error } = await window.__VP_SB.sb.functions.invoke('ais-sync');
@@ -1441,6 +1468,8 @@ function EmailInbox({ setRoute, setSubsel }) {
         subject = /^re:/i.test(active.subject || '') ? active.subject : `Re: ${active.subject || ''}`;
         text = respostaTexto;
       }
+      const erroValidacao = validarEmails(to);
+      if (erroValidacao) { window.toast?.(erroValidacao, 'warning'); setEnviandoResposta(false); return; }
       const { error } = await sb.functions.invoke('send-email', {
         body: {
           to, subject, text,
@@ -1449,12 +1478,12 @@ function EmailInbox({ setRoute, setSubsel }) {
           attachments: anexosResposta.length ? anexosResposta.map((a) => ({ filename: a.filename, contentType: a.contentType, base64: a.base64 })) : undefined,
         },
       });
-      if (error) throw error;
+      if (error) { window.toast?.('Erro ao enviar: ' + await extrairErroFuncao(error), 'error'); return; }
       window.toast?.(modoCompose === 'encaminhar' ? 'E-mail encaminhado.' : 'Resposta enviada.', 'success');
       setRespondendo(false); setRespostaTexto(''); setAnexosResposta([]); setDestinatarioEncaminhar('');
       carregar();
     } catch (e) {
-      window.toast?.('Erro ao enviar: ' + (e.message || e), 'error');
+      window.toast?.('Erro ao enviar: ' + await extrairErroFuncao(e), 'error');
     } finally {
       setEnviandoResposta(false);
     }
@@ -1740,6 +1769,8 @@ function EmailNovoModal({ onClose, onEnviado }) {
       window.toast?.('Preencha destinatário, assunto e mensagem.', 'warning');
       return;
     }
+    const erroValidacao = validarEmails(para);
+    if (erroValidacao) { window.toast?.(erroValidacao, 'warning'); return; }
     const numero = numeroCotacaoInput.trim() ? parseInt(numeroCotacaoInput.replace(/\D/g, ''), 10) : null;
     setEnviando(true);
     try {
@@ -1752,12 +1783,12 @@ function EmailNovoModal({ onClose, onEnviado }) {
           attachments: anexos.length ? anexos.map((a) => ({ filename: a.filename, contentType: a.contentType, base64: a.base64 })) : undefined,
         },
       });
-      if (error) throw error;
+      if (error) { window.toast?.('Erro ao enviar: ' + await extrairErroFuncao(error), 'error'); return; }
       window.toast?.('E-mail enviado.', 'success');
       onEnviado?.();
       onClose();
     } catch (e) {
-      window.toast?.('Erro ao enviar: ' + (e.message || e), 'error');
+      window.toast?.('Erro ao enviar: ' + await extrairErroFuncao(e), 'error');
     } finally {
       setEnviando(false);
     }
