@@ -290,14 +290,16 @@ Deno.serve(async (req) => {
       }
     }
 
-    // financas/mf mistura Contas a Pagar e a Receber pro mesmo CPF/CNPJ
-    // (raro pra instalador, mas possível) — só nos interessa o que a
-    // VerticalParts paga a ele, nunca o que ele nos deve.
-    const brutosPagar = brutos.filter(({ m }) => {
-      const grupo = normalize(m.detalhes?.cGrupo as string);
-      const natureza = normalize(m.detalhes?.cNatureza as string);
-      return grupo === "CONTA_A_PAGAR" || natureza === "P";
-    });
+    // financas/mf devolve MAIS DE UMA LINHA por título pago: uma com
+    // cGrupo "CONTA_A_PAGAR" (o título em si, com nValorTitulo/resumo
+    // completo) e outra com cGrupo "CONTA_CORRENTE_PAG" (o evento de
+    // baixa bancária ligado ao mesmo nCodTitulo, mas sem nValorTitulo/
+    // nValAberto — só nValPago). Achado rodando a sincronização real
+    // 11/09: as duas batem no mesmo codigo_lancamento_omie, e a segunda
+    // (incompleta) sobrescrevia a primeira no dedup, zerando
+    // valor_documento/valor_a_pagar. Só a "CONTA_A_PAGAR" é o título de
+    // verdade — o resumo dela já vem com o pago/a pagar corretos.
+    const brutosPagar = brutos.filter(({ m }) => normalize(m.detalhes?.cGrupo as string) === "CONTA_A_PAGAR");
 
     const projetoNomeCache = new Map<number, string | null>();
     for (const b of brutosPagar) {
