@@ -3,7 +3,8 @@
    ADM/Financeiro · Pagamentos a Instaladores — Trilha B (01/09).
    Lista as parcelas geradas por contrato-instalador-parcelas-store.js
    (uma por contrato, conforme formaPagamento), liberadas automaticamente
-   pelo progresso real do Cronograma de Instalação. Confirmar que a
+   pelo progresso real do Acompanhamento de Obra (Diário — ver A10 em
+   não commitar/tour.md). Confirmar que a
    parcela foi REALMENTE paga é sempre manual — o sistema não movimenta
    dinheiro, só sinaliza quando já pode ser paga.
    ============================================================ */
@@ -58,7 +59,7 @@ function PagamentosInstaladorPage() {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule" />ADM/ Financeiro</div>
           <h1 className="page-head__title">Pagamentos a Instaladores</h1>
-          <p className="page-head__sub">Parcelas do Contrato Instalador — liberadas automaticamente conforme a instalação avança no Cronograma de Instalação. Confirmar o pagamento é sempre manual.</p>
+          <p className="page-head__sub">Parcelas do Contrato Instalador — liberadas automaticamente conforme a instalação avança no Acompanhamento de Obra (Diário). Confirmar o pagamento é sempre manual.</p>
         </div>
       </div>
 
