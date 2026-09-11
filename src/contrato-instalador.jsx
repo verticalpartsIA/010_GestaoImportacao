@@ -345,6 +345,9 @@ function CIStepObjeto({ s, set }) {
 
   const aplicarProposta = (p) => {
     set('masterId', p.master_id); set('propostaId', p.id); set('ativosIndices', []);
+    /* Snapshot dos ativos (com custoInstalacaoMaoDeObraRs por equipamento) —
+       usado no Passo 5 pra sugerir o Valor total (Fase 3b da granularidade). */
+    set('ativosSnapshot', (p.data_json && p.data_json.ativos) || []);
     const valores = p.data_json?.elevador?.valores;
     if (valores?.quantidade) set('quantidade', Number(valores.quantidade) || s.quantidade);
   };
@@ -476,6 +479,20 @@ function CIBancoPrefill({ cnpj, s, set }) {
 }
 
 function CIStepPagamento({ s, set, errors }) {
+  /* Sugestão de valor (Fase 3b da granularidade) — soma o custo de mão de
+     obra de instalação (calculado por equipamento em Precificação) dos
+     ativos vinculados a este contrato. Só sugere: pré-preenche o campo
+     enquanto ele estiver vazio, nunca sobrescreve um valor já digitado. */
+  const sugestaoInstalacao = (s.ativosSnapshot || [])
+    .filter((a) => (s.ativosIndices || []).includes(a.indice))
+    .reduce((t, a) => t + (Number(a.custoInstalacaoMaoDeObraRs) || 0), 0);
+  _ciUE(() => {
+    if (sugestaoInstalacao > 0 && !s.valorTotal) {
+      set('valorTotal', window.CI.maskMoeda(String(Math.round(sugestaoInstalacao * 100))));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sugestaoInstalacao]);
+
   const addParcela = () => set('parcelas', [...(s.parcelas || []), { valor: '', data: '', descricao: '' }]);
   const updateParcela = (i, k, v) => {
     const arr = [...s.parcelas];
@@ -490,6 +507,15 @@ function CIStepPagamento({ s, set, errors }) {
         <div className="ci-grid">
           <CIMoneyField label="Valor total do contrato" required width="wide" value={s.valorTotal} onChange={(v) => set('valorTotal', v)} error={errors.valorTotal} />
         </div>
+        {sugestaoInstalacao > 0 && (
+          <p className="ci-field-hint">
+            Sugestão com base na Precificação: <b>R$ {window.CI.fmtMoeda(sugestaoInstalacao)}</b> (mão de obra do(s) equipamento(s) vinculado(s)).{' '}
+            <button type="button" className="ci-btn ci-btn--ghost" style={{ padding: '0 4px' }}
+              onClick={() => set('valorTotal', window.CI.maskMoeda(String(Math.round(sugestaoInstalacao * 100))))}>
+              Usar este valor
+            </button>
+          </p>
+        )}
         <label className="ci-mini-label">Forma de pagamento</label>
         <CISegmented value={s.formaPagamento} onChange={(v) => set('formaPagamento', v)} options={[
           { value: '2', label: '2 parcelas (50/50)' },

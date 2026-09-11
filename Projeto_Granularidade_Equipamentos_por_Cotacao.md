@@ -1,6 +1,6 @@
 # Projeto: Granularidade de valor por equipamento (Precificação → Proposta → Contrato)
 
-Status: **Fase 1 e Fase 2 no ar. Fase 3 em andamento, sub-parte (a) feita, (b)/(c)/(d) pendentes — implementando uma por vez.**
+Status: **Fase 1, 2, 3a e 3b no ar. 3c adiada (decisão do usuário — sem consumidor real hoje). 3d ainda não iniciada — vira capítulo/investigação própria (mecanismo de aval do gestor + integração Omie).**
 
 ## Contexto / gatilho
 
@@ -98,21 +98,30 @@ Plano em 4 sub-partes, uma por vez (pedido explícito do usuário):
   — ratear sem base real seria inventar um número, o oposto de "pura verdade". Testado com a cotação 950:
   VPEL-EL0950-1 → R$ 38.100, VPEL-EL0950-2 → R$ 16.500 (valores diferentes, batendo com o porte de cada
   elevador).
-- **3b. Contrato Instalador** (pendente): hoje o valor é 100% manual e por contrato inteiro. Precisa
-  decidir: o campo "Valor total do contrato" vira uma lista com um valor por dossiê/equipamento vinculado
-  (mudança de UI + schema), ou mantém 1 valor mas ganha um "valor sugerido" pré-preenchido a partir da
-  soma dos `custoInstalacaoMaoDeObraRs` dos equipamentos vinculados (mudança bem menor, só ajuda a
-  digitação, não obriga nada)? Essa escolha muda o tamanho do trabalho.
-- **3c. Diário de Obra / gatilho A10** (pendente): hoje o gatilho é só por `dossier_id`. Rastrear
-  progresso por equipamento individual (não só por obra) é uma mudança de schema em
-  `acompanhamento_obra_itens`/`_lancamentos` — maior, mexe em fluxo já em uso.
-  Só faz sentido depois de 3b decidir como o pagamento por equipamento vai ser modelado.
-- **3d. Reconciliação** (pendente): uma tela/alerta que compare "previsto na Precificação" × "pago de
-  fato" (via Omie, já lido por `omie-pagamentos-store.js`) e avise quando não bater. Só é possível depois
-  de 3b/3c existirem — é o fechamento do ciclo, não o começo.
+- **3b. Contrato Instalador — ✅ FEITO**: escolhida a opção pequena — o campo "Valor total do contrato"
+  continua sendo 1 valor único (nenhuma mudança de schema), mas o Passo 5 (Pagamento) agora soma
+  `custoInstalacaoMaoDeObraRs` dos ativos vinculados (`s.ativosSnapshot` × `s.ativosIndices`) e:
+  (1) pré-preenche o campo automaticamente enquanto ele estiver vazio, sem nunca sobrescrever um valor
+  já digitado; (2) mostra sempre um texto "Sugestão com base na Precificação: R$ X" com um botão "Usar
+  este valor" pra reaplicar a sugestão a qualquer momento. Testado isoladamente (`CIStepPagamento`):
+  soma de 2 equipamentos (R$ 38.100 + R$ 16.500 = R$ 54.600,00) pré-preencheu certo, e um valor já
+  digitado (R$ 99.999,00) não foi sobrescrito.
+- **3c. Diário de Obra / gatilho A10 — ADIADA (decisão do usuário)**: a ideia original (rastrear
+  progresso por equipamento) só faria sentido se o pagamento também fosse liberado por equipamento — mas
+  a 3b escolhida manteve 1 valor por contrato/obra inteira. Mudar o schema do Diário de Obra
+  (`acompanhamento_obra_itens`/`_lancamentos`, fluxo já em uso) sem nenhum consumidor real da
+  granularidade seria abstração prematura. Fica pra quando (se algum dia) o pagamento por equipamento
+  vier a ser necessário.
+- **3d. Reconciliação previsto × pago — VIRA CAPÍTULO PRÓPRIO** (pedido explícito do usuário, ainda não
+  investigado): o usuário explicou como o pagamento ao instalador funciona hoje na prática — a 1ª
+  parcela cai na assinatura do contrato; as demais acompanham o Diário de Obra, mas **não são
+  automáticas** — já existe uma trava hoje que sinaliza quando o montador tem medição suficiente pra
+  receber, mas o desbloqueio efetivo do pagamento depende do aval manual do gestor. Também não está
+  mapeado de onde exatamente esses valores são puxados dentro do Omie. Por ter mecanismo de negócio
+  próprio (a trava/aval) e uma integração externa ainda não investigada, esta fase precisa de uma
+  investigação dedicada antes de qualquer plano — não é uma continuação direta da 3a/3b.
 
 ## Recomendação
 
-Começar e terminar a **Fase 1** primeiro (pequena, isolada, sem risco pro resto do sistema) e só depois
-decidir se a Fase 2 é realmente necessária — ela tem implicação jurídica/contratual que merece conversa
-separada, não é uma decisão técnica que eu deva tomar sozinho.
+~~Começar e terminar a Fase 1 primeiro~~ — feito. Progresso: Fase 1 ✅, Fase 2 ✅, Fase 3a ✅, Fase 3b ✅,
+Fase 3c adiada por decisão do usuário, Fase 3d aguardando investigação dedicada (capítulo próprio).

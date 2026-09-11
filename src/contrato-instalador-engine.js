@@ -166,6 +166,10 @@
     return {
       modalidade: 'instalacao',
       masterId: null, propostaId: null, ativosIndices: [],  // Master ID Fase 2
+      /* Snapshot dos ativos da Proposta selecionada (com custoInstalacaoMaoDeObraRs
+         por equipamento, ver proposta-heranca.js) — usado só pra sugerir o
+         Valor total do contrato (Passo 5), nunca lido pelo documento em si. */
+      ativosSnapshot: [],
       dossierIds: [],  // Dossiê(s) reais cobertos (pagamento por marco — Trilha B)
       c_razao:'', c_cnpj:'', c_rua:'', c_numero:'', c_bairro:'', c_cidade:'', c_estado:'', c_cep:'',
       r_nome:'', r_nacionalidade:'brasileiro(a)', r_estadoCivil:'', r_profissao:'',
