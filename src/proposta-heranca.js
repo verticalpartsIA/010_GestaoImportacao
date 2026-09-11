@@ -134,19 +134,31 @@
   /* Lista granular de ativos — o que Contrato de Venda e Contrato
      Instalador consomem depois (Master ID Fase 2). */
   function montarAtivos(fontes) {
-    const { unidades, cotacao } = fontes;
+    const { unidades, cotacao, precificacao } = fontes;
     const envio = (cotacao && cotacao.dados_envio && cotacao.dados_envio.unidades) || [];
     const cefStore = window.CotacaoElevadorFornecedorStore;
     const base = unidades.length ? unidades : envio.map((u) => ({ ...u, id: u.unidade_id }));
+    /* Mão de obra de instalação já é calculada por unidade em Precificação
+       (pz.mo_lookup, ver precificacao-elevador.jsx) — é a parcela dominante
+       (e a única hoje genuinamente por equipamento) do custo de instalação.
+       Expõe aqui pra granularidade sobreviver até Contrato Instalador/Diário
+       de Obra consumirem (ainda não consomem — ver Fase 3b/3c do projeto).
+       As demais categorias (ART, andaime, talha, empilhadeira, ajudantes)
+       continuam só como total da cotação inteira — não têm dado de origem
+       por unidade, então não são rateadas aqui (ratear sem base real seria
+       inventar um número, não "a mais pura verdade"). */
+    const moLookup = (precificacao && precificacao.mo_lookup) || [];
     return base.map((u) => {
       const uid = u.id || u.unidade_id;
       const tec = envio.find((e) => e.unidade_id === uid) || {};
       const indice = u.indice_ativo ?? tec.indice_ativo ?? null;
+      const mo = moLookup.find((m) => m.unidadeId === uid) || {};
       return {
         indice,
         codigo: (cotacao && cefStore) ? cefStore.assetMasterId(cotacao, indice) : null,
         identificador: u.identificador || tec.identificador || '',
         modelo: u.modelo || tec.modelo || '',
+        custoInstalacaoMaoDeObraRs: Number(mo.valorRs) || null,
       };
     }).filter((a) => a.indice != null);
   }

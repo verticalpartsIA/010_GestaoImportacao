@@ -1,6 +1,6 @@
 # Projeto: Granularidade de valor por equipamento (Precificação → Proposta → Contrato)
 
-Status: **diagnóstico concluído, nada implementado ainda** — aguardando aval pra iniciar a Fase 1.
+Status: **Fase 1 e Fase 2 no ar. Fase 3 em andamento, sub-parte (a) feita, (b)/(c)/(d) pendentes — implementando uma por vez.**
 
 ## Contexto / gatilho
 
@@ -58,18 +58,58 @@ Objetivo: cada item da proposta nasce com o valor real do seu equipamento, não 
 **Escopo**: só `proposta-heranca.js`. Não toca em `precificacao-elevador-engine.js` (o cálculo já está
 certo lá) nem no schema do banco (não precisa de migration).
 
-### Fase 2 — Contrato de Venda (maior, separada, precisa de decisão de negócio antes)
-Hoje o contrato tem uma cláusula de "valor total". Levar o valor por equipamento até o Contrato
-implica decidir: o contrato deve discriminar o preço de cada elevador individualmente na cláusula de
-pagamento (mudança de texto jurídico, não só de código), ou o valor total continua sendo o que importa
-legalmente e só a Proposta interna precisa ser granular? Essa é uma pergunta de negócio, não técnica —
-recomendo não iniciar essa fase até você confirmar se isso é necessário (ex.: pra rastrear reembolso ou
-desconto perpetuado individualmente até o contrato).
+### Fase 2 — Contrato de Venda ✅ FEITO
+Cláusula 3.1.1 informativa por equipamento, herdando `elevador.valores.itens[]` da Proposta. Cláusula
+3.1 (valor total) e cláusulas de multa/rescisão continuam inalteradas — só aparece quando há mais de 1
+equipamento. Commit `344908b`.
 
-### Fase 3 — Diário de Obra / Instalação (provavelmente não precisa)
-Diário de Obra e Instalação já referenciam o equipamento individual pra fins de identificação/execução
-(via `montarAtivos()`), só não pra valor — e não parecem precisar de valor (são módulos operacionais,
-não financeiros). Recomendo não mexer aqui a menos que surja um caso de uso concreto que precise disso.
+### Fase 3 — Diário de Obra / pagamento ao instalador (revisado — TINHA razão de ser)
+
+**Correção ao diagnóstico original**: eu tinha marcado esta fase como "provavelmente não precisa" por
+achar que Diário de Obra era só operacional. O usuário apontou o motivo real: o Diário de Obra
+**desbloqueia o pagamento ao montador**, e o custo de instalação que a Precificação prevê precisa bater
+com o que de fato é pago — "se a Precificação diz que instalar é R$10k, aquilo tem que ser a mais pura
+verdade até o fim". Investiguei de novo com esse critério e o problema é mais sério do que a Fase 1: os
+dois números **nunca se conversam hoje**.
+
+Diagnóstico (arquivo:linha):
+- **Precificação** (`precificacao-elevador-engine.js:69,96`) já entrega o custo de instalação
+  (`U32_despesasInstalacaoMontagem`) como total único da cotação inteira. A mão de obra JÁ é calculada
+  por unidade (`pz.mo_lookup[i].valorRs`, tabela em `precificacao-elevador.jsx:509-568`), mas essa
+  granularidade morre ali — só a soma entra no motor (`precificacao-elevador.jsx:691-692`). As demais
+  categorias (ART, andaime, talha, empilhadeira, ajudantes) nunca tiveram dado de origem por unidade —
+  são digitadas já agregadas pra cotação inteira.
+- **Contrato Instalador** (`contrato-instalador.jsx:491`) não lê a Precificação em nenhum momento — o
+  "Valor total do contrato" é digitado manualmente, pode cobrir vários dossiês/equipamentos ao mesmo
+  tempo, e é um valor único pro contrato inteiro.
+- **Diário de Obra** (`diario-obra-app.jsx:152-154`, gatilho A10 em `acompanhamento-obra-store.js:145-165`)
+  dispara o desbloqueio por `dossier_id` (a obra inteira), não por equipamento — quando há 2+
+  equipamentos na mesma obra, aparecem concatenados num único registro de progresso.
+- **Reconciliação**: não existe nenhuma comparação hoje entre "quanto a Precificação previu" e "quanto
+  foi pago" — confirmado por grep, `U32_despesasInstalacaoMontagem` não aparece fora do próprio módulo
+  de Precificação.
+
+Plano em 4 sub-partes, uma por vez (pedido explícito do usuário):
+
+- **3a. Fonte da verdade — ✅ FEITO** (`proposta-heranca.js`, `montarAtivos()`): cada ativo (equipamento)
+  agora carrega `custoInstalacaoMaoDeObraRs`, lido de `precificacao.mo_lookup[]` por `unidadeId` — a
+  parcela de mão de obra (a dominante) passa a ser genuinamente por equipamento, em vez de descartada.
+  As categorias sem dado de origem por unidade (ART, andaime, etc.) **não** são rateadas artificialmente
+  — ratear sem base real seria inventar um número, o oposto de "pura verdade". Testado com a cotação 950:
+  VPEL-EL0950-1 → R$ 38.100, VPEL-EL0950-2 → R$ 16.500 (valores diferentes, batendo com o porte de cada
+  elevador).
+- **3b. Contrato Instalador** (pendente): hoje o valor é 100% manual e por contrato inteiro. Precisa
+  decidir: o campo "Valor total do contrato" vira uma lista com um valor por dossiê/equipamento vinculado
+  (mudança de UI + schema), ou mantém 1 valor mas ganha um "valor sugerido" pré-preenchido a partir da
+  soma dos `custoInstalacaoMaoDeObraRs` dos equipamentos vinculados (mudança bem menor, só ajuda a
+  digitação, não obriga nada)? Essa escolha muda o tamanho do trabalho.
+- **3c. Diário de Obra / gatilho A10** (pendente): hoje o gatilho é só por `dossier_id`. Rastrear
+  progresso por equipamento individual (não só por obra) é uma mudança de schema em
+  `acompanhamento_obra_itens`/`_lancamentos` — maior, mexe em fluxo já em uso.
+  Só faz sentido depois de 3b decidir como o pagamento por equipamento vai ser modelado.
+- **3d. Reconciliação** (pendente): uma tela/alerta que compare "previsto na Precificação" × "pago de
+  fato" (via Omie, já lido por `omie-pagamentos-store.js`) e avise quando não bater. Só é possível depois
+  de 3b/3c existirem — é o fechamento do ciclo, não o começo.
 
 ## Recomendação
 
