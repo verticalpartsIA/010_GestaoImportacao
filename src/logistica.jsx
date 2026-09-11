@@ -71,6 +71,11 @@ async function extrairErroFuncao(error) {
   } catch (e) { /* corpo não era JSON — segue pro fallback abaixo */ }
   return error.message || String(error);
 }
+/* 11/09 — confirmado via teste real (arquivo aleatório, não suposição):
+   2.5MB passa, 3.5MB estoura WORKER_RESOURCE_LIMIT na Edge Function
+   send-email (denomailer construindo o MIME do anexo). Espelha o mesmo
+   limite fixado lá — avisa aqui ANTES de tentar enviar. */
+const MAX_ANEXO_TOTAL = 2.5 * 1024 * 1024;
 const EMAIL_VALIDO_RE = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 function validarEmails(destinatariosStr) {
   const lista = String(destinatariosStr || '').split(',').map((s) => s.trim()).filter(Boolean);
@@ -1407,7 +1412,6 @@ function EmailInbox({ setRoute, setSubsel }) {
     }
   };
 
-  const MAX_ANEXO_TOTAL = 8 * 1024 * 1024; // espelha o limite de send-email
   const lerArquivoBase64 = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
     reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
@@ -1420,7 +1424,7 @@ function EmailInbox({ setRoute, setSubsel }) {
     const totalAtual = anexosResposta.reduce((s, a) => s + a.size, 0);
     const totalNovo = arquivos.reduce((s, f) => s + f.size, 0);
     if (totalAtual + totalNovo > MAX_ANEXO_TOTAL) {
-      window.toast?.(`Anexos somam mais de ${MAX_ANEXO_TOTAL / 1024 / 1024}MB — remova algum antes de adicionar mais.`, 'warning');
+      window.toast?.(`Anexos somam mais de ${MAX_ANEXO_TOTAL / 1024 / 1024}MB — limite real do ambiente de envio (confirmado em teste). Remova algum antes de adicionar mais.`, 'warning');
       return;
     }
     const novos = await Promise.all(arquivos.map(async (f) => ({
@@ -1758,6 +1762,12 @@ function EmailNovoModal({ onClose, onEnviado }) {
   const anexarArquivos = async (fileList) => {
     const arquivos = Array.from(fileList || []);
     if (!arquivos.length) return;
+    const totalAtual = anexos.reduce((s, a) => s + a.size, 0);
+    const totalNovo = arquivos.reduce((s, f) => s + f.size, 0);
+    if (totalAtual + totalNovo > MAX_ANEXO_TOTAL) {
+      window.toast?.(`Anexos somam mais de ${MAX_ANEXO_TOTAL / 1024 / 1024}MB — limite real do ambiente de envio (confirmado em teste). Remova algum antes de adicionar mais.`, 'warning');
+      return;
+    }
     const novos = await Promise.all(arquivos.map(async (f) => ({
       filename: f.name, contentType: f.type || 'application/octet-stream', size: f.size, base64: await lerArquivoBase64(f),
     })));

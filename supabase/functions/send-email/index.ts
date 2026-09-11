@@ -12,15 +12,17 @@
 // 10/09 (2) — suporte a anexo: body.attachments = [{filename,
 // contentType, base64}].
 //
-// 11/09 — BUG REAL corrigido: passar `content` como Uint8Array cru pro
-// denomailer produzia anexo de 0 bytes (achado do usuário — PDF chegou
-// mas não abria; confirmado via teste real: attachments[].size:0 na
-// extração de volta pelo read-inbox). denomailer espera o mesmo formato
-// do nodemailer pra binário: `content` como STRING base64 + `encoding:
-// "base64"` explícito — sem isso, o anexo existe (nome/content-type
-// aparecem) mas o corpo fica vazio, silenciosamente, sem erro nenhum.
-// Testado ao vivo: PDF mandado, lido de volta via read-inbox, baixado
-// do Storage e comparado byte a byte com o original — idêntico.
+// 11/09 — BUG REAL corrigido: `content` como Uint8Array cru pro
+// denomailer produzia anexo de 0 bytes. Fix inicial: decodificar
+// base64→bytes e reconstruir bytes→base64 antes de mandar — funcionou
+// pra arquivo pequeno, mas quebrou com PDF real de 4.2MB do usuário
+// ("WORKER_RESOURCE_LIMIT"). Removido o vai-e-volta (base64 do cliente
+// vai direto pro SMTP), mas o limite persistiu — confirmado via testes
+// reais com arquivo aleatório: 2.5MB passa, 3.5MB estoura recurso.
+// Conclusão: o teto real é do próprio ambiente (Edge Function + o jeito
+// que o denomailer monta o MIME do anexo), não do meu código. Limite
+// fixado em 2.5MB (confirmado funcionando), avisado claramente ao
+// usuário em vez de deixar tentar e falhar com erro genérico.
 //
 // Secrets: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS. Opcional:
 // SMTP_FROM_NAME.
@@ -51,28 +53,21 @@ function parseDestinatarios(to: unknown): string[] {
   return [];
 }
 
+function limparBase64(b64: string): string {
+  return String(b64 || "").replace(/^data:[^,]*,/, "").replace(/[^A-Za-z0-9+/=]/g, "");
+}
 function base64ToBytes(b64: string): Uint8Array {
-  const clean = String(b64 || "").replace(/^data:[^,]*,/, "").replace(/[^A-Za-z0-9+/=]/g, "");
-  const bin = atob(clean);
+  const bin = atob(b64);
   const arr = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
   return arr;
 }
 
-/* Reconstrói uma string base64 "limpa" a partir dos bytes já validados
-   (em vez de reusar o base64 recebido do cliente direto) — processa em
-   blocos pra não estourar o limite de argumentos de
-   String.fromCharCode(...bytes) em arquivos grandes. */
-function bytesToBase64(bytes: Uint8Array): string {
-  let binary = "";
-  const chunkSize = 0x8000;
-  for (let i = 0; i < bytes.length; i += chunkSize) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
-  }
-  return btoa(binary);
-}
-
-const MAX_ANEXO_TOTAL_BYTES = 8 * 1024 * 1024; // 8MB — limite de body de Edge Function
+/* 11/09 — confirmado via teste real (arquivo aleatório, não suposição):
+   2.5MB passa, 3.5MB estoura WORKER_RESOURCE_LIMIT. Fixado em 2.5MB —
+   dentro da faixa confirmada, com margem antes do ponto de falha real
+   observado. */
+const MAX_ANEXO_TOTAL_BYTES = 2.5 * 1024 * 1024;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
@@ -105,14 +100,14 @@ Deno.serve(async (req: Request) => {
   if (!subject) return json({ error: "Assunto (\"subject\") é obrigatório." }, 400);
   if (!text && !html) return json({ error: "Informe \"text\" ou \"html\"." }, 400);
 
-  const anexosBytes = anexosIn.map((a) => ({
+  const anexos = anexosIn.map((a) => ({
     filename: String(a?.filename || "anexo"),
     contentType: String(a?.contentType || "application/octet-stream"),
-    bytes: base64ToBytes(a?.base64 || ""),
+    base64: limparBase64(a?.base64 || ""),
   }));
-  const totalBytes = anexosBytes.reduce((s, a) => s + a.bytes.length, 0);
-  if (totalBytes > MAX_ANEXO_TOTAL_BYTES) {
-    return json({ error: `Anexos somam ${(totalBytes / 1024 / 1024).toFixed(1)}MB — limite de ${MAX_ANEXO_TOTAL_BYTES / 1024 / 1024}MB por envio.` }, 400);
+  const totalBytesEstimado = anexos.reduce((s, a) => s + Math.floor(a.base64.length * 3 / 4), 0);
+  if (totalBytesEstimado > MAX_ANEXO_TOTAL_BYTES) {
+    return json({ error: `Anexos somam ~${(totalBytesEstimado / 1024 / 1024).toFixed(1)}MB — limite de ${(MAX_ANEXO_TOTAL_BYTES / 1024 / 1024).toFixed(1)}MB por envio (limite real do ambiente de envio, confirmado em teste — não é uma escolha arbitrária).` }, 400);
   }
 
   const messageId = `<${crypto.randomUUID()}@vpsistema.com>`;
@@ -135,24 +130,33 @@ Deno.serve(async (req: Request) => {
       content: text || "Ver versão HTML.",
       html: html || undefined,
       headers: { "Message-ID": messageId },
-      attachments: anexosBytes.length
-        ? anexosBytes.map((a) => ({ filename: a.filename, content: bytesToBase64(a.bytes), encoding: "base64", contentType: a.contentType }))
+      attachments: anexos.length
+        ? anexos.map((a) => ({ filename: a.filename, content: a.base64, encoding: "base64", contentType: a.contentType }))
         : undefined,
     } as any);
     await client.close();
 
     let anexosSalvos: { filename: string; content_type: string; size: number; path: string }[] = [];
-    if (numeroCotacao != null) {
+    if (numeroCotacao != null && anexos.length) {
       try {
         const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
         const grupoId = crypto.randomUUID();
-        for (const a of anexosBytes) {
+        for (const a of anexos) {
+          const bytes = base64ToBytes(a.base64);
           const path = `saida/${grupoId}/${a.filename}`;
           const { error: upErrAnexo } = await supabase.storage.from("emails-anexos")
-            .upload(path, a.bytes, { contentType: a.contentType, upsert: true });
+            .upload(path, bytes, { contentType: a.contentType, upsert: true });
           if (upErrAnexo) { console.warn("[send-email] upload anexo falhou", a.filename, upErrAnexo); continue; }
-          anexosSalvos.push({ filename: a.filename, content_type: a.contentType, size: a.bytes.length, path });
+          anexosSalvos.push({ filename: a.filename, content_type: a.contentType, size: bytes.length, path });
         }
+      } catch (e) {
+        console.warn("[send-email] falha ao subir anexo pro Storage", e);
+      }
+    }
+
+    if (numeroCotacao != null) {
+      try {
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
         await supabase.from("emails_projeto").insert({
           numero_cotacao: numeroCotacao,
           referencia_tipo: referenciaTipo,
