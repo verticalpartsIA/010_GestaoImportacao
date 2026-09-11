@@ -30,6 +30,29 @@ function CV_DocItem({ item }) {
       </table>
     );
   }
+  /* tabela informativa por equipamento (cláusula 3.1.1) */
+  if (item.equipamentos) {
+    const eqs = item.equipamentos || [];
+    const total = eqs.reduce((s, e) => s + (e.valor || 0), 0);
+    return (
+      <table className="cv-doc-table">
+        <thead>
+          <tr><th>Equipamento</th><th style={{textAlign:'right'}}>Valor</th></tr>
+        </thead>
+        <tbody>
+          {eqs.map((e, i) => (
+            <tr key={i}>
+              <td>{e.label}</td>
+              <td className="cv-mono" style={{textAlign:'right'}}>{window.CV.brl(e.valor || 0)}</td>
+            </tr>
+          ))}
+        </tbody>
+        <tfoot>
+          <tr><td><b>Total</b></td><td className="cv-mono" style={{textAlign:'right'}}><b>{window.CV.brl(total)}</b></td></tr>
+        </tfoot>
+      </table>
+    );
+  }
   /* tabela simples de 2 colunas — Anexo I / Anexo II (cláusula 1.1.1) */
   if (item.anexos) {
     return (

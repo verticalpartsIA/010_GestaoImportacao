@@ -152,6 +152,12 @@
       modelo: '', largura: '', velocidade: '0,5 m/s', desnivel: '',
       distancia: '', localObra: '',
       valor: '', sinalPct: 30, parcelas: 5,
+      /* Discriminação informativa por equipamento (Fase 2 da granularidade
+         de valor) — herdada de elevador.valores.itens[] da Proposta quando
+         há mais de 1 equipamento na cotação. Não afeta a cláusula 3.1, que
+         continua falando em valor total único (decisão de escopo do
+         usuário — ver Projeto_Granularidade_Equipamentos_por_Cotacao.md). */
+      itensEquipamento: [],
       checklist: { proposta: false, desenho: false, nrs: false },
       d0_entrada: null,      // ISSUE #6: Data de pagamento da entrada
       d0_assinatura: null,   // ISSUE #6: Data de assinatura do contrato
@@ -185,6 +191,17 @@
     for (let i = 1; i <= parcelas; i++) {
       tabela.push({ label: `Parcela ${i} de ${parcelas}`, quando: `${i * 30} dias`, pct: (100 - sinalPct) / parcelas, valor: parcValor });
     }
+
+    /* Discriminação informativa por equipamento — só quando a cotação tem
+       mais de 1 equipamento. Puramente informativa: não substitui nem
+       altera a cláusula 3.1 (que segue com o valor total único). */
+    const itensEquip = Array.isArray(f.itensEquipamento) ? f.itensEquipamento : [];
+    const tabelaEquipamentos = itensEquip.length > 1
+      ? itensEquip.map((it) => ({
+          label: it.equipamento || it.id || 'Equipamento',
+          valor: (Number(it.valorUnit) || 0) * (Number(it.quantidade) || 1),
+        }))
+      : null;
 
     const compRazao = c.razao || 'RAZÃO SOCIAL';
     const compCnpj  = c.cnpj  || 'XX.XXX.XXX/XXXX-XX';
@@ -267,6 +284,10 @@
       body: [
         p(`<b>3.1 Preço.</b> Pela compra dos equipamentos e prestação dos serviços de instalação e montagem, o COMPRADOR pagará à VENDEDORA o valor total de <b>${brl(valor)} (${extenso(valor)})</b>. O pagamento deverá ser efetuado conforme cronograma abaixo:`, { html: true }),
         p('__TABELA_PARCELAS__', { table: tabela }),
+        ...(tabelaEquipamentos ? [
+          p('<b>3.1.1</b> O valor total acima discrimina-se, a título informativo, por equipamento conforme tabela a seguir — a obrigação de pagamento permanece única e integral nos termos da cláusula 3.1.', { html: true, indent: true }),
+          p('__TABELA_EQUIPAMENTOS__', { equipamentos: tabelaEquipamentos }),
+        ] : []),
         p('<b>3.2 Serviços.</b> A porcentagem de serviços em relação ao preço total pode chegar a até 30% (trinta por cento) podendo ser considerado serviço a instalação, frete rodoviário, projetos de engenharia, treinamentos entre outros.', { html: true }),
         p('<b>3.3 Formas de pagamento.</b> Todos os valores acima mencionados poderão ser pagos pelo COMPRADOR por meio de boleto, depósito bancário ou transferência eletrônica bancária diretamente na conta corrente da VENDEDORA ou de outra forma que as partes combinarem.', { html: true }),
         p('<b>3.4 Penalidades por atraso no pagamento.</b> Caso o COMPRADOR não realize qualquer pagamento na data prevista, sobre o valor em atraso incidirá multa de 2% (dois por cento), juros moratórios de 1% (um por cento) ao mês, calculado por dia de atraso (pro rata die) e correção monetária pelo índice IGPM ou outro que o substitua.', { html: true }),

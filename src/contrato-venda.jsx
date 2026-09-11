@@ -484,6 +484,13 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
        lia só valorUnit e o contrato podia nascer R$ 0 (achado E2E C). */
     const totalProposta = Number(p.valor_total) || (Number(valores.valorUnit) || 0) * qtd || 0;
 
+    /* Discriminação por equipamento (Fase 2 da granularidade de valor) —
+       só informativa na cláusula 3.1.1, não muda o valor total do contrato
+       acima. Mesmo shape de elevador.valores.itens[] da Proposta. */
+    const itensEquipamento = (valores.itens || []).map((it) => ({
+      id: it.id, equipamento: it.equipamento, quantidade: it.quantidade, valorUnit: it.valorUnit,
+    }));
+
     /* Equipamento: antes NADA da especificação era herdado, então o objeto
        do contrato ficava no default ("1× Elevador Social, 10 paradas") em vez
        do equipamento real da proposta (achado E2E C). */
@@ -515,6 +522,7 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
       // que o CVMoneyField produz e que parseMoney lê (dígitos como centavos).
       // Antes gravava "185022" cru, que parseMoney lia como R$ 1.850,22 (÷100).
       valor: totalProposta ? window.CV.maskMoney(String(Math.round(totalProposta * 100))) : prev.valor,
+      itensEquipamento: itensEquipamento.length ? itensEquipamento : prev.itensEquipamento,
       qtd: qtd || prev.qtd,
       tipo: tipoInf || prev.tipo,
       paradas: paradasInf || prev.paradas,
