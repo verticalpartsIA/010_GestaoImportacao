@@ -1335,6 +1335,7 @@ function EmailInbox({ setRoute, setSubsel }) {
   const [anexosResposta, setAnexosResposta] = React.useState([]);
   const [gatilhoAberto, setGatilhoAberto] = React.useState(null);
   const [marcandoGatilho, setMarcandoGatilho] = React.useState(false);
+  const [novoEmailAberto, setNovoEmailAberto] = React.useState(false);
 
   const carregar = React.useCallback(() => {
     setLoading(true); setErro(null);
@@ -1540,8 +1541,10 @@ function EmailInbox({ setRoute, setSubsel }) {
         <div className="page-head__r row gap-2">
           {erro ? <Badge variant="danger" dot>Erro na conexão</Badge> : <Badge variant="success" dot>Conectado</Badge>}
           <Button variant="outline" size="sm" icon="refresh" disabled={loading} onClick={carregar}>{loading ? 'Atualizando…' : 'Atualizar'}</Button>
+          <Button variant="primary" size="sm" icon="mail" onClick={() => setNovoEmailAberto(true)}>Novo e-mail</Button>
         </div>
       </div>
+      {novoEmailAberto && <EmailNovoModal onClose={() => setNovoEmailAberto(false)} onEnviado={carregar}/>}
 
       <div className="inbox">
         <div className="inbox__folders">
@@ -1700,6 +1703,93 @@ function EmailInbox({ setRoute, setSubsel }) {
         </div>
       </div>
     </div>
+  );
+}
+
+/* 11/09 — pedido do usuário: "faltou um botão de enviar novo, tipo um
+   usuário quer enviar um e-mail novo, como faz?". Antes só existia
+   Responder/Responder a todos/Encaminhar, todos dependentes de uma
+   mensagem já aberta — não tinha jeito de começar um e-mail do zero.
+   Mesmo send-email, com "Nº Cotação (opcional)" pra já nascer vinculado
+   a um projeto, igual ao RFQ do Formulário. */
+function EmailNovoModal({ onClose, onEnviado }) {
+  const [para, setPara] = React.useState('');
+  const [assunto, setAssunto] = React.useState('');
+  const [corpo, setCorpo] = React.useState('');
+  const [numeroCotacaoInput, setNumeroCotacaoInput] = React.useState('');
+  const [anexos, setAnexos] = React.useState([]);
+  const [enviando, setEnviando] = React.useState(false);
+
+  const lerArquivoBase64 = (file) => new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result).split(',')[1] || '');
+    reader.onerror = reject;
+    reader.readAsDataURL(file);
+  });
+  const anexarArquivos = async (fileList) => {
+    const arquivos = Array.from(fileList || []);
+    if (!arquivos.length) return;
+    const novos = await Promise.all(arquivos.map(async (f) => ({
+      filename: f.name, contentType: f.type || 'application/octet-stream', size: f.size, base64: await lerArquivoBase64(f),
+    })));
+    setAnexos((prev) => [...prev, ...novos]);
+  };
+
+  const enviar = async () => {
+    if (!para.trim() || !assunto.trim() || !corpo.trim()) {
+      window.toast?.('Preencha destinatário, assunto e mensagem.', 'warning');
+      return;
+    }
+    const numero = numeroCotacaoInput.trim() ? parseInt(numeroCotacaoInput.replace(/\D/g, ''), 10) : null;
+    setEnviando(true);
+    try {
+      const sb = window.__VP_SB.sb;
+      const { error } = await sb.functions.invoke('send-email', {
+        body: {
+          to: para.trim(), subject: assunto.trim(), text: corpo,
+          numeroCotacao: numero || undefined,
+          referenciaTipo: numero ? 'avulso_inbox' : undefined,
+          attachments: anexos.length ? anexos.map((a) => ({ filename: a.filename, contentType: a.contentType, base64: a.base64 })) : undefined,
+        },
+      });
+      if (error) throw error;
+      window.toast?.('E-mail enviado.', 'success');
+      onEnviado?.();
+      onClose();
+    } catch (e) {
+      window.toast?.('Erro ao enviar: ' + (e.message || e), 'error');
+    } finally {
+      setEnviando(false);
+    }
+  };
+
+  return (
+    <Modal title="Novo e-mail" onClose={onClose} width={560}
+      footer={<div className="row gap-2">
+        <Button variant="primary" icon="send" disabled={enviando} onClick={enviar}>{enviando ? 'Enviando…' : 'Enviar'}</Button>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+      </div>}>
+      <div className="stack" style={{ gap: 8 }}>
+        <input className="input" placeholder="Para (e-mail)" value={para} onChange={(e) => setPara(e.target.value)}/>
+        <input className="input" placeholder="Assunto" value={assunto} onChange={(e) => setAssunto(e.target.value)}/>
+        <textarea className="input" rows={7} style={{ resize: 'vertical' }} placeholder="Mensagem…" value={corpo} onChange={(e) => setCorpo(e.target.value)}/>
+        <input className="input" style={{ maxWidth: 220 }} placeholder="Nº Cotação (opcional)" value={numeroCotacaoInput} onChange={(e) => setNumeroCotacaoInput(e.target.value)}/>
+        {anexos.length > 0 && (
+          <div className="row gap-2" style={{ flexWrap: 'wrap' }}>
+            {anexos.map((a, i) => (
+              <span key={i} className="badge badge--outline" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                <Icon.paperclip size={10}/> {a.filename} <span className="muted small">({Math.round(a.size / 1024)}kb)</span>
+                <span style={{ cursor: 'pointer', marginLeft: 4 }} onClick={() => setAnexos((prev) => prev.filter((_, idx) => idx !== i))}>×</span>
+              </span>
+            ))}
+          </div>
+        )}
+        <label className="btn btn--outline btn--sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4, width: 'fit-content' }}>
+          <Icon.paperclip size={12}/> Anexar
+          <input type="file" multiple style={{ display: 'none' }} onChange={(e) => { anexarArquivos(e.target.files); e.target.value = ''; }}/>
+        </label>
+      </div>
+    </Modal>
   );
 }
 

@@ -10,10 +10,17 @@
 // responder citando esse Message-ID.
 //
 // 10/09 (2) — suporte a anexo: body.attachments = [{filename,
-// contentType, base64}]. Cada anexo é (a) mandado de verdade no SMTP via
-// denomailer e (b) salvo no bucket emails-anexos e referenciado em
-// emails_projeto.anexos, pro mesmo anexo aparecer também na Linha do
-// Tempo/Inbox sem precisar reabrir o e-mail.
+// contentType, base64}].
+//
+// 11/09 — BUG REAL corrigido: passar `content` como Uint8Array cru pro
+// denomailer produzia anexo de 0 bytes (achado do usuário — PDF chegou
+// mas não abria; confirmado via teste real: attachments[].size:0 na
+// extração de volta pelo read-inbox). denomailer espera o mesmo formato
+// do nodemailer pra binário: `content` como STRING base64 + `encoding:
+// "base64"` explícito — sem isso, o anexo existe (nome/content-type
+// aparecem) mas o corpo fica vazio, silenciosamente, sem erro nenhum.
+// Testado ao vivo: PDF mandado, lido de volta via read-inbox, baixado
+// do Storage e comparado byte a byte com o original — idêntico.
 //
 // Secrets: SMTP_HOST, SMTP_PORT, SMTP_USER, SMTP_PASS. Opcional:
 // SMTP_FROM_NAME.
@@ -50,6 +57,19 @@ function base64ToBytes(b64: string): Uint8Array {
   const arr = new Uint8Array(bin.length);
   for (let i = 0; i < bin.length; i++) arr[i] = bin.charCodeAt(i);
   return arr;
+}
+
+/* Reconstrói uma string base64 "limpa" a partir dos bytes já validados
+   (em vez de reusar o base64 recebido do cliente direto) — processa em
+   blocos pra não estourar o limite de argumentos de
+   String.fromCharCode(...bytes) em arquivos grandes. */
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = "";
+  const chunkSize = 0x8000;
+  for (let i = 0; i < bytes.length; i += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + chunkSize));
+  }
+  return btoa(binary);
 }
 
 const MAX_ANEXO_TOTAL_BYTES = 8 * 1024 * 1024; // 8MB — limite de body de Edge Function
@@ -116,7 +136,7 @@ Deno.serve(async (req: Request) => {
       html: html || undefined,
       headers: { "Message-ID": messageId },
       attachments: anexosBytes.length
-        ? anexosBytes.map((a) => ({ filename: a.filename, content: a.bytes, contentType: a.contentType }))
+        ? anexosBytes.map((a) => ({ filename: a.filename, content: bytesToBase64(a.bytes), encoding: "base64", contentType: a.contentType }))
         : undefined,
     } as any);
     await client.close();
