@@ -7,15 +7,25 @@
 //
 // 10/09 — a lib npm "imapflow" fecha a conexão logo após o TLS neste
 // runtime ("ClosedAfterConnectTLS") — confirmado via teste isolado que a
-// rede/host/porta estão corretos (Deno.connectTls cru lê o banner
-// normal). Então o protocolo IMAP é falado à mão aqui, só com
-// Deno.connectTls — sem dependência nenhuma de socket de terceiro.
-// mailparser também foi evitado de propósito (mesma família de risco de
-// incompatibilidade) — o parser MIME abaixo é mínimo mas autocontido.
+// rede/host/porta estão corretos. Então o protocolo IMAP é falado à mão
+// aqui, só com Deno.connectTls — sem dependência de socket de terceiro.
+//
+// 11/09 — achado real do usuário: depois de mandar/receber mensagens
+// grandes (testes de limite de anexo do send-email), o Inbox inteiro
+// parou de carregar ("Erro na conexão", lista vazia) — os dados
+// continuavam no banco, mas a FUNÇÃO TODA travava (WORKER_RESOURCE_LIMIT)
+// só porque UMA mensagem grande estava no lote sendo processado, e o
+// processamento é sequencial — uma mensagem estourando derruba a
+// resposta inteira, nenhuma das outras aparece. Corrigido com checagem
+// de tamanho em 2 fases: primeiro busca só UID/FLAGS/RFC822.SIZE/header
+// (barato), só baixa o corpo inteiro (BODY.PEEK[]) se a mensagem for
+// menor que SIZE_LIMIT_BYTES — mensagem grande vira um resumo com aviso,
+// nunca mais derruba o lote inteiro. Protege contra QUALQUER e-mail
+// grande futuro (fornecedor mandando anexo pesado), não só os testes.
 //
 // Vínculo a projeto (duas camadas, nunca finge certeza que não tem):
-//   'certo'    — In-Reply-To/References da mensagem bate com o
-//                 message_id de um e-mail que o PRÓPRIO site mandou.
+//   'certo'    — In-Reply-To/References bate com Message-ID que o
+//                 PRÓPRIO site mandou.
 //   'provavel' — fallback por regex no assunto, validado contra
 //                 numero_cotacao real existente.
 //
@@ -78,20 +88,26 @@ async function readUntilTagged(c: ImapConn, tag: string): Promise<string[]> {
   }
 }
 
-async function readFetchOne(c: ImapConn, tag: string): Promise<{ flags: string; uid: string; source: Uint8Array | null }> {
-  let flags = "", uid = "", source: Uint8Array | null = null;
+/* Genérico: lê uma resposta FETCH inteira, capturando FLAGS/UID/
+   RFC822.SIZE de qualquer linha, e o ÚNICO literal ({n}) que aparecer
+   (seja BODY.PEEK[HEADER] ou BODY.PEEK[] — o call-site escolhe qual
+   pedir). */
+async function readFetchOne(c: ImapConn, tag: string): Promise<{ flags: string; uid: string; size: number; source: Uint8Array | null }> {
+  let flags = "", uid = "", size = 0, source: Uint8Array | null = null;
   while (true) {
     const line = await c.readLine();
     const flagsM = line.match(/FLAGS \(([^)]*)\)/);
     if (flagsM) flags = flagsM[1];
     const uidM = line.match(/\bUID (\d+)/);
     if (uidM) uid = uidM[1];
+    const sizeM = line.match(/RFC822\.SIZE (\d+)/);
+    if (sizeM) size = parseInt(sizeM[1], 10);
     const lit = line.match(/\{(\d+)\}\s*$/);
     if (lit) {
       source = await c.readExact(parseInt(lit[1], 10));
       continue;
     }
-    if (line.startsWith(tag + " ")) return { flags, uid, source };
+    if (line.startsWith(tag + " ")) return { flags, uid, size, source };
   }
 }
 
@@ -125,8 +141,6 @@ function decodeHeaderValue(v: string): string {
     } catch { return data; }
   });
 }
-/* RFC 2231 (filename*=UTF-8''nome.pdf) além do RFC 2047 comum — clientes
-   modernos usam um ou outro pro nome de anexo com acento/espaço. */
 function decodeFilename(v: string): string {
   const m = v.match(/^[^']*'[^']*'(.+)$/);
   if (m) { try { return decodeURIComponent(m[1]); } catch { return m[1]; } }
@@ -165,12 +179,6 @@ function splitBody(body: string, boundary: string): string[] {
 }
 
 type Extracted = { text: string; html: string; attachments: { filename: string; contentType: string; bytes: Uint8Array }[] };
-/* 10/09 — unifica a extração de texto/HTML com a de anexos (antes só
-   extractText existia) — um único passe pela árvore MIME, evita duplicar
-   a lógica de multipart/split. Uma parte é anexo se tiver
-   Content-Disposition: attachment OU tiver filename mas não for
-   text/plain nem text/html (alguns clientes mandam imagem inline sem
-   marcar "attachment" explicitamente). */
 function extractParts(raw: string, depth = 0): Extracted {
   if (depth > 6) return { text: "", html: "", attachments: [] };
   const part = parsePart(raw);
@@ -203,10 +211,6 @@ function parseFromHeader(v: string): { email: string; name: string } {
   const name = decodeHeaderValue((m ? v.slice(0, m.index) : "").replace(/^"|"$/g, "").trim());
   return { email, name };
 }
-/* To/Cc podem ter vários endereços separados por vírgula, cada um com ou
-   sem nome de exibição ("Fulano <a@x.com>, b@y.com") — usado por
-   "Responder a todos" pra saber quem mais recebeu, sem descartar como
-   antes (para: [] sempre, mesmo com destinatário real no header). */
 function parseEnderecos(v: string): string[] {
   if (!v) return [];
   return v.split(",").map((part) => {
@@ -228,6 +232,11 @@ function extrairNumeroCotacaoDoAssunto(subject: string): number | null {
   if (m2) return parseInt(m2[1], 10);
   return null;
 }
+
+/* 11/09 — mensagem é considerada "grande" acima disso; corpo não é
+   baixado (só os headers), evitando o WORKER_RESOURCE_LIMIT que
+   derrubava o lote inteiro. */
+const SIZE_LIMIT_BYTES = 3 * 1024 * 1024;
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
@@ -269,23 +278,39 @@ Deno.serve(async (req: Request) => {
       for (let seq = total; seq >= from; seq--) seqs.push(seq);
       let ti = 3;
       for (const seq of seqs) {
-        const tag = `a${ti++}`;
-        await c.write(`${tag} FETCH ${seq} (UID FLAGS BODY.PEEK[])\r\n`);
-        const { flags, uid, source } = await readFetchOne(c, tag);
-        if (!source || !uid) continue;
-        const rawLatin1 = new TextDecoder("latin1").decode(source);
-        const top = parsePart(rawLatin1);
-        const { text, html, attachments } = extractParts(rawLatin1);
-        const fromParsed = parseFromHeader(top.headers["from"] || "");
-        const toList = parseEnderecos(top.headers["to"] || "");
-        const ccList = parseEnderecos(top.headers["cc"] || "");
-        const subject = decodeHeaderValue(top.headers["subject"] || "(sem assunto)");
-        const dataMsg = top.headers["date"] ? new Date(top.headers["date"]) : null;
-        const messageIdHeader = (top.headers["message-id"] || "").match(/<[^>]+>/)?.[0] || null;
+        // Passo 1 (barato): UID/FLAGS/tamanho/só headers.
+        const tagH = `a${ti++}`;
+        await c.write(`${tagH} FETCH ${seq} (UID FLAGS RFC822.SIZE BODY.PEEK[HEADER])\r\n`);
+        const { flags, uid, size, source: headerSrc } = await readFetchOne(c, tagH);
+        if (!uid) continue;
+        const headerLatin1 = headerSrc ? new TextDecoder("latin1").decode(headerSrc) : "";
+        const headers = parseHeaders(headerLatin1);
+
+        const fromParsed = parseFromHeader(headers["from"] || "");
+        const toList = parseEnderecos(headers["to"] || "");
+        const ccList = parseEnderecos(headers["cc"] || "");
+        const subject = decodeHeaderValue(headers["subject"] || "(sem assunto)");
+        const dataMsg = headers["date"] ? new Date(headers["date"]) : null;
+        const messageIdHeader = (headers["message-id"] || "").match(/<[^>]+>/)?.[0] || null;
+        const referenciaId = parseReferenciaId(headers);
+
+        // Passo 2 (só se couber): corpo inteiro + anexos. Mensagem grande
+        // vira um resumo com aviso, nunca derruba o lote inteiro.
+        let text = "", html = "", attachments: Extracted["attachments"] = [];
+        const grandeDemais = size > 0 && size > SIZE_LIMIT_BYTES;
+        if (!grandeDemais) {
+          const tagB = `a${ti++}`;
+          await c.write(`${tagB} FETCH ${seq} (BODY.PEEK[])\r\n`);
+          const { source } = await readFetchOne(c, tagB);
+          if (source) {
+            const rawLatin1 = new TextDecoder("latin1").decode(source);
+            const extracted = extractParts(rawLatin1);
+            text = extracted.text; html = extracted.html; attachments = extracted.attachments;
+          }
+        }
 
         let numeroCotacao: number | null = null;
         let vinculo: string | null = null;
-        const referenciaId = parseReferenciaId(top.headers);
         if (referenciaId) {
           const { data: pai } = await supabase.from("emails_projeto")
             .select("numero_cotacao").eq("message_id", referenciaId).eq("direcao", "saida").maybeSingle();
@@ -300,7 +325,6 @@ Deno.serve(async (req: Request) => {
           }
         }
 
-        // ---- upload de anexos reais pro Storage (bucket emails-anexos) ----
         const anexosSalvos: { filename: string; content_type: string; size: number; path: string }[] = [];
         for (const a of attachments) {
           const path = `entrada/${uid}/${a.filename}`;
@@ -317,8 +341,8 @@ Deno.serve(async (req: Request) => {
           de_nome: fromParsed.name,
           para: [...toList, ...ccList],
           assunto: subject,
-          corpo_texto: text || null,
-          corpo_html: html ? html.slice(0, 50000) : null,
+          corpo_texto: grandeDemais ? null : (text || null),
+          corpo_html: grandeDemais ? null : (html ? html.slice(0, 50000) : null),
           message_id: messageIdHeader,
           in_reply_to: referenciaId,
           imap_uid: uid,
@@ -331,8 +355,6 @@ Deno.serve(async (req: Request) => {
           .upsert(row, { onConflict: "imap_uid" }).select().maybeSingle();
         if (upErr) console.warn("[read-inbox] upsert falhou", uid, upErr);
 
-        // Links assinados (7 dias) pros anexos já salvos — poupa o frontend
-        // de pedir um por um.
         const anexosComUrl = await Promise.all(anexosSalvos.map(async (a) => {
           const { data: signed } = await supabase.storage.from("emails-anexos").createSignedUrl(a.path, 60 * 60 * 24 * 7);
           return { ...a, url: signed?.signedUrl || null };
@@ -345,13 +367,16 @@ Deno.serve(async (req: Request) => {
           subject,
           date: dataMsg ? dataMsg.toISOString() : null,
           unread: !/\\Seen/.test(flags),
-          preview: (text || html.replace(/<[^>]+>/g, " ")).trim().slice(0, 2000),
-          html: html ? html.slice(0, 20000) : null,
+          preview: grandeDemais
+            ? `[Mensagem de ${(size / 1024 / 1024).toFixed(1)}MB — grande demais pra abrir aqui; acesse direto pela caixa suporte@vpsistema.com]`
+            : (text || html.replace(/<[^>]+>/g, " ")).trim().slice(0, 2000),
+          html: grandeDemais ? null : (html ? html.slice(0, 20000) : null),
           numeroCotacao,
           vinculoConfianca: vinculo,
           anexos: anexosComUrl,
           to: toList,
           cc: ccList,
+          grandeDemais,
         });
       }
     }
