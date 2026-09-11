@@ -58,7 +58,7 @@ function PagamentosInstaladorPage() {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule" />ADM/ Financeiro</div>
           <h1 className="page-head__title">Pagamentos a Instaladores</h1>
-          <p className="page-head__sub">Parcelas do Contrato Instalador — liberadas automaticamente conforme a instalação avança no Cronograma de Instalação. Confirmar o pagamento é sempre manual.</p>
+          <p className="page-head__sub">Parcelas do Contrato Instalador — liberadas automaticamente conforme a instalação avança no Acompanhamento de Obra (Diário). Confirmar o pagamento é sempre manual.</p>
         </div>
       </div>
 
