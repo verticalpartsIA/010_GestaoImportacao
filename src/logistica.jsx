@@ -1324,12 +1324,17 @@ function EmailInbox({ setRoute, setSubsel }) {
   const active = emails.find(e => e.id === activeId);
 
   const [respondendo, setRespondendo] = React.useState(false);
+  const [modoCompose, setModoCompose] = React.useState('responder'); // 'responder' | 'responder-todos' | 'encaminhar'
+  const [destinatarioEncaminhar, setDestinatarioEncaminhar] = React.useState('');
   const [respostaTexto, setRespostaTexto] = React.useState('');
   const [enviandoResposta, setEnviandoResposta] = React.useState(false);
+  const [sugerindoIA, setSugerindoIA] = React.useState(false);
   const [vinculando, setVinculando] = React.useState(false);
   const [vincularInput, setVincularInput] = React.useState('');
   const [salvandoVinculo, setSalvandoVinculo] = React.useState(false);
   const [anexosResposta, setAnexosResposta] = React.useState([]);
+  const [gatilhoAberto, setGatilhoAberto] = React.useState(null);
+  const [marcandoGatilho, setMarcandoGatilho] = React.useState(false);
 
   const carregar = React.useCallback(() => {
     setLoading(true); setErro(null);
@@ -1340,7 +1345,39 @@ function EmailInbox({ setRoute, setSubsel }) {
     }).catch((e) => setErro(e.message || String(e))).finally(() => setLoading(false));
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
-  React.useEffect(() => { setRespondendo(false); setRespostaTexto(''); setVinculando(false); setVincularInput(''); setAnexosResposta([]); }, [activeId]);
+  React.useEffect(() => {
+    setRespondendo(false); setModoCompose('responder'); setDestinatarioEncaminhar('');
+    setRespostaTexto(''); setVinculando(false); setVincularInput(''); setAnexosResposta([]); setGatilhoAberto(null);
+  }, [activeId]);
+
+  /* Sugestão de gatilho (10/09) — não dispara sozinho: um e-mail chegando
+     não prova que É a resposta do fornecedor (pode ser só "recebido,
+     aguarde"). Só avisa quando existe um nó SLA_FORNECEDOR aberto pra
+     essa cotação, e deixa o vendedor decidir clicando. */
+  React.useEffect(() => {
+    if (!active || active.numeroCotacao == null) { setGatilhoAberto(null); return; }
+    let cancelado = false;
+    window.__VP_SB.sb.from('gatilhos').select('id, alvo_id')
+      .eq('numero_cotacao', active.numeroCotacao).eq('evento_key', 'SLA_FORNECEDOR').is('concluido_em', null).maybeSingle()
+      .then(({ data }) => { if (!cancelado) setGatilhoAberto(data || null); });
+    return () => { cancelado = true; };
+  }, [active && active.id, active && active.numeroCotacao]);
+
+  const marcarComoRespostaFornecedor = async () => {
+    if (!active || !gatilhoAberto) return;
+    setMarcandoGatilho(true);
+    try {
+      await window.EventosFluxo.registrar({
+        evento: 'FORNECEDOR_RESPONDEU', numeroCotacao: active.numeroCotacao, alvoId: gatilhoAberto.alvo_id || null,
+      });
+      window.toast?.('Marcado — gatilho "Aguardando resposta do Fornecedor" fechado.', 'success');
+      setGatilhoAberto(null);
+    } catch (e) {
+      window.toast?.('Erro ao marcar gatilho: ' + (e.message || e), 'error');
+    } finally {
+      setMarcandoGatilho(false);
+    }
+  };
 
   const MAX_ANEXO_TOTAL = 8 * 1024 * 1024; // espelha o limite de send-email
   const lerArquivoBase64 = (file) => new Promise((resolve, reject) => {
@@ -1376,28 +1413,82 @@ function EmailInbox({ setRoute, setSubsel }) {
      verdade. Responder reusa a mesma send-email (mesma caixa suporte@
      vpsistema.com); se o e-mail original já estava vinculado a uma
      cotação, a resposta herda o vínculo automaticamente. */
-  const enviarResposta = async () => {
+  const NOSSO_EMAIL = 'suporte@vpsistema.com'; // caixa própria — nunca incluir como destinatário em "responder a todos"
+  const enviarCompose = async () => {
     if (!active || !respostaTexto.trim()) return;
+    if (modoCompose === 'encaminhar' && !destinatarioEncaminhar.trim()) {
+      window.toast?.('Digite o e-mail de quem vai receber o encaminhamento.', 'warning');
+      return;
+    }
     setEnviandoResposta(true);
     try {
       const sb = window.__VP_SB.sb;
-      const subject = /^re:/i.test(active.subject || '') ? active.subject : `Re: ${active.subject || ''}`;
+      let to, subject, text;
+      if (modoCompose === 'encaminhar') {
+        to = destinatarioEncaminhar.trim();
+        subject = /^fwd:/i.test(active.subject || '') ? active.subject : `Fwd: ${active.subject || ''}`;
+        text = `${respostaTexto}\n\n---------- Mensagem encaminhada ----------\nDe: ${active.fromName || active.from} <${active.from}>\nAssunto: ${active.subject}\n\n${active.preview || ''}`;
+      } else if (modoCompose === 'responder-todos') {
+        const todos = [active.from, ...(active.to || []), ...(active.cc || [])]
+          .map((e) => String(e).toLowerCase())
+          .filter((e, i, arr) => e && e !== NOSSO_EMAIL && arr.indexOf(e) === i);
+        to = todos.join(', ');
+        subject = /^re:/i.test(active.subject || '') ? active.subject : `Re: ${active.subject || ''}`;
+        text = respostaTexto;
+      } else {
+        to = active.from;
+        subject = /^re:/i.test(active.subject || '') ? active.subject : `Re: ${active.subject || ''}`;
+        text = respostaTexto;
+      }
       const { error } = await sb.functions.invoke('send-email', {
         body: {
-          to: active.from, subject, text: respostaTexto,
+          to, subject, text,
           numeroCotacao: active.numeroCotacao ?? undefined,
           referenciaTipo: active.numeroCotacao != null ? 'resposta_inbox' : undefined,
           attachments: anexosResposta.length ? anexosResposta.map((a) => ({ filename: a.filename, contentType: a.contentType, base64: a.base64 })) : undefined,
         },
       });
       if (error) throw error;
-      window.toast?.('Resposta enviada.', 'success');
-      setRespondendo(false); setRespostaTexto(''); setAnexosResposta([]);
+      window.toast?.(modoCompose === 'encaminhar' ? 'E-mail encaminhado.' : 'Resposta enviada.', 'success');
+      setRespondendo(false); setRespostaTexto(''); setAnexosResposta([]); setDestinatarioEncaminhar('');
       carregar();
     } catch (e) {
       window.toast?.('Erro ao enviar: ' + (e.message || e), 'error');
     } finally {
       setEnviandoResposta(false);
+    }
+  };
+
+  const abrirCompose = (modo) => {
+    setModoCompose(modo);
+    setRespondendo(true);
+    setVinculando(false);
+    if (modo !== 'encaminhar') setDestinatarioEncaminhar('');
+  };
+
+  /* Sugestão de resposta por IA (10/09) — pedido do usuário, botão que já
+     existia desabilitado. Manda o corpo real do e-mail (texto puro, sem
+     tags HTML) pra suggest-email-reply e só preenche o campo — o
+     vendedor sempre revisa/edita antes de enviar, nunca envia sozinho. */
+  const sugerirResposta = async () => {
+    if (!active) return;
+    setSugerindoIA(true);
+    try {
+      const sb = window.__VP_SB.sb;
+      const bodyText = active.preview || (active.html || '').replace(/<[^>]+>/g, ' ');
+      const { data, error } = await sb.functions.invoke('suggest-email-reply', {
+        body: { subject: active.subject, fromName: active.fromName, from: active.from, bodyText, numeroCotacao: active.numeroCotacao ?? undefined },
+      });
+      if (error) throw error;
+      if (data && data.error) throw new Error(data.error);
+      setModoCompose((m) => (m === 'encaminhar' ? m : 'responder'));
+      setRespondendo(true);
+      setRespostaTexto(data.sugestao || '');
+      window.toast?.('Sugestão gerada — revise antes de enviar.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao sugerir resposta: ' + (e.message || e), 'error');
+    } finally {
+      setSugerindoIA(false);
     }
   };
 
@@ -1509,6 +1600,18 @@ function EmailInbox({ setRoute, setSubsel }) {
                     <Icon.link2 size={10}/> Ver na Linha do Tempo — Cotação Nº {active.numeroCotacao}{active.vinculoConfianca === 'provavel' ? ' (vínculo provável)' : ''}
                   </Badge>
                 )}
+                {gatilhoAberto && (
+                  <div className="alert warning" style={{ marginTop: 8 }}>
+                    <Icon.warning/>
+                    <div style={{ flex: 1 }}>
+                      <div className="alert__title">Nova mensagem na Cotação Nº {active.numeroCotacao} — o gatilho "Aguardando resposta do Fornecedor" ainda está aberto.</div>
+                      <div className="small muted">Confirme se este e-mail é a resposta técnica/comercial antes de marcar — um e-mail pode ser só "recebido, aguarde".</div>
+                    </div>
+                    <Button variant="primary" size="sm" disabled={marcandoGatilho} onClick={marcarComoRespostaFornecedor}>
+                      {marcandoGatilho ? 'Marcando…' : 'Marcar como resposta do fornecedor'}
+                    </Button>
+                  </div>
+                )}
                 <div className="inbox__msg-meta">
                   <div className="avatar">{(active.fromName || active.from || "").split(/[\s.\-_]/).filter(Boolean).slice(0,2).map(w => (w[0]||"").toUpperCase()).join("") || "?"}</div>
                   <div>
@@ -1517,7 +1620,7 @@ function EmailInbox({ setRoute, setSubsel }) {
                   </div>
                   <div className="from-email">{active.date ? new Date(active.date).toLocaleString('pt-BR') : ''}</div>
                   <div className="inbox__msg-actions">
-                    <Button variant="outline" size="sm" icon="reply" onClick={() => { setRespondendo(r => !r); setVinculando(false); }}>Responder</Button>
+                    <Button variant="outline" size="sm" icon="reply" onClick={() => (respondendo && modoCompose === 'responder' ? setRespondendo(false) : abrirCompose('responder'))}>Responder</Button>
                     <Button variant="ghost" size="sm" icon="link2" onClick={() => { setVinculando(v => !v); setRespondendo(false); setVincularInput(active.numeroCotacao != null ? String(active.numeroCotacao) : ''); }}>Vincular</Button>
                   </div>
                 </div>
@@ -1550,8 +1653,17 @@ function EmailInbox({ setRoute, setSubsel }) {
               )}
               {respondendo && (
                 <div style={{ padding: '0 16px 12px' }}>
+                  {modoCompose === 'encaminhar' && (
+                    <input className="input" style={{ width: '100%', marginBottom: 6 }} placeholder="Encaminhar para (e-mail)"
+                      value={destinatarioEncaminhar} onChange={(e) => setDestinatarioEncaminhar(e.target.value)}/>
+                  )}
+                  {modoCompose === 'responder-todos' && (
+                    <div className="small muted" style={{ marginBottom: 6 }}>
+                      Para: {[active.from, ...(active.to || []), ...(active.cc || [])].map((e) => String(e).toLowerCase()).filter((e, i, arr) => e && e !== NOSSO_EMAIL && arr.indexOf(e) === i).join(', ')}
+                    </div>
+                  )}
                   <textarea className="input" rows={5} style={{ width: '100%', resize: 'vertical' }}
-                    placeholder={`Respondendo a ${active.fromName || active.from}…`}
+                    placeholder={modoCompose === 'encaminhar' ? 'Mensagem (opcional) antes do conteúdo encaminhado…' : `Respondendo a ${active.fromName || active.from}…`}
                     value={respostaTexto} onChange={(e) => setRespostaTexto(e.target.value)} autoFocus/>
                   {anexosResposta.length > 0 && (
                     <div className="row gap-2" style={{ marginTop: 6, flexWrap: 'wrap' }}>
@@ -1564,23 +1676,24 @@ function EmailInbox({ setRoute, setSubsel }) {
                     </div>
                   )}
                   <div className="row gap-2" style={{ marginTop: 8 }}>
-                    <Button variant="primary" size="sm" icon="send" disabled={enviandoResposta || !respostaTexto.trim()} onClick={enviarResposta}>
-                      {enviandoResposta ? 'Enviando…' : 'Enviar resposta'}
+                    <Button variant="primary" size="sm" icon="send" disabled={enviandoResposta || !respostaTexto.trim()} onClick={enviarCompose}>
+                      {enviandoResposta ? 'Enviando…' : modoCompose === 'encaminhar' ? 'Encaminhar' : 'Enviar resposta'}
                     </Button>
                     <label className="btn btn--outline btn--sm" style={{ cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
                       <Icon.paperclip size={12}/> Anexar
                       <input type="file" multiple style={{ display: 'none' }} onChange={(e) => { anexarArquivos(e.target.files); e.target.value = ''; }}/>
                     </label>
+                    <Button variant="ghost" size="sm" icon="zap" disabled={sugerindoIA} onClick={sugerirResposta}>{sugerindoIA ? 'Pensando…' : 'Sugerir resposta (AI)'}</Button>
                     <Button variant="ghost" size="sm" onClick={() => { setRespondendo(false); setRespostaTexto(''); setAnexosResposta([]); }}>Cancelar</Button>
                   </div>
                 </div>
               )}
               <div className="inbox__compose">
-                <Button variant="primary" size="sm" icon="reply" onClick={() => { setRespondendo(r => !r); setVinculando(false); }}>Responder</Button>
-                <Button variant="outline" size="sm" icon="reply" disabled title="Em desenvolvimento — responder a todos os destinatários ainda não implementado">Responder a todos</Button>
-                <Button variant="outline" size="sm" icon="arrowRight" disabled title="Em desenvolvimento — encaminhar ainda não implementado">Encaminhar</Button>
+                <Button variant="primary" size="sm" icon="reply" onClick={() => abrirCompose('responder')}>Responder</Button>
+                <Button variant="outline" size="sm" icon="reply" onClick={() => abrirCompose('responder-todos')}>Responder a todos</Button>
+                <Button variant="outline" size="sm" icon="arrowRight" onClick={() => abrirCompose('encaminhar')}>Encaminhar</Button>
                 <div className="spacer" style={{ flex: 1 }}/>
-                <Button variant="ghost" size="sm" icon="zap" disabled title="Em desenvolvimento — sugestão de resposta por IA ainda não implementada">Sugerir resposta (AI)</Button>
+                <Button variant="ghost" size="sm" icon="zap" disabled={sugerindoIA} onClick={sugerirResposta}>{sugerindoIA ? 'Pensando…' : 'Sugerir resposta (AI)'}</Button>
               </div>
             </>
           ) : null}

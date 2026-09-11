@@ -203,6 +203,17 @@ function parseFromHeader(v: string): { email: string; name: string } {
   const name = decodeHeaderValue((m ? v.slice(0, m.index) : "").replace(/^"|"$/g, "").trim());
   return { email, name };
 }
+/* To/Cc podem ter vários endereços separados por vírgula, cada um com ou
+   sem nome de exibição ("Fulano <a@x.com>, b@y.com") — usado por
+   "Responder a todos" pra saber quem mais recebeu, sem descartar como
+   antes (para: [] sempre, mesmo com destinatário real no header). */
+function parseEnderecos(v: string): string[] {
+  if (!v) return [];
+  return v.split(",").map((part) => {
+    const m = part.match(/<([^>]+)>/);
+    return (m ? m[1] : part).trim();
+  }).filter(Boolean);
+}
 function parseReferenciaId(headers: Record<string, string>): string | null {
   const inReplyTo = headers["in-reply-to"];
   if (inReplyTo) { const m = inReplyTo.match(/<[^>]+>/); if (m) return m[0]; }
@@ -266,6 +277,8 @@ Deno.serve(async (req: Request) => {
         const top = parsePart(rawLatin1);
         const { text, html, attachments } = extractParts(rawLatin1);
         const fromParsed = parseFromHeader(top.headers["from"] || "");
+        const toList = parseEnderecos(top.headers["to"] || "");
+        const ccList = parseEnderecos(top.headers["cc"] || "");
         const subject = decodeHeaderValue(top.headers["subject"] || "(sem assunto)");
         const dataMsg = top.headers["date"] ? new Date(top.headers["date"]) : null;
         const messageIdHeader = (top.headers["message-id"] || "").match(/<[^>]+>/)?.[0] || null;
@@ -302,7 +315,7 @@ Deno.serve(async (req: Request) => {
           direcao: "entrada",
           de_email: fromParsed.email,
           de_nome: fromParsed.name,
-          para: [],
+          para: [...toList, ...ccList],
           assunto: subject,
           corpo_texto: text || null,
           corpo_html: html ? html.slice(0, 50000) : null,
@@ -337,6 +350,8 @@ Deno.serve(async (req: Request) => {
           numeroCotacao,
           vinculoConfianca: vinculo,
           anexos: anexosComUrl,
+          to: toList,
+          cc: ccList,
         });
       }
     }

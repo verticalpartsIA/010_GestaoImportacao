@@ -836,7 +836,52 @@ const FE_RFQ_CONTATOS_PADRAO = {
   Glarie: { nome: 'Kimmy (Glarie)', email: 'kimmy.kuai@glarie.com, carrie.han@glarie.com, sam.zhang@glarie.com', telefone: '8618751801577' },
   VERTICALPARTS: { nome: 'Victória (VerticalParts)', email: 'victoria@verticalparts.com.br', telefone: '11995578519' },
 };
-function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, onPedirRevisao, enviando }) {
+/* 10/09 — pedido do usuário: "os e-mails desse projeto deveriam ficar
+   juntos". Lê emails_projeto (send-email/read-inbox) pelo numero_cotacao
+   — mesma chave que amarra Formulário/Cotação/Proposta/Contrato/P.I./
+   Embarque no resto do sistema (ver linha-do-tempo-store.js). Carrega só
+   quando o vendedor clica (evita bater no banco toda vez que o modal
+   abre, a maioria das cotações nunca vai ser aberta pra ver isso). */
+function FEComunicacaoFornecedor({ numeroCotacao }) {
+  const [aberto, setAberto] = React.useState(false);
+  const [msgs, setMsgs] = React.useState(null);
+  const [carregando, setCarregando] = React.useState(false);
+  if (numeroCotacao == null) return null;
+  const abrir = () => {
+    setAberto((v) => !v);
+    if (msgs) return;
+    setCarregando(true);
+    window.__VP_SB.sb.from('emails_projeto').select('*').eq('numero_cotacao', numeroCotacao)
+      .order('data_mensagem', { ascending: false }).limit(20)
+      .then(({ data }) => setMsgs(data || [])).finally(() => setCarregando(false));
+  };
+  return (
+    <div style={{ marginTop: 10 }}>
+      <Button variant="ghost" size="sm" icon="mail" onClick={abrir}>{aberto ? 'Ocultar comunicação' : 'Ver comunicação desta cotação'}</Button>
+      {aberto && (
+        <div className="card" style={{ padding: 10, marginTop: 6, maxHeight: 320, overflowY: 'auto' }}>
+          {carregando && <p className="small muted">Carregando…</p>}
+          {!carregando && msgs && msgs.length === 0 && <p className="small muted">Nenhum e-mail vinculado à Cotação Nº {numeroCotacao} ainda.</p>}
+          {!carregando && msgs && msgs.map((m) => (
+            <div key={m.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+              <div className="row gap-2" style={{ justifyContent: 'space-between' }}>
+                <b className="small">{m.direcao === 'saida' ? `Enviado → ${(m.para || []).join(', ')}` : `Recebido — ${m.de_nome || m.de_email}`}</b>
+                <span className="small muted">{m.data_mensagem ? new Date(m.data_mensagem).toLocaleString('pt-BR') : ''}</span>
+              </div>
+              <div className="small">{m.assunto}</div>
+              {m.corpo_texto && <p className="small muted" style={{ marginTop: 2, whiteSpace: 'pre-wrap' }}>{m.corpo_texto.slice(0, 300)}</p>}
+              {m.anexos && m.anexos.length > 0 && (
+                <div className="small muted" style={{ marginTop: 2 }}><Icon.paperclip size={10} style={{ verticalAlign: 'middle' }}/> {m.anexos.map((a) => a.filename).join(', ')}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedirRevisao, enviando }) {
   const store = window.CotacaoElevadorFornecedorStore;
   const suportado = Object.prototype.hasOwnProperty.call(FE_RFQ_CONTATOS_PADRAO, grupo.fornecedor);
   const [verResp, setVerResp] = React.useState(false);
@@ -881,6 +926,7 @@ function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, onPedirRevisao, envian
           </div>
         </div>
       )}
+      <FEComunicacaoFornecedor numeroCotacao={numeroCotacao}/>
     </div>
   );
 }
@@ -985,7 +1031,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
       footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
       {grupos.length === 0 && <p className="small muted">Salve o formulário e defina o Fornecedor em pelo menos uma Unidade para enviar a cotação.</p>}
       {grupos.map((g) => (
-        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}|${g.categoriaProduto}`} grupo={g} cot={cotacaoDoGrupo(g)} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando}/>
+        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}|${g.categoriaProduto}`} grupo={g} cot={cotacaoDoGrupo(g)} numeroCotacao={numeroCotacao} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando}/>
       ))}
     </Modal>
   );
