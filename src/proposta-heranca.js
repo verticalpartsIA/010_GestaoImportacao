@@ -81,6 +81,12 @@
     const { unidades, cotacao, precificacao } = fontes;
     const envio = (cotacao && cotacao.dados_envio && cotacao.dados_envio.unidades) || [];
     const modelos = (precificacao && precificacao.modelos) || [];
+    /* Rateio calculado (valorUnitarioRs por unidade) mora em resultado(_v2)
+       .modelos — é OUTPUT do motor, não o snapshot de entrada acima (que só
+       tem modelo/quantidade/valorUnitarioUsd). Mesma seleção V1/V2 de
+       montarPrefill(). */
+    const modelosCalc = (precificacao && precificacao.resultado_v2 && precificacao.resultado_v2.modelos)
+      || (precificacao && precificacao.resultado && precificacao.resultado.modelos) || [];
     const cefStore = window.CotacaoElevadorFornecedorStore;
 
     const base = unidades.length ? unidades : envio.map((u) => ({ ...u, id: u.unidade_id }));
@@ -89,6 +95,7 @@
       const uid = u.id || u.unidade_id;
       const tec = envio.find((e) => e.unidade_id === uid) || {};
       const mod = modelos.find((m) => m.unidadeId === uid) || {};
+      const modCalc = modelosCalc.find((m) => m.unidadeId === uid) || {};
       const capKg = u.capacidade_kg || tec.capacidade_kg;
       const capPass = u.capacidade_pessoas || tec.capacidade_pessoas;
       const largura = u.caixa_largura_mm || tec.caixa_largura_mm;
@@ -114,6 +121,12 @@
         andaresParadasPortas: paradas ? `${paradas} Paradas` : '',
         qtd: Number(u.quantidade || tec.quantidade) || 1,
         codigoAtivo: (cotacao && cefStore) ? cefStore.assetMasterId(cotacao, u.indice_ativo ?? tec.indice_ativo) : null,
+        /* Valor rateado por equipamento (ponderado pelo custo USD real do
+           modelo, ver precificacao-elevador-engine.js) — distinto de
+           precoVendaPorEquipamento, que é só a média. Usado em
+           montarPrefill() pra dar a cada item da proposta seu valor real,
+           em vez do mesmo valor clonado pra todos. */
+        valorUnitarioRs: Number(modCalc.valorUnitarioRs) || null,
       };
     });
   }
@@ -198,23 +211,28 @@
        o agregado acima) pra Preview mostrar cada equipamento separado, em
        vez de uma linha só somando tudo (bug real na cotação 950 — 2
        elevadores viravam 1 linha "GEF, GEP" com quantidade errada).
-       precoVendaPorEquipamento já é uma média (motor de precificação não
-       diferencia por modelo — ver Frente 3, não feita ainda), então todo
-       item nasce com o mesmo valorUnit por ora. */
-    if (especificacoes.length > 1 && resultado && resultado.precoVendaPorEquipamento) {
-      const unit = Math.round(resultado.precoVendaPorEquipamento);
-      valores.itens = especificacoes.map((e, i) => ({
-        id: e.id || e.codigoAtivo || `Equipamento ${i + 1}`,
-        /* Só o Nº do equipamento (VPEL-EL0950-1) — combinado é esse, sem
-           anexar o código interno de modelo do fabricante junto. */
-        equipamento: e.id || equipamentos || 'Elevador de Passageiros',
-        quantidade: String(Number(e.qtd) || 1),
-        valorUnit: String(unit),
-        /* valorOriginal: congelado no nascimento — nunca sobrescrito por um
-           desconto (proposta-desconto.js só mexe em valorUnit/desconto*). */
-        valorOriginal: String(unit),
-        desconto: null, descontoPendente: null, descontoLog: [],
-      }));
+       Cada item usa seu valor real (e.valorUnitarioRs, rateado por modelo
+       em precificacao-elevador-engine.js) — só cai pra precoVendaPorEquipamento
+       (a média) quando o rateio não está disponível (cotação antiga, ou
+       modelos[] incompleto). */
+    if (especificacoes.length > 1 && resultado
+      && (resultado.precoVendaPorEquipamento || especificacoes.some((e) => e.valorUnitarioRs))) {
+      const mediaFallback = Math.round(resultado.precoVendaPorEquipamento) || 0;
+      valores.itens = especificacoes.map((e, i) => {
+        const unit = Math.round(e.valorUnitarioRs) || mediaFallback;
+        return {
+          id: e.id || e.codigoAtivo || `Equipamento ${i + 1}`,
+          /* Só o Nº do equipamento (VPEL-EL0950-1) — combinado é esse, sem
+             anexar o código interno de modelo do fabricante junto. */
+          equipamento: e.id || equipamentos || 'Elevador de Passageiros',
+          quantidade: String(Number(e.qtd) || 1),
+          valorUnit: String(unit),
+          /* valorOriginal: congelado no nascimento — nunca sobrescrito por um
+             desconto (proposta-desconto.js só mexe em valorUnit/desconto*). */
+          valorOriginal: String(unit),
+          desconto: null, descontoPendente: null, descontoLog: [],
+        };
+      });
     }
     if (especificacoes.length || Object.keys(valores).length) {
       prefill.elevador = {};
