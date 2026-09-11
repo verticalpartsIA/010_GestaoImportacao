@@ -133,7 +133,13 @@ async function listarMovimentosPorDoc(doc: string, maxPaginas = 20): Promise<Mov
         const seg = fault.match(/(\d+)\s*segundos?/)?.[1] || "60";
         throw new Error(`REDUNDANT:${seg}`);
       }
-      if (/nenhum registro|n[aã]o encontrad/i.test(fault)) break;
+      // financas/mf só acha um documento se ele também estiver cadastrado
+      // como "Cliente" no Omie (nem todo Fornecedor tem isso, achado
+      // rodando a sincronização real 11/09) — pra esses, o Omie nunca vai
+      // achar nada por esse filtro; tratar como "sem resultados" em vez
+      // de erro retentável (senão fica gastando rate-limit à toa numa
+      // consulta que nunca vai funcionar).
+      if (/nenhum registro|n[aã]o encontrad|nenhum cliente cadastrado/i.test(fault)) break;
       throw new Error(fault || "erro desconhecido no Omie");
     }
     totalPaginas = resp.data.nTotPaginas || 1;
