@@ -22,7 +22,7 @@
      com a reorganização IA Fase 1 (2026-09-03) — labels antigos migrados
      em colaborador_alocacoes na mesma mudança, ver commit. */
   const GRUPOS_MODULO = [
-    'Geral', 'Cadastros Mestres', 'Comercial | Pré-venda', 'Financeiro & Preços',
+    'Geral', 'CRM', 'Cadastros Mestres', 'Comercial | Pré-venda', 'Financeiro & Preços',
     'Contratos & Jurídico', 'Suprimentos & Importação', 'Engenharia & Produto',
     'Obras & Instalação', 'Entrega & Documentação', 'Parceiros & Instaladores',
     'Logística Interna', 'Administração',

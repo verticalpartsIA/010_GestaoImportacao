@@ -18,6 +18,7 @@ const NAV_GROUPS = [
     { id: "financeiro", label: "Prazos & Pendências", icon: "dollar", restrict: ["financeiro", "admin"] },
     { id: "inbox", label: "Inbox", icon: "mail" },
   ]},
+  { label: "CRM", empty: true, items: [] },
   /* Só os cadastros mestres de verdade (usados por múltiplos domínios) ficam
      aqui. Produtos, Empresas Instaladoras e Atualização de Custos migraram
      pro domínio que efetivamente os usa. */
