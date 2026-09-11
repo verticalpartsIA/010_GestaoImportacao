@@ -76,7 +76,7 @@
     const [{ data: status }, { data: lancamentos }, { data: dossier }, { data: equipamentos }] = await Promise.all([
       c.from('acompanhamento_obra_status').select('*, acompanhamento_obra_itens(id, texto, ordem, peso)').eq('dossier_id', dossierId),
       c.from('acompanhamento_obra_lancamentos').select('*').eq('dossier_id', dossierId).order('data', { ascending: false }).order('enviado_em', { ascending: false }),
-      c.from('dossier_obra').select('id, client_name, building_name, equip_type').eq('id', dossierId).maybeSingle(),
+      c.from('dossier_obra').select('id, client_name, building_name, equip_type, numero_cotacao').eq('id', dossierId).maybeSingle(),
       /* Nº do Equipamento (Master ID) no cabeçalho — pedido do usuário
          04/09: mesmo cliente/prédio pode ter 2+ dossiês (1 elevador por
          dossiê) com a MESMA instaladora — client_name/building_name saem
@@ -138,7 +138,34 @@
       observacao: observacao || null,
     });
     if (error) throw error;
+    await _checarMetadeExecucao(dossierId);
     return novos.length;
+  }
+
+  /* Achado A10 da auditoria (não commitar/tour.md): INSTALACAO_METADE_EXECUCAO
+     era disparado pelo Cronograma de Instalação (checklist de template),
+     desconectado do Acompanhamento de Obra — que o usuário confirmou ser
+     quem de fato define o status da obra em campo (verificado com foto).
+     Decisão de negócio 10/09/2026: mover o gatilho pra cá, usando o
+     progresso PONDERADO (resumoProgresso, pesos por item) em vez de
+     contagem simples de itens. Idempotente via checagem prévia em
+     eventos_fluxo — mesmo padrão que instalacao-checklist-store.js usava
+     (removido de lá na mesma mudança). Nunca derruba o fluxo de
+     registrar lançamento por falha aqui — é gatilho, não obrigação. */
+  async function _checarMetadeExecucao(dossierId) {
+    try {
+      const c = sb(); if (!c || !window.EventosFluxo) return;
+      const estado = await obterEstadoDossier(dossierId);
+      const resumo = resumoProgresso(estado.status);
+      if (resumo.pct < 50) return;
+      const label = window.EventosFluxo.EVENTOS.INSTALACAO_METADE_EXECUCAO.label;
+      const { data: existe } = await c.from('eventos_fluxo').select('id').eq('alvo_id', dossierId).eq('evento', label).maybeSingle();
+      if (existe) return;
+      await window.EventosFluxo.registrar({
+        evento: 'INSTALACAO_METADE_EXECUCAO', numeroCotacao: estado.dossier?.numero_cotacao ?? null,
+        alvoLabel: estado.dossier?.building_name, alvoId: dossierId,
+      });
+    } catch (e) { console.warn('[AcompanhamentoObraStore] checar metade execução falhou', e); }
   }
 
   /* Flegar de dentro do sistema (não pelo link do Montador) — pedido do
