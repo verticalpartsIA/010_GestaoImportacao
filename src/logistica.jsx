@@ -1885,10 +1885,10 @@ function EmailNovoModal({ onClose, onEnviado }) {
 function EmailBody({ active }) {
   if (!active) return null;
   if (active.html) {
-    return <iframe title="corpo do e-mail" sandbox="" srcDoc={active.html}
+    return <iframe title="corpo do e-mail" sandbox="allow-popups allow-top-navigation-by-user-activation" srcDoc={active.html}
       style={{ width: '100%', minHeight: 420, border: 'none', background: '#fff' }}/>;
   }
-  return <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 13, margin: 0 }}>{active.preview || 'Mensagem sem conteúdo de texto.'}</pre>;
+  return <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 13, margin: 0 }}>{active.preview ? window.linkifyTexto(active.preview) : 'Mensagem sem conteúdo de texto.'}</pre>;
 }
 
 Object.assign(window, { ImportacaoPage, ImportacaoDetail, ImportacaoRastreamento, ComprasPage, EmailInbox });

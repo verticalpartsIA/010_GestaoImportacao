@@ -869,7 +869,7 @@ function FEComunicacaoFornecedor({ numeroCotacao }) {
                 <span className="small muted">{m.data_mensagem ? new Date(m.data_mensagem).toLocaleString('pt-BR') : ''}</span>
               </div>
               <div className="small">{m.assunto}</div>
-              {m.corpo_texto && <p className="small muted" style={{ marginTop: 2, whiteSpace: 'pre-wrap' }}>{m.corpo_texto.slice(0, 300)}</p>}
+              {m.corpo_texto && <p className="small muted" style={{ marginTop: 2, whiteSpace: 'pre-wrap' }}>{window.linkifyTexto(m.corpo_texto.slice(0, 300))}</p>}
               {m.anexos && m.anexos.length > 0 && (
                 <div className="small muted" style={{ marginTop: 2 }}><Icon.paperclip size={10} style={{ verticalAlign: 'middle' }}/> {m.anexos.map((a) => a.filename).join(', ')}</div>
               )}
