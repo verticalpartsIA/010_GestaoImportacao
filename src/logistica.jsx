@@ -1353,7 +1353,29 @@ function EmailInbox({ setRoute, setSubsel }) {
   const [erro, setErro] = React.useState(null);
   const [activeId, setActiveId] = React.useState(null);
   const [folder, setFolder] = React.useState("inbox");
-  const active = emails.find(e => e.id === activeId);
+  const [enviados, setEnviados] = React.useState([]);
+  const [carregandoEnviados, setCarregandoEnviados] = React.useState(false);
+  /* Normaliza as linhas de emails_projeto (saida) pro mesmo formato que
+     read-inbox devolve — reusa a mesma lista/detalhe sem duplicar JSX.
+     "Para" vira o indicador principal (não "De", que seria sempre a
+     própria caixa suporte@vpsistema.com — inútil pra escanear a lista). */
+  const enviadosNormalizados = React.useMemo(() => enviados.map((e) => ({
+    id: e.id,
+    from: (e.para && e.para[0]) || '',
+    fromName: 'Para: ' + ((e.para || []).join(', ') || '—'),
+    subject: e.assunto || '(sem assunto)',
+    date: e.data_mensagem,
+    unread: false,
+    preview: (e.corpo_texto || '').slice(0, 2000),
+    html: e.corpo_html || null,
+    numeroCotacao: e.numero_cotacao,
+    vinculoConfianca: e.vinculo_confianca,
+    anexos: (e.anexos || []).map((a) => ({ ...a, url: null })),
+    to: e.para || [],
+    cc: [],
+  })), [enviados]);
+  const listaAtual = folder === 'sent' ? enviadosNormalizados : emails;
+  const active = listaAtual.find(e => e.id === activeId);
 
   const [respondendo, setRespondendo] = React.useState(false);
   const [modoCompose, setModoCompose] = React.useState('responder'); // 'responder' | 'responder-todos' | 'encaminhar'
@@ -1378,6 +1400,20 @@ function EmailInbox({ setRoute, setSubsel }) {
     }).catch((e) => setErro(e.message || String(e))).finally(() => setLoading(false));
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
+
+  /* 11/09 — achado real do usuário: mandou o RFQ pra fornecedora, não
+     apareceu em lugar nenhum ("não vi ela na inbox") — na verdade tinha
+     sido enviado com sucesso (confirmado em emails_projeto), só que
+     "Enviados" era um placeholder que nunca lia dado real. E-mail que a
+     gente manda não passa pelo IMAP de entrada — vem direto de
+     emails_projeto (direcao='saida'), gravado pelo próprio send-email. */
+  const carregarEnviados = React.useCallback(() => {
+    setCarregandoEnviados(true);
+    window.__VP_SB.sb.from('emails_projeto').select('*').eq('direcao', 'saida')
+      .order('data_mensagem', { ascending: false }).limit(50)
+      .then(({ data }) => setEnviados(data || [])).finally(() => setCarregandoEnviados(false));
+  }, []);
+  React.useEffect(() => { carregarEnviados(); }, [carregarEnviados]);
   React.useEffect(() => {
     setRespondendo(false); setModoCompose('responder'); setDestinatarioEncaminhar('');
     setRespostaTexto(''); setVinculando(false); setVincularInput(''); setAnexosResposta([]); setGatilhoAberto(null);
@@ -1595,12 +1631,12 @@ function EmailInbox({ setRoute, setSubsel }) {
 
         <div className="inbox__list">
           <div className="inbox__list-head">
-            <span>{folder === "inbox" ? "Caixa de entrada" : folder}</span>
-            <span className="mono">{emails.length}</span>
+            <span>{folders.find((f) => f.id === folder)?.label || folder}</span>
+            <span className="mono">{listaAtual.length}</span>
           </div>
-          {folder !== "inbox" && (
+          {folder !== "inbox" && folder !== "sent" && (
             <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
-              Esta pasta ainda não está implementada — só a Caixa de entrada lê de verdade.
+              Esta pasta ainda não está implementada — só Caixa de entrada e Enviados leem de verdade.
             </div>
           )}
           {folder === "inbox" && !loading && emails.length === 0 && (
@@ -1609,7 +1645,13 @@ function EmailInbox({ setRoute, setSubsel }) {
               {erro || 'A caixa está vazia.'}
             </div>
           )}
-          {folder === "inbox" && emails.map((m) => (
+          {folder === "sent" && !carregandoEnviados && enviadosNormalizados.length === 0 && (
+            <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
+              <div style={{ fontWeight:600, color:'var(--fg2)', marginBottom:4 }}>Nenhum e-mail enviado ainda</div>
+              Aparece aqui assim que você mandar um pelo Responder, Novo e-mail ou Cotação a Fornecedor.
+            </div>
+          )}
+          {(folder === "inbox" || folder === "sent") && listaAtual.map((m) => (
             <div key={m.id} className={"inbox__item " + (m.unread ? "unread " : "") + (activeId === m.id ? "is-active" : "")} onClick={() => setActiveId(m.id)}>
               <div className="from">
                 <span>{m.fromName || m.from}</span>
