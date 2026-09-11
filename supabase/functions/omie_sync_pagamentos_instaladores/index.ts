@@ -1,7 +1,6 @@
 /* ============================================================
-   omie_sync_pagamentos_instaladores — sincroniza Contas a Pagar do
-   Omie pras Empresas Instaladoras, gravando cache em
-   omie_pagamentos_cache.
+   omie_sync_pagamentos_instaladores — sincroniza pagamentos do Omie
+   pras Empresas Instaladoras, gravando cache em omie_pagamentos_cache.
 
    Matching pra achar a obra (dossier_obra) de cada título, em ordem
    de confiança:
@@ -12,21 +11,31 @@
       contido nesse nome (só quando é candidato único — ambíguo não
       vincula).
 
-   Valor pago/a pagar (10/09): o Omie permite baixa PARCIAL de um
-   título (status_titulo = "PAGTO_PARCIAL", diferente de "PAGO") — o
-   campo valor_pag da própria listagem já traz o saldo em aberto
-   ("Valor a Pagar" na tela do Omie), então valor_pago é sempre
-   derivado como valor_documento - valor_a_pagar, nunca um booleano
-   tudo-ou-nada. Título CANCELADO não é mais sincronizado (não é uma
-   obrigação real).
+   Fonte dos dados (10-11/09): trocado de financas/contapagar
+   (ListarContasPagar) pra financas/mf (ListarMovimentos). O primeiro
+   NUNCA reflete pagamento parcial — um título com baixa parcial real
+   (comparado com o relatório oficial do Omie, "Situação: Pago
+   Parcialmente") volta lá com status_titulo "PAGO" e valor_pag=0,
+   como se estivesse 100% pago. O segundo (financas/mf) devolve, pra
+   cada lançamento, um objeto "detalhes" (mesmos campos de sempre,
+   nomeados como no Omie: cNumTitulo = numero_documento, nCodTitulo =
+   codigo_lancamento_omie, cStatus = status_titulo, cNumParcela,
+   nValorTitulo, dDtVenc/dDtPrevisao/dDtRegistro/dDtPagamento) MAIS um
+   "resumo" (nValPago/nValAberto/nValLiquido/cLiquidado) com o valor
+   pago/a pagar de verdade, já resolvido pelo próprio Omie — confirmado
+   testando o mesmo título parcial (R$1.650 pago / R$2.640 a pagar,
+   batendo exatamente com o relatório). Não precisa mais cruzar
+   manualmente com financas/contacorrentelancamentos (rota descartada
+   por custo de rate-limit — ver PR #349 e issue de investigação).
 
-   MODO DEBUG: ver ramos abaixo (debug_cpf_cnpj, debug_consultar,
-   debug_projeto, debug_buscar_projeto, debug_cliente_codigo) — exigem
-   header x-debug-key igual ao secret OMIE_SYNC_DEBUG_KEY (função roda
-   com verify_jwt:false de propósito, pro botão do frontend, então sem
-   esse gate qualquer chamador com a ANON_SB conseguia puxar Contas a
-   Pagar/Projetos/Clientes crus de qualquer CPF/CNPJ — achado do review
-   bot, PR #349). Sem a secret configurada, debug fica sempre desligado.
+   MODO DEBUG: debug_cpf_cnpj (financas/mf), debug_projeto (contas a
+   pagar por projeto), debug_buscar_projeto, debug_cliente_codigo —
+   exigem header x-debug-key igual ao secret OMIE_SYNC_DEBUG_KEY
+   (função roda com verify_jwt:false de propósito, pro botão do
+   frontend, então sem esse gate qualquer chamador com a ANON_SB
+   conseguia puxar dados financeiros crus de qualquer CPF/CNPJ —
+   achado do review bot, PR #349). Sem a secret configurada, debug
+   fica sempre desligado.
    SYNC COMPLETO: POST {} (ou { empresa_id: "..." } pra só uma).
    ============================================================ */
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
@@ -37,10 +46,10 @@ const omieKey = Deno.env.get("OMIE_API_KEY") || "";
 const omieSecret = Deno.env.get("OMIE_API_SECRET") || "";
 // Gate pros ramos debug_* — sem isso, qualquer chamador com a ANON_SB
 // (a função roda com verify_jwt:false, de propósito, pro botão
-// "Atualizar pagamentos" do frontend) conseguia arrancar Contas a
-// Pagar/Projetos/Clientes crus do Omie de qualquer CPF/CNPJ, sem
-// precisar nem ser desta empresa (achado do review bot, PR #349).
-// Sem OMIE_SYNC_DEBUG_KEY configurada, os ramos de debug ficam sempre
+// "Atualizar pagamentos" do frontend) conseguia arrancar dados
+// financeiros crus do Omie de qualquer CPF/CNPJ, sem precisar nem ser
+// desta empresa (achado do review bot, PR #349). Sem
+// OMIE_SYNC_DEBUG_KEY configurada, os ramos de debug ficam sempre
 // desligados (não tem fallback aberto).
 const debugKey = Deno.env.get("OMIE_SYNC_DEBUG_KEY") || "";
 
@@ -88,10 +97,6 @@ function converteData(br: string | null | undefined): string | null {
   return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
 }
 
-function isPago(statusTitulo: string): boolean {
-  return normalize(statusTitulo) === "PAGO";
-}
-
 function isCancelado(statusTitulo: string): boolean {
   return normalize(statusTitulo) === "CANCELADO";
 }
@@ -106,16 +111,21 @@ async function omieCall(endpoint: string, call: string, param: Record<string, un
   return { ok: res.ok && !data.faultstring, data };
 }
 
-async function listarContasPagarPorDoc(doc: string, maxPaginas = 20) {
-  const titulos: Record<string, unknown>[] = [];
+type Movimento = { detalhes: Record<string, unknown>; resumo: Record<string, unknown> };
+
+// financas/mf ListarMovimentos — cada item já vem com "detalhes" (o
+// título em si) e "resumo" (valor pago/a pagar reais, resolvidos pelo
+// Omie a partir das baixas, mesmo quando parciais). Ver comentário no
+// topo do arquivo.
+async function listarMovimentosPorDoc(doc: string, maxPaginas = 20): Promise<Movimento[]> {
+  const movimentos: Movimento[] = [];
   let pagina = 1;
   let totalPaginas = 1;
   while (pagina <= totalPaginas && pagina <= maxPaginas) {
-    const resp = await omieCall("financas/contapagar", "ListarContasPagar", {
-      pagina,
-      registros_por_pagina: 50,
-      filtrar_por_cpf_cnpj: doc,
-      exibir_obs: "N",
+    const resp = await omieCall("financas/mf", "ListarMovimentos", {
+      nPagina: pagina,
+      nRegPorPagina: 100,
+      cCPFCNPJCliente: doc,
     });
     if (!resp.ok) {
       const fault = resp.data?.faultstring || "";
@@ -123,15 +133,21 @@ async function listarContasPagarPorDoc(doc: string, maxPaginas = 20) {
         const seg = fault.match(/(\d+)\s*segundos?/)?.[1] || "60";
         throw new Error(`REDUNDANT:${seg}`);
       }
-      if (/nenhum registro|n[aã]o encontrad/i.test(fault)) break;
+      // financas/mf só acha um documento se ele também estiver cadastrado
+      // como "Cliente" no Omie (nem todo Fornecedor tem isso, achado
+      // rodando a sincronização real 11/09) — pra esses, o Omie nunca vai
+      // achar nada por esse filtro; tratar como "sem resultados" em vez
+      // de erro retentável (senão fica gastando rate-limit à toa numa
+      // consulta que nunca vai funcionar).
+      if (/nenhum registro|n[aã]o encontrad|nenhum cliente cadastrado/i.test(fault)) break;
       throw new Error(fault || "erro desconhecido no Omie");
     }
-    totalPaginas = resp.data.total_de_paginas || 1;
-    const registros = resp.data.conta_pagar_cadastro || [];
-    titulos.push(...registros);
+    totalPaginas = resp.data.nTotPaginas || 1;
+    const registros = (resp.data.movimentos || []) as Movimento[];
+    movimentos.push(...registros);
     pagina++;
   }
-  return titulos;
+  return movimentos;
 }
 
 async function consultarNomeProjeto(codigo: number): Promise<string | null> {
@@ -150,11 +166,11 @@ Deno.serve(async (req) => {
     }
 
     const body = await req.json().catch(() => ({}));
-    const { debug_cpf_cnpj, debug_consultar, empresa_id } = body;
+    const { debug_cpf_cnpj, empresa_id } = body;
     const debug_projeto = body.debug_projeto;
     const debug_buscar_projeto = body.debug_buscar_projeto;
     const debug_cliente_codigo = body.debug_cliente_codigo;
-    const pediuDebug = debug_cpf_cnpj || debug_consultar || debug_projeto || debug_buscar_projeto || debug_cliente_codigo;
+    const pediuDebug = debug_cpf_cnpj || debug_projeto || debug_buscar_projeto || debug_cliente_codigo;
 
     if (pediuDebug) {
       if (!debugKey || req.headers.get("x-debug-key") !== debugKey) {
@@ -163,13 +179,8 @@ Deno.serve(async (req) => {
 
       if (debug_cpf_cnpj) {
         const doc = soDigitos(debug_cpf_cnpj);
-        const titulos = await listarContasPagarPorDoc(doc);
-        return json({ doc, total: titulos.length, titulos });
-      }
-
-      if (debug_consultar) {
-        const resp = await omieCall("financas/contapagar", "ConsultarContaPagar", { codigo_lancamento_omie: debug_consultar });
-        return json(resp.data);
+        const movimentos = await listarMovimentosPorDoc(doc);
+        return json({ doc, total: movimentos.length, movimentos });
       }
 
       if (debug_projeto) {
@@ -228,16 +239,16 @@ Deno.serve(async (req) => {
       return candidatos.length === 1 ? (candidatos[0].id as string) : null;
     }
 
-    type TituloBruto = { t: Record<string, unknown>; doc: string; empresaId: string; colaboradorId: string | null; fonte: string };
+    type MovimentoBruto = { m: Movimento; doc: string; empresaId: string; colaboradorId: string | null; fonte: string };
     type Pendencia = { doc: string; empresaId: string; colaboradorId: string | null; fonte: string; label: string; erro: string };
-    const brutos: TituloBruto[] = [];
+    const brutos: MovimentoBruto[] = [];
     const pendencias: Pendencia[] = [];
     let erroGeral: string | null = null;
 
     async function buscarComRetry(doc: string, empresaId: string, colaboradorId: string | null, fonte: string, label: string): Promise<boolean> {
       try {
-        const titulos = await listarContasPagarPorDoc(doc);
-        for (const t of titulos) brutos.push({ t, doc, empresaId, colaboradorId, fonte });
+        const movimentos = await listarMovimentosPorDoc(doc);
+        for (const m of movimentos) brutos.push({ m, doc, empresaId, colaboradorId, fonte });
         return true;
       } catch (e) {
         const msg = (e as Error).message;
@@ -270,8 +281,8 @@ Deno.serve(async (req) => {
       await sleep(1500);
       for (const p of pendencias) {
         try {
-          const titulos = await listarContasPagarPorDoc(p.doc);
-          for (const t of titulos) brutos.push({ t, doc: p.doc, empresaId: p.empresaId, colaboradorId: p.colaboradorId, fonte: p.fonte });
+          const movimentos = await listarMovimentosPorDoc(p.doc);
+          for (const m of movimentos) brutos.push({ m, doc: p.doc, empresaId: p.empresaId, colaboradorId: p.colaboradorId, fonte: p.fonte });
         } catch (e) {
           falhasFinais.push({ label: p.label, erro: (e as Error).message });
         }
@@ -279,11 +290,22 @@ Deno.serve(async (req) => {
       }
     }
 
+    // financas/mf devolve MAIS DE UMA LINHA por título pago: uma com
+    // cGrupo "CONTA_A_PAGAR" (o título em si, com nValorTitulo/resumo
+    // completo) e outra com cGrupo "CONTA_CORRENTE_PAG" (o evento de
+    // baixa bancária ligado ao mesmo nCodTitulo, mas sem nValorTitulo/
+    // nValAberto — só nValPago). Achado rodando a sincronização real
+    // 11/09: as duas batem no mesmo codigo_lancamento_omie, e a segunda
+    // (incompleta) sobrescrevia a primeira no dedup, zerando
+    // valor_documento/valor_a_pagar. Só a "CONTA_A_PAGAR" é o título de
+    // verdade — o resumo dela já vem com o pago/a pagar corretos.
+    const brutosPagar = brutos.filter(({ m }) => normalize(m.detalhes?.cGrupo as string) === "CONTA_A_PAGAR");
+
     const projetoNomeCache = new Map<number, string | null>();
-    for (const b of brutos) {
-      const serie = extraiNumeroSerie(b.t.numero_documento as string);
+    for (const b of brutosPagar) {
+      const serie = extraiNumeroSerie(b.m.detalhes.cNumTitulo as string);
       if (serie) continue;
-      const cod = b.t.codigo_projeto as number;
+      const cod = b.m.detalhes.cCodProjeto as number;
       if (!cod || projetoNomeCache.has(cod)) continue;
       try {
         const nome = await consultarNomeProjeto(cod);
@@ -299,46 +321,44 @@ Deno.serve(async (req) => {
     // upsert (não são mais uma obrigação real) — mas se um título que já
     // estava no cache como aberto/pago virar CANCELADO depois, o upsert
     // sozinho nunca ia tocar essa linha (ela só recebe update quando volta
-    // nos resultados do ListarContasPagar, e um cancelado é filtrado antes
-    // de chegar lá). Sem apagar explicitamente, a linha antiga ficava pra
+    // nos resultados da consulta, e um cancelado é filtrado antes de
+    // chegar lá). Sem apagar explicitamente, a linha antiga ficava pra
     // sempre inflando total/pago (achado do review bot, PR #349).
     const canceladosKeys = Array.from(
       new Map(
-        brutos
-          .filter(({ t }) => isCancelado((t.status_titulo || "") as string))
-          .map(({ t, doc }) => [`${t.codigo_lancamento_omie}|${doc}`, { codigo: t.codigo_lancamento_omie, doc }]),
+        brutosPagar
+          .filter(({ m }) => isCancelado(m.detalhes.cStatus as string))
+          .map(({ m, doc }) => [`${m.detalhes.nCodTitulo}|${doc}`, { codigo: m.detalhes.nCodTitulo, doc }]),
       ).values(),
     );
 
-    const rows = brutos
-      .filter(({ t }) => !isCancelado((t.status_titulo || "") as string))
-      .map(({ t, doc, empresaId, colaboradorId, fonte }) => {
-        const serie = extraiNumeroSerie(t.numero_documento as string);
+    const rows = brutosPagar
+      .filter(({ m }) => !isCancelado(m.detalhes.cStatus as string))
+      .map(({ m, doc, empresaId, colaboradorId, fonte }) => {
+        const det = m.detalhes;
+        const res = m.resumo || {};
+        const numeroDocumento = det.cNumTitulo as string;
+        const serie = extraiNumeroSerie(numeroDocumento);
         let dossierId: string | null = null;
         let projetoTexto: string | null = null;
         if (serie) {
           dossierId = equipPorSerie.get(normalizeSerie(serie)) || null;
-          projetoTexto = t.numero_documento as string;
+          projetoTexto = numeroDocumento;
         } else {
-          const nome = projetoNomeCache.get(t.codigo_projeto as number) || null;
+          const nome = projetoNomeCache.get(det.cCodProjeto as number) || null;
           projetoTexto = nome;
           dossierId = matchPorNomeCliente(nome);
         }
-        const valorDocumento = Number(t.valor_documento) || 0;
-        // valor_pag = "Valor a Pagar" nativo do Omie (saldo em aberto do
-        // título, já considerando baixas parciais). Quando por algum
-        // motivo o Omie não devolve o campo, cai pro booleano de status
-        // como fallback (mesmo comportamento de antes) em vez de quebrar.
-        const valorAPagarBruto = t.valor_pag;
-        const statusPagoLegado = isPago((t.status_titulo || "") as string);
-        const valorAPagar = valorAPagarBruto != null
-          ? Number(valorAPagarBruto) || 0
-          : (statusPagoLegado ? 0 : valorDocumento);
-        const valorPago = Math.max(0, valorDocumento - valorAPagar);
+        const valorDocumento = Number(det.nValorTitulo) || 0;
+        // resumo.nValPago/nValAberto = valor pago/a pagar reais,
+        // considerando baixas parciais — é o mesmo cálculo que o Omie
+        // usa no relatório "Situação: Pago Parcialmente" (confirmado
+        // testando o título real, ver comentário no topo do arquivo).
+        const valorPago = Number(res.nValPago) || 0;
+        const valorAPagar = Number(res.nValAberto) || 0;
         const pago = valorAPagar <= 0.005;
-        const info = t.info as Record<string, unknown> | undefined;
         return {
-          codigo_lancamento_omie: t.codigo_lancamento_omie,
+          codigo_lancamento_omie: det.nCodTitulo,
           cpf_cnpj_consultado: doc,
           empresa_id: empresaId,
           colaborador_id: colaboradorId,
@@ -348,14 +368,14 @@ Deno.serve(async (req) => {
           valor_documento: valorDocumento,
           valor_pago: valorPago,
           valor_a_pagar: valorAPagar,
-          status_titulo: t.status_titulo,
+          status_titulo: det.cStatus,
           pago,
-          data_vencimento: converteData(t.data_vencimento as string),
-          data_previsao: converteData(t.data_previsao as string),
-          data_registro: converteData(t.data_entrada as string),
-          data_pagamento: pago ? converteData(info?.dAlt as string) : null,
-          numero_documento_fiscal: t.numero_documento_fiscal,
-          numero_pedido: t.numero_parcela,
+          data_vencimento: converteData(det.dDtVenc as string),
+          data_previsao: converteData(det.dDtPrevisao as string),
+          data_registro: converteData(det.dDtRegistro as string),
+          data_pagamento: converteData(det.dDtPagamento as string),
+          numero_documento_fiscal: det.cNumDocFiscal,
+          numero_pedido: det.cNumParcela,
           atualizado_em: new Date().toISOString(),
         };
       });
