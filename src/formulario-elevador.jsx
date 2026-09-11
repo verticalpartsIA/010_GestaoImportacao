@@ -829,12 +829,21 @@ function FECotacaoRespostaModal({ cot, onClose }) {
    em fornecedoresOptions abaixo). Cotação VPCT-0954 pro fornecedor
    "VERTICALPARTS" (fornecedor interno real, cadastrado com a Victória como
    contato) nunca teve botão de envio — o modal só mostrava "ainda não
-   configurado", silenciosamente, sem erro. FE_RFQ_CONTATOS_PADRAO cresce
-   conforme mais fornecedores forem confirmados prontos; suportado deriva
-   das chaves desse mapa em vez de comparar string solta feito antes. */
+   configurado", silenciosamente, sem erro.
+   11/09 — o e-mail da Victória ficou hardcoded aqui, desalinhado do
+   cadastro real (Cadastros → Fornecedores). Achado do usuário: RFQ
+   "enviado com sucesso" mas ela não recebia — o e-mail em si estava
+   certo (bateu com o cadastro), causa real era filtro de spam do
+   Outlook dela (verticalparts.com.br usa Microsoft 365 — confirmado via
+   MX; nosso SPF/DKIM/DMARC em vpsistema.com estão corretos). Mas o
+   hardcode continuava errado por princípio: se alguém editasse o e-mail
+   em Cadastros → Fornecedores, o RFQ continuaria mandando pro endereço
+   velho. Agora FECotacaoFornecedorGrupo busca o contato do cadastro real
+   (fornecedores.email/telefone/contato via CadastrosFornecedoresStore) e
+   só cai neste mapa como fallback pra fornecedor sem cadastro ainda
+   (ex.: Glarie, fornecedor chinês fora do cadastro local). */
 const FE_RFQ_CONTATOS_PADRAO = {
   Glarie: { nome: 'Kimmy (Glarie)', email: 'kimmy.kuai@glarie.com, carrie.han@glarie.com, sam.zhang@glarie.com', telefone: '8618751801577' },
-  VERTICALPARTS: { nome: 'Victória (VerticalParts)', email: 'victoria@verticalparts.com.br', telefone: '11995578519' },
 };
 /* 10/09 — pedido do usuário: "os e-mails desse projeto deveriam ficar
    juntos". Lê emails_projeto (send-email/read-inbox) pelo numero_cotacao
@@ -881,14 +890,29 @@ function FEComunicacaoFornecedor({ numeroCotacao }) {
   );
 }
 
-function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedirRevisao, enviando }) {
+function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedirRevisao, enviando, fornecedoresCadastro }) {
   const store = window.CotacaoElevadorFornecedorStore;
-  const suportado = Object.prototype.hasOwnProperty.call(FE_RFQ_CONTATOS_PADRAO, grupo.fornecedor);
+  /* 11/09 — contato real vem do cadastro (Cadastros → Fornecedores),
+     casando nome_fantasia/razao_social com o nome livre do fornecedor
+     nesta cotação (fornecedores_elevador.nome). Cai no mapa hardcoded só
+     se o fornecedor ainda não tiver cadastro (ex.: Glarie). */
+  const norm = (s) => String(s || '').trim().toUpperCase();
+  const cadastroMatch = React.useMemo(() => (fornecedoresCadastro || []).find((f) =>
+    norm(f.nome_fantasia) === norm(grupo.fornecedor) || norm(f.razao_social) === norm(grupo.fornecedor)
+  ), [fornecedoresCadastro, grupo.fornecedor]);
+  const contatoPadrao = cadastroMatch
+    ? { nome: cadastroMatch.contato || cadastroMatch.nome_fantasia || '', email: cadastroMatch.email || '', telefone: cadastroMatch.telefone || '' }
+    : (FE_RFQ_CONTATOS_PADRAO[grupo.fornecedor] || { nome: '', email: '', telefone: '' });
+  const suportado = !!cadastroMatch || Object.prototype.hasOwnProperty.call(FE_RFQ_CONTATOS_PADRAO, grupo.fornecedor);
   const [verResp, setVerResp] = React.useState(false);
-  const [recipient, setRecipient] = React.useState(() => (
-    FE_RFQ_CONTATOS_PADRAO[grupo.fornecedor] || { nome: '', email: '', telefone: '' }
-  ));
-  const setR = (k) => (v) => setRecipient((r) => ({ ...r, [k]: v }));
+  const [recipient, setRecipient] = React.useState(() => contatoPadrao);
+  const tocadoRef = React.useRef(false);
+  React.useEffect(() => {
+    if (cadastroMatch && !tocadoRef.current) {
+      setRecipient({ nome: cadastroMatch.contato || cadastroMatch.nome_fantasia || '', email: cadastroMatch.email || '', telefone: cadastroMatch.telefone || '' });
+    }
+  }, [cadastroMatch]);
+  const setR = (k) => (v) => { tocadoRef.current = true; setRecipient((r) => ({ ...r, [k]: v })); };
   const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
   const busy = enviando === key;
 
@@ -935,6 +959,11 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
   const store = window.CotacaoElevadorFornecedorStore;
   const [cotacoes, setCotacoes] = React.useState([]);
   const [enviando, setEnviando] = React.useState(null);
+  const [fornecedoresCadastro, setFornecedoresCadastro] = React.useState([]);
+  React.useEffect(() => {
+    if (!window.CadastrosFornecedoresStore) return;
+    window.CadastrosFornecedoresStore.listarAtivos('Fornecedor').then(setFornecedoresCadastro).catch(() => {});
+  }, []);
 
   const reload = () => store.listarPorFormulario(formularioId).then(setCotacoes).catch(() => {});
   React.useEffect(() => { reload(); }, [formularioId]);
@@ -1031,7 +1060,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
       footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
       {grupos.length === 0 && <p className="small muted">Salve o formulário e defina o Fornecedor em pelo menos uma Unidade para enviar a cotação.</p>}
       {grupos.map((g) => (
-        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}|${g.categoriaProduto}`} grupo={g} cot={cotacaoDoGrupo(g)} numeroCotacao={numeroCotacao} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando}/>
+        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}|${g.categoriaProduto}`} grupo={g} cot={cotacaoDoGrupo(g)} numeroCotacao={numeroCotacao} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando} fornecedoresCadastro={fornecedoresCadastro}/>
       ))}
     </Modal>
   );

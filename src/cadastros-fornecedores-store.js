@@ -40,10 +40,14 @@
   }
 
   /* Sugestões pra datalist noutros módulos (P.I./RFQ/Embarques/IMS) — nome
-     + categorias, sem obrigar ninguém a migrar campo livre pra FK ainda. */
+     + categorias, sem obrigar ninguém a migrar campo livre pra FK ainda.
+     11/09 — ganhou email/telefone/contato: o RFQ (formulario-elevador.jsx)
+     passou a capturar o e-mail do fornecedor direto daqui em vez de um
+     mapa hardcoded (achado real: e-mail da Victória/VERTICALPARTS estava
+     fixo no código, desalinhado do cadastro de verdade). */
   async function listarAtivos(categoria) {
     const c = sb(); if (!c) return [];
-    let q = c.from('fornecedores').select('id, codigo, razao_social, nome_fantasia, categorias').eq('ativo', true);
+    let q = c.from('fornecedores').select('id, codigo, razao_social, nome_fantasia, categorias, email, telefone, contato').eq('ativo', true);
     if (categoria) q = q.contains('categorias', [categoria]);
     const { data, error } = await q.order('razao_social');
     if (error) return [];
