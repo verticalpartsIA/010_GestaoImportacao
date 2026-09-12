@@ -1,6 +1,6 @@
 # Projeto: Granularidade de valor por equipamento (Precificação → Proposta → Contrato)
 
-Status: **Fase 1, 2, 3a e 3b no ar. 3c adiada (decisão do usuário — sem consumidor real hoje). 3d ainda não iniciada — vira capítulo/investigação própria (mecanismo de aval do gestor + integração Omie).**
+Status: **Fase 1, 2, 3a, 3b e 3c (versão leve — métrica no Dashboard) no ar. 3d ainda não iniciada — vira capítulo/investigação própria (mecanismo de aval do gestor + integração Omie).**
 
 ## Contexto / gatilho
 
@@ -106,12 +106,21 @@ Plano em 4 sub-partes, uma por vez (pedido explícito do usuário):
   este valor" pra reaplicar a sugestão a qualquer momento. Testado isoladamente (`CIStepPagamento`):
   soma de 2 equipamentos (R$ 38.100 + R$ 16.500 = R$ 54.600,00) pré-preencheu certo, e um valor já
   digitado (R$ 99.999,00) não foi sobrescrito.
-- **3c. Diário de Obra / gatilho A10 — ADIADA (decisão do usuário)**: a ideia original (rastrear
-  progresso por equipamento) só faria sentido se o pagamento também fosse liberado por equipamento — mas
-  a 3b escolhida manteve 1 valor por contrato/obra inteira. Mudar o schema do Diário de Obra
-  (`acompanhamento_obra_itens`/`_lancamentos`, fluxo já em uso) sem nenhum consumidor real da
-  granularidade seria abstração prematura. Fica pra quando (se algum dia) o pagamento por equipamento
-  vier a ser necessário.
+- **3c. Diário de Obra / gatilho A10 — ADIADA parcialmente, resolvida com um caminho mais leve**: a
+  ideia original (mudar o checklist do Diário de Obra pra ser por equipamento) foi revista — o checklist
+  é uma lista de atividades genéricas da obra inteira (ex.: "fundação pronta"), preenchida pelo montador
+  em campo todo dia; forçar o montador a dizer, atividade por atividade, a qual equipamento ela se refere
+  seria uma mudança de UX arriscada num fluxo já em produção, sem necessidade real hoje (o pagamento
+  continua 1 valor por contrato). Em vez disso, o que o usuário realmente precisava — visibilidade no
+  Dashboard de quanto o custo de instalação real diverge do previsto — foi resolvido sem tocar no
+  checklist: **✅ FEITO** como uma métrica nova no Dashboard Financeiro (`dashboard-metrics-financeiro.js`
+  `divergenciaInstalacao()`), comparando `custoInstalacaoMaoDeObraRs` (Precificação, Fase 3a) ×
+  `valor_total` de cada Contrato Instalador vinculado a uma Proposta via Master ID. Só conta contratos
+  com proposta+equipamentos vinculados (Master ID) e não recusados/expirados; some do Dashboard quando
+  não há nada comparável, em vez de mostrar "R$0 x R$0". Testado com dados sintéticos (2 contratos
+  comparáveis, 2 fora do escopo por falta de vínculo) — matemática confere.
+  O checklist por equipamento em si (progresso "elevador 1 pronto, elevador 2 não") continua sem fazer
+  sentido enquanto o pagamento for só por obra — fica arquivado, não é mais uma pendência ativa.
 - **3d. Reconciliação previsto × pago — VIRA CAPÍTULO PRÓPRIO** (pedido explícito do usuário, ainda não
   investigado): o usuário explicou como o pagamento ao instalador funciona hoje na prática — a 1ª
   parcela cai na assinatura do contrato; as demais acompanham o Diário de Obra, mas **não são

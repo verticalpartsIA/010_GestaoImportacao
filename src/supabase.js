@@ -176,7 +176,7 @@
       tarR, embR, ctR, estR,
       comR, gatR, fichasR, catalogoR,
       propR, avaisR, ncmR,
-      formR, cliR
+      formR, cliR, instR
     ] = await Promise.all([
       sb.from('leads').select('*').order('date', { ascending: false }),
       sb.from('cotacoes').select('*').order('date', { ascending: false }),
@@ -194,7 +194,11 @@
       // pra corrigir os KPIs do Dashboard Admin, que antes só liam a tabela
       // legada/desconectada `projetos` (achado E2E: Faturamento Total R$0 e
       // Alertas Críticos 0 com proposta assinada de R$185mil e sinal pago).
-      sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em'),
+      // ativos:data_json->ativos — só o array de ativos (com
+      // custoInstalacaoMaoDeObraRs por equipamento, ver proposta-heranca.js),
+      // não o data_json inteiro (evita puxar o JSON grande da proposta toda
+      // só pra comparar custo de instalação no Dashboard).
+      sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em, ativos:data_json->ativos'),
       sb.from('avais_financeiros').select('id, numero_cotacao, status, sinal_pago, contrato_venda_id'),
       // Issue #273: o widget "Pendências NCM" do Dashboard lia um array
       // hardcoded vazio — puxa de verdade agora (ver dashboard-metrics-engenharia.js).
@@ -205,6 +209,9 @@
       // real em dashboard-metrics-gantt.js (projetosDaEsteira).
       sb.from('formularios_elevador').select('numero_cotacao, cliente_id, local_obra_cidade'),
       sb.from('clientes').select('id, nome_fantasia, razao_social'),
+      // Instalação: contratado x previsto (Fase 3d "capítulo leve" da
+      // granularidade de custo) — só os campos usados na comparação.
+      sb.from('contratos_instalador').select('id, valor_total, proposta_id, ativos_indices, status'),
     ]);
 
     const leads     = lR.data    || [];
@@ -223,6 +230,7 @@
     const avais     = avaisR.data || [];
     const ncmSolicitacoes = ncmR.data || [];
     const formularios = formR.data || [];
+    const contratosInstalador = instR.data || [];
     const clientesPorId = {};
     (cliR.data || []).forEach((c) => { clientesPorId[c.id] = c; });
 
@@ -240,7 +248,7 @@
 
     // ---- Financeiro (dashboard-metrics-financeiro.js) — 3º módulo extraído. ----
     const FM = window.FinanceiroMetrics;
-    const financeiro = FM.compute({ contratos, comissoes, gatilhos });
+    const financeiro = FM.compute({ contratos, comissoes, gatilhos, contratosInstalador, propostas });
 
     // ---- Gantt (dashboard-metrics-gantt.js) — 4º módulo extraído.
     // Issue #274 fechada em 23/08: projeta a esteira real (gatilhos +
