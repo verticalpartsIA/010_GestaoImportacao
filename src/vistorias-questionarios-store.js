@@ -32,10 +32,24 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
      Elevador) e 'servico'. */
   const TIPO_LABEL = { vistoria: 'Vistoria', entrega: 'Entrega', servico: 'Serviço' };
 
+  /* Checklist de Entrega de Elevador (issue do "3 checkboxes de pendência
+     por item"): cada ponto de verificação vira 3 perguntas (resultado +
+     observação + foto), e o checkbox "Marcar como pendência" é genérico,
+     por pergunta — sem isso, cada item mostra 3 checkboxes idênticos em
+     vez de 1. Observação/foto são evidência complementar do resultado do
+     MESMO item, não um ponto independente; identificadas pelo prefixo
+     fixo do texto (convenção usada só no seed desse questionário — não
+     afeta pergunta nenhuma de outro questionário). */
+  function ehPerguntaCompanion(pergunta) {
+    const t = (pergunta || {}).texto || '';
+    return t.indexOf('Observação / evidência —') === 0 || t.indexOf('Foto (opcional) —') === 0;
+  }
+
   return {
     TIPOS_CAMPO,
     TIPOS_CAMPO_COM_OPCOES,
     TIPO_LABEL,
+    ehPerguntaCompanion,
 
     /* ---- Questionários ---- */
     async listarQuestionarios() {

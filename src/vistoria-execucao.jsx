@@ -380,10 +380,12 @@ function VePergunta({ pergunta, resposta, onResponder, atividadeId, sb }) {
         <VeAssinaturaPad valorAtual={resposta?.anexo_url} onSalvar={salvarAssinatura} salvando={enviandoArquivo}/>
       )}
 
-      <label className="ve-pendencia">
-        <input type="checkbox" checked={!!resposta?.pendencia} onChange={(e) => onResponder({ pendencia: e.target.checked })}/>
-        Marcar como pendência
-      </label>
+      {!window.VistoriasQuestionariosStore.ehPerguntaCompanion(pergunta) && (
+        <label className="ve-pendencia">
+          <input type="checkbox" checked={!!resposta?.pendencia} onChange={(e) => onResponder({ pendencia: e.target.checked })}/>
+          Marcar como pendência
+        </label>
+      )}
     </div>
   );
 }
