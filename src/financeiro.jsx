@@ -122,6 +122,18 @@ function FinanceiroPage({ setRoute, setSubsel }) {
        cron, roda toda vez que a tela abre. Não altera `rows`, só gera
        alertas em `alertas` (recarregados por reloadAlertas logo abaixo). */
     if (window.InstalacaoObraStore) window.InstalacaoObraStore.verificarPrazoVistorias().then(() => reloadAlertas());
+    /* Gatilhos manuais gravam days_left como número fixo na criação
+       (ver ModalNovoGatilho.save) e nada recalculava depois — "vence em
+       Xd"/"atrasado há Xd" e os KPIs de 7d/atrasados ficavam desatualizados
+       com o passar do tempo. Recalcula aqui, a cada carregamento da tela,
+       a partir de due_date — mesmo padrão que os gatilhos automáticos já
+       usam (recalculam via GanttBarMini/labelPrazo a cada render). Não
+       grava de volta no banco: é só a leitura que passa a ser fresca. */
+    rows = rows.map((g) => (
+      g.origem !== 'automatico' && g.due_date
+        ? { ...g, days_left: Math.round((new Date(g.due_date) - new Date()) / 86400000) }
+        : g
+    ));
     setGatilhos(rows);
     setLoading(false);
   };

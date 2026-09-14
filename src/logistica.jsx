@@ -1370,7 +1370,7 @@ function EmailInbox({ setRoute, setSubsel }) {
     html: e.corpo_html || null,
     numeroCotacao: e.numero_cotacao,
     vinculoConfianca: e.vinculo_confianca,
-    anexos: (e.anexos || []).map((a) => ({ ...a, url: null })),
+    anexos: (e.anexos || []).map((a) => ({ ...a, url: a.url || null })),
     to: e.para || [],
     cc: [],
   })), [enviados]);
@@ -1407,11 +1407,33 @@ function EmailInbox({ setRoute, setSubsel }) {
      "Enviados" era um placeholder que nunca lia dado real. E-mail que a
      gente manda não passa pelo IMAP de entrada — vem direto de
      emails_projeto (direcao='saida'), gravado pelo próprio send-email. */
+  /* 14/09 — achado real (auditoria do tour.md): anexos de "Enviados" nunca
+     tinham link de download (badge sem href), mesmo com o arquivo salvo de
+     verdade no Storage — só a Caixa de Entrada gerava link (via read-inbox,
+     que assina com service role). O bucket emails-anexos nega SELECT pra
+     anon (só authenticated/service_role), então o navegador não consegue
+     assinar sozinho: precisa da edge function sign-email-anexos, que faz
+     exatamente o mesmo que read-inbox já fazia pros anexos recebidos. */
   const carregarEnviados = React.useCallback(() => {
     setCarregandoEnviados(true);
     window.__VP_SB.sb.from('emails_projeto').select('*').eq('direcao', 'saida')
       .order('data_mensagem', { ascending: false }).limit(50)
-      .then(({ data }) => setEnviados(data || [])).finally(() => setCarregandoEnviados(false));
+      .then(async ({ data }) => {
+        const rows = data || [];
+        const paths = [...new Set(rows.flatMap((r) => (r.anexos || []).map((a) => a.path).filter(Boolean)))];
+        if (!paths.length) { setEnviados(rows); return; }
+        try {
+          const { data: signed, error } = await window.__VP_SB.sb.functions.invoke('sign-email-anexos', { body: { paths } });
+          const urls = (!error && signed && signed.urls) || {};
+          setEnviados(rows.map((r) => ({
+            ...r,
+            anexos: (r.anexos || []).map((a) => ({ ...a, url: (a.path && urls[a.path]) || null })),
+          })));
+        } catch (e) {
+          console.warn('[Inbox] falha ao assinar anexos de Enviados', e);
+          setEnviados(rows);
+        }
+      }).finally(() => setCarregandoEnviados(false));
   }, []);
   React.useEffect(() => { carregarEnviados(); }, [carregarEnviados]);
   React.useEffect(() => {
