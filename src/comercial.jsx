@@ -309,7 +309,7 @@ function LeadsPage({ setRoute, setSubsel }) {
   const rows = allLeads.filter(l => {
     if (status !== "Todos" && l.status !== status) return false;
     if (owner !== "Todos" && l.owner !== owner) return false;
-    if (search && !((l.building || "") + (l.contact || "") + (l.equip || "")).toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !((l.building || "") + (l.contact || "")).toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
@@ -373,7 +373,7 @@ function LeadsPage({ setRoute, setSubsel }) {
         <div className="spacer"/>
         <div className="search">
           <Icon.search size={12} color="var(--fg3)"/>
-          <input placeholder="Buscar prédio, contato, equipamento…" value={search} onChange={(e) => setSearch(e.target.value)}/>
+          <input placeholder="Buscar prédio, contato…" value={search} onChange={(e) => setSearch(e.target.value)}/>
         </div>
       </div>
 
@@ -383,7 +383,6 @@ function LeadsPage({ setRoute, setSubsel }) {
             <th>ID</th>
             <th>Lead / Prédio</th>
             <th>Contato</th>
-            <th>Equipamento</th>
             <th>Origem</th>
             <th>Status</th>
             <th>Resp.</th>
@@ -394,7 +393,7 @@ function LeadsPage({ setRoute, setSubsel }) {
           <tbody>
             {pageRows.length === 0 ? (
               <tr>
-                <td colSpan={10} style={{ textAlign: "center", padding: "48px 0", color: "var(--fg3)", fontSize: 13 }}>
+                <td colSpan={9} style={{ textAlign: "center", padding: "48px 0", color: "var(--fg3)", fontSize: 13 }}>
                   {search || status !== "Todos" || owner !== "Todos"
                     ? "Nenhum lead encontrado com os filtros aplicados."
                     : "Nenhum lead cadastrado. Clique em \"Novo Lead\" para começar."}
@@ -411,7 +410,6 @@ function LeadsPage({ setRoute, setSubsel }) {
                   <div className="cell-main">{l.contact}</div>
                   <div className="cell-sub">{l.role} · {l.phone}</div>
                 </td>
-                <td><span style={{ fontSize: 12.5, color: "var(--fg2)" }}>{l.equip}</span></td>
                 <td><Badge variant="outline">{l.origin}</Badge></td>
                 <td><StatusBadge status={l.status}/></td>
                 <td>
@@ -525,7 +523,28 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
     return () => { alive = false; };
   }, [lead.id]);
 
+  /* 14/09 — achado real (auditoria do tour.md): "Qualificar → Dossier"
+     sempre criava um Dossier novo, nunca checava se este Lead já tinha
+     um — clicar duas vezes enquanto o status ainda permitia duplicava o
+     prontuário da obra. Agora checa por lead_id antes de criar; se já
+     existe, o botão abre o existente em vez de criar outro. */
+  const [dossierExistente, setDossierExistente] = React.useState(undefined); // undefined = carregando, null = não existe
+  React.useEffect(() => {
+    let alive = true;
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb || lead.id == null) { setDossierExistente(null); return; }
+    sb.from('dossier_obra').select('id').eq('lead_id', lead.id).maybeSingle()
+      .then(({ data }) => { if (alive) setDossierExistente(data || null); })
+      .catch(() => { if (alive) setDossierExistente(null); });
+    return () => { alive = false; };
+  }, [lead.id]);
+
   const criarDossier = async () => {
+    if (dossierExistente) {
+      setSubsel?.(dossierExistente.id);
+      setRoute('dossier-obra');
+      return;
+    }
     if (lead.status !== "Em qualificação" && lead.status !== "Aguardando cotação") {
       return window.toast('Lead já está avançado. Crie Dossier manualmente.', 'warning');
     }
@@ -534,6 +553,7 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
       const dossier = await window.__DOSSIER.criarDeDossier(lead);
       window.VPLog && window.VPLog.registrar({ modulo: "Comercial", acao: "Lead convertido em Dossiê da Obra", alvo: lead.building, alvo_id: lead.id, detalhe: { dossier_id: dossier.id } });
       window.toast('Dossier criado com sucesso! ID: ' + dossier.id, 'success');
+      setDossierExistente({ id: dossier.id });
       setSubsel?.(dossier.id);
       setRoute('dossier-obra');
     } catch (e) {
@@ -570,7 +590,7 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
           <Button variant="outline" icon="edit" onClick={() => setShowEditLead(true)}>Editar Lead</Button>
           <Button variant="outline" icon="ruler" onClick={abrirFormulario}>Abrir Formulário</Button>
           <Button variant="primary" icon="zap" onClick={criarDossier} disabled={creatingDossier}>
-            {creatingDossier ? 'Criando…' : 'Qualificar → Dossier'}
+            {creatingDossier ? 'Criando…' : dossierExistente ? 'Abrir Dossier' : 'Qualificar → Dossier'}
           </Button>
         </div>
       </div>
