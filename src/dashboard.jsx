@@ -246,7 +246,10 @@ function Dashboard({ role, setRoute, setSubsel }) {
 
       <div className="grid-5" style={{ marginBottom: 20 }}>
         {kpis.map((k, i) => (
-          <KPI key={i} {...k} icon={["flag","globe","proposal","trending","ruler","fileText","calendar","clock","dollar","award","zap","trending","briefcase","ship","warning","trending"][i % 16]}/>
+          <KPI key={i} {...k}
+            icon={["flag","globe","proposal","trending","ruler","fileText","calendar","clock","dollar","award","zap","trending","briefcase","ship","warning","trending"][i % 16]}
+            onClick={k.label === 'Alertas críticos' && Number(k.value) > 0 ? () => setRoute('notificacoes') : undefined}
+          />
         ))}
       </div>
 

@@ -695,6 +695,9 @@ button.nav-item {
   transition: border-color var(--dur-fast) var(--ease-out);
 }
 .kpi:hover { border-color: var(--vp-yellow); }
+.kpi--clickable { cursor: pointer; }
+.kpi--clickable:hover { box-shadow: 0 0 0 1px var(--vp-yellow); }
+.kpi--clickable:focus-visible { outline: 2px solid var(--vp-yellow); outline-offset: 2px; }
 .kpi__stripe { position: absolute; top: 0; left: 0; width: 24px; height: 3px; background: var(--vp-yellow); }
 .kpi__label {
   font-size: 10px;
