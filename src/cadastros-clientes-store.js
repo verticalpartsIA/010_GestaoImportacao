@@ -86,6 +86,12 @@
       cpf: form.tipo_pessoa === 'PF' ? (doc || null) : null,
       inscricao_estadual: form.inscricao_estadual || null,
       contribuinte_icms: typeof form.contribuinte_icms === 'boolean' ? form.contribuinte_icms : null,
+      /* 14/09 — achado real (auditoria do tour.md): documento_pendente já
+         existia na tabela (gravado por Leads/Formulário quando o cliente
+         nasce sem CNPJ/CPF ainda), mas este store nunca lia nem escrevia
+         essa coluna — o cadastro mestre não deixava ver nem resolver a
+         pendência. */
+      documento_pendente: typeof form.documento_pendente === 'boolean' ? form.documento_pendente : false,
       email: form.email || null, telefone: form.telefone || null, contato: form.contato || null,
       endereco_logradouro: form.endereco_logradouro || null, endereco_complemento: form.endereco_complemento || null,
       endereco_bairro: form.endereco_bairro || null, endereco_cep: form.endereco_cep || null,

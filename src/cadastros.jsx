@@ -34,7 +34,7 @@ function CadEnderecoFields({ form, set }) {
    ============================================================ */
 const CLI_EMPTY = {
   razao_social: '', nome_fantasia: '', tipo_pessoa: 'PJ', cnpj: '', cpf: '', inscricao_estadual: '',
-  contribuinte_icms: false, email: '', telefone: '', contato: '',
+  contribuinte_icms: false, email: '', telefone: '', contato: '', documento_pendente: false,
   endereco_logradouro: '', endereco_complemento: '', endereco_bairro: '', endereco_cep: '', endereco_cidade: '', endereco_estado: '',
   ativo: true,
 };
@@ -61,6 +61,16 @@ function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
       <label className="row gap-2" style={{ cursor: 'pointer', margin: '10px 0' }}>
         <input type="checkbox" checked={!!form.contribuinte_icms} onChange={(e) => set('contribuinte_icms')(e.target.checked)}/>
         <span className="small">Contribuinte de ICMS</span>
+      </label>
+      {/* 14/09 — achado real (auditoria do tour.md): documento_pendente já
+          existia na tabela clientes, gravado por Leads e pelo Formulário
+          (cliente criado sem CNPJ/CPF ainda), mas o cadastro mestre de
+          Clientes não expunha nem deixava resolver essa pendência — quem
+          gerencia o cadastro central não tinha como ver nem limpar a
+          flag. Agora visível e editável aqui também. */}
+      <label className="row gap-2" style={{ cursor: 'pointer', margin: '0 0 10px' }}>
+        <input type="checkbox" checked={!!form.documento_pendente} onChange={(e) => set('documento_pendente')(e.target.checked)}/>
+        <span className="small">Documento pendente (CNPJ/CPF ainda não regularizado)</span>
       </label>
       <div style={{ marginTop: 6 }}>
         <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>Endereço</h4>
@@ -145,7 +155,10 @@ function CadastroClientesPage() {
               <tr key={c.id}>
                 <td className="mono">{c.codigo || '—'}</td>
                 <td><div className="cell-main">{c.razao_social}</div>{c.nome_fantasia ? <div className="cell-sub">{c.nome_fantasia}</div> : null}</td>
-                <td className="mono">{cadFmtDoc(c.cnpj || c.cpf)}</td>
+                <td className="mono">
+                  {cadFmtDoc(c.cnpj || c.cpf)}
+                  {c.documento_pendente ? <div><span className="badge badge--warning small" title="CNPJ/CPF ainda não regularizado">Doc. pendente</span></div> : null}
+                </td>
                 <td>{c.endereco_cidade ? `${c.endereco_cidade}/${c.endereco_estado || ''}` : '—'}</td>
                 <td>{c.contato || c.telefone || '—'}</td>
                 <td>{c.ativo === false ? <span className="badge">Inativo</span> : <StatusBadge status="Ativo"/>}</td>
