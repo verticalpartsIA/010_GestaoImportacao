@@ -769,10 +769,19 @@ button.nav-item {
 }
 
 /* ========== TABLE ================================================== */
+/* 14/09 — bug real achado ao vivo: overflow:hidden cortava a coluna de
+   ações (Histórico/Editar/Excluir) sem dar nenhuma forma de rolar até
+   ela quando uma linha tinha conteúdo largo (razão social longa, CNPJ +
+   endereço etc.) — o botão existia e funcionava (confirmado clicando via
+   JS), só ficava inacessível na tela. Afeta as 45 telas que reusam esta
+   classe (grep confirma), não só Clientes. overflow-x:auto dá rolagem
+   horizontal real em vez de cortar; overflow-y:hidden preserva o clip
+   vertical que a borda arredondada já dependia. */
 .table-wrap {
   background: #fff;
   border: 1px solid var(--border);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 table.t {
   width: 100%;
