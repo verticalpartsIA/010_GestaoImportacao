@@ -330,9 +330,17 @@ function Dashboard({ role, setRoute, setSubsel }) {
 
 function PipelineFunnel({ stages }) {
   const data = stages || [];
-  const max  = data[0]?.value || 1;
+  // leadsValue = estágio "Leads" (data[0]), usado só na % de conversão —
+  // não confundir com maxBar, o maior valor entre os estágios, usado pra
+  // escalar a largura das barras. Estágios do funil vêm em ordem de
+  // negócio fixa (dashboard-metrics-comercial.js), não por tamanho —
+  // "Propostas enviadas" pode superar "Leads" de verdade (achado ao vivo:
+  // Leads=5, Propostas enviadas=308), o que fazia a barra passar de 100%
+  // de largura e vazar pra fora do card (sem overflow:hidden no CSS).
+  const leadsValue = data[0]?.value || 0;
+  const maxBar = Math.max(1, ...data.map((s) => s.value || 0));
   const last = data[data.length - 1]?.value || 0;
-  const conv = max > 0 ? ((last / max) * 100).toFixed(1) : "0.0";
+  const conv = leadsValue > 0 ? ((last / leadsValue) * 100).toFixed(1) : "0.0";
   if (!data.length) return (
     <div className="muted" style={{ padding: '24px 0', textAlign: 'center', fontSize: 13 }}>Aguardando dados de leads.</div>
   );
@@ -342,7 +350,7 @@ function PipelineFunnel({ stages }) {
         <div key={s.label} className="funnel-row">
           <div className="funnel-row__lbl">{s.label}</div>
           <div className="funnel-row__bar">
-            <div style={{ width: (s.value / max * 100) + "%", background: s.color }}>
+            <div style={{ width: Math.min(100, (s.value || 0) / maxBar * 100) + "%", background: s.color }}>
               <span>{s.value}</span>
             </div>
           </div>
