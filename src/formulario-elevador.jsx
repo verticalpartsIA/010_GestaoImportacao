@@ -1179,6 +1179,21 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
   const [showCotacaoFornecedor, setShowCotacaoFornecedor] = React.useState(false);
   const [showLinkCliente, setShowLinkCliente] = React.useState(false);
 
+  /* 14/09 — achado real (auditoria do tour.md): "Enviar direto para
+     Precificação" (preço combinado por fora) ficava visível pra
+     qualquer usuário, sem checar nenhuma alçada — só um window.confirm
+     de texto. A alçada propostas.precificar_manual já existia em
+     Configurações → Permissões (hint: "Preço combinado por fora
+     (CEO/Financeiro)..."), mas nunca era consultada em lugar nenhum do
+     código. Administrador (perfis.nivel) já passa automaticamente via
+     temCapacidade; Financeiro recebe a alçada explicitamente (não é
+     um nivel, é um departamento). */
+  const [podePrecificarManual, setPodePrecificarManual] = React.useState(false);
+  React.useEffect(() => {
+    if (publicMode || !window.PropostaStore) return;
+    window.PropostaStore.temCapacidade('propostas', 'precificar_manual').then(setPodePrecificarManual).catch(() => {});
+  }, [publicMode]);
+
   React.useEffect(() => {
     if (publicMode) return;
     window.FormularioElevadorStore.listarFornecedores().then(setFornecedores).catch(() => {});
@@ -1571,7 +1586,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       {!publicMode && (id || onControleCotacoes) && (
         <div className="row gap-2" style={{ marginTop: 16, justifyContent: 'center' }}>
           {id && <Button variant="ghost" icon="send" onClick={() => setShowCotacaoFornecedor(true)}>Enviar cotação a fornecedores</Button>}
-          {id && (
+          {id && podePrecificarManual && (
             <Button variant="ghost" icon="calculator" title="Preço já combinado por fora (CEO/Financeiro) — a Proposta já nasce agora, com o preço em aberto pra preencher"
               onClick={async () => {
                 if (!unidades.length) { window.toast?.('Adicione ao menos um equipamento antes de enviar.', 'warning'); return; }
