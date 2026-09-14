@@ -26,11 +26,23 @@
     return 'VPCLI-' + String(maior + 1).padStart(4, '0');
   }
 
+  /* 14/09 — achado real: depois da importação Omie (191 -> 1212 clientes),
+     a lista passou a mostrar só 1000 — o PostgREST tem limite padrão de
+     1000 linhas por select() sem .range(), e ninguém tinha notado porque
+     a tabela nunca tinha passado disso antes. Pagina em blocos de 1000
+     até a página vir incompleta (sinal de que chegou ao fim). */
   async function listarTodos() {
     const c = sb(); if (!c) return [];
-    const { data, error } = await c.from('clientes').select('*').order('criado_em', { ascending: false });
-    if (error) { console.warn('[CadastrosClientesStore] listarTodos falhou', error); return []; }
-    return data || [];
+    const PAGE = 1000;
+    let todos = [];
+    for (let from = 0; ; from += PAGE) {
+      const { data, error } = await c.from('clientes').select('*')
+        .order('criado_em', { ascending: false }).range(from, from + PAGE - 1);
+      if (error) { console.warn('[CadastrosClientesStore] listarTodos falhou', error); return todos; }
+      todos = todos.concat(data || []);
+      if (!data || data.length < PAGE) break;
+    }
+    return todos;
   }
 
   async function obter(id) {
