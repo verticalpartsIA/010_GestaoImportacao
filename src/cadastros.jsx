@@ -431,7 +431,7 @@ function CadastroFornecedoresPage() {
   const filtered = items.filter((f) => {
     const q = search.toLowerCase();
     const matchSearch = !q || (f.razao_social || '').toLowerCase().includes(q) || (f.nome_fantasia || '').toLowerCase().includes(q)
-      || (f.codigo || '').toLowerCase().includes(q) || (f.cnpj || '').includes(q);
+      || (f.codigo || '').toLowerCase().includes(q) || (f.cnpj || '').includes(q) || (f.cpf || '').includes(q);
     const matchCat = filterCategoria === 'Todas' || (f.categorias || []).includes(filterCategoria);
     return matchSearch && matchCat;
   });
