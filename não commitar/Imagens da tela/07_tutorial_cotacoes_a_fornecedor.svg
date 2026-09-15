@@ -1,0 +1,150 @@
+<svg style="max-width:100%;height:auto;display:block" xmlns="http://www.w3.org/2000/svg" width="1800" height="2200" viewBox="0 0 1800 2200" preserveAspectRatio="xMidYMin meet">
+<defs>
+  <linearGradient id="g" x1="0" x2="1"><stop offset="0" stop-color="#4f46e5"/><stop offset="1" stop-color="#7c3aed"/></linearGradient>
+  <style>
+    .t{font:700 54px Arial;fill:#111827}.h{font:700 24px Arial;fill:#172554}.s{font:700 20px Arial;fill:#4338ca}.b{font:400 15px Arial;fill:#374151}.sm{font:400 12px Arial;fill:#6b7280}.xs{font:400 10px Arial;fill:#6b7280}.w{fill:#fff}.n{font:700 13px Arial;fill:#fff}.m{font:600 11px Consolas;fill:#374151}.nav{font:500 12px Arial;fill:#e5e7eb}.k{font:700 24px Arial;fill:#111827}
+  </style>
+</defs>
+<rect width="1600" height="2200" fill="#f8fafc"/>
+
+<!-- HEADER -->
+<rect x="32" y="30" width="72" height="72" rx="18" fill="url(#g)"/>
+<path d="M52 58h30v25H61l-9 9z" fill="none" stroke="#fff" stroke-width="4"/>
+<text x="130" y="62" class="h">GUIA COMPLETO DA TELA</text>
+<text x="130" y="112" class="t">Cotações a Fornecedor</text>
+<text x="130" y="145" class="b">Solicitações técnicas, respostas, negociação e decisão de compra em um único fluxo rastreável.</text>
+
+<text x="760" y="62" class="h">O QUE É ESTA TELA?</text>
+<text x="760" y="94" class="b">Centraliza as cotações técnicas enviadas aos fornecedores.</text>
+<text x="760" y="116" class="b">Hoje o fluxo real está implementado para elevadores/Glarie,</text>
+<text x="760" y="138" class="b">mas a arquitetura já prevê outras categorias de equipamentos.</text>
+
+<rect x="1225" y="35" width="340" height="120" rx="18" fill="#10142c"/>
+<text x="1248" y="68" class="h" fill="#fff">? COMO USAR ESTA CARTILHA</text>
+<text x="1248" y="96" class="sm" fill="#e5e7eb">Entenda cada elemento da tela,</text>
+<text x="1248" y="116" class="sm" fill="#e5e7eb">de onde os dados vêm e para onde</text>
+<text x="1248" y="136" class="sm" fill="#e5e7eb">eles seguem no workflow.</text>
+
+<text x="32" y="205" class="s">EXPLODEDVIEW DA TELA — COTAÇÕES A FORNECEDOR</text>
+
+<!-- APP MOCKUP -->
+<rect x="175" y="250" width="1250" height="790" rx="20" fill="#fff" stroke="#dbe3f0"/>
+<rect x="175" y="250" width="205" height="790" rx="20" fill="#11162f"/>
+<text x="200" y="295" class="h" fill="#fff">VP Gestão</text>
+<text x="195" y="330" class="xs">GERAL</text>
+<text x="210" y="358" class="nav">Dashboard</text><text x="210" y="388" class="nav">Notificações</text><text x="210" y="418" class="nav">Central de Decisões</text><text x="210" y="448" class="nav">Gatilhos &amp; Prazo</text>
+<text x="195" y="490" class="xs">COMERCIAL</text>
+<text x="210" y="520" class="nav">Leads</text><text x="210" y="550" class="nav">Formulários</text>
+<rect x="188" y="564" width="178" height="30" rx="7" fill="#4f46e5"/><text x="205" y="584" class="nav">Cotações a Fornecedor</text>
+<text x="210" y="620" class="nav">Propostas</text>
+<text x="195" y="665" class="xs">FINANCEIRO</text><text x="210" y="695" class="nav">Precificação</text><text x="210" y="725" class="nav">Aval Financeiro</text>
+<text x="195" y="770" class="xs">IMPORTAÇÃO</text><text x="210" y="800" class="nav">P.I.</text><text x="210" y="830" class="nav">RFQ</text><text x="210" y="860" class="nav">Embarques</text><text x="210" y="890" class="nav">IMS</text>
+<text x="195" y="935" class="xs">ENGENHARIA</text><text x="210" y="965" class="nav">Projetos</text><text x="210" y="995" class="nav">Vistorias de Obras</text>
+
+<text x="405" y="300" class="h">Cotações a Fornecedor</text><text x="405" y="323" class="sm">Comercial › Cotações a Fornecedor</text>
+<rect x="830" y="277" width="210" height="38" rx="8" fill="#fff" stroke="#d1d5db"/><text x="846" y="301" class="sm">Buscar documento, cliente...</text>
+<rect x="1050" y="277" width="125" height="38" rx="8" fill="#fff" stroke="#d1d5db"/><text x="1065" y="301" class="sm">Fornecedor ▾</text>
+<rect x="1185" y="277" width="150" height="38" rx="8" fill="#fff" stroke="#d1d5db"/><text x="1200" y="301" class="sm">Categoria ▾</text>
+
+<!-- KPI -->
+<g>
+<rect x="405" y="350" width="220" height="92" rx="12" fill="#fff" stroke="#e5e7eb"/><text x="423" y="378" class="sm">Aguardando</text><text x="423" y="414" class="k">12</text><text x="472" y="414" class="xs">fornecedor não respondeu</text>
+<rect x="640" y="350" width="220" height="92" rx="12" fill="#fff" stroke="#e5e7eb"/><text x="658" y="378" class="sm">Recebidas</text><text x="658" y="414" class="k">7</text><text x="695" y="414" class="xs">prontas para decisão</text>
+<rect x="875" y="350" width="220" height="92" rx="12" fill="#fff" stroke="#e5e7eb"/><text x="893" y="378" class="sm">Em análise</text><text x="893" y="414" class="k">4</text><text x="930" y="414" class="xs">decisão interna em curso</text>
+<rect x="1110" y="350" width="220" height="92" rx="12" fill="#fff" stroke="#e5e7eb"/><text x="1128" y="378" class="sm">Aprovadas</text><text x="1128" y="414" class="k">3</text><text x="1165" y="414" class="xs">compra confirmada</text>
+</g>
+
+<!-- STATUS TABS -->
+<rect x="405" y="468" width="104" height="32" rx="9" fill="#4f46e5"/><text x="457" y="489" class="n" text-anchor="middle">Todos</text>
+<rect x="517" y="468" width="112" height="32" rx="9" fill="#fff" stroke="#c7d2fe"/><text x="573" y="489" class="sm" text-anchor="middle">Aguardando</text>
+<rect x="637" y="468" width="106" height="32" rx="9" fill="#fff" stroke="#c7d2fe"/><text x="690" y="489" class="sm" text-anchor="middle">Recebida</text>
+<rect x="751" y="468" width="108" height="32" rx="9" fill="#fff" stroke="#c7d2fe"/><text x="805" y="489" class="sm" text-anchor="middle">Em análise</text>
+<rect x="867" y="468" width="102" height="32" rx="9" fill="#fff" stroke="#c7d2fe"/><text x="918" y="489" class="sm" text-anchor="middle">Aprovada</text>
+
+<!-- TABLE -->
+<rect x="405" y="525" width="780" height="425" rx="12" fill="#fff" stroke="#e5e7eb"/>
+<text x="420" y="553" class="xs">Nº Documento</text><text x="535" y="553" class="xs">Nº Cotação</text><text x="635" y="553" class="xs">Prédio / Cliente</text><text x="805" y="553" class="xs">Fornecedor</text><text x="905" y="553" class="xs">Categoria</text><text x="1005" y="553" class="xs">Status</text>
+<line x1="415" y1="568" x2="1172" y2="568" stroke="#eef2f7"/>
+<text x="420" y="602" class="m">VPEL-EL0902-A</text><text x="535" y="602" class="m">EL0902</text><text x="635" y="602" class="sm">Residencial Vila Verde</text><text x="805" y="602" class="sm">Glarie</text><text x="905" y="602" class="sm">Elevador</text><text x="1005" y="602" class="sm">Aguardando</text>
+<line x1="415" y1="628" x2="1172" y2="628" stroke="#eef2f7"/>
+<text x="420" y="662" class="m">VPEL-EL0908-A</text><text x="535" y="662" class="m">EL0908</text><text x="635" y="662" class="sm">Shopping Center Norte</text><text x="805" y="662" class="sm">Glarie</text><text x="905" y="662" class="sm">Elevador</text><text x="1005" y="662" class="sm">Recebida</text>
+<line x1="415" y1="688" x2="1172" y2="688" stroke="#eef2f7"/>
+<text x="420" y="722" class="m">VPEL-EL0912-A</text><text x="535" y="722" class="m">EL0912</text><text x="635" y="722" class="sm">Hospital São Lucas</text><text x="805" y="722" class="sm">Glarie</text><text x="905" y="722" class="sm">Elevador</text><text x="1005" y="722" class="sm">Em análise</text>
+<line x1="415" y1="748" x2="1172" y2="748" stroke="#eef2f7"/>
+<text x="420" y="782" class="m">VPEL-EL0915-A</text><text x="535" y="782" class="m">EL0915</text><text x="635" y="782" class="sm">Ed. Comercial Paulista</text><text x="805" y="782" class="sm">Glarie</text><text x="905" y="782" class="sm">Elevador</text><text x="1005" y="782" class="sm">Aprovada</text>
+
+<!-- DETAIL -->
+<rect x="1200" y="525" width="200" height="425" rx="12" fill="#fafbff" stroke="#dbe3f0"/>
+<text x="1218" y="553" class="h">Detalhes</text><text x="1218" y="585" class="xs">Documento</text><text x="1218" y="606" class="m">VPEL-EL0908-A</text>
+<text x="1218" y="638" class="xs">Cliente</text><text x="1218" y="659" class="sm">Shopping Center Norte</text><text x="1218" y="690" class="xs">Fornecedor</text><text x="1218" y="711" class="sm">Glarie</text>
+<text x="1218" y="744" class="xs">Status</text><rect x="1218" y="756" width="74" height="24" rx="8" fill="#e0f2fe"/><text x="1255" y="772" class="xs" text-anchor="middle">Recebida</text>
+<rect x="1218" y="815" width="164" height="34" rx="8" fill="#4f46e5"/><text x="1300" y="837" class="n" text-anchor="middle">Abrir Cotação</text>
+<rect x="1218" y="858" width="164" height="34" rx="8" fill="#fff" stroke="#c7d2fe"/><text x="1300" y="880" class="sm" text-anchor="middle">Ver Tratativas</text>
+
+<!-- CALLOUTS -->
+<g>
+<circle cx="42" cy="310" r="13" fill="#4f46e5"/><text x="42" y="315" class="n" text-anchor="middle">1</text><text x="65" y="306" class="h">Menu</text><text x="65" y="331" class="sm">Acesso ao módulo Comercial.</text>
+<circle cx="42" cy="430" r="13" fill="#4f46e5"/><text x="42" y="435" class="n" text-anchor="middle">2</text><text x="65" y="426" class="h">KPIs</text><text x="65" y="451" class="sm">Volume por estágio da cotação.</text>
+<circle cx="42" cy="550" r="13" fill="#4f46e5"/><text x="42" y="555" class="n" text-anchor="middle">3</text><text x="65" y="546" class="h">Filtros</text><text x="65" y="571" class="sm">Status, fornecedor e categoria.</text>
+<circle cx="1460" cy="320" r="13" fill="#4f46e5"/><text x="1460" y="325" class="n" text-anchor="middle">4</text><text x="1483" y="316" class="h">Status</text><text x="1483" y="341" class="sm">Aguardando → Recebida →</text><text x="1483" y="359" class="sm">Em análise → Aprovada.</text>
+<circle cx="1460" cy="500" r="13" fill="#4f46e5"/><text x="1460" y="505" class="n" text-anchor="middle">5</text><text x="1483" y="496" class="h">Tabela</text><text x="1483" y="521" class="sm">Uma linha = uma cotação real.</text>
+<circle cx="1460" cy="660" r="13" fill="#4f46e5"/><text x="1460" y="665" class="n" text-anchor="middle">6</text><text x="1483" y="656" class="h">Detalhes</text><text x="1483" y="681" class="sm">Resumo e ações do registro.</text>
+<circle cx="1460" cy="820" r="13" fill="#4f46e5"/><text x="1460" y="825" class="n" text-anchor="middle">7</text><text x="1483" y="816" class="h">Tratativas</text><text x="1483" y="841" class="sm">Mensagens, anexos e negociação.</text>
+</g>
+
+<!-- WORKFLOW -->
+<rect x="32" y="1080" width="760" height="445" rx="18" fill="#fff" stroke="#e5e7eb"/>
+<text x="58" y="1120" class="s">WORKFLOW — COMO OS DADOS FLUEM</text>
+<text x="58" y="1155" class="h">HERDA DADOS DE</text>
+<rect x="60" y="1180" width="300" height="60" rx="10" fill="#fafaff" stroke="#ddd6fe"/><text x="78" y="1205" class="h">Formulários</text><text x="78" y="1227" class="xs">Cliente, obra, unidades e especificações técnicas.</text>
+<rect x="60" y="1252" width="300" height="60" rx="10" fill="#fafaff" stroke="#ddd6fe"/><text x="78" y="1277" class="h">Cadastros</text><text x="78" y="1299" class="xs">Cliente e fornecedor conhecidos.</text>
+<rect x="60" y="1324" width="300" height="60" rx="10" fill="#fafaff" stroke="#ddd6fe"/><text x="78" y="1349" class="h">Master ID / Nº Cotação</text><text x="78" y="1371" class="xs">Identidade do ativo e rastreabilidade.</text>
+<rect x="390" y="1250" width="160" height="88" rx="18" fill="url(#g)"/><text x="470" y="1286" class="n" text-anchor="middle">COTAÇÕES</text><text x="470" y="1311" class="n" text-anchor="middle">A FORNECEDOR</text>
+<text x="575" y="1155" class="h">DOA DADOS PARA</text>
+<rect x="565" y="1180" width="200" height="55" rx="10" fill="#f8fafc" stroke="#dbeafe"/><text x="580" y="1204" class="h">Precificação</text><text x="580" y="1225" class="xs">Custos respondidos.</text>
+<rect x="565" y="1245" width="200" height="55" rx="10" fill="#f8fafc" stroke="#dbeafe"/><text x="580" y="1269" class="h">Propostas</text><text x="580" y="1290" class="xs">Base técnica/comercial.</text>
+<rect x="565" y="1310" width="200" height="55" rx="10" fill="#f8fafc" stroke="#dbeafe"/><text x="580" y="1334" class="h">Central de Decisões</text><text x="580" y="1355" class="xs">Aprovações quando exigidas.</text>
+<rect x="565" y="1375" width="200" height="55" rx="10" fill="#f8fafc" stroke="#dbeafe"/><text x="580" y="1399" class="h">Gatilhos &amp; Prazo</text><text x="580" y="1420" class="xs">Eventos e prazos.</text>
+<rect x="565" y="1440" width="200" height="55" rx="10" fill="#f8fafc" stroke="#dbeafe"/><text x="580" y="1464" class="h">P.I. / Compra</text><text x="580" y="1485" class="xs">Continuidade após aprovação.</text>
+<line x1="360" y1="1294" x2="390" y2="1294" stroke="#818cf8" stroke-width="3"/><line x1="550" y1="1294" x2="565" y2="1294" stroke="#818cf8" stroke-width="3"/>
+
+<rect x="815" y="1080" width="750" height="445" rx="18" fill="#fff" stroke="#e5e7eb"/>
+<text x="840" y="1120" class="s">CICLO REAL DA COTAÇÃO</text>
+<text x="850" y="1170" class="h">1. Nasce do Formulário</text><text x="850" y="1194" class="sm">Reaproveita dados técnicos já coletados.</text>
+<text x="850" y="1235" class="h">2. Envio ao Fornecedor</text><text x="850" y="1259" class="sm">A solicitação passa a ser rastreada.</text>
+<text x="850" y="1300" class="h">3. Visualização</text><text x="850" y="1324" class="sm">O fornecedor acessa a solicitação.</text>
+<text x="850" y="1365" class="h">4. Resposta</text><text x="850" y="1389" class="sm">Valores e condições retornam ao sistema.</text>
+<text x="1190" y="1170" class="h">5. Tratativas</text><text x="1190" y="1194" class="sm">Negociação, mensagens e anexos.</text>
+<text x="1190" y="1235" class="h">6. Em análise</text><text x="1190" y="1259" class="sm">A empresa avalia se seguirá com a compra.</text>
+<text x="1190" y="1300" class="h">7. Aprovada</text><text x="1190" y="1324" class="sm">Compra confirmada internamente.</text>
+<text x="1190" y="1380" class="h">Regra de ouro</text><text x="1190" y="1404" class="sm">Recebida ≠ Aprovada.</text><text x="1190" y="1424" class="sm">A resposta do fornecedor ainda precisa</text><text x="1190" y="1444" class="sm">ser analisada antes de seguir no workflow.</text>
+
+<!-- BOTTOM -->
+<rect x="32" y="1560" width="500" height="395" rx="18" fill="#fff" stroke="#e5e7eb"/>
+<text x="58" y="1600" class="s">COMO UTILIZAR — PASSO A PASSO</text>
+<text x="60" y="1650" class="b">1. Abra Cotações a Fornecedor.</text><text x="60" y="1690" class="b">2. Localize a cotação pelos filtros.</text><text x="60" y="1730" class="b">3. Confira o status atual.</text><text x="60" y="1770" class="b">4. Clique na linha para abrir o detalhe.</text><text x="60" y="1810" class="b">5. Revise os dados técnicos enviados.</text><text x="60" y="1850" class="b">6. Consulte Tratativas e anexos.</text><text x="60" y="1890" class="b">7. Encaminhe resposta válida para análise/precificação.</text>
+
+<rect x="550" y="1560" width="500" height="395" rx="18" fill="#fff" stroke="#e5e7eb"/>
+<text x="576" y="1600" class="s">STATUS E SIGNIFICADO</text>
+<text x="580" y="1650" class="h">Aguardando</text><text x="580" y="1672" class="sm">Fornecedor ainda não respondeu.</text>
+<text x="580" y="1720" class="h">Recebida</text><text x="580" y="1742" class="sm">Resposta chegou e está pronta para avaliação.</text>
+<text x="580" y="1790" class="h">Em análise</text><text x="580" y="1812" class="sm">A VerticalParts decidiu avaliar/seguir com a compra.</text>
+<text x="580" y="1860" class="h">Aprovada</text><text x="580" y="1882" class="sm">Compra confirmada internamente.</text>
+
+<rect x="1068" y="1560" width="497" height="395" rx="18" fill="#fff" stroke="#e5e7eb"/>
+<text x="1094" y="1600" class="s">DICAS IMPORTANTES</text>
+<text x="1096" y="1650" class="sm">✓ Não redigite dados que já vieram do Formulário.</text>
+<text x="1096" y="1690" class="sm">✓ Use Tratativas para preservar a negociação.</text>
+<text x="1096" y="1730" class="sm">✓ Não confunda resposta recebida com compra aprovada.</text>
+<text x="1096" y="1770" class="sm">✓ Confira Nº da Cotação / Master ID antes de avançar.</text>
+<text x="1096" y="1810" class="sm">✓ Use filtros para reduzir ruído operacional.</text>
+<text x="1096" y="1850" class="sm">✓ Só dados confirmados devem alimentar a Precificação.</text>
+
+<!-- FOOTER -->
+<rect x="32" y="1990" width="1733" height="150" rx="18" fill="url(#g)"/>
+<text x="60" y="2030" class="h" fill="#fff">IMPORTANTE</text>
+<text x="60" y="2060" class="b" fill="#fff">Cotações a Fornecedor é a ponte entre a especificação técnica e o custo real informado pelo fornecedor.</text>
+<text x="60" y="2085" class="b" fill="#fff">O valor da tela está também na rastreabilidade: quem enviou, quem respondeu, o que foi negociado e qual decisão veio depois.</text>
+<text x="1210" y="2030" class="h" fill="#fff">SVG VETORIAL</text>
+<text x="1210" y="2060" class="sm" fill="#fff">Ideal para Supabase Storage,</text><text x="1210" y="2082" class="sm" fill="#fff">browser, modal ou nova aba.</text>
+</svg>

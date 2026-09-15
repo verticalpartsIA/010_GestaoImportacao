@@ -1,0 +1,139 @@
+{
+  "schema_version": "1.0.0",
+  "motor_calculo": {
+    "versao_alvo": "2.0.0",
+    "modo_padrao": "margem_sobre_venda",
+    "modos_permitidos": [
+      "markup_sobre_custo",
+      "margem_sobre_venda"
+    ],
+    "componentes_custo_economico_completo": [
+      "custo_liquido_importacao",
+      "despesas_operacionais",
+      "instalacao_montagem",
+      "logistica_interna",
+      "contingencia_valor",
+      "outros_custos_nao_recuperaveis"
+    ],
+    "validacoes": {
+      "divisor_preco_maior_que_zero": true,
+      "produto_mais_servico_igual_100_pct": true,
+      "quantidade_modelos_igual_quantidade_total": true,
+      "margem_negativa_bloqueia_aprovacao": true,
+      "custo_obrigatorio_pendente_bloqueia_aprovacao": true,
+      "cotacao_expirada_bloqueia_aprovacao": true,
+      "projeto_especial_exige_aprovacao": true
+    }
+  },
+  "origens_custo": [
+    "sistema",
+    "tabela_referencia",
+    "fornecedor",
+    "cotacao_externa",
+    "estimativa",
+    "manual"
+  ],
+  "situacoes_custo": [
+    "confirmado",
+    "herdado",
+    "estimado",
+    "pendente",
+    "expirado"
+  ],
+  "equipamentos": {
+    "elevador": {
+      "chave_consulta_mao_obra": [
+        "tracao",
+        "faixa_capacidade_kg",
+        "paradas"
+      ],
+      "campos_complementares": [
+        "quantidade_acessos",
+        "tipo_instalacao",
+        "dias_montagem",
+        "quantidade_montadores"
+      ],
+      "cobertura_referencia_inicial": {
+        "tracoes": ["2:1", "4:1"],
+        "paradas_min": 2,
+        "paradas_max": 40,
+        "capacidade_max_kg": 2000
+      }
+    },
+    "escada_esteira": {
+      "chave_consulta_mao_obra": [
+        "tipo",
+        "inclinacao_graus",
+        "desnivel_vertical_mm",
+        "quantidade"
+      ],
+      "campos_complementares": [
+        "comprimento_mm",
+        "tipo_container",
+        "quantidade_containers",
+        "custo_descarga"
+      ],
+      "inclinacoes_referencia": {
+        "esteira": [12],
+        "escada": [30, 35]
+      }
+    }
+  },
+  "projeto_especial": {
+    "ativar_quando_fora_da_cobertura": true,
+    "preco_confirmado_automaticamente": false,
+    "permitir_estimativa": true,
+    "exigir_metodologia_versionada": true,
+    "exigir_justificativa": true,
+    "exigir_aprovacao_tecnica": true,
+    "exigir_aprovacao_financeira": true,
+    "permitir_anexo_cotacao": true
+  },
+  "auditoria": {
+    "campos_obrigatorios_por_custo": [
+      "origem",
+      "situacao",
+      "data_base",
+      "responsavel",
+      "valor"
+    ],
+    "campos_condicionais": [
+      "validade",
+      "referencia",
+      "evidencia",
+      "justificativa_override"
+    ],
+    "snapshot_na_aprovacao": true,
+    "historico_alteracoes": true,
+    "guardar_versao_motor": true,
+    "guardar_versao_tabelas": true
+  },
+  "politica_aprovacao": {
+    "status": [
+      "rascunho",
+      "calculado",
+      "pendente",
+      "em_aprovacao",
+      "aprovado",
+      "rejeitado",
+      "expirado"
+    ],
+    "bloqueios": [
+      "margem_negativa",
+      "divisor_invalido",
+      "quantidade_divergente",
+      "custo_obrigatorio_pendente",
+      "projeto_especial_sem_aprovacao",
+      "cotacao_expirada",
+      "cambio_invalido",
+      "composicao_produto_servico_invalida"
+    ],
+    "alertas_com_justificativa": [
+      "margem_abaixo_do_piso",
+      "override_manual",
+      "valor_fora_da_faixa_historica",
+      "contingencia_zero_em_projeto_especial",
+      "custo_estimado"
+    ]
+  }
+}

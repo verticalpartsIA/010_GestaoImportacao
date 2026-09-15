@@ -14,6 +14,7 @@
     "build:pdf:vistoria": "cross-env PDF_ENTRY=vistoria vite build --config pdf-bundle/vite.config.js"
   },
   "dependencies": {
+    "dotenv": "^17.4.2",
     "express": "^4.19.2"
   },
   "engines": {

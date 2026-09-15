@@ -1,0 +1,26 @@
+KIT FIEL AO INFOGRÁFICO ORIGINAL
+
+Fonte visual:
+VerticalParts_BPMN_Infografico_Original_Prezi2.pdf
+
+Método:
+Os PNGs deste pacote NÃO foram redesenhados.
+São recortes literais da página original renderizada em alta resolução (10368 × 15552 px).
+Assim, tipografia, ícones, cores, bordas, números e proporções permanecem iguais ao infográfico aprovado.
+
+Conteúdo:
+- Cabeçalho e KPIs
+- 6 faixas de fases
+- 14 raias/atores
+- 52 elementos/cards detectados e recortados do corpo do fluxo
+- 4 painéis inferiores
+- Infográfico completo em alta resolução como referência de montagem
+
+Numeração:
+O prefixo 001, 002, 003... é a ORDEM GLOBAL DO ARQUIVO para montagem.
+Dentro de cada card permanece a numeração original impressa no próprio infográfico.
+
+Observação:
+Linhas e setas são melhor recriadas diretamente no Prezi por cima da referência, porque recortá-las
+do raster preservaria também partes do fundo/grid. O arquivo de referência em alta resolução serve
+como gabarito exato de posição e conexão.

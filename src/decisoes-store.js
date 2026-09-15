@@ -58,6 +58,7 @@
     compra_equipamento_ceo: 'Compra do equipamento — aprovação do CEO',
     compra_varejo_logistica: 'Compra de varejo — aprovação da Logística',
     desconto_proposta: 'Desconto em proposta',
+    pagamento_instalador_parcela: 'Pagamento a instalador — aprovação do Gestor Comercial',
   };
 
   /* Além dos e-mails fixos, qualquer papel pode ganhar aprovadores extras
@@ -278,6 +279,27 @@
     return { ok: true };
   }
 
+  /* Pagamento de parcela ao instalador — hoje "Marcar paga" era um botão
+     livre pra qualquer um com acesso à tela (achado ao investigar a
+     granularidade de custo de instalação, 11-12/09): o sistema sinaliza
+     "liberada" automaticamente pelo progresso da obra, mas nada exigia
+     aprovação de verdade antes do clique que confirma o pagamento. Chave é
+     o id da própria parcela (referencia_id) — cada parcela pede sua
+     própria aprovação, não uma por contrato inteiro. */
+  async function podePagarParcela(parcelaId, contexto) {
+    if (!parcelaId) return { ok: true };
+    const c = sb(); if (!c) return { ok: true };
+    const { data: existentes } = await c.from('decisoes_gerenciais').select('*')
+      .eq('referencia_tabela', 'contrato_instalador_parcelas').eq('referencia_id', parcelaId).eq('tipo', 'pagamento_instalador_parcela');
+    let decisao = (existentes || [])[0];
+    if (!decisao) {
+      decisao = await criarDecisao({ tipo: 'pagamento_instalador_parcela', papelRequerido: 'gestor_comercial', referenciaTabela: 'contrato_instalador_parcelas', referenciaId: parcelaId, contexto });
+    }
+    if (decisao.status === 'reprovada') return { ok: false, motivo: `Pagamento reprovado pelo Gestor Comercial (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Solicitação de aprovação enviada ao Gestor Comercial (Regiane ou Guilherme) — aguarde antes de marcar como paga.' };
+    return { ok: true };
+  }
+
   /* Compra do equipamento (elevador/escada rolante) — o pedido do usuário
      em 15/08: TODA compra de equipamento passa pelo CEO, disparada assim
      que o CLIENTE aprova a proposta — bem antes da assinatura do contrato
@@ -333,6 +355,6 @@
     aprovar, reprovar,
     podeEnviarProposta, podeContratarInstalador, podeMontadorEntrarObra,
     podeComprarEquipamento, verificarGateCompra,
-    criarDecisaoCompraVarejo,
+    criarDecisaoCompraVarejo, podePagarParcela,
   };
 }());

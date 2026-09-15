@@ -1,6 +1,8 @@
 # Projeto: Granularidade de valor por equipamento (Precificação → Proposta → Contrato)
 
-Status: **Fase 1, 2, 3a, 3b e 3c (versão leve — métrica no Dashboard) no ar. 3d ainda não iniciada — vira capítulo/investigação própria (mecanismo de aval do gestor + integração Omie).**
+Status: **Fase 1, 2, 3a, 3b, 3c (leve) e 3d — parte 1 (trava de aprovação real) no ar.** 3d ainda tem 2
+frentes pendentes (ligação direta Omie↔Contrato Instalador; tela de reconciliação 3 pontas) —
+o usuário escolheu começar só pela trava, as outras ficam pra quando quiser retomar.
 
 ## Contexto / gatilho
 
@@ -121,14 +123,25 @@ Plano em 4 sub-partes, uma por vez (pedido explícito do usuário):
   comparáveis, 2 fora do escopo por falta de vínculo) — matemática confere.
   O checklist por equipamento em si (progresso "elevador 1 pronto, elevador 2 não") continua sem fazer
   sentido enquanto o pagamento for só por obra — fica arquivado, não é mais uma pendência ativa.
-- **3d. Reconciliação previsto × pago — VIRA CAPÍTULO PRÓPRIO** (pedido explícito do usuário, ainda não
-  investigado): o usuário explicou como o pagamento ao instalador funciona hoje na prática — a 1ª
-  parcela cai na assinatura do contrato; as demais acompanham o Diário de Obra, mas **não são
-  automáticas** — já existe uma trava hoje que sinaliza quando o montador tem medição suficiente pra
-  receber, mas o desbloqueio efetivo do pagamento depende do aval manual do gestor. Também não está
-  mapeado de onde exatamente esses valores são puxados dentro do Omie. Por ter mecanismo de negócio
-  próprio (a trava/aval) e uma integração externa ainda não investigada, esta fase precisa de uma
-  investigação dedicada antes de qualquer plano — não é uma continuação direta da 3a/3b.
+- **3d. Reconciliação previsto × pago × trava de aprovação** — investigado e dividido em 3 lacunas
+  reais (arquivo:linha nos commits/histórico da conversa):
+  1. **Trava de aprovação do Gestor — ✅ FEITO**. Descoberta importante: a trava que o usuário descreveu
+     (montador com medição suficiente, mas depende de aval do gestor) **não existia no código** — "Marcar
+     paga" era um clique livre pra qualquer um com acesso à tela (`pagamentos-instalador.jsx`), sem
+     aprovação, sem alçada, sem trilha de quem confirmou. Implementado reaproveitando o mesmo mecanismo
+     genérico de Central de Decisões já usado em desconto de proposta/contratação de mão de obra
+     (`decisoes-store.js`, novo `podePagarParcela()`, papel `gestor_comercial` — mesmas pessoas que já
+     aprovam desconto, Regiane/Guilherme): 1ª tentativa de marcar paga cria a solicitação e bloqueia;
+     só confirma de fato depois de aprovada em Central de Decisões. Testado ao vivo (parcela de teste):
+     pendente bloqueia, idempotente (não duplica solicitação), aprovada libera — limpo depois do teste.
+  2. **Ligação direta Omie ↔ Contrato Instalador — pendente**: hoje o pagamento no Omie só se conecta
+     à obra via número de série do equipamento ou nome do cliente (aproximado), nunca ao
+     `contratos_instalador.id` diretamente — não há FK real.
+  3. **Tela/KPI de reconciliação 3 pontas — pendente**: Previsto (Precificação) × Contratado (Contrato
+     Instalador, já no Dashboard via 3c) × Pago de fato (Omie). Depende parcialmente da lacuna 2 pra ser
+     confiável.
+  O usuário escolheu começar só pela trava (1); as outras 2 ficam registradas aqui pra quando ele quiser
+  retomar — não são consideradas concluídas.
 
 ## Recomendação
 

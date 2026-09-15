@@ -27,3 +27,7 @@ version.json
 
 # Material de referência local (não versionado, não é parte do produto)
 Andreia/
+
+# hyperresearch (repo clonado à parte + config local do vault) — ferramenta, não é parte do produto
+/hyperresearch/
+.hyperresearch/

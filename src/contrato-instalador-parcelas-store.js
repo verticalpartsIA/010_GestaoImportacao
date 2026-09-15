@@ -88,8 +88,20 @@
     return data || [];
   }
 
-  async function marcarPaga(parcelaId) {
+  /* Trava real de aprovação (11-12/09) — antes "Marcar paga" confirmava
+     na hora, sem nenhuma aprovação de verdade (só "liberada" pelo
+     progresso da obra, que não é a mesma coisa que alguém ter dito "pode
+     pagar"). Reaproveita o mesmo mecanismo genérico de decisão gerencial
+     (decisoes-store.js) já usado pra desconto de proposta/contratação de
+     mão de obra — 1ª chamada cria a solicitação e bloqueia; só confirma
+     de verdade depois que o Gestor Comercial aprovar em Central de
+     Decisões. */
+  async function marcarPaga(parcelaId, contexto) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (window.DecisoesStore) {
+      const gate = await window.DecisoesStore.podePagarParcela(parcelaId, contexto);
+      if (!gate.ok) throw new Error(gate.motivo);
+    }
     const user = window.__VP_USER || {};
     const { error } = await c.from('contrato_instalador_parcelas').update({
       status: 'paga', pago_em: new Date().toISOString(), pago_por: user.nome || user.email || null,

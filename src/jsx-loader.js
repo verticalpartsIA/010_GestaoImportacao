@@ -37,7 +37,7 @@
   // função compile() (presets/plugins) precisa incrementar isto pra invalidar
   // todo o cache antigo (senão reusa JS compilado pela regra velha). O GC no
   // fim do boot apaga as entradas de versões antigas.
-  var CACHE_VERSION = 'c2';
+  var CACHE_VERSION = 'c3';
 
   function keyFor(url) { return CACHE_VERSION + '::' + url; }
 

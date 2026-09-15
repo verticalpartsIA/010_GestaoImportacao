@@ -1,0 +1,120 @@
+﻿Nº global;Tipo;Arquivo;Conteúdo;Pasta
+1;Cabeçalho;001_Cabecalho_Principal.png;Cabeçalho principal;01_Cabecalhos_Fases
+2;Cabeçalho de fase;002_Fase_1.png;FASE 1 — FUNIL COMERCIAL;01_Cabecalhos_Fases
+3;Cabeçalho de fase;003_Fase_2.png;FASE 2 — PREPARAÇÃO DA COMPRA NEGOCIAÇÃO E PRODUÇÃO;01_Cabecalhos_Fases
+4;Cabeçalho de fase;004_Fase_3.png;FASE 3 — EMBARQUE E TRÂNSITO MARÍTIMO (~90 DIAS);01_Cabecalhos_Fases
+5;Cabeçalho de fase;005_Fase_4.png;FASE 4 — DESEMBARAÇO E ENTREGA NACIONAL;01_Cabecalhos_Fases
+6;Cabeçalho de fase;006_Fase_5.png;FASE 5 — INSTALAÇÃO E ENTREGA TÉCNICA;01_Cabecalhos_Fases
+7;Cabeçalho de fase;007_Fase_6.png;FASE 6 — PÓS-VENDA E MANUTENÇÃO PREVENTIVA;01_Cabecalhos_Fases
+8;Raia;008_Raia_CLIENTE.png;CLIENTE;02_Raias
+9;Raia;009_Raia_VENDEDOR.png;VENDEDOR;02_Raias
+10;Raia;010_Raia_GESTOR_COMERCIAL.png;GESTOR COMERCIAL;02_Raias
+11;Raia;011_Raia_CEO.png;CEO;02_Raias
+12;Raia;012_Raia_FINANCEIRO.png;FINANCEIRO;02_Raias
+13;Raia;013_Raia_JURÍDICO.png;JURÍDICO;02_Raias
+14;Raia;014_Raia_ENGENHARIA.png;ENGENHARIA;02_Raias
+15;Raia;015_Raia_RH.png;RH;02_Raias
+16;Raia;016_Raia_IMPORTAÇÃO.png;IMPORTAÇÃO;02_Raias
+17;Raia;017_Raia_FORNECEDOR_DO_EQUIPAMENTO.png;FORNECEDOR DO EQUIPAMENTO;02_Raias
+18;Raia;018_Raia_CADEIA_LOGÍSTICA_INTERNACIONAL.png;CADEIA LOGÍSTICA INTERNACIONAL;02_Raias
+19;Raia;019_Raia_INSTALADOR_(PARCEIRO).png;INSTALADOR (PARCEIRO);02_Raias
+20;Raia;020_Raia_EMPRESA_DE_MANUTENÇÃO.png;EMPRESA DE MANUTENÇÃO;02_Raias
+21;Card;021_Card_01.png;01 — Manifesta interesse;03_Cards
+22;Card;022_Card_02.png;02 — Qualifica o Lead;03_Cards
+23;Card;023_Card_03.png;03 — Preenche o Formulário de Equipamento;03_Cards
+24;Card;024_Card_04.png;04 — Envia cotação ao fornecedor;03_Cards
+25;Card;025_Card_05.png;05 — Recebe a cotação;03_Cards
+26;Card;026_Card_06.png;06 — Responde com preço e specs;03_Cards
+27;Card;027_Card_07.png;07 — Precifica a proposta;03_Cards
+28;Card;028_Card_08.png;08 — Aprova envio da proposta?;03_Cards
+29;Card;029_Card_09.png;09 — Aprova envio da proposta?;03_Cards
+30;Card;030_Card_10.png;10 — Envia proposta ao cliente;03_Cards
+31;Card;031_Card_11.png;11 — Aprova a proposta?;03_Cards
+32;Card;032_Card_12.png;12 — Assina o contrato;03_Cards
+33;Card;033_Card_13.png;13 — Paga o sinal;03_Cards
+34;Card;034_Card_14.png;14 — Elabora contrato de venda;03_Cards
+35;Card;035_Card_15.png;15 — Envia contrato para assinatura;03_Cards
+36;Card;036_Card_16.png;16 — Confirma pagamento do sinal;03_Cards
+37;Card;037_Card_17.png;17 — GATE DA COMPRA;03_Cards
+38;Card;038_Card_18.png;18 — Dá o Aval de Pagamento;03_Cards
+39;Card;039_Card_19.png;19 — Vistoria da obra — Fase 1;03_Cards
+40;Card;040_Card_20.png;20 — Vistoria da obra — Fase 2;03_Cards
+41;Card;041_Card_21.png;21 — Vistoria da obra — Fase 3;03_Cards
+42;Card;042_Card_22.png;22 — Vistorias adicionais;03_Cards
+43;Card;043_Card_23.png;23 — Prepara equipe para recebimento;03_Cards
+44;Card;044_Card_24.png;24 — Verifica Munck / Andaime;03_Cards
+45;Card;045_Card_25.png;25 — Providencia ART da obra;03_Cards
+46;Card;046_Card_26.png;26 — Homologa o instalador;03_Cards
+47;Card;047_Card_27.png;27 — Libera instalador para esta obra;03_Cards
+48;Card;048_Card_28.png;28 — Negociação final com fornecedor;03_Cards
+49;Card;049_Card_29.png;29 — Cria a P.I.;03_Cards
+50;Card;050_Card_30.png;30 — Realiza 1º pagamento;03_Cards
+51;Card;051_Card_31.png;31 — Acompanha produção;03_Cards
+52;Card;052_Card_32.png;32 — Produz o equipamento;03_Cards
+53;Card;053_Card_33.png;33 — Cargo Ready;03_Cards
+54;Card;054_Card_34.png;34 — Realiza 2º pagamento;03_Cards
+55;Card;055_Card_35.png;35 — Cota frete / RFQ;03_Cards
+56;Card;056_Card_36.png;36 — Define agente de cargas;03_Cards
+57;Card;057_Card_37.png;37 — Booking + cadastra embarque;03_Cards
+58;Card;058_Card_38.png;38 — Despachante prepara exportação;03_Cards
+59;Card;059_Card_39.png;39 — Transporte ao porto de origem;03_Cards
+60;Card;060_Card_40.png;40 — Navio sai do porto de origem;03_Cards
+61;Card;061_Card_41.png;41 — Trânsito marítimo;03_Cards
+62;Card;062_Card_42.png;42 — Navio chega em Santos;03_Cards
+63;Card;063_Card_43.png;43 — DUIMP + canal + desembaraço;03_Cards
+64;Card;064_Card_44.png;44 — Recebe equipamento e instala;03_Cards
+65;Card;065_Card_45.png;45 — Manutenção preventiva;03_Cards
+66;Linha / conector;066_Linha_01_para_02.png;Conector 1 → 2;04_Linhas_Conectores
+67;Linha / conector;067_Linha_02_para_03.png;Conector 2 → 3;04_Linhas_Conectores
+68;Linha / conector;068_Linha_03_para_04.png;Conector 3 → 4;04_Linhas_Conectores
+69;Linha / conector;069_Linha_04_para_05.png;Conector 4 → 5;04_Linhas_Conectores
+70;Linha / conector;070_Linha_05_para_06.png;Conector 5 → 6;04_Linhas_Conectores
+71;Linha / conector;071_Linha_06_para_07.png;Conector 6 → 7;04_Linhas_Conectores
+72;Linha / conector;072_Linha_07_para_08.png;Conector 7 → 8;04_Linhas_Conectores
+73;Linha / conector;073_Linha_08_para_09.png;Conector 8 → 9;04_Linhas_Conectores
+74;Linha / conector;074_Linha_09_para_10.png;Conector 9 → 10;04_Linhas_Conectores
+75;Linha / conector;075_Linha_10_para_11.png;Conector 10 → 11;04_Linhas_Conectores
+76;Linha / conector;076_Linha_11_para_12.png;Conector 11 → 12;04_Linhas_Conectores
+77;Linha / conector;077_Linha_12_para_13.png;Conector 12 → 13;04_Linhas_Conectores
+78;Linha / conector;078_Linha_13_para_14.png;Conector 13 → 14;04_Linhas_Conectores
+79;Linha / conector;079_Linha_14_para_15.png;Conector 14 → 15;04_Linhas_Conectores
+80;Linha / conector;080_Linha_15_para_16.png;Conector 15 → 16;04_Linhas_Conectores
+81;Linha / conector;081_Linha_16_para_17.png;Conector 16 → 17;04_Linhas_Conectores
+82;Linha / conector;082_Linha_17_para_18.png;Conector 17 → 18;04_Linhas_Conectores
+83;Linha / conector;083_Linha_18_para_19.png;Conector 18 → 19;04_Linhas_Conectores
+84;Linha / conector;084_Linha_19_para_20.png;Conector 19 → 20;04_Linhas_Conectores
+85;Linha / conector;085_Linha_20_para_21.png;Conector 20 → 21;04_Linhas_Conectores
+86;Linha / conector;086_Linha_21_para_22.png;Conector 21 → 22;04_Linhas_Conectores
+87;Linha / conector;087_Linha_22_para_23.png;Conector 22 → 23;04_Linhas_Conectores
+88;Linha / conector;088_Linha_23_para_24.png;Conector 23 → 24;04_Linhas_Conectores
+89;Linha / conector;089_Linha_24_para_25.png;Conector 24 → 25;04_Linhas_Conectores
+90;Linha / conector;090_Linha_25_para_26.png;Conector 25 → 26;04_Linhas_Conectores
+91;Linha / conector;091_Linha_26_para_27.png;Conector 26 → 27;04_Linhas_Conectores
+92;Linha / conector;092_Linha_27_para_28.png;Conector 27 → 28;04_Linhas_Conectores
+93;Linha / conector;093_Linha_28_para_29.png;Conector 28 → 29;04_Linhas_Conectores
+94;Linha / conector;094_Linha_29_para_30.png;Conector 29 → 30;04_Linhas_Conectores
+95;Linha / conector;095_Linha_30_para_31.png;Conector 30 → 31;04_Linhas_Conectores
+96;Linha / conector;096_Linha_31_para_32.png;Conector 31 → 32;04_Linhas_Conectores
+97;Linha / conector;097_Linha_32_para_33.png;Conector 32 → 33;04_Linhas_Conectores
+98;Linha / conector;098_Linha_33_para_34.png;Conector 33 → 34;04_Linhas_Conectores
+99;Linha / conector;099_Linha_34_para_35.png;Conector 34 → 35;04_Linhas_Conectores
+100;Linha / conector;100_Linha_35_para_36.png;Conector 35 → 36;04_Linhas_Conectores
+101;Linha / conector;101_Linha_36_para_37.png;Conector 36 → 37;04_Linhas_Conectores
+102;Linha / conector;102_Linha_37_para_38.png;Conector 37 → 38;04_Linhas_Conectores
+103;Linha / conector;103_Linha_38_para_39.png;Conector 38 → 39;04_Linhas_Conectores
+104;Linha / conector;104_Linha_39_para_40.png;Conector 39 → 40;04_Linhas_Conectores
+105;Linha / conector;105_Linha_40_para_41.png;Conector 40 → 41;04_Linhas_Conectores
+106;Linha / conector;106_Linha_41_para_42.png;Conector 41 → 42;04_Linhas_Conectores
+107;Linha / conector;107_Linha_42_para_43.png;Conector 42 → 43;04_Linhas_Conectores
+108;Linha / conector;108_Linha_43_para_44.png;Conector 43 → 44;04_Linhas_Conectores
+109;Linha / conector;109_Linha_44_para_45.png;Conector 44 → 45;04_Linhas_Conectores
+110;Conector especial;110_Conector_mensagem_entre_Pools.png;Conector mensagem entre Pools;04_Linhas_Conectores
+111;Conector especial;111_Conector_fluxo_de_informação.png;Conector fluxo de informação;04_Linhas_Conectores
+112;Conector especial;112_Conector_handoff___aprovação.png;Conector handoff / aprovação;04_Linhas_Conectores
+113;Conector especial;113_Conector_retorno___reprovação.png;Conector retorno / reprovação;04_Linhas_Conectores
+114;Conector especial;114_Linha_de_tempo_principal.png;Linha de tempo principal;04_Linhas_Conectores
+115;Conector especial;115_Moldura_atividades_paralelas.png;Moldura atividades paralelas;04_Linhas_Conectores
+116;Painel inferior;116_LEGENDA_BPMN.png;LEGENDA BPMN;05_Legendas_Paineis
+117;Painel inferior;117_STATUS.png;STATUS — INTEGRAÇÃO COM O SISTEMA;05_Legendas_Paineis
+118;Painel inferior;118_INDICADORES_POR_FASE.png;INDICADORES POR FASE — DASHBOARD;05_Legendas_Paineis
+119;Painel inferior;119_OBSERVAÇÕES_IMPORTANTES.png;OBSERVAÇÕES IMPORTANTES;05_Legendas_Paineis

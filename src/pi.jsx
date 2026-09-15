@@ -315,6 +315,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
         <div className="stack" style={{ gap: 14, marginTop: 14 }}>
           <div className="grid-3" style={{ gap: 12 }}>
             <PIField label="Número da P.I. *"><PIInput value={form.numero_pi} onChange={set('numero_pi')}/></PIField>
+            <PIField label="Nº Cotação (gate de compra do CEO)"><PIInput type="number" value={form.numero_cotacao} onChange={set('numero_cotacao')} disabled={isEdit}/></PIField>
             <PIField label="Data de abertura *"><PIInput type="date" value={form.data_abertura} onChange={set('data_abertura')}/></PIField>
             <PIField label="Status"><PISelect value={form.status} onChange={set('status')} options={PI_STATUS}/></PIField>
             <PIField label="Data de prontidão do pedido"><PIInput type="date" value={form.data_prontidao} onChange={set('data_prontidao')}/></PIField>
@@ -335,7 +336,6 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
             <PIField label="Incoterms"><PISelect value={form.incoterms} onChange={set('incoterms')} options={PI_INCOTERMS}/></PIField>
             <PIField label="Data da solicitação de pagamento"><PIInput type="date" value={form.data_solicitacao_pagamento} onChange={set('data_solicitacao_pagamento')}/></PIField>
             <PIField label="Nº da requisição"><PIInput value={form.numero_requisicao} onChange={set('numero_requisicao')}/></PIField>
-            <PIField label="Nº Cotação (gate de compra do CEO)"><PIInput type="number" value={form.numero_cotacao} onChange={set('numero_cotacao')} disabled={isEdit}/></PIField>
             <PIMultiText label="Nºs de série" values={form.numeros_serie} onChange={set('numeros_serie')} placeholder="Nº de série do equipamento"/>
             <PIMultiText label="Categorias" values={form.categorias} onChange={set('categorias')} placeholder="Categoria do equipamento"/>
           </div>
@@ -440,6 +440,7 @@ function PIModalVincularEmbarque({ pi, embarques, onClose, onSaved }) {
 
 /* ---------- Página ---------- */
 function PIPage() {
+  console.log('🎯 PI PAGE LOADED - v12 - FIELD REORDER SHOULD BE VISIBLE');
   const [pis, setPis] = React.useState(null);
   const [embarques, setEmbarques] = React.useState([]);
   const [showForm, setShowForm] = React.useState(false);

@@ -1,0 +1,159 @@
+<div id="import-flow">
+  <div class="viz-controls" aria-label="Selecionar fase do processo">
+    <button class="btn btn-primary" data-phase="overview" aria-pressed="true">Visão geral</button>
+    <button class="btn" data-phase="a" aria-pressed="false">A · Compra</button>
+    <button class="btn" data-phase="b" aria-pressed="false">B · Embarque</button>
+    <button class="btn" data-phase="c" aria-pressed="false">C · Obra em paralelo</button>
+    <button class="btn" data-phase="d" aria-pressed="false">D · Desembaraço</button>
+    <button class="btn" data-phase="e" aria-pressed="false">E · Instalação</button>
+    <button class="btn" data-phase="f" aria-pressed="false">F · Entrega final</button>
+  </div>
+
+  <section class="flow-view is-active" data-view="overview" aria-label="Fluxo geral da importação">
+    <div class="flow-stack overview">
+      <div class="node terminal">INÍCIO<br><span>Necessidade de compra confirmada</span></div>
+      <div class="arrow">↓</div>
+      <div class="node phase"><b>A · DECISÃO E P.I.</b><span>Dupla aprovação → negociação → P.I. → 1º pagamento</span></div>
+      <div class="arrow">↓</div>
+      <div class="node phase"><b>B · PRODUÇÃO E EMBARQUE</b><span>Produção → saldo → RFQ → booking → ETD → vínculo da P.I.</span></div>
+      <div class="arrow split">↓ início de duas frentes simultâneas</div>
+      <div class="parallel" aria-label="Atividades paralelas durante o trânsito marítimo">
+        <div class="lane">
+          <div class="lane-label">TRILHA MARÍTIMA · ~90 DIAS</div>
+          <div class="node process">Navio em trânsito</div>
+          <div class="arrow">↓</div>
+          <div class="node phase"><b>D · CHEGADA E DESEMBARAÇO</b><span>DUIMP → canal → liberação → retirada</span></div>
+        </div>
+        <div class="lane accent-lane">
+          <div class="lane-label">TRILHA DA OBRA · EM PARALELO</div>
+          <div class="node phase"><b>C · PREPARAÇÃO DA OBRA</b><span>Vistorias + instalador + recursos + ART + equipe</span></div>
+          <div class="arrow">↓</div>
+          <div class="node decision"><b>Obra e instalador prontos?</b></div>
+          <div class="branch"><span>Não ↺ corrigir pendências</span><span>Sim ↓</span></div>
+        </div>
+      </div>
+      <div class="join">CONVERGÊNCIA: equipamento liberado + obra preparada + instalador vinculado</div>
+      <div class="arrow">↓</div>
+      <div class="node decision"><b>GATE ABERTO?</b><span>Contrato assinado AND Pagamento F1 liberado AND PDF do projeto recebido</span></div>
+      <div class="branch"><span>Não ↺ cobrar requisito pendente</span><span>Sim ↓</span></div>
+      <div class="node phase"><b>E · ENTREGA E INSTALAÇÃO</b><span>Transporte → recepção por ≥2 pessoas → instalação → acompanhamento</span></div>
+      <div class="arrow">↓</div>
+      <div class="node phase"><b>F · DOCUMENTAÇÃO E HANDOVER</b><span>Testes + Data Book + certificados + treinamento + garantia</span></div>
+      <div class="arrow">↓</div>
+      <div class="node decision"><b>Checklist completo e Termo assinado?</b></div>
+      <div class="branch"><span>Não ↺ completar/corrigir</span><span>Sim ↓</span></div>
+      <div class="node terminal">FIM<br><span>Transição para Escamax</span></div>
+    </div>
+  </section>
+
+  <section class="flow-view" data-view="a" aria-label="Fase A — decisão e pedido de importação">
+    <div class="flow-stack">
+      <div class="node terminal">INÍCIO · compra necessária</div><div class="arrow">↓</div>
+      <div class="node process"><b>A1 · Gestor Comercial aprova?</b><span>Central de Decisões · sem SLA</span></div>
+      <div class="branch"><span>Não → encerrar/revisar</span><span>Sim ↓</span></div>
+      <div class="node decision"><b>CEO/Owner aprova?</b><span>Nenhum dos dois decide sozinho</span></div>
+      <div class="branch"><span>Não → encerrar/revisar</span><span>Sim ↓</span></div>
+      <div class="node process"><b>A2 · Negociação final</b><span>Comercial/Importação · SLA 7 dias</span></div><div class="arrow">↓</div>
+      <div class="node process"><b>A3 · Criar P.I.</b><span>Nº, fornecedor, incoterm, itens e NCM</span></div><div class="arrow">↓</div>
+      <div class="node process risk"><b>A4 · Realizar 1º pagamento</b><span>Financeiro · registrar câmbio real</span></div><div class="arrow">↓</div>
+      <div class="node terminal">LIBERAR PRODUÇÃO</div>
+    </div>
+  </section>
+
+  <section class="flow-view" data-view="b" aria-label="Fase B — produção, frete e embarque">
+    <div class="flow-stack">
+      <div class="node terminal">P.I. E ADIANTAMENTO CONFIRMADOS</div><div class="arrow">↓</div>
+      <div class="node process"><b>B1 · Fornecedor inicia produção</b><span>Prazo variável e manual</span></div><div class="arrow">↓</div>
+      <div class="node process"><b>B2 · Acompanhar produção</b><span>Fotos e relatórios anexados</span></div><div class="arrow">↓</div>
+      <div class="node decision"><b>B3 · Cargo Ready?</b></div>
+      <div class="branch"><span>Não ↺ continuar acompanhamento</span><span>Sim ↓</span></div>
+      <div class="node risk"><b>B4 · Pagar saldo ao fornecedor</b><span>Registrar segunda cotação cambial</span></div><div class="arrow">↓</div>
+      <div class="node decision"><b>B5 · Cotar múltiplos agentes?</b><span>RFQ opcional, recomendada para reduzir custo</span></div>
+      <div class="branch"><span>Não → cotação direta</span><span>Sim → comparar propostas</span></div>
+      <div class="node process"><b>B6 · Definir agente e frete</b><span>Modalidade, transit time e free time</span></div><div class="arrow">↓</div>
+      <div class="node process"><b>B7 · Booking + cadastro do embarque</b><span>Portos, navio, BL/AWB e contêineres</span></div><div class="arrow">↓</div>
+      <div class="node decision"><b>B8 · Navio partiu no ETD?</b></div>
+      <div class="branch"><span>Não ↺ registrar rolagem e reprogramar</span><span>Sim ↓</span></div>
+      <div class="node process"><b>B9 · Vincular P.I. ao embarque</b></div><div class="arrow">↓</div>
+      <div class="node terminal">ABRIR TRILHAS C E D EM PARALELO</div>
+    </div>
+  </section>
+
+  <section class="flow-view" data-view="c" aria-label="Fase C — preparação paralela da obra">
+    <div class="parallel three">
+      <div class="lane"><div class="lane-label">ENGENHARIA / OBRA</div><div class="node process">C1 · Vistoria Fase 1</div><div class="arrow">↓</div><div class="node process">C2 · Vistoria Fase 2</div><div class="arrow">↓</div><div class="node process">C3 · Vistoria Fase 3</div><div class="arrow">↓</div><div class="node decision">Mais vistoria?</div><div class="branch vertical"><span>Sim → C4 · avulsa</span><span>Não ↓</span></div><div class="node process">C8 · Verificar andaime/munck</div><div class="arrow">↓</div><div class="node decision">Recurso necessário?</div><div class="branch vertical"><span>Sim → C9 · IMS providencia</span><span>Não ↓</span></div><div class="node process">C10 · Providenciar ART</div></div>
+      <div class="lane accent-lane"><div class="lane-label">INSTALADOR</div><div class="node decision">C5 · CEO aprova contratação?</div><div class="branch vertical"><span>Não ↺ revisar contratação</span><span>Sim ↓</span></div><div class="node process">C6 · RH homologa parceiro</div><div class="arrow">↓</div><div class="node decision">5 documentos válidos?</div><div class="branch vertical"><span>Não ↺ regularizar</span><span>Sim ↓</span></div><div class="node process">C7 · Vincular instalador à obra</div></div>
+      <div class="lane"><div class="lane-label">RECEPÇÃO</div><div class="node process">C11 · Escalar equipe própria</div><div class="arrow">↓</div><div class="node decision">Há ≥2 pessoas confirmadas?</div><div class="branch vertical"><span>Não ↺ recompor equipe</span><span>Sim ↓</span></div><div class="node process">Registrar nomes e quantidade</div></div>
+    </div>
+    <div class="join">OBRA PRONTA + INSTALADOR HOMOLOGADO E VINCULADO + RECURSOS E EQUIPE CONFIRMADOS</div>
+  </section>
+
+  <section class="flow-view" data-view="d" aria-label="Fase D — desembaraço aduaneiro">
+    <div class="flow-stack">
+      <div class="node terminal">D1 · ETA CONFIRMADO EM SANTOS</div><div class="arrow">↓</div>
+      <div class="node process">D2 · Despachante registra DUIMP</div><div class="arrow">↓</div>
+      <div class="node decision"><b>D3 · Qual foi o canal?</b></div>
+      <div class="branch"><span>Verde → liberação</span><span>Amarelo/Vermelho/Cinza ↓</span></div>
+      <div class="node risk"><b>D4 · Conferência extra</b><span>Registrar status, motivo e data</span></div><div class="arrow">↓</div>
+      <div class="node decision"><b>Carga liberada dentro do free time?</b><span>D5 · prazo contratado em B6</span></div>
+      <div class="branch"><span>Não → demurrage + tratar pendência</span><span>Sim ↓</span></div>
+      <div class="node process">D6 · Faturamento do desembaraço</div><div class="arrow">↓</div>
+      <div class="node process">D7 · Alocar transporte para retirada</div><div class="arrow">↓</div>
+      <div class="node decision">D8 · Precisa munck/empilhadeira?</div><div class="branch"><span>Sim → alocar no IMS</span><span>Não ↓</span></div>
+      <div class="node process">D9 · Emitir NF-e</div><div class="arrow">↓</div>
+      <div class="node process risk">D10 · Devolver contêiner no prazo</div><div class="arrow">↓</div>
+      <div class="node terminal">CARGA LIBERADA PARA ENTREGA</div>
+    </div>
+  </section>
+
+  <section class="flow-view" data-view="e" aria-label="Fase E — liberação, entrega e instalação">
+    <div class="flow-stack">
+      <div class="node decision"><b>E1 · GATE DE INSTALAÇÃO</b><span>Contrato assinado?</span></div><div class="arrow">＋</div>
+      <div class="node decision"><span>Pagamento F1 liberado?</span></div><div class="arrow">＋</div>
+      <div class="node decision"><span>PDF do projeto recebido?</span></div>
+      <div class="branch"><span>Qualquer “Não” ↺ cobrar requisito</span><span>Todos “Sim” ↓</span></div>
+      <div class="node process">E2 · Transportar ao cliente/CD</div><div class="arrow">↓</div>
+      <div class="node decision"><b>E3 · Recepção com ≥2 pessoas?</b></div><div class="branch"><span>Não → não concluir entrega</span><span>Sim → registrar responsáveis</span></div>
+      <div class="node decision"><b>Instalador homologado e vinculado?</b><span>Dependências C6 + C7</span></div><div class="branch"><span>Não ↺ voltar à preparação</span><span>Sim ↓</span></div>
+      <div class="node process">E4 · Iniciar instalação em campo</div><div class="arrow">↓</div>
+      <div class="node process">E5 · Acompanhar Status de Obras</div><div class="arrow">↓</div>
+      <div class="node terminal">INSTALAÇÃO CONCLUÍDA</div>
+    </div>
+  </section>
+
+  <section class="flow-view" data-view="f" aria-label="Fase F — documentação e entrega final">
+    <div class="flow-stack">
+      <div class="node terminal">INSTALAÇÃO CONCLUÍDA</div><div class="arrow">↓</div>
+      <div class="check-grid">
+        <div class="node process">F1 · ART registrada e entregue</div><div class="node process">F2 · Data Book carregado</div><div class="node process">F3 · Equipamento testado</div><div class="node process">F4 · Manuais entregues</div><div class="node process">F5 · Data Book assinado</div><div class="node process">F6 · Certificados e ART entregues</div><div class="node process">F7 · Treinamento realizado</div><div class="node process">F8 · Suporte 24/7 confirmado</div><div class="node process">F9 · Garantia explicada</div>
+      </div>
+      <div class="arrow">↓</div><div class="node decision"><b>Todos os requisitos concluídos?</b></div>
+      <div class="branch"><span>Não ↺ identificar e concluir pendência</span><span>Sim ↓</span></div>
+      <div class="node process">F10 · Cliente assina Termo de Entrega</div><div class="arrow">↓</div>
+      <div class="node process">F11 · Transferir para Escamax</div><div class="arrow">↓</div>
+      <div class="node terminal">FIM · PÓS-VENDA / MANUTENÇÃO</div>
+    </div>
+  </section>
+
+  <div class="legend text-small" aria-label="Legenda"><span><i class="lg terminal-lg"></i> Início/fim</span><span><i class="lg process-lg"></i> Processo</span><span><i class="lg decision-lg"></i> Decisão/gate</span><span><i class="lg risk-lg"></i> Ponto de custo/risco</span></div>
+</div>
+
+<style>
+#import-flow{color:var(--foreground);width:100%;padding:4px 0}#import-flow *{box-sizing:border-box}.flow-view{display:none;margin-top:18px}.flow-view.is-active{display:block}.flow-stack{display:flex;flex-direction:column;align-items:center;width:100%;max-width:720px;margin:0 auto}.node{width:min(100%,520px);padding:12px 16px;text-align:center;background:color-mix(in srgb,var(--viz-series-1) 10%,var(--background));color:var(--foreground);border:1px solid var(--border);border-radius:10px}.node span{display:block;margin-top:4px;color:var(--muted-foreground)}.node.terminal{border-radius:999px;background:var(--primary);color:var(--primary-foreground);border-color:transparent}.node.terminal span{color:var(--primary-foreground)}.node.phase{background:color-mix(in srgb,var(--viz-series-1) 16%,var(--background));border-color:color-mix(in srgb,var(--viz-series-1) 45%,var(--border))}.node.process{background:color-mix(in srgb,var(--viz-series-2) 10%,var(--background))}.node.decision{width:min(92%,440px);clip-path:polygon(12% 0,88% 0,100% 50%,88% 100%,12% 100%,0 50%);border:0;border-radius:0;padding:18px 42px;background:color-mix(in srgb,var(--viz-series-3) 19%,var(--background))}.node.risk,.risk{background:color-mix(in srgb,var(--viz-series-5) 16%,var(--background));border-color:color-mix(in srgb,var(--viz-series-5) 45%,var(--border))}.arrow{min-height:28px;display:flex;align-items:center;justify-content:center;color:var(--muted-foreground);font-weight:500;text-align:center}.arrow.split{min-height:44px}.branch{display:flex;width:min(100%,560px);justify-content:space-between;gap:16px;padding:8px 18px 12px;color:var(--muted-foreground)}.branch span:last-child{text-align:right}.parallel{display:grid;grid-template-columns:1fr 1fr;gap:26px;width:100%;margin:8px 0 16px}.parallel.three{grid-template-columns:repeat(3,1fr);align-items:start}.lane{display:flex;flex-direction:column;align-items:center;padding:12px 8px;border-top:3px solid var(--viz-series-2)}.lane.accent-lane{border-top-color:var(--viz-series-3)}.lane-label{font-weight:500;text-align:center;margin-bottom:12px;color:var(--muted-foreground)}.lane .node{width:100%}.lane .node.decision{padding:18px 24px}.branch.vertical{flex-direction:column;align-items:center;text-align:center;padding:6px}.branch.vertical span:last-child{text-align:center}.join{width:100%;padding:12px;text-align:center;border-top:2px solid var(--border);border-bottom:2px solid var(--border);font-weight:500;margin:10px 0}.check-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;width:100%}.check-grid .node{width:100%;padding:10px}.legend{display:flex;gap:18px;justify-content:center;flex-wrap:wrap;margin-top:20px;color:var(--muted-foreground)}.legend span{display:flex;align-items:center;gap:6px}.lg{width:14px;height:10px;display:inline-block;border:1px solid var(--border)}.terminal-lg{border-radius:999px;background:var(--primary)}.process-lg{background:color-mix(in srgb,var(--viz-series-2) 20%,var(--background))}.decision-lg{clip-path:polygon(15% 0,85% 0,100% 50%,85% 100%,15% 100%,0 50%);background:color-mix(in srgb,var(--viz-series-3) 30%,var(--background))}.risk-lg{background:color-mix(in srgb,var(--viz-series-5) 30%,var(--background))}@media(max-width:620px){.parallel,.parallel.three{grid-template-columns:1fr}.check-grid{grid-template-columns:1fr 1fr}.branch{font-size:.92em}.node.decision{padding-left:34px;padding-right:34px}}@media(max-width:390px){.check-grid{grid-template-columns:1fr}.branch{flex-direction:column;align-items:center}.branch span:last-child{text-align:center}}
+</style>
+
+<script>
+(function(){
+  const root=document.getElementById('import-flow');
+  if(!root)return;
+  const buttons=Array.from(root.querySelectorAll('[data-phase]'));
+  const views=Array.from(root.querySelectorAll('[data-view]'));
+  buttons.forEach(function(button){
+    button.addEventListener('click',function(){
+      const phase=button.getAttribute('data-phase');
+      buttons.forEach(function(item){const active=item===button;item.setAttribute('aria-pressed',String(active));item.classList.toggle('btn-primary',active);});
+      views.forEach(function(view){view.classList.toggle('is-active',view.getAttribute('data-view')===phase);});
+    });
+  });
+})();
+</script>
