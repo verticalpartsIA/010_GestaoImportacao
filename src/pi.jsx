@@ -232,7 +232,10 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
      isso a P.I. fica "solta", sem ligação nenhuma com o que o cliente
      pediu. Busca via o mesmo motor de herança já usado pela Proposta
      (PropostaHeranca) e mostra o Master ID (ex.: VPEL-EL0902) confirmando
-     a cotação certa antes de seguir. */
+     a cotação certa antes de seguir.
+     15/09 — Herança automática de Produtos: quando a cotação é encontrada,
+     popula automaticamente form.itens com os modelos/quantidades/valores
+     da precificação. Só em Nova P.I., não em edição. */
   React.useEffect(() => {
     if (isEdit || !form.numero_cotacao || !window.PropostaHeranca || !window.MasterIdEngine) { setCotacaoInfo(null); return; }
     let cancelado = false;
@@ -245,6 +248,22 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
         const cliente = (fontes.cliente || {}).razao_social || null;
         const fornecedor = (fontes.cotacao || {}).fornecedor || null;
         setCotacaoInfo({ encontrada: true, masterId, cliente, fornecedor });
+
+        /* Herança automática dos Produtos (modelos da precificação) */
+        if (fontes.precificacao && fontes.precificacao.modelos && fontes.precificacao.modelos.length > 0) {
+          const itensHerdados = fontes.precificacao.modelos.map((m) => ({
+            descricao_produto: m.modelo || 'Equipamento',
+            codigo_produto: '',
+            quantidade: m.quantidade || 1,
+            unidade_medida: 'un',
+            ncm: '',
+            valor_unitario: m.valorUnitarioUsd || 0,
+          }));
+          console.log('[PIForm] Herdando', itensHerdados.length, 'itens da cotação', fontes.numeroCotacao);
+          setForm((f) => ({ ...f, itens: itensHerdados }));
+        } else {
+          console.log('[PIForm] Cotação encontrada mas sem modelos:', fontes.numeroCotacao, 'precificacao:', !!fontes.precificacao, 'modelos:', fontes.precificacao?.modelos?.length);
+        }
       })
       .catch(() => { if (!cancelado) setCotacaoInfo({ encontrada: false }); });
     return () => { cancelado = true; };
