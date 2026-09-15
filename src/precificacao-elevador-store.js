@@ -553,7 +553,14 @@
      Financeiro já tenha digitado (câmbio, frete, percentuais). Sem
      cotacao_fornecedor_id (fluxo "direto pra Precificação") não há o que
      ressincronizar — lança erro claro em vez de silenciar. */
-  async function ressincronizarDoFornecedor(precificacaoId) {
+  /* 15/09 — achado real (auditoria do tour.md): esta função sobrescrevia
+     modelo/valorUnitarioUsd/vmle_usd incondicionalmente, mesmo quando o
+     Financeiro já tinha corrigido esses valores manualmente na tela — sem
+     diff, sem aviso, sem chance de cancelar. Agora sempre calcula o diff
+     contra os valores atuais; com dryRun:true (default) só retorna o que
+     mudaria, sem gravar — o chamador decide se avisa o usuário antes de
+     confirmar a gravação de verdade (dryRun:false). */
+  async function ressincronizarDoFornecedor(precificacaoId, { dryRun = true } = {}) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const pz = await obter(precificacaoId);
     if (!pz.cotacao_fornecedor_id) throw new Error('Esta precificação não veio de uma Cotação a Fornecedor — nada para ressincronizar.');
@@ -563,12 +570,21 @@
     if (!itensResposta.length) throw new Error('O fornecedor ainda não respondeu esta cotação.');
     const itemPorUnidade = {}; itensResposta.forEach((it) => { itemPorUnidade[it.unidade_id] = it; });
 
+    const diffs = [];
     const modelos = (pz.modelos || []).map((m) => {
       const item = itemPorUnidade[m.unidadeId];
       if (!item) return m;
-      return { ...m, modelo: item.modelo_fornecedor || m.modelo, valorUnitarioUsd: window.parseMoeda(item.preco_unitario) };
+      const modeloNovo = item.modelo_fornecedor || m.modelo;
+      const valorNovo = window.parseMoeda(item.preco_unitario);
+      if (modeloNovo !== m.modelo || valorNovo !== m.valorUnitarioUsd) {
+        diffs.push({ unidadeId: m.unidadeId, de: { modelo: m.modelo, valorUnitarioUsd: m.valorUnitarioUsd }, para: { modelo: modeloNovo, valorUnitarioUsd: valorNovo } });
+      }
+      return { ...m, modelo: modeloNovo, valorUnitarioUsd: valorNovo };
     });
     const vmleUsd = itensResposta.reduce((s, it) => s + window.parseMoeda(it.preco_total), 0);
+    if (vmleUsd !== (Number(pz.vmle_usd) || 0)) {
+      diffs.push({ unidadeId: null, de: { vmle_usd: pz.vmle_usd }, para: { vmle_usd: vmleUsd } });
+    }
     // Câmbio congelado: só preenche se ainda não tinha (precificação nasceu
     // antes dessa coluna existir, ou antes do fornecedor ter câmbio salvo) —
     // depois de setado uma vez, nunca reescreve (é congelado por definição).
@@ -576,8 +592,9 @@
     if (pz.cambio_na_cotacao_usd_brl == null && cotFornecedor.cambio_na_resposta_usd_brl != null) {
       patch.cambio_na_cotacao_usd_brl = cotFornecedor.cambio_na_resposta_usd_brl;
     }
+    if (dryRun) return { modelos, vmle_usd: vmleUsd, diffs };
     await salvar(precificacaoId, patch);
-    return { modelos, vmle_usd: vmleUsd };
+    return { modelos, vmle_usd: vmleUsd, diffs };
   }
 
   window.PrecificacaoElevadorStore = {

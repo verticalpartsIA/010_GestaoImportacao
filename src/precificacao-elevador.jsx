@@ -217,7 +217,22 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const ressincronizarDoFornecedor = async () => {
     setRessincronizando(true);
     try {
-      await window.PrecificacaoElevadorStore.ressincronizarDoFornecedor(pz.id);
+      /* 15/09 — achado real (auditoria do tour.md): antes esta ação
+         sobrescrevia modelo/valor das unidades sem avisar, mesmo quando o
+         Financeiro tinha corrigido manualmente na tela. Agora faz um
+         dry-run primeiro, mostra exatamente o que vai mudar e só grava
+         depois de confirmação explícita. */
+      const preview = await window.PrecificacaoElevadorStore.ressincronizarDoFornecedor(pz.id, { dryRun: true });
+      if (!preview.diffs.length) {
+        window.toast?.('Já está sincronizado — nada mudou.', 'info');
+        return;
+      }
+      const linhas = preview.diffs.map((d) => d.unidadeId
+        ? `• Unidade ${d.unidadeId}: modelo "${d.de.modelo || '—'}" → "${d.para.modelo || '—'}", valor US$ ${d.de.valorUnitarioUsd ?? 0} → US$ ${d.para.valorUnitarioUsd ?? 0}`
+        : `• VMLE total: US$ ${d.de.vmle_usd ?? 0} → US$ ${d.para.vmle_usd ?? 0}`);
+      const ok = window.confirm('Isso vai sobrescrever os seguintes valores (incluindo eventuais correções manuais já feitas):\n\n' + linhas.join('\n') + '\n\nConfirmar ressincronização?');
+      if (!ok) return;
+      await window.PrecificacaoElevadorStore.ressincronizarDoFornecedor(pz.id, { dryRun: false });
       await carregar();
       window.toast?.('Valores do fornecedor ressincronizados.', 'success');
     } catch (e) {
@@ -691,12 +706,27 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         const moRs = Number(itensInst[0] ? itensInst[0].valor : 0) || 0;
         const custosOperacionaisRs = itensInst.slice(1).reduce((s, it) => s + (Number(it.valor) || 0), 0);
         const freteInternoRs = Number(pz.frete_interno_rs) || 0;
+        /* 15/09 — achado real (auditoria do tour.md): a soma abaixo cobria só
+           6 das ~15 linhas que o usuário efetivamente preenche nas seções
+           acima (faltavam Siscomex, Despachante+Desembaraço, Demurrage,
+           Outras despesas, Armazenagem, Containers, Despesas Extras avulsas,
+           Contingência e Outros custos não recuperáveis) — o rótulo "Soma"
+           só avisava da ausência do Imposto, nunca dessas 9 outras lacunas,
+           passando falsa impressão de custo total. Completando a soma com
+           todos os campos que já existem nas seções acima. */
+        const despesasImportacaoRs = (Number(pz.siscomex_rs) || 0) + (Number(pz.despachante_desembaraco_rs) || 0)
+          + (Number(pz.demurrage_rs) || 0) + (Number(pz.outras_despesas_importacao_rs) || 0);
+        const armazenagemRs = Number(pz.armazenagem_rs) || 0;
+        const despesasExtrasRs = (pz.itens_despesas_extras || []).reduce((s, it) => s + (Number(it.valor) || 0), 0);
+        const contingenciaOutrosRs = (Number(pz.contingencia_valor) || 0) + (Number(pz.outros_custos_nao_recuperaveis_rs) || 0);
         const impImportacao = (pz.resultado_v2 || pz.resultado || {}).importacao;
         const custosImpostoRs = impImportacao
           ? (Number(impImportacao.ii) || 0) + (Number(impImportacao.ipi) || 0) + (Number(impImportacao.pis) || 0)
             + (Number(impImportacao.cofins) || 0) + (Number(impImportacao.icms) || 0)
           : null;
-        const somaRs = custosEquipamentosRs + custosFreteRs + moRs + custosOperacionaisRs + freteInternoRs + (custosImpostoRs || 0);
+        const somaRs = custosEquipamentosRs + custosFreteRs + moRs + custosOperacionaisRs + freteInternoRs
+          + despesasImportacaoRs + armazenagemRs + containersTotalRs + despesasExtrasRs + contingenciaOutrosRs
+          + (custosImpostoRs || 0);
         const linha = (label, valor) => (
           <div className="row sb" style={{ padding: '4px 0' }}>
             <span className="small">{label}</span>
@@ -711,6 +741,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               {linha('Mão de Obra', moRs)}
               {linha('Custos Operacionais (Empilhadeira, Munck...)', custosOperacionaisRs)}
               {linha('Frete Interno (no Brasil)', freteInternoRs)}
+              {linha('Despesas de Importação (Siscomex, Despachante, Demurrage, Outras)', despesasImportacaoRs)}
+              {linha('Armazenagem', armazenagemRs)}
+              {linha('Containers', containersTotalRs)}
+              {linha('Despesas Extras (itens avulsos)', despesasExtrasRs)}
+              {linha('Contingência e Outros custos não recuperáveis', contingenciaOutrosRs)}
               {linha('Custos Imposto', custosImpostoRs)}
               <div className="row sb" style={{ borderTop: '2px solid var(--border)', paddingTop: 10, marginTop: 6 }}>
                 <span style={{ fontWeight: 700 }}>Soma{custosImpostoRs == null ? ' (parcial — falta Custos Imposto)' : ''}</span>
