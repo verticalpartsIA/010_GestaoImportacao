@@ -94,7 +94,7 @@ function ModalNovoContrato({ onClose, onSaved, tipoDefault = 'cliente' }) {
     setSaving(true);
     const ano = new Date().getFullYear();
     const id = 'CTR-' + String(Date.now()).slice(-4) + '/' + ano;
-    const { error } = await window.__VP_SB.sb.from('contratos_venda_equipamentos').insert({
+    const novoContrato = {
       id,
       client: f.client,
       project_id: f.projeto || null,
@@ -106,11 +106,18 @@ function ModalNovoContrato({ onClose, onSaved, tipoDefault = 'cliente' }) {
       days_pending: 0,
       tipo_contrato: f.tipo_contrato,
       dados: { numero: id, propostaRef: f.projeto },
-    });
+    };
+    const { error } = await window.__VP_SB.sb.from('contratos_venda_equipamentos').insert(novoContrato);
     setSaving(false);
     if (error) return window.toast('Erro: ' + error.message, 'error');
     window.toast('Contrato criado! Preencha os dados no editor.', 'success');
-    onSaved?.(); onClose();
+    /* 15/09 — achado real (auditoria do tour.md): o botão diz "Criar e
+       Abrir Editor" e o toast promete "Preencha os dados no editor", mas
+       onSaved() não recebia nada — o chamador só recarregava a lista,
+       deixando o usuário na tela de lista, tendo que achar o card novo e
+       clicar Editar manualmente. Repassa o registro recém-criado pro
+       onSaved poder abrir o editor de verdade. */
+    onSaved?.(novoContrato); onClose();
   };
 
   const fld = (label, key, type = 'text', ph = '', opts = null) => (
@@ -450,7 +457,7 @@ function JuridicoPage({ setRoute, setSubsel }) {
         <ModalNovoContrato
           tipoDefault="cliente"
           onClose={() => setShowNovo(false)}
-          onSaved={() => { reload(); setShowNovo(false); }}/>
+          onSaved={(novoContrato) => { setShowNovo(false); if (novoContrato) openEditor(novoContrato); else reload(); }}/>
       )}
     </div>
   );

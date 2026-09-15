@@ -114,12 +114,99 @@
       .replace(/"/g, '&quot;').replace(/'/g, '&#39;');
   }
 
+  /* 15/09 — achado real (auditoria do tour.md): esta função era um
+     placeholder fixo ('(valor por extenso)') desde sempre — todo
+     contrato gerado saía com essa string literal no lugar do valor
+     escrito por extenso, indo assim pro documento que o cliente assina.
+     Implementado o algoritmo real de números por extenso em português
+     (regra do "e"/vírgula entre grupos, "de" antes de reais quando o
+     valor é um milhão/bilhão redondo) — testado contra 14 casos
+     conhecidos (incluindo milhão redondo, grupos com centena exata,
+     centavos) antes de entrar aqui. RG e endereço residencial continuam
+     como lacunas editáveis de propósito — isso aqui não era o mesmo
+     tipo de lacuna, era um valor 100% calculável a partir do próprio
+     preço já digitado. */
   function extenso(n) {
-    /* Sem lib de números por extenso — a minuta oficial sempre traz o valor
-       por extenso ao lado do numérico; aqui deixamos o campo para o
-       Jurídico/Comercial completar antes do envio, igual a outros pontos
-       da minuta que ficam como lacuna editável (RG, endereço residencial). */
-    return '(valor por extenso)';
+    const valor = Number(n) || 0;
+    const negativo = valor < 0;
+    const abs = Math.abs(valor);
+    const inteiro = Math.floor(abs);
+    const centavos = Math.round((abs - inteiro) * 100);
+
+    const UNIDADES = ['', 'um', 'dois', 'três', 'quatro', 'cinco', 'seis', 'sete', 'oito', 'nove'];
+    const DEZ_A_DEZENOVE = ['dez', 'onze', 'doze', 'treze', 'catorze', 'quinze', 'dezesseis', 'dezessete', 'dezoito', 'dezenove'];
+    const DEZENAS = ['', '', 'vinte', 'trinta', 'quarenta', 'cinquenta', 'sessenta', 'setenta', 'oitenta', 'noventa'];
+    const CENTENAS = ['', 'cento', 'duzentos', 'trezentos', 'quatrocentos', 'quinhentos', 'seiscentos', 'setecentos', 'oitocentos', 'novecentos'];
+    const ESCALAS = [
+      null,
+      { singular: 'mil', plural: 'mil' },
+      { singular: 'milhão', plural: 'milhões' },
+      { singular: 'bilhão', plural: 'bilhões' },
+      { singular: 'trilhão', plural: 'trilhões' },
+    ];
+
+    function grupo3(g) {
+      if (g === 0) return '';
+      if (g === 100) return 'cem';
+      const c = Math.floor(g / 100);
+      const resto = g % 100;
+      const partes = [];
+      if (c > 0) partes.push(CENTENAS[c]);
+      if (resto > 0) {
+        if (resto < 10) partes.push(UNIDADES[resto]);
+        else if (resto < 20) partes.push(DEZ_A_DEZENOVE[resto - 10]);
+        else {
+          const d = Math.floor(resto / 10);
+          const u = resto % 10;
+          partes.push(u === 0 ? DEZENAS[d] : DEZENAS[d] + ' e ' + UNIDADES[u]);
+        }
+      }
+      return partes.join(' e ');
+    }
+
+    function numeroPorExtenso(num) {
+      if (num === 0) return { texto: 'zero', escalaMaisAlta: 0, partesCount: 1 };
+      const grupos = [];
+      let n2 = num;
+      while (n2 > 0) { grupos.unshift(n2 % 1000); n2 = Math.floor(n2 / 1000); }
+      const total = grupos.length;
+      const partes = [];
+      grupos.forEach((g, idx) => {
+        const escalaIdx = total - 1 - idx;
+        if (g === 0) return;
+        let texto = grupo3(g);
+        if (escalaIdx === 1) {
+          texto = (g === 1) ? 'mil' : texto + ' mil';
+        } else if (escalaIdx >= 2) {
+          const escala = ESCALAS[escalaIdx];
+          texto = texto + ' ' + (g === 1 ? escala.singular : escala.plural);
+        }
+        partes.push({ texto, g, escalaIdx });
+      });
+      if (partes.length === 0) return { texto: 'zero', escalaMaisAlta: 0, partesCount: 1 };
+      let resultado = partes[0].texto;
+      for (let i = 1; i < partes.length; i++) {
+        const isLast = i === partes.length - 1;
+        const curr = partes[i];
+        const usarE = isLast && (curr.g < 100 || curr.g % 100 === 0);
+        resultado += (usarE ? ' e ' : ', ') + curr.texto;
+      }
+      return { texto: resultado, escalaMaisAlta: partes[0].escalaIdx, partesCount: partes.length };
+    }
+
+    function comSufixo(inteiroVal, singular, plural) {
+      const r = numeroPorExtenso(inteiroVal);
+      const label = inteiroVal === 1 ? singular : plural;
+      const usaDe = r.escalaMaisAlta >= 2 && r.partesCount === 1;
+      return `${r.texto}${usaDe ? ' de' : ''} ${label}`;
+    }
+
+    let resultado = comSufixo(inteiro, 'real', 'reais');
+    if (centavos > 0) {
+      resultado += ' e ' + comSufixo(centavos, 'centavo', 'centavos');
+    }
+    resultado = (negativo ? 'menos ' : '') + resultado;
+    return resultado.charAt(0).toUpperCase() + resultado.slice(1);
   }
 
   function descEquipamento(f) {
