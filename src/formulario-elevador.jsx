@@ -622,7 +622,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
               <FEField label="Modelo de porta"><FESelect value={unidade.porta_modelo} onChange={set('porta_modelo')} options={opcoes.porta} placeholder="— selecione o modelo primeiro —"/></FEField>
               <FEField label="Largura (mm)"><FEInput type="number" value={unidade.porta_largura_mm} onChange={set('porta_largura_mm')}/></FEField>
               <FEField label="Altura (mm)"><FEInput type="number" value={unidade.porta_altura_mm} onChange={set('porta_altura_mm')}/></FEField>
-              <FEField label="Aço da Cabina"><FESelect value={unidade.aco_cabina} onChange={set('aco_cabina')} options={['Aço 430', 'Aço 304']}/></FEField>
+              <FEField label="Aço da Cabina"><FESelect value={unidade.aco_cabina} onChange={set('aco_cabina')} options={['Aço 430', 'Aço 304']} placeholder="— escolha —"/></FEField>
               <FEField label="Acabamento porta cabina"><FESelect value={unidade.acabamento_porta_cabina} onChange={set('acabamento_porta_cabina')} options={['Aço 430', 'Aço 304']}/></FEField>
               <FEField label="Acabamento porta pavimento"><FESelect value={unidade.acabamento_porta_pavimento} onChange={set('acabamento_porta_pavimento')} options={['Aço 430', 'Aço 304']}/></FEField>
               <FEField label="Classe corta-fogo"><FESelect value={unidade.classe_corta_fogo} onChange={set('classe_corta_fogo')} options={['Nenhuma', 'E120', 'EI60', 'EI120']}/></FEField>
