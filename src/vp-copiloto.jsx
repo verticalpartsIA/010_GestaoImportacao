@@ -36,6 +36,12 @@ function vpcClean(s) { return (s || '').replace(/\s+/g, ' ').replace(/\*\s*$/, '
    rótulo exibido (vpcLabelFor, que limpa) quanto pra detectar obrigatório
    por convenção de UI (vpcRequired, que olha o "*" antes de limpar). */
 function vpcRawLabelText(el) {
+  // Checkbox direto dentro de <label>texto<input/></label> (padrão usado em
+  // "usar padrão comercial" / "Confirmado pela engenharia" etc.) — o
+  // <label> É o próprio pai, não um descendente de um pai mais acima.
+  if (el.parentElement && el.parentElement.tagName === 'LABEL') {
+    return el.parentElement.textContent || '';
+  }
   if (el.id) {
     try {
       const sel = 'label[for="' + (window.CSS && CSS.escape ? CSS.escape(el.id) : el.id) + '"]';
@@ -79,16 +85,17 @@ function vpcScanPage() {
   nodes.forEach((el) => {
     const tag = el.tagName.toLowerCase();
     const type = (el.getAttribute('type') || '').toLowerCase();
-    if (['hidden', 'file', 'submit', 'button', 'checkbox', 'radio', 'range'].includes(type)) return;
+    if (['hidden', 'file', 'submit', 'button', 'radio', 'range'].includes(type)) return;
     if (el.disabled || el.readOnly) return;
     // visível?
     if (!(el.offsetWidth || el.offsetHeight || el.getClientRects().length)) return;
     const isSelect = tag === 'select';
+    const isCheckbox = type === 'checkbox';
     const f = {
       idx: i,
       label: vpcLabelFor(el),
-      type: isSelect ? 'select' : (tag === 'textarea' ? 'textarea' : (type || 'text')),
-      value: el.value || '',
+      type: isSelect ? 'select' : (tag === 'textarea' ? 'textarea' : isCheckbox ? 'checkbox' : (type || 'text')),
+      value: isCheckbox ? !!el.checked : (el.value || ''),
       required: vpcRequired(el),
     };
     if (isSelect) f.options = Array.from(el.options).map(o => o.value).filter(v => v !== '');
@@ -107,6 +114,13 @@ function vpcDocText() {
 /* ---------- Preenchimento (React-compatível) ---------- */
 function vpcSetValue(el, value) {
   const tag = el.tagName;
+  if (tag === 'INPUT' && el.type === 'checkbox') {
+    const desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked');
+    if (desc && desc.set) desc.set.call(el, !!value); else el.checked = !!value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return;
+  }
   const proto = tag === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype
     : tag === 'SELECT' ? window.HTMLSelectElement.prototype
     : window.HTMLInputElement.prototype;
@@ -129,6 +143,8 @@ function vpcApplyFills(fills, els) {
         || opts.find(o => o.textContent.trim().toLowerCase() === String(v).toLowerCase());
       if (!m) continue;
       v = m.value;
+    } else if (el.tagName === 'INPUT' && el.type === 'checkbox') {
+      v = (v === true || v === 'true' || v === 1 || v === '1');
     }
     vpcSetValue(el, v);
     try {
