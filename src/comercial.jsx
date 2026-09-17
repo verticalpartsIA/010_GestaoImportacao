@@ -737,7 +737,7 @@ const FE_CATEGORIAS = [
   { id: 'mod-elevador', label: 'Modernização Elevador', icon: 'tool', pronto: false },
   { id: 'mod-er-es', label: 'Modernização Escadas e Esteiras', icon: 'tool', pronto: false },
   { id: 'maquina-tracao', label: 'Máquina de Tração', icon: 'grid', pronto: false },
-  { id: 'quadro-comando', label: 'Quadro de Comando', icon: 'grid', pronto: false },
+  { id: 'quadro-comando', label: 'Quadro de Comando', icon: 'grid', route: 'quadro-comando', pronto: true },
   { id: 'portas', label: 'Portas', icon: 'grid', pronto: false },
 ];
 
