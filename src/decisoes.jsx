@@ -7,6 +7,36 @@
 
 function fmtDataHora(d) { return d ? new Date(d).toLocaleString('pt-BR') : '—'; }
 
+/* Gera URL pra navegar até o documento que precisa ser aprovado */
+function gerarLinkDecisao(decisao) {
+  const ctx = decisao.contexto || {};
+
+  // Cotação — vai pro formulário de cotação
+  if (decisao.numero_cotacao != null) {
+    return `?page=formulario-elevador&id=${decisao.numero_cotacao}`;
+  }
+
+  // Dossier de obra
+  if (decisao.dossier_id) {
+    return `?page=dossier-obra&id=${decisao.dossier_id}`;
+  }
+
+  // Referência genérica (tabela + id)
+  if (decisao.referencia_tabela && decisao.referencia_id) {
+    // Mapa de tabelas → páginas
+    const tabelaPagina = {
+      'formularios_elevador': 'formulario-elevador',
+      'formularios_rfq': 'formulario-rfq',
+      'formularios_ims': 'formulario-ims',
+    };
+    const page = tabelaPagina[decisao.referencia_tabela] || decisao.referencia_tabela;
+    return `?page=${page}&id=${decisao.referencia_id}`;
+  }
+
+  // Fallback: nenhum link
+  return null;
+}
+
 function DecModalReprovar({ decisao, onClose, onSaved }) {
   const [motivo, setMotivo] = React.useState('');
   const [saving, setSaving] = React.useState(false);
@@ -58,6 +88,8 @@ function DecCard({ decisao, onReload }) {
     finally { setBusy(false); }
   };
 
+  const linkDocumento = gerarLinkDecisao(decisao);
+
   return (
     <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
@@ -80,6 +112,7 @@ function DecCard({ decisao, onReload }) {
       </div>
       {souAprovador && (
         <div className="row gap-2">
+          {linkDocumento && <Button variant="outline" size="sm" onClick={() => window.location.href = linkDocumento}>Ver documento</Button>}
           <Button variant="danger" size="sm" onClick={() => setReprovando(true)} disabled={busy}>Reprovar</Button>
           <Button variant="primary" size="sm" onClick={aprovar} disabled={busy}>{busy ? 'Salvando…' : 'Aprovar'}</Button>
         </div>
