@@ -131,21 +131,114 @@
     E: 'E. Opcionais / Options',
   };
 
+  /* ---------- Especificação técnica — Quadro de Comando (Ramo B: comprar
+     pronto de fornecedor). Mesmo padrão de CEF_SPEC_DEFS/CEF_SECAO_TITULO
+     acima, só que a "unidade" aqui é um objeto sintético montado por
+     QuadroComandoStore a partir de quadros_comando + _maquina + _geometria +
+     _paradas (não uma linha de formularios_elevador_unidades). Campos
+     combinados com o usuário em conversa antes de implementar. */
+  function cefBool(v) { return v === true ? 'Sim / Yes' : v === false ? 'Não / No' : ''; }
+  const CEF_SPEC_DEFS_QUADRO_COMANDO = [
+    { key: 'quantidade_quadros', pt: 'Quantidade de quadros idênticos', en: 'Quantity (identical panels)', secao: 'A', get: (u) => u.quantidade_quadros || 1 },
+    { key: 'aplicacao', pt: 'Aplicação', en: 'Application', secao: 'A', get: (u) => u.aplicacao },
+    { key: 'novo_modernizacao', pt: 'Novo / Modernização', en: 'New / Modernization', secao: 'A', get: (u) => u.novo_modernizacao },
+    { key: 'fabricante_desejado', pt: 'Fabricante desejado', en: 'Preferred Manufacturer', secao: 'A', get: (u) => u.fabricante_desejado },
+    { key: 'modelo_desejado', pt: 'Modelo desejado', en: 'Preferred Model', secao: 'A', get: (u) => u.modelo_desejado },
+
+    { key: 'capacidade', pt: 'Capacidade', en: 'Rated Capacity', secao: 'B', get: (u) => u.capacidade_kg ? `${u.capacidade_kg}kg` : '' },
+    { key: 'velocidade', pt: 'Velocidade', en: 'Rated Speed', secao: 'B', get: (u) => u.velocidade_ms ? `${u.velocidade_ms}m/s` : '' },
+    { key: 'paradas', pt: 'Paradas', en: 'Stops', secao: 'B', get: (u) => u.paradas },
+    { key: 'porta_oposta', pt: 'Porta oposta', en: 'Open-Through Door', secao: 'B', get: (u) => cefBool(u.porta_oposta) },
+    { key: 'controle', pt: 'Controle (simplex/duplex/grupo)', en: 'Control (simplex/duplex/group)', secao: 'B', get: (u) => u.controle },
+
+    { key: 'tensao_rede', pt: 'Tensão de rede', en: 'Site Voltage', secao: 'C', get: (u) => u.tensao_rede ? `${u.tensao_rede}V trifásico / 3-phase` : '' },
+    { key: 'tipo_controle', pt: 'Tipo de controle', en: 'Control Type', secao: 'C', get: (u) => u.tipo_controle },
+    { key: 'ard', pt: 'ARD — resgate automático', en: 'ARD', secao: 'C', get: (u) => cefBool(u.ard) },
+    { key: 'regeneracao_energia', pt: 'Regeneração de energia', en: 'Energy Regeneration', secao: 'C', get: (u) => cefBool(u.regeneracao_energia) },
+
+    { key: 'tipo_maquina', pt: 'Tipo de máquina', en: 'Machine Type', secao: 'D', get: (u) => u.tipo_maquina },
+    { key: 'potencia_kw', pt: 'Potência da máquina', en: 'Machine Rated Power', secao: 'D', get: (u) => u.potencia_kw ? `${u.potencia_kw}kW` : '' },
+    { key: 'corrente_a', pt: 'Corrente da máquina', en: 'Machine Rated Current', secao: 'D', get: (u) => u.corrente_a ? `${u.corrente_a}A` : '' },
+    { key: 'freio_tensao_acionamento', pt: 'Tensão de acionamento do freio', en: 'Brake Voltage', secao: 'D', get: (u) => u.freio_tensao_acionamento ? `${u.freio_tensao_acionamento}V` : '' },
+    { key: 'freio_tensao_manutencao', pt: 'Tensão de manutenção do freio', en: 'Brake Maintain Voltage', secao: 'D', get: (u) => u.freio_tensao_manutencao ? `${u.freio_tensao_manutencao}V` : '' },
+    { key: 'tensao_limitador_mrl', pt: 'Tensão do limitador de velocidade (MRL)', en: 'Machine-Roomless Speed Governor Voltage', secao: 'D', get: (u) => u.tensao_limitador_mrl },
+
+    { key: 'cop_modelo_acabamento', pt: 'COP — modelo/acabamento', en: 'COP Model/Finish', secao: 'E', get: (u) => u.cop_modelo_acabamento },
+    { key: 'lop_modelo_acabamento', pt: 'LOP — modelo/acabamento', en: 'LOP Model/Finish', secao: 'E', get: (u) => u.lop_modelo_acabamento },
+    { key: 'indicador_posicao_tipo', pt: 'Indicador de posição', en: 'Position Indicator', secao: 'E', get: (u) => u.indicador_posicao_tipo },
+    { key: 'chave_incendio_tipo', pt: 'Chave de incêndio (integrada/independente)', en: 'Fire Switch (integrated/independent)', secao: 'E', get: (u) => u.chave_incendio_tipo },
+
+    { key: 'interfone_5_canais', pt: 'Interfone 5 canais', en: 'Five-way Intercom', secao: 'F', get: (u) => cefBool(u.interfone_5_canais) },
+    { key: 'gongo', pt: 'Gongo', en: 'Arrival Gong', secao: 'F', get: (u) => cefBool(u.gongo) },
+    { key: 'pesador_carga', pt: 'Pesador de carga', en: 'Weighing Device', secao: 'F', get: (u) => cefBool(u.pesador_carga) },
+    { key: 'botoeira_inspecao_cabina', pt: 'Botoeira de inspeção — cabina', en: 'Car Top Inspection Box', secao: 'F', get: (u) => cefBool(u.botoeira_inspecao_cabina) },
+    { key: 'botoeira_inspecao_poco', pt: 'Botoeira de inspeção — poço', en: 'Pit Inspection Box', secao: 'F', get: (u) => cefBool(u.botoeira_inspecao_poco) },
+    { key: 'caixa_emergencia_poco', pt: 'Caixa de emergência do poço', en: 'Emergency Stop Box', secao: 'F', get: (u) => cefBool(u.caixa_emergencia_poco) },
+
+    { key: 'percurso', pt: 'Percurso', en: 'Travel Height', secao: 'G', get: (u) => cefMm(u.percurso_mm) },
+    { key: 'ultima_altura', pt: 'Última altura', en: 'Overhead', secao: 'G', get: (u) => cefMm(u.ultima_altura_mm) },
+    { key: 'poco', pt: 'Poço', en: 'Shaft Pit', secao: 'G', get: (u) => cefMm(u.poco_mm) },
+    { key: 'distancia_quadro_maquina', pt: 'Distância quadro → máquina', en: 'Panel to Machine Distance', secao: 'G', get: (u) => cefMm(u.distancia_quadro_maquina_mm) },
+    { key: 'distancia_quadro_limitador', pt: 'Distância quadro → limitador', en: 'Panel to Governor Distance', secao: 'G', get: (u) => cefMm(u.distancia_quadro_limitador_mm) },
+    { key: 'distancia_quadro_entrada_caixa', pt: 'Distância quadro → entrada da caixa', en: 'Panel to Shaft Entry Distance', secao: 'G', get: (u) => cefMm(u.distancia_quadro_entrada_caixa_mm) },
+    { key: 'cabo_paralelo', pt: 'Cabo paralelo (duplex)', en: 'Parallel Cable', secao: 'G', get: (u) => cefBool(u.cabo_paralelo) },
+  ];
+  const CEF_SECAO_TITULO_QUADRO_COMANDO = {
+    A: 'A. Identificação do pedido / Order Identification',
+    B: 'B. Especificação básica do elevador atendido / Base Lift Specification',
+    C: 'C. Comando / Control Cabinet',
+    D: 'D. Máquina, freio e encoder / Machine, Brake & Encoder',
+    E: 'E. Botoeiras e interface humana / Human Interface',
+    F: 'F. Acessórios elétricos / Electric Accessories',
+    G: 'G. Geometria para fiação / Cable System Geometry',
+  };
+
+  function cefDefsPorCategoria(categoriaProduto) {
+    return categoriaProduto === 'quadro_comando'
+      ? { defs: CEF_SPEC_DEFS_QUADRO_COMANDO, titulos: CEF_SECAO_TITULO_QUADRO_COMANDO }
+      : { defs: CEF_SPEC_DEFS, titulos: CEF_SECAO_TITULO };
+  }
+
   /* Retorna as seções já filtradas por tipo (elevator/homelift) e com linhas
-     [key, pt, en, valor] — key é usado como campo estável de divergência. */
-  function unitSpecSecoes(u, tipoFormulario) {
+     [key, pt, en, valor] — key é usado como campo estável de divergência.
+     categoriaProduto (opcional, default 'elevador') escolhe qual conjunto
+     de definições usar — CEF_SPEC_DEFS (elevador) ou
+     CEF_SPEC_DEFS_QUADRO_COMANDO (quadro de comando comprado pronto). */
+  function unitSpecSecoes(u, tipoFormulario, categoriaProduto) {
+    const { defs, titulos } = cefDefsPorCategoria(categoriaProduto);
     const isElevator = tipoFormulario === 'elevator';
     const porSecao = {};
-    CEF_SPEC_DEFS.forEach((d) => {
+    defs.forEach((d) => {
       if (d.onlyElevator && !isElevator) return;
       (porSecao[d.secao] = porSecao[d.secao] || []).push([d.key, d.pt, d.en, d.get(u)]);
     });
-    return Object.keys(CEF_SECAO_TITULO).filter((s) => porSecao[s]).map((s) => ({ titulo: CEF_SECAO_TITULO[s], linhas: porSecao[s] }));
+    return Object.keys(titulos).filter((s) => porSecao[s]).map((s) => ({ titulo: titulos[s], linhas: porSecao[s] }));
   }
 
-  function unitSpecFieldLabel(key) {
-    const def = CEF_SPEC_DEFS.find((d) => d.key === key);
+  function unitSpecFieldLabel(key, categoriaProduto) {
+    const { defs } = cefDefsPorCategoria(categoriaProduto);
+    const def = defs.find((d) => d.key === key);
     return def ? `${def.pt} / ${def.en}` : key;
+  }
+
+  /* ---------- Snapshot do que é enviado — Quadro de Comando (Ramo B).
+     "unidades" aqui é sempre um array de 1 objeto sintético (o quadro em
+     si não tem múltiplas variantes num mesmo envio). Guarda todos os
+     campos que CEF_SPEC_DEFS_QUADRO_COMANDO.get() lê, sem mapear campo a
+     campo feito buildDadosEnvio — é um objeto próprio, montado só por
+     QuadroComandoStore, então não corre risco de vazar coluna interna de
+     outra tabela. */
+  function buildDadosEnvioQuadroComando(unidades, numeroCotacao) {
+    const primeira = unidades[0] || {};
+    return {
+      header: {
+        numero_cotacao: numeroCotacao ?? null,
+        pais: 'Brazil',
+        data: new Date().toISOString().slice(0, 10),
+      },
+      unidades: unidades.map((u) => ({ ...u })),
+      _primeiraIdentificador: primeira.identificador,
+    };
   }
 
   /* ---------- Snapshot do que é enviado (congela os dados no momento do
@@ -211,7 +304,8 @@
   async function gerar(formularioElevadorId, unidades, fornecedor, numeroCotacao, categoriaProduto) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const categoria = categoriaProduto || 'elevador';
-    const tipo_formulario = tipoFormularioPara(unidades[0].tipo);
+    const ehQuadroComando = categoria === 'quadro_comando';
+    const tipo_formulario = ehQuadroComando ? 'quadro_comando' : tipoFormularioPara(unidades[0].tipo);
 
     const { data: existentes, error: exErr } = await c.from('cotacoes_elevador_fornecedor')
       .select('revisao').eq('formulario_elevador_id', formularioElevadorId).eq('categoria_produto', categoria);
@@ -229,7 +323,7 @@
       categoria_produto: categoria,
       tipo_formulario,
       unidade_ids: unidades.map((u) => u.id),
-      dados_envio: buildDadosEnvio(unidades, numeroCotacao),
+      dados_envio: ehQuadroComando ? buildDadosEnvioQuadroComando(unidades, numeroCotacao) : buildDadosEnvio(unidades, numeroCotacao),
       status: 'rascunho',
     };
     const { data, error } = await c.from('cotacoes_elevador_fornecedor').insert(row).select().single();

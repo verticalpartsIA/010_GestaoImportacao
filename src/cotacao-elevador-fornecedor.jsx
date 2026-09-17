@@ -57,9 +57,9 @@ function CefSpecTableDivergente({ linhas, divergencias, onChange, readOnly }) {
   );
 }
 
-function CefUnidadeRead({ u, tipoFormulario, idx, codigoAtivo, divergencias, onDivergenciaChange, readOnly }) {
+function CefUnidadeRead({ u, tipoFormulario, categoriaProduto, idx, codigoAtivo, divergencias, onDivergenciaChange, readOnly }) {
   const store = window.CotacaoElevadorFornecedorStore;
-  const secoes = store.unitSpecSecoes(u, tipoFormulario);
+  const secoes = store.unitSpecSecoes(u, tipoFormulario, categoriaProduto);
   return (
     <div className="co-block">
       <div className="co-sec-lbl">Unidade {u.identificador || idx + 1}{codigoAtivo ? ` · ${codigoAtivo}` : ''}</div>
@@ -73,19 +73,22 @@ function CefUnidadeRead({ u, tipoFormulario, idx, codigoAtivo, divergencias, onD
   );
 }
 
-function CefUnidadeFill({ u, val, onChange, readOnly }) {
+function CefUnidadeFill({ u, categoriaProduto, val, onChange, readOnly }) {
   const f = (k) => (e) => onChange(k, e.target.value);
+  const ehQuadroComando = categoriaProduto === 'quadro_comando';
   return (
     <div className="co-fill" style={{ background: '#fcfcf7', borderRadius: 12, marginTop: 10 }}>
-      <b style={{ fontSize: 12 }}>Resposta — Unidade {u.identificador}{u.quantidade > 1 ? ` (${u.quantidade} unidades idênticas)` : ''}</b>
+      <b style={{ fontSize: 12 }}>Resposta — {ehQuadroComando ? 'Quadro de Comando' : `Unidade ${u.identificador}`}{u.quantidade > 1 ? ` (${u.quantidade} unidades idênticas)` : ''}</b>
       <label className="co-f">
         <span>Modelo do fornecedor / Supplier model</span>
-        <input className="co-inp" value={val.modelo_fornecedor || ''} onChange={f('modelo_fornecedor')} placeholder="ex.: GEP-MRL" disabled={readOnly}/>
+        <input className="co-inp" value={val.modelo_fornecedor || ''} onChange={f('modelo_fornecedor')} placeholder={ehQuadroComando ? 'ex.: NICE3000 MRL' : 'ex.: GEP-MRL'} disabled={readOnly}/>
       </label>
-      <label className="co-f">
-        <span>Andares/Paradas/Portas confirmados / Confirmed Floors-Stops-Doors</span>
-        <input className="co-inp" value={val.floors_stops_doors || ''} onChange={f('floors_stops_doors')} placeholder="ex.: 9/9/9" disabled={readOnly}/>
-      </label>
+      {!ehQuadroComando && (
+        <label className="co-f">
+          <span>Andares/Paradas/Portas confirmados / Confirmed Floors-Stops-Doors</span>
+          <input className="co-inp" value={val.floors_stops_doors || ''} onChange={f('floors_stops_doors')} placeholder="ex.: 9/9/9" disabled={readOnly}/>
+        </label>
+      )}
       <div className="co-f-row">
         <label className="co-f">
           <span>Preço unitário / Unit Price</span>
@@ -324,12 +327,12 @@ function CotacaoElevadorFornecedorApp() {
 
       {unidades.map((u, i) => (
         <div key={u.unidade_id || i}>
-          <CefUnidadeRead u={u} tipoFormulario={cot.tipo_formulario} idx={i}
+          <CefUnidadeRead u={u} tipoFormulario={cot.tipo_formulario} categoriaProduto={cot.categoria_produto} idx={i}
             codigoAtivo={store.assetMasterId(cot, u.indice_ativo)}
             divergencias={(itemVals[u.unidade_id] || {}).divergencias || {}}
             onDivergenciaChange={(k, v) => setDivergencia(u.unidade_id, k, v)}
             readOnly={readOnly}/>
-          <CefUnidadeFill u={u} val={itemVals[u.unidade_id] || {}} onChange={(k, v) => setItemVal(u.unidade_id, k, v)} readOnly={readOnly}/>
+          <CefUnidadeFill u={u} categoriaProduto={cot.categoria_produto} val={itemVals[u.unidade_id] || {}} onChange={(k, v) => setItemVal(u.unidade_id, k, v)} readOnly={readOnly}/>
         </div>
       ))}
 

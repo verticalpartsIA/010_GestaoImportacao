@@ -38,6 +38,7 @@
     elevador: 'VPEL-EL',
     escada_rolante: 'VPER-ER',
     esteira_rolante: 'VPES-ES',
+    quadro_comando: 'VPQC-QC',
   };
 
   function baseId(categoriaProduto, numeroCotacao) {
