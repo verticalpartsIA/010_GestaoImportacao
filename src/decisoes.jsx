@@ -39,6 +39,14 @@ function DecCard({ decisao, onReload }) {
   const [busy, setBusy] = React.useState(false);
   const [reprovando, setReprovando] = React.useState(false);
   const ctx = decisao.contexto || {};
+  /* Visão de Administrador mostra decisões de qualquer pessoa (ver
+     listarTodasEmAberto em decisoes-store.js) — mas aprovar()/reprovar()
+     continuam travados no servidor por souAprovador(). Em vez de deixar o
+     Admin clicar e tomar um erro, já esconde os botões e explica quem
+     decide de verdade — visualização, não aprovação (pedido explícito do
+     usuário: "não vou aprovar nada"). */
+  const souAprovador = window.DecisoesStore.souAprovador(decisao);
+  const bloqueada = decisao.status === 'bloqueada_por_dependencia';
 
   const aprovar = async () => {
     setBusy(true);
@@ -62,11 +70,20 @@ function DecCard({ decisao, onReload }) {
           {ctx.valor != null ? `R$ ${Number(ctx.valor).toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` : ''}
         </div>
         <div className="small muted" style={{ marginTop: 2 }}>Aberta em {fmtDataHora(decisao.criado_em)}</div>
+        {!souAprovador && (
+          <div className="small" style={{ marginTop: 6, color: 'var(--fg2)' }}>
+            {bloqueada
+              ? <>⏳ Bloqueada — depende de outra decisão ser aprovada primeiro.</>
+              : <>👁 Só você está vendo (Administrador) — quem decide: <b>{(decisao.aprovadores_esperados || []).join(', ') || '—'}</b></>}
+          </div>
+        )}
       </div>
-      <div className="row gap-2">
-        <Button variant="danger" size="sm" onClick={() => setReprovando(true)} disabled={busy}>Reprovar</Button>
-        <Button variant="primary" size="sm" onClick={aprovar} disabled={busy}>{busy ? 'Salvando…' : 'Aprovar'}</Button>
-      </div>
+      {souAprovador && (
+        <div className="row gap-2">
+          <Button variant="danger" size="sm" onClick={() => setReprovando(true)} disabled={busy}>Reprovar</Button>
+          <Button variant="primary" size="sm" onClick={aprovar} disabled={busy}>{busy ? 'Salvando…' : 'Aprovar'}</Button>
+        </div>
+      )}
       {reprovando && <DecModalReprovar decisao={decisao} onClose={() => setReprovando(false)} onSaved={onReload}/>}
     </div>
   );
@@ -75,10 +92,22 @@ function DecCard({ decisao, onReload }) {
 function DecisoesPage() {
   const [pendentes, setPendentes] = React.useState(null);
   const [erro, setErro] = React.useState(false);
+  const [modoAdmin, setModoAdmin] = React.useState(false);
 
-  const reload = React.useCallback(() => {
+  /* "Ver tudo" pra Administrador — pedido explícito do usuário (criador do
+     site): precisa entender/instruir qualquer decisão do sistema, mesmo
+     sem poder de aprovar ("não vou aprovar nada"). Natural (automático
+     por nivel), não depende de alçada — DecCard já esconde os botões de
+     ação pra quem não é aprovador de verdade (ver souAprovador acima). */
+  const reload = React.useCallback(async () => {
     setErro(false);
-    window.DecisoesStore.listarPendentesParaMim().then(setPendentes).catch(() => { setErro(true); setPendentes([]); });
+    try {
+      const perfil = window.PropostaStore ? await window.PropostaStore.resolverPerfilAtual() : null;
+      const admin = !!(perfil && perfil.nivel === 'Administrador');
+      setModoAdmin(admin);
+      const lista = admin ? await window.DecisoesStore.listarTodasEmAberto() : await window.DecisoesStore.listarPendentesParaMim();
+      setPendentes(lista);
+    } catch (e) { setErro(true); setPendentes([]); }
   }, []);
   React.useEffect(() => { reload(); }, [reload]);
 
@@ -90,11 +119,15 @@ function DecisoesPage() {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Geral · Decisões</div>
           <h1 className="page-head__title">Central de Decisões</h1>
-          <p className="page-head__sub">Tudo que precisa da sua aprovação, de qualquer módulo — em um só lugar.</p>
+          <p className="page-head__sub">
+            {modoAdmin
+              ? 'Modo Administrador: você está vendo tudo que está em aberto no sistema, de qualquer pessoa — não é aprovação, é visão completa pra instruir quem decide.'
+              : 'Tudo que precisa da sua aprovação, de qualquer módulo — em um só lugar.'}
+          </p>
         </div>
       </div>
 
-      <Card title="Aguardando você" sub={`${pendentes.length} decisão(ões) pendente(s)`}>
+      <Card title={modoAdmin ? 'Tudo em aberto no sistema' : 'Aguardando você'} sub={`${pendentes.length} decisão(ões) em aberto`}>
         <div className="stack" style={{ gap: 10 }}>
           {pendentes.length === 0 && erro && (
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>
@@ -104,7 +137,7 @@ function DecisoesPage() {
           )}
           {pendentes.length === 0 && !erro && (
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>
-              Nenhuma decisão pendente pra você no momento.
+              {modoAdmin ? 'Nenhuma decisão em aberto no sistema no momento.' : 'Nenhuma decisão pendente pra você no momento.'}
             </div>
           )}
           {pendentes.map((d) => <DecCard key={d.id} decisao={d} onReload={reload}/>)}

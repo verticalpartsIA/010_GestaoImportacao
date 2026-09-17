@@ -133,6 +133,20 @@
     return (data || []).filter(souAprovador);
   }
 
+  /* Visão de Administrador — "ver tudo que está em aberto no sistema", sem
+     filtrar por aprovador (pedido do usuário, criador do site: precisa
+     entender/instruir qualquer decisão, mesmo sem poder de aprovar). Não
+     concede poder de decidir — aprovar()/reprovar() continuam exigindo
+     souAprovador(decisao); isso é só leitura ampliada, gate de nivel
+     'Administrador' é decidido por quem chama (decisoes.jsx). */
+  async function listarTodasEmAberto() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('decisoes_gerenciais')
+      .select('*').in('status', ['pendente', 'bloqueada_por_dependencia']).order('criado_em', { ascending: false });
+    if (error) { console.warn('[DecisoesStore] listarTodasEmAberto falhou', error); return []; }
+    return data || [];
+  }
+
   async function listarPorCotacao(numeroCotacao) {
     const c = sb(); if (!c || numeroCotacao == null) return [];
     const { data } = await c.from('decisoes_gerenciais').select('*').eq('numero_cotacao', numeroCotacao).order('criado_em');
@@ -351,7 +365,7 @@
     PAPEL_LABEL, TIPO_LABEL,
     resolverAprovadores, souAprovador,
     criarDecisao, criarDecisaoSeNaoExiste,
-    listarPendentesParaMim, listarPorCotacao, listarPorDossier, statusMontadorObra,
+    listarPendentesParaMim, listarTodasEmAberto, listarPorCotacao, listarPorDossier, statusMontadorObra,
     aprovar, reprovar,
     podeEnviarProposta, podeContratarInstalador, podeMontadorEntrarObra,
     podeComprarEquipamento, verificarGateCompra,
