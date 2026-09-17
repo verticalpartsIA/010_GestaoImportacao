@@ -1309,7 +1309,7 @@ function ConfigAlcadasPropostas() {
   return (
     <Card title="Alçadas de Propostas" sub="Quem pode ver tudo, precificar manualmente, destravar aprovada ou conceder essas alçadas pra outros">
       <div style={{ padding: "10px 12px", marginBottom: 14, background: "var(--vp-warning-tint, #f8eed7)", border: "1px solid var(--border)", fontSize: 12, color: "var(--fg2)" }}>
-        Administradores sempre têm as 4 alçadas. Pra qualquer outra pessoa, ligue os toggles abaixo — sem isso, ela não tem essa capacidade.
+        Administradores sempre têm as 4 primeiras alçadas (traço = já tem, automático). <b>"Atua como CEO" e "Atua como Gestor Comercial" são diferentes</b> — nem Administrador tem isso de graça, precisa ligar o toggle mesmo sendo Admin (é a Central de Decisões que decide quem aprova o quê, não o nível de acesso).
       </div>
       {/* Lista de colaboradores costuma passar de uma tela — cabeçalho fixo
          (sticky, relativo a este container com scroll próprio) e barra de
@@ -1334,10 +1334,19 @@ function ConfigAlcadasPropostas() {
                   <td><Badge variant="ink">{p.nivel}</Badge></td>
                   {ALCADAS_PROPOSTAS.map((a) => {
                     const chave = p.id + '.' + a.modulo + '.' + a.capacidade;
-                    const tem = admin || !!concedidas[chave];
+                    /* "Administrador sempre tem" só vale pras 4 alçadas originais
+                       (checadas por temCapacidade(), que trata nivel==='Administrador'
+                       como bypass automático). "Atua como CEO"/"Atua como Gestor
+                       Comercial" (modulo='decisoes') são resolvidas por
+                       decisoes-store.js, que NUNCA olha o nível — só e-mail fixo
+                       ou concessão real nesta mesma tabela. Mostrar "—" pra Admin
+                       nessas duas colunas seria mentir: ele não tem esse poder só
+                       por ser Admin, precisa do toggle igual todo mundo. */
+                    const bypassAdmin = admin && a.modulo !== 'decisoes';
+                    const tem = bypassAdmin || !!concedidas[chave];
                     return (
                       <td key={chave} style={{ textAlign:'center' }}>
-                        {admin ? (
+                        {bypassAdmin ? (
                           <span className="small muted" title="Administrador sempre tem">—</span>
                         ) : (
                           <input type="checkbox" checked={tem} disabled={salvandoChave === chave}
