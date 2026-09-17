@@ -358,6 +358,129 @@ function QcResultadoSecao({ quadroId, podeGerar }) {
   );
 }
 
+/* ---------- Ramo B — comprar pronto de fornecedor ----------
+   Reusa CotacaoElevadorFornecedorStore (token, envio WhatsApp/E-mail/Link,
+   portal público, Inbox) com categoria 'quadro_comando'. Único requisito
+   real: o quadro precisa estar vinculado a uma Unidade de um Formulário de
+   Elevador já existente (FK NOT NULL de cotacoes_elevador_fornecedor). */
+function QcRamoBComprado({ quadro, setQuadro, quadroId }) {
+  const [buscaCotacao, setBuscaCotacao] = React.useState('');
+  const [unidadesEncontradas, setUnidadesEncontradas] = React.useState(null);
+  const [buscando, setBuscando] = React.useState(false);
+  const [vinculando, setVinculando] = React.useState(false);
+  const [fornecedor, setFornecedor] = React.useState('');
+  const [fornecedoresCadastro, setFornecedoresCadastro] = React.useState([]);
+  const [contato, setContato] = React.useState({ telefone: '', email: '' });
+  const [cot, setCot] = React.useState(null);
+  const [enviando, setEnviando] = React.useState(null);
+
+  React.useEffect(() => {
+    if (window.FormularioElevadorStore) window.FormularioElevadorStore.listarFornecedores().then(setFornecedoresCadastro).catch(() => {});
+  }, []);
+
+  const carregarCot = React.useCallback(() => {
+    if (quadro.cotacao_fornecedor_id && window.CotacaoElevadorFornecedorStore) {
+      window.CotacaoElevadorFornecedorStore.getById(quadro.cotacao_fornecedor_id).then(setCot);
+    } else setCot(null);
+  }, [quadro.cotacao_fornecedor_id]);
+  React.useEffect(() => { carregarCot(); }, [carregarCot]);
+
+  const buscar = async () => {
+    const n = Number(buscaCotacao);
+    if (!n) { window.toast?.('Informe um Nº da Cotação válido.', 'warning'); return; }
+    setBuscando(true);
+    try {
+      const unidades = await window.QuadroComandoStore.buscarUnidadesElevadorPorCotacao(n);
+      setUnidadesEncontradas(unidades);
+      if (!unidades.length) window.toast?.('Nenhuma Unidade encontrada para essa Cotação.', 'warning');
+    } catch (e) { window.toast?.('Erro na busca: ' + e.message, 'error'); }
+    finally { setBuscando(false); }
+  };
+
+  const vincular = async (unidadeId) => {
+    setVinculando(true);
+    try {
+      await window.QuadroComandoStore.vincularFormularioElevador(quadroId, unidadeId);
+      setQuadro({ ...quadro, formulario_elevador_unidade_id: unidadeId });
+      window.toast?.('Quadro vinculado à Unidade do Formulário de Elevador.', 'success');
+    } catch (e) { window.toast?.('Erro ao vincular: ' + e.message, 'error'); }
+    finally { setVinculando(false); }
+  };
+
+  const enviar = async (canal) => {
+    if (!fornecedor) { window.toast?.('Escolha o fornecedor.', 'warning'); return; }
+    setEnviando(canal);
+    try {
+      const cotAtual = await window.QuadroComandoStore.obterOuCriarCotacaoFornecedor(quadroId, fornecedor);
+      const url = window.CotacaoElevadorFornecedorStore.cotacaoUrl(cotAtual.token);
+      const msg = `Solicitação de cotação técnica ${cotAtual.numero_documento} — VerticalParts\n` +
+        `Segue o link com as especificações do Quadro de Comando para cotação:\n${url}`;
+      if (canal === 'whatsapp') window.open(window.PFStore.whatsAppHref(contato.telefone, msg), '_blank');
+      if (canal === 'email') window.open(window.PFStore.mailtoHref(contato.email, `Cotação técnica ${cotAtual.numero_documento} — VerticalParts`, msg), '_blank');
+      if (canal === 'link') { try { await navigator.clipboard.writeText(url); } catch (e) {} window.toast?.('Link copiado.', 'success'); }
+      await window.CotacaoElevadorFornecedorStore.marcarEnviado(cotAtual.id, canal, contato);
+      setQuadro({ ...quadro, cotacao_fornecedor_id: cotAtual.id });
+      window.toast?.('Cotação marcada como enviada.', 'success');
+      carregarCot();
+    } catch (e) { window.toast?.('Erro ao enviar: ' + e.message, 'error'); }
+    finally { setEnviando(null); }
+  };
+
+  return (
+    <>
+      <Card title="Vínculo com Formulário de Elevador" sub="Obrigatório pra enviar cotação a fornecedor — é o projeto/cotação que o fornecedor vai referenciar.">
+        {quadro.formulario_elevador_unidade_id ? (
+          <p className="small">Vinculado à Unidade <code>{quadro.formulario_elevador_unidade_id}</code>. <Button variant="ghost" size="sm" onClick={() => setQuadro({ ...quadro, formulario_elevador_unidade_id: null })}>Trocar vínculo</Button></p>
+        ) : (
+          <>
+            <div className="row gap-2" style={{ alignItems: 'flex-end' }}>
+              <QcField label="Nº da Cotação (Formulário de Elevador)">
+                <QcInput type="number" value={buscaCotacao} onChange={setBuscaCotacao}/>
+              </QcField>
+              <Button variant="outline" disabled={buscando} onClick={buscar}>{buscando ? 'Buscando…' : 'Buscar unidades'}</Button>
+            </div>
+            {unidadesEncontradas && !!unidadesEncontradas.length && (
+              <div className="table-wrap" style={{ border: 0 }}>
+                <table className="t">
+                  <thead><tr><th>Identificação</th><th>Tipo</th><th>Capacidade</th><th>Velocidade</th><th></th></tr></thead>
+                  <tbody>
+                    {unidadesEncontradas.map((u) => (
+                      <tr key={u.id}>
+                        <td>{u.identificador}</td><td>{u.tipo}</td><td>{u.capacidade_kg ? `${u.capacidade_kg}kg` : '—'}</td><td>{u.velocidade_ms ? `${u.velocidade_ms}m/s` : '—'}</td>
+                        <td><Button variant="primary" size="sm" disabled={vinculando} onClick={() => vincular(u.id)}>Vincular</Button></td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </>
+        )}
+      </Card>
+
+      <Card title="Enviar cotação técnica ao fornecedor" sub="Mesmo mecanismo do RFQ de elevadores — token público, portal de resposta, Inbox.">
+        {!quadro.formulario_elevador_unidade_id && <p className="small muted">Vincule uma Unidade de Formulário de Elevador acima antes de enviar.</p>}
+        {cot ? (
+          <p className="small">Cotação <b>{cot.numero_documento}</b> — status: <b>{cot.status}</b>. {cot.envios?.length ? `Enviada ${cot.envios.length}x.` : 'Ainda não enviada.'}</p>
+        ) : (
+          <div className="grid-3" style={{ gap: 12 }}>
+            <QcField label="Fornecedor">
+              <QcSelect value={fornecedor} options={fornecedoresCadastro.map((f) => ({ value: f, label: f }))} onChange={setFornecedor}/>
+            </QcField>
+            <QcField label="Telefone (WhatsApp)"><QcInput value={contato.telefone} onChange={(v) => setContato({ ...contato, telefone: v })}/></QcField>
+            <QcField label="E-mail"><QcInput value={contato.email} onChange={(v) => setContato({ ...contato, email: v })}/></QcField>
+          </div>
+        )}
+        <div className="row gap-2" style={{ marginTop: 8 }}>
+          <Button variant="outline" disabled={!quadro.formulario_elevador_unidade_id || enviando} onClick={() => enviar('whatsapp')}>{enviando === 'whatsapp' ? 'Enviando…' : 'WhatsApp'}</Button>
+          <Button variant="outline" disabled={!quadro.formulario_elevador_unidade_id || enviando} onClick={() => enviar('email')}>{enviando === 'email' ? 'Enviando…' : 'E-mail'}</Button>
+          <Button variant="outline" disabled={!quadro.formulario_elevador_unidade_id || enviando} onClick={() => enviar('link')}>{enviando === 'link' ? 'Copiando…' : 'Copiar link'}</Button>
+        </div>
+      </Card>
+    </>
+  );
+}
+
 /* ---------- Página principal ---------- */
 function QuadroComandoDetail({ quadroId, onClose }) {
   const [quadro, setQuadro] = React.useState(null);
@@ -430,15 +553,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
       </Card>
 
       {quadro.origem_fabricacao === 'comprado' ? (
-        <Card title="Comprar pronto de fornecedor" sub="Ramo B — ainda não implementado nesta fase.">
-          <p className="small muted">
-            Este ramo deve reusar exatamente o mesmo mecanismo de "Cotação a Fornecedor" já usado pros elevadores
-            (token público, envio por WhatsApp/E-mail/Link, resposta no portal, Inbox) — só falta cadastrar a
-            especificação técnica bilíngue (equivalente à E-PACKAGE SPECS COLLECTION TABLE) pra categoria
-            <code> quadro_comando</code>, que já existe como valor no modelo de dados. Combine comigo os campos
-            dessa especificação antes de eu implementar esta parte.
-          </p>
-        </Card>
+        <QcRamoBComprado quadro={quadro} setQuadro={setQuadro} quadroId={quadroId}/>
       ) : (
         <>
           <Tabs tabs={[

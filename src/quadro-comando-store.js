@@ -41,7 +41,7 @@
   const QC_COLUNAS_VALIDAS = [
     'numero_cotacao', 'formulario_elevador_unidade_id', 'cliente_id', 'tipo_aplicacao',
     'novo_ou_modernizacao', 'origem_fabricacao', 'fabricante_comando', 'modelo_comando',
-    'status', 'escopo_fornecimento',
+    'status', 'escopo_fornecimento', 'cotacao_fornecedor_id',
   ];
   async function salvar(id, patchBruto) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -233,6 +233,114 @@
     if (error) throw error;
   }
 
+  /* ---------- Ramo B — comprar pronto de fornecedor ----------
+     Reusa 100% o mecanismo de CotacaoElevadorFornecedorStore (token,
+     envio WhatsApp/E-mail/Link, portal público, Inbox) com a categoria
+     'quadro_comando' já prevista naquele modelo de dados. A única
+     exigência real (FK NOT NULL de cotacoes_elevador_fornecedor pra
+     formularios_elevador) é que o quadro esteja vinculado a uma Unidade
+     de um Formulário de Elevador já existente — um quadro avulso (sem
+     vínculo) não tem "projeto" pro fornecedor cotar contra. */
+
+  async function buscarUnidadesElevadorPorCotacao(numeroCotacao) {
+    const c = sb(); if (!c || numeroCotacao == null) return [];
+    const { data: formularios, error: e1 } = await c.from('formularios_elevador')
+      .select('id, numero_cotacao').eq('numero_cotacao', numeroCotacao);
+    if (e1) throw e1;
+    if (!formularios || !formularios.length) return [];
+    const formularioIds = formularios.map((f) => f.id);
+    const { data: unidades, error: e2 } = await c.from('formularios_elevador_unidades')
+      .select('id, formulario_id, identificador, tipo, capacidade_kg, velocidade_ms, paradas, porta_oposta, agrupamento')
+      .in('formulario_id', formularioIds).order('identificador');
+    if (e2) throw e2;
+    return unidades || [];
+  }
+
+  async function vincularFormularioElevador(quadroId, unidadeElevadorId) {
+    await salvar(quadroId, { formulario_elevador_unidade_id: unidadeElevadorId || null });
+  }
+
+  /* Monta o objeto "unidade" sintético que CEF_SPEC_DEFS_QUADRO_COMANDO
+     (cotacao-elevador-fornecedor-store.js) vai ler campo a campo — nunca
+     um valor inventado: o que não dá pra derivar do que já foi
+     preenchido fica de fora (a tabela de especificação só mostra o que
+     tem valor). */
+  function construirUnidadeSintetica(quadro, unidadeElevador) {
+    const engine = window.QuadroComandoBomEngine;
+    const geo = quadro.geometria || {};
+    const maq = quadro.maquina || {};
+    const escopo = quadro.escopo_fornecimento || {};
+    const decisaoFornecer = (item) => (escopo[item] || {}).decisao === 'fornecer';
+    const { percurso_mm } = engine ? engine.alturaTotalMm(geo, quadro.intervalos) : { percurso_mm: null };
+    const ue = unidadeElevador || {};
+    return {
+      id: quadro.id,
+      identificador: `Quadro de Comando${quadro.modelo_comando ? ' — ' + quadro.modelo_comando : ''}`,
+      quantidade: 1,
+      quantidade_quadros: 1,
+      aplicacao: quadro.tipo_aplicacao,
+      novo_modernizacao: quadro.novo_ou_modernizacao,
+      fabricante_desejado: quadro.fabricante_comando,
+      modelo_desejado: quadro.modelo_comando,
+      capacidade_kg: ue.capacidade_kg,
+      velocidade_ms: ue.velocidade_ms,
+      paradas: (quadro.paradas && quadro.paradas.length) || ue.paradas,
+      porta_oposta: ue.porta_oposta === 'Sim' || ue.porta_oposta === true,
+      controle: ue.agrupamento,
+      tensao_rede: maq.tensao_v,
+      tipo_maquina: maq.tipo_maquina,
+      potencia_kw: maq.potencia_kw,
+      corrente_a: maq.corrente_a,
+      freio_tensao_acionamento: maq.freio_tensao_acionamento,
+      freio_tensao_manutencao: maq.freio_tensao_manutencao,
+      ard: escopo.resgate_automatico ? decisaoFornecer('resgate_automatico') : undefined,
+      cop_modelo_acabamento: (escopo.cop || {}).detalhe,
+      lop_modelo_acabamento: (escopo.lop || {}).detalhe,
+      indicador_posicao_tipo: (escopo.lip || {}).detalhe,
+      interfone_5_canais: escopo.interfone ? decisaoFornecer('interfone') : undefined,
+      botoeira_inspecao_cabina: escopo.inspecao_teto ? decisaoFornecer('inspecao_teto') : undefined,
+      caixa_emergencia_poco: escopo.caixa_botao_parada_poco ? decisaoFornecer('caixa_botao_parada_poco') : undefined,
+      percurso_mm,
+      ultima_altura_mm: geo.ultima_altura_mm,
+      poco_mm: geo.poco_mm,
+      distancia_quadro_maquina_mm: geo.distancia_quadro_maquina_mm,
+      distancia_quadro_limitador_mm: geo.distancia_quadro_limitador_mm,
+      distancia_quadro_entrada_caixa_mm: geo.distancia_quadro_entrada_caixa_mm,
+      cabo_paralelo: ue.agrupamento ? (ue.agrupamento !== 'simplex') : undefined,
+    };
+  }
+
+  /* Garante uma cotação a fornecedor (categoria quadro_comando) vinculada
+     a este quadro — cria na 1ª chamada, reaproveita nas seguintes (não
+     duplica documento a cada clique em "enviar" por outro canal). Exige
+     vínculo prévio com uma Unidade do Formulário de Elevador. */
+  async function obterOuCriarCotacaoFornecedor(quadroId, fornecedor) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const store = window.CotacaoElevadorFornecedorStore;
+    if (!store) throw new Error('CotacaoElevadorFornecedorStore não carregado');
+
+    const quadro = await obter(quadroId);
+    if (!quadro) throw new Error('Quadro de comando não encontrado.');
+
+    if (quadro.cotacao_fornecedor_id) {
+      const existente = await store.getById(quadro.cotacao_fornecedor_id);
+      if (existente) return existente;
+    }
+
+    if (!quadro.formulario_elevador_unidade_id) {
+      throw new Error('Vincule este quadro a uma Unidade de um Formulário de Elevador (via Nº da Cotação) antes de enviar cotação a fornecedor.');
+    }
+    const { data: unidadeElevador, error: eUn } = await c.from('formularios_elevador_unidades')
+      .select('*').eq('id', quadro.formulario_elevador_unidade_id).maybeSingle();
+    if (eUn) throw eUn;
+    if (!unidadeElevador) throw new Error('A Unidade do Formulário de Elevador vinculada não foi encontrada — vincule novamente.');
+
+    const unidadeSintetica = construirUnidadeSintetica(quadro, unidadeElevador);
+    const cot = await store.gerar(unidadeElevador.formulario_id, [unidadeSintetica], fornecedor, quadro.numero_cotacao, 'quadro_comando');
+    await salvar(quadroId, { cotacao_fornecedor_id: cot.id });
+    return cot;
+  }
+
   window.QuadroComandoStore = {
     podeDecidirOrigemFabricacao,
     criar, salvar, obter, listarPorNumeroCotacao,
@@ -240,5 +348,6 @@
     catalogoPorSku,
     gerarBomECortes, obterBomECortes,
     gerarChecklistSeparacao, obterChecklist, marcarChecklistItem,
+    buscarUnidadesElevadorPorCotacao, vincularFormularioElevador, obterOuCriarCotacaoFornecedor,
   };
 }());
