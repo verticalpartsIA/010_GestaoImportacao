@@ -7,18 +7,19 @@
 
 function fmtDataHora(d) { return d ? new Date(d).toLocaleString('pt-BR') : '—'; }
 
-/* Gera URL pra navegar até o documento que precisa ser aprovado */
+/* Gera navegação pra abrir o documento que precisa ser aprovado
+   Retorna {page, id} ou null */
 function gerarLinkDecisao(decisao) {
   const ctx = decisao.contexto || {};
 
   // Cotação — vai pro formulário de cotação
   if (decisao.numero_cotacao != null) {
-    return `?page=formulario-elevador&id=${decisao.numero_cotacao}`;
+    return { page: 'formulario-elevador', id: decisao.numero_cotacao };
   }
 
   // Dossier de obra
   if (decisao.dossier_id) {
-    return `?page=dossier-obra&id=${decisao.dossier_id}`;
+    return { page: 'dossier-obra', id: decisao.dossier_id };
   }
 
   // Referência genérica (tabela + id)
@@ -30,7 +31,7 @@ function gerarLinkDecisao(decisao) {
       'formularios_ims': 'formulario-ims',
     };
     const page = tabelaPagina[decisao.referencia_tabela] || decisao.referencia_tabela;
-    return `?page=${page}&id=${decisao.referencia_id}`;
+    return { page, id: decisao.referencia_id };
   }
 
   // Fallback: nenhum link
@@ -112,7 +113,7 @@ function DecCard({ decisao, onReload }) {
       </div>
       {souAprovador && (
         <div className="row gap-2">
-          {linkDocumento && <Button variant="outline" size="sm" onClick={() => window.location.href = linkDocumento}>Ver documento</Button>}
+          {linkDocumento && <Button variant="outline" size="sm" onClick={() => window.VpRouter.navigate(linkDocumento.page, linkDocumento.id)}>Ver documento</Button>}
           <Button variant="danger" size="sm" onClick={() => setReprovando(true)} disabled={busy}>Reprovar</Button>
           <Button variant="primary" size="sm" onClick={aprovar} disabled={busy}>{busy ? 'Salvando…' : 'Aprovar'}</Button>
         </div>
