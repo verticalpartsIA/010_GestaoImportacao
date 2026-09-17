@@ -1013,7 +1013,21 @@ function NotificationPrefsModal({ onClose }) {
 
 /* ---------- CONFIGURAÇÕES ---------- */
 function ConfiguracoesPage() {
-  const [tab, setTab] = React.useState("usuarios");
+  /* Aba inicial vem da URL quando é deep link (ex.: .../admin/configuracoes/permissoes)
+     — mesmo padrão de dossier-obra.jsx. "configuracoes" não tem id de
+     registro (não é uma tela de detalhe), então o 2º segmento da URL é
+     usado como identificador da aba em vez de um id de banco. */
+  const [tab, setTab] = React.useState(() =>
+    (window.VpRouter && window.VpRouter.parseLocation().id) || "usuarios");
+
+  /* Espelha a aba ativa na URL — replace (não push) pra não lotar o
+     histórico a cada clique de aba. Roda independente do efeito de
+     sincronização de rota em app.jsx (que não reage a mudança de aba). */
+  React.useEffect(() => {
+    if (!window.VpRouter) return;
+    window.VpRouter.navigate('configuracoes', tab, null, { replace: true });
+  }, [tab]);
+
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -1297,11 +1311,19 @@ function ConfigAlcadasPropostas() {
       <div style={{ padding: "10px 12px", marginBottom: 14, background: "var(--vp-warning-tint, #f8eed7)", border: "1px solid var(--border)", fontSize: 12, color: "var(--fg2)" }}>
         Administradores sempre têm as 4 alçadas. Pra qualquer outra pessoa, ligue os toggles abaixo — sem isso, ela não tem essa capacidade.
       </div>
-      <div className="table-wrap" style={{ border: 0, overflowX: 'auto' }}>
+      {/* Lista de colaboradores costuma passar de uma tela — cabeçalho fixo
+         (sticky, relativo a este container com scroll próprio) e barra de
+         rolagem horizontal visível pra tabela larga (muitas capacidades),
+         só nesta tabela — não mexe na classe .table-wrap compartilhada
+         pelo resto do sistema. */}
+      <div className="table-wrap" style={{ border: 0, overflowX: 'auto', overflowY: 'auto', maxHeight: '65vh' }}>
         <table className="t">
           <thead><tr>
-            <th>Nome</th><th>Nível</th>
-            {ALCADAS_PROPOSTAS.map((a) => <th key={a.modulo + a.capacidade} style={{ textAlign:'center' }} title={a.hint}>{a.label}</th>)}
+            <th style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--vp-gray-50)' }}>Nome</th>
+            <th style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--vp-gray-50)' }}>Nível</th>
+            {ALCADAS_PROPOSTAS.map((a) => (
+              <th key={a.modulo + a.capacidade} style={{ textAlign:'center', position: 'sticky', top: 0, zIndex: 1, background: 'var(--vp-gray-50)' }} title={a.hint}>{a.label}</th>
+            ))}
           </tr></thead>
           <tbody>
             {perfis.map((p) => {

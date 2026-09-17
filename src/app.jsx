@@ -237,7 +237,13 @@ function App() {
     // que rodasse (ex.: no mount de um deep link .../DOS-M034/documentos).
     const atual = window.VpRouter.parseLocation();
     const tabAtual = atual.route === route ? atual.tab : null;
-    window.VpRouter.navigate(route, id != null ? id : pendingFetchId, tabAtual);
+    // Mesma ideia, mas pro 2º segmento (id): rotas sem id de registro
+    // (ex.: configuracoes) não têm subsel/deriveIdForRoute próprio, então
+    // usam esse 2º segmento como identificador de aba (ver
+    // ConfiguracoesPage) — sem preservar aqui, este efeito zeraria a aba
+    // assim que rodasse no mount de um deep link .../configuracoes/permissoes.
+    const idAtualPreservado = (id == null && pendingFetchId == null && atual.route === route) ? atual.id : null;
+    window.VpRouter.navigate(route, id != null ? id : (pendingFetchId != null ? pendingFetchId : idAtualPreservado), tabAtual);
   }, [route, subsel, pendingFetchId]);
 
   React.useEffect(() => {
