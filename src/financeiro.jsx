@@ -1041,6 +1041,7 @@ function ConfiguracoesPage() {
       <Tabs tabs={[
         { key: "administracao", label: "Administração", icon: "users" },
         { key: "usuarios", label: "Usuários & Perfis", icon: "users" },
+        { key: "whatsapp", label: "WhatsApp", icon: "phone" },
         { key: "permissoes", label: "Permissões (RLS)", icon: "shield" },
         { key: "parametros", label: "Parâmetros", icon: "settings" },
         { key: "integracoes", label: "Integrações", icon: "globe" },
@@ -1050,6 +1051,7 @@ function ConfiguracoesPage() {
       <div style={{ marginTop: 24 }}>
         {tab === "administracao" && <window.ColaboradoresAdminPage/>}
         {tab === "usuarios" && <ConfigUsers/>}
+        {tab === "whatsapp" && <ConfigWhatsapp/>}
         {tab === "permissoes" && <ConfigPermissions/>}
         {tab === "parametros" && <ConfigParams/>}
         {tab === "integracoes" && <ConfigIntegrations/>}
@@ -1144,6 +1146,82 @@ function ConfigUsers() {
 
       {showConvite && <ModalConvidarUsuario onClose={() => setShowConvite(false)} onSaved={() => { setShowConvite(false); load(); }}/>}
     </>
+  );
+}
+
+/* WhatsApp por Colaborador — cadastro do número usado pela notificação
+   automática da Central de Decisões (ver decisoes-store.js:notificarWhatsapp
+   e docs/superpowers/specs/2026-09-17-whatsapp-central-decisoes-design.md).
+   Mostra os e-mails com papel fixo em DecisoesStore.EMAILS_FIXOS — cobertura
+   incompleta de números é a armadilha mais comum desse tipo de integração,
+   então a lista fica visível mesmo pra quem ainda não tem número salvo. */
+function ConfigWhatsapp() {
+  const sb = window.__VP_SB.sb;
+  const [perfis, setPerfis] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [editando, setEditando] = React.useState({});
+  const [salvando, setSalvando] = React.useState(null);
+
+  const emailsRelevantes = React.useMemo(() => {
+    const fixos = Object.values((window.DecisoesStore || {}).EMAILS_FIXOS || {}).flat();
+    return [...new Set(fixos)];
+  }, []);
+
+  const load = React.useCallback(async () => {
+    if (!emailsRelevantes.length) { setPerfis([]); setLoading(false); return; }
+    const { data } = await sb.from('perfis').select('id, email, nome, whatsapp_number').in('email', emailsRelevantes);
+    setPerfis(data || []); setLoading(false);
+  }, [emailsRelevantes]);
+  React.useEffect(() => { load(); }, [load]);
+
+  const salvar = async (email) => {
+    setSalvando(email);
+    const numero = (editando[email] ?? '').replace(/\D/g, '');
+    const { error } = await sb.from('perfis').update({ whatsapp_number: numero || null }).eq('email', email);
+    setSalvando(null);
+    if (error) return window.toast('Erro: ' + error.message, 'error');
+    window.toast('Número salvo.', 'info');
+    setEditando((e) => { const n = { ...e }; delete n[email]; return n; });
+    load();
+  };
+
+  if (loading) return <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
+
+  return (
+    <Card title="WhatsApp por Colaborador" sub="Números usados pela notificação automática da Central de Decisões">
+      <div className="table-wrap" style={{ border: 0 }}>
+        <table className="t">
+          <thead><tr><th>Nome</th><th>Email</th><th>WhatsApp</th><th></th></tr></thead>
+          <tbody>
+            {emailsRelevantes.length === 0 && (
+              <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
+                Nenhum papel fixo cadastrado em DecisoesStore.EMAILS_FIXOS.
+              </td></tr>
+            )}
+            {emailsRelevantes.map((email) => {
+              const p = perfis.find((x) => x.email === email);
+              const valor = editando[email] ?? (p?.whatsapp_number || '');
+              return (
+                <tr key={email}>
+                  <td>{p?.nome || '—'}</td>
+                  <td><span className="mono small">{email}</span></td>
+                  <td>
+                    <input type="text" className="input" style={{ maxWidth: 200 }}
+                      placeholder="5511999999999" value={valor}
+                      onChange={(e) => setEditando((s) => ({ ...s, [email]: e.target.value }))}/>
+                  </td>
+                  <td>
+                    <Button variant="ghost" size="sm" disabled={salvando === email} onClick={() => salvar(email)}>
+                      {salvando === email ? 'Salvando…' : 'Salvar'}
+                    </Button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+    </Card>
   );
 }
 

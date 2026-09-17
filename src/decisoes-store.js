@@ -390,6 +390,7 @@
   }
 
   window.DecisoesStore = {
+    EMAILS_FIXOS,
     PAPEL_LABEL, TIPO_LABEL,
     resolverAprovadores, souAprovador,
     criarDecisao, criarDecisaoSeNaoExiste,
