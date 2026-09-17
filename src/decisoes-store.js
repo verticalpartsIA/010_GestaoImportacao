@@ -90,6 +90,15 @@
     return (decisao.aprovadores_esperados || []).some((e) => (e || '').toLowerCase() === email);
   }
 
+  /* ---------- WhatsApp (Central de Decisões) ---------- */
+  /* Fire-and-forget — nunca bloqueia nem derruba a ação principal (criar,
+     aprovar, reprovar). Ver docs/superpowers/specs/2026-09-17-whatsapp-central-decisoes-design.md */
+  function notificarWhatsapp(payload) {
+    const c = sb(); if (!c) return;
+    c.functions.invoke('whatsapp-notify', { body: payload })
+      .catch((e) => console.warn('[DecisoesStore] notificarWhatsapp falhou', e));
+  }
+
   /* ---------- Criação ---------- */
   async function criarDecisao({ tipo, papelRequerido, numeroCotacao, dossierId, referenciaTabela, referenciaId, dependeDe, contexto }) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -107,9 +116,16 @@
       // 20260817200000_decisoes_gerenciais_schema_doc.sql.
       aprovador_esperado_email: aprovadores[0] || null,
       contexto: contexto || {},
+      solicitado_por: meuEmail() || null,
     };
     const { data, error } = await c.from('decisoes_gerenciais').insert(row).select().single();
     if (error) throw error;
+    if (aprovadores.length && status === 'pendente') {
+      notificarWhatsapp({
+        stage: 'decisao_pendente', decisaoId: data.id, tipo,
+        numeroCotacao: numeroCotacao ?? null, recipients: aprovadores,
+      });
+    }
     return data;
   }
 
@@ -220,6 +236,12 @@
     if (error) throw error;
     await desbloquearDependentes(c, id);
     await notificarResultado(c, { ...decisao, motivo: motivo || null }, 'aprovada');
+    if (decisao.solicitado_por) {
+      notificarWhatsapp({
+        stage: 'decisao_resultado', decisaoId: id, tipo: decisao.tipo,
+        statusFinal: 'aprovada', motivo: motivo || null, recipients: [decisao.solicitado_por],
+      });
+    }
   }
 
   async function reprovar(id, motivo) {
@@ -235,6 +257,12 @@
     }).eq('id', id);
     if (error) throw error;
     await notificarResultado(c, { ...decisao, motivo: motivo.trim() }, 'reprovada');
+    if (decisao.solicitado_por) {
+      notificarWhatsapp({
+        stage: 'decisao_resultado', decisaoId: id, tipo: decisao.tipo,
+        statusFinal: 'reprovada', motivo: motivo.trim(), recipients: [decisao.solicitado_por],
+      });
+    }
   }
 
   /* ---------- Gates ---------- */
