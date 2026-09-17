@@ -1410,10 +1410,11 @@ function EmailInbox({ setRoute, setSubsel }) {
   /* 14/09 — achado real (auditoria do tour.md): anexos de "Enviados" nunca
      tinham link de download (badge sem href), mesmo com o arquivo salvo de
      verdade no Storage — só a Caixa de Entrada gerava link (via read-inbox,
-     que assina com service role). O bucket emails-anexos nega SELECT pra
-     anon (só authenticated/service_role), então o navegador não consegue
-     assinar sozinho: precisa da edge function sign-email-anexos, que faz
-     exatamente o mesmo que read-inbox já fazia pros anexos recebidos. */
+     que assina com a chave de serviço do Supabase, não a chave anônima). O
+     bucket emails-anexos nega SELECT pra anon (só authenticated/chave de
+     serviço), então o navegador não consegue assinar sozinho: precisa da
+     edge function sign-email-anexos, que faz exatamente o mesmo que
+     read-inbox já fazia pros anexos recebidos. */
   const carregarEnviados = React.useCallback(() => {
     setCarregandoEnviados(true);
     window.__VP_SB.sb.from('emails_projeto').select('*').eq('direcao', 'saida')
