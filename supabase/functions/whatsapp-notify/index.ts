@@ -132,34 +132,38 @@ Deno.serve(async (req: Request) => {
     const numero = (perfil?.whatsapp_number || "").replace(/\D/g, "");
 
     if (!numero) {
-      await admin.from("whatsapp_notification_log").insert({
+      const { error: logError } = await admin.from("whatsapp_notification_log").insert({
         stage, decisao_id: decisaoId, recipient_email: email, recipient_number: null, status: "skipped_no_number",
       });
+      if (logError) console.error("[whatsapp-notify] log insert failed", logError);
       resultados.push({ email, status: "skipped_no_number" });
       continue;
     }
 
     if (!creds) {
-      await admin.from("whatsapp_notification_log").insert({
+      const { error: logError } = await admin.from("whatsapp_notification_log").insert({
         stage, decisao_id: decisaoId, recipient_email: email, recipient_number: numero, status: "skipped_no_apikey",
       });
+      if (logError) console.error("[whatsapp-notify] log insert failed", logError);
       resultados.push({ email, status: "skipped_no_apikey" });
       continue;
     }
 
     try {
       const envio = await enviarEvolution(numero, texto, creds);
-      await admin.from("whatsapp_notification_log").insert({
+      const { error: logError } = await admin.from("whatsapp_notification_log").insert({
         stage, decisao_id: decisaoId, recipient_email: email, recipient_number: numero,
         status: envio.ok ? "sent" : "error", http_status: envio.status,
         error_detail: envio.ok ? null : envio.body,
       });
+      if (logError) console.error("[whatsapp-notify] log insert failed", logError);
       resultados.push({ email, status: envio.ok ? "sent" : "error" });
     } catch (e) {
-      await admin.from("whatsapp_notification_log").insert({
+      const { error: logError } = await admin.from("whatsapp_notification_log").insert({
         stage, decisao_id: decisaoId, recipient_email: email, recipient_number: numero,
         status: "error", error_detail: String(e).slice(0, 500),
       });
+      if (logError) console.error("[whatsapp-notify] log insert failed", logError);
       resultados.push({ email, status: "error" });
     }
   }
