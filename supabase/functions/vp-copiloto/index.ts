@@ -988,6 +988,164 @@ Ao responder sobre esta tela, deixe claro pro usuário quais abas realmente
 persistem mudança (1, 2, 3a, 6) e quais são só estáticas/documentação
 (3b, 4, 5) — é fácil o usuário achar que mudar um parâmetro na aba 4
 afeta o cálculo real, e hoje isso não acontece.`,
+
+  'quadro-comando': `TELA: Quadro de Comando (Comercial → Formulários).
+
+Coleta os dados técnicos do quadro de comando (painel elétrico NICE3000
+MRL) de um elevador e, a partir deles, gera a especificação completa de
+fabricação/compra: lista de materiais (BOM), lista de corte de fiação, e
+um checklist digital de separação por chão de fábrica. Entrada real hoje:
+botão "Novo quadro de comando" na listagem (avulso) — uma lista futura
+"por cotação" ainda não existe.
+
+TOPO DA PÁGINA (sempre visível, fora das abas):
+
+CARD "Origem de fabricação" — decide entre 2 ramos:
+- "Fabricar interno (VerticalParts)" (Ramo A) — VerticalParts monta o
+  quadro com peças próprias; usa as abas de baixo (Escopo, Configuração e
+  portas, Quadro/máquina, Geometria p/ fiação, BOM/lista de corte/
+  checklist).
+- "Comprar pronto de fornecedor" (Ramo B) — compra um quadro já pronto de
+  um fornecedor (ex.: BST/NICE3000); substitui as 5 abas por 2 cards de
+  vínculo+envio de cotação (ver abaixo). Não gera BOM/corte/checklist
+  (isso só existe pro Ramo A).
+- Esse campo (select "Fabricar interno" / "Comprar pronto") só é editável
+  por quem tem a alçada "quadro_comando"/"decidir_fabricacao" (concedida
+  em Configurações → Permissões → Alçadas de Propostas, rótulo "Decide
+  fabricar interno ou comprar pronto (Quadro de Comando)"). Sem essa
+  alçada o campo aparece TRAVADO (disabled) com uma nota explicando o
+  motivo ao lado — Administradores (nível) sempre passam nessa checagem.
+- Também neste card: "Tipo de aplicação" (MR com casa de máquinas / MRL
+  sem casa de máquinas), "Novo ou modernização", "Fabricante do comando"
+  (texto livre) — estes 3 campos são editáveis por qualquer um, só a
+  origem de fabricação em si é que é travada pela alçada.
+
+RAMO A — ABAS (só aparecem quando origem_fabricacao = "interno"):
+
+1. "Escopo" — tabela de 11 itens do escopo do pedido (COP, LOP, LIP/
+   indicadores, Operador de porta, Resgate automático, Interfone, Inspeção
+   no teto, Caixa e botão de parada do poço, Iluminação/tomada, Acessórios
+   de segurança, Cabos — fiação fixa + cabo de manobra). Para CADA item:
+   decisão (Fornecer / Reutilizar existente / Fornecido por terceiro / Não
+   se aplica) + campo livre de Qtd/modelo (só habilitado depois de
+   escolher uma decisão que não seja "Não se aplica").
+
+2. "Configuração e portas" (paradas) — uma linha por parada: Identificação
+   (texto livre), Abertura frontal / Abertura traseira (checkboxes — uma
+   parada pode ter as duas), Tipo de porta do pavimento, Tipo de porta da
+   cabina, Qtd. LOP frontal, Qtd. LOP traseira (só habilitado se a
+   abertura traseira estiver marcada). REGRA: o número de paradas NÃO
+   determina sozinho a quantidade de portas/botoeiras quando há frentes
+   opostas — por isso cada parada tem seus próprios campos frontal/
+   traseiro, em vez de um único total global.
+
+3. "Quadro/máquina" — Tipo de máquina (Síncrona/ímãs permanentes ou
+   Assíncrona/indução), Fabricante/modelo, Potência (kW), Corrente (A),
+   Tensão da rede (220V/380V), Velocidade (rpm), Freio (tipo, tensão de
+   acionamento, tensão de manutenção), Encoder (fabricante, modelo/
+   referência exata, tecnologia/protocolo — ex. incremental/EnDat/
+   Hiperface). A "variante do quadro" é reconhecida automaticamente a
+   partir de Potência × Tensão (só existem 4 variantes cadastradas hoje:
+   7,5kW/220V, 7,5kW/380V, 15kW/220V, 15kW/380V — cada uma tem sua própria
+   BOM fixa/variável tirada da planilha real do fornecedor). Combinação de
+   potência/tensão fora dessas 4, ou encoder incomum, não é uma variante
+   "corrigida" automaticamente — some da tela como "não reconhecida" e a
+   geração de BOM vai reportar erro em vez de inventar peças.
+
+4. "Geometria p/ fiação" — 4 cards:
+   a) "Geometria da caixa (medida em mm)": Profundidade do poço (S),
+      Última altura (K), Largura/Profundidade da caixa de corrida,
+      Largura/Profundidade da cabina. Poço e Última altura têm um
+      checkbox "usar padrão comercial" (1500mm e 4400mm respectivamente)
+      — só ativa esse padrão se o usuário marcar explicitamente; por
+      padrão o sistema exige a medida REAL da obra, nunca assume o padrão
+      sozinho. Se K (Última altura) ficar acima de 4400mm, aparece aviso
+      "fora do padrão — encaminhar pra análise da engenharia".
+   b) "Distância entre pisos por intervalo": um valor de distância (mm)
+      por intervalo entre paradas (De/Para), cada linha marcada como
+      "Medido" ou "Estimado (3000mm)". REGRA: nunca multiplicar um mínimo
+      presumido por N intervalos — cada intervalo tem seu próprio valor,
+      porque intervalos reais raramente são todos iguais.
+   c) "Posição do quadro e rotas de fiação": Lado do quadro / Lado tripé-
+      máquina / Lado da guia solitária (Esquerda/Direita — relativos, o
+      espelhamento preserva as RELAÇÕES entre eles, não o rótulo em si),
+      e 3 distâncias em mm (quadro→máquina, quadro→limitador, quadro→
+      entrada da caixa) que alimentam diretamente a lista de corte da
+      fiação FIXA (item d abaixo).
+   d) "Cabo de manobra — seio e folga": Seio do cabo (mm) + checkbox
+      "Definição do seio confirmada pela engenharia?", Folga (mm) +
+      checkbox "Regra de folga confirmada pela engenharia?". REGRA CRÍTICA
+      (não relaxar nunca ao responder sobre isso): o corte do cabo de
+      manobra só é calculado com confiança "Confirmado" se AMBOS os
+      checkboxes estiverem marcados; sem isso o corte fica marcado
+      "Pendente de engenharia" e NÃO deve ser tratado como medida
+      definitiva — o sistema propositalmente nunca assume uma definição
+      de "seio" ou aplica a folga sozinho sem confirmação explícita da
+      engenharia (histórico: os dados de referência do fornecedor eram
+      ambíguos demais nesse ponto pra virar regra automática segura).
+
+5. "BOM / lista de corte / checklist" (aba "resultado"):
+   - Botão "Gerar BOM + lista de corte" — recalcula do ZERO a cada clique
+     a partir do que está preenchido nas abas acima (idempotente, nunca
+     acumula duplicado); NÃO altera nada do que foi digitado no
+     formulário. Gera 2 tabelas: "Lista de compra (BOM)" (SKU, Descrição,
+     Grupo, Qtd, Unidade, Confiança) e "Lista de corte" (fiação fixa +
+     cabo de manobra: Tipo de cabo, Origem física, Destino físico,
+     Comprimento final, Confiança, Fórmula usada). Cada linha mostra um
+     badge de confiança: "Confirmado" (verde), "Estimado" (amarelo) ou
+     "Pendente de engenharia" (vermelho) — o vermelho significa que aquele
+     número NÃO deve ser usado pra cortar material de verdade sem
+     validação humana antes.
+   - Botão "Gerar checklist de separação" (só habilita depois de já ter
+     gerado a BOM pelo menos uma vez) — cria um checklist versionado
+     (nunca apaga/sobrescreve uma versão anterior, cada geração é uma
+     versão nova) agrupado em 3 blocos físicos de separação: "Caixa
+     metálica", "Componentes internos", "Fiação de poço e cabo de
+     manobra". Cada item tem um checkbox "feito" que qualquer um pode
+     marcar/desmarcar (chão de fábrica). REGRA NOTÁVEL, sempre repetir se
+     perguntado: este checklist é DISPARADO MANUALMENTE, nunca gerado
+     sozinho na aprovação do cliente — decisão explícita do usuário, ele
+     só quer o checklist no momento em que a fábrica for de fato começar
+     a separar os materiais, não antes.
+
+RAMO B — 2 CARDS (só aparecem quando origem_fabricacao = "comprado"),
+reaproveitando o MESMO mecanismo do RFQ de Elevadores (token público,
+portal de resposta do fornecedor, envio por WhatsApp/E-mail/Link, Inbox
+de e-mails):
+
+1. "Vínculo com Formulário de Elevador" — OBRIGATÓRIO antes de poder
+   enviar cotação. Busca por "Nº da Cotação" traz as Unidades daquele
+   Formulário de Elevador (identificação, tipo, capacidade, velocidade);
+   clicar "Vincular" numa delas grava o vínculo no quadro. Motivo real
+   dessa exigência (explique se perguntado "por que preciso vincular"):
+   'cotacoes_elevador_fornecedor.formulario_elevador_id' é uma
+   FOREIGN KEY NOT NULL no banco — não existe RFQ "solto" sem elevador
+   associado, então um Quadro de Comando avulso (Ramo B) tem que
+   emprestar o vínculo de uma Unidade de Elevador já cadastrada antes de
+   poder gerar cotação de fornecedor.
+   Já vinculado, mostra o id da Unidade com botão "Trocar vínculo".
+
+2. "Enviar cotação técnica ao fornecedor" — escolhe Fornecedor (lista do
+   cadastro de fornecedores de elevador), Telefone/E-mail de contato, e 3
+   botões (WhatsApp / E-mail / Copiar link). Ao clicar qualquer um deles
+   pela 1ª vez, cria (se ainda não existir) a cotação de fornecedor com
+   categoria_produto='quadro_comando' — reaproveita as mesmas seções
+   bilíngues (PT/EN) de especificação técnica do RFQ de elevador normal,
+   adaptadas: identificação do pedido, especificação básica do elevador
+   atendido, comando, máquina/freio/encoder, botoeiras e interface humana,
+   acessórios elétricos, geometria para fiação — os valores vêm
+   derivados do que foi preenchido no próprio Quadro de Comando e na
+   Unidade de Elevador vinculada, nunca inventados. Depois de criada, a
+   cotação fica fixa (reusa a mesma sempre, não cria uma nova a cada
+   clique) e a tela passa a mostrar status + quantas vezes já foi
+   enviada, com a busca/vínculo escondidos.
+
+REGRA GERAL DE TODA A TELA (badges "Confirmado"/"Estimado"/"Pendente de
+engenharia"): sempre que o usuário perguntar sobre um número específico do
+BOM ou da lista de corte, verifique mentalmente qual badge acompanha
+aquela linha antes de tratá-lo como definitivo — "Pendente de engenharia"
+significa literalmente que ninguém confirmou aquele valor ainda, não é um
+erro do sistema.`,
 };
 
 function extractJson(text: string): any {
