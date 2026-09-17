@@ -31,3 +31,6 @@ Andreia/
 # hyperresearch (repo clonado à parte + config local do vault) — ferramenta, não é parte do produto
 /hyperresearch/
 .hyperresearch/
+
+# Worktrees locais de desenvolvimento (superpowers:using-git-worktrees) — nunca versionar
+.worktrees/
