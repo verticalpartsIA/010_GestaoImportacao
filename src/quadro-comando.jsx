@@ -158,6 +158,35 @@ function QcMaquinaSecao({ maquina, onChange, disabled, varianteLabel }) {
   );
 }
 
+/* ---------- Componentes internos do quadro (item 3.5) ---------- */
+function QcComponentesSecao({ componentes, onChange, disabled }) {
+  const set = (patch) => onChange({ ...componentes, ...patch });
+  return (
+    <Card title="Componentes internos do quadro" sub="Especificação dos elementos que compõem o gabinete do quadro de comando.">
+      <div className="grid-3" style={{ gap: 12 }}>
+        <QcField label="Inversor — marca/modelo"><QcInput value={componentes.inversor_modelo} disabled={disabled} onChange={(v) => set({ inversor_modelo: v })}/></QcField>
+        <QcField label="Inversor — potência (kW)"><QcInput type="number" value={componentes.inversor_potencia_kw} disabled={disabled} onChange={(v) => set({ inversor_potencia_kw: v })}/></QcField>
+        <QcField label="Placa PCB principal — código SKU"><QcInput value={componentes.pcb_principal_sku} disabled={disabled} onChange={(v) => set({ pcb_principal_sku: v })}/></QcField>
+        <QcField label="Disjuntor — tipo/corrente (A)"><QcInput value={componentes.disjuntor_tipo_a} disabled={disabled} placeholder="ex: C16" onChange={(v) => set({ disjuntor_tipo_a: v })}/></QcField>
+        <QcField label="Disjuntor — quantidade"><QcInput type="number" value={componentes.disjuntor_qtd} disabled={disabled} onChange={(v) => set({ disjuntor_qtd: v })}/></QcField>
+        <QcField label="Contator — modelo"><QcInput value={componentes.contator_modelo} disabled={disabled} placeholder="ex: CJX2-1210" onChange={(v) => set({ contator_modelo: v })}/></QcField>
+        <QcField label="Contator — quantidade"><QcInput type="number" value={componentes.contator_qtd} disabled={disabled} onChange={(v) => set({ contator_qtd: v })}/></QcField>
+        <QcField label="Relé térmico — corrente (A)"><QcInput type="number" value={componentes.rele_termico_a} disabled={disabled} onChange={(v) => set({ rele_termico_a: v })}/></QcField>
+        <QcField label="Relé térmico — quantidade"><QcInput type="number" value={componentes.rele_termico_qtd} disabled={disabled} onChange={(v) => set({ rele_termico_qtd: v })}/></QcField>
+        <QcField label="Terminais M5 — quantidade"><QcInput type="number" value={componentes.terminais_m5_qtd} disabled={disabled} onChange={(v) => set({ terminais_m5_qtd: v })}/></QcField>
+        <QcField label="Parafusos — tamanho/tipo"><QcInput value={componentes.parafusos_tamanho} disabled={disabled} placeholder="ex: M6×10" onChange={(v) => set({ parafusos_tamanho: v })}/></QcField>
+        <QcField label="Parafusos — quantidade"><QcInput type="number" value={componentes.parafusos_qtd} disabled={disabled} onChange={(v) => set({ parafusos_qtd: v })}/></QcField>
+        <QcField label="Fusíveis — tipo/corrente (A)"><QcInput value={componentes.fusivel_tipo_a} disabled={disabled} placeholder="ex: gL 10" onChange={(v) => set({ fusivel_tipo_a: v })}/></QcField>
+        <QcField label="Fusíveis — quantidade"><QcInput type="number" value={componentes.fusivel_qtd} disabled={disabled} onChange={(v) => set({ fusivel_qtd: v })}/></QcField>
+        <QcField label="Cabos internos — bitola/tipo"><QcInput value={componentes.cabos_internos_bitola} disabled={disabled} placeholder="ex: 4mm² VVF" onChange={(v) => set({ cabos_internos_bitola: v })}/></QcField>
+        <QcField label="Cabos internos — metros"><QcInput type="number" value={componentes.cabos_internos_metros} disabled={disabled} onChange={(v) => set({ componentes.cabos_internos_metros: v })}/></QcField>
+        <QcField label="Conectores/plugs — tipo"><QcInput value={componentes.conectores_tipo} disabled={disabled} placeholder="ex: 2.8mm, 6.3mm" onChange={(v) => set({ conectores_tipo: v })}/></QcField>
+        <QcField label="Conectores/plugs — quantidade"><QcInput type="number" value={componentes.conectores_qtd} disabled={disabled} onChange={(v) => set({ conectores_qtd: v })}/></QcField>
+      </div>
+    </Card>
+  );
+}
+
 /* ---------- Geometria para fiação (item 4/5) ---------- */
 function QcGeometriaSecao({ geometria, intervalos, onGeom, onIntervalos, disabled }) {
   const set = (patch) => onGeom({ ...geometria, ...patch });
@@ -517,6 +546,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
       await window.QuadroComandoStore.salvarIntervalos(quadroId, quadro.intervalos);
       await window.QuadroComandoStore.salvarGeometria(quadroId, quadro.geometria);
       await window.QuadroComandoStore.salvarMaquina(quadroId, quadro.maquina);
+      await window.QuadroComandoStore.salvarComponentes(quadroId, quadro.componentes);
       window.toast?.('Quadro de comando salvo.', 'success');
       reload();
     } catch (e) { window.toast?.('Erro ao salvar: ' + e.message, 'error'); }
@@ -565,6 +595,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
             { key: 'escopo', label: 'Escopo' },
             { key: 'paradas', label: 'Configuração e portas' },
             { key: 'maquina', label: 'Quadro/máquina' },
+            { key: 'componentes', label: 'Componentes internos' },
             { key: 'geometria', label: 'Geometria p/ fiação' },
             { key: 'resultado', label: 'BOM / lista de corte / checklist' },
           ]} active={tab} onChange={setTab}/>
@@ -572,6 +603,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
             {tab === 'escopo' && <QcEscopoSecao escopo={quadro.escopo_fornecimento || {}} onChange={(v) => setQuadro({ ...quadro, escopo_fornecimento: v })}/>}
             {tab === 'paradas' && <QcParadasSecao paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, paradas: v })}/>}
             {tab === 'maquina' && <QcMaquinaSecao maquina={quadro.maquina} varianteLabel={varianteLabel} onChange={(v) => setQuadro({ ...quadro, maquina: v })}/>}
+            {tab === 'componentes' && <QcComponentesSecao componentes={quadro.componentes || {}} onChange={(v) => setQuadro({ ...quadro, componentes: v })}/>}
             {tab === 'geometria' && <QcGeometriaSecao geometria={quadro.geometria} intervalos={quadro.intervalos}
               onGeom={(v) => setQuadro({ ...quadro, geometria: v })} onIntervalos={(v) => setQuadro({ ...quadro, intervalos: v })}/>}
             {tab === 'resultado' && <QcResultadoSecao quadroId={quadroId} podeGerar={true}/>}
