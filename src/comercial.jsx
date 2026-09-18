@@ -753,15 +753,23 @@ function FormulariosPage({ setRoute, setSubsel }) {
       </div>
       <div className="grid-4" style={{ gap: 14 }}>
         {FE_CATEGORIAS.map((c) => (
-          <Card key={c.id} title={c.label} sub={c.pronto ? (c.subLabel || 'Disponível') : 'Em breve'}
-            style={!c.pronto ? { opacity: .55, cursor: 'not-allowed' } : { cursor: 'pointer' }}
-            action={<Icon.chevRight/>}>
-            <div
-              onClick={() => { if (c.pronto) { setSubsel && setSubsel(null); setRoute(c.route); } }}
-              style={{ minHeight: 40, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--fg2)', fontSize: 12.5 }}>
-              {c.pronto ? 'Clique para preencher um novo formulário.' : 'Estrutura prevista para fase futura.'}
-            </div>
-          </Card>
+          <div key={c.id}
+            onClick={() => { if (c.pronto) { setSubsel && setSubsel(null); setRoute(c.route); } }}
+            style={!c.pronto ? { opacity: .55, cursor: 'not-allowed' } : { cursor: 'pointer' }}>
+            <Card title={c.label} sub={c.pronto ? (c.subLabel || 'Disponível') : 'Em breve'}
+              action={<Icon.chevRight/>}>
+              <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--fg2)', fontSize: 12.5 }}>
+                {c.pronto ? (
+                  <>
+                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 6, height: 6, borderRadius: '50%', background: 'var(--vp-blue)', flexShrink: 0 }}/>
+                    Clique para preencher um novo formulário.
+                  </>
+                ) : (
+                  'Estrutura prevista para fase futura.'
+                )}
+              </div>
+            </Card>
+          </div>
         ))}
       </div>
     </div>
