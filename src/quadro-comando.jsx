@@ -583,7 +583,8 @@ function QuadroComandoDetail({ quadroId, onClose }) {
 }
 
 function QuadroComandoPage({ setRoute, subsel }) {
-  const [abertoId, setAbertoId] = React.useState(() => (window.VpRouter && window.VpRouter.parseLocation().id) || null);
+  const initialId = typeof subsel === 'string' ? subsel : ((window.VpRouter && window.VpRouter.parseLocation().id) || null);
+  const [abertoId, setAbertoId] = React.useState(() => initialId);
   const [criando, setCriando] = React.useState(false);
 
   // Sem número de cotação fixo aqui: lista geral (por cotação) fica pra uma
