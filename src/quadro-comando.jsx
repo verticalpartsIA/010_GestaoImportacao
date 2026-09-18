@@ -577,7 +577,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
   );
 }
 
-function QuadroComandoPage() {
+function QuadroComandoPage({ setRoute, subsel }) {
   const [abertoId, setAbertoId] = React.useState(() => (window.VpRouter && window.VpRouter.parseLocation().id) || null);
   const [criando, setCriando] = React.useState(false);
 
@@ -590,13 +590,13 @@ function QuadroComandoPage() {
     try {
       const q = await window.QuadroComandoStore.criar({});
       setAbertoId(q.id);
-      if (window.VpRouter) window.VpRouter.navigate('quadro-comando', q.id);
+      if (window.VpRouter) window.VpRouter.navigate('formulario-quadro-comando', q.id);
     } catch (e) { window.toast?.('Erro ao criar: ' + e.message, 'error'); }
     finally { setCriando(false); }
   };
 
   if (abertoId) {
-    return <QuadroComandoDetail quadroId={abertoId} onClose={() => { setAbertoId(null); if (window.VpRouter) window.VpRouter.navigate('formularios'); }}/>;
+    return <QuadroComandoDetail quadroId={abertoId} onClose={() => { setAbertoId(null); setRoute && setRoute('formularios'); }}/>;
   }
 
   return (
