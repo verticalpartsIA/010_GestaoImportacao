@@ -44,17 +44,22 @@ function QcOrigemBadge({ confianca }) {
 
 /* ---------- Escopo de fornecimento (item 1 da instrução) ---------- */
 const QC_ESCOPO_ITENS = [
-  { key: 'cop', label: 'COP (botoeira de cabina)' },
-  { key: 'lop', label: 'LOP (botoeiras de pavimento)' },
-  { key: 'lip', label: 'LIP / indicadores' },
-  { key: 'operador_porta', label: 'Operador de porta' },
-  { key: 'resgate_automatico', label: 'Resgate automático' },
-  { key: 'interfone', label: 'Interfone' },
-  { key: 'inspecao_teto', label: 'Inspeção no teto' },
-  { key: 'caixa_botao_parada_poco', label: 'Caixa e botão de parada do poço' },
-  { key: 'iluminacao_tomada', label: 'Iluminação/tomada' },
-  { key: 'acessorios_seguranca', label: 'Acessórios de segurança' },
-  { key: 'cabos', label: 'Cabos (fiação fixa + cabo de manobra)' },
+  { key: 'cop', label: 'COP — Botoeira de Cabina' },
+  { key: 'lop', label: 'LOP — Botoeira de Pavimento' },
+  { key: 'lip', label: 'LIP — Indicador de Posição sobre as Portas' },
+  { key: 'operador_porta', label: 'Operador de Portas' },
+  { key: 'resgate_automatico', label: 'Resgate Automático (ARD)' },
+  { key: 'interfone', label: 'Interfone 5 Canais' },
+  { key: 'botoeira_inspecao_cabina', label: 'Botoeira de Inspeção sobre a Cabina' },
+  { key: 'botoeira_inspecao_poco', label: 'Botoeira de Inspeção no Fundo do Poço' },
+  { key: 'botao_stop_poco', label: 'Botão de Stop para Acesso ao Poço' },
+  { key: 'gongo', label: 'Gongo' },
+  { key: 'anuncio_voz', label: 'Anúncio de Voz na Cabina' },
+  { key: 'suporte_cabo_comando', label: 'Suporte de Fixação para Cabo de Comando' },
+  { key: 'sensor_fotoeletrico', label: 'Sensor Fotoelétrico para Informação de Poço' },
+  { key: 'pesador_carga', label: 'Pesador de Carga' },
+  { key: 'tomada_fundo_poco', label: 'Tomada para Fundo do Poço' },
+  { key: 'cabos', label: 'Cabos — Fiação Fixa + Cabo de Manobra' },
 ];
 const QC_ESCOPO_OPCOES = [
   { value: 'fornecer', label: 'Fornecer' },
