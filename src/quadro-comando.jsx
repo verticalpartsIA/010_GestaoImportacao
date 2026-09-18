@@ -179,7 +179,7 @@ function QcComponentesSecao({ componentes, onChange, disabled }) {
         <QcField label="Fusíveis — tipo/corrente (A)"><QcInput value={componentes.fusivel_tipo_a} disabled={disabled} placeholder="ex: gL 10" onChange={(v) => set({ fusivel_tipo_a: v })}/></QcField>
         <QcField label="Fusíveis — quantidade"><QcInput type="number" value={componentes.fusivel_qtd} disabled={disabled} onChange={(v) => set({ fusivel_qtd: v })}/></QcField>
         <QcField label="Cabos internos — bitola/tipo"><QcInput value={componentes.cabos_internos_bitola} disabled={disabled} placeholder="ex: 4mm² VVF" onChange={(v) => set({ cabos_internos_bitola: v })}/></QcField>
-        <QcField label="Cabos internos — metros"><QcInput type="number" value={componentes.cabos_internos_metros} disabled={disabled} onChange={(v) => set({ componentes.cabos_internos_metros: v })}/></QcField>
+        <QcField label="Cabos internos — metros"><QcInput type="number" value={componentes.cabos_internos_metros} disabled={disabled} onChange={(v) => set({ cabos_internos_metros: v })}/></QcField>
         <QcField label="Conectores/plugs — tipo"><QcInput value={componentes.conectores_tipo} disabled={disabled} placeholder="ex: 2.8mm, 6.3mm" onChange={(v) => set({ conectores_tipo: v })}/></QcField>
         <QcField label="Conectores/plugs — quantidade"><QcInput type="number" value={componentes.conectores_qtd} disabled={disabled} onChange={(v) => set({ conectores_qtd: v })}/></QcField>
       </div>
