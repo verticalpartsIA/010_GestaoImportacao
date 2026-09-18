@@ -26,7 +26,7 @@ const ROUTE_TITLE = {
   "dossier-obra": "Dossier da Obra",
   "status-obras": "Status de Obras",
   "formulario-elevador": "Formulário — Elevador",
-  "quadro-comando": "Quadro de Comando",
+  "formulario-quadro-comando": "Formulário — Quadro de Comando",
   "controle-cotacoes": "Controle de Cotações",
   "cotacoes-fornecedor": "Cotações a Fornecedor",
   "cotacao-fornecedor-detail": "Detalhe de Cotação a Fornecedor",
@@ -337,7 +337,7 @@ function App() {
       case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formularios": return <FormulariosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formulario-elevador": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel}/>;
-      case "quadro-comando": return <QuadroComandoPage/>;
+      case "formulario-quadro-comando": return <QuadroComandoPage setRoute={setRoute} subsel={subsel}/>;
       case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "status-obras": return <ObrasStatusPage setRoute={setRoute} setSubsel={setSubsel}/>;
