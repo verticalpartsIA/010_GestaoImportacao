@@ -759,14 +759,7 @@ function FormulariosPage({ setRoute, setSubsel }) {
             <Card title={c.label} sub={c.pronto ? (c.subLabel || 'Disponível') : 'Em breve'}
               action={<Icon.chevRight/>}>
               <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--fg2)', fontSize: 12.5 }}>
-                {c.pronto ? (
-                  <>
-                    <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 6, height: 6, borderRadius: '50%', background: 'var(--vp-blue)', flexShrink: 0 }}/>
-                    Clique para preencher um novo formulário.
-                  </>
-                ) : (
-                  'Estrutura prevista para fase futura.'
-                )}
+                {c.pronto ? '🔵 Clique para preencher um novo formulário.' : 'Estrutura prevista para fase futura.'}
               </div>
             </Card>
           </div>
