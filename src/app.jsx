@@ -131,7 +131,7 @@ function EmConstrucaoPage({ titulo, descricao }) {
    3. ASYNC_FETCH_ROUTES — subsel é o registro inteiro, sem suporte a id
       solto no componente; app.jsx busca no Supabase e só then popula
       subsel (renderPage mostra "Carregando…" enquanto isso). */
-const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador", "central-documentos", "cadastro-custos"]);
+const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador", "formulario-quadro-comando", "central-documentos", "cadastro-custos"]);
 const WRAPPED_ID_KEY = { "proposta-editor": "__editId" };
 
 /* Cada fetcher recebe o id da URL e resolve pro registro (ou null se não
