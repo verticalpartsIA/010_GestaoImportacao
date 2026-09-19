@@ -258,7 +258,7 @@ function ListaView({ solicitacoes, loading, filtroStatus, filtroTipo, onFiltroSt
 function NovaView({ onSalvar, onCancelar, user }) {
   const [form, setForm] = React.useState({
     tipo_equipamento: 'elevador',
-    solicitante_nome: user.name || '',
+    solicitante_nome: user.name || 'Usuário',
     solicitante_email: user.email || '',
     cliente_nome: '',
     cliente_industria: '',
@@ -361,6 +361,23 @@ function NovaView({ onSalvar, onCancelar, user }) {
             onChange={(e) => setForm({ ...form, observacoes_comercial: e.target.value })}
             style={styles.textarea}
             placeholder="Qualquer informação adicional que possa ser útil"
+          />
+        </div>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Fotos (opcional)</label>
+          <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
+            Você pode adicionar links para fotos do equipamento ou documentação (ex: URL de imagem, screenshot, etc)
+          </div>
+          <input
+            type="text"
+            placeholder="https://example.com/foto1.jpg (um por linha)"
+            style={{...styles.textarea, minHeight: '60px'}}
+            onBlur={(e) => {
+              const urls = e.target.value.split('\n').filter(u => u.trim());
+              setForm({ ...form, fotos_url: urls });
+            }}
+            defaultValue={form.fotos_url.join('\n')}
           />
         </div>
 
