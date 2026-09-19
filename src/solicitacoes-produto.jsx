@@ -11,7 +11,7 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
   const [filtroStatus, setFiltroStatus] = React.useState('');
   const [filtroTipo, setFiltroTipo] = React.useState('');
 
-  const user = window.__VP_USER || { email: 'desconhecido', name: 'Usuário' };
+  const user = window.__VP_USER || { email: 'desconhecido', nome: 'Usuário' };
 
   React.useEffect(() => {
     if (!window.SolicitacoesProdutoStore) {
@@ -258,7 +258,7 @@ function ListaView({ solicitacoes, loading, filtroStatus, filtroTipo, onFiltroSt
 function NovaView({ onSalvar, onCancelar, user }) {
   const [form, setForm] = React.useState({
     tipo_equipamento: 'elevador',
-    solicitante_nome: user.name || 'Usuário',
+    solicitante_nome: user.nome || 'Usuário',
     solicitante_email: user.email || '',
     cliente_nome: '',
     cliente_industria: '',
