@@ -1111,6 +1111,14 @@ function FichaTecnicaPage({ fichaId }) {
     }
   }, [fichaId, libReady]);
 
+  const handleNavTo = (newView, newId) => {
+    if (window.VpRouter) {
+      window.VpRouter.navigate('ficha-tecnica', newId || null);
+    }
+    setView(newView);
+    setInitial(null);
+  };
+
   return (
     <div className="ci-page">
       <div className="ci-page-head">
@@ -1121,8 +1129,8 @@ function FichaTecnicaPage({ fichaId }) {
         </div>
         <div className="ci-page-actions-wrap">
           <div className="ci-page-actions">
-            <button className={'ci-tab' + (view === 'painel' ? ' on' : '')} onClick={() => { setView('painel'); setInitial(null); }}>▦ Painel</button>
-            <button className={'ci-tab' + (view === 'nova' ? ' on' : '')} onClick={() => { setView('nova'); setInitial(null); }}>+ Nova ficha</button>
+            <button className={'ci-tab' + (view === 'painel' ? ' on' : '')} onClick={() => handleNavTo('painel')}>▦ Painel</button>
+            <button className={'ci-tab' + (view === 'nova' ? ' on' : '')} onClick={() => handleNavTo('nova', 'nova-ficha-tecnica')}>+ Nova ficha</button>
           </div>
         </div>
       </div>
