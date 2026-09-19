@@ -118,11 +118,12 @@ window.SolicitacoesProdutoStore = (() => {
     });
   }
 
-  async function marcarPronto(id, especificacoes, desenho_url) {
+  async function marcarPronto(id, especificacoes, desenho_url, complementos_descobertos) {
     return atualizar(id, {
       status: 'pronto',
       especificacoes_completas: especificacoes,
       desenho_url: desenho_url,
+      complementos_descobertos: complementos_descobertos,
       data_conclusao: new Date().toISOString(),
     });
   }

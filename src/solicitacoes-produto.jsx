@@ -430,13 +430,44 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
       await window.SolicitacoesProdutoStore.marcarPronto(
         solicitacao.id,
         form.especificacoes_completas,
-        form.desenho_url
+        form.desenho_url,
+        form.complementos_descobertos
       );
       onAtualizar({});
       setEdicao(false);
       alert('Análise salva e marcada como pronta!');
     } catch (e) {
       alert('Erro: ' + e.message);
+    }
+  }
+
+  async function _converterEmFicha() {
+    if (!window.FT || !window.FTStore) {
+      alert('Módulo de Ficha Técnica não está carregado. Recarregue a página e tente novamente.');
+      return;
+    }
+    if (!confirm('Converter esta solicitação em uma nova Ficha Técnica?')) return;
+    try {
+      const state = window.FT.freshState();
+      state.identificacao.nomeProduto = solicitacao.cliente_nome
+        ? `${solicitacao.tipo_equipamento} — ${solicitacao.cliente_nome}`
+        : solicitacao.tipo_equipamento;
+      state.identificacao.descricaoComercial = solicitacao.descricao_inicial || '';
+      state.identificacao.descricaoTecnica = solicitacao.complementos_descobertos || '';
+
+      const rec = await window.FTStore.createDraft(state);
+      await window.SolicitacoesProdutoStore.converterEmFicha(solicitacao.id, rec.id);
+      onAtualizar({});
+      alert('Ficha técnica criada! Abrindo editor…');
+      if (window.VpRouter) {
+        window.VpRouter.navigate('ficha-tecnica', rec.id);
+        // navigate() só faz pushState (não dispara popstate); o app.jsx só
+        // troca de página reagindo a popstate, então disparamos manualmente
+        // pra simular uma navegação real do browser.
+        window.dispatchEvent(new PopStateEvent('popstate'));
+      }
+    } catch (e) {
+      alert('Erro ao converter em ficha técnica: ' + e.message);
     }
   }
 
@@ -533,6 +564,29 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
         <div style={styles.formActions}>
           <button onClick={() => setEdicao(true)} style={styles.btnPrimary}>
             EDITAR ANÁLISE
+          </button>
+        </div>
+      )}
+
+      {solicitacao.status === 'pronto' && (
+        <div style={styles.formActions}>
+          <button onClick={_converterEmFicha} style={styles.btnPrimary}>
+            CONVERTER EM FICHA TÉCNICA
+          </button>
+        </div>
+      )}
+
+      {solicitacao.status === 'convertido_em_ficha' && solicitacao.ficha_tecnica_id && (
+        <div style={styles.formActions}>
+          <button
+            onClick={() => {
+              if (!window.VpRouter) return;
+              window.VpRouter.navigate('ficha-tecnica', solicitacao.ficha_tecnica_id);
+              window.dispatchEvent(new PopStateEvent('popstate'));
+            }}
+            style={styles.btnPrimary}
+          >
+            ABRIR FICHA TÉCNICA
           </button>
         </div>
       )}
