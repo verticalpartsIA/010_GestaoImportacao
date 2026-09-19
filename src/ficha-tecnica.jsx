@@ -1039,7 +1039,7 @@ function FtDashboard({ onNew, onOpen }) {
 /* ============================================================
    PAGE — abas Painel / Nova ficha
    ============================================================ */
-function FichaTecnicaPage() {
+function FichaTecnicaPage({ fichaId }) {
   const [view, setView] = _ftUS('painel'); // painel | nova
   const [initial, setInitial] = _ftUS(null);
   const [libReady, setLibReady] = _ftUS(false);
@@ -1091,6 +1091,25 @@ function FichaTecnicaPage() {
     });
     setView('nova');
   };
+
+  /* Deep-link via URL: /engenharia/ficha-tecnica/nova-ficha-tecnica abre direto o editor */
+  _ftUE(() => {
+    if (!libReady) return;
+    if (fichaId === 'nova-ficha-tecnica') {
+      setInitial(null);
+      setView('nova');
+    } else if (fichaId && fichaId !== 'nova-ficha-tecnica') {
+      // Se for um ID válido, carrega a ficha
+      (async () => {
+        try {
+          const ficha = await window.FTStore.getById(fichaId);
+          if (ficha) handleOpen(ficha);
+        } catch (e) {
+          console.warn('[FichaTecnica] deep-link load failed', e);
+        }
+      })();
+    }
+  }, [fichaId, libReady]);
 
   return (
     <div className="ci-page">
