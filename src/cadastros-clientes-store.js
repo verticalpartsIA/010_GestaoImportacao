@@ -13,17 +13,18 @@
 
   function sb() { return (window.__VP_SB || {}).sb; }
 
-  /* Deriva do MAIOR código já usado, não de count(*): com contagem, excluir
-     um cliente fazia o próximo cadastro reusar um código existente e estourar
-     o índice único (bug pego em teste ao vivo). */
+  /* Usa sequência nativa do PostgreSQL (seq_clientes_codigo) pra evitar race condition.
+     Antes usava MAX em JS — se 2+ usuários criavam clientes simultaneamente,
+     ambos calculavam o mesmo código e a 2ª inserção falhava com "duplicate key".
+     Agora PostgreSQL garante unicidade da sequência. */
   async function gerarCodigo() {
     const c = sb(); if (!c) return 'VPCLI-0001';
-    const { data } = await c.from('clientes').select('codigo');
-    const maior = (data || []).reduce((max, r) => {
-      const n = parseInt(String(r.codigo || '').replace(/\D/g, ''), 10);
-      return isNaN(n) ? max : Math.max(max, n);
-    }, 0);
-    return 'VPCLI-' + String(maior + 1).padStart(4, '0');
+    const { data, error } = await c.rpc('gerar_codigo_cliente');
+    if (error) {
+      console.warn('[CadastrosClientesStore] gerarCodigo falhou, fallback', error);
+      return 'VPCLI-0001';
+    }
+    return data || 'VPCLI-0001';
   }
 
   /* 14/09 — achado real: depois da importação Omie (191 -> 1212 clientes),
