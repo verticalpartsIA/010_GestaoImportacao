@@ -356,6 +356,7 @@ function App() {
       case "eng-configurador": return <ConfiguradorPage setRoute={setRoute}/>;
       case "desenho-tecnico": return <DesenhoTecnicoPage setRoute={setRoute}/>;
       case "ficha-tecnica": return <FichaTecnicaPage fichaId={subsel}/>; /* deep-link support: /nova-ficha-tecnica */
+      case "solicitacoes-produto": return <SolicitacoesProdutoPage solicitacaoId={subsel}/>; /* deep-link support */
       case "juridico": return <JuridicoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "contrato-editor": return <ContratoEditorPage contrato={subsel} setRoute={setRoute} onSaved={() => {}} />;
       case "contrato-venda-equipamentos": return <ContratoVendaEquipamentosPage/>;
