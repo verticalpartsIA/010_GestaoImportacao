@@ -33,6 +33,7 @@
     'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos',
     'compras', 'pedidos-acompanhamento',
     'engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'ficha-tecnica',
+    'solicitacoes-produto',
     'ncm-kanban', 'ncm-detail',
     'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias-envio', 'vistorias', 'instalacao',
     'art', 'cronograma', 'databook', 'handover',

@@ -217,6 +217,7 @@ function ListaView({ solicitacoes, loading, filtroStatus, filtroTipo, onFiltroSt
               <tr style={styles.theadTr}>
                 <th style={styles.th}>SOLICITAÇÃO</th>
                 <th style={styles.th}>TIPO</th>
+                <th style={styles.th}>CATEGORIA</th>
                 <th style={styles.th}>CLIENTE</th>
                 <th style={styles.th}>SOLICITANTE</th>
                 <th style={styles.th}>STATUS</th>
@@ -229,6 +230,7 @@ function ListaView({ solicitacoes, loading, filtroStatus, filtroTipo, onFiltroSt
                 <tr key={sol.id} style={styles.tbodyTr}>
                   <td style={{ ...styles.td, fontWeight: 600 }}>{sol.numero_solicitacao}</td>
                   <td style={styles.td}>{tiposLabel[sol.tipo_equipamento]}</td>
+                  <td style={styles.td}>{sol.categoria_sku || '—'}</td>
                   <td style={styles.td}>{sol.cliente_nome}</td>
                   <td style={styles.td}>{sol.solicitante_nome}</td>
                   <td style={styles.td}>
@@ -258,6 +260,7 @@ function ListaView({ solicitacoes, loading, filtroStatus, filtroTipo, onFiltroSt
 function NovaView({ onSalvar, onCancelar, user }) {
   const [form, setForm] = React.useState({
     tipo_equipamento: 'elevador',
+    categoria_sku: '',
     solicitante_nome: user.nome || 'Usuário',
     solicitante_email: user.email || '',
     cliente_nome: '',
@@ -271,6 +274,7 @@ function NovaView({ onSalvar, onCancelar, user }) {
 
   function _validar() {
     const novosErros = {};
+    if (!form.categoria_sku) novosErros.categoria_sku = 'Categoria é obrigatória';
     if (!form.cliente_nome) novosErros.cliente_nome = 'Cliente é obrigatório';
     if (!form.descricao_inicial) novosErros.descricao_inicial = 'Descrição é obrigatória';
     setErros(novosErros);
@@ -298,6 +302,21 @@ function NovaView({ onSalvar, onCancelar, user }) {
             <option value="escada_rolante">Escada Rolante</option>
             <option value="esteira">Esteira</option>
           </select>
+        </div>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Categoria (SKU) *</label>
+          <select
+            value={form.categoria_sku}
+            onChange={(e) => setForm({ ...form, categoria_sku: e.target.value })}
+            style={{ ...styles.input, borderColor: erros.categoria_sku ? '#ef4444' : '' }}
+          >
+            <option value="">Selecione…</option>
+            {(window.SolicitacoesProdutoStore.CATEGORIAS_SKU || []).map((c) => (
+              <option key={c.valor} value={c.valor}>{c.label}</option>
+            ))}
+          </select>
+          {erros.categoria_sku && <div style={styles.erro}>{erros.categoria_sku}</div>}
         </div>
 
         <div style={styles.formRow}>
@@ -503,6 +522,10 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
           <div style={styles.detalheRow}>
             <div style={styles.detalheLabel}>Tipo:</div>
             <div style={styles.detalheValue}>{solicitacao.tipo_equipamento}</div>
+          </div>
+          <div style={styles.detalheRow}>
+            <div style={styles.detalheLabel}>Categoria (SKU):</div>
+            <div style={styles.detalheValue}>{solicitacao.categoria_sku || '—'}</div>
           </div>
           <div style={styles.detalheRow}>
             <div style={styles.detalheLabel}>Data:</div>

@@ -5,6 +5,14 @@
 window.SolicitacoesProdutoStore = (() => {
   const TIPOS = ['elevador', 'escada_rolante', 'esteira'];
   const STATUS_LIST = ['novo', 'em_analise', 'aguardando_desenho', 'pronto', 'convertido_em_ficha'];
+  // Categoria de SKU — define o prefixo do código no Omie. Sem trava por
+  // setor: tanto Comercial quanto Importação podem escolher qualquer uma.
+  const CATEGORIAS_SKU = [
+    { valor: 'VPEL', label: 'VPEL — Peça de Elevador (VerticalParts)' },
+    { valor: 'VPER', label: 'VPER — Peça de Escada/Esteira Rolante (VerticalParts)' },
+    { valor: 'VPB', label: 'VPB — Peça fornecida por BST' },
+    { valor: 'VPMP', label: 'VPMP — Matéria-Prima (VerticalParts)' },
+  ];
 
   function _gerarNumero() {
     const now = new Date();
@@ -21,6 +29,7 @@ window.SolicitacoesProdutoStore = (() => {
         numero_solicitacao: _gerarNumero(),
         status: 'novo',
         tipo_equipamento: dados.tipo_equipamento,
+        categoria_sku: dados.categoria_sku,
         solicitante_nome: dados.solicitante_nome,
         solicitante_email: dados.solicitante_email,
         cliente_nome: dados.cliente_nome,
@@ -138,6 +147,7 @@ window.SolicitacoesProdutoStore = (() => {
   return {
     TIPOS,
     STATUS_LIST,
+    CATEGORIAS_SKU,
     criar,
     listar,
     obter,
