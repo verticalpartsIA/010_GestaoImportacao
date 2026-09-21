@@ -16,15 +16,27 @@
   /* Usa sequência nativa do PostgreSQL (seq_clientes_codigo) pra evitar race condition.
      Antes usava MAX em JS — se 2+ usuários criavam clientes simultaneamente,
      ambos calculavam o mesmo código e a 2ª inserção falhava com "duplicate key".
-     Agora PostgreSQL garante unicidade da sequência. */
+     Agora PostgreSQL garante unicidade da sequência.
+
+     21/09 — achado real: o fallback aqui era a string fixa 'VPCLI-0001' pra
+     QUALQUER falha (RPC ausente, erro de rede, etc). A função gerar_codigo_
+     cliente() ficou ausente em produção por ~2 dias (migration nunca
+     aplicada) e esse fallback colidiu SEMPRE com um cliente real que já
+     tinha esse código desde abril — todo usuário travava salvando o
+     Formulário, com um erro de constraint do banco, difícil de entender.
+     Um fallback fixo pra um valor garantido a colidir não é fallback, é
+     uma bomba-relógio — melhor falhar alto e claro do que silenciar e
+     tentar um código que sabidamente já existe. */
   async function gerarCodigo() {
-    const c = sb(); if (!c) return 'VPCLI-0001';
+    const c = sb();
+    if (!c) throw new Error('Não foi possível gerar o código do cliente: conexão com o banco indisponível.');
     const { data, error } = await c.rpc('gerar_codigo_cliente');
     if (error) {
-      console.warn('[CadastrosClientesStore] gerarCodigo falhou, fallback', error);
-      return 'VPCLI-0001';
+      console.error('[CadastrosClientesStore] gerarCodigo — RPC gerar_codigo_cliente falhou', error);
+      throw new Error('Não foi possível gerar o código do cliente agora. Tente novamente em instantes; se persistir, avise o suporte (função gerar_codigo_cliente indisponível).');
     }
-    return data || 'VPCLI-0001';
+    if (!data) throw new Error('Não foi possível gerar o código do cliente: resposta vazia do banco.');
+    return data;
   }
 
   /* 14/09 — achado real: depois da importação Omie (191 -> 1212 clientes),
