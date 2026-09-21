@@ -14,9 +14,13 @@ window.SolicitacoesProdutoStore = (() => {
     { valor: 'VPMP', label: 'VPMP — Matéria-Prima (VerticalParts)' },
   ];
 
-  // Fluxo definido com o usuário em 20/09/2026: Solicitação enviada avisa
-  // Arilene (Engenharia), que designa quem da equipe resolve.
+  // Fluxo definido com o usuário em 20/09/2026:
+  // 1) Solicitação enviada avisa Arilene (Engenharia), que designa quem da
+  //    equipe resolve.
+  // 2) Engenharia termina (marcarPronto) avisa Bianca (Importação), que
+  //    avalia/aprova/reprova e designa quem publica no Omie.
   const EMAIL_ENGENHARIA_RESPONSAVEL = 'arilene.avila@verticalparts.com.br';
+  const EMAIL_IMPORTACAO_RESPONSAVEL = 'bianca@verticalparts.com.br';
 
   async function _notificarEngenharia(solicitacao) {
     try {
@@ -32,6 +36,23 @@ window.SolicitacoesProdutoStore = (() => {
       if (error) console.warn('[SolicitacoesProdutoStore] Erro ao notificar Engenharia:', error);
     } catch (e) {
       console.warn('[SolicitacoesProdutoStore] Erro ao notificar Engenharia:', e);
+    }
+  }
+
+  async function _notificarImportacao(solicitacao) {
+    try {
+      const { error } = await window.__VP_SB.sb.from('alertas').insert([{
+        id: `sol-pronto-${solicitacao.numero_solicitacao}`,
+        level: 'info',
+        title: `Solicitação pronta para avaliação — ${solicitacao.numero_solicitacao}`,
+        sub: `${solicitacao.cliente_nome} · ${solicitacao.categoria_sku} · Engenharia: ${solicitacao.engenheiro_responsavel || '—'}`,
+        module: 'Engenharia',
+        resolved: false,
+        destinatario_email: EMAIL_IMPORTACAO_RESPONSAVEL,
+      }]);
+      if (error) console.warn('[SolicitacoesProdutoStore] Erro ao notificar Importação:', error);
+    } catch (e) {
+      console.warn('[SolicitacoesProdutoStore] Erro ao notificar Importação:', e);
     }
   }
 
@@ -150,13 +171,15 @@ window.SolicitacoesProdutoStore = (() => {
   }
 
   async function marcarPronto(id, especificacoes, desenho_url, complementos_descobertos) {
-    return atualizar(id, {
+    const atualizada = await atualizar(id, {
       status: 'pronto',
       especificacoes_completas: especificacoes,
       desenho_url: desenho_url,
       complementos_descobertos: complementos_descobertos,
       data_conclusao: new Date().toISOString(),
     });
+    _notificarImportacao(atualizada);
+    return atualizada;
   }
 
   async function converterEmFicha(id, ficha_tecnica_id) {
