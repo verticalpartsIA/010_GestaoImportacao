@@ -853,7 +853,16 @@ function NotificacoesPage({ setRoute }) {
   // de alertas, e reabria a query toda vez que uma notificação era marcada).
   React.useEffect(() => {
     setLoading(true);
-    window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false })
+    const emailAtual = (window.__VP_USER || {}).email || null;
+    // Alertas sem destinatario_email são globais (comportamento de sempre,
+    // visíveis a todos); com destinatario_email preenchido, só aparecem
+    // pra quem tem esse e-mail logado (ex.: aviso de Solicitação de Produto
+    // direcionado a um gestor específico).
+    let query = window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false);
+    query = emailAtual
+      ? query.or(`destinatario_email.is.null,destinatario_email.eq.${emailAtual}`)
+      : query.is('destinatario_email', null);
+    query.order('created_at', { ascending: false })
       .then(({ data, error }) => {
         if (error) { window.toast('Erro ao carregar notificações: ' + error.message, 'error'); setAlertasRaw([]); }
         else setAlertasRaw(data || []);

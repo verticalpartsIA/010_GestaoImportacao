@@ -14,6 +14,27 @@ window.SolicitacoesProdutoStore = (() => {
     { valor: 'VPMP', label: 'VPMP — Matéria-Prima (VerticalParts)' },
   ];
 
+  // Fluxo definido com o usuário em 20/09/2026: Solicitação enviada avisa
+  // Arilene (Engenharia), que designa quem da equipe resolve.
+  const EMAIL_ENGENHARIA_RESPONSAVEL = 'arilene.avila@verticalparts.com.br';
+
+  async function _notificarEngenharia(solicitacao) {
+    try {
+      const { error } = await window.__VP_SB.sb.from('alertas').insert([{
+        id: `sol-${solicitacao.numero_solicitacao}`,
+        level: 'info',
+        title: `Nova Solicitação de Produto — ${solicitacao.numero_solicitacao}`,
+        sub: `${solicitacao.cliente_nome} · ${solicitacao.categoria_sku} · ${solicitacao.solicitante_nome}`,
+        module: 'Engenharia',
+        resolved: false,
+        destinatario_email: EMAIL_ENGENHARIA_RESPONSAVEL,
+      }]);
+      if (error) console.warn('[SolicitacoesProdutoStore] Erro ao notificar Engenharia:', error);
+    } catch (e) {
+      console.warn('[SolicitacoesProdutoStore] Erro ao notificar Engenharia:', e);
+    }
+  }
+
   function _gerarNumero() {
     const now = new Date();
     const ano = now.getFullYear();
@@ -47,6 +68,7 @@ window.SolicitacoesProdutoStore = (() => {
 
       if (error) throw error;
       console.log('[SolicitacoesProdutoStore] Solicitação criada:', data);
+      _notificarEngenharia(data);
       return data;
     } catch (e) {
       console.error('[SolicitacoesProdutoStore] Erro ao criar:', e);
