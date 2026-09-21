@@ -28,7 +28,7 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
 function json(body: unknown, status = 200, extra: Record<string, string> = {}) {
@@ -794,7 +794,7 @@ PEDIDO já confirmado e em acompanhamento de entrega.`,
 
 Lista/detalha projetos de engenharia (visita técnica, laudo) e valida os
 gates de importação ('ProjectGates.validarGatesImportacao') — ou seja,
-checa se o projeto já cumpriu os pré-requisitos técnicos pra seguir pro
+checа se o projeto já cumpriu os pré-requisitos técnicos pra seguir pro
 fluxo de importação.
 
 REGRA NOTÁVEL: as abas Vistoria/Documentos/NCM dentro desta tela são
@@ -1266,7 +1266,11 @@ Deno.serve(async (req: Request) => {
     resp = await fetch(ANTHROPIC_URL, {
       method: "POST",
       headers: { "x-api-key": KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: MODEL, max_tokens: 4096, temperature: 0.2, system: SYSTEM, messages }),
+      // 21/09 — a API da Anthropic passou a rejeitar `temperature` pro
+      // modelo claude-sonnet-5 ("`temperature` is deprecated for this
+      // model") — toda chamada falhava com invalid_request_error, sempre
+      // 500 pro usuário. Parâmetro removido.
+      body: JSON.stringify({ model: MODEL, max_tokens: 4096, system: SYSTEM, messages }),
     });
   } catch (e) {
     return json({ error: "Falha ao contatar a IA", detail: String(e) }, 503);
