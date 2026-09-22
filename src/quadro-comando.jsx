@@ -663,7 +663,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Formulários · Quadro de Comando</div>
           <h1 className="page-head__title">Quadro de Comando</h1>
-          <p className="page-head__sub">Status: <b>{quadro.status}</b>{quadro.numero_cotacao ? ` · Cotação Nº ${quadro.numero_cotacao}` : ''}</p>
+          <p className="page-head__sub">Pedido Nº {quadro.numero_pedido} · Status: <b>{quadro.status}</b>{quadro.numero_cotacao ? ` · Cotação Nº ${quadro.numero_cotacao}` : ''}</p>
         </div>
         <div className="row gap-2">
           {onClose && <Button variant="ghost" onClick={onClose}>Voltar</Button>}

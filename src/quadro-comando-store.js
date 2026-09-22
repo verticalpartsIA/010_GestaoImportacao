@@ -110,6 +110,13 @@
     if (error) throw error;
   }
 
+  async function salvarComponentes(quadroId, componentes) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { error } = await c.from('quadros_comando_componentes')
+      .upsert({ ...componentes, quadro_comando_id: quadroId, updated_at: new Date().toISOString() }, { onConflict: 'quadro_comando_id' });
+    if (error) throw error;
+  }
+
   /* ---------- Catálogo ---------- */
   async function catalogoPorSku() {
     const c = sb(); if (!c) return {};
@@ -344,7 +351,7 @@
   window.QuadroComandoStore = {
     podeDecidirOrigemFabricacao,
     criar, salvar, obter, listarPorNumeroCotacao,
-    salvarParadas, salvarIntervalos, salvarGeometria, salvarMaquina,
+    salvarParadas, salvarIntervalos, salvarGeometria, salvarMaquina, salvarComponentes,
     catalogoPorSku,
     gerarBomECortes, obterBomECortes,
     gerarChecklistSeparacao, obterChecklist, marcarChecklistItem,
