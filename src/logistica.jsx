@@ -1374,7 +1374,18 @@ function EmailInbox({ setRoute, setSubsel }) {
     to: e.para || [],
     cc: [],
   })), [enviados]);
-  const listaAtual = folder === 'sent' ? enviadosNormalizados : emails;
+  /* 22/09 — lixeira: soft-delete só no site (excluido_em em emails_projeto),
+     NUNCA mexe na caixa real via IMAP. Caixa de entrada vem de um fetch ao
+     vivo (read-inbox), que não sabe de exclusões — por isso filtra aqui,
+     contra a lista de ids já marcados como excluídos no banco. */
+  const [excluidos, setExcluidos] = React.useState([]);
+  const carregarExcluidos = React.useCallback(() => {
+    window.__VP_SB.sb.from('emails_projeto').select('id').not('excluido_em', 'is', null).limit(500)
+      .then(({ data }) => setExcluidos((data || []).map((d) => d.id)));
+  }, []);
+  React.useEffect(() => { carregarExcluidos(); }, [carregarExcluidos]);
+  const emailsVisiveis = React.useMemo(() => emails.filter((e) => !excluidos.includes(e.id)), [emails, excluidos]);
+  const listaAtual = folder === 'sent' ? enviadosNormalizados : emailsVisiveis;
   const active = listaAtual.find(e => e.id === activeId);
 
   const [respondendo, setRespondendo] = React.useState(false);
@@ -1417,7 +1428,7 @@ function EmailInbox({ setRoute, setSubsel }) {
      read-inbox já fazia pros anexos recebidos. */
   const carregarEnviados = React.useCallback(() => {
     setCarregandoEnviados(true);
-    window.__VP_SB.sb.from('emails_projeto').select('*').eq('direcao', 'saida')
+    window.__VP_SB.sb.from('emails_projeto').select('*').eq('direcao', 'saida').is('excluido_em', null)
       .order('data_mensagem', { ascending: false }).limit(50)
       .then(async ({ data }) => {
         const rows = data || [];
@@ -1454,6 +1465,29 @@ function EmailInbox({ setRoute, setSubsel }) {
       .then(({ data }) => { if (!cancelado) setGatilhoAberto(data || null); });
     return () => { cancelado = true; };
   }, [active && active.id, active && active.numeroCotacao]);
+
+  /* 22/09 — pedido do usuário: botão de lixeira, mas NUNCA exclui sem
+     perguntar antes. Soft-delete (excluido_em) — o e-mail continua na
+     caixa real (IMAP)/no banco, só some da lista do site. */
+  const excluirEmail = async (ev, email) => {
+    if (ev) ev.stopPropagation();
+    if (!email) return;
+    const assunto = email.subject || '(sem assunto)';
+    if (!window.confirm(`Tem certeza que deseja excluir este e-mail?\n\n"${assunto}"\n\nEle continua existindo na caixa de e-mail real — isso só remove da lista do site.`)) return;
+    try {
+      const user = window.__VP_USER || {};
+      const { error } = await window.__VP_SB.sb.from('emails_projeto')
+        .update({ excluido_em: new Date().toISOString(), excluido_por: user.email || null })
+        .eq('id', email.id);
+      if (error) throw error;
+      if (folder === 'sent') setEnviados((prev) => prev.filter((e) => e.id !== email.id));
+      else setExcluidos((prev) => [...prev, email.id]);
+      if (activeId === email.id) setActiveId(null);
+      window.toast?.('E-mail excluído da lista.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao excluir: ' + e.message, 'error');
+    }
+  };
 
   const marcarComoRespostaFornecedor = async () => {
     if (!active || !gatilhoAberto) return;
@@ -1678,7 +1712,10 @@ function EmailInbox({ setRoute, setSubsel }) {
             <div key={m.id} className={"inbox__item " + (m.unread ? "unread " : "") + (activeId === m.id ? "is-active" : "")} onClick={() => setActiveId(m.id)}>
               <div className="from">
                 <span>{m.fromName || m.from}</span>
-                <span className="time">{m.date ? new Date(m.date).toLocaleString('pt-BR') : ''}</span>
+                <span className="row gap-1" style={{ alignItems: 'center' }}>
+                  <span className="time">{m.date ? new Date(m.date).toLocaleString('pt-BR') : ''}</span>
+                  <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => excluirEmail(ev, m)}/>
+                </span>
               </div>
               <div className="subj">{m.subject}{m.anexos && m.anexos.length > 0 ? <Icon.paperclip size={11} style={{ marginLeft: 6, verticalAlign: 'middle', opacity: .6 }}/> : null}</div>
               <div className="preview">{m.preview}</div>
@@ -1723,6 +1760,7 @@ function EmailInbox({ setRoute, setSubsel }) {
                   <div className="inbox__msg-actions">
                     <Button variant="outline" size="sm" icon="reply" onClick={() => (respondendo && modoCompose === 'responder' ? setRespondendo(false) : abrirCompose('responder'))}>Responder</Button>
                     <Button variant="ghost" size="sm" icon="link2" onClick={() => { setVinculando(v => !v); setRespondendo(false); setVincularInput(active.numeroCotacao != null ? String(active.numeroCotacao) : ''); }}>Vincular</Button>
+                    <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => excluirEmail(ev, active)}>Excluir</Button>
                   </div>
                 </div>
                 {vinculando && (
