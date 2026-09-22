@@ -933,6 +933,7 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
         <div style={{ marginTop: 10 }}>
           <div className="row gap-2">
             <Button variant="outline" size="sm" icon="fileText" onClick={() => setVerResp(true)}>Ver resposta do fornecedor</Button>
+            <Button variant="ghost" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>Reenviar por e-mail</Button>
             <Button variant="ghost" size="sm" icon="refresh" disabled={busy} onClick={() => onPedirRevisao(grupo)}>Pedir nova revisão</Button>
           </div>
           {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}
@@ -945,8 +946,8 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
             <FEInput value={recipient.telefone} onChange={setR('telefone')} placeholder="WhatsApp (DDI+DDD+número)"/>
           </div>
           <div className="row gap-2" style={{ marginTop: 8 }}>
-            <Button variant="outline" size="sm" icon="message" disabled={busy} onClick={() => onEnviar(grupo, 'whatsapp', recipient)}>WhatsApp</Button>
-            <Button variant="outline" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>E-mail</Button>
+            <Button variant="outline" size="sm" icon="message" disabled={busy} onClick={() => onEnviar(grupo, 'whatsapp', recipient)}>{cot ? 'Reenviar por WhatsApp' : 'WhatsApp'}</Button>
+            <Button variant="outline" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>{cot ? 'Reenviar por e-mail' : 'E-mail'}</Button>
             <Button variant="ghost" size="sm" icon="copy" disabled={busy} onClick={() => onEnviar(grupo, 'link', recipient)}>Copiar link</Button>
           </div>
         </div>
