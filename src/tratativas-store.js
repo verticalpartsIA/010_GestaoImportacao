@@ -28,10 +28,12 @@
     return data || [];
   }
 
-  async function enviar({ cotacaoFornecedorId, numeroCotacao, mensagem, anexos, autor } = {}) {
+  async function enviar({ cotacaoFornecedorId, numeroCotacao, mensagem, anexos, autor, emailFornecedor } = {}) {
     const c = sb(); if (!c) throw new Error('Sem conexão com o banco.');
     if (!cotacaoFornecedorId) throw new Error('Cotação a fornecedor não informada.');
     if (!mensagem?.trim() && !(anexos || []).length) throw new Error('Escreva uma mensagem ou anexe um arquivo.');
+
+    // Salvar mensagem no banco
     const { data, error } = await c.from('tratativas_cotacao').insert({
       cotacao_fornecedor_id: cotacaoFornecedorId,
       numero_cotacao: numeroCotacao ?? null,
@@ -40,6 +42,38 @@
       anexos: anexos || [],
     }).select().single();
     if (error) throw new Error(error.message);
+
+    // Buscar e-mail do fornecedor se não foi fornecido
+    let email = emailFornecedor;
+    if (!email) {
+      try {
+        const { data: cot } = await c.from('cotacoes_elevador_fornecedor').select('fornecedor').eq('id', cotacaoFornecedorId).maybeSingle();
+        if (cot?.fornecedor) {
+          const { data: forn } = await c.from('fornecedores').select('email').ilike('razao_social', cot.fornecedor).maybeSingle();
+          email = forn?.email;
+        }
+      } catch (e) {
+        console.warn('[Tratativas] erro ao buscar email do fornecedor', e);
+      }
+    }
+
+    // Enviar e-mail ao fornecedor (async, não bloqueia se falhar)
+    if (email && email.trim()) {
+      try {
+        const { error: emailError } = await c.functions.invoke('send-email', {
+          to: email,
+          subject: `Nova mensagem na Cotação ${numeroCotacao || ''}`,
+          html: `<p>Você recebeu uma nova mensagem sobre a cotação.</p>
+                 <p><strong>${autor || autorAtual()}:</strong></p>
+                 <p>${mensagem?.trim()?.replace(/\n/g, '<br/>') || '(Sem texto, apenas anexos)'}</p>
+                 <p><a href="${window.location.origin || 'https://vpgestaoimportacao.vpsistema.com'}/cotacao-elevador-fornecedor">Ver cotação no portal</a></p>`,
+        });
+        if (emailError) console.warn('[Tratativas] send-email falhou (não crítico)', emailError);
+      } catch (e) {
+        console.warn('[Tratativas] erro ao invocar send-email', e);
+      }
+    }
+
     return data;
   }
 
