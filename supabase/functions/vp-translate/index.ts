@@ -75,8 +75,11 @@ Deno.serve(async (req: Request) => {
     resp = await fetch(ANTHROPIC_URL, {
       method: "POST",
       headers: { "x-api-key": KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
+      // `temperature` removido — API Anthropic rejeita esse parâmetro pro
+      // modelo em uso (invalid_request_error: "temperature is deprecated
+      // for this model"). Ver mesmo fix em vp-copiloto/index.ts (21/09).
       body: JSON.stringify({
-        model: MODEL, max_tokens: 4096, temperature: 0.1, system: SYSTEM,
+        model: MODEL, max_tokens: 4096, system: SYSTEM,
         messages: [{ role: "user", content: userContent }],
       }),
     });
