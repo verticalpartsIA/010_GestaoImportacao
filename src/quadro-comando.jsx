@@ -70,35 +70,109 @@ const QC_ESCOPO_OPCOES = [
 
 function QcEscopoSecao({ escopo, onChange, disabled }) {
   return (
-    <Card title="Escopo do pedido" sub="Para cada item: fornecer / reutilizar existente / fornecido por terceiro / não se aplica.">
-      <div className="table-wrap" style={{ border: 0 }}>
-        <table className="t">
-          <thead><tr><th>Item</th><th>Decisão</th><th>Qtd/modelo</th></tr></thead>
-          <tbody>
-            {QC_ESCOPO_ITENS.map((it) => {
-              const v = escopo[it.key] || {};
-              return (
-                <tr key={it.key}>
-                  <td>{it.label}</td>
-                  <td style={{ maxWidth: 220 }}>
-                    <QcSelect value={v.decisao} disabled={disabled} options={QC_ESCOPO_OPCOES}
-                      onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, decisao: val } })}/>
-                  </td>
-                  <td style={{ maxWidth: 220 }}>
-                    <QcInput value={v.detalhe} disabled={disabled || v.decisao === 'nao_aplica' || !v.decisao}
-                      placeholder="qtd/modelo" onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
-      </div>
-    </Card>
+    <>
+      <Card title="Escopo do pedido" sub="Para cada item: fornecer / reutilizar existente / fornecido por terceiro / não se aplica.">
+        <div className="table-wrap" style={{ border: 0 }}>
+          <table className="t">
+            <thead><tr><th>Item</th><th>Decisão</th><th>Qtd/modelo</th></tr></thead>
+            <tbody>
+              {QC_ESCOPO_ITENS.map((it) => {
+                const v = escopo[it.key] || {};
+                return (
+                  <tr key={it.key}>
+                    <td>{it.label}</td>
+                    <td style={{ maxWidth: 220 }}>
+                      <QcSelect value={v.decisao} disabled={disabled} options={QC_ESCOPO_OPCOES}
+                        onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, decisao: val } })}/>
+                    </td>
+                    <td style={{ maxWidth: 220 }}>
+                      <QcInput value={v.detalhe} disabled={disabled || v.decisao === 'nao_aplica' || !v.decisao}
+                        placeholder="qtd/modelo" onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+
+      <Card title="Customizações de botoeiras" sub="Gravação, furação e personalizações do COP/LOP.">
+        <div className="grid-2" style={{ gap: 12 }}>
+          <QcField label="Logo da empresa nas botoeiras" hint="Gravar/imprimir logo do cliente nas botoeiras fornecidas.">
+            <label className="small"><input type="checkbox" checked={!!escopo.botoeiras_logo_cliente} disabled={disabled}
+              onChange={(e) => onChange({ ...escopo, botoeiras_logo_cliente: e.target.checked })}/> Sim, gravar logo do cliente</label>
+          </QcField>
+          <QcField label="Furação do totem (botoeira de cabina)">
+            <QcSelect value={escopo.botoeiras_furacoes_totem} disabled={disabled}
+              options={[
+                { value: 'nenhuma', label: 'Sem furação (padrão)' },
+                { value: 't', label: 'Furação em T' },
+                { value: 'custom', label: 'Furação customizada (especificar)' }
+              ]}
+              onChange={(val) => onChange({ ...escopo, botoeiras_furacoes_totem: val })}/>
+            {escopo.botoeiras_furacoes_totem === 'custom' && (
+              <QcInput value={escopo.botoeiras_furacoes_custom} disabled={disabled} placeholder="Ex: furo M5 central + 4 furos de fixação"
+                onChange={(val) => onChange({ ...escopo, botoeiras_furacoes_custom: val })}/>
+            )}
+          </QcField>
+          <QcField label="COP com display visual (modelo)" hint="Indicador de posição ou outras informações visuais.">
+            <QcSelect value={escopo.cop_com_display} disabled={disabled}
+              options={[
+                { value: '', label: 'Sem display' },
+                { value: 'vpb333', label: 'VPB-333 (Display TFT 7")' },
+                { value: 'vpb036', label: 'VPB-036 (Indicador LED de direção)' },
+                { value: 'outro', label: 'Outro modelo (especificar)' }
+              ]}
+              onChange={(val) => onChange({ ...escopo, cop_com_display: val })}/>
+            {escopo.cop_com_display === 'outro' && (
+              <QcInput value={escopo.cop_display_modelo} disabled={disabled} placeholder="Modelo/referência do display"
+                onChange={(val) => onChange({ ...escopo, cop_display_modelo: val })}/>
+            )}
+          </QcField>
+          <QcField label="Operador de portas — modelo e tensão" hint="Se fornecido, especifique modelo exato e tensão de acionamento.">
+            <QcInput value={escopo.operador_porta_modelo} disabled={disabled} placeholder="Ex: Monarch S5000-8000, 24Vcc"
+              onChange={(val) => onChange({ ...escopo, operador_porta_modelo: val })}/>
+          </QcField>
+        </div>
+      </Card>
+    </>
   );
 }
 
-/* ---------- Configuração + Paradas (item 2) ---------- */
+/* ---------- Identificação e Configuração geral (item 2) ---------- */
+function QcConfiguracaoSecao({ config, paradas, onChange, disabled }) {
+  const set = (patch) => onChange({ ...config, ...patch });
+  const numParadas = paradas?.length || 0;
+  return (
+    <>
+      <Card title="Identificação do equipamento e da obra" sub="Rastreabilidade do projeto — local, cliente, responsáveis e data da medição.">
+        <div className="grid-2" style={{ gap: 12 }}>
+          <QcField label="Local/obra"><QcInput value={config.local_obra} disabled={disabled} placeholder="ex: Prédio Commercial 'X', Av. Paulista" onChange={(v) => set({ local_obra: v })}/></QcField>
+          <QcField label="Responsável pela medição"><QcInput value={config.responsavel_medicao} disabled={disabled} placeholder="Nome completo + contato" onChange={(v) => set({ responsavel_medicao: v })}/></QcField>
+          <QcField label="Data da medição"><QcInput type="date" value={config.data_medicao} disabled={disabled} onChange={(v) => set({ data_medicao: v })}/></QcField>
+          <QcField label="Data revisão/confirmação"><QcInput type="date" value={config.data_revisao} disabled={disabled} onChange={(v) => set({ data_revisao: v })}/></QcField>
+        </div>
+      </Card>
+
+      <Card title="Configuração do elevador" sub="Estrutura geral — número de paradas, capacidade, tipo de aplicação.">
+        <div className="grid-3" style={{ gap: 12 }}>
+          <QcField label="Número de elevadores nesta instalação"><QcInput type="number" value={config.numero_elevadores} disabled={disabled} onChange={(v) => set({ numero_elevadores: v })}/></QcField>
+          <QcField label="Capacidade (pessoas)"><QcInput type="number" value={config.capacidade_pessoas} disabled={disabled} onChange={(v) => set({ capacidade_pessoas: v })}/></QcField>
+          <QcField label="Velocidade nominal (m/s)"><QcInput type="number" step="0.1" value={config.velocidade_ms} disabled={disabled} onChange={(v) => set({ velocidade_ms: v })}/></QcField>
+          <QcField label="Número de paradas"><QcInput type="number" value={config.numero_paradas} disabled={disabled} placeholder="Preenchido automaticamente" disabled={true}/></QcField>
+          <QcField label="Portas opostas na cabina?" hint="Frente E fundo com aberturas simultâneas?">
+            <label className="small"><input type="checkbox" checked={!!config.portas_opostas_cabina} disabled={disabled}
+              onChange={(e) => set({ portas_opostas_cabina: e.target.checked })}/> Sim, há portas opostas na cabina</label>
+          </QcField>
+          <QcField label="Parada principal (acesso maior)"><QcInput value={config.parada_principal} disabled={disabled} placeholder="ex: Térreo / Parada 1" onChange={(v) => set({ parada_principal: v })}/></QcField>
+        </div>
+      </Card>
+    </>
+  );
+}
+
+/* ---------- Paradas (item 2.1) ---------- */
 function QcParadasSecao({ paradas, onChange, disabled }) {
   const add = () => onChange([...paradas, { identificacao: `Parada ${paradas.length + 1}`, abertura_frontal: true, abertura_traseira: false, tipo_porta_pavimento: '', tipo_porta_cabina: '', qtd_lop_frontal: 1, qtd_lop_traseira: 0 }]);
   const upd = (i, patch) => onChange(paradas.map((p, idx) => idx === i ? { ...p, ...patch } : p));
@@ -134,27 +208,43 @@ function QcParadasSecao({ paradas, onChange, disabled }) {
 function QcMaquinaSecao({ maquina, onChange, disabled, varianteLabel }) {
   const set = (patch) => onChange({ ...maquina, ...patch });
   return (
-    <Card title="Quadro, máquina e acionamentos" sub={varianteLabel ? `Variante reconhecida: ${varianteLabel}` : 'Preencha potência e tensão pra reconhecer a variante do quadro (7,5/15 kW × 220/380 V).'}>
-      <div className="grid-3" style={{ gap: 12 }}>
-        <QcField label="Tipo de máquina"><QcSelect value={maquina.tipo_maquina} disabled={disabled}
-          options={[{ value: 'sincrona', label: 'Síncrona (ímãs permanentes)' }, { value: 'assincrona', label: 'Assíncrona (indução)' }]}
-          onChange={(v) => set({ tipo_maquina: v })}/></QcField>
-        <QcField label="Fabricante/modelo da máquina"><QcInput value={maquina.fabricante_maquina} disabled={disabled} onChange={(v) => set({ fabricante_maquina: v })}/></QcField>
-        <QcField label="Potência (kW)"><QcInput type="number" value={maquina.potencia_kw} disabled={disabled} onChange={(v) => set({ potencia_kw: v })}/></QcField>
-        <QcField label="Corrente (A)"><QcInput type="number" value={maquina.corrente_a} disabled={disabled} onChange={(v) => set({ corrente_a: v })}/></QcField>
-        <QcField label="Tensão da rede (V)"><QcSelect value={maquina.tensao_v} disabled={disabled}
-          options={[{ value: '220', label: '220V' }, { value: '380', label: '380V' }]}
-          onChange={(v) => set({ tensao_v: v ? Number(v) : null })}/></QcField>
-        <QcField label="Velocidade (rpm)"><QcInput type="number" value={maquina.velocidade_rpm} disabled={disabled} onChange={(v) => set({ velocidade_rpm: v })}/></QcField>
-        <QcField label="Freio — tipo"><QcInput value={maquina.freio_tipo} disabled={disabled} onChange={(v) => set({ freio_tipo: v })}/></QcField>
-        <QcField label="Freio — tensão de acionamento"><QcInput type="number" value={maquina.freio_tensao_acionamento} disabled={disabled} onChange={(v) => set({ freio_tensao_acionamento: v })}/></QcField>
-        <QcField label="Freio — tensão de manutenção"><QcInput type="number" value={maquina.freio_tensao_manutencao} disabled={disabled} onChange={(v) => set({ freio_tensao_manutencao: v })}/></QcField>
-        <QcField label="Encoder — fabricante"><QcInput value={maquina.encoder_fabricante} disabled={disabled} onChange={(v) => set({ encoder_fabricante: v })}/></QcField>
-        <QcField label="Encoder — modelo/referência exata"><QcInput value={maquina.encoder_modelo} disabled={disabled} onChange={(v) => set({ encoder_modelo: v })}/></QcField>
-        <QcField label="Encoder — tecnologia/protocolo" hint="Ex.: incremental, EnDat, Hiperface. Combinações incomuns vão pra validação técnica, não são corrigidas automaticamente.">
-          <QcInput value={maquina.encoder_tecnologia} disabled={disabled} onChange={(v) => set({ encoder_tecnologia: v })}/></QcField>
-      </div>
-    </Card>
+    <>
+      <Card title="Alimentação da rede" sub="Características técnicas do local da instalação.">
+        <div className="grid-3" style={{ gap: 12 }}>
+          <QcField label="Tensão da rede (V)"><QcSelect value={maquina.tensao_v} disabled={disabled}
+            options={[{ value: '220', label: '220V' }, { value: '380', label: '380V' }]}
+            onChange={(v) => set({ tensao_v: v ? Number(v) : null })}/></QcField>
+          <QcField label="Número de fases"><QcSelect value={maquina.fases} disabled={disabled}
+            options={[{ value: '1', label: 'Monofásico (1Ø)' }, { value: '3', label: 'Trifásico (3Ø)' }]}
+            onChange={(v) => set({ fases: v })}/></QcField>
+          <QcField label="Frequência (Hz)"><QcSelect value={maquina.frequencia_hz} disabled={disabled}
+            options={[{ value: '50', label: '50 Hz' }, { value: '60', label: '60 Hz' }]}
+            onChange={(v) => set({ frequencia_hz: v ? Number(v) : null })}/></QcField>
+        </div>
+      </Card>
+
+      <Card title="Quadro, máquina e acionamentos" sub={varianteLabel ? `Variante reconhecida: ${varianteLabel}` : 'Preencha potência e tensão pra reconhecer a variante do quadro (7,5/15 kW × 220/380 V).'}>
+        <div className="grid-3" style={{ gap: 12 }}>
+          <QcField label="Tipo de máquina"><QcSelect value={maquina.tipo_maquina} disabled={disabled}
+            options={[{ value: 'sincrona', label: 'Síncrona (ímãs permanentes)' }, { value: 'assincrona', label: 'Assíncrona (indução)' }]}
+            onChange={(v) => set({ tipo_maquina: v })}/></QcField>
+          <QcField label="Fabricante/modelo da máquina"><QcInput value={maquina.fabricante_maquina} disabled={disabled} onChange={(v) => set({ fabricante_maquina: v })}/></QcField>
+          <QcField label="Potência (kW)"><QcInput type="number" value={maquina.potencia_kw} disabled={disabled} onChange={(v) => set({ potencia_kw: v })}/></QcField>
+          <QcField label="Corrente (A)"><QcInput type="number" value={maquina.corrente_a} disabled={disabled} onChange={(v) => set({ corrente_a: v })}/></QcField>
+          <QcField label="Velocidade (rpm)"><QcInput type="number" value={maquina.velocidade_rpm} disabled={disabled} onChange={(v) => set({ velocidade_rpm: v })}/></QcField>
+          <QcField label="Freio — tipo"><QcInput value={maquina.freio_tipo} disabled={disabled} onChange={(v) => set({ freio_tipo: v })}/></QcField>
+          <QcField label="Freio — tensão de acionamento"><QcInput type="number" value={maquina.freio_tensao_acionamento} disabled={disabled} onChange={(v) => set({ freio_tensao_acionamento: v })}/></QcField>
+          <QcField label="Freio — tensão de manutenção"><QcInput type="number" value={maquina.freio_tensao_manutencao} disabled={disabled} onChange={(v) => set({ freio_tensao_manutencao: v })}/></QcField>
+          <QcField label="Freio — quantidade de bobinas"><QcInput type="number" value={maquina.freio_qtd_bobinas} disabled={disabled} placeholder="1, 2, 3..." onChange={(v) => set({ freio_qtd_bobinas: v })}/></QcField>
+          <QcField label="Encoder — fabricante"><QcInput value={maquina.encoder_fabricante} disabled={disabled} onChange={(v) => set({ encoder_fabricante: v })}/></QcField>
+          <QcField label="Encoder — modelo/referência exata"><QcInput value={maquina.encoder_modelo} disabled={disabled} onChange={(v) => set({ encoder_modelo: v })}/></QcField>
+          <QcField label="Encoder — tecnologia/protocolo" hint="Ex.: incremental, EnDat, Hiperface. Combinações incomuns vão pra validação técnica.">
+            <QcInput value={maquina.encoder_tecnologia} disabled={disabled} onChange={(v) => set({ encoder_tecnologia: v })}/></QcField>
+          <QcField label="Encoder — resolução (PPR)"><QcInput type="number" value={maquina.encoder_resolucao_ppr} disabled={disabled} placeholder="Pulsos por rotação" onChange={(v) => set({ encoder_resolucao_ppr: v })}/></QcField>
+          <QcField label="Encoder — alimentação (V)"><QcInput type="number" value={maquina.encoder_alimentacao_v} disabled={disabled} onChange={(v) => set({ encoder_alimentacao_v: v })}/></QcField>
+        </div>
+      </Card>
+    </>
   );
 }
 
@@ -162,28 +252,40 @@ function QcMaquinaSecao({ maquina, onChange, disabled, varianteLabel }) {
 function QcComponentesSecao({ componentes, onChange, disabled }) {
   const set = (patch) => onChange({ ...componentes, ...patch });
   return (
-    <Card title="Componentes internos do quadro" sub="Especificação dos elementos que compõem o gabinete do quadro de comando.">
-      <div className="grid-3" style={{ gap: 12 }}>
-        <QcField label="Inversor — marca/modelo"><QcInput value={componentes.inversor_modelo} disabled={disabled} onChange={(v) => set({ inversor_modelo: v })}/></QcField>
-        <QcField label="Inversor — potência (kW)"><QcInput type="number" value={componentes.inversor_potencia_kw} disabled={disabled} onChange={(v) => set({ inversor_potencia_kw: v })}/></QcField>
-        <QcField label="Placa PCB principal — código SKU"><QcInput value={componentes.pcb_principal_sku} disabled={disabled} onChange={(v) => set({ pcb_principal_sku: v })}/></QcField>
-        <QcField label="Disjuntor — tipo/corrente (A)"><QcInput value={componentes.disjuntor_tipo_a} disabled={disabled} placeholder="ex: C16" onChange={(v) => set({ disjuntor_tipo_a: v })}/></QcField>
-        <QcField label="Disjuntor — quantidade"><QcInput type="number" value={componentes.disjuntor_qtd} disabled={disabled} onChange={(v) => set({ disjuntor_qtd: v })}/></QcField>
-        <QcField label="Contator — modelo"><QcInput value={componentes.contator_modelo} disabled={disabled} placeholder="ex: CJX2-1210" onChange={(v) => set({ contator_modelo: v })}/></QcField>
-        <QcField label="Contator — quantidade"><QcInput type="number" value={componentes.contator_qtd} disabled={disabled} onChange={(v) => set({ contator_qtd: v })}/></QcField>
-        <QcField label="Relé térmico — corrente (A)"><QcInput type="number" value={componentes.rele_termico_a} disabled={disabled} onChange={(v) => set({ rele_termico_a: v })}/></QcField>
-        <QcField label="Relé térmico — quantidade"><QcInput type="number" value={componentes.rele_termico_qtd} disabled={disabled} onChange={(v) => set({ rele_termico_qtd: v })}/></QcField>
-        <QcField label="Terminais M5 — quantidade"><QcInput type="number" value={componentes.terminais_m5_qtd} disabled={disabled} onChange={(v) => set({ terminais_m5_qtd: v })}/></QcField>
-        <QcField label="Parafusos — tamanho/tipo"><QcInput value={componentes.parafusos_tamanho} disabled={disabled} placeholder="ex: M6×10" onChange={(v) => set({ parafusos_tamanho: v })}/></QcField>
-        <QcField label="Parafusos — quantidade"><QcInput type="number" value={componentes.parafusos_qtd} disabled={disabled} onChange={(v) => set({ parafusos_qtd: v })}/></QcField>
-        <QcField label="Fusíveis — tipo/corrente (A)"><QcInput value={componentes.fusivel_tipo_a} disabled={disabled} placeholder="ex: gL 10" onChange={(v) => set({ fusivel_tipo_a: v })}/></QcField>
-        <QcField label="Fusíveis — quantidade"><QcInput type="number" value={componentes.fusivel_qtd} disabled={disabled} onChange={(v) => set({ fusivel_qtd: v })}/></QcField>
-        <QcField label="Cabos internos — bitola/tipo"><QcInput value={componentes.cabos_internos_bitola} disabled={disabled} placeholder="ex: 4mm² VVF" onChange={(v) => set({ cabos_internos_bitola: v })}/></QcField>
-        <QcField label="Cabos internos — metros"><QcInput type="number" value={componentes.cabos_internos_metros} disabled={disabled} onChange={(v) => set({ cabos_internos_metros: v })}/></QcField>
-        <QcField label="Conectores/plugs — tipo"><QcInput value={componentes.conectores_tipo} disabled={disabled} placeholder="ex: 2.8mm, 6.3mm" onChange={(v) => set({ conectores_tipo: v })}/></QcField>
-        <QcField label="Conectores/plugs — quantidade"><QcInput type="number" value={componentes.conectores_qtd} disabled={disabled} onChange={(v) => set({ conectores_qtd: v })}/></QcField>
-      </div>
-    </Card>
+    <>
+      <Card title="Componentes internos do quadro" sub="Especificação dos elementos que compõem o gabinete do quadro de comando.">
+        <div className="grid-3" style={{ gap: 12 }}>
+          <QcField label="Inversor — marca/modelo"><QcInput value={componentes.inversor_modelo} disabled={disabled} onChange={(v) => set({ inversor_modelo: v })}/></QcField>
+          <QcField label="Inversor — potência (kW)"><QcInput type="number" value={componentes.inversor_potencia_kw} disabled={disabled} onChange={(v) => set({ inversor_potencia_kw: v })}/></QcField>
+          <QcField label="Placa PCB principal — código SKU"><QcInput value={componentes.pcb_principal_sku} disabled={disabled} onChange={(v) => set({ pcb_principal_sku: v })}/></QcField>
+          <QcField label="Disjuntor — tipo/corrente (A)"><QcInput value={componentes.disjuntor_tipo_a} disabled={disabled} placeholder="ex: C16" onChange={(v) => set({ disjuntor_tipo_a: v })}/></QcField>
+          <QcField label="Disjuntor — quantidade"><QcInput type="number" value={componentes.disjuntor_qtd} disabled={disabled} onChange={(v) => set({ disjuntor_qtd: v })}/></QcField>
+          <QcField label="Contator — modelo"><QcInput value={componentes.contator_modelo} disabled={disabled} placeholder="ex: CJX2-1210" onChange={(v) => set({ contator_modelo: v })}/></QcField>
+          <QcField label="Contator — quantidade"><QcInput type="number" value={componentes.contator_qtd} disabled={disabled} onChange={(v) => set({ contator_qtd: v })}/></QcField>
+          <QcField label="Relé térmico — corrente (A)"><QcInput type="number" value={componentes.rele_termico_a} disabled={disabled} onChange={(v) => set({ rele_termico_a: v })}/></QcField>
+          <QcField label="Relé térmico — quantidade"><QcInput type="number" value={componentes.rele_termico_qtd} disabled={disabled} onChange={(v) => set({ rele_termico_qtd: v })}/></QcField>
+          <QcField label="Terminais M5 — quantidade"><QcInput type="number" value={componentes.terminais_m5_qtd} disabled={disabled} onChange={(v) => set({ terminais_m5_qtd: v })}/></QcField>
+          <QcField label="Parafusos — tamanho/tipo"><QcInput value={componentes.parafusos_tamanho} disabled={disabled} placeholder="ex: M6×10" onChange={(v) => set({ parafusos_tamanho: v })}/></QcField>
+          <QcField label="Parafusos — quantidade"><QcInput type="number" value={componentes.parafusos_qtd} disabled={disabled} onChange={(v) => set({ parafusos_qtd: v })}/></QcField>
+          <QcField label="Fusíveis — tipo/corrente (A)"><QcInput value={componentes.fusivel_tipo_a} disabled={disabled} placeholder="ex: gL 10" onChange={(v) => set({ fusivel_tipo_a: v })}/></QcField>
+          <QcField label="Fusíveis — quantidade"><QcInput type="number" value={componentes.fusivel_qtd} disabled={disabled} onChange={(v) => set({ fusivel_qtd: v })}/></QcField>
+          <QcField label="Cabos internos — bitola/tipo"><QcInput value={componentes.cabos_internos_bitola} disabled={disabled} placeholder="ex: 4mm² VVF" onChange={(v) => set({ cabos_internos_bitola: v })}/></QcField>
+          <QcField label="Cabos internos — metros"><QcInput type="number" value={componentes.cabos_internos_metros} disabled={disabled} onChange={(v) => set({ cabos_internos_metros: v })}/></QcField>
+          <QcField label="Conectores/plugs — tipo"><QcInput value={componentes.conectores_tipo} disabled={disabled} placeholder="ex: 2.8mm, 6.3mm" onChange={(v) => set({ conectores_tipo: v })}/></QcField>
+          <QcField label="Conectores/plugs — quantidade"><QcInput type="number" value={componentes.conectores_qtd} disabled={disabled} onChange={(v) => set({ conectores_qtd: v })}/></QcField>
+        </div>
+      </Card>
+
+      <Card title="Placas adicionais do comando" sub="Componentes de leitura, proteção e interface — especifique modelo/SKU quando fornecido.">
+        <div className="grid-3" style={{ gap: 12 }}>
+          <QcField label="Placa leitora Encoder (Sin/Cos) — SKU"><QcInput value={componentes.placa_encoder_sku} disabled={disabled} placeholder="ex: MC02-1" onChange={(v) => set({ placa_encoder_sku: v })}/></QcField>
+          <QcField label="Placa de proteção do freio — SKU"><QcInput value={componentes.placa_freio_sku} disabled={disabled} placeholder="ex: NC30-1" onChange={(v) => set({ placa_freio_sku: v })}/></QcField>
+          <QcField label="Placa de interface de ligações — SKU"><QcInput value={componentes.placa_interface_sku} disabled={disabled} placeholder="ex: MC04-1" onChange={(v) => set({ placa_interface_sku: v })}/></QcField>
+          <QcField label="Capacitores — tipo/µF"><QcInput value={componentes.capacitor_tipo_uf} disabled={disabled} placeholder="ex: 100µF 400V" onChange={(v) => set({ capacitor_tipo_uf: v })}/></QcField>
+          <QcField label="Capacitores — quantidade"><QcInput type="number" value={componentes.capacitor_qtd} disabled={disabled} onChange={(v) => set({ capacitor_qtd: v })}/></QcField>
+        </div>
+      </Card>
+    </>
   );
 }
 
@@ -593,7 +695,8 @@ function QuadroComandoDetail({ quadroId, onClose }) {
         <>
           <Tabs tabs={[
             { key: 'escopo', label: 'Escopo' },
-            { key: 'paradas', label: 'Configuração e portas' },
+            { key: 'configuracao', label: 'Configuração' },
+            { key: 'paradas', label: 'Paradas e portas' },
             { key: 'maquina', label: 'Quadro/máquina' },
             { key: 'componentes', label: 'Componentes internos' },
             { key: 'geometria', label: 'Geometria p/ fiação' },
@@ -601,6 +704,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
           ]} active={tab} onChange={setTab}/>
           <div style={{ marginTop: 16 }}>
             {tab === 'escopo' && <QcEscopoSecao escopo={quadro.escopo_fornecimento || {}} onChange={(v) => setQuadro({ ...quadro, escopo_fornecimento: v })}/>}
+            {tab === 'configuracao' && <QcConfiguracaoSecao config={quadro.configuracao || {}} paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, configuracao: v })}/>}
             {tab === 'paradas' && <QcParadasSecao paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, paradas: v })}/>}
             {tab === 'maquina' && <QcMaquinaSecao maquina={quadro.maquina} varianteLabel={varianteLabel} onChange={(v) => setQuadro({ ...quadro, maquina: v })}/>}
             {tab === 'componentes' && <QcComponentesSecao componentes={quadro.componentes || {}} onChange={(v) => setQuadro({ ...quadro, componentes: v })}/>}
