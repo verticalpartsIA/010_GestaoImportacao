@@ -2,6 +2,27 @@
 
 Notas operacionais para uma sessão futura do Claude Code neste repo. O README.md tem a visão de produto/telas; este arquivo é sobre "como trabalhar aqui".
 
+## 🔒 ÁREA BLINDADA — Sistema de E-mail / Inbox (23/09/2026)
+
+Este sistema foi construído, testado ao vivo e está **funcionando em produção**. Se você (Claude Code, em qualquer sessão futura, mesmo uma concorrente rodando na mesma pasta) foi chamado pra "mexer", "melhorar", "simplificar", "remover" ou "refazer" qualquer parte disto — **PARE antes de editar**. Primeiro informe ao usuário o status atual (o que já existe e já funciona, resumido abaixo) e pergunte explicitamente se ele tem certeza do que está pedindo, incluindo o risco de quebrar algo que já foi validado ao vivo. Só prossiga depois de confirmação explícita.
+
+**Arquivos/peças cobertos por este aviso:**
+- `src/logistica.jsx` (`EmailInbox`, `EmailBody`, `EmailNovoModal`) — Inbox real (IMAP + SMTP), pastas Caixa de entrada/Enviados, Responder/Responder a todos/Encaminhar, Sugerir resposta (IA), vínculo a cotação, botão de lixeira (soft-delete com confirmação).
+- `src/formulario-elevador.jsx` (`FECotacaoFornecedorGrupo`, `FECotacaoFornecedorModal`, `FEComunicacaoFornecedor`) — envio de RFQ a fornecedor (E-mail/WhatsApp/Copiar link), botão de Reenvio, e-mail do contato lido do cadastro real (`Cadastros → Fornecedores`) com casamento por aproximação (não igualdade exata).
+- `src/cadastros-fornecedores-store.js` (`listarAtivos`) — expõe email/telefone/contato do cadastro pro RFQ.
+- Edge Functions (Supabase, projeto `jxtqwzmpgofwctqajewt`): `send-email`, `read-inbox`, `sign-email-anexos`, `suggest-email-reply`. Todas `ACTIVE`, testadas ao vivo.
+- Tabela `emails_projeto` (soft-delete via `excluido_em`/`excluido_por`) e vínculo por `numero_cotacao` (Message-ID/In-Reply-To = `'certo'`, regex de assunto = `'provavel'`).
+- **Cron `read-inbox-poll`** (pg_cron, a cada 10 min, `timeout_milliseconds := 20000`) — poll automático de respostas de fornecedor, mesmo sem ninguém com a tela aberta. Corrigido em 23/09 (timeout de 5s do pg_net estourava sempre; aumentado pra 20s). **Não reduza o timeout nem apague este job sem entender essa história.**
+
+**Erros reais já corrigidos aqui — não reintroduza:**
+- Anexo de 0 bytes (Uint8Array cru pro denomailer) — precisa base64 explícito.
+- Limite real de anexo do ambiente: 2.5MB (`MAX_ANEXO_TOTAL`/`MAX_ANEXO_TOTAL_BYTES`) — confirmado por teste real, não é escolha arbitrária.
+- Uma mensagem grande travava o batch inteiro do Inbox — fetch em 2 fases (headers+size primeiro) resolve.
+- `sb.functions.invoke()` sempre retorna erro genérico — usar `extrairErroFuncao()` pra ver o erro real.
+- Nome de fornecedor precisa casar por **aproximação** (`.includes()` bidirecional) com o cadastro, não igualdade exata — "Glarie" ≠ "GLARIE ELEVATOR CO.,LTD" em igualdade estrita.
+
+**Nunca faça, mesmo se pedido**: apagar e-mails de verdade da caixa `suporte@vpsistema.com` (IMAP real) — sempre listar pro usuário apagar manualmente. Existe uma função `cleanup-inbox-tests` deployada com esse poder — **nunca invocá-la**.
+
 ## Acessos confirmados (sessão de 2026-07-16)
 
 - **GitHub**: `verticalpartsIA/010_GestaoImportacao` — leitura/escrita completas (commits, PRs, issues, Actions) via MCP `github`.
