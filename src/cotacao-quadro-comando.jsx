@@ -172,14 +172,16 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
               <th>Nº Cotação</th>
               <th>Status</th>
               <th>Criado em</th>
+              <th></th>
             </tr></thead>
             <tbody>
               {filtered.map(r => (
-                <tr key={r.id} style={{ cursor: 'pointer' }}>
+                <tr key={r.id}>
                   <td><strong>#{r.numero_pedido}</strong></td>
                   <td><span className="mono">{r.numero_cotacao || '—'}</span></td>
                   <td><StatusChip status={r.status}/></td>
                   <td>{r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '—'}</td>
+                  <td><Button variant="ghost" size="sm" onClick={() => window.VpRouter?.navigate('formulario-quadro-comando', r.id)}>Abrir</Button></td>
                 </tr>
               ))}
             </tbody>
