@@ -107,7 +107,8 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
     setRefreshing(true);
     try {
       if (!window.__VP_SB || !window.__VP_SB.sb) throw new Error('Supabase não inicializado');
-      const { data, error } = await window.__VP_SB.sb.from('quadros_comando').select('*').order('created_at', { ascending: false }).limit(200);
+      const userEmail = (window.__VP_USER || {}).email;
+      const { data, error } = await window.__VP_SB.sb.from('quadros_comando').select('*').eq('criado_por', userEmail).order('created_at', { ascending: false }).limit(200);
       if (error) throw error;
       setRows(data || []);
     } catch (e) {
