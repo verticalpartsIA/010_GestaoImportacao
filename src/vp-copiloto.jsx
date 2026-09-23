@@ -310,8 +310,9 @@ function VpCopiloto({ route, role }) {
 
       if (docContent.trim().length === 0) throw new Error('Documento está vazio.');
 
-      // Enviar documento pra IA preencher
-      await send('fill', `Aqui está um documento pra você analisar e preencher os campos:\n\n${docContent.slice(0, 10000)}`);
+      // Enviar documento pra IA preencher — instrução clara de mapeamento
+      const promptComDoc = `📄 DOCUMENTO ANEXADO (${file.name}):\n\n${docContent.slice(0, 10000)}\n\n---\n\nAnalise este documento e preencha CADA CAMPO DO FORMULÁRIO com os dados correspondentes. Mapeie cada informação do documento ao campo mais relevante da tela.`;
+      await send('fill', promptComDoc);
     } catch (e) {
       setMsgs(m => [...m, { role: 'assistant', content: '⚠️ Erro ao ler documento: ' + e.message }]);
     } finally {
