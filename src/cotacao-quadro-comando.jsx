@@ -90,7 +90,7 @@ function ModalVisualizarChecklist({ checklist, onClose }) {
         </div>
 
         <div style={{ marginTop: 24, textAlign: 'center', fontSize: 11, color: 'var(--fg3)' }}>
-          <p>Criado em {new Date(checklist.criado_em).toLocaleString('pt-BR')}</p>
+          <p>Criado em {new Date(checklist.created_at).toLocaleString('pt-BR')}</p>
         </div>
       </div>
     </div>
@@ -101,14 +101,12 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
   const [rows, setRows] = React.useState(null);
   const [busca, setBusca] = React.useState('');
   const [fStatus, setFStatus] = React.useState('Todos');
-  const [fTipo, setFTipo] = React.useState('Todos');
   const [refreshing, setRefreshing] = React.useState(false);
-  const [selecionado, setSelecionado] = React.useState(null);
 
   const carregar = React.useCallback(async () => {
     setRefreshing(true);
     try {
-      const { data, error } = await window.__VP_SB.sb.from('cotacoes_quadro_comando').select('*').order('criado_em', { ascending: false }).limit(200);
+      const { data, error } = await window.__VP_SB.sb.from('quadros_comando').select('*').order('created_at', { ascending: false }).limit(200);
       if (error) throw error;
       setRows(data || []);
     } catch (e) {
@@ -130,13 +128,12 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
     if (!rows) return [];
     return rows.filter(r => {
       const matchStatus = fStatus === 'Todos' || r.status === fStatus;
-      const matchTipo = fTipo === 'Todos' || r.tipo === fTipo;
       const matchBusca = !busca.trim() ||
-        String(r.numero_pedido).includes(busca) ||
-        String(r.numero_checklist || r.numero_cotacao || '').includes(busca);
-      return matchStatus && matchTipo && matchBusca;
+        String(r.numero_pedido || '').includes(busca) ||
+        String(r.numero_cotacao || '').includes(busca);
+      return matchStatus && matchBusca;
     });
-  }, [rows, busca, fStatus, fTipo]);
+  }, [rows, busca, fStatus]);
 
   return (
     <div className="page fade-in">
@@ -153,12 +150,7 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
 
       <Card style={{ marginBottom: 14 }}>
         <div className="row gap-2" style={{ alignItems: 'center' }}>
-          <input className="input" style={{ flex: 1 }} placeholder="Buscar por pedido, checklist…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
-          <select className="input" style={{ minWidth: 150 }} value={fTipo} onChange={(e) => setFTipo(e.target.value)}>
-            <option value="Todos">Tipo: Todos</option>
-            <option value="checklist">Checklist</option>
-            <option value="cotacao">Cotação</option>
-          </select>
+          <input className="input" style={{ flex: 1 }} placeholder="Buscar por pedido, cotação…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
           <select className="input" style={{ minWidth: 150 }} value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
             {statusDisponiveis.map(s => <option key={s} value={s}>{s === 'Todos' ? 'Status: Todos' : s}</option>)}
           </select>
@@ -174,25 +166,17 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
           <table className="t">
             <thead><tr>
               <th>Pedido Nº</th>
-              <th>Nº Checklist/Cotação</th>
-              <th>Tipo</th>
+              <th>Nº Cotação</th>
               <th>Status</th>
               <th>Criado em</th>
-              <th></th>
             </tr></thead>
             <tbody>
               {filtered.map(r => (
                 <tr key={r.id} style={{ cursor: 'pointer' }}>
                   <td><strong>#{r.numero_pedido}</strong></td>
-                  <td><span className="mono">{r.numero_checklist || r.numero_cotacao || '—'}</span></td>
-                  <td><span className="badge" style={{ fontSize: 11, background: r.tipo === 'checklist' ? '#e0e7ff' : '#f0f9ff', color: r.tipo === 'checklist' ? '#3730a3' : '#0369a1' }}>{r.tipo}</span></td>
+                  <td><span className="mono">{r.numero_cotacao || '—'}</span></td>
                   <td><StatusChip status={r.status}/></td>
-                  <td>{r.criado_em ? new Date(r.criado_em).toLocaleDateString('pt-BR') : '—'}</td>
-                  <td>
-                    {r.tipo === 'checklist' && (
-                      <Button variant="ghost" size="sm" onClick={() => setSelecionado(r)}>Visualizar</Button>
-                    )}
-                  </td>
+                  <td>{r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '—'}</td>
                 </tr>
               ))}
             </tbody>
@@ -203,8 +187,6 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
       <div className="row sb" style={{ marginTop: 14, fontSize: 12, color: 'var(--fg3)' }}>
         <span>Exibindo <b>{filtered.length}</b> de <b>{rows?.length || 0}</b> registros</span>
       </div>
-
-      {selecionado && <ModalVisualizarChecklist checklist={selecionado} onClose={() => setSelecionado(null)}/>}
     </div>
   );
 }
