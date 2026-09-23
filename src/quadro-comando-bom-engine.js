@@ -312,10 +312,64 @@
     return linhas;
   }
 
+  /* ---------- Cruzamento com o ERP (item 6 da instrução) ----------
+     Puro: recebe os itens da BOM já gerada + os resultados já
+     consultados no Omie (edge function quadro-comando-cruzamento-erp,
+     que faz a chamada real — este arquivo nunca fala com rede) e
+     classifica cada linha. "cadastrado_fora_do_pedido" é calculado
+     100% local (materiais_catalogo × SKUs desta BOM), sem precisar de
+     nova consulta — mas pode incluir SKUs que só pertencem a OUTRA
+     variante de potência/tensão (não é necessariamente uma anomalia,
+     é só o que sobra do catálogo compartilhado depois de tirar o que
+     este pedido específico usa). Nunca adiciona nada à BOM sozinho —
+     é só diagnóstico pro usuário decidir o que fazer. */
+  function classificarCruzamentoErp(bomItens, resultadosOmie, catalogoPorSku) {
+    const resultados = resultadosOmie || {};
+    const catalogo = catalogoPorSku || {};
+    const skusNaBom = new Set(bomItens.map((i) => i.sku));
+
+    const linhas = bomItens.map((item) => {
+      const r = resultados[item.sku] || { encontrado: null };
+      const cat = catalogo[item.sku];
+      const descricaoLocal = (cat && cat.descricao) || item.descricao || null;
+      const unidadeLocal = (cat && cat.unidade) || item.unidade || null;
+
+      let status = 'erro_consulta';
+      if (r.encontrado === true) status = 'cadastrado_e_solicitado';
+      else if (r.encontrado === false) status = 'solicitado_sem_cadastro';
+
+      const normaliza = (s) => (s == null ? null : String(s).trim().toUpperCase());
+      const divergenciaUnidade = r.encontrado === true
+        && normaliza(r.unidade) != null && normaliza(unidadeLocal) != null
+        && normaliza(r.unidade) !== normaliza(unidadeLocal);
+      const divergenciaDescricao = r.encontrado === true
+        && normaliza(r.descricao) != null && normaliza(descricaoLocal) != null
+        && normaliza(r.descricao) !== normaliza(descricaoLocal);
+
+      return {
+        sku: item.sku,
+        descricao_local: descricaoLocal,
+        descricao_omie: r.descricao != null ? r.descricao : null,
+        unidade_local: unidadeLocal,
+        unidade_omie: r.unidade != null ? r.unidade : null,
+        status,
+        divergencia_unidade: !!divergenciaUnidade,
+        divergencia_descricao: !!divergenciaDescricao,
+        erro: r.erro || null,
+      };
+    });
+
+    const catalogoNaoUsado = Object.keys(catalogo)
+      .filter((sku) => catalogo[sku].ativo !== false && !skusNaBom.has(sku))
+      .map((sku) => ({ sku, descricao: catalogo[sku].descricao }));
+
+    return { linhas, catalogoNaoUsado };
+  }
+
   window.QuadroComandoBomEngine = {
     listarVariantes, chaveVariante, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
     montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,
-    grupoSeparacaoPorCategoria,
+    grupoSeparacaoPorCategoria, classificarCruzamentoErp,
   };
 }());
