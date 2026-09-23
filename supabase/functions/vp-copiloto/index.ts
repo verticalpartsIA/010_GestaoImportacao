@@ -1008,7 +1008,7 @@ persistem mudança (1, 2, 3a, 6) e quais são só estáticas/documentação
 (3b, 4, 5) — é fácil o usuário achar que mudar um parâmetro na aba 4
 afeta o cálculo real, e hoje isso não acontece.`,
 
-  'quadro-comando': `TELA: Quadro de Comando (Comercial → Formulários).
+  'formulario-quadro-comando': `TELA: Quadro de Comando (Comercial → Formulários).
 
 Coleta os dados técnicos do quadro de comando (painel elétrico NICE3000
 MRL) de um elevador e, a partir deles, gera a especificação completa de
