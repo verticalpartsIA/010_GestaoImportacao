@@ -340,6 +340,7 @@ function App() {
       case "formulario-elevador": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel}/>;
       case "formulario-quadro-comando": return <QuadroComandoPage setRoute={setRoute} subsel={subsel}/>;
       case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "cotacao-quadro-comando": return <CotacaoQuadroComandoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "status-obras": return <ObrasStatusPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "linha-do-tempo": return <window.LinhaDoTempoPage subsel={subsel}/>;
