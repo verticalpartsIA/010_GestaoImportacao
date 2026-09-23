@@ -15,10 +15,11 @@ function QcField({ label, children, hint }) {
   );
 }
 
-function QcInput({ value, onChange, type, placeholder, disabled }) {
+function QcInput({ value, onChange, type, placeholder, disabled, required, hasError, name }) {
   return (
-    <input className="input" type={type || 'text'} value={value == null ? '' : value} placeholder={placeholder}
-      disabled={disabled}
+    <input className="input" data-field={name} type={type || 'text'} value={value == null ? '' : value} placeholder={placeholder}
+      disabled={disabled} required={required}
+      style={{borderColor: hasError ? '#d32f2f' : undefined}}
       onChange={(e) => onChange(type === 'number' ? (e.target.value === '' ? null : Number(e.target.value)) : e.target.value)}/>
   );
 }
@@ -160,7 +161,7 @@ function QcConfiguracaoSecao({ config, paradas, onChange, disabled }) {
           <QcField label="Número de elevadores nesta instalação"><QcInput type="number" value={config.numero_elevadores} disabled={disabled} onChange={(v) => set({ numero_elevadores: v })}/></QcField>
           <QcField label="Capacidade (pessoas)"><QcInput type="number" value={config.capacidade_pessoas} disabled={disabled} onChange={(v) => set({ capacidade_pessoas: v })}/></QcField>
           <QcField label="Velocidade nominal (m/s)"><QcInput type="number" step="0.1" value={config.velocidade_ms} disabled={disabled} onChange={(v) => set({ velocidade_ms: v })}/></QcField>
-          <QcField label="Número de paradas"><QcInput type="number" value={config.numero_paradas} disabled={disabled} placeholder="Preenchido automaticamente" disabled={true}/></QcField>
+          <QcField label="Número de paradas"><QcInput type="number" value={paradas?.length || 0} disabled={true} placeholder="Automático"/></QcField>
           <QcField label="Portas opostas na cabina?" hint="Frente E fundo com aberturas simultâneas?">
             <label className="small"><input type="checkbox" checked={!!config.portas_opostas_cabina} disabled={disabled}
               onChange={(e) => set({ portas_opostas_cabina: e.target.checked })}/> Sim, há portas opostas na cabina</label>
@@ -205,20 +206,23 @@ function QcParadasSecao({ paradas, onChange, disabled }) {
 }
 
 /* ---------- Máquina/Freio/Encoder (item 3) ---------- */
-function QcMaquinaSecao({ maquina, onChange, disabled, varianteLabel }) {
+function QcMaquinaSecao({ maquina, onChange, disabled, varianteLabel, errosVisiveis }) {
   const set = (patch) => onChange({ ...maquina, ...patch });
   return (
     <>
       <Card title="Alimentação da rede" sub="Características técnicas do local da instalação.">
         <div className="grid-3" style={{ gap: 12 }}>
-          <QcField label="Tensão da rede (V)"><QcSelect value={maquina.tensao_v} disabled={disabled}
+          <QcField label="Tensão da rede (V)"><QcSelect value={maquina.tensao_v} disabled={disabled} data-field="tensao_v"
             options={[{ value: '220', label: '220V' }, { value: '380', label: '380V' }]}
+            style={{borderColor: errosVisiveis?.tensao_v ? '#d32f2f' : undefined}}
             onChange={(v) => set({ tensao_v: v ? Number(v) : null })}/></QcField>
-          <QcField label="Número de fases"><QcSelect value={maquina.fases} disabled={disabled}
+          <QcField label="Número de fases"><QcSelect value={maquina.fases} disabled={disabled} data-field="fases"
             options={[{ value: '1', label: 'Monofásico (1Ø)' }, { value: '3', label: 'Trifásico (3Ø)' }]}
+            style={{borderColor: errosVisiveis?.fases ? '#d32f2f' : undefined}}
             onChange={(v) => set({ fases: v })}/></QcField>
-          <QcField label="Frequência (Hz)"><QcSelect value={maquina.frequencia_hz} disabled={disabled}
+          <QcField label="Frequência (Hz)"><QcSelect value={maquina.frequencia_hz} disabled={disabled} data-field="frequencia_hz"
             options={[{ value: '50', label: '50 Hz' }, { value: '60', label: '60 Hz' }]}
+            style={{borderColor: errosVisiveis?.frequencia_hz ? '#d32f2f' : undefined}}
             onChange={(v) => set({ frequencia_hz: v ? Number(v) : null })}/></QcField>
         </div>
       </Card>
@@ -229,10 +233,10 @@ function QcMaquinaSecao({ maquina, onChange, disabled, varianteLabel }) {
             options={[{ value: 'sincrona', label: 'Síncrona (ímãs permanentes)' }, { value: 'assincrona', label: 'Assíncrona (indução)' }]}
             onChange={(v) => set({ tipo_maquina: v })}/></QcField>
           <QcField label="Fabricante/modelo da máquina"><QcInput value={maquina.fabricante_maquina} disabled={disabled} onChange={(v) => set({ fabricante_maquina: v })}/></QcField>
-          <QcField label="Potência (kW)"><QcInput type="number" value={maquina.potencia_kw} disabled={disabled} onChange={(v) => set({ potencia_kw: v ? Number(v) : null })}/></QcField>
+          <QcField label="Potência (kW)"><QcInput type="number" value={maquina.potencia_kw} disabled={disabled} hasError={!!errosVisiveis?.potencia_kw} name="potencia_kw" onChange={(v) => set({ potencia_kw: v ? Number(v) : null })}/></QcField>
           <QcField label="Corrente (A)"><QcInput type="number" value={maquina.corrente_a} disabled={disabled} onChange={(v) => set({ corrente_a: v ? Number(v) : null })}/></QcField>
           <QcField label="Velocidade (rpm)"><QcInput type="number" value={maquina.velocidade_rpm} disabled={disabled} onChange={(v) => set({ velocidade_rpm: v ? Number(v) : null })}/></QcField>
-          <QcField label="Freio — tipo"><QcInput value={maquina.freio_tipo} disabled={disabled} onChange={(v) => set({ freio_tipo: v })}/></QcField>
+          <QcField label="Freio — tipo"><QcInput value={maquina.freio_tipo} disabled={disabled} hasError={!!errosVisiveis?.freio_tipo} name="freio_tipo" onChange={(v) => set({ freio_tipo: v })}/></QcField>
           <QcField label="Freio — tensão de acionamento"><QcInput type="number" value={maquina.freio_tensao_acionamento} disabled={disabled} onChange={(v) => set({ freio_tensao_acionamento: v ? Number(v) : null })}/></QcField>
           <QcField label="Freio — tensão de manutenção"><QcInput type="number" value={maquina.freio_tensao_manutencao} disabled={disabled} onChange={(v) => set({ freio_tensao_manutencao: v ? Number(v) : null })}/></QcField>
           <QcField label="Freio — quantidade de bobinas"><QcInput type="number" value={maquina.freio_qtd_bobinas} disabled={disabled} placeholder="1, 2, 3..." onChange={(v) => set({ freio_qtd_bobinas: v ? Number(v) : null })}/></QcField>
@@ -623,6 +627,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
   const [podeDecidir, setPodeDecidir] = React.useState(false);
   const [tab, setTab] = React.useState('escopo');
   const [saving, setSaving] = React.useState(false);
+  const [errosVisiveis, setErrosVisiveis] = React.useState({});
 
   const reload = React.useCallback(() => {
     window.QuadroComandoStore.obter(quadroId).then(setQuadro);
@@ -636,7 +641,35 @@ function QuadroComandoDetail({ quadroId, onClose }) {
   const varianteKey = engine ? engine.chaveVariante(quadro.maquina.potencia_kw, quadro.maquina.tensao_v) : null;
   const varianteLabel = varianteKey && engine.listarVariantes().find((v) => v.key === varianteKey)?.label;
 
+  const validarFormulario = () => {
+    const errosMap = {};
+    if (!quadro.maquina?.potencia_kw) errosMap.potencia_kw = 'Obrigatório';
+    if (!quadro.maquina?.tensao_v) errosMap.tensao_v = 'Obrigatório';
+    if (!quadro.maquina?.fases) errosMap.fases = 'Obrigatório';
+    if (!quadro.maquina?.frequencia_hz) errosMap.frequencia_hz = 'Obrigatório';
+    if (!quadro.maquina?.freio_tipo) errosMap.freio_tipo = 'Obrigatório';
+    return errosMap;
+  };
+
+  const scrollParaCampoComErro = (nomeDoErro) => {
+    const campo = document.querySelector(`input[data-field="${nomeDoErro}"]`) || document.querySelector(`select[data-field="${nomeDoErro}"]`);
+    if (campo) {
+      campo.scrollIntoView({ behavior: 'smooth', block: 'center' });
+      campo.focus();
+    }
+  };
+
   const salvarTudo = async () => {
+    const errosMap = validarFormulario();
+    const temErros = Object.keys(errosMap).length > 0;
+    if (temErros) {
+      setErrosVisiveis(errosMap);
+      const primeiroErro = Object.keys(errosMap)[0];
+      window.toast?.(`Campo obrigatório: ${primeiroErro.replace(/_/g, ' ')}`, 'warning');
+      setTimeout(() => scrollParaCampoComErro(primeiroErro), 100);
+      return;
+    }
+    setErrosVisiveis({});
     setSaving(true);
     try {
       await window.QuadroComandoStore.salvar(quadroId, {
@@ -706,7 +739,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
             {tab === 'escopo' && <QcEscopoSecao escopo={quadro.escopo_fornecimento || {}} onChange={(v) => setQuadro({ ...quadro, escopo_fornecimento: v })}/>}
             {tab === 'configuracao' && <QcConfiguracaoSecao config={quadro.configuracao || {}} paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, configuracao: v })}/>}
             {tab === 'paradas' && <QcParadasSecao paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, paradas: v })}/>}
-            {tab === 'maquina' && <QcMaquinaSecao maquina={quadro.maquina} varianteLabel={varianteLabel} onChange={(v) => setQuadro({ ...quadro, maquina: v })}/>}
+            {tab === 'maquina' && <QcMaquinaSecao maquina={quadro.maquina} varianteLabel={varianteLabel} errosVisiveis={errosVisiveis} onChange={(v) => setQuadro({ ...quadro, maquina: v })}/>}
             {tab === 'componentes' && <QcComponentesSecao componentes={quadro.componentes || {}} onChange={(v) => setQuadro({ ...quadro, componentes: v })}/>}
             {tab === 'geometria' && <QcGeometriaSecao geometria={quadro.geometria} intervalos={quadro.intervalos}
               onGeom={(v) => setQuadro({ ...quadro, geometria: v })} onIntervalos={(v) => setQuadro({ ...quadro, intervalos: v })}/>}
