@@ -244,8 +244,8 @@ function QcMaquinaSecao({ maquina, onChange, disabled, varianteLabel, errosVisiv
           <QcField label="Encoder — modelo/referência exata"><QcInput value={maquina.encoder_modelo} disabled={disabled} onChange={(v) => set({ encoder_modelo: v })}/></QcField>
           <QcField label="Encoder — tecnologia/protocolo" hint="Ex.: incremental, EnDat, Hiperface. Combinações incomuns vão pra validação técnica.">
             <QcInput value={maquina.encoder_tecnologia} disabled={disabled} onChange={(v) => set({ encoder_tecnologia: v })}/></QcField>
-          <QcField label="Encoder — resolução (PPR)"><QcInput type="number" value={maquina.encoder_resolucao_ppr} disabled={disabled} placeholder="Pulsos por rotação" onChange={(v) => set({ encoder_resolucao_ppr: v ? Number(v) : null })}/></QcField>
-          <QcField label="Encoder — alimentação (V)"><QcInput type="number" value={maquina.encoder_alimentacao_v} disabled={disabled} onChange={(v) => set({ encoder_alimentacao_v: v ? Number(v) : null })}/></QcField>
+          <QcField label="Encoder — resolução (PPR)"><QcInput type="number" value={maquina.encoder_resolucao} disabled={disabled} placeholder="Pulsos por rotação" onChange={(v) => set({ encoder_resolucao: v ? String(v) : null })}/></QcField>
+          <QcField label="Encoder — alimentação (V)"><QcInput type="number" value={maquina.encoder_alimentacao} disabled={disabled} onChange={(v) => set({ encoder_alimentacao: v ? String(v) : null })}/></QcField>
         </div>
       </Card>
     </>
