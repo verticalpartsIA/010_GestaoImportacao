@@ -108,7 +108,7 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
     try {
       if (!window.__VP_SB || !window.__VP_SB.sb) throw new Error('Supabase não inicializado');
       const userEmail = (window.__VP_USER || {}).email;
-      const { data, error } = await window.__VP_SB.sb.from('quadros_comando').select('*').eq('criado_por', userEmail).order('created_at', { ascending: false }).limit(200);
+      const { data, error } = await window.__VP_SB.sb.from('quadros_comando').select('*').eq('criado_por', userEmail).is('excluido_em', null).order('created_at', { ascending: false }).limit(200);
       if (error) throw error;
       setRows(data || []);
     } catch (e) {
@@ -120,6 +120,21 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
   }, []);
 
   React.useEffect(() => { carregar(); }, [carregar]);
+
+  /* Soft-delete (mesmo padrão do Inbox de e-mail em logistica.jsx): nunca
+     exclui sem confirmar, e a linha só some da lista — dado preservado
+     no banco (window.QuadroComandoStore.excluir marca excluido_em). */
+  const excluirRegistro = async (ev, r) => {
+    ev.stopPropagation();
+    if (!window.confirm(`Tem certeza que deseja excluir o Pedido Nº ${r.numero_pedido}?\n\nIsso remove o registro desta lista — os dados ficam preservados para auditoria.`)) return;
+    try {
+      await window.QuadroComandoStore.excluir(r.id);
+      setRows((prev) => prev.filter((x) => x.id !== r.id));
+      window.toast?.('Registro excluído.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao excluir: ' + e.message, 'error');
+    }
+  };
 
   const statusDisponiveis = React.useMemo(() => {
     if (!rows) return [];
@@ -181,7 +196,10 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
                   <td><span className="mono">{r.numero_cotacao || '—'}</span></td>
                   <td><StatusChip status={r.status}/></td>
                   <td>{r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '—'}</td>
-                  <td><Button variant="ghost" size="sm" onClick={() => { setSubsel(r.id); setRoute('formulario-quadro-comando'); }}>Abrir</Button></td>
+                  <td className="row gap-1">
+                    <Button variant="ghost" size="sm" onClick={() => { setSubsel(r.id); setRoute('formulario-quadro-comando'); }}>Abrir</Button>
+                    <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => excluirRegistro(ev, r)}/>
+                  </td>
                 </tr>
               ))}
             </tbody>

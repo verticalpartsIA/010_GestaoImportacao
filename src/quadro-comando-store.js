@@ -72,6 +72,18 @@
     return data || [];
   }
 
+  /* Soft delete (mesmo padrão de emails_projeto/cotacoes_elevador_fornecedor):
+     paradas/geometria/maquina/bom/checklist/etc referenciam esta linha por FK,
+     então nunca DELETE de verdade — só marca excluido_em e a linha some das
+     listagens (quem lista já filtra .is('excluido_em', null)). */
+  async function excluir(id) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { error } = await c.from('quadros_comando').update({
+      excluido_em: new Date().toISOString(), excluido_por: (window.__VP_USER || {}).email || null,
+    }).eq('id', id);
+    if (error) throw error;
+  }
+
   /* ---------- Filhas 1:N — substituição total (mais simples e previsível
      que diff campo a campo; volume por quadro é pequeno, poucas dezenas
      de linhas no máximo). ---------- */
@@ -350,7 +362,7 @@
 
   window.QuadroComandoStore = {
     podeDecidirOrigemFabricacao,
-    criar, salvar, obter, listarPorNumeroCotacao,
+    criar, salvar, obter, listarPorNumeroCotacao, excluir,
     salvarParadas, salvarIntervalos, salvarGeometria, salvarMaquina, salvarComponentes,
     catalogoPorSku,
     gerarBomECortes, obterBomECortes,
