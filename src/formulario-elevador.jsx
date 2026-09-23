@@ -896,10 +896,21 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
   /* 11/09 — contato real vem do cadastro (Cadastros → Fornecedores),
      casando nome_fantasia/razao_social com o nome livre do fornecedor
      nesta cotação (fornecedores_elevador.nome). Cai no mapa hardcoded só
-     se o fornecedor ainda não tiver cadastro (ex.: Glarie). */
+     se o fornecedor ainda não tiver cadastro.
+     23/09 — achado real: "Glarie" (nome livre usado na Unidade) nunca
+     batia com o cadastro real "GLARIE ELEVATOR CO.,LTD" (razão social
+     completa) — igualdade exata nunca casava, então o cadastro ficava
+     esquecido e o RFQ sempre usava o fallback hardcoded, mesmo depois de
+     cadastrado. Trocado pra "contém" (bidirecional, nome curto dentro do
+     nome longo ou vice-versa) — exige >=3 caracteres pra evitar match
+     degenerado (nome curto demais casando com qualquer coisa). */
   const norm = (s) => String(s || '').trim().toUpperCase();
+  const combina = (a, b) => {
+    if (!a || !b || a.length < 3 || b.length < 3) return false;
+    return a.includes(b) || b.includes(a);
+  };
   const cadastroMatch = React.useMemo(() => (fornecedoresCadastro || []).find((f) =>
-    norm(f.nome_fantasia) === norm(grupo.fornecedor) || norm(f.razao_social) === norm(grupo.fornecedor)
+    combina(norm(f.nome_fantasia), norm(grupo.fornecedor)) || combina(norm(f.razao_social), norm(grupo.fornecedor))
   ), [fornecedoresCadastro, grupo.fornecedor]);
   const contatoPadrao = cadastroMatch
     ? { nome: cadastroMatch.contato || cadastroMatch.nome_fantasia || '', email: cadastroMatch.email || '', telefone: cadastroMatch.telefone || '' }
