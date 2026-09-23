@@ -382,7 +382,7 @@ function App() {
       case "cadastro-instaladores": return <window.CadastroInstaladoresPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cadastro-custos": return <window.CadastroCustosPage setSubsel={setSubsel} subsel={subsel}/>;
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
-      case "decisoes": return <window.DecisoesPage/>;
+      case "decisoes": return <window.DecisoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
       case "pi-importacao": return <window.PIPage/>;
       case "rfq-importacao": return <window.RFQPage/>;

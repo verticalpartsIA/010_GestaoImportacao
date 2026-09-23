@@ -7,14 +7,18 @@
 
 function fmtDataHora(d) { return d ? new Date(d).toLocaleString('pt-BR') : '—'; }
 
-/* Gera navegação pra abrir o documento que precisa ser aprovado
-   Retorna {page, id} ou null */
+/* Gera navegação pra abrir o documento que precisa ser aprovado.
+   Retorna {page, id} | {page, numeroCotacao} | null.
+   `numeroCotacao` (em vez de `id`) sinaliza pro clique em "Ver documento"
+   que precisa resolver pro id real do registro antes de navegar — ver
+   abrirDocumento() em DecCard: numero_cotacao é o Nº legível da cotação,
+   não o id (uuid) de formularios_elevador que a página de destino espera. */
 function gerarLinkDecisao(decisao) {
   const ctx = decisao.contexto || {};
 
   // Cotação — vai pro formulário de cotação
   if (decisao.numero_cotacao != null) {
-    return { page: 'formulario-elevador', id: decisao.numero_cotacao };
+    return { page: 'formulario-elevador', numeroCotacao: decisao.numero_cotacao };
   }
 
   // Dossier de obra
@@ -22,15 +26,20 @@ function gerarLinkDecisao(decisao) {
     return { page: 'dossier-obra', id: decisao.dossier_id };
   }
 
-  // Referência genérica (tabela + id)
+  // Referência genérica (tabela + id) — aqui referencia_id já É o id real
+  // do registro (diferente do numero_cotacao acima). Só tabelas com
+  // mapeamento conhecido pra uma rota real geram link; o resto fica sem
+  // botão em vez de gerar um link quebrado (window.VpRouter.KNOWN_ROUTES
+  // não tem 'formularios_rfq'/'formularios_ims'/nome-cru-da-tabela).
   if (decisao.referencia_tabela && decisao.referencia_id) {
-    // Mapa de tabelas → páginas
     const tabelaPagina = {
       'formularios_elevador': 'formulario-elevador',
-      'formularios_rfq': 'formulario-rfq',
-      'formularios_ims': 'formulario-ims',
+      'parceiros_instaladores': 'cadastro-instaladores',
+      'contrato_instalador_parcelas': 'pagamentos-instalador',
+      'pedidos_compra_varejo': 'almoxarifado',
     };
-    const page = tabelaPagina[decisao.referencia_tabela] || decisao.referencia_tabela;
+    const page = tabelaPagina[decisao.referencia_tabela];
+    if (!page) return null;
     return { page, id: decisao.referencia_id };
   }
 
@@ -66,9 +75,10 @@ function DecModalReprovar({ decisao, onClose, onSaved }) {
   );
 }
 
-function DecCard({ decisao, onReload }) {
+function DecCard({ decisao, onReload, setRoute, setSubsel }) {
   const [busy, setBusy] = React.useState(false);
   const [reprovando, setReprovando] = React.useState(false);
+  const [abrindo, setAbrindo] = React.useState(false);
   const ctx = decisao.contexto || {};
   /* Visão de Administrador mostra decisões de qualquer pessoa (ver
      listarTodasEmAberto em decisoes-store.js) — mas aprovar()/reprovar()
@@ -90,6 +100,34 @@ function DecCard({ decisao, onReload }) {
   };
 
   const linkDocumento = gerarLinkDecisao(decisao);
+
+  /* Navega de verdade pro documento. window.VpRouter.navigate() sozinho só
+     reescreve a URL (pushState) — não dispara popstate, então o estado
+     route/subsel do App (que decide o que renderiza) nunca era avisado e a
+     tela ficava parada em "Central de Decisões" com a URL trocada por
+     baixo. setRoute/setSubsel (recebidos do App) são quem de fato manda. */
+  const abrirDocumento = async () => {
+    if (!linkDocumento || !setRoute || !setSubsel) return;
+    setAbrindo(true);
+    try {
+      if (linkDocumento.numeroCotacao != null) {
+        // numero_cotacao (Nº legível) != id (uuid) que formulario-elevador
+        // espera em subsel — resolve pro registro real antes de navegar.
+        const { data, error } = await window.__VP_SB.sb.from('formularios_elevador')
+          .select('id').eq('numero_cotacao', linkDocumento.numeroCotacao).maybeSingle();
+        if (error || !data) {
+          window.toast?.('Não foi possível localizar o formulário desta cotação.', 'error');
+          return;
+        }
+        setSubsel(data.id);
+      } else {
+        setSubsel(linkDocumento.id ?? null);
+      }
+      setRoute(linkDocumento.page);
+    } finally {
+      setAbrindo(false);
+    }
+  };
 
   return (
     <div style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: '14px 18px', display: 'flex', alignItems: 'center', gap: 16 }}>
@@ -113,7 +151,7 @@ function DecCard({ decisao, onReload }) {
       </div>
       {souAprovador && (
         <div className="row gap-2">
-          {linkDocumento && <Button variant="outline" size="sm" onClick={() => window.VpRouter.navigate(linkDocumento.page, linkDocumento.id)}>Ver documento</Button>}
+          {linkDocumento && <Button variant="outline" size="sm" onClick={abrirDocumento} disabled={abrindo}>{abrindo ? 'Abrindo…' : 'Ver documento'}</Button>}
           <Button variant="danger" size="sm" onClick={() => setReprovando(true)} disabled={busy}>Reprovar</Button>
           <Button variant="primary" size="sm" onClick={aprovar} disabled={busy}>{busy ? 'Salvando…' : 'Aprovar'}</Button>
         </div>
@@ -123,7 +161,7 @@ function DecCard({ decisao, onReload }) {
   );
 }
 
-function DecisoesPage() {
+function DecisoesPage({ setRoute, setSubsel }) {
   const [pendentes, setPendentes] = React.useState(null);
   const [erro, setErro] = React.useState(false);
   const [modoAdmin, setModoAdmin] = React.useState(false);
@@ -174,7 +212,7 @@ function DecisoesPage() {
               {modoAdmin ? 'Nenhuma decisão em aberto no sistema no momento.' : 'Nenhuma decisão pendente pra você no momento.'}
             </div>
           )}
-          {pendentes.map((d) => <DecCard key={d.id} decisao={d} onReload={reload}/>)}
+          {pendentes.map((d) => <DecCard key={d.id} decisao={d} onReload={reload} setRoute={setRoute} setSubsel={setSubsel}/>)}
         </div>
       </Card>
     </div>

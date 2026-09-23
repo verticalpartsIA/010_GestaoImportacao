@@ -254,8 +254,8 @@ function QcMaquinaSecao({ maquina, onChange, disabled, varianteLabel, errosVisiv
           <QcField label="Encoder — modelo/referência exata"><QcInput value={maquina.encoder_modelo} disabled={disabled} onChange={(v) => set({ encoder_modelo: v })}/></QcField>
           <QcField label="Encoder — tecnologia/protocolo" hint="Ex.: incremental, EnDat, Hiperface. Combinações incomuns vão pra validação técnica.">
             <QcInput value={maquina.encoder_tecnologia} disabled={disabled} onChange={(v) => set({ encoder_tecnologia: v })}/></QcField>
-          <QcField label="Encoder — resolução (PPR)"><QcInput type="number" value={maquina.encoder_resolucao_ppr} disabled={disabled} placeholder="Pulsos por rotação" onChange={(v) => set({ encoder_resolucao_ppr: v ? Number(v) : null })}/></QcField>
-          <QcField label="Encoder — alimentação (V)"><QcInput type="number" value={maquina.encoder_alimentacao_v} disabled={disabled} onChange={(v) => set({ encoder_alimentacao_v: v ? Number(v) : null })}/></QcField>
+          <QcField label="Encoder — resolução (PPR)"><QcInput type="number" value={maquina.encoder_resolucao} disabled={disabled} placeholder="Pulsos por rotação" onChange={(v) => set({ encoder_resolucao: v ? String(v) : null })}/></QcField>
+          <QcField label="Encoder — alimentação (V)"><QcInput type="number" value={maquina.encoder_alimentacao} disabled={disabled} onChange={(v) => set({ encoder_alimentacao: v ? String(v) : null })}/></QcField>
         </div>
       </Card>
     </>
@@ -749,6 +749,36 @@ function QuadroComandoDetail({ quadroId, onClose }) {
     finally { setSaving(false); }
   };
 
+  const gerarChecklist = async () => {
+    setSaving(true);
+    try {
+      await salvarTudo();
+      const checklist = {
+        numero_pedido: quadro.numero_pedido,
+        tipo_aplicacao: quadro.tipo_aplicacao,
+        novo_ou_modernizacao: quadro.novo_ou_modernizacao,
+        maquina: quadro.maquina,
+        componentes: quadro.componentes,
+        escopo: quadro.escopo_fornecimento,
+        paradas: quadro.paradas,
+        criado_em: new Date().toISOString(),
+        formulario_completo: quadro,
+      };
+      const { data, error } = await window.__VP_SB.sb.from('cotacoes_quadro_comando').insert({
+        numero_pedido: quadro.numero_pedido,
+        numero_checklist: 'CHK-' + Date.now().toString().slice(-6),
+        tipo: 'checklist',
+        status: 'em_producao',
+        checklist_data: checklist,
+        criado_em: new Date().toISOString(),
+      });
+      if (error) throw error;
+      window.toast?.('Checklist gerado com sucesso!', 'success');
+      reload();
+    } catch (e) { window.toast?.('Erro ao gerar checklist: ' + e.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
   const origemTravada = !podeDecidir && quadro.origem_fabricacao !== 'interno';
 
   return (
@@ -762,6 +792,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
         <div className="row gap-2">
           {onClose && <Button variant="ghost" onClick={onClose}>Voltar</Button>}
           <Button variant="primary" disabled={saving} onClick={salvarTudo}>{saving ? 'Salvando…' : 'Salvar'}</Button>
+          {quadro.origem_fabricacao === 'interno' && <Button variant="success" disabled={saving} onClick={gerarChecklist}>{saving ? 'Gerando…' : 'Gerar Checklist'}</Button>}
         </div>
       </div>
 

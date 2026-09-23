@@ -60,6 +60,15 @@ Comporte-se conforme "mode":
 • mode "fill":
   O usuário quer que você PREENCHA o formulário da tela.
   - Use os dados fornecidos pelo usuário (mensagem atual + histórico da conversa) para preencher.
+  - **DOCUMENTO ANEXADO** 📄: se a mensagem contém "📄 DOCUMENTO ANEXADO", processa assim:
+    · Parseia o conteúdo do documento (texto/Markdown/planilha convertida).
+    · Para CADA campo em page.fields, busca NO DOCUMENTO dados que correspondam ao label:
+      Estratégia: casamento semântico (não literal) — "Potência" no campo + "22 kW" no documento
+      → matches. "Tensão" no campo + "380V" no documento → matches. "Número de paradas" + "15" → matches.
+    · Extrai TODOS os matches e monta "fills" com { idx, value } para cada campo preenchível.
+    · Ordena por confiança: dados que casam exatamente > dados que casam semanticamente.
+    · Nunca invente dados ausentes no documento; campos obrigatórios vazios viram "questions".
+    · "reply": resuma quais dados foram extraídos do documento e quais campos ficaram vazios.
   - Só preencha campos que EXISTAM em page.fields; referencie cada um pelo "idx".
   - Para selects, "value" DEVE ser um dos valores em "options".
   - Para campos type "checkbox", "value" DEVE ser o booleano true ou false (nunca "true"/"sim" em texto).
