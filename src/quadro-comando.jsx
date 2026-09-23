@@ -688,6 +688,36 @@ function QuadroComandoDetail({ quadroId, onClose }) {
     finally { setSaving(false); }
   };
 
+  const gerarChecklist = async () => {
+    setSaving(true);
+    try {
+      await salvarTudo();
+      const checklist = {
+        numero_pedido: quadro.numero_pedido,
+        tipo_aplicacao: quadro.tipo_aplicacao,
+        novo_ou_modernizacao: quadro.novo_ou_modernizacao,
+        maquina: quadro.maquina,
+        componentes: quadro.componentes,
+        escopo: quadro.escopo_fornecimento,
+        paradas: quadro.paradas,
+        criado_em: new Date().toISOString(),
+        formulario_completo: quadro,
+      };
+      const { data, error } = await window.__VP_SB.sb.from('cotacoes_quadro_comando').insert({
+        numero_pedido: quadro.numero_pedido,
+        numero_checklist: 'CHK-' + Date.now().toString().slice(-6),
+        tipo: 'checklist',
+        status: 'em_producao',
+        checklist_data: checklist,
+        criado_em: new Date().toISOString(),
+      });
+      if (error) throw error;
+      window.toast?.('Checklist gerado com sucesso!', 'success');
+      reload();
+    } catch (e) { window.toast?.('Erro ao gerar checklist: ' + e.message, 'error'); }
+    finally { setSaving(false); }
+  };
+
   const origemTravada = !podeDecidir && quadro.origem_fabricacao !== 'interno';
 
   return (
@@ -701,6 +731,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
         <div className="row gap-2">
           {onClose && <Button variant="ghost" onClick={onClose}>Voltar</Button>}
           <Button variant="primary" disabled={saving} onClick={salvarTudo}>{saving ? 'Salvando…' : 'Salvar'}</Button>
+          {quadro.origem_fabricacao === 'interno' && <Button variant="success" disabled={saving} onClick={gerarChecklist}>{saving ? 'Gerando…' : 'Gerar Checklist'}</Button>}
         </div>
       </div>
 

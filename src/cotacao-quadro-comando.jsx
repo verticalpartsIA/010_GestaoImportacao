@@ -1,52 +1,124 @@
 /* ============================================================
-   cotacao-quadro-comando.jsx — Cotação Quadro de Comando
-   Fluxo completo: Pedido QC → Cotação a Fornecedor →
-   Precificação → Proposta
+   cotacao-quadro-comando.jsx — Cotação Quadro de Comando & Checklists
+   Gerenciamento de cotações e checklists de produção interna
    ============================================================ */
 
-const CQC_STATUS_COR = {
+const STATUS_COR = {
   rascunho: '#64748b', enviada: '#2563eb', respondida: '#059669',
   em_cotacao: '#b45309', precificada: '#7c3aed', proposta_enviada: '#06b6d4', concluida: '#059669',
+  em_producao: '#f59e0b', pronto: '#10b981', cancelado: '#ef4444',
 };
 
-function CqcStatusChip({ status }) {
+function StatusChip({ status }) {
   if (!status) return <span className="muted">—</span>;
-  const cor = CQC_STATUS_COR[status] || '#64748b';
+  const cor = STATUS_COR[status] || '#64748b';
   return <span className="la-setor" style={{ background: cor }}>{status.replace(/_/g, ' ')}</span>;
+}
+
+function ModalVisualizarChecklist({ checklist, onClose }) {
+  if (!checklist) return null;
+  const dados = checklist.checklist_data || {};
+  const maquina = dados.maquina || {};
+
+  const imprimirChecklist = () => window.print?.();
+
+  return (
+    <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.5)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 999 }}>
+      <div style={{ background: 'white', borderRadius: 8, maxWidth: 900, maxHeight: '90vh', overflowY: 'auto', padding: 32, boxShadow: '0 20px 25px rgba(0,0,0,0.15)' }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
+          <h2>Checklist Nº {checklist.numero_checklist}</h2>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <Button variant="outline" size="sm" onClick={imprimirChecklist}>Imprimir</Button>
+            <Button variant="ghost" size="sm" onClick={onClose}>Fechar</Button>
+          </div>
+        </div>
+
+        <div className="grid-2" style={{ gap: 24, marginBottom: 24 }}>
+          <div>
+            <h4 className="small muted" style={{ marginBottom: 8 }}>Pedido</h4>
+            <p style={{ fontSize: 18, fontWeight: 'bold' }}>#{checklist.numero_pedido}</p>
+          </div>
+          <div>
+            <h4 className="small muted" style={{ marginBottom: 8 }}>Status</h4>
+            <StatusChip status={checklist.status}/>
+          </div>
+        </div>
+
+        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 24, marginBottom: 24 }}>
+          <h4>Especificações da Máquina</h4>
+          <div className="grid-3" style={{ gap: 16, marginTop: 12 }}>
+            <div>
+              <span className="small muted">Potência</span>
+              <p style={{ fontWeight: 'bold' }}>{maquina.potencia_kw || '—'} kW</p>
+            </div>
+            <div>
+              <span className="small muted">Tensão</span>
+              <p style={{ fontWeight: 'bold' }}>{maquina.tensao_v || '—'} V</p>
+            </div>
+            <div>
+              <span className="small muted">Fases</span>
+              <p style={{ fontWeight: 'bold' }}>{maquina.fases || '—'}</p>
+            </div>
+            <div>
+              <span className="small muted">Frequência</span>
+              <p style={{ fontWeight: 'bold' }}>{maquina.frequencia_hz || '—'} Hz</p>
+            </div>
+            <div>
+              <span className="small muted">Tipo de Freio</span>
+              <p style={{ fontWeight: 'bold' }}>{maquina.freio_tipo || '—'}</p>
+            </div>
+            <div>
+              <span className="small muted">Nº de Paradas</span>
+              <p style={{ fontWeight: 'bold' }}>{dados.paradas?.length || 0}</p>
+            </div>
+          </div>
+        </div>
+
+        <div style={{ borderTop: '1px solid #e5e7eb', paddingTop: 24 }}>
+          <h4>Componentes</h4>
+          <div style={{ marginTop: 12, fontSize: 13 }}>
+            {dados.componentes && Object.keys(dados.componentes).length > 0 ? (
+              <ul style={{ lineHeight: 1.8 }}>
+                {Object.entries(dados.componentes).map(([key, val]) => (
+                  <li key={key}><strong>{key}:</strong> {String(val)}</li>
+                ))}
+              </ul>
+            ) : (
+              <span className="muted">Sem componentes registrados</span>
+            )}
+          </div>
+        </div>
+
+        <div style={{ marginTop: 24, textAlign: 'center', fontSize: 11, color: 'var(--fg3)' }}>
+          <p>Criado em {new Date(checklist.criado_em).toLocaleString('pt-BR')}</p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
 function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
   const [rows, setRows] = React.useState(null);
   const [busca, setBusca] = React.useState('');
   const [fStatus, setFStatus] = React.useState('Todos');
+  const [fTipo, setFTipo] = React.useState('Todos');
   const [refreshing, setRefreshing] = React.useState(false);
-  const [abrindo, setAbrindo] = React.useState(null);
+  const [selecionado, setSelecionado] = React.useState(null);
 
   const carregar = React.useCallback(async () => {
     setRefreshing(true);
     try {
-      const data = await window.CotacaoQuadroComandoStore.listarCotacoes();
-      setRows(data);
+      const { data, error } = await window.__VP_SB.sb.from('cotacoes_quadro_comando').select('*').order('criado_em', { ascending: false }).limit(200);
+      if (error) throw error;
+      setRows(data || []);
     } catch (e) {
-      window.toast?.('Erro ao carregar cotações: ' + e.message, 'error');
+      window.toast?.('Erro ao carregar: ' + e.message, 'error');
     } finally {
       setRefreshing(false);
     }
   }, []);
 
   React.useEffect(() => { carregar(); }, [carregar]);
-
-  const abrirNoFormulario = async (r) => {
-    setAbrindo(r.id);
-    try {
-      setSubsel(r.id);
-      setRoute('formulario-quadro-comando');
-    } catch (e) {
-      window.toast?.('Erro ao abrir: ' + e.message, 'error');
-    } finally {
-      setAbrindo(null);
-    }
-  };
 
   const statusDisponiveis = React.useMemo(() => {
     if (!rows) return [];
@@ -58,12 +130,13 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
     if (!rows) return [];
     return rows.filter(r => {
       const matchStatus = fStatus === 'Todos' || r.status === fStatus;
+      const matchTipo = fTipo === 'Todos' || r.tipo === fTipo;
       const matchBusca = !busca.trim() ||
         String(r.numero_pedido).includes(busca) ||
-        String(r.numero_cotacao || '').includes(busca);
-      return matchStatus && matchBusca;
+        String(r.numero_checklist || r.numero_cotacao || '').includes(busca);
+      return matchStatus && matchTipo && matchBusca;
     });
-  }, [rows, busca, fStatus]);
+  }, [rows, busca, fStatus, fTipo]);
 
   return (
     <div className="page fade-in">
@@ -71,7 +144,7 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Pré-venda</div>
           <h1 className="page-head__title">Cotação Quadro de Comando</h1>
-          <p className="page-head__sub">Gerenciamento do fluxo completo: pedido → cotação → precificação → proposta</p>
+          <p className="page-head__sub">Gerenciamento de cotações e checklists de produção</p>
         </div>
         <div className="row gap-2">
           <Button variant="outline" disabled={refreshing} onClick={carregar}>{refreshing ? 'Atualizando…' : 'Atualizar'}</Button>
@@ -80,9 +153,14 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
 
       <Card style={{ marginBottom: 14 }}>
         <div className="row gap-2" style={{ alignItems: 'center' }}>
-          <input className="input" style={{ flex: 1 }} placeholder="Buscar por pedido, cotação…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
+          <input className="input" style={{ flex: 1 }} placeholder="Buscar por pedido, checklist…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
+          <select className="input" style={{ minWidth: 150 }} value={fTipo} onChange={(e) => setFTipo(e.target.value)}>
+            <option value="Todos">Tipo: Todos</option>
+            <option value="checklist">Checklist</option>
+            <option value="cotacao">Cotação</option>
+          </select>
           <select className="input" style={{ minWidth: 150 }} value={fStatus} onChange={(e) => setFStatus(e.target.value)}>
-            {statusDisponiveis.map(s => <option key={s} value={s}>{s}</option>)}
+            {statusDisponiveis.map(s => <option key={s} value={s}>{s === 'Todos' ? 'Status: Todos' : s}</option>)}
           </select>
         </div>
       </Card>
@@ -90,29 +168,31 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
       {rows === null ? (
         <div className="small muted" style={{ padding: 32, textAlign: 'center' }}>Carregando…</div>
       ) : filtered.length === 0 ? (
-        <div className="small muted" style={{ padding: 32, textAlign: 'center' }}>Nenhuma cotação encontrada</div>
+        <div className="small muted" style={{ padding: 32, textAlign: 'center' }}>Nenhum registro encontrado</div>
       ) : (
         <div className="table-wrap">
           <table className="t">
             <thead><tr>
               <th>Pedido Nº</th>
-              <th>Cotação Nº</th>
+              <th>Nº Checklist/Cotação</th>
+              <th>Tipo</th>
               <th>Status</th>
               <th>Criado em</th>
-              <th>Especificações</th>
               <th></th>
             </tr></thead>
             <tbody>
               {filtered.map(r => (
-                <tr key={r.id} onClick={() => abrirNoFormulario(r)} style={{ cursor: 'pointer' }}>
+                <tr key={r.id} style={{ cursor: 'pointer' }}>
                   <td><strong>#{r.numero_pedido}</strong></td>
-                  <td><span className="mono">{r.numero_cotacao || '—'}</span></td>
-                  <td><CqcStatusChip status={r.status}/></td>
+                  <td><span className="mono">{r.numero_checklist || r.numero_cotacao || '—'}</span></td>
+                  <td><span className="badge" style={{ fontSize: 11, background: r.tipo === 'checklist' ? '#e0e7ff' : '#f0f9ff', color: r.tipo === 'checklist' ? '#3730a3' : '#0369a1' }}>{r.tipo}</span></td>
+                  <td><StatusChip status={r.status}/></td>
                   <td>{r.criado_em ? new Date(r.criado_em).toLocaleDateString('pt-BR') : '—'}</td>
-                  <td style={{ fontSize: 12, color: 'var(--fg2)' }}>
-                    {r.potencia_kw ? `${r.potencia_kw} kW` : '—'} · {r.tensao_v ? `${r.tensao_v}V` : '—'}
+                  <td>
+                    {r.tipo === 'checklist' && (
+                      <Button variant="ghost" size="sm" onClick={() => setSelecionado(r)}>Visualizar</Button>
+                    )}
                   </td>
-                  <td><Button variant="ghost" size="sm" icon="chevRight" disabled={abrindo === r.id}>{abrindo === r.id ? '…' : ''}</Button></td>
                 </tr>
               ))}
             </tbody>
@@ -121,8 +201,10 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
       )}
 
       <div className="row sb" style={{ marginTop: 14, fontSize: 12, color: 'var(--fg3)' }}>
-        <span>Exibindo <b>{filtered.length}</b> de <b>{rows?.length || 0}</b> cotações</span>
+        <span>Exibindo <b>{filtered.length}</b> de <b>{rows?.length || 0}</b> registros</span>
       </div>
+
+      {selecionado && <ModalVisualizarChecklist checklist={selecionado} onClose={() => setSelecionado(null)}/>}
     </div>
   );
 }
