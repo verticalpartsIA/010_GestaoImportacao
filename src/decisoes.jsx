@@ -36,7 +36,7 @@ function gerarLinkDecisao(decisao) {
       'formularios_elevador': 'formulario-elevador',
       'parceiros_instaladores': 'cadastro-instaladores',
       'contrato_instalador_parcelas': 'pagamentos-instalador',
-      'pedidos_compra_varejo': 'pedidos-acompanhamento',
+      'pedidos_compra_varejo': 'almoxarifado',
     };
     const page = tabelaPagina[decisao.referencia_tabela];
     if (!page) return null;
