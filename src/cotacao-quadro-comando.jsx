@@ -181,7 +181,7 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
                   <td><span className="mono">{r.numero_cotacao || '—'}</span></td>
                   <td><StatusChip status={r.status}/></td>
                   <td>{r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '—'}</td>
-                  <td><Button variant="ghost" size="sm" onClick={() => window.VpRouter?.navigate('formulario-quadro-comando', r.id)}>Abrir</Button></td>
+                  <td><Button variant="ghost" size="sm" onClick={() => { setSubsel(r.id); setRoute('formulario-quadro-comando'); }}>Abrir</Button></td>
                 </tr>
               ))}
             </tbody>
