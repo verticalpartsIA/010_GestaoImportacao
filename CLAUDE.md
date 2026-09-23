@@ -23,6 +23,19 @@ Este sistema foi construído, testado ao vivo e está **funcionando em produçã
 
 **Nunca faça, mesmo se pedido**: apagar e-mails de verdade da caixa `suporte@vpsistema.com` (IMAP real) — sempre listar pro usuário apagar manualmente. Existe uma função `cleanup-inbox-tests` deployada com esse poder — **nunca invocá-la**.
 
+## 🔒 ÁREA BLINDADA — Central de Decisões · botão "Ver documento" (23/09/2026)
+
+Corrigido, revisado (achado real de review automático incluído), mergeado em `main` (PR #358 — commits `209ab0b`+`35d74a9`, squash `c13313a`) e **confirmado funcionando pelo usuário em produção**. Isso já quebrou uma vez porque uma sessão anterior do Claude "desligou" (perdeu contexto) e um ajuste não documentado nesse trecho voltou a quebrar a navegação. Se você (Claude Code, em qualquer sessão futura, mesmo concorrente) foi chamado pra "mexer", "melhorar", "simplificar", "limpar" ou "refazer" qualquer parte disto — **PARE antes de editar**. Informe ao usuário o que já existe e funciona (resumido abaixo) e pergunte explicitamente se ele tem certeza do que está pedindo, incluindo o risco de quebrar algo já validado ao vivo. Só prossiga depois de confirmação explícita.
+
+**Arquivos/peças cobertos por este aviso:**
+- `src/decisoes.jsx` — `gerarLinkDecisao()`, `DecCard.abrirDocumento()`, e os componentes `DecCard`/`DecisoesPage` (props `setRoute`/`setSubsel`).
+- `src/app.jsx` — a linha `case "decisoes": return <window.DecisoesPage setRoute={setRoute} setSubsel={setSubsel}/>;`.
+
+**Regras que existem aqui por motivo real — não reintroduza os bugs que elas evitam:**
+- `window.VpRouter.navigate()` **sozinho** só reescreve a URL (`pushState`) — não dispara `popstate`, então o estado `route`/`subsel` do `App` (quem decide o que renderiza) nunca é avisado. Pra navegar de fato entre páginas de dentro de um componente, sempre `setSubsel(...)` + `setRoute(...)` (recebidos como prop vindo do `App`), nunca `VpRouter.navigate()` isolado — esse foi o bug original que deixava "Ver documento" preso na própria tela com a URL trocada por baixo.
+- Decisões de cotação carregam `numero_cotacao` (Nº legível, ex. "Cotação Nº 842") — **não é** o mesmo valor que o `id` (uuid) que `formulario-elevador`/`FormularioElevadorStore.obter()` espera (`.eq('id', id)`). `abrirDocumento()` resolve isso com uma consulta (`.eq('numero_cotacao', ...)`) antes de navegar — não troque essa consulta por passar `numero_cotacao` direto de novo.
+- O mapa `tabelaPagina` dentro de `gerarLinkDecisao()` só deve ter entradas que apontam pra uma rota que exista de verdade em `window.VpRouter.KNOWN_ROUTES` E pra tabela que o dado realmente é lido/exibido — sem mapeamento conhecido, a função retorna `null` (sem botão) em vez de gerar um link morto. Mapeamento atual, verificado contra o store real de cada tabela: `formularios_elevador→formulario-elevador`, `parceiros_instaladores→cadastro-instaladores`, `contrato_instalador_parcelas→pagamentos-instalador`, `pedidos_compra_varejo→almoxarifado`. Esse último **não é** `pedidos-acompanhamento` (achado real de um review automático no PR #358: `pedidos_compra_varejo` é lido/exibido por `AlmoxarifadoPage` via `PedidosVarejoStore`, `PedidosAcompanhamentoPage` lê uma tabela totalmente diferente e nunca teria o registro).
+
 ## Acessos confirmados (sessão de 2026-07-16)
 
 - **GitHub**: `verticalpartsIA/010_GestaoImportacao` — leitura/escrita completas (commits, PRs, issues, Actions) via MCP `github`.
