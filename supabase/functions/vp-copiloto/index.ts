@@ -1285,13 +1285,23 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Erro na IA", detail: t.slice(0, 300) }, resp.status >= 500 ? 503 : 500);
   }
 
+  let text = "";
   let out: any;
   try {
     const data = await resp.json();
-    const text = (data.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+    text = (data.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
     out = extractJson(text);
   } catch (e) {
-    return json({ error: "Resposta da IA ilegível", detail: String(e) }, 500);
+    // A IA às vezes foge do "só JSON, sem texto fora dele" (raro, mas real —
+    // foi o que deixou o Copiloto parecendo "fora do ar" pro usuário: um 500
+    // puro em vez de aproveitar o texto que ela mandou). Se sobrou texto,
+    // usa ele como "reply" em vez de falhar a chamada inteira; só erra de
+    // verdade quando não veio nada.
+    if (text.trim()) {
+      out = { reply: text.trim() };
+    } else {
+      return json({ error: "Resposta da IA ilegível", detail: String(e) }, 500);
+    }
   }
 
   // Normaliza o contrato — devolve sempre as chaves, vazias quando não se aplicam.
