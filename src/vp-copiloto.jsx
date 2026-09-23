@@ -239,7 +239,7 @@ async function vpcAplicarOpsQuestionario(ops) {
 function VpCopiloto({ route, role }) {
   const [open, setOpen] = _vpUS(() => { try { return localStorage.getItem(VPC_LS_OPEN) === '1'; } catch (e) { return false; } });
   const [msgs, setMsgs] = _vpUS([
-    { role: 'assistant', content: 'Oi! Sou o Copiloto VP 🟡 Posso responder dúvidas, preencher o formulário desta tela ou revisar o documento à procura de erros. É só pedir.' },
+    { role: 'assistant', content: 'Oi! Sou o Copiloto VP 🟡 Posso responder dúvidas, preencher o formulário desta tela, revisar erros ou analisar um documento (Excel/Markdown) pra preencher automaticamente. É só pedir ou anexar um arquivo.' },
   ]);
   const [input, setInput] = _vpUS('');
   const [loading, setLoading] = _vpUS(false);
@@ -256,6 +256,7 @@ function VpCopiloto({ route, role }) {
   const elsRef = _vpUR([]);
   const fieldsRef = _vpUR([]);
   const bodyRef = _vpUR(null);
+  const fileInputRef = _vpUR(null);
   // Campos sublinhados por "Revisar erros" (issues com idx) — limpos a
   // cada nova análise/troca de tela, e individualmente quando o usuário
   // preenche o campo (o sublinhado deixa de fazer sentido).
@@ -269,6 +270,59 @@ function VpCopiloto({ route, role }) {
       } catch (e) {}
     }
     highlightedRef.current = [];
+  };
+
+  /* Parseia Excel ou Markdown e envia pra IA preencher */
+  const parseDocument = async (file) => {
+    if (!file) return;
+    try {
+      setLoading(true);
+      let docContent = '';
+
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        // Parsear Excel usando SheetJS (carrega sob demanda via CDN)
+        if (!window.XLSX) {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/xlsx@latest/dist/xlsx.full.min.js';
+          await new Promise((resolve, reject) => {
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
+        }
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = window.XLSX.read(arrayBuffer, { type: 'array' });
+        const sheets = workbook.SheetNames;
+        for (const sheetName of sheets) {
+          const worksheet = workbook.Sheets[sheetName];
+          const range = worksheet['!ref'];
+          if (range) {
+            const data = window.XLSX.utils.sheet_to_txt(worksheet);
+            docContent += `\n### Planilha: ${sheetName}\n${data}`;
+          }
+        }
+      } else if (file.name.endsWith('.md') || file.type === 'text/markdown' || file.type === 'text/plain') {
+        // Ler Markdown ou texto simples
+        docContent = await file.text();
+      } else {
+        throw new Error('Formato não suportado. Use .xlsx, .xls ou .md');
+      }
+
+      if (docContent.trim().length === 0) throw new Error('Documento está vazio.');
+
+      // Enviar documento pra IA preencher
+      await send('fill', `Aqui está um documento pra você analisar e preencher os campos:\n\n${docContent.slice(0, 10000)}`);
+    } catch (e) {
+      setMsgs(m => [...m, { role: 'assistant', content: '⚠️ Erro ao ler documento: ' + e.message }]);
+    } finally {
+      setLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) parseDocument(file);
   };
 
   const vpcHighlightIssues = (issues, els, fields) => {
@@ -495,9 +549,11 @@ function VpCopiloto({ route, role }) {
       <div className="vpc-actions">
         <button className="vpc-act" disabled={loading || !!pendingFill} onClick={() => send('fill')}>✨ Preencher página</button>
         <button className="vpc-act" disabled={loading || !!pendingFill} onClick={() => send('analyze')}>🔍 Revisar erros</button>
+        <button className="vpc-act" disabled={loading || !!pendingFill} onClick={() => fileInputRef.current?.click()}>📎 Anexar doc</button>
         {route === 'vistorias-envio' && (
           <button className="vpc-act" disabled={loading || !!pendingOpsQuestionario} onClick={() => send('questionario')}>🧩 Editar questionário</button>
         )}
+        <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.md,.txt" onChange={handleFileUpload} style={{ display: 'none' }} />
       </div>
 
       <form className="vpc-input-row" onSubmit={onSubmit}>
