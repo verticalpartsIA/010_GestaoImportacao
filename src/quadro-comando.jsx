@@ -296,7 +296,7 @@ function QcComponentesSecao({ componentes, onChange, disabled }) {
           <QcField label="Placa de proteção do freio — SKU"><QcInput value={componentes.placa_freio_sku} disabled={disabled} placeholder="ex: NC30-1" onChange={(v) => set({ placa_freio_sku: v })}/></QcField>
           <QcField label="Placa de interface de ligações — SKU"><QcInput value={componentes.placa_interface_sku} disabled={disabled} placeholder="ex: MC04-1" onChange={(v) => set({ placa_interface_sku: v })}/></QcField>
           <QcField label="Capacitores — tipo/µF"><QcInput value={componentes.capacitor_tipo_uf} disabled={disabled} placeholder="ex: 100µF 400V" onChange={(v) => set({ capacitor_tipo_uf: v })}/></QcField>
-          <QcField label="Capacitores — quantidade"><QcInput type="number" value={componentes.capacitor_qtd} disabled={disabled} onChange={(v) => set({ capacitor_qtd: v })}/></QcField>
+          <QcField label="Capacitores — quantidade"><QcInput type="number" value={componentes.capacitor_qtd} disabled={disabled} onChange={(v) => set({ capacitor_qtd: v ? Number(v) : null })}/></QcField>
         </div>
       </Card>
     </>
