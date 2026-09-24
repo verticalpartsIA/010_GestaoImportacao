@@ -15,13 +15,16 @@ const app  = express();
 const PORT = process.env.PORT || 3000;
 
 /* ---------- /version.json (aviso de atualização — ver src/version-check.js) ----------
-   O deploy real é o "git pull" automático do hPanel (Hostinger), sem etapa
-   de build — por isso NÃO dá pra confiar em gravar version.json só na hora
-   do build (o workflow .github/workflows/deploy.yml faz isso, mas é
-   redundante e pode nem ser o mecanismo usado, e nem sempre reinicia o
-   processo Node). Em vez disso, lê o HEAD do git direto do repositório
-   (que o hPanel mantém sempre atualizado) a cada request — com um cache
-   curto pra não rodar `git` a cada carregamento de página. */
+   O deploy real é a integração "Deploy Node.js app from Git" do hPanel
+   (Hostinger) — CADA deploy é um build isolado por commit (confirmado via
+   hosting_listJsDeployments), não um `git pull` incremental num clone
+   persistente. Isso importa: o diretório publicado só tem o commit atual
+   alcançável (`git log -1`/`git rev-parse HEAD` funcionam), NÃO o histórico
+   de commits anteriores — uma rota que tentasse `git log <sha antigo>..HEAD`
+   pra montar um changelog sempre falharia em produção (testado ao vivo:
+   sempre devolvia vazio). Por isso o changelog usa só o assunto do commit
+   atual (`commitSubject`, também sempre disponível), não um range.
+   Lido a cada request com cache curto pra não rodar `git` a cada carga. */
 const VERSION_CACHE_MS = 30 * 1000;
 let versionCache = null;
 let versionCacheAt = 0;
@@ -31,9 +34,10 @@ function readVersionInfo() {
   try {
     const buildTime = execSync('git log -1 --format=%cI', { cwd: __dirname }).toString().trim();
     const commit = execSync('git rev-parse HEAD', { cwd: __dirname }).toString().trim();
-    versionCache = { buildTime, commit };
+    const commitSubject = execSync('git log -1 --format=%s', { cwd: __dirname }).toString().trim();
+    versionCache = { buildTime, commit, commitSubject };
   } catch (e) {
-    if (!versionCache) versionCache = { buildTime: new Date().toISOString(), commit: 'unknown' };
+    if (!versionCache) versionCache = { buildTime: new Date().toISOString(), commit: 'unknown', commitSubject: '' };
     console.warn('[server] Não foi possível ler a versão do git — usando fallback:', e.message);
   }
   versionCacheAt = now;
@@ -42,25 +46,6 @@ function readVersionInfo() {
 app.get('/version.json', (_req, res) => {
   res.setHeader('Cache-Control', 'no-cache');
   res.json(readVersionInfo());
-});
-
-/* ---------- /api/version-changelog — "o que chegou" no toast de atualização ----------
-   `since` é o commit que o navegador tinha carregado antes de detectar a
-   nova versão (ver src/version-check.js). Validado como SHA hex antes de
-   entrar no comando git (senão vira injeção de shell). Se o commit não
-   existir mais no histórico local (force-push/rebase raro), git log falha
-   e caímos no fallback genérico do toast — sem 500. */
-app.get('/api/version-changelog', (req, res) => {
-  res.setHeader('Cache-Control', 'no-cache');
-  const since = String(req.query.since || '');
-  if (!/^[0-9a-f]{7,40}$/i.test(since)) return res.json({ ok: false, commits: [] });
-  try {
-    const out = execSync(`git log ${since}..HEAD --format=%s --max-count=10`, { cwd: __dirname }).toString();
-    const commits = out.split('\n').map((s) => s.trim()).filter(Boolean);
-    res.json({ ok: true, commits });
-  } catch (e) {
-    res.json({ ok: false, commits: [] });
-  }
 });
 
 app.use(express.json({ limit: '4mb' }));

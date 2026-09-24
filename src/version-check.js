@@ -3,16 +3,16 @@
    usuário, sem forçar reload (evita perder algo que a pessoa
    esteja digitando).
 
-   Deploy é feito por `git pull` direto no servidor (ver
-   .github/workflows/deploy.yml), que grava version.json a cada push
-   em main com o timestamp + commit do deploy.
+   Deploy real: build isolado por commit via integração Git do hPanel
+   (Hostinger) — ver readVersionInfo() em server.js, que serve /version.json
+   lendo o HEAD do git a cada request (sem histórico de commits anteriores
+   no diretório publicado, só o commit atual).
    ============================================================ */
 (function () {
   const CHECK_INTERVAL_MS = 5 * 60 * 1000;
   const NOTIFIED_BUILD_KEY = 'vp_version_notified_build';
   const JSX_CACHE_DB = 'vp-jsx-cache'; // mesmo nome de src/jsx-loader.js
   let runningBuildTime = null;
-  let runningCommit = null;
   let notified = false;
 
   function alreadyNotified(buildTime) {
@@ -25,13 +25,6 @@
     return fetch('/version.json?t=' + Date.now(), { cache: 'no-store' })
       .then((res) => (res.ok ? res.json() : null)).catch(() => null);
   }
-  function fetchChangelog(sinceCommit) {
-    if (!sinceCommit) return Promise.resolve([]);
-    return fetch('/api/version-changelog?since=' + encodeURIComponent(sinceCommit), { cache: 'no-store' })
-      .then((res) => (res.ok ? res.json() : null))
-      .then((data) => (data && data.ok && Array.isArray(data.commits) ? data.commits : []))
-      .catch(() => []);
-  }
   function announce(info) {
     window.__VP_VERSION = info;
     window.dispatchEvent(new CustomEvent('vpprd:version', { detail: info }));
@@ -43,13 +36,19 @@
     const time = d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
     return `Este site foi atualizado em ${date} às ${time}h`;
   }
-  function formatChangelog(commits) {
-    if (!commits.length) return 'Atualize a página para usar a versão mais recente.';
-    const shown = commits.slice(0, 5);
-    const resto = commits.length - shown.length;
-    let texto = 'Novidades desta atualização:\n' + shown.map((c) => '• ' + c).join('\n');
-    if (resto > 0) texto += `\n… e mais ${resto} ${resto === 1 ? 'alteração' : 'alterações'}`;
-    return texto;
+  /* Só o assunto do commit ATUAL (não um range/lista de commits): o deploy
+     na Hostinger é um build isolado por commit, sem histórico de commits
+     anteriores no diretório publicado — testado ao vivo em produção,
+     confirmando que uma rota baseada em `git log <sha antigo>..HEAD`
+     nunca teria o que responder ali (ver server.js). Se pular mais de uma
+     versão entre checagens (raro, intervalo de 5min), mostra só a mais
+     recente — correto por ser real, mesmo que incompleto. Commits de merge
+     genéricos ("Merge ...") não dizem nada ao usuário, então caem no
+     texto padrão em vez de aparecer como "novidade". */
+  function formatChangelog(commitSubject) {
+    const s = (commitSubject || '').trim();
+    if (!s || /^merge\b/i.test(s)) return 'Atualize a página para usar a versão mais recente.';
+    return 'Novidade desta atualização:\n• ' + s;
   }
 
   /* Zera o cache de compilação JSX (IndexedDB — ver src/jsx-loader.js) antes
@@ -77,7 +76,6 @@
   fetchVersion().then((info) => {
     if (!info || !info.buildTime) return;
     runningBuildTime = info.buildTime;
-    runningCommit = info.commit || null;
     announce(info);
   });
 
@@ -89,12 +87,10 @@
         if (alreadyNotified(info.buildTime)) { notified = true; return; }
         notified = true; markNotified(info.buildTime);
         if (typeof window.toast === 'function') {
-          fetchChangelog(runningCommit).then((commits) => {
-            window.toast(formatUpdateMessage(info.buildTime), 'info', {
-              description: formatChangelog(commits),
-              duration: Infinity,
-              action: { label: 'Atualizar agora', onClick: clearJsxCacheAndReload },
-            });
+          window.toast(formatUpdateMessage(info.buildTime), 'info', {
+            description: formatChangelog(info.commitSubject),
+            duration: Infinity,
+            action: { label: 'Atualizar agora', onClick: clearJsxCacheAndReload },
           });
         } else clearJsxCacheAndReload();
       }
