@@ -43,6 +43,16 @@ function QcOrigemBadge({ confianca }) {
   return <span className="badge" style={{ background: s.bg, color: s.fg, fontSize: 11 }}>{s.label}</span>;
 }
 
+function QcCruzamentoBadge({ status }) {
+  const map = {
+    cadastrado_e_solicitado: { label: 'Cadastrado no Omie', bg: '#e6f4ea', fg: '#1e7a34' },
+    solicitado_sem_cadastro: { label: 'SEM cadastro no Omie', bg: '#fde2e1', fg: '#a11d1d' },
+    erro_consulta: { label: 'Erro na consulta', bg: '#fff4d6', fg: '#8a6300' },
+  };
+  const s = map[status] || map.erro_consulta;
+  return <span className="badge" style={{ background: s.bg, color: s.fg, fontSize: 11 }}>{s.label}</span>;
+}
+
 /* ---------- Escopo de fornecimento (item 1 da instrução) ---------- */
 const QC_ESCOPO_ITENS = [
   { key: 'cop', label: 'COP — Botoeira de Cabina' },
@@ -391,12 +401,16 @@ function QcResultadoSecao({ quadroId, podeGerar }) {
   const [bom, setBom] = React.useState([]);
   const [cortes, setCortes] = React.useState([]);
   const [checklist, setChecklist] = React.useState([]);
+  const [cruzamento, setCruzamento] = React.useState([]);
   const [gerando, setGerando] = React.useState(false);
   const [gerandoChecklist, setGerandoChecklist] = React.useState(false);
+  const [cruzando, setCruzando] = React.useState(false);
+  const [catalogoNaoUsado, setCatalogoNaoUsado] = React.useState(null); // null = nunca rodou nesta sessão
 
   const reload = React.useCallback(() => {
     window.QuadroComandoStore.obterBomECortes(quadroId).then(({ bomItens, trechos }) => { setBom(bomItens); setCortes(trechos); });
     window.QuadroComandoStore.obterChecklist(quadroId).then(setChecklist);
+    window.QuadroComandoStore.obterCruzamentoErp(quadroId).then(setCruzamento);
   }, [quadroId]);
   React.useEffect(() => { reload(); }, [reload]);
 
@@ -409,6 +423,21 @@ function QcResultadoSecao({ quadroId, podeGerar }) {
       reload();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setGerando(false); }
+  };
+
+  const cruzarErp = async () => {
+    setCruzando(true);
+    try {
+      const r = await window.QuadroComandoStore.cruzarComErp(quadroId);
+      setCruzamento(r.linhas);
+      setCatalogoNaoUsado(r.catalogoNaoUsado);
+      const semCadastro = r.linhas.filter((l) => l.status === 'solicitado_sem_cadastro').length;
+      window.toast?.(
+        semCadastro ? `Cruzamento feito — ${semCadastro} SKU(s) sem cadastro no Omie.` : 'Cruzamento feito — todos os SKUs cadastrados no Omie.',
+        semCadastro ? 'warning' : 'success',
+      );
+    } catch (e) { window.toast?.('Erro ao cruzar com o Omie: ' + e.message, 'error'); }
+    finally { setCruzando(false); }
   };
 
   const gerarChecklist = async () => {
@@ -472,6 +501,38 @@ function QcResultadoSecao({ quadroId, podeGerar }) {
               </table>
             </div>
           </>
+        )}
+      </Card>
+
+      <Card title="Cruzamento com o ERP (Omie)" sub="Consulta ao vivo se cada SKU da BOM está realmente cadastrado no Omie, e se descrição/unidade batem — nunca cadastra nem altera nada, só diagnóstico."
+        action={<Button variant="outline" size="sm" disabled={cruzando || !bom.length} onClick={cruzarErp}>{cruzando ? 'Consultando Omie…' : 'Cruzar com o ERP'}</Button>}>
+        {!cruzamento.length && <div className="small muted" style={{ padding: 16, textAlign: 'center' }}>{bom.length ? 'Ainda não cruzado com o Omie nesta sessão.' : 'Gere o BOM primeiro.'}</div>}
+        {!!cruzamento.length && (
+          <div className="table-wrap" style={{ border: 0 }}>
+            <table className="t">
+              <thead><tr><th>SKU</th><th>Descrição (local)</th><th>Descrição (Omie)</th><th>Unidade</th><th>Status</th></tr></thead>
+              <tbody>
+                {cruzamento.map((l) => (
+                  <tr key={l.id || l.sku}>
+                    <td>{l.sku}</td>
+                    <td>{l.descricao_local}</td>
+                    <td className={l.divergencia_descricao ? 'small' : 'small muted'} style={l.divergencia_descricao ? { color: '#a11d1d', fontWeight: 600 } : undefined}>
+                      {l.descricao_omie || '—'}{l.divergencia_descricao && ' (diverge do local)'}
+                    </td>
+                    <td className={l.divergencia_unidade ? 'small' : 'small muted'} style={l.divergencia_unidade ? { color: '#a11d1d', fontWeight: 600 } : undefined}>
+                      {l.unidade_local}{l.unidade_omie && l.unidade_omie !== l.unidade_local ? ` (Omie: ${l.unidade_omie})` : ''}
+                    </td>
+                    <td><QcCruzamentoBadge status={l.status}/>{l.erro && <div className="small muted" style={{ marginTop: 2 }}>{l.erro}</div>}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+        {!!(catalogoNaoUsado && catalogoNaoUsado.length) && (
+          <div className="small muted" style={{ marginTop: 12 }}>
+            <b>{catalogoNaoUsado.length}</b> SKU(s) do catálogo de materiais não entraram nesta BOM (podem ser de outra variante de potência/tensão — não é necessariamente um erro): {catalogoNaoUsado.map((c) => c.sku).join(', ')}.
+          </div>
         )}
       </Card>
 

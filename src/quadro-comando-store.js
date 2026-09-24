@@ -193,6 +193,51 @@
     return { bomItens: bomItens || [], trechos: trechos || [] };
   }
 
+  /* ---------- Cruzamento com o ERP (item 6 da instrução) ----------
+     Consulta o Omie de verdade (edge function quadro-comando-cruzamento-erp
+     — só leitura, nunca escreve no Omie) pra cada SKU da BOM já gerada,
+     e grava o diagnóstico (idempotente: apaga o cruzamento anterior deste
+     quadro e grava o novo, igual gerarBomECortes). Nunca mexe na BOM em
+     si — "solicitado sem cadastro" é só um alerta, quem decide o que
+     fazer é o usuário. */
+  async function cruzarComErp(quadroId) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const engine = window.QuadroComandoBomEngine;
+    if (!engine) throw new Error('QuadroComandoBomEngine não carregado');
+
+    const { bomItens } = await obterBomECortes(quadroId);
+    if (!bomItens.length) throw new Error('Gere o BOM antes de cruzar com o ERP.');
+
+    const catalogo = await catalogoPorSku();
+    const skus = [...new Set(bomItens.map((i) => i.sku))];
+
+    const { data, error } = await c.functions.invoke('quadro-comando-cruzamento-erp', { body: { skus } });
+    if (error) {
+      let msg = error.message || 'Erro ao consultar o Omie';
+      try { const body = await error.context?.json?.(); if (body && body.error) msg = body.error; } catch (e) { /* mantém msg */ }
+      throw new Error(msg);
+    }
+    if (data && data.error) throw new Error(data.error);
+
+    const { linhas, catalogoNaoUsado } = engine.classificarCruzamentoErp(bomItens, data.resultados || {}, catalogo);
+
+    const { error: delErr } = await c.from('quadros_comando_cruzamento_erp').delete().eq('quadro_comando_id', quadroId);
+    if (delErr) throw delErr;
+    if (linhas.length) {
+      const rows = linhas.map((l) => ({ ...l, quadro_comando_id: quadroId }));
+      const { error: insErr } = await c.from('quadros_comando_cruzamento_erp').insert(rows);
+      if (insErr) throw insErr;
+    }
+    return { linhas, catalogoNaoUsado };
+  }
+
+  async function obterCruzamentoErp(quadroId) {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('quadros_comando_cruzamento_erp').select('*').eq('quadro_comando_id', quadroId).order('sku');
+    if (error) throw error;
+    return data || [];
+  }
+
   /* ---------- Checklist digital de separação ----------
      Gatilho manual ("quando quisermos"), não automático na aprovação —
      só cria uma versão nova se pedido explicitamente; a versão anterior
@@ -366,6 +411,7 @@
     salvarParadas, salvarIntervalos, salvarGeometria, salvarMaquina, salvarComponentes,
     catalogoPorSku,
     gerarBomECortes, obterBomECortes,
+    cruzarComErp, obterCruzamentoErp,
     gerarChecklistSeparacao, obterChecklist, marcarChecklistItem,
     buscarUnidadesElevadorPorCotacao, vincularFormularioElevador, obterOuCriarCotacaoFornecedor,
   };

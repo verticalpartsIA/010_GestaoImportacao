@@ -1017,7 +1017,7 @@ persistem mudança (1, 2, 3a, 6) e quais são só estáticas/documentação
 (3b, 4, 5) — é fácil o usuário achar que mudar um parâmetro na aba 4
 afeta o cálculo real, e hoje isso não acontece.`,
 
-  'quadro-comando': `TELA: Quadro de Comando (Comercial → Formulários).
+  'formulario-quadro-comando': `TELA: Quadro de Comando (Comercial → Formulários).
 
 Coleta os dados técnicos do quadro de comando (painel elétrico NICE3000
 MRL) de um elevador e, a partir deles, gera a especificação completa de
@@ -1111,6 +1111,51 @@ RAMO A — ABAS (só aparecem quando origem_fabricacao = "interno"):
       de "seio" ou aplica a folga sozinho sem confirmação explícita da
       engenharia (histórico: os dados de referência do fornecedor eram
       ambíguos demais nesse ponto pra virar regra automática segura).
+
+   FÓRMULAS EXATAS por trás do card (a)/(b) — use estes números ao
+   explicar de onde vem um resultado, nunca aproxime:
+   - Padrões comerciais de ESTIMATIVA (nunca são medição real da obra):
+     poço 1.500mm, intervalo mínimo típico entre pisos 3.000mm, última
+     altura usual 4.400mm.
+   - 'percurso = soma de todas as distâncias entre pisos' (cada intervalo
+     tem seu próprio valor real; só vira '(N-1) × d' quando TODOS os
+     intervalos são iguais a d — nunca presuma igualdade sem checar).
+   - 'altura_total = poço + percurso + última_altura'. Não confundir
+     altura total da caixa com comprimento de um fio ou percurso da
+     cabina — são grandezas diferentes.
+   - Perímetro de contorno da caixa: '2 × (largura + profundidade)'. Ex.:
+     caixa 1.500×1.500mm → perímetro de 6.000mm. Um trecho fixo que de
+     fato passa pela laje E pelo poço pode orçar até 2 perímetros (12.000mm
+     no total) — mas um ramal que termina ANTES do poço (ex.: numa parada
+     intermediária) nunca recebe o perímetro do poço lançado automaticamente.
+
+   REGRA CRÍTICA sobre o cabo de manobra comercial (28 vias): ele aparece
+   como UM pedaço com seu próprio comprimento, sujeito à verificação do
+   seio — NUNCA como 28 pedaços iguais, e nunca multiplique o comprimento
+   por 28 achando que isso vira "metros de cabo comprado" (28× o
+   comprimento representa metros de CONDUTORES internos, não metros do
+   cabo 28 vias em si). Da mesma forma, "5m de folga" é um parâmetro
+   EDITÁVEL informado pelo usuário como padrão — nunca acrescente esses 5m
+   automaticamente em cada curva nem aplique por fio por presunção;
+   enquanto a regra de folga não estiver com a checkbox de confirmação da
+   engenharia marcada, o corte fica "Pendente de engenharia".
+
+   TABELA DE BORNES (referência do esquema NICE3000, use se o usuário
+   perguntar "o que é o borne X" ou "pra que serve a interface Y"):
+   AA/AB = interfaces de cabina e cabo de manobra (checar ocupação real
+   das 28 vias, nunca presumir todas ocupadas); BA = cadeia de segurança,
+   poço, trincos e outros contatos (vários pontos, pode ter derivações);
+   BB = alimentação/comunicação das botoeiras de pavimento; BC =
+   comunicação/interfone do poço; BD/BE = limites superior/inferior de
+   desaceleração, quando instalados na caixa; MT = freio e retornos da
+   máquina; U/V/W = potência da máquina (PE é especificado à parte); OS =
+   limitador de velocidade; HW = contato do volante de manobra manual.
+   REGRA NOTÁVEL: um endereço de borne NÃO equivale a um fio contínuo do
+   quadro até o poço — há identificações repetidas, contatos em série e
+   ramais que terminam em alturas distintas; os pedaços de corte se
+   calculam pelos PONTOS FÍSICOS de origem/destino, nunca pela contagem
+   bruta de bornes (ex.: "26 posições de borne BA–BE" não vira "26 fios
+   integrais").
 
 5. "BOM / lista de corte / checklist" (aba "resultado"):
    - Botão "Gerar BOM + lista de corte" — recalcula do ZERO a cada clique
@@ -1294,13 +1339,23 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Erro na IA", detail: t.slice(0, 300) }, resp.status >= 500 ? 503 : 500);
   }
 
+  let text = "";
   let out: any;
   try {
     const data = await resp.json();
-    const text = (data.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+    text = (data.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
     out = extractJson(text);
   } catch (e) {
-    return json({ error: "Resposta da IA ilegível", detail: String(e) }, 500);
+    // A IA às vezes foge do "só JSON, sem texto fora dele" (raro, mas real —
+    // foi o que deixou o Copiloto parecendo "fora do ar" pro usuário: um 500
+    // puro em vez de aproveitar o texto que ela mandou). Se sobrou texto,
+    // usa ele como "reply" em vez de falhar a chamada inteira; só erra de
+    // verdade quando não veio nada.
+    if (text.trim()) {
+      out = { reply: text.trim() };
+    } else {
+      return json({ error: "Resposta da IA ilegível", detail: String(e) }, 500);
+    }
   }
 
   // Normaliza o contrato — devolve sempre as chaves, vazias quando não se aplicam.
