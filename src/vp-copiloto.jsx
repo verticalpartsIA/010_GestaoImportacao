@@ -146,7 +146,18 @@ function vpcApplyFills(fills, els) {
     } else if (el.tagName === 'INPUT' && el.type === 'checkbox') {
       v = (v === true || v === 'true' || v === 1 || v === '1');
     }
-    vpcSetValue(el, v);
+    // flushSync força o React a confirmar (re-renderizar) este campo ANTES do
+    // próximo — sem isso, N dispatches síncronos de 'input'/'change' num loop
+    // entram todos no MESMO batch do React 18; qualquer tela cujo onChange
+    // faça setState(objeto) a partir de closure (ex.: `set = (patch) =>
+    // onChange({...estadoAtual, ...patch})`, padrão comum em
+    // quadro-comando.jsx) lê o MESMO estado obsoleto em todas as chamadas —
+    // cada setState novo substitui o anterior por inteiro, então só o ÚLTIMO
+    // campo do lote sobrevive e os demais são perdidos silenciosamente (achado
+    // real: "preencher com dados fictícios" preenchia 23 campos mas só o
+    // último aparecia na tela).
+    if (window.ReactDOM && window.ReactDOM.flushSync) window.ReactDOM.flushSync(() => vpcSetValue(el, v));
+    else vpcSetValue(el, v);
     try {
       el.classList.add('vpc-flash');
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
