@@ -53,6 +53,20 @@ function QcCruzamentoBadge({ status }) {
   return <span className="badge" style={{ background: s.bg, color: s.fg, fontSize: 11 }}>{s.label}</span>;
 }
 
+/* Suficiência de estoque Omie x Qtd necessária da BOM — pedido do
+   usuário (24/09/2026): verde/amarelo/vermelho, sempre só diagnóstico
+   (nunca decide nada sozinho). */
+function QcEstoqueBadge({ status }) {
+  const map = {
+    suficiente: { label: 'Suficiente', bg: '#e6f4ea', fg: '#1e7a34' },
+    insuficiente: { label: 'Insuficiente', bg: '#fff4d6', fg: '#8a6300' },
+    sem_estoque: { label: 'Sem estoque', bg: '#fde2e1', fg: '#a11d1d' },
+    erro_consulta: { label: 'Erro ao consultar', bg: '#eee', fg: '#555' },
+  };
+  const s = map[status] || map.erro_consulta;
+  return <span className="badge" style={{ background: s.bg, color: s.fg, fontSize: 11 }}>{s.label}</span>;
+}
+
 /* ---------- Escopo de fornecimento (item 1 da instrução) ---------- */
 const QC_ESCOPO_ITENS = [
   { key: 'cop', label: 'COP — Botoeira de Cabina' },
@@ -510,7 +524,7 @@ function QcResultadoSecao({ quadroId, podeGerar }) {
         {!!cruzamento.length && (
           <div className="table-wrap" style={{ border: 0 }}>
             <table className="t">
-              <thead><tr><th>SKU</th><th>Descrição (local)</th><th>Descrição (Omie)</th><th>Unidade</th><th>Status</th></tr></thead>
+              <thead><tr><th>SKU</th><th>Descrição (local)</th><th>Descrição (Omie)</th><th>Unidade</th><th>Status</th><th>Qtd. necessária</th><th>Qtd. em estoque (Omie)</th></tr></thead>
               <tbody>
                 {cruzamento.map((l) => (
                   <tr key={l.id || l.sku}>
@@ -523,6 +537,12 @@ function QcResultadoSecao({ quadroId, podeGerar }) {
                       {l.unidade_local}{l.unidade_omie && l.unidade_omie !== l.unidade_local ? ` (Omie: ${l.unidade_omie})` : ''}
                     </td>
                     <td><QcCruzamentoBadge status={l.status}/>{l.erro && <div className="small muted" style={{ marginTop: 2 }}>{l.erro}</div>}</td>
+                    <td>{l.quantidade_necessaria != null ? l.quantidade_necessaria : '—'}</td>
+                    <td>
+                      {l.estoque_status !== 'erro_consulta' && <span style={{ marginRight: 6 }}>{l.quantidade_estoque_omie != null ? l.quantidade_estoque_omie : 0}</span>}
+                      <QcEstoqueBadge status={l.estoque_status}/>
+                      {l.estoque_erro && <div className="small muted" style={{ marginTop: 2 }}>{l.estoque_erro}</div>}
+                    </td>
                   </tr>
                 ))}
               </tbody>

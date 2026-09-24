@@ -323,9 +323,10 @@
      é só o que sobra do catálogo compartilhado depois de tirar o que
      este pedido específico usa). Nunca adiciona nada à BOM sozinho —
      é só diagnóstico pro usuário decidir o que fazer. */
-  function classificarCruzamentoErp(bomItens, resultadosOmie, catalogoPorSku) {
+  function classificarCruzamentoErp(bomItens, resultadosOmie, catalogoPorSku, estoqueOmie, estoqueErroGeral) {
     const resultados = resultadosOmie || {};
     const catalogo = catalogoPorSku || {};
+    const estoque = estoqueOmie || {};
     const skusNaBom = new Set(bomItens.map((i) => i.sku));
 
     const linhas = bomItens.map((item) => {
@@ -346,6 +347,23 @@
         && normaliza(r.descricao) != null && normaliza(descricaoLocal) != null
         && normaliza(r.descricao) !== normaliza(descricaoLocal);
 
+      // Estoque Omie — diagnóstico independente do cadastro/descrição
+      // acima: uma falha na busca de estoque (erroGeral) nunca derruba o
+      // resto do cruzamento, só essa coluna específica.
+      const quantidadeNecessaria = item.quantidade != null ? Number(item.quantidade) : null;
+      const saldoOmie = Object.prototype.hasOwnProperty.call(estoque, item.sku) ? estoque[item.sku] : null;
+      let estoqueStatus = null;
+      let estoqueErroLinha = null;
+      if (estoqueErroGeral) {
+        estoqueStatus = 'erro_consulta';
+        estoqueErroLinha = estoqueErroGeral;
+      } else {
+        const saldo = saldoOmie == null ? 0 : Number(saldoOmie);
+        if (saldo <= 0) estoqueStatus = 'sem_estoque';
+        else if (quantidadeNecessaria != null && saldo < quantidadeNecessaria) estoqueStatus = 'insuficiente';
+        else estoqueStatus = 'suficiente';
+      }
+
       return {
         sku: item.sku,
         descricao_local: descricaoLocal,
@@ -356,6 +374,10 @@
         divergencia_unidade: !!divergenciaUnidade,
         divergencia_descricao: !!divergenciaDescricao,
         erro: r.erro || null,
+        quantidade_necessaria: quantidadeNecessaria,
+        quantidade_estoque_omie: estoqueErroGeral ? null : saldoOmie,
+        estoque_status: estoqueStatus,
+        estoque_erro: estoqueErroLinha,
       };
     });
 

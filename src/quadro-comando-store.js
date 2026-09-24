@@ -219,7 +219,7 @@
     }
     if (data && data.error) throw new Error(data.error);
 
-    const { linhas, catalogoNaoUsado } = engine.classificarCruzamentoErp(bomItens, data.resultados || {}, catalogo);
+    const { linhas, catalogoNaoUsado } = engine.classificarCruzamentoErp(bomItens, data.resultados || {}, catalogo, data.estoque || {}, data.estoqueErro || null);
 
     const { error: delErr } = await c.from('quadros_comando_cruzamento_erp').delete().eq('quadro_comando_id', quadroId);
     if (delErr) throw delErr;
