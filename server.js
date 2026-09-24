@@ -44,6 +44,25 @@ app.get('/version.json', (_req, res) => {
   res.json(readVersionInfo());
 });
 
+/* ---------- /api/version-changelog — "o que chegou" no toast de atualização ----------
+   `since` é o commit que o navegador tinha carregado antes de detectar a
+   nova versão (ver src/version-check.js). Validado como SHA hex antes de
+   entrar no comando git (senão vira injeção de shell). Se o commit não
+   existir mais no histórico local (force-push/rebase raro), git log falha
+   e caímos no fallback genérico do toast — sem 500. */
+app.get('/api/version-changelog', (req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  const since = String(req.query.since || '');
+  if (!/^[0-9a-f]{7,40}$/i.test(since)) return res.json({ ok: false, commits: [] });
+  try {
+    const out = execSync(`git log ${since}..HEAD --format=%s --max-count=10`, { cwd: __dirname }).toString();
+    const commits = out.split('\n').map((s) => s.trim()).filter(Boolean);
+    res.json({ ok: true, commits });
+  } catch (e) {
+    res.json({ ok: false, commits: [] });
+  }
+});
+
 app.use(express.json({ limit: '4mb' }));
 
 /* ---------- Credenciais do projeto Propostas (service role) ----------
