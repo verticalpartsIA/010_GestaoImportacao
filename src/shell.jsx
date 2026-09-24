@@ -291,7 +291,7 @@ const BREADCRUMB_MAP = {
   "lead-detail": { module: "Comercial", page: "Detalhe de Lead", icon: "flag" },
   formularios:   { module: "Comercial", page: "Formulários", icon: "layers" },
   "formulario-elevador": { module: "Comercial", page: "Formulário — Elevador", icon: "layers" },
-  "quadro-comando": { module: "Comercial", page: "Quadro de Comando", icon: "layers" },
+  "formulario-quadro-comando": { module: "Comercial", page: "Quadro de Comando", icon: "layers" },
   "controle-cotacoes":   { module: "Comercial", page: "Controle de Cotações", icon: "history" },
   "cotacao-quadro-comando": { module: "Comercial", page: "Cotação Quadro de Comando", icon: "grid" },
   "cotacoes-fornecedor": { module: "Financeiro", page: "Cotações a Fornecedor", icon: "globe" },
