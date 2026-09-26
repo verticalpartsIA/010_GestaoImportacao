@@ -93,7 +93,7 @@ Gerador de ficha técnica de produto (preview em tela + PDF via `html2canvas`+`j
 
 ## Módulo Comercial · Leads (`src/comercial.jsx`) — robustez + busca no Omie (26/09/2026)
 
-Feito a partir de 2 instruções do usuário (erros E01–E11 + nova funcionalidade). PRs #368 e #370 (squash `1972c15` e `0017041` em `main`), documentados nas issues fechadas #369 e #371. Esta própria seção entrou no PR #372 (squash `e59dd8b`, issue fechada #373). Depois: correção da função Omie (PR #375 / issue #376) e botão de excluir lead (PR #377 / issue #378). `comercial.jsx` está em `?v=30`, `shell.jsx` em `?v=64`, `supabase.js` em `?v=23`.
+Feito a partir de 2 instruções do usuário (erros E01–E11 + nova funcionalidade). PRs #368 e #370 (squash `1972c15` e `0017041` em `main`), documentados nas issues fechadas #369 e #371. Esta própria seção entrou no PR #372 (squash `e59dd8b`, issue fechada #373). Depois: correção da função Omie (PR #375 / issue #376) e botão de excluir lead (PR #377 / issue #378). `comercial.jsx` está em `?v=31`, `shell.jsx` em `?v=64`, `supabase.js` em `?v=23`.
 
 - **Acesso ao Supabase neste arquivo sempre via `comercialSb()`** (retorna `null` se o Supabase não carregou) — nunca `window.__VP_SB.sb` direto. `reloadLeads` trata `error`/`.catch()` e cai em lista vazia + toast, nunca em "Carregando…" eterno.
 - Stores externos (`EnderecoAPI`, `FormularioElevadorStore`, `CadastrosClientesStore`, `__DOSSIER`) são checados antes de usar. Erro no `update` do `leads.cliente_id` **não é mais ignorado** (antes o modal dizia "Cliente vinculado" mesmo falhando).
@@ -109,6 +109,13 @@ Feito a partir de 2 instruções do usuário (erros E01–E11 + nova funcionalid
   - Filtro `.is('excluido_em', null)` só nas listagens: lista de Leads (`reloadLeads`), busca global (`shell.jsx`) e Dashboard (`supabase.js`). **De propósito sem filtro**: Precificação (a fila vem do dossiê da obra), histórico do cliente (`cadastros-clientes-store.js`) e buscas por id (contrato, proposta, link direto `lead-detail`) — o modal promete que registros ligados continuam acessíveis.
   - O modal conta dossiês/formulários/cotações ligados (aviso amarelo) com limite de 6s por consulta — se estourar, mostra "não foi possível verificar" e libera o botão, em vez de travar desabilitado.
   - Pra "desexcluir" (suporte): `update leads set excluido_em = null, excluido_por = null where id = '...'`.
+- **Campo Status no formulário do lead (26/09)**: antes não existia — todo lead ficava "Em qualificação" até a Proposta assinada marcar "Convertido" (`proposta-store.js`), e os outros status dos filtros nunca eram usados. Lista única `LEAD_STATUSES` alimenta o campo e os filtros da lista. Status antigo fora da lista continua selecionável na edição (não troca sozinho).
+- **Coluna "Está no Omie desde" (26/09)**: data de cadastro do **cliente** (CNPJ/CPF) no Omie — mora em `clientes`, não em `leads` (migration `20260926170000_clientes_omie_cadastrado_desde.sql`): `omie_cadastrado_desde` (date), `omie_verificado_em` (timestamptz) e o `codigo_cliente_omie` que já existia e nunca era preenchido. A lista traz o cliente junto via embed `cliente_omie:clientes(...)` (FK `leads.cliente_id`). **Em branco** = não está no Omie, sem CNPJ/CPF, ou ainda não verificado.
+  - `omie_verificado_em` separa "verificado e não está" de "nunca verificado". `gravarOmieNoCliente()`: encontrado → data + código; não encontrado → data nula + verificado; **falha de consulta (`encontrado: null`) não grava nada**.
+  - Preenchimento automático: (1) ao salvar o lead (reaproveita o "Buscar CNPJ" feito no modal, senão consulta); (2) ao abrir a lista, `verificarOmiePendentes()` consulta em segundo plano, um por vez, até 10 por carga, os clientes nunca verificados ou não encontrados há mais de 7 dias (`OMIE_REVERIFICAR_DIAS`) — cobre clientes criados pelo Formulário. Documento com dígitos inválidos é ignorado (não gasta consulta).
+  - Data formatada por `isoParaDataBR()` direto no texto — **não** use `new Date('aaaa-mm-dd')` (vira o dia anterior no fuso do Brasil) nem o `fmtDate` global (corta o ano pra 2 dígitos).
+  - Carga inicial feita em 26/09 nos 4 leads com cliente: CTIS (desde 09/04/2024), Piramide/Grownt (21/12/2021), Condomínio Bloco C e Ribeiro Caram (não estão no Omie).
+  - `omie-buscar-cliente` v3 passou a devolver também `codigo_cliente_omie`.
 
 ## Fluxo de trabalho estabelecido nesta sessão
 

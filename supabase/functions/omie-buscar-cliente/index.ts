@@ -11,7 +11,8 @@
 
    Resposta:
      { encontrado: true, razao_social, nome_fantasia, data_cadastro
-       (dd/mm/aaaa, de info.dInc), telefone, email, inativo }
+       (dd/mm/aaaa, de info.dInc), telefone, email, inativo,
+       codigo_cliente_omie }
      { encontrado: false }
      { encontrado: null, erro }   ← falha real de consulta (rate-limit,
                                     credencial...) — NÃO é "não existe".
@@ -103,6 +104,7 @@ Deno.serve(async (req) => {
       telefone: tel,
       email: c.email || null,
       inativo: c.inativo === "S",
+      codigo_cliente_omie: c.codigo_cliente_omie || null,
     });
   } catch (e) {
     return json({ encontrado: null, erro: (e as Error).message || "Falha ao consultar o Omie" });
