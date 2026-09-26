@@ -18,7 +18,15 @@ const NAV_GROUPS = [
     { id: "financeiro", label: "Prazos & Pendências", icon: "dollar", restrict: ["financeiro", "admin"] },
     { id: "inbox", label: "Inbox", icon: "mail" },
   ]},
-  { label: "CRM", empty: true, items: [] },
+  /* Leads (Pipeline + Kanban) migrou de "Comercial | Pré-venda" pra cá
+     26/09/2026, a pedido do usuário — este era o espaço reservado desde o
+     início para o CRM. `colaborador_alocacoes` foi migrado junto (mesmo
+     padrão da reorganização de 2026-09-03): todo colaborador que tinha
+     "Comercial | Pré-venda" ganhou "CRM" também, senão perderia a
+     visibilidade do Leads sem aviso. */
+  { label: "CRM", items: [
+    { id: "leads", label: "Leads", icon: "flag" },
+  ]},
   /* Só os cadastros mestres de verdade (usados por múltiplos domínios) ficam
      aqui. Produtos, Empresas Instaladoras e Atualização de Custos migraram
      pro domínio que efetivamente os usa. */
@@ -27,7 +35,6 @@ const NAV_GROUPS = [
     { id: "cadastro-fornecedores", label: "Fornecedores", icon: "truck" },
   ]},
   { label: "Comercial | Pré-venda", items: [
-    { id: "leads", label: "Leads", icon: "flag" },
     { id: "formularios", label: "Formulários", icon: "layers" },
     { id: "controle-cotacoes", label: "Controle de Cotações", icon: "history" },
     { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
