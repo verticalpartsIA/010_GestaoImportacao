@@ -336,6 +336,10 @@ function App() {
       case "inbox": return <EmailInbox setRoute={setRoute} setSubsel={setSubsel}/>;
       case "leads": return <LeadsPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "crm-canais": return <CRMCanaisPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "crm-conversao": return <CRMConversaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "crm-automacao": return <CRMAutomacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "crm-analise": return <CRMAnalisePage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formularios": return <FormulariosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formulario-elevador": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel}/>;
       case "formulario-quadro-comando": return <QuadroComandoPage setRoute={setRoute} subsel={subsel}/>;

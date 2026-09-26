@@ -26,6 +26,10 @@ const NAV_GROUPS = [
      visibilidade do Leads sem aviso. */
   { label: "CRM", items: [
     { id: "leads", label: "Leads", icon: "flag" },
+    { id: "crm-canais", label: "Canais", icon: "mail" },
+    { id: "crm-conversao", label: "Conversão", icon: "arrowRight" },
+    { id: "crm-automacao", label: "Automação", icon: "bolt" },
+    { id: "crm-analise", label: "Análise", icon: "trending" },
   ]},
   /* Só os cadastros mestres de verdade (usados por múltiplos domínios) ficam
      aqui. Produtos, Empresas Instaladoras e Atualização de Custos migraram
@@ -294,8 +298,12 @@ const BREADCRUMB_MAP = {
   dashboard:     { module: "Dashboard", page: "Visão Geral", icon: "home" },
   notificacoes:  { module: "Notificações", page: "Central de Alertas", icon: "bell" },
   inbox:         { module: "Geral", page: "Inbox", icon: "mail" },
-  leads:         { module: "Comercial", page: "Leads", icon: "flag" },
-  "lead-detail": { module: "Comercial", page: "Detalhe de Lead", icon: "flag" },
+  leads:         { module: "CRM", page: "Leads", icon: "flag" },
+  "lead-detail": { module: "CRM", page: "Detalhe de Lead", icon: "flag" },
+  "crm-canais":     { module: "CRM", page: "Canais", icon: "mail" },
+  "crm-conversao":  { module: "CRM", page: "Conversão", icon: "arrowRight" },
+  "crm-automacao":  { module: "CRM", page: "Automação", icon: "bolt" },
+  "crm-analise":    { module: "CRM", page: "Análise", icon: "trending" },
   formularios:   { module: "Comercial", page: "Formulários", icon: "layers" },
   "formulario-elevador": { module: "Comercial", page: "Formulário — Elevador", icon: "layers" },
   "formulario-quadro-comando": { module: "Comercial", page: "Quadro de Comando", icon: "layers" },
@@ -363,7 +371,8 @@ const MODULE_HOME = {
   "Dashboard": "dashboard",
   "Notificações": "notificacoes",
   "Cadastros": "cadastro-clientes",
-  "Comercial": "leads",
+  "Comercial": "formularios",
+  "CRM": "leads",
   "Jurídico": "juridico",
   "Engenharia": "engenharia",
   "RH Operacional": "rh-homologacao",

@@ -288,6 +288,21 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       }
     }
 
+    /* Lead convertido tem que virar cliente de verdade (pedido do usuário,
+       26/09) — o bloco de CNPJ/CPF acima já cobre a maioria dos casos, mas
+       um Lead marcado "Convertido" sem CNPJ ainda (documento pendente)
+       ficaria sem cliente. criarOuVincularDeLead() é o mesmo dedup (por
+       nome) que proposta-store.js usa quando a Proposta é assinada —
+       idempotente, não duplica se já tem cliente_id. */
+    if (payload.status === "Convertido" && !clienteId && window.CadastrosClientesStore) {
+      try {
+        const vinculado = await window.CadastrosClientesStore.criarOuVincularDeLead({ id, building: f.building, contact: f.contact, phone: f.phone || null, email: f.email || null });
+        if (vinculado) clienteId = vinculado;
+      } catch (e) {
+        console.warn("[comercial] Erro ao converter lead em cliente:", e);
+      }
+    }
+
     /* "Está no Omie desde": grava no cliente vinculado, em segundo plano
        (não atrasa o save). Reaproveita o resultado do "Buscar CNPJ" desta
        mesma abertura do modal — statusOmie zera sempre que o CNPJ muda,
@@ -660,6 +675,19 @@ function LeadsPage({ setRoute, setSubsel }) {
       modulo: "Comercial", acao: 'Lead movido de "' + anterior + '" para "' + novoStatus + '"',
       alvo: lead.building, alvo_id: lead.id, detalhe: { de: anterior, para: novoStatus },
     });
+
+    /* Lead convertido tem que virar cliente de verdade (pedido do usuário,
+       26/09) — criarOuVincularDeLead() é idempotente (não duplica se o
+       lead já tem cliente_id) e é a mesma função que proposta-store.js já
+       usa quando uma Proposta é assinada. */
+    if (novoStatus === "Convertido" && window.CadastrosClientesStore) {
+      try {
+        const clienteId = await window.CadastrosClientesStore.criarOuVincularDeLead(lead);
+        if (clienteId) setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, cliente_id: l.cliente_id || clienteId } : l)));
+      } catch (e) {
+        console.warn("[comercial] Erro ao converter lead em cliente (Kanban):", e);
+      }
+    }
   };
 
   const statuses = ["Todos", ...LEAD_STATUSES];
@@ -697,7 +725,7 @@ function LeadsPage({ setRoute, setSubsel }) {
       <div className="page fade-in">
         <div className="page-head">
           <div className="page-head__l">
-            <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Leads</div>
+            <div className="page-head__eyebrow"><span className="vp-rule"/>CRM · Leads</div>
             <h1 className="page-head__title">Pipeline de Leads</h1>
           </div>
         </div>
@@ -710,7 +738,7 @@ function LeadsPage({ setRoute, setSubsel }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Leads</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>CRM · Leads</div>
           <h1 className="page-head__title">Pipeline de Leads</h1>
           <p className="page-head__sub">{allLeads.length} leads ativos · pipeline {fmtBRL(stats.valor)} · conversão média 27%</p>
         </div>
@@ -1287,4 +1315,4 @@ function FormulariosPage({ setRoute, setSubsel }) {
   );
 }
 
-Object.assign(window, { LeadsPage, LeadDetail });
+Object.assign(window, { LeadsPage, LeadDetail, comercialSb, LEAD_STATUSES });

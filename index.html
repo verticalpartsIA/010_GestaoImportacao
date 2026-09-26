@@ -94,7 +94,7 @@
   <!-- Roteamento por URL (Fase 1 da roteirização, issue #279) — carrega
        depois do guard de SSO (mexe só na query string, nunca no pathname)
        e antes de shell.jsx/app.jsx, que o consomem. -->
-  <script src="/src/router.js?v=13"></script>
+  <script src="/src/router.js?v=14"></script>
 
   <script src="/src/notificacoes-processamento.js?v=2"></script>
   <script src="/src/notificacoes-lidas-store.js?v=1"></script>
@@ -143,9 +143,10 @@
   <!-- Components in dependency order -->
   <script type="text/vp-jsx" src="/src/primitives.jsx?v=7"></script>
   <script type="text/vp-jsx" src="/src/toast.jsx?v=6"></script>
-  <script type="text/vp-jsx" src="/src/shell.jsx?v=65"></script>
+  <script type="text/vp-jsx" src="/src/shell.jsx?v=66"></script>
   <script type="text/vp-jsx" src="/src/dashboard.jsx?v=19"></script>
-  <script type="text/vp-jsx" src="/src/comercial.jsx?v=32"></script>
+  <script type="text/vp-jsx" src="/src/comercial.jsx?v=34"></script>
+  <script type="text/vp-jsx" src="/src/crm.jsx?v=1"></script>
   <script type="text/vp-jsx" src="/src/linha-do-tempo.jsx?v=5"></script>
 
   <!-- Padrão universal de codificação de IDs (Master ID) — Fase 1 -->
@@ -330,6 +331,6 @@
   <script type="text/vp-jsx" src="/src/vp-copiloto.jsx?v=9"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="/src/app.jsx?v=76"></script>
+  <script type="text/vp-jsx" src="/src/app.jsx?v=77"></script>
 </body>
 </html>
