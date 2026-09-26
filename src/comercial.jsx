@@ -49,6 +49,58 @@ function priorityKey(p) {
 const PRIORITY_VARIANT = { alta: 'danger', media: 'warning', baixa: 'neutral' };
 const PRIORITY_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
 
+/* Status do lead — fonte única pro campo do formulário e pros filtros da
+   lista (antes só existiam nos filtros; nenhuma tela deixava escolher,
+   então todo lead ficava "Em qualificação" até a Proposta assinada
+   marcar "Convertido"). */
+const LEAD_STATUSES = ['Em qualificação', 'Aguardando cotação', 'Proposta enviada', 'Negociação', 'Convertido', 'Sem retorno'];
+
+/* "Está no Omie desde" (26/09) — a data pertence ao CLIENTE (CNPJ/CPF),
+   guardada em clientes.omie_cadastrado_desde (+ codigo_cliente_omie,
+   omie_verificado_em). Grava o resultado de uma consulta ao Omie:
+     encontrado true  → data de inclusão (dd/mm/aaaa → aaaa-mm-dd) + código
+     encontrado false → data vazia, marca como verificado
+     encontrado null  → falha de consulta: NÃO grava nada (não é "não está")
+   Retorna os campos gravados (pra atualizar a tela sem recarregar) ou null. */
+function dataOmieParaIso(dmy) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(dmy || ''));
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+}
+// aaaa-mm-dd → dd/mm/aaaa direto no texto (sem new Date: evita o dia
+// "voltar um" pelo fuso, e o fmtDate global corta o ano pra 2 dígitos).
+function isoParaDataBR(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+}
+async function gravarOmieNoCliente(clienteId, omie) {
+  const sb = comercialSb();
+  if (!sb || !clienteId || !omie || omie.encontrado == null) return null;
+  const campos = omie.encontrado
+    ? { omie_cadastrado_desde: dataOmieParaIso(omie.data_cadastro), codigo_cliente_omie: omie.codigo_cliente_omie || null, omie_verificado_em: new Date().toISOString() }
+    : { omie_cadastrado_desde: null, omie_verificado_em: new Date().toISOString() };
+  try {
+    const { error } = await sb.from('clientes').update(campos).eq('id', clienteId);
+    if (error) { console.warn('[comercial] gravar Omie no cliente falhou:', error.message); return null; }
+    return campos;
+  } catch (e) {
+    console.warn('[comercial] gravar Omie no cliente falhou:', e);
+    return null;
+  }
+}
+/* Precisa (re)consultar o Omie? Nunca verificado → sim. Verificado e não
+   encontrado há mais de 7 dias → sim (o cliente pode ter sido cadastrado
+   no Omie depois). Encontrado → não (a data de inclusão não muda). */
+const OMIE_REVERIFICAR_DIAS = 7;
+function precisaVerificarOmie(cli) {
+  if (!cli) return false;
+  // Documento incompleto nunca vai achar nada — não gasta consulta com ele.
+  const dig = String(cli.cnpj || cli.cpf || '').replace(/\D/g, '');
+  if (dig.length !== 14 && dig.length !== 11) return false;
+  if (!cli.omie_verificado_em) return true;
+  if (cli.omie_cadastrado_desde) return false;
+  return (Date.now() - new Date(cli.omie_verificado_em).getTime()) > OMIE_REVERIFICAR_DIAS * 86400000;
+}
+
 function OmieStatusBox({ status }) {
   const tone = status.encontrado === true
     ? { bg: '#ecfdf5', border: '#10b981', fg: '#059669', icon: '✓' }
@@ -236,6 +288,19 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       }
     }
 
+    /* "Está no Omie desde": grava no cliente vinculado, em segundo plano
+       (não atrasa o save). Reaproveita o resultado do "Buscar CNPJ" desta
+       mesma abertura do modal — statusOmie zera sempre que o CNPJ muda,
+       então, se existe, é deste documento; senão consulta agora (ex.: CPF,
+       que não tem botão de busca). Falha de consulta não grava nada. */
+    let omieSync = null;
+    if (clienteId && docDigits && !f.documentoPendente) {
+      const jaConsultado = f.tipoPessoa !== 'PF' && statusOmie && statusOmie.encontrado != null ? statusOmie : null;
+      omieSync = (jaConsultado ? Promise.resolve(jaConsultado) : buscarClienteOmie(docDigits))
+        .then((omie) => gravarOmieNoCliente(clienteId, omie))
+        .catch(() => null);
+    }
+
     setSaving(false);
     if (isEdit) {
       window.toast('Lead atualizado.', 'success');
@@ -249,6 +314,9 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       return;
     }
     onSaved?.();
+    // Recarrega a lista de novo quando a data do Omie chegar (reloadLeads
+    // não zera a lista, então não pisca nem desmonta este modal).
+    if (omieSync) omieSync.then((gravou) => { if (gravou) onSaved?.(); });
     setSavedLead({
       id, building: f.building, contact: f.contact, role: f.role, phone: f.phone, email: f.email,
       cliente_id: clienteId, razaoSocial: f.razaoSocial,
@@ -377,7 +445,10 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
           </p>
         </div>
 
-        <div className="grid-2" style={{ gap:12 }}>
+        <div className="grid-3" style={{ gap:12 }}>
+          {/* Status antigo fora da lista padrão continua selecionável, pra
+              editar um lead não trocar o status dele sem querer. */}
+          {fld('Status', 'status', 'text', '', LEAD_STATUSES.includes(f.status) ? LEAD_STATUSES : [f.status, ...LEAD_STATUSES])}
           {fld('Origem', 'origin', 'text', '', ['Site','Indicação','LinkedIn','Cold Call','Evento','WhatsApp','Email'])}
           {fld('Prioridade', 'priority', 'text', '', ['Alta','Média','Baixa'])}
         </div>
@@ -515,7 +586,11 @@ function LeadsPage({ setRoute, setSubsel }) {
       setLeads([]);
       return;
     }
-    Promise.resolve(sb.from('leads').select('*').is('excluido_em', null).order('date', { ascending: false }))
+    // cliente_omie = cliente vinculado (FK leads.cliente_id → clientes),
+    // só com o necessário pra coluna "Está no Omie desde".
+    Promise.resolve(sb.from('leads')
+      .select('*, cliente_omie:clientes(id, cnpj, cpf, omie_cadastrado_desde, omie_verificado_em)')
+      .is('excluido_em', null).order('date', { ascending: false }))
       .then(({ data, error }) => {
         if (error) {
           window.toast('Erro ao carregar leads: ' + error.message, 'error');
@@ -523,15 +598,45 @@ function LeadsPage({ setRoute, setSubsel }) {
           return;
         }
         setLeads(data || []);
+        verificarOmiePendentes(data || []);
       })
       .catch((e) => {
         window.toast('Erro de conexão ao carregar leads: ' + (e.message || e), 'error');
         setLeads((prev) => prev || []);
       });
   };
+
+  /* Clientes ainda não verificados no Omie (ou não encontrados há mais de
+     7 dias) são consultados em segundo plano, um por vez (o Omie tem
+     rate-limit), no máximo OMIE_LOTE por carga da lista — cada resultado
+     já aparece na coluna sem recarregar. Cobre clientes criados fora do
+     modal de Lead (ex.: pelo Formulário). */
+  const OMIE_LOTE = 10;
+  const verificandoOmie = React.useRef(new Set());
+  const verificarOmiePendentes = async (rows) => {
+    const pendentes = [];
+    rows.forEach((l) => {
+      const cli = l.cliente_omie;
+      if (cli && precisaVerificarOmie(cli) && !verificandoOmie.current.has(cli.id) && !pendentes.some((c) => c.id === cli.id)) pendentes.push(cli);
+    });
+    for (const cli of pendentes.slice(0, OMIE_LOTE)) {
+      verificandoOmie.current.add(cli.id);
+      try {
+        const omie = await buscarClienteOmie(String(cli.cnpj || cli.cpf).replace(/\D/g, ''));
+        const gravou = await gravarOmieNoCliente(cli.id, omie);
+        if (gravou) {
+          setLeads((prev) => (prev || []).map((l) => (
+            l.cliente_omie && l.cliente_omie.id === cli.id ? { ...l, cliente_omie: { ...l.cliente_omie, ...gravou } } : l
+          )));
+        }
+      } finally {
+        verificandoOmie.current.delete(cli.id);
+      }
+    }
+  };
   React.useEffect(() => { reloadLeads(); }, []);
 
-  const statuses = ["Todos", "Em qualificação", "Aguardando cotação", "Proposta enviada", "Negociação", "Convertido", "Sem retorno"];
+  const statuses = ["Todos", ...LEAD_STATUSES];
   const allLeads = leads || [];
   const owners = ["Todos", ...Array.from(new Set(allLeads.filter(l => l.owner).map(l => l.owner))).sort()];
 
@@ -577,7 +682,7 @@ function LeadsPage({ setRoute, setSubsel }) {
           <p className="page-head__sub">{allLeads.length} leads ativos · pipeline {fmtBRL(stats.valor)} · conversão média 27%</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="download" onClick={() => window.csvDownload(rows.map(l => ({ id:l.id, predio:l.building, contato:l.contact, cargo:l.role, telefone:l.phone, email:l.email, equipamento:l.equip, origem:l.origin, status:l.status, responsavel:l.owner, valor:l.value, prioridade:l.priority, proxima_acao:l.next_action || l.next, data:l.date })), 'leads.csv')}>Exportar</Button>
+          <Button variant="outline" icon="download" onClick={() => window.csvDownload(rows.map(l => ({ id:l.id, predio:l.building, contato:l.contact, cargo:l.role, telefone:l.phone, email:l.email, equipamento:l.equip, origem:l.origin, status:l.status, responsavel:l.owner, valor:l.value, prioridade:l.priority, proxima_acao:l.next_action || l.next, data:l.date, no_omie_desde:isoParaDataBR(l.cliente_omie && l.cliente_omie.omie_cadastrado_desde) })), 'leads.csv')}>Exportar</Button>
           {/* Removido o botão "Filtros" (era só um toast ecoando o estado dos
               filtros de status/responsável que já existem, visíveis e
               funcionais, logo abaixo — CTA redundante, achado #47). */}
@@ -624,12 +729,13 @@ function LeadsPage({ setRoute, setSubsel }) {
             <th>Resp.</th>
             <th className="text-right">Valor</th>
             <th>Próx. Ação</th>
+            <th title="Data de cadastro do cliente (CNPJ/CPF) no ERP Omie. Em branco: não está no Omie ou o lead ainda não tem CNPJ/CPF.">Está no Omie desde</th>
             <th></th>
           </tr></thead>
           <tbody>
             {pageRows.length === 0 ? (
               <tr>
-                <td colSpan={9} style={{ textAlign: "center", padding: "48px 0", color: "var(--fg3)", fontSize: 13 }}>
+                <td colSpan={10} style={{ textAlign: "center", padding: "48px 0", color: "var(--fg3)", fontSize: 13 }}>
                   {search || status !== "Todos" || owner !== "Todos"
                     ? "Nenhum lead encontrado com os filtros aplicados."
                     : "Nenhum lead cadastrado. Clique em \"Novo Lead\" para começar."}
@@ -661,6 +767,11 @@ function LeadsPage({ setRoute, setSubsel }) {
                     {PRIORITY_LABEL[priorityKey(l.priority)] || l.priority || "—"}
                   </Badge>
                 </td>
+                {/* Em branco (pedido do usuário) quando não está no Omie, sem
+                    CNPJ/CPF ou ainda não verificado. */}
+                <td><span className="mono" style={{ fontSize: 12 }}>
+                  {isoParaDataBR(l.cliente_omie && l.cliente_omie.omie_cadastrado_desde)}
+                </span></td>
                 <td>
                   <div className="row gap-2" style={{ justifyContent: "flex-end" }}>
                     <Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button>
