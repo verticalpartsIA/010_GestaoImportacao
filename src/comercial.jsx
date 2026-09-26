@@ -10,6 +10,69 @@
    identificação do cliente (CNPJ + contato); a alocação de quantos
    equipamentos/tipos forem necessários acontece no Formulário, chamado
    a partir daqui ou da tela de Detalhe do Lead. */
+/* Cliente do banco — sempre via este helper (null quando o Supabase não
+   carregou), nunca `window.__VP_SB.sb` direto: se o script do Supabase
+   falhar, o acesso direto quebra a tela inteira (E03/E10, 26/09). */
+function comercialSb() {
+  return (window.__VP_SB && window.__VP_SB.sb) || null;
+}
+
+/* Consulta se o CNPJ/CPF já é cliente no Omie — Edge Function
+   omie-buscar-cliente (o frontend nunca fala com o Omie direto).
+   Retorna { encontrado: true, razao_social, data_cadastro, telefone,
+   email, inativo } | { encontrado: false } | { encontrado: null, erro }
+   — null = falha de consulta, NÃO confundir com "não cadastrado". */
+async function buscarClienteOmie(doc) {
+  const sb = comercialSb();
+  if (!sb) return { encontrado: null, erro: 'Banco de dados indisponível' };
+  try {
+    const { data, error } = await sb.functions.invoke('omie-buscar-cliente', { body: { cnpj_cpf: doc } });
+    if (error) {
+      // invoke() só devolve "non-2xx status code" — o status real fica em error.context.
+      const st = error.context && error.context.status;
+      const erro = st === 401 ? 'sessão sem permissão pra consultar o ERP (faça login de novo)'
+        : st ? 'ERP respondeu HTTP ' + st : (error.message || 'falha ao consultar o ERP');
+      return { encontrado: null, erro };
+    }
+    return data || { encontrado: null, erro: 'Resposta vazia do ERP' };
+  } catch (e) {
+    return { encontrado: null, erro: e.message || 'Falha ao consultar o ERP' };
+  }
+}
+
+/* Prioridade vem do banco em minúsculo ('alta'/'media'/'baixa'), mas
+   registros antigos têm 'Alta'/'Média'/'ALTA' — normaliza tudo (sem
+   acento/case) antes de escolher cor/rótulo (E04). */
+function priorityKey(p) {
+  return String(p || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+const PRIORITY_VARIANT = { alta: 'danger', media: 'warning', baixa: 'neutral' };
+const PRIORITY_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
+
+function OmieStatusBox({ status }) {
+  const tone = status.encontrado === true
+    ? { bg: '#ecfdf5', border: '#10b981', fg: '#059669', icon: '✓' }
+    : status.encontrado === false
+      ? { bg: '#f0f9ff', border: '#3b82f6', fg: '#0284c7', icon: 'ℹ' }
+      : { bg: '#fffbeb', border: '#f59e0b', fg: '#b45309', icon: '!' };
+  const titulo = status.encontrado === true
+    ? 'Cliente cadastrado no ERP' + (status.data_cadastro ? ' desde ' + status.data_cadastro : '')
+    : status.encontrado === false ? 'Não encontrado no ERP' : 'Não foi possível consultar o ERP';
+  const sub = status.encontrado === true
+    ? [status.razao_social, status.inativo ? 'cadastro INATIVO no Omie' : null].filter(Boolean).join(' · ')
+    : status.encontrado === false ? 'Seguindo com a consulta pública de CNPJ'
+      : (status.erro ? status.erro + ' — ' : '') + 'seguindo com a consulta pública de CNPJ';
+  return (
+    <div style={{ background: tone.bg, border: '1px solid ' + tone.border, padding: '10px 12px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
+      <span style={{ color: tone.fg, fontSize: 16, fontWeight: 700 }}>{tone.icon}</span>
+      <div>
+        <div style={{ fontWeight: 600, color: tone.fg }}>{titulo}</div>
+        {sub ? <div style={{ color: 'var(--fg3)', fontSize: 12, marginTop: 2 }}>{sub}</div> : null}
+      </div>
+    </div>
+  );
+}
+
 function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
   const isEdit = !!lead;
   const [f, setF] = React.useState(() => isEdit ? {
@@ -39,7 +102,9 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
   React.useEffect(() => {
     if (!isEdit || !lead.cliente_id) return;
     let alive = true;
-    window.CadastrosClientesStore?.obter(lead.cliente_id).then((c) => {
+    const store = window.CadastrosClientesStore;
+    if (!store?.obter) return;
+    Promise.resolve(store.obter(lead.cliente_id)).then((c) => {
       if (!alive || !c) return;
       setF((p) => ({
         ...p,
@@ -48,19 +113,51 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
         cpf: c.cpf || p.cpf,
         razaoSocial: c.razao_social || p.razaoSocial,
       }));
+    }).catch((e) => {
+      console.warn('[comercial] Erro ao carregar cliente do lead:', e);
+      if (alive) window.toast?.('Não foi possível carregar os dados do cliente vinculado.', 'warning');
     });
     return () => { alive = false; };
   }, [isEdit, lead?.cliente_id]);
 
+  /* Busca do CNPJ (26/09): 1º no ERP Omie — se já é cliente, mostra
+     "Cliente cadastrado desde dd/mm/aaaa" e preenche com o cadastro de
+     lá, sem ir na API pública; senão (ou se o Omie falhar), cai na
+     EnderecoAPI como antes. `statusOmie`: null = ainda não buscou;
+     { encontrado: true|false|null } — null = não deu pra consultar o
+     ERP (mostrado como tal, nunca como "não cadastrado"). */
+  const [statusOmie, setStatusOmie] = React.useState(null);
   const buscarCnpj = async () => {
-    if (!window.EnderecoAPI?.isCnpjValido(f.cnpj)) return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
+    const api = window.EnderecoAPI;
+    const cnpjDigits = (f.cnpj || '').replace(/\D/g, '');
+    const valido = api?.isCnpjValido ? api.isCnpjValido(f.cnpj) : cnpjDigits.length === 14;
+    if (!valido) return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
+
     setBuscandoCnpj(true);
+    setStatusOmie(null);
     try {
-      const dados = await window.EnderecoAPI.buscarCNPJ(f.cnpj);
-      setF(p => ({ ...p, razaoSocial: dados.razao_social || p.razaoSocial, phone: p.phone || dados.telefone || p.phone }));
-      window.toast('Dados do CNPJ preenchidos automaticamente.', 'success');
+      const omie = await buscarClienteOmie(cnpjDigits);
+      if (omie.encontrado === true) {
+        setStatusOmie(omie);
+        setF(p => ({
+          ...p,
+          razaoSocial: omie.razao_social || p.razaoSocial,
+          phone: p.phone || omie.telefone || '',
+          email: p.email || omie.email || '',
+        }));
+        window.toast('Cliente encontrado no ERP Omie.', 'success');
+        return;
+      }
+      setStatusOmie(omie.encontrado === false ? { encontrado: false } : { encontrado: null, erro: omie.erro });
+
+      if (!api?.buscarCNPJ) {
+        return window.toast('Módulo de endereço indisponível. Recarregue a página e tente novamente.', 'error');
+      }
+      const dados = await api.buscarCNPJ(f.cnpj);
+      setF(p => ({ ...p, razaoSocial: dados.razao_social || p.razaoSocial, phone: p.phone || dados.telefone || '' }));
+      window.toast('Dados do CNPJ preenchidos via consulta pública.', 'success');
     } catch (e) {
-      window.toast(e.message, 'warning');
+      window.toast('Erro ao buscar CNPJ: ' + e.message, 'warning');
     } finally {
       setBuscandoCnpj(false);
     }
@@ -78,6 +175,8 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
         return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
       }
     }
+    const sb = comercialSb();
+    if (!sb) return window.toast('Banco de dados indisponível — recarregue a página.', 'error');
     setSaving(true);
     const id = isEdit ? lead.id : 'LD-' + Date.now().toString().slice(-6);
     const payload = {
@@ -90,10 +189,15 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       documento_pendente: f.documentoPendente,
     };
 
-    const { error } = isEdit
-      ? await window.__VP_SB.sb.from('leads').update(payload).eq('id', id)
-      : await window.__VP_SB.sb.from('leads').insert({ id, ...payload, date: new Date().toISOString().slice(0, 10) });
-    if (error) { setSaving(false); return window.toast('Erro: ' + error.message, 'error'); }
+    let error = null;
+    try {
+      ({ error } = isEdit
+        ? await sb.from('leads').update(payload).eq('id', id)
+        : await sb.from('leads').insert({ id, ...payload, date: new Date().toISOString().slice(0, 10) }));
+    } catch (e) {
+      error = e;
+    }
+    if (error) { setSaving(false); return window.toast('Erro: ' + (error.message || error), 'error'); }
 
     /* CNPJ/CPF informado (e não marcado como "será inserido depois") →
        resolve/cria o cliente (mesma dedup por documento do Formulário,
@@ -112,17 +216,21 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     let clienteAtualizado = null;
     if ((isEdit && lead.cliente_id) || (!f.documentoPendente && docDigits)) {
       try {
+        if (!window.FormularioElevadorStore?.buscarOuCriarCliente) {
+          throw new Error('módulo de clientes (FormularioElevadorStore) não carregou — recarregue a página');
+        }
         const cliente = await window.FormularioElevadorStore.buscarOuCriarCliente({
           [f.tipoPessoa === 'PF' ? 'cpf' : 'cnpj']: docDigits, tipo_pessoa: f.tipoPessoa,
           razao_social: f.razaoSocial || f.building,
           contato: f.contact, telefone: f.phone || null, email: f.email || null,
           clienteIdProvisorio: isEdit ? (lead.cliente_id || null) : null,
         });
+        if (cliente.id !== (isEdit ? lead.cliente_id : null)) {
+          const { error: vincErr } = await sb.from('leads').update({ cliente_id: cliente.id }).eq('id', id);
+          if (vincErr) throw vincErr;
+        }
         clienteId = cliente.id;
         clienteAtualizado = cliente;
-        if (clienteId !== (isEdit ? lead.cliente_id : null)) {
-          await window.__VP_SB.sb.from('leads').update({ cliente_id: clienteId }).eq('id', id);
-        }
       } catch (e) {
         window.toast((isEdit ? 'Lead atualizado, mas' : 'Lead criado, mas') + ' falhou ao vincular cliente: ' + e.message, 'warning');
       }
@@ -237,7 +345,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
               <label className="up-eyebrow muted">{f.tipoPessoa === 'PF' ? 'CPF' : 'CNPJ'}</label>
               <input className="input" type="text"
                 value={f.tipoPessoa === 'PF' ? f.cpf : f.cnpj}
-                onChange={e => set(f.tipoPessoa === 'PF' ? 'cpf' : 'cnpj', e.target.value)}
+                onChange={e => { set(f.tipoPessoa === 'PF' ? 'cpf' : 'cnpj', e.target.value); setStatusOmie(null); }}
                 placeholder={f.tipoPessoa === 'PF' ? '000.000.000-00' : '00.000.000/0000-00'}
                 disabled={f.documentoPendente}/>
             </div>
@@ -247,6 +355,9 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
               </Button>
             )}
           </div>
+          {statusOmie && f.tipoPessoa !== 'PF' && !f.documentoPendente && (
+            <OmieStatusBox status={statusOmie}/>
+          )}
           <label className="row gap-2" style={{ alignItems:'center', fontSize:12.5, cursor:'pointer' }}>
             <input type="checkbox" checked={f.documentoPendente}
               onChange={e => {
@@ -288,7 +399,8 @@ function LeadsPage({ setRoute, setSubsel }) {
   const [owner, setOwner] = React.useState("Todos");
   const [showLead, setShowLead] = React.useState(false);
   const [page, setPage] = React.useState(0);
-  const PAGE_SIZE = 15;
+  const [pageSize, setPageSize] = React.useState(15);
+  const PAGE_SIZE = pageSize;
 
   // Não reseta `leads` pra null aqui: fazer isso re-renderiza LeadsPage no
   // branch de "carregando" (que não inclui o modal na árvore) e desmonta
@@ -296,9 +408,28 @@ function LeadsPage({ setRoute, setSubsel }) {
   // nunca chegava a aparecer, reabria um modal novo em branco (bug real,
   // achado testando o fluxo completo). `leads` já nasce null no useState
   // inicial, então a primeira carga continua mostrando o esqueleto normal.
+  // Sem Supabase / erro de rede → lista vazia + toast, nunca "Carregando…"
+  // eterno (E03).
   const reloadLeads = () => {
-    window.__VP_SB.sb.from('leads').select('*').order('date', { ascending: false })
-      .then(({ data }) => setLeads(data || []));
+    const sb = comercialSb();
+    if (!sb) {
+      window.toast('Falha ao conectar com o banco de dados.', 'error');
+      setLeads([]);
+      return;
+    }
+    Promise.resolve(sb.from('leads').select('*').order('date', { ascending: false }))
+      .then(({ data, error }) => {
+        if (error) {
+          window.toast('Erro ao carregar leads: ' + error.message, 'error');
+          setLeads((prev) => prev || []);
+          return;
+        }
+        setLeads(data || []);
+      })
+      .catch((e) => {
+        window.toast('Erro de conexão ao carregar leads: ' + (e.message || e), 'error');
+        setLeads((prev) => prev || []);
+      });
   };
   React.useEffect(() => { reloadLeads(); }, []);
 
@@ -367,8 +498,12 @@ function LeadsPage({ setRoute, setSubsel }) {
           ))}
         </div>
         <div className="divider-v"/>
-        <select className="input" style={{ width: 160, height: 28, fontSize: 12 }} value={owner} onChange={(e) => setOwner(e.target.value)}>
+        <select className="input" style={{ width: 160, height: 28, fontSize: 12 }} value={owner} onChange={(e) => { setOwner(e.target.value); setPage(0); }}>
           {owners.map(o => <option key={o}>{o}</option>)}
+        </select>
+        <select className="input" style={{ width: 130, height: 28, fontSize: 12 }} value={pageSize}
+          onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} aria-label="Leads por página">
+          {[10, 15, 25, 50].map(n => <option key={n} value={n}>{n} por página</option>)}
         </select>
         <div className="spacer"/>
         <div className="search">
@@ -421,8 +556,8 @@ function LeadsPage({ setRoute, setSubsel }) {
                 <td className="cell-money">{fmtBRL(l.value)}</td>
                 <td>
                   <div style={{ fontSize: 12, color: "var(--fg1)", fontWeight: 500 }}>{l.next_action || l.next || "—"}</div>
-                  <Badge variant={String(l.priority).toLowerCase() === "alta" ? "danger" : String(l.priority).toLowerCase() === "media" || l.priority === "Média" ? "warning" : "neutral"} style={{ marginTop: 4 }}>
-                    {({ alta: "Alta", media: "Média", baixa: "Baixa" }[String(l.priority || "").toLowerCase()] || l.priority || "—")}
+                  <Badge variant={PRIORITY_VARIANT[priorityKey(l.priority)] || "neutral"} style={{ marginTop: 4 }}>
+                    {PRIORITY_LABEL[priorityKey(l.priority)] || l.priority || "—"}
                   </Badge>
                 </td>
                 <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
@@ -480,7 +615,17 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
   React.useEffect(() => {
     let alive = true;
     if (!lead.cliente_id) { setCliente(null); return; }
-    window.CadastrosClientesStore?.obter(lead.cliente_id).then((c) => { if (alive) setCliente(c || null); });
+    const store = window.CadastrosClientesStore;
+    if (!store?.obter) { setCliente(null); return; }
+    Promise.resolve(store.obter(lead.cliente_id))
+      .then((c) => { if (alive) setCliente(c || null); })
+      .catch((e) => {
+        console.warn('[comercial] Erro ao carregar cliente do lead:', e);
+        if (alive) {
+          setCliente(null); // sai do "Carregando…"
+          window.toast?.('Erro ao carregar dados do cliente.', 'warning');
+        }
+      });
     return () => { alive = false; };
   }, [lead.cliente_id]);
 
@@ -506,7 +651,7 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
       const rows = [];
       if (lead.date) rows.push({ t: "Lead criado" + (lead.origin ? " via " + lead.origin : ""), who: lead.owner || "Sistema", ts: lead.date, icon: "plus" });
       try {
-        const sb = window.__VP_SB && window.__VP_SB.sb;
+        const sb = comercialSb();
         if (sb && lead.id != null) {
           const { data } = await sb.from("vp_logs").select("*").eq("alvo_id", String(lead.id)).order("criado_em", { ascending: false }).limit(50);
           (data || []).forEach((l) => rows.push({
@@ -531,9 +676,9 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
   const [dossierExistente, setDossierExistente] = React.useState(undefined); // undefined = carregando, null = não existe
   React.useEffect(() => {
     let alive = true;
-    const sb = window.__VP_SB && window.__VP_SB.sb;
+    const sb = comercialSb();
     if (!sb || lead.id == null) { setDossierExistente(null); return; }
-    sb.from('dossier_obra').select('id').eq('lead_id', lead.id).maybeSingle()
+    Promise.resolve(sb.from('dossier_obra').select('id').eq('lead_id', lead.id).maybeSingle())
       .then(({ data }) => { if (alive) setDossierExistente(data || null); })
       .catch(() => { if (alive) setDossierExistente(null); });
     return () => { alive = false; };
@@ -547,6 +692,9 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
     }
     if (lead.status !== "Em qualificação" && lead.status !== "Aguardando cotação") {
       return window.toast('Lead já está avançado. Crie Dossier manualmente.', 'warning');
+    }
+    if (!window.__DOSSIER?.criarDeDossier) {
+      return window.toast('Módulo de Dossier indisponível — recarregue a página.', 'error');
     }
     setCreatingDossier(true);
     try {
@@ -573,15 +721,18 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
           <div className="page-head__eyebrow"><span className="vp-rule"/>{lead.id} · {lead.origin}</div>
           <h1 className="page-head__title">{lead.building}</h1>
           <p className="page-head__sub">
-            {cliente ? `${cliente.razao_social}${cliente.cnpj ? ' · ' + (window.cadFmtDoc ? window.cadFmtDoc(cliente.cnpj) : cliente.cnpj) : ''}`
-              : lead.equip || 'Sem cliente (CNPJ) vinculado ainda'}
+            {cliente
+              ? `${cliente.razao_social || '—'}${cliente.cnpj ? ' · ' + (window.cadFmtDoc ? window.cadFmtDoc(cliente.cnpj) : cliente.cnpj) : ''}`
+              : cliente === undefined ? 'Carregando cliente…' : (lead.equip || 'Sem cliente (CNPJ) vinculado ainda')}
           </p>
           <div className="row gap-3" style={{ marginTop: 4 }}>
             <StatusBadge status={lead.status}/>
-            <Badge variant={String(lead.priority).toLowerCase() === "alta" ? "danger" : "warning"} dot>
-              {({ alta: "Alta", media: "Média", baixa: "Baixa" }[String(lead.priority || "").toLowerCase()] || lead.priority)}
+            <Badge variant={PRIORITY_VARIANT[priorityKey(lead.priority)] || "neutral"} dot>
+              {PRIORITY_LABEL[priorityKey(lead.priority)] || lead.priority || "—"}
             </Badge>
-            <span className="muted small">Última atualização: —</span>
+            {/* leads não tem updated_at — usa o evento mais recente do
+                histórico (vp_logs), senão a criação do lead (E08). */}
+            <span className="muted small">Última atualização: {fmtHistTs((history && history[0] && history[0].ts) || lead.created_at || lead.date)}</span>
           </div>
         </div>
         <div className="page-head__r">
@@ -712,7 +863,7 @@ function SuggestedStep({ icon, label, sub, status }) {
       display: "flex", alignItems: "center", gap: 12,
       padding: "12px 14px",
       border: "1px solid var(--border)",
-      ...stylesByStatus[status]
+      ...(stylesByStatus[status] || stylesByStatus.future)
     }}>
       <div style={{ width: 34, height: 34, background: status === "current" ? "#000" : "var(--vp-gray-100)", color: status === "current" ? "var(--vp-yellow)" : "var(--fg2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
         <I size={18}/>
