@@ -93,7 +93,7 @@ Gerador de ficha técnica de produto (preview em tela + PDF via `html2canvas`+`j
 
 ## Módulo Comercial · Leads (`src/comercial.jsx`) — robustez + busca no Omie (26/09/2026)
 
-Feito a partir de 2 instruções do usuário (erros E01–E11 + nova funcionalidade). PRs #368 e #370 (squash `1972c15` e `0017041` em `main`), documentados nas issues fechadas #369 e #371. `comercial.jsx` está em `?v=29`.
+Feito a partir de 2 instruções do usuário (erros E01–E11 + nova funcionalidade). PRs #368 e #370 (squash `1972c15` e `0017041` em `main`), documentados nas issues fechadas #369 e #371. Esta própria seção entrou no PR #372 (squash `e59dd8b`, issue fechada #373). `comercial.jsx` está em `?v=29`.
 
 - **Acesso ao Supabase neste arquivo sempre via `comercialSb()`** (retorna `null` se o Supabase não carregou) — nunca `window.__VP_SB.sb` direto. `reloadLeads` trata `error`/`.catch()` e cai em lista vazia + toast, nunca em "Carregando…" eterno.
 - Stores externos (`EnderecoAPI`, `FormularioElevadorStore`, `CadastrosClientesStore`, `__DOSSIER`) são checados antes de usar. Erro no `update` do `leads.cliente_id` **não é mais ignorado** (antes o modal dizia "Cliente vinculado" mesmo falhando).
