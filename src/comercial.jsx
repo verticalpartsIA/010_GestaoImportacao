@@ -391,6 +391,103 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
   );
 }
 
+/* ---------- MODAL: Excluir Lead (26/09) ----------
+   Sempre com confirmação. Soft-delete (leads.excluido_em/excluido_por) —
+   o registro continua no banco; só sai das listagens. Hard delete não
+   serve: cotacoes/formularios_elevador têm FK NO ACTION pra leads
+   (bloqueariam) e dossier_obra.lead_id ficaria órfão. Antes de confirmar,
+   mostra o que está ligado a este lead, pra ninguém excluir às cegas um
+   lead que já virou obra. */
+function ModalExcluirLead({ lead, onClose, onExcluido }) {
+  const [vinculos, setVinculos] = React.useState(null); // null = carregando
+  const [excluindo, setExcluindo] = React.useState(false);
+
+  React.useEffect(() => {
+    let alive = true;
+    const sb = comercialSb();
+    if (!sb) { setVinculos({ erro: true }); return; }
+    // Limite de 6s por consulta: a verificação é só informativa — se a
+    // rede travar, o modal avisa "não foi possível verificar" e libera a
+    // confirmação, em vez de deixar o botão desabilitado pra sempre.
+    const contar = (tabela) => Promise.race([
+      Promise.resolve(
+        sb.from(tabela).select('id', { count: 'exact', head: true }).eq('lead_id', String(lead.id))
+      ).then(({ count, error }) => (error ? null : (count || 0))).catch(() => null),
+      new Promise((res) => setTimeout(() => res(null), 6000)),
+    ]);
+    Promise.all([contar('dossier_obra'), contar('formularios_elevador'), contar('cotacoes')])
+      .then(([dossier, formularios, cotacoes]) => {
+        if (alive) setVinculos({ dossier, formularios, cotacoes });
+      });
+    return () => { alive = false; };
+  }, [lead.id]);
+
+  const confirmar = async () => {
+    const sb = comercialSb();
+    if (!sb) return window.toast('Banco de dados indisponível — recarregue a página.', 'error');
+    setExcluindo(true);
+    try {
+      // .select() pra confirmar que a linha foi mesmo alterada — um update
+      // barrado por RLS volta sem erro e sem linhas.
+      const { data, error } = await sb.from('leads')
+        .update({ excluido_em: new Date().toISOString(), excluido_por: (window.__VP_USER && window.__VP_USER.email) || null })
+        .eq('id', lead.id).select('id');
+      if (error) throw error;
+      if (!data || !data.length) throw new Error('nenhum registro foi alterado');
+      window.VPLog && window.VPLog.registrar({ modulo: 'Comercial', acao: 'Lead excluído', alvo: lead.building, alvo_id: lead.id });
+      window.toast('Lead excluído.', 'success');
+      onExcluido(lead.id);
+    } catch (e) {
+      window.toast('Erro ao excluir lead: ' + (e.message || e), 'error');
+      setExcluindo(false);
+    }
+  };
+
+  const itens = vinculos && !vinculos.erro ? [
+    vinculos.dossier ? `${vinculos.dossier} Dossiê(s) da Obra` : null,
+    vinculos.formularios ? `${vinculos.formularios} Formulário(s)` : null,
+    vinculos.cotacoes ? `${vinculos.cotacoes} Cotação(ões)` : null,
+  ].filter(Boolean) : [];
+  const vinculosFalharam = vinculos && (vinculos.erro || vinculos.dossier === null || vinculos.formularios === null || vinculos.cotacoes === null);
+
+  return (
+    <Modal title="Excluir lead?" onClose={excluindo ? () => {} : onClose} width={500}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={excluindo}>Cancelar</Button>
+        <Button variant="danger" icon="trash" onClick={confirmar} disabled={excluindo || vinculos === null}>
+          {excluindo ? 'Excluindo…' : 'Sim, excluir lead'}
+        </Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <div style={{ background: 'var(--vp-gray-50)', border: '1px solid var(--border)', padding: '12px 14px' }}>
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{lead.building || '—'}</div>
+          <div className="cell-sub" style={{ marginTop: 4 }}>
+            {lead.id}{lead.contact ? ' · ' + lead.contact : ''}{lead.date ? ' · criado em ' + fmtDate(lead.date) : ''}
+          </div>
+        </div>
+        {vinculos === null && (
+          <div className="muted small">Verificando dossiês, formulários e cotações ligados a este lead…</div>
+        )}
+        {itens.length > 0 && (
+          <div style={{ background: '#fffbeb', border: '1px solid #f59e0b', padding: '10px 12px', fontSize: 13 }}>
+            <div style={{ fontWeight: 600, color: '#b45309' }}>Este lead tem registros ligados: {itens.join(', ')}.</div>
+            <div style={{ color: 'var(--fg3)', fontSize: 12, marginTop: 2 }}>
+              Eles não são apagados e continuam acessíveis nos seus módulos — só o lead sai da lista.
+            </div>
+          </div>
+        )}
+        {vinculosFalharam && (
+          <div className="muted small">Não foi possível verificar todos os registros ligados a este lead (dossiê, formulário, cotação).</div>
+        )}
+        <p style={{ fontSize: 13, color: 'var(--fg2)', margin: 0 }}>
+          O lead sai da lista de Leads, da busca e do Dashboard. O registro fica guardado no banco
+          (com data e autor da exclusão) e pode ser recuperado pelo suporte, se necessário.
+        </p>
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- LEADS ---------- */
 function LeadsPage({ setRoute, setSubsel }) {
   const [leads, setLeads] = React.useState(null);
@@ -398,6 +495,7 @@ function LeadsPage({ setRoute, setSubsel }) {
   const [search, setSearch] = React.useState("");
   const [owner, setOwner] = React.useState("Todos");
   const [showLead, setShowLead] = React.useState(false);
+  const [leadExcluir, setLeadExcluir] = React.useState(null);
   const [page, setPage] = React.useState(0);
   const [pageSize, setPageSize] = React.useState(15);
   const PAGE_SIZE = pageSize;
@@ -417,7 +515,7 @@ function LeadsPage({ setRoute, setSubsel }) {
       setLeads([]);
       return;
     }
-    Promise.resolve(sb.from('leads').select('*').order('date', { ascending: false }))
+    Promise.resolve(sb.from('leads').select('*').is('excluido_em', null).order('date', { ascending: false }))
       .then(({ data, error }) => {
         if (error) {
           window.toast('Erro ao carregar leads: ' + error.message, 'error');
@@ -444,6 +542,9 @@ function LeadsPage({ setRoute, setSubsel }) {
     return true;
   });
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  // Excluir o último lead da última página (ou filtrar) não pode deixar a
+  // tela numa página que não existe mais.
+  React.useEffect(() => { if (page > totalPages - 1) setPage(totalPages - 1); }, [page, totalPages]);
   const pageRows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const stats = {
@@ -560,7 +661,13 @@ function LeadsPage({ setRoute, setSubsel }) {
                     {PRIORITY_LABEL[priorityKey(l.priority)] || l.priority || "—"}
                   </Badge>
                 </td>
-                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
+                <td>
+                  <div className="row gap-2" style={{ justifyContent: "flex-end" }}>
+                    <Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button>
+                    <Button variant="ghost" size="sm" icon="trash" title="Excluir lead" aria-label="Excluir lead"
+                      onClick={(ev) => { ev.stopPropagation(); setLeadExcluir(l); }}/>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -575,6 +682,17 @@ function LeadsPage({ setRoute, setSubsel }) {
           <Button variant="ghost" size="sm" icon="chevRight" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}/>
         </div>
       </div>
+
+      {leadExcluir && (
+        <ModalExcluirLead
+          lead={leadExcluir}
+          onClose={() => setLeadExcluir(null)}
+          onExcluido={(id) => {
+            setLeadExcluir(null);
+            setLeads((prev) => (prev || []).filter((x) => x.id !== id));
+          }}
+        />
+      )}
 
       {showLead && (
         <ModalNovoLead

@@ -93,7 +93,7 @@ Gerador de ficha técnica de produto (preview em tela + PDF via `html2canvas`+`j
 
 ## Módulo Comercial · Leads (`src/comercial.jsx`) — robustez + busca no Omie (26/09/2026)
 
-Feito a partir de 2 instruções do usuário (erros E01–E11 + nova funcionalidade). PRs #368 e #370 (squash `1972c15` e `0017041` em `main`), documentados nas issues fechadas #369 e #371. Esta própria seção entrou no PR #372 (squash `e59dd8b`, issue fechada #373). `comercial.jsx` está em `?v=29`.
+Feito a partir de 2 instruções do usuário (erros E01–E11 + nova funcionalidade). PRs #368 e #370 (squash `1972c15` e `0017041` em `main`), documentados nas issues fechadas #369 e #371. Esta própria seção entrou no PR #372 (squash `e59dd8b`, issue fechada #373). `comercial.jsx` está em `?v=30`.
 
 - **Acesso ao Supabase neste arquivo sempre via `comercialSb()`** (retorna `null` se o Supabase não carregou) — nunca `window.__VP_SB.sb` direto. `reloadLeads` trata `error`/`.catch()` e cai em lista vazia + toast, nunca em "Carregando…" eterno.
 - Stores externos (`EnderecoAPI`, `FormularioElevadorStore`, `CadastrosClientesStore`, `__DOSSIER`) são checados antes de usar. Erro no `update` do `leads.cliente_id` **não é mais ignorado** (antes o modal dizia "Cliente vinculado" mesmo falhando).
@@ -105,6 +105,10 @@ Feito a partir de 2 instruções do usuário (erros E01–E11 + nova funcionalid
   - Comportamento real do Omie (confirmado 26/09): `ListarClientes` com `clientesFiltro.cnpj_cpf` aceita **só dígitos**; CNPJ sem cadastro volta como **fault "Não existem registros para a página [1]!" (HTTP 500)**, não lista vazia; data de cadastro = `info.dInc` (dd/mm/aaaa); telefone = `telefone1_ddd` + `telefone1_numero`.
   - Não existe `window.OmieClientesStore` (a instrução supunha que sim) — o helper é `buscarClienteOmie()` dentro do próprio `comercial.jsx`.
   - Mesmo padrão das outras funções Omie: fetch cru, sem `supabase-js` via esm.sh (ver BOOT_ERROR em `quadro-comando-cruzamento-erp`).
+- **Excluir lead (26/09)**: ícone de lixeira em cada linha da lista → `ModalExcluirLead` (sempre com confirmação). **Soft-delete** em `leads.excluido_em`/`excluido_por` (migration `20260926160000_leads_soft_delete.sql`). Não troque por DELETE de verdade: `cotacoes.lead_id` e `formularios_elevador.lead_id` têm FK `NO ACTION` (bloqueiam), `dossier_obra.lead_id` não tem FK (ficaria órfão) e `leads` **não tem policy de DELETE** pra anon — um `.delete()` voltaria sem erro e sem apagar nada. O update usa `.select('id')` e trata "0 linhas" como erro pelo mesmo motivo.
+  - Filtro `.is('excluido_em', null)` só nas listagens: lista de Leads (`reloadLeads`), busca global (`shell.jsx`) e Dashboard (`supabase.js`). **De propósito sem filtro**: Precificação (a fila vem do dossiê da obra), histórico do cliente (`cadastros-clientes-store.js`) e buscas por id (contrato, proposta, link direto `lead-detail`) — o modal promete que registros ligados continuam acessíveis.
+  - O modal conta dossiês/formulários/cotações ligados (aviso amarelo) com limite de 6s por consulta — se estourar, mostra "não foi possível verificar" e libera o botão, em vez de travar desabilitado.
+  - Pra "desexcluir" (suporte): `update leads set excluido_em = null, excluido_por = null where id = '...'`.
 
 ## Fluxo de trabalho estabelecido nesta sessão
 
@@ -119,7 +123,7 @@ Feito a partir de 2 instruções do usuário (erros E01–E11 + nova funcionalid
 - `deploy.yml` (workflow SSH redundante) continua sem uso real — usuário optou por não mexer.
 - Não testei o fluxo real de upload de mídia (Supabase Storage) fim-a-fim — só simulei com dataURL local, já que upload real precisa de rede que o sandbox não tem.
 - **Perguntar depois (pedido em 2026-08-27, aguardando "Faça")**: estruturar o campo `container_no` da resposta do fornecedor (`cotacoes_elevador_fornecedor.respostas.container_no`, hoje texto livre único, ex. `"1x40HC + 1x20GP"`) em tipo/quantidade por container, e conectar esse dado ao módulo Embarques-Importação (`src/embarques-importacao.jsx`, componente `EIContainers` já suporta múltiplos containers estruturados). Contexto: confirmado nesta sessão que o formulário público (`cotacao-elevador-fornecedor.jsx`) já captura esse campo corretamente e ele aparece no modal interno "Ver resposta do fornecedor" (`formulario-elevador.jsx` `FECotacaoRespostaModal`) — mas não flui pra Precificação (`precificacao-elevador.jsx`/`-store.js`) nem pra Embarques hoje. **Atualização 28/08**: o módulo Cadastros → Atualização de Custos criado nesta sessão já cadastra 21 tipos de container com specs ISO — a estruturação do `container_no` do fornecedor deveria casar com esses mesmos tipos.
-- **Busca do CNPJ no Omie (26/09)**: função v2 testada direto com a anon key (`42.689.068/0002-50` → encontrado, desde 18/04/2023; `46.533.808/0001-35` → desde 17/01/2017; CNPJ inexistente → não encontrado). Falta só o usuário confirmar o aviso verde na tela em produção.
+- **Busca do CNPJ no Omie (26/09)**: função v2 testada direto com a anon key (`42.689.068/0002-50` → encontrado, desde 18/04/2023; `46.533.808/0001-35` → desde 17/01/2017; CNPJ inexistente → não encontrado). Usuário confirmou o aviso verde em produção (26/09) — resolvido.
 - Cadastros → Atualização de Custos (28/08): novo submódulo com 3 tabelas de referência de custo (Instalação Elevador por tração×capacidade×paradas, Instalação Escada/Esteira por estado, Containers) — ver `src/cadastro-custos.jsx`/`-store.js`. Ainda não conectado à Precificação por herança automática (falta campo "tração" no Formulário, que não existe hoje).
 
 <!-- hyperresearch:start -->

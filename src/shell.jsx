@@ -427,7 +427,7 @@ async function runGlobalSearch(term) {
   const like = "%" + clean + "%";
   const safe = (p) => p.then((r) => r).catch(() => ({ data: [], error: true }));
   const [L, P, C, E] = await Promise.all([
-    safe(sb.from("leads").select("*").or(`building.ilike.${like},contact.ilike.${like},email.ilike.${like}`).limit(6)),
+    safe(sb.from("leads").select("*").is("excluido_em", null).or(`building.ilike.${like},contact.ilike.${like},email.ilike.${like}`).limit(6)),
     safe(sb.from("projetos").select("*").or(`name.ilike.${like},client.ilike.${like}`).limit(6)),
     safe(sb.from("contratos_venda_equipamentos").select("*").ilike("client", like).limit(6)),
     safe(sb.from("embarques").select("*").or(`client.ilike.${like},vessel.ilike.${like},bl.ilike.${like},container_number.ilike.${like}`).limit(6)),

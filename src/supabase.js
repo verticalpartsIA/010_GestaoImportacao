@@ -178,7 +178,7 @@
       propR, avaisR, ncmR,
       formR, cliR, instR
     ] = await Promise.all([
-      sb.from('leads').select('*').order('date', { ascending: false }),
+      sb.from('leads').select('*').is('excluido_em', null).order('date', { ascending: false }),
       sb.from('cotacoes').select('*').order('date', { ascending: false }),
       sb.from('projetos').select('*').order('start_date'),
       sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false }),
