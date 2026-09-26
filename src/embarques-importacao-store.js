@@ -64,7 +64,9 @@
   }
 
   function _payload(form, pis) {
-    const containers = (form.containers || []).map((c) => ({ ...c, peso: c.peso !== '' && c.peso != null ? Number(c.peso) : null })).filter((c) => c.numero);
+    // Container com tipo e sem número ainda também fica (issue #384): os
+    // herdados da cotação chegam assim, antes do booking dar os números.
+    const containers = (form.containers || []).map((c) => ({ ...c, peso: c.peso !== '' && c.peso != null ? Number(c.peso) : null })).filter((c) => c.numero || c.tipo_tamanho);
     const nfes = (form.nfes || []).map((n) => ({ ...n, valor: n.valor !== '' && n.valor != null ? Number(n.valor) : null })).filter((n) => n.numero);
     const resumo = resumoPIs(pis || []);
     const num = (v) => (v === '' || v == null ? null : Number(v));
@@ -201,5 +203,51 @@
     if (error) throw error;
   }
 
-  window.EmbarquesImportacaoStore = { listarTodas, obter, listarPIsVinculadas, resumoPIs, criar, atualizar, remover, arquivar };
+  /* Issue #384 — containers que a cotação já tem estruturados, pra logística
+     não redigitar no embarque. Mesma prioridade de PropostaHeranca: a
+     precificação aprovada (status 'finalizado') vale mais que o rascunho
+     mais recente; sem precificação (ou com a lista vazia), cai no texto
+     livre do fornecedor (`respostas.container_no`, ex. "1x40HC + 1x20GP"),
+     lido pelo mesmo parseContainerNo() da Precificação. Devolve linhas
+     agregadas {tipo_tamanho, quantidade} — quem expande em containers
+     físicos (1 por linha do embarque) é expandirContainers() abaixo.
+     Nunca grava nada: a tela só oferece os containers pro usuário aceitar. */
+  async function containersDaCotacao(numeroCotacao) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const numero = window.MasterIdEngine ? window.MasterIdEngine.parseNumeroCotacao(numeroCotacao) : Number(numeroCotacao);
+    if (!numero) throw new Error('Informe um Nº da Cotação válido.');
+    const limpar = (linhas) => (linhas || [])
+      .map((l) => ({ tipo_tamanho: l.tipo_tamanho || 'Outro', quantidade: Math.max(1, Math.floor(Number(l.quantidade) || 1)) }));
+
+    const { data: pzs, error: errPz } = await c.from('precificacoes_elevador').select('status, containers')
+      .eq('numero_cotacao', numero).order('created_at', { ascending: false });
+    if (errPz) throw errPz;
+    const lista = pzs || [];
+    const pz = lista.find((p) => p.status === 'finalizado') || lista[0] || null;
+    if (pz && (pz.containers || []).length) return { numeroCotacao: numero, origem: 'precificacao', linhas: limpar(pz.containers) };
+
+    const { data: form, error: errF } = await c.from('formularios_elevador').select('id').eq('numero_cotacao', numero).maybeSingle();
+    if (errF) throw errF;
+    if (!form) return { numeroCotacao: numero, origem: null, linhas: [], formularioEncontrado: false };
+    const { data: cots, error: errC } = await c.from('cotacoes_elevador_fornecedor').select('status, respostas')
+      .eq('formulario_elevador_id', form.id).order('created_at', { ascending: false });
+    if (errC) throw errC;
+    const comContainer = (cots || []).filter((x) => String((x.respostas || {}).container_no || '').trim());
+    const cot = comContainer.find((x) => x.status === 'aprovada') || comContainer.find((x) => x.status === 'em_analise')
+      || comContainer.find((x) => x.status === 'respondido') || comContainer[0] || null;
+    const parse = window.PrecificacaoElevadorStore && window.PrecificacaoElevadorStore.parseContainerNo;
+    if (!cot || !parse) return { numeroCotacao: numero, origem: null, linhas: [], formularioEncontrado: true };
+    return { numeroCotacao: numero, origem: 'fornecedor', linhas: limpar(parse(cot.respostas.container_no)), textoFornecedor: cot.respostas.container_no };
+  }
+
+  /* 2x 40'HC → 2 containers físicos (numero/lacre/peso em branco pra
+     logística completar). Teto de 50 por linha contra quantidade absurda
+     digitada por engano na Precificação. */
+  function expandirContainers(linhas) {
+    return (linhas || []).flatMap((l) => Array.from({ length: Math.min(50, l.quantidade || 1) }, () => (
+      { numero: '', tipo_tamanho: l.tipo_tamanho, lacre: '', peso: '', data_embarque: '', data_chegada: '' }
+    )));
+  }
+
+  window.EmbarquesImportacaoStore = { listarTodas, obter, listarPIsVinculadas, resumoPIs, criar, atualizar, remover, arquivar, containersDaCotacao, expandirContainers };
 }());

@@ -92,8 +92,64 @@ function EIPagamentos({ pis }) {
   );
 }
 
+/* ---------- Herdar containers da cotação (issue #384) ----------
+   O fornecedor já informou os containers (respostas.container_no) e a
+   Precificação já estruturou isso em tipo × quantidade — aqui a logística
+   puxa essa lista em 1 clique em vez de redigitar. Nº da Cotação vem das
+   P.I. vinculadas / do próprio embarque; sem isso (embarque novo, ainda
+   sem P.I.), o usuário digita o Nº. Só preenche o formulário: nada é
+   gravado até "Salvar". */
+function EIHerdarContainers({ numeroCotacaoConhecido, temContainers, onHerdar }) {
+  const [numeroDigitado, setNumeroDigitado] = React.useState('');
+  const [buscando, setBuscando] = React.useState(false);
+  const [aviso, setAviso] = React.useState(null);
+  const numero = numeroCotacaoConhecido ?? numeroDigitado;
+
+  const puxar = async () => {
+    const store = window.EmbarquesImportacaoStore;
+    if (!String(numero || '').trim()) { setAviso('Informe o Nº da Cotação.'); return; }
+    setBuscando(true); setAviso(null);
+    try {
+      const r = await store.containersDaCotacao(numero);
+      if (!r.linhas.length) {
+        setAviso(r.formularioEncontrado === false
+          ? `Cotação Nº ${r.numeroCotacao} não encontrada.`
+          : `Cotação Nº ${r.numeroCotacao} ainda não tem containers informados (nem na Precificação, nem na resposta do fornecedor).`);
+        return;
+      }
+      const novos = store.expandirContainers(r.linhas);
+      if (temContainers && !window.confirm(`Adicionar ${novos.length} container(es) da Cotação Nº ${r.numeroCotacao} aos que já estão neste embarque?`)) return;
+      onHerdar(novos, r.numeroCotacao);
+      const resumo = r.linhas.map((l) => `${l.quantidade}x ${l.tipo_tamanho}`).join(' + ');
+      const origem = r.origem === 'precificacao' ? 'da Precificação' : `da resposta do fornecedor ("${r.textoFornecedor}")`;
+      window.toast?.(`${novos.length} container(es) ${origem}: ${resumo}. Complete número, lacre e peso e salve o embarque.`, 'success');
+    } catch (e) {
+      setAviso('Não foi possível buscar os containers: ' + (e.message || e));
+    } finally {
+      setBuscando(false);
+    }
+  };
+
+  return (
+    <div style={{ background: 'var(--vp-gray-50)', borderRadius: 6, padding: 10, marginBottom: 10 }}>
+      <div className="row gap-2" style={{ alignItems: 'center', flexWrap: 'wrap' }}>
+        <span className="small">
+          {numeroCotacaoConhecido != null
+            ? <>Containers informados na <b>Cotação Nº {numeroCotacaoConhecido}</b> (Precificação / resposta do fornecedor):</>
+            : 'Puxar containers de uma cotação — Nº da Cotação:'}
+        </span>
+        {numeroCotacaoConhecido == null && (
+          <input className="input" style={{ width: 120 }} value={numeroDigitado} onChange={(e) => setNumeroDigitado(e.target.value)} placeholder="ex.: 842"/>
+        )}
+        <Button variant="outline" size="sm" icon="download" onClick={puxar} disabled={buscando}>{buscando ? 'Buscando…' : 'Usar containers da cotação'}</Button>
+      </div>
+      {aviso && <p className="small" style={{ margin: '6px 0 0', color: '#8a5a00' }}>{aviso}</p>}
+    </div>
+  );
+}
+
 /* ---------- Containers ---------- */
-function EIContainers({ containers, onChange }) {
+function EIContainers({ containers, onChange, numeroCotacao, onNumeroCotacao }) {
   const list = containers || [];
   const add = () => onChange([...list, { numero: '', tipo_tamanho: '', lacre: '', peso: '', data_embarque: '', data_chegada: '' }]);
   const remove = (i) => onChange(list.filter((_, idx) => idx !== i));
@@ -104,6 +160,8 @@ function EIContainers({ containers, onChange }) {
         <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700 }}>Containers</h4>
         <Button variant="outline" size="sm" icon="plus" onClick={add}>Adicionar container</Button>
       </div>
+      <EIHerdarContainers numeroCotacaoConhecido={numeroCotacao} temContainers={list.length > 0}
+        onHerdar={(novos, numero) => { onChange([...list, ...novos]); if (numeroCotacao == null) onNumeroCotacao?.(numero); }}/>
       {list.length === 0 && <p className="small muted" style={{ textAlign: 'center', padding: '16px 0' }}>Nenhum container cadastrado.</p>}
       <div className="stack" style={{ gap: 8 }}>
         {list.map((c, i) => (
@@ -219,6 +277,9 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
   const [form, setForm] = React.useState(() => (initialData ? { ...EI_EMPTY, ...initialData } : EI_EMPTY));
   const [tab, setTab] = React.useState('identificacao');
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
+  // Mesma regra do _payload no store: P.I. vinculada manda; senão o que já
+  // está gravado no embarque (ou foi escolhido ao herdar containers).
+  const numeroCotacaoEmbarque = window.EmbarquesImportacaoStore.resumoPIs(pis || []).numeroCotacao ?? form.numero_cotacao ?? null;
 
   return (
     <Card title={isEdit ? `Editar embarque ${form.nome_embarque || ''}` : 'Novo embarque'}>
@@ -269,7 +330,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             </p>
           ) : null}
           <EIRolagens form={form} set={set}/>
-          <EIContainers containers={form.containers} onChange={set('containers')}/>
+          <EIContainers containers={form.containers} onChange={set('containers')} numeroCotacao={numeroCotacaoEmbarque} onNumeroCotacao={set('numero_cotacao')}/>
         </div>
       )}
 
