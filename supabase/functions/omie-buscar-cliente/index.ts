@@ -21,11 +21,19 @@
    sem cadastro volta como fault "Não existem registros para a página
    [1]!" (HTTP 500), não como lista vazia.
 
-   Acesso: exige um token de USUÁRIO logado (validado em /auth/v1/user)
-   — verify_jwt sozinho aceita a anon key pública, e esta função devolve
-   dados de contato de clientes do ERP.
-   Acesso ao Supabase via fetch cru (sem supabase-js pelo esm.sh — ver
-   BOOT_ERROR documentado em quadro-comando-cruzamento-erp).
+   Acesso: verify_jwt (aceita a anon key do app) — MESMO modelo das
+   outras funções Omie deste projeto. NÃO exija sessão de usuário do
+   Supabase aqui: este app nunca tem uma. O login real é o SSO do
+   vpsistema.com (outro projeto Supabase, ubdkoqxfwcraftesgmbw — ver
+   src/supabase.js) e todas as chamadas do frontend saem com a anon key.
+   A 1ª versão (26/09) validava o token em /auth/v1/user e por isso
+   respondia 401 SEMPRE em produção, mesmo com o usuário logado — bug
+   real, visto na tela do usuário no mesmo dia. Removido por decisão
+   explícita do usuário ("opção 1": mesmo modelo das outras funções
+   Omie). Mitigação: só responde a um CNPJ/CPF exato (sem listagem) e
+   devolve só os campos que o modal usa.
+   Sem imports externos (nada de supabase-js pelo esm.sh — ver BOOT_ERROR
+   documentado em quadro-comando-cruzamento-erp).
    ============================================================ */
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
@@ -42,25 +50,11 @@ function json(body: unknown, status = 200) {
 
 const omieKey = Deno.env.get("OMIE_API_KEY") || "";
 const omieSecret = Deno.env.get("OMIE_API_SECRET") || "";
-const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-const supabaseAnonKey = Deno.env.get("SUPABASE_ANON_KEY") || "";
-
-async function usuarioLogado(req: Request): Promise<boolean> {
-  const auth = req.headers.get("authorization") || "";
-  if (!/^Bearer\s+\S+/i.test(auth)) return false;
-  const res = await fetch(`${supabaseUrl}/auth/v1/user`, {
-    headers: { apikey: supabaseAnonKey, Authorization: auth },
-  });
-  if (!res.ok) return false;
-  const u = await res.json().catch(() => null);
-  return !!(u && u.id);
-}
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
-  if (!(await usuarioLogado(req))) return json({ error: "Não autorizado" }, 401);
   if (!omieKey || !omieSecret) {
     return json({ encontrado: null, erro: "OMIE_API_KEY / OMIE_API_SECRET não configuradas no Supabase" });
   }
