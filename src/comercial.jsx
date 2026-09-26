@@ -596,10 +596,11 @@ function LeadsPage({ setRoute, setSubsel }) {
 }
 
 /* ---------- LEAD DETAIL ---------- */
+/* E11 (26/09): o `if (!lead) return` ficava ANTES de vários hooks — se a
+   mesma instância alternasse entre sem lead e com lead, o React quebrava
+   ("Rendered more hooks than during the previous render"). O estado vazio
+   fica aqui fora e os hooks todos em LeadDetailView, sempre na mesma ordem. */
 function LeadDetail({ lead, setRoute, setSubsel }) {
-  const [creatingDossier, setCreatingDossier] = React.useState(false);
-  const [showEditLead, setShowEditLead] = React.useState(false);
-
   if (!lead) {
     return <EmptyStateRedirect
       icon="flag"
@@ -608,13 +609,23 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
       ctaLabel="Ir para Listagem de Leads"
       onCta={() => setRoute("leads")}/>;
   }
+  return <LeadDetailView lead={lead} setRoute={setRoute} setSubsel={setSubsel}/>;
+}
+
+function LeadDetailView({ lead, setRoute, setSubsel }) {
+  const [creatingDossier, setCreatingDossier] = React.useState(false);
+  const [showEditLead, setShowEditLead] = React.useState(false);
   /* Cliente vinculado (CNPJ) — busca real via lead.cliente_id. Sem vínculo
      ainda → null, e a tela oferece "Abrir Formulário" pra completar lá
      (mesma busca por CNPJ, sem duplicar cliente). */
   const [cliente, setCliente] = React.useState(undefined); // undefined = carregando, null = sem vínculo
   React.useEffect(() => {
     let alive = true;
-    if (!lead.cliente_id) { setCliente(null); return; }
+    /* E11: trocar de lead (A com cliente → B) mantinha o cliente de A na
+       tela até a nova busca responder. Zera pra "carregando" na hora; o
+       `alive` descarta a resposta atrasada do lead anterior. */
+    setCliente(lead.cliente_id ? undefined : null);
+    if (!lead.cliente_id) return;
     const store = window.CadastrosClientesStore;
     if (!store?.obter) { setCliente(null); return; }
     Promise.resolve(store.obter(lead.cliente_id))
@@ -647,6 +658,7 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
   };
   React.useEffect(() => {
     let alive = true;
+    setHistory(null); // E11: não mostra o histórico do lead anterior enquanto carrega
     (async () => {
       const rows = [];
       if (lead.date) rows.push({ t: "Lead criado" + (lead.origin ? " via " + lead.origin : ""), who: lead.owner || "Sistema", ts: lead.date, icon: "plus" });
@@ -676,6 +688,7 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
   const [dossierExistente, setDossierExistente] = React.useState(undefined); // undefined = carregando, null = não existe
   React.useEffect(() => {
     let alive = true;
+    setDossierExistente(undefined); // E11: senão "Abrir Dossier" abriria o dossier do lead anterior
     const sb = comercialSb();
     if (!sb || lead.id == null) { setDossierExistente(null); return; }
     Promise.resolve(sb.from('dossier_obra').select('id').eq('lead_id', lead.id).maybeSingle())
@@ -685,6 +698,9 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
   }, [lead.id]);
 
   const criarDossier = async () => {
+    // Checagem de dossier existente ainda em andamento — criar agora podia
+    // duplicar o prontuário (mesma proteção do achado de 14/09).
+    if (dossierExistente === undefined) return window.toast('Verificando se este lead já tem Dossier… tente de novo em instantes.', 'info');
     if (dossierExistente) {
       setSubsel?.(dossierExistente.id);
       setRoute('dossier-obra');
