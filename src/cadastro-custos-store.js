@@ -58,15 +58,30 @@
   /* Busca o custo de instalação pra uma unidade real (herança na
      Precificação): tração exata + paradas exata + capacidade dentro da
      faixa [min,max]. Se não achar, devolve null — quem chamou decide
-     deixar em branco pro Financeiro preencher manualmente. */
+     deixar em branco pro Financeiro preencher manualmente.
+     26/09 — faixas sobrepostas (achado real: uma linha 2:1 × 2 paradas ×
+     0-2000kg com R$ 0,00 cobria as faixas certas de 400-630/631-1000/
+     1001-1500): com .maybeSingle() a busca dava erro de "múltiplas linhas",
+     voltava null e a unidade virava "projeto especial" com MO R$ 0 sem
+     aviso nenhum. Agora, se mais de uma linha casar, vale a mais específica:
+     com valor > 0 primeiro, cotação real antes de estimativa, faixa de
+     capacidade mais estreita — e avisa no console pra alguém limpar a
+     tabela em Cadastros → Atualização de Custos. */
   async function buscarCustoElevador(tracao, capacidadeKg, paradas) {
     const c = sb(); if (!c || !tracao || !paradas) return null;
     const { data, error } = await c.from('custos_instalacao_elevador').select('*')
       .eq('ativo', true).eq('tracao', tracao).eq('paradas', paradas)
-      .lte('capacidade_min_kg', capacidadeKg).gte('capacidade_max_kg', capacidadeKg)
-      .maybeSingle();
+      .lte('capacidade_min_kg', capacidadeKg).gte('capacidade_max_kg', capacidadeKg);
     if (error) { console.warn('[CadastroCustosStore] buscarCustoElevador falhou', error); return null; }
-    return data || null;
+    const linhas = data || [];
+    if (linhas.length <= 1) return linhas[0] || null;
+    const largura = (l) => Number(l.capacidade_max_kg) - Number(l.capacidade_min_kg);
+    const escolhida = [...linhas].sort((a, b) =>
+      ((Number(b.valor_reajustado_rs) > 0) - (Number(a.valor_reajustado_rs) > 0))
+      || ((!!a.is_estimativa) - (!!b.is_estimativa))
+      || (largura(a) - largura(b)))[0];
+    console.warn(`[CadastroCustosStore] ${linhas.length} faixas de MO sobrepostas pra tração ${tracao} × ${paradas} paradas × ${capacidadeKg}kg — usando ${escolhida.capacidade_min_kg}-${escolhida.capacidade_max_kg}kg (id ${escolhida.id}). Revise em Cadastros → Atualização de Custos.`, linhas);
+    return escolhida;
   }
 
   /* ---------- Estimativa de valor (regressão) pra faixas sem cotação real ----------
