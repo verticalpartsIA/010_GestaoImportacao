@@ -1359,6 +1359,17 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
     return null;
   };
 
+  /* Issue #383 — `fornecedor` da unidade não entra em validar() de
+     propósito (aviso, não bloqueio: o vendedor pode enviar o formulário e
+     definir o fornecedor depois), mas sem ele a unidade nunca aparece em
+     "Enviar cotação a fornecedores" e o RFQ não sai. Só no canal
+     assistido — no self-service o cliente nem vê esse campo. */
+  const unidadesSemFornecedor = publicMode ? [] : unidades.filter((u) => !String(u.fornecedor || '').trim());
+  const avisoSemFornecedor = unidadesSemFornecedor.length === 0 ? null
+    : unidadesSemFornecedor.length === unidades.length
+      ? 'Nenhum equipamento tem Fornecedor definido — o pedido de cotação (RFQ) não sai para fornecedor nenhum até você definir e usar "Enviar cotação a fornecedores".'
+      : `${unidadesSemFornecedor.length} de ${unidades.length} equipamentos estão sem Fornecedor (${unidadesSemFornecedor.map((u) => u.identificador).filter(Boolean).join(', ')}) — eles ficam fora do pedido de cotação (RFQ).`;
+
   /* Retorna o id salvo (não um boolean) — quem chama precisa do valor real,
      não do estado `id`, que só reflete o setId em um próximo render (issue
      #90: gerarLink chamava gerarLinkPublico(id) com o id ainda stale). */
@@ -1419,6 +1430,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       setUnidades(unidadesSalvas);
       if (novoStatus) await window.FormularioElevadorStore.enviar(currentId);
       window.toast?.(novoStatus ? 'Formulário enviado!' : 'Rascunho salvo.', 'success');
+      if (novoStatus && avisoSemFornecedor) window.toast?.(avisoSemFornecedor, 'warning');
       onSaved?.(currentId);
       return currentId;
     } catch (e) {
@@ -1588,6 +1600,11 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         </div>
       </fieldset>
 
+      {avisoSemFornecedor && (
+        <div style={{ marginTop: 16, padding: '10px 12px', background: '#fff8e6', border: '1px solid #FBB039', borderRadius: 6, fontSize: 12, color: '#8a5a00' }}>
+          ⚠ {avisoSemFornecedor}
+        </div>
+      )}
       <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
         <div className="row gap-2">
           <Button variant="outline" onClick={() => salvarTudo(null)} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>
