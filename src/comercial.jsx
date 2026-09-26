@@ -570,6 +570,7 @@ function LeadsPage({ setRoute, setSubsel }) {
   const [page, setPage] = React.useState(0);
   const [pageSize, setPageSize] = React.useState(15);
   const PAGE_SIZE = pageSize;
+  const [view, setView] = React.useState("lista");
 
   // Não reseta `leads` pra null aqui: fazer isso re-renderiza LeadsPage no
   // branch de "carregando" (que não inclui o modal na árvore) e desmonta
@@ -636,12 +637,44 @@ function LeadsPage({ setRoute, setSubsel }) {
   };
   React.useEffect(() => { reloadLeads(); }, []);
 
+  /* Kanban: arrasta o card pra outra coluna = muda o status do lead.
+     Atualização otimista (move na hora) + rollback se o update falhar;
+     mesmo padrão de log do resto do arquivo (window.VPLog.registrar). */
+  const moverLeadStatus = async (lead, novoStatus) => {
+    if (!lead || lead.status === novoStatus) return;
+    const anterior = lead.status;
+    setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, status: novoStatus } : l)));
+    const sb = comercialSb();
+    if (!sb) {
+      window.toast("Banco de dados indisponível — recarregue a página.", "error");
+      setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, status: anterior } : l)));
+      return;
+    }
+    const { error } = await sb.from("leads").update({ status: novoStatus }).eq("id", lead.id);
+    if (error) {
+      setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, status: anterior } : l)));
+      window.toast("Erro ao mover lead: " + error.message, "error");
+      return;
+    }
+    window.VPLog && window.VPLog.registrar({
+      modulo: "Comercial", acao: 'Lead movido de "' + anterior + '" para "' + novoStatus + '"',
+      alvo: lead.building, alvo_id: lead.id, detalhe: { de: anterior, para: novoStatus },
+    });
+  };
+
   const statuses = ["Todos", ...LEAD_STATUSES];
   const allLeads = leads || [];
   const owners = ["Todos", ...Array.from(new Set(allLeads.filter(l => l.owner).map(l => l.owner))).sort()];
 
   const rows = allLeads.filter(l => {
     if (status !== "Todos" && l.status !== status) return false;
+    if (owner !== "Todos" && l.owner !== owner) return false;
+    if (search && !((l.building || "") + (l.contact || "")).toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+  // Kanban ignora o filtro de status (as colunas SÃO os status) mas
+  // respeita responsável/busca, iguais à lista.
+  const kanbanRows = allLeads.filter(l => {
     if (owner !== "Todos" && l.owner !== owner) return false;
     if (search && !((l.building || "") + (l.contact || "")).toLowerCase().includes(search.toLowerCase())) return false;
     return true;
@@ -682,6 +715,10 @@ function LeadsPage({ setRoute, setSubsel }) {
           <p className="page-head__sub">{allLeads.length} leads ativos · pipeline {fmtBRL(stats.valor)} · conversão média 27%</p>
         </div>
         <div className="page-head__r">
+          <div className="seg" role="group" aria-label="Modo de visualização">
+            <button className={view === "lista" ? "is-active" : ""} onClick={() => setView("lista")} title="Lista" aria-label="Ver como lista"><Icon.list size={14}/></button>
+            <button className={view === "kanban" ? "is-active" : ""} onClick={() => setView("kanban")} title="Kanban" aria-label="Ver como quadro Kanban"><Icon.grid size={14}/></button>
+          </div>
           <Button variant="outline" icon="download" onClick={() => window.csvDownload(rows.map(l => ({ id:l.id, predio:l.building, contato:l.contact, cargo:l.role, telefone:l.phone, email:l.email, equipamento:l.equip, origem:l.origin, status:l.status, responsavel:l.owner, valor:l.value, prioridade:l.priority, proxima_acao:l.next_action || l.next, data:l.date, no_omie_desde:isoParaDataBR(l.cliente_omie && l.cliente_omie.omie_cadastrado_desde) })), 'leads.csv')}>Exportar</Button>
           {/* Removido o botão "Filtros" (era só um toast ecoando o estado dos
               filtros de status/responsável que já existem, visíveis e
@@ -698,19 +735,25 @@ function LeadsPage({ setRoute, setSubsel }) {
       </div>
 
       <div className="tbar">
-        <div className="seg">
-          {statuses.map(s => (
-            <button key={s} className={status === s ? "is-active" : ""} onClick={() => setStatus(s)}>{s}</button>
-          ))}
-        </div>
-        <div className="divider-v"/>
+        {view === "lista" && (
+          <>
+            <div className="seg">
+              {statuses.map(s => (
+                <button key={s} className={status === s ? "is-active" : ""} onClick={() => setStatus(s)}>{s}</button>
+              ))}
+            </div>
+            <div className="divider-v"/>
+          </>
+        )}
         <select className="input" style={{ width: 160, height: 28, fontSize: 12 }} value={owner} onChange={(e) => { setOwner(e.target.value); setPage(0); }}>
           {owners.map(o => <option key={o}>{o}</option>)}
         </select>
-        <select className="input" style={{ width: 130, height: 28, fontSize: 12 }} value={pageSize}
-          onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} aria-label="Leads por página">
-          {[10, 15, 25, 50].map(n => <option key={n} value={n}>{n} por página</option>)}
-        </select>
+        {view === "lista" && (
+          <select className="input" style={{ width: 130, height: 28, fontSize: 12 }} value={pageSize}
+            onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} aria-label="Leads por página">
+            {[10, 15, 25, 50].map(n => <option key={n} value={n}>{n} por página</option>)}
+          </select>
+        )}
         <div className="spacer"/>
         <div className="search">
           <Icon.search size={12} color="var(--fg3)"/>
@@ -718,6 +761,8 @@ function LeadsPage({ setRoute, setSubsel }) {
         </div>
       </div>
 
+      {view === "lista" && (
+      <>
       <div className="table-wrap">
         <table className="t">
           <thead><tr>
@@ -793,6 +838,12 @@ function LeadsPage({ setRoute, setSubsel }) {
           <Button variant="ghost" size="sm" icon="chevRight" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}/>
         </div>
       </div>
+      </>
+      )}
+
+      {view === "kanban" && (
+        <LeadsKanban rows={kanbanRows} onOpen={(l) => { setSubsel(l); setRoute("lead-detail"); }} onMove={moverLeadStatus}/>
+      )}
 
       {leadExcluir && (
         <ModalExcluirLead
@@ -820,6 +871,77 @@ function LeadsPage({ setRoute, setSubsel }) {
           }}
         />
       )}
+    </div>
+  );
+}
+
+/* ---------- LEADS KANBAN ---------- */
+/* Quadro por status (LEAD_STATUSES) - arrastar um card muda o status via
+   onMove (mesma escrita que o modal de edicao usa). Ignora paginacao (a
+   base de leads real e pequena hoje; sem isso um card "sumiria" ao trocar
+   de pagina no meio do drag). Leads com status legado fora de
+   LEAD_STATUSES (dado antigo, pre-26/09) caem numa coluna "Outros" so de
+   leitura - nao da pra arrastar PARA la (nao e um status valido) mas o
+   lead continua visivel em vez de desaparecer do quadro. */
+function LeadsKanban({ rows, onOpen, onMove }) {
+  const [dragId, setDragId] = React.useState(null);
+  const [overCol, setOverCol] = React.useState(null);
+
+  const conhecidos = new Set(LEAD_STATUSES);
+  const colunas = LEAD_STATUSES.map((s) => ({ status: s, label: s, leads: rows.filter((l) => l.status === s) }));
+  const outros = rows.filter((l) => !conhecidos.has(l.status));
+  if (outros.length) colunas.push({ status: null, label: "Outros", leads: outros });
+
+  return (
+    <div className="row" style={{ gap: 12, overflowX: "auto", paddingBottom: 8, alignItems: "flex-start" }}>
+      {colunas.map((col) => {
+        const valorTotal = col.leads.reduce((a, l) => a + (l.value || 0), 0);
+        return (
+          <div key={col.label}
+            onDragOver={(e) => { if (col.status) { e.preventDefault(); setOverCol(col.label); } }}
+            onDragLeave={() => setOverCol((c) => (c === col.label ? null : c))}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOverCol(null);
+              const id = e.dataTransfer.getData("text/lead-id");
+              const lead = rows.find((l) => l.id === id);
+              if (lead && col.status) onMove(lead, col.status);
+            }}
+            style={{
+              flex: "0 0 260px", background: overCol === col.label ? "var(--bg2)" : "var(--bg1)",
+              border: "1px solid var(--border)", borderRadius: 8, padding: 10, minHeight: 160,
+            }}>
+            <div className="row sb" style={{ marginBottom: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>{col.label}</div>
+              <Badge variant="neutral">{col.leads.length}</Badge>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--fg3)", marginBottom: 10 }}>{fmtBRL(valorTotal)}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {col.leads.length === 0 ? (
+                <div style={{ fontSize: 11, color: "var(--fg3)", textAlign: "center", padding: "16px 0" }}>Sem leads</div>
+              ) : col.leads.map((l) => (
+                <div key={l.id}
+                  draggable={!!col.status}
+                  onDragStart={(e) => { e.dataTransfer.setData("text/lead-id", l.id); setDragId(l.id); }}
+                  onDragEnd={() => setDragId(null)}
+                  onClick={() => onOpen(l)}
+                  className="card sharp"
+                  style={{ padding: 10, cursor: col.status ? "grab" : "default", opacity: dragId === l.id ? 0.4 : 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{l.building}</div>
+                  <div style={{ fontSize: 11, color: "var(--fg3)", marginBottom: 6 }}>{l.contact}</div>
+                  <div className="row sb">
+                    <Badge variant={PRIORITY_VARIANT[priorityKey(l.priority)] || "neutral"}>
+                      {PRIORITY_LABEL[priorityKey(l.priority)] || l.priority || "-"}
+                    </Badge>
+                    <span style={{ fontSize: 11, fontWeight: 600 }}>{fmtBRL(l.value)}</span>
+                  </div>
+                  {l.owner ? <div style={{ fontSize: 10, color: "var(--fg3)", marginTop: 6 }}>{l.owner}</div> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
