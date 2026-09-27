@@ -65,6 +65,15 @@ Todo `<script>`/`<link>` do `index.html` é servido com `?v=N` (ex.: `ficha-tecn
 - **Não use `pkill -f "node server.js"`** no mesmo comando Bash que faz outras coisas — o padrão casa com a própria linha de comando do shell e mata o comando inteiro (exit 144, commit não acontece). Use `for p in $(pgrep -f "^node server.js"); do kill $p; done`.
 - Isso vale o esforço: peguei vários bugs reais (não hipotéticos) só rodando o app de verdade em vez de confiar na leitura do código.
 
+## Testes de fumaça do frontend (Playwright, 27/09) — `npm run test:e2e`
+
+Workflow `.github/workflows/e2e.yml` (PR e push em `main`): abre **todas** as rotas de `VpRouter.KNOWN_ROUTES` + as 8 páginas públicas (`/assinar/`, `/cotacao/`, `/formulario-cliente/`…) num Chromium real e falha se alguma tela der erro de JS, JSX que não compila (`[jsx-loader] … falhou`) ou cair no ErrorBoundary. Não clica nem grava nada. Em caso de falha, o artefato `playwright-report` do run tem print de cada tela quebrada.
+- `e2e/helpers.js`: **Supabase simulado** (leitura = lista vazia, escrita = 403) — o teste **nunca** toca o banco de produção; CDNs passam de verdade, com cache em memória + 4 tentativas por URL (sem isso, falha de rede passageira vira "React is not defined" = falso positivo); qualquer outro host externo é bloqueado.
+- `e2e/fixtures.js`: **um contexto de navegador por worker**, reaproveitado — o jsx-loader guarda a compilação no IndexedDB do contexto; com contexto novo por teste, cada rota recompilaria os ~70 .jsx (~20s). Só a 1ª rota de cada worker paga isso (timeout de 45s nela); as seguintes levam ~4s. Suíte inteira: ~1,6 min.
+- Rota nova em `router.js` entra no teste sozinha. Página pública nova → adicionar em `PAGINAS_PUBLICAS` (`e2e/smoke.spec.js`).
+- Versão do `@playwright/test` fixada em `1.56.1` = Chromium 1194, o mesmo pré-instalado no sandbox (`/opt/pw-browsers`) — não precisa `executablePath` nem `playwright install` aqui. Se subir a versão, o sandbox deixa de achar o browser.
+- No sandbox, `playwright.config.js` usa o `HTTPS_PROXY` automaticamente e `baseURL` em `127.0.0.1` (com `localhost` o proxy interceptava a página local).
+
 ## ⚠️ Única exceção ao "sem build step": `pdf-bundle/` (Vite)
 
 Migração de geração de PDF pra `@react-pdf/renderer` (plano aprovado pelo usuário 20/08, Fase 1 = RFQ/Solicitação de Cotação). **Caminho A (CDN ESM sem bundler, ex. esm.sh/jsDelivr) foi testado e travou de verdade** — `pdf().toBlob()` sempre falhava com `Cannot read properties of null (reading 'props')`, em 2 CDNs diferentes, com e sem instância de React pareada (falha conhecida do próprio `@react-pdf/renderer` v4 fora de um bundler real — ver `diegomura/react-pdf` issues #3223/#3156). O usuário escolheu então o Caminho B.
