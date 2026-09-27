@@ -56,6 +56,7 @@ const PAGINAS_PUBLICAS = [
   { url: '/cotacao-elevador-fornecedor/e2e-token', root: '#cef-root' },
   { url: '/vistoria/e2e-token', root: '#ve-root' },
   { url: '/status-obra/e2e-token', root: '#so-root' },
+  { url: '/status-obra-interno/e2e-token', root: '#so-root' }, // modo interno (equipe): outro caminho no status-obra-app.jsx
   { url: '/diario-obra/e2e-token', root: '#do-root' },
   { url: '/termo-entrega/e2e-token', root: '#te-root' },
 ];
@@ -65,8 +66,17 @@ test.describe('Páginas públicas', () => {
     test(url.split('/')[1], async ({ page }) => {
       const erros = coletarErros(page);
       await page.goto(url);
-      await expect(page.locator(root)).not.toBeEmpty();
+      const el = page.locator(root);
+      // O HTML já vem com um "Carregando…" dentro do root — não basta o root
+      // ter conteúdo. Exige que o React tenha montado ali (createRoot marca o
+      // elemento com __reactContainer…) e que a tela tenha saído do
+      // "Carregando…" (com o Supabase simulado, token inexistente resolve na
+      // hora pro aviso de link inválido). Se um script não carregar (ex.: CDN
+      // 404), o app nunca monta e o teste falha em vez de passar em silêncio.
+      await expect.poll(() => el.evaluate((n) => Object.keys(n).some((k) => k.startsWith('__reactContainer'))),
+        { message: `app não montou em ${root}\n${erros.join('\n')}` }).toBe(true);
       await page.waitForLoadState('networkidle').catch(() => {});
+      await expect(el, `tela presa em "Carregando…"\n${erros.join('\n')}`).not.toHaveText(/^\s*Carregando…?\s*$/);
       expect(erros, erros.join('\n')).toEqual([]);
     });
   }
