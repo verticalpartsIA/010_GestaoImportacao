@@ -49,6 +49,8 @@ Corrigido, revisado (achado real de review automático incluído), mergeado em `
 
 Todo `<script>`/`<link>` do `index.html` é servido com `?v=N` (ex.: `ficha-tecnica.jsx?v=18`). **Sempre que editar um arquivo referenciado assim, incremente esse número no `index.html` no mesmo commit.** Esquecer isso quebra produção silenciosamente: quem já tinha o arquivo em cache continua rodando a versão antiga, mesmo depois do deploy — e o erro só aparece depois, tipo `TypeError: can't access property "X", window.FT.Y is undefined`, difícil de ligar à causa na hora. Já aconteceu nesta sessão (esqueci de bumpar `ficha-tecnica-engine.js`/`store.js`/`.jsx`/`.css` em 3 commits seguidos antes de perceber — PR #31 foi só pra corrigir isso). Checklist antes de considerar uma mudança em `src/*.js`/`*.jsx` ou `styles/*.css` "pronta": grep o nome do arquivo em `index.html` e confirma que o `?v=` mudou.
 
+**O CI agora barra isso (27/09)**: `scripts/check-cache-bust.js` (passo "Cache-busting" do `ci.yml`) compara com o commit base e falha se um arquivo referenciado com `?v=` mudou sem o `?v=` mudar — em **todas** as páginas `.html` da raiz, não só `index.html`. Atenção: `formulario-cliente.html` (formulário público) carrega vários arquivos compartilhados (`formulario-elevador.jsx`, `formulario-elevador-store.js`, `styles/app.css`, `toast.jsx`, `primitives.jsx`…) — mexer num deles exige bumpar o `?v=` lá também. Rodar localmente: `node scripts/check-cache-bust.js origin/main`.
+
 ## Stack / como testar localmente
 
 - React 18 UMD + Babel Standalone + Supabase JS + jsPDF + html2canvas, todos via **CDN** (unpkg, jsdelivr, cdnjs) — **sem build step**.
