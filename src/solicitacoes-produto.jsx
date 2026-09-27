@@ -10,8 +10,18 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
   const [loading, setLoading] = React.useState(false);
   const [filtroStatus, setFiltroStatus] = React.useState('');
   const [filtroTipo, setFiltroTipo] = React.useState('');
+  /* Alçada — Configurações › Administração › Engenharia › Solicitações de
+     Produto › Criar. Sem linha em alcadas_capacidade = não pode (Admin
+     sempre pode, via temCapacidade). Só trava o botão de criar; ver/abrir
+     detalhe continua livre (fluxo de análise da Engenharia não muda). */
+  const [podeCriar, setPodeCriar] = React.useState(false);
 
   const user = window.__VP_USER || { email: 'desconhecido', nome: 'Usuário' };
+
+  React.useEffect(() => {
+    if (!window.PropostaStore) return;
+    window.PropostaStore.temCapacidade('solicitacoes-produto', 'criar').then(setPodeCriar).catch(() => {});
+  }, []);
 
   React.useEffect(() => {
     if (!window.SolicitacoesProdutoStore) {
@@ -85,6 +95,7 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
         <ListaView
           solicitacoes={solicitacoes}
           loading={loading}
+          podeCriar={podeCriar}
           filtroStatus={filtroStatus}
           filtroTipo={filtroTipo}
           onFiltroStatusChange={(s) => {
@@ -129,7 +140,7 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
   );
 }
 
-function ListaView({ solicitacoes, loading, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, user }) {
+function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, user }) {
   const statusCores = {
     novo: '#3b82f6',
     em_analise: '#f59e0b',
@@ -147,7 +158,12 @@ function ListaView({ solicitacoes, loading, filtroStatus, filtroTipo, onFiltroSt
   return (
     <div style={styles.viewContainer}>
       <div style={styles.toolbar}>
-        <button onClick={onNovaClick} style={styles.btnPrimary}>
+        <button
+          onClick={onNovaClick}
+          disabled={!podeCriar}
+          style={{ ...styles.btnPrimary, ...(podeCriar ? {} : { opacity: 0.5, cursor: 'not-allowed' }) }}
+          title={podeCriar ? undefined : 'Sem permissão para criar — peça liberação em Configurações → Administração'}
+        >
           + NOVA SOLICITAÇÃO
         </button>
       </div>

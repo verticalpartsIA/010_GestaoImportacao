@@ -518,11 +518,20 @@ function FtGenerator({ initial, onSaved, onCancel }) {
   const [saving, setSaving] = _ftUS(false);
   const previewWrap = _ftUR(null);
   const [scale, setScale] = _ftUS(0.42);
+  /* Alçada — Configurações › Administração › Engenharia › Ficha Técnica ›
+     Publica (ou republica) a ficha como anexo no Omie. Admin sempre pode
+     (temCapacidade trata nivel==='Administrador' como bypass). */
+  const [podePublicarOmie, setPodePublicarOmie] = _ftUS(false);
 
   _ftUE(() => {
     const el = previewWrap.current; if (!el) return;
     const ro = new ResizeObserver(() => setScale(Math.max(0.2, Math.min(1, (el.clientWidth - 28) / 1040))));
     ro.observe(el); return () => ro.disconnect();
+  }, []);
+
+  _ftUE(() => {
+    if (!window.PropostaStore) return;
+    window.PropostaStore.temCapacidade('ficha-tecnica', 'publicar_omie').then(setPodePublicarOmie).catch(() => {});
   }, []);
 
   const setIdent = (k, v) => setState((s) => ({ ...s, identificacao: { ...s.identificacao, [k]: v } }));
@@ -690,9 +699,10 @@ function FtGenerator({ initial, onSaved, onCancel }) {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
           Gerar PDF
         </button>
-        <button className={'ft-btn omie' + (state.identificacao.codigoProduto ? '' : ' off')}
-          disabled={!state.identificacao.codigoProduto}
+        <button className={'ft-btn omie' + ((state.identificacao.codigoProduto && podePublicarOmie) ? '' : ' off')}
+          disabled={!state.identificacao.codigoProduto || !podePublicarOmie}
           onClick={async () => {
+            if (!podePublicarOmie) { window.toast?.('Sem permissão para publicar no Omie — peça liberação em Configurações → Administração', 'error'); return; }
             if (!window.FichaOmiePublish) { window.toast?.('Sistema não carregado — recarregue a página', 'error'); return; }
             const fichaId = state.__id || (initial && initial.__id) || null;
             if (!fichaId) { window.toast?.('Salve a ficha primeiro — depois publique no Omie', 'error'); return; }
@@ -708,6 +718,7 @@ function FtGenerator({ initial, onSaved, onCancel }) {
             } catch (e) { console.error('[Omie publish]', e); }
           }}
           title={(() => {
+            if (!podePublicarOmie) return '🔒 Sem permissão para publicar no Omie — peça liberação em Configurações → Administração';
             if (!state.identificacao.nomeProduto) return '⚠️ Preencha o Nome do Produto';
             if (!state.identificacao.codigoProduto) return '⚠️ Preencha o Código do Produto (Omie)';
             if (!podeGerar) return '⚠️ Faltam campos obrigatórios marcados com * (ou descrição técnica vazia)';
