@@ -94,6 +94,15 @@ function CadastroClientesPage() {
   const [editing, setEditing] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  /* 27/09 — achado real: "Editar" parecia não funcionar. O formulário abre
+     no topo da página, mas a lista tem 1200+ linhas — clicando numa linha
+     lá embaixo, nada visível mudava. Além disso, com o formulário já
+     aberto, clicar "Editar" em outro registro não trocava os dados
+     (useState só lê initialData na montagem) — por isso o key={id}. */
+  const formRef = React.useRef(null);
+  React.useEffect(() => {
+    if (showForm && formRef.current) formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [showForm, editing]);
   const [historicoDe, setHistoricoDe] = React.useState(null);
 
   const reload = React.useCallback(() => { window.CadastrosClientesStore.listarTodos().then(setItems).catch(() => setItems([])); }, []);
@@ -138,8 +147,8 @@ function CadastroClientesPage() {
       </div>
 
       {showForm && (
-        <div style={{ marginBottom: 20 }}>
-          <ClienteForm initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
+        <div ref={formRef} style={{ marginBottom: 20, scrollMarginTop: 16 }}>
+          <ClienteForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
         </div>
       )}
 
@@ -400,6 +409,11 @@ function CadastroFornecedoresPage() {
   const [search, setSearch] = React.useState('');
   const [filterCategoria, setFilterCategoria] = React.useState('Todas');
   const [saving, setSaving] = React.useState(false);
+  /* Mesmo ajuste de CadastroClientesPage (rolar até o form + key={id}). */
+  const formRef = React.useRef(null);
+  React.useEffect(() => {
+    if (showForm && formRef.current) formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
+  }, [showForm, editing]);
 
   const [medias, setMedias] = React.useState({});
 
@@ -450,8 +464,8 @@ function CadastroFornecedoresPage() {
       </div>
 
       {showForm && (
-        <div style={{ marginBottom: 20 }}>
-          <FornecedorForm initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
+        <div ref={formRef} style={{ marginBottom: 20, scrollMarginTop: 16 }}>
+          <FornecedorForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
         </div>
       )}
 
