@@ -64,6 +64,9 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
         .insert({ nome, tipo: tipo || 'vistoria', criado_por: window.__VP_USER?.email || 'system' })
         .select().single();
       if (error) throw error;
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Vistorias', acao: 'Criou questionário de vistoria', alvo: nome, alvo_id: data.id,
+      });
       return data;
     },
 
@@ -76,6 +79,9 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     async excluirQuestionario(id) {
       const { error } = await sb().from('vistorias_questionarios').delete().eq('id', id);
       if (error) throw error;
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Vistorias', acao: 'Excluiu questionário de vistoria', alvo_id: id,
+      });
     },
 
     /* ---- Estrutura completa (categorias + perguntas aninhadas) ---- */
@@ -118,6 +124,9 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     async excluirCategoria(id) {
       const { error } = await sb().from('vistorias_categorias').delete().eq('id', id);
       if (error) throw error;
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Vistorias', acao: 'Excluiu categoria de vistoria', alvo_id: id,
+      });
     },
 
     /* ---- Perguntas ---- */
@@ -139,6 +148,9 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     async excluirPergunta(id) {
       const { error } = await sb().from('vistorias_perguntas').delete().eq('id', id);
       if (error) throw error;
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Vistorias', acao: 'Excluiu pergunta de vistoria', alvo_id: id,
+      });
     },
 
     /* Lista de pavimentos que uma categoria repete, dado o nº de paradas da
@@ -192,6 +204,9 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
         enviado_em: new Date().toISOString(),
       }).eq('id', atividadeId).select().single();
       if (error) throw error;
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Vistorias', acao: 'Trocou vistoriador e reenviou vistoria', alvo_id: atividadeId, detalhe: { novoTecnicoId },
+      });
       return data;
     },
 
@@ -200,6 +215,9 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
       if (e1) throw e1;
       const { error: e2 } = await sb().from('vistorias_atividades').delete().eq('id', atividadeId);
       if (e2) throw e2;
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Vistorias', acao: 'Excluiu atividade de vistoria', alvo_id: atividadeId,
+      });
     },
 
     /* Casa os campos "esperado" digitados pelo operador no Despacho com as

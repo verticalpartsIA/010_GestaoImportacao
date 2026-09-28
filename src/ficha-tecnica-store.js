@@ -149,6 +149,9 @@
 
     const { error } = await c.from('fichas_tecnicas').insert(rec);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Ficha Técnica', acao: 'Criou ficha técnica de produto', alvo: rec.nome_produto, alvo_id: rec.id,
+    });
     return rec;
   }
 
@@ -191,6 +194,9 @@
       await c.from('catalogo_produtos').delete().eq('id', cur.produto_id);
     }
     await c.from('fichas_tecnicas').delete().eq('id', id);
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Ficha Técnica', acao: 'Excluiu ficha técnica de produto', alvo: cur && cur.nome_produto, alvo_id: id,
+    });
   }
 
   /* ============================================================
