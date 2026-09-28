@@ -154,10 +154,19 @@ Deno.serve(async (req: Request) => {
       }
     }
 
+    // 28/09 — achado real: o insert abaixo nunca checava `error` (só existia
+    // o try/catch, que só pega exceção de rede/conexão) — uma falha de
+    // verdade do PostgREST (RLS, coluna, constraint) resolvia normalmente
+    // sem lançar exceção nenhuma, então o e-mail saía via SMTP mas nunca
+    // aparecia em Enviados/Linha do Tempo e ninguém era avisado. Continua
+    // "nunca derruba o envio por falha de persistência" (o e-mail já foi
+    // enviado de verdade quando chega aqui), mas agora reporta o problema
+    // pro chamador via avisoPersistencia em vez de engolir silenciosamente.
+    let avisoPersistencia: string | null = null;
     if (numeroCotacao != null) {
       try {
         const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
-        await supabase.from("emails_projeto").insert({
+        const { error: insertErr } = await supabase.from("emails_projeto").insert({
           numero_cotacao: numeroCotacao,
           referencia_tipo: referenciaTipo,
           referencia_id: referenciaId,
@@ -172,13 +181,17 @@ Deno.serve(async (req: Request) => {
           data_mensagem: new Date().toISOString(),
           anexos: anexosSalvos,
         });
+        if (insertErr) {
+          console.warn("[send-email] falha ao gravar em emails_projeto", insertErr);
+          avisoPersistencia = "E-mail enviado normalmente, mas não foi possível registrá-lo em Enviados/Linha do Tempo desta cotação — avise o suporte se isso persistir.";
+        }
       } catch (e) {
-        // Nunca derruba o envio (já aconteceu) por falha de persistência.
-        console.warn("[send-email] falha ao gravar em emails_projeto", e);
+        console.warn("[send-email] falha ao gravar em emails_projeto (exceção)", e);
+        avisoPersistencia = "E-mail enviado normalmente, mas não foi possível registrá-lo em Enviados/Linha do Tempo desta cotação — avise o suporte se isso persistir.";
       }
     }
 
-    return json({ ok: true, destinatarios, messageId });
+    return json({ ok: true, destinatarios, messageId, avisoPersistencia });
   } catch (e) {
     try { await client.close(); } catch (_) { /* já pode ter fechado sozinho no erro */ }
     console.warn("[send-email] falha ao enviar", e);

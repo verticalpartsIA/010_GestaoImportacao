@@ -1424,6 +1424,24 @@ function EmailInbox({ setRoute, setSubsel }) {
   const listaAtual = folder === 'sent' ? enviadosNormalizados : emailsVisiveis;
   const active = listaAtual.find(e => e.id === activeId);
 
+  /* 28/09 — pedido do usuário: campo de busca no Inbox (não existia nenhum,
+     só filtro por pasta e por Nº Cotação pra vínculo manual). Filtro em
+     memória sobre a lista já carregada (assunto/remetente/preview/nº
+     cotação) — não é busca no histórico completo de emails_projeto, só na
+     janela recente que read-inbox/Enviados já trazem. Limpa ao trocar de
+     pasta pra não confundir "sem resultado" com "pasta vazia". */
+  const [busca, setBusca] = React.useState('');
+  React.useEffect(() => { setBusca(''); }, [folder]);
+  const buscaNorm = busca.trim().toLowerCase();
+  const listaFiltrada = React.useMemo(() => {
+    if (!buscaNorm) return listaAtual;
+    return listaAtual.filter((m) => {
+      const alvo = [m.subject, m.fromName, m.from, m.preview, m.numeroCotacao != null ? String(m.numeroCotacao) : '']
+        .join(' ').toLowerCase();
+      return alvo.includes(buscaNorm);
+    });
+  }, [listaAtual, buscaNorm]);
+
   const [respondendo, setRespondendo] = React.useState(false);
   const [modoCompose, setModoCompose] = React.useState('responder'); // 'responder' | 'responder-todos' | 'encaminhar'
   const [destinatarioEncaminhar, setDestinatarioEncaminhar] = React.useState('');
@@ -1622,7 +1640,7 @@ function EmailInbox({ setRoute, setSubsel }) {
       }
       const erroValidacao = validarEmails(to);
       if (erroValidacao) { window.toast?.(erroValidacao, 'warning'); setEnviandoResposta(false); return; }
-      const { error } = await sb.functions.invoke('send-email', {
+      const { data, error } = await sb.functions.invoke('send-email', {
         body: {
           to, subject, text,
           numeroCotacao: active.numeroCotacao ?? undefined,
@@ -1631,6 +1649,7 @@ function EmailInbox({ setRoute, setSubsel }) {
         },
       });
       if (error) { window.toast?.('Erro ao enviar: ' + await extrairErroFuncao(error), 'error'); return; }
+      if (data && data.avisoPersistencia) window.toast?.(data.avisoPersistencia, 'warning');
       window.toast?.(modoCompose === 'encaminhar' ? 'E-mail encaminhado.' : 'Resposta enviada.', 'success');
       setRespondendo(false); setRespostaTexto(''); setAnexosResposta([]); setDestinatarioEncaminhar('');
       carregar();
@@ -1744,8 +1763,14 @@ function EmailInbox({ setRoute, setSubsel }) {
         <div className="inbox__list">
           <div className="inbox__list-head">
             <span>{folders.find((f) => f.id === folder)?.label || folder}</span>
-            <span className="mono">{listaAtual.length}</span>
+            <span className="mono">{listaFiltrada.length}</span>
           </div>
+          {(folder === "inbox" || folder === "sent") && (
+            <div style={{ padding: '8px 12px' }}>
+              <input className="input" style={{ width: '100%' }} placeholder="Buscar por assunto, remetente ou nº cotação…"
+                value={busca} onChange={(e) => setBusca(e.target.value)}/>
+            </div>
+          )}
           {folder !== "inbox" && folder !== "sent" && (
             <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
               Esta pasta ainda não está implementada — só Caixa de entrada e Enviados leem de verdade.
@@ -1763,7 +1788,12 @@ function EmailInbox({ setRoute, setSubsel }) {
               Aparece aqui assim que você mandar um pelo Responder, Novo e-mail ou Cotação a Fornecedor.
             </div>
           )}
-          {(folder === "inbox" || folder === "sent") && listaAtual.map((m) => (
+          {(folder === "inbox" || folder === "sent") && buscaNorm && listaFiltrada.length === 0 && listaAtual.length > 0 && (
+            <div style={{ textAlign:'center', padding:'32px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
+              Nenhum resultado para "{busca}".
+            </div>
+          )}
+          {(folder === "inbox" || folder === "sent") && listaFiltrada.map((m) => (
             <div key={m.id} className={"inbox__item " + (m.unread ? "unread " : "") + (activeId === m.id ? "is-active" : "")} onClick={() => setActiveId(m.id)}>
               <div className="from">
                 <span>{m.fromName || m.from}</span>
@@ -1943,7 +1973,7 @@ function EmailNovoModal({ onClose, onEnviado }) {
     setEnviando(true);
     try {
       const sb = window.__VP_SB.sb;
-      const { error } = await sb.functions.invoke('send-email', {
+      const { data, error } = await sb.functions.invoke('send-email', {
         body: {
           to: para.trim(), subject: assunto.trim(), text: corpo,
           numeroCotacao: numero || undefined,
@@ -1952,6 +1982,7 @@ function EmailNovoModal({ onClose, onEnviado }) {
         },
       });
       if (error) { window.toast?.('Erro ao enviar: ' + await extrairErroFuncao(error), 'error'); return; }
+      if (data && data.avisoPersistencia) window.toast?.(data.avisoPersistencia, 'warning');
       window.toast?.('E-mail enviado.', 'success');
       onEnviado?.();
       onClose();

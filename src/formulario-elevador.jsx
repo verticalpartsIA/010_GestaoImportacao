@@ -891,7 +891,44 @@ function FEComunicacaoFornecedor({ numeroCotacao }) {
   );
 }
 
-function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedirRevisao, enviando, fornecedoresCadastro }) {
+/* 28/09 — pedido do usuário: "dá pra mostrar no Inbox que o formulário foi
+   respondido?" — o FECefStatusChip existente só cobre resposta pelo
+   FORMULÁRIO PÚBLICO (link/token) do fornecedor, nunca resposta por E-MAIL.
+   Este badge cobre o caminho de e-mail, cruzando com emails_projeto.
+   Prioriza referencia_id (aponta pra ESTA linha de cotacoes_elevador_
+   fornecedor — granularidade por fornecedor, só existe pra e-mails
+   recebidos a partir de 28/09, quando read-inbox passou a herdar esse
+   campo do e-mail de saída original via Message-ID). Cai pro fallback por
+   numero_cotacao (mais antigo/mais abrangente) só quando matchSeguro=true
+   (só 1 fornecedor nesta cotação) — com 2+ fornecedores, um match só por
+   numero_cotacao não sabe dizer QUEM respondeu (achado real da investigação:
+   read-inbox descartava essa distinção antes desta mudança), então nesse
+   caso prefere não mostrar nada a mostrar errado. */
+function FEEmailRespondidoBadge({ cotId, numeroCotacao, matchSeguro }) {
+  const [temResposta, setTemResposta] = React.useState(false);
+  React.useEffect(() => {
+    let cancelado = false;
+    setTemResposta(false);
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb || numeroCotacao == null || !cotId) return;
+    let q = sb.from('emails_projeto').select('id', { count: 'exact', head: true })
+      .eq('direcao', 'entrada').is('excluido_em', null);
+    q = matchSeguro
+      ? q.or(`referencia_id.eq.${cotId},numero_cotacao.eq.${numeroCotacao}`)
+      : q.eq('referencia_id', String(cotId));
+    q.then(({ count }) => { if (!cancelado) setTemResposta((count || 0) > 0); })
+      .catch(() => { if (!cancelado) setTemResposta(false); });
+    return () => { cancelado = true; };
+  }, [cotId, numeroCotacao, matchSeguro]);
+  if (!temResposta) return null;
+  return (
+    <Badge variant="info" style={{ marginLeft: 6 }} title="Existe e-mail recebido vinculado a esta cotação/fornecedor">
+      <Icon.mail size={10}/> Respondeu por e-mail
+    </Badge>
+  );
+}
+
+function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedirRevisao, enviando, fornecedoresCadastro, matchSeguro }) {
   const store = window.CotacaoElevadorFornecedorStore;
   /* 11/09 — contato real vem do cadastro (Cadastros → Fornecedores),
      casando nome_fantasia/razao_social com o nome livre do fornecedor
@@ -935,7 +972,12 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
           <b>{grupo.fornecedor}</b> <span className="muted small">· {FE_TIPO_FORMULARIO_LABEL[grupo.tipoFormulario]}</span>
           <div className="small muted">Unidades: {grupo.unidades.map((u) => u.identificador || '—').join(', ')}</div>
         </div>
-        {cot && <FECefStatusChip status={cot.status}/>}
+        {cot && (
+          <div className="row gap-1" style={{ alignItems: 'center' }}>
+            <FECefStatusChip status={cot.status}/>
+            <FEEmailRespondidoBadge cotId={cot.id} numeroCotacao={numeroCotacao} matchSeguro={matchSeguro}/>
+          </div>
+        )}
       </div>
 
       {!suportado && <p className="small muted" style={{ marginTop: 8 }}>Formulário deste fornecedor ainda não configurado — em breve.</p>}
@@ -1046,16 +1088,28 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
         const sb = window.__VP_SB && window.__VP_SB.sb;
         let enviouDireto = false;
         if (sb) {
-          const { error: emailError } = await sb.functions.invoke('send-email', {
+          const { data: emailData, error: emailError } = await sb.functions.invoke('send-email', {
             body: {
               to: recipient.email, subject: `Cotação técnica ${cot.numero_documento} — VerticalParts`, text: msg,
               numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
             },
           });
-          if (!emailError) enviouDireto = true;
-          else console.warn('[FormularioElevador] send-email falhou, caindo pro mailto:', emailError);
+          if (!emailError) {
+            enviouDireto = true;
+            if (emailData && emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
+          } else {
+            console.warn('[FormularioElevador] send-email falhou, caindo pro mailto:', emailError);
+          }
         }
-        if (!enviouDireto) window.open(window.PFStore.mailtoHref(recipient.email, `Cotação técnica ${cot.numero_documento} — VerticalParts`, msg), '_blank');
+        /* 28/09 — achado real: essa queda pro mailto: era silenciosa (só
+           console.warn) — o vendedor só percebia pela janela do cliente de
+           e-mail local abrindo, sem entender por quê. Esse envio via mailto
+           também nunca entra em emails_projeto (sem Message-ID nosso), então
+           avisa também que não vai aparecer em Enviados/Linha do Tempo. */
+        if (!enviouDireto) {
+          window.toast?.('Não foi possível enviar direto (envio automático falhou) — abrindo seu e-mail padrão para envio manual. Esse envio não ficará registrado em Enviados/Linha do Tempo.', 'warning');
+          window.open(window.PFStore.mailtoHref(recipient.email, `Cotação técnica ${cot.numero_documento} — VerticalParts`, msg), '_blank');
+        }
       }
       if (canal === 'link') { try { await navigator.clipboard.writeText(url); } catch (e) {} window.toast?.('Link copiado.', 'success'); }
       await store.marcarEnviado(cot.id, canal, recipient);
@@ -1073,7 +1127,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
       footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
       {grupos.length === 0 && <p className="small muted">Salve o formulário e defina o Fornecedor em pelo menos uma Unidade para enviar a cotação.</p>}
       {grupos.map((g) => (
-        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}|${g.categoriaProduto}`} grupo={g} cot={cotacaoDoGrupo(g)} numeroCotacao={numeroCotacao} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando} fornecedoresCadastro={fornecedoresCadastro}/>
+        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}|${g.categoriaProduto}`} grupo={g} cot={cotacaoDoGrupo(g)} numeroCotacao={numeroCotacao} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando} fornecedoresCadastro={fornecedoresCadastro} matchSeguro={grupos.length === 1}/>
       ))}
     </Modal>
   );

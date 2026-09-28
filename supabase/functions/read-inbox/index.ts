@@ -311,10 +311,21 @@ Deno.serve(async (req: Request) => {
 
         let numeroCotacao: number | null = null;
         let vinculo: string | null = null;
+        // 28/09 — herda referencia_id/referencia_tipo do e-mail de saída original
+        // (ex.: o id da linha em cotacoes_elevador_fornecedor) quando o vínculo é
+        // 'certo' (Message-ID). Sem isso, uma resposta não tinha como ser
+        // atribuída a UM fornecedor específico quando há 2+ cotando a mesma
+        // numero_cotacao — só dava pra saber a cotação, nunca quem respondeu.
+        let referenciaIdHerdada: string | null = null;
+        let referenciaTipoHerdada: string | null = null;
         if (referenciaId) {
           const { data: pai } = await supabase.from("emails_projeto")
-            .select("numero_cotacao").eq("message_id", referenciaId).eq("direcao", "saida").maybeSingle();
-          if (pai && pai.numero_cotacao != null) { numeroCotacao = pai.numero_cotacao; vinculo = "certo"; }
+            .select("numero_cotacao, referencia_id, referencia_tipo").eq("message_id", referenciaId).eq("direcao", "saida").maybeSingle();
+          if (pai && pai.numero_cotacao != null) {
+            numeroCotacao = pai.numero_cotacao; vinculo = "certo";
+            referenciaIdHerdada = pai.referencia_id ?? null;
+            referenciaTipoHerdada = pai.referencia_tipo ?? null;
+          }
         }
         if (numeroCotacao == null) {
           const candidato = extrairNumeroCotacaoDoAssunto(subject);
@@ -336,6 +347,8 @@ Deno.serve(async (req: Request) => {
 
         const row = {
           numero_cotacao: numeroCotacao,
+          referencia_id: referenciaIdHerdada,
+          referencia_tipo: referenciaTipoHerdada,
           direcao: "entrada",
           de_email: fromParsed.email,
           de_nome: fromParsed.name,
