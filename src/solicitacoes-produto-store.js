@@ -74,11 +74,16 @@ window.SolicitacoesProdutoStore = (() => {
         categoria_sku: dados.categoria_sku,
         solicitante_nome: dados.solicitante_nome,
         solicitante_email: dados.solicitante_email,
-        cliente_nome: dados.cliente_nome,
-        cliente_industria: dados.cliente_industria,
+        // Cliente só entra se a solicitação de fato nasceu de um pedido de
+        // cliente (form.foiPedidoCliente) — nunca obrigatório.
+        cliente_nome: dados.foiPedidoCliente ? (dados.cliente_nome || null) : null,
+        cliente_industria: dados.foiPedidoCliente ? (dados.cliente_industria || null) : null,
+        cliente_contato: dados.foiPedidoCliente ? (dados.cliente_contato || null) : null,
         descricao_inicial: dados.descricao_inicial,
         observacoes_comercial: dados.observacoes_comercial,
-        fotos_url: dados.fotos_url || [],
+        fornecedor_contato: dados.fornecedor_contato || null,
+        link_produto: dados.link_produto || null,
+        anexos: dados.anexos || [],
       };
 
       const { data, error } = await window.__VP_SB.sb
@@ -189,6 +194,31 @@ window.SolicitacoesProdutoStore = (() => {
     });
   }
 
+  /* ---------- Anexos (imagem/PDF do produto) ----------
+     Mesmo bucket público "engenharia" já usado por Projeto de Elevadores/
+     P.I./Termo de Entrega — sem bucket novo. A solicitação ainda não tem
+     id no momento do upload (formulário "Nova"), então usa uma pasta
+     temporária (tmp-<random>), igual ao padrão já usado em fichas-imagens. */
+  function _pastaTemp() { return 'tmp-' + Math.random().toString(36).slice(2, 10); }
+
+  async function uploadAnexo(file, solicitacaoIdOuPastaTemp) {
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c) throw new Error('Supabase não carregado');
+    const pasta = solicitacaoIdOuPastaTemp || _pastaTemp();
+    const path = `solicitacoes/${pasta}/${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
+    const { error } = await c.storage.from('engenharia').upload(path, file, { upsert: true });
+    if (error) throw new Error(error.message);
+    const { data } = c.storage.from('engenharia').getPublicUrl(path);
+    const tipo = file.type && file.type.startsWith('image/') ? 'imagem' : 'pdf';
+    return { nome: file.name, url: data.publicUrl, tipo, path };
+  }
+
+  async function removerAnexo(path) {
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c || !path) return;
+    await c.storage.from('engenharia').remove([path]);
+  }
+
   return {
     TIPOS,
     STATUS_LIST,
@@ -197,6 +227,9 @@ window.SolicitacoesProdutoStore = (() => {
     listar,
     obter,
     atualizar,
+    uploadAnexo,
+    removerAnexo,
+    _pastaTemp,
     iniciarAnalise,
     marcarPronto,
     converterEmFicha,
