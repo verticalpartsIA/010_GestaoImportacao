@@ -94,6 +94,11 @@ window.SolicitacoesProdutoStore = (() => {
 
       if (error) throw error;
       console.log('[SolicitacoesProdutoStore] Solicitação criada:', data);
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Solicitações de Produto', acao: 'Criou solicitação de produto',
+        alvo: data.numero_solicitacao, alvo_id: data.id,
+        detalhe: { tipo_equipamento: data.tipo_equipamento, categoria_sku: data.categoria_sku, cliente_nome: data.cliente_nome || null },
+      });
       _notificarEngenharia(data);
       return data;
     } catch (e) {
@@ -169,11 +174,16 @@ window.SolicitacoesProdutoStore = (() => {
     const agora = new Date().toISOString();
     const user = window.__VP_USER || {};
 
-    return atualizar(id, {
+    const atualizada = await atualizar(id, {
       status: 'em_analise',
       engenheiro_responsavel: user.email,
       data_inicio_analise: agora,
     });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Solicitações de Produto', acao: 'Iniciou análise da solicitação',
+      alvo: atualizada.numero_solicitacao, alvo_id: id,
+    });
+    return atualizada;
   }
 
   async function marcarPronto(id, especificacoes, desenho_url, complementos_descobertos) {
@@ -184,15 +194,24 @@ window.SolicitacoesProdutoStore = (() => {
       complementos_descobertos: complementos_descobertos,
       data_conclusao: new Date().toISOString(),
     });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Solicitações de Produto', acao: 'Marcou solicitação como pronta',
+      alvo: atualizada.numero_solicitacao, alvo_id: id,
+    });
     _notificarImportacao(atualizada);
     return atualizada;
   }
 
   async function converterEmFicha(id, ficha_tecnica_id) {
-    return atualizar(id, {
+    const atualizada = await atualizar(id, {
       status: 'convertido_em_ficha',
       ficha_tecnica_id: ficha_tecnica_id,
     });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Solicitações de Produto', acao: 'Converteu solicitação em Ficha Técnica',
+      alvo: atualizada.numero_solicitacao, alvo_id: id, detalhe: { ficha_tecnica_id },
+    });
+    return atualizada;
   }
 
   /* Soft-delete (excluido_em/excluido_por) — nada aponta de volta pra
@@ -215,6 +234,9 @@ window.SolicitacoesProdutoStore = (() => {
       if (error) throw error;
       if (!data || !data.length) throw new Error('nenhum registro foi alterado');
       console.log('[SolicitacoesProdutoStore] Solicitação excluída:', id);
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Solicitações de Produto', acao: 'Excluiu solicitação de produto', alvo_id: id,
+      });
       return true;
     } catch (e) {
       console.error('[SolicitacoesProdutoStore] Erro ao excluir:', e);

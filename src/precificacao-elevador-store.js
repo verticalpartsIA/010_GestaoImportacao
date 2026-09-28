@@ -333,6 +333,11 @@
     }
     const moLookup = await buscarMaoDeObraAutomatica(modelos);
     await salvar(id, { modelos, mo_lookup: moLookup });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Acrescentou equipamento na Precificação',
+      alvo: pz.numero_documento || id, alvo_id: id,
+      detalhe: { modo: patch.modo, quantidadeAdicional, unidadeIdReferencia: patch.unidadeId || null, modelo: patch.modelo || null },
+    });
     return moLookup;
   }
 
@@ -351,12 +356,18 @@
     let modelos = [...(pz.modelos || [])];
     const idx = modelos.findIndex((m) => m.unidadeId === unidadeId);
     if (idx === -1) throw new Error('Equipamento não encontrado nesta precificação.');
-    const quantidade = Math.max(1, Number(modelos[idx].quantidade) || 1);
-    const atual = Math.min(quantidade, Math.max(0, Number(modelos[idx].moExcluidos) || 0));
+    const itemAlvo = modelos[idx];
+    const quantidade = Math.max(1, Number(itemAlvo.quantidade) || 1);
+    const atual = Math.min(quantidade, Math.max(0, Number(itemAlvo.moExcluidos) || 0));
     if (atual >= quantidade) throw new Error('Todos os equipamentos deste grupo já estão com a Mão de obra excluída.');
     modelos[idx] = { ...modelos[idx], moExcluidos: atual + 1 };
     const moLookup = await buscarMaoDeObraAutomatica(modelos);
     await salvar(id, { modelos, mo_lookup: moLookup });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Removeu a Mão de obra de um equipamento na Precificação',
+      alvo: pz.numero_documento || id, alvo_id: id,
+      detalhe: { unidadeId, identificador: itemAlvo.identificador || null, modelo: itemAlvo.modelo || null, moExcluidosAntes: atual, moExcluidosDepois: atual + 1 },
+    });
     return moLookup;
   }
 
@@ -367,11 +378,17 @@
     let modelos = [...(pz.modelos || [])];
     const idx = modelos.findIndex((m) => m.unidadeId === unidadeId);
     if (idx === -1) throw new Error('Equipamento não encontrado nesta precificação.');
-    const atual = Math.max(0, Number(modelos[idx].moExcluidos) || 0);
+    const itemAlvo = modelos[idx];
+    const atual = Math.max(0, Number(itemAlvo.moExcluidos) || 0);
     if (atual <= 0) throw new Error('Este equipamento já está incluído no cálculo de Mão de obra.');
     modelos[idx] = { ...modelos[idx], moExcluidos: atual - 1 };
     const moLookup = await buscarMaoDeObraAutomatica(modelos);
     await salvar(id, { modelos, mo_lookup: moLookup });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Restaurou a Mão de obra de um equipamento na Precificação',
+      alvo: pz.numero_documento || id, alvo_id: id,
+      detalhe: { unidadeId, identificador: itemAlvo.identificador || null, modelo: itemAlvo.modelo || null, moExcluidosAntes: atual, moExcluidosDepois: atual - 1 },
+    });
     return moLookup;
   }
 
@@ -723,6 +740,11 @@
       status: 'finalizado', aprovado_em: now, aprovado_por: (window.__VP_USER || {}).email || null, updated_at: now,
     }).eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Aprovou a precificação',
+      alvo: pz.numero_documento || id, alvo_id: id,
+      detalhe: { margemFinal, forcarAbaixoMinima: !!forcarAbaixoMinima },
+    });
 
     /* Proposta nasce sozinha ao aprovar (pedido do usuário, 27/08) — puxa
        Lead/Cliente + o preço já calculado na Precificação (resultado.

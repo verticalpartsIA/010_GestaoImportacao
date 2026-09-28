@@ -110,6 +110,11 @@
     };
     const { data, error } = await c.from('decisoes_gerenciais').insert(row).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Central de Decisões', acao: `Abriu decisão pendente — ${TIPO_LABEL[tipo] || tipo}`,
+      alvo: numeroCotacao != null ? `Cotação Nº ${numeroCotacao}` : (data.id), alvo_id: data.id,
+      detalhe: { tipo, papel_requerido: papelRequerido, aprovadores },
+    });
     return data;
   }
 
@@ -218,6 +223,11 @@
       status: 'aprovada', decidido_por: meuEmail(), decidido_em: now, motivo: motivo || null, atualizado_em: now,
     }).eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Central de Decisões', acao: `Aprovou decisão — ${TIPO_LABEL[decisao.tipo] || decisao.tipo}`,
+      alvo: decisao.numero_cotacao != null ? `Cotação Nº ${decisao.numero_cotacao}` : id, alvo_id: id,
+      detalhe: { motivo: motivo || null },
+    });
     await desbloquearDependentes(c, id);
     await notificarResultado(c, { ...decisao, motivo: motivo || null }, 'aprovada');
   }
@@ -234,6 +244,11 @@
       status: 'reprovada', decidido_por: meuEmail(), decidido_em: now, motivo: motivo.trim(), atualizado_em: now,
     }).eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Central de Decisões', acao: `Reprovou decisão — ${TIPO_LABEL[decisao.tipo] || decisao.tipo}`,
+      alvo: decisao.numero_cotacao != null ? `Cotação Nº ${decisao.numero_cotacao}` : id, alvo_id: id,
+      detalhe: { motivo: motivo.trim() },
+    });
     await notificarResultado(c, { ...decisao, motivo: motivo.trim() }, 'reprovada');
   }
 
