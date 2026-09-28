@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 
 global.window = global.window || {};
 require('./precificacao-elevador-store.js');
-const { parseContainerNo, classificarMaoDeObraUnidade } = window.PrecificacaoElevadorStore;
+const { parseContainerNo, classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica } = window.PrecificacaoElevadorStore;
 
 test('parseContainerNo — "1x40HC + 1x20GP" (resposta real da Glarie, VPCT-0950)', () => {
   const out = parseContainerNo('1x40HC + 1x20GP');
@@ -67,4 +67,72 @@ test('classificarMaoDeObraUnidade — achou na tabela vira confirmado, com regra
   assert.equal(out.dataBase, '2026-08-28T10:00:00Z');
   assert.match(out.regraUsada, /2:1/);
   assert.match(out.regraUsada, /3 paradas/);
+});
+
+/* ============================================================
+   buscarMaoDeObraAutomatica — expansão por quantidade (28/09)
+   Unidade com quantidade > 1 = N elevadores idênticos, cada um com sua
+   própria instalação — vira N linhas na tabela "Mão de obra — busca
+   automática" (achado real: cotação Nº 955, quantidade=2, mostrava só 1).
+   ============================================================ */
+
+function stubCadastroCustos(valorRs) {
+  return {
+    async buscarCustoElevador() {
+      return { capacidade_min_kg: 0, capacidade_max_kg: 2000, dias_montagem: 5, qtd_montadores: 2, valor_reajustado_rs: valorRs, atualizado_em: '2026-01-01' };
+    },
+  };
+}
+
+test('buscarMaoDeObraAutomatica — quantidade=2 numa única Unidade (cotação Nº 955 real) vira 2 linhas, sufixo contínuo -1/-2', async () => {
+  const antigo = window.CadastroCustosStore;
+  window.CadastroCustosStore = stubCadastroCustos(12345);
+  try {
+    const out = await buscarMaoDeObraAutomatica([
+      { unidadeId: 'u1', identificador: 'VPEL-EL0955-1', tracao: '2:1', capacidadeKg: 1050, paradas: 3, quantidade: 2 },
+    ]);
+    assert.equal(out.length, 2);
+    assert.deepEqual(out.map((o) => o.identificador), ['VPEL-EL0955-1', 'VPEL-EL0955-2']);
+    assert.equal(out.reduce((s, o) => s + o.valorRs, 0), 12345 * 2, 'cada equipamento físico soma seu próprio valor de MO');
+  } finally {
+    window.CadastroCustosStore = antigo;
+  }
+});
+
+test('buscarMaoDeObraAutomatica — quantidade=1 continua com o mesmo identificador, sem sufixo', async () => {
+  const antigo = window.CadastroCustosStore;
+  window.CadastroCustosStore = stubCadastroCustos(9999);
+  try {
+    const out = await buscarMaoDeObraAutomatica([
+      { unidadeId: 'u2', identificador: 'VPEL-EL0958-2', tracao: '2:1', capacidadeKg: 800, paradas: 4, quantidade: 1 },
+    ]);
+    assert.equal(out.length, 1);
+    assert.equal(out[0].identificador, 'VPEL-EL0958-2');
+  } finally {
+    window.CadastroCustosStore = antigo;
+  }
+});
+
+test('buscarMaoDeObraAutomatica — sufixo contínuo nunca colide com o identificador de outra Unidade real da mesma cotação (cotação Nº 957 real)', async () => {
+  const antigo = window.CadastroCustosStore;
+  window.CadastroCustosStore = stubCadastroCustos(5000);
+  try {
+    const out = await buscarMaoDeObraAutomatica([
+      { unidadeId: 'u1', identificador: 'VPEL-EL0957-1', tracao: '2:1', capacidadeKg: 1050, paradas: 3, quantidade: 6 },
+      { unidadeId: 'u4', identificador: 'VPEL-EL0957-4', tracao: '2:1', capacidadeKg: 1050, paradas: 3, quantidade: 6 },
+      { unidadeId: 'u6', identificador: 'VPEL-EL0957-6', tracao: '2:1', capacidadeKg: 1050, paradas: 3, quantidade: 6 },
+      { unidadeId: 'u9', identificador: 'VPEL-EL0957-9', tracao: '2:1', capacidadeKg: 1050, paradas: 3, quantidade: 3 },
+    ]);
+    assert.equal(out.length, 21);
+    const identificadores = out.map((o) => o.identificador);
+    const duplicados = identificadores.filter((v, i) => identificadores.indexOf(v) !== i);
+    assert.deepEqual(duplicados, [], 'nenhum identificador pode se repetir entre Unidades físicas diferentes');
+    // as próprias Unidades reais (1ª linha de cada grupo) preservam o identificador original intacto
+    assert.equal(out.find((o) => o.unidadeId === 'u1').identificador, 'VPEL-EL0957-1');
+    assert.equal(out.find((o) => o.unidadeId === 'u4').identificador, 'VPEL-EL0957-4');
+    assert.equal(out.find((o) => o.unidadeId === 'u6').identificador, 'VPEL-EL0957-6');
+    assert.equal(out.find((o) => o.unidadeId === 'u9').identificador, 'VPEL-EL0957-9');
+  } finally {
+    window.CadastroCustosStore = antigo;
+  }
 });

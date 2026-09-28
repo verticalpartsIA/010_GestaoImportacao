@@ -101,21 +101,82 @@
      e devolve a lista classificada — pronta pra virar o card "Mão de
      obra" da Precificação (Fase 4) e pra alimentar o motor V2
      (custo_economico_completo). Nunca lança: unidade sem tabela vira
-     projeto especial, não erro. */
+     projeto especial, não erro.
+
+     28/09 — uma Unidade com quantidade > 1 (o vendedor cotou "2" no
+     Formulário pra dois elevadores idênticos numa Unidade só, ver
+     feNovaUnidade em formulario-elevador.jsx) representa N equipamentos
+     físicos reais, cada um exigindo sua própria instalação — mas até aqui
+     virava só 1 linha/1 valor de MO nesta tabela (achado real: cotação
+     Nº 955 com quantidade=2 mostrava 1 linha em vez de 2, e a soma de MO
+     em pzMoTotalRs/precificacao-elevador.jsx contava só 1x). Cada Unidade
+     agora vira `quantidade` linhas (mesma classificação/valor — a tabela
+     de custo é por especificação, não por unidade física).
+
+     Numeração pedida explicitamente pelo usuário: renumerar de forma
+     contínua a partir do próprio identificador da Unidade (ex.:
+     "VPEL-EL0955-1" com quantidade=2 vira "VPEL-EL0955-1"/"VPEL-EL0955-2"),
+     não um sufixo aninhado. Risco real avisado e aceito pelo usuário:
+     como o número final de cada Unidade já é o índice de ativo real dela
+     (indice_ativo, 1 por Unidade — ver migration
+     master_id_elevador_fase1), renumerar pra cima pode bater em cima do
+     identificador de OUTRA Unidade real da mesma cotação (confirmado em
+     produção: cotação 957 tem Unidade índice 1 com quantidade=6 ao lado de
+     Unidades reais nos índices 4/6/9). getIdentificadorFisico() below só
+     usa a numeração contínua quando o número não está em uso por NENHUM
+     identificador já visto nesta chamada — nem um real (outra Unidade da
+     mesma cotação) nem um já gerado pela expansão de OUTRA Unidade com
+     quantidade > 1 processada antes (achado ao testar com >1 Unidade de
+     quantidade>1 na mesma cotação: checar só contra os identificadores
+     reais não bastava — duas Unidades diferentes geravam o mesmo número
+     "emprestado" uma da outra, ex. duas fileiras de "VPEL-EL0957-7"
+     apontando pra equipamentos físicos diferentes). Quando colide (com o
+     real ou com o já gerado), cai pra um sufixo aninhado (ex.
+     "VPEL-EL0955-1-4") só pra não fabricar um rótulo idêntico ao de outro
+     equipamento de verdade. Em ambos os casos, isso é só pra exibição/soma
+     nesta tabela — nunca grava de volta em
+     formularios_elevador_unidades.identificador. */
   async function buscarMaoDeObraAutomatica(modelos) {
     const store = window.CadastroCustosStore;
     const lista = Array.isArray(modelos) ? modelos : [];
+    const usados = new Set(lista.map((m) => m.identificador).filter(Boolean));
+
+    function getIdentificadorFisico(identificadorBase, i, quantidade) {
+      if (quantidade <= 1 || !identificadorBase) return identificadorBase;
+      const m = /^(.*)-(\d+)$/.exec(identificadorBase);
+      if (m) {
+        const candidato = `${m[1]}-${Number(m[2]) + i}`;
+        if (i === 0) return candidato; // próprio identificador da Unidade — sempre permitido
+        if (!usados.has(candidato)) { usados.add(candidato); return candidato; }
+        console.warn('[PrecificacaoElevadorStore] numeração contínua colidiria com outro identificador desta cotação', candidato, '— usando sufixo aninhado');
+      }
+      let fallback = `${identificadorBase}-${i + 1}`;
+      while (usados.has(fallback)) fallback += '.';
+      usados.add(fallback);
+      return fallback;
+    }
+
     const resultados = [];
     for (const m of lista) {
       const capacidadeKg = m.capacidadeKg != null && m.capacidadeKg !== '' ? Number(m.capacidadeKg) : null;
+      let base;
       if (!store || !m.tracao || !m.paradas || !(capacidadeKg > 0)) {
-        resultados.push(classificarMaoDeObraUnidade(m, null));
-        continue;
+        base = classificarMaoDeObraUnidade(m, null);
+      } else {
+        let custoTabela = null;
+        try { custoTabela = await store.buscarCustoElevador(m.tracao, capacidadeKg, Number(m.paradas)); }
+        catch (e) { console.warn('[PrecificacaoElevadorStore] buscarMaoDeObraAutomatica falhou pra unidade', m.unidadeId, e); }
+        base = classificarMaoDeObraUnidade(m, custoTabela);
       }
-      let custoTabela = null;
-      try { custoTabela = await store.buscarCustoElevador(m.tracao, capacidadeKg, Number(m.paradas)); }
-      catch (e) { console.warn('[PrecificacaoElevadorStore] buscarMaoDeObraAutomatica falhou pra unidade', m.unidadeId, e); }
-      resultados.push(classificarMaoDeObraUnidade(m, custoTabela));
+      const quantidade = Math.max(1, Number(m.quantidade) || 1);
+      for (let i = 0; i < quantidade; i++) {
+        resultados.push({
+          ...base,
+          identificador: getIdentificadorFisico(base.identificador, i, quantidade),
+          equipamentoIndice: i + 1,
+          equipamentoTotal: quantidade,
+        });
+      }
     }
     return resultados;
   }
