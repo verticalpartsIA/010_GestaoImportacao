@@ -553,10 +553,12 @@ function PreviewValoresTabelas({ data }) {
     const unit = parseFloat((it.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
     /* Desconto ativo (Frentes B+C): mostra o valor original riscado ao lado
        do atual — histórico visível pro cliente e pra VerticalParts, mesmo
-       reabrindo a proposta depois. */
+       reabrindo a proposta depois. Comparado já totalizado (× qtd), já que
+       a coluna de Qtd./Valor Unit. saiu da tabela — só Equipamento | Valor. */
     const original = it.valorOriginal != null ? parseFloat(String(it.valorOriginal).replace(/\./g, "").replace(",", ".")) || 0 : null;
     const temDesconto = it.desconto && original != null && original > unit;
-    return { equipamento: it.equipamento, qtd, unit, original: temDesconto ? original : null, total: qtd * unit };
+    const total = qtd * unit;
+    return { equipamento: it.equipamento, original: temDesconto ? original * (qtd || 1) : null, total };
   });
   const totalEq = linhas.reduce((s, l) => s + l.total, 0);
   const totalGeral = totalEq + difal;
@@ -570,21 +572,19 @@ function PreviewValoresTabelas({ data }) {
 
         <h3 className="pdf-sub-title">Preços dos Equipamentos</h3>
         <table className="pdf-table2">
-          <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Qtd</th><th style={{ textAlign: "right" }}>Valor Unit.</th><th style={{ textAlign: "right" }}>Total</th></tr></thead>
+          <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
           <tbody>
             {linhas.map((l, i) => (
               <tr key={i}>
                 <td>{l.equipamento || "Elevador de Passageiros"}</td>
-                <td style={{ textAlign: "right" }}>{l.qtd || "—"}</td>
                 <td style={{ textAlign: "right" }}>
                   {l.original != null && <span style={{ textDecoration: "line-through", opacity: 0.6, marginRight: 6 }}>{fmt(l.original)}</span>}
-                  {l.unit ? fmt(l.unit) : "—"}
+                  <b>{l.total ? fmt(l.total) : "—"}</b>
                 </td>
-                <td style={{ textAlign: "right", fontWeight: 700 }}>{l.total ? fmt(l.total) : "—"}</td>
               </tr>
             ))}
-            {difal ? <tr><td colSpan={3}>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(difal)}</td></tr> : null}
-            <tr className="pdf-total-row"><td colSpan={3}>Total Equipamentos</td><td style={{ textAlign: "right" }}>{fmt(totalGeral)}</td></tr>
+            {difal ? <tr><td>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(difal)}</td></tr> : null}
+            <tr className="pdf-total-row"><td>Total Equipamentos</td><td style={{ textAlign: "right" }}>{fmt(totalGeral)}</td></tr>
           </tbody>
         </table>
 

@@ -463,15 +463,25 @@ function PgFotos(S, data, urls) {
 function PgValores(S, data) {
   const v = (data.elevador || {}).valores || {};
   const parcelas = v.parcelas || [];
-  const qtd = parseFloat(v.quantidade) || 0;
-  const unit = numBR(v.valorUnit);
   const difal = numBR(v.difal);
-  const totalEq = qtd * unit;
+  /* v.itens (mais de 1 equipamento vindo da Precificação): 1 linha por
+     equipamento real em vez de agregar tudo numa linha só clonada — mesmo
+     ajuste feito em proposta-preview.jsx (bug real na cotação 950). Sem
+     itens, cai no formato antigo de 1 equipamento só. Tabela mostra só
+     Equipamento | Valor (já qtd × unitário somado) — Qtd./Valor Unit.
+     saíram da tabela a pedido do usuário (28/09/2026). */
+  const fonte = (Array.isArray(v.itens) && v.itens.length) ? v.itens : [v];
+  const linhas = fonte.map((it) => {
+    const qtd = parseFloat(it.quantidade) || 0;
+    const unit = numBR(it.valorUnit);
+    return { equipamento: it.equipamento, total: qtd * unit };
+  });
+  const totalEq = linhas.reduce((s, l) => s + l.total, 0);
   const totalGeral = totalEq + difal;
   const totalParcelas = parcelas.reduce((s, p) => s + numBR(p.valor), 0);
-  const linhasEq = [[v.equipamento || 'Elevador de Passageiros', qtd || '—', unit ? fmtBRL(unit) : '—', totalEq ? fmtBRL(totalEq) : '—']];
-  if (difal) linhasEq.push(['DIFAL', '', '', fmtBRL(difal)]);
-  linhasEq.push(['Total Equipamentos', '', '', fmtBRL(totalGeral)]);
+  const linhasEq = linhas.map((l) => [l.equipamento || 'Elevador de Passageiros', l.total ? fmtBRL(l.total) : '—']);
+  if (difal) linhasEq.push(['DIFAL', fmtBRL(difal)]);
+  linhasEq.push(['Total Equipamentos', fmtBRL(totalGeral)]);
   const linhasParc = parcelas.map(p => [p.desc || '—', p.valor ? 'R$ ' + p.valor : '—']);
   if (parcelas.length) linhasParc.push(['Total Parcelado', fmtBRL(totalParcelas)]);
   return h(Page, { size: 'A4', style: S.page }, [
@@ -479,7 +489,7 @@ function PgValores(S, data) {
     h(Text, { style: S.secTitle, key: 't' }, 'Valores e Pagamento'),
     h(View, { style: S.secRule, key: 'r' }),
     h(Text, { style: S.subTitle, key: 's1' }, 'Preços dos Equipamentos'),
-    Tabela2(S, [{ label: 'Equipamento', flex: 2 }, { label: 'Qtd', flex: 1, align: 'right' }, { label: 'Valor Unit.', flex: 1, align: 'right' }, { label: 'Total', flex: 1, align: 'right' }], linhasEq, 't1'),
+    Tabela2(S, [{ label: 'Equipamento', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasEq, 't1'),
     parcelas.length ? h(View, { key: 'parc' }, [
       h(Text, { style: S.subTitle, key: 's2' }, 'Cronograma de Pagamento'),
       Tabela2(S, [{ label: 'Parcela / Descrição', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasParc, 't2'),
