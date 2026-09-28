@@ -512,6 +512,17 @@ function PropostasPage({ setRoute, setSubsel }) {
   }, [escopo]);
   React.useEffect(() => { carregar(); }, [carregar]);
 
+  // Realtime (28/09): status muda sozinho na lista quando o cliente
+  // visualiza/assina/recusa pela página pública /assinar/<token>.
+  React.useEffect(() => {
+    const sb = window.__VP_SB?.sb;
+    if (!sb) return;
+    const canal = sb.channel('propostas-lista')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'propostas' }, () => carregar())
+      .subscribe();
+    return () => sb.removeChannel(canal);
+  }, [carregar]);
+
   /* "Prontas para enviar" — Precificação terminou o cálculo, mas quem
      decide analisar e enviar é o Comercial, não o Financeiro. Lista toda
      precificação calculada OU já aprovada (status 'finalizado' — "aprovada"

@@ -306,6 +306,17 @@ function ImportacaoPage({ setRoute, setSubsel }) {
   };
   React.useEffect(() => { reloadEmbarques(); }, []);
 
+  // Realtime (28/09): o cron ais-sync grava posição/status sem ninguém com a
+  // tela aberta — sem isto, só via reload manual/F5 pra ver a mudança.
+  React.useEffect(() => {
+    const sb = window.__VP_SB?.sb;
+    if (!sb) return;
+    const canal = sb.channel('embarques-lista')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'embarques' }, reloadEmbarques)
+      .subscribe();
+    return () => sb.removeChannel(canal);
+  }, []);
+
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
   const rows = embarques
@@ -514,6 +525,19 @@ function ImportacaoDetail({ embarque, setRoute }) {
   const [mapaAberto, setMapaAberto] = React.useState(false);
   const [mostrarTodosEventos, setMostrarTodosEventos] = React.useState(false);
   React.useEffect(() => { setE(embarque); }, [embarque]);
+
+  // Realtime (28/09): status/posição/docs atualizam sozinhos nesta tela
+  // quando o cron ais-sync (ou outra aba) grava — sem isto, `e` ficava
+  // congelado no snapshot passado por `subsel` na navegação.
+  React.useEffect(() => {
+    const sb = window.__VP_SB?.sb;
+    if (!sb || !embarque?.id) return;
+    const canal = sb.channel('embarque-detail-' + embarque.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'embarques', filter: `id=eq.${embarque.id}` },
+        (payload) => { if (payload.new) setE(payload.new); })
+      .subscribe();
+    return () => sb.removeChannel(canal);
+  }, [embarque?.id]);
 
   const refresh = async () => {
     setSyncing(true);
@@ -757,6 +781,18 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
       .then(({ data }) => { setEmbarques(data || []); setLoading(false); });
   }, []);
   React.useEffect(() => { load(); }, [load]);
+
+  // Realtime (28/09): a posição do navio (lat/lng/heading/speed) e o status
+  // atualizam sozinhos no mapa e na lista quando o cron ais-sync grava —
+  // sem isto só via "Atualizar" manual.
+  React.useEffect(() => {
+    const sb = window.__VP_SB?.sb;
+    if (!sb) return;
+    const canal = sb.channel('embarques-rastreamento')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'embarques' }, () => load())
+      .subscribe();
+    return () => sb.removeChannel(canal);
+  }, [load]);
 
   const onSync = async () => { setSyncing(true); await runAisSync(); await load(); setSyncing(false); };
 
@@ -1411,6 +1447,25 @@ function EmailInbox({ setRoute, setSubsel }) {
     }).catch((e) => setErro(e.message || String(e))).finally(() => setLoading(false));
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
+
+  /* Realtime (28/09, área blindada — CLAUDE.md): o cron read-inbox-poll já
+     grava resposta de fornecedor em emails_projeto (direcao='entrada') a
+     cada 10 min mesmo sem ninguém com a tela aberta; sem isto, quem já
+     estava com a Inbox aberta só via a resposta nova fechando e reabrindo a
+     tela. NÃO troca a leitura por emails_projeto (isso sim mexeria na
+     lógica de vínculo/matching) — só chama de novo o mesmíssimo `carregar`
+     acima (a mesma chamada do refresh manual, via read-inbox/IMAP). `active`
+     é só um id (linha ~1390), então a thread aberta e a resposta em
+     digitação (`respondendo`/`respostaTexto`) não são afetadas por este
+     refetch. */
+  React.useEffect(() => {
+    const sb = window.__VP_SB?.sb;
+    if (!sb) return;
+    const canal = sb.channel('emails-projeto-entrada')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'emails_projeto', filter: 'direcao=eq.entrada' }, carregar)
+      .subscribe();
+    return () => sb.removeChannel(canal);
+  }, [carregar]);
 
   /* 11/09 — achado real do usuário: mandou o RFQ pra fornecedora, não
      apareceu em lugar nenhum ("não vi ela na inbox") — na verdade tinha
