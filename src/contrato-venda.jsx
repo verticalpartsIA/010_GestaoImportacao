@@ -505,9 +505,30 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
     const endCli = [cli.endereco, cli.numero].filter(Boolean).join(', ');
     const endObra = [[obra.endereco, obra.numero].filter(Boolean).join(', '), obra.cidade, obra.uf].filter(Boolean).join(', ');
 
+    /* Sinal/Parcelas: a Proposta já calcula isso (Sinal de 40% + N parcelas
+       iguais, proposta-form.jsx/proposta-heranca.js) mas o Contrato de Venda
+       nunca lia esse dado — sempre caía no default do wizard (30%/5x),
+       desalinhado do que o vendedor já ajustou na Proposta. O modelo de dado
+       é diferente: valores.qtdParcelas conta TODAS as linhas da tabela da
+       Proposta (sinal + parcelas do saldo), enquanto form.parcelas aqui conta
+       só as parcelas do saldo (sem a linha do sinal) — por isso o -1.
+       O percentual do sinal na Proposta é sempre fixo em 40% (hardcoded em
+       gerarParcelasAutomaticas), não configurável por lá. */
+    let sinalPctInf = null;
+    let parcelasInf = null;
+    if (valores.formaTipo === 'vista') {
+      sinalPctInf = 100;
+      parcelasInf = 0;
+    } else if (valores.formaTipo === 'parcelado' && Number(valores.qtdParcelas) > 0) {
+      sinalPctInf = 40;
+      parcelasInf = Math.max(Number(valores.qtdParcelas) - 1, 0);
+    }
+
     setForm(prev => ({
       ...prev,
       masterId: p.master_id, propostaId: p.id,
+      sinalPct: sinalPctInf != null ? sinalPctInf : prev.sinalPct,
+      parcelas: parcelasInf != null ? parcelasInf : prev.parcelas,
       comprador: {
         ...prev.comprador,
         razao: cli.nome || prev.comprador.razao,
