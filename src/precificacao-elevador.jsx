@@ -190,6 +190,131 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
   );
 }
 
+/* 28/09 — pedido do usuário: depois que a Proposta já foi enviada, o
+   cliente às vezes pede pra acrescentar mais equipamentos (idênticos ou
+   com specs diferentes) ao pedido. `grupos` é 1 opção por Unidade já
+   cotada nesta Precificação (real ou já acrescentada antes), pra "igual
+   a este" oferecer a lista certa. */
+function ModalAcrescentarEquipamento({ grupos, onClose, onConfirmar }) {
+  const [modo, setModo] = React.useState(grupos.length ? 'identico' : 'novo');
+  const [unidadeId, setUnidadeId] = React.useState((grupos[0] || {}).unidadeId || '');
+  const [quantidade, setQuantidade] = React.useState(1);
+  const [tracao, setTracao] = React.useState('');
+  const [capacidadeKg, setCapacidadeKg] = React.useState('');
+  const [paradas, setParadas] = React.useState('');
+  const [modelo, setModelo] = React.useState('');
+  const [salvando, setSalvando] = React.useState(false);
+
+  const valido = modo === 'identico' ? !!unidadeId && Number(quantidade) > 0
+    : Number(quantidade) > 0; // equipamento novo pode nascer sem tração/capacidade/paradas ainda (mesma regra de "pendente" da tabela)
+
+  const confirmar = async () => {
+    if (!valido || salvando) return;
+    setSalvando(true);
+    try {
+      await onConfirmar(modo === 'identico'
+        ? { modo: 'identico', unidadeId, quantidadeAdicional: quantidade }
+        : { modo: 'novo', tracao: tracao || null, capacidadeKg, paradas, modelo, quantidadeAdicional: quantidade });
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <Modal title="Acrescentar equipamento" onClose={onClose} width={520}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={salvando}>Cancelar</Button>
+        <Button variant="primary" onClick={confirmar} disabled={!valido || salvando}>{salvando ? 'Acrescentando…' : 'Acrescentar'}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <p className="small muted" style={{ margin: 0 }}>Só entra nesta Precificação (mão de obra e totais) — não altera as Unidades do Formulário de Elevadores original.</p>
+        <div className="stack" style={{ gap: 6 }}>
+          <label className="row gap-2" style={{ alignItems: 'center' }}>
+            <input type="radio" checked={modo === 'identico'} disabled={!grupos.length} onChange={() => setModo('identico')}/>
+            <span>Idêntico a um equipamento já cotado</span>
+          </label>
+          <label className="row gap-2" style={{ alignItems: 'center' }}>
+            <input type="radio" checked={modo === 'novo'} onChange={() => setModo('novo')}/>
+            <span>Equipamento novo (especificações diferentes)</span>
+          </label>
+        </div>
+
+        {modo === 'identico' && (
+          <PZField label="Igual a">
+            <select className="input" value={unidadeId} onChange={(e) => setUnidadeId(e.target.value)}>
+              {grupos.map((g) => (
+                <option key={g.unidadeId} value={g.unidadeId}>
+                  {g.identificador} — {g.tracao || '?'} × {g.capacidadeKg != null ? `${g.capacidadeKg}kg` : '?'} × {g.paradas != null ? `${g.paradas} paradas` : '?'}
+                </option>
+              ))}
+            </select>
+          </PZField>
+        )}
+
+        {modo === 'novo' && (
+          <div className="grid-3" style={{ gap: 12 }}>
+            <PZField label="Tração">
+              <select className="input" value={tracao} onChange={(e) => setTracao(e.target.value)}>
+                <option value="">— selecione —</option>
+                {PZ_TRACOES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </PZField>
+            <PZField label="Capacidade (kg)"><PZInput type="number" value={capacidadeKg} onChange={setCapacidadeKg}/></PZField>
+            <PZField label="Paradas"><PZInput type="number" value={paradas} onChange={setParadas}/></PZField>
+            <PZField span={3} label="Modelo (opcional)"><PZInput value={modelo} onChange={setModelo}/></PZField>
+          </div>
+        )}
+
+        <PZField label="Quantidade de equipamentos a acrescentar">
+          <input className="input" type="number" min="1" style={{ width: 120 }} value={quantidade}
+            onChange={(e) => setQuantidade(e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}/>
+        </PZField>
+      </div>
+    </Modal>
+  );
+}
+
+/* Aviso "vendedor está ciente" pedido pelo usuário — nunca remove sem
+   confirmação explícita. `mo` é a linha física clicada; remove sempre 1
+   equipamento do grupo dela (decrementa quantidade, ou some com o grupo
+   inteiro se já era o último). */
+function ModalRemoverEquipamento({ mo, onClose, onConfirmar }) {
+  const [ciente, setCiente] = React.useState(false);
+  const [removendo, setRemovendo] = React.useState(false);
+  const ultimoDoGrupo = (mo.equipamentoTotal || 1) <= 1;
+
+  const confirmar = async () => {
+    if (!ciente || removendo) return;
+    setRemovendo(true);
+    try { await onConfirmar(); } finally { setRemovendo(false); }
+  };
+
+  return (
+    <Modal title="Remover equipamento?" onClose={onClose} width={480}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={removendo}>Cancelar</Button>
+        <Button variant="danger" onClick={confirmar} disabled={!ciente || removendo}>{removendo ? 'Removendo…' : 'Sim, remover'}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <div style={{ background: 'var(--vp-gray-50)', border: '1px solid var(--border)', padding: '12px 14px' }}>
+          <div style={{ fontWeight: 700 }}>{mo.identificador || '—'}</div>
+          <div className="cell-sub" style={{ marginTop: 4 }}>{mo.tracao || '?'} × {mo.capacidadeKg != null ? `${mo.capacidadeKg}kg` : '?'} × {mo.paradas != null ? `${mo.paradas} paradas` : '?'}</div>
+        </div>
+        <p className="small" style={{ margin: 0 }}>
+          {ultimoDoGrupo
+            ? 'Este é o último equipamento deste grupo — ele some inteiro desta tabela.'
+            : `Reduz a quantidade cotada deste grupo de ${mo.equipamentoTotal} para ${mo.equipamentoTotal - 1}.`}
+          {' '}Isso só afeta esta Precificação (mão de obra e totais) — a Unidade original no Formulário de Elevadores não é alterada.
+        </p>
+        <label className="row gap-2" style={{ alignItems: 'flex-start' }}>
+          <input type="checkbox" checked={ciente} onChange={(e) => setCiente(e.target.checked)} style={{ marginTop: 2 }}/>
+          <span className="small">Estou ciente e tenho certeza de que este equipamento deve ser removido do pedido.</span>
+        </label>
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Detalhe — motor de cálculo ---------- */
 function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const [pz, setPz] = React.useState(null);
@@ -202,6 +327,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const [atualizandoMo, setAtualizandoMo] = React.useState(false);
   const [editandoMoUnidade, setEditandoMoUnidade] = React.useState(null);
   const [moSpecEdit, setMoSpecEdit] = React.useState({ tracao: '', capacidadeKg: '', paradas: '' });
+  const [mostrarAcrescentarEquipamento, setMostrarAcrescentarEquipamento] = React.useState(false);
+  const [removendoEquipamento, setRemovendoEquipamento] = React.useState(null); // mo (linha) sendo removida, pro modal de confirmação
   // Câmbio USD/BRL ao vivo — só referência/comparação (ver cambio-api.js).
   // Não substitui tx_cambial sozinho; o Financeiro aplica clicando "Usar".
   const [cambioVivo, setCambioVivo] = React.useState(null); // null | { valor, timestamp } | 'erro'
@@ -281,6 +408,39 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       window.toast?.('Especificação atualizada — mão de obra recalculada.', 'success');
     } catch (e) {
       window.toast?.('Erro ao salvar: ' + e.message, 'error');
+    } finally {
+      setAtualizandoMo(false);
+    }
+  };
+
+  /* 28/09 — pedido do usuário: depois que a Proposta já foi enviada, o
+     cliente às vezes pede pra acrescentar ou remover equipamento(s). Nunca
+     mexe na Unidade real do Formulário (diferente de "Trocar" acima) — só
+     no snapshot pz.modelos desta Precificação, ver comentário em
+     acrescentarEquipamento/removerEquipamento (precificacao-elevador-store.js). */
+  const acrescentarEquipamento = async (patch) => {
+    setAtualizandoMo(true);
+    try {
+      await window.PrecificacaoElevadorStore.acrescentarEquipamento(pz.id, patch);
+      await carregar();
+      setMostrarAcrescentarEquipamento(false);
+      window.toast?.('Equipamento acrescentado — mão de obra recalculada.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao acrescentar equipamento: ' + e.message, 'error');
+    } finally {
+      setAtualizandoMo(false);
+    }
+  };
+
+  const removerEquipamento = async (unidadeId) => {
+    setAtualizandoMo(true);
+    try {
+      await window.PrecificacaoElevadorStore.removerEquipamento(pz.id, unidadeId);
+      await carregar();
+      setRemovendoEquipamento(null);
+      window.toast?.('Equipamento removido desta precificação.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao remover equipamento: ' + e.message, 'error');
     } finally {
       setAtualizandoMo(false);
     }
@@ -527,7 +687,12 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
       <Card title="Mão de obra — busca automática" sub="tração × capacidade × paradas em Cadastros → Atualização de Custos"
         style={{ marginTop: 16 }}
-        action={<Button variant="outline" size="sm" icon="refresh" onClick={atualizarMaoDeObra} disabled={atualizandoMo}>{atualizandoMo ? 'Recalculando…' : 'Recalcular'}</Button>}>
+        action={
+          <div className="row gap-2">
+            <Button variant="outline" size="sm" icon="plus" onClick={() => setMostrarAcrescentarEquipamento(true)} disabled={atualizandoMo}>Acrescentar equipamento</Button>
+            <Button variant="outline" size="sm" icon="refresh" onClick={atualizarMaoDeObra} disabled={atualizandoMo}>{atualizandoMo ? 'Recalculando…' : 'Recalcular'}</Button>
+          </div>
+        }>
         {!(pz.mo_lookup || []).length && <p className="small muted" style={{ margin: 0 }}>Nenhuma unidade elevador com dados suficientes ainda.</p>}
         {!!(pz.mo_lookup || []).length && (
           <div className="table-wrap">
@@ -575,7 +740,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                   }
                   return (
                     <tr key={chave}>
-                      <td>{mo.identificador || '—'}</td>
+                      <td>{mo.identificador || '—'}{mo.avulso && <span className="badge" style={{ background: 'var(--vp-gray-100)', color: 'var(--fg2)', padding: '2px 6px', borderRadius: 4, fontSize: 10, marginLeft: 6 }} title="Acrescentado nesta Precificação — não existe como Unidade no Formulário de Elevadores">manual</span>}</td>
                       <td>{mo.tracao || '—'}</td>
                       <td>{mo.capacidadeKg != null ? `${mo.capacidadeKg} kg` : '—'}</td>
                       <td>{mo.paradas != null ? mo.paradas : '—'}</td>
@@ -588,15 +753,23 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                       <td className="small muted" title={mo.motivo || ''}>{mo.regraUsada || mo.motivo || '—'}</td>
                       <td className="mono">{mo.valorRs ? fmtBRL2(mo.valorRs) : '—'}</td>
                       <td>
-                        {mo.unidadeId && primeiraDoGrupo && (
-                          <Button variant="ghost" size="sm" icon="edit" title={mo.equipamentoTotal > 1 ? `Trocar tração/capacidade/paradas desta unidade (vale para os ${mo.equipamentoTotal} equipamentos)` : 'Trocar tração/capacidade/paradas desta unidade'}
-                            onClick={() => {
-                              setMoSpecEdit({ tracao: mo.tracao || '', capacidadeKg: mo.capacidadeKg ?? '', paradas: mo.paradas ?? '' });
-                              setEditandoMoUnidade(mo.unidadeId);
-                            }}>
-                            Trocar
-                          </Button>
-                        )}
+                        <div className="row gap-1">
+                          {mo.unidadeId && !mo.avulso && primeiraDoGrupo && (
+                            <Button variant="ghost" size="sm" icon="edit" title={mo.equipamentoTotal > 1 ? `Trocar tração/capacidade/paradas desta unidade (vale para os ${mo.equipamentoTotal} equipamentos)` : 'Trocar tração/capacidade/paradas desta unidade'}
+                              onClick={() => {
+                                setMoSpecEdit({ tracao: mo.tracao || '', capacidadeKg: mo.capacidadeKg ?? '', paradas: mo.paradas ?? '' });
+                                setEditandoMoUnidade(mo.unidadeId);
+                              }}>
+                              Trocar
+                            </Button>
+                          )}
+                          {mo.unidadeId && (
+                            <Button variant="ghost" size="sm" icon="trash" title="Remover este equipamento desta precificação"
+                              onClick={() => setRemovendoEquipamento(mo)}>
+                              Remover
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -920,6 +1093,21 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             <div><span className="up-eyebrow muted">Diferença motor atual − V1 (120 dias)</span><div className="cell-money" style={{ fontSize: 16 }}>{resultadoV2 ? fmtBRL2(resultadoV2.precificacao.precoVendaProposta - resultado.precoVendaProposta) : '—'}</div></div>
           </div>
         </Card>
+      )}
+
+      {mostrarAcrescentarEquipamento && (
+        <ModalAcrescentarEquipamento
+          grupos={pz.modelos || []}
+          onClose={() => setMostrarAcrescentarEquipamento(false)}
+          onConfirmar={acrescentarEquipamento}
+        />
+      )}
+      {removendoEquipamento && (
+        <ModalRemoverEquipamento
+          mo={removendoEquipamento}
+          onClose={() => setRemovendoEquipamento(null)}
+          onConfirmar={() => removerEquipamento(removendoEquipamento.unidadeId)}
+        />
       )}
     </div>
   );

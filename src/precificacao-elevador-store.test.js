@@ -4,7 +4,20 @@ const assert = require('node:assert/strict');
 
 global.window = global.window || {};
 require('./precificacao-elevador-store.js');
-const { parseContainerNo, classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica } = window.PrecificacaoElevadorStore;
+const { parseContainerNo, classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, acrescentarEquipamento, removerEquipamento } = window.PrecificacaoElevadorStore;
+
+/* Fake mínimo de window.__VP_SB.sb — só o suficiente pra obter()/salvar()
+   (select().eq().single() e update().eq()) contra uma "tabela" em memória. */
+function makeFakeSb(row) {
+  return {
+    from() {
+      return {
+        select() { return { eq() { return { single: async () => ({ data: row, error: null }) }; } }; },
+        update(patch) { return { eq: async () => { Object.assign(row, patch); return { error: null }; } }; },
+      };
+    },
+  };
+}
 
 test('parseContainerNo — "1x40HC + 1x20GP" (resposta real da Glarie, VPCT-0950)', () => {
   const out = parseContainerNo('1x40HC + 1x20GP');
@@ -134,5 +147,84 @@ test('buscarMaoDeObraAutomatica — sufixo contínuo nunca colide com o identifi
     assert.equal(out.find((o) => o.unidadeId === 'u9').identificador, 'VPEL-EL0957-9');
   } finally {
     window.CadastroCustosStore = antigo;
+  }
+});
+
+/* ============================================================
+   acrescentarEquipamento / removerEquipamento (28/09) — vendedor ajusta
+   a quantidade cotada depois que a Proposta já foi enviada (cliente pede
+   pra acrescentar ou remover equipamento). Nunca mexe na Unidade real do
+   Formulário — só no snapshot pz.modelos desta Precificação.
+   ============================================================ */
+
+test('acrescentarEquipamento — modo "identico" incrementa a quantidade da Unidade existente', async () => {
+  const antigoCustos = window.CadastroCustosStore;
+  const antigoSb = window.__VP_SB;
+  window.CadastroCustosStore = stubCadastroCustos(5000);
+  const row = { id: 'pz1', modelos: [{ unidadeId: 'u1', identificador: 'VPEL-EL0999-1', tracao: '2:1', capacidadeKg: 800, paradas: 3, quantidade: 1 }] };
+  window.__VP_SB = { sb: makeFakeSb(row) };
+  try {
+    const moLookup = await acrescentarEquipamento('pz1', { modo: 'identico', unidadeId: 'u1', quantidadeAdicional: 1 });
+    assert.equal(row.modelos.length, 1, 'não cria uma nova entrada — só incrementa a existente');
+    assert.equal(row.modelos[0].quantidade, 2);
+    assert.equal(moLookup.length, 2);
+    assert.deepEqual(moLookup.map((m) => m.identificador), ['VPEL-EL0999-1', 'VPEL-EL0999-2']);
+  } finally {
+    window.CadastroCustosStore = antigoCustos;
+    window.__VP_SB = antigoSb;
+  }
+});
+
+test('acrescentarEquipamento — modo "novo" cria equipamento avulso com specs próprias, sem tocar nas Unidades existentes', async () => {
+  const antigoCustos = window.CadastroCustosStore;
+  const antigoSb = window.__VP_SB;
+  window.CadastroCustosStore = stubCadastroCustos(7000);
+  const row = { id: 'pz1', modelos: [{ unidadeId: 'u1', identificador: 'VPEL-EL0999-1', tracao: '2:1', capacidadeKg: 800, paradas: 3, quantidade: 1 }] };
+  window.__VP_SB = { sb: makeFakeSb(row) };
+  try {
+    const moLookup = await acrescentarEquipamento('pz1', { modo: 'novo', tracao: '4:1', capacidadeKg: 630, paradas: 5, quantidadeAdicional: 2 });
+    assert.equal(row.modelos.length, 2);
+    const novo = row.modelos[1];
+    assert.equal(novo.avulso, true);
+    assert.equal(novo.quantidade, 2);
+    assert.ok(novo.unidadeId && novo.unidadeId !== 'u1', 'ganha um id sintético próprio, nunca reaproveita o de outra Unidade');
+    assert.equal(row.modelos[0].quantidade, 1, 'Unidade existente não é alterada');
+    assert.equal(moLookup.length, 3, '1 da Unidade original + 2 do equipamento avulso novo');
+  } finally {
+    window.CadastroCustosStore = antigoCustos;
+    window.__VP_SB = antigoSb;
+  }
+});
+
+test('removerEquipamento — decrementa quantidade sem zerar o grupo inteiro', async () => {
+  const antigoCustos = window.CadastroCustosStore;
+  const antigoSb = window.__VP_SB;
+  window.CadastroCustosStore = stubCadastroCustos(3000);
+  const row = { id: 'pz1', modelos: [{ unidadeId: 'u1', identificador: 'VPEL-EL0999-1', tracao: '2:1', capacidadeKg: 800, paradas: 3, quantidade: 3 }] };
+  window.__VP_SB = { sb: makeFakeSb(row) };
+  try {
+    const moLookup = await removerEquipamento('pz1', 'u1');
+    assert.equal(row.modelos.length, 1, 'Unidade continua existindo, só com 1 a menos');
+    assert.equal(row.modelos[0].quantidade, 2);
+    assert.equal(moLookup.length, 2);
+  } finally {
+    window.CadastroCustosStore = antigoCustos;
+    window.__VP_SB = antigoSb;
+  }
+});
+
+test('removerEquipamento — remove a entrada inteira quando a quantidade chega a 0', async () => {
+  const antigoCustos = window.CadastroCustosStore;
+  const antigoSb = window.__VP_SB;
+  window.CadastroCustosStore = stubCadastroCustos(3000);
+  const row = { id: 'pz1', modelos: [{ unidadeId: 'u1', identificador: 'VPEL-EL0999-1', tracao: '2:1', capacidadeKg: 800, paradas: 3, quantidade: 1 }] };
+  window.__VP_SB = { sb: makeFakeSb(row) };
+  try {
+    const moLookup = await removerEquipamento('pz1', 'u1');
+    assert.deepEqual(row.modelos, []);
+    assert.deepEqual(moLookup, []);
+  } finally {
+    window.CadastroCustosStore = antigoCustos;
+    window.__VP_SB = antigoSb;
   }
 });

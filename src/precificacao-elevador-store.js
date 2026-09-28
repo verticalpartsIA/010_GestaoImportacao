@@ -217,6 +217,7 @@
           identificador: getIdentificadorFisico(base.identificador, i, quantidade),
           equipamentoIndice: i + 1,
           equipamentoTotal: quantidade,
+          avulso: !!m.avulso,
         });
       }
     }
@@ -263,6 +264,69 @@
   async function atualizarMaoDeObra(id) {
     const pz = await obter(id);
     const modelos = await refrescarSpecUnidades(pz.modelos || []);
+    const moLookup = await buscarMaoDeObraAutomatica(modelos);
+    await salvar(id, { modelos, mo_lookup: moLookup });
+    return moLookup;
+  }
+
+  /* 28/09 — pedido do usuário: depois que a Proposta já foi enviada, o
+     cliente às vezes pede pra acrescentar ou remover equipamento(s) do
+     pedido. Isso NUNCA mexe em formularios_elevador_unidades (a Unidade
+     original do Formulário, com seu indice_ativo/Master ID real) — só no
+     snapshot `pz.modelos` desta Precificação, igual "Trocar" faz pra
+     tração/capacidade/paradas só que ali sim grava na Unidade real (ver
+     salvarSpecUnidade em precificacao-elevador.jsx). Um equipamento
+     "novo" (specs diferentes de qualquer Unidade já cotada) nasce sem
+     `unidadeId` real — ganha um id sintético (`avulso-...`) só pra ter
+     uma chave única nesta lista, marcado `avulso: true`, e um
+     identificador só descritivo (nunca um Master ID de verdade, pra não
+     fingir que existe uma Unidade real por trás). */
+  function novoIdSintetico() {
+    return `avulso-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  async function acrescentarEquipamento(id, patch) {
+    const pz = await obter(id);
+    const modelos = [...(pz.modelos || [])];
+    const quantidadeAdicional = Math.max(1, Number(patch.quantidadeAdicional) || 1);
+
+    if (patch.modo === 'identico') {
+      const idx = modelos.findIndex((m) => m.unidadeId === patch.unidadeId);
+      if (idx === -1) throw new Error('Equipamento de referência não encontrado nesta precificação.');
+      modelos[idx] = { ...modelos[idx], quantidade: (Number(modelos[idx].quantidade) || 1) + quantidadeAdicional };
+    } else {
+      const numeroAvulso = modelos.filter((m) => m.avulso).length + 1;
+      modelos.push({
+        unidadeId: novoIdSintetico(),
+        identificador: `Equipamento adicional ${numeroAvulso}`,
+        modelo: patch.modelo || '',
+        quantidade: quantidadeAdicional,
+        valorUnitarioUsd: 0,
+        tracao: patch.tracao || null,
+        capacidadeKg: patch.capacidadeKg != null && patch.capacidadeKg !== '' ? Number(patch.capacidadeKg) : null,
+        paradas: patch.paradas != null && patch.paradas !== '' ? Number(patch.paradas) : null,
+        avulso: true,
+      });
+    }
+    const moLookup = await buscarMaoDeObraAutomatica(modelos);
+    await salvar(id, { modelos, mo_lookup: moLookup });
+    return moLookup;
+  }
+
+  /* Remove 1 equipamento físico do grupo (decrementa `quantidade`; some da
+     lista quando chega a 0) — nunca some do Formulário/Unidade real,
+     só desta Precificação. */
+  async function removerEquipamento(id, unidadeId) {
+    const pz = await obter(id);
+    let modelos = [...(pz.modelos || [])];
+    const idx = modelos.findIndex((m) => m.unidadeId === unidadeId);
+    if (idx === -1) throw new Error('Equipamento não encontrado nesta precificação.');
+    const quantidadeAtual = Number(modelos[idx].quantidade) || 1;
+    if (quantidadeAtual <= 1) {
+      modelos.splice(idx, 1);
+    } else {
+      modelos[idx] = { ...modelos[idx], quantidade: quantidadeAtual - 1 };
+    }
     const moLookup = await buscarMaoDeObraAutomatica(modelos);
     await salvar(id, { modelos, mo_lookup: moLookup });
     return moLookup;
@@ -710,5 +774,6 @@
     camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,
     parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra,
+    acrescentarEquipamento, removerEquipamento,
   };
 }());
