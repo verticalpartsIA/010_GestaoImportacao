@@ -1557,6 +1557,10 @@ function EmailInbox({ setRoute, setSubsel }) {
       else setExcluidos((prev) => [...prev, email.id]);
       if (activeId === email.id) setActiveId(null);
       window.toast?.('E-mail excluído da lista.', 'success');
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Inbox de E-mail', acao: 'Excluiu e-mail da lista (soft-delete)',
+        alvo: assunto, alvo_id: email.id,
+      });
     } catch (e) {
       window.toast?.('Erro ao excluir: ' + e.message, 'error');
     }
@@ -1651,6 +1655,12 @@ function EmailInbox({ setRoute, setSubsel }) {
       if (error) { window.toast?.('Erro ao enviar: ' + await extrairErroFuncao(error), 'error'); return; }
       if (data && data.avisoPersistencia) window.toast?.(data.avisoPersistencia, 'warning');
       window.toast?.(modoCompose === 'encaminhar' ? 'E-mail encaminhado.' : 'Resposta enviada.', 'success');
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Inbox de E-mail',
+        acao: modoCompose === 'encaminhar' ? 'Encaminhou e-mail' : modoCompose === 'responder-todos' ? 'Respondeu a todos' : 'Respondeu e-mail',
+        alvo: subject, alvo_id: active.id,
+        detalhe: { para: to, numeroCotacao: active.numeroCotacao ?? null },
+      });
       setRespondendo(false); setRespostaTexto(''); setAnexosResposta([]); setDestinatarioEncaminhar('');
       carregar();
     } catch (e) {
@@ -1986,6 +1996,10 @@ function EmailNovoModal({ onClose, onEnviado }) {
       if (error) { window.toast?.('Erro ao enviar: ' + await extrairErroFuncao(error), 'error'); return; }
       if (data && data.avisoPersistencia) window.toast?.(data.avisoPersistencia, 'warning');
       window.toast?.('E-mail enviado.', 'success');
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Inbox de E-mail', acao: 'Enviou e-mail novo',
+        alvo: assunto.trim(), detalhe: { para: para.trim(), numeroCotacao: numero || null },
+      });
       onEnviado?.();
       onClose();
     } catch (e) {

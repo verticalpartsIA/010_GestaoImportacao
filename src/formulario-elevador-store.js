@@ -196,6 +196,11 @@
       alvoLabel: data.local_obra_cidade ? `${data.local_obra_cidade}/${data.local_obra_estado || ''}` : data.id,
       alvoId: data.id,
     });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Criou formulário de elevadores',
+      alvo: data.numero_cotacao ? `Cotação Nº ${data.numero_cotacao}` : data.id, alvo_id: data.id,
+      detalhe: { canal: data.canal, predio_empreendimento: data.predio_empreendimento || null },
+    });
     return data;
   }
 
@@ -325,12 +330,20 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('formularios_elevador_unidades').update(limparVazios(patch)).eq('id', unidadeId);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Alterou dados de uma unidade do formulário',
+      alvo_id: unidadeId, detalhe: patch,
+    });
   }
 
   async function removerUnidade(unidadeId) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('formularios_elevador_unidades').delete().eq('id', unidadeId);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Removeu unidade do formulário',
+      alvo_id: unidadeId,
+    });
   }
 
   async function listar(filtros = {}) {

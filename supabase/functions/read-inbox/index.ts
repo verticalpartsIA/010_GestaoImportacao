@@ -345,6 +345,14 @@ Deno.serve(async (req: Request) => {
           anexosSalvos.push({ filename: a.filename, content_type: a.contentType, size: a.bytes.length, path });
         }
 
+        // Log de auditoria (vp_logs) só quando a mensagem é NOVA — este poll
+        // roda a cada 10min e reprocessa os últimos `limit` e-mails via
+        // upsert por imap_uid, então logar sem essa checagem duplicaria uma
+        // entrada por e-mail a cada rodada do cron. Best-effort, nunca
+        // derruba a leitura do Inbox por falha aqui.
+        const { data: jaExistia } = await supabase.from("emails_projeto")
+          .select("id").eq("imap_uid", uid).maybeSingle();
+
         const row = {
           numero_cotacao: numeroCotacao,
           referencia_id: referenciaIdHerdada,
@@ -367,6 +375,18 @@ Deno.serve(async (req: Request) => {
         const { data: salvo, error: upErr } = await supabase.from("emails_projeto")
           .upsert(row, { onConflict: "imap_uid" }).select().maybeSingle();
         if (upErr) console.warn("[read-inbox] upsert falhou", uid, upErr);
+        if (!jaExistia && salvo && !upErr) {
+          const { error: logErr } = await supabase.from("vp_logs").insert({
+            ator_nome: fromParsed.name || fromParsed.email || "Remetente externo",
+            ator_setor: "externo",
+            modulo: "Inbox de E-mail",
+            acao: "E-mail recebido",
+            alvo: subject,
+            alvo_id: salvo.id,
+            detalhe: { de_email: fromParsed.email, numero_cotacao: numeroCotacao, vinculo_confianca: vinculo },
+          });
+          if (logErr) console.warn("[read-inbox] vp_logs falhou", logErr);
+        }
 
         const anexosComUrl = await Promise.all(anexosSalvos.map(async (a) => {
           const { data: signed } = await supabase.storage.from("emails-anexos").createSignedUrl(a.path, 60 * 60 * 24 * 7);
