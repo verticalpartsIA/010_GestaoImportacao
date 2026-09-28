@@ -96,6 +96,16 @@ Usuário reportou que `LogsAdminPage` (`src/logs-admin.jsx`) deveria registrar t
 
 **Não coberto nesta rodada** — não foi feita varredura exaustiva de todo `.insert/update/delete(` do projeto, só os módulos citados pelo usuário + achados correlatos (`atualizarUnidade`). Outros módulos (Cadastros, Embarques, Vistorias, Instalação) podem ainda estar sem log — não investigados.
 
+## Envio de Proposta ao Cliente — investigação + correção de erro engolido (28/09/2026, PR #464 / issue #465)
+
+Pedido do usuário: comparar o envio de Proposta a clientes com o RFQ a fornecedores (área blindada de E-mail/Inbox acima, PR #450). **Não é o mesmo padrão** — ver comparativo completo na issue #465. Resumo do que importa pra não reabrir sem contexto:
+
+- **Canal "E-mail" da Proposta sempre foi `mailto:`** (`PropostaSendModal.enviar()`, `src/proposta-editor.jsx`) — nunca existiu tentativa de SMTP automático via `send-email` como no RFQ, e **nunca grava em `emails_projeto`**. Não é um bug a "consertar" trocando por `send-email` sem pedido explícito — só foi adicionado um `window.toast?.(...)` avisando o vendedor que esse envio não é registrado automaticamente, coisa que não existia antes.
+- **Erro de persistência engolido em `src/proposta-store.js`** (mesma classe de bug do `send-email`, achada na investigação do RFQ): `markSent`, `markSigned`, `refuse`, `solicitarRevisao` e `decidirRevisao` faziam `await c.from('propostas').update(patch)...` **sem desestruturar `{ error }`** — uma falha real do PostgREST passava batida e a tela mostrava "Assinada"/"Enviada" mesmo sem nada gravado. Corrigido pra checar e lançar, igual ao padrão que `salvar`/`publicar`/`destravar`/`excluir` já usavam **no mesmo arquivo** (inconsistência interna, não invenção de padrão novo). **Não volte a chamar `.update()` sem checar `.error` nessas funções.**
+- **`markSigned`/`refuse` são chamadas pelo CLIENTE na página pública `/assinar/:token`** (`src/assinar-app.jsx`, compartilhada com Contrato Instalador/Venda) — como agora lançam erro, ganharam `try/catch` ali (`handleSign`/`handleRefuse`) que mostra `window.alert` e desfaz o `setPhase` otimista em vez de deixar a tela travada em "processing" pra sempre sem explicação nenhuma. **Se mexer nessas duas funções de novo, mantenha o try/catch** — sem ele, uma falha de gravação prende o cliente numa tela sem saída.
+- **`markViewed` (mount da página pública, sem ação do usuário) ficou de propósito como best-effort** — `console.warn` em vez de lançar, porque é só rastreamento automático de "cliente abriu o link"; lançar aqui bloquearia a leitura da proposta por uma falha só de auditoria. **Não troque isso por lançar também** — é uma escolha deliberada, diferente das outras 5 funções.
+- `index.html`/`assinar.html`: `proposta-store.js` v16→17, `proposta-editor.jsx` v44→45, `assinar-app.jsx` v12→13.
+
 ## Acessos confirmados (sessão de 2026-07-16)
 
 - **GitHub**: `verticalpartsIA/010_GestaoImportacao` — leitura/escrita completas (commits, PRs, issues, Actions) via MCP `github`.
