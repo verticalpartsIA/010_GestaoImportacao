@@ -9,8 +9,50 @@
      da Solicitação de Produto que originou esta ficha, cadastra o produto
      de verdade no Omie (IncluirProduto) e SÓ DEPOIS anexa o PDF.
 
+   Mapeamento célula-a-célula Ficha Técnica → Omie (definido com o
+   usuário em 28/09/2026):
+   - marca/modelo/unidade/FCI: campos novos em identificacao (jsonb).
+     FCI: SEM campo confirmado na estrutura produto_servico_cadastro
+     (nem em ConsultarProduto de produto real, nem na doc) — fica só
+     guardado na Ficha por ora, não é enviado ao Omie.
+   - peso líquido/bruto: direto da categoria "Peso e Massa", mesma unidade (kg).
+   - altura/largura/profundidade: categoria "Dimensões Físicas" está em
+     mm na Ficha — Omie pede CENTÍMETROS, então SEMPRE ÷10 na publicação
+     (nunca alterar a Ficha pra guardar em cm — o erro é feio: um produto
+     de 800mm vira "8 metros" se mandar cru).
+   - NCM: SEMPRE ncm_recomendado (nunca o campo solto dentro de "Códigos
+     e Classificações" — evita duas fontes divergentes).
+   - CEST: campo solto de "Códigos e Classificações", vai pra
+     recomendacoes_fiscais.id_cest (nome real confirmado ao vivo via
+     ConsultarProduto num produto de verdade — não é campo solto no nível
+     raiz do payload).
+   - EAN/GTIN e Part Number soltos em "Códigos e Classificações": NUNCA
+     vão pro Omie (sem fonte confiável / duplicam identificacao.partNumber).
+   - Observação Interna: Descrição DUIMP + Descrição Técnica concatenadas.
+   - Demais campos ativos das categorias (Elétricas, Velocidade, Fluidos,
+     Acústica, Tração, Componentes, Comprimento/Diâmetro/etc. de
+     Dimensões) → ficam de fora da publicação automática por ora. Uma
+     sessão anterior (20/09/2026) já testou ao vivo "caracteristicas" e
+     "caracteristicasArray" dentro de IncluirProduto e nenhum dos dois é
+     aceito pela estrutura produto_servico_cadastro. O endpoint dedicado
+     geral/caracteristicas (IncluirCaracteristica) existe mas cadastra só
+     o NOME da característica no catálogo geral da conta — não tem campo
+     de produto nem de valor, não serve pra atribuir "Altura: 30mm" a UM
+     produto específico. Não achamos (ainda) o mecanismo real de API pra
+     isso — o caminho que existe de verdade hoje é a planilha de
+     importação em massa (aba Omie_Produtos_Caracteristicas), fora deste
+     fluxo automático.
+   - Tipo do Produto (Bloco K) e Origem da Mercadoria: fixos "00" e "1"
+     SÓ na criação (IncluirProduto). NUNCA reenviados no Alterar/republicar
+     — um produto real (VPEL-700) já está classificado diferente ("01")
+     por decisão humana, e republicar não pode sobrescrever isso.
+
    API Omie é JSON-RPC:
    - IncluirProduto    → cadastra o produto novo (só quando código vazio)
+   - AlterarProduto    → sincroniza os campos mapeados acima a CADA
+                          publicação (novo ou republicação) — sem isso,
+                          editar a Ficha depois de já ter criado o produto
+                          nunca chegava no Omie.
    - ConsultarProduto  → valida que o código existe e obtém o nId
    - ExcluirAnexo      → remove anexo anterior desta ficha (se houver),
                           permitindo republicar substituindo o PDF antigo
@@ -33,7 +75,7 @@ const omieSecret = Deno.env.get("OMIE_API_SECRET") || "";
 
 // Function proximo-codigo-produto vive no projeto bd_Omie (kgecbycsyrtdhmdziuul)
 // — cache local dos produtos VerticalParts + confirmação ao vivo no Omie.
-// Chave anon (publicável por design, protegida por RLS do lado de lá).
+// Chave publicável (publicável por design, protegida por RLS do lado de lá).
 const PROXIMO_CODIGO_URL = "https://kgecbycsyrtdhmdziuul.supabase.co/functions/v1/proximo-codigo-produto";
 const PROXIMO_CODIGO_ANON_KEY = "sb_publishable_Qb6sMn7yCuTaeL1lDl5WWQ_9RUIKYVI";
 
@@ -68,6 +110,30 @@ async function omieCall(endpoint: string, call: string, param: Record<string, un
   return { ok: res.ok && !data.faultstring, data };
 }
 
+/* ---------- Helpers do mapeamento célula-a-célula ---------- */
+
+function toNum(v: unknown): number {
+  const n = parseFloat(String(v ?? "").replace(",", "."));
+  return Number.isFinite(n) ? n : 0;
+}
+
+/* mm (Ficha Técnica) → cm (Omie). NUNCA remover este ÷10. */
+function mmParaCm(v: unknown): number {
+  return Math.round((toNum(v) / 10) * 100) / 100;
+}
+
+/* Valor de um campo ATIVO de uma categoria específica, por nome exato
+   (case-insensitive). Usado pra puxar Peso/Dimensões/CEST sem misturar
+   com o restante dos campos dinâmicos da ficha. */
+function campoAtivo(cats: any[], catId: string, nomeRegex: RegExp): string | null {
+  const cat = (cats || []).find((c: any) => c && c.id === catId);
+  if (!cat) return null;
+  const fld = (cat.campos || []).find(
+    (f: any) => f && f.ativo && nomeRegex.test(f.nome || "") && String(f.valor ?? "").trim() !== ""
+  );
+  return fld ? String(fld.valor).trim() : null;
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
@@ -82,10 +148,11 @@ Deno.serve(async (req) => {
       return json({ error: "ficha_id e pdf_base64 são obrigatórios" }, 400);
     }
 
-    // 1) Ficha (+ campos usados só se for preciso cadastrar produto novo)
+    // 1) Ficha (+ campos usados pro mapeamento célula-a-célula e, se
+    // preciso cadastrar produto novo, categoria da Solicitação de Produto)
     const { data: ficha, error: fichaError } = await sb
       .from("fichas_tecnicas")
-      .select("id, nome_produto, codigo_produto, numero_documento, ncm_recomendado, descricao_comercial, descricao_duimp")
+      .select("id, nome_produto, codigo_produto, numero_documento, ncm_recomendado, descricao_comercial, descricao_tecnica, descricao_duimp, identificacao, cats")
       .eq("id", ficha_id)
       .single();
     if (fichaError || !ficha) return json({ error: "Ficha não encontrada" }, 404);
@@ -93,6 +160,39 @@ Deno.serve(async (req) => {
     const { nome_produto, numero_documento } = ficha;
     let codigo_produto = ficha.codigo_produto as string | null;
     let produtoRecemCriado = false;
+
+    // Campos mapeados da Ficha Técnica — usados tanto na criação
+    // (IncluirProduto) quanto em toda republicação (AlterarProduto).
+    const ident = (ficha.identificacao || {}) as Record<string, unknown>;
+    const cats = (ficha.cats || []) as any[];
+    const cest = campoAtivo(cats, "codigos", /^CEST$/i);
+    const pesoLiquido = campoAtivo(cats, "peso", /^Peso L[ií]quido$/i);
+    const pesoBruto = campoAtivo(cats, "peso", /^Peso Bruto$/i);
+    const altura = campoAtivo(cats, "dimensoes", /^Altura$/i);
+    const largura = campoAtivo(cats, "dimensoes", /^Largura$/i);
+    const profundidade = campoAtivo(cats, "dimensoes", /^Profundidade$/i);
+
+    const obsParts: string[] = [];
+    if (ficha.descricao_duimp) obsParts.push(`DUIMP: ${ficha.descricao_duimp}`);
+    if (ficha.descricao_tecnica) obsParts.push(`Descrição Técnica: ${ficha.descricao_tecnica}`);
+    const obsInternas = obsParts.length ? obsParts.join("\n\n") : null;
+
+    // Campos "vivos" — sempre sincronizados do jeito que a Ficha estiver
+    // agora, tanto na criação quanto em toda republicação.
+    const camposMapeados: Record<string, unknown> = {
+      descricao: String(nome_produto || "Produto sem nome").slice(0, 120),
+      unidade: String((ident.unidade as string) || "UN").toUpperCase().slice(0, 6) || "UN",
+      marca: ident.marca ? String(ident.marca).slice(0, 60) : null,
+      modelo: ident.modelo ? String(ident.modelo).slice(0, 60) : null,
+      peso_liq: toNum(pesoLiquido),
+      peso_bruto: toNum(pesoBruto),
+      altura: mmParaCm(altura),
+      largura: mmParaCm(largura),
+      profundidade: mmParaCm(profundidade),
+      descr_detalhada: ficha.descricao_comercial || null,
+      obs_internas: obsInternas,
+    };
+    if (cest) camposMapeados.recomendacoes_fiscais = { id_cest: cest };
 
     // 1.1) Código vazio → SKU novo. Gera o próximo código livre (categoria da
     // Solicitação de Produto que originou esta ficha) e cadastra o produto de
@@ -132,32 +232,19 @@ Deno.serve(async (req) => {
       }
       const codigoNovo = codigoData.codigo_sugerido as string;
 
-      // Cadastra o produto de verdade no Omie. Unidade sem campo próprio na
-      // Ficha Técnica hoje — usa "UN" como padrão (limitação conhecida a
-      // revisitar se surgir produto com outra unidade de medida).
-      //
-      // Mapeamento de descrições (definido com o usuário em 20/09/2026, na
-      // aba "Observações" do cadastro Omie):
-      // - descr_detalhada  ("Descrição Detalhada do Produto")   ← Descrição Comercial da ficha
-      // - obs_internas     ("Observações Internas", nunca sai em NF-e/pedido) ← Descrição DUIMP da ficha
-      //
-      // NOTA: tentamos registrar "quem publicou" como característica
-      // customizada do produto (rastreabilidade dentro do próprio Omie,
-      // já que o histórico de alterações do Omie sempre mostra "Integração"
-      // para chamadas via API — não identifica pessoa). Nem "caracteristicas"
-      // nem "caracteristicasArray" foram aceitos pelo IncluirProduto (testado
-      // ao vivo em 20/09/2026 — o segundo nome nem existe na estrutura
-      // produto_servico_cadastro). Removido por ora; a rastreabilidade real
-      // já existe do nosso lado, em vp_logs (ator_nome/ator_setor abaixo).
+      // Cadastra o produto de verdade no Omie. Tipo do Produto (Bloco K) e
+      // Origem da Mercadoria só entram AQUI, na criação — nunca no Alterar,
+      // pra não sobrescrever uma classificação fiscal já corrigida à mão
+      // depois (achado real: um produto VerticalParts já cadastrado está
+      // como "01 - Matéria Prima", não "00").
       const inclusao = await omieCall("geral/produtos", "IncluirProduto", {
         codigo: codigoNovo,
         codigo_produto_integracao: codigoNovo,
-        descricao: String(nome_produto || "Produto sem nome").slice(0, 120),
-        unidade: "UN",
         ncm: ficha.ncm_recomendado,
         valor_unitario: 0,
-        descr_detalhada: ficha.descricao_comercial || null,
-        obs_internas: ficha.descricao_duimp || null,
+        tipoItem: "00",
+        ...camposMapeados,
+        recomendacoes_fiscais: { ...(camposMapeados.recomendacoes_fiscais as object || {}), origem_mercadoria: "1" },
       });
       if (!inclusao.ok) {
         const fault = inclusao.data?.faultstring || "erro desconhecido";
@@ -196,6 +283,19 @@ Deno.serve(async (req) => {
       return json({ error: `Omie: ${fault}` }, 400);
     }
     const nIdProduto = consulta.data.codigo_produto;
+
+    // 2.1) Sincroniza os campos mapeados a CADA publicação (não só na
+    // criação) — sem isso, editar a Ficha depois de o produto já existir
+    // no Omie nunca chegava lá. Best-effort: falha aqui não derruba a
+    // publicação (o anexo do PDF, mais abaixo, é a ação principal).
+    const alteracao = await omieCall("geral/produtos", "AlterarProduto", {
+      codigo: codigo_produto,
+      ncm: ficha.ncm_recomendado || undefined,
+      ...camposMapeados,
+    });
+    if (!alteracao.ok) {
+      console.warn("[publicar_ficha_omie] AlterarProduto (sync de campos) falhou:", alteracao.data?.faultstring || alteracao.data);
+    }
 
     // 3) Remover anexo anterior desta ficha, se existir — permite republicar
     // substituindo o PDF em vez de duplicar (mesma cCodIntAnexo de sempre).
@@ -273,7 +373,11 @@ Deno.serve(async (req) => {
         : (foiSubstituido ? "republicou ficha no Omie" : "publicou ficha no Omie"),
       alvo: nome_produto || numero_documento || codigo_produto,
       alvo_id: String(ficha_id),
-      detalhe: { codigo_produto, arquivo: nomeArquivo, omie_nid: nIdProduto, omie_anexo_id: nIdAnexo, substituido: foiSubstituido, produto_recem_criado: produtoRecemCriado },
+      detalhe: {
+        codigo_produto, arquivo: nomeArquivo, omie_nid: nIdProduto, omie_anexo_id: nIdAnexo,
+        substituido: foiSubstituido, produto_recem_criado: produtoRecemCriado,
+        sync_campos_ok: alteracao.ok,
+      },
     });
     if (logError) console.warn("vp_logs falhou:", logError.message);
 

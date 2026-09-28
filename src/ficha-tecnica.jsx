@@ -120,6 +120,8 @@ function FtFicha({ state }) {
     id.sku && { k: 'SKU', v: id.sku },
     id.codigoProduto && { k: 'Código do Produto', v: id.codigoProduto },
     id.partNumber && { k: 'Part Number', v: id.partNumber },
+    id.marca && { k: 'Marca', v: id.marca },
+    id.modelo && { k: 'Modelo', v: id.modelo },
   ].filter(Boolean);
   const vazia = !d.grupos.length && idents.length === 0 && !(id.descricaoTecnica && id.descricaoTecnica.trim()) && !(state.descricao_duimp && state.descricao_duimp.trim());
   const orientation = useFichaOrientation(d.temMidia ? d.midia : null);
@@ -325,6 +327,18 @@ function FtEditor({ state, onIdent, onValue, onRemove, onMedia, onAddField, onNC
           </label>
           <label className="ft-f"><span>Part Number</span>
             <input className="ft-mono" value={state.identificacao.partNumber} onChange={(e) => onIdent('partNumber', e.target.value)} placeholder="opcional"/>
+          </label>
+          <label className="ft-f"><span>Marca</span>
+            <input value={state.identificacao.marca || ''} onChange={(e) => onIdent('marca', e.target.value)} placeholder="opcional"/>
+          </label>
+          <label className="ft-f"><span>Modelo</span>
+            <input value={state.identificacao.modelo || ''} onChange={(e) => onIdent('modelo', e.target.value)} placeholder="opcional"/>
+          </label>
+          <label className="ft-f"><span>Unidade (Omie)</span>
+            <input className="ft-mono" value={state.identificacao.unidade || ''} onChange={(e) => onIdent('unidade', e.target.value.toUpperCase())} placeholder="UN, KG, PC, M…"/>
+          </label>
+          <label className="ft-f"><span>FCI · Ficha de Conteúdo de Importação</span>
+            <input className="ft-mono" value={state.identificacao.fci || ''} onChange={(e) => onIdent('fci', e.target.value)} placeholder="opcional"/>
           </label>
           {/* SKU é gerado automaticamente — usuário não digita (padrão único, sem interpretações) */}
           <label className="ft-f full"><span>SKU · gerado automaticamente {skuAuto.sku ? '✓' : ''}</span>

@@ -91,10 +91,15 @@
       ],
     },
     {
+      /* Part Number/ANVISA/ANP removidos em 28/09 (mapeamento pro Omie):
+         Part Number duplicava identificacao.partNumber; ANVISA/ANP são de
+         remédio/combustível, sem uso pra elevador/escada/esteira. NCM e
+         EAN/GTIN continuam aqui só como anotação interna — quem publica no
+         Omie é sempre ncm_recomendado (NCM) e nada (EAN, sem fonte
+         confiável ainda); nenhum dos dois campos abaixo é enviado. */
       id: 'codigos', nome: 'Códigos e Classificações', icon: 'barcode',
       campos: [
         f('NCM', '', 'text'), f('CEST', '', 'text'), f('EAN / GTIN', '', 'text'),
-        f('Part Number', '', 'text'), f('Código ANVISA', '', 'text'), f('Código ANP', '', 'text'),
       ],
     },
   ];
@@ -178,7 +183,7 @@
   function freshState() {
     return {
       __id: genId(),    // estável desde o mount — usado como pasta no Storage e id na DB
-      identificacao: { nomeProduto: '', descricaoComercial: '', descricaoTecnica: '', categoriaProduto: '', sku: '', codigoProduto: '', partNumber: '' },
+      identificacao: { nomeProduto: '', descricaoComercial: '', descricaoTecnica: '', categoriaProduto: '', sku: '', codigoProduto: '', partNumber: '', marca: '', modelo: '', unidade: '', fci: '' },
       /* NCM/DUIMP — campos novos do copiloto (inputs do humano) */
       insumo: '', funcao_aplicacao: '', eh_parte_de: '', forma_estado: '',
       /* NCM/DUIMP — decisão limpa devolvida pela IA */
