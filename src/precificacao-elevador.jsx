@@ -570,6 +570,10 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const resultadoV2 = pz.resultado_v2 && pz.resultado_v2.precificacao ? pz.resultado_v2 : null;
   const margemEfetivaV2Negativa = !!resultadoV2 && resultadoV2.precificacao.margemEfetivaPct < 0;
   const resultadoV2Expresso = pz.resultado_v2_expresso && pz.resultado_v2_expresso.precificacao ? pz.resultado_v2_expresso : null;
+  // Mesma soma usada em calcularEsalvar() (precificacao-elevador-store.js) pra
+  // formar quantidadeEquipamentos — reaproveitada aqui só pra exibir "× N"
+  // ao lado do preço por equipamento, sem recalcular nada do motor.
+  const quantidadeEquipamentos = (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1;
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
   const margemMinima = Number(params.margem_minima_pct) || 0;
@@ -1037,7 +1041,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <Card title="Preço de venda — 120 dias (Compartilhado)" sub="container compartilhado, prazo padrão">
             <div className="stack" style={{ gap: 12 }}>
               <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
-              <div><span className="up-eyebrow muted">Preço de venda</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
+              <div><span className="up-eyebrow muted">Preço de venda por equipamento</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaPorEquipamento)}{quantidadeEquipamentos > 1 ? ` × ${quantidadeEquipamentos}` : ''}</div></div>
+              <div><span className="up-eyebrow muted">Preço de venda — soma de todos os equipamentos</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
               <div className="row gap-3">
                 <div>
                   <span className="up-eyebrow muted">Margem efetiva</span>
@@ -1068,7 +1073,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             <Card title="Preço de venda — 90 dias (Exclusivo)" sub="container exclusivo, entrega mais rápida">
               <div className="stack" style={{ gap: 12 }}>
                 <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2Expresso.custoEconomicoCompleto)}</div></div>
-                <div><span className="up-eyebrow muted">Preço de venda</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta)}</div></div>
+                <div><span className="up-eyebrow muted">Preço de venda por equipamento</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaPorEquipamento)}{quantidadeEquipamentos > 1 ? ` × ${quantidadeEquipamentos}` : ''}</div></div>
+                <div><span className="up-eyebrow muted">Preço de venda — soma de todos os equipamentos</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta)}</div></div>
                 <div className="row gap-3">
                   <div>
                     <span className="up-eyebrow muted">Margem efetiva</span>
