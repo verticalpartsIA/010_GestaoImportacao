@@ -56,7 +56,7 @@ Deno.serve(async (req: Request) => {
   }
 
   try {
-    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+    const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
     const urls: Record<string, string | null> = {};
     await Promise.all(paths.map(async (path) => {
       const { data, error } = await supabase.storage.from(BUCKET).createSignedUrl(path, EXPIRY_SECONDS);

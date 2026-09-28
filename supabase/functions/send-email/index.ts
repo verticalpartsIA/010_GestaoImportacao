@@ -139,7 +139,7 @@ Deno.serve(async (req: Request) => {
     let anexosSalvos: { filename: string; content_type: string; size: number; path: string }[] = [];
     if (numeroCotacao != null && anexos.length) {
       try {
-        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
         const grupoId = crypto.randomUUID();
         for (const a of anexos) {
           const bytes = base64ToBytes(a.base64);
@@ -156,7 +156,7 @@ Deno.serve(async (req: Request) => {
 
     if (numeroCotacao != null) {
       try {
-        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
         await supabase.from("emails_projeto").insert({
           numero_cotacao: numeroCotacao,
           referencia_tipo: referenciaTipo,

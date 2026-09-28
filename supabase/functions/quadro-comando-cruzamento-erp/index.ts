@@ -55,7 +55,7 @@ function json(body: unknown, status = 200) {
 const omieKey = Deno.env.get("OMIE_API_KEY") || "";
 const omieSecret = Deno.env.get("OMIE_API_SECRET") || "";
 const supabaseUrl = Deno.env.get("SUPABASE_URL") || "";
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const supabaseServiceKey = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}")["default"] || "";
 
 function restHeaders(extra?: Record<string, string>) {
   return { apikey: supabaseServiceKey, Authorization: `Bearer ${supabaseServiceKey}`, "Content-Type": "application/json", ...extra };
