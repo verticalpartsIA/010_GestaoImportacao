@@ -8,7 +8,7 @@ model: sonnet
 # Agent: DATABASE — Supabase Schema
 **Projeto:** VP Gestão — vpprd_claudeDesigner
 **Supabase URL:** https://jxtqwzmpgofwctqajewt.supabase.co
-**Anon key:** eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc
+**Anon key:** sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP
 
 ## Status atual (maio/2026)
 As 11 tabelas abaixo já existem e estão vazias:
@@ -22,7 +22,7 @@ Sempre verificar se a tabela já existe antes de criar. Usar `CREATE TABLE IF NO
 ## Verificar tabelas existentes
 
 ```bash
-curl -s "https://jxtqwzmpgofwctqajewt.supabase.co/rest/v1/?apikey=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc"
+curl -s "https://jxtqwzmpgofwctqajewt.supabase.co/rest/v1/?apikey=sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP"
 ```
 
 ## Schema das 11 tabelas principais
