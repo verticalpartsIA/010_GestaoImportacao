@@ -15,12 +15,15 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
      sempre pode, via temCapacidade). Só trava o botão de criar; ver/abrir
      detalhe continua livre (fluxo de análise da Engenharia não muda). */
   const [podeCriar, setPodeCriar] = React.useState(false);
+  const [podeExcluir, setPodeExcluir] = React.useState(false);
+  const [solicitacaoExcluir, setSolicitacaoExcluir] = React.useState(null);
 
   const user = window.__VP_USER || { email: 'desconhecido', nome: 'Usuário' };
 
   React.useEffect(() => {
     if (!window.PropostaStore) return;
     window.PropostaStore.temCapacidade('solicitacoes-produto', 'criar').then(setPodeCriar).catch(() => {});
+    window.PropostaStore.temCapacidade('solicitacoes-produto', 'excluir').then(setPodeExcluir).catch(() => {});
   }, []);
 
   React.useEffect(() => {
@@ -108,6 +111,8 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
           }}
           onNovaClick={() => setView('nova')}
           onAbrirClick={_abrirDetalhe}
+          podeExcluir={podeExcluir}
+          onExcluirClick={setSolicitacaoExcluir}
           user={user}
         />
       ) : view === 'nova' ? (
@@ -136,11 +141,101 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
           user={user}
         />
       )}
+
+      {solicitacaoExcluir && (
+        <ModalExcluirSolicitacao
+          solicitacao={solicitacaoExcluir}
+          onClose={() => setSolicitacaoExcluir(null)}
+          onExcluida={() => {
+            setSolicitacaoExcluir(null);
+            _carregarLista();
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, user }) {
+/* ---------- MODAL: Excluir Solicitação ----------
+   Soft-delete (SolicitacoesProdutoStore.excluir → excluido_em/excluido_por).
+   Exige o checkbox de ciência marcado antes de liberar o botão de
+   confirmação — ninguém exclui em 1 clique só, mesmo padrão de "certeza
+   explícita" pedido pelo usuário. */
+function ModalExcluirSolicitacao({ solicitacao, onClose, onExcluida }) {
+  const [ciente, setCiente] = React.useState(false);
+  const [excluindo, setExcluindo] = React.useState(false);
+  const [erro, setErro] = React.useState('');
+
+  const jaVirouFicha = solicitacao.status === 'convertido_em_ficha';
+
+  async function confirmar() {
+    if (!ciente || excluindo) return;
+    setExcluindo(true);
+    setErro('');
+    try {
+      await window.SolicitacoesProdutoStore.excluir(solicitacao.id);
+      onExcluida();
+    } catch (e) {
+      setErro('Erro ao excluir: ' + (e.message || e));
+      setExcluindo(false);
+    }
+  }
+
+  return (
+    <div style={styles.modalShroud} onClick={excluindo ? undefined : onClose}>
+      <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalTitle}>Excluir solicitação?</div>
+
+        <div style={styles.modalInfo}>
+          <div style={{ fontWeight: 700 }}>{solicitacao.numero_solicitacao}</div>
+          <div style={{ color: '#666', marginTop: '4px' }}>
+            {solicitacao.cliente_nome ? solicitacao.cliente_nome + ' · ' : ''}
+            {solicitacao.categoria_sku || '—'} · {solicitacao.status.replace(/_/g, ' ').toUpperCase()}
+          </div>
+        </div>
+
+        {jaVirouFicha && (
+          <div style={styles.modalWarn}>
+            Esta solicitação já foi convertida em Ficha Técnica. A ficha não é apagada e continua
+            acessível normalmente — só esta solicitação sai da lista.
+          </div>
+        )}
+
+        <div style={styles.modalText}>
+          A solicitação sai da lista de Solicitações de Produto. O registro fica guardado no banco
+          (com data e autor da exclusão) e pode ser recuperado pelo suporte, se necessário.
+        </div>
+
+        <label style={styles.modalCheckboxRow}>
+          <input
+            type="checkbox"
+            checked={ciente}
+            onChange={(e) => setCiente(e.target.checked)}
+            style={{ marginTop: '2px' }}
+          />
+          <span>Estou ciente e tenho certeza de que quero excluir esta solicitação.</span>
+        </label>
+
+        {erro && <div style={styles.erro}>{erro}</div>}
+
+        <div style={styles.modalActions}>
+          <button style={styles.btnSecondary} onClick={onClose} disabled={excluindo}>
+            CANCELAR
+          </button>
+          <button
+            style={{ ...styles.btnDanger, ...((!ciente || excluindo) ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+            onClick={confirmar}
+            disabled={!ciente || excluindo}
+          >
+            {excluindo ? 'EXCLUINDO…' : 'SIM, EXCLUIR'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, podeExcluir, onExcluirClick, user }) {
   const statusCores = {
     novo: '#3b82f6',
     em_analise: '#f59e0b',
@@ -256,12 +351,24 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
                   </td>
                   <td style={styles.td}>{new Date(sol.data_criacao).toLocaleDateString('pt-BR')}</td>
                   <td style={styles.td}>
-                    <button
-                      onClick={() => onAbrirClick(sol.id)}
-                      style={styles.btnLink}
-                    >
-                      ABRIR
-                    </button>
+                    <div style={styles.acoesCell}>
+                      <button
+                        onClick={() => onAbrirClick(sol.id)}
+                        style={styles.btnLink}
+                      >
+                        ABRIR
+                      </button>
+                      {podeExcluir && (
+                        <button
+                          onClick={() => onExcluirClick(sol)}
+                          style={styles.btnIconTrash}
+                          title="Excluir solicitação"
+                          aria-label="Excluir solicitação"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -798,6 +905,18 @@ const styles = {
   btnPrimary: { padding: '10px 20px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
   btnSecondary: { padding: '10px 20px', background: '#e5e7eb', color: '#333', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
   btnLink: { color: '#3b82f6', textDecoration: 'none', fontWeight: 600, cursor: 'pointer', fontSize: '12px', background: 'none', border: 'none', padding: 0 },
+  btnDanger: { padding: '10px 20px', background: '#ef4444', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
+  acoesCell: { display: 'flex', gap: '10px', alignItems: 'center' },
+  btnIconTrash: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', padding: '2px 4px', lineHeight: 1 },
+
+  modalShroud: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  modalBox: { background: '#fff', borderRadius: '8px', width: '460px', maxWidth: '92vw', padding: '22px', boxShadow: '0 10px 40px rgba(0,0,0,0.25)' },
+  modalTitle: { fontSize: '16px', fontWeight: 700, marginBottom: '14px' },
+  modalInfo: { background: '#f9fafb', border: '1px solid #e5e7eb', borderRadius: '4px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px' },
+  modalWarn: { background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: '4px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px', color: '#b45309' },
+  modalText: { fontSize: '13px', color: '#444', lineHeight: 1.5, marginBottom: '14px' },
+  modalCheckboxRow: { display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '13px', marginBottom: '18px', cursor: 'pointer' },
+  modalActions: { display: 'flex', gap: '10px', justifyContent: 'flex-end' },
 
   filtros: { display: 'flex', gap: '16px', marginBottom: '20px', alignItems: 'flex-end', flexWrap: 'wrap' },
   filtroGrupo: { display: 'flex', flexDirection: 'column', gap: '6px' },

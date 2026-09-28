@@ -106,7 +106,8 @@ window.SolicitacoesProdutoStore = (() => {
     try {
       let query = window.__VP_SB.sb
         .from('solicitacoes_produto')
-        .select('*');
+        .select('*')
+        .is('excluido_em', null);
 
       if (filtros.status) {
         query = query.eq('status', filtros.status);
@@ -194,6 +195,33 @@ window.SolicitacoesProdutoStore = (() => {
     });
   }
 
+  /* Soft-delete (excluido_em/excluido_por) — nada aponta de volta pra
+     solicitacoes_produto (sem FK), então não há risco de registro órfão,
+     mas o registro fica guardado no banco (recuperável pelo suporte) em
+     vez de apagado de verdade, mesmo padrão de leads (comercial.jsx).
+     .select('id') pra confirmar que a linha foi mesmo alterada — um update
+     barrado por RLS volta sem erro e sem linhas. */
+  async function excluir(id) {
+    try {
+      const { data, error } = await window.__VP_SB.sb
+        .from('solicitacoes_produto')
+        .update({
+          excluido_em: new Date().toISOString(),
+          excluido_por: (window.__VP_USER && window.__VP_USER.email) || null,
+        })
+        .eq('id', id)
+        .select('id');
+
+      if (error) throw error;
+      if (!data || !data.length) throw new Error('nenhum registro foi alterado');
+      console.log('[SolicitacoesProdutoStore] Solicitação excluída:', id);
+      return true;
+    } catch (e) {
+      console.error('[SolicitacoesProdutoStore] Erro ao excluir:', e);
+      throw e;
+    }
+  }
+
   /* ---------- Anexos (imagem/PDF do produto) ----------
      Mesmo bucket público "engenharia" já usado por Projeto de Elevadores/
      P.I./Termo de Entrega — sem bucket novo. A solicitação ainda não tem
@@ -233,5 +261,6 @@ window.SolicitacoesProdutoStore = (() => {
     iniciarAnalise,
     marcarPronto,
     converterEmFicha,
+    excluir,
   };
 })();
