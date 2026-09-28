@@ -680,15 +680,18 @@ function PropostaEditor({ setRoute, subsel }) {
     return () => { cancelado = true; };
   }, [editId]);
 
-  /* Re-sincroniza o status quando a aba volta ao foco. O aceite acontece na
-     página pública /assinar (outra aba/janela); sem isto, ao voltar pro editor
-     o badge continuava "Rascunho" mesmo com a proposta já assinada no banco
-     (achado E2E). Atualiza só os campos de meta — nunca o conteúdo em edição. */
+  /* Re-sincroniza o status quando a aba volta ao foco OU quando a página
+     pública /assinar/<token> grava direto em `propostas` (Realtime, 28/09).
+     O aceite/recusa acontece numa aba/janela diferente; antes disto o badge
+     só saía de "Rascunho" se o usuário trocasse de aba (achado E2E) — o
+     Realtime cobre o caso comum (tela aberta, sem trocar de aba), o
+     visibilitychange fica como reforço pra quando o canal cair.
+     Atualiza só os campos de meta — nunca o conteúdo em edição. */
   React.useEffect(() => {
-    if (!editId) return;
+    if (!editId || !window.__VP_SB?.sb) return;
+    const sb = window.__VP_SB.sb;
     const refetch = () => {
-      if (document.visibilityState !== 'visible' || !window.__VP_SB?.sb) return;
-      window.__VP_SB.sb.from('propostas')
+      sb.from('propostas')
         .select('status, publicado_em, publicado_por, version, valor_total, atualizado_em, revisao_texto, revisao_solicitada_em, destravada_em, destravada_por, revisao_decisao, revisao_decidida_em, revisao_decidida_por, motivo_recusa_interna')
         .eq('id', editId).maybeSingle()
         .then(({ data: row }) => {
@@ -704,8 +707,12 @@ function PropostaEditor({ setRoute, subsel }) {
           }));
         });
     };
-    document.addEventListener('visibilitychange', refetch);
-    return () => document.removeEventListener('visibilitychange', refetch);
+    const onVisibility = () => { if (document.visibilityState === 'visible') refetch(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    const canal = sb.channel('proposta-status-' + editId)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'propostas', filter: `id=eq.${editId}` }, refetch)
+      .subscribe();
+    return () => { document.removeEventListener('visibilitychange', onVisibility); sb.removeChannel(canal); };
   }, [editId]);
 
   const set = React.useCallback((path, value) => {

@@ -528,6 +528,18 @@ function DespacharVistoria() {
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
 
+  // Realtime (28/09): status muda sozinho na lista de despachos quando o
+  // montador responde pela página pública vistoria-execucao.html (link
+  // mandado por WhatsApp/e-mail) — sem isto só via reload manual.
+  React.useEffect(() => {
+    const sb = window.__VP_SB?.sb;
+    if (!sb) return;
+    const canal = sb.channel('vistorias-atividades-despacho')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'vistorias_atividades' }, () => carregar())
+      .subscribe();
+    return () => sb.removeChannel(canal);
+  }, [carregar]);
+
   const equipamentosDaObra = form.dossierId ? (equipPorObra[form.dossierId] || []) : [];
 
   const despachar = async () => {
