@@ -20,6 +20,11 @@
     repQualif: 'brasileiro, casado, empresário, portador do RG 23.401.535-4 SSP/SP, inscrito no CPF nº 249.432.208-19',
     repCpf: '249.432.208-19',
     repCargo: 'CEO',
+    /* Chave PIX é o próprio CNPJ da VENDEDORA (cima) — nunca digitar um valor
+       solto aqui, pra não divergir se o CNPJ acima for corrigido um dia. */
+    banco: 'Banco Santander',
+    agencia: '2206',
+    contaCorrente: '13002295-4',
   };
 
   /* ---------- Contatos fixos da VENDEDORA (cláusula 10.1) ---------- */
@@ -376,7 +381,8 @@
           p('__TABELA_EQUIPAMENTOS__', { equipamentos: tabelaEquipamentos }),
         ] : []),
         p('<b>3.2 Serviços.</b> A porcentagem de serviços em relação ao preço total pode chegar a até 30% (trinta por cento) podendo ser considerado serviço a instalação, frete rodoviário, projetos de engenharia, treinamentos entre outros.', { html: true }),
-        p('<b>3.3 Formas de pagamento.</b> Todos os valores acima mencionados poderão ser pagos pelo COMPRADOR por meio de boleto, depósito bancário ou transferência eletrônica bancária diretamente na conta corrente da VENDEDORA ou de outra forma que as partes combinarem.', { html: true }),
+        p('<b>3.3 Formas de pagamento.</b> Todos os valores mencionados neste Contrato deverão ser pagos pelo COMPRADOR à VENDEDORA por meio de boleto bancário, depósito bancário ou transferência eletrônica (TED, DOC ou PIX), mediante crédito na conta corrente de titularidade da VENDEDORA, conforme os dados bancários abaixo, ou de outra forma que as partes combinarem por escrito.', { html: true }),
+        p(`<b>Dados bancários da VENDEDORA:</b><br/>Banco: ${esc(V.banco)}<br/>Agência: ${esc(V.agencia)}<br/>Conta Corrente: ${esc(V.contaCorrente)}<br/>Chave PIX: ${esc(V.cnpj)}`, { html: true, callout: true }),
         p('<b>3.4 Penalidades por atraso no pagamento.</b> Caso o COMPRADOR não realize qualquer pagamento na data prevista, sobre o valor em atraso incidirá multa de 2% (dois por cento), juros moratórios de 1% (um por cento) ao mês, calculado por dia de atraso (pro rata die) e correção monetária pelo índice IGPM ou outro que o substitua.', { html: true }),
         p('<b>3.4.1</b> Além das penalidades previstas acima, o atraso no pagamento de qualquer valor por mais de 30 (trinta) dias importará no vencimento integral e antecipado do débito total vencendo, sujeitando o COMPRADOR ao protesto extrajudicial, à negativação nos órgãos de proteção ao crédito e à execução imediata do presente instrumento, independentemente de notificação, intimação, interpelação ou qualquer outra formalidade.', { html: true, indent: true }),
         p('<b>3.4.2</b> Também será caso de vencimento antecipado a falência, a recuperação judicial, a alteração societária, a dissolução ou o encerramento de fato das atividades (apurado pela verificação do fechamento do estabelecimento comercial) do COMPRADOR.', { html: true, indent: true }),
