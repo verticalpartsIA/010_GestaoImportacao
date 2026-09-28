@@ -1761,16 +1761,18 @@ function EmailInbox({ setRoute, setSubsel }) {
         </div>
 
         <div className="inbox__list">
-          <div className="inbox__list-head">
-            <span>{folders.find((f) => f.id === folder)?.label || folder}</span>
-            <span className="mono">{listaFiltrada.length}</span>
-          </div>
-          {(folder === "inbox" || folder === "sent") && (
-            <div style={{ padding: '8px 12px' }}>
-              <input className="input" style={{ width: '100%' }} placeholder="Buscar por assunto, remetente ou nº cotação…"
-                value={busca} onChange={(e) => setBusca(e.target.value)}/>
+          <div className="inbox__list-toolbar">
+            <div className="inbox__list-head">
+              <span>{folders.find((f) => f.id === folder)?.label || folder}</span>
+              <span className="mono">{listaFiltrada.length}</span>
             </div>
-          )}
+            {(folder === "inbox" || folder === "sent") && (
+              <div className="inbox__list-search">
+                <input className="input" style={{ width: '100%' }} placeholder="Buscar por assunto, remetente ou nº cotação…"
+                  value={busca} onChange={(e) => setBusca(e.target.value)}/>
+              </div>
+            )}
+          </div>
           {folder !== "inbox" && folder !== "sent" && (
             <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
               Esta pasta ainda não está implementada — só Caixa de entrada e Enviados leem de verdade.
