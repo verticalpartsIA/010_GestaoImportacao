@@ -309,7 +309,7 @@ Usuário reportou olhando a Central de Decisões (`/geral/decisoes`) que a cota�
 - `index.html`: `decisoes-store.js` v13→v14.
 - Não testado com clique real no navegador nesta sessão — validado só pela leitura direta dos dados reais da precificação 955 no Supabase e por `node -c` (sintaxe).
 
-## Envio de Proposta por E-mail — trocado de `mailto:` pra SMTP direto (28/09/2026)
+## Envio de Proposta por E-mail — trocado de `mailto:` pra SMTP direto (28/09/2026, PR #476, squash `3787338`, issue fechada #477)
 
 Pedido explícito do usuário (o que faltava na investigação de PR #464/#465, ver bullet acima): "as propostas devem sair de dentro do site para o cliente e as respostas dele de fora pra dentro do site, a proposta deverá aparecer pra ele em forma de link público, isso já acontece quando é enviado pelo whatsapp". Ou seja: o canal E-mail devia se comportar como o WhatsApp/Link (que já enviam o link público `/assinar/:token` direto do site) — não como hoje, que abria o Outlook/cliente local.
 
