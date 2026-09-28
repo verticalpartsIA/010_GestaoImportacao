@@ -825,6 +825,78 @@ REGRA NOTÁVEL: as abas Vistoria/Documentos/NCM dentro desta tela são
 placeholders que só REDIRECIONAM pras telas reais correspondentes (evita
 duplicar o mesmo registro em dois lugares — "agora fica num lugar só").`,
 
+  'solicitacoes-produto': `TELA: Solicitação de Produto (Engenharia/Comercial).
+
+Formulário pensado pra quem NÃO é técnico pedir a criação de um SKU/produto
+novo — a Engenharia completa os detalhes técnicos depois. Fluxo: qualquer
+setor preenche e clica "ENVIAR PARA ENGENHARIA" → a Engenharia (Arilene) é
+avisada automaticamente e faz a análise/desenho → quando pronto, a
+Importação (Bianca) é avisada pra avaliar → vira Ficha Técnica de produto.
+
+IMPORTANTE — como se referir aos campos: cite SEMPRE o rótulo exatamente
+como aparece na tela (ex.: "Foi um pedido de um cliente específico?",
+"Categoria (SKU)") — nunca o nome interno da variável (ex.: nunca diga
+"categoria_sku" ou "foiPedidoCliente"). O usuário não sabe e não precisa
+saber que existe um nome de campo por trás do rótulo.
+
+CAMPOS DO FORMULÁRIO DE NOVA SOLICITAÇÃO, na ordem em que aparecem:
+
+- "Tipo de Equipamento" — select: Elevador, Escada Rolante ou Esteira. Já
+  vem com "Elevador" selecionado.
+- "Categoria (SKU)" — select, define o prefixo do código do produto no
+  Omie. Opções: "VPEL — Peça de Elevador (VerticalParts)",
+  "VPER — Peça de Escada/Esteira Rolante (VerticalParts)",
+  "VPB — Peça fornecida por BST", "VPMP — Matéria-Prima (VerticalParts)".
+  Qualquer setor pode escolher qualquer categoria, não tem trava por área.
+- "O que você precisa?" — texto livre, em palavras simples, do que é o
+  produto e pra que serve. Não precisa ser técnico — a Engenharia completa
+  os detalhes depois.
+- "Detalhes adicionais (opcional)" — qualquer informação extra que ajude.
+- "Contato do fornecedor (opcional)" — nome/telefone/e-mail do fornecedor,
+  se o usuário já tiver.
+- "Link do produto (opcional)" — site do fabricante, catálogo ou
+  marketplace onde o produto foi visto.
+- "Imagem ou PDF do produto (opcional)" — anexo de verdade (sobe pro
+  Storage), aceita imagem ou PDF, pode anexar mais de um arquivo.
+- "Foi um pedido de um cliente específico?" — checkbox. É o GATILHO de um
+  bloco condicional (ver abaixo).
+- "Solicitante" e "E-mail" — já vêm preenchidos com o nome/e-mail de quem
+  está logado; raramente precisam ser alterados.
+
+NA VERDADE só DOIS campos bloqueiam o envio se vazios: "Categoria (SKU)" e
+"O que você precisa?". Os demais campos marcados com "*" na tela (Tipo de
+Equipamento, Solicitante, E-mail) já nascem preenchidos por padrão, então
+na prática nunca impedem o envio.
+
+CAMPO CONDICIONAL (só aparece depois de um clique) — regra de negócio
+importante: marcar a checkbox "Foi um pedido de um cliente específico?"
+revela 3 campos novos, que ficam escondidos até isso acontecer:
+  - "Cliente (opcional)" — nome do cliente.
+  - "Indústria (opcional)" — ramo/indústria do cliente.
+  - "Contato do cliente (opcional)" — telefone, e-mail etc.
+**Se a checkbox continuar DESMARCADA, qualquer coisa digitada nesses 3
+campos é DESCARTADA ao enviar** (o sistema só grava esses dados quando a
+checkbox está marcada — é assim mesmo mesmo que os campos já tenham sido
+preenchidos antes de desmarcar). Se o usuário te der nome/indústria/
+contato de um cliente pra você preencher, marque também a checkbox "Foi
+um pedido de um cliente específico?" como marcada — senão os dados dele
+somem silenciosamente e ele nunca vai saber por quê.
+
+DEPOIS DE ENVIAR: a solicitação nasce com o status "NOVO", ganha um número
+(formato SOL-AAAAMMDD-#####) e some pra fila da Engenharia. Ciclo de
+status que aparece como selo na listagem (o solicitante só ACOMPANHA,
+não controla essas mudanças): NOVO → EM ANALISE (Engenharia está
+trabalhando nela) → AGUARDANDO DESENHO → PRONTO (Importação foi avisada
+pra avaliar) → CONVERTIDO EM FICHA (virou uma Ficha Técnica de produto de
+verdade).
+
+Você pode conduzir a conversa perguntando os dados um de cada vez e
+preencher a solicitação inteira (mesmas regras gerais de "mode fill" do
+sistema): comece pelos dois campos obrigatórios se ainda não tiver essa
+informação, e SEMPRE pergunte "foi um pedido de algum cliente específico"
+antes de preencher os campos de cliente, justamente pra saber se marca a
+checkbox — sem isso o preenchimento do cliente não serve pra nada.`,
+
   'eng-projeto-elevadores': `TELA: Projeto de Elevadores (Engenharia).
 
 Traduz os desenhos técnicos enviados pelo fornecedor (poço/cabine/porta/
