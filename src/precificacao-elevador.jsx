@@ -522,10 +522,17 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               <thead><tr><th>Unidade</th><th>Tração</th><th>Capacidade</th><th>Paradas</th><th>Situação</th><th>Regra usada</th><th>Valor (R$)</th><th></th></tr></thead>
               <tbody>
                 {pz.mo_lookup.map((mo, i) => {
-                  const editando = editandoMoUnidade && editandoMoUnidade === mo.unidadeId;
+                  // Unidade com quantidade > 1 vira várias linhas (mesmo unidadeId,
+                  // uma por equipamento físico — ver buscarMaoDeObraAutomatica) —
+                  // só a 1ª linha do grupo pode abrir a edição inline, já que
+                  // tração/capacidade/paradas são da Unidade inteira, não de um
+                  // equipamento físico isolado.
+                  const primeiraDoGrupo = (mo.equipamentoIndice || 1) === 1;
+                  const editando = primeiraDoGrupo && editandoMoUnidade && editandoMoUnidade === mo.unidadeId;
+                  const chave = `${mo.unidadeId || 'x'}-${mo.equipamentoIndice || i}`;
                   if (editando) {
                     return (
-                      <tr key={mo.unidadeId || i} style={{ background: 'var(--vp-gray-50)' }}>
+                      <tr key={chave} style={{ background: 'var(--vp-gray-50)' }}>
                         <td>{mo.identificador || '—'}</td>
                         <td>
                           <select className="input" style={{ minWidth: 90 }} value={moSpecEdit.tracao}
@@ -554,7 +561,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                     );
                   }
                   return (
-                    <tr key={mo.unidadeId || i}>
+                    <tr key={chave}>
                       <td>{mo.identificador || '—'}</td>
                       <td>{mo.tracao || '—'}</td>
                       <td>{mo.capacidadeKg != null ? `${mo.capacidadeKg} kg` : '—'}</td>
@@ -568,8 +575,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                       <td className="small muted" title={mo.motivo || ''}>{mo.regraUsada || mo.motivo || '—'}</td>
                       <td className="mono">{mo.valorRs ? fmtBRL2(mo.valorRs) : '—'}</td>
                       <td>
-                        {mo.unidadeId && (
-                          <Button variant="ghost" size="sm" icon="edit" title="Trocar tração/capacidade/paradas desta unidade"
+                        {mo.unidadeId && primeiraDoGrupo && (
+                          <Button variant="ghost" size="sm" icon="edit" title={mo.equipamentoTotal > 1 ? `Trocar tração/capacidade/paradas desta unidade (vale para os ${mo.equipamentoTotal} equipamentos)` : 'Trocar tração/capacidade/paradas desta unidade'}
                             onClick={() => {
                               setMoSpecEdit({ tracao: mo.tracao || '', capacidadeKg: mo.capacidadeKg ?? '', paradas: mo.paradas ?? '' });
                               setEditandoMoUnidade(mo.unidadeId);
