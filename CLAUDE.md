@@ -201,6 +201,15 @@ Resultado final, confirmado via `ListarCaractProduto` real e o toast da própria
 
 **Lição pra próxima vez que "validar em produção" for pedido**: um teste com produto **novo** (via `IncluirProduto`) não é suficiente pra pegar bugs que só aparecem em produto **já existente** — os dois caminhos passam por `AlterarProduto`/`prodcaract` de formas diferentes o bastante pra esconder bugs um do outro. Prefira sempre testar nos dois cenários quando mexer nesse fluxo de novo.
 
+### Lixeira (exclusão) em Solicitações de Produto (28/09/2026, PR #429 / issue #430)
+
+Ícone de lixeira em cada linha de `/engenharia/solicitacoes-produto` (`ListaView` em `solicitacoes-produto.jsx`), só visível pra quem tem a capacidade "Excluir" do módulo (`temCapacidade('solicitacoes-produto', 'excluir')` — ação padrão já existente na Administração, nenhuma mudança de alçada foi necessária). Clique abre `ModalExcluirSolicitacao`: mostra número/cliente/status, avisa se a solicitação já virou Ficha Técnica (a ficha não é afetada, só a solicitação some da lista), e **exige o checkbox "Estou ciente e tenho certeza..." marcado** antes de liberar "SIM, EXCLUIR" — pedido explícito do usuário pra evitar exclusão em 1 clique só.
+
+- **Soft-delete** (`excluido_em`/`excluido_por`, migration `20260928140000_solicitacoes_produto_soft_delete.sql`), mesmo padrão de Leads (`comercial.jsx`). `SolicitacoesProdutoStore.listar()` passa a filtrar `.is('excluido_em', null)`; `excluir(id)` faz o soft-delete com `.select('id')` pra confirmar que a linha foi mesmo alterada (update barrado por RLS volta sem erro e sem linhas — mesmo cuidado documentado na seção de Leads).
+- **Verificado antes de escolher soft vs. hard delete**: `select conname from pg_constraint where confrelid = 'solicitacoes_produto'::regclass` não retorna nada — nenhuma tabela tem FK apontando pra `solicitacoes_produto` (diferente de leads, que tem `cotacoes`/`formularios_elevador` bloqueando). Um DELETE de verdade seria seguro aqui, mas soft-delete foi mantido mesmo assim, pelo mesmo motivo de Leads: recuperação pelo suporte e preservação do histórico se a solicitação já tiver virado ficha (`ficha_tecnica_id`).
+- `solicitacoes-produto.jsx` v9→v10, `solicitacoes-produto-store.js` v6→v7.
+- Não testado com clique real no navegador nesta sessão — CDNs instáveis no sandbox (ver seção "Playwright" em Stack/como testar localmente); validado por transform via `@babel/standalone` (sem erro de sintaxe) e migration confirmada aplicada em produção via `information_schema.columns`.
+
 ## Fluxo de trabalho estabelecido nesta sessão
 
 - Branch de trabalho: `claude/project-setup-check-atzlcv` (sessão de 07/2026); na sessão de 26/09 foi `claude/nifty-rubin-hewkt6`; na sessão de 27–28/09 foi `claude/gifted-meitner-8mgx8m` (3 entregas, 3 rodadas de squash — mesmo padrão de recriar o branch a cada commit novo, ver abaixo). Fluxo: commit → push → abrir PR → squash merge em `main` (o usuário pede "abra o PR e faça o merge em main" a cada entrega) → issue fechada documentando → atualizar este arquivo.
