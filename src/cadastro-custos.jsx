@@ -266,19 +266,53 @@ function CCEscadaEsteiraTab() {
 }
 
 /* ---------- Containers ---------- */
+/* Preço (R$) — pedido do usuário (28/09): parava de existir de fato (campo
+   digitado à mão, podia ficar dessincronizado do dólar) e é ele quem "doa"
+   o valor pro campo de mesmo nome na Precificação (ver
+   [[precificacao-elevador-store]], enriquecerContainersComCusto). Câmbio
+   ao vivo via window.CambioAPI (já usado em Precificação/Proposta/PI —
+   mesmo módulo, sem chave, cache de 60s). Preenche sozinho quando o
+   Preço(USD) muda, mas continua editável na mão (decisão explícita do
+   usuário: câmbio é sugestão, não trava o campo) — por isso o botão
+   "Recalcular" ao lado, pra reaplicar o câmbio de hoje numa linha que já
+   tinha USD/R$ preenchidos antes desta feature existir. */
 function CCContainersTab() {
   const [rows, setRows] = React.useState(null);
   const [saving, setSaving] = React.useState(null);
   const [removendo, setRemovendo] = React.useState(null);
   const [adicionando, setAdicionando] = React.useState(false);
+  const [cambioHoje, setCambioHoje] = React.useState(null);
 
   const reload = () => { setRows(null); window.CadastroCustosStore.listarContainers().then(setRows); };
   React.useEffect(() => { reload(); }, []);
+  React.useEffect(() => {
+    let vivo = true;
+    window.CambioAPI?.buscarUsdBrl().then((c) => { if (vivo) setCambioHoje(c); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
 
   const salvarCampo = async (row, campo, valor) => {
     setSaving(row.id);
     try {
       await window.CadastroCustosStore.salvarContainer({ ...row, [campo]: valor });
+      await reload();
+    } catch (e) {
+      window.toast?.('Erro ao salvar: ' + e.message, 'error');
+    } finally {
+      setSaving(null);
+    }
+  };
+
+  /* Preço(USD) e Preço(R$) num único save (nunca 2 chamadas separadas) —
+     mesmo cuidado do bug de concorrência já documentado em
+     CCElevadorTab.salvarCampo: 2 awaits em sequência arriscaria o 2º
+     sobrescrever com uma cópia de `row` desatualizada. */
+  const salvarUsdComCambio = async (row, precoUsd) => {
+    setSaving(row.id);
+    try {
+      const patch = { ...row, preco_usd: precoUsd };
+      if (cambioHoje && precoUsd) patch.preco_rs = Math.round(precoUsd * cambioHoje.valor * 100) / 100;
+      await window.CadastroCustosStore.salvarContainer(patch);
       await reload();
     } catch (e) {
       window.toast?.('Erro ao salvar: ' + e.message, 'error');
@@ -336,8 +370,19 @@ function CCContainersTab() {
                 <td><input className="input" style={{ width: 100 }} defaultValue={r.altura_desc || ''}
                   onBlur={(e) => { if (e.target.value !== (r.altura_desc || '')) salvarCampo(r, 'altura_desc', e.target.value || null); }}/></td>
                 <td><CCInputNum value={r.capacidade_m3} width={80} onBlurSave={(v) => salvarCampo(r, 'capacidade_m3', v)}/></td>
-                <td className="text-right"><PZCurrencyInput moeda="USD" value={r.preco_usd} onChange={(v) => salvarCampo(r, 'preco_usd', v)}/></td>
-                <td className="text-right"><PZCurrencyInput moeda="BRL" value={r.preco_rs} onChange={(v) => salvarCampo(r, 'preco_rs', v)}/></td>
+                <td className="text-right"><PZCurrencyInput moeda="USD" value={r.preco_usd} onChange={(v) => salvarUsdComCambio(r, v)}/></td>
+                <td className="text-right">
+                  <PZCurrencyInput moeda="BRL" value={r.preco_rs} onChange={(v) => salvarCampo(r, 'preco_rs', v)}/>
+                  {cambioHoje && r.preco_usd > 0 && (
+                    <div className="small" style={{ marginTop: 4, color: 'var(--fg3)', whiteSpace: 'nowrap' }}>
+                      Câmbio hoje: <b>{cambioHoje.valor.toFixed(4)}</b>{' '}
+                      <Button variant="ghost" size="sm" disabled={saving === r.id}
+                        onClick={() => salvarCampo(r, 'preco_rs', Math.round(Number(r.preco_usd) * cambioHoje.valor * 100) / 100)}>
+                        Recalcular
+                      </Button>
+                    </div>
+                  )}
+                </td>
                 <td>
                   <input className="input" type="date" style={{ width: 140 }} value={r.data_cotacao || ''}
                     onChange={(e) => salvarCampo(r, 'data_cotacao', e.target.value || null)}/>
