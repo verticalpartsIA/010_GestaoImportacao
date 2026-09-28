@@ -274,14 +274,22 @@ function ModalAcrescentarEquipamento({ grupos, onClose, onConfirmar }) {
   );
 }
 
-/* Aviso "vendedor está ciente" pedido pelo usuário — nunca remove sem
-   confirmação explícita. `mo` é a linha física clicada; remove sempre 1
-   equipamento do grupo dela (decrementa quantidade, ou some com o grupo
-   inteiro se já era o último). */
+/* Aviso "vendedor está ciente" pedido pelo usuário — nunca exclui sem
+   confirmação explícita. `mo` é a linha física clicada.
+
+   29/09 — corrigido depois de um achado real na cotação Nº 962: a versão
+   anterior deste modal ("Remover equipamento?") decrementava a quantidade
+   cotada — o equipamento inteiro (com seu custo de mercadoria) sumia da
+   tabela "Unidades desta cotação"/VMLE e da Proposta, não só da Mão de
+   obra. O pedido real da Juliana era só excluir a Mão de obra de um
+   equipamento cuja instalação não é por conta da VerticalParts (terceiro
+   cuida da montagem) — o equipamento em si continua sendo vendido/
+   importado normalmente. Este modal (e removerEquipamento) NUNCA mais
+   mexe na quantidade — só marca a Mão de obra deste equipamento como
+   excluída do cálculo. */
 function ModalRemoverEquipamento({ mo, onClose, onConfirmar }) {
   const [ciente, setCiente] = React.useState(false);
   const [removendo, setRemovendo] = React.useState(false);
-  const ultimoDoGrupo = (mo.equipamentoTotal || 1) <= 1;
 
   const confirmar = async () => {
     if (!ciente || removendo) return;
@@ -290,10 +298,10 @@ function ModalRemoverEquipamento({ mo, onClose, onConfirmar }) {
   };
 
   return (
-    <Modal title="Remover equipamento?" onClose={onClose} width={480}
+    <Modal title="Excluir Mão de obra deste equipamento?" onClose={onClose} width={520}
       footer={<>
         <Button variant="ghost" onClick={onClose} disabled={removendo}>Cancelar</Button>
-        <Button variant="danger" onClick={confirmar} disabled={!ciente || removendo}>{removendo ? 'Removendo…' : 'Sim, remover'}</Button>
+        <Button variant="danger" onClick={confirmar} disabled={!ciente || removendo}>{removendo ? 'Excluindo…' : 'Sim, excluir a Mão de obra'}</Button>
       </>}>
       <div className="stack" style={{ gap: 12 }}>
         <div style={{ background: 'var(--vp-gray-50)', border: '1px solid var(--border)', padding: '12px 14px' }}>
@@ -301,14 +309,14 @@ function ModalRemoverEquipamento({ mo, onClose, onConfirmar }) {
           <div className="cell-sub" style={{ marginTop: 4 }}>{mo.tracao || '?'} × {mo.capacidadeKg != null ? `${mo.capacidadeKg}kg` : '?'} × {mo.paradas != null ? `${mo.paradas} paradas` : '?'}</div>
         </div>
         <p className="small" style={{ margin: 0 }}>
-          {ultimoDoGrupo
-            ? 'Este é o último equipamento deste grupo — ele some inteiro desta tabela.'
-            : `Reduz a quantidade cotada deste grupo de ${mo.equipamentoTotal} para ${mo.equipamentoTotal - 1}.`}
-          {' '}Isso só afeta esta Precificação (mão de obra e totais) — a Unidade original no Formulário de Elevadores não é alterada.
+          Use isso quando a instalação deste equipamento <b>não é por conta da VerticalParts</b> (ex.: terceiro cuida da montagem). O valor de Mão de obra (R$ {mo.valorRs ? fmtBRL2(mo.valorRs) : '0,00'}) sai do total de "Instalação e Montagem".
+        </p>
+        <p className="small" style={{ margin: 0, fontWeight: 600 }}>
+          O equipamento continua normalmente na cotação — isso NÃO reduz a quantidade nem mexe em "Unidades desta cotação"/VMLE/Proposta. Dá pra desfazer depois clicando em "Devolver ao cálculo".
         </p>
         <label className="row gap-2" style={{ alignItems: 'flex-start' }}>
           <input type="checkbox" checked={ciente} onChange={(e) => setCiente(e.target.checked)} style={{ marginTop: 2 }}/>
-          <span className="small">Estou ciente e tenho certeza de que este equipamento deve ser removido do pedido.</span>
+          <span className="small">Estou ciente e tenho certeza de que a Mão de obra deste equipamento deve ser excluída do cálculo.</span>
         </label>
       </div>
     </Modal>
@@ -453,9 +461,22 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       await window.PrecificacaoElevadorStore.removerEquipamento(pz.id, unidadeId);
       await carregar();
       setRemovendoEquipamento(null);
-      window.toast?.('Equipamento removido desta precificação.', 'success');
+      window.toast?.('Mão de obra excluída — o equipamento continua na cotação.', 'success');
     } catch (e) {
-      window.toast?.('Erro ao remover equipamento: ' + e.message, 'error');
+      window.toast?.('Erro ao excluir Mão de obra: ' + e.message, 'error');
+    } finally {
+      setAtualizandoMo(false);
+    }
+  };
+
+  const devolverEquipamentoMO = async (unidadeId) => {
+    setAtualizandoMo(true);
+    try {
+      await window.PrecificacaoElevadorStore.restaurarEquipamentoMO(pz.id, unidadeId);
+      await carregar();
+      window.toast?.('Equipamento devolvido pro cálculo normal de Mão de obra.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao devolver equipamento: ' + e.message, 'error');
     } finally {
       setAtualizandoMo(false);
     }
@@ -770,6 +791,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                         {mo.estimativa && <span className="badge" style={{ background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Estimativa — não confirmada</span>}
                         {mo.projetoEspecial && <span className="badge" style={{ background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Projeto especial</span>}
                         {mo.situacao === 'pendente' && !mo.projetoEspecial && <span className="badge" style={{ background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Pendente</span>}
+                        {mo.situacao === 'excluido' && <span className="badge" style={{ background: 'var(--vp-gray-200)', color: 'var(--fg2)', padding: '2px 8px', borderRadius: 4, fontSize: 11 }} title={mo.motivo || ''}>Fora do escopo VP</span>}
                       </td>
                       <td className="small muted" title={mo.motivo || ''}>{mo.regraUsada || mo.motivo || '—'}</td>
                       <td className="mono">{mo.valorRs ? fmtBRL2(mo.valorRs) : '—'}</td>
@@ -784,10 +806,16 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                               Trocar
                             </Button>
                           )}
-                          {mo.unidadeId && (
-                            <Button variant="ghost" size="sm" icon="trash" title="Remover este equipamento desta precificação"
+                          {mo.unidadeId && mo.situacao !== 'excluido' && (
+                            <Button variant="ghost" size="sm" icon="trash" title="Excluir a Mão de obra deste equipamento (instalação não é por conta da VerticalParts) — o equipamento continua na cotação"
                               onClick={() => setRemovendoEquipamento(mo)}>
                               Remover
+                            </Button>
+                          )}
+                          {mo.unidadeId && mo.situacao === 'excluido' && (
+                            <Button variant="ghost" size="sm" icon="refresh" disabled={atualizandoMo} title="Devolver este equipamento pro cálculo normal de Mão de obra"
+                              onClick={() => devolverEquipamentoMO(mo.unidadeId)}>
+                              Devolver ao cálculo
                             </Button>
                           )}
                         </div>

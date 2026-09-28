@@ -4,7 +4,7 @@ const assert = require('node:assert/strict');
 
 global.window = global.window || {};
 require('./precificacao-elevador-store.js');
-const { parseContainerNo, classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, acrescentarEquipamento, removerEquipamento } = window.PrecificacaoElevadorStore;
+const { parseContainerNo, classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO } = window.PrecificacaoElevadorStore;
 
 /* Fake mínimo de window.__VP_SB.sb — só o suficiente pra obter()/salvar()
    (select().eq().single() e update().eq()) contra uma "tabela" em memória. */
@@ -196,7 +196,51 @@ test('acrescentarEquipamento — modo "novo" cria equipamento avulso com specs p
   }
 });
 
-test('removerEquipamento — decrementa quantidade sem zerar o grupo inteiro', async () => {
+test('buscarMaoDeObraAutomatica — moExcluidos exclui a Mão de obra do(s) último(s) equipamento(s) físico(s), sem mudar quantidade/identificadores', async () => {
+  const antigo = window.CadastroCustosStore;
+  window.CadastroCustosStore = stubCadastroCustos(11550);
+  try {
+    const out = await buscarMaoDeObraAutomatica([
+      { unidadeId: 'u1', identificador: 'VPEL-EL0962-1', tracao: '2:1', capacidadeKg: 675, paradas: 4, quantidade: 1, moExcluidos: 1 },
+    ]);
+    assert.equal(out.length, 1, 'moExcluidos nunca remove a linha — só zera o valor');
+    assert.equal(out[0].situacao, 'excluido');
+    assert.equal(out[0].valorRs, 0);
+    assert.equal(out[0].moExcluido, true);
+    assert.match(out[0].motivo, /não é por conta da VerticalParts/);
+  } finally {
+    window.CadastroCustosStore = antigo;
+  }
+});
+
+// Achado real na cotação Nº 962: "Remover" (versão antiga) decrementava
+// `quantidade` — o mesmo campo que a tabela "Unidades desta cotação"/VMLE
+// e a Proposta usam como contagem real de equipamento vendido. Um
+// equipamento inteiro (com seu custo de mercadoria) sumiu da cotação só
+// porque o vendedor queria excluir a Mão de obra dele (instalação por
+// conta de terceiro). Os 2 testes abaixo travam o comportamento correto.
+test('removerEquipamento — NUNCA decrementa quantidade (achado real: cotação 962) — só exclui a MO daquele equipamento', async () => {
+  const antigoCustos = window.CadastroCustosStore;
+  const antigoSb = window.__VP_SB;
+  window.CadastroCustosStore = stubCadastroCustos(3000);
+  const row = { id: 'pz1', modelos: [{ unidadeId: 'u1', identificador: 'VPEL-EL0999-1', tracao: '2:1', capacidadeKg: 800, paradas: 3, quantidade: 1, valorUnitarioUsd: 9040 }] };
+  window.__VP_SB = { sb: makeFakeSb(row) };
+  try {
+    const moLookup = await removerEquipamento('pz1', 'u1');
+    assert.equal(row.modelos.length, 1, 'nunca remove a entrada — o equipamento continua na cotação/VMLE');
+    assert.equal(row.modelos[0].quantidade, 1, 'quantidade jamais muda — só quem alimenta "Unidades desta cotação"/Proposta');
+    assert.equal(row.modelos[0].valorUnitarioUsd, 9040, 'custo de mercadoria intacto');
+    assert.equal(row.modelos[0].moExcluidos, 1);
+    assert.equal(moLookup.length, 1);
+    assert.equal(moLookup[0].situacao, 'excluido');
+    assert.equal(moLookup[0].valorRs, 0);
+  } finally {
+    window.CadastroCustosStore = antigoCustos;
+    window.__VP_SB = antigoSb;
+  }
+});
+
+test('removerEquipamento — com quantidade > 1, exclui só 1 equipamento físico do grupo (os outros continuam confirmados)', async () => {
   const antigoCustos = window.CadastroCustosStore;
   const antigoSb = window.__VP_SB;
   window.CadastroCustosStore = stubCadastroCustos(3000);
@@ -204,25 +248,43 @@ test('removerEquipamento — decrementa quantidade sem zerar o grupo inteiro', a
   window.__VP_SB = { sb: makeFakeSb(row) };
   try {
     const moLookup = await removerEquipamento('pz1', 'u1');
-    assert.equal(row.modelos.length, 1, 'Unidade continua existindo, só com 1 a menos');
-    assert.equal(row.modelos[0].quantidade, 2);
-    assert.equal(moLookup.length, 2);
+    assert.equal(row.modelos[0].quantidade, 3, 'quantidade não muda');
+    assert.equal(moLookup.length, 3, 'os 3 equipamentos físicos continuam na tabela');
+    const excluidos = moLookup.filter((m) => m.situacao === 'excluido');
+    const confirmados = moLookup.filter((m) => m.situacao === 'confirmado');
+    assert.equal(excluidos.length, 1);
+    assert.equal(confirmados.length, 2);
   } finally {
     window.CadastroCustosStore = antigoCustos;
     window.__VP_SB = antigoSb;
   }
 });
 
-test('removerEquipamento — remove a entrada inteira quando a quantidade chega a 0', async () => {
+test('removerEquipamento — recusa quando todos os equipamentos do grupo já estão excluídos', async () => {
   const antigoCustos = window.CadastroCustosStore;
   const antigoSb = window.__VP_SB;
   window.CadastroCustosStore = stubCadastroCustos(3000);
-  const row = { id: 'pz1', modelos: [{ unidadeId: 'u1', identificador: 'VPEL-EL0999-1', tracao: '2:1', capacidadeKg: 800, paradas: 3, quantidade: 1 }] };
+  const row = { id: 'pz1', modelos: [{ unidadeId: 'u1', identificador: 'VPEL-EL0999-1', tracao: '2:1', capacidadeKg: 800, paradas: 3, quantidade: 1, moExcluidos: 1 }] };
   window.__VP_SB = { sb: makeFakeSb(row) };
   try {
-    const moLookup = await removerEquipamento('pz1', 'u1');
-    assert.deepEqual(row.modelos, []);
-    assert.deepEqual(moLookup, []);
+    await assert.rejects(() => removerEquipamento('pz1', 'u1'), /já estão com a Mão de obra excluída/);
+  } finally {
+    window.CadastroCustosStore = antigoCustos;
+    window.__VP_SB = antigoSb;
+  }
+});
+
+test('restaurarEquipamentoMO — desfaz a exclusão, devolvendo o equipamento pro cálculo normal', async () => {
+  const antigoCustos = window.CadastroCustosStore;
+  const antigoSb = window.__VP_SB;
+  window.CadastroCustosStore = stubCadastroCustos(11550);
+  const row = { id: 'pz1', modelos: [{ unidadeId: 'u1', identificador: 'VPEL-EL0962-1', tracao: '2:1', capacidadeKg: 675, paradas: 4, quantidade: 1, moExcluidos: 1 }] };
+  window.__VP_SB = { sb: makeFakeSb(row) };
+  try {
+    const moLookup = await restaurarEquipamentoMO('pz1', 'u1');
+    assert.equal(row.modelos[0].moExcluidos, 0);
+    assert.equal(moLookup[0].situacao, 'confirmado');
+    assert.equal(moLookup[0].valorRs, 11550);
   } finally {
     window.CadastroCustosStore = antigoCustos;
     window.__VP_SB = antigoSb;
