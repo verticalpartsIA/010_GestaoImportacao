@@ -159,6 +159,7 @@
     ]},
     { grupo: 'Jurídico', itens: [
       { modulo: 'contrato-venda-equipamentos', label: 'Contrato Venda de Equipamentos' },
+      { modulo: 'aval-juridico', label: 'Aval Jurídico' },
       { modulo: 'contrato-instalador', label: 'Contrato Instalador' },
       { modulo: 'juridico', label: 'Contratos & Minutas' },
     ]},

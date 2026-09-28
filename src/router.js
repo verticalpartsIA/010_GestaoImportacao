@@ -29,7 +29,7 @@
     'cotacoes-fornecedor', 'cotacao-fornecedor-detail', 'precificacao', 'propostas', 'proposta-editor',
     'aval-financeiro',
     'cadastro-clientes', 'cadastro-fornecedores', 'ncm-catalogo', 'cadastro-instaladores', 'cadastro-custos',
-    'juridico', 'contrato-venda-equipamentos', 'contrato-instalador', 'contrato-editor',
+    'juridico', 'contrato-venda-equipamentos', 'aval-juridico', 'contrato-instalador', 'contrato-editor',
     'importacao', 'importacao-detail', 'importacao-rastreamento',
     'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos',
     'compras', 'pedidos-acompanhamento',

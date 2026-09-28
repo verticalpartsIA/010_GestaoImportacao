@@ -10,6 +10,7 @@ const ROUTE_TITLE = {
   "cadastro-clientes": "Clientes",
   "cadastro-fornecedores": "Fornecedores",
   "aval-financeiro": "Aval Financeiro",
+  "aval-juridico": "Aval Jurídico",
   "linha-do-tempo": "Linha do Tempo da Cotação",
   "gi-painel": "Gestão Importação — Painel",
   "pi-importacao": "Gestão Importação — P.I.",
@@ -314,6 +315,7 @@ function App() {
     precificacao: ["financeiro", "admin"],
     financeiro: ["financeiro", "admin"],
     "aval-financeiro": ["financeiro", "admin"],
+    "aval-juridico": ["juridico", "admin"],
     comissoes: ["financeiro", "admin"],
     "pagamentos-instalador": ["financeiro", "admin"],
     logs: ["admin"],
@@ -380,6 +382,7 @@ function App() {
       case "compras": return <ComprasPage setRoute={setRoute}/>;
       case "financeiro": return <FinanceiroPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
+      case "aval-juridico": return <window.AvalJuridicoPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
       case "pagamentos-instalador": return <PagamentosInstaladorPage/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;

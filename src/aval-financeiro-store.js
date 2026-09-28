@@ -52,6 +52,15 @@
     return data || null;
   }
 
+  /* Usado por CVDesenhoInstalacaoSection (contrato-venda.jsx) pra checar
+     sinal_pago a partir do Contrato de Venda — vincularContrato() abaixo é
+     quem grava esse contrato_venda_id. */
+  async function getByContratoVendaId(contratoVendaId) {
+    const c = sb(); if (!c || !contratoVendaId) return null;
+    const { data } = await c.from('avais_financeiros').select('*').eq('contrato_venda_id', contratoVendaId).maybeSingle();
+    return data || null;
+  }
+
   /* Garante que existe um registro pra essa proposta (cria se ainda não
      existir) — chamado tanto ao listar a fila do Financeiro quanto pelos
      gates, pra nunca travar por falta de registro. */
@@ -349,7 +358,7 @@
   }
 
   window.AvalFinanceiroStore = {
-    getById, getByPropostaId, getByNumeroCotacao, garantirRegistro, listarFila,
+    getById, getByPropostaId, getByNumeroCotacao, getByContratoVendaId, garantirRegistro, listarFila,
     registrarConsulta, darAval, confirmarSinal, confirmarAvalPagamento, vincularContrato,
     podeEnviarContrato, podeIniciarCompra, aprovarComoCEO, aprovarComoOwner, isOwner,
     registrarCustoReal,

@@ -39,6 +39,10 @@
     COMPRA_FORNECEDOR_INICIADA:  { modulo: 'Cotação a Fornecedor',    label: 'Compra do equipamento iniciada no fornecedor', papel: 'Importação' },
     COMPRA_FORNECEDOR_CONFIRMADA:{ modulo: 'Cotação a Fornecedor',    label: 'Compra do equipamento confirmada com o fornecedor', papel: 'Fornecedor' },
     PROJETO_ELEVADOR_FINALIZADO: { modulo: 'Engenharia',              label: 'Projeto de Elevadores finalizado',             papel: 'Engenharia' },
+    AVAL_JURIDICO_APROVADO:      { modulo: 'Aval Jurídico',           label: 'Jurídico deu o aval ao contrato',              papel: 'Jurídico' },
+    AVAL_JURIDICO_REPROVADO:     { modulo: 'Aval Jurídico',           label: 'Jurídico reprovou o contrato',                 papel: 'Jurídico' },
+    DESENHO_INSTALACAO_ANEXADO:  { modulo: 'Contrato de Venda',       label: 'Desenho do Projeto de Instalação anexado',     papel: 'Engenharia' },
+    DESENHO_INSTALACAO_ENVIADO:  { modulo: 'Contrato de Venda',       label: 'Desenho do Projeto de Instalação enviado ao cliente', papel: 'Engenharia' },
 
     /* ---- Extensão 23/08 — checklist completo de 73 etapas (Gatilhos.md).
        Itens 1-32 já cobertos acima; daqui pra baixo é Engenharia final,
