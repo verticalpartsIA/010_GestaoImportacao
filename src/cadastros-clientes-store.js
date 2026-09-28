@@ -135,6 +135,9 @@
     const row = { ..._payload(form), codigo };
     const { data, error } = await c.from('clientes').insert(row).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Criou cliente', alvo: data.razao_social, alvo_id: data.id,
+    });
     return data;
   }
 
@@ -143,6 +146,9 @@
     const row = { ..._payload(form), atualizado_em: new Date().toISOString() };
     const { data, error } = await c.from('clientes').update(row).eq('id', id).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Editou cliente', alvo: data.razao_social, alvo_id: id,
+    });
     return data;
   }
 
@@ -150,6 +156,9 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('clientes').delete().eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Excluiu cliente', alvo_id: id,
+    });
   }
 
   /* Promoção Lead → Cliente (Central de Decisões concordou: Lead continua

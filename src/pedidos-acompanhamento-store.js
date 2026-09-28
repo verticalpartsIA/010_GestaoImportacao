@@ -34,6 +34,9 @@
     const row = { ..._payload(form), created_by: (window.__VP_USER || {}).email || null };
     const { data, error } = await c.from('pedidos_acompanhamento').insert(row).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Pedidos', acao: 'Criou pedido de acompanhamento', alvo: data.numero_pedido, alvo_id: data.id,
+    });
     return data;
   }
 
@@ -42,6 +45,9 @@
     const row = { ..._payload(form), updated_at: new Date().toISOString() };
     const { data, error } = await c.from('pedidos_acompanhamento').update(row).eq('id', id).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Pedidos', acao: 'Editou pedido de acompanhamento', alvo: data.numero_pedido, alvo_id: id,
+    });
     return data;
   }
 
@@ -49,6 +55,9 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('pedidos_acompanhamento').delete().eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Pedidos', acao: 'Excluiu pedido de acompanhamento', alvo_id: id,
+    });
   }
 
   window.PedidosAcompanhamentoStore = { listarTodos, criar, atualizar, remover };

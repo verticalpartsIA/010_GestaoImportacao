@@ -33,6 +33,10 @@
     };
     const { data: pedido, error } = await c.from('pedidos_compra_varejo').insert(row).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Almoxarifado', acao: 'Criou pedido de compra varejo', alvo: pedido.numero_documento, alvo_id: pedido.id,
+      detalhe: { item: pedido.item, quantidade: pedido.quantidade },
+    });
 
     const decisao = await window.DecisoesStore.criarDecisaoCompraVarejo(pedido.id, {
       item: pedido.item, quantidade: pedido.quantidade, valor: pedido.valor_estimado,
@@ -71,6 +75,9 @@
     if (!pedido || pedido.status !== 'aprovado') throw new Error('Só é possível marcar como comprado um pedido aprovado.');
     const { error } = await c.from('pedidos_compra_varejo').update({ status: 'comprado', atualizado_em: new Date().toISOString() }).eq('id', pedidoId);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Almoxarifado', acao: 'Marcou pedido de varejo como comprado', alvo_id: pedidoId,
+    });
   }
 
   window.PedidosVarejoStore = { criarPedido, listarPedidos, marcarComprado };

@@ -29,6 +29,9 @@ window.__ANALISE_TECNICA = window.__ANALISE_TECNICA || (() => {
       });
 
       if (error) throw error;
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Análise Técnica', acao: 'Criou análise técnica', alvo_id: dossierId, detalhe: { analiseId: id, equip_type },
+      });
       return { id, ...data?.[0] };
     },
 
@@ -119,6 +122,9 @@ window.__ANALISE_TECNICA = window.__ANALISE_TECNICA || (() => {
 
       // Registra histórico
       await this.registrarHistorico(analiseId, 'rascunho', 'completa', 'Análise marcada como completa');
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Análise Técnica', acao: 'Marcou análise técnica como completa', alvo_id: analiseId,
+      });
     },
 
     /* ---- Aprovar análise (Engenharia) ---- */
@@ -139,6 +145,9 @@ window.__ANALISE_TECNICA = window.__ANALISE_TECNICA || (() => {
 
       // Registra histórico
       await this.registrarHistorico(analiseId, 'completa', 'aprovada', notas || 'Análise aprovada');
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Análise Técnica', acao: 'Aprovou análise técnica', alvo_id: analiseId, detalhe: { notas: notas || null },
+      });
 
       // Atualiza Dossier para próxima etapa
       if (analise.dossier_id) {
@@ -185,6 +194,9 @@ window.__ANALISE_TECNICA = window.__ANALISE_TECNICA || (() => {
       await this.atualizar(analiseId, {
         status: 'pendente_cliente'
       });
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Análise Técnica', acao: 'Adicionou pendência do cliente', alvo_id: analiseId, detalhe: { descricao },
+      });
 
       return id;
     },
@@ -199,6 +211,9 @@ window.__ANALISE_TECNICA = window.__ANALISE_TECNICA || (() => {
         .eq('id', pendenciaId);
 
       if (error) throw error;
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Análise Técnica', acao: 'Resolveu pendência do cliente', alvo_id: pendenciaId,
+      });
     },
 
     /* ---- Calcular variáveis derivadas (auxiliar) ---- */
