@@ -537,13 +537,13 @@
      fornecedor não pode ficar travado por causa de um serviço de IA
      instável, só fica sem a linha traduzida. */
   const VP_TRANSLATE_URL = 'https://jxtqwzmpgofwctqajewt.supabase.co/functions/v1/vp-translate-to-pt';
-  const VP_TRANSLATE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+  const VP_TRANSLATE_ANON_KEY = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
   async function traduzirConfirmacaoTecnica(text) {
     if (!text || !text.trim()) return null;
     try {
       const res = await fetch(VP_TRANSLATE_URL, {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + VP_TRANSLATE_ANON_KEY, 'Content-Type': 'application/json' },
+        headers: { apikey: VP_TRANSLATE_ANON_KEY, Authorization: 'Bearer ' + VP_TRANSLATE_ANON_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
       if (!res.ok) return null;
