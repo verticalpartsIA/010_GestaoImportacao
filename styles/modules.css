@@ -455,6 +455,12 @@
 .inbox__folder.is-active .count { background: #000; color: #fff; }
 
 .inbox__list { border-right: 1px solid var(--border); overflow-y: auto; }
+/* 28/09 — pedido do usuário: travar (fixar) o cabeçalho do filtro de busca
+   ao rolar a lista de e-mails. .inbox__list-toolbar agrupa o título/contador
+   e a caixa de busca num único bloco sticky, em vez de cada um sticky
+   separado (evitaria ter que calcular o offset exato de um em relação ao
+   outro). */
+.inbox__list-toolbar { position: sticky; top: 0; z-index: 2; background: #fff; }
 .inbox__list-head {
   padding: 10px 16px;
   border-bottom: 1px solid var(--border);
@@ -465,6 +471,7 @@
   color: var(--fg2);
   display: flex; justify-content: space-between; align-items: center;
 }
+.inbox__list-search { padding: 8px 12px; border-bottom: 1px solid var(--border); }
 .inbox__item {
   padding: 12px 16px;
   border-bottom: 1px solid var(--border);
