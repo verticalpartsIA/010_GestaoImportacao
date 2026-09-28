@@ -253,8 +253,34 @@
   }
 
   /* ---------- Gates ---------- */
-  /* Envio de proposta exige Gestor Comercial (Regiane OU Guilherme) + CEO,
-     nesta ordem — o registro do CEO nasce bloqueado até o do Gestor ser
+  /* Regra combinada com o usuário (28/09, achado real na cotação 955: o
+     CEO aprovou uma proposta com margem efetiva de 25,9%, bem acima da
+     meta de 15%, só porque o gate mandava toda proposta pra ele sem
+     checar nada — CEO tem pouco tempo, não deveria ver o que já está
+     dentro da política). CEO só entra na alçada quando a margem efetiva
+     da precificação fica ABAIXO da regra de 15% — dentro da regra, a
+     aprovação do Gestor Comercial (Regiane ou Guilherme) já basta.
+     Margem desconhecida (sem precificação finalizada pra essa cotação)
+     mantém o CEO no circuito por segurança, igual ao comportamento
+     anterior. */
+  const LIMITE_MARGEM_SEM_CEO = 0.15;
+
+  async function margemEfetivaDaCotacao(numeroCotacao) {
+    const c = sb(); if (!c) return null;
+    const { data } = await c.from('precificacoes_elevador')
+      .select('status, resultado_v2, resultado, updated_at')
+      .eq('numero_cotacao', numeroCotacao).order('updated_at', { ascending: false });
+    if (!data || !data.length) return null;
+    const pz = data.find((p) => p.status === 'finalizado') || data[0];
+    const v2 = pz.resultado_v2 && pz.resultado_v2.precificacao;
+    if (v2 && v2.margemEfetivaPct != null) return v2.margemEfetivaPct;
+    if (pz.resultado && pz.resultado.margemFinalPct != null) return pz.resultado.margemFinalPct;
+    return null;
+  }
+
+  /* Envio de proposta exige Gestor Comercial (Regiane OU Guilherme) sempre
+     e, quando a margem sai da regra acima, também o CEO — nesta ordem, o
+     registro do CEO (quando existe) nasce bloqueado até o do Gestor ser
      aprovado. Cria as decisões sob demanda (idempotente) se ainda não
      existirem pra essa cotação. */
   async function podeEnviarProposta(numeroCotacao) {
@@ -266,13 +292,16 @@
     if (!gestor) {
       gestor = await criarDecisaoSeNaoExiste({ tipo: 'envio_proposta_gestor', papelRequerido: 'gestor_comercial', numeroCotacao });
     }
-    if (!ceo) {
-      ceo = await criarDecisaoSeNaoExiste({ tipo: 'envio_proposta_ceo', papelRequerido: 'ceo', numeroCotacao, dependeDe: [gestor.id] });
-    }
     if (gestor.status === 'reprovada') return { ok: false, motivo: `Envio reprovado pelo Gestor Comercial (${gestor.decidido_por || ''}): ${gestor.motivo || 'sem motivo informado'}.` };
     if (gestor.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do Gestor Comercial (Regiane ou Guilherme) para enviar a proposta.' };
+    if (!ceo) {
+      const margem = await margemEfetivaDaCotacao(numeroCotacao);
+      const precisaCeo = margem == null || margem < LIMITE_MARGEM_SEM_CEO;
+      if (!precisaCeo) return { ok: true };
+      ceo = await criarDecisaoSeNaoExiste({ tipo: 'envio_proposta_ceo', papelRequerido: 'ceo', numeroCotacao, dependeDe: [gestor.id], contexto: { margem_efetiva_pct: margem } });
+    }
     if (ceo.status === 'reprovada') return { ok: false, motivo: `Envio reprovado pelo CEO (${ceo.decidido_por || ''}): ${ceo.motivo || 'sem motivo informado'}.` };
-    if (ceo.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para enviar a proposta.' };
+    if (ceo.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para enviar a proposta — a margem desta proposta ficou abaixo da regra de 15%.' };
     return { ok: true };
   }
 
