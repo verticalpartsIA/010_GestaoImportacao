@@ -279,20 +279,27 @@ function NovaView({ onSalvar, onCancelar, user }) {
     categoria_sku: '',
     solicitante_nome: user.nome || 'Usuário',
     solicitante_email: user.email || '',
-    cliente_nome: '',
-    cliente_industria: '',
     descricao_inicial: '',
     observacoes_comercial: '',
-    fotos_url: [],
+    fornecedor_contato: '',
+    link_produto: '',
+    foiPedidoCliente: false,
+    cliente_nome: '',
+    cliente_industria: '',
+    cliente_contato: '',
+    anexos: [],
   });
 
   const [erros, setErros] = React.useState({});
+  const [enviandoAnexo, setEnviandoAnexo] = React.useState(false);
+  // Todos os anexos desta solicitação nova caem na mesma pasta temporária —
+  // a solicitação ainda não tem id (só existe depois do insert).
+  const pastaTempRef = React.useRef(window.SolicitacoesProdutoStore._pastaTemp());
 
   function _validar() {
     const novosErros = {};
     if (!form.categoria_sku) novosErros.categoria_sku = 'Categoria é obrigatória';
-    if (!form.cliente_nome) novosErros.cliente_nome = 'Cliente é obrigatório';
-    if (!form.descricao_inicial) novosErros.descricao_inicial = 'Descrição é obrigatória';
+    if (!form.descricao_inicial) novosErros.descricao_inicial = 'Explique o que você precisa';
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
   }
@@ -302,38 +309,173 @@ function NovaView({ onSalvar, onCancelar, user }) {
     await onSalvar(form);
   }
 
+  async function _onAnexoChange(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setEnviandoAnexo(true);
+    try {
+      for (const file of files) {
+        const anexo = await window.SolicitacoesProdutoStore.uploadAnexo(file, pastaTempRef.current);
+        setForm((s) => ({ ...s, anexos: [...s.anexos, anexo] }));
+      }
+    } catch (err) {
+      alert('Erro ao enviar anexo: ' + (err.message || err));
+    } finally {
+      setEnviandoAnexo(false);
+      e.target.value = '';
+    }
+  }
+
+  function _removerAnexo(idx) {
+    const anexo = form.anexos[idx];
+    if (anexo && anexo.path) window.SolicitacoesProdutoStore.removerAnexo(anexo.path).catch(() => {});
+    setForm((s) => ({ ...s, anexos: s.anexos.filter((_, i) => i !== idx) }));
+  }
+
   return (
     <div style={styles.viewContainer}>
       <div style={styles.formContainer}>
         <div style={styles.formTitle}>NOVA SOLICITAÇÃO DE PRODUTO</div>
+        <div style={{ fontSize: '12px', color: '#666', marginBottom: '16px' }}>
+          Só <b>Tipo</b>, <b>Categoria</b> e a <b>Descrição</b> são obrigatórios — preencha o resto que souber, o que faltar a Engenharia completa depois.
+        </div>
 
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Tipo de Equipamento *</label>
-          <select
-            value={form.tipo_equipamento}
-            onChange={(e) => setForm({ ...form, tipo_equipamento: e.target.value })}
-            style={styles.input}
-          >
-            <option value="elevador">Elevador</option>
-            <option value="escada_rolante">Escada Rolante</option>
-            <option value="esteira">Esteira</option>
-          </select>
+        <div style={styles.formRow}>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Tipo de Equipamento *</label>
+            <select
+              value={form.tipo_equipamento}
+              onChange={(e) => setForm({ ...form, tipo_equipamento: e.target.value })}
+              style={styles.input}
+            >
+              <option value="elevador">Elevador</option>
+              <option value="escada_rolante">Escada Rolante</option>
+              <option value="esteira">Esteira</option>
+            </select>
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Categoria (SKU) *</label>
+            <select
+              value={form.categoria_sku}
+              onChange={(e) => setForm({ ...form, categoria_sku: e.target.value })}
+              style={{ ...styles.input, borderColor: erros.categoria_sku ? '#ef4444' : '' }}
+            >
+              <option value="">Selecione…</option>
+              {(window.SolicitacoesProdutoStore.CATEGORIAS_SKU || []).map((c) => (
+                <option key={c.valor} value={c.valor}>{c.label}</option>
+              ))}
+            </select>
+            {erros.categoria_sku && <div style={styles.erro}>{erros.categoria_sku}</div>}
+          </div>
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}>Categoria (SKU) *</label>
-          <select
-            value={form.categoria_sku}
-            onChange={(e) => setForm({ ...form, categoria_sku: e.target.value })}
-            style={{ ...styles.input, borderColor: erros.categoria_sku ? '#ef4444' : '' }}
-          >
-            <option value="">Selecione…</option>
-            {(window.SolicitacoesProdutoStore.CATEGORIAS_SKU || []).map((c) => (
-              <option key={c.valor} value={c.valor}>{c.label}</option>
-            ))}
-          </select>
-          {erros.categoria_sku && <div style={styles.erro}>{erros.categoria_sku}</div>}
+          <label style={styles.label}>O que você precisa? *</label>
+          <textarea
+            value={form.descricao_inicial}
+            onChange={(e) => setForm({ ...form, descricao_inicial: e.target.value })}
+            style={{ ...styles.textarea, borderColor: erros.descricao_inicial ? '#ef4444' : '' }}
+            placeholder="Explique com suas palavras o que é o produto e pra que serve — não precisa ser técnico, a Engenharia completa os detalhes depois."
+          />
+          {erros.descricao_inicial && <div style={styles.erro}>{erros.descricao_inicial}</div>}
         </div>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Detalhes adicionais (opcional)</label>
+          <textarea
+            value={form.observacoes_comercial}
+            onChange={(e) => setForm({ ...form, observacoes_comercial: e.target.value })}
+            style={styles.textarea}
+            placeholder="Qualquer informação a mais que possa ajudar"
+          />
+        </div>
+
+        <div style={styles.formRow}>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Contato do fornecedor (opcional)</label>
+            <input
+              type="text"
+              value={form.fornecedor_contato}
+              onChange={(e) => setForm({ ...form, fornecedor_contato: e.target.value })}
+              style={styles.input}
+              placeholder="Nome, telefone, e-mail — o que você já tiver"
+            />
+          </div>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Link do produto (opcional)</label>
+            <input
+              type="text"
+              value={form.link_produto}
+              onChange={(e) => setForm({ ...form, link_produto: e.target.value })}
+              style={styles.input}
+              placeholder="Site do fabricante, catálogo, marketplace…"
+            />
+          </div>
+        </div>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Imagem ou PDF do produto (opcional)</label>
+          <input type="file" accept="image/*,.pdf" multiple onChange={_onAnexoChange} disabled={enviandoAnexo}/>
+          {enviandoAnexo && <div style={{ fontSize: '12px', color: '#666', marginTop: '6px' }}>Enviando…</div>}
+          {form.anexos.length > 0 && (
+            <div style={{ marginTop: '8px' }}>
+              {form.anexos.map((a, idx) => (
+                <div key={a.path} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', padding: '4px 0' }}>
+                  <span>{a.tipo === 'imagem' ? '🖼️' : '📄'}</span>
+                  <a href={a.url} target="_blank" style={{ color: '#3b82f6' }}>{a.nome}</a>
+                  <button type="button" onClick={() => _removerAnexo(idx)} style={{ border: 'none', background: 'none', color: '#ef4444', cursor: 'pointer' }}>remover</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={styles.formGroup}>
+          <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={form.foiPedidoCliente}
+              onChange={(e) => setForm({ ...form, foiPedidoCliente: e.target.checked })}
+            />
+            Foi um pedido de um cliente específico?
+          </label>
+        </div>
+
+        {form.foiPedidoCliente && (
+          <div style={{ padding: '12px', background: '#f8fafc', borderRadius: '4px', marginBottom: '16px' }}>
+            <div style={styles.formRow}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Cliente (opcional)</label>
+                <input
+                  type="text"
+                  value={form.cliente_nome}
+                  onChange={(e) => setForm({ ...form, cliente_nome: e.target.value })}
+                  style={styles.input}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Indústria (opcional)</label>
+                <input
+                  type="text"
+                  value={form.cliente_industria}
+                  onChange={(e) => setForm({ ...form, cliente_industria: e.target.value })}
+                  style={styles.input}
+                />
+              </div>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Contato do cliente (opcional)</label>
+              <input
+                type="text"
+                value={form.cliente_contato}
+                onChange={(e) => setForm({ ...form, cliente_contato: e.target.value })}
+                style={styles.input}
+                placeholder="Telefone, e-mail…"
+              />
+            </div>
+          </div>
+        )}
 
         <div style={styles.formRow}>
           <div style={styles.formGroup}>
@@ -354,66 +496,6 @@ function NovaView({ onSalvar, onCancelar, user }) {
               style={styles.input}
             />
           </div>
-        </div>
-
-        <div style={styles.formRow}>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Cliente *</label>
-            <input
-              type="text"
-              value={form.cliente_nome}
-              onChange={(e) => setForm({ ...form, cliente_nome: e.target.value })}
-              style={{ ...styles.input, borderColor: erros.cliente_nome ? '#ef4444' : '' }}
-            />
-            {erros.cliente_nome && <div style={styles.erro}>{erros.cliente_nome}</div>}
-          </div>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Indústria</label>
-            <input
-              type="text"
-              value={form.cliente_industria}
-              onChange={(e) => setForm({ ...form, cliente_industria: e.target.value })}
-              style={styles.input}
-            />
-          </div>
-        </div>
-
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Descrição Detalhada *</label>
-          <textarea
-            value={form.descricao_inicial}
-            onChange={(e) => setForm({ ...form, descricao_inicial: e.target.value })}
-            style={{ ...styles.textarea, borderColor: erros.descricao_inicial ? '#ef4444' : '' }}
-            placeholder="Descreva o equipamento, suas características, dimensões aproximadas, etc."
-          />
-          {erros.descricao_inicial && <div style={styles.erro}>{erros.descricao_inicial}</div>}
-        </div>
-
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Observações e Detalhes Adicionais</label>
-          <textarea
-            value={form.observacoes_comercial}
-            onChange={(e) => setForm({ ...form, observacoes_comercial: e.target.value })}
-            style={styles.textarea}
-            placeholder="Qualquer informação adicional que possa ser útil"
-          />
-        </div>
-
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Fotos (opcional)</label>
-          <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
-            Você pode adicionar links para fotos do equipamento ou documentação (ex: URL de imagem, screenshot, etc)
-          </div>
-          <input
-            type="text"
-            placeholder="https://example.com/foto1.jpg (um por linha)"
-            style={{...styles.textarea, minHeight: '60px'}}
-            onBlur={(e) => {
-              const urls = e.target.value.split('\n').filter(u => u.trim());
-              setForm({ ...form, fotos_url: urls });
-            }}
-            defaultValue={form.fotos_url.join('\n')}
-          />
         </div>
 
         <div style={styles.formActions}>
@@ -523,14 +605,35 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
       <div style={styles.detalheGrid}>
         <div style={styles.detalheSection}>
           <div style={styles.detalheSectionTitle}>INFORMAÇÕES COMERCIAIS</div>
-          <div style={styles.detalheRow}>
-            <div style={styles.detalheLabel}>Cliente:</div>
-            <div style={styles.detalheValue}>{solicitacao.cliente_nome}</div>
-          </div>
-          <div style={styles.detalheRow}>
-            <div style={styles.detalheLabel}>Indústria:</div>
-            <div style={styles.detalheValue}>{solicitacao.cliente_industria}</div>
-          </div>
+          {solicitacao.cliente_nome && (
+            <div style={styles.detalheRow}>
+              <div style={styles.detalheLabel}>Cliente:</div>
+              <div style={styles.detalheValue}>
+                {solicitacao.cliente_nome}
+                {solicitacao.cliente_industria ? ` (${solicitacao.cliente_industria})` : ''}
+              </div>
+            </div>
+          )}
+          {solicitacao.cliente_contato && (
+            <div style={styles.detalheRow}>
+              <div style={styles.detalheLabel}>Contato do cliente:</div>
+              <div style={styles.detalheValue}>{solicitacao.cliente_contato}</div>
+            </div>
+          )}
+          {solicitacao.fornecedor_contato && (
+            <div style={styles.detalheRow}>
+              <div style={styles.detalheLabel}>Contato do fornecedor:</div>
+              <div style={styles.detalheValue}>{solicitacao.fornecedor_contato}</div>
+            </div>
+          )}
+          {solicitacao.link_produto && (
+            <div style={styles.detalheRow}>
+              <div style={styles.detalheLabel}>Link do produto:</div>
+              <div style={styles.detalheValue}>
+                <a href={solicitacao.link_produto} target="_blank" style={styles.btnLink}>{solicitacao.link_produto}</a>
+              </div>
+            </div>
+          )}
           <div style={styles.detalheRow}>
             <div style={styles.detalheLabel}>Solicitante:</div>
             <div style={styles.detalheValue}>{solicitacao.solicitante_nome} ({solicitacao.solicitante_email})</div>
@@ -556,6 +659,18 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
             <>
               <div style={styles.detalheSectionTitle}>OBSERVAÇÕES</div>
               <div style={styles.detalheText}>{solicitacao.observacoes_comercial}</div>
+            </>
+          )}
+          {(solicitacao.anexos || []).length > 0 && (
+            <>
+              <div style={styles.detalheSectionTitle}>ANEXOS</div>
+              {solicitacao.anexos.map((a) => (
+                <div key={a.path || a.url} style={{ padding: '4px 0' }}>
+                  <a href={a.url} target="_blank" style={styles.btnLink}>
+                    {a.tipo === 'imagem' ? '🖼️' : '📄'} {a.nome}
+                  </a>
+                </div>
+              ))}
             </>
           )}
         </div>
