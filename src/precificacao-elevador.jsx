@@ -701,13 +701,15 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               <tbody>
                 {pz.mo_lookup.map((mo, i) => {
                   // Unidade com quantidade > 1 vira várias linhas (mesmo unidadeId,
-                  // uma por equipamento físico — ver buscarMaoDeObraAutomatica) —
-                  // só a 1ª linha do grupo pode abrir a edição inline, já que
-                  // tração/capacidade/paradas são da Unidade inteira, não de um
-                  // equipamento físico isolado.
-                  const primeiraDoGrupo = (mo.equipamentoIndice || 1) === 1;
-                  const editando = primeiraDoGrupo && editandoMoUnidade && editandoMoUnidade === mo.unidadeId;
+                  // uma por equipamento físico — ver buscarMaoDeObraAutomatica).
+                  // "Trocar" aparece em TODAS as linhas do grupo (tração/capacidade/
+                  // paradas são da Unidade inteira, então editar de qualquer uma
+                  // delas salva pra todo o grupo) — editandoMoUnidade guarda a
+                  // `chave` (linha física exata clicada, não só o unidadeId
+                  // compartilhado) pra abrir a edição só ali, nunca em todas as
+                  // linhas do grupo ao mesmo tempo.
                   const chave = `${mo.unidadeId || 'x'}-${mo.equipamentoIndice || i}`;
+                  const editando = editandoMoUnidade === chave;
                   if (editando) {
                     return (
                       <tr key={chave} style={{ background: 'var(--vp-gray-50)' }}>
@@ -754,11 +756,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                       <td className="mono">{mo.valorRs ? fmtBRL2(mo.valorRs) : '—'}</td>
                       <td>
                         <div className="row gap-1">
-                          {mo.unidadeId && !mo.avulso && primeiraDoGrupo && (
+                          {mo.unidadeId && !mo.avulso && (
                             <Button variant="ghost" size="sm" icon="edit" title={mo.equipamentoTotal > 1 ? `Trocar tração/capacidade/paradas desta unidade (vale para os ${mo.equipamentoTotal} equipamentos)` : 'Trocar tração/capacidade/paradas desta unidade'}
                               onClick={() => {
                                 setMoSpecEdit({ tracao: mo.tracao || '', capacidadeKg: mo.capacidadeKg ?? '', paradas: mo.paradas ?? '' });
-                                setEditandoMoUnidade(mo.unidadeId);
+                                setEditandoMoUnidade(chave);
                               }}>
                               Trocar
                             </Button>
