@@ -205,6 +205,10 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   // Câmbio USD/BRL ao vivo — só referência/comparação (ver cambio-api.js).
   // Não substitui tx_cambial sozinho; o Financeiro aplica clicando "Usar".
   const [cambioVivo, setCambioVivo] = React.useState(null); // null | { valor, timestamp } | 'erro'
+  // Containers de Cadastros → Atualização de Custos — só pra herdar o
+  // Preço(R$) quando o Financeiro escolhe/troca o tipo/tamanho aqui (ver
+  // buscarContainerCustoPorIso em precificacao-elevador-store.js).
+  const [custosContainers, setCustosContainers] = React.useState([]);
 
   const carregar = React.useCallback(() => {
     window.PrecificacaoElevadorStore.obter(id).then((data) => setPz(pzNormalizarItensInstalacao(data)));
@@ -213,6 +217,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   React.useEffect(() => {
     window.CambioAPI.buscarUsdBrl().then(setCambioVivo).catch(() => setCambioVivo('erro'));
   }, []);
+  React.useEffect(() => { window.CadastroCustosStore?.listarContainers().then(setCustosContainers); }, []);
 
   const ressincronizarDoFornecedor = async () => {
     setRessincronizando(true);
@@ -300,7 +305,15 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const addContainer = () => setPz((p) => ({ ...p, containers: [...(p.containers || []), { tipo_tamanho: '', quantidade: 1, preco_rs: 0 }] }));
   const setContainer = (i, k) => (v) => setPz((p) => {
     const arr = [...(p.containers || [])];
-    arr[i] = { ...arr[i], [k]: v };
+    const linha = { ...arr[i], [k]: v };
+    // Trocar o tipo/tamanho herda o Preço(R$) de Atualização de Custos —
+    // só quando ainda não tem preço nenhum (não sobrescreve valor que o
+    // Financeiro já digitou na mão pra essa linha).
+    if (k === 'tipo_tamanho' && !(Number(linha.preco_rs) > 0)) {
+      const custo = window.PrecificacaoElevadorStore.buscarContainerCustoPorIso(v, custosContainers);
+      if (custo) linha.preco_rs = Number(custo.preco_rs) || 0;
+    }
+    arr[i] = linha;
     return { ...p, containers: arr };
   });
   const removeContainer = (i) => setPz((p) => ({ ...p, containers: (p.containers || []).filter((_, idx) => idx !== i) }));

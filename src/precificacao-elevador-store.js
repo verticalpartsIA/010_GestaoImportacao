@@ -33,6 +33,48 @@
     });
   }
 
+  /* Mapa fixo ISO (tipo_tamanho, usado aqui e em EI_CONTAINER_TIPOS de
+     embarques-importacao.jsx) → tipo real de custos_containers (texto
+     livre, ver seed em supabase/migrations/20260828100000_cadastro_custos.sql).
+     Pedido do usuário (28/09): "Preço (R$)" de Cadastros → Atualização de
+     Custos → Containers precisa doar valor pro container da Precificação.
+     Decisão explícita: NÃO trocar o vocabulário ISO da Precificação pelos
+     nomes de Custos — esse tipo_tamanho também alimenta
+     EmbarquesImportacaoStore.containersDaCotacao/expandirContainers (issue
+     #384, já em produção), que só reconhece os códigos ISO. Este mapa é só
+     uma tradução interna pra achar a linha certa em custos_containers — a
+     Precificação continua salvando/mostrando "20'DV", "40'HC" etc. */
+  const CONTAINER_ISO_PARA_CUSTOS = {
+    "20'DV": '20GP (Padrão)', "40'DV": '40GP (Padrão)',
+    "20'HC": '20HC (High Cube)', "40'HC": '40HC (High Cube)',
+    "20'RF": '20 Reefer (Refrigerado)', "40'RF": '40 HC Reefer (Refrigerado Alto)',
+    "20'OT": '20 Open Top (Teto aberto)', "40'OT": '40 Open Top (Teto aberto)',
+    "20'FR": '20 Flat Rack (Sem laterais)', "40'FR": '40 Flat Rack (Sem laterais)',
+  };
+
+  /* Busca em custos_containers a linha que corresponde a um tipo_tamanho
+     ISO da Precificação/Embarques — usada pra herdar o Preço(R$) sem tocar
+     no vocabulário salvo (ver comentário do mapa acima). null quando não
+     há mapeamento (ex. 'Outro') ou a tabela de Custos não tem essa linha
+     ativa ainda. */
+  function buscarContainerCustoPorIso(tipoTamanhoIso, custosContainers) {
+    const tipoCustos = CONTAINER_ISO_PARA_CUSTOS[tipoTamanhoIso];
+    if (!tipoCustos) return null;
+    return (custosContainers || []).find((c) => c.tipo === tipoCustos && c.ativo !== false) || null;
+  }
+
+  /* Preenche preco_rs de cada container detectado no container_no do
+     fornecedor com o valor já cadastrado em Atualização de Custos — só
+     quando o container ainda não tem preço nenhum (preserva edição manual
+     de uma precificação já existente/recarregada). */
+  function enriquecerContainersComCusto(containers, custosContainers) {
+    return (containers || []).map((ct) => {
+      if (Number(ct.preco_rs) > 0) return ct;
+      const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
+      return custo ? { ...ct, preco_rs: Number(custo.preco_rs) || 0 } : ct;
+    });
+  }
+
   /* ============================================================
      Busca automática de mão de obra (issue "Precificação real" Fase 3).
      custos_instalacao_elevador é indexada por tração × faixa de
@@ -368,6 +410,10 @@
       freteSeguroCapataziaUsd = freteInternacionalUsd + taxasExtrasUsd;
 
       containersSeed = parseContainerNo(respostas.container_no);
+      if (containersSeed.length) {
+        const custosContainers = await window.CadastroCustosStore?.listarContainers();
+        containersSeed = enriquecerContainersComCusto(containersSeed, custosContainers);
+      }
     }
 
     const parametros = await listarParametrosFiscais();
@@ -662,7 +708,7 @@
     listarParametrosFiscais, salvarParametrosFiscais,
     listarPendentes, criar, obter, salvar, calcularEsalvar,
     camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,
-    parseContainerNo,
+    parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra,
   };
 }());
