@@ -402,7 +402,18 @@ function PropostaSendModal({ record, onClose, onSent }) {
     try {
       await store.markSent(record.id, channel, { name, contact });
       if (channel === 'whatsapp') window.open(store.whatsAppHref(contact, message), '_blank');
-      else if (channel === 'email') window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} — VerticalParts`, message), '_blank');
+      else if (channel === 'email') {
+        /* 28/09 — achado real (mesma investigação do RFQ→Inbox): diferente
+           do RFQ a fornecedor, aqui NUNCA existiu tentativa de SMTP
+           automático — o canal "E-mail" sempre foi mailto:, sem aviso
+           nenhum ao vendedor. Isso passava a falsa impressão de "enviado"
+           quando na real só abre o cliente de e-mail local, que o
+           vendedor ainda precisa confirmar/mandar manualmente — e esse
+           envio nunca fica registrado (não existe linha em
+           emails_projeto pra Proposta). */
+        window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} — VerticalParts`, message), '_blank');
+        window.toast?.('Abrindo seu e-mail padrão — confirme e envie por lá. Diferente do link/WhatsApp, este envio não é registrado automaticamente aqui.', 'warning');
+      }
       setSent(channel);
       onSent && onSent();
     } catch (e) {
