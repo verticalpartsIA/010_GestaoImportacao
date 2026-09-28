@@ -246,6 +246,34 @@
         };
       });
     }
+    /* "VALORES DE PAGAMENTOS" (Forma de Pagamento + Parcelas) — assim que
+       precificado, a Proposta já nasce com o template padrão (Sinal 40% +
+       4 parcelas iguais, mesmo texto que já era usado como sugestão fixa
+       em proposta-editor.jsx) em vez do vendedor precisar montar na mão.
+       deepMergeHeranca() (proposta-editor.jsx) garante que isso só entra
+       se o vendedor ainda não tiver mexido nesses campos — nunca sobrescreve
+       parcelas já digitadas/ajustadas. */
+    if (Object.keys(valores).length) {
+      const totalItens = Array.isArray(valores.itens)
+        ? valores.itens.reduce((s, it) => s + (Number(it.valorUnit) || 0) * (Number(it.quantidade) || 1), 0)
+        : (Number(valores.quantidade) || 0) * (Number(valores.valorUnit) || 0);
+      const totalComDifal = totalItens + (Number(valores.difal) || 0);
+      if (totalComDifal > 0) {
+        const QTD_PADRAO = 5;
+        const sinal = totalComDifal * 0.4;
+        const restCount = QTD_PADRAO - 1;
+        const cadaParcela = (totalComDifal - sinal) / restCount;
+        const fmt2 = (x) => x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        valores.formaTipo = 'parcelado';
+        valores.qtdParcelas = QTD_PADRAO;
+        valores.forma = `40% à vista e ${restCount} parcelas`;
+        valores.parcelas = [
+          { desc: 'Sinal de 40% na assinatura do contrato', valor: fmt2(sinal) },
+          ...Array.from({ length: restCount }, (_, i) => ({ desc: `${i + 1}ª Parcela`, valor: fmt2(cadaParcela) })),
+        ];
+      }
+    }
+
     if (especificacoes.length || Object.keys(valores).length) {
       prefill.elevador = {};
       if (especificacoes.length) prefill.elevador.especificacoes = especificacoes;

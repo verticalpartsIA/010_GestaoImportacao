@@ -721,16 +721,16 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
       {itens.map((it) => {
         const original = engine ? engine.parseNum(it.valorOriginal ?? it.valorUnit) : Number(it.valorUnit) || 0;
         const atual = engine ? engine.parseNum(it.valorUnit) : Number(it.valorUnit) || 0;
+        const qtd = Number(it.quantidade) || 1;
         const temDesconto = it.desconto && atual < original;
         return (
           <div key={it.id} className="pe-acab-cat">
             <div className="pe-acab-cat-head">
               <span className="pe-acab-cat-nome">{it.id || it.equipamento}</span>
-              <span className="small muted">Qtd. {it.quantidade || 1}</span>
             </div>
             <div className="row gap-2" style={{ alignItems: "baseline", flexWrap: "wrap" }}>
-              {temDesconto && <span className="small muted" style={{ textDecoration: "line-through" }}>{fmt(original)}</span>}
-              <b style={{ fontSize: 16 }}>{fmt(atual)}</b>
+              {temDesconto && <span className="small muted" style={{ textDecoration: "line-through" }}>{fmt(original * qtd)}</span>}
+              <b style={{ fontSize: 16 }}>{fmt(atual * qtd)}</b>
               {it.descontoPendente && <span className="pe-tag" style={{ background: "var(--vp-warning-tint, #f8eed7)" }}>Aguardando aprovação ({it.descontoPendente.papel === "ceo" ? "CEO" : "Gestor Comercial"})</span>}
             </div>
             <div className="row gap-2" style={{ marginTop: 8 }}>
@@ -753,6 +753,23 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
     </div>
   );
 }
+
+/* Sinal de 40% + restante dividido em partes iguais entre as demais parcelas
+   — mesmo template que já era usado como texto fixo no elevador ("40% à
+   vista e 4 parcelas"), agora gerado de verdade a partir da Quantidade de
+   Parcelas escolhida, em vez de vir só como sugestão estática no default. */
+function gerarParcelasAutomaticas(qtd, total) {
+  const n = Math.max(1, Number(qtd) || 0);
+  const fmt2 = (x) => x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (n <= 1) return [{ desc: "Pagamento integral na assinatura do contrato", valor: fmt2(total) }];
+  const sinal = total * 0.4;
+  const restCount = n - 1;
+  const cadaParcela = restCount > 0 ? (total - sinal) / restCount : 0;
+  const linhas = [{ desc: "Sinal de 40% na assinatura do contrato", valor: fmt2(sinal) }];
+  for (let i = 1; i <= restCount; i++) linhas.push({ desc: `${i}ª Parcela`, valor: fmt2(cadaParcela) });
+  return linhas;
+}
+const QTD_PARCELAS_OPTIONS = Array.from({ length: 11 }, (_, i) => String(i + 2)); // 2..12
 
 function S_Valores({ d, set, eq, recordId }) {
   const v = d[eq].valores;
@@ -778,6 +795,42 @@ function S_Valores({ d, set, eq, recordId }) {
   const formatBR = (n) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const formaPagLabel = eq === "esteira" ? "Condições de Pagamento" : "Forma de Pagamento";
+
+  /* formaTipo/qtdParcelas controlam a UI (select "À vista"/"Parcelado" +
+     Qtd. de Parcelas); v.forma continua sendo o texto legível exibido na
+     capa da proposta (PreviewCapa) — nunca deixado de fora, sempre
+     recalculado junto pra não desincronizar do que a tabela mostra. */
+  const formaTipo = v.formaTipo || "";
+  const qtdParcelas = v.qtdParcelas || "";
+
+  const aplicarFormaTipo = (tipo) => {
+    set(`${eq}.valores.formaTipo`, tipo);
+    if (tipo === "vista") {
+      set(`${eq}.valores.forma`, "100% à vista");
+      setParcelas([]);
+    } else if (tipo === "parcelado") {
+      const qtd = Number(v.qtdParcelas) || 5;
+      const restCount = Math.max(qtd - 1, 0);
+      set(`${eq}.valores.qtdParcelas`, qtd);
+      set(`${eq}.valores.forma`, restCount > 0 ? `40% à vista e ${restCount} parcela${restCount > 1 ? "s" : ""}` : "100% à vista");
+      setParcelas(gerarParcelasAutomaticas(qtd, totalDifal));
+    }
+  };
+  const aplicarQtdParcelas = (qtdStr) => {
+    const qtd = Number(qtdStr) || 0;
+    const restCount = Math.max(qtd - 1, 0);
+    set(`${eq}.valores.qtdParcelas`, qtd);
+    set(`${eq}.valores.forma`, restCount > 0 ? `40% à vista e ${restCount} parcela${restCount > 1 ? "s" : ""}` : "100% à vista");
+    setParcelas(gerarParcelasAutomaticas(qtd, totalDifal));
+  };
+  /* Total com DIFAL pode mudar depois das parcelas já geradas (ex.: preço
+     herdado da Precificação atualizado, desconto aplicado) — "Recalcular"
+     reaplica o mesmo template (Sinal 40% + resto igual) sem o vendedor
+     precisar trocar a Qtd. de Parcelas pra forçar a regeneração. */
+  const recalcularParcelas = () => {
+    const qtd = Number(v.qtdParcelas) || parcelas.length || 5;
+    setParcelas(gerarParcelasAutomaticas(qtd, totalDifal));
+  };
 
   const propostaRef = { id: recordId, numeroCotacao: d.numeroCotacao, cliente: d.cliente, titulo: d.cliente?.nome };
 
@@ -816,29 +869,50 @@ function S_Valores({ d, set, eq, recordId }) {
           <PEField label="Quantidade"><PENumber value={v.quantidade} onChange={u("quantidade")} placeholder="1"/></PEField>
           <PEField label="Valor Unitário"><PECurrency value={v.valorUnit} onChange={u("valorUnit")} placeholder="480.000,00"/></PEField>
           <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
-          <PEField label={formaPagLabel} span="3"><PESelect value={v.forma} onChange={u("forma")}/></PEField>
+          <PEField label={formaPagLabel} span={formaTipo === "parcelado" ? "1" : "2"}>
+            <PESelect value={formaTipo} onChange={aplicarFormaTipo} options={[{ value: "vista", label: "À vista" }, { value: "parcelado", label: "Parcelado" }]}/>
+          </PEField>
+          {formaTipo === "parcelado" && (
+            <PEField label="Quantidade de Parcelas">
+              <PESelect value={String(qtdParcelas || "")} onChange={aplicarQtdParcelas} options={QTD_PARCELAS_OPTIONS}/>
+            </PEField>
+          )}
         </div>
       )}
       {temItens && (
         <div className="pe-grid cols-4">
           <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
-          <PEField label={formaPagLabel} span="3"><PESelect value={v.forma} onChange={u("forma")}/></PEField>
+          <PEField label={formaPagLabel} span={formaTipo === "parcelado" ? "1" : "2"}>
+            <PESelect value={formaTipo} onChange={aplicarFormaTipo} options={[{ value: "vista", label: "À vista" }, { value: "parcelado", label: "Parcelado" }]}/>
+          </PEField>
+          {formaTipo === "parcelado" && (
+            <PEField label="Quantidade de Parcelas">
+              <PESelect value={String(qtdParcelas || "")} onChange={aplicarQtdParcelas} options={QTD_PARCELAS_OPTIONS}/>
+            </PEField>
+          )}
         </div>
       )}
 
-      <div style={{ marginTop: 18, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div className="pe-field-label">Parcelas <span className="pe-tag">{parcelas.length} parcela{parcelas.length !== 1 ? "s" : ""}</span></div>
-      </div>
+      {formaTipo !== "vista" && (
+        <>
+          <div style={{ marginTop: 18, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div className="pe-field-label">Parcelas <span className="pe-tag">{parcelas.length} parcela{parcelas.length !== 1 ? "s" : ""}</span></div>
+            {parcelas.length > 0 && (
+              <button type="button" className="pe-acab-addfield" onClick={recalcularParcelas}>Recalcular</button>
+            )}
+          </div>
 
-      {parcelas.map((p, i) => (
-        <div key={i} className="pe-parcela-row">
-          <span className="pe-parcela-row__idx">{i + 1}</span>
-          <input className="pe-input" value={p.desc || ""} onChange={(e) => { const a = [...parcelas]; a[i] = { ...a[i], desc: e.target.value }; setParcelas(a); }} placeholder="30% — Entrada (assinatura)"/>
-          <div className="pe-input-grp"><span className="pe-input-prefix">R$</span><input className="pe-input" value={p.valor || ""} onChange={(e) => { const a = [...parcelas]; a[i] = { ...a[i], valor: e.target.value }; setParcelas(a); }} placeholder="144.000,00"/></div>
-          <button type="button" className="pe-parcela-row__del" onClick={() => setParcelas(parcelas.filter((_, j) => j !== i))}><Icon.x size={12}/></button>
-        </div>
-      ))}
-      <PERepAdd label="+ Adicionar Parcela" onAdd={() => setParcelas([...parcelas, { desc: "", valor: "" }])}/>
+          {parcelas.map((p, i) => (
+            <div key={i} className="pe-parcela-row">
+              <span className="pe-parcela-row__idx">{i + 1}</span>
+              <input className="pe-input" value={p.desc || ""} onChange={(e) => { const a = [...parcelas]; a[i] = { ...a[i], desc: e.target.value }; setParcelas(a); }} placeholder="30% — Entrada (assinatura)"/>
+              <div className="pe-input-grp"><span className="pe-input-prefix">R$</span><input className="pe-input" value={p.valor || ""} onChange={(e) => { const a = [...parcelas]; a[i] = { ...a[i], valor: e.target.value }; setParcelas(a); }} placeholder="144.000,00"/></div>
+              <button type="button" className="pe-parcela-row__del" onClick={() => setParcelas(parcelas.filter((_, j) => j !== i))}><Icon.x size={12}/></button>
+            </div>
+          ))}
+          <PERepAdd label="+ Adicionar Parcela" onAdd={() => setParcelas([...parcelas, { desc: "", valor: "" }])}/>
+        </>
+      )}
 
       <div className="pe-totais">
         <div className="pe-totais-row">
