@@ -177,7 +177,19 @@
      "VPEL-EL0955-1-4") só pra não fabricar um rótulo idêntico ao de outro
      equipamento de verdade. Em ambos os casos, isso é só pra exibição/soma
      nesta tabela — nunca grava de volta em
-     formularios_elevador_unidades.identificador. */
+     formularios_elevador_unidades.identificador.
+
+     29/09 — achado real na cotação Nº 962 (Juliana): a instalação de um
+     equipamento pode não ser por conta da VerticalParts (terceiro cuida da
+     montagem) — o vendedor/financeiro precisa poder excluir SÓ a Mão de
+     obra daquele equipamento físico, sem reduzir a quantidade cotada (isso
+     afetaria "Unidades desta cotação"/VMLE e a proposta, que leem
+     `modelos[i].quantidade` como a contagem real de equipamento vendido).
+     `m.moExcluidos` (contagem, não índice — os equipamentos físicos de uma
+     mesma Unidade são idênticos entre si) marca quantos dos `quantidade`
+     equipamentos físicos deste grupo têm a MO excluída; os últimos
+     `moExcluidos` viram `situacao: 'excluido'`/`valorRs: 0` em vez da
+     classificação normal. Nunca decrementa `quantidade`. */
   async function buscarMaoDeObraAutomatica(modelos) {
     const store = window.CadastroCustosStore;
     const lista = Array.isArray(modelos) ? modelos : [];
@@ -211,13 +223,24 @@
         base = classificarMaoDeObraUnidade(m, custoTabela);
       }
       const quantidade = Math.max(1, Number(m.quantidade) || 1);
+      const moExcluidos = Math.min(quantidade, Math.max(0, Number(m.moExcluidos) || 0));
       for (let i = 0; i < quantidade; i++) {
+        const excluido = i >= quantidade - moExcluidos;
+        const linha = excluido
+          ? {
+              ...base, origem: 'excluido_manual', situacao: 'excluido', valorRs: 0,
+              estimativa: false, projetoEspecial: false,
+              regraUsada: null, diasMontagem: null, qtdMontadores: null, dataBase: null,
+              motivo: 'Instalação não é por conta da VerticalParts — Mão de obra excluída manualmente desta Precificação (o equipamento continua na cotação).',
+            }
+          : base;
         resultados.push({
-          ...base,
+          ...linha,
           identificador: getIdentificadorFisico(base.identificador, i, quantidade),
           equipamentoIndice: i + 1,
           equipamentoTotal: quantidade,
           avulso: !!m.avulso,
+          moExcluido: excluido,
         });
       }
     }
@@ -313,20 +336,40 @@
     return moLookup;
   }
 
-  /* Remove 1 equipamento físico do grupo (decrementa `quantidade`; some da
-     lista quando chega a 0) — nunca some do Formulário/Unidade real,
-     só desta Precificação. */
+  /* 29/09 — corrigido depois de um achado real na cotação Nº 962: a
+     versão anterior desta função decrementava (ou removia inteiro)
+     `modelos[idx].quantidade` — o mesmo campo que "Unidades desta
+     cotação"/VMLE (precificacao-elevador.jsx, tabela logo acima do card de
+     Mão de obra) e a Proposta usam como a contagem real de equipamento
+     vendido. Juliana clicou "Remover" só pra tirar a Mão de obra de um
+     equipamento cuja instalação não é da VerticalParts — e o equipamento
+     inteiro (goods, VMLE) sumiu da cotação junto. "Remover" agora só
+     incrementa `moExcluidos` (nunca toca `quantidade`) — ver
+     buscarMaoDeObraAutomatica. Ver restaurarEquipamentoMO() pra desfazer. */
   async function removerEquipamento(id, unidadeId) {
     const pz = await obter(id);
     let modelos = [...(pz.modelos || [])];
     const idx = modelos.findIndex((m) => m.unidadeId === unidadeId);
     if (idx === -1) throw new Error('Equipamento não encontrado nesta precificação.');
-    const quantidadeAtual = Number(modelos[idx].quantidade) || 1;
-    if (quantidadeAtual <= 1) {
-      modelos.splice(idx, 1);
-    } else {
-      modelos[idx] = { ...modelos[idx], quantidade: quantidadeAtual - 1 };
-    }
+    const quantidade = Math.max(1, Number(modelos[idx].quantidade) || 1);
+    const atual = Math.min(quantidade, Math.max(0, Number(modelos[idx].moExcluidos) || 0));
+    if (atual >= quantidade) throw new Error('Todos os equipamentos deste grupo já estão com a Mão de obra excluída.');
+    modelos[idx] = { ...modelos[idx], moExcluidos: atual + 1 };
+    const moLookup = await buscarMaoDeObraAutomatica(modelos);
+    await salvar(id, { modelos, mo_lookup: moLookup });
+    return moLookup;
+  }
+
+  /* Desfaz removerEquipamento — devolve 1 equipamento físico do grupo pro
+     cálculo normal de Mão de obra. */
+  async function restaurarEquipamentoMO(id, unidadeId) {
+    const pz = await obter(id);
+    let modelos = [...(pz.modelos || [])];
+    const idx = modelos.findIndex((m) => m.unidadeId === unidadeId);
+    if (idx === -1) throw new Error('Equipamento não encontrado nesta precificação.');
+    const atual = Math.max(0, Number(modelos[idx].moExcluidos) || 0);
+    if (atual <= 0) throw new Error('Este equipamento já está incluído no cálculo de Mão de obra.');
+    modelos[idx] = { ...modelos[idx], moExcluidos: atual - 1 };
     const moLookup = await buscarMaoDeObraAutomatica(modelos);
     await salvar(id, { modelos, mo_lookup: moLookup });
     return moLookup;
@@ -774,6 +817,6 @@
     camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,
     parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra,
-    acrescentarEquipamento, removerEquipamento,
+    acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO,
   };
 }());
