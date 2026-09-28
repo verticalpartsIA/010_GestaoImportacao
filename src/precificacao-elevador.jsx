@@ -338,7 +338,22 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const [custosContainers, setCustosContainers] = React.useState([]);
 
   const carregar = React.useCallback(() => {
-    window.PrecificacaoElevadorStore.obter(id).then((data) => setPz(pzNormalizarItensInstalacao(data)));
+    window.PrecificacaoElevadorStore.obter(id).then(async (data) => {
+      const norm = pzNormalizarItensInstalacao(data);
+      // 28/09 — achado real (Gelson): a herança de Preço(R$) de Atualização
+      // de Custos (buscarContainerCustoPorIso/enriquecerContainersComCusto)
+      // só rodava ao MONTAR um rascunho novo (montarRascunho). Uma
+      // precificação já salva antes desta feature — ou salva com container
+      // sem preço por qualquer motivo — nunca passava por ali de novo, só
+      // ficava R$ 0,00 pra sempre. Reaplica aqui, toda vez que a tela
+      // carrega, pros containers que ainda não têm preço nenhum — nunca
+      // sobrescreve um valor já digitado (mesma regra de sempre).
+      if ((norm.containers || []).some((c) => !(Number(c.preco_rs) > 0))) {
+        const custos = await window.CadastroCustosStore?.listarContainers();
+        norm.containers = window.PrecificacaoElevadorStore.enriquecerContainersComCusto(norm.containers, custos);
+      }
+      setPz(norm);
+    });
   }, [id]);
   React.useEffect(() => { carregar(); }, [carregar]);
   React.useEffect(() => {
