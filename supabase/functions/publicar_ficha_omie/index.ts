@@ -31,17 +31,25 @@
    - Observação Interna: Descrição DUIMP + Descrição Técnica concatenadas.
    - Demais campos ativos das categorias (Elétricas, Velocidade, Fluidos,
      Acústica, Tração, Componentes, Comprimento/Diâmetro/etc. de
-     Dimensões) → ficam de fora da publicação automática por ora. Uma
-     sessão anterior (20/09/2026) já testou ao vivo "caracteristicas" e
-     "caracteristicasArray" dentro de IncluirProduto e nenhum dos dois é
-     aceito pela estrutura produto_servico_cadastro. O endpoint dedicado
-     geral/caracteristicas (IncluirCaracteristica) existe mas cadastra só
-     o NOME da característica no catálogo geral da conta — não tem campo
-     de produto nem de valor, não serve pra atribuir "Altura: 30mm" a UM
-     produto específico. Não achamos (ainda) o mecanismo real de API pra
-     isso — o caminho que existe de verdade hoje é a planilha de
-     importação em massa (aba Omie_Produtos_Caracteristicas), fora deste
-     fluxo automático.
+     Dimensões) → Omie em 2 chamadas por campo (achado de 28/09/2026,
+     via omie_documentacao_diff + busca na lista de serviços — o endpoint
+     certo não é geral/caracteristicas sozinho):
+       1. geral/caracteristicas · IncluirCaracteristica — garante que o
+          NOME da característica existe no catálogo geral da conta
+          (cCodIntCaract = slug estável do nome, ex. "tensao_de_alimentacao").
+          Best-effort: se já existir (republicação ou campo repetido em
+          outra ficha), a chamada falha e a gente ignora — não é erro.
+       2. geral/prodcaract · IncluirCaractProduto (ou AlterarCaractProduto
+          se já existia) — aí sim atribui o VALOR ao PRODUTO específico
+          (cCodIntProd = nosso codigo_produto, cCodIntCaract = mesmo slug,
+          cConteudo = valor + unidade). É esse endpoint que faltava — o
+          geral/caracteristicas sozinho só tem nome, sem produto nem valor.
+     Uma sessão anterior (20/09/2026) já tinha testado "caracteristicas"/
+     "caracteristicasArray" dentro do IncluirProduto e nenhum dos dois
+     funciona — não repita essa tentativa, o caminho certo é o de cima.
+     Best-effort por característica: uma falha isolada não derruba a
+     publicação nem as outras características. Não remove característica
+     que saiu da Ficha desde a última publicação (fica órfã no Omie).
    - Tipo do Produto (Bloco K) e Origem da Mercadoria: fixos "00" e "1"
      SÓ na criação (IncluirProduto). NUNCA reenviados no Alterar/republicar
      — um produto real (VPEL-700) já está classificado diferente ("01")
@@ -134,6 +142,67 @@ function campoAtivo(cats: any[], catId: string, nomeRegex: RegExp): string | nul
   return fld ? String(fld.valor).trim() : null;
 }
 
+/* Todo campo ativo e preenchido, de QUALQUER categoria exceto "Códigos e
+   Classificações" (NCM/CEST/EAN já têm destino próprio acima — nunca
+   duplicar aqui). */
+function buildCaracteristicas(cats: any[]): { nome: string; conteudo: string }[] {
+  const linhas: { nome: string; conteudo: string }[] = [];
+  (cats || []).forEach((cat: any) => {
+    if (!cat || cat.id === "codigos") return;
+    (cat.campos || []).forEach((fld: any) => {
+      if (!fld || !fld.ativo) return;
+      const valor = String(fld.valor ?? "").trim();
+      if (!valor) return;
+      const conteudo = fld.unidade ? `${valor} ${fld.unidade}` : valor;
+      linhas.push({ nome: String(fld.nome || "").trim(), conteudo });
+    });
+  });
+  return linhas;
+}
+
+/* cCodIntCaract estável — mesmo nome de característica (ex. "Peso Bruto"
+   dentro de uma categoria custom, "Tensão de Alimentação"...) sempre gera
+   o mesmo código, então o catálogo geral não duplica entrada por ficha. */
+function slugCaract(nome: string): string {
+  return String(nome)
+    .normalize("NFD").replace(/[̀-ͯ]/g, "")
+    .toLowerCase().replace(/[^a-z0-9]+/g, "_").replace(/^_|_$/g, "")
+    .slice(0, 60) || "caract";
+}
+
+/* Sincroniza as características dinâmicas com o produto no Omie —
+   2 chamadas por campo (ver comentário no topo do arquivo). Best-effort:
+   cada característica é isolada, uma falha não derruba as outras nem a
+   publicação. Retorna contagem pra log de auditoria. */
+async function sincronizarCaracteristicas(codigoProduto: string, itens: { nome: string; conteudo: string }[]) {
+  let ok = 0, falhas = 0;
+  for (const it of itens) {
+    if (!it.nome) continue;
+    const cCodIntCaract = slugCaract(it.nome);
+    const cNomeCaract = it.nome.slice(0, 30);
+    const cConteudo = it.conteudo.slice(0, 60);
+
+    // 1) garante o nome no catálogo geral — se já existir, a chamada
+    // falha (nome duplicado) e a gente ignora, é o esperado numa republicação.
+    await omieCall("geral/caracteristicas", "IncluirCaracteristica", { cCodIntCaract, cNomeCaract });
+
+    // 2) atribui o valor a ESTE produto — tenta incluir; se já existia
+    // (republicação), cai pra alterar.
+    const inc = await omieCall("geral/prodcaract", "IncluirCaractProduto", {
+      cCodIntProd: codigoProduto, cCodIntCaract, cConteudo,
+    });
+    if (inc.ok) { ok++; continue; }
+    const alt = await omieCall("geral/prodcaract", "AlterarCaractProduto", {
+      cCodIntProd: codigoProduto, cCodIntCaract, cConteudo,
+    });
+    if (alt.ok) ok++; else {
+      falhas++;
+      console.warn(`[publicar_ficha_omie] característica "${it.nome}" falhou:`, inc.data?.faultstring || alt.data?.faultstring);
+    }
+  }
+  return { ok, falhas };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
@@ -171,6 +240,7 @@ Deno.serve(async (req) => {
     const altura = campoAtivo(cats, "dimensoes", /^Altura$/i);
     const largura = campoAtivo(cats, "dimensoes", /^Largura$/i);
     const profundidade = campoAtivo(cats, "dimensoes", /^Profundidade$/i);
+    const caracteristicas = buildCaracteristicas(cats);
 
     const obsParts: string[] = [];
     if (ficha.descricao_duimp) obsParts.push(`DUIMP: ${ficha.descricao_duimp}`);
@@ -297,6 +367,12 @@ Deno.serve(async (req) => {
       console.warn("[publicar_ficha_omie] AlterarProduto (sync de campos) falhou:", alteracao.data?.faultstring || alteracao.data);
     }
 
+    // 2.2) Sincroniza as características dinâmicas (Elétricas, Velocidade,
+    // Tração etc.) — best-effort, mesma lógica de "não derruba o resto".
+    const caracteristicasResultado = caracteristicas.length
+      ? await sincronizarCaracteristicas(codigo_produto, caracteristicas)
+      : { ok: 0, falhas: 0 };
+
     // 3) Remover anexo anterior desta ficha, se existir — permite republicar
     // substituindo o PDF em vez de duplicar (mesma cCodIntAnexo de sempre).
     const nomeArquivo = `FICHA-TECNICA-${String(codigo_produto).replace(/[^A-Za-z0-9-]/g, "")}.pdf`;
@@ -376,21 +452,26 @@ Deno.serve(async (req) => {
       detalhe: {
         codigo_produto, arquivo: nomeArquivo, omie_nid: nIdProduto, omie_anexo_id: nIdAnexo,
         substituido: foiSubstituido, produto_recem_criado: produtoRecemCriado,
-        sync_campos_ok: alteracao.ok,
+        sync_campos_ok: alteracao.ok, caracteristicas: caracteristicasResultado,
       },
     });
     if (logError) console.warn("vp_logs falhou:", logError.message);
 
+    const caractSufixo = caracteristicas.length
+      ? ` · ${caracteristicasResultado.ok}/${caracteristicas.length} características sincronizadas`
+      : "";
+
     return json({
       sucesso: true,
-      mensagem: produtoRecemCriado
+      mensagem: (produtoRecemCriado
         ? `🆕 Produto ${codigo_produto} cadastrado no Omie e ficha anexada (${nomeArquivo})`
         : (foiSubstituido
           ? `🔄 Ficha republicada — PDF substituído no produto ${codigo_produto} no Omie (${nomeArquivo})`
-          : `✅ Ficha anexada ao produto ${codigo_produto} no Omie (${nomeArquivo})`),
+          : `✅ Ficha anexada ao produto ${codigo_produto} no Omie (${nomeArquivo})`)) + caractSufixo,
       codigo_produto,
       substituido: foiSubstituido,
       produto_recem_criado: produtoRecemCriado,
+      caracteristicas: caracteristicasResultado,
     });
   } catch (error) {
     console.error("Erro geral:", error);
