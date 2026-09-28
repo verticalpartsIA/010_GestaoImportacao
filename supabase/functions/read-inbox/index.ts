@@ -252,7 +252,7 @@ Deno.serve(async (req: Request) => {
   try { payload = await req.json(); } catch { /* body vazio ok */ }
   const limit = Math.min(Math.max(Number(payload?.limit) || 15, 1), 25);
 
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
 
   let c: ImapConn | null = null;
   try {

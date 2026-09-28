@@ -27,7 +27,7 @@ import { zipSync } from "https://esm.sh/fflate@0.8.2";
 import { createHash } from "node:crypto";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabaseServiceKey = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"];
 const omieKey = Deno.env.get("OMIE_API_KEY") || "";
 const omieSecret = Deno.env.get("OMIE_API_SECRET") || "";
 
@@ -35,7 +35,7 @@ const omieSecret = Deno.env.get("OMIE_API_SECRET") || "";
 // — cache local dos produtos VerticalParts + confirmação ao vivo no Omie.
 // Chave anon (publicável por design, protegida por RLS do lado de lá).
 const PROXIMO_CODIGO_URL = "https://kgecbycsyrtdhmdziuul.supabase.co/functions/v1/proximo-codigo-produto";
-const PROXIMO_CODIGO_ANON_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImtnZWNieWNzeXJ0ZGhtZHppdXVsIiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzc5MjMxOTYsImV4cCI6MjA5MzQ5OTE5Nn0.JCgq_dD96sW-tpTrfzb08CMVhrT9uzKIjcitvb7nJws";
+const PROXIMO_CODIGO_ANON_KEY = "sb_publishable_Qb6sMn7yCuTaeL1lDl5WWQ_9RUIKYVI";
 
 const sb = createClient(supabaseUrl, supabaseServiceKey);
 

@@ -30,7 +30,7 @@ function json(body: unknown, status = 200) {
 }
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const SERVICE_KEY = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}")["default"] || "";
 
 function campo(form: Record<string, unknown>, ...nomes: string[]) {
   for (const n of nomes) {

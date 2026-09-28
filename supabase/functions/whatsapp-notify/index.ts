@@ -122,7 +122,7 @@ Deno.serve(async (req: Request) => {
   const motivo: string | null = typeof payload?.motivo === "string" ? payload.motivo : null;
 
   const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-  const serviceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+  const serviceKey = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"];
   const admin = createClient(supabaseUrl, serviceKey);
 
   const texto = montarTexto({ stage, tipo, numeroCotacao, statusFinal, motivo });

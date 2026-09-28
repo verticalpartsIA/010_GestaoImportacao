@@ -14,7 +14,7 @@
   'use strict';
 
   const TRANSLATE_URL = 'https://jxtqwzmpgofwctqajewt.supabase.co/functions/v1/vp-translate';
-  const ANON = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+  const ANON = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
 
   function sb() { return (window.__VP_SB || {}).sb; }
 
@@ -134,7 +134,7 @@
     }));
     const res = await fetch(TRANSLATE_URL, {
       method: 'POST',
-      headers: { 'Authorization': 'Bearer ' + ANON, 'Content-Type': 'application/json' },
+      headers: { 'apikey': ANON, 'Authorization': 'Bearer ' + ANON, 'Content-Type': 'application/json' },
       body: JSON.stringify({ target: 'en', intro: intro || '', observacoes: observacoes || '', items: payloadItems }),
     });
     if (!res.ok) {
