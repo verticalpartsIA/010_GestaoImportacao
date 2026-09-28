@@ -291,7 +291,8 @@
       } : {}),
       log, atualizado_em: now.toISOString(),
     };
-    await c.from('propostas').update(patch).eq('id', id);
+    const { error } = await c.from('propostas').update(patch).eq('id', id);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'enviada', { channel });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
@@ -316,7 +317,16 @@
     const log = (cur.log || []).slice();
     log.push({ status:'visualizada', at: now.toISOString(), meta:{ ip, ua } });
     const patch = { status: 'visualizada', viewed_at: now.toISOString(), audit, log, atualizado_em: now.toISOString() };
-    await c.from('propostas').update(patch).eq('token', token);
+    /* 28/09 — achado real (mesmo padrão do erro engolido em send-email):
+       este update nunca checava `.error`. Diferente de markSent/markSigned/
+       refuse (ações explícitas com toast/alert no chamador), este roda
+       sozinho no mount da página pública sem nenhum tratamento de erro do
+       lado de quem chama (assinar-app.jsx) — lançar aqui prenderia o
+       cliente pra sempre em "Carregando…" por uma falha só de auditoria.
+       Best-effort de propósito: loga pra suporte investigar, nunca trava
+       a leitura da proposta pelo cliente. */
+    const { error } = await c.from('propostas').update(patch).eq('token', token);
+    if (error) console.warn('[PropostaStore] falha ao registrar visualização (best-effort, não bloqueia o cliente)', error);
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'visualizada', { ip });
     return updated;
@@ -351,7 +361,8 @@
       status: 'aprovada', signed_at: now.toISOString(), aprovada_em: now.toISOString(),
       audit, log, atualizado_em: now.toISOString(),
     };
-    await c.from('propostas').update(patch).eq('token', token);
+    const { error } = await c.from('propostas').update(patch).eq('token', token);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'aprovada', { ip, signerName: sig.signerName });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
@@ -407,7 +418,8 @@
     const log = (cur.log || []).slice();
     log.push({ status:'recusada', at: now.toISOString() });
     const patch = { status: 'recusada', log, atualizado_em: now.toISOString() };
-    await c.from('propostas').update(patch).eq('token', token);
+    const { error } = await c.from('propostas').update(patch).eq('token', token);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'recusada', {});
     if (window.EventosFluxo) window.EventosFluxo.registrar({
@@ -438,7 +450,8 @@
       status: 'revisao_solicitada', revisao_texto: txt, revisao_solicitada_em: now.toISOString(),
       log, atualizado_em: now.toISOString(),
     };
-    await c.from('propostas').update(patch).eq('token', token);
+    const { error } = await c.from('propostas').update(patch).eq('token', token);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'revisao_solicitada', { texto: txt });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
@@ -475,7 +488,8 @@
       motivo_recusa_interna: aceita ? null : motivo.trim(),
       atualizado_em: now.toISOString(),
     };
-    await c.from('propostas').update(patch).eq('id', id);
+    const { error } = await c.from('propostas').update(patch).eq('id', id);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Proposta Comercial', acao: aceita ? 'aceitou a revisão pedida pelo cliente' : 'recusou internamente a revisão pedida',

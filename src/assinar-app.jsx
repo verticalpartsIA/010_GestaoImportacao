@@ -267,9 +267,21 @@ function SgApp() {
       ? { type: 'draw', data: drawData, signerName: defaultName }
       : { type: 'type', data: typedName.trim(), signerName: typedName.trim() };
     await new Promise(r => setTimeout(r, 1200));
-    const updated = await source.store.markSigned(token, sig);
-    setSource({ ...source, rec: updated });
-    setPhase('done');
+    /* 28/09 — achado real: markSigned agora lança se a gravação no banco
+       falhar (antes engolia o erro em silêncio e a tela ia pra "done" —
+       o cliente via "assinado com sucesso" mesmo sem nada persistido).
+       Sem este try/catch, uma falha aqui deixaria a tela travada pra
+       sempre em "processing" (nunca chegaria em setPhase('done') nem em
+       lugar nenhum) — pior que o silêncio de antes. Volta pra 'sign' e
+       avisa, pra o cliente poder tentar de novo. */
+    try {
+      const updated = await source.store.markSigned(token, sig);
+      setSource({ ...source, rec: updated });
+      setPhase('done');
+    } catch (e) {
+      window.alert('Não foi possível registrar sua assinatura agora. Tente novamente em instantes — se o problema continuar, entre em contato com a VerticalParts.\n\n' + (e.message || e));
+      setPhase('sign');
+    }
   };
 
   const isPropostaSrc = source && source.kind === 'proposta';
@@ -280,9 +292,16 @@ function SgApp() {
       ? 'Confirma que não tem interesse nesta proposta? A VerticalParts será notificada.'
       : 'Recusar a assinatura deste contrato? A VerticalParts será notificada.';
     if (!window.confirm(pergunta)) return;
-    const updated = await source.store.refuse(token);
-    setSource({ ...source, rec: updated });
-    setPhase('refused');
+    /* 28/09 — mesmo motivo do try/catch em handleSign: refuse() agora
+       lança em falha de gravação, então precisa de tratamento aqui pra
+       não deixar a tela sem retorno nenhum pro cliente. */
+    try {
+      const updated = await source.store.refuse(token);
+      setSource({ ...source, rec: updated });
+      setPhase('refused');
+    } catch (e) {
+      window.alert('Não foi possível registrar sua resposta agora. Tente novamente em instantes.\n\n' + (e.message || e));
+    }
   };
 
   const handleSolicitarRevisao = async () => {
