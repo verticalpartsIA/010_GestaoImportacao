@@ -41,15 +41,26 @@
           outra ficha), a chamada falha e a gente ignora — não é erro.
        2. geral/prodcaract · IncluirCaractProduto (ou AlterarCaractProduto
           se já existia) — aí sim atribui o VALOR ao PRODUTO específico
-          (cCodIntProd = nosso codigo_produto, cCodIntCaract = mesmo slug,
-          cConteudo = valor + unidade). É esse endpoint que faltava — o
-          geral/caracteristicas sozinho só tem nome, sem produto nem valor.
+          (nCodProd = nIdProduto — o nº interno do Omie via ConsultarProduto,
+          cCodIntCaract = mesmo slug, cConteudo = valor + unidade). É esse
+          endpoint que faltava — o geral/caracteristicas sozinho só tem
+          nome, sem produto nem valor.
      Uma sessão anterior (20/09/2026) já tinha testado "caracteristicas"/
      "caracteristicasArray" dentro do IncluirProduto e nenhum dos dois
      funciona — não repita essa tentativa, o caminho certo é o de cima.
      Best-effort por característica: uma falha isolada não derruba a
      publicação nem as outras características. Não remove característica
      que saiu da Ficha desde a última publicação (fica órfã no Omie).
+     ⚠️ NUNCA use cCodIntProd (Código de Integração) aqui — achado real na
+     validação em produção de 28/09/2026 (ficha VPFT20260917_30/VPER-681,
+     produto cadastrado em 2016, muito antes desta feature existir):
+     cCodIntProd só existe pra produtos criados PELO NOSSO IncluirProduto
+     (que grava codigo_produto_integracao = nosso código) — todo o resto
+     do catálogo antigo tem esse campo vazio no Omie, e a chamada falhava
+     com "Produto não cadastrado para o Código de Integração [...]" pra
+     100% das características, silenciosamente (o resto da publicação —
+     AlterarProduto, anexo do PDF — funcionava normal, escondendo o bug).
+     nCodProd não depende desse campo — sempre existe, pra qualquer produto.
    - Tipo do Produto (Bloco K) e Origem da Mercadoria: fixos "00" e "1"
      SÓ na criação (IncluirProduto). NUNCA reenviados no Alterar/republicar
      — um produto real (VPEL-700) já está classificado diferente ("01")
@@ -173,8 +184,29 @@ function slugCaract(nome: string): string {
 /* Sincroniza as características dinâmicas com o produto no Omie —
    2 chamadas por campo (ver comentário no topo do arquivo). Best-effort:
    cada característica é isolada, uma falha não derruba as outras nem a
-   publicação. Retorna contagem pra log de auditoria. */
-async function sincronizarCaracteristicas(codigoProduto: string, itens: { nome: string; conteudo: string }[]) {
+   publicação. Retorna contagem pra log de auditoria.
+   nIdProduto = nCodProd (nº interno do Omie via ConsultarProduto) —
+   NUNCA cCodIntProd, ver comentário no topo do arquivo.
+
+   Segundo achado real da mesma validação (28/09/2026, mesma ficha
+   VPER-681, campo "Largura"): o NOME da característica pode já existir
+   no catálogo geral da conta sob um cCodIntCaract DIFERENTE do nosso
+   slug (ex.: cadastro antigo/manual, sem nosso padrão de slug) — nesse
+   caso IncluirCaracteristica falha (esperado, nome duplicado), mas o
+   nosso cCodIntCaract nunca chega a existir de verdade, então os passos
+   seguintes (IncluirCaractProduto/AlterarCaractProduto com esse
+   cCodIntCaract) falham também com "Característica não cadastrada".
+   O faultstring do Omie inclui o código real já cadastrado (ex.:
+   "já cadastrada para a descrição [Largura] código [859989228]") —
+   extrai esse nCodCaract e usa ele (confirmado que prodcaract aceita
+   nCodCaract do mesmo jeito que aceita nCodProd) em vez de insistir
+   no nosso cCodIntCaract inexistente. */
+function extrairCodigoExistente(fault: string): number | null {
+  const m = /c[oó]digo\s*\[(\d+)\]/i.exec(fault || "");
+  return m ? Number(m[1]) : null;
+}
+
+async function sincronizarCaracteristicas(nIdProduto: number, itens: { nome: string; conteudo: string }[]) {
   let ok = 0, falhas = 0;
   for (const it of itens) {
     if (!it.nome) continue;
@@ -182,18 +214,24 @@ async function sincronizarCaracteristicas(codigoProduto: string, itens: { nome: 
     const cNomeCaract = it.nome.slice(0, 30);
     const cConteudo = it.conteudo.slice(0, 60);
 
-    // 1) garante o nome no catálogo geral — se já existir, a chamada
-    // falha (nome duplicado) e a gente ignora, é o esperado numa republicação.
-    await omieCall("geral/caracteristicas", "IncluirCaracteristica", { cCodIntCaract, cNomeCaract });
+    // 1) garante o nome no catálogo geral — se já existir (nome duplicado),
+    // a chamada falha; se o nosso próprio cCodIntCaract é quem já existe
+    // (republicação), segue normal. Se é OUTRO código com o mesmo nome,
+    // usa esse código real daqui pra frente nesta característica.
+    const criacao = await omieCall("geral/caracteristicas", "IncluirCaracteristica", { cCodIntCaract, cNomeCaract });
+    const nCodCaractExistente = criacao.ok ? null : extrairCodigoExistente(criacao.data?.faultstring);
+    const identCaract = nCodCaractExistente
+      ? { nCodCaract: nCodCaractExistente }
+      : { cCodIntCaract };
 
     // 2) atribui o valor a ESTE produto — tenta incluir; se já existia
     // (republicação), cai pra alterar.
     const inc = await omieCall("geral/prodcaract", "IncluirCaractProduto", {
-      cCodIntProd: codigoProduto, cCodIntCaract, cConteudo,
+      nCodProd: nIdProduto, ...identCaract, cConteudo,
     });
     if (inc.ok) { ok++; continue; }
     const alt = await omieCall("geral/prodcaract", "AlterarCaractProduto", {
-      cCodIntProd: codigoProduto, cCodIntCaract, cConteudo,
+      nCodProd: nIdProduto, ...identCaract, cConteudo,
     });
     if (alt.ok) ok++; else {
       falhas++;
@@ -370,7 +408,7 @@ Deno.serve(async (req) => {
     // 2.2) Sincroniza as características dinâmicas (Elétricas, Velocidade,
     // Tração etc.) — best-effort, mesma lógica de "não derruba o resto".
     const caracteristicasResultado = caracteristicas.length
-      ? await sincronizarCaracteristicas(codigo_produto, caracteristicas)
+      ? await sincronizarCaracteristicas(nIdProduto, caracteristicas)
       : { ok: 0, falhas: 0 };
 
     // 3) Remover anexo anterior desta ficha, se existir — permite republicar
