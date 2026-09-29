@@ -108,6 +108,91 @@
     },
   };
 
+  /* ---------- Fiação do carro (chicotes da caixa de passagem/inspeção) ----------
+     Trechos reais de "LISTA DE MATERIAIS E FICAO PARA QUADRO DE COMANDO
+     MANUFATURADO MONARCH.xlsx" (planilha de engenharia, achada em
+     29/09/2026) — cada chicote com seu código, cabo/bitola e comprimento
+     reais de referência, em vez dos valores estimados da 1ª versão.
+     Comprimento automático só se a cabina for até 2400x2400mm (regra do
+     usuário) — acima disso, ou sem a medida da cabina, fica
+     pendente_engenharia, com override manual por chicote. A decisão de
+     Escopo (fornecer/reutilizar/terceiro) NUNCA entra aqui: a fiação é
+     sempre fabricada pela VerticalParts, mesmo em cima de um componente
+     reaproveitado pelo cliente. A Botoeira de Cabina (COP) não tem chicote
+     próprio — a placa já vem fiada de fábrica dentro da botoeira. */
+  const CABINA_LIMITE_PADRAO_MM = 2400;
+  const FIACAO_CARRO_ORIGEM_PADRAO = 'Caixa de passagem/inspeção (teto da cabina)';
+
+  /* doorSpecific: true = 1 trecho por porta ativa (dobra com portas_opostas_cabina).
+     origemFisica: só o POW1 foge da caixa de passagem (é alimentação
+     independente que desce da casa de máquinas/última altura). */
+  const FIACAO_CARRO_CHICOTES = [
+    { chicote: 'GS1', nome: 'Contato de trinco da porta', destino: 'Trinco da porta de cabina', cabo: 'Cabo flexível 3×0,75mm²', mm: 6000, override: 'fiacao_carro_gs1_mm', doorSpecific: true },
+    { chicote: 'DC1', nome: 'Alimentação do operador de porta', destino: 'Operador de porta (motor)', cabo: 'Cabo flexível 3×0,75mm²', mm: 6000, override: 'fiacao_carro_dc1_mm', doorSpecific: true },
+    { chicote: 'DEN1', nome: 'Sinais do operador de porta', destino: 'Módulo do operador de porta (comunicação)', cabo: 'Cabo de controle 6×0,75mm²', mm: 6000, override: 'fiacao_carro_den1_mm', doorSpecific: true },
+    { chicote: 'EDP1', nome: 'Barreira de luz — alimentação', destino: 'Cortina luminosa (alimentação)', cabo: 'Cabo flexível 3×0,75mm²', mm: 6000, override: 'fiacao_carro_edp1_alim_mm', doorSpecific: true },
+    { chicote: 'EDP1', nome: 'Barreira de luz — sinal', destino: 'Cortina luminosa (sinal)', cabo: 'Cabo flexível 2×0,75mm²', mm: 6000, override: 'fiacao_carro_edp1_sinal_mm', doorSpecific: true },
+    { chicote: 'RDZ', nome: 'Sensor de nivelamento de cabina', destino: 'Sensores de nivelamento e zona de porta (DZU/DZD/FL1/FL2)', cabo: 'Cabo flexível 4×0,75mm²', mm: 4000, override: 'fiacao_carro_rdz_mm', doorSpecific: false },
+    { chicote: 'SOS', nome: 'Segurança do carro', destino: 'Contato do freio de segurança (cunha) do carro', cabo: 'Cabo flexível 3×0,75mm²', mm: 6000, override: 'fiacao_carro_seguranca_mm', doorSpecific: false },
+    { chicote: 'FAN', nome: 'Iluminação da cabina', destino: 'Iluminação da cabina', cabo: 'Cabo flexível 3×0,75mm²', mm: 2000, override: 'fiacao_carro_fan_iluminacao_mm', doorSpecific: false },
+    { chicote: 'FAN', nome: 'Ventilador da cabina', destino: 'Ventilador da cabina', cabo: 'Cabo flexível 3×0,75mm²', mm: 2000, override: 'fiacao_carro_fan_ventilador_mm', doorSpecific: false },
+    { chicote: 'SL', nome: 'LED e sirene 24V', destino: 'Sinalizador (LED + sirene)', cabo: 'Cabo flexível 2×0,75mm²', mm: 6000, override: 'fiacao_carro_sl_mm', doorSpecific: false },
+    { chicote: 'WT1', nome: 'Pesador de carga digital', destino: 'Pesador de carga', cabo: 'Cabo flexível 4×0,75mm²', mm: 2000, override: 'fiacao_carro_wt1_mm', doorSpecific: false },
+    { chicote: 'POW1', nome: 'Alimentação independente (backup luz/ventilador)', destino: 'Backup de luz/ventilador da cabina', cabo: 'Cabo flexível 2×0,75mm²', mm: 6000, override: 'fiacao_carro_pow1_mm', doorSpecific: false, origemFisica: 'Casa de máquinas / última altura' },
+  ];
+
+  function cabinaDentroDoPadrao(geometria) {
+    const l = Number(geometria.cabina_largura_mm) || null;
+    const p = Number(geometria.cabina_profundidade_mm) || null;
+    if (!l || !p) return null;
+    return l <= CABINA_LIMITE_PADRAO_MM && p <= CABINA_LIMITE_PADRAO_MM;
+  }
+
+  function trechoFiacaoCarro(geometria, spec, dentroPadrao, sufixoPorta) {
+    const overrideMm = Number(geometria[spec.override]) || null;
+    let comprimento = null, confianca, formula;
+    if (overrideMm) {
+      comprimento = overrideMm;
+      confianca = 'confirmado';
+      formula = `Comprimento informado manualmente pela engenharia: ${overrideMm}mm.`;
+    } else if (dentroPadrao === true) {
+      comprimento = spec.mm;
+      confianca = 'estimado';
+      formula = `Cabina dentro do padrão (largura e profundidade ≤ ${CABINA_LIMITE_PADRAO_MM}mm) — comprimento de referência do chicote ${spec.chicote} (${spec.mm}mm, planilha de engenharia Monarch).`;
+    } else if (dentroPadrao === false) {
+      formula = `Cabina maior que ${CABINA_LIMITE_PADRAO_MM}x${CABINA_LIMITE_PADRAO_MM}mm — comprimento não pode ser presumido pelo padrão de referência. Informar a medida real (campo de override desta aba).`;
+      confianca = 'pendente_engenharia';
+    } else {
+      formula = 'Largura/profundidade da cabina ainda não informadas — sem base pra saber se o padrão de referência se aplica.';
+      confianca = 'pendente_engenharia';
+    }
+    return trechoBase({
+      tipo_cabo: `Fiação do carro — ${spec.chicote} — ${spec.nome}${sufixoPorta ? ` (${sufixoPorta})` : ''}`,
+      vias_bitola: spec.cabo,
+      origem_fisica: spec.origemFisica || FIACAO_CARRO_ORIGEM_PADRAO,
+      destino_fisico: spec.destino,
+      comprimento_base_mm: comprimento,
+      comprimento_final_mm: comprimento,
+      quantidade_pedacos: 1,
+      confianca,
+      formula,
+    });
+  }
+
+  function montarTrechosFiacaoCarro(geometria, config) {
+    const dentroPadrao = cabinaDentroDoPadrao(geometria);
+    const portas2 = !!(config || {}).portas_opostas_cabina;
+    const g = geometria || {};
+
+    const trechos = [];
+    FIACAO_CARRO_CHICOTES.forEach((spec) => {
+      if (!spec.doorSpecific) { trechos.push(trechoFiacaoCarro(g, spec, dentroPadrao, null)); return; }
+      trechos.push(trechoFiacaoCarro(g, spec, dentroPadrao, 'frontal'));
+      if (portas2) trechos.push(trechoFiacaoCarro(g, spec, dentroPadrao, 'traseira'));
+    });
+    return trechos;
+  }
+
   /* Máquina (kW, tensão da rede) -> chave de variante. Sem correspondência
      exata -> null (fica pendente de engenharia, não escolhe "a mais perto"). */
   function chaveVariante(potenciaKw, tensaoV) {
@@ -392,6 +477,7 @@
     listarVariantes, chaveVariante, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
     montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,
+    cabinaDentroDoPadrao, montarTrechosFiacaoCarro,
     grupoSeparacaoPorCategoria, classificarCruzamentoErp,
   };
 }());
