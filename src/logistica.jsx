@@ -1236,139 +1236,26 @@ function RouteAndShip({ start, end, cur, ship, isActive, onClick }) {
 }
 
 /* ---------- COMPRAS NACIONAL ============================== */
+/* 29/09/2026 — pedido do usuário: a tela antes reaproveitava dados de
+   `embarques` (Importação) relabelados como "Fretes Nacionais", com vários
+   stubs (Transportadora/Motorista/Valor/Ocorrências nunca preenchidos de
+   verdade — ver investigação da mesma sessão). Usuário decidiu reservar
+   esta rota/menu ("Compras Nacional") pra um processo novo, ainda não
+   definido — removida toda a lógica antiga (fetch de embarques, tabela,
+   KPIs, filtros) de propósito, não é regressão. Casca mínima só pra rota
+   continuar existindo até o novo processo ser especificado. */
 function ComprasPage({ setRoute }) {
-  const [fretes, setFretes] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [filter, setFilter] = React.useState("Todos");
-  const filters = ["Todos", "Em rota", "Saiu CD", "Aguardando coleta", "Entregue", "Atraso"];
-
-  const reloadFretes = () => {
-    setLoading(true);
-    Promise.all([
-      window.__VP_SB.sb.from('embarques').select('*').order('eta'),
-      window.__VP_SB.sb.from('dossier_obra').select('id,client_name,building_name,city,state'),
-    ]).then(([{ data, error }, { data: obrasData }]) => {
-        if (error) {
-          window.toast('Erro ao carregar fretes nacionais: ' + error.message, 'error');
-          setFretes([]);
-        } else {
-          const obrasById = {};
-          (obrasData || []).forEach(o => { obrasById[o.id] = o; });
-          setFretes((data || []).map(e => {
-            const status = e.status === 'Entregue' ? 'Entregue'
-              : e.status === 'Liberação aduaneira' ? 'Aguardando coleta'
-              : e.status === 'Em trânsito' ? 'Saiu CD'
-              : e.status || 'Aguardando coleta';
-            const obra = e.project_id ? obrasById[e.project_id] : null;
-            const destino = obra
-              ? `${obra.building_name} — ${obra.city || '?'}/${obra.state || '?'}`
-              : (e.client || 'Obra (sem cidade/UF vinculada)');
-            return {
-              id: 'FN-' + e.id,
-              origem: e.to || 'Porto',
-              destino,
-              transportadora: e.line || 'Operador logístico',
-              driver: null,
-              placa: e.bl,
-              itens: e.containers || 1,
-              peso: e.containers ? e.containers * 1200 : 0,
-              valor: null,
-              eta: e.eta ? fmtDate(e.eta) : '—',
-              status,
-              ocorrencias: e.status === 'Atraso' ? 1 : 0,
-            };
-          }));
-        }
-        setLoading(false);
-      });
-  };
-  React.useEffect(() => { reloadFretes(); }, []);
-
-  if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
-  const rows = fretes.filter(f => {
-    if (filter === "Todos") return true;
-    if (filter === "Atraso") return f.ocorrencias > 0 || f.status === "Atraso";
-    return f.status === filter;
-  });
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Compras Nacional</div>
-          <h1 className="page-head__title">Fretes Nacionais</h1>
-          <p className="page-head__sub">Movimentação entre CD Guarulhos, portos e obras. Ocorrências e CTes integrados.</p>
-        </div>
-        <div className="page-head__r">
-          <Button variant="outline" icon="mail" onClick={() => setRoute("inbox")}>Inbox</Button>
-          <Button variant="primary" icon="plus" onClick={() => setRoute("importacao")}>Novo frete via embarque</Button>
+          <h1 className="page-head__title">Compras Nacional</h1>
+          <p className="page-head__sub">Módulo em preparação — novo processo a definir.</p>
         </div>
       </div>
-
-      <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Em rota" value={fretes.filter(f => f.status === "Em rota" || f.status === "Em trânsito").length} sub="ativos" icon="truck"/>
-        <KPI label="Entregues (semana)" value={fretes.filter(f => f.status === "Entregue").length} sub="OK" icon="check"/>
-        <KPI label="Ocorrências" value={fretes.filter(f => f.ocorrencias > 0).length} sub="abertas" icon="warning"/>
-        <KPI label="Custo médio frete" value="—" sub="sem dados suficientes" icon="dollar"/>
-      </div>
-
-      <div className="tbar">
-        <div className="seg">
-          {filters.map(s => (
-            <button key={s} className={filter === s ? "is-active" : ""} onClick={() => setFilter(s)}>
-              {s === "Atraso" ? "Com ocorrência" : s}
-            </button>
-          ))}
-        </div>
-        <div className="spacer"/>
-        <Button variant="outline" size="sm" icon="filter" disabled title="Em desenvolvimento — filtro por transportadora ainda não implementado">Transportadora</Button>
-      </div>
-
-      <div className="table-wrap">
-        <table className="t">
-          <thead><tr>
-            <th>Frete</th>
-            <th>Trajeto</th>
-            <th>Transportadora</th>
-            <th>Motorista</th>
-            <th>Carga</th>
-            <th className="text-right">Valor</th>
-            <th>ETA</th>
-            <th>Status</th>
-            <th></th>
-          </tr></thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
-                Nenhum frete registrado.
-              </td></tr>
-            )}
-            {rows.map((f) => (
-              <tr key={f.id}>
-                <td>
-                  <div className="cell-main">{f.id}</div>
-                  <div className="cell-sub">{f.itens} itens · {f.peso}kg</div>
-                </td>
-                <td>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-                    <span>{f.origem}</span>
-                    <Icon.arrowRight size={12} color="var(--vp-yellow)"/>
-                    <span>{f.destino}</span>
-                  </div>
-                </td>
-                <td>{f.transportadora}<div className="cell-sub">{f.placa}</div></td>
-                <td><div className="row gap-2"><div className="avatar sm">{(f.driver || "?").split(" ").map(w => w[0]).join("").slice(0,2)}</div><span style={{ fontSize: 12 }}>{f.driver || "—"}</span></div></td>
-                <td>
-                  <span className="cell-num">{f.itens}</span>
-                  {f.ocorrencias > 0 ? <Badge variant="danger" style={{ marginLeft: 8 }}>{f.ocorrencias} oco</Badge> : null}
-                </td>
-                <td className="cell-money">{fmtBRL(f.valor)}</td>
-                <td><span className="cell-num">{f.eta}</span></td>
-                <td><StatusBadge status={f.status}/></td>
-                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
+      <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13, border:'1px dashed var(--border)', borderRadius:6 }}>
+        Nenhum conteúdo ainda.
       </div>
     </div>
   );
