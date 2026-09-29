@@ -250,7 +250,7 @@
          continua falando em valor total único (decisão de escopo do
          usuário — ver Projeto_Granularidade_Equipamentos_por_Cotacao.md). */
       itensEquipamento: [],
-      checklist: { proposta: false, desenho: false, nrs: false },
+      checklist: { proposta: false, nrs: false },
       d0_entrada: null,      // ISSUE #6: Data de pagamento da entrada
       d0_assinatura: null,   // ISSUE #6: Data de assinatura do contrato
       d0_projeto: null,      // ISSUE #6: Data de aprovação do projeto
@@ -336,6 +336,7 @@
           ['Anexo I', 'Proposta Comercial nº ' + numero],
           ['Anexo II', 'Desenho(s) Técnico(s)'],
         ] }),
+        p('<b>1.1.2</b> O(s) Desenho(s) Técnico(s) referidos no Anexo II acima (Projeto de Instalação) não constituem anexo físico entregue na data de assinatura deste Contrato — a VENDEDORA os fornecerá separadamente ao COMPRADOR assim que estiverem cumpridas, cumulativamente: (i) o pagamento do sinal, com o aval do setor Financeiro da VENDEDORA; (ii) a assinatura deste Contrato; e (iii) o aval do setor Jurídico da VENDEDORA.', { html: true, indent: true }),
       ],
     });
 

@@ -465,6 +465,98 @@
     }
   }
 
+  /* ---------- Desenho do Projeto de Instalação ----------
+     Deixou de ser anexado no wizard (checklist "Anexo II") e passou a ser
+     enviado separadamente pela Engenharia, só depois de sinal pago (Aval
+     Financeiro) + contrato assinado + Aval Jurídico — ver
+     CVDesenhoInstalacaoSection em contrato-venda.jsx e os gates em
+     aval-financeiro-store.js/aval-juridico-store.js. Mesmo padrão de
+     upload real de projeto-elevador-store.js (bucket `engenharia`). */
+  async function uploadDesenhoInstalacao(id, file) {
+    const c = sb(); if (!c) throw new Error('Sem conexão com o banco.');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Contrato não encontrado.');
+    const path = `desenho-instalacao/${id}/${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
+    const { error: upErr } = await c.storage.from('engenharia').upload(path, file, { upsert: true });
+    if (upErr) throw new Error(upErr.message);
+    const { data: pub } = c.storage.from('engenharia').getPublicUrl(path);
+    const now = new Date().toISOString();
+    const arquivo = {
+      nome: file.name, url: pub.publicUrl, tipo: file.type, tamanho: file.size, path,
+      anexado_por: (window.__VP_USER || {}).email || null, anexado_em: now,
+    };
+    const desenho = { ...(cur.desenho_instalacao || {}), arquivo, envios: (cur.desenho_instalacao || {}).envios || [] };
+    const { error } = await c.from('contratos_venda_equipamentos')
+      .update({ desenho_instalacao: desenho, atualizado_em: now }).eq('id', id);
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Contrato Venda', acao: 'anexou o Desenho do Projeto de Instalação',
+      alvo: cur.numero_documento, alvo_id: id,
+    });
+    if (window.EventosFluxo) {
+      const numeroCotacao = await numeroCotacaoDaProposta(cur.proposta_id);
+      window.EventosFluxo.registrar({
+        evento: 'DESENHO_INSTALACAO_ANEXADO', numeroCotacao,
+        alvoLabel: cur.comprador_razao_social || cur.numero_documento, alvoId: id,
+      });
+    }
+    return { ...cur, desenho_instalacao: desenho };
+  }
+
+  /* Envia o arquivo já anexado por e-mail real (mesma Edge Function
+     `send-email` do RFQ a fornecedor — ver formulario-elevador.jsx) — fica
+     registrado em emails_projeto (Inbox/Enviados/Linha do Tempo), não é o
+     mailto: usado no CVSendModal. Histórico em desenho_instalacao.envios
+     permite reenvio sem precisar anexar o arquivo de novo. */
+  async function enviarDesenhoInstalacao(id) {
+    const c = sb(); if (!c) throw new Error('Sem conexão com o banco.');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Contrato não encontrado.');
+    const arquivo = (cur.desenho_instalacao || {}).arquivo;
+    if (!arquivo) throw new Error('Anexe o arquivo do Desenho de Instalação antes de enviar.');
+    const destinatario = (cur.form_state && cur.form_state.comprador && cur.form_state.comprador.email) || null;
+    if (!destinatario) throw new Error('E-mail do comprador não encontrado neste contrato.');
+
+    const resp = await fetch(arquivo.url);
+    if (!resp.ok) throw new Error('Não foi possível ler o arquivo anexado pra enviar.');
+    const blob = await resp.blob();
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result).split(',')[1] || '');
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    const numeroCotacao = await numeroCotacaoDaProposta(cur.proposta_id);
+    const { data: emailData, error: emailError } = await c.functions.invoke('send-email', {
+      body: {
+        to: destinatario,
+        subject: `Projeto de Instalação — Contrato ${cur.numero_documento} — VerticalParts`,
+        text: `Olá,\n\nSegue em anexo o Desenho do Projeto de Instalação referente ao Contrato ${cur.numero_documento}.\n\nAtenciosamente,\nVerticalParts`,
+        numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: id,
+        attachments: [{ filename: arquivo.nome, contentType: arquivo.tipo || 'application/octet-stream', base64 }],
+      },
+    });
+    if (emailError) throw new Error(emailError.message || 'Falha ao enviar o e-mail.');
+
+    const now = new Date().toISOString();
+    const envios = ((cur.desenho_instalacao || {}).envios || []).slice();
+    envios.push({ enviado_em: now, enviado_por: (window.__VP_USER || {}).email || null, destinatario });
+    const desenho = { ...(cur.desenho_instalacao || {}), envios };
+    await c.from('contratos_venda_equipamentos').update({ desenho_instalacao: desenho, atualizado_em: now }).eq('id', id);
+
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Contrato Venda', acao: 'enviou o Desenho do Projeto de Instalação ao cliente',
+      alvo: cur.numero_documento, alvo_id: id,
+    });
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'DESENHO_INSTALACAO_ENVIADO', numeroCotacao,
+      alvoLabel: cur.comprador_razao_social || cur.numero_documento, alvoId: id, detalhe: { destinatario },
+    });
+    if (emailData && emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
+    return { ...cur, desenho_instalacao: desenho };
+  }
+
   async function remove(id) {
     const c = sb();
     await c.from('contratos_venda_equipamentos').delete().eq('id', id);
@@ -478,6 +570,7 @@
     listAll, listarPropostasAguardandoContrato, garantirDossier, getById, getByToken,
     createDraft, updateFormState,
     markSent, markViewed, markSigned, refuse,
+    uploadDesenhoInstalacao, enviarDesenhoInstalacao,
     sweepExpired, remove,
     getPublicIP, deviceLabel, sha256Hex,
   };

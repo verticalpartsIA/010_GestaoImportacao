@@ -3,7 +3,7 @@
    ContratoVendaEquipamentosPage — wizard + dashboard + send modal
    tudo persistindo em contratos_venda_equipamentos via Supabase.
    ============================================================ */
-const { useState: _cvUS, useEffect: _cvUE, useMemo: _cvUM, useRef: _cvUR } = React;
+const { useState: _cvUS, useEffect: _cvUE, useMemo: _cvUM, useRef: _cvUR, useCallback: _cvUC } = React;
 
 /* ============================================================
    FORM FIELDS
@@ -271,7 +271,7 @@ function CVStepRevisao({ form, set, doc, dossierProvisioning }) {
   if (longa) conds.push('Obra a mais de 100 km');
 
   const setChk = (k, v) => set({ checklist: { ...form.checklist, [k]: v } });
-  const allChk = form.checklist.proposta && form.checklist.desenho && form.checklist.nrs;
+  const allChk = form.checklist.proposta && form.checklist.nrs;
 
   const rows = [
     ['Comprador', form.comprador.razao || '—'],
@@ -299,15 +299,16 @@ function CVStepRevisao({ form, set, doc, dossierProvisioning }) {
           <span className="cv-check-box">{form.checklist.proposta && '✓'}</span>
           <span className="cv-check-label"><b>Anexo I — Proposta Comercial</b> · PDF assinado pelo comercial</span>
         </button>
-        <button type="button" className={'cv-check-row' + (form.checklist.desenho ? ' on' : '')} onClick={() => setChk('desenho', !form.checklist.desenho)}>
-          <span className="cv-check-box">{form.checklist.desenho && '✓'}</span>
-          <span className="cv-check-label"><b>Anexo II — Desenho(s) Técnico(s)</b> · Projeto aprovado pelo comprador</span>
-        </button>
+        <div className="cv-cond-alert" style={{ margin: '8px 0' }}>
+          O(s) Desenho(s) Técnico(s) — Anexo II (Projeto de Instalação) não são mais anexados aqui: a Engenharia envia
+          separadamente, de dentro do próprio contrato, depois que o sinal for pago (Financeiro), o contrato for
+          assinado e o Jurídico der o aval.
+        </div>
         <button type="button" className={'cv-check-row' + (form.checklist.nrs ? ' on' : '')} onClick={() => setChk('nrs', !form.checklist.nrs)}>
           <span className="cv-check-box">{form.checklist.nrs && '✓'}</span>
           <span className="cv-check-label"><b>NRs e ART</b> · Documentação de segurança</span>
         </button>
-        {!allChk && <p className="cv-field-hint" style={{ marginTop: 8 }}>Marque os 3 anexos para liberar o envio.</p>}
+        {!allChk && <p className="cv-field-hint" style={{ marginTop: 8 }}>Marque os anexos para liberar o envio.</p>}
       </div>
     </div>
   );
@@ -593,9 +594,11 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
     let all = {};
     [0, 3].forEach(i => { all = { ...all, ...validateStep(i, f) }; });
 
-    // ISSUE #6: Validar anexos obrigatórios
-    if (!f.checklist.proposta || !f.checklist.desenho || !f.checklist.nrs) {
-      all.__checklist = 'Marque os 3 anexos obrigatórios (Proposta, Desenho, NRs).';
+    // ISSUE #6: Validar anexos obrigatórios (Desenho saiu daqui — ver
+    // CVDesenhoInstalacaoSection, enviado separadamente após sinal pago +
+    // contrato assinado + aval Jurídico).
+    if (!f.checklist.proposta || !f.checklist.nrs) {
+      all.__checklist = 'Marque os anexos obrigatórios (Proposta, NRs).';
     }
 
     // Dossier da Obra — normalmente já provisionado automaticamente (ver
@@ -807,6 +810,105 @@ function CVD0Section({ rec, onSaved }) {
   );
 }
 
+/* Desenho do Projeto de Instalação — não é mais anexado no wizard (ver
+   CVStepRevisao, checklist antigo "Anexo II"); a Engenharia anexa e envia
+   daqui, só depois que as 3 condições abaixo baterem (pedido explícito do
+   usuário: sinal pago + aval Financeiro, contrato assinado + aval
+   Jurídico). Histórico de envios fica em rec.desenho_instalacao.envios —
+   permite reenviar sem anexar de novo. */
+function CVDesenhoInstalacaoSection({ rec, onSaved }) {
+  const [gate, setGate] = _cvUS(null); // {sinalPago, contratoAssinado, avalJuridico}
+  const [uploading, setUploading] = _cvUS(false);
+  const [sending, setSending] = _cvUS(false);
+  const desenho = rec.desenho_instalacao || {};
+
+  const carregarGate = _cvUC(async () => {
+    const [av, aj] = await Promise.all([
+      window.AvalFinanceiroStore ? window.AvalFinanceiroStore.getByContratoVendaId(rec.id) : null,
+      window.AvalJuridicoStore ? window.AvalJuridicoStore.getByContratoId(rec.id) : null,
+    ]);
+    setGate({
+      sinalPago: !!(av && av.sinal_pago),
+      contratoAssinado: rec.status === 'assinado',
+      avalJuridico: !!(aj && aj.status === 'aprovado'),
+    });
+  }, [rec.id, rec.status]);
+  _cvUE(() => { carregarGate(); }, [carregarGate]);
+
+  if (!gate) return null;
+  const liberado = gate.sinalPago && gate.contratoAssinado && gate.avalJuridico;
+
+  const onFile = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    e.target.value = '';
+    if (!file) return;
+    setUploading(true);
+    try {
+      const novo = await window.CVStore.uploadDesenhoInstalacao(rec.id, file);
+      window.toast?.('Desenho anexado.', 'success');
+      onSaved && onSaved(novo);
+    } catch (err) {
+      window.toast?.('Erro ao anexar: ' + (err.message || err), 'error');
+    } finally {
+      setUploading(false);
+    }
+  };
+
+  const enviar = async () => {
+    if (!window.confirm('Enviar o Desenho do Projeto de Instalação ao cliente por e-mail agora?')) return;
+    setSending(true);
+    try {
+      const novo = await window.CVStore.enviarDesenhoInstalacao(rec.id);
+      window.toast?.('Desenho enviado ao cliente!', 'success');
+      onSaved && onSaved(novo);
+    } catch (err) {
+      window.toast?.('Erro ao enviar: ' + (err.message || err), 'error');
+    } finally {
+      setSending(false);
+    }
+  };
+
+  return (
+    <div className="ci-drawer-sec">
+      <h3 className="ci-drawer-sec-title">Desenho — Projeto de Instalação</h3>
+      <p className="cv-field-hint" style={{ marginBottom: 10, display: 'block' }}>
+        Enviado separadamente do contrato — só depois do sinal pago, contrato assinado e aval do Jurídico.
+      </p>
+      <div className="ci-audit" style={{ marginBottom: 10 }}>
+        <CVAuditRow k="Sinal pago (Financeiro)" v={gate.sinalPago ? 'OK' : 'Pendente'}/>
+        <CVAuditRow k="Contrato assinado" v={gate.contratoAssinado ? 'OK' : 'Pendente'}/>
+        <CVAuditRow k="Aval Jurídico" v={gate.avalJuridico ? 'OK' : 'Pendente'}/>
+      </div>
+      {!liberado && (
+        <div className="cv-cond-alert">As 3 condições acima precisam estar OK antes de anexar/enviar o desenho.</div>
+      )}
+      {liberado && (
+        <>
+          {desenho.arquivo
+            ? <div className="ci-audit-row"><span className="k">Arquivo anexado</span><span className="v"><a href={desenho.arquivo.url} target="_blank" rel="noopener">{desenho.arquivo.nome}</a></span></div>
+            : <div className="small muted">Nenhum arquivo anexado ainda.</div>}
+          <label className="ci-btn ci-btn--ghost" style={{ marginTop: 10, display: 'inline-block', cursor: 'pointer' }}>
+            {uploading ? 'Enviando…' : (desenho.arquivo ? 'Substituir arquivo' : 'Anexar arquivo (Engenharia)')}
+            <input type="file" style={{ display: 'none' }} onChange={onFile} disabled={uploading}/>
+          </label>
+          {desenho.arquivo && (
+            <button className="ci-btn ci-btn--primary" style={{ marginTop: 10, marginLeft: 8 }} onClick={enviar} disabled={sending}>
+              {sending ? 'Enviando…' : ((desenho.envios || []).length ? 'Reenviar por e-mail' : 'Enviar por e-mail')}
+            </button>
+          )}
+          {(desenho.envios || []).length > 0 && (
+            <div className="ci-audit" style={{ marginTop: 10 }}>
+              {desenho.envios.map((ev, i) => (
+                <CVAuditRow key={i} k="Enviado em" v={`${window.CVStore.fmtDateTime(ev.enviado_em)} · ${ev.destinatario}`}/>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
 function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
   const a = rec.audit || {};
   const del = async () => {
@@ -861,6 +963,7 @@ function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
             )}
           </div>
           <CVD0Section rec={rec} onSaved={onRefresh}/>
+          <CVDesenhoInstalacaoSection rec={rec} onSaved={onRefresh}/>
           <div className="ci-drawer-sec">
             <h3 className="ci-drawer-sec-title">Ações</h3>
             <div className="ci-drawer-actions">

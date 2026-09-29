@@ -53,6 +53,7 @@ const NAV_GROUPS = [
   ]},
   { label: "Contratos & Jurídico", items: [
     { id: "contrato-venda-equipamentos", label: "Contrato Venda de Equipamentos", icon: "fileText" },
+    { id: "aval-juridico", label: "Aval Jurídico", icon: "scale" },
     { id: "juridico", label: "Contratos & Minutas", icon: "scale" },
   ]},
   { label: "Suprimentos & Importação", sublabel: "Siscomex & Compras", items: [
@@ -319,6 +320,7 @@ const BREADCRUMB_MAP = {
   "linha-do-tempo": { module: "Engenharia", page: "Linha do Tempo da Cotação", icon: "clock" },
   "central-documentos": { module: "Engenharia", page: "Central de Documentos", icon: "fileSearch" },
   juridico:      { module: "Jurídico", page: "Contratos & Minutas", icon: "scale" },
+  "aval-juridico": { module: "Jurídico", page: "Aval Jurídico", icon: "scale" },
   "contrato-editor": { module: "Jurídico", page: "Editor de Contrato", icon: "fileText" },
   "contrato-venda-equipamentos": { module: "Jurídico", page: "Contrato Venda de Equipamentos", icon: "fileText" },
   "contrato-instalador":         { module: "Jurídico", page: "Contrato Instalador", icon: "hardhat" },
