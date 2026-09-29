@@ -248,6 +248,15 @@
     return data ? data.numero_cotacao : null;
   }
 
+  /* Primeiro livre entre base, base-2, base-3… */
+  function proximoNumeroLivre(base, usados) {
+    const set = new Set(usados || []);
+    if (!set.has(base)) return base;
+    let n = 2;
+    while (set.has(base + '-' + n)) n++;
+    return base + '-' + n;
+  }
+
   /* Cria rascunho. Gera VPVE numero_documento via RPC */
   async function createDraft(formState, opts) {
     opts = opts || {};
@@ -270,7 +279,15 @@
        (idText abaixo), não mudam. Sem propostaId (raro/legado), mantém o
        número gerado pelo RPC como está. */
     const numeroCotacaoOrigem = await numeroCotacaoDaProposta(formState.propostaId);
-    if (numeroCotacaoOrigem != null) num.numero_documento = window.MasterIdEngine.etapaId('contrato_venda', numeroCotacaoOrigem);
+    if (numeroCotacaoOrigem != null) {
+      /* numero_documento é UNIQUE: um 2º contrato da mesma cotação (aditivo,
+         ex.: equipamento especial ≥ 1000 kg) batia na constraint com erro
+         técnico. Agora ganha sufixo -2, -3… (parseNumeroCotacao continua
+         extraindo o mesmo Nº da cotação). */
+      const base = window.MasterIdEngine.etapaId('contrato_venda', numeroCotacaoOrigem);
+      const { data: usados } = await c.from('contratos_venda_equipamentos').select('numero_documento').ilike('numero_documento', base + '%');
+      num.numero_documento = proximoNumeroLivre(base, (usados || []).map((r) => r.numero_documento));
+    }
 
     const valor = window.CV.parseMoney(formState.valor);
     const doc = window.CV.buildContract({
@@ -660,7 +677,7 @@
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
     listAll, listarPropostasAguardandoContrato, garantirDossier, getById, getByToken,
     numeroCotacaoDaProposta,
-    createDraft, updateFormState,
+    createDraft, updateFormState, proximoNumeroLivre,
     markSent, markViewed, markSigned, refuse,
     tentarFinalizarAposSignatarioExtra,
     uploadDesenhoInstalacao, enviarDesenhoInstalacao,
