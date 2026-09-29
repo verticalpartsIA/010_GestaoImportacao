@@ -228,6 +228,16 @@
     return data;
   }
 
+  /* Primeiro número livre a partir da base ("VPNI-0955" → "VPNI-0955",
+     depois "-2", "-3"…). numero_documento é UNIQUE no banco; a checagem aqui
+     é o que evita bater na constraint no caso normal. */
+  async function reservarNumero(base) {
+    const c = sb(); if (!c) return base;
+    const { data, error } = await c.from('contratos_instalador').select('numero_documento').ilike('numero_documento', base + '%');
+    if (error) { console.warn('[CIStore] reservarNumero falhou, usando a base', error); return base; }
+    return window.CI.proximoNumeroLivre(base, (data || []).map((r) => r.numero_documento));
+  }
+
   /* Cria um novo registro de contrato a partir do estado do form.
      Gera numero_documento via RPC next_doc_number('VPNI'). */
   async function createDraft(formState, opts) {
@@ -239,18 +249,22 @@
     const { data: numRows, error: numErr } = await c.rpc('next_doc_number', { p_prefixo: 'VPNI' });
     if (numErr) throw numErr;
     const num = (Array.isArray(numRows) ? numRows[0] : numRows) || {};
-    /* Nº exibido (revisão 27/08): reaproveita o Nº da Cotação da Proposta de
-       origem (VPCM-0950 — Contrato de Montagem), em vez da sequência
-       própria "VPNI-...". Sem propostaId (raro/legado), mantém o número
-       gerado pelo RPC como está. */
+    /* Nº do contrato (29/09) nasce dos equipamentos: VPNI-<Nº da cotação>
+       quando há Proposta, VPNI-<nº de série/projeto> no avulso; um 2º
+       contrato com a mesma base (ex.: 2 montadores na mesma obra, cada um
+       com parte dos equipamentos) ganha sufixo -2, -3… Sem nenhum
+       equipamento informado (registro legado), mantém o número do RPC. */
     if (formState.propostaId) {
       const { data: prop } = await c.from('propostas').select('numero_cotacao').eq('id', formState.propostaId).maybeSingle();
-      if (prop && prop.numero_cotacao != null) {
-        num.numero_documento = window.MasterIdEngine.etapaId('contrato_montagem', prop.numero_cotacao);
-        /* formState.numeroCotacao nunca era preenchido pelo wizard, então
-           EventosFluxo/Aval Financeiro abaixo nunca disparavam. */
-        if (formState.numeroCotacao == null) formState.numeroCotacao = prop.numero_cotacao;
-      }
+      /* formState.numeroCotacao nunca era preenchido pelo wizard, então
+         EventosFluxo/Aval Financeiro abaixo nunca disparavam. */
+      if (prop && prop.numero_cotacao != null && formState.numeroCotacao == null) formState.numeroCotacao = prop.numero_cotacao;
+    }
+    const base = formState.numeroContratoBase || window.CI.numeroBaseContrato(formState);
+    if (base) {
+      num.numero_documento = await reservarNumero(base);
+      formState.numeroContrato = num.numero_documento;
+      formState.numeroContratoBase = base;
     }
 
     const valorTotal = window.CI.moedaParaNumero(formState.valorTotal);
@@ -490,7 +504,7 @@
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
     listAll, listPainel, getById, getByToken,
-    createDraft, updateFormState,
+    createDraft, updateFormState, reservarNumero,
     markSent, markViewed, markSigned, refuse,
     sweepExpired, remove,
     getPublicIP, deviceLabel, sha256Hex,

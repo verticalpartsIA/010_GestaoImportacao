@@ -57,6 +57,7 @@
     proposta: 'VPPR',
     contrato_venda: 'VPCV',
     contrato_montagem: 'VPCM',
+    contrato_instalador: 'VPNI',  // Contrato Instalador (29/09): VPNI-<Nº da cotação ou do equipamento>
     obra: 'VPOB',
   };
 

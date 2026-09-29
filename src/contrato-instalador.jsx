@@ -345,6 +345,92 @@ function CISeletorObras({ dossierIds, onToggle }) {
   );
 }
 
+/* Equipamentos cobertos + Nº do contrato (29/09). O Nº nasce assim que há ao
+   menos um equipamento (ativo da Proposta marcado, ou nº de série/projeto
+   digitado) e fica FIXO depois — trocar equipamentos não muda o número.
+   Com Proposta: VPNI-<Nº da cotação>. Sem Proposta: VPNI-<1º nº informado>.
+   Já existindo contrato com a mesma base (ex.: 2 montadores na mesma obra),
+   o novo ganha -2, -3… */
+function CIEquipamentosNumero({ s, set, errors }) {
+  const [texto, setTexto] = _ciUS('');
+  const [conflitos, setConflitos] = _ciUS([]);
+  const lista = window.CI.equipamentosDoContrato(s);
+  const base = window.CI.numeroBaseContrato(s);
+
+  _ciUE(() => {
+    let vivo = true;
+    if (s.numeroContrato || !base) return;
+    window.CIStore.reservarNumero(base).then((n) => {
+      if (!vivo || !n) return;
+      set('numeroContratoBase', base);
+      set('numeroContrato', n);
+    });
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, s.numeroContrato]);
+
+  /* Aviso (não bloqueia): ativo já coberto por outro contrato da mesma Proposta. */
+  _ciUE(() => {
+    let vivo = true;
+    setConflitos([]);
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb || !s.propostaId || !(s.ativosIndices || []).length) return;
+    sb.from('contratos_instalador').select('numero_documento, ativos_indices, status').eq('proposta_id', s.propostaId)
+      .then(({ data }) => {
+        if (!vivo) return;
+        setConflitos((data || []).filter((c) => c.status !== 'recusado' && c.status !== 'expirado'
+          && (c.ativos_indices || []).some((i) => (s.ativosIndices || []).includes(i))).map((c) => c.numero_documento));
+      });
+    return () => { vivo = false; };
+  }, [s.propostaId, JSON.stringify(s.ativosIndices || [])]);
+
+  const adicionar = () => {
+    const novos = texto.split(/[,;\n]/).map((v) => v.trim().toUpperCase()).filter(Boolean);
+    if (!novos.length) return;
+    const atual = s.equipamentosManuais || [];
+    set('equipamentosManuais', [...atual, ...novos.filter((v, i) => !atual.includes(v) && novos.indexOf(v) === i)]);
+    setTexto('');
+  };
+  const remover = (v) => set('equipamentosManuais', (s.equipamentosManuais || []).filter((x) => x !== v));
+
+  return (
+    <div className="ci-field-group">
+      <h3 className="ci-group-title">Equipamentos cobertos por este contrato *</h3>
+      <p className="ci-field-hint" style={{ marginBottom: 8 }}>
+        {s.propostaId
+          ? 'Marque os ativos da Proposta acima e/ou digite nº de série. Cada montador tem o seu contrato, com os equipamentos que ele vai montar — o número do contrato nasce daqui.'
+          : 'Sem Proposta: informe o nº do projeto ou o nº de série de cada equipamento (separe por vírgula). O número do contrato nasce do 1º informado.'}
+      </p>
+      {lista.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {lista.map((v) => {
+            const manual = (s.equipamentosManuais || []).includes(v);
+            return (
+              <span key={v} className="ci-cond-pill ci-cond-pill--info" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                {v}{manual && <button type="button" className="ci-btn ci-btn--ghost" style={{ padding: '0 4px' }} onClick={() => remover(v)} title="Remover">✕</button>}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input className={'ci-input' + (errors.equipamentos ? ' ci-input--error' : '')} value={texto} placeholder="Nº do projeto ou nº de série (Enter para adicionar)"
+          onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); adicionar(); } }} />
+        <button type="button" className="ci-btn ci-btn--dark" onClick={adicionar}>Adicionar</button>
+      </div>
+      {errors.equipamentos && <span className="ci-field-err">{errors.equipamentos}</span>}
+      <div className="ci-contratante-note" style={{ marginTop: 10 }}>
+        <span className="ci-cn-label">Nº do contrato</span>
+        <strong>{s.numeroContrato || (base ? 'gerando…' : 'nasce quando você informar os equipamentos')}</strong>
+        {s.numeroContrato && <span className="ci-cn-meta">Fixo — trocar os equipamentos depois não muda o número.</span>}
+      </div>
+      {conflitos.length > 0 && (
+        <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Atenção: algum(ns) destes ativos já consta(m) em outro contrato desta Proposta ({conflitos.join(', ')}). Confirme que não é uma contratação em duplicidade.</div>
+      )}
+    </div>
+  );
+}
+
 function CIStepObjeto({ s, set, errors }) {
   errors = errors || {};
   const isElevador = s.equipamento === 'elevador';
@@ -353,6 +439,7 @@ function CIStepObjeto({ s, set, errors }) {
 
   const aplicarProposta = (p) => {
     set('masterId', p.master_id); set('propostaId', p.id); set('ativosIndices', []);
+    set('numeroContrato', null); set('numeroContratoBase', null);  // número nasce de novo a partir da cotação
     /* Nº da cotação (alimenta EventosFluxo/Aval Financeiro no createDraft —
        antes nunca era preenchido). Cai pro parse do Master ID se a coluna
        vier vazia. */
@@ -365,6 +452,7 @@ function CIStepObjeto({ s, set, errors }) {
   };
   const limparProposta = () => {
     set('masterId', null); set('propostaId', null); set('ativosIndices', []); set('ativosSnapshot', []); set('numeroCotacao', null);
+    set('numeroContrato', null); set('numeroContratoBase', null);
   };
   const toggleAtivo = (indice) => {
     const atual = s.ativosIndices || [];
@@ -383,6 +471,7 @@ function CIStepObjeto({ s, set, errors }) {
       {!s.propostaId && (
         <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Contrato avulso (sem Proposta vinculada): o envio continua exigindo aprovação do CEO na Central de Decisões, e o vínculo automático de respostas por e-mail só funciona quando o instalador responde ao próprio e-mail enviado (sem Nº de Cotação não há vínculo por assunto). Se possível, selecione a Proposta de origem acima antes de continuar.</div>
       )}
+      <CIEquipamentosNumero s={s} set={set} errors={errors} />
       <div className="ci-field-group">
         <h3 className="ci-group-title">Equipamento</h3>
         <CIRadioCards value={s.equipamento} onChange={(v) => set('equipamento', v)} options={window.CI.EQUIPAMENTOS} columns={3} />
@@ -868,6 +957,7 @@ function ciValidateStep(idx, s) {
     if (!s.r_mesmoEndereco) endereco('r_');
   }
   if (idx === 2) {
+    if (!window.CI.equipamentosDoContrato(s).length) e.equipamentos = 'Informe ao menos um equipamento (nº de série, nº do projeto ou ativo da Proposta) coberto por este contrato.';
     obrig('descricaoServicos', 'Descreva os serviços a executar.');
     obrig('localServico', 'Informe o endereço onde o serviço será realizado.');
     if (s.equipamento === 'elevador' && s.paradas === 'Personalizado') obrig('paradasCustom', 'Informe a quantidade de paradas.');
@@ -910,7 +1000,7 @@ function CIWizard({ onCreated, initial }) {
 
   const set = (k, v) => setS(prev => ({ ...prev, [k]: v }));
 
-  const docPreview = _ciUM(() => window.CI.buildContract(s, 'VPNI' + '________'), [s]);
+  const docPreview = _ciUM(() => window.CI.buildContract(s, s.numeroContrato || 'VPNI________'), [s]);
   const conds = window.CI.activeConditionals(s);
 
   const goNext = () => {
