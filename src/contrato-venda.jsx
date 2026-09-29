@@ -346,7 +346,37 @@ function CVSendModal({ record, onClose, onSent }) {
       if (channel === 'whatsapp') {
         window.open(window.CVStore.whatsAppHref(contact, message), '_blank');
       } else if (channel === 'email') {
-        window.open(window.CVStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
+        /* 29/09 — mesmo padrão já aplicado em RFQ (formulario-elevador.jsx)
+           e Proposta (proposta-editor.jsx): tenta send-email (SMTP direto)
+           primeiro, com numeroCotacao/referenciaTipo/referenciaId pra ficar
+           em Enviados/Linha do Tempo e o read-inbox conseguir casar a
+           resposta do cliente de volta a este contrato. Cai pro mailto:
+           (como sempre foi) só se o envio direto falhar — nunca deixa o
+           vendedor sem alternativa. numeroCotacao vem de numero_documento
+           (VPCV-0950 → 950); contrato sem Proposta de origem (formato
+           VPVE...) não tem número pra extrair — cai direto pro mailto:,
+           sem tentar send-email com numeroCotacao null. */
+        const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(record.numero_documento) ?? null;
+        const sb = window.__VP_SB && window.__VP_SB.sb;
+        let enviouDireto = false;
+        if (sb && numeroCotacao != null) {
+          const { data: emailData, error: emailError } = await sb.functions.invoke('send-email', {
+            body: {
+              to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
+              numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
+            },
+          });
+          if (!emailError) {
+            enviouDireto = true;
+            if (emailData && emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
+          } else {
+            console.warn('[CVSendModal] send-email falhou, caindo pro mailto:', emailError);
+          }
+        }
+        if (!enviouDireto) {
+          window.open(window.CVStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
+          window.toast?.('Não foi possível enviar direto (envio automático falhou ou este contrato não tem Nº de Cotação) — abrindo seu e-mail padrão para envio manual. Esse envio não ficará registrado em Enviados/Linha do Tempo.', 'warning');
+        }
       }
       setSent(true);
       onSent && onSent(updated);
@@ -714,6 +744,37 @@ function CVBadge({ status }) {
   return <span className={'ci-badge ci-badge--' + st.tone}><span className="ci-badge-dot"></span>{st.label}</span>;
 }
 
+/* 29/09 — indicador "respondeu por e-mail" (achado da investigação do
+   Inbox único: nenhuma tela de Contrato mostrava isso, resposta ficava só
+   solta no Inbox genérico). Só usa `referencia_id` (aponta pra ESTE
+   contrato, gravado pelo send-email/read-inbox quando o Message-ID casa)
+   — DE PROPÓSITO sem fallback por numero_cotacao como o FEEmailRespondidoBadge
+   (formulario-elevador.jsx) faz: aqui o mesmo numero_cotacao é compartilhado
+   por RFQ/Proposta/Contrato de Venda/Contrato Instalador do mesmo negócio,
+   então um match só por numero_cotacao não sabe dizer se a resposta é
+   sobre ESTE contrato ou sobre outro documento da mesma cotação — prefere
+   não mostrar nada a mostrar errado. */
+function CVEmailRespondidoBadge({ contratoId }) {
+  const [temResposta, setTemResposta] = React.useState(false);
+  React.useEffect(() => {
+    let cancelado = false;
+    setTemResposta(false);
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb || !contratoId) return;
+    sb.from('emails_projeto').select('id', { count: 'exact', head: true })
+      .eq('direcao', 'entrada').is('excluido_em', null).eq('referencia_id', String(contratoId))
+      .then(({ count }) => { if (!cancelado) setTemResposta((count || 0) > 0); })
+      .catch(() => { if (!cancelado) setTemResposta(false); });
+    return () => { cancelado = true; };
+  }, [contratoId]);
+  if (!temResposta) return null;
+  return (
+    <span className="ci-badge ci-badge--blue" style={{ marginLeft: 6 }} title="Existe e-mail recebido vinculado a este contrato (Message-ID)">
+      <span className="ci-badge-dot"></span>Respondeu por e-mail
+    </span>
+  );
+}
+
 const CV_TL_SEQ = ['rascunho', 'enviado', 'visualizado', 'assinado'];
 
 function CVTimeline({ rec }) {
@@ -1047,7 +1108,7 @@ function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
           <div>
             <h2>{rec.numero_documento}</h2>
             <div className="ci-drawer-co">{rec.comprador_razao_social}</div>
-            <div style={{ marginTop: 10 }}><CVBadge status={rec.status}/></div>
+            <div style={{ marginTop: 10 }}><CVBadge status={rec.status}/><CVEmailRespondidoBadge contratoId={rec.id}/></div>
             <button className="ci-btn" style={{ marginTop: 10 }} onClick={() => {
               const fs = rec.form_state || {};
               const doc = window.CV.buildContract({

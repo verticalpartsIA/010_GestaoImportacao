@@ -678,7 +678,35 @@ function CISendModal({ record, onClose, onSent }) {
       if (channel === 'whatsapp') {
         window.open(window.CIStore.whatsAppHref(contact, message), '_blank');
       } else if (channel === 'email') {
-        window.open(window.CIStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
+        /* 29/09 — mesmo padrão já aplicado em RFQ, Proposta e Contrato de
+           Venda: tenta send-email (SMTP direto) primeiro, com numeroCotacao
+           (já resolvido acima pro gate de alçada)/referenciaTipo/
+           referenciaId pra ficar em Enviados/Linha do Tempo e o read-inbox
+           conseguir casar a resposta do instalador de volta a este
+           contrato. Cai pro mailto: (como sempre foi) só se o envio direto
+           falhar — nunca deixa o vendedor sem alternativa. Contrato sem
+           Proposta/Formulário de origem (numeroCotacao null) cai direto
+           pro mailto:, sem tentar send-email sem número. */
+        const sb = window.__VP_SB && window.__VP_SB.sb;
+        let enviouDireto = false;
+        if (sb && numeroCotacao != null) {
+          const { data: emailData, error: emailError } = await sb.functions.invoke('send-email', {
+            body: {
+              to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
+              numeroCotacao, referenciaTipo: 'contrato_instalador', referenciaId: record.id,
+            },
+          });
+          if (!emailError) {
+            enviouDireto = true;
+            if (emailData && emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
+          } else {
+            console.warn('[CISendModal] send-email falhou, caindo pro mailto:', emailError);
+          }
+        }
+        if (!enviouDireto) {
+          window.open(window.CIStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
+          window.toast?.('Não foi possível enviar direto (envio automático falhou ou este contrato não tem Nº de Cotação) — abrindo seu e-mail padrão para envio manual. Esse envio não ficará registrado em Enviados/Linha do Tempo.', 'warning');
+        }
       }
       setSent(true);
       onSent && onSent(updated);
@@ -895,6 +923,34 @@ function CIBadge({ status }) {
   return <span className={'ci-badge ci-badge--' + st.tone}><span className="ci-badge-dot"></span>{st.label}</span>;
 }
 
+/* 29/09 — indicador "respondeu por e-mail" (mesma investigação/correção do
+   Contrato de Venda, ver CVEmailRespondidoBadge em contrato-venda.jsx).
+   Só usa `referencia_id` (aponta pra ESTE contrato) — de propósito sem
+   fallback por numero_cotacao, porque o mesmo numero_cotacao é
+   compartilhado por RFQ/Proposta/Contrato de Venda/Contrato Instalador do
+   mesmo negócio — um match só por numero_cotacao não sabe dizer se a
+   resposta é sobre ESTE contrato ou outro documento da mesma cotação. */
+function CIEmailRespondidoBadge({ contratoId }) {
+  const [temResposta, setTemResposta] = React.useState(false);
+  React.useEffect(() => {
+    let cancelado = false;
+    setTemResposta(false);
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb || !contratoId) return;
+    sb.from('emails_projeto').select('id', { count: 'exact', head: true })
+      .eq('direcao', 'entrada').is('excluido_em', null).eq('referencia_id', String(contratoId))
+      .then(({ count }) => { if (!cancelado) setTemResposta((count || 0) > 0); })
+      .catch(() => { if (!cancelado) setTemResposta(false); });
+    return () => { cancelado = true; };
+  }, [contratoId]);
+  if (!temResposta) return null;
+  return (
+    <span className="ci-badge ci-badge--blue" style={{ marginLeft: 6 }} title="Existe e-mail recebido vinculado a este contrato (Message-ID)">
+      <span className="ci-badge-dot"></span>Respondeu por e-mail
+    </span>
+  );
+}
+
 const CI_TL_SEQ = ['rascunho', 'enviado', 'visualizado', 'assinado'];
 
 function CITimeline({ rec }) {
@@ -957,7 +1013,7 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
           <div>
             <h2>{rec.numero_documento}</h2>
             <div className="ci-drawer-co">{rec.contratada_nome}</div>
-            <div style={{ marginTop: 10 }}><CIBadge status={rec.status} /></div>
+            <div style={{ marginTop: 10 }}><CIBadge status={rec.status} /><CIEmailRespondidoBadge contratoId={rec.id}/></div>
           </div>
           <button className="ci-drawer-x" onClick={onClose}>✕</button>
         </div>
