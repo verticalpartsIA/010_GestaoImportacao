@@ -94,7 +94,7 @@
   <!-- Roteamento por URL (Fase 1 da roteirização, issue #279) — carrega
        depois do guard de SSO (mexe só na query string, nunca no pathname)
        e antes de shell.jsx/app.jsx, que o consomem. -->
-  <script src="/src/router.js?v=15"></script>
+  <script src="/src/router.js?v=16"></script>
 
   <script src="/src/notificacoes-processamento.js?v=2"></script>
   <script src="/src/notificacoes-lidas-store.js?v=1"></script>
@@ -102,7 +102,7 @@
   <!-- Administração — espelho de colaboradores (vpsistema) + alocação de
        módulos do VP Gestão. Carrega cedo pra enriquecer window.__VP_USER
        (foto + grupos alocados) assim que a identidade SSO chegar. -->
-  <script src="/src/colaboradores-admin-store.js?v=12"></script>
+  <script src="/src/colaboradores-admin-store.js?v=13"></script>
 
   <!-- Registro central de atividades (auditoria global) -->
   <script src="/src/vp-log.js?v=2"></script>
@@ -146,7 +146,7 @@
   <!-- Components in dependency order -->
   <script type="text/vp-jsx" src="/src/primitives.jsx?v=7"></script>
   <script type="text/vp-jsx" src="/src/toast.jsx?v=6"></script>
-  <script type="text/vp-jsx" src="/src/shell.jsx?v=68"></script>
+  <script type="text/vp-jsx" src="/src/shell.jsx?v=69"></script>
   <script type="text/vp-jsx" src="/src/dashboard.jsx?v=19"></script>
   <script type="text/vp-jsx" src="/src/comercial.jsx?v=34"></script>
   <script type="text/vp-jsx" src="/src/crm.jsx?v=1"></script>
@@ -175,6 +175,8 @@
   <script type="text/vp-jsx" src="/src/quadro-comando.jsx?v=15"></script>
 
   <!-- Cotação Quadro de Comando — fluxo completo como elevador -->
+  <script src="/src/contratos-sociais-store.js?v=1"></script>
+  <script type="text/vp-jsx" src="/src/contratos-sociais.jsx?v=1"></script>
   <script src="/src/cotacao-quadro-comando-store.js?v=2"></script>
   <script type="text/vp-jsx" src="/src/cotacao-quadro-comando.jsx?v=5"></script>
 
@@ -338,6 +340,6 @@
   <script type="text/vp-jsx" src="/src/vp-copiloto.jsx?v=9"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="/src/app.jsx?v=79"></script>
+  <script type="text/vp-jsx" src="/src/app.jsx?v=80"></script>
 </body>
 </html>
