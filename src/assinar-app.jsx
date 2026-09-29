@@ -94,10 +94,25 @@ function SgSumRow({ k, v }) { return <div className="ci-sum-row"><span className
 const STATUS_ALIASES = {
   instalador: { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
   venda:      { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
+  /* Signatário adicional (sócio/jurídico do Comprador, além do
+     representante — ver contrato-venda-signatarios-store.js): mesmo
+     vocabulário de status de 'venda', é uma linha própria na tabela
+     filha, não o contrato inteiro. */
+  venda_signatario: { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
   proposta:   { signed: 'aprovada', refused: 'recusada', expired: 'expirada' },
 };
 
-/* Resolve a "fonte" (instalador vs venda vs proposta) a partir do token */
+/* Verdadeiro assim que ESTA pessoa (representante, signatário adicional,
+   contratada ou cliente) assinou — independente do status agregado do
+   registro (que no Contrato de Venda pode ficar 'aguardando_signatarios'
+   enquanto outros signatários ainda faltam assinar). Usar isso em vez de
+   comparar `rec.status === st.signed` evita reabrir o formulário de
+   assinatura pra quem já assinou só porque o contrato como um todo ainda
+   não fechou. */
+function jaAssinado(rec) { return !!(rec && rec.audit && rec.audit.signedAt); }
+
+/* Resolve a "fonte" (instalador vs venda vs signatário adicional vs
+   proposta) a partir do token */
 async function resolveSource(token) {
   // Tenta primeiro instalador (token mais comum nesse momento)
   if (window.CIStore) {
@@ -107,6 +122,25 @@ async function resolveSource(token) {
   if (window.CVStore) {
     const r = await window.CVStore.getByToken(token);
     if (r) return { kind: 'venda', rec: r, store: window.CVStore, Preview: window.CVContractPreview, engine: window.CV };
+  }
+  if (window.CVSignatarioStore) {
+    const s = await window.CVSignatarioStore.getByToken(token);
+    if (s) {
+      /* Mescla os dados do contrato-pai (pro documento/resumo renderizar
+         igual ao do representante) com o status/audit/token PRÓPRIOS
+         deste signatário — nunca o contrário, senão o status do
+         representante (ou de outro signatário) vazaria pra esta sessão. */
+      const contrato = window.CVStore ? await window.CVStore.getById(s.contrato_venda_id) : null;
+      const rec = {
+        ...(contrato || {}),
+        id: s.id, token: s.token, status: s.status, audit: s.audit || {},
+        sent_at: s.sent_at, viewed_at: s.viewed_at, signed_at: s.signed_at,
+        recipient: s.recipient, channel: s.channel,
+        signatarioPapel: s.papel, signatarioNome: s.nome,
+        contratoStatus: contrato ? contrato.status : null,
+      };
+      return { kind: 'venda_signatario', rec, store: window.CVSignatarioStore, Preview: window.CVContractPreview, engine: window.CV };
+    }
   }
   if (window.PropostaStore) {
     const r = await window.PropostaStore.getByToken(token);
@@ -147,7 +181,7 @@ function SgApp() {
 
       const r = src.rec;
       const st = STATUS_ALIASES[src.kind];
-      if (r.status === st.signed) { setSource(src); setPhase('done'); setLoading(false); return; }
+      if (jaAssinado(r)) { setSource(src); setPhase('done'); setLoading(false); return; }
       if (r.status === st.refused || r.status === st.expired) { setSource(src); setLoading(false); return; }
       if (r.status === 'revisao_solicitada') { setSource(src); setPhase('revisao'); setLoading(false); return; }
 
@@ -176,7 +210,7 @@ function SgApp() {
          antigo/malformado sem doc persistido. */
       return (rec.doc && rec.doc.clauses) ? rec.doc : window.CI.buildContract(rec.form_state, rec.numero_documento);
     }
-    // venda
+    // venda / venda_signatario (mesmo documento do representante)
     return window.CV.buildContract({
       form: rec.form_state, comprador: (rec.form_state || {}).comprador,
       valor: (rec.valor_total_num != null) ? rec.valor_total_num : window.CV.parseMoney((rec.form_state || {}).valor),
@@ -214,8 +248,9 @@ function SgApp() {
     /* Contrato de Venda (29/09): PDF vetorial no layout EXATO da minuta
        oficial (cabeçalho/rodapé em toda página) — o motor recebe o mesmo
        `doc` que a tela já renderiza, sem redigir nada. Se o motor não
-       carregou ou falhar, cai na impressão nativa como antes. */
-    if (source && source.kind === 'venda' && doc && window.ContratoVendaReactPdf) {
+       carregou ou falhar, cai na impressão nativa como antes. Vale também
+       pra signatário adicional (sócio/jurídico do Comprador) — mesmo doc. */
+    if (source && (source.kind === 'venda' || source.kind === 'venda_signatario') && doc && window.ContratoVendaReactPdf) {
       try {
         const rv = source.rec;
         const nomeV = ['Contrato', rv.numero_documento, (rv.comprador_razao_social || '').trim()].filter(Boolean).join(' - ') + '.pdf';
@@ -278,6 +313,8 @@ function SgApp() {
       ? (rec.responsavel_nome || rec.contratada_nome)
       : source.kind === 'proposta'
       ? ((window.PropostaStore.conteudoRenderizavel(rec).data.cliente || {}).nome)
+      : source.kind === 'venda_signatario'
+      ? rec.signatarioNome
       : (rec.responsavel_nome || rec.comprador_razao_social);
     const sig = sigMode === 'draw'
       ? { type: 'draw', data: drawData, signerName: defaultName }
@@ -391,14 +428,28 @@ function SgApp() {
       </div>
     );
   }
-  if (phase === 'done' || rec.status === st.signed) {
+  if (phase === 'done' || jaAssinado(rec)) {
     const a = rec.audit || {};
+    /* Contrato de Venda com signatários adicionais (sócios/jurídico do
+       Comprador): quem acabou de assinar pode não ser o último — o
+       contrato só fica de fato concluído quando todos tiverem assinado
+       (ver contrato-venda-store.js). Mensagem distinta pra não dizer
+       "contrato assinado" quando ainda falta gente. */
+    const ehVendaOuSignatario = source.kind === 'venda' || source.kind === 'venda_signatario';
+    const statusContrato = source.kind === 'venda_signatario' ? rec.contratoStatus : rec.status;
+    const aindaFaltamOutros = ehVendaOuSignatario && statusContrato !== 'assinado';
     return (
       <>
         <div className="ci-sign-status">
           <div className="ci-success-check">✓</div>
-          <h1>{source.kind === 'proposta' ? 'Proposta aprovada!' : 'Contrato assinado!'}</h1>
-          <p>{source.kind === 'proposta' ? 'A proposta' : 'O contrato'} <b>{rec.numero_documento}</b> foi {source.kind === 'proposta' ? 'aprovada e assinada' : 'assinado(a)'} com sucesso.</p>
+          <h1>{source.kind === 'proposta' ? 'Proposta aprovada!' : aindaFaltamOutros ? 'Assinatura registrada!' : 'Contrato assinado!'}</h1>
+          <p>
+            {source.kind === 'proposta'
+              ? <>A proposta <b>{rec.numero_documento}</b> foi aprovada e assinada com sucesso.</>
+              : aindaFaltamOutros
+              ? <>Sua assinatura no contrato <b>{rec.numero_documento}</b> foi registrada. Ele ainda aguarda a assinatura dos demais signatários (sócios/jurídico) para ser concluído.</>
+              : <>O contrato <b>{rec.numero_documento}</b> foi assinado com sucesso.</>}
+          </p>
           <div className="ci-protocolo">
             Protocolo: {rec.token}<br/>
             Assinado em {source.store.fmtDateTime(a.signedAt)}<br/>
@@ -491,6 +542,7 @@ function SgApp() {
               <SgSumRow k={counterpartyLabel} v={counterpartyName}/>
               <SgSumRow k="Objeto" v={objetoResumo}/>
               <SgSumRow k="Valor total" v={valorFmt}/>
+              {source.kind === 'venda_signatario' && <SgSumRow k="Assinando como" v={`${rec.signatarioPapel} — ${rec.signatarioNome}`}/>}
             </div>
           </div>
 
