@@ -308,7 +308,23 @@
   /* Contratação de mão de obra (Engenharia envia Contrato Instalador) exige
      aprovação do CEO antes do envio pro parceiro. */
   async function podeContratarInstalador(numeroCotacao, contexto) {
-    if (numeroCotacao == null) return { ok: true };
+    /* Contrato avulso (sem Proposta/Nº de cotação): antes passava direto
+       (`ok: true`), pulando a alçada do CEO. Agora a decisão é chaveada pelo
+       id do próprio contrato (referencia_tabela/referencia_id). */
+    if (numeroCotacao == null) {
+      const contratoId = contexto && contexto.contratoInstaladorId;
+      const c = sb();
+      if (!contratoId || !c) return { ok: true };
+      const { data: existentes } = await c.from('decisoes_gerenciais').select('*')
+        .eq('tipo', 'contratacao_mao_obra_ceo').eq('referencia_tabela', 'contratos_instalador').eq('referencia_id', contratoId);
+      let avulsa = (existentes || [])[0];
+      if (!avulsa) {
+        avulsa = await criarDecisao({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo', referenciaTabela: 'contratos_instalador', referenciaId: contratoId, contexto: { ...contexto, avulso: true } });
+      }
+      if (avulsa.status === 'reprovada') return { ok: false, motivo: `Contratação reprovada pelo CEO (${avulsa.decidido_por || ''}): ${avulsa.motivo || 'sem motivo informado'}.` };
+      if (avulsa.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador (contrato avulso, sem Proposta).' };
+      return { ok: true };
+    }
     let decisoes = await listarPorCotacao(numeroCotacao);
     let decisao = decisoes.find((d) => d.tipo === 'contratacao_mao_obra_ceo');
     if (!decisao) {

@@ -30,9 +30,9 @@
   ];
 
   const EQUIPAMENTOS = [
-    { id: 'elevador', label: 'Elevador',        gen: 'o' },
-    { id: 'escada',   label: 'Escada Rolante',  gen: 'a' },
-    { id: 'esteira',  label: 'Esteira Rolante', gen: 'a' },
+    { id: 'elevador', label: 'Elevador',        plural: 'Elevadores',       gen: 'o' },
+    { id: 'escada',   label: 'Escada Rolante',  plural: 'Escadas Rolantes', gen: 'a' },
+    { id: 'esteira',  label: 'Esteira Rolante', plural: 'Esteiras Rolantes', gen: 'a' },
   ];
 
   const TIPOS_ELEVADOR = [
@@ -115,6 +115,29 @@
     return result;
   }
 
+  /* Divide `valor` (R$) em n parcelas, em centavos inteiros — a diferença de
+     arredondamento vai pra ÚLTIMA parcela, então a soma bate exatamente com
+     o total (antes: 100,00/3 virava 3×33,33 = 99,99 e 100,01/2 virava
+     2×50,01 = 100,02). */
+  function dividirEmParcelas(valor, n) {
+    const total = Math.round((Number(valor) || 0) * 100);
+    const base = Math.floor(total / n);
+    const out = Array(n).fill(base / 100);
+    out[n - 1] = (total - base * (n - 1)) / 100;
+    return out;
+  }
+
+  /* Extenso com concordância de gênero (1→uma, 2→duas, 200→duzentas) —
+     usado pra Escada/Esteira Rolante (feminino). */
+  function inteiroExtensoGen(n, fem) {
+    const t = inteiroExtenso(n);
+    if (!fem) return t;
+    return t
+      .replace(/\bum\b(?! (mil|milh|bilh|trilh))/g, 'uma')
+      .replace(/\bdois\b/g, 'duas')
+      .replace(/\b(duz|trez|quatroc|quinh|seisc|setec|oitoc|novec)entos\b/g, '$1entas');
+  }
+
   function valorExtenso(valor) {
     const v = Number(valor) || 0;
     const reais = Math.floor(v);
@@ -155,8 +178,32 @@
   }
   function fmtMoeda(num) { return (Number(num) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-  function isCNPJValid(v) { return onlyDigits(v).length === 14; }
-  function isCPFValid(v) { return onlyDigits(v).length === 11; }
+  /* Valida tamanho + dígitos verificadores (mod 11) — antes só checava o
+     tamanho, então "111.111.111-11" ou um CNPJ digitado errado passavam. */
+  function isCNPJValid(v) {
+    const d = onlyDigits(v);
+    if (d.length !== 14 || /^(\d)\1+$/.test(d)) return false;
+    const dv = (base) => {
+      let soma = 0, peso = base.length - 7;
+      for (let i = 0; i < base.length; i++) { soma += parseInt(base[i], 10) * peso--; if (peso < 2) peso = 9; }
+      const r = soma % 11;
+      return r < 2 ? 0 : 11 - r;
+    };
+    return dv(d.slice(0, 12)) === parseInt(d[12], 10) && dv(d.slice(0, 13)) === parseInt(d[13], 10);
+  }
+  function isCPFValid(v) {
+    const d = onlyDigits(v);
+    if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false;
+    const dv = (base) => {
+      let soma = 0;
+      for (let i = 0; i < base.length; i++) soma += parseInt(base[i], 10) * (base.length + 1 - i);
+      const r = (soma * 10) % 11;
+      return r === 10 ? 0 : r;
+    };
+    return dv(d.slice(0, 9)) === parseInt(d[9], 10) && dv(d.slice(0, 10)) === parseInt(d[10], 10);
+  }
+  /* CNPJ da própria Contratante não pode ser usado como Contratada. */
+  function isCNPJContratante(v) { return onlyDigits(v) === onlyDigits(CONTRATANTE.cnpj); }
   function isCEPValid(v) { return onlyDigits(v).length === 8; }
 
   function pad2(n) { return String(n).padStart(2,'0'); }
@@ -211,9 +258,18 @@
   /* ---------- Builder do documento ---------- */
   function vBlank(v, ph) { return (v && String(v).trim()) ? String(v).trim() : ph; }
 
+  /* Só prefixa "Rua " quando o usuário não digitou o tipo do logradouro
+     (senão "Avenida Paulista" virava "Rua Avenida Paulista"). */
+  const TIPO_LOGRADOURO = /^(rua|r\.|avenida|av\.?|alameda|al\.|travessa|tv\.|estrada|estr\.|rodovia|rod\.|pra[cç]a|p[cç]a\.?|largo|viela|via|beco|parque|jardim)(\s|$)/i;
+  function logradouro(v) {
+    const t = vBlank(v, '');
+    if (!t) return 'Rua XXX';
+    return TIPO_LOGRADOURO.test(t) ? t : 'Rua ' + t;
+  }
+
   function buildEnderecoContratada(s) {
     return [
-      'Rua ' + vBlank(s.c_rua, 'XXX'),
+      logradouro(s.c_rua),
       'nº ' + vBlank(s.c_numero, 'XXX'),
       vBlank(s.c_bairro, 'bairro'),
       vBlank(s.c_cidade, 'cidade') + '/' + vBlank(s.c_estado, 'UF'),
@@ -223,7 +279,7 @@
   function buildEnderecoResponsavel(s) {
     if (s.r_mesmoEndereco) return buildEnderecoContratada(s);
     return [
-      'Rua ' + vBlank(s.r_rua, 'XXX'),
+      logradouro(s.r_rua),
       'nº ' + vBlank(s.r_numero, 'XXX'),
       vBlank(s.r_bairro, 'bairro'),
       vBlank(s.r_cidade, 'cidade') + '/' + vBlank(s.r_estado, 'UF'),
@@ -264,7 +320,8 @@
       frase += '.';
       return frase;
     }
-    return `Faz parte do escopo desse serviço a ${verboModalidade(s)} de ${qtd} (${qtdExt}) ${eq.label} da Marca Vertical Parts.`;
+    const fem = eq.gen === 'a';
+    return `Faz parte do escopo desse serviço a ${verboModalidade(s)} de ${qtd} (${inteiroExtensoGen(qtd, fem)}) ${qtd > 1 ? eq.plural : eq.label} da Marca Vertical Parts.`;
   }
 
   function buildPagamentoItems(s) {
@@ -273,20 +330,20 @@
     const valorExt = valor ? ' (' + valorExtenso(valor) + ')' : ' (valor por extenso)';
     const items = [];
     if (s.formaPagamento === '2') {
-      const metade = valor ? valor/2 : 0;
-      const mFmt = metade ? 'R$ ' + fmtMoeda(metade) : 'R$ XX.XXX,XX';
-      const mExt = metade ? ' (' + valorExtenso(metade) + ')' : ' (valor por extenso)';
+      const [p1, p2] = dividirEmParcelas(valor, 2);
+      const f = (v) => v ? 'R$ ' + fmtMoeda(v) : 'R$ XX.XXX,XX';
+      const e = (v) => v ? ' (' + valorExtenso(v) + ')' : ' (valor por extenso)';
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago em 2 (duas) parcelas via depósito em conta bancária, da seguinte forma:` });
-      items.push({ n:'5.1.1', text:`${mFmt}${mExt} na data de início dos trabalhos;` });
-      items.push({ n:'5.1.2', text:`${mFmt}${mExt} após a finalização do serviço, com o equipamento apto ao pleno funcionamento e mediante nota fiscal de serviço.` });
+      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos;` });
+      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} após a finalização do serviço, com o equipamento apto ao pleno funcionamento e mediante nota fiscal de serviço.` });
     } else if (s.formaPagamento === '3') {
-      const terco = valor ? valor/3 : 0;
-      const tFmt = terco ? 'R$ ' + fmtMoeda(terco) : 'R$ XX.XXX,XX';
-      const tExt = terco ? ' (' + valorExtenso(terco) + ')' : ' (valor por extenso)';
+      const [p1, p2, p3] = dividirEmParcelas(valor, 3);
+      const f = (v) => v ? 'R$ ' + fmtMoeda(v) : 'R$ XX.XXX,XX';
+      const e = (v) => v ? ' (' + valorExtenso(v) + ')' : ' (valor por extenso)';
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago em 3 (três) parcelas via depósito em conta bancária, da seguinte forma:` });
-      items.push({ n:'5.1.1', text:`${tFmt}${tExt} na data de início dos trabalhos;` });
-      items.push({ n:'5.1.2', text:`${tFmt}${tExt} na metade da execução dos serviços;` });
-      items.push({ n:'5.1.3', text:`${tFmt}${tExt} após a finalização do serviço, mediante nota fiscal de serviço.` });
+      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos;` });
+      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} na metade da execução dos serviços;` });
+      items.push({ n:'5.1.3', text:`${f(p3)}${e(p3)} após a finalização do serviço, mediante nota fiscal de serviço.` });
     } else {
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago via depósito em conta bancária, da seguinte forma:` });
       const parc = (s.parcelas && s.parcelas.length) ? s.parcelas : [];
@@ -524,7 +581,8 @@
     ORDINAIS, ORDINAIS_REF, MESES,
     inteiroExtenso, valorExtenso,
     onlyDigits, maskCNPJ, maskCPF, maskCEP, maskRG, maskMoeda, moedaParaNumero, fmtMoeda,
-    isCNPJValid, isCPFValid, isCEPValid,
+    isCNPJValid, isCPFValid, isCEPValid, isCNPJContratante,
+    dividirEmParcelas, inteiroExtensoGen, logradouro,
     defaultState, pad2,
     isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals,
     buildContract,

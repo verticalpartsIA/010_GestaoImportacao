@@ -199,10 +199,33 @@
     const { data } = await c.from('contratos_instalador').select('*').eq('id', id).maybeSingle();
     return data || null;
   }
+  /* Colunas do Painel — sem `doc`/`form_state` (jsonb grandes, não usados na
+     lista nem no drawer), pra não puxar o texto inteiro de todos os contratos
+     a cada rodada de atualização. */
+  const COLS_PAINEL = 'id,numero_documento,token,titulo,contratada_nome,contratada_cnpj,responsavel_nome,valor_total,objeto_resumo,status,channel,recipient,log,audit,sent_at,viewed_at,signed_at,expires_at,master_id,proposta_id,criado_em';
+  async function listPainel() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('contratos_instalador').select(COLS_PAINEL).order('criado_em', { ascending: false });
+    if (error) { console.warn('[CIStore] listPainel error', error); return []; }
+    return data || [];
+  }
   async function getByToken(token) {
     const c = sb(); if (!c) return null;
     const { data } = await c.from('contratos_instalador').select('*').eq('token', token).maybeSingle();
-    return data || null;
+    if (!data) return null;
+    /* Expiração "preguiçosa": antes só o Painel (sweepExpired) marcava
+       'expirado', então um link vencido continuava assinável enquanto
+       ninguém abrisse o Painel. Ao abrir o link (ou assinar), já converte. */
+    if ((data.status === 'enviado' || data.status === 'visualizado') && data.expires_at && new Date(data.expires_at) < new Date()) {
+      const now = new Date();
+      const log = (data.log || []).slice();
+      log.push({ status: 'expirado', at: now.toISOString(), meta: null });
+      const patch = { status: 'expirado', log, atualizado_em: now.toISOString() };
+      const { error } = await c.from('contratos_instalador').update(patch).eq('id', data.id).in('status', ['enviado', 'visualizado']);
+      if (error) console.warn('[CIStore] falha ao marcar expirado (best-effort)', error);
+      else { const upd = { ...data, ...patch }; await pushNotification(upd, 'expirado', {}); return upd; }
+    }
+    return data;
   }
 
   /* Cria um novo registro de contrato a partir do estado do form.
@@ -212,6 +235,7 @@
     const c = sb();
     if (!c) throw new Error('Supabase indisponível');
 
+    formState = { ...formState };
     const { data: numRows, error: numErr } = await c.rpc('next_doc_number', { p_prefixo: 'VPNI' });
     if (numErr) throw numErr;
     const num = (Array.isArray(numRows) ? numRows[0] : numRows) || {};
@@ -221,7 +245,12 @@
        gerado pelo RPC como está. */
     if (formState.propostaId) {
       const { data: prop } = await c.from('propostas').select('numero_cotacao').eq('id', formState.propostaId).maybeSingle();
-      if (prop && prop.numero_cotacao != null) num.numero_documento = window.MasterIdEngine.etapaId('contrato_montagem', prop.numero_cotacao);
+      if (prop && prop.numero_cotacao != null) {
+        num.numero_documento = window.MasterIdEngine.etapaId('contrato_montagem', prop.numero_cotacao);
+        /* formState.numeroCotacao nunca era preenchido pelo wizard, então
+           EventosFluxo/Aval Financeiro abaixo nunca disparavam. */
+        if (formState.numeroCotacao == null) formState.numeroCotacao = prop.numero_cotacao;
+      }
     }
 
     const valorTotal = window.CI.moedaParaNumero(formState.valorTotal);
@@ -297,11 +326,13 @@
       master_id: formState.masterId || null,
       proposta_id: formState.propostaId || null,
       ativos_indices: formState.ativosIndices || [],
+      dossier_ids: formState.dossierIds || [],
       form_state: formState,
       doc,
       atualizado_em: new Date().toISOString(),
     };
-    await c.from('contratos_instalador').update(patch).eq('id', id);
+    const { error } = await c.from('contratos_instalador').update(patch).eq('id', id);
+    if (error) throw error;
     return { ...cur, ...patch };
   }
 
@@ -367,11 +398,17 @@
     const c = sb();
     const cur = await getByToken(token);
     if (!cur) return null;
+    if (cur.status === 'expirado') throw new Error('Este link de assinatura expirou. Peça um novo envio à Vertical Parts.');
+    if (cur.status === 'recusado') throw new Error('Este contrato foi recusado e não pode mais ser assinado.');
+    if (cur.status === 'assinado') return cur;
     const ip = await getPublicIP();
     const ua = navigator.userAgent;
     const device = deviceLabel(ua);
     const now = new Date();
-    const hash = await sha256Hex(JSON.stringify(cur.form_state) + '|' + (sig.signerName || ''));
+    /* Hash cobre o texto do contrato (doc), os dados do formulário, o nome de
+       quem assinou e o instante — antes só form_state + nome, então o texto
+       das cláusulas e a data não eram protegidos. */
+    const hash = await sha256Hex(JSON.stringify(cur.doc) + '|' + JSON.stringify(cur.form_state) + '|' + (sig.signerName || '') + '|' + now.toISOString());
     const audit = {
       ...(cur.audit || {}),
       signedAt: now.toISOString(),
@@ -434,9 +471,16 @@
     }
   }
 
+  /* Só rascunho pode ser excluído: contratos enviados/assinados/recusados/
+     expirados têm trilha de auditoria e (na assinatura) parcelas de
+     pagamento — o DELETE leva junto as parcelas (FK ON DELETE CASCADE),
+     inclusive as já pagas. Confere o status no próprio banco e trata
+     "0 linhas" como erro (RLS que barra volta sem erro). */
   async function remove(id) {
-    const c = sb();
-    await c.from('contratos_instalador').delete().eq('id', id);
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const { data, error } = await c.from('contratos_instalador').delete().eq('id', id).eq('status', 'rascunho').select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('Só é possível excluir contratos em rascunho.');
   }
 
   /* ---------- expor ---------- */
@@ -445,7 +489,7 @@
     uuid, shortToken,
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
-    listAll, getById, getByToken,
+    listAll, listPainel, getById, getByToken,
     createDraft, updateFormState,
     markSent, markViewed, markSigned, refuse,
     sweepExpired, remove,
