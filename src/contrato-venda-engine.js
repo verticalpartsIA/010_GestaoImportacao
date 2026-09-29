@@ -67,6 +67,34 @@
 
   /* ---------- Máscaras / formatação ---------- */
   function onlyDigits(s) { return String(s == null ? '' : s).replace(/\D/g, ''); }
+  /* CPF com dígito verificador (rejeita 111.111.111-11 etc.). */
+  function isCPFValid(v) {
+    const d = onlyDigits(v);
+    if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false;
+    const dv = (base) => {
+      let soma = 0;
+      for (let i = 0; i < base.length; i++) soma += parseInt(base[i], 10) * (base.length + 1 - i);
+      const r = (soma * 10) % 11;
+      return r === 10 ? 0 : r;
+    };
+    return dv(d.slice(0, 9)) === parseInt(d[9], 10) && dv(d.slice(0, 10)) === parseInt(d[10], 10);
+  }
+  /* Endereço completo no padrão do contrato ("Rua, nº, bairro, cidade/UF, CEP")
+     a partir de {endereco, numero, bairro, cidade, uf, cep} — antes só
+     logradouro + número herdavam da Proposta. Partes vazias são omitidas. */
+  function montarEndereco(o) {
+    o = o || {};
+    const t = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+    const cidadeUf = [t(o.cidade), t(o.uf).toUpperCase()].filter(Boolean).join('/');
+    const cepD = onlyDigits(o.cep);
+    return [
+      t(o.endereco).replace(/[\s,]+$/, ''),
+      t(o.numero) ? 'nº ' + t(o.numero) : '',
+      t(o.bairro),
+      cidadeUf,
+      cepD.length === 8 ? 'CEP ' + cepD.slice(0, 5) + '-' + cepD.slice(5) : (t(o.cep) ? 'CEP ' + t(o.cep) : ''),
+    ].filter(Boolean).join(', ');
+  }
   function maskCNPJ(v) {
     const d = onlyDigits(v).slice(0, 14);
     if (d.length > 12) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
@@ -567,7 +595,7 @@
   /* ---------- Exporta tudo em window.CV ---------- */
   window.CV = {
     VENDEDORA, EQUIPAMENTOS, CONTATOS_VP,
-    onlyDigits, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
+    onlyDigits, isCPFValid, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
     descEquipamento, defaultState,
     buildContract,
     calcularD0, addDias,  // ISSUE #6

@@ -79,3 +79,13 @@ test('parcelas — herda o cronograma real da Proposta (20/15/15/10) e cai nas i
   assert.equal(t2.length, 4);
   assert.ok(Math.abs(t2[1].valor - 87042.948) < 0.01);
 });
+
+test('montarEndereco / CPF — endereço completo com CEP e validação de CPF', () => {
+  assert.equal(
+    CV.montarEndereco({ endereco: 'Praça Barão do Rio Branco ', numero: '82', bairro: 'CENTRO', cidade: 'São Vicente ', uf: 'SP', cep: '11310000' }),
+    'Praça Barão do Rio Branco, nº 82, CENTRO, São Vicente/SP, CEP 11310-000');
+  assert.equal(CV.montarEndereco({}), '');
+  assert.equal(CV.isCPFValid('529.982.247-25'), true);
+  assert.equal(CV.isCPFValid('529.982.247-24'), false);
+  assert.equal(CV.isCPFValid('111.111.111-11'), false);
+});

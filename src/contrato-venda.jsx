@@ -149,14 +149,14 @@ function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
         <CVField label="Telefone" mask="maskPhone" mono value={form.comprador.tel} onChange={(v) => setComp({ tel: v })} placeholder="(11) 90000-0000"/>
       </div>
       <div className="cv-grid">
-        <CVField label="Endereço (sede)" width="full" value={form.comprador.endereco} onChange={(v) => setComp({ endereco: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP"/>
+        <CVField label="Endereço (sede)" required width="full" value={form.comprador.endereco} onChange={(v) => setComp({ endereco: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP" error={errors.endereco}/>
       </div>
       <div className="cv-grid">
         <CVField label="Representante legal" required width="full" value={form.comprador.rep} onChange={(v) => setComp({ rep: v })} placeholder="Nome completo" error={errors.rep}/>
       </div>
       <div className="cv-grid">
         <CVField label="Cargo" value={form.comprador.repCargo} onChange={(v) => setComp({ repCargo: v })} placeholder="ex: Diretor"/>
-        <CVField label="CPF do representante" mask="maskCPF" mono value={form.comprador.repCpf} onChange={(v) => setComp({ repCpf: v })} placeholder="000.000.000-00"/>
+        <CVField label="CPF do representante" required mask="maskCPF" mono value={form.comprador.repCpf} onChange={(v) => setComp({ repCpf: v })} placeholder="000.000.000-00" error={errors.repCpf}/>
       </div>
       <div className="cv-grid">
         <CVField label="E-mail para assinatura" width="full" value={form.comprador.email} onChange={(v) => setComp({ email: v })} placeholder="contato@cliente.com.br" hint="Usado no envio do link de assinatura e como contato de comunicação (cláusula 10.1)."/>
@@ -164,15 +164,15 @@ function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
       <div className="cv-field-group">
         <h3 className="cv-group-title">Qualificação do representante (preâmbulo do contrato)</h3>
         <div className="cv-grid">
-          <CVField label="Nacionalidade" value={form.comprador.repNacionalidade} onChange={(v) => setComp({ repNacionalidade: v })} placeholder="ex: brasileiro"/>
-          <CVField label="Estado civil" value={form.comprador.repEstadoCivil} onChange={(v) => setComp({ repEstadoCivil: v })} placeholder="ex: casado"/>
+          <CVField label="Nacionalidade" required value={form.comprador.repNacionalidade} onChange={(v) => setComp({ repNacionalidade: v })} placeholder="ex: brasileiro" error={errors.repNacionalidade}/>
+          <CVField label="Estado civil" required value={form.comprador.repEstadoCivil} onChange={(v) => setComp({ repEstadoCivil: v })} placeholder="ex: casado" error={errors.repEstadoCivil}/>
         </div>
         <div className="cv-grid">
-          <CVField label="Profissão" value={form.comprador.repProfissao} onChange={(v) => setComp({ repProfissao: v })} placeholder="ex: empresário"/>
-          <CVField label="RG do representante" mono value={form.comprador.repRg} onChange={(v) => setComp({ repRg: v })} placeholder="nº e órgão emissor"/>
+          <CVField label="Profissão" required value={form.comprador.repProfissao} onChange={(v) => setComp({ repProfissao: v })} placeholder="ex: empresário" error={errors.repProfissao}/>
+          <CVField label="RG do representante" required mono value={form.comprador.repRg} onChange={(v) => setComp({ repRg: v })} placeholder="nº e órgão emissor" error={errors.repRg}/>
         </div>
         <div className="cv-grid">
-          <CVField label="Endereço residencial do representante" width="full" value={form.comprador.repEnderecoResidencial} onChange={(v) => setComp({ repEnderecoResidencial: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP" hint="Onde o representante reside e é domiciliado — exigido pelo preâmbulo do contrato."/>
+          <CVField label="Endereço residencial do representante" required width="full" value={form.comprador.repEnderecoResidencial} onChange={(v) => setComp({ repEnderecoResidencial: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP" hint="Onde o representante reside e é domiciliado — exigido pelo preâmbulo do contrato." error={errors.repEnderecoResidencial}/>
         </div>
       </div>
     </div>
@@ -498,6 +498,17 @@ function validateStep(idx, s) {
     if (!s.comprador.razao || !s.comprador.razao.trim()) e.razao = 'Informe a razão social.';
     if (window.CV.onlyDigits(s.comprador.cnpj).length !== 14) e.cnpj = 'CNPJ incompleto (14 dígitos).';
     if (!s.comprador.rep || !s.comprador.rep.trim()) e.rep = 'Informe o representante.';
+    /* Qualificação do representante e endereço da sede entram no preâmbulo
+       do contrato — antes eram opcionais e saíam como "XXX"/"nacionalidade"
+       no documento enviado ao cliente. */
+    const vazio = (v) => !v || !String(v).trim();
+    if (vazio(s.comprador.endereco)) e.endereco = 'Informe o endereço da sede.';
+    if (!window.CV.isCPFValid(s.comprador.repCpf)) e.repCpf = 'CPF inválido (confira os dígitos).';
+    if (vazio(s.comprador.repNacionalidade)) e.repNacionalidade = 'Informe a nacionalidade.';
+    if (vazio(s.comprador.repEstadoCivil)) e.repEstadoCivil = 'Informe o estado civil.';
+    if (vazio(s.comprador.repProfissao)) e.repProfissao = 'Informe a profissão.';
+    if (vazio(s.comprador.repRg)) e.repRg = 'Informe o RG.';
+    if (vazio(s.comprador.repEnderecoResidencial)) e.repEnderecoResidencial = 'Informe o endereço residencial.';
   }
   if (idx === 3) {
     if (window.CV.parseMoney(s.valor) <= 0) e.valor = 'Informe o valor total.';
@@ -552,8 +563,11 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
 
     /* Endereço: combina logradouro + número quando o número existe (registros
        novos já preservam o número — ver EnderecoAPI.mesclarLogradouro). */
-    const endCli = [cli.endereco, cli.numero].filter(Boolean).join(', ');
-    const endObra = [[obra.endereco, obra.numero].filter(Boolean).join(', '), obra.cidade, obra.uf].filter(Boolean).join(', ');
+    /* Endereço completo (bairro, cidade/UF e CEP também) — antes só rua +
+       número herdavam, e o CEP da obra (que a cláusula 1 cita como base de
+       reajuste) nunca chegava ao contrato. */
+    const endCli = window.CV.montarEndereco(cli);
+    const endObra = window.CV.montarEndereco(obra);
 
     /* Sinal/Parcelas: a Proposta já calcula isso (Sinal de 40% + N parcelas
        iguais, proposta-form.jsx/proposta-heranca.js) mas o Contrato de Venda
@@ -596,13 +610,15 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
       comprador: {
         ...prev.comprador,
         razao: cli.nome || prev.comprador.razao,
-        cnpj: cli.cnpj || prev.comprador.cnpj,
+        cnpj: (cli.cnpj && window.CV.maskCNPJ(cli.cnpj)) || prev.comprador.cnpj,
         rep: cli.responsavel || prev.comprador.rep,
         email: cli.email || prev.comprador.email,
         tel: cli.telefone || prev.comprador.tel,
         endereco: endCli || prev.comprador.endereco,
       },
       localObra: endObra || prev.localObra,
+      obraCidade: (obra.cidade && String(obra.cidade).trim()) || prev.obraCidade || '',
+      obraUf: (obra.uf && String(obra.uf).trim()) || prev.obraUf || '',
       // valor é guardado no formato mascarado pt-BR ("185.022,00") — o mesmo
       // que o CVMoneyField produz e que parseMoney lê (dígitos como centavos).
       // Antes gravava "185022" cru, que parseMoney lia como R$ 1.850,22 (÷100).
