@@ -211,6 +211,22 @@ function SgApp() {
      21/08). Contratos e Escada/Esteira ainda não foram migrados e
      seguem na impressão nativa — essa continua precisando do DOM. */
   const baixarDocumento = _sgUC(async () => {
+    /* Contrato de Venda (29/09): PDF vetorial no layout EXATO da minuta
+       oficial (cabeçalho/rodapé em toda página) — o motor recebe o mesmo
+       `doc` que a tela já renderiza, sem redigir nada. Se o motor não
+       carregou ou falhar, cai na impressão nativa como antes. */
+    if (source && source.kind === 'venda' && doc && window.ContratoVendaReactPdf) {
+      try {
+        const rv = source.rec;
+        const nomeV = ['Contrato', rv.numero_documento, (rv.comprador_razao_social || '').trim()].filter(Boolean).join(' - ') + '.pdf';
+        await window.ContratoVendaReactPdf.baixar(doc, nomeV);
+        return;
+      } catch (e) {
+        console.error('PDF do contrato falhou, caindo pra impressão do navegador:', e);
+        window.print();
+        return;
+      }
+    }
     if (!podeReactPdf) { window.print(); return; }
     const r = source.rec;
     try {
@@ -222,7 +238,7 @@ function SgApp() {
       console.error('PDF vetorial falhou, caindo pra impressão do navegador:', e);
       window.print();
     }
-  }, [podeReactPdf, source]);
+  }, [podeReactPdf, source, doc]);
 
   const onScroll = () => {
     const el = viewerRef.current;
