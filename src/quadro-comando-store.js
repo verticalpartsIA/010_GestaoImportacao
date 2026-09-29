@@ -172,7 +172,7 @@
 
     const trechosFixa = engine.montarTrechosFiacaoFixa(quadro.geometria);
     const trechoManobra = engine.montarTrechoCaboManobra(quadro.geometria, quadro.intervalos);
-    const trechosCarro = engine.montarTrechosFiacaoCarro(quadro.geometria, quadro.configuracao, quadro.paradas.length);
+    const trechosCarro = engine.montarTrechosFiacaoCarro(quadro.geometria, quadro.configuracao);
     const trechos = [...trechosFixa, trechoManobra, ...trechosCarro];
 
     const { error: delBomErr } = await c.from('quadros_comando_bom_itens').delete().eq('quadro_comando_id', quadroId);

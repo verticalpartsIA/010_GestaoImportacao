@@ -201,23 +201,34 @@ function QcConfiguracaoSecao({ config, paradas, onChange, disabled }) {
 
 /* ---------- Cabina — o que o cliente responder aqui é o que ele vai levar (item novo) ----------
    Dimensões + acabamento da cabina, e a fiação da caixa de passagem
-   (chicote do carro: barreira de luz, motor do operador de porta,
-   sensores, segurança do carro, botoeira) calculada pelo engine a partir
-   dessas dimensões + de portas_opostas_cabina (aba Configuração). */
+   (chicotes reais do carro: GS1 trinco, DC1/DEN1 operador de porta, EDP1
+   barreira de luz, RDZ sensores, SOS segurança, FAN luz/ventilador, SL
+   LED/sirene, WT1 pesador, POW1 backup) calculada pelo engine a partir
+   dessas dimensões + de portas_opostas_cabina (aba Configuração). Fonte
+   dos chicotes/comprimentos: "LISTA DE MATERIAIS E FICAO PARA QUADRO DE
+   COMANDO MANUFATURADO MONARCH.xlsx" (planilha de engenharia real). A
+   Botoeira de Cabina (COP) não entra aqui — vem fiada de fábrica. */
 const QC_CABINA_OVERRIDE_CAMPOS = [
-  { key: 'fiacao_carro_barreira_mm', label: 'Barreira de luz — comprimento (mm)' },
-  { key: 'fiacao_carro_motor_porta_mm', label: 'Motor operador de porta — comprimento (mm)' },
-  { key: 'fiacao_carro_sensores_mm', label: 'Sensores óticos/magnéticos — comprimento (mm)' },
-  { key: 'fiacao_carro_seguranca_mm', label: 'Segurança do carro (SOS) — comprimento (mm)' },
-  { key: 'fiacao_carro_botoeira_mm', label: 'Botoeira de cabina (COP) — comprimento (mm)' },
+  { key: 'fiacao_carro_gs1_mm', label: 'GS1 — Trinco da porta — comprimento (mm)' },
+  { key: 'fiacao_carro_dc1_mm', label: 'DC1 — Alimentação do operador de porta — comprimento (mm)' },
+  { key: 'fiacao_carro_den1_mm', label: 'DEN1 — Sinais do operador de porta — comprimento (mm)' },
+  { key: 'fiacao_carro_edp1_alim_mm', label: 'EDP1 — Barreira de luz (alimentação) — comprimento (mm)' },
+  { key: 'fiacao_carro_edp1_sinal_mm', label: 'EDP1 — Barreira de luz (sinal) — comprimento (mm)' },
+  { key: 'fiacao_carro_rdz_mm', label: 'RDZ — Sensor de nivelamento — comprimento (mm)' },
+  { key: 'fiacao_carro_seguranca_mm', label: 'SOS — Segurança do carro — comprimento (mm)' },
+  { key: 'fiacao_carro_fan_iluminacao_mm', label: 'FAN — Iluminação da cabina — comprimento (mm)' },
+  { key: 'fiacao_carro_fan_ventilador_mm', label: 'FAN — Ventilador da cabina — comprimento (mm)' },
+  { key: 'fiacao_carro_sl_mm', label: 'SL — LED e sirene 24V — comprimento (mm)' },
+  { key: 'fiacao_carro_wt1_mm', label: 'WT1 — Pesador de carga — comprimento (mm)' },
+  { key: 'fiacao_carro_pow1_mm', label: 'POW1 — Alimentação independente (backup) — comprimento (mm)' },
 ];
 const QC_CABINA_ACABAMENTO_ACO = [{ value: 'Aço 430', label: 'Aço 430' }, { value: 'Aço 304', label: 'Aço 304' }];
 
-function QcCabinaSecao({ geometria, config, numParadas, disabled, onGeom }) {
+function QcCabinaSecao({ geometria, config, disabled, onGeom }) {
   const set = (patch) => onGeom({ ...geometria, ...patch });
   const engine = window.QuadroComandoBomEngine;
   const dentroPadrao = engine ? engine.cabinaDentroDoPadrao(geometria) : null;
-  const trechosCarro = engine ? engine.montarTrechosFiacaoCarro(geometria, config, numParadas) : [];
+  const trechosCarro = engine ? engine.montarTrechosFiacaoCarro(geometria, config) : [];
 
   return (
     <>
@@ -239,7 +250,7 @@ function QcCabinaSecao({ geometria, config, numParadas, disabled, onGeom }) {
         </div>
       </Card>
 
-      <Card title="Fiação da caixa de passagem (chicote do carro)" sub="Cabo PP 3 vias 0,75mm². Dobra barreira/motor de porta se 'Portas opostas na cabina' estiver marcado em Configuração. Fornecida pela VerticalParts mesmo quando o componente em si é reaproveitado pelo cliente.">
+      <Card title="Fiação da caixa de passagem (chicotes do carro)" sub="Chicotes reais (GS1, DC1, DEN1, EDP1, RDZ, SOS, FAN, SL, WT1, POW1) — cabos flexíveis 0,75mm², bitola por chicote. Dobra os chicotes de porta (GS1/DC1/DEN1/EDP1) se 'Portas opostas na cabina' estiver marcado em Configuração. Fornecida pela VerticalParts mesmo quando o componente em si é reaproveitado pelo cliente. A Botoeira de Cabina (COP) não entra aqui — já vem fiada de fábrica.">
         <div className="table-wrap" style={{ border: 0 }}>
           <table className="t">
             <thead><tr><th>Trecho</th><th>Destino</th><th>Cabo</th><th>Comprimento</th><th>Confiança</th></tr></thead>
@@ -895,7 +906,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
           <div style={{ marginTop: 16 }}>
             {tab === 'escopo' && <QcEscopoSecao escopo={quadro.escopo_fornecimento || {}} onChange={(v) => setQuadro({ ...quadro, escopo_fornecimento: v })}/>}
             {tab === 'configuracao' && <QcConfiguracaoSecao config={quadro.configuracao || {}} paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, configuracao: v })}/>}
-            {tab === 'cabina' && <QcCabinaSecao geometria={quadro.geometria} config={quadro.configuracao || {}} numParadas={quadro.paradas?.length || 0}
+            {tab === 'cabina' && <QcCabinaSecao geometria={quadro.geometria} config={quadro.configuracao || {}}
               onGeom={(v) => setQuadro({ ...quadro, geometria: v })}/>}
             {tab === 'paradas' && <QcParadasSecao paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, paradas: v })}/>}
             {tab === 'maquina' && <QcMaquinaSecao maquina={quadro.maquina} varianteLabel={varianteLabel} errosVisiveis={errosVisiveis} onChange={(v) => setQuadro({ ...quadro, maquina: v })}/>}
