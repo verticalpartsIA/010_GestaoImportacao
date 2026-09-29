@@ -1,5 +1,5 @@
 /* ============================================================
-   logistica.jsx — Importação (ship map) + Compras Nacional + Email Inbox
+   logistica.jsx — Importação (ship map) + Importação Varejo + Email Inbox
    ============================================================ */
 
 /* ---------- Armadores suportados pela Sinay/Safecube Container Tracking API
@@ -1235,22 +1235,27 @@ function RouteAndShip({ start, end, cur, ship, isActive, onClick }) {
   );
 }
 
-/* ---------- COMPRAS NACIONAL ============================== */
+/* ---------- IMPORTAÇÃO VAREJO (ex-"Compras Nacional") ====== */
 /* 29/09/2026 — pedido do usuário: a tela antes reaproveitava dados de
    `embarques` (Importação) relabelados como "Fretes Nacionais", com vários
    stubs (Transportadora/Motorista/Valor/Ocorrências nunca preenchidos de
    verdade — ver investigação da mesma sessão). Usuário decidiu reservar
-   esta rota/menu ("Compras Nacional") pra um processo novo, ainda não
-   definido — removida toda a lógica antiga (fetch de embarques, tabela,
-   KPIs, filtros) de propósito, não é regressão. Casca mínima só pra rota
-   continuar existindo até o novo processo ser especificado. */
+   esta rota/menu (então chamada "Compras Nacional") pra um processo novo,
+   ainda não definido — removida toda a lógica antiga (fetch de embarques,
+   tabela, KPIs, filtros) de propósito, não é regressão. Casca mínima só
+   pra rota continuar existindo até o novo processo ser especificado.
+   Renomeada no mesmo dia pra "Importação Varejo" (pedido explícito do
+   usuário) — vai ser responsável por Compras de Varejo Importação. Rota
+   interna (`compras`) e id de módulo (`modulo: 'compras'` nas alçadas)
+   continuam os mesmos de propósito, só o rótulo visível mudou — não
+   troque o id sem migrar as alçadas já concedidas em `alcadas_capacidade`. */
 function ComprasPage({ setRoute }) {
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Compras Nacional</div>
-          <h1 className="page-head__title">Compras Nacional</h1>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Importação Varejo</div>
+          <h1 className="page-head__title">Importação Varejo</h1>
           <p className="page-head__sub">Módulo em preparação — novo processo a definir.</p>
         </div>
       </div>

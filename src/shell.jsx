@@ -72,7 +72,7 @@ const NAV_GROUPS = [
     { id: "embarques-importacao", label: "Embarques", icon: "ship", indent: true },
     { id: "importacao", label: "Importação", icon: "ship", indent: true },
     { id: "gi-analise-precos", label: "Análise de Preços", icon: "calculator", indent: true },
-    { id: "compras", label: "Compras Nacional", icon: "truck" },
+    { id: "compras", label: "Importação Varejo", icon: "truck" },
     { id: "pedidos-acompanhamento", label: "Pedidos", icon: "package" },
   ]},
   /* Só o que define/projeta o produto. Vistoria, instalação, entrega e
@@ -347,7 +347,7 @@ const BREADCRUMB_MAP = {
   "pedidos-acompanhamento": { module: "Suprimentos", page: "Pedidos", icon: "package" },
   "importacao-detail":        { module: "Importação", page: "Gestão Importação — Detalhe de Embarque", icon: "ship" },
   "importacao-rastreamento":  { module: "Importação", page: "Gestão Importação — Rastreamento de Navios", icon: "mapIcon" },
-  compras:       { module: "Logística", page: "Compras Nacional", icon: "truck" },
+  compras:       { module: "Logística", page: "Importação Varejo", icon: "truck" },
   "vistorias-envio": { module: "Instalação & Entrega", page: "Vistorias de Obras", icon: "send" },
   vistorias:     { module: "Instalação & Entrega", page: "Resultado Vistorias de Obras", icon: "history" },
   instalacao:    { module: "Instalação & Entrega", page: "Instalação em Campo", icon: "hardhat" },

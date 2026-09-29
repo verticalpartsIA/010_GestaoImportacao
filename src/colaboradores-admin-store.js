@@ -171,7 +171,7 @@
       { modulo: 'ims-importacao', label: 'IMS' },
       { modulo: 'embarques-importacao', label: 'Embarques' },
       { modulo: 'gi-analise-precos', label: 'Análise de Preços' },
-      { modulo: 'compras', label: 'Compras Nacional' },
+      { modulo: 'compras', label: 'Importação Varejo' },
       { modulo: 'pedidos-acompanhamento', label: 'Pedidos' },
     ]},
     { grupo: 'Engenharia', itens: [
