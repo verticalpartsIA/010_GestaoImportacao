@@ -271,6 +271,7 @@
       tipo: 'Social', carga: '', paradas: '10', cargaEspecial: false,
       modelo: '', largura: '', velocidade: '0,5 m/s', desnivel: '',
       distancia: '', localObra: '',
+      descProposta: '',
       valor: '', sinalPct: 30, parcelas: 5,
       /* Discriminação informativa por equipamento (Fase 2 da granularidade
          de valor) — herdada de elevador.valores.itens[] da Proposta quando
@@ -301,6 +302,8 @@
     const dist = parseFloat(String(f.distancia || '0').replace(',', '.')) || 0;
     const longa = dist >= 100;
     const descEq = descEquipamento(f);
+    /* Complemento da cláusula 1.1 — texto livre digitado no Passo 2; vazio mantém o marcador da minuta */
+    const descProposta = (f.descProposta || '').trim() || 'DESCREVER CONFORME PROPOSTA COMERCIAL';
     const localObra = f.localObra || '(ENDEREÇO COMPLETO DO LOCAL DE ENTREGA)';
 
     /* Tabela de parcelas */
@@ -368,7 +371,7 @@
       id: 's1', num: '1', title: 'OBJETO DO CONTRATO',
       body: [
         p('<b>1.1 Objeto.</b> O objeto deste Contrato consiste no descrito a seguir, observados e respeitados os termos e as condições estabelecidos neste instrumento contratual:', { html: true }),
-        p(`Compra e venda de <b>${esc(descEq)}</b> (DESCREVER CONFORME PROPOSTA COMERCIAL), denominado equipamentos, conforme especificações dos Anexos I e II.`, { html: true, li: true }),
+        p(`Compra e venda de <b>${esc(descEq)}</b> (${esc(descProposta)}), denominado equipamentos, conforme especificações dos Anexos I e II.`, { html: true, li: true }),
         p('Modalidade: "CIF" (Cost, Insurance and Freight).', { li: true }),
         p('Instalação dos equipamentos mencionados acima de forma a entregá-los ao COMPRADOR em condições de uso imediato ("turn key"). A instalação compreende as seguintes atividades:', { li: true }),
         p('Frete (transporte e desembarque);', { li: true, indent: true }),
@@ -388,7 +391,7 @@
       id: 's2', num: '2', title: 'INFORMAÇÕES SOBRE A ENTREGA E A INSTALAÇÃO DOS EQUIPAMENTOS',
       body: [
         p('<b>2.1 Instalação e funcionamento dos equipamentos.</b> A instalação dos equipamentos a serem entregues ao COMPRADOR observarão as normas técnicas pertinentes à natureza do trabalho. O COMPRADOR declara ciência de que o funcionamento definitivo desses equipamentos dependerá das boas condições do local em que serão montados e ainda das instalações elétricas adequadas e permanentes que os alimentarão.', { html: true }),
-        p('<b>2.1.1</b> As instalações elétricas deverão ser providenciadas, antecipada e exclusivamente, pelo COMPRADOR, seguindo as especificações técnicas contidas nos Anexos I e II, para que após aprovação seja iniciada produção dos equipamentos, vide cláusula 2.8.', { html: true, indent: true }),
+        p('<b>2.1.1</b> As instalações elétricas deverão ser providenciadas, antecipada e exclusivamente, pelo COMPRADOR, seguindo as especificações técnicas contidas nos Anexos I e II, para que após aprovação seja iniciada produção dos equipamentos, vide cláusula 1.1.2.', { html: true, indent: true }),
         p('<b>2.2 Guarda e manutenção.</b> O COMPRADOR se obriga a receber os equipamentos, dentro do prazo acordado para a entrega, vide cláusula 2.4, e a mantê-los devidamente protegidos contra qualquer tipo de avaria, dano e/ou deterioração, incluindo a proteção contra detritos originados das obras civis, como por exemplo: cimento, gesso, massa corrida, poeira, tinta, umidade, chuva, entre outros.', { html: true }),
         p('<b>2.2.1</b> Essa obrigação perdurará do ato de entrega dos equipamentos no local da instalação até a vistoria final e a efetiva entrega dos mesmos em pleno funcionamento. Ocasião na qual deverá ser assinado o Termo de Conclusão da Instalação pelas partes deste Contrato e pela empresa designada para a manutenção dos equipamentos.', { html: true, indent: true }),
         p('<b>2.2.2</b> Caso a obra não esteja apta ao recebimento dos equipamentos até a data de entrega, o COMPRADOR deverá indicar um local para a entrega, vide cláusula 1.1, se o COMPRADOR não indicar o local, os equipamentos serão armazenados em local de terceiros e todos os custos decorrentes da armazenagem e posterior movimentação dos equipamentos para a obra, serão de total responsabilidade do COMPRADOR.', { html: true, indent: true }),
@@ -408,8 +411,7 @@
         p('<b>2.6.3</b> A VENDEDORA não se responsabiliza por eventual atraso na instalação e montagem dos equipamentos por alterações no cronograma de obra ou por motivos a que o COMPRADOR der causa.', { html: true, indent: true }),
         p('<b>2.7 Alterações nos prazos acordados.</b> Todos os prazos com os quais a VENDEDORA se compromete estão sujeitos a alterações em caso de eventuais paralisações, interrupções ou atrasos na atividade em decorrência de situações imprevisíveis, irresistíveis e/ou inevitáveis (“caso fortuito ou força maior”) que impeçam ou dificultem o cumprimento do acordado.', { html: true }),
         p('<b>2.7.1</b> São exemplos de situações imprevisíveis: pandemia, epidemia, calamidades públicas, greves, trâmites aduaneiros entre outros.', { html: true, indent: true }),
-        p('<b>2.8 Aprovação de projetos.</b> O COMPRADOR deverá aprovar os projetos referentes aos equipamentos na data de assinatura deste Contrato.', { html: true }),
-        p('<b>2.9 Condições importantes.</b> O cumprimento dos prazos acordados também está condicionado à permissão de acesso à VENDEDORA ao local de execução dos serviços, à existência de um ambiente de trabalho seguro conforme as normas aplicáveis e à disponibilidade no mercado de Equipamento de Proteção Individual, mão-de-obra e material necessários para o devido cumprimento do Contrato.', { html: true }),
+        p('<b>2.8 Condições importantes.</b> O cumprimento dos prazos acordados também está condicionado à permissão de acesso à VENDEDORA ao local de execução dos serviços, à existência de um ambiente de trabalho seguro conforme as normas aplicáveis e à disponibilidade no mercado de Equipamento de Proteção Individual, mão-de-obra e material necessários para o devido cumprimento do Contrato.', { html: true }),
       ],
     };
     sections.push(s2);

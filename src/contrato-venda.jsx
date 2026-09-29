@@ -210,6 +210,9 @@ function CVStepObjeto({ form, set }) {
           return <CVField key={fld.id} label={fld.label} type={fld.type} value={form[fld.id]} onChange={(v) => set({ [fld.id]: v })} placeholder={fld.placeholder} suffix={fld.suffix}/>;
         })}
       </div>
+      <div className="cv-grid">
+        <CVField label="Descrição conforme Proposta Comercial (cláusula 1.1)" value={form.descProposta || ''} onChange={(v) => set({ descProposta: v })} placeholder="Ex.: Elevador Social com cabine em inox, porta automática..."/>
+      </div>
       {especial && (
         <div className="cv-cond-alert">
           <span className="cv-cond-dot"></span>
