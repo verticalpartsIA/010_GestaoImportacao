@@ -112,7 +112,7 @@ function CV_SignBlock({ doc }) {
 function CV_Witnesses() {
   return (
     <div className="cv-doc-witnesses">
-      <h2 className="cv-doc-section-title">TESTEMUNHAS:</h2>
+      <div className="cv-doc-witness-title">TESTEMUNHAS:</div>
       <div className="cv-doc-witness-row">
         <div className="cv-doc-witness-col">
           <div className="cv-doc-witness-line">1. _________________________</div>
@@ -129,38 +129,26 @@ function CV_Witnesses() {
   );
 }
 
-/* Rodapé de contato — mesmo bloco que aparece em todas as páginas da
-   minuta oficial. Aqui aparece 1x, ao final do documento (a repetição
-   física por página impressa exigiria autoria em páginas A4 fixas, como
-   foi feito na Proposta — ver nota na revisão). */
+/* Rodapé da minuta oficial (endereço/telefones/e-mails). Na tela aparece 1x,
+   ao final; no PDF (contrato-venda-reactpdf.entry.js) repete em toda página. */
 function CV_Foot() {
-  return (
-    <div className="cv-doc-foot">
-      <span>Rua Armandina Braga de Almeida, 383 · Jardim Santa Emilia · Guarulhos/SP · CEP 07141-003</span>
-      <span>+55 11 2528-6473 · +55 11 2528-6479 · +55 11 94460-6396</span>
-      <span>contato@verticalparts.com.br · comercial@verticalparts.com.br</span>
-    </div>
-  );
+  return <img className="cv-doc-foot-img" src="/assets/contrato-venda-rodape.png" alt="VerticalParts — Rua Armandina Braga de Almeida, 383 · Jardim Santa Emilia · Guarulhos/SP · CEP 07141-003"/>;
 }
 
 function CVContractPreview({ doc, highlightInjected }) {
   if (!doc) return null;
   return (
     <div className="cv-doc-sheet" id="cv-contract-doc">
-      <div className="cv-doc-head">
-        <img className="cv-doc-logo" src="/assets/logo-verticalparts-color.png" alt="VerticalParts"/>
-        <div className="cv-doc-meta">
-          <span className="cv-doc-meta-label">Nº do Contrato</span>
-          <span className="cv-doc-meta-num">{doc.numero}</span>
-        </div>
-      </div>
+      <img className="cv-doc-banner" src="/assets/contrato-venda-cabecalho.png" alt="VerticalParts"/>
+      <div className="cv-doc-body">
       <h1 className="cv-doc-title">{doc.titulo || 'CONTRATO DE COMPRA E VENDA DE EQUIPAMENTO'}</h1>
+      <div className="cv-doc-numero">Nº do Contrato: {doc.numero}</div>
 
       {doc.sections.map((sec) => (
         <section key={sec.id} className={'cv-doc-section' + (sec.kind === 'preamble' ? ' cv-doc-preamble' : '')}>
           {sec.num && (
             <h2 className="cv-doc-section-title">
-              <span className="cv-doc-section-num">{sec.num}.</span> {sec.title}
+              {sec.num} – {sec.title}
             </h2>
           )}
           {sec.body.map((it, j) => <CV_DocItem key={j} item={it}/>)}
@@ -169,6 +157,7 @@ function CVContractPreview({ doc, highlightInjected }) {
 
       <CV_SignBlock doc={doc}/>
       <CV_Witnesses/>
+      </div>
       <CV_Foot/>
     </div>
   );

@@ -687,6 +687,7 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
         <div className="ci-preview-col">
           <div className="ci-preview-bar">
             <span className="ci-preview-bar-title">Pré-visualização</span>
+            <button className="ci-btn" type="button" onClick={() => cvBaixarPdf(docPreview, 'Contrato - rascunho.pdf')}>⬇ Baixar PDF</button>
             <div className="ci-preview-bar-conds">
               {nPendencias > 0 && <span className="ci-pv-cond ci-pv-cond--warn" title={Object.values(pendencias).join(' ')}>{nPendencias} campo{nPendencias > 1 ? 's' : ''} obrigatório{nPendencias > 1 ? 's' : ''} pendente{nPendencias > 1 ? 's' : ''}</span>}
               {docPreview.meta.especial && <span className="ci-pv-cond ci-pv-cond--warn">Equipamento Especial</span>}
@@ -909,6 +910,19 @@ function CVDesenhoInstalacaoSection({ rec, onSaved }) {
   );
 }
 
+/* Baixa o PDF no layout idêntico ao da minuta oficial (motor react-pdf —
+   pdf-bundle/contrato-venda-reactpdf.entry.js). Recebe o mesmo `doc` da tela. */
+async function cvBaixarPdf(doc, nome) {
+  if (!window.ContratoVendaReactPdf) { window.toast?.('Motor de PDF ainda carregando — tente de novo em instantes.', 'warning'); return; }
+  try {
+    const r = await window.ContratoVendaReactPdf.baixar(doc, nome);
+    if (r && r.falhasDeImagem && r.falhasDeImagem.length) window.toast?.('PDF gerado, mas o cabeçalho/rodapé não carregou: ' + r.falhasDeImagem.join('; '), 'warning');
+  } catch (e) {
+    console.error('PDF do contrato falhou:', e);
+    window.toast?.('Não foi possível gerar o PDF: ' + (e.message || e), 'error');
+  }
+}
+
 function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
   const a = rec.audit || {};
   const del = async () => {
@@ -926,6 +940,15 @@ function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
             <h2>{rec.numero_documento}</h2>
             <div className="ci-drawer-co">{rec.comprador_razao_social}</div>
             <div style={{ marginTop: 10 }}><CVBadge status={rec.status}/></div>
+            <button className="ci-btn" style={{ marginTop: 10 }} onClick={() => {
+              const fs = rec.form_state || {};
+              const doc = window.CV.buildContract({
+                form: fs, comprador: fs.comprador,
+                valor: (rec.valor_total_num != null) ? rec.valor_total_num : window.CV.parseMoney(fs.valor),
+                sinalPct: fs.sinalPct, parcelas: fs.parcelas, numero: rec.numero_documento,
+              });
+              cvBaixarPdf(doc, ['Contrato', rec.numero_documento, rec.comprador_razao_social].filter(Boolean).join(' - ') + '.pdf');
+            }}>⬇ Baixar PDF</button>
           </div>
           <button className="ci-drawer-x" onClick={onClose}>✕</button>
         </div>

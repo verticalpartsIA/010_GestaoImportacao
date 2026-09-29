@@ -1,3 +1,4 @@
+@import url('https://fonts.googleapis.com/css2?family=Poppins:ital,wght@0,400;0,600;1,400&display=swap');
 /* ============================================================
    contrato-venda.css
    Estilos específicos do Contrato Venda de Equipamentos.
@@ -156,64 +157,41 @@
    ============================================================ */
 .cv-doc-sheet {
   background: #fff;
-  padding: 28px 36px 20px;
+  padding: 0;
   box-shadow: 0 1px 3px rgba(0,0,0,.06);
-  font-family: 'Times New Roman', serif;
-  font-size: 11.5pt; line-height: 1.75; color: #111;
-  max-width: 720px; margin: 0 auto;
-  border-top: 10px solid #F6D9A0;
+  /* Poppins 10pt justificado, como a minuta oficial (o PDF usa a mesma fonte) */
+  font-family: 'Poppins', Arial, sans-serif;
+  font-size: 10pt; line-height: 1.72; color: #000;
+  max-width: 720px; margin: 0 auto; overflow: hidden;
 }
-.cv-doc-head {
-  display: flex; justify-content: space-between; align-items: flex-start;
-  padding: 12px 0 14px; margin: -12px -36px 18px; padding-left: 36px; padding-right: 36px;
-  background: #F2F2F2;
-  border-bottom: 1px solid #ddd;
-}
-.cv-doc-logo { height: 36px; }
-.cv-doc-foot {
-  display: flex; flex-direction: column; align-items: center; gap: 3pt;
-  margin: 28pt -36px -20px; padding: 12pt 36px;
-  font-family: Arial, sans-serif; font-size: 8pt; color: #fff;
-  background: linear-gradient(90deg, #2B3648 50%, #F5A623 50%);
-}
-.cv-doc-foot span { opacity: .95; }
-.cv-doc-meta { display: flex; flex-direction: column; align-items: flex-end; }
-.cv-doc-meta-label { font-size: 8pt; color: #555; font-family: Arial, sans-serif; letter-spacing: .1em; text-transform: uppercase; }
-.cv-doc-meta-num { font-size: 11pt; font-weight: 800; font-family: 'Courier New', monospace; }
-
+.cv-doc-banner, .cv-doc-foot-img { display: block; width: 100%; height: auto; }
+.cv-doc-body { padding: 14px 12% 24px 12%; }
 .cv-doc-title {
-  text-align: center; font-family: Arial, sans-serif;
-  font-size: 13.5pt; font-weight: 700;
-  margin: 4pt 0 14pt; letter-spacing: .02em;
+  text-align: center; font-size: 12pt; font-weight: 600;
+  text-decoration: underline; margin: 4pt 0 34pt; line-height: 1.5;
 }
+.cv-doc-numero { text-align: right; font-weight: 600; text-decoration: underline; margin-bottom: 34pt; }
 
-.cv-doc-section { margin: 22pt 0; }
+.cv-doc-section { margin: 17pt 0; }
 .cv-doc-preamble { margin-top: 8pt; }
+/* Título de cláusula = faixa preta cheia, texto branco em negrito */
 .cv-doc-section-title {
-  font-family: Arial, sans-serif;
-  font-size: 11pt; font-weight: 700;
-  margin: 0 0 6pt;
+  background: #000; color: #fff;
+  font-size: 9pt; font-weight: 600; line-height: 1.6;
+  margin: 0 0 17pt; padding: 2pt 6pt;
 }
-.cv-doc-section-num { color: #E89A1F; font-weight: 800; }
 
-.cv-doc-p { text-align: justify; margin: 9pt 0; }
-.cv-doc-p b { font-weight: 700; }
-.cv-doc-li {
-  position: relative; padding-left: 18pt;
-}
-.cv-doc-li::before {
-  content: '•'; position: absolute; left: 6pt; top: 0;
-  color: #E89A1F; font-weight: 700;
-}
-/* Sub-cláusulas (2.1.1, 8.2.2, alíneas a/b/c, incisos i/ii...) — mesma
-   indentação da minuta oficial, sem marcador (o rótulo já vem no texto). */
-.cv-doc-indent { padding-left: 18pt; }
-.cv-doc-li.cv-doc-indent { padding-left: 30pt; }
-.cv-doc-li.cv-doc-indent::before { left: 18pt; }
-.cv-doc-callout {
-  background: #fffbeb; border-left: 3px solid #FBB039;
-  padding: 8pt 12pt; margin: 8pt 0;
-}
+.cv-doc-p { text-align: justify; margin: 0 0 17pt; }
+.cv-doc-p b { font-weight: 600; }
+.cv-doc-li { position: relative; padding-left: 14pt; margin: 0; }
+.cv-doc-li::before { content: '\27A2'; position: absolute; left: 0; top: 0; font-size: 8pt; }
+/* Sub-cláusulas (2.1.1, 8.2.2, alíneas, incisos) — recuadas, sem marcador */
+.cv-doc-indent { padding-left: 14pt; }
+.cv-doc-li.cv-doc-indent { padding-left: 28pt; margin-bottom: 0; }
+.cv-doc-li.cv-doc-indent::before { content: '\2713'; left: 14pt; }
+/* Blocos de dados (local de entrega, dados bancários, contatos): na minuta
+   são texto simples recuado, sem caixa */
+.cv-doc-callout { padding-left: 28pt; }
 .cv-doc-injected {
   background: #fef3c7; border-left: 3px solid #E89A1F;
   padding: 8pt 12pt; margin: 8pt 0;
@@ -221,74 +199,49 @@
 }
 .cv-doc-tag {
   display: block; font-size: 8.5pt; color: #92400e;
-  font-family: Arial, sans-serif; font-weight: 700;
+  font-weight: 700;
   text-transform: uppercase; letter-spacing: .04em;
   margin-bottom: 4pt;
 }
-.cv-doc-center { text-align: center; margin-top: 24pt; }
-.cv-doc-sign-line { margin-top: 36pt; font-style: italic; }
+.cv-doc-center { text-align: center; margin-top: 24pt; margin-bottom: 40pt; }
+.cv-doc-sign-line { margin-top: 24pt; }
 
-/* Tabela de parcelas */
-.cv-doc-table {
-  width: 100%; border-collapse: collapse;
-  margin: 8pt 0; font-size: 10pt;
-  font-family: Arial, sans-serif;
+/* Tabelas — mesmo estilo da minuta: cabeçalho cinza, bordas finas cinza-escuro */
+.cv-doc-table, .cv-doc-anexos {
+  width: 88%; margin: 0 auto 17pt; border-collapse: collapse;
+  font-size: 10pt; line-height: 1.5; border: 1px solid #7f7f7f;
 }
-.cv-doc-table th {
-  background: #111; color: #fff;
-  padding: 6pt 8pt; text-align: left;
-  font-size: 9pt; font-weight: 700;
-  text-transform: uppercase; letter-spacing: .06em;
+.cv-doc-table th, .cv-doc-anexos th {
+  background: #bfbfbf; color: #000; padding: 1pt 8pt; text-align: center;
+  font-weight: 600; border: 1px solid #7f7f7f;
 }
-.cv-doc-table td {
-  padding: 5pt 8pt; border-bottom: 1px solid #e5e7eb;
-}
-.cv-doc-table tbody tr:nth-child(even) td { background: #fafafa; }
-.cv-doc-table tfoot td {
-  border-top: 2px solid #111; border-bottom: none;
-  background: #fff; padding-top: 8pt;
-}
-.cv-mono { font-family: 'Courier New', monospace; }
+.cv-doc-table td, .cv-doc-anexos td { padding: 1pt 8pt; border: 1px solid #7f7f7f; }
+.cv-doc-table tfoot td { font-weight: 600; }
+.cv-mono { font-family: inherit; }
+.cv-doc-anexos td:first-child { width: 26%; }
 
-/* Tabela "Títulos dos Anexos" (cláusula 1.1.1) */
-.cv-doc-anexos {
-  width: 100%; border-collapse: collapse; margin: 10pt 0 14pt;
-  font-family: Arial, sans-serif; font-size: 10pt; border: 1px solid #ccc;
-}
-.cv-doc-anexos th {
-  background: #d9d9d9; color: #111; padding: 6pt 10pt; text-align: center;
-  font-weight: 700; border: 1px solid #ccc;
-}
-.cv-doc-anexos td { padding: 6pt 10pt; border: 1px solid #ccc; }
-.cv-doc-anexos td:first-child { font-weight: 700; width: 25%; }
+/* Assinaturas empilhadas (VENDEDORA, depois COMPRADOR) + TESTEMUNHAS */
+.cv-doc-signatures { display: block; margin-top: 30pt; }
+.cv-doc-sign-col { margin-bottom: 30pt; }
+.cv-doc-sign-role { font-weight: 600; margin-bottom: 22pt; }
+.cv-doc-sign-x { font-size: 20pt; line-height: 1.1; }
+.cv-doc-sign-line2 { width: 190pt; border-top: 1.2pt solid #000; margin: 0 0 2pt; }
+.cv-doc-sign-name, .cv-doc-sign-cpf { font-size: 8pt; line-height: 1.4; margin-left: 6pt; }
 
-/* Bloco de assinaturas — VENDEDORA / COMPRADOR lado a lado */
-.cv-doc-signatures {
-  display: flex; gap: 40pt; margin-top: 40pt;
-  font-family: Arial, sans-serif;
-}
-.cv-doc-sign-col { flex: 1; }
-.cv-doc-sign-role { font-size: 9.5pt; font-weight: 700; margin-bottom: 22pt; }
-.cv-doc-sign-x { font-size: 20pt; font-weight: 700; line-height: 1; }
-.cv-doc-sign-line2 { border-top: 1px solid #111; margin: 2pt 0 6pt; }
-.cv-doc-sign-name { font-size: 9pt; }
-.cv-doc-sign-cpf { font-size: 9pt; }
-
-/* Página final — testemunhas, sempre numa folha nova */
-.cv-doc-witnesses { page-break-before: always; padding-top: 4pt; }
-.cv-doc-witness-row { display: flex; gap: 40pt; margin-top: 18pt; font-size: 10pt; }
+.cv-doc-witnesses { padding-top: 6pt; }
+.cv-doc-witness-title { font-weight: 600; }
+.cv-doc-witness-row { display: flex; gap: 30pt; margin-top: 16pt; }
 .cv-doc-witness-col { flex: 1; }
-.cv-doc-witness-line { font-family: Arial, sans-serif; margin-bottom: 6pt; }
+.cv-doc-witness-line { font-weight: 600; }
 
-/* ---------- Impressão real (window.print() em /assinar/:token) ----------
-   Testamos cabeçalho/rodapé fixos repetindo em toda página física (como
-   na minuta original), mas o Chromium não reserva a margem do @page de
-   forma confiável com position:fixed — o título do contrato saía coberto
-   pelo cabeçalho na 1ª página. Preferimos capa + rodapé únicos (1x cada),
-   sem risco de sobreposição num documento que vai para assinatura real. */
+/* ---------- Impressão nativa (fallback do "Baixar PDF" em /assinar/:token) ----------
+   O PDF oficial vem do motor react-pdf (pdf-bundle/contrato-venda-reactpdf.entry.js),
+   que repete cabeçalho e rodapé em toda página. Esta impressão do navegador é só o
+   plano B se o motor não carregar: cabeçalho e rodapé 1x cada (fixos em toda página
+   o Chromium cobria o título — ver histórico). */
 @media print {
-  @page { size: A4; margin: 14mm; }
-  .cv-doc-sheet { max-width: none; margin: 0; box-shadow: none; }
-  .cv-doc-head { page-break-inside: avoid; }
+  @page { size: A4; margin: 0; }
+  .cv-doc-sheet { max-width: none; margin: 0; box-shadow: none; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .cv-doc-banner { page-break-inside: avoid; }
   .cv-doc-signatures, .cv-doc-witnesses { break-inside: avoid-page; }
 }

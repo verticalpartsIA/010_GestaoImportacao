@@ -18,7 +18,7 @@
   <link rel="stylesheet" href="/styles/ncm.css">
   <link rel="stylesheet" href="/styles/desenho-tecnico.css?v=1">
   <link rel="stylesheet" href="/styles/contrato-instalador.css?v=5">
-  <link rel="stylesheet" href="/styles/contrato-venda.css?v=2">
+  <link rel="stylesheet" href="/styles/contrato-venda.css?v=3">
   <link rel="stylesheet" href="/styles/ficha-tecnica.css?v=7">
   <link rel="stylesheet" href="/styles/vp-copiloto.css?v=4">
   <link rel="stylesheet" href="/styles/pedido-fornecedor.css?v=3">
@@ -294,10 +294,12 @@
   <script type="text/vp-jsx" src="/src/pagamentos-instalador.jsx?v=3"></script>
 
   <!-- Jurídico · Contrato Venda de Equipamentos (cliente final) -->
-  <script src="/src/contrato-venda-engine.js?v=10"></script>
+  <script src="/src/contrato-venda-engine.js?v=11"></script>
   <script src="/src/contrato-venda-store.js?v=12"></script>
-  <script type="text/vp-jsx" src="/src/contrato-venda-preview.jsx?v=3"></script>
-  <script type="text/vp-jsx" src="/src/contrato-venda.jsx?v=13"></script>
+  <!-- Motor de PDF do Contrato de Venda (react-pdf) — layout idêntico à minuta oficial. Ver pdf-bundle/contrato-venda-reactpdf.entry.js -->
+  <script src="/src/contrato-venda-reactpdf.bundle.js?v=1"></script>
+  <script type="text/vp-jsx" src="/src/contrato-venda-preview.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="/src/contrato-venda.jsx?v=14"></script>
 
   <!-- Engenharia · Ficha Técnica (gerador universal) -->
   <script src="/src/ficha-tecnica-engine.js?v=10"></script>
