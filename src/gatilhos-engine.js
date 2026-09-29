@@ -134,9 +134,22 @@
       fechamentoTipo: 'manual' /* Financeiro clica "Dar Aval de Pagamento" — confirmarAvalPagamento() */,
       rota: 'aval-financeiro' },
 
+    /* Aval Jurídico (manual, depois do contrato assinado) — corre em
+       paralelo ao boleto/Aval de Pagamento e, JUNTO com o Aval de Pagamento,
+       libera a compra (COMPRA_LIBERADA abaixo exige os dois). */
+    { key: 'AVAL_JURIDICO', label: 'Aguardando Aval Jurídico do contrato',
+      predecessores: [{ key: 'AGUARDA_ASSINATURA', rel: 'FS' }],
+      nasce: 'CONTRATO_VENDA_ASSINADO', fecha: 'AVAL_JURIDICO_APROVADO',
+      fechamentoTipo: 'manual', rota: 'aval-juridico' },
+
     { key: 'COMPRA_LIBERADA', label: 'Compra ao Fornecedor liberada',
-      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'FS' }],
-      nasce: 'AVAL_PAGAMENTO_CONFIRMADO', fecha: 'COMPRA_FORNECEDOR_INICIADA',
+      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'FS' }, { key: 'AVAL_JURIDICO', rel: 'FS' }],
+      /* Nasce só quando OS DOIS avais manuais já aconteceram (o último a
+         chegar dispara). `nasce` continua sendo o de sempre pra quem lê o
+         grafo; `requerEventos` é a condição real (ver onEvento). */
+      nasce: 'AVAL_PAGAMENTO_CONFIRMADO',
+      requerEventos: ['AVAL_PAGAMENTO_CONFIRMADO', 'AVAL_JURIDICO_APROVADO'],
+      fecha: 'COMPRA_FORNECEDOR_INICIADA',
       fechamentoTipo: 'automatico' /* botão "Decidir Comprar" já existente em Cotação a Fornecedor */,
       rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
 
@@ -571,6 +584,17 @@
      `alvoId` é o id do registro que disparou o evento (ex.: id da cotação
      a fornecedor, da proposta) — gravado no nó que nasce, pra dar pra
      clicar na linha e abrir o objeto real (ver navegarPara). */
+  /* Todos os eventos de `chaves` já foram registrados pra essa cotação?
+     (eventos_fluxo guarda o LABEL do evento, e o registro do evento atual já
+     foi gravado antes de onEvento ser chamado.) */
+  async function todosEventosRegistrados(numeroCotacao, chaves) {
+    const ev = window.EventosFluxo;
+    if (!ev || !ev.listarPorCotacao) return false;
+    const linhas = await ev.listarPorCotacao(numeroCotacao);
+    const labels = new Set((linhas || []).map((l) => l.evento));
+    return chaves.every((k) => labels.has((ev.EVENTOS[k] || {}).label));
+  }
+
   async function onEvento({ evento, numeroCotacao, alvoId, detalhe } = {}) {
     if (numeroCotacao == null) return;
     try {
@@ -598,8 +622,13 @@
 
       /* 2) nasce quem tiver esse evento como nascimento */
       for (const node of NODES) {
-        if (node.nasce !== evento) continue;
+        const dispara = node.nasce === evento || (node.requerEventos || []).includes(evento);
+        if (!dispara) continue;
         if (node.condicaoNasce && !node.condicaoNasce(detalhe)) continue;
+        if (node.requerEventos) {
+          const jaAconteceram = await todosEventosRegistrados(numeroCotacao, node.requerEventos);
+          if (!jaAconteceram) continue;
+        }
         const predKey = (node.predecessores[0] || {}).key;
         const predRow = predKey ? await garantirNo(numeroCotacao, predKey) : null;
         await nascerNo(numeroCotacao, node, predRow ? predRow.id : null, alvoId);

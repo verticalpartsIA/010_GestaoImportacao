@@ -214,12 +214,12 @@ function AFRow({ row, onOpenModal, onSaved }) {
               <Button variant="primary" size="sm" onClick={() => onOpenModal('aprovar', row)}>Dar aval</Button>
             </>
           )}
-          {status === 'aprovado' && !a.sinal_pago && (
+          {status !== 'reprovado' && !a.sinal_pago && (
             <Button variant="primary" size="sm" onClick={() => onOpenModal('sinal', row)}>Confirmar sinal</Button>
           )}
         </div>
       </div>
-      {status === 'aprovado' && <AFAprovacoes row={row} onSaved={onSaved}/>}
+      {status !== 'reprovado' && <AFAprovacoes row={row} onSaved={onSaved}/>}
     </div>
   );
 }
@@ -241,7 +241,7 @@ function AvalFinanceiroPage({ setRoute }) {
 
   const pendConsulta = fila.filter((r) => r.aval.status === 'pendente_consulta');
   const pendAval = fila.filter((r) => r.aval.status === 'pendente_aval');
-  const aguardandoSinal = fila.filter((r) => r.aval.status === 'aprovado' && !r.aval.sinal_pago);
+  const aguardandoSinal = fila.filter((r) => r.aval.status !== 'reprovado' && !r.aval.sinal_pago);
   const reprovados = fila.filter((r) => r.aval.status === 'reprovado');
 
   return (
@@ -250,15 +250,15 @@ function AvalFinanceiroPage({ setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Aval de Vendas</div>
           <h1 className="page-head__title">Aval Financeiro</h1>
-          <p className="page-head__sub">Consulta de score e aval de venda antes do contrato · confirmação do sinal antes da compra no fornecedor.</p>
+          <p className="page-head__sub">Confirmação do sinal e aprovações antes da compra no fornecedor · consulta de score e aval de venda são opcionais (não bloqueiam o contrato).</p>
         </div>
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
         <KPI label="Aguardando consulta" value={pendConsulta.length} sub="propostas aprovadas" delta="—" deltaDir="up" icon="fileSearch"/>
         <KPI label="Aguardando aval" value={pendAval.length} sub="decisão pendente" delta="—" deltaDir="up" icon="zap"/>
-        <KPI label="Aguardando sinal" value={aguardandoSinal.length} sub="contrato liberado" delta="—" deltaDir="up" icon="dollar"/>
-        <KPI label="Reprovados" value={reprovados.length} sub="venda bloqueada" delta="—" deltaDir="down" icon="warning"/>
+        <KPI label="Aguardando sinal" value={aguardandoSinal.length} sub="sinal a confirmar" delta="—" deltaDir="up" icon="dollar"/>
+        <KPI label="Reprovados" value={reprovados.length} sub="avaliação negativa" delta="—" deltaDir="down" icon="warning"/>
       </div>
 
       <Card title="Fila do Financeiro" sub={`${fila.length} propostas aprovadas pelo cliente`}>
