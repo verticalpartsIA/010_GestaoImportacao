@@ -148,19 +148,57 @@
        por unidade, então não são rateadas aqui (ratear sem base real seria
        inventar um número, não "a mais pura verdade"). */
     const moLookup = (precificacao && precificacao.mo_lookup) || [];
-    return base.map((u) => {
+    const modelosPz = (precificacao && precificacao.modelos) || [];
+    /* Uma linha por UNIDADE do Formulário (visão antiga) → cada uma pode ter
+       `quantidade` > 1 = vários equipamentos físicos. A Precificação já
+       expande isso em mo_lookup (1 linha por equipamento físico, com o
+       identificador real VPEL-EL0955-1/-2). Antes esta lista tinha 1 ativo
+       por Unidade, então uma Unidade de quantidade 2 aparecia como 1 ativo só
+       (e 1 só custo de MO) no Contrato Instalador/painel financeiro. */
+    const porUnidade = base.map((u) => {
       const uid = u.id || u.unidade_id;
       const tec = envio.find((e) => e.unidade_id === uid) || {};
       const indice = u.indice_ativo ?? tec.indice_ativo ?? null;
-      const mo = moLookup.find((m) => m.unidadeId === uid) || {};
+      const linhasMo = moLookup.filter((m) => m.unidadeId === uid)
+        .sort((x, y) => (Number(x.equipamentoIndice) || 0) - (Number(y.equipamentoIndice) || 0));
+      const mod = modelosPz.find((m) => m.unidadeId === uid) || {};
       return {
-        indice,
+        uid, indice, linhasMo,
         codigo: (cotacao && cefStore) ? cefStore.assetMasterId(cotacao, indice) : null,
         identificador: u.identificador || tec.identificador || '',
-        modelo: u.modelo || tec.modelo || '',
-        custoInstalacaoMaoDeObraRs: Number(mo.valorRs) || null,
+        // mesmo critério de montarEspecificacoes: o modelo da Precificação vence
+        modelo: mod.modelo || u.modelo || tec.modelo || '',
       };
-    }).filter((a) => a.indice != null);
+    }).filter((x) => x.indice != null);
+
+    const expandiu = porUnidade.some((x) => x.linhasMo.length > 1);
+    if (!expandiu) {
+      // caso comum (1 equipamento por Unidade) — formato de sempre
+      return porUnidade.map((x) => ({
+        indice: x.indice, codigo: x.codigo, identificador: x.identificador, modelo: x.modelo,
+        custoInstalacaoMaoDeObraRs: Number((x.linhasMo[0] || {}).valorRs) || null,
+      }));
+    }
+    // Há Unidade com vários equipamentos: 1 ativo por equipamento físico e
+    // `indice` sequencial único (1..N) — os consumidores (Contrato Instalador,
+    // dashboard financeiro) identificam o ativo por esse índice.
+    const out = [];
+    porUnidade.forEach((x) => {
+      if (x.linhasMo.length > 1) {
+        x.linhasMo.forEach((l) => out.push({
+          indice: out.length + 1, codigo: l.identificador || x.codigo, identificador: l.identificador || x.identificador,
+          modelo: x.modelo, unidadeId: x.uid, equipamentoIndice: l.equipamentoIndice ?? null,
+          custoInstalacaoMaoDeObraRs: Number(l.valorRs) || null,
+        }));
+      } else {
+        out.push({
+          indice: out.length + 1, codigo: x.codigo, identificador: x.identificador, modelo: x.modelo,
+          unidadeId: x.uid, equipamentoIndice: 1,
+          custoInstalacaoMaoDeObraRs: Number((x.linhasMo[0] || {}).valorRs) || null,
+        });
+      }
+    });
+    return out;
   }
 
   /* ---------- Prefill no formato do PropostaEditor ---------- */
@@ -298,5 +336,5 @@
     return partes.join(' · ');
   }
 
-  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes };
+  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos };
 }());

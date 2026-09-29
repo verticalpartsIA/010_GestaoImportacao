@@ -59,7 +59,8 @@
 
     /* 2. Dossiê da Obra + histórico de status + vistorias (só existe se o
        Lead já virou Dossiê) */
-    const { data: dossier } = await c.from('dossier_obra').select('*').eq('numero_cotacao', numeroCotacao).maybeSingle();
+    const { data: dossiers } = await c.from('dossier_obra').select('*').eq('numero_cotacao', numeroCotacao).order('created_at', { ascending: true }).limit(1);
+    const dossier = (dossiers || [])[0] || null;
     if (dossier) {
       const { data: historico } = await c.from('dossier_history').select('*').eq('dossier_id', dossier.id).order('created_at', { ascending: true });
       (historico || []).forEach((h) => add(h.created_at, PAPEL_STATUS_DOSSIER[h.status_to] || 'Engenharia', `Status: ${h.status_from || '—'} → ${h.status_to}${h.notes ? ' — ' + h.notes : ''}`, h.actor, 'Dossiê da Obra'));

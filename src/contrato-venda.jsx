@@ -149,14 +149,14 @@ function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
         <CVField label="Telefone" mask="maskPhone" mono value={form.comprador.tel} onChange={(v) => setComp({ tel: v })} placeholder="(11) 90000-0000"/>
       </div>
       <div className="cv-grid">
-        <CVField label="Endereço (sede)" width="full" value={form.comprador.endereco} onChange={(v) => setComp({ endereco: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP"/>
+        <CVField label="Endereço (sede)" required width="full" value={form.comprador.endereco} onChange={(v) => setComp({ endereco: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP" error={errors.endereco}/>
       </div>
       <div className="cv-grid">
         <CVField label="Representante legal" required width="full" value={form.comprador.rep} onChange={(v) => setComp({ rep: v })} placeholder="Nome completo" error={errors.rep}/>
       </div>
       <div className="cv-grid">
         <CVField label="Cargo" value={form.comprador.repCargo} onChange={(v) => setComp({ repCargo: v })} placeholder="ex: Diretor"/>
-        <CVField label="CPF do representante" mask="maskCPF" mono value={form.comprador.repCpf} onChange={(v) => setComp({ repCpf: v })} placeholder="000.000.000-00"/>
+        <CVField label="CPF do representante" required mask="maskCPF" mono value={form.comprador.repCpf} onChange={(v) => setComp({ repCpf: v })} placeholder="000.000.000-00" error={errors.repCpf}/>
       </div>
       <div className="cv-grid">
         <CVField label="E-mail para assinatura" width="full" value={form.comprador.email} onChange={(v) => setComp({ email: v })} placeholder="contato@cliente.com.br" hint="Usado no envio do link de assinatura e como contato de comunicação (cláusula 10.1)."/>
@@ -164,15 +164,15 @@ function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
       <div className="cv-field-group">
         <h3 className="cv-group-title">Qualificação do representante (preâmbulo do contrato)</h3>
         <div className="cv-grid">
-          <CVField label="Nacionalidade" value={form.comprador.repNacionalidade} onChange={(v) => setComp({ repNacionalidade: v })} placeholder="ex: brasileiro"/>
-          <CVField label="Estado civil" value={form.comprador.repEstadoCivil} onChange={(v) => setComp({ repEstadoCivil: v })} placeholder="ex: casado"/>
+          <CVField label="Nacionalidade" required value={form.comprador.repNacionalidade} onChange={(v) => setComp({ repNacionalidade: v })} placeholder="ex: brasileiro" error={errors.repNacionalidade}/>
+          <CVField label="Estado civil" required value={form.comprador.repEstadoCivil} onChange={(v) => setComp({ repEstadoCivil: v })} placeholder="ex: casado" error={errors.repEstadoCivil}/>
         </div>
         <div className="cv-grid">
-          <CVField label="Profissão" value={form.comprador.repProfissao} onChange={(v) => setComp({ repProfissao: v })} placeholder="ex: empresário"/>
-          <CVField label="RG do representante" mono value={form.comprador.repRg} onChange={(v) => setComp({ repRg: v })} placeholder="nº e órgão emissor"/>
+          <CVField label="Profissão" required value={form.comprador.repProfissao} onChange={(v) => setComp({ repProfissao: v })} placeholder="ex: empresário" error={errors.repProfissao}/>
+          <CVField label="RG do representante" required mono value={form.comprador.repRg} onChange={(v) => setComp({ repRg: v })} placeholder="nº e órgão emissor" error={errors.repRg}/>
         </div>
         <div className="cv-grid">
-          <CVField label="Endereço residencial do representante" width="full" value={form.comprador.repEnderecoResidencial} onChange={(v) => setComp({ repEnderecoResidencial: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP" hint="Onde o representante reside e é domiciliado — exigido pelo preâmbulo do contrato."/>
+          <CVField label="Endereço residencial do representante" required width="full" value={form.comprador.repEnderecoResidencial} onChange={(v) => setComp({ repEnderecoResidencial: v })} placeholder="Rua, nº, bairro, cidade/estado, CEP" hint="Onde o representante reside e é domiciliado — exigido pelo preâmbulo do contrato." error={errors.repEnderecoResidencial}/>
         </div>
       </div>
     </div>
@@ -258,7 +258,14 @@ function CVStepPreco({ form, set, errors }) {
         <div className="cv-pay-summary">
           <div className="cv-mini-label">Resumo do pagamento</div>
           <div className="cv-pay-row"><span>Sinal ({form.sinalPct}%)</span><b className="cv-mono">{window.CV.brl(valor * form.sinalPct / 100)}</b></div>
-          <div className="cv-pay-row"><span>{form.parcelas}× parcelas do saldo</span><b className="cv-mono">{window.CV.brl((valor * (100 - form.sinalPct) / 100) / form.parcelas)}</b></div>
+          {(() => {
+            const det = Array.isArray(form.parcelasDetalhe) ? form.parcelasDetalhe.map(Number) : null;
+            const sinalV = valor * form.sinalPct / 100;
+            const ok = det && det.length === form.parcelas && det.every((v) => v > 0) && Math.abs(sinalV + det.reduce((t, v) => t + v, 0) - valor) < 0.02;
+            return ok
+              ? det.map((v, i) => <div className="cv-pay-row" key={i}><span>Parcela {i + 1} de {det.length} (da Proposta)</span><b className="cv-mono">{window.CV.brl(v)}</b></div>)
+              : <div className="cv-pay-row"><span>{form.parcelas}× parcelas do saldo</span><b className="cv-mono">{window.CV.brl((valor * (100 - form.sinalPct) / 100) / form.parcelas)}</b></div>;
+          })()}
           <div className="cv-pay-row cv-pay-total"><span>Total</span><b className="cv-mono">{window.CV.brl(valor)}</b></div>
         </div>
       )}
@@ -323,7 +330,10 @@ function CVStepRevisao({ form, set, doc, dossierProvisioning }) {
    SEND MODAL (compartilha o estilo .ci-modal)
    ============================================================ */
 function CVSendModal({ record, onClose, onSent }) {
-  const [channel, setChannel] = _cvUS(record.channel || 'whatsapp');
+  /* Canal inicial: se o contato cadastrado é um e-mail (herdado da Proposta),
+     abre já em E-mail — antes abria em WhatsApp com e-mails no campo de
+     telefone. */
+  const [channel, setChannel] = _cvUS(record.channel || (/@/.test((record.recipient && record.recipient.contact) || '') ? 'email' : 'whatsapp'));
   const [contact, setContact] = _cvUS((record.recipient && record.recipient.contact) || '');
   const [name, setName] = _cvUS((record.recipient && record.recipient.name) || record.responsavel_nome || '');
   const [sent, setSent] = _cvUS(false);
@@ -488,6 +498,17 @@ function validateStep(idx, s) {
     if (!s.comprador.razao || !s.comprador.razao.trim()) e.razao = 'Informe a razão social.';
     if (window.CV.onlyDigits(s.comprador.cnpj).length !== 14) e.cnpj = 'CNPJ incompleto (14 dígitos).';
     if (!s.comprador.rep || !s.comprador.rep.trim()) e.rep = 'Informe o representante.';
+    /* Qualificação do representante e endereço da sede entram no preâmbulo
+       do contrato — antes eram opcionais e saíam como "XXX"/"nacionalidade"
+       no documento enviado ao cliente. */
+    const vazio = (v) => !v || !String(v).trim();
+    if (vazio(s.comprador.endereco)) e.endereco = 'Informe o endereço da sede.';
+    if (!window.CV.isCPFValid(s.comprador.repCpf)) e.repCpf = 'CPF inválido (confira os dígitos).';
+    if (vazio(s.comprador.repNacionalidade)) e.repNacionalidade = 'Informe a nacionalidade.';
+    if (vazio(s.comprador.repEstadoCivil)) e.repEstadoCivil = 'Informe o estado civil.';
+    if (vazio(s.comprador.repProfissao)) e.repProfissao = 'Informe a profissão.';
+    if (vazio(s.comprador.repRg)) e.repRg = 'Informe o RG.';
+    if (vazio(s.comprador.repEnderecoResidencial)) e.repEnderecoResidencial = 'Informe o endereço residencial.';
   }
   if (idx === 3) {
     if (window.CV.parseMoney(s.valor) <= 0) e.valor = 'Informe o valor total.';
@@ -542,8 +563,11 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
 
     /* Endereço: combina logradouro + número quando o número existe (registros
        novos já preservam o número — ver EnderecoAPI.mesclarLogradouro). */
-    const endCli = [cli.endereco, cli.numero].filter(Boolean).join(', ');
-    const endObra = [[obra.endereco, obra.numero].filter(Boolean).join(', '), obra.cidade, obra.uf].filter(Boolean).join(', ');
+    /* Endereço completo (bairro, cidade/UF e CEP também) — antes só rua +
+       número herdavam, e o CEP da obra (que a cláusula 1 cita como base de
+       reajuste) nunca chegava ao contrato. */
+    const endCli = window.CV.montarEndereco(cli);
+    const endObra = window.CV.montarEndereco(obra);
 
     /* Sinal/Parcelas: a Proposta já calcula isso (Sinal de 40% + N parcelas
        iguais, proposta-form.jsx/proposta-heranca.js) mas o Contrato de Venda
@@ -556,12 +580,25 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
        gerarParcelasAutomaticas), não configurável por lá. */
     let sinalPctInf = null;
     let parcelasInf = null;
+    /* Cronograma real da Proposta (o vendedor pode ter editado, ex.: 20/15/15/10
+       em vez de parcelas iguais): valores em R$ das linhas depois do sinal. */
+    let parcelasDetalheInf = null;
+    const numBR = (v) => {
+      const s = String(v == null ? '' : v).trim();
+      if (!s) return NaN;
+      return Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s);
+    };
     if (valores.formaTipo === 'vista') {
       sinalPctInf = 100;
       parcelasInf = 0;
     } else if (valores.formaTipo === 'parcelado' && Number(valores.qtdParcelas) > 0) {
       sinalPctInf = 40;
       parcelasInf = Math.max(Number(valores.qtdParcelas) - 1, 0);
+      const linhas = Array.isArray(valores.parcelas) ? valores.parcelas : [];
+      if (linhas.length === Number(valores.qtdParcelas) && /sinal/i.test(String(linhas[0] && linhas[0].desc))) {
+        const v = linhas.slice(1).map((l) => numBR(l.valor));
+        if (v.length && v.every((x) => Number.isFinite(x) && x > 0)) parcelasDetalheInf = v;
+      }
     }
 
     setForm(prev => ({
@@ -569,16 +606,19 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
       masterId: p.master_id, propostaId: p.id,
       sinalPct: sinalPctInf != null ? sinalPctInf : prev.sinalPct,
       parcelas: parcelasInf != null ? parcelasInf : prev.parcelas,
+      parcelasDetalhe: parcelasDetalheInf,
       comprador: {
         ...prev.comprador,
         razao: cli.nome || prev.comprador.razao,
-        cnpj: cli.cnpj || prev.comprador.cnpj,
+        cnpj: (cli.cnpj && window.CV.maskCNPJ(cli.cnpj)) || prev.comprador.cnpj,
         rep: cli.responsavel || prev.comprador.rep,
         email: cli.email || prev.comprador.email,
         tel: cli.telefone || prev.comprador.tel,
         endereco: endCli || prev.comprador.endereco,
       },
       localObra: endObra || prev.localObra,
+      obraCidade: (obra.cidade && String(obra.cidade).trim()) || prev.obraCidade || '',
+      obraUf: (obra.uf && String(obra.uf).trim()) || prev.obraUf || '',
       // valor é guardado no formato mascarado pt-BR ("185.022,00") — o mesmo
       // que o CVMoneyField produz e que parseMoney lê (dígitos como centavos).
       // Antes gravava "185022" cru, que parseMoney lia como R$ 1.850,22 (÷100).
@@ -684,8 +724,11 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
       }
       if (!completeAll(f)) { setCreating(false); return; }
       const rec = await window.CVStore.createDraft(f);
+      /* Só abre o modal de envio. Antes chamava onCreated aqui, que troca a
+         aba pro Painel e desmontava o assistente (e o modal junto) na hora —
+         "Gerar e enviar" nunca chegava a mostrar a tela de envio. onCreated
+         agora roda ao fechar o modal (abaixo). */
       setSendRec(rec);
-      onCreated && onCreated(rec);
     } catch (e) {
       alert('Erro ao gerar contrato: ' + (e.message || e));
     } finally {
@@ -740,7 +783,7 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
         </div>
       </div>
 
-      {sendRec && <CVSendModal record={sendRec} onClose={() => { setSendRec(null); setForm(window.CV.defaultState()); setStep(0); }} onSent={() => {}}/>}
+      {sendRec && <CVSendModal record={sendRec} onClose={() => { const r = sendRec; setSendRec(null); setForm(window.CV.defaultState()); setStep(0); onCreated && onCreated(r); }} onSent={() => {}}/>}
     </div>
   );
 }

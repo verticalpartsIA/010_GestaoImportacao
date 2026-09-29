@@ -67,6 +67,34 @@
 
   /* ---------- Máscaras / formatação ---------- */
   function onlyDigits(s) { return String(s == null ? '' : s).replace(/\D/g, ''); }
+  /* CPF com dígito verificador (rejeita 111.111.111-11 etc.). */
+  function isCPFValid(v) {
+    const d = onlyDigits(v);
+    if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false;
+    const dv = (base) => {
+      let soma = 0;
+      for (let i = 0; i < base.length; i++) soma += parseInt(base[i], 10) * (base.length + 1 - i);
+      const r = (soma * 10) % 11;
+      return r === 10 ? 0 : r;
+    };
+    return dv(d.slice(0, 9)) === parseInt(d[9], 10) && dv(d.slice(0, 10)) === parseInt(d[10], 10);
+  }
+  /* Endereço completo no padrão do contrato ("Rua, nº, bairro, cidade/UF, CEP")
+     a partir de {endereco, numero, bairro, cidade, uf, cep} — antes só
+     logradouro + número herdavam da Proposta. Partes vazias são omitidas. */
+  function montarEndereco(o) {
+    o = o || {};
+    const t = (v) => String(v == null ? '' : v).replace(/\s+/g, ' ').trim();
+    const cidadeUf = [t(o.cidade), t(o.uf).toUpperCase()].filter(Boolean).join('/');
+    const cepD = onlyDigits(o.cep);
+    return [
+      t(o.endereco).replace(/[\s,]+$/, ''),
+      t(o.numero) ? 'nº ' + t(o.numero) : '',
+      t(o.bairro),
+      cidadeUf,
+      cepD.length === 8 ? 'CEP ' + cepD.slice(0, 5) + '-' + cepD.slice(5) : (t(o.cep) ? 'CEP ' + t(o.cep) : ''),
+    ].filter(Boolean).join(', ');
+  }
   function maskCNPJ(v) {
     const d = onlyDigits(v).slice(0, 14);
     if (d.length > 12) return `${d.slice(0,2)}.${d.slice(2,5)}.${d.slice(5,8)}/${d.slice(8,12)}-${d.slice(12)}`;
@@ -280,8 +308,23 @@
     const saldo = valor - sinalValor;
     const parcValor = parcelas > 0 ? saldo / parcelas : 0;
     const tabela = [{ label: 'Sinal / entrada', quando: 'Na assinatura', pct: sinalPct, valor: sinalValor }];
+    /* Cronograma herdado da Proposta (ex.: 20/15/15/10) — `parcelasDetalhe` =
+       valores em R$ de cada parcela do saldo, na ordem. Só vale enquanto
+       bate com o que está na tela (mesma quantidade de parcelas e
+       sinal + parcelas = total, tolerância de 2 centavos): se o usuário
+       mexer no valor, no sinal ou no nº de parcelas, cai na divisão em
+       parcelas iguais de antes (sem valor "fantasma" desatualizado). */
+    const detalhe = Array.isArray(f.parcelasDetalhe) ? f.parcelasDetalhe.map(Number) : null;
+    const usaDetalhe = !!detalhe && detalhe.length === parcelas && parcelas > 0
+      && detalhe.every((v) => Number.isFinite(v) && v > 0)
+      && Math.abs(sinalValor + detalhe.reduce((t, v) => t + v, 0) - valor) < 0.02;
     for (let i = 1; i <= parcelas; i++) {
-      tabela.push({ label: `Parcela ${i} de ${parcelas}`, quando: `${i * 30} dias`, pct: (100 - sinalPct) / parcelas, valor: parcValor });
+      const vi = usaDetalhe ? detalhe[i - 1] : parcValor;
+      tabela.push({
+        label: `Parcela ${i} de ${parcelas}`, quando: `${i * 30} dias`,
+        pct: usaDetalhe ? (valor > 0 ? (vi / valor) * 100 : 0) : (100 - sinalPct) / parcelas,
+        valor: vi,
+      });
     }
 
     /* Discriminação informativa por equipamento — só quando a cotação tem
@@ -552,7 +595,7 @@
   /* ---------- Exporta tudo em window.CV ---------- */
   window.CV = {
     VENDEDORA, EQUIPAMENTOS, CONTATOS_VP,
-    onlyDigits, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
+    onlyDigits, isCPFValid, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
     descEquipamento, defaultState,
     buildContract,
     calcularD0, addDias,  // ISSUE #6
