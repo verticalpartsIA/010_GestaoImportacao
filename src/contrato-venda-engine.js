@@ -30,9 +30,9 @@
   /* ---------- Contatos fixos da VENDEDORA (cláusula 10.1) ---------- */
   const CONTATOS_VP = [
     { nome: 'Diego Yutaka Maeno', cargo: 'CEO',         tel: '(11) 99462-1946', email: 'diego@verticalparts.com.br' },
-    { nome: 'Marcus Braz',        cargo: 'Comercial',   tel: '(11) 99898-1275', email: 'marcus.braz@verticalparts.com.br' },
-    { nome: 'Arilene Avila',      cargo: 'Operacional', tel: '(11) 96407-7688', email: 'arilene.avila@verticalparts.com.br' },
-    { nome: 'Juliana Anderson',   cargo: 'Financeiro',  tel: '(11) 94460-6396', email: 'juliana@verticalparts.com.br' },
+    { nome: 'Regiane Vilas Boas', cargo: 'Comercial',   tel: '(11) 99898-1275', email: 'regiane.rocha@verticalparts.com.br' },
+    { nome: 'Alexandre Schmidt',  cargo: 'Engenharia',  tel: '(11) 94250-1627', email: 'engenharia@verticalparts.com.br' },
+    { nome: 'Juliana Anderson',   cargo: 'Financeiro',  tel: '(11) 94460-6396', email: 'financeiro@verticalparts.com.br' },
   ];
 
   const EQUIPAMENTOS = {
