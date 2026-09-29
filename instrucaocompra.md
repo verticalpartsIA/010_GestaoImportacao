@@ -32,8 +32,9 @@ Todo prazo é contado a partir do **nascimento** do nó (`nascido_em`), não da 
 | 6b | Projeto de Engenharia enviado ao Cliente | Cliente aprovou | Projeto finalizado | **24 horas** | TI (de 5) + **II** com 6a — nascem juntos |
 | 7 | Aguardando assinatura do Contrato | Contrato enviado | Contrato assinado | **5 dias** | TI |
 | 8 | Aguardando pagamento do Boleto | Contrato assinado (boleto é gerado após a assinatura) | Financeiro confirma que o boleto foi pago (manual) | **3 dias** | TI |
-| 9 | Aguardando Aval de Pagamento | Boleto pago | Financeiro dá o Aval de Pagamento (manual, **novo** — distinto do Aval Financeiro de score/crédito que já existe antes do contrato) | **4 horas** | TI |
-| 10 | Compra ao Fornecedor liberada | Aval de Pagamento confirmado | Time de Importação decide comprar (`decidirComprar`, já existente) | — (é o gate, não uma espera) | TI |
+| 9 | Aguardando Aval de Pagamento | Boleto pago | Financeiro dá o Aval de Pagamento — **clique manual** (é o "Aval Financeiro" do processo real: acontece depois do sinal pago) | **4 horas** | TI |
+| 9b | Aguardando Aval Jurídico do contrato | Contrato assinado | Jurídico dá o Aval Jurídico — **clique manual** (tela "Aval Jurídico"); corre em paralelo ao boleto/Aval de Pagamento | — | TI (de 7) |
+| 10 | Compra ao Fornecedor liberada | **Aval de Pagamento (Financeiro) E Aval Jurídico** — os dois avais manuais; o último a chegar dispara | Time de Importação decide comprar (`decidirComprar`, já existente) | — (é o gate, não uma espera) | TI |
 | 11 | Negociação e Compra do Produto | Compra liberada | Compra confirmada com o fornecedor (`aprovar`, já existente — evento novo) | **7 dias** | TI |
 | 12 | Embarque até chegada no Brasil | Compra confirmada | *(sem evento automático ainda — fronteira do que existe hoje no código; logística/embarques não está wired em `eventos_fluxo`)* | **90 dias** | TI |
 
@@ -66,13 +67,23 @@ não é instantâneo ao bater a hora exata.
   Compra libera. Isso substitui o desenho anterior (v1), em que "Aguardando Sinal" e
   "Aguardando Assinatura" corriam em paralelo — a descrição real do processo veio depois e é
   sequencial.
-- **Aval de Pagamento é uma confirmação nova**, distinta do Aval Financeiro que já existe hoje
-  (aquele que roda **antes** do contrato ser criado, checando score/crédito do cliente). Não
-  reaproveita a mesma tela — é um segundo checkpoint do Financeiro, focado em confirmar que o
-  dinheiro entrou de verdade antes de autorizar a compra na China.
-- O gate real de código (`AvalFinanceiroStore.podeIniciarCompra`) confere, em paralelo à cadeia
-  visual de Gatilhos: contrato assinado **e** Aval de Pagamento confirmado — dupla checagem
-  (a cadeia de Gatilhos é a visualização; o gate no código é o que efetivamente bloqueia).
+- **Os dois avais são MANUAIS (processo real, confirmado pelo usuário em 29/09/2026).** Depois
+  que o cliente paga o sinal, o Financeiro dá o **Aval Financeiro** (no código: "Aval de
+  Pagamento", `confirmarAvalPagamento`) e o Jurídico dá o **Aval Jurídico** (`AvalJuridicoStore`),
+  cada um clicando "aprovar" — nada é automático. Os dois juntos disparam a compra da importação.
+- **A consulta de score/aval de venda do Financeiro NÃO bloqueia mais o contrato** (29/09/2026).
+  Antes, `AvalFinanceiroStore.podeEnviarContrato` exigia esse aval antes de gerar/enviar o Contrato
+  de Venda; agora devolve sempre `ok` — o contrato é criado e enviado assim que a Proposta é
+  assinada. A consulta de score e o "aval de venda" continuam disponíveis na tela Aval Financeiro
+  como registro **opcional** (os nós FIN_SCORE/FIN_AVAL_VENDA seguem na cadeia, só informativos);
+  "Confirmar sinal" e as aprovações do CEO/responsável ficam disponíveis mesmo sem esse aval
+  (só somem se a venda foi marcada como reprovada).
+- O gate real de código (`AvalFinanceiroStore.podeIniciarCompra`) confere: aprovação do CEO,
+  aprovação do responsável, sinal pago, **Aval de Pagamento (Financeiro)**, contrato assinado
+  pelo cliente, **Aval Jurídico** e revisão técnica do projeto (Engenharia) — a primeira que faltar
+  é a mostrada. O nó COMPRA_LIBERADA da cadeia só nasce quando Aval de Pagamento **e** Aval
+  Jurídico já aconteceram (`requerEventos` em `gatilhos-engine.js`). A cadeia de Gatilhos é a
+  visualização; o gate no código é o que efetivamente bloqueia.
 
 ## Arquivos envolvidos
 
@@ -82,7 +93,10 @@ não é instantâneo ao bater a hora exata.
 - [`src/eventos-fluxo-store.js`](src/eventos-fluxo-store.js) — catálogo de eventos (`EVENTOS`) e
   ponto único de disparo do motor.
 - [`src/aval-financeiro-store.js`](src/aval-financeiro-store.js) — `confirmarSinal()` (boleto
-  pago), `confirmarAvalPagamento()` (novo), `podeIniciarCompra()` (gate real).
+  pago), `confirmarAvalPagamento()` (Aval Financeiro manual), `podeIniciarCompra()` (gate real,
+  inclui o Aval Jurídico), `podeEnviarContrato()` (não bloqueia mais).
+- [`src/aval-juridico-store.js`](src/aval-juridico-store.js) — Aval Jurídico manual (aprovar/reprovar)
+  do contrato assinado; libera o Desenho de Instalação e, junto com o Aval de Pagamento, a compra.
 - [`src/cotacao-elevador-fornecedor-store.js`](src/cotacao-elevador-fornecedor-store.js) —
   `decidirComprar()` (compra liberada) e `aprovar()` (compra confirmada — evento novo).
 - [`src/financeiro.jsx`](src/financeiro.jsx) — tela "Gatilhos & Prazo", cadeia por Nº da

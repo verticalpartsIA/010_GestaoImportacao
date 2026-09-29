@@ -550,8 +550,8 @@ function ModalConfirmarAvalPagamento({ g, onClose, onSaved }) {
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
         <p className="muted" style={{ fontSize: 13 }}>
-          Checkpoint final do Financeiro antes de liberar a compra ao Fornecedor — distinto do
-          Aval Financeiro de score/crédito, que já rodou antes do contrato.
+          Checkpoint manual do Financeiro depois do sinal pago. Junto com o Aval Jurídico
+          (manual) e o contrato assinado, libera a compra ao Fornecedor.
         </p>
         <div className="stack" style={{ gap: 4 }}>
           <label className="up-eyebrow muted">Observações (opcional)</label>

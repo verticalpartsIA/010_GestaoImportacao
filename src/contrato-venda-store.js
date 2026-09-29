@@ -263,8 +263,10 @@
     const c = sb();
     if (!c) throw new Error('Supabase indisponível');
 
-    // Gate: Financeiro precisa ter dado o aval (consultou score + aprovou a
-    // venda) antes do contrato poder nem ser gerado — ver aval-financeiro-store.js.
+    // 29/09: o aval de score do Financeiro NÃO bloqueia mais o contrato (o
+    // Aval Financeiro real é manual e vem DEPOIS do sinal pago) — a chamada
+    // abaixo fica só por compatibilidade (podeEnviarContrato devolve sempre ok).
+    // Ver aval-financeiro-store.js / instrucaocompra.md.
     if (window.AvalFinanceiroStore && formState.propostaId) {
       const gate = await window.AvalFinanceiroStore.podeEnviarContrato(formState.propostaId);
       if (!gate.ok) throw new Error(gate.motivo);

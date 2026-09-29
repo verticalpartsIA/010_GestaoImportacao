@@ -3,17 +3,19 @@
    Gate do Financeiro no meio do funil comercial:
 
      Proposta aprovada (cliente assinou)
-       -> Financeiro consulta o score do cliente
-       -> Financeiro dá o aval (aprova ou reprova a venda)
-       -> [só então o Contrato de Venda pode ser enviado — ver createDraft
-          em contrato-venda-store.js]
+       -> Contrato de Venda é gerado e enviado SEM esperar o Financeiro
+          (29/09: a consulta de score/aval de venda deixou de bloquear o
+          contrato — ver podeEnviarContrato abaixo; continua disponível
+          como registro opcional na tela Aval Financeiro)
      Contrato enviado
-       -> Jurídico assina o contrato (automático, via link público)
-       -> Boleto gerado -> Financeiro confirma que foi pago (manual)
-       -> Financeiro dá o Aval de Pagamento (manual, NOVO — distinto
-          deste aval de score acima)
-       -> [só com contrato assinado + boleto pago + Aval de Pagamento
-          a Cotação a Fornecedor pode iniciar a compra na China — ver
+       -> Cliente assina (automático, via link público)
+       -> Boleto do sinal gerado -> Financeiro confirma que foi pago (manual)
+       -> Financeiro dá o Aval de Pagamento (manual)
+       -> Jurídico dá o Aval Jurídico ao contrato assinado (manual — ver
+          aval-juridico-store.js)
+       -> [Aval de Pagamento (Financeiro) + Aval Jurídico + contrato
+          assinado + sinal pago (+ aprovações internas CEO/responsável e a
+          revisão técnica de Engenharia) liberam a compra na China — ver
           decidirComprar em cotacao-elevador-fornecedor-store.js e
           podeIniciarCompra abaixo. Ver instrucaocompra.md.]
 
@@ -204,12 +206,15 @@
   }
 
   /* ---------- Gates ---------- */
-  async function podeEnviarContrato(propostaId) {
-    if (!propostaId) return { ok: true }; // wizard 100% manual, sem Master ID — não trava
-    const av = await getByPropostaId(propostaId);
-    if (!av || av.status !== 'aprovado') {
-      return { ok: false, motivo: 'O Financeiro ainda não deu o aval pra essa venda. Consulte o score e aprove em "Aval Financeiro" antes de enviar o contrato.' };
-    }
+  /* 29/09 — DEIXOU de bloquear. Antes exigia o aval de score/crédito do
+     Financeiro (status 'aprovado') antes de gerar/enviar o Contrato de Venda.
+     Processo real (confirmado pelo usuário): o Aval Financeiro é um evento à
+     parte, DEPOIS do sinal pago (Aval de Pagamento, manual) — não existe
+     aprovação do Financeiro antes do contrato. A consulta de score e o
+     "aval de venda" continuam existindo na tela Aval Financeiro como
+     registro opcional. Mantida a função (mesma assinatura) só porque
+     createDraft ainda a chama. */
+  async function podeEnviarContrato(_propostaId) {
     return { ok: true };
   }
 
@@ -342,12 +347,24 @@
       .select('status').eq('numero_cotacao', numeroCotacao).order('updated_at', { ascending: false }).limit(1).maybeSingle();
     const revisaoProjeto = projeto?.status === 'finalizado';
 
+    /* Aval Jurídico (manual, depois do contrato assinado) — junto com o Aval
+       de Pagamento do Financeiro é o que libera a compra (processo confirmado
+       pelo usuário em 29/09; antes só o Aval Jurídico liberava o Desenho de
+       Instalação, não a compra). */
+    let avalJuridico = false;
+    if (av && av.contrato_venda_id) {
+      const { data: aj } = await c.from('avais_juridicos')
+        .select('status').eq('contrato_venda_id', av.contrato_venda_id).maybeSingle();
+      avalJuridico = aj?.status === 'aprovado';
+    }
+
     const checagens = [
       { ok: !!(av && av.aprovacao_ceo_em), motivo: 'a aprovação do CEO (Diego)' },
       { ok: !!(av && av.aprovacao_owner_em), motivo: 'a aprovação do responsável pelo sistema' },
       { ok: !!(av && av.sinal_pago), motivo: 'o pagamento do boleto pelo cliente (Financeiro)' },
       { ok: !!(av && av.aval_pagamento_confirmado), motivo: 'o Aval de Pagamento (Financeiro)' },
-      { ok: contratoAssinado, motivo: 'a assinatura do contrato (Jurídico)' },
+      { ok: contratoAssinado, motivo: 'a assinatura do contrato pelo cliente' },
+      { ok: avalJuridico, motivo: 'o Aval Jurídico (Jurídico)' },
       { ok: revisaoProjeto, motivo: 'a revisão técnica do projeto (Engenharia)' },
     ];
     const primeiraFaltando = checagens.find((ck) => !ck.ok);
