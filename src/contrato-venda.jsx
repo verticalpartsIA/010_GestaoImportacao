@@ -330,7 +330,10 @@ function CVStepRevisao({ form, set, doc, dossierProvisioning }) {
    SEND MODAL (compartilha o estilo .ci-modal)
    ============================================================ */
 function CVSendModal({ record, onClose, onSent }) {
-  const [channel, setChannel] = _cvUS(record.channel || 'whatsapp');
+  /* Canal inicial: se o contato cadastrado é um e-mail (herdado da Proposta),
+     abre já em E-mail — antes abria em WhatsApp com e-mails no campo de
+     telefone. */
+  const [channel, setChannel] = _cvUS(record.channel || (/@/.test((record.recipient && record.recipient.contact) || '') ? 'email' : 'whatsapp'));
   const [contact, setContact] = _cvUS((record.recipient && record.recipient.contact) || '');
   const [name, setName] = _cvUS((record.recipient && record.recipient.name) || record.responsavel_nome || '');
   const [sent, setSent] = _cvUS(false);
@@ -705,8 +708,11 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
       }
       if (!completeAll(f)) { setCreating(false); return; }
       const rec = await window.CVStore.createDraft(f);
+      /* Só abre o modal de envio. Antes chamava onCreated aqui, que troca a
+         aba pro Painel e desmontava o assistente (e o modal junto) na hora —
+         "Gerar e enviar" nunca chegava a mostrar a tela de envio. onCreated
+         agora roda ao fechar o modal (abaixo). */
       setSendRec(rec);
-      onCreated && onCreated(rec);
     } catch (e) {
       alert('Erro ao gerar contrato: ' + (e.message || e));
     } finally {
@@ -761,7 +767,7 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
         </div>
       </div>
 
-      {sendRec && <CVSendModal record={sendRec} onClose={() => { setSendRec(null); setForm(window.CV.defaultState()); setStep(0); }} onSent={() => {}}/>}
+      {sendRec && <CVSendModal record={sendRec} onClose={() => { const r = sendRec; setSendRec(null); setForm(window.CV.defaultState()); setStep(0); onCreated && onCreated(r); }} onSent={() => {}}/>}
     </div>
   );
 }
