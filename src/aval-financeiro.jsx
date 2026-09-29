@@ -122,7 +122,7 @@ function AFModalSinal({ row, onClose, onSaved }) {
     setSaving(true);
     try {
       await window.AvalFinanceiroStore.confirmarSinal(row.aval.id, { valor: valor ? Number(valor) : null, pagoEm });
-      window.toast('Sinal confirmado — pode iniciar a compra no fornecedor!', 'success');
+      window.toast('Sinal confirmado. Faltam o Aval de Pagamento e o Aval Jurídico para liberar a compra.', 'success');
       onSaved(); onClose();
     } catch (e) {
       window.toast('Erro: ' + (e.message || e), 'error');
@@ -149,43 +149,71 @@ function AFModalSinal({ row, onClose, onSaved }) {
             <input className="input" type="date" value={pagoEm} onChange={(e) => setPagoEm(e.target.value)}/>
           </div>
         </div>
-        <p className="small muted">Depois de confirmado, a Cotação a Fornecedor correspondente já pode iniciar a compra do equipamento na China.</p>
+        <p className="small muted">Depois do sinal, o Financeiro dá o Aval de Pagamento (em Gatilhos &amp; Prazo). Com ele e o Aval Jurídico, a compra na China é liberada.</p>
       </div>
     </Modal>
   );
 }
 
-/* Aprovação do CEO (Diego) e do responsável pelo sistema — mesmo peso, sem
-   ordem estrita entre elas, ambas exigidas antes de "Decidir comprar"
-   (ver AvalFinanceiroStore.podeIniciarCompra). A "minha" é restrita por
-   identidade — o botão fica desabilitado pra quem não for o dono. */
+/* Status dos dois avais que liberam a compra na China (29/09/2026):
+   Aval de Pagamento (Financeiro, depois do sinal — dado em "Gatilhos &
+   Prazo") + Aval Jurídico (tela "Aval Jurídico"). A aprovação do CEO só
+   aparece quando a margem efetiva da precificação fica abaixo de 15% (ou é
+   desconhecida) — "CEO só chega nele dentro de discrepâncias". A antiga
+   "Minha aprovação" (responsável pelo sistema) saiu: deixou de travar a
+   compra. Ver AvalFinanceiroStore.podeIniciarCompra. */
 function AFAprovacoes({ row, onSaved }) {
   const a = row.aval;
-  const [busy, setBusy] = React.useState(null);
-  const souOwner = window.AvalFinanceiroStore.isOwner();
+  const propostaId = row.proposta ? row.proposta.id : null;
+  const [busy, setBusy] = React.useState(false);
+  const [ceo, setCeo] = React.useState(null); // {precisa, margem}
+  const [aj, setAj] = React.useState(undefined); // undefined = carregando
 
-  const aprovar = async (quem) => {
-    setBusy(quem);
+  React.useEffect(() => {
+    let vivo = true;
+    setCeo(null); setAj(undefined);
+    window.AvalFinanceiroStore.precisaAprovacaoCeo(a.numero_cotacao)
+      .then((r) => { if (vivo) setCeo(r); })
+      .catch(() => { if (vivo) setCeo({ precisa: true, margem: null }); });
+    const ajStore = window.AvalJuridicoStore;
+    (ajStore && propostaId ? ajStore.getByPropostaId(propostaId) : Promise.resolve(null))
+      .then((r) => { if (vivo) setAj(r); })
+      .catch(() => { if (vivo) setAj(null); });
+    return () => { vivo = false; };
+  }, [a.id, a.numero_cotacao, propostaId]);
+
+  const aprovarCeo = async () => {
+    setBusy(true);
     try {
-      if (quem === 'ceo') await window.AvalFinanceiroStore.aprovarComoCEO(a.numero_cotacao);
-      else await window.AvalFinanceiroStore.aprovarComoOwner(a.numero_cotacao);
-      window.toast('Aprovação registrada.', 'success');
+      await window.AvalFinanceiroStore.aprovarComoCEO(a.numero_cotacao);
+      window.toast('Aprovação do CEO registrada.', 'success');
       onSaved();
     } catch (e) {
       window.toast('Erro: ' + (e.message || e), 'error');
     } finally {
-      setBusy(null);
+      setBusy(false);
     }
   };
 
+  const margemTxt = ceo && ceo.margem != null ? `${(ceo.margem * 100).toFixed(1).replace('.', ',')}%` : null;
+  const ajStatus = aj === undefined ? null : (aj ? aj.status : 'pendente');
+
   return (
-    <div className="row gap-2" style={{ flexWrap: 'wrap' }}>
-      {a.aprovacao_ceo_em
+    <div className="row gap-2" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
+      {a.aval_pagamento_confirmado
+        ? <Badge variant="success" dot>Aval de Pagamento OK</Badge>
+        : <Badge variant="warning" dot>Aval de Pagamento pendente (após o sinal)</Badge>}
+      {ajStatus === 'aprovado' && <Badge variant="success" dot>Aval Jurídico OK</Badge>}
+      {ajStatus === 'reprovado' && <Badge variant="danger" dot>Aval Jurídico reprovado</Badge>}
+      {ajStatus === 'pendente' && <Badge variant="warning" dot>Aval Jurídico pendente</Badge>}
+      {ceo && !ceo.precisa && <Badge variant="neutral" dot>CEO não precisa aprovar (margem {margemTxt})</Badge>}
+      {ceo && ceo.precisa && (a.aprovacao_ceo_em
         ? <Badge variant="success" dot>CEO aprovou · {new Date(a.aprovacao_ceo_em).toLocaleDateString('pt-BR')}</Badge>
-        : <Button variant="outline" size="sm" disabled={busy === 'ceo'} onClick={() => aprovar('ceo')}>{busy === 'ceo' ? 'Salvando…' : 'Aprovação CEO (Diego)'}</Button>}
-      {a.aprovacao_owner_em
-        ? <Badge variant="success" dot>Responsável aprovou · {new Date(a.aprovacao_owner_em).toLocaleDateString('pt-BR')}</Badge>
-        : <Button variant="outline" size="sm" disabled={!souOwner || busy === 'owner'} title={!souOwner ? 'Só o responsável pelo sistema pode dar esta aprovação.' : undefined} onClick={() => aprovar('owner')}>{busy === 'owner' ? 'Salvando…' : 'Minha aprovação'}</Button>}
+        : <Button variant="outline" size="sm" disabled={busy}
+            title={margemTxt ? `Margem ${margemTxt}, abaixo de 15%` : 'Margem desconhecida (sem precificação finalizada)'}
+            onClick={aprovarCeo}>
+            {busy ? 'Salvando…' : `Aprovação CEO (Diego) — margem ${margemTxt || 'desconhecida'}`}
+          </Button>)}
     </div>
   );
 }
@@ -250,7 +278,7 @@ function AvalFinanceiroPage({ setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Aval de Vendas</div>
           <h1 className="page-head__title">Aval Financeiro</h1>
-          <p className="page-head__sub">Confirmação do sinal e aprovações antes da compra no fornecedor · consulta de score e aval de venda são opcionais (não bloqueiam o contrato).</p>
+          <p className="page-head__sub">Abre junto com o Aval Jurídico quando o cliente aprova a proposta · a compra na China libera com Aval de Pagamento (depois do sinal) + Aval Jurídico — CEO só se a margem ficar abaixo de 15% · consulta de score e aval de venda são opcionais.</p>
         </div>
       </div>
 

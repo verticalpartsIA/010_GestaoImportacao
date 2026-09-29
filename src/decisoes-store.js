@@ -278,6 +278,16 @@
     return null;
   }
 
+  /* {precisa, margem} — o CEO só precisa decidir quando a margem efetiva
+     fica abaixo de LIMITE_MARGEM_SEM_CEO (ou é desconhecida). Usado também
+     por AvalFinanceiroStore.podeIniciarCompra e pela tela Aval Financeiro
+     (29/09: a mesma regra dos 15% vale pra compra na China). */
+  async function precisaAprovacaoCeo(numeroCotacao) {
+    if (numeroCotacao == null) return { precisa: true, margem: null };
+    const margem = await margemEfetivaDaCotacao(numeroCotacao);
+    return { precisa: margem == null || margem < LIMITE_MARGEM_SEM_CEO, margem };
+  }
+
   /* Envio de proposta exige Gestor Comercial (Regiane OU Guilherme) sempre
      e, quando a margem sai da regra acima, também o CEO — nesta ordem, o
      registro do CEO (quando existe) nasce bloqueado até o do Gestor ser
@@ -381,6 +391,11 @@
      passa de R$ 7 mil). Ver hook em proposta-store.js (sign()). */
   async function podeComprarEquipamento(numeroCotacao, contexto) {
     if (numeroCotacao == null) return { ok: true };
+    /* 29/09 — CEO só em discrepância: margem >= 15% não cria (nem exige) a
+       decisão de compra do CEO. Decisão já criada antes dessa regra fica
+       na Central, mas deixa de travar. */
+    const { precisa } = await precisaAprovacaoCeo(numeroCotacao);
+    if (!precisa) return { ok: true };
     let decisoes = await listarPorCotacao(numeroCotacao);
     let decisao = decisoes.find((d) => d.tipo === 'compra_equipamento_ceo');
     if (!decisao) {
@@ -392,10 +407,10 @@
   }
 
   /* Gate final antes do "start" real da compra (1ª P.I. criada pro
-     fornecedor): exige a aprovação do CEO acima E que a cadeia automática
-     de gatilhos já tenha liberado a compra — nó COMPRA_LIBERADA em
-     gatilhos-engine.js, que só nasce depois de Contrato assinado + Sinal
-     pago + Aval de Pagamento confirmado. Pedido explícito do usuário:
+     fornecedor): exige a aprovação do CEO acima (só quando a margem < 15%)
+     E que a cadeia automática de gatilhos já tenha liberado a compra — nó
+     COMPRA_LIBERADA em gatilhos-engine.js, que só nasce com Aval de
+     Pagamento + Aval Jurídico. Pedido explícito do usuário:
      aprovação do CEO é cedo (proposta aprovada), mas o start da compra em
      si só depois dos outros gatilhos. */
   async function verificarGateCompra(numeroCotacao) {
@@ -405,7 +420,7 @@
     if (!aprovacaoCeo.ok) return aprovacaoCeo;
     const { data } = await c.from('gatilhos').select('status').eq('numero_cotacao', numeroCotacao).eq('evento_key', 'COMPRA_LIBERADA').maybeSingle();
     if (!data || data.status !== 'ok') {
-      return { ok: false, motivo: 'CEO já aprovou a compra do equipamento, mas o início ainda depende da cadeia automática: Contrato assinado + Sinal pago + Aval de Pagamento confirmado (nó "Compra ao Fornecedor liberada").' };
+      return { ok: false, motivo: 'O início da compra ainda depende dos dois avais: Aval de Pagamento do Financeiro (depois do sinal) + Aval Jurídico (nó "Compra ao Fornecedor liberada").' };
     }
     return { ok: true };
   }
@@ -428,7 +443,7 @@
     listarPendentesParaMim, listarTodasEmAberto, listarPorCotacao, listarPorDossier, statusMontadorObra,
     aprovar, reprovar,
     podeEnviarProposta, podeContratarInstalador, podeMontadorEntrarObra,
-    podeComprarEquipamento, verificarGateCompra,
+    podeComprarEquipamento, verificarGateCompra, precisaAprovacaoCeo,
     criarDecisaoCompraVarejo, podePagarParcela,
   };
 }());
