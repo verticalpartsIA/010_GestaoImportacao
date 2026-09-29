@@ -30,6 +30,23 @@
     return `${moeda || 'USD'} ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
 
+  /* Taxas adicionais (Frete Local, Seguro, Taxa administrativa etc.).
+     tipo: '%' calcula sobre o subtotal dos itens; 'BRL'/'USD' é um valor
+     fixo nessa moeda. Uma taxa em moeda diferente da moeda da P.I. não é
+     somada automaticamente ao total (não há taxa de câmbio confiável aqui —
+     mesma cautela já usada em `cotacao_dolar_*` dos pagamentos). */
+  function calcTaxaValor(taxa, subtotalItens) {
+    const v = parseFloat(taxa.valor) || 0;
+    if (taxa.tipo === '%') return (subtotalItens || 0) * (v / 100);
+    return v;
+  }
+  function calcTotalTaxas(taxas, subtotalItens, moedaPI) {
+    return (taxas || []).reduce((s, t) => {
+      if (t.tipo === '%' || t.tipo === moedaPI) return s + calcTaxaValor(t, subtotalItens);
+      return s;
+    }, 0);
+  }
+
   async function listarTodas() {
     const c = sb(); if (!c) return [];
     const { data, error } = await c.from('pi_importacao').select('*').order('created_at', { ascending: false });
@@ -49,6 +66,12 @@
       const v = parseFloat(i.valor_unitario) || 0;
       return { ...i, quantidade: q, valor_unitario: v, valor_total: q * v };
     });
+    const moeda = form.moeda || 'USD';
+    const taxas = (form.taxas || []).map((t) => ({
+      tipo: t.tipo || '%', descricao: (t.descricao || '').trim(),
+      valor: t.valor !== '' && t.valor != null ? Number(t.valor) : null,
+    })).filter((t) => t.descricao || t.valor);
+    const subtotalItens = calcTotalGeral(itens);
     const cleanArr = (arr) => (arr || []).map((s) => (s || '').trim()).filter(Boolean);
     return {
       numero_pi: form.numero_pi, fornecedor: form.fornecedor || null, incoterms: form.incoterms || null,
@@ -56,8 +79,8 @@
       numero_cotacao: form.numero_cotacao !== '' && form.numero_cotacao != null ? Number(form.numero_cotacao) : null,
       numeros_serie: cleanArr(form.numeros_serie), categorias: cleanArr(form.categorias),
       embarque_id: form.embarque_id || null, data_abertura: form.data_abertura || null, data_prontidao: form.data_prontidao || null,
-      status: form.status || 'Em andamento', moeda: form.moeda || 'USD',
-      itens, valor_total: calcTotalGeral(itens),
+      status: form.status || 'Em andamento', moeda,
+      itens, valor_total: subtotalItens + calcTotalTaxas(taxas, subtotalItens, moeda),
       data_primeiro_pagamento: form.data_primeiro_pagamento || null,
       valor_primeiro_pagamento: form.valor_primeiro_pagamento !== '' && form.valor_primeiro_pagamento != null ? Number(form.valor_primeiro_pagamento) : null,
       cotacao_dolar_primeiro_pagamento: form.cotacao_dolar_primeiro_pagamento !== '' && form.cotacao_dolar_primeiro_pagamento != null ? Number(form.cotacao_dolar_primeiro_pagamento) : null,
@@ -68,7 +91,7 @@
         data: p.data || null, valor: p.valor !== '' && p.valor != null ? Number(p.valor) : null,
         cotacao_dolar: p.cotacao_dolar !== '' && p.cotacao_dolar != null ? Number(p.cotacao_dolar) : null,
       })).filter((p) => p.data || p.valor),
-      producao: form.producao || {}, observacoes: form.observacoes || null,
+      taxas, producao: form.producao || {}, observacoes: form.observacoes || null,
     };
   }
 
@@ -135,5 +158,6 @@
     listarTodas, obter, criar, atualizar, remover, vincularEmbarque,
     uploadAnexoProducao, removerAnexoProducao,
     calcItemTotal, calcTotalGeral, somaPagamentosAdicionais, fmtMoeda,
+    calcTaxaValor, calcTotalTaxas,
   };
 }());
