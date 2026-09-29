@@ -136,8 +136,17 @@ Deno.serve(async (req: Request) => {
     } as any);
     await client.close();
 
+    // 29/09 — achado real: Contrato de Venda/Instalador sem Proposta de
+    // origem não tem numeroCotacao (número não bate no formato que o
+    // read-inbox reconhece), mas ainda tem referenciaId (o próprio id do
+    // contrato) — o vínculo por Message-ID (camada 'certo' do read-inbox)
+    // não depende de numeroCotacao nenhum, só precisa da linha de saída
+    // existir. Sem este `|| referenciaId != null`, esses envios nunca
+    // eram gravados em emails_projeto e a resposta nunca tinha chance de
+    // vínculo algum, nem por Message-ID. Mesma lógica pro bloco de
+    // persistência mais abaixo — mantenha as duas condições iguais.
     let anexosSalvos: { filename: string; content_type: string; size: number; path: string }[] = [];
-    if (numeroCotacao != null && anexos.length) {
+    if ((numeroCotacao != null || referenciaId != null) && anexos.length) {
       try {
         const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
         const grupoId = crypto.randomUUID();
@@ -163,7 +172,7 @@ Deno.serve(async (req: Request) => {
     // enviado de verdade quando chega aqui), mas agora reporta o problema
     // pro chamador via avisoPersistencia em vez de engolir silenciosamente.
     let avisoPersistencia: string | null = null;
-    if (numeroCotacao != null) {
+    if (numeroCotacao != null || referenciaId != null) {
       try {
         const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
         const { error: insertErr } = await supabase.from("emails_projeto").insert({

@@ -131,6 +131,11 @@ function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
     <div className="cv-step">
       <CVStepHeader kicker="Passo 1 — Cadastro" title="Dados do Comprador" desc="A VENDEDORA (Vertical Parts) já está fixada. Preencha a contraparte."/>
       <CVSeletorProposta masterId={form.masterId} onSelect={onSelecionarProposta}/>
+      {!form.masterId && (
+        <div className="cv-cond-alert" style={{ marginBottom: 16 }}>
+          ⚠️ Sem Proposta vinculada: se o comprador responder por e-mail, essa resposta não vai aparecer conectada a este contrato no Inbox (o vínculo automático depende do Nº da Cotação, que só existe quando o contrato nasce de uma Proposta). Se possível, selecione a Proposta de origem acima antes de continuar.
+        </div>
+      )}
       <div className="cv-contratante-note">
         <span>VENDEDORA (fixo)</span>
         <strong>VERTICAL PARTS LTDA-ME</strong>
@@ -348,18 +353,22 @@ function CVSendModal({ record, onClose, onSent }) {
       } else if (channel === 'email') {
         /* 29/09 — mesmo padrão já aplicado em RFQ (formulario-elevador.jsx)
            e Proposta (proposta-editor.jsx): tenta send-email (SMTP direto)
-           primeiro, com numeroCotacao/referenciaTipo/referenciaId pra ficar
-           em Enviados/Linha do Tempo e o read-inbox conseguir casar a
-           resposta do cliente de volta a este contrato. Cai pro mailto:
-           (como sempre foi) só se o envio direto falhar — nunca deixa o
-           vendedor sem alternativa. numeroCotacao vem de numero_documento
-           (VPCV-0950 → 950); contrato sem Proposta de origem (formato
-           VPVE...) não tem número pra extrair — cai direto pro mailto:,
-           sem tentar send-email com numeroCotacao null. */
+           primeiro, com referenciaTipo/referenciaId (+ numeroCotacao quando
+           existir) pra ficar em Enviados/Linha do Tempo e o read-inbox
+           conseguir casar a resposta do cliente de volta a este contrato.
+           Cai pro mailto: (como sempre foi) só se o envio direto falhar —
+           nunca deixa o vendedor sem alternativa.
+           29/09 (2) — achado real corrigido: contrato sem Proposta de
+           origem (numero_documento em formato VPVE..., sem número pra
+           extrair) antes pulava o send-email inteiro — nunca tentava
+           registrar nada. `send-email`/`read-inbox` agora aceitam vínculo
+           só por `referenciaId` (sem numeroCotacao) — o vínculo por
+           Message-ID não depende de Nº de Cotação nenhum. Sempre tenta
+           send-email; numeroCotacao null não é mais motivo pra pular. */
         const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(record.numero_documento) ?? null;
         const sb = window.__VP_SB && window.__VP_SB.sb;
         let enviouDireto = false;
-        if (sb && numeroCotacao != null) {
+        if (sb) {
           const { data: emailData, error: emailError } = await sb.functions.invoke('send-email', {
             body: {
               to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
@@ -375,7 +384,7 @@ function CVSendModal({ record, onClose, onSent }) {
         }
         if (!enviouDireto) {
           window.open(window.CVStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
-          window.toast?.('Não foi possível enviar direto (envio automático falhou ou este contrato não tem Nº de Cotação) — abrindo seu e-mail padrão para envio manual. Esse envio não ficará registrado em Enviados/Linha do Tempo.', 'warning');
+          window.toast?.('Não foi possível enviar direto (envio automático falhou) — abrindo seu e-mail padrão para envio manual. Esse envio não ficará registrado em Enviados/Linha do Tempo.', 'warning');
         }
       }
       setSent(true);

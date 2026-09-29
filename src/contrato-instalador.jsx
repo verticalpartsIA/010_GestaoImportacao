@@ -365,6 +365,9 @@ function CIStepObjeto({ s, set }) {
       <CIStepHeader kicker="Passo 3 — Objeto" title="Objeto do contrato" desc="Defina o equipamento e o escopo. Os campos mudam conforme o tipo selecionado." />
       <CISeletorObras dossierIds={s.dossierIds} onToggle={toggleDossier} />
       <CISeletorProposta propostaId={s.propostaId} ativosIndices={s.ativosIndices} onSelecionarProposta={aplicarProposta} onToggleAtivo={toggleAtivo}/>
+      {!s.propostaId && (
+        <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Sem Proposta vinculada: se o instalador responder por e-mail, essa resposta não vai aparecer conectada a este contrato no Inbox (o vínculo automático depende do Nº da Cotação, que só existe quando o contrato nasce de uma Proposta). Se possível, selecione a Proposta de origem acima antes de continuar.</div>
+      )}
       <div className="ci-field-group">
         <h3 className="ci-group-title">Equipamento</h3>
         <CIRadioCards value={s.equipamento} onChange={(v) => set('equipamento', v)} options={window.CI.EQUIPAMENTOS} columns={3} />
@@ -679,17 +682,22 @@ function CISendModal({ record, onClose, onSent }) {
         window.open(window.CIStore.whatsAppHref(contact, message), '_blank');
       } else if (channel === 'email') {
         /* 29/09 — mesmo padrão já aplicado em RFQ, Proposta e Contrato de
-           Venda: tenta send-email (SMTP direto) primeiro, com numeroCotacao
-           (já resolvido acima pro gate de alçada)/referenciaTipo/
-           referenciaId pra ficar em Enviados/Linha do Tempo e o read-inbox
-           conseguir casar a resposta do instalador de volta a este
-           contrato. Cai pro mailto: (como sempre foi) só se o envio direto
-           falhar — nunca deixa o vendedor sem alternativa. Contrato sem
-           Proposta/Formulário de origem (numeroCotacao null) cai direto
-           pro mailto:, sem tentar send-email sem número. */
+           Venda: tenta send-email (SMTP direto) primeiro, com referenciaTipo/
+           referenciaId (+ numeroCotacao quando existir, já resolvido acima
+           pro gate de alçada) pra ficar em Enviados/Linha do Tempo e o
+           read-inbox conseguir casar a resposta do instalador de volta a
+           este contrato. Cai pro mailto: (como sempre foi) só se o envio
+           direto falhar — nunca deixa o vendedor sem alternativa.
+           29/09 (2) — achado real corrigido: contrato sem Proposta/
+           Formulário de origem (numeroCotacao null) antes pulava o
+           send-email inteiro — nunca tentava registrar nada. `send-email`/
+           `read-inbox` agora aceitam vínculo só por `referenciaId` (sem
+           numeroCotacao) — o vínculo por Message-ID não depende de Nº de
+           Cotação nenhum. Sempre tenta send-email; numeroCotacao null não
+           é mais motivo pra pular. */
         const sb = window.__VP_SB && window.__VP_SB.sb;
         let enviouDireto = false;
-        if (sb && numeroCotacao != null) {
+        if (sb) {
           const { data: emailData, error: emailError } = await sb.functions.invoke('send-email', {
             body: {
               to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
@@ -705,7 +713,7 @@ function CISendModal({ record, onClose, onSent }) {
         }
         if (!enviouDireto) {
           window.open(window.CIStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
-          window.toast?.('Não foi possível enviar direto (envio automático falhou ou este contrato não tem Nº de Cotação) — abrindo seu e-mail padrão para envio manual. Esse envio não ficará registrado em Enviados/Linha do Tempo.', 'warning');
+          window.toast?.('Não foi possível enviar direto (envio automático falhou) — abrindo seu e-mail padrão para envio manual. Esse envio não ficará registrado em Enviados/Linha do Tempo.', 'warning');
         }
       }
       setSent(true);
