@@ -218,6 +218,13 @@
          Valor total do contrato (Passo 5), nunca lido pelo documento em si. */
       ativosSnapshot: [],
       dossierIds: [],  // Dossiê(s) reais cobertos (pagamento por marco — Trilha B)
+      /* Nº do contrato nasce dos equipamentos (29/09): numeroContratoBase =
+         "VPNI-0955" (cotação) ou "VPNI-<nº de série/projeto>" (avulso);
+         numeroContrato = base + sufixo -2/-3 se já existir outro contrato
+         com a mesma base (ex.: 2 montadores na mesma cotação). Fixo depois
+         de nascer. equipamentosManuais = nº de série / Master ID digitados
+         (obrigatório no avulso; opcional junto de uma Proposta). */
+      numeroCotacao: null, numeroContrato: null, numeroContratoBase: null, equipamentosManuais: [],
       c_razao:'', c_cnpj:'', c_rua:'', c_numero:'', c_bairro:'', c_cidade:'', c_estado:'', c_cep:'',
       r_nome:'', r_nacionalidade:'brasileiro(a)', r_estadoCivil:'', r_profissao:'',
       r_rg:'', r_cpf:'', r_mesmoEndereco: true,
@@ -234,6 +241,40 @@
       dataMes: MESES[hoje.getMonth()],
       dataAno: String(hoje.getFullYear()),
     };
+  }
+
+  /* ---------- Equipamentos e Nº do contrato ---------- */
+  /* Equipamentos cobertos: ativos marcados da Proposta (identificador
+     VPEL-EL0955-1…) + nº de série / projeto digitados. Sem duplicata. */
+  function equipamentosDoContrato(s) {
+    const marcados = (s.ativosSnapshot || [])
+      .filter((a) => (s.ativosIndices || []).includes(a.indice))
+      .map((a) => String(a.identificador || a.codigo || '').trim());
+    const manuais = (s.equipamentosManuais || []).map((v) => String(v).trim());
+    const out = [];
+    marcados.concat(manuais).forEach((v) => { if (v && !out.includes(v)) out.push(v); });
+    return out;
+  }
+  function slugEquipamento(v) {
+    return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase().trim().replace(/\s+/g, '-').replace(/[^A-Z0-9._-]/g, '').replace(/^-+|-+$/g, '');
+  }
+  /* Base do nº do contrato: com Proposta → VPNI-<Nº da cotação, 4 dígitos>;
+     sem Proposta → VPNI-<1º nº de série/projeto informado>. null = ainda
+     não dá pra nascer (nenhum equipamento mencionado). */
+  function numeroBaseContrato(s) {
+    if (!equipamentosDoContrato(s).length) return null;
+    if (s.numeroCotacao != null && s.numeroCotacao !== '') return 'VPNI-' + String(s.numeroCotacao).padStart(4, '0');
+    const primeiro = (s.equipamentosManuais || []).map(slugEquipamento).find(Boolean);
+    return primeiro ? 'VPNI-' + primeiro : null;
+  }
+  /* 1º livre entre base, base-2, base-3… dado o conjunto de nºs já usados. */
+  function proximoNumeroLivre(base, usados) {
+    const set = usados instanceof Set ? usados : new Set(usados || []);
+    if (!set.has(base)) return base;
+    let n = 2;
+    while (set.has(base + '-' + n)) n++;
+    return base + '-' + n;
   }
 
   /* ---------- Regras condicionais ---------- */
@@ -406,6 +447,8 @@
       { n:'1.',  text:`O objeto do presente contrato consiste na ${objetoFrase(s)}, referente aos equipamentos e condições a seguir:` },
       { n:'1.1', text: escopoFrase(s) },
     ];
+    const equips = equipamentosDoContrato(s);
+    if (equips.length) objetoItems.push({ n:'1.1.1', text:`Equipamento${equips.length > 1 ? 's' : ''} objeto deste contrato (nº de série / identificação): ${equips.join(', ')}.` });
     if (s.descricaoServicos && s.descricaoServicos.trim()) objetoItems.push({ n:'1.2', text:'Descrição dos serviços: ' + s.descricaoServicos.trim() });
     else objetoItems.push({ n:'1.2', text:'Descrição dos serviços: (detalhar os serviços a executar)' });
     objetoItems.push({ n:'1.3', text:'Local do serviço: ' + vBlank(s.localServico, '(endereço completo de onde será realizado o serviço)') });
@@ -583,6 +626,7 @@
     onlyDigits, maskCNPJ, maskCPF, maskCEP, maskRG, maskMoeda, moedaParaNumero, fmtMoeda,
     isCNPJValid, isCPFValid, isCEPValid, isCNPJContratante,
     dividirEmParcelas, inteiroExtensoGen, logradouro,
+    equipamentosDoContrato, slugEquipamento, numeroBaseContrato, proximoNumeroLivre,
     defaultState, pad2,
     isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals,
     buildContract,

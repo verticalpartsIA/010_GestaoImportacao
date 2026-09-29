@@ -51,3 +51,30 @@ test('logradouro — só prefixa "Rua" quando falta o tipo', () => {
   assert.equal(CI.logradouro('das Flores'), 'Rua das Flores');
   assert.equal(CI.logradouro(''), 'Rua XXX');
 });
+
+test('Nº do contrato — nasce dos equipamentos (cotação ou nº de série)', () => {
+  const s = CI.defaultState();
+  assert.equal(CI.numeroBaseContrato(s), null); // nenhum equipamento ainda
+  s.equipamentosManuais = ['sn 12/34'];
+  assert.equal(CI.numeroBaseContrato(s), 'VPNI-SN-1234'); // avulso: 1º nº de série
+  s.numeroCotacao = 955;
+  assert.equal(CI.numeroBaseContrato(s), 'VPNI-0955'); // com Proposta: Nº da cotação
+});
+
+test('Nº do contrato — 2ª empresa na mesma cotação ganha sufixo', () => {
+  assert.equal(CI.proximoNumeroLivre('VPNI-0955', []), 'VPNI-0955');
+  assert.equal(CI.proximoNumeroLivre('VPNI-0955', ['VPNI-0955']), 'VPNI-0955-2');
+  assert.equal(CI.proximoNumeroLivre('VPNI-0955', ['VPNI-0955', 'VPNI-0955-2']), 'VPNI-0955-3');
+  assert.equal(CI.proximoNumeroLivre('VPNI-0955', ['VPNI-09551']), 'VPNI-0955');
+});
+
+test('equipamentos — ativos marcados da Proposta + manuais, sem duplicata, e cláusula 1.1.1', () => {
+  const s = CI.defaultState();
+  s.ativosSnapshot = [{ indice: 1, identificador: 'VPEL-EL0955-1' }, { indice: 2, identificador: 'VPEL-EL0955-2' }, { indice: 3, identificador: 'VPEL-EL0955-3' }];
+  s.ativosIndices = [1, 3];
+  s.equipamentosManuais = ['SN-77', 'VPEL-EL0955-1'];
+  assert.deepEqual(CI.equipamentosDoContrato(s), ['VPEL-EL0955-1', 'VPEL-EL0955-3', 'SN-77']);
+  const it = CI.buildContract(s, 'VPNI-0955').clauses[0].items.find((i) => i.n === '1.1.1');
+  assert.match(it.text, /Equipamentos objeto deste contrato.*VPEL-EL0955-1, VPEL-EL0955-3, SN-77\./);
+  assert.equal(CI.buildContract(CI.defaultState(), 'X').clauses[0].items.some((i) => i.n === '1.1.1'), false);
+});
