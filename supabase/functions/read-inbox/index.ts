@@ -318,16 +318,28 @@ Deno.serve(async (req: Request) => {
         // numero_cotacao — só dava pra saber a cotação, nunca quem respondeu.
         let referenciaIdHerdada: string | null = null;
         let referenciaTipoHerdada: string | null = null;
+        // 29/09 — achado real: Contrato de Venda/Instalador sem Proposta de
+        // origem não tem numero_cotacao (o número gerado, VPVE.../VPNI...,
+        // não bate no formato que extrairNumeroCotacaoDoAssunto reconhece),
+        // mas ainda tem referencia_id (o próprio id do contrato) — o vínculo
+        // por Message-ID não depende de numero_cotacao nenhum, só de achar a
+        // linha de saída. Sem o `|| pai.referencia_id != null`, essa resposta
+        // nunca ganhava vinculo_confianca nenhum, mesmo o Message-ID batendo
+        // exato — ficava indistinguível de um e-mail nunca visto antes.
         if (referenciaId) {
           const { data: pai } = await supabase.from("emails_projeto")
             .select("numero_cotacao, referencia_id, referencia_tipo").eq("message_id", referenciaId).eq("direcao", "saida").maybeSingle();
-          if (pai && pai.numero_cotacao != null) {
-            numeroCotacao = pai.numero_cotacao; vinculo = "certo";
+          if (pai && (pai.numero_cotacao != null || pai.referencia_id != null)) {
+            numeroCotacao = pai.numero_cotacao ?? null; vinculo = "certo";
             referenciaIdHerdada = pai.referencia_id ?? null;
             referenciaTipoHerdada = pai.referencia_tipo ?? null;
           }
         }
-        if (numeroCotacao == null) {
+        // Camada 'provavel' só entra se a 'certo' acima não achou nada —
+        // checar `vinculo == null` (não `numeroCotacao == null`) pra não
+        // sobrescrever um vínculo 'certo' sem numero_cotacao (caso acima)
+        // com um palpite por regex de assunto.
+        if (vinculo == null) {
           const candidato = extrairNumeroCotacaoDoAssunto(subject);
           if (candidato != null) {
             const { data: existe } = await supabase.from("formularios_elevador")
