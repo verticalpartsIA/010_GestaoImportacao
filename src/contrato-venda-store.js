@@ -170,10 +170,26 @@
   async function garantirDossier(formState) {
     if (formState.dossier_id) return formState.dossier_id;
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const localObra = String(formState.localObra || '').trim();
-    const m = localObra.match(/^(.*),\s*([A-Za-z]{2})$/);
-    const city = m ? m[1].trim() : (localObra || null);
-    const state = m ? m[2].toUpperCase() : null;
+    /* Reaproveita o Dossiê que já existe pra esta cotação — a assinatura da
+       Proposta já cria um (DossierStore.criarDeProposta, idempotente por
+       numero_cotacao). Antes esta função só olhava formState.dossier_id (sempre
+       null no assistente), então criava um SEGUNDO dossiê pra mesma cotação, o
+       que quebra buscas por numero_cotacao (ex.: Linha do Tempo). */
+    const numeroCotacaoExistente = window.MasterIdEngine?.parseNumeroCotacao?.(formState.masterId) ?? null;
+    if (numeroCotacaoExistente != null) {
+      const { data: existentes } = await c.from('dossier_obra').select('id')
+        .eq('numero_cotacao', numeroCotacaoExistente).order('created_at', { ascending: true }).limit(1);
+      if (existentes && existentes.length) return existentes[0].id;
+    }
+    /* Cidade/UF: preferem os campos estruturados herdados da obra; senão
+       extrai do texto "rua, nº, bairro, cidade, UF" — só o ÚLTIMO trecho
+       antes da UF é a cidade (antes a rua e o número iam junto pro campo
+       cidade). */
+    const localObra = String(formState.localObra || '').replace(/,?\s*CEP\b.*$/i, '').trim();
+    const m = localObra.match(/^(.*?)[\s,/-]+([A-Za-z]{2})$/);
+    const cidadeTexto = m ? m[1].split(',').pop().trim() : (localObra || null);
+    const city = (formState.obraCidade && String(formState.obraCidade).trim()) || cidadeTexto || null;
+    const state = ((formState.obraUf && String(formState.obraUf).trim()) || (m ? m[2] : '') || '').toUpperCase() || null;
     const equipMap = { ELEVADOR: 'elevador', ESCADA: 'escada', ESTEIRA: 'esteira' };
     const id = 'DOS-' + Date.now().toString(36).toUpperCase();
     // numero_cotacao é a chave que o resto da esteira usa pra correlacionar
