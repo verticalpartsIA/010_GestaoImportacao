@@ -98,7 +98,8 @@
     rascunho:    { id:'rascunho',    label:'Rascunho',    icon:'📝', tone:'gray',   order:0 },
     enviado:     { id:'enviado',     label:'Enviado',     icon:'📤', tone:'blue',   order:1 },
     visualizado: { id:'visualizado', label:'Visualizado', icon:'👁',  tone:'yellow', order:2 },
-    assinado:    { id:'assinado',    label:'Assinado',    icon:'✍',  tone:'green',  order:3 },
+    aguardando_signatarios: { id:'aguardando_signatarios', label:'Aguardando outras assinaturas', icon:'✍', tone:'yellow', order:3 },
+    assinado:    { id:'assinado',    label:'Assinado',    icon:'✍',  tone:'green',  order:4 },
     expirado:    { id:'expirado',    label:'Expirado',    icon:'⚠',  tone:'red',    order:4 },
     recusado:    { id:'recusado',    label:'Recusado',    icon:'✕',  tone:'red',    order:4 },
   };
@@ -112,6 +113,7 @@
         enviado:     { acao: 'enviou p/ assinatura' },
         visualizado: { acao: 'contraparte visualizou', ator: contraparte, setor: 'externo' },
         assinado:    { acao: 'contrato assinado', ator: (meta && meta.signerName) || contraparte, setor: 'externo' },
+        assinado_representante: { acao: 'representante assinou — aguardando outros signatários (sócios/jurídico)', ator: (meta && meta.signerName) || contraparte, setor: 'externo' },
         recusado:    { acao: 'assinatura recusada', ator: contraparte, setor: 'externo' },
         expirado:    { acao: 'link de assinatura expirou', ator: 'Sistema', setor: 'sistema' },
       };
@@ -130,6 +132,7 @@
         enviado:     { level: 'info',    title: `Contrato venda ${num} enviado`,                 sub: `Para ${titularNome} · canal ${meta && meta.channel ? (meta.channel === 'whatsapp' ? 'WhatsApp' : meta.channel === 'email' ? 'E-mail' : 'Link') : '—'}` },
         visualizado: { level: 'warning', title: `Contrato venda ${num} foi VISUALIZADO`,         sub: `Aberto por ${titularNome} · ${meta && meta.ip ? 'IP ' + meta.ip + ' · ' : ''}${fmtDateTime(Date.now())}` },
         assinado:    { level: 'info',    title: `Contrato venda ${num} ASSINADO`,                sub: `Por ${meta && meta.signerName ? meta.signerName : titularNome} · ${meta && meta.ip ? 'IP ' + meta.ip : ''}` },
+        assinado_representante: { level: 'info', title: `Contrato venda ${num} — representante assinou`, sub: `Aguardando outros signatários (sócios/jurídico) para concluir · ${meta && meta.signerName ? meta.signerName : titularNome}` },
         recusado:    { level: 'danger',  title: `Contrato venda ${num} foi RECUSADO`,            sub: `Recusado pelo destinatário em ${fmtDateTime(Date.now())}` },
         expirado:    { level: 'warning', title: `Contrato venda ${num} EXPIROU`,                 sub: `Link aguardando assinatura por 7 dias sem retorno` },
       };
@@ -387,6 +390,30 @@
     return updated;
   }
 
+  /* Recalcula D0/entrega a partir da assinatura — usado nos dois lugares
+     que podem finalizar o contrato como 'assinado' de verdade (markSigned
+     quando não há signatário extra pendente, e
+     tentarFinalizarAposSignatarioExtra quando o último deles assina). Só
+     monta o formState — quem grava é o call-site, cada um com seu próprio
+     log/patch, pra não duplicar entrada de log num caminho que só precisa
+     de 1 gravação (ver markSigned). */
+  function _formStateFinalizado(cur, now) {
+    const formState = { ...(cur.form_state || {}) };
+    if (!formState.d0_assinatura) formState.d0_assinatura = now.toISOString().slice(0, 10);
+    const d0 = window.CV.calcularD0(formState.d0_entrada, formState.d0_assinatura, formState.d0_projeto);
+    formState.d0 = d0;
+    formState.entrega_prevista = d0 ? window.CV.addDias(d0, 120) : null;
+    return formState;
+  }
+
+  /* Signatários adicionais (sócios/jurídico do Comprador, pedido do
+     usuário — ver contrato-venda-signatarios-store.js) — opcional. Um
+     contrato sem nenhum signatário adicional cadastrado se comporta
+     EXATAMENTE como antes desta feature: o representante assinando já
+     fecha tudo numa única gravação. Só quando existem signatários extras
+     é que o representante assinar primeiro deixa o contrato em
+     'aguardando_signatarios' até o último deles também assinar (ver
+     tentarFinalizarAposSignatarioExtra abaixo). */
   async function markSigned(token, sig) {
     const c = sb();
     const cur = await getByToken(token);
@@ -408,24 +435,62 @@
     const log = (cur.log || []).slice();
     log.push({ status:'assinado', at: now.toISOString(), meta:{ ip, ua, hash } });
 
-    // ISSUE #6: assinatura é um dos 3 marcos do D0 — preenche sozinho aqui
-    // (evento real), sem precisar de entrada manual, e recalcula D0/entrega.
-    const formState = { ...(cur.form_state || {}) };
-    if (!formState.d0_assinatura) formState.d0_assinatura = now.toISOString().slice(0, 10);
-    const d0 = window.CV.calcularD0(formState.d0_entrada, formState.d0_assinatura, formState.d0_projeto);
-    formState.d0 = d0;
-    formState.entrega_prevista = d0 ? window.CV.addDias(d0, 120) : null;
+    const pendentesExtras = window.CVSignatarioStore ? await window.CVSignatarioStore.contarPendentes(cur.id) : 0;
+    const statusFinal = pendentesExtras > 0 ? 'aguardando_signatarios' : 'assinado';
 
-    const patch = {
-      status: 'assinado',
-      signed_at: now.toISOString(),
-      audit, log,
-      form_state: formState,
-      atualizado_em: now.toISOString(),
-    };
+    let patch = { audit, log, status: statusFinal, atualizado_em: now.toISOString() };
+    if (statusFinal === 'assinado') {
+      // ISSUE #6: assinatura é um dos 3 marcos do D0 — preenche sozinho
+      // (evento real), sem precisar de entrada manual, e recalcula D0/entrega.
+      patch.form_state = _formStateFinalizado(cur, now);
+      patch.signed_at = now.toISOString();
+    }
     await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
     const updated = { ...cur, ...patch };
-    await pushNotification(updated, 'assinado', { ip, signerName: sig.signerName });
+
+    if (statusFinal === 'assinado') {
+      await pushNotification(updated, 'assinado', { ip, signerName: sig.signerName });
+      if (window.EventosFluxo) {
+        const numeroCotacao = await numeroCotacaoDaProposta(updated.proposta_id);
+        window.EventosFluxo.registrar({
+          evento: 'CONTRATO_VENDA_ASSINADO', numeroCotacao,
+          alvoLabel: `${updated.comprador_razao_social || ''} · ${updated.numero_documento || ''}`, alvoId: updated.id,
+        });
+      }
+    } else {
+      await pushNotification(updated, 'assinado_representante', { ip, signerName: sig.signerName });
+      if (window.EventosFluxo) {
+        const numeroCotacao = await numeroCotacaoDaProposta(updated.proposta_id);
+        window.EventosFluxo.registrar({
+          evento: 'CONTRATO_VENDA_REPRESENTANTE_ASSINOU', numeroCotacao,
+          alvoLabel: `${updated.comprador_razao_social || ''} · ${updated.numero_documento || ''}`, alvoId: updated.id,
+        });
+      }
+    }
+    return updated;
+  }
+
+  /* Chamado por CVSignatarioStore.markSigned depois de gravar a assinatura
+     de um signatário extra — só finaliza o contrato quando o representante
+     JÁ tiver assinado (audit.signedAt) e não sobrar mais ninguém pendente;
+     idempotente (não faz nada se o contrato já estiver 'assinado'). */
+  async function tentarFinalizarAposSignatarioExtra(contratoId) {
+    const c = sb();
+    const cur = await getById(contratoId);
+    if (!cur) return null;
+    if (cur.status === 'assinado') return cur;
+    if (!cur.audit || !cur.audit.signedAt) return cur; // representante ainda não assinou
+    const pendentes = window.CVSignatarioStore ? await window.CVSignatarioStore.contarPendentes(contratoId) : 0;
+    if (pendentes > 0) return cur;
+
+    const now = new Date();
+    const formState = _formStateFinalizado(cur, now);
+    const log = (cur.log || []).slice();
+    log.push({ status: 'assinado', at: now.toISOString(), meta: { ultimoSignatario: true } });
+    const patch = { status: 'assinado', signed_at: now.toISOString(), form_state: formState, log, atualizado_em: now.toISOString() };
+    await c.from('contratos_venda_equipamentos').update(patch).eq('id', contratoId);
+    const updated = { ...cur, ...patch };
+    await pushNotification(updated, 'assinado', {});
     if (window.EventosFluxo) {
       const numeroCotacao = await numeroCotacaoDaProposta(updated.proposta_id);
       window.EventosFluxo.registrar({
@@ -568,8 +633,10 @@
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
     listAll, listarPropostasAguardandoContrato, garantirDossier, getById, getByToken,
+    numeroCotacaoDaProposta,
     createDraft, updateFormState,
     markSent, markViewed, markSigned, refuse,
+    tentarFinalizarAposSignatarioExtra,
     uploadDesenhoInstalacao, enviarDesenhoInstalacao,
     sweepExpired, remove,
     getPublicIP, deviceLabel, sha256Hex,

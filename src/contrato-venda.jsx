@@ -811,6 +811,114 @@ function CVD0Section({ rec, onSaved }) {
   );
 }
 
+const CVS_STATUS = {
+  pendente:    { label: 'Pendente',     tone: 'gray' },
+  enviado:     { label: 'Enviado',      tone: 'blue' },
+  visualizado: { label: 'Visualizado',  tone: 'yellow' },
+  assinado:    { label: 'Assinado',     tone: 'green' },
+  recusado:    { label: 'Recusado',     tone: 'red' },
+};
+function CVSBadge({ status }) {
+  const st = CVS_STATUS[status] || CVS_STATUS.pendente;
+  return <span className={'ci-badge ci-badge--' + st.tone}><span className="ci-badge-dot"></span>{st.label}</span>;
+}
+
+/* Signatários adicionais (sócios/jurídico do Comprador) — pedido explícito
+   do usuário: além do representante principal (que continua no fluxo já
+   existente, intocado), o Comprador pode exigir que sócios e/ou o
+   jurídico dele também assinem. Cada um tem seu próprio link (1 token por
+   pessoa); o contrato só vira "Assinado" de verdade quando todos aqui +
+   o representante tiverem assinado — ver contrato-venda-store.js
+   (markSigned/tentarFinalizarAposSignatarioExtra). Opcional: um contrato
+   sem nenhum signatário adicional cadastrado se comporta exatamente como
+   antes desta feature. */
+function CVSignatariosSection({ rec, onSaved }) {
+  const [lista, setLista] = _cvUS(null);
+  const [novo, setNovo] = _cvUS({ papel: '', nome: '', email: '', telefone: '' });
+  const [adding, setAdding] = _cvUS(false);
+  const [busyId, setBusyId] = _cvUS(null);
+
+  const carregar = _cvUC(async () => {
+    if (!window.CVSignatarioStore) return;
+    const l = await window.CVSignatarioStore.listarPorContrato(rec.id);
+    setLista(l);
+  }, [rec.id]);
+  _cvUE(() => { carregar(); }, [carregar]);
+
+  if (!window.CVSignatarioStore) return null;
+
+  const adicionar = async () => {
+    setAdding(true);
+    try {
+      await window.CVSignatarioStore.adicionar(rec.id, novo, (lista || []).length);
+      setNovo({ papel: '', nome: '', email: '', telefone: '' });
+      await carregar();
+      window.toast?.('Signatário adicionado.', 'success');
+    } catch (err) {
+      window.toast?.('Erro ao adicionar: ' + (err.message || err), 'error');
+    } finally {
+      setAdding(false);
+    }
+  };
+
+  const remover = async (s) => {
+    if (!window.confirm(`Remover ${s.nome} (${s.papel}) da lista de signatários?`)) return;
+    await window.CVSignatarioStore.remover(s.id);
+    await carregar();
+    onSaved && onSaved();
+  };
+
+  const enviar = async (s, canal) => {
+    setBusyId(s.id);
+    try {
+      const url = window.CVSignatarioStore.signUrl(s.token);
+      const msg = `Olá ${s.nome}, segue o link para assinatura do Contrato ${rec.numero_documento} (${s.papel}) — VerticalParts:\n${url}`;
+      if (canal === 'whatsapp') window.open(window.CVStore.whatsAppHref(s.telefone, msg), '_blank');
+      if (canal === 'email') window.open(window.CVStore.mailtoHref(s.email, `Assinatura — Contrato ${rec.numero_documento}`, msg), '_blank');
+      if (canal === 'link') { try { await navigator.clipboard.writeText(url); } catch (e) {} window.toast?.('Link copiado.', 'success'); }
+      await window.CVSignatarioStore.marcarEnviado(s.id, canal, { contact: canal === 'whatsapp' ? s.telefone : s.email });
+      await carregar();
+    } catch (err) {
+      window.toast?.('Erro ao enviar: ' + (err.message || err), 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  return (
+    <div className="ci-drawer-sec">
+      <h3 className="ci-drawer-sec-title">Signatários adicionais (sócios/jurídico do Comprador)</h3>
+      <p className="cv-field-hint" style={{ marginBottom: 10, display: 'block' }}>
+        Opcional — além do representante acima, adicione quem mais precisa assinar este contrato. O contrato só fica "Assinado" quando todos aqui + o representante tiverem assinado.
+      </p>
+      {(lista || []).map((s) => (
+        <div key={s.id} className="ci-audit-row" style={{ alignItems: 'center', gap: 8 }}>
+          <span className="k">{s.papel} — {s.nome}</span>
+          <span className="v" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <CVSBadge status={s.status}/>
+            {s.status !== 'assinado' && (
+              <>
+                <button className="ci-mini-btn" disabled={busyId === s.id || !s.telefone} onClick={() => enviar(s, 'whatsapp')}>WhatsApp</button>
+                <button className="ci-mini-btn" disabled={busyId === s.id || !s.email} onClick={() => enviar(s, 'email')}>E-mail</button>
+                <button className="ci-mini-btn" disabled={busyId === s.id} onClick={() => enviar(s, 'link')}>Copiar link</button>
+                <button className="ci-mini-btn" onClick={() => remover(s)}>Remover</button>
+              </>
+            )}
+          </span>
+        </div>
+      ))}
+      {(!lista || lista.length === 0) && <div className="small muted" style={{ marginBottom: 8 }}>Nenhum signatário adicional.</div>}
+      <div className="cv-grid" style={{ marginTop: 10 }}>
+        <CVField label="Papel" value={novo.papel} onChange={(v) => setNovo({ ...novo, papel: v })} placeholder="Sócio, Jurídico…"/>
+        <CVField label="Nome" value={novo.nome} onChange={(v) => setNovo({ ...novo, nome: v })} placeholder="Nome completo"/>
+        <CVField label="E-mail" value={novo.email} onChange={(v) => setNovo({ ...novo, email: v })} placeholder="email@empresa.com"/>
+        <CVField label="Telefone" value={novo.telefone} onChange={(v) => setNovo({ ...novo, telefone: v })} placeholder="(11) 99999-9999"/>
+      </div>
+      <button className="ci-btn ci-btn--ghost" style={{ marginTop: 10 }} disabled={adding || !novo.papel.trim() || !novo.nome.trim()} onClick={adicionar}>{adding ? 'Adicionando…' : '+ Adicionar signatário'}</button>
+    </div>
+  );
+}
+
 /* Desenho do Projeto de Instalação — não é mais anexado no wizard (ver
    CVStepRevisao, checklist antigo "Anexo II"); a Engenharia anexa e envia
    daqui, só depois que as 3 condições abaixo baterem (pedido explícito do
@@ -986,6 +1094,7 @@ function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
             )}
           </div>
           <CVD0Section rec={rec} onSaved={onRefresh}/>
+          <CVSignatariosSection rec={rec} onSaved={onRefresh}/>
           <CVDesenhoInstalacaoSection rec={rec} onSaved={onRefresh}/>
           <div className="ci-drawer-sec">
             <h3 className="ci-drawer-sec-title">Ações</h3>
