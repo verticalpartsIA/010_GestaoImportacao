@@ -165,7 +165,7 @@ Existem duas camadas que não devem ser confundidas:
 
 **Análise de Preços** — reaproveita histórico das RFQs para transformar memória de sourcing em inteligência de compra.
 
-**Compras Nacional** — separa sourcing doméstico da aquisição internacional.
+**Importação Varejo** (antes "Compras Nacional") — reservado para o processo de Compras de Varejo Importação, ainda em definição (29/09/2026).
 
 **Pedidos** — abrange pedido ao fornecedor e acompanhamento do cumprimento do pedido.
 

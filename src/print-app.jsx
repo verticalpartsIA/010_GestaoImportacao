@@ -20,7 +20,7 @@ const PRINT_SCREENS = [
   { id: "importacao-detail", title: "Embarque — Detalhe",      module: "Logística",   role: "admin",      sub: "navio · timeline · documentos" },
   { id: "importacao-rastreamento", title: "Mapa de Navios",    module: "Logística",   role: "admin",      sub: "MarineTraffic API · rota Shanghai → Santos" },
   { id: "inbox",           title: "Inbox",                     module: "Geral",       role: "admin",      sub: "IMAP · caixa compartilhada suporte@vpsistema.com" },
-  { id: "compras",        title: "Compras Nacional",           module: "Logística",   role: "admin",      sub: "fretes · ocorrências · CTes" },
+  { id: "compras",        title: "Importação Varejo",          module: "Logística",   role: "admin",      sub: "reservado — processo em definição" },
   { id: "financeiro",     title: "Gatilhos & Prazo",   module: "Financeiro",  role: "financeiro", sub: "cadeia automática por Nº da Cotação" },
   { id: "comissoes",      title: "Comissões Q2/26",            module: "Financeiro",  role: "financeiro", sub: "vendedor · % · aprovação · pagamento" },
   { id: "notificacoes",   title: "Central de Notificações",    module: "Geral",       role: "admin",      sub: "estilo Linear · agrupadas" },

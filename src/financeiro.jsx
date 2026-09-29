@@ -1426,7 +1426,7 @@ function ConfigIntegrations() {
   const integrations = [
     { name: "Rastreamento marítimo (AIS)", desc: "Edge function ais-sync — posição de navios" },
     { name: "IMAP — cotacoes@verticalparts.com.br", desc: "Inbox Importação" },
-    { name: "IMAP — compras@verticalparts.com.br", desc: "Inbox Compras Nacional" },
+    { name: "IMAP — compras@verticalparts.com.br", desc: "Inbox Importação Varejo" },
     { name: "SMTP — envio transacional", desc: "Notificações e propostas" },
     { name: "Assinatura digital", desc: "Assinatura de contratos e propostas" },
     { name: "Omie (faturamento)", desc: "Sincronização NF / contas a receber" },
