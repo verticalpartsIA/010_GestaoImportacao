@@ -28,9 +28,12 @@
 
   function gtId() { return 'CIP-' + Date.now().toString().slice(-6) + '-' + Math.random().toString(36).slice(2, 6); }
 
-  /* Sem dossiê vinculado ao contrato, não há evento nenhum que vá liberar
-     a parcela sozinho — nasce já liberada, senão travaria o Financeiro
-     pra sempre esperando um gatilho que nunca dispara. */
+  /* Sem dossiê vinculado ao contrato (ex.: contrato avulso), nenhum evento de
+     obra vai liberar as parcelas por marco. Antes TODAS nasciam liberadas
+     (inclusive "Finalização", antes de a obra existir). Agora só nasce
+     liberada a 1ª parcela por marco (início dos trabalhos) e as parcelas
+     personalizadas (sem gatilho, Financeiro controla); as demais ficam
+     "aguardando" até o contrato ser vinculado a um dossiê. */
   async function criarParcelas(contratoId, formState) {
     const c = sb(); if (!c) return;
     const valor = window.CI.moedaParaNumero(formState.valorTotal) || 0;
@@ -38,17 +41,20 @@
     let rows = [];
 
     if (formState.formaPagamento === '2') {
-      const metade = valor / 2;
+      /* Divisão em centavos, resto na última — mesma regra do texto do
+         contrato (window.CI.dividirEmParcelas), senão parcela e cláusula
+         5.1 divergem. */
+      const [v1, v2] = window.CI.dividirEmParcelas(valor, 2);
       rows = [
-        { numero: 1, descricao: 'Início dos trabalhos', valor: metade, gatilho_evento: 'INSTALACAO_INICIADA' },
-        { numero: 2, descricao: 'Finalização do serviço', valor: metade, gatilho_evento: 'INSTALACAO_CONCLUIDA' },
+        { numero: 1, descricao: 'Início dos trabalhos', valor: v1, gatilho_evento: 'INSTALACAO_INICIADA' },
+        { numero: 2, descricao: 'Finalização do serviço', valor: v2, gatilho_evento: 'INSTALACAO_CONCLUIDA' },
       ];
     } else if (formState.formaPagamento === '3') {
-      const terco = valor / 3;
+      const [v1, v2, v3] = window.CI.dividirEmParcelas(valor, 3);
       rows = [
-        { numero: 1, descricao: 'Início dos trabalhos', valor: terco, gatilho_evento: 'INSTALACAO_INICIADA' },
-        { numero: 2, descricao: 'Metade da execução dos serviços', valor: terco, gatilho_evento: 'INSTALACAO_METADE_EXECUCAO' },
-        { numero: 3, descricao: 'Finalização do serviço', valor: terco, gatilho_evento: 'INSTALACAO_CONCLUIDA' },
+        { numero: 1, descricao: 'Início dos trabalhos', valor: v1, gatilho_evento: 'INSTALACAO_INICIADA' },
+        { numero: 2, descricao: 'Metade da execução dos serviços', valor: v2, gatilho_evento: 'INSTALACAO_METADE_EXECUCAO' },
+        { numero: 3, descricao: 'Finalização do serviço', valor: v3, gatilho_evento: 'INSTALACAO_CONCLUIDA' },
       ];
     } else {
       rows = (formState.parcelas || []).map((p, i) => ({
@@ -60,11 +66,12 @@
     }
     if (!rows.length) return;
 
+    const liberadaNaCriacao = (r) => !r.gatilho_evento || (!temDossier && r.numero === 1);
     const insertRows = rows.map((r) => ({
       id: gtId(), contrato_id: contratoId, numero: r.numero, descricao: r.descricao, valor: r.valor,
       gatilho_evento: r.gatilho_evento,
-      liberada: !temDossier || !r.gatilho_evento,
-      liberada_em: (!temDossier || !r.gatilho_evento) ? new Date().toISOString() : null,
+      liberada: liberadaNaCriacao(r),
+      liberada_em: liberadaNaCriacao(r) ? new Date().toISOString() : null,
       status: 'pendente',
     }));
     const { error } = await c.from('contrato_instalador_parcelas').insert(insertRows);
