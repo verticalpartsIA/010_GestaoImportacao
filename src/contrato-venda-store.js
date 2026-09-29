@@ -352,7 +352,8 @@
       log,
       atualizado_em: now.toISOString(),
     };
-    await c.from('contratos_venda_equipamentos').update(patch).eq('id', id);
+    const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('id', id);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'enviado', { channel });
     if (window.EventosFluxo) {
@@ -384,7 +385,13 @@
       audit, log,
       atualizado_em: now.toISOString(),
     };
-    await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    /* 29/09 — mesmo achado do send-email/proposta-store: best-effort de
+       propósito (console.warn, não lança) porque é rastreamento automático
+       no mount da página pública (assinar-app.jsx), sem ação do usuário —
+       lançar aqui travaria a leitura do contrato por uma falha só de
+       auditoria. */
+    const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    if (error) console.warn('[CVStore] falha ao registrar visualização (best-effort, não bloqueia o cliente)', error);
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'visualizado', { ip });
     return updated;
@@ -445,7 +452,8 @@
       patch.form_state = _formStateFinalizado(cur, now);
       patch.signed_at = now.toISOString();
     }
-    await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
 
     if (statusFinal === 'assinado') {
@@ -488,7 +496,8 @@
     const log = (cur.log || []).slice();
     log.push({ status: 'assinado', at: now.toISOString(), meta: { ultimoSignatario: true } });
     const patch = { status: 'assinado', signed_at: now.toISOString(), form_state: formState, log, atualizado_em: now.toISOString() };
-    await c.from('contratos_venda_equipamentos').update(patch).eq('id', contratoId);
+    const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('id', contratoId);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'assinado', {});
     if (window.EventosFluxo) {
@@ -509,7 +518,8 @@
     const log = (cur.log || []).slice();
     log.push({ status:'recusado', at: now.toISOString(), meta:{ at: now.toISOString() } });
     const patch = { status:'recusado', log, atualizado_em: now.toISOString() };
-    await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'recusado', {});
     return updated;

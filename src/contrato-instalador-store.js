@@ -323,7 +323,8 @@
       log,
       atualizado_em: now.toISOString(),
     };
-    await c.from('contratos_instalador').update(patch).eq('id', id);
+    const { error } = await c.from('contratos_instalador').update(patch).eq('id', id);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'enviado', { channel });
     return updated;
@@ -349,7 +350,13 @@
       audit, log,
       atualizado_em: now.toISOString(),
     };
-    await c.from('contratos_instalador').update(patch).eq('token', token);
+    /* 29/09 — mesmo achado do send-email/proposta-store/CVStore: best-effort
+       de propósito (console.warn, não lança) porque é rastreamento
+       automático no mount da página pública (assinar-app.jsx), sem ação do
+       usuário — lançar aqui travaria a leitura do contrato por uma falha
+       só de auditoria. */
+    const { error } = await c.from('contratos_instalador').update(patch).eq('token', token);
+    if (error) console.warn('[CIStore] falha ao registrar visualização (best-effort, não bloqueia o cliente)', error);
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'visualizado', { ip });
     return updated;
@@ -385,7 +392,8 @@
       audit, log,
       atualizado_em: now.toISOString(),
     };
-    await c.from('contratos_instalador').update(patch).eq('token', token);
+    const { error } = await c.from('contratos_instalador').update(patch).eq('token', token);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'assinado', { ip, signerName: sig.signerName });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
@@ -403,7 +411,8 @@
     const log = (cur.log || []).slice();
     log.push({ status:'recusado', at: now.toISOString(), meta:{ at: now.toISOString() } });
     const patch = { status:'recusado', log, atualizado_em: now.toISOString() };
-    await c.from('contratos_instalador').update(patch).eq('token', token);
+    const { error } = await c.from('contratos_instalador').update(patch).eq('token', token);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'recusado', {});
     return updated;
