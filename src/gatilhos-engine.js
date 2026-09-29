@@ -24,7 +24,7 @@
 
   const SLA_HORAS = {
     SLA_FORNECEDOR: 48,
-    PRECIFICACAO: 5,
+    PRECIFICACAO: 2,               // 29/09: era 5h — pedido do usuário
     /* 10 dias (23/08, Gelson) — não é mais só um SLA informativo: é o
        limiar do "Cemitério". Depois disso, verificarPrazos() marca
        status 'revisao_necessaria' e a tela de Gatilhos destaca "parado
@@ -79,6 +79,8 @@
 
   /* Cada nó: { key, label, predecessores:[{key, rel}], nasce, fecha,
      fechamentoTipo, condicaoNasce(detalhe) opcional para branches,
+     condicaoCotacao(numeroCotacao) opcional e assíncrona (ex.: CEO só com
+     margem < 15%),
      rota (nome da rota em app.jsx), resolverSubsel (opcional). */
   const NODES = [
     { key: 'FORMULARIO', label: 'Formulário preenchido',
@@ -90,7 +92,7 @@
       nasce: 'COTACAO_ENVIADA_FORNECEDOR', fecha: 'FORNECEDOR_RESPONDEU',
       fechamentoTipo: 'automatico', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
 
-    { key: 'PRECIFICACAO', label: 'Financeiro precificando (SLA 5h)',
+    { key: 'PRECIFICACAO', label: 'Financeiro precificando (SLA 2h)',
       predecessores: [{ key: 'SLA_FORNECEDOR', rel: 'FS' }],
       nasce: 'FORNECEDOR_RESPONDEU', fecha: 'PROPOSTA_ELABORADA',
       fechamentoTipo: 'automatico', rota: 'precificacao', resolverSubsel: resolverPrecificacaoElevador },
@@ -134,12 +136,16 @@
       fechamentoTipo: 'manual' /* Financeiro clica "Dar Aval de Pagamento" — confirmarAvalPagamento() */,
       rota: 'aval-financeiro' },
 
-    /* Aval Jurídico (manual, depois do contrato assinado) — corre em
-       paralelo ao boleto/Aval de Pagamento e, JUNTO com o Aval de Pagamento,
-       libera a compra (COMPRA_LIBERADA abaixo exige os dois). */
-    { key: 'AVAL_JURIDICO', label: 'Aguardando Aval Jurídico do contrato',
-      predecessores: [{ key: 'AGUARDA_ASSINATURA', rel: 'FS' }],
-      nasce: 'CONTRATO_VENDA_ASSINADO', fecha: 'AVAL_JURIDICO_APROVADO',
+    /* Aval Jurídico (manual) — desde 29/09 (2ª rodada) abre JUNTO com o
+       Aval Financeiro, quando o cliente aprova a Proposta (antes: só depois
+       do contrato assinado). JUNTO com o Aval de Pagamento, libera a compra
+       (COMPRA_LIBERADA abaixo exige os dois). O registro em avais_juridicos
+       nasce pelo trigger fn_avais_abrir_na_proposta no banco. */
+    { key: 'AVAL_JURIDICO', label: 'Aguardando Aval Jurídico',
+      predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
+      nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
+      condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
+      fecha: 'AVAL_JURIDICO_APROVADO',
       fechamentoTipo: 'manual', rota: 'aval-juridico' },
 
     { key: 'COMPRA_LIBERADA', label: 'Compra ao Fornecedor liberada',
@@ -256,14 +262,25 @@
        construí isso ainda — precisa de mais instrução sua sobre onde essa
        conta corrente deve morar (nova tabela? campo em avais_financeiros?)
        antes de desenhar. */
-    { key: 'CEO_APROVOU', label: 'Aguardando aprovação do CEO',
+    /* 29/09: CEO só em discrepância — o nó só nasce quando a margem
+       efetiva da cotação fica abaixo de 15% (ou é desconhecida), mesma
+       regra de DecisoesStore.precisaAprovacaoCeo. */
+    { key: 'CEO_APROVOU', label: 'Aguardando aprovação do CEO (margem abaixo de 15%)',
       predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'SS' }],
       nasce: 'SINAL_PAGO', fecha: 'FINANCEIRO_APROVOU_CEO',
+      condicaoCotacao: async (numeroCotacao) => {
+        const d = window.DecisoesStore;
+        if (!d || !d.precisaAprovacaoCeo) return true;
+        return (await d.precisaAprovacaoCeo(numeroCotacao).catch(() => ({ precisa: true }))).precisa;
+      },
       fechamentoTipo: 'manual', rota: 'aval-financeiro' },
 
+    /* 29/09: a aprovação do responsável pelo sistema deixou de travar a
+       compra — o nó não nasce mais (nasce: null). Mantido no catálogo só
+       pra linhas antigas de `gatilhos` continuarem com rótulo/rota. */
     { key: 'OWNER_APROVOU', label: 'Aguardando aprovação do responsável pelo sistema',
       predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'SS' }],
-      nasce: 'SINAL_PAGO', fecha: 'FINANCEIRO_APROVOU_OWNER',
+      nasce: null, fecha: 'FINANCEIRO_APROVOU_OWNER',
       fechamentoTipo: 'manual', rota: 'aval-financeiro' },
 
     /* ---- 33-37: Engenharia final + Ficha Técnica ---- */
@@ -625,6 +642,7 @@
         const dispara = node.nasce === evento || (node.requerEventos || []).includes(evento);
         if (!dispara) continue;
         if (node.condicaoNasce && !node.condicaoNasce(detalhe)) continue;
+        if (node.condicaoCotacao && !(await node.condicaoCotacao(numeroCotacao))) continue;
         if (node.requerEventos) {
           const jaAconteceram = await todosEventosRegistrados(numeroCotacao, node.requerEventos);
           if (!jaAconteceram) continue;

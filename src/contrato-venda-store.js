@@ -339,6 +339,7 @@
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Contrato Venda', acao: 'criou o contrato', alvo: rec.numero_documento, alvo_id: rec.id, detalhe: { comprador: rec.comprador_razao_social } });
     if (window.AvalFinanceiroStore && formState.propostaId) window.AvalFinanceiroStore.vincularContrato(formState.propostaId, rec.id);
+    if (window.AvalJuridicoStore && formState.propostaId) window.AvalJuridicoStore.vincularContrato(formState.propostaId, rec.id);
     return rec;
   }
 

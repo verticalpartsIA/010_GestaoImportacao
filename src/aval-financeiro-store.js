@@ -10,14 +10,14 @@
      Contrato enviado
        -> Cliente assina (automático, via link público)
        -> Boleto do sinal gerado -> Financeiro confirma que foi pago (manual)
-       -> Financeiro dá o Aval de Pagamento (manual)
-       -> Jurídico dá o Aval Jurídico ao contrato assinado (manual — ver
-          aval-juridico-store.js)
-       -> [Aval de Pagamento (Financeiro) + Aval Jurídico + contrato
-          assinado + sinal pago (+ aprovações internas CEO/responsável e a
-          revisão técnica de Engenharia) liberam a compra na China — ver
-          decidirComprar em cotacao-elevador-fornecedor-store.js e
-          podeIniciarCompra abaixo. Ver instrucaocompra.md.]
+       -> Financeiro dá o Aval de Pagamento (manual) = "Aval Financeiro"
+     Em paralelo, desde a Proposta aprovada:
+       -> Jurídico dá o Aval Jurídico (manual — ver aval-juridico-store.js;
+          o registro nasce junto com este, via trigger no banco)
+     [Aval de Pagamento + Aval Jurídico (+ CEO só se a margem < 15%)
+      liberam a compra na China — ver podeIniciarCompra abaixo e
+      decidirComprar em cotacao-elevador-fornecedor-store.js. Ver
+      instrucaocompra.md. Regra de 29/09/2026 (2ª rodada do dia).]
 
    window.AvalFinanceiroStore
    ============================================================ */
@@ -324,52 +324,57 @@
     });
   }
 
-  /* Gate final antes de iniciar a compra no fornecedor. Checa, na ordem de
-     prioridade pedida (mostra sempre a PRIMEIRA condição que falta, mesmo
-     que outras também estejam pendentes): aprovação do CEO, aprovação do
-     responsável, sinal pago, Aval de Pagamento, contrato assinado, revisão
-     técnica do projeto pela Engenharia. Sinal/contrato continuam
-     acontecendo quando o cliente agir — não dependem de ordem estrita com
-     as aprovações internas, só entram todos juntos na conta final. */
+  /* CEO só entra quando a margem efetiva da precificação fica abaixo de 15%
+     (ou é desconhecida) — mesma regra de LIMITE_MARGEM_SEM_CEO do envio de
+     proposta, em decisoes-store.js (29/09, usuário: "CEO só chega nele
+     dentro de discrepâncias"). Sem DecisoesStore carregado, mantém o CEO
+     por segurança. */
+  async function precisaAprovacaoCeo(numeroCotacao) {
+    const d = window.DecisoesStore;
+    if (!d || !d.precisaAprovacaoCeo) return { precisa: true, margem: null };
+    return d.precisaAprovacaoCeo(numeroCotacao);
+  }
+
+  /* Aval Jurídico da mesma venda — pela Proposta (o registro nasce junto com
+     este, quando o cliente aprova), senão pelo Nº da cotação. */
+  async function avalJuridicoDe(av, numeroCotacao) {
+    const c = sb(); if (!c) return null;
+    if (av && av.proposta_id) {
+      const { data } = await c.from('avais_juridicos').select('status').eq('proposta_id', av.proposta_id).maybeSingle();
+      if (data) return data;
+    }
+    const { data } = await c.from('avais_juridicos').select('status')
+      .eq('numero_cotacao', numeroCotacao).order('criado_em', { ascending: false }).limit(1).maybeSingle();
+    return data || null;
+  }
+
+  /* Gate final antes de iniciar a compra no fornecedor (29/09/2026, pedido
+     do usuário: "para a compra na China, dois avais precisam estar OK,
+     financeiro e jurídico"):
+       1. Aval de Pagamento do Financeiro (manual, depois do sinal pago —
+          é o "Aval Financeiro" do processo real, ver #503)
+       2. Aval Jurídico (manual, abre junto com o Financeiro quando o
+          cliente aprova a Proposta)
+       3. CEO — só se a margem efetiva ficou abaixo de 15% (ou desconhecida)
+     Mostra sempre a PRIMEIRA que faltar. Deixaram de travar a compra:
+     aprovação do responsável pelo sistema, sinal pago como checagem própria
+     (o Aval de Pagamento já vem depois dele), contrato assinado e revisão
+     técnica de Engenharia. */
   async function podeIniciarCompra(numeroCotacao) {
     if (numeroCotacao == null) return { ok: true }; // sem correlação — não trava
-    const c = sb();
     const av = await getByNumeroCotacao(numeroCotacao);
-
-    let contratoAssinado = false;
-    if (av && av.contrato_venda_id) {
-      const { data: contrato } = await c.from('contratos_venda_equipamentos')
-        .select('status').eq('id', av.contrato_venda_id).maybeSingle();
-      contratoAssinado = contrato?.status === 'assinado';
-    }
-
-    const { data: projeto } = await c.from('projetos_elevador')
-      .select('status').eq('numero_cotacao', numeroCotacao).order('updated_at', { ascending: false }).limit(1).maybeSingle();
-    const revisaoProjeto = projeto?.status === 'finalizado';
-
-    /* Aval Jurídico (manual, depois do contrato assinado) — junto com o Aval
-       de Pagamento do Financeiro é o que libera a compra (processo confirmado
-       pelo usuário em 29/09; antes só o Aval Jurídico liberava o Desenho de
-       Instalação, não a compra). */
-    let avalJuridico = false;
-    if (av && av.contrato_venda_id) {
-      const { data: aj } = await c.from('avais_juridicos')
-        .select('status').eq('contrato_venda_id', av.contrato_venda_id).maybeSingle();
-      avalJuridico = aj?.status === 'aprovado';
-    }
+    const aj = await avalJuridicoDe(av, numeroCotacao);
+    const ceo = await precisaAprovacaoCeo(numeroCotacao);
+    const margemTxt = ceo.margem != null ? `margem ${(ceo.margem * 100).toFixed(1).replace('.', ',')}%, abaixo de 15%` : 'margem desconhecida';
 
     const checagens = [
-      { ok: !!(av && av.aprovacao_ceo_em), motivo: 'a aprovação do CEO (Diego)' },
-      { ok: !!(av && av.aprovacao_owner_em), motivo: 'a aprovação do responsável pelo sistema' },
-      { ok: !!(av && av.sinal_pago), motivo: 'o pagamento do boleto pelo cliente (Financeiro)' },
-      { ok: !!(av && av.aval_pagamento_confirmado), motivo: 'o Aval de Pagamento (Financeiro)' },
-      { ok: contratoAssinado, motivo: 'a assinatura do contrato pelo cliente' },
-      { ok: avalJuridico, motivo: 'o Aval Jurídico (Jurídico)' },
-      { ok: revisaoProjeto, motivo: 'a revisão técnica do projeto (Engenharia)' },
+      { ok: !!(av && av.aval_pagamento_confirmado), motivo: 'o Aval de Pagamento do Financeiro (depois do sinal pago, em "Gatilhos & Prazo")' },
+      { ok: aj?.status === 'aprovado', motivo: 'o Aval Jurídico (tela "Aval Jurídico")' },
+      { ok: !ceo.precisa || !!(av && av.aprovacao_ceo_em), motivo: `a aprovação do CEO (Diego) — ${margemTxt}` },
     ];
     const primeiraFaltando = checagens.find((ck) => !ck.ok);
     if (primeiraFaltando) {
-      return { ok: false, motivo: `Ainda falta confirmar: ${primeiraFaltando.motivo}. Verifique em "Aval Financeiro" antes de iniciar a compra no fornecedor.` };
+      return { ok: false, motivo: `Ainda falta confirmar: ${primeiraFaltando.motivo}. Só então a compra no fornecedor pode ser iniciada.` };
     }
     return { ok: true };
   }
@@ -377,7 +382,7 @@
   window.AvalFinanceiroStore = {
     getById, getByPropostaId, getByNumeroCotacao, getByContratoVendaId, garantirRegistro, listarFila,
     registrarConsulta, darAval, confirmarSinal, confirmarAvalPagamento, vincularContrato,
-    podeEnviarContrato, podeIniciarCompra, aprovarComoCEO, aprovarComoOwner, isOwner,
+    podeEnviarContrato, podeIniciarCompra, precisaAprovacaoCeo, aprovarComoCEO, aprovarComoOwner, isOwner,
     registrarCustoReal,
   };
 }());

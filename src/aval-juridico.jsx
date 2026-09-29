@@ -1,9 +1,10 @@
 /* ============================================================
    aval-juridico.jsx — Aval Jurídico
-   Gate entre "Contrato de Venda assinado" e "Desenho do Projeto de
-   Instalação liberado pra envio". Ver aval-juridico-store.js pro gate
-   real (podeEnviarDesenho, checado por CVDesenhoInstalacaoSection em
-   contrato-venda.jsx).
+   Desde 29/09/2026 abre JUNTO com o Aval Financeiro, quando o cliente
+   aprova a Proposta. Com o Aval de Pagamento do Financeiro, libera a
+   compra na China (AvalFinanceiroStore.podeIniciarCompra); também é uma
+   das 3 condições do envio do Desenho de Instalação (podeEnviarDesenho,
+   checado por CVDesenhoInstalacaoSection em contrato-venda.jsx).
    ============================================================ */
 
 const AJ_STATUS = {
@@ -25,7 +26,7 @@ function AJModalAval({ row, aprovado, onClose, onSaved }) {
     setSaving(true);
     try {
       await window.AvalJuridicoStore.darAval(row.aval.id, aprovado, observacoes);
-      window.toast(aprovado ? 'Aval concedido — desenho liberado pra envio (junto com sinal pago e contrato assinado)!' : 'Contrato reprovado.', aprovado ? 'success' : 'warning');
+      window.toast(aprovado ? 'Aval Jurídico concedido. Com o Aval de Pagamento do Financeiro, a compra na China fica liberada.' : 'Venda reprovada pelo Jurídico.', aprovado ? 'success' : 'warning');
       onSaved(); onClose();
     } catch (e) {
       window.toast('Erro: ' + (e.message || e), 'error');
@@ -35,13 +36,13 @@ function AJModalAval({ row, aprovado, onClose, onSaved }) {
   };
 
   return (
-    <Modal title={aprovado ? 'Dar aval jurídico' : 'Reprovar contrato'} onClose={onClose} width={480}
+    <Modal title={aprovado ? 'Dar aval jurídico' : 'Reprovar (Jurídico)'} onClose={onClose} width={480}
       footer={<>
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button variant={aprovado ? 'primary' : 'danger'} onClick={salvar} disabled={saving}>{saving ? 'Salvando…' : (aprovado ? 'Confirmar aval' : 'Confirmar reprovação')}</Button>
       </>}>
       <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-        <div className="small muted">Cliente: <b>{row.aval.cliente_nome || '—'}</b> · Contrato {row.aval.numero_documento}</div>
+        <div className="small muted">Cliente: <b>{row.aval.cliente_nome || '—'}</b> · {row.proposta ? `Proposta ${row.proposta.numero_documento || ''}` : `Contrato ${row.contrato?.numero_documento || ''}`}</div>
         <div className="stack" style={{ gap: 4 }}>
           <label className="up-eyebrow muted">Observações {aprovado ? '(opcional)' : '(motivo da reprovação)'}</label>
           <textarea className="input" rows={3} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder={aprovado ? 'Ressalvas, condições especiais…' : 'Explique o motivo da reprovação…'}/>
@@ -56,9 +57,12 @@ function AJRow({ row, onOpenModal }) {
   return (
     <div style={{ background: '#fff', border: '1px solid var(--border)', padding: '16px 20px', display: 'flex', alignItems: 'center', gap: 16 }}>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="up-eyebrow muted">{a.numero_documento}</div>
+        <div className="up-eyebrow muted">{a.numero_cotacao != null ? `Cotação Nº ${a.numero_cotacao} · ` : ''}{a.numero_documento}</div>
         <div style={{ fontSize: 15, fontWeight: 800 }}>{a.cliente_nome || '—'}</div>
-        <div className="cell-sub mono">{fmtBRL(row.contrato.valor_total_num)}</div>
+        <div className="cell-sub mono">{fmtBRL(row.valor)}</div>
+        <div className="small muted">{row.contrato
+          ? `Contrato ${row.contrato.numero_documento || ''} · ${row.contrato.status === 'assinado' ? 'assinado' : (row.contrato.status || '—')}`
+          : 'Contrato de Venda ainda não gerado'}</div>
       </div>
       <AJBadge status={a.status}/>
       {a.status === 'pendente' && (
@@ -96,25 +100,25 @@ function AvalJuridicoPage({ setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Jurídico · Aval de Contratos</div>
           <h1 className="page-head__title">Aval Jurídico</h1>
-          <p className="page-head__sub">Todo Contrato de Venda assinado pelo cliente entra aqui — o aval, junto com sinal pago e contrato assinado, libera o envio do Desenho do Projeto de Instalação.</p>
+          <p className="page-head__sub">Toda proposta aprovada pelo cliente entra aqui, junto com o Aval Financeiro. O Aval Jurídico + o Aval de Pagamento do Financeiro liberam a compra na China — e, com sinal pago e contrato assinado, o envio do Desenho de Instalação.</p>
         </div>
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Aguardando aval" value={pendentes.length} sub="contratos assinados" delta="—" deltaDir="up" icon="scale"/>
-        <KPI label="Aprovados" value={aprovados.length} sub="desenho liberado" delta="—" deltaDir="up" icon="shield"/>
-        <KPI label="Reprovados" value={reprovados.length} sub="contrato bloqueado" delta="—" deltaDir="down" icon="warning"/>
+        <KPI label="Aguardando aval" value={pendentes.length} sub="propostas aprovadas" delta="—" deltaDir="up" icon="scale"/>
+        <KPI label="Aprovados" value={aprovados.length} sub="aval dado" delta="—" deltaDir="up" icon="shield"/>
+        <KPI label="Reprovados" value={reprovados.length} sub="venda bloqueada" delta="—" deltaDir="down" icon="warning"/>
       </div>
 
-      <Card title="Fila do Jurídico" sub={`${fila.length} contratos assinados pelo cliente`}>
+      <Card title="Fila do Jurídico" sub={`${fila.length} vendas aprovadas pelo cliente`}>
         <div className="stack" style={{ gap: 10 }}>
           {fila.length === 0 && (
             <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>
-              Nenhum Contrato de Venda assinado aguardando o Jurídico ainda.
+              Nenhuma proposta aprovada aguardando o Jurídico ainda.
             </div>
           )}
           {fila.map((row) => (
-            <AJRow key={row.contrato.id} row={row} onOpenModal={(type, row) => setModal({ type, row })}/>
+            <AJRow key={row.key} row={row} onOpenModal={(type, row) => setModal({ type, row })}/>
           ))}
         </div>
       </Card>
