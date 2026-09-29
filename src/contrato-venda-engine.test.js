@@ -63,3 +63,19 @@ test('buildContract — doc.meta.descEq permanece SEM escape (consumido como tex
   });
   assert.ok(doc.meta.descEq.includes('&'), 'meta.descEq deve manter o "&" cru, não "&amp;"');
 });
+
+test('parcelas — herda o cronograma real da Proposta (20/15/15/10) e cai nas iguais se divergir', () => {
+  require('./contrato-venda-engine.js');
+  const CV = window.CV;
+  const f = CV.defaultState();
+  f.parcelasDetalhe = [87042.95, 65282.21, 65282.21, 43521.47];
+  const doc = CV.buildContract({ form: f, comprador: f.comprador, valor: 435214.74, sinalPct: 40, parcelas: 4, numero: 'VPCV-0955' });
+  const tabela = doc.sections.find((s) => s.id === 's3').body.find((b) => b.table).table;
+  assert.deepEqual(tabela.slice(1).map((r) => r.valor), [87042.95, 65282.21, 65282.21, 43521.47]);
+  assert.equal(Math.round(tabela[1].pct * 100) / 100, 20);
+  // usuário mudou o nº de parcelas: volta pras iguais
+  const doc2 = CV.buildContract({ form: f, comprador: f.comprador, valor: 435214.74, sinalPct: 40, parcelas: 3, numero: 'X' });
+  const t2 = doc2.sections.find((s) => s.id === 's3').body.find((b) => b.table).table;
+  assert.equal(t2.length, 4);
+  assert.ok(Math.abs(t2[1].valor - 87042.948) < 0.01);
+});

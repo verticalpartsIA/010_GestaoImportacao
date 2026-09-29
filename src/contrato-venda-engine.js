@@ -280,8 +280,23 @@
     const saldo = valor - sinalValor;
     const parcValor = parcelas > 0 ? saldo / parcelas : 0;
     const tabela = [{ label: 'Sinal / entrada', quando: 'Na assinatura', pct: sinalPct, valor: sinalValor }];
+    /* Cronograma herdado da Proposta (ex.: 20/15/15/10) — `parcelasDetalhe` =
+       valores em R$ de cada parcela do saldo, na ordem. Só vale enquanto
+       bate com o que está na tela (mesma quantidade de parcelas e
+       sinal + parcelas = total, tolerância de 2 centavos): se o usuário
+       mexer no valor, no sinal ou no nº de parcelas, cai na divisão em
+       parcelas iguais de antes (sem valor "fantasma" desatualizado). */
+    const detalhe = Array.isArray(f.parcelasDetalhe) ? f.parcelasDetalhe.map(Number) : null;
+    const usaDetalhe = !!detalhe && detalhe.length === parcelas && parcelas > 0
+      && detalhe.every((v) => Number.isFinite(v) && v > 0)
+      && Math.abs(sinalValor + detalhe.reduce((t, v) => t + v, 0) - valor) < 0.02;
     for (let i = 1; i <= parcelas; i++) {
-      tabela.push({ label: `Parcela ${i} de ${parcelas}`, quando: `${i * 30} dias`, pct: (100 - sinalPct) / parcelas, valor: parcValor });
+      const vi = usaDetalhe ? detalhe[i - 1] : parcValor;
+      tabela.push({
+        label: `Parcela ${i} de ${parcelas}`, quando: `${i * 30} dias`,
+        pct: usaDetalhe ? (valor > 0 ? (vi / valor) * 100 : 0) : (100 - sinalPct) / parcelas,
+        valor: vi,
+      });
     }
 
     /* Discriminação informativa por equipamento — só quando a cotação tem

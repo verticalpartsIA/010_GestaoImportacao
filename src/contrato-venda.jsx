@@ -258,7 +258,14 @@ function CVStepPreco({ form, set, errors }) {
         <div className="cv-pay-summary">
           <div className="cv-mini-label">Resumo do pagamento</div>
           <div className="cv-pay-row"><span>Sinal ({form.sinalPct}%)</span><b className="cv-mono">{window.CV.brl(valor * form.sinalPct / 100)}</b></div>
-          <div className="cv-pay-row"><span>{form.parcelas}× parcelas do saldo</span><b className="cv-mono">{window.CV.brl((valor * (100 - form.sinalPct) / 100) / form.parcelas)}</b></div>
+          {(() => {
+            const det = Array.isArray(form.parcelasDetalhe) ? form.parcelasDetalhe.map(Number) : null;
+            const sinalV = valor * form.sinalPct / 100;
+            const ok = det && det.length === form.parcelas && det.every((v) => v > 0) && Math.abs(sinalV + det.reduce((t, v) => t + v, 0) - valor) < 0.02;
+            return ok
+              ? det.map((v, i) => <div className="cv-pay-row" key={i}><span>Parcela {i + 1} de {det.length} (da Proposta)</span><b className="cv-mono">{window.CV.brl(v)}</b></div>)
+              : <div className="cv-pay-row"><span>{form.parcelas}× parcelas do saldo</span><b className="cv-mono">{window.CV.brl((valor * (100 - form.sinalPct) / 100) / form.parcelas)}</b></div>;
+          })()}
           <div className="cv-pay-row cv-pay-total"><span>Total</span><b className="cv-mono">{window.CV.brl(valor)}</b></div>
         </div>
       )}
@@ -556,12 +563,25 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
        gerarParcelasAutomaticas), não configurável por lá. */
     let sinalPctInf = null;
     let parcelasInf = null;
+    /* Cronograma real da Proposta (o vendedor pode ter editado, ex.: 20/15/15/10
+       em vez de parcelas iguais): valores em R$ das linhas depois do sinal. */
+    let parcelasDetalheInf = null;
+    const numBR = (v) => {
+      const s = String(v == null ? '' : v).trim();
+      if (!s) return NaN;
+      return Number(s.includes(',') ? s.replace(/\./g, '').replace(',', '.') : s);
+    };
     if (valores.formaTipo === 'vista') {
       sinalPctInf = 100;
       parcelasInf = 0;
     } else if (valores.formaTipo === 'parcelado' && Number(valores.qtdParcelas) > 0) {
       sinalPctInf = 40;
       parcelasInf = Math.max(Number(valores.qtdParcelas) - 1, 0);
+      const linhas = Array.isArray(valores.parcelas) ? valores.parcelas : [];
+      if (linhas.length === Number(valores.qtdParcelas) && /sinal/i.test(String(linhas[0] && linhas[0].desc))) {
+        const v = linhas.slice(1).map((l) => numBR(l.valor));
+        if (v.length && v.every((x) => Number.isFinite(x) && x > 0)) parcelasDetalheInf = v;
+      }
     }
 
     setForm(prev => ({
@@ -569,6 +589,7 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
       masterId: p.master_id, propostaId: p.id,
       sinalPct: sinalPctInf != null ? sinalPctInf : prev.sinalPct,
       parcelas: parcelasInf != null ? parcelasInf : prev.parcelas,
+      parcelasDetalhe: parcelasDetalheInf,
       comprador: {
         ...prev.comprador,
         razao: cli.nome || prev.comprador.razao,
