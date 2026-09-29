@@ -108,6 +108,81 @@
     },
   };
 
+  /* ---------- Fiação do carro (chicote da caixa de passagem/inspeção) ----------
+     Trechos que saem da caixa de passagem no teto da cabina pra: barreira de
+     luz, motor do operador de porta, sensores óticos/magnéticos, segurança
+     do carro (SOS) e botoeira de cabina (COP). Cabo PP 3 vias 0,75mm² —
+     confirmado pelo usuário em 29/09/2026 (não está em nenhum catálogo BST
+     lido até agora, que só cobre fiação do poço).
+     Comprimento automático só se a cabina for até 2400x2400mm (regra do
+     usuário) — acima disso, ou sem a medida da cabina, fica
+     pendente_engenharia. A decisão de Escopo (fornecer/reutilizar/terceiro)
+     NUNCA entra aqui: a fiação é sempre fabricada pela VerticalParts, mesmo
+     em cima de um componente reaproveitado pelo cliente. */
+  const CABINA_LIMITE_PADRAO_MM = 2400;
+  const FIACAO_CARRO_PADRAO_MM = {
+    barreira: 3000, motor_porta: 3000, sensores: 3000, seguranca_carro: 6000, botoeira_cabina: 5000,
+  };
+  const FIACAO_CARRO_CABO = 'Cabo PP 3 vias 0,75mm²';
+
+  function cabinaDentroDoPadrao(geometria) {
+    const l = Number(geometria.cabina_largura_mm) || null;
+    const p = Number(geometria.cabina_profundidade_mm) || null;
+    if (!l || !p) return null;
+    return l <= CABINA_LIMITE_PADRAO_MM && p <= CABINA_LIMITE_PADRAO_MM;
+  }
+
+  function trechoFiacaoCarro(geometria, nome, destino, chaveOverride, chavePadrao, dentroPadrao) {
+    const overrideMm = Number(geometria[chaveOverride]) || null;
+    let comprimento = null, confianca, formula;
+    if (overrideMm) {
+      comprimento = overrideMm;
+      confianca = 'confirmado';
+      formula = `Comprimento informado manualmente pela engenharia: ${overrideMm}mm.`;
+    } else if (dentroPadrao === true) {
+      comprimento = FIACAO_CARRO_PADRAO_MM[chavePadrao];
+      confianca = 'estimado';
+      formula = `Cabina dentro do padrão (largura e profundidade ≤ ${CABINA_LIMITE_PADRAO_MM}mm) — comprimento padrão VerticalParts (${FIACAO_CARRO_PADRAO_MM[chavePadrao]}mm).`;
+    } else if (dentroPadrao === false) {
+      formula = `Cabina maior que ${CABINA_LIMITE_PADRAO_MM}x${CABINA_LIMITE_PADRAO_MM}mm — comprimento não pode ser presumido pelo padrão comercial. Informar a medida real (campo de override desta aba).`;
+      confianca = 'pendente_engenharia';
+    } else {
+      formula = 'Largura/profundidade da cabina ainda não informadas — sem base pra saber se o padrão comercial se aplica.';
+      confianca = 'pendente_engenharia';
+    }
+    return trechoBase({
+      tipo_cabo: `Fiação do carro — ${nome}`,
+      vias_bitola: FIACAO_CARRO_CABO,
+      origem_fisica: 'Caixa de passagem/inspeção (teto da cabina)',
+      destino_fisico: destino,
+      comprimento_base_mm: comprimento,
+      comprimento_final_mm: comprimento,
+      quantidade_pedacos: 1,
+      confianca,
+      formula,
+    });
+  }
+
+  function montarTrechosFiacaoCarro(geometria, config, numParadas) {
+    const dentroPadrao = cabinaDentroDoPadrao(geometria);
+    const portas2 = !!(config || {}).portas_opostas_cabina;
+    const g = geometria || {};
+
+    const trechos = [
+      trechoFiacaoCarro(g, 'Barreira de luz — frontal', 'Cortina luminosa (porta frontal)', 'fiacao_carro_barreira_mm', 'barreira', dentroPadrao),
+      trechoFiacaoCarro(g, 'Motor operador de porta — frontal', 'Operador de porta (frontal)', 'fiacao_carro_motor_porta_mm', 'motor_porta', dentroPadrao),
+    ];
+    if (portas2) {
+      trechos.push(trechoFiacaoCarro(g, 'Barreira de luz — traseira', 'Cortina luminosa (porta traseira)', 'fiacao_carro_barreira_mm', 'barreira', dentroPadrao));
+      trechos.push(trechoFiacaoCarro(g, 'Motor operador de porta — traseira', 'Operador de porta (traseira)', 'fiacao_carro_motor_porta_mm', 'motor_porta', dentroPadrao));
+    }
+    trechos.push(trechoFiacaoCarro(g, 'Sensores óticos/magnéticos', 'Sensores de nivelamento e zona de porta (DZU/DZD/FL1/FL2)', 'fiacao_carro_sensores_mm', 'sensores', dentroPadrao));
+    trechos.push(trechoFiacaoCarro(g, 'Segurança do carro (SOS)', 'Contato de segurança sob o carro', 'fiacao_carro_seguranca_mm', 'seguranca_carro', dentroPadrao));
+    trechos.push(trechoFiacaoCarro(g, 'Botoeira de cabina (COP)', `Botoeira de cabina — ${numParadas || 0} botão(ões) de andar`, 'fiacao_carro_botoeira_mm', 'botoeira_cabina', dentroPadrao));
+
+    return trechos;
+  }
+
   /* Máquina (kW, tensão da rede) -> chave de variante. Sem correspondência
      exata -> null (fica pendente de engenharia, não escolhe "a mais perto"). */
   function chaveVariante(potenciaKw, tensaoV) {
@@ -392,6 +467,7 @@
     listarVariantes, chaveVariante, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
     montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,
+    cabinaDentroDoPadrao, montarTrechosFiacaoCarro,
     grupoSeparacaoPorCategoria, classificarCruzamentoErp,
   };
 }());

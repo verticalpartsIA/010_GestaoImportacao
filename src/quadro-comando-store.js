@@ -45,7 +45,7 @@
   const QC_COLUNAS_VALIDAS = [
     'numero_cotacao', 'formulario_elevador_unidade_id', 'cliente_id', 'tipo_aplicacao',
     'novo_ou_modernizacao', 'origem_fabricacao', 'fabricante_comando', 'modelo_comando',
-    'status', 'escopo_fornecimento', 'cotacao_fornecedor_id',
+    'status', 'escopo_fornecimento', 'cotacao_fornecedor_id', 'configuracao',
   ];
   async function salvar(id, patchBruto) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -172,7 +172,8 @@
 
     const trechosFixa = engine.montarTrechosFiacaoFixa(quadro.geometria);
     const trechoManobra = engine.montarTrechoCaboManobra(quadro.geometria, quadro.intervalos);
-    const trechos = [...trechosFixa, trechoManobra];
+    const trechosCarro = engine.montarTrechosFiacaoCarro(quadro.geometria, quadro.configuracao, quadro.paradas.length);
+    const trechos = [...trechosFixa, trechoManobra, ...trechosCarro];
 
     const { error: delBomErr } = await c.from('quadros_comando_bom_itens').delete().eq('quadro_comando_id', quadroId);
     if (delBomErr) throw delBomErr;

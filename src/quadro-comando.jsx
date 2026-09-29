@@ -82,8 +82,10 @@ const QC_ESCOPO_ITENS = [
   { key: 'anuncio_voz', label: 'Anúncio de Voz na Cabina' },
   { key: 'suporte_cabo_comando', label: 'Suporte de Fixação para Cabo de Comando' },
   { key: 'sensor_fotoeletrico', label: 'Sensor Fotoelétrico para Informação de Poço' },
+  { key: 'barreira_luz', label: 'Barreira de Luz (Cortina Luminosa) da Porta' },
   { key: 'pesador_carga', label: 'Pesador de Carga' },
   { key: 'tomada_fundo_poco', label: 'Tomada para Fundo do Poço' },
+  { key: 'camera', label: 'Câmera na Cabina' },
   { key: 'cabos', label: 'Cabos — Fiação Fixa + Cabo de Manobra' },
 ];
 const QC_ESCOPO_OPCOES = [
@@ -192,6 +194,79 @@ function QcConfiguracaoSecao({ config, paradas, onChange, disabled }) {
           </QcField>
           <QcField label="Parada principal (acesso maior)"><QcInput value={config.parada_principal} disabled={disabled} placeholder="ex: Térreo / Parada 1" onChange={(v) => set({ parada_principal: v })}/></QcField>
         </div>
+      </Card>
+    </>
+  );
+}
+
+/* ---------- Cabina — o que o cliente responder aqui é o que ele vai levar (item novo) ----------
+   Dimensões + acabamento da cabina, e a fiação da caixa de passagem
+   (chicote do carro: barreira de luz, motor do operador de porta,
+   sensores, segurança do carro, botoeira) calculada pelo engine a partir
+   dessas dimensões + de portas_opostas_cabina (aba Configuração). */
+const QC_CABINA_OVERRIDE_CAMPOS = [
+  { key: 'fiacao_carro_barreira_mm', label: 'Barreira de luz — comprimento (mm)' },
+  { key: 'fiacao_carro_motor_porta_mm', label: 'Motor operador de porta — comprimento (mm)' },
+  { key: 'fiacao_carro_sensores_mm', label: 'Sensores óticos/magnéticos — comprimento (mm)' },
+  { key: 'fiacao_carro_seguranca_mm', label: 'Segurança do carro (SOS) — comprimento (mm)' },
+  { key: 'fiacao_carro_botoeira_mm', label: 'Botoeira de cabina (COP) — comprimento (mm)' },
+];
+const QC_CABINA_ACABAMENTO_ACO = [{ value: 'Aço 430', label: 'Aço 430' }, { value: 'Aço 304', label: 'Aço 304' }];
+
+function QcCabinaSecao({ geometria, config, numParadas, disabled, onGeom }) {
+  const set = (patch) => onGeom({ ...geometria, ...patch });
+  const engine = window.QuadroComandoBomEngine;
+  const dentroPadrao = engine ? engine.cabinaDentroDoPadrao(geometria) : null;
+  const trechosCarro = engine ? engine.montarTrechosFiacaoCarro(geometria, config, numParadas) : [];
+
+  return (
+    <>
+      <Card title="Dimensões da cabina" sub="Até 2400×2400mm (largura×profundidade), a fiação da caixa de passagem usa comprimento automático. Acima disso, a engenharia precisa informar os comprimentos reais no card abaixo.">
+        <div className="grid-3" style={{ gap: 12 }}>
+          <QcField label="Largura (mm)"><QcInput type="number" value={geometria.cabina_largura_mm} disabled={disabled} onChange={(v) => set({ cabina_largura_mm: v })}/></QcField>
+          <QcField label="Profundidade (mm)"><QcInput type="number" value={geometria.cabina_profundidade_mm} disabled={disabled} onChange={(v) => set({ cabina_profundidade_mm: v })}/></QcField>
+          <QcField label="Altura (mm)"><QcInput type="number" value={geometria.cabina_altura_mm} disabled={disabled} placeholder="2500 (padrão)" onChange={(v) => set({ cabina_altura_mm: v })}/></QcField>
+        </div>
+      </Card>
+
+      <Card title="Acabamento e revestimento" sub="O que o cliente responder aqui é exatamente o que ele vai levar.">
+        <div className="grid-3" style={{ gap: 12 }}>
+          <QcField label="Aço da cabina"><QcSelect value={geometria.aco_cabina} disabled={disabled} options={QC_CABINA_ACABAMENTO_ACO} onChange={(v) => set({ aco_cabina: v })}/></QcField>
+          <QcField label="Acabamento porta cabina"><QcSelect value={geometria.acabamento_porta_cabina} disabled={disabled} options={QC_CABINA_ACABAMENTO_ACO} onChange={(v) => set({ acabamento_porta_cabina: v })}/></QcField>
+          <QcField label="Teto falso"><QcInput value={geometria.teto_falso} disabled={disabled} onChange={(v) => set({ teto_falso: v })}/></QcField>
+          <QcField label="Piso da cabina"><QcInput value={geometria.piso_cabina} disabled={disabled} onChange={(v) => set({ piso_cabina: v })}/></QcField>
+          <QcField label="Corrimão"><QcInput value={geometria.corrimao} disabled={disabled} placeholder="Não / Sim - traseiro" onChange={(v) => set({ corrimao: v })}/></QcField>
+        </div>
+      </Card>
+
+      <Card title="Fiação da caixa de passagem (chicote do carro)" sub="Cabo PP 3 vias 0,75mm². Dobra barreira/motor de porta se 'Portas opostas na cabina' estiver marcado em Configuração. Fornecida pela VerticalParts mesmo quando o componente em si é reaproveitado pelo cliente.">
+        <div className="table-wrap" style={{ border: 0 }}>
+          <table className="t">
+            <thead><tr><th>Trecho</th><th>Destino</th><th>Cabo</th><th>Comprimento</th><th>Confiança</th></tr></thead>
+            <tbody>
+              {trechosCarro.map((t, i) => (
+                <tr key={i}>
+                  <td>{(t.tipo_cabo || '').replace('Fiação do carro — ', '')}</td>
+                  <td>{t.destino_fisico}</td>
+                  <td>{t.vias_bitola}</td>
+                  <td>{t.comprimento_final_mm != null ? `${t.comprimento_final_mm}mm` : '—'}</td>
+                  <td><QcOrigemBadge confianca={t.confianca}/></td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {dentroPadrao === false && (
+          <>
+            <div className="small" style={{ color: '#a11d1d', fontWeight: 600, marginTop: 12 }}>Cabina maior que 2400×2400mm — informe os comprimentos reais medidos pela engenharia:</div>
+            <div className="grid-3" style={{ gap: 12, marginTop: 8 }}>
+              {QC_CABINA_OVERRIDE_CAMPOS.map((c) => (
+                <QcField key={c.key} label={c.label}><QcInput type="number" value={geometria[c.key]} disabled={disabled} onChange={(v) => set({ [c.key]: v })}/></QcField>
+              ))}
+            </div>
+          </>
+        )}
+        {dentroPadrao == null && <div className="small muted" style={{ marginTop: 8 }}>Preencha largura e profundidade da cabina no card acima pra calcular a fiação.</div>}
       </Card>
     </>
   );
@@ -344,9 +419,8 @@ function QcGeometriaSecao({ geometria, intervalos, onGeom, onIntervalos, disable
           </QcField>
           <QcField label="Largura da caixa de corrida"><QcInput type="number" value={geometria.caixa_largura_mm} disabled={disabled} onChange={(v) => set({ caixa_largura_mm: v })}/></QcField>
           <QcField label="Profundidade da caixa de corrida"><QcInput type="number" value={geometria.caixa_profundidade_mm} disabled={disabled} onChange={(v) => set({ caixa_profundidade_mm: v })}/></QcField>
-          <QcField label="Largura da cabina"><QcInput type="number" value={geometria.cabina_largura_mm} disabled={disabled} onChange={(v) => set({ cabina_largura_mm: v })}/></QcField>
-          <QcField label="Profundidade da cabina"><QcInput type="number" value={geometria.cabina_profundidade_mm} disabled={disabled} onChange={(v) => set({ cabina_profundidade_mm: v })}/></QcField>
         </div>
+        <div className="small muted" style={{ marginTop: 4 }}>Largura/profundidade/altura da cabina agora ficam na aba "Cabina".</div>
         <div className="small muted" style={{ marginTop: 6 }}>
           Percurso (soma dos intervalos): <b>{calc.percurso_mm} mm</b> · Altura total: <b>{calc.altura_total_mm} mm</b>
           {calc.ultima_altura_fora_do_padrao && <span style={{ color: '#a11d1d', fontWeight: 600 }}> · fora do padrão (K &gt; 4400mm) — encaminhar pra análise da engenharia.</span>}
@@ -498,7 +572,7 @@ function QcResultadoSecao({ quadroId, podeGerar }) {
         )}
         {!!cortes.length && (
           <>
-            <h4 className="small" style={{ marginTop: 16 }}>Lista de corte (fiação fixa + cabo de manobra)</h4>
+            <h4 className="small" style={{ marginTop: 16 }}>Lista de corte (fiação fixa + cabo de manobra + fiação do carro)</h4>
             <div className="table-wrap" style={{ border: 0 }}>
               <table className="t">
                 <thead><tr><th>Tipo</th><th>Origem</th><th>Destino</th><th>Comprimento final</th><th>Confiança</th><th>Fórmula</th></tr></thead>
@@ -757,6 +831,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
         tipo_aplicacao: quadro.tipo_aplicacao, novo_ou_modernizacao: quadro.novo_ou_modernizacao,
         origem_fabricacao: quadro.origem_fabricacao, fabricante_comando: quadro.fabricante_comando,
         modelo_comando: quadro.modelo_comando, escopo_fornecimento: quadro.escopo_fornecimento,
+        configuracao: quadro.configuracao,
       });
       await window.QuadroComandoStore.salvarParadas(quadroId, quadro.paradas);
       await window.QuadroComandoStore.salvarIntervalos(quadroId, quadro.intervalos);
@@ -810,6 +885,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
           <Tabs tabs={[
             { key: 'escopo', label: 'Escopo' },
             { key: 'configuracao', label: 'Configuração' },
+            { key: 'cabina', label: 'Cabina' },
             { key: 'paradas', label: 'Paradas e portas' },
             { key: 'maquina', label: 'Quadro/máquina' },
             { key: 'componentes', label: 'Componentes internos' },
@@ -819,6 +895,8 @@ function QuadroComandoDetail({ quadroId, onClose }) {
           <div style={{ marginTop: 16 }}>
             {tab === 'escopo' && <QcEscopoSecao escopo={quadro.escopo_fornecimento || {}} onChange={(v) => setQuadro({ ...quadro, escopo_fornecimento: v })}/>}
             {tab === 'configuracao' && <QcConfiguracaoSecao config={quadro.configuracao || {}} paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, configuracao: v })}/>}
+            {tab === 'cabina' && <QcCabinaSecao geometria={quadro.geometria} config={quadro.configuracao || {}} numParadas={quadro.paradas?.length || 0}
+              onGeom={(v) => setQuadro({ ...quadro, geometria: v })}/>}
             {tab === 'paradas' && <QcParadasSecao paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, paradas: v })}/>}
             {tab === 'maquina' && <QcMaquinaSecao maquina={quadro.maquina} varianteLabel={varianteLabel} errosVisiveis={errosVisiveis} onChange={(v) => setQuadro({ ...quadro, maquina: v })}/>}
             {tab === 'componentes' && <QcComponentesSecao componentes={quadro.componentes || {}} onChange={(v) => setQuadro({ ...quadro, componentes: v })}/>}
