@@ -583,8 +583,18 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
     const paradasInf = (String(spec.andaresParadasPortas || '').match(/\d+/) || [])[0] || '';
     const modeloInf = spec.modelo || valores.equipamento || '';
     const cargaInf = (String(spec.capacidade || '').match(/(\d+)\s*kg/i) || [])[1] || '';
-    const TIPO_MAP = { passageiro: 'Social', social: 'Social', panoramico: 'Panorâmico', 'panorâmico': 'Panorâmico', carga: 'Carga', montacargas: 'Montacargas' };
+    const TIPO_MAP = { passageiros: 'Social', passageiro: 'Social', social: 'Social', panoramico: 'Panorâmico', 'panorâmico': 'Panorâmico', carga: 'Carga', montacargas: 'Montacargas' };
     const tipoInf = TIPO_MAP[(spec.carac || '').trim().toLowerCase()] || '';
+
+    /* Descrição da cláusula 1.1 (antes ficava o marcador "DESCREVER CONFORME
+       PROPOSTA COMERCIAL" da minuta): montada da especificação da Proposta. */
+    const descPropostaInf = [
+      spec.carac,
+      spec.capacidade,
+      spec.andaresParadasPortas,
+      spec.vel && `velocidade ${String(spec.vel).replace('.', ',')} m/s`,
+      spec.dimensoesCaixa && `caixa ${spec.dimensoesCaixa}`,
+    ].map((x) => String(x || '').trim()).filter(Boolean).join(', ');
 
     /* Endereço: combina logradouro + número quando o número existe (registros
        novos já preservam o número — ver EnderecoAPI.mesclarLogradouro). */
@@ -654,6 +664,7 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
       paradas: paradasInf || prev.paradas,
       modelo: modeloInf || prev.modelo,
       carga: cargaInf || prev.carga,
+      descProposta: descPropostaInf || prev.descProposta,
     }));
   };
 
