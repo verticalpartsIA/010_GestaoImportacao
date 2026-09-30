@@ -1235,38 +1235,56 @@ function RouteAndShip({ start, end, cur, ship, isActive, onClick }) {
   );
 }
 
-/* ---------- IMPORTAÇÃO VAREJO (ex-"Compras Nacional") ====== */
-/* 29/09/2026 — pedido do usuário: a tela antes reaproveitava dados de
-   `embarques` (Importação) relabelados como "Fretes Nacionais", com vários
-   stubs (Transportadora/Motorista/Valor/Ocorrências nunca preenchidos de
-   verdade — ver investigação da mesma sessão). Usuário decidiu reservar
-   esta rota/menu (então chamada "Compras Nacional") pra um processo novo,
-   ainda não definido — removida toda a lógica antiga (fetch de embarques,
-   tabela, KPIs, filtros) de propósito, não é regressão. Casca mínima só
-   pra rota continuar existindo até o novo processo ser especificado.
-   Renomeada no mesmo dia pra "Importação Varejo" (pedido explícito do
-   usuário) — vai ser responsável por Compras de Varejo Importação. Rota
-   interna (`compras`) e id de módulo (`modulo: 'compras'` nas alçadas)
-   continuam os mesmos de propósito, só o rótulo visível mudou — não
-   troque o id sem migrar as alçadas já concedidas em `alcadas_capacidade`. */
-function ComprasPage({ setRoute }) {
+/* ---------- IMPORTAÇÃO VAREJO — movida pra src/importacao-varejo.jsx =
+   29/09/2026: a casca vazia que existia aqui (ex-"Compras Nacional",
+   esvaziada no PR #496 pra reserva de processo novo) virou o módulo real
+   de estoque/sugestão de compra (`ImportacaoVarejoPage`, arquivo próprio
+   `src/importacao-varejo.jsx` + `-store.js`, Edge Functions
+   list-importacao-varejo/sync-importacao-varejo/
+   criar-requisicao-compra-importacao-varejo). Rota/menu continuam com o
+   id interno `compras` — ver `case "compras"` em app.jsx/print-app.jsx. */
+
+/* ---------- EMAIL INBOX (Importação + Compras) ============== */
+/* 30/09 — pedido do usuário: "as respostas dos fornecedores devem aparecer
+   dentro do Inbox". O fornecedor (ex.: Glarie) costuma responder pelo
+   FORMULÁRIO do link (cotacoes_elevador_fornecedor.respostas), nunca pela
+   caixa suporte@ — então essas respostas não apareciam aqui, só as por
+   e-mail. Bloco SOMENTE LEITURA, separado da lista de e-mails: não toca em
+   emails_projeto, vínculo, matching nem soft-delete. */
+function InboxRespostasFormulario({ onAbrir }) {
+  const [itens, setItens] = React.useState(null);
+  React.useEffect(() => {
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb) { setItens([]); return; }
+    let vivo = true;
+    sb.from('cotacoes_elevador_fornecedor')
+      .select('id, numero_documento, fornecedor, responded_at, respostas, dados_envio')
+      .not('responded_at', 'is', null).is('excluido_em', null)
+      .order('responded_at', { ascending: false }).limit(6)
+      .then(({ data }) => { if (vivo) setItens(data || []); })
+      .catch(() => { if (vivo) setItens([]); });
+    return () => { vivo = false; };
+  }, []);
+  if (!itens || itens.length === 0) return null;
   return (
-    <div className="page fade-in">
-      <div className="page-head">
-        <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Importação Varejo</div>
-          <h1 className="page-head__title">Importação Varejo</h1>
-          <p className="page-head__sub">Módulo em preparação — novo processo a definir.</p>
-        </div>
-      </div>
-      <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13, border:'1px dashed var(--border)', borderRadius:6 }}>
-        Nenhum conteúdo ainda.
-      </div>
+    <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle, rgba(0,0,0,.03))' }}>
+      <div className="small" style={{ fontWeight: 600, marginBottom: 4 }}>Respostas de fornecedores pelo formulário (link)</div>
+      {itens.map((c) => {
+        const num = c.dados_envio && c.dados_envio.header ? c.dados_envio.header.numero_cotacao : null;
+        const total = ((c.respostas && c.respostas.itens) || []).reduce((t, it) => t + (Number(it.preco_total) || 0), 0);
+        const moeda = (c.respostas && c.respostas.moeda) || 'USD';
+        return (
+          <div key={c.id} className="small" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0', cursor: num != null ? 'pointer' : 'default' }}
+            onClick={(ev) => num != null && onAbrir(ev, num)}>
+            <span><b>{c.fornecedor}</b> respondeu {c.numero_documento}{total > 0 ? ` — ${moeda} ${total.toLocaleString('pt-BR')}` : ''}</span>
+            <span className="muted">{c.responded_at ? new Date(c.responded_at).toLocaleString('pt-BR') : ''}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-/* ---------- EMAIL INBOX (Importação + Compras) ============== */
 /* 10/09 — IMAP conectado de verdade (Edge Function read-inbox, mesma
    caixa suporte@vpsistema.com usada pra enviar em send-email). Movida do
    módulo Comercial pro módulo Geral no mesmo dia — pedido do usuário: é
@@ -1680,6 +1698,7 @@ function EmailInbox({ setRoute, setSubsel }) {
               Esta pasta ainda não está implementada — só Caixa de entrada e Enviados leem de verdade.
             </div>
           )}
+          {folder === "inbox" && <InboxRespostasFormulario onAbrir={verNaLinhaDoTempo}/>}
           {folder === "inbox" && !loading && emails.length === 0 && (
             <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
               <div style={{ fontWeight:600, color:'var(--fg2)', marginBottom:4 }}>{erro ? 'Não foi possível carregar' : 'Nenhuma mensagem'}</div>
@@ -1946,4 +1965,4 @@ function EmailBody({ active }) {
   return <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 13, margin: 0 }}>{active.preview ? window.linkifyTexto(active.preview) : 'Mensagem sem conteúdo de texto.'}</pre>;
 }
 
-Object.assign(window, { ImportacaoPage, ImportacaoDetail, ImportacaoRastreamento, ComprasPage, EmailInbox });
+Object.assign(window, { ImportacaoPage, ImportacaoDetail, ImportacaoRastreamento, EmailInbox });

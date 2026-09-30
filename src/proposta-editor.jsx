@@ -400,7 +400,11 @@ function PropostaSendModal({ record, onClose, onSent }) {
     const contact = channel === 'whatsapp' ? telefone : email;
     setSendingChannel(channel);
     try {
-      await store.markSent(record.id, channel, { name, contact });
+      /* 30/09 — e-mail: só registra "enviada" DEPOIS de o send-email
+         confirmar (antes marcava antes de enviar, e mesmo com falha +
+         mailto o status ficava "enviada"). WhatsApp/link seguem como
+         antes (o envio em si é manual). */
+      if (channel !== 'email') await store.markSent(record.id, channel, { name, contact });
       if (channel === 'whatsapp') window.open(store.whatsAppHref(contact, message), '_blank');
       else if (channel === 'email') {
         /* 28/09 — pedido explícito do usuário: a Proposta deve sair "de
@@ -422,16 +426,20 @@ function PropostaSendModal({ record, onClose, onSent }) {
               numeroCotacao: record.numeroCotacao ?? null, referenciaTipo: 'proposta', referenciaId: record.id,
             },
           });
-          if (!emailError) {
+          if (!emailError && emailData && emailData.ok) {
             enviouDireto = true;
-            if (emailData && emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
+            if (emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
           } else {
-            console.warn('[PropostaSendModal] send-email falhou, caindo pro mailto:', emailError);
+            console.warn('[PropostaSendModal] send-email falhou, caindo pro mailto:', emailError, emailData);
           }
         }
-        if (!enviouDireto) {
+        if (enviouDireto) {
+          await store.markSent(record.id, channel, { name, contact });
+          window.toast?.(`E-mail enviado para ${contact}.`, 'success');
+        } else {
           window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} — VerticalParts`, message), '_blank');
-          window.toast?.('Não foi possível enviar direto (envio automático falhou) — abrindo seu e-mail padrão para envio manual. Esse envio não ficará registrado em Enviados/Linha do Tempo.', 'warning');
+          window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado ao cliente e a proposta NÃO foi marcada como enviada. Abrindo seu e-mail padrão para envio manual; depois de enviar, use o WhatsApp/link para registrar o envio.', 'error');
+          return;
         }
       }
       setSent(channel);

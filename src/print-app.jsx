@@ -50,7 +50,7 @@ function renderPrintPage(scr) {
     case "importacao-detail": return <ImportacaoDetail embarque={null} setRoute={noop}/>;
     case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={noop} setSubsel={noop}/>;
     case "inbox": return <EmailInbox setRoute={noop}/>;
-    case "compras":        return <ComprasPage setRoute={noop}/>;
+    case "compras":        return <window.ImportacaoVarejoPage setRoute={noop}/>;
     case "financeiro":     return <FinanceiroPage/>;
     case "comissoes":      return <ComissoesPage/>;
     case "notificacoes":   return <NotificacoesPage setRoute={noop}/>;
