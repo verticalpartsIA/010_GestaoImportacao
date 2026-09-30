@@ -1,14 +1,18 @@
 /* ============================================================
    importacao-varejo.jsx — Importação Varejo
-   Estoque AO VIVO (Omie) + Curva ABC-D + Sugestão de Compra pra
-   produtos importados vendidos avulsos ("varejo"). Pedido do usuário
-   (29/09/2026) — porta a lógica do Estoque Omie (repo
-   verticalpartsIA/003_requisicoes) adaptada: escopo = produtos com
-   origem_mercadoria='1' (fiscal, confirmado ao vivo que bate em
-   VPER/VPMP/VPB), giro/Curva calculado desde 01/01/2024 (não janela
-   móvel), estoque nunca cacheado (Omie tem endpoint em lote pra isso —
-   ver list-importacao-varejo). Rota/menu continuam com o id interno
-   `compras` (não trocar — ver alçadas em colaboradores-admin-store.js).
+   Estoque Omie CACHEADO (4x/dia, sync-importacao-varejo-estoque) +
+   Curva ABC-D + Sugestão de Compra pra produtos importados vendidos
+   avulsos ("varejo"). Pedido do usuário (29/09/2026) — porta a lógica do
+   Estoque Omie (repo verticalpartsIA/003_requisicoes) adaptada: escopo =
+   produtos com origem_mercadoria='1' (fiscal, confirmado ao vivo que
+   bate em VPER/VPMP/VPB), giro/Curva calculado desde 01/01/2024 (não
+   janela móvel). Estoque começou "ao vivo" (consulta direta ao Omie a
+   cada load) e foi trocado pra cache 4x/dia em 30/09/2026 — pedido
+   explícito do usuário depois de sentir a tela lenta ("não seria legal
+   se isso morasse no Supabase e lá dentro atualizasse tipo 4 vezes por
+   dia?"); ver list-importacao-varejo/sync-importacao-varejo-estoque.
+   Rota/menu continuam com o id interno `compras` (não trocar — ver
+   alçadas em colaboradores-admin-store.js).
    ============================================================ */
 
 function ivFmtNum(v) {
@@ -194,7 +198,7 @@ function ImportacaoVarejoPage({ setRoute }) {
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState(null);
   const [aviso, setAviso] = React.useState(null);
-  const [lastLiveCheckAt, setLastLiveCheckAt] = React.useState(null);
+  const [lastEstoqueSyncAt, setLastEstoqueSyncAt] = React.useState(null);
   const [lastGiroSyncAt, setLastGiroSyncAt] = React.useState(null);
   const [busca, setBusca] = React.useState('');
   const [corFiltro, setCorFiltro] = React.useState('todas');
@@ -215,7 +219,7 @@ function ImportacaoVarejoPage({ setRoute }) {
     window.ImportacaoVarejoStore.carregar()
       .then((data) => {
         setItems(data.items || []);
-        setLastLiveCheckAt(data.lastLiveCheckAt || null);
+        setLastEstoqueSyncAt(data.lastEstoqueSyncAt || null);
         setLastGiroSyncAt(data.lastGiroSyncAt || null);
         setAviso(data.aviso || null);
       })
@@ -245,9 +249,20 @@ function ImportacaoVarejoPage({ setRoute }) {
     setSincronizando(true);
     try {
       await window.ImportacaoVarejoStore.dispararSyncManual();
-      window.toast?.('Sincronização disparada — catálogo/giro podem levar alguns minutos pra terminar (roda em segundo plano). Estoque já é ao vivo, não precisa disso.', 'success');
+      window.toast?.('Sincronização de catálogo/giro disparada — pode levar alguns minutos pra terminar (roda em segundo plano).', 'success');
     } catch (e) { window.toast?.('Erro ao disparar sincronização: ' + e.message, 'error'); }
     finally { setSincronizando(false); }
+  };
+
+  const [sincronizandoEstoque, setSincronizandoEstoque] = React.useState(false);
+  const forcarSyncEstoque = async () => {
+    setSincronizandoEstoque(true);
+    try {
+      await window.ImportacaoVarejoStore.dispararSyncEstoqueManual();
+      window.toast?.('Estoque sincronizado com o Omie agora.', 'success');
+      carregar();
+    } catch (e) { window.toast?.('Erro ao sincronizar estoque: ' + e.message, 'error'); }
+    finally { setSincronizandoEstoque(false); }
   };
 
   const toggleSelecionado = (codigo) => setSelecionados((prev) => {
@@ -257,7 +272,7 @@ function ImportacaoVarejoPage({ setRoute }) {
   });
   const itensSelecionados = items.filter((i) => selecionados.has(i.codigo));
 
-  if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando estoque ao vivo do Omie…</div>;
+  if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando Importação Varejo…</div>;
 
   return (
     <div className="page fade-in">
@@ -265,12 +280,17 @@ function ImportacaoVarejoPage({ setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule" />Logística · Importação Varejo</div>
           <h1 className="page-head__title">Importação Varejo</h1>
-          <p className="page-head__sub">Estoque ao vivo, giro de vendas (desde 01/01/2024) e Sugestão de Compra dos produtos importados vendidos avulsos.</p>
+          <p className="page-head__sub">Estoque (sincronizado 4x/dia), giro de vendas (desde 01/01/2024) e Sugestão de Compra dos produtos importados vendidos avulsos.</p>
         </div>
         <div className="page-head__r">
           {podeGerenciar && (
+            <Button variant="outline" icon="refresh" onClick={forcarSyncEstoque} disabled={sincronizandoEstoque} data-tip="Consulta o estoque no Omie agora, sem esperar a próxima janela de sincronização (4x/dia)">
+              {sincronizandoEstoque ? 'Sincronizando…' : 'Sincronizar estoque agora'}
+            </Button>
+          )}
+          {podeGerenciar && (
             <Button variant="outline" icon="refresh" onClick={forcarSync} disabled={sincronizando}>
-              {sincronizando ? 'Disparando…' : 'Forçar sincronização'}
+              {sincronizando ? 'Disparando…' : 'Forçar sincronização de catálogo/giro'}
             </Button>
           )}
           <Button variant="outline" icon="refresh" onClick={carregar} disabled={loading}>Atualizar</Button>
@@ -278,7 +298,7 @@ function ImportacaoVarejoPage({ setRoute }) {
       </div>
 
       <div className="row" style={{ gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
-        <span className="small muted">Estoque consultado ao vivo: <b>{ivFmtDataHora(lastLiveCheckAt)}</b></span>
+        <span className="small muted">Estoque sincronizado em: <b>{ivFmtDataHora(lastEstoqueSyncAt)}</b></span>
         <span className="small muted">Giro/Curva calculados em: <b>{ivFmtDataHora(lastGiroSyncAt)}</b></span>
       </div>
 
