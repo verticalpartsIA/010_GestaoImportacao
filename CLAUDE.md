@@ -572,6 +572,15 @@ Pedido do usuário: 6º submódulo de Comercial | Pré-venda (`/comercial/contra
 - Versões: `contratos-sociais.jsx` v2, `contratos-sociais-store.js` v1, `shell.jsx` v69, `router.js` v16, `colaboradores-admin-store.js` v13, `app.jsx` v81.
 - **Não feito (fica pra quando pedirem)**: substituir/versionar o contrato social de um cliente já com PDF (hoje cada save é uma linha nova), visualizar o PDF dentro da tela, filtro por cliente na lista além da busca de texto, vínculo com o Contrato de Venda.
 
+## Contrato de Venda — minuta de 01/10/2026 + numeração herdada do sistema (01/10/2026)
+
+Pedido do usuário: reeditar o contrato para `MINUTA_CONTRATUAL_VERTICALPARTS_01_OUT_26.docx`. **Regra dele: o texto do contrato pode mudar; o conteúdo herdado dentro do sistema (cotação, proposta, equipamentos, cliente) não** — placeholders do DOCX (`XXXX/2026`, `0X equipamento`, `RAZÃO SOCIAL`…) nunca sobrescrevem dado herdado.
+
+- **Texto**: único trecho novo vs. a minuta de 30/09 foi a 2.6.1 ("…dos equipamentos, se a obra não estiver pronta na data da entrega dos equipamentos, seguirá conforme abaixo:"). Todo o resto já batia (conferido por diff automático do DOCX com revisões aceitas × `buildContract`). Os erros de digitação da minuta e a Chave PIX seguem como na seção de 30/09.
+- **Numeração — supera o `0955/2026` da seção de 30/09**: o cabeçalho volta a mostrar o número do sistema, `Nº do Contrato: VPCV-0955` (aditivo `VPCV-0955-2`; rascunho `VPCV-XXXX`; legado `VPVE…` cru) e o Anexo I mostra `Proposta Comercial nº VPPR-0955` (`CV.propostaExibicao()`, mesmo inteiro da cotação). Prefixos do sistema (`MasterIdEngine.PREFIXO_ETAPA`): **VPCT = cotação**, VPPC precificação, VPPR proposta, **VPCV contrato de venda**, VPNI contrato instalador. O usuário sugeriu "vpct-955 ou algo parecido"; **VPCT já é a cotação**, então foi mantido VPCV — trocar o prefixo mexeria em `numero_documento`/e-mail/`parseNumeroCotacao`.
+- **Equipamentos herdados**: `form.equipamentosIds` (novo) vem de `proposta.data_json.ativos[].codigo` em `aplicarProposta` (ex. `VPEL-EL0955-1`, `VPEL-EL0955-2`); a cláusula 1.1 acrescenta ", identificados como **VPEL-EL0955-1 e VPEL-EL0955-2**". Sem ativos → cláusula sai como antes.
+- `index.html`: engine v16→17, `contrato-venda.jsx` v22→23. `assinar.html`: engine v13→14. Suíte 185/188 (3 falhas pré-existentes em `instalacao-obra-store.test.js`).
+
 ## P.I. — transferência de pagamento entre P.I.s (30/09/2026)
 
 Caso real: a SCVP260522 (Ningbo Senchen) não coube num container; o restante virou a fatura SCVP260522-2 (USD 35.435,84, 3 itens Thyssen, embarque **146º**). O sinal de 30% da -2 (USD 10.630,75) já tinha sido pago em 01/06 **dentro** da SCVP260522, que aparecia em 157,491% paga.

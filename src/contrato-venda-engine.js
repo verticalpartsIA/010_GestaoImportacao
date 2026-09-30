@@ -257,15 +257,20 @@
     return `${qtd}× ${e.label}${m}${l}`.replace(/\s+/g, ' ').trim();
   }
 
-  /* Nº do contrato como na minuta ("XXXX/AAAA"): VPCV-0955 → 0955/2026,
-     VPCV-0955-2 (aditivo) → 0955-2/2026. Sem número definitivo (rascunho)
-     ou formato legado (VPVE.../VPNI...) → placeholder da minuta / valor cru. */
-  function numeroExibicao(numero, ano) {
-    const a = ano || new Date().getFullYear();
-    const m = /^VPCV-(\d+)((?:-\d+)?)$/.exec(String(numero || ''));
-    if (m) return m[1] + m[2] + '/' + a;
-    if (!numero || /^VPVE_+$/.test(numero)) return 'XXXX/' + a;
-    return String(numero);
+  /* Nº do contrato exibido no documento = o número do sistema, herdado da
+     cotação/proposta (VPCV-0955; aditivo VPCV-0955-2). Rascunho sem número
+     definitivo → VPCV-XXXX; formato legado (VPVE.../VPNI...) → valor cru. */
+  function numeroExibicao(numero) {
+    const n = String(numero || '');
+    if (/^VPCV-\d+/.test(n)) return n;
+    if (!n || /^VPVE_+$/.test(n)) return 'VPCV-XXXX';
+    return n;
+  }
+
+  /* Nº da Proposta de origem (Anexo I): mesmo inteiro da cotação, prefixo VPPR. */
+  function propostaExibicao(numero) {
+    const m = /^VPCV-(\d+)/.exec(String(numero || ''));
+    return m ? 'VPPR-' + m[1] : 'VPPR-XXXX';
   }
 
   function defaultState() {
@@ -283,6 +288,7 @@
       modelo: '', largura: '', velocidade: '0,5 m/s', desnivel: '',
       distancia: '', localObra: '',
       descProposta: '',
+      equipamentosIds: [],   // identificadores herdados da Proposta (VPEL-EL0955-1, -2...)
       valor: '', sinalPct: 30, parcelas: 5,
       /* Discriminação informativa por equipamento (Fase 2 da granularidade
          de valor) — herdada de elevador.valores.itens[] da Proposta quando
@@ -307,7 +313,8 @@
     const parcelas = ctx.parcelas != null ? ctx.parcelas : 5;
     const numero = ctx.numero || 'VPVE________';
     /* Nº exibido no documento = formato da minuta ("XXXX/AAAA"); o número interno (numero_documento) segue como chave. */
-    const numeroExib = numeroExibicao(numero, ctx.ano);
+    const numeroExib = numeroExibicao(numero);
+    const propostaExib = propostaExibicao(numero);
 
     const cargaNum = parseFloat(String(f.carga || '0').replace(',', '.')) || 0;
     const isElevador = f.tipoEquip === 'ELEVADOR';
@@ -317,6 +324,8 @@
     const descEq = descEquipamento(f);
     /* Complemento da cláusula 1.1 — texto livre digitado no Passo 2; vazio mantém o marcador da minuta */
     const descProposta = (f.descProposta || '').trim() || 'DESCREVER CONFORME PROPOSTA COMERCIAL';
+    const idsLista = (Array.isArray(f.equipamentosIds) ? f.equipamentosIds : []).map((x) => String(x || '').trim()).filter(Boolean);
+    const idsEquip = idsLista.length > 1 ? idsLista.slice(0, -1).join(', ') + ' e ' + idsLista[idsLista.length - 1] : idsLista[0] || '';
     const localObra = f.localObra || '(ENDEREÇO COMPLETO DO LOCAL DE ENTREGA)';
 
     /* Tabela de parcelas */
@@ -384,7 +393,7 @@
       id: 's1', num: '1', title: 'OBJETO DO CONTRATO',
       body: [
         p('<b>1.1 Objeto.</b> O objeto deste Contrato consiste no descrito a seguir, observados e respeitados os termos e as condições estabelecidos neste instrumento contratual:', { html: true }),
-        p(`Compra e venda de <b>${esc(descEq)}</b> (${esc(descProposta)}), denominado equipamentos, conforme especificações do Anexos I e II.`, { html: true, li: true }),
+        p(`Compra e venda de <b>${esc(descEq)}</b> (${esc(descProposta)})${idsEquip ? `, identificados como <b>${esc(idsEquip)}</b>` : ''}, denominado equipamentos, conforme especificações do Anexos I e II.`, { html: true, li: true }),
         p('Modalidade: “CIF” (“Cost, Insurance and Freight”).', { li: true }),
         p('Instalação dos equipamentos mencionados acima de forma a entregá-los ao COMPRADOR em condições de uso imediato (“turn key”). A instalação compreende as seguintes atividades:', { li: true }),
         p('Frete (transporte e desembarque);', { li: true, indent: true }),
@@ -392,7 +401,7 @@
         p(`<b>LOCAL DE ENTREGA:</b> ${esc(localObra)}`, { html: true, callout: true }),
         p('<b>1.1.1</b> Os seguintes anexos a este Contrato constituem parte indissociável e podem servir para complementar os termos e as condições firmadas neste instrumento contratual.', { html: true }),
         p(null, { anexos: [
-          ['Anexo I', 'Proposta Comercial nº ' + numeroExib],
+          ['Anexo I', 'Proposta Comercial nº ' + propostaExib],
           ['Anexo II', 'Desenho(s) Técnico(s)'],
         ] }),
         p('<b>1.1.2</b> Os Desenhos Técnicos referidos no Anexo II acima (Projeto de Instalação) não serão entregues fisicamente na data de assinatura deste Contrato. A VENDEDORA fornecê-los-á separadamente ao COMPRADOR em até 5 (cinco) dias úteis, contados da assinatura deste Contrato, desde que estiverem cumpridas, cumulativamente, as seguintes condições: (i) o pagamento do sinal, mediante confirmação pelo setor Financeiro da VENDEDORA; e (ii) a aprovação pelo setor Jurídico da VENDEDORA.', { html: true, indent: true }),
@@ -413,7 +422,7 @@
         p('<b>2.5 Prazo de entrega na obra.</b> A VENDEDORA se compromete a entregar os equipamentos adquiridos no prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias, a contar da data que o último requisito for preenchido, quais sejam: assinatura do Contrato, pagamento do sinal e aprovação do projeto. A conclusão desses 03 (três) requisitos são condições essenciais e indispensáveis para o início da contagem do prazo de entrega dos equipamentos.', { html: true }),
         p('<b>2.5.1</b> Caso a VENDEDORA não realize a entrega dos equipamentos na obra no prazo convencionado, ficará sujeita ao pagamento da multa moratória diária de 0,05% (cinco centésimos por cento) limitado até 2% (dois por cento) sobre o valor do(s) equipamento(s) em atraso.', { html: true, indent: true }),
         p('<b>2.6 Cronograma de Obra.</b> O COMPRADOR deverá apresentar à validação da VENDEDORA o cronograma de obra contendo as datas de liberação para início das montagens e datas finais de entrega.', { html: true }),
-        p('<b>2.6.1 Procedimento e Prazos para Instalação:</b> O processo de instalação dos equipamentos seguirá conforme abaixo:', { html: true, indent: true }),
+        p('<b>2.6.1 Procedimento e Prazos para Instalação:</b> O processo de instalação dos equipamentos, se a obra não estiver pronta na data da entrega dos equipamentos, seguirá conforme abaixo:', { html: true, indent: true }),
         p('<b>a)</b> O COMPRADOR deverá notificar a VENDEDORA por escrito para que esta inicie a instalação dos equipamentos, respeitado o cronograma de obras, e em prazo que não poderá ser superior a 90 (noventa) dias após a entrega, sob pena da resolução deste contrato aplicando-se o disposto na alínea “b” do item 8.2.2 do contrato;', { html: true, indent: true }),
         p('<b>b)</b> Em até 05 (cinco) dias após a notificação do COMPRADOR, a VENDEDORA apresentará a relação de atividades a serem realizadas e os respectivos prazos, podendo a disponibilização da equipe de montagem — e, consequentemente, o início das atividades — ocorrer em até 90 (noventa) dias, conforme a disponibilidade das equipes;', { html: true, indent: true }),
         p('<b>c)</b> A VENDEDORA iniciará a instalação dos equipamentos de acordo com o cronograma apresentado ao COMPRADOR.', { html: true, indent: true }),
@@ -612,7 +621,7 @@
   window.CV = {
     VENDEDORA, EQUIPAMENTOS, CONTATOS_VP,
     onlyDigits, isCPFValid, montarEndereco, maskCNPJ, maskCPF, maskPhone, maskCEP, maskMoney, parseMoney, brl, dataBR,
-    descEquipamento, defaultState, numeroExibicao,
+    descEquipamento, defaultState, numeroExibicao, propostaExibicao,
     buildContract,
     calcularD0, addDias,  // ISSUE #6
   };
