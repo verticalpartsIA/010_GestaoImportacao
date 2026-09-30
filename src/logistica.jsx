@@ -1245,6 +1245,46 @@ function RouteAndShip({ start, end, cur, ship, isActive, onClick }) {
    id interno `compras` — ver `case "compras"` em app.jsx/print-app.jsx. */
 
 /* ---------- EMAIL INBOX (Importação + Compras) ============== */
+/* 30/09 — pedido do usuário: "as respostas dos fornecedores devem aparecer
+   dentro do Inbox". O fornecedor (ex.: Glarie) costuma responder pelo
+   FORMULÁRIO do link (cotacoes_elevador_fornecedor.respostas), nunca pela
+   caixa suporte@ — então essas respostas não apareciam aqui, só as por
+   e-mail. Bloco SOMENTE LEITURA, separado da lista de e-mails: não toca em
+   emails_projeto, vínculo, matching nem soft-delete. */
+function InboxRespostasFormulario({ onAbrir }) {
+  const [itens, setItens] = React.useState(null);
+  React.useEffect(() => {
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb) { setItens([]); return; }
+    let vivo = true;
+    sb.from('cotacoes_elevador_fornecedor')
+      .select('id, numero_documento, fornecedor, responded_at, respostas, dados_envio')
+      .not('responded_at', 'is', null).is('excluido_em', null)
+      .order('responded_at', { ascending: false }).limit(6)
+      .then(({ data }) => { if (vivo) setItens(data || []); })
+      .catch(() => { if (vivo) setItens([]); });
+    return () => { vivo = false; };
+  }, []);
+  if (!itens || itens.length === 0) return null;
+  return (
+    <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle, rgba(0,0,0,.03))' }}>
+      <div className="small" style={{ fontWeight: 600, marginBottom: 4 }}>Respostas de fornecedores pelo formulário (link)</div>
+      {itens.map((c) => {
+        const num = c.dados_envio && c.dados_envio.header ? c.dados_envio.header.numero_cotacao : null;
+        const total = ((c.respostas && c.respostas.itens) || []).reduce((t, it) => t + (Number(it.preco_total) || 0), 0);
+        const moeda = (c.respostas && c.respostas.moeda) || 'USD';
+        return (
+          <div key={c.id} className="small" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0', cursor: num != null ? 'pointer' : 'default' }}
+            onClick={(ev) => num != null && onAbrir(ev, num)}>
+            <span><b>{c.fornecedor}</b> respondeu {c.numero_documento}{total > 0 ? ` — ${moeda} ${total.toLocaleString('pt-BR')}` : ''}</span>
+            <span className="muted">{c.responded_at ? new Date(c.responded_at).toLocaleString('pt-BR') : ''}</span>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 /* 10/09 — IMAP conectado de verdade (Edge Function read-inbox, mesma
    caixa suporte@vpsistema.com usada pra enviar em send-email). Movida do
    módulo Comercial pro módulo Geral no mesmo dia — pedido do usuário: é
@@ -1658,6 +1698,7 @@ function EmailInbox({ setRoute, setSubsel }) {
               Esta pasta ainda não está implementada — só Caixa de entrada e Enviados leem de verdade.
             </div>
           )}
+          {folder === "inbox" && <InboxRespostasFormulario onAbrir={verNaLinhaDoTempo}/>}
           {folder === "inbox" && !loading && emails.length === 0 && (
             <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
               <div style={{ fontWeight:600, color:'var(--fg2)', marginBottom:4 }}>{erro ? 'Não foi possível carregar' : 'Nenhuma mensagem'}</div>

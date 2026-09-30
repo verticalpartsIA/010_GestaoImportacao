@@ -360,7 +360,11 @@ function CVSendModal({ record, onClose, onSent }) {
     if (sending) return;
     setSending(true);
     try {
-      const updated = await window.CVStore.markSent(record.id, channel, { name, contact });
+      /* 30/09 — e-mail: só registra "enviado" DEPOIS de o send-email
+         confirmar (antes marcava antes, e com falha + mailto o status
+         ficava "enviado" sem nada ter saído). */
+      let updated = null;
+      if (channel !== 'email') updated = await window.CVStore.markSent(record.id, channel, { name, contact });
       if (channel === 'whatsapp') {
         window.open(window.CVStore.whatsAppHref(contact, message), '_blank');
       } else if (channel === 'email') {
@@ -388,16 +392,20 @@ function CVSendModal({ record, onClose, onSent }) {
               numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
             },
           });
-          if (!emailError) {
+          if (!emailError && emailData && emailData.ok) {
             enviouDireto = true;
-            if (emailData && emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
+            if (emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
           } else {
-            console.warn('[CVSendModal] send-email falhou, caindo pro mailto:', emailError);
+            console.warn('[CVSendModal] send-email falhou, caindo pro mailto:', emailError, emailData);
           }
         }
-        if (!enviouDireto) {
+        if (enviouDireto) {
+          updated = await window.CVStore.markSent(record.id, channel, { name, contact });
+          window.toast?.(`E-mail enviado para ${contact}.`, 'success');
+        } else {
           window.open(window.CVStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
-          window.toast?.('Não foi possível enviar direto (envio automático falhou) — abrindo seu e-mail padrão para envio manual. Esse envio não ficará registrado em Enviados/Linha do Tempo.', 'warning');
+          window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado e o contrato NÃO foi marcado como enviado. Abrindo seu e-mail padrão para envio manual; depois de enviar, use WhatsApp/Link para registrar o envio.', 'error');
+          return;
         }
       }
       setSent(true);
