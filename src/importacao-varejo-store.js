@@ -80,7 +80,15 @@
     return data;
   }
 
+  async function dispararSyncEstoqueManual() {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.functions.invoke('sync-importacao-varejo-estoque', { body: {} });
+    if (error) throw new Error((window.extrairErroFuncao && window.extrairErroFuncao(error)) || error.message || 'Falha ao sincronizar estoque.');
+    if (data && data.error) throw new Error(data.error);
+    return data;
+  }
+
   window.ImportacaoVarejoStore = {
-    carregar, salvarLoteConfig, lancarComprado, excluirComprado, enviarRequisicaoOmie, dispararSyncManual,
+    carregar, salvarLoteConfig, lancarComprado, excluirComprado, enviarRequisicaoOmie, dispararSyncManual, dispararSyncEstoqueManual,
   };
 }());
