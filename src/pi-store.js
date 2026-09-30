@@ -26,6 +26,23 @@
   function somaPagamentosAdicionais(pagamentos) {
     return (pagamentos || []).reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
   }
+  /* Transferência de pagamento entre P.I.s (30/09): um pagamento feito na P.I.
+     de origem que, na verdade, quitava (parte de) outra P.I. — ex.: o sinal da
+     SCVP260522-2 foi pago junto com a SCVP260522. Os pagamentos originais não
+     mudam; só o "% paga" desconta o que saiu ('enviada') e soma o que entrou
+     ('recebida'). Saldo líquido = recebidas − enviadas. */
+  function saldoTransferencias(transf) {
+    return (transf || []).reduce((s, t) => {
+      const v = parseFloat(t.valor) || 0;
+      return s + (t.direcao === 'enviada' ? -v : v);
+    }, 0);
+  }
+  /* Valor que conta pra quitar ESTA P.I. (pagamentos próprios + transferências). */
+  function calcValorQuitado(pi) {
+    const pago = (parseFloat(pi.valor_primeiro_pagamento) || 0) + (parseFloat(pi.valor_segundo_pagamento) || 0)
+      + somaPagamentosAdicionais(pi.pagamentos_adicionais);
+    return pago + saldoTransferencias(pi.transferencias_pagamento);
+  }
   function fmtMoeda(valor, moeda) {
     return `${moeda || 'USD'} ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
   }
@@ -91,6 +108,10 @@
         data: p.data || null, valor: p.valor !== '' && p.valor != null ? Number(p.valor) : null,
         cotacao_dolar: p.cotacao_dolar !== '' && p.cotacao_dolar != null ? Number(p.cotacao_dolar) : null,
       })).filter((p) => p.data || p.valor),
+      transferencias_pagamento: (form.transferencias_pagamento || []).map((t) => ({
+        direcao: t.direcao === 'enviada' ? 'enviada' : 'recebida', pi_numero: (t.pi_numero || '').trim(),
+        data: t.data || null, valor: t.valor !== '' && t.valor != null ? Number(t.valor) : null, obs: (t.obs || '').trim(),
+      })).filter((t) => t.pi_numero || t.valor),
       taxas, producao: form.producao || {}, observacoes: form.observacoes || null,
     };
   }
@@ -158,6 +179,6 @@
     listarTodas, obter, criar, atualizar, remover, vincularEmbarque,
     uploadAnexoProducao, removerAnexoProducao,
     calcItemTotal, calcTotalGeral, somaPagamentosAdicionais, fmtMoeda,
-    calcTaxaValor, calcTotalTaxas,
+    calcTaxaValor, calcTotalTaxas, saldoTransferencias, calcValorQuitado,
   };
 }());

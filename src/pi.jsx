@@ -249,6 +249,45 @@ function PIPagamentosAdicionais({ pagamentos, onChange }) {
   );
 }
 
+/* ---------- Transferências de pagamento entre P.I.s ---------- */
+function PITransferencias({ transferencias, onChange, moeda }) {
+  const lista = transferencias || [];
+  const add = () => onChange([...lista, { direcao: 'recebida', pi_numero: '', data: '', valor: '', obs: '' }]);
+  const remove = (i) => onChange(lista.filter((_, idx) => idx !== i));
+  const update = (i, field, v) => onChange(lista.map((t, idx) => (idx === i ? { ...t, [field]: v } : t)));
+  return (
+    <Card title="Transferência de pagamento entre P.I.s" sub="Pagamento feito numa P.I. que quitava outra. Os pagamentos originais não mudam; só o % paga desconta o que saiu e soma o que entrou.">
+      {lista.length === 0 ? (
+        <p className="small muted" style={{ textAlign: 'center', padding: '16px 0' }}>Nenhuma transferência.</p>
+      ) : (
+        <div className="stack" style={{ gap: 8 }}>
+          {lista.map((t, i) => (
+            <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 10 }}>
+              <div className="row sb" style={{ marginBottom: 6 }}>
+                <span className="small muted">{t.direcao === 'enviada' ? 'Enviada para' : 'Recebida de'} {t.pi_numero || 'outra P.I.'}</span>
+                <Button variant="ghost" size="sm" icon="trash" onClick={() => remove(i)}/>
+              </div>
+              <div className="grid-3" style={{ gap: 10 }}>
+                <PIField label="Sentido">
+                  <select className="input" value={t.direcao} onChange={(e) => update(i, 'direcao', e.target.value)}>
+                    <option value="recebida">Recebida (outra P.I. pagou esta)</option>
+                    <option value="enviada">Enviada (paguei aqui algo de outra P.I.)</option>
+                  </select>
+                </PIField>
+                <PIField label="Nº da outra P.I."><PIInput value={t.pi_numero} onChange={(v) => update(i, 'pi_numero', v)}/></PIField>
+                <PIField label={`Valor (${moeda || 'USD'})`}><PIInput type="number" step="0.01" value={t.valor} onChange={(v) => update(i, 'valor', v)}/></PIField>
+                <PIField label="Data do pagamento original"><PIInput type="date" value={t.data} onChange={(v) => update(i, 'data', v)}/></PIField>
+                <PIField label="Observação" span={2}><PIInput value={t.obs} onChange={(v) => update(i, 'obs', v)} placeholder="Ex.: sinal de 30% pago junto com a SCVP260522"/></PIField>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 10 }} onClick={add}>Adicionar transferência</Button>
+    </Card>
+  );
+}
+
 /* ---------- Produção ---------- */
 function PIProducaoSection({ value, onChange, piId }) {
   const [uploading, setUploading] = React.useState(false);
@@ -313,7 +352,7 @@ const PI_EMPTY = {
   status: 'Em andamento', moeda: 'USD', itens: [], taxas: [],
   data_primeiro_pagamento: '', valor_primeiro_pagamento: '', cotacao_dolar_primeiro_pagamento: '',
   data_segundo_pagamento: '', valor_segundo_pagamento: '', cotacao_dolar_segundo_pagamento: '',
-  pagamentos_adicionais: [], producao: {}, observacoes: '',
+  pagamentos_adicionais: [], transferencias_pagamento: [], producao: {}, observacoes: '',
 };
 
 function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) {
@@ -373,7 +412,9 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
   const pago2 = parseFloat(form.valor_segundo_pagamento) || 0;
   const pagoAdicional = store.somaPagamentosAdicionais(form.pagamentos_adicionais);
   const totalPago = pago1 + pago2 + pagoAdicional;
-  const percPaga = valorTotalComTaxas > 0 ? (totalPago / valorTotalComTaxas) * 100 : 0;
+  const saldoTransf = store.saldoTransferencias(form.transferencias_pagamento);
+  const totalQuitado = totalPago + saldoTransf;
+  const percPaga = valorTotalComTaxas > 0 ? (totalQuitado / valorTotalComTaxas) * 100 : 0;
 
   /* Compra de equipamento — gate do CEO + gatilhos automáticos, só faz
      sentido conferir na criação (o "start" da compra) e quando a P.I. está
@@ -492,9 +533,11 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
             </div>
           </Card>
           <PIPagamentosAdicionais pagamentos={form.pagamentos_adicionais} onChange={set('pagamentos_adicionais')}/>
+          <PITransferencias transferencias={form.transferencias_pagamento} onChange={set('transferencias_pagamento')} moeda={form.moeda}/>
           <div className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 12 }}>
             <div className="small">
               <span className="muted">Total pago: </span><b>{store.fmtMoeda(totalPago, form.moeda)}</b>
+              {saldoTransf !== 0 && <><span className="muted" style={{ margin: '0 8px' }}>·</span><span className="muted">Transferências: </span><b>{saldoTransf > 0 ? '+' : '−'}{store.fmtMoeda(Math.abs(saldoTransf), form.moeda)}</b></>}
               <span className="muted" style={{ margin: '0 8px' }}>·</span>
               <span className="muted">Total dos itens: </span><b>{store.fmtMoeda(valorTotalItens, form.moeda)}</b>
               {totalTaxas > 0 && <><span className="muted" style={{ margin: '0 8px' }}>·</span><span className="muted">Taxas: </span><b>{store.fmtMoeda(totalTaxas, form.moeda)}</b></>}
@@ -634,9 +677,7 @@ function PIPage() {
             {filtered.map((pi) => {
               const embarque = embarquesMap[pi.embarque_id];
               const itens = pi.itens || [];
-              const pagoAdicional = (pi.pagamentos_adicionais || []).reduce((s, p) => s + (Number(p.valor) || 0), 0);
-              const totalPago = (Number(pi.valor_primeiro_pagamento) || 0) + (Number(pi.valor_segundo_pagamento) || 0) + pagoAdicional;
-              const percPaga = pi.valor_total ? (totalPago / pi.valor_total) * 100 : 0;
+              const percPaga = pi.valor_total ? (window.PIStore.calcValorQuitado(pi) / pi.valor_total) * 100 : 0;
               const prod = pi.producao || {};
               return (
                 <tr key={pi.id}>
