@@ -271,6 +271,17 @@ function ImportacaoVarejoPage({ setRoute }) {
     return next;
   });
   const itensSelecionados = items.filter((i) => selecionados.has(i.codigo));
+  const todosFiltradosSelecionados = filtrados.length > 0 && filtrados.every((i) => selecionados.has(i.codigo));
+  const algunsFiltradosSelecionados = !todosFiltradosSelecionados && filtrados.some((i) => selecionados.has(i.codigo));
+  const toggleSelecionarTodosFiltrados = () => setSelecionados((prev) => {
+    const next = new Set(prev);
+    if (todosFiltradosSelecionados) {
+      filtrados.forEach((i) => next.delete(i.codigo));
+    } else {
+      filtrados.forEach((i) => next.add(i.codigo));
+    }
+    return next;
+  });
 
   if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando Importação Varejo…</div>;
 
@@ -362,7 +373,19 @@ function ImportacaoVarejoPage({ setRoute }) {
       <div className="table-wrap">
         <table className="t">
           <thead><tr>
-            {podeGerenciar && <th style={{ width: 32 }} />}
+            {podeGerenciar && (
+              <th style={{ width: 32 }}>
+                <input
+                  type="checkbox"
+                  checked={todosFiltradosSelecionados}
+                  ref={(el) => { if (el) el.indeterminate = algunsFiltradosSelecionados; }}
+                  onChange={toggleSelecionarTodosFiltrados}
+                  disabled={filtrados.length === 0}
+                  title="Selecionar todos os produtos filtrados"
+                  data-tip="Selecionar todos os produtos filtrados, pra compra em massa"
+                />
+              </th>
+            )}
             <th>Código</th>
             <th>Descrição</th>
             <th className="text-center">Curva</th>
