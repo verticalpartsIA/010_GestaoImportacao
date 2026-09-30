@@ -151,9 +151,18 @@ function ContratoSocialModal({ clientes, onClose, onSaved }) {
     ).slice(0, 8);
   }, [busca, clientes]);
 
+  /* Documento completo (CNPJ 14 / CPF 11 dígitos) com 1 único cliente
+     correspondente já seleciona sozinho — antes o vendedor digitava o CNPJ,
+     via o cliente na lista e salvava sem clicar nele ("Identifique o cliente"). */
+  React.useEffect(() => {
+    if (cliente) return;
+    const d = busca.replace(/\D/g, '');
+    if ((d.length === 14 || d.length === 11) && sugestoes.length === 1) setCliente(sugestoes[0]);
+  }, [busca, sugestoes, cliente]);
+
   async function salvar() {
     setErro('');
-    if (!cliente) return setErro('Identifique o cliente (busque pelo nome ou CNPJ).');
+    if (!cliente) return setErro(sugestoes.length ? 'Clique no cliente na lista para selecioná-lo antes de salvar.' : 'Identifique o cliente (busque pelo nome ou CNPJ).');
     if (!file) return setErro('Selecione o PDF do contrato social.');
     setSaving(true);
     try {
@@ -176,14 +185,16 @@ function ContratoSocialModal({ clientes, onClose, onSaved }) {
       ) : (
         <div style={{ marginBottom: 12, position: 'relative' }}>
           <input className="input" style={{ width: '100%' }} autoFocus placeholder="Digite o nome ou CNPJ do cliente…"
-            value={busca} onChange={e => setBusca(e.target.value)}/>
+            value={busca} onChange={e => setBusca(e.target.value)}
+            onKeyDown={e => { if (e.key === 'Enter' && sugestoes.length) { e.preventDefault(); setCliente(sugestoes[0]); } }}/>
           {clientes.length === 0 && <div style={{ fontSize: 12, opacity: .7, marginTop: 4 }}>Carregando clientes…</div>}
           {busca.trim().length >= 2 && (
             <div style={{ border: '1px solid var(--border, #ddd)', borderRadius: 6, marginTop: 4 }}>
               {sugestoes.length === 0
                 ? <div style={{ padding: 10, fontSize: 13, opacity: .7 }}>Cliente não encontrado. Cadastre em Cadastros Mestres › Clientes.</div>
-                : sugestoes.map(c => (
-                  <div key={c.id} onClick={() => setCliente(c)} style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: '1px solid var(--border, #eee)' }}>
+                : <div style={{ padding: '6px 10px', fontSize: 12, opacity: .7 }}>Clique no cliente para selecioná-lo:</div>}
+              {sugestoes.map(c => (
+                  <div key={c.id} onClick={() => setCliente(c)} onMouseEnter={e => e.currentTarget.style.background = 'rgba(127,127,127,.15)'} onMouseLeave={e => e.currentTarget.style.background = ''} style={{ padding: '8px 10px', cursor: 'pointer', borderBottom: '1px solid var(--border, #eee)' }}>
                     <b>{c.razao_social || c.nome_fantasia}</b>
                     <div style={{ fontSize: 12, opacity: .7 }}>{c.cnpj || c.cpf || 'sem documento'}{c.cidade ? ` · ${c.cidade}` : ''}</div>
                   </div>
