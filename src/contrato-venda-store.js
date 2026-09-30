@@ -95,6 +95,7 @@
   }
 
   const STATUS = {
+    em_preenchimento: { id:'em_preenchimento', label:'Em preenchimento', icon:'✏', tone:'gray', order:-1 },
     rascunho:    { id:'rascunho',    label:'Rascunho',    icon:'📝', tone:'gray',   order:0 },
     enviado:     { id:'enviado',     label:'Enviado',     icon:'📤', tone:'blue',   order:1 },
     visualizado: { id:'visualizado', label:'Visualizado', icon:'👁',  tone:'yellow', order:2 },
@@ -160,6 +161,18 @@
     if (error) { console.warn('[CVStore] list error', error); return []; }
     return data || [];
   }
+  /* Rascunhos do assistente ("Salvar rascunho") — sem token/número, por isso
+     ficam fora de listAll (que exige token) e dos KPIs do Painel. */
+  async function listarRascunhos() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('contratos_venda_equipamentos')
+      .select('id, comprador_razao_social, objeto_resumo, valor_total_num, proposta_id, master_id, form_state, log, atualizado_em, criado_em')
+      .eq('status', 'em_preenchimento')
+      .order('atualizado_em', { ascending: false });
+    if (error) { console.warn('[CVStore] listarRascunhos error', error); return []; }
+    return data || [];
+  }
+
   /* Cria (ou reaproveita) o Dossier da Obra exigido pelo Passo 5 — Revisão.
      O fluxo Formulário → Fornecedor → Precificação → Proposta nunca passa
      pelo pipeline de Leads (onde o Dossier normalmente nasce, ver
@@ -223,9 +236,13 @@
       .select('id, master_id, numero_documento, titulo, valor_total, data_json, aprovada_em')
       .eq('status', 'aprovada').order('aprovada_em', { ascending: false }).limit(50);
     if (!assinadas || !assinadas.length) return [];
-    const { data: contratos } = await c.from('contratos_venda_equipamentos').select('proposta_id');
-    const comContrato = new Set((contratos || []).map((x) => x.proposta_id).filter(Boolean));
-    return assinadas.filter((p) => !comContrato.has(p.id));
+    const { data: contratos } = await c.from('contratos_venda_equipamentos').select('id, proposta_id, status');
+    /* Rascunho em preenchimento NÃO tira a proposta da fila — só marca qual é
+       o rascunho (_rascunhoId) pro botão virar "Continuar rascunho". */
+    const rascunhoPorProposta = {};
+    (contratos || []).forEach((x) => { if (x.proposta_id && x.status === 'em_preenchimento') rascunhoPorProposta[x.proposta_id] = x.id; });
+    const comContrato = new Set((contratos || []).filter((x) => x.status !== 'em_preenchimento').map((x) => x.proposta_id).filter(Boolean));
+    return assinadas.filter((p) => !comContrato.has(p.id)).map((p) => ({ ...p, _rascunhoId: rascunhoPorProposta[p.id] || null }));
   }
 
   async function getById(id) {
@@ -335,12 +352,75 @@
       dados: { numero_documento: num.numero_documento },
     };
 
-    const { error } = await c.from('contratos_venda_equipamentos').insert(rec);
-    if (error) throw error;
+    /* Vindo de um rascunho ("Salvar rascunho"): promove a MESMA linha (troca o
+       id provisório RASC-… e preenche número/token/doc) em vez de inserir uma
+       segunda e deixar o rascunho fantasma na lista. */
+    let promovido = false;
+    if (opts.rascunhoId) {
+      const { data: upd, error: updErr } = await c.from('contratos_venda_equipamentos').update(rec)
+        .eq('id', opts.rascunhoId).eq('status', 'em_preenchimento').select('id');
+      if (updErr) throw updErr;
+      promovido = !!(upd && upd.length);
+    }
+    if (!promovido) {
+      const { error } = await c.from('contratos_venda_equipamentos').insert(rec);
+      if (error) throw error;
+    }
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Contrato Venda', acao: 'criou o contrato', alvo: rec.numero_documento, alvo_id: rec.id, detalhe: { comprador: rec.comprador_razao_social } });
     if (window.AvalFinanceiroStore && formState.propostaId) window.AvalFinanceiroStore.vincularContrato(formState.propostaId, rec.id);
     if (window.AvalJuridicoStore && formState.propostaId) window.AvalJuridicoStore.vincularContrato(formState.propostaId, rec.id);
     return rec;
+  }
+
+  /* "Salvar rascunho" do assistente. Não valida nada (a ideia é justamente ir
+     preenchendo aos poucos) — exige só razão social OU proposta, pra o rascunho
+     ser identificável na lista. Não gera número, token, doc, vínculo com Aval
+     nem log de "criou o contrato": isso só acontece em createDraft. Devolve
+     { id } — 1º save insere, os seguintes (opts.id) atualizam a mesma linha. */
+  async function salvarRascunho(formState, opts) {
+    opts = opts || {};
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    const comp = formState.comprador || {};
+    if (!String(comp.razao || '').trim() && !formState.propostaId) {
+      throw new Error('Para salvar o rascunho, informe a razão social do comprador ou selecione uma Proposta.');
+    }
+    const valor = window.CV.parseMoney(formState.valor);
+    const agora = new Date().toISOString();
+    const usuario = (window.__VP_USER || {}).email || null;
+    const fs = { ...formState, __rascunhoStep: opts.step || 0 };
+    const campos = {
+      titulo: 'Contrato de Venda (em preenchimento)',
+      comprador_razao_social: comp.razao || null,
+      comprador_cnpj: comp.cnpj || null,
+      responsavel_nome: comp.rep || null,
+      responsavel_cpf: comp.repCpf || '',
+      valor_total_num: valor || null,
+      objeto_resumo: window.CV.descEquipamento(formState),
+      master_id: formState.masterId || null,
+      proposta_id: formState.propostaId || null,
+      form_state: fs,
+      atualizado_em: agora,
+    };
+    if (opts.id) {
+      const { data, error } = await c.from('contratos_venda_equipamentos').update(campos)
+        .eq('id', opts.id).eq('status', 'em_preenchimento').select('id');
+      if (error) throw error;
+      if (data && data.length) return { id: opts.id };
+      // 0 linhas: rascunho excluído/promovido por outra pessoa — recria abaixo.
+    }
+    const id = 'RASC-' + uuid().replace(/-/g, '').slice(0, 12).toUpperCase();
+    const rec = {
+      id, ...campos,
+      status: 'em_preenchimento',
+      log: [{ status: 'em_preenchimento', at: agora, meta: { por: usuario } }],
+      criado_em: agora,
+      tipo_contrato: 'cliente',
+    };
+    const { error } = await c.from('contratos_venda_equipamentos').insert(rec);
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Contrato Venda', acao: 'salvou rascunho de contrato', alvo: comp.razao || id, alvo_id: id });
+    return { id };
   }
 
   async function updateFormState(id, formState) {
@@ -680,7 +760,7 @@
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
     listAll, listarPropostasAguardandoContrato, garantirDossier, getById, getByToken,
     numeroCotacaoDaProposta,
-    createDraft, updateFormState, proximoNumeroLivre,
+    createDraft, salvarRascunho, listarRascunhos, updateFormState, proximoNumeroLivre,
     markSent, markViewed, markSigned, refuse,
     tentarFinalizarAposSignatarioExtra,
     uploadDesenhoInstalacao, enviarDesenhoInstalacao,

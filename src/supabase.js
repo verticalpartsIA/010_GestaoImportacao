@@ -184,7 +184,7 @@
       sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false }),
       sb.from('tarefas').select('*').eq('role', role).eq('done', false).order('id'),
       sb.from('embarques').select('*').order('eta'),
-      sb.from('contratos_venda_equipamentos').select('*').order('issued_date', { ascending: false }),
+      sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false }),
       sb.from('estoque').select('*').order('sku'),
       sb.from('comissoes').select('*').order('id'),
       sb.from('gatilhos').select('*').order('due_date'),

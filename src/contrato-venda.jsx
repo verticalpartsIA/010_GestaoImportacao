@@ -519,9 +519,23 @@ function validateStep(idx, s) {
   return e;
 }
 
-function CVWizard({ onCreated, initial, prefillProposta }) {
-  const [form, setForm] = _cvUS(initial || window.CV.defaultState());
-  const [step, setStep] = _cvUS(0);
+/* Reabre um rascunho salvo: mescla com o defaultState (rascunhos antigos podem
+   não ter campos novos) e tira as chaves internas (__rascunhoStep). */
+function cvFormDeRascunho(rasc) {
+  const def = window.CV.defaultState();
+  const fs = { ...((rasc && rasc.form_state) || {}) };
+  delete fs.__rascunhoStep;
+  return { ...def, ...fs, comprador: { ...def.comprador, ...(fs.comprador || {}) }, checklist: { ...def.checklist, ...(fs.checklist || {}) } };
+}
+
+function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
+  const [form, setForm] = _cvUS(() => rascunho ? cvFormDeRascunho(rascunho) : (initial || window.CV.defaultState()));
+  const [step, setStep] = _cvUS(() => {
+    const n = rascunho && rascunho.form_state && Number(rascunho.form_state.__rascunhoStep);
+    return Number.isInteger(n) && n >= 0 && n < CV_STEPS.length ? n : 0;
+  });
+  const [rascunhoId, setRascunhoId] = _cvUS(rascunho ? rascunho.id : null);
+  const [salvando, setSalvando] = _cvUS(false);
   const [errors, setErrors] = _cvUS({});
   const [sendRec, setSendRec] = _cvUS(null);
   const [creating, setCreating] = _cvUS(false);
@@ -662,6 +676,20 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
       .finally(() => setDossierProvisioning(false));
   }, [step, form.dossier_id]);
 
+  const handleSalvarRascunho = async () => {
+    if (salvando) return;
+    setSalvando(true);
+    try {
+      const r = await window.CVStore.salvarRascunho(form, { id: rascunhoId, step });
+      setRascunhoId(r.id);
+      window.toast ? window.toast('Rascunho salvo. Você pode continuar depois pelo Painel.', 'success') : alert('Rascunho salvo.');
+    } catch (e) {
+      alert('Não foi possível salvar o rascunho: ' + (e.message || e));
+    } finally {
+      setSalvando(false);
+    }
+  };
+
   const goNext = () => {
     const e = validateStep(step, form);
     setErrors(e);
@@ -726,7 +754,8 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
         setForm(f);
       }
       if (!completeAll(f)) { setCreating(false); return; }
-      const rec = await window.CVStore.createDraft(f);
+      const rec = await window.CVStore.createDraft(f, { rascunhoId });
+      setRascunhoId(null);
       /* Só abre o modal de envio. Antes chamava onCreated aqui, que troca a
          aba pro Painel e desmontava o assistente (e o modal junto) na hora —
          "Gerar e enviar" nunca chegava a mostrar a tela de envio. onCreated
@@ -763,6 +792,7 @@ function CVWizard({ onCreated, initial, prefillProposta }) {
           <div className="ci-form-inner">{StepComp}</div>
           <div className="ci-form-foot">
             <button className="ci-btn ci-btn--ghost" onClick={goPrev} disabled={step === 0}>← Voltar</button>
+            <button className="ci-btn" type="button" onClick={handleSalvarRascunho} disabled={salvando || creating}>{salvando ? 'Salvando…' : '💾 Salvar rascunho'}</button>
             <span className="ci-form-foot-meta">Passo {step + 1} de {CV_STEPS.length}</span>
             {step < CV_STEPS.length - 1
               ? <button className="ci-btn ci-btn--dark" onClick={goNext}>Avançar →</button>
@@ -1227,7 +1257,7 @@ function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
   );
 }
 
-function CVDashboard({ onCriarDeProposta }) {
+function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
   const [contracts, setContracts] = _cvUS([]);
   const [loading, setLoading] = _cvUS(true);
   const [filter, setFilter] = _cvUS('todos');
@@ -1235,15 +1265,24 @@ function CVDashboard({ onCriarDeProposta }) {
   const [drawerId, setDrawerId] = _cvUS(null);
   const [sendRec, setSendRec] = _cvUS(null);
   const [aguardando, setAguardando] = _cvUS([]);
+  const [rascunhos, setRascunhos] = _cvUS([]);
+
+  const excluirRascunho = async (r) => {
+    if (!window.confirm('Excluir este rascunho (' + (r.comprador_razao_social || 'sem comprador') + ')? Não dá pra desfazer.')) return;
+    try { await window.CVStore.remove(r.id); } catch (e) { alert('Erro ao excluir: ' + (e.message || e)); }
+    refresh();
+  };
 
   const refresh = async () => {
     setLoading(true);
-    const [list, fila] = await Promise.all([
+    const [list, fila, rasc] = await Promise.all([
       window.CVStore.listAll(),
       window.CVStore.listarPropostasAguardandoContrato ? window.CVStore.listarPropostasAguardandoContrato() : [],
+      window.CVStore.listarRascunhos(),
     ]);
     setContracts(list);
     setAguardando(fila);
+    setRascunhos(rasc);
     setLoading(false);
   };
 
@@ -1315,10 +1354,43 @@ function CVDashboard({ onCriarDeProposta }) {
                   <td className="ci-cell-val">{p.valor_total ? window.CV.brl(Number(p.valor_total)) : '—'}</td>
                   <td className="ci-cell-time">{p.aprovada_em ? window.CVStore.relative(p.aprovada_em) : '—'}</td>
                   <td style={{ textAlign: 'right' }}>
-                    <button className="ci-mini-btn" onClick={() => onCriarDeProposta && onCriarDeProposta(p)}>Criar contrato</button>
+                    {p._rascunhoId
+                      ? <button className="ci-mini-btn" onClick={() => { const r = rascunhos.find((x) => x.id === p._rascunhoId); if (r && onContinuarRascunho) onContinuarRascunho(r); }}>Continuar rascunho</button>
+                      : <button className="ci-mini-btn" onClick={() => onCriarDeProposta && onCriarDeProposta(p)}>Criar contrato</button>}
                   </td>
                 </tr>
               ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {rascunhos.length > 0 && (
+        <div className="ci-panel" style={{ marginBottom: 16, borderLeft: '3px solid #9CA3AF' }}>
+          <div className="ci-panel-head">
+            <h2>Rascunhos em preenchimento <span className="ci-cell-num">({rascunhos.length})</span></h2>
+          </div>
+          <table className="ci-table">
+            <thead><tr><th>Comprador</th><th>Objeto</th><th>Valor</th><th>Criado por</th><th>Atualizado</th><th style={{ textAlign: 'right' }}>Ações</th></tr></thead>
+            <tbody>
+              {rascunhos.map((r) => {
+                const por = (((r.log || [])[0] || {}).meta || {}).por;
+                return (
+                  <tr key={r.id}>
+                    <td><div className="ci-cell-co">{r.comprador_razao_social || '—'}</div><div className="ci-cell-resp">{r.master_id || ''}</div></td>
+                    <td><div className="ci-cell-obj">{r.objeto_resumo || '—'}</div></td>
+                    <td className="ci-cell-val">{r.valor_total_num ? window.CV.brl(r.valor_total_num) : '—'}</td>
+                    <td className="ci-cell-time">{por || '—'}</td>
+                    <td className="ci-cell-time">{window.CVStore.relative(r.atualizado_em)}</td>
+                    <td style={{ textAlign: 'right' }}>
+                      <div className="ci-cell-actions">
+                        <button className="ci-mini-btn" onClick={() => onContinuarRascunho && onContinuarRascunho(r)}>Continuar editando</button>
+                        <button className="ci-icon-btn" title="Excluir rascunho" onClick={() => excluirRascunho(r)}>🗑</button>
+                      </div>
+                    </td>
+                  </tr>
+                );
+              })}
             </tbody>
           </table>
         </div>
@@ -1377,7 +1449,9 @@ function CVDashboard({ onCriarDeProposta }) {
 function ContratoVendaEquipamentosPage() {
   const [tab, setTab] = _cvUS('painel');
   const [prefillProposta, setPrefillProposta] = _cvUS(null);
-  const criarDeProposta = (p) => { setPrefillProposta(p); setTab('novo'); };
+  const [rascunhoEdit, setRascunhoEdit] = _cvUS(null);
+  const criarDeProposta = (p) => { setRascunhoEdit(null); setPrefillProposta(p); setTab('novo'); };
+  const continuarRascunho = (r) => { setPrefillProposta(null); setRascunhoEdit(r); setTab('novo'); };
   return (
     <div className="ci-page">
       <div className="ci-page-head">
@@ -1389,14 +1463,14 @@ function ContratoVendaEquipamentosPage() {
         <div className="ci-page-actions-wrap">
           <div className="ci-page-actions">
             <button className={'ci-tab' + (tab === 'painel' ? ' on' : '')} onClick={() => setTab('painel')}>▦ Painel</button>
-            <button className={'ci-tab' + (tab === 'novo' ? ' on' : '')} onClick={() => { setPrefillProposta(null); setTab('novo'); }}>+ Novo contrato</button>
+            <button className={'ci-tab' + (tab === 'novo' ? ' on' : '')} onClick={() => { setPrefillProposta(null); setRascunhoEdit(null); setTab('novo'); }}>+ Novo contrato</button>
           </div>
         </div>
       </div>
       <div className="ci-page-body">
         {tab === 'painel'
-          ? <CVDashboard onCriarDeProposta={criarDeProposta}/>
-          : <CVWizard prefillProposta={prefillProposta} onCreated={() => { setPrefillProposta(null); setTab('painel'); }}/>}
+          ? <CVDashboard onCriarDeProposta={criarDeProposta} onContinuarRascunho={continuarRascunho}/>
+          : <CVWizard key={rascunhoEdit ? rascunhoEdit.id : 'novo'} rascunho={rascunhoEdit} prefillProposta={prefillProposta} onCreated={() => { setPrefillProposta(null); setRascunhoEdit(null); setTab('painel'); }}/>}
       </div>
     </div>
   );

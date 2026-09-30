@@ -110,7 +110,8 @@
         .select('id, numero_documento, titulo, valor_total, numero_cotacao, data_json, aprovada_em')
         .eq('status', 'aprovada').order('aprovada_em', { ascending: false }),
       c.from('contratos_venda_equipamentos')
-        .select('id, numero_documento, status, comprador_razao_social, valor_total_num, proposta_id, signed_at'),
+        .select('id, numero_documento, status, comprador_razao_social, valor_total_num, proposta_id, signed_at')
+        .or('status.is.null,status.neq.em_preenchimento'), // rascunho do assistente não é contrato
     ]);
     if (error) { console.warn('[AvalJuridicoStore] listarFila falhou', error); return []; }
     const contratoPorProposta = {};

@@ -237,7 +237,7 @@
     // status + sent_at.
     if (dossier.proposta_id) {
       const { data: contrato } = await c.from('contratos_venda_equipamentos')
-        .select('status, sent_at').eq('proposta_id', dossier.proposta_id).maybeSingle();
+        .select('status, sent_at').eq('proposta_id', dossier.proposta_id).or('status.is.null,status.neq.em_preenchimento').maybeSingle();
       if (contrato) {
         const enviado = ['enviado', 'visualizado', 'assinado'].includes(contrato.status);
         itens.push({ chave: 'contrato', titulo: 'Envio de Contrato', concluido: enviado, pessoa: null, data: enviado ? contrato.sent_at : null });
