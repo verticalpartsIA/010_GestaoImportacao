@@ -151,6 +151,7 @@
         { chave: 'excluir', label: 'Exclui propostas' },
       ]},
       { modulo: 'controle-cotacoes', label: 'Controle de Cotações' },
+      { modulo: 'contratos-sociais', label: 'Contratos Social' },
     ]},
     { grupo: 'ADM/ Financeiro', itens: [
       { modulo: 'cotacoes-fornecedor', label: 'Cotações a Fornecedor' },
