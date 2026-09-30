@@ -179,13 +179,13 @@ function Card({ id, title, sub, action, children, sharp = true, style, className
 }
 
 /* ---- KPI ---- */
-function KPI({ label, value, unit, delta, deltaDir, sub, icon, onClick }) {
+function KPI({ label, value, unit, delta, deltaDir, sub, icon, onClick, style }) {
   const cls = "delta " + (deltaDir === "up" ? "up" : deltaDir === "down" ? "down" : "flat");
   const clickProps = onClick
     ? { onClick, role: "button", tabIndex: 0, onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(e); } } }
     : {};
   return (
-    <div className={"kpi" + (onClick ? " kpi--clickable" : "")} {...clickProps}>
+    <div className={"kpi" + (onClick ? " kpi--clickable" : "")} style={style} {...clickProps}>
       <span className="kpi__stripe" />
       <div className="kpi__label">{icon ? React.createElement(Icon[icon] || Icon.bolt) : null}{label}</div>
       <div className="kpi__value">{value}{unit ? <span className="unit">{unit}</span> : null}</div>

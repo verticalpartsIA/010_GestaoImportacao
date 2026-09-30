@@ -316,8 +316,22 @@ function ImportacaoVarejoPage({ setRoute }) {
       )}
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Precisa comprar" value={filtrados.filter((i) => ivStatusDoItem(i) === 'vermelha').length} sub="linhas vermelhas" icon="warning" />
-        <KPI label="Alerta (no mínimo)" value={filtrados.filter((i) => ivStatusDoItem(i) === 'amarela').length} sub="linhas amarelas" icon="clock" />
+        <KPI
+          label="Precisa comprar"
+          value={filtrados.filter((i) => ivStatusDoItem(i) === 'vermelha').length}
+          sub={corFiltro === 'vermelha' ? 'filtrando — clique pra limpar' : 'linhas vermelhas'}
+          icon="warning"
+          onClick={() => setCorFiltro(corFiltro === 'vermelha' ? 'todas' : 'vermelha')}
+          style={corFiltro === 'vermelha' ? { boxShadow: '0 0 0 2px var(--vp-danger)' } : undefined}
+        />
+        <KPI
+          label="Alerta (no mínimo)"
+          value={filtrados.filter((i) => ivStatusDoItem(i) === 'amarela').length}
+          sub={corFiltro === 'amarela' ? 'filtrando — clique pra limpar' : 'linhas amarelas'}
+          icon="clock"
+          onClick={() => setCorFiltro(corFiltro === 'amarela' ? 'todas' : 'amarela')}
+          style={corFiltro === 'amarela' ? { boxShadow: '0 0 0 2px var(--vp-yellow)' } : undefined}
+        />
         <KPI label="Sugestão total" value={ivFmtNum(totais.sugestaoCompra)} sub="unidades" icon="package" />
         <KPI label="Curva D com estoque parado" value={filtrados.filter((i) => i.conselho).length} sub="considere pausar compra" icon="fileSearch" />
       </div>
