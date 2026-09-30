@@ -379,7 +379,7 @@ function App() {
       case "importacao": return <ImportacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "importacao-detail": return <ImportacaoDetail embarque={subsel} setRoute={setRoute}/>;
       case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "compras": return <ComprasPage setRoute={setRoute}/>;
+      case "compras": return <window.ImportacaoVarejoPage setRoute={setRoute}/>;
       case "financeiro": return <FinanceiroPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
       case "aval-juridico": return <window.AvalJuridicoPage setRoute={setRoute}/>;
