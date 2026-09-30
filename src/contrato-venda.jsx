@@ -679,7 +679,14 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
   _cvUE(() => { if (prefillProposta) aplicarProposta(prefillProposta); }, [prefillProposta && prefillProposta.id]);
 
   const valorNum = window.CV.parseMoney(form.valor);
-  const docPreview = _cvUM(() => window.CV.buildContract({ form, comprador: form.comprador, valor: valorNum, sinalPct: form.sinalPct, parcelas: form.parcelas, numero: 'VPVE________' }), [form]);
+  /* Número provisório da pré-visualização: com Proposta vinculada já é
+     conhecido (VPCV-<cotação>); o definitivo (com sufixo -2 se houver aditivo)
+     sai em createDraft. Sem Proposta → placeholder. */
+  const numeroPrevia = (() => {
+    const n = window.MasterIdEngine?.parseNumeroCotacao?.(form.masterId);
+    return n != null ? window.MasterIdEngine.etapaId('contrato_venda', n) : 'VPVE________';
+  })();
+  const docPreview = _cvUM(() => window.CV.buildContract({ form, comprador: form.comprador, valor: valorNum, sinalPct: form.sinalPct, parcelas: form.parcelas, numero: numeroPrevia }), [form]);
 
   /* Campos obrigatórios ainda pendentes (mesma regra que bloqueia o "Gerar").
      Sem isto, o preview dizia "Sem pontos de atenção" enquanto a validação
