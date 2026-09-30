@@ -586,6 +586,11 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
     const TIPO_MAP = { passageiros: 'Social', passageiro: 'Social', social: 'Social', panoramico: 'Panorâmico', 'panorâmico': 'Panorâmico', carga: 'Carga', montacargas: 'Montacargas' };
     const tipoInf = TIPO_MAP[(spec.carac || '').trim().toLowerCase()] || '';
 
+    /* Identificadores dos equipamentos físicos (VPEL-EL0955-1, -2...) vindos dos
+       ativos da Proposta — entram na cláusula 1.1 sem ninguém digitar. */
+    const idsAtivosInf = (Array.isArray(dj.ativos) ? dj.ativos : [])
+      .map((a) => String((a && (a.codigo || a.identificador)) || '').trim()).filter(Boolean);
+
     /* Descrição da cláusula 1.1 (antes ficava o marcador "DESCREVER CONFORME
        PROPOSTA COMERCIAL" da minuta): montada da especificação da Proposta. */
     const descPropostaInf = [
@@ -665,6 +670,7 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
       modelo: modeloInf || prev.modelo,
       carga: cargaInf || prev.carga,
       descProposta: descPropostaInf || prev.descProposta,
+      equipamentosIds: idsAtivosInf.length ? idsAtivosInf : prev.equipamentosIds,
     }));
   };
 
