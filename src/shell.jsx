@@ -44,6 +44,7 @@ const NAV_GROUPS = [
     { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
     { id: "cotacao-quadro-comando", label: "Cotação Quadro de Comando", icon: "grid" },
     { id: "propostas", label: "Propostas", icon: "proposal" },
+    { id: "contratos-sociais", label: "Contratos Social", icon: "fileText" },
   ]},
   { label: "Financeiro & Preços", items: [
     { id: "cadastro-custos", label: "Atualização de Custos", icon: "calculator" },
@@ -310,6 +311,7 @@ const BREADCRUMB_MAP = {
   "formulario-quadro-comando": { module: "Comercial", page: "Quadro de Comando", icon: "layers" },
   "controle-cotacoes":   { module: "Comercial", page: "Controle de Cotações", icon: "history" },
   "cotacao-quadro-comando": { module: "Comercial", page: "Cotação Quadro de Comando", icon: "grid" },
+  "contratos-sociais": { module: "Comercial", page: "Contratos Social", icon: "fileText" },
   "cotacoes-fornecedor": { module: "Financeiro", page: "Cotações a Fornecedor", icon: "globe" },
   "cotacao-fornecedor-detail": { module: "Comercial", page: "Detalhe de Cotação", icon: "globe" },
   precificacao:  { module: "Comercial", page: "Precificação", icon: "calculator" },
