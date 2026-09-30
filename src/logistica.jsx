@@ -1235,36 +1235,14 @@ function RouteAndShip({ start, end, cur, ship, isActive, onClick }) {
   );
 }
 
-/* ---------- IMPORTAÇÃO VAREJO (ex-"Compras Nacional") ====== */
-/* 29/09/2026 — pedido do usuário: a tela antes reaproveitava dados de
-   `embarques` (Importação) relabelados como "Fretes Nacionais", com vários
-   stubs (Transportadora/Motorista/Valor/Ocorrências nunca preenchidos de
-   verdade — ver investigação da mesma sessão). Usuário decidiu reservar
-   esta rota/menu (então chamada "Compras Nacional") pra um processo novo,
-   ainda não definido — removida toda a lógica antiga (fetch de embarques,
-   tabela, KPIs, filtros) de propósito, não é regressão. Casca mínima só
-   pra rota continuar existindo até o novo processo ser especificado.
-   Renomeada no mesmo dia pra "Importação Varejo" (pedido explícito do
-   usuário) — vai ser responsável por Compras de Varejo Importação. Rota
-   interna (`compras`) e id de módulo (`modulo: 'compras'` nas alçadas)
-   continuam os mesmos de propósito, só o rótulo visível mudou — não
-   troque o id sem migrar as alçadas já concedidas em `alcadas_capacidade`. */
-function ComprasPage({ setRoute }) {
-  return (
-    <div className="page fade-in">
-      <div className="page-head">
-        <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Importação Varejo</div>
-          <h1 className="page-head__title">Importação Varejo</h1>
-          <p className="page-head__sub">Módulo em preparação — novo processo a definir.</p>
-        </div>
-      </div>
-      <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13, border:'1px dashed var(--border)', borderRadius:6 }}>
-        Nenhum conteúdo ainda.
-      </div>
-    </div>
-  );
-}
+/* ---------- IMPORTAÇÃO VAREJO — movida pra src/importacao-varejo.jsx =
+   29/09/2026: a casca vazia que existia aqui (ex-"Compras Nacional",
+   esvaziada no PR #496 pra reserva de processo novo) virou o módulo real
+   de estoque/sugestão de compra (`ImportacaoVarejoPage`, arquivo próprio
+   `src/importacao-varejo.jsx` + `-store.js`, Edge Functions
+   list-importacao-varejo/sync-importacao-varejo/
+   criar-requisicao-compra-importacao-varejo). Rota/menu continuam com o
+   id interno `compras` — ver `case "compras"` em app.jsx/print-app.jsx. */
 
 /* ---------- EMAIL INBOX (Importação + Compras) ============== */
 /* 10/09 — IMAP conectado de verdade (Edge Function read-inbox, mesma
@@ -1946,4 +1924,4 @@ function EmailBody({ active }) {
   return <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 13, margin: 0 }}>{active.preview ? window.linkifyTexto(active.preview) : 'Mensagem sem conteúdo de texto.'}</pre>;
 }
 
-Object.assign(window, { ImportacaoPage, ImportacaoDetail, ImportacaoRastreamento, ComprasPage, EmailInbox });
+Object.assign(window, { ImportacaoPage, ImportacaoDetail, ImportacaoRastreamento, EmailInbox });
