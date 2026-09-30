@@ -518,7 +518,8 @@ Pedido do usuário: substituir **exatamente** o texto do contrato do site (`/jur
 - **Numeração**: o documento agora exibe `Nº do Contrato: 0955/2026` e `Proposta Comercial nº 0955/2026` (formato `XXXX/AAAA` da minuta) via `CV.numeroExibicao()` — `VPCV-0955` → `0955/2026`, `VPCV-0955-2` → `0955-2/2026`, rascunho → `XXXX/2026`, legado `VPVE…` → valor cru. **`numero_documento` (chave UNIQUE, e-mail, `parseNumeroCotacao`) não mudou**; o interno fica em `doc.numeroInterno`. O ano é o corrente na hora de montar o documento (muda em 01/01 se um contrato antigo for reaberto).
 - PDF (`contrato-venda-reactpdf.entry.js`): item com `bancario: true` renderiza todas as linhas como marcadores. Bundle recompilado.
 - Como `assinar-app.jsx` remonta o documento com `buildContract`, contratos **já existentes** passam a exibir o texto novo ao serem reabertos — avisar o usuário se isso importar para contratos já assinados.
-- `index.html`: engine v15→16, bundle v1→2. `assinar.html`: engine v12→13, bundle v1→2. Suíte: 185/188 (as 3 falhas são de `instalacao-obra-store.test.js`, já existiam na base).
+- **Dados do modelo × dados da Proposta (conferido com a 955)**: os `XXX`/`RAZÃO SOCIAL`/`0X equipamento`/`R$ XXX` do DOCX são só *fallback* do motor; com Proposta vinculada, `aplicarProposta` preenche comprador, CNPJ, endereços, valor, parcelas e equipamento. O marcador "(DESCREVER CONFORME PROPOSTA COMERCIAL)" da 1.1 agora também é substituído: `descProposta` é montado da especificação (tipo, capacidade, paradas, velocidade, caixa). Qualificação do representante (nacionalidade, estado civil, profissão, RG, endereço residencial) continua manual e obrigatória — não existe na Proposta.
+- `index.html`: `contrato-venda.jsx` v21→22, engine v15→16, bundle v1→2. `assinar.html`: engine v12→13, bundle v1→2. Suíte: 185/188 (as 3 falhas são de `instalacao-obra-store.test.js`, já existiam na base).
 
 ## Fluxo de trabalho estabelecido nesta sessão
 
