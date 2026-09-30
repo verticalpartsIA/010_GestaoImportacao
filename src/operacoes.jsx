@@ -349,7 +349,7 @@ function JuridicoPage({ setRoute, setSubsel }) {
 
   const reload = () => {
     setLoading(true);
-    window.__VP_SB.sb.from('contratos_venda_equipamentos').select('*').order('issued_date', { ascending: false })
+    window.__VP_SB.sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false })
       .then(({ data }) => { setContratos(data || []); setLoading(false); });
   };
   React.useEffect(() => { reload(); }, []);
