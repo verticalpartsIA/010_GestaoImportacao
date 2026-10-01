@@ -171,6 +171,15 @@ function SgApp() {
   const [drawData, setDrawData] = _sgUS(null);
   const [typedName, setTypedName] = _sgUS('');
   const viewerRef = _sgUR(null);
+  /* Modalidade de entrega escolhida pelo cliente ('120' | '90' | null) — só existe em proposta
+     de elevador com 1 equipamento (ver proposta-opcoes.js). Ao escolher, o documento passa a
+     mostrar só a modalidade escolhida (a outra deixa de aparecer). */
+  const [opcaoEntrega, setOpcaoEntrega] = _sgUS(null);
+  const propostaRender = (rec) => {
+    const r = window.PropostaStore.conteudoRenderizavel(rec);
+    const O = window.PropostaOpcoes;
+    return (O && opcaoEntrega) ? { ...r, data: O.aplicarEscolha(r.data, opcaoEntrega) } : r;
+  };
 
   /* Mount: localiza o contrato e marca como visualizado */
   _sgUE(() => {
@@ -265,7 +274,7 @@ function SgApp() {
     if (!podeReactPdf) { window.print(); return; }
     const r = source.rec;
     try {
-      const dj = window.PropostaStore.conteudoRenderizavel(r).data;
+      const dj = propostaRender(r).data;
       const nomeCliente = ((dj && dj.cliente && dj.cliente.nome) || '').trim();
       const nome = ['Proposta', r.numero_documento, nomeCliente].filter(Boolean).join(' - ') + '.pdf';
       await window.PropostaReactPdf.baixar(dj, nome);
@@ -273,7 +282,7 @@ function SgApp() {
       console.error('PDF vetorial falhou, caindo pra impressão do navegador:', e);
       window.print();
     }
-  }, [podeReactPdf, source, doc]);
+  }, [podeReactPdf, source, doc, opcaoEntrega]);
 
   const onScroll = () => {
     const el = viewerRef.current;
@@ -303,7 +312,10 @@ function SgApp() {
   }, [phase, source]);
 
   const sigValid = sigMode === 'draw' ? !!drawData : typedName.trim().length >= 3;
-  const canSign = scrolledEnd && consent && sigValid && source;
+  /* Proposta com 2 modalidades de entrega: só dá pra aprovar depois de escolher uma. */
+  const opcoesProposta = (source && source.kind === 'proposta' && window.PropostaOpcoes && window.PropostaOpcoes.temOpcoes(window.PropostaStore.conteudoRenderizavel(source.rec).data))
+    ? window.PropostaOpcoes.opcoes(window.PropostaStore.conteudoRenderizavel(source.rec).data) : null;
+  const canSign = scrolledEnd && consent && sigValid && source && (!opcoesProposta || !!opcaoEntrega);
 
   const handleSign = async () => {
     if (!source) return;
@@ -319,6 +331,7 @@ function SgApp() {
     const sig = sigMode === 'draw'
       ? { type: 'draw', data: drawData, signerName: defaultName }
       : { type: 'type', data: typedName.trim(), signerName: typedName.trim() };
+    if (opcaoEntrega) sig.opcaoEntrega = opcaoEntrega;
     await new Promise(r => setTimeout(r, 1200));
     /* 28/09 — achado real: markSigned agora lança se a gravação no banco
        falhar (antes engolia o erro em silêncio e a tela ia pra "done" —
@@ -466,7 +479,7 @@ function SgApp() {
         {!podeReactPdf && (
           <div className="ci-print-doc">
             {source.kind === 'proposta'
-              ? <window.PEPreview {...window.PropostaStore.conteudoRenderizavel(rec)} bare/>
+              ? <window.PEPreview {...propostaRender(rec)} bare/>
               : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
           </div>
         )}
@@ -498,11 +511,13 @@ function SgApp() {
   const valorFmt = isInstalador
     ? (rec.valor_total ? 'R$ ' + window.CI.fmtMoeda(rec.valor_total) : '—')
     : isProposta
-    ? (rec.valor_total ? window.CV.brl(Number(rec.valor_total)) : '—')
+    ? ((opcoesProposta && opcaoEntrega)
+        ? window.CV.brl(opcoesProposta.find((o) => o.id === opcaoEntrega).totalEquipamento)
+        : (rec.valor_total ? window.CV.brl(Number(rec.valor_total)) : '—'))
     : (rec.valor_total_num ? window.CV.brl(rec.valor_total_num) : '—');
 
   const docNode = isProposta
-    ? <window.PEPreview {...window.PropostaStore.conteudoRenderizavel(rec)} bare/>
+    ? <window.PEPreview {...propostaRender(rec)} bare/>
     : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>;
 
   return (
@@ -546,7 +561,30 @@ function SgApp() {
             </div>
           </div>
 
-          <div className="ci-sign-label"><span className="n">2</span> Concordância</div>
+          {opcoesProposta && (
+            <>
+              <div className="ci-sign-label"><span className="n">2</span> Escolha a modalidade de entrega</div>
+              <div className="ci-opcoes-entrega" role="radiogroup" aria-label="Modalidade de entrega" style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
+                {opcoesProposta.map((o) => {
+                  const sel = opcaoEntrega === o.id;
+                  return (
+                    <div key={o.id} role="radio" aria-checked={sel} tabIndex={0} data-opcao-entrega-card={o.id}
+                      onClick={() => setOpcaoEntrega(o.id)}
+                      onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setOpcaoEntrega(o.id); } }}
+                      style={{ cursor: 'pointer', border: sel ? '2px solid #f5b800' : '1px solid #d0d0d0', background: sel ? '#fffbea' : '#fff', borderRadius: 8, padding: '10px 14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontWeight: 700 }}>
+                        <span>{sel ? '◉' : '○'} {o.titulo}</span>
+                        <span>{window.CV.brl(o.total)}</span>
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>{o.rotulo} — {o.caracteristicas[o.caracteristicas.length - 1]}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          <div className="ci-sign-label"><span className="n">{opcoesProposta ? 3 : 2}</span> Concordância</div>
           <div className={'ci-consent' + (consent ? ' on' : '') + (scrolledEnd ? '' : ' disabled')}
             role="checkbox" aria-checked={consent} aria-disabled={!scrolledEnd} tabIndex={scrolledEnd ? 0 : -1}
             onClick={() => scrolledEnd && setConsent(!consent)}
@@ -555,7 +593,7 @@ function SgApp() {
             <div className="txt">Declaro que li, compreendi e concordo com todos os termos {isProposta ? 'desta proposta' : 'deste contrato'}.</div>
           </div>
 
-          <div className="ci-sign-label"><span className="n">3</span> Sua assinatura</div>
+          <div className="ci-sign-label"><span className="n">{opcoesProposta ? 4 : 3}</span> Sua assinatura</div>
           <div className="ci-sig-tabs">
             <button className={'ci-sig-tab' + (sigMode === 'draw' ? ' on' : '')} onClick={() => setSigMode('draw')}>Desenhar</button>
             <button className={'ci-sig-tab' + (sigMode === 'type' ? ' on' : '')} onClick={() => setSigMode('type')}>Digitar nome</button>
@@ -572,7 +610,7 @@ function SgApp() {
 
           <div className="ci-sign-actionbar">
             <button className="ci-sign-btn" disabled={!canSign} onClick={handleSign}>{isProposta ? 'Aprovar proposta' : 'Confirmar e assinar'}</button>
-            {!canSign && <p className="ci-req-hint">{!scrolledEnd ? 'Leia o documento até o fim' : !consent ? 'Marque a concordância' : 'Adicione sua assinatura'}</p>}
+            {!canSign && <p className="ci-req-hint">{!scrolledEnd ? 'Leia o documento até o fim' : (opcoesProposta && !opcaoEntrega) ? 'Escolha a modalidade de entrega' : !consent ? 'Marque a concordância' : 'Adicione sua assinatura'}</p>}
             <div className="ci-sign-actionbar-row">
               {isProposta && <button className="ci-sign-sub-action ci-sign-sub-action--neutral" onClick={() => setShowRevisao(true)}>Pedir revisão</button>}
               <button className="ci-sign-sub-action" onClick={handleRefuse}>{isProposta ? 'Não tenho interesse' : 'Recusar assinatura'}</button>

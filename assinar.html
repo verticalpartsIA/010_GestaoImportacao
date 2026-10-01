@@ -66,15 +66,16 @@
        o PEPreview não entende — ou seja, documento VAZIO pra quem abre o
        link (achado 21/08, conferindo a LEGADO-405 em produção). -->
   <script src="/src/proposta-legado.js?v=1"></script>
-  <script src="/src/proposta-store.js?v=17"></script>
+  <script src="/src/proposta-opcoes.js?v=1"></script>
+  <script src="/src/proposta-store.js?v=18"></script>
   <script src="/src/proposta-imagens.js?v=1"></script>
   <!-- Motor de PDF da Proposta (react-pdf). Esta página é a que o CLIENTE
        abre — sem isto o botão "Baixar proposta (PDF)" daqui caía na
        impressão do navegador, justamente o caminho que gerava a página em
        branco (achado 21/08: o cliente recebia um PDF pior que o do
        vendedor). Ver pdf-bundle/proposta-reactpdf.entry.js. -->
-  <script src="/src/proposta-reactpdf.bundle.js?v=7"></script>
-  <script type="text/babel" src="/src/proposta-preview.jsx?v=15"></script>
+  <script src="/src/proposta-reactpdf.bundle.js?v=8"></script>
+  <script type="text/babel" src="/src/proposta-preview.jsx?v=16"></script>
 
   <!-- Motor de PDF do Contrato de Venda (react-pdf) — layout idêntico à minuta
        oficial, com cabeçalho/rodapé em toda página. Ver
@@ -82,6 +83,6 @@
   <script src="/src/contrato-venda-reactpdf.bundle.js?v=3"></script>
 
   <!-- App unificado de assinatura (auto-detecta o tipo pelo token) -->
-  <script type="text/babel" src="/src/assinar-app.jsx?v=15"></script>
+  <script type="text/babel" src="/src/assinar-app.jsx?v=16"></script>
 </body>
 </html>

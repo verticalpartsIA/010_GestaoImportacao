@@ -312,6 +312,28 @@
       }
     }
 
+    /* Duas modalidades de entrega (Financeiro, 01/10/2026): com 1 equipamento a
+       Precificação calcula também o preço de 90 dias (container exclusivo) —
+       vai na Proposta como alternativa (opcao90) ao de 120 dias (o "oficial"
+       acima). O cliente escolhe na assinatura (ver proposta-opcoes.js). Com
+       2+ equipamentos não existe resultado_v2_expresso, então nada muda. */
+    const expresso = precificacao && precificacao.resultado_v2_expresso && precificacao.resultado_v2_expresso.precificacao;
+    if (expresso && especificacoes.length === 1 && window.PropostaOpcoes) {
+      const difalOpc = (difal && difal.difal_aplicavel && difal.responsavel_recolhimento === 'emitente_verticalparts') ? difal.valor_difal : 0;
+      const fmt2 = (x) => x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const opcao90 = window.PropostaOpcoes.montarOpcao90({
+        precoVendaPorEquipamento: expresso.precoVendaPorEquipamento, difal: difalOpc, qtdParcelas: 5,
+        parcelasFn: (qtd, total) => {
+          const rest = Math.max(qtd - 1, 0);
+          const sinal = total * 0.4;
+          const cada = rest > 0 ? (total - sinal) / rest : 0;
+          return [{ desc: 'Sinal de 40% na assinatura do contrato', valor: fmt2(sinal) },
+            ...Array.from({ length: rest }, (_, i) => ({ desc: `${i + 1}ª Parcela`, valor: fmt2(cada) }))];
+        },
+      });
+      if (opcao90) valores.opcao90 = opcao90;
+    }
+
     if (especificacoes.length || Object.keys(valores).length) {
       prefill.elevador = {};
       if (especificacoes.length) prefill.elevador.especificacoes = especificacoes;

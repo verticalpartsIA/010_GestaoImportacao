@@ -914,6 +914,29 @@ function S_Valores({ d, set, eq, recordId }) {
         </>
       )}
 
+      {eq === "elevador" && window.PropostaOpcoes && window.PropostaOpcoes.temOpcao90(d) && (() => {
+        /* Modalidade alternativa (90 dias, container exclusivo) vinda da Precificação — o preço
+           de 120 dias é o que está acima; o cliente escolhe uma das duas na assinatura
+           (ver proposta-opcoes.js). Só aparece com 1 equipamento. */
+        const ops = window.PropostaOpcoes.opcoes(d);
+        const o90 = ops && ops[1];
+        const escolhida = window.PropostaOpcoes.modalidadeEscolhida(d);
+        return (
+          <div className="pe-totais" style={{ marginTop: 14 }}>
+            <div className="pe-totais-row">
+              <span><b>Modalidade alternativa — {o90.titulo}</b> ({o90.rotulo})</span>
+              <b>R$ {formatBR(o90.total)}</b>
+            </div>
+            <div className="pe-totais-row" style={{ opacity: .75 }}>
+              <span>{escolhida ? `Escolhida pelo cliente: ${escolhida.titulo}.` : "O cliente escolhe entre 120 dias (valores acima) e 90 dias ao aprovar a proposta."}</span>
+              {!escolhida && (
+                <button type="button" className="pe-acab-addfield" onClick={() => set(`${eq}.valores.opcao90`, null)}>Oferecer só 120 dias</button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
+
       <div className="pe-totais">
         <div className="pe-totais-row">
           <span>Total dos Equipamentos</span>
