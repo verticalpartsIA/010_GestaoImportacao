@@ -76,6 +76,8 @@
       // Capatazia (01/10/2026): mesma regra do preço — herda do cadastro só
       // quando a linha ainda não tem valor, nunca sobrescreve edição manual.
       if (!(Number(ct.capatazia_rs) > 0) && Number(custo.capatazia_rs) > 0) out.capatazia_rs = Number(custo.capatazia_rs);
+      // GRI (01/10/2026): mesma regra da capatazia.
+      if (!(Number(ct.gri_rs) > 0) && Number(custo.gri_rs) > 0) out.gri_rs = Number(custo.gri_rs);
       return out;
     });
   }
@@ -89,7 +91,7 @@
     (containers || []).forEach((ct, i) => {
       const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
       if (!custo) return;
-      [['preco_rs', 'preço do container'], ['capatazia_rs', 'capatazia']].forEach(([campo, rotulo]) => {
+      [['preco_rs', 'preço do container'], ['capatazia_rs', 'capatazia'], ['gri_rs', 'GRI']].forEach(([campo, rotulo]) => {
         const atual = Number(ct[campo]) || 0;
         const cadastro = Number(custo[campo]) || 0;
         if (atual > 0 && cadastro > 0 && Math.abs(atual - cadastro) > 0.01) out.push({ indice: i, campo, rotulo, atual, cadastro });
