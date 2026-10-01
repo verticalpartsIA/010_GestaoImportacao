@@ -323,7 +323,8 @@
     const longa = dist >= 100;
     const descEq = descEquipamento(f);
     /* Complemento da cláusula 1.1 — texto livre digitado no Passo 2; vazio mantém o marcador da minuta */
-    const descProposta = (f.descProposta || '').trim() || 'DESCREVER CONFORME PROPOSTA COMERCIAL';
+    /* tira a redundância "Passageiros, 14 Passageiros x…" (tipo repetido na capacidade) */
+    const descProposta = (f.descProposta || '').trim().replace(/^([^,\d]+),\s*(\d+\s+\1)/i, '$2') || 'DESCREVER CONFORME PROPOSTA COMERCIAL';
     const idsLista = (Array.isArray(f.equipamentosIds) ? f.equipamentosIds : []).map((x) => String(x || '').trim()).filter(Boolean);
     const idsEquip = idsLista.length > 1 ? idsLista.slice(0, -1).join(', ') + ' e ' + idsLista[idsLista.length - 1] : idsLista[0] || '';
     const localObra = f.localObra || '(ENDEREÇO COMPLETO DO LOCAL DE ENTREGA)';
@@ -547,7 +548,11 @@
     /* 10. DISPOSIÇÕES FINAIS */
     const contatoCompradorNome = c.rep || '(nome completo)';
     const contatoCompradorCargo = c.repCargo || '(descrição)';
-    const contatoCompradorEmail = c.email || '(de preferência, ter mais de um contato)';
+    /* Dados do COMPRADOR: só e-mails do cliente — a Proposta herda também o e-mail
+       do vendedor da VerticalParts em cópia, que não pode aparecer como contato do Comprador. */
+    const emailsCliente = String(c.email || '').split(/[,;\s]+/).map((x) => x.trim())
+      .filter((x) => x && !/@verticalparts\.com\.br$/i.test(x)).join(', ');
+    const contatoCompradorEmail = emailsCliente || '(de preferência, ter mais de um contato)';
     const contatosVpHtml = CONTATOS_VP.map((p2) =>
       `Nome: ${p2.nome}<br/>${p2.cargo ? `${p2.rotulo}${p2.cargo}<br/>` : ''}Tel.: ${p2.tel}<br/>E-mail: ${p2.email}${p2.fim || ''}`
     ).join('<br/><br/>');

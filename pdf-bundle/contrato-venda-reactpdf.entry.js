@@ -83,7 +83,7 @@ const S = StyleSheet.create({
 
   par: { textAlign: 'justify', marginBottom: ESPACO_PARAGRAFO },
   parIndent: { marginLeft: 14 },
-  parCallout: { marginLeft: 28 },
+  parCallout: { marginLeft: 28, textAlign: 'left' },
   parCentro: { textAlign: 'center', marginTop: 24, marginBottom: 40 },
 
   li: { flexDirection: 'row', marginBottom: 0 },
