@@ -253,7 +253,41 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
 }
 
 /* ---------- Tratativas: histórico de conversa/negociação da cotação,
-   substitui o e-mail — thread único, correlacionado pelo Nº da Cotação. ---------- */
+   substitui o e-mail — thread único, correlacionado pelo Nº da Cotação.
+
+   01/10 — a sub mentia um pouco: "fica registrado aqui, não em e-mail"
+   deixava de propósito foi escrito antes de existir qualquer envio por
+   e-mail, mas desde que o aviso por e-mail (tratativas-store.js) passou
+   a existir, essa frase é enganosa — tem e-mail envolvido, e se o
+   fornecedor RESPONDER esse e-mail (em vez de esperar a VerticalParts
+   escrever de novo aqui), a resposta vai pro Inbox de E-mail (tabela
+   emails_projeto), não pra esta lista (tabela tratativas_cotacao) —
+   são tabelas/telas diferentes, sem sincronização entre si. Texto e o
+   badge abaixo existem só pra deixar isso visível pra quem usa a tela,
+   sem mudar nenhuma lógica de envio/vínculo. */
+function CfTratativasEmailRespondidoBadge({ cotacaoFornecedorId }) {
+  const [temResposta, setTemResposta] = React.useState(false);
+  React.useEffect(() => {
+    let cancelado = false;
+    setTemResposta(false);
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb || !cotacaoFornecedorId) return;
+    sb.from('emails_projeto').select('id', { count: 'exact', head: true })
+      .eq('direcao', 'entrada').is('excluido_em', null)
+      .eq('referencia_id', String(cotacaoFornecedorId))
+      .then(({ count }) => { if (!cancelado) setTemResposta((count || 0) > 0); })
+      .catch(() => { if (!cancelado) setTemResposta(false); });
+    return () => { cancelado = true; };
+  }, [cotacaoFornecedorId]);
+  if (!temResposta) return null;
+  return (
+    <span className="badge badge--info" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
+      title="Existe e-mail recebido vinculado a esta cotação/fornecedor — veja em Geral → Inbox">
+      <Icon.mail size={10}/> Fornecedor também respondeu por e-mail — ver no Inbox
+    </span>
+  );
+}
+
 function CfTratativas({ cotacaoFornecedorId, numeroCotacao }) {
   const store = window.TratativasStore;
   const [msgs, setMsgs] = React.useState([]);
@@ -295,7 +329,10 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao }) {
   if (loading) return <div style={{ textAlign: "center", padding: "40px 0", color: "var(--fg3)", fontSize: 13 }}>Carregando…</div>;
 
   return (
-    <Card title="Tratativas" sub="Histórico de negociação com o fornecedor — fica registrado aqui, não em e-mail.">
+    <Card title="Tratativas" sub="Histórico de negociação com o fornecedor. Cada mensagem aqui dispara um aviso por e-mail ao fornecedor — se ele RESPONDER esse e-mail (em vez de esperar você escrever de novo aqui), a resposta aparece no Inbox de E-mail (Geral → Inbox), não nesta lista.">
+      <div className="row" style={{ marginBottom: 8 }}>
+        <CfTratativasEmailRespondidoBadge cotacaoFornecedorId={cotacaoFornecedorId}/>
+      </div>
       <div className="stack" style={{ gap: 10, maxHeight: 420, overflowY: "auto", padding: "4px 2px" }}>
         {msgs.length === 0 && <div className="muted small" style={{ padding: "16px 0", textAlign: "center" }}>Nenhuma mensagem ainda.</div>}
         {msgs.map(m => (

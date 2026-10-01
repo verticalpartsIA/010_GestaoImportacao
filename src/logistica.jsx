@@ -1285,6 +1285,19 @@ function InboxRespostasFormulario({ onAbrir }) {
   );
 }
 
+/* 01/10 — rótulo curto por `referencia_tipo`, só pra deixar visível na
+   lista/detalhe de qual documento veio o e-mail (RFQ/Proposta/Contrato/
+   Tratativa) — antes só se via o Nº da cotação, sem saber qual dos 4+
+   fluxos que compartilham o mesmo Nº gerou aquele e-mail específico.
+   Puramente de exibição — não influencia nenhum vínculo/matching. */
+const INBOX_REFERENCIA_TIPO_LABEL = {
+  cotacao_fornecedor: 'RFQ ao fornecedor',
+  proposta: 'Proposta',
+  contrato_venda: 'Contrato de Venda',
+  contrato_instalador: 'Contrato Instalador',
+  tratativa_cotacao: 'Tratativa',
+};
+
 /* 10/09 — IMAP conectado de verdade (Edge Function read-inbox, mesma
    caixa suporte@vpsistema.com usada pra enviar em send-email). Movida do
    módulo Comercial pro módulo Geral no mesmo dia — pedido do usuário: é
@@ -1316,6 +1329,7 @@ function EmailInbox({ setRoute, setSubsel }) {
     html: e.corpo_html || null,
     numeroCotacao: e.numero_cotacao,
     vinculoConfianca: e.vinculo_confianca,
+    referenciaTipo: e.referencia_tipo,
     anexos: (e.anexos || []).map((a) => ({ ...a, url: a.url || null })),
     to: e.para || [],
     cc: [],
@@ -1727,10 +1741,17 @@ function EmailInbox({ setRoute, setSubsel }) {
               </div>
               <div className="subj">{m.subject}{m.anexos && m.anexos.length > 0 ? <Icon.paperclip size={11} style={{ marginLeft: 6, verticalAlign: 'middle', opacity: .6 }}/> : null}</div>
               <div className="preview">{m.preview}</div>
-              {m.numeroCotacao != null && (
-                <Badge variant={m.vinculoConfianca === 'certo' ? 'success' : 'warning'} onClick={(ev) => verNaLinhaDoTempo(ev, m.numeroCotacao)} style={{ cursor: 'pointer', marginTop: 4 }}>
-                  <Icon.link2 size={10}/> Cotação Nº {m.numeroCotacao}{m.vinculoConfianca === 'provavel' ? ' (provável)' : ''}
-                </Badge>
+              {(m.numeroCotacao != null || INBOX_REFERENCIA_TIPO_LABEL[m.referenciaTipo]) && (
+                <div className="row gap-1" style={{ marginTop: 4, flexWrap: 'wrap' }}>
+                  {m.numeroCotacao != null && (
+                    <Badge variant={m.vinculoConfianca === 'certo' ? 'success' : 'warning'} onClick={(ev) => verNaLinhaDoTempo(ev, m.numeroCotacao)} style={{ cursor: 'pointer' }}>
+                      <Icon.link2 size={10}/> Cotação Nº {m.numeroCotacao}{m.vinculoConfianca === 'provavel' ? ' (provável)' : ''}
+                    </Badge>
+                  )}
+                  {INBOX_REFERENCIA_TIPO_LABEL[m.referenciaTipo] && (
+                    <Badge variant="outline">{INBOX_REFERENCIA_TIPO_LABEL[m.referenciaTipo]}</Badge>
+                  )}
+                </div>
               )}
             </div>
           ))}
@@ -1745,6 +1766,9 @@ function EmailInbox({ setRoute, setSubsel }) {
                   <Badge variant={active.vinculoConfianca === 'certo' ? 'success' : 'warning'} onClick={(ev) => verNaLinhaDoTempo(ev, active.numeroCotacao)} style={{ cursor: 'pointer', marginTop: 6 }}>
                     <Icon.link2 size={10}/> Ver na Linha do Tempo — Cotação Nº {active.numeroCotacao}{active.vinculoConfianca === 'provavel' ? ' (vínculo provável)' : ''}
                   </Badge>
+                )}
+                {INBOX_REFERENCIA_TIPO_LABEL[active.referenciaTipo] && (
+                  <Badge variant="outline" style={{ marginTop: 6, marginLeft: 6 }}>{INBOX_REFERENCIA_TIPO_LABEL[active.referenciaTipo]}</Badge>
                 )}
                 {gatilhoAberto && (
                   <div className="alert warning" style={{ marginTop: 8 }}>
