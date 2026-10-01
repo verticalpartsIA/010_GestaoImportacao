@@ -208,6 +208,62 @@
     ]},
   ];
 
+  /* Grupo da sidebar (GRUPOS_MODULO) → módulos do CATALOGO_MODULOS que
+     moram nele. Os dois vocabulários de grupo são diferentes (o catálogo
+     é por área de alçada, a sidebar é navegação), então o vínculo é este
+     mapa explícito. Marcar o grupo de um colaborador concede TODAS as
+     ações desses módulos; "admin.conceder_alcadas" fica de fora de
+     propósito — poder de dar poder a terceiros nunca vem de tabela. */
+  const MODULOS_POR_GRUPO_SIDEBAR = {
+    'Geral': ['dashboard', 'notificacoes', 'decisoes', 'financeiro'],
+    'CRM': ['leads'],
+    'Cadastros Mestres': ['cadastro-clientes', 'cadastro-fornecedores'],
+    'Comercial | Pré-venda': ['formularios', 'controle-cotacoes', 'cotacoes-fornecedor', 'propostas', 'contratos-sociais'],
+    'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro'],
+    'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
+    'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'compras', 'pedidos-acompanhamento'],
+    'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
+    'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
+    'Entrega & Documentação': ['databook', 'handover'],
+    'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
+    'Logística Interna': ['almoxarifado'],
+    'Administração': ['logs'],
+  };
+
+  /* Lista { modulo, capacidade } de tudo que o grupo inteiro cobre. */
+  function capacidadesDoGrupo(grupo) {
+    const ids = new Set(MODULOS_POR_GRUPO_SIDEBAR[grupo] || []);
+    const out = [];
+    CATALOGO_MODULOS.forEach((g) => g.itens.forEach((it) => {
+      if (!ids.has(it.modulo)) return;
+      (it.capacidades || ACOES_PADRAO).forEach((a) => out.push({ modulo: it.modulo, capacidade: a.chave }));
+    }));
+    return out;
+  }
+
+  /* Concede (ou retira) em lote todas as ações do grupo. Devolve a lista
+     afetada pra tela atualizar os checkboxes sem reler o banco. */
+  async function concederGrupoInteiro(colaboradorId, grupo, conceder) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const lista = capacidadesDoGrupo(grupo);
+    if (!lista.length) return lista;
+    if (conceder) {
+      const por = (window.__VP_USER || {}).email || null;
+      const agora = new Date().toISOString();
+      const { error } = await c.from('alcadas_capacidade').upsert(
+        lista.map((l) => ({ perfil_id: colaboradorId, modulo: l.modulo, capacidade: l.capacidade, concedido_por: por, concedido_em: agora })),
+        { onConflict: 'perfil_id,modulo,capacidade' },
+      );
+      if (error) throw error;
+    } else {
+      const modulos = [...new Set(lista.map((l) => l.modulo))];
+      const { error } = await c.from('alcadas_capacidade').delete().eq('perfil_id', colaboradorId).in('modulo', modulos);
+      if (error) throw error;
+    }
+    if (window.PropostaStore) window.PropostaStore.resetAlcadasCache();
+    return lista;
+  }
+
   async function listarCapacidadesConcedidas() {
     const c = sb(); if (!c) return [];
     const { data, error } = await c.from('alcadas_capacidade').select('perfil_id, modulo, capacidade');
@@ -257,5 +313,6 @@
     GRUPOS_MODULO, listarColaboradores, listarAlocacoes, arvoreDepartamentos,
     alocar, desalocar, removerTodasAlocacoes, enriquecerUsuarioLogado,
     ACOES_PADRAO, CATALOGO_MODULOS, listarCapacidadesConcedidas, concederCapacidade,
+    MODULOS_POR_GRUPO_SIDEBAR, capacidadesDoGrupo, concederGrupoInteiro,
   };
 }());
