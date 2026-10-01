@@ -100,13 +100,19 @@ function PainelAlocacaoModulos({ colaborador, onVoltar, onChange }) {
   const toggleGrupo = async (grupo) => {
     setBusyGrupo(grupo);
     try {
-      if (alocadosGrupo.includes(grupo)) {
-        await window.ColaboradoresAdminStore.desalocar(colaborador.id, grupo);
-        setAlocadosGrupo((a) => a.filter((g) => g !== grupo));
-      } else {
-        await window.ColaboradoresAdminStore.alocar(colaborador.id, grupo);
-        setAlocadosGrupo((a) => [...a, grupo]);
-      }
+      const S = window.ColaboradoresAdminStore;
+      const marcando = !alocadosGrupo.includes(grupo);
+      if (marcando) await S.alocar(colaborador.id, grupo);
+      else await S.desalocar(colaborador.id, grupo);
+      /* Grupo inteiro = todos os módulos do grupo com todas as ações
+         (marcar) ou nenhum (desmarcar) — ajustes finos ficam por módulo. */
+      const afetadas = await S.concederGrupoInteiro(colaborador.id, grupo, marcando);
+      setAlocadosGrupo((a) => marcando ? [...a, grupo] : a.filter((g) => g !== grupo));
+      setConcedidas((prev) => {
+        const n = new Set(prev || []);
+        afetadas.forEach((l) => { const k = l.modulo + '.' + l.capacidade; marcando ? n.add(k) : n.delete(k); });
+        return n;
+      });
       onChange && onChange();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setBusyGrupo(null); }
