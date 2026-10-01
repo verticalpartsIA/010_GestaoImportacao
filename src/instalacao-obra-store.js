@@ -228,7 +228,7 @@
     const { data: propostaDaCotacao } = await c.from('propostas').select('id').eq('numero_cotacao', numeroCotacao).maybeSingle();
     let contrato = null;
     if (propostaDaCotacao) {
-      const { data } = await c.from('contratos_venda_equipamentos').select('signed_at').eq('proposta_id', propostaDaCotacao.id).maybeSingle();
+      const { data } = await c.from('contratos_venda_equipamentos').select('signed_at').eq('proposta_id', propostaDaCotacao.id).or('status.is.null,status.neq.em_preenchimento').maybeSingle();
       contrato = data;
     }
     const contratoAssinado = !!(contrato && contrato.signed_at);

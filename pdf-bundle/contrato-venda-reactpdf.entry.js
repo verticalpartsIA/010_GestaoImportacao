@@ -264,10 +264,10 @@ function Item(item, key) {
      marcadores redondos. */
   if (item.callout) {
     const linhas = dividirLinhas(runs);
-    const bancario = linhas.length > 1 && /dados banc/i.test(linhas[0].map(r => r.t).join(''));
+    const bancario = !!item.bancario || (linhas.length > 1 && /dados banc/i.test(linhas[0].map(r => r.t).join('')));
     if (bancario) {
       return h(View, { key, style: { marginBottom: ESPACO_PARAGRAFO } },
-        linhas.map((l, i) => i === 0
+        linhas.map((l, i) => (i === 0 && !item.bancario)
           ? h(Text, { key: i, style: { marginLeft: 14 } }, runsParaFilhos(l))
           : h(View, { key: i, style: [S.li, { marginLeft: 22 }], wrap: false }, [
               h(View, { key: 'm', style: S.liMarca }, h(Bolinha)),

@@ -962,7 +962,12 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
     }
   }, [cadastroMatch]);
   const setR = (k) => (v) => { tocadoRef.current = true; setRecipient((r) => ({ ...r, [k]: v })); };
-  const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
+  /* 30/09 — achado real: esta chave não incluía categoriaProduto, mas
+     enviar() (FECotacaoFornecedorModal) grava `enviando` COM ela — nunca
+     casavam, então `busy` era sempre false e os botões não desabilitavam
+     durante o envio (a cotação 961 saiu 4x por e-mail em 7s). Manter as
+     duas chaves idênticas. */
+  const key = `${grupo.fornecedor}|${grupo.tipoFormulario}|${grupo.categoriaProduto}`;
   const busy = enviando === key;
 
   return (
@@ -1014,6 +1019,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
   const store = window.CotacaoElevadorFornecedorStore;
   const [cotacoes, setCotacoes] = React.useState([]);
   const [enviando, setEnviando] = React.useState(null);
+  const enviandoRef = React.useRef(false);
   const [fornecedoresCadastro, setFornecedoresCadastro] = React.useState([]);
   React.useEffect(() => {
     if (!window.CadastrosFornecedoresStore) return;
@@ -1068,6 +1074,10 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
 
   const enviar = async (grupo, canal, recipient) => {
     const key = `${grupo.fornecedor}|${grupo.tipoFormulario}|${grupo.categoriaProduto}`;
+    /* 30/09 — trava síncrona (ref) contra duplo clique: o state `enviando`
+       só reflete no próximo render, e dois cliques rápidos entram antes. */
+    if (enviandoRef.current) return;
+    enviandoRef.current = true;
     setEnviando(key);
     try {
       let cot = cotacaoDoGrupo(grupo);
@@ -1079,27 +1089,26 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
         `Este mesmo link foi enviado por WhatsApp e E-mail — responda por qualquer um dos dois, sem precisar repetir.\n` +
         `This same link was sent via WhatsApp and Email — please reply through either one, no need to repeat.\n` +
         `此链接已通过WhatsApp和邮件发送 — 您可以通过任一方式回复，无需重复填写。`;
-      if (canal === 'whatsapp') window.open(window.PFStore.whatsAppHref(recipient.telefone, msg), '_blank');
+      let registrar = true; // só registra "enviado" quando o envio de fato aconteceu
+      let avisoFinal = null;
+      if (canal === 'whatsapp') {
+        window.open(window.PFStore.whatsAppHref(recipient.telefone, msg), '_blank');
+        avisoFinal = 'WhatsApp aberto — confirme o envio na janela do WhatsApp. A cotação foi registrada como enviada por WhatsApp.';
+      }
       if (canal === 'email') {
         /* 10/09 — envio direto via SMTP (send-email edge function), sem abrir
            Outlook/cliente local. Se o SMTP ainda não tiver os secrets
            configurados (ou a chamada falhar por qualquer motivo), cai pro
-           mailto: como estava antes — nunca deixa o vendedor sem alternativa. */
-        const sb = window.__VP_SB && window.__VP_SB.sb;
-        let enviouDireto = false;
-        if (sb) {
-          const { data: emailData, error: emailError } = await sb.functions.invoke('send-email', {
-            body: {
-              to: recipient.email, subject: `Cotação técnica ${cot.numero_documento} — VerticalParts`, text: msg,
-              numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
-            },
-          });
-          if (!emailError) {
-            enviouDireto = true;
-            if (emailData && emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
-          } else {
-            console.warn('[FormularioElevador] send-email falhou, caindo pro mailto:', emailError);
-          }
+           mailto: como estava antes — nunca deixa o vendedor sem alternativa.
+           01/10 — chamada em si extraída pro EmailEnvioHelper (compartilhado
+           com Proposta/Contrato de Venda/Contrato Instalador); a decisão do
+           que fazer com sucesso/falha continua aqui, sem mudança. */
+        const { enviouDireto, emailData } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: recipient.email, subject: `Cotação técnica ${cot.numero_documento} — VerticalParts`, text: msg,
+          numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
+        });
+        if (enviouDireto) {
+          avisoFinal = `E-mail enviado para ${(emailData.destinatarios || []).join(', ') || recipient.email}.`;
         }
         /* 28/09 — achado real: essa queda pro mailto: era silenciosa (só
            console.warn) — o vendedor só percebia pela janela do cliente de
@@ -1107,17 +1116,28 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
            também nunca entra em emails_projeto (sem Message-ID nosso), então
            avisa também que não vai aparecer em Enviados/Linha do Tempo. */
         if (!enviouDireto) {
-          window.toast?.('Não foi possível enviar direto (envio automático falhou) — abrindo seu e-mail padrão para envio manual. Esse envio não ficará registrado em Enviados/Linha do Tempo.', 'warning');
+          /* 30/09 — antes marcava "enviada" mesmo sem nada ter saído. Agora,
+             se o envio automático falhou, NÃO registra como enviada (o
+             vendedor ainda nem enviou no e-mail padrão). */
+          registrar = false;
+          avisoFinal = null;
+          window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado ao fornecedor e a cotação NÃO foi marcada como enviada. Abrindo seu e-mail padrão para envio manual (depois use "Copiar link"/WhatsApp para registrar o envio).', 'error');
           window.open(window.PFStore.mailtoHref(recipient.email, `Cotação técnica ${cot.numero_documento} — VerticalParts`, msg), '_blank');
         }
       }
-      if (canal === 'link') { try { await navigator.clipboard.writeText(url); } catch (e) {} window.toast?.('Link copiado.', 'success'); }
-      await store.marcarEnviado(cot.id, canal, recipient);
-      await reload();
-      window.toast?.('Cotação marcada como enviada.', 'success');
+      if (canal === 'link') {
+        try { await navigator.clipboard.writeText(url); } catch (e) {}
+        avisoFinal = 'Link copiado — nenhum e-mail/mensagem foi enviado por aqui: cole o link no canal que preferir (a cotação fica registrada como "enviada por link").';
+      }
+      if (registrar) {
+        await store.marcarEnviado(cot.id, canal, recipient);
+        await reload();
+        if (avisoFinal) window.toast?.(avisoFinal, 'success');
+      }
     } catch (e) {
       window.toast?.('Erro ao enviar: ' + e.message, 'error');
     } finally {
+      enviandoRef.current = false;
       setEnviando(null);
     }
   };

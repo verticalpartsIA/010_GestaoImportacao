@@ -90,11 +90,11 @@
   <script src="/src/dashboard-metrics-financeiro.js?v=3"></script>
   <script src="/src/dashboard-metrics-gantt.js?v=3"></script>
   <script src="/src/dashboard-metrics-admin.js?v=3"></script>
-  <script src="/src/supabase.js?v=23"></script>
+  <script src="/src/supabase.js?v=24"></script>
   <!-- Roteamento por URL (Fase 1 da roteirização, issue #279) — carrega
        depois do guard de SSO (mexe só na query string, nunca no pathname)
        e antes de shell.jsx/app.jsx, que o consomem. -->
-  <script src="/src/router.js?v=15"></script>
+  <script src="/src/router.js?v=16"></script>
 
   <script src="/src/notificacoes-processamento.js?v=2"></script>
   <script src="/src/notificacoes-lidas-store.js?v=1"></script>
@@ -102,10 +102,14 @@
   <!-- Administração — espelho de colaboradores (vpsistema) + alocação de
        módulos do VP Gestão. Carrega cedo pra enriquecer window.__VP_USER
        (foto + grupos alocados) assim que a identidade SSO chegar. -->
-  <script src="/src/colaboradores-admin-store.js?v=12"></script>
+  <script src="/src/colaboradores-admin-store.js?v=13"></script>
 
   <!-- Registro central de atividades (auditoria global) -->
   <script src="/src/vp-log.js?v=2"></script>
+
+  <!-- Envio de e-mail direto (SMTP) + fallback mailto: — compartilhado por
+       RFQ/Proposta/Contrato de Venda/Contrato Instalador -->
+  <script src="/src/email-envio-helper.js?v=1"></script>
 
   <!-- Gatilhos & Prazo — motor que nasce/fecha nós automaticamente a partir
        dos eventos de eventos-fluxo-store.js (carrega ANTES dele) -->
@@ -119,7 +123,7 @@
   <script src="/src/pedidos-varejo-store.js?v=2"></script>
 
   <!-- Gestão Importação — Fase 1: P.I. (Proforma Invoice) -->
-  <script src="/src/pi-store.js?v=5"></script>
+  <script src="/src/pi-store.js?v=6"></script>
   <!-- Gestão Importação — Fase 2: RFQ (Request for Quotation) -->
   <script src="/src/rfq-store.js?v=3"></script>
   <!-- Gestão Importação — Fase 3: IMS (recursos operacionais) -->
@@ -131,22 +135,22 @@
 
   <!-- Linha do Tempo da Cotação — agrega dados de várias tabelas por Nº Cotação -->
   <script src="/src/linha-do-tempo-store.js?v=6"></script>
-  <script src="/src/instalacao-checklist-store.js?v=7"></script>
+  <script src="/src/instalacao-checklist-store.js?v=8"></script>
   <script src="/src/acompanhamento-obra-store.js?v=6"></script>
 
   <!-- Aval Financeiro — gate entre Proposta aprovada/Contrato e Contrato assinado/Compra -->
   <script src="/src/aval-financeiro-store.js?v=11"></script>
 
   <!-- Aval Jurídico — gate entre Contrato de Venda assinado e envio do Desenho de Instalação -->
-  <script src="/src/aval-juridico-store.js?v=2"></script>
+  <script src="/src/aval-juridico-store.js?v=3"></script>
 
   <!-- Tweaks panel framework -->
   <script type="text/vp-jsx" src="/src/tweaks-panel.jsx?v=3"></script>
 
   <!-- Components in dependency order -->
-  <script type="text/vp-jsx" src="/src/primitives.jsx?v=7"></script>
+  <script type="text/vp-jsx" src="/src/primitives.jsx?v=8"></script>
   <script type="text/vp-jsx" src="/src/toast.jsx?v=6"></script>
-  <script type="text/vp-jsx" src="/src/shell.jsx?v=68"></script>
+  <script type="text/vp-jsx" src="/src/shell.jsx?v=69"></script>
   <script type="text/vp-jsx" src="/src/dashboard.jsx?v=19"></script>
   <script type="text/vp-jsx" src="/src/comercial.jsx?v=34"></script>
   <script type="text/vp-jsx" src="/src/crm.jsx?v=1"></script>
@@ -166,7 +170,7 @@
   <script src="/src/cambio-api.js?v=2"></script>
   <script src="/src/formulario-elevador-store.js?v=20"></script>
   <script src="/src/cotacao-elevador-fornecedor-store.js?v=22"></script>
-  <script type="text/vp-jsx" src="/src/formulario-elevador.jsx?v=6"></script>
+  <script type="text/vp-jsx" src="/src/formulario-elevador.jsx?v=8"></script>
 
   <!-- Quadro de Comando (Comercial · Formulários) — BOM + lista de corte
        + checklist digital de separação quando fabricado internamente. -->
@@ -175,6 +179,8 @@
   <script type="text/vp-jsx" src="/src/quadro-comando.jsx?v=17"></script>
 
   <!-- Cotação Quadro de Comando — fluxo completo como elevador -->
+  <script src="/src/contratos-sociais-store.js?v=1"></script>
+  <script type="text/vp-jsx" src="/src/contratos-sociais.jsx?v=2"></script>
   <script src="/src/cotacao-quadro-comando-store.js?v=2"></script>
   <script type="text/vp-jsx" src="/src/cotacao-quadro-comando.jsx?v=5"></script>
 
@@ -182,8 +188,8 @@
   <script type="text/vp-jsx" src="/src/controle-cotacoes.jsx?v=7"></script>
 
   <!-- Cotações a Fornecedor — substitui a antiga "Cotações China" (mock) -->
-  <script src="/src/tratativas-store.js?v=1"></script>
-  <script type="text/vp-jsx" src="/src/cotacoes-fornecedor.jsx?v=10"></script>
+  <script src="/src/tratativas-store.js?v=2"></script>
+  <script type="text/vp-jsx" src="/src/cotacoes-fornecedor.jsx?v=11"></script>
 
   <!-- Precificação de Elevador (ADM/Financeiro) + DIFAL -->
   <script src="/src/difal-engine.js?v=1"></script>
@@ -209,7 +215,7 @@
        gerado por `npm run build:pdf:proposta` a partir de
        pdf-bundle/proposta-reactpdf.entry.js. Só Elevador por enquanto. -->
   <script src="/src/proposta-reactpdf.bundle.js?v=8"></script>
-  <script type="text/vp-jsx" src="/src/proposta-editor.jsx?v=46"></script>
+  <script type="text/vp-jsx" src="/src/proposta-editor.jsx?v=48"></script>
   <script type="text/vp-jsx" src="/src/ncm.jsx?v=6"></script>
 
   <!-- Funil de pré-venda por setores (workflow + histórico) — antes do Catálogo -->
@@ -219,8 +225,10 @@
   <script type="text/vp-jsx" src="/src/ficha-workflow.jsx?v=1"></script>
 
   <script type="text/vp-jsx" src="/src/ncm-catalogo.jsx?v=24"></script>
-  <script type="text/vp-jsx" src="/src/operacoes.jsx?v=17"></script>
-  <script type="text/vp-jsx" src="/src/logistica.jsx?v=47"></script>
+  <script type="text/vp-jsx" src="/src/operacoes.jsx?v=18"></script>
+  <script type="text/vp-jsx" src="/src/logistica.jsx?v=50"></script>
+  <script src="/src/importacao-varejo-store.js?v=2"></script>
+  <script type="text/vp-jsx" src="/src/importacao-varejo.jsx?v=4"></script>
   <script src="/src/comissionamento-store.js?v=2"></script>
   <script type="text/vp-jsx" src="/src/colaboradores-admin.jsx?v=4"></script>
   <script type="text/vp-jsx" src="/src/financeiro.jsx?v=38"></script>
@@ -228,7 +236,7 @@
   <script type="text/vp-jsx" src="/src/aval-juridico.jsx?v=2"></script>
   <script type="text/vp-jsx" src="/src/decisoes.jsx?v=5"></script>
   <script type="text/vp-jsx" src="/src/almoxarifado.jsx?v=1"></script>
-  <script type="text/vp-jsx" src="/src/pi.jsx?v=13"></script>
+  <script type="text/vp-jsx" src="/src/pi.jsx?v=14"></script>
   <script type="text/vp-jsx" src="/src/rfq.jsx?v=3"></script>
   <script type="text/vp-jsx" src="/src/ims.jsx?v=3"></script>
   <script type="text/vp-jsx" src="/src/embarques-importacao.jsx?v=6"></script>
@@ -275,7 +283,7 @@
 
   <!-- Recursos Humanos · Homologação de Parceiros Instaladores -->
   <script src="/src/rh-homologacao-store.js?v=13"></script>
-  <script src="/src/instalacao-obra-store.js?v=13"></script>
+  <script src="/src/instalacao-obra-store.js?v=14"></script>
   <script src="/src/omie-pagamentos-store.js?v=6"></script>
   <script type="text/vp-jsx" src="/src/rh-homologacao.jsx?v=8"></script>
   <script type="text/vp-jsx" src="/src/cadastro-instaladores.jsx?v=17"></script>
@@ -290,17 +298,17 @@
   <script src="/src/contrato-instalador-parcelas-store.js?v=3"></script>
   <script src="/src/contrato-instalador-store.js?v=12"></script>
   <script type="text/vp-jsx" src="/src/contrato-instalador-preview.jsx?v=2"></script>
-  <script type="text/vp-jsx" src="/src/contrato-instalador.jsx?v=14"></script>
+  <script type="text/vp-jsx" src="/src/contrato-instalador.jsx?v=16"></script>
   <script type="text/vp-jsx" src="/src/pagamentos-instalador.jsx?v=3"></script>
 
   <!-- Jurídico · Contrato Venda de Equipamentos (cliente final) -->
-  <script src="/src/contrato-venda-engine.js?v=15"></script>
-  <script src="/src/contrato-venda-store.js?v=17"></script>
+  <script src="/src/contrato-venda-engine.js?v=17"></script>
+  <script src="/src/contrato-venda-store.js?v=18"></script>
   <script src="/src/contrato-venda-signatarios-store.js?v=1"></script>
   <!-- Motor de PDF do Contrato de Venda (react-pdf) — layout idêntico à minuta oficial. Ver pdf-bundle/contrato-venda-reactpdf.entry.js -->
-  <script src="/src/contrato-venda-reactpdf.bundle.js?v=1"></script>
+  <script src="/src/contrato-venda-reactpdf.bundle.js?v=2"></script>
   <script type="text/vp-jsx" src="/src/contrato-venda-preview.jsx?v=4"></script>
-  <script type="text/vp-jsx" src="/src/contrato-venda.jsx?v=19"></script>
+  <script type="text/vp-jsx" src="/src/contrato-venda.jsx?v=25"></script>
 
   <!-- Engenharia · Ficha Técnica (gerador universal) -->
   <script src="/src/ficha-tecnica-engine.js?v=10"></script>
@@ -338,6 +346,6 @@
   <script type="text/vp-jsx" src="/src/vp-copiloto.jsx?v=9"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="/src/app.jsx?v=79"></script>
+  <script type="text/vp-jsx" src="/src/app.jsx?v=81"></script>
 </body>
 </html>

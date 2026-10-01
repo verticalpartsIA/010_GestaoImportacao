@@ -796,7 +796,11 @@ function CISendModal({ record, onClose, onSent }) {
     }
     setSending(true);
     try {
-      const updated = await window.CIStore.markSent(record.id, channel, { name, contact });
+      /* 30/09 — e-mail: só registra "enviado" DEPOIS de o send-email
+         confirmar (antes marcava antes, e com falha + mailto o status
+         ficava "enviado" sem nada ter saído). */
+      let updated = null;
+      if (channel !== 'email') updated = await window.CIStore.markSent(record.id, channel, { name, contact });
       if (channel === 'whatsapp') {
         window.open(window.CIStore.whatsAppHref(contact, message), '_blank');
       } else if (channel === 'email') {
@@ -814,25 +818,20 @@ function CISendModal({ record, onClose, onSent }) {
            numeroCotacao) — o vínculo por Message-ID não depende de Nº de
            Cotação nenhum. Sempre tenta send-email; numeroCotacao null não
            é mais motivo pra pular. */
-        const sb = window.__VP_SB && window.__VP_SB.sb;
-        let enviouDireto = false;
-        if (sb) {
-          const { data: emailData, error: emailError } = await sb.functions.invoke('send-email', {
-            body: {
-              to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
-              numeroCotacao, referenciaTipo: 'contrato_instalador', referenciaId: record.id,
-            },
-          });
-          if (!emailError) {
-            enviouDireto = true;
-            if (emailData && emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
-          } else {
-            console.warn('[CISendModal] send-email falhou, caindo pro mailto:', emailError);
-          }
-        }
-        if (!enviouDireto) {
+        /* 01/10 — chamada em si extraída pro EmailEnvioHelper (compartilhado
+           com RFQ/Proposta/Contrato de Venda); sucesso/falha continuam
+           decididos aqui, sem mudança de comportamento. */
+        const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
+          numeroCotacao, referenciaTipo: 'contrato_instalador', referenciaId: record.id,
+        });
+        if (enviouDireto) {
+          updated = await window.CIStore.markSent(record.id, channel, { name, contact });
+          window.toast?.(`E-mail enviado para ${contact}.`, 'success');
+        } else {
           window.open(window.CIStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
-          window.toast?.('Não foi possível enviar direto (envio automático falhou) — abrindo seu e-mail padrão para envio manual. Esse envio não ficará registrado em Enviados/Linha do Tempo.', 'warning');
+          window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado e o contrato NÃO foi marcado como enviado. Abrindo seu e-mail padrão para envio manual; depois de enviar, use WhatsApp/Link para registrar o envio.', 'error');
+          return;
         }
       }
       setSent(true);
