@@ -716,8 +716,8 @@
        preenchido, resultado_v2_expresso fica vazio — não força a
        modalidade pra quem não precisa dela. */
     // 01/10/2026 — o card de 90 dias (container exclusivo) só existe com 1 equipamento
-    // e paga o container + capatazia inteiros (rateio 1); frete_seguro_capatazia_usd_expresso
-    // saiu da tela e do cálculo (coluna fica no banco, sem uso).
+    // e paga o container + capatazia inteiros (rateio 1). O antigo frete expresso digitado
+    // (frete_seguro_capatazia_usd_expresso) foi removido do banco em 01/10/2026.
     const resultadoV2Expresso = qtdEquipamentos <= 1
       ? window.PrecificacaoElevadorEngine.calcularV2({
           ...baseInputs, containerRateioDivisor: 1, difalCustoRs, ...v2Extras,
