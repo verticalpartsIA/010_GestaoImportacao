@@ -45,6 +45,38 @@
    Volume confirmado ao vivo: 1770 pedidos em TODA a história da conta
    (18 páginas a 100/pág, o máximo aceito pelo endpoint).
 
+   Fase 'pi' (01/10/2026) — pedido do usuário depois de uma investigação ao
+   vivo (via Omie MCP) que não achou NENHUM Pedido de Compra ligando o
+   fornecedor BST a nenhum produto VPB: "vamos melhorar essa busca?
+   pagamentos de P.I veja isso". A tabela `pi_importacao` (P.I. — fatura
+   comercial real de importação, preenchida manualmente pelo Financeiro) é
+   uma fonte MELHOR que Pedido de Compra do Omie quando existe: fornecedor é
+   texto livre real (sem cadastro bagunçado) e `itens[].codigo_produto` já
+   bate com o nosso código. Roda por ÚLTIMO (depois de 'pedidos'/
+   'fornecedores'), pra sempre ter a palavra final na mesma sincronização.
+   Tabela pequena (8 P.I.s na criação desta fase) — sem cursor de paginação,
+   1 passada só por ciclo.
+     - Preço: `itens[].valor_unitario` está na moeda da P.I. (`moeda`,
+       sempre "USD" até agora) — convertido pra R$ multiplicando pela
+       cotação REAL que a própria P.I. já registrou no pagamento
+       (`cotacao_dolar_primeiro_pagamento`, senão `_segundo_pagamento`).
+       Sem nenhuma cotação ainda registrada (P.I. aberta mas não paga),
+       fica sem preço (fornecedor/data continuam úteis sozinhos).
+     - Freshness: só sobrescreve uma linha já existente (de Pedido de
+       Compra OU de uma P.I. anterior) se a `data_abertura` desta P.I. for
+       mais recente que o `data_pedido` já gravado — nunca deixa a P.I.
+       apagar um dado mais novo. Como 'pi' roda por último a cada ciclo,
+       se amanhã o Omie ganhar um Pedido de Compra really novo pro mesmo
+       código, a fase 'pedidos' sobrescreve sem checar data (comportamento
+       de sempre) e esta fase, ao rodar na sequência, vê que o
+       `data_pedido` já é mais novo que a P.I. e CORRETAMENTE não
+       restaura a P.I. antiga por cima.
+     - Achado real nos dados (01/10): vários `itens[].codigo_produto`
+       têm espaço em branco sobrando no fim (ex. `"VPER-675 "`) —
+       `.trim()` antes de comparar com `codigosAtivos`, senão produtos
+       ativos reais (confirmado: VPER-675, VPER-701) ficariam de fora
+       silenciosamente.
+
    ⚠️ SEM `@supabase/supabase-js` de propósito — achado real ao deployar
    esta função (30/09): o import via esm.sh deu BOOT_ERROR ("A remote
    specifier was requested [...] but --no-remote is specified"), algo que
@@ -153,9 +185,19 @@ type PedidoCabecalho = { nCodFor: number; dIncData: string; cNumero: string; nCo
 type PedidoPesquisa = { cabecalho_consulta: PedidoCabecalho; produtos_consulta: PedidoItem[] };
 type PesquisarPedCompraResp = { nTotalPaginas: number; pedidos_pesquisa: PedidoPesquisa[] };
 type ClienteOmie = { razao_social?: string; nome_fantasia?: string; cnpj_cpf?: string; exterior?: string };
+type PiItem = { codigo_produto?: string; valor_unitario?: number };
+type PiRow = {
+  numero_pi: string;
+  fornecedor: string;
+  moeda: string;
+  data_abertura: string | null;
+  itens: PiItem[];
+  cotacao_dolar_primeiro_pagamento: number | string | null;
+  cotacao_dolar_segundo_pagamento: number | string | null;
+};
 
 interface Cursor {
-  fase: "pedidos" | "fornecedores" | "idle";
+  fase: "pedidos" | "fornecedores" | "pi" | "idle";
   next_pagina: number;
   total_paginas: number | null;
   started_at: string;
@@ -231,6 +273,12 @@ async function processarPaginaPedidos(cursor: Cursor, codigosAtivos: Set<string>
           preco_unitario: item.nValUnit ?? 0,
           numero_pedido: cab.cNumero || String(cab.nCodPed || ""),
           data_pedido: dataIso,
+          // Sempre explícito (não confia no DEFAULT da coluna) — um
+          // upsert por ON CONFLICT DO UPDATE não aplica DEFAULT em quem
+          // já existia; sem isso, uma linha antes marcada 'pi_importacao'
+          // (fase abaixo) ficaria com esse rótulo errado depois de ser
+          // sobrescrita com dado do Pedido de Compra.
+          fonte: "omie_pedido_compra",
           updated_at: new Date().toISOString(),
         },
       });
@@ -297,6 +345,78 @@ async function processarLoteFornecedores(): Promise<{ restantes: number }> {
   return { restantes: codigosDistintos.length - lote.length };
 }
 
+async function processarFasePi(codigosAtivos: Set<string>): Promise<void> {
+  const pis = await pgSelect<PiRow>(
+    "pi_importacao",
+    "select=numero_pi,fornecedor,moeda,data_abertura,itens,cotacao_dolar_primeiro_pagamento,cotacao_dolar_segundo_pagamento",
+    [0, 9999],
+  );
+
+  // Melhor P.I. por código (a de data_abertura mais recente, entre as
+  // que citam esse código em itens[]).
+  const melhorPorCodigo = new Map<
+    string,
+    { fornecedorNome: string; precoUnitarioBrl: number | null; dataAbertura: string; numeroPi: string }
+  >();
+  for (const pi of pis) {
+    if (!pi.data_abertura) continue; // sem data não dá pra comparar freshness depois
+    const cotacao = pi.cotacao_dolar_primeiro_pagamento ?? pi.cotacao_dolar_segundo_pagamento ?? null;
+    for (const item of pi.itens || []) {
+      const codigo = (item.codigo_produto || "").trim(); // ver comentário no topo do arquivo — códigos com espaço sobrando são reais
+      if (!codigo || !codigosAtivos.has(codigo)) continue;
+      const valorUnit = Number(item.valor_unitario);
+      if (!Number.isFinite(valorUnit)) continue;
+
+      let precoUnitarioBrl: number | null = null;
+      if (pi.moeda === "BRL") precoUnitarioBrl = valorUnit;
+      else if (pi.moeda === "USD" && cotacao != null) precoUnitarioBrl = valorUnit * Number(cotacao);
+      // Outra moeda, ou USD sem cotação registrada ainda (P.I. aberta sem
+      // pagamento): fica sem preço — fornecedor/data continuam úteis.
+
+      const atual = melhorPorCodigo.get(codigo);
+      if (atual && atual.dataAbertura >= pi.data_abertura) continue;
+      melhorPorCodigo.set(codigo, {
+        fornecedorNome: pi.fornecedor?.trim() || "(sem nome)",
+        precoUnitarioBrl,
+        dataAbertura: pi.data_abertura,
+        numeroPi: pi.numero_pi?.trim() || "",
+      });
+    }
+  }
+
+  if (melhorPorCodigo.size === 0) return;
+
+  // Só sobrescreve uma linha já existente (Pedido de Compra do Omie OU
+  // uma P.I. de ciclo anterior) se esta P.I. for mais recente — nunca
+  // deixa um dado de P.I. mais velho apagar algo mais novo.
+  const codigos = [...melhorPorCodigo.keys()];
+  const inValue = `(${codigos.map((c) => `"${c.replace(/"/g, '\\"')}"`).join(",")})`;
+  const existentes = await pgSelect<{ codigo: string; data_pedido: string | null }>(
+    "importacao_varejo_fornecedor",
+    `select=codigo,data_pedido&codigo=in.${encodeURIComponent(inValue)}`,
+  );
+  const dataExistentePorCodigo = new Map(existentes.map((e) => [e.codigo, e.data_pedido]));
+
+  const linhas: Record<string, unknown>[] = [];
+  for (const [codigo, info] of melhorPorCodigo) {
+    const dataExistente = dataExistentePorCodigo.get(codigo);
+    if (dataExistente && dataExistente > info.dataAbertura) continue; // já tem algo mais novo (Omie ou P.I. anterior)
+    linhas.push({
+      codigo,
+      fornecedor_codigo_omie: null, // sem cadastro Omie — fornecedor é texto livre da P.I.
+      fornecedor_nome: info.fornecedorNome,
+      fornecedor_cnpj: null,
+      fornecedor_exterior: true, // pi_importacao só registra compras internacionais
+      preco_unitario: info.precoUnitarioBrl,
+      numero_pedido: info.numeroPi,
+      data_pedido: info.dataAbertura,
+      fonte: "pi_importacao",
+      updated_at: new Date().toISOString(),
+    });
+  }
+  if (linhas.length) await pgUpsert("importacao_varejo_fornecedor", "codigo", linhas);
+}
+
 async function continuarSync(isContinuation: boolean) {
   let cursor = await obterOuResetarCursor(isContinuation);
   const inicio = Date.now();
@@ -307,9 +427,13 @@ async function continuarSync(isContinuation: boolean) {
   while (cursor.fase !== "idle" && Date.now() - inicio < TEMPO_MAXIMO_MS) {
     if (cursor.fase === "pedidos") {
       cursor = await processarPaginaPedidos(cursor, codigosAtivos);
-    } else {
+    } else if (cursor.fase === "fornecedores") {
       const { restantes } = await processarLoteFornecedores();
-      if (restantes === 0) cursor = { ...cursor, fase: "idle" };
+      if (restantes === 0) cursor = { ...cursor, fase: "pi" };
+    } else {
+      // fase 'pi' — tabela pequena, sem paginação, 1 passada só.
+      await processarFasePi(codigosAtivos);
+      cursor = { ...cursor, fase: "idle" };
     }
     await salvarCursor(cursor);
   }
