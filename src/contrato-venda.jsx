@@ -286,7 +286,6 @@ function CVStepRevisao({ form, set, doc, dossierProvisioning }) {
   if (longa) conds.push('Obra a mais de 100 km');
 
   const setChk = (k, v) => set({ checklist: { ...form.checklist, [k]: v } });
-  const allChk = form.checklist.proposta && form.checklist.nrs;
 
   const rows = [
     ['Comprador', form.comprador.razao || '—'],
@@ -299,7 +298,7 @@ function CVStepRevisao({ form, set, doc, dossierProvisioning }) {
 
   return (
     <div className="cv-step">
-      <CVStepHeader kicker="Passo 5 — Revisão" title="Revisão e checklist documental" desc="Confira o resumo, marque os anexos e libere o envio."/>
+      <CVStepHeader kicker="Passo 5 — Revisão" title="Revisão e checklist documental" desc="Confira o resumo e, se quiser, marque os anexos de apoio."/>
       <div className="cv-summary">
         {rows.map(([k, v], i) => (
           <div className="cv-summary-row" key={i}>
@@ -309,7 +308,7 @@ function CVStepRevisao({ form, set, doc, dossierProvisioning }) {
         ))}
       </div>
       <div className="cv-field-group" style={{ marginTop: 16 }}>
-        <h3 className="cv-group-title">Anexos obrigatórios</h3>
+        <h3 className="cv-group-title">Anexos (opcional)</h3>
         <button type="button" className={'cv-check-row' + (form.checklist.proposta ? ' on' : '')} onClick={() => setChk('proposta', !form.checklist.proposta)}>
           <span className="cv-check-box">{form.checklist.proposta && '✓'}</span>
           <span className="cv-check-label"><b>Anexo I — Proposta Comercial</b> · PDF assinado pelo comercial</span>
@@ -323,7 +322,6 @@ function CVStepRevisao({ form, set, doc, dossierProvisioning }) {
           <span className="cv-check-box">{form.checklist.nrs && '✓'}</span>
           <span className="cv-check-label"><b>NRs e ART</b> · Documentação de segurança</span>
         </button>
-        {!allChk && <p className="cv-field-hint" style={{ marginTop: 8 }}>Marque os anexos para liberar o envio.</p>}
       </div>
     </div>
   );
@@ -729,12 +727,7 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
     let all = {};
     [0, 3].forEach(i => { all = { ...all, ...validateStep(i, f) }; });
 
-    // ISSUE #6: Validar anexos obrigatórios (Desenho saiu daqui — ver
-    // CVDesenhoInstalacaoSection, enviado separadamente após sinal pago +
-    // contrato assinado + aval Jurídico).
-    if (!f.checklist.proposta || !f.checklist.nrs) {
-      all.__checklist = 'Marque os anexos obrigatórios (Proposta, NRs).';
-    }
+    // Checklist de anexos é informativo (não bloqueia o envio — pedido do usuário 01/10).
 
     // Dossier da Obra — normalmente já provisionado automaticamente (ver
     // efeito acima) assim que o usuário chega na Revisão; este check só
