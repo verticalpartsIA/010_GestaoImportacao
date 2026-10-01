@@ -359,6 +359,20 @@ Continuação no mesmo dia do achado acima. Usuário pediu ideias pra contornar;
 - Edge Functions `send-email` v14→v15, `read-inbox` v10→v11 (deploy direto via MCP). `index.html`: `contrato-instalador.jsx` v11→12, `contrato-venda.jsx` v16→17.
 - Não testado com clique real no navegador nesta sessão — validado só por `@babel/standalone` e confirmação de deploy `ACTIVE` via MCP.
 
+## Verificação ao vivo do Inbox (envio/recebimento) + Tratativas de Cotação vinculada (01/10/2026, PR #540 / issue #541)
+
+Usuário pediu pra confirmar se o Inbox está enviando e recebendo de verdade (não só pela leitura do código). Verificado direto no Supabase: `send-email` v15/`read-inbox` v11 `ACTIVE`, cron `read-inbox-poll` rodando a cada 10min sem erro, e dado real confirmando ida e volta (RFQ → fornecedor Glarie, cotação 970: enviado 23/09, resposta real 24/09, `vinculo_confianca: 'certo'`). Proposta/Contrato (PR #476/#486/#489) confirmados deployados e sem erro, mas sem tráfego real suficiente pra confirmar "ida e volta" neles especificamente ainda.
+
+**Achado à parte, nesta mesma verificação**: usuário reportou 2 e-mails de teste pra `gelsonsimoes@gmail.com` que não chegaram — um dos dois nem saiu de verdade (só um `OPTIONS` de pré-flight nos logs, sem `POST` seguinte — falhou do lado do navegador antes de chamar a função); o outro saiu com sucesso (SMTP aceitou, sem erro) mas **caiu no Spam**. Causa raiz **não é falta de DKIM** (cheguei a afirmar isso errado numa primeira checagem com seletores genéricos — corrigido depois conferindo o DNS real da Hostinger: `hostingermail1._domainkey` + `hostingermail-a/-b/-c._domainkey` existem e estão propagados certinho). A causa real é reputação: domínio/IP com volume de envio muito baixo (~10 e-mails no total desde que o sistema existe) somado a IP SMTP compartilhado da Hostinger — sem nenhuma mudança de código possível aqui, é questão de uso/reputação ao longo do tempo (ou trocar por um provedor transacional dedicado, fora de escopo). Nenhuma ação tomada sobre isso, só diagnóstico.
+
+**Pergunta de acompanhamento ("quem depende do Inbox") levantou um gap real, corrigido nesta entrega**: `tratativas-store.js` (chat de negociação por cotação, dentro do portal `/cotacao-elevador-fornecedor`, tabela `tratativas_cotacao` — **diferente** de e-mail de verdade, é só um aviso) chamava `send-email` sem `numeroCotacao`/`referenciaId` — o aviso nunca era gravado em `emails_projeto`. Se o fornecedor respondesse esse aviso por e-mail (em vez de entrar no portal), a resposta caía órfã: nem Message-ID (nunca salvo) nem o regex de assunto do `read-inbox` casavam (`"Nova mensagem na Cotação 955"` não tem o `"Nº"` que o regex exige). Existia rede de segurança manual (botão "Vincular" no Inbox), mas não automática.
+
+- **Correção**: `tratativas-store.js` agora passa `numeroCotacao`, `referenciaTipo: 'tratativa_cotacao'` (valor novo) e `referenciaId: cotacaoFornecedorId` (mesmo id de `cotacoes_elevador_fornecedor` que o RFQ usa com `referencia_tipo: 'cotacao_fornecedor'`) na chamada ao `send-email`.
+- **Por que o mesmo `referenciaId` do RFQ, de propósito**: `FEEmailRespondidoBadge` (`formulario-elevador.jsx`) filtra só por `referencia_id`, sem olhar `referencia_tipo` — uma resposta via Tratativas acende o mesmo badge "Respondeu por e-mail" do RFQ, o que é correto (os dois canais são sobre o mesmo fornecedor/cotação). **Não mude isso pra um `referencia_id` próprio** sem revisar esse badge também.
+- Nenhuma mudança em `send-email`/`read-inbox` — o gate `numeroCotacao != null || referenciaId != null` já existia desde o PR #489 e cobre este caso sozinho.
+- `index.html`: `tratativas-store.js` v1→v2.
+- Não testado com clique real no navegador/resposta real de fornecedor nesta sessão — validado só por `node -c` (sintaxe).
+
 ## Contrato de Venda — layout idêntico à minuta oficial em PDF (29/09/2026)
 
 Pedido do usuário: o contrato gerado pelo site tem que ter **exatamente o layout** da "MINUTA CONTRATUAL VERTICALPARTS 25 AGO 26" (PDF de 16 págs), **sem mudar texto nem cláusulas**. Escolhida a opção A (react-pdf, cabeçalho/rodapé em toda página).
