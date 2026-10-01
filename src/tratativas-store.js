@@ -60,6 +60,16 @@
     // Enviar e-mail ao fornecedor (async, não bloqueia se falhar)
     if (email && email.trim()) {
       try {
+        // 01/10 — antes mandava só to/subject/html, sem numeroCotacao/
+        // referenciaId: o aviso nunca era gravado em emails_projeto (gate
+        // do send-email exige um dos dois), então uma resposta do
+        // fornecedor a este e-mail (em vez de usar o portal) caía órfã no
+        // Inbox — nem Message-ID nem o regex de assunto do read-inbox
+        // casavam ("Nova mensagem na Cotação N" não bate no padrão
+        // "Cotação Nº N"). referenciaId = mesma cotacoes_elevador_fornecedor.id
+        // usada pelo RFQ (referencia_tipo 'cotacao_fornecedor') — faz o
+        // FEEmailRespondidoBadge (que filtra só por referencia_id) acender
+        // também pra resposta de Tratativas, o que é correto aqui.
         const { error: emailError } = await c.functions.invoke('send-email', {
           to: email,
           subject: `Nova mensagem na Cotação ${numeroCotacao || ''}`,
@@ -67,6 +77,9 @@
                  <p><strong>${autor || autorAtual()}:</strong></p>
                  <p>${mensagem?.trim()?.replace(/\n/g, '<br/>') || '(Sem texto, apenas anexos)'}</p>
                  <p><a href="${window.location.origin || 'https://vpgestaoimportacao.vpsistema.com'}/cotacao-elevador-fornecedor">Ver cotação no portal</a></p>`,
+          numeroCotacao: numeroCotacao ?? undefined,
+          referenciaTipo: 'tratativa_cotacao',
+          referenciaId: cotacaoFornecedorId,
         });
         if (emailError) console.warn('[Tratativas] send-email falhou (não crítico)', emailError);
       } catch (e) {
