@@ -8,7 +8,7 @@
   <title>Analise a Proposta VerticalParts</title>
 
   <link rel="stylesheet" href="/colors_and_type.css">
-  <link rel="stylesheet" href="/styles/contrato-instalador.css?v=5">
+  <link rel="stylesheet" href="/styles/contrato-instalador.css?v=6">
   <link rel="stylesheet" href="/styles/contrato-venda.css?v=4">
   <link rel="stylesheet" href="/styles/proposta-editor.css?v=19">
   <style>
@@ -52,11 +52,16 @@
   <script src="/src/gatilhos-engine.js?v=13"></script>
   <script src="/src/eventos-fluxo-store.js?v=10"></script>
   <script src="/src/contrato-instalador-engine.js?v=6"></script>
-  <script src="/src/contrato-instalador-store.js?v=10"></script>
+  <script src="/src/contrato-instalador-store.js?v=11"></script>
   <script type="text/babel" src="/src/contrato-instalador-preview.jsx?v=2"></script>
   <script src="/src/contrato-venda-engine.js?v=15"></script>
-  <script src="/src/contrato-venda-store.js?v=17"></script>
-  <script src="/src/contrato-venda-signatarios-store.js?v=1"></script>
+  <!-- Signatários com token individual — genérico (Proposta/Contrato Venda/Contrato
+       Instalador), ver documento-signatarios-store.js. Precisa vir ANTES de
+       contrato-venda-store.js, que checa window.DocumentoSignatariosStore ao
+       finalizar a assinatura. -->
+  <script src="/src/documento-signatarios-store.js?v=1"></script>
+  <script src="/src/contrato-venda-store.js?v=18"></script>
+  <script src="/src/contrato-venda-signatarios-store.js?v=2"></script>
   <script type="text/babel" src="/src/contrato-venda-preview.jsx?v=3"></script>
   <!-- Dossiê da Obra — proposta assinada cria o Dossiê sozinha (ver proposta-store.js markSigned) -->
   <script src="/src/dossier-store.js?v=6"></script>
@@ -83,6 +88,6 @@
   <script src="/src/contrato-venda-reactpdf.bundle.js?v=3"></script>
 
   <!-- App unificado de assinatura (auto-detecta o tipo pelo token) -->
-  <script type="text/babel" src="/src/assinar-app.jsx?v=16"></script>
+  <script type="text/babel" src="/src/assinar-app.jsx?v=17"></script>
 </body>
 </html>

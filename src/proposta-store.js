@@ -94,7 +94,7 @@
         enviada:     { acao: 'enviou a proposta p/ assinatura' },
         visualizada: { acao: 'cliente visualizou a proposta', ator: contraparte, setor: 'externo' },
         aprovada:    { acao: 'proposta assinada', ator: (meta && meta.signerName) || contraparte, setor: 'externo' },
-        recusada:    { acao: 'assinatura da proposta recusada', ator: contraparte, setor: 'externo' },
+        recusada:    { acao: 'assinatura da proposta recusada' + (meta && meta.motivo ? ` — Motivo: ${meta.motivo}` : ''), ator: (meta && meta.nome) || contraparte, setor: 'externo' },
         revisao_solicitada: { acao: 'cliente pediu revisão da proposta', ator: contraparte, setor: 'externo' },
       };
       const m = MAP[newStatus];
@@ -110,7 +110,7 @@
         enviada:     { level: 'info',    title: `Proposta ${rec.numero_documento} enviada`, sub: `Para ${(rec.recipient && rec.recipient.name) || ''} · canal ${meta && meta.channel ? (meta.channel === 'whatsapp' ? 'WhatsApp' : 'E-mail') : '—'}` },
         visualizada: { level: 'warning', title: `Proposta ${rec.numero_documento} foi VISUALIZADA`, sub: `Aberta por ${(rec.recipient && rec.recipient.name) || ''} · ${meta && meta.ip ? 'IP ' + meta.ip + ' · ' : ''}${fmtDateTime(Date.now())}` },
         aprovada:    { level: 'info',    title: `Proposta ${rec.numero_documento} ASSINADA`, sub: `Por ${meta && meta.signerName ? meta.signerName : ''} · ${meta && meta.ip ? 'IP ' + meta.ip : ''}` },
-        recusada:    { level: 'danger',  title: `Proposta ${rec.numero_documento} foi RECUSADA`, sub: `Recusada pelo cliente em ${fmtDateTime(Date.now())}` },
+        recusada:    { level: 'danger',  title: `Proposta ${rec.numero_documento} foi RECUSADA`, sub: `Recusada por ${(meta && meta.nome) || contraparte} em ${fmtDateTime(Date.now())}${meta && meta.motivo ? ' — Motivo: ' + meta.motivo : ''}` },
         revisao_solicitada: { level: 'warning', title: `Proposta ${rec.numero_documento} — cliente pediu revisão`, sub: (meta && meta.texto) ? meta.texto.slice(0, 140) : `Em ${fmtDateTime(Date.now())}` },
       };
       const cfg = map[newStatus];
@@ -432,22 +432,32 @@
     return updated;
   }
 
-  async function refuse(token) {
+  /* 01/10 — mesmo achado real do Contrato de Venda (cotação 955/AKAI):
+     recusa não registrava quem recusou nem por quê. Agora recebe
+     { nome, motivo } de `assinar-app.jsx` e grava com IP/dispositivo,
+     mesmo padrão de auditoria de `markViewed`/`markSigned`. */
+  async function refuse(token, info) {
     const c = sb();
     const cur = await getByToken(token);
     if (!cur) return null;
     const now = new Date();
+    const ip = await getPublicIP();
+    const ua = navigator.userAgent;
+    const device = deviceLabel(ua);
+    const nome = ((info && info.nome) || '').trim() || null;
+    const motivo = ((info && info.motivo) || '').trim() || null;
+    const audit = { ...(cur.audit || {}), refusedAt: now.toISOString(), refusedBy: nome, refusedReason: motivo, refuseIp: ip, refuseUa: ua, refuseDevice: device };
     const log = (cur.log || []).slice();
-    log.push({ status:'recusada', at: now.toISOString() });
-    const patch = { status: 'recusada', log, atualizado_em: now.toISOString() };
+    log.push({ status:'recusada', at: now.toISOString(), meta:{ nome, motivo, ip } });
+    const patch = { status: 'recusada', log, audit, atualizado_em: now.toISOString() };
     const { error } = await c.from('propostas').update(patch).eq('token', token);
     if (error) throw error;
     const updated = { ...cur, ...patch };
-    await pushNotification(updated, 'recusada', {});
+    await pushNotification(updated, 'recusada', { nome, motivo });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
       alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
-      detalhe: { resposta: 'recusada' },
+      detalhe: { resposta: 'recusada', nome, motivo },
     });
     return updated;
   }
