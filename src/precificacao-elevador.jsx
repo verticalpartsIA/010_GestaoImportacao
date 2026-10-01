@@ -356,7 +356,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       // ficava R$ 0,00 pra sempre. Reaplica aqui, toda vez que a tela
       // carrega, pros containers que ainda não têm preço nenhum — nunca
       // sobrescreve um valor já digitado (mesma regra de sempre).
-      if ((norm.containers || []).some((c) => !(Number(c.preco_rs) > 0))) {
+      // 01/10/2026: a capatazia herda do cadastro com a mesma regra (só se ainda vazia).
+      if ((norm.containers || []).some((c) => !(Number(c.preco_rs) > 0) || !(Number(c.capatazia_rs) > 0))) {
         const custos = await window.CadastroCustosStore?.listarContainers();
         norm.containers = window.PrecificacaoElevadorStore.enriquecerContainersComCusto(norm.containers, custos);
       }
@@ -505,15 +506,19 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     // Trocar o tipo/tamanho herda o Preço(R$) de Atualização de Custos —
     // só quando ainda não tem preço nenhum (não sobrescreve valor que o
     // Financeiro já digitou na mão pra essa linha).
-    if (k === 'tipo_tamanho' && !(Number(linha.preco_rs) > 0)) {
+    if (k === 'tipo_tamanho') {
       const custo = window.PrecificacaoElevadorStore.buscarContainerCustoPorIso(v, custosContainers);
-      if (custo) linha.preco_rs = Number(custo.preco_rs) || 0;
+      if (custo && !(Number(linha.preco_rs) > 0)) linha.preco_rs = Number(custo.preco_rs) || 0;
+      if (custo && !(Number(linha.capatazia_rs) > 0) && Number(custo.capatazia_rs) > 0) linha.capatazia_rs = Number(custo.capatazia_rs);
     }
     arr[i] = linha;
     return { ...p, containers: arr };
   });
   const removeContainer = (i) => setPz((p) => ({ ...p, containers: (p.containers || []).filter((_, idx) => idx !== i) }));
   const containersTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.preco_rs) || 0), 0);
+  const capataziaTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.capatazia_rs) || 0), 0);
+  // Aviso (não bloqueia) quando container/capatazia divergem do cadastro de Containers.
+  const divergenciasContainer = window.PrecificacaoElevadorStore.divergenciasContainerComCadastro(pz.containers, custosContainers);
 
   const addItemExtra = () => setPz((p) => ({ ...p, itens_despesas_extras: [...(p.itens_despesas_extras || []), { descricao: '', valor: 0 }] }));
   const setItemExtra = (i, k) => (v) => setPz((p) => {
@@ -525,7 +530,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
   const payloadSalvar = () => ({
     vmle_usd: pz.vmle_usd, seguro_usd: pz.seguro_usd, frete_seguro_capatazia_usd: pz.frete_seguro_capatazia_usd,
-    frete_seguro_capatazia_usd_expresso: pz.frete_seguro_capatazia_usd_expresso,
+    containers_compartilhados_120d: pz.containers_compartilhados_120d ?? null,
     siscomex_rs: pz.siscomex_rs, tx_cambial: pz.tx_cambial, outras_despesas_importacao_rs: pz.outras_despesas_importacao_rs,
     despachante_desembaraco_rs: pz.despachante_desembaraco_rs, demurrage_rs: pz.demurrage_rs,
     frete_interno_rs: pz.frete_interno_rs, armazenagem_rs: pz.armazenagem_rs,
@@ -848,11 +853,21 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         <div className="grid-3" style={{ gap: 12 }}>
           <PZField label="VMLE (USD)"><PZCurrencyInput moeda="USD" value={pz.vmle_usd} onChange={set('vmle_usd')}/></PZField>
           <PZField label="Seguro (USD)"><PZCurrencyInput moeda="USD" value={pz.seguro_usd} onChange={set('seguro_usd')}/></PZField>
-          <PZField label="Frete + Seguro + Capatazia — Padrão 120d, container compartilhado (USD)"><PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd} onChange={set('frete_seguro_capatazia_usd')}/></PZField>
-          <PZField label="Frete + Seguro + Capatazia — Expresso 90d, container exclusivo (USD)">
-            <PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd_expresso} onChange={set('frete_seguro_capatazia_usd_expresso')}/>
-            <div className="small muted" style={{ marginTop: 4 }}>Deixe em branco/zero se o cliente não pediu a opção expressa.</div>
-          </PZField>
+          {/* 01/10/2026 — container e capatazia vêm do cadastro (Despesa Operacional); este
+              campo só aparece quando já há um frete internacional lançado (informado pelo
+              fornecedor na cotação, ou precificação antiga) pra poder ser conferido/zerado. */}
+          {Number(pz.frete_seguro_capatazia_usd) > 0 && (
+            <PZField label="Frete internacional informado (USD)">
+              <PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd} onChange={set('frete_seguro_capatazia_usd')}/>
+              <div className="small muted" style={{ marginTop: 4 }}>Container e capatazia vêm do cadastro de Containers — não some aqui de novo. Zere se este valor já os incluía.</div>
+            </PZField>
+          )}
+          {quantidadeEquipamentos <= 1 && (
+            <PZField label="Equipamentos dividindo o container (card 120 dias)">
+              <PZInput type="number" value={pz.containers_compartilhados_120d ?? 2} onChange={(v) => set('containers_compartilhados_120d')(v === '' ? '' : Math.max(1, Math.floor(Number(v)) || 1))}/>
+              <div className="small muted" style={{ marginTop: 4 }}>Container + capatazia ÷ este número no card de 120 dias. Padrão 2 (planilha do Financeiro).</div>
+            </PZField>
+          )}
           <PZField label="Siscomex (R$)"><PZCurrencyInput moeda="BRL" value={pz.siscomex_rs} onChange={set('siscomex_rs')}/></PZField>
           <PZField label="Câmbio (R$/US$)">
             <PZInput type="number" value={pz.tx_cambial} onChange={set('tx_cambial')}/>
@@ -872,20 +887,34 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
         <div style={{ marginTop: 20 }}>
           <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
-            Containers <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tamanho/quantidade herdados da resposta do fornecedor quando possível; preço do frete por container, digitado pelo Financeiro</span>
+            Containers <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tipo/quantidade vêm da resposta do fornecedor; preço e capatazia herdados do cadastro de Containers (Atualização de Custos) — Despesa Operacional</span>
           </div>
+          {divergenciasContainer.length > 0 && (
+            <div style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', padding: '8px 12px', marginBottom: 8, borderRadius: 6 }}>
+              ⚠ Difere do cadastro de Containers: {divergenciasContainer.map((d) => `${d.rotulo} da linha ${d.indice + 1} (${fmtBRL2(d.atual)} × cadastro ${fmtBRL2(d.cadastro)})`).join('; ')}. Pode ser edição intencional.
+            </div>
+          )}
           <div className="stack" style={{ gap: 8 }}>
+            {(pz.containers || []).length > 0 && (
+              <div className="row gap-2 up-eyebrow muted" style={{ fontSize: 11 }}>
+                <div style={{ width: 140 }}>Tipo</div>
+                <div style={{ width: 100 }}>Qtd</div>
+                <div style={{ width: 160 }}>Preço do container (R$)</div>
+                <div style={{ width: 160 }}>Capatazia (R$)</div>
+              </div>
+            )}
             {(pz.containers || []).map((ct, i) => (
               <div key={i} className="row gap-2">
                 <div style={{ width: 140 }}><PZSelect value={ct.tipo_tamanho} onChange={setContainer(i, 'tipo_tamanho')} options={PZ_CONTAINER_TIPOS} placeholder="Tamanho"/></div>
                 <input className="input" style={{ width: 100 }} type="number" value={ct.quantidade ?? 1} onChange={(e) => setContainer(i, 'quantidade')(Number(e.target.value) || 0)} placeholder="Qtd"/>
                 <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.preco_rs} onChange={setContainer(i, 'preco_rs')}/></div>
+                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.capatazia_rs} onChange={setContainer(i, 'capatazia_rs')}/></div>
                 <Button variant="ghost" size="sm" icon="trash" onClick={() => removeContainer(i)}/>
               </div>
             ))}
           </div>
           <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addContainer}>+ Adicionar container</Button>
-          {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b></div>}
+          {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b> · Capatazia: <b>{fmtBRL2(capataziaTotalRs)}</b></div>}
         </div>
       </Card>
 
@@ -972,7 +1001,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             + (Number(impImportacao.cofins) || 0) + (Number(impImportacao.icms) || 0)
           : null;
         const somaRs = custosEquipamentosRs + custosFreteRs + moRs + custosOperacionaisRs + freteInternoRs
-          + despesasImportacaoRs + armazenagemRs + containersTotalRs + despesasExtrasRs + contingenciaOutrosRs
+          + despesasImportacaoRs + armazenagemRs + containersTotalRs + capataziaTotalRs + despesasExtrasRs + contingenciaOutrosRs
           + (custosImpostoRs || 0);
         const linha = (label, valor) => (
           <div className="row sb" style={{ padding: '4px 0' }}>
@@ -991,6 +1020,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               {linha('Despesas de Importação (Siscomex, Despachante, Demurrage, Outras)', despesasImportacaoRs)}
               {linha('Armazenagem', armazenagemRs)}
               {linha('Containers', containersTotalRs)}
+              {linha('Capatazia', capataziaTotalRs)}
               {linha('Despesas Extras (itens avulsos)', despesasExtrasRs)}
               {linha('Contingência e Outros custos não recuperáveis', contingenciaOutrosRs)}
               {linha('Custos Imposto', custosImpostoRs)}
@@ -1077,7 +1107,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
       {resultadoV2 && (
         <div className={mostrarExpresso ? 'grid-2' : ''} style={{ gap: 16, marginTop: 16 }}>
-          <Card title={mostrarExpresso ? 'Preço de venda — 120 dias (Compartilhado)' : 'Preço de venda'} sub={mostrarExpresso ? 'container compartilhado, prazo padrão' : undefined}>
+          <Card title={mostrarExpresso ? 'Preço de venda — 120 dias (Compartilhado)' : 'Preço de venda'} sub={mostrarExpresso ? `container dividido por ${Math.max(1, Math.floor(Number(pz.containers_compartilhados_120d)) || 2)}, prazo padrão` : undefined}>
             <div className="stack" style={{ gap: 12 }}>
               <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
               <div><span className="up-eyebrow muted">Preço de venda por equipamento</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaPorEquipamento)}{quantidadeEquipamentos > 1 ? ` × ${quantidadeEquipamentos}` : ''}</div></div>
@@ -1125,7 +1155,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               </div>
               {resultadoV2Expresso.precificacao.margemEfetivaPct < 0 && (
                 <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
-                  ⚠ Margem efetiva negativa no cenário expresso — mesmo cobrindo o frete mais caro, confira se o preço faz sentido antes de oferecer ao cliente.
+                  ⚠ Margem efetiva negativa no cenário de 90 dias — o container inteiro recai sobre um equipamento só; confira se o preço faz sentido antes de oferecer ao cliente.
                 </p>
               )}
             </Card>

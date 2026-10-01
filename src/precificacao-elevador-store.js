@@ -69,10 +69,33 @@
      de uma precificação já existente/recarregada). */
   function enriquecerContainersComCusto(containers, custosContainers) {
     return (containers || []).map((ct) => {
-      if (Number(ct.preco_rs) > 0) return ct;
       const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
-      return custo ? { ...ct, preco_rs: Number(custo.preco_rs) || 0 } : ct;
+      if (!custo) return ct;
+      const out = { ...ct };
+      if (!(Number(ct.preco_rs) > 0)) out.preco_rs = Number(custo.preco_rs) || 0;
+      // Capatazia (01/10/2026): mesma regra do preço — herda do cadastro só
+      // quando a linha ainda não tem valor, nunca sobrescreve edição manual.
+      if (!(Number(ct.capatazia_rs) > 0) && Number(custo.capatazia_rs) > 0) out.capatazia_rs = Number(custo.capatazia_rs);
+      return out;
     });
+  }
+
+  /* Avisa (não bloqueia) quando o preço do container ou a capatazia lançados
+     na Precificação divergem do cadastro de Containers (Atualização de
+     Custos) — decisão do Financeiro (01/10/2026). Só compara campos já
+     preenchidos dos dois lados. */
+  function divergenciasContainerComCadastro(containers, custosContainers) {
+    const out = [];
+    (containers || []).forEach((ct, i) => {
+      const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
+      if (!custo) return;
+      [['preco_rs', 'preço do container'], ['capatazia_rs', 'capatazia']].forEach(([campo, rotulo]) => {
+        const atual = Number(ct[campo]) || 0;
+        const cadastro = Number(custo[campo]) || 0;
+        if (atual > 0 && cadastro > 0 && Math.abs(atual - cadastro) > 0.01) out.push({ indice: i, campo, rotulo, atual, cadastro });
+      });
+    });
+    return out;
   }
 
   /* ============================================================
@@ -622,7 +645,15 @@
     }
 
     const params = paramsCamelCase(pz.parametros_fiscais_snapshot || {});
+    /* Card base = 120 dias (container compartilhado). Com 1 equipamento o
+       container (+ capatazia) é dividido pelos equipamentos que o dividem
+       (padrão 2, editável — regra do Financeiro 01/10/2026, vem da planilha
+       FIN (120)); com 2+ o container é pago uma vez só pra cotação inteira,
+       então não divide (preço por equipamento já cai por total ÷ quantidade). */
+    const qtdEquipamentos = (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1;
+    const divisor120 = qtdEquipamentos <= 1 ? Math.max(Math.floor(Number(pz.containers_compartilhados_120d)) || 2, 1) : 1;
     const baseInputs = {
+      containerRateioDivisor: divisor120,
       vmleUsd: pz.vmle_usd, seguroUsd: pz.seguro_usd, freteSeguroCapataziaUsd: pz.frete_seguro_capatazia_usd,
       siscomexRs: pz.siscomex_rs, txCambial: pz.tx_cambial, outrasDespesasImportacaoRs: pz.outras_despesas_importacao_rs,
       despachanteDesembaracoRs: pz.despachante_desembaraco_rs, demurrageRs: pz.demurrage_rs,
@@ -680,10 +711,12 @@
        cotação comparativa, não uma aprovação final). Sem frete expresso
        preenchido, resultado_v2_expresso fica vazio — não força a
        modalidade pra quem não precisa dela. */
-    const freteExpressoUsd = Number(pz.frete_seguro_capatazia_usd_expresso) || 0;
-    const resultadoV2Expresso = freteExpressoUsd > 0
+    // 01/10/2026 — o card de 90 dias (container exclusivo) só existe com 1 equipamento
+    // e paga o container + capatazia inteiros (rateio 1); frete_seguro_capatazia_usd_expresso
+    // saiu da tela e do cálculo (coluna fica no banco, sem uso).
+    const resultadoV2Expresso = qtdEquipamentos <= 1
       ? window.PrecificacaoElevadorEngine.calcularV2({
-          ...baseInputs, freteSeguroCapataziaUsd: freteExpressoUsd, difalCustoRs, ...v2Extras,
+          ...baseInputs, containerRateioDivisor: 1, difalCustoRs, ...v2Extras,
           // Markup próprio do card 90d (Financeiro, 01/10). Null = usa o mesmo do 120d, como antes.
           markUpPct: pz.mark_up_pct_expresso != null ? pz.mark_up_pct_expresso : pz.mark_up_pct,
         })
@@ -841,7 +874,7 @@
     listarParametrosFiscais, salvarParametrosFiscais,
     listarPendentes, criar, obter, salvar, calcularEsalvar,
     camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,
-    parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto,
+    parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto, divergenciasContainerComCadastro,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra,
     acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO,
   };
