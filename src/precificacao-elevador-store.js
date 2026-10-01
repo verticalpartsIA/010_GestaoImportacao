@@ -579,6 +579,8 @@
       percentual_servicos: 0.30,
       parametros_fiscais_snapshot: parametros,
       mark_up_pct: parametros.mark_up_padrao_pct,
+      // Card 90d tem markup padrão próprio (Financeiro, 01/10/2026): 40,5% (120d) × 38,1% (90d).
+      mark_up_pct_expresso: parametros.mark_up_padrao_expresso_pct ?? null,
       // V2 (custo econômico completo) — motor oficial desde 29/08 (decisão
       // registrada em conversa, sem necessidade de aval formal do
       // Financeiro por enquanto). Nasce em modo markup_sobre_custo: mesma
