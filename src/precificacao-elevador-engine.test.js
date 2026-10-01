@@ -244,3 +244,14 @@ test('calcular — rateio por modelo soma 100% do preço de venda proposto', () 
   closeTo(somaValorTotalRs, out.precificacao.precoVendaProposta, 0.01, 'soma do rateio deveria bater com o preço de venda total');
   closeTo(out.modelos[0].percentual, 0.6, 0.001, 'E1 é 60% do valor USD total (600/1000)');
 });
+
+test('calcular — GRI soma como despesa operacional, entra na base do AFRMM e acompanha o rateio', () => {
+  const sem = E.calcular(inputsBase);
+  const containers = [{ tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 1000, capatazia_rs: 250, gri_rs: 150 }];
+  const com = E.calcular({ ...inputsBase, containers });
+  closeTo(com.importacao.griRs, 150, 0.01, 'griRs deveria ser 1×150');
+  closeTo(com.importacao.despesasExtrasTotal - sem.importacao.despesasExtrasTotal, 1400, 0.01, 'container + capatazia + GRI entram nas despesas operacionais');
+  closeTo(com.importacao.afrmm - sem.importacao.afrmm, 112, 0.01, 'AFRMM = 8% × (1000 + 250 + 150)');
+  const metade = E.calcular({ ...inputsBase, containers, containerRateioDivisor: 2 });
+  closeTo(metade.importacao.griRs, 75, 0.01, 'GRI dividida pelo rateio (card 120d compartilhado)');
+});

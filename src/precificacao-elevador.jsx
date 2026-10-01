@@ -357,7 +357,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       // carrega, pros containers que ainda não têm preço nenhum — nunca
       // sobrescreve um valor já digitado (mesma regra de sempre).
       // 01/10/2026: a capatazia herda do cadastro com a mesma regra (só se ainda vazia).
-      if ((norm.containers || []).some((c) => !(Number(c.preco_rs) > 0) || !(Number(c.capatazia_rs) > 0))) {
+      if ((norm.containers || []).some((c) => !(Number(c.preco_rs) > 0) || !(Number(c.capatazia_rs) > 0) || !(Number(c.gri_rs) > 0))) {
         const custos = await window.CadastroCustosStore?.listarContainers();
         norm.containers = window.PrecificacaoElevadorStore.enriquecerContainersComCusto(norm.containers, custos);
       }
@@ -510,6 +510,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       const custo = window.PrecificacaoElevadorStore.buscarContainerCustoPorIso(v, custosContainers);
       if (custo && !(Number(linha.preco_rs) > 0)) linha.preco_rs = Number(custo.preco_rs) || 0;
       if (custo && !(Number(linha.capatazia_rs) > 0) && Number(custo.capatazia_rs) > 0) linha.capatazia_rs = Number(custo.capatazia_rs);
+      if (custo && !(Number(linha.gri_rs) > 0) && Number(custo.gri_rs) > 0) linha.gri_rs = Number(custo.gri_rs);
     }
     arr[i] = linha;
     return { ...p, containers: arr };
@@ -517,6 +518,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const removeContainer = (i) => setPz((p) => ({ ...p, containers: (p.containers || []).filter((_, idx) => idx !== i) }));
   const containersTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.preco_rs) || 0), 0);
   const capataziaTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.capatazia_rs) || 0), 0);
+  const griTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.gri_rs) || 0), 0);
   // Aviso (não bloqueia) quando container/capatazia divergem do cadastro de Containers.
   const divergenciasContainer = window.PrecificacaoElevadorStore.divergenciasContainerComCadastro(pz.containers, custosContainers);
 
@@ -894,6 +896,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                 <div style={{ width: 100 }}>Qtd</div>
                 <div style={{ width: 160 }}>Preço do container (R$)</div>
                 <div style={{ width: 160 }}>Capatazia (R$)</div>
+                <div style={{ width: 160 }}>GRI (R$)</div>
               </div>
             )}
             {(pz.containers || []).map((ct, i) => (
@@ -902,12 +905,13 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                 <input className="input" style={{ width: 100 }} type="number" value={ct.quantidade ?? 1} onChange={(e) => setContainer(i, 'quantidade')(Number(e.target.value) || 0)} placeholder="Qtd"/>
                 <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.preco_rs} onChange={setContainer(i, 'preco_rs')}/></div>
                 <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.capatazia_rs} onChange={setContainer(i, 'capatazia_rs')}/></div>
+                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.gri_rs} onChange={setContainer(i, 'gri_rs')}/></div>
                 <Button variant="ghost" size="sm" icon="trash" onClick={() => removeContainer(i)}/>
               </div>
             ))}
           </div>
           <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addContainer}>+ Adicionar container</Button>
-          {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b> · Capatazia: <b>{fmtBRL2(capataziaTotalRs)}</b></div>}
+          {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b> · Capatazia: <b>{fmtBRL2(capataziaTotalRs)}</b> · GRI: <b>{fmtBRL2(griTotalRs)}</b></div>}
         </div>
       </Card>
 
@@ -994,7 +998,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             + (Number(impImportacao.cofins) || 0) + (Number(impImportacao.icms) || 0)
           : null;
         const somaRs = custosEquipamentosRs + custosFreteRs + moRs + custosOperacionaisRs + freteInternoRs
-          + despesasImportacaoRs + armazenagemRs + containersTotalRs + capataziaTotalRs + despesasExtrasRs + contingenciaOutrosRs
+          + despesasImportacaoRs + armazenagemRs + containersTotalRs + capataziaTotalRs + griTotalRs + despesasExtrasRs + contingenciaOutrosRs
           + (custosImpostoRs || 0);
         const linha = (label, valor) => (
           <div className="row sb" style={{ padding: '4px 0' }}>
@@ -1014,6 +1018,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               {linha('Armazenagem', armazenagemRs)}
               {linha('Containers', containersTotalRs)}
               {linha('Capatazia', capataziaTotalRs)}
+              {linha('GRI', griTotalRs)}
               {linha('Despesas Extras (itens avulsos)', despesasExtrasRs)}
               {linha('Contingência e Outros custos não recuperáveis', contingenciaOutrosRs)}
               {linha('Custos Imposto', custosImpostoRs)}

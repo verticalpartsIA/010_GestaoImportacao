@@ -326,3 +326,13 @@ test('divergenciasContainerComCadastro — avisa quando preço/capatazia diferem
   assert.equal(div.length, 1);
   assert.deepEqual({ i: div[0].indice, campo: div[0].campo, atual: div[0].atual, cadastro: div[0].cadastro }, { i: 0, campo: 'preco_rs', atual: 36450.4, cadastro: 31243.2 });
 });
+
+test('GRI — herda do cadastro só em linha vazia e entra no aviso de divergência', () => {
+  const custos = [{ tipo: '40HC (High Cube)', ativo: true, preco_rs: 36450.4, capatazia_rs: 6559.42, gri_rs: 2000 }];
+  const [herdado] = enriquecerContainersComCusto([{ tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 0 }], custos);
+  assert.equal(herdado.gri_rs, 2000);
+  const [manual] = enriquecerContainersComCusto([{ tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 1, gri_rs: 1500 }], custos);
+  assert.equal(manual.gri_rs, 1500, 'nunca sobrescreve valor digitado');
+  const div = divergenciasContainerComCadastro([{ tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 36450.4, gri_rs: 1500 }], custos);
+  assert.deepEqual(div.map((d) => [d.campo, d.atual, d.cadastro]), [['gri_rs', 1500, 2000]]);
+});
