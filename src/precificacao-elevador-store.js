@@ -651,7 +651,9 @@
        FIN (120)); com 2+ o container é pago uma vez só pra cotação inteira,
        então não divide (preço por equipamento já cai por total ÷ quantidade). */
     const qtdEquipamentos = (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1;
-    const divisor120 = qtdEquipamentos <= 1 ? Math.max(Math.floor(Number(pz.containers_compartilhados_120d)) || 2, 1) : 1;
+    // Um container comporta no máximo 2 elevadores (regra física, Financeiro 01/10): o equipamento
+    // sozinho em 120d viaja com outro, então divide o container por 2 — fixo, sem campo na tela.
+    const divisor120 = qtdEquipamentos <= 1 ? 2 : 1;
     const baseInputs = {
       containerRateioDivisor: divisor120,
       vmleUsd: pz.vmle_usd, seguroUsd: pz.seguro_usd, freteSeguroCapataziaUsd: pz.frete_seguro_capatazia_usd,
