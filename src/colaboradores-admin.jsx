@@ -198,11 +198,127 @@ function ColabRow({ colaborador, onEditar, onExcluir }) {
   );
 }
 
+function MatrizPermissoes() {
+  const [colaboradores, setColaboradores] = React.useState([]);
+  const [alocacoes, setAlocacoes] = React.useState({});
+  const [salvando, setSalvando] = React.useState(null);
+  const [status, setStatus] = React.useState('');
+  const [busca, setBusca] = React.useState('');
+
+  const grupos = window.ColaboradoresAdminStore?.GRUPOS_MODULO || [];
+
+  const carregar = React.useCallback(async () => {
+    try {
+      const cols = await window.ColaboradoresAdminStore?.listarColaboradores?.();
+      const alocs = await window.ColaboradoresAdminStore?.listarAlocacoes?.();
+
+      setColaboradores((cols || []).sort((a, b) => a.nome.localeCompare(b.nome)));
+
+      const map = {};
+      (alocs || []).forEach(a => {
+        map[a.colaborador_id] = map[a.colaborador_id] || new Set();
+        if (a.grupo_modulo !== '__acesso_restrito__') {
+          map[a.colaborador_id].add(a.grupo_modulo);
+        }
+      });
+      setAlocacoes(map);
+    } catch (e) { console.warn('Erro ao carregar', e); }
+  }, []);
+
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const toggle = async (colId, grupo) => {
+    setSalvando(`${colId}|${grupo}`);
+    try {
+      const temAcesso = (alocacoes[colId] || new Set()).has(grupo);
+      if (temAcesso) {
+        await window.ColaboradoresAdminStore.desalocar(colId, grupo);
+      } else {
+        await window.ColaboradoresAdminStore.alocar(colId, grupo);
+      }
+      await carregar();
+      setStatus('✓ Salvo!');
+      setTimeout(() => setStatus(''), 2000);
+    } catch (e) {
+      window.toast?.('Erro: ' + e.message, 'error');
+    } finally {
+      setSalvando(null);
+    }
+  };
+
+  const buscaLower = busca.toLowerCase();
+  const colsFiltrados = colaboradores.filter(c => c.nome?.toLowerCase().includes(buscaLower));
+
+  return (
+    <div style={{ padding: '1rem 0' }}>
+      <h3 style={{ fontSize: 18, fontWeight: 500, margin: '0 0 0.5rem', color: 'var(--text-primary)' }}>Matriz de permissões</h3>
+      <p style={{ fontSize: 14, color: 'var(--text-secondary)', margin: '0 0 1rem' }}>Marque os módulos que cada usuário pode acessar.</p>
+
+      <input type="text" className="input" style={{ marginBottom: '1rem' }} placeholder="Buscar usuário…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
+
+      {colsFiltrados.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '48px 0', color: 'var(--text-secondary)', fontSize: 13 }}>
+          {colaboradores.length === 0 ? 'Carregando…' : 'Nenhum usuário encontrado'}
+        </div>
+      ) : (
+        <div style={{ overflowX: 'auto', border: '0.5px solid var(--border)', borderRadius: 6 }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+            <thead>
+              <tr style={{ background: 'var(--vp-gray-50)', borderBottom: '0.5px solid var(--border)' }}>
+                <th style={{ padding: '12px 14px', textAlign: 'left', fontWeight: 500, minWidth: 120, borderRight: '0.5px solid var(--border)' }}>Usuário</th>
+                {grupos.map(g => (
+                  <th key={g} style={{
+                    padding: '12px 8px',
+                    textAlign: 'center',
+                    fontWeight: 400,
+                    minWidth: 80,
+                    borderRight: '0.5px solid var(--border)',
+                    fontSize: 11,
+                    background: g === 'Suprimentos & Importação' ? '#EEF5FF' : 'transparent',
+                  }}>
+                    {g.split('&')[0].split('|')[0].trim()}
+                  </th>
+                ))}
+              </tr>
+            </thead>
+            <tbody>
+              {colsFiltrados.map(col => (
+                <tr key={col.id} style={{ borderBottom: '0.5px solid var(--border)' }}>
+                  <td style={{ padding: '12px 14px', fontWeight: 500, borderRight: '0.5px solid var(--border)', color: 'var(--text-primary)' }}>
+                    {col.nome}
+                  </td>
+                  {grupos.map(g => {
+                    const temAcesso = (alocacoes[col.id] || new Set()).has(g);
+                    const key = `${col.id}|${g}`;
+                    return (
+                      <td key={g} style={{
+                        padding: '8px',
+                        textAlign: 'center',
+                        borderRight: '0.5px solid var(--border)',
+                        background: g === 'Suprimentos & Importação' ? '#EEF5FF' : 'transparent',
+                      }}>
+                        <input type="checkbox" checked={temAcesso} disabled={salvando === key} onChange={() => toggle(col.id, g)} style={{ cursor: salvando === key ? 'wait' : 'pointer', width: 16, height: 16 }}/>
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div style={{ marginTop: '0.5rem', fontSize: 12, color: 'var(--text-secondary)' }}>{colsFiltrados.length} usuário(s)</div>
+      {status && <div style={{ marginTop: '1rem', padding: '8px 12px', background: '#E8F5E9', color: '#2E7D32', borderRadius: 6, fontSize: 12, fontWeight: 500 }}>{status}</div>}
+    </div>
+  );
+}
+
 function ColaboradoresAdminPage() {
   const [arvore, setArvore] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [editando, setEditando] = React.useState(null);
   const [recolhidos, setRecolhidos] = React.useState(() => new Set());
+  const [visualizacao, setVisualizacao] = React.useState('padrão');
 
   const reload = React.useCallback(() => { window.ColaboradoresAdminStore.arvoreDepartamentos().then(setArvore).catch(() => setArvore([])); }, []);
   React.useEffect(() => { reload(); }, [reload]);
@@ -217,11 +333,22 @@ function ColaboradoresAdminPage() {
 
   if (arvore === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
-  /* Painel cheio no lugar da lista — não modal pequeno — pra rolagem ser
-     da página inteira (pedido explícito do usuário: catálogo é grande,
-     nada pode ficar cortado nas bordas da tela). */
   if (editando) {
     return <PainelAlocacaoModulos colaborador={editando} onVoltar={() => setEditando(null)} onChange={reload}/>;
+  }
+
+  if (visualizacao === 'matriz') {
+    return (
+      <div>
+        <div className="row gap-2" style={{ marginBottom: 16 }}>
+          <button onClick={() => setVisualizacao('padrão')} style={{ padding: '8px 14px', background: 'transparent', border: '0.5px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+            ← Voltar
+          </button>
+          <div className="small muted">Visualização em matriz — clique rápido para alterar permissões</div>
+        </div>
+        <MatrizPermissoes />
+      </div>
+    );
   }
 
   const q = search.toLowerCase();
@@ -233,11 +360,17 @@ function ColaboradoresAdminPage() {
 
   return (
     <div>
-      <p className="small muted" style={{ marginTop: 0, marginBottom: 14 }}>
-        Espelho de vpsistema.com (Gestão de Colaboradores) — nome, foto e departamento vêm de lá, sem edição por aqui.
-        O que dá pra editar é a <b>alocação de módulos do VP Gestão</b>: um colaborador pode estar em vários grupos ao mesmo tempo,
-        e é isso que decide o que ele vê na sidebar.
-      </p>
+      <div className="row sb" style={{ marginBottom: 16, alignItems: 'center' }}>
+        <div>
+          <p className="small muted" style={{ marginTop: 0, marginBottom: 8 }}>
+            Espelho de vpsistema.com (Gestão de Colaboradores) — nome, foto e departamento vêm de lá.
+            O que dá pra editar é a <b>alocação de módulos do VP Gestão</b>.
+          </p>
+        </div>
+        <button onClick={() => setVisualizacao('matriz')} style={{ padding: '8px 14px', background: 'var(--fill-accent)', color: 'white', border: '0.5px solid var(--fill-accent)', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>
+          Ver em matriz →
+        </button>
+      </div>
 
       <input className="input" style={{ marginBottom: 14 }} placeholder="Buscar colaborador por nome ou e-mail…" value={search} onChange={(e) => setSearch(e.target.value)}/>
       <div className="small muted" style={{ marginBottom: 10 }}>{totalColaboradores} colaborador(es) em {arvore.length} departamento(s)</div>
