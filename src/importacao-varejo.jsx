@@ -150,11 +150,38 @@ function IVModalEnviarOmie({ itens, onClose, onEnviado }) {
   const [enviando, setEnviando] = React.useState(false);
   const itensParaEnviar = itens.filter((i) => i.sugestaoCompra > 0);
   const itensIgnorados = itens.filter((i) => i.sugestaoCompra <= 0);
+  // Fornecedor/preço sugeridos (vindos do cache de último Pedido de Compra
+  // real, ver sync-importacao-varejo-fornecedor) pré-preenchem aqui, mas o
+  // comprador pode confirmar/editar antes de enviar — pedido do usuário
+  // ("o comprador selecionaria o fornecedor e já ajuda a fazer o pedido em
+  // massa"). O preço editado aqui vai como `precoUnit` real na Requisição
+  // (antes sempre 0); o fornecedor vira só texto na observação do item —
+  // Requisição de Compra não tem campo de fornecedor no Omie (decisão
+  // confirmada com o usuário).
+  const [overrides, setOverrides] = React.useState(() => Object.fromEntries(
+    itensParaEnviar.map((i) => [i.codigo, {
+      fornecedor: i.ultimoFornecedorNome || '',
+      preco: i.ultimoPrecoUnitario != null ? String(i.ultimoPrecoUnitario) : '',
+    }]),
+  ));
+  const setOverride = (codigo, campo, valor) => setOverrides((prev) => ({ ...prev, [codigo]: { ...prev[codigo], [campo]: valor } }));
+
+  const valorTotalEstimado = itensParaEnviar.reduce((acc, i) => {
+    const preco = Number(overrides[i.codigo]?.preco) || 0;
+    return acc + preco * i.sugestaoCompra;
+  }, 0);
+
   const enviar = async () => {
     setEnviando(true);
     try {
       const resultado = await window.ImportacaoVarejoStore.enviarRequisicaoOmie(
-        itensParaEnviar.map((i) => ({ codigo: i.codigo, descricao: i.descricao, quantidade: i.sugestaoCompra })),
+        itensParaEnviar.map((i) => ({
+          codigo: i.codigo,
+          descricao: i.descricao,
+          quantidade: i.sugestaoCompra,
+          precoUnitario: Number(overrides[i.codigo]?.preco) || 0,
+          fornecedorNome: (overrides[i.codigo]?.fornecedor || '').trim() || undefined,
+        })),
       );
       if (resultado.itensComErro && resultado.itensComErro.length) {
         window.toast?.(`Requisição ${resultado.codReqCompra} criada com ${resultado.quantidadeItens} itens. ${resultado.itensComErro.length} não puderam ser incluídos.`, 'warning');
@@ -166,7 +193,7 @@ function IVModalEnviarOmie({ itens, onClose, onEnviado }) {
     finally { setEnviando(false); }
   };
   return (
-    <Modal title="Enviar requisição de compra em massa" onClose={onClose} width={640}
+    <Modal title="Enviar requisição de compra em massa" onClose={onClose} width={760}
       footer={<>
         <Button variant="ghost" onClick={onClose} disabled={enviando}>Cancelar</Button>
         <Button variant="primary" icon="send" onClick={enviar} disabled={enviando || itensParaEnviar.length === 0}>
@@ -174,17 +201,41 @@ function IVModalEnviarOmie({ itens, onClose, onEnviado }) {
         </Button>
       </>}>
       <div className="stack" style={{ gap: 12 }}>
-        <p className="small">Será criada 1 Requisição de Compra no Omie ("Compras de Mercadorias para Revenda Importada") com {itensParaEnviar.length} {itensParaEnviar.length === 1 ? 'item' : 'itens'}, usando a Sugestão de Compra de cada produto.</p>
-        <div className="table-wrap" style={{ maxHeight: 260, overflowY: 'auto' }}>
+        <p className="small">Será criada 1 Requisição de Compra no Omie ("Compras de Mercadorias para Revenda Importada") com {itensParaEnviar.length} {itensParaEnviar.length === 1 ? 'item' : 'itens'}, usando a Sugestão de Compra de cada produto. Fornecedor/preço abaixo vêm do último Pedido de Compra real de cada produto (quando existe) — confirme ou edite antes de enviar.</p>
+        <div className="table-wrap" style={{ maxHeight: 320, overflowY: 'auto' }}>
           <table className="t">
-            <thead><tr><th>Código</th><th>Descrição</th><th className="text-right">Qtd.</th></tr></thead>
+            <thead><tr><th>Código</th><th>Descrição</th><th className="text-right">Qtd.</th><th>Fornecedor</th><th className="text-right">Preço Unit. (R$)</th></tr></thead>
             <tbody>
               {itensParaEnviar.map((i) => (
-                <tr key={i.codigo}><td className="mono">{i.codigo}</td><td>{i.descricao}</td><td className="text-right">{i.sugestaoCompra}</td></tr>
+                <tr key={i.codigo}>
+                  <td className="mono">{i.codigo}</td>
+                  <td>{i.descricao}</td>
+                  <td className="text-right">{i.sugestaoCompra}</td>
+                  <td>
+                    <input
+                      className="input"
+                      style={{ minWidth: 180 }}
+                      value={overrides[i.codigo]?.fornecedor ?? ''}
+                      onChange={(e) => setOverride(i.codigo, 'fornecedor', e.target.value)}
+                      placeholder="sem histórico"
+                    />
+                  </td>
+                  <td className="text-right">
+                    <input
+                      className="input text-right"
+                      style={{ minWidth: 100 }}
+                      type="number" min="0" step="0.01"
+                      value={overrides[i.codigo]?.preco ?? ''}
+                      onChange={(e) => setOverride(i.codigo, 'preco', e.target.value)}
+                      placeholder="0,00"
+                    />
+                  </td>
+                </tr>
               ))}
             </tbody>
           </table>
         </div>
+        <p className="small" style={{ textAlign: 'right', fontWeight: 700 }}>Valor total estimado: {ivFmtMoeda(valorTotalEstimado)}</p>
         {itensIgnorados.length > 0 && (
           <p className="small muted">{itensIgnorados.length} item(ns) selecionado(s) sem sugestão de compra (zerada) foram ignorados: {itensIgnorados.map((i) => i.codigo).join(', ')}</p>
         )}
@@ -238,12 +289,17 @@ function ImportacaoVarejoPage({ setRoute }) {
     });
   }, [items, busca, corFiltro, curvaFiltro]);
 
-  const totais = React.useMemo(() => filtrados.reduce((acc, i) => ({
-    estoqueFisico: acc.estoqueFisico + i.estoqueFisico,
-    estoqueDisponivel: acc.estoqueDisponivel + i.estoqueDisponivel,
-    sugestaoCompra: acc.sugestaoCompra + i.sugestaoCompra,
-    comprado: acc.comprado + i.comprado,
-  }), { estoqueFisico: 0, estoqueDisponivel: 0, sugestaoCompra: 0, comprado: 0 }), [filtrados]);
+  const totais = React.useMemo(() => filtrados.reduce((acc, i) => {
+    const temPrecoEPrecisaComprar = i.sugestaoCompra > 0 && i.ultimoPrecoUnitario != null;
+    return {
+      estoqueFisico: acc.estoqueFisico + i.estoqueFisico,
+      estoqueDisponivel: acc.estoqueDisponivel + i.estoqueDisponivel,
+      sugestaoCompra: acc.sugestaoCompra + i.sugestaoCompra,
+      comprado: acc.comprado + i.comprado,
+      valorAPagar: acc.valorAPagar + (temPrecoEPrecisaComprar ? i.sugestaoCompra * i.ultimoPrecoUnitario : 0),
+      itensSemPreco: acc.itensSemPreco + (i.sugestaoCompra > 0 && i.ultimoPrecoUnitario == null ? 1 : 0),
+    };
+  }, { estoqueFisico: 0, estoqueDisponivel: 0, sugestaoCompra: 0, comprado: 0, valorAPagar: 0, itensSemPreco: 0 }), [filtrados]);
 
   const forcarSync = async () => {
     setSincronizando(true);
@@ -326,7 +382,7 @@ function ImportacaoVarejoPage({ setRoute }) {
         </div>
       )}
 
-      <div className="grid-4" style={{ marginBottom: 20 }}>
+      <div className="grid-5" style={{ marginBottom: 20 }}>
         <KPI
           label="Precisa comprar"
           value={filtrados.filter((i) => ivStatusDoItem(i) === 'vermelha').length}
@@ -345,6 +401,12 @@ function ImportacaoVarejoPage({ setRoute }) {
         />
         <KPI label="Sugestão total" value={ivFmtNum(totais.sugestaoCompra)} sub="unidades" icon="package" />
         <KPI label="Curva D com estoque parado" value={filtrados.filter((i) => i.conselho).length} sub="considere pausar compra" icon="fileSearch" />
+        <KPI
+          label="Valores a pagar (estimado)"
+          value={ivFmtMoeda(totais.valorAPagar)}
+          sub={totais.itensSemPreco > 0 ? `${totais.itensSemPreco} item(ns) sem preço conhecido` : 'com base no último preço pago'}
+          icon="dollar"
+        />
       </div>
 
       <div className="tbar" style={{ flexWrap: 'wrap', gap: 8 }}>
@@ -396,6 +458,8 @@ function ImportacaoVarejoPage({ setRoute }) {
             <th className="text-right">Pendente</th>
             <th className="text-right">Comprado</th>
             <th className="text-right">Sugestão</th>
+            <th>Último Fornecedor</th>
+            <th className="text-right">Último Preço Unit.</th>
             <th></th>
           </tr></thead>
           <tbody>
@@ -433,6 +497,15 @@ function ImportacaoVarejoPage({ setRoute }) {
                         </button>
                       )}
                     </td>
+                    <td className="small" title={item.ultimoPedidoNumero ? `Pedido ${item.ultimoPedidoNumero} em ${ivFmtData(item.ultimoPedidoData)}` : ''}>
+                      {item.ultimoFornecedorNome ? (
+                        <>
+                          {item.ultimoFornecedorNome}
+                          {item.ultimoFornecedorExterior && <Badge variant="neutral" style={{ marginLeft: 6 }} title="Fornecedor estrangeiro">exterior</Badge>}
+                        </>
+                      ) : <span className="muted">sem histórico</span>}
+                    </td>
+                    <td className="text-right cell-num">{item.ultimoPrecoUnitario != null ? ivFmtMoeda(item.ultimoPrecoUnitario) : '—'}</td>
                     <td>{item.semRegistroEstoque && <Badge variant="neutral" title="Sem registro de estoque no Omie">sem estoque</Badge>}</td>
                   </tr>
                   {item.conselho && (
@@ -456,6 +529,8 @@ function ImportacaoVarejoPage({ setRoute }) {
                 <td colSpan={2}></td>
                 <td className="text-right">{ivFmtNum(totais.comprado)}</td>
                 <td className="text-right">{ivFmtNum(totais.sugestaoCompra)}</td>
+                <td></td>
+                <td className="text-right">{ivFmtMoeda(totais.valorAPagar)}</td>
                 <td></td>
               </tr>
             </tfoot>

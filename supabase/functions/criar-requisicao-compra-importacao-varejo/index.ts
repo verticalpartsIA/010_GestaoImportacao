@@ -16,15 +16,33 @@
    sozinho — igual ao sistema de referência, o lançamento de "Comprado"
    continua sendo uma ação manual separada (senão a Sugestão de Compra
    não reflete a requisição recém-criada até alguém logar).
+
+   Fornecedor + preço unitário (30/09/2026, pedido do usuário "consegue
+   trazer a informação de fornecedores? [...] o comprador selecionaria o
+   fornecedor e já ajuda a fazer o pedido em massa [...] último preço
+   unitário") — decisão confirmada com o usuário: Requisição de Compra NÃO
+   tem campo de fornecedor no Omie (é supplier-blind de propósito — quem
+   recebe decide o fornecedor real ao converter em Pedido de Compra).
+   Por isso o fornecedor sugerido (vindo do cache
+   importacao_varejo_fornecedor, editável na tela) vai só como texto em
+   `obsItem`, e `precoUnit` passa a vir do `ultimoPrecoUnitario` daquele
+   cache (ou do que o comprador editar na tela) em vez do `0` fixo de
+   antes — dado melhor pra quem for aprovar/converter a requisição.
+
+   ⚠️ SEM `@supabase/supabase-js` de propósito (01/10/2026) — achado real:
+   redeployar `list-importacao-varejo` via MCP (sb_deploy_edge_function)
+   com esse import causou BOOT_ERROR em produção por ~4 minutos, mesmo a
+   função já rodando normalmente há meses com ele ("A remote specifier
+   was requested [...] but --no-remote is specified") — não é só função
+   nova que sofre disso, qualquer redeploy por esta ferramenta pode
+   quebrar o bundling. Fala direto com o PostgREST via fetch (mesmo
+   padrão já usado pro Omie) — elimina o risco.
    ============================================================ */
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
 const supabaseServiceKey = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"];
 const omieKey = Deno.env.get("OMIE_API_KEY") || "";
 const omieSecret = Deno.env.get("OMIE_API_SECRET") || "";
-
-const sb = createClient(supabaseUrl, supabaseServiceKey);
 
 const CORS = {
   "Access-Control-Allow-Origin": "*",
@@ -40,6 +58,23 @@ function formatarDataBR(d: Date) {
   return `${String(d.getDate()).padStart(2, "0")}/${String(d.getMonth() + 1).padStart(2, "0")}/${d.getFullYear()}`;
 }
 
+function pgHeaders(extra?: Record<string, string>) {
+  return {
+    apikey: supabaseServiceKey,
+    Authorization: `Bearer ${supabaseServiceKey}`,
+    "Content-Type": "application/json",
+    ...extra,
+  };
+}
+
+async function pgSelectIn<T>(tabela: string, colunas: string, coluna: string, valores: string[]): Promise<T[]> {
+  const qs = new URLSearchParams({ select: colunas });
+  qs.set(coluna, `in.(${valores.join(",")})`);
+  const res = await fetch(`${supabaseUrl}/rest/v1/${tabela}?${qs.toString()}`, { headers: pgHeaders() });
+  if (!res.ok) throw new Error(`select ${tabela}: HTTP ${res.status} ${await res.text()}`);
+  return (await res.json()) as T[];
+}
+
 async function omiePost<T>(endpoint: string, call: string, param: Record<string, unknown>): Promise<T> {
   const res = await fetch(`https://app.omie.com.br/api/v1/${endpoint}/`, {
     method: "POST",
@@ -52,7 +87,7 @@ async function omiePost<T>(endpoint: string, call: string, param: Record<string,
   return data as T;
 }
 
-type ItemEntrada = { codigo: string; descricao: string; quantidade: number };
+type ItemEntrada = { codigo: string; descricao: string; quantidade: number; precoUnitario?: number; fornecedorNome?: string };
 
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
@@ -66,14 +101,15 @@ Deno.serve(async (req) => {
     if (itens.length > 200) return json({ error: "Máximo de 200 itens por requisição." }, 400);
 
     const codigos = itens.map((i) => i.codigo);
-    const { data: produtos, error: errProdutos } = await sb
-      .from("importacao_varejo_produtos")
-      .select("codigo,codigo_produto_omie")
-      .in("codigo", codigos);
-    if (errProdutos) throw new Error(`select importacao_varejo_produtos: ${errProdutos.message}`);
-    const codProdPorCodigo = new Map((produtos ?? []).map((p) => [p.codigo as string, p.codigo_produto_omie as number]));
+    const produtos = await pgSelectIn<{ codigo: string; codigo_produto_omie: number }>(
+      "importacao_varejo_produtos",
+      "codigo,codigo_produto_omie",
+      "codigo",
+      codigos,
+    );
+    const codProdPorCodigo = new Map(produtos.map((p) => [p.codigo, p.codigo_produto_omie]));
 
-    const itensValidos: { codProd: number; qtde: number; obsItem: string }[] = [];
+    const itensValidos: { codProd: number; qtde: number; precoUnit: number; obsItem: string }[] = [];
     const itensComErro: { codigo: string; motivo: string }[] = [];
     for (const item of itens) {
       const codProd = codProdPorCodigo.get(item.codigo);
@@ -85,7 +121,16 @@ Deno.serve(async (req) => {
         itensComErro.push({ codigo: item.codigo, motivo: "Quantidade inválida." });
         continue;
       }
-      itensValidos.push({ codProd, qtde: Number(item.quantidade), obsItem: item.descricao || item.codigo });
+      const descricaoBase = item.descricao || item.codigo;
+      const obsItem = item.fornecedorNome
+        ? `${descricaoBase} — Fornecedor sugerido: ${item.fornecedorNome}`
+        : descricaoBase;
+      itensValidos.push({
+        codProd,
+        qtde: Number(item.quantidade),
+        precoUnit: Number(item.precoUnitario) > 0 ? Number(item.precoUnitario) : 0,
+        obsItem,
+      });
     }
 
     if (itensValidos.length === 0) return json({ error: "Nenhum item válido pra enviar.", itensComErro }, 400);
@@ -95,7 +140,7 @@ Deno.serve(async (req) => {
       codIntReqCompra: `IV-${Date.now()}`,
       dtSugestao: formatarDataBR(new Date()),
       obsIntReqCompra: "Reposição de estoque — gerado via Sugestão de Compra (Importação Varejo)",
-      ItensReqCompra: itensValidos.map((item) => ({ codProd: item.codProd, qtde: item.qtde, precoUnit: 0, obsItem: item.obsItem })),
+      ItensReqCompra: itensValidos.map((item) => ({ codProd: item.codProd, qtde: item.qtde, precoUnit: item.precoUnit, obsItem: item.obsItem })),
     });
 
     return json({ codReqCompra: resp.codReqCompra, quantidadeItens: itensValidos.length, itensComErro });
