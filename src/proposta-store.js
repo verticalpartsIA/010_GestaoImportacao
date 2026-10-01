@@ -345,9 +345,19 @@
        não o rascunho vivo — senão editar depois do envio invalidava a
        correspondência entre documento lido e documento assinado. */
     const assinado = conteudoVigente(cur);
-    const hash = await sha256Hex(JSON.stringify(assinado) + '|' + (sig.signerName || ''));
+    /* Duas modalidades de entrega (120 × 90 dias — ver proposta-opcoes.js): com as duas
+       na proposta, o cliente PRECISA escolher uma pra aprovar; a escolha entra no hash e
+       na trilha de auditoria. Proposta sem opção (caso de sempre) não muda em nada. */
+    const O = window.PropostaOpcoes;
+    const escolha = sig && sig.opcaoEntrega;
+    if (O && O.temOpcoes(assinado) && escolha !== '120' && escolha !== '90') {
+      throw new Error('Escolha a modalidade de entrega (120 ou 90 dias) para aprovar a proposta.');
+    }
+    const escolhaValida = O && O.temOpcao90(assinado) && (escolha === '120' || escolha === '90') ? escolha : null;
+    const hash = await sha256Hex(JSON.stringify(assinado) + (escolhaValida ? '|opcao:' + escolhaValida : '') + '|' + (sig.signerName || ''));
     const audit = {
       ...(cur.audit || {}),
+      ...(escolhaValida ? { opcaoEntrega: escolhaValida } : {}),
       signedAt: now.toISOString(), signIp: ip, signUa: ua, signDevice: device,
       signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data,
       consent: true, hash,
@@ -361,6 +371,18 @@
       status: 'aprovada', signed_at: now.toISOString(), aprovada_em: now.toISOString(),
       audit, log, atualizado_em: now.toISOString(),
     };
+    /* Modalidade escolhida vira o preço OFICIAL da proposta (é o que Contrato, Aval e
+       dashboards herdam): troca os campos de valor nos dados (rascunho e versão
+       publicada) e atualiza valor_total. A opção não escolhida fica guardada, só não aparece. */
+    if (escolhaValida) {
+      const aplicadoRascunho = O.aplicarEscolha(cur.data_json, escolhaValida);
+      patch.data_json = aplicadoRascunho;
+      if (cur.versao_publicada) patch.versao_publicada = O.aplicarEscolha(cur.versao_publicada, escolhaValida);
+      if (escolhaValida === '90') {
+        const total = O.totalOficial(aplicadoRascunho || cur.versao_publicada || {});
+        if (total > 0) patch.valor_total = total;
+      }
+    }
     const { error } = await c.from('propostas').update(patch).eq('token', token);
     if (error) throw error;
     const updated = { ...cur, ...patch };
@@ -368,7 +390,7 @@
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
       alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
-      detalhe: { resposta: 'aprovada', signerName: sig.signerName },
+      detalhe: { resposta: 'aprovada', signerName: sig.signerName, ...(escolhaValida ? { modalidadeEntrega: escolhaValida + ' dias' } : {}) },
     });
     /* Cliente aprovou → dispara a aprovação do CEO pra comprar o
        equipamento, bem antes do contrato assinado ou do sinal pago

@@ -460,7 +460,39 @@ function PgFotos(S, data, urls) {
   ]);
 }
 
+/* Duas modalidades de entrega (Financeiro, 01/10/2026) — enquanto o cliente não escolheu, as duas
+   aparecem, cada uma com características, tabela de preços, cronograma e campo de escolha. Mesmo
+   conteúdo de PreviewValoresOpcoes (proposta-preview.jsx); regras em src/proposta-opcoes.js
+   (carregado antes deste bundle, em window.PropostaOpcoes). */
+function PgValoresOpcoes(S, data, ops) {
+  const caixa = { borderWidth: 1, borderColor: '#d9d9d9', borderStyle: 'solid', borderRadius: 4, padding: 8, marginTop: 10 };
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, 'Valores e Pagamento'),
+    h(View, { style: S.secRule, key: 'r' }),
+    h(Text, { style: S.p, key: 'intro' }, 'Esta proposta traz duas modalidades de entrega. Escolha a que melhor atende o seu cronograma — ao escolher uma, a outra deixa de valer.'),
+    ...ops.map((o) => {
+      const linhasEq = [[o.equipamento, fmtBRL(o.totalEquipamento)]];
+      if (o.difal) linhasEq.push(['DIFAL', fmtBRL(o.difal)]);
+      linhasEq.push(['Total — ' + o.titulo.toLowerCase(), fmtBRL(o.total)]);
+      const linhasParc = o.parcelas.map((p) => [p.desc || '—', p.valor ? 'R$ ' + p.valor : '—']);
+      if (o.parcelas.length) linhasParc.push(['Total Parcelado', fmtBRL(o.totalParcelas)]);
+      return h(View, { key: 'op' + o.id, style: caixa, wrap: false }, [
+        h(Text, { style: S.subTitle, key: 'st' }, o.titulo + ' — ' + o.rotulo),
+        ...o.caracteristicas.map((c, i) => h(Text, { style: S.p, key: 'c' + i }, c)),
+        Tabela2(S, [{ label: 'Equipamento', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasEq, 'e' + o.id),
+        o.parcelas.length ? Tabela2(S, [{ label: 'Cronograma de Pagamento', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasParc, 'p' + o.id) : null,
+        h(Text, { style: [S.p, { fontWeight: 700 }], key: 'esc' }, '[   ] Escolho a modalidade: ' + o.titulo),
+      ].filter(Boolean));
+    }),
+    PdfFooter(S),
+  ]);
+}
+
 function PgValores(S, data) {
+  const O = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  if (O && O.temOpcoes(data)) return PgValoresOpcoes(S, data, O.opcoes(data));
+  const modalidade = O ? O.modalidadeEscolhida(data) : null;
   const v = (data.elevador || {}).valores || {};
   const parcelas = v.parcelas || [];
   const difal = numBR(v.difal);
@@ -488,6 +520,7 @@ function PgValores(S, data) {
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, 'Valores e Pagamento'),
     h(View, { style: S.secRule, key: 'r' }),
+    modalidade ? h(Text, { style: [S.p, { fontWeight: 700 }], key: 'mod' }, 'Modalidade de entrega escolhida: ' + modalidade.titulo + ' — ' + modalidade.rotulo + '.') : null,
     h(Text, { style: S.subTitle, key: 's1' }, 'Preços dos Equipamentos'),
     Tabela2(S, [{ label: 'Equipamento', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasEq, 't1'),
     parcelas.length ? h(View, { key: 'parc' }, [

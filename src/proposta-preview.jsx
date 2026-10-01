@@ -537,7 +537,54 @@ function PreviewFotos({ data }) {
 }
 
 /* ---------- Página 12: Valores e Pagamento (2 tabelas) ---------- */
+/* Duas modalidades de entrega (Financeiro, 01/10/2026): enquanto o cliente não
+   escolheu, as duas aparecem — cada uma com suas características, tabela de
+   preços e cronograma, e um campo de escolha. Ao escolher (na assinatura), a
+   outra deixa de aparecer: o documento volta ao formato de sempre (PreviewValoresTabelas
+   com os valores da modalidade escolhida). Ver proposta-opcoes.js. */
+function PreviewValoresOpcoes({ data }) {
+  const ops = window.PropostaOpcoes.opcoes(data) || [];
+  const fmt = (n) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (
+    <div className="pe__pdf">
+      <div className="pe__pdf-inner">
+        <PdfHeader numero={data.numero}/>
+        <h2 className="pdf-sec-title">Valores e Pagamento</h2>
+        <div className="pdf-sec-rule"/>
+        <p>Esta proposta traz duas modalidades de entrega. Escolha a que melhor atende o seu cronograma — ao escolher uma, a outra deixa de valer.</p>
+        {ops.map((o) => (
+          <div key={o.id} data-opcao-entrega={o.id} style={{ border: "1px solid #d9d9d9", borderRadius: 6, padding: "10px 14px", marginTop: 14 }}>
+            <h3 className="pdf-sub-title" style={{ marginTop: 0 }}>{o.titulo} <span style={{ fontWeight: 400, opacity: 0.7 }}>— {o.rotulo}</span></h3>
+            {o.caracteristicas.map((c, i) => <p key={i} style={{ margin: "2px 0" }}>{c}</p>)}
+            <table className="pdf-table2" style={{ marginTop: 8 }}>
+              <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
+              <tbody>
+                <tr><td>{o.equipamento}</td><td style={{ textAlign: "right" }}><b>{fmt(o.totalEquipamento)}</b></td></tr>
+                {o.difal ? <tr><td>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(o.difal)}</td></tr> : null}
+                <tr className="pdf-total-row"><td>Total — {o.titulo.toLowerCase()}</td><td style={{ textAlign: "right" }}>{fmt(o.total)}</td></tr>
+              </tbody>
+            </table>
+            {o.parcelas.length ? (
+              <table className="pdf-table2" style={{ marginTop: 8 }}>
+                <thead><tr><th>Cronograma de Pagamento</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
+                <tbody>
+                  {o.parcelas.map((p, i) => <tr key={i}><td>{p.desc || "—"}</td><td style={{ textAlign: "right" }}>{p.valor ? "R$ " + p.valor : "—"}</td></tr>)}
+                  <tr className="pdf-total-row"><td>Total Parcelado</td><td style={{ textAlign: "right" }}>{fmt(o.totalParcelas)}</td></tr>
+                </tbody>
+              </table>
+            ) : null}
+            <p style={{ marginTop: 10, fontWeight: 700 }}>☐ Escolho a modalidade: {o.titulo}</p>
+          </div>
+        ))}
+      </div>
+      <PdfFooter/>
+    </div>
+  );
+}
+
 function PreviewValoresTabelas({ data }) {
+  if (window.PropostaOpcoes && window.PropostaOpcoes.temOpcoes(data)) return <PreviewValoresOpcoes data={data}/>;
+  const modalidade = window.PropostaOpcoes ? window.PropostaOpcoes.modalidadeEscolhida(data) : null;
   const v = data.elevador.valores;
   const parcelas = v.parcelas || [];
   const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
@@ -570,6 +617,7 @@ function PreviewValoresTabelas({ data }) {
         <h2 className="pdf-sec-title">Valores e Pagamento</h2>
         <div className="pdf-sec-rule"/>
 
+        {modalidade && <p><b>Modalidade de entrega escolhida:</b> {modalidade.titulo} — {modalidade.rotulo}.</p>}
         <h3 className="pdf-sub-title">Preços dos Equipamentos</h3>
         <table className="pdf-table2">
           <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
