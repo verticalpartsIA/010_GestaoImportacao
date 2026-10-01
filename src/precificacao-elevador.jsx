@@ -595,6 +595,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   // formar quantidadeEquipamentos — reaproveitada aqui só pra exibir "× N"
   // ao lado do preço por equipamento, sem recalcular nada do motor.
   const quantidadeEquipamentos = (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1;
+  /* Regra do Financeiro (01/10): 2 cards (120d compartilhado × 90d exclusivo)
+     só com UM equipamento — importar 1 equipamento sozinho em 90 dias não
+     compensa o frete, então vale a comparação. Com 2+ o container já é
+     compartilhado: só o card base (120d), sem citar prazo. */
+  const mostrarExpresso = !!resultadoV2Expresso && quantidadeEquipamentos <= 1;
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
   const margemMinima = Number(params.margem_minima_pct) || 0;
@@ -1065,8 +1070,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       </Card>
 
       {resultadoV2 && (
-        <div className={resultadoV2Expresso ? 'grid-2' : ''} style={{ gap: 16, marginTop: 16 }}>
-          <Card title="Preço de venda — 120 dias (Compartilhado)" sub="container compartilhado, prazo padrão">
+        <div className={mostrarExpresso ? 'grid-2' : ''} style={{ gap: 16, marginTop: 16 }}>
+          <Card title={mostrarExpresso ? 'Preço de venda — 120 dias (Compartilhado)' : 'Preço de venda'} sub={mostrarExpresso ? 'container compartilhado, prazo padrão' : undefined}>
             <div className="stack" style={{ gap: 12 }}>
               <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
               <div><span className="up-eyebrow muted">Preço de venda por equipamento</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaPorEquipamento)}{quantidadeEquipamentos > 1 ? ` × ${quantidadeEquipamentos}` : ''}</div></div>
@@ -1097,7 +1102,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             )}
           </Card>
 
-          {resultadoV2Expresso && (
+          {mostrarExpresso && (
             <Card title="Preço de venda — 90 dias (Exclusivo)" sub="container exclusivo, entrega mais rápida">
               <div className="stack" style={{ gap: 12 }}>
                 <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2Expresso.custoEconomicoCompleto)}</div></div>
