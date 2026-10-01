@@ -1099,23 +1099,16 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
         /* 10/09 — envio direto via SMTP (send-email edge function), sem abrir
            Outlook/cliente local. Se o SMTP ainda não tiver os secrets
            configurados (ou a chamada falhar por qualquer motivo), cai pro
-           mailto: como estava antes — nunca deixa o vendedor sem alternativa. */
-        const sb = window.__VP_SB && window.__VP_SB.sb;
-        let enviouDireto = false;
-        if (sb) {
-          const { data: emailData, error: emailError } = await sb.functions.invoke('send-email', {
-            body: {
-              to: recipient.email, subject: `Cotação técnica ${cot.numero_documento} — VerticalParts`, text: msg,
-              numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
-            },
-          });
-          if (!emailError && emailData && emailData.ok) {
-            enviouDireto = true;
-            if (emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
-            avisoFinal = `E-mail enviado para ${(emailData.destinatarios || []).join(', ') || recipient.email}.`;
-          } else {
-            console.warn('[FormularioElevador] send-email falhou, caindo pro mailto:', emailError, emailData);
-          }
+           mailto: como estava antes — nunca deixa o vendedor sem alternativa.
+           01/10 — chamada em si extraída pro EmailEnvioHelper (compartilhado
+           com Proposta/Contrato de Venda/Contrato Instalador); a decisão do
+           que fazer com sucesso/falha continua aqui, sem mudança. */
+        const { enviouDireto, emailData } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: recipient.email, subject: `Cotação técnica ${cot.numero_documento} — VerticalParts`, text: msg,
+          numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
+        });
+        if (enviouDireto) {
+          avisoFinal = `E-mail enviado para ${(emailData.destinatarios || []).join(', ') || recipient.email}.`;
         }
         /* 28/09 — achado real: essa queda pro mailto: era silenciosa (só
            console.warn) — o vendedor só percebia pela janela do cliente de

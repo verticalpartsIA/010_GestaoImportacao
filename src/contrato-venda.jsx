@@ -382,23 +382,14 @@ function CVSendModal({ record, onClose, onSent }) {
            só por `referenciaId` (sem numeroCotacao) — o vínculo por
            Message-ID não depende de Nº de Cotação nenhum. Sempre tenta
            send-email; numeroCotacao null não é mais motivo pra pular. */
+        /* 01/10 — chamada em si extraída pro EmailEnvioHelper (compartilhado
+           com RFQ/Proposta/Contrato Instalador); sucesso/falha continuam
+           decididos aqui, sem mudança de comportamento. */
         const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(record.numero_documento) ?? null;
-        const sb = window.__VP_SB && window.__VP_SB.sb;
-        let enviouDireto = false;
-        if (sb) {
-          const { data: emailData, error: emailError } = await sb.functions.invoke('send-email', {
-            body: {
-              to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
-              numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
-            },
-          });
-          if (!emailError && emailData && emailData.ok) {
-            enviouDireto = true;
-            if (emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
-          } else {
-            console.warn('[CVSendModal] send-email falhou, caindo pro mailto:', emailError, emailData);
-          }
-        }
+        const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
+          numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
+        });
         if (enviouDireto) {
           updated = await window.CVStore.markSent(record.id, channel, { name, contact });
           window.toast?.(`E-mail enviado para ${contact}.`, 'success');

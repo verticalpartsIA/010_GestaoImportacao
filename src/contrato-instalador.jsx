@@ -818,22 +818,13 @@ function CISendModal({ record, onClose, onSent }) {
            numeroCotacao) — o vínculo por Message-ID não depende de Nº de
            Cotação nenhum. Sempre tenta send-email; numeroCotacao null não
            é mais motivo pra pular. */
-        const sb = window.__VP_SB && window.__VP_SB.sb;
-        let enviouDireto = false;
-        if (sb) {
-          const { data: emailData, error: emailError } = await sb.functions.invoke('send-email', {
-            body: {
-              to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
-              numeroCotacao, referenciaTipo: 'contrato_instalador', referenciaId: record.id,
-            },
-          });
-          if (!emailError && emailData && emailData.ok) {
-            enviouDireto = true;
-            if (emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
-          } else {
-            console.warn('[CISendModal] send-email falhou, caindo pro mailto:', emailError, emailData);
-          }
-        }
+        /* 01/10 — chamada em si extraída pro EmailEnvioHelper (compartilhado
+           com RFQ/Proposta/Contrato de Venda); sucesso/falha continuam
+           decididos aqui, sem mudança de comportamento. */
+        const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
+          numeroCotacao, referenciaTipo: 'contrato_instalador', referenciaId: record.id,
+        });
         if (enviouDireto) {
           updated = await window.CIStore.markSent(record.id, channel, { name, contact });
           window.toast?.(`E-mail enviado para ${contact}.`, 'success');
