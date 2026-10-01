@@ -29,6 +29,11 @@
      é a maioria do catálogo, cuja reposição nunca passou pelo Omie local)
      não tem linha nesta tabela — `ultimoFornecedor`/`ultimoPrecoUnitario`
      saem `null`/`0`, tratado na tela como "sem histórico".
+     **(01/10/2026)** essa mesma tabela também recebe fornecedor/preço
+     cruzados de `pi_importacao` (P.I. do próprio site — ver fase 'pi' em
+     sync-importacao-varejo-fornecedor) quando é a fonte mais recente;
+     `fonte` diz qual das duas alimentou a linha — exposta como
+     `ultimoFornecedorFonte` pra tela poder diferenciar visualmente.
 
    Sugestão de Compra = max(0, estoqueMinimo − disponível + pendente(Omie,
    cacheado) − comprado) — arredondada pra cima e ajustada por lote quando
@@ -132,9 +137,9 @@ Deno.serve(async (req) => {
         "codigo,quantidade,previsao_chegada",
         { coluna: "recebido", valor: false },
       ),
-      buscarTodasAsLinhas<{ codigo: string; fornecedor_nome: string | null; fornecedor_cnpj: string | null; fornecedor_exterior: boolean; preco_unitario: number | null; numero_pedido: string | null; data_pedido: string | null }>(
+      buscarTodasAsLinhas<{ codigo: string; fornecedor_nome: string | null; fornecedor_cnpj: string | null; fornecedor_exterior: boolean; preco_unitario: number | null; numero_pedido: string | null; data_pedido: string | null; fonte: string | null }>(
         "importacao_varejo_fornecedor",
-        "codigo,fornecedor_nome,fornecedor_cnpj,fornecedor_exterior,preco_unitario,numero_pedido,data_pedido",
+        "codigo,fornecedor_nome,fornecedor_cnpj,fornecedor_exterior,preco_unitario,numero_pedido,data_pedido,fonte",
       ),
     ]);
     if (!produtos || produtos.length === 0) {
@@ -165,7 +170,7 @@ Deno.serve(async (req) => {
       const lc = loteMap.get(codigo) as { multiplo_compra?: number; lote_minimo?: number } | undefined;
       const comp = compradoPorCodigo.get(codigo) ?? { total: 0, pedidos: [] };
       const forn = fornecedorMap.get(codigo) as
-        | { fornecedor_nome?: string | null; fornecedor_cnpj?: string | null; fornecedor_exterior?: boolean; preco_unitario?: number | null; numero_pedido?: string | null; data_pedido?: string | null }
+        | { fornecedor_nome?: string | null; fornecedor_cnpj?: string | null; fornecedor_exterior?: boolean; preco_unitario?: number | null; numero_pedido?: string | null; data_pedido?: string | null; fonte?: string | null }
         | undefined;
 
       const estoqueFisico = est?.fisico ?? 0;
@@ -217,6 +222,7 @@ Deno.serve(async (req) => {
         ultimoPrecoUnitario: forn?.preco_unitario ?? null,
         ultimoPedidoNumero: forn?.numero_pedido ?? null,
         ultimoPedidoData: forn?.data_pedido ?? null,
+        ultimoFornecedorFonte: forn?.fonte ?? null,
         multiploCompra: lc?.multiplo_compra ?? null,
         loteMinimo: lc?.lote_minimo ?? null,
         sugestaoBruta,

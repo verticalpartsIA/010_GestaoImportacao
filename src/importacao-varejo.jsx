@@ -502,11 +502,23 @@ function ImportacaoVarejoPage({ setRoute }) {
                         </button>
                       )}
                     </td>
-                    <td className="small" title={item.ultimoPedidoNumero ? `Pedido ${item.ultimoPedidoNumero} em ${ivFmtData(item.ultimoPedidoData)}` : ''}>
+                    <td
+                      className="small"
+                      title={
+                        item.ultimoPedidoNumero
+                          ? `${item.ultimoFornecedorFonte === 'pi_importacao' ? 'P.I.' : 'Pedido'} ${item.ultimoPedidoNumero} em ${ivFmtData(item.ultimoPedidoData)}`
+                          : ''
+                      }
+                    >
                       {item.ultimoFornecedorNome ? (
                         <>
                           {item.ultimoFornecedorNome}
                           {item.ultimoFornecedorExterior && <Badge variant="neutral" style={{ marginLeft: 6 }} title="Fornecedor estrangeiro">exterior</Badge>}
+                          {item.ultimoFornecedorFonte === 'pi_importacao' && (
+                            <Badge variant="info" style={{ marginLeft: 6 }} title="Veio de uma P.I. (fatura comercial real) do próprio site, não de Pedido de Compra do Omie">
+                              P.I.
+                            </Badge>
+                          )}
                         </>
                       ) : <span className="muted">sem histórico</span>}
                     </td>
