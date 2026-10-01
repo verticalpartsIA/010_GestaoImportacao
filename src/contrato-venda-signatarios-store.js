@@ -139,18 +139,24 @@
     return updated;
   }
 
-  async function refuse(token) {
+  /* 01/10 — mesmo achado real do representante principal (cotação 955/
+     AKAI): recusa sem motivo registrado. Aqui "quem" já é conhecido
+     (cada signatário extra tem seu próprio registro/`cur.nome`) —
+     só faltava o motivo, opcional, vindo de `assinar-app.jsx`. */
+  async function refuse(token, info) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const cur = await getByToken(token);
     if (!cur) return null;
     const now = new Date().toISOString();
+    const motivo = ((info && info.motivo) || '').trim() || null;
+    const audit = { ...(cur.audit || {}), refusedAt: now, refusedReason: motivo };
     const log = (cur.log || []).slice();
-    log.push({ status: 'recusado', at: now, meta: null });
-    const patch = { status: 'recusado', log, atualizado_em: now };
+    log.push({ status: 'recusado', at: now, meta: { motivo } });
+    const patch = { status: 'recusado', log, audit, atualizado_em: now };
     const { error } = await c.from('contrato_venda_signatarios').update(patch).eq('token', token);
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({
-      modulo: 'Contrato Venda', acao: `${cur.papel} (${cur.nome || 'signatário adicional'}) recusou assinar o contrato`,
+      modulo: 'Contrato Venda', acao: `${cur.papel} (${cur.nome || 'signatário adicional'}) recusou assinar o contrato` + (motivo ? ` — Motivo: ${motivo}` : ''),
       alvo_id: cur.contrato_venda_id,
     });
     if (window.EventosFluxo && window.CVStore) {

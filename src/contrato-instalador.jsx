@@ -1160,6 +1160,10 @@ function CITimeline({ rec }) {
               {s.entry ? window.CIStore.fmtDateTime(s.entry.at) : 'Pendente'}
               {s.entry && s.entry.meta && s.entry.meta.channel ? ' · ' + (s.entry.meta.channel === 'whatsapp' ? 'WhatsApp' : 'E-mail') : ''}
               {s.entry && s.entry.meta && s.entry.meta.ip ? ' · IP ' + s.entry.meta.ip : ''}
+              {/* 01/10 — recusa agora traz quem recusou e o motivo (mesmo
+                 achado real do Contrato de Venda, cotação 955/AKAI) */}
+              {s.entry && s.entry.meta && s.entry.meta.nome ? ' · Por ' + s.entry.meta.nome : ''}
+              {s.entry && s.entry.meta && s.entry.meta.motivo ? <div>Motivo: {s.entry.meta.motivo}</div> : ''}
             </div>
           </div>
         </div>

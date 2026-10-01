@@ -340,6 +340,18 @@ function CVSendModal({ record, onClose, onSent }) {
   const [sent, setSent] = _cvUS(false);
   const [copied, setCopied] = _cvUS(false);
   const [sending, setSending] = _cvUS(false);
+  /* 01/10 — achado real (cotação 955/AKAI + Juliana/Financeiro): o campo
+     "Para" acima é SEMPRE o representante (1 único token, nunca muda —
+     continua exatamente como sempre foi). Esta lista é NOVA: destinatários
+     adicionais que antes eram só mais um e-mail colado no mesmo "Para",
+     todos compartilhando o mesmo link — por isso o primeiro que abria
+     "consumia" visualização/assinatura/recusa pros demais. Cada linha
+     marcada "Deve assinar" ganha um token PRÓPRIO (documento-signatarios-store.js);
+     quem não marcar recebe só um e-mail de aviso, sem link de assinatura. */
+  const [extras, setExtras] = _cvUS([]);
+  const addExtra = () => setExtras((prev) => [...prev, { nome: '', email: '', deveAssinar: false }]);
+  const removeExtra = (i) => setExtras((prev) => prev.filter((_, idx) => idx !== i));
+  const updateExtra = (i, patch) => setExtras((prev) => prev.map((ex, idx) => (idx === i ? { ...ex, ...patch } : ex)));
 
   const real = window.CVStore.signUrl(record.token);
   const valorFmt = record.valor_total_num ? window.CV.brl(record.valor_total_num) : '—';
@@ -352,6 +364,50 @@ function CVSendModal({ record, onClose, onSent }) {
   const copyLink = () => {
     navigator.clipboard && navigator.clipboard.writeText(real);
     setCopied(true); setTimeout(() => setCopied(false), 1600);
+  };
+
+  /* Processa a lista de "Outros destinatários" DEPOIS do representante ter
+     sido enviado com sucesso — falha num extra nunca desfaz/bloqueia o
+     envio principal, só avisa por toast qual destinatário falhou. */
+  const enviarExtras = async () => {
+    const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(record.numero_documento) ?? null;
+    for (const ex of extras) {
+      const nomeExtra = (ex.nome || '').trim();
+      const emailExtra = (ex.email || '').trim();
+      if (!emailExtra) continue;
+      if (ex.deveAssinar) {
+        try {
+          const sig = await window.DocumentoSignatariosStore.criar({
+            documentoTipo: 'contrato_venda', documentoId: record.id,
+            nome: nomeExtra || emailExtra, email: emailExtra, papel: 'Signatário adicional',
+          });
+          const url = window.DocumentoSignatariosStore.signUrl(sig.token);
+          const msgExtra =
+            `Olá${nomeExtra ? ' ' + nomeExtra.split(' ')[0] : ''}! A Vertical Parts enviou o contrato ${record.numero_documento} também para a sua assinatura digital.\n\n` +
+            `${record.titulo}\nValor: ${valorFmt}\n\nAssine pelo seu link individual e seguro (válido por 7 dias):\n${url}`;
+          const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
+            to: emailExtra, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: msgExtra,
+            numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
+          });
+          if (enviouDireto) {
+            await window.DocumentoSignatariosStore.marcarEnviado(sig.id, 'email', { name: nomeExtra, contact: emailExtra });
+          } else {
+            window.toast?.(`Envio automático falhou para ${emailExtra} — copie o link manualmente: ${url}`, 'error');
+          }
+        } catch (e) {
+          window.toast?.(`Erro ao criar signatário para ${emailExtra}: ${e.message || e}`, 'error');
+        }
+      } else {
+        const msgCopia =
+          `Olá${nomeExtra ? ' ' + nomeExtra.split(' ')[0] : ''}! Você está recebendo, em cópia informativa, o contrato ${record.numero_documento} enviado pela Vertical Parts para assinatura de ${name || record.comprador_razao_social}.\n\n` +
+          `${record.titulo}\nValor: ${valorFmt}\n\nEste e-mail é só um aviso — não é necessário assinar nada aqui.`;
+        const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: emailExtra, subject: `[Cópia] Contrato ${record.numero_documento} — Vertical Parts`, text: msgCopia,
+          numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
+        });
+        if (!enviouDireto) window.toast?.(`Falha ao enviar cópia informativa para ${emailExtra}.`, 'error');
+      }
+    }
   };
 
   const handleSend = async () => {
@@ -397,6 +453,7 @@ function CVSendModal({ record, onClose, onSent }) {
           return;
         }
       }
+      await enviarExtras();
       setSent(true);
       onSent && onSent(updated);
     } catch (e) {
@@ -450,6 +507,25 @@ function CVSendModal({ record, onClose, onSent }) {
                   <input className="ci-input" value={contact} onChange={(e) => setContact(e.target.value)} placeholder={channel === 'whatsapp' ? '(11) 99999-0000' : 'cliente@empresa.com.br'}/>
                 </div>
               )}
+
+              <div style={{ marginTop: 18, borderTop: '1px solid #eee', paddingTop: 14 }}>
+                <label className="ci-mini-label" style={{ display: 'block', marginBottom: 4 }}>Outros destinatários (opcional)</label>
+                <p style={{ fontSize: 12, color: '#777', margin: '0 0 10px' }}>
+                  Cada destinatário marcado "Deve assinar" recebe um link de assinatura PRÓPRIO, individual — diferente de colar vários e-mails no campo acima, que faria todos compartilharem o mesmo link (achado real: o primeiro que abrisse "consumia" a visualização/assinatura/recusa, deixando os demais sem conseguir ver o documento). Quem não marcar recebe só um e-mail avisando, sem nenhum link de assinatura.
+                </p>
+                {extras.map((ex, i) => (
+                  <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 8, flexWrap: 'wrap' }}>
+                    <input className="ci-input" style={{ flex: '1 1 140px' }} placeholder="Nome" value={ex.nome} onChange={(e) => updateExtra(i, { nome: e.target.value })}/>
+                    <input className="ci-input" style={{ flex: '1 1 200px' }} placeholder="e-mail@empresa.com.br" value={ex.email} onChange={(e) => updateExtra(i, { email: e.target.value })}/>
+                    <label style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, whiteSpace: 'nowrap' }}>
+                      <input type="checkbox" checked={ex.deveAssinar} onChange={(e) => updateExtra(i, { deveAssinar: e.target.checked })}/>
+                      Deve assinar
+                    </label>
+                    <button type="button" className="ci-btn ci-btn--ghost" onClick={() => removeExtra(i)}>✕</button>
+                  </div>
+                ))}
+                <button type="button" className="ci-btn ci-btn--ghost" onClick={addExtra}>+ Adicionar destinatário</button>
+              </div>
             </>
           ) : (
             <div className="ci-sent-ok">
@@ -461,6 +537,12 @@ function CVSendModal({ record, onClose, onSent }) {
                 <button onClick={copyLink}>{copied ? 'Copiado ✓' : 'Copiar'}</button>
               </div>
               <a className="ci-btn ci-btn--dark" href={real} target="_blank" rel="noopener" style={{ textDecoration: 'none', marginTop: 8, display:'inline-block' }}>Abrir página de assinatura →</a>
+              {extras.filter((ex) => ex.email).length > 0 && (
+                <p style={{ marginTop: 10, fontSize: 13 }}>
+                  + {extras.filter((ex) => ex.email).length} destinatário(s) adicional(is) notificado(s)
+                  {extras.some((ex) => ex.deveAssinar && ex.email) ? ' — os marcados "Deve assinar" receberam link próprio (ver seção de signatários no painel).' : '.'}
+                </p>
+              )}
             </div>
           )}
         </div>
@@ -909,6 +991,10 @@ function CVTimeline({ rec }) {
               {s.entry ? window.CVStore.fmtDateTime(s.entry.at) : 'Pendente'}
               {s.entry && s.entry.meta && s.entry.meta.channel ? ' · ' + (s.entry.meta.channel === 'whatsapp' ? 'WhatsApp' : 'E-mail') : ''}
               {s.entry && s.entry.meta && s.entry.meta.ip ? ' · IP ' + s.entry.meta.ip : ''}
+              {/* 01/10 — recusa agora traz quem recusou e o motivo (achado real,
+                 cotação 955/AKAI: recusa sem nenhum registro de quem/porquê) */}
+              {s.entry && s.entry.meta && s.entry.meta.nome ? ' · Por ' + s.entry.meta.nome : ''}
+              {s.entry && s.entry.meta && s.entry.meta.motivo ? <div>Motivo: {s.entry.meta.motivo}</div> : ''}
             </div>
           </div>
         </div>
@@ -1079,6 +1165,78 @@ function CVSignatariosSection({ rec, onSaved }) {
         <CVField label="Telefone" value={novo.telefone} onChange={(v) => setNovo({ ...novo, telefone: v })} placeholder="(11) 99999-9999"/>
       </div>
       <button className="ci-btn ci-btn--ghost" style={{ marginTop: 10 }} disabled={adding || !novo.papel.trim() || !novo.nome.trim()} onClick={adicionar}>{adding ? 'Adicionando…' : '+ Adicionar signatário'}</button>
+    </div>
+  );
+}
+
+/* Destinatários adicionais com link PRÓPRIO (01/10/2026 — ver
+   documento-signatarios-store.js) — cadastrados ao enviar o contrato pelo
+   CVSendModal ("Outros destinatários"), não aqui (esta seção é só
+   acompanhamento/reenvio). Diferente de CVSignatariosSection acima
+   (sócios/jurídico, tabela própria `contrato_venda_signatarios`, já
+   existia antes): esta lista vem da tabela genérica `documento_signatarios`,
+   pensada pra também servir Proposta/Contrato Instalador no futuro. As duas
+   listas são independentes — um contrato pode ter as duas ao mesmo tempo,
+   cada uma conta pro próprio gate de finalização em contrato-venda-store.js. */
+function CVDocumentoSignatariosSection({ rec }) {
+  const [lista, setLista] = _cvUS(null);
+  const [busyId, setBusyId] = _cvUS(null);
+
+  const carregar = _cvUC(async () => {
+    if (!window.DocumentoSignatariosStore) return;
+    const l = await window.DocumentoSignatariosStore.listarPorDocumento('contrato_venda', rec.id);
+    setLista(l);
+  }, [rec.id]);
+  _cvUE(() => { carregar(); }, [carregar]);
+
+  if (!window.DocumentoSignatariosStore || !lista || lista.length === 0) return null;
+
+  const reenviar = async (s) => {
+    setBusyId(s.id);
+    try {
+      const url = window.DocumentoSignatariosStore.signUrl(s.token);
+      if (s.email) {
+        const msg = `Olá${s.nome ? ' ' + s.nome.split(' ')[0] : ''}! Lembrete: o contrato ${rec.numero_documento} ainda aguarda sua assinatura digital.\n\nAssine pelo seu link individual:\n${url}`;
+        const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(rec.numero_documento) ?? null;
+        const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: s.email, subject: `Lembrete — Contrato ${rec.numero_documento} — Assinatura digital | Vertical Parts`, text: msg,
+          numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: rec.id,
+        });
+        if (enviouDireto) { await window.DocumentoSignatariosStore.marcarEnviado(s.id, 'email', { name: s.nome, contact: s.email }); window.toast?.('Lembrete enviado.', 'success'); }
+        else window.toast?.('Falha ao reenviar — copie o link manualmente.', 'error');
+      }
+      await carregar();
+    } catch (err) {
+      window.toast?.('Erro ao reenviar: ' + (err.message || err), 'error');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const copiarLink = async (s) => {
+    try { await navigator.clipboard.writeText(window.DocumentoSignatariosStore.signUrl(s.token)); window.toast?.('Link copiado.', 'success'); } catch (e) {}
+  };
+
+  return (
+    <div className="ci-drawer-sec">
+      <h3 className="ci-drawer-sec-title">Destinatários adicionais — link próprio</h3>
+      <p className="cv-field-hint" style={{ marginBottom: 10, display: 'block' }}>
+        Cadastrados no envio ("Outros destinatários → Deve assinar"). Cada um assina com seu próprio token, independente do representante.
+      </p>
+      {lista.map((s) => (
+        <div key={s.id} className="ci-audit-row" style={{ alignItems: 'center', gap: 8 }}>
+          <span className="k">{s.papel ? s.papel + ' — ' : ''}{s.nome}</span>
+          <span className="v" style={{ display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+            <CVSBadge status={s.status}/>
+            {s.status !== 'assinado' && (
+              <>
+                <button className="ci-mini-btn" disabled={busyId === s.id} onClick={() => reenviar(s)}>Reenviar e-mail</button>
+                <button className="ci-mini-btn" disabled={busyId === s.id} onClick={() => copiarLink(s)}>Copiar link</button>
+              </>
+            )}
+          </span>
+        </div>
+      ))}
     </div>
   );
 }
@@ -1259,6 +1417,7 @@ function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
           </div>
           <CVD0Section rec={rec} onSaved={onRefresh}/>
           <CVSignatariosSection rec={rec} onSaved={onRefresh}/>
+          <CVDocumentoSignatariosSection rec={rec}/>
           <CVDesenhoInstalacaoSection rec={rec} onSaved={onRefresh}/>
           <div className="ci-drawer-sec">
             <h3 className="ci-drawer-sec-title">Ações</h3>

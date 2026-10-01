@@ -119,7 +119,7 @@
         enviado:     { acao: 'enviou p/ assinatura' },
         visualizado: { acao: 'contraparte visualizou', ator: contraparte, setor: 'externo' },
         assinado:    { acao: 'contrato assinado', ator: (meta && meta.signerName) || contraparte, setor: 'externo' },
-        recusado:    { acao: 'assinatura recusada', ator: contraparte, setor: 'externo' },
+        recusado:    { acao: 'assinatura recusada' + (meta && meta.motivo ? ` — Motivo: ${meta.motivo}` : ''), ator: (meta && meta.nome) || contraparte, setor: 'externo' },
         expirado:    { acao: 'link de assinatura expirou', ator: 'Sistema', setor: 'sistema' },
       };
       const m = MAP[newStatus];
@@ -135,7 +135,7 @@
         enviado:     { level: 'info',    title: `Contrato instalador ${rec.numero_documento} enviado`, sub: `Para ${(rec.recipient && rec.recipient.name) || rec.responsavel_nome || ''} · canal ${meta && meta.channel ? (meta.channel === 'whatsapp' ? 'WhatsApp' : 'E-mail') : '—'}` },
         visualizado: { level: 'warning', title: `Contrato instalador ${rec.numero_documento} foi VISUALIZADO`, sub: `Aberto por ${(rec.recipient && rec.recipient.name) || ''} · ${meta && meta.ip ? 'IP ' + meta.ip + ' · ' : ''}${fmtDateTime(Date.now())}` },
         assinado:    { level: 'info',    title: `Contrato instalador ${rec.numero_documento} ASSINADO`, sub: `Por ${meta && meta.signerName ? meta.signerName : (rec.responsavel_nome || '')} · ${meta && meta.ip ? 'IP ' + meta.ip : ''}` },
-        recusado:    { level: 'danger',  title: `Contrato instalador ${rec.numero_documento} foi RECUSADO`, sub: `Recusado pelo destinatário em ${fmtDateTime(Date.now())}` },
+        recusado:    { level: 'danger',  title: `Contrato instalador ${rec.numero_documento} foi RECUSADO`, sub: `Recusado por ${(meta && meta.nome) || (rec.recipient && rec.recipient.name) || 'destinatário'} em ${fmtDateTime(Date.now())}${meta && meta.motivo ? ' — Motivo: ' + meta.motivo : ''}` },
         expirado:    { level: 'warning', title: `Contrato instalador ${rec.numero_documento} EXPIROU`, sub: `Link aguardando assinatura por 7 dias sem retorno` },
       };
       const cfg = map[newStatus];
@@ -454,18 +454,28 @@
     return updated;
   }
 
-  async function refuse(token) {
+  /* 01/10 — mesmo achado real do Contrato de Venda (cotação 955/AKAI):
+     recusa não registrava quem recusou nem por quê. Agora recebe
+     { nome, motivo } de `assinar-app.jsx` e grava com IP/dispositivo,
+     mesmo padrão de auditoria de `markViewed`/`markSigned`. */
+  async function refuse(token, info) {
     const c = sb();
     const cur = await getByToken(token);
     if (!cur) return null;
     const now = new Date();
+    const ip = await getPublicIP();
+    const ua = navigator.userAgent;
+    const device = deviceLabel(ua);
+    const nome = ((info && info.nome) || '').trim() || null;
+    const motivo = ((info && info.motivo) || '').trim() || null;
+    const audit = { ...(cur.audit || {}), refusedAt: now.toISOString(), refusedBy: nome, refusedReason: motivo, refuseIp: ip, refuseUa: ua, refuseDevice: device };
     const log = (cur.log || []).slice();
-    log.push({ status:'recusado', at: now.toISOString(), meta:{ at: now.toISOString() } });
-    const patch = { status:'recusado', log, atualizado_em: now.toISOString() };
+    log.push({ status:'recusado', at: now.toISOString(), meta:{ nome, motivo, ip } });
+    const patch = { status:'recusado', log, audit, atualizado_em: now.toISOString() };
     const { error } = await c.from('contratos_instalador').update(patch).eq('token', token);
     if (error) throw error;
     const updated = { ...cur, ...patch };
-    await pushNotification(updated, 'recusado', {});
+    await pushNotification(updated, 'recusado', { nome, motivo });
     return updated;
   }
 

@@ -142,6 +142,34 @@ async function resolveSource(token) {
       return { kind: 'venda_signatario', rec, store: window.CVSignatarioStore, Preview: window.CVContractPreview, engine: window.CV };
     }
   }
+  /* Signatários genéricos (01/10/2026 — ver documento-signatarios-store.js):
+     e-mails marcados explicitamente "deve assinar" no envio, cada um com
+     token próprio, 1 linha em `documento_signatarios`. Hoje só Contrato de
+     Venda usa este mecanismo (reaproveita o mesmo kind 'venda_signatario' —
+     mesma UI/engine do signatário sócio/jurídico, só troca a store de
+     origem); Proposta/Contrato Instalador plugam aqui depois sem mudar nada
+     nesta função, só adicionando um `case` no mapa STORE_POR_TIPO abaixo. */
+  if (window.DocumentoSignatariosStore) {
+    const s = await window.DocumentoSignatariosStore.getByToken(token);
+    if (s) {
+      const STORE_POR_TIPO = {
+        contrato_venda: { get: (id) => window.CVStore && window.CVStore.getById(id), Preview: window.CVContractPreview, engine: window.CV, kind: 'venda_signatario' },
+      };
+      const cfg = STORE_POR_TIPO[s.documento_tipo];
+      if (cfg) {
+        const documentoPai = cfg.get ? await cfg.get(s.documento_id) : null;
+        const rec = {
+          ...(documentoPai || {}),
+          id: s.id, token: s.token, status: s.status, audit: s.audit || {},
+          sent_at: s.sent_at, viewed_at: s.viewed_at, signed_at: s.signed_at,
+          recipient: s.recipient, channel: s.channel,
+          signatarioPapel: s.papel, signatarioNome: s.nome,
+          contratoStatus: documentoPai ? documentoPai.status : null,
+        };
+        return { kind: cfg.kind, rec, store: window.DocumentoSignatariosStore, Preview: cfg.Preview, engine: cfg.engine };
+      }
+    }
+  }
   if (window.PropostaStore) {
     const r = await window.PropostaStore.getByToken(token);
     if (r) return { kind: 'proposta', rec: r, store: window.PropostaStore, Preview: null, engine: null };
@@ -165,6 +193,10 @@ function SgApp() {
   const [showRevisao, setShowRevisao] = _sgUS(false);
   const [textoRevisao, setTextoRevisao] = _sgUS('');
   const [enviandoRevisao, setEnviandoRevisao] = _sgUS(false);
+  const [showRecusa, setShowRecusa] = _sgUS(false);
+  const [nomeRecusa, setNomeRecusa] = _sgUS('');
+  const [motivoRecusa, setMotivoRecusa] = _sgUS('');
+  const [enviandoRecusa, setEnviandoRecusa] = _sgUS(false);
   const [scrolledEnd, setScrolledEnd] = _sgUS(false);
   const [consent, setConsent] = _sgUS(false);
   const [sigMode, setSigMode] = _sgUS('draw');
@@ -195,7 +227,20 @@ function SgApp() {
       if (r.status === 'revisao_solicitada') { setSource(src); setPhase('revisao'); setLoading(false); return; }
 
       const updated = await src.store.markViewed(token);
-      setSource({ ...src, rec: updated || r });
+      /* 01/10 — achado real ao testar o novo DocumentoSignatariosStore: pra
+         'venda_signatario' (sócio/jurídico OU o novo signatário genérico),
+         `r` carrega os campos do CONTRATO-PAI mesclados (numero_documento,
+         form_state, titulo…) + o status/token PRÓPRIOS do signatário — mas
+         `markViewed` da store do signatário só sabe consultar a própria
+         tabela (signatários), então `updated` tem só status/audit/viewed_at,
+         sem nenhum campo do contrato. Usar `updated` sozinho (como antes)
+         apagava numero_documento/form_state do documento renderizado assim
+         que a página marcava "visualizado" — o cliente via "VPCV-XXXX" em
+         vez do número real logo na primeira abertura do link. Mesclar por
+         cima de `r` corrige isso e continua correto pros outros kinds
+         (instalador/venda/proposta), cujo `updated` já É a linha completa
+         da própria tabela — sobrescrever tudo de `r` não perde nada ali. */
+      setSource({ ...src, rec: updated ? { ...r, ...updated } : r });
       setLoading(false);
     })();
   }, [token]);
@@ -342,7 +387,11 @@ function SgApp() {
        avisa, pra o cliente poder tentar de novo. */
     try {
       const updated = await source.store.markSigned(token, sig);
-      setSource({ ...source, rec: updated });
+      /* Mesmo cuidado do markViewed acima — mescla por cima do rec atual em
+         vez de substituir, senão o resumo/"baixar PDF" da tela 'done' perde
+         numero_documento/form_state pra um signatário extra (sócio/jurídico
+         ou o novo DocumentoSignatariosStore). */
+      setSource({ ...source, rec: updated ? { ...source.rec, ...updated } : source.rec });
       setPhase('done');
     } catch (e) {
       window.alert('Não foi possível registrar sua assinatura agora. Tente novamente em instantes — se o problema continuar, entre em contato com a VerticalParts.\n\n' + (e.message || e));
@@ -352,21 +401,44 @@ function SgApp() {
 
   const isPropostaSrc = source && source.kind === 'proposta';
 
-  const handleRefuse = async () => {
+  /* 01/10 — achado real do usuário (cotação 955/AKAI): um contrato apareceu
+     "recusado" sem registro nenhum de QUEM recusou nem POR QUÊ — refuse()
+     nunca pediu nem gravou nada além do carimbo de data/hora. Agora abre um
+     modal (em vez do window.confirm cru de antes) pedindo nome (obrigatório)
+     e motivo (opcional) antes de confirmar — mesmo padrão visual do modal
+     de "Pedir revisão" logo abaixo. */
+  const handleRefuse = () => {
     if (!source) return;
-    const pergunta = isPropostaSrc
-      ? 'Confirma que não tem interesse nesta proposta? A VerticalParts será notificada.'
-      : 'Recusar a assinatura deste contrato? A VerticalParts será notificada.';
-    if (!window.confirm(pergunta)) return;
+    const rec = source.rec;
+    const defaultName = source.kind === 'instalador'
+      ? (rec.responsavel_nome || rec.contratada_nome)
+      : source.kind === 'proposta'
+      ? ((window.PropostaStore.conteudoRenderizavel(rec).data.cliente || {}).nome)
+      : source.kind === 'venda_signatario'
+      ? rec.signatarioNome
+      : (rec.responsavel_nome || rec.comprador_razao_social);
+    setNomeRecusa(defaultName || '');
+    setMotivoRecusa('');
+    setShowRecusa(true);
+  };
+
+  const confirmarRecusa = async () => {
+    if (!source) return;
+    const nome = nomeRecusa.trim();
+    if (!nome) { window.alert('Informe seu nome.'); return; }
+    setEnviandoRecusa(true);
     /* 28/09 — mesmo motivo do try/catch em handleSign: refuse() agora
        lança em falha de gravação, então precisa de tratamento aqui pra
        não deixar a tela sem retorno nenhum pro cliente. */
     try {
-      const updated = await source.store.refuse(token);
-      setSource({ ...source, rec: updated });
+      const updated = await source.store.refuse(token, { nome, motivo: motivoRecusa.trim() });
+      setSource({ ...source, rec: updated ? { ...source.rec, ...updated } : source.rec });
+      setShowRecusa(false);
       setPhase('refused');
     } catch (e) {
       window.alert('Não foi possível registrar sua resposta agora. Tente novamente em instantes.\n\n' + (e.message || e));
+    } finally {
+      setEnviandoRecusa(false);
     }
   };
 
@@ -650,6 +722,37 @@ function SgApp() {
               <button className="ci-sign-sub-action" disabled={enviandoRevisao} onClick={() => setShowRevisao(false)}>Cancelar</button>
               <button className="ci-sign-btn" disabled={enviandoRevisao || !textoRevisao.trim()} onClick={handleSolicitarRevisao}>
                 {enviandoRevisao ? 'Enviando…' : 'Enviar pedido de revisão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRecusa && (
+        <div className="ci-modal-backdrop" onClick={() => !enviandoRecusa && setShowRecusa(false)}>
+          <div className="ci-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>{isProposta ? 'Não tenho interesse' : 'Recusar assinatura'}</h2>
+            <p className="small">A VerticalParts será notificada. Confirme seu nome e, se quiser, conte o motivo — ajuda a equipe a te dar o retorno certo.</p>
+            <input
+              className="ci-modal-input"
+              value={nomeRecusa}
+              onChange={(e) => setNomeRecusa(e.target.value)}
+              placeholder="Seu nome completo"
+              disabled={enviandoRecusa}
+              autoFocus
+            />
+            <textarea
+              className="ci-modal-textarea"
+              rows={4}
+              value={motivoRecusa}
+              onChange={(e) => setMotivoRecusa(e.target.value)}
+              placeholder="Motivo (opcional) — ex.: preço, prazo, mudou de fornecedor..."
+              disabled={enviandoRecusa}
+            />
+            <div className="ci-modal-actions">
+              <button className="ci-sign-sub-action" disabled={enviandoRecusa} onClick={() => setShowRecusa(false)}>Cancelar</button>
+              <button className="ci-sign-btn" disabled={enviandoRecusa || !nomeRecusa.trim()} onClick={confirmarRecusa}>
+                {enviandoRecusa ? 'Enviando…' : 'Confirmar'}
               </button>
             </div>
           </div>

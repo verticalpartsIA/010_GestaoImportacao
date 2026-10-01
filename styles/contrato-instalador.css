@@ -469,6 +469,7 @@
 .ci-modal h2 { margin: 0 0 8px; font-size: 17px; }
 .ci-modal p.small { margin: 0 0 14px; font-size: 12.5px; color: var(--ci-fg2); line-height: 1.5; }
 .ci-modal-textarea { width: 100%; box-sizing: border-box; border: 1px solid var(--ci-border, #ddd); border-radius: 4px; padding: 10px; font: inherit; font-size: 13px; resize: vertical; min-height: 100px; }
+.ci-modal-input { width: 100%; box-sizing: border-box; border: 1px solid var(--ci-border, #ddd); border-radius: 4px; padding: 10px; font: inherit; font-size: 13px; margin-bottom: 10px; }
 .ci-modal-actions { display: flex; justify-content: flex-end; gap: 10px; margin-top: 16px; }
 .ci-modal-actions .ci-sign-sub-action, .ci-modal-actions .ci-sign-btn { width: auto; margin-top: 0; }
 .ci-modal-actions .ci-sign-sub-action { color: var(--ci-fg2); padding: 10px 14px; }

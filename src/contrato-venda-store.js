@@ -115,7 +115,7 @@
         visualizado: { acao: 'contraparte visualizou', ator: contraparte, setor: 'externo' },
         assinado:    { acao: 'contrato assinado', ator: (meta && meta.signerName) || contraparte, setor: 'externo' },
         assinado_representante: { acao: 'representante assinou — aguardando outros signatários (sócios/jurídico)', ator: (meta && meta.signerName) || contraparte, setor: 'externo' },
-        recusado:    { acao: 'assinatura recusada', ator: contraparte, setor: 'externo' },
+        recusado:    { acao: 'assinatura recusada' + (meta && meta.motivo ? ` — Motivo: ${meta.motivo}` : ''), ator: (meta && meta.nome) || contraparte, setor: 'externo' },
         expirado:    { acao: 'link de assinatura expirou', ator: 'Sistema', setor: 'sistema' },
       };
       const m = MAP[newStatus];
@@ -134,7 +134,7 @@
         visualizado: { level: 'warning', title: `Contrato venda ${num} foi VISUALIZADO`,         sub: `Aberto por ${titularNome} · ${meta && meta.ip ? 'IP ' + meta.ip + ' · ' : ''}${fmtDateTime(Date.now())}` },
         assinado:    { level: 'info',    title: `Contrato venda ${num} ASSINADO`,                sub: `Por ${meta && meta.signerName ? meta.signerName : titularNome} · ${meta && meta.ip ? 'IP ' + meta.ip : ''}` },
         assinado_representante: { level: 'info', title: `Contrato venda ${num} — representante assinou`, sub: `Aguardando outros signatários (sócios/jurídico) para concluir · ${meta && meta.signerName ? meta.signerName : titularNome}` },
-        recusado:    { level: 'danger',  title: `Contrato venda ${num} foi RECUSADO`,            sub: `Recusado pelo destinatário em ${fmtDateTime(Date.now())}` },
+        recusado:    { level: 'danger',  title: `Contrato venda ${num} foi RECUSADO`,            sub: `Recusado por ${(meta && meta.nome) || titularNome || 'destinatário'} em ${fmtDateTime(Date.now())}${meta && meta.motivo ? ' — Motivo: ' + meta.motivo : ''}` },
         expirado:    { level: 'warning', title: `Contrato venda ${num} EXPIROU`,                 sub: `Link aguardando assinatura por 7 dias sem retorno` },
       };
       const cfg = map[newStatus];
@@ -559,7 +559,8 @@
     log.push({ status:'assinado', at: now.toISOString(), meta:{ ip, ua, hash } });
 
     const pendentesExtras = window.CVSignatarioStore ? await window.CVSignatarioStore.contarPendentes(cur.id) : 0;
-    const statusFinal = pendentesExtras > 0 ? 'aguardando_signatarios' : 'assinado';
+    const pendentesDocSig = window.DocumentoSignatariosStore ? await window.DocumentoSignatariosStore.contarPendentes('contrato_venda', cur.id) : 0;
+    const statusFinal = (pendentesExtras > 0 || pendentesDocSig > 0) ? 'aguardando_signatarios' : 'assinado';
 
     let patch = { audit, log, status: statusFinal, atualizado_em: now.toISOString() };
     if (statusFinal === 'assinado') {
@@ -605,7 +606,8 @@
     if (cur.status === 'assinado') return cur;
     if (!cur.audit || !cur.audit.signedAt) return cur; // representante ainda não assinou
     const pendentes = window.CVSignatarioStore ? await window.CVSignatarioStore.contarPendentes(contratoId) : 0;
-    if (pendentes > 0) return cur;
+    const pendentesDocSig = window.DocumentoSignatariosStore ? await window.DocumentoSignatariosStore.contarPendentes('contrato_venda', contratoId) : 0;
+    if (pendentes > 0 || pendentesDocSig > 0) return cur;
 
     const now = new Date();
     const formState = _formStateFinalizado(cur, now);
@@ -626,18 +628,30 @@
     return updated;
   }
 
-  async function refuse(token) {
+  /* 01/10 — achado real (cotação 955/AKAI): recusa não registrava QUEM
+     recusou nem POR QUÊ, só o carimbo de data/hora — impossível saber se
+     foi mesmo o cliente ou com que motivo sem contatá-lo de novo. Agora
+     recebe { nome, motivo } (preenchido pela própria página pública,
+     `assinar-app.jsx`) e grava junto com IP/dispositivo, mesmo padrão de
+     auditoria que `markViewed`/`markSigned` já usam. */
+  async function refuse(token, info) {
     const c = sb();
     const cur = await getByToken(token);
     if (!cur) return null;
     const now = new Date();
+    const ip = await getPublicIP();
+    const ua = navigator.userAgent;
+    const device = deviceLabel(ua);
+    const nome = ((info && info.nome) || '').trim() || null;
+    const motivo = ((info && info.motivo) || '').trim() || null;
+    const audit = { ...(cur.audit || {}), refusedAt: now.toISOString(), refusedBy: nome, refusedReason: motivo, refuseIp: ip, refuseUa: ua, refuseDevice: device };
     const log = (cur.log || []).slice();
-    log.push({ status:'recusado', at: now.toISOString(), meta:{ at: now.toISOString() } });
-    const patch = { status:'recusado', log, atualizado_em: now.toISOString() };
+    log.push({ status:'recusado', at: now.toISOString(), meta:{ nome, motivo, ip } });
+    const patch = { status:'recusado', log, audit, atualizado_em: now.toISOString() };
     const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
     if (error) throw error;
     const updated = { ...cur, ...patch };
-    await pushNotification(updated, 'recusado', {});
+    await pushNotification(updated, 'recusado', { nome, motivo });
     return updated;
   }
 
