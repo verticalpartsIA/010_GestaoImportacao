@@ -107,6 +107,10 @@
   <!-- Registro central de atividades (auditoria global) -->
   <script src="/src/vp-log.js?v=2"></script>
 
+  <!-- Envio de e-mail direto (SMTP) + fallback mailto: — compartilhado por
+       RFQ/Proposta/Contrato de Venda/Contrato Instalador -->
+  <script src="/src/email-envio-helper.js?v=1"></script>
+
   <!-- Gatilhos & Prazo — motor que nasce/fecha nós automaticamente a partir
        dos eventos de eventos-fluxo-store.js (carrega ANTES dele) -->
   <script src="/src/gatilhos-engine.js?v=14"></script>
@@ -166,7 +170,7 @@
   <script src="/src/cambio-api.js?v=2"></script>
   <script src="/src/formulario-elevador-store.js?v=20"></script>
   <script src="/src/cotacao-elevador-fornecedor-store.js?v=22"></script>
-  <script type="text/vp-jsx" src="/src/formulario-elevador.jsx?v=7"></script>
+  <script type="text/vp-jsx" src="/src/formulario-elevador.jsx?v=8"></script>
 
   <!-- Quadro de Comando (Comercial · Formulários) — BOM + lista de corte
        + checklist digital de separação quando fabricado internamente. -->
@@ -211,7 +215,7 @@
        gerado por `npm run build:pdf:proposta` a partir de
        pdf-bundle/proposta-reactpdf.entry.js. Só Elevador por enquanto. -->
   <script src="/src/proposta-reactpdf.bundle.js?v=8"></script>
-  <script type="text/vp-jsx" src="/src/proposta-editor.jsx?v=47"></script>
+  <script type="text/vp-jsx" src="/src/proposta-editor.jsx?v=48"></script>
   <script type="text/vp-jsx" src="/src/ncm.jsx?v=6"></script>
 
   <!-- Funil de pré-venda por setores (workflow + histórico) — antes do Catálogo -->
@@ -294,7 +298,7 @@
   <script src="/src/contrato-instalador-parcelas-store.js?v=3"></script>
   <script src="/src/contrato-instalador-store.js?v=12"></script>
   <script type="text/vp-jsx" src="/src/contrato-instalador-preview.jsx?v=2"></script>
-  <script type="text/vp-jsx" src="/src/contrato-instalador.jsx?v=15"></script>
+  <script type="text/vp-jsx" src="/src/contrato-instalador.jsx?v=16"></script>
   <script type="text/vp-jsx" src="/src/pagamentos-instalador.jsx?v=3"></script>
 
   <!-- Jurídico · Contrato Venda de Equipamentos (cliente final) -->
@@ -304,7 +308,7 @@
   <!-- Motor de PDF do Contrato de Venda (react-pdf) — layout idêntico à minuta oficial. Ver pdf-bundle/contrato-venda-reactpdf.entry.js -->
   <script src="/src/contrato-venda-reactpdf.bundle.js?v=2"></script>
   <script type="text/vp-jsx" src="/src/contrato-venda-preview.jsx?v=4"></script>
-  <script type="text/vp-jsx" src="/src/contrato-venda.jsx?v=24"></script>
+  <script type="text/vp-jsx" src="/src/contrato-venda.jsx?v=25"></script>
 
   <!-- Engenharia · Ficha Técnica (gerador universal) -->
   <script src="/src/ficha-tecnica-engine.js?v=10"></script>

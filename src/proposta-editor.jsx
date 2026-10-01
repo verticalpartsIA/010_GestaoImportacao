@@ -417,22 +417,13 @@ function PropostaSendModal({ record, onClose, onSent }) {
            resposta do cliente de volta a esta cotação. Cai pro mailto:
            (como sempre foi) só se o envio direto falhar — nunca deixa o
            vendedor sem alternativa. */
-        const sb = window.__VP_SB && window.__VP_SB.sb;
-        let enviouDireto = false;
-        if (sb) {
-          const { data: emailData, error: emailError } = await sb.functions.invoke('send-email', {
-            body: {
-              to: contact, subject: `Proposta ${record.numero_documento} — VerticalParts`, text: message,
-              numeroCotacao: record.numeroCotacao ?? null, referenciaTipo: 'proposta', referenciaId: record.id,
-            },
-          });
-          if (!emailError && emailData && emailData.ok) {
-            enviouDireto = true;
-            if (emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
-          } else {
-            console.warn('[PropostaSendModal] send-email falhou, caindo pro mailto:', emailError, emailData);
-          }
-        }
+        /* 01/10 — chamada em si extraída pro EmailEnvioHelper (compartilhado
+           com RFQ/Contrato de Venda/Contrato Instalador); sucesso/falha
+           continuam decididos aqui, sem mudança de comportamento. */
+        const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: contact, subject: `Proposta ${record.numero_documento} — VerticalParts`, text: message,
+          numeroCotacao: record.numeroCotacao ?? null, referenciaTipo: 'proposta', referenciaId: record.id,
+        });
         if (enviouDireto) {
           await store.markSent(record.id, channel, { name, contact });
           window.toast?.(`E-mail enviado para ${contact}.`, 'success');
