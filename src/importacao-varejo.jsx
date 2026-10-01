@@ -289,7 +289,7 @@ function ImportacaoVarejoPage({ setRoute }) {
     });
   }, [items, busca, corFiltro, curvaFiltro]);
 
-  const totais = React.useMemo(() => filtrados.reduce((acc, i) => {
+  const calcularTotais = (lista) => lista.reduce((acc, i) => {
     const temPrecoEPrecisaComprar = i.sugestaoCompra > 0 && i.ultimoPrecoUnitario != null;
     return {
       estoqueFisico: acc.estoqueFisico + i.estoqueFisico,
@@ -299,7 +299,8 @@ function ImportacaoVarejoPage({ setRoute }) {
       valorAPagar: acc.valorAPagar + (temPrecoEPrecisaComprar ? i.sugestaoCompra * i.ultimoPrecoUnitario : 0),
       itensSemPreco: acc.itensSemPreco + (i.sugestaoCompra > 0 && i.ultimoPrecoUnitario == null ? 1 : 0),
     };
-  }, { estoqueFisico: 0, estoqueDisponivel: 0, sugestaoCompra: 0, comprado: 0, valorAPagar: 0, itensSemPreco: 0 }), [filtrados]);
+  }, { estoqueFisico: 0, estoqueDisponivel: 0, sugestaoCompra: 0, comprado: 0, valorAPagar: 0, itensSemPreco: 0 });
+  const totais = React.useMemo(() => calcularTotais(filtrados), [filtrados]);
 
   const forcarSync = async () => {
     setSincronizando(true);
@@ -327,6 +328,7 @@ function ImportacaoVarejoPage({ setRoute }) {
     return next;
   });
   const itensSelecionados = items.filter((i) => selecionados.has(i.codigo));
+  const totaisSelecionados = calcularTotais(itensSelecionados);
   const todosFiltradosSelecionados = filtrados.length > 0 && filtrados.every((i) => selecionados.has(i.codigo));
   const algunsFiltradosSelecionados = !todosFiltradosSelecionados && filtrados.some((i) => selecionados.has(i.codigo));
   const toggleSelecionarTodosFiltrados = () => setSelecionados((prev) => {
@@ -403,9 +405,12 @@ function ImportacaoVarejoPage({ setRoute }) {
         <KPI label="Curva D com estoque parado" value={filtrados.filter((i) => i.conselho).length} sub="considere pausar compra" icon="fileSearch" />
         <KPI
           label="Valores a pagar (estimado)"
-          value={ivFmtMoeda(totais.valorAPagar)}
-          sub={totais.itensSemPreco > 0 ? `${totais.itensSemPreco} item(ns) sem preço conhecido` : 'com base no último preço pago'}
+          value={ivFmtMoeda(selecionados.size > 0 ? totaisSelecionados.valorAPagar : totais.valorAPagar)}
+          sub={selecionados.size > 0
+            ? `${itensSelecionados.length} selecionado(s)${totaisSelecionados.itensSemPreco > 0 ? ` · ${totaisSelecionados.itensSemPreco} sem preço` : ''}`
+            : (totais.itensSemPreco > 0 ? `${totais.itensSemPreco} item(ns) sem preço conhecido` : 'com base no último preço pago')}
           icon="dollar"
+          style={selecionados.size > 0 ? { boxShadow: '0 0 0 2px var(--vp-info)' } : undefined}
         />
       </div>
 
