@@ -418,6 +418,12 @@ Deno.serve(async (req: Request) => {
           html: grandeDemais ? null : (html ? html.slice(0, 20000) : null),
           numeroCotacao,
           vinculoConfianca: vinculo,
+          // 01/10 — já era calculado (referenciaTipoHerdada) e gravado na
+          // linha de emails_projeto, mas nunca devolvido no JSON pro
+          // frontend — a tela do Inbox não tinha como mostrar de qual
+          // documento (RFQ/Proposta/Contrato/Tratativa) veio a resposta,
+          // só o Nº da cotação. Campo aditivo, não muda nenhum vínculo.
+          referenciaTipo: referenciaTipoHerdada,
           anexos: anexosComUrl,
           to: toList,
           cc: ccList,
