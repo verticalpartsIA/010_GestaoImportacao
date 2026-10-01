@@ -155,7 +155,7 @@ function CVStepCadastro({ form, setComp, errors, onSelecionarProposta }) {
         <CVField label="Representante legal" required width="full" value={form.comprador.rep} onChange={(v) => setComp({ rep: v })} placeholder="Nome completo" error={errors.rep}/>
       </div>
       <div className="cv-grid">
-        <CVField label="Cargo" value={form.comprador.repCargo} onChange={(v) => setComp({ repCargo: v })} placeholder="ex: Diretor"/>
+        <CVField label="Cargo do representante" required value={form.comprador.repCargo} onChange={(v) => setComp({ repCargo: v })} placeholder="ex: Sócio administrador" error={errors.repCargo}/>
         <CVField label="CPF do representante" required mask="maskCPF" mono value={form.comprador.repCpf} onChange={(v) => setComp({ repCpf: v })} placeholder="000.000.000-00" error={errors.repCpf}/>
       </div>
       <div className="cv-grid">
@@ -506,6 +506,7 @@ function validateStep(idx, s) {
     const vazio = (v) => !v || !String(v).trim();
     if (vazio(s.comprador.endereco)) e.endereco = 'Informe o endereço da sede.';
     if (!window.CV.isCPFValid(s.comprador.repCpf)) e.repCpf = 'CPF inválido (confira os dígitos).';
+    if (vazio(s.comprador.repCargo)) e.repCargo = 'Informe o cargo do representante (ex.: Sócio administrador).';
     if (vazio(s.comprador.repNacionalidade)) e.repNacionalidade = 'Informe a nacionalidade.';
     if (vazio(s.comprador.repEstadoCivil)) e.repEstadoCivil = 'Informe o estado civil.';
     if (vazio(s.comprador.repProfissao)) e.repProfissao = 'Informe a profissão.';
@@ -643,6 +644,7 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
         razao: cli.nome || prev.comprador.razao,
         cnpj: (cli.cnpj && window.CV.maskCNPJ(cli.cnpj)) || prev.comprador.cnpj,
         rep: cli.responsavel || prev.comprador.rep,
+        repCargo: cli.cargo || cli.responsavel_cargo || prev.comprador.repCargo,
         email: cli.email || prev.comprador.email,
         tel: cli.telefone || prev.comprador.tel,
         endereco: endCli || prev.comprador.endereco,
