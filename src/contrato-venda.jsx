@@ -585,7 +585,7 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
     /* Descrição da cláusula 1.1 (antes ficava o marcador "DESCREVER CONFORME
        PROPOSTA COMERCIAL" da minuta): montada da especificação da Proposta. */
     const descPropostaInf = [
-      spec.carac,
+      (spec.carac && !new RegExp('\\b' + String(spec.carac).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '\\b', 'i').test(String(spec.capacidade || ''))) ? spec.carac : '',
       spec.capacidade,
       spec.andaresParadasPortas,
       spec.vel && `velocidade ${String(spec.vel).replace('.', ',')} m/s`,

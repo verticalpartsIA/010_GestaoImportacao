@@ -191,7 +191,7 @@
 .cv-doc-li.cv-doc-indent::before { content: '\2713'; left: 14pt; }
 /* Blocos de dados (local de entrega, dados bancários, contatos): na minuta
    são texto simples recuado, sem caixa */
-.cv-doc-callout { padding-left: 28pt; }
+.cv-doc-callout { padding-left: 28pt; text-align: left; }
 .cv-doc-injected {
   background: #fef3c7; border-left: 3px solid #E89A1F;
   padding: 8pt 12pt; margin: 8pt 0;
