@@ -70,9 +70,16 @@
         // usada pelo RFQ (referencia_tipo 'cotacao_fornecedor') — faz o
         // FEEmailRespondidoBadge (que filtra só por referencia_id) acender
         // também pra resposta de Tratativas, o que é correto aqui.
+        // Assunto também reescrito pra "Cotação Nº N" (01/10, 2ª rodada) —
+        // mesmo padrão que o regex 'provável' do read-inbox reconhece
+        // (/Cota[cç][aã]o\s*N[ºo]\.?\s*0*(\d{2,6})/i). Reforço, não
+        // substituição: o vínculo 'certo' por referenciaId acima já resolve
+        // o caso comum (resposta preserva In-Reply-To); isso cobre o caso
+        // raro de thread quebrada (fornecedor inicia e-mail novo, sem
+        // responder) caindo na camada 'provável' em vez de ficar órfã.
         const { error: emailError } = await c.functions.invoke('send-email', {
           to: email,
-          subject: `Nova mensagem na Cotação ${numeroCotacao || ''}`,
+          subject: `Nova mensagem — Cotação Nº ${numeroCotacao || ''} — VerticalParts`,
           html: `<p>Você recebeu uma nova mensagem sobre a cotação.</p>
                  <p><strong>${autor || autorAtual()}:</strong></p>
                  <p>${mensagem?.trim()?.replace(/\n/g, '<br/>') || '(Sem texto, apenas anexos)'}</p>
