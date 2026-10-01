@@ -290,3 +290,39 @@ test('restaurarEquipamentoMO — desfaz a exclusão, devolvendo o equipamento pr
     window.__VP_SB = antigoSb;
   }
 });
+
+/* ---------- Containers: capatazia herdada + aviso de divergência (01/10/2026) ---------- */
+const { enriquecerContainersComCusto, divergenciasContainerComCadastro } = window.PrecificacaoElevadorStore;
+const CUSTOS_CONT = [
+  { tipo: '20GP (Padrão)', ativo: true, preco_rs: 31243.2, capatazia_rs: 6000 },
+  { tipo: '40HC (High Cube)', ativo: true, preco_rs: 36450.4, capatazia_rs: null },
+];
+
+test('enriquecerContainersComCusto — herda preço e capatazia do cadastro quando a linha não tem valor', () => {
+  const [ct] = enriquecerContainersComCusto([{ tipo_tamanho: "20'DV", quantidade: 1, preco_rs: 0 }], CUSTOS_CONT);
+  assert.equal(ct.preco_rs, 31243.2);
+  assert.equal(ct.capatazia_rs, 6000);
+});
+
+test('enriquecerContainersComCusto — nunca sobrescreve valor já digitado (preço nem capatazia)', () => {
+  const [ct] = enriquecerContainersComCusto([{ tipo_tamanho: "20'DV", quantidade: 1, preco_rs: 30000, capatazia_rs: 5000 }], CUSTOS_CONT);
+  assert.equal(ct.preco_rs, 30000);
+  assert.equal(ct.capatazia_rs, 5000);
+});
+
+test('enriquecerContainersComCusto — cadastro sem capatazia não cria capatazia; tipo sem mapeamento fica intacto', () => {
+  const [a, b] = enriquecerContainersComCusto([{ tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 0 }, { tipo_tamanho: 'Outro', quantidade: 1, preco_rs: 0 }], CUSTOS_CONT);
+  assert.equal(a.preco_rs, 36450.4);
+  assert.equal(a.capatazia_rs, undefined);
+  assert.deepEqual(b, { tipo_tamanho: 'Outro', quantidade: 1, preco_rs: 0 });
+});
+
+test('divergenciasContainerComCadastro — avisa quando preço/capatazia diferem do cadastro, só com os dois lados preenchidos', () => {
+  const div = divergenciasContainerComCadastro([
+    { tipo_tamanho: "20'DV", quantidade: 1, preco_rs: 36450.4, capatazia_rs: 6000 },   // preço diverge, capatazia igual
+    { tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 36450.4, capatazia_rs: 100 },    // cadastro sem capatazia → não compara
+    { tipo_tamanho: 'Outro', quantidade: 1, preco_rs: 1 },                              // sem mapeamento → não compara
+  ], CUSTOS_CONT);
+  assert.equal(div.length, 1);
+  assert.deepEqual({ i: div[0].indice, campo: div[0].campo, atual: div[0].atual, cadastro: div[0].cadastro }, { i: 0, campo: 'preco_rs', atual: 36450.4, cadastro: 31243.2 });
+});

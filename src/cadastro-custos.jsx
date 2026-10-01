@@ -321,6 +321,23 @@ function CCContainersTab() {
     }
   };
 
+  /* Capatazia (01/10/2026): mesma mecânica do Preço — USD recalcula o R$ pelo
+     câmbio de hoje num único save; R$ continua editável. A Precificação herda
+     esse valor como Despesa Operacional (ver enriquecerContainersComCusto). */
+  const salvarCapataziaUsd = async (row, usd) => {
+    setSaving(row.id);
+    try {
+      const patch = { ...row, capatazia_usd: usd };
+      if (cambioHoje && usd) patch.capatazia_rs = Math.round(usd * cambioHoje.valor * 100) / 100;
+      await window.CadastroCustosStore.salvarContainer(patch);
+      await reload();
+    } catch (e) {
+      window.toast?.('Erro ao salvar: ' + e.message, 'error');
+    } finally {
+      setSaving(null);
+    }
+  };
+
   /* tipo é NOT NULL UNIQUE no banco — nasce com um placeholder óbvio e
      único (timestamp) pra não colidir; o Financeiro renomeia na hora. */
   const adicionarContainer = async () => {
@@ -359,6 +376,7 @@ function CCContainersTab() {
           <thead><tr>
             <th>Tipo</th><th>Compr. (m)</th><th>Altura</th><th>Capac. (m³)</th>
             <th className="text-right">Preço (USD)</th><th className="text-right">Preço (R$)</th>
+            <th className="text-right">Capatazia (USD)</th><th className="text-right">Capatazia (R$)</th>
             <th>Data cotação</th><th>Fornecedor</th><th>Observações</th><th></th>
           </tr></thead>
           <tbody>
@@ -378,6 +396,18 @@ function CCContainersTab() {
                       Câmbio hoje: <b>{cambioHoje.valor.toFixed(4)}</b>{' '}
                       <Button variant="ghost" size="sm" disabled={saving === r.id}
                         onClick={() => salvarCampo(r, 'preco_rs', Math.round(Number(r.preco_usd) * cambioHoje.valor * 100) / 100)}>
+                        Recalcular
+                      </Button>
+                    </div>
+                  )}
+                </td>
+                <td className="text-right"><PZCurrencyInput moeda="USD" value={r.capatazia_usd} onChange={(v) => salvarCapataziaUsd(r, v)}/></td>
+                <td className="text-right">
+                  <PZCurrencyInput moeda="BRL" value={r.capatazia_rs} onChange={(v) => salvarCampo(r, 'capatazia_rs', v)}/>
+                  {cambioHoje && r.capatazia_usd > 0 && (
+                    <div className="small" style={{ marginTop: 4, color: 'var(--fg3)', whiteSpace: 'nowrap' }}>
+                      <Button variant="ghost" size="sm" disabled={saving === r.id}
+                        onClick={() => salvarCampo(r, 'capatazia_rs', Math.round(Number(r.capatazia_usd) * cambioHoje.valor * 100) / 100)}>
                         Recalcular
                       </Button>
                     </div>

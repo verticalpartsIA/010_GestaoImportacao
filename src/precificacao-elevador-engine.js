@@ -40,7 +40,16 @@
     const D9_siscomexRs = Number(inputs.siscomexRs) || 0;
     const D12_txCambial = Number(inputs.txCambial) || 0;
     const D13_outrasDespesasRs = Number(inputs.outrasDespesasImportacaoRs) || 0;
-    const D11_afrmmRs = D8_freteSeguroCapataziaUsd * 0.08 * D12_txCambial;
+    /* Container e capatazia são Despesa Operacional (herdados do cadastro de
+       Containers, decisão do Financeiro 01/10/2026). `containerRateioDivisor`
+       divide os dois quando o container é compartilhado (card 120d com 1
+       equipamento); 1 = container inteiro (card 90d / 2+ equipamentos). */
+    const containers = Array.isArray(inputs.containers) ? inputs.containers : [];
+    const rateio = Math.max(Number(inputs.containerRateioDivisor) || 1, 1);
+    const K13_containersRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.preco_rs) || 0), 0) / rateio;
+    const K13b_capataziaRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.capatazia_rs) || 0), 0) / rateio;
+    // AFRMM = 8% do frete marítimo: frete informado (USD) + container + capatazia (R$).
+    const D11_afrmmRs = (D8_freteSeguroCapataziaUsd * D12_txCambial + K13_containersRs + K13b_capataziaRs) * 0.08;
 
     // ---------- Despesas extras (K6:K12) ----------
     const itensInstalacao = Array.isArray(inputs.itensInstalacaoMontagem) ? inputs.itensInstalacaoMontagem : [];
@@ -52,8 +61,7 @@
     // K13_containersRs não é célula original da planilha — extensão (28/08) pro
     // card "Despesas Operacionais" (Containers), soma no mesmo bucket que
     // Instalação e Montagem já usava (K11).
-    const containers = Array.isArray(inputs.containers) ? inputs.containers : [];
-    const K13_containersRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.preco_rs) || 0), 0);
+    // (K13_containersRs e K13b_capataziaRs já calculados acima, junto do AFRMM.)
     // K14_despesasExtrasItensRs também não é célula original — lista avulsa
     // do card catch-all "Despesas Extras", mesmo bucket de K11/K13.
     const itensExtras = Array.isArray(inputs.itensDespesasExtras) ? inputs.itensDespesasExtras : [];
@@ -66,7 +74,7 @@
     const S23_vmldRs = S20_vmleRs + S21_seguroRs + S22_freteRs;
 
     const K7_adValoremRs = S23_vmldRs * 0.001; // Ad-Valorem = VMLD * 0,1%
-    const K12_despesasExtrasTotalRs = K6_despachanteRs + K7_adValoremRs + K8_demurrageRs + K9_freteInternoRs + K10_armazenagemRs + K11_instalacaoMontagemRs + K13_containersRs + K14_despesasExtrasItensRs;
+    const K12_despesasExtrasTotalRs = K6_despachanteRs + K7_adValoremRs + K8_demurrageRs + K9_freteInternoRs + K10_armazenagemRs + K11_instalacaoMontagemRs + K13_containersRs + K13b_capataziaRs + K14_despesasExtrasItensRs;
 
     // ---------- Cascata de impostos na importação (M24:S30) ----------
     const M24_bcII = S23_vmldRs;
@@ -182,7 +190,7 @@
         totalNotaFiscal: U31_totalNotaFiscal, despesasInstalacaoMontagem: U32_despesasInstalacaoMontagem,
         totalDesembolso: U33_totalDesembolso, creditos: U34_creditos,
         custoTotalMercadorias: U35_custoTotalMercadorias, custoPorEquipamento: U36_custoPorEquipamento,
-        afrmm: D11_afrmmRs, adValorem: K7_adValoremRs, despesasExtrasTotal: K12_despesasExtrasTotalRs, containersRs: K13_containersRs,
+        afrmm: D11_afrmmRs, adValorem: K7_adValoremRs, despesasExtrasTotal: K12_despesasExtrasTotalRs, containersRs: K13_containersRs, capataziaRs: K13b_capataziaRs,
         itensDespesasExtrasRs: K14_despesasExtrasItensRs,
       },
       modelos: modelosComRateio,
