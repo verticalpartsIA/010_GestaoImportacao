@@ -682,7 +682,11 @@
        modalidade pra quem não precisa dela. */
     const freteExpressoUsd = Number(pz.frete_seguro_capatazia_usd_expresso) || 0;
     const resultadoV2Expresso = freteExpressoUsd > 0
-      ? window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, freteSeguroCapataziaUsd: freteExpressoUsd, difalCustoRs, ...v2Extras })
+      ? window.PrecificacaoElevadorEngine.calcularV2({
+          ...baseInputs, freteSeguroCapataziaUsd: freteExpressoUsd, difalCustoRs, ...v2Extras,
+          // Markup próprio do card 90d (Financeiro, 01/10). Null = usa o mesmo do 120d, como antes.
+          markUpPct: pz.mark_up_pct_expresso != null ? pz.mark_up_pct_expresso : pz.mark_up_pct,
+        })
       : {};
 
     await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, status: 'calculado' });

@@ -532,7 +532,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     itens_instalacao_montagem: pz.itens_instalacao_montagem, containers: pz.containers,
     itens_despesas_extras: pz.itens_despesas_extras, percentual_servicos: pz.percentual_servicos,
     modelos: pz.modelos, parametros_fiscais_snapshot: pz.parametros_fiscais_snapshot,
-    mark_up_pct: pz.mark_up_pct, comissao_consultoria_pct: pz.comissao_consultoria_pct,
+    mark_up_pct: pz.mark_up_pct, mark_up_pct_expresso: pz.mark_up_pct_expresso ?? null, comissao_consultoria_pct: pz.comissao_consultoria_pct,
     comissao_vendedor_pct: pz.comissao_vendedor_pct, comissao_indicacao_pct: pz.comissao_indicacao_pct,
     modo_formacao_preco: pz.modo_formacao_preco, margem_desejada_pct: pz.margem_desejada_pct,
     contingencia_valor: pz.contingencia_valor, outros_custos_nao_recuperaveis_rs: pz.outros_custos_nao_recuperaveis_rs,
@@ -1008,10 +1008,16 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
       <Card title="Alavancas do Financeiro" style={{ marginTop: 16 }}>
         <div className="grid-3" style={{ gap: 12 }}>
-          <PZField label="Markup sobre o custo (%)">
+          <PZField label={mostrarExpresso ? 'Markup sobre o custo — 120 dias (%)' : 'Markup sobre o custo (%)'}>
             <PZPercentInput value={pz.mark_up_pct} onChange={set('mark_up_pct')}/>
             {markUpForaFaixa && <div style={{ color: '#991b1b', fontSize: 11, marginTop: 4 }}>Markup de {fmtPct2(pz.mark_up_pct)} parece implausível — confira o valor (zera o preço de venda no V1).</div>}
           </PZField>
+          {mostrarExpresso && (
+            <PZField label="Markup sobre o custo — 90 dias (%)">
+              <PZPercentInput value={pz.mark_up_pct_expresso ?? pz.mark_up_pct} onChange={set('mark_up_pct_expresso')}/>
+              <div className="small muted" style={{ marginTop: 4 }}>Só vale pro card de 90 dias (exclusivo).</div>
+            </PZField>
+          )}
           <PZField label="Comissão consultoria (%)"><PZPercentInput value={pz.comissao_consultoria_pct} onChange={set('comissao_consultoria_pct')}/></PZField>
           <PZField label="Comissão vendedor (%)"><PZPercentInput value={pz.comissao_vendedor_pct} onChange={set('comissao_vendedor_pct')}/></PZField>
           <PZField label="Comissão indicação (%)"><PZPercentInput value={pz.comissao_indicacao_pct} onChange={set('comissao_indicacao_pct')}/></PZField>
