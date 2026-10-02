@@ -25,6 +25,44 @@
     return `${window.location.origin}/formulario-cliente/${encodeURIComponent(token)}`;
   }
 
+  /* ---------- Dono do formulário (02/10/2026) ----------
+     Quem cria o formulário (created_by = e-mail do SSO) é o dono: o banco não deixa
+     mais o Nº, o dono nem o vendedor serem sobrescritos nem a linha ser apagada
+     (migration 20261002120000). Aqui fica a parte de VISÃO/EDIÇÃO por vendedor:
+     quem não é o dono só abre/edita com a alçada formularios.ver_de_outros
+     (Administração › Alçadas). Administrador passa sempre (temCapacidade).
+     Limites honestos: é checagem do front — o banco ainda responde ao anon (RLS
+     aberta, issue #571). Sem e-mail (página pública do cliente, link do formulário)
+     ou sem dono gravado, não há o que proteger e o acesso segue livre. */
+  function emailAtual() { return String((window.__VP_USER || {}).email || '').trim().toLowerCase(); }
+  function ehDono(createdBy) {
+    const dono = String(createdBy || '').trim().toLowerCase();
+    return !dono || dono === emailAtual();
+  }
+  async function veDeOutros() {
+    if (!emailAtual()) return true;
+    const ps = window.PropostaStore;
+    if (!ps || !ps.temCapacidade) return true;
+    return !!(await ps.temCapacidade('formularios', 'ver_de_outros'));
+  }
+  async function exigirAcesso(createdBy, numeroCotacao) {
+    if (!emailAtual() || ehDono(createdBy)) return;
+    if (await veDeOutros()) return;
+    throw new Error(`A cotação Nº ${numeroCotacao} foi criada por outro vendedor (${createdBy}). Só ele, ou quem tem a alçada "Vê e edita formulários de outros vendedores", pode abrir ou editar.`);
+  }
+  async function exigirAcessoAoFormulario(formularioId) {
+    if (!emailAtual()) return;
+    const c = sb(); if (!c) return;
+    const { data } = await c.from('formularios_elevador').select('created_by, numero_cotacao').eq('id', formularioId).maybeSingle();
+    if (data) await exigirAcesso(data.created_by, data.numero_cotacao);
+  }
+  async function exigirAcessoDaUnidade(unidadeId) {
+    if (!emailAtual()) return;
+    const c = sb(); if (!c) return;
+    const { data } = await c.from('formularios_elevador_unidades').select('formulario_id').eq('id', unidadeId).maybeSingle();
+    if (data && data.formulario_id) await exigirAcessoAoFormulario(data.formulario_id);
+  }
+
   /* ---------- Fornecedores (cadastro expansível) ---------- */
   async function listarFornecedores() {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -230,6 +268,7 @@
 
   async function salvar(id, patch) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await exigirAcessoAoFormulario(id);
     const resolved = {};
     Object.keys(patch).forEach((k) => { if (FE_COLUNAS_VALIDAS.has(k)) resolved[k] = patch[k]; });
     if (resolved.endereco_obra_diferente !== undefined) {
@@ -254,6 +293,7 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data: header, error } = await c.from('formularios_elevador').select('*, clientes(*)').eq('id', id).single();
     if (error) throw error;
+    await exigirAcesso(header.created_by, header.numero_cotacao);
     const { data: unidades } = await c.from('formularios_elevador_unidades')
       .select('*').eq('formulario_id', id).order('created_at', { ascending: true });
     // Dados de identidade do cliente (razão social, CNPJ, endereço etc.) vivem
@@ -277,6 +317,7 @@
 
   async function gerarLinkPublico(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await exigirAcessoAoFormulario(id);
     const { data: atual } = await c.from('formularios_elevador').select('token').eq('id', id).single();
     const token = atual?.token || shortToken();
     if (!atual?.token) {
@@ -315,6 +356,7 @@
 
   async function adicionarUnidade(formularioId, unidade) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await exigirAcessoAoFormulario(formularioId);
     const id = novoId('FEU');
     const { data: existentes } = await c.from('formularios_elevador_unidades')
       .select('indice_ativo').eq('formulario_id', formularioId);
@@ -328,6 +370,7 @@
 
   async function atualizarUnidade(unidadeId, patch) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await exigirAcessoDaUnidade(unidadeId);
     const { error } = await c.from('formularios_elevador_unidades').update(limparVazios(patch)).eq('id', unidadeId);
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({
@@ -338,6 +381,7 @@
 
   async function removerUnidade(unidadeId) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    await exigirAcessoDaUnidade(unidadeId);
     const { error } = await c.from('formularios_elevador_unidades').delete().eq('id', unidadeId);
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({
@@ -352,7 +396,8 @@
     if (filtros.status) q = q.eq('status', filtros.status);
     const { data, error } = await q;
     if (error) throw error;
-    return data || [];
+    const todos = data || [];
+    return (await veDeOutros()) ? todos : todos.filter((f) => ehDono(f.created_by));
   }
 
   /* ---------- Controle de Cotações (histórico da planilha + cotações novas) ---------- */
@@ -360,19 +405,24 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const [{ data: hist, error: e1 }, { data: novos, error: e2 }] = await Promise.all([
       c.from('cotacoes_elevador_historico').select('*'),
-      c.from('formularios_elevador').select('id, numero_cotacao, created_at, vendedor, origem_venda, status, local_obra_cidade, local_obra_estado, clientes(razao_social, cnpj)'),
+      c.from('formularios_elevador').select('id, numero_cotacao, created_at, created_by, vendedor, origem_venda, status, local_obra_cidade, local_obra_estado, clientes(razao_social, cnpj)'),
     ]);
     if (e1) throw e1;
     if (e2) throw e2;
+    // Quem não vê cotação de outros vendedor só enxerga o que criou — e a planilha
+    // histórica (sem dono) fica de fora: ela não foi criada por ele.
+    const vetudo = await veDeOutros();
+    const hist2 = vetudo ? (hist || []) : [];
+    const novos2 = vetudo ? (novos || []) : (novos || []).filter((f) => ehDono(f.created_by));
     const unificado = [
       // Linha de planilha já "ressuscitada" (formulario_id preenchido) some
       // daqui — o Formulário que ela virou já aparece abaixo, com Nº novo.
-      ...(hist || []).filter((h) => !h.formulario_id).map((h) => ({
+      ...hist2.filter((h) => !h.formulario_id).map((h) => ({
         id: h.id, numero_cotacao: h.numero_cotacao, data: h.data, vendedor: h.vendedor, origem_venda: h.origem_venda,
         nome_cliente: h.nome_cliente, cnpj_comprador: h.cnpj_comprador, estado_instalacao: h.estado_instalacao,
         status: h.status, origem: 'historico',
       })),
-      ...(novos || []).map((f) => ({
+      ...novos2.map((f) => ({
         id: f.id, numero_cotacao: f.numero_cotacao, data: f.created_at, vendedor: f.vendedor, origem_venda: f.origem_venda,
         nome_cliente: f.clientes?.razao_social || null, cnpj_comprador: f.clientes?.cnpj || null,
         estado_instalacao: f.local_obra_estado, status: f.status, origem: 'formulario',
