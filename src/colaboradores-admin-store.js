@@ -143,7 +143,12 @@
     ]},
     { grupo: 'Comercial', itens: [
       { modulo: 'leads', label: 'Leads' },
-      { modulo: 'formularios', label: 'Formulários' },
+      { modulo: 'formularios', label: 'Formulários', capacidades: [
+        ...ACOES_PADRAO,
+        /* 02/10/2026: sem esta alçada o vendedor só vê/edita as cotações que ELE criou
+           (formulario-elevador-store.js). Quem não tem fica restrito aos próprios. */
+        { chave: 'ver_de_outros', label: 'Vê e edita formulários/cotações de outros vendedores' },
+      ]},
       { modulo: 'propostas', label: 'Propostas', capacidades: [
         { chave: 'ver_todas', label: 'Vê propostas de outros vendedores' },
         { chave: 'precificar_manual', label: 'Precifica manualmente' },
