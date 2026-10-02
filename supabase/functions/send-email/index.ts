@@ -69,6 +69,17 @@ function base64ToBytes(b64: string): Uint8Array {
    observado. */
 const MAX_ANEXO_TOTAL_BYTES = 2.5 * 1024 * 1024;
 
+/* 01/10 — travas anti-relay (issue #584). Domínios internos e endereços de teste
+   autorizados pelo usuário passam sem consulta; qualquer outro destinatário precisa
+   já existir em algum cadastro/histórico (public.email_conhecidos). Limites contam
+   envios (não destinatários) numa janela de 10 min — ver public.email_rate_check. */
+const EMAIL_RE = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]{2,}$/;
+const MAX_DESTINATARIOS = 10;
+const MAX_ENVIOS_IP_10MIN = 25;
+const MAX_ENVIOS_GLOBAL_10MIN = 60;
+const DOMINIOS_INTERNOS = ["verticalparts.com.br", "vpsistema.com"];
+const EXTRAS_PERMITIDOS = ["gelsonsimoes@gmail.com"];
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Método não suportado" }, 405);
@@ -108,6 +119,52 @@ Deno.serve(async (req: Request) => {
   const totalBytesEstimado = anexos.reduce((s, a) => s + Math.floor(a.base64.length * 3 / 4), 0);
   if (totalBytesEstimado > MAX_ANEXO_TOTAL_BYTES) {
     return json({ error: `Anexos somam ~${(totalBytesEstimado / 1024 / 1024).toFixed(1)}MB — limite de ${(MAX_ANEXO_TOTAL_BYTES / 1024 / 1024).toFixed(1)}MB por envio (limite real do ambiente de envio, confirmado em teste — não é uma escolha arbitrária).` }, 400);
+  }
+
+  /* 01/10 — ClaudeNotebook (issue #584): esta função era um relay aberto (a chave
+     publishable do front chega a qualquer visitante). Três travas, todas ANTES do SMTP:
+     formato do e-mail, allowlist (só destinatários já conhecidos no sistema) e limite
+     de taxa por IP/global. Nada abaixo daqui (anexos, base64, persistência, vínculo)
+     foi alterado. Falha ao consultar o banco = bloqueia (fail-closed). */
+  const invalidos = destinatarios.filter((d) => !EMAIL_RE.test(d));
+  if (invalidos.length) return json({ error: `Destinatário inválido: ${invalidos.join(", ")}` }, 400);
+  if (destinatarios.length > MAX_DESTINATARIOS) {
+    return json({ error: `Máximo de ${MAX_DESTINATARIOS} destinatários por envio.` }, 400);
+  }
+
+  let guard: ReturnType<typeof createClient>;
+  try {
+    guard = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
+  } catch (e) {
+    console.warn("[send-email] guard: cliente de serviço indisponível", e);
+    return json({ error: "Envio temporariamente indisponível (verificação de segurança)." }, 503);
+  }
+
+  const externos = destinatarios.filter((d) => {
+    const dom = d.split("@")[1]?.toLowerCase() || "";
+    return !DOMINIOS_INTERNOS.includes(dom) && !EXTRAS_PERMITIDOS.includes(d.toLowerCase());
+  });
+  if (externos.length) {
+    const { data: conhecidos, error: errConh } = await guard.rpc("email_conhecidos", { p_emails: externos });
+    if (errConh) {
+      console.warn("[send-email] guard: email_conhecidos falhou", errConh);
+      return json({ error: "Envio temporariamente indisponível (verificação de segurança)." }, 503);
+    }
+    const ok = new Set((conhecidos as string[] | null || []).map((x) => x.toLowerCase()));
+    const desconhecidos = externos.filter((d) => !ok.has(d.toLowerCase()));
+    if (desconhecidos.length) {
+      return json({ error: `Destinatário(s) não cadastrado(s) no sistema: ${desconhecidos.join(", ")}. Cadastre o contato (cliente, fornecedor, lead ou colaborador) antes de enviar.` }, 403);
+    }
+  }
+
+  const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "desconhecido").split(",")[0].trim();
+  const { data: taxa, error: errTaxa } = await guard.rpc("email_rate_check", { p_ip: ip, p_n: destinatarios.length, p_max_ip: MAX_ENVIOS_IP_10MIN, p_max_global: MAX_ENVIOS_GLOBAL_10MIN });
+  if (errTaxa) {
+    console.warn("[send-email] guard: email_rate_check falhou", errTaxa);
+    return json({ error: "Envio temporariamente indisponível (verificação de segurança)." }, 503);
+  }
+  if (taxa !== "ok") {
+    return json({ error: "Muitos envios em pouco tempo. Aguarde alguns minutos e tente de novo." }, 429);
   }
 
   const messageId = `<${crypto.randomUUID()}@vpsistema.com>`;
