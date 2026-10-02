@@ -729,6 +729,38 @@
       const ehFkPrecificacaoMorta = (err) => /precificacao_id_fkey/i.test(err?.message || '');
       let precificacaoOrfa = false;
 
+      /* Trava (02/10, cotação 982): um Nº de cotação digitado ANTES de a cotação
+         andar virou "Proposta elaborada" de verdade, pulou Fornecedor e
+         Precificação na linha do tempo e colou a proposta de outro vendedor na
+         cotação do Vagner. Proposta de elevador só pode ficar ligada a um Nº que
+         já tenha Precificação OU que tenha sido enviado direto pra Precificação
+         (preço combinado por fora, formulario-elevador.jsx). Só confere quando
+         é proposta NOVA ou o Nº mudou — propostas antigas já ligadas continuam
+         salvando normalmente. */
+      if (eq === 'elevador' && payload.numero_cotacao != null) {
+        let numeroAnterior = null;
+        if (existing?.id) {
+          const { data: ant } = await c.from('propostas').select('numero_cotacao').eq('id', existing.id).maybeSingle();
+          numeroAnterior = ant ? ant.numero_cotacao : null;
+        }
+        if (!existing?.id || numeroAnterior !== payload.numero_cotacao) {
+          const { data: precif, error: precifErr } = await c.from('precificacoes_elevador')
+            .select('id').eq('numero_cotacao', payload.numero_cotacao).limit(1);
+          if (precifErr) throw precifErr;
+          let liberada = !!(precif && precif.length);
+          if (!liberada) {
+            const { data: diretos, error: diretoErr } = await c.from('formularios_elevador')
+              .select('id').eq('numero_cotacao', payload.numero_cotacao)
+              .not('envio_direto_precificacao_em', 'is', null).limit(1);
+            if (diretoErr) throw diretoErr;
+            liberada = !!(diretos && diretos.length);
+          }
+          if (!liberada) {
+            return { erro: `A cotação Nº ${payload.numero_cotacao} ainda não tem Precificação (o fornecedor precisa responder e o Financeiro precificar antes). Apague o Nº da cotação pra salvar como rascunho solto, ou confira o número.` };
+          }
+        }
+      }
+
       if (existing?.id) {
         let { data: row, error } = await c.from('propostas').update(payload).eq('id', existing.id).select('id, token').single();
         if (error && ehFkPrecificacaoMorta(error)) {
