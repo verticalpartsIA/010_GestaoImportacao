@@ -446,6 +446,24 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
   if (!omieKey || !omieSecret) return json({ error: "OMIE_API_KEY / OMIE_API_SECRET não configuradas" }, 500);
 
+  /* 02/10 — ClaudeNotebook (issue #572): esta função só é chamada por cron (e por ela
+     mesma, no encadeamento) — nunca pelo navegador — então dá pra exigir um segredo de
+     verdade, guardado em public.app_secrets e conferido via public.segredo_valido().
+     Antes qualquer um com a chave pública disparava varreduras longas no Omie (esgota a
+     cota da API e bloqueia os outros fluxos: "consumo redundante"). Falha ao validar = 401. */
+  const segredoRecebido = req.headers.get("x-cron-secret") || "";
+  try {
+    const r = await fetch(`${supabaseUrl}/rest/v1/rpc/segredo_valido`, {
+      method: "POST",
+      headers: pgHeaders(),
+      body: JSON.stringify({ p_nome: "cron_secret", p_valor: segredoRecebido }),
+    });
+    if (!r.ok || (await r.json()) !== true) return json({ error: "Não autorizado" }, 401);
+  } catch (e) {
+    console.error("validação do segredo falhou", e);
+    return json({ error: "Não autorizado" }, 401);
+  }
+
   try {
     const url = new URL(req.url);
     const isContinuation = url.searchParams.get("continue") === "1";
@@ -457,7 +475,7 @@ Deno.serve(async (req) => {
       const selfUrl = `${supabaseUrl}/functions/v1/sync-importacao-varejo-fornecedor?continue=1`;
       const chain = fetch(selfUrl, {
         method: "POST",
-        headers: { "Content-Type": "application/json", apikey: publishableKey, Authorization: `Bearer ${publishableKey}` },
+        headers: { "Content-Type": "application/json", apikey: publishableKey, Authorization: `Bearer ${publishableKey}`, "x-cron-secret": segredoRecebido },
         body: "{}",
       }).catch((e) => console.error("chain error", e));
       // deno-lint-ignore no-explicit-any
