@@ -737,26 +737,45 @@
          (preço combinado por fora, formulario-elevador.jsx). Só confere quando
          é proposta NOVA ou o Nº mudou — propostas antigas já ligadas continuam
          salvando normalmente. */
-      if (eq === 'elevador' && payload.numero_cotacao != null) {
+      if (payload.numero_cotacao != null) {
         let numeroAnterior = null;
         if (existing?.id) {
           const { data: ant } = await c.from('propostas').select('numero_cotacao').eq('id', existing.id).maybeSingle();
           numeroAnterior = ant ? ant.numero_cotacao : null;
         }
         if (!existing?.id || numeroAnterior !== payload.numero_cotacao) {
-          const { data: precif, error: precifErr } = await c.from('precificacoes_elevador')
-            .select('id').eq('numero_cotacao', payload.numero_cotacao).limit(1);
-          if (precifErr) throw precifErr;
-          let liberada = !!(precif && precif.length);
-          if (!liberada) {
-            const { data: diretos, error: diretoErr } = await c.from('formularios_elevador')
-              .select('id').eq('numero_cotacao', payload.numero_cotacao)
-              .not('envio_direto_precificacao_em', 'is', null).limit(1);
-            if (diretoErr) throw diretoErr;
-            liberada = !!(diretos && diretos.length);
+          /* Um Nº de cotação, uma proposta por tipo de equipamento — outra
+             pessoa não pode "pegar" o Nº de uma proposta que já existe. */
+          const { data: dup, error: dupErr } = await c.from('propostas')
+            .select('id, numero_documento').eq('numero_cotacao', payload.numero_cotacao).eq('proposal_type', eq).limit(1);
+          if (dupErr) throw dupErr;
+          if (dup && dup.length && dup[0].id !== existing?.id) {
+            return { erro: `A cotação Nº ${payload.numero_cotacao} já tem a proposta ${dup[0].numero_documento}. Abra essa proposta em vez de criar outra com o mesmo Nº.` };
           }
-          if (!liberada) {
-            return { erro: `A cotação Nº ${payload.numero_cotacao} ainda não tem Precificação (o fornecedor precisa responder e o Financeiro precificar antes). Apague o Nº da cotação pra salvar como rascunho solto, ou confira o número.` };
+          if (eq === 'elevador') {
+            const { data: precif, error: precifErr } = await c.from('precificacoes_elevador')
+              .select('id').eq('numero_cotacao', payload.numero_cotacao).limit(1);
+            if (precifErr) throw precifErr;
+            let liberada = !!(precif && precif.length);
+            if (!liberada) {
+              const { data: diretos, error: diretoErr } = await c.from('formularios_elevador')
+                .select('id').eq('numero_cotacao', payload.numero_cotacao)
+                .not('envio_direto_precificacao_em', 'is', null).limit(1);
+              if (diretoErr) throw diretoErr;
+              liberada = !!(diretos && diretos.length);
+            }
+            if (!liberada) {
+              return { erro: `A cotação Nº ${payload.numero_cotacao} ainda não tem Precificação (o fornecedor precisa responder e o Financeiro precificar antes). Apague o Nº da cotação pra salvar como rascunho solto, ou confira o número.` };
+            }
+          } else {
+            /* Escada/esteira não têm Precificação própria no sistema: o mínimo
+               é o Nº existir de verdade (ter nascido de um Formulário). */
+            const { data: form, error: formErr } = await c.from('formularios_elevador')
+              .select('id').eq('numero_cotacao', payload.numero_cotacao).limit(1);
+            if (formErr) throw formErr;
+            if (!form || !form.length) {
+              return { erro: `A cotação Nº ${payload.numero_cotacao} não existe (nenhum Formulário com esse número). Confira o número ou deixe em branco.` };
+            }
           }
         }
       }
