@@ -255,6 +255,30 @@ Deno.serve(async (req) => {
       return json({ error: "ficha_id e pdf_base64 são obrigatórios" }, 400);
     }
 
+    /* 02/10 — ClaudeNotebook (issue #572): esta função ESCREVE no Omie (cria/altera produto
+       e troca o PDF anexo) e não tinha nenhuma trava. O navegador não tem credencial
+       verificável de usuário (ver CLAUDE.md), então o que dá pra fazer é: (1) só aceitar um
+       PDF de verdade e de tamanho razoável (antes qualquer base64 virava anexo do produto),
+       e (2) limitar a taxa por IP/global. O conteúdo legítimo é sempre base64 puro de PDF
+       gerado pelo jsPDF (começa com "%PDF-" = "JVBERi0"). Falha ao consultar o limite = bloqueia. */
+    if (typeof pdf_base64 !== "string" || !pdf_base64.startsWith("JVBERi0")) {
+      return json({ error: "O arquivo enviado não é um PDF válido." }, 400);
+    }
+    if (pdf_base64.length > 25_000_000) {
+      return json({ error: "O PDF é grande demais para o anexo do Omie (máx. ~18 MB)." }, 413);
+    }
+    {
+      const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "desconhecido").split(",")[0].trim();
+      const { data: taxa, error: errTaxa } = await sb.rpc("api_rate_check", {
+        p_bucket: "publicar-ficha-omie", p_ip: ip, p_max_ip: 30, p_max_global: 60, p_janela_s: 600,
+      });
+      if (errTaxa) {
+        console.warn("[publicar_ficha_omie] limite de taxa indisponível", errTaxa);
+        return json({ error: "Publicação temporariamente indisponível (verificação de segurança)." }, 503);
+      }
+      if (taxa !== "ok") return json({ error: "Muitas publicações em pouco tempo. Aguarde alguns minutos e tente de novo." }, 429);
+    }
+
     // 1) Ficha (+ campos usados pro mapeamento célula-a-célula e, se
     // preciso cadastrar produto novo, categoria da Solicitação de Produto)
     const { data: ficha, error: fichaError } = await sb
