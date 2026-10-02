@@ -21,6 +21,7 @@ const ROUTE_TITLE = {
   "pedidos-acompanhamento": "Pedidos",
   "vistorias-envio": "Vistorias de Obras",
   almoxarifado: "Almoxarifado",
+  pcp: "PCP — Planejamento e Controle da Produção",
   leads: "Pipeline de Leads",
   "lead-detail": "Detalhe de Lead",
   formularios: "Formulários",
@@ -393,6 +394,7 @@ function App() {
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
       case "decisoes": return <window.DecisoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
+      case "pcp": return <window.PCPPage/>;
       case "pi-importacao": return <window.PIPage/>;
       case "rfq-importacao": return <window.RFQPage/>;
       case "ims-importacao": return <window.IMSPage/>;

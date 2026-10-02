@@ -207,6 +207,7 @@
     ]},
     { grupo: 'Logística', itens: [
       { modulo: 'almoxarifado', label: 'Almoxarifado' },
+      { modulo: 'pcp', label: 'PCP — Planejamento e Controle da Produção' },
     ]},
     { grupo: 'Portal Admin', itens: [
       { modulo: 'logs', label: 'Logs de Atividade' },
@@ -231,7 +232,7 @@
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
     'Entrega & Documentação': ['databook', 'handover'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
-    'Logística Interna': ['almoxarifado'],
+    'Logística Interna': ['almoxarifado', 'pcp'],
     'Administração': ['logs'],
   };
 

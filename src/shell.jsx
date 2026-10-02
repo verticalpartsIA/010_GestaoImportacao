@@ -122,6 +122,7 @@ const NAV_GROUPS = [
      visível deve significar "posso entrar e fazer algo" (Achado 12). */
   { label: "Logística Interna", items: [
     { id: "almoxarifado", label: "Almoxarifado", icon: "package" },
+    { id: "pcp", label: "PCP", icon: "calendar" },
   ]},
   { label: "Administração", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
@@ -350,6 +351,7 @@ const BREADCRUMB_MAP = {
   "importacao-detail":        { module: "Importação", page: "Gestão Importação — Detalhe de Embarque", icon: "ship" },
   "importacao-rastreamento":  { module: "Importação", page: "Gestão Importação — Rastreamento de Navios", icon: "mapIcon" },
   compras:       { module: "Logística", page: "Importação Varejo", icon: "truck" },
+  pcp:           { module: "Logística", page: "PCP — Planejamento e Controle da Produção", icon: "calendar" },
   "vistorias-envio": { module: "Instalação & Entrega", page: "Vistorias de Obras", icon: "send" },
   vistorias:     { module: "Instalação & Entrega", page: "Resultado Vistorias de Obras", icon: "history" },
   instalacao:    { module: "Instalação & Entrega", page: "Instalação em Campo", icon: "hardhat" },

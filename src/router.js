@@ -39,7 +39,7 @@
     'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias-envio', 'vistorias', 'instalacao',
     'art', 'cronograma', 'databook', 'handover',
     'rh-homologacao',
-    'almoxarifado',
+    'almoxarifado', 'pcp',
     'logs', 'configuracoes', 'comissoes', 'pagamentos-instalador',
   ];
   const KNOWN_ROUTES_SET = new Set(KNOWN_ROUTES);
