@@ -203,6 +203,28 @@ Deno.serve(async (req) => {
       }
     }
 
+    /* 02/10 — ClaudeNotebook (issue #572): esta função só LÊ do Omie (grava o cache local),
+       mas quem chamasse em loop esgotaria a cota da API do Omie ("consumo redundante") e
+       travaria os outros fluxos que dependem dele. Dois baldes: sync por empresa (o front
+       dispara um por vínculo, pode vir em rajada → folgado) e sync completo (varre todas as
+       empresas → apertado). Falha ao consultar o limite = bloqueia (503). */
+    {
+      const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "desconhecido").split(",")[0].trim();
+      const porEmpresa = !!empresa_id;
+      const { data: taxa, error: errTaxa } = await sb.rpc("api_rate_check", {
+        p_bucket: porEmpresa ? "omie-sync-pag-empresa" : "omie-sync-pag-completo",
+        p_ip: ip,
+        p_max_ip: porEmpresa ? 40 : 4,
+        p_max_global: porEmpresa ? 80 : 8,
+        p_janela_s: 600,
+      });
+      if (errTaxa) {
+        console.warn("[omie_sync_pagamentos] limite de taxa indisponível", errTaxa);
+        return json({ error: "Sincronização temporariamente indisponível (verificação de segurança)." }, 503);
+      }
+      if (taxa !== "ok") return json({ error: "Muitas sincronizações em pouco tempo. Aguarde alguns minutos e tente de novo." }, 429);
+    }
+
     // ---- Sync completo ----
     const { data: logRow } = await sb
       .from("omie_pagamentos_sync_log")
