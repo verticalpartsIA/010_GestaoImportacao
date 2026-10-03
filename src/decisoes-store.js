@@ -90,6 +90,21 @@
     return (decisao.aprovadores_esperados || []).some((e) => (e || '').toLowerCase() === email);
   }
 
+  /* `aprovadores_esperados` é um retrato do momento da criação — se o responsável do papel muda, decisões já abertas
+     ficam apontando para quem não decide mais. Ao LER, recalcula pelo papel atual (fixos + alçadas); sem papel
+     resolvível, mantém o retrato gravado. Decisões já decididas/canceladas não mudam (histórico). */
+  async function atualizarAprovadores(lista) {
+    const cache = {};
+    const out = [];
+    for (const d of lista || []) {
+      if (!['pendente', 'bloqueada_por_dependencia'].includes(d.status) || !d.papel_requerido) { out.push(d); continue; }
+      if (!(d.papel_requerido in cache)) cache[d.papel_requerido] = await resolverAprovadores(d.papel_requerido);
+      const atuais = cache[d.papel_requerido];
+      out.push(atuais.length ? { ...d, aprovadores_esperados: atuais } : d);
+    }
+    return out;
+  }
+
   /* ---------- Criação ---------- */
   async function criarDecisao({ tipo, papelRequerido, numeroCotacao, dossierId, referenciaTabela, referenciaId, dependeDe, contexto }) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -107,6 +122,7 @@
       // 20260817200000_decisoes_gerenciais_schema_doc.sql.
       aprovador_esperado_email: aprovadores[0] || null,
       contexto: contexto || {},
+      solicitado_por: meuEmail() || null,
     };
     const { data, error } = await c.from('decisoes_gerenciais').insert(row).select().single();
     if (error) throw error;
@@ -135,7 +151,21 @@
     const { data, error } = await c.from('decisoes_gerenciais')
       .select('*').in('status', ['pendente']).order('criado_em', { ascending: false });
     if (error) { console.warn('[DecisoesStore] listarPendentesParaMim falhou', error); return []; }
-    return (data || []).filter(souAprovador);
+    return (await atualizarAprovadores(data || [])).filter(souAprovador);
+  }
+
+  /* Histórico (aprovadas, reprovadas e canceladas). `todas` = visão de Administrador; senão só o que eu decidi,
+     era aprovador ou solicitei. */
+  async function listarDecididas({ todas = false, limite = 200 } = {}) {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('decisoes_gerenciais')
+      .select('*').in('status', ['aprovada', 'reprovada', 'cancelada'])
+      .order('decidido_em', { ascending: false, nullsFirst: false }).limit(limite);
+    if (error) { console.warn('[DecisoesStore] listarDecididas falhou', error); return []; }
+    if (todas) return data || [];
+    const email = meuEmail();
+    if (!email) return [];
+    return (data || []).filter((d) => souAprovador(d) || (d.decidido_por || '').toLowerCase() === email || (d.solicitado_por || '').toLowerCase() === email);
   }
 
   /* Visão de Administrador — "ver tudo que está em aberto no sistema", sem
@@ -149,7 +179,7 @@
     const { data, error } = await c.from('decisoes_gerenciais')
       .select('*').in('status', ['pendente', 'bloqueada_por_dependencia']).order('criado_em', { ascending: false });
     if (error) { console.warn('[DecisoesStore] listarTodasEmAberto falhou', error); return []; }
-    return data || [];
+    return atualizarAprovadores(data || []);
   }
 
   async function listarPorCotacao(numeroCotacao) {
@@ -194,6 +224,8 @@
       sub: [alvo, decisao.motivo].filter(Boolean).join(' · ') || null,
       module: 'Central de Decisões',
       resolved: false,
+      /* Quem pediu é avisado; sem solicitante conhecido (decisões antigas), segue global como antes. */
+      destinatario_email: decisao.solicitado_por ? String(decisao.solicitado_por).toLowerCase() : null,
     };
     const { error } = await c.from('alertas').insert(row);
     if (error) console.warn('[DecisoesStore] notificarResultado falhou', error);
@@ -214,15 +246,18 @@
 
   async function aprovar(id, motivo) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { data: decisao, error: e1 } = await c.from('decisoes_gerenciais').select('*').eq('id', id).single();
+    const { data: bruta, error: e1 } = await c.from('decisoes_gerenciais').select('*').eq('id', id).single();
     if (e1) throw e1;
+    const [decisao] = await atualizarAprovadores([bruta]);
     if (decisao.status !== 'pendente') throw new Error('Esta decisão não está pendente.');
     if (!souAprovador(decisao)) throw new Error('Você não é um dos aprovadores esperados desta decisão.');
     const now = new Date().toISOString();
-    const { error } = await c.from('decisoes_gerenciais').update({
+    /* .eq('status','pendente') + select: se outra pessoa decidiu no meio tempo, 0 linhas voltam e não sobrescreve. */
+    const { data: gravadas, error } = await c.from('decisoes_gerenciais').update({
       status: 'aprovada', decidido_por: meuEmail(), decidido_em: now, motivo: motivo || null, atualizado_em: now,
-    }).eq('id', id);
+    }).eq('id', id).eq('status', 'pendente').select('id');
     if (error) throw error;
+    if (!gravadas || !gravadas.length) throw new Error('Esta decisão já foi decidida por outra pessoa.');
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Central de Decisões', acao: `Aprovou decisão — ${TIPO_LABEL[decisao.tipo] || decisao.tipo}`,
       alvo: decisao.numero_cotacao != null ? `Cotação Nº ${decisao.numero_cotacao}` : id, alvo_id: id,
@@ -234,22 +269,125 @@
 
   async function reprovar(id, motivo) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { data: decisao, error: e1 } = await c.from('decisoes_gerenciais').select('*').eq('id', id).single();
+    const { data: bruta, error: e1 } = await c.from('decisoes_gerenciais').select('*').eq('id', id).single();
     if (e1) throw e1;
+    const [decisao] = await atualizarAprovadores([bruta]);
     if (decisao.status !== 'pendente') throw new Error('Esta decisão não está pendente.');
     if (!souAprovador(decisao)) throw new Error('Você não é um dos aprovadores esperados desta decisão.');
     if (!motivo || !motivo.trim()) throw new Error('Informe o motivo da reprovação.');
     const now = new Date().toISOString();
-    const { error } = await c.from('decisoes_gerenciais').update({
+    const { data: gravadas, error } = await c.from('decisoes_gerenciais').update({
       status: 'reprovada', decidido_por: meuEmail(), decidido_em: now, motivo: motivo.trim(), atualizado_em: now,
-    }).eq('id', id);
+    }).eq('id', id).eq('status', 'pendente').select('id');
     if (error) throw error;
+    if (!gravadas || !gravadas.length) throw new Error('Esta decisão já foi decidida por outra pessoa.');
+    /* Quem dependia desta decisão (ex.: CEO depois do Gestor) não tem mais o que esperar: cancela com marca própria,
+       para reabrir() restaurar se a decisão for solicitada de novo. */
+    await c.from('decisoes_gerenciais').update({
+      status: 'cancelada', decidido_por: 'sistema', decidido_em: now, atualizado_em: now, motivo: MOTIVO_DEPENDENCIA_REPROVADA,
+    }).eq('status', 'bloqueada_por_dependencia').contains('depende_de', [id]);
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Central de Decisões', acao: `Reprovou decisão — ${TIPO_LABEL[decisao.tipo] || decisao.tipo}`,
       alvo: decisao.numero_cotacao != null ? `Cotação Nº ${decisao.numero_cotacao}` : id, alvo_id: id,
       detalhe: { motivo: motivo.trim() },
     });
     await notificarResultado(c, { ...decisao, motivo: motivo.trim() }, 'reprovada');
+  }
+
+  /* ---------- Cancelar / reabrir ---------- */
+  const MOTIVO_DEPENDENCIA_REPROVADA = 'Cancelada: a decisão da qual dependia foi reprovada.';
+
+  async function ehAdministrador() {
+    try {
+      const perfil = window.PropostaStore ? await window.PropostaStore.resolverPerfilAtual() : null;
+      return !!(perfil && perfil.nivel === 'Administrador');
+    } catch (_) { return false; }
+  }
+
+  /* Só Administrador cancela (decisão que perdeu o sentido: cotação descartada, regra mudou). Fica no histórico. */
+  async function cancelar(id, motivo) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (!(await ehAdministrador())) throw new Error('Só o Administrador pode cancelar uma decisão.');
+    if (!motivo || !motivo.trim()) throw new Error('Informe o motivo do cancelamento.');
+    const now = new Date().toISOString();
+    const { data, error } = await c.from('decisoes_gerenciais').update({
+      status: 'cancelada', decidido_por: meuEmail(), decidido_em: now, motivo: motivo.trim(), atualizado_em: now,
+    }).eq('id', id).in('status', ['pendente', 'bloqueada_por_dependencia']).select('id, tipo, numero_cotacao');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('Esta decisão já não está em aberto.');
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Central de Decisões', acao: `Cancelou decisão — ${TIPO_LABEL[data[0].tipo] || data[0].tipo}`,
+      alvo: data[0].numero_cotacao != null ? `Cotação Nº ${data[0].numero_cotacao}` : id, alvo_id: id, detalhe: { motivo: motivo.trim() },
+    });
+  }
+
+  /* Solicita de novo uma decisão reprovada/cancelada: a MESMA linha volta a pendente (os gates procuram por tipo+cotação,
+     então um registro novo conviveria com o reprovado e continuaria bloqueando). O que houve antes fica em
+     contexto.reaberturas. Decisões que foram canceladas por depender desta voltam a "bloqueada". */
+  async function reabrirInterno(c, d) {
+    const [atual] = await atualizarAprovadores([{ ...d, status: 'pendente' }]);
+    let status = 'pendente';
+    if (d.depende_de && d.depende_de.length) {
+      const { data: pais } = await c.from('decisoes_gerenciais').select('id, status').in('id', d.depende_de);
+      if (!(pais || []).every((p) => p.status === 'aprovada')) status = 'bloqueada_por_dependencia';
+    }
+    const now = new Date().toISOString();
+    const reaberturas = [...((d.contexto || {}).reaberturas || []), {
+      em: now, por: meuEmail() || null, statusAnterior: d.status, decididoPor: d.decidido_por || null, motivoAnterior: d.motivo || null,
+    }];
+    const { data, error } = await c.from('decisoes_gerenciais').update({
+      status, decidido_por: null, decidido_em: null, motivo: null, atualizado_em: now,
+      aprovadores_esperados: atual.aprovadores_esperados, aprovador_esperado_email: (atual.aprovadores_esperados || [])[0] || null,
+      contexto: { ...(d.contexto || {}), reaberturas },
+    }).eq('id', d.id).in('status', ['reprovada', 'cancelada']).select('*').single();
+    if (error) throw error;
+    await c.from('decisoes_gerenciais').update({ status: 'bloqueada_por_dependencia', decidido_por: null, decidido_em: null, motivo: null, atualizado_em: now })
+      .eq('status', 'cancelada').eq('motivo', MOTIVO_DEPENDENCIA_REPROVADA).contains('depende_de', [d.id]);
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Central de Decisões', acao: `Solicitou novamente — ${TIPO_LABEL[d.tipo] || d.tipo}`,
+      alvo: d.numero_cotacao != null ? `Cotação Nº ${d.numero_cotacao}` : d.id, alvo_id: d.id,
+      detalhe: { statusAnterior: d.status, motivoAnterior: d.motivo || null },
+    });
+    return data;
+  }
+
+  async function reabrir(id) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: d, error } = await c.from('decisoes_gerenciais').select('*').eq('id', id).single();
+    if (error) throw error;
+    if (!['reprovada', 'cancelada'].includes(d.status)) throw new Error('Só dá para solicitar de novo uma decisão reprovada ou cancelada.');
+    return reabrirInterno(c, d);
+  }
+
+  /* Gate que encontra a decisão cancelada (ex.: expirada) e precisa dela de novo: reabre em vez de ficar travado
+     esperando algo que ninguém vê na fila. */
+  async function garantirAtiva(d) {
+    if (!d || d.status !== 'cancelada') return d;
+    const c = sb(); if (!c) return d;
+    try { return await reabrirInterno(c, d); } catch (e) { console.warn('[DecisoesStore] garantirAtiva falhou', e); return d; }
+  }
+
+  /* Dados que o aprovador precisa ver no card quando a decisão nasce de uma cotação (cliente, valor, margem). */
+  async function contextoDaCotacao(numeroCotacao, extra) {
+    const out = { ...(extra || {}) };
+    const c = sb();
+    if (!c || numeroCotacao == null) return out;
+    try {
+      const { data } = await c.from('propostas').select('titulo, valor_total, data_json, numero_documento')
+        .eq('numero_cotacao', numeroCotacao).order('updated_at', { ascending: false }).limit(1);
+      const p = data && data[0];
+      if (p) {
+        const cli = (p.data_json && p.data_json.cliente && p.data_json.cliente.nome) || p.titulo || null;
+        if (!out.cliente && cli) out.cliente = cli;
+        if (out.valor == null && p.valor_total != null) out.valor = Number(p.valor_total);
+        if (!out.proposta) out.proposta = p.numero_documento || p.titulo || null;
+      }
+      if (out.margem_efetiva_pct == null) {
+        const m = await margemEfetivaDaCotacao(numeroCotacao);
+        if (m != null) out.margem_efetiva_pct = m;
+      }
+    } catch (e) { console.warn('[DecisoesStore] contextoDaCotacao falhou', e); }
+    return out;
   }
 
   /* ---------- Gates ---------- */
@@ -300,15 +438,17 @@
     let gestor = decisoes.find((d) => d.tipo === 'envio_proposta_gestor');
     let ceo = decisoes.find((d) => d.tipo === 'envio_proposta_ceo');
     if (!gestor) {
-      gestor = await criarDecisaoSeNaoExiste({ tipo: 'envio_proposta_gestor', papelRequerido: 'gestor_comercial', numeroCotacao });
+      gestor = await criarDecisaoSeNaoExiste({ tipo: 'envio_proposta_gestor', papelRequerido: 'gestor_comercial', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao) });
     }
+    gestor = await garantirAtiva(gestor);
+    ceo = await garantirAtiva(ceo);
     if (gestor.status === 'reprovada') return { ok: false, motivo: `Envio reprovado pelo Gestor Comercial (${gestor.decidido_por || ''}): ${gestor.motivo || 'sem motivo informado'}.` };
     if (gestor.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do Gestor Comercial (Regiane ou Guilherme) para enviar a proposta.' };
     if (!ceo) {
       const margem = await margemEfetivaDaCotacao(numeroCotacao);
       const precisaCeo = margem == null || margem < LIMITE_MARGEM_SEM_CEO;
       if (!precisaCeo) return { ok: true };
-      ceo = await criarDecisaoSeNaoExiste({ tipo: 'envio_proposta_ceo', papelRequerido: 'ceo', numeroCotacao, dependeDe: [gestor.id], contexto: { margem_efetiva_pct: margem } });
+      ceo = await criarDecisaoSeNaoExiste({ tipo: 'envio_proposta_ceo', papelRequerido: 'ceo', numeroCotacao, dependeDe: [gestor.id], contexto: await contextoDaCotacao(numeroCotacao, { margem_efetiva_pct: margem }) });
     }
     if (ceo.status === 'reprovada') return { ok: false, motivo: `Envio reprovado pelo CEO (${ceo.decidido_por || ''}): ${ceo.motivo || 'sem motivo informado'}.` };
     if (ceo.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para enviar a proposta — a margem desta proposta ficou abaixo da regra de 15%.' };
@@ -338,8 +478,9 @@
     let decisoes = await listarPorCotacao(numeroCotacao);
     let decisao = decisoes.find((d) => d.tipo === 'contratacao_mao_obra_ceo');
     if (!decisao) {
-      decisao = await criarDecisaoSeNaoExiste({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo', numeroCotacao, contexto });
+      decisao = await criarDecisaoSeNaoExiste({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao, contexto) });
     }
+    decisao = await garantirAtiva(decisao);
     if (decisao.status === 'reprovada') return { ok: false, motivo: `Contratação reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
     if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador.' };
     return { ok: true };
@@ -399,8 +540,9 @@
     let decisoes = await listarPorCotacao(numeroCotacao);
     let decisao = decisoes.find((d) => d.tipo === 'compra_equipamento_ceo');
     if (!decisao) {
-      decisao = await criarDecisaoSeNaoExiste({ tipo: 'compra_equipamento_ceo', papelRequerido: 'ceo', numeroCotacao, contexto });
+      decisao = await criarDecisaoSeNaoExiste({ tipo: 'compra_equipamento_ceo', papelRequerido: 'ceo', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao, contexto) });
     }
+    decisao = await garantirAtiva(decisao);
     if (decisao.status === 'reprovada') return { ok: false, motivo: `Compra do equipamento reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
     if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para comprar o equipamento deste pedido.' };
     return { ok: true };
@@ -438,9 +580,10 @@
 
   window.DecisoesStore = {
     PAPEL_LABEL, TIPO_LABEL,
-    resolverAprovadores, souAprovador,
-    criarDecisao, criarDecisaoSeNaoExiste,
-    listarPendentesParaMim, listarTodasEmAberto, listarPorCotacao, listarPorDossier, statusMontadorObra,
+    resolverAprovadores, souAprovador, ehAdministrador,
+    criarDecisao, criarDecisaoSeNaoExiste, contextoDaCotacao,
+    cancelar, reabrir,
+    listarPendentesParaMim, listarTodasEmAberto, listarDecididas, listarPorCotacao, listarPorDossier, statusMontadorObra,
     aprovar, reprovar,
     podeEnviarProposta, podeContratarInstalador, podeMontadorEntrarObra,
     podeComprarEquipamento, verificarGateCompra, precisaAprovacaoCeo,
