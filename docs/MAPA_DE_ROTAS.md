@@ -134,7 +134,7 @@
 
 | Item do menu | Rota | Endereço | Abas (padrão em **negrito**) | Detalhe por id |
 |---|---|---|---|---|
-| Almoxarifado | `almoxarifado` | `/logistica/almoxarifado[/<aba>]` | **estoque**, estrutura, custos, reposicao, pedidos | — |
+| Almoxarifado | `almoxarifado` | `/logistica/almoxarifado[/<aba>]` | **estoque**, estrutura, custos, reposicao, necessidade, pedidos | — |
 | Carga Máquina | `carga-maquina` | `/logistica/carga-maquina[/<aba>]` | **capacidade**, maquinas, roteiro, recursos | — |
 | Montagem do Produto | `montagem-produto` | `/logistica/montagem-produto` | — | — |
 | Simulação | `simulacao-producao` | `/logistica/simulacao-producao` | — | — |
