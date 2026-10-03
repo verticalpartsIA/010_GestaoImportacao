@@ -4,11 +4,17 @@
    de loadDashboardData() (ver dashboard-metrics-comercial.js pro
    raciocínio completo). Funções puras, zero I/O.
 
-   Fecha a issue #273: o widget "Pendências NCM" recebia sempre `[]`
-   (const ncm = []; // legado removido). Agora ncmPendentes() puxa de
-   verdade de `ncm_solicitacoes` — só os 3 status que o widget sabe
-   interpretar (EM_PREENCHIMENTO / AGUARD_JURIDICO / APROVADO); depois
-   disso o produto já foi pra LogComex/Siscomex, não é mais "pendência".
+   Fechou a issue #273 (widget "Pendências NCM" recebia sempre `[]`):
+   ncmPendentes() filtra `ncm_solicitacoes` pelos 3 status que o widget
+   sabia interpretar (EM_PREENCHIMENTO / AGUARD_JURIDICO / APROVADO).
+   **Achado real (03/10): o widget em si não existe mais** — o comentário
+   de `OndeParouWidget` (dashboard.jsx) confirma que "Onde Parou" (23/08)
+   substituiu "Pendências NCM" e "Estoque Crítico", mas a limpeza do
+   back-end ficou pela metade: `supabase.js` continuou buscando
+   `ncm_solicitacoes` e devolvendo `ncm` pro Dashboard sem ninguém ler.
+   `supabase.js` parou de passar `ncmSolicitacoes` pra `compute()` — a
+   função/teste continuam aqui, puras e cobertas, pro dia em que um
+   widget equivalente for pedido de novo (só plugar a consulta de volta).
 
    window.EngenhariaMetrics
    ============================================================ */

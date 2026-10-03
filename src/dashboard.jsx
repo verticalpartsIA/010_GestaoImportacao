@@ -185,7 +185,7 @@ function Dashboard({ role, setRoute, setSubsel }) {
     setLoading(true);
     // Timeout de 3s: se Supabase não responder, renderiza vazio
     const timeoutId = setTimeout(() => {
-      setSbData({ kpis: {}, tarefas: [], alertas: [], ganttProjetos: [], estoqueCritico: [], alertasCriticos: 0 });
+      setSbData({ kpis: {}, tarefas: [], alertas: [], ganttProjetos: [], alertasCriticos: 0 });
       setLoading(false);
     }, 3000);
     return window.__VP_SB.loadDashboardData(role, period)
