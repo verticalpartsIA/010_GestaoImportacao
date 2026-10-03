@@ -165,7 +165,13 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
      `route`), reaproveita isso pra recalcular ao sair de /decisoes. */
   const [pendentesDecisoes, setPendentesDecisoes] = React.useState(0);
   React.useEffect(() => {
-    window.DecisoesStore?.listarPendentesParaMim().then((l) => setPendentesDecisoes(l.length)).catch(() => {});
+    const atualizar = () => window.DecisoesStore?.listarPendentesParaMim().then((l) => setPendentesDecisoes(l.length)).catch(() => {});
+    atualizar();
+    /* Além de a cada navegação: a Central avisa (vp:decisoes) quando algo muda e há uma conferência a cada 3 min,
+       para a decisão nova de outra pessoa aparecer no badge sem F5. */
+    const t = setInterval(() => { if (!document.hidden) atualizar(); }, 180000);
+    window.addEventListener('vp:decisoes', atualizar);
+    return () => { clearInterval(t); window.removeEventListener('vp:decisoes', atualizar); };
   }, [route]);
   /* Alocação de módulos (Administração › Configurações) — só filtra grupo
      quando o colaborador tem pelo menos 1 alocação; sem isso, comportamento
