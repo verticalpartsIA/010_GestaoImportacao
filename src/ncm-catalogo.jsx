@@ -378,7 +378,7 @@ function OperadorDetail({ o, onAct }) {
 
 /* ---------- Página: Catálogo de Produtos (Produtos + Operadores) ---------- */
 function NcmCatalogoPage({ setRoute }) {
-  const [tab, setTab] = React.useState("produtos");
+  const [tab, setTab] = window.useRouteTab('ncm-catalogo', 'produtos', ['produtos', 'operadores', 'pedidos']);
   const [produtos, setProdutos] = React.useState([]);
   const [operadores, setOperadores] = React.useState([]);
   const [loading, setLoading] = React.useState(true);

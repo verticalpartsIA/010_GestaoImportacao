@@ -307,7 +307,7 @@ function CMCapacidadePorRecursos({ sb, recursos, irPara }) {
 }
 
 function CargaMaquinaPage() {
-  const [aba, setAba] = React.useState('capacidade');
+  const [aba, setAba] = window.useRouteTab('carga-maquina', 'capacidade', ['capacidade', 'maquinas', 'roteiro', 'recursos']);
   const [recursos, setRecursos] = React.useState(null);
   const [erro, setErro] = React.useState(null);
   const [podeEditar, setPodeEditar] = React.useState(false);

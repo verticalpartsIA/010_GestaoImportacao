@@ -129,6 +129,45 @@
     };
   }
 
+  /* ---- Aba (submódulo) de uma tela na URL ----
+     Convenção do projeto (já usada por configuracoes e dossier-obra):
+       tela de lista com abas   → /<módulo>/<rota>/<aba>        (aba = 2º segmento)
+       tela de detalhe com abas → /<módulo>/<rota>/<id>/<aba>   (aba = 3º segmento; withId)
+     Função pura (testável): devolve a aba da URL se a rota é essa e a aba é
+     válida; senão, a aba padrão. */
+  function tabFromLocation(route, defaultTab, valid, withId) {
+    const loc = parseLocation();
+    if (loc.route !== route) return defaultTab;
+    const t = withId ? loc.tab : loc.id;
+    if (!t) return defaultTab;
+    if (valid && valid.indexOf(t) === -1) return defaultTab;
+    return t;
+  }
+
+  /* Substitui `const [aba, setAba] = React.useState('padrao')` por uma linha:
+       const [aba, setAba] = window.useRouteTab('rota', 'padrao', ['padrao', 'outra']);
+     O resto da tela não muda. Clicar na aba grava na URL (a aba padrão deixa a
+     URL limpa); Voltar/Avançar do navegador e F5 restauram a aba. */
+  window.useRouteTab = function useRouteTab(route, defaultTab, valid, withId) {
+    const R = window.React;
+    const st = R.useState(function () { return tabFromLocation(route, defaultTab, valid, withId); });
+    const tab = st[0], setTabState = st[1];
+    R.useEffect(function () {
+      return subscribe(function () { setTabState(tabFromLocation(route, defaultTab, valid, withId)); });
+    }, []);
+    const setTab = R.useCallback(function (t) {
+      setTabState(t);
+      const novaTab = t === defaultTab ? null : t;
+      if (withId) {
+        const loc = parseLocation();
+        navigate(route, loc.route === route ? loc.id : null, novaTab);
+      } else {
+        navigate(route, novaTab);
+      }
+    }, [route, defaultTab, withId]);
+    return [tab, setTab];
+  };
+
   window.VpRouter = {
     KNOWN_ROUTES: KNOWN_ROUTES,
     isKnownRoute: isKnownRoute,
@@ -136,5 +175,6 @@
     parseLocation: parseLocation,
     navigate: navigate,
     subscribe: subscribe,
+    tabFromLocation: tabFromLocation,
   };
 }());

@@ -287,7 +287,7 @@ function ModalNovoEmbarque({ onClose, onSaved, prefill }) {
 function ImportacaoPage({ setRoute, setSubsel }) {
   const [embarques, setEmbarques] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [tab, setTab] = React.useState("embarques");
+  const [tab, setTab] = window.useRouteTab('importacao', 'embarques', ['embarques', 'documentos', 'aduana']);
   const [filter, setFilter] = React.useState("Todos");
   const [filterPorto, setFilterPorto] = React.useState("Todos");
   const [filterLinha, setFilterLinha] = React.useState("Todas");
