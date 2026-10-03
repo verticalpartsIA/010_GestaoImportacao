@@ -48,7 +48,7 @@
     DOSSIE_CRIADO: 'Instalação', VISTORIA_AGENDADA: 'Instalação', VISTORIA_REALIZADA: 'Instalação',
     PENDENCIAS_RESOLVIDAS: 'Instalação', INSTALADOR_VINCULADO: 'Instalação', CI_GERADO: 'Instalação',
     CI_ASSINADO: 'Instalação', IMS_CONTRATADO: 'Instalação', EQUIPAMENTO_RECEBIDO: 'Instalação',
-    INSTALACAO_INICIADA: 'Instalação', PENDENCIA_INSTALACAO: 'Instalação',
+    INSTALACAO_INICIADA: 'Instalação', INSTALACAO_METADE_EXECUCAO: 'Instalação', PENDENCIA_INSTALACAO: 'Instalação',
     INSTALACAO_CONCLUIDA: 'Instalação', ART_EMITIDA: 'Instalação', TESTES_REALIZADOS: 'Instalação',
     DATABOOK_MONTADO: 'Instalação',
 
