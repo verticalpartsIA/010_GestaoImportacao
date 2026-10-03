@@ -38,8 +38,12 @@
 
   function kpis({ projetos, fichas, catalogo, alertas, fichasNoMes }) {
     return [
-      // "Projetos abertos" ainda lê a tabela legada `projetos` (issue #274
-      // / Candidato 2 da revisão de arquitetura — fora do escopo aqui).
+      // Achado real (03/10): até aqui `projetos` ainda era a tabela legada
+      // `projetos` (0 linhas em produção, issue #274) — o KPI sempre
+      // mostrava zero mesmo com cotações ativas de verdade. supabase.js
+      // agora passa a mesma esteira real (gatilhos+formulários) que já
+      // alimenta "Projetos ativos" do Admin e o Gantt/Kanban/Lista —
+      // mesmo array, mesma definição de "projeto aberto", 1 fonte só.
       { label: 'Projetos abertos', value: String((projetos || []).length), unit: '', delta: '', deltaDir: 'up', sub: 'ativos' },
       { label: 'Fichas técnicas', value: String((fichas || []).length), unit: '', delta: fichasNoMes.length > 0 ? `+${fichasNoMes.length}` : '0', deltaDir: 'up', sub: 'no mês' },
       { label: 'Catálogo (ativos)', value: String(catalogoAtivos(catalogo).length), unit: '', delta: '', deltaDir: 'up', sub: 'produtos no catálogo' },
