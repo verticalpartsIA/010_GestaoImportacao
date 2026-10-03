@@ -118,3 +118,28 @@ test('agruparPorPeriodo — sem created_at cai em Anteriores', () => {
   const grupos = M.agruparPorPeriodo([{ id: 1, createdAt: null }], new Date('2026-08-17T12:00:00'));
   assert.deepEqual(grupos.Anteriores.map((n) => n.id), [1]);
 });
+
+test('rotaPara — Comercial e Compras não caem mais no Dashboard', () => {
+  assert.equal(M.rotaPara('Comercial'), 'propostas');
+  assert.equal(M.rotaPara('Compras'), 'cotacoes-fornecedor');
+});
+
+test('visivelPorPreferencia — oculta só a categoria desligada', () => {
+  const prefs = { financeiro: false, operacoes: true, comercial: true };
+  assert.equal(M.visivelPorPreferencia({ module: 'Financeiro' }, prefs), false);
+  assert.equal(M.visivelPorPreferencia({ module: 'Comissões' }, prefs), false);
+  assert.equal(M.visivelPorPreferencia({ module: 'Comercial' }, prefs), true);
+  assert.equal(M.visivelPorPreferencia({ module: 'Almoxarifado' }, prefs), true);
+});
+
+test('visivelPorPreferencia — Jurídico, Decisões e módulo desconhecido nunca somem', () => {
+  const tudoOff = { financeiro: false, operacoes: false, comercial: false };
+  assert.equal(M.visivelPorPreferencia({ module: 'Jurídico' }, tudoOff), true);
+  assert.equal(M.visivelPorPreferencia({ module: 'Central de Decisões' }, tudoOff), true);
+  assert.equal(M.visivelPorPreferencia({ module: 'Sistema' }, tudoOff), true);
+});
+
+test('visivelPorPreferencia — sem preferências salvas mostra tudo', () => {
+  assert.equal(M.visivelPorPreferencia({ module: 'Financeiro' }, undefined), true);
+  assert.equal(M.visivelPorPreferencia({ module: 'Engenharia' }, {}), true);
+});

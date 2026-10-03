@@ -8,6 +8,7 @@
    Dia útil = segunda a sexta (feriados não considerados).
    ============================================================ */
 (function () {
+  // BEGIN CALC — copiado para supabase/functions/alerta-pcp-prazos/index.ts; src/alerta-pcp-paridade.test.js confere que seguem idênticos
   const dia = (s) => (s ? String(s).slice(0, 10) : null);
   const paraData = (s) => { const [a, m, d] = dia(s).split('-').map(Number); return new Date(a, m - 1, d); };
   const iso = (dt) => `${dt.getFullYear()}-${String(dt.getMonth() + 1).padStart(2, '0')}-${String(dt.getDate()).padStart(2, '0')}`;
@@ -43,5 +44,6 @@
     return { historico: false, etapas, atrasado };
   }
 
+  // END CALC
   window.PcpPedidoSLA = { somarDiasUteis, etapa, calcular };
 }());

@@ -34,3 +34,16 @@ test('cálculo da Necessidade na função == src/necessidade-calc.js', () => {
   assert.equal(tela.length, 1);
   assert.equal(funcao[1], tela[0]);
 });
+
+// ---- Alerta de PRAZO (alerta-pcp-prazos): cópia do SLA de src/pcp-pedido-sla.js ----
+const prazos = blocos(ler('supabase/functions/alerta-pcp-prazos/index.ts'));
+
+test('a função de prazos tem 1 bloco de cálculo marcado', () => {
+  assert.equal(prazos.length, 1);
+});
+
+test('cálculo do SLA na função de prazos == src/pcp-pedido-sla.js', () => {
+  const tela = blocos(ler('src/pcp-pedido-sla.js'));
+  assert.equal(tela.length, 1);
+  assert.equal(prazos[0], tela[0]);
+});

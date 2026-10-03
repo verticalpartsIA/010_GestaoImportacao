@@ -118,6 +118,7 @@
       const c = sb(); if (!c) return;
       await c.from('alertas').insert({
         id: 'prop-' + uuid(), level: cfg.level, title: cfg.title, sub: cfg.sub, module: 'Comercial', resolved: false,
+        rota: rec.id ? '/comercial/proposta-editor/' + encodeURIComponent(String(rec.id)) : null,   // abre ESTA proposta no editor
       });
     } catch (e) { console.warn('[PropostaStore] notification failed', e); }
   }

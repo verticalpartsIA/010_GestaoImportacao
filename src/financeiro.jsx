@@ -138,7 +138,11 @@ function FinanceiroPage({ setRoute, setSubsel }) {
     setLoading(false);
   };
   const reloadAlertas = () => {
-    window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false })
+    // Mesma regra de destinatário da Central de Notificações: alerta dirigido a uma pessoa não aparece para as outras.
+    const emailAlertas = (window.__VP_USER || {}).email || null;
+    const baseAlertas = window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false);
+    (emailAlertas ? baseAlertas.or(`destinatario_email.is.null,destinatario_email.eq.${emailAlertas}`) : baseAlertas.is('destinatario_email', null))
+      .order('created_at', { ascending: false })
       .then(({ data }) => setAlertas((data || []).map(a => ({ ...a, time: window.__VP_SB.timeAgo(a.created_at) }))));
   };
   React.useEffect(() => { reloadGatilhos(); reloadAlertas(); }, []);
@@ -843,7 +847,9 @@ function NotificacoesPage({ setRoute }) {
   const [prefsOpen, setPrefsOpen] = React.useState(false);
   const [details, setDetails] = React.useState(null);
   const [readIds, setReadIds] = React.useState([]);
-  const filters = ["Todas", "Não lidas"];
+  const [archivedIds, setArchivedIds] = React.useState([]);
+  const [prefs, setPrefs] = React.useState(() => window.NotificacoesLidasStore.lerPreferencias());
+  const filters = ["Todas", "Não lidas", "Arquivadas"];
   const NP = window.NotificacoesProcessamento;
   const LidasStore = window.NotificacoesLidasStore;
 
@@ -853,39 +859,20 @@ function NotificacoesPage({ setRoute }) {
   // de alertas, e reabria a query toda vez que uma notificação era marcada).
   React.useEffect(() => {
     setLoading(true);
-    const emailAtual = (window.__VP_USER || {}).email || null;
-    // Alertas sem destinatario_email são globais (comportamento de sempre,
-    // visíveis a todos); com destinatario_email preenchido, só aparecem
-    // pra quem tem esse e-mail logado (ex.: aviso de Solicitação de Produto
-    // direcionado a um gestor específico).
-    let query = window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false);
-    query = emailAtual
-      ? query.or(`destinatario_email.is.null,destinatario_email.eq.${emailAtual}`)
-      : query.is('destinatario_email', null);
-    const sb = window.__VP_SB.sb;
-    // Achado real (03/10): o KPI "Alertas críticos" do Dashboard Admin soma
-    // 3 checagens cruzadas (proposta sem contrato, contrato valor zero,
-    // sinal sem contrato — AdminMetrics.alertasCriticos()) que NUNCA viram
-    // linha em `alertas` — clicar em "ver central" (sub do card) nunca
-    // achava elas aqui. Busca os mesmos 3 recortes (dashboard-metrics-admin.js)
-    // e mescla via AdminMetrics.alertasSinteticosDetalhados() — sem tabela
-    // nova, recalculado a cada carga desta tela, igual ao Dashboard.
-    Promise.all([
-      query.order('created_at', { ascending: false }),
-      sb.from('propostas').select('id, status, numero_cotacao, aprovada_em'),
-      sb.from('contratos_venda_equipamentos').select('id, proposta_id, valor_total_num').or('status.is.null,status.neq.em_preenchimento'),
-      sb.from('avais_financeiros').select('id, numero_cotacao, sinal_pago, contrato_venda_id'),
-    ]).then(([alertasR, propR, ctR, avaisR]) => {
-      if (alertasR.error) { window.toast('Erro ao carregar notificações: ' + alertasR.error.message, 'error'); setAlertasRaw([]); setLoading(false); return; }
-      const sinteticos = window.AdminMetrics
-        ? window.AdminMetrics.alertasSinteticosDetalhados({ propostas: propR.data || [], contratos: ctR.data || [], avais: avaisR.data || [] })
-        : [];
-      setAlertasRaw([...(alertasR.data || []), ...sinteticos]);
-      setLoading(false);
-    });
+    // A leitura (globais + dirigidos ao e-mail + sintéticos do Dashboard) fica no store, a MESMA que o sino do cabeçalho usa.
+    LidasStore.carregarAlertas()
+      .then((lista) => { setAlertasRaw(lista); setLoading(false); })
+      .catch((err) => { window.toast('Erro ao carregar notificações: ' + (err.message || err), 'error'); setAlertasRaw([]); setLoading(false); });
   }, []);
 
-  React.useEffect(() => { LidasStore.carregar().then(setReadIds); }, []);
+  React.useEffect(() => { LidasStore.carregarEstado().then((e) => { setReadIds(e.lidas); setArchivedIds(e.arquivadas); }); }, []);
+
+  // Preferências mudadas no modal (ou em outra aba do app) refletem aqui sem recarregar.
+  React.useEffect(() => {
+    const h = () => setPrefs(LidasStore.lerPreferencias());
+    window.addEventListener('vp:notificacoes', h);
+    return () => window.removeEventListener('vp:notificacoes', h);
+  }, []);
 
   const markRead = (id) => {
     const idStr = String(id);
@@ -894,19 +881,42 @@ function NotificacoesPage({ setRoute }) {
     LidasStore.marcarLida(id);
   };
   const markAllRead = () => {
-    const ids = alertasRaw.map((a) => String(a.id));
+    const ids = notificationsVisiveis.map((n) => String(n.id));
     setReadIds((prev) => Array.from(new Set([...prev, ...ids])));
     LidasStore.marcarTodasLidas(ids);
     window.toast("Notificações marcadas como lidas", "success");
   };
+  // Arquivar/restaurar é POR PESSOA (some só da lista de quem arquivou). Arquivar também conta como lida.
+  const archive = async (ids) => {
+    const strs = ids.map(String);
+    setArchivedIds((prev) => Array.from(new Set([...prev, ...strs])));
+    setReadIds((prev) => Array.from(new Set([...prev, ...strs])));
+    const ok = await LidasStore.arquivar(strs);
+    if (!ok) setArchivedIds((prev) => prev.filter((x) => !strs.includes(x)));
+    else window.toast(strs.length > 1 ? `${strs.length} notificações arquivadas` : 'Notificação arquivada', 'success');
+  };
+  const restore = async (ids) => {
+    const strs = ids.map(String);
+    setArchivedIds((prev) => prev.filter((x) => !strs.includes(x)));
+    const ok = await LidasStore.desarquivar(strs);
+    if (!ok) setArchivedIds((prev) => Array.from(new Set([...prev, ...strs])));
+    else window.toast('Notificação restaurada', 'success');
+  };
 
-  const notifications = NP.processarAlertas(alertasRaw, readIds);
+  // Todas as notificações respeitando as Preferências; "ativas" = sem as arquivadas desta pessoa.
+  const notificationsPref = NP.processarAlertas(alertasRaw, readIds).filter((n) => NP.visivelPorPreferencia(n, prefs));
+  const notificationsVisiveis = notificationsPref.filter((n) => !archivedIds.includes(String(n.id)));
+  const notifications = filter === "Arquivadas" ? notificationsPref.filter((n) => archivedIds.includes(String(n.id))) : notificationsVisiveis;
+  const naoLidasCount = NP.naoLidas(notificationsVisiveis).length;
+  // Avisa o sino do cabeçalho na hora (sem esperar o intervalo de 5 min).
+  React.useEffect(() => { if (!loading) LidasStore.avisar({ naoLidas: naoLidasCount }); }, [naoLidasCount, loading]);
   const modules = ["Todos", ...Array.from(new Set(notifications.map(n => n.module))).sort()];
   const rows = notifications.filter(n => {
     if (filter === "Não lidas" && !n.unread) return false;
     if (moduleFilter !== "Todos" && n.module !== moduleFilter) return false;
     return true;
   });
+  const archiveReadVisible = () => archive(notificationsVisiveis.filter((n) => !n.unread).map((n) => n.id));
   const groups = NP.agruparPorPeriodo(rows);
   const openNotification = (n) => {
     markRead(n.id);
@@ -927,11 +937,12 @@ function NotificacoesPage({ setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Central</div>
           <h1 className="page-head__title">Notificações</h1>
-          <p className="page-head__sub">Agrupadas por módulo · respostas rápidas inline</p>
+          <p className="page-head__sub">{naoLidasCount} não lida(s) · agrupadas por período · arquivar tira da sua lista (os alertas somem sozinhos depois de 14 dias, ou 45 se forem avisos/críticos)</p>
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="settings" onClick={() => setPrefsOpen(true)}>Preferências</Button>
-          <Button variant="primary" icon="check" onClick={markAllRead}>Marcar todas como lidas</Button>
+          <Button variant="outline" icon="x" onClick={archiveReadVisible} disabled={!notificationsVisiveis.some((n) => !n.unread)}>Arquivar lidas</Button>
+          <Button variant="primary" icon="check" onClick={markAllRead} disabled={!naoLidasCount}>Marcar todas como lidas</Button>
         </div>
       </div>
 
@@ -973,8 +984,14 @@ function NotificacoesPage({ setRoute }) {
                     </div>
                   </div>
                   <div className="row gap-2">
-                    <Button variant="ghost" size="sm" icon="check" aria-label="Marcar como lida"
-                      onClick={(e) => { e.stopPropagation(); markRead(n.id); window.toast('Notificação marcada como lida', 'success'); }}/>
+                    {filter === "Arquivadas"
+                      ? <Button variant="ghost" size="sm" aria-label="Restaurar" onClick={(e) => { e.stopPropagation(); restore([n.id]); }}>Restaurar</Button>
+                      : <>
+                          <Button variant="ghost" size="sm" icon="check" aria-label="Marcar como lida" disabled={!n.unread}
+                            onClick={(e) => { e.stopPropagation(); markRead(n.id); window.toast('Notificação marcada como lida', 'success'); }}/>
+                          <Button variant="ghost" size="sm" icon="x" aria-label="Arquivar"
+                            onClick={(e) => { e.stopPropagation(); archive([n.id]); }}/>
+                        </>}
                     <Button variant="ghost" size="sm" icon="arrowRight" aria-label="Abrir origem"
                       onClick={(e) => { e.stopPropagation(); openNotification(n); }}/>
                   </div>
@@ -987,6 +1004,9 @@ function NotificacoesPage({ setRoute }) {
       {prefsOpen && <NotificationPrefsModal onClose={() => setPrefsOpen(false)}/>}
       {details && <Modal title="Detalhe da Notificação" onClose={() => setDetails(null)} width={520}
         footer={<>
+          {archivedIds.includes(String(details.id))
+            ? <Button variant="ghost" onClick={() => { restore([details.id]); setDetails(null); }}>Restaurar</Button>
+            : <Button variant="ghost" onClick={() => { archive([details.id]); setDetails(null); }}>Arquivar</Button>}
           <Button variant="ghost" onClick={() => { markRead(details.id); setDetails(null); }}>Marcar como lida</Button>
           <Button variant="primary" iconRight="arrowRight" onClick={() => openNotification(details)}>Abrir origem</Button>
         </>}>
@@ -1002,18 +1022,13 @@ function NotificacoesPage({ setRoute }) {
 }
 
 function NotificationPrefsModal({ onClose }) {
-  const [prefs, setPrefs] = React.useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('vpprd.notificacoes.preferencias') || 'null') || {
-        email: true, navegador: true, financeiro: true, operacoes: true, comercial: true,
-      };
-    } catch (e) {
-      return { email: true, navegador: true, financeiro: true, operacoes: true, comercial: true };
-    }
-  });
+  // Preferências REAIS: a Central e o contador do sino leem esta mesma configuração (NotificacoesLidasStore). Ficam neste
+  // navegador. Jurídico e Central de Decisões nunca são ocultados. (Antes: "Resumo por e-mail" e "Alertas no sistema" eram
+  // chaves salvas que nada lia — removidas; não existe envio de resumo por e-mail.)
+  const [prefs, setPrefs] = React.useState(() => window.NotificacoesLidasStore.lerPreferencias());
   const toggle = (key) => setPrefs(p => ({ ...p, [key]: !p[key] }));
   const save = () => {
-    localStorage.setItem('vpprd.notificacoes.preferencias', JSON.stringify(prefs));
+    window.NotificacoesLidasStore.salvarPreferencias(prefs);
     window.toast('Preferências salvas', 'success');
     onClose();
   };
@@ -1033,11 +1048,10 @@ function NotificationPrefsModal({ onClose }) {
         <Button variant="primary" onClick={save}>Salvar preferências</Button>
       </>}>
       <div className="stack">
-        {row('navegador', 'Alertas no sistema', 'Exibir notificações dentro do VP Gestão.')}
-        {row('email', 'Resumo por email', 'Receber consolidados operacionais no email cadastrado.')}
-        {row('financeiro', 'Financeiro', 'Gatilhos, comissões e pagamentos.')}
-        {row('operacoes', 'Operações', 'Importação, engenharia, NCM e instalação.')}
-        {row('comercial', 'Comercial', 'Leads, cotações e propostas.')}
+        <div className="muted" style={{ fontSize: 12 }}>Escolha o que aparece na Central e no contador do sino (vale só neste navegador). Jurídico e Central de Decisões sempre aparecem.</div>
+        {row('financeiro', 'Financeiro', 'Avais, estouro de teto, comissões e pagamentos.')}
+        {row('operacoes', 'Operações', 'Importação, Engenharia, Almoxarifado/PCP e instalação.')}
+        {row('comercial', 'Comercial', 'Propostas, cotações a fornecedor e compras.')}
       </div>
     </Modal>
   );
