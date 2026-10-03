@@ -271,7 +271,15 @@ function FEFornecedorInput({ value, onChange, fornecedores, disabled }) {
       <input className="input" list={listId} value={value ?? ''} onChange={(e) => onChange(e.target.value)}
         placeholder="Digite pra filtrar (ex.: G)" disabled={disabled}/>
       <datalist id={listId}>
-        {(fornecedores || []).map((f) => <option key={f} value={f}/>)}
+        {/* `fornecedores` mistura string (RFQ configurado) e { value, label }
+            (ainda não configurado — ver fornecedoresOptions). Usar o objeto
+            direto virava value="[object Object]" (e key duplicada): o que o
+            usuário escolhia na lista era gravado em unidade.fornecedor. O
+            nome vai em `value`; o rótulo com o aviso vai em `label` (dica). */}
+        {(fornecedores || []).map((f) => {
+          const nome = typeof f === 'string' ? f : f.value;
+          return <option key={nome} value={nome} label={typeof f === 'string' ? undefined : f.label}/>;
+        })}
       </datalist>
     </>
   );

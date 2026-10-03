@@ -30,8 +30,8 @@
        jsx-loader.js abaixo só injeta babel.min.js sob demanda, quando há
        cache-miss (1ª carga / após um ?v= novo). Cargas seguintes com tudo
        em cache nem baixam nem executam o Babel. -->
-  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
 
   <!-- Cache de compilação JSX (IndexedDB) — compila cada .jsx uma vez e reusa
        nas cargas seguintes, em vez de rodar o Babel em ~40 arquivos toda vez.
@@ -95,7 +95,7 @@
   <!-- Roteamento por URL (Fase 1 da roteirização, issue #279) — carrega
        depois do guard de SSO (mexe só na query string, nunca no pathname)
        e antes de shell.jsx/app.jsx, que o consomem. -->
-  <script src="/src/router.js?v=23"></script>
+  <script src="/src/router.js?v=24"></script>
 
   <script src="/src/notificacoes-processamento.js?v=2"></script>
   <script src="/src/notificacoes-lidas-store.js?v=1"></script>
@@ -151,7 +151,7 @@
   <!-- Components in dependency order -->
   <script type="text/vp-jsx" src="/src/primitives.jsx?v=8"></script>
   <script type="text/vp-jsx" src="/src/toast.jsx?v=6"></script>
-  <script type="text/vp-jsx" src="/src/shell.jsx?v=77"></script>
+  <script type="text/vp-jsx" src="/src/shell.jsx?v=78"></script>
   <script type="text/vp-jsx" src="/src/dashboard.jsx?v=19"></script>
   <script type="text/vp-jsx" src="/src/comercial.jsx?v=34"></script>
   <script type="text/vp-jsx" src="/src/crm.jsx?v=1"></script>
@@ -171,7 +171,7 @@
   <script src="/src/cambio-api.js?v=2"></script>
   <script src="/src/formulario-elevador-store.js?v=21"></script>
   <script src="/src/cotacao-elevador-fornecedor-store.js?v=22"></script>
-  <script type="text/vp-jsx" src="/src/formulario-elevador.jsx?v=8"></script>
+  <script type="text/vp-jsx" src="/src/formulario-elevador.jsx?v=9"></script>
 
   <!-- Quadro de Comando (Comercial · Formulários) — BOM + lista de corte
        + checklist digital de separação quando fabricado internamente. -->
@@ -262,7 +262,7 @@
   <!-- Dossier da Obra (entidade central) — ISSUE #2 -->
   <script src="/src/dossier-store.js?v=14"></script>
   <script src="/src/termo-entrega-store.js?v=2"></script>
-  <script type="text/vp-jsx" src="/src/dossier-obra.jsx?v=35"></script>
+  <script type="text/vp-jsx" src="/src/dossier-obra.jsx?v=36"></script>
 
   <!-- Análise Técnica (ISSUE #3) -->
   <script src="/src/analise-tecnica-store.js?v=5"></script>
