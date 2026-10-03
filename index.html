@@ -49,12 +49,15 @@
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
 
-  <!-- Tailwind CSS via CDN — para estilização rápida de formulários novos -->
-  <script src="https://cdn.tailwindcss.com?v=1"></script>
-
   <!-- Leaflet — mapa real (tiles) do popup "Ver mapa" em Importação/Logística. -->
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Tailwind CSS 3.4.17 ESTÁTICO (antes: cdn.tailwindcss.com, compilado no navegador a cada
+       carga e desaconselhado em produção — issue #614). Fica por ÚLTIMO no <head> de
+       propósito: o <style> do CDN era injetado depois de todo o resto, então a cascata
+       continua igual. Regerar: ver o comando em styles/tailwind.config.js. -->
+  <link rel="stylesheet" href="/styles/tailwind.css?v=1">
 </head>
 <body class="vp" data-density="cozy">
   <div id="root"></div>
