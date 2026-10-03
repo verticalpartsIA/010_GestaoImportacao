@@ -669,7 +669,7 @@ function RPFluxoCaixa({ ctx }) {
 
 /* ---------------- Página ---------------- */
 function RelatoriosPCPPage({ setRoute, setSubsel }) {
-  const [aba, setAba] = React.useState('pedidos');
+  const [aba, setAba] = React.useState('painel');
   const [produtos, setProdutos] = React.useState(null);
   const sb = window.__VP_SB && window.__VP_SB.sb;
 
@@ -684,7 +684,7 @@ function RelatoriosPCPPage({ setRoute, setSubsel }) {
   }, [sb]);
 
   const ctx = produtos && { sb, produtos, nav: { setRoute, setSubsel } };
-  const abas = [['pedidos', 'Pedidos'], ['precos', 'Lista de Preços'], ['producao', 'Produção'], ['perdas', 'Perdas'], ['estoque', 'Estoque'], ['fluxo', 'Fluxo de Caixa'], ['clientes', 'Clientes']];
+  const abas = [['painel', 'Painel'], ['pedidos', 'Pedidos'], ['precos', 'Lista de Preços'], ['producao', 'Produção'], ['perdas', 'Perdas'], ['estoque', 'Estoque'], ['fluxo', 'Fluxo de Caixa'], ['clientes', 'Clientes']];
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -698,6 +698,7 @@ function RelatoriosPCPPage({ setRoute, setSubsel }) {
         {abas.map(([id, rot]) => <button key={id} className={'btn btn--sm' + (aba === id ? ' btn--primary' : '')} onClick={() => setAba(id)}>{rot}</button>)}
       </div>
       {!ctx && <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>}
+      {ctx && aba === 'painel' && <RPPainelProducao ctx={ctx}/>}
       {ctx && aba === 'pedidos' && <RPPedidos ctx={ctx}/>}
       {ctx && aba === 'clientes' && <RPClientes ctx={ctx}/>}
       {ctx && aba === 'precos' && <RPListaPrecos ctx={ctx}/>}
