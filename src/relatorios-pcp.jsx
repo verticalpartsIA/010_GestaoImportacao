@@ -90,7 +90,7 @@ function RPPerdas({ ctx }) {
 
   React.useEffect(() => {
     let vivo = true;
-    sb.from('pcp_ordens').select('produto, qtd_produzida, qtd_perdida, causa_perda, data_finalizacao').eq('status', 'concluida').not('produto', 'is', null).limit(5000)
+    sb.from('pcp_ordens').select('id, numero, produto, qtd_produzida, qtd_perdida, causa_perda, acao_corretiva, data_finalizacao').eq('status', 'concluida').not('produto', 'is', null).limit(5000)
       .then(({ data }) => { if (vivo) setOrdens((data || []).filter(x => x.data_finalizacao && Number(x.data_finalizacao.slice(0, 4)) === ano)); });
     return () => { vivo = false; };
   }, [sb, ano]);
@@ -113,6 +113,8 @@ function RPPerdas({ ctx }) {
         <b style={{ fontWeight: 500, fontSize: 16 }}>{ano}</b>
         <button className="btn btn--sm" onClick={() => setAno(a => a + 1)}>→</button>
       </div>
+      <RPPainelPerdas ctx={ctx} ano={ano} ordens={ordens}/>
+      <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>Detalhe por produto</h3>
       <div className="card table-wrap" style={{ overflowX: 'auto', marginBottom: 12 }}>
         <table className="t pcp-grid">
           <thead><tr><th>Produto</th><th className="text-right">OPs</th><th className="text-right">Produção total</th><th className="text-right">Aproveitado</th><th className="text-right">Perdas</th><th className="text-right">% de perda</th></tr></thead>
