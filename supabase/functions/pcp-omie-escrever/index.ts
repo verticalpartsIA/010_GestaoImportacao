@@ -87,7 +87,10 @@ async function omie(endpoint: string, call: string, param: Record<string, unknow
   throw new Error("Omie: tentativas esgotadas");
 }
 
-type Prod = { codigo: string; codigo_produto_omie: number | null; descricao: string; origem_mercadoria: string | null; preco_custo: number | null; unidade: string | null };
+type Prod = { codigo: string; codigo_produto_omie: number | null; descricao: string; origem_mercadoria: string | null; preco_custo: number | null; custo_manual: number | null; unidade: string | null };
+// Custo do produto: o do Omie (CMC) vale; só sem ele entra o custo manual lançado no PCP (Almoxarifado › Custos).
+const custoDe = (p?: Pick<Prod, "preco_custo" | "custo_manual"> | null) =>
+  Number(p?.preco_custo) > 0 ? Number(p!.preco_custo) : (Number(p?.custo_manual) > 0 ? Number(p!.custo_manual) : 0);
 
 /* Executa uma linha da fila: chama o Omie e grava o resultado. */
 async function executar(fila: { id: string; payload: any; tipo: string }) {
@@ -119,7 +122,7 @@ async function ajustarSaldoLocal(codigo: string, tipo: string, quantidade: numbe
 
 async function carregarProdutos(codigos: string[]): Promise<Map<string, Prod>> {
   const lista = codigos.map((c) => `"${c.replace(/"/g, "")}"`).join(",");
-  const rows: Prod[] = await pg("GET", `pcp_produtos?select=codigo,codigo_produto_omie,descricao,origem_mercadoria,preco_custo,unidade&ativo=eq.true&codigo=in.(${encodeURIComponent(lista)})`);
+  const rows: Prod[] = await pg("GET", `pcp_produtos?select=codigo,codigo_produto_omie,descricao,origem_mercadoria,preco_custo,custo_manual,unidade&ativo=eq.true&codigo=in.(${encodeURIComponent(lista)})`);
   return new Map(rows.map((r) => [r.codigo, r]));
 }
 
@@ -219,7 +222,7 @@ Deno.serve(async (req) => {
       if (!p) return json({ error: "Produto não encontrado (ou inativo) no PCP." }, 404);
       if (!p.codigo_produto_omie) return json({ error: "Produto sem código do Omie — sincronize antes." }, 400);
       // O Omie exige "valor" ≠ 0 em todo ajuste: usa o informado; senão o custo cadastrado (CMC).
-      const valor = Number(b?.valor) > 0 ? Number(b.valor) : (Number(p.preco_custo) > 0 ? Number(p.preco_custo) : 0);
+      const valor = Number(b?.valor) > 0 ? Number(b.valor) : custoDe(p);
       if (!(valor > 0)) return json({ error: "Informe o valor unitário (R$): o produto não tem custo cadastrado e o Omie exige um valor." }, 400);
       const chave = chaveNova();
       const payload = {
@@ -277,12 +280,12 @@ Deno.serve(async (req) => {
         if (!p) problemas.push({ codigo: c, motivo: "Produto não encontrado (ou inativo) no PCP." });
         else if (!p.codigo_produto_omie) problemas.push({ codigo: c, motivo: "Produto sem código do Omie — sincronize antes." });
       }
-      // Custo do cadastro; se não houver (item nunca comprado), o valor informado pelo almoxarife na tela (b.valores).
+      // Custo do Omie; senão o manual do PCP; senão o valor informado pelo almoxarife na tela (b.valores).
       const infoVal = (b?.valores && typeof b.valores === "object") ? b.valores as Record<string, unknown> : {};
-      const valorMat = (c: string) => Number(prods.get(c)?.preco_custo) > 0 ? Number(prods.get(c)!.preco_custo) : (Number(infoVal[c]) > 0 ? Number(infoVal[c]) : 0);
+      const valorMat = (c: string) => custoDe(prods.get(c)) > 0 ? custoDe(prods.get(c)) : (Number(infoVal[c]) > 0 ? Number(infoVal[c]) : 0);
       const custoTotal = [...consumo].reduce((s, [c, q]) => s + q * valorMat(c), 0);
       const valorProd = Number(b?.valor_produto) > 0 ? Number(b.valor_produto) : Number(infoVal[op.produto]) > 0 ? Number(infoVal[op.produto])
-        : (Number(prods.get(op.produto)?.preco_custo) > 0 ? Number(prods.get(op.produto)!.preco_custo) : (produzida > 0 ? custoTotal / produzida : 0));
+        : (custoDe(prods.get(op.produto)) > 0 ? custoDe(prods.get(op.produto)) : (produzida > 0 ? custoTotal / produzida : 0));
       if (problemas.length) return json({ error: "Há itens que impedem a baixa.", problemas }, 422);
 
       const chaveDe = async (cod: string, tipo: string) => {

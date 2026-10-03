@@ -394,7 +394,7 @@ function AlmoxarifadoEstoque() {
     if (!c) { setErro('Supabase não carregou.'); setLinhas([]); return; }
     // Sem a alçada "ver_custo" o custo real nem é pedido ao banco: a coluna mostra só um valor de enfeite borrado.
     c.from('pcp_produtos')
-      .select('codigo, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade), pcp_estoque_fisico(quantidade, contado_em, contado_por)' + (podeVerCusto ? ', preco_custo' : ''))
+      .select('codigo, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade), pcp_estoque_fisico(quantidade, contado_em, contado_por)' + (podeVerCusto ? ', preco_custo, custo_manual' : ''))
       .eq('ativo', true).order('familia').order('codigo')
       .then(({ data, error }) => {
         if (error) { setErro(error.message); setLinhas([]); return; }
@@ -514,7 +514,7 @@ function AlmoxarifadoEstoque() {
                     <td className="text-right">{almFmt(l.estoque_minimo)}</td>
                     <td className="text-right" title={podeVerCusto ? '' : 'Sem permissão para ver custos'}
                       style={podeVerCusto ? undefined : { filter: 'blur(6px)', userSelect: 'none' }}>
-                      {podeVerCusto ? almFmt(l.preco_custo, 2) : '00,00'}
+                      {podeVerCusto ? (Number(l.preco_custo) > 0 ? almFmt(l.preco_custo, 2) : (Number(l.custo_manual) > 0 ? <span title="Custo manual (estimado): o Omie ainda não tem custo deste item">{almFmt(l.custo_manual, 2)} ⓜ</span> : almFmt(l.preco_custo, 2))) : '00,00'}
                     </td>
                     <td>{l.endereco || '—'}</td>
                     <td className="text-right">{almFmt(l.leadtime_dias)}</td>
@@ -539,6 +539,136 @@ function AlmoxarifadoEstoque() {
   );
 }
 
+/* Aba "Custos": preenche o custo MANUAL (estimado) dos itens que o Omie ainda não tem custo (nunca comprados).
+   Regras: o custo do Omie sempre vence; o manual só vale quando o Omie não tem (rpCustoEfetivo, relatorios-pcp-custos.jsx).
+   Ver exige almoxarifado.ver_custo; gravar exige almoxarifado.custo_manual. A coluna é própria (custo_manual*): a
+   sincronização com o Omie sobrescreve preco_custo e apagaria o ajuste. Lista primeiro o que trava o lucro dos
+   produtos JÁ VENDIDOS (componentes das estruturas dos itens de pcp_pedido_itens). */
+function AlmoxarifadoCustos() {
+  const sb = window.__VP_SB && window.__VP_SB.sb;
+  const [pVer, setPVer] = React.useState(null);
+  const [pEditar, setPEditar] = React.useState(false);
+  const [dados, setDados] = React.useState(null);
+  const [erro, setErro] = React.useState(null);
+  const [filtro, setFiltro] = React.useState('pendentes');   // pendentes | manuais | todos
+  const [soVendidos, setSoVendidos] = React.useState(true);
+  const [busca, setBusca] = React.useState('');
+  const [edits, setEdits] = React.useState({});               // codigo -> { valor, obs }
+  const [salvando, setSalvando] = React.useState(null);
+
+  React.useEffect(() => {
+    const T = window.PropostaStore;
+    Promise.resolve(T?.temCapacidade?.('almoxarifado', 'ver_custo')).then(v => setPVer(!!v)).catch(() => setPVer(false));
+    Promise.resolve(T?.temCapacidade?.('almoxarifado', 'custo_manual')).then(v => setPEditar(!!v)).catch(() => {});
+  }, []);
+
+  const carregar = React.useCallback(async () => {
+    if (!sb) { setErro('Supabase não carregou.'); return; }
+    const [pr, es, it] = await Promise.all([
+      sb.from('pcp_produtos').select('codigo, descricao, unidade, preco_custo, custo_manual, custo_manual_obs, custo_manual_por, custo_manual_em').eq('ativo', true).order('codigo').limit(5000),
+      sb.from('pcp_estrutura').select('codigo_pai, codigo_filho').limit(5000),
+      sb.from('pcp_pedido_itens').select('codigo').eq('item_pcp', true).limit(20000),
+    ]);
+    const err = pr.error || es.error || it.error;
+    if (err) { setErro(err.message); return; }
+    const filhos = {}; (es.data || []).forEach(l => { (filhos[l.codigo_pai] = filhos[l.codigo_pai] || []).push(l); });
+    const vendidos = Array.from(new Set((it.data || []).map(x => x.codigo)));
+    const usadoEm = {};                                          // folha -> produtos vendidos que dependem dela
+    vendidos.forEach(raiz => { rpFolhasOnde(raiz, filhos, () => true).forEach(f => { (usadoEm[f] = usadoEm[f] || new Set()).add(raiz); }); });
+    setErro(null); setDados({ produtos: pr.data || [], usadoEm, temFilhos: new Set(Object.keys(filhos)) });
+  }, [sb]);
+  React.useEffect(() => { if (pVer) carregar(); }, [pVer, carregar]);
+
+  if (pVer === null) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Verificando permissão…</div>;
+  if (!pVer) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Você não tem a alçada para ver custos (almoxarifado › Vê os preços de custo).</div>;
+  if (erro) return <div style={{ padding: 16, color: 'var(--vp-danger)' }}>{erro}</div>;
+  if (!dados) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
+
+  const semOmie = (p) => !(Number(p.preco_custo) > 0);
+  const eFolha = (p) => !dados.temFilhos.has(p.codigo);           // custo de montagem sai da estrutura; só folha precisa de custo próprio
+  const usado = (p) => dados.usadoEm[p.codigo] ? Array.from(dados.usadoEm[p.codigo]) : [];
+  const pendentes = dados.produtos.filter(p => semOmie(p) && eFolha(p) && !(Number(p.custo_manual) > 0));
+  const pendUsados = pendentes.filter(p => usado(p).length);
+  const comManual = dados.produtos.filter(p => Number(p.custo_manual) > 0);
+  const q = busca.trim().toLowerCase();
+  let lista = dados.produtos.filter(p => eFolha(p) || Number(p.custo_manual) > 0);
+  if (filtro === 'pendentes') lista = lista.filter(p => semOmie(p) && !(Number(p.custo_manual) > 0));
+  else if (filtro === 'manuais') lista = lista.filter(p => Number(p.custo_manual) > 0);
+  else lista = lista.filter(p => semOmie(p) || Number(p.custo_manual) > 0);
+  if (soVendidos && filtro !== 'manuais') lista = lista.filter(p => usado(p).length);
+  if (q) lista = lista.filter(p => (p.codigo + ' ' + (p.descricao || '')).toLowerCase().includes(q));
+  lista = lista.sort((a, b) => usado(b).length - usado(a).length || a.codigo.localeCompare(b.codigo)).slice(0, 300);
+
+  const ed = (p) => edits[p.codigo] || { valor: p.custo_manual != null ? String(p.custo_manual).replace('.', ',') : '', obs: p.custo_manual_obs || '' };
+  const mudou = (p) => { const e = edits[p.codigo]; return !!e && (e.valor !== (p.custo_manual != null ? String(p.custo_manual).replace('.', ',') : '') || e.obs !== (p.custo_manual_obs || '')); };
+  const salvar = async (p) => {
+    const e = ed(p), txt = String(e.valor).trim().replace(/\./g, '').replace(',', '.');
+    const v = txt === '' ? null : Number(txt);
+    if (v !== null && !(v > 0)) { window.toast?.('Informe um valor maior que zero (ou deixe vazio para limpar).', 'error'); return; }
+    setSalvando(p.codigo);
+    const quem = (window.__VP_USER && window.__VP_USER.email) || null;
+    const { data, error } = await sb.from('pcp_produtos').update({
+      custo_manual: v, custo_manual_obs: v === null ? null : (e.obs.trim() || null),
+      custo_manual_por: v === null ? null : quem, custo_manual_em: v === null ? null : new Date().toISOString(),
+    }).eq('codigo', p.codigo).select('codigo');
+    setSalvando(null);
+    if (error || !data || !data.length) { window.toast?.('Não foi possível salvar: ' + (error ? error.message : 'nenhuma linha alterada'), 'error'); return; }
+    window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: v === null ? 'Removeu custo manual' : 'Informou custo manual', alvo: `${p.codigo} — ${v === null ? 'removido' : 'R$ ' + v.toLocaleString('pt-BR', { minimumFractionDigits: 2 })}` });
+    window.toast?.(v === null ? 'Custo manual removido.' : 'Custo manual salvo.', 'success');
+    setEdits(x => { const n = { ...x }; delete n[p.codigo]; return n; });
+    await carregar();
+  };
+
+  return (
+    <div>
+      <div className="grid-3" style={{ marginBottom: 16 }}>
+        <KPI label="Sem custo, usados em produtos vendidos" value={pendUsados.length} sub="travam o lucro real" delta="—" deltaDir="up" icon="alert"/>
+        <KPI label="Sem custo no total" value={pendentes.length} sub="componentes sem custo no Omie nem manual" delta="—" deltaDir="up" icon="package"/>
+        <KPI label="Com custo manual" value={comManual.length} sub="estimativas lançadas no PCP" delta="—" deltaDir="up" icon="check"/>
+      </div>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <Button variant={filtro === 'pendentes' ? 'primary' : 'ghost'} onClick={() => setFiltro('pendentes')}>Pendentes</Button>
+        <Button variant={filtro === 'manuais' ? 'primary' : 'ghost'} onClick={() => setFiltro('manuais')}>Com custo manual</Button>
+        <Button variant={filtro === 'todos' ? 'primary' : 'ghost'} onClick={() => setFiltro('todos')}>Sem custo no Omie (todos)</Button>
+        <label style={{ fontSize: 12, color: 'var(--fg3)' }}><input type="checkbox" checked={soVendidos} onChange={e => setSoVendidos(e.target.checked)}/> só os usados em produtos já vendidos</label>
+        <input className="input" placeholder="Buscar código ou descrição" value={busca} onChange={e => setBusca(e.target.value)} style={{ minWidth: 240 }}/>
+      </div>
+      <Card title="Custos sem cadastro no Omie" sub={`${lista.length} item(ns)${pEditar ? '' : ' · somente leitura (sem a alçada de custo manual)'}`}>
+        <div className="table-wrap" style={{ border: 0, overflowX: 'auto' }}>
+          <table className="t pcp-grid">
+            <thead><tr><th>Código</th><th>Descrição</th><th>Usado em</th><th className="text-right">Custo Omie</th><th className="text-right">Custo manual (R$)</th><th>Observação / fonte</th><th></th></tr></thead>
+            <tbody>
+              {lista.map(p => {
+                const e = ed(p), omie = !semOmie(p);
+                return (
+                  <tr key={p.codigo}>
+                    <td><b style={{ fontWeight: 500 }}>{p.codigo}</b></td>
+                    <td style={{ minWidth: 220 }}>{p.descricao}<div style={{ fontSize: 10, color: 'var(--fg3)' }}>{p.unidade || ''}{p.custo_manual_por ? ` · manual por ${p.custo_manual_por} em ${new Date(p.custo_manual_em).toLocaleDateString('pt-BR')}` : ''}</div></td>
+                    <td style={{ fontSize: 12 }}>{usado(p).length ? usado(p).join(', ') : <span style={{ color: 'var(--fg3)' }}>nenhum vendido</span>}</td>
+                    <td className="text-right">{omie ? almFmt(p.preco_custo, 2) : <span style={{ color: 'var(--vp-yellow)' }}>sem custo</span>}</td>
+                    <td className="text-right">
+                      <input className="input" style={{ width: 110, textAlign: 'right' }} disabled={!pEditar || omie} placeholder="0,00" value={e.valor}
+                        onChange={ev => setEdits({ ...edits, [p.codigo]: { ...e, valor: ev.target.value } })}/>
+                      {omie && <div style={{ fontSize: 10, color: 'var(--fg3)' }}>o custo do Omie vale</div>}
+                    </td>
+                    <td><input className="input" style={{ width: 200 }} disabled={!pEditar || omie} placeholder="ex.: orçamento do fornecedor X" value={e.obs}
+                      onChange={ev => setEdits({ ...edits, [p.codigo]: { ...e, obs: ev.target.value } })}/></td>
+                    <td>{pEditar && !omie && <Button variant="primary" disabled={!mudou(p) || salvando === p.codigo} onClick={() => salvar(p)}>{salvando === p.codigo ? 'Salvando…' : 'Salvar'}</Button>}</td>
+                  </tr>
+                );
+              })}
+              {lista.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>{filtro === 'pendentes' ? 'Nenhum componente pendente com os filtros atuais.' : 'Nada para mostrar com os filtros atuais.'}</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      </Card>
+      <div style={{ marginTop: 8, fontSize: 12, color: 'var(--fg3)' }}>
+        O custo manual é uma <b style={{ fontWeight: 500 }}>estimativa do PCP</b> e só vale enquanto o Omie não tiver custo do item; quando o Omie passar a ter (primeira compra), o do Omie assume sozinho. Entra no lucro dos relatórios com o marcador ⓜ. Limpe o campo e salve para remover.
+      </div>
+    </div>
+  );
+}
+
 function AlmoxarifadoPage() {
   const [aba, setAba] = React.useState('estoque');
   const [pedidos, setPedidos] = React.useState(null);
@@ -559,6 +689,7 @@ function AlmoxarifadoPage() {
 
   const emEstoque = aba === 'estoque';
   const emEstrutura = aba === 'estrutura';
+  const emCustos = aba === 'custos';
   if (aba === 'pedidos' && pedidos === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const lista = pedidos || [];
@@ -570,12 +701,14 @@ function AlmoxarifadoPage() {
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Almoxarifado</div>
-          <h1 className="page-head__title">{emEstoque ? 'Estoque' : emEstrutura ? 'Estrutura dos produtos' : 'Pedidos de Compra (Varejo)'}</h1>
+          <h1 className="page-head__title">{emEstoque ? 'Estoque' : emEstrutura ? 'Estrutura dos produtos' : emCustos ? 'Custos' : 'Pedidos de Compra (Varejo)'}</h1>
           <p className="page-head__sub">{emEstoque
             ? 'Estoque do PCP — cabos de aço, cabos de manobra, corrimãos e componentes dos Quadros de Comando.'
             : emEstrutura
               ? 'Lista de materiais dos Quadros de Comando. Alterações são gravadas no Omie.'
-              : 'Insumos e peças para estoque — não equipamento de venda. Exige aprovação do Chefe de Logística.'}</p>
+              : emCustos
+                ? 'Custo manual (estimado) dos itens que o Omie ainda não tem custo — necessário para o lucro real dos relatórios.'
+                : 'Insumos e peças para estoque — não equipamento de venda. Exige aprovação do Chefe de Logística.'}</p>
         </div>
         <div className="page-head__r">
           {aba === 'pedidos' && <Button variant="primary" icon="plus" onClick={() => setModalOpen(true)}>Novo pedido</Button>}
@@ -584,6 +717,7 @@ function AlmoxarifadoPage() {
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
         <Button variant={emEstoque ? 'primary' : 'ghost'} onClick={() => setAba('estoque')}>Estoque</Button>
         <Button variant={emEstrutura ? 'primary' : 'ghost'} onClick={() => setAba('estrutura')}>Estrutura</Button>
+        <Button variant={emCustos ? 'primary' : 'ghost'} onClick={() => setAba('custos')}>Custos</Button>
         <Button variant={aba === 'pedidos' ? 'primary' : 'ghost'} onClick={() => setAba('pedidos')}>Pedidos de compra</Button>
       </div>
     </>
@@ -591,6 +725,7 @@ function AlmoxarifadoPage() {
 
   if (emEstoque) return <div className="page fade-in">{cabecalho}<AlmoxarifadoEstoque/></div>;
   if (emEstrutura) return <div className="page fade-in">{cabecalho}<AlmoxarifadoEstrutura/></div>;
+  if (emCustos) return <div className="page fade-in">{cabecalho}<AlmoxarifadoCustos/></div>;
 
   return (
     <div className="page fade-in">

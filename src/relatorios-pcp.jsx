@@ -364,7 +364,7 @@ function RPPedidos({ ctx }) {
                       <td className="text-right">{Number(i.desconto) ? rpMoeda(i.desconto) : '—'}</td>
                       <td className="text-right"><b style={{ fontWeight: 500 }}>{rpMoeda(i.valor_total)}</b></td>
                       {lcs && <>
-                        <td className="text-right">{rpMoeda(lcs[k].custo)}<RPAvisoCusto falta={lcs[k].falta}/></td>
+                        <td className="text-right">{rpMoeda(lcs[k].custo)}<RPAvisoCusto falta={lcs[k].falta} manuais={lcs[k].manuais}/></td>
                         <td className="text-right" style={lcs[k].lucro < 0 ? { color: 'var(--vp-danger)' } : undefined}>{rpMoeda(lcs[k].lucro)}</td>
                         <td className="text-right">{rpPct(lcs[k].margem)}</td>
                       </>}
@@ -473,7 +473,7 @@ function RPClientes({ ctx }) {
                   <td className="text-right">{Number(l.desconto) ? rpMoeda(l.desconto) : '—'}</td>
                   <td className="text-right"><b style={{ fontWeight: 500 }}>{rpMoeda(l.valor_total)}</b></td>
                   {lcs && <>
-                    <td className="text-right">{rpMoeda(lcs[k].custo)}<RPAvisoCusto falta={lcs[k].falta}/></td>
+                    <td className="text-right">{rpMoeda(lcs[k].custo)}<RPAvisoCusto falta={lcs[k].falta} manuais={lcs[k].manuais}/></td>
                     <td className="text-right" style={lcs[k].lucro < 0 ? { color: 'var(--vp-danger)' } : undefined}>{rpMoeda(lcs[k].lucro)}</td>
                   </>}
                 </tr>
@@ -536,8 +536,8 @@ function RPListaPrecos({ ctx }) {
       ]);
       let custo = {};
       if (perm.custo) {
-        const { data } = await sb.from('pcp_produtos').select('codigo, preco_custo').limit(5000);
-        (data || []).forEach(l => { custo[l.codigo] = Number(l.preco_custo || 0); });
+        const { data } = await sb.from('pcp_produtos').select('codigo, preco_custo, custo_manual').limit(5000);
+        (data || []).forEach(l => { custo[l.codigo] = rpCustoEfetivo(l); });
       }
       // Mão de obra real média por unidade: custo de HH das OPs concluídas do produto ÷ unidades produzidas.
       const mo = {};
