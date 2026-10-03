@@ -43,10 +43,27 @@ test('conversaoLeadProposta — sem leads não divide por zero', () => {
   assert.equal(M.conversaoLeadProposta([], []), 0);
 });
 
-test('conversaoLeadProposta — calcula percentual corretamente', () => {
-  const leads = [{ id: 1 }, { id: 2 }, { id: 3 }, { id: 4 }];
-  const enviadas = [{ id: 1 }];
+test('conversaoLeadProposta — casa lead com proposta pelo cliente_id, não pela contagem bruta', () => {
+  const leads = [{ id: 1, cliente_id: 'c1' }, { id: 2, cliente_id: 'c2' }, { id: 3, cliente_id: 'c3' }, { id: 4, cliente_id: null }];
+  const enviadas = [{ id: 'p1', cliente_id: 'c1' }];
   assert.equal(M.conversaoLeadProposta(leads, enviadas), 25);
+});
+
+// Regressão do bug real de produção (02/10): 12 leads × 309 propostas
+// históricas (de clientes em grande parte distintos dos 12 leads atuais)
+// dava 2575% na razão bruta propostas/leads. Com o casamento por
+// cliente_id, o percentual nunca passa de 100% e só conta lead cujo
+// cliente já tem proposta de verdade — aqui, de 4 leads, só 1 bate.
+test('conversaoLeadProposta — nunca passa de 100% mesmo com muito mais propostas que leads', () => {
+  const leads = [{ id: 1, cliente_id: 'c1' }, { id: 2, cliente_id: 'c2' }, { id: 3, cliente_id: 'c3' }, { id: 4, cliente_id: 'c4' }];
+  const enviadas = Array.from({ length: 50 }, (_, i) => ({ id: 'p' + i, cliente_id: 'c1' }));
+  assert.equal(M.conversaoLeadProposta(leads, enviadas), 25);
+});
+
+test('conversaoLeadProposta — lead sem cliente_id (ainda não qualificado) nunca conta como convertido', () => {
+  const leads = [{ id: 1, cliente_id: null }];
+  const enviadas = [{ id: 'p1', cliente_id: null }];
+  assert.equal(M.conversaoLeadProposta(leads, enviadas), 0);
 });
 
 test('propostasAprovadas — só status "aprovada"', () => {

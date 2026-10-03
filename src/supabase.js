@@ -198,7 +198,9 @@
       // custoInstalacaoMaoDeObraRs por equipamento, ver proposta-heranca.js),
       // não o data_json inteiro (evita puxar o JSON grande da proposta toda
       // só pra comparar custo de instalação no Dashboard).
-      sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em, ativos:data_json->ativos'),
+      // cliente_id: usado por ComercialMetrics.conversaoLeadProposta() pra
+      // casar lead → proposta pelo cliente (propostas não tem lead_id).
+      sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em, cliente_id, ativos:data_json->ativos'),
       sb.from('avais_financeiros').select('id, numero_cotacao, status, sinal_pago, contrato_venda_id'),
       // Issue #273: o widget "Pendências NCM" do Dashboard lia um array
       // hardcoded vazio — puxa de verdade agora (ver dashboard-metrics-engenharia.js).

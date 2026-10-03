@@ -40,10 +40,23 @@
     return (leads || []).filter((l) => l.status === 'Convertido');
   }
 
+  /* Achado real (02/10): a versão anterior dividia o TOTAL histórico de
+     propostas enviadas (309, de todas as cotações já feitas) pelo nº de
+     leads ainda não excluídos na tela de Leads (12) — populações sem
+     relação, dava 2575% em produção. propostas não tem `lead_id`, mas
+     tem `cliente_id` (igual a `leads.cliente_id`) — conta como "lead que
+     virou proposta" só o lead cujo cliente já tem pelo menos 1 proposta
+     enviada vinculada. Sempre ≤ 100%, nunca divide por populações
+     diferentes. Lead sem `cliente_id` (ainda não qualificado) não conta. */
+  function leadsComPropostaVinculada(leads, propEnviadas) {
+    const clientesComProposta = new Set((propEnviadas || []).map((p) => p.cliente_id).filter(Boolean));
+    return (leads || []).filter((l) => l.cliente_id && clientesComProposta.has(l.cliente_id));
+  }
+
   function conversaoLeadProposta(leads, propEnviadas) {
     const total = (leads || []).length;
     if (!total) return 0;
-    return Math.round((((propEnviadas || []).length) / total) * 100);
+    return Math.round((leadsComPropostaVinculada(leads, propEnviadas).length / total) * 100);
   }
 
   /* Propostas (tabela real `propostas`, distinta do status textual dos
@@ -105,7 +118,7 @@
   }
 
   window.ComercialMetrics = {
-    leadsDoMes, cotacoesAbertas, propostasEnviadas, leadsConvertidos, conversaoLeadProposta,
+    leadsDoMes, cotacoesAbertas, propostasEnviadas, leadsConvertidos, leadsComPropostaVinculada, conversaoLeadProposta,
     propostasAprovadas, idsComContrato, kpis, pipeline, origemBars, compute,
   };
 }());
