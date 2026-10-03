@@ -167,6 +167,14 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
   }, [dossier, activeTab]);
 
   const carregarDossier = async () => {
+    /* Rota aberta sem id (ex.: /engenharia/dossier-obra): não há o que buscar.
+       Sem esta guarda, `obter(null)` fazia GET dossier_obra?id=eq.null (HTTP
+       406) e mostrava toast de erro antes do "Dossier não encontrado". */
+    if (!dossierId) {
+      setDossier(null);
+      setLoading(false);
+      return;
+    }
     try {
       setLoading(true);
       const data = await window.__DOSSIER.obter(dossierId);
