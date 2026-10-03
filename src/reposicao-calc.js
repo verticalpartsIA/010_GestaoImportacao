@@ -21,6 +21,7 @@
 (function () {
   'use strict';
 
+  // BEGIN CALC — copiado para supabase/functions/alerta-pcp-compras/index.ts; src/alerta-pcp-paridade.test.js confere que seguem idênticos
   const MESES_HISTORICO_CURTO = 3;
   const ehNacional = (codigo) => /n$/.test(String(codigo || ''));        // só "n" minúsculo
 
@@ -88,5 +89,6 @@
     return { ...r, status, critico, pedido, maximo, coberturaAtual, coberturaProj, sugestao, excesso, faltaAntesDeChegar: coberturaAtual < prazo };
   }
 
+  // END CALC
   window.PcpReposicao = { ehNacional, calcularItem, origensDe, contaComoConsumo, MESES_HISTORICO_CURTO };
 }());

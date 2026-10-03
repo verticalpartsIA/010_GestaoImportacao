@@ -82,6 +82,38 @@ test('agruparPorPeriodo — omite grupos vazios do resultado', () => {
   assert.deepEqual(Object.keys(grupos), ['Hoje']);
 });
 
+const conhecida = (r) => ['almoxarifado', 'pcp', 'decisoes'].includes(r);
+
+test('urlSegura — aceita caminho relativo de rota conhecida (com aba/item)', () => {
+  assert.equal(M.urlSegura('/logistica/almoxarifado/reposicao', conhecida), '/logistica/almoxarifado/reposicao');
+  assert.equal(M.urlSegura('/logistica/pcp/ordens/abc-123', conhecida), '/logistica/pcp/ordens/abc-123');
+  assert.equal(M.urlSegura('/geral/decisoes', conhecida), '/geral/decisoes');
+});
+
+test('urlSegura — recusa o que não é caminho relativo seguro (sem redirecionamento aberto)', () => {
+  assert.equal(M.urlSegura('https://evil.com/logistica/pcp', conhecida), null);
+  assert.equal(M.urlSegura('//evil.com/logistica/pcp', conhecida), null);
+  assert.equal(M.urlSegura('/\\evil.com/pcp', conhecida), null);
+  assert.equal(M.urlSegura('javascript:alert(1)', conhecida), null);
+  assert.equal(M.urlSegura('/logistica/rota-inexistente', conhecida), null);
+  assert.equal(M.urlSegura('/so-um-segmento', conhecida), null);
+  assert.equal(M.urlSegura('', conhecida), null);
+  assert.equal(M.urlSegura(null, conhecida), null);
+});
+
+test('urlSegura — sem a lista de rotas conhecidas, recusa (falha fechada)', () => {
+  assert.equal(M.urlSegura('/logistica/almoxarifado/reposicao', undefined), null);
+});
+
+test('paraNotificacao — carrega a rota do alerta; sem rota continua null', () => {
+  assert.equal(M.paraNotificacao({ id: 'a', title: 't', module: 'Almoxarifado', rota: '/logistica/almoxarifado/reposicao' }, []).rota, '/logistica/almoxarifado/reposicao');
+  assert.equal(M.paraNotificacao({ id: 'b', title: 't', module: 'Jurídico' }, []).rota, null);
+});
+
+test('rotaPara — Almoxarifado abre o módulo quando a notificação não tem rota própria', () => {
+  assert.equal(M.rotaPara('Almoxarifado'), 'almoxarifado');
+});
+
 test('agruparPorPeriodo — sem created_at cai em Anteriores', () => {
   const grupos = M.agruparPorPeriodo([{ id: 1, createdAt: null }], new Date('2026-08-17T12:00:00'));
   assert.deepEqual(grupos.Anteriores.map((n) => n.id), [1]);
