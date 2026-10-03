@@ -203,7 +203,9 @@
       // só a tabela `projetos`, legada e sempre vazia em produção. cliente/
       // obra por numero_cotacao vêm daqui pra montar o projeto sintético
       // real em dashboard-metrics-gantt.js (projetosDaEsteira).
-      sb.from('formularios_elevador').select('numero_cotacao, cliente_id, local_obra_cidade'),
+      // vendedor/created_by: achado real (03/10) — alimenta "Responsável"
+      // no modal de detalhe do projeto (campo morto até então).
+      sb.from('formularios_elevador').select('numero_cotacao, cliente_id, local_obra_cidade, vendedor, created_by'),
       sb.from('clientes').select('id, nome_fantasia, razao_social'),
       // Instalação: contratado x previsto (Fase 3d "capítulo leve" da
       // granularidade de custo) — só os campos usados na comparação.
@@ -232,7 +234,7 @@
     // 03/10, "Projetos abertos" da Engenharia também). Calculada ANTES dos
     // módulos de perspectiva porque mais de um perfil precisa dela. ----
     const GM = window.ProjetosGanttMetrics;
-    const projetosReais = GM.projetosDaEsteira({ gatilhos, formularios, clientesPorId });
+    const projetosReais = GM.projetosDaEsteira({ gatilhos, formularios, clientesPorId, propostas });
 
     // ---- Comercial (dashboard-metrics-comercial.js) — 1º módulo extraído
     // da revisão de arquitetura do Dashboard. Funções puras, testadas em
