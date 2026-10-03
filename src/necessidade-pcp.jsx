@@ -40,6 +40,9 @@ function AlmoxarifadoNecessidade() {
   const [incluiOrdens, setIncluiOrdens] = React.useState(true);
   const [filtro, setFiltro] = React.useState('agir');       // agir | atrasado | comprar | todos
   const [busca, setBusca] = React.useState('');
+  const [sel, setSel] = React.useState(() => new Set());
+  const [comprando, setComprando] = React.useState(null);          // itens do modal "Enviar compra ao Omie" (compra-pcp.jsx)
+  const [reqs, recarregarReqs] = window.usePcpRequisicoesRecentes();
 
   React.useEffect(() => {
     Promise.resolve(window.PropostaStore?.temCapacidade?.('almoxarifado', 'ver_custo')).then(v => setCustoOk(!!v)).catch(() => {});
@@ -111,9 +114,20 @@ function AlmoxarifadoNecessidade() {
     .filter(l => !q || (l.codigo + ' ' + (l.p?.descricao || '') + ' ' + l.refs.join(' ')).toLowerCase().includes(q));
   const btn = (a) => 'btn btn--sm' + (a ? ' btn--primary' : '');
   const refsTxt = (refs) => refs.length > 3 ? `${refs.slice(0, 3).join(', ')} +${refs.length - 3}` : refs.join(', ');
+  // Compra ao Omie: só o que está marcado E falta (a tabela "A produzir" não entra: fabricado não se compra).
+  const compraSel = lista.filter(l => sel.has(l.codigo) && l.falta > 1e-9);
+  const alternar = (cod) => setSel(prev => { const n = new Set(prev); if (n.has(cod)) n.delete(cod); else n.add(cod); return n; });
+  const faltantesLista = lista.filter(l => l.falta > 1e-9);
+  const todosMarcados = faltantesLista.length > 0 && faltantesLista.every(l => sel.has(l.codigo));
+  const marcarTodos = () => setSel(prev => { const n = new Set(prev); if (todosMarcados) faltantesLista.forEach(l => n.delete(l.codigo)); else faltantesLista.forEach(l => n.add(l.codigo)); return n; });
+  const abrirCompra = () => setComprando(compraSel.map(l => ({
+    codigo: l.codigo, descricao: l.p?.descricao, unidade: l.p?.unidade, quantidade: Math.ceil(l.falta * 100) / 100,
+    obs: `Necessidade: ${refsTxt(l.refs)} · entrega ${necData(l.previsao)}`.slice(0, 190),
+  })));
 
   return (
     <div>
+      {comprando && <PcpModalCompra itens={comprando} requisicoes={reqs} onClose={() => setComprando(null)} onEnviado={recarregarReqs}/>}
       <div className="grid-4" style={{ marginBottom: 12 }}>
         <div className="pcp-total"><div className="pcp-total__l">Carteira considerada</div><div className="pcp-total__v">{res.abertos.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>pedido(s){res.nOrdens ? ` + ${res.nOrdens} ordem(ns) avulsa(s)` : ''} · {res.nItens} linha(s)</div></div>
         <div className="pcp-total"><div className="pcp-total__l">Materiais em falta</div><div className="pcp-total__v">{faltam.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>para atender a carteira</div></div>
@@ -129,6 +143,7 @@ function AlmoxarifadoNecessidade() {
         <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center', marginLeft: 8 }}><input type="checkbox" checked={incluiPropostas} onChange={e => setIncluiPropostas(e.target.checked)}/>incluir propostas (etapa 00)</label>
         <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={incluiOrdens} onChange={e => setIncluiOrdens(e.target.checked)}/>incluir ordens avulsas</label>
         <input className="input" style={{ minWidth: 200, marginLeft: 'auto' }} placeholder="Buscar item ou pedido…" value={busca} onChange={e => setBusca(e.target.value)}/>
+        <button className="btn btn--sm" disabled={!compraSel.length} title="Marque os itens em falta na tabela. Mostra uma simulação antes de enviar; nada vai ao Omie sem confirmação." onClick={abrirCompra}>Enviar compra ao Omie ({compraSel.length})</button>
         <button className="btn btn--sm" onClick={carregar}>Recarregar</button>
       </div>
 
@@ -142,7 +157,7 @@ function AlmoxarifadoNecessidade() {
         <div className="table-wrap">
           <table className="t pcp-grid">
             <thead><tr>
-              <th>Item</th><th>Situação</th><th style={{ textAlign: 'right' }}>Necessário</th><th style={{ textAlign: 'right' }}>Em mãos</th><th style={{ textAlign: 'right' }}>A caminho</th>
+              <th style={{ width: 28 }}><input type="checkbox" checked={todosMarcados} onChange={marcarTodos} title="Marcar todos os itens em falta da lista"/></th><th>Item</th><th>Situação</th><th style={{ textAlign: 'right' }}>Necessário</th><th style={{ textAlign: 'right' }}>Em mãos</th><th style={{ textAlign: 'right' }}>A caminho</th>
               <th style={{ textAlign: 'right' }}>Falta</th><th style={{ textAlign: 'right' }}>Prazo</th><th>Entrega mais cedo</th><th>Comprar até</th><th>Pedidos</th>{custoOk && <th style={{ textAlign: 'right' }}>Valor</th>}
             </tr></thead>
             <tbody>
@@ -150,12 +165,13 @@ function AlmoxarifadoNecessidade() {
                 const st = NEC_STATUS[l.status];
                 return (
                   <tr key={l.codigo}>
+                    <td>{l.falta > 1e-9 ? <input type="checkbox" checked={sel.has(l.codigo)} onChange={() => alternar(l.codigo)}/> : null}</td>
                     <td style={{ minWidth: 220 }}><b style={{ fontWeight: 500 }}>{l.codigo}</b><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{l.p?.descricao}</div></td>
                     <td><Badge variant={st.variant}>{st.label}</Badge>{l.status === 'atrasado' ? <div style={{ fontSize: 10, color: 'var(--fg3)' }}>{l.prazo - l.diasAtePrevisao} dia(s) de atraso</div> : null}</td>
                     <td style={{ textAlign: 'right' }}>{necFmt(l.necessario)} {l.p?.unidade || ''}</td>
                     <td style={{ textAlign: 'right' }}>{necFmt(l.fisico)}</td>
                     <td style={{ textAlign: 'right' }}>{l.aCaminho ? necFmt(l.aCaminho) : '—'}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{l.falta > 1e-9 ? necFmt(Math.ceil(l.falta * 100) / 100) : '—'}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{l.falta > 1e-9 ? necFmt(Math.ceil(l.falta * 100) / 100) : '—'}<PcpTagRequisicao lista={reqs[l.codigo]}/></td>
                     <td style={{ textAlign: 'right' }}>{l.prazo}d{l.nacional ? <div style={{ fontSize: 10, color: 'var(--fg3)' }}>nacional</div> : null}</td>
                     <td>{necData(l.previsao)}</td>
                     <td style={{ color: l.status === 'atrasado' ? 'var(--vp-danger)' : undefined }}>{l.falta > 1e-9 ? (l.comprarAte ? necData(l.comprarAte) : '—') : '—'}</td>
@@ -164,7 +180,7 @@ function AlmoxarifadoNecessidade() {
                   </tr>
                 );
               })}
-              {lista.length === 0 && <tr><td colSpan={custoOk ? 11 : 10} style={{ padding: 24, textAlign: 'center', color: 'var(--fg3)' }}>Nenhum item neste filtro.</td></tr>}
+              {lista.length === 0 && <tr><td colSpan={custoOk ? 12 : 11} style={{ padding: 24, textAlign: 'center', color: 'var(--fg3)' }}>Nenhum item neste filtro.</td></tr>}
             </tbody>
           </table>
         </div>
