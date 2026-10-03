@@ -173,9 +173,9 @@
   async function loadDashboardData(role, period) {
     const [
       lR, alertR,
-      tarR, embR, ctR, estR,
+      tarR, embR, ctR,
       comR, gatR, fichasR, catalogoR,
-      propR, avaisR, ncmR,
+      propR, avaisR,
       formR, cliR, instR
     ] = await Promise.all([
       sb.from('leads').select('*').is('excluido_em', null).order('date', { ascending: false }),
@@ -183,7 +183,6 @@
       sb.from('tarefas').select('*').eq('role', role).eq('done', false).order('id'),
       sb.from('embarques').select('*').order('eta'),
       sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false }),
-      sb.from('estoque').select('*').order('sku'),
       sb.from('comissoes').select('*').order('id'),
       sb.from('gatilhos').select('*').order('due_date'),
       sb.from('fichas_tecnicas').select('*').order('criado_em', { ascending: false }),
@@ -200,9 +199,6 @@
       // casar lead → proposta pelo cliente (propostas não tem lead_id).
       sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em, cliente_id, ativos:data_json->ativos'),
       sb.from('avais_financeiros').select('id, numero_cotacao, status, sinal_pago, contrato_venda_id'),
-      // Issue #273: o widget "Pendências NCM" do Dashboard lia um array
-      // hardcoded vazio — puxa de verdade agora (ver dashboard-metrics-engenharia.js).
-      sb.from('ncm_solicitacoes').select('id, status, created_at'),
       // Issue #274 (23/08): "Projetos em Andamento" (Gantt/Kanban/Lista) lia
       // só a tabela `projetos`, legada e sempre vazia em produção. cliente/
       // obra por numero_cotacao vêm daqui pra montar o projeto sintético
@@ -219,14 +215,12 @@
     const tarefas   = tarR.data  || [];
     const embarques = embR.data  || [];
     const contratos = ctR.data   || [];
-    const estoque   = estR.data  || [];
     const comissoes = comR.data  || [];
     const gatilhos  = gatR.data  || [];
     const fichas    = fichasR.data || [];
     const catalogo  = catalogoR.data || [];
     const propostas = propR.data  || [];
     const avais     = avaisR.data || [];
-    const ncmSolicitacoes = ncmR.data || [];
     const formularios = formR.data || [];
     const contratosInstalador = instR.data || [];
     const clientesPorId = {};
@@ -248,12 +242,13 @@
     const comercial = CM.compute({ leads, gatilhos, propostas, contratos });
 
     // ---- Engenharia (dashboard-metrics-engenharia.js) — 2º módulo
-    // extraído. Fecha a issue #273 (NCM sempre vazio). Achado real (03/10):
-    // "Projetos abertos" lia a tabela legada `projetos` (0 linhas em
-    // produção) — agora usa a mesma esteira reconciliada (projetosReais)
-    // que o Gantt/Admin já usam, nunca mais fica preso em zero. ----
+    // extraído. Achado real (03/10): "Projetos abertos" lia a tabela legada
+    // `projetos` (0 linhas em produção) — agora usa a mesma esteira
+    // reconciliada (projetosReais) que o Gantt/Admin já usam, nunca mais
+    // fica preso em zero. `ncmSolicitacoes` não é mais passado aqui —
+    // ver nota sobre `ncm_solicitacoes` logo abaixo (achado real 03/10). ----
     const EM = window.EngenhariaMetrics;
-    const engenharia = EM.compute({ projetos: projetosReais, fichas, catalogo, alertas, ncmSolicitacoes });
+    const engenharia = EM.compute({ projetos: projetosReais, fichas, catalogo, alertas });
 
     // ---- Financeiro (dashboard-metrics-financeiro.js) — 3º módulo extraído. ----
     const FM = window.FinanceiroMetrics;
@@ -286,20 +281,22 @@
       admin: admin.kpis,
     };
 
-    // ---- Estoque crítico ----
-    const estoqueCritico = estoque
-      .filter(e => e.qty < e.min_qty)
-      .map(e => ({
-        sku: e.sku, name: e.name, qty: e.qty, min: e.min_qty,
-        status: e.qty <= Math.floor(e.min_qty / 2) ? 'danger' : 'warning',
-      }));
-
+    // Achado real (03/10): até aqui o Dashboard ainda consultava `estoque`
+    // (pra computar `estoqueCritico`) e `ncm_solicitacoes` (pra
+    // `engenharia.ncm`, issue #273) a cada carregamento — mas nenhum dos
+    // dois é lido em lugar nenhum de `dashboard.jsx`. O comentário de
+    // `OndeParouWidget` já confirma a causa: "Onde Parou" (23/08) substituiu
+    // os widgets "Pendências NCM" e "Estoque Crítico" que consumiam esses
+    // dados — a limpeza do back-end ficou pela metade na troca. Removidas
+    // as 2 consultas (não há mais `estoqueCritico`/`ncm` no retorno) —
+    // se um widget equivalente for pedido de novo, refazer a consulta é
+    // simples; manter uma rodando pra ninguém ler não é.
     const gantt = GM.compute({ projetos: projetosReais });
 
     return {
       leads, projetos: projetosReais, alertas, tarefas: tarefasFmt,
-      embarques, contratos, estoque, comissoes, gatilhos, fichas, catalogo, ncm: engenharia.ncm,
-      kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars, estoqueCritico,
+      embarques, contratos, comissoes, gatilhos, fichas, catalogo,
+      kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars,
       alertasCriticos: admin.alertasCriticos.length,
       ganttToday: gantt.ganttToday, ganttProjetos: gantt.ganttProjetos,
     };
