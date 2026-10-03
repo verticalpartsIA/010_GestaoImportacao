@@ -20,6 +20,7 @@
 (function () {
   'use strict';
 
+  // BEGIN CALC — copiado para supabase/functions/alerta-pcp-compras/index.ts; src/alerta-pcp-paridade.test.js confere que seguem idênticos
   const DIA = 86400000;
   const nacional = (codigo) => /n$/.test(String(codigo || ''));
   const t = (iso) => { const [y, m, d] = String(iso).slice(0, 10).split('-').map(Number); return Date.UTC(y, m - 1, d); };
@@ -86,5 +87,6 @@
     return { comprados, fabricados, ciclos };
   }
 
+  // END CALC
   window.PcpNecessidade = { calcular, nacional };
 }());

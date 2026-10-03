@@ -895,6 +895,14 @@ function NotificacoesPage({ setRoute }) {
   const groups = NP.agruparPorPeriodo(rows);
   const openNotification = (n) => {
     markRead(n.id);
+    // Link composto (alertas.rota, ex.: /logistica/almoxarifado/reposicao): abre a aba certa. Passa pelo roteador por URL
+    // (pushState + popstate, como o Voltar do navegador), e só aceita caminho relativo de rota conhecida (urlSegura).
+    const url = NP.urlSegura(n.rota, window.VpRouter && window.VpRouter.isKnownRoute);
+    if (url) {
+      window.history.pushState({}, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      return;
+    }
     setRoute(NP.rotaPara(n.module));
   };
 
