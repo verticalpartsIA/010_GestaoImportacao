@@ -73,6 +73,22 @@ test('projetosDaEsteira — fase atual vem do gatilho aberto mais antigo (o garg
   assert.equal(r[0].current_phase, M.FASE_POR_NODE.PRECIFICACAO);
 });
 
+// Achado real (03/10): INSTALACAO_METADE_EXECUCAO (gatilhos-engine.js) nasce
+// junto com INSTALACAO_INICIADA e fica aberto até ~50% do checklist de
+// instalação — mas não tinha entrada em FASE_POR_NODE. Se fosse o nó aberto
+// mais antigo de uma cotação (empate de nascido_em com INSTALACAO_INICIADA,
+// ou INSTALACAO_INICIADA já fechado por outro motivo), a fase caía no
+// fallback 'Projeto' — um projeto já em instalação retrocedendo pra fase
+// inicial no Gantt/Kanban.
+test('projetosDaEsteira — INSTALACAO_METADE_EXECUCAO mapeia pra fase "Instalação", não cai no fallback "Projeto"', () => {
+  const gatilhos = [
+    { numero_cotacao: 20, evento_key: 'AGUARDA_ASSINATURA', nascido_em: '2026-08-01T00:00:00Z', concluido_em: '2026-08-05T00:00:00Z' },
+    { numero_cotacao: 20, evento_key: 'INSTALACAO_METADE_EXECUCAO', nascido_em: '2026-08-05T00:00:01Z', concluido_em: null },
+  ];
+  const r = M.projetosDaEsteira({ gatilhos, formularios: [], clientesPorId: {} });
+  assert.equal(r[0].current_phase, 'Instalação');
+});
+
 test('projetosDaEsteira — ignora linhas de lembrete (LEMBRETE__*)', () => {
   const gatilhos = [
     { numero_cotacao: 7, evento_key: 'LEMBRETE__PRECIFICACAO', nascido_em: '2026-08-01T00:00:00Z', concluido_em: null },
