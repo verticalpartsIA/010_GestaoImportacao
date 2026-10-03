@@ -319,7 +319,7 @@ function Dashboard({ role, setRoute, setSubsel }) {
         <Card title="Pipeline Comercial" sub="acumulado">
           <PipelineFunnel stages={sbData?.pipelineStages}/>
         </Card>
-        <Card title="Conversão por Origem" sub="todos os leads">
+        <Card title="Conversão por Origem" sub="leads marcados como Convertido">
           <OriginBars data={sbData?.originBars}/>
         </Card>
         <OndeParouWidget gatilhos={sbData?.gatilhos || []} setRoute={setRoute} setSubsel={setSubsel}/>
@@ -357,7 +357,7 @@ function PipelineFunnel({ stages }) {
         </div>
       ))}
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
-        <span className="muted small">Conversão Lead→Contrato</span>
+        <span className="muted small" title="Nº de contratos dividido pelo nº de leads (volume do funil, sem vínculo lead a lead)">Contratos ÷ Leads (volume)</span>
         <span className="mono" style={{ fontWeight: 700 }}>{conv}%</span>
       </div>
     </div>

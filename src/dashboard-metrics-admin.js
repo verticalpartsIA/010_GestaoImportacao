@@ -112,8 +112,23 @@
     };
   }
 
+  /* Projeto "ativo no período": já começou e ainda não terminou antes do
+     início do período (sem end_date = em andamento). Antes o recorte usava
+     `start_date >= desde` ("iniciado no período"): um projeto começado há
+     semanas e ainda em andamento sumia — "Projetos ativos" dava 0 em "Hoje"
+     enquanto o Gantt listava 38 (issue #612). Sem `desde`, devolve tudo. */
+  function projetosAtivosNoPeriodo(projetos, desde, agora) {
+    if (!desde) return projetos || [];
+    const hoje = agora ? new Date(agora) : new Date();
+    return (projetos || []).filter((p) => {
+      if (p.start_date && new Date(p.start_date) > hoje) return false; // ainda não começou
+      return !p.end_date || new Date(p.end_date) >= desde;
+    });
+  }
+
   window.AdminMetrics = {
     embarquesEmTransito, faturamentoTotal, propostasSemContrato, contratosValorZero,
     avaisSinalSemContrato, alertasCriticos, comissaoTotal, kpis, compute,
+    projetosAtivosNoPeriodo,
   };
 }());

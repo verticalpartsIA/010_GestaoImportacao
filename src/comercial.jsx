@@ -718,6 +718,7 @@ function LeadsPage({ setRoute, setSubsel }) {
     qualif: allLeads.filter(l => l.status === "Em qualificação").length,
     proposta: allLeads.filter(l => l.status === "Proposta enviada").length,
     valor: allLeads.reduce((a, l) => a + (l.value || 0), 0),
+    convertidos: allLeads.filter(l => l.status === "Convertido").length,
   };
 
   if (leads === null) {
@@ -740,7 +741,7 @@ function LeadsPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>CRM · Leads</div>
           <h1 className="page-head__title">Pipeline de Leads</h1>
-          <p className="page-head__sub">{allLeads.length} leads ativos · pipeline {fmtBRL(stats.valor)} · conversão média 27%</p>
+          <p className="page-head__sub">{allLeads.length} leads ativos · pipeline {fmtBRL(stats.valor)} · {stats.convertidos} convertido{stats.convertidos === 1 ? "" : "s"} ({stats.total ? Math.round((stats.convertidos / stats.total) * 100) : 0}%)</p>
         </div>
         <div className="page-head__r">
           <div className="seg" role="group" aria-label="Modo de visualização">
