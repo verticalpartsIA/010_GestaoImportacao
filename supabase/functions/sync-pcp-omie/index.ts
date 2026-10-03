@@ -5,7 +5,14 @@
    grava nas tabelas pcp_* (pcp_produtos, pcp_estoque, pcp_estrutura). Nada é
    escrito no Omie. A mão dupla (PCP → Omie) vem nas próximas etapas.
 
-   Escopo (body JSON, tudo opcional): { escopo: 'tudo'|'cadastro'|'estoque'|'estrutura' }.
+   Escopo (body JSON, tudo opcional): { escopo: 'tudo'|'cadastro'|'estoque'|'estrutura'|'familia' }.
+   'familia' (corrimãos, 03/10/2026): { escopo:'familia', familia_id:<código da família no Omie>, simular?:true }.
+   O passo 'estrutura' só consulta quem JÁ é "pai" em pcp_estrutura (semeado pelos quadros), então produto de outra
+   família nunca tinha a estrutura buscada. 'familia' lê ListarEstruturas (todos os produtos com estrutura no Omie, poucas
+   páginas), fica com os da família pedida (idFamilia) e, se não for simulação, grava no PCP pai + componentes +
+   linhas de estrutura (origem 'omie'). Depois disso o produto passa a ser "pai" e o sync normal o mantém atualizado.
+   ⚠ NUNCA varrer produto a produto com ConsultarEstrutura: "Produto não encontrado!" (= sem estrutura) conta como erro
+   e ~10 seguidos bloqueiam a API do Omie por 30 min para TODAS as integrações.
    Em conflito, o Omie vale. Exceção: linha de estrutura com origem='pcp'
    (criada só no PCP, ainda não existe no Omie) nunca é apagada.
 
@@ -93,9 +100,15 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
   if (!SERVICE_KEY || !OMIE_KEY || !OMIE_SECRET) return json({ error: "Credenciais não configuradas" }, 500);
 
-  let escopo = "tudo";
-  try { const b = await req.json(); if (b?.escopo) escopo = String(b.escopo); } catch { /* sem body */ }
-  if (!["tudo", "cadastro", "estoque", "estrutura"].includes(escopo)) return json({ error: "escopo inválido" }, 400);
+  let escopo = "tudo", familiaId = 0, simular = false;
+  try {
+    const b = await req.json();
+    if (b?.escopo) escopo = String(b.escopo);
+    familiaId = Number(b?.familia_id) || 0;
+    simular = b?.simular === true;
+  } catch { /* sem body */ }
+  if (!["tudo", "cadastro", "estoque", "estrutura", "familia"].includes(escopo)) return json({ error: "escopo inválido" }, 400);
+  if (escopo === "familia" && !(familiaId > 0)) return json({ error: "Informe familia_id (código numérico da família no Omie)." }, 400);
 
   // Limite de taxa (a chamada é do navegador, sem credencial de usuário verificável).
   try {
@@ -231,6 +244,69 @@ Deno.serve(async (req) => {
         if (sobrando.length) { await pgDeleteIds("pcp_estrutura", sobrando); removidas += sobrando.length; }
       }
       resumo.estrutura = { pais: pais.length, linhas_omie: linhasOmie, removidas, componentes_novos: novosProdutos };
+    }
+
+    /* ---- 4) Família inteira: traz para o PCP o que tem estrutura no Omie (ex.: corrimãos) ---- */
+    if (escopo === "familia") {
+      // ListarEstruturas devolve TODOS os produtos que têm estrutura (com família e componentes) em poucas páginas.
+      // NÃO consultar produto a produto com ConsultarEstrutura: cada "Produto não encontrado!" conta como erro e ~10
+      // seguidos fazem o Omie BLOQUEAR a API inteira por 30 min ("consumo indevido") — aconteceu em 03/10/2026.
+      const comEstrutura: { pai: any; itens: any[] }[] = [];
+      let pagina = 1, total = 1, estruturasNoOmie = 0;
+      while (pagina <= total && pagina <= 20) {
+        const r = await omie<any>("geral/malha", "ListarEstruturas", { nPagina: pagina, nRegPorPagina: 100, cOrdenarPor: "CODIGO" });
+        total = r.nTotPaginas || 1;
+        for (const e of r.produtosEncontrados || []) {
+          estruturasNoOmie++;
+          const id = e.ident || {};
+          if (Number(id.idFamilia) !== familiaId) continue;
+          const itens: any[] = (e.itens || []).filter((it: any) => it.codProdMalha);
+          if (!id.codProduto || !itens.length) continue;
+          comEstrutura.push({
+            pai: { codigo: id.codProduto, codigo_produto: id.idProduto, descricao: id.descrProduto, unidade: id.unidProduto, descricao_familia: id.descrFamilia, tipoItem: id.tipoProduto, ncm: null },
+            itens,
+          });
+        }
+        pagina++;
+      }
+      let paisNovos = 0, componentesNovos = 0, linhasGravadas = 0, removidas = 0;
+      if (!simular && comEstrutura.length) {
+        const jaTem = new Set((await pgSelectAll<{ codigo: string }>("pcp_produtos", "select=codigo")).map((x) => x.codigo));
+        for (const { pai, itens } of comEstrutura) {
+          if (!jaTem.has(pai.codigo)) {
+            await pgUpsert("pcp_produtos", [{
+              codigo: pai.codigo, codigo_produto_omie: pai.codigo_produto ?? null, descricao: pai.descricao || pai.codigo,
+              unidade: pai.unidade || null, familia: pai.descricao_familia || null, tipo_sped: pai.tipoItem || null,
+              ncm: pai.ncm || null, ativo: true,
+            }], "codigo");
+            jaTem.add(pai.codigo); paisNovos++;
+          }
+          const novos = itens.filter((it) => !jaTem.has(it.codProdMalha)).map((it) => ({
+            codigo: it.codProdMalha, codigo_produto_omie: it.idProdMalha ?? null, descricao: it.descrProdMalha || it.codProdMalha,
+            unidade: it.unidProdMalha || null, familia: it.descrFamMalha || null, tipo_sped: it.tipoProdMalha || null, ativo: true,
+          }));
+          if (novos.length) { await pgUpsert("pcp_produtos", novos, "codigo"); novos.forEach((n) => jaTem.add(n.codigo)); componentesNovos += novos.length; }
+          const linhas = itens.map((it) => ({
+            codigo_pai: pai.codigo, codigo_filho: it.codProdMalha, quantidade: it.quantProdMalha ?? 0,
+            perda_pct: it.percPerdaProdMalha ?? null, origem: "omie",
+          }));
+          await pgUpsert("pcp_estrutura", linhas, "codigo_pai,codigo_filho");
+          linhasGravadas += linhas.length;
+          const noOmie = new Set(linhas.map((l) => l.codigo_filho));
+          const atuais = await pgSelectAll<{ id: string; codigo_filho: string; origem: string }>(
+            "pcp_estrutura", `select=id,codigo_filho,origem&codigo_pai=eq.${encodeURIComponent(pai.codigo)}`);
+          const sobrando = atuais.filter((a) => a.origem === "omie" && !noOmie.has(a.codigo_filho)).map((a) => a.id);
+          if (sobrando.length) { await pgDeleteIds("pcp_estrutura", sobrando); removidas += sobrando.length; }
+        }
+      }
+      resumo.familia = {
+        familia_id: familiaId, simulado: simular, estruturas_no_omie: estruturasNoOmie,
+        com_estrutura: comEstrutura.length, pais_novos: paisNovos, componentes_novos: componentesNovos, linhas: linhasGravadas, removidas,
+        detalhe: comEstrutura.map(({ pai, itens }) => ({
+          codigo: pai.codigo, descricao: pai.descricao, tipo: pai.tipoItem, unidade: pai.unidade,
+          itens: itens.map((it) => ({ codigo: it.codProdMalha, descricao: it.descrProdMalha, quantidade: it.quantProdMalha, unidade: it.unidProdMalha, perda_pct: it.percPerdaProdMalha })),
+        })),
+      };
     }
   } catch (e) {
     erros.push((e as Error).message);
