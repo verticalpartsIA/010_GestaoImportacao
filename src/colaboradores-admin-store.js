@@ -216,6 +216,7 @@
         { chave: 'excluir', label: 'Excluir' },
         { chave: 'ver_custo', label: 'Vê os preços de custo dos itens do estoque' },
         { chave: 'escrever_omie', label: 'Grava no Omie: requisição de compra e movimento de estoque (entrada, saída, ajuste)' },
+        { chave: 'custo_manual', label: 'Informa o custo manual (estimado) de itens que o Omie ainda não tem custo' },
       ]},
       { modulo: 'carga-maquina', label: 'Carga Máquina' },
       { modulo: 'montagem-produto', label: 'Montagem do Produto' },

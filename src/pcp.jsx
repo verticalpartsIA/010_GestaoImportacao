@@ -302,8 +302,8 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
       const { data: ms } = await sb.from('pcp_ordem_materiais').select('codigo, necessario').in('ordem_id', idsOrdem);
       const cods = Array.from(new Set((ms || []).map(m => m.codigo)));
       if (!cods.length) { if (vivo) setTotalMat(0); return; }
-      const { data: ps } = await sb.from('pcp_produtos').select('codigo, preco_custo').in('codigo', cods);
-      const c = {}; (ps || []).forEach(p => { c[p.codigo] = Number(p.preco_custo || 0); });
+      const { data: ps } = await sb.from('pcp_produtos').select('codigo, preco_custo, custo_manual').in('codigo', cods);
+      const c = {}; (ps || []).forEach(p => { c[p.codigo] = rpCustoEfetivo(p); });
       if (vivo) setTotalMat((ms || []).reduce((s, m) => s + Number(m.necessario) * (c[m.codigo] || 0), 0));
     })();
     return () => { vivo = false; };
@@ -890,8 +890,8 @@ function PCPControle({ ctx }) {
     Promise.resolve(window.PropostaStore?.temCapacidade?.('almoxarifado', 'ver_custo')).then(async (ok) => {
       if (!vivo || !ok) return;
       setVerCusto(true);
-      const { data } = await sb.from('pcp_produtos').select('codigo, preco_custo').limit(5000);
-      const c = {}; (data || []).forEach(l => { c[l.codigo] = Number(l.preco_custo || 0); });
+      const { data } = await sb.from('pcp_produtos').select('codigo, preco_custo, custo_manual').limit(5000);
+      const c = {}; (data || []).forEach(l => { c[l.codigo] = rpCustoEfetivo(l); });
       if (vivo) setCusto(c);
     }).catch(() => {});
     return () => { vivo = false; };
