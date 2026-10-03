@@ -99,6 +99,7 @@ const QC_VARIANTES_QUADRO = [
   { value: '15_220', label: '15 kW / 220 V' },
   { value: '15_380', label: '15 kW / 380 V' },
   { value: '30_380', label: '30 kW / 380 V' },
+  { value: '30_220', label: '30 kW / 220 V' },
 ];
 const QC_ESCOPO_OPCOES = [
   { value: 'fornecer', label: 'Fornecer' },
