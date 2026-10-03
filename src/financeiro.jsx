@@ -862,12 +862,27 @@ function NotificacoesPage({ setRoute }) {
     query = emailAtual
       ? query.or(`destinatario_email.is.null,destinatario_email.eq.${emailAtual}`)
       : query.is('destinatario_email', null);
-    query.order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (error) { window.toast('Erro ao carregar notificações: ' + error.message, 'error'); setAlertasRaw([]); }
-        else setAlertasRaw(data || []);
-        setLoading(false);
-      });
+    const sb = window.__VP_SB.sb;
+    // Achado real (03/10): o KPI "Alertas críticos" do Dashboard Admin soma
+    // 3 checagens cruzadas (proposta sem contrato, contrato valor zero,
+    // sinal sem contrato — AdminMetrics.alertasCriticos()) que NUNCA viram
+    // linha em `alertas` — clicar em "ver central" (sub do card) nunca
+    // achava elas aqui. Busca os mesmos 3 recortes (dashboard-metrics-admin.js)
+    // e mescla via AdminMetrics.alertasSinteticosDetalhados() — sem tabela
+    // nova, recalculado a cada carga desta tela, igual ao Dashboard.
+    Promise.all([
+      query.order('created_at', { ascending: false }),
+      sb.from('propostas').select('id, status, numero_cotacao, aprovada_em'),
+      sb.from('contratos_venda_equipamentos').select('id, proposta_id, valor_total_num').or('status.is.null,status.neq.em_preenchimento'),
+      sb.from('avais_financeiros').select('id, numero_cotacao, sinal_pago, contrato_venda_id'),
+    ]).then(([alertasR, propR, ctR, avaisR]) => {
+      if (alertasR.error) { window.toast('Erro ao carregar notificações: ' + alertasR.error.message, 'error'); setAlertasRaw([]); setLoading(false); return; }
+      const sinteticos = window.AdminMetrics
+        ? window.AdminMetrics.alertasSinteticosDetalhados({ propostas: propR.data || [], contratos: ctR.data || [], avais: avaisR.data || [] })
+        : [];
+      setAlertasRaw([...(alertasR.data || []), ...sinteticos]);
+      setLoading(false);
+    });
   }, []);
 
   React.useEffect(() => { LidasStore.carregar().then(setReadIds); }, []);
