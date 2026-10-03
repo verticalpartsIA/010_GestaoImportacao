@@ -717,7 +717,7 @@ function RelatoriosPCPPage({ setRoute, setSubsel }) {
   }, [sb]);
 
   const ctx = produtos && { sb, produtos, nav: { setRoute, setSubsel } };
-  const abas = [['painel', 'Painel'], ['pedidos', 'Pedidos'], ['precos', 'Lista de Preços'], ['producao', 'Produção'], ['perdas', 'Perdas'], ['estoque', 'Estoque'], ['fluxo', 'Fluxo de Caixa'], ['clientes', 'Clientes']];
+  const abas = [['painel', 'Painel'], ['pedidos', 'Pedidos'], ['precos', 'Lista de Preços'], ['producao', 'Produção'], ['perdas', 'Perdas'], ['estoque', 'Estoque'], ['fluxo', 'Fluxo de Caixa'], ['clientes', 'Clientes'], ['fotos', 'Produtos com foto']];
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -739,6 +739,7 @@ function RelatoriosPCPPage({ setRoute, setSubsel }) {
       {ctx && aba === 'producao' && <RPProducao ctx={ctx}/>}
       {ctx && aba === 'perdas' && <RPPerdas ctx={ctx}/>}
       {ctx && aba === 'estoque' && <RPEstoque ctx={ctx}/>}
+      {ctx && aba === 'fotos' && <RPProdutosFoto ctx={ctx}/>}
     </div>
   );
 }
