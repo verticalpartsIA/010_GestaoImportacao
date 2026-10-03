@@ -52,6 +52,7 @@ const NAV_GROUPS = [
     { id: "cadastro-custos", label: "Atualização de Custos", icon: "calculator" },
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
     { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
+    { id: "emissao-nf", label: "Emissão de NF", icon: "fileText", restrict: ["financeiro", "admin"] },
     { id: "comissoes", label: "Comissões", icon: "award", restrict: ["financeiro", "admin"] },
   ]},
   { label: "Contratos & Jurídico", items: [
@@ -129,6 +130,7 @@ const NAV_GROUPS = [
     { id: "simulacao-producao", label: "Simulação", icon: "history" },
     { id: "pcp", label: "PCP", icon: "calendar" },
     { id: "relatorios-pcp", label: "Relatórios", icon: "fileText" },
+    { id: "expedicao", label: "Expedição", icon: "truck" },
   ]},
   { label: "Administração", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
@@ -364,6 +366,8 @@ const BREADCRUMB_MAP = {
   "montagem-produto": { module: "Logística", page: "Montagem do Produto", icon: "layers" },
   "simulacao-producao": { module: "Logística", page: "Simulação", icon: "history" },
   "relatorios-pcp": { module: "Logística", page: "Relatórios", icon: "fileText" },
+  expedicao: { module: "Logística", page: "Expedição", icon: "truck" },
+  "emissao-nf": { module: "Financeiro", page: "Emissão de NF", icon: "fileText" },
   pcp:           { module: "Logística", page: "PCP — Planejamento e Controle da Produção", icon: "calendar" },
   "vistorias-envio": { module: "Instalação & Entrega", page: "Vistorias de Obras", icon: "send" },
   vistorias:     { module: "Instalação & Entrega", page: "Resultado Vistorias de Obras", icon: "history" },

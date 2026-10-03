@@ -164,6 +164,7 @@
       { modulo: 'cotacoes-fornecedor', label: 'Cotações a Fornecedor' },
       { modulo: 'precificacao', label: 'Precificação' },
       { modulo: 'aval-financeiro', label: 'Aval Financeiro' },
+      { modulo: 'emissao-nf', label: 'Emissão de NF' },
     ]},
     { grupo: 'Jurídico', itens: [
       { modulo: 'contrato-venda-equipamentos', label: 'Contrato Venda de Equipamentos' },
@@ -220,6 +221,7 @@
       { modulo: 'montagem-produto', label: 'Montagem do Produto' },
       { modulo: 'simulacao-producao', label: 'Simulação' },
       { modulo: 'relatorios-pcp', label: 'Relatórios do PCP' },
+      { modulo: 'expedicao', label: 'Expedição' },
       { modulo: 'pcp', label: 'PCP — Planejamento e Controle da Produção', capacidades: [
         { chave: 'ver', label: 'Ver' },
         { chave: 'criar', label: 'Criar' },
@@ -245,14 +247,14 @@
     'CRM': ['leads'],
     'Cadastros Mestres': ['cadastro-clientes', 'cadastro-fornecedores', 'cadastro-materias-primas', 'cadastro-produtos'],
     'Comercial | Pré-venda': ['formularios', 'controle-cotacoes', 'cotacoes-fornecedor', 'propostas', 'contratos-sociais'],
-    'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro'],
+    'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro', 'emissao-nf'],
     'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
     'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'compras', 'pedidos-acompanhamento'],
     'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
     'Entrega & Documentação': ['databook', 'handover'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
-    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'relatorios-pcp'],
+    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'relatorios-pcp', 'expedicao'],
     'Administração': ['logs'],
   };
 

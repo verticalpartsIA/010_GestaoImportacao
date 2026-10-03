@@ -277,7 +277,7 @@ function RPPedidos({ ctx }) {
   const ler = async (n) => {
     const { data: ps } = await sb.from('pcp_pedidos').select('*').eq('numero_pedido', n).order('data_pedido', { ascending: false });
     if (!ps || !ps.length) return [];
-    const { data: its } = await sb.from('pcp_pedido_itens').select('*').in('codigo_pedido', ps.map(p => p.codigo_pedido)).order('seq');
+    const { data: its } = await sb.from('pcp_pedido_itens').select('*').eq('item_pcp', true).in('codigo_pedido', ps.map(p => p.codigo_pedido)).order('seq');
     return ps.map(p => ({ ...p, itens: (its || []).filter(i => i.codigo_pedido === p.codigo_pedido) }));
   };
   const buscar = async (n0, forcar) => {
@@ -397,7 +397,7 @@ function RPClientes({ ctx }) {
   const carregar = React.useCallback(async () => {
     const [p, i] = await Promise.all([
       sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, codigo_cliente, cliente_nome, data_pedido').neq('etapa', '00').limit(5000),
-      sb.from('pcp_pedido_itens').select('codigo_pedido, codigo, codigo_original, descricao, quantidade, valor_unitario, desconto, valor_total').limit(20000),
+      sb.from('pcp_pedido_itens').select('codigo_pedido, codigo, codigo_original, descricao, quantidade, valor_unitario, desconto, valor_total').eq('item_pcp', true).limit(20000),
     ]);
     const itens = {}; (i.data || []).forEach(x => { (itens[x.codigo_pedido] = itens[x.codigo_pedido] || []).push(x); });
     setPedidos((p.data || []).map(x => ({ ...x, itens: itens[x.codigo_pedido] || [] })));
@@ -601,7 +601,7 @@ function RPFluxoCaixa({ ctx }) {
       const { data: ped } = await sb.from('pcp_pedidos').select('codigo_pedido, data_pedido').neq('etapa', '00').gte('data_pedido', `${ano}-01-01`).lte('data_pedido', `${ano}-12-31`).limit(5000);
       const mesPedido = {}; (ped || []).forEach(p => { mesPedido[p.codigo_pedido] = Number(p.data_pedido.slice(5, 7)) - 1; });
       if (Object.keys(mesPedido).length) {
-        const { data: its } = await sb.from('pcp_pedido_itens').select('codigo_pedido, valor_total').in('codigo_pedido', Object.keys(mesPedido).map(Number)).limit(20000);
+        const { data: its } = await sb.from('pcp_pedido_itens').select('codigo_pedido, valor_total').eq('item_pcp', true).in('codigo_pedido', Object.keys(mesPedido).map(Number)).limit(20000);
         (its || []).forEach(i => { receita[mesPedido[i.codigo_pedido]] += Number(i.valor_total || 0); });
       }
       // Custos: OPs (frentes) concluídas no ano, pelo mês da finalização.
