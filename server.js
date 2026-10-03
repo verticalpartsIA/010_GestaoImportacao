@@ -246,6 +246,41 @@ app.get('/termo-entrega/:token', (_req, res) => {
    1h atrás mesmo sem nunca ter aberto a aba antes. Imagens/fonts continuam
    com cache longo — não fazem parte do bundle de código, mudam raríssimo. */
 const NO_CACHE_EXT = ['.html', '.js', '.jsx', '.css', '.json'];
+
+/* Lista de permissão do que é público. Antes `express.static(__dirname)` servia
+   a pasta inteira do repositório (docs, logs, scripts, o próprio server.js...)
+   e o catch-all devolvia o index.html (HTTP 200) para QUALQUER caminho, até
+   /api/inexistente (issue #615). Agora só passam: as páginas públicas da raiz,
+   as pastas do front (src/styles/assets) e os módulos do SPA (mesmos slugs de
+   MODULE_SLUG em src/router.js). Todo o resto responde 404. */
+const PUBLIC_ROOT_FILES = new Set([
+  'index.html', 'index-print.html', 'assinar.html', 'cotacao.html', 'cotacao-elevador-fornecedor.html',
+  'diario-obra.html', 'formulario-cliente.html', 'status-obra.html', 'termo-entrega.html',
+  'vistoria-execucao.html', 'colors_and_type.css', 'favicon.ico',
+]);
+const PUBLIC_DIRS = new Set(['src', 'styles', 'assets']);
+const SPA_MODULES = new Set([
+  'geral', 'comercial', 'crm', 'cadastros', 'engenharia', 'logistica', 'gestao-importacao',
+  'adm-financeiro', 'juridico', 'rh', 'admin',
+]);
+function primeiroSegmento(reqPath) {
+  const seg = String(reqPath || '/').split('/').filter(Boolean);
+  return { first: seg[0] || '', depth: seg.length };
+}
+function naoEncontrado(req, res) {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found' });
+  return res.status(404).type('text/plain').send('404 — página não encontrada');
+}
+/* O navegador pede /favicon.ico sozinho e o projeto não tem ícone: 204 (vazio)
+   em vez de 404 no console — antes caía no catch-all e recebia o HTML do app. */
+app.get('/favicon.ico', (_req, res) => res.status(204).end());
+app.use((req, res, next) => {
+  const { first, depth } = primeiroSegmento(req.path);
+  if (!first || PUBLIC_DIRS.has(first) || SPA_MODULES.has(first)) return next();
+  if (depth === 1 && PUBLIC_ROOT_FILES.has(first)) return next();
+  return naoEncontrado(req, res);
+});
+
 app.use(express.static(path.join(__dirname), {
   index: 'index.html',
   setHeaders(res, filePath) {
@@ -254,8 +289,14 @@ app.use(express.static(path.join(__dirname), {
   },
 }));
 
-/* Catch-all SPA */
-app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+/* Catch-all SPA — só "/" e os módulos do app recebem o index.html; um arquivo
+   estático que não existe (ex.: /src/faltando.js) agora é 404, e não o HTML do
+   app com status 200 (que o navegador tentava executar como JS). */
+app.get('*', (req, res) => {
+  const { first } = primeiroSegmento(req.path);
+  if (!first || SPA_MODULES.has(first)) return res.sendFile(path.join(__dirname, 'index.html'));
+  return naoEncontrado(req, res);
+});
 
 app.listen(PORT, () => {
   console.log(`✅ VP Gestão rodando na porta ${PORT}  · Proxy Propostas: ${PROPOSTAS_ON ? 'ON' : 'OFF'}`);

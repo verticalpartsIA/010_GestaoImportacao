@@ -1115,6 +1115,10 @@ function FichaTecnicaPage({ fichaId }) {
       omie_publicado_em: ficha.omie_publicado_em || null,
     });
     setView('nova');
+    /* Abrir uma ficha existente não mudava a URL: F5 perdia a ficha e o Voltar
+       do navegador saía da tela inteira (issue #611). `navigate` ignora a
+       chamada se a URL já é essa (deep-link por fichaId). */
+    if (window.VpRouter && ficha.id) window.VpRouter.navigate('ficha-tecnica', ficha.id);
   };
 
   /* Deep-link via URL: /engenharia/ficha-tecnica/nova-ficha-tecnica abre direto o editor */
@@ -1135,6 +1139,20 @@ function FichaTecnicaPage({ fichaId }) {
       })();
     }
   }, [fichaId, libReady]);
+
+  /* Voltar/Avançar do navegador: `VpRouter.navigate` só reescreve a URL (não
+     dispara popstate pro App), então o `fichaId` não muda e a tela ficava no
+     editor com a URL já de volta em /ficha-tecnica. Escuta o roteador direto:
+     sem id → painel; 'nova-ficha-tecnica' → editor vazio. Id de ficha real o
+     efeito acima já abre (o App atualiza o subsel no popstate). */
+  _ftUE(() => {
+    if (!window.VpRouter) return undefined;
+    return window.VpRouter.subscribe((loc) => {
+      if (!loc || loc.route !== 'ficha-tecnica') return;
+      if (!loc.id) { setView('painel'); setInitial(null); }
+      else if (loc.id === 'nova-ficha-tecnica') { setInitial(null); setView('nova'); }
+    });
+  }, []);
 
   const handleNavTo = (newView, newId) => {
     if (window.VpRouter) {
