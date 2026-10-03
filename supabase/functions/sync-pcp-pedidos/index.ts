@@ -98,12 +98,16 @@ Deno.serve(async (req) => {
 
   let numeros: string[] = [];
   let dias = 0;
+  let etapa = "";
+  let atualizarAbertos = false;
   try {
     const b = await req.json();
     if (Array.isArray(b?.numeros)) numeros = b.numeros.map((n: unknown) => String(n).replace(/\D/g, "")).filter(Boolean).slice(0, 30);
     if (b?.dias) dias = Math.min(90, Math.max(1, Number(b.dias) || 0));
+    if (b?.etapa) etapa = String(b.etapa).replace(/\D/g, "").slice(0, 2);
+    atualizarAbertos = !!b?.atualizar_abertos;
   } catch { /* sem body */ }
-  if (!numeros.length && !dias) return json({ error: "Informe numeros[] ou dias" }, 400);
+  if (!numeros.length && !dias && !etapa && !atualizarAbertos) return json({ error: "Informe numeros[], dias, etapa ou atualizar_abertos" }, 400);
 
   // Limite de taxa (chamada do navegador, sem credencial de usuário verificável).
   try {
@@ -129,9 +133,31 @@ Deno.serve(async (req) => {
     const ehPcp = (c: string) => meus.has(c) || atual.has(c);
     const codAtual = (c: string) => atual.get(c) ?? c;
 
+    // Atualizar abertos: relê no Omie os pedidos que já temos e ainda não foram entregues (para pegar NF emitida / mudança de etapa).
+    if (atualizarAbertos) {
+      const entregues = new Set((await pgSelect<{ pedido_codigo: number }>("pcp_expedicoes", "select=pedido_codigo&status=eq.entregue")).map((x) => Number(x.pedido_codigo)));
+      const abertos = (await pgSelect<{ codigo_pedido: number; numero_pedido: string }>("pcp_pedidos", "select=codigo_pedido,numero_pedido&cancelado=eq.false&order=atualizado_em.asc&limit=60"))
+        .filter((p) => !entregues.has(Number(p.codigo_pedido)));
+      numeros = Array.from(new Set(abertos.map((p) => p.numero_pedido))).slice(0, 25);
+      if (!numeros.length) return json({ ok: true, lidos: 0, gravados: 0, sem_item_do_pcp: 0, erros: [] });
+    }
+
     // 1) Pedidos do Omie
     const pedidos: any[] = [];
-    if (numeros.length) {
+    if (etapa && !numeros.length) {
+      // Todos os pedidos numa etapa (ex.: 20 = "Separar Estoque / Produção"). O filtro de data do Omie é o da previsão: janela larga.
+      let pagina = 1, total = 1;
+      while (pagina <= total && pagina <= 8) {
+        const r = await omie<any>("produtos/pedido", "ListarPedidos", {
+          pagina, registros_por_pagina: 50, apenas_importado_api: "N", etapa,
+          filtrar_por_data_de: "01/01/2025", filtrar_por_data_ate: "31/12/2027",
+        });
+        total = r.total_de_paginas || 1;
+        pedidos.push(...(r.pedido_venda_produto || []));
+        pagina++;
+      }
+      if (total > 8) resumo.aviso = `Só as 8 primeiras páginas de ${total} foram lidas.`;
+    } else if (numeros.length) {
       for (const n of numeros) {
         try {
           const r = await omie<any>("produtos/pedido", "ListarPedidos", {
@@ -161,8 +187,10 @@ Deno.serve(async (req) => {
     let gravados = 0, ignorados = 0;
     for (const p of pedidos) {
       const c = p.cabecalho || {};
-      const itens = (p.det || []).map((d: any, i: number) => ({ d: d.produto || {}, seq: i + 1 })).filter((x: any) => ehPcp(x.d.codigo));
-      if (!itens.length) { ignorados++; continue; }
+      const todos = (p.det || []).map((d: any, i: number) => ({ d: d.produto || {}, seq: i + 1 }));
+      const itens = todos.filter((x: any) => ehPcp(x.d.codigo));
+      if (!itens.length) { ignorados++; continue; }       // só guardamos pedidos que têm item do PCP; nesses, o pedido inteiro (a Expedição envia tudo)
+      const ic = p.infoCadastro || {}, fr = p.frete || {};
 
       let cli = clientes.get(c.codigo_cliente);
       if (cli === undefined) {
@@ -182,11 +210,15 @@ Deno.serve(async (req) => {
         data_pedido: dataIso(p.infoCadastro?.dInc), data_previsao: dataIso(c.data_previsao),
         valor_total: p.total_pedido?.valor_total_pedido ?? null,
         observacao: limpa(p.observacoes?.obs_venda) || null,
+        faturado: ic.faturado === "S", data_faturamento: dataIso(ic.dFat), nf_autorizada: ic.autorizado === "S",
+        cancelado: ic.cancelado === "S", volumes: fr.quantidade_volumes ?? null, peso_bruto: fr.peso_bruto ?? null,
+        modalidade_frete: fr.modalidade != null ? String(fr.modalidade) : null, transportadora_codigo: fr.codigo_transportadora || null,
         atualizado_em: new Date().toISOString(),
       }], "codigo_pedido");
       await pgDelete("pcp_pedido_itens", `codigo_pedido=eq.${c.codigo_pedido}`);
-      await pgInsert("pcp_pedido_itens", itens.map((x: any) => ({
-        codigo_pedido: c.codigo_pedido, seq: x.seq, codigo: codAtual(x.d.codigo), codigo_original: atual.has(x.d.codigo) ? x.d.codigo : null, descricao: limpa(x.d.descricao), unidade: x.d.unidade || null,
+      await pgInsert("pcp_pedido_itens", todos.map((x: any) => ({
+        codigo_pedido: c.codigo_pedido, seq: x.seq, item_pcp: ehPcp(x.d.codigo),
+        codigo: codAtual(x.d.codigo), codigo_original: atual.has(x.d.codigo) ? x.d.codigo : null, descricao: limpa(x.d.descricao), unidade: x.d.unidade || null,
         quantidade: x.d.quantidade ?? 0, valor_unitario: x.d.valor_unitario ?? 0,
         desconto: x.d.valor_desconto ?? 0, valor_total: x.d.valor_total ?? 0,
       })));

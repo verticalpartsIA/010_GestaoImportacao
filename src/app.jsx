@@ -27,6 +27,8 @@ const ROUTE_TITLE = {
   "montagem-produto": "Montagem do Produto",
   "simulacao-producao": "Simulação",
   "relatorios-pcp": "Relatórios do PCP",
+  expedicao: "Expedição",
+  "emissao-nf": "Emissão de NF",
   pcp: "PCP — Planejamento e Controle da Produção",
   leads: "Pipeline de Leads",
   "lead-detail": "Detalhe de Lead",
@@ -323,6 +325,7 @@ function App() {
     precificacao: ["financeiro", "admin"],
     financeiro: ["financeiro", "admin"],
     "aval-financeiro": ["financeiro", "admin"],
+    "emissao-nf": ["financeiro", "admin"],
     "aval-juridico": ["juridico", "admin"],
     comissoes: ["financeiro", "admin"],
     "pagamentos-instalador": ["financeiro", "admin"],
@@ -401,6 +404,8 @@ function App() {
       case "decisoes": return <window.DecisoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
       case "carga-maquina": return <window.CargaMaquinaPage/>;
+      case "expedicao": return <window.ExpedicaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "emissao-nf": return <window.EmissaoNFPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "relatorios-pcp": return <window.RelatoriosPCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "simulacao-producao": return <window.SimulacaoProducaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
