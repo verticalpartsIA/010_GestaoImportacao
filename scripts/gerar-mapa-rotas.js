@@ -70,16 +70,30 @@ const tabs = {};   // rota → { padrao, abas[], comId }
 const navCalls = [];
 for (const f of jsxFiles) {
   const lines = read(f).split('\n');
-  const fnAt = (idx) => { for (let i = idx; i >= 0; i--) { const m = lines[i].match(/^(?:async\s+)?function\s+([A-Za-z0-9_]+)/); if (m) return m[1]; } return '?'; };
+  const fnAt = (idx) => { for (let i = idx; i >= 0; i--) { const m = lines[i].match(/^(?:async\s+)?function\s+([A-Za-z0-9_]+)|^(?:const|let)\s+([A-Z][A-Za-z0-9_]+)\s*=\s*(?:\(|function|React\.memo|async)/); if (m) return m[1] || m[2]; } return '?'; };
   lines.forEach((ln, i) => {
     const t = ln.match(/useRouteTab\(\s*'([a-z0-9-]+)',\s*['"]([^'"]+)['"],\s*\[([^\]]*)\](,\s*true)?/);
     if (t) tabs[t[1]] = { padrao: t[2], abas: (t[3].match(/'([^']+)'|"([^"]+)"/g) || []).map((x) => x.replace(/['"]/g, '')), comId: !!t[4], arquivo: f };
     for (const m of ln.matchAll(/\bsetRoute\(\s*["'`]([a-z0-9-]+)["'`]\s*\)/g)) {
-      const around = [ln, lines[i + 1] || '', lines[i + 2] || ''].join(' ');
-      const lab = around.match(/>\s*([^<>{}\n]{2,45}?)\s*</) || around.match(/(?:label|title)=["']([^"']{2,45})["']/);
+      /* O rótulo costuma vir nas linhas SEGUINTES (filhos do <Button>), às vezes
+         depois de várias linhas de onClick. Anda até 8 linhas pra frente e para
+         se achar outro onClick/setRoute (aí já é outro botão). */
+      /* Conservador: só aceita o texto se a chamada está DENTRO de uma tag
+         <Button|button|a> (aberta na própria linha ou até 2 acima) e o texto
+         aparece em até 4 linhas depois. Melhor “sem rótulo” do que rótulo errado. */
+      const abre = [lines[i - 2] || '', lines[i - 1] || '', ln].join(' ');
+      let lab = null;
+      if (/<(?:Button|button|a)\b/.test(abre)) {
+        for (let k = 0; k <= 4 && !lab; k++) {
+          const cand = lines[i + k];
+          if (cand === undefined || (k > 0 && /onClick|setRoute\(/.test(cand))) break;
+          lab = cand.match(/>\s*([A-Za-zÀ-ú0-9][^<>{}\n]{1,44}?)\s*<\/(?:Button|button|a)>/);
+        }
+        if (lab && /^(carregando|…)/i.test(lab[1])) lab = null;
+      }
       const fn = fnAt(i);
       const origem = comp2routes[fn] ? comp2routes[fn].join(', ') : `(${fn} em ${f})`;
-      navCalls.push({ origem, botao: lab ? lab[1].replace(/\s+/g, ' ') : '(ação sem rótulo no mesmo trecho)', alvo: m[1], onde: `${f}:${i + 1}` });
+      navCalls.push({ origem, botao: lab ? lab[1].replace(/\s+/g, ' ') : '(acionado por um handler — ver o código)', alvo: m[1], onde: `${f}:${i + 1}` });
     }
   });
 }
@@ -170,9 +184,13 @@ L.push('## Estados internos que ainda NÃO têm endereço');
 L.push('');
 L.push('São abas de formulário/modal, filtros, modos de visualização e passos de assistente. Ficam fora da URL de propósito (não são “submódulos”: trocar não muda de tela nem se compartilha por link). Listados para que nada fique escondido:');
 L.push('');
+L.push('> Já têm endereço por implementação própria (por isso não aparecem abaixo): aba do Dossiê da Obra (`/engenharia/dossier-obra/<id>/<aba>`), aba de Configurações (`/admin/configuracoes/<aba>`), Ficha Técnica (`/engenharia/ficha-tecnica/<id>` e `/nova-ficha-tecnica`) e detalhe da Precificação (`/comercial/precificacao/<id>`).');
+L.push('');
 L.push('| Onde | Componente | Estado | Valor inicial | Rotas que o exibem |');
 L.push('|---|---|---|---|---|');
-for (const s of semUrl) {
+/* Abas que já espelham a URL por implementação própria (não passam por useRouteTab). */
+const jaNaUrlPropria = (s) => (s.comp === 'DossierObraPage' && s.estado === 'activeTab') || (s.comp === 'ConfiguracoesPage' && s.estado === 'tab');
+for (const s of semUrl.filter((x) => !jaNaUrlPropria(x))) {
   L.push(`| \`${s.onde}\` | ${esc(s.comp)} | \`${s.estado}\` | \`${esc(s.inicial)}\` | ${s.rotas.length ? s.rotas.map((r) => '`' + r + '`').join(', ') : '(modal/componente interno)'} |`);
 }
 L.push('');
