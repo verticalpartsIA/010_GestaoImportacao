@@ -395,10 +395,13 @@ function OriginBars({ data }) {
    Dashboard (supabase.js), motor em gatilhos-engine.js. */
 function OndeParouWidget({ gatilhos, setRoute, setSubsel }) {
   const agora = Date.now();
+  const E = window.GatilhosEngine;
+  /* Mesmo critério da tela Prazos & Pendências: prazo efetivo (inclui etapas antigas sem prazo
+     gravado), sem etapas opcionais nem encerradas. */
   const atrasados = (gatilhos || [])
-    .filter((g) => !g.concluido_em && g.prazo_em && new Date(g.prazo_em).getTime() < agora
-      && !String(g.evento_key || '').startsWith('LEMBRETE__'))
-    .map((g) => ({ ...g, diasAtraso: Math.floor((agora - new Date(g.prazo_em).getTime()) / 86400000) }))
+    .filter((g) => E ? (E.emAtraso(g, agora) && !(E.nodeByKey(g.evento_key) || {}).opcional)
+      : (!g.concluido_em && g.prazo_em && new Date(g.prazo_em).getTime() < agora))
+    .map((g) => ({ ...g, diasAtraso: Math.floor((agora - (E ? E.prazoEfetivo(g) : new Date(g.prazo_em)).getTime()) / 86400000) }))
     .sort((a, b) => b.diasAtraso - a.diasAtraso)
     .slice(0, 6);
 
@@ -413,7 +416,7 @@ function OndeParouWidget({ gatilhos, setRoute, setSubsel }) {
 
   return (
     <Card title="Onde Parou" sub="cotações com etapa atrasada — quem tem a bola agora"
-      action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute('financeiro')}>Ver Gatilhos & Prazo</Button>}>
+      action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute('financeiro')}>Ver Prazos & Pendências</Button>}>
       <div className="stack">
         {atrasados.length === 0
           ? <div className="muted" style={{ padding: '16px 0', textAlign: 'center', fontSize: 13 }}>Nada atrasado agora. 🎉</div>

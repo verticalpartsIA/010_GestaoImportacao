@@ -39,7 +39,68 @@
     AVAL_PAGAMENTO: 4,
     NEGOCIACAO_COMPRA: 7 * 24,     // 168h
     EMBARQUE_CHEGADA: 90 * 24,     // 2160h
+    /* 03/10: "Proposta pronta — aguardando envio manual" não tinha prazo, então
+       uma proposta parada desde agosto nunca aparecia como atrasada. 24h úteis
+       é uma escolha minha (o usuário não passou número) — ajuste aqui. */
+    PROPOSTA_PREP: 24,
   };
+
+  /* Prazos que correm em dia corrido (espera do cliente / navio). Os demais
+     contam só segunda a sexta — um SLA de 48h aberto na sexta não estoura no
+     domingo. */
+  const SLA_CALENDARIO = { AGUARDA_CLIENTE: true, EMBARQUE_CHEGADA: true };
+
+  /* Soma `horas` ao instante `inicio` pulando sábado e domingo. */
+  function somarHorasUteis(inicio, horas) {
+    let t = new Date(inicio).getTime();
+    let resto = horas * 3600000;
+    let guarda = 0;
+    while (resto > 0 && guarda++ < 400) {
+      const d = new Date(t);
+      const dia = d.getDay();
+      if (dia === 0 || dia === 6) {                       // fim de semana: salta para segunda 00:00
+        const d2 = new Date(t); d2.setHours(0, 0, 0, 0);
+        d2.setDate(d2.getDate() + (dia === 0 ? 1 : 2));
+        t = d2.getTime();
+        continue;
+      }
+      const fimDoDia = new Date(t); fimDoDia.setHours(24, 0, 0, 0);
+      const cabe = fimDoDia.getTime() - t;
+      if (resto <= cabe) { t += resto; resto = 0; } else { resto -= cabe; t = fimDoDia.getTime(); }
+    }
+    return new Date(t);
+  }
+
+  function prazoDe(key, inicio) {
+    const h = SLA_HORAS[key];
+    if (h == null) return null;
+    return SLA_CALENDARIO[key] ? new Date(new Date(inicio).getTime() + h * 3600000) : somarHorasUteis(inicio, h);
+  }
+
+  /* Prazo que vale para uma linha de `gatilhos`: o gravado ou, nas linhas antigas
+     sem prazo (ex.: Proposta pronta), o calculado pelo SLA atual do nó. */
+  function prazoEfetivo(g) {
+    if (!g || String(g.evento_key || '').startsWith('LEMBRETE__')) return null;
+    if (g.prazo_em) return new Date(g.prazo_em);
+    if (!g.nascido_em) return null;
+    return prazoDe(g.evento_key, g.nascido_em);
+  }
+
+  function emAtraso(g, agora) {
+    if (!g || g.concluido_em || g.status === 'encerrado') return false;
+    const p = prazoEfetivo(g);
+    return !!p && p.getTime() < (agora || Date.now());
+  }
+
+  /* Etapa fechada "de uma vez" por garantirNo (etapa pulada no fluxo) — não é
+     um cumprimento de prazo. Linhas antigas não têm a marca: nas etapas de
+     espera (com SLA), nascer e fechar em menos de 3s só pode ser retroativo. */
+  function ehRetroativo(g) {
+    if (!g || !g.concluido_em) return false;
+    if (g.conclusao_tipo === 'retroativo') return true;
+    if (SLA_HORAS[g.evento_key] == null || !g.nascido_em) return false;
+    return new Date(g.concluido_em) - new Date(g.nascido_em) < 3000;
+  }
 
   /* Lembretes de cobrança — nascem como um gatilho-filho (evento_key
      'LEMBRETE__<chaveDoPai>') quando o nó pai passa de X horas sem
@@ -200,13 +261,15 @@
        condicionar `condicaoNasce` a cliente novo, e "Financeiro Responde
        Sim" cobrir as duas respostas (Score + Sinal) num fluxo só quando
        recorrente. */
-    { key: 'FIN_SCORE', label: 'Financeiro consultando score do cliente',
+    /* `opcional`: desde 29/09 (PR #503) a consulta de score/aval de venda não
+       trava contrato nem compra — não conta como pendência na tela. */
+    { key: 'FIN_SCORE', label: 'Financeiro consultando score do cliente', opcional: true,
       predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
       nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
       condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
       fecha: 'FINANCEIRO_CONSULTOU_SCORE', fechamentoTipo: 'manual', rota: 'aval-financeiro' },
 
-    { key: 'FIN_AVAL_VENDA', label: 'Financeiro decidindo o Aval de Venda',
+    { key: 'FIN_AVAL_VENDA', label: 'Financeiro decidindo o Aval de Venda', opcional: true,
       predecessores: [{ key: 'FIN_SCORE', rel: 'FS' }],
       nasce: 'FINANCEIRO_CONSULTOU_SCORE', fecha: 'FINANCEIRO_APROVOU_VENDA',
       fechamentoTipo: 'manual', rota: 'aval-financeiro' },
@@ -530,14 +593,14 @@
     return data || null;
   }
 
-  async function fecharNo(numeroCotacao, node, statusFinal) {
+  async function fecharNo(numeroCotacao, node, statusFinal, retroativo) {
     const c = sb(); if (!c) return null;
     const row = await getRow(numeroCotacao, node.key);
     if (!row || row.concluido_em) return row; // já fechado ou nunca nasceu
     const now = new Date().toISOString();
-    const { data, error } = await c.from('gatilhos').update({
-      concluido_em: now, status: statusFinal || 'ok',
-    }).eq('id', row.id).select().single();
+    const patch = { concluido_em: now, status: statusFinal || 'ok' };
+    if (retroativo) patch.conclusao_tipo = 'retroativo';   // etapa pulada — a tela não a mostra como "cumprida no prazo"
+    const { data, error } = await c.from('gatilhos').update(patch).eq('id', row.id).select().single();
     if (error) { console.warn('[GatilhosEngine] fecharNo falhou', error); return row; }
     return data;
   }
@@ -549,7 +612,7 @@
     const now = new Date();
     const nowIso = now.toISOString();
     const slaHoras = SLA_HORAS[node.key] ?? null;
-    const prazoEm = slaHoras != null ? new Date(now.getTime() + slaHoras * 3600000) : null;
+    const prazoEm = prazoDe(node.key, now);
     const relPrincipal = (node.predecessores[0] || {}).rel || 'FS';
     const row = {
       id: gtId(numeroCotacao, node.key),
@@ -583,7 +646,7 @@
   async function garantirNo(numeroCotacao, key) {
     let row = await getRow(numeroCotacao, key);
     if (row) {
-      if (!row.concluido_em) row = await fecharNo(numeroCotacao, nodeByKey(key), 'ok');
+      if (!row.concluido_em) row = await fecharNo(numeroCotacao, nodeByKey(key), 'ok', true);
       return row;
     }
     const node = nodeByKey(key);
@@ -591,7 +654,7 @@
     const predKey = (node.predecessores[0] || {}).key;
     const predRow = predKey ? await garantirNo(numeroCotacao, predKey) : null;
     row = await nascerNo(numeroCotacao, node, predRow ? predRow.id : null, predRow ? predRow.alvo_id : null);
-    if (row) row = await fecharNo(numeroCotacao, node, 'ok');
+    if (row) row = await fecharNo(numeroCotacao, node, 'ok', true);
     return row;
   }
 
@@ -744,5 +807,6 @@
     return data;
   }
 
-  window.GatilhosEngine = { NODES, SLA_HORAS, LEMBRETES, onEvento, verificarPrazos, fecharLembrete, fecharComMotivo, navegarPara, profundidade };
+  window.GatilhosEngine = { NODES, SLA_HORAS, LEMBRETES, onEvento, verificarPrazos, fecharLembrete, fecharComMotivo, navegarPara, profundidade,
+    nodeByKey, somarHorasUteis, prazoEfetivo, emAtraso, ehRetroativo };
 }());

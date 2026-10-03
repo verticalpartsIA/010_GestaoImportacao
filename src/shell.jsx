@@ -382,7 +382,7 @@ const BREADCRUMB_MAP = {
   cronograma:    { module: "Instalação & Entrega", page: "Cronograma de Instalação", icon: "clock" },
   databook:      { module: "Instalação & Entrega", page: "Data Book & Termo", icon: "fileSearch" },
   handover:      { module: "Instalação & Entrega", page: "Handover & Pós-venda", icon: "package" },
-  financeiro:    { module: "Financeiro", page: "Gatilhos & Prazo", icon: "dollar" },
+  financeiro:    { module: "Financeiro", page: "Prazos & Pendências", icon: "dollar" },
   "aval-financeiro": { module: "Financeiro", page: "Aval Financeiro", icon: "shield" },
   comissoes:     { module: "Financeiro", page: "Comissões", icon: "award" },
   "pagamentos-instalador": { module: "Financeiro", page: "Pagamentos a Instaladores", icon: "dollar" },
