@@ -702,7 +702,7 @@ function RPFluxoCaixa({ ctx }) {
 
 /* ---------------- Página ---------------- */
 function RelatoriosPCPPage({ setRoute, setSubsel }) {
-  const [aba, setAba] = React.useState('painel');
+  const [aba, setAba] = window.useRouteTab('relatorios-pcp', 'painel', ['painel', 'pedidos', 'precos', 'producao', 'perdas', 'estoque', 'fluxo', 'clientes', 'fotos']);
   const [produtos, setProdutos] = React.useState(null);
   const sb = window.__VP_SB && window.__VP_SB.sb;
 

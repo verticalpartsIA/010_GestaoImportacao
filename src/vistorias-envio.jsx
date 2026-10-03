@@ -26,7 +26,7 @@ function veVpobLabel(obra) {
 }
 
 function VistoriasEnvio({ setRoute }) {
-  const [aba, setAba] = React.useState('despacho');
+  const [aba, setAba] = window.useRouteTab('vistorias-envio', 'despacho', ['questionarios', 'despacho', 'calendario']);
   const [questionarioAberto, setQuestionarioAberto] = React.useState(null);
 
   if (questionarioAberto) {

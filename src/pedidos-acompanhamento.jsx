@@ -55,7 +55,7 @@ function PedidosAcompanhamentoPage() {
   const [items, setItems] = React.useState(null);
   const [showForm, setShowForm] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
-  const [tab, setTab] = React.useState('Nacional');
+  const [tab, setTab] = window.useRouteTab('pedidos-acompanhamento', 'Nacional', ['Nacional', 'Importação']);
   const [search, setSearch] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('Todos');
   const [saving, setSaving] = React.useState(false);

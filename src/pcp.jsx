@@ -1407,7 +1407,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
 function PCPPage({ setRoute, setSubsel }) {
   const [dados, setDados] = React.useState(null);
   const [erro, setErro] = React.useState(null);
-  const [aba, setAba] = React.useState('ordens');
+  const [aba, setAba] = window.useRouteTab('pcp', 'ordens', ['ordens', 'fila', 'pedidos', 'planejamento', 'controle']);
   const [podeCriar, setPodeCriar] = React.useState(false);
   const [podeEditar, setPodeEditar] = React.useState(false);
   const sb = window.__VP_SB && window.__VP_SB.sb;

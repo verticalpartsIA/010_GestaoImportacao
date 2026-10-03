@@ -385,7 +385,7 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
   const [cot, setCot] = React.useState(cotInicial);
   const [verResp, setVerResp] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const [tab, setTab] = React.useState('detalhes');
+  const [tab, setTab] = window.useRouteTab('cotacao-fornecedor-detail', 'detalhes', ['detalhes', 'tratativas'], true);
   // Pré-condições financeiras da decisão de compra (contrato assinado + sinal
   // pago + aval), avaliadas na carga. Sem isso, o botão "Decidir comprar"
   // parecia clicável mas falhava só num toast — e a linha do tempo mostrava

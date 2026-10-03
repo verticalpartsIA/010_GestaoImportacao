@@ -844,7 +844,7 @@ function QcRamoBComprado({ quadro, setQuadro, quadroId }) {
 function QuadroComandoDetail({ quadroId, onClose }) {
   const [quadro, setQuadro] = React.useState(null);
   const [podeDecidir, setPodeDecidir] = React.useState(false);
-  const [tab, setTab] = React.useState('escopo');
+  const [tab, setTab] = window.useRouteTab('formulario-quadro-comando', 'escopo', ['escopo', 'configuracao', 'cabina', 'paradas', 'maquina', 'componentes', 'geometria', 'resultado'], true);
   const [saving, setSaving] = React.useState(false);
   const [errosVisiveis, setErrosVisiveis] = React.useState({});
 
