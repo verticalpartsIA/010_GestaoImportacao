@@ -182,6 +182,53 @@ Deno.serve(async (req) => {
     }
     resumo.lidos = pedidos.length;
 
+    // Etapa 10 ("Pedido", antes de "Separar Estoque / Produção") é SÓ PREVISÃO: vai para pcp_previsao_pedidos/itens, tabelas
+    // que nenhuma tela de produção, NF, expedição ou relatório lê (só a aba Necessidade). Assim ela nunca vira venda firme
+    // por engano, não entra no SLA e não aparece na Emissão de NF/Expedição. Quando o pedido chega à etapa 20, o job da
+    // etapa 20 o grava em pcp_pedidos (com entrada_em = agora) e a limpeza abaixo o tira da previsão.
+    if (etapa === "10" && !numeros.length) {
+      const completa = !resumo.aviso;
+      const clientesPrev = new Map<number, any>();
+      const vistos = new Set<number>();
+      let guardados = 0;
+      for (const p of pedidos) {
+        const c = p.cabecalho || {}, ic = p.infoCadastro || {};
+        const todos = (p.det || []).map((d: any, i: number) => ({ d: d.produto || {}, seq: i + 1 }));
+        const itensPcp = todos.filter((x: any) => ehPcp(x.d.codigo));
+        if (!itensPcp.length || ic.cancelado === "S" || ic.faturado === "S" || !(Number(c.codigo_pedido) > 0)) continue;
+        let cli = clientesPrev.get(c.codigo_cliente);
+        if (cli === undefined) {
+          try { cli = await omie<any>("geral/clientes", "ConsultarCliente", { codigo_cliente_omie: c.codigo_cliente }); }
+          catch (e) { cli = null; erros.push(`cliente ${c.codigo_cliente}: ${(e as Error).message}`); }
+          clientesPrev.set(c.codigo_cliente, cli);
+        }
+        await pgUpsert("pcp_previsao_pedidos", [{
+          codigo_pedido: c.codigo_pedido, numero_pedido: String(c.numero_pedido),
+          cliente_nome: cli ? limpa(cli.razao_social) : null, cliente_fantasia: cli ? limpa(cli.nome_fantasia) : null,
+          data_pedido: dataIso(ic.dInc), data_previsao: dataIso(c.data_previsao),
+          valor_total: p.total_pedido?.valor_total_pedido ?? null, atualizado_em: new Date().toISOString(),
+        }], "codigo_pedido");
+        await pgDelete("pcp_previsao_itens", `codigo_pedido=eq.${c.codigo_pedido}`);
+        await pgInsert("pcp_previsao_itens", itensPcp.map((x: any) => ({
+          codigo_pedido: c.codigo_pedido, seq: x.seq, codigo: codAtual(x.d.codigo), descricao: limpa(x.d.descricao),
+          unidade: x.d.unidade || null, quantidade: x.d.quantidade ?? 0,
+        })));
+        vistos.add(Number(c.codigo_pedido));
+        guardados++;
+      }
+      // Limpeza: o que não veio mais na etapa 10 avançou de etapa ou foi cancelado/faturado. Só limpa com leitura COMPLETA e sem erro.
+      if (completa && erros.length === 0) {
+        const existentes = await pgSelect<{ codigo_pedido: number }>("pcp_previsao_pedidos", "select=codigo_pedido");
+        const sobra = existentes.map((x) => Number(x.codigo_pedido)).filter((id) => !vistos.has(id));
+        for (let i = 0; i < sobra.length; i += 100) await pgDelete("pcp_previsao_pedidos", `codigo_pedido=in.(${sobra.slice(i, i + 100).join(",")})`);
+        resumo.removidos = sobra.length;
+      }
+      resumo.previsao = guardados;
+      resumo.sem_item_do_pcp = pedidos.length - guardados;
+      resumo.erros = erros;
+      return json({ ok: erros.length === 0, ...resumo }, erros.length === 0 ? 200 : 207);
+    }
+
     // 2) Mantém só pedidos com item do PCP; resolve cliente; grava.
     const clientes = new Map<number, any>();
     let gravados = 0, ignorados = 0;

@@ -7,6 +7,9 @@
    - Carteira = pedidos que o PCP já leu do Omie (etapa 20 em diante) NÃO faturados, NÃO cancelados e fora do histórico.
      Propostas (etapa 00) só entram se marcado: ainda não são venda firme.
    - Ordens de produção só entram se NÃO vierem de pedido (nem a OP-mãe): as de pedido já estão na demanda do pedido.
+   - Pedidos em etapa 10 ("Pedido", antes de separar estoque/produção) são SÓ PREVISÃO: vêm de pcp_previsao_* (nunca de pcp_pedidos),
+     entram na conta apenas com o interruptor ligado, não mudam os cartões (que são da carteira firme), ganham o selo "Previsão" quando
+     são a única razão de o item faltar, e pedidos parados há mais de PREV_DIAS_MAX dias (cadastro antigo esquecido na etapa) são ignorados.
    - Só LÊ: nada é gravado no Omie nem no banco. Custo/valor só para quem tem almoxarifado.ver_custo.
    ============================================================ */
 
@@ -16,6 +19,7 @@ const NEC_STATUS = {
   sem_data: { label: 'Sem data de entrega', variant: 'info' },
   coberto: { label: 'Coberto', variant: 'success' },
 };
+const PREV_DIAS_MAX = 120;
 const necFmt = (v, d = 2) => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: d });
 const necMoeda = (v) => Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
 const necData = (iso) => iso ? String(iso).slice(0, 10).split('-').reverse().join('/') : '—';
@@ -38,6 +42,7 @@ function AlmoxarifadoNecessidade() {
   const [erro, setErro] = React.useState(null);
   const [incluiPropostas, setIncluiPropostas] = React.useState(false);
   const [incluiOrdens, setIncluiOrdens] = React.useState(true);
+  const [incluiPrev, setIncluiPrev] = React.useState(true);
   const [filtro, setFiltro] = React.useState('agir');       // agir | atrasado | comprar | todos
   const [busca, setBusca] = React.useState('');
   const [sel, setSel] = React.useState(() => new Set());
@@ -52,7 +57,7 @@ function AlmoxarifadoNecessidade() {
     if (!sb) { setErro('Supabase não carregou.'); return; }
     try {
       const campos = 'codigo, descricao, unidade' + (custoOk ? ', preco_custo, custo_manual' : '');
-      const [cfg, pedidos, acomp, itens, ordens, estr, prods, pos, est] = await Promise.all([
+      const [cfg, pedidos, acomp, itens, ordens, estr, prods, pos, est, prevPed, prevItens] = await Promise.all([
         sb.from('pcp_reposicao_config').select('*').eq('id', true).maybeSingle(),
         necLerTudo(() => sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_fantasia, data_previsao').eq('faturado', false).eq('cancelado', false).order('codigo_pedido')),
         necLerTudo(() => sb.from('pcp_pedido_acompanhamento').select('numero_pedido, historico').order('numero_pedido')),
@@ -62,9 +67,11 @@ function AlmoxarifadoNecessidade() {
         necLerTudo(() => sb.from('pcp_produtos').select(campos).order('codigo')),
         necLerTudo(() => sb.from('pcp_posicao_compra').select('codigo, fisico, pendente').order('codigo')),
         necLerTudo(() => sb.from('pcp_estoque').select('codigo, quantidade').order('codigo')),
+        necLerTudo(() => sb.from('pcp_previsao_pedidos').select('codigo_pedido, numero_pedido, cliente_nome, cliente_fantasia, data_pedido, data_previsao').order('codigo_pedido')),
+        necLerTudo(() => sb.from('pcp_previsao_itens').select('codigo_pedido, codigo, quantidade').order('id')),
       ]);
       if (cfg.error) throw cfg.error;
-      setD({ cfg: cfg.data, pedidos, historico: new Set(acomp.filter(a => a.historico).map(a => a.numero_pedido)), itens, ordens, estr, prods, pos, est });
+      setD({ cfg: cfg.data, pedidos, historico: new Set(acomp.filter(a => a.historico).map(a => a.numero_pedido)), itens, ordens, estr, prods, pos, est, prevPed, prevItens });
       setErro(null);
     } catch (e) { setErro(e.message || String(e)); }
   }, [sb, custoOk]);
@@ -96,18 +103,36 @@ function AlmoxarifadoNecessidade() {
     d.prods.forEach(p => { estoque[p.codigo] = { fisico: fis[p.codigo] || 0, aCaminho: 0 }; });
     d.pos.forEach(p => { estoque[p.codigo] = { fisico: Number(p.fisico || 0), aCaminho: Number(p.pendente || 0) }; });
     const r = window.PcpNecessidade.calcular({ demanda, filhos, estoque, hoje, cfg: d.cfg });
+    // Previsão (etapa 10): só pedidos que ainda não estão em pcp_pedidos e que não estão parados há muito tempo.
+    const conhecidos = new Set(d.pedidos.map(p => p.numero_pedido));
+    const limite = new Date(Date.now() - PREV_DIAS_MAX * 86400000).toISOString().slice(0, 10);
+    const prevOk = d.prevPed.filter(p => !conhecidos.has(p.numero_pedido) && !d.historico.has(p.numero_pedido) && (p.data_pedido || '9999') >= limite);
+    const prevIgnorados = d.prevPed.length - prevOk.length;
+    const prevPorCod = new Map(prevOk.map(p => [p.codigo_pedido, p]));
+    const demandaPrev = [];
+    d.prevItens.forEach(i => {
+      const p = prevPorCod.get(i.codigo_pedido);
+      if (p && Number(i.quantidade) > 0) demandaPrev.push({ codigo: i.codigo, qtd: Number(i.quantidade), ref: `Previsão ${p.numero_pedido}`, previsao: p.data_previsao || null });
+    });
+    const rPrev = incluiPrev && demandaPrev.length ? window.PcpNecessidade.calcular({ demanda: demanda.concat(demandaPrev), filhos, estoque, hoje, cfg: d.cfg }) : null;
+    const firmeFalta = new Map(r.comprados.map(l => [l.codigo, l.falta]));
+    const mostra = rPrev || r;
     const prod = Object.fromEntries(d.prods.map(p => [p.codigo, p]));
     const comCusto = (l) => { const p = prod[l.codigo]; const c = custoOk && p ? rpCustoEfetivo(p) : null; return { ...l, p, custo: c, valor: c > 0 ? l.falta * c : null }; };
-    return { abertos, nOrdens, nItens: demanda.length, ciclos: r.ciclos, comprados: r.comprados.map(comCusto), fabricados: r.fabricados.map(l => ({ ...l, p: prod[l.codigo] })) };
-  }, [d, incluiPropostas, incluiOrdens, custoOk]);
+    const comPrev = (l) => ({ ...comCusto(l), soPrevisao: !!rPrev && l.falta > 1e-9 && !((firmeFalta.get(l.codigo) || 0) > 1e-9) });
+    return { abertos, nOrdens, nItens: demanda.length, ciclos: r.ciclos, firmes: r.comprados.map(comCusto), comprados: mostra.comprados.map(comPrev), fabricados: mostra.fabricados.map(l => ({ ...l, p: prod[l.codigo] })), prevOk, prevIgnorados, nPrev: demandaPrev.length };
+  }, [d, incluiPropostas, incluiOrdens, incluiPrev, custoOk]);
 
   if (erro) return <div style={{ padding: 16, color: 'var(--vp-danger)' }}>Não foi possível carregar: {erro}</div>;
   if (!d || !res) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
 
   const faltam = res.comprados.filter(l => l.falta > 1e-9);
   const atrasados = res.comprados.filter(l => l.status === 'atrasado');
-  const valorFalta = faltam.reduce((s, l) => s + (l.valor || 0), 0);
-  const semCusto = faltam.filter(l => custoOk && !(l.custo > 0)).length;
+  const faltamFirmes = res.firmes.filter(l => l.falta > 1e-9);       // cartões = carteira firme (previsão não conta)
+  const atrasadosFirmes = res.firmes.filter(l => l.status === 'atrasado');
+  const soPrev = faltam.filter(l => l.soPrevisao).length;
+  const valorFalta = faltamFirmes.reduce((s, l) => s + (l.valor || 0), 0);
+  const semCusto = faltamFirmes.filter(l => custoOk && !(l.custo > 0)).length;
   const q = busca.trim().toLowerCase();
   const lista = res.comprados
     .filter(l => filtro === 'todos' ? true : filtro === 'agir' ? l.falta > 1e-9 : l.status === filtro)
@@ -130,8 +155,8 @@ function AlmoxarifadoNecessidade() {
       {comprando && <PcpModalCompra itens={comprando} requisicoes={reqs} onClose={() => setComprando(null)} onEnviado={recarregarReqs}/>}
       <div className="grid-4" style={{ marginBottom: 12 }}>
         <div className="pcp-total"><div className="pcp-total__l">Carteira considerada</div><div className="pcp-total__v">{res.abertos.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>pedido(s){res.nOrdens ? ` + ${res.nOrdens} ordem(ns) avulsa(s)` : ''} · {res.nItens} linha(s)</div></div>
-        <div className="pcp-total"><div className="pcp-total__l">Materiais em falta</div><div className="pcp-total__v">{faltam.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>para atender a carteira</div></div>
-        <div className="pcp-total"><div className="pcp-total__l">Não chegam a tempo</div><div className="pcp-total__v" style={{ color: atrasados.length ? 'var(--vp-danger)' : undefined }}>{atrasados.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>mesmo comprando hoje</div></div>
+        <div className="pcp-total"><div className="pcp-total__l">Materiais em falta</div><div className="pcp-total__v">{faltamFirmes.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>para atender a carteira{soPrev ? ` · +${soPrev} só pela previsão` : ''}</div></div>
+        <div className="pcp-total"><div className="pcp-total__l">Não chegam a tempo</div><div className="pcp-total__v" style={{ color: atrasadosFirmes.length ? 'var(--vp-danger)' : undefined }}>{atrasadosFirmes.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>mesmo comprando hoje</div></div>
         <div className="pcp-total"><div className="pcp-total__l">{custoOk ? 'Valor do que falta' : 'Itens a produzir'}</div><div className="pcp-total__v">{custoOk ? necMoeda(valorFalta) : res.fabricados.filter(l => l.produzir > 0).length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{custoOk ? (semCusto ? `${semCusto} sem custo` : 'custo efetivo') : 'quadros / corrimões / kits'}</div></div>
       </div>
 
@@ -141,6 +166,7 @@ function AlmoxarifadoNecessidade() {
         <button className={btn(filtro === 'comprar')} onClick={() => setFiltro('comprar')}>Comprar ({res.comprados.filter(l => l.status === 'comprar').length})</button>
         <button className={btn(filtro === 'todos')} onClick={() => setFiltro('todos')}>Todos ({res.comprados.length})</button>
         <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center', marginLeft: 8 }}><input type="checkbox" checked={incluiPropostas} onChange={e => setIncluiPropostas(e.target.checked)}/>incluir propostas (etapa 00)</label>
+        <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }} title="Pedidos em etapa 10 no Omie: ainda não são venda firme. Só aparecem aqui como aviso, com o selo Previsão."><input type="checkbox" checked={incluiPrev} onChange={e => setIncluiPrev(e.target.checked)}/>incluir previsão (etapa 10: {res.prevOk.length})</label>
         <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={incluiOrdens} onChange={e => setIncluiOrdens(e.target.checked)}/>incluir ordens avulsas</label>
         <input className="input" style={{ minWidth: 200, marginLeft: 'auto' }} placeholder="Buscar item ou pedido…" value={busca} onChange={e => setBusca(e.target.value)}/>
         <button className="btn btn--sm" disabled={!compraSel.length} title="Marque os itens em falta na tabela. Mostra uma simulação antes de enviar; nada vai ao Omie sem confirmação." onClick={abrirCompra}>Enviar compra ao Omie ({compraSel.length})</button>
@@ -167,7 +193,7 @@ function AlmoxarifadoNecessidade() {
                   <tr key={l.codigo}>
                     <td>{l.falta > 1e-9 ? <input type="checkbox" checked={sel.has(l.codigo)} onChange={() => alternar(l.codigo)}/> : null}</td>
                     <td style={{ minWidth: 220 }}><b style={{ fontWeight: 500 }}>{l.codigo}</b><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{l.p?.descricao}</div></td>
-                    <td><Badge variant={st.variant}>{st.label}</Badge>{l.status === 'atrasado' ? <div style={{ fontSize: 10, color: 'var(--fg3)' }}>{l.prazo - l.diasAtePrevisao} dia(s) de atraso</div> : null}</td>
+                    <td><Badge variant={st.variant}>{st.label}</Badge>{l.soPrevisao ? <> <Badge variant="info">Previsão</Badge></> : null}{l.status === 'atrasado' ? <div style={{ fontSize: 10, color: 'var(--fg3)' }}>{l.prazo - l.diasAtePrevisao} dia(s) de atraso</div> : null}</td>
                     <td style={{ textAlign: 'right' }}>{necFmt(l.necessario)} {l.p?.unidade || ''}</td>
                     <td style={{ textAlign: 'right' }}>{necFmt(l.fisico)}</td>
                     <td style={{ textAlign: 'right' }}>{l.aCaminho ? necFmt(l.aCaminho) : '—'}</td>
@@ -208,15 +234,18 @@ function AlmoxarifadoNecessidade() {
         </div>
       </Card>
 
-      {res.abertos.length > 0 && (
+      {(res.abertos.length > 0 || res.prevOk.length > 0) && (
         <>
           <div style={{ height: 12 }}/>
-          <Card title="Pedidos considerados" sub={`${res.abertos.length} pedido(s) abertos, não faturados`}>
+          <Card title="Pedidos considerados" sub={`${res.abertos.length} pedido(s) abertos, não faturados${res.prevOk.length ? ` · ${res.prevOk.length} em previsão (etapa 10)` : ''}${res.prevIgnorados ? ` · ${res.prevIgnorados} da etapa 10 ignorado(s) por antigo(s) (> ${PREV_DIAS_MAX} dias)` : ''}`}>
             <div className="table-wrap">
               <table className="t pcp-grid">
                 <thead><tr><th>Pedido</th><th>Cliente</th><th>Etapa</th><th>Previsão de entrega</th></tr></thead>
                 <tbody>{res.abertos.map(p => (
                   <tr key={p.codigo_pedido}><td>{p.numero_pedido}</td><td>{p.cliente_fantasia || p.cliente_nome}</td><td>{p.etapa}</td><td>{necData(p.data_previsao)}</td></tr>
+                ))}
+                {incluiPrev && res.prevOk.map(p => (
+                  <tr key={'p' + p.codigo_pedido}><td>{p.numero_pedido}</td><td>{p.cliente_fantasia || p.cliente_nome}</td><td>10 <Badge variant="info">Previsão</Badge></td><td>{necData(p.data_previsao)}</td></tr>
                 ))}</tbody>
               </table>
             </div>
