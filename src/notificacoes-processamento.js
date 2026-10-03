@@ -32,6 +32,7 @@
     'Financeiro': 'dollar',
     'Engenharia': 'ruler',
     'Cotações': 'mail',
+    'Inbox': 'mail',
     'Propostas': 'proposal',
     'Comissões': 'award',
     'Central de Decisões': 'check',
@@ -50,6 +51,7 @@
     'Comercial': 'propostas',                  // 14 dos alertas eram "Comercial" e caíam no Dashboard
     'Compras': 'cotacoes-fornecedor',
     'Propostas': 'propostas',
+    'Inbox': 'inbox',
   };
 
   /* Preferências da Central (Modal "Preferências"): cada módulo pertence a UMA categoria que a pessoa pode ocultar.

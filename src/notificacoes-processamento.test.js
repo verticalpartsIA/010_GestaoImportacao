@@ -143,3 +143,9 @@ test('visivelPorPreferencia — sem preferências salvas mostra tudo', () => {
   assert.equal(M.visivelPorPreferencia({ module: 'Financeiro' }, undefined), true);
   assert.equal(M.visivelPorPreferencia({ module: 'Engenharia' }, {}), true);
 });
+
+test('Inbox — ícone de e-mail e rota do Inbox; nunca oculto por preferência', () => {
+  assert.equal(M.iconePara('Inbox'), 'mail');
+  assert.equal(M.rotaPara('Inbox'), 'inbox');
+  assert.equal(M.visivelPorPreferencia({ module: 'Inbox' }, { financeiro: false, operacoes: false, comercial: false }), true);
+});
