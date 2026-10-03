@@ -28,7 +28,7 @@
     'formularios', 'formulario-elevador', 'formulario-quadro-comando', 'controle-cotacoes',
     'cotacoes-fornecedor', 'cotacao-fornecedor-detail', 'contratos-sociais', 'precificacao', 'propostas', 'proposta-editor',
     'aval-financeiro',
-    'cadastro-clientes', 'cadastro-fornecedores', 'ncm-catalogo', 'cadastro-instaladores', 'cadastro-custos',
+    'cadastro-clientes', 'cadastro-fornecedores', 'cadastro-materias-primas', 'cadastro-produtos', 'ncm-catalogo', 'cadastro-instaladores', 'cadastro-custos',
     'juridico', 'contrato-venda-equipamentos', 'aval-juridico', 'contrato-instalador', 'contrato-editor',
     'importacao', 'importacao-detail', 'importacao-rastreamento',
     'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos',
@@ -39,7 +39,7 @@
     'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias-envio', 'vistorias', 'instalacao',
     'art', 'cronograma', 'databook', 'handover',
     'rh-homologacao',
-    'almoxarifado', 'pcp',
+    'almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'relatorios-pcp',
     'logs', 'configuracoes', 'comissoes', 'pagamentos-instalador',
   ];
   const KNOWN_ROUTES_SET = new Set(KNOWN_ROUTES);
