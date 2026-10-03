@@ -132,7 +132,7 @@
       { modulo: 'dashboard', label: 'Dashboard' },
       { modulo: 'notificacoes', label: 'Notificações' },
       { modulo: 'decisoes', label: 'Central de Decisões' },
-      { modulo: 'financeiro', label: 'Gatilhos & Prazo' },
+      { modulo: 'financeiro', label: 'Prazos & Pendências' },
     ]},
     { grupo: 'Cadastros', itens: [
       { modulo: 'cadastro-clientes', label: 'Clientes' },
