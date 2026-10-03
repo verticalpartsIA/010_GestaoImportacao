@@ -68,9 +68,12 @@ function MPNo({ linha, codigo, qtd, nivel, ctx, caminho }) {
 function MontagemProdutoPage({ setRoute, setSubsel }) {
   const [dados, setDados] = React.useState(null);
   const [erro, setErro] = React.useState(null);
-  const [pai, setPai] = React.useState(() => {
-    try { const v = sessionStorage.getItem('vp_pcp_pai') || ''; sessionStorage.removeItem('vp_pcp_pai'); return v; } catch (e) { return ''; }
-  });
+  // Produto escolhido vive na URL: /logistica/montagem-produto/{código} (rota-pcp.js). O sessionStorage 'vp_pcp_pai'
+  // continua só como porta de entrada vinda de OUTRAS telas (OP, Simulação, Cadastros): no mount vira URL e é descartado.
+  const [pai, setPai] = window.useRotaId('montagem-produto');
+  React.useEffect(() => {
+    try { const v = sessionStorage.getItem('vp_pcp_pai') || ''; sessionStorage.removeItem('vp_pcp_pai'); if (v && !pai) setPai(v); } catch (e) { /* ok */ }
+  }, []);
   const [abertos, setAbertos] = React.useState(new Set());
   const [verCusto, setVerCusto] = React.useState(false);
   const [podeEditar, setPodeEditar] = React.useState(false);
