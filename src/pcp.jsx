@@ -672,9 +672,13 @@ function PCPOrdens({ ctx }) {
   const { sb, dados, podeCriar } = ctx;
   const [ordens, setOrdens] = React.useState(null);
   const [progresso, setProgresso] = React.useState({});
-  const [aberta, setAberta] = React.useState(() => {
-    try { const v = sessionStorage.getItem('vp_pcp_op') || null; sessionStorage.removeItem('vp_pcp_op'); return v; } catch (e) { return null; }
-  });
+  // OP aberta vive na URL: /logistica/pcp/ordens/{id} (rota-pcp.js). O sessionStorage 'vp_pcp_op' continua só como porta de
+  // entrada vinda de OUTRAS telas (Emissão de NF, Expedição): no mount ele é convertido em URL e descartado.
+  const aberta = ctx.opId || null;
+  const setAberta = (id) => ctx.setOpId(id || null);
+  React.useEffect(() => {
+    try { const v = sessionStorage.getItem('vp_pcp_op') || null; sessionStorage.removeItem('vp_pcp_op'); if (v && !ctx.opId) ctx.setOpId(v); } catch (e) { /* ok */ }
+  }, []);
   const [nova, setNova] = React.useState(false);
   const [filtro, setFiltro] = React.useState('');
 
@@ -962,7 +966,7 @@ function PCPControle({ ctx }) {
               const atr = atrasada(o);
               return (
                 <tr key={o.id}>
-                  <td><button className="pcp-cod" onClick={() => { try { sessionStorage.setItem('vp_pcp_op', o.id); } catch (e) {} ctx.abrirOp(o.id); }}>{o.numero}</button></td>
+                  <td><button className="pcp-cod" onClick={() => ctx.abrirOp(o.id)}>{o.numero}</button></td>
                   <td>{o.produto}</td>
                   <td>{pcpData(o.prazo_entrega)}{atr && <div style={{ fontSize: 10, color: 'var(--vp-danger)' }}>{diasAtraso(o)} dia(s) de atraso</div>}</td>
                   <td>{pcpData(o.data_finalizacao)}</td>
@@ -1408,6 +1412,14 @@ function PCPPage({ setRoute, setSubsel }) {
   const [dados, setDados] = React.useState(null);
   const [erro, setErro] = React.useState(null);
   const [aba, setAba] = window.useRouteTab('pcp', 'ordens', ['ordens', 'fila', 'pedidos', 'planejamento', 'controle']);
+  // OP aberta na URL: /logistica/pcp/ordens/{id} (rota-pcp.js). Abrir a partir de OUTRA aba troca a aba e grava o id com
+  // replace, para o Voltar do navegador voltar à aba de origem (e não a uma URL intermediária).
+  const [opId, setOpId] = window.useRotaItem('pcp', 'ordens');
+  const abrirOp = (id) => {
+    if (aba === 'ordens') { setOpId(id); return; }
+    setAba('ordens');
+    setOpId(id, { replace: true });
+  };
   const [podeCriar, setPodeCriar] = React.useState(false);
   const [podeEditar, setPodeEditar] = React.useState(false);
   const sb = window.__VP_SB && window.__VP_SB.sb;
@@ -1436,7 +1448,8 @@ function PCPPage({ setRoute, setSubsel }) {
 
   const nav = { setRoute, setSubsel };
   const ctx = dados && {
-    sb, dados, podeCriar, podeEditar, nav, pais: Object.keys(dados.filhos).sort(), abrirOp: () => setAba('ordens'),
+    sb, dados, podeCriar, podeEditar, nav, pais: Object.keys(dados.filhos).sort(), abrirOp,
+    opId: aba === 'ordens' ? (opId || null) : null, setOpId: (id) => setOpId(id || null),
     irParaItem: (codigo) => window.pcpIrPara?.(nav, dados.prods[codigo]?.tipo_sped === '01' ? 'cadastro-materias-primas' : 'cadastro-produtos', 'vp_pcp_busca', codigo),
   };
 
@@ -1459,8 +1472,8 @@ function PCPPage({ setRoute, setSubsel }) {
       {erro && <div style={{ color: 'var(--vp-danger)', padding: 12 }}>{erro}</div>}
       {!erro && !dados && <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>}
       {ctx && aba === 'ordens' && <PCPOrdens ctx={ctx}/>}
-      {ctx && aba === 'fila' && <PCPFilaProducao ctx={ctx} abrirOp={(id) => { try { sessionStorage.setItem('vp_pcp_op', id); } catch (e) { /* ok */ } setAba('ordens'); }}/>}
-      {ctx && aba === 'pedidos' && <PCPPedidosQuadro ctx={ctx} abrirOp={(id) => { try { sessionStorage.setItem('vp_pcp_op', id); } catch (e) { /* ok */ } setAba('ordens'); }}/>}
+      {ctx && aba === 'fila' && <PCPFilaProducao ctx={ctx} abrirOp={abrirOp}/>}
+      {ctx && aba === 'pedidos' && <PCPPedidosQuadro ctx={ctx} abrirOp={abrirOp}/>}
       {ctx && aba === 'planejamento' && <PCPPlanejamento ctx={ctx}/>}
       {ctx && aba === 'controle' && <PCPControle ctx={ctx}/>}
     </div>
