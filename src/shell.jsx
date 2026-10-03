@@ -590,6 +590,18 @@ function RoleSwitch({ role, setRole }) {
   );
 }
 
+/* Sino do cabeçalho: contador REAL de não lidas (antes era um ponto vermelho fixo, sempre aceso). Mesma fonte e mesmas
+   regras da Central (NotificacoesLidasStore.useNaoLidas: destinatário, arquivadas e Preferências). Sem não lidas, sem ponto. */
+function SinoNotificacoes({ onClick }) {
+  const n = window.NotificacoesLidasStore && window.NotificacoesLidasStore.useNaoLidas ? window.NotificacoesLidasStore.useNaoLidas() : 0;
+  return (
+    <button className="header__btn" data-tip={n ? `Notificações (${n} não lida${n > 1 ? 's' : ''})` : 'Notificações'} aria-label={n ? `${n} notificações não lidas` : 'Notificações'} onClick={onClick}>
+      <Icon.bell size={16}/>
+      {n > 0 && <span style={{ position: 'absolute', top: -6, right: -6, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: 'var(--vp-danger)', color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center', border: '1.5px solid #fff' }}>{n > 99 ? '99+' : n}</span>}
+    </button>
+  );
+}
+
 function Header({ route, role, setRole, onSearch, onNavigate }) {
   const bc = BREADCRUMB_MAP[route] || BREADCRUMB_MAP.dashboard;
   const [showHelp, setShowHelp] = React.useState(false);
@@ -609,10 +621,7 @@ function Header({ route, role, setRole, onSearch, onNavigate }) {
       </div>
       <GlobalSearch onNavigate={onNavigate}/>
       <RoleSwitch role={role} setRole={setRole}/>
-      <button className="header__btn" data-tip="Notificações" onClick={() => onSearch?.("notificacoes")}>
-        <Icon.bell size={16}/>
-        <span className="dot"/>
-      </button>
+      <SinoNotificacoes onClick={() => onSearch?.("notificacoes")}/>
       <button className="header__btn" data-tip="Ajuda" aria-label="Central de Ajuda" onClick={() => setShowHelp(true)}><Icon.info size={16}/></button>
       {showHelp ? <HelpCenter route={route} bc={bc} onClose={() => setShowHelp(false)}/> : null}
     </header>

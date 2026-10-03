@@ -101,6 +101,7 @@
           title: `Cotação ${d.numero_cotacao} — vistorias não agendadas há ${diasPassados} dias`,
           sub: `${d.building_name || d.id} · faltam ${3 - qtdAgendadas} de 3 vistorias obrigatórias · CEO${ceo ? ' (' + ceo.nome + ')' : ''} precisa saber o motivo`,
           module: 'Engenharia', resolved: false,
+          rota: '/engenharia/dossier-obra/' + encodeURIComponent(String(d.id)),
         });
         await c.from('dossier_obra').update({ vistorias_alerta_15d_em: new Date().toISOString() }).eq('id', d.id);
         mudou = true;
@@ -111,6 +112,7 @@
           title: `Cotação ${d.numero_cotacao} — vistorias não agendadas há ${diasPassados} dias`,
           sub: `${d.building_name || d.id} · faltam ${3 - qtdAgendadas} de 3 vistorias obrigatórias · ${lider ? lider.nome : 'líder da Engenharia'} precisa agendar`,
           module: 'Engenharia', resolved: false,
+          rota: '/engenharia/dossier-obra/' + encodeURIComponent(String(d.id)),
         });
         await c.from('dossier_obra').update({ vistorias_alerta_10d_em: new Date().toISOString() }).eq('id', d.id);
         mudou = true;

@@ -179,7 +179,12 @@
       formR, cliR, instR
     ] = await Promise.all([
       sb.from('leads').select('*').is('excluido_em', null).order('date', { ascending: false }),
-      sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false }),
+      // Mesma regra de destinatário da Central de Notificações (antes o Dashboard contava alertas dirigidos a outras pessoas).
+      (() => {
+        const q = sb.from('alertas').select('*').eq('resolved', false);
+        const em = (window.__VP_USER || {}).email || null;
+        return (em ? q.or(`destinatario_email.is.null,destinatario_email.eq.${em}`) : q.is('destinatario_email', null)).order('created_at', { ascending: false });
+      })(),
       sb.from('tarefas').select('*').eq('role', role).eq('done', false).order('id'),
       sb.from('embarques').select('*').order('eta'),
       sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false }),
