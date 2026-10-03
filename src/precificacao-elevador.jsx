@@ -137,18 +137,41 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
 
+  /* URL ↔ detalhe (issue #611): abrir/voltar acima gravam o id no `subsel`
+     (o App espelha na URL). Este efeito cobre o caminho inverso — Voltar/
+     Avançar do navegador mudam o `subsel` por fora: sem ele o detalhe ficava
+     aberto com a URL já de volta na lista. Só age quando o `subsel` diverge do
+     que a tela mostra (cliques da própria tela e a montagem já batem). */
+  const pzIdRef = React.useRef(pzId);
+  pzIdRef.current = pzId;
+  React.useEffect(() => {
+    const novo = subsel && typeof subsel === 'string' ? subsel : null;
+    if (novo === pzIdRef.current) return;
+    setPzId(novo);
+    if (!novo) carregar();
+  }, [subsel]);
+
   const abrir = async (item) => {
-    if (item.precificacaoId) { setPzId(item.precificacaoId); return; }
+    if (item.precificacaoId) { setPzId(item.precificacaoId); setSubsel?.(item.precificacaoId); return; }
     try {
       const pz = await window.PrecificacaoElevadorStore.criar(item.formularioElevadorId, item.cotacaoFornecedorId);
       setPzId(pz.id);
+      setSubsel?.(pz.id);
     } catch (e) {
       window.toast?.('Erro ao abrir precificação: ' + e.message, 'error');
     }
   };
 
   if (pzId) {
-    return <PrecificacaoElevadorDetalhe id={pzId} onVoltar={() => { setPzId(null); carregar(); }} setRoute={setRoute} setSubsel={setSubsel}/>;
+    return <PrecificacaoElevadorDetalhe id={pzId} onVoltar={() => {
+      setPzId(null);
+      /* O App preserva o id da URL quando o subsel vira null na mesma rota (p/
+         rotas que usam o 2º segmento como aba) — então limpa a URL antes,
+         de forma síncrona; o efeito do App vê a URL já sem id e não a refaz. */
+      window.VpRouter?.navigate('precificacao', null);
+      setSubsel?.(null);
+      carregar();
+    }} setRoute={setRoute} setSubsel={setSubsel}/>;
   }
 
   return (
