@@ -1010,3 +1010,10 @@ Summaries must be specific — "Mamba achieves linear-time sequence modeling via
 - After editing `.md` files directly, run `hyperresearch sync` to update the index
 - Run `hyperresearch --help` for the full command list
 <!-- hyperresearch:end -->
+
+## PCP — Etapa 10 do Omie entra só como PREVISÃO na Necessidade (03/10/2026)
+
+Pedido do usuário: pedidos em etapa 10 ("Pedido", antes de "Separar estoque/produção") aparecem só como previsão — não alertam, não contam como venda firme, não afetam Emissão de NF, Expedição, SLA nem relatórios.
+- **Tabelas próprias** `pcp_previsao_pedidos`/`pcp_previsao_itens` (migration `20261003180000`), lidas SÓ por `necessidade-pcp.jsx`. **Nunca gravar etapa 10 em `pcp_pedidos`** (aparece na Emissão de NF/Expedição/SLA). `sync-pcp-pedidos` v5 com `{"etapa":"10"}` grava lá; cron `sync-pcp-pedidos-previsao-etapa10` (:20, 7h–19h seg–sex). Quando o pedido chega à etapa 20, a limpeza da própria função o tira da previsão.
+- **Necessidade**: interruptor "incluir previsão (etapa 10)" (padrão ligado); roda o cálculo duas vezes (firme × firme+previsão); cartões e `alerta-pcp-compras` continuam só da carteira firme; item que só falta por causa da previsão ganha selo "Previsão". Pedidos com `data_pedido` > `PREV_DIAS_MAX` (120) dias são ignorados — a etapa 10 tem cadastros esquecidos desde 2020 (73 lidos, 8 com item do PCP, 1 válido em 03/10).
+- `necessidade-pcp.jsx` v3. Testado no app local com dados reais. Não commitado.
