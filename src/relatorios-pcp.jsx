@@ -645,6 +645,8 @@ function RPFluxoCaixa({ ctx }) {
         <b style={{ fontWeight: 500, fontSize: 16 }}>{ano}</b>
         <button className="btn btn--sm" onClick={() => setAno(a => a + 1)}>→</button>
       </div>
+      <RPPainelFluxo ctx={ctx} ano={ano} d={d} perm={perm}/>
+      <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>Resultado do PCP por mês</h3>
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
         <table className="t pcp-grid">
           <thead><tr><th>Resultado do PCP</th>{RP_MESES.map(m => <th key={m} className="text-right">{m.slice(0, 3)}</th>)}<th className="text-right">Total {ano}</th></tr></thead>
