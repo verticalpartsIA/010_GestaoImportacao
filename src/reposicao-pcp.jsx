@@ -53,6 +53,8 @@ function AlmoxarifadoReposicao() {
   const [cfgAberta, setCfgAberta] = React.useState(false);
   const [edit, setEdit] = React.useState(null);
   const [salvando, setSalvando] = React.useState(false);
+  const [comprando, setComprando] = React.useState(null);          // itens do modal "Enviar compra ao Omie" (compra-pcp.jsx)
+  const [reqs, recarregarReqs] = window.usePcpRequisicoesRecentes();
 
   React.useEffect(() => {
     const T = window.PropostaStore;
@@ -166,8 +168,18 @@ function AlmoxarifadoReposicao() {
     finally { setSalvando(false); }
   };
 
+  // Compra ao Omie: só item COMPRADO com sugestão (fabricado "Produzir" não é comprado).
+  const compraSel = marcados.filter(l => l.sugestao > 0 && !l.fabricado);
+  const abrirCompra = () => {
+    const ignorados = marcados.length - compraSel.length;
+    if (ignorados > 0) window.toast?.(`${ignorados} item(ns) marcado(s) ficaram de fora (sem sugestão de compra ou fabricados pelo PCP).`);
+    setComprando(compraSel.map(l => ({
+      codigo: l.codigo, descricao: l.p.descricao, unidade: l.p.unidade, quantidade: l.sugestao,
+      obs: `Reposição: consumo ${repFmt(l.mediaMensal, 1)}/mês · cobertura ${l.coberturaProj != null ? repFmt(l.coberturaProj, 0) : '—'}d · prazo ${l.prazo}d`,
+    })));
+  };
   const btn = (ativo) => 'btn btn--sm' + (ativo ? ' btn--primary' : '');
-  const filtro = (id, rot, n) => <button key={id} className={btn(statusF === id)} onClick={() => setStatusF(id)}>{rot}{n != null ? ` (${n})` : ''}</button>;
+  const filtro =(id, rot, n) => <button key={id} className={btn(statusF === id)} onClick={() => setStatusF(id)}>{rot}{n != null ? ` (${n})` : ''}</button>;
   const nAcao = cont('critico') + cont('comprar');
   const lido = d.cursor.concluido_ate ? repData(d.cursor.concluido_ate) : null;
   const campo = (k, rot, hint) => (
@@ -179,6 +191,7 @@ function AlmoxarifadoReposicao() {
 
   return (
     <div>
+      {comprando && <PcpModalCompra itens={comprando} requisicoes={reqs} onClose={() => setComprando(null)} onEnviado={recarregarReqs}/>}
       {!lido && (
         <div style={{ padding: 12, marginBottom: 12, border: '1px solid var(--vp-warning)', borderRadius: 8, fontSize: 13 }}>
           O histórico de consumo ainda não foi carregado por completo. Clique em <b>Atualizar do Omie</b> (leva alguns minutos na primeira vez; depois é automático todo dia de madrugada).
@@ -203,6 +216,7 @@ function AlmoxarifadoReposicao() {
         <button className={btn(grupo === 'todos')} onClick={() => setGrupo('todos')}>Todos</button>
         <input className="input" style={{ minWidth: 200, marginLeft: 'auto' }} placeholder="Buscar código, descrição ou família…" value={busca} onChange={e => setBusca(e.target.value)}/>
         <button className="btn btn--sm" onClick={() => setCfgAberta(v => !v)}>Parâmetros</button>
+        <button className="btn btn--sm" disabled={!compraSel.length} title="Marque itens na tabela. Mostra uma simulação antes de enviar; nada vai ao Omie sem confirmação." onClick={abrirCompra}>Enviar compra ao Omie ({compraSel.length})</button>
         <button className="btn btn--sm btn--primary" disabled={!!atualizando} onClick={atualizar}>{atualizando ? 'Atualizando…' : 'Atualizar do Omie'}</button>
       </div>
       {atualizando && <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 8 }}>{atualizando}</div>}
@@ -251,7 +265,7 @@ function AlmoxarifadoReposicao() {
                     <td style={{ textAlign: 'right' }}>{l.coberturaProj != null ? `${repFmt(l.coberturaProj, 0)}d` : '—'}</td>
                     <td style={{ textAlign: 'right' }}>{l.pedido != null ? repFmt(l.pedido, 1) : '—'}</td>
                     <td style={{ textAlign: 'right' }}>{l.maximo != null ? repFmt(l.maximo, 1) : '—'}</td>
-                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{l.sugestao > 0 ? `${repFmt(l.sugestao)} ${l.p.unidade || ''}` : l.excesso > 0 ? <span style={{ fontWeight: 400, color: 'var(--fg3)' }}>+{repFmt(l.excesso)} acima</span> : '—'}</td>
+                    <td style={{ textAlign: 'right', fontWeight: 600 }}>{l.sugestao > 0 ? `${repFmt(l.sugestao)} ${l.p.unidade || ''}` : l.excesso > 0 ? <span style={{ fontWeight: 400, color: 'var(--fg3)' }}>+{repFmt(l.excesso)} acima</span> : '—'}<PcpTagRequisicao lista={reqs[l.codigo]}/></td>
                     {perm.custo && <td style={{ textAlign: 'right' }}>{l.sugestao > 0 ? (l.custo > 0 ? repMoeda(l.sugestao * l.custo) : <span title="Sem custo cadastrado">⚠</span>) : '—'}</td>}
                     <td style={{ textAlign: 'right' }}>{l.sugestao > 0 ? (l.m3un ? repFmt(l.sugestao * l.m3un, 2) : <span title="Sem dimensões cadastradas">?</span>) : '—'}</td>
                   </tr>
