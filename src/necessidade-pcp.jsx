@@ -10,9 +10,13 @@
    - Pedidos em etapa 10 ("Pedido", antes de separar estoque/produção) são SÓ PREVISÃO: vêm de pcp_previsao_* (nunca de pcp_pedidos),
      entram na conta apenas com o interruptor ligado, não mudam os cartões (que são da carteira firme), ganham o selo "Previsão" quando
      são a única razão de o item faltar, e pedidos parados há mais de PREV_DIAS_MAX dias (cadastro antigo esquecido na etapa) são ignorados.
-   - Só LÊ: nada é gravado no Omie nem no banco. Custo/valor só para quem tem almoxarifado.ver_custo.
+   - Gerar OP (03/10): cada item fabricado em falta vira uma OP aberta pelo botão "Gerar OP". A quantidade é o que FALTA ABRIR
+     (produzir − o que já está em OPs abertas do mesmo produto, de pedido ou não), então clicar de novo não duplica. A observação
+     da OP começa com [Necessidade] e essas OPs NÃO entram na demanda avulsa (senão a conta dobraria: demanda + oferta).
+   - Fora a geração de OP, só LÊ: nada é gravado no Omie nem no banco. Custo/valor só para quem tem almoxarifado.ver_custo.
    ============================================================ */
 
+const NEC_MARCA = '[Necessidade]';
 const NEC_STATUS = {
   atrasado: { label: 'Não chega a tempo', variant: 'danger' },
   comprar: { label: 'Comprar', variant: 'warning' },
@@ -46,11 +50,15 @@ function AlmoxarifadoNecessidade() {
   const [filtro, setFiltro] = React.useState('agir');       // agir | atrasado | comprar | todos
   const [busca, setBusca] = React.useState('');
   const [sel, setSel] = React.useState(() => new Set());
+  const [podeOp, setPodeOp] = React.useState(false);
+  const [selOp, setSelOp] = React.useState(() => new Set());
+  const [gerando, setGerando] = React.useState(false);
   const [comprando, setComprando] = React.useState(null);          // itens do modal "Enviar compra ao Omie" (compra-pcp.jsx)
   const [reqs, recarregarReqs] = window.usePcpRequisicoesRecentes();
 
   React.useEffect(() => {
     Promise.resolve(window.PropostaStore?.temCapacidade?.('almoxarifado', 'ver_custo')).then(v => setCustoOk(!!v)).catch(() => {});
+    Promise.resolve(window.PropostaStore?.temCapacidade?.('pcp', 'criar')).then(v => setPodeOp(!!v)).catch(() => {});
   }, []);
 
   const carregar = React.useCallback(async () => {
@@ -62,7 +70,7 @@ function AlmoxarifadoNecessidade() {
         necLerTudo(() => sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_fantasia, data_previsao').eq('faturado', false).eq('cancelado', false).order('codigo_pedido')),
         necLerTudo(() => sb.from('pcp_pedido_acompanhamento').select('numero_pedido, historico').order('numero_pedido')),
         necLerTudo(() => sb.from('pcp_pedido_itens').select('codigo_pedido, codigo, quantidade').eq('item_pcp', true).order('id')),
-        necLerTudo(() => sb.from('pcp_ordens').select('id, numero, produto, quantidade, qtd_produzida, status, prazo_entrega, pedido_codigo, ordem_mae_id, cliente').not('status', 'in', '(concluida,cancelada)').order('created_at')),
+        necLerTudo(() => sb.from('pcp_ordens').select('id, numero, produto, quantidade, qtd_produzida, status, prazo_entrega, pedido_codigo, ordem_mae_id, cliente, observacao').not('status', 'in', '(concluida,cancelada)').order('created_at')),
         necLerTudo(() => sb.from('pcp_estrutura').select('codigo_pai, codigo_filho, quantidade, perda_pct').order('id')),
         necLerTudo(() => sb.from('pcp_produtos').select(campos).order('codigo')),
         necLerTudo(() => sb.from('pcp_posicao_compra').select('codigo, fisico, pendente').order('codigo')),
@@ -92,7 +100,7 @@ function AlmoxarifadoNecessidade() {
       const porId = new Map(d.ordens.map(o => [o.id, o]));
       const raizDePedido = (o) => { let x = o, n = 0; while (x && n++ < 5) { if (x.pedido_codigo) return true; x = x.ordem_mae_id ? porId.get(x.ordem_mae_id) : null; } return false; };
       d.ordens.forEach(o => {
-        if (!o.produto || raizDePedido(o)) return;
+        if (!o.produto || raizDePedido(o) || String(o.observacao || '').startsWith(NEC_MARCA)) return;
         const q = Math.max(0, Number(o.quantidade || 0) - Number(o.qtd_produzida || 0));
         if (q > 0) { demanda.push({ codigo: o.produto, qtd: q, ref: `OP ${o.numero}`, previsao: o.prazo_entrega || null }); nOrdens++; }
       });
@@ -120,7 +128,18 @@ function AlmoxarifadoNecessidade() {
     const prod = Object.fromEntries(d.prods.map(p => [p.codigo, p]));
     const comCusto = (l) => { const p = prod[l.codigo]; const c = custoOk && p ? rpCustoEfetivo(p) : null; return { ...l, p, custo: c, valor: c > 0 ? l.falta * c : null }; };
     const comPrev = (l) => ({ ...comCusto(l), soPrevisao: !!rPrev && l.falta > 1e-9 && !((firmeFalta.get(l.codigo) || 0) > 1e-9) });
-    return { abertos, nOrdens, nItens: demanda.length, ciclos: r.ciclos, firmes: r.comprados.map(comCusto), comprados: mostra.comprados.map(comPrev), fabricados: mostra.fabricados.map(l => ({ ...l, p: prod[l.codigo] })), prevOk, prevIgnorados, nPrev: demandaPrev.length };
+    const emOp = {};                                                     // OPs abertas por produto (pedido, avulsa ou da Necessidade)
+    d.ordens.forEach(o => {
+      if (!o.produto) return;
+      const q = Math.max(0, Number(o.quantidade || 0) - Number(o.qtd_produzida || 0));
+      const e = (emOp[o.produto] = emOp[o.produto] || { qtd: 0, nums: [] });
+      e.qtd += q; e.nums.push(o.numero);
+    });
+    const fabr = mostra.fabricados.map(l => {
+      const e = emOp[l.codigo] || { qtd: 0, nums: [] };
+      return { ...l, p: prod[l.codigo], emOp: e.qtd, opNums: e.nums, abrir: Math.max(0, l.produzir - e.qtd) };
+    });
+    return { abertos, nOrdens, nItens: demanda.length, ciclos: r.ciclos, firmes: r.comprados.map(comCusto), comprados: mostra.comprados.map(comPrev), fabricados: fabr, prevOk, prevIgnorados, nPrev: demandaPrev.length };
   }, [d, incluiPropostas, incluiOrdens, incluiPrev, custoOk]);
 
   if (erro) return <div style={{ padding: 16, color: 'var(--vp-danger)' }}>Não foi possível carregar: {erro}</div>;
@@ -145,6 +164,49 @@ function AlmoxarifadoNecessidade() {
   const faltantesLista = lista.filter(l => l.falta > 1e-9);
   const todosMarcados = faltantesLista.length > 0 && faltantesLista.every(l => sel.has(l.codigo));
   const marcarTodos = () => setSel(prev => { const n = new Set(prev); if (todosMarcados) faltantesLista.forEach(l => n.delete(l.codigo)); else faltantesLista.forEach(l => n.add(l.codigo)); return n; });
+  const fabrAbrir = res.fabricados.filter(l => l.abrir > 1e-9);
+  const opSel = fabrAbrir.filter(l => selOp.has(l.codigo));
+  const alternarOp = (cod) => setSelOp(prev => { const n = new Set(prev); if (n.has(cod)) n.delete(cod); else n.add(cod); return n; });
+  const todosOp = fabrAbrir.length > 0 && fabrAbrir.every(l => selOp.has(l.codigo));
+  const gerarOps = async () => {
+    if (!opSel.length || gerando) return;
+    const txt = opSel.map(l => `${l.codigo} × ${necFmt(Math.ceil(l.abrir))}`).join('\n');
+    if (!window.confirm(`Criar ${opSel.length} ordem(ns) de produção?\n\n${txt}\n\nNada é enviado ao Omie.`)) return;
+    setGerando(true);
+    const quem = (window.__VP_USER && window.__VP_USER.email) || null;
+    const feitas = []; let falha = null;
+    try {
+      const { data: modelo } = await sb.from('pcp_etapas_modelo').select('posicao, nome, setor').eq('ativo', true).order('posicao');
+      const filhos = {}; d.estr.forEach(l => { (filhos[l.codigo_pai] = filhos[l.codigo_pai] || []).push(l); });
+      const explode = (raiz, mult, acc, pilha) => {
+        (filhos[raiz] || []).forEach(f => {
+          if (pilha.includes(f.codigo_filho)) return;
+          const q = Number(f.quantidade || 0) * mult * (1 + Number(f.perda_pct || 0) / 100);
+          if ((filhos[f.codigo_filho] || []).length) explode(f.codigo_filho, q, acc, pilha.concat(f.codigo_filho)); else acc[f.codigo_filho] = (acc[f.codigo_filho] || 0) + q;
+        });
+        return acc;
+      };
+      const prodMap = Object.fromEntries(d.prods.map(p => [p.codigo, p]));
+      for (const l of opSel) {
+        const qtd = Math.ceil(l.abrir);
+        const { data: op, error } = await sb.from('pcp_ordens').insert({
+          produto: l.codigo, quantidade: qtd, prazo_entrega: l.previsao || null, criado_por: quem,
+          observacao: `${NEC_MARCA} ${refsTxt(l.refs)}`.slice(0, 300),
+        }).select('id, numero').single();
+        if (error || !op) { falha = error?.message || 'sem permissão'; break; }
+        const mats = explode(l.codigo, 1, {}, [l.codigo]);
+        const linhas = Object.keys(mats).sort().map(c => ({ ordem_id: op.id, codigo: c, descricao: prodMap[c]?.descricao || null, unidade: prodMap[c]?.unidade || null, quantidade_unit: mats[c], necessario: mats[c] * qtd }));
+        if (linhas.length) { const r = await sb.from('pcp_ordem_materiais').insert(linhas); if (r.error) { falha = r.error.message; break; } }
+        const etapas = (modelo || []).map(m => ({ ordem_id: op.id, posicao: m.posicao, nome: m.nome, setor: m.setor }));
+        if (etapas.length) { const r = await sb.from('pcp_ordem_etapas').insert(etapas); if (r.error) { falha = r.error.message; break; } }
+        window.VPLog?.registrar?.({ modulo: 'PCP', acao: 'Abriu OP pela Necessidade', alvo: `${op.numero} — ${l.codigo} × ${qtd}` });
+        feitas.push(op.numero);
+      }
+    } catch (e) { falha = e.message || String(e); }
+    setGerando(false);
+    if (feitas.length) { setSelOp(new Set()); await carregar(); }
+    window.toast?.(falha ? `${feitas.length} OP(s) criada(s); parou: ${falha}` : `${feitas.length} OP(s) criada(s): ${feitas.join(', ')}.`);
+  };
   const abrirCompra = () => setComprando(compraSel.map(l => ({
     codigo: l.codigo, descricao: l.p?.descricao, unidade: l.p?.unidade, quantidade: Math.ceil(l.falta * 100) / 100,
     obs: `Necessidade: ${refsTxt(l.refs)} · entrega ${necData(l.previsao)}`.slice(0, 190),
@@ -213,22 +275,28 @@ function AlmoxarifadoNecessidade() {
       </Card>
 
       <div style={{ height: 12 }}/>
-      <Card title="A produzir (itens fabricados)" sub="Quadros, corrimões e kits com estrutura: o que falta fabricar depois de abater o estoque acabado">
+      <Card title="A produzir (itens fabricados)" sub="Quadros, corrimões e kits com estrutura: o que falta fabricar depois de abater o estoque acabado e as OPs já abertas">
+        <div style={{ display: 'flex', gap: 8, padding: '0 0 8px', alignItems: 'center' }}>
+          <button className="btn btn--sm" disabled={!opSel.length || gerando || !podeOp} title={podeOp ? 'Marque os itens e crie as ordens de produção. Nada é enviado ao Omie.' : 'Sem a alçada PCP › Criar'} onClick={gerarOps}>{gerando ? 'Criando…' : `Gerar OP (${opSel.length})`}</button>
+          <span style={{ fontSize: 11, color: 'var(--fg3)' }}>A quantidade da OP é o que falta abrir; OPs já abertas do mesmo produto são descontadas.</span>
+        </div>
         <div className="table-wrap">
           <table className="t pcp-grid">
-            <thead><tr><th>Item</th><th style={{ textAlign: 'right' }}>Necessário</th><th style={{ textAlign: 'right' }}>Em estoque</th><th style={{ textAlign: 'right' }}>Produzir</th><th>Entrega mais cedo</th><th>Pedidos</th></tr></thead>
+            <thead><tr><th style={{ width: 28 }}><input type="checkbox" checked={todosOp} onChange={() => setSelOp(todosOp ? new Set() : new Set(fabrAbrir.map(l => l.codigo)))} title="Marcar todos os itens sem OP"/></th><th>Item</th><th style={{ textAlign: 'right' }}>Necessário</th><th style={{ textAlign: 'right' }}>Em estoque</th><th style={{ textAlign: 'right' }}>Produzir</th><th>OP aberta</th><th>Entrega mais cedo</th><th>Pedidos</th></tr></thead>
             <tbody>
               {res.fabricados.map(l => (
                 <tr key={l.codigo}>
+                  <td>{l.abrir > 1e-9 ? <input type="checkbox" checked={selOp.has(l.codigo)} onChange={() => alternarOp(l.codigo)}/> : null}</td>
                   <td style={{ minWidth: 220 }}><b style={{ fontWeight: 500 }}>{l.codigo}</b><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{l.p?.descricao}</div></td>
                   <td style={{ textAlign: 'right' }}>{necFmt(l.necessario)} {l.p?.unidade || ''}</td>
                   <td style={{ textAlign: 'right' }}>{necFmt(l.fisico)}</td>
                   <td style={{ textAlign: 'right', fontWeight: 600 }}>{l.produzir > 1e-9 ? necFmt(l.produzir) : <span style={{ fontWeight: 400, color: 'var(--fg3)' }}>coberto pelo estoque</span>}</td>
+                  <td style={{ fontSize: 11 }}>{l.emOp > 1e-9 ? <>{necFmt(l.emOp)} em {l.opNums.slice(0, 3).join(', ')}{l.opNums.length > 3 ? ` +${l.opNums.length - 3}` : ''}{l.abrir <= 1e-9 && l.produzir > 1e-9 ? <> <Badge variant="success">com OP</Badge></> : null}</> : '—'}</td>
                   <td>{necData(l.previsao)}</td>
                   <td style={{ fontSize: 11, maxWidth: 220 }}>{refsTxt(l.refs)}</td>
                 </tr>
               ))}
-              {res.fabricados.length === 0 && <tr><td colSpan={6} style={{ padding: 24, textAlign: 'center', color: 'var(--fg3)' }}>Nenhum item fabricado na carteira.</td></tr>}
+              {res.fabricados.length === 0 && <tr><td colSpan={8} style={{ padding: 24, textAlign: 'center', color: 'var(--fg3)' }}>Nenhum item fabricado na carteira.</td></tr>}
             </tbody>
           </table>
         </div>
