@@ -22,8 +22,21 @@
     return (leads || []).filter((l) => (l.date || '').startsWith(mesAtual));
   }
 
-  function cotacoesAbertas(cotacoes) {
-    return (cotacoes || []).filter((c) => ['Aguardando China', 'Recebida', 'Em análise'].includes(c.status));
+  /* Achado real (03/10): lia a tabela `cotacoes` — 0 linhas em produção,
+     nunca escrita por ninguém no fluxo real (só lida pelo módulo jurídico
+     legado `contrato-editor.jsx`, mesma tabela física, fluxo diferente).
+     O KPI sempre mostrava 0, desconectado da esteira real de verdade.
+     Fonte agora: `gatilhos` (já carregado pelo Dashboard) — cotação
+     "em China" = tem um nó aberto de "aguardando resposta do fornecedor"
+     (SLA_FORNECEDOR) ou "financeiro precificando" (PRECIFICACAO),
+     equivalente aos 3 status antigos (aguardando/recebida/em análise).
+     Devolve nº de cotações DISTINTAS, não linhas de gatilho (um nó por
+     cotação nessas 2 chaves, mas sem essa garantia explícita um dia
+     poderia duplicar). */
+  const COTACAO_ABERTA_NODES = ['SLA_FORNECEDOR', 'PRECIFICACAO'];
+  function cotacoesAbertas(gatilhos) {
+    const abertos = (gatilhos || []).filter((g) => !g.concluido_em && COTACAO_ABERTA_NODES.includes(g.evento_key));
+    return Array.from(new Set(abertos.map((g) => g.numero_cotacao).filter((n) => n != null)));
   }
 
   /* Antes filtrava leads.status === 'Proposta enviada' — número sem
@@ -73,10 +86,10 @@
     return new Set((contratos || []).map((c) => c.proposta_id).filter(Boolean));
   }
 
-  function kpis({ leads, cotacoes, propEnviadas, convPct }) {
+  function kpis({ leads, gatilhos, propEnviadas, convPct }) {
     return [
       { label: 'Leads do mês', value: String(leadsDoMes(leads).length), unit: '', delta: leadsDoMes(leads).length > 0 ? `+${leadsDoMes(leads).length}` : '0', deltaDir: 'up', sub: 'vs. mês anterior' },
-      { label: 'Cot. em China', value: String(cotacoesAbertas(cotacoes).length), unit: '', delta: `${cotacoesAbertas(cotacoes).length}`, deltaDir: 'up', sub: 'abertas' },
+      { label: 'Cot. em China', value: String(cotacoesAbertas(gatilhos).length), unit: '', delta: `${cotacoesAbertas(gatilhos).length}`, deltaDir: 'up', sub: 'abertas' },
       { label: 'Propostas enviadas', value: String((propEnviadas || []).length), unit: '', delta: '', deltaDir: 'up', sub: 'no período' },
       { label: 'Conversão Lead→Proposta', value: String(convPct), unit: '%', delta: '', deltaDir: convPct >= 25 ? 'up' : 'down', sub: 'meta 25%' },
     ];
@@ -107,18 +120,18 @@
       .sort((a, b) => b.v - a.v);
   }
 
-  function compute({ leads, cotacoes, propostas, contratos }) {
+  function compute({ leads, gatilhos, propostas, contratos }) {
     const propEnviadas = propostasEnviadas(propostas);
     const convPct = conversaoLeadProposta(leads, propEnviadas);
     return {
-      kpis: kpis({ leads, cotacoes, propEnviadas, convPct }),
+      kpis: kpis({ leads, gatilhos, propEnviadas, convPct }),
       pipelineStages: pipeline({ leads, propostas, contratos }),
       originBars: origemBars(leads),
     };
   }
 
   window.ComercialMetrics = {
-    leadsDoMes, cotacoesAbertas, propostasEnviadas, leadsConvertidos, leadsComPropostaVinculada, conversaoLeadProposta,
+    leadsDoMes, COTACAO_ABERTA_NODES, cotacoesAbertas, propostasEnviadas, leadsConvertidos, leadsComPropostaVinculada, conversaoLeadProposta,
     propostasAprovadas, idsComContrato, kpis, pipeline, origemBars, compute,
   };
 }());

@@ -172,15 +172,13 @@
 
   async function loadDashboardData(role, period) {
     const [
-      lR, cotR, projR, alertR,
+      lR, alertR,
       tarR, embR, ctR, estR,
       comR, gatR, fichasR, catalogoR,
       propR, avaisR, ncmR,
       formR, cliR, instR
     ] = await Promise.all([
       sb.from('leads').select('*').is('excluido_em', null).order('date', { ascending: false }),
-      sb.from('cotacoes').select('*').order('date', { ascending: false }),
-      sb.from('projetos').select('*').order('start_date'),
       sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false }),
       sb.from('tarefas').select('*').eq('role', role).eq('done', false).order('id'),
       sb.from('embarques').select('*').order('eta'),
@@ -217,8 +215,6 @@
     ]);
 
     const leads     = lR.data    || [];
-    const cotacoes  = cotR.data  || [];
-    const projetos  = projR.data || [];
     const alertas   = (alertR.data || []).map(a => ({ ...a, time: timeAgo(a.created_at) }));
     const tarefas   = tarR.data  || [];
     const embarques = embR.data  || [];
@@ -236,29 +232,32 @@
     const clientesPorId = {};
     (cliR.data || []).forEach((c) => { clientesPorId[c.id] = c; });
 
+    // ---- Esteira real (gatilhos+formulários) reconciliada em "projeto
+    // sintético" — fonte única de "projeto/cotação aberta" pro Dashboard
+    // inteiro (Gantt/Kanban/Lista, "Projetos ativos" do Admin e, desde
+    // 03/10, "Projetos abertos" da Engenharia também). Calculada ANTES dos
+    // módulos de perspectiva porque mais de um perfil precisa dela. ----
+    const GM = window.ProjetosGanttMetrics;
+    const projetosReais = GM.projetosDaEsteira({ gatilhos, formularios, clientesPorId });
+
     // ---- Comercial (dashboard-metrics-comercial.js) — 1º módulo extraído
     // da revisão de arquitetura do Dashboard. Funções puras, testadas em
     // dashboard-metrics-comercial.test.js. Os outros perfis ainda são
     // calculados aqui embaixo — extração incremental, um módulo por vez. ----
     const CM = window.ComercialMetrics;
-    const comercial = CM.compute({ leads, cotacoes, propostas, contratos });
+    const comercial = CM.compute({ leads, gatilhos, propostas, contratos });
 
     // ---- Engenharia (dashboard-metrics-engenharia.js) — 2º módulo
-    // extraído. Fecha a issue #273 (NCM sempre vazio). ----
+    // extraído. Fecha a issue #273 (NCM sempre vazio). Achado real (03/10):
+    // "Projetos abertos" lia a tabela legada `projetos` (0 linhas em
+    // produção) — agora usa a mesma esteira reconciliada (projetosReais)
+    // que o Gantt/Admin já usam, nunca mais fica preso em zero. ----
     const EM = window.EngenhariaMetrics;
-    const engenharia = EM.compute({ projetos, fichas, catalogo, alertas, ncmSolicitacoes });
+    const engenharia = EM.compute({ projetos: projetosReais, fichas, catalogo, alertas, ncmSolicitacoes });
 
     // ---- Financeiro (dashboard-metrics-financeiro.js) — 3º módulo extraído. ----
     const FM = window.FinanceiroMetrics;
     const financeiro = FM.compute({ contratos, comissoes, gatilhos, contratosInstalador, propostas });
-
-    // ---- Gantt (dashboard-metrics-gantt.js) — 4º módulo extraído.
-    // Issue #274 fechada em 23/08: projeta a esteira real (gatilhos +
-    // formulários) em vez da tabela `projetos` legada/sempre vazia.
-    // Calculado aqui (antes do Admin) porque o KPI "Projetos ativos" do
-    // Admin também precisa desse mesmo array reconciliado. ----
-    const GM = window.ProjetosGanttMetrics;
-    const projetosReais = GM.projetosDaEsteira({ gatilhos, formularios, clientesPorId });
 
     // ---- Admin (dashboard-metrics-admin.js) — 5º e último módulo
     // extraído. Único que COMPÕE outro módulo (ComercialMetrics), em vez
@@ -298,7 +297,7 @@
     const gantt = GM.compute({ projetos: projetosReais });
 
     return {
-      leads, cotacoes, projetos, alertas, tarefas: tarefasFmt,
+      leads, projetos: projetosReais, alertas, tarefas: tarefasFmt,
       embarques, contratos, estoque, comissoes, gatilhos, fichas, catalogo, ncm: engenharia.ncm,
       kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars, estoqueCritico,
       alertasCriticos: admin.alertasCriticos.length,
