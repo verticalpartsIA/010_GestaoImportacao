@@ -58,6 +58,32 @@ test('alertasCriticos — detecta proposta sem contrato mesmo sem alertas manuai
   assert.equal(crit[0].ref, 904);
 });
 
+// Achado real (03/10): o KPI "Alertas críticos" contava estas 3 checagens,
+// mas clicar em "ver central" nunca as achava lá (não existem em `alertas`).
+// alertasSinteticosDetalhados() devolve o mesmo formato que
+// NotificacoesProcessamento.paraNotificacao() espera, pra a Central listar
+// e abrir cada uma de verdade.
+test('alertasSinteticosDetalhados — converte as 3 checagens pro formato de notificação', () => {
+  const out = M.alertasSinteticosDetalhados({
+    propostas: [{ id: 'p1', status: 'aprovada', numero_cotacao: 870, aprovada_em: '2026-08-28T00:00:00Z' }],
+    contratos: [{ id: 'CVE-9', valor_total_num: 0 }],
+    avais: [{ id: 'a1', numero_cotacao: 931, sinal_pago: true, contrato_venda_id: null }],
+  });
+  assert.equal(out.length, 3);
+  out.forEach((n) => {
+    assert.equal(n.level, 'danger');
+    assert.ok(n.id && n.title && n.module);
+  });
+  const propostaAlerta = out.find((n) => n.title.includes('sem contrato gerado'));
+  assert.ok(propostaAlerta.sub.includes('870'));
+  assert.equal(propostaAlerta.id, 'sintetico-proposta-sem-contrato-p1');
+});
+
+test('alertasSinteticosDetalhados — vazio sem nenhuma inconsistência', () => {
+  const out = M.alertasSinteticosDetalhados({ propostas: [], contratos: [], avais: [] });
+  assert.deepEqual(out, []);
+});
+
 test('kpis — Faturamento reflete proposta aprovada real (regressão "R$0 com venda fechada")', () => {
   const out = M.kpis({
     projetos: [], embarques: [], alertas: [],
