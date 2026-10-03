@@ -670,7 +670,7 @@ function AlmoxarifadoCustos() {
 }
 
 function AlmoxarifadoPage() {
-  const [aba, setAba] = window.useRouteTab('almoxarifado', 'estoque', ['estoque', 'estrutura', 'custos', 'reposicao', 'pedidos']);
+  const [aba, setAba] = window.useRouteTab('almoxarifado', 'estoque', ['estoque', 'estrutura', 'custos', 'reposicao', 'necessidade', 'pedidos']);
   const [pedidos, setPedidos] = React.useState(null);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(null);
@@ -691,6 +691,7 @@ function AlmoxarifadoPage() {
   const emEstrutura = aba === 'estrutura';
   const emCustos = aba === 'custos';
   const emReposicao = aba === 'reposicao';
+  const emNecessidade = aba === 'necessidade';
   if (aba === 'pedidos' && pedidos === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const lista = pedidos || [];
@@ -702,7 +703,7 @@ function AlmoxarifadoPage() {
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Almoxarifado</div>
-          <h1 className="page-head__title">{emEstoque ? 'Estoque' : emEstrutura ? 'Estrutura dos produtos' : emCustos ? 'Custos' : emReposicao ? 'Reposição' : 'Pedidos de Compra (Varejo)'}</h1>
+          <h1 className="page-head__title">{emEstoque ? 'Estoque' : emEstrutura ? 'Estrutura dos produtos' : emCustos ? 'Custos' : emReposicao ? 'Reposição' : emNecessidade ? 'Necessidade de materiais' : 'Pedidos de Compra (Varejo)'}</h1>
           <p className="page-head__sub">{emEstoque
             ? 'Estoque do PCP — cabos de aço, cabos de manobra, corrimãos e componentes dos Quadros de Comando.'
             : emEstrutura
@@ -711,7 +712,9 @@ function AlmoxarifadoPage() {
                 ? 'Custo manual (estimado) dos itens que o Omie ainda não tem custo — necessário para o lucro real dos relatórios.'
                 : emReposicao
                   ? 'O que comprar e quando: consumo médio real × prazo de chegada (importado ≈ 90 dias), não estoque mínimo.'
-                  : 'Insumos e peças para estoque — não equipamento de venda. Exige aprovação do Chefe de Logística.'}</p>
+                  : emNecessidade
+                    ? 'O que falta de material para atender os pedidos já vendidos (carteira) e até quando comprar.'
+                    : 'Insumos e peças para estoque — não equipamento de venda. Exige aprovação do Chefe de Logística.'}</p>
         </div>
         <div className="page-head__r">
           {aba === 'pedidos' && <Button variant="primary" icon="plus" onClick={() => setModalOpen(true)}>Novo pedido</Button>}
@@ -722,6 +725,7 @@ function AlmoxarifadoPage() {
         <Button variant={emEstrutura ? 'primary' : 'ghost'} onClick={() => setAba('estrutura')}>Estrutura</Button>
         <Button variant={emCustos ? 'primary' : 'ghost'} onClick={() => setAba('custos')}>Custos</Button>
         <Button variant={emReposicao ? 'primary' : 'ghost'} onClick={() => setAba('reposicao')}>Reposição</Button>
+        <Button variant={emNecessidade ? 'primary' : 'ghost'} onClick={() => setAba('necessidade')}>Necessidade</Button>
         <Button variant={aba === 'pedidos' ? 'primary' : 'ghost'} onClick={() => setAba('pedidos')}>Pedidos de compra</Button>
       </div>
     </>
@@ -731,6 +735,7 @@ function AlmoxarifadoPage() {
   if (emEstrutura) return <div className="page fade-in">{cabecalho}<AlmoxarifadoEstrutura/></div>;
   if (emCustos) return <div className="page fade-in">{cabecalho}<AlmoxarifadoCustos/></div>;
   if (emReposicao) return <div className="page fade-in">{cabecalho}<AlmoxarifadoReposicao/></div>;
+  if (emNecessidade) return <div className="page fade-in">{cabecalho}<AlmoxarifadoNecessidade/></div>;
 
   return (
     <div className="page fade-in">
