@@ -51,10 +51,10 @@ function RPPainelFluxo({ ctx, ano, d, perm }) {
   const totCarteira = carteira.reduce((s, r) => s + r.v, 0);
   const soma = (arr) => arr.reduce((s, v) => s + v, 0);
   const totPedida = soma(d.receita), totFat = soma(faturada);
-  const custo = d.mat.map((m, i) => m + d.mo[i]);
-  const completo = perm.custo && perm.hh;
+  const custo = d.mat;                                    // custo dos materiais dos itens vendidos; mão de obra fica de fora do lucro
+  const completo = perm.custo;
   const totCusto = soma(custo), margem = totPedida - totCusto;
-  const nOps = d.nOps || 0;
+  const nItens = d.nItens || 0, incompletos = d.incompletos || 0;
   // Variação: compara o ÚLTIMO MÊS FECHADO com o anterior (o mês em curso ainda está incompleto e daria queda falsa).
   const mes = new Date().getFullYear() === ano ? new Date().getMonth() - 1 : 11;
   const varMes = mes > 0 && d.receita[mes - 1] > 0 ? ((d.receita[mes] - d.receita[mes - 1]) / d.receita[mes - 1]) * 100 : null;
@@ -82,14 +82,14 @@ function RPPainelFluxo({ ctx, ano, d, perm }) {
         {card(`Receita pedida ${ano}`, rpMoeda(totPedida), varMes == null ? 'itens do PCP, mês do pedido' : `${RP_MESES[mes].slice(0, 3)}: ${varMes >= 0 ? '▲' : '▼'} ${rpFmt(Math.abs(varMes), 0)}% vs. ${RP_MESES[mes - 1].slice(0, 3)} (últimos meses fechados)`)}
         {card(`Faturado (NF) ${ano}`, rpMoeda(totFat), `${nFat} pedido(s) com NF emitida`, null)}
         {card('Carteira a faturar', rpMoeda(totCarteira), `${carteira.length} pedido(s) sem NF, fora os históricos`, carteira.length ? 'var(--vp-yellow)' : '#2e9e5b')}
-        {perm.custo || perm.hh
-          ? card('Custo (materiais + mão de obra)', rpMoeda(totCusto), !completo ? 'parcial: falta uma das alçadas de custo' : (nOps ? `${nOps} OP(s) concluída(s) no ano` : 'nenhuma OP concluída no ano ainda'), completo ? null : 'var(--vp-yellow)')
-          : card('Custo (materiais + mão de obra)', falso, 'visível só com a alçada de custo', null, rpBorrado)}
         {completo
-          ? (nOps && totPedida > 0
-            ? card('Margem de contribuição', rpPct((margem / totPedida) * 100), 'receita pedida − custo das OPs concluídas (superestima enquanto há pedido ainda não produzido)', margem / totPedida < 0.15 ? 'var(--vp-danger)' : '#2e9e5b')
-            : card('Margem de contribuição', '—', 'só existe depois de OPs concluídas com custo', null))
-          : card('Margem de contribuição', '00,0%', 'visível só com as alçadas de custo', null, rpBorrado)}
+          ? card('Custo dos materiais vendidos', rpMoeda(totCusto), 'estrutura × custo atual · sem mão de obra', null)
+          : card('Custo dos materiais vendidos', falso, 'visível só com a alçada de custo', null, rpBorrado)}
+        {completo
+          ? (totPedida > 0
+            ? card('Lucro bruto (materiais)', rpMoeda(margem), `${rpPct((margem / totPedida) * 100)} de margem${incompletos ? ` · ⚠ ${incompletos} de ${nItens} itens com custo incompleto: superestimado` : ''}`, incompletos ? 'var(--vp-yellow)' : (margem / totPedida < 0.15 ? 'var(--vp-danger)' : '#2e9e5b'))
+            : card('Lucro bruto (materiais)', '—', 'sem receita no ano', null))
+          : card('Lucro bruto (materiais)', 'R$ 000.000,00', 'visível só com a alçada de custo', null, rpBorrado)}
       </div>
 
       <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>Receita pedida × faturada{completo ? ' × custo' : ''} por mês em {ano}</h3>
@@ -110,7 +110,7 @@ function RPPainelFluxo({ ctx, ano, d, perm }) {
         <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>
           <span style={{ display: 'inline-block', width: 10, height: 10, background: 'color-mix(in srgb, var(--fg3) 45%, transparent)', marginRight: 4 }}/>Pedida (mês do pedido)
           <span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--vp-yellow)', margin: '0 4px 0 14px' }}/>Faturada (mês da NF)
-          {completo && <><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--vp-danger)', margin: '0 4px 0 14px' }}/>Custo (mês da finalização da OP)</>}
+          {completo && <><span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--vp-danger)', margin: '0 4px 0 14px' }}/>Custo dos materiais vendidos (mês do pedido)</>}
         </div>
       </div>
 
@@ -164,7 +164,7 @@ function RPPainelFluxo({ ctx, ano, d, perm }) {
         </div>
       </div>
       <div style={{ marginTop: 8, fontSize: 12, color: 'var(--fg3)' }}>
-        Resultado do PCP, não o caixa do banco. Considera só os pedidos já lidos do Omie (leitura automática seg–sex, 7h–19h). Faturado = NF emitida, inclusive de pedidos marcados como histórico; a carteira exclui propostas e pedidos históricos. Despesas fixas e prazos de pagamento entram quando o Financeiro ligar o Contas a Pagar e a Receber.
+        Resultado do PCP, não o caixa do banco. O lucro é bruto sobre materiais: sem mão de obra, impostos, frete, comissão e despesas fixas. Considera só os pedidos já lidos do Omie (leitura automática seg–sex, 7h–19h). Faturado = NF emitida, inclusive de pedidos marcados como histórico; a carteira exclui propostas e pedidos históricos. Despesas fixas e prazos de pagamento entram quando o Financeiro ligar o Contas a Pagar e a Receber.
       </div>
     </div>
   );

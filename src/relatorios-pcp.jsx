@@ -264,6 +264,8 @@ async function rpAtualizarDoOmie(sb, corpo) {
 
 function RPPedidos({ ctx }) {
   const { sb, nav } = ctx;
+  const perm = useRPPermissoes();
+  const custos = useRPCustos(sb, perm.custo);            // null sem alçada de custo (nem consulta)
   const [numero, setNumero] = React.useState('');
   const [busy, setBusy] = React.useState(false);
   const [aviso, setAviso] = React.useState(null);
@@ -328,6 +330,9 @@ function RPPedidos({ ctx }) {
 
       {pedidos && pedidos.map(p => {
         const totItens = p.itens.reduce((s, i) => s + Number(i.valor_total || 0), 0);
+        const lcs = custos ? p.itens.map(i => rpLinhaCusto(custos, i)) : null;
+        const totCusto = lcs ? lcs.reduce((s, l) => s + l.custo, 0) : 0;
+        const totLucro = totItens - totCusto, nIncompletos = lcs ? lcs.filter(l => l.incompleto).length : 0;
         return (
           <div key={p.codigo_pedido} className="card pcp-total" style={{ padding: 14, marginBottom: 14 }}>
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
@@ -346,9 +351,9 @@ function RPPedidos({ ctx }) {
             </div>
             <div className="table-wrap" style={{ overflowX: 'auto' }}>
               <table className="t pcp-grid">
-                <thead><tr><th>Código</th><th>Descrição</th><th className="text-right">Qtd</th><th>Un.</th><th className="text-right">Preço unit.</th><th className="text-right">Desconto</th><th className="text-right">Total</th></tr></thead>
+                <thead><tr><th>Código</th><th>Descrição</th><th className="text-right">Qtd</th><th>Un.</th><th className="text-right">Preço unit.</th><th className="text-right">Desconto</th><th className="text-right">Total</th>{lcs && <><th className="text-right">Custo (materiais)</th><th className="text-right">Lucro bruto</th><th className="text-right">Margem</th></>}</tr></thead>
                 <tbody>
-                  {p.itens.map(i => (
+                  {p.itens.map((i, k) => (
                     <tr key={i.id}>
                       <td><button className="pcp-cod" onClick={() => window.pcpIrPara?.(nav, 'cadastro-produtos', 'vp_pcp_busca', i.codigo)}>{i.codigo}</button>
                         {i.codigo_original && <div style={{ fontSize: 10, color: 'var(--fg3)' }}>no Omie: {i.codigo_original}</div>}</td>
@@ -358,13 +363,25 @@ function RPPedidos({ ctx }) {
                       <td className="text-right">{rpMoeda(i.valor_unitario)}</td>
                       <td className="text-right">{Number(i.desconto) ? rpMoeda(i.desconto) : '—'}</td>
                       <td className="text-right"><b style={{ fontWeight: 500 }}>{rpMoeda(i.valor_total)}</b></td>
+                      {lcs && <>
+                        <td className="text-right">{rpMoeda(lcs[k].custo)}<RPAvisoCusto falta={lcs[k].falta}/></td>
+                        <td className="text-right" style={lcs[k].lucro < 0 ? { color: 'var(--vp-danger)' } : undefined}>{rpMoeda(lcs[k].lucro)}</td>
+                        <td className="text-right">{rpPct(lcs[k].margem)}</td>
+                      </>}
                     </tr>
                   ))}
-                  <tr><td colSpan={6} className="text-right"><b style={{ fontWeight: 500 }}>Total dos itens do PCP</b></td><td className="text-right"><b style={{ fontWeight: 500 }}>{rpMoeda(totItens)}</b></td></tr>
+                  <tr><td colSpan={6} className="text-right"><b style={{ fontWeight: 500 }}>Total dos itens do PCP</b></td><td className="text-right"><b style={{ fontWeight: 500 }}>{rpMoeda(totItens)}</b></td>
+                    {lcs && <>
+                      <td className="text-right"><b style={{ fontWeight: 500 }}>{rpMoeda(totCusto)}</b></td>
+                      <td className="text-right" style={totLucro < 0 ? { color: 'var(--vp-danger)' } : undefined}><b style={{ fontWeight: 500 }}>{rpMoeda(totLucro)}</b></td>
+                      <td className="text-right"><b style={{ fontWeight: 500 }}>{rpPct(totItens > 0 ? (totLucro / totItens) * 100 : null)}</b></td>
+                    </>}
+                  </tr>
                 </tbody>
               </table>
             </div>
-            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--fg3)' }}>Valor total do pedido no Omie (todos os itens): {rpMoeda(p.valor_total)}. Aqui aparecem só quadros de comando, corrimãos e cabos.</div>
+            <div style={{ marginTop: 6, fontSize: 11, color: 'var(--fg3)' }}>Valor total do pedido no Omie (todos os itens): {rpMoeda(p.valor_total)}. Aqui aparecem só quadros de comando, corrimãos e cabos.
+              {lcs && <div style={{ marginTop: 4 }}>Lucro bruto = venda − custo dos materiais (estrutura × custo atual); <b style={{ fontWeight: 500 }}>não inclui mão de obra, impostos, frete nem comissão</b>.{nIncompletos > 0 && <span style={{ color: 'var(--vp-yellow)' }}> ⚠ {nIncompletos} item(ns) com componente sem custo cadastrado: o lucro está superestimado (passe o mouse no ⚠).</span>}</div>}</div>
           </div>
         );
       })}
@@ -392,6 +409,8 @@ function RPPedidos({ ctx }) {
 
 function RPClientes({ ctx }) {
   const { sb, nav } = ctx;
+  const perm = useRPPermissoes();
+  const custos = useRPCustos(sb, perm.custo);
   const [pedidos, setPedidos] = React.useState(null);
   const [cliente, setCliente] = React.useState('');
   const [busy, setBusy] = React.useState(false);
@@ -412,6 +431,9 @@ function RPClientes({ ctx }) {
   const linhas = doCliente.flatMap(p => p.itens.map(i => ({ ...i, numero: p.numero_pedido, data: p.data_pedido }))).sort((a, b) => (b.data || '').localeCompare(a.data || ''));
   const qtd = linhas.reduce((s, l) => s + Number(l.quantidade || 0), 0);
   const total = linhas.reduce((s, l) => s + Number(l.valor_total || 0), 0);
+  const lcs = custos ? linhas.map(l => rpLinhaCusto(custos, l)) : null;
+  const totCusto = lcs ? lcs.reduce((s, l) => s + l.custo, 0) : 0, totLucro = total - totCusto;
+  const nIncompletos = lcs ? lcs.filter(l => l.incompleto).length : 0;
 
   const atualizar = async () => {
     setBusy(true);
@@ -437,10 +459,11 @@ function RPClientes({ ctx }) {
           <div className="card pcp-total" style={{ padding: 14, flex: '1 1 180px' }}><div style={{ fontSize: 12, color: 'var(--fg3)' }}>Quantidade de produtos</div><div style={{ fontSize: 22, fontWeight: 500 }}>{rpFmt(qtd, 0)}</div></div>
           <div className="card pcp-total" style={{ padding: 14, flex: '1 1 180px' }}><div style={{ fontSize: 12, color: 'var(--fg3)' }}>Total vendido</div><div style={{ fontSize: 22, fontWeight: 500 }}>{rpMoeda(total)}</div></div>
           <div className="card pcp-total" style={{ padding: 14, flex: '1 1 180px' }}><div style={{ fontSize: 12, color: 'var(--fg3)' }}>Pedidos</div><div style={{ fontSize: 22, fontWeight: 500 }}>{doCliente.length}</div></div>
+          {lcs && <div className="card pcp-total" style={{ padding: 14, flex: '1 1 220px', borderLeft: `4px solid ${totLucro < 0 ? 'var(--vp-danger)' : '#2e9e5b'}` }}><div style={{ fontSize: 12, color: 'var(--fg3)' }}>Lucro bruto (materiais)</div><div style={{ fontSize: 22, fontWeight: 500 }}>{rpMoeda(totLucro)}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{rpPct(total > 0 ? (totLucro / total) * 100 : null)} de margem · custo {rpMoeda(totCusto)}{nIncompletos > 0 ? ` · ⚠ ${nIncompletos} item(ns) com custo incompleto` : ''}</div></div>}
         </div>
         <div className="card table-wrap" style={{ overflowX: 'auto' }}>
           <table className="t pcp-grid">
-            <thead><tr><th>Produto</th><th>Data da venda</th><th>Pedido</th><th className="text-right">Qtd</th><th className="text-right">Valor unit.</th><th className="text-right">Desconto</th><th className="text-right">Total</th></tr></thead>
+            <thead><tr><th>Produto</th><th>Data da venda</th><th>Pedido</th><th className="text-right">Qtd</th><th className="text-right">Valor unit.</th><th className="text-right">Desconto</th><th className="text-right">Total</th>{lcs && <><th className="text-right">Custo (materiais)</th><th className="text-right">Lucro bruto</th></>}</tr></thead>
             <tbody>
               {linhas.map((l, k) => (
                 <tr key={k}>
@@ -449,15 +472,20 @@ function RPClientes({ ctx }) {
                   <td className="text-right">{rpFmt(l.quantidade, 3)}</td><td className="text-right">{rpMoeda(l.valor_unitario)}</td>
                   <td className="text-right">{Number(l.desconto) ? rpMoeda(l.desconto) : '—'}</td>
                   <td className="text-right"><b style={{ fontWeight: 500 }}>{rpMoeda(l.valor_total)}</b></td>
+                  {lcs && <>
+                    <td className="text-right">{rpMoeda(lcs[k].custo)}<RPAvisoCusto falta={lcs[k].falta}/></td>
+                    <td className="text-right" style={lcs[k].lucro < 0 ? { color: 'var(--vp-danger)' } : undefined}>{rpMoeda(lcs[k].lucro)}</td>
+                  </>}
                 </tr>
               ))}
-              {linhas.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 24, color: 'var(--fg3)' }}>Nada vendido a este cliente.</td></tr>}
+              {linhas.length === 0 && <tr><td colSpan={lcs ? 9 : 7} style={{ textAlign: 'center', padding: 24, color: 'var(--fg3)' }}>Nada vendido a este cliente.</td></tr>}
             </tbody>
           </table>
         </div>
       </>)}
       <div style={{ marginTop: 8, fontSize: 12, color: 'var(--fg3)' }}>
         Vem dos pedidos de venda do Omie, só com quadros de comando, corrimãos e cabos. Propostas (etapa 00) não contam como venda.
+        {lcs && ' Lucro bruto = venda − custo dos materiais (estrutura × custo atual), sem mão de obra, impostos, frete nem comissão.'}
       </div>
     </div>
   );
@@ -591,44 +619,44 @@ function RPListaPrecos({ ctx }) {
 function RPFluxoCaixa({ ctx }) {
   const { sb } = ctx;
   const perm = useRPPermissoes();
+  const custos = useRPCustos(sb, perm.custo);
   const [ano, setAno] = React.useState(new Date().getFullYear());
   const [d, setD] = React.useState(null);
 
   React.useEffect(() => {
     let vivo = true;
     setD(null);
+    if (perm.custo && !custos) return;                       // espera a tabela de custos carregar
     (async () => {
       const receita = Array(12).fill(0), mat = Array(12).fill(0), mo = Array(12).fill(0);
+      let nItens = 0, incompletos = 0;
       // Receita: itens do PCP vendidos (pedidos de venda do Omie, exceto proposta), pelo mês do pedido.
       const { data: ped } = await sb.from('pcp_pedidos').select('codigo_pedido, data_pedido').neq('etapa', '00').gte('data_pedido', `${ano}-01-01`).lte('data_pedido', `${ano}-12-31`).limit(5000);
       const mesPedido = {}; (ped || []).forEach(p => { mesPedido[p.codigo_pedido] = Number(p.data_pedido.slice(5, 7)) - 1; });
       if (Object.keys(mesPedido).length) {
-        const { data: its } = await sb.from('pcp_pedido_itens').select('codigo_pedido, valor_total').eq('item_pcp', true).in('codigo_pedido', Object.keys(mesPedido).map(Number)).limit(20000);
-        (its || []).forEach(i => { receita[mesPedido[i.codigo_pedido]] += Number(i.valor_total || 0); });
+        const { data: its } = await sb.from('pcp_pedido_itens').select('codigo_pedido, codigo, quantidade, valor_total').eq('item_pcp', true).in('codigo_pedido', Object.keys(mesPedido).map(Number)).limit(20000);
+        (its || []).forEach(i => {
+          receita[mesPedido[i.codigo_pedido]] += Number(i.valor_total || 0);
+          // Custo dos materiais do que foi VENDIDO (estrutura × custo atual), no mesmo mês da receita: casa com a venda.
+          if (custos) { const lc = rpLinhaCusto(custos, i); mat[mesPedido[i.codigo_pedido]] += lc.custo; nItens++; if (lc.incompleto) incompletos++; }
+        });
       }
       // Custos: OPs (frentes) concluídas no ano, pelo mês da finalização.
       const { data: ops } = await sb.from('pcp_ordens').select('id, data_finalizacao, frente').eq('status', 'concluida').neq('frente', 'pedido').gte('data_finalizacao', `${ano}-01-01`).lte('data_finalizacao', `${ano}-12-31`).limit(2000);
       const mesOp = {}; (ops || []).forEach(o => { mesOp[o.id] = Number(o.data_finalizacao.slice(5, 7)) - 1; });
       const ids = Object.keys(mesOp);
-      if (perm.custo && ids.length) {
-        const { data: ms } = await sb.from('pcp_ordem_materiais').select('ordem_id, codigo, necessario').in('ordem_id', ids).limit(20000);
-        const cods = Array.from(new Set((ms || []).map(m => m.codigo)));
-        const c = {};
-        if (cods.length) { const { data: ps } = await sb.from('pcp_produtos').select('codigo, preco_custo').in('codigo', cods); (ps || []).forEach(p => { c[p.codigo] = Number(p.preco_custo || 0); }); }
-        (ms || []).forEach(m => { mat[mesOp[m.ordem_id]] += Number(m.necessario) * (c[m.codigo] || 0); });
-      }
       if (perm.hh && ids.length) {
         const porOrdem = await rpCustosHH(sb, ids);
         Object.keys(porOrdem).forEach(oid => { if (mesOp[oid] != null) mo[mesOp[oid]] += Number(porOrdem[oid]); });
       }
-      if (vivo) setD({ receita, mat, mo, nOps: ids.length });
+      if (vivo) setD({ receita, mat, mo, nOps: ids.length, nItens, incompletos });
     })();
     return () => { vivo = false; };
-  }, [sb, ano, perm.custo, perm.hh]);
+  }, [sb, ano, perm.custo, perm.hh, custos]);
 
   if (!d) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
   const soma = (a) => a.reduce((s, v) => s + v, 0);
-  const margem = d.receita.map((r, i) => r - d.mat[i] - d.mo[i]);
+  const margem = d.receita.map((r, i) => r - d.mat[i]);          // lucro bruto sobre materiais; a mão de obra fica só informativa (apontamento incompleto)
   const linha = (rot, arr, opts = {}) => (
     <tr>
       <td><b style={{ fontWeight: opts.forte ? 500 : 300 }}>{rot}</b></td>
@@ -636,7 +664,7 @@ function RPFluxoCaixa({ ctx }) {
       <td className="text-right" style={opts.oculto ? rpBorrado : undefined}><b style={{ fontWeight: 500 }}>{opts.oculto ? '•••' : (soma(arr) ? rpMoeda(opts.sinal ? -soma(arr) : soma(arr)) : '—')}</b></td>
     </tr>
   );
-  const completo = perm.custo && perm.hh;
+  const completo = perm.custo;
 
   return (
     <div>
@@ -652,11 +680,11 @@ function RPFluxoCaixa({ ctx }) {
           <thead><tr><th>Resultado do PCP</th>{RP_MESES.map(m => <th key={m} className="text-right">{m.slice(0, 3)}</th>)}<th className="text-right">Total {ano}</th></tr></thead>
           <tbody>
             {linha('Receita (vendas dos itens do PCP)', d.receita, { forte: true })}
-            {linha('(−) Custo dos materiais', d.mat, { oculto: !perm.custo, sinal: true })}
-            {linha('(−) Custo de mão de obra', d.mo, { oculto: !perm.hh, sinal: true })}
-            {linha('Margem de contribuição', margem, { forte: true, oculto: !completo, neg: true })}
+            {linha('(−) Custo dos materiais vendidos', d.mat, { oculto: !perm.custo, sinal: true })}
+            {linha('Lucro bruto (sobre materiais)', margem, { forte: true, oculto: !completo, neg: true })}
+            {linha('Mão de obra apontada nas OPs (informativo, fora do lucro)', d.mo, { oculto: !perm.hh, sinal: true })}
             <tr>
-              <td>Margem %</td>
+              <td>Margem bruta %</td>
               {d.receita.map((r, i) => <td key={i} className="text-right" style={completo ? undefined : rpBorrado}>{completo ? (r > 0 ? rpPct((margem[i] / r) * 100) : '—') : '•••'}</td>)}
               <td className="text-right" style={completo ? undefined : rpBorrado}><b style={{ fontWeight: 500 }}>{completo ? (soma(d.receita) > 0 ? rpPct((soma(margem) / soma(d.receita)) * 100) : '—') : '•••'}</b></td>
             </tr>
@@ -664,8 +692,9 @@ function RPFluxoCaixa({ ctx }) {
         </table>
       </div>
       <div style={{ marginTop: 8, fontSize: 12, color: 'var(--fg3)' }}>
-        É o <b style={{ fontWeight: 500 }}>resultado do PCP</b>, não o caixa do banco: a receita vem dos pedidos de venda do Omie (mês do pedido, sem propostas) e os custos das {d.nOps} OP(s) concluída(s) (mês da finalização). Despesas fixas e prazos de pagamento entram quando o Financeiro ligar o Contas a Pagar e a Receber.
-        {!completo && ' Custos e margem aparecem só para quem tem as alçadas de custo (materiais e mão de obra).'}
+        É o <b style={{ fontWeight: 500 }}>resultado do PCP</b>, não o caixa do banco: a receita vem dos pedidos de venda do Omie (mês do pedido, sem propostas) e o custo é o dos materiais dos mesmos itens vendidos (estrutura × custo atual). O lucro <b style={{ fontWeight: 500 }}>não inclui mão de obra, impostos, frete, comissão nem despesas fixas</b>; a mão de obra das {d.nOps} OP(s) concluída(s) aparece só como informação.
+        {d.incompletos > 0 && ` ⚠ ${d.incompletos} de ${d.nItens} item(ns) vendido(s) têm componente sem custo cadastrado: o lucro está superestimado.`}
+        {!completo && ' Custos e lucro aparecem só para quem tem a alçada de custo.'}
       </div>
     </div>
   );
