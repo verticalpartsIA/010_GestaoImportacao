@@ -15,7 +15,9 @@
    - Sem spam: o id do alerta é determinístico = semana + assinatura da lista (código:situação). Lista igual na mesma semana
      = mesmo id = nada novo (insert ignora duplicata). Lista mudou, ou virou a semana (lembrete semanal) = alerta novo, e os
      anteriores do mesmo tipo são marcados como resolvidos. Se a situação normalizou, eles também são resolvidos.
-   - Alerta global (destinatario_email nulo), módulo "Almoxarifado". `rota` leva direto à aba (a Central de Notificações abre
+   - Destinatários: líderes ATIVOS do departamento de Logística/Almoxarifado/Produção (colaboradores_vpsistema.is_department_lead),
+     decisão do usuário em 03/10; sem líder cadastrado cai no alerta global (destinatario_email nulo). Um alerta por pessoa
+     (id com sufixo do e-mail). Módulo "Almoxarifado". `rota` leva direto à aba (a Central de Notificações abre
      por URL). Body: { simular: true } devolve o que seria criado sem gravar; { email } cria só para essa pessoa (id com
      prefixo pcp-teste-, para testar de ponta a ponta sem avisar a empresa).
    Sem supabase-js (import remoto já derrubou produção em redeploy): PostgREST via fetch.
@@ -256,8 +258,15 @@ Deno.serve(async (req) => {
       pgSelectAll<any>("pcp_pedidos", "select=codigo_pedido,numero_pedido,etapa,data_previsao&faturado=eq.false&cancelado=eq.false&order=codigo_pedido"),
       pgSelectAll<any>("pcp_pedido_acompanhamento", "select=numero_pedido,historico&order=numero_pedido"),
       pgSelectAll<any>("pcp_pedido_itens", "select=codigo_pedido,codigo,quantidade&item_pcp=eq.true&order=id"),
-      pgSelectAll<any>("pcp_ordens", "select=id,numero,produto,quantidade,qtd_produzida,prazo_entrega,pedido_codigo,ordem_mae_id&status=not.in.(concluida,cancelada)&order=created_at"),
+      pgSelectAll<any>("pcp_ordens", "select=id,numero,produto,quantidade,qtd_produzida,prazo_entrega,pedido_codigo,ordem_mae_id,observacao&status=not.in.(concluida,cancelada)&order=created_at"),
     ]);
+    // Quem recebe: líderes ativos do departamento de Almoxarifado (teste com {email}: só essa pessoa).
+    let destinos: (string | null)[] = [email];
+    if (!email) {
+      const lideres = await pgSelectAll<any>("colaboradores_vpsistema", "select=email&is_department_lead=eq.true&is_active=eq.true&departamento=ilike.*Almoxarifado*&order=email");
+      const mails = Array.from(new Set(lideres.map((l) => String(l.email || "").trim().toLowerCase()).filter((m) => /^[^@\s]+@[^@\s]+$/.test(m))));
+      destinos = mails.length ? mails : [null];
+    }
     const cfg = cfgRows[0];
     if (!cfg) return json({ error: "Parâmetros da reposição não encontrados." }, 500);
 
@@ -286,7 +295,7 @@ Deno.serve(async (req) => {
     const porId = new Map(ordens.map((o) => [o.id, o]));
     const raizDePedido = (o: any) => { let x = o, n = 0; while (x && n++ < 5) { if (x.pedido_codigo) return true; x = x.ordem_mae_id ? porId.get(x.ordem_mae_id) : null; } return false; };
     ordens.forEach((o) => {
-      if (!o.produto || raizDePedido(o)) return;
+      if (!o.produto || raizDePedido(o) || String(o.observacao || "").startsWith("[Necessidade]")) return;   // OP gerada pela Necessidade não é demanda nova
       const q = Math.max(0, Number(o.quantidade || 0) - Number(o.qtd_produzida || 0));
       if (q > 0) demanda.push({ codigo: o.produto, qtd: q, ref: `OP ${o.numero}`, previsao: o.prazo_entrega || null });
     });
@@ -325,29 +334,33 @@ Deno.serve(async (req) => {
     const resumo = {
       hoje, semana, reposicao: { criticos: crit.length, comprar: comp.length }, necessidade: { atrasados: atrasados.length, urgentes7d: urgentes.length },
     };
-    if (simular) return json({ ok: true, simulado: true, resumo, alertas: candidatos });
+    if (simular) return json({ ok: true, simulado: true, resumo, destinatarios: destinos, alertas: candidatos });
 
     /* ---- grava: insere o novo (ignora duplicata) e resolve os antigos do mesmo tipo ---- */
     const criados: any[] = [];
-    for (const tipo of ["reposicao", "necessidade"]) {
-      const novo = candidatos.find((c) => c.tipo === tipo);
-      const filtroEmail = email ? `&destinatario_email=eq.${encodeURIComponent(email)}` : "&destinatario_email=is.null";
-      if (novo) {
-        const r = await fetch(`${SUPABASE_URL}/rest/v1/alertas?on_conflict=id`, {
-          method: "POST", headers: pgH({ Prefer: "resolution=ignore-duplicates,return=representation" }),
-          body: JSON.stringify([{ id: novo.id, level: novo.level, title: novo.title, sub: novo.sub, module: "Almoxarifado", rota: novo.rota, resolved: false, destinatario_email: email }]),
+    for (const dest of destinos) {
+      const sufixo = dest ? "-" + dest.replace(/[^a-z0-9]/g, "") : "";
+      for (const tipo of ["reposicao", "necessidade"]) {
+        const novoBase = candidatos.find((c) => c.tipo === tipo);
+        const novo = novoBase ? { ...novoBase, id: novoBase.id + sufixo } : null;
+        const filtroEmail = dest ? `&destinatario_email=eq.${encodeURIComponent(dest)}` : "&destinatario_email=is.null";
+        if (novo) {
+          const r = await fetch(`${SUPABASE_URL}/rest/v1/alertas?on_conflict=id`, {
+            method: "POST", headers: pgH({ Prefer: "resolution=ignore-duplicates,return=representation" }),
+            body: JSON.stringify([{ id: novo.id, level: novo.level, title: novo.title, sub: novo.sub, module: "Almoxarifado", rota: novo.rota, resolved: false, destinatario_email: dest }]),
+          });
+          if (!r.ok) throw new Error(`insert alertas: ${r.status} ${await r.text()}`);
+          const inseridos = await r.json();
+          criados.push({ ...novo, destinatario: dest, novo: inseridos.length > 0 });
+        }
+        // Resolve os anteriores do mesmo tipo e destinatário (e todos, se a situação normalizou).
+        const padrao = encodeURIComponent(`${prefixoId}-${tipo}-*`);
+        const nao = novo ? `&id=neq.${encodeURIComponent(novo.id)}` : "";
+        const p = await fetch(`${SUPABASE_URL}/rest/v1/alertas?id=like.${padrao}&resolved=eq.false${nao}${filtroEmail}`, {
+          method: "PATCH", headers: pgH({ Prefer: "return=minimal" }), body: JSON.stringify({ resolved: true }),
         });
-        if (!r.ok) throw new Error(`insert alertas: ${r.status} ${await r.text()}`);
-        const inseridos = await r.json();
-        criados.push({ ...novo, novo: inseridos.length > 0 });
+        if (!p.ok) throw new Error(`resolver alertas: ${p.status} ${await p.text()}`);
       }
-      // Resolve os anteriores do mesmo tipo (e todos, se a situação normalizou).
-      const padrao = encodeURIComponent(`${prefixoId}-${tipo}-*`);
-      const nao = novo ? `&id=neq.${encodeURIComponent(novo.id)}` : "";
-      const p = await fetch(`${SUPABASE_URL}/rest/v1/alertas?id=like.${padrao}&resolved=eq.false${nao}${filtroEmail}`, {
-        method: "PATCH", headers: pgH({ Prefer: "return=minimal" }), body: JSON.stringify({ resolved: true }),
-      });
-      if (!p.ok) throw new Error(`resolver alertas: ${p.status} ${await p.text()}`);
     }
     return json({ ok: true, simulado: false, resumo, criados });
   } catch (e) {
