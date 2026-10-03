@@ -9,6 +9,8 @@ const ROUTE_TITLE = {
   decisoes: "Central de Decisões",
   "cadastro-clientes": "Clientes",
   "cadastro-fornecedores": "Fornecedores",
+  "cadastro-materias-primas": "Matérias-Primas",
+  "cadastro-produtos": "Produtos",
   "aval-financeiro": "Aval Financeiro",
   "aval-juridico": "Aval Jurídico",
   "linha-do-tempo": "Linha do Tempo da Cotação",
@@ -21,6 +23,10 @@ const ROUTE_TITLE = {
   "pedidos-acompanhamento": "Pedidos",
   "vistorias-envio": "Vistorias de Obras",
   almoxarifado: "Almoxarifado",
+  "carga-maquina": "Carga Máquina",
+  "montagem-produto": "Montagem do Produto",
+  "simulacao-producao": "Simulação",
+  "relatorios-pcp": "Relatórios do PCP",
   pcp: "PCP — Planejamento e Controle da Produção",
   leads: "Pipeline de Leads",
   "lead-detail": "Detalhe de Lead",
@@ -394,7 +400,11 @@ function App() {
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
       case "decisoes": return <window.DecisoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
-      case "pcp": return <window.PCPPage/>;
+      case "carga-maquina": return <window.CargaMaquinaPage/>;
+      case "relatorios-pcp": return <window.RelatoriosPCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "simulacao-producao": return <window.SimulacaoProducaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "pcp": return <window.PCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "pi-importacao": return <window.PIPage/>;
       case "rfq-importacao": return <window.RFQPage/>;
       case "ims-importacao": return <window.IMSPage/>;
@@ -404,6 +414,8 @@ function App() {
       case "pedidos-acompanhamento": return <window.PedidosAcompanhamentoPage/>;
       case "cadastro-clientes": return <window.CadastroClientesPage/>;
       case "cadastro-fornecedores": return <window.CadastroFornecedoresPage/>;
+      case "cadastro-materias-primas": return <window.CadastroMateriasPrimasPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "cadastro-produtos": return <window.CadastroProdutosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "logs": return <LogsAdminPage/>;
       case "configuracoes": return <ConfiguracoesPage/>;
       default: return <Dashboard role={role} setRoute={setRoute}/>;

@@ -137,6 +137,8 @@
     { grupo: 'Cadastros', itens: [
       { modulo: 'cadastro-clientes', label: 'Clientes' },
       { modulo: 'cadastro-fornecedores', label: 'Fornecedores' },
+      { modulo: 'cadastro-materias-primas', label: 'Matérias-Primas' },
+      { modulo: 'cadastro-produtos', label: 'Produtos' },
       { modulo: 'ncm-catalogo', label: 'Produtos' },
       { modulo: 'cadastro-instaladores', label: 'Empresas Instaladoras' },
       { modulo: 'cadastro-custos', label: 'Atualização de Custos' },
@@ -206,8 +208,26 @@
       { modulo: 'rh-homologacao', label: 'Homologação de Instaladores' },
     ]},
     { grupo: 'Logística', itens: [
-      { modulo: 'almoxarifado', label: 'Almoxarifado' },
-      { modulo: 'pcp', label: 'PCP — Planejamento e Controle da Produção' },
+      { modulo: 'almoxarifado', label: 'Almoxarifado', capacidades: [
+        { chave: 'ver', label: 'Ver' },
+        { chave: 'criar', label: 'Criar' },
+        { chave: 'editar', label: 'Editar' },
+        { chave: 'excluir', label: 'Excluir' },
+        { chave: 'ver_custo', label: 'Vê os preços de custo dos itens do estoque' },
+        { chave: 'escrever_omie', label: 'Grava no Omie: requisição de compra e movimento de estoque (entrada, saída, ajuste)' },
+      ]},
+      { modulo: 'carga-maquina', label: 'Carga Máquina' },
+      { modulo: 'montagem-produto', label: 'Montagem do Produto' },
+      { modulo: 'simulacao-producao', label: 'Simulação' },
+      { modulo: 'relatorios-pcp', label: 'Relatórios do PCP' },
+      { modulo: 'pcp', label: 'PCP — Planejamento e Controle da Produção', capacidades: [
+        { chave: 'ver', label: 'Ver' },
+        { chave: 'criar', label: 'Criar' },
+        { chave: 'editar', label: 'Editar' },
+        { chave: 'excluir', label: 'Excluir' },
+        { chave: 'apontar_hh', label: 'Escolhe quem trabalhou na OP e as horas (mão de obra). O valor da hora é buscado no Omie e fica oculto' },
+        { chave: 'ver_hh', label: 'Vê o valor da hora-homem e o custo de mão de obra das OPs (dado salarial)' },
+      ]},
     ]},
     { grupo: 'Portal Admin', itens: [
       { modulo: 'logs', label: 'Logs de Atividade' },
@@ -223,7 +243,7 @@
   const MODULOS_POR_GRUPO_SIDEBAR = {
     'Geral': ['dashboard', 'notificacoes', 'decisoes', 'financeiro'],
     'CRM': ['leads'],
-    'Cadastros Mestres': ['cadastro-clientes', 'cadastro-fornecedores'],
+    'Cadastros Mestres': ['cadastro-clientes', 'cadastro-fornecedores', 'cadastro-materias-primas', 'cadastro-produtos'],
     'Comercial | Pré-venda': ['formularios', 'controle-cotacoes', 'cotacoes-fornecedor', 'propostas', 'contratos-sociais'],
     'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro'],
     'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
@@ -232,7 +252,7 @@
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
     'Entrega & Documentação': ['databook', 'handover'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
-    'Logística Interna': ['almoxarifado', 'pcp'],
+    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'relatorios-pcp'],
     'Administração': ['logs'],
   };
 

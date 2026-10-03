@@ -69,6 +69,7 @@ function QcEstoqueBadge({ status }) {
 
 /* ---------- Escopo de fornecimento (item 1 da instrução) ---------- */
 const QC_ESCOPO_ITENS = [
+  { key: 'quadro_comando', label: 'Quadro de Comando', especial: 'variante' },
   { key: 'cop', label: 'COP — Botoeira de Cabina' },
   { key: 'lop', label: 'LOP — Botoeira de Pavimento' },
   { key: 'lip', label: 'LIP — Indicador de Posição sobre as Portas' },
@@ -86,7 +87,18 @@ const QC_ESCOPO_ITENS = [
   { key: 'pesador_carga', label: 'Pesador de Carga' },
   { key: 'tomada_fundo_poco', label: 'Tomada para Fundo do Poço' },
   { key: 'camera', label: 'Câmera na Cabina' },
+  { key: 'portas', label: 'Portas (pavimento e cabina)' },
+  { key: 'maquina_tracao', label: 'Máquina de Tração' },
   { key: 'cabos', label: 'Cabos — Fiação Fixa + Cabo de Manobra' },
+  { key: 'cabos_aco', label: 'Cabos de Aço (tração)', especial: 'cabos_aco' },
+];
+/* Modelo do quadro (potência_tensão). Define o produto e a lista padrão no PCP; 7,5 kW/380 V ainda não tem produto no Omie. */
+const QC_VARIANTES_QUADRO = [
+  { value: '7.5_220', label: '7,5 kW / 220 V' },
+  { value: '7.5_380', label: '7,5 kW / 380 V' },
+  { value: '15_220', label: '15 kW / 220 V' },
+  { value: '15_380', label: '15 kW / 380 V' },
+  { value: '30_380', label: '30 kW / 380 V' },
 ];
 const QC_ESCOPO_OPCOES = [
   { value: 'fornecer', label: 'Fornecer' },
@@ -94,6 +106,40 @@ const QC_ESCOPO_OPCOES = [
   { value: 'terceiro', label: 'Fornecido por terceiro' },
   { value: 'nao_aplica', label: 'Não se aplica' },
 ];
+
+/* Cabos de aço da tração: cabo (cadastro do PCP), quantidade e comprimento de cada um. O PCP gera a frente de corte. */
+function QcCabosAcoCard({ escopo, onChange, disabled }) {
+  const c = escopo.cabos_aco || {};
+  const [cabos, setCabos] = React.useState([]);
+  React.useEffect(() => {
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb) return;
+    sb.from('pcp_produtos').select('codigo, descricao').ilike('familia', '%CABOS E CINTAS%').eq('ativo', true).order('codigo')
+      .then(({ data }) => setCabos(data || []));
+  }, []);
+  if (c.decisao !== 'fornecer') return null;
+  const set = (patch) => onChange({ ...escopo, cabos_aco: { ...c, ...patch } });
+  const total = (Number(String(c.qtd_cabos || '').replace(',', '.')) || 0) * (Number(String(c.comprimento_m || '').replace(',', '.')) || 0);
+  return (
+    <Card title="Cabos de aço (tração)" sub="Cabo, quantidade e comprimento de cada um. O PCP gera a frente de corte a partir daqui.">
+      <div className="grid-2" style={{ gap: 12 }}>
+        <QcField label="Cabo de aço">
+          <QcSelect value={c.produto} disabled={disabled} placeholder="Selecione…"
+            options={cabos.map((x) => ({ value: x.codigo, label: `${x.codigo} — ${x.descricao}` }))} onChange={(v) => set({ produto: v })}/>
+        </QcField>
+        <QcField label="Quantidade de cabos">
+          <QcInput value={c.qtd_cabos} disabled={disabled} placeholder="Ex: 6" onChange={(v) => set({ qtd_cabos: v })}/>
+        </QcField>
+        <QcField label="Comprimento de cada cabo (m)" hint="O comprimento depende do percurso e da tração — informe o valor fechado pela engenharia.">
+          <QcInput value={c.comprimento_m} disabled={disabled} placeholder="Ex: 32" onChange={(v) => set({ comprimento_m: v })}/>
+        </QcField>
+        <QcField label="Total a cortar">
+          <span className="small">{total ? total.toLocaleString('pt-BR') + ' m' : '—'}</span>
+        </QcField>
+      </div>
+    </Card>
+  );
+}
 
 function QcEscopoSecao({ escopo, onChange, disabled }) {
   return (
@@ -113,8 +159,13 @@ function QcEscopoSecao({ escopo, onChange, disabled }) {
                         onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, decisao: val } })}/>
                     </td>
                     <td style={{ maxWidth: 220 }}>
-                      <QcInput value={v.detalhe} disabled={disabled || v.decisao === 'nao_aplica' || !v.decisao}
-                        placeholder="qtd/modelo" onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>
+                      {it.especial === 'variante'
+                        ? <QcSelect value={v.detalhe} disabled={disabled || v.decisao !== 'fornecer'} placeholder="Modelo…" options={QC_VARIANTES_QUADRO}
+                            onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>
+                        : it.especial === 'cabos_aco'
+                          ? <span className="small muted">{v.decisao === 'fornecer' ? 'preencha o card abaixo' : '—'}</span>
+                          : <QcInput value={v.detalhe} disabled={disabled || v.decisao === 'nao_aplica' || !v.decisao}
+                              placeholder="qtd/modelo" onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>}
                     </td>
                   </tr>
                 );
@@ -123,6 +174,8 @@ function QcEscopoSecao({ escopo, onChange, disabled }) {
           </table>
         </div>
       </Card>
+
+      <QcCabosAcoCard escopo={escopo} onChange={onChange} disabled={disabled}/>
 
       <Card title="Customizações de botoeiras" sub="Gravação, furação e personalizações do COP/LOP.">
         <div className="grid-2" style={{ gap: 12 }}>

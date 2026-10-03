@@ -37,6 +37,8 @@ const NAV_GROUPS = [
   { label: "Cadastros Mestres", items: [
     { id: "cadastro-clientes", label: "Clientes", icon: "users" },
     { id: "cadastro-fornecedores", label: "Fornecedores", icon: "truck" },
+    { id: "cadastro-materias-primas", label: "Matérias-Primas", icon: "layers" },
+    { id: "cadastro-produtos", label: "Produtos", icon: "package" },
   ]},
   { label: "Comercial | Pré-venda", items: [
     { id: "formularios", label: "Formulários", icon: "layers" },
@@ -122,7 +124,11 @@ const NAV_GROUPS = [
      visível deve significar "posso entrar e fazer algo" (Achado 12). */
   { label: "Logística Interna", items: [
     { id: "almoxarifado", label: "Almoxarifado", icon: "package" },
+    { id: "carga-maquina", label: "Carga Máquina", icon: "calculator" },
+    { id: "montagem-produto", label: "Montagem do Produto", icon: "layers" },
+    { id: "simulacao-producao", label: "Simulação", icon: "history" },
     { id: "pcp", label: "PCP", icon: "calendar" },
+    { id: "relatorios-pcp", label: "Relatórios", icon: "fileText" },
   ]},
   { label: "Administração", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
@@ -329,6 +335,8 @@ const BREADCRUMB_MAP = {
   "contrato-instalador":         { module: "Jurídico", page: "Contrato Instalador", icon: "hardhat" },
   "cadastro-clientes":     { module: "Cadastros", page: "Clientes", icon: "users" },
   "cadastro-fornecedores": { module: "Cadastros", page: "Fornecedores", icon: "truck" },
+  "cadastro-materias-primas": { module: "Cadastros", page: "Matérias-Primas", icon: "layers" },
+  "cadastro-produtos": { module: "Cadastros", page: "Produtos", icon: "package" },
   engenharia:    { module: "Engenharia", page: "Engenharia", icon: "ruler" },
   "ncm-catalogo": { module: "Cadastros", page: "Produtos", icon: "fileSearch" },
   "cadastro-instaladores": { module: "Cadastros", page: "Empresas Instaladoras", icon: "hardhat" },
@@ -351,6 +359,11 @@ const BREADCRUMB_MAP = {
   "importacao-detail":        { module: "Importação", page: "Gestão Importação — Detalhe de Embarque", icon: "ship" },
   "importacao-rastreamento":  { module: "Importação", page: "Gestão Importação — Rastreamento de Navios", icon: "mapIcon" },
   compras:       { module: "Logística", page: "Importação Varejo", icon: "truck" },
+  almoxarifado: { module: "Logística", page: "Almoxarifado", icon: "package" },
+  "carga-maquina": { module: "Logística", page: "Carga Máquina", icon: "calculator" },
+  "montagem-produto": { module: "Logística", page: "Montagem do Produto", icon: "layers" },
+  "simulacao-producao": { module: "Logística", page: "Simulação", icon: "history" },
+  "relatorios-pcp": { module: "Logística", page: "Relatórios", icon: "fileText" },
   pcp:           { module: "Logística", page: "PCP — Planejamento e Controle da Produção", icon: "calendar" },
   "vistorias-envio": { module: "Instalação & Entrega", page: "Vistorias de Obras", icon: "send" },
   vistorias:     { module: "Instalação & Entrega", page: "Resultado Vistorias de Obras", icon: "history" },
