@@ -25,7 +25,7 @@
   const KNOWN_ROUTES = [
     'dashboard', 'notificacoes', 'decisoes', 'financeiro', 'inbox',
     'leads', 'lead-detail', 'crm-canais', 'crm-conversao', 'crm-automacao', 'crm-analise',
-    'formularios', 'formulario-elevador', 'formulario-quadro-comando', 'controle-cotacoes',
+    'formularios', 'formulario-elevador', 'formulario-quadro-comando', 'cotacao-quadro-comando', 'controle-cotacoes',
     'cotacoes-fornecedor', 'cotacao-fornecedor-detail', 'contratos-sociais', 'precificacao', 'propostas', 'proposta-editor',
     'aval-financeiro',
     'cadastro-clientes', 'cadastro-fornecedores', 'cadastro-materias-primas', 'cadastro-produtos', 'ncm-catalogo', 'cadastro-instaladores', 'cadastro-custos',

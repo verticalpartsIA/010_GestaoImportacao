@@ -88,7 +88,7 @@ const NAV_GROUPS = [
     { id: "desenho-tecnico", label: "Projetos ER/Es", icon: "ruler" },
     { id: "solicitacoes-produto", label: "Solicitações de Produto", icon: "inbox" },
     { id: "ficha-tecnica", label: "Ficha Técnica", icon: "fileText" },
-    { id: "ncm-catalogo", label: "Produtos", icon: "fileSearch" },
+    { id: "ncm-catalogo", label: "Catálogo Siscomex", icon: "fileSearch" },
     { id: "linha-do-tempo", label: "Linha do Tempo da Cotação", icon: "clock" },
   ]},
   /* Novo grupo — execução da obra. "Dossiês de Obras" é a tela que já lista
