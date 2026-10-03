@@ -134,7 +134,7 @@
 
 | Item do menu | Rota | Endereço | Abas (padrão em **negrito**) | Detalhe por id |
 |---|---|---|---|---|
-| Almoxarifado | `almoxarifado` | `/logistica/almoxarifado[/<aba>]` | **estoque**, estrutura, custos, pedidos | — |
+| Almoxarifado | `almoxarifado` | `/logistica/almoxarifado[/<aba>]` | **estoque**, estrutura, custos, reposicao, pedidos | — |
 | Carga Máquina | `carga-maquina` | `/logistica/carga-maquina[/<aba>]` | **capacidade**, maquinas, roteiro, recursos | — |
 | Montagem do Produto | `montagem-produto` | `/logistica/montagem-produto` | — | — |
 | Simulação | `simulacao-producao` | `/logistica/simulacao-producao` | — | — |
@@ -175,10 +175,10 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `rh-homologacao` | `/rh/rh-homologacao` | `central-documentos.jsx:81` |
 | (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:337` |
 | (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:431` |
-| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1085` |
-| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1101` |
-| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:1024` |
-| (LeadDetailView em comercial.jsx) | Voltar para Leads | `leads` | `/crm/leads` | `comercial.jsx:1112` |
+| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1086` |
+| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1102` |
+| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:1025` |
+| (LeadDetailView em comercial.jsx) | Voltar para Leads | `leads` | `/crm/leads` | `comercial.jsx:1113` |
 | (NcmDashboardWidget em ncm-catalogo.jsx) | Ver todas | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:988` |
 | (OndeParouWidget em dashboard.jsx) | Ver Gatilhos & Prazo | `financeiro` | `/adm-financeiro/financeiro` | `dashboard.jsx:416` |
 | (PrecificacaoDetail em precificacao.jsx) | Gerar proposta | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:279` |
@@ -220,10 +220,10 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | inbox | Voltar | `dashboard` | `/geral/dashboard` | `logistica.jsx:1665` |
 | inbox | (acionado por um handler — ver o código) | `linha-do-tempo` | `/engenharia/linha-do-tempo` | `logistica.jsx:1533` |
 | juridico | (acionado por um handler — ver o código) | `contrato-editor` | `/juridico/contrato-editor` | `operacoes.jsx:359` |
-| lead-detail | (acionado por um handler — ver o código) | `leads` | `/crm/leads` | `comercial.jsx:989` |
-| leads | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:898` |
-| leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:818` |
-| leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:873` |
+| lead-detail | (acionado por um handler — ver o código) | `leads` | `/crm/leads` | `comercial.jsx:990` |
+| leads | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:899` |
+| leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:819` |
+| leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:874` |
 | ncm-catalogo | (acionado por um handler — ver o código) | `ficha-tecnica` | `/engenharia/ficha-tecnica` | `ncm-catalogo.jsx:424` |
 | ncm-detail | (acionado por um handler — ver o código) | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:845` |
 | ncm-detail | Voltar para Solicitações NCM | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:851` |

@@ -263,7 +263,7 @@
     // de refiltrar do zero — ver comentário no próprio arquivo. ----
     const AM = window.AdminMetrics;
     const desde = periodoParaData(period);
-    const projetosPeriodo = desde ? projetosReais.filter(p => p.start_date && new Date(p.start_date) >= desde) : undefined;
+    const projetosPeriodo = desde ? AM.projetosAtivosNoPeriodo(projetosReais, desde) : undefined;
     const propostasPeriodo = desde ? propostas.filter(p => p.aprovada_em && new Date(p.aprovada_em) >= desde) : undefined;
     const comissoesPeriodo = desde ? comissoes.filter(c => c.created_at && new Date(c.created_at) >= desde) : undefined;
     const admin = AM.compute({ projetos: projetosReais, embarques, alertas, propostas, contratos, avais, comissoes, projetosPeriodo, propostasPeriodo, comissoesPeriodo });
