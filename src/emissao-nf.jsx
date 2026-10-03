@@ -73,6 +73,7 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
   if (!dados) return <div className="page"><div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div></div>;
 
   const hoje = nfHoje();
+  const ultimaLeitura = dados.grupos.flatMap(g => g.regs).map(r => r.atualizado_em).filter(Boolean).sort().pop() || null;
   // Resumo de um grupo (todos os registros do mesmo nº de pedido).
   const resumo = (g) => {
     const mae = g.regs.map(r => dados.maes[r.codigo_pedido]).find(Boolean) || null;
@@ -152,7 +153,7 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Fiscal</div>
           <h1 className="page-head__title">Emissão de NF</h1>
-          <p className="page-head__sub">Acompanha os pedidos fabricados, o SLA de cada etapa e a conferência proposta × NF. A nota é emitida no Omie.</p>
+          <p className="page-head__sub">Acompanha os pedidos fabricados, o SLA de cada etapa e a conferência proposta × NF. A nota é emitida no Omie. Leitura automática do Omie a cada 30 min (seg–sex, 7h–19h) · última: {ultimaLeitura ? new Date(ultimaLeitura).toLocaleString('pt-BR') : '—'}.</p>
         </div>
       </div>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>

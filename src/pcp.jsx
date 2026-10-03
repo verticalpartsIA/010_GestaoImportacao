@@ -94,6 +94,133 @@ function PCPNovaOrdem({ ctx, onCriada, onCancelar }) {
 }
 
 /* ---------------- Detalhe da OP ---------------- */
+/* Baixa de produção no estoque do Omie: ao concluir a OP, a matéria-prima SAI e o produto acabado ENTRA.
+   ESCRITA REAL no Omie (função pcp-omie-escrever, ação baixa_producao): primeiro mostra o que será lançado
+   (simulação, sem gravar nada), o almoxarife pode corrigir o consumo real e só então confirma.
+   Só OP com produto acabado; corte não movimenta (a NF do pedido já dá a saída). */
+function PCPBaixaOmie({ op, prods, onMudou }) {
+  const sb = window.__VP_SB && window.__VP_SB.sb;
+  const [pode, setPode] = React.useState(false);
+  const [plano, setPlano] = React.useState(null);
+  const [consumo, setConsumo] = React.useState({});
+  const [ocupado, setOcupado] = React.useState(false);
+  const [aviso, setAviso] = React.useState(null);
+  const [decisoes, setDecisoes] = React.useState({});   // 'TIPO:CODIGO' -> 'lancar' (só vale p/ linhas que o Omie já tem)
+  const [valores, setValores] = React.useState({});     // custo informado para componente sem custo cadastrado
+  React.useEffect(() => {
+    let vivo = true;
+    Promise.resolve(window.PropostaStore?.temCapacidade?.('almoxarifado', 'escrever_omie')).then(v => { if (vivo) setPode(!!v); }).catch(() => {});
+    return () => { vivo = false; };
+  }, []);
+  if (op.status !== 'concluida' || !op.produto) return null;
+  if (op.baixa_omie_em) {
+    const r = op.baixa_omie_resumo || {};
+    return (
+      <div className="card pcp-total" style={{ padding: 14, marginBottom: 12, fontSize: 13 }}>
+        <b style={{ fontWeight: 500 }}>Baixa no estoque do Omie lançada</b> em {new Date(op.baixa_omie_em).toLocaleString('pt-BR')} por {op.baixa_omie_por || '—'}
+        {' '}· {r.saidas ?? 0} componente(s){r.ja_no_omie ? ` (${r.ja_no_omie} linha(s) já constavam no Omie e não foram tocadas)` : ' baixado(s)'}{r.entrada ? ` · entrada de ${pcpFmt(r.entrada.quantidade, 0)} × ${r.entrada.codigo}` : ''}.
+      </div>
+    );
+  }
+  if (!pode) return null;
+
+  const chamar = async (corpo) => {
+    const { data, error } = await sb.functions.invoke('pcp-omie-escrever', { body: { solicitante: pcpUsuario(), acao: 'baixa_producao', ordem_id: op.id, ...corpo } });
+    if (!error) return data;
+    let j = null; try { j = await error.context.json(); } catch (e) { /* sem corpo */ }
+    return j || { error: error.message };
+  };
+  const valoresNum = () => { const v = {}; Object.entries(valores).forEach(([k, x]) => { const n = Number(String(x).replace(',', '.')); if (n > 0) v[k] = n; }); return v; };
+  const preparar = async () => {
+    setOcupado(true); setAviso(null);
+    const r = await chamar({ simular: true, decisoes: {}, consumo: Object.keys(consumo).length ? numConsumo() : undefined, valores: valoresNum() });
+    setOcupado(false);
+    if (r.error) { setPlano(null); setAviso({ texto: r.error, problemas: r.problemas || [] }); return; }
+    setPlano(r); setDecisoes({});
+    const c = {}; r.linhas.filter(l => l.tipo === 'SAI').forEach(l => { c[l.codigo] = String(l.quantidade); });
+    setConsumo(c);
+  };
+  const numConsumo = () => { const o = {}; Object.entries(consumo).forEach(([k, v]) => { o[k] = Number(String(v).replace(',', '.')); }); return o; };
+  const confirmar = async () => {
+    const alvo = plano.linhas.filter(vaiLancar);
+    const jaTem = plano.linhas.length - alvo.length;
+    const msg = alvo.length
+      ? `Lançar NO OMIE (estoque real): ${alvo.length} movimento(s) novo(s) de ${op.numero}.${jaTem ? `
+${jaTem} linha(s) já constam no Omie e NÃO serão tocadas.` : ''}`
+      : `Todas as ${plano.linhas.length} linhas já constam no Omie. Nada será lançado; a baixa de ${op.numero} será apenas marcada como feita. Continuar?`;
+    if (!window.confirm(msg)) return;
+    setOcupado(true); setAviso(null);
+    const r = await chamar({ consumo: numConsumo(), valores: valoresNum(), decisoes });
+    setOcupado(false);
+    window.VPLog?.registrar?.({ modulo: 'PCP', acao: r.ok ? 'Lançou baixa de produção no Omie' : 'Tentou baixa de produção no Omie', alvo: `${op.numero} — ${r.ok ? `${r.feitas} movimento(s)` : (r.error || 'incompleta')}` });
+    if (r.ok) { window.toast?.('Baixa lançada no Omie.'); setPlano(null); onMudou && onMudou(); return; }
+    setAviso({ texto: r.error || (r.parcial ? `Parou por tempo: ${r.feitas} lançado(s), faltam ${r.restantes}. Clique em Confirmar de novo para continuar (o que já foi não se repete).` : `${r.feitas || 0} lançado(s); houve falhas. Corrija e confirme de novo (o que já foi não se repete).`), erros: r.erros || [], problemas: r.problemas || [] });
+  };
+  const vaiLancar = (l) => l.situacao === 'novo' || decisoes[l.tipo + ':' + l.codigo] === 'lancar';
+  const qtdIgual = (l) => Number(String(consumo[l.codigo] ?? l.quantidade).replace(',', '.')) === l.quantidade;
+
+  return (
+    <div className="card pcp-total" style={{ padding: 14, marginBottom: 12 }}>
+      <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        <b style={{ fontWeight: 500 }}>Baixa no estoque do Omie</b>
+        <span style={{ fontSize: 12, color: 'var(--fg3)' }}>OP concluída: lança a saída dos componentes e a entrada do produto acabado.</span>
+        <span style={{ flex: 1 }}/>
+        {!plano && <button className="btn btn--sm btn--primary" disabled={ocupado} onClick={preparar}>{ocupado ? 'Calculando…' : 'Preparar baixa'}</button>}
+        {plano && <button className="btn btn--sm" disabled={ocupado} onClick={() => { setPlano(null); setAviso(null); }}>Cancelar</button>}
+        {plano && <button className="btn btn--sm btn--primary" disabled={ocupado} onClick={confirmar}>{ocupado ? 'Lançando no Omie…' : 'Confirmar e lançar no Omie'}</button>}
+      </div>
+      {aviso && (
+        <div style={{ marginTop: 8, fontSize: 12, color: 'var(--vp-danger)' }}>
+          {aviso.texto}
+          {(aviso.problemas || []).map(p => (
+            <div key={p.codigo} style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 4 }}>
+              <span>• {p.codigo}: {p.motivo}</span>
+              {/custo/i.test(p.motivo) && <input className="input" style={{ width: 90, textAlign: 'right' }} placeholder="R$ unit." value={valores[p.codigo] ?? ''} onChange={e => setValores({ ...valores, [p.codigo]: e.target.value })}/>}
+            </div>
+          ))}
+          {(aviso.problemas || []).some(p => /custo/i.test(p.motivo)) && <button className="btn btn--sm" style={{ marginTop: 6 }} disabled={ocupado} onClick={preparar}>Recalcular com os valores informados</button>}
+          {(aviso.erros || []).map((e, i) => <div key={i}>• {e.codigo} ({e.tipo}): {e.erro}</div>)}
+        </div>
+      )}
+      {plano && (
+        <div className="table-wrap" style={{ overflowX: 'auto', marginTop: 10 }}>
+          <table className="t pcp-grid">
+            <thead><tr><th>Movimento</th><th>Código</th><th>Descrição</th><th className="text-right">Quantidade</th><th>Situação no Omie</th></tr></thead>
+            <tbody>
+              {plano.linhas.map(l => (
+                <tr key={l.tipo + l.codigo}>
+                  <td><span className="pcp-tag" style={l.tipo === 'ENT' ? { background: 'color-mix(in srgb, #2e9e5b 25%, transparent)' } : undefined}>{l.tipo === 'SAI' ? 'Saída (consumo)' : 'Entrada (acabado)'}</span></td>
+                  <td>{l.codigo}</td>
+                  <td>{(prods[l.codigo] || {}).descricao || ''}</td>
+                  <td className="text-right">{l.tipo === 'SAI'
+                    ? <input className="input" style={{ width: 90, textAlign: 'right', ...(qtdIgual(l) ? {} : { outline: '2px solid var(--vp-yellow)' }) }} value={consumo[l.codigo] ?? ''} onChange={e => setConsumo({ ...consumo, [l.codigo]: e.target.value })}/>
+                    : pcpFmt(l.quantidade, 0)}</td>
+                  <td style={{ minWidth: 250, fontSize: 12 }}>
+                    {l.situacao === 'novo' && <span className="pcp-tag">novo — será lançado</span>}
+                    {l.situacao !== 'novo' && (<>
+                      <span className="pcp-tag" style={{ background: l.situacao === 'igual' ? 'color-mix(in srgb, #2e9e5b 25%, transparent)' : 'color-mix(in srgb, var(--vp-yellow) 40%, transparent)' }}>
+                        {l.situacao === 'igual' ? 'já consta no Omie — não mexer' : 'Omie tem quantidade diferente'}
+                      </span>
+                      <div style={{ color: 'var(--fg3)' }}>{l.omie.map((o, i) => <span key={i}>{o.data.split('-').reverse().join('/')}: {o.tipo === 'SAI' ? 'saída' : 'entrada'} de {pcpFmt(o.quantidade)}{o.origem_pcp ? ' (PCP)' : ' (manual)'}{i < l.omie.length - 1 ? ' · ' : ''}</span>)}</div>
+                      <select className="input" style={{ marginTop: 3 }} value={decisoes[l.tipo + ':' + l.codigo] || 'pular'} onChange={e => setDecisoes({ ...decisoes, [l.tipo + ':' + l.codigo]: e.target.value })}>
+                        <option value="pular">Não mexer</option>
+                        <option value="lancar">Lançar mesmo assim</option>
+                      </select>
+                    </>)}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>
+            Antes de lançar, cada linha é comparada com os ajustes que o Omie já tem (a partir de 7 dias antes da abertura da OP): o que já consta não é tocado. Consumo proporcional ao produzido + perdido ({pcpFmt(plano.produzida, 0)} + {pcpFmt(plano.perdida, 0)}); corrija se o consumo real foi outro. No Omie os lançamentos aparecem como ajuste de estoque (motivo “Inventário”) com a OP na observação.
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
   const { sb, dados, podeEditar } = ctx;
   const [op, setOp] = React.useState(null);
@@ -374,6 +501,8 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
           <button className="btn btn--sm btn--primary" onClick={concluir}>Confirmar conclusão</button>
         </div>
       )}
+
+      <PCPBaixaOmie op={op} prods={dados.prods} onMudou={async () => { await carregar(); onMudou(); }}/>
 
       {(verHH || podeVerCustoMat) && (
         <div className="card pcp-total" style={{ padding: 14, marginBottom: 12, display: 'flex', gap: 28, flexWrap: 'wrap', alignItems: 'baseline' }}>
