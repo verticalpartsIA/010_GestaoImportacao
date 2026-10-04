@@ -172,3 +172,12 @@
 .io-opcao { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
 .io-item { display: flex; align-items: center; gap: 8px; }
 .ig-toolbar .ig-menu { vertical-align: middle; }
+
+/* ---- fase 4C: conversas ---- */
+.io-conv-n { display:inline-block; margin-left:6px; min-width:16px; padding:0 5px; border-radius:8px; background:var(--bg-3, #eee); color:var(--fg2, #555); font-size:11px; font-weight:600; text-align:center; }
+.io-conversa { margin-top:8px; border:1px solid var(--border); border-radius:8px; background:var(--bg-2, #fafafa); }
+.io-conversa__cab { width:100%; text-align:left; background:none; border:0; padding:8px 12px; cursor:pointer; font-size:12.5px; }
+.io-conversa__item { display:grid; grid-template-columns:140px 1fr auto; gap:10px; padding:6px 12px; border-top:1px solid var(--border); cursor:pointer; font-size:12.5px; }
+.io-conversa__item:hover, .io-conversa__item.on { background:var(--yellow-50, #fff8d6); }
+.io-conversa__quem { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+.io-conversa__txt { color:var(--fg3, #777); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
