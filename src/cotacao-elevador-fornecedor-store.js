@@ -598,6 +598,37 @@
     return { ...cur, ...patch };
   }
 
+  /* ---------- Resposta do fornecedor REGISTRADA A PARTIR DE UM E-MAIL (Inbox, 04/10/2026) ----------
+     O fornecedor respondeu por e-mail em vez do link. Uma pessoa confere os valores propostos pelo Inbox (src/inbox-preco*.js) e
+     confirma: aqui grava no MESMO formato do formulário (`salvarResposta`) — status 'respondido', câmbio congelado, evento
+     FORNECEDOR_RESPONDEU (fecha a etapa de espera) —, mas com _meta.origem = 'email' (sem IP/navegador do fornecedor) e quem registrou.
+     Não sobrescreve resposta já dada pelo formulário, a menos que `substituir` seja pedido explicitamente. */
+  async function registrarRespostaPorEmail(id, respostas, opcoes) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Cotação do fornecedor não encontrada.');
+    const o = opcoes || {};
+    if (cur.status === 'respondido' && !o.substituir) throw new Error('Este fornecedor já respondeu pelo formulário — confirme "substituir" para atualizar.');
+    const now = new Date().toISOString();
+    const payload = { ...respostas, _meta: { origem: 'email', email_id: o.emailId || null, registrado_por: o.por || null, respondido_em: now, ...(cur.respostas && cur.respostas._meta && cur.status === 'respondido' ? { substitui: cur.respostas._meta } : {}) } };
+    let cambioNaResposta = cur.cambio_na_resposta_usd_brl ?? null;
+    try { cambioNaResposta = (await window.CambioAPI.buscarUsdBrl()).valor; } catch (e) { /* segue sem câmbio novo */ }
+    const patch = { status: 'respondido', respostas: payload, responded_at: now, updated_at: now, cambio_na_resposta_usd_brl: cambioNaResposta };
+    const { data, error } = await c.from('cotacoes_elevador_fornecedor').update(patch).eq('id', id).select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('Não consegui gravar a resposta (nenhuma linha alterada).');
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Registrou a resposta do fornecedor a partir de um e-mail',
+      alvo: cur.numero_documento, alvo_id: cur.id, detalhe: { email_id: o.emailId || null, substituiu: cur.status === 'respondido' },
+    });
+    if (window.EventosFluxo && cur.status !== 'respondido') window.EventosFluxo.registrar({
+      evento: 'FORNECEDOR_RESPONDEU',
+      numeroCotacao: cur.dados_envio?.header?.numero_cotacao,
+      alvoLabel: `${cur.fornecedor || 'Fornecedor'} · ${cur.numero_documento || ''}`, alvoId: cur.id,
+    });
+    return { ...cur, ...patch };
+  }
+
   /* ---------- Anexos da resposta do Fornecedor (PDF/DWG/imagens) ----------
      Bucket privado cotacao-fornecedor-anexos — mesmo padrão de bucket
      privado + URL assinada de formulario-elevador-store.js (FEA_BUCKET).
@@ -679,7 +710,7 @@
     listarAnexosResposta, anexarArquivoResposta, urlAssinadaAnexoResposta, removerAnexoResposta,
     listarAnexosFormulario, urlAssinadaAnexoFormulario,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
-    getByToken, marcarVisualizado, salvarResposta, getPublicIP,
+    getByToken, marcarVisualizado, salvarResposta, registrarRespostaPorEmail, getPublicIP,
     decidirComprar, aprovar, listarComprasAguardandoEmbarque, excluirComMotivo,
   };
 }());
