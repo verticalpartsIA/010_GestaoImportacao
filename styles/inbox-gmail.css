@@ -181,3 +181,12 @@
 .io-conversa__item:hover, .io-conversa__item.on { background:var(--yellow-50, #fff8d6); }
 .io-conversa__quem { font-weight:600; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .io-conversa__txt { color:var(--fg3, #777); overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+
+/* ---- issue #653: notebooks de 1366–1440 px (painel de leitura estreito) ---- */
+.inbox--gmail .inbox__msg-actions { flex-wrap: wrap; justify-content: flex-end; }
+.inbox--gmail .inbox__msg-actions .btn { white-space: nowrap; }
+.inbox--gmail .inbox__msg .alert { flex-wrap: wrap; }
+.inbox--gmail .inbox__msg .alert > div { flex: 1 1 220px; min-width: 0; }
+.inbox--gmail .inbox__compose { flex-wrap: wrap; padding: 10px 16px; }
+.inbox--gmail .inbox__compose .btn { white-space: nowrap; }
+.inbox--gmail .inbox__compose .spacer { display: none; }
