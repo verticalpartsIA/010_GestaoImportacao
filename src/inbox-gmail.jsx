@@ -39,7 +39,7 @@ const IG_EM_OPCOES = [['todos', 'Todos os e-mails'], ['entrada', 'Caixa de entra
 const IG_FORM_VAZIO = { de: '', para: '', assunto: '', contem: '', naoTem: '', depois: '', antes: '', em: 'todos', anexo: false, naoLida: false, estrela: false };
 
 /* ---------- Pesquisa em pílula + opções avançadas ---------- */
-function InboxBarraBusca({ valor, onChange }) {
+function InboxBarraBusca({ valor, onChange, onDicas }) {
   const [aberto, setAberto] = React.useState(false);
   const [f, setF] = React.useState(IG_FORM_VAZIO);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
@@ -77,7 +77,7 @@ function InboxBarraBusca({ valor, onChange }) {
               <label><input type="checkbox" checked={f.estrela} onChange={(e) => set('estrela', e.target.checked)}/> Com estrela</label>
             </div>
             <div className="ig-busca__rodape">
-              <span className="muted small">A pesquisa olha os e-mails carregados na tela (recentes).</span>
+              <span className="muted small">Pesquisa em todo o histórico. {onDicas ? <a href="#" onClick={(ev) => { ev.preventDefault(); setAberto(false); onDicas(); }}>Dicas de pesquisa</a> : null}</span>
               <span className="row gap-2"><Button variant="ghost" size="sm" onClick={limpar}>Limpar</Button><Button variant="primary" size="sm" onClick={pesquisar}>Pesquisar</Button></span>
             </div>
           </div>
