@@ -440,25 +440,23 @@ function HelpCenter({ route, bc, onClose }) {
   const tutorial = TUTORIAIS[route];
   return (
     <Modal title="Central de Ajuda" onClose={onClose} width={620}
-      footer={<>
-        <Button variant="ghost" size="sm" onClick={onClose}>Fechar</Button>
-        <Button variant="primary" size="sm" icon="mail"
-          onClick={() => window.open('mailto:suporte@verticalparts.com.br?subject=' + encodeURIComponent('Ajuda VP Gestão — ' + (bc.page || '')), '_blank')}>
-          Falar com o suporte
-        </Button>
-      </>}>
+      footer={<Button variant="ghost" size="sm" onClick={onClose}>Fechar</Button>}>
+      {tutorial ? (
+        <div style={{ border: '1px solid var(--vp-yellow)', borderLeft: '4px solid var(--vp-yellow)', background: 'rgba(245, 196, 0, 0.12)', borderRadius: 8, padding: '12px 14px', marginBottom: 16 }}>
+          <div style={{ fontWeight: 700, marginBottom: 2 }}>Tutorial passo a passo desta tela</div>
+          <p className="vp-small" style={{ margin: '0 0 10px' }}>Explica cada botão e cada janela, com imagens. Abre em uma nova aba.</p>
+          <a href={'/TreinamentoVP/' + tutorial + '/'} target="_blank" rel="noopener noreferrer"
+            style={{ display: 'inline-block', background: 'var(--vp-yellow)', color: '#000', fontWeight: 700, fontSize: 13, letterSpacing: '.04em', textTransform: 'uppercase', textDecoration: 'none', padding: '9px 16px', borderRadius: 6 }}>
+            Abrir o tutorial
+          </a>
+        </div>
+      ) : null}
       <div className="help-ctx">
         <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Você está em</div>
         <div style={{ fontWeight: 600, marginBottom: 4 }}>{bc.module} · {bc.page}</div>
         <p className="vp-small" style={{ marginTop: 0 }}>
           {ctx || "Use o menu à esquerda para navegar entre os módulos. Cada tela tem suas próprias ações no topo e na lista."}
         </p>
-        {tutorial ? (
-          <Button variant="primary" size="sm"
-            onClick={() => window.open('/TreinamentoVP/' + tutorial + '/', '_blank', 'noopener')}>
-            Abrir tutorial passo a passo
-          </Button>
-        ) : null}
       </div>
       <div className="up-eyebrow muted" style={{ margin: "16px 0 8px" }}>Perguntas frequentes</div>
       <dl className="help-faq">
@@ -469,7 +467,7 @@ function HelpCenter({ route, bc, onClose }) {
         <dt>Um botão não fez nada</dt>
         <dd>Alguns fluxos dependem de uma etapa anterior (ex.: precificar exige Análise Técnica aprovada). Verifique o status da obra no Dossiê.</dd>
         <dt>Preciso de suporte humano</dt>
-        <dd>Use o botão “Falar com o suporte” abaixo — ele abre um e-mail já com a tela atual no assunto.</dd>
+        <dd>Escreva para suporte@verticalparts.com.br contando em qual tela você estava e o que aconteceu.</dd>
       </dl>
     </Modal>
   );
