@@ -1321,13 +1321,28 @@ const INBOX_REFERENCIA_TIPO_LABEL = {
    Sem categorização automática por módulo ainda (não fabrica um filtro
    que não existe). Sem cron: busca só quando a tela abre/atualiza. */
 function EmailInbox({ setRoute, setSubsel }) {
-  const [emails, setEmails] = React.useState([]);
+  const [emailsBase, setEmails] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState(null);
   const [activeId, setActiveId] = React.useState(null);
   const [folder, setFolder] = React.useState("inbox");
-  const [enviados, setEnviados] = React.useState([]);
+  const [enviadosBase, setEnviados] = React.useState([]);
   const [carregandoEnviados, setCarregandoEnviados] = React.useState(false);
+  const [limiteEnv, setLimiteEnv] = React.useState(50);               // fase 4B: "Carregar mais" nos Enviados
+  /* Fase 4B (04/10): a pesquisa também olha o HISTÓRICO COMPLETO no banco (inbox-historico.jsx). As linhas achadas entram
+     na lista junto das carregadas (sem duplicar); tudo mais (pastas, permissões, marcadores) trata como e-mail comum. */
+  const [busca, setBusca] = React.useState('');
+  const consulta = window.InboxBusca ? window.InboxBusca.parseConsulta(busca) : null;
+  const buscando = !!(consulta && !window.InboxBusca.vazia(consulta));
+  const hist = (window.useInboxHistorico || (() => ({ entrada: [], saida: [], carregando: false, truncado: false })))(consulta, buscando);
+  const emails = React.useMemo(() => {
+    const ids = new Set(emailsBase.map((e) => e.id));
+    return hist.entrada.length ? [...emailsBase, ...hist.entrada.filter((e) => !ids.has(e.id))] : emailsBase;
+  }, [emailsBase, hist.entrada]);
+  const enviados = React.useMemo(() => {
+    const ids = new Set(enviadosBase.map((e) => e.id));
+    return hist.saida.length ? [...enviadosBase, ...hist.saida.filter((e) => !ids.has(e.id)).map((n) => ({ id: n.id, direcao: 'saida', dono_email: n.dono, atribuido_a: n.atribuido, para: n.to, assunto: n.subject, corpo_texto: n.preview, corpo_html: n.html, data_mensagem: n.date, numero_cotacao: n.numeroCotacao, vinculo_confianca: n.vinculoConfianca, referencia_tipo: n.referenciaTipo, anexos: n.anexos }))] : enviadosBase;
+  }, [enviadosBase, hist.saida]);
   /* 04/10 — Inbox fase 1: DONO do e-mail + permissões (Administração › Alçadas › Inbox). Quem vê o quê vem de
      src/inbox-visibilidade.js (regras testadas): é meu → vejo; senão pelas alçadas ver_todos/equipe/departamento/áreas/triagem.
      Começa liberado para todos. `perm` = undefined enquanto carrega, null se falhou (aí mostra tudo: organização na
@@ -1423,9 +1438,6 @@ function EmailInbox({ setRoute, setSubsel }) {
     const base = id === 'inbox' ? (foco ? emailsVisiveis.filter((m) => politicaDe(m) !== 'silencioso') : emailsVisiveis) : todasLinhas;
     return O ? base.filter((m) => O.visivelNaPasta(m, id, ctxPasta)) : base;
   };
-  const [busca, setBusca] = React.useState('');
-  const consulta = window.InboxBusca ? window.InboxBusca.parseConsulta(busca) : null;
-  const buscando = !!(consulta && !window.InboxBusca.vazia(consulta));
   const pastaEfetiva = buscando ? (consulta.em || 'all') : folder;           // pesquisar sem "em:" olha todas as mensagens, como no Gmail
   const listaAtual = pastaLinhas(pastaEfetiva);
   // nos Enviados o remetente é a nossa caixa e a outra ponta é o destinatário (`de:` e `para:` precisam refletir isso)
@@ -1522,7 +1534,7 @@ function EmailInbox({ setRoute, setSubsel }) {
   const carregarEnviados = React.useCallback(() => {
     setCarregandoEnviados(true);
     window.__VP_SB.sb.from('emails_projeto').select('*').eq('direcao', 'saida').is('excluido_em', null)
-      .order('data_mensagem', { ascending: false }).limit(50)
+      .order('data_mensagem', { ascending: false }).limit(limiteEnv)
       .then(async ({ data }) => {
         const rows = data || [];
         const paths = [...new Set(rows.flatMap((r) => (r.anexos || []).map((a) => a.path).filter(Boolean)))];
@@ -1539,7 +1551,7 @@ function EmailInbox({ setRoute, setSubsel }) {
           setEnviados(rows);
         }
       }).finally(() => setCarregandoEnviados(false));
-  }, []);
+  }, [limiteEnv]);
   React.useEffect(() => { carregarEnviados(); }, [carregarEnviados]);
   React.useEffect(() => {
     setRespondendo(false); setModoCompose('responder'); setDestinatarioEncaminhar('');
@@ -2005,6 +2017,12 @@ function EmailInbox({ setRoute, setSubsel }) {
               Aparece aqui assim que você mandar um pelo Responder, Escrever ou Cotação a Fornecedor.
             </div>
           )}
+          {buscando && (hist.carregando || hist.entrada.length > 0 || hist.saida.length > 0) && (
+            <div className="small muted" style={{ padding:'6px 16px', borderBottom:'1px solid var(--border)' }}>
+              {hist.carregando ? 'Pesquisando em todo o histórico…'
+                : `Pesquisa no histórico completo: ${hist.entrada.length + hist.saida.length} resultado(s)${hist.truncado ? ' (mostrando os 100 mais recentes — refine a pesquisa)' : ''}.`}
+            </div>
+          )}
           {listaFiltrada.length === 0 && (buscando || (folder !== 'inbox' && folder !== 'sent')) && (
             <div style={{ textAlign:'center', padding:'40px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
               {buscando ? <>Nenhum resultado para “{busca}”. <a href="#" onClick={(ev) => { ev.preventDefault(); setBusca(''); }}>Limpar pesquisa</a></>
@@ -2044,6 +2062,11 @@ function EmailInbox({ setRoute, setSubsel }) {
               </div>
             );
           })}
+          {pastaEfetiva === 'sent' && !buscando && !carregandoEnviados && enviadosBase.length >= limiteEnv && (
+            <div style={{ textAlign:'center', padding:'12px' }}>
+              <Button variant="outline" size="sm" onClick={() => setLimiteEnv((n) => n + 50)}>Carregar mais enviados</Button>
+            </div>
+          )}
         </div>
           )}
 
