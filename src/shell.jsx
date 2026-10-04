@@ -434,6 +434,7 @@ const HELP_TOPICS = {
    ver CLAUDE.md, seção "Tutoriais"). Tutorial novo = uma linha aqui: rota do app → pasta.
    Rota sem linha: o item "Treinamento" do menu "?" (src/ajuda-suporte.jsx) aparece apagado ("em breve"). */
 const TUTORIAIS = {
+  dashboard: "dashboard",
   decisoes: "central-de-decisoes",
 };
 
