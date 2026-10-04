@@ -1951,10 +1951,9 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
       <div className="ig-topo">
         <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute("dashboard")}>Voltar</Button>
         <span className="ig-topo__titulo">Inbox</span>
-        {window.InboxBarraBusca && <window.InboxBarraBusca valor={busca} onChange={setBusca}/>}
+        {window.InboxBarraBusca && <window.InboxBarraBusca valor={busca} onChange={setBusca} onDicas={() => abrirAjuda('guia')}/>}
         <div className="ig-topo__fim">
           {erro ? <Badge variant="danger" dot>Erro na conexão</Badge> : <Badge variant="success" dot>Conectado</Badge>}
-          {window.InboxMenuAjuda && <window.InboxMenuAjuda onAbrir={abrirAjuda}/>}
           <button className="ig-iconbtn ig-iconbtn--grande" title="Configurações rápidas" onClick={() => setConfigAberta((a) => !a)}><Icon.settings size={16}/></button>
         </div>
       </div>
