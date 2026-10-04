@@ -71,7 +71,7 @@
 .ig-msg-vazio { margin: auto; text-align: center; color: var(--fg3); font-size: 13px; padding: 32px; }
 
 /* ---- barra de ferramentas da lista ---- */
-.ig-toolbar { display: flex; align-items: center; gap: 6px; padding: 4px 12px; border-bottom: 1px solid var(--border); background: #fff; min-height: 44px; }
+.ig-toolbar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; padding: 4px 12px; border-bottom: 1px solid var(--border); background: #fff; min-height: 44px; }
 .ig-toolbar__fim { margin-left: auto; white-space: nowrap; }
 .ig-check { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; cursor: pointer; }
 .ig-check input { cursor: pointer; }
@@ -156,3 +156,19 @@
   .inbox__main--direita { grid-template-columns: 1fr; }
   .ig-janela { right: 8px; width: calc(100vw - 16px); }
 }
+
+/* ---- fase 4A: marcadores, suspender, spam ---- */
+.io-sep { display: flex; justify-content: space-between; align-items: center; margin-right: 12px; }
+.io-mais { cursor: pointer; font-size: 18px; line-height: 1; color: var(--fg2); padding: 0 6px; border-radius: 50%; }
+.io-mais:hover { background: rgba(0,0,0,.08); color: var(--fg1); }
+.io-bolinha { display: inline-block; width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.inbox--gmail .io-marcador { gap: 8px; }
+.io-apagar { margin-left: auto; opacity: 0; cursor: pointer; color: var(--fg3); padding: 0 6px; font-size: 14px; }
+.io-marcador:hover .io-apagar { opacity: 1; }
+.io-marcador .count + .io-apagar { margin-left: 4px; }
+.io-chip { font-size: 10px; font-weight: 700; padding: 0 6px; border: 1px solid; border-radius: 8px; white-space: nowrap; line-height: 16px; }
+.io-cor { width: 22px; height: 22px; border-radius: 50%; cursor: pointer; border: 2px solid transparent; box-sizing: border-box; }
+.io-cor.on { border-color: #000; box-shadow: 0 0 0 2px #fff inset; }
+.io-opcao { display: flex; align-items: center; gap: 8px; font-size: 13px; cursor: pointer; }
+.io-item { display: flex; align-items: center; gap: 8px; }
+.ig-toolbar .ig-menu { vertical-align: middle; }

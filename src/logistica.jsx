@@ -1378,7 +1378,12 @@ function EmailInbox({ setRoute, setSubsel }) {
      a tela se comporta exatamente como antes. Não toca leitura/vínculo/envio/exclusão. */
   const iaMapa = meta.ia;
   /* Fase 2 (04/10): lido/estrela POR PESSOA, troca de responsável, aviso ao responder e-mail de outro, pop-up de vínculo. */
-  const { estado, marcarLido, definirLido, alternarEstrela } = (window.useInboxEstado || (() => ({ estado: {}, marcarLido() {}, definirLido() {}, alternarEstrela() {} })))(emails);
+  const { estado, marcarLido, definirLido, alternarEstrela, arquivar, adiar } = (window.useInboxEstado || (() => ({ estado: {}, marcarLido() {}, definirLido() {}, alternarEstrela() {}, arquivar: async () => false, adiar: async () => false })))([...emails, ...enviados]);
+  /* Fase 4A (04/10): marcadores (pessoal/equipe), arquivar e suspender POR PESSOA, spam compartilhado — ver inbox-organizar*.js */
+  const mk = (window.useInboxMarcadores || (() => ({ marcadores: [], porEmail: {}, pronto: true, criar: async () => 'Marcadores indisponíveis.', apagar: async () => null, aplicar: async () => null })))([...emails, ...enviados]);
+  const [modalMarcador, setModalMarcador] = React.useState(false);
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 60000); return () => clearInterval(t); }, []);   // e-mail suspenso volta sozinho na hora marcada, com a tela aberta
   const naoLida = (m) => (window.InboxTriagem ? window.InboxTriagem.naoLidaPara(m.unread, estado[m.id]) : m.unread);
   const [atribuirAberto, setAtribuirAberto] = React.useState(false);
   const [avisoOutro, setAvisoOutro] = React.useState(null);        // { modo, responsavel }
@@ -1407,16 +1412,25 @@ function EmailInbox({ setRoute, setSubsel }) {
   const todasLinhas = [...emailsVisiveis, ...enviadosNormalizados];
   const eMeu = (m) => !!respDe(m) && respDe(m) === eu;
   const semResp = (m) => !ehEnviado(m) && !donoDe(m) && !atribuidoDe(m);
-  const pastaLinhas = (id) => (id === 'inbox' ? (foco ? emailsVisiveis.filter((m) => politicaDe(m) !== 'silencioso') : emailsVisiveis)
-    : id === 'sent' ? enviadosNormalizados : id === 'starred' ? todasLinhas.filter(estrelaDe) : id === 'mine' ? todasLinhas.filter(eMeu)
-    : id === 'triagem' ? emailsVisiveis.filter(semResp) : todasLinhas);
+  const O = window.InboxOrganizar;
+  const spamDe = (m) => !!(meta.spam && meta.spam[m.id]);
+  const marcadorPorId = Object.fromEntries((mk.marcadores || []).map((x) => [x.id, x]));
+  const mkArvore = O ? O.arvoreMarcadores(mk.marcadores || []) : [];
+  const capsOrg = { editar: pode('editar'), triagem: !perm || !!(perm.caps && perm.caps.triagem), ver_todos: !perm || !!(perm.caps && perm.caps.ver_todos) };
+  /* quem aparece em cada pasta (arquivado/suspenso/spam/marcador) vem de inbox-organizar-calc.js — regra única e testada */
+  const ctxPasta = { ehEnviado, estado: (m) => estado[m.id], spam: spamDe, eMeu, semResp, marcadores: (m) => mk.porEmail[m.id] || [], agora: new Date() };
+  const pastaLinhas = (id) => {
+    const base = id === 'inbox' ? (foco ? emailsVisiveis.filter((m) => politicaDe(m) !== 'silencioso') : emailsVisiveis) : todasLinhas;
+    return O ? base.filter((m) => O.visivelNaPasta(m, id, ctxPasta)) : base;
+  };
   const [busca, setBusca] = React.useState('');
   const consulta = window.InboxBusca ? window.InboxBusca.parseConsulta(busca) : null;
   const buscando = !!(consulta && !window.InboxBusca.vazia(consulta));
   const pastaEfetiva = buscando ? (consulta.em || 'all') : folder;           // pesquisar sem "em:" olha todas as mensagens, como no Gmail
   const listaAtual = pastaLinhas(pastaEfetiva);
   // nos Enviados o remetente é a nossa caixa e a outra ponta é o destinatário (`de:` e `para:` precisam refletir isso)
-  const paraBusca = (m) => ({ ...m, ...(ehEnviado(m) ? { from: 'suporte@vpsistema.com', fromName: 'VerticalParts' } : {}), naoLida: naoLida(m), estrela: estrelaDe(m) });
+  const paraBusca = (m) => ({ ...m, ...(ehEnviado(m) ? { from: 'suporte@vpsistema.com', fromName: 'VerticalParts' } : {}), naoLida: naoLida(m), estrela: estrelaDe(m),
+    marcadoresNomes: (mk.porEmail[m.id] || []).map((id) => marcadorPorId[id] && marcadorPorId[id].nome).filter(Boolean) });
   const listaFiltrada0 = buscando ? listaAtual.filter((m) => window.InboxBusca.aplicar(paraBusca(m), consulta)) : listaAtual;
   const listaFiltrada = window.InboxBusca
     ? window.InboxBusca.ordenar(listaFiltrada0, prefs.ordem, { naoLida, estrela: estrelaDe, importante: (m) => politicaDe(m) === 'precisa_de_voce' }) : listaFiltrada0;
@@ -1801,14 +1815,81 @@ function EmailInbox({ setRoute, setSubsel }) {
     } catch (e) { window.toast?.('Erro ao excluir: ' + (e.message || e), 'error'); }
   };
 
+  /* ---- Fase 4A: Arquivar, Spam, Suspender e Marcadores. Agem nos e-mails MARCADOS ou, se nada estiver marcado, no e-mail ABERTO. ---- */
+  const alvosIds = selecionados.size ? [...selecionados] : (active ? [active.id] : []);
+  const alvosLinhas = alvosIds.map((id) => todasLinhas.find((m) => m.id === id)).filter(Boolean);
+  const todosArquivados = alvosLinhas.length > 0 && alvosLinhas.every((m) => estado[m.id] && estado[m.id].arquivado);
+  const concluirAcao = (msg) => { setSelecionados(new Set()); if (msg) window.toast?.(msg, 'success'); };
+  const semPermissaoEditar = () => { window.toast?.('Sem permissão (alçada Inbox › Editar).', 'warning'); };
+  const arquivarAlvos = async () => {
+    if (!pode('editar')) return semPermissaoEditar();
+    const desfazer = todosArquivados;
+    if (await arquivar(alvosIds, !desfazer)) {
+      if (!desfazer && activeId && alvosIds.includes(activeId)) setActiveId(null);
+      concluirAcao(`${alvosIds.length} e-mail(s) ${desfazer ? 'de volta à Caixa de entrada' : 'arquivado(s) — continuam em “Todos os e-mails”'}.`);
+    }
+  };
+  const spamAlvos = async (marcar) => {
+    if (!pode('editar')) return semPermissaoEditar();
+    let ids = alvosIds;
+    if (marcar) {
+      const veredito = alvosLinhas.map((m) => ({ m, r: O.podeMarcarSpam(m, ehEnviado(m)) }));
+      ids = veredito.filter((x) => x.r.ok).map((x) => x.m.id);
+      const barrados = veredito.filter((x) => !x.r.ok);
+      if (!ids.length) { window.toast?.(`Não dá para marcar como spam: ${barrados[0] ? barrados[0].r.motivo : 'nada selecionado'}.`, 'warning'); return; }
+      if (barrados.length) window.toast?.(`${barrados.length} e-mail(s) ficaram de fora do spam (ligados a cotação/documento ou enviados por nós).`, 'info');
+    }
+    try {
+      const n = await window.inboxMarcarSpam(ids, marcar);
+      if (meta.recarregar) meta.recarregar();
+      if (activeId && ids.includes(activeId)) setActiveId(null);
+      concluirAcao(marcar ? `${n} e-mail(s) marcado(s) como spam (aparece em “Spam”, para todos).` : `${n} e-mail(s) tirado(s) do spam.`);
+    } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+  };
+  const adiarAlvos = async (quando) => {
+    if (!pode('editar')) return semPermissaoEditar();
+    if (await adiar(alvosIds, quando)) {
+      if (quando && activeId && alvosIds.includes(activeId)) setActiveId(null);
+      concluirAcao(quando ? `${alvosIds.length} e-mail(s) suspenso(s) até ${new Date(quando).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}.` : 'Adiamento cancelado — de volta à Caixa de entrada.');
+    }
+  };
+  const estadoMarcador = (id) => {
+    if (!alvosIds.length) return 'nenhum';
+    const n = alvosIds.filter((e) => (mk.porEmail[e] || []).includes(id)).length;
+    return n === 0 ? 'nenhum' : n === alvosIds.length ? 'todos' : 'alguns';
+  };
+  const aplicarMarcador = async (mc, st) => {
+    if (!O.podeAplicarMarcador(mc, eu, capsOrg)) { window.toast?.('Você não pode usar este marcador.', 'warning'); return; }
+    const err = await mk.aplicar(alvosIds, mc.id, st !== 'todos');
+    if (err) window.toast?.(err, 'error');
+  };
+  const moverPara = async (mc) => {
+    if (!O.podeAplicarMarcador(mc, eu, capsOrg)) { window.toast?.('Você não pode usar este marcador.', 'warning'); return; }
+    const err = await mk.aplicar(alvosIds, mc.id, true);
+    if (err) { window.toast?.(err, 'error'); return; }
+    await arquivar(alvosIds, true);
+    if (activeId && alvosIds.includes(activeId)) setActiveId(null);
+    concluirAcao(`${alvosIds.length} e-mail(s) movido(s) para “${mc.nome}”.`);
+  };
+  const apagarMarcador = async (mc) => {
+    if (!window.confirm(`Apagar o marcador “${mc.nome}”?\n\nOs e-mails não são apagados — só perdem este marcador.`)) return;
+    const err = await mk.apagar(mc.id);
+    if (err) { window.toast?.(err, 'error'); return; }
+    if (folder === 'm:' + mc.id) setFolder('inbox');
+    window.toast?.('Marcador apagado.', 'success');
+  };
+  const contaPasta = (pasta, soNaoLidas) => (O ? todasLinhas.filter((m) => O.visivelNaPasta(m, pasta, ctxPasta) && (!soNaoLidas || naoLida(m))).length : 0);
+
   const mostrarTriagem = !perm || !!(perm.caps && (perm.caps.triagem || perm.caps.ver_todos));
   const folders = [
-    { id: "inbox", label: "Caixa de entrada", icon: "mail", count: emailsVisiveis.filter(naoLida).length },
+    { id: "inbox", label: "Caixa de entrada", icon: "mail", count: contaPasta('inbox', true) },
     { id: "starred", label: "Com estrela", icon: "star" },
-    { id: "mine", label: "Atribuídos a mim", icon: "users", count: todasLinhas.filter((m) => eMeu(m) && naoLida(m)).length },
-    ...(mostrarTriagem ? [{ id: "triagem", label: "Sem responsável", icon: "inbox", count: emailsVisiveis.filter((m) => semResp(m) && naoLida(m)).length }] : []),
+    { id: "adiados", label: "Adiados", icon: "clock", count: contaPasta('adiados', false) },
+    { id: "mine", label: "Atribuídos a mim", icon: "users", count: contaPasta('mine', true) },
+    ...(mostrarTriagem ? [{ id: "triagem", label: "Sem responsável", icon: "inbox", count: contaPasta('triagem', true) }] : []),
     { id: "sent", label: "Enviados", icon: "send" },
     { id: "all", label: "Todos os e-mails", icon: "layers" },
+    { id: "spam", label: "Spam", icon: "warning", count: contaPasta('spam', true) },
   ];
 
   if (perm && !pode('ver')) {
@@ -1845,6 +1926,9 @@ function EmailInbox({ setRoute, setSubsel }) {
           onSemVinculo={() => { vinculoDecidido.current = true; setPopupVinculo(null); enviarCompose(); }}
           onEscolher={(n) => { numeroForcado.current = n; vinculoDecidido.current = true; setPopupVinculo(null); enviarCompose(); }}/>
       )}
+      {modalMarcador && window.InboxModalMarcador && (
+        <window.InboxModalMarcador marcadores={mk.marcadores} caps={capsOrg} onCriar={mk.criar} onClose={() => setModalMarcador(false)}/>
+      )}
       {atribuirAberto && active && window.InboxModalAtribuir && (
         <window.InboxModalAtribuir email={active} dono={donoDe(active)} atribuido={atribuidoDe(active)} decisao={iaMapa[active.id]} ctx={perm}
           onClose={() => setAtribuirAberto(false)} onSalvo={() => { setAtribuirAberto(false); if (meta.recarregar) meta.recarregar(); carregarEnviados(); }}/>
@@ -1865,6 +1949,12 @@ function EmailInbox({ setRoute, setSubsel }) {
               </div>
             );
           })}
+          {window.InboxSecaoMarcadores && O && (
+            <window.InboxSecaoMarcadores arvore={mkArvore} pasta={folder}
+              onAbrir={(id) => { setBusca(''); setFolder(id); setActiveId(null); }} onNovo={() => setModalMarcador(true)}
+              contagem={(id) => todasLinhas.filter((m) => (mk.porEmail[m.id] || []).includes(id) && naoLida(m) && !spamDe(m)).length}
+              podeGerir={(m) => O.podeGerirMarcador(m, eu, capsOrg)} onApagar={apagarMarcador}/>
+          )}
         </div>
 
         <div className={"inbox__main inbox__main--" + prefs.painel}>
@@ -1873,6 +1963,23 @@ function EmailInbox({ setRoute, setSubsel }) {
           <div className="inbox__list-toolbar">
             {window.InboxToolbarLista && (
               <window.InboxToolbarLista total={listaFiltrada.length} selecionadas={selecionados.size}
+                alvos={alvosIds.length} rotuloAlvo={selecionados.size ? undefined : 'E-mail aberto:'}
+                extras={O && window.InboxMenuSuspender ? (
+                  <>
+                    {pastaEfetiva === 'spam'
+                      ? <Button variant="ghost" size="sm" disabled={!pode('editar')} onClick={() => spamAlvos(false)}>Não é spam</Button>
+                      : (<>
+                          <Button variant="ghost" size="sm" disabled={!pode('editar')} onClick={arquivarAlvos}>{todosArquivados ? 'Mover para a Caixa de entrada' : 'Arquivar'}</Button>
+                          <Button variant="ghost" size="sm" disabled={!pode('editar')} onClick={() => spamAlvos(true)}>Denunciar spam</Button>
+                        </>)}
+                    {pastaEfetiva === 'adiados'
+                      ? <Button variant="ghost" size="sm" disabled={!pode('editar')} onClick={() => adiarAlvos(null)}>Cancelar adiamento</Button>
+                      : <window.InboxMenuSuspender desabilitado={!pode('editar')} onEscolher={adiarAlvos}/>}
+                    <window.InboxMenuMarcadores rotulo="Mover para" icone="arrowRight" marcadores={mk.marcadores} estadoDe={estadoMarcador}
+                      onEscolher={(mc) => moverPara(mc)} onNovo={() => setModalMarcador(true)} desabilitado={!pode('editar')}/>
+                    <window.InboxMenuMarcadores rotulo="Marcadores" icone="layers" marcadores={mk.marcadores} estadoDe={estadoMarcador}
+                      onEscolher={aplicarMarcador} onNovo={() => setModalMarcador(true)} desabilitado={!pode('editar')}/>
+                  </>) : null}
                 todasMarcadas={listaFiltrada.length > 0 && listaFiltrada.every((m) => selecionados.has(m.id))}
                 onToggleTodas={alternarTodas} onLida={() => marcarSelecionados(true)} onNaoLida={() => marcarSelecionados(false)}
                 onExcluir={excluirSelecionados} onAtualizar={() => { carregar(); carregarEnviados(); }} carregando={loading} podeEditar={pode('editar')}/>
@@ -1903,7 +2010,10 @@ function EmailInbox({ setRoute, setSubsel }) {
               {buscando ? <>Nenhum resultado para “{busca}”. <a href="#" onClick={(ev) => { ev.preventDefault(); setBusca(''); }}>Limpar pesquisa</a></>
                 : folder === 'starred' ? 'Nenhum e-mail com estrela. Clique na ☆ de uma mensagem para marcá-la (só você vê).'
                 : folder === 'mine' ? 'Nenhum e-mail atribuído a você.'
-                : folder === 'triagem' ? 'Nenhum e-mail sem responsável. Tudo tem dono.' : 'Nenhuma mensagem.'}
+                : folder === 'triagem' ? 'Nenhum e-mail sem responsável. Tudo tem dono.'
+                : folder === 'adiados' ? 'Nada suspenso. Use “Suspender” para um e-mail voltar à Caixa de entrada na hora que você escolher.'
+                : folder === 'spam' ? 'Nenhum spam. E-mails ligados a cotação ou documento nunca vão para cá.'
+                : String(folder).startsWith('m:') ? 'Nenhum e-mail com este marcador. Selecione e-mails e use “Marcadores”.' : 'Nenhuma mensagem.'}
             </div>
           )}
           {listaFiltrada.map((m) => {
@@ -1920,6 +2030,7 @@ function EmailInbox({ setRoute, setSubsel }) {
                 <span className="ig-texto"><b className="subj">{m.subject}</b>{m.preview ? <span> — {String(m.preview).replace(/\s+/g, ' ').slice(0, 160)}</span> : null}
                   {m.anexos && m.anexos.length > 0 ? <Icon.paperclip size={11} style={{ marginLeft: 6, verticalAlign: 'middle', opacity: .6 }}/> : null}</span>
                 <span className="ig-chips">
+                  {window.InboxChipsMarcadores && <window.InboxChipsMarcadores ids={mk.porEmail[m.id]} porId={marcadorPorId}/>}
                   {!sent && window.InboxChip && iaMapa[m.id] && <window.InboxChip decisao={iaMapa[m.id]}/>}
                   {m.numeroCotacao != null && (
                     <Badge variant={m.vinculoConfianca === 'certo' ? 'success' : 'warning'} onClick={(ev) => verNaLinhaDoTempo(ev, m.numeroCotacao)} style={{ cursor: 'pointer' }}>
