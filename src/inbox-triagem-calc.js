@@ -103,7 +103,8 @@
 
   /* naoLidaPara(imapNaoLida, estado) — "lido" POR PESSOA: se eu já abri (linha em inbox_estado_pessoa), é lida para mim;
      senão vale a bandeira da caixa (IMAP). */
-  const naoLidaPara = (imapNaoLida, estado) => (estado && estado.lido ? false : !!imapNaoLida);
+  /* `estado.lido`: true = abri/marquei como lida · false = marquei como NÃO lida · null/ausente = sem opinião, segue a caixa. */
+  const naoLidaPara = (imapNaoLida, estado) => (estado && estado.lido != null ? !estado.lido : !!imapNaoLida);
 
   const api = { ASSUNTO_LABEL, DEPARTAMENTO_LABEL, PRIORIDADE_LABEL, LIMITE_SILENCIOSO, politica, rotulo,
     politicaSugestao, sugerirResponsavel, responsavelDe, avisoOutroDono, naoLidaPara };

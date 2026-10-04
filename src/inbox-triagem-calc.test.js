@@ -89,3 +89,9 @@ test('politicaSugestao — evidência diluída entre muitas cotações fica em s
   assert.equal(T.politicaSugestao(sug(cand(955, 0.65, 0.21), cand(970, 0.65, 0.21), cand(960, 0.6, 0.19))), 'silencio');   // fornecedor que atende várias
   assert.equal(T.politicaSugestao(sug(cand(955, 0.65, 0.32), cand(970, 0.65, 0.3), cand(960, 0.6, 0.2))), 'perguntar');     // ainda dá para escolher
 });
+
+test('naoLidaPara — "marcar como não lida" por pessoa vence a caixa; sem opinião segue a caixa', () => {
+  assert.equal(T.naoLidaPara(false, { lido: false }), true);       // eu marquei como não lida, mesmo a caixa tendo lido
+  assert.equal(T.naoLidaPara(true, { lido: null, estrela: true }), true);   // só dei estrela: continua seguindo a caixa
+  assert.equal(T.naoLidaPara(false, { lido: null, estrela: true }), false);
+});

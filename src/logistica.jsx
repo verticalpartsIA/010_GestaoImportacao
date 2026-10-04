@@ -1343,6 +1343,7 @@ function EmailInbox({ setRoute, setSubsel }) {
      própria caixa suporte@vpsistema.com — inútil pra escanear a lista). */
   const enviadosNormalizados = React.useMemo(() => enviados.filter((e) => perm === undefined ? false : verOk(e.dono_email || null, e.atribuido_a || null)).map((e) => ({
     id: e.id,
+    _pasta: 'sent',
     dono: e.dono_email || null,
     atribuido: e.atribuido_a || null,
     from: (e.para && e.para[0]) || '',
@@ -1377,7 +1378,7 @@ function EmailInbox({ setRoute, setSubsel }) {
      a tela se comporta exatamente como antes. Não toca leitura/vínculo/envio/exclusão. */
   const iaMapa = meta.ia;
   /* Fase 2 (04/10): lido/estrela POR PESSOA, troca de responsável, aviso ao responder e-mail de outro, pop-up de vínculo. */
-  const { estado, marcarLido, alternarEstrela } = (window.useInboxEstado || (() => ({ estado: {}, marcarLido() {}, alternarEstrela() {} })))(emails);
+  const { estado, marcarLido, definirLido, alternarEstrela } = (window.useInboxEstado || (() => ({ estado: {}, marcarLido() {}, definirLido() {}, alternarEstrela() {} })))(emails);
   const naoLida = (m) => (window.InboxTriagem ? window.InboxTriagem.naoLidaPara(m.unread, estado[m.id]) : m.unread);
   const [atribuirAberto, setAtribuirAberto] = React.useState(false);
   const [avisoOutro, setAvisoOutro] = React.useState(null);        // { modo, responsavel }
@@ -1389,13 +1390,39 @@ function EmailInbox({ setRoute, setSubsel }) {
   const politicaDe = (m) => (window.InboxTriagem ? window.InboxTriagem.politica(iaMapa[m.id], { vinculado: m.numeroCotacao != null }) : 'normal');
   const silenciosos = folder === 'inbox' ? emailsVisiveis.filter((m) => politicaDe(m) === 'silencioso') : [];
   const importantes = folder === 'inbox' ? emailsVisiveis.filter((m) => politicaDe(m) === 'precisa_de_voce').map((m) => ({ ...m, decisao: iaMapa[m.id] })) : [];
-  const listaAtual = folder === 'sent' ? enviadosNormalizados : (foco ? emailsVisiveis.filter((m) => politicaDe(m) !== 'silencioso') : emailsVisiveis);
-  const active = listaAtual.find(e => e.id === activeId);
   /* Fase 2: responsável (dono ou atribuído), sugestão de cotação (JEV) e vínculo em 1 clique. */
   const donoDe = (m) => (m ? ((m.dono !== undefined ? m.dono : meta.dono[m.id]) || null) : null);
   const atribuidoDe = (m) => (m ? ((m.atribuido !== undefined ? m.atribuido : (meta.atribuido || {})[m.id]) || null) : null);
+  /* Fase 3 (04/10) — fluxo de lista estilo Gmail: pasta → pesquisa (operadores) → ordem → seleção em massa.
+     Pasta + pesquisa olham o que já está carregado na tela (Caixa de entrada + Enviados); histórico completo = fase 4. */
+  const [prefs, atualizarPrefs] = (window.useInboxPrefs || (() => [{ densidade: 'padrao', painel: 'direita', ordem: 'padrao' }, () => {}]))();
+  const [configAberta, setConfigAberta] = React.useState(false);
+  const [ajudaAba, setAjudaAba] = React.useState(null);              // null | 'guia' | 'passo'
+  const [novoInicial, setNovoInicial] = React.useState(null);        // { para, assunto } — ex.: feedback
+  const [selecionados, setSelecionados] = React.useState(() => new Set());
+  const eu = perm ? perm.eu : String((window.__VP_USER || {}).email || '').toLowerCase();
+  const ehEnviado = (m) => !!m && m._pasta === 'sent';
+  const respDe = (m) => (window.InboxTriagem ? window.InboxTriagem.responsavelDe(donoDe(m), atribuidoDe(m)) : null);
+  const estrelaDe = (m) => !!(estado[m.id] && estado[m.id].estrela);
+  const todasLinhas = [...emailsVisiveis, ...enviadosNormalizados];
+  const eMeu = (m) => !!respDe(m) && respDe(m) === eu;
+  const semResp = (m) => !ehEnviado(m) && !donoDe(m) && !atribuidoDe(m);
+  const pastaLinhas = (id) => (id === 'inbox' ? (foco ? emailsVisiveis.filter((m) => politicaDe(m) !== 'silencioso') : emailsVisiveis)
+    : id === 'sent' ? enviadosNormalizados : id === 'starred' ? todasLinhas.filter(estrelaDe) : id === 'mine' ? todasLinhas.filter(eMeu)
+    : id === 'triagem' ? emailsVisiveis.filter(semResp) : todasLinhas);
+  const [busca, setBusca] = React.useState('');
+  const consulta = window.InboxBusca ? window.InboxBusca.parseConsulta(busca) : null;
+  const buscando = !!(consulta && !window.InboxBusca.vazia(consulta));
+  const pastaEfetiva = buscando ? (consulta.em || 'all') : folder;           // pesquisar sem "em:" olha todas as mensagens, como no Gmail
+  const listaAtual = pastaLinhas(pastaEfetiva);
+  // nos Enviados o remetente é a nossa caixa e a outra ponta é o destinatário (`de:` e `para:` precisam refletir isso)
+  const paraBusca = (m) => ({ ...m, ...(ehEnviado(m) ? { from: 'suporte@vpsistema.com', fromName: 'VerticalParts' } : {}), naoLida: naoLida(m), estrela: estrelaDe(m) });
+  const listaFiltrada0 = buscando ? listaAtual.filter((m) => window.InboxBusca.aplicar(paraBusca(m), consulta)) : listaAtual;
+  const listaFiltrada = window.InboxBusca
+    ? window.InboxBusca.ordenar(listaFiltrada0, prefs.ordem, { naoLida, estrela: estrelaDe, importante: (m) => politicaDe(m) === 'precisa_de_voce' }) : listaFiltrada0;
+  const active = listaFiltrada.find((e) => e.id === activeId) || todasLinhas.find((e) => e.id === activeId);   // o e-mail aberto continua aberto mesmo que a pesquisa o esconda
   const nomeDe = (email) => { const p = ((perm && perm.colaboradores) || []).find((x) => String(x.email).toLowerCase() === String(email || '').toLowerCase()); return (p && p.nome) || email; };
-  const pontaAtiva = active ? (folder === 'sent' ? (active.to || []).join(',') : active.from) : '';
+  const pontaAtiva = active ? (ehEnviado(active) ? (active.to || []).join(',') : active.from) : '';
   const sugAtiva = (window.useSugestaoVinculo || (() => null))(active, pontaAtiva);
   const [vinculandoSug, setVinculandoSug] = React.useState(false);
   const vincularA = async (numero) => {
@@ -1417,17 +1444,9 @@ function EmailInbox({ setRoute, setSubsel }) {
      cotação) — não é busca no histórico completo de emails_projeto, só na
      janela recente que read-inbox/Enviados já trazem. Limpa ao trocar de
      pasta pra não confundir "sem resultado" com "pasta vazia". */
-  const [busca, setBusca] = React.useState('');
-  React.useEffect(() => { setBusca(''); }, [folder]);
-  const buscaNorm = busca.trim().toLowerCase();
-  const listaFiltrada = React.useMemo(() => {
-    if (!buscaNorm) return listaAtual;
-    return listaAtual.filter((m) => {
-      const alvo = [m.subject, m.fromName, m.from, m.preview, m.numeroCotacao != null ? String(m.numeroCotacao) : '']
-        .join(' ').toLowerCase();
-      return alvo.includes(buscaNorm);
-    });
-  }, [listaAtual, buscaNorm]);
+  /* 04/10 (fase 3): `busca`, `consulta` e `listaFiltrada` agora vivem no fluxo de lista mais acima (operadores estilo Gmail,
+     inbox-busca-calc.js). A seleção em massa zera quando a pasta ou a pesquisa muda. */
+  React.useEffect(() => { setSelecionados(new Set()); }, [folder, busca]);
 
   const [respondendo, setRespondendo] = React.useState(false);
   const [modoCompose, setModoCompose] = React.useState('responder'); // 'responder' | 'responder-todos' | 'encaminhar'
@@ -1544,7 +1563,7 @@ function EmailInbox({ setRoute, setSubsel }) {
         .update({ excluido_em: new Date().toISOString(), excluido_por: user.email || null })
         .eq('id', email.id);
       if (error) throw error;
-      if (folder === 'sent') setEnviados((prev) => prev.filter((e) => e.id !== email.id));
+      if (ehEnviado(email)) setEnviados((prev) => prev.filter((e) => e.id !== email.id));
       else setExcluidos((prev) => [...prev, email.id]);
       if (activeId === email.id) setActiveId(null);
       window.toast?.('E-mail excluído da lista.', 'success');
@@ -1653,7 +1672,7 @@ function EmailInbox({ setRoute, setSubsel }) {
       if (data && data.avisoPersistencia) window.toast?.(data.avisoPersistencia, 'warning');
       window.toast?.(modoCompose === 'encaminhar' ? 'E-mail encaminhado.' : 'Resposta enviada.', 'success');
       /* Fase 2: vínculo confirmado no pop-up vale também para o e-mail original; e quem era o responsável é avisado. */
-      if (numeroForcado.current != null && folder === 'inbox') {
+      if (numeroForcado.current != null && !ehEnviado(active)) {
         sb.from('emails_projeto').update({ numero_cotacao: numeroForcado.current, vinculo_confianca: 'certo' }).eq('id', active.id).then(() => { if (meta.recarregar) meta.recarregar(); });
       }
       numeroForcado.current = null; vinculoDecidido.current = false;
@@ -1740,11 +1759,56 @@ function EmailInbox({ setRoute, setSubsel }) {
     }
   };
 
+  /* ---- Fase 3: ações do layout Gmail (todas funcionam com o backend de hoje) ---- */
+  const abrirEscrever = () => {
+    if (!pode('criar')) { window.toast?.('Sem permissão para escrever e-mails (alçada Inbox › Criar).', 'warning'); return; }
+    setNovoInicial(null); setNovoEmailAberto(true);
+  };
+  const abrirAjuda = (aba) => {
+    if (aba === 'feedback') {      // feedback vira um e-mail para a caixa de suporte (mesmo fluxo de envio, fica no histórico)
+      if (!pode('criar')) { window.toast?.('Sem permissão para escrever e-mails (alçada Inbox › Criar).', 'warning'); return; }
+      setNovoInicial({ para: 'suporte@vpsistema.com', assunto: '[Feedback Inbox] ' }); setNovoEmailAberto(true); return;
+    }
+    setAjudaAba(aba);
+  };
+  const alternarSel = (id) => setSelecionados((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const alternarTodas = () => setSelecionados(listaFiltrada.length > 0 && listaFiltrada.every((m) => selecionados.has(m.id)) ? new Set() : new Set(listaFiltrada.map((m) => m.id)));
+  const marcarSelecionados = (lido) => {
+    if (!pode('editar')) { window.toast?.('Sem permissão (alçada Inbox › Editar).', 'warning'); return; }
+    const n = selecionados.size;
+    selecionados.forEach((id) => definirLido(id, lido));
+    setSelecionados(new Set());
+    window.toast?.(`${n} e-mail(s) marcado(s) como ${lido ? 'lido(s)' : 'não lido(s)'} para você.`, 'success');
+  };
+  const excluirSelecionados = async () => {
+    const linhas = listaFiltrada.filter((m) => selecionados.has(m.id));
+    const permitidas = linhas.filter((m) => podeExcluirDe(donoDe(m)));
+    if (!permitidas.length) { window.toast?.('Você não tem permissão para excluir os e-mails selecionados (só o dono, ou quem tem a alçada “Exclui e-mails de outras pessoas”).', 'warning'); return; }
+    const pulados = linhas.length - permitidas.length;
+    if (!window.confirm(`Excluir ${permitidas.length} e-mail(s) da lista?\n\nEles continuam na caixa de e-mail real — isso só remove da lista do site.${pulados ? `\n\n${pulados} selecionado(s) de outra pessoa será(ão) mantido(s).` : ''}`)) return;
+    try {
+      const ids = permitidas.map((m) => m.id);
+      const { data, error } = await window.__VP_SB.sb.from('emails_projeto')
+        .update({ excluido_em: new Date().toISOString(), excluido_por: (window.__VP_USER || {}).email || null }).in('id', ids).select('id');
+      if (error) throw error;
+      const feitos = new Set((data || []).map((r) => r.id));
+      setEnviados((prev) => prev.filter((e) => !feitos.has(e.id)));
+      setExcluidos((prev) => [...prev, ...feitos]);
+      if (activeId && feitos.has(activeId)) setActiveId(null);
+      setSelecionados(new Set());
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Inbox de E-mail', acao: 'Excluiu e-mails da lista (soft-delete, em massa)', alvo: `${feitos.size} e-mail(s)` });
+      window.toast?.(`${feitos.size} e-mail(s) excluído(s) da lista.`, 'success');
+    } catch (e) { window.toast?.('Erro ao excluir: ' + (e.message || e), 'error'); }
+  };
+
+  const mostrarTriagem = !perm || !!(perm.caps && (perm.caps.triagem || perm.caps.ver_todos));
   const folders = [
     { id: "inbox", label: "Caixa de entrada", icon: "mail", count: emailsVisiveis.filter(naoLida).length },
+    { id: "starred", label: "Com estrela", icon: "star" },
+    { id: "mine", label: "Atribuídos a mim", icon: "users", count: todasLinhas.filter((m) => eMeu(m) && naoLida(m)).length },
+    ...(mostrarTriagem ? [{ id: "triagem", label: "Sem responsável", icon: "inbox", count: emailsVisiveis.filter((m) => semResp(m) && naoLida(m)).length }] : []),
     { id: "sent", label: "Enviados", icon: "send" },
-    { id: "drafts", label: "Rascunhos", icon: "edit" },
-    { id: "archive", label: "Arquivados", icon: "package" },
+    { id: "all", label: "Todos os e-mails", icon: "layers" },
   ];
 
   if (perm && !pode('ver')) {
@@ -1758,24 +1822,20 @@ function EmailInbox({ setRoute, setSubsel }) {
 
   return (
     <div className="page fade-in" style={{ paddingBottom: 0, paddingRight: 24, paddingLeft: 24 }}>
-      <div className="row" style={{ marginBottom: 14 }}>
+      <div className="ig-topo">
         <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute("dashboard")}>Voltar</Button>
-      </div>
-      <div className="page-head">
-        <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Geral · Email</div>
-          <h1 className="page-head__title">Inbox</h1>
-          <p className="page-head__sub">
-            {erro ? `Falha ao conectar: ${erro}` : 'Caixa suporte@vpsistema.com — compartilhada por Comercial, Compras e Importação, sem separação automática por assunto ainda.'}
-          </p>
-        </div>
-        <div className="page-head__r row gap-2">
+        <span className="ig-topo__titulo">Inbox</span>
+        {window.InboxBarraBusca && <window.InboxBarraBusca valor={busca} onChange={setBusca}/>}
+        <div className="ig-topo__fim">
           {erro ? <Badge variant="danger" dot>Erro na conexão</Badge> : <Badge variant="success" dot>Conectado</Badge>}
-          <Button variant="outline" size="sm" icon="refresh" disabled={loading} onClick={carregar}>{loading ? 'Atualizando…' : 'Atualizar'}</Button>
-          <Button variant="primary" size="sm" icon="mail" onClick={() => (pode('criar') ? setNovoEmailAberto(true) : window.toast?.('Sem permissão para escrever e-mails (alçada Inbox › Criar).', 'warning'))}>Novo e-mail</Button>
+          {window.InboxMenuAjuda && <window.InboxMenuAjuda onAbrir={abrirAjuda}/>}
+          <button className="ig-iconbtn ig-iconbtn--grande" title="Configurações rápidas" onClick={() => setConfigAberta((a) => !a)}><Icon.settings size={16}/></button>
         </div>
       </div>
-      {novoEmailAberto && <EmailNovoModal onClose={() => setNovoEmailAberto(false)} onEnviado={carregar}/>}
+      <div className="small muted" style={{ margin: '-4px 0 8px' }}>
+        {erro ? `Falha ao conectar: ${erro}` : 'Caixa suporte@vpsistema.com — compartilhada por Comercial, Compras e Importação.'}
+      </div>
+      {novoEmailAberto && <EmailNovoModal inicial={novoInicial} onClose={() => { setNovoEmailAberto(false); setNovoInicial(null); }} onEnviado={() => { carregar(); carregarEnviados(); }}/>}
       {avisoOutro && window.InboxAvisoOutroDono && (
         <window.InboxAvisoOutroDono responsavel={avisoOutro.responsavel} nomeDe={nomeDe} onCancelar={() => setAvisoOutro(null)}
           onConfirmar={() => { if (active) avisoConfirmado.current[active.id] = true; const m = avisoOutro.modo; setAvisoOutro(null); abrirCompose(m); }}/>
@@ -1790,12 +1850,15 @@ function EmailInbox({ setRoute, setSubsel }) {
           onClose={() => setAtribuirAberto(false)} onSalvo={() => { setAtribuirAberto(false); if (meta.recarregar) meta.recarregar(); carregarEnviados(); }}/>
       )}
 
-      <div className="inbox">
+      <div className={"inbox inbox--gmail inbox--den-" + prefs.densidade}>
         <div className="inbox__folders">
+          <button className="ig-escrever" disabled={!pode('criar')} onClick={abrirEscrever} title={pode('criar') ? 'Escrever um e-mail novo' : 'Sem permissão (alçada Inbox › Criar)'}>
+            <Icon.edit size={18}/> Escrever
+          </button>
           {folders.map((f) => {
             const I = Icon[f.icon] || Icon.mail;
             return (
-              <div key={f.id} className={"inbox__folder " + (folder === f.id ? "is-active" : "")} onClick={() => setFolder(f.id)}>
+              <div key={f.id} className={"inbox__folder " + (folder === f.id && !buscando ? "is-active" : "")} onClick={() => { setBusca(''); setFolder(f.id); setActiveId(null); }}>
                 <I size={14}/>
                 <span>{f.label}</span>
                 {f.count ? <span className="count">{f.count}</span> : null}
@@ -1804,76 +1867,80 @@ function EmailInbox({ setRoute, setSubsel }) {
           })}
         </div>
 
+        <div className={"inbox__main inbox__main--" + prefs.painel}>
+          {(prefs.painel !== 'sem' || !active) && (
         <div className="inbox__list">
           <div className="inbox__list-toolbar">
+            {window.InboxToolbarLista && (
+              <window.InboxToolbarLista total={listaFiltrada.length} selecionadas={selecionados.size}
+                todasMarcadas={listaFiltrada.length > 0 && listaFiltrada.every((m) => selecionados.has(m.id))}
+                onToggleTodas={alternarTodas} onLida={() => marcarSelecionados(true)} onNaoLida={() => marcarSelecionados(false)}
+                onExcluir={excluirSelecionados} onAtualizar={() => { carregar(); carregarEnviados(); }} carregando={loading} podeEditar={pode('editar')}/>
+            )}
             <div className="inbox__list-head">
-              <span>{folders.find((f) => f.id === folder)?.label || folder}</span>
+              <span>{buscando ? 'Resultados da pesquisa' : (folders.find((f) => f.id === folder)?.label || folder)}</span>
               <span className="mono">{listaFiltrada.length}</span>
             </div>
-            {(folder === "inbox" || folder === "sent") && (
-              <div className="inbox__list-search">
-                <input className="input" style={{ width: '100%' }} placeholder="Buscar por assunto, remetente ou nº cotação…"
-                  value={busca} onChange={(e) => setBusca(e.target.value)}/>
-              </div>
-            )}
           </div>
-          {folder !== "inbox" && folder !== "sent" && (
-            <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
-              Esta pasta ainda não está implementada — só Caixa de entrada e Enviados leem de verdade.
-            </div>
-          )}
-          {folder === "inbox" && window.InboxFaixaImportante && (
+          {folder === "inbox" && !buscando && window.InboxFaixaImportante && (
             <window.InboxFaixaImportante itens={importantes} ocultos={silenciosos.length} foco={foco} onToggleFoco={() => setFoco((f) => !f)} onAbrir={setActiveId}/>
           )}
-          {folder === "inbox" && perm !== undefined && <InboxRespostasFormulario onAbrir={verNaLinhaDoTempo} verOk={verOk} liberado={perm === null ? 'sem' : perm.eu + ':' + (perm.flags && perm.flags.ver_todos)}/>}
-          {folder === "inbox" && !loading && emails.length === 0 && (
+          {folder === "inbox" && !buscando && perm !== undefined && <InboxRespostasFormulario onAbrir={verNaLinhaDoTempo} verOk={verOk} liberado={perm === null ? 'sem' : perm.eu + ':' + (perm.flags && perm.flags.ver_todos)}/>}
+          {folder === "inbox" && !buscando && !loading && emails.length === 0 && (
             <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
               <div style={{ fontWeight:600, color:'var(--fg2)', marginBottom:4 }}>{erro ? 'Não foi possível carregar' : 'Nenhuma mensagem'}</div>
               {erro || 'A caixa está vazia.'}
             </div>
           )}
-          {folder === "sent" && !carregandoEnviados && enviadosNormalizados.length === 0 && (
+          {pastaEfetiva === "sent" && !buscando && !carregandoEnviados && enviadosNormalizados.length === 0 && (
             <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
               <div style={{ fontWeight:600, color:'var(--fg2)', marginBottom:4 }}>Nenhum e-mail enviado ainda</div>
-              Aparece aqui assim que você mandar um pelo Responder, Novo e-mail ou Cotação a Fornecedor.
+              Aparece aqui assim que você mandar um pelo Responder, Escrever ou Cotação a Fornecedor.
             </div>
           )}
-          {(folder === "inbox" || folder === "sent") && buscaNorm && listaFiltrada.length === 0 && listaAtual.length > 0 && (
-            <div style={{ textAlign:'center', padding:'32px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
-              Nenhum resultado para "{busca}".
+          {listaFiltrada.length === 0 && (buscando || (folder !== 'inbox' && folder !== 'sent')) && (
+            <div style={{ textAlign:'center', padding:'40px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
+              {buscando ? <>Nenhum resultado para “{busca}”. <a href="#" onClick={(ev) => { ev.preventDefault(); setBusca(''); }}>Limpar pesquisa</a></>
+                : folder === 'starred' ? 'Nenhum e-mail com estrela. Clique na ☆ de uma mensagem para marcá-la (só você vê).'
+                : folder === 'mine' ? 'Nenhum e-mail atribuído a você.'
+                : folder === 'triagem' ? 'Nenhum e-mail sem responsável. Tudo tem dono.' : 'Nenhuma mensagem.'}
             </div>
           )}
-          {(folder === "inbox" || folder === "sent") && listaFiltrada.map((m) => (
-            <div key={m.id} className={"inbox__item " + (naoLida(m) ? "unread " : "") + (activeId === m.id ? "is-active" : "")} onClick={() => { setActiveId(m.id); marcarLido(m.id); }}>
-              <div className="from">
-                <span>{m.fromName || m.from}</span>
-                <span className="row gap-1" style={{ alignItems: 'center' }}>
-                  <span title={estado[m.id] && estado[m.id].estrela ? 'Tirar a estrela' : 'Marcar com estrela (só para você)'} style={{ cursor: 'pointer', fontSize: 15, lineHeight: 1 }}
-                    onClick={(ev) => { ev.stopPropagation(); alternarEstrela(m.id, !!(estado[m.id] && estado[m.id].estrela)); }}>{estado[m.id] && estado[m.id].estrela ? '★' : '☆'}</span>
-                  <span className="time">{m.date ? new Date(m.date).toLocaleString('pt-BR') : ''}</span>
-                  <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => excluirEmail(ev, m)}/>
-                </span>
-              </div>
-              <div className="subj">{m.subject}{m.anexos && m.anexos.length > 0 ? <Icon.paperclip size={11} style={{ marginLeft: 6, verticalAlign: 'middle', opacity: .6 }}/> : null}</div>
-              <div className="preview">{m.preview}</div>
-              {folder === 'inbox' && window.InboxChip && iaMapa[m.id] && <window.InboxChip decisao={iaMapa[m.id]}/>}
-              {(m.numeroCotacao != null || INBOX_REFERENCIA_TIPO_LABEL[m.referenciaTipo]) && (
-                <div className="row gap-1" style={{ marginTop: 4, flexWrap: 'wrap' }}>
+          {listaFiltrada.map((m) => {
+            const sent = ehEnviado(m);
+            const sel = selecionados.has(m.id);
+            const est = estrelaDe(m);
+            return (
+              <div key={m.id} className={"inbox__item inbox__row " + (naoLida(m) ? "unread " : "") + (activeId === m.id ? "is-active " : "") + (sel ? "is-sel" : "")}
+                onClick={() => { setActiveId(m.id); marcarLido(m.id); }}>
+                <label className="ig-check" onClick={(ev) => ev.stopPropagation()}><input type="checkbox" checked={sel} onChange={() => alternarSel(m.id)}/></label>
+                <span className={"ig-estrela" + (est ? " on" : "")} title={est ? 'Tirar a estrela' : 'Marcar com estrela (só para você)'}
+                  onClick={(ev) => { ev.stopPropagation(); alternarEstrela(m.id, est); }}>{est ? '★' : '☆'}</span>
+                <span className="ig-quem">{m.fromName || m.from}</span>
+                <span className="ig-texto"><b className="subj">{m.subject}</b>{m.preview ? <span> — {String(m.preview).replace(/\s+/g, ' ').slice(0, 160)}</span> : null}
+                  {m.anexos && m.anexos.length > 0 ? <Icon.paperclip size={11} style={{ marginLeft: 6, verticalAlign: 'middle', opacity: .6 }}/> : null}</span>
+                <span className="ig-chips">
+                  {!sent && window.InboxChip && iaMapa[m.id] && <window.InboxChip decisao={iaMapa[m.id]}/>}
                   {m.numeroCotacao != null && (
                     <Badge variant={m.vinculoConfianca === 'certo' ? 'success' : 'warning'} onClick={(ev) => verNaLinhaDoTempo(ev, m.numeroCotacao)} style={{ cursor: 'pointer' }}>
                       <Icon.link2 size={10}/> Cotação Nº {m.numeroCotacao}{m.vinculoConfianca === 'provavel' ? ' (provável)' : ''}
                     </Badge>
                   )}
-                  {INBOX_REFERENCIA_TIPO_LABEL[m.referenciaTipo] && (
-                    <Badge variant="outline">{INBOX_REFERENCIA_TIPO_LABEL[m.referenciaTipo]}</Badge>
-                  )}
-                </div>
-              )}
-            </div>
-          ))}
+                  {INBOX_REFERENCIA_TIPO_LABEL[m.referenciaTipo] && <Badge variant="outline">{INBOX_REFERENCIA_TIPO_LABEL[m.referenciaTipo]}</Badge>}
+                </span>
+                <span className="ig-quando">{window.igQuando ? window.igQuando(m.date) : ''}</span>
+                <span className="ig-lixo"><Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => excluirEmail(ev, m)}/></span>
+              </div>
+            );
+          })}
         </div>
+          )}
 
+          {(prefs.painel !== 'sem' || active) && (
         <div className="inbox__msg">
+          {prefs.painel === 'sem' && active && (
+            <div className="ig-voltar"><Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setActiveId(null)}>Voltar à lista</Button></div>
+          )}
           {active ? (
             <>
               <div className="inbox__msg-head">
@@ -1993,9 +2060,19 @@ function EmailInbox({ setRoute, setSubsel }) {
                 <Button variant="ghost" size="sm" icon="zap" disabled={sugerindoIA} onClick={sugerirResposta}>{sugerindoIA ? 'Pensando…' : 'Sugerir resposta (AI)'}</Button>
               </div>
             </>
-          ) : null}
+          ) : (
+            <div className="ig-msg-vazio">Selecione um e-mail para ler.</div>
+          )}
         </div>
+        )}
+        </div>
+        {configAberta && window.InboxConfigRapida && (
+          <window.InboxConfigRapida prefs={prefs} atualizar={atualizarPrefs} foco={foco} setFoco={setFoco} onClose={() => setConfigAberta(false)}/>
+        )}
       </div>
+      {ajudaAba && window.InboxAjudaModal && (
+        <window.InboxAjudaModal aba={ajudaAba} onTrocar={setAjudaAba} onClose={() => setAjudaAba(null)}/>
+      )}
     </div>
   );
 }
@@ -2006,9 +2083,9 @@ function EmailInbox({ setRoute, setSubsel }) {
    mensagem já aberta — não tinha jeito de começar um e-mail do zero.
    Mesmo send-email, com "Nº Cotação (opcional)" pra já nascer vinculado
    a um projeto, igual ao RFQ do Formulário. */
-function EmailNovoModal({ onClose, onEnviado }) {
-  const [para, setPara] = React.useState('');
-  const [assunto, setAssunto] = React.useState('');
+function EmailNovoModal({ onClose, onEnviado, inicial }) {
+  const [para, setPara] = React.useState((inicial && inicial.para) || '');
+  const [assunto, setAssunto] = React.useState((inicial && inicial.assunto) || '');
   const [corpo, setCorpo] = React.useState('');
   const [numeroCotacaoInput, setNumeroCotacaoInput] = React.useState('');
   const [anexos, setAnexos] = React.useState([]);
@@ -2085,11 +2162,17 @@ function EmailNovoModal({ onClose, onEnviado }) {
         onSemVinculo={() => { vinculoDecidido.current = true; setPopupVinculo(null); enviar(); }}
         onEscolher={(n) => { numeroForcado.current = n; vinculoDecidido.current = true; setPopupVinculo(null); enviar(); }}/>
     )}
-    <Modal title="Novo e-mail" onClose={onClose} width={560}
-      footer={<div className="row gap-2">
-        <Button variant="primary" icon="send" disabled={enviando} onClick={enviar}>{enviando ? 'Enviando…' : 'Enviar'}</Button>
-        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-      </div>}>
+    {/* Fase 3: "Escrever" abre a janela flutuante do canto da tela (como no Gmail); sem o componente novo, cai no modal de sempre. */}
+    {React.createElement(window.InboxJanela || Modal,
+      window.InboxJanela
+        ? { titulo: 'Nova mensagem', onClose, footer: <div className="row gap-2">
+            <Button variant="primary" icon="send" disabled={enviando} onClick={enviar}>{enviando ? 'Enviando…' : 'Enviar'}</Button>
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          </div> }
+        : { title: 'Novo e-mail', onClose, width: 560, footer: <div className="row gap-2">
+            <Button variant="primary" icon="send" disabled={enviando} onClick={enviar}>{enviando ? 'Enviando…' : 'Enviar'}</Button>
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          </div> },
       <div className="stack" style={{ gap: 8 }}>
         <input className="input" placeholder="Para (e-mail)" value={para} onChange={(e) => setPara(e.target.value)}/>
         <input className="input" placeholder="Assunto" value={assunto} onChange={(e) => setAssunto(e.target.value)}/>
@@ -2110,7 +2193,7 @@ function EmailNovoModal({ onClose, onEnviado }) {
           <input type="file" multiple style={{ display: 'none' }} onChange={(e) => { anexarArquivos(e.target.files); e.target.value = ''; }}/>
         </label>
       </div>
-    </Modal>
+    )}
     </>
   );
 }
