@@ -1334,16 +1334,17 @@ function EmailInbox({ setRoute, setSubsel }) {
      tela, não isolamento — ver CLAUDE.md/#571). Não toca leitura/vínculo/envio. */
   const meta = (window.useInboxMeta || (() => ({ ia: {}, dono: {}, pronto: true })))(emails);
   const perm = (window.useInboxPermissoes || (() => null))();
-  const verOk = (dono) => !perm || !window.InboxVisibilidade || window.InboxVisibilidade.podeVer(dono, perm);
+  const verOk = (dono, atribuido) => !perm || !window.InboxVisibilidade || window.InboxVisibilidade.podeVer(dono, perm, atribuido);
   const pode = (c) => !perm || !!(perm.flags && perm.flags[c]);
   const podeExcluirDe = (dono) => !perm || (pode('excluir') && String(dono || '').toLowerCase() === perm.eu) || pode('excluir_de_outros');
   /* Normaliza as linhas de emails_projeto (saida) pro mesmo formato que
      read-inbox devolve — reusa a mesma lista/detalhe sem duplicar JSX.
      "Para" vira o indicador principal (não "De", que seria sempre a
      própria caixa suporte@vpsistema.com — inútil pra escanear a lista). */
-  const enviadosNormalizados = React.useMemo(() => enviados.filter((e) => perm === undefined ? false : verOk(e.dono_email || null)).map((e) => ({
+  const enviadosNormalizados = React.useMemo(() => enviados.filter((e) => perm === undefined ? false : verOk(e.dono_email || null, e.atribuido_a || null)).map((e) => ({
     id: e.id,
     dono: e.dono_email || null,
+    atribuido: e.atribuido_a || null,
     from: (e.para && e.para[0]) || '',
     fromName: 'Para: ' + ((e.para || []).join(', ') || '—'),
     subject: e.assunto || '(sem assunto)',
@@ -1369,18 +1370,46 @@ function EmailInbox({ setRoute, setSubsel }) {
   }, []);
   React.useEffect(() => { carregarExcluidos(); }, [carregarExcluidos]);
   const emailsVisiveis = React.useMemo(() => (perm === undefined || !meta.pronto) ? []
-    : emails.filter((e) => !excluidos.includes(e.id)).filter((e) => verOk(meta.dono[e.id] || null)), [emails, excluidos, meta, perm]);
+    : emails.filter((e) => !excluidos.includes(e.id)).filter((e) => verOk(meta.dono[e.id] || null, (meta.atribuido || {})[e.id] || null)), [emails, excluidos, meta, perm]);
   /* 04/10 — triagem silenciosa (estilo JEV, só regras; autorizada pelo usuário): a decisão (assunto/departamento/
      prioridade/confiança) é calculada no banco e só LIDA aqui (inbox-triagem.jsx). Esconde apenas e-mail automático
      com confiança suficiente (nunca apaga; "ver tudo" devolve) e destaca o que precisa de resposta. Sem classificação,
      a tela se comporta exatamente como antes. Não toca leitura/vínculo/envio/exclusão. */
   const iaMapa = meta.ia;
+  /* Fase 2 (04/10): lido/estrela POR PESSOA, troca de responsável, aviso ao responder e-mail de outro, pop-up de vínculo. */
+  const { estado, marcarLido, alternarEstrela } = (window.useInboxEstado || (() => ({ estado: {}, marcarLido() {}, alternarEstrela() {} })))(emails);
+  const naoLida = (m) => (window.InboxTriagem ? window.InboxTriagem.naoLidaPara(m.unread, estado[m.id]) : m.unread);
+  const [atribuirAberto, setAtribuirAberto] = React.useState(false);
+  const [avisoOutro, setAvisoOutro] = React.useState(null);        // { modo, responsavel }
+  const [popupVinculo, setPopupVinculo] = React.useState(null);    // resultado de inboxBuscarSugestao
+  const avisoConfirmado = React.useRef({});                         // e-mails de outra pessoa que já confirmei responder
+  const numeroForcado = React.useRef(null);
+  const vinculoDecidido = React.useRef(false);
   const [foco, setFoco] = React.useState(true);
   const politicaDe = (m) => (window.InboxTriagem ? window.InboxTriagem.politica(iaMapa[m.id], { vinculado: m.numeroCotacao != null }) : 'normal');
   const silenciosos = folder === 'inbox' ? emailsVisiveis.filter((m) => politicaDe(m) === 'silencioso') : [];
   const importantes = folder === 'inbox' ? emailsVisiveis.filter((m) => politicaDe(m) === 'precisa_de_voce').map((m) => ({ ...m, decisao: iaMapa[m.id] })) : [];
   const listaAtual = folder === 'sent' ? enviadosNormalizados : (foco ? emailsVisiveis.filter((m) => politicaDe(m) !== 'silencioso') : emailsVisiveis);
   const active = listaAtual.find(e => e.id === activeId);
+  /* Fase 2: responsável (dono ou atribuído), sugestão de cotação (JEV) e vínculo em 1 clique. */
+  const donoDe = (m) => (m ? ((m.dono !== undefined ? m.dono : meta.dono[m.id]) || null) : null);
+  const atribuidoDe = (m) => (m ? ((m.atribuido !== undefined ? m.atribuido : (meta.atribuido || {})[m.id]) || null) : null);
+  const nomeDe = (email) => { const p = ((perm && perm.colaboradores) || []).find((x) => String(x.email).toLowerCase() === String(email || '').toLowerCase()); return (p && p.nome) || email; };
+  const pontaAtiva = active ? (folder === 'sent' ? (active.to || []).join(',') : active.from) : '';
+  const sugAtiva = (window.useSugestaoVinculo || (() => null))(active, pontaAtiva);
+  const [vinculandoSug, setVinculandoSug] = React.useState(false);
+  const vincularA = async (numero) => {
+    if (!active) return;
+    if (!pode('editar')) { window.toast?.('Sem permissão para vincular (alçada Inbox › Editar).', 'warning'); return; }
+    setVinculandoSug(true);
+    try {
+      const { error } = await window.__VP_SB.sb.from('emails_projeto').update({ numero_cotacao: numero, vinculo_confianca: 'certo' }).eq('id', active.id);
+      if (error) throw error;
+      window.toast?.(`Vinculado à Cotação Nº ${numero}.`, 'success');
+      carregar(); carregarEnviados(); if (meta.recarregar) meta.recarregar();
+    } catch (e) { window.toast?.('Erro ao vincular: ' + (e.message || e), 'error'); }
+    finally { setVinculandoSug(false); }
+  };
 
   /* 28/09 — pedido do usuário: campo de busca no Inbox (não existia nenhum,
      só filtro por pasta e por Nº Cotação pra vínculo manual). Filtro em
@@ -1606,17 +1635,30 @@ function EmailInbox({ setRoute, setSubsel }) {
       }
       const erroValidacao = validarEmails(to);
       if (erroValidacao) { window.toast?.(erroValidacao, 'warning'); setEnviandoResposta(false); return; }
+      /* Fase 2 (JEV): sem Nº de cotação, sugere uma — o pop-up só aparece se há evidência (forte/perguntar). */
+      if (active.numeroCotacao == null && numeroForcado.current == null && !vinculoDecidido.current && window.inboxBuscarSugestao) {
+        const r = await window.inboxBuscarSugestao(modoCompose === 'encaminhar' ? to : active.from, subject);
+        if (r.politica !== 'silencio') { setPopupVinculo(r); setEnviandoResposta(false); return; }
+      }
+      const numeroEfetivo = active.numeroCotacao ?? numeroForcado.current ?? undefined;
       const { data, error } = await sb.functions.invoke('send-email', {
         body: {
           to, subject, text,
-          numeroCotacao: active.numeroCotacao ?? undefined,
-          referenciaTipo: active.numeroCotacao != null ? 'resposta_inbox' : undefined,
+          numeroCotacao: numeroEfetivo,
+          referenciaTipo: numeroEfetivo != null ? 'resposta_inbox' : undefined,
           attachments: anexosResposta.length ? anexosResposta.map((a) => ({ filename: a.filename, contentType: a.contentType, base64: a.base64 })) : undefined,
         },
       });
       if (error) { window.toast?.('Erro ao enviar: ' + await extrairErroFuncao(error), 'error'); return; }
       if (data && data.avisoPersistencia) window.toast?.(data.avisoPersistencia, 'warning');
       window.toast?.(modoCompose === 'encaminhar' ? 'E-mail encaminhado.' : 'Resposta enviada.', 'success');
+      /* Fase 2: vínculo confirmado no pop-up vale também para o e-mail original; e quem era o responsável é avisado. */
+      if (numeroForcado.current != null && folder === 'inbox') {
+        sb.from('emails_projeto').update({ numero_cotacao: numeroForcado.current, vinculo_confianca: 'certo' }).eq('id', active.id).then(() => { if (meta.recarregar) meta.recarregar(); });
+      }
+      numeroForcado.current = null; vinculoDecidido.current = false;
+      const respAnterior = window.InboxTriagem ? window.InboxTriagem.avisoOutroDono({ dono: donoDe(active), atribuido: atribuidoDe(active), eu: perm ? perm.eu : String((window.__VP_USER || {}).email || '').toLowerCase() }) : null;
+      if (respAnterior && window.inboxNotificar) window.inboxNotificar(respAnterior, 'Responderam um e-mail seu', `${nomeDe(String((window.__VP_USER || {}).email || ''))} respondeu "${active.subject || '(sem assunto)'}".`);
       if (window.VPLog) window.VPLog.registrar({
         modulo: 'Inbox de E-mail',
         acao: modoCompose === 'encaminhar' ? 'Encaminhou e-mail' : modoCompose === 'responder-todos' ? 'Respondeu a todos' : 'Respondeu e-mail',
@@ -1634,6 +1676,9 @@ function EmailInbox({ setRoute, setSubsel }) {
 
   const abrirCompose = (modo) => {
     if (!pode('editar')) { window.toast?.('Sem permissão para responder ou encaminhar (alçada Inbox › Editar).', 'warning'); return; }
+    /* Fase 2: e-mail de OUTRA pessoa (dono ou atribuído) → aviso antes de responder; o responsável é avisado depois do envio. */
+    const outroResp = active && window.InboxTriagem ? window.InboxTriagem.avisoOutroDono({ dono: donoDe(active), atribuido: atribuidoDe(active), eu: perm ? perm.eu : String((window.__VP_USER || {}).email || '').toLowerCase() }) : null;
+    if (outroResp && !avisoConfirmado.current[active.id]) { setAvisoOutro({ modo, responsavel: outroResp }); return; }
     setModoCompose(modo);
     setRespondendo(true);
     setVinculando(false);
@@ -1647,6 +1692,8 @@ function EmailInbox({ setRoute, setSubsel }) {
   const sugerirResposta = async () => {
     if (!active) return;
     if (!pode('editar')) { window.toast?.('Sem permissão para responder (alçada Inbox › Editar).', 'warning'); return; }
+    const outroResp = window.InboxTriagem ? window.InboxTriagem.avisoOutroDono({ dono: donoDe(active), atribuido: atribuidoDe(active), eu: perm ? perm.eu : String((window.__VP_USER || {}).email || '').toLowerCase() }) : null;
+    if (outroResp && !avisoConfirmado.current[active.id]) { setAvisoOutro({ modo: 'responder', responsavel: outroResp }); return; }
     setSugerindoIA(true);
     try {
       const sb = window.__VP_SB.sb;
@@ -1694,7 +1741,7 @@ function EmailInbox({ setRoute, setSubsel }) {
   };
 
   const folders = [
-    { id: "inbox", label: "Caixa de entrada", icon: "mail", count: emails.filter(e => e.unread).length },
+    { id: "inbox", label: "Caixa de entrada", icon: "mail", count: emailsVisiveis.filter(naoLida).length },
     { id: "sent", label: "Enviados", icon: "send" },
     { id: "drafts", label: "Rascunhos", icon: "edit" },
     { id: "archive", label: "Arquivados", icon: "package" },
@@ -1729,6 +1776,19 @@ function EmailInbox({ setRoute, setSubsel }) {
         </div>
       </div>
       {novoEmailAberto && <EmailNovoModal onClose={() => setNovoEmailAberto(false)} onEnviado={carregar}/>}
+      {avisoOutro && window.InboxAvisoOutroDono && (
+        <window.InboxAvisoOutroDono responsavel={avisoOutro.responsavel} nomeDe={nomeDe} onCancelar={() => setAvisoOutro(null)}
+          onConfirmar={() => { if (active) avisoConfirmado.current[active.id] = true; const m = avisoOutro.modo; setAvisoOutro(null); abrirCompose(m); }}/>
+      )}
+      {popupVinculo && window.InboxPopupVinculoEnvio && (
+        <window.InboxPopupVinculoEnvio r={popupVinculo} onCancelar={() => setPopupVinculo(null)}
+          onSemVinculo={() => { vinculoDecidido.current = true; setPopupVinculo(null); enviarCompose(); }}
+          onEscolher={(n) => { numeroForcado.current = n; vinculoDecidido.current = true; setPopupVinculo(null); enviarCompose(); }}/>
+      )}
+      {atribuirAberto && active && window.InboxModalAtribuir && (
+        <window.InboxModalAtribuir email={active} dono={donoDe(active)} atribuido={atribuidoDe(active)} decisao={iaMapa[active.id]} ctx={perm}
+          onClose={() => setAtribuirAberto(false)} onSalvo={() => { setAtribuirAberto(false); if (meta.recarregar) meta.recarregar(); carregarEnviados(); }}/>
+      )}
 
       <div className="inbox">
         <div className="inbox__folders">
@@ -1784,10 +1844,12 @@ function EmailInbox({ setRoute, setSubsel }) {
             </div>
           )}
           {(folder === "inbox" || folder === "sent") && listaFiltrada.map((m) => (
-            <div key={m.id} className={"inbox__item " + (m.unread ? "unread " : "") + (activeId === m.id ? "is-active" : "")} onClick={() => setActiveId(m.id)}>
+            <div key={m.id} className={"inbox__item " + (naoLida(m) ? "unread " : "") + (activeId === m.id ? "is-active" : "")} onClick={() => { setActiveId(m.id); marcarLido(m.id); }}>
               <div className="from">
                 <span>{m.fromName || m.from}</span>
                 <span className="row gap-1" style={{ alignItems: 'center' }}>
+                  <span title={estado[m.id] && estado[m.id].estrela ? 'Tirar a estrela' : 'Marcar com estrela (só para você)'} style={{ cursor: 'pointer', fontSize: 15, lineHeight: 1 }}
+                    onClick={(ev) => { ev.stopPropagation(); alternarEstrela(m.id, !!(estado[m.id] && estado[m.id].estrela)); }}>{estado[m.id] && estado[m.id].estrela ? '★' : '☆'}</span>
                   <span className="time">{m.date ? new Date(m.date).toLocaleString('pt-BR') : ''}</span>
                   <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => excluirEmail(ev, m)}/>
                 </span>
@@ -1824,6 +1886,13 @@ function EmailInbox({ setRoute, setSubsel }) {
                 {INBOX_REFERENCIA_TIPO_LABEL[active.referenciaTipo] && (
                   <Badge variant="outline" style={{ marginTop: 6, marginLeft: 6 }}>{INBOX_REFERENCIA_TIPO_LABEL[active.referenciaTipo]}</Badge>
                 )}
+                {(donoDe(active) || atribuidoDe(active)) ? (
+                  <div className="small muted" style={{ marginTop: 6 }}>
+                    Responsável: <b>{nomeDe(atribuidoDe(active) || donoDe(active))}</b>
+                    {atribuidoDe(active) && donoDe(active) && atribuidoDe(active) !== donoDe(active) ? <> · autor original: {nomeDe(donoDe(active))}</> : null}
+                  </div>
+                ) : (folder === 'inbox' && <div className="small muted" style={{ marginTop: 6 }}>Sem responsável — fica na fila de triagem até alguém atribuir.</div>)}
+                {window.InboxSugestaoBarra && <window.InboxSugestaoBarra s={sugAtiva} onVincular={vincularA} ocupado={vinculandoSug}/>}
                 {gatilhoAberto && (
                   <div className="alert warning" style={{ marginTop: 8 }}>
                     <Icon.warning/>
@@ -1846,6 +1915,9 @@ function EmailInbox({ setRoute, setSubsel }) {
                   <div className="inbox__msg-actions">
                     <Button variant="outline" size="sm" icon="reply" onClick={() => (respondendo && modoCompose === 'responder' ? setRespondendo(false) : abrirCompose('responder'))}>Responder</Button>
                     <Button variant="ghost" size="sm" icon="link2" onClick={() => { setVinculando(v => !v); setRespondendo(false); setVincularInput(active.numeroCotacao != null ? String(active.numeroCotacao) : ''); }}>Vincular</Button>
+                    {perm && window.InboxVisibilidade && window.InboxVisibilidade.podeAtribuir(donoDe(active), atribuidoDe(active), perm) && (
+                      <Button variant="ghost" size="sm" icon="users" onClick={() => setAtribuirAberto(true)}>Atribuir</Button>
+                    )}
                     <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => excluirEmail(ev, active)}>Excluir</Button>
                   </div>
                 </div>
@@ -1941,6 +2013,10 @@ function EmailNovoModal({ onClose, onEnviado }) {
   const [numeroCotacaoInput, setNumeroCotacaoInput] = React.useState('');
   const [anexos, setAnexos] = React.useState([]);
   const [enviando, setEnviando] = React.useState(false);
+  /* Fase 2 (JEV): sem Nº de cotação, sugere uma antes de enviar — só pergunta quando há evidência. */
+  const [popupVinculo, setPopupVinculo] = React.useState(null);
+  const numeroForcado = React.useRef(null);
+  const vinculoDecidido = React.useRef(false);
 
   const lerArquivoBase64 = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1970,7 +2046,11 @@ function EmailNovoModal({ onClose, onEnviado }) {
     }
     const erroValidacao = validarEmails(para);
     if (erroValidacao) { window.toast?.(erroValidacao, 'warning'); return; }
-    const numero = numeroCotacaoInput.trim() ? parseInt(numeroCotacaoInput.replace(/\D/g, ''), 10) : null;
+    const numero = numeroForcado.current != null ? numeroForcado.current : (numeroCotacaoInput.trim() ? parseInt(numeroCotacaoInput.replace(/\D/g, ''), 10) : null);
+    if (!numero && !vinculoDecidido.current && window.inboxBuscarSugestao) {
+      const r = await window.inboxBuscarSugestao(para, assunto);
+      if (r.politica !== 'silencio') { setPopupVinculo(r); return; }
+    }
     setEnviando(true);
     try {
       const sb = window.__VP_SB.sb;
@@ -1999,6 +2079,12 @@ function EmailNovoModal({ onClose, onEnviado }) {
   };
 
   return (
+    <>
+    {popupVinculo && window.InboxPopupVinculoEnvio && (
+      <window.InboxPopupVinculoEnvio r={popupVinculo} onCancelar={() => setPopupVinculo(null)}
+        onSemVinculo={() => { vinculoDecidido.current = true; setPopupVinculo(null); enviar(); }}
+        onEscolher={(n) => { numeroForcado.current = n; vinculoDecidido.current = true; setPopupVinculo(null); enviar(); }}/>
+    )}
     <Modal title="Novo e-mail" onClose={onClose} width={560}
       footer={<div className="row gap-2">
         <Button variant="primary" icon="send" disabled={enviando} onClick={enviar}>{enviando ? 'Enviando…' : 'Enviar'}</Button>
@@ -2025,6 +2111,7 @@ function EmailNovoModal({ onClose, onEnviado }) {
         </label>
       </div>
     </Modal>
+    </>
   );
 }
 

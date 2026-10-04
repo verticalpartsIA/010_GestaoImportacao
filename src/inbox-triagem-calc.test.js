@@ -40,3 +40,52 @@ test('rotulo — texto curto do chip', () => {
   assert.equal(T.rotulo(d), 'Avaria · Pós-venda · Alta');
   assert.equal(T.rotulo(null), '');
 });
+
+/* ---- Fase 2 (JEV): sugestão de vínculo, responsável, aviso e lido por pessoa ---- */
+const sug = (...c) => ({ candidatos: c, confianca: 0.7 });
+const cand = (numero, score, probabilidade) => ({ numero, score, probabilidade });
+
+test('politicaSugestao — uma candidata clara sugere forte; ambígua pergunta; fraca fica em silêncio', () => {
+  assert.equal(T.politicaSugestao(sug(cand(955, 0.65, 1))), 'forte');
+  assert.equal(T.politicaSugestao(sug(cand(955, 0.65, 0.5), cand(950, 0.65, 0.5))), 'perguntar');   // duas igualmente prováveis
+  assert.equal(T.politicaSugestao(sug(cand(955, 0.3, 1))), 'silencio');                              // pouca evidência: não pergunta à toa
+  assert.equal(T.politicaSugestao(sug()), 'silencio');
+  assert.equal(T.politicaSugestao(null), 'silencio');
+});
+
+test('politicaSugestao — forte exige folga sobre a segunda candidata', () => {
+  assert.equal(T.politicaSugestao(sug(cand(955, 0.8, 0.7), cand(950, 0.5, 0.3))), 'forte');          // folga 0,40 → destaca a 955
+  assert.equal(T.politicaSugestao(sug(cand(955, 0.8, 0.55), cand(950, 0.7, 0.45))), 'perguntar');    // quase empate → deixa a pessoa escolher
+});
+
+test('sugerirResponsavel — líderes do departamento da classificação vêm primeiro', () => {
+  const colaboradores = [
+    { email: 'lider@x.com', nome: 'Líder', departamento: 'Adm/Financeiro', is_department_lead: true },
+    { email: 'fin1@x.com', nome: 'Fin 1', departamento: 'Adm/Financeiro', is_department_lead: false },
+    { email: 'vend@x.com', nome: 'Vend', departamento: 'Comercial', is_department_lead: false },
+  ];
+  const r = T.sugerirResponsavel({ decisao: { resumo: { departamento: 'financeiro' } }, colaboradores });
+  assert.deepEqual(r.map((x) => x.email), ['lider@x.com', 'fin1@x.com']);
+  assert.equal(r[0].probabilidade, 0.5);
+  assert.deepEqual(T.sugerirResponsavel({ decisao: { resumo: { departamento: 'geral' } }, colaboradores }), []);
+  assert.deepEqual(T.sugerirResponsavel({ decisao: null, colaboradores }), []);
+});
+
+test('avisoOutroDono — avisa só quando o responsável não sou eu (atribuição vence o dono)', () => {
+  assert.equal(T.avisoOutroDono({ dono: 'ana@x.com', eu: 'ana@x.com' }), null);
+  assert.equal(T.avisoOutroDono({ dono: 'ana@x.com', eu: 'bia@x.com' }), 'ana@x.com');
+  assert.equal(T.avisoOutroDono({ dono: 'ana@x.com', atribuido: 'bia@x.com', eu: 'bia@x.com' }), null);   // atribuído a mim
+  assert.equal(T.avisoOutroDono({ dono: 'ana@x.com', atribuido: 'bia@x.com', eu: 'ana@x.com' }), 'bia@x.com');
+  assert.equal(T.avisoOutroDono({ dono: null, atribuido: null, eu: 'ana@x.com' }), null);                // sem responsável: nada a avisar
+});
+
+test('naoLidaPara — o que EU abri é lida para mim; o resto segue a caixa', () => {
+  assert.equal(T.naoLidaPara(true, { lido: true }), false);
+  assert.equal(T.naoLidaPara(true, null), true);
+  assert.equal(T.naoLidaPara(false, null), false);
+});
+
+test('politicaSugestao — evidência diluída entre muitas cotações fica em silêncio', () => {
+  assert.equal(T.politicaSugestao(sug(cand(955, 0.65, 0.21), cand(970, 0.65, 0.21), cand(960, 0.6, 0.19))), 'silencio');   // fornecedor que atende várias
+  assert.equal(T.politicaSugestao(sug(cand(955, 0.65, 0.32), cand(970, 0.65, 0.3), cand(960, 0.6, 0.2))), 'perguntar');     // ainda dá para escolher
+});

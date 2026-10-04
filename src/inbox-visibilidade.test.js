@@ -75,3 +75,37 @@ test('areaDe — departamento do cadastro vira o sufixo da alçada', () => {
   assert.equal(V.areaDe('CEO'), null);
   assert.equal(V.areaDe(null), null);
 });
+
+/* ---- Fase 2: atribuição (troca de dono) ---- */
+test('podeVer — quem recebeu a atribuição passa a ver o e-mail, mesmo sem alçada', () => {
+  const c = ctx('vendedor2@x.com', {});
+  assert.equal(V.podeVer('vendedor1@x.com', c, null), false);
+  assert.equal(V.podeVer('vendedor1@x.com', c, 'vendedor2@x.com'), true);       // férias: o e-mail foi passado para ele
+});
+
+test('podeVer — e-mail sem dono mas atribuído sai da fila de triagem', () => {
+  const triagem = ctx('juliana@x.com', { triagem: true });
+  assert.equal(V.podeVer(null, triagem, null), true);                            // sem dono e sem atribuição → triagem
+  assert.equal(V.podeVer(null, triagem, 'vendedor1@x.com'), false);              // já tem responsável → saiu da triagem
+});
+
+test('podeVer — a gestora vê o que foi atribuído a alguém da equipe dela', () => {
+  const c = ctx('regiane@x.com', { ver_equipe: true });
+  assert.equal(V.podeVer('fin1@x.com', c, null), false);
+  assert.equal(V.podeVer('fin1@x.com', c, 'vendedor1@x.com'), true);
+});
+
+test('podeAtribuir — responsável atual, chefe, ver_todos e triagem; mais ninguém', () => {
+  const flags = { editar: true };
+  assert.equal(V.podeAtribuir('vendedor1@x.com', null, { ...ctx('vendedor1@x.com', {}), flags }), true);          // é meu
+  assert.equal(V.podeAtribuir('vendedor1@x.com', null, { ...ctx('vendedor2@x.com', {}), flags }), false);         // de outro, sem alçada
+  assert.equal(V.podeAtribuir('vendedor1@x.com', null, { ...ctx('regiane@x.com', { ver_equipe: true }), flags }), true);   // chefe do dono
+  assert.equal(V.podeAtribuir('fin1@x.com', null, { ...ctx('regiane@x.com', { ver_equipe: true }), flags }), false);       // outra área
+  assert.equal(V.podeAtribuir('fin1@x.com', null, { ...ctx('diego@x.com', { ver_todos: true }), flags }), true);
+  assert.equal(V.podeAtribuir(null, null, { ...ctx('juliana@x.com', { triagem: true }), flags }), true);          // sem responsável → triagem
+  assert.equal(V.podeAtribuir(null, null, { ...ctx('vendedor1@x.com', {}), flags }), false);
+});
+
+test('podeAtribuir — sem a alçada Editar ninguém atribui', () => {
+  assert.equal(V.podeAtribuir('vendedor1@x.com', null, { ...ctx('vendedor1@x.com', {}), flags: { editar: false } }), false);
+});
