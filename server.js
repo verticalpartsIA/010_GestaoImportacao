@@ -163,6 +163,53 @@ app.post('/api/minuta', async (req, res) => {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, propostas_proxy: PROPOSTAS_ON }));
 
+/* ---------- API: Feedback -> issue do GitHub (menu Suporte "?" do cabeçalho, src/ajuda-suporte.jsx) ----------
+   O token do GitHub fica SÓ aqui, em env GITHUB_TOKEN (Hostinger › Node.js › variáveis de ambiente) — o navegador
+   nunca o vê. Token fine-grained com permissão apenas de "Issues: Read and write" no repositório abaixo.
+   GITHUB_FEEDBACK_REPO muda o repositório de destino (padrão: este). FEEDBACK_DRY_RUN=1 só monta a issue e
+   devolve, sem chamar o GitHub (testes locais). A issue leva só o primeiro nome do colaborador (server-lib/feedback-issue.js). */
+const feedbackIssue = require('./server-lib/feedback-issue');
+const FEEDBACK_REPO = process.env.GITHUB_FEEDBACK_REPO || 'verticalpartsIA/010_GestaoImportacao';
+const feedbackPorIp = feedbackIssue.criarLimitador({ max: 5, janelaMs: 10 * 60 * 1000 });
+const feedbackGlobal = feedbackIssue.criarLimitador({ max: 60, janelaMs: 60 * 60 * 1000 });
+function feedbackOrigemOk(req) {
+  const o = req.headers.origin;
+  if (!o) return true;   // sem Origin (ex.: teste por curl): a proteção real é o limitador de envios
+  try { const h = new URL(o).host; return h === req.headers.host || /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(h); } catch (e) { return false; }
+}
+app.post('/api/feedback', async (req, res) => {
+  if (!feedbackOrigemOk(req)) return res.status(403).json({ ok: false, error: 'origem_nao_permitida' });
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim() || 'sem-ip';
+  if (!feedbackPorIp(ip) || !feedbackGlobal('global')) {
+    return res.status(429).json({ ok: false, error: 'limite', mensagem: 'Muitos envios em pouco tempo. Tente de novo em alguns minutos.' });
+  }
+  const v = feedbackIssue.validar(req.body);
+  if (!v.ok) return res.status(400).json({ ok: false, error: 'invalido', mensagem: v.erro });
+  const issue = feedbackIssue.montarIssue(v.dados, { versao: String(readVersionInfo().commit || '').slice(0, 7), navegador: req.headers['user-agent'] });
+  if (process.env.FEEDBACK_DRY_RUN === '1') return res.json({ ok: true, simulado: true, numero: 0, titulo: issue.title, etiquetas: issue.labels, corpo: issue.body });
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) return res.status(503).json({ ok: false, error: 'nao_configurado', mensagem: 'O envio de feedback ainda não foi ativado. Avise o gestor do site.' });
+  try {
+    const r = await fetch(`https://api.github.com/repos/${FEEDBACK_REPO}/issues`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'vp-gestao-feedback', 'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(issue),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      console.error('[feedback] GitHub recusou a criação da issue:', r.status, data && data.message);
+      return res.status(502).json({ ok: false, error: 'github', mensagem: 'Não foi possível registrar agora. Tente de novo mais tarde.' });
+    }
+    return res.json({ ok: true, numero: data.number });
+  } catch (e) {
+    console.error('[feedback] falha de rede ao chamar o GitHub:', e.message);
+    return res.status(502).json({ ok: false, error: 'github', mensagem: 'Não foi possível registrar agora. Tente de novo mais tarde.' });
+  }
+});
+
 /* ---------- Rota pública de assinatura (antes do estático) ----------
    /assinar/<token> → entrega assinar.html. O token é extraído no client. */
 app.get('/assinar/:token', (_req, res) => {
