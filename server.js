@@ -258,7 +258,9 @@ const PUBLIC_ROOT_FILES = new Set([
   'diario-obra.html', 'formulario-cliente.html', 'status-obra.html', 'termo-entrega.html',
   'vistoria-execucao.html', 'colors_and_type.css', 'favicon.ico',
 ]);
-const PUBLIC_DIRS = new Set(['src', 'styles', 'assets']);
+/* TreinamentoVP: tutoriais passo a passo (páginas HTML estáticas, uma pasta por tela). O botão "Ajuda" do
+   app (HelpCenter, src/shell.jsx) abre /TreinamentoVP/<slug>/. Só vai o que estiver no Git. */
+const PUBLIC_DIRS = new Set(['src', 'styles', 'assets', 'TreinamentoVP']);
 const SPA_MODULES = new Set([
   'geral', 'comercial', 'crm', 'cadastros', 'engenharia', 'logistica', 'gestao-importacao',
   'adm-financeiro', 'juridico', 'rh', 'admin',

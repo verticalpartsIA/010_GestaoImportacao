@@ -429,8 +429,15 @@ const HELP_TOPICS = {
   "rh-homologacao": "Homologação de parceiros instaladores e controle documental (NRs, ASO, PGR…).",
 };
 
+/* Tutoriais passo a passo publicados em /TreinamentoVP/<pasta>/ (páginas HTML geradas por outra sessão do Claude;
+   ver CLAUDE.md, seção "Tutoriais"). Tutorial novo = uma linha aqui: rota do app → pasta. Rota sem linha não mostra botão. */
+const TUTORIAIS = {
+  decisoes: "central-de-decisoes",
+};
+
 function HelpCenter({ route, bc, onClose }) {
   const ctx = HELP_TOPICS[route];
+  const tutorial = TUTORIAIS[route];
   return (
     <Modal title="Central de Ajuda" onClose={onClose} width={620}
       footer={<>
@@ -446,6 +453,12 @@ function HelpCenter({ route, bc, onClose }) {
         <p className="vp-small" style={{ marginTop: 0 }}>
           {ctx || "Use o menu à esquerda para navegar entre os módulos. Cada tela tem suas próprias ações no topo e na lista."}
         </p>
+        {tutorial ? (
+          <Button variant="primary" size="sm"
+            onClick={() => window.open('/TreinamentoVP/' + tutorial + '/', '_blank', 'noopener')}>
+            Abrir tutorial passo a passo
+          </Button>
+        ) : null}
       </div>
       <div className="up-eyebrow muted" style={{ margin: "16px 0 8px" }}>Perguntas frequentes</div>
       <dl className="help-faq">
