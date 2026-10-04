@@ -49,6 +49,7 @@ function gerarLinkDecisao(decisao) {
       'contrato_instalador_parcelas': 'pagamentos-instalador',
       'contratos_instalador': 'contrato-instalador',
       'pedidos_compra_varejo': 'almoxarifado',
+      'emails_projeto': 'inbox',
     };
     const page = tabelaPagina[decisao.referencia_tabela];
     if (!page) return null;
