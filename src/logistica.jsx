@@ -1463,6 +1463,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   /* "Pedir decisão" (04/10): decisão ligada ao e-mail aberto na Central de Decisões. Também é o destino do "Ver documento" do cartão
      (subsel = id do e-mail): abre o e-mail; se ele não está nas listas carregadas, pesquisa o assunto no histórico e abre. */
   const [pedirDecisaoAberto, setPedirDecisaoAberto] = React.useState(false);
+  const [precoEmailAberto, setPrecoEmailAberto] = React.useState(false);   // "Extrair preço" (04/10): propõe preço/condições do e-mail do fornecedor; só grava após conferência
   const [tickDecisao, setTickDecisao] = React.useState(0);
   const decisoesDoEmail = (window.useDecisoesDoEmail || (() => []))(active ? active.id : null, tickDecisao);
   const idParaAbrir = typeof subsel === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subsel) ? subsel : null;
@@ -1973,6 +1974,9 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
       {modalMarcador && window.InboxModalMarcador && (
         <window.InboxModalMarcador marcadores={mk.marcadores} caps={capsOrg} onCriar={mk.criar} onClose={() => setModalMarcador(false)}/>
       )}
+      {precoEmailAberto && active && window.InboxModalPrecoEmail && (
+        <window.InboxModalPrecoEmail email={active} eu={eu} onClose={() => setPrecoEmailAberto(false)} onRegistrado={() => { setPrecoEmailAberto(false); }}/>
+      )}
       {pedirDecisaoAberto && active && window.InboxModalPedirDecisao && (
         <window.InboxModalPedirDecisao email={active} responsavel={respDe(active)} colaboradores={(perm && perm.colaboradores) || []} eu={eu}
           onClose={() => setPedirDecisaoAberto(false)} onCriada={() => setTickDecisao((t) => t + 1)}/>
@@ -2155,6 +2159,9 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
                     <Button variant="ghost" size="sm" icon="link2" onClick={() => { setVinculando(v => !v); setRespondendo(false); setVincularInput(active.numeroCotacao != null ? String(active.numeroCotacao) : ''); }}>Vincular</Button>
                     {perm && window.InboxVisibilidade && window.InboxVisibilidade.podeAtribuir(donoDe(active), atribuidoDe(active), perm) && (
                       <Button variant="ghost" size="sm" icon="users" onClick={() => setAtribuirAberto(true)}>Atribuir</Button>
+                    )}
+                    {pode('editar') && !ehEnviado(active) && (active.numeroCotacao != null || active.referenciaTipo === 'cotacao_fornecedor') && window.InboxModalPrecoEmail && (
+                      <Button variant="ghost" size="sm" icon="dollar" title="Lê o e-mail do fornecedor, propõe os preços e as condições e registra a resposta depois que você conferir" onClick={() => setPrecoEmailAberto(true)}>Extrair preço</Button>
                     )}
                     {pode('editar') && window.InboxModalPedirDecisao && (
                       <Button variant="ghost" size="sm" icon="shield" title="Cria uma decisão na Central de Decisões ligada a este e-mail" onClick={() => setPedirDecisaoAberto(true)}>Pedir decisão</Button>
