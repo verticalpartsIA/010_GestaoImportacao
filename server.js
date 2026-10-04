@@ -170,6 +170,39 @@ app.get('/api/health', (_req, res) => res.json({ ok: true, propostas_proxy: PROP
    devolve, sem chamar o GitHub (testes locais). A issue leva só o primeiro nome do colaborador (server-lib/feedback-issue.js). */
 const feedbackIssue = require('./server-lib/feedback-issue');
 const FEEDBACK_REPO = process.env.GITHUB_FEEDBACK_REPO || 'verticalpartsIA/010_GestaoImportacao';
+const GITHUB_API = process.env.GITHUB_API_URL || 'https://api.github.com';   // só muda em teste local (servidor de mentira)
+
+/* Quando o GitHub recusa a criação da issue, descobre o PORQUÊ para o log (sem nunca registrar o token):
+   - permissão que o GitHub exigiu (cabeçalho x-accepted-github-permissions, ex.: "issues=write");
+   - conta dona do token (GET /user -> login): mostra se foi criado na conta certa;
+   - se o token enxerga o repositório (GET /repos/... -> 200 = enxerga, 404 = repositório fora do token);
+   - validade do token (cabeçalho github-authentication-token-expiration). Melhor esforço: falha aqui nunca derruba o envio. */
+async function feedbackDiagnostico(token, resp, data) {
+  const diag = {
+    status: resp.status,
+    mensagem: (data && data.message) || null,
+    permissao_exigida: resp.headers.get('x-accepted-github-permissions'),
+    token_expira_em: resp.headers.get('github-authentication-token-expiration'),
+    id_requisicao_github: resp.headers.get('x-github-request-id'),
+    repositorio: FEEDBACK_REPO,
+  };
+  const ler = async (rota) => {
+    try {
+      return await fetch(GITHUB_API + rota, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'vp-gestao-feedback' },
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (e) { return null; }
+  };
+  const u = await ler('/user');
+  if (u) {
+    diag.conta_do_token_status = u.status;
+    if (u.ok) { const j = await u.json().catch(() => ({})); diag.conta_do_token = j.login || null; }
+  }
+  const rp = await ler('/repos/' + FEEDBACK_REPO);
+  if (rp) diag.repositorio_status = rp.status;
+  return diag;
+}
 const feedbackPorIp = feedbackIssue.criarLimitador({ max: 5, janelaMs: 10 * 60 * 1000 });
 const feedbackGlobal = feedbackIssue.criarLimitador({ max: 60, janelaMs: 60 * 60 * 1000 });
 function feedbackOrigemOk(req) {
@@ -194,7 +227,7 @@ app.post('/api/feedback', async (req, res) => {
   const token = process.env.GITHUB_TOKEN;
   if (!token) return res.status(503).json({ ok: false, error: 'nao_configurado', mensagem: 'O envio de feedback ainda não foi ativado. Avise o gestor do site.' });
   try {
-    const r = await fetch(`https://api.github.com/repos/${FEEDBACK_REPO}/issues`, {
+    const r = await fetch(`${GITHUB_API}/repos/${FEEDBACK_REPO}/issues`, {
       method: 'POST',
       headers: {
         Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
@@ -204,7 +237,12 @@ app.post('/api/feedback', async (req, res) => {
     });
     const data = await r.json().catch(() => ({}));
     if (!r.ok) {
-      console.error('[feedback] GitHub recusou a criação da issue:', r.status, data && data.message);
+      const diag = await feedbackDiagnostico(token, r, data);
+      console.error('[feedback] GitHub recusou a criação da issue:', r.status, data && data.message, '| diagnóstico:', JSON.stringify(diag));
+      // 401/403/404 = o token não serve para este repositório (permissão, conta ou repositório errado): não adianta tentar de novo
+      if ([401, 403, 404].includes(r.status)) {
+        return res.status(502).json({ ok: false, error: 'github_permissao', mensagem: 'O envio de feedback está sem permissão no GitHub. Avise o gestor do site.' });
+      }
       return res.status(502).json({ ok: false, error: 'github', mensagem: 'Não foi possível registrar agora. Tente de novo mais tarde.' });
     }
     return res.json({ ok: true, numero: data.number });
