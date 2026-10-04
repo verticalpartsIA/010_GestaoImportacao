@@ -60,6 +60,18 @@ test('caminho: só caminho do próprio app, sem query', () => {
   assert.equal(F.caminhoSeguro('javascript:alert(1)'), '');
 });
 
+test('endereço completo da tela entra na issue (origem do servidor + caminho)', () => {
+  assert.equal(F.enderecoCompleto('https://vpgestaoimportacao.vpsistema.com', '/geral/decisoes'), 'https://vpgestaoimportacao.vpsistema.com/geral/decisoes');
+  assert.equal(F.enderecoCompleto('http://localhost:3111', '/geral/decisoes'), 'http://localhost:3111/geral/decisoes');
+  assert.equal(F.enderecoCompleto('javascript:alert(1)', '/geral/decisoes'), '/geral/decisoes');   // origem inválida: só o caminho
+  assert.equal(F.enderecoCompleto('https://x.com/path', '/a'), '/a');                                // origem com caminho não vale
+  assert.equal(F.enderecoCompleto('https://x.com', ''), '');
+  const v = F.validar(base);
+  const { body } = F.montarIssue(v.dados, { baseUrl: 'https://vpgestaoimportacao.vpsistema.com' });
+  assert.ok(body.includes('| **Endereço da tela** | https://vpgestaoimportacao.vpsistema.com/geral/decisoes |'));
+  assert.ok(!body.includes('x=1'));   // a query do formulário (?x=1) nunca vai
+});
+
 test('etiquetas e título da issue', () => {
   const v = F.validar(base);
   const { title, labels } = F.montarIssue(v.dados, {});

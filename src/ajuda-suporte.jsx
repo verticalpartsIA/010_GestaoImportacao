@@ -73,6 +73,26 @@ function AjudaModal({ telaNome, ajudaTexto, tutorial, onClose }) {
   );
 }
 
+const AJ_MIN_RESUMO = 5;       // mesmo mínimo do servidor (server-lib/feedback-issue.js, validar)
+const AJ_MIN_DESCRICAO = 10;   // "O que aconteceu" OU o texto livre
+const aj_letras = (n) => n + (n === 1 ? ' letra' : ' letras');
+
+/* Rótulo + contador do campo: "faltam N letras" (âmbar) conta para ZERO e vira "✓" quando o mínimo é cumprido;
+   sempre mostra "tamanho/máximo" (vermelho perto do limite). `falta` indefinido = campo sem mínimo. */
+function AjRotulo({ htmlFor, children, falta, tam, max }) {
+  return (
+    <label htmlFor={htmlFor} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: 8, fontWeight: 600, fontSize: 13, margin: '14px 0 4px' }}>
+      <span>{children}</span>
+      <span style={{ fontWeight: 400, fontSize: 12, whiteSpace: 'nowrap' }}>
+        {falta === undefined ? null : falta > 0
+          ? <span style={{ color: '#9A5A00', fontWeight: 600, marginRight: 8 }}>faltam {aj_letras(falta)}</span>
+          : <span style={{ color: 'var(--vp-success, #2E7D32)', fontWeight: 700, marginRight: 8 }}>✓</span>}
+        <span style={{ color: tam >= max * 0.9 ? 'var(--vp-danger, #c62828)' : 'var(--fg3, #777)' }}>{tam}/{max}</span>
+      </span>
+    </label>
+  );
+}
+
 function FeedbackModal({ telaNome, route, onClose }) {
   const user = window.__VP_USER || {};
   const [f, setF] = React.useState({ tipo: 'erro', gravidade: '', resumo: '', fazendo: '', aconteceu: '', esperava: '', livre: '', contato: true });
@@ -81,9 +101,17 @@ function FeedbackModal({ telaNome, route, onClose }) {
   const [feito, setFeito] = React.useState(null);
   const set = (k, v) => setF((p) => ({ ...p, [k]: v }));
   const rot = AJ_ROTULOS[f.tipo];
-  const valido = f.resumo.trim().length >= 5
-    && (f.tipo !== 'erro' || !!f.gravidade)
-    && (f.aconteceu.trim().length >= 10 || f.livre.trim().length >= 10);
+  // Tamanhos contam o texto sem espaços nas pontas (igual ao servidor). Cada "falta" chega a ZERO quando o mínimo é cumprido.
+  const tam = (k) => f[k].trim().length;
+  const faltaResumo = Math.max(0, AJ_MIN_RESUMO - tam('resumo'));
+  const faltaDescricao = (tam('aconteceu') >= AJ_MIN_DESCRICAO || tam('livre') >= AJ_MIN_DESCRICAO)
+    ? 0 : AJ_MIN_DESCRICAO - Math.max(tam('aconteceu'), tam('livre'));
+  const faltaGravidade = f.tipo === 'erro' && !f.gravidade;
+  const faltas = [];
+  if (faltaResumo > 0) faltas.push('“Em poucas palavras” (faltam ' + aj_letras(faltaResumo) + ')');
+  if (faltaGravidade) faltas.push('escolher “O quanto isso atrapalha?”');
+  if (faltaDescricao > 0) faltas.push('“' + rot.aconteceu.replace('?', '') + '” (faltam ' + aj_letras(faltaDescricao) + ')');
+  const valido = faltas.length === 0;
 
   const enviar = async () => {
     if (!valido || enviando) return;
@@ -107,6 +135,7 @@ function FeedbackModal({ telaNome, route, onClose }) {
 
   const rotulo = { display: 'block', fontWeight: 600, fontSize: 13, margin: '14px 0 4px' };
   const campo = { width: '100%', fontFamily: 'inherit', boxSizing: 'border-box' };
+  const campoFalta = { ...campo, borderColor: '#E0A000' };   // obrigatório ainda incompleto
 
   if (feito) {
     return (
@@ -120,11 +149,15 @@ function FeedbackModal({ telaNome, route, onClose }) {
   return (
     <Modal title="Enviar feedback" onClose={onClose} width={640}
       footer={<>
+        <span role="status" className="vp-small" style={{ marginRight: 'auto', textAlign: 'left', fontWeight: 600, color: valido ? 'var(--vp-success, #2E7D32)' : '#9A5A00' }}>
+          {valido ? 'Tudo certo ✓' : 'Falta: ' + faltas.join(' · ')}
+        </span>
         <Button variant="ghost" size="sm" onClick={onClose}>Cancelar</Button>
         <Button variant="primary" size="sm" disabled={!valido || enviando} onClick={enviar}>{enviando ? 'Enviando…' : 'Enviar feedback'}</Button>
       </>}>
       <div className="vp-small" style={{ background: 'rgba(245,196,0,.14)', border: '1px solid var(--vp-yellow, #F5C400)', borderRadius: 6, padding: '8px 12px' }}>
-        <b>Não digite senhas nem dados de clientes</b> (nome, CNPJ, valores). Só o seu <b>primeiro nome</b> ({ajPrimeiroNome(user.email)}) vai no registro, junto com a tela em que você está: <b>{telaNome}</b>.
+        <b>Não digite senhas nem dados de clientes</b> (nome, CNPJ, valores). Só o seu <b>primeiro nome</b> ({ajPrimeiroNome(user.email)}) vai no registro, junto com o endereço da tela em que você está: <b>{telaNome}</b>.
+        <div style={{ marginTop: 4 }}>Campos com <b>*</b> são obrigatórios. Os contadores mostram quantas letras ainda faltam e chegam a zero (✓) quando estiver certo.</div>
       </div>
 
       <span style={rotulo}>O que você quer enviar?</span>
@@ -133,29 +166,29 @@ function FeedbackModal({ telaNome, route, onClose }) {
       </div>
       <div className="vp-small muted" style={{ marginTop: 4 }}>{AJ_TIPOS.find((t) => t[0] === f.tipo)[2]}</div>
 
-      <label style={rotulo} htmlFor="aj-resumo">Em poucas palavras *</label>
-      <input id="aj-resumo" className="input" style={campo} maxLength={100} value={f.resumo} onChange={(e) => set('resumo', e.target.value)} placeholder="Ex.: o botão Aprovar não responde"/>
+      <AjRotulo htmlFor="aj-resumo" falta={faltaResumo} tam={tam('resumo')} max={100}>Em poucas palavras *</AjRotulo>
+      <input id="aj-resumo" className="input" style={faltaResumo > 0 ? campoFalta : campo} maxLength={100} value={f.resumo} onChange={(e) => set('resumo', e.target.value)} placeholder="Ex.: o botão Aprovar não responde"/>
 
       {f.tipo === 'erro' && (<>
         <label style={rotulo} htmlFor="aj-grav">O quanto isso atrapalha? *</label>
-        <select id="aj-grav" className="input" style={campo} value={f.gravidade} onChange={(e) => set('gravidade', e.target.value)}>
+        <select id="aj-grav" className="input" style={faltaGravidade ? campoFalta : campo} value={f.gravidade} onChange={(e) => set('gravidade', e.target.value)}>
           <option value="">Escolha…</option>
           {AJ_GRAVIDADES.map(([v, r]) => <option key={v} value={v}>{r}</option>)}
         </select>
       </>)}
 
-      <label style={rotulo} htmlFor="aj-fazendo">{rot.fazendo}</label>
+      <AjRotulo htmlFor="aj-fazendo" tam={tam('fazendo')} max={1000}>{rot.fazendo}</AjRotulo>
       <textarea id="aj-fazendo" className="input" style={campo} rows={2} maxLength={1000} value={f.fazendo} onChange={(e) => set('fazendo', e.target.value)}/>
 
-      <label style={rotulo} htmlFor="aj-aconteceu">{rot.aconteceu} *</label>
-      <textarea id="aj-aconteceu" className="input" style={campo} rows={3} maxLength={2000} value={f.aconteceu} onChange={(e) => set('aconteceu', e.target.value)} placeholder={rot.ph}/>
+      <AjRotulo htmlFor="aj-aconteceu" falta={faltaDescricao} tam={tam('aconteceu')} max={2000}>{rot.aconteceu} *</AjRotulo>
+      <textarea id="aj-aconteceu" className="input" style={faltaDescricao > 0 ? campoFalta : campo} rows={3} maxLength={2000} value={f.aconteceu} onChange={(e) => set('aconteceu', e.target.value)} placeholder={rot.ph}/>
 
       {f.tipo === 'erro' && (<>
-        <label style={rotulo} htmlFor="aj-esperava">O que você esperava que acontecesse?</label>
+        <AjRotulo htmlFor="aj-esperava" tam={tam('esperava')} max={2000}>O que você esperava que acontecesse?</AjRotulo>
         <textarea id="aj-esperava" className="input" style={campo} rows={2} maxLength={2000} value={f.esperava} onChange={(e) => set('esperava', e.target.value)}/>
       </>)}
 
-      <label style={rotulo} htmlFor="aj-livre">Quer acrescentar mais alguma coisa? (texto livre)</label>
+      <AjRotulo htmlFor="aj-livre" tam={tam('livre')} max={3000}>Quer acrescentar mais alguma coisa? (texto livre — também vale como descrição)</AjRotulo>
       <textarea id="aj-livre" className="input" style={campo} rows={3} maxLength={3000} value={f.livre} onChange={(e) => set('livre', e.target.value)}/>
 
       <label style={{ display: 'flex', gap: 8, alignItems: 'center', marginTop: 14, fontSize: 13 }}>
@@ -164,7 +197,6 @@ function FeedbackModal({ telaNome, route, onClose }) {
       </label>
 
       {erro && <div role="alert" style={{ marginTop: 12, color: 'var(--vp-danger, #c62828)', fontWeight: 600, fontSize: 13 }}>{erro}</div>}
-      <div className="vp-small muted" style={{ marginTop: 10 }}>* obrigatório. Em “O que aconteceu” ou no texto livre, escreva pelo menos 10 letras.</div>
     </Modal>
   );
 }

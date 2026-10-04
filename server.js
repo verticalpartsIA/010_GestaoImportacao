@@ -185,7 +185,11 @@ app.post('/api/feedback', async (req, res) => {
   }
   const v = feedbackIssue.validar(req.body);
   if (!v.ok) return res.status(400).json({ ok: false, error: 'invalido', mensagem: v.erro });
-  const issue = feedbackIssue.montarIssue(v.dados, { versao: String(readVersionInfo().commit || '').slice(0, 7), navegador: req.headers['user-agent'] });
+  const issue = feedbackIssue.montarIssue(v.dados, {
+    // origem do próprio site (o Origin já passou em feedbackOrigemOk: é este host ou localhost); sem Origin, usa o Host
+    baseUrl: req.headers.origin || `https://${req.headers.host}`,
+    versao: String(readVersionInfo().commit || '').slice(0, 7), navegador: req.headers['user-agent'],
+  });
   if (process.env.FEEDBACK_DRY_RUN === '1') return res.json({ ok: true, simulado: true, numero: 0, titulo: issue.title, etiquetas: issue.labels, corpo: issue.body });
   const token = process.env.GITHUB_TOKEN;
   if (!token) return res.status(503).json({ ok: false, error: 'nao_configurado', mensagem: 'O envio de feedback ainda não foi ativado. Avise o gestor do site.' });
