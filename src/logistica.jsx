@@ -1425,6 +1425,12 @@ function EmailInbox({ setRoute, setSubsel }) {
   const respDe = (m) => (window.InboxTriagem ? window.InboxTriagem.responsavelDe(donoDe(m), atribuidoDe(m)) : null);
   const estrelaDe = (m) => !!(estado[m.id] && estado[m.id].estrela);
   const todasLinhas = [...emailsVisiveis, ...enviadosNormalizados];
+  /* Fase 4C (04/10): CONVERSAS — uma linha por conversa (cabeçalho In-Reply-To; senão mesmo assunto + mesma ponta externa).
+     Ações da barra (arquivar, suspender, spam, marcador, lida, excluir) agem na conversa toda; o e-mail aberto mostra as demais mensagens. */
+  const usaConversas = prefs.conversas !== false;
+  const conv = (window.useInboxConversas || (() => ({ porId: {} })))(todasLinhas, usaConversas);
+  const conversaDe = (m) => (usaConversas && m ? conv.porId[m.id] : null) || null;
+  const expandirConv = (ids) => { const out = new Set(); (ids || []).forEach((id) => { const c = usaConversas ? conv.porId[id] : null; (c ? c.ids : [id]).forEach((x) => out.add(x)); }); return [...out]; };
   const eMeu = (m) => !!respDe(m) && respDe(m) === eu;
   const semResp = (m) => !ehEnviado(m) && !donoDe(m) && !atribuidoDe(m);
   const O = window.InboxOrganizar;
@@ -1444,8 +1450,15 @@ function EmailInbox({ setRoute, setSubsel }) {
   const paraBusca = (m) => ({ ...m, ...(ehEnviado(m) ? { from: 'suporte@vpsistema.com', fromName: 'VerticalParts' } : {}), naoLida: naoLida(m), estrela: estrelaDe(m),
     marcadoresNomes: (mk.porEmail[m.id] || []).map((id) => marcadorPorId[id] && marcadorPorId[id].nome).filter(Boolean) });
   const listaFiltrada0 = buscando ? listaAtual.filter((m) => window.InboxBusca.aplicar(paraBusca(m), consulta)) : listaAtual;
-  const listaFiltrada = window.InboxBusca
+  const listaOrdenada = window.InboxBusca
     ? window.InboxBusca.ordenar(listaFiltrada0, prefs.ordem, { naoLida, estrela: estrelaDe, importante: (m) => politicaDe(m) === 'precisa_de_voce' }) : listaFiltrada0;
+  // uma linha por conversa: a primeira da ordem (a mais recente, ou a mais relevante pelo tipo de caixa) representa as demais
+  const listaFiltrada = (() => {
+    if (!usaConversas) return listaOrdenada;
+    const vistos = new Set();
+    return listaOrdenada.filter((m) => { const c = conv.porId[m.id]; if (!c) return true; if (vistos.has(c.chave)) return false; vistos.add(c.chave); return true; });
+  })();
+  const naoLidaConv = (m) => { const c = conversaDe(m); return c ? c.ids.some((id) => { const x = todasLinhas.find((y) => y.id === id); return x && naoLida(x); }) : naoLida(m); };
   const active = listaFiltrada.find((e) => e.id === activeId) || todasLinhas.find((e) => e.id === activeId);   // o e-mail aberto continua aberto mesmo que a pesquisa o esconda
   const nomeDe = (email) => { const p = ((perm && perm.colaboradores) || []).find((x) => String(x.email).toLowerCase() === String(email || '').toLowerCase()); return (p && p.nome) || email; };
   const pontaAtiva = active ? (ehEnviado(active) ? (active.to || []).join(',') : active.from) : '';
@@ -1582,7 +1595,8 @@ function EmailInbox({ setRoute, setSubsel }) {
       return;
     }
     const assunto = email.subject || '(sem assunto)';
-    if (!window.confirm(`Tem certeza que deseja excluir este e-mail?\n\n"${assunto}"\n\nEle continua existindo na caixa de e-mail real — isso só remove da lista do site.`)) return;
+    const cv = conversaDe(email);
+    if (!window.confirm(`Tem certeza que deseja excluir este e-mail?${cv && cv.total > 1 ? `\n\n(Só esta mensagem — a conversa tem ${cv.total}. Para a conversa toda, marque a linha e use Excluir na barra.)` : ''}\n\n"${assunto}"\n\nEle continua existindo na caixa de e-mail real — isso só remove da lista do site.`)) return;
     try {
       const user = window.__VP_USER || {};
       const { error } = await window.__VP_SB.sb.from('emails_projeto')
@@ -1802,12 +1816,13 @@ function EmailInbox({ setRoute, setSubsel }) {
   const marcarSelecionados = (lido) => {
     if (!pode('editar')) { window.toast?.('Sem permissão (alçada Inbox › Editar).', 'warning'); return; }
     const n = selecionados.size;
-    selecionados.forEach((id) => definirLido(id, lido));
+    expandirConv([...selecionados]).forEach((id) => definirLido(id, lido));
     setSelecionados(new Set());
     window.toast?.(`${n} e-mail(s) marcado(s) como ${lido ? 'lido(s)' : 'não lido(s)'} para você.`, 'success');
   };
   const excluirSelecionados = async () => {
-    const linhas = listaFiltrada.filter((m) => selecionados.has(m.id));
+    const idsConv = new Set(expandirConv([...selecionados]));
+    const linhas = todasLinhas.filter((m) => idsConv.has(m.id));
     const permitidas = linhas.filter((m) => podeExcluirDe(donoDe(m)));
     if (!permitidas.length) { window.toast?.('Você não tem permissão para excluir os e-mails selecionados (só o dono, ou quem tem a alçada “Exclui e-mails de outras pessoas”).', 'warning'); return; }
     const pulados = linhas.length - permitidas.length;
@@ -1828,7 +1843,7 @@ function EmailInbox({ setRoute, setSubsel }) {
   };
 
   /* ---- Fase 4A: Arquivar, Spam, Suspender e Marcadores. Agem nos e-mails MARCADOS ou, se nada estiver marcado, no e-mail ABERTO. ---- */
-  const alvosIds = selecionados.size ? [...selecionados] : (active ? [active.id] : []);
+  const alvosIds = expandirConv(selecionados.size ? [...selecionados] : (active ? [active.id] : []));
   const alvosLinhas = alvosIds.map((id) => todasLinhas.find((m) => m.id === id)).filter(Boolean);
   const todosArquivados = alvosLinhas.length > 0 && alvosLinhas.every((m) => estado[m.id] && estado[m.id].arquivado);
   const concluirAcao = (msg) => { setSelecionados(new Set()); if (msg) window.toast?.(msg, 'success'); };
@@ -2039,12 +2054,12 @@ function EmailInbox({ setRoute, setSubsel }) {
             const sel = selecionados.has(m.id);
             const est = estrelaDe(m);
             return (
-              <div key={m.id} className={"inbox__item inbox__row " + (naoLida(m) ? "unread " : "") + (activeId === m.id ? "is-active " : "") + (sel ? "is-sel" : "")}
+              <div key={m.id} className={"inbox__item inbox__row " + (naoLidaConv(m) ? "unread " : "") + (activeId === m.id ? "is-active " : "") + (sel ? "is-sel" : "")}
                 onClick={() => { setActiveId(m.id); marcarLido(m.id); }}>
                 <label className="ig-check" onClick={(ev) => ev.stopPropagation()}><input type="checkbox" checked={sel} onChange={() => alternarSel(m.id)}/></label>
                 <span className={"ig-estrela" + (est ? " on" : "")} title={est ? 'Tirar a estrela' : 'Marcar com estrela (só para você)'}
                   onClick={(ev) => { ev.stopPropagation(); alternarEstrela(m.id, est); }}>{est ? '★' : '☆'}</span>
-                <span className="ig-quem">{m.fromName || m.from}</span>
+                <span className="ig-quem">{m.fromName || m.from}{conversaDe(m) && conversaDe(m).total > 1 ? <span className="io-conv-n" title="Mensagens nesta conversa">{conversaDe(m).total}</span> : null}</span>
                 <span className="ig-texto"><b className="subj">{m.subject}</b>{m.preview ? <span> — {String(m.preview).replace(/\s+/g, ' ').slice(0, 160)}</span> : null}
                   {m.anexos && m.anexos.length > 0 ? <Icon.paperclip size={11} style={{ marginLeft: 6, verticalAlign: 'middle', opacity: .6 }}/> : null}</span>
                 <span className="ig-chips">
@@ -2094,6 +2109,7 @@ function EmailInbox({ setRoute, setSubsel }) {
                   </div>
                 ) : (folder === 'inbox' && <div className="small muted" style={{ marginTop: 6 }}>Sem responsável — fica na fila de triagem até alguém atribuir.</div>)}
                 {window.InboxSugestaoBarra && <window.InboxSugestaoBarra s={sugAtiva} onVincular={vincularA} ocupado={vinculandoSug}/>}
+                {window.InboxFaixaConversa && <window.InboxFaixaConversa conversa={conversaDe(active)} linhas={todasLinhas} ativoId={active.id} onAbrir={(id) => { setActiveId(id); marcarLido(id); }} quando={window.igQuando}/>}
                 {gatilhoAberto && (
                   <div className="alert warning" style={{ marginTop: 8 }}>
                     <Icon.warning/>

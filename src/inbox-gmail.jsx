@@ -6,7 +6,7 @@
    dependem do backend da fase 4 e não aparecem (item visível tem que fazer algo).
    Preferências visuais (densidade, painel, ordem) ficam no navegador de cada pessoa (localStorage) — conveniência, não dado.
    ============================================================ */
-const IG_PREFS_PADRAO = { densidade: 'padrao', painel: 'direita', ordem: 'padrao' };
+const IG_PREFS_PADRAO = { densidade: 'padrao', painel: 'direita', ordem: 'padrao', conversas: true };
 
 function useInboxPrefs() {
   const eu = String((window.__VP_USER || {}).email || 'anon').toLowerCase();
@@ -106,6 +106,10 @@ function InboxConfigRapida({ prefs, atualizar, foco, setFoco, onClose }) {
       {grupo('Densidade', 'densidade', [['padrao', 'Padrão', 'duas linhas por e-mail'], ['regular', 'Regular', 'uma linha'], ['compacto', 'Compacto', 'uma linha, mais junto']])}
       {grupo('Painel de leitura', 'painel', [['direita', 'À direita da lista'], ['abaixo', 'Abaixo da lista'], ['sem', 'Sem divisão', 'o e-mail abre no lugar da lista']])}
       {grupo('Tipo de caixa de entrada', 'ordem', [['padrao', 'Padrão', 'mais recentes primeiro'], ['nao_lidas', 'Não lidas primeiro'], ['estrela', 'Com estrela primeiro'], ['importantes', 'Precisa de você primeiro']])}
+      <div className="ig-config__grupo">
+        <div className="ig-config__titulo">Conversas</div>
+        <label className="ig-config__opcao"><input type="checkbox" checked={prefs.conversas !== false} onChange={() => atualizar({ conversas: prefs.conversas === false })}/><span>Agrupar mensagens da mesma conversa <span className="muted small">— uma linha por conversa; arquivar, suspender e marcar agem na conversa toda</span></span></label>
+      </div>
       <div className="ig-config__grupo">
         <div className="ig-config__titulo">E-mails automáticos</div>
         <label className="ig-config__opcao"><input type="checkbox" checked={foco} onChange={() => setFoco((f) => !f)}/><span>Ocultar newsletters e avisos automáticos <span className="muted small">— nunca apaga; “ver tudo” devolve</span></span></label>
