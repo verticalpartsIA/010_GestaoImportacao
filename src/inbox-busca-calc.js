@@ -125,7 +125,24 @@
     return [...lista].sort((a, b) => (peso(a) - peso(b)) || (new Date(b.date || 0) - new Date(a.date || 0)));
   }
 
-  const api = { parseConsulta, montarConsulta, aplicar, ordenar, normalizar, vazia };
+  /* 04/10 (fase 4B) — parte da consulta que o BANCO consegue filtrar (histórico completo de emails_projeto).
+     O resto (para:, exclusões, lida/estrela, marcadores…) continua sendo aplicado na tela por aplicar(). Nunca devolve
+     caractere que quebre a sintaxe do filtro `or=` do PostgREST (vírgula, parênteses, aspas, %, *, \). */
+  const limpar = (v) => String(v == null ? '' : v).replace(/[,()"\\%*]/g, ' ').replace(/\s+/g, ' ').trim();
+  function filtroServidor(q) {
+    if (!q) return null;
+    const f = {
+      termos: (q.termos || []).map(limpar).filter(Boolean),
+      de: (q.de || []).map(limpar).filter(Boolean),
+      assunto: (q.assunto || []).map(limpar).filter(Boolean),
+      cotacao: q.cotacao != null ? Number(q.cotacao) : null,
+      depois: q.depois || null, antes: q.antes || null, anexo: !!q.anexo,
+    };
+    const util = f.termos.length || f.de.length || f.assunto.length || f.cotacao != null || f.depois || f.antes;
+    return util ? f : null;
+  }
+
+  const api = { parseConsulta, montarConsulta, aplicar, ordenar, normalizar, vazia, filtroServidor };
   if (typeof window !== 'undefined') window.InboxBusca = api;
   if (typeof module !== 'undefined') module.exports = api;
 }());

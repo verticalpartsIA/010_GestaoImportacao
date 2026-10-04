@@ -102,3 +102,13 @@ test('em:spam e em:adiados viram pastas', () => {
   assert.equal(B.parseConsulta('em:adiados').em, 'adiados');
   assert.equal(B.parseConsulta('in:snoozed').em, 'adiados');
 });
+
+test('filtroServidor: só devolve o que o banco consegue filtrar e limpa caracteres perigosos', () => {
+  const B = require('./inbox-busca-calc.js');
+  assert.equal(B.filtroServidor(B.parseConsulta('')), null);
+  assert.equal(B.filtroServidor(B.parseConsulta('para:fulano')), null);   // para: é só da tela
+  const f = B.filtroServidor(B.parseConsulta('glarie, "a(b)" cotacao:970 depois:2026-01-01'));
+  assert.deepEqual(f.termos, ['glarie,'.replace(',', '').trim(), 'a b']);
+  assert.equal(f.cotacao, 970);
+  assert.ok(f.depois instanceof Date);
+});
