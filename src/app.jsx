@@ -143,7 +143,7 @@ function EmConstrucaoPage({ titulo, descricao }) {
    3. ASYNC_FETCH_ROUTES — subsel é o registro inteiro, sem suporte a id
       solto no componente; app.jsx busca no Supabase e só then popula
       subsel (renderPage mostra "Carregando…" enquanto isso). */
-const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador", "formulario-quadro-comando", "central-documentos", "cadastro-custos", "ficha-tecnica", "solicitacoes-produto", "precificacao", "linha-do-tempo"]);
+const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador", "formulario-quadro-comando", "central-documentos", "cadastro-custos", "ficha-tecnica", "solicitacoes-produto", "precificacao", "linha-do-tempo", "inbox"]);
 const WRAPPED_ID_KEY = { "proposta-editor": "__editId" };
 
 /* Cada fetcher recebe o id da URL e resolve pro registro (ou null se não
@@ -346,7 +346,7 @@ function App() {
     }
     switch (route) {
       case "dashboard": return <Dashboard role={role} setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "inbox": return <EmailInbox setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "inbox": return <EmailInbox setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
       case "leads": return <LeadsPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "crm-canais": return <CRMCanaisPage setRoute={setRoute} setSubsel={setSubsel}/>;

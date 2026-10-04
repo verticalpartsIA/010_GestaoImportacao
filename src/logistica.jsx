@@ -1320,7 +1320,7 @@ const INBOX_REFERENCIA_TIPO_LABEL = {
    "Inbox" dentro de Importação/Compras aponta pra cá também (mesma rota).
    Sem categorização automática por módulo ainda (não fabrica um filtro
    que não existe). Sem cron: busca só quando a tela abre/atualiza. */
-function EmailInbox({ setRoute, setSubsel }) {
+function EmailInbox({ setRoute, setSubsel, subsel }) {
   const [emailsBase, setEmails] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState(null);
@@ -1460,6 +1460,23 @@ function EmailInbox({ setRoute, setSubsel }) {
   })();
   const naoLidaConv = (m) => { const c = conversaDe(m); return c ? c.ids.some((id) => { const x = todasLinhas.find((y) => y.id === id); return x && naoLida(x); }) : naoLida(m); };
   const active = listaFiltrada.find((e) => e.id === activeId) || todasLinhas.find((e) => e.id === activeId);   // o e-mail aberto continua aberto mesmo que a pesquisa o esconda
+  /* "Pedir decisão" (04/10): decisão ligada ao e-mail aberto na Central de Decisões. Também é o destino do "Ver documento" do cartão
+     (subsel = id do e-mail): abre o e-mail; se ele não está nas listas carregadas, pesquisa o assunto no histórico e abre. */
+  const [pedirDecisaoAberto, setPedirDecisaoAberto] = React.useState(false);
+  const [tickDecisao, setTickDecisao] = React.useState(0);
+  const decisoesDoEmail = (window.useDecisoesDoEmail || (() => []))(active ? active.id : null, tickDecisao);
+  const idParaAbrir = typeof subsel === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subsel) ? subsel : null;
+  const buscouParaAbrir = React.useRef(null);
+  React.useEffect(() => {
+    if (!idParaAbrir || perm === undefined || loading) return;
+    if (todasLinhas.some((m) => m.id === idParaAbrir)) { setFolder('all'); setActiveId(idParaAbrir); if (setSubsel) setSubsel(null); return; }
+    if (buscouParaAbrir.current === idParaAbrir) return;
+    buscouParaAbrir.current = idParaAbrir;
+    window.__VP_SB.sb.from('emails_projeto').select('assunto').eq('id', idParaAbrir).maybeSingle().then(({ data }) => {
+      if (data && data.assunto) setBusca('assunto:"' + String(data.assunto).replace(/["]/g, ' ').trim() + '"');
+      else { window.toast?.('Não encontrei este e-mail (pode ter sido excluído).', 'warning'); if (setSubsel) setSubsel(null); }
+    });
+  }, [idParaAbrir, todasLinhas.length, perm, loading]);
   const nomeDe = (email) => { const p = ((perm && perm.colaboradores) || []).find((x) => String(x.email).toLowerCase() === String(email || '').toLowerCase()); return (p && p.nome) || email; };
   const pontaAtiva = active ? (ehEnviado(active) ? (active.to || []).join(',') : active.from) : '';
   const sugAtiva = (window.useSugestaoVinculo || (() => null))(active, pontaAtiva);
@@ -1956,6 +1973,10 @@ function EmailInbox({ setRoute, setSubsel }) {
       {modalMarcador && window.InboxModalMarcador && (
         <window.InboxModalMarcador marcadores={mk.marcadores} caps={capsOrg} onCriar={mk.criar} onClose={() => setModalMarcador(false)}/>
       )}
+      {pedirDecisaoAberto && active && window.InboxModalPedirDecisao && (
+        <window.InboxModalPedirDecisao email={active} responsavel={respDe(active)} colaboradores={(perm && perm.colaboradores) || []} eu={eu}
+          onClose={() => setPedirDecisaoAberto(false)} onCriada={() => setTickDecisao((t) => t + 1)}/>
+      )}
       {atribuirAberto && active && window.InboxModalAtribuir && (
         <window.InboxModalAtribuir email={active} dono={donoDe(active)} atribuido={atribuidoDe(active)} decisao={iaMapa[active.id]} ctx={perm}
           onClose={() => setAtribuirAberto(false)} onSalvo={() => { setAtribuirAberto(false); if (meta.recarregar) meta.recarregar(); carregarEnviados(); }}/>
@@ -2135,9 +2156,13 @@ function EmailInbox({ setRoute, setSubsel }) {
                     {perm && window.InboxVisibilidade && window.InboxVisibilidade.podeAtribuir(donoDe(active), atribuidoDe(active), perm) && (
                       <Button variant="ghost" size="sm" icon="users" onClick={() => setAtribuirAberto(true)}>Atribuir</Button>
                     )}
+                    {pode('editar') && window.InboxModalPedirDecisao && (
+                      <Button variant="ghost" size="sm" icon="shield" title="Cria uma decisão na Central de Decisões ligada a este e-mail" onClick={() => setPedirDecisaoAberto(true)}>Pedir decisão</Button>
+                    )}
                     <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => excluirEmail(ev, active)}>Excluir</Button>
                   </div>
                 </div>
+                {window.InboxFaixaDecisao && <window.InboxFaixaDecisao decisoes={decisoesDoEmail} nomeDe={nomeDe}/>}
                 {vinculando && (
                   <div className="row gap-2" style={{ marginTop: 10, alignItems: 'center' }}>
                     <input className="input" style={{ maxWidth: 180 }} placeholder="Nº Cotação (ex.: 950)" value={vincularInput}

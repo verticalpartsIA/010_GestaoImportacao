@@ -59,6 +59,7 @@
     compra_varejo_logistica: 'Compra de varejo — aprovação da Logística',
     desconto_proposta: 'Desconto em proposta',
     pagamento_instalador_parcela: 'Pagamento a instalador — aprovação do Gestor Comercial',
+    inbox_decisao: 'Decisão pedida a partir de um e-mail',
   };
 
   /* Além dos e-mails fixos, qualquer papel pode ganhar aprovadores extras
@@ -106,9 +107,10 @@
   }
 
   /* ---------- Criação ---------- */
-  async function criarDecisao({ tipo, papelRequerido, numeroCotacao, dossierId, referenciaTabela, referenciaId, dependeDe, contexto }) {
+  async function criarDecisao({ tipo, papelRequerido, numeroCotacao, dossierId, referenciaTabela, referenciaId, dependeDe, contexto, aprovadoresFixos }) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const aprovadores = await resolverAprovadores(papelRequerido);
+    // aprovadoresFixos (opcional): quando quem pede escolhe as pessoas na hora (ex.: "Pedir decisão" no Inbox). Os outros gates seguem pelo papel.
+    const aprovadores = (aprovadoresFixos && aprovadoresFixos.length) ? [...new Set(aprovadoresFixos.map((e) => String(e).trim().toLowerCase()).filter(Boolean))] : await resolverAprovadores(papelRequerido);
     const status = (dependeDe && dependeDe.length) ? 'bloqueada_por_dependencia' : 'pendente';
     const row = {
       tipo, papel_requerido: papelRequerido,
@@ -578,6 +580,24 @@
     });
   }
 
+  /* ---------- Inbox: "Pedir decisão" (04/10/2026) ----------
+     Cria uma decisão ligada a um e-mail (referencia_tabela='emails_projeto'). De propósito SEM numero_cotacao na linha (o Nº vai em
+     `contexto`): com numero_cotacao o botão "Ver documento" abriria o formulário da cotação em vez do e-mail. Papel 'inbox_decisao'
+     não existe em EMAILS_FIXOS → os aprovadores escolhidos ficam como estão (atualizarAprovadores só recalcula papel conhecido).
+     Qualquer um dos escolhidos pode decidir. */
+  async function pedirDecisaoInbox({ emailId, assunto, de, numeroCotacao, pergunta, aprovadores }) {
+    const lista = (aprovadores || []).filter(Boolean);
+    if (!emailId) throw new Error('E-mail não informado.');
+    if (!String(pergunta || '').trim()) throw new Error('Escreva a pergunta da decisão.');
+    if (!lista.length) throw new Error('Escolha pelo menos uma pessoa para decidir.');
+    const titulo = String(pergunta).trim().slice(0, 140);
+    return criarDecisao({
+      tipo: 'inbox_decisao', papelRequerido: 'inbox_decisao', referenciaTabela: 'emails_projeto', referenciaId: String(emailId),
+      aprovadoresFixos: lista,
+      contexto: { titulo: assunto ? `${titulo} — e-mail “${String(assunto).slice(0, 70)}”` : titulo, pergunta: String(pergunta).trim(), email_assunto: assunto || null, email_de: de || null, cotacao_do_email: numeroCotacao ?? null, solicitante: meuEmail() || null },
+    });
+  }
+
   window.DecisoesStore = {
     PAPEL_LABEL, TIPO_LABEL,
     resolverAprovadores, souAprovador, ehAdministrador,
@@ -587,6 +607,6 @@
     aprovar, reprovar,
     podeEnviarProposta, podeContratarInstalador, podeMontadorEntrarObra,
     podeComprarEquipamento, verificarGateCompra, precisaAprovacaoCeo,
-    criarDecisaoCompraVarejo, podePagarParcela,
+    criarDecisaoCompraVarejo, podePagarParcela, pedirDecisaoInbox,
   };
 }());
