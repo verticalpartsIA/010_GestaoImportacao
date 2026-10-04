@@ -51,19 +51,36 @@
      ctx = { eu, caps: { ver_todos, ver_equipe, ver_departamento, triagem, areas: [sufixos] },
              equipe: Set<email>, meuDepartamento, departamentoDe: (email) => texto }
      Regras, na ordem: é meu → vejo; ver_todos → vejo; sem dono → só quem faz triagem; equipe; meu departamento; áreas marcadas. */
-  function podeVer(dono, ctx) {
+  function podeVer(dono, ctx, atribuido) {
     const c = ctx || {};
     const caps = c.caps || {};
     const d = norm(dono);
-    if (d && d === norm(c.eu)) return true;
+    const a = norm(atribuido);
+    const eu = norm(c.eu);
+    if ((d && d === eu) || (a && a === eu)) return true;      // é meu, ou foi atribuído a mim (fase 2)
     if (caps.ver_todos) return true;
-    if (!d) return !!caps.triagem;
-    if (caps.ver_equipe && c.equipe && c.equipe.has(d)) return true;
-    const depto = c.departamentoDe ? c.departamentoDe(d) : null;
-    if (caps.ver_departamento && depto && c.meuDepartamento && depto === c.meuDepartamento) return true;
-    const area = areaDe(depto);
-    if (area && Array.isArray(caps.areas) && caps.areas.includes(area)) return true;
-    return false;
+    if (!d && !a) return !!caps.triagem;
+    /* equipe / departamento / áreas valem para o dono E para quem recebeu a atribuição */
+    return [d, a].filter(Boolean).some((pessoa) => {
+      if (caps.ver_equipe && c.equipe && c.equipe.has(pessoa)) return true;
+      const depto = c.departamentoDe ? c.departamentoDe(pessoa) : null;
+      if (caps.ver_departamento && depto && c.meuDepartamento && depto === c.meuDepartamento) return true;
+      const area = areaDe(depto);
+      return !!(area && Array.isArray(caps.areas) && caps.areas.includes(area));
+    });
+  }
+
+  /* podeAtribuir(dono, atribuido, ctx) → quem pode TROCAR o responsável: precisa da alçada Editar e ser o responsável atual,
+     ou ter ver_todos, ou fazer triagem (e-mail sem responsável), ou ser chefe do responsável (equipe). Férias: o chefe reatribui. */
+  function podeAtribuir(dono, atribuido, ctx) {
+    const c = ctx || {};
+    const caps = c.caps || {};
+    if (c.flags && !c.flags.editar) return false;
+    const resp = norm(atribuido) || norm(dono);
+    if (!resp) return !!(caps.triagem || caps.ver_todos);
+    if (resp === norm(c.eu) || norm(dono) === norm(c.eu)) return true;
+    if (caps.ver_todos) return true;
+    return !!(caps.ver_equipe && c.equipe && c.equipe.has(resp));
   }
 
   /* carregarContexto(): lê as alçadas da pessoa logada (PropostaStore.temCapacidade — Administrador passa em tudo)
@@ -79,7 +96,7 @@
         .concat(Object.values(AREA_POR_DEPARTAMENTO).map((a) => 'ver_area_' + a));
       const flags = {};
       await Promise.all(nomes.map(async (n) => { flags[n] = !!(await ps.temCapacidade('inbox', n)); }));
-      const { data: pessoas } = await sb.from('colaboradores_vpsistema').select('id, email, departamento, manager_id').eq('is_active', true);
+      const { data: pessoas } = await sb.from('colaboradores_vpsistema').select('id, email, nome, departamento, manager_id, is_department_lead').eq('is_active', true);
       const lista = pessoas || [];
       const mapaDepto = {};
       lista.forEach((p) => { if (p.email) mapaDepto[norm(p.email)] = p.departamento || null; });
@@ -91,6 +108,7 @@
           areas: Object.values(AREA_POR_DEPARTAMENTO).filter((a) => flags['ver_area_' + a]),
         },
         equipe: subordinados(lista, eu),
+        colaboradores: lista,                       // para o seletor "Atribuir" (nome, departamento, líder)
         meuDepartamento: mapaDepto[eu] || null,
         departamentoDe: (email) => mapaDepto[norm(email)] || null,
       };
@@ -100,7 +118,7 @@
     }
   }
 
-  const api = { AREA_POR_DEPARTAMENTO, areaDe, subordinados, podeVer, carregarContexto };
+  const api = { AREA_POR_DEPARTAMENTO, areaDe, subordinados, podeVer, podeAtribuir, carregarContexto };
   if (typeof window !== 'undefined') window.InboxVisibilidade = api;
   if (typeof module !== 'undefined') module.exports = api;
 }());
