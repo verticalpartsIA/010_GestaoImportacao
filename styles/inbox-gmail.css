@@ -1,0 +1,158 @@
+/* ============================================================
+   inbox-gmail.css — layout estilo Gmail para o Inbox (04/10/2026, fase 3).
+   Estrutura do Gmail (sidebar com Escrever, pesquisa em pílula, barra de ferramentas, densidades, painel de leitura,
+   janela flutuante) na identidade visual da VerticalParts (amarelo/preto). Sobrescreve .inbox* de modules.css.
+   ============================================================ */
+
+/* ---- barra de cima: pesquisa em pílula + ? ⚙ ---- */
+.ig-topo { display: flex; align-items: center; gap: 10px; margin: 0 0 10px; }
+.ig-topo__titulo { font-family: var(--font-display); font-weight: 800; font-size: 20px; text-transform: uppercase; letter-spacing: .02em; margin-right: 8px; }
+.ig-topo__fim { margin-left: auto; display: flex; align-items: center; gap: 4px; }
+.ig-busca { position: relative; flex: 1; max-width: 680px; }
+.ig-busca__pilula {
+  display: flex; align-items: center; gap: 8px; height: 44px; padding: 0 8px 0 16px;
+  background: var(--vp-gray-100); border: 1px solid transparent; border-radius: 24px; color: var(--fg2);
+  transition: background var(--dur-fast) var(--ease-out), box-shadow var(--dur-fast) var(--ease-out);
+}
+.ig-busca__pilula:focus-within { background: #fff; border-color: var(--border-strong); box-shadow: 0 2px 8px rgba(0,0,0,.12); }
+.ig-busca__pilula input { flex: 1; border: 0; background: transparent; outline: 0; font-size: 14px; color: var(--fg1); min-width: 0; }
+.ig-busca__painel {
+  position: absolute; z-index: 40; left: 0; right: 0; top: 50px; background: #fff; border: 1px solid var(--border-strong);
+  box-shadow: 0 8px 24px rgba(0,0,0,.18); padding: 14px 16px 10px; border-radius: 8px;
+}
+.ig-busca__linha { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.ig-busca__linha > label:first-child { width: 150px; font-size: 12px; color: var(--fg2); flex-shrink: 0; }
+.ig-busca__linha .input { flex: 1; }
+.ig-busca__checks { gap: 18px; padding-left: 160px; font-size: 12px; }
+.ig-busca__checks label { display: inline-flex; align-items: center; gap: 6px; width: auto; color: var(--fg1); cursor: pointer; }
+.ig-busca__rodape { display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-top: 4px; }
+.ig-backdrop { position: fixed; inset: 0; z-index: 30; background: transparent; }
+.ig-iconbtn {
+  width: 32px; height: 32px; display: inline-flex; align-items: center; justify-content: center; border: 0; border-radius: 50%;
+  background: transparent; color: var(--fg2); cursor: pointer; font-size: 14px; line-height: 1;
+}
+.ig-iconbtn:hover:not(:disabled) { background: rgba(0,0,0,.08); color: var(--fg1); }
+.ig-iconbtn:disabled { opacity: .4; cursor: default; }
+.ig-iconbtn--grande { width: 36px; height: 36px; border: 1.5px solid var(--fg3); border-radius: 50%; font-size: 15px; }
+.ig-iconbtn--claro { color: #fff; border-radius: 4px; }
+.ig-iconbtn--claro:hover:not(:disabled) { background: rgba(255,255,255,.2); color: #fff; }
+
+/* ---- menu "?" ---- */
+.ig-menu { position: relative; }
+.ig-menu__lista { position: absolute; z-index: 40; right: 0; top: 40px; min-width: 190px; background: #fff; border: 1px solid var(--border-strong); box-shadow: 0 8px 24px rgba(0,0,0,.18); border-radius: 8px; padding: 6px 0; }
+.ig-menu__item { padding: 9px 16px; font-size: 13px; cursor: pointer; }
+.ig-menu__item:hover { background: var(--vp-gray-50); }
+
+/* ---- moldura: sidebar + principal ---- */
+.inbox.inbox--gmail { grid-template-columns: 248px 1fr; position: relative; border-radius: 8px; overflow: hidden; }
+.inbox--gmail .inbox__folders { padding: 12px 8px 12px 0; background: #fff; }
+.ig-escrever {
+  display: inline-flex; align-items: center; gap: 12px; margin: 4px 0 14px 8px; padding: 0 22px 0 16px; height: 56px;
+  background: var(--vp-yellow); color: #000; font-weight: 700; font-size: 14px; border: 0; border-radius: 16px; cursor: pointer;
+  box-shadow: 0 1px 3px rgba(0,0,0,.25);
+}
+.ig-escrever:hover { box-shadow: 0 3px 8px rgba(0,0,0,.3); filter: brightness(1.04); }
+.ig-escrever:disabled { opacity: .5; cursor: default; box-shadow: none; }
+.inbox--gmail .inbox__folder { border-left: 0; border-radius: 0 16px 16px 0; padding: 7px 14px 7px 24px; font-size: 13px; }
+.inbox--gmail .inbox__folder.is-active { background: #FFF3B0; font-weight: 700; }
+.inbox--gmail .inbox__folder:hover:not(.is-active) { background: var(--vp-gray-100); }
+.inbox--gmail .inbox__folder .count { background: transparent; color: var(--fg1); font-family: inherit; font-size: 12px; font-weight: 700; }
+.inbox--gmail .inbox__folder.is-active .count { background: transparent; color: #000; }
+.inbox__folders-sep { margin: 10px 24px 4px; font-size: 10px; letter-spacing: .12em; text-transform: uppercase; color: var(--fg3); font-weight: 700; }
+
+/* ---- área principal: painel de leitura à direita / abaixo / sem divisão ---- */
+.inbox__main { display: grid; min-width: 0; min-height: 0; overflow: hidden; }
+.inbox__main--direita { grid-template-columns: minmax(340px, 46%) 1fr; }
+.inbox__main--abaixo { grid-template-columns: 1fr; grid-template-rows: minmax(160px, 45%) 1fr; }
+.inbox__main--abaixo .inbox__list { border-right: 0; border-bottom: 1px solid var(--border); }
+.inbox__main--sem { grid-template-columns: 1fr; }
+.inbox__main .inbox__list, .inbox__main .inbox__msg { min-height: 0; }
+.ig-voltar { padding: 8px 16px; border-bottom: 1px solid var(--border); background: var(--vp-gray-50); }
+.ig-msg-vazio { margin: auto; text-align: center; color: var(--fg3); font-size: 13px; padding: 32px; }
+
+/* ---- barra de ferramentas da lista ---- */
+.ig-toolbar { display: flex; align-items: center; gap: 6px; padding: 4px 12px; border-bottom: 1px solid var(--border); background: #fff; min-height: 44px; }
+.ig-toolbar__fim { margin-left: auto; white-space: nowrap; }
+.ig-check { display: inline-flex; align-items: center; justify-content: center; width: 28px; height: 28px; cursor: pointer; }
+.ig-check input { cursor: pointer; }
+
+/* ---- linhas da lista (densidades) ---- */
+.inbox--gmail .inbox__item.inbox__row {
+  display: grid; align-items: center; column-gap: 8px; padding: 6px 12px 6px 8px; cursor: pointer;
+  background: var(--vp-gray-50); border-bottom: 1px solid var(--border);
+}
+.inbox--gmail .inbox__item.inbox__row.unread { background: #fff; }
+.inbox--gmail .inbox__item.inbox__row.unread::before { display: none; }
+.inbox--gmail .inbox__item.inbox__row.is-active { background: #FFFBE6; box-shadow: inset 3px 0 0 0 var(--vp-yellow); }
+.inbox--gmail .inbox__item.inbox__row.is-sel { background: #FFF3B0; }
+.inbox--gmail .inbox__item.inbox__row:hover { box-shadow: inset 0 -1px 0 0 var(--border-strong), 0 1px 3px rgba(0,0,0,.18); z-index: 1; }
+.inbox__row .ig-estrela { cursor: pointer; font-size: 16px; line-height: 1; color: var(--fg3); text-align: center; }
+.inbox__row .ig-estrela.on { color: #E0A800; }
+.inbox__row .ig-quem { font-size: 13px; color: var(--fg1); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 500; }
+.inbox__row.unread .ig-quem, .inbox__row.unread .ig-texto .subj { font-weight: 800; }
+.inbox__row .ig-texto { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; color: var(--fg3); }
+.inbox__row .ig-texto .subj { color: var(--fg1); font-weight: 500; margin: 0; }
+.inbox__row .ig-chips { display: flex; gap: 4px; flex-wrap: wrap; align-items: center; min-width: 0; }
+.inbox__row .ig-chips .badge { margin-top: 0 !important; }
+.inbox__row .ig-quando { font-size: 12px; color: var(--fg2); white-space: nowrap; text-align: right; font-weight: 500; }
+.inbox__row.unread .ig-quando { color: var(--fg1); font-weight: 700; }
+.inbox__row .ig-lixo { opacity: 0; transition: opacity var(--dur-fast); }
+.inbox__row:hover .ig-lixo { opacity: 1; }
+
+/* Padrão: duas linhas (remetente/data, assunto—prévia) + etiquetas embaixo */
+.inbox--den-padrao .inbox__row {
+  grid-template-columns: 28px 24px minmax(0, 1fr) auto 32px;
+  grid-template-areas: "check estrela quem quando lixo" "check estrela texto texto lixo" ". . chips chips .";
+  row-gap: 1px; padding-top: 8px; padding-bottom: 8px;
+}
+/* Regular / Compacto: uma linha */
+.inbox--den-regular .inbox__row, .inbox--den-compacto .inbox__row {
+  grid-template-columns: 28px 24px 170px minmax(0, 1fr) auto auto 32px;
+  grid-template-areas: "check estrela quem texto chips quando lixo";
+}
+.inbox--den-regular .inbox__row { padding-top: 11px; padding-bottom: 11px; }
+.inbox--den-compacto .inbox__row { padding-top: 3px; padding-bottom: 3px; }
+.inbox--den-compacto .ig-chips .badge { font-size: 9px; padding: 0 5px; }
+.inbox__row > .ig-check { grid-area: check; }
+.inbox__row > .ig-estrela { grid-area: estrela; }
+.inbox__row > .ig-quem { grid-area: quem; }
+.inbox__row > .ig-texto { grid-area: texto; }
+.inbox__row > .ig-chips { grid-area: chips; }
+.inbox__row > .ig-quando { grid-area: quando; }
+.inbox__row > .ig-lixo { grid-area: lixo; }
+.inbox--den-padrao .ig-chips:empty, .inbox--den-regular .ig-chips:empty { display: none; }
+
+/* ---- ⚙ configurações rápidas ---- */
+.ig-config {
+  position: absolute; z-index: 35; right: 0; top: 0; bottom: 0; width: 320px; background: #fff; overflow-y: auto;
+  border-left: 1px solid var(--border-strong); box-shadow: -6px 0 20px rgba(0,0,0,.16);
+}
+.ig-config__cab { display: flex; justify-content: space-between; align-items: center; padding: 12px 12px 12px 16px; border-bottom: 1px solid var(--border); position: sticky; top: 0; background: #fff; }
+.ig-config__grupo { padding: 12px 16px 4px; border-bottom: 1px solid var(--border); }
+.ig-config__titulo { font-size: 11px; letter-spacing: .1em; text-transform: uppercase; color: var(--fg3); font-weight: 700; margin-bottom: 6px; }
+.ig-config__opcao { display: flex; align-items: flex-start; gap: 8px; padding: 5px 0; font-size: 13px; cursor: pointer; }
+.ig-config__opcao input { margin-top: 3px; }
+
+/* ---- janela "Escrever" flutuante ---- */
+.ig-janela {
+  position: fixed; z-index: 60; right: 24px; bottom: 0; width: 520px; max-width: calc(100vw - 32px); background: #fff;
+  border: 1px solid var(--border-strong); border-bottom: 0; border-radius: 10px 10px 0 0; box-shadow: 0 6px 28px rgba(0,0,0,.35);
+  display: flex; flex-direction: column; max-height: 82vh;
+}
+.ig-janela.is-max { width: min(860px, calc(100vw - 48px)); max-height: 92vh; }
+.ig-janela.is-min { width: 300px; }
+.ig-janela__cab { display: flex; justify-content: space-between; align-items: center; padding: 8px 8px 8px 14px; background: #000; color: #fff; border-radius: 9px 9px 0 0; font-size: 13px; cursor: pointer; }
+.ig-janela__corpo { padding: 12px 14px; overflow-y: auto; }
+.ig-janela__rodape { padding: 10px 14px; border-top: 1px solid var(--border); }
+
+/* ---- ajuda ---- */
+.ig-ajuda { font-size: 13px; line-height: 1.6; }
+.ig-ajuda li { margin-bottom: 8px; }
+.ig-ajuda h4 { margin: 12px 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .08em; color: var(--fg2); }
+.ig-ajuda table td { padding: 4px 10px 4px 0; vertical-align: top; }
+
+@media (max-width: 900px) {
+  .inbox.inbox--gmail { grid-template-columns: 1fr; height: auto; }
+  .inbox__main--direita { grid-template-columns: 1fr; }
+  .ig-janela { right: 8px; width: calc(100vw - 16px); }
+}

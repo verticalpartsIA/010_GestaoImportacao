@@ -276,13 +276,14 @@ function useInboxEstado(emails) {
   const gravar = React.useCallback((id, patch) => {
     const sb = window.__VP_SB && window.__VP_SB.sb;
     if (!sb || !eu || !IT_UUID.test(String(id))) return;
-    setEstado((prev) => ({ ...prev, [id]: { lido: false, estrela: false, ...(prev[id] || {}), ...patch } }));
+    setEstado((prev) => ({ ...prev, [id]: { lido: null, estrela: false, ...(prev[id] || {}), ...patch } }));
     sb.from('inbox_estado_pessoa').upsert({ email_id: id, pessoa: eu, ...patch, atualizado_em: new Date().toISOString() }, { onConflict: 'email_id,pessoa' })
       .then(({ error }) => { if (error) console.warn('[Inbox] estado não gravado', error); });
   }, [eu]);
   const marcarLido = React.useCallback((id) => gravar(id, { lido: true }), [gravar]);
+  const definirLido = React.useCallback((id, lido) => gravar(id, { lido: !!lido }), [gravar]);      // "Marcar como lida / não lida" (só para mim)
   const alternarEstrela = React.useCallback((id, atual) => gravar(id, { estrela: !atual }), [gravar]);
-  return { estado, marcarLido, alternarEstrela };
+  return { estado, marcarLido, definirLido, alternarEstrela };
 }
 
 Object.assign(window, { useInboxMeta, useInboxPermissoes, InboxChip, InboxFaixaImportante,
