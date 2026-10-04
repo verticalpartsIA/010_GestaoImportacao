@@ -245,6 +245,32 @@ app.post('/api/feedback', async (req, res) => {
       }
       return res.status(502).json({ ok: false, error: 'github', mensagem: 'Não foi possível registrar agora. Tente de novo mais tarde.' });
     }
+    // A issue já existe. O GitHub às vezes IGNORA `labels` na criação (ex.: a issue #660/#661 saíram sem etiqueta, e a
+    // triagem aguardando-gestor -> pronto-para-claude depende delas). Confere o que voltou e, se faltar, aplica num 2º passo.
+    // Falha aqui NUNCA derruba o envio (o feedback já foi registrado): só vai para o log.
+    try {
+      const aplicadas = new Set((Array.isArray(data.labels) ? data.labels : []).map((l) => l && l.name));
+      if (issue.labels.some((l) => !aplicadas.has(l))) {
+        const rl = await fetch(`${GITHUB_API}/repos/${FEEDBACK_REPO}/issues/${data.number}/labels`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
+            'User-Agent': 'vp-gestao-feedback', 'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ labels: issue.labels }),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (rl.ok) {
+          console.log(`[feedback] issue #${data.number}: o GitHub ignorou as etiquetas na criação; aplicadas em 2º passo.`);
+        } else {
+          const dl = await rl.json().catch(() => ({}));
+          console.error(`[feedback] issue #${data.number} criada SEM etiquetas e o 2º passo falhou:`, rl.status, dl && dl.message,
+            '| permissão exigida:', rl.headers.get('x-accepted-github-permissions'));
+        }
+      }
+    } catch (e) {
+      console.error(`[feedback] issue #${data.number} criada; não foi possível conferir/aplicar as etiquetas:`, e.message);
+    }
     return res.json({ ok: true, numero: data.number });
   } catch (e) {
     console.error('[feedback] falha de rede ao chamar o GitHub:', e.message);
