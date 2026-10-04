@@ -415,6 +415,7 @@ const MODULE_HOME = {
 /* Ajuda contextual por rota — texto curto do que a tela faz / próximos passos. */
 const HELP_TOPICS = {
   dashboard: "Visão geral do dia: KPIs, tarefas de hoje, projetos em andamento (Gantt/Lista/Kanban) e alertas críticos.",
+  decisoes: "Pedidos de aprovação que vêm de outras telas (envio de proposta, desconto, compra, montador). Em Pendentes está o que espera por você: leia o cartão, use Ver documento para conferir e depois Aprovar ou Reprovar (a reprovação pede o motivo). Em Decididas fica o histórico. “Bloqueada” quer dizer que depende de outra decisão ser aprovada antes.",
   leads: "Pipeline comercial. Crie e qualifique leads; a partir do lead você abre formulário, cotação e proposta.",
   formularios: "Formulários de intake por tipo de equipamento. O de Elevador coleta os dados que alimentam cotação e precificação.",
   "cotacoes-fornecedor": "Cotações enviadas aos fornecedores (Glarie/Seloon…). Acompanhe status, tratativas e a decisão de compra.",
@@ -429,37 +430,18 @@ const HELP_TOPICS = {
   "rh-homologacao": "Homologação de parceiros instaladores e controle documental (NRs, ASO, PGR…).",
 };
 
-function HelpCenter({ route, bc, onClose }) {
-  const ctx = HELP_TOPICS[route];
-  return (
-    <Modal title="Central de Ajuda" onClose={onClose} width={620}
-      footer={<>
-        <Button variant="ghost" size="sm" onClick={onClose}>Fechar</Button>
-        <Button variant="primary" size="sm" icon="mail"
-          onClick={() => window.open('mailto:suporte@verticalparts.com.br?subject=' + encodeURIComponent('Ajuda VP Gestão — ' + (bc.page || '')), '_blank')}>
-          Falar com o suporte
-        </Button>
-      </>}>
-      <div className="help-ctx">
-        <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Você está em</div>
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>{bc.module} · {bc.page}</div>
-        <p className="vp-small" style={{ marginTop: 0 }}>
-          {ctx || "Use o menu à esquerda para navegar entre os módulos. Cada tela tem suas próprias ações no topo e na lista."}
-        </p>
-      </div>
-      <div className="up-eyebrow muted" style={{ margin: "16px 0 8px" }}>Perguntas frequentes</div>
-      <dl className="help-faq">
-        <dt>Como faço login?</dt>
-        <dd>O acesso é via SSO do portal vpsistema.com — você entra pelo portal e o VP Gestão abre já autenticado.</dd>
-        <dt>Não encontro um módulo no menu</dt>
-        <dd>O menu respeita o seu perfil (Comercial/Engenharia/Financeiro/Admin). Troque o perfil no topo à direita se tiver permissão.</dd>
-        <dt>Um botão não fez nada</dt>
-        <dd>Alguns fluxos dependem de uma etapa anterior (ex.: precificar exige Análise Técnica aprovada). Verifique o status da obra no Dossiê.</dd>
-        <dt>Preciso de suporte humano</dt>
-        <dd>Use o botão “Falar com o suporte” abaixo — ele abre um e-mail já com a tela atual no assunto.</dd>
-      </dl>
-    </Modal>
-  );
+/* Tutoriais passo a passo publicados em /TreinamentoVP/<pasta>/ (páginas HTML geradas por outra sessão do Claude;
+   ver CLAUDE.md, seção "Tutoriais"). Tutorial novo = uma linha aqui: rota do app → pasta.
+   Rota sem linha: o item "Treinamento" do menu "?" (src/ajuda-suporte.jsx) aparece apagado ("em breve"). */
+const TUTORIAIS = {
+  decisoes: "central-de-decisoes",
+};
+
+/* Nome da tela como aparece no menu lateral (NAV_GROUPS). Não usa o BREADCRUMB_MAP, que ainda não tem a rota
+   `decisoes` e cairia no Dashboard (defeito conhecido — o tutorial da Central de Decisões o descreve). */
+function nomeDaTela(route, bc) {
+  for (const g of NAV_GROUPS) for (const it of (g.items || [])) if (it.id === route) return it.label;
+  return (bc && bc.page) || "VP Gestão";
 }
 
 /* Busca global — consulta leads/projetos/contratos/embarques no Supabase e
@@ -610,7 +592,6 @@ function SinoNotificacoes({ onClick }) {
 
 function Header({ route, role, setRole, onSearch, onNavigate }) {
   const bc = BREADCRUMB_MAP[route] || BREADCRUMB_MAP.dashboard;
-  const [showHelp, setShowHelp] = React.useState(false);
   const moduleHome = MODULE_HOME[bc.module];
   return (
     <header className="header">
@@ -628,8 +609,7 @@ function Header({ route, role, setRole, onSearch, onNavigate }) {
       <GlobalSearch onNavigate={onNavigate}/>
       <RoleSwitch role={role} setRole={setRole}/>
       <SinoNotificacoes onClick={() => onSearch?.("notificacoes")}/>
-      <button className="header__btn" data-tip="Ajuda" aria-label="Central de Ajuda" onClick={() => setShowHelp(true)}><Icon.info size={16}/></button>
-      {showHelp ? <HelpCenter route={route} bc={bc} onClose={() => setShowHelp(false)}/> : null}
+      {window.AjudaSuporte ? <window.AjudaSuporte route={route} telaNome={nomeDaTela(route, bc)} ajudaTexto={HELP_TOPICS[route]} tutorial={TUTORIAIS[route]}/> : null}
     </header>
   );
 }
