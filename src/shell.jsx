@@ -315,6 +315,7 @@ const BREADCRUMB_MAP = {
   dashboard:     { module: "Dashboard", page: "Visão Geral", icon: "home" },
   notificacoes:  { module: "Notificações", page: "Central de Alertas", icon: "bell" },
   inbox:         { module: "Geral", page: "Inbox", icon: "mail" },
+  decisoes:      { module: "Geral", page: "Central de Decisões", icon: "check" },
   leads:         { module: "CRM", page: "Leads", icon: "flag" },
   "lead-detail": { module: "CRM", page: "Detalhe de Lead", icon: "flag" },
   "crm-canais":     { module: "CRM", page: "Canais", icon: "mail" },
@@ -436,10 +437,11 @@ const HELP_TOPICS = {
 const TUTORIAIS = {
   dashboard: "dashboard",
   decisoes: "central-de-decisoes",
+  notificacoes: "notificacoes",
 };
 
-/* Nome da tela como aparece no menu lateral (NAV_GROUPS). Não usa o BREADCRUMB_MAP, que ainda não tem a rota
-   `decisoes` e cairia no Dashboard (defeito conhecido — o tutorial da Central de Decisões o descreve). */
+/* Nome da tela como aparece no menu lateral (NAV_GROUPS). (O BREADCRUMB_MAP ganhou a rota `decisoes` em 04/10/2026 — issue #654 —,
+   mas o nome do menu continua sendo a fonte certa para o formulário de feedback.) */
 function nomeDaTela(route, bc) {
   for (const g of NAV_GROUPS) for (const it of (g.items || [])) if (it.id === route) return it.label;
   return (bc && bc.page) || "VP Gestão";

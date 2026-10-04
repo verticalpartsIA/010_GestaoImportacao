@@ -105,7 +105,7 @@
      o tutorial à lógica comercial. O script só atua quando Pipeline de Leads
      está renderizado; nas demais telas permanece inerte. */
   const helpScript = document.createElement('script');
-  helpScript.src = '/src/leads-tooltips.js?v=1';
+  helpScript.src = '/src/leads-tooltips.js?v=2';
   helpScript.defer = true;
   document.head.appendChild(helpScript);
 })();

@@ -717,7 +717,8 @@ function LeadsPage({ setRoute, setSubsel }) {
     total: allLeads.length,
     qualif: allLeads.filter(l => l.status === "Em qualificação").length,
     proposta: allLeads.filter(l => l.status === "Proposta enviada").length,
-    valor: allLeads.reduce((a, l) => a + (l.value || 0), 0),
+    // pipeline = só o que ainda está em aberto (Convertido e Sem retorno já saíram do funil — issue #663)
+    valor: allLeads.filter(l => l.status !== "Convertido" && l.status !== "Sem retorno").reduce((a, l) => a + (l.value || 0), 0),
     convertidos: allLeads.filter(l => l.status === "Convertido").length,
   };
 
@@ -757,10 +758,11 @@ function LeadsPage({ setRoute, setSubsel }) {
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Leads ativos" value={stats.total} sub="mês" delta={stats.total > 0 ? `+${stats.total}` : "0"} deltaDir="up" icon="flag"/>
-        <KPI label="Em qualificação" value={stats.qualif} sub="hot leads" delta={`+${stats.qualif}`} deltaDir="up" icon="zap"/>
-        <KPI label="Propostas no ar" value={stats.proposta} sub="aguardando" delta="0" deltaDir="up" icon="fileText"/>
-        <KPI label="Valor pipeline" value={fmtBRL(stats.valor)} sub="potencial" delta="—" deltaDir="up" icon="dollar"/>
+        {/* Sem "variação" inventada: não há comparação com mês anterior nesta tela (issue #663). */}
+        <KPI label="Leads ativos" value={stats.total} sub="no total" icon="flag"/>
+        <KPI label="Em qualificação" value={stats.qualif} sub="em avaliação" icon="zap"/>
+        <KPI label="Propostas no ar" value={stats.proposta} sub="aguardando o cliente" icon="fileText"/>
+        <KPI label="Valor pipeline" value={fmtBRL(stats.valor)} sub="em aberto" icon="dollar"/>
       </div>
 
       <div className="tbar">
@@ -1030,7 +1032,9 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
   const [history, setHistory] = React.useState(null); // null = carregando
   const fmtHistTs = (ts) => {
     if (!ts) return "—";
-    const d = new Date(ts);
+    // "aaaa-mm-dd" puro vira meia-noite UTC e, no fuso do Brasil, cai no dia anterior (issue #663): monta a data local.
+    const soData = typeof ts === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ts.trim());
+    const d = soData ? new Date(Number(ts.slice(0, 4)), Number(ts.slice(5, 7)) - 1, Number(ts.slice(8, 10))) : new Date(ts);
     if (isNaN(d.getTime())) return "—";
     const dateStr = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
     const hasTime = typeof ts === "string" && ts.includes("T");
@@ -1132,7 +1136,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
           </div>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="message" onClick={() => { const p = (lead.phone || '').replace(/\D/g,''); p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
+          <Button variant="outline" icon="message" onClick={() => { const p0 = (lead.phone || '').replace(/\D/g,''); const p = (p0.length > 11 && p0.startsWith('55')) ? p0.slice(2) : p0; p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
           <Button variant="outline" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
           <Button variant="outline" icon="edit" onClick={() => setShowEditLead(true)}>Editar Lead</Button>
           <Button variant="outline" icon="ruler" onClick={abrirFormulario}>Abrir Formulário</Button>
@@ -1208,7 +1212,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
             <KvBlock label="Telefone" value={lead.phone} mono/>
             <KvBlock label="Email" value={lead.email} mono/>
             <div className="row gap-2" style={{ marginTop: 14 }}>
-              <Button variant="secondary" size="sm" icon="message" onClick={() => { const p = (lead.phone || '').replace(/\D/g,''); p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
+              <Button variant="secondary" size="sm" icon="message" onClick={() => { const p0 = (lead.phone || '').replace(/\D/g,''); const p = (p0.length > 11 && p0.startsWith('55')) ? p0.slice(2) : p0; p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
               <Button variant="outline" size="sm" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
             </div>
           </Card>

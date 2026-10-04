@@ -147,6 +147,9 @@ function InboxAjudaModal({ aba, onTrocar, onClose }) {
           <li><b>Vincule à cotação.</b> Se o robô achar a cotação provável, aparece uma barra com <b>Vincular</b>. Você decide.</li>
           <li><b>Responda.</b> Se o e-mail é de outra pessoa, o sistema avisa antes e avisa a ela depois.</li>
           <li><b>Escreva.</b> O botão <b>Escrever</b> abre a janela no canto da tela. Se faltar o Nº da cotação, o sistema pode sugerir uma antes de enviar.</li>
+          <li><b>Organize.</b> Marque as linhas e use <b>Arquivar</b>, <b>Suspender</b>, <b>Marcadores</b> ou <b>Mover para</b>. Uma linha pode ser uma <i>conversa</i> com várias mensagens.</li>
+          <li><b>Peça uma decisão.</b> No e-mail aberto, <b>Pedir decisão</b> cria um pedido na Central de Decisões (por padrão para o chefe do responsável).</li>
+          <li><b>Preço do fornecedor por e-mail.</b> Em e-mail ligado a uma cotação, <b>Extrair preço</b> propõe os valores lidos do texto; só grava depois que você confere.</li>
           <li><b>Pesquise.</b> Use a caixa de cima, ou o ícone de filtro para a pesquisa avançada.</li>
         </ol>
       ) : (
@@ -163,7 +166,10 @@ function InboxAjudaModal({ aba, onTrocar, onClose }) {
             <li><b>Etiqueta “Fornecedor · Importação · Média”:</b> o que o sistema entendeu do e-mail (assunto · área · prioridade). É uma sugestão por regras — passe o mouse para ver a confiança.</li>
             <li><b>“Precisa de você”:</b> prioridade alta, reclamação ou e-mail que pede resposta.</li>
             <li><b>Responsável:</b> o dono do e-mail (quem enviou) ou quem recebeu a atribuição. O autor original nunca muda.</li>
-            <li><b>Limite:</b> a pesquisa olha os e-mails carregados na tela, não todo o histórico. Arquivar, marcadores e histórico completo chegam na próxima etapa.</li>
+            <li><b>Pesquisa:</b> procura em todo o histórico guardado no sistema (mostra até os 100 mais recentes; refine com os operadores acima). E-mails que nunca passaram pelo sistema não aparecem.</li>
+            <li><b>Conversas:</b> mensagens da mesma troca ficam numa linha só, com o número de mensagens ao lado do remetente. Arquivar, suspender, spam, marcadores e excluir agem na conversa toda. Dá para desligar em ⚙ Configurações rápidas.</li>
+            <li><b>Arquivar / Suspender:</b> arquivar tira da Caixa de entrada (continua em Todos os e-mails); suspender traz de volta na hora que você escolher, em Adiados. Ambos valem só para você.</li>
+            <li><b>Spam e marcadores:</b> spam é compartilhado, mas e-mail ligado a uma cotação ou documento nunca vira spam. Marcadores podem ser pessoais ou da equipe e aninhados.</li>
           </ul>
         </div>
       )}
