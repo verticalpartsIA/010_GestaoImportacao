@@ -1251,7 +1251,7 @@ function RouteAndShip({ start, end, cur, ship, isActive, onClick }) {
    caixa suporte@ — então essas respostas não apareciam aqui, só as por
    e-mail. Bloco SOMENTE LEITURA, separado da lista de e-mails: não toca em
    emails_projeto, vínculo, matching nem soft-delete. */
-function InboxRespostasFormulario({ onAbrir }) {
+function InboxRespostasFormulario({ onAbrir, verOk, liberado }) {
   const [itens, setItens] = React.useState(null);
   React.useEffect(() => {
     const sb = window.__VP_SB && window.__VP_SB.sb;
@@ -1261,10 +1261,24 @@ function InboxRespostasFormulario({ onAbrir }) {
       .select('id, numero_documento, fornecedor, responded_at, respostas, dados_envio')
       .not('responded_at', 'is', null).is('excluido_em', null)
       .order('responded_at', { ascending: false }).limit(6)
-      .then(({ data }) => { if (vivo) setItens(data || []); })
+      .then(async ({ data }) => {
+        const linhas = data || [];
+        /* 04/10 — Inbox fase 1: estas respostas (com preço) não passam por emails_projeto, então a regra de dono
+           também vale aqui: o dono é o vendedor da cotação (formularios_elevador.created_by). */
+        const nums = [...new Set(linhas.map((c) => c.dados_envio && c.dados_envio.header ? c.dados_envio.header.numero_cotacao : null).filter((n) => n != null))];
+        let donos = {};
+        if (nums.length) {
+          const { data: fs } = await sb.from('formularios_elevador').select('numero_cotacao, created_by').in('numero_cotacao', nums);
+          (fs || []).forEach((f) => { donos[f.numero_cotacao] = f.created_by ? String(f.created_by).toLowerCase() : null; });
+        }
+        if (vivo) setItens(linhas.filter((c) => {
+          const n = c.dados_envio && c.dados_envio.header ? c.dados_envio.header.numero_cotacao : null;
+          return !verOk || verOk(n != null ? (donos[n] || null) : null);
+        }));
+      })
       .catch(() => { if (vivo) setItens([]); });
     return () => { vivo = false; };
-  }, []);
+  }, [liberado]);
   if (!itens || itens.length === 0) return null;
   return (
     <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle, rgba(0,0,0,.03))' }}>
@@ -1314,12 +1328,22 @@ function EmailInbox({ setRoute, setSubsel }) {
   const [folder, setFolder] = React.useState("inbox");
   const [enviados, setEnviados] = React.useState([]);
   const [carregandoEnviados, setCarregandoEnviados] = React.useState(false);
+  /* 04/10 — Inbox fase 1: DONO do e-mail + permissões (Administração › Alçadas › Inbox). Quem vê o quê vem de
+     src/inbox-visibilidade.js (regras testadas): é meu → vejo; senão pelas alçadas ver_todos/equipe/departamento/áreas/triagem.
+     Começa liberado para todos. `perm` = undefined enquanto carrega, null se falhou (aí mostra tudo: organização na
+     tela, não isolamento — ver CLAUDE.md/#571). Não toca leitura/vínculo/envio. */
+  const meta = (window.useInboxMeta || (() => ({ ia: {}, dono: {}, pronto: true })))(emails);
+  const perm = (window.useInboxPermissoes || (() => null))();
+  const verOk = (dono) => !perm || !window.InboxVisibilidade || window.InboxVisibilidade.podeVer(dono, perm);
+  const pode = (c) => !perm || !!(perm.flags && perm.flags[c]);
+  const podeExcluirDe = (dono) => !perm || (pode('excluir') && String(dono || '').toLowerCase() === perm.eu) || pode('excluir_de_outros');
   /* Normaliza as linhas de emails_projeto (saida) pro mesmo formato que
      read-inbox devolve — reusa a mesma lista/detalhe sem duplicar JSX.
      "Para" vira o indicador principal (não "De", que seria sempre a
      própria caixa suporte@vpsistema.com — inútil pra escanear a lista). */
-  const enviadosNormalizados = React.useMemo(() => enviados.map((e) => ({
+  const enviadosNormalizados = React.useMemo(() => enviados.filter((e) => perm === undefined ? false : verOk(e.dono_email || null)).map((e) => ({
     id: e.id,
+    dono: e.dono_email || null,
     from: (e.para && e.para[0]) || '',
     fromName: 'Para: ' + ((e.para || []).join(', ') || '—'),
     subject: e.assunto || '(sem assunto)',
@@ -1333,7 +1357,7 @@ function EmailInbox({ setRoute, setSubsel }) {
     anexos: (e.anexos || []).map((a) => ({ ...a, url: a.url || null })),
     to: e.para || [],
     cc: [],
-  })), [enviados]);
+  })), [enviados, perm]);
   /* 22/09 — lixeira: soft-delete só no site (excluido_em em emails_projeto),
      NUNCA mexe na caixa real via IMAP. Caixa de entrada vem de um fetch ao
      vivo (read-inbox), que não sabe de exclusões — por isso filtra aqui,
@@ -1344,8 +1368,18 @@ function EmailInbox({ setRoute, setSubsel }) {
       .then(({ data }) => setExcluidos((data || []).map((d) => d.id)));
   }, []);
   React.useEffect(() => { carregarExcluidos(); }, [carregarExcluidos]);
-  const emailsVisiveis = React.useMemo(() => emails.filter((e) => !excluidos.includes(e.id)), [emails, excluidos]);
-  const listaAtual = folder === 'sent' ? enviadosNormalizados : emailsVisiveis;
+  const emailsVisiveis = React.useMemo(() => (perm === undefined || !meta.pronto) ? []
+    : emails.filter((e) => !excluidos.includes(e.id)).filter((e) => verOk(meta.dono[e.id] || null)), [emails, excluidos, meta, perm]);
+  /* 04/10 — triagem silenciosa (estilo JEV, só regras; autorizada pelo usuário): a decisão (assunto/departamento/
+     prioridade/confiança) é calculada no banco e só LIDA aqui (inbox-triagem.jsx). Esconde apenas e-mail automático
+     com confiança suficiente (nunca apaga; "ver tudo" devolve) e destaca o que precisa de resposta. Sem classificação,
+     a tela se comporta exatamente como antes. Não toca leitura/vínculo/envio/exclusão. */
+  const iaMapa = meta.ia;
+  const [foco, setFoco] = React.useState(true);
+  const politicaDe = (m) => (window.InboxTriagem ? window.InboxTriagem.politica(iaMapa[m.id], { vinculado: m.numeroCotacao != null }) : 'normal');
+  const silenciosos = folder === 'inbox' ? emailsVisiveis.filter((m) => politicaDe(m) === 'silencioso') : [];
+  const importantes = folder === 'inbox' ? emailsVisiveis.filter((m) => politicaDe(m) === 'precisa_de_voce').map((m) => ({ ...m, decisao: iaMapa[m.id] })) : [];
+  const listaAtual = folder === 'sent' ? enviadosNormalizados : (foco ? emailsVisiveis.filter((m) => politicaDe(m) !== 'silencioso') : emailsVisiveis);
   const active = listaAtual.find(e => e.id === activeId);
 
   /* 28/09 — pedido do usuário: campo de busca no Inbox (não existia nenhum,
@@ -1469,6 +1503,10 @@ function EmailInbox({ setRoute, setSubsel }) {
   const excluirEmail = async (ev, email) => {
     if (ev) ev.stopPropagation();
     if (!email) return;
+    if (!podeExcluirDe(email.dono !== undefined ? email.dono : meta.dono[email.id])) {
+      window.toast?.('Você não tem permissão para excluir este e-mail (só o dono, ou quem tem a alçada "Exclui e-mails de outras pessoas").', 'warning');
+      return;
+    }
     const assunto = email.subject || '(sem assunto)';
     if (!window.confirm(`Tem certeza que deseja excluir este e-mail?\n\n"${assunto}"\n\nEle continua existindo na caixa de e-mail real — isso só remove da lista do site.`)) return;
     try {
@@ -1595,6 +1633,7 @@ function EmailInbox({ setRoute, setSubsel }) {
   };
 
   const abrirCompose = (modo) => {
+    if (!pode('editar')) { window.toast?.('Sem permissão para responder ou encaminhar (alçada Inbox › Editar).', 'warning'); return; }
     setModoCompose(modo);
     setRespondendo(true);
     setVinculando(false);
@@ -1607,6 +1646,7 @@ function EmailInbox({ setRoute, setSubsel }) {
      vendedor sempre revisa/edita antes de enviar, nunca envia sozinho. */
   const sugerirResposta = async () => {
     if (!active) return;
+    if (!pode('editar')) { window.toast?.('Sem permissão para responder (alçada Inbox › Editar).', 'warning'); return; }
     setSugerindoIA(true);
     try {
       const sb = window.__VP_SB.sb;
@@ -1633,6 +1673,7 @@ function EmailInbox({ setRoute, setSubsel }) {
      qualquer heurística automática. */
   const salvarVinculo = async () => {
     if (!active) return;
+    if (!pode('editar')) { window.toast?.('Sem permissão para vincular (alçada Inbox › Editar).', 'warning'); return; }
     const numero = parseInt(String(vincularInput).replace(/\D/g, ''), 10);
     if (!numero) { window.toast?.('Digite um Nº Cotação válido (ex.: 950).', 'warning'); return; }
     setSalvandoVinculo(true);
@@ -1659,6 +1700,15 @@ function EmailInbox({ setRoute, setSubsel }) {
     { id: "archive", label: "Arquivados", icon: "package" },
   ];
 
+  if (perm && !pode('ver')) {
+    return (
+      <div className="page fade-in">
+        <div className="page-head"><div className="page-head__l"><h1 className="page-head__title">Inbox</h1>
+          <p className="page-head__sub">Você não tem acesso ao Inbox. Peça ao administrador a alçada Inbox › Ver (Administração › Alçadas).</p></div></div>
+      </div>
+    );
+  }
+
   return (
     <div className="page fade-in" style={{ paddingBottom: 0, paddingRight: 24, paddingLeft: 24 }}>
       <div className="row" style={{ marginBottom: 14 }}>
@@ -1675,7 +1725,7 @@ function EmailInbox({ setRoute, setSubsel }) {
         <div className="page-head__r row gap-2">
           {erro ? <Badge variant="danger" dot>Erro na conexão</Badge> : <Badge variant="success" dot>Conectado</Badge>}
           <Button variant="outline" size="sm" icon="refresh" disabled={loading} onClick={carregar}>{loading ? 'Atualizando…' : 'Atualizar'}</Button>
-          <Button variant="primary" size="sm" icon="mail" onClick={() => setNovoEmailAberto(true)}>Novo e-mail</Button>
+          <Button variant="primary" size="sm" icon="mail" onClick={() => (pode('criar') ? setNovoEmailAberto(true) : window.toast?.('Sem permissão para escrever e-mails (alçada Inbox › Criar).', 'warning'))}>Novo e-mail</Button>
         </div>
       </div>
       {novoEmailAberto && <EmailNovoModal onClose={() => setNovoEmailAberto(false)} onEnviado={carregar}/>}
@@ -1712,7 +1762,10 @@ function EmailInbox({ setRoute, setSubsel }) {
               Esta pasta ainda não está implementada — só Caixa de entrada e Enviados leem de verdade.
             </div>
           )}
-          {folder === "inbox" && <InboxRespostasFormulario onAbrir={verNaLinhaDoTempo}/>}
+          {folder === "inbox" && window.InboxFaixaImportante && (
+            <window.InboxFaixaImportante itens={importantes} ocultos={silenciosos.length} foco={foco} onToggleFoco={() => setFoco((f) => !f)} onAbrir={setActiveId}/>
+          )}
+          {folder === "inbox" && perm !== undefined && <InboxRespostasFormulario onAbrir={verNaLinhaDoTempo} verOk={verOk} liberado={perm === null ? 'sem' : perm.eu + ':' + (perm.flags && perm.flags.ver_todos)}/>}
           {folder === "inbox" && !loading && emails.length === 0 && (
             <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
               <div style={{ fontWeight:600, color:'var(--fg2)', marginBottom:4 }}>{erro ? 'Não foi possível carregar' : 'Nenhuma mensagem'}</div>
@@ -1741,6 +1794,7 @@ function EmailInbox({ setRoute, setSubsel }) {
               </div>
               <div className="subj">{m.subject}{m.anexos && m.anexos.length > 0 ? <Icon.paperclip size={11} style={{ marginLeft: 6, verticalAlign: 'middle', opacity: .6 }}/> : null}</div>
               <div className="preview">{m.preview}</div>
+              {folder === 'inbox' && window.InboxChip && iaMapa[m.id] && <window.InboxChip decisao={iaMapa[m.id]}/>}
               {(m.numeroCotacao != null || INBOX_REFERENCIA_TIPO_LABEL[m.referenciaTipo]) && (
                 <div className="row gap-1" style={{ marginTop: 4, flexWrap: 'wrap' }}>
                   {m.numeroCotacao != null && (
