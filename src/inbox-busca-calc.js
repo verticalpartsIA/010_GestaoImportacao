@@ -34,7 +34,7 @@
   }
 
   function parseConsulta(texto) {
-    const q = { termos: [], excluir: [], de: [], para: [], assunto: [], anexo: false, lida: null, estrela: false, depois: null, antes: null, em: null, cotacao: null };
+    const q = { termos: [], excluir: [], de: [], para: [], assunto: [], marcador: [], anexo: false, lida: null, estrela: false, depois: null, antes: null, em: null, cotacao: null };
     tokens(texto).forEach((tk) => {
       const neg = tk.startsWith('-') && tk.length > 1;
       const corpo = neg ? tk.slice(1) : tk;
@@ -47,6 +47,7 @@
         case 'de': case 'from': if (v) q.de.push(v); return;
         case 'para': case 'to': if (v) q.para.push(v); return;
         case 'assunto': case 'subject': if (v) q.assunto.push(v); return;
+        case 'marcador': case 'label': if (v) q.marcador.push(v); return;
         case 'cotacao': case 'vpct': { const n = parseInt(v.replace(/\D/g, ''), 10); if (n) q.cotacao = n; return; }
         case 'tem': case 'has': if (/anexo|attach/.test(v)) q.anexo = true; return;
         case 'e': case 'is':
@@ -58,7 +59,8 @@
         case 'antes': case 'before': q.antes = paraData(valor, true) || q.antes; return;
         case 'em': case 'in': {
           const mapa = { entrada: 'inbox', inbox: 'inbox', enviados: 'sent', enviado: 'sent', sent: 'sent', estrela: 'starred', starred: 'starred',
-            meus: 'mine', meu: 'mine', mine: 'mine', triagem: 'triagem', todos: 'all', all: 'all' };
+            meus: 'mine', meu: 'mine', mine: 'mine', triagem: 'triagem', todos: 'all', all: 'all',
+            spam: 'spam', adiados: 'adiados', adiado: 'adiados', snoozed: 'adiados' };
           if (mapa[v]) q.em = mapa[v];
           return;
         }
@@ -91,6 +93,10 @@
     if (q.de.some((x) => !de.includes(x))) return false;
     if (q.para.some((x) => !para.includes(x))) return false;
     if (q.assunto.some((x) => !assunto.includes(x))) return false;
+    if (q.marcador.length) {                                   // marcador:nome → o e-mail precisa ter um marcador cujo nome contém o texto
+      const nomes = (m.marcadoresNomes || []).map(normalizar);
+      if (q.marcador.some((x) => !nomes.some((n) => n.includes(x)))) return false;
+    }
     if (q.termos.some((x) => !tudo.includes(x))) return false;
     if (q.excluir.some((x) => tudo.includes(x))) return false;
     if (q.anexo && !(m.anexos && m.anexos.length)) return false;
@@ -104,7 +110,7 @@
     return true;
   }
 
-  const vazia = (q) => !q || (!q.termos.length && !q.excluir.length && !q.de.length && !q.para.length && !q.assunto.length && !q.anexo
+  const vazia = (q) => !q || (!q.termos.length && !q.excluir.length && !q.de.length && !q.para.length && !q.assunto.length && !q.marcador.length && !q.anexo
     && q.lida === null && !q.estrela && !q.depois && !q.antes && !q.em && q.cotacao == null);
 
   /* ordenar(lista, tipo, f) — tipo: 'padrao' | 'nao_lidas' | 'estrela' | 'importantes'. Dentro de cada grupo, mais recentes primeiro.

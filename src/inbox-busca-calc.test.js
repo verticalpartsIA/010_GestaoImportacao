@@ -85,3 +85,20 @@ test('ordenar — padrão é só por data; os outros tipos põem o grupo no topo
   assert.deepEqual(B.ordenar(l, 'estrela', f).map((x) => x.id), ['c', 'a', 'b']);
   assert.deepEqual(l.map((x) => x.id), ['a', 'b', 'c']);       // não altera a lista original
 });
+
+/* ---- Fase 4A: marcador:, em:spam, em:adiados ---- */
+test('marcador: — casa pelo nome do marcador (sem acento, parcial); sem marcador não passa', () => {
+  const com = m({ marcadoresNomes: ['Aguardando Fornecedor', 'Urgente'] });
+  assert.equal(acha('marcador:aguardando', com), true);
+  assert.equal(acha('label:urgente', com), true);
+  assert.equal(acha('marcador:aguardando marcador:urgente', com), true);      // todos precisam existir
+  assert.equal(acha('marcador:financeiro', com), false);
+  assert.equal(acha('marcador:urgente', m()), false);
+  assert.equal(B.vazia(B.parseConsulta('marcador:urgente')), false);
+});
+
+test('em:spam e em:adiados viram pastas', () => {
+  assert.equal(B.parseConsulta('em:spam').em, 'spam');
+  assert.equal(B.parseConsulta('em:adiados').em, 'adiados');
+  assert.equal(B.parseConsulta('in:snoozed').em, 'adiados');
+});

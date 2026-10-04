@@ -21,12 +21,12 @@ function useInboxMeta(emails) {
     if (!sb) { setMeta({ ia: {}, dono: {}, atribuido: {}, pronto: true }); return; }
     if (!chave) { setMeta({ ia: {}, dono: {}, atribuido: {}, pronto: (emails || []).length === 0 }); return; }
     let vivo = true;
-    sb.from('emails_projeto').select('id, ia_decisao, dono_email, atribuido_a').in('id', chave.split(','))
+    sb.from('emails_projeto').select('id, ia_decisao, dono_email, atribuido_a, spam_em').in('id', chave.split(','))
       .then(({ data }) => {
         if (!vivo) return;
-        const ia = {}; const dono = {}; const atribuido = {};
-        (data || []).forEach((r) => { if (r.ia_decisao) ia[r.id] = r.ia_decisao; dono[r.id] = r.dono_email || null; atribuido[r.id] = r.atribuido_a || null; });
-        setMeta({ ia, dono, atribuido, pronto: true });
+        const ia = {}; const dono = {}; const atribuido = {}; const spam = {};
+        (data || []).forEach((r) => { if (r.ia_decisao) ia[r.id] = r.ia_decisao; dono[r.id] = r.dono_email || null; atribuido[r.id] = r.atribuido_a || null; spam[r.id] = r.spam_em || null; });
+        setMeta({ ia, dono, atribuido, spam, pronto: true });
       })
       .catch(() => { if (vivo) setMeta({ ia: {}, dono: {}, atribuido: {}, pronto: true }); });   // sem metadados a tela funciona como sempre
     return () => { vivo = false; };
@@ -268,8 +268,8 @@ function useInboxEstado(emails) {
     const sb = window.__VP_SB && window.__VP_SB.sb;
     if (!sb || !chave || !eu) { setEstado({}); return; }
     let vivo = true;
-    sb.from('inbox_estado_pessoa').select('email_id, lido, estrela').eq('pessoa', eu).in('email_id', chave.split(','))
-      .then(({ data }) => { if (vivo) { const m = {}; (data || []).forEach((r) => { m[r.email_id] = { lido: r.lido, estrela: r.estrela }; }); setEstado(m); } })
+    sb.from('inbox_estado_pessoa').select('email_id, lido, estrela, arquivado, adiado_ate').eq('pessoa', eu).in('email_id', chave.split(','))
+      .then(({ data }) => { if (vivo) { const m = {}; (data || []).forEach((r) => { m[r.email_id] = { lido: r.lido, estrela: r.estrela, arquivado: r.arquivado, adiado_ate: r.adiado_ate }; }); setEstado(m); } })
       .catch(() => { if (vivo) setEstado({}); });
     return () => { vivo = false; };
   }, [chave, eu]);
@@ -283,7 +283,29 @@ function useInboxEstado(emails) {
   const marcarLido = React.useCallback((id) => gravar(id, { lido: true }), [gravar]);
   const definirLido = React.useCallback((id, lido) => gravar(id, { lido: !!lido }), [gravar]);      // "Marcar como lida / não lida" (só para mim)
   const alternarEstrela = React.useCallback((id, atual) => gravar(id, { estrela: !atual }), [gravar]);
-  return { estado, marcarLido, definirLido, alternarEstrela };
+  /* Fase 4A: gravação em lote (Arquivar / Suspender), tudo POR PESSOA. Atualização otimista; erro avisa e a tela recarrega ao atualizar. */
+  const gravarVarios = React.useCallback((ids, patch) => {
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    const validos = (ids || []).filter((id) => IT_UUID.test(String(id)));
+    if (!sb || !eu || !validos.length) return Promise.resolve(false);
+    setEstado((prev) => {
+      const n = { ...prev };
+      validos.forEach((id) => { n[id] = { lido: null, estrela: false, arquivado: false, adiado_ate: null, ...(n[id] || {}), ...patch }; });
+      return n;
+    });
+    const agora = new Date().toISOString();
+    return sb.from('inbox_estado_pessoa').upsert(validos.map((id) => ({ email_id: id, pessoa: eu, ...patch, atualizado_em: agora })), { onConflict: 'email_id,pessoa' })
+      .then(({ error }) => {
+        if (error) { console.warn('[Inbox] estado não gravado', error); window.toast?.('Não consegui salvar: ' + error.message, 'error'); return false; }
+        return true;
+      });
+  }, [eu]);
+  const arquivar = React.useCallback((ids, sim) => gravarVarios(ids, { arquivado: !!sim }), [gravarVarios]);
+  /* Suspender: volta na hora escolhida, como NÃO lido (lido=false) e com aviso na Central (cron inbox-acordar-adiados). quando=null cancela. */
+  const adiar = React.useCallback((ids, quando) => gravarVarios(ids, quando
+    ? { adiado_ate: new Date(quando).toISOString(), acordado_avisado_em: null, lido: false }
+    : { adiado_ate: null, acordado_avisado_em: null }), [gravarVarios]);
+  return { estado, marcarLido, definirLido, alternarEstrela, arquivar, adiar };
 }
 
 Object.assign(window, { useInboxMeta, useInboxPermissoes, InboxChip, InboxFaixaImportante,

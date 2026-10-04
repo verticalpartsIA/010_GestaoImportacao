@@ -35,7 +35,7 @@ function igQuando(iso) {
   return d.toLocaleDateString('pt-BR');
 }
 
-const IG_EM_OPCOES = [['todos', 'Todos os e-mails'], ['entrada', 'Caixa de entrada'], ['enviados', 'Enviados'], ['estrela', 'Com estrela'], ['meus', 'Atribuídos a mim'], ['triagem', 'Sem responsável']];
+const IG_EM_OPCOES = [['todos', 'Todos os e-mails'], ['entrada', 'Caixa de entrada'], ['enviados', 'Enviados'], ['estrela', 'Com estrela'], ['meus', 'Atribuídos a mim'], ['triagem', 'Sem responsável'], ['adiados', 'Adiados'], ['spam', 'Spam']];
 const IG_FORM_VAZIO = { de: '', para: '', assunto: '', contem: '', naoTem: '', depois: '', antes: '', em: 'todos', anexo: false, naoLida: false, estrela: false };
 
 /* ---------- Pesquisa em pílula + opções avançadas ---------- */
@@ -168,15 +168,19 @@ function InboxAjudaModal({ aba, onTrocar, onClose }) {
 }
 
 /* ---------- Barra de ferramentas sobre a lista ---------- */
-function InboxToolbarLista({ total, selecionadas, todasMarcadas, onToggleTodas, onLida, onNaoLida, onExcluir, onAtualizar, carregando, podeEditar }) {
+/* `selecionadas` = caixas marcadas; `alvos` = sobre quantos e-mails as ações agem (marcados, ou o e-mail aberto se nada estiver marcado);
+   `extras` = botões da fase 4A (Arquivar, Spam, Suspender, Mover para, Marcadores) montados pelo Inbox. */
+function InboxToolbarLista({ total, selecionadas, alvos, rotuloAlvo, extras, todasMarcadas, onToggleTodas, onLida, onNaoLida, onExcluir, onAtualizar, carregando, podeEditar }) {
   const ref = React.useRef(null);
+  const nAlvos = alvos != null ? alvos : selecionadas;
   React.useEffect(() => { if (ref.current) ref.current.indeterminate = selecionadas > 0 && !todasMarcadas; }, [selecionadas, todasMarcadas]);
   return (
     <div className="ig-toolbar">
       <label className="ig-check" title="Selecionar todos"><input ref={ref} type="checkbox" checked={todasMarcadas && total > 0} onChange={onToggleTodas}/></label>
-      {selecionadas > 0 ? (
+      {nAlvos > 0 ? (
         <>
-          <span className="small muted">{selecionadas} selecionado(s)</span>
+          <span className="small muted">{rotuloAlvo || `${nAlvos} selecionado(s)`}</span>
+          {extras}
           <Button variant="ghost" size="sm" disabled={!podeEditar} onClick={onLida}>Marcar como lida</Button>
           <Button variant="ghost" size="sm" disabled={!podeEditar} onClick={onNaoLida}>Marcar como não lida</Button>
           <Button variant="ghost" size="sm" icon="trash" onClick={onExcluir}>Excluir</Button>
