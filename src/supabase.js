@@ -309,6 +309,32 @@
     };
   }
 
+  /* 04/10/2026 — Inbox fase 1: todo envio pela função send-email leva o LOGIN de quem enviou (`enviadoPor`) — é o DONO
+     do e-mail. Feito num ponto só para nenhum chamador (hoje ou futuro) esquecer. `sb.functions` cria um cliente novo a
+     cada acesso, então o invólucro é aplicado no getter. Declarado pelo navegador (não verificável — issue #571). */
+  try {
+    const descFn = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(sb), 'functions');
+    if (descFn && descFn.get) {
+      Object.defineProperty(sb, 'functions', {
+        configurable: true,
+        get() {
+          const fc = descFn.get.call(sb);
+          const invocar = fc.invoke.bind(fc);
+          fc.invoke = (nome, opts) => {
+            try {
+              if (nome === 'send-email' && opts && opts.body && typeof opts.body === 'object' && !opts.body.enviadoPor) {
+                const quem = (window.__VP_USER || {}).email;
+                if (quem) opts = { ...opts, body: { ...opts.body, enviadoPor: String(quem).toLowerCase() } };
+              }
+            } catch (_) { /* nunca atrapalha o envio */ }
+            return invocar(nome, opts);
+          };
+          return fc;
+        },
+      });
+    }
+  } catch (e) { console.warn('[supabase.js] não consegui anexar o dono nos envios de e-mail', e); }
+
   // ---- expor para componentes React ----
   window.__VP_SB = { sb, loadDashboardData, timeAgo };
 }());

@@ -133,6 +133,25 @@
       { modulo: 'notificacoes', label: 'Notificações' },
       { modulo: 'decisoes', label: 'Central de Decisões' },
       { modulo: 'financeiro', label: 'Prazos & Pendências' },
+      /* 04/10/2026 — Inbox na grade de alçadas. Dono do e-mail = LOGIN de quem enviou (a resposta herda o dono do
+         e-mail que responde; senão o dono da cotação; senão "sem dono"). Quem vê o dos outros é por pessoa.
+         Tudo começa MARCADO (migration 20261004120000) = comportamento de hoje; o administrador desmarca.
+         Regras em src/inbox-visibilidade.js (testadas). É organização na tela, não isolamento real (issue #571). */
+      { modulo: 'inbox', label: 'Inbox', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'ver_todos', label: 'Vê os e-mails de todos (CEO/administração)' },
+        { chave: 'ver_equipe', label: 'Vê os e-mails de quem responde a ele (equipe)' },
+        { chave: 'ver_departamento', label: 'Vê os e-mails do próprio departamento' },
+        { chave: 'ver_area_comercial', label: 'Vê e-mails da área Comercial (interação entre áreas)' },
+        { chave: 'ver_area_financeiro', label: 'Vê e-mails da área Adm/Financeiro (interação entre áreas)' },
+        { chave: 'ver_area_engenharia', label: 'Vê e-mails da área Engenharia (interação entre áreas)' },
+        { chave: 'ver_area_logistica', label: 'Vê e-mails da área Logística/Almoxarifado/Produção (interação entre áreas)' },
+        { chave: 'ver_area_juridico_importacao', label: 'Vê e-mails da área Jurídico/Importação/Suprimentos (interação entre áreas)' },
+        { chave: 'ver_area_gente_gestao', label: 'Vê e-mails da área Gente & Gestão (interação entre áreas)' },
+        { chave: 'ver_area_marketing', label: 'Vê e-mails da área Marketing (interação entre áreas)' },
+        { chave: 'triagem', label: 'Recebe os e-mails sem dono (fila de triagem)' },
+        { chave: 'excluir_de_outros', label: 'Exclui e-mails de outras pessoas (por padrão só o dono exclui)' },
+      ]},
     ]},
     { grupo: 'Cadastros', itens: [
       { modulo: 'cadastro-clientes', label: 'Clientes' },

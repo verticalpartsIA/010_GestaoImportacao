@@ -105,6 +105,10 @@ Deno.serve(async (req: Request) => {
   const numeroCotacao = Number.isFinite(Number(payload?.numeroCotacao)) && payload?.numeroCotacao != null ? Number(payload.numeroCotacao) : null;
   const referenciaTipo = typeof payload?.referenciaTipo === "string" ? payload.referenciaTipo : null;
   const referenciaId = payload?.referenciaId != null ? String(payload.referenciaId) : null;
+  /* 04/10 — Inbox fase 1: DONO do e-mail = login de quem enviou (o front manda `enviadoPor`). Declarado pelo navegador
+     (não há identidade verificável por função — issue #571), por isso só valida o formato; vale como organização. */
+  const enviadoPorRaw = typeof payload?.enviadoPor === "string" ? payload.enviadoPor.trim().toLowerCase() : "";
+  const enviadoPor = enviadoPorRaw.length <= 120 && EMAIL_RE.test(enviadoPorRaw) ? enviadoPorRaw : null;
   const anexosIn: any[] = Array.isArray(payload?.attachments) ? payload.attachments : [];
 
   if (!destinatarios.length) return json({ error: "Nenhum destinatário válido em \"to\"." }, 400);
@@ -203,7 +207,7 @@ Deno.serve(async (req: Request) => {
     // vínculo algum, nem por Message-ID. Mesma lógica pro bloco de
     // persistência mais abaixo — mantenha as duas condições iguais.
     let anexosSalvos: { filename: string; content_type: string; size: number; path: string }[] = [];
-    if ((numeroCotacao != null || referenciaId != null) && anexos.length) {
+    if (anexos.length) {      // 04/10: todo envio é registrado (histórico eterno), não só os com cotação/documento
       try {
         const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
         const grupoId = crypto.randomUUID();
@@ -229,7 +233,7 @@ Deno.serve(async (req: Request) => {
     // enviado de verdade quando chega aqui), mas agora reporta o problema
     // pro chamador via avisoPersistencia em vez de engolir silenciosamente.
     let avisoPersistencia: string | null = null;
-    if (numeroCotacao != null || referenciaId != null) {
+    {   // 04/10: sempre grava (antes só com cotação/documento) — sem isso, e-mail avulso não tinha dono nem aparecia em Enviados
       try {
         const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
         const { error: insertErr } = await supabase.from("emails_projeto").insert({
@@ -246,6 +250,7 @@ Deno.serve(async (req: Request) => {
           message_id: messageId,
           data_mensagem: new Date().toISOString(),
           anexos: anexosSalvos,
+          enviado_por: enviadoPor,
         });
         if (insertErr) {
           console.warn("[send-email] falha ao gravar em emails_projeto", insertErr);
