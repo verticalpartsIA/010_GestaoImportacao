@@ -58,6 +58,14 @@ function caminhoSeguro(caminho) {
   return /^\/[A-Za-z0-9\-_/.]*$/.test(c) ? c : '';
 }
 
+/* Endereço completo da tela = origem do próprio site (vinda do servidor, não do formulário) + caminho.
+   Origem inválida/ausente -> só o caminho. Ex.: https://vpgestaoimportacao.vpsistema.com/geral/decisoes */
+function enderecoCompleto(base, caminho) {
+  if (!caminho) return '';
+  const b = /^https?:\/\/[A-Za-z0-9.\-]+(:\d{1,5})?$/.test(String(base || '')) ? String(base) : '';
+  return b + caminho;
+}
+
 function slugTela(rota) {
   return String(rota || '').toLowerCase().replace(/[^a-z0-9-]+/g, '-').replace(/^-+|-+$/g, '').slice(0, 40);
 }
@@ -88,7 +96,7 @@ function validar(corpo) {
   return { ok: true, dados };
 }
 
-/* Monta { title, body, labels } da issue. `ctx` = { versao, navegador } vindos do servidor (não do formulário). */
+/* Monta { title, body, labels } da issue. `ctx` = { baseUrl, versao, navegador } vindos do servidor (não do formulário). */
 function montarIssue(dados, ctx = {}) {
   const tipo = TIPOS[dados.tipo];
   const tela = dados.tela || 'Tela não informada';
@@ -102,7 +110,9 @@ function montarIssue(dados, ctx = {}) {
     `| **Tipo** | ${tipo.rotulo} |`,
   ];
   if (dados.gravidade) linhas.push(`| **Gravidade** | ${GRAVIDADES[dados.gravidade]} |`);
-  linhas.push(`| **Tela** | ${tela}${dados.caminho ? ` (\`${dados.caminho}\`)` : ''} |`);
+  linhas.push(`| **Tela** | ${tela} |`);
+  const endereco = enderecoCompleto(ctx.baseUrl, dados.caminho);
+  if (endereco) linhas.push(`| **Endereço da tela** | ${endereco} |`);
   if (ctx.versao) linhas.push(`| **Versão do site** | \`${neutralizar(ctx.versao, 40, { umaLinha: true })}\` |`);
   if (ctx.navegador) linhas.push(`| **Navegador** | ${neutralizar(ctx.navegador, 160, { umaLinha: true }).replace(/\|/g, '/')} |`);
   linhas.push(`| **Pode ser chamado para explicar** | ${dados.contato ? 'Sim' : 'Não'} |`);
@@ -135,4 +145,4 @@ function criarLimitador({ max, janelaMs }) {
   };
 }
 
-module.exports = { TIPOS, GRAVIDADES, LIMITES, LABEL_NOVA_ISSUE, primeiroNome, neutralizar, caminhoSeguro, validar, montarIssue, criarLimitador };
+module.exports = { TIPOS, GRAVIDADES, LIMITES, LABEL_NOVA_ISSUE, primeiroNome, neutralizar, caminhoSeguro, enderecoCompleto, validar, montarIssue, criarLimitador };
