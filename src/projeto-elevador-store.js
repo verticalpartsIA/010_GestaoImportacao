@@ -104,6 +104,24 @@
     return data || [];
   }
 
+  /* Códigos dos equipamentos da obra (VPEL-EL0955-1, -2…). Fontes, na ordem de confiança:
+     Proposta (data_json.ativos[].codigo) → Precificação (mo_lookup[].identificador, 1 linha por
+     equipamento físico) → identificador da Unidade do Formulário. Une tudo sem repetir. */
+  async function equipamentosDaObra(numeroCotacao, unidades) {
+    const c = sb(); const cods = new Set();
+    const add = (v) => { const t = String(v || '').trim().toUpperCase(); if (t) cods.add(t); };
+    try {
+      const { data } = await c.from('propostas').select('data_json').eq('numero_cotacao', numeroCotacao);
+      (data || []).forEach(p => ((p.data_json || {}).ativos || []).forEach(a => add(a.codigo)));
+    } catch (e) { console.warn('[ProjetoElevador] ativos da proposta', e); }
+    try {
+      const { data } = await c.from('precificacoes_elevador').select('mo_lookup').eq('numero_cotacao', numeroCotacao);
+      (data || []).forEach(p => (p.mo_lookup || []).forEach(m => add(m.identificador)));
+    } catch (e) { console.warn('[ProjetoElevador] mo_lookup', e); }
+    (unidades || []).forEach(u => add(u.identificador));
+    return Array.from(cods).filter(x => /^VP[A-Z]*-/.test(x) || cods.size === 1).sort((a, b) => a.localeCompare(b, 'pt', { numeric: true }));
+  }
+
   /* Busca a OBRA pela Nº da cotação (formulário que originou o negócio) com o cliente
      vinculado. Passa por FormularioElevadorStore.obter, que já aplica a regra de dono
      (vendedor só abre o que criou, salvo alçada `formularios.ver_de_outros`) — se a
@@ -114,7 +132,9 @@
     if (error) throw new Error(error.message);
     if (!data || !data.length) return null;
     const f = await window.FormularioElevadorStore.obter(data[0].id);
+    const equipamentos = await equipamentosDaObra(f.numero_cotacao, f.unidades);
     return {
+      equipamentos,
       formularioId: f.id, numeroCotacao: f.numero_cotacao,
       predio: f.predio_empreendimento || '', cidade: f.local_obra_cidade || '', uf: f.local_obra_estado || '',
       enderecoObra: f.endereco_obra || '',
@@ -150,19 +170,26 @@
         cidade: f.local_obra_cidade || '', uf: f.local_obra_estado || '' }));
   }
 
-  async function salvarDesenhos({ referencia, clienteNome, numeroCotacao, observacao, files, formularioId, clienteId, clienteDocumento }) {
+  const DESENHO_TIPOS = { projeto_instalacao: 'Projeto de Instalação', id_tag: 'ID-TAG' };
+
+  /* docs = [{ tipo: 'projeto_instalacao'|'id_tag', files: File[] }]; equipamentos = ['VPEL-EL0955-1', ...] */
+  async function salvarDesenhos({ referencia, clienteNome, numeroCotacao, observacao, docs, equipamentos, formularioId, clienteId, clienteDocumento }) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     if (!referencia || !referencia.trim()) throw new Error('Informe o prédio/empreendimento.');
-    if (!files || !files.length) throw new Error('Selecione ao menos um arquivo.');
-    for (const f of files) {
+    const equips = Array.from(new Set((equipamentos || []).map(e => String(e || '').trim().toUpperCase()).filter(Boolean)));
+    if (!equips.length) throw new Error('Informe o código do equipamento (ex.: VPEL-EL0955-1).');
+    const lote = [];
+    (docs || []).forEach(d => (d.files || []).forEach(f => lote.push({ tipo: d.tipo, file: f })));
+    if (!lote.length) throw new Error('Anexe o Projeto de Instalação e/ou o ID-TAG.');
+    for (const { file: f } of lote) {
       if (!DESENHO_EXT.test(f.name)) throw new Error(`"${f.name}": use PDF, PNG, JPG, DWG ou DXF.`);
       if (f.size > DESENHO_MAX_BYTES) throw new Error(`"${f.name}" passa de 25 MB.`);
     }
     const user = window.__VP_USER || {};
     const pasta = numeroCotacao != null ? String(numeroCotacao) : 'avulso';
     const salvos = [];
-    for (const file of files) {
-      const path = `projetos-elevador/desenhos/${pasta}/${Date.now()}_${uuid().slice(0, 8)}_${file.name.replace(/[^\w.\-]/g, '_')}`;
+    for (const { tipo, file } of lote) {
+      const path = `projetos-elevador/desenhos/${pasta}/${tipo}/${Date.now()}_${uuid().slice(0, 8)}_${file.name.replace(/[^\w.\-]/g, '_')}`;
       const up = await c.storage.from('engenharia').upload(path, file, { upsert: false, contentType: file.type || 'application/octet-stream' });
       if (up.error) throw new Error(up.error.message);
       const { data: pub } = c.storage.from('engenharia').getPublicUrl(path);
@@ -171,6 +198,7 @@
         cliente_nome: (clienteNome || '').trim() || null,
         numero_cotacao: numeroCotacao ?? null,
         formulario_id: formularioId || null, cliente_id: clienteId || null, cliente_documento: clienteDocumento || null,
+        tipo_documento: tipo, equipamentos: equips,
         arquivo_nome: file.name, arquivo_path: path, arquivo_url: pub.publicUrl,
         tamanho_bytes: file.size, observacao: observacao || null,
         enviado_por_email: user.email || null, enviado_por_nome: user.nome || user.name || null,
@@ -182,7 +210,7 @@
       salvos.push(data);
       if (window.VPLog) window.VPLog.registrar({
         modulo: 'Projeto de Elevadores', acao: 'Salvou desenho', alvo: data.referencia, alvo_id: data.id,
-        detalhe: { arquivo: data.arquivo_nome, numero_cotacao: data.numero_cotacao },
+        detalhe: { arquivo: data.arquivo_nome, numero_cotacao: data.numero_cotacao, tipo: data.tipo_documento, equipamentos: data.equipamentos },
       });
     }
     return salvos;
@@ -203,6 +231,6 @@
   }
 
   window.ProjetoElevadorStore = { listarTodas, listarPorCotacao, salvar, finalizar, uploadAnexo, removerAnexo, uuid,
-    listarDesenhos, salvarDesenhos, excluirDesenho, DESENHO_MAX_BYTES,
+    listarDesenhos, salvarDesenhos, excluirDesenho, DESENHO_MAX_BYTES, DESENHO_TIPOS,
     buscarObraPorCotacao, buscarClientePorDocumento, obrasDoCliente };
 }());
