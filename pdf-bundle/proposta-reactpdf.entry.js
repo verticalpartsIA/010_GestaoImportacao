@@ -578,7 +578,31 @@ function PgResponsabilidades(S, data) {
   ]);
 }
 
-function PgGarantia(S, data) {
+/* REGRA TRAVADA (05/10/2026, ver CLAUDE.md): proposta ASSINADA traz a assinatura
+   digital de quem assinou (nome, papel, data/hora Brasília, dispositivo, IP, hash)
+   no lugar da linha em branco. `assinaturas` = [{papel,nome,em,dispositivo,ip,hash}]
+   montado por quem chama (assinar-app / proposta-editor). Vazio = linha de sempre. */
+function fmtDataHora(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function BlocoAssinaturasDigitais(S, assinaturas) {
+  return h(View, { key: 'dig', style: { marginTop: pt(60) } }, [
+    h(Text, { style: S.subTitle, key: 'dt' }, 'Assinaturas digitais'),
+    ...assinaturas.map((a, i) => h(View, { key: 'a' + i, wrap: false, style: { marginBottom: pt(18), paddingLeft: pt(10), borderLeft: '2pt solid ' + NAVY } }, [
+      h(Text, { key: 'p', style: { fontSize: pt(12), fontWeight: 700, color: NAVY } }, a.papel || ''),
+      h(Text, { key: 'n', style: { fontSize: pt(15), fontWeight: 700 } }, a.nome || ''),
+      h(Text, { key: 'd', style: S.assinaturaSpan }, `Assinado em ${fmtDataHora(a.em)} (horário de Brasília) · ${a.dispositivo || 'dispositivo não informado'}`),
+      h(Text, { key: 'i', style: S.assinaturaSpan }, `IP: ${a.ip || 'não informado'}`),
+      h(Text, { key: 'h', style: { fontSize: pt(9), color: '#777' } }, `Hash: ${a.hash || ''}`),
+    ])),
+  ]);
+}
+
+function PgGarantia(S, data, assinaturas) {
   const g = (data.elevador || {}).garantia || {};
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
@@ -594,16 +618,18 @@ function PgGarantia(S, data) {
     ]) : null,
     h(Text, { style: S.subTitle, key: 's3' }, 'Validade da Proposta'),
     h(Text, { style: S.p, key: 'p5' }, data.validade || '30 dias'),
-    h(View, { style: S.assinaturas, key: 'ass' }, [
-      h(View, { style: S.assinatura, key: 'c' }, [h(View, { style: S.assinaturaLinha, key: 'l' }), h(Text, { style: S.assinaturaB, key: 'b' }, 'Assinatura do Cliente:'), h(Text, { style: S.assinaturaSpan, key: 's' }, 'Nome legível:')]),
-      h(View, { style: S.assinatura, key: 'v' }, [h(View, { style: S.assinaturaLinha, key: 'l' }), h(Text, { style: S.assinaturaB, key: 'b' }, 'VerticalParts:')]),
-    ]),
+    (Array.isArray(assinaturas) && assinaturas.length)
+      ? BlocoAssinaturasDigitais(S, assinaturas)
+      : h(View, { style: S.assinaturas, key: 'ass' }, [
+          h(View, { style: S.assinatura, key: 'c' }, [h(View, { style: S.assinaturaLinha, key: 'l' }), h(Text, { style: S.assinaturaB, key: 'b' }, 'Assinatura do Cliente:'), h(Text, { style: S.assinaturaSpan, key: 's' }, 'Nome legível:')]),
+          h(View, { style: S.assinatura, key: 'v' }, [h(View, { style: S.assinaturaLinha, key: 'l' }), h(Text, { style: S.assinaturaB, key: 'b' }, 'VerticalParts:')]),
+        ]),
     PdfFooter(S),
   ]);
 }
 
 /* ---------- Monta o documento completo ---------- */
-async function montarDocumento(data) {
+async function montarDocumento(data, assinaturas) {
   const S = montarStyles();
   const eq = 'elevador';
   const ed = data.elevador || {};
@@ -663,14 +689,14 @@ async function montarDocumento(data) {
     PgBlocos(S, data, 'Ajustes e Impostos', 'ajustes', [['Cláusula de Reajuste Cambial', 'clausulaCambial'], ['Faturamento', 'faturamentoTexto'], ['Taxas e Impostos Inclusos', 'taxasInclusas'], ['Taxas e Impostos Excluídos', 'taxasExcluidas']]),
     PgPrazo(S, data),
     PgResponsabilidades(S, data),
-    PgGarantia(S, data),
+    PgGarantia(S, data, assinaturas),
   ];
   return h0(Document, {}, pages);
 }
 
-async function baixar(data, filename) {
+async function baixar(data, filename, assinaturas) {
   registrarFontes();
-  const elemento = await montarDocumento(data);
+  const elemento = await montarDocumento(data, assinaturas);
   const blob = await pdf(elemento).toBlob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

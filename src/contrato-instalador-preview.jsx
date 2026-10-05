@@ -31,7 +31,17 @@ function CI_ClauseItem({ it }) {
   );
 }
 
-function CIContractPreview({ doc, highlightConditional }) {
+/* REGRA TRAVADA (05/10/2026, ver CLAUDE.md): contrato ASSINADO mostra quem assinou
+   digitalmente (papel, nome, data/hora Brasília, dispositivo, IP, hash). `assinaturas`
+   = [{papel,nome,em,dispositivo,ip,hash}]; vazio/ausente = documento como sempre foi. */
+function CI_fmtDataHora(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function CIContractPreview({ doc, highlightConditional, assinaturas }) {
   const ct = doc.contratante;
   const cd = doc.contratada;
   return (
@@ -88,6 +98,21 @@ function CIContractPreview({ doc, highlightConditional }) {
           <span className="ci-doc-sign-cpf">CPF: {cd.cpf}</span>
         </div>
       </div>
+
+      {Array.isArray(assinaturas) && assinaturas.length > 0 && (
+        <div className="ci-doc-digital">
+          <span className="ci-doc-sign-role">ASSINATURAS DIGITAIS</span>
+          {assinaturas.map((a, i) => (
+            <div className="ci-doc-digital-item" key={i}>
+              <span className="ci-doc-digital-role">{a.papel}</span>
+              <span className="ci-doc-digital-name">{a.nome}</span>
+              <span className="ci-doc-digital-meta">Assinado em {CI_fmtDataHora(a.em)} (horário de Brasília) · {a.dispositivo || 'dispositivo não informado'}</span>
+              <span className="ci-doc-digital-meta">IP: {a.ip || 'não informado'}</span>
+              <span className="ci-doc-digital-hash">Hash: {a.hash || ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="ci-doc-witness">
         <div className="ci-doc-sign">

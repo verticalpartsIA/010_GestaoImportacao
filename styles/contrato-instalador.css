@@ -503,3 +503,11 @@
   .ci-sign-status, .ci-sign-shell { display: none !important; }
   .ci-print-doc { display: block !important; position: static !important; left: auto !important; width: auto !important; }
 }
+
+/* Assinaturas digitais (05/10/2026 — REGRA TRAVADA, ver CLAUDE.md) */
+.ci-doc-digital { margin: 18pt 0; break-inside: avoid; }
+.ci-doc-digital-item { display: flex; flex-direction: column; margin-top: 10pt; padding-left: 8pt; border-left: 2pt solid #000; break-inside: avoid; }
+.ci-doc-digital-role { font-weight: 700; font-size: 9pt; }
+.ci-doc-digital-name { font-size: 11pt; font-style: italic; }
+.ci-doc-digital-meta { font-size: 8pt; }
+.ci-doc-digital-hash { font-size: 6.5pt; word-break: break-all; }
