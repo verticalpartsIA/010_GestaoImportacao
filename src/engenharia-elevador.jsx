@@ -285,6 +285,13 @@ function peMascaraDoc(d) {
   return d || "";
 }
 
+const PE_DOC_TIPOS = [
+  { key: "projeto_instalacao", label: "Projeto de Instalação" },
+  { key: "id_tag", label: "ID-TAG" },
+];
+function peTipoLabel(k) { return (PE_DOC_TIPOS.find(t => t.key === k) || PE_DOC_TIPOS[0]).label; }
+function peNormCodigo(v) { return String(v || "").trim().toUpperCase().replace(/\s+/g, ""); }
+
 function DesenhoModal({ onClose, onSaved }) {
   const store = window.ProjetoElevadorStore;
   const [referencia, setReferencia] = React.useState("");
@@ -292,34 +299,41 @@ function DesenhoModal({ onClose, onSaved }) {
   const [doc, setDoc] = React.useState("");
   const [cotacao, setCotacao] = React.useState("");
   const [obs, setObs] = React.useState("");
-  const [files, setFiles] = React.useState([]);
+  const [arquivos, setArquivos] = React.useState({ projeto_instalacao: [], id_tag: [] });
   const [saving, setSaving] = React.useState(false);
   const [erro, setErro] = React.useState("");
   /* vínculo resolvido (obra e cliente cadastrados) + avisos das buscas */
   const [vinc, setVinc] = React.useState({ formularioId: null, clienteId: null });
-  const [obraInfo, setObraInfo] = React.useState(null);   // { ok, texto }
+  const [obra, setObra] = React.useState(null);           // { predio, cidade, uf, numeroCotacao }
+  const [obraInfo, setObraInfo] = React.useState(null);   // { ok, texto } (só quando NÃO achou / deu erro)
   const [docInfo, setDocInfo] = React.useState(null);     // { ok, texto }
   const [obras, setObras] = React.useState([]);           // obras do cliente achado pelo documento
+  /* equipamentos: sugeridos pela obra (marcados por padrão) + códigos digitados pelo usuário */
+  const [sugeridos, setSugeridos] = React.useState([]);
+  const [desmarcados, setDesmarcados] = React.useState([]);
+  const [extras, setExtras] = React.useState([]);
+  const [extraTxt, setExtraTxt] = React.useState("");
   const auto = React.useRef({ referencia: "", cliente: "", doc: "" }); // o que foi preenchido pela busca (não pelo usuário)
 
-  /* Nº da cotação → obra + cliente */
+  /* Nº da cotação → obra + cliente + equipamentos */
   React.useEffect(() => {
     const n = Number(cotacao);
-    if (!(n > 0)) { setObraInfo(null); setVinc(v => ({ ...v, formularioId: null })); return; }
+    if (!(n > 0)) { setObra(null); setObraInfo(null); setSugeridos([]); setVinc(v => ({ ...v, formularioId: null })); return; }
     let vivo = true;
     const t = setTimeout(async () => {
       try {
         const o = await store.buscarObraPorCotacao(n);
         if (!vivo) return;
-        if (!o) { setObraInfo({ ok: false, texto: `Cotação Nº ${n} não encontrada nos formulários.` }); setVinc(v => ({ ...v, formularioId: null })); return; }
+        if (!o) { setObra(null); setSugeridos([]); setObraInfo({ ok: false, texto: `Cotação Nº ${n} não encontrada nos formulários.` }); setVinc(v => ({ ...v, formularioId: null })); return; }
+        setObraInfo(null);
+        setObra({ predio: o.predio, cidade: o.cidade, uf: o.uf, numeroCotacao: o.numeroCotacao });
         setVinc({ formularioId: o.formularioId, clienteId: o.clienteId });
-        const local = [o.cidade, o.uf].filter(Boolean).join("/");
-        setObraInfo({ ok: true, texto: `Obra encontrada: ${o.predio || "(sem nome)"}${local ? " · " + local : ""}` });
+        setSugeridos(o.equipamentos || []); setDesmarcados([]);
         // só preenche o que o usuário não digitou por conta própria
         setReferencia(r => (!r || r === auto.current.referencia) ? (auto.current.referencia = o.predio || r) : r);
         setCliente(c => (!c || c === auto.current.cliente) ? (auto.current.cliente = o.clienteNome || c) : c);
         setDoc(d => (!d || d === auto.current.doc) ? (auto.current.doc = peMascaraDoc(o.clienteDocumento) || d) : d);
-      } catch (e) { if (vivo) { setObraInfo({ ok: false, texto: e.message }); setVinc(v => ({ ...v, formularioId: null })); } }
+      } catch (e) { if (vivo) { setObra(null); setSugeridos([]); setObraInfo({ ok: false, texto: e.message }); setVinc(v => ({ ...v, formularioId: null })); } }
     }, 450);
     return () => { vivo = false; clearTimeout(t); };
   }, [cotacao]);
@@ -334,7 +348,7 @@ function DesenhoModal({ onClose, onSaved }) {
         const cl = await store.buscarClientePorDocumento(d);
         if (!vivo) return;
         if (!cl) { setDocInfo({ ok: false, texto: "CPF/CNPJ não encontrado no cadastro de clientes (o desenho será salvo só com o texto digitado)." }); setObras([]); setVinc(v => ({ ...v, clienteId: null })); return; }
-        setDocInfo({ ok: true, texto: `Cliente: ${cl.nome}` });
+        setDocInfo({ ok: true, texto: "Cliente encontrado no cadastro." });
         setVinc(v => ({ ...v, clienteId: cl.id }));
         setCliente(c => (!c || c === auto.current.cliente) ? (auto.current.cliente = cl.nome) : c);
         setObras(await store.obrasDoCliente(cl.id));
@@ -343,31 +357,39 @@ function DesenhoModal({ onClose, onSaved }) {
     return () => { vivo = false; };
   }, [doc]);
 
-  const escolherObra = (formId) => {
-    const o = obras.find(x => x.formularioId === formId);
-    if (!o) return;
-    setCotacao(String(o.numeroCotacao || ""));
+  const equipamentos = [...sugeridos.filter(c => !desmarcados.includes(c)), ...extras.filter(c => !sugeridos.includes(c))];
+  const alternar = (c) => setDesmarcados(d => d.includes(c) ? d.filter(x => x !== c) : [...d, c]);
+  const addExtra = () => {
+    const c = peNormCodigo(extraTxt);
+    if (!c) return;
+    if (!sugeridos.includes(c) && !extras.includes(c)) setExtras(e => [...e, c]);
+    setDesmarcados(d => d.filter(x => x !== c));
+    setExtraTxt("");
   };
+  const setArq = (tipo, lista) => setArquivos(a => ({ ...a, [tipo]: lista }));
 
   const salvar = async () => {
     setErro("");
     if (!referencia.trim()) return setErro("Informe o prédio/empreendimento.");
-    if (!files.length) return setErro("Selecione ao menos um arquivo.");
+    if (!equipamentos.length) return setErro("Informe o código do equipamento (ex.: VPEL-EL0955-1).");
+    if (!arquivos.projeto_instalacao.length && !arquivos.id_tag.length) return setErro("Anexe o Projeto de Instalação e/ou o ID-TAG.");
     setSaving(true);
     try {
       const salvos = await store.salvarDesenhos({
-        referencia, clienteNome: cliente, numeroCotacao: cotacao ? Number(cotacao) : null, observacao: obs.trim(), files,
+        referencia, clienteNome: cliente, numeroCotacao: cotacao ? Number(cotacao) : null, observacao: obs.trim(),
+        docs: PE_DOC_TIPOS.map(t => ({ tipo: t.key, files: arquivos[t.key] })), equipamentos,
         formularioId: vinc.formularioId, clienteId: vinc.clienteId, clienteDocumento: doc.replace(/\D/g, "") || null,
       });
-      window.toast?.(`${salvos.length} desenho(s) salvo(s).`, "success");
+      window.toast?.(`${salvos.length} documento(s) salvo(s).`, "success");
       onSaved();
     } catch (e) { setErro(e.message); setSaving(false); }
   };
 
   const aviso = (info) => info ? <span className="small" style={{ color: info.ok ? "var(--vp-success)" : "var(--fg3)" }}>{info.ok ? "✓ " : ""}{info.texto}</span> : null;
+  const faltaUm = (!!arquivos.projeto_instalacao.length) !== (!!arquivos.id_tag.length);
 
   return (
-    <Modal title="Salvar desenho de elevador" onClose={saving ? () => {} : onClose} width={600}
+    <Modal title="Salvar documentos da obra" onClose={saving ? () => {} : onClose} width={640}
       footer={<>
         <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
         <Button variant="primary" onClick={salvar} disabled={saving}>{saving ? "Salvando…" : "Salvar"}</Button>
@@ -381,20 +403,67 @@ function DesenhoModal({ onClose, onSaved }) {
             <input className="input" value={doc} onChange={e => setDoc(e.target.value)} placeholder="Digite o CNPJ ou CPF"/>
             {aviso(docInfo)}</div>
         </div>
-        {obras.length > 0 && (
-          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Obras deste cliente — escolha para preencher</label>
-            <select className="input" value={vinc.formularioId || ""} onChange={e => escolherObra(e.target.value)}>
+
+        {obra && (
+          <div style={{ border: "1px solid var(--border)", background: "var(--vp-gray-50)", padding: "8px 12px", fontSize: 13 }}>
+            <span className="up-eyebrow muted">Obra vinculada</span><br/>
+            <b>Cotação Nº {obra.numeroCotacao}</b> · {obra.predio || "(sem nome)"}{obra.cidade ? ` · ${obra.cidade}/${obra.uf}` : ""}
+          </div>
+        )}
+        {!obra && obras.length > 0 && (
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Obras deste cliente — escolha a obra</label>
+            <select className="input" value="" onChange={e => { const o = obras.find(x => x.formularioId === e.target.value); if (o) setCotacao(String(o.numeroCotacao || "")); }}>
               <option value="">— selecione a obra —</option>
               {obras.map(o => <option key={o.formularioId} value={o.formularioId}>Cotação {o.numeroCotacao} · {o.predio || "sem nome"}{o.cidade ? " · " + o.cidade + "/" + o.uf : ""}</option>)}
             </select></div>
         )}
-        <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Prédio / Empreendimento *</label>
-          <input className="input" value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="Shopping Vila Olímpia…"/></div>
-        <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Cliente (opcional)</label>
-          <input className="input" value={cliente} onChange={e => setCliente(e.target.value)}/></div>
-        <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Arquivos * (PDF, PNG, JPG, DWG, DXF — máx. 25 MB cada)</label>
-          <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" onChange={e => setFiles(Array.from(e.target.files || []))}/>
-          {files.length > 0 && <span className="muted small">{files.length} arquivo(s) selecionado(s).</span>}</div>
+
+        <div className="grid-2" style={{ gap: 12 }}>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Prédio / Empreendimento *</label>
+            <input className="input" value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="Shopping Vila Olímpia…"/></div>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Cliente (opcional)</label>
+            <input className="input" value={cliente} onChange={e => setCliente(e.target.value)}/></div>
+        </div>
+
+        <div className="stack" style={{ gap: 6 }}>
+          <label className="up-eyebrow muted">Equipamento(s) *</label>
+          {sugeridos.length > 0 && (
+            <div className="row gap-2" style={{ flexWrap: "wrap" }}>
+              {sugeridos.map(c => (
+                <label key={c} style={{ display: "inline-flex", gap: 6, alignItems: "center", border: "1px solid var(--border)", padding: "4px 10px", fontSize: 13, cursor: "pointer", background: desmarcados.includes(c) ? "transparent" : "var(--vp-gray-50)" }}>
+                  <input type="checkbox" checked={!desmarcados.includes(c)} onChange={() => alternar(c)}/> <span className="mono">{c}</span>
+                </label>
+              ))}
+            </div>
+          )}
+          {extras.length > 0 && (
+            <div className="row gap-2" style={{ flexWrap: "wrap" }}>
+              {extras.map(c => (
+                <span key={c} className="mono" style={{ border: "1px solid var(--border)", padding: "4px 10px", fontSize: 13, background: "var(--vp-gray-50)" }}>
+                  {c} <button onClick={() => setExtras(e => e.filter(x => x !== c))} style={{ border: "none", background: "transparent", cursor: "pointer", color: "var(--fg3)" }}>×</button>
+                </span>
+              ))}
+            </div>
+          )}
+          <div className="row gap-2">
+            <input className="input" style={{ flex: 1 }} value={extraTxt} onChange={e => setExtraTxt(e.target.value)}
+              onKeyDown={e => { if (e.key === "Enter") { e.preventDefault(); addExtra(); } }}
+              placeholder={sugeridos.length ? "Outro código de equipamento…" : "Digite o código do equipamento — ex.: VPEL-EL0955-1"}/>
+            <Button variant="outline" onClick={addExtra}>Adicionar</Button>
+          </div>
+          <span className="muted small">{sugeridos.length ? "Códigos achados na Proposta/Precificação desta cotação. Desmarque o que o documento não cobre ou acrescente outro." : "Informe a cotação para sugerir os códigos, ou digite-os."}</span>
+        </div>
+
+        {PE_DOC_TIPOS.map(t => (
+          <div key={t.key} className="stack" style={{ gap: 4, border: "1px solid var(--border)", padding: 10 }}>
+            <label className="up-eyebrow muted">{t.label}</label>
+            <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" onChange={e => setArq(t.key, Array.from(e.target.files || []))}/>
+            {arquivos[t.key].length > 0 && <span className="muted small">{arquivos[t.key].length} arquivo(s) selecionado(s).</span>}
+          </div>
+        ))}
+        <span className="muted small">PDF, PNG, JPG, DWG ou DXF — máx. 25 MB cada. Cada obra precisa dos dois documentos: Projeto de Instalação e ID-TAG.</span>
+        {faltaUm && <div style={{ color: "#92400e", fontSize: 13 }}>⚠ Falta anexar o {arquivos.projeto_instalacao.length ? "ID-TAG" : "Projeto de Instalação"} desta obra (você pode salvar assim e completar depois).</div>}
+
         <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Observação (opcional)</label>
           <input className="input" value={obs} onChange={e => setObs(e.target.value)} placeholder="Ex.: planta do poço, revisão 2"/></div>
         {erro && <div style={{ color: "#b91c1c", fontSize: 13 }}>{erro}</div>}
@@ -419,10 +488,26 @@ function ProjetoElevadorDesenhos({ abas }) {
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
 
+  /* Pendência por obra: cada obra precisa dos dois documentos (Projeto de Instalação + ID-TAG). */
+  const faltas = React.useMemo(() => {
+    const porObra = {};
+    itens.forEach(i => {
+      const k = i.formulario_id || (i.numero_cotacao != null ? "c" + i.numero_cotacao : "r" + peNorm(i.referencia));
+      (porObra[k] = porObra[k] || new Set()).add(i.tipo_documento || "projeto_instalacao");
+    });
+    const f = {};
+    itens.forEach(i => {
+      const k = i.formulario_id || (i.numero_cotacao != null ? "c" + i.numero_cotacao : "r" + peNorm(i.referencia));
+      const tem = porObra[k];
+      f[i.id] = PE_DOC_TIPOS.filter(t => !tem.has(t.key)).map(t => t.label);
+    });
+    return f;
+  }, [itens]);
+
   const filtrados = React.useMemo(() => {
     const q = peNorm(busca);
     if (!q) return itens;
-    return itens.filter(i => peNorm(`${i.referencia} ${i.cliente_nome} ${i.cliente_documento || ""} ${i.numero_cotacao} ${i.arquivo_nome} ${i.enviado_por_nome}`).includes(q));
+    return itens.filter(i => peNorm(`${i.referencia} ${i.cliente_nome} ${i.cliente_documento || ""} ${i.numero_cotacao} ${(i.equipamentos || []).join(" ")} ${peTipoLabel(i.tipo_documento)} ${i.arquivo_nome} ${i.enviado_por_nome}`).includes(q));
   }, [itens, busca]);
 
   const copiarLink = async (i) => {
@@ -448,30 +533,33 @@ function ProjetoElevadorDesenhos({ abas }) {
         </div>
         <div className="page-head__r row gap-2">
           <Button variant="outline" onClick={carregar} disabled={loading}>{loading ? "Atualizando…" : "Atualizar"}</Button>
-          <Button variant="primary" icon="plus" onClick={() => setModal(true)}>Salvar desenho</Button>
+          <Button variant="primary" icon="plus" onClick={() => setModal(true)}>Salvar documentos da obra</Button>
         </div>
       </div>
 
       {abas}
 
       <Card style={{ marginBottom: 14 }}>
-        <input className="input" style={{ width: "100%" }} placeholder="Buscar por prédio, cliente, CNPJ/CPF, nº da cotação ou arquivo…"
+        <input className="input" style={{ width: "100%" }} placeholder="Buscar por prédio, cliente, CNPJ/CPF, cotação, equipamento ou arquivo…"
           value={busca} onChange={e => setBusca(e.target.value)}/>
       </Card>
 
       <div className="table-wrap">
         <table className="t">
-          <thead><tr><th>Prédio / Cliente</th><th>Nº Cotação</th><th>Arquivo</th><th>Tamanho</th><th>Salvo por</th><th>Data</th><th style={{ width: 230 }}></th></tr></thead>
+          <thead><tr><th>Prédio / Cliente</th><th>Nº Cotação</th><th>Equipamento(s)</th><th>Documento</th><th>Arquivo</th><th>Tamanho</th><th>Salvo por</th><th>Data</th><th style={{ width: 230 }}></th></tr></thead>
           <tbody>
             {loading && <tr><td colSpan={99}><div style={{ padding: 24 }}>Carregando…</div></td></tr>}
             {!loading && filtrados.length === 0 && (
               <tr><td colSpan={99}><div className="empty"><h4>{itens.length === 0 ? "Nenhum desenho salvo ainda" : "Nenhum resultado para a busca"}</h4>
-                {itens.length === 0 && <p>Clique em "Salvar desenho" para guardar um projeto.</p>}</div></td></tr>
+                {itens.length === 0 && <p>Clique em "Salvar documentos da obra" para guardar o Projeto de Instalação e o ID-TAG.</p>}</div></td></tr>
             )}
             {!loading && filtrados.map(i => (
               <tr key={i.id}>
                 <td><div className="cell-main">{i.referencia}</div><div className="cell-sub">{i.cliente_nome || "—"}{i.cliente_documento ? " · " + peMascaraDoc(i.cliente_documento) : ""}{i.observacao ? " · " + i.observacao : ""}</div></td>
                 <td><span className="mono small">{i.numero_cotacao ?? "—"}</span></td>
+                <td><span className="mono small">{(i.equipamentos || []).join(", ") || "—"}</span></td>
+                <td><Badge variant={i.tipo_documento === "id_tag" ? "info" : "success"}>{peTipoLabel(i.tipo_documento)}</Badge>
+                  {(faltas[i.id] || []).length > 0 && <div className="small" style={{ color: "#92400e", marginTop: 4 }}>Falta {(faltas[i.id] || []).join(" e ")}</div>}</td>
                 <td>{i.arquivo_nome}</td>
                 <td>{peFmtTam(i.tamanho_bytes)}</td>
                 <td>{i.enviado_por_nome || i.enviado_por_email || "—"}</td>
