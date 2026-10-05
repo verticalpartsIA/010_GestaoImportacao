@@ -57,3 +57,13 @@ table.t.pcp-grid input.input { font-family: 'Poppins', sans-serif; font-weight: 
 table.t.pcp-grid tbody td:nth-child(2) { min-width: 280px; }
 table.t.pcp-grid tbody td:first-child { white-space: nowrap; }
 table.t.pcp-grid tbody td.pcp-num, table.t.pcp-grid tbody td.text-right { white-space: nowrap; }
+
+/* Almoxarifado › Estoque: a coluna de ações (⋯) fica sempre visível à direita, mesmo com rolagem horizontal. */
+table.t.pcp-grid.pcp-estoque tbody td:nth-child(2) { min-width: 200px; }
+table.t.pcp-grid .pcp-acao { position: sticky; right: 0; width: 44px; text-align: center; padding: 4px 6px; box-shadow: -6px 0 8px -6px rgba(0,0,0,.18); }
+table.t.pcp-grid thead th.pcp-acao { z-index: 3; }
+table.t.pcp-grid tbody tr td.pcp-acao { z-index: 2; background: var(--vp-white, #fff); }
+table.t.pcp-grid tbody tr:nth-child(even) td.pcp-acao { background: color-mix(in srgb, var(--vp-gray-50) 55%, var(--vp-white, #fff)); }
+table.t.pcp-grid tbody tr:hover td.pcp-acao { background: color-mix(in srgb, var(--vp-yellow) 16%, var(--vp-gray-50)); }
+table.t.pcp-grid.pcp-estoque thead th, table.t.pcp-grid.pcp-estoque tbody td { padding-left: 8px; padding-right: 8px; }
+table.t.pcp-grid.pcp-estoque input.input[type="number"] { width: 78px !important; }
