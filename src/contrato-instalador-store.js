@@ -209,8 +209,34 @@
     if (error) { console.warn('[CIStore] listPainel error', error); return []; }
     return data || [];
   }
+  /* Segurança real (#571, Fase 3/Task 11c): a página pública fala com o banco por RPC `public_ci_*` (recebem só o TOKEN; o servidor
+     decide as transições, carimba hora/IP e faz a expiração "preguiçosa"). Interruptor: localStorage.vp_public_rpc = 'off' (o mesmo da
+     Proposta); se a RPC falhar, cai no caminho antigo (tabelas ainda abertas). */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+  function erroDaRpc(res) {
+    const e = res && res.erro;
+    if (e === 'status_expirado') return new Error('Este link de assinatura expirou. Peça um novo envio à Vertical Parts.');
+    if (e === 'status_recusado') return new Error('Este contrato foi recusado e não pode mais ser assinado.');
+    if (e === 'link_invalido') return new Error('Link inválido ou expirado.');
+    if (e === 'nome_obrigatorio') return new Error('Informe o seu nome para assinar.');
+    if (e && String(e).indexOf('status_') === 0) return new Error('Este contrato não está mais disponível para esta ação (situação atual: ' + String(e).slice(7) + ').');
+    return new Error('Não foi possível concluir a ação. Tente novamente.');
+  }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[CIStore] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[CIStore] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
   async function getByToken(token) {
     const c = sb(); if (!c) return null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_ci_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
     const { data } = await c.from('contratos_instalador').select('*').eq('token', token).maybeSingle();
     if (!data) return null;
     /* Expiração "preguiçosa": antes só o Painel (sweepExpired) marcava
@@ -400,6 +426,10 @@
        automático no mount da página pública (assinar-app.jsx), sem ação do
        usuário — lançar aqui travaria a leitura do contrato por uma falha
        só de auditoria. */
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_ci_visualizado', { p_token: token, p_audit: { viewUa: ua, viewDevice: device, viewIp: ip } });
+      if (!r.falhou && r.data && r.data.ok && r.data.rec) return r.data.rec;   // aviso/auditoria já gravados no banco
+    }
     const { error } = await c.from('contratos_instalador').update(patch).eq('token', token);
     if (error) console.warn('[CIStore] falha ao registrar visualização (best-effort, não bloqueia o cliente)', error);
     const updated = { ...cur, ...patch };
@@ -435,6 +465,16 @@
       consent: true,
       hash,
     };
+    if (usarRpcPublica()) {
+      /* O servidor grava a assinatura, carimba hora/IP, avisa e enfileira o evento (src/fluxo-pendentes.js → CIStore.processarEfeitoFila). */
+      const r = await chamarRpcPublica(c, 'public_ci_assinar', { p_token: token, p_audit: {
+        signUa: ua, signDevice: device, signIp: ip, signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data, hash,
+      } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        return r.data.rec;
+      }
+    }
     const log = (cur.log || []).slice();
     log.push({ status:'assinado', at: now.toISOString(), meta:{ ip, ua, hash } });
     const patch = {
@@ -472,6 +512,13 @@
     const log = (cur.log || []).slice();
     log.push({ status:'recusado', at: now.toISOString(), meta:{ nome, motivo, ip } });
     const patch = { status:'recusado', log, audit, atualizado_em: now.toISOString() };
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_ci_recusar', { p_token: token, p_nome: nome, p_motivo: motivo, p_audit: { refuseUa: ua, refuseDevice: device, refuseIp: ip } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        return r.data.rec;   // aviso/auditoria já gravados no banco
+      }
+    }
     const { error } = await c.from('contratos_instalador').update(patch).eq('token', token);
     if (error) throw error;
     const updated = { ...cur, ...patch };
@@ -508,8 +555,22 @@
   }
 
   /* ---------- expor ---------- */
+  /* Efeito de uma ação pública do Contrato do Instalador, executado por um usuário interno via fila `fluxo_pendentes`
+     (src/fluxo-pendentes.js): o evento CONTRATO_INSTALADOR_ASSINADO que o navegador do instalador disparava ao assinar. */
+  async function processarEfeitoFila(tipo, p) {
+    if (tipo !== 'contrato_instalador_assinado') throw new Error('tipo desconhecido: ' + tipo);
+    if (!window.EventosFluxo) throw new Error('EventosFluxo indisponível');
+    const num = p.numero_cotacao != null && p.numero_cotacao !== '' ? Number(p.numero_cotacao) : null;
+    const r = await window.EventosFluxo.registrar({
+      evento: 'CONTRATO_INSTALADOR_ASSINADO', numeroCotacao: Number.isFinite(num) ? num : null,
+      alvoLabel: p.label, alvoId: p.contrato_id, atorNome: p.signerName || 'Instalador (link público)',
+    });
+    if (!r) throw new Error('evento não registrado');
+  }
+
   window.CIStore = {
     STATUS,
+    processarEfeitoFila,
     uuid, shortToken,
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
