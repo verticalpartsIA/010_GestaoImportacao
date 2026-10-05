@@ -358,17 +358,63 @@
        Best-effort de propósito: loga pra suporte investigar, nunca trava
        a leitura da proposta pelo cliente. */
     let updated = null;
+    let viaRpc = false;   // via RPC o aviso (alertas) e a auditoria (vp_logs) já são gravados NO BANCO (Task 10)
     if (usarRpcPublica()) {
       const r = await chamarRpcPublica(c, 'public_proposta_visualizada', { p_token: token, p_audit: { viewUa: ua, viewDevice: device, viewIp: ip } });
-      if (!r.falhou && r.data && r.data.ok && r.data.rec) updated = r.data.rec;
+      if (!r.falhou && r.data && r.data.ok && r.data.rec) { updated = r.data.rec; viaRpc = true; }
     }
     if (!updated) {
       const { error } = await c.from('propostas').update(patch).eq('token', token);
       if (error) console.warn('[PropostaStore] falha ao registrar visualização (best-effort, não bloqueia o cliente)', error);
       updated = { ...cur, ...patch };
     }
-    await pushNotification(updated, 'visualizada', { ip });
+    if (!viaRpc) await pushNotification(updated, 'visualizada', { ip });
     return updated;
+  }
+
+  /* Cascata pós-assinatura (eventos/gatilhos, decisão do CEO, Dossiê, Lead→Cliente). Segurança real (#571, Task 10): ela
+     NÃO roda mais no navegador do cliente — a RPC `public_proposta_assinar` enfileira em `fluxo_pendentes` e um usuário
+     interno logado a executa (src/fluxo-pendentes.js chama esta MESMA função, então a regra é uma só). O caminho antigo
+     (RPC indisponível) ainda a chama inline. Cada passo é best-effort e isolado; devolve a lista de falhas. */
+  async function executarEfeitosAssinatura(updated, meta) {
+    const c = sb();
+    const falhas = [];
+    const signerName = meta && meta.signerName;
+    const passo = async (nome, fn) => { try { await fn(); } catch (e) { falhas.push(nome + ': ' + ((e && e.message) || e)); console.warn('[PropostaStore] ' + nome + ' falhou', e); } };
+    await passo('evento', async () => {
+      if (!window.EventosFluxo) return;
+      await window.EventosFluxo.registrar({
+        evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
+        alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
+        detalhe: { resposta: 'aprovada', signerName, ...(meta && meta.modalidadeEntrega ? { modalidadeEntrega: meta.modalidadeEntrega } : {}) },
+        atorNome: signerName || 'Cliente (assinatura pública)',
+      });
+    });
+    /* Cliente aprovou → dispara a aprovação do CEO pra comprar o equipamento (só quando a margem sai da regra), bem antes
+       do contrato assinado ou do sinal pago (pedido do usuário em 15/08). O "start" real da compra fica travado até os
+       outros gatilhos também liberarem — ver DecisoesStore.verificarGateCompra, checado na criação da P.I. */
+    await passo('decisão do CEO', async () => {
+      if (window.DecisoesStore && updated.numero_cotacao != null) {
+        await window.DecisoesStore.podeComprarEquipamento(updated.numero_cotacao, { proposta: updated.titulo || updated.numero_documento, origem_cliente: true });
+      }
+    });
+    /* Proposta ganha → Dossiê da Obra nasce sozinho (pedido do usuário 19/08). */
+    await passo('dossiê', async () => {
+      if (window.__DOSSIER && updated.numero_cotacao != null) await window.__DOSSIER.criarDeProposta(updated);
+    });
+    /* Cliente assinou = a venda aconteceu — é o único gatilho de conversão do Lead em Cliente (decisão 21/08). Rastreia
+       numero_cotacao -> formularios_elevador.lead_id -> leads; formulário sem Lead não tem o que converter. */
+    await passo('lead→cliente', async () => {
+      if (updated.numero_cotacao == null) return;
+      const { data: form } = await c.from('formularios_elevador').select('lead_id').eq('numero_cotacao', updated.numero_cotacao).maybeSingle();
+      if (!form?.lead_id) return;
+      const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email').eq('id', form.lead_id).maybeSingle();
+      if (!leadRow) return;
+      const { error: errLead } = await c.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id);
+      if (errLead) throw errLead;
+      if (window.CadastrosClientesStore) await window.CadastrosClientesStore.criarOuVincularDeLead(leadRow);
+    });
+    return falhas;
   }
 
   /* Marca como assinada (status 'aprovada' — já existia na tabela). sig = { type:'draw'|'type', data, signerName } */
@@ -423,6 +469,7 @@
       }
     }
     let updated = null;
+    let viaRpc = false;
     if (usarRpcPublica()) {
       /* O servidor decide status/valores/troca da modalidade e carimba hora e IP; daqui só vão os dados da assinatura. */
       const r = await chamarRpcPublica(c, 'public_proposta_assinar', {
@@ -435,7 +482,7 @@
       });
       if (!r.falhou) {
         if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
-        updated = r.data.rec;
+        updated = r.data.rec; viaRpc = true;
       }
     }
     if (!updated) {
@@ -443,49 +490,9 @@
       if (error) throw error;
       updated = { ...cur, ...patch };
     }
+    if (viaRpc) return updated;   // aviso/auditoria já gravados no banco; a cascata abaixo roda pela fila (src/fluxo-pendentes.js) — Task 10
     await pushNotification(updated, 'aprovada', { ip, signerName: sig.signerName });
-    if (window.EventosFluxo) window.EventosFluxo.registrar({
-      evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
-      alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
-      detalhe: { resposta: 'aprovada', signerName: sig.signerName, ...(escolhaValida ? { modalidadeEntrega: escolhaValida + ' dias' } : {}) },
-    });
-    /* Cliente aprovou → dispara a aprovação do CEO pra comprar o
-       equipamento, bem antes do contrato assinado ou do sinal pago
-       (pedido do usuário em 15/08 — equipamentos caros demais pra deixar
-       sem aprovação). O "start" real da compra fica travado até os outros
-       gatilhos também liberarem — ver DecisoesStore.verificarGateCompra,
-       checado na criação da P.I. */
-    if (window.DecisoesStore && updated.numero_cotacao != null) {
-      window.DecisoesStore.podeComprarEquipamento(updated.numero_cotacao, {
-        proposta: updated.titulo || updated.numero_documento,
-      }).catch((e) => console.warn('[PropostaStore] podeComprarEquipamento falhou', e));
-    }
-    /* Proposta ganha → Dossiê da Obra nasce sozinho (pedido do usuário
-       19/08, mesmo padrão de Formulário→Proposta). Best-effort — nunca
-       trava a assinatura por isso. */
-    if (window.__DOSSIER && updated.numero_cotacao != null) {
-      window.__DOSSIER.criarDeProposta(updated).catch((e) => console.warn('[PropostaStore] criarDeProposta (Dossiê) falhou', e));
-    }
-    /* Cliente assinou = a venda aconteceu — é o único gatilho de conversão
-       do Lead em Cliente (decisão 21/08: visita, workshop, cotação, proposta
-       enviada... nada disso converte, só mantém o Lead em qualificação).
-       Rastreia numero_cotacao -> formularios_elevador.lead_id -> leads —
-       só existe esse vínculo quando o Formulário nasceu do "Criar Cotação
-       China" (comercial.jsx); formulário criado direto, sem Lead, não tem
-       o que converter, e tudo aqui é best-effort (não trava a assinatura). */
-    if (updated.numero_cotacao != null) {
-      (async () => {
-        try {
-          const { data: form } = await c.from('formularios_elevador').select('lead_id').eq('numero_cotacao', updated.numero_cotacao).maybeSingle();
-          if (!form?.lead_id) return;
-          const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email').eq('id', form.lead_id).maybeSingle();
-          if (!leadRow) return;
-          const { error: errLead } = await c.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id);
-          if (errLead) { console.warn('[PropostaStore] falha ao marcar lead como Convertido', errLead); return; }
-          if (window.CadastrosClientesStore) await window.CadastrosClientesStore.criarOuVincularDeLead(leadRow);
-        } catch (e) { console.warn('[PropostaStore] falha ao converter lead em cliente', e); }
-      })();
-    }
+    executarEfeitosAssinatura(updated, { signerName: sig.signerName, modalidadeEntrega: escolhaValida ? escolhaValida + ' dias' : null });
     return updated;
   }
 
@@ -508,11 +515,12 @@
     log.push({ status:'recusada', at: now.toISOString(), meta:{ nome, motivo, ip } });
     const patch = { status: 'recusada', log, audit, atualizado_em: now.toISOString() };
     let updated = null;
+    let viaRpc = false;
     if (usarRpcPublica()) {
       const r = await chamarRpcPublica(c, 'public_proposta_recusar', { p_token: token, p_nome: nome, p_motivo: motivo, p_audit: { refuseUa: ua, refuseDevice: device, refuseIp: ip } });
       if (!r.falhou) {
         if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
-        updated = r.data.rec;
+        updated = r.data.rec; viaRpc = true;
       }
     }
     if (!updated) {
@@ -520,6 +528,7 @@
       if (error) throw error;
       updated = { ...cur, ...patch };
     }
+    if (viaRpc) return updated;   // aviso/auditoria no banco; o evento roda pela fila (src/fluxo-pendentes.js)
     await pushNotification(updated, 'recusada', { nome, motivo });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
@@ -550,11 +559,12 @@
       log, atualizado_em: now.toISOString(),
     };
     let updated = null;
+    let viaRpc = false;
     if (usarRpcPublica()) {
       const r = await chamarRpcPublica(c, 'public_proposta_revisao', { p_token: token, p_texto: txt });
       if (!r.falhou) {
         if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
-        updated = r.data.rec;
+        updated = r.data.rec; viaRpc = true;
       }
     }
     if (!updated) {
@@ -562,6 +572,7 @@
       if (error) throw error;
       updated = { ...cur, ...patch };
     }
+    if (viaRpc) return updated;   // aviso/auditoria no banco; o evento roda pela fila (src/fluxo-pendentes.js)
     await pushNotification(updated, 'revisao_solicitada', { texto: txt });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
@@ -892,6 +903,7 @@
     getById, getByToken, garantirToken,
     publicar, conteudoVigente, conteudoRenderizavel, resolverEq, normalizarEq,
     markSent, markViewed, markSigned, refuse, solicitarRevisao, decidirRevisao,
+    executarEfeitosAssinatura,
     salvar,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
     resolverPerfilAtual, temCapacidade, podeConcederAlcadas, resetAlcadasCache,

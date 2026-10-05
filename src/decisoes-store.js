@@ -124,7 +124,9 @@
       // 20260817200000_decisoes_gerenciais_schema_doc.sql.
       aprovador_esperado_email: aprovadores[0] || null,
       contexto: contexto || {},
-      solicitado_por: meuEmail() || null,
+      // `origem_cliente`: decisão disparada pela assinatura do CLIENTE (processada por um usuário interno via fila) — sem
+      // solicitante, como era quando rodava na página pública (o resultado avisa o grupo, não quem processou a fila).
+      solicitado_por: (contexto && contexto.origem_cliente) ? null : (meuEmail() || null),
     };
     const { data, error } = await c.from('decisoes_gerenciais').insert(row).select().single();
     if (error) throw error;
