@@ -292,21 +292,54 @@ function Secao(sec, i) {
   return h(View, { key: 's' + i }, filhos);
 }
 
-function Assinaturas(doc) {
+/* Pedido do usuário (05/10/2026): o PDF do contrato ASSINADO deve trazer
+   quem assinou digitalmente (nome, papel, data/hora, dispositivo, IP e hash).
+   `assinaturas` = [{papel, nome, em, dispositivo, ip, hash}] já em ordem de
+   assinatura, montada por assinar-app.jsx a partir do banco. Vazio/ausente
+   (contrato não assinado, pré-visualização) = layout da minuta de sempre. */
+function fmtDataHora(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function Assinaturas(doc, assinaturas) {
   const a = (doc && doc.assinatura) || {};
   const vend = a.vendedora || {};
   const comp = a.comprador || {};
-  const bloco = (key, papel, nome, cpf) => h(View, { key, wrap: false, style: { marginBottom: 30 } }, [
+  const lista = Array.isArray(assinaturas) ? assinaturas : [];
+  const razao = String(comp.razaoLabel || '').trim();
+  const razaoLtda = /ltda\.?$/i.test(razao) ? razao : `${razao} LTDA.`;
+  const assinado = lista.length > 0;
+  const bloco = (key, papel, nome, cpf) => h(View, { key, wrap: false, style: { marginBottom: 30 } }, assinado ? [
+    h(Text, { key: 'r', style: S.assRole }, papel),
+    h(Text, { key: 'n', style: S.assTxt }, nome),
+    h(Text, { key: 'c', style: S.assTxt }, `CPF: ${cpf || ''}`),
+  ] : [
     h(Text, { key: 'r', style: S.assRole }, papel),
     h(Text, { key: 'x', style: S.assX }, 'X'),
     h(View, { key: 'l', style: S.assLinha }),
     h(Text, { key: 'n', style: S.assTxt }, nome),
     h(Text, { key: 'c', style: S.assTxt }, `CPF: ${cpf || ''}`),
   ]);
-  return [
+  const saida = [
     bloco('v', 'VENDEDORA\nVERTICALPARTS', vend.nome || '', vend.cpf),
-    bloco('c', `COMPRADOR\n${comp.razaoLabel || ''} LTDA.`, `NOME: ${comp.nome || ''}`, comp.cpf),
+    bloco('c', `COMPRADOR\n${razaoLtda}`, `NOME: ${comp.nome || ''}`, comp.cpf),
   ];
+  if (assinado) {
+    saida.push(h(Text, { key: 'dig-t', style: { fontWeight: BOLD, marginTop: 4, marginBottom: 10 } }, 'ASSINATURAS DIGITAIS'));
+    lista.forEach((s, i) => {
+      saida.push(h(View, { key: 'dig' + i, wrap: false, style: { marginBottom: 14, paddingLeft: 6, borderLeft: '2pt solid #000' } }, [
+        h(Text, { key: 'p', style: { fontWeight: BOLD, fontSize: 9 } }, s.papel || ''),
+        h(Text, { key: 'n', style: { fontSize: 11, fontStyle: 'italic' } }, s.nome || ''),
+        h(Text, { key: 'd', style: S.assTxt }, `Assinado em ${fmtDataHora(s.em)} (horário de Brasília) · ${s.dispositivo || 'dispositivo não informado'}`),
+        h(Text, { key: 'i', style: S.assTxt }, `IP: ${s.ip || 'não informado'}`),
+        h(Text, { key: 'h', style: { fontSize: 6.5, lineHeight: 1.4, marginLeft: 6 } }, `Hash: ${s.hash || ''}`),
+      ]));
+    });
+  }
+  return saida;
 }
 
 function Testemunhas() {
@@ -342,7 +375,7 @@ async function carregarImagem(caminho) {
   return dataUri;
 }
 
-async function montarDocumento(doc) {
+async function montarDocumento(doc, assinaturas) {
   registrarFontes();
   montarDocumento.ultimasFalhas = [];
   await Promise.all([
@@ -356,7 +389,7 @@ async function montarDocumento(doc) {
     h(Text, { key: 'titulo', style: S.titulo }, doc.titulo || 'CONTRATO DE COMPRA E VENDA DE EQUIPAMENTOS E PRESTAÇÃO DE SERVIÇOS DE INSTALAÇÃO'),
     h(Text, { key: 'numero', style: S.numero }, `Nº do Contrato: ${doc.numero || ''}`),
     ...(doc.sections || []).map(Secao),
-    ...Assinaturas(doc),
+    ...Assinaturas(doc, assinaturas),
     Testemunhas(),
   ];
 
@@ -368,13 +401,13 @@ async function montarDocumento(doc) {
   return h0(Document, { title: doc.numero ? `Contrato ${doc.numero}` : 'Contrato' }, pagina);
 }
 
-async function gerarBlob(doc) {
-  const elemento = await montarDocumento(doc);
+async function gerarBlob(doc, assinaturas) {
+  const elemento = await montarDocumento(doc, assinaturas);
   return pdf(elemento).toBlob();
 }
 
-async function baixar(doc, filename) {
-  const blob = await gerarBlob(doc);
+async function baixar(doc, filename, assinaturas) {
+  const blob = await gerarBlob(doc, assinaturas);
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename;

@@ -139,6 +139,9 @@ async function resolveSource(token) {
         recipient: s.recipient, channel: s.channel,
         signatarioPapel: s.papel, signatarioNome: s.nome,
         contratoStatus: contrato ? contrato.status : null,
+        contratoId: contrato ? contrato.id : null,
+        contratoAudit: contrato ? contrato.audit : null,
+        contratoSignedAt: contrato ? contrato.signed_at : null,
       };
       return { kind: 'venda_signatario', rec, store: window.CVSignatarioStore, Preview: window.CVContractPreview, engine: window.CV };
     }
@@ -166,6 +169,9 @@ async function resolveSource(token) {
           recipient: s.recipient, channel: s.channel,
           signatarioPapel: s.papel, signatarioNome: s.nome,
           contratoStatus: documentoPai ? documentoPai.status : null,
+          contratoId: documentoPai ? documentoPai.id : null,
+          contratoAudit: documentoPai ? documentoPai.audit : null,
+          contratoSignedAt: documentoPai ? documentoPai.signed_at : null,
         };
         return { kind: cfg.kind, rec, store: window.DocumentoSignatariosStore, Preview: cfg.Preview, engine: cfg.engine };
       }
@@ -309,7 +315,31 @@ function SgApp() {
       try {
         const rv = source.rec;
         const nomeV = ['Contrato', rv.numero_documento, (rv.comprador_razao_social || '').trim()].filter(Boolean).join(' - ') + '.pdf';
-        await window.ContratoVendaReactPdf.baixar(doc, nomeV);
+        /* Assinaturas digitais (05/10/2026): monta, em ordem de assinatura, quem já
+           assinou — representante do Comprador + sócios/jurídico + "deve assinar".
+           Falha ao buscar = PDF sai sem o bloco (como antes), nunca trava o download. */
+        let assinaturas = [];
+        try {
+          const ehPai = source.kind === 'venda';
+          const cId = ehPai ? rv.id : rv.contratoId;
+          const cAudit = (ehPai ? rv.audit : rv.contratoAudit) || {};
+          const cEm = ehPai ? rv.signed_at : rv.contratoSignedAt;
+          const mapa = (papel, nome, em, au) => ({ papel, nome, em, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash });
+          const lista = [];
+          if (cAudit.signedAt || cEm) lista.push(mapa('Representante legal do Comprador', cAudit.signerName || '', cAudit.signedAt || cEm, cAudit));
+          if (cId) {
+            const [extras, genericos] = await Promise.all([
+              window.CVSignatarioStore ? window.CVSignatarioStore.listarPorContrato(cId) : [],
+              window.DocumentoSignatariosStore ? window.DocumentoSignatariosStore.listarPorDocumento('contrato_venda', cId) : [],
+            ]);
+            [...(extras || []), ...(genericos || [])].filter((s) => s.status === 'assinado').forEach((s) => {
+              const au = s.audit || {};
+              lista.push(mapa(s.papel || 'Signatário', au.signerName || s.nome || '', au.signedAt || s.signed_at, au));
+            });
+          }
+          assinaturas = lista.sort((a, b) => new Date(a.em) - new Date(b.em));
+        } catch (e) { console.warn('Assinaturas digitais não carregadas pro PDF:', e); }
+        await window.ContratoVendaReactPdf.baixar(doc, nomeV, assinaturas);
         return;
       } catch (e) {
         console.error('PDF do contrato falhou, caindo pra impressão do navegador:', e);
