@@ -59,7 +59,7 @@ table.t.pcp-grid tbody td:first-child { white-space: nowrap; }
 table.t.pcp-grid tbody td.pcp-num, table.t.pcp-grid tbody td.text-right { white-space: nowrap; }
 
 /* Almoxarifado › Estoque: a coluna de ações (⋯) fica sempre visível à direita, mesmo com rolagem horizontal. */
-table.t.pcp-grid.pcp-estoque tbody td:nth-child(2) { min-width: 200px; }
+table.t.pcp-grid.pcp-estoque tbody td:nth-child(2) { min-width: 170px; }
 table.t.pcp-grid .pcp-acao { position: sticky; right: 0; width: 44px; text-align: center; padding: 4px 6px; box-shadow: -6px 0 8px -6px rgba(0,0,0,.18); }
 table.t.pcp-grid thead th.pcp-acao { z-index: 3; }
 table.t.pcp-grid tbody tr td.pcp-acao { z-index: 2; background: var(--vp-white, #fff); }

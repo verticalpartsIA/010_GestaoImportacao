@@ -403,6 +403,120 @@ function AlmModalHistoricoContagem({ prod, onClose }) {
   );
 }
 
+/* Acerto do saldo do Omie pela contagem real (grava no Omie: "acertar saldo" no local VERTICAL MP).
+   Sempre passa por uma PRÉVIA (a função devolve o que enviaria, sem gravar nada) e por uma confirmação explícita.
+   Avisa quando o saldo do Omie mudou depois da contagem (venda/entrada no meio do caminho) ou quando a contagem é antiga:
+   nesses casos o certo é recontar antes de acertar. */
+function almAvisosAcerto(prod, ultima, agora) {
+  const av = [];
+  if (!prod || prod.fisico == null) return av;
+  if (ultima && ultima.quantidade_omie != null && Math.abs(Number(ultima.quantidade_omie) - prod.saldo) > 1e-9) {
+    av.push('O saldo do Omie mudou depois da contagem (era ' + almFmt(ultima.quantidade_omie, 2) + ', agora ' + almFmt(prod.saldo, 2) + '): pode ter havido venda, entrada ou consumo. Recontar antes de acertar é o mais seguro.');
+  }
+  if (prod.fisicoEm && (agora - new Date(prod.fisicoEm).getTime()) > 24 * 3600 * 1000) {
+    av.push('Esta contagem tem mais de 24 horas (feita em ' + new Date(prod.fisicoEm).toLocaleString('pt-BR') + ').');
+  }
+  return av;
+}
+function AlmModalAcerto({ prod, onClose, onDone }) {
+  const [ultima, setUltima] = React.useState(undefined);       // última linha do histórico de contagens (undefined = carregando)
+  const [previa, setPrevia] = React.useState({ estado: 'carregando' });   // carregando | ok | erro
+  const [valor, setValor] = React.useState('');
+  const [ciente, setCiente] = React.useState(false);
+  const [saving, setSaving] = React.useState(false);
+  const quando = prod.fisicoEm ? new Date(prod.fisicoEm).toLocaleString('pt-BR') : '—';
+  const obs = 'Acerto pela contagem física de ' + quando + (prod.fisicoPor ? ' (' + prod.fisicoPor + ')' : '');
+  const corpo = (extra) => ({ acao: 'ajuste_estoque', solicitante: almSolicitante(), codigo: prod.codigo, tipo: 'SLD', motivo: 'INV', quantidade: prod.fisico, obs,
+    valor: Number(String(valor).replace(',', '.')) > 0 ? Number(String(valor).replace(',', '.')) : undefined, ...extra });
+
+  React.useEffect(() => {
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c) { setUltima(null); return; }
+    c.from('pcp_estoque_contagens').select('quantidade_omie, contado_em').eq('codigo', prod.codigo).order('contado_em', { ascending: false }).limit(1)
+      .then(({ data }) => setUltima((data && data[0]) || null));
+  }, [prod.codigo]);
+
+  // Prévia: a função monta o ajuste e devolve, sem gravar em lugar nenhum (simular: true). Refaz ao informar o valor unitário.
+  React.useEffect(() => {
+    let vivo = true;
+    setPrevia({ estado: 'carregando' });
+    const t = setTimeout(async () => {
+      try {
+        const { data, error } = await window.__VP_SB.sb.functions.invoke('pcp-omie-escrever', { body: corpo({ simular: true }) });
+        if (!vivo) return;
+        if (error || !data || data.ok === false || data.error) throw new Error(await almErroFuncao(error, data) || 'falha');
+        setPrevia({ estado: 'ok', ajuste: data.ajuste });
+      } catch (e) { if (vivo) setPrevia({ estado: 'erro', msg: String(e.message || e) }); }
+    }, 350);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [valor]);
+
+  const avisos = ultima === undefined ? [] : almAvisosAcerto(prod, ultima, Date.now());
+  const precisaValor = previa.estado === 'erro' && /valor unit/i.test(previa.msg || '');
+  const dif = prod.fisico - prod.saldo;
+  const podeEnviar = previa.estado === 'ok' && ciente && !saving && ultima !== undefined;
+  const enviar = async () => {
+    setSaving(true);
+    try {
+      const { data, error } = await window.__VP_SB.sb.functions.invoke('pcp-omie-escrever', { body: corpo({}) });
+      if (error || !data || data.ok === false) throw new Error(await almErroFuncao(error, data) || (data && data.erro) || 'falha');
+      window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Acertou o saldo do Omie pela contagem', alvo: prod.codigo + ': Omie ' + almFmt(prod.saldo, 2) + ' → ' + almFmt(prod.fisico, 2) });
+      window.toast?.('Saldo acertado no Omie: ' + prod.codigo + ' = ' + almFmt(prod.fisico, 2) + '.', 'success');
+      onDone && onDone(); onClose();
+    } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+    finally { setSaving(false); }
+  };
+  return (
+    <Modal title={'Acertar saldo no Omie — ' + prod.codigo} onClose={onClose} width={520}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={enviar} disabled={!podeEnviar}>{saving ? 'Gravando…' : 'Acertar saldo no Omie'}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="small muted">{prod.descricao}</div>
+        <div className="table-wrap" style={{ border: 0 }}>
+          <table className="t pcp-grid">
+            <tbody>
+              <tr><td>Saldo do Omie agora</td><td className="text-right">{almFmt(prod.saldo, 2)} {prod.unidade || ''}</td></tr>
+              <tr><td>Contagem na prateleira</td><td className="text-right"><b>{almFmt(prod.fisico, 2)} {prod.unidade || ''}</b></td></tr>
+              <tr><td>Diferença</td><td className="text-right" style={{ color: 'var(--vp-danger)', fontWeight: 600 }}>{(dif > 0 ? '+' : '') + almFmt(dif, 2)}</td></tr>
+              <tr><td>Contado em / por</td><td className="text-right small">{quando}{prod.fisicoPor ? ' · ' + prod.fisicoPor : ''}</td></tr>
+            </tbody>
+          </table>
+        </div>
+        {avisos.map((a, i) => <div key={i} className="card" style={{ padding: 10, fontSize: 12, borderLeft: '3px solid var(--vp-yellow)' }}>⚠ {a}</div>)}
+        {previa.estado === 'carregando' && <div className="small muted">Montando a prévia…</div>}
+        {previa.estado === 'ok' && previa.ajuste && (
+          <div className="small" style={{ color: 'var(--fg2)' }}>
+            Prévia do que será enviado ao Omie: <b>acertar o saldo para {almFmt(prod.fisico, 2)}</b> no local VERTICAL MP, motivo “ajuste por inventário”, valor unitário R$ {almFmt(previa.ajuste.valor, 2)}. Nada foi gravado ainda.
+          </div>
+        )}
+        {previa.estado === 'erro' && <div className="card" style={{ padding: 10, fontSize: 12, borderLeft: '3px solid var(--vp-danger)', color: 'var(--vp-danger)' }}>{previa.msg}</div>}
+        {precisaValor && (
+          <div className="stack" style={{ gap: 4 }}>
+            <label className="up-eyebrow muted">Valor unitário (R$) *</label>
+            <input className="input" type="number" step="0.01" value={valor} onChange={(e) => setValor(e.target.value)} placeholder="o produto não tem custo cadastrado; o Omie exige um valor"/>
+          </div>
+        )}
+        <label style={{ display: 'flex', gap: 8, alignItems: 'flex-start', fontSize: 12.5 }}>
+          <input type="checkbox" checked={ciente} onChange={(e) => setCiente(e.target.checked)} style={{ marginTop: 2 }}/>
+          <span>Conferi a contagem e entendo que isto <b>altera o estoque no Omie</b> e não dá para desfazer por aqui.</span>
+        </label>
+      </div>
+    </Modal>
+  );
+}
+
+/* Cadastro incompleto de um item do estoque: o que falta e onde se corrige. Não bloqueia nada; só sinaliza. */
+function almFaltas(l, podeVerCusto) {
+  const f = [];
+  if (!l.codigo_produto_omie) f.push({ id: 'semvinc', curto: 'sem vínculo no Omie', como: 'sincronize com o Omie; se persistir, o produto não existe lá com este código' });
+  if (!(l.endereco || '').trim()) f.push({ id: 'semend', curto: 'sem endereço', como: 'preencha o endereço na coluna Endereço' });
+  if (!(Number(l.leadtime_dias) > 0)) f.push({ id: 'semlead', curto: 'sem lead time', como: 'cadastre o lead time no produto, no Omie' });
+  if (podeVerCusto && !(l.custo > 0)) f.push({ id: 'semcusto', curto: 'sem custo', como: 'informe o custo na aba Custos' });
+  return f;
+}
+
 /* Aba "Estoque": o saldo do Omie (físico, reservado, disponível, a caminho) ao lado da contagem real da prateleira.
    - "Omie (físico)" vem de pcp_estoque (sync 4x/dia); reservado e a caminho vêm de pcp_posicao_compra (sync diário).
      Disponível = físico − reservado (mesma conta do Omie), então não fica velho se só o físico mudou.
@@ -426,6 +540,7 @@ function AlmoxarifadoEstoque() {
   const [modalMov, setModalMov] = React.useState(null);
   const [modalEd, setModalEd] = React.useState(null);
   const [modalHist, setModalHist] = React.useState(null);
+  const [modalAcerto, setModalAcerto] = React.useState(null);
   // Colunas secundárias (Família, Mínimo, Custo, Lead time) ficam recolhidas para a tela caber; preferência por pessoa no navegador.
   const [maisCols, setMaisCols] = React.useState(() => { try { return localStorage.getItem('vp_alm_cols') === '1'; } catch (e) { return false; } });
   const alternarCols = () => setMaisCols((v) => { try { localStorage.setItem('vp_alm_cols', v ? '0' : '1'); } catch (e) { /* sem storage */ } return !v; });
@@ -450,7 +565,7 @@ function AlmoxarifadoEstoque() {
     if (!c) { setErro('Supabase não carregou.'); setLinhas([]); return; }
     // Sem a alçada "ver_custo" o custo real nem é pedido ao banco: a coluna mostra só um valor de enfeite borrado.
     const pProdutos = c.from('pcp_produtos')
-      .select('codigo, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade), pcp_estoque_fisico(quantidade, contado_em, contado_por)' + (podeVerCusto ? ', preco_custo, custo_manual' : ''))
+      .select('codigo, codigo_produto_omie, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade), pcp_estoque_fisico(quantidade, contado_em, contado_por)' + (podeVerCusto ? ', preco_custo, custo_manual' : ''))
       .eq('ativo', true).order('familia').order('codigo');
     const pPosicao = c.from('pcp_posicao_compra').select('codigo, reservado, pendente, atualizado_em').range(0, 4999);
     Promise.all([pProdutos, pPosicao]).then(([rp, rq]) => {
@@ -476,6 +591,7 @@ function AlmoxarifadoEstoque() {
           fisicoPor: f ? f.contado_por : null,
           dif: f ? Number(f.quantidade) - saldo : null,
           custo: podeVerCusto ? (Number(p.preco_custo) > 0 ? Number(p.preco_custo) : (Number(p.custo_manual) > 0 ? Number(p.custo_manual) : 0)) : null,
+          faltas: [],
         };
       }));
     });
@@ -508,6 +624,18 @@ function AlmoxarifadoEstoque() {
     carregar();
   };
 
+  // Endereço da prateleira: dado só do PCP (a sincronização com o Omie não mexe nele), então se completa aqui mesmo.
+  const salvarEndereco = async (l, valor) => {
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c) return;
+    const novo = String(valor || '').trim().slice(0, 60);
+    if (novo === String(l.endereco || '').trim()) return;
+    const r = await c.from('pcp_produtos').update({ endereco: novo || null }).eq('codigo', l.codigo).select('codigo');
+    if (r.error || !r.data || r.data.length === 0) { window.toast?.('Não foi possível salvar o endereço' + (r.error ? ': ' + r.error.message : '.')); carregar(); return; }
+    window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Definiu o endereço do item', alvo: `${l.codigo}: ${novo || '(vazio)'}` });
+    carregar();
+  };
+
   const sincronizar = async () => {
     const c = window.__VP_SB && window.__VP_SB.sb;
     if (!c) return;
@@ -527,6 +655,7 @@ function AlmoxarifadoEstoque() {
 
   if (linhas === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
+  linhas.forEach((l) => { l.faltas = almFaltas(l, podeVerCusto); });   // campo derivado (não vem do banco)
   const EPS = 1e-9;
   const abaixoMin = (l) => l.temSaldo && l.estoque_minimo != null && l.saldo < Number(l.estoque_minimo);
   const FILTROS = [
@@ -536,6 +665,9 @@ function AlmoxarifadoEstoque() {
     { id: 'abaixo', label: 'Abaixo do mínimo', fn: abaixoMin },
     { id: 'reserv', label: 'Com reservado', fn: (l) => (l.reservado || 0) > 0 },
     ...(podeVerCusto ? [{ id: 'semcusto', label: 'Sem custo', fn: (l) => !(l.custo > 0) }] : []),
+    { id: 'semend', label: 'Sem endereço', fn: (l) => l.faltas.some((x) => x.id === 'semend') },
+    { id: 'semlead', label: 'Sem lead time', fn: (l) => l.faltas.some((x) => x.id === 'semlead') },
+    { id: 'semvinc', label: 'Sem vínculo no Omie', fn: (l) => l.faltas.some((x) => x.id === 'semvinc') },
   ];
   const familias = Array.from(new Set(linhas.map((l) => l.familia).filter(Boolean)));
   const q = busca.trim().toLowerCase();
@@ -565,6 +697,7 @@ function AlmoxarifadoEstoque() {
   );
   const nContados = linhas.filter((l) => l.fisico != null).length;
   const nDif = linhas.filter((l) => l.fisico != null && Math.abs(l.dif) > EPS).length;
+  const nCompletos = linhas.filter((l) => l.faltas.length === 0).length;
 
   return (
     <>
@@ -586,7 +719,7 @@ function AlmoxarifadoEstoque() {
         <Button variant="primary" disabled={sincronizando} onClick={sincronizar}>{sincronizando ? 'Sincronizando…' : 'Sincronizar com Omie'}</Button>
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        {FILTROS.map((f) => (
+        {FILTROS.filter((f) => !['semend', 'semlead', 'semvinc'].includes(f.id) || contagemPor[f.id] > 0 || filtro === f.id).map((f) => (
           <Button key={f.id} size="sm" variant={filtro === f.id ? 'primary' : 'ghost'} onClick={() => setFiltro(f.id)}>
             {f.label} <span style={{ opacity: 0.7 }}>({contagemPor[f.id]})</span>
           </Button>
@@ -594,7 +727,7 @@ function AlmoxarifadoEstoque() {
         <span style={{ flex: 1 }}/>
         <Button size="sm" variant="ghost" title="Mostrar ou esconder Família, Mínimo, Custo e Lead time" onClick={alternarCols}>{maisCols ? '◂ Menos colunas' : 'Mais colunas ▸'}</Button>
         <span className="muted" style={{ fontSize: 12 }}>
-          Contagem: {nContados} de {linhas.length} itens contados{nDif > 0 ? ` · ${nDif} com diferença` : ''}
+          Cadastro completo: {nCompletos} de {linhas.length} · Contagem: {nContados} de {linhas.length}{nDif > 0 ? ` · ${nDif} com diferença` : ''}
         </span>
       </div>
       <Card title="Estoque do PCP" sub="Saldo do Omie × contagem real da prateleira · clique no título da coluna para ordenar">
@@ -622,7 +755,10 @@ function AlmoxarifadoEstoque() {
                 const abaixo = abaixoMin(l);
                 return (
                   <tr key={l.codigo}>
-                    <td className="mono">{l.codigo}</td>
+                    <td className="mono">
+                      {l.faltas.length > 0 && <span style={{ color: 'var(--vp-yellow)', cursor: 'help' }} title={'Cadastro incompleto:\n' + l.faltas.map((x) => '• ' + x.curto + ' — ' + x.como).join('\n')}>● </span>}
+                      {l.codigo}
+                    </td>
                     <td>{l.descricao}</td>
                     {maisCols && <td className="small muted">{l.familia || '—'}</td>}
                     <td>{l.unidade || '—'}</td>
@@ -643,6 +779,9 @@ function AlmoxarifadoEstoque() {
                         <>
                           <span style={Math.abs(l.dif) > EPS ? { color: 'var(--vp-danger)', fontWeight: 600 } : { color: 'var(--fg3)' }}
                             title={Math.abs(l.dif) > EPS ? 'A contagem não bate com o Omie' : 'Bate com o Omie'}>{Math.abs(l.dif) > EPS ? (l.dif > 0 ? '+' : '') + almFmt(l.dif, 2) : 'ok'}</span>
+                          {podeEscrever && Math.abs(l.dif) > EPS && (
+                            <>{' '}<Button variant="primary" size="sm" title="Acertar o saldo do Omie com esta contagem (grava no Omie, com prévia e confirmação)" onClick={() => setModalAcerto(l)}>Acertar</Button></>
+                          )}
                           {' '}<Button variant="ghost" size="sm" title="Histórico de contagens deste item" onClick={() => setModalHist(l)}>↺</Button>
                         </>
                       )}
@@ -652,7 +791,12 @@ function AlmoxarifadoEstoque() {
                       style={podeVerCusto ? undefined : { filter: 'blur(6px)', userSelect: 'none' }}>
                       {podeVerCusto ? (Number(l.preco_custo) > 0 ? almFmt(l.preco_custo, 2) : (Number(l.custo_manual) > 0 ? <span title="Custo manual (estimado): o Omie ainda não tem custo deste item">{almFmt(l.custo_manual, 2)} ⓜ</span> : almFmt(l.preco_custo, 2))) : '00,00'}
                     </td>}
-                    <td>{l.endereco || '—'}</td>
+                    <td>
+                      {podeContar
+                        ? <input className="input" type="text" maxLength={60} placeholder="falta" key={l.codigo + '-end-' + (l.endereco || '')}
+                            defaultValue={l.endereco || ''} style={{ width: 76 }} title="Endereço na prateleira (só do PCP)" onBlur={(e) => salvarEndereco(l, e.target.value)}/>
+                        : (l.endereco || <span style={{ color: 'var(--fg3)' }}>falta</span>)}
+                    </td>
                     {maisCols && <td className="text-right">{almFmt(l.leadtime_dias)}</td>}
                     {podeEscrever && (
                       <td className="pcp-acao">
@@ -676,12 +820,16 @@ function AlmoxarifadoEstoque() {
           <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalReq(menuAcao.l); setMenuAcao(null); }}>Requisitar compra</Button>
           <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalMov(menuAcao.l); setMenuAcao(null); }}>Movimentar estoque</Button>
           <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalEd(menuAcao.l); setMenuAcao(null); }}>Editar cadastro</Button>
+          {menuAcao.l.fisico != null && Math.abs(menuAcao.l.dif) > EPS && (
+            <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalAcerto(menuAcao.l); setMenuAcao(null); }}>Acertar saldo pela contagem</Button>
+          )}
         </div>
       )}
       {modalReq && <AlmModalRequisicao prod={modalReq} onClose={() => setModalReq(null)} onDone={carregar}/>}
       {modalMov && <AlmModalMovimento prod={modalMov} onClose={() => setModalMov(null)} onDone={carregar}/>}
       {modalEd && <AlmModalEditarProduto prod={modalEd} onClose={() => setModalEd(null)} onDone={carregar}/>}
       {modalHist && <AlmModalHistoricoContagem prod={modalHist} onClose={() => setModalHist(null)}/>}
+      {modalAcerto && <AlmModalAcerto prod={modalAcerto} onClose={() => setModalAcerto(null)} onDone={carregar}/>}
     </>
   );
 }
