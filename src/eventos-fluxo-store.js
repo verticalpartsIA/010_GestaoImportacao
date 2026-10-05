@@ -109,7 +109,7 @@
      catálogo acima — nenhum call-site precisa passar isso.
      Nunca derruba o fluxo principal por falha aqui — é rastro, não
      obrigação transacional (mesmo padrão de proteção do VPLog.registrar). */
-  async function registrar({ evento, numeroCotacao, alvoLabel, alvoId, detalhe } = {}) {
+  async function registrar({ evento, numeroCotacao, alvoLabel, alvoId, detalhe, atorNome } = {}) {
     const def = EVENTOS[evento];
     if (!def) { console.warn('[EventosFluxo] evento desconhecido:', evento); return null; }
     try {
@@ -122,7 +122,9 @@
         alvo_label: alvoLabel || null,
         alvo_id: alvoId != null ? String(alvoId) : null,
         detalhe: detalhe || null,
-        ator_nome: user.nome || user.email || null,
+        // `atorNome` (opcional): evento disparado pelo CLIENTE na página pública mas gravado por um usuário interno (fila
+        // fluxo_pendentes) — o ator é quem de fato agiu, não quem processou.
+        ator_nome: atorNome || user.nome || user.email || null,
         ator_papel: def.papel || null,
       }).select().single();
       if (error) { console.warn('[EventosFluxo] registrar falhou', error); return null; }
