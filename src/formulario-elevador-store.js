@@ -162,7 +162,11 @@
 
   async function buscarOuCriarCliente(dados) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const doc = (dados.cnpj || dados.cpf || '').replace(/\D/g, '');
+    // O documento vem do campo que combina com o tipo escolhido na lista (PF → CPF, PJ → CNPJ) e precisa conferir (04/10/2026).
+    const tipoDoc = dados.tipo_pessoa === 'PF' ? 'PF' : 'PJ';
+    const val = window.EnderecoAPI && window.EnderecoAPI.validarDocumento ? window.EnderecoAPI.validarDocumento(tipoDoc, tipoDoc === 'PF' ? dados.cpf : dados.cnpj) : { ok: true, digitos: String((tipoDoc === 'PF' ? dados.cpf : dados.cnpj) || '').replace(/\D/g, '') };
+    if (!val.ok) throw new Error(val.msg);
+    const doc = val.digitos;
     /* `clienteIdProvisorio` (passado pelo Formulário quando ainda não tem
        CNPJ/CPF) identifica um cliente provisório já criado numa chamada
        anterior desta mesma sessão de rascunho — atualiza esse registro em
