@@ -134,6 +134,18 @@
       } catch (e) {}
       window.history.replaceState({}, '', voltarPara);
     }
+
+    // Segurança real (#571) — MODO SOMBRA: troca o login do vpsistema por uma sessão nativa do vpprd
+    // (Edge Function sso-exchange). Só observa: o cliente de dados abaixo continua com a chave pública,
+    // então nada muda para o usuário e uma falha aqui nunca quebra o app (VpAuth.init não lança).
+    try {
+      if (window.VpAuth) {
+        window.VpAuth.init({ ssoToken: ssoToken || null }).then(function () {
+          const s = window.VpAuth.status();
+          if (s.modo !== 'off') console.info('[VpAuth] modo=' + s.modo + ' estado=' + s.estado + (s.motivo ? ' (' + s.motivo + ')' : ''));
+        });
+      }
+    } catch (e) { /* sombra: nunca bloqueia */ }
   }());
 
   // ---- helpers --------------------------------------------------------
