@@ -431,6 +431,7 @@ const HELP_TOPICS = {
   leads: "O pipeline de possíveis clientes, na lista ou no quadro Kanban. O lead guarda só a identificação do cliente (prédio, contato, telefone, e-mail, CNPJ/CPF); o equipamento é escolhido depois, no Formulário, que o lead abre com os dados já preenchidos. Ao digitar o CNPJ, o sistema consulta o Omie (só leitura) e mostra se o cliente já existe. Use Qualificar → Dossier para criar o Dossiê da obra (um só por lead). O lead vira Convertido quando a proposta é assinada (ou quando você muda o status) e passa a entrar nos indicadores.",
   "crm-canais": "As formas de falar com um lead: aqui o CRM oferece o WhatsApp, com um clique e mensagem de apresentação pronta. A lista traz os leads ativos que têm telefone ou e-mail, do mais novo para o mais antigo; clicar na linha abre o detalhe do lead. Esta tela só consulta e chama: ela não cadastra nem edita leads (use Leads) e não envia e-mails (o e-mail é feito pelo Inbox).",
   "crm-conversao": "De onde vêm os seus leads: a tela conta quantos leads ativos foram capturados e mostra, com uma barra para comparar, quantos vieram de cada origem (indicação, site, evento, LinkedIn…). Lead sem origem entra em \"Não informado\"; os excluídos não contam; o formulário do site verticalparts.com.br cria o lead sozinho e ele passa a contar aqui. É uma tela só de consulta: a origem é escolhida por quem cadastra o lead, na tela Leads.",
+  "crm-automacao": "Confira se o lead que fechou virou cliente: quando um lead passa a Convertido (a proposta foi assinada, por exemplo), o sistema o cadastra como cliente sozinho. Esta tela mostra essa regra, lista os leads convertidos e se cada um já tem cliente vinculado; nos que ficaram sem vínculo, use o botão Vincular agora. Ela não envia e-mails nem mensagens em massa.",
   formularios: "Formulários de intake por tipo de equipamento. O de Elevador coleta os dados que alimentam cotação e precificação.",
   "cotacoes-fornecedor": "Cotações enviadas aos fornecedores (Glarie/Seloon…). Acompanhe status, tratativas e a decisão de compra.",
   precificacao: "Precificação a partir da cotação respondida. Só libera depois da Análise Técnica aprovada.",
@@ -457,6 +458,7 @@ const TUTORIAIS = {
   leads: "leads",
   "crm-canais": "canais",
   "crm-conversao": "conversao",
+  "crm-automacao": "automacao",
 };
 
 /* Tutorial do MÓDULO (grupo do menu lateral, ex.: "Geral", que aninha várias telas): rótulo do grupo em NAV_GROUPS → pasta em
