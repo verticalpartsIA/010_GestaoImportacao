@@ -428,7 +428,7 @@ const HELP_TOPICS = {
   "ncm-kanban": "Fila de solicitações NCM por status. Abra um produto para ver a ficha e exportar para o LogComex.",
   juridico: "Contratos e minutas. O contrato de venda nasce da proposta aprovada; contrato do instalador exige homologação.",
   importacao: "Embarques, rastreamento de navios (AIS) e inbox. Vincule o embarque à obra do Dossiê.",
-  financeiro: "Gatilhos, prazos, comissões e aval financeiro.",
+  financeiro: "Painel de controle de prazos: cada cotação percorre uma sequência de etapas (do Formulário ao Pós-venda); cada etapa nasce sozinha quando a anterior termina, tem um prazo e fecha sozinha quando a ação acontece na tela de origem. Os prazos contam só de segunda a sexta (exceto a espera do cliente e o embarque). Clique numa etapa para abrir o documento real. Só duas ações dependem de uma pessoa: Boleto pago e Dar Aval; Fechar com motivo encerra uma cotação parada, e Exportar fluxo baixa as etapas em planilha. Todo dia útil, às 7h20, um resumo das etapas vencidas chega em Notificações.",
   "rh-homologacao": "Homologação de parceiros instaladores e controle documental (NRs, ASO, PGR…).",
 };
 
@@ -439,7 +439,7 @@ const TUTORIAIS = {
   dashboard: "dashboard",
   decisoes: "central-de-decisoes",
   notificacoes: "notificacoes",
-  notificacoes: "notificacoes",
+  financeiro: "prazos-e-pendencias",   // a rota interna continua `financeiro`; só o rótulo do menu virou "Prazos & Pendências"
 };
 
 /* Nome da tela como aparece no menu lateral (NAV_GROUPS). (O BREADCRUMB_MAP ganhou a rota `decisoes` em 04/10/2026 — issue #654 —,
