@@ -104,7 +104,53 @@
     return data || [];
   }
 
-  async function salvarDesenhos({ referencia, clienteNome, numeroCotacao, observacao, files }) {
+  /* Busca a OBRA pela Nº da cotação (formulário que originou o negócio) com o cliente
+     vinculado. Passa por FormularioElevadorStore.obter, que já aplica a regra de dono
+     (vendedor só abre o que criou, salvo alçada `formularios.ver_de_outros`) — se a
+     cotação for de outro vendedor, o erro dessa regra sobe pra tela. */
+  async function buscarObraPorCotacao(numero) {
+    const c = sb(); if (!c || !(Number(numero) > 0)) return null;
+    const { data, error } = await c.from('formularios_elevador').select('id').eq('numero_cotacao', Number(numero)).limit(1);
+    if (error) throw new Error(error.message);
+    if (!data || !data.length) return null;
+    const f = await window.FormularioElevadorStore.obter(data[0].id);
+    return {
+      formularioId: f.id, numeroCotacao: f.numero_cotacao,
+      predio: f.predio_empreendimento || '', cidade: f.local_obra_cidade || '', uf: f.local_obra_estado || '',
+      enderecoObra: f.endereco_obra || '',
+      clienteId: f.cliente_id || null, clienteNome: f.razao_social || f.nome_fantasia || '',
+      clienteDocumento: f.cnpj || f.cpf || '',
+    };
+  }
+
+  /* Cliente cadastrado pelo CPF/CNPJ (só dígitos, 11 ou 14). */
+  async function buscarClientePorDocumento(doc) {
+    const d = String(doc || '').replace(/\D/g, '');
+    if (d.length !== 11 && d.length !== 14) return null;
+    const lista = (await window.CadastrosClientesStore?.listarTodos()) || [];
+    const achados = lista.filter(cl => String(cl.cnpj || cl.cpf || '').replace(/\D/g, '') === d);
+    if (!achados.length) return null;
+    const cl = achados[0];
+    return { id: cl.id, nome: cl.razao_social || cl.nome_fantasia || '', documento: cl.cnpj || cl.cpf || '' };
+  }
+
+  /* Obras (formulários) de um cliente — mesma regra de dono da busca por cotação. */
+  async function obrasDoCliente(clienteId) {
+    const c = sb(); if (!c || !clienteId) return [];
+    const { data, error } = await c.from('formularios_elevador')
+      .select('id, numero_cotacao, predio_empreendimento, local_obra_cidade, local_obra_estado, created_by')
+      .eq('cliente_id', clienteId).order('numero_cotacao', { ascending: false }).limit(50);
+    if (error) throw new Error(error.message);
+    const eu = String((window.__VP_USER || {}).email || '').trim().toLowerCase();
+    let vtudo = !eu;
+    if (!vtudo && window.PropostaStore?.temCapacidade) vtudo = !!(await window.PropostaStore.temCapacidade('formularios', 'ver_de_outros'));
+    else if (!vtudo) vtudo = true;
+    return (data || []).filter(f => vtudo || !f.created_by || String(f.created_by).trim().toLowerCase() === eu)
+      .map(f => ({ formularioId: f.id, numeroCotacao: f.numero_cotacao, predio: f.predio_empreendimento || '',
+        cidade: f.local_obra_cidade || '', uf: f.local_obra_estado || '' }));
+  }
+
+  async function salvarDesenhos({ referencia, clienteNome, numeroCotacao, observacao, files, formularioId, clienteId, clienteDocumento }) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     if (!referencia || !referencia.trim()) throw new Error('Informe o prédio/empreendimento.');
     if (!files || !files.length) throw new Error('Selecione ao menos um arquivo.');
@@ -124,6 +170,7 @@
         referencia: referencia.trim(),
         cliente_nome: (clienteNome || '').trim() || null,
         numero_cotacao: numeroCotacao ?? null,
+        formulario_id: formularioId || null, cliente_id: clienteId || null, cliente_documento: clienteDocumento || null,
         arquivo_nome: file.name, arquivo_path: path, arquivo_url: pub.publicUrl,
         tamanho_bytes: file.size, observacao: observacao || null,
         enviado_por_email: user.email || null, enviado_por_nome: user.nome || user.name || null,
@@ -156,5 +203,6 @@
   }
 
   window.ProjetoElevadorStore = { listarTodas, listarPorCotacao, salvar, finalizar, uploadAnexo, removerAnexo, uuid,
-    listarDesenhos, salvarDesenhos, excluirDesenho, DESENHO_MAX_BYTES };
+    listarDesenhos, salvarDesenhos, excluirDesenho, DESENHO_MAX_BYTES,
+    buscarObraPorCotacao, buscarClientePorDocumento, obrasDoCliente };
 }());
