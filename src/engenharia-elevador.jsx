@@ -278,14 +278,76 @@ function peNorm(s) {
   return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
 }
 
+function peMascaraDoc(d) {
+  const n = String(d || "").replace(/\D/g, "");
+  if (n.length === 14) return n.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, "$1.$2.$3/$4-$5");
+  if (n.length === 11) return n.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, "$1.$2.$3-$4");
+  return d || "";
+}
+
 function DesenhoModal({ onClose, onSaved }) {
+  const store = window.ProjetoElevadorStore;
   const [referencia, setReferencia] = React.useState("");
   const [cliente, setCliente] = React.useState("");
+  const [doc, setDoc] = React.useState("");
   const [cotacao, setCotacao] = React.useState("");
   const [obs, setObs] = React.useState("");
   const [files, setFiles] = React.useState([]);
   const [saving, setSaving] = React.useState(false);
   const [erro, setErro] = React.useState("");
+  /* vínculo resolvido (obra e cliente cadastrados) + avisos das buscas */
+  const [vinc, setVinc] = React.useState({ formularioId: null, clienteId: null });
+  const [obraInfo, setObraInfo] = React.useState(null);   // { ok, texto }
+  const [docInfo, setDocInfo] = React.useState(null);     // { ok, texto }
+  const [obras, setObras] = React.useState([]);           // obras do cliente achado pelo documento
+  const auto = React.useRef({ referencia: "", cliente: "", doc: "" }); // o que foi preenchido pela busca (não pelo usuário)
+
+  /* Nº da cotação → obra + cliente */
+  React.useEffect(() => {
+    const n = Number(cotacao);
+    if (!(n > 0)) { setObraInfo(null); setVinc(v => ({ ...v, formularioId: null })); return; }
+    let vivo = true;
+    const t = setTimeout(async () => {
+      try {
+        const o = await store.buscarObraPorCotacao(n);
+        if (!vivo) return;
+        if (!o) { setObraInfo({ ok: false, texto: `Cotação Nº ${n} não encontrada nos formulários.` }); setVinc(v => ({ ...v, formularioId: null })); return; }
+        setVinc({ formularioId: o.formularioId, clienteId: o.clienteId });
+        const local = [o.cidade, o.uf].filter(Boolean).join("/");
+        setObraInfo({ ok: true, texto: `Obra encontrada: ${o.predio || "(sem nome)"}${local ? " · " + local : ""}` });
+        // só preenche o que o usuário não digitou por conta própria
+        setReferencia(r => (!r || r === auto.current.referencia) ? (auto.current.referencia = o.predio || r) : r);
+        setCliente(c => (!c || c === auto.current.cliente) ? (auto.current.cliente = o.clienteNome || c) : c);
+        setDoc(d => (!d || d === auto.current.doc) ? (auto.current.doc = peMascaraDoc(o.clienteDocumento) || d) : d);
+      } catch (e) { if (vivo) { setObraInfo({ ok: false, texto: e.message }); setVinc(v => ({ ...v, formularioId: null })); } }
+    }, 450);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [cotacao]);
+
+  /* CPF/CNPJ → cliente cadastrado + obras dele */
+  React.useEffect(() => {
+    const d = doc.replace(/\D/g, "");
+    if (d.length !== 11 && d.length !== 14) { setDocInfo(null); setObras([]); return; }
+    let vivo = true;
+    (async () => {
+      try {
+        const cl = await store.buscarClientePorDocumento(d);
+        if (!vivo) return;
+        if (!cl) { setDocInfo({ ok: false, texto: "CPF/CNPJ não encontrado no cadastro de clientes (o desenho será salvo só com o texto digitado)." }); setObras([]); setVinc(v => ({ ...v, clienteId: null })); return; }
+        setDocInfo({ ok: true, texto: `Cliente: ${cl.nome}` });
+        setVinc(v => ({ ...v, clienteId: cl.id }));
+        setCliente(c => (!c || c === auto.current.cliente) ? (auto.current.cliente = cl.nome) : c);
+        setObras(await store.obrasDoCliente(cl.id));
+      } catch (e) { if (vivo) setDocInfo({ ok: false, texto: e.message }); }
+    })();
+    return () => { vivo = false; };
+  }, [doc]);
+
+  const escolherObra = (formId) => {
+    const o = obras.find(x => x.formularioId === formId);
+    if (!o) return;
+    setCotacao(String(o.numeroCotacao || ""));
+  };
 
   const salvar = async () => {
     setErro("");
@@ -293,29 +355,43 @@ function DesenhoModal({ onClose, onSaved }) {
     if (!files.length) return setErro("Selecione ao menos um arquivo.");
     setSaving(true);
     try {
-      const salvos = await window.ProjetoElevadorStore.salvarDesenhos({
+      const salvos = await store.salvarDesenhos({
         referencia, clienteNome: cliente, numeroCotacao: cotacao ? Number(cotacao) : null, observacao: obs.trim(), files,
+        formularioId: vinc.formularioId, clienteId: vinc.clienteId, clienteDocumento: doc.replace(/\D/g, "") || null,
       });
       window.toast?.(`${salvos.length} desenho(s) salvo(s).`, "success");
       onSaved();
     } catch (e) { setErro(e.message); setSaving(false); }
   };
 
+  const aviso = (info) => info ? <span className="small" style={{ color: info.ok ? "var(--vp-success)" : "var(--fg3)" }}>{info.ok ? "✓ " : ""}{info.texto}</span> : null;
+
   return (
-    <Modal title="Salvar desenho de elevador" onClose={saving ? () => {} : onClose} width={560}
+    <Modal title="Salvar desenho de elevador" onClose={saving ? () => {} : onClose} width={600}
       footer={<>
         <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
         <Button variant="primary" onClick={salvar} disabled={saving}>{saving ? "Salvando…" : "Salvar"}</Button>
       </>}>
       <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-        <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Prédio / Empreendimento *</label>
-          <input className="input" autoFocus value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="Shopping Vila Olímpia…"/></div>
         <div className="grid-2" style={{ gap: 12 }}>
-          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Cliente (opcional)</label>
-            <input className="input" value={cliente} onChange={e => setCliente(e.target.value)}/></div>
           <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Nº da Cotação (opcional)</label>
-            <input className="input" type="number" value={cotacao} onChange={e => setCotacao(e.target.value)} placeholder="706"/></div>
+            <input className="input" type="number" value={cotacao} onChange={e => setCotacao(e.target.value)} placeholder="955"/>
+            {aviso(obraInfo)}</div>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">CPF / CNPJ do cliente (opcional)</label>
+            <input className="input" value={doc} onChange={e => setDoc(e.target.value)} placeholder="Digite o CNPJ ou CPF"/>
+            {aviso(docInfo)}</div>
         </div>
+        {obras.length > 0 && (
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Obras deste cliente — escolha para preencher</label>
+            <select className="input" value={vinc.formularioId || ""} onChange={e => escolherObra(e.target.value)}>
+              <option value="">— selecione a obra —</option>
+              {obras.map(o => <option key={o.formularioId} value={o.formularioId}>Cotação {o.numeroCotacao} · {o.predio || "sem nome"}{o.cidade ? " · " + o.cidade + "/" + o.uf : ""}</option>)}
+            </select></div>
+        )}
+        <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Prédio / Empreendimento *</label>
+          <input className="input" value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="Shopping Vila Olímpia…"/></div>
+        <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Cliente (opcional)</label>
+          <input className="input" value={cliente} onChange={e => setCliente(e.target.value)}/></div>
         <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Arquivos * (PDF, PNG, JPG, DWG, DXF — máx. 25 MB cada)</label>
           <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" onChange={e => setFiles(Array.from(e.target.files || []))}/>
           {files.length > 0 && <span className="muted small">{files.length} arquivo(s) selecionado(s).</span>}</div>
@@ -346,7 +422,7 @@ function ProjetoElevadorDesenhos({ abas }) {
   const filtrados = React.useMemo(() => {
     const q = peNorm(busca);
     if (!q) return itens;
-    return itens.filter(i => peNorm(`${i.referencia} ${i.cliente_nome} ${i.numero_cotacao} ${i.arquivo_nome} ${i.enviado_por_nome}`).includes(q));
+    return itens.filter(i => peNorm(`${i.referencia} ${i.cliente_nome} ${i.cliente_documento || ""} ${i.numero_cotacao} ${i.arquivo_nome} ${i.enviado_por_nome}`).includes(q));
   }, [itens, busca]);
 
   const copiarLink = async (i) => {
@@ -379,7 +455,7 @@ function ProjetoElevadorDesenhos({ abas }) {
       {abas}
 
       <Card style={{ marginBottom: 14 }}>
-        <input className="input" style={{ width: "100%" }} placeholder="Buscar por prédio, cliente, nº da cotação ou arquivo…"
+        <input className="input" style={{ width: "100%" }} placeholder="Buscar por prédio, cliente, CNPJ/CPF, nº da cotação ou arquivo…"
           value={busca} onChange={e => setBusca(e.target.value)}/>
       </Card>
 
@@ -394,7 +470,7 @@ function ProjetoElevadorDesenhos({ abas }) {
             )}
             {!loading && filtrados.map(i => (
               <tr key={i.id}>
-                <td><div className="cell-main">{i.referencia}</div><div className="cell-sub">{i.cliente_nome || "—"}{i.observacao ? " · " + i.observacao : ""}</div></td>
+                <td><div className="cell-main">{i.referencia}</div><div className="cell-sub">{i.cliente_nome || "—"}{i.cliente_documento ? " · " + peMascaraDoc(i.cliente_documento) : ""}{i.observacao ? " · " + i.observacao : ""}</div></td>
                 <td><span className="mono small">{i.numero_cotacao ?? "—"}</span></td>
                 <td>{i.arquivo_nome}</td>
                 <td>{peFmtTam(i.tamanho_bytes)}</td>
