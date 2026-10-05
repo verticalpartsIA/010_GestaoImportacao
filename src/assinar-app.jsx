@@ -353,7 +353,9 @@ function SgApp() {
       const dj = propostaRender(r).data;
       const nomeCliente = ((dj && dj.cliente && dj.cliente.nome) || '').trim();
       const nome = ['Proposta', r.numero_documento, nomeCliente].filter(Boolean).join(' - ') + '.pdf';
-      await window.PropostaReactPdf.baixar(dj, nome);
+      const au = r.audit || {};
+      const assinaturas = au.signedAt ? [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash }] : [];
+      await window.PropostaReactPdf.baixar(dj, nome, assinaturas);
     } catch (e) {
       console.error('PDF vetorial falhou, caindo pra impressão do navegador:', e);
       window.print();
@@ -513,6 +515,12 @@ function SgApp() {
 
   const rec = source.rec;
   const Preview = source.Preview;
+  /* Contrato do Instalador assinado: o documento (e a impressão dele) mostra quem assinou
+     digitalmente. REGRA TRAVADA, ver CLAUDE.md. Vazio enquanto não assinado. */
+  const auI = (source.kind === 'instalador' && rec.audit) || {};
+  const assinaturasInstalador = auI.signedAt
+    ? [{ papel: 'Contratada (instalador)', nome: auI.signerName || '', em: auI.signedAt, dispositivo: auI.signDevice, ip: auI.signIp, hash: auI.hash }]
+    : [];
   const st = STATUS_ALIASES[source.kind];
 
   if (rec.status === st.expired) {
@@ -583,7 +591,7 @@ function SgApp() {
           <div className="ci-print-doc">
             {source.kind === 'proposta'
               ? <window.PEPreview {...propostaRender(rec)} bare/>
-              : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
+              : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={assinaturasInstalador}/>}
           </div>
         )}
       </>
@@ -621,7 +629,7 @@ function SgApp() {
 
   const docNode = isProposta
     ? <window.PEPreview {...propostaRender(rec)} bare/>
-    : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>;
+    : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={assinaturasInstalador}/>;
 
   return (
     <div className="ci-sign-shell ci-sign-shell--split">

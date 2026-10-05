@@ -856,7 +856,18 @@ function PropostaEditor({ setRoute, subsel }) {
     try {
       const cliente = (data.cliente?.nome || '').trim();
       const filename = (['Proposta', data.numero, cliente].filter(Boolean).join(' - ') || 'Proposta VerticalParts') + '.pdf';
-      const r = await window.PropostaReactPdf.baixar(data, filename);
+      /* Assinatura digital do cliente (REGRA TRAVADA, ver CLAUDE.md): proposta assinada sai com
+         quem assinou, data/hora, dispositivo, IP e hash. Falha = PDF sem o bloco, nunca trava. */
+      let assinaturas = [];
+      try {
+        const sb = window.__VP_SB && window.__VP_SB.sb;
+        if (sb && recordId) {
+          const { data: row } = await sb.from('propostas').select('audit').eq('id', recordId).maybeSingle();
+          const au = (row && row.audit) || {};
+          if (au.signedAt) assinaturas = [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash }];
+        }
+      } catch (e) { console.warn('Assinatura digital não carregada pro PDF da proposta:', e); }
+      const r = await window.PropostaReactPdf.baixar(data, filename, assinaturas);
       /* Sem este aviso, uma falha de carregamento de imagem produzia um
          PDF completo mas SEM logo nem foto de capa, e ninguém ficava
          sabendo até abrir o arquivo (achado 20/08). */

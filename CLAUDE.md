@@ -720,7 +720,8 @@ Pedido do usuário depois do VPCV-0955 (AKAI): o PDF baixado saía com "X ______
 - **Corrigido junto:** razão social do Comprador saía com "LTDA LTDA." — só acrescenta " LTDA." se o nome ainda não termina em LTDA.
 - Se mexer em `pdf-bundle/contrato-venda-reactpdf.entry.js`: `npm run build:pdf:contrato` e subir `?v=` do bundle e do `assinar-app.jsx` em `assinar.html`. Não testado com clique real em `/assinar` (testado gerando o PDF com dados reais do VPCV-0955, 17 páginas, 5 assinaturas). Versões: bundle v4, `assinar-app.jsx` v19.
 - **Botão "Baixar PDF" do painel (drawer do Jurídico, `contrato-venda.jsx › cvBaixarPdf`) também passa as assinaturas** (05/10, `contrato-venda.jsx` v30; `index.html` carregava o bundle v3, subido pra v4). Qualquer novo ponto que chame `ContratoVendaReactPdf.baixar` deve passar `assinaturas`.
-- **Pendente (não feito):** Proposta e Contrato do Instalador ainda não têm esse bloco no PDF (o motor de PDF deles é outro).
+- **Estendido (05/10/2026) à Proposta e ao Contrato do Instalador, mesma regra:** Proposta de Elevador (`pdf-bundle/proposta-reactpdf.entry.js`, `baixar(data, nome, assinaturas)`; o bloco substitui as linhas em branco da última página; `proposta-editor.jsx` v49 e `assinar-app.jsx` v20 passam a assinatura de `propostas.audit`; bundle v10/v9) e Contrato do Instalador (`CIContractPreview` recebe `assinaturas`, o bloco vem na pré-visualização/impressão e na página `/assinar`; `contrato-instalador.css` v7). Ambos têm 1 só signatário (cliente / instalador) hoje; se ganharem "deve assinar" é só somar à lista. Proposta de Escada/Esteira ainda imprime pelo fluxo antigo (sem bloco).
+- **Pendente (não feito):** Projeto de Instalação da Obra assinado pelo cliente (Engenharia sobe o PDF e o cliente assina em `/assinar`) — ver pedido de 05/10/2026, depende de decisões do usuário.
 
 ## P.I. — transferência de pagamento entre P.I.s (30/09/2026)
 
