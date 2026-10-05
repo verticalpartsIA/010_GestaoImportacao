@@ -1342,10 +1342,34 @@ function CVDesenhoInstalacaoSection({ rec, onSaved }) {
 
 /* Baixa o PDF no layout idêntico ao da minuta oficial (motor react-pdf —
    pdf-bundle/contrato-venda-reactpdf.entry.js). Recebe o mesmo `doc` da tela. */
-async function cvBaixarPdf(doc, nome) {
+/* Assinaturas digitais já coletadas (REGRA TRAVADA, ver CLAUDE.md — mesma lógica
+   de assinar-app.jsx › baixarDocumento): representante do Comprador + sócios/
+   jurídico + "deve assinar", só os `assinado`, em ordem de assinatura. Falha =
+   lista vazia (o PDF sai como antes), nunca trava o download. */
+async function cvMontarAssinaturas(rec) {
+  try {
+    if (!rec || !rec.id) return [];
+    const au = rec.audit || {};
+    const mapa = (papel, nome, em, a) => ({ papel, nome, em, dispositivo: a.signDevice, ip: a.signIp, hash: a.hash });
+    const lista = [];
+    if (au.signedAt || rec.signed_at) lista.push(mapa('Representante legal do Comprador', au.signerName || '', au.signedAt || rec.signed_at, au));
+    const [extras, genericos] = await Promise.all([
+      window.CVSignatarioStore ? window.CVSignatarioStore.listarPorContrato(rec.id) : [],
+      window.DocumentoSignatariosStore ? window.DocumentoSignatariosStore.listarPorDocumento('contrato_venda', rec.id) : [],
+    ]);
+    [...(extras || []), ...(genericos || [])].filter((s) => s.status === 'assinado').forEach((s) => {
+      const a = s.audit || {};
+      lista.push(mapa(s.papel || 'Signatário', a.signerName || s.nome || '', a.signedAt || s.signed_at, a));
+    });
+    return lista.sort((a, b) => new Date(a.em) - new Date(b.em));
+  } catch (e) { console.warn('Assinaturas digitais não carregadas pro PDF:', e); return []; }
+}
+
+async function cvBaixarPdf(doc, nome, rec) {
   if (!window.ContratoVendaReactPdf) { window.toast?.('Motor de PDF ainda carregando — tente de novo em instantes.', 'warning'); return; }
   try {
-    const r = await window.ContratoVendaReactPdf.baixar(doc, nome);
+    const assinaturas = rec ? await cvMontarAssinaturas(rec) : [];
+    const r = await window.ContratoVendaReactPdf.baixar(doc, nome, assinaturas);
     if (r && r.falhasDeImagem && r.falhasDeImagem.length) window.toast?.('PDF gerado, mas o cabeçalho/rodapé não carregou: ' + r.falhasDeImagem.join('; '), 'warning');
   } catch (e) {
     console.error('PDF do contrato falhou:', e);
@@ -1377,7 +1401,7 @@ function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
                 valor: (rec.valor_total_num != null) ? rec.valor_total_num : window.CV.parseMoney(fs.valor),
                 sinalPct: fs.sinalPct, parcelas: fs.parcelas, numero: rec.numero_documento,
               });
-              cvBaixarPdf(doc, ['Contrato', rec.numero_documento, rec.comprador_razao_social].filter(Boolean).join(' - ') + '.pdf');
+              cvBaixarPdf(doc, ['Contrato', rec.numero_documento, rec.comprador_razao_social].filter(Boolean).join(' - ') + '.pdf', rec);
             }}>⬇ Baixar PDF</button>
           </div>
           <button className="ci-drawer-x" onClick={onClose}>✕</button>
