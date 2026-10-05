@@ -266,6 +266,20 @@ body[data-density="airy"] {
   color: #000;
 }
 .sidebar__group.is-collapsed .sidebar__group-toggle { transform: rotate(-90deg); }
+/* "?" do módulo (tutorial do módulo): sobreposto ao título do grupo, à ESQUERDA do círculo da setinha, mas como IRMÃO do botão de
+   recolher (src/shell.jsx) — 8px de padding + 20px da setinha + 8px de respiro = 36px da borda direita. */
+.sidebar__group-head { position: relative; }
+.sidebar__group-help {
+  position: absolute; top: 50%; right: 36px; transform: translateY(-50%);
+  width: 20px; height: 20px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 1px solid var(--vp-gray-700); background: none;
+  color: var(--vp-gray-400); font-size: 11px; font-weight: 700; line-height: 1; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.sidebar__group-help:hover,
+.sidebar__group-help:focus-visible { background: var(--vp-yellow); border-color: var(--vp-yellow); color: #000; }
+.app[data-sidebar="collapsed"] .sidebar__group-help { display: none; }
 .sidebar__group-sublabel {
   font-size: 8px;
   font-weight: 700;

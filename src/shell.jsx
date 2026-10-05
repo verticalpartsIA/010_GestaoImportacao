@@ -231,16 +231,26 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
           const isCollapsed = !collapsed && collapsedGroups.has(group.label);
           return (
             <div className={"sidebar__group " + (isCollapsed ? "is-collapsed" : "")} key={group.label}>
-              <button type="button" className="sidebar__group-label" onClick={() => toggleGroup(group.label)}
-                aria-expanded={!isCollapsed} title={isCollapsed ? "Expandir módulo" : "Recolher módulo"}>
-                <span className="sidebar__group-label__text">
-                  <span>{group.label}</span>
-                  {group.sublabel ? <span className="sidebar__group-sublabel">{group.sublabel}</span> : null}
-                </span>
-                <span className="sidebar__group-toggle">
-                  <Icon.chevDown size={13}/>
-                </span>
-              </button>
+              <div className="sidebar__group-head">
+                <button type="button" className="sidebar__group-label" onClick={() => toggleGroup(group.label)}
+                  aria-expanded={!isCollapsed} title={isCollapsed ? "Expandir módulo" : "Recolher módulo"}>
+                  <span className="sidebar__group-label__text">
+                    <span>{group.label}</span>
+                    {group.sublabel ? <span className="sidebar__group-sublabel">{group.sublabel}</span> : null}
+                  </span>
+                  <span className="sidebar__group-toggle">
+                    <Icon.chevDown size={13}/>
+                  </span>
+                </button>
+                {/* "?" do módulo: irmão do botão de recolher (botão dentro de botão é inválido e o clique recolheria o grupo).
+                    Só nos grupos que têm tutorial do módulo (MODULOS_TUTORIAL). Abre o tutorial direto, em nova aba. */}
+                {MODULOS_TUTORIAL[group.label] ? (
+                  <button type="button" className="sidebar__group-help"
+                    aria-label={"Tutorial do módulo " + group.label}
+                    title={"Tutorial do módulo " + group.label + " (abre em nova aba)"}
+                    onClick={() => window.open('/TreinamentoVP/' + MODULOS_TUTORIAL[group.label] + '/', '_blank', 'noopener')}>?</button>
+                ) : null}
+              </div>
               {isCollapsed ? null : <>
               {!items.length && group.empty && (
                 <div className="nav-item nav-item--empty" style={{ color: 'var(--fg3)', cursor: 'default', fontStyle: 'italic' }}>
@@ -440,6 +450,13 @@ const TUTORIAIS = {
   decisoes: "central-de-decisoes",
   notificacoes: "notificacoes",
   financeiro: "prazos-e-pendencias",   // a rota interna continua `financeiro`; só o rótulo do menu virou "Prazos & Pendências"
+};
+
+/* Tutorial do MÓDULO (grupo do menu lateral, ex.: "Geral", que aninha várias telas): rótulo do grupo em NAV_GROUPS → pasta em
+   /TreinamentoVP/. Grupo com linha aqui ganha um "?" no título do grupo (ao lado da setinha de recolher) que abre o tutorial
+   direto, em nova aba. O rótulo é a chave porque é ele que `NAV_GROUPS` usa para permissão. Grupo sem linha: sem "?". */
+const MODULOS_TUTORIAL = {
+  "Geral": "geral",
 };
 
 /* Nome da tela como aparece no menu lateral (NAV_GROUPS). (O BREADCRUMB_MAP ganhou a rota `decisoes` em 04/10/2026 — issue #654 —,
