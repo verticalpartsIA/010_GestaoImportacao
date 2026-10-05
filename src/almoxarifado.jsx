@@ -426,6 +426,17 @@ function AlmoxarifadoEstoque() {
   const [modalMov, setModalMov] = React.useState(null);
   const [modalEd, setModalEd] = React.useState(null);
   const [modalHist, setModalHist] = React.useState(null);
+  // Colunas secundárias (Família, Mínimo, Custo, Lead time) ficam recolhidas para a tela caber; preferência por pessoa no navegador.
+  const [maisCols, setMaisCols] = React.useState(() => { try { return localStorage.getItem('vp_alm_cols') === '1'; } catch (e) { return false; } });
+  const alternarCols = () => setMaisCols((v) => { try { localStorage.setItem('vp_alm_cols', v ? '0' : '1'); } catch (e) { /* sem storage */ } return !v; });
+  const [menuAcao, setMenuAcao] = React.useState(null);   // { l, x, y } — menu "⋯" da linha (fixo na tela, não é cortado pela rolagem)
+  React.useEffect(() => {
+    if (!menuAcao) return undefined;
+    const fechar = () => setMenuAcao(null);
+    const tecla = (e) => { if (e.key === 'Escape') fechar(); };
+    window.addEventListener('click', fechar); window.addEventListener('scroll', fechar, true); window.addEventListener('keydown', tecla); window.addEventListener('resize', fechar);
+    return () => { window.removeEventListener('click', fechar); window.removeEventListener('scroll', fechar, true); window.removeEventListener('keydown', tecla); window.removeEventListener('resize', fechar); };
+  }, [menuAcao]);
   React.useEffect(() => {
     if (!window.PropostaStore) { setPodeVerCusto(false); return; }
     window.PropostaStore.temCapacidade('almoxarifado', 'escrever_omie').then(setPodeEscrever).catch(() => {});
@@ -581,27 +592,28 @@ function AlmoxarifadoEstoque() {
           </Button>
         ))}
         <span style={{ flex: 1 }}/>
+        <Button size="sm" variant="ghost" title="Mostrar ou esconder Família, Mínimo, Custo e Lead time" onClick={alternarCols}>{maisCols ? '◂ Menos colunas' : 'Mais colunas ▸'}</Button>
         <span className="muted" style={{ fontSize: 12 }}>
           Contagem: {nContados} de {linhas.length} itens contados{nDif > 0 ? ` · ${nDif} com diferença` : ''}
         </span>
       </div>
       <Card title="Estoque do PCP" sub="Saldo do Omie × contagem real da prateleira · clique no título da coluna para ordenar">
         <div className="table-wrap" style={{ border: 0 }}>
-          <table className="t pcp-grid">
+          <table className="t pcp-grid pcp-estoque">
             <thead>
               <tr>
-                <Th chave="codigo">Código</Th><Th chave="descricao">Descrição</Th><Th chave="familia">Família</Th><th>Un.</th>
+                <Th chave="codigo">Código</Th><Th chave="descricao">Descrição</Th>{maisCols && <Th chave="familia">Família</Th>}<th>Un.</th>
                 <Th chave="saldo" right title="Saldo físico total no Omie (inclui o que já está reservado)">Omie (físico)</Th>
                 <Th chave="reservado" right title={'Separado para pedidos no Omie' + (posicaoEm ? ' · atualizado em ' + new Date(posicaoEm).toLocaleString('pt-BR') : '')}>Reservado</Th>
                 <Th chave="disponivel" right title="Físico − reservado: o que realmente dá para usar">Disponível</Th>
                 <Th chave="pendente" right title="Pedido de compra aberto no Omie, ainda não recebido">A caminho</Th>
                 <Th chave="fisico" right title="Contagem real na prateleira (digite aqui)">Contagem</Th>
                 <Th chave="dif" right title="Contagem − Omie (físico)">Diferença</Th>
-                <Th chave="estoque_minimo" right>Mínimo</Th>
-                <Th chave="custo" right title={podeVerCusto ? '' : 'Sem permissão para ver custos'}>Custo (R$)</Th>
+                {maisCols && <Th chave="estoque_minimo" right>Mínimo</Th>}
+                {maisCols && <Th chave="custo" right title={podeVerCusto ? '' : 'Sem permissão para ver custos'}>Custo (R$)</Th>}
                 <th>Endereço</th>
-                <Th chave="leadtime_dias" right>Lead time (d)</Th>
-                {podeEscrever && <th></th>}
+                {maisCols && <Th chave="leadtime_dias" right>Lead time (d)</Th>}
+                {podeEscrever && <th className="pcp-acao" title="Ações"></th>}
               </tr>
             </thead>
             <tbody>
@@ -612,7 +624,7 @@ function AlmoxarifadoEstoque() {
                   <tr key={l.codigo}>
                     <td className="mono">{l.codigo}</td>
                     <td>{l.descricao}</td>
-                    <td className="small muted">{l.familia || '—'}</td>
+                    {maisCols && <td className="small muted">{l.familia || '—'}</td>}
                     <td>{l.unidade || '—'}</td>
                     <td className="text-right" style={{ color: abaixo ? 'var(--vp-danger)' : undefined, fontWeight: abaixo ? 700 : undefined }}
                       title={abaixo ? 'Abaixo do estoque mínimo cadastrado (' + almFmt(l.estoque_minimo) + ')' : ''}>{l.temSaldo ? almFmt(l.saldo, 2) : '—'}</td>
@@ -635,18 +647,20 @@ function AlmoxarifadoEstoque() {
                         </>
                       )}
                     </td>
-                    <td className="text-right">{almFmt(l.estoque_minimo)}</td>
-                    <td className="text-right" title={podeVerCusto ? '' : 'Sem permissão para ver custos'}
+                    {maisCols && <td className="text-right">{almFmt(l.estoque_minimo)}</td>}
+                    {maisCols && <td className="text-right" title={podeVerCusto ? '' : 'Sem permissão para ver custos'}
                       style={podeVerCusto ? undefined : { filter: 'blur(6px)', userSelect: 'none' }}>
                       {podeVerCusto ? (Number(l.preco_custo) > 0 ? almFmt(l.preco_custo, 2) : (Number(l.custo_manual) > 0 ? <span title="Custo manual (estimado): o Omie ainda não tem custo deste item">{almFmt(l.custo_manual, 2)} ⓜ</span> : almFmt(l.preco_custo, 2))) : '00,00'}
-                    </td>
+                    </td>}
                     <td>{l.endereco || '—'}</td>
-                    <td className="text-right">{almFmt(l.leadtime_dias)}</td>
+                    {maisCols && <td className="text-right">{almFmt(l.leadtime_dias)}</td>}
                     {podeEscrever && (
-                      <td style={{ whiteSpace: 'nowrap' }}>
-                        <Button variant="ghost" size="sm" onClick={() => setModalReq(l)}>Requisitar</Button>{' '}
-                        <Button variant="ghost" size="sm" onClick={() => setModalMov(l)}>Movimentar</Button>{' '}
-                        <Button variant="ghost" size="sm" onClick={() => setModalEd(l)}>Editar</Button>
+                      <td className="pcp-acao">
+                        <Button variant="ghost" size="sm" title="Requisitar, movimentar ou editar este item" onClick={(e) => {
+                          e.stopPropagation();
+                          const r = e.currentTarget.getBoundingClientRect();
+                          setMenuAcao(menuAcao && menuAcao.l.codigo === l.codigo ? null : { l, x: Math.max(8, r.right - 196), y: r.bottom + 4 });
+                        }}>⋯</Button>
                       </td>
                     )}
                   </tr>
@@ -656,6 +670,14 @@ function AlmoxarifadoEstoque() {
           </table>
         </div>
       </Card>
+      {menuAcao && (
+        <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', left: menuAcao.x, top: menuAcao.y, width: 196, zIndex: 60, background: 'var(--vp-white, #fff)', border: '1px solid var(--vp-gray-200, #d9dce1)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.18)', padding: 4, display: 'flex', flexDirection: 'column' }}>
+          <div className="small muted" style={{ padding: '4px 10px', fontFamily: 'monospace' }}>{menuAcao.l.codigo}</div>
+          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalReq(menuAcao.l); setMenuAcao(null); }}>Requisitar compra</Button>
+          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalMov(menuAcao.l); setMenuAcao(null); }}>Movimentar estoque</Button>
+          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalEd(menuAcao.l); setMenuAcao(null); }}>Editar cadastro</Button>
+        </div>
+      )}
       {modalReq && <AlmModalRequisicao prod={modalReq} onClose={() => setModalReq(null)} onDone={carregar}/>}
       {modalMov && <AlmModalMovimento prod={modalMov} onClose={() => setModalMov(null)} onDone={carregar}/>}
       {modalEd && <AlmModalEditarProduto prod={modalEd} onClose={() => setModalEd(null)} onDone={carregar}/>}
