@@ -473,6 +473,141 @@ function DesenhoModal({ onClose, onSaved }) {
   );
 }
 
+/* ---------- Assinatura digital do Projeto de Instalação (cliente assina em /assinar/<token>) ----------
+   Pedido do usuário (05/10/2026): só o REPRESENTANTE do cliente assina, sem trava de envio.
+   Reaproveita documento_signatarios (documento_tipo 'projeto_instalacao', documento_id = id do desenho)
+   e a página pública /assinar. PDF assinado = original + página de assinaturas (projeto-assinado-pdf.js).
+   REGRA TRAVADA (ver CLAUDE.md): o PDF assinado traz nome, data/hora, dispositivo, IP e hash. */
+const PE_ASSIN_STATUS = {
+  pendente: { label: "Link criado", variant: "info" },
+  enviado: { label: "Enviado p/ assinatura", variant: "info" },
+  visualizado: { label: "Visualizado", variant: "warning" },
+  assinado: { label: "✓ Assinado", variant: "success" },
+  recusado: { label: "Recusado", variant: "danger" },
+  expirado: { label: "Expirado", variant: "danger" },
+};
+
+function ModalAssinaturaProjeto({ item, linha, onClose, onChanged }) {
+  const S = window.DocumentoSignatariosStore;
+  const [nome, setNome] = React.useState("");
+  const [email, setEmail] = React.useState("");
+  const [tel, setTel] = React.useState("");
+  const [sig, setSig] = React.useState(linha || null);
+  const [busy, setBusy] = React.useState(false);
+  const [erro, setErro] = React.useState("");
+
+  const url = sig ? S.signUrl(sig.token) : "";
+  const primeiro = ((sig && sig.nome) || nome || "").trim().split(/\s+/)[0] || "";
+  const mensagem = `Olá${primeiro ? " " + primeiro : ""}! A VerticalParts enviou o Projeto de Instalação da obra ${item.referencia} para sua assinatura digital.\n\nAssine pelo link seguro e individual:\n${url}`;
+  const assunto = `Projeto de Instalação — ${item.referencia} — Assinatura digital | Vertical Parts`;
+
+  const criar = async () => {
+    setErro("");
+    if (!nome.trim()) return setErro("Informe o nome do representante do cliente.");
+    if (!/^\S+@\S+\.\S+$/.test(email.trim())) return setErro("Informe um e-mail válido.");
+    setBusy(true);
+    try {
+      const nova = await S.criar({ documentoTipo: "projeto_instalacao", documentoId: item.id, nome, email, telefone: tel, papel: "Representante do cliente", ordem: 1 });
+      setSig(nova); onChanged && onChanged();
+      window.VPLog?.registrar({ modulo: "Projeto de Elevadores", acao: "Criou link de assinatura do Projeto de Instalação", alvo: item.referencia, alvo_id: item.id, detalhe: { representante: nova.nome, numero_cotacao: item.numero_cotacao } });
+    } catch (e) { setErro(e.message || String(e)); }
+    setBusy(false);
+  };
+
+  const marcar = async (canal) => {
+    try {
+      const upd = await S.marcarEnviado(sig.id, canal, { name: sig.nome, contact: canal === "whatsapp" ? sig.telefone : sig.email });
+      setSig(upd); onChanged && onChanged();
+      window.VPLog?.registrar({ modulo: "Projeto de Elevadores", acao: "Enviou o Projeto de Instalação para assinatura (" + canal + ")", alvo: item.referencia, alvo_id: item.id, detalhe: { representante: sig.nome, canal } });
+    } catch (e) { setErro(e.message || String(e)); }
+  };
+
+  const enviarEmail = async () => {
+    setBusy(true); setErro("");
+    const r = await window.EmailEnvioHelper.tentarEnviarDireto({
+      to: sig.email, subject: assunto, text: mensagem,
+      numeroCotacao: item.numero_cotacao, referenciaTipo: "projeto_instalacao", referenciaId: item.id,
+    });
+    if (r.enviouDireto) { window.toast?.("E-mail enviado a " + sig.email + ".", "success"); await marcar("email"); }
+    else {
+      window.toast?.("Não foi possível enviar direto pelo sistema — abrindo seu e-mail. O envio só é registrado quando sai pelo sistema.", "warning");
+      window.open("mailto:" + encodeURIComponent(sig.email) + "?subject=" + encodeURIComponent(assunto) + "&body=" + encodeURIComponent(mensagem), "_blank");
+    }
+    setBusy(false);
+  };
+  const enviarWhats = async () => {
+    let d = String(sig.telefone || "").replace(/\D/g, "");
+    if (!d) return setErro("Este representante não tem telefone cadastrado.");
+    if (d.length <= 11) d = "55" + d;
+    window.open("https://wa.me/" + d + "?text=" + encodeURIComponent(mensagem), "_blank");
+    await marcar("whatsapp");
+  };
+  const copiar = async () => {
+    try { await navigator.clipboard.writeText(url); window.toast?.("Link individual copiado. Cole no WhatsApp ou e-mail.", "success"); }
+    catch { window.prompt("Copie o link:", url); }
+    await marcar("link");
+  };
+  const baixarAssinado = async () => {
+    setBusy(true); setErro("");
+    try {
+      const ass = window.ProjetoAssinadoPdf.assinaturasDe([sig]);
+      await window.ProjetoAssinadoPdf.baixar(item, ass, `Projeto de Instalação - ${item.referencia} - assinado.pdf`);
+    } catch (e) { setErro("Não foi possível gerar o PDF assinado: " + (e.message || e)); }
+    setBusy(false);
+  };
+  const novoLink = () => {
+    if (!window.confirm("Gerar um novo link? O link atual deixa de ser o usado nesta tela (ele continua no histórico).")) return;
+    setSig(null);
+  };
+
+  const st = sig && PE_ASSIN_STATUS[sig.status];
+  const au = (sig && sig.audit) || {};
+  return (
+    <Modal title="Assinatura do Projeto de Instalação" onClose={onClose} width={560}
+      footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
+      <p style={{ marginTop: 0 }}><b>{item.referencia}</b><br/><span className="muted small">{item.cliente_nome || "—"} · {item.arquivo_nome}</span></p>
+      {!sig && (
+        <div style={{ display: "grid", gap: 10 }}>
+          <p className="muted small" style={{ margin: 0 }}>Só o representante do cliente assina. Ele recebe um link individual com este PDF, sem precisar de cadastro.</p>
+          <input className="input" placeholder="Nome do representante do cliente *" value={nome} onChange={e => setNome(e.target.value)}/>
+          <input className="input" placeholder="E-mail do representante *" value={email} onChange={e => setEmail(e.target.value)}/>
+          <input className="input" placeholder="WhatsApp com DDD (opcional)" value={tel} onChange={e => setTel(e.target.value)}/>
+          <div><Button variant="primary" onClick={criar} disabled={busy}>{busy ? "Criando…" : "Criar link de assinatura"}</Button></div>
+        </div>
+      )}
+      {sig && (
+        <div style={{ display: "grid", gap: 10 }}>
+          <div className="row gap-2" style={{ alignItems: "center" }}>
+            {st && <Badge variant={st.variant}>{st.label}</Badge>}
+            <span><b>{sig.nome}</b> · {sig.email}{sig.telefone ? " · " + sig.telefone : ""}</span>
+          </div>
+          {sig.status === "assinado" && (
+            <div className="small" style={{ background: "#f0fdf4", padding: 10, borderRadius: 6 }}>
+              Assinado em {peFmtData(au.signedAt || sig.signed_at)} · {au.signDevice || "—"} · IP {au.signIp || "—"}<br/>
+              <span className="muted">Hash: {(au.hash || "").slice(0, 40)}…</span>
+            </div>
+          )}
+          {sig.status === "recusado" && <div className="small" style={{ background: "#fef2f2", padding: 10, borderRadius: 6 }}>Recusado{au.refusedBy ? " por " + au.refusedBy : ""}. {au.refusedReason ? "Motivo: " + au.refusedReason : "Sem motivo informado."}</div>}
+          {sig.status === "assinado" ? (
+            <div><Button variant="primary" onClick={baixarAssinado} disabled={busy}>{busy ? "Gerando…" : "Baixar PDF assinado"}</Button></div>
+          ) : (
+            <>
+              <div className="row gap-2" style={{ flexWrap: "wrap" }}>
+                <Button variant="primary" onClick={enviarEmail} disabled={busy}>{sig.status === "pendente" ? "Enviar por e-mail" : "Reenviar por e-mail"}</Button>
+                <Button variant="outline" onClick={enviarWhats} disabled={busy}>WhatsApp</Button>
+                <Button variant="outline" onClick={copiar}>Copiar link</Button>
+              </div>
+              <div className="small muted" style={{ wordBreak: "break-all" }}>{url}</div>
+              {sig.status === "recusado" && <div><Button variant="outline" onClick={novoLink}>Criar novo link</Button></div>}
+            </>
+          )}
+        </div>
+      )}
+      {erro && <div style={{ color: "#b91c1c", fontSize: 13, marginTop: 10 }}>{erro}</div>}
+    </Modal>
+  );
+}
+
 function ProjetoElevadorDesenhos({ abas }) {
   const store = window.ProjetoElevadorStore;
   const [itens, setItens] = React.useState([]);
@@ -480,13 +615,23 @@ function ProjetoElevadorDesenhos({ abas }) {
   const [busca, setBusca] = React.useState("");
   const [modal, setModal] = React.useState(false);
   const [excluir, setExcluir] = React.useState(null);
+  const [assinaturas, setAssinaturas] = React.useState({});
+  const [modalAssin, setModalAssin] = React.useState(null);
+
+  const carregarAssinaturas = React.useCallback(async () => {
+    const S = window.DocumentoSignatariosStore; if (!S) return;
+    const linhas = await S.listarPorTipo("projeto_instalacao");
+    const m = {}; linhas.forEach(l => { if (!m[l.documento_id]) m[l.documento_id] = l; }); // vem da mais recente p/ a mais antiga
+    setAssinaturas(m);
+  }, []);
 
   const carregar = React.useCallback(async () => {
     setLoading(true);
+    carregarAssinaturas();
     try { setItens(await store.listarDesenhos()); }
     catch (e) { window.toast?.("Não foi possível carregar os desenhos: " + e.message, "error"); setItens([]); }
     setLoading(false);
-  }, []);
+  }, [carregarAssinaturas]);
   React.useEffect(() => { carregar(); }, [carregar]);
 
   /* Pendência por obra: cada obra precisa dos dois documentos (Projeto de Instalação + ID-TAG). */
@@ -560,7 +705,8 @@ function ProjetoElevadorDesenhos({ abas }) {
                 <td><span className="mono small">{i.numero_cotacao ?? "—"}</span></td>
                 <td><span className="mono small">{(i.equipamentos || []).join(", ") || "—"}</span></td>
                 <td><Badge variant={i.tipo_documento === "id_tag" ? "info" : "success"}>{peTipoLabel(i.tipo_documento)}</Badge>
-                  {(faltas[i.id] || []).length > 0 && <div className="small" style={{ color: "#92400e", marginTop: 4 }}>Falta {(faltas[i.id] || []).join(" e ")}</div>}</td>
+                  {(faltas[i.id] || []).length > 0 && <div className="small" style={{ color: "#92400e", marginTop: 4 }}>Falta {(faltas[i.id] || []).join(" e ")}</div>}
+                  {assinaturas[i.id] && PE_ASSIN_STATUS[assinaturas[i.id].status] && <div style={{ marginTop: 4 }}><Badge variant={PE_ASSIN_STATUS[assinaturas[i.id].status].variant}>{PE_ASSIN_STATUS[assinaturas[i.id].status].label}</Badge></div>}</td>
                 <td>{i.arquivo_nome}</td>
                 <td>{peFmtTam(i.tamanho_bytes)}</td>
                 <td>{i.enviado_por_nome || i.enviado_por_email || "—"}</td>
@@ -569,6 +715,9 @@ function ProjetoElevadorDesenhos({ abas }) {
                   <div className="row gap-2">
                     <a className="btn btn--outline" href={i.arquivo_url} target="_blank" rel="noopener noreferrer">Abrir</a>
                     <button className="btn btn--outline" onClick={() => copiarLink(i)}>Copiar link</button>
+                    {(i.tipo_documento || "projeto_instalacao") === "projeto_instalacao" && /\.pdf$/i.test(i.arquivo_nome || "") && (
+                      <button className="btn btn--outline" title="Enviar para o cliente assinar / ver status" onClick={() => setModalAssin(i)}>Assinatura</button>
+                    )}
                     <button className="btn btn--outline" title="Excluir" onClick={() => setExcluir(i)}>🗑</button>
                   </div>
                 </td>
@@ -579,6 +728,7 @@ function ProjetoElevadorDesenhos({ abas }) {
       </div>
 
       {modal && <DesenhoModal onClose={() => setModal(false)} onSaved={() => { setModal(false); carregar(); }}/>}
+      {modalAssin && <ModalAssinaturaProjeto key={modalAssin.id + (assinaturas[modalAssin.id] ? assinaturas[modalAssin.id].id : "")} item={modalAssin} linha={assinaturas[modalAssin.id] || null} onClose={() => setModalAssin(null)} onChanged={carregarAssinaturas}/>}
       {excluir && (
         <Modal title="Excluir desenho?" onClose={() => setExcluir(null)} width={460}
           footer={<>

@@ -319,7 +319,7 @@
 
   <!-- Engenharia · Projeto de Elevadores (poço/cabine/porta, correlacionado por Nº da Cotação) -->
   <script src="/src/projeto-elevador-store.js?v=8"></script>
-  <script type="text/vp-jsx" src="/src/engenharia-elevador.jsx?v=7"></script>
+  <script type="text/vp-jsx" src="/src/engenharia-elevador.jsx?v=8"></script>
 
   <!-- Engenharia · Desenho Técnico ER|ES (porte Claude Designer) -->
   <script type="text/vp-jsx" src="/src/desenho-tecnico.jsx?v=1"></script>
@@ -350,7 +350,10 @@
        Instalador), ver documento-signatarios-store.js. Precisa vir ANTES de
        contrato-venda-store.js, que checa window.DocumentoSignatariosStore ao
        finalizar a assinatura. -->
-  <script src="/src/documento-signatarios-store.js?v=2"></script>
+  <script src="/src/documento-signatarios-store.js?v=3"></script>
+  <!-- pdf-lib: anexa a página de assinaturas digitais ao PDF do Projeto de Instalação (projeto-assinado-pdf.js) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js" integrity="sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" crossorigin="anonymous"></script>
+  <script src="/src/projeto-assinado-pdf.js?v=1"></script>
   <script src="/src/contrato-venda-store.js?v=20"></script>
   <script src="/src/contrato-venda-signatarios-store.js?v=3"></script>
   <!-- Motor de PDF do Contrato de Venda (react-pdf) — layout idêntico à minuta oficial. Ver pdf-bundle/contrato-venda-reactpdf.entry.js -->
