@@ -459,6 +459,7 @@ const TUTORIAIS = {
    direto, em nova aba. O rótulo é a chave porque é ele que `NAV_GROUPS` usa para permissão. Grupo sem linha: sem "?". */
 const MODULOS_TUTORIAL = {
   "Geral": "geral",
+  "CRM": "crm",
 };
 
 /* Nome da tela como aparece no menu lateral (NAV_GROUPS). (O BREADCRUMB_MAP ganhou a rota `decisoes` em 04/10/2026 — issue #654 —,
