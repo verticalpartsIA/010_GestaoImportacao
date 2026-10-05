@@ -73,6 +73,13 @@ function almFmt(v, casas = 0) {
   return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: casas, maximumFractionDigits: casas });
 }
 
+/* Quantidade de estrutura: inteiro sem casas; fracionário com até 6 casas, sem zeros sobrando
+   (0,24 · 3,43 · 0,000043). Antes arredondava em 2 casas e 0,000043 aparecia como "0,00". */
+function almFmtQtd(v) {
+  if (v == null || v === '') return '—';
+  return Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 0, maximumFractionDigits: 6 });
+}
+
 async function almErroFuncao(error, data) {
   if (data && data.error) return data.error;
   try {
@@ -290,7 +297,7 @@ function AlmModalEstruturaLinha({ pai, linha, produtos, onClose, onDone }) {
         )}
         <div className="stack" style={{ gap: 4 }}>
           <label className="up-eyebrow muted">Quantidade por unidade do produto *</label>
-          <input className="input" type="number" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} autoFocus/>
+          <input className="input" type="number" step="any" min="0" value={quantidade} onChange={(e) => setQuantidade(e.target.value)} autoFocus/>
         </div>
         {soPcp && <div className="small muted">Esta linha existe só no PCP. "Enviar ao Omie" a inclui na estrutura de lá.</div>}
         <div className="small muted">Grava na estrutura do produto no Omie. Não dá para desfazer por aqui.</div>
@@ -299,10 +306,32 @@ function AlmModalEstruturaLinha({ pai, linha, produtos, onClose, onDone }) {
   );
 }
 
+/* Produtos que têm estrutura. Só aparecem os ATIVOS (produto inativo no Omie com estrutura antiga era o 1º da lista, sem
+   descrição). Ordem: mais componentes primeiro (os quadros de comando) e, no empate, pelo código. Os inativos ficam
+   em `ocultos` só para a tela avisar que existem; nada é apagado. */
+function almParesEstrutura(dados) {
+  const ativos = new Set(dados.produtos.map((p) => p.codigo));   // a consulta já traz só ativo = true
+  const n = {};
+  dados.linhas.forEach((l) => { n[l.codigo_pai] = (n[l.codigo_pai] || 0) + 1; });
+  const todos = Object.keys(n);
+  return {
+    n,
+    pais: todos.filter((c) => ativos.has(c)).sort((a, b) => (n[b] - n[a]) || a.localeCompare(b)),
+    ocultos: todos.filter((c) => !ativos.has(c)).sort(),
+  };
+}
+
 function AlmoxarifadoEstrutura() {
   const [dados, setDados] = React.useState(null);
   const [erro, setErro] = React.useState(null);
-  const [pai, setPai] = React.useState('');
+  // O produto aberto vive na URL (/logistica/almoxarifado/estrutura/<código>): F5, Voltar e link direto funcionam.
+  const [pai, setPai] = window.useRotaItem('almoxarifado', 'estrutura');
+  const grupo = dados ? almParesEstrutura(dados) : null;
+  const paiAtual = grupo ? (grupo.pais.includes(pai) ? pai : (grupo.pais[0] || '')) : '';
+  React.useEffect(() => {
+    // Link sem produto (ou com um código inválido/inativo): completa a URL com o produto que a tela mostra, sem criar entrada no Voltar.
+    if (grupo && paiAtual && pai !== paiAtual) setPai(paiAtual, { replace: true });
+  }, [dados, pai]);
   const [podeEscrever, setPodeEscrever] = React.useState(false);
   const [modal, setModal] = React.useState(null); // { linha | null }
   React.useEffect(() => {
@@ -323,8 +352,7 @@ function AlmoxarifadoEstrutura() {
   if (!dados) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const porCodigo = new Map(dados.produtos.map((p) => [p.codigo, p]));
-  const pais = Array.from(new Set(dados.linhas.map((l) => l.codigo_pai))).sort();
-  const paiAtual = pai || pais[0] || '';
+  const { pais, ocultos, n: nPorPai } = grupo;
   const linhas = dados.linhas.filter((l) => l.codigo_pai === paiAtual)
     .map((l) => ({ ...l, descricao: (porCodigo.get(l.codigo_filho) || {}).descricao || '', unidade: (porCodigo.get(l.codigo_filho) || {}).unidade || '' }))
     .sort((a, b) => a.codigo_filho.localeCompare(b.codigo_filho));
@@ -334,9 +362,14 @@ function AlmoxarifadoEstrutura() {
       {erro && <div className="card" style={{ padding: 12, color: 'var(--vp-danger)', marginBottom: 12 }}>Erro: {erro}</div>}
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
         <select className="input" style={{ maxWidth: 520 }} value={paiAtual} onChange={(e) => setPai(e.target.value)}>
-          {pais.map((p) => <option key={p} value={p}>{p} — {(porCodigo.get(p) || {}).descricao || ''}</option>)}
+          {pais.map((p) => <option key={p} value={p}>{p} — {(porCodigo.get(p) || {}).descricao || ''} ({nPorPai[p]})</option>)}
         </select>
         <span className="muted" style={{ fontSize: 12 }}>{linhas.length} componente(s)</span>
+        {ocultos.length > 0 && (
+          <span className="muted" style={{ fontSize: 12, cursor: 'help' }} title={'Produtos inativos que ainda têm estrutura antiga, ocultos desta lista: ' + ocultos.join(', ')}>
+            · {ocultos.length} inativo(s) oculto(s)
+          </span>
+        )}
         <span style={{ flex: 1 }}/>
         {podeEscrever && paiAtual && <Button variant="primary" onClick={() => setModal({ linha: null })}>+ Adicionar componente</Button>}
       </div>
@@ -351,7 +384,7 @@ function AlmoxarifadoEstrutura() {
                   <td className="mono">{l.codigo_filho}</td>
                   <td>{l.descricao}</td>
                   <td>{l.unidade || '—'}</td>
-                  <td className="text-right">{almFmt(l.quantidade, l.quantidade % 1 ? 2 : 0)}</td>
+                  <td className="text-right">{almFmtQtd(l.quantidade)}</td>
                   <td>{l.origem === 'pcp' ? <Badge variant="warning">Só no PCP</Badge> : <span className="small muted">Omie</span>}</td>
                   {podeEscrever && <td><Button variant="ghost" size="sm" onClick={() => setModal({ linha: l })}>{l.origem === 'pcp' ? 'Enviar ao Omie' : 'Editar'}</Button></td>}
                 </tr>
