@@ -53,6 +53,9 @@ const PRIORITY_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
    lista (antes só existiam nos filtros; nenhuma tela deixava escolher,
    então todo lead ficava "Em qualificação" até a Proposta assinada
    marcar "Convertido"). */
+/* Comissão do lead: manual (campo "Comissão (%)"); sem valor informado vale o padrão de 2% (decisão do usuário, 04/10/2026). */
+const COMISSAO_PADRAO_PCT = 2;
+const comissaoDoLead = (lead) => (lead && lead.comissao_pct != null && Number.isFinite(Number(lead.comissao_pct)) ? Number(lead.comissao_pct) : COMISSAO_PADRAO_PCT);
 const LEAD_STATUSES = ['Em qualificação', 'Aguardando cotação', 'Proposta enviada', 'Negociação', 'Convertido', 'Sem retorno'];
 
 /* "Está no Omie desde" (26/09) — a data pertence ao CLIENTE (CNPJ/CPF),
@@ -133,13 +136,14 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     tipoPessoa: 'PJ', cnpj: '', cpf: '', documentoPendente: !!lead.documento_pendente, razaoSocial: '',
     origin: lead.origin || 'Site', status: lead.status || 'Em qualificação',
     owner: lead.owner || '', value: lead.value != null ? String(lead.value) : '',
+    comissaoPct: lead.comissao_pct != null ? String(lead.comissao_pct) : '',
     priority: ({ alta: 'Alta', media: 'Média', baixa: 'Baixa' }[String(lead.priority || '').toLowerCase()] || lead.priority || 'Alta'),
     next: lead.next_action || lead.next || '',
   } : {
     building:'', contact:'', role:'', phone:'', email:'',
     tipoPessoa:'PJ', cnpj:'', cpf:'', documentoPendente:false, razaoSocial:'',
     origin:'Site', status:'Em qualificação',
-    owner:'', value:'', priority:'Alta', next:'',
+    owner:'', value:'', comissaoPct:'', priority:'Alta', next:'',
   });
   const [buscandoCnpj, setBuscandoCnpj] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -182,8 +186,8 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
   const buscarCnpj = async () => {
     const api = window.EnderecoAPI;
     const cnpjDigits = (f.cnpj || '').replace(/\D/g, '');
-    const valido = api?.isCnpjValido ? api.isCnpjValido(f.cnpj) : cnpjDigits.length === 14;
-    if (!valido) return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
+    const v = api?.validarDocumento ? api.validarDocumento('PJ', f.cnpj) : { ok: cnpjDigits.length === 14, msg: 'CNPJ inválido — informe 14 dígitos.' };
+    if (!cnpjDigits || !v.ok) return window.toast(v.msg || 'Informe o CNPJ.', 'warning');
 
     setBuscandoCnpj(true);
     setStatusOmie(null);
@@ -220,13 +224,13 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     if (!f.contact.trim())  return window.toast('Contato é obrigatório.', 'warning');
     const cnpjDigits = (f.cnpj || '').replace(/\D/g, '');
     const cpfDigits = (f.cpf || '').replace(/\D/g, '');
-    if (!f.documentoPendente) {
-      if (f.tipoPessoa === 'PF') {
-        if (cpfDigits && !window.EnderecoAPI?.isCpfValido(cpfDigits)) return window.toast('CPF inválido — informe 11 dígitos.', 'warning');
-      } else if (cnpjDigits && !window.EnderecoAPI?.isCnpjValido(cnpjDigits)) {
-        return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
-      }
+    if (!f.documentoPendente && window.EnderecoAPI?.validarDocumento) {
+      // O número precisa combinar com o tipo escolhido na lista (PF → CPF, PJ → CNPJ) e ter dígitos verificadores corretos.
+      const v = window.EnderecoAPI.validarDocumento(f.tipoPessoa, f.tipoPessoa === 'PF' ? f.cpf : f.cnpj);
+      if (!v.ok) return window.toast(v.msg, 'warning');
     }
+    const comissaoTxt = String(f.comissaoPct == null ? '' : f.comissaoPct).replace(',', '.').trim();
+    if (comissaoTxt !== '' && !(Number(comissaoTxt) >= 0 && Number(comissaoTxt) <= 100)) return window.toast('Comissão deve ser um percentual entre 0 e 100 (deixe em branco para usar 2%).', 'warning');
     const sb = comercialSb();
     if (!sb) return window.toast('Banco de dados indisponível — recarregue a página.', 'error');
     setSaving(true);
@@ -239,6 +243,8 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       priority: ({ 'Alta': 'alta', 'Média': 'media', 'Baixa': 'baixa' }[f.priority] || 'media'),
       next_action: f.next || null,
       documento_pendente: f.documentoPendente,
+      // Comissão manual; em branco = padrão de 2% (COMISSAO_PADRAO_PCT) — grava null para não "congelar" o padrão.
+      comissao_pct: comissaoTxt === '' ? null : Number(comissaoTxt),
     };
 
     let error = null;
@@ -470,6 +476,9 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
         <div className="grid-2" style={{ gap:12 }}>
           {fld('Responsável (Comercial)', 'owner', 'text', 'Nome do vendedor')}
           {fld('Valor estimado (R$)', 'value', 'number', '0')}
+        </div>
+        <div className="grid-2" style={{ gap:12 }}>
+          {fld('Comissão (%) — manual', 'comissaoPct', 'number', `${COMISSAO_PADRAO_PCT} (padrão, se deixar em branco)`)}
         </div>
         {fld('Próxima ação', 'next', 'text', 'Ex.: Enviar proposta, Agendar visita…')}
       </div>
@@ -1220,7 +1229,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
           <Card title="Atribuição">
             <KvBlock label="Vendedor" value={lead.owner || '—'}/>
             <KvBlock label="Origem" value={lead.origin}/>
-            {lead.value ? <KvBlock label="Comissão prevista" value={fmtBRL(lead.value * 0.04, { decimals: 0 }) + " (4%)"} mono/> : null}
+            {lead.value ? <KvBlock label="Comissão prevista" value={fmtBRL(lead.value * (comissaoDoLead(lead) / 100), { decimals: 0 }) + " (" + String(comissaoDoLead(lead)).replace('.', ',') + "%" + (lead.comissao_pct == null ? " — padrão" : "") + ")"} mono/> : null}
           </Card>
         </div>
       </div>
