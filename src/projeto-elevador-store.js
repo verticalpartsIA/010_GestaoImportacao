@@ -90,5 +90,71 @@
     await c.storage.from('engenharia').remove([path]);
   }
 
-  window.ProjetoElevadorStore = { listarTodas, listarPorCotacao, salvar, finalizar, uploadAnexo, removerAnexo, uuid };
+  /* ---------- Repositório de desenhos (aba "Desenhos") ----------
+     Tabela projetos_elevador_desenhos, independente do formulário acima.
+     Uma linha por arquivo; exclusão = soft-delete. */
+  const DESENHO_MAX_BYTES = 25 * 1024 * 1024;
+  const DESENHO_EXT = /\.(pdf|png|jpe?g|dwg|dxf)$/i;
+
+  async function listarDesenhos() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('projetos_elevador_desenhos').select('*')
+      .is('excluido_em', null).order('criado_em', { ascending: false }).limit(1000);
+    if (error) throw new Error(error.message);
+    return data || [];
+  }
+
+  async function salvarDesenhos({ referencia, clienteNome, numeroCotacao, observacao, files }) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (!referencia || !referencia.trim()) throw new Error('Informe o prédio/empreendimento.');
+    if (!files || !files.length) throw new Error('Selecione ao menos um arquivo.');
+    for (const f of files) {
+      if (!DESENHO_EXT.test(f.name)) throw new Error(`"${f.name}": use PDF, PNG, JPG, DWG ou DXF.`);
+      if (f.size > DESENHO_MAX_BYTES) throw new Error(`"${f.name}" passa de 25 MB.`);
+    }
+    const user = window.__VP_USER || {};
+    const pasta = numeroCotacao != null ? String(numeroCotacao) : 'avulso';
+    const salvos = [];
+    for (const file of files) {
+      const path = `projetos-elevador/desenhos/${pasta}/${Date.now()}_${uuid().slice(0, 8)}_${file.name.replace(/[^\w.\-]/g, '_')}`;
+      const up = await c.storage.from('engenharia').upload(path, file, { upsert: false, contentType: file.type || 'application/octet-stream' });
+      if (up.error) throw new Error(up.error.message);
+      const { data: pub } = c.storage.from('engenharia').getPublicUrl(path);
+      const { data, error } = await c.from('projetos_elevador_desenhos').insert([{
+        referencia: referencia.trim(),
+        cliente_nome: (clienteNome || '').trim() || null,
+        numero_cotacao: numeroCotacao ?? null,
+        arquivo_nome: file.name, arquivo_path: path, arquivo_url: pub.publicUrl,
+        tamanho_bytes: file.size, observacao: observacao || null,
+        enviado_por_email: user.email || null, enviado_por_nome: user.nome || user.name || null,
+      }]).select().single();
+      if (error) {
+        await c.storage.from('engenharia').remove([path]).catch(() => {});
+        throw new Error(error.message);
+      }
+      salvos.push(data);
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Projeto de Elevadores', acao: 'Salvou desenho', alvo: data.referencia, alvo_id: data.id,
+        detalhe: { arquivo: data.arquivo_nome, numero_cotacao: data.numero_cotacao },
+      });
+    }
+    return salvos;
+  }
+
+  async function excluirDesenho(id) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const user = window.__VP_USER || {};
+    const { data, error } = await c.from('projetos_elevador_desenhos')
+      .update({ excluido_em: new Date().toISOString(), excluido_por: user.email || null })
+      .eq('id', id).is('excluido_em', null).select('id, referencia, arquivo_nome');
+    if (error) throw new Error(error.message);
+    if (!data || !data.length) throw new Error('Nada foi excluído (registro inexistente ou sem permissão).');
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Projeto de Elevadores', acao: 'Excluiu desenho', alvo: data[0].referencia, alvo_id: id,
+      detalhe: { arquivo: data[0].arquivo_nome },
+    });
+  }
+
+  window.ProjetoElevadorStore = { listarTodas, listarPorCotacao, salvar, finalizar, uploadAnexo, removerAnexo, uuid,
+    listarDesenhos, salvarDesenhos, excluirDesenho, DESENHO_MAX_BYTES };
 }());

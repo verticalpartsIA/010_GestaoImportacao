@@ -201,7 +201,7 @@ function ProjetoElevadorModal({ projeto, onClose, onSaved }) {
 }
 
 /* ---------- PÁGINA: Projeto de Elevadores ---------- */
-function ProjetoElevadorPage({ setRoute }) {
+function ProjetoElevadorEspecificacao({ abas }) {
   const store = window.ProjetoElevadorStore;
   const [projetos, setProjetos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -228,6 +228,8 @@ function ProjetoElevadorPage({ setRoute }) {
           <Button variant="primary" icon="plus" onClick={() => { setEdit(null); setShowModal(true); }}>Novo projeto de elevadores</Button>
         </div>
       </div>
+
+      {abas}
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
         <KPI label="Projetos" value={projetos.length} sub="cotações com desenho" icon="ruler"/>
@@ -260,6 +262,177 @@ function ProjetoElevadorPage({ setRoute }) {
       {showModal && <ProjetoElevadorModal projeto={edit} onClose={() => { setShowModal(false); setEdit(null); }} onSaved={reload}/>}
     </div>
   );
+}
+
+/* ---------- ABA: Desenhos (repositório p/ enviar ao cliente) ---------- */
+function peFmtData(iso) {
+  if (!iso) return "—";
+  const d = new Date(iso);
+  return d.toLocaleDateString("pt-BR") + " " + d.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+function peFmtTam(b) {
+  if (!b) return "—";
+  return b >= 1048576 ? (b / 1048576).toFixed(1) + " MB" : Math.max(1, Math.round(b / 1024)) + " KB";
+}
+function peNorm(s) {
+  return String(s || "").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase();
+}
+
+function DesenhoModal({ onClose, onSaved }) {
+  const [referencia, setReferencia] = React.useState("");
+  const [cliente, setCliente] = React.useState("");
+  const [cotacao, setCotacao] = React.useState("");
+  const [obs, setObs] = React.useState("");
+  const [files, setFiles] = React.useState([]);
+  const [saving, setSaving] = React.useState(false);
+  const [erro, setErro] = React.useState("");
+
+  const salvar = async () => {
+    setErro("");
+    if (!referencia.trim()) return setErro("Informe o prédio/empreendimento.");
+    if (!files.length) return setErro("Selecione ao menos um arquivo.");
+    setSaving(true);
+    try {
+      const salvos = await window.ProjetoElevadorStore.salvarDesenhos({
+        referencia, clienteNome: cliente, numeroCotacao: cotacao ? Number(cotacao) : null, observacao: obs.trim(), files,
+      });
+      window.toast?.(`${salvos.length} desenho(s) salvo(s).`, "success");
+      onSaved();
+    } catch (e) { setErro(e.message); setSaving(false); }
+  };
+
+  return (
+    <Modal title="Salvar desenho de elevador" onClose={saving ? () => {} : onClose} width={560}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={saving}>Cancelar</Button>
+        <Button variant="primary" onClick={salvar} disabled={saving}>{saving ? "Salvando…" : "Salvar"}</Button>
+      </>}>
+      <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Prédio / Empreendimento *</label>
+          <input className="input" autoFocus value={referencia} onChange={e => setReferencia(e.target.value)} placeholder="Shopping Vila Olímpia…"/></div>
+        <div className="grid-2" style={{ gap: 12 }}>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Cliente (opcional)</label>
+            <input className="input" value={cliente} onChange={e => setCliente(e.target.value)}/></div>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Nº da Cotação (opcional)</label>
+            <input className="input" type="number" value={cotacao} onChange={e => setCotacao(e.target.value)} placeholder="706"/></div>
+        </div>
+        <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Arquivos * (PDF, PNG, JPG, DWG, DXF — máx. 25 MB cada)</label>
+          <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" onChange={e => setFiles(Array.from(e.target.files || []))}/>
+          {files.length > 0 && <span className="muted small">{files.length} arquivo(s) selecionado(s).</span>}</div>
+        <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Observação (opcional)</label>
+          <input className="input" value={obs} onChange={e => setObs(e.target.value)} placeholder="Ex.: planta do poço, revisão 2"/></div>
+        {erro && <div style={{ color: "#b91c1c", fontSize: 13 }}>{erro}</div>}
+      </div>
+    </Modal>
+  );
+}
+
+function ProjetoElevadorDesenhos({ abas }) {
+  const store = window.ProjetoElevadorStore;
+  const [itens, setItens] = React.useState([]);
+  const [loading, setLoading] = React.useState(true);
+  const [busca, setBusca] = React.useState("");
+  const [modal, setModal] = React.useState(false);
+  const [excluir, setExcluir] = React.useState(null);
+
+  const carregar = React.useCallback(async () => {
+    setLoading(true);
+    try { setItens(await store.listarDesenhos()); }
+    catch (e) { window.toast?.("Não foi possível carregar os desenhos: " + e.message, "error"); setItens([]); }
+    setLoading(false);
+  }, []);
+  React.useEffect(() => { carregar(); }, [carregar]);
+
+  const filtrados = React.useMemo(() => {
+    const q = peNorm(busca);
+    if (!q) return itens;
+    return itens.filter(i => peNorm(`${i.referencia} ${i.cliente_nome} ${i.numero_cotacao} ${i.arquivo_nome} ${i.enviado_por_nome}`).includes(q));
+  }, [itens, busca]);
+
+  const copiarLink = async (i) => {
+    try { await navigator.clipboard.writeText(i.arquivo_url); window.toast?.("Link copiado. Cole no WhatsApp ou e-mail para o cliente.", "success"); }
+    catch { window.prompt("Copie o link do desenho:", i.arquivo_url); }
+  };
+
+  const confirmarExcluir = async () => {
+    try {
+      await store.excluirDesenho(excluir.id);
+      window.toast?.("Desenho excluído.", "success");
+      setExcluir(null); carregar();
+    } catch (e) { window.toast?.(e.message, "error"); }
+  };
+
+  return (
+    <div className="page fade-in">
+      <div className="page-head">
+        <div className="page-head__l">
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Engenharia · Projeto de Elevadores</div>
+          <h1 className="page-head__title">Projeto de Elevadores</h1>
+          <p className="page-head__sub">Repositório dos projetos e desenhos dos elevadores, para enviar aos clientes.</p>
+        </div>
+        <div className="page-head__r row gap-2">
+          <Button variant="outline" onClick={carregar} disabled={loading}>{loading ? "Atualizando…" : "Atualizar"}</Button>
+          <Button variant="primary" icon="plus" onClick={() => setModal(true)}>Salvar desenho</Button>
+        </div>
+      </div>
+
+      {abas}
+
+      <Card style={{ marginBottom: 14 }}>
+        <input className="input" style={{ width: "100%" }} placeholder="Buscar por prédio, cliente, nº da cotação ou arquivo…"
+          value={busca} onChange={e => setBusca(e.target.value)}/>
+      </Card>
+
+      <div className="table-wrap">
+        <table className="t">
+          <thead><tr><th>Prédio / Cliente</th><th>Nº Cotação</th><th>Arquivo</th><th>Tamanho</th><th>Salvo por</th><th>Data</th><th style={{ width: 230 }}></th></tr></thead>
+          <tbody>
+            {loading && <tr><td colSpan={99}><div style={{ padding: 24 }}>Carregando…</div></td></tr>}
+            {!loading && filtrados.length === 0 && (
+              <tr><td colSpan={99}><div className="empty"><h4>{itens.length === 0 ? "Nenhum desenho salvo ainda" : "Nenhum resultado para a busca"}</h4>
+                {itens.length === 0 && <p>Clique em "Salvar desenho" para guardar um projeto.</p>}</div></td></tr>
+            )}
+            {!loading && filtrados.map(i => (
+              <tr key={i.id}>
+                <td><div className="cell-main">{i.referencia}</div><div className="cell-sub">{i.cliente_nome || "—"}{i.observacao ? " · " + i.observacao : ""}</div></td>
+                <td><span className="mono small">{i.numero_cotacao ?? "—"}</span></td>
+                <td>{i.arquivo_nome}</td>
+                <td>{peFmtTam(i.tamanho_bytes)}</td>
+                <td>{i.enviado_por_nome || i.enviado_por_email || "—"}</td>
+                <td>{peFmtData(i.criado_em)}</td>
+                <td>
+                  <div className="row gap-2">
+                    <a className="btn btn--outline" href={i.arquivo_url} target="_blank" rel="noopener noreferrer">Abrir</a>
+                    <button className="btn btn--outline" onClick={() => copiarLink(i)}>Copiar link</button>
+                    <button className="btn btn--outline" title="Excluir" onClick={() => setExcluir(i)}>🗑</button>
+                  </div>
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+
+      {modal && <DesenhoModal onClose={() => setModal(false)} onSaved={() => { setModal(false); carregar(); }}/>}
+      {excluir && (
+        <Modal title="Excluir desenho?" onClose={() => setExcluir(null)} width={460}
+          footer={<>
+            <Button variant="ghost" onClick={() => setExcluir(null)}>Cancelar</Button>
+            <Button variant="primary" onClick={confirmarExcluir}>Sim, excluir</Button>
+          </>}>
+          <p><b>{excluir.referencia}</b><br/>{excluir.arquivo_nome}</p>
+          <p className="muted small">O registro sai da lista (o arquivo fica guardado para recuperação pelo suporte). Links já enviados a clientes continuam abrindo.</p>
+        </Modal>
+      )}
+    </div>
+  );
+}
+
+/* ---------- PÁGINA: Projeto de Elevadores (abas) ---------- */
+function ProjetoElevadorPage({ setRoute }) {
+  const [aba, setAba] = window.useRouteTab("eng-projeto-elevadores", "desenhos", ["desenhos", "especificacao"], false, true);
+  const abas = <div style={{ marginBottom: 16 }}><Tabs tabs={[{ key: "desenhos", label: "Desenhos" }, { key: "especificacao", label: "Especificação técnica" }]} active={aba} onChange={setAba}/></div>;
+  return aba === "especificacao" ? <ProjetoElevadorEspecificacao abas={abas}/> : <ProjetoElevadorDesenhos abas={abas}/>;
 }
 
 Object.assign(window, { ProjetoElevadorPage });
