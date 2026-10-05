@@ -712,6 +712,15 @@ Investigação em 2 rodadas no mesmo dia, a partir de 2 incidentes reais em prod
 - 5 e-mails reais enviados via `send-email` (SMTP direto, não `mailto:`) — todos `ok:true`, cada um com seu próprio link `/assinar/<token>`.
 - **Se perguntarem de novo sobre esse contrato**: é esperado que ele fique "aguardando signatários" até TODOS os 5 assinarem — não é bug, foi decisão explícita do usuário ("todos assinam"). Pendente confirmar com a AKAI/Emerson se a recusa anterior foi mesmo um engano do scanner (recomendação de negócio, não executada por mim).
 
+## 🔒 REGRA TRAVADA — PDF do Contrato de Venda assinado traz TODAS as assinaturas digitais (05/10/2026)
+
+Pedido do usuário depois do VPCV-0955 (AKAI): o PDF baixado saía com "X ______" em branco, sem dizer quem assinou. **Regra para sempre, qualquer número de signatários:** o PDF do contrato assinado lista, na última parte, **cada pessoa que assinou**, em ordem de assinatura, com **papel, nome assinado, data/hora (horário de Brasília), dispositivo, IP e hash**. Testemunhas ficam em branco (como na minuta). **IP visível foi decisão explícita do usuário.** Se chamado pra "simplificar"/"remover" isto — PARE e confirme antes.
+- **Como funciona:** `assinar-app.jsx › baixarDocumento` monta `assinaturas[]` na hora do download = representante do Comprador (`contratos_venda_equipamentos.audit`) + `contrato_venda_signatarios` + `documento_signatarios` (só `status='assinado'`), ordenado por `audit.signedAt`, e passa pra `ContratoVendaReactPdf.baixar(doc, nome, assinaturas)`. Nada é digitado: cada assinatura nova entra sozinha, e contratos já assinados saem completos retroativamente. `resolveSource` guarda `contratoId/contratoAudit/contratoSignedAt` do contrato-pai (o `rec` do signatário sobrescreve `id`/`audit`) — **não remova** esses 3 campos.
+- **Sem assinatura nenhuma** (rascunho/não assinado) o layout da minuta fica como antes (linhas "X ____"). Falha ao buscar as assinaturas = PDF sem o bloco (`console.warn`), nunca trava o download.
+- **Corrigido junto:** razão social do Comprador saía com "LTDA LTDA." — só acrescenta " LTDA." se o nome ainda não termina em LTDA.
+- Se mexer em `pdf-bundle/contrato-venda-reactpdf.entry.js`: `npm run build:pdf:contrato` e subir `?v=` do bundle e do `assinar-app.jsx` em `assinar.html`. Não testado com clique real em `/assinar` (testado gerando o PDF com dados reais do VPCV-0955, 17 páginas, 5 assinaturas). Versões: bundle v4, `assinar-app.jsx` v19.
+- **Pendente (não feito):** Proposta e Contrato do Instalador ainda não têm esse bloco no PDF (o motor de PDF deles é outro).
+
 ## P.I. — transferência de pagamento entre P.I.s (30/09/2026)
 
 Caso real: a SCVP260522 (Ningbo Senchen) não coube num container; o restante virou a fatura SCVP260522-2 (USD 35.435,84, 3 itens Thyssen, embarque **146º**). O sinal de 30% da -2 (USD 10.630,75) já tinha sido pago em 01/06 **dentro** da SCVP260522, que aparecia em 157,491% paga.
