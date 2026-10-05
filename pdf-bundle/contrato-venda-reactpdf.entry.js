@@ -54,6 +54,8 @@ function registrarFontes() {
   });
   /* Sem hifenização: o padrão do react-pdf quebra palavras em inglês, e a
      minuta nunca hifeniza. */
+  /* Assinatura digitada em letra de mão (pedido do usuário, 05/10/2026). */
+  Font.register({ family: 'Caveat', fonts: [{ src: 'https://cdn.jsdelivr.net/npm/@fontsource/caveat@5.0.8/files/caveat-latin-700-normal.woff', fontWeight: 700, fontStyle: 'normal' }] });
   Font.registerHyphenationCallback((palavra) => [palavra]);
   _fontesRegistradas = true;
 }
@@ -332,7 +334,9 @@ function Assinaturas(doc, assinaturas) {
     lista.forEach((s, i) => {
       saida.push(h(View, { key: 'dig' + i, wrap: false, style: { marginBottom: 14, paddingLeft: 6, borderLeft: '2pt solid #000' } }, [
         h(Text, { key: 'p', style: { fontWeight: BOLD, fontSize: 9 } }, s.papel || ''),
-        h(Text, { key: 'n', style: { fontSize: 11, fontStyle: 'italic' } }, s.nome || ''),
+        s.imagem
+          ? h(Image, { key: 'n', src: s.imagem, style: { height: 36, objectFit: 'contain', alignSelf: 'flex-start', marginVertical: 2 } })
+          : h(Text, { key: 'n', style: { fontFamily: 'Caveat', fontWeight: 700, fontSize: 20, lineHeight: 1.1 } }, s.nome || ''),
         h(Text, { key: 'd', style: S.assTxt }, `Assinado em ${fmtDataHora(s.em)} (horário de Brasília) · ${s.dispositivo || 'dispositivo não informado'}`),
         h(Text, { key: 'i', style: S.assTxt }, `IP: ${s.ip || 'não informado'}`),
         h(Text, { key: 'h', style: { fontSize: 6.5, lineHeight: 1.4, marginLeft: 6 } }, `Hash: ${s.hash || ''}`),

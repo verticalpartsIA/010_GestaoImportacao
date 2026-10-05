@@ -21,6 +21,8 @@
 (function () {
   'use strict';
 
+  const FONTE_MAO = 'https://cdn.jsdelivr.net/npm/@fontsource/caveat@5.0.8/files/caveat-latin-700-normal.woff';
+
   /* Fontes padrão da pdf-lib só entendem Latin-1: troca o que sobrar por "?"
      (nome com emoji/CJK não pode derrubar o download). */
   function limpa(t) {
@@ -72,6 +74,15 @@
     const reg = await pdf.embedFont(L.StandardFonts.Helvetica);
     const neg = await pdf.embedFont(L.StandardFonts.HelveticaBold);
     const ita = await pdf.embedFont(L.StandardFonts.HelveticaOblique);
+    /* Assinatura em letra de mão (Caveat). Precisa do fontkit; sem ele ou sem rede, cai pro itálico. */
+    let mao = ita;
+    try {
+      if (window.fontkit) {
+        pdf.registerFontkit(window.fontkit);
+        const fr = await fetch(FONTE_MAO, { cache: 'force-cache' });
+        if (fr.ok) mao = await pdf.embedFont(new Uint8Array(await fr.arrayBuffer()), { subset: true });
+      }
+    } catch (e) { console.warn('[ProjetoAssinadoPdf] fonte de letra de mão indisponível, usando itálico', e); mao = ita; }
 
     const W = 595.28, H = 841.89, M = 56;
     const preto = L.rgb(0, 0, 0), cinza = L.rgb(0.4, 0.4, 0.4), amarelo = L.rgb(0.96, 0.72, 0);
@@ -104,17 +115,28 @@
 
     const lista = Array.isArray(assinaturas) ? assinaturas : [];
     if (!lista.length) texto('Documento ainda sem assinatura.', { font: ita, size: 10 });
-    lista.forEach((a) => {
+    for (const a of lista) {
       novaPaginaSe(120);
       const topo = y;
       texto(a.papel || '', { font: neg, size: 9, x: M + 10, gap: 3 });
-      texto(a.nome || '', { font: ita, size: 14, x: M + 10, gap: 5 });
+      if (a.imagem) {
+        try {
+          const img = /^data:image\/png/.test(a.imagem) ? await pdf.embedPng(a.imagem) : await pdf.embedJpg(a.imagem);
+          const h = 40, w = Math.min(220, img.width * (h / img.height));
+          novaPaginaSe(h + 6);
+          y -= h;
+          page.drawImage(img, { x: M + 10, y, width: w, height: h });
+          y -= 6;
+        } catch (e) { texto(a.nome || '', { font: mao, size: 22, x: M + 10, gap: 5 }); }
+      } else {
+        texto(a.nome || '', { font: mao, size: 22, x: M + 10, gap: 5 });
+      }
       texto('Assinado em ' + fmtDataHora(a.em) + ' (horário de Brasília) · ' + (a.dispositivo || 'dispositivo não informado'), { size: 9, x: M + 10, gap: 3 });
       texto('IP: ' + (a.ip || 'não informado'), { size: 9, x: M + 10, gap: 3 });
       texto('Hash: ' + (a.hash || ''), { size: 7, cor: cinza, x: M + 10, gap: 6 });
       page.drawRectangle({ x: M, y: y + 2, width: 2, height: topo - y - 2, color: preto });
       y -= 10;
-    });
+    }
 
     texto('Documento assinado eletronicamente, com registro de data/hora, IP e dispositivo, conforme a MP 2.200-2/2001 e a Lei 14.063/2020.', { font: ita, size: 8, cor: cinza, gap: 4 });
 
@@ -136,7 +158,7 @@
   function assinaturasDe(linhas) {
     return (linhas || []).filter((s) => s && s.status === 'assinado').map((s) => {
       const au = s.audit || {};
-      return { papel: s.papel || 'Representante do cliente', nome: au.signerName || s.nome || '', em: au.signedAt || s.signed_at, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash };
+      return { papel: s.papel || 'Representante do cliente', nome: au.signerName || s.nome || '', em: au.signedAt || s.signed_at, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null };
     }).sort((a, b) => new Date(a.em) - new Date(b.em));
   }
 

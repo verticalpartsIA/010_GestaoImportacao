@@ -864,7 +864,7 @@ function PropostaEditor({ setRoute, subsel }) {
         if (sb && recordId) {
           const { data: row } = await sb.from('propostas').select('audit').eq('id', recordId).maybeSingle();
           const au = (row && row.audit) || {};
-          if (au.signedAt) assinaturas = [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash }];
+          if (au.signedAt) assinaturas = [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }];
         }
       } catch (e) { console.warn('Assinatura digital não carregada pro PDF da proposta:', e); }
       const r = await window.PropostaReactPdf.baixar(data, filename, assinaturas);
