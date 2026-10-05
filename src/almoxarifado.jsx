@@ -367,20 +367,65 @@ function AlmoxarifadoEstrutura() {
 
 /* Estoque do PCP — espelho do cadastro do Omie (pcp_produtos + pcp_estoque).
    Leitura vem do sync Omie → PCP; requisição e movimento gravam no Omie. */
+/* Histórico de contagens de UM item (somente leitura): contagem × saldo do Omie na hora, para auditar divergências. */
+function AlmModalHistoricoContagem({ prod, onClose }) {
+  const [linhas, setLinhas] = React.useState(null);
+  React.useEffect(() => {
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c) { setLinhas([]); return; }
+    c.from('pcp_estoque_contagens').select('quantidade_fisica, quantidade_omie, diferenca, contado_por, contado_em')
+      .eq('codigo', prod.codigo).order('contado_em', { ascending: false }).limit(50)
+      .then(({ data }) => setLinhas(data || []));
+  }, [prod.codigo]);
+  return (
+    <Modal title={'Histórico de contagens — ' + prod.codigo} onClose={onClose} width={620} footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
+      <div className="small muted" style={{ marginBottom: 8 }}>{prod.descricao}</div>
+      {linhas === null ? <div className="muted small">Carregando…</div> : linhas.length === 0 ? <div className="muted small">Nenhuma contagem registrada.</div> : (
+        <div className="table-wrap" style={{ border: 0 }}>
+          <table className="t pcp-grid">
+            <thead><tr><th>Quando</th><th className="text-right">Contagem</th><th className="text-right">Omie na hora</th><th className="text-right">Diferença</th><th>Quem</th></tr></thead>
+            <tbody>{linhas.map((h, i) => {
+              const d = Number(h.diferenca);
+              return (
+                <tr key={i}>
+                  <td>{new Date(h.contado_em).toLocaleString('pt-BR')}</td>
+                  <td className="text-right">{almFmt(h.quantidade_fisica, 2)}</td>
+                  <td className="text-right">{almFmt(h.quantidade_omie, 2)}</td>
+                  <td className="text-right" style={Math.abs(d) > 1e-9 ? { color: 'var(--vp-danger)', fontWeight: 600 } : { color: 'var(--fg3)' }}>{Math.abs(d) > 1e-9 ? (d > 0 ? '+' : '') + almFmt(d, 2) : 'ok'}</td>
+                  <td className="small muted">{h.contado_por || '—'}</td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+        </div>
+      )}
+    </Modal>
+  );
+}
+
+/* Aba "Estoque": o saldo do Omie (físico, reservado, disponível, a caminho) ao lado da contagem real da prateleira.
+   - "Omie (físico)" vem de pcp_estoque (sync 4x/dia); reservado e a caminho vêm de pcp_posicao_compra (sync diário).
+     Disponível = físico − reservado (mesma conta do Omie), então não fica velho se só o físico mudou.
+   - Diferença = contagem − Omie FÍSICO (a prateleira conta o que está lá, inclusive o que já está reservado).
+   - A data de "sincronizado" olha a última execução FINALIZADA, com ou sem avisos (antes só contava ok=true e ficava dias velha). */
 function AlmoxarifadoEstoque() {
   const [linhas, setLinhas] = React.useState(null);
   const [erro, setErro] = React.useState(null);
   const [busca, setBusca] = React.useState('');
   const [familia, setFamilia] = React.useState('todas');
+  const [filtro, setFiltro] = React.useState('todos');
+  const [ordem, setOrdem] = React.useState({ chave: null, dir: 1 });
 
   const [sincronizando, setSincronizando] = React.useState(false);
-  const [ultimaSync, setUltimaSync] = React.useState(null);
+  const [ultimaSync, setUltimaSync] = React.useState(null);   // { em, ok, avisos: [] }
+  const [posicaoEm, setPosicaoEm] = React.useState(null);
   const [podeEscrever, setPodeEscrever] = React.useState(false);
   const [podeContar, setPodeContar] = React.useState(false);     // registra o estoque físico (contagem real)
   const [podeVerCusto, setPodeVerCusto] = React.useState(null); // null = ainda verificando
   const [modalReq, setModalReq] = React.useState(null);
   const [modalMov, setModalMov] = React.useState(null);
   const [modalEd, setModalEd] = React.useState(null);
+  const [modalHist, setModalHist] = React.useState(null);
   React.useEffect(() => {
     if (!window.PropostaStore) { setPodeVerCusto(false); return; }
     window.PropostaStore.temCapacidade('almoxarifado', 'escrever_omie').then(setPodeEscrever).catch(() => {});
@@ -393,25 +438,41 @@ function AlmoxarifadoEstoque() {
     const c = window.__VP_SB && window.__VP_SB.sb;
     if (!c) { setErro('Supabase não carregou.'); setLinhas([]); return; }
     // Sem a alçada "ver_custo" o custo real nem é pedido ao banco: a coluna mostra só um valor de enfeite borrado.
-    c.from('pcp_produtos')
+    const pProdutos = c.from('pcp_produtos')
       .select('codigo, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade), pcp_estoque_fisico(quantidade, contado_em, contado_por)' + (podeVerCusto ? ', preco_custo, custo_manual' : ''))
-      .eq('ativo', true).order('familia').order('codigo')
-      .then(({ data, error }) => {
-        if (error) { setErro(error.message); setLinhas([]); return; }
-        setLinhas((data || []).map((p) => {
-          const f = Array.isArray(p.pcp_estoque_fisico) ? p.pcp_estoque_fisico[0] : p.pcp_estoque_fisico;   // 1:1, mas tolera as duas formas
-          return {
-            ...p,
-            saldo: (p.pcp_estoque || []).reduce((s, e) => s + Number(e.quantidade || 0), 0),
-            temSaldo: (p.pcp_estoque || []).length > 0,
-            fisico: f ? Number(f.quantidade) : null,
-            fisicoEm: f ? f.contado_em : null,
-            fisicoPor: f ? f.contado_por : null,
-          };
-        }));
+      .eq('ativo', true).order('familia').order('codigo');
+    const pPosicao = c.from('pcp_posicao_compra').select('codigo, reservado, pendente, atualizado_em').range(0, 4999);
+    Promise.all([pProdutos, pPosicao]).then(([rp, rq]) => {
+      if (rp.error) { setErro(rp.error.message); setLinhas([]); return; }
+      const pos = {};
+      let maisRecente = null;
+      ((rq && rq.data) || []).forEach((p) => { pos[p.codigo] = p; if (p.atualizado_em && (!maisRecente || p.atualizado_em > maisRecente)) maisRecente = p.atualizado_em; });
+      setPosicaoEm(maisRecente);
+      setLinhas((rp.data || []).map((p) => {
+        const f = Array.isArray(p.pcp_estoque_fisico) ? p.pcp_estoque_fisico[0] : p.pcp_estoque_fisico;   // 1:1, mas tolera as duas formas
+        const saldo = (p.pcp_estoque || []).reduce((s, e) => s + Number(e.quantidade || 0), 0);
+        const ps = pos[p.codigo];
+        const reservado = ps && ps.reservado != null ? Number(ps.reservado) : null;
+        return {
+          ...p,
+          saldo,
+          temSaldo: (p.pcp_estoque || []).length > 0,
+          reservado,
+          pendente: ps && ps.pendente != null ? Number(ps.pendente) : null,
+          disponivel: reservado != null ? saldo - reservado : null,
+          fisico: f ? Number(f.quantidade) : null,
+          fisicoEm: f ? f.contado_em : null,
+          fisicoPor: f ? f.contado_por : null,
+          dif: f ? Number(f.quantidade) - saldo : null,
+          custo: podeVerCusto ? (Number(p.preco_custo) > 0 ? Number(p.preco_custo) : (Number(p.custo_manual) > 0 ? Number(p.custo_manual) : 0)) : null,
+        };
+      }));
+    });
+    c.from('pcp_sync_log').select('finalizado_em, ok, resumo').not('finalizado_em', 'is', null).order('finalizado_em', { ascending: false }).limit(1)
+      .then(({ data }) => {
+        const s = data && data[0];
+        setUltimaSync(s ? { em: s.finalizado_em, ok: s.ok, avisos: (s.resumo && Array.isArray(s.resumo.erros)) ? s.resumo.erros : [] } : null);
       });
-    c.from('pcp_sync_log').select('finalizado_em').eq('ok', true).order('finalizado_em', { ascending: false }).limit(1)
-      .then(({ data }) => setUltimaSync((data && data[0] && data[0].finalizado_em) || null));
   }, [podeVerCusto]);
   React.useEffect(() => { carregar(); }, [carregar]);
 
@@ -428,9 +489,10 @@ function AlmoxarifadoEstoque() {
     const agora = new Date().toISOString();
     const r1 = await c.from('pcp_estoque_fisico').upsert({ codigo: l.codigo, quantidade: q, contado_em: agora, contado_por: quem }, { onConflict: 'codigo' });
     if (r1.error) { window.toast?.('Não foi possível salvar a contagem: ' + r1.error.message); carregar(); return; }
-    await c.from('pcp_estoque_contagens').insert({
+    const r2 = await c.from('pcp_estoque_contagens').insert({
       codigo: l.codigo, quantidade_fisica: q, quantidade_omie: l.saldo, diferenca: q - l.saldo, contado_por: quem, contado_em: agora,
     });
+    if (r2.error) window.toast?.('Contagem salva, mas o histórico não foi gravado: ' + r2.error.message);
     window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Registrou estoque físico', alvo: `${l.codigo}: físico ${q} × Omie ${l.saldo}` });
     carregar();
   };
@@ -442,8 +504,10 @@ function AlmoxarifadoEstoque() {
     try {
       const { data, error } = await c.functions.invoke('sync-pcp-omie', { body: { escopo: 'tudo' } });
       if (error) throw error;
-      if (data && data.ok === false) throw new Error((data.erros || []).slice(0, 2).join(' · ') || 'falha parcial');
-      window.toast?.('Sincronizado com o Omie.', 'success');
+      if (data && data.ok === false) {
+        // Os dados foram gravados; só alguns itens deram aviso (ex.: produto sem vínculo no Omie).
+        window.toast?.('Sincronizado, com ' + ((data.erros || []).length || 'alguns') + ' aviso(s): ' + (data.erros || []).slice(0, 2).join(' · '), 'warning');
+      } else window.toast?.('Sincronizado com o Omie.', 'success');
       carregar();
     } catch (e) {
       window.toast?.('Erro ao sincronizar: ' + (e.message || e), 'error');
@@ -452,16 +516,49 @@ function AlmoxarifadoEstoque() {
 
   if (linhas === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
+  const EPS = 1e-9;
+  const abaixoMin = (l) => l.temSaldo && l.estoque_minimo != null && l.saldo < Number(l.estoque_minimo);
+  const FILTROS = [
+    { id: 'todos', label: 'Todos', fn: () => true },
+    { id: 'dif', label: 'Com diferença', fn: (l) => l.fisico != null && Math.abs(l.dif) > EPS },
+    { id: 'semcont', label: 'Sem contagem', fn: (l) => l.fisico == null },
+    { id: 'abaixo', label: 'Abaixo do mínimo', fn: abaixoMin },
+    { id: 'reserv', label: 'Com reservado', fn: (l) => (l.reservado || 0) > 0 },
+    ...(podeVerCusto ? [{ id: 'semcusto', label: 'Sem custo', fn: (l) => !(l.custo > 0) }] : []),
+  ];
   const familias = Array.from(new Set(linhas.map((l) => l.familia).filter(Boolean)));
   const q = busca.trim().toLowerCase();
-  const visiveis = linhas.filter((l) =>
+  const base = linhas.filter((l) =>
     (familia === 'todas' || l.familia === familia) &&
     (!q || l.codigo.toLowerCase().includes(q) || (l.descricao || '').toLowerCase().includes(q)));
+  const contagemPor = {};
+  FILTROS.forEach((f) => { contagemPor[f.id] = base.filter(f.fn).length; });
+  const filtroAtual = FILTROS.find((f) => f.id === filtro) || FILTROS[0];
+  let visiveis = base.filter(filtroAtual.fn);
+  if (ordem.chave) {
+    const k = ordem.chave;
+    const texto = k === 'codigo' || k === 'descricao' || k === 'familia';
+    visiveis = visiveis.slice().sort((a, b) => {
+      const va = a[k], vb = b[k];
+      if (va == null && vb == null) return 0;
+      if (va == null) return 1;      // vazios sempre no fim, qualquer que seja o sentido
+      if (vb == null) return -1;
+      return (texto ? String(va).localeCompare(String(vb), 'pt-BR') : va - vb) * ordem.dir;
+    });
+  }
+  const alternarOrdem = (chave) => setOrdem((o) => o.chave !== chave ? { chave, dir: 1 } : (o.dir === 1 ? { chave, dir: -1 } : { chave: null, dir: 1 }));
+  const Th = ({ chave, children, right, title }) => (
+    <th className={right ? 'text-right' : undefined} title={title} style={{ cursor: 'pointer', userSelect: 'none' }} onClick={() => alternarOrdem(chave)}>
+      {children}{ordem.chave === chave ? (ordem.dir === 1 ? ' ▲' : ' ▼') : ''}
+    </th>
+  );
+  const nContados = linhas.filter((l) => l.fisico != null).length;
+  const nDif = linhas.filter((l) => l.fisico != null && Math.abs(l.dif) > EPS).length;
 
   return (
     <>
       {erro && <div className="card" style={{ padding: 12, color: 'var(--vp-danger)', marginBottom: 12 }}>Erro: {erro}</div>}
-      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center' }}>
+      <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <input className="input" style={{ maxWidth: 280 }} placeholder="Buscar código ou descrição…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
         <select className="input" style={{ maxWidth: 260 }} value={familia} onChange={(e) => setFamilia(e.target.value)}>
           <option value="todas">Todas as famílias</option>
@@ -469,48 +566,75 @@ function AlmoxarifadoEstoque() {
         </select>
         <span className="muted" style={{ fontSize: 12 }}>{visiveis.length} produto(s)</span>
         <span style={{ flex: 1 }}/>
-        <span className="muted" style={{ fontSize: 12 }}>{ultimaSync ? 'Sincronizado com o Omie em ' + new Date(ultimaSync).toLocaleString('pt-BR') : 'Ainda não sincronizado'}</span>
+        <span className="muted" style={{ fontSize: 12 }}>{ultimaSync ? 'Sincronizado com o Omie em ' + new Date(ultimaSync.em).toLocaleString('pt-BR') : 'Ainda não sincronizado'}</span>
+        {ultimaSync && !ultimaSync.ok && ultimaSync.avisos.length > 0 && (
+          <Badge variant="warning" style={{ cursor: 'help' }}>
+            <span title={'A sincronização terminou, mas com avisos de cadastro no Omie:\n' + ultimaSync.avisos.join('\n')}>{ultimaSync.avisos.length} aviso(s) de cadastro</span>
+          </Badge>
+        )}
         <Button variant="primary" disabled={sincronizando} onClick={sincronizar}>{sincronizando ? 'Sincronizando…' : 'Sincronizar com Omie'}</Button>
       </div>
-      <Card title="Estoque do PCP" sub="Espelho do cadastro do Omie">
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
+        {FILTROS.map((f) => (
+          <Button key={f.id} size="sm" variant={filtro === f.id ? 'primary' : 'ghost'} onClick={() => setFiltro(f.id)}>
+            {f.label} <span style={{ opacity: 0.7 }}>({contagemPor[f.id]})</span>
+          </Button>
+        ))}
+        <span style={{ flex: 1 }}/>
+        <span className="muted" style={{ fontSize: 12 }}>
+          Contagem: {nContados} de {linhas.length} itens contados{nDif > 0 ? ` · ${nDif} com diferença` : ''}
+        </span>
+      </div>
+      <Card title="Estoque do PCP" sub="Saldo do Omie × contagem real da prateleira · clique no título da coluna para ordenar">
         <div className="table-wrap" style={{ border: 0 }}>
           <table className="t pcp-grid">
             <thead>
               <tr>
-                <th>Código</th><th>Descrição</th><th>Família</th><th>Un.</th>
-                <th className="text-right" title="Saldo do sistema (Omie)">Estoque Omie</th>
-                <th className="text-right" title="Contagem real na prateleira">Estoque Físico</th>
-                <th className="text-right" title="Físico − Omie">Diferença</th>
-                <th className="text-right">Mínimo</th>
-                <th className="text-right" title={podeVerCusto ? '' : 'Sem permissão para ver custos'}>Custo (R$)</th>
+                <Th chave="codigo">Código</Th><Th chave="descricao">Descrição</Th><Th chave="familia">Família</Th><th>Un.</th>
+                <Th chave="saldo" right title="Saldo físico total no Omie (inclui o que já está reservado)">Omie (físico)</Th>
+                <Th chave="reservado" right title={'Separado para pedidos no Omie' + (posicaoEm ? ' · atualizado em ' + new Date(posicaoEm).toLocaleString('pt-BR') : '')}>Reservado</Th>
+                <Th chave="disponivel" right title="Físico − reservado: o que realmente dá para usar">Disponível</Th>
+                <Th chave="pendente" right title="Pedido de compra aberto no Omie, ainda não recebido">A caminho</Th>
+                <Th chave="fisico" right title="Contagem real na prateleira (digite aqui)">Contagem</Th>
+                <Th chave="dif" right title="Contagem − Omie (físico)">Diferença</Th>
+                <Th chave="estoque_minimo" right>Mínimo</Th>
+                <Th chave="custo" right title={podeVerCusto ? '' : 'Sem permissão para ver custos'}>Custo (R$)</Th>
                 <th>Endereço</th>
-                <th className="text-right">Lead time (d)</th>
+                <Th chave="leadtime_dias" right>Lead time (d)</Th>
                 {podeEscrever && <th></th>}
               </tr>
             </thead>
             <tbody>
-              {visiveis.length === 0 && <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum produto.</td></tr>}
+              {visiveis.length === 0 && <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhum produto neste filtro.</td></tr>}
               {visiveis.map((l) => {
-                const abaixo = l.temSaldo && l.estoque_minimo != null && l.saldo < Number(l.estoque_minimo);
+                const abaixo = abaixoMin(l);
                 return (
                   <tr key={l.codigo}>
                     <td className="mono">{l.codigo}</td>
                     <td>{l.descricao}</td>
                     <td className="small muted">{l.familia || '—'}</td>
                     <td>{l.unidade || '—'}</td>
-                    <td className="text-right" style={{ color: abaixo ? 'var(--vp-danger)' : undefined, fontWeight: abaixo ? 700 : undefined }}>{l.temSaldo ? almFmt(l.saldo, 2) : '—'}</td>
+                    <td className="text-right" style={{ color: abaixo ? 'var(--vp-danger)' : undefined, fontWeight: abaixo ? 700 : undefined }}
+                      title={abaixo ? 'Abaixo do estoque mínimo cadastrado (' + almFmt(l.estoque_minimo) + ')' : ''}>{l.temSaldo ? almFmt(l.saldo, 2) : '—'}</td>
+                    <td className="text-right" style={{ color: (l.reservado || 0) > 0 ? undefined : 'var(--fg3)' }}>{l.reservado == null ? '—' : almFmt(l.reservado, 2)}</td>
+                    <td className="text-right" style={l.disponivel != null && l.disponivel <= 0 && l.saldo > 0 ? { color: 'var(--vp-danger)', fontWeight: 600 } : undefined}
+                      title={l.disponivel != null && l.disponivel <= 0 && l.saldo > 0 ? 'Tudo o que há em estoque já está reservado' : ''}>{l.disponivel == null ? '—' : almFmt(l.disponivel, 2)}</td>
+                    <td className="text-right" style={{ color: (l.pendente || 0) > 0 ? undefined : 'var(--fg3)' }}>{l.pendente == null || l.pendente === 0 ? '—' : almFmt(l.pendente, 2)}</td>
                     <td className="text-right" title={l.fisicoEm ? `Contado em ${new Date(l.fisicoEm).toLocaleString('pt-BR')}${l.fisicoPor ? ' por ' + l.fisicoPor : ''}` : 'Ainda não contado'}>
                       {podeContar
                         ? <input className="input" type="number" min="0" step="any" placeholder="—" key={l.codigo + '-' + (l.fisico ?? '') + '-' + (l.fisicoEm || '')}
                             defaultValue={l.fisico ?? ''} style={{ width: 90, textAlign: 'right' }} onBlur={(e) => contar(l, e.target.value)}/>
                         : (l.fisico != null ? almFmt(l.fisico, 2) : '—')}
                     </td>
-                    {(() => {
-                      if (l.fisico == null) return <td className="text-right" style={{ color: 'var(--fg3)' }}>—</td>;
-                      const dif = l.fisico - l.saldo;
-                      return <td className="text-right" style={Math.abs(dif) > 1e-9 ? { color: 'var(--vp-danger)', fontWeight: 600 } : { color: 'var(--fg3)' }}
-                        title={Math.abs(dif) > 1e-9 ? 'O estoque físico não bate com o Omie' : 'Bate com o Omie'}>{Math.abs(dif) > 1e-9 ? (dif > 0 ? '+' : '') + almFmt(dif, 2) : 'ok'}</td>;
-                    })()}
+                    <td className="text-right" style={{ whiteSpace: 'nowrap' }}>
+                      {l.fisico == null ? <span style={{ color: 'var(--fg3)' }}>—</span> : (
+                        <>
+                          <span style={Math.abs(l.dif) > EPS ? { color: 'var(--vp-danger)', fontWeight: 600 } : { color: 'var(--fg3)' }}
+                            title={Math.abs(l.dif) > EPS ? 'A contagem não bate com o Omie' : 'Bate com o Omie'}>{Math.abs(l.dif) > EPS ? (l.dif > 0 ? '+' : '') + almFmt(l.dif, 2) : 'ok'}</span>
+                          {' '}<Button variant="ghost" size="sm" title="Histórico de contagens deste item" onClick={() => setModalHist(l)}>↺</Button>
+                        </>
+                      )}
+                    </td>
                     <td className="text-right">{almFmt(l.estoque_minimo)}</td>
                     <td className="text-right" title={podeVerCusto ? '' : 'Sem permissão para ver custos'}
                       style={podeVerCusto ? undefined : { filter: 'blur(6px)', userSelect: 'none' }}>
@@ -535,6 +659,7 @@ function AlmoxarifadoEstoque() {
       {modalReq && <AlmModalRequisicao prod={modalReq} onClose={() => setModalReq(null)} onDone={carregar}/>}
       {modalMov && <AlmModalMovimento prod={modalMov} onClose={() => setModalMov(null)} onDone={carregar}/>}
       {modalEd && <AlmModalEditarProduto prod={modalEd} onClose={() => setModalEd(null)} onDone={carregar}/>}
+      {modalHist && <AlmModalHistoricoContagem prod={modalHist} onClose={() => setModalHist(null)}/>}
     </>
   );
 }
