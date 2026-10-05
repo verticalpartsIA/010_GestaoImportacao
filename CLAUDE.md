@@ -719,6 +719,7 @@ Pedido do usuário depois do VPCV-0955 (AKAI): o PDF baixado saía com "X ______
 - **Sem assinatura nenhuma** (rascunho/não assinado) o layout da minuta fica como antes (linhas "X ____"). Falha ao buscar as assinaturas = PDF sem o bloco (`console.warn`), nunca trava o download.
 - **Corrigido junto:** razão social do Comprador saía com "LTDA LTDA." — só acrescenta " LTDA." se o nome ainda não termina em LTDA.
 - Se mexer em `pdf-bundle/contrato-venda-reactpdf.entry.js`: `npm run build:pdf:contrato` e subir `?v=` do bundle e do `assinar-app.jsx` em `assinar.html`. Não testado com clique real em `/assinar` (testado gerando o PDF com dados reais do VPCV-0955, 17 páginas, 5 assinaturas). Versões: bundle v4, `assinar-app.jsx` v19.
+- **Botão "Baixar PDF" do painel (drawer do Jurídico, `contrato-venda.jsx › cvBaixarPdf`) também passa as assinaturas** (05/10, `contrato-venda.jsx` v30; `index.html` carregava o bundle v3, subido pra v4). Qualquer novo ponto que chame `ContratoVendaReactPdf.baixar` deve passar `assinaturas`.
 - **Pendente (não feito):** Proposta e Contrato do Instalador ainda não têm esse bloco no PDF (o motor de PDF deles é outro).
 
 ## P.I. — transferência de pagamento entre P.I.s (30/09/2026)
