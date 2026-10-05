@@ -12,7 +12,7 @@
   'use strict';
   const INTERVALO_MS = 30000;
   /* Tipos que ESTA versão sabe executar — o banco só entrega estes (uma versão antiga em cache nunca pega tipo novo e o marca como falho). */
-  const TIPOS = ['proposta_assinada', 'proposta_recusada', 'proposta_revisao', 'contrato_venda_assinado', 'contrato_venda_representante', 'contrato_venda_signatario'];
+  const TIPOS = ['proposta_assinada', 'proposta_recusada', 'proposta_revisao', 'contrato_venda_assinado', 'contrato_venda_representante', 'contrato_venda_signatario', 'contrato_instalador_assinado'];
   let rodando = false;
 
   function sb() { return (window.__VP_SB || {}).sb; }
@@ -31,6 +31,11 @@
     if (String(item.tipo).indexOf('contrato_venda_') === 0) {
       if (!window.CVStore || !window.CVStore.processarEfeitoFila) return 'módulos ainda não carregados';
       await window.CVStore.processarEfeitoFila(item.tipo, item.payload || {});
+      return null;
+    }
+    if (item.tipo === 'contrato_instalador_assinado') {
+      if (!window.CIStore || !window.CIStore.processarEfeitoFila) return 'módulos ainda não carregados';
+      await window.CIStore.processarEfeitoFila(item.tipo, item.payload || {});
       return null;
     }
     const rec = await P.getById(item.proposta_id);
