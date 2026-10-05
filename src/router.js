@@ -148,23 +148,32 @@
        const [aba, setAba] = window.useRouteTab('rota', 'padrao', ['padrao', 'outra']);
      O resto da tela não muda. Clicar na aba grava na URL (a aba padrão deixa a
      URL limpa); Voltar/Avançar do navegador e F5 restauram a aba. */
-  window.useRouteTab = function useRouteTab(route, defaultTab, valid, withId) {
+  /* `explicit` (5º argumento, só para telas sem id): a aba padrão TAMBÉM aparece
+     na URL (/logistica/almoxarifado/estoque, não só /logistica/almoxarifado).
+     Ao abrir a tela sem aba na URL, ela é completada na hora (replaceState,
+     sem criar entrada extra no Voltar). Usado na Logística Interna. */
+  window.useRouteTab = function useRouteTab(route, defaultTab, valid, withId, explicit) {
     const R = window.React;
     const st = R.useState(function () { return tabFromLocation(route, defaultTab, valid, withId); });
     const tab = st[0], setTabState = st[1];
+    R.useEffect(function () {
+      if (!explicit || withId) return;
+      const loc = parseLocation();
+      if (loc.route === route && !loc.id) navigate(route, defaultTab, null, { replace: true });
+    }, []);
     R.useEffect(function () {
       return subscribe(function () { setTabState(tabFromLocation(route, defaultTab, valid, withId)); });
     }, []);
     const setTab = R.useCallback(function (t) {
       setTabState(t);
-      const novaTab = t === defaultTab ? null : t;
+      const novaTab = (t === defaultTab && !explicit) ? null : t;
       if (withId) {
         const loc = parseLocation();
         navigate(route, loc.route === route ? loc.id : null, novaTab);
       } else {
         navigate(route, novaTab);
       }
-    }, [route, defaultTab, withId]);
+    }, [route, defaultTab, withId, explicit]);
     return [tab, setTab];
   };
 

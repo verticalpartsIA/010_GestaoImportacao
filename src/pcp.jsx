@@ -1411,7 +1411,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
 function PCPPage({ setRoute, setSubsel }) {
   const [dados, setDados] = React.useState(null);
   const [erro, setErro] = React.useState(null);
-  const [aba, setAba] = window.useRouteTab('pcp', 'ordens', ['ordens', 'fila', 'pedidos', 'planejamento', 'controle']);
+  const [aba, setAba] = window.useRouteTab('pcp', 'ordens', ['ordens', 'fila', 'pedidos', 'planejamento', 'controle'], false, true);
   // OP aberta na URL: /logistica/pcp/ordens/{id} (rota-pcp.js). Abrir a partir de OUTRA aba troca a aba e grava o id com
   // replace, para o Voltar do navegador voltar à aba de origem (e não a uma URL intermediária).
   const [opId, setOpId] = window.useRotaItem('pcp', 'ordens');

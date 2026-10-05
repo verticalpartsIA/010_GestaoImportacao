@@ -670,7 +670,7 @@ function AlmoxarifadoCustos() {
 }
 
 function AlmoxarifadoPage() {
-  const [aba, setAba] = window.useRouteTab('almoxarifado', 'estoque', ['estoque', 'estrutura', 'custos', 'reposicao', 'necessidade', 'pedidos']);
+  const [aba, setAba] = window.useRouteTab('almoxarifado', 'estoque', ['estoque', 'estrutura', 'custos', 'reposicao', 'necessidade', 'pedidos'], false, true);
   const [pedidos, setPedidos] = React.useState(null);
   const [modalOpen, setModalOpen] = React.useState(false);
   const [busy, setBusy] = React.useState(null);
