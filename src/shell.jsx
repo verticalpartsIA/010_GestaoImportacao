@@ -416,6 +416,7 @@ const MODULE_HOME = {
 /* Ajuda contextual por rota — texto curto do que a tela faz / próximos passos. */
 const HELP_TOPICS = {
   dashboard: "Visão geral do dia: KPIs, tarefas de hoje, projetos em andamento (Gantt/Lista/Kanban) e alertas críticos.",
+  notificacoes: "Seu painel de avisos: o sistema escreve aqui quando algo importante acontece (proposta aprovada, decisão esperando por você, prazo vencido, resposta por e-mail). Um aviso só informa: para agir, clique em Abrir origem e resolva na tela certa. Marcar como lida e Arquivar valem só para você; em Arquivadas fica o que você guardou; Preferências escolhe o que aparece para você aqui e no sino. Os avisos somem sozinhos (informativos em 14 dias, os demais em 45).",
   decisoes: "Pedidos de aprovação que vêm de outras telas (envio de proposta, desconto, compra, montador). Em Pendentes está o que espera por você: leia o cartão, use Ver documento para conferir e depois Aprovar ou Reprovar (a reprovação pede o motivo). Em Decididas fica o histórico. “Bloqueada” quer dizer que depende de outra decisão ser aprovada antes.",
   leads: "Pipeline comercial. Crie e qualifique leads; a partir do lead você abre formulário, cotação e proposta.",
   formularios: "Formulários de intake por tipo de equipamento. O de Elevador coleta os dados que alimentam cotação e precificação.",
@@ -437,6 +438,7 @@ const HELP_TOPICS = {
 const TUTORIAIS = {
   dashboard: "dashboard",
   decisoes: "central-de-decisoes",
+  notificacoes: "notificacoes",
   notificacoes: "notificacoes",
 };
 
