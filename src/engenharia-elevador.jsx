@@ -457,11 +457,12 @@ function DesenhoModal({ onClose, onSaved }) {
         {PE_DOC_TIPOS.map(t => (
           <div key={t.key} className="stack" style={{ gap: 4, border: "1px solid var(--border)", padding: 10 }}>
             <label className="up-eyebrow muted">{t.label}</label>
-            <input type="file" multiple accept=".pdf,.png,.jpg,.jpeg,.dwg,.dxf" onChange={e => setArq(t.key, Array.from(e.target.files || []))}/>
+            <input type="file" multiple accept={t.key === "id_tag" ? ".pdf,application/pdf" : ".pdf,.png,.jpg,.jpeg,.dwg,.dxf"} onChange={e => setArq(t.key, Array.from(e.target.files || []))}/>
+            {t.key === "id_tag" && <span className="muted small">Somente PDF.</span>}
             {arquivos[t.key].length > 0 && <span className="muted small">{arquivos[t.key].length} arquivo(s) selecionado(s).</span>}
           </div>
         ))}
-        <span className="muted small">PDF, PNG, JPG, DWG ou DXF — máx. 25 MB cada. Cada obra precisa dos dois documentos: Projeto de Instalação e ID-TAG.</span>
+        <span className="muted small">Projeto de Instalação: PDF, PNG, JPG, DWG ou DXF. ID-TAG: PDF. Máx. 25 MB cada. Cada obra leva os dois documentos.</span>
         {faltaUm && <div style={{ color: "#92400e", fontSize: 13 }}>⚠ Falta anexar o {arquivos.projeto_instalacao.length ? "ID-TAG" : "Projeto de Instalação"} desta obra (você pode salvar assim e completar depois).</div>}
 
         <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Observação (opcional)</label>
