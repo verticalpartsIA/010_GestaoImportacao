@@ -129,8 +129,39 @@
     const { data } = await c.from('propostas').select('*').eq('id', id).maybeSingle();
     return data || null;
   }
+  /* Segurança real (#571, Fase 3/Task 9): a página pública (/assinar/:token) fala com o banco por RPC `public_proposta_*`
+     (recebem só o TOKEN e mexem só naquele registro; a regra de status e a troca da modalidade 120×90 são decididas no
+     servidor). Interruptor de emergência: localStorage.vp_public_rpc = 'off' volta ao caminho antigo (update direto na
+     tabela). Se a RPC falhar por rede/erro, cada função cai no caminho antigo (enquanto as tabelas ainda estão abertas). */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+  const MSG_RPC = {
+    link_invalido: 'Link inválido ou expirado.',
+    expirada: 'Esta proposta expirou.',
+    nome_obrigatorio: 'Informe o seu nome para assinar.',
+    escolha_obrigatoria: 'Escolha a modalidade de entrega (120 ou 90 dias) para aprovar a proposta.',
+    texto_obrigatorio: 'Descreva o que você gostaria de revisar.',
+  };
+  function erroDaRpc(res) {
+    const e = res && res.erro;
+    if (MSG_RPC[e]) return new Error(MSG_RPC[e]);
+    if (e && String(e).indexOf('status_') === 0) return new Error('Esta proposta não está mais disponível para esta ação (situação atual: ' + String(e).slice(7) + ').');
+    return new Error('Não foi possível concluir a ação. Tente novamente.');
+  }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[PropostaStore] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[PropostaStore] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
   async function getByToken(token) {
     const c = sb(); if (!c) return null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_proposta_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
     const { data } = await c.from('propostas').select('*').eq('token', token).maybeSingle();
     return data || null;
   }
@@ -326,9 +357,16 @@
        cliente pra sempre em "Carregando…" por uma falha só de auditoria.
        Best-effort de propósito: loga pra suporte investigar, nunca trava
        a leitura da proposta pelo cliente. */
-    const { error } = await c.from('propostas').update(patch).eq('token', token);
-    if (error) console.warn('[PropostaStore] falha ao registrar visualização (best-effort, não bloqueia o cliente)', error);
-    const updated = { ...cur, ...patch };
+    let updated = null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_proposta_visualizada', { p_token: token, p_audit: { viewUa: ua, viewDevice: device, viewIp: ip } });
+      if (!r.falhou && r.data && r.data.ok && r.data.rec) updated = r.data.rec;
+    }
+    if (!updated) {
+      const { error } = await c.from('propostas').update(patch).eq('token', token);
+      if (error) console.warn('[PropostaStore] falha ao registrar visualização (best-effort, não bloqueia o cliente)', error);
+      updated = { ...cur, ...patch };
+    }
     await pushNotification(updated, 'visualizada', { ip });
     return updated;
   }
@@ -384,9 +422,27 @@
         if (total > 0) patch.valor_total = total;
       }
     }
-    const { error } = await c.from('propostas').update(patch).eq('token', token);
-    if (error) throw error;
-    const updated = { ...cur, ...patch };
+    let updated = null;
+    if (usarRpcPublica()) {
+      /* O servidor decide status/valores/troca da modalidade e carimba hora e IP; daqui só vão os dados da assinatura. */
+      const r = await chamarRpcPublica(c, 'public_proposta_assinar', {
+        p_token: token,
+        p_opcao: escolhaValida || null,
+        p_audit: {
+          signUa: ua, signDevice: device, signIp: ip, signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data,
+          hash, versaoAssinada: audit.versaoAssinada, assinouRascunho: audit.assinouRascunho,
+        },
+      });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        updated = r.data.rec;
+      }
+    }
+    if (!updated) {
+      const { error } = await c.from('propostas').update(patch).eq('token', token);
+      if (error) throw error;
+      updated = { ...cur, ...patch };
+    }
     await pushNotification(updated, 'aprovada', { ip, signerName: sig.signerName });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
@@ -451,9 +507,19 @@
     const log = (cur.log || []).slice();
     log.push({ status:'recusada', at: now.toISOString(), meta:{ nome, motivo, ip } });
     const patch = { status: 'recusada', log, audit, atualizado_em: now.toISOString() };
-    const { error } = await c.from('propostas').update(patch).eq('token', token);
-    if (error) throw error;
-    const updated = { ...cur, ...patch };
+    let updated = null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_proposta_recusar', { p_token: token, p_nome: nome, p_motivo: motivo, p_audit: { refuseUa: ua, refuseDevice: device, refuseIp: ip } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        updated = r.data.rec;
+      }
+    }
+    if (!updated) {
+      const { error } = await c.from('propostas').update(patch).eq('token', token);
+      if (error) throw error;
+      updated = { ...cur, ...patch };
+    }
     await pushNotification(updated, 'recusada', { nome, motivo });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
@@ -483,9 +549,19 @@
       status: 'revisao_solicitada', revisao_texto: txt, revisao_solicitada_em: now.toISOString(),
       log, atualizado_em: now.toISOString(),
     };
-    const { error } = await c.from('propostas').update(patch).eq('token', token);
-    if (error) throw error;
-    const updated = { ...cur, ...patch };
+    let updated = null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_proposta_revisao', { p_token: token, p_texto: txt });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        updated = r.data.rec;
+      }
+    }
+    if (!updated) {
+      const { error } = await c.from('propostas').update(patch).eq('token', token);
+      if (error) throw error;
+      updated = { ...cur, ...patch };
+    }
     await pushNotification(updated, 'revisao_solicitada', { texto: txt });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
