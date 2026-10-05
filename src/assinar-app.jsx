@@ -99,6 +99,9 @@ const STATUS_ALIASES = {
      vocabulário de status de 'venda', é uma linha própria na tabela
      filha, não o contrato inteiro. */
   venda_signatario: { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
+  /* Projeto de Instalação da Obra (Engenharia sobe o PDF, o representante do cliente assina) —
+     linha própria em documento_signatarios, mesmo vocabulário de status. */
+  projeto:    { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
   proposta:   { signed: 'aprovada', refused: 'recusada', expired: 'expirada' },
 };
 
@@ -159,6 +162,30 @@ async function resolveSource(token) {
       const STORE_POR_TIPO = {
         contrato_venda: { get: (id) => window.CVStore && window.CVStore.getById(id), Preview: window.CVContractPreview, engine: window.CV, kind: 'venda_signatario' },
       };
+      if (s.documento_tipo === 'projeto_instalacao') {
+        /* Projeto de Instalação: o "documento" é o PDF que a Engenharia subiu (bucket público
+           'engenharia'); não há engine nem Preview — a página mostra o próprio PDF. */
+        const c = window.__VP_SB && window.__VP_SB.sb;
+        let d = null;
+        if (c) {
+          const r = await c.from('projetos_elevador_desenhos')
+            .select('id,referencia,cliente_nome,numero_cotacao,equipamentos,arquivo_nome,arquivo_url,tipo_documento')
+            .eq('id', s.documento_id).maybeSingle();
+          d = r && r.data;
+        }
+        if (d) {
+          const rec = {
+            ...s, status: s.status, audit: s.audit || {},
+            numero_documento: d.numero_cotacao != null ? ('Cotação ' + d.numero_cotacao) : 'Projeto de Instalação',
+            titulo: 'Projeto de Instalação — ' + (d.referencia || ''),
+            objeto_resumo: (d.equipamentos || []).join(', ') || d.referencia || 'Projeto de Instalação da Obra',
+            comprador_razao_social: d.cliente_nome || '',
+            signatarioPapel: s.papel, signatarioNome: s.nome,
+            desenho: d,
+          };
+          return { kind: 'projeto', rec, store: window.DocumentoSignatariosStore, Preview: null, engine: null };
+        }
+      }
       const cfg = STORE_POR_TIPO[s.documento_tipo];
       if (cfg) {
         const documentoPai = s.__contratoPai || (cfg.get ? await cfg.get(s.documento_id) : null);
@@ -256,7 +283,7 @@ function SgApp() {
   const doc = _sgUM(() => {
     if (!source) return null;
     const rec = source.rec;
-    if (source.kind === 'proposta') return null; // PEPreview renderiza a versão publicada (ver conteudoVigente)
+    if (source.kind === 'proposta' || source.kind === 'projeto') return null; // PEPreview / PDF do projeto renderiza a versão publicada (ver conteudoVigente)
     if (source.kind === 'instalador') {
       /* Usa o snapshot já persistido em rec.doc (gravado uma única vez em
          createDraft — CI não tem edição pós-envio, updateFormState nunca é
@@ -306,6 +333,19 @@ function SgApp() {
      21/08). Contratos e Escada/Esteira ainda não foram migrados e
      seguem na impressão nativa — essa continua precisando do DOM. */
   const baixarDocumento = _sgUC(async () => {
+    /* Projeto de Instalação: PDF original da Engenharia + página final com as assinaturas digitais (pdf-lib). */
+    if (source && source.kind === 'projeto') {
+      try {
+        const rp = source.rec;
+        const assinaturas = window.ProjetoAssinadoPdf.assinaturasDe([rp]);
+        const nomeP = ['Projeto de Instalação', rp.desenho.referencia, assinaturas.length ? 'assinado' : ''].filter(Boolean).join(' - ') + '.pdf';
+        await window.ProjetoAssinadoPdf.baixar(rp.desenho, assinaturas, nomeP);
+      } catch (e) {
+        console.error('PDF do projeto falhou:', e);
+        window.alert('Não foi possível gerar o PDF agora: ' + (e.message || e));
+      }
+      return;
+    }
     /* Contrato de Venda (29/09): PDF vetorial no layout EXATO da minuta
        oficial (cabeçalho/rodapé em toda página) — o motor recebe o mesmo
        `doc` que a tela já renderiza, sem redigir nada. Se o motor não
@@ -389,6 +429,10 @@ function SgApp() {
     return () => { if (ro) ro.disconnect(); clearTimeout(t1); clearTimeout(t2); };
   }, [phase, source]);
 
+  /* Projeto de Instalação: o PDF aparece num iframe (não dá pra detectar a rolagem dele) — a
+     leitura fica por conta da caixa "li e concordo", que continua obrigatória. */
+  _sgUE(() => { if (source && source.kind === 'projeto') setScrolledEnd(true); }, [source]);
+
   const sigValid = sigMode === 'draw' ? !!drawData : typedName.trim().length >= 3;
   /* Proposta com 2 modalidades de entrega: só dá pra aprovar depois de escolher uma. */
   const opcoesProposta = (source && source.kind === 'proposta' && window.PropostaOpcoes && window.PropostaOpcoes.temOpcoes(window.PropostaStore.conteudoRenderizavel(source.rec).data))
@@ -403,7 +447,7 @@ function SgApp() {
       ? (rec.responsavel_nome || rec.contratada_nome)
       : source.kind === 'proposta'
       ? ((window.PropostaStore.conteudoRenderizavel(rec).data.cliente || {}).nome)
-      : source.kind === 'venda_signatario'
+      : (source.kind === 'venda_signatario' || source.kind === 'projeto')
       ? rec.signatarioNome
       : (rec.responsavel_nome || rec.comprador_razao_social);
     const sig = sigMode === 'draw'
@@ -447,7 +491,7 @@ function SgApp() {
       ? (rec.responsavel_nome || rec.contratada_nome)
       : source.kind === 'proposta'
       ? ((window.PropostaStore.conteudoRenderizavel(rec).data.cliente || {}).nome)
-      : source.kind === 'venda_signatario'
+      : (source.kind === 'venda_signatario' || source.kind === 'projeto')
       ? rec.signatarioNome
       : (rec.responsavel_nome || rec.comprador_razao_social);
     setNomeRecusa(defaultName || '');
@@ -566,10 +610,12 @@ function SgApp() {
       <>
         <div className="ci-sign-status">
           <div className="ci-success-check">✓</div>
-          <h1>{source.kind === 'proposta' ? 'Proposta aprovada!' : aindaFaltamOutros ? 'Assinatura registrada!' : 'Contrato assinado!'}</h1>
+          <h1>{source.kind === 'proposta' ? 'Proposta aprovada!' : source.kind === 'projeto' ? 'Projeto assinado!' : aindaFaltamOutros ? 'Assinatura registrada!' : 'Contrato assinado!'}</h1>
           <p>
             {source.kind === 'proposta'
               ? <>A proposta <b>{rec.numero_documento}</b> foi aprovada e assinada com sucesso.</>
+              : source.kind === 'projeto'
+              ? <>O Projeto de Instalação da obra <b>{(rec.desenho || {}).referencia}</b> foi assinado com sucesso. A VerticalParts já foi avisada.</>
               : aindaFaltamOutros
               ? <>Sua assinatura no contrato <b>{rec.numero_documento}</b> foi registrada. Ele ainda aguarda a assinatura dos demais signatários (sócios/jurídico) para ser concluído.</>
               : <>O contrato <b>{rec.numero_documento}</b> foi assinado com sucesso.</>}
@@ -587,7 +633,7 @@ function SgApp() {
            Proposta de Elevador NÃO precisa disto — o react-pdf monta o PDF
            direto dos dados, sem ler o DOM — então nem renderiza: essa cópia
            dobrava o número de páginas na tela à toa (achado 21/08). */}
-        {!podeReactPdf && (
+        {!podeReactPdf && source.kind !== 'projeto' && (
           <div className="ci-print-doc">
             {source.kind === 'proposta'
               ? <window.PEPreview {...propostaRender(rec)} bare/>
@@ -611,6 +657,7 @@ function SgApp() {
   /* Resumo do card de topo varia por tipo */
   const isInstalador = source.kind === 'instalador';
   const isProposta = source.kind === 'proposta';
+  const isProjeto = source.kind === 'projeto';
   const djVigente = isProposta ? window.PropostaStore.conteudoRenderizavel(rec).data : {};
   const djCliente = (djVigente && djVigente.cliente) || {};
   const counterpartyName = isInstalador ? rec.contratada_nome : isProposta ? djCliente.nome : rec.comprador_razao_social;
@@ -627,7 +674,12 @@ function SgApp() {
         : (rec.valor_total ? window.CV.brl(Number(rec.valor_total)) : '—'))
     : (rec.valor_total_num ? window.CV.brl(rec.valor_total_num) : '—');
 
-  const docNode = isProposta
+  const docNode = isProjeto
+    ? <div className="ci-projeto-pdf" style={{ width: '100%', height: '100%', minHeight: 560, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <iframe title="Projeto de Instalação" src={rec.desenho.arquivo_url} style={{ flex: 1, width: '100%', minHeight: 520, border: '1px solid #d0d0d0', background: '#fff' }}/>
+        <a href={rec.desenho.arquivo_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13 }}>Não está vendo o PDF? Abrir em nova aba ↗</a>
+      </div>
+    : isProposta
     ? <window.PEPreview {...propostaRender(rec)} bare/>
     : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={assinaturasInstalador}/>;
 
@@ -639,13 +691,13 @@ function SgApp() {
       </div>
 
       <div className="ci-sign-intro">
-        <h1>{isProposta ? 'Analise sua proposta' : 'Assine seu contrato'}</h1>
-        <p>A VerticalParts enviou {isProposta ? 'esta proposta comercial para sua análise' : 'este contrato para sua assinatura digital'}. Leia o documento por inteiro ao lado{isProposta ? ' e aprove, peça uma revisão ou recuse' : ', confirme e assine'} — sem precisar de cadastro.</p>
+        <h1>{isProposta ? 'Analise sua proposta' : isProjeto ? 'Assine o Projeto de Instalação' : 'Assine seu contrato'}</h1>
+        <p>A VerticalParts enviou {isProposta ? 'esta proposta comercial para sua análise' : isProjeto ? 'o Projeto de Instalação da sua obra para sua assinatura digital' : 'este contrato para sua assinatura digital'}. Leia o documento por inteiro ao lado{isProposta ? ' e aprove, peça uma revisão ou recuse' : ', confirme e assine'} — sem precisar de cadastro.</p>
       </div>
 
       <div className="ci-sign-grid">
         <div className="ci-sign-doc-col">
-          <div className="ci-sign-label"><span className="n">1</span> Leia {isProposta ? 'a proposta' : 'o contrato'} por inteiro</div>
+          <div className="ci-sign-label"><span className="n">1</span> Leia {isProposta ? 'a proposta' : isProjeto ? 'o projeto' : 'o contrato'} por inteiro</div>
           <div className="ci-doc-viewer">
             <div className="ci-doc-viewer-scroll" ref={viewerRef} onScroll={onScroll}>
               {docNode}
@@ -665,10 +717,10 @@ function SgApp() {
             </div>
             <div className="ci-sum-rows">
               <SgSumRow k={isInstalador ? 'Contratante' : 'Vendedora'} v="VerticalParts Ltda."/>
-              <SgSumRow k={counterpartyLabel} v={counterpartyName}/>
-              <SgSumRow k="Objeto" v={objetoResumo}/>
-              <SgSumRow k="Valor total" v={valorFmt}/>
-              {source.kind === 'venda_signatario' && <SgSumRow k="Assinando como" v={`${rec.signatarioPapel} — ${rec.signatarioNome}`}/>}
+              <SgSumRow k={isProjeto ? 'Cliente' : counterpartyLabel} v={counterpartyName}/>
+              <SgSumRow k={isProjeto ? 'Equipamento(s)' : 'Objeto'} v={objetoResumo}/>
+              {!isProjeto && <SgSumRow k="Valor total" v={valorFmt}/>}
+              {(source.kind === 'venda_signatario' || isProjeto) && <SgSumRow k="Assinando como" v={`${rec.signatarioPapel} — ${rec.signatarioNome}`}/>}
             </div>
           </div>
 
@@ -701,7 +753,7 @@ function SgApp() {
             onClick={() => scrolledEnd && setConsent(!consent)}
             onKeyDown={(e) => { if (scrolledEnd && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); setConsent(!consent); } }}>
             <div className="box">{consent && <span>✓</span>}</div>
-            <div className="txt">Declaro que li, compreendi e concordo com todos os termos {isProposta ? 'desta proposta' : 'deste contrato'}.</div>
+            <div className="txt">Declaro que li, compreendi e concordo com todos os termos {isProposta ? 'desta proposta' : isProjeto ? 'deste projeto' : 'deste contrato'}.</div>
           </div>
 
           <div className="ci-sign-label"><span className="n">{opcoesProposta ? 4 : 3}</span> Sua assinatura</div>
@@ -729,8 +781,8 @@ function SgApp() {
           </div>
 
           <div className="ci-sign-alt">
-            <button type="button" className="ci-sign-alt-btn" onClick={baixarDocumento}>⬇ Baixar {isProposta ? 'proposta' : 'contrato'} (PDF)</button>
-            <p>Prefere assinar à mão? Baixe {isProposta ? 'a proposta' : 'o contrato'}, assine com caneta, tire uma foto ou digitalize e envie por e-mail para <a href="mailto:comercial@verticalparts.com.br">comercial@verticalparts.com.br</a>.</p>
+            <button type="button" className="ci-sign-alt-btn" onClick={baixarDocumento}>⬇ Baixar {isProposta ? 'proposta' : isProjeto ? 'projeto' : 'contrato'} (PDF)</button>
+            <p>Prefere assinar à mão? Baixe {isProposta ? 'a proposta' : isProjeto ? 'o projeto' : 'o contrato'}, assine com caneta, tire uma foto ou digitalize e envie por e-mail para <a href="mailto:comercial@verticalparts.com.br">comercial@verticalparts.com.br</a>.</p>
           </div>
         </div>
       </div>
@@ -741,7 +793,7 @@ function SgApp() {
          dados. Sem este `if`, toda proposta de Elevador renderizava o
          documento duas vezes na página (a visível pra leitura + esta cópia
          escondida) — 34 páginas no DOM pra um documento de 17 (achado 21/08). */}
-      {!podeReactPdf && <div className="ci-print-doc">{docNode}</div>}
+      {!podeReactPdf && source.kind !== 'projeto' && <div className="ci-print-doc">{docNode}</div>}
 
       {showRevisao && (
         <div className="ci-modal-backdrop" onClick={() => !enviandoRevisao && setShowRevisao(false)}>

@@ -113,6 +113,16 @@
     return data || [];
   }
 
+  /* Todas as linhas de um tipo de documento (ex.: 'projeto_instalacao') — a Engenharia
+     usa pra mostrar o status de assinatura de cada projeto na lista, numa consulta só. */
+  async function listarPorTipo(documentoTipo) {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('documento_signatarios').select('*')
+      .eq('documento_tipo', documentoTipo).order('criado_em', { ascending: false }).limit(2000);
+    if (error) { console.warn('[DocumentoSignatariosStore] listarPorTipo falhou', error); return []; }
+    return data || [];
+  }
+
   /* Quantos signatários AINDA não completaram a própria assinatura
      (inclui 'recusado' de propósito — uma recusa também bloqueia o
      documento de virar 'assinado' até ser resolvida manualmente, mesmo
@@ -267,7 +277,7 @@
   }
 
   window.DocumentoSignatariosStore = {
-    shortToken, signUrl, getByToken, listarPorDocumento, contarPendentes,
+    shortToken, signUrl, getByToken, listarPorDocumento, listarPorTipo, contarPendentes,
     criar, remover, marcarEnviado, markViewed, markSigned, refuse,
     getPublicIP, deviceLabel, sha256Hex,
     /* achado real (01/10, teste E2E): a tela final de assinatura chama
