@@ -428,7 +428,7 @@ const HELP_TOPICS = {
   dashboard: "Visão geral do dia: KPIs, tarefas de hoje, projetos em andamento (Gantt/Lista/Kanban) e alertas críticos.",
   notificacoes: "Seu painel de avisos: o sistema escreve aqui quando algo importante acontece (proposta aprovada, decisão esperando por você, prazo vencido, resposta por e-mail). Um aviso só informa: para agir, clique em Abrir origem e resolva na tela certa. Marcar como lida e Arquivar valem só para você; em Arquivadas fica o que você guardou; Preferências escolhe o que aparece para você aqui e no sino. Os avisos somem sozinhos (informativos em 14 dias, os demais em 45).",
   decisoes: "Pedidos de aprovação que vêm de outras telas (envio de proposta, desconto, compra, montador). Em Pendentes está o que espera por você: leia o cartão, use Ver documento para conferir e depois Aprovar ou Reprovar (a reprovação pede o motivo). Em Decididas fica o histórico. “Bloqueada” quer dizer que depende de outra decisão ser aprovada antes.",
-  leads: "Pipeline comercial. Crie e qualifique leads; a partir do lead você abre formulário, cotação e proposta.",
+  leads: "O pipeline de possíveis clientes, na lista ou no quadro Kanban. O lead guarda só a identificação do cliente (prédio, contato, telefone, e-mail, CNPJ/CPF); o equipamento é escolhido depois, no Formulário, que o lead abre com os dados já preenchidos. Ao digitar o CNPJ, o sistema consulta o Omie (só leitura) e mostra se o cliente já existe. Use Qualificar → Dossier para criar o Dossiê da obra (um só por lead). O lead vira Convertido quando a proposta é assinada (ou quando você muda o status) e passa a entrar nos indicadores.",
   formularios: "Formulários de intake por tipo de equipamento. O de Elevador coleta os dados que alimentam cotação e precificação.",
   "cotacoes-fornecedor": "Cotações enviadas aos fornecedores (Glarie/Seloon…). Acompanhe status, tratativas e a decisão de compra.",
   precificacao: "Precificação a partir da cotação respondida. Só libera depois da Análise Técnica aprovada.",
@@ -452,6 +452,7 @@ const TUTORIAIS = {
   notificacoes: "notificacoes",
   financeiro: "prazos-e-pendencias",   // a rota interna continua `financeiro`; só o rótulo do menu virou "Prazos & Pendências"
   inbox: "inbox",
+  leads: "leads",
 };
 
 /* Tutorial do MÓDULO (grupo do menu lateral, ex.: "Geral", que aninha várias telas): rótulo do grupo em NAV_GROUPS → pasta em
