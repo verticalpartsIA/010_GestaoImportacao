@@ -433,6 +433,10 @@ const HELP_TOPICS = {
   "crm-conversao": "De onde vêm os seus leads: a tela conta quantos leads ativos foram capturados e mostra, com uma barra para comparar, quantos vieram de cada origem (indicação, site, evento, LinkedIn…). Lead sem origem entra em \"Não informado\"; os excluídos não contam; o formulário do site verticalparts.com.br cria o lead sozinho e ele passa a contar aqui. É uma tela só de consulta: a origem é escolhida por quem cadastra o lead, na tela Leads.",
   "crm-automacao": "Confira se o lead que fechou virou cliente: quando um lead passa a Convertido (a proposta foi assinada, por exemplo), o sistema o cadastra como cliente sozinho. Esta tela mostra essa regra, lista os leads convertidos e se cada um já tem cliente vinculado; nos que ficaram sem vínculo, use o botão Vincular agora. Ela não envia e-mails nem mensagens em massa.",
   "crm-analise": "Como está o funil de leads: a tela mostra quatro indicadores (total de leads, convertidos, taxa de conversão e sem retorno), quantos leads estão em cada status do funil e quantos cada responsável tem. Conta apenas os leads cadastrados no sistema (não é análise de site nem de anúncios) e é só de consulta: para mudar um número, atualize o lead na tela Leads.",
+  "cadastro-clientes": "O cadastro dos clientes da empresa: pesquise na lista, cadastre um cliente novo, edite e abra o histórico dele (leads, obras e score de relacionamento). O CNPJ/CPF é conferido ao salvar e precisa combinar com o tipo escolhido (CPF para Pessoa Física, CNPJ para Pessoa Jurídica). Exclua com cuidado.",
+  "cadastro-fornecedores": "O cadastro dos fornecedores: pesquise e filtre por categoria, veja a avaliação em estrelas, cadastre um fornecedor novo (escolhendo as categorias), edite e avalie com nota e comentário. O CNPJ/CPF é conferido ao salvar.",
+  "cadastro-materias-primas": "Tela só de consulta: as matérias-primas vêm do Omie. Pesquise por código ou descrição, filtre por família e leia cada coluna (NCM, peso, endereço). Se um dado estiver errado, a correção é feita no Omie, não aqui.",
+  "cadastro-produtos": "Tela só de consulta: os produtos vêm do Omie. Pesquise por código ou descrição, filtre por família e leia cada coluna; o código do produto abre a Montagem do Produto. Se um dado estiver errado, a correção é feita no Omie, não aqui.",
   formularios: "Formulários de intake por tipo de equipamento. O de Elevador coleta os dados que alimentam cotação e precificação.",
   "cotacoes-fornecedor": "Cotações enviadas aos fornecedores (Glarie/Seloon…). Acompanhe status, tratativas e a decisão de compra.",
   precificacao: "Precificação a partir da cotação respondida. Só libera depois da Análise Técnica aprovada.",
@@ -461,6 +465,10 @@ const TUTORIAIS = {
   "crm-conversao": "conversao",
   "crm-automacao": "automacao",
   "crm-analise": "analise",
+  "cadastro-clientes": "clientes",
+  "cadastro-fornecedores": "fornecedores",
+  "cadastro-materias-primas": "materias-primas",
+  "cadastro-produtos": "produtos",
 };
 
 /* Tutorial do MÓDULO (grupo do menu lateral, ex.: "Geral", que aninha várias telas): rótulo do grupo em NAV_GROUPS → pasta em
@@ -469,6 +477,7 @@ const TUTORIAIS = {
 const MODULOS_TUTORIAL = {
   "Geral": "geral",
   "CRM": "crm",
+  "Cadastros Mestres": "cadastros-mestres",
 };
 
 /* Nome da tela como aparece no menu lateral (NAV_GROUPS). (O BREADCRUMB_MAP ganhou a rota `decisoes` em 04/10/2026 — issue #654 —,
