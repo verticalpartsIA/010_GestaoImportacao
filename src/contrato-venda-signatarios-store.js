@@ -19,8 +19,20 @@
 
   function sb() { return (window.__VP_SB || {}).sb; }
 
+  /* Segurança real (#571, Fase 3/Task 11b): leitura/visualização/assinatura/recusa por RPC `public_cvs_*` (só o TOKEN do signatário;
+     o servidor decide se o contrato já pode virar ASSINADO). Interruptor/queda: ver CVStore.rpcPublica. A RPC devolve também o
+     contrato-pai (`__contratoPai`) para a página renderizar o documento sem ler a tabela de contratos. */
+  function rpc() { return (window.CVStore && window.CVStore.rpcPublica) || null; }
   async function getByToken(token) {
     const c = sb(); if (!c) return null;
+    const R = rpc();
+    if (R && R.usar()) {
+      const r = await R.chamar(c, 'public_cvs_obter', { p_token: token });
+      if (!r.falhou) {
+        if (!r.data || r.data.origem !== 'cvs') return null;
+        const sig = r.data.sig; sig.__contratoPai = r.data.contrato || null; return sig;
+      }
+    }
     const { data } = await c.from('contrato_venda_signatarios').select('*').eq('token', token).maybeSingle();
     return data || null;
   }
@@ -89,6 +101,11 @@
     const cur = await getByToken(token);
     if (!cur) return null;
     if (cur.status !== 'enviado' && cur.status !== 'pendente') return cur;
+    const R = rpc();
+    if (R && R.usar()) {
+      const r = await R.chamar(c, 'public_cvs_visualizado', { p_token: token, p_audit: {} });
+      if (!r.falhou && r.data && r.data.ok && r.data.rec) return { ...cur, ...r.data.rec };
+    }
     const now = new Date().toISOString();
     const { error } = await c.from('contrato_venda_signatarios')
       .update({ status: 'visualizado', viewed_at: now, atualizado_em: now }).eq('token', token);
@@ -110,6 +127,17 @@
       signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data,
       consent: true, hash,
     };
+    const R = rpc();
+    if (R && R.usar()) {
+      /* O servidor grava a assinatura, o log, o evento (fila) e finaliza o contrato se este era o último pendente. */
+      const r = await R.chamar(c, 'public_cvs_assinar', { p_token: token, p_audit: {
+        signUa: ua, signDevice: device, signIp: ip, signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data, hash,
+      } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw R.erro(r.data);
+        return { ...cur, ...r.data.rec };
+      }
+    }
     const log = (cur.log || []).slice();
     log.push({ status: 'assinado', at: now.toISOString(), meta: { ip, ua, hash } });
     const patch = { status: 'assinado', signed_at: now.toISOString(), audit, log, atualizado_em: now.toISOString() };
@@ -149,6 +177,14 @@
     if (!cur) return null;
     const now = new Date().toISOString();
     const motivo = ((info && info.motivo) || '').trim() || null;
+    const R = rpc();
+    if (R && R.usar()) {
+      const r = await R.chamar(c, 'public_cvs_recusar', { p_token: token, p_nome: null, p_motivo: motivo, p_audit: {} });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw R.erro(r.data);
+        return { ...cur, ...r.data.rec };
+      }
+    }
     const audit = { ...(cur.audit || {}), refusedAt: now, refusedReason: motivo };
     const log = (cur.log || []).slice();
     log.push({ status: 'recusado', at: now, meta: { motivo } });

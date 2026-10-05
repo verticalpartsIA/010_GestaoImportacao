@@ -75,8 +75,32 @@
     return `${window.location.origin}/assinar/${encodeURIComponent(token)}`;
   }
 
+  /* Segurança real (#571, Fase 3/Task 11b): leitura/visualização/assinatura/recusa por RPC `public_cvs_*` (só o TOKEN do signatário;
+     o servidor decide se o documento-pai já pode virar ASSINADO). Interruptor: localStorage.vp_public_rpc = 'off' (o mesmo da Proposta);
+     se a RPC falhar, cai no caminho antigo. A RPC devolve também o contrato-pai (`__contratoPai`). Esta store não depende de CVStore. */
+  function usarRpcPublica() { try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; } }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[DocumentoSignatariosStore] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[DocumentoSignatariosStore] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
+  function erroDaRpc(res) {
+    const e = res && res.erro;
+    if (e === 'link_invalido') return new Error('Link inválido ou expirado.');
+    if (e && String(e).indexOf('status_') === 0) return new Error('Este documento não está mais disponível para esta ação (situação atual: ' + String(e).slice(7) + ').');
+    return new Error('Não foi possível concluir a ação. Tente novamente.');
+  }
   async function getByToken(token) {
     const c = sb(); if (!c) return null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cvs_obter', { p_token: token });
+      if (!r.falhou) {
+        if (!r.data || r.data.origem !== 'doc') return null;
+        const sig = r.data.sig; sig.__contratoPai = r.data.contrato || null; return sig;
+      }
+    }
     const { data } = await c.from('documento_signatarios').select('*').eq('token', token).maybeSingle();
     return data || null;
   }
@@ -158,6 +182,10 @@
     const ip = await getPublicIP();
     const ua = navigator.userAgent;
     const device = deviceLabel(ua);
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cvs_visualizado', { p_token: token, p_audit: { viewUa: ua, viewDevice: device, viewIp: ip } });
+      if (!r.falhou && r.data && r.data.ok && r.data.rec) return { ...cur, ...r.data.rec };
+    }
     const now = new Date().toISOString();
     const audit = { ...(cur.audit || {}), viewedAt: now, viewIp: ip, viewUa: ua, viewDevice: device };
     const { error } = await c.from('documento_signatarios')
@@ -181,6 +209,16 @@
       signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data,
       consent: true, hash,
     };
+    if (usarRpcPublica()) {
+      /* O servidor grava a assinatura + o log e reavalia se o documento-pai já pode virar ASSINADO. */
+      const r = await chamarRpcPublica(c, 'public_cvs_assinar', { p_token: token, p_audit: {
+        signUa: ua, signDevice: device, signIp: ip, signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data, hash,
+      } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        return { ...cur, ...r.data.rec };
+      }
+    }
     const log = (cur.log || []).slice();
     log.push({ status: 'assinado', at: now.toISOString(), meta: { ip, ua, hash } });
     const patch = { status: 'assinado', signed_at: now.toISOString(), audit, log, atualizado_em: now.toISOString() };
@@ -207,6 +245,13 @@
     const now = new Date().toISOString();
     const nome = ((info && info.nome) || '').trim() || cur.nome || null;
     const motivo = ((info && info.motivo) || '').trim() || null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cvs_recusar', { p_token: token, p_nome: nome, p_motivo: motivo, p_audit: { refuseUa: ua, refuseDevice: device, refuseIp: ip } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        return { ...cur, ...r.data.rec };
+      }
+    }
     const audit = { ...(cur.audit || {}), refusedAt: now, refusedBy: nome, refusedReason: motivo, refuseIp: ip, refuseUa: ua, refuseDevice: device };
     const log = (cur.log || []).slice();
     log.push({ status: 'recusado', at: now, meta: { nome, motivo, ip } });

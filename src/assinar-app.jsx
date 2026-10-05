@@ -130,7 +130,8 @@ async function resolveSource(token) {
          igual ao do representante) com o status/audit/token PRÓPRIOS
          deste signatário — nunca o contrário, senão o status do
          representante (ou de outro signatário) vazaria pra esta sessão. */
-      const contrato = window.CVStore ? await window.CVStore.getById(s.contrato_venda_id) : null;
+      /* `__contratoPai` vem da RPC public_cvs_obter (Task 11b) — a página não lê mais a tabela de contratos. */
+      const contrato = s.__contratoPai || (window.CVStore ? await window.CVStore.getById(s.contrato_venda_id) : null);
       const rec = {
         ...(contrato || {}),
         id: s.id, token: s.token, status: s.status, audit: s.audit || {},
@@ -157,7 +158,7 @@ async function resolveSource(token) {
       };
       const cfg = STORE_POR_TIPO[s.documento_tipo];
       if (cfg) {
-        const documentoPai = cfg.get ? await cfg.get(s.documento_id) : null;
+        const documentoPai = s.__contratoPai || (cfg.get ? await cfg.get(s.documento_id) : null);
         const rec = {
           ...(documentoPai || {}),
           id: s.id, token: s.token, status: s.status, audit: s.audit || {},

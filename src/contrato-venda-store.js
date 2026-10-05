@@ -250,8 +250,34 @@
     const { data } = await c.from('contratos_venda_equipamentos').select('*').eq('id', id).maybeSingle();
     return data || null;
   }
+  /* Segurança real (#571, Fase 3/Task 11a): a página pública fala com o banco por RPC `public_cv_*` (recebem só o TOKEN; a regra
+     "só vira ASSINADO com o representante + todos os signatários" e o IP/hora da assinatura ficam no servidor). Interruptor de
+     emergência: localStorage.vp_public_rpc = 'off' (o mesmo da Proposta). Se a RPC falhar, cai no caminho antigo (tabelas ainda abertas). */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+  const MSG_RPC = {
+    link_invalido: 'Link inválido ou expirado.', expirada: 'Este contrato expirou.', nome_obrigatorio: 'Informe o seu nome para assinar.',
+  };
+  function erroDaRpc(res) {
+    const e = res && res.erro;
+    if (MSG_RPC[e]) return new Error(MSG_RPC[e]);
+    if (e && String(e).indexOf('status_') === 0) return new Error('Este contrato não está mais disponível para esta ação (situação atual: ' + String(e).slice(7) + ').');
+    return new Error('Não foi possível concluir a ação. Tente novamente.');
+  }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[CVStore] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[CVStore] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
   async function getByToken(token) {
     const c = sb(); if (!c) return null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cv_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
     const { data } = await c.from('contratos_venda_equipamentos').select('*').eq('token', token).maybeSingle();
     return data || null;
   }
@@ -506,6 +532,10 @@
        no mount da página pública (assinar-app.jsx), sem ação do usuário —
        lançar aqui travaria a leitura do contrato por uma falha só de
        auditoria. */
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cv_visualizado', { p_token: token, p_audit: { viewUa: ua, viewDevice: device, viewIp: ip } });
+      if (!r.falhou && r.data && r.data.ok && r.data.rec) return r.data.rec;   // aviso/auditoria já gravados no banco
+    }
     const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
     if (error) console.warn('[CVStore] falha ao registrar visualização (best-effort, não bloqueia o cliente)', error);
     const updated = { ...cur, ...patch };
@@ -557,6 +587,18 @@
     };
     const log = (cur.log || []).slice();
     log.push({ status:'assinado', at: now.toISOString(), meta:{ ip, ua, hash } });
+
+    if (usarRpcPublica()) {
+      /* O servidor conta os signatários que faltam, decide assinado × aguardando_signatarios e carimba hora/IP; aviso e log no banco;
+         D0 e evento rodam pela fila (src/fluxo-pendentes.js → CVStore.processarEfeitoFila). */
+      const r = await chamarRpcPublica(c, 'public_cv_assinar', { p_token: token, p_audit: {
+        signUa: ua, signDevice: device, signIp: ip, signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data, hash,
+      } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        return r.data.rec;
+      }
+    }
 
     const pendentesExtras = window.CVSignatarioStore ? await window.CVSignatarioStore.contarPendentes(cur.id) : 0;
     const pendentesDocSig = window.DocumentoSignatariosStore ? await window.DocumentoSignatariosStore.contarPendentes('contrato_venda', cur.id) : 0;
@@ -648,6 +690,13 @@
     const log = (cur.log || []).slice();
     log.push({ status:'recusado', at: now.toISOString(), meta:{ nome, motivo, ip } });
     const patch = { status:'recusado', log, audit, atualizado_em: now.toISOString() };
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cv_recusar', { p_token: token, p_nome: nome, p_motivo: motivo, p_audit: { refuseUa: ua, refuseDevice: device, refuseIp: ip } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        return r.data.rec;   // aviso/auditoria já gravados no banco
+      }
+    }
     const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
     if (error) throw error;
     const updated = { ...cur, ...patch };
@@ -767,8 +816,34 @@
     await c.from('contratos_venda_equipamentos').delete().eq('id', id);
   }
 
+  /* Efeitos de uma ação pública do Contrato de Venda, executados por um usuário interno via fila `fluxo_pendentes`
+     (src/fluxo-pendentes.js). Roda o MESMO que o navegador do cliente rodava: recálculo do D0 ao assinar e os eventos de fluxo. */
+  async function processarEfeitoFila(tipo, p) {
+    const c = sb();
+    const numeroCotacao = await numeroCotacaoDaProposta(p.proposta_id);
+    const evento = async (chave, atorNome) => {
+      if (!window.EventosFluxo) return;
+      const r = await window.EventosFluxo.registrar({ evento: chave, numeroCotacao, alvoLabel: p.label, alvoId: p.contrato_id, atorNome: atorNome || 'Cliente (link público)' });
+      if (!r) throw new Error('evento ' + chave + ' não registrado');
+    };
+    if (tipo === 'contrato_venda_assinado') {
+      const cur = await getById(p.contrato_id);
+      if (cur) {
+        const fs = _formStateFinalizado(cur, cur.signed_at ? new Date(cur.signed_at) : new Date());
+        const { error } = await c.from('contratos_venda_equipamentos').update({ form_state: fs, atualizado_em: new Date().toISOString() }).eq('id', p.contrato_id);
+        if (error) throw error;
+      }
+      return evento('CONTRATO_VENDA_ASSINADO', p.signerName);
+    }
+    if (tipo === 'contrato_venda_representante') return evento('CONTRATO_VENDA_REPRESENTANTE_ASSINOU', p.signerName);
+    if (tipo === 'contrato_venda_signatario') return evento(p.resposta === 'recusou' ? 'CONTRATO_VENDA_SIGNATARIO_RECUSOU' : 'CONTRATO_VENDA_SIGNATARIO_ASSINOU', p.nome);
+    throw new Error('tipo desconhecido: ' + tipo);
+  }
+
   window.CVStore = {
     STATUS,
+    processarEfeitoFila,
+    rpcPublica: { usar: usarRpcPublica, chamar: chamarRpcPublica, erro: erroDaRpc },
     uuid, shortToken,
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
