@@ -438,6 +438,7 @@ const HELP_TOPICS = {
   "ncm-kanban": "Fila de solicitações NCM por status. Abra um produto para ver a ficha e exportar para o LogComex.",
   juridico: "Contratos e minutas. O contrato de venda nasce da proposta aprovada; contrato do instalador exige homologação.",
   importacao: "Embarques, rastreamento de navios (AIS) e inbox. Vincule o embarque à obra do Dossiê.",
+  inbox: "A caixa de e-mail compartilhada da empresa (suporte@vpsistema.com): nela chegam as respostas de fornecedores e clientes, e dela saem as cotações, propostas e contratos enviados pelo sistema. A faixa “Precisa de você” mostra o que pede ação; a etiqueta amarela é só uma sugestão do sistema (assunto, área e prioridade). Cada e-mail tem um responsável, e Atribuir passa o e-mail para outra pessoa. Vincule o e-mail à cotação para ele entrar no histórico dela. Organize com estrela, marcadores, arquivar, suspender e spam, e pesquise na caixa de cima. O que você vê e faz depende das suas alçadas. Excluir só tira o e-mail da lista do sistema: ele continua na caixa real.",
   financeiro: "Painel de controle de prazos: cada cotação percorre uma sequência de etapas (do Formulário ao Pós-venda); cada etapa nasce sozinha quando a anterior termina, tem um prazo e fecha sozinha quando a ação acontece na tela de origem. Os prazos contam só de segunda a sexta (exceto a espera do cliente e o embarque). Clique numa etapa para abrir o documento real. Só duas ações dependem de uma pessoa: Boleto pago e Dar Aval; Fechar com motivo encerra uma cotação parada, e Exportar fluxo baixa as etapas em planilha. Todo dia útil, às 7h20, um resumo das etapas vencidas chega em Notificações.",
   "rh-homologacao": "Homologação de parceiros instaladores e controle documental (NRs, ASO, PGR…).",
 };
@@ -450,6 +451,7 @@ const TUTORIAIS = {
   decisoes: "central-de-decisoes",
   notificacoes: "notificacoes",
   financeiro: "prazos-e-pendencias",   // a rota interna continua `financeiro`; só o rótulo do menu virou "Prazos & Pendências"
+  inbox: "inbox",
 };
 
 /* Tutorial do MÓDULO (grupo do menu lateral, ex.: "Geral", que aninha várias telas): rótulo do grupo em NAV_GROUPS → pasta em
