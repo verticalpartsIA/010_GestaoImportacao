@@ -181,7 +181,8 @@
     const lote = [];
     (docs || []).forEach(d => (d.files || []).forEach(f => lote.push({ tipo: d.tipo, file: f })));
     if (!lote.length) throw new Error('Anexe o Projeto de Instalação e/ou o ID-TAG.');
-    for (const { file: f } of lote) {
+    for (const { tipo, file: f } of lote) {
+      if (tipo === 'id_tag' && !/\.pdf$/i.test(f.name)) throw new Error(`ID-TAG deve ser um PDF ("${f.name}").`);
       if (!DESENHO_EXT.test(f.name)) throw new Error(`"${f.name}": use PDF, PNG, JPG, DWG ou DXF.`);
       if (f.size > DESENHO_MAX_BYTES) throw new Error(`"${f.name}" passa de 25 MB.`);
     }
