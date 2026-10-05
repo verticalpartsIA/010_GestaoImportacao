@@ -49,6 +49,11 @@ function registrarFontes() {
     family: 'Barlow Condensed',
     fonts: [{ src: barlow + '800-normal.woff', fontWeight: 800 }],
   });
+  /* Assinatura digitada em letra de mão (pedido do usuário, 05/10/2026). */
+  Font.register({
+    family: 'Caveat',
+    fonts: [{ src: 'https://cdn.jsdelivr.net/npm/@fontsource/caveat@5.0.8/files/caveat-latin-700-normal.woff', fontWeight: 700 }],
+  });
   _fontesRegistradas = true;
 }
 
@@ -594,7 +599,9 @@ function BlocoAssinaturasDigitais(S, assinaturas) {
     h(Text, { style: S.subTitle, key: 'dt' }, 'Assinaturas digitais'),
     ...assinaturas.map((a, i) => h(View, { key: 'a' + i, wrap: false, style: { marginBottom: pt(18), paddingLeft: pt(10), borderLeft: '2pt solid ' + NAVY } }, [
       h(Text, { key: 'p', style: { fontSize: pt(12), fontWeight: 700, color: NAVY } }, a.papel || ''),
-      h(Text, { key: 'n', style: { fontSize: pt(15), fontWeight: 700 } }, a.nome || ''),
+      a.imagem
+        ? h(Image, { key: 'n', src: a.imagem, style: { height: pt(56), objectFit: 'contain', alignSelf: 'flex-start', marginVertical: pt(4) } })
+        : h(Text, { key: 'n', style: { fontFamily: 'Caveat', fontWeight: 700, fontSize: pt(30), lineHeight: 1.1 } }, a.nome || ''),
       h(Text, { key: 'd', style: S.assinaturaSpan }, `Assinado em ${fmtDataHora(a.em)} (horário de Brasília) · ${a.dispositivo || 'dispositivo não informado'}`),
       h(Text, { key: 'i', style: S.assinaturaSpan }, `IP: ${a.ip || 'não informado'}`),
       h(Text, { key: 'h', style: { fontSize: pt(9), color: '#777' } }, `Hash: ${a.hash || ''}`),

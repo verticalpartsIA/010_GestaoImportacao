@@ -233,7 +233,7 @@ function SgApp() {
   const [enviandoRecusa, setEnviandoRecusa] = _sgUS(false);
   const [scrolledEnd, setScrolledEnd] = _sgUS(false);
   const [consent, setConsent] = _sgUS(false);
-  const [sigMode, setSigMode] = _sgUS('draw');
+  const [sigMode, setSigMode] = _sgUS('type'); // digitado em letra de mão é o padrão (05/10/2026)
   const [drawData, setDrawData] = _sgUS(null);
   const [typedName, setTypedName] = _sgUS('');
   const viewerRef = _sgUR(null);
@@ -364,7 +364,7 @@ function SgApp() {
           const cId = ehPai ? rv.id : rv.contratoId;
           const cAudit = (ehPai ? rv.audit : rv.contratoAudit) || {};
           const cEm = ehPai ? rv.signed_at : rv.contratoSignedAt;
-          const mapa = (papel, nome, em, au) => ({ papel, nome, em, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash });
+          const mapa = (papel, nome, em, au) => ({ papel, nome, em, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null });
           const lista = [];
           if (cAudit.signedAt || cEm) lista.push(mapa('Representante legal do Comprador', cAudit.signerName || '', cAudit.signedAt || cEm, cAudit));
           if (cId) {
@@ -394,7 +394,7 @@ function SgApp() {
       const nomeCliente = ((dj && dj.cliente && dj.cliente.nome) || '').trim();
       const nome = ['Proposta', r.numero_documento, nomeCliente].filter(Boolean).join(' - ') + '.pdf';
       const au = r.audit || {};
-      const assinaturas = au.signedAt ? [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash }] : [];
+      const assinaturas = au.signedAt ? [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }] : [];
       await window.PropostaReactPdf.baixar(dj, nome, assinaturas);
     } catch (e) {
       console.error('PDF vetorial falhou, caindo pra impressão do navegador:', e);
@@ -563,7 +563,7 @@ function SgApp() {
      digitalmente. REGRA TRAVADA, ver CLAUDE.md. Vazio enquanto não assinado. */
   const auI = (source.kind === 'instalador' && rec.audit) || {};
   const assinaturasInstalador = auI.signedAt
-    ? [{ papel: 'Contratada (instalador)', nome: auI.signerName || '', em: auI.signedAt, dispositivo: auI.signDevice, ip: auI.signIp, hash: auI.hash }]
+    ? [{ papel: 'Contratada (instalador)', nome: auI.signerName || '', em: auI.signedAt, dispositivo: auI.signDevice, ip: auI.signIp, hash: auI.hash, imagem: /^data:image\//.test(auI.signatureData || '') ? auI.signatureData : null }]
     : [];
   const st = STATUS_ALIASES[source.kind];
 

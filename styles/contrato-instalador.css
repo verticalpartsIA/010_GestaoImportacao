@@ -1,3 +1,6 @@
+/* Assinatura em letra de mão — mesma fonte dos PDFs (05/10/2026) */
+@font-face { font-family: 'Caveat'; font-weight: 700; font-style: normal; font-display: swap; src: url('https://cdn.jsdelivr.net/npm/@fontsource/caveat@5.0.8/files/caveat-latin-700-normal.woff2') format('woff2'), url('https://cdn.jsdelivr.net/npm/@fontsource/caveat@5.0.8/files/caveat-latin-700-normal.woff') format('woff'); }
+
 /* ============================================================
    contrato-instalador.css
    Estilos do Contrato Instalador (wizard + dashboard + sign).
@@ -447,7 +450,7 @@
 
 .ci-sig-typed input { width: 100%; padding: 14px; border: 1px solid var(--ci-line); border-radius: 3px; font-size: 14px; }
 .ci-sig-typed .preview { margin-top: 10px; padding: 18px 14px; background: #fff; border: 1px solid var(--ci-line); border-radius: 3px; text-align: center; }
-.ci-sig-typed .preview span { font-family: 'Brush Script MT', 'Lucida Handwriting', cursive; font-size: 28px; color: var(--ci-dark); }
+.ci-sig-typed .preview span { font-family: 'Caveat', 'Brush Script MT', 'Lucida Handwriting', cursive; font-weight: 700; font-size: 34px; color: var(--ci-dark); }
 .ci-sig-typed .preview .ph { color: var(--ci-fg3); font-family: inherit; font-size: 12px; }
 
 .ci-sig-meta { font-size: 11px; color: var(--ci-fg3); margin: 10px 0 0; line-height: 1.5; }
@@ -508,6 +511,7 @@
 .ci-doc-digital { margin: 18pt 0; break-inside: avoid; }
 .ci-doc-digital-item { display: flex; flex-direction: column; margin-top: 10pt; padding-left: 8pt; border-left: 2pt solid #000; break-inside: avoid; }
 .ci-doc-digital-role { font-weight: 700; font-size: 9pt; }
-.ci-doc-digital-name { font-size: 11pt; font-style: italic; }
+.ci-doc-digital-name { font-family: 'Caveat', 'Segoe Script', 'Brush Script MT', cursive; font-weight: 700; font-size: 20pt; line-height: 1.1; }
+.ci-doc-digital-img { height: 36pt; max-width: 220pt; object-fit: contain; align-self: flex-start; margin: 2pt 0; }
 .ci-doc-digital-meta { font-size: 8pt; }
 .ci-doc-digital-hash { font-size: 6.5pt; word-break: break-all; }

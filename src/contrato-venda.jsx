@@ -1350,7 +1350,7 @@ async function cvMontarAssinaturas(rec) {
   try {
     if (!rec || !rec.id) return [];
     const au = rec.audit || {};
-    const mapa = (papel, nome, em, a) => ({ papel, nome, em, dispositivo: a.signDevice, ip: a.signIp, hash: a.hash });
+    const mapa = (papel, nome, em, a) => ({ papel, nome, em, dispositivo: a.signDevice, ip: a.signIp, hash: a.hash, imagem: /^data:image\//.test(a.signatureData || '') ? a.signatureData : null });
     const lista = [];
     if (au.signedAt || rec.signed_at) lista.push(mapa('Representante legal do Comprador', au.signerName || '', au.signedAt || rec.signed_at, au));
     const [extras, genericos] = await Promise.all([

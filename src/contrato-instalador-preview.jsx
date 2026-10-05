@@ -105,7 +105,9 @@ function CIContractPreview({ doc, highlightConditional, assinaturas }) {
           {assinaturas.map((a, i) => (
             <div className="ci-doc-digital-item" key={i}>
               <span className="ci-doc-digital-role">{a.papel}</span>
-              <span className="ci-doc-digital-name">{a.nome}</span>
+              {a.imagem
+                ? <img className="ci-doc-digital-img" src={a.imagem} alt={'Assinatura de ' + a.nome} />
+                : <span className="ci-doc-digital-name">{a.nome}</span>}
               <span className="ci-doc-digital-meta">Assinado em {CI_fmtDataHora(a.em)} (horário de Brasília) · {a.dispositivo || 'dispositivo não informado'}</span>
               <span className="ci-doc-digital-meta">IP: {a.ip || 'não informado'}</span>
               <span className="ci-doc-digital-hash">Hash: {a.hash || ''}</span>
