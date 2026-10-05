@@ -697,7 +697,7 @@ function AlmoxarifadoEstoque() {
     { id: 'semcont', label: 'Sem contagem', fn: (l) => l.fisico == null },
     { id: 'abaixo', label: 'Abaixo do mínimo', fn: abaixoMin },
     { id: 'reserv', label: 'Com reservado', fn: (l) => (l.reservado || 0) > 0 },
-    ...(podeVerCusto ? [{ id: 'semcusto', label: 'Sem custo', fn: (l) => !(l.custo > 0) }] : []),
+    ...(podeVerCusto ? [{ id: 'semcusto', label: 'Sem custo', dica: 'Inclui os itens montados (o custo deles sai da estrutura). A aba Custos lista só os componentes.', fn: (l) => !(l.custo > 0) }] : []),
     { id: 'semend', label: 'Sem endereço', fn: (l) => l.faltas.some((x) => x.id === 'semend') },
     { id: 'semlead', label: 'Sem lead time', fn: (l) => l.faltas.some((x) => x.id === 'semlead') },
     { id: 'semvinc', label: 'Sem vínculo no Omie', fn: (l) => l.faltas.some((x) => x.id === 'semvinc') },
@@ -753,7 +753,7 @@ function AlmoxarifadoEstoque() {
       </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         {FILTROS.filter((f) => !['semend', 'semlead', 'semvinc'].includes(f.id) || contagemPor[f.id] > 0 || filtro === f.id).map((f) => (
-          <Button key={f.id} size="sm" variant={filtro === f.id ? 'primary' : 'ghost'} onClick={() => setFiltro(f.id)}>
+          <Button key={f.id} size="sm" variant={filtro === f.id ? 'primary' : 'ghost'} title={f.dica} onClick={() => setFiltro(f.id)}>
             {f.label} <span style={{ opacity: 0.7 }}>({contagemPor[f.id]})</span>
           </Button>
         ))}
@@ -895,15 +895,18 @@ function AlmoxarifadoCustos() {
     const [pr, es, it] = await Promise.all([
       sb.from('pcp_produtos').select('codigo, descricao, unidade, preco_custo, custo_manual, custo_manual_obs, custo_manual_por, custo_manual_em').eq('ativo', true).order('codigo').limit(5000),
       sb.from('pcp_estrutura').select('codigo_pai, codigo_filho').limit(5000),
-      sb.from('pcp_pedido_itens').select('codigo').eq('item_pcp', true).limit(20000),
+      sb.from('pcp_pedido_itens').select('codigo, valor_total').eq('item_pcp', true).limit(20000),
     ]);
     const err = pr.error || es.error || it.error;
     if (err) { setErro(err.message); return; }
     const filhos = {}; (es.data || []).forEach(l => { (filhos[l.codigo_pai] = filhos[l.codigo_pai] || []).push(l); });
-    const vendidos = Array.from(new Set((it.data || []).map(x => x.codigo)));
+    const receitaPorRaiz = {};                                   // produto vendido -> R$ vendido (soma dos pedidos)
+    (it.data || []).forEach(x => { receitaPorRaiz[x.codigo] = (receitaPorRaiz[x.codigo] || 0) + (Number(x.valor_total) || 0); });
+    const vendidos = Object.keys(receitaPorRaiz);
     const usadoEm = {};                                          // folha -> produtos vendidos que dependem dela
     vendidos.forEach(raiz => { rpFolhasOnde(raiz, filhos, () => true).forEach(f => { (usadoEm[f] = usadoEm[f] || new Set()).add(raiz); }); });
-    setErro(null); setDados({ produtos: pr.data || [], usadoEm, temFilhos: new Set(Object.keys(filhos)) });
+    const impacto = window.PcpCusto.impacto(usadoEm, receitaPorRaiz);   // folha -> { receita, pct, produtos }
+    setErro(null); setDados({ produtos: pr.data || [], usadoEm, impacto, temFilhos: new Set(Object.keys(filhos)) });
   }, [sb]);
   React.useEffect(() => { if (pVer) carregar(); }, [pVer, carregar]);
 
@@ -925,14 +928,21 @@ function AlmoxarifadoCustos() {
   else lista = lista.filter(p => semOmie(p) || Number(p.custo_manual) > 0);
   if (soVendidos && filtro !== 'manuais') lista = lista.filter(p => usado(p).length);
   if (q) lista = lista.filter(p => (p.codigo + ' ' + (p.descricao || '')).toLowerCase().includes(q));
-  lista = lista.sort((a, b) => usado(b).length - usado(a).length || a.codigo.localeCompare(b.codigo)).slice(0, 300);
+  // Ordem: quem tem MAIS receita dependendo dele vem primeiro (é onde o lucro está mais incerto); empate: mais produtos, depois código.
+  const imp = (p) => dados.impacto[p.codigo] || { receita: 0, pct: 0, produtos: 0 };
+  lista = lista.sort((a, b) => imp(b).receita - imp(a).receita || usado(b).length - usado(a).length || a.codigo.localeCompare(b.codigo));
+  const totalFiltrado = lista.length;
+  lista = lista.slice(0, 300);
+  const filtroNome = { pendentes: 'Pendentes', manuais: 'Com custo manual', todos: 'Todos sem custo no Omie' }[filtro];
+  const filtrosAtivos = [filtroNome, soVendidos && filtro !== 'manuais' ? 'só usados em produtos vendidos' : null, q ? `busca “${busca.trim()}”` : null].filter(Boolean);
+  const padrao = filtro === 'pendentes' && soVendidos && !q;
 
   const ed = (p) => edits[p.codigo] || { valor: p.custo_manual != null ? String(p.custo_manual).replace('.', ',') : '', obs: p.custo_manual_obs || '' };
   const mudou = (p) => { const e = edits[p.codigo]; return !!e && (e.valor !== (p.custo_manual != null ? String(p.custo_manual).replace('.', ',') : '') || e.obs !== (p.custo_manual_obs || '')); };
   const salvar = async (p) => {
-    const e = ed(p), txt = String(e.valor).trim().replace(/\./g, '').replace(',', '.');
-    const v = txt === '' ? null : Number(txt);
-    if (v !== null && !(v > 0)) { window.toast?.('Informe um valor maior que zero (ou deixe vazio para limpar).', 'error'); return; }
+    const e = ed(p), lido = window.PcpCusto.parseValor(e.valor);
+    if (lido.erro) { window.toast?.(lido.erro + ' (ou deixe vazio para limpar)', 'error'); return; }
+    const v = lido.vazio ? null : lido.valor;
     setSalvando(p.codigo);
     const quem = (window.__VP_USER && window.__VP_USER.email) || null;
     const { data, error } = await sb.from('pcp_produtos').update({
@@ -950,21 +960,26 @@ function AlmoxarifadoCustos() {
   return (
     <div>
       <div className="grid-3" style={{ marginBottom: 16 }}>
-        <KPI label="Sem custo, usados em produtos vendidos" value={pendUsados.length} sub="travam o lucro real" delta="—" deltaDir="up" icon="alert"/>
-        <KPI label="Sem custo no total" value={pendentes.length} sub="componentes sem custo no Omie nem manual" delta="—" deltaDir="up" icon="package"/>
+        <KPI label="Componentes sem custo, em produtos vendidos" value={pendUsados.length} sub="travam o lucro real dos relatórios" delta="—" deltaDir="up" icon="alert"/>
+        <KPI label="Componentes sem custo (total)" value={pendentes.length} sub="só componentes; os itens montados da aba Estoque ficam de fora (custo sai da estrutura)" delta="—" deltaDir="up" icon="package"/>
         <KPI label="Com custo manual" value={comManual.length} sub="estimativas lançadas no PCP" delta="—" deltaDir="up" icon="check"/>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <Button variant={filtro === 'pendentes' ? 'primary' : 'ghost'} onClick={() => setFiltro('pendentes')}>Pendentes</Button>
         <Button variant={filtro === 'manuais' ? 'primary' : 'ghost'} onClick={() => setFiltro('manuais')}>Com custo manual</Button>
-        <Button variant={filtro === 'todos' ? 'primary' : 'ghost'} onClick={() => setFiltro('todos')}>Sem custo no Omie (todos)</Button>
+        <Button variant={filtro === 'todos' ? 'primary' : 'ghost'} onClick={() => setFiltro('todos')} title="Pendentes + os que já têm custo manual">Todos sem custo no Omie</Button>
         <label style={{ fontSize: 12, color: 'var(--fg3)' }}><input type="checkbox" checked={soVendidos} onChange={e => setSoVendidos(e.target.checked)}/> só os usados em produtos já vendidos</label>
         <input className="input" placeholder="Buscar código ou descrição" value={busca} onChange={e => setBusca(e.target.value)} style={{ minWidth: 240 }}/>
       </div>
-      <Card title="Custos sem cadastro no Omie" sub={`${lista.length} item(ns)${pEditar ? '' : ' · somente leitura (sem a alçada de custo manual)'}`}>
+      <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 8, display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <span>Mostrando: <b style={{ fontWeight: 500, color: 'var(--fg2)' }}>{filtrosAtivos.join(' · ')}</b></span>
+        {!padrao && <Button size="sm" variant="ghost" onClick={() => { setFiltro('pendentes'); setSoVendidos(true); setBusca(''); }}>Voltar ao padrão</Button>}
+        {totalFiltrado > 300 && <span style={{ color: 'var(--vp-danger)' }}>Mostrando só os 300 primeiros de {totalFiltrado}: refine a busca.</span>}
+      </div>
+      <Card title="Custos sem cadastro no Omie" sub={`${lista.length}${totalFiltrado > lista.length ? ' de ' + totalFiltrado : ''} item(ns), do maior para o menor valor de receita em jogo${pEditar ? '' : ' · somente leitura (sem a alçada de custo manual)'}`}>
         <div className="table-wrap" style={{ border: 0, overflowX: 'auto' }}>
           <table className="t pcp-grid">
-            <thead><tr><th>Código</th><th>Descrição</th><th>Usado em</th><th className="text-right">Custo Omie</th><th className="text-right">Custo manual (R$)</th><th>Observação / fonte</th><th></th></tr></thead>
+            <thead><tr><th>Código</th><th>Descrição</th><th>Usado em</th><th className="text-right" title="Receita dos pedidos do PCP que dependem deste componente (soma dos produtos vendidos que o contêm). Quanto maior, mais incerto fica o lucro sem este custo.">Receita em jogo</th><th className="text-right">Custo Omie</th><th className="text-right">Custo manual (R$)</th><th>Observação / fonte</th><th></th></tr></thead>
             <tbody>
               {lista.map(p => {
                 const e = ed(p), omie = !semOmie(p);
@@ -973,19 +988,28 @@ function AlmoxarifadoCustos() {
                     <td><b style={{ fontWeight: 500 }}>{p.codigo}</b></td>
                     <td style={{ minWidth: 220 }}>{p.descricao}<div style={{ fontSize: 10, color: 'var(--fg3)' }}>{p.unidade || ''}{p.custo_manual_por ? ` · manual por ${p.custo_manual_por} em ${new Date(p.custo_manual_em).toLocaleDateString('pt-BR')}` : ''}</div></td>
                     <td style={{ fontSize: 12 }}>{usado(p).length ? usado(p).join(', ') : <span style={{ color: 'var(--fg3)' }}>nenhum vendido</span>}</td>
+                    <td className="text-right" style={{ whiteSpace: 'nowrap' }}>{imp(p).receita > 0
+                      ? <>{fmtBRL(imp(p).receita)}<div style={{ fontSize: 10, color: 'var(--fg3)' }}>{(imp(p).pct * 100).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}% da receita do PCP</div></>
+                      : <span style={{ color: 'var(--fg3)' }}>—</span>}</td>
                     <td className="text-right">{omie ? almFmt(p.preco_custo, 2) : <span style={{ color: 'var(--vp-yellow)' }}>sem custo</span>}</td>
                     <td className="text-right">
                       <input className="input" style={{ width: 110, textAlign: 'right' }} disabled={!pEditar || omie} placeholder="0,00" value={e.valor}
                         onChange={ev => setEdits({ ...edits, [p.codigo]: { ...e, valor: ev.target.value } })}/>
                       {omie && <div style={{ fontSize: 10, color: 'var(--fg3)' }}>o custo do Omie vale</div>}
+                      {!omie && mudou(p) && (() => {
+                        const l = window.PcpCusto.parseValor(e.valor);
+                        if (l.vazio) return <div style={{ fontSize: 10, color: 'var(--fg3)' }}>será removido</div>;
+                        if (l.erro) return <div style={{ fontSize: 10, color: 'var(--vp-danger)' }}>{l.erro}</div>;
+                        return <div style={{ fontSize: 10, color: l.aviso ? 'var(--vp-warning-ink, #8a6d00)' : 'var(--fg3)' }} title={l.aviso || ''}>= {fmtBRL(l.valor)}{l.aviso ? ' ⚠' : ''}</div>;
+                      })()}
                     </td>
                     <td><input className="input" style={{ width: 200 }} disabled={!pEditar || omie} placeholder="ex.: orçamento do fornecedor X" value={e.obs}
                       onChange={ev => setEdits({ ...edits, [p.codigo]: { ...e, obs: ev.target.value } })}/></td>
-                    <td>{pEditar && !omie && <Button variant="primary" disabled={!mudou(p) || salvando === p.codigo} onClick={() => salvar(p)}>{salvando === p.codigo ? 'Salvando…' : 'Salvar'}</Button>}</td>
+                    <td>{pEditar && !omie && <Button variant="primary" disabled={!mudou(p) || salvando === p.codigo || !!window.PcpCusto.parseValor(e.valor).erro} onClick={() => salvar(p)}>{salvando === p.codigo ? 'Salvando…' : 'Salvar'}</Button>}</td>
                   </tr>
                 );
               })}
-              {lista.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>{filtro === 'pendentes' ? 'Nenhum componente pendente com os filtros atuais.' : 'Nada para mostrar com os filtros atuais.'}</td></tr>}
+              {lista.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>{filtro === 'pendentes' ? 'Nenhum componente pendente com os filtros atuais.' : 'Nada para mostrar com os filtros atuais.'}</td></tr>}
             </tbody>
           </table>
         </div>
