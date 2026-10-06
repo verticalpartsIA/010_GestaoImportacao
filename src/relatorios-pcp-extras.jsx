@@ -89,6 +89,19 @@ function RPCobertura({ sb, onAtualizado }) {
   );
 }
 
+/* Estado vazio guiado: explica por que a tela está vazia e leva ao lugar onde ela passa a se preencher. */
+function RPVazioGuiado({ titulo, passos, acoes }) {
+  return (
+    <div style={{ padding: 12, marginBottom: 12, border: '1px dashed var(--border)', borderRadius: 8, fontSize: 13 }}>
+      <b style={{ fontWeight: 500 }}>{titulo}</b>
+      <ol style={{ margin: '6px 0 8px 18px', padding: 0, color: 'var(--fg3)' }}>{passos.map((p, i) => <li key={i}>{p}</li>)}</ol>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {acoes.map(a => <button key={a.rot} className="btn btn--sm" onClick={() => window.pcpIrParaUrl && window.pcpIrParaUrl(a.path)}>{a.rot}</button>)}
+      </div>
+    </div>
+  );
+}
+
 /* ---------------- Estoque (situação pela Reposição) ---------------- */
 const RP_EST_ST = {
   critico: { l: 'Crítico', ordem: 0, cor: 'color-mix(in srgb, var(--vp-danger, #c0392b) 25%, transparent)' },
@@ -203,4 +216,4 @@ function RPEstoque({ ctx }) {
   );
 }
 
-Object.assign(window, { RPCobertura, RPEstoque, rpCarregarPeriodo, rpCsv, rpBaixar, rpLerTudo });
+Object.assign(window, { RPVazioGuiado, RPCobertura, RPEstoque, rpCarregarPeriodo, rpCsv, rpBaixar, rpLerTudo });

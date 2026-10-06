@@ -81,6 +81,9 @@ function RPPainelPerdas({ ctx, ano, ordens }) {
 
   return (
     <div style={{ marginBottom: 20 }}>
+      {ordens.length === 0 && <RPVazioGuiado titulo={`Nenhuma OP concluída em ${ano}: não há perda para medir`}
+        passos={['Conclua as OPs em PCP › Ordens de Produção, informando a quantidade produzida e a perdida.', 'Em OP com perda, preencha a causa e a ação corretiva: elas alimentam os quadros abaixo.']}
+        acoes={[{ rot: 'Abrir Ordens de Produção', path: '/logistica/pcp' }]}/>}
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
         {card(`Perda em ${ano}`, pctAno == null ? '—' : rpPct(pctAno), `${rpFmt(totPerd, 0)} un. de ${rpFmt(totBoa + totPerd, 0)} produzidas`, corPct(pctAno))}
         {card(`Perda em ${PP_MESES[mesAtual]}`, pctMes == null ? '—' : rpPct(pctMes), delta == null ? 'sem mês anterior para comparar' : `${delta > 0 ? '▲' : delta < 0 ? '▼' : '='} ${rpFmt(Math.abs(delta), 1)} p.p. vs. mês anterior`, corPct(pctMes))}

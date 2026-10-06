@@ -12,7 +12,7 @@ function nfData(d) { return d ? String(d).slice(0, 10).split('-').reverse().join
 function nfMoeda(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 function nfHoje() { const d = new Date(); return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`; }
 function nfUsuario() { return (window.__VP_USER && window.__VP_USER.email) || null; }
-const NF_ETAPA = { '00': 'Proposta', '10': 'Pedido de Venda', '20': 'Separar estoque / produção', '50': 'Faturar', '60': 'Faturado', '70': 'Entrega', '80': 'Etapa 80' };
+const NF_ETAPA = window.PCP_ETAPAS_OMIE;      // tabela única das telas do PCP (src/pcp-etapas-omie.js)
 const NF_CONF = { pendente: 'Conferência pendente', conferida: 'Conferida', regularizar: 'Entregue — regularizar NF' };
 const NF_SLA_ROT = { op: 'OP', producao: 'Produção', nf: 'NF', despacho: 'Despacho' };
 const NF_SLA_COR = {
