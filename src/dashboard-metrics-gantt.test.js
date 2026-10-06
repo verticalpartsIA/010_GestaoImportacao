@@ -89,6 +89,19 @@ test('projetosDaEsteira — INSTALACAO_METADE_EXECUCAO mapeia pra fase "Instala�
   assert.equal(r[0].current_phase, 'Instalação');
 });
 
+// issue #706 — nó novo em gatilhos-engine.js (IMPORTACAO_A_INICIAR), mesmo
+// cuidado do achado acima: sem entrada em FASE_POR_NODE, cairia no fallback
+// 'Projeto' se fosse o gatilho aberto mais antigo de uma cotação.
+test('projetosDaEsteira — IMPORTACAO_A_INICIAR mapeia pra fase real, não cai no fallback "Projeto"', () => {
+  const gatilhos = [
+    { numero_cotacao: 21, evento_key: 'COMPRA_LIBERADA', nascido_em: '2026-09-01T00:00:00Z', concluido_em: '2026-09-02T00:00:00Z' },
+    { numero_cotacao: 21, evento_key: 'IMPORTACAO_A_INICIAR', nascido_em: '2026-09-02T00:00:01Z', concluido_em: null },
+  ];
+  const r = M.projetosDaEsteira({ gatilhos, formularios: [], clientesPorId: {} });
+  assert.equal(r[0].current_phase, M.FASE_POR_NODE.IMPORTACAO_A_INICIAR);
+  assert.notEqual(r[0].current_phase, 'Projeto');
+});
+
 test('projetosDaEsteira — ignora linhas de lembrete (LEMBRETE__*)', () => {
   const gatilhos = [
     { numero_cotacao: 7, evento_key: 'LEMBRETE__PRECIFICACAO', nascido_em: '2026-08-01T00:00:00Z', concluido_em: null },

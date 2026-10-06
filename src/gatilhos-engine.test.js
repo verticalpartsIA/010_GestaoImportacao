@@ -46,3 +46,18 @@ test('etapas opcionais — score e aval de venda não contam como pendência', (
   assert.equal(E().nodeByKey('FIN_AVAL_VENDA').opcional, true);
   assert.equal(E().nodeByKey('AVAL_PAGAMENTO').opcional, undefined);
 });
+
+/* issue #706 — handoff automático da compra liberada pra Gestão de
+   Importação: nasce já em "compra liberada" (decidirComprar, evento
+   COMPRA_FORNECEDOR_INICIADA), ANTES de confirmar com o fornecedor
+   (aprovar, COMPRA_FORNECEDOR_CONFIRMADA) — decisão explícita do
+   usuário. Fecha sozinho quando a P.I. real é registrada (PI_CRIADA,
+   já emitido por pi-store.js) — sem inventar P.I. nenhuma. */
+test('IMPORTACAO_A_INICIAR — nasce na compra liberada, fecha na P.I. real, predecessor é COMPRA_LIBERADA', () => {
+  const node = E().nodeByKey('IMPORTACAO_A_INICIAR');
+  assert.ok(node, 'nó IMPORTACAO_A_INICIAR não está no catálogo NODES');
+  assert.equal(node.nasce, 'COMPRA_FORNECEDOR_INICIADA');
+  assert.equal(node.fecha, 'PI_CRIADA');
+  assert.equal(node.fechamentoTipo, 'automatico');
+  assert.equal((node.predecessores[0] || {}).key, 'COMPRA_LIBERADA');
+});

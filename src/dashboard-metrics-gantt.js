@@ -38,7 +38,7 @@
 
     PROJETO_CRIADO: 'Fabricação', PROJETO_APROVADO: 'Fabricação', FICHA_CRIADA: 'Fabricação',
     PI_CRIADA: 'Fabricação', PAGAMENTO_1_SOLICITADO: 'Fabricação', PAGAMENTO_1_CONFIRMADO: 'Fabricação',
-    NEGOCIACAO_COMPRA: 'Fabricação',
+    NEGOCIACAO_COMPRA: 'Fabricação', IMPORTACAO_A_INICIAR: 'Fabricação',
 
     CARGO_READY: 'Importação', RFQ_FRETE: 'Importação', AGENTE_DEFINIDO: 'Importação',
     EMBARQUE_CRIADO: 'Importação', EMBARQUE_ATUALIZADO: 'Importação',

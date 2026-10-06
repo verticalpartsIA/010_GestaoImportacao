@@ -220,6 +220,19 @@
       fechamentoTipo: 'automatico' /* botão "Decidir Comprar" já existente em Cotação a Fornecedor */,
       rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
 
+    /* issue #706 — handoff automático da compra liberada pra Gestão de
+       Importação. Nasce já na COMPRA LIBERADA (decidirComprar), ANTES de
+       confirmar com o fornecedor (aprovar) — decisão explícita do usuário,
+       pra não deixar a cotação "sumir" sem pendência visível no intervalo
+       entre decidir comprar e a P.I. real chegar. Fecha sozinho quando a
+       P.I. real é registrada (PI_CRIADA, já emitido por pi-store.js) —
+       nunca inventa P.I. nenhuma. Sem SLA nesta 1ª rodada (sem número de
+       negócio definido ainda); alerta proativo fica pra entrega futura. */
+    { key: 'IMPORTACAO_A_INICIAR', label: 'Processo de Importação a iniciar (aguardando P.I.)',
+      predecessores: [{ key: 'COMPRA_LIBERADA', rel: 'FS' }],
+      nasce: 'COMPRA_FORNECEDOR_INICIADA', fecha: 'PI_CRIADA',
+      fechamentoTipo: 'automatico', rota: 'pi-importacao' },
+
     { key: 'NEGOCIACAO_COMPRA', label: 'Negociação e Compra do Produto (SLA 7 dias)',
       predecessores: [{ key: 'COMPRA_LIBERADA', rel: 'FS' }],
       nasce: 'COMPRA_FORNECEDOR_INICIADA', fecha: 'COMPRA_FORNECEDOR_CONFIRMADA',
