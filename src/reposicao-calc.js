@@ -23,6 +23,8 @@
 
   // BEGIN CALC — copiado para supabase/functions/alerta-pcp-compras/index.ts; src/alerta-pcp-paridade.test.js confere que seguem idênticos
   const MESES_HISTORICO_CURTO = 3;
+  const JANELA_MEDIA_MESES = 12;
+  const SEM_GIRO_RECENTE_MESES = 6;
   const ehNacional = (codigo) => /n$/.test(String(codigo || ''));        // só "n" minúsculo
 
   const ym = (iso) => String(iso).slice(0, 7);
@@ -57,23 +59,30 @@
     const mesAtual = idx(ym(hoje));
     const inicio = Math.max(idx(ym(cfg.janela_desde)), primeiro === null ? Infinity : idx(primeiro));
     const n = mesAtual - inicio;                                       // meses completos (exclui o mês em curso)
-    if (!(n > 0)) return { ...base, status: 'sem_historico', meses: 0, mediaMensal: 0, consumoDia: 0, sugestao: 0 };
+    if (!(n > 0)) return { ...base, status: 'sem_historico', meses: 0, mediaMensal: 0, consumoDia: 0, sugestao: 0, serie: [], serieInicio: null, ultimoConsumo: null, mesesSemSaida: null };
 
     const serie = [];
     for (let i = inicio; i < mesAtual; i++) serie.push(Math.max(0, porMes[keyDe(i)] || 0));
-    const total = serie.reduce((a, b) => a + b, 0);
-    const media = total / n;
+    // A média é dos ÚLTIMOS 12 meses completos (ou do que existir): consumo de 2 anos atrás não decide a compra de hoje.
+    const janela = serie.slice(-Math.min(JANELA_MEDIA_MESES, n));
+    const media = janela.reduce((a, b) => a + b, 0) / janela.length;
     const ult = serie.slice(-Math.min(6, n));
     const media6 = ult.reduce((a, b) => a + b, 0) / ult.length;
     let tendencia = 'estavel';
     if (n >= 6 && media > 0) { const r = media6 / media; if (r > 1.25) tendencia = 'alta'; else if (r < 0.75) tendencia = 'baixa'; }
+    let ultimoI = -1;
+    serie.forEach((v, i) => { if (v > 0) ultimoI = i; });
+    const mesesSemSaida = ultimoI < 0 ? null : n - 1 - ultimoI;      // 0 = houve saída no último mês completo
 
     const consumoDia = media / 30;
     const r = {
       ...base, meses: n, mediaMensal: media, media6, tendencia, consumoDia, historicoCurto: n < MESES_HISTORICO_CURTO,
-      ultimoMes: serie[serie.length - 1],
+      ultimoMes: serie[serie.length - 1], serie, serieInicio: keyDe(inicio), mesesSemSaida,
+      ultimoConsumo: ultimoI < 0 ? null : keyDe(inicio + ultimoI),
     };
     if (!(consumoDia > 0)) return { ...r, status: 'sem_giro', sugestao: 0 };
+    // Sem saída há 6 meses ou mais: o item parou de girar; não sugere compra mesmo que a média de 12 meses ainda seja > 0.
+    if (mesesSemSaida >= SEM_GIRO_RECENTE_MESES) return { ...r, status: 'sem_giro', semGiroRecente: true, sugestao: 0 };
 
     const critico = consumoDia * prazo;
     const pedido = consumoDia * (prazo + cfg.folga_dias);
