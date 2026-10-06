@@ -12,7 +12,11 @@
    - Pedido faturado com OP-mãe ainda aberta recebe aviso (a NF não prova que a produção acabou).
    - O código de rastreio costuma chegar depois da saída: continua editável enquanto o pedido não for entregue.
    - Desfazer saída/entrega exige motivo e fica no log; só quem tem a alçada de edição da Expedição.
-   - O canhoto continua em link público (bucket "engenharia") — decisão de privacidade ainda em aberto.
+   - O canhoto vai para o bucket PRIVADO "expedicao-comprovantes" (guarda-se o caminho; o link abre por URL assinada de 1 h).
+     Comprovantes antigos (link público do bucket "engenharia") continuam abrindo como antes.
+   - O nº da NF vem do Omie (ListarNF, pela função sync-pcp-pedidos); a transportadora é sugerida pelo Omie e pelas já usadas,
+     e o nome é normalizado (maiúsculas, sem espaço duplo, sem diferença de LTDA/ME) para não virar 5 grafias do mesmo transportador.
+   - Alerta diário (cron pcp-expedicao-alerta-sem-entrega): despachado há 5+ dias úteis sem entrega confirmada.
    ============================================================ */
 
 function expData(d) { return d ? d.split('-').reverse().join('/') : '—'; }
@@ -21,6 +25,14 @@ function expHoje() { return new Date(Date.now() - 3 * 3600 * 1000).toISOString()
 function expUsuario() { return (window.__VP_USER && window.__VP_USER.email) || null; }
 function expEsc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function expDias(de, ate) { return Math.round((Date.parse(ate + 'T00:00:00Z') - Date.parse(de + 'T00:00:00Z')) / 86400000); }
+// "hoje", "ontem", "há N dias" (em vez de "há 0 dia(s)").
+function expQuando(n) { return n <= 0 ? 'hoje' : n === 1 ? 'ontem' : `há ${n} dias`; }
+// Modalidade de frete do Omie (campo "modalidade").
+const EXP_FRETE = { '0': 'Remetente (CIF)', '1': 'Destinatário (FOB)', '2': 'Terceiros', '3': 'Próprio — remetente', '4': 'Próprio — destinatário', '9': 'Sem frete' };
+// Normaliza o nome da transportadora: maiúsculas, espaços únicos e sem sufixo societário, para casar "Braspress" com "BRASPRESS LTDA".
+function expTranspChave(s) { return String(s || '').toUpperCase().replace(/[.,]/g, ' ').replace(/\b(LTDA|ME|EPP|EIRELI|S\/?A|SA)\b/g, ' ').replace(/\s+/g, ' ').trim(); }
+function expTranspLimpa(s) { return String(s || '').replace(/\s+/g, ' ').trim().toUpperCase(); }
+const expRetiraTxt = (s) => /RETIRA/i.test(String(s || ''));
 // Código de objeto dos Correios (AA123456789BR) → link de rastreamento; outros códigos só ganham o botão copiar.
 function expLinkRastreio(codigo) {
   const c = String(codigo || '').trim().toUpperCase();
@@ -43,7 +55,7 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
   const carregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase indisponível.'); return; }
     const [p, o, e, h] = await Promise.all([
-      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_endereco, cliente_telefone, data_pedido, data_previsao, faturado, data_faturamento, nf_autorizada, cancelado, volumes, peso_bruto, valor_total').eq('cancelado', false).order('data_previsao', { ascending: true }).limit(500),
+      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_endereco, cliente_telefone, data_pedido, data_previsao, faturado, data_faturamento, nf_autorizada, numero_nf, transportadora_nome, modalidade_frete, cancelado, volumes, peso_bruto, valor_total').eq('cancelado', false).order('data_previsao', { ascending: true }).limit(500),
       sb.from('pcp_ordens').select('id, numero, pedido_codigo, status').eq('frente', 'pedido').not('pedido_codigo', 'is', null),
       sb.from('pcp_expedicoes').select('*').limit(1000),
       sb.from('pcp_pedido_acompanhamento').select('numero_pedido').eq('historico', true).limit(5000),
@@ -94,8 +106,9 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
   const abrir = async (p) => {
     setAberto(p.codigo_pedido);
     const x = dados.exps[p.codigo_pedido] || {};
+    const doOmie = !x.status && p.transportadora_nome ? p.transportadora_nome : '';
     setForm({
-      retirada: !!x.retirada, transportadora: x.transportadora || '', volumes: x.volumes ?? p.volumes ?? '', data_saida: x.data_saida || expHoje(),
+      retirada: !!x.retirada || (!x.status && expRetiraTxt(doOmie)), transportadora: x.transportadora || (expRetiraTxt(doOmie) ? '' : expTranspLimpa(doOmie)), volumes: x.volumes ?? p.volumes ?? '', data_saida: x.data_saida || expHoje(),
       rastreio: x.rastreio || '', data_entrega: x.data_entrega || expHoje(), comprovante: x.comprovante || '', observacao: x.observacao || '',
     });
     const { data } = await sb.from('pcp_pedido_itens').select('seq, codigo, descricao, unidade, quantidade, item_pcp').eq('codigo_pedido', p.codigo_pedido).order('seq');
@@ -106,8 +119,10 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
     if (status === 'despachado' && !form.retirada && !String(form.transportadora).trim()) { window.toast?.('Informe a transportadora (ou marque retirada pelo cliente).'); return; }
     if (status === 'entregue' && !form.data_entrega) { window.toast?.('Informe a data da entrega.'); return; }
     setBusy(true);
+    const digitada = expTranspLimpa(form.transportadora);
+    const conhecida = transps.find(n => expTranspChave(n) === expTranspChave(digitada));      // mantém a grafia já usada
     const linha = {
-      pedido_codigo: p.codigo_pedido, status, retirada: !!form.retirada, transportadora: form.retirada ? null : (String(form.transportadora).trim() || null),
+      pedido_codigo: p.codigo_pedido, status, retirada: !!form.retirada, transportadora: form.retirada ? null : ((conhecida || digitada) || null),
       volumes: form.volumes === '' ? null : Number(form.volumes), data_saida: form.data_saida || null, rastreio: String(form.rastreio).trim() || null,
       data_entrega: status === 'entregue' ? form.data_entrega : null, comprovante: String(form.comprovante).trim() || null,
       observacao: String(form.observacao).trim() || null, atualizado_por: expUsuario(),
@@ -155,14 +170,21 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
     setBusy(true);
     try {
       const nome = arquivo.name.replace(/[^\w.\-]+/g, '_');
-      const caminho = `expedicao/${p.codigo_pedido}/${Date.now()}_${nome}`;
-      const up = await sb.storage.from('engenharia').upload(caminho, arquivo, { upsert: false });
+      const caminho = `${p.codigo_pedido}/${Date.now()}_${nome}`;
+      const up = await sb.storage.from('expedicao-comprovantes').upload(caminho, arquivo, { upsert: false });
       if (up.error) throw up.error;
-      const { data } = sb.storage.from('engenharia').getPublicUrl(caminho);
-      setForm(f => ({ ...f, comprovante: data.publicUrl }));
+      setForm(f => ({ ...f, comprovante: caminho }));
       window.toast?.('Comprovante anexado. Confirme a entrega para salvar.');
     } catch (e) { window.toast?.('Não foi possível anexar: ' + (e.message || e)); }
     setBusy(false);
+  };
+  // Comprovante novo = caminho no bucket privado (URL assinada de 1 h); o antigo é link público e abre direto.
+  const abrirComprovante = async (c) => {
+    if (!c) return;
+    if (/^https?:/i.test(c)) { window.open(c, '_blank', 'noopener'); return; }
+    const { data, error } = await sb.storage.from('expedicao-comprovantes').createSignedUrl(c, 3600);
+    if (error || !data?.signedUrl) { window.toast?.('Não foi possível abrir o comprovante.'); return; }
+    window.open(data.signedUrl, '_blank', 'noopener');
   };
   const copiar = async (texto) => {
     try { await navigator.clipboard.writeText(texto); window.toast?.('Código copiado.'); }
@@ -177,9 +199,10 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
       table{border-collapse:collapse;width:100%;margin:10px 0}th,td{border:1px solid #bbb;padding:5px 8px;text-align:left}th{background:#eee;font-weight:500;font-size:11px;text-transform:uppercase}
       .g{display:grid;grid-template-columns:1fr 1fr;gap:4px 18px;margin:10px 0}b{font-weight:500}.ass{margin-top:40px;display:flex;gap:40px}.ass div{flex:1;border-top:1px solid #111;padding-top:4px;font-size:11px}</style></head><body>
       <h1>ROMANEIO DE EXPEDIÇÃO — PEDIDO ${expEsc(p.numero_pedido)}</h1>
-      <div class="g"><div><b>Cliente:</b> ${expEsc(p.cliente_nome)}</div><div><b>NF emitida em:</b> ${expData(p.data_faturamento)}</div>
+      <div class="g"><div><b>Cliente:</b> ${expEsc(p.cliente_nome)}</div><div><b>NF:</b> ${expEsc(p.numero_nf || '—')} · emitida em ${expData(p.data_faturamento)}</div>
       <div><b>Endereço:</b> ${expEsc(p.cliente_endereco)}</div><div><b>Telefone:</b> ${expEsc(p.cliente_telefone)}</div>
-      <div><b>Entrega:</b> ${form.retirada ? 'Retirada pelo cliente' : 'Transportadora ' + expEsc(form.transportadora || '________')}</div><div><b>Volumes:</b> ${expEsc(form.volumes || '____')}</div></div>
+      <div><b>Entrega:</b> ${form.retirada ? 'Retirada pelo cliente' : 'Transportadora ' + expEsc(form.transportadora || '________')}</div><div><b>Volumes:</b> ${expEsc(form.volumes || '____')}</div>
+      <div><b>Peso bruto:</b> ${p.peso_bruto ? expEsc(expFmt(p.peso_bruto, 2)) + ' kg' : '____'}</div><div><b>Frete (Omie):</b> ${expEsc(EXP_FRETE[p.modalidade_frete] || '—')}</div></div>
       <table><tr><th></th><th>Código</th><th>Descrição</th><th>Quantidade</th></tr>${linhas}</table>
       <div class="ass"><div>Conferido por (expedição)</div><div>Recebido por (transportador/cliente)</div></div>
       <script>window.onload=function(){window.print()}<\/script></body></html>`);
@@ -206,12 +229,14 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
       {sub ? <div style={{ fontSize: 11, color: 'var(--vp-danger)' }}>{sub}</div> : null}
     </button>
   );
+  const transps = Array.from(new Set([...Object.values(dados.exps).map(x => x.transportadora), ...dados.pedidos.map(p => p.transportadora_nome)]
+    .filter(n => n && !expRetiraTxt(n)).map(expTranspLimpa))).sort();
   const exportar = () => {
     const cel = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const rows = [['Pedido', 'Cliente', 'Situação', 'NF emitida em', 'Dias desde a NF', 'Prazo de despacho', 'Previsão', 'Transportadora / retirada', 'Volumes', 'Rastreio', 'Saída', 'Entrega'],
+    const rows = [['Pedido', 'NF', 'Cliente', 'Situação', 'NF emitida em', 'Dias desde a NF', 'Prazo de despacho', 'Previsão', 'Transportadora / retirada', 'Volumes', 'Peso bruto (kg)', 'Frete (Omie)', 'Rastreio', 'Saída', 'Entrega'],
       ...lista.map(p => { const x = dados.exps[p.codigo_pedido] || {}; const l = limiteDespacho(p);
-        return [p.numero_pedido, p.cliente_nome || '', rotulo[situacao(p)] + (atrasado(p) ? ' (atrasado)' : ''), expData(p.data_faturamento), p.data_faturamento ? expDias(p.data_faturamento, hoje) : '', l ? expData(l) : '',
-          expData(p.data_previsao), x.retirada ? 'retirada pelo cliente' : (x.transportadora || ''), x.volumes ?? p.volumes ?? '', x.rastreio || '', expData(x.data_saida), expData(x.data_entrega)]; })];
+        return [p.numero_pedido, p.numero_nf || '', p.cliente_nome || '', rotulo[situacao(p)] + (atrasado(p) ? ' (atrasado)' : ''), expData(p.data_faturamento), p.data_faturamento ? expDias(p.data_faturamento, hoje) : '', l ? expData(l) : '',
+          expData(p.data_previsao), x.retirada ? 'retirada pelo cliente' : (x.transportadora || ''), x.volumes ?? p.volumes ?? '', p.peso_bruto ?? '', EXP_FRETE[p.modalidade_frete] || '', x.rastreio || '', expData(x.data_saida), expData(x.data_entrega)]; })];
     const url = URL.createObjectURL(new Blob(['﻿' + rows.map(r => r.map(cel).join(';')).join('\r\n')], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = `expedicao-${hoje}.csv`; document.body.appendChild(a); a.click(); a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 2000);
@@ -255,9 +280,9 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
                   <tr>
                     <td><b style={{ fontWeight: 500 }}>{p.numero_pedido}</b></td>
                     <td style={{ minWidth: 220 }}>{p.cliente_nome || '—'}</td>
-                    <td>{mae ? <button className="pcp-cod" onClick={() => { try { sessionStorage.setItem('vp_pcp_op', mae.id); } catch (e) { /* ok */ } setSubsel && setSubsel(null); setRoute && setRoute('pcp'); }}>{mae.numero}</button> : <span style={{ color: 'var(--fg3)' }}>sem OP</span>}{mae && <span className="pcp-tag" style={{ marginLeft: 6 }}>{mae.status === 'concluida' ? 'concluída' : mae.status.replace('_', ' ')}</span>}
+                    <td>{mae ? <button className="pcp-cod" onClick={() => { try { sessionStorage.setItem('vp_pcp_op', mae.id); } catch (e) { /* ok */ } setSubsel && setSubsel(null); setRoute && setRoute('pcp'); }}>{mae.numero}</button> : <span style={{ color: 'var(--fg3)' }}>OP não criada</span>}{mae && <span className="pcp-tag" style={{ marginLeft: 6 }}>{mae.status === 'concluida' ? 'concluída' : mae.status.replace('_', ' ')}</span>}
                       {opAberta && p.faturado && s !== 'entregue' ? <div style={{ fontSize: 10, color: 'var(--vp-danger)' }} title="Tem NF, mas a OP-mãe do pedido ainda não foi concluída. Confira a produção antes de despachar.">⚠ produção ainda aberta</div> : null}</td>
-                    <td>{p.faturado ? <>NF emitida <span style={{ color: 'var(--fg3)' }}>{expData(p.data_faturamento)}</span>{s === 'pronto' && p.data_faturamento ? <div style={{ fontSize: 10, color: atr ? 'var(--vp-danger)' : 'var(--fg3)' }}>há {expDias(p.data_faturamento, hoje)} dia(s){lim ? ` · prazo ${expData(lim)}` : ''}</div> : null}</> : <span style={{ color: 'var(--fg3)' }}>não emitida</span>}</td>
+                    <td>{p.faturado ? <>{p.numero_nf ? <b style={{ fontWeight: 500 }}>NF {p.numero_nf}</b> : 'NF emitida'} <span style={{ color: 'var(--fg3)' }}>{expData(p.data_faturamento)}</span>{s === 'pronto' && p.data_faturamento ? <div style={{ fontSize: 10, color: atr ? 'var(--vp-danger)' : 'var(--fg3)' }}>emitida {expQuando(expDias(p.data_faturamento, hoje))}{lim ? ` · prazo ${expData(lim)}` : ''}</div> : null}</> : <span style={{ color: 'var(--fg3)' }}>não emitida</span>}</td>
                     <td>{expData(p.data_previsao)}</td>
                     <td><span className="pcp-tag" style={cor[s] ? { background: cor[s] } : undefined}>{rotulo[s]}</span>{atr ? <> <span className="pcp-tag" style={{ background: 'color-mix(in srgb, var(--vp-danger, #c0392b) 25%, transparent)' }}>Despacho atrasado</span></> : null}
                       {x && x.status !== 'aguardando' && <div style={{ fontSize: 10, color: 'var(--fg3)' }}>{x.retirada ? 'retirada pelo cliente' : x.transportadora}{x.data_saida ? ' · saiu ' + expData(x.data_saida) : ''}{x.data_entrega ? ' · entregue ' + expData(x.data_entrega) : ''}</div>}
@@ -279,13 +304,15 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
                             {itens.map(i => <div key={i.seq} style={{ padding: '3px 0', borderBottom: '1px solid var(--vp-gray-100)' }}>{i.item_pcp ? <b style={{ fontWeight: 500 }}>{i.codigo}</b> : i.codigo} · {i.descricao} <span style={{ color: 'var(--fg3)' }}>× {expFmt(i.quantidade)} {i.unidade || ''}</span></div>)}
                           </div>
                           <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>{p.cliente_endereco || ''}{p.cliente_telefone ? ' · ' + p.cliente_telefone : ''}</div>
+                          <div style={{ fontSize: 11, color: 'var(--fg3)' }}>{p.numero_nf ? `NF ${p.numero_nf}` : ''}{p.peso_bruto ? ` · ${expFmt(p.peso_bruto, 2)} kg` : ''}{EXP_FRETE[p.modalidade_frete] ? ` · frete ${EXP_FRETE[p.modalidade_frete]}` : ''}{p.transportadora_nome ? ` · Omie: ${p.transportadora_nome}` : ''}</div>
                           <button className="btn btn--sm" style={{ marginTop: 6 }} disabled={!itens.length} onClick={() => imprimirRomaneio(p)}>Imprimir romaneio</button>
                         </div>
                         <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignContent: 'flex-start' }}>
                           {opAberta && <div style={{ flex: '1 1 100%', fontSize: 12, color: 'var(--vp-danger)' }}>⚠ A OP-mãe {mae.numero} deste pedido ainda não foi concluída. Confira a produção antes de despachar.</div>}
                           {s !== 'entregue' && (<>
                             <label style={{ fontSize: 12 }}><input type="checkbox" checked={!!form.retirada} disabled={!podeEditar || s === 'despachado'} onChange={e => setForm({ ...form, retirada: e.target.checked })}/> Retirada pelo cliente</label>
-                            {!form.retirada && <input className="input" placeholder="Transportadora" value={form.transportadora} disabled={!podeEditar || s === 'despachado'} onChange={e => setForm({ ...form, transportadora: e.target.value })} style={{ width: 200 }}/>}
+                            {!form.retirada && <input className="input" list="exp-transps" placeholder="Transportadora" value={form.transportadora} disabled={!podeEditar || s === 'despachado'} onChange={e => setForm({ ...form, transportadora: e.target.value })} style={{ width: 200 }}/>}
+                            <datalist id="exp-transps">{transps.map(n => <option key={n} value={n}/>)}</datalist>
                             <input className="input" type="number" min="0" placeholder="Volumes" value={form.volumes} disabled={!podeEditar || s === 'despachado'} onChange={e => setForm({ ...form, volumes: e.target.value })} style={{ width: 90 }}/>
                             <label style={{ fontSize: 12, color: 'var(--fg3)' }}>Saída <input className="input" type="date" value={form.data_saida} disabled={!podeEditar || s === 'despachado'} onChange={e => setForm({ ...form, data_saida: e.target.value })}/></label>
                             <input className="input" placeholder="Rastreio / nº do conhecimento (pode ser preenchido depois da saída)" value={form.rastreio} disabled={!podeEditar} onChange={e => setForm({ ...form, rastreio: e.target.value })} style={{ width: 300 }}/>
@@ -295,7 +322,7 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
                           {(s === 'despachado' || s === 'entregue') && (<>
                             <label style={{ fontSize: 12, color: 'var(--fg3)' }}>Entrega <input className="input" type="date" value={form.data_entrega} disabled={!podeEditar || s === 'entregue'} onChange={e => setForm({ ...form, data_entrega: e.target.value })}/></label>
                             {s === 'despachado' && podeEditar && <label style={{ fontSize: 12, color: 'var(--fg3)' }}>Canhoto / comprovante <input type="file" accept=".pdf,.jpg,.jpeg,.png" onChange={e => anexar(p, e.target.files[0])}/></label>}
-                            {form.comprovante && <a href={form.comprovante} target="_blank" rel="noopener noreferrer" className="pcp-cod" style={{ fontSize: 12 }}>ver comprovante</a>}
+                            {form.comprovante && <button className="pcp-cod" style={{ fontSize: 12 }} onClick={() => abrirComprovante(form.comprovante)}>ver comprovante</button>}
                           </>)}
                           <input className="input" placeholder="Observação" value={form.observacao} disabled={!podeEditar || s === 'entregue'} onChange={e => setForm({ ...form, observacao: e.target.value })} style={{ flex: '1 1 100%' }}/>
                           {podeEditar && s === 'pronto' && <button className="btn btn--sm btn--primary" disabled={busy} onClick={() => gravar(p, 'despachado')}>Registrar saída</button>}

@@ -52,6 +52,10 @@ async function pgInsert(tabela: string, rows: Record<string, unknown>[]) {
   });
   if (!r.ok) throw new Error(`insert ${tabela}: ${r.status} ${await r.text()}`);
 }
+async function pgPatch(tabela: string, qs: string, body: Record<string, unknown>) {
+  const r = await fetch(`${SUPABASE_URL}/rest/v1/${tabela}?${qs}`, { method: "PATCH", headers: pgH({ Prefer: "return=minimal" }), body: JSON.stringify(body) });
+  if (!r.ok) throw new Error(`patch ${tabela}: ${r.status} ${await r.text()}`);
+}
 async function pgDelete(tabela: string, qs: string) {
   const r = await fetch(`${SUPABASE_URL}/rest/v1/${tabela}?${qs}`, { method: "DELETE", headers: pgH({ Prefer: "return=minimal" }) });
   if (!r.ok) throw new Error(`delete ${tabela}: ${r.status} ${await r.text()}`);
@@ -248,6 +252,17 @@ Deno.serve(async (req) => {
       const end = cli ? [cli.endereco, cli.endereco_numero, cli.bairro, [cli.cidade, cli.estado].filter(Boolean).join("/"), cli.cep].filter(Boolean).join(", ") : null;
       const fone = cli && cli.telefone1_numero ? `${cli.telefone1_ddd ? "(" + cli.telefone1_ddd + ") " : ""}${cli.telefone1_numero}` : null;
 
+      // Nome da transportadora (no Omie ela é um cadastro de cliente/fornecedor); reaproveita o cache de consultas.
+      let transpNome: string | null = null;
+      if (fr.codigo_transportadora) {
+        let tr = clientes.get(fr.codigo_transportadora);
+        if (tr === undefined) {
+          try { tr = await omie<any>("geral/clientes", "ConsultarCliente", { codigo_cliente_omie: fr.codigo_transportadora }); }
+          catch (_e) { tr = null; }
+          clientes.set(fr.codigo_transportadora, tr);
+        }
+        transpNome = tr ? (limpa(tr.nome_fantasia) || limpa(tr.razao_social) || null) : null;
+      }
       await pgUpsert("pcp_pedidos", [{
         codigo_pedido: c.codigo_pedido, numero_pedido: String(c.numero_pedido), etapa: c.etapa || null,
         codigo_cliente: c.codigo_cliente || null,
@@ -259,7 +274,7 @@ Deno.serve(async (req) => {
         observacao: limpa(p.observacoes?.obs_venda) || null,
         faturado: ic.faturado === "S", data_faturamento: dataIso(ic.dFat), nf_autorizada: ic.autorizado === "S",
         cancelado: ic.cancelado === "S", volumes: fr.quantidade_volumes ?? null, peso_bruto: fr.peso_bruto ?? null,
-        modalidade_frete: fr.modalidade != null ? String(fr.modalidade) : null, transportadora_codigo: fr.codigo_transportadora || null,
+        modalidade_frete: fr.modalidade != null ? String(fr.modalidade) : null, transportadora_codigo: fr.codigo_transportadora || null, transportadora_nome: transpNome,
         atualizado_em: new Date().toISOString(),
       }], "codigo_pedido");
       await pgDelete("pcp_pedido_itens", `codigo_pedido=eq.${c.codigo_pedido}`);
@@ -273,6 +288,35 @@ Deno.serve(async (req) => {
     }
     resumo.gravados = gravados;
     resumo.sem_item_do_pcp = ignorados;
+
+    // Nº da NF: o pedido do Omie não traz o número; ele vem de produtos/nfconsultar ListarNF (compl.nIdPedido -> ide.nNF).
+    // Só busca para pedidos faturados ainda sem número, por data de emissão (poucas chamadas), e ignora NF cancelada.
+    try {
+      const semNf = await pgSelect<{ codigo_pedido: number; data_faturamento: string }>("pcp_pedidos",
+        "select=codigo_pedido,data_faturamento&faturado=eq.true&cancelado=eq.false&numero_nf=is.null&data_faturamento=not.is.null&order=data_faturamento.desc&limit=40");
+      const datas = Array.from(new Set(semNf.map((x) => x.data_faturamento))).slice(0, 6);
+      const porPedido = new Map<number, string>();
+      for (const d of datas) {
+        const [a, m, dia] = d.split("-");
+        const br = `${dia}/${m}/${a}`;
+        let pg = 1, tot = 1;
+        while (pg <= tot && pg <= 4) {
+          const r = await omie<any>("produtos/nfconsultar", "ListarNF", { pagina: pg, registros_por_pagina: 100, dEmiInicial: br, dEmiFinal: br, tpNF: "1" });
+          tot = r.total_de_paginas || 1;
+          for (const nf of r.nfCadastro || []) {
+            if (nf.ide?.dCan || !(Number(nf.compl?.nIdPedido) > 0)) continue;
+            porPedido.set(Number(nf.compl.nIdPedido), String(nf.ide?.nNF || "").replace(/^0+/, ""));
+          }
+          pg++;
+        }
+      }
+      let comNf = 0;
+      for (const x of semNf) {
+        const n = porPedido.get(Number(x.codigo_pedido));
+        if (n) { await pgPatch("pcp_pedidos", `codigo_pedido=eq.${x.codigo_pedido}`, { numero_nf: n }); comNf++; }
+      }
+      resumo.nf_gravadas = comNf;
+    } catch (e) { erros.push(`NF: ${(e as Error).message}`); }
   } catch (e) {
     erros.push((e as Error).message);
   }
