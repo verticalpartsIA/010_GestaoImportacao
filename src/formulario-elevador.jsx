@@ -512,6 +512,7 @@ function FEAnexos({ formularioId, categoria, titulo, descricao, podeAnexar, gara
   );
 }
 
+const FE_OPCOES_ACO = ['Aço 304', 'Aço 430', 'Pintado'];
 const FE_OPCOES_VAZIAS = { teto_falso: [], piso: [], porta: [], botoeira_cabine: [], botoeira_pavimento: [] };
 
 /* ---------- Card de uma Unidade (um elevador) ---------- */
@@ -627,12 +628,12 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Portas <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tipo obrigatório, resto opcional</span></div>
             <div className="grid-3" style={{ gap: 12 }}>
               <FEField label="Tipo de abertura *"><FESelect value={unidade.porta_tipo_abertura} onChange={set('porta_tipo_abertura')} options={['Central', 'Lateral', 'Telescópica']}/></FEField>
-              <FEField label="Modelo de porta"><FESelect value={unidade.porta_modelo} onChange={set('porta_modelo')} options={opcoes.porta} placeholder="— selecione o modelo primeiro —"/></FEField>
+              <FEField label="Modelo de porta"><FESelect value={unidade.porta_modelo} onChange={set('porta_modelo')} options={FE_OPCOES_ACO} placeholder="— escolha —"/></FEField>
               <FEField label="Largura (mm)"><FEInput type="number" value={unidade.porta_largura_mm} onChange={set('porta_largura_mm')}/></FEField>
               <FEField label="Altura (mm)"><FEInput type="number" value={unidade.porta_altura_mm} onChange={set('porta_altura_mm')}/></FEField>
-              <FEField label="Aço da Cabina"><FESelect value={unidade.aco_cabina} onChange={set('aco_cabina')} options={['Aço 430', 'Aço 304']} placeholder="— escolha —"/></FEField>
-              <FEField label="Acabamento porta cabina"><FESelect value={unidade.acabamento_porta_cabina} onChange={set('acabamento_porta_cabina')} options={['Aço 430', 'Aço 304']}/></FEField>
-              <FEField label="Acabamento porta pavimento"><FESelect value={unidade.acabamento_porta_pavimento} onChange={set('acabamento_porta_pavimento')} options={['Aço 430', 'Aço 304']}/></FEField>
+              <FEField label="Aço da Cabina"><FESelect value={unidade.aco_cabina} onChange={set('aco_cabina')} options={FE_OPCOES_ACO} placeholder="— escolha —"/></FEField>
+              <FEField label="Acabamento porta cabina"><FESelect value={unidade.acabamento_porta_cabina} onChange={set('acabamento_porta_cabina')} options={FE_OPCOES_ACO}/></FEField>
+              <FEField label="Acabamento porta pavimento"><FESelect value={unidade.acabamento_porta_pavimento} onChange={set('acabamento_porta_pavimento')} options={FE_OPCOES_ACO}/></FEField>
               <FEField label="Classe corta-fogo"><FESelect value={unidade.classe_corta_fogo} onChange={set('classe_corta_fogo')} options={['Nenhuma', 'E120', 'EI60', 'EI120']}/></FEField>
             </div>
           </div>
