@@ -418,20 +418,29 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
 
   /* Compra de equipamento — gate do CEO + gatilhos automáticos, só faz
      sentido conferir na criação (o "start" da compra) e quando a P.I. está
-     vinculada a uma cotação. Ver decisoes-store.js › verificarGateCompra. */
+     vinculada a uma cotação. Ver decisoes-store.js › verificarGateCompra.
+     06/10/2026 (issue #728): esta prévia roda enquanto a pessoa DIGITA o Nº
+     ("951" passa por 9 e 95) — por isso é somenteLeitura (nunca cria nem
+     reabre decisão) e espera a digitação parar. Quem cria/reabre a decisão
+     do CEO é só o submit abaixo, com a cotação confirmada. */
   React.useEffect(() => {
-    if (isEdit || !form.numero_cotacao || !window.DecisoesStore) { setGate(null); return; }
+    if (isEdit || !form.numero_cotacao || !window.DecisoesStore) { setGate(null); setCheckingGate(false); return; }
     let cancelado = false;
     setCheckingGate(true);
-    window.DecisoesStore.verificarGateCompra(Number(form.numero_cotacao))
-      .then((r) => { if (!cancelado) setGate(r); })
-      .catch(() => { if (!cancelado) setGate(null); })
-      .finally(() => { if (!cancelado) setCheckingGate(false); });
-    return () => { cancelado = true; };
+    const t = setTimeout(() => {
+      window.DecisoesStore.verificarGateCompra(Number(form.numero_cotacao), { somenteLeitura: true })
+        .then((r) => { if (!cancelado) setGate(r); })
+        .catch(() => { if (!cancelado) setGate(null); })
+        .finally(() => { if (!cancelado) setCheckingGate(false); });
+    }, 500);
+    return () => { cancelado = true; clearTimeout(t); };
   }, [form.numero_cotacao, isEdit]);
 
   const submit = async () => {
     if (!form.numero_pi.trim()) return window.toast?.('Informe o número da P.I.', 'warning');
+    if (!isEdit && form.numero_cotacao && cotacaoInfo && cotacaoInfo.checking) {
+      return window.toast?.('Aguarde a verificação do Nº da cotação terminar.', 'warning');
+    }
     if (!isEdit && form.numero_cotacao && cotacaoInfo && cotacaoInfo.encontrada === false) {
       return window.toast?.(`Nenhuma cotação Nº ${form.numero_cotacao} encontrada — confira o número antes de continuar.`, 'warning');
     }
