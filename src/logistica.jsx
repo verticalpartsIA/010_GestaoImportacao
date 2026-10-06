@@ -91,7 +91,11 @@ async function runAisSync() {
   if (error) { window.toast('Falha na sincronização AIS: ' + (error.message || error), 'error'); return null; }
   const reais = (data && data.real) || 0;
   if (reais > 0) window.toast(`Posições atualizadas: ${reais} navio(s) com leitura real.`, 'success');
-  else window.toast('Nenhuma leitura real obtida — a consulta de rastreio está com erro (veja o motivo no detalhe do embarque).', 'error');
+  else {
+    let motivo = '';
+    try { const r = await window.__VP_SB.sb.from('embarques').select('tracking_erro').eq('teste', false).neq('status', 'Entregue').not('tracking_erro', 'is', null).limit(1); motivo = rtExplicaErro(r.data && r.data[0] && r.data[0].tracking_erro); } catch (e) { /* sem motivo */ }
+    window.toast('Nenhuma leitura real obtida. ' + (motivo || 'A consulta de rastreio está com erro (veja o motivo no detalhe do embarque).'), 'error');
+  }
   return data;
 }
 
@@ -662,26 +666,41 @@ function ImportacaoDetail({ embarque, setRoute }) {
             </Card>
           )}
 
-          <Card title="Posição atual do navio" sub={(e.tracking_provider === 'sinay' ? "Rastreio Sinay/Safecube · " : "Simulação · ") + (e.last_ais_sync ? "atualizado " + window.__VP_SB.timeAgo(e.last_ais_sync) : "aguardando 1ª sync")}
-            action={<Button variant="ghost" size="sm" icon="refresh" onClick={refresh} disabled={syncing}>{syncing ? "Atualizando…" : "Atualizar"}</Button>}>
-            <div className="map-frame" style={{ height: 360 }}>
-              <ShipMap mainShip={e}/>
-            </div>
-            <div className="grid-4" style={{ marginTop: 14 }}>
-              <KvBlock label="Posição" value={e.lat ? `${e.lat}° / ${e.lng}°` : "—"} mono/>
-              <KvBlock label="Velocidade" value={e.speed ? `${e.speed} kn` : "—"} mono/>
-              <KvBlock label="Rumo" value={e.heading ? `${e.heading}°` : "—"} mono/>
-              <KvBlock label="ETA atualizada" value={fmtDateLong(e.eta)}/>
-            </div>
-            {e.tracking_provider === 'sinay'
-              ? <div className="grid-2" style={{ marginTop: 10 }}>
-                  <KvBlock label="Status Sinay" value={e.tracking_status || '—'} mono/>
-                  <KvBlock label="Atualizado (Sinay)" value={e.tracking_updated_at ? window.__VP_SB.timeAgo(e.tracking_updated_at) : '—'}/>
+          {(() => {
+            const chegou = rtChegou(e), real = rtPosicaoReal(e), etaR = rtEta(e, rtHojeBrasilia());
+            const sub = (e.tracking_provider === 'sinay' ? 'Rastreio Sinay/Safecube · ' : 'Sem rastreio configurado · ') + (chegou ? 'chegada confirmada' : real ? 'leitura real ' + window.__VP_SB.timeAgo(e.tracking_updated_at) : 'rastreio parado');
+            return (
+              <Card title="Posição atual do navio" sub={sub}
+                action={<Button variant="ghost" size="sm" icon="refresh" onClick={refresh} disabled={syncing}>{syncing ? "Atualizando…" : "Atualizar"}</Button>}>
+                {!chegou && !real && e.tracking_provider === 'sinay' ? (
+                  <div style={{ padding: 8, marginBottom: 10, border: '1px solid var(--vp-warning)', borderRadius: 8, fontSize: 12 }}>
+                    <b>⚠ Rastreio parado.</b> O mapa mostra a última posição conhecida{rtUltimoEvento(e) ? ` (${rtUltimoEvento(e)})` : ''}, que não acompanha o navio.
+                    {e.tracking_erro ? <div style={{ marginTop: 4 }}>{rtExplicaErro(e.tracking_erro)} <span style={{ color: 'var(--fg3)' }}>({e.tracking_erro})</span></div> : null}
+                  </div>
+                ) : null}
+                <div className="map-frame" style={{ height: 360, position: 'relative' }}>
+                  <RastreamentoMapa ships={[e]} activeId={e.id}/>
                 </div>
-              : (e.bl || e.container_number) && e.sealine
-                ? <p className="small muted" style={{ marginTop: 10 }}>Ainda não sincronizado com a Sinay — clique "Atualizar" ou aguarde a sincronização diária.</p>
-                : <p className="small muted" style={{ marginTop: 10 }}>Preencha BL/Container + Armador (SCAC) para habilitar rastreio real via Sinay/Safecube.</p>}
-          </Card>
+                <div className="grid-4" style={{ marginTop: 14 }}>
+                  <KvBlock label="Situação" value={chegou ? `chegou${e.chegada_confirmada_em ? ' · confirmado em ' + rtDataBR(e.chegada_confirmada_em) : ''}` : real ? 'posição real' : 'desatualizada (rastreio parado)'}/>
+                  <KvBlock label="Último evento real" value={rtUltimoEvento(e) || '—'}/>
+                  <KvBlock label="Última leitura real" value={e.tracking_updated_at ? `${rtDataBR(e.tracking_updated_at)} (${window.__VP_SB.timeAgo(e.tracking_updated_at)})` : 'nenhuma'}/>
+                  {!chegou ? <KvBlock label="Última tentativa do robô" value={e.last_ais_sync ? window.__VP_SB.timeAgo(e.last_ais_sync) : 'aguardando 1ª sync'}/> : <KvBlock label="Status do rastreio" value="encerrado — navio chegou"/>}
+                </div>
+                <div className="grid-4" style={{ marginTop: 10 }}>
+                  <KvBlock label="ETA atual" value={fmtDateLong(e.eta)}/>
+                  {e.eta_original && e.eta_original !== e.eta ? <KvBlock label="ETA original" value={fmtDateLong(e.eta_original)}/> : <KvBlock label="ETA original" value="igual ao atual"/>}
+                  <KvBlock label="Situação do ETA" value={rtSituacaoEta(etaR)}/>
+                  {real && !chegou && e.speed != null ? <KvBlock label="Velocidade / rumo" value={`${e.speed} kn · ${e.heading}°`} mono/> : <KvBlock label="Posição (lat/lng)" value={e.lat != null ? `${e.lat}° / ${e.lng}°` : '—'} mono/>}
+                </div>
+                {e.tracking_provider !== 'sinay'
+                  ? ((e.bl || e.container_number) && e.sealine
+                    ? <p className="small muted" style={{ marginTop: 10 }}>Ainda não sincronizado com a Sinay — clique "Atualizar" ou aguarde a sincronização diária.</p>
+                    : <p className="small muted" style={{ marginTop: 10 }}>Preencha BL/Container + Armador (SCAC) para habilitar rastreio real via Sinay/Safecube.</p>)
+                  : null}
+              </Card>
+            );
+          })()}
 
           <DocsCard docs={e.docs} onChange={onDocsChange}/>
         </div>
@@ -795,6 +814,23 @@ const rtUltimoEvento = (s) => {
   const ev = Array.isArray(s.tracking_events) ? s.tracking_events.find(e => e.isActual) : null;
   return ev ? `${ev.description || 'Evento'}${ev.location ? ' em ' + ev.location : ''} (${rtDataBR(ev.date)})` : null;
 };
+// Traduz o erro bruto gravado pelo ais-sync em uma frase para quem usa o sistema.
+function rtExplicaErro(txt) {
+  const s = String(txt || '');
+  if (!s) return '';
+  if (/expired|4003|403/i.test(s)) return 'A chave da Sinay expirou — avise a TI para renovar (secret SINAY_API_KEY no Supabase).';
+  if (/401|invalid|unauthor/i.test(s)) return 'A chave da Sinay foi recusada — avise a TI para conferir a chave.';
+  if (/402|credit|quota|saldo/i.test(s)) return 'Os créditos da Sinay acabaram — avise a TI/Financeiro.';
+  if (/429|limite|rate/i.test(s)) return 'A Sinay limitou as consultas — o sistema tenta de novo na próxima rodada.';
+  if (/SINAY_API_KEY/i.test(s)) return 'A chave da Sinay não está configurada no Supabase — avise a TI.';
+  return s;
+}
+// true quando a janela é estreita (celular): o mapa e a lista passam a ficar um embaixo do outro.
+function useRtEstreito(px = 900) {
+  const [e, setE] = React.useState(() => window.innerWidth < px);
+  React.useEffect(() => { const f = () => setE(window.innerWidth < px); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, [px]);
+  return e;
+}
 const rtDoc = (s) => s.bl || s.container_number || null;
 const rtSemRota = (s) => !(eiPortCoords(s.origin || s.from) && eiPortCoords(s.destination || s.to));
 
@@ -865,6 +901,7 @@ function RastreamentoMapa({ ships, activeId, onSelect }) {
 }
 
 function ImportacaoRastreamento({ setRoute, setSubsel }) {
+  const estreito = useRtEstreito();
   const [embarques, setEmbarques] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [active, setActive] = React.useState(null);
@@ -923,10 +960,11 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
 
   const exportar = () => {
     const cel = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
-    const linhas = [['Embarque', 'Navio', 'Armador', 'BL', 'Container', 'Origem', 'Destino', 'Status', 'ETA', 'ETA original', 'Situação do ETA', 'Progresso %', 'Posição', 'Latitude', 'Longitude', 'Velocidade (kn)', 'Rumo', 'Última leitura', 'Status do rastreio', 'Chegada confirmada']]
+    const linhas = [['Embarque', 'Navio', 'Armador', 'BL', 'Container', 'Origem', 'Destino', 'Status', 'ETA', 'ETA original', 'Situação do ETA', 'Progresso %', 'Posição', 'Latitude', 'Longitude', 'Velocidade (kn)', 'Rumo', 'Última leitura real', 'Última tentativa do robô', 'Status do rastreio', 'Motivo do erro', 'Dias de atraso do ETA', 'Chegada confirmada']]
       .concat(ships.map(s => [s.id, s.vessel || '', rtArmador(s) === '—' ? '' : rtArmador(s), s.bl || '', s.container_number || '', s.origin || s.from || '', s.destination || s.to || '', s.status || '',
         s.eta ? fmtDate(s.eta) : '', (s.eta_original || s.etaOriginal) ? fmtDate(s.eta_original || s.etaOriginal) : '', rtSituacaoEta(rtEta(s, hoje)), rtChegou(s) ? 100 : Math.round((s.position || 0) * 100), rtChegou(s) ? 'chegou' : rtPosicaoReal(s) ? 'real' : 'desatualizada (rastreio parado)', s.lat ?? '', s.lng ?? '', rtPosicaoReal(s) ? (s.speed ?? '') : '', rtPosicaoReal(s) ? (s.heading ?? '') : '',
-        s.last_ais_sync ? new Date(s.last_ais_sync).toLocaleString('pt-BR') : '', s.tracking_status || '', s.chegada_confirmada_em ? rtDataBR(s.chegada_confirmada_em) : '']));
+        s.tracking_updated_at ? new Date(s.tracking_updated_at).toLocaleString('pt-BR') : '', s.last_ais_sync ? new Date(s.last_ais_sync).toLocaleString('pt-BR') : '', s.tracking_status || '',
+        rtChegou(s) ? '' : rtExplicaErro(s.tracking_erro), rtEta(s, hoje).vencidaDias || rtEta(s, hoje).adiadaDias || '', s.chegada_confirmada_em ? rtDataBR(s.chegada_confirmada_em) : '']));
     const texto = '﻿' + linhas.map(l => l.map(cel).join(';')).join('\r\n');
     const url = URL.createObjectURL(new Blob([texto], { type: 'text/csv;charset=utf-8' }));
     const a = document.createElement('a'); a.href = url; a.download = `rastreamento-navios-${hoje}.csv`; document.body.appendChild(a); a.click(); a.remove();
@@ -978,9 +1016,9 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
         </div>
       </div>
 
-      <div className="grid-2" style={{ gap: 20, gridTemplateColumns: "1fr 360px" }}>
+      <div className="grid-2" style={{ gap: 20, gridTemplateColumns: estreito ? "minmax(0, 1fr)" : "1fr 360px" }}>
         <Card sharp={false} padding="0">
-          <div style={{ height: 600 }}>
+          <div style={{ height: estreito ? 380 : 600 }}>
             <RastreamentoMapa ships={noMapa} activeId={activeId} onSelect={(id) => setActive(id)}/>
           </div>
         </Card>
@@ -1156,12 +1194,13 @@ function EmbarqueMapaModal({ embarque: e, onClose }) {
 
     const origin = eiPortCoords(e.origin || e.from);
     const destino = eiPortCoords(e.destination || e.to);
-    const atual = (e.lat != null && e.lng != null) ? [e.lat, e.lng] : null;
+    const chegou = rtChegou(e), real = rtPosicaoReal(e);
+    const atual = chegou && destino ? destino : ((e.lat != null && e.lng != null) ? [e.lat, e.lng] : null);
     const rota = eiRouteWaypoints(origin, destino);
     const pontos = [...rota, atual].filter(Boolean);
 
     const shipIcon = window.L.divIcon({
-      className: "", html: '<div style="font-size:20px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚢</div>',
+      className: "", html: `<div style="font-size:20px;line-height:1;${!chegou && !real ? 'opacity:.55;' : ''}filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚢</div>`,
       iconSize: [22, 22], iconAnchor: [11, 11],
     });
     const portIcon = (cor) => window.L.divIcon({
@@ -1171,7 +1210,7 @@ function EmbarqueMapaModal({ embarque: e, onClose }) {
 
     if (origin) window.L.marker(origin, { icon: portIcon("#334155") }).addTo(map).bindTooltip(e.origin || e.from || "Origem");
     if (destino) window.L.marker(destino, { icon: portIcon("#dc2626") }).addTo(map).bindTooltip(e.destination || e.to || "Destino");
-    if (atual) window.L.marker(atual, { icon: shipIcon, zIndexOffset: 1000 }).addTo(map).bindTooltip(e.vessel || "Navio", { permanent: false });
+    if (atual) window.L.marker(atual, { icon: shipIcon, zIndexOffset: 1000 }).addTo(map).bindTooltip((e.vessel || "Navio") + (chegou ? " — chegou" : real ? "" : " — última posição conhecida (rastreio parado)"), { permanent: false });
 
     if (pontos.length >= 2) map.fitBounds(window.L.latLngBounds(pontos), { padding: [60, 60] });
     else if (pontos.length === 1) map.setView(pontos[0], 4);
@@ -1233,6 +1272,9 @@ function EmbarqueMapaModal({ embarque: e, onClose }) {
           <div>
             <div className="up-eyebrow" style={{ color: "#94a3b8" }}>{e.id} · {e.line || e.sealine}</div>
             <div style={{ color: "#fff", fontWeight: 600, fontSize: 15 }}>{e.vessel || "Rastreamento marítimo"}</div>
+            <div style={{ fontSize: 11, marginTop: 2, color: rtChegou(e) ? "#86efac" : rtPosicaoReal(e) ? "#94a3b8" : "#fbbf24" }}>
+              {rtChegou(e) ? `✓ Chegada confirmada${e.chegada_confirmada_em ? " em " + rtDataBR(e.chegada_confirmada_em) : ""}` : rtPosicaoReal(e) ? `Posição real · leitura ${rtDataBR(e.tracking_updated_at)}` : `⚠ Rastreio parado — última posição conhecida${rtUltimoEvento(e) ? ": " + rtUltimoEvento(e) : ""}`}
+            </div>
           </div>
           <div className="row gap-2">
             <span className="mono small" style={{ color: "#94a3b8" }}>
