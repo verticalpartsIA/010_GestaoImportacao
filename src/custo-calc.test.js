@@ -59,6 +59,59 @@ test('impacto: receita dos produtos vendidos que dependem de cada componente', (
   assert.equal(r['SEM-VENDA'].receita, 0);
 });
 
+const rec = (d, q, vu) => ({ situacao: 'recebido', data_pedido: d, quantidade: q, qtde_recebida: q, valor_unitario: vu });
+const pen = (d, q, vu) => ({ situacao: 'pendente', data_pedido: d, quantidade: q, qtde_recebida: 0, valor_unitario: vu });
+
+test('custoPorCompras: média PONDERADA pela quantidade (a linha minúscula de preço alto não distorce)', () => {
+  // caso real VPEL-484: 7000 m × 3,5642 + 0,03 m × 8,86
+  const r = C.custoPorCompras([rec('2025-02-26', 7000, 3.5642), rec('2025-05-13', 0.03, 8.86)], '2025-10-05');
+  assert.equal(r.fonte, 'media_12m');
+  assert.equal(r.n, 2);
+  assert.equal(r.em, '2025-05-13');
+  assert.ok(Math.abs(r.custo - 3.5642) < 0.001, 'esperava ~3,5642, veio ' + r.custo);
+  // o "último preço" (8,86) estaria 2,5× errado: a regra não é essa
+  assert.ok(r.custo < 4);
+});
+
+test('custoPorCompras: caso real VP-1389 fica perto do custo do Omie (37,18), não do "último preço" de R$ 280', () => {
+  const r = C.custoPorCompras([rec('2023-06-05', 0.5, 18.61), rec('2025-05-13', 0.03, 280)], '2025-10-05', 36);
+  assert.ok(r.custo > 30 && r.custo < 36, 'veio ' + r.custo);
+});
+
+test('custoPorCompras: só conta os últimos 12 meses', () => {
+  const linhas = [rec('2024-01-10', 100, 1), rec('2026-06-01', 10, 5)];
+  const r = C.custoPorCompras(linhas, '2026-10-05');
+  assert.equal(r.custo, 5);
+  assert.equal(r.n, 1);
+  assert.equal(C.custoPorCompras([rec('2024-01-10', 100, 1)], '2026-10-05'), null);   // só compra antiga e nada pendente
+});
+
+test('custoPorCompras: preço 0 e quantidade 0 são ignorados (requisição sem preço)', () => {
+  assert.equal(C.custoPorCompras([rec('2026-09-01', 8, 0)], '2026-10-05'), null);
+  const r = C.custoPorCompras([rec('2026-09-01', 8, 0), rec('2026-09-02', 10, 2)], '2026-10-05');
+  assert.equal(r.custo, 2);
+  assert.equal(r.n, 1);
+});
+
+test('custoPorCompras: sem compra recebida, usa o preço do pedido PENDENTE (gaxeta: 100 MT × R$ 10,40)', () => {
+  const r = C.custoPorCompras([pen('2026-09-28', 100, 10.4)], '2026-10-05');
+  assert.equal(r.custo, 10.4);
+  assert.equal(r.fonte, 'pedido_pendente');
+  assert.equal(r.em, '2026-09-28');
+});
+
+test('custoPorCompras: compra recebida tem prioridade sobre o pedido pendente', () => {
+  const r = C.custoPorCompras([rec('2026-07-31', 20, 5.13), pen('2026-09-28', 100, 9)], '2026-10-05');
+  assert.equal(r.fonte, 'media_12m');
+  assert.equal(r.custo, 5.13);
+});
+
+test('custoPorCompras: pendente com preço 0 não vira custo; sem linhas devolve null', () => {
+  assert.equal(C.custoPorCompras([pen('2026-10-03', 8, 0)], '2026-10-05'), null);
+  assert.equal(C.custoPorCompras([], '2026-10-05'), null);
+  assert.equal(C.custoPorCompras(null, '2026-10-05'), null);
+});
+
 test('impacto: sem receita nenhuma não divide por zero', () => {
   const r = C.impacto({ X: new Set(['A']) }, {});
   assert.equal(r.X.pct, 0);

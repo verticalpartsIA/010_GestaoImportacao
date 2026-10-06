@@ -460,7 +460,8 @@ function AlmModalAcerto({ prod, onClose, onDone }) {
   const quando = prod.fisicoEm ? new Date(prod.fisicoEm).toLocaleString('pt-BR') : '—';
   const obs = 'Acerto pela contagem física de ' + quando + (prod.fisicoPor ? ' (' + prod.fisicoPor + ')' : '');
   const corpo = (extra) => ({ acao: 'ajuste_estoque', solicitante: almSolicitante(), codigo: prod.codigo, tipo: 'SLD', motivo: 'INV', quantidade: prod.fisico, obs,
-    valor: Number(String(valor).replace(',', '.')) > 0 ? Number(String(valor).replace(',', '.')) : undefined, ...extra });
+    // valor unitário exigido pelo Omie: o digitado; senão o custo efetivo que a tela já conhece (Omie → compras → manual)
+    valor: Number(String(valor).replace(',', '.')) > 0 ? Number(String(valor).replace(',', '.')) : (Number(prod.custo) > 0 ? Number(prod.custo) : undefined), ...extra });
 
   React.useEffect(() => {
     const c = window.__VP_SB && window.__VP_SB.sb;
@@ -598,7 +599,7 @@ function AlmoxarifadoEstoque() {
     if (!c) { setErro('Supabase não carregou.'); setLinhas([]); return; }
     // Sem a alçada "ver_custo" o custo real nem é pedido ao banco: a coluna mostra só um valor de enfeite borrado.
     const pProdutos = c.from('pcp_produtos')
-      .select('codigo, codigo_produto_omie, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade), pcp_estoque_fisico(quantidade, contado_em, contado_por)' + (podeVerCusto ? ', preco_custo, custo_manual' : ''))
+      .select('codigo, codigo_produto_omie, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade), pcp_estoque_fisico(quantidade, contado_em, contado_por)' + (podeVerCusto ? ', preco_custo, custo_manual, custo_compra, custo_compra_fonte, custo_compra_em' : ''))
       .eq('ativo', true).order('familia').order('codigo');
     const pPosicao = c.from('pcp_posicao_compra').select('codigo, reservado, pendente, atualizado_em').range(0, 4999);
     Promise.all([pProdutos, pPosicao]).then(([rp, rq]) => {
@@ -623,7 +624,7 @@ function AlmoxarifadoEstoque() {
           fisicoEm: f ? f.contado_em : null,
           fisicoPor: f ? f.contado_por : null,
           dif: f ? Number(f.quantidade) - saldo : null,
-          custo: podeVerCusto ? (Number(p.preco_custo) > 0 ? Number(p.preco_custo) : (Number(p.custo_manual) > 0 ? Number(p.custo_manual) : 0)) : null,
+          custo: podeVerCusto ? rpCustoEfetivo(p) : null,   // Omie → compras → manual (relatorios-pcp-custos.jsx)
           faltas: [],
         };
       }));
@@ -822,7 +823,11 @@ function AlmoxarifadoEstoque() {
                     {maisCols && <td className="text-right">{almFmt(l.estoque_minimo)}</td>}
                     {maisCols && <td className="text-right" title={podeVerCusto ? '' : 'Sem permissão para ver custos'}
                       style={podeVerCusto ? undefined : { filter: 'blur(6px)', userSelect: 'none' }}>
-                      {podeVerCusto ? (Number(l.preco_custo) > 0 ? almFmt(l.preco_custo, 2) : (Number(l.custo_manual) > 0 ? <span title="Custo manual (estimado): o Omie ainda não tem custo deste item">{almFmt(l.custo_manual, 2)} ⓜ</span> : almFmt(l.preco_custo, 2))) : '00,00'}
+                      {podeVerCusto ? (rpUsaCompra(l)
+                        ? <span title={'Custo pelas COMPRAS: ' + (l.custo_compra_fonte === 'pedido_pendente' ? 'preço do pedido de compra ainda não recebido' : 'média ponderada das compras recebidas nos últimos 12 meses') + (l.custo_compra_em ? ' (compra mais recente em ' + new Date(l.custo_compra_em + 'T12:00:00').toLocaleDateString('pt-BR') + ')' : '') + '. O Omie ainda não informa custo médio deste item (sem saldo em estoque).'}>{almFmt(l.custo_compra, 2)} ⓒ</span>
+                        : (rpUsaManual(l)
+                          ? <span title="Custo manual (estimado): o Omie ainda não tem custo deste item">{almFmt(l.custo_manual, 2)} ⓜ</span>
+                          : almFmt(l.preco_custo, 2))) : '00,00'}
                     </td>}
                     <td>
                       {podeContar
@@ -893,7 +898,7 @@ function AlmoxarifadoCustos() {
   const carregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase não carregou.'); return; }
     const [pr, es, it] = await Promise.all([
-      sb.from('pcp_produtos').select('codigo, descricao, unidade, preco_custo, custo_manual, custo_manual_obs, custo_manual_por, custo_manual_em').eq('ativo', true).order('codigo').limit(5000),
+      sb.from('pcp_produtos').select('codigo, descricao, unidade, preco_custo, custo_manual, custo_compra, custo_compra_fonte, custo_compra_em, custo_compra_n, custo_manual_obs, custo_manual_por, custo_manual_em').eq('ativo', true).order('codigo').limit(5000),
       sb.from('pcp_estrutura').select('codigo_pai, codigo_filho').limit(5000),
       sb.from('pcp_pedido_itens').select('codigo, valor_total').eq('item_pcp', true).limit(20000),
     ]);
@@ -916,14 +921,15 @@ function AlmoxarifadoCustos() {
   if (!dados) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
 
   const semOmie = (p) => !(Number(p.preco_custo) > 0);
+  const porCompra = (p) => semOmie(p) && Number(p.custo_compra) > 0;      // custo vem das compras (Omie → compras → manual)
   const eFolha = (p) => !dados.temFilhos.has(p.codigo);           // custo de montagem sai da estrutura; só folha precisa de custo próprio
   const usado = (p) => dados.usadoEm[p.codigo] ? Array.from(dados.usadoEm[p.codigo]) : [];
-  const pendentes = dados.produtos.filter(p => semOmie(p) && eFolha(p) && !(Number(p.custo_manual) > 0));
+  const pendentes = dados.produtos.filter(p => semOmie(p) && eFolha(p) && !porCompra(p) && !(Number(p.custo_manual) > 0));
   const pendUsados = pendentes.filter(p => usado(p).length);
   const comManual = dados.produtos.filter(p => Number(p.custo_manual) > 0);
   const q = busca.trim().toLowerCase();
   let lista = dados.produtos.filter(p => eFolha(p) || Number(p.custo_manual) > 0);
-  if (filtro === 'pendentes') lista = lista.filter(p => semOmie(p) && !(Number(p.custo_manual) > 0));
+  if (filtro === 'pendentes') lista = lista.filter(p => semOmie(p) && !porCompra(p) && !(Number(p.custo_manual) > 0));
   else if (filtro === 'manuais') lista = lista.filter(p => Number(p.custo_manual) > 0);
   else lista = lista.filter(p => semOmie(p) || Number(p.custo_manual) > 0);
   if (soVendidos && filtro !== 'manuais') lista = lista.filter(p => usado(p).length);
@@ -979,10 +985,10 @@ function AlmoxarifadoCustos() {
       <Card title="Custos sem cadastro no Omie" sub={`${lista.length}${totalFiltrado > lista.length ? ' de ' + totalFiltrado : ''} item(ns), do maior para o menor valor de receita em jogo${pEditar ? '' : ' · somente leitura (sem a alçada de custo manual)'}`}>
         <div className="table-wrap" style={{ border: 0, overflowX: 'auto' }}>
           <table className="t pcp-grid">
-            <thead><tr><th>Código</th><th>Descrição</th><th>Usado em</th><th className="text-right" title="Receita dos pedidos do PCP que dependem deste componente (soma dos produtos vendidos que o contêm). Quanto maior, mais incerto fica o lucro sem este custo.">Receita em jogo</th><th className="text-right">Custo Omie</th><th className="text-right">Custo manual (R$)</th><th>Observação / fonte</th><th></th></tr></thead>
+            <thead><tr><th>Código</th><th>Descrição</th><th>Usado em</th><th className="text-right" title="Receita dos pedidos do PCP que dependem deste componente (soma dos produtos vendidos que o contêm). Quanto maior, mais incerto fica o lucro sem este custo.">Receita em jogo</th><th className="text-right" title="Custo médio do Omie (só existe com saldo) ou, sem ele, o custo pelas compras ⓒ (pedidos de compra do Omie)">Custo Omie / compras</th><th className="text-right">Custo manual (R$)</th><th>Observação / fonte</th><th></th></tr></thead>
             <tbody>
               {lista.map(p => {
-                const e = ed(p), omie = !semOmie(p);
+                const e = ed(p), omie = !semOmie(p), compra = porCompra(p), travado = omie || compra;   // custo do Omie ou das compras vale; o manual fica em reserva
                 return (
                   <tr key={p.codigo}>
                     <td><b style={{ fontWeight: 500 }}>{p.codigo}</b></td>
@@ -991,21 +997,25 @@ function AlmoxarifadoCustos() {
                     <td className="text-right" style={{ whiteSpace: 'nowrap' }}>{imp(p).receita > 0
                       ? <>{fmtBRL(imp(p).receita)}<div style={{ fontSize: 10, color: 'var(--fg3)' }}>{(imp(p).pct * 100).toLocaleString('pt-BR', { maximumFractionDigits: 0 })}% da receita do PCP</div></>
                       : <span style={{ color: 'var(--fg3)' }}>—</span>}</td>
-                    <td className="text-right">{omie ? almFmt(p.preco_custo, 2) : <span style={{ color: 'var(--vp-yellow)' }}>sem custo</span>}</td>
+                    <td className="text-right" style={{ whiteSpace: 'nowrap' }}>{omie ? almFmt(p.preco_custo, 2)
+                      : compra
+                        ? <>{almFmt(p.custo_compra, 4)} ⓒ<div style={{ fontSize: 10, color: 'var(--fg3)' }} title={'Custo pelas compras: ' + (p.custo_compra_fonte === 'pedido_pendente' ? 'preço do pedido de compra ainda não recebido' : 'média ponderada das compras recebidas nos últimos 12 meses') + '. Vem dos pedidos de compra do Omie.'}>{p.custo_compra_fonte === 'pedido_pendente' ? 'pedido pendente' : `${p.custo_compra_n} compra(s)`}{p.custo_compra_em ? ' · ' + new Date(p.custo_compra_em + 'T12:00:00').toLocaleDateString('pt-BR') : ''}</div></>
+                        : <span style={{ color: 'var(--vp-yellow)' }}>sem custo</span>}</td>
                     <td className="text-right">
-                      <input className="input" style={{ width: 110, textAlign: 'right' }} disabled={!pEditar || omie} placeholder="0,00" value={e.valor}
+                      <input className="input" style={{ width: 110, textAlign: 'right' }} disabled={!pEditar || travado} placeholder="0,00" value={e.valor}
                         onChange={ev => setEdits({ ...edits, [p.codigo]: { ...e, valor: ev.target.value } })}/>
                       {omie && <div style={{ fontSize: 10, color: 'var(--fg3)' }}>o custo do Omie vale</div>}
-                      {!omie && mudou(p) && (() => {
+                      {compra && <div style={{ fontSize: 10, color: 'var(--fg3)' }}>o custo das compras vale{Number(p.custo_manual) > 0 ? ' (o manual fica em reserva)' : ''}</div>}
+                      {!travado && mudou(p) && (() => {
                         const l = window.PcpCusto.parseValor(e.valor);
                         if (l.vazio) return <div style={{ fontSize: 10, color: 'var(--fg3)' }}>será removido</div>;
                         if (l.erro) return <div style={{ fontSize: 10, color: 'var(--vp-danger)' }}>{l.erro}</div>;
                         return <div style={{ fontSize: 10, color: l.aviso ? 'var(--vp-warning-ink, #8a6d00)' : 'var(--fg3)' }} title={l.aviso || ''}>= {fmtBRL(l.valor)}{l.aviso ? ' ⚠' : ''}</div>;
                       })()}
                     </td>
-                    <td><input className="input" style={{ width: 200 }} disabled={!pEditar || omie} placeholder="ex.: orçamento do fornecedor X" value={e.obs}
+                    <td><input className="input" style={{ width: 200 }} disabled={!pEditar || travado} placeholder="ex.: orçamento do fornecedor X" value={e.obs}
                       onChange={ev => setEdits({ ...edits, [p.codigo]: { ...e, obs: ev.target.value } })}/></td>
-                    <td>{pEditar && !omie && <Button variant="primary" disabled={!mudou(p) || salvando === p.codigo || !!window.PcpCusto.parseValor(e.valor).erro} onClick={() => salvar(p)}>{salvando === p.codigo ? 'Salvando…' : 'Salvar'}</Button>}</td>
+                    <td>{pEditar && !travado && <Button variant="primary" disabled={!mudou(p) || salvando === p.codigo || !!window.PcpCusto.parseValor(e.valor).erro} onClick={() => salvar(p)}>{salvando === p.codigo ? 'Salvando…' : 'Salvar'}</Button>}</td>
                   </tr>
                 );
               })}
@@ -1015,7 +1025,7 @@ function AlmoxarifadoCustos() {
         </div>
       </Card>
       <div style={{ marginTop: 8, fontSize: 12, color: 'var(--fg3)' }}>
-        O custo manual é uma <b style={{ fontWeight: 500 }}>estimativa do PCP</b> e só vale enquanto o Omie não tiver custo do item; quando o Omie passar a ter (primeira compra), o do Omie assume sozinho. Entra no lucro dos relatórios com o marcador ⓜ. Limpe o campo e salve para remover.
+        Ordem do custo: <b style={{ fontWeight: 500 }}>1) custo médio do Omie</b> (só existe enquanto há saldo) → <b style={{ fontWeight: 500 }}>2) custo pelas compras ⓒ</b> (média ponderada das compras recebidas nos últimos 12 meses, ou o preço do pedido pendente; vem dos pedidos de compra do Omie, atualizado todo dia) → <b style={{ fontWeight: 500 }}>3) custo manual ⓜ</b>. O manual é uma <b style={{ fontWeight: 500 }}>estimativa do PCP</b> e só vale quando as duas fontes automáticas não têm custo do item. Limpe o campo e salve para remover.
       </div>
     </div>
   );

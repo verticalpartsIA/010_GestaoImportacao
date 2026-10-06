@@ -54,7 +54,7 @@ function RPProdutosFoto({ ctx }) {
     let vivo = true;
     (async () => {
       try {
-        const campos = 'codigo, descricao, familia, tipo_sped, unidade' + (perm.custo ? ', preco_custo, custo_manual' : '');
+        const campos = 'codigo, descricao, familia, tipo_sped, unidade' + (perm.custo ? ', preco_custo, custo_manual, custo_compra' : '');
         const [p, f, e] = await Promise.all([
           sb.from('pcp_produtos').select(campos).eq('ativo', true).limit(5000),
           sb.from('fichas_tecnicas').select('id, codigo_produto, midia, arquivado').not('codigo_produto', 'is', null).limit(5000),
@@ -138,7 +138,7 @@ function RPProdutosFoto({ ctx }) {
                   {p.familia && <div style={{ fontSize: 11, color: 'var(--fg3)' }}>{p.familia}</div>}
                   <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 'auto' }}>
                     Estoque: <b style={{ fontWeight: 500 }}>{rpFmt(d.saldo[p.codigo] || 0, 2)}</b> {p.unidade || ''}
-                    {ef != null && ef > 0 && <> · Custo: <b style={{ fontWeight: 500 }}>{pfMoeda(ef)}</b>{rpUsaManual(p) ? ' ⓜ' : ''}</>}
+                    {ef != null && ef > 0 && <> · Custo: <b style={{ fontWeight: 500 }}>{pfMoeda(ef)}</b>{rpUsaManual(p) ? ' ⓜ' : (rpUsaCompra(p) ? ' ⓒ' : '')}</>}
                   </div>
                   {s !== 'com' && <button className="btn btn--sm" onClick={() => abrirFicha(p)}>{f ? 'Abrir ficha e anexar foto' : 'Ir para Fichas Técnicas'}</button>}
                 </div>

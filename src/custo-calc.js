@@ -66,5 +66,35 @@
     return out;
   }
 
-  window.PcpCusto = { parseValor: parseValor, impacto: impacto };
+  /* custoPorCompras(linhas, hojeIso, meses): custo do componente a partir das compras (pedidos de compra do Omie).
+     Regra aprovada: média PONDERADA pela quantidade RECEBIDA das compras dos últimos `meses` (12), só linhas com preço > 0;
+     sem compra recebida nesse prazo, cai para o preço do PEDIDO PENDENTE (ponderado pela quantidade pedida).
+     Ponderar pela quantidade é o que protege de linhas de quantidade minúscula com preço fora do padrão (ex.: 0,03 × R$ 280
+     ao lado de 7.000 × R$ 3,56) — o "último preço" erraria; a média ponderada ficou a ±30% do custo do Omie em 57 de 57 itens.
+     Preço de pedido com valor 0 é ignorado (ex.: requisição convertida sem preço). IPI/ST/frete não entram: quase não vêm
+     nas linhas (5 de 91) e incluí-los não aproximou do custo do Omie.
+     linhas: [{ situacao: 'recebido'|'pendente', data_pedido: 'AAAA-MM-DD', quantidade, qtde_recebida, valor_unitario }]
+     devolve { custo, fonte: 'media_12m'|'pedido_pendente', em: 'AAAA-MM-DD', n } ou null. */
+  // BEGIN CALC custoPorCompras
+  function custoPorCompras(linhas, hojeIso, meses) {
+    const num = (x) => Number(x) || 0;
+    const d = new Date(hojeIso + 'T00:00:00Z');
+    d.setUTCMonth(d.getUTCMonth() - (meses || 12));
+    const desde = d.toISOString().slice(0, 10);
+    const todas = linhas || [];
+    const rec = todas.filter((l) => l.situacao === 'recebido' && num(l.valor_unitario) > 0 && num(l.qtde_recebida) > 0 && l.data_pedido && l.data_pedido >= desde);
+    const pend = todas.filter((l) => l.situacao === 'pendente' && num(l.valor_unitario) > 0 && num(l.quantidade) > 0);
+    const media = (ls, campo) => {
+      const q = ls.reduce((s, l) => s + num(l[campo]), 0);
+      const v = ls.reduce((s, l) => s + num(l[campo]) * num(l.valor_unitario), 0);
+      return Math.round((v / q) * 10000) / 10000;
+    };
+    const maisRecente = (ls) => ls.map((l) => l.data_pedido || '').sort().pop() || null;
+    if (rec.length) return { custo: media(rec, 'qtde_recebida'), fonte: 'media_12m', em: maisRecente(rec), n: rec.length };
+    if (pend.length) return { custo: media(pend, 'quantidade'), fonte: 'pedido_pendente', em: maisRecente(pend), n: pend.length };
+    return null;
+  }
+  // END CALC
+
+  window.PcpCusto = { parseValor: parseValor, impacto: impacto, custoPorCompras: custoPorCompras };
 }());

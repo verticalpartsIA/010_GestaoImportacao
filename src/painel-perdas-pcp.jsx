@@ -26,7 +26,7 @@ function RPPainelPerdas({ ctx, ano, ordens }) {
     (async () => {
       const [e, p] = await Promise.all([
         sb.from('pcp_estrutura').select('codigo_pai, codigo_filho, quantidade, perda_pct').limit(5000),
-        sb.from('pcp_produtos').select('codigo, preco_custo, custo_manual').limit(5000),
+        sb.from('pcp_produtos').select('codigo, preco_custo, custo_manual, custo_compra').limit(5000),
       ]);
       const filhos = {}; (e.data || []).forEach(l => { (filhos[l.codigo_pai] = filhos[l.codigo_pai] || []).push(l); });
       const preco = {}; (p.data || []).forEach(l => { preco[l.codigo] = rpCustoEfetivo(l); });
