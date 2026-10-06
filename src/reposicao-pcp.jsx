@@ -65,7 +65,7 @@ function AlmoxarifadoReposicao() {
   const carregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase não carregou.'); return; }
     try {
-      const campos = 'codigo, descricao, unidade, familia, tipo_sped, altura_cm, largura_cm, profundidade_cm' + (perm.custo ? ', preco_custo, custo_manual' : '');
+      const campos = 'codigo, descricao, unidade, familia, tipo_sped, altura_cm, largura_cm, profundidade_cm' + (perm.custo ? ', preco_custo, custo_manual, custo_compra' : '');
       const [c, cur, prods, estoque, pos, movs, estr] = await Promise.all([
         sb.from('pcp_reposicao_config').select('*').eq('id', true).maybeSingle(),
         sb.from('pcp_consumo_cursor').select('concluido_ate, atualizado_em, proxima_data').eq('id', true).maybeSingle(),
