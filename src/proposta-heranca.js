@@ -102,6 +102,8 @@
       const prof = u.caixa_profundidade_mm || tec.caixa_profundidade_mm;
       const paradas = u.paradas || tec.paradas;
       const tipo = u.tipo || tec.tipo || '';
+      const cabLargura = u.cabina_largura_mm || tec.cabina_largura_mm;
+      const cabProf = u.cabina_profundidade_mm || tec.cabina_profundidade_mm;
       /* Elevador de Carga também pode ter capacidade de passageiros (não é
          exclusividade do tipo Passageiro) — o "4000 Passageiros" visto na
          cotação 950 era só o vendedor tendo digitado o número errado no
@@ -117,6 +119,9 @@
         capacidade: capKg ? `${capPass ? capPass + ' Passageiros x ' : ''}${capKg}Kg` : '',
         dimensoesCaixa: (largura || prof) ? `${largura || '?'} x ${prof || '?'}mm` : '',
         profPoço: String(u.poco_mm || tec.poco_mm || ''),
+        dimensoesCabine: (cabLargura || cabProf) ? `${cabLargura || '?'} x ${cabProf || '?'}mm` : '',
+        tensao: u.tensao_principal || tec.tensao_principal || '',
+        tracao: u.tracao || tec.tracao || '',
         vel: String(u.velocidade_ms || tec.velocidade_ms || ''),
         andaresParadasPortas: paradas ? `${paradas} Paradas` : '',
         qtd: Number(u.quantidade || tec.quantidade) || 1,
@@ -358,5 +363,5 @@
     return partes.join(' · ');
   }
 
-  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos };
+  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes };
 }());

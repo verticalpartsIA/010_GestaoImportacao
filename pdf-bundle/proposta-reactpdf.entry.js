@@ -390,21 +390,41 @@ function PgMarketing(S, data) {
   ]);
 }
 
+/* Linhas + agrupamento por equipamento — extraído (issue #704) pra ser
+   testável sem react-pdf. Mesma lista de campos (+tensão/tração/cabine,
+   novos nesta issue) e mesma regra de "1 bloco por equipamento" que
+   proposta-preview.jsx já usa (PreviewEspecTabela/montarLinhasEspec) —
+   antes esta função só lia especificacoes[0], então o PDF baixado pelo
+   cliente mostrava só o 1º equipamento de uma cotação com 2+ (950/955),
+   mesmo o preview HTML já mostrando todos. */
+function montarBlocosEspec(especificacoes) {
+  const lista = (especificacoes && especificacoes.length) ? especificacoes : [{}];
+  return lista.map((s) => ({
+    id: s.id,
+    linhas: [
+      ['Tipo de Empreendimento', s.empreendimento], ['Característica de Transporte', s.carac], ['Denominação', s.denominacao],
+      ['Percurso', s.percurso && `${s.percurso}mm`], ['Capacidade', s.capacidade], ['Caixa de Corrida', s.dimensoesCaixa],
+      ['Poço', s.profPoço && `${s.profPoço}mm`], ['Dimensões da Cabine', s.dimensoesCabine], ['Tensão de Alimentação', s.tensao],
+      ['Tração', s.tracao], ['Velocidade', s.vel && `${s.vel} m/s`], ['Paradas', s.andaresParadasPortas],
+      ['Modelo', s.modelo], ['Quantidade', s.qtd],
+    ].filter(([, v]) => v),
+  }));
+}
+
 function PgEspecTabela(S, data) {
   const ed = data.elevador || {};
-  const s = (ed.especificacoes || [])[0] || {};
-  const linhas = [
-    ['Tipo de Empreendimento', s.empreendimento], ['Característica de Transporte', s.carac], ['Denominação', s.denominacao],
-    ['Percurso', s.percurso && `${s.percurso}mm`], ['Capacidade', s.capacidade], ['Caixa de Corrida', s.dimensoesCaixa],
-    ['Poço', s.profPoço && `${s.profPoço}mm`], ['Velocidade', s.vel && `${s.vel} m/s`], ['Paradas', s.andaresParadasPortas],
-    ['Modelo', s.modelo], ['Quantidade', s.qtd],
-  ].filter(([, v]) => v);
+  const blocos = montarBlocosEspec(ed.especificacoes);
+  const temConteudo = blocos.some((b) => b.linhas.length);
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, 'Especificações Técnicas'),
     h(View, { style: S.secRule, key: 'r' }),
-    h(Text, { style: S.subTitle, key: 'st' }, 'Características Principais'),
-    linhas.length ? Tabela2(S, [{ label: 'Característica', flex: 1 }, { label: s.id || 'Elevador de Passageiros', flex: 1 }], linhas, 't') : Vazio(S, 'Preencha as especificações técnicas na aba "Especificações Técnicas".'),
+    ...(temConteudo
+      ? blocos.map((b, i) => b.linhas.length ? h(View, { key: 'b' + i }, [
+          h(Text, { style: S.subTitle, key: 'st' }, blocos.length > 1 ? (b.id || `Equipamento ${i + 1}`) : 'Características Principais'),
+          Tabela2(S, [{ label: 'Característica', flex: 1 }, { label: b.id || 'Elevador de Passageiros', flex: 1 }], b.linhas, 't'),
+        ]) : null)
+      : [Vazio(S, 'Preencha as especificações técnicas na aba "Especificações Técnicas".')]),
     PdfFooter(S),
   ]);
 }

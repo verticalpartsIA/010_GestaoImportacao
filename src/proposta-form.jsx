@@ -41,6 +41,8 @@ const OPTIONS = {
   caracTransporteEsc:  ["Alto Tráfego", "Comercial"],
   caracTransporteEst:  ["Alto Tráfego", "Comercial"],
 
+  tracaoElev: ["2:1", "4:1"],
+
   // Elevador — Acabamentos
   modeloCabine: ["VP-004","VP-200","VP-221","VP-224","VP-228","VP-229","VP-230","VP-301","VP-302","VPY","HC165","HC160"],
   acabamentoMaterial: ["Aço Inox - 304", "Aço Inox - 430", "Aço pintado", "Aço Inox com painel traseiro espelhado"],
@@ -381,7 +383,7 @@ function S_DescricaoElevador({ d, set }) {
 function S_EspecElevador({ d, set }) {
   const items = d.elevador.especificacoes;
   const update = (i, k, v) => { const arr = [...items]; arr[i] = { ...arr[i], [k]: v }; set("elevador.especificacoes", arr); };
-  const add = () => set("elevador.especificacoes", [...items, { id: "", modelo: "", empreendimento: "", carac: "", denominacao: "", percurso: "", capacidade: "", dimensoesCaixa: "", profPoço: "", vel: "", andaresParadasPortas: "", qtd: 1 }]);
+  const add = () => set("elevador.especificacoes", [...items, { id: "", modelo: "", empreendimento: "", carac: "", denominacao: "", percurso: "", capacidade: "", dimensoesCaixa: "", profPoço: "", dimensoesCabine: "", tensao: "", tracao: "", vel: "", andaresParadasPortas: "", qtd: 1 }]);
   const remove = (i) => set("elevador.especificacoes", items.filter((_, j) => j !== i));
   const dup = (i) => { const arr = [...items]; arr.splice(i + 1, 0, { ...items[i] }); set("elevador.especificacoes", arr); };
 
@@ -403,8 +405,12 @@ function S_EspecElevador({ d, set }) {
             <PEField label="Dimensões da Caixa" tag="LxP mm"><PETextInput value={it.dimensoesCaixa} onChange={(v) => update(i, "dimensoesCaixa", v)} placeholder="1600 x 1840mm"/></PEField>
 
             <PEField label="Profundidade do Poço" tag="mm"><PENumber value={it.profPoço} onChange={(v) => update(i, "profPoço", v)} suffix="mm" placeholder="1500"/></PEField>
+            <PEField label="Dimensões da Cabine" tag="LxP mm"><PETextInput value={it.dimensoesCabine} onChange={(v) => update(i, "dimensoesCabine", v)} placeholder="1500 x 1700mm"/></PEField>
             <PEField label="Velocidade" tag="m/s"><PENumber value={it.vel} onChange={(v) => update(i, "vel", v)} suffix="m/s" placeholder="1"/></PEField>
+
             <PEField label="Andares / Paradas / Portas"><PETextInput value={it.andaresParadasPortas} onChange={(v) => update(i, "andaresParadasPortas", v)} placeholder="18 Paradas (-1, 0, 1 a 16)"/></PEField>
+            <PEField label="Tensão de Alimentação"><PETextInput value={it.tensao} onChange={(v) => update(i, "tensao", v)} placeholder="380V/3P/60Hz"/></PEField>
+            <PEField label="Tração"><PESelect value={it.tracao} onChange={(v) => update(i, "tracao", v)} options={OPTIONS.tracaoElev}/></PEField>
 
             <PEField label="Quantidade" required><PENumber value={it.qtd} onChange={(v) => update(i, "qtd", v)} placeholder="1"/></PEField>
           </div>
