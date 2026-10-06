@@ -1093,11 +1093,12 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
       if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
       const url = store.cotacaoUrl(cot.token);
       const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.etapaId('cotacao', numeroCotacao)}` : '';
-      const msg = `Solicitação de cotação técnica ${cot.numero_documento}${numeroTxt} — VerticalParts\n` +
-        `Segue o link com as especificações da(s) unidade(s) ${grupo.unidades.map((u) => u.identificador).join(', ')} para cotação:\n${url}\n\n` +
-        `Este mesmo link foi enviado por WhatsApp e E-mail — responda por qualquer um dos dois, sem precisar repetir.\n` +
-        `This same link was sent via WhatsApp and Email — please reply through either one, no need to repeat.\n` +
-        `此链接已通过WhatsApp和邮件发送 — 您可以通过任一方式回复，无需重复填写。`;
+      /* 06/10 — assunto e corpo em PT-BR / EN-US / 中文 (fonte única no store). */
+      const unidTxt = grupo.unidades.map((u) => u.identificador).join(', ');
+      const { subject: assuntoRfq, text: msg } = store.mensagemRfq({
+        numeroDocumento: cot.numero_documento, numeroTxt, url, linkJaEnviadoEmDoisCanais: true,
+        descricaoPt: `da(s) unidade(s) ${unidTxt}`, descricaoEn: `of unit(s) ${unidTxt}`, descricaoZh: `单元 ${unidTxt} `,
+      });
       let registrar = true; // só registra "enviado" quando o envio de fato aconteceu
       let avisoFinal = null;
       if (canal === 'whatsapp') {
@@ -1113,7 +1114,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
            com Proposta/Contrato de Venda/Contrato Instalador); a decisão do
            que fazer com sucesso/falha continua aqui, sem mudança. */
         const { enviouDireto, emailData } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: recipient.email, subject: `Cotação técnica ${cot.numero_documento} — VerticalParts`, text: msg,
+          to: recipient.email, subject: assuntoRfq, text: msg,
           numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
         });
         if (enviouDireto) {
@@ -1131,7 +1132,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
           registrar = false;
           avisoFinal = null;
           window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado ao fornecedor e a cotação NÃO foi marcada como enviada. Abrindo seu e-mail padrão para envio manual (depois use "Copiar link"/WhatsApp para registrar o envio).', 'error');
-          window.open(window.PFStore.mailtoHref(recipient.email, `Cotação técnica ${cot.numero_documento} — VerticalParts`, msg), '_blank');
+          window.open(window.PFStore.mailtoHref(recipient.email, assuntoRfq, msg), '_blank');
         }
       }
       if (canal === 'link') {

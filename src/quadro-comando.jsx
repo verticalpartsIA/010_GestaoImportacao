@@ -773,10 +773,13 @@ function QcRamoBComprado({ quadro, setQuadro, quadroId }) {
     try {
       const cotAtual = await window.QuadroComandoStore.obterOuCriarCotacaoFornecedor(quadroId, fornecedor);
       const url = window.CotacaoElevadorFornecedorStore.cotacaoUrl(cotAtual.token);
-      const msg = `Solicitação de cotação técnica ${cotAtual.numero_documento} — VerticalParts\n` +
-        `Segue o link com as especificações do Quadro de Comando para cotação:\n${url}`;
+      /* 06/10 — assunto e corpo em PT-BR / EN-US / 中文 (fonte única no store). */
+      const { subject: assuntoRfq, text: msg } = window.CotacaoElevadorFornecedorStore.mensagemRfq({
+        numeroDocumento: cotAtual.numero_documento, numeroTxt: '', url, linkJaEnviadoEmDoisCanais: false,
+        descricaoPt: 'do Quadro de Comando', descricaoEn: 'of the Control Panel', descricaoZh: '控制柜',
+      });
       if (canal === 'whatsapp') window.open(window.PFStore.whatsAppHref(contato.telefone, msg), '_blank');
-      if (canal === 'email') window.open(window.PFStore.mailtoHref(contato.email, `Cotação técnica ${cotAtual.numero_documento} — VerticalParts`, msg), '_blank');
+      if (canal === 'email') window.open(window.PFStore.mailtoHref(contato.email, assuntoRfq, msg), '_blank');
       if (canal === 'link') { try { await navigator.clipboard.writeText(url); } catch (e) {} window.toast?.('Link copiado.', 'success'); }
       await window.CotacaoElevadorFornecedorStore.marcarEnviado(cotAtual.id, canal, contato);
       setQuadro({ ...quadro, cotacao_fornecedor_id: cotAtual.id });
