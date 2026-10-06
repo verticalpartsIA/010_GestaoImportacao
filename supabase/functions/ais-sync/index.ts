@@ -124,6 +124,8 @@ function mapSinayResponse(j: Record<string, unknown>) {
     lng: coords?.lng ?? null,
     eta: isoDate((pod as Record<string, unknown>)?.date),
     etd: isoDate((pol as Record<string, unknown>)?.date),
+    polName: (((pol as Record<string, unknown>)?.location as Record<string, unknown>)?.name as string) ?? null,
+    podName: (((pod as Record<string, unknown>)?.location as Record<string, unknown>)?.name as string) ?? null,
     vessel: (vessel?.name as string) ?? null,
     imo: vessel?.imo != null ? String(vessel.imo) : null,
     timeline,
@@ -206,6 +208,8 @@ Deno.serve(async (req) => {
         }
         if (mapped.eta) patch.eta = mapped.eta;
         if (mapped.etd) patch.etd = mapped.etd;
+        if (!e.origin && mapped.polName) patch.origin = mapped.polName;
+        if (!e.destination && mapped.podName) patch.destination = mapped.podName;
         if (mapped.vessel) patch.vessel = mapped.vessel;
         if (mapped.imo) patch.imo = mapped.imo;
         if (mapped.timeline && mapped.timeline.length) patch.tracking_events = mapped.timeline;

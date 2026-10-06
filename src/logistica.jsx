@@ -790,6 +790,11 @@ const rtPosicaoReal = (s) => s.tracking_provider === 'sinay' && !['ERROR', 'RATE
 const rtChegou = (s) => !!s.chegada_confirmada_em || s.status === 'Entregue';
 const rtStatusEfetivo = (s) => s.chegada_confirmada_em ? 'Entregue' : s.status;
 const rtDataBR = (iso) => iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
+// Último evento REAL (isActual) vindo da Sinay — a única "posição" confiável quando o rastreio está parado.
+const rtUltimoEvento = (s) => {
+  const ev = Array.isArray(s.tracking_events) ? s.tracking_events.find(e => e.isActual) : null;
+  return ev ? `${ev.description || 'Evento'}${ev.location ? ' em ' + ev.location : ''} (${rtDataBR(ev.date)})` : null;
+};
 const rtDoc = (s) => s.bl || s.container_number || null;
 const rtSemRota = (s) => !(eiPortCoords(s.origin || s.from) && eiPortCoords(s.destination || s.to));
 
@@ -835,7 +840,7 @@ function RastreamentoMapa({ ships, activeId, onSelect }) {
       if (pos) {
         const tam = ativo ? 30 : 22, estimada = !chegou && !rtPosicaoReal(s);
         const icone = window.L.divIcon({ className: "", html: `<div style="font-size:${tam - 2}px;line-height:1;${ativo ? "background:var(--vp-yellow,#facc15);border-radius:50%;padding:2px;" : ""}${estimada ? "opacity:.55;" : ""}filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚢</div>`, iconSize: [tam, tam], iconAnchor: [tam / 2, tam / 2] });
-        window.L.marker(pos, { icon: icone, zIndexOffset: ativo ? 2000 : 1000 }).addTo(grp).bindTooltip((s.vessel || s.id) + (chegou ? ' — chegou' : estimada ? ' — última posição conhecida (rastreio parado)' : '')).on("click", () => onSelect && onSelect(s.id));
+        window.L.marker(pos, { icon: icone, zIndexOffset: ativo ? 2000 : 1000 }).addTo(grp).bindTooltip((s.vessel || s.id) + (chegou ? ' — chegou' : estimada ? ' — ' + (rtUltimoEvento(s) || 'sem leitura real') + ' · rastreio parado' : '')).on("click", () => onSelect && onSelect(s.id));
       }
     });
   }, [ships, activeId]);
@@ -905,13 +910,16 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
       if (filterEta === "Próximos 30 dias") return dias >= 0 && dias <= 30;
       return true;
     });
-  const activeId = (active && ships.some(s => s.id === active)) ? active : (ships[0] && ships[0].id) || null;
+  const ativos = ships.filter(s => !rtChegou(s));
+  const entregues = ships.filter(rtChegou);
+  const noMapa = filterStatus === "Entregue" ? ships : ativos;
+  const activeId = (active && ships.some(s => s.id === active)) ? active : ((ativos[0] || ships[0]) && (ativos[0] || ships[0]).id) || null;
   const activeShip = ships.find(s => s.id === activeId);
-  const lastSync = comPosicao.map(s => s.last_ais_sync).filter(Boolean).sort().pop();
+  const lastSync = comPosicao.filter(e => !rtChegou(e)).map(s => s.last_ais_sync).filter(Boolean).sort().pop();
   const horasSync = rtHoras(lastSync);
   const nAtrasados = comPosicao.filter(e => rtEta(e, hoje).atrasado).length;
   const estimadas = comPosicao.filter(e => !rtChegou(e) && !rtPosicaoReal(e));
-  const ultimaReal = comPosicao.map(e => e.tracking_updated_at).filter(Boolean).sort().pop();
+  const ultimaReal = comPosicao.filter(e => !rtChegou(e)).map(e => e.tracking_updated_at).filter(Boolean).sort().pop();
 
   const exportar = () => {
     const cel = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
@@ -938,7 +946,7 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Rastreamento</div>
           <h1 className="page-head__title">Mapa Marítimo</h1>
-          <p className="page-head__sub">Posição dos {ships.length} navio{ships.length !== 1 ? 's' : ''}{nAtrasados ? ` · ${nAtrasados} com ETA atrasada` : ''} · sincronização AIS{lastSync ? ` · atualizado ${window.__VP_SB.timeAgo(lastSync)}` : ' · aguardando 1ª sync'}</p>
+          <p className="page-head__sub">{ativos.length} navio{ativos.length !== 1 ? 's' : ''} em trânsito{entregues.length ? ` · ${entregues.length} entregue${entregues.length !== 1 ? 's' : ''}` : ''}{nAtrasados ? ` · ${nAtrasados} com ETA atrasada` : ''} · {ultimaReal ? `última leitura real em ${rtDataBR(ultimaReal)}` : 'nenhuma leitura real ainda'}{lastSync ? ` · robô tentou ${window.__VP_SB.timeAgo(lastSync)}` : ''}</p>
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="refresh" onClick={onSync} disabled={syncing}>{syncing ? 'Atualizando…' : 'Atualizar'}</Button>
@@ -973,15 +981,16 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
       <div className="grid-2" style={{ gap: 20, gridTemplateColumns: "1fr 360px" }}>
         <Card sharp={false} padding="0">
           <div style={{ height: 600 }}>
-            <RastreamentoMapa ships={ships} activeId={activeId} onSelect={(id) => setActive(id)}/>
+            <RastreamentoMapa ships={noMapa} activeId={activeId} onSelect={(id) => setActive(id)}/>
           </div>
         </Card>
 
         <div className="stack">
-          <Card title="Navios em trânsito" sub={ships.length + " ativos"}>
+          {[['Navios em trânsito', ativos, ativos.length + ' ativos'], ['Entregues', entregues, entregues.length + ' entregue' + (entregues.length !== 1 ? 's' : '')]].filter(([, l], i) => i === 0 || l.length).map(([titulo, lista, subt]) => (
+          <Card key={titulo} title={titulo} sub={subt}>
             <div className="stack" style={{ gap: 8 }}>
-              {ships.length === 0 ? <div className="small muted">Nenhum navio neste filtro.</div> : null}
-              {ships.map((s) => {
+              {lista.length === 0 ? <div className="small muted">Nenhum navio neste filtro.</div> : null}
+              {lista.map((s) => {
                 const r = rtEta(s, hoje), sel = activeId === s.id, doc = rtDoc(s), chegou = rtChegou(s), real = rtPosicaoReal(s);
                 return (
                   <div key={s.id}
@@ -997,17 +1006,18 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
                     {sel ? <span style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: "var(--vp-yellow)" }}/> : null}
                     <div className="row sb">
                       <div className="cell-main" style={{ color: "inherit", fontSize: 13 }}>{s.vessel}</div>
-                      <span className="mono small" style={{ color: sel ? "var(--vp-yellow)" : "var(--fg3)" }} title={chegou ? 'Chegada confirmada' : real ? 'Percurso' : 'Percurso na última leitura (desatualizado)'}>{chegou ? '100%' : (real ? '' : '~') + Math.round(s.position * 100) + '%'}</span>
+                      <span className="mono small" style={{ color: sel ? "var(--vp-yellow)" : "var(--fg3)" }} title={chegou ? 'Chegada confirmada' : real ? 'Percurso' : 'Sem leitura real: percurso desconhecido'}>{chegou ? '100%' : real ? Math.round(s.position * 100) + '%' : '—'}</span>
                     </div>
                     <div className="cell-sub" style={{ marginTop: 4 }}>{rtArmador(s)} · {doc ? (s.bl ? `BL ${s.bl}` : `Cont. ${s.container_number}`) : 'sem BL/container'}</div>
                     <div className="progress" style={{ marginTop: 8, background: sel ? "var(--vp-gray-900)" : "var(--vp-gray-200)" }}>
-                      <span style={{ width: (chegou ? 100 : s.position * 100) + "%", opacity: real || chegou ? 1 : .5 }}/>
+                      <span style={{ width: (chegou ? 100 : real ? s.position * 100 : 0) + "%", opacity: 1 }}/>
                     </div>
                     <div className="row sb mono small" style={{ marginTop: 8, color: sel ? "rgba(255,255,255,.7)" : "var(--fg3)" }}>
-                      <span>{real && !chegou ? (s.speed != null ? `${s.speed} kn · rumo ${s.heading}°` : 'posição real') : chegou ? '' : 'última posição conhecida'}</span>
+                      <span>{real && !chegou ? (s.speed != null ? `${s.speed} kn · rumo ${s.heading}°` : 'posição real') : chegou ? '' : (rtUltimoEvento(s) || 'sem leitura real')}</span>
                       <span>ETA {fmtDate(s.eta)}</span>
                     </div>
                     {chegou ? <div style={{ marginTop: 6, fontSize: 11, fontWeight: 500, color: sel ? 'var(--vp-yellow)' : 'var(--vp-success-ink, #1a7f37)' }}>✓ Chegada confirmada{s.chegada_confirmada_em ? ' em ' + rtDataBR(s.chegada_confirmada_em) : ''}</div> : null}
+                    {!chegou && (s.eta_original || s.etaOriginal) && (s.eta_original || s.etaOriginal) !== s.eta ? <div style={{ marginTop: 4, fontSize: 10, opacity: .75 }}>ETA original {fmtDate(s.eta_original || s.etaOriginal)}{r.adiadaDias ? ` · adiada ${r.adiadaDias}d` : ''}</div> : null}
                     {r.atrasado && !chegou ? <div style={{ marginTop: 6, fontSize: 11, fontWeight: 500, color: r.vencidaDias ? "#ff6b6b" : "var(--vp-warning-ink, #b45309)" }}>{r.vencidaDias ? '⚠ ' : ''}{rtSituacaoEta(r)}</div> : null}
                     {rtSemRota(s) ? <div style={{ marginTop: 4, fontSize: 10, opacity: .7 }}>sem origem/destino: rota não desenhada</div> : null}
                   </div>
@@ -1015,6 +1025,7 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
               })}
             </div>
           </Card>
+          ))}
 
           {activeShip ? (
             <Card title="Detalhe" sub={activeShip.id} sharp>
@@ -1026,11 +1037,13 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
               <KvBlock label="Conteúdo" value={`${activeShip.containers || '—'}× ${activeShip.type || activeShip.container_type || '—'}`}/>
               <KvBlock label="Trajeto" value={rtSemRota(activeShip) ? `${activeShip.from || activeShip.origin || '—'} → ${activeShip.to || activeShip.destination || '—'} (não informado)` : `${activeShip.from || activeShip.origin} → ${activeShip.to || activeShip.destination}`}/>
               <KvBlock label="ETA" value={fmtDateLong(activeShip.eta)}/>
+              {(activeShip.eta_original && activeShip.eta_original !== activeShip.eta) ? <KvBlock label="ETA original" value={fmtDateLong(activeShip.eta_original)}/> : null}
               <KvBlock label="Situação do ETA" value={rtSituacaoEta(detalheEta)}/>
-              <KvBlock label="Posição" value={rtChegou(activeShip) ? 'chegou (confirmado)' : rtPosicaoReal(activeShip) ? (activeShip.speed != null ? `real · ${activeShip.speed} kn · rumo ${activeShip.heading}°` : 'real (sem velocidade/rumo)') : 'DESATUALIZADA — rastreio sem leitura real recente'}/>
-              <KvBlock label="Status do rastreio" value={String(activeShip.tracking_status || '').toUpperCase() === 'ERROR' ? `erro na consulta à Sinay (última leitura real em ${rtDataBR(activeShip.tracking_updated_at)})` : (activeShip.tracking_status || (activeShip.tracking_provider ? '—' : 'sem rastreio configurado'))}/>
-              {activeShip.tracking_erro ? <KvBlock label="Motivo do erro" value={activeShip.tracking_erro}/> : null}
-              <KvBlock label="Última leitura" value={activeShip.last_ais_sync ? `${window.__VP_SB.timeAgo(activeShip.last_ais_sync)}${rtHoras(activeShip.last_ais_sync) > 26 ? ' ⚠' : ''}` : 'aguardando 1ª sync'}/>
+              <KvBlock label="Posição" value={rtChegou(activeShip) ? 'chegou (confirmado)' : rtPosicaoReal(activeShip) ? (activeShip.speed != null ? `real · ${activeShip.speed} kn · rumo ${activeShip.heading}°` : 'real (sem velocidade/rumo)') : `DESATUALIZADA — ${rtUltimoEvento(activeShip) ? 'último evento real: ' + rtUltimoEvento(activeShip) : 'sem leitura real'}`}/>
+              <KvBlock label="Status do rastreio" value={rtChegou(activeShip) ? `encerrado — chegada confirmada${activeShip.chegada_confirmada_em ? ' em ' + rtDataBR(activeShip.chegada_confirmada_em) : ''}` : String(activeShip.tracking_status || '').toUpperCase() === 'ERROR' ? `erro na consulta à Sinay (última leitura real em ${rtDataBR(activeShip.tracking_updated_at)})` : (activeShip.tracking_status || (activeShip.tracking_provider ? '—' : 'sem rastreio configurado'))}/>
+              {activeShip.tracking_erro && !rtChegou(activeShip) ? <KvBlock label="Motivo do erro" value={activeShip.tracking_erro}/> : null}
+              <KvBlock label="Última leitura real" value={activeShip.tracking_updated_at ? `${rtDataBR(activeShip.tracking_updated_at)} (${window.__VP_SB.timeAgo(activeShip.tracking_updated_at)})${rtHoras(activeShip.tracking_updated_at) > 72 && !rtChegou(activeShip) ? ' ⚠' : ''}` : 'nenhuma'}/>
+              {!rtChegou(activeShip) ? <KvBlock label="Última tentativa do robô" value={activeShip.last_ais_sync ? `${window.__VP_SB.timeAgo(activeShip.last_ais_sync)}${rtHoras(activeShip.last_ais_sync) > 26 ? ' ⚠' : ''}` : 'aguardando 1ª sync'}/> : null}
               {eventos.length ? (
                 <div style={{ marginTop: 8 }}>
                   <div className="up-eyebrow muted" style={{ marginBottom: 4 }}>Últimos eventos</div>
