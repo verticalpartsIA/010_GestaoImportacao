@@ -478,14 +478,72 @@ function AlmModalAcerto({ prod, onClose, onDone }) {
   );
 }
 
-/* Cadastro incompleto de um item do estoque: o que falta e onde se corrige. Não bloqueia nada; só sinaliza. */
+/* Cadastro incompleto de um item do estoque: o que falta e onde se corrige. Não bloqueia nada; só sinaliza.
+   Lead time e estoque mínimo do Omie NÃO contam como falta: a Reposição decide pelo consumo real e ignora os dois de propósito. */
 function almFaltas(l, podeVerCusto) {
   const f = [];
   if (!l.codigo_produto_omie) f.push({ id: 'semvinc', curto: 'sem vínculo no Omie', como: 'sincronize com o Omie; se persistir, o produto não existe lá com este código' });
   if (!(l.endereco || '').trim()) f.push({ id: 'semend', curto: 'sem endereço', como: 'preencha o endereço na coluna Endereço' });
-  if (!(Number(l.leadtime_dias) > 0)) f.push({ id: 'semlead', curto: 'sem lead time', como: 'cadastre o lead time no produto, no Omie' });
   if (podeVerCusto && !(l.custo > 0)) f.push({ id: 'semcusto', curto: 'sem custo', como: 'informe o custo na aba Custos' });
   return f;
+}
+
+/* Importa endereços em massa: cole linhas "código;endereço" (ou separadas por tab, vindas de uma planilha). Mostra a prévia
+   com o que será gravado, códigos desconhecidos e endereços repetidos antes de aplicar. Só altera o endereço (dado do PCP). */
+function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
+  const [texto, setTexto] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const porCodigo = React.useMemo(() => Object.fromEntries(linhas.map((l) => [l.codigo.toUpperCase(), l])), [linhas]);
+  const itens = React.useMemo(() => texto.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).map((x) => {
+    const [cod, ...resto] = x.split(/[;\t]/); const end = resto.join(' ').trim().toUpperCase().slice(0, 60);
+    const l = porCodigo[String(cod || '').trim().toUpperCase()];
+    return { cod: String(cod || '').trim(), end, l };
+  }), [texto, porCodigo]);
+  const validos = itens.filter((i) => i.l && i.end);
+  const usos = {};      // endereço (normalizado) -> códigos, somando os já cadastrados e os do arquivo
+  linhas.forEach((l) => { const e = String(l.endereco || '').trim().toUpperCase(); if (e) (usos[e] = usos[e] || new Set()).add(l.codigo); });
+  validos.forEach((i) => { (usos[i.end] = usos[i.end] || new Set()).add(i.l.codigo); });
+  validos.forEach((i) => { const antes = String(i.l.endereco || '').trim().toUpperCase(); if (antes && antes !== i.end && usos[antes]) usos[antes].delete(i.l.codigo); });
+  const repetido = (i) => (usos[i.end] && usos[i.end].size > 1) ? Array.from(usos[i.end]).filter((c) => c !== i.l.codigo) : [];
+  const aplicar = async () => {
+    const c = window.__VP_SB && window.__VP_SB.sb; if (!c) return;
+    setSaving(true); let ok = 0, falhas = 0;
+    for (const i of validos) {
+      if (String(i.l.endereco || '').trim().toUpperCase() === i.end) { ok++; continue; }
+      const r = await c.from('pcp_produtos').update({ endereco: i.end }).eq('codigo', i.l.codigo).select('codigo');
+      if (r.error || !r.data || !r.data.length) falhas++; else ok++;
+    }
+    window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Importou endereços em massa', alvo: `${ok} item(ns) gravado(s)${falhas ? ', ' + falhas + ' falha(s)' : ''}` });
+    window.toast?.(`Endereços gravados: ${ok}${falhas ? ' · falhas: ' + falhas : ''}.`, falhas ? 'warning' : 'success');
+    setSaving(false); onDone && onDone(); onClose();
+  };
+  return (
+    <Modal title="Importar endereços" onClose={onClose} width={640}
+      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={!validos.length || saving} onClick={aplicar}>{saving ? 'Gravando…' : `Gravar ${validos.length} endereço(s)`}</Button></>}>
+      <div className="stack" style={{ gap: 10 }}>
+        <div className="small muted">Cole uma linha por item: <b>código;endereço</b> (também aceita o que vem copiado de uma planilha, com tab). O endereço é só do PCP — nada vai ao Omie.</div>
+        <textarea className="input" rows={7} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'VPMP-178;A-01-02\nVPEL-229;B-03-01'} style={{ fontFamily: 'monospace', fontSize: 12 }}/>
+        {itens.length > 0 && (
+          <div className="table-wrap" style={{ maxHeight: 220, overflowY: 'auto', border: 0 }}>
+            <table className="t pcp-grid">
+              <thead><tr><th>Código</th><th>Endereço novo</th><th>Situação</th></tr></thead>
+              <tbody>{itens.map((i, k) => {
+                const rep = i.l && i.end ? repetido(i) : [];
+                return (
+                  <tr key={k}>
+                    <td className="mono">{i.cod}</td><td>{i.end || '—'}</td>
+                    <td style={{ fontSize: 12, color: !i.l || !i.end ? 'var(--vp-danger)' : rep.length ? 'var(--vp-warning-ink, #b45309)' : undefined }}>
+                      {!i.l ? 'código não encontrado' : !i.end ? 'sem endereço na linha' : rep.length ? `⚠ já usado por ${rep.slice(0, 3).join(', ')}${rep.length > 3 ? '…' : ''} (grava mesmo assim)` : (String(i.l.endereco || '').trim() ? `troca "${i.l.endereco}"` : 'novo')}
+                    </td>
+                  </tr>
+                );
+              })}</tbody>
+            </table>
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
 }
 
 /* Aba "Estoque": o saldo do Omie (físico, reservado, disponível, a caminho) ao lado da contagem real da prateleira.
@@ -504,6 +562,10 @@ function AlmoxarifadoEstoque() {
   const [sincronizando, setSincronizando] = React.useState(false);
   const [ultimaSync, setUltimaSync] = React.useState(null);   // { em, ok, avisos: [] }
   const [posicaoEm, setPosicaoEm] = React.useState(null);
+  const [comprasEm, setComprasEm] = React.useState(null);       // última leitura dos pedidos de compra do Omie
+  const [alertaRepos, setAlertaRepos] = React.useState(null);   // título do último aviso diário da Reposição
+  const [modalEnd, setModalEnd] = React.useState(false);
+  const [mostrarContar, setMostrarContar] = React.useState(false);
   const [podeEscrever, setPodeEscrever] = React.useState(false);
   const [podeContar, setPodeContar] = React.useState(false);     // registra o estoque físico (contagem real)
   const [podeVerCusto, setPodeVerCusto] = React.useState(null); // null = ainda verificando
@@ -539,23 +601,40 @@ function AlmoxarifadoEstoque() {
       .select('codigo, codigo_produto_omie, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade), pcp_estoque_fisico(quantidade, contado_em, contado_por)' + (podeVerCusto ? ', preco_custo, custo_manual, custo_compra, custo_compra_fonte, custo_compra_em' : ''))
       .eq('ativo', true).order('familia').order('codigo');
     const pPosicao = c.from('pcp_posicao_compra').select('codigo, reservado, pendente, atualizado_em').range(0, 4999);
-    Promise.all([pProdutos, pPosicao]).then(([rp, rq]) => {
+    // "A caminho" = o que falta chegar nos pedidos de compra em aberto (lidos 2x/dia); a posição do Omie (1x/dia) fica de reserva.
+    const pCompras = c.from('pcp_compras_itens').select('codigo, numero_pedido, data_pedido, data_previsao, quantidade, qtde_recebida, atualizado_em').range(0, 4999);
+    c.from('alertas').select('title').like('id', 'pcp-reposicao-%').eq('resolved', false).order('created_at', { ascending: false }).limit(1)
+      .then(({ data }) => setAlertaRepos(data && data[0] ? data[0].title : null));
+    Promise.all([pProdutos, pPosicao, pCompras]).then(([rp, rq, rc]) => {
       if (rp.error) { setErro(rp.error.message); setLinhas([]); return; }
       const pos = {};
       let maisRecente = null;
       ((rq && rq.data) || []).forEach((p) => { pos[p.codigo] = p; if (p.atualizado_em && (!maisRecente || p.atualizado_em > maisRecente)) maisRecente = p.atualizado_em; });
       setPosicaoEm(maisRecente);
+      const cam = {}; let comprasMais = null;
+      ((rc && rc.data) || []).forEach((x) => {
+        if (x.atualizado_em && (!comprasMais || x.atualizado_em > comprasMais)) comprasMais = x.atualizado_em;
+        const falta = Number(x.quantidade || 0) - Number(x.qtde_recebida || 0);
+        if (falta <= 1e-9) return;
+        const e = (cam[x.codigo] = cam[x.codigo] || { qtd: 0, pedidos: [] });
+        e.qtd += falta;
+        e.pedidos.push({ n: x.numero_pedido, q: falta, prev: x.data_previsao && x.data_pedido && x.data_previsao > x.data_pedido ? x.data_previsao : null });
+      });
+      setComprasEm(comprasMais);
       setLinhas((rp.data || []).map((p) => {
         const f = Array.isArray(p.pcp_estoque_fisico) ? p.pcp_estoque_fisico[0] : p.pcp_estoque_fisico;   // 1:1, mas tolera as duas formas
         const saldo = (p.pcp_estoque || []).reduce((s, e) => s + Number(e.quantidade || 0), 0);
         const ps = pos[p.codigo];
+        const cm = cam[p.codigo];
+        const pendOmie = ps && ps.pendente != null ? Number(ps.pendente) : null;
         const reservado = ps && ps.reservado != null ? Number(ps.reservado) : null;
         return {
           ...p,
           saldo,
           temSaldo: (p.pcp_estoque || []).length > 0,
           reservado,
-          pendente: ps && ps.pendente != null ? Number(ps.pendente) : null,
+          pendente: cm || pendOmie != null ? Math.max(cm ? cm.qtd : 0, pendOmie || 0) : null,
+          pedidosAbertos: cm ? cm.pedidos : [],
           disponivel: reservado != null ? saldo - reservado : null,
           fisico: f ? Number(f.quantidade) : null,
           fisicoEm: f ? f.contado_em : null,
@@ -633,11 +712,12 @@ function AlmoxarifadoEstoque() {
     { id: 'todos', label: 'Todos', fn: () => true },
     { id: 'dif', label: 'Com diferença', fn: (l) => l.fisico != null && Math.abs(l.dif) > EPS },
     { id: 'semcont', label: 'Sem contagem', fn: (l) => l.fisico == null },
-    { id: 'abaixo', label: 'Abaixo do mínimo', fn: abaixoMin },
+    { id: 'zerados', label: 'Zerados', dica: 'Sem saldo físico no Omie (inclui itens que ainda não têm registro de estoque).', fn: (l) => !l.temSaldo || l.saldo <= 0 },
+    { id: 'abaixo', label: 'Abaixo do mínimo do Omie', dica: 'Só vale para os poucos itens com mínimo cadastrado no Omie. A Reposição não usa mínimo: decide pelo consumo e pelo prazo de chegada.', fn: abaixoMin },
     { id: 'reserv', label: 'Com reservado', fn: (l) => (l.reservado || 0) > 0 },
     ...(podeVerCusto ? [{ id: 'semcusto', label: 'Sem custo', dica: 'Inclui os itens montados (o custo deles sai da estrutura). A aba Custos lista só os componentes.', fn: (l) => !(l.custo > 0) }] : []),
     { id: 'semend', label: 'Sem endereço', fn: (l) => l.faltas.some((x) => x.id === 'semend') },
-    { id: 'semlead', label: 'Sem lead time', fn: (l) => l.faltas.some((x) => x.id === 'semlead') },
+    { id: 'semlead', label: 'Sem lead time (informativo)', dica: 'Não conta como cadastro incompleto: a Reposição ignora o lead time do Omie e usa 90 dias (importado) ou 15 dias (nacional).', fn: (l) => !(Number(l.leadtime_dias) > 0) },
     { id: 'semvinc', label: 'Sem vínculo no Omie', fn: (l) => l.faltas.some((x) => x.id === 'semvinc') },
   ];
   const familias = Array.from(new Set(linhas.map((l) => l.familia).filter(Boolean)));
@@ -666,6 +746,26 @@ function AlmoxarifadoEstoque() {
       {children}{ordem.chave === chave ? (ordem.dir === 1 ? ' ▲' : ' ▼') : ''}
     </th>
   );
+  const porEnd = {}; linhas.forEach((l) => { const e = String(l.endereco || '').trim().toUpperCase(); if (e) (porEnd[e] = porEnd[e] || []).push(l.codigo); });
+  const mesmoEnd = (l) => { const e = String(l.endereco || '').trim().toUpperCase(); return e && porEnd[e] && porEnd[e].length > 1 ? porEnd[e].filter((c) => c !== l.codigo) : []; };
+  const nZerados = linhas.filter((l) => !l.temSaldo || l.saldo <= 0).length;
+  const valorEstoque = podeVerCusto ? linhas.reduce((s, l) => s + (l.temSaldo && l.saldo > 0 && l.custo > 0 ? l.saldo * l.custo : 0), 0) : null;
+  const semCustoComSaldo = podeVerCusto ? linhas.filter((l) => l.temSaldo && l.saldo > 0 && !(l.custo > 0)).length : 0;
+  // C: fila "Contar hoje" — prioridade por risco: diferença aberta, abaixo do mínimo ou reservado sem saldo, zerado, nunca contado, contagem antiga.
+  const hojeMs = Date.now();
+  const fila = linhas.map((l) => {
+    let p = 0, motivo = [];
+    if (l.fisico != null && Math.abs(l.dif) > EPS) { p += 5; motivo.push('diferença aberta'); }
+    if (abaixoMin(l)) { p += 4; motivo.push('abaixo do mínimo'); }
+    if ((l.reservado || 0) > 0 && (l.disponivel || 0) <= 0) { p += 4; motivo.push('tudo reservado'); }
+    if (!l.temSaldo || l.saldo <= 0) { p += 2; motivo.push('zerado'); }
+    if (l.fisico == null) { p += 1; motivo.push('nunca contado'); }
+    else if (l.fisicoEm && (hojeMs - new Date(l.fisicoEm).getTime()) / 864e5 > 90) { p += 1.5; motivo.push('contagem com mais de 90 dias'); }
+    return { l, p, motivo };
+  }).filter((x) => x.p > 0).sort((a, b) => b.p - a.p || a.l.codigo.localeCompare(b.l.codigo)).slice(0, 20);
+  const horas = (iso) => iso ? (hojeMs - new Date(iso).getTime()) / 3.6e6 : null;
+  const fmtHM = (iso) => iso ? new Date(iso).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' }) : '—';
+  const velho = [ultimaSync && ultimaSync.em, posicaoEm, comprasEm].some((x) => x && horas(x) > 36);
   const nContados = linhas.filter((l) => l.fisico != null).length;
   const nDif = linhas.filter((l) => l.fisico != null && Math.abs(l.dif) > EPS).length;
   const nCompletos = linhas.filter((l) => l.faltas.length === 0).length;
@@ -681,7 +781,9 @@ function AlmoxarifadoEstoque() {
         </select>
         <span className="muted" style={{ fontSize: 12 }}>{visiveis.length} produto(s)</span>
         <span style={{ flex: 1 }}/>
-        <span className="muted" style={{ fontSize: 12 }}>{ultimaSync ? 'Sincronizado com o Omie em ' + new Date(ultimaSync.em).toLocaleString('pt-BR') : 'Ainda não sincronizado'}</span>
+        <span className="muted" style={{ fontSize: 12, color: velho ? 'var(--vp-warning-ink, #b45309)' : undefined }} title="Cada dado vem de uma leitura do Omie com horário próprio.">
+          {ultimaSync ? `Saldo: ${fmtHM(ultimaSync.em)}` : 'Saldo: ainda não sincronizado'} · Reservado: {fmtHM(posicaoEm)} · Pedidos de compra (a caminho): {fmtHM(comprasEm)}{velho ? ' ⚠ leitura com mais de 36 h' : ''}
+        </span>
         {ultimaSync && !ultimaSync.ok && ultimaSync.avisos.length > 0 && (
           <Badge variant="warning" style={{ cursor: 'help' }}>
             <span title={'A sincronização terminou, mas com avisos de cadastro no Omie:\n' + ultimaSync.avisos.join('\n')}>{ultimaSync.avisos.length} aviso(s) de cadastro</span>
@@ -689,18 +791,53 @@ function AlmoxarifadoEstoque() {
         )}
         <Button variant="primary" disabled={sincronizando} onClick={sincronizar}>{sincronizando ? 'Sincronizando…' : 'Sincronizar com Omie'}</Button>
       </div>
+      <div className="pcp-toolbar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
+        <div className="card pcp-total" onClick={() => setFiltro('zerados')} style={{ padding: 14, flex: '1 1 170px', cursor: 'pointer', borderLeft: nZerados ? '4px solid var(--vp-yellow)' : undefined }}>
+          <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Itens zerados</div><div style={{ fontSize: 22, fontWeight: 500 }}>{nZerados}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>de {linhas.length} · clique para filtrar</div>
+        </div>
+        <div className="card pcp-total" onClick={() => window.pcpIrParaUrl && window.pcpIrParaUrl('/logistica/almoxarifado/reposicao')} style={{ padding: 14, flex: '2 1 280px', cursor: 'pointer' }}>
+          <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Reposição (aviso diário)</div><div style={{ fontSize: 15, fontWeight: 500 }}>{alertaRepos || 'sem aviso aberto'}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>clique para abrir a aba Reposição</div>
+        </div>
+        {podeVerCusto
+          ? <div className="card pcp-total" style={{ padding: 14, flex: '1 1 200px' }}><div style={{ fontSize: 12, color: 'var(--fg3)' }}>Valor em estoque</div><div style={{ fontSize: 22, fontWeight: 500 }}>{valorEstoque.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>saldo físico × custo{semCustoComSaldo ? ` · ${semCustoComSaldo} item(ns) com saldo e sem custo (subestimado)` : ''}</div></div>
+          : <div className="card pcp-total" style={{ padding: 14, flex: '1 1 200px' }}><div style={{ fontSize: 12, color: 'var(--fg3)' }}>Valor em estoque</div><div style={{ fontSize: 22, fontWeight: 500, filter: 'blur(6px)', userSelect: 'none' }}>R$ 000.000,00</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>visível só com a alçada de custo</div></div>}
+      </div>
       <div style={{ display: 'flex', gap: 6, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
-        {FILTROS.filter((f) => !['semend', 'semlead', 'semvinc'].includes(f.id) || contagemPor[f.id] > 0 || filtro === f.id).map((f) => (
+        {FILTROS.filter((f) => !['semend', 'semvinc'].includes(f.id) || contagemPor[f.id] > 0 || filtro === f.id).map((f) => (
           <Button key={f.id} size="sm" variant={filtro === f.id ? 'primary' : 'ghost'} title={f.dica} onClick={() => setFiltro(f.id)}>
             {f.label} <span style={{ opacity: 0.7 }}>({contagemPor[f.id]})</span>
           </Button>
         ))}
         <span style={{ flex: 1 }}/>
+        <Button size="sm" variant={mostrarContar ? 'primary' : 'ghost'} title="Os 20 itens que mais precisam de contagem hoje" onClick={() => setMostrarContar((v) => !v)}>Contar hoje ({fila.length})</Button>
+        {podeContar && <Button size="sm" variant="ghost" title="Gravar endereços de muitos itens de uma vez (código;endereço)" onClick={() => setModalEnd(true)}>Importar endereços</Button>}
         <Button size="sm" variant="ghost" title="Mostrar ou esconder Família, Mínimo, Custo e Lead time" onClick={alternarCols}>{maisCols ? '◂ Menos colunas' : 'Mais colunas ▸'}</Button>
         <span className="muted" style={{ fontSize: 12 }}>
-          Cadastro completo: {nCompletos} de {linhas.length} · Contagem: {nContados} de {linhas.length}{nDif > 0 ? ` · ${nDif} com diferença` : ''}
+          <span title="Cadastro completo = vínculo com o Omie e endereço (e custo, para quem vê custos). Lead time e mínimo do Omie não contam.">Cadastro completo: {nCompletos} de {linhas.length}</span> · Contagem: {nContados} de {linhas.length}{nDif > 0 ? ` · ${nDif} com diferença` : ''}
         </span>
       </div>
+      {mostrarContar && (
+        <Card title="Contar hoje" sub="Prioridade: diferença aberta, abaixo do mínimo ou tudo reservado, zerado, nunca contado, contagem com mais de 90 dias">
+          <div className="table-wrap" style={{ border: 0 }}>
+            <table className="t pcp-grid">
+              <thead><tr><th>Código</th><th>Descrição</th><th>Endereço</th><th className="text-right">Omie (físico)</th><th>Por quê</th><th className="text-right">Contagem</th></tr></thead>
+              <tbody>
+                {fila.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', padding: 20, color: 'var(--fg3)' }}>Nada urgente para contar.</td></tr>}
+                {fila.map(({ l, motivo }) => (
+                  <tr key={l.codigo}>
+                    <td className="mono">{l.codigo}</td><td>{l.descricao}</td><td>{l.endereco || <span style={{ color: 'var(--fg3)' }}>falta</span>}</td>
+                    <td className="text-right">{l.temSaldo ? almFmt(l.saldo, 2) : '—'} {l.unidade || ''}</td>
+                    <td style={{ fontSize: 12 }}>{motivo.join(' · ')}</td>
+                    <td className="text-right">{podeContar
+                      ? <input className="input" type="number" min="0" step="any" placeholder="contagem" key={'c-' + l.codigo + '-' + (l.fisico ?? '') + '-' + (l.fisicoEm || '')} defaultValue={l.fisico ?? ''} style={{ width: 100, textAlign: 'right' }} onBlur={(e) => contar(l, e.target.value)}/>
+                      : (l.fisico != null ? almFmt(l.fisico, 2) : '—')}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
       <Card title="Estoque do PCP" sub="Saldo do Omie × contagem real da prateleira · clique no título da coluna para ordenar">
         <div className="table-wrap" style={{ border: 0 }}>
           <table className="t pcp-grid pcp-estoque">
@@ -710,7 +847,7 @@ function AlmoxarifadoEstoque() {
                 <Th chave="saldo" right title="Saldo físico total no Omie (inclui o que já está reservado)">Omie (físico)</Th>
                 <Th chave="reservado" right title={'Separado para pedidos no Omie' + (posicaoEm ? ' · atualizado em ' + new Date(posicaoEm).toLocaleString('pt-BR') : '')}>Reservado</Th>
                 <Th chave="disponivel" right title="Físico − reservado: o que realmente dá para usar">Disponível</Th>
-                <Th chave="pendente" right title="Pedido de compra aberto no Omie, ainda não recebido">A caminho</Th>
+                <Th chave="pendente" right title="O que falta chegar nos pedidos de compra em aberto no Omie (passe o mouse no número para ver os pedidos)">A caminho</Th>
                 <Th chave="fisico" right title="Contagem real na prateleira (digite aqui)">Contagem</Th>
                 <Th chave="dif" right title="Contagem − Omie (físico)">Diferença</Th>
                 {maisCols && <Th chave="estoque_minimo" right>Mínimo</Th>}
@@ -738,7 +875,8 @@ function AlmoxarifadoEstoque() {
                     <td className="text-right" style={{ color: (l.reservado || 0) > 0 ? undefined : 'var(--fg3)' }}>{l.reservado == null ? '—' : almFmt(l.reservado, 2)}</td>
                     <td className="text-right" style={l.disponivel != null && l.disponivel <= 0 && l.saldo > 0 ? { color: 'var(--vp-danger)', fontWeight: 600 } : undefined}
                       title={l.disponivel != null && l.disponivel <= 0 && l.saldo > 0 ? 'Tudo o que há em estoque já está reservado' : ''}>{l.disponivel == null ? '—' : almFmt(l.disponivel, 2)}</td>
-                    <td className="text-right" style={{ color: (l.pendente || 0) > 0 ? undefined : 'var(--fg3)' }}>{l.pendente == null || l.pendente === 0 ? '—' : almFmt(l.pendente, 2)}</td>
+                    <td className="text-right" style={{ color: (l.pendente || 0) > 0 ? undefined : 'var(--fg3)' }}
+                      title={l.pedidosAbertos.length ? l.pedidosAbertos.map((p) => `Pedido ${p.n}: falta ${almFmt(p.q, 2)}${p.prev ? ' · previsão ' + new Date(p.prev + 'T12:00:00').toLocaleDateString('pt-BR') : ' · sem previsão informada'}`).join('\n') : ''}>{l.pendente == null || l.pendente === 0 ? '—' : almFmt(l.pendente, 2)}</td>
                     <td className="text-right" title={l.fisicoEm ? `Contado em ${new Date(l.fisicoEm).toLocaleString('pt-BR')}${l.fisicoPor ? ' por ' + l.fisicoPor : ''}` : 'Ainda não contado'}>
                       {podeContar
                         ? <input className="input" type="number" min="0" step="any" placeholder="—" key={l.codigo + '-' + (l.fisico ?? '') + '-' + (l.fisicoEm || '')}
@@ -771,6 +909,7 @@ function AlmoxarifadoEstoque() {
                         ? <input className="input" type="text" maxLength={60} placeholder="falta" key={l.codigo + '-end-' + (l.endereco || '')}
                             defaultValue={l.endereco || ''} style={{ width: 76 }} title="Endereço na prateleira (só do PCP)" onBlur={(e) => salvarEndereco(l, e.target.value)}/>
                         : (l.endereco || <span style={{ color: 'var(--fg3)' }}>falta</span>)}
+                      {mesmoEnd(l).length > 0 && <span style={{ color: 'var(--vp-warning-ink, #b45309)', cursor: 'help', marginLeft: 4 }} title={'Mesmo endereço de: ' + mesmoEnd(l).slice(0, 6).join(', ')}>⚠</span>}
                     </td>
                     {maisCols && <td className="text-right">{almFmt(l.leadtime_dias)}</td>}
                     {podeEscrever && (
@@ -805,6 +944,7 @@ function AlmoxarifadoEstoque() {
       {modalEd && <AlmModalEditarProduto prod={modalEd} onClose={() => setModalEd(null)} onDone={carregar}/>}
       {modalHist && <AlmModalHistoricoContagem prod={modalHist} onClose={() => setModalHist(null)}/>}
       {modalAcerto && <AlmModalAcerto prod={modalAcerto} onClose={() => setModalAcerto(null)} onDone={carregar}/>}
+      {modalEnd && <AlmModalImportarEnderecos linhas={linhas} onClose={() => setModalEnd(false)} onDone={carregar}/>}
     </>
   );
 }
