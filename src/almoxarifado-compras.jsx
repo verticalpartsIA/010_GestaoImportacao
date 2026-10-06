@@ -9,6 +9,9 @@
    Regras que existem por motivo real:
    - Valores (preço/total) só são pedidos ao banco para quem tem almoxarifado.ver_custo (sem a alçada, nem consulta).
    - Nada é escrito no Omie aqui. "Atualizar do Omie" só relê (sync-pcp-compras); a leitura automática roda todo dia de manhã.
+   - Previsão de chegada IGUAL à data do pedido = ninguém combinou prazo (o Omie preenche assim): vira "previsão não informada" e
+     NÃO conta como atrasado. Só previsão maior que a data do pedido e já vencida é atraso (mesma regra do alerta diário no banco).
+   - Requisição enviada sem pedido há 3+ dias úteis é marcada "parada" (e também avisada no alerta diário pcp_compras_alertar).
    - Pedido do Omie "recebido" = todas as linhas do PCP com quantidade recebida >= pedida; "parcial" = alguma recebida.
    - A visão padrão é "internos" quando há pedido interno aguardando aprovação/compra (a Central de Decisões abre esta aba
      para o pedido de varejo), senão "omie".
@@ -32,6 +35,12 @@ const pcDataHora = (iso) => {
   const d = new Date(iso); if (isNaN(d)) return '—';
   return new Intl.DateTimeFormat('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit', hour12: false }).format(d).replace(',', '');
 };
+// Dias úteis (seg–sex) entre duas datas ISO, sem contar o dia de início.
+function pcDiasUteis(de, ate) {
+  let n = 0; const d = new Date(de + 'T00:00:00Z'), fim = new Date(ate + 'T00:00:00Z');
+  while (d < fim) { d.setUTCDate(d.getUTCDate() + 1); const w = d.getUTCDay(); if (w !== 0 && w !== 6) n++; }
+  return n;
+}
 const pcDias = (de, ate) => Math.round((Date.parse(ate + 'T00:00:00Z') - Date.parse(de + 'T00:00:00Z')) / 86400000);
 const pcCsv = (rows) => '﻿' + rows.map(r => r.map(v => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; }).join(';')).join('\r\n');
 const pcBaixar = (nome, texto) => {
@@ -89,7 +98,7 @@ function PcComprasOmie() {
   const carregar = React.useCallback(async () => {
     if (!sb || custo === null) return;
     try {
-      const cols = 'pedido_id, item_id, numero_pedido, data_pedido, situacao, fornecedor_cod, codigo, unidade, quantidade, qtde_recebida, data_previsao, atualizado_em' + (custo ? ', valor_unitario, valor_total' : '');
+      const cols = 'pedido_id, item_id, numero_pedido, data_pedido, situacao, fornecedor_cod, codigo, unidade, quantidade, qtde_recebida, data_previsao, etapa, atualizado_em' + (custo ? ', valor_unitario, valor_total' : '');
       const [itens, forn, prods] = await Promise.all([
         pcLerTudo(() => sb.from('pcp_compras_itens').select(cols).order('pedido_id')),
         pcLerTudo(() => sb.from('pcp_fornecedores_omie').select('codigo, nome').order('codigo')),
@@ -107,17 +116,20 @@ function PcComprasOmie() {
     if (!d) return [];
     const m = new Map();
     d.itens.forEach(l => {
-      const p = m.get(l.pedido_id) || { id: l.pedido_id, numero: l.numero_pedido, data: l.data_pedido, previsao: l.data_previsao, forCod: l.fornecedor_cod, linhas: [] };
+      const p = m.get(l.pedido_id) || { id: l.pedido_id, numero: l.numero_pedido, data: l.data_pedido, previsao: l.data_previsao, etapa: l.etapa, forCod: l.fornecedor_cod, linhas: [] };
       p.linhas.push(l); m.set(l.pedido_id, p);
     });
     return Array.from(m.values()).map(p => {
       const rec = p.linhas.every(l => Number(l.qtde_recebida) >= Number(l.quantidade) - 1e-9);
       const algum = p.linhas.some(l => Number(l.qtde_recebida) > 0);
       const status = rec ? 'recebido' : algum ? 'parcial' : 'pendente';
-      const atrasado = status !== 'recebido' && !!p.previsao && p.previsao < hoje;
+      const previsaoReal = !!p.previsao && !!p.data && p.previsao > p.data;            // previsão = data do pedido => ninguém informou prazo
+      const semPrevisao = status !== 'recebido' && !previsaoReal;
+      const atrasado = status !== 'recebido' && previsaoReal && p.previsao < hoje;
+      const semPreco = !!custo && status !== 'recebido' && p.linhas.some(l => Number(l.qtde_recebida) < Number(l.quantidade) && !(Number(l.valor_unitario) > 0));
       const emAberto = custo ? p.linhas.reduce((s, l) => s + Math.max(0, Number(l.quantidade) - Number(l.qtde_recebida)) * Number(l.valor_unitario || 0), 0) : null;
       const total = custo ? p.linhas.reduce((s, l) => s + Number(l.valor_total || 0), 0) : null;
-      return { ...p, status, atrasado, diasAtraso: atrasado ? pcDias(p.previsao, hoje) : 0, emAberto, total, nome: d.forn[p.forCod] || (p.forCod ? `Fornecedor ${p.forCod}` : '—') };
+      return { ...p, status, atrasado, semPrevisao, semPreco, diasAtraso: atrasado ? pcDias(p.previsao, hoje) : 0, emAberto, total, nome: d.forn[p.forCod] || (p.forCod ? `Fornecedor ${p.forCod}` : '—') };
     });
   }, [d, hoje, custo]);
 
@@ -128,6 +140,10 @@ function PcComprasOmie() {
   const atrasados = andamento.filter(p => p.atrasado);
   const recebidos = pedidos.filter(p => p.status === 'recebido');
   const emAbertoTotal = custo ? andamento.reduce((s, p) => s + (p.emAberto || 0), 0) : null;
+  const linhasAReceber = andamento.reduce((s, p) => s + p.linhas.filter(l => Number(l.qtde_recebida) < Number(l.quantidade)).length, 0);
+  const maiorAtraso = atrasados.reduce((m, p) => Math.max(m, p.diasAtraso), 0);
+  const nSemPreco = andamento.filter(p => p.semPreco).length;
+  const nSemPrev = andamento.filter(p => p.semPrevisao).length;
   const q = busca.trim().toLowerCase();
   const base = filtro === 'andamento' ? andamento : filtro === 'atrasados' ? atrasados : filtro === 'recebidos' ? recebidos : pedidos;
   const lista = ordenar(base.filter(p => !q || (p.numero + ' ' + p.nome + ' ' + p.linhas.map(l => l.codigo + ' ' + (d.desc[l.codigo] || '')).join(' ')).toLowerCase().includes(q)),
@@ -164,8 +180,8 @@ function PcComprasOmie() {
       </div>
       <div className="grid-4" style={{ marginBottom: 12 }}>
         <div className="pcp-total"><div className="pcp-total__l">Em andamento</div><div className="pcp-total__v">{andamento.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>pedido(s) a caminho ou recebidos em parte</div></div>
-        <div className="pcp-total"><div className="pcp-total__l">Atrasados</div><div className="pcp-total__v" style={{ color: atrasados.length ? 'var(--vp-danger)' : undefined }}>{atrasados.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>previsão de chegada já passou</div></div>
-        <div className="pcp-total"><div className="pcp-total__l">{custo ? 'Valor ainda a receber' : 'Itens a receber'}</div><div className="pcp-total__v">{custo ? pcMoeda(emAbertoTotal) : andamento.reduce((s, p) => s + p.linhas.filter(l => Number(l.qtde_recebida) < Number(l.quantidade)).length, 0)}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>do que falta chegar nos pedidos em andamento</div></div>
+        <div className="pcp-total"><div className="pcp-total__l">Atrasados</div><div className="pcp-total__v" style={{ color: atrasados.length ? 'var(--vp-danger)' : undefined }}>{atrasados.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>previsão combinada já passou{maiorAtraso ? ` · maior atraso ${maiorAtraso} dia(s)` : ''}{nSemPrev ? ` · ${nSemPrev} sem previsão informada` : ''}</div></div>
+        <div className="pcp-total"><div className="pcp-total__l">{custo ? 'Valor ainda a receber' : 'Itens a receber'}</div><div className="pcp-total__v">{custo ? pcMoeda(emAbertoTotal) : linhasAReceber}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{custo ? `${linhasAReceber} linha(s) de item a receber` : `linha(s) de item a receber em ${andamento.length} pedido(s)`}{custo && nSemPreco ? ` · ${nSemPreco} pedido(s) sem preço no Omie (valor subestimado)` : ''}</div></div>
         <div className="pcp-total"><div className="pcp-total__l">Recebidos</div><div className="pcp-total__v">{recebidos.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>pedido(s) nos últimos 12 meses</div></div>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
@@ -186,11 +202,11 @@ function PcComprasOmie() {
                 <React.Fragment key={p.id}>
                   <tr>
                     <td style={{ cursor: 'pointer' }} title="Clique para ver os itens" onClick={() => setAberto(aberto === p.id ? null : p.id)}><span style={{ color: 'var(--fg3)', marginRight: 4 }}>{aberto === p.id ? '▾' : '▸'}</span><b style={{ fontWeight: 500 }}>{p.numero}</b></td>
-                    <td>{p.nome}</td>
+                    <td>{p.forCod ? p.nome : <span style={{ color: 'var(--fg3)', fontStyle: 'italic' }} title="O pedido ainda não tem fornecedor no Omie (provável rascunho).">fornecedor não definido</span>}{p.etapa ? <div style={{ fontSize: 10, color: 'var(--fg3)' }} title="Etapa do pedido de compra no Omie">etapa Omie {p.etapa}</div> : null}</td>
                     <td>{pcData(p.data)}</td>
-                    <td style={{ color: p.atrasado ? 'var(--vp-danger)' : undefined }}>{pcData(p.previsao)}{p.atrasado ? <div style={{ fontSize: 10 }}>atrasado há {p.diasAtraso} dia(s)</div> : null}{!p.previsao && p.status !== 'recebido' ? <div style={{ fontSize: 10, color: 'var(--fg3)' }}>sem previsão</div> : null}</td>
+                    <td style={{ color: p.atrasado ? 'var(--vp-danger)' : undefined }}>{p.semPrevisao ? <span style={{ color: 'var(--fg3)' }} title="O Omie repetiu a data do pedido: ninguém informou o prazo de chegada.">não informada</span> : pcData(p.previsao)}{p.atrasado ? <div style={{ fontSize: 10 }}>atrasado há {p.diasAtraso} dia(s)</div> : null}</td>
                     <td style={{ fontSize: 12 }}>{p.linhas.length} · {p.linhas.slice(0, 3).map(l => l.codigo).join(', ')}{p.linhas.length > 3 ? ` +${p.linhas.length - 3}` : ''}</td>
-                    {custo && <td style={{ textAlign: 'right' }}>{p.status === 'recebido' ? '—' : pcMoeda(p.emAberto)}</td>}
+                    {custo && <td style={{ textAlign: 'right' }}>{p.status === 'recebido' ? '—' : pcMoeda(p.emAberto)}{p.semPreco ? <div style={{ fontSize: 10, color: 'var(--vp-warning-ink, #b45309)' }} title="Há item sem preço no pedido do Omie; o valor mostrado está incompleto.">⚠ sem preço</div> : null}</td>}
                     <td><Badge variant={PC_ST_OMIE[p.status].v}>{PC_ST_OMIE[p.status].l}</Badge>{p.atrasado ? <> <Badge variant="danger">Atrasado</Badge></> : null}</td>
                   </tr>
                   {aberto === p.id && (
@@ -246,13 +262,14 @@ function PcRequisicoes() {
     const dia = String(r.enviado_em || r.criado_em).slice(0, 10);
     const pedidos = {};                                              // item -> primeiro pedido de compra feito a partir do dia da requisição
     itens.forEach(i => { const c = d.compras.filter(x => x.codigo === i.codigo && x.data_pedido && x.data_pedido >= dia).sort((a, b) => a.data_pedido.localeCompare(b.data_pedido))[0]; if (c) pedidos[i.codigo] = c.numero_pedido; });
-    return { ...r, itens, dia, pedidos, categoria: r.payload && r.payload.param && r.payload.param.codCateg, codOmie: r.resposta && r.resposta.codReqCompra };
+    const parada = r.status === 'enviado' && itens.length > 0 && itens.every(i => !pedidos[i.codigo]) && pcDiasUteis(dia, pcHojeBrasilia()) >= 3;
+    return { ...r, itens, dia, pedidos, parada, diasParada: parada ? pcDiasUteis(dia, pcHojeBrasilia()) : 0, categoria: r.payload && r.payload.param && r.payload.param.codCateg, codOmie: r.resposta && r.resposta.codReqCompra };
   });
   const q = busca.trim().toLowerCase();
-  const lista = ordenar(linhas.filter(r => (filtro === 'todas' || (filtro === 'enviadas' ? r.status === 'enviado' : r.status === 'erro'))
+  const lista = ordenar(linhas.filter(r => (filtro === 'todas' || (filtro === 'enviadas' ? r.status === 'enviado' : filtro === 'paradas' ? r.parada : r.status === 'erro'))
     && (!q || (r.itens.map(i => i.codigo).join(' ') + ' ' + (r.solicitante_email || '')).toLowerCase().includes(q))),
     (r, col) => ({ data: r.criado_em, solicitante: r.solicitante_email || '', status: r.status }[col]));
-  const nEnv = linhas.filter(r => r.status === 'enviado').length, nErr = linhas.filter(r => r.status === 'erro').length;
+  const nParadas = linhas.filter(r => r.parada).length, nEnv = linhas.filter(r => r.status === 'enviado').length, nErr = linhas.filter(r => r.status === 'erro').length;
   const exportar = () => {
     const rows = [];
     lista.forEach(r => r.itens.forEach(i => rows.push([pcData(r.dia), r.solicitante_email || '', i.codigo, String(i.quantidade).replace('.', ','), r.categoria || '', r.codOmie || '', r.status, r.pedidos[i.codigo] || '', r.erro || ''])));
@@ -265,6 +282,7 @@ function PcRequisicoes() {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
         <button className={btn(filtro === 'todas')} onClick={() => setFiltro('todas')}>Todas ({linhas.length})</button>
         <button className={btn(filtro === 'enviadas')} onClick={() => setFiltro('enviadas')}>Enviadas ({nEnv})</button>
+        <button className={btn(filtro === 'paradas')} onClick={() => setFiltro('paradas')} title="Enviadas ao Omie há 3+ dias úteis sem virar pedido de compra">Paradas ({nParadas})</button>
         <button className={btn(filtro === 'erro')} onClick={() => setFiltro('erro')}>Com erro ({nErr})</button>
         <input className="input" style={{ minWidth: 220, marginLeft: 'auto' }} placeholder="Buscar item ou solicitante…" value={busca} onChange={e => setBusca(e.target.value)}/>
         <button className="btn btn--sm" disabled={!lista.length} onClick={exportar}>Exportar planilha</button>
@@ -282,7 +300,7 @@ function PcRequisicoes() {
                   <td style={{ fontSize: 12 }}>{r.itens.map(i => <div key={i.codigo}><b style={{ fontWeight: 500 }}>{i.codigo}</b> × {pcFmt(i.quantidade)}</div>)}</td>
                   <td style={{ fontSize: 12 }}>{r.categoria === '2.01.90' ? 'Nacional (2.01.90)' : r.categoria === '2.01.99' ? 'Importada (2.01.99)' : (r.categoria || '—')}</td>
                   <td className="mono" style={{ fontSize: 12 }}>{r.codOmie || '—'}</td>
-                  <td><Badge variant={r.status === 'enviado' ? 'success' : 'danger'}>{r.status === 'enviado' ? 'Enviada' : 'Erro'}</Badge>{r.erro ? <div style={{ fontSize: 10, color: 'var(--vp-danger)', maxWidth: 220 }}>{r.erro}</div> : null}</td>
+                  <td><Badge variant={r.status === 'enviado' ? 'success' : 'danger'}>{r.status === 'enviado' ? 'Enviada' : 'Erro'}</Badge>{r.parada ? <> <Badge variant="warning">Parada há {r.diasParada} dias úteis</Badge></> : null}{r.erro ? <div style={{ fontSize: 10, color: 'var(--vp-danger)', maxWidth: 220 }}>{r.erro}</div> : null}</td>
                   <td style={{ fontSize: 12 }}>{r.itens.some(i => r.pedidos[i.codigo]) ? r.itens.map(i => <div key={i.codigo}>{i.codigo}: {r.pedidos[i.codigo] ? <>Pedido {r.pedidos[i.codigo]} <span style={{ color: 'var(--fg3)' }}>(provável)</span></> : <span style={{ color: 'var(--fg3)' }}>ainda não virou pedido</span>}</div>) : <span style={{ color: 'var(--fg3)' }}>ainda não virou pedido</span>}</td>
                 </tr>
               ))}
