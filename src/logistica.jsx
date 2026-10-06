@@ -766,11 +766,104 @@ function ImportacaoDetail({ embarque, setRoute }) {
 }
 
 /* ---------- IMPORTAÇÃO · MAPA DE NAVIOS ====================== */
+/* ---------- Rastreamento de navios (pente fino 06/10/2026) ----------
+   - ETA vencida (previsão passou e o navio não chegou) e ETA adiada (maior que a original) são "atrasos"; o filtro "Atrasados" pega os dois.
+   - Mapa real (Leaflet) com todos os navios, rota marítima (eiRouteWaypoints) e portos; sem origem/destino NÃO inventa rota.
+   - Detalhe com armador (line ou sealine), BL/container, última leitura, status do rastreio e últimos eventos.
+   - A sincronização automática (ais-sync) roda 1x/dia; passou de 26h sem leitura = aviso na tela.
+   - Exporta CSV. Data de hoje no fuso de Brasília. Só leitura (o único efeito é o botão Atualizar chamar ais-sync). */
+const rtHojeBrasilia = () => new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+const rtHoras = (iso) => iso ? (Date.now() - new Date(iso).getTime()) / 3.6e6 : Infinity;
+function rtEta(s, hoje) {
+  const encerrado = s.status === 'Entregue' || !!s.chegada_confirmada_em;
+  const vencidaDias = !encerrado && s.eta && s.eta < hoje ? diffDiasISO(hoje, s.eta) : 0;
+  const orig = s.eta_original || s.etaOriginal;
+  const adiadaDias = orig && s.eta && s.eta > orig ? diffDiasISO(s.eta, orig) : 0;
+  return { encerrado, vencidaDias, adiadaDias, atrasado: vencidaDias > 0 || adiadaDias > 0 };
+}
+const rtSituacaoEta = (r) => r.encerrado ? 'Chegou' : r.vencidaDias ? `ETA vencida há ${r.vencidaDias} dia(s)` : r.adiadaDias ? `ETA adiada em ${r.adiadaDias} dia(s)` : 'No prazo';
+const rtArmador = (s) => s.line || s.sealine || '—';
+// Posição REAL = última consulta à Sinay deu certo (status diferente de ERROR/RATE_LIMITED) e tem menos de 72h. Senão a função ais-sync
+// está SIMULANDO a posição (avanço de ~2%/dia, velocidade e rumo sorteados): nunca apresentar isso como dado real.
+const rtPosicaoReal = (s) => s.tracking_provider === 'sinay' && !['ERROR', 'RATE_LIMITED'].includes(String(s.tracking_status || '').toUpperCase()) && rtHoras(s.tracking_updated_at) <= 72;
+const rtChegou = (s) => !!s.chegada_confirmada_em || s.status === 'Entregue';
+const rtStatusEfetivo = (s) => s.chegada_confirmada_em ? 'Entregue' : s.status;
+const rtDataBR = (iso) => iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
+const rtDoc = (s) => s.bl || s.container_number || null;
+const rtSemRota = (s) => !(eiPortCoords(s.origin || s.from) && eiPortCoords(s.destination || s.to));
+
+function RastreamentoMapa({ ships, activeId, onSelect }) {
+  const elRef = React.useRef(null);
+  const mapRef = React.useRef(null);
+  const grpRef = React.useRef(null);
+  const tileRef = React.useRef(null);
+  const [estilo, setEstilo] = React.useState("claro");
+  const chave = ships.map(s => s.id).join(",");
+
+  React.useEffect(() => {
+    if (!window.L || !elRef.current) return undefined;
+    const map = window.L.map(elRef.current, { zoomControl: true, worldCopyJump: true });
+    mapRef.current = map;
+    grpRef.current = window.L.layerGroup().addTo(map);
+    map.setView([-5, -20], 2);
+    const t = setTimeout(() => map.invalidateSize(), 150);
+    return () => { clearTimeout(t); map.remove(); mapRef.current = null; };
+  }, []);
+
+  React.useEffect(() => {
+    const map = mapRef.current; if (!map || !window.L) return;
+    const cfg = EI_MAP_STYLES.find(s => s.key === estilo) || EI_MAP_STYLES[0];
+    if (tileRef.current) map.removeLayer(tileRef.current);
+    tileRef.current = window.L.tileLayer(cfg.url, { attribution: cfg.attribution, subdomains: cfg.subdomains || "abc", maxZoom: 19 }).addTo(map);
+    tileRef.current.bringToBack();
+  }, [estilo]);
+
+  React.useEffect(() => {
+    const map = mapRef.current, grp = grpRef.current; if (!map || !grp || !window.L) return;
+    grp.clearLayers();
+    ships.forEach(s => {
+      const ativo = s.id === activeId;
+      const origem = eiPortCoords(s.origin || s.from), destino = eiPortCoords(s.destination || s.to);
+      if (origem && destino) {
+        window.L.polyline(eiRouteWaypoints(origem, destino), { color: ativo ? "#000" : "#64748b", weight: ativo ? 3 : 1.5, opacity: ativo ? 0.9 : 0.6, dashArray: "1 8", lineCap: "round", smoothFactor: 2 }).addTo(grp);
+        const porto = (p, cor, nome) => window.L.marker(p, { icon: window.L.divIcon({ className: "", html: `<div style="width:10px;height:10px;border-radius:50%;background:${cor};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.3)"></div>`, iconSize: [10, 10], iconAnchor: [5, 5] }) }).addTo(grp).bindTooltip(nome);
+        porto(origem, "#334155", s.origin || s.from || "Origem"); porto(destino, "#dc2626", s.destination || s.to || "Destino");
+      }
+      const chegou = rtChegou(s) && destino;
+      const pos = chegou ? destino : (s.lat != null && s.lng != null ? [s.lat, s.lng] : null);
+      if (pos) {
+        const tam = ativo ? 30 : 22, estimada = !chegou && !rtPosicaoReal(s);
+        const icone = window.L.divIcon({ className: "", html: `<div style="font-size:${tam - 2}px;line-height:1;${ativo ? "background:var(--vp-yellow,#facc15);border-radius:50%;padding:2px;" : ""}${estimada ? "opacity:.55;" : ""}filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚢</div>`, iconSize: [tam, tam], iconAnchor: [tam / 2, tam / 2] });
+        window.L.marker(pos, { icon: icone, zIndexOffset: ativo ? 2000 : 1000 }).addTo(grp).bindTooltip((s.vessel || s.id) + (chegou ? ' — chegou' : estimada ? ' — posição estimada' : '')).on("click", () => onSelect && onSelect(s.id));
+      }
+    });
+  }, [ships, activeId]);
+
+  React.useEffect(() => {
+    const map = mapRef.current; if (!map || !window.L) return;
+    const pts = ships.filter(s => s.lat != null && s.lng != null).map(s => [s.lat, s.lng]);
+    ships.forEach(s => { const o = eiPortCoords(s.origin || s.from), d = eiPortCoords(s.destination || s.to); if (o && d) { pts.push(o); pts.push(d); } });
+    if (pts.length > 1) map.fitBounds(window.L.latLngBounds(pts), { padding: [40, 40], maxZoom: 5 });
+    else if (pts.length === 1) map.setView(pts[0], 4);
+  }, [chave]);
+
+  if (!window.L) return <div style={{ padding: 24, color: "var(--fg3)", fontSize: 13 }}>O mapa não carregou (biblioteca Leaflet indisponível). A lista ao lado continua funcionando.</div>;
+  return (
+    <div style={{ position: "relative", height: "100%" }}>
+      <div ref={elRef} style={{ position: "absolute", inset: 0 }}/>
+      <select value={estilo} onChange={(e) => setEstilo(e.target.value)} title="Estilo do mapa" style={{ position: "absolute", top: 10, right: 10, zIndex: 500, padding: "4px 8px", fontSize: 12 }}>
+        {EI_MAP_STYLES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function ImportacaoRastreamento({ setRoute, setSubsel }) {
   const [embarques, setEmbarques] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [active, setActive] = React.useState(null);
   const [syncing, setSyncing] = React.useState(false);
+  const [grande, setGrande] = React.useState(false);
   const [filterStatus, setFilterStatus] = React.useState("Todos");
   const [filterEta, setFilterEta] = React.useState("Todos");
   const statusOptions = ["Todos", "Em trânsito", "Aguardando liberação", "Entregue"];
@@ -798,24 +891,45 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
-  const hoje = new Date().toISOString().slice(0, 10);
-  const ships = embarques.filter(e => e.lat !== null && e.lat !== undefined)
-    .filter(e => filterStatus === "Todos" || e.status === filterStatus)
+  const hoje = rtHojeBrasilia();
+  const comPosicao = embarques.filter(e => e.lat !== null && e.lat !== undefined);
+  const ships = comPosicao
+    .filter(e => filterStatus === "Todos" || rtStatusEfetivo(e) === filterStatus)
     .filter(e => {
       if (filterEta === "Todos") return true;
+      if (filterEta === "Atrasados") return rtEta(e, hoje).atrasado;
       if (!e.eta) return false;
-      if (filterEta === "Atrasados") return (e.eta_original || e.etaOriginal) && e.eta > (e.eta_original || e.etaOriginal);
       const dias = diffDiasISO(e.eta, hoje);
       if (filterEta === "Próximos 7 dias") return dias >= 0 && dias <= 7;
       if (filterEta === "Próximos 30 dias") return dias >= 0 && dias <= 30;
       return true;
     });
-  const activeId = active || (ships[0] && ships[0].id) || null;
+  const activeId = (active && ships.some(s => s.id === active)) ? active : (ships[0] && ships[0].id) || null;
   const activeShip = ships.find(s => s.id === activeId);
-  const lastSync = ships.map(s => s.last_ais_sync).filter(Boolean).sort().pop();
+  const lastSync = comPosicao.map(s => s.last_ais_sync).filter(Boolean).sort().pop();
+  const horasSync = rtHoras(lastSync);
+  const nAtrasados = comPosicao.filter(e => rtEta(e, hoje).atrasado).length;
+  const estimadas = comPosicao.filter(e => !rtChegou(e) && !rtPosicaoReal(e));
+  const ultimaReal = comPosicao.map(e => e.tracking_updated_at).filter(Boolean).sort().pop();
+
+  const exportar = () => {
+    const cel = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const linhas = [['Embarque', 'Navio', 'Armador', 'BL', 'Container', 'Origem', 'Destino', 'Status', 'ETA', 'ETA original', 'Situação do ETA', 'Progresso %', 'Posição', 'Latitude', 'Longitude', 'Velocidade (kn)', 'Rumo', 'Última leitura', 'Status do rastreio', 'Chegada confirmada']]
+      .concat(ships.map(s => [s.id, s.vessel || '', rtArmador(s) === '—' ? '' : rtArmador(s), s.bl || '', s.container_number || '', s.origin || s.from || '', s.destination || s.to || '', s.status || '',
+        s.eta ? fmtDate(s.eta) : '', (s.eta_original || s.etaOriginal) ? fmtDate(s.eta_original || s.etaOriginal) : '', rtSituacaoEta(rtEta(s, hoje)), rtChegou(s) ? 100 : Math.round((s.position || 0) * 100), rtChegou(s) ? 'chegou' : rtPosicaoReal(s) ? 'real' : 'estimada (simulação)', s.lat ?? '', s.lng ?? '', rtPosicaoReal(s) ? (s.speed ?? '') : '', rtPosicaoReal(s) ? (s.heading ?? '') : '',
+        s.last_ais_sync ? new Date(s.last_ais_sync).toLocaleString('pt-BR') : '', s.tracking_status || '', s.chegada_confirmada_em ? rtDataBR(s.chegada_confirmada_em) : '']));
+    const texto = '﻿' + linhas.map(l => l.map(cel).join(';')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([texto], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = `rastreamento-navios-${hoje}.csv`; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+
+  const detalheEta = activeShip ? rtEta(activeShip, hoje) : null;
+  const eventos = activeShip && Array.isArray(activeShip.tracking_events) ? activeShip.tracking_events.slice(0, 3) : [];
 
   return (
     <div className="page fade-in" style={{ paddingBottom: 32 }}>
+      {grande && activeShip ? <EmbarqueMapaModal embarque={activeShip} onClose={() => setGrande(false)}/> : null}
       <div className="row" style={{ marginBottom: 14 }}>
         <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute("importacao")}>Voltar para Importação</Button>
       </div>
@@ -823,13 +937,24 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Rastreamento</div>
           <h1 className="page-head__title">Mapa Marítimo</h1>
-          <p className="page-head__sub">Posição dos {ships.length} navio{ships.length !== 1 ? 's' : ''} · sincronização AIS{lastSync ? ` · atualizado ${window.__VP_SB.timeAgo(lastSync)}` : ' · aguardando 1ª sync'}</p>
+          <p className="page-head__sub">Posição dos {ships.length} navio{ships.length !== 1 ? 's' : ''}{nAtrasados ? ` · ${nAtrasados} com ETA atrasada` : ''} · sincronização AIS{lastSync ? ` · atualizado ${window.__VP_SB.timeAgo(lastSync)}` : ' · aguardando 1ª sync'}</p>
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="refresh" onClick={onSync} disabled={syncing}>{syncing ? 'Atualizando…' : 'Atualizar'}</Button>
-          <Button variant="outline" icon="download" disabled title="Em desenvolvimento — exportação do mapa ainda não implementada">Exportar relatório</Button>
+          <Button variant="outline" icon="download" onClick={exportar} disabled={!ships.length} title="Baixa a lista que está na tela em planilha CSV">Exportar relatório</Button>
         </div>
       </div>
+
+      {estimadas.length ? (
+        <div style={{ padding: 10, marginBottom: 12, border: '1px solid var(--vp-danger, #c0392b)', borderRadius: 8, fontSize: 12 }}>
+          <b>⚠ Posição ESTIMADA em {estimadas.length} navio(s)</b> — o rastreio real (Sinay/Safecube) está com erro{ultimaReal ? ` (última leitura real em ${rtDataBR(ultimaReal)})` : ''} e o sistema está <b>simulando</b> o avanço do navio. Velocidade, rumo e % de percurso desses navios não são dados reais; confira a posição no site do armador. Peça à TI para verificar a chave/saldo da Sinay.
+        </div>
+      ) : null}
+      {horasSync > 26 ? (
+        <div style={{ padding: 10, marginBottom: 12, border: '1px solid var(--vp-warning)', borderRadius: 8, fontSize: 12 }}>
+          <b>⚠ Posições desatualizadas</b> — {lastSync ? `última sincronização há ${Math.round(horasSync)} h` : 'nenhuma sincronização ainda'}. A automática roda uma vez por dia (06:00 UTC); clique em "Atualizar".
+        </div>
+      ) : null}
 
       <div className="tbar" style={{ marginBottom: 16 }}>
         <div className="seg">
@@ -839,57 +964,81 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
         </div>
         <div className="seg">
           {etaOptions.map(s => (
-            <button key={s} className={filterEta === s ? "is-active" : ""} onClick={() => setFilterEta(s)}>{s}</button>
+            <button key={s} className={filterEta === s ? "is-active" : ""} onClick={() => setFilterEta(s)}>{s === "Atrasados" ? `Atrasados (${nAtrasados})` : s}</button>
           ))}
         </div>
       </div>
 
       <div className="grid-2" style={{ gap: 20, gridTemplateColumns: "1fr 360px" }}>
         <Card sharp={false} padding="0">
-          <div className="map-frame" style={{ height: 600 }}>
-            <ShipMap mainShip={activeShip} ships={ships} onClick={(s) => setActive(s.id)} active={activeId}/>
+          <div style={{ height: 600 }}>
+            <RastreamentoMapa ships={ships} activeId={activeId} onSelect={(id) => setActive(id)}/>
           </div>
         </Card>
 
         <div className="stack">
           <Card title="Navios em trânsito" sub={ships.length + " ativos"}>
             <div className="stack" style={{ gap: 8 }}>
-              {ships.map((s) => (
-                <div key={s.id}
-                  onClick={() => setActive(s.id)}
-                  style={{
-                    padding: 12,
-                    background: activeId === s.id ? "#000" : "#fff",
-                    color: activeId === s.id ? "#fff" : "var(--fg1)",
-                    border: "1px solid " + (activeId === s.id ? "#000" : "var(--border)"),
-                    cursor: "pointer",
-                    position: "relative",
-                  }}>
-                  {activeId === s.id ? <span style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: "var(--vp-yellow)" }}/> : null}
-                  <div className="row sb">
-                    <div className="cell-main" style={{ color: "inherit", fontSize: 13 }}>{s.vessel}</div>
-                    <span className="mono small" style={{ color: activeId === s.id ? "var(--vp-yellow)" : "var(--fg3)" }}>{Math.round(s.position * 100)}%</span>
+              {ships.length === 0 ? <div className="small muted">Nenhum navio neste filtro.</div> : null}
+              {ships.map((s) => {
+                const r = rtEta(s, hoje), sel = activeId === s.id, doc = rtDoc(s), chegou = rtChegou(s), real = rtPosicaoReal(s);
+                return (
+                  <div key={s.id}
+                    onClick={() => setActive(s.id)}
+                    style={{
+                      padding: 12,
+                      background: sel ? "#000" : "#fff",
+                      color: sel ? "#fff" : "var(--fg1)",
+                      border: "1px solid " + (sel ? "#000" : "var(--border)"),
+                      cursor: "pointer",
+                      position: "relative",
+                    }}>
+                    {sel ? <span style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: "var(--vp-yellow)" }}/> : null}
+                    <div className="row sb">
+                      <div className="cell-main" style={{ color: "inherit", fontSize: 13 }}>{s.vessel}</div>
+                      <span className="mono small" style={{ color: sel ? "var(--vp-yellow)" : "var(--fg3)" }} title={chegou ? 'Chegada confirmada' : real ? 'Percurso' : 'Percurso estimado (simulação)'}>{chegou ? '100%' : (real ? '' : '~') + Math.round(s.position * 100) + '%'}</span>
+                    </div>
+                    <div className="cell-sub" style={{ marginTop: 4 }}>{rtArmador(s)} · {doc ? (s.bl ? `BL ${s.bl}` : `Cont. ${s.container_number}`) : 'sem BL/container'}</div>
+                    <div className="progress" style={{ marginTop: 8, background: sel ? "var(--vp-gray-900)" : "var(--vp-gray-200)" }}>
+                      <span style={{ width: (chegou ? 100 : s.position * 100) + "%", opacity: real || chegou ? 1 : .5 }}/>
+                    </div>
+                    <div className="row sb mono small" style={{ marginTop: 8, color: sel ? "rgba(255,255,255,.7)" : "var(--fg3)" }}>
+                      <span>{real && !chegou ? `${s.speed} kn · rumo ${s.heading}°` : chegou ? '' : 'posição estimada'}</span>
+                      <span>ETA {fmtDate(s.eta)}</span>
+                    </div>
+                    {chegou ? <div style={{ marginTop: 6, fontSize: 11, fontWeight: 500, color: sel ? 'var(--vp-yellow)' : 'var(--vp-success-ink, #1a7f37)' }}>✓ Chegada confirmada{s.chegada_confirmada_em ? ' em ' + rtDataBR(s.chegada_confirmada_em) : ''}</div> : null}
+                    {r.atrasado && !chegou ? <div style={{ marginTop: 6, fontSize: 11, fontWeight: 500, color: r.vencidaDias ? "#ff6b6b" : "var(--vp-warning-ink, #b45309)" }}>{r.vencidaDias ? '⚠ ' : ''}{rtSituacaoEta(r)}</div> : null}
+                    {rtSemRota(s) ? <div style={{ marginTop: 4, fontSize: 10, opacity: .7 }}>sem origem/destino: rota não desenhada</div> : null}
                   </div>
-                  <div className="cell-sub" style={{ marginTop: 4 }}>{s.line} · BL {s.bl}</div>
-                  <div className="progress" style={{ marginTop: 8, background: activeId === s.id ? "var(--vp-gray-900)" : "var(--vp-gray-200)" }}>
-                    <span style={{ width: (s.position * 100) + "%" }}/>
-                  </div>
-                  <div className="row sb mono small" style={{ marginTop: 8, color: activeId === s.id ? "rgba(255,255,255,.7)" : "var(--fg3)" }}>
-                    <span>{s.speed} kn · rumo {s.heading}°</span>
-                    <span>ETA {fmtDate(s.eta)}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
 
           {activeShip ? (
             <Card title="Detalhe" sub={activeShip.id} sharp>
-              <KvBlock label="Cliente" value={activeShip.client}/>
-              <KvBlock label="Conteúdo" value={`${activeShip.containers}× ${activeShip.type || activeShip.container_type}`}/>
-              <KvBlock label="Trajeto" value={`${activeShip.from || activeShip.origin} → ${activeShip.to || activeShip.destination}`}/>
+              <KvBlock label="Navio" value={activeShip.vessel || '—'}/>
+              <KvBlock label="Armador" value={rtArmador(activeShip)}/>
+              <KvBlock label="BL / Container" value={[activeShip.bl, activeShip.container_number].filter(Boolean).join(' · ') || 'não informado'}/>
+              <KvBlock label="Cliente / embarque" value={activeShip.client || '—'}/>
+              <KvBlock label="Fornecedor" value={activeShip.supplier || '—'}/>
+              <KvBlock label="Conteúdo" value={`${activeShip.containers || '—'}× ${activeShip.type || activeShip.container_type || '—'}`}/>
+              <KvBlock label="Trajeto" value={rtSemRota(activeShip) ? `${activeShip.from || activeShip.origin || '—'} → ${activeShip.to || activeShip.destination || '—'} (não informado)` : `${activeShip.from || activeShip.origin} → ${activeShip.to || activeShip.destination}`}/>
               <KvBlock label="ETA" value={fmtDateLong(activeShip.eta)}/>
-              <Button variant="primary" size="sm" iconRight="arrowRight" style={{ width: "100%", marginTop: 8 }} onClick={() => { setSubsel?.(activeShip); setRoute("importacao-detail"); }}>Abrir embarque</Button>
+              <KvBlock label="Situação do ETA" value={rtSituacaoEta(detalheEta)}/>
+              <KvBlock label="Posição" value={rtChegou(activeShip) ? 'chegou (confirmado)' : rtPosicaoReal(activeShip) ? `real · ${activeShip.speed} kn · rumo ${activeShip.heading}°` : 'ESTIMADA (simulação) — sem velocidade/rumo reais'}/>
+              <KvBlock label="Status do rastreio" value={String(activeShip.tracking_status || '').toUpperCase() === 'ERROR' ? `erro na consulta à Sinay (última leitura real em ${rtDataBR(activeShip.tracking_updated_at)})` : (activeShip.tracking_status || (activeShip.tracking_provider ? '—' : 'simulação (sem BL/armador)'))}/>
+              <KvBlock label="Última leitura" value={activeShip.last_ais_sync ? `${window.__VP_SB.timeAgo(activeShip.last_ais_sync)}${rtHoras(activeShip.last_ais_sync) > 26 ? ' ⚠' : ''}` : 'aguardando 1ª sync'}/>
+              {eventos.length ? (
+                <div style={{ marginTop: 8 }}>
+                  <div className="up-eyebrow muted" style={{ marginBottom: 4 }}>Últimos eventos</div>
+                  {eventos.map((ev, i) => <div key={i} className="small" style={{ marginBottom: 4 }}><span className="mono">{evDateTime(ev.date)}</span> · {ev.description || '—'}{ev.location ? ` (${ev.location})` : ''}</div>)}
+                </div>
+              ) : null}
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <Button variant="outline" size="sm" icon="globe" style={{ flex: 1 }} onClick={() => setGrande(true)}>Mapa grande</Button>
+                <Button variant="primary" size="sm" iconRight="arrowRight" style={{ flex: 1 }} onClick={() => { setSubsel?.(activeShip); setRoute("importacao-detail"); }}>Abrir embarque</Button>
+              </div>
             </Card>
           ) : null}
         </div>
@@ -901,7 +1050,7 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
 /* ---------- Portos conhecidos (espelho client-side do PORTS da edge
    function ais-sync — só pra desenhar origem/destino no mapa real). ------ */
 const EI_PORTS = {
-  shanghai: [31.2, 121.5], xangai: [31.2, 121.5],
+  shanghai: [31.2, 121.5], xangai: [31.2, 121.5], shangai: [31.2, 121.5],
   ningbo: [29.8, 121.5], qingdao: [36.0, 120.4],
   hamburg: [53.55, 9.99], hamburgo: [53.55, 9.99],
   santos: [-23.95, -46.3], itaguai: [-22.86, -43.75], "itaguaí": [-22.86, -43.75],
