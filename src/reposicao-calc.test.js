@@ -81,3 +81,26 @@ test('tendência compara os últimos 6 meses com a média do histórico', () => 
   const r = R.calcularItem({ codigo: 'VPMP-6', movs: alta, hoje, cfg, disponivel: 0, pendente: 0 });
   assert.equal(r.tendencia, 'alta');
 });
+
+test('média dos últimos 12 meses: consumo antigo não pesa', () => {
+  const m = [{ dt_mov: '2024-02-10', qtde: -1000, cod_origem: 'VEN' }];
+  for (let i = 10; i <= 12; i++) m.push({ dt_mov: `2025-${i}-10`, qtde: -12, cod_origem: 'VEN' });
+  for (let i = 1; i <= 9; i++) m.push({ dt_mov: `2026-0${i}-10`, qtde: -12, cod_origem: 'VEN' });
+  const r = R.calcularItem({ codigo: 'VPMP-7', movs: m, hoje, cfg, disponivel: 0, pendente: 0 });
+  assert.equal(r.mediaMensal, 12);          // out/25–set/26, sem os 1.000 de 2024
+  assert.equal(r.mesesSemSaida, 0);
+  assert.equal(r.serie.length, r.meses);
+});
+
+test('sem saída há 6 meses ou mais = sem giro recente, sem sugestão (mesmo com disponível 0)', () => {
+  const parado = [{ dt_mov: '2025-12-10', qtde: -50, cod_origem: 'VEN' }, { dt_mov: '2026-02-10', qtde: -50, cod_origem: 'VEN' }];
+  const r = R.calcularItem({ codigo: 'VPMP-8', movs: parado, hoje, cfg, disponivel: 0, pendente: 0 });
+  assert.equal(r.status, 'sem_giro');
+  assert.equal(r.semGiroRecente, true);
+  assert.equal(r.sugestao, 0);
+  assert.equal(r.ultimoConsumo, '2026-02');
+  assert.equal(r.mesesSemSaida, 7);
+  // saída 5 meses atrás ainda é item vivo
+  const vivo = [{ dt_mov: '2026-01-10', qtde: -300, cod_origem: 'VEN' }, { dt_mov: '2026-04-10', qtde: -50, cod_origem: 'VEN' }];
+  assert.equal(R.calcularItem({ codigo: 'VPMP-9', movs: vivo, hoje, cfg, disponivel: 0, pendente: 0 }).semGiroRecente, undefined);
+});
