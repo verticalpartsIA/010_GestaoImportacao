@@ -125,7 +125,7 @@ function custoPorCompras(linhas, hojeIso, meses) {
 type Linha = {
   pedido_id: number; item_id: number; numero_pedido: string; data_pedido: string | null; etapa: string; situacao: "recebido" | "pendente";
   fornecedor_cod: number | null; codigo: string; unidade: string | null; quantidade: number; qtde_recebida: number;
-  valor_unitario: number; valor_total: number;
+  valor_unitario: number; valor_total: number; data_previsao: string | null;
 };
 
 Deno.serve(async (req) => {
@@ -183,6 +183,7 @@ Deno.serve(async (req) => {
               data_pedido: dataIso(c.dIncData), etapa: String(c.cEtapa || ""), situacao: qrec > 0 ? "recebido" : "pendente",
               fornecedor_cod: c.nCodFor ? Number(c.nCodFor) : null, codigo: it.cProduto, unidade: it.cUnidade || null,
               quantidade: Number(it.nQtde) || 0, qtde_recebida: qrec, valor_unitario: Number(it.nValUnit) || 0, valor_total: Number(it.nValTot) || 0,
+              data_previsao: dataIso(c.dDtPrevisao),
             };
             if (l.pedido_id && l.item_id) linhas.set(`${l.pedido_id}:${l.item_id}`, l);
           }
@@ -221,6 +222,22 @@ Deno.serve(async (req) => {
     // Grava: linhas (upsert) → pendentes que sumiram (delete) → custo nos produtos
     await pgUpsert("pcp_compras_itens", Array.from(linhas.values()).map((l) => ({ ...l, atualizado_em: inicioIso })), "pedido_id,item_id");
     resumo.pendentes_removidas = await pgDelete("pcp_compras_itens", `situacao=eq.pendente&atualizado_em=lt.${encodeURIComponent(inicioIso)}`);
+    // Nomes dos fornecedores (cache em pcp_fornecedores_omie): só consulta quem ainda não tem nome, no máximo 20 por rodada, e
+    // para no 2º erro seguido (cada erro conta para o bloqueio por consumo indevido do Omie).
+    const codsFor = Array.from(new Set(Array.from(linhas.values()).map((l) => l.fornecedor_cod).filter((c): c is number => !!c)));
+    const jaTem = new Set((await pgSelect<{ codigo: number }>("pcp_fornecedores_omie", "select=codigo&nome=not.is.null")).map((x) => Number(x.codigo)));
+    const novosFor: Record<string, unknown>[] = []; let errosFor = 0;
+    for (const cod of codsFor.filter((c) => !jaTem.has(c)).slice(0, 20)) {
+      try {
+        // deno-lint-ignore no-explicit-any
+        const r = await omie<any>("geral/clientes", "ConsultarCliente", { codigo_cliente_omie: cod });
+        novosFor.push({ codigo: cod, nome: r.nome_fantasia || r.razao_social || null, atualizado_em: inicioIso });
+        errosFor = 0;
+      } catch (e) { if (e instanceof OmieBloqueado) throw e; if (++errosFor >= 2) break; }
+      await sleep(400);
+    }
+    if (novosFor.length) await pgUpsert("pcp_fornecedores_omie", novosFor, "codigo");
+    resumo.fornecedores_novos = novosFor.length;
     const alvo = Array.from(resultado.entries());
     for (let i = 0; i < alvo.length; i += 8) {
       await Promise.all(alvo.slice(i, i + 8).map(([cod, r]) => pgPatch("pcp_produtos", `codigo=eq.${encodeURIComponent(cod)}`, {
