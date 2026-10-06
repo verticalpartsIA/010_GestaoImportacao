@@ -198,7 +198,7 @@
         return (em ? q.or(`destinatario_email.is.null,destinatario_email.eq.${em}`) : q.is('destinatario_email', null)).order('created_at', { ascending: false });
       })(),
       sb.from('tarefas').select('*').eq('role', role).eq('done', false).order('id'),
-      sb.from('embarques').select('*').order('eta'),
+      sb.from('embarques').select('*').eq('teste', false).order('eta'),
       sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false }),
       sb.from('comissoes').select('*').order('id'),
       sb.from('gatilhos').select('*').order('due_date'),

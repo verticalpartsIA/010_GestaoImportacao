@@ -89,8 +89,9 @@ function validarEmails(destinatariosStr) {
 async function runAisSync() {
   const { data, error } = await window.__VP_SB.sb.functions.invoke('ais-sync');
   if (error) { window.toast('Falha na sincronização AIS: ' + (error.message || error), 'error'); return null; }
-  const modo = data && data.mode === 'ais' ? 'AIS' : 'simulação';
-  window.toast(`Posições atualizadas (${(data && data.updated) || 0} navios · modo ${modo}).`, 'success');
+  const reais = (data && data.real) || 0;
+  if (reais > 0) window.toast(`Posições atualizadas: ${reais} navio(s) com leitura real.`, 'success');
+  else window.toast('Nenhuma leitura real obtida — a consulta de rastreio está com erro (veja o motivo no detalhe do embarque).', 'error');
   return data;
 }
 
@@ -297,7 +298,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
 
   const reloadEmbarques = () => {
     setLoading(true);
-    window.__VP_SB.sb.from('embarques').select('*').order('eta')
+    window.__VP_SB.sb.from('embarques').select('*').eq('teste', false).order('eta')
       .then(({ data }) => { setEmbarques(data || []); setLoading(false); });
     if (window.CotacaoElevadorFornecedorStore?.listarComprasAguardandoEmbarque) {
       window.CotacaoElevadorFornecedorStore.listarComprasAguardandoEmbarque()
@@ -834,7 +835,7 @@ function RastreamentoMapa({ ships, activeId, onSelect }) {
       if (pos) {
         const tam = ativo ? 30 : 22, estimada = !chegou && !rtPosicaoReal(s);
         const icone = window.L.divIcon({ className: "", html: `<div style="font-size:${tam - 2}px;line-height:1;${ativo ? "background:var(--vp-yellow,#facc15);border-radius:50%;padding:2px;" : ""}${estimada ? "opacity:.55;" : ""}filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚢</div>`, iconSize: [tam, tam], iconAnchor: [tam / 2, tam / 2] });
-        window.L.marker(pos, { icon: icone, zIndexOffset: ativo ? 2000 : 1000 }).addTo(grp).bindTooltip((s.vessel || s.id) + (chegou ? ' — chegou' : estimada ? ' — posição estimada' : '')).on("click", () => onSelect && onSelect(s.id));
+        window.L.marker(pos, { icon: icone, zIndexOffset: ativo ? 2000 : 1000 }).addTo(grp).bindTooltip((s.vessel || s.id) + (chegou ? ' — chegou' : estimada ? ' — última posição conhecida (rastreio parado)' : '')).on("click", () => onSelect && onSelect(s.id));
       }
     });
   }, [ships, activeId]);
@@ -870,7 +871,7 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
   const etaOptions = ["Todos", "Próximos 7 dias", "Próximos 30 dias", "Atrasados"];
 
   const load = React.useCallback(() => {
-    return window.__VP_SB.sb.from('embarques').select('*').order('eta')
+    return window.__VP_SB.sb.from('embarques').select('*').eq('teste', false).order('eta')
       .then(({ data }) => { setEmbarques(data || []); setLoading(false); });
   }, []);
   React.useEffect(() => { load(); }, [load]);
@@ -916,7 +917,7 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
     const cel = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
     const linhas = [['Embarque', 'Navio', 'Armador', 'BL', 'Container', 'Origem', 'Destino', 'Status', 'ETA', 'ETA original', 'Situação do ETA', 'Progresso %', 'Posição', 'Latitude', 'Longitude', 'Velocidade (kn)', 'Rumo', 'Última leitura', 'Status do rastreio', 'Chegada confirmada']]
       .concat(ships.map(s => [s.id, s.vessel || '', rtArmador(s) === '—' ? '' : rtArmador(s), s.bl || '', s.container_number || '', s.origin || s.from || '', s.destination || s.to || '', s.status || '',
-        s.eta ? fmtDate(s.eta) : '', (s.eta_original || s.etaOriginal) ? fmtDate(s.eta_original || s.etaOriginal) : '', rtSituacaoEta(rtEta(s, hoje)), rtChegou(s) ? 100 : Math.round((s.position || 0) * 100), rtChegou(s) ? 'chegou' : rtPosicaoReal(s) ? 'real' : 'estimada (simulação)', s.lat ?? '', s.lng ?? '', rtPosicaoReal(s) ? (s.speed ?? '') : '', rtPosicaoReal(s) ? (s.heading ?? '') : '',
+        s.eta ? fmtDate(s.eta) : '', (s.eta_original || s.etaOriginal) ? fmtDate(s.eta_original || s.etaOriginal) : '', rtSituacaoEta(rtEta(s, hoje)), rtChegou(s) ? 100 : Math.round((s.position || 0) * 100), rtChegou(s) ? 'chegou' : rtPosicaoReal(s) ? 'real' : 'desatualizada (rastreio parado)', s.lat ?? '', s.lng ?? '', rtPosicaoReal(s) ? (s.speed ?? '') : '', rtPosicaoReal(s) ? (s.heading ?? '') : '',
         s.last_ais_sync ? new Date(s.last_ais_sync).toLocaleString('pt-BR') : '', s.tracking_status || '', s.chegada_confirmada_em ? rtDataBR(s.chegada_confirmada_em) : '']));
     const texto = '﻿' + linhas.map(l => l.map(cel).join(';')).join('\r\n');
     const url = URL.createObjectURL(new Blob([texto], { type: 'text/csv;charset=utf-8' }));
@@ -947,7 +948,7 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
 
       {estimadas.length ? (
         <div style={{ padding: 10, marginBottom: 12, border: '1px solid var(--vp-danger, #c0392b)', borderRadius: 8, fontSize: 12 }}>
-          <b>⚠ Posição ESTIMADA em {estimadas.length} navio(s)</b> — o rastreio real (Sinay/Safecube) está com erro{ultimaReal ? ` (última leitura real em ${rtDataBR(ultimaReal)})` : ''} e o sistema está <b>simulando</b> o avanço do navio. Velocidade, rumo e % de percurso desses navios não são dados reais; confira a posição no site do armador. Peça à TI para verificar a chave/saldo da Sinay.
+          <b>⚠ Rastreio parado em {estimadas.length} navio(s)</b> — a consulta à Sinay/Safecube está falhando{ultimaReal ? ` (última leitura real em ${rtDataBR(ultimaReal)})` : ''}. O mapa mostra a <b>última posição conhecida</b>, que não acompanha o navio; confira no site do armador. O motivo do erro está no detalhe de cada embarque (peça à TI para verificar a chave da Sinay).
         </div>
       ) : null}
       {horasSync > 26 ? (
@@ -996,14 +997,14 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
                     {sel ? <span style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: "var(--vp-yellow)" }}/> : null}
                     <div className="row sb">
                       <div className="cell-main" style={{ color: "inherit", fontSize: 13 }}>{s.vessel}</div>
-                      <span className="mono small" style={{ color: sel ? "var(--vp-yellow)" : "var(--fg3)" }} title={chegou ? 'Chegada confirmada' : real ? 'Percurso' : 'Percurso estimado (simulação)'}>{chegou ? '100%' : (real ? '' : '~') + Math.round(s.position * 100) + '%'}</span>
+                      <span className="mono small" style={{ color: sel ? "var(--vp-yellow)" : "var(--fg3)" }} title={chegou ? 'Chegada confirmada' : real ? 'Percurso' : 'Percurso na última leitura (desatualizado)'}>{chegou ? '100%' : (real ? '' : '~') + Math.round(s.position * 100) + '%'}</span>
                     </div>
                     <div className="cell-sub" style={{ marginTop: 4 }}>{rtArmador(s)} · {doc ? (s.bl ? `BL ${s.bl}` : `Cont. ${s.container_number}`) : 'sem BL/container'}</div>
                     <div className="progress" style={{ marginTop: 8, background: sel ? "var(--vp-gray-900)" : "var(--vp-gray-200)" }}>
                       <span style={{ width: (chegou ? 100 : s.position * 100) + "%", opacity: real || chegou ? 1 : .5 }}/>
                     </div>
                     <div className="row sb mono small" style={{ marginTop: 8, color: sel ? "rgba(255,255,255,.7)" : "var(--fg3)" }}>
-                      <span>{real && !chegou ? `${s.speed} kn · rumo ${s.heading}°` : chegou ? '' : 'posição estimada'}</span>
+                      <span>{real && !chegou ? (s.speed != null ? `${s.speed} kn · rumo ${s.heading}°` : 'posição real') : chegou ? '' : 'última posição conhecida'}</span>
                       <span>ETA {fmtDate(s.eta)}</span>
                     </div>
                     {chegou ? <div style={{ marginTop: 6, fontSize: 11, fontWeight: 500, color: sel ? 'var(--vp-yellow)' : 'var(--vp-success-ink, #1a7f37)' }}>✓ Chegada confirmada{s.chegada_confirmada_em ? ' em ' + rtDataBR(s.chegada_confirmada_em) : ''}</div> : null}
@@ -1026,8 +1027,9 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
               <KvBlock label="Trajeto" value={rtSemRota(activeShip) ? `${activeShip.from || activeShip.origin || '—'} → ${activeShip.to || activeShip.destination || '—'} (não informado)` : `${activeShip.from || activeShip.origin} → ${activeShip.to || activeShip.destination}`}/>
               <KvBlock label="ETA" value={fmtDateLong(activeShip.eta)}/>
               <KvBlock label="Situação do ETA" value={rtSituacaoEta(detalheEta)}/>
-              <KvBlock label="Posição" value={rtChegou(activeShip) ? 'chegou (confirmado)' : rtPosicaoReal(activeShip) ? `real · ${activeShip.speed} kn · rumo ${activeShip.heading}°` : 'ESTIMADA (simulação) — sem velocidade/rumo reais'}/>
-              <KvBlock label="Status do rastreio" value={String(activeShip.tracking_status || '').toUpperCase() === 'ERROR' ? `erro na consulta à Sinay (última leitura real em ${rtDataBR(activeShip.tracking_updated_at)})` : (activeShip.tracking_status || (activeShip.tracking_provider ? '—' : 'simulação (sem BL/armador)'))}/>
+              <KvBlock label="Posição" value={rtChegou(activeShip) ? 'chegou (confirmado)' : rtPosicaoReal(activeShip) ? (activeShip.speed != null ? `real · ${activeShip.speed} kn · rumo ${activeShip.heading}°` : 'real (sem velocidade/rumo)') : 'DESATUALIZADA — rastreio sem leitura real recente'}/>
+              <KvBlock label="Status do rastreio" value={String(activeShip.tracking_status || '').toUpperCase() === 'ERROR' ? `erro na consulta à Sinay (última leitura real em ${rtDataBR(activeShip.tracking_updated_at)})` : (activeShip.tracking_status || (activeShip.tracking_provider ? '—' : 'sem rastreio configurado'))}/>
+              {activeShip.tracking_erro ? <KvBlock label="Motivo do erro" value={activeShip.tracking_erro}/> : null}
               <KvBlock label="Última leitura" value={activeShip.last_ais_sync ? `${window.__VP_SB.timeAgo(activeShip.last_ais_sync)}${rtHoras(activeShip.last_ais_sync) > 26 ? ' ⚠' : ''}` : 'aguardando 1ª sync'}/>
               {eventos.length ? (
                 <div style={{ marginTop: 8 }}>
