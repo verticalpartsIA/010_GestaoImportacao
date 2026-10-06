@@ -1093,6 +1093,21 @@ function FichaTecnicaPage({ fichaId }) {
           if (ficha && alive) handleOpen(ficha);
         }
       } catch (e) { console.warn('[FTPage] deep-link open failed', e); }
+      /* Deep-link dos Relatórios do PCP ("Produtos com foto" › Criar ficha deste item): abre uma ficha NOVA já com o Código e o
+         Nome do produto preenchidos. Valor = JSON {codigo, nome} (aceita só o código em texto). Não grava nada: só preenche. */
+      try {
+        const novaRaw = sessionStorage.getItem('vp_pcp_ficha_nova');
+        if (novaRaw && alive) {
+          sessionStorage.removeItem('vp_pcp_ficha_nova');
+          let dado; try { dado = JSON.parse(novaRaw); } catch (e) { dado = { codigo: novaRaw }; }
+          const st = window.FT.freshState();
+          st.identificacao = Object.assign({}, st.identificacao, {
+            codigoProduto: String((dado && dado.codigo) || '').trim(),
+            nomeProduto: dado && dado.nome ? String(dado.nome).slice(0, 120) : (st.identificacao.nomeProduto || ''),
+          });
+          setInitial(st); setView('nova');
+        }
+      } catch (e) { console.warn('[FTPage] deep-link nova ficha falhou', e); }
     })();
     return () => { alive = false; };
   }, []);
