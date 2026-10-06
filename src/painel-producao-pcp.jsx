@@ -64,6 +64,8 @@ function RPPainelProducao({ ctx }) {
   dados.plano.forEach(l => { plano[l.mes - 1] += Number(l.quantidade); });
   doAno.forEach(x => { real[Number(x.data_finalizacao.slice(5, 7)) - 1] += Number(x.qtd_produzida || 0); });
   const maxMes = Math.max(1, ...plano, ...real);
+  const temPlano = plano.some(Boolean);
+  const semProducao = !temPlano && doAno.length === 0;
 
   const topProdutos = Object.entries(doAno.reduce((a, x) => { a[x.produto] = (a[x.produto] || 0) + Number(x.qtd_produzida || 0); return a; }, {}))
     .sort((a, b) => b[1] - a[1]).slice(0, 5);
@@ -98,13 +100,16 @@ function RPPainelProducao({ ctx }) {
         {card('Pedidos aguardando OP', aguardandoOp.length, 'etapa 20 no Omie, sem OP', aguardandoOp.length ? 'var(--vp-yellow)' : '#2e9e5b', () => { nav.setSubsel && nav.setSubsel(null); nav.setRoute && nav.setRoute('pcp'); })}
       </div>
 
-      <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>Planejado × produzido em {ano}</h3>
+      {semProducao && <RPVazioGuiado titulo={`Nenhuma OP concluída e nenhum planejamento em ${ano}`}
+        passos={['Lance a meta mensal em PCP › Planejamento para ver "Planejado × produzido".', 'Conclua as OPs em PCP › Ordens de Produção (quantidade produzida e perdida) para ver produção, perdas e ranking.']}
+        acoes={[{ rot: 'Abrir Planejamento', path: '/logistica/pcp/planejamento' }, { rot: 'Abrir Ordens de Produção', path: '/logistica/pcp' }]}/>}
+      <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>{temPlano ? 'Planejado × produzido' : 'Produzido'} em {ano}</h3>
       <div className="card" style={{ padding: 14, marginBottom: 16 }}>
         <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 150 }}>
           {PN_MESES.map((m, i) => (
             <div key={m} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2, height: '100%', justifyContent: 'flex-end' }} title={`${m}: planejado ${pnFmt(plano[i])} · produzido ${pnFmt(real[i])}`}>
               <div style={{ display: 'flex', gap: 2, alignItems: 'flex-end', height: 120, width: '100%', justifyContent: 'center' }}>
-                <div style={{ width: '38%', height: (plano[i] / maxMes) * 120, background: 'color-mix(in srgb, var(--fg3) 45%, transparent)', minHeight: plano[i] ? 2 : 0 }}/>
+                {temPlano && <div style={{ width: '38%', height: (plano[i] / maxMes) * 120, background: 'color-mix(in srgb, var(--fg3) 45%, transparent)', minHeight: plano[i] ? 2 : 0 }}/>}
                 <div style={{ width: '38%', height: (real[i] / maxMes) * 120, background: 'var(--vp-yellow)', minHeight: real[i] ? 2 : 0 }}/>
               </div>
               <div style={{ fontSize: 10, color: 'var(--fg3)' }}>{m}</div>
@@ -112,7 +117,7 @@ function RPPainelProducao({ ctx }) {
           ))}
         </div>
         <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>
-          <span style={{ display: 'inline-block', width: 10, height: 10, background: 'color-mix(in srgb, var(--fg3) 45%, transparent)', marginRight: 4 }}/>Planejado (meta)
+          {temPlano && <><span style={{ display: 'inline-block', width: 10, height: 10, background: 'color-mix(in srgb, var(--fg3) 45%, transparent)', marginRight: 4 }}/>Planejado (meta)</>}
           <span style={{ display: 'inline-block', width: 10, height: 10, background: 'var(--vp-yellow)', margin: '0 4px 0 14px' }}/>Produzido (OPs concluídas no mês da finalização)
         </div>
       </div>
@@ -144,7 +149,7 @@ function RPPainelProducao({ ctx }) {
                       <td><b style={{ fontWeight: 500 }}>{x.numero_pedido}</b></td>
                       <td>{x.cliente_nome || '—'}</td>
                       <td>{pnData(x.data_previsao)}</td>
-                      <td className="text-right" style={dias > 1 ? { color: 'var(--vp-danger)' } : undefined}>{dias == null ? '—' : dias === 0 ? 'hoje' : `${dias} dia(s)`}</td>
+                      <td className="text-right" style={dias > 1 ? { color: 'var(--vp-danger)' } : undefined}>{window.pcpDiasTxt(dias)}</td>
                     </tr>
                   );
                 })}

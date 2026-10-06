@@ -17,7 +17,7 @@
 function pfData(d) { return d ? String(d).slice(0, 10).split('-').reverse().join('/') : '—'; }
 function pfDias(deIso, ateIso) { return Math.round((new Date(ateIso + 'T00:00') - new Date(deIso + 'T00:00')) / 86400000); }
 function pfHoje() { const x = new Date(); return `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}-${String(x.getDate()).padStart(2, '0')}`; }
-const PF_ETAPA = { '10': 'Pedido de Venda', '20': 'Separar estoque / produção', '50': 'Faturar', '60': 'Faturado', '70': 'Entrega', '80': 'Etapa 80' };
+const PF_ETAPA = window.PCP_ETAPAS_OMIE;      // tabela única das telas do PCP (src/pcp-etapas-omie.js)
 
 function RPPainelFluxo({ ctx, ano, d, perm }) {
   const { sb, produtos } = ctx;
@@ -67,6 +67,8 @@ function RPPainelFluxo({ ctx, ano, d, perm }) {
   const topCli = Object.entries(porCliente).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
   const topProd = Object.entries(porProduto).filter(([, v]) => v > 0).sort((a, b) => b[1] - a[1]).slice(0, 5);
 
+  const lidas = x.pedidos.map(r => r.data_pedido).filter(Boolean).sort();
+  const selo = lidas.length ? ` · só pedidos lidos desde ${rpDataBr(lidas[0])}` : '';
   const card = (rot, val, sub, cor, extra) => (
     <div className="card pcp-total" style={{ padding: 14, flex: '1 1 175px', borderLeft: cor ? `4px solid ${cor}` : undefined }}>
       <div style={{ fontSize: 12, color: 'var(--fg3)' }}>{rot}</div>
@@ -79,8 +81,8 @@ function RPPainelFluxo({ ctx, ano, d, perm }) {
   return (
     <div style={{ marginBottom: 20 }}>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-        {card(`Receita pedida ${ano}`, rpMoeda(totPedida), varMes == null ? 'itens do PCP, mês do pedido' : `${RP_MESES[mes].slice(0, 3)}: ${varMes >= 0 ? '▲' : '▼'} ${rpFmt(Math.abs(varMes), 0)}% vs. ${RP_MESES[mes - 1].slice(0, 3)} (últimos meses fechados)`)}
-        {card(`Faturado (NF) ${ano}`, rpMoeda(totFat), `${nFat} pedido(s) com NF emitida`, null)}
+        {card(`Receita pedida ${ano}`, rpMoeda(totPedida), varMes == null ? 'itens do PCP, mês do pedido' + selo : `${RP_MESES[mes].slice(0, 3)}: ${varMes >= 0 ? '▲' : '▼'} ${rpFmt(Math.abs(varMes), 0)}% vs. ${RP_MESES[mes - 1].slice(0, 3)} (últimos meses fechados)${selo}`)}
+        {card(`Faturado (NF) ${ano}`, rpMoeda(totFat), `${nFat} pedido(s) com NF emitida${selo}`, null)}
         {card('Carteira a faturar', rpMoeda(totCarteira), `${carteira.length} pedido(s) sem NF, fora os históricos`, carteira.length ? 'var(--vp-yellow)' : '#2e9e5b')}
         {completo
           ? card('Custo dos materiais vendidos', rpMoeda(totCusto), 'estrutura × custo atual · sem mão de obra', null)
@@ -129,7 +131,7 @@ function RPPainelFluxo({ ctx, ano, d, perm }) {
                       <td>{r.cliente_nome || '—'}</td>
                       <td>{PF_ETAPA[r.etapa] || 'Etapa ' + r.etapa}</td>
                       <td className="text-right">{rpMoeda(r.v)}</td>
-                      <td className="text-right">{dias == null ? '—' : dias === 0 ? 'hoje' : `${dias} dia(s)`}</td>
+                      <td className="text-right">{window.pcpDiasTxt(dias)}</td>
                     </tr>
                   );
                 })}

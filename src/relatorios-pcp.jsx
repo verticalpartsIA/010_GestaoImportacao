@@ -55,9 +55,9 @@ function RPProducao({ ctx }) {
         <button className="btn btn--sm" onClick={exportar}>Exportar planilha</button>
       </div>
       {dados.plano.length === 0 && dados.ordens.length === 0 && (
-        <div style={{ padding: 12, marginBottom: 12, border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--fg3)' }}>
-          Ainda não há planejamento nem OP concluída em {ano}. Esta tabela se preenche sozinha quando o Planejamento (PCP › Planejamento) for lançado e as OPs forem concluídas.
-        </div>
+        <RPVazioGuiado titulo={`Ainda não há planejamento nem OP concluída em ${ano}`}
+          passos={['Lance a meta mensal por produto em PCP › Planejamento (coluna "Planejado").', 'Conclua as OPs em PCP › Ordens de Produção, informando quantidade produzida e perdida (coluna "Produzido").', 'Esta tabela se preenche sozinha com esses dois dados.']}
+          acoes={[{ rot: 'Abrir Planejamento', path: '/logistica/pcp/planejamento' }, { rot: 'Abrir Ordens de Produção', path: '/logistica/pcp' }]}/>
       )}
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
         <table className="t pcp-grid">
@@ -180,7 +180,7 @@ function RPPerdas({ ctx }) {
 /* Estoque: RPEstoque está em relatorios-pcp-extras.jsx (situação pela regra da Reposição). */
 
 /* ---------------- Pedidos / Clientes (pedidos de VENDA do Omie, só itens do PCP) ---------------- */
-const RP_ETAPA = { '00': 'Proposta', '10': 'Pedido de Venda', '20': 'Separar estoque / produção', '50': 'Faturar', '60': 'Faturado', '70': 'Entrega', '80': 'Etapa 80' };
+const RP_ETAPA = window.PCP_ETAPAS_OMIE;      // tabela única das telas do PCP (src/pcp-etapas-omie.js)
 function rpMoeda(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 function rpDataBr(d) { return d ? d.split('-').reverse().join('/') : '—'; }
 function rpEsc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -261,6 +261,7 @@ function RPPedidos({ ctx }) {
   const qf = fBusca.trim().toLowerCase();
   const recFiltrados = recentes.filter(r => (!qf || (String(r.numero_pedido) + ' ' + (r.cliente_nome || '')).toLowerCase().includes(qf)) && (!fEtapa || r.etapa === fEtapa)
     && (!fDe || (r.data_pedido || '') >= fDe) && (!fAte || (r.data_pedido || '') <= fAte));
+  const nUnicos = new Set(recFiltrados.filter(r => !r.cancelado).map(r => r.numero_pedido)).size, nCancel = recFiltrados.filter(r => r.cancelado).length;
   const exportarRec = () => rpBaixar(`pedidos-${rpHojeBrasilia()}.csv`, rpCsv([['Pedido', 'Cliente', 'Data', 'Etapa', 'Cancelado', 'Total do pedido (Omie)'],
     ...recFiltrados.map(r => [r.numero_pedido, r.cliente_nome || '', rpDataBr(r.data_pedido), RP_ETAPA[r.etapa] || 'Etapa ' + r.etapa, r.cancelado ? 'sim' : '', rpNumCsv(r.valor_total)])]));
 
@@ -334,7 +335,7 @@ function RPPedidos({ ctx }) {
         );
       })}
 
-      <h3 style={{ margin: '14px 0 8px', fontWeight: 500, fontSize: 14 }}>Pedidos já lidos do Omie ({recFiltrados.length})</h3>
+      <h3 style={{ margin: '14px 0 8px', fontWeight: 500, fontSize: 14 }}>Pedidos já lidos do Omie ({nUnicos})<span style={{ fontWeight: 300, fontSize: 11, color: 'var(--fg3)', marginLeft: 8 }}>{recFiltrados.length !== nUnicos ? `${recFiltrados.length} registro(s): pedido parcial tem mais de um` : ''}{nCancel ? ` · ${nCancel} cancelado(s) não contam` : ''}</span></h3>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
         <input className="input" placeholder="Buscar nº ou cliente…" value={fBusca} onChange={e => setFBusca(e.target.value)} style={{ minWidth: 220 }}/>
         <select className="input" value={fEtapa} onChange={e => setFEtapa(e.target.value)}>
@@ -393,6 +394,7 @@ function RPClientes({ ctx }) {
   const lcs = custos ? linhas.map(l => rpLinhaCusto(custos, l)) : null;
   const totCusto = lcs ? lcs.reduce((s, l) => s + l.custo, 0) : 0, totLucro = total - totCusto;
   const nIncompletos = lcs ? lcs.filter(l => l.incompleto).length : 0;
+  const datasLidas = pedidos.map(p => p.data_pedido).filter(Boolean).sort();
   const nPedidos = new Set(doCliente.map(p => p.numero_pedido)).size;     // pedido parcial = mais de um registro com o mesmo número
 
   // Ranking: quanto cada cliente comprou (pedidos distintos, quantidade, total e — com alçada de custo — lucro bruto).
@@ -421,6 +423,7 @@ function RPClientes({ ctx }) {
   return (
     <div>
       <RPCobertura sb={sb} onAtualizado={carregar}/>
+      {datasLidas.length ? <div style={{ fontSize: 11, color: 'var(--fg3)', marginBottom: 8 }}>Cobertura deste ranking: pedidos de {rpDataBr(datasLidas[0])} a {rpDataBr(datasLidas[datasLidas.length - 1])} já lidos do Omie — clientes e totais são só desse período.</div> : null}
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <select className="input" value={cliente} onChange={e => setCliente(e.target.value)} style={{ minWidth: 340 }}>
           <option value="">Todos os clientes (ranking)</option>
@@ -515,6 +518,7 @@ function RPListaPrecos({ ctx }) {
   const [dados, setDados] = React.useState(null);
   const [busca, setBusca] = React.useState('');
   const [soComPreco, setSoComPreco] = React.useState(false);
+  const [soSemPreco, setSoSemPreco] = React.useState(false);
 
   React.useEffect(() => {
     let vivo = true;
@@ -548,7 +552,9 @@ function RPListaPrecos({ ctx }) {
 
   if (!dados) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
   const semPrecoN = dados.produtos.filter(p => !(Number(p.preco_venda || 0) > 0)).length;
-  const linhas = dados.produtos.filter(p => (!soComPreco || Number(p.preco_venda || 0) > 0) && (!busca.trim() || (p.codigo + ' ' + p.descricao).toLowerCase().includes(busca.trim().toLowerCase()))).map(p => {
+  const exportarPendencias = () => rpBaixar(`produtos-sem-preco-${rpHojeBrasilia()}.csv`, rpCsv([['Código', 'Descrição', 'Unidade', 'Família'],
+    ...dados.produtos.filter(p => !(Number(p.preco_venda || 0) > 0)).map(p => [p.codigo, p.descricao, p.unidade || '', p.familia || ''])]));
+  const linhas = dados.produtos.filter(p => (!soComPreco || Number(p.preco_venda || 0) > 0) && (!soSemPreco || !(Number(p.preco_venda || 0) > 0)) && (!busca.trim() || (p.codigo + ' ' + p.descricao).toLowerCase().includes(busca.trim().toLowerCase()))).map(p => {
     const preco = Number(p.preco_venda || 0);
     const mat = perm.custo ? rpCustoUnit(p.codigo, dados.filhos, dados.custo) : null;
     const m = dados.mo[p.codigo];
@@ -573,9 +579,11 @@ function RPListaPrecos({ ctx }) {
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <input className="input" placeholder="Buscar código ou descrição…" value={busca} onChange={e => setBusca(e.target.value)} style={{ minWidth: 260 }}/>
         <span style={{ fontSize: 12, color: 'var(--fg3)' }}>{linhas.length} produto(s) · {semPrecoN} sem preço de venda</span>
-        <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={soComPreco} onChange={e => setSoComPreco(e.target.checked)}/>só com preço de venda</label>
+        <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={soComPreco} onChange={e => { setSoComPreco(e.target.checked); if (e.target.checked) setSoSemPreco(false); }}/>só com preço de venda</label>
+        <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={soSemPreco} onChange={e => { setSoSemPreco(e.target.checked); if (e.target.checked) setSoComPreco(false); }}/>só os {semPrecoN} sem preço</label>
         <span style={{ flex: 1 }}/>
         <button className="btn btn--sm" disabled={!linhas.length} onClick={exportar}>Exportar planilha</button>
+        <button className="btn btn--sm" disabled={!semPrecoN} onClick={exportarPendencias} title="Baixa só os produtos sem preço de venda, para quem cadastra o preço no Omie">Exportar pendências ({semPrecoN})</button>
         <button className="btn btn--sm" onClick={imprimir} title="Imprime só código, produto e preço de venda (sem custos), apenas dos produtos que têm preço">Imprimir lista de preços</button>
       </div>
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
