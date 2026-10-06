@@ -3,23 +3,24 @@
 // ------------------------------------------------------------
 // Backend do spec de Importação: "Calcula progresso, status, ETA dinâmico"
 //
-// Três modos, escolhidos automaticamente por embarque:
-//   • SINAY REAL → quando o secret SINAY_API_KEY existe E o embarque tem
-//                  bl ou container_number preenchido. Consulta a Sinay/
-//                  Safecube Container Tracking API (rastreio real, por
-//                  BL/container/booking) e persiste posição, ETA e status.
-//   • AIS GENÉRICO → sem BL/container mas com IMO + secrets AIS_API_KEY/
-//                  AIS_PROVIDER_URL (integração antiga, mantida por
-//                  compatibilidade).
-//   • SIMULAÇÃO   → sem nenhuma chave, interpola a rota porto-origem →
-//                  porto-destino (mantém o demo "vivo").
+// Modos, escolhidos automaticamente por embarque:
+//   • SINAY REAL → secret SINAY_API_KEY + embarque com bl ou container_number.
+//   • AIS GENÉRICO → sem BL/container mas com IMO + AIS_API_KEY/AIS_PROVIDER_URL.
+//   • NUNCA SIMULA (06/10/2026): se a consulta falhar ou faltar dado, a última
+//     posição real é mantida e o motivo vai em tracking_status/tracking_erro.
+//     (Antes a função inventava avanço de ~2%/dia, velocidade e rumo.)
 //
 // Para ativar o rastreio real via Sinay, configure o secret:
 //   supabase secrets set SINAY_API_KEY=...
 // (ou via Dashboard → Project Settings → Edge Functions → Secrets)
 // ============================================================
-import "jsr:@supabase/functions-js/edge-runtime.d.ts";
-import { createClient } from "jsr:@supabase/supabase-js@2";
+
+const SB_URL = Deno.env.get("SUPABASE_URL")!;
+function sbKey(): string {
+  try { return JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]; }
+  catch { return Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!; }
+}
+const pgH = () => ({ apikey: sbKey(), Authorization: `Bearer ${sbKey()}`, "Content-Type": "application/json" });
 
 const PORTS: Record<string, [number, number]> = {
   shanghai: [31.2, 121.5], xangai: [31.2, 121.5],
@@ -67,7 +68,11 @@ async function fetchSinay(
   try {
     const resp = await fetch(url, { headers: { API_KEY: key } });
     if (resp.status === 429) return { __rateLimited: true };
-    if (!resp.ok) return { __error: `HTTP ${resp.status}` };
+    if (!resp.ok) {
+      let corpo = "";
+      try { corpo = (await resp.text()).replace(/\s+/g, " ").slice(0, 160); } catch (_e) { /* ignora */ }
+      return { __error: `HTTP ${resp.status}${corpo ? " — " + corpo : ""}` };
+    }
     return await resp.json();
   } catch (e) {
     return { __error: String(e) };
@@ -157,32 +162,23 @@ const JSON_HEADERS = { ...CORS, "Content-Type": "application/json" };
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
 
-  const supabase = createClient(
-    Deno.env.get("SUPABASE_URL")!,
-    JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"],
-  );
-
   const hasSinay = !!Deno.env.get("SINAY_API_KEY");
   const hasGenericAis = !!Deno.env.get("AIS_API_KEY");
 
-  const { data: ships, error } = await supabase
-    .from("embarques").select("*").neq("status", "Entregue");
-
-  if (error) {
-    return new Response(JSON.stringify({ ok: false, error: error.message }), {
-      status: 500, headers: JSON_HEADERS,
-    });
+  const r = await fetch(`${SB_URL}/rest/v1/embarques?select=*&status=neq.Entregue&teste=eq.false&chegada_confirmada_em=is.null`, { headers: pgH() });
+  if (!r.ok) {
+    return new Response(JSON.stringify({ ok: false, error: `HTTP ${r.status}` }), { status: 500, headers: JSON_HEADERS });
   }
+  const ships = await r.json() as Array<Record<string, any>>;
 
   let updated = 0;
-  let sinayCount = 0;
+  let real = 0;
   const now = new Date().toISOString();
 
-  for (const e of ships ?? []) {
-    let patch: Record<string, unknown> = { last_ais_sync: now };
+  for (const e of ships) {
+    let patch: Record<string, unknown> = {};
     let handled = false;
 
-    // 1) Rastreio real via Sinay — precisa de BL ou nº do container.
     const shipmentNumber = e.bl || e.container_number;
     if (hasSinay && shipmentNumber) {
       const shipmentType = e.bl ? "BL" : "CT";
@@ -192,15 +188,21 @@ Deno.serve(async (req) => {
       if (raw && !raw.__rateLimited && !raw.__error) {
         const mapped = mapSinayResponse(raw);
         patch = {
-          ...patch,
+          last_ais_sync: now,
           tracking_provider: "sinay",
           tracking_status: mapped.shippingStatus,
+          tracking_erro: null,
           tracking_updated_at: mapped.sinayUpdatedAt || now,
           tracking_raw: raw,
         };
         if (mapped.lat != null && mapped.lng != null) {
           patch.lat = mapped.lat;
           patch.lng = mapped.lng;
+          const start = portOf(e.origin, [31.2, 121.5]);
+          const end = portOf(e.destination, [-23.95, -46.3]);
+          const total = Math.hypot(end[0] - start[0], end[1] - start[1]);
+          if (total > 0) patch.position = Math.round(Math.max(0, Math.min(0.99, Math.hypot(mapped.lat - start[0], mapped.lng - start[1]) / total)) * 1000) / 1000;
+          patch.speed = null; patch.heading = null; // a Sinay não informa velocidade/rumo
         }
         if (mapped.eta) patch.eta = mapped.eta;
         if (mapped.etd) patch.etd = mapped.etd;
@@ -209,53 +211,37 @@ Deno.serve(async (req) => {
         if (mapped.timeline && mapped.timeline.length) patch.tracking_events = mapped.timeline;
         handled = true;
       } else if (raw) {
-        // Rate limit ou erro pontual — não sobrescreve dados já persistidos,
-        // só registra a tentativa para não travar a fila de sincronização.
-        patch.tracking_status = raw.__rateLimited ? "RATE_LIMITED" : "ERROR";
+        // Erro/limite: NÃO mexe na posição; só registra o motivo.
+        patch = {
+          tracking_status: raw.__rateLimited ? "RATE_LIMITED" : "ERROR",
+          tracking_erro: raw.__rateLimited ? "HTTP 429 — limite de requisições da Sinay" : String(raw.__error ?? "erro desconhecido"),
+        };
       }
+    } else if (!shipmentNumber && !(hasGenericAis && e.imo)) {
+      patch = { tracking_status: "SEM_IDENTIFICADOR", tracking_erro: "Embarque sem BL nem nº de container — nada a rastrear." };
+    } else if (!hasSinay && shipmentNumber && !(hasGenericAis && e.imo)) {
+      patch = { tracking_status: "ERROR", tracking_erro: "Secret SINAY_API_KEY não configurada no Supabase." };
     }
 
-    // 2) Fallback: AIS genérico por IMO (integração antiga).
-    if (!handled && hasGenericAis && e.imo) {
-      const real = await fetchAis(e.imo);
-      if (real && real.lat != null && real.lng != null) {
-        patch = { ...patch, lat: real.lat, lng: real.lng, speed: real.speed, heading: real.heading };
-        if (real.eta) patch.eta = real.eta;
+    if (!handled && hasGenericAis && e.imo && !shipmentNumber) {
+      const ais = await fetchAis(e.imo);
+      if (ais && ais.lat != null && ais.lng != null) {
+        patch = { last_ais_sync: now, lat: ais.lat, lng: ais.lng, speed: ais.speed, heading: ais.heading, tracking_erro: null };
+        if (ais.eta) patch.eta = ais.eta;
         handled = true;
       }
     }
 
-    // 3) Simulação — mantém o demo "vivo" quando não há integração real.
-    if (!handled) {
-      const start = portOf(e.origin, [31.2, 121.5]);
-      const end = portOf(e.destination, [-23.95, -46.3]);
-      const arrived = e.status === "Aguardando liberação" || (e.position ?? 0) >= 0.99;
-      if (arrived) {
-        patch = { ...patch, speed: 0 };
-      } else {
-        const pos = Math.min(0.99, (e.position ?? 0) + 0.02 + Math.random() * 0.015);
-        const lat = start[0] + (end[0] - start[0]) * pos;
-        const lng = start[1] + (end[1] - start[1]) * pos;
-        const hdg = Math.round(((bearing(start, end) + (Math.random() * 6 - 3)) + 360) % 360);
-        patch = {
-          ...patch,
-          position: Math.round(pos * 1000) / 1000,
-          lat: Math.round(lat * 100) / 100,
-          lng: Math.round(lng * 100) / 100,
-          heading: hdg,
-          speed: Math.round((14 + Math.random() * 4) * 10) / 10,
-        };
-      }
-    } else {
-      sinayCount++;
+    if (handled) real++;
+    if (Object.keys(patch).length) {
+      const u = await fetch(`${SB_URL}/rest/v1/embarques?id=eq.${encodeURIComponent(e.id)}`, {
+        method: "PATCH", headers: { ...pgH(), Prefer: "return=minimal" }, body: JSON.stringify(patch),
+      });
+      if (u.ok) updated++;
     }
-
-    const { error: upErr } = await supabase.from("embarques").update(patch).eq("id", e.id);
-    if (!upErr) updated++;
   }
 
-  const mode = sinayCount > 0 ? "sinay" : hasGenericAis ? "ais" : "simulação";
-  return new Response(JSON.stringify({ ok: true, mode, updated, sinayCount }), {
+  return new Response(JSON.stringify({ ok: true, mode: real > 0 ? "real" : "sem leitura real", updated, real }), {
     headers: JSON_HEADERS,
   });
 });
