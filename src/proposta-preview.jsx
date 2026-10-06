@@ -345,6 +345,29 @@ function PreviewElevadorMarketing({ data }) {
   );
 }
 
+/* Linhas da tabela de especificações de 1 equipamento — extraída (issue
+   #704) pra ser testável sem montar o React inteiro; tensão/tração/
+   dimensões da cabine entram aqui pela 1ª vez (vinham sendo coletadas
+   no Formulário, nunca chegavam à Proposta). */
+function montarLinhasEspec(s) {
+  return [
+    ["Tipo de Empreendimento", s.empreendimento],
+    ["Característica de Transporte", s.carac],
+    ["Denominação", s.denominacao],
+    ["Percurso", s.percurso && `${s.percurso}mm`],
+    ["Capacidade", s.capacidade],
+    ["Caixa de Corrida", s.dimensoesCaixa],
+    ["Poço", s.profPoço && `${s.profPoço}mm`],
+    ["Dimensões da Cabine", s.dimensoesCabine],
+    ["Tensão de Alimentação", s.tensao],
+    ["Tração", s.tracao],
+    ["Velocidade", s.vel && `${s.vel} m/s`],
+    ["Paradas", s.andaresParadasPortas],
+    ["Modelo", s.modelo],
+    ["Quantidade", s.qtd],
+  ].filter(([, v]) => v);
+}
+
 /* ---------- Página 6: Especificações Técnicas (tabela) ---------- */
 function PreviewEspecTabela({ data }) {
   const ed = data.elevador;
@@ -354,19 +377,7 @@ function PreviewEspecTabela({ data }) {
   const lista = (ed.especificacoes && ed.especificacoes.length) ? ed.especificacoes : [{}];
   const blocos = lista.map((s) => ({
     id: s.id,
-    linhas: [
-      ["Tipo de Empreendimento", s.empreendimento],
-      ["Característica de Transporte", s.carac],
-      ["Denominação", s.denominacao],
-      ["Percurso", s.percurso && `${s.percurso}mm`],
-      ["Capacidade", s.capacidade],
-      ["Caixa de Corrida", s.dimensoesCaixa],
-      ["Poço", s.profPoço && `${s.profPoço}mm`],
-      ["Velocidade", s.vel && `${s.vel} m/s`],
-      ["Paradas", s.andaresParadasPortas],
-      ["Modelo", s.modelo],
-      ["Quantidade", s.qtd],
-    ].filter(([, v]) => v),
+    linhas: montarLinhasEspec(s),
   }));
   const temConteudo = blocos.some((b) => b.linhas.length);
   return (

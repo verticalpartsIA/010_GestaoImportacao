@@ -753,6 +753,18 @@ Pedido do Financeiro: com **1 equipamento**, a Precificação gera 2 preços (12
 - Versões: `proposta-opcoes.js` v1, `proposta-store.js` v18, `proposta-preview.jsx` v20 (index) / v16 (assinar), `proposta-form.jsx` v15, `proposta-heranca.js` v15, bundle v9 (index) / v8 (assinar), `assinar-app.jsx` v16.
 - **Não coberto**: desconto (`proposta-desconto.js`) só incide no preço de 120d; a opção de 90d não é editável no editor (só removível); prazo de entrega do Contrato/D0 não distingue 90 × 120.
 
+## Proposta de Elevador — tensão, tração e dimensões da cabine por equipamento (06/10/2026, issue #704)
+
+Issue aberta pelo ChatGPT Codex Connector: `montarEspecificacoes()` já herdava id/modelo/capacidade/velocidade/paradas/dimensões da caixa por equipamento, mas nunca repassava `tensao_principal` nem `tracao` — campos reais, obrigatórios no Formulário (`formulario-elevador.jsx`) — nem as dimensões internas da cabine (`cabina_largura_mm`/`cabina_profundidade_mm`, diferente da "Caixa de Corrida" = poço/hoistway, que já existia). Investigação confirmou a lacuna; implementado em 4 passos com TDD (teste antes de cada mudança).
+
+- **`proposta-heranca.js` (`montarEspecificacoes`)**: 3 campos novos no objeto por equipamento — `tensao` (`u.tensao_principal || tec.tensao_principal`), `tracao` (idem), `dimensoesCabine` (mesmo formato `"L x Pmm"` de `dimensoesCaixa`, a partir de `cabina_largura_mm`/`cabina_profundidade_mm`). Mesmo fallback `|| ''` dos campos vizinhos — cotação antiga sem esses dados não quebra, só sai vazio. Testes: `proposta-heranca-campos-tecnicos.test.js` (4).
+- **`proposta-preview.jsx` (preview HTML do editor)**: lógica de linhas da tabela "Especificações Técnicas" extraída pra `montarLinhasEspec(s)` (antes inline em `PreviewEspecTabela`) — ganhou as 3 linhas novas. Testes: `proposta-preview-espec.test.js` (3).
+- **`proposta-form.jsx` (`S_EspecElevador`)**: 3 campos editáveis novos (Tensão de Alimentação, Tração — `PESelect` com `OPTIONS.tracaoElev = ["2:1","4:1"]`, Dimensões da Cabine). Teste de contrato (nomes de campo batendo entre heranca/form, sem harness de componente React — nenhum `S_*` deste arquivo tem teste de render): `proposta-form-espec.test.js` (2).
+- **Achado à parte durante a investigação, corrigido com autorização explícita do usuário**: o PDF real (`pdf-bundle/proposta-reactpdf.entry.js`, `PgEspecTabela`) só lia `especificacoes[0]` — com 2+ equipamentos (ex. cotação 950/955) o PDF baixado pelo cliente mostrava só o 1º, mesmo o preview HTML já corrigido pra isso. Extraída `montarBlocosEspec(especificacoes)` (mesma regra de 1 bloco por equipamento do preview) e `PgEspecTabela` agora itera e gera 1 `Tabela2` por equipamento. Testes: `proposta-pdf-espec.test.js` (3). `npm run build:pdf:proposta` rodado sem erro, bundle recompilado.
+- **Suíte completa**: 385/388 (as 3 falhas são pré-existentes em `instalacao-obra-store.test.js`, sem relação).
+- `index.html`: `proposta-heranca.js` v15→16, `proposta-form.jsx` v15→16, `proposta-preview.jsx` v20→21, `proposta-reactpdf.bundle.js` v11→12. `assinar.html`: `proposta-preview.jsx` v16→17, `proposta-reactpdf.bundle.js` v10→11.
+- Não testado com clique real no navegador nesta sessão — validado por `node:test` (12 testes novos) + build real do bundle.
+
 ## Cotação 982 — proposta de outro vendedor colada + trava de Nº sem Precificação (02/10/2026, PR #593)
 
 Usuário (via navegador, passo a passo) achou que a cotação Nº 982 do Vagner mostrava "Proposta pronta — aguardando envio manual" sem o fornecedor ter respondido, que a proposta era do vendedor **Victor Caruso**, e que clicar em "Formulário preenchido" abria um formulário em branco.
