@@ -15,6 +15,8 @@
 (function () {
   'use strict';
 
+  // Pedido a partir deste valor exige justificativa (o aprovador decide só com o que está escrito).
+  const JUSTIFICATIVA_MIN_VALOR = 500;
   function sb() { return (window.__VP_SB || {}).sb; }
   const meuEmail = () => String((window.__VP_USER || {}).email || '').toLowerCase();
 
@@ -33,6 +35,7 @@
     if (!(qtd > 0)) throw new Error('A quantidade precisa ser maior que zero.');
     const val = valorEstimado != null && valorEstimado !== '' ? Number(valorEstimado) : null;
     if (val != null && !(val >= 0)) throw new Error('O valor estimado não pode ser negativo.');
+    if (val != null && val >= JUSTIFICATIVA_MIN_VALOR && !String(justificativa || '').trim()) throw new Error(`Pedido de R$ ${JUSTIFICATIVA_MIN_VALOR} ou mais exige justificativa.`);
     const user = window.__VP_USER || {};
     const base = {
       item: item.trim(), quantidade: qtd, unidade: unidade || null, valor_estimado: val, codigo_produto: codigoProduto || null,
@@ -78,7 +81,7 @@
      decidido. Autocura a cada listagem, sem precisar de trigger/webhook. */
   async function listarPedidos() {
     const c = sb(); if (!c) return [];
-    const { data, error } = await c.from('pedidos_compra_varejo').select('*, decisoes_gerenciais(status, decidido_por, decidido_em, motivo)').order('criado_em', { ascending: false });
+    const { data, error } = await c.from('pedidos_compra_varejo').select('*, decisoes_gerenciais(status, decidido_por, decidido_em, motivo, contexto)').order('criado_em', { ascending: false });
     if (error) { console.warn('[PedidosVarejoStore] listarPedidos falhou', error); return []; }
     const pedidos = data || [];
     const paraCorrigir = [];
@@ -86,7 +89,7 @@
       const dec = p.decisoes_gerenciais;
       const statusReal = !dec ? p.status : dec.status === 'aprovada' ? 'aprovado' : dec.status === 'reprovada' ? 'reprovado' : dec.status === 'cancelada' ? 'cancelado' : 'pendente';
       if (statusReal !== p.status && !['comprado', 'cancelado'].includes(p.status)) paraCorrigir.push(p.id);
-      return { ...p, status: p.status === 'comprado' || p.status === 'cancelado' ? p.status : statusReal, decidido_por: dec && dec.decidido_por, decidido_em: dec && dec.decidido_em, motivo: dec && dec.motivo };
+      return { ...p, status: p.status === 'comprado' || p.status === 'cancelado' ? p.status : statusReal, decidido_por: dec && dec.decidido_por, decidido_em: dec && dec.decidido_em, motivo: dec && dec.motivo, decisao_edicoes: (dec && dec.contexto && dec.contexto.edicoes) || [] };
     });
     if (paraCorrigir.length) {
       await Promise.all(resultado.filter((p) => paraCorrigir.includes(p.id))
@@ -139,5 +142,63 @@
     });
   }
 
-  window.PedidosVarejoStore = { criarPedido, listarPedidos, marcarComprado, cancelarPedido, podeCancelar };
+  /* Duplicidade: pedido interno em aberto do mesmo item e requisição enviada pelo PCP ao Omie nos últimos 7 dias. Só avisa. */
+  async function verificarDuplicidade({ codigoProduto, item }) {
+    const c = sb(); const out = { internos: [], requisicoes: [] };
+    if (!c) return out;
+    try {
+      let q = c.from('pedidos_compra_varejo').select('numero_documento, item, quantidade, unidade, status, criado_em').in('status', ['pendente', 'aprovado']).limit(10);
+      q = codigoProduto ? q.eq('codigo_produto', codigoProduto) : q.ilike('item', String(item || '').trim());
+      const r = await q; out.internos = r.data || [];
+      if (codigoProduto) {
+        const desde = new Date(Date.now() - 7 * 864e5).toISOString();
+        const f = await c.from('pcp_omie_fila').select('criado_em, enviado_em, solicitante_email, payload').eq('tipo', 'requisicao_compra').eq('status', 'enviado').gte('criado_em', desde).limit(50);
+        out.requisicoes = (f.data || []).map((x) => ({ x, it: ((x.payload && x.payload.meta && x.payload.meta.itens) || []).find((i) => i.codigo === codigoProduto) }))
+          .filter((y) => y.it).map((y) => ({ em: y.x.enviado_em || y.x.criado_em, por: y.x.solicitante_email, quantidade: y.it.quantidade }));
+      }
+    } catch (e) { console.warn('[PedidosVarejoStore] verificarDuplicidade', e); }
+    return out;
+  }
+
+  /* Edita um pedido AINDA PENDENTE (só o solicitante): atualiza o pedido e o contexto da decisão, guardando a versão anterior no
+     histórico (contexto.edicoes) para o aprovador ver o que mudou. Não reabre decisão já tomada. */
+  async function editarPedido(pedidoId, { item, quantidade, unidade, valorEstimado, urgencia, justificativa, codigoProduto }) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: p } = await c.from('pedidos_compra_varejo').select('*').eq('id', pedidoId).maybeSingle();
+    if (!p) throw new Error('Pedido não encontrado.');
+    if (p.status !== 'pendente') throw new Error('Só dá para editar pedido que ainda aguarda decisão.');
+    if (String(p.solicitante_email || '').toLowerCase() !== meuEmail()) throw new Error('Só o solicitante pode editar o pedido.');
+    const qtd = Number(quantidade); if (!(qtd > 0)) throw new Error('A quantidade precisa ser maior que zero.');
+    if (!item || !String(item).trim()) throw new Error('Informe o item.');
+    const val = valorEstimado != null && valorEstimado !== '' ? Number(valorEstimado) : null;
+    if (val != null && !(val >= 0)) throw new Error('O valor estimado não pode ser negativo.');
+    if (val != null && val >= JUSTIFICATIVA_MIN_VALOR && !String(justificativa || '').trim()) throw new Error(`Pedido de R$ ${JUSTIFICATIVA_MIN_VALOR} ou mais exige justificativa.`);
+    const novo = { item: String(item).trim(), quantidade: qtd, unidade: unidade || null, valor_estimado: val, urgencia: urgencia || 'normal', justificativa: justificativa || null, codigo_produto: codigoProduto || null, atualizado_em: new Date().toISOString() };
+    const r = await c.from('pedidos_compra_varejo').update(novo).eq('id', pedidoId).eq('status', 'pendente').select('id');
+    if (r.error) throw r.error;
+    if (!r.data || !r.data.length) throw new Error('O pedido mudou de situação; atualize a tela.');
+    if (p.decisao_id) {
+      const d = await c.from('decisoes_gerenciais').select('contexto, status').eq('id', p.decisao_id).maybeSingle();
+      if (d.data && d.data.status === 'pendente') {
+        const ctx = d.data.contexto || {};
+        const antes = { item: p.item, quantidade: p.quantidade, valor: p.valor_estimado, urgencia: p.urgencia, em: new Date().toISOString(), por: meuEmail() };
+        await c.from('decisoes_gerenciais').update({ contexto: { ...ctx, item: novo.item, quantidade: qtd, valor: val, urgencia: novo.urgencia, edicoes: [...(ctx.edicoes || []), antes] } }).eq('id', p.decisao_id).eq('status', 'pendente');
+      }
+    }
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Almoxarifado', acao: 'Editou pedido de varejo', alvo: p.numero_documento, alvo_id: pedidoId, detalhe: { de: { item: p.item, quantidade: p.quantidade, valor: p.valor_estimado }, para: { item: novo.item, quantidade: qtd, valor: val } } });
+  }
+
+  /* Confere o nº do pedido do Omie digitado contra os pedidos de compra já lidos (sync-pcp-compras). */
+  async function conferirPedidoOmie(numero) {
+    const c = sb(); const n = String(numero || '').replace(/\D/g, '');
+    if (!c || !n) return null;
+    const r = await c.from('pcp_compras_itens').select('numero_pedido, codigo, fornecedor_cod, data_pedido').eq('numero_pedido', n).limit(20);
+    const linhas = r.data || [];
+    if (!linhas.length) return { achado: false, numero: n };
+    let fornecedor = null;
+    if (linhas[0].fornecedor_cod) { const f = await c.from('pcp_fornecedores_omie').select('nome').eq('codigo', linhas[0].fornecedor_cod).maybeSingle(); fornecedor = f.data && f.data.nome; }
+    return { achado: true, numero: n, fornecedor, itens: linhas.map((x) => x.codigo), data: linhas[0].data_pedido };
+  }
+
+  window.PedidosVarejoStore = { criarPedido, listarPedidos, marcarComprado, cancelarPedido, podeCancelar, verificarDuplicidade, editarPedido, conferirPedidoOmie, JUSTIFICATIVA_MIN_VALOR };
 }());
