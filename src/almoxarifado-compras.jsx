@@ -25,6 +25,7 @@ const PC_ST_INT = {
 };
 const PC_ST_OMIE = { pendente: { l: 'A caminho', v: 'info' }, parcial: { l: 'Recebido em parte', v: 'warning' }, recebido: { l: 'Recebido', v: 'success' } };
 const PC_DEFASADO_H = 36;
+const PC_JUST_MIN = 500;       // espelho de PedidosVarejoStore.JUSTIFICATIVA_MIN_VALOR
 
 const pcFmt = (v, d = 2) => Number(v).toLocaleString('pt-BR', { maximumFractionDigits: d });
 const pcMoeda = (v) => v == null ? '—' : Number(v).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' });
@@ -87,7 +88,7 @@ function PcComprasOmie() {
   const [d, setD] = React.useState(null);
   const [erro, setErro] = React.useState(null);
   const [filtro, setFiltro] = React.useState('andamento');
-  const [busca, setBusca] = React.useState('');
+  const [busca, setBusca] = React.useState(() => { try { const v = sessionStorage.getItem('vp_pc_busca') || ''; sessionStorage.removeItem('vp_pc_busca'); return v; } catch (e) { return ''; } });   // vem do vínculo "pedido N no Omie" dos pedidos internos
   const [aberto, setAberto] = React.useState(null);
   const [atualizando, setAtualizando] = React.useState(false);
   const { th, ordenar } = usePcOrdem();
@@ -314,38 +315,63 @@ function PcRequisicoes() {
 }
 
 /* ------------------------------------------------------------------ 3) Pedidos internos (varejo) */
-function PcModalNovoInterno({ onClose, onSaved }) {
+function PcModalNovoInterno({ onClose, onSaved, inicial, editando }) {
   const sb = window.__VP_SB && window.__VP_SB.sb;
+  const ini = editando || inicial || null;                         // "pedir de novo" (inicial) ou editar um pendente (editando)
   const [prods, setProds] = React.useState([]);
-  const [item, setItem] = React.useState('');
-  const [produto, setProduto] = React.useState(null);              // item escolhido no cadastro (null = texto livre)
-  const [quantidade, setQuantidade] = React.useState('1');
-  const [unidade, setUnidade] = React.useState('un');
-  const [valorEstimado, setValorEstimado] = React.useState('');
-  const [urgencia, setUrgencia] = React.useState('normal');
-  const [justificativa, setJustificativa] = React.useState('');
+  const [item, setItem] = React.useState(ini ? ini.item : '');
+  const [produto, setProduto] = React.useState(ini && ini.codigo_produto ? { codigo: ini.codigo_produto, unidade: ini.unidade } : null);   // item escolhido no cadastro (null = texto livre)
+  const [quantidade, setQuantidade] = React.useState(ini ? String(ini.quantidade) : '1');
+  const [unidade, setUnidade] = React.useState(ini ? (ini.unidade || 'un') : 'un');
+  const [valorEstimado, setValorEstimado] = React.useState(ini && ini.valor_estimado != null ? String(ini.valor_estimado) : '');
+  const [urgencia, setUrgencia] = React.useState(ini ? (ini.urgencia || 'normal') : 'normal');
+  const [justificativa, setJustificativa] = React.useState(ini ? (ini.justificativa || '') : '');
   const [saving, setSaving] = React.useState(false);
+  const [dup, setDup] = React.useState(null);                      // aviso de duplicidade (pedido interno aberto / requisição recente)
+  React.useEffect(() => {
+    const chave = produto ? produto.codigo : item.trim();
+    if (!chave || chave.length < 2) { setDup(null); return undefined; }
+    let vivo = true;
+    const t = setTimeout(() => {
+      window.PedidosVarejoStore.verificarDuplicidade({ codigoProduto: produto ? produto.codigo : null, item }).then(r => {
+        if (!vivo) return;
+        const internos = (r.internos || []).filter(x => !editando || x.numero_documento !== editando.numero_documento);
+        setDup(internos.length || (r.requisicoes || []).length ? { internos, requisicoes: r.requisicoes || [] } : null);
+      });
+    }, 500);
+    return () => { vivo = false; clearTimeout(t); };
+  }, [produto, item, editando]);
   React.useEffect(() => { if (sb) pcLerTudo(() => sb.from('pcp_produtos').select('codigo, descricao, unidade').eq('ativo', true).order('codigo')).then(setProds).catch(() => {}); }, [sb]);
   const q = item.trim().toLowerCase();
   const sugestoes = !produto && q.length >= 2 ? prods.filter(p => (p.codigo + ' ' + (p.descricao || '')).toLowerCase().includes(q)).slice(0, 8) : [];
   const escolher = (p) => { setProduto(p); setItem(`${p.codigo} — ${p.descricao || ''}`.trim()); if (p.unidade) setUnidade(p.unidade); };
   const qtdOk = Number(quantidade) > 0, valOk = valorEstimado === '' || Number(valorEstimado) >= 0;
+  const justObrig = Number(valorEstimado) >= PC_JUST_MIN && !justificativa.trim();
   const salvar = async () => {
     if (!item.trim()) return window.toast?.('Informe o item.', 'warning');
     if (!qtdOk) return window.toast?.('A quantidade precisa ser maior que zero.', 'warning');
     if (!valOk) return window.toast?.('O valor estimado não pode ser negativo.', 'warning');
+    if (justObrig) return window.toast?.(`Pedido de ${pcMoeda(PC_JUST_MIN)} ou mais exige justificativa.`, 'warning');
     setSaving(true);
     try {
-      await window.PedidosVarejoStore.criarPedido({ item, quantidade: Number(quantidade), unidade, valorEstimado, urgencia, justificativa, codigoProduto: produto ? produto.codigo : null });
-      window.toast?.('Pedido criado — aguardando aprovação da Logística.', 'success');
+      const dados = { item, quantidade: Number(quantidade), unidade, valorEstimado, urgencia, justificativa, codigoProduto: produto ? produto.codigo : null };
+      if (editando) { await window.PedidosVarejoStore.editarPedido(editando.id, dados); window.toast?.('Pedido atualizado; a decisão guarda o que mudou.', 'success'); }
+      else { await window.PedidosVarejoStore.criarPedido(dados); window.toast?.('Pedido criado — aguardando aprovação da Logística.', 'success'); }
       onSaved(); onClose();
     } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
     finally { setSaving(false); }
   };
   return (
-    <Modal title="Novo pedido interno de compra (varejo)" onClose={onClose} width={520}
-      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" onClick={salvar} disabled={saving}>{saving ? 'Salvando…' : 'Enviar pedido'}</Button></>}>
+    <Modal title={editando ? `Editar ${editando.numero_documento}` : inicial ? 'Novo pedido (refeito a partir de outro)' : 'Novo pedido interno de compra (varejo)'} onClose={onClose} width={520}
+      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" onClick={salvar} disabled={saving}>{saving ? 'Salvando…' : editando ? 'Salvar alterações' : 'Enviar pedido'}</Button></>}>
       <div className="stack" style={{ gap: 12 }}>
+        {dup && (
+          <div className="card" style={{ padding: 10, fontSize: 12, borderLeft: '3px solid var(--vp-yellow)' }}>
+            <b style={{ fontWeight: 500 }}>⚠ Já existe algo parecido — confira antes de enviar:</b>
+            {dup.internos.map(x => <div key={x.numero_documento}>Pedido interno <b style={{ fontWeight: 500 }}>{x.numero_documento}</b> ({PC_ST_INT[x.status]?.l || x.status}): {x.item} × {pcFmt(x.quantidade)} {x.unidade || ''}, criado em {pcData(x.criado_em)}</div>)}
+            {dup.requisicoes.map((x, i) => <div key={i}>Requisição do PCP enviada ao Omie em {pcData(x.em)}{x.por ? ' por ' + x.por : ''}: × {pcFmt(x.quantidade)} (veja em "Requisições enviadas")</div>)}
+          </div>
+        )}
         <div className="stack" style={{ gap: 4, position: 'relative' }}>
           <label className="up-eyebrow muted">Item * <span style={{ textTransform: 'none', letterSpacing: 0 }}>(digite para buscar no cadastro ou escreva livremente)</span></label>
           <input className="input" value={item} onChange={(e) => { setItem(e.target.value); setProduto(null); }} placeholder="ex.: VPMP-303 ou Parafuso M8 inox…"/>
@@ -375,8 +401,8 @@ function PcModalNovoInterno({ onClose, onSaved }) {
           <select className="input" value={urgencia} onChange={(e) => setUrgencia(e.target.value)}>{Object.entries(PC_URG).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
         </div>
         <div className="stack" style={{ gap: 4 }}>
-          <label className="up-eyebrow muted">Justificativa</label>
-          <textarea className="input" rows={3} value={justificativa} onChange={(e) => setJustificativa(e.target.value)} placeholder="Por que esse item é necessário…"/>
+          <label className="up-eyebrow muted">Justificativa{Number(valorEstimado) >= PC_JUST_MIN ? ' *' : ''} <span style={{ textTransform: 'none', letterSpacing: 0 }}>{Number(valorEstimado) >= PC_JUST_MIN ? `(obrigatória a partir de ${pcMoeda(PC_JUST_MIN)})` : ''}</span></label>
+          <textarea className="input" rows={3} value={justificativa} onChange={(e) => setJustificativa(e.target.value)} placeholder="Por que esse item é necessário…" style={justObrig ? { borderColor: 'var(--vp-danger)' } : undefined}/>
         </div>
       </div>
     </Modal>
@@ -411,6 +437,8 @@ function PcModalComprado({ pedido, onClose, onFeito }) {
   const [valor, setValor] = React.useState(pedido.valor_estimado != null ? String(pedido.valor_estimado) : '');
   const [dia, setDia] = React.useState(pcHojeBrasilia());
   const [busy, setBusy] = React.useState(false);
+  const [conf, setConf] = React.useState(null);         // resultado da conferência do nº do Omie
+  const conferir = async () => { if (!omie.trim()) { setConf(null); return; } try { setConf(await window.PedidosVarejoStore.conferirPedidoOmie(omie)); } catch (e) { setConf(null); } };
   const ok = async () => {
     setBusy(true);
     try { await window.PedidosVarejoStore.marcarComprado(pedido.id, { omiePedido: omie, fornecedor: forn, valorReal: valor, dataCompra: dia }); window.toast?.('Marcado como comprado.', 'success'); onFeito(); onClose(); }
@@ -423,11 +451,14 @@ function PcModalComprado({ pedido, onClose, onFeito }) {
       <div className="stack" style={{ gap: 10 }}>
         <div style={{ fontSize: 13 }}>{pedido.item} — {pcFmt(pedido.quantidade)} {pedido.unidade || ''}</div>
         <div className="grid-2" style={{ gap: 12 }}>
-          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Nº do pedido no Omie</label><input className="input" value={omie} onChange={(e) => setOmie(e.target.value)} placeholder="ex.: 2177"/></div>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Nº do pedido no Omie</label><input className="input" value={omie} onChange={(e) => { setOmie(e.target.value); setConf(null); }} onBlur={conferir} placeholder="ex.: 2177"/></div>
           <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Fornecedor</label><input className="input" value={forn} onChange={(e) => setForn(e.target.value)}/></div>
           <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Valor real (R$)</label><input className="input" type="number" min="0" step="any" value={valor} onChange={(e) => setValor(e.target.value)}/></div>
           <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Data da compra</label><input className="input" type="date" value={dia} onChange={(e) => setDia(e.target.value)}/></div>
         </div>
+        {conf && (conf.achado
+          ? <div style={{ fontSize: 12, color: 'var(--vp-success, #1a7f37)' }}>✓ Pedido {conf.numero} encontrado no Omie ({pcData(conf.data)}{conf.fornecedor ? ' · ' + conf.fornecedor : ''}; itens: {Array.from(new Set(conf.itens)).slice(0, 4).join(', ')}).{!forn.trim() && conf.fornecedor ? <> <button className="btn btn--sm" onClick={() => setForn(conf.fornecedor)}>Usar este fornecedor</button></> : null}</div>
+          : <div style={{ fontSize: 12, color: 'var(--vp-warning-ink, #b45309)' }}>⚠ Pedido {conf.numero} não está entre os pedidos de compra já lidos do Omie (a leitura roda 2 vezes por dia e só traz itens do PCP). Pode gravar mesmo assim.</div>)}
         <div style={{ fontSize: 11, color: 'var(--fg3)' }}>Informe pelo menos o nº do pedido no Omie ou o fornecedor.</div>
       </div>
     </Modal>
@@ -438,7 +469,8 @@ function PcInternos({ pedidos, reload }) {
   const [filtro, setFiltro] = React.useState('abertos');
   const [busca, setBusca] = React.useState('');
   const [aberto, setAberto] = React.useState(null);
-  const [novo, setNovo] = React.useState(false);
+  const [modalNovo, setModalNovo] = React.useState(null);     // null | { inicial?, editando? }
+  const [ctxItem, setCtxItem] = React.useState({});           // contexto de estoque do item de cada pedido aberto (carregado ao expandir)
   const [cancelando, setCancelando] = React.useState(null);
   const [comprando, setComprando] = React.useState(null);
   const [podeCanc, setPodeCanc] = React.useState({});
@@ -450,6 +482,32 @@ function PcInternos({ pedidos, reload }) {
     return () => { vivo = false; };
   }, [pedidos]);
   const pend = pedidos.filter(p => p.status === 'pendente'), apr = pedidos.filter(p => p.status === 'aprovado');
+  const hoje = pcHojeBrasilia();
+  const meu = String((window.__VP_USER && window.__VP_USER.email) || '').toLowerCase();
+  const parado = (p) => {                                       // dias úteis parado: pendente há 2+, aprovado sem compra há 3+
+    if (p.status === 'pendente' && p.criado_em) { const d = pcDiasUteis(String(p.criado_em).slice(0, 10), hoje); return d >= 2 ? d : 0; }
+    if (p.status === 'aprovado') { const base = p.decidido_em || p.atualizado_em || p.criado_em; const d = base ? pcDiasUteis(String(base).slice(0, 10), hoje) : 0; return d >= 3 ? d : 0; }
+    return 0;
+  };
+  const somaEst = (l) => l.reduce((s, p) => s + (Number(p.valor_estimado) || 0), 0);
+  const emAbertoValor = somaEst([...pend, ...apr]);
+  const comReal = pedidos.filter(p => p.status === 'comprado' && p.comprado_valor != null && Number(p.valor_estimado) > 0);
+  const variacaoMedia = comReal.length ? (comReal.reduce((s, p) => s + Number(p.comprado_valor), 0) / comReal.reduce((s, p) => s + Number(p.valor_estimado), 0) - 1) * 100 : null;
+  // Contexto para decidir: saldo, reservado e a caminho do item do cadastro (carregado quando a linha é aberta).
+  React.useEffect(() => {
+    const p = pedidos.find(x => x.id === aberto);
+    if (!p || !p.codigo_produto || ctxItem[p.id]) return;
+    const sb = window.__VP_SB && window.__VP_SB.sb; if (!sb) return;
+    Promise.all([
+      sb.from('pcp_estoque').select('quantidade').eq('codigo', p.codigo_produto),
+      sb.from('pcp_posicao_compra').select('reservado, pendente').eq('codigo', p.codigo_produto).maybeSingle(),
+      sb.from('pcp_compras_itens').select('numero_pedido, quantidade, qtde_recebida, data_previsao, data_pedido').eq('codigo', p.codigo_produto),
+    ]).then(([e, po, c]) => {
+      const caminho = (c.data || []).filter(x => Number(x.quantidade) - Number(x.qtde_recebida) > 1e-9);
+      setCtxItem(m => ({ ...m, [p.id]: { saldo: (e.data || []).reduce((s, x) => s + Number(x.quantidade || 0), 0), temSaldo: (e.data || []).length > 0, reservado: po.data ? Number(po.data.reservado || 0) : null,
+        caminho: caminho.reduce((s, x) => s + Number(x.quantidade) - Number(x.qtde_recebida), 0), pedidos: caminho.map(x => x.numero_pedido) } }));
+    }).catch(() => setCtxItem(m => ({ ...m, [p.id]: { erro: true } })));
+  }, [aberto, pedidos]);
   const q = busca.trim().toLowerCase();
   const base = filtro === 'abertos' ? pedidos.filter(p => p.status === 'pendente' || p.status === 'aprovado') : filtro === 'todos' ? pedidos : pedidos.filter(p => p.status === filtro);
   const lista = ordenar(base.filter(p => !q || (p.numero_documento + ' ' + p.item + ' ' + (p.solicitante_nome || '')).toLowerCase().includes(q)),
@@ -462,13 +520,14 @@ function PcInternos({ pedidos, reload }) {
   const btn = (a) => 'btn btn--sm' + (a ? ' btn--primary' : '');
   return (
     <div>
-      {novo && <PcModalNovoInterno onClose={() => setNovo(false)} onSaved={reload}/>}
+      {modalNovo && <PcModalNovoInterno inicial={modalNovo.inicial} editando={modalNovo.editando} onClose={() => setModalNovo(null)} onSaved={reload}/>}
       {cancelando && <PcModalCancelar pedido={cancelando} onClose={() => setCancelando(null)} onFeito={reload}/>}
       {comprando && <PcModalComprado pedido={comprando} onClose={() => setComprando(null)} onFeito={reload}/>}
-      <div className="grid-3" style={{ marginBottom: 12 }}>
-        <div className="pcp-total"><div className="pcp-total__l">Aguardando Logística</div><div className="pcp-total__v">{pend.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>decisão pendente</div></div>
-        <div className="pcp-total"><div className="pcp-total__l">Aprovados, aguardando compra</div><div className="pcp-total__v">{apr.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>liberados</div></div>
-        <div className="pcp-total"><div className="pcp-total__l">Total de pedidos</div><div className="pcp-total__v">{pedidos.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>histórico</div></div>
+      <div className="grid-4" style={{ marginBottom: 12 }}>
+        <div className="pcp-total"><div className="pcp-total__l">Aguardando Logística</div><div className="pcp-total__v">{pend.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{pend.filter(p => parado(p)).length ? `${pend.filter(p => parado(p)).length} parado(s) há 2+ dias úteis` : 'decisão pendente'}</div></div>
+        <div className="pcp-total"><div className="pcp-total__l">Aprovados, aguardando compra</div><div className="pcp-total__v">{apr.length}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{apr.filter(p => parado(p)).length ? `${apr.filter(p => parado(p)).length} sem compra há 3+ dias úteis` : 'liberados'}</div></div>
+        <div className="pcp-total"><div className="pcp-total__l">Valor em aberto (estimado)</div><div className="pcp-total__v">{pcMoeda(emAbertoValor)}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>pendentes {pcMoeda(somaEst(pend))} · aprovados {pcMoeda(somaEst(apr))}</div></div>
+        <div className="pcp-total"><div className="pcp-total__l">Estimado × real</div><div className="pcp-total__v" style={{ color: variacaoMedia != null && Math.abs(variacaoMedia) > 20 ? 'var(--vp-danger)' : undefined }}>{variacaoMedia == null ? '—' : (variacaoMedia > 0 ? '+' : '') + pcFmt(variacaoMedia, 1) + '%'}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{comReal.length ? `em ${comReal.length} compra(s) com valor real` : 'sem compra com valor real ainda'}</div></div>
       </div>
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
         <button className={btn(filtro === 'abertos')} onClick={() => setFiltro('abertos')}>Em aberto ({pend.length + apr.length})</button>
@@ -476,7 +535,7 @@ function PcInternos({ pedidos, reload }) {
         <button className={btn(filtro === 'todos')} onClick={() => setFiltro('todos')}>Todos ({pedidos.length})</button>
         <input className="input" style={{ minWidth: 200, marginLeft: 'auto' }} placeholder="Buscar nº, item ou solicitante…" value={busca} onChange={e => setBusca(e.target.value)}/>
         <button className="btn btn--sm" disabled={!lista.length} onClick={exportar}>Exportar planilha</button>
-        <button className="btn btn--sm btn--primary" onClick={() => setNovo(true)}>+ Novo pedido interno</button>
+        <button className="btn btn--sm btn--primary" onClick={() => setModalNovo({})}>+ Novo pedido interno</button>
       </div>
       <Card title="Pedidos internos de varejo" sub={`${lista.length} pedido(s) · exigem aprovação do Chefe de Logística`}>
         <div className="table-wrap">
@@ -491,11 +550,13 @@ function PcInternos({ pedidos, reload }) {
                       <td className="mono" style={{ cursor: 'pointer' }} title="Clique para ver os detalhes" onClick={() => setAberto(aberto === p.id ? null : p.id)}><span style={{ color: 'var(--fg3)', marginRight: 4 }}>{aberto === p.id ? '▾' : '▸'}</span>{p.numero_documento}</td>
                       <td>{p.item}</td>
                       <td>{pcFmt(p.quantidade)} {p.unidade || ''}</td>
-                      <td style={{ textAlign: 'right' }}>{pcMoeda(p.valor_estimado)}</td>
+                      <td style={{ textAlign: 'right' }}>{pcMoeda(p.valor_estimado)}{p.status === 'comprado' && p.comprado_valor != null && Number(p.valor_estimado) > 0 ? (() => { const v = (Number(p.comprado_valor) / Number(p.valor_estimado) - 1) * 100; return <div style={{ fontSize: 10, color: Math.abs(v) > 20 ? 'var(--vp-danger)' : 'var(--fg3)' }} title="Valor real da compra comparado com o estimado">real {pcMoeda(p.comprado_valor)} ({v > 0 ? '+' : ''}{pcFmt(v, 0)}%)</div>; })() : null}</td>
                       <td><Badge variant={p.urgencia === 'critica' ? 'danger' : p.urgencia === 'alta' ? 'warning' : 'neutral'}>{PC_URG[p.urgencia] || p.urgencia}</Badge></td>
                       <td style={{ fontSize: 12 }}>{p.solicitante_nome || '—'}<div style={{ fontSize: 10, color: 'var(--fg3)' }}>{pcData(p.criado_em)}</div></td>
-                      <td><Badge variant={st.v}>{st.l}</Badge></td>
+                      <td><Badge variant={st.v}>{st.l}</Badge>{parado(p) ? <> <Badge variant="warning">parado há {parado(p)} dias úteis</Badge></> : null}</td>
                       <td style={{ whiteSpace: 'nowrap' }}>
+                        {p.status === 'pendente' && String(p.solicitante_email || '').toLowerCase() === meu && <><button className="btn btn--sm" onClick={() => setModalNovo({ editando: p })}>Editar</button> </>}
+                        {['reprovado', 'cancelado'].includes(p.status) && <><button className="btn btn--sm" title="Abre um pedido novo já preenchido com estes dados" onClick={() => setModalNovo({ inicial: p })}>Pedir de novo</button> </>}
                         {p.status === 'aprovado' && <button className="btn btn--sm btn--primary" onClick={() => setComprando(p)}>Marcar comprado</button>}
                         {podeCanc[p.id] && <> <button className="btn btn--sm" onClick={() => setCancelando(p)}>Cancelar</button></>}
                       </td>
@@ -503,9 +564,12 @@ function PcInternos({ pedidos, reload }) {
                     {aberto === p.id && (
                       <tr><td colSpan={8} style={{ background: 'var(--bg2, rgba(127,127,127,0.06))', padding: 12, fontSize: 12, lineHeight: 1.7 }}>
                         <div><b style={{ fontWeight: 500 }}>Justificativa:</b> {p.justificativa || '—'}</div>
-                        {p.codigo_produto && <div><b style={{ fontWeight: 500 }}>Item do cadastro:</b> {p.codigo_produto}</div>}
+                        {p.codigo_produto && <div><b style={{ fontWeight: 500 }}>Item do cadastro:</b> {p.codigo_produto}
+                          {(() => { const c = ctxItem[p.id]; if (!c) return <span style={{ color: 'var(--fg3)' }}> · carregando saldo…</span>; if (c.erro) return null;
+                            return <span> · saldo {c.temSaldo ? pcFmt(c.saldo) : '—'}{c.reservado != null ? ` · reservado ${pcFmt(c.reservado)}` : ''} · a caminho {c.caminho ? pcFmt(c.caminho) + ' (pedido ' + Array.from(new Set(c.pedidos)).join(', ') + ')' : '—'}</span>; })()}</div>}
+                        {(p.decisao_edicoes || []).length > 0 && <div style={{ color: 'var(--fg3)' }}>Editado {p.decisao_edicoes.length}x depois de enviado.</div>}
                         {p.decidido_por && <div><b style={{ fontWeight: 500 }}>Decisão:</b> {p.status === 'reprovado' ? 'reprovado' : 'aprovado'} por {p.decidido_por}{p.decidido_em ? ' em ' + pcDataHora(p.decidido_em) : ''}{p.motivo ? ` — ${p.motivo}` : ''}</div>}
-                        {p.status === 'comprado' && <div><b style={{ fontWeight: 500 }}>Compra:</b> {pcData(p.comprado_em)} por {p.comprado_por || '—'}{p.comprado_omie_pedido ? ` · pedido ${p.comprado_omie_pedido} no Omie` : ''}{p.comprado_fornecedor ? ` · ${p.comprado_fornecedor}` : ''}{p.comprado_valor != null ? ` · ${pcMoeda(p.comprado_valor)}` : ''}</div>}
+                        {p.status === 'comprado' && <div><b style={{ fontWeight: 500 }}>Compra:</b> {pcData(p.comprado_em)} por {p.comprado_por || '—'}{p.comprado_omie_pedido ? <> · pedido <button className="pcp-cod" title="Abre Compras no Omie já buscando este pedido" onClick={() => { try { sessionStorage.setItem('vp_pc_busca', String(p.comprado_omie_pedido)); } catch (e) { /* ok */ } window.pcpIrParaUrl && window.pcpIrParaUrl('/logistica/almoxarifado/pedidos/omie'); }}>{p.comprado_omie_pedido}</button> no Omie</> : null}{p.comprado_fornecedor ? ` · ${p.comprado_fornecedor}` : ''}{p.comprado_valor != null ? ` · ${pcMoeda(p.comprado_valor)}` : ''}</div>}
                         {p.status === 'cancelado' && <div><b style={{ fontWeight: 500 }}>Cancelado</b>{p.cancelado_por ? ` por ${p.cancelado_por}` : ''}{p.cancelado_em ? ' em ' + pcDataHora(p.cancelado_em) : ''}: {p.cancelado_motivo || '—'}</div>}
                       </td></tr>
                     )}
