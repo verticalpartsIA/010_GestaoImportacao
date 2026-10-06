@@ -533,8 +533,15 @@
      em 15/08: TODA compra de equipamento passa pelo CEO, disparada assim
      que o CLIENTE aprova a proposta — bem antes da assinatura do contrato
      ou do pagamento do sinal (equipamentos caros, só o frete marítimo já
-     passa de R$ 7 mil). Ver hook em proposta-store.js (sign()). */
-  async function podeComprarEquipamento(numeroCotacao, contexto) {
+     passa de R$ 7 mil). Ver hook em proposta-store.js (sign()).
+
+     opts.somenteLeitura (06/10/2026, issue #728): só consulta — NÃO cria nem
+     reabre a decisão. Obrigatório em prévia/aviso de tela: o formulário de
+     Nova P.I. checava o gate a cada tecla do "Nº Cotação", então digitar
+     "951" passava por 9 e 95 — criou decisões de CEO para cotações
+     inexistentes (1, 2, 5, 7, 8, 9, 51, 70, 87, 89, 91, 93, 95, 97, 510…)
+     e, depois de canceladas na revisão de 03/10, as reabriu (05/10). */
+  async function podeComprarEquipamento(numeroCotacao, contexto, opts) {
     if (numeroCotacao == null) return { ok: true };
     /* 29/09 — CEO só em discrepância: margem >= 15% não cria (nem exige) a
        decisão de compra do CEO. Decisão já criada antes dessa regra fica
@@ -543,6 +550,11 @@
     if (!precisa) return { ok: true };
     let decisoes = await listarPorCotacao(numeroCotacao);
     let decisao = decisoes.find((d) => d.tipo === 'compra_equipamento_ceo');
+    if (opts && opts.somenteLeitura) {
+      if (decisao && decisao.status === 'aprovada') return { ok: true };
+      if (decisao && decisao.status === 'reprovada') return { ok: false, motivo: `Compra do equipamento reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+      return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para comprar o equipamento deste pedido.' };
+    }
     if (!decisao) {
       decisao = await criarDecisaoSeNaoExiste({ tipo: 'compra_equipamento_ceo', papelRequerido: 'ceo', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao, contexto) });
     }
@@ -558,11 +570,12 @@
      COMPRA_LIBERADA em gatilhos-engine.js, que só nasce com Aval de
      Pagamento + Aval Jurídico. Pedido explícito do usuário:
      aprovação do CEO é cedo (proposta aprovada), mas o start da compra em
-     si só depois dos outros gatilhos. */
-  async function verificarGateCompra(numeroCotacao) {
+     si só depois dos outros gatilhos.
+     opts.somenteLeitura: repassado a podeComprarEquipamento (ver acima). */
+  async function verificarGateCompra(numeroCotacao, opts) {
     if (numeroCotacao == null) return { ok: true };
     const c = sb(); if (!c) return { ok: true };
-    const aprovacaoCeo = await podeComprarEquipamento(numeroCotacao);
+    const aprovacaoCeo = await podeComprarEquipamento(numeroCotacao, undefined, opts);
     if (!aprovacaoCeo.ok) return aprovacaoCeo;
     const { data } = await c.from('gatilhos').select('status').eq('numero_cotacao', numeroCotacao).eq('evento_key', 'COMPRA_LIBERADA').maybeSingle();
     if (!data || data.status !== 'ok') {
