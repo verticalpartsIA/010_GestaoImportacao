@@ -38,6 +38,9 @@ function RPProducao({ ctx }) {
   const totP = plano.reduce((a, b) => a + b, 0), totR = real.reduce((a, b) => a + b, 0);
   const opcoes = Array.from(new Set([...dados.plano.map(l => l.produto), ...dados.ordens.map(l => l.produto)])).sort();
 
+  const exportar = () => rpBaixar(`producao-${ano}.csv`, rpCsv([['Mês', 'Planejado (meta)', 'Produzido (real)', 'Diferença', 'Eficiência %'],
+    ...RP_MESES.map((m, i) => [m, plano[i] || '', real[i] || '', plano[i] || real[i] ? real[i] - plano[i] : '', plano[i] ? rpNumCsv((real[i] / plano[i]) * 100, 1) : '']), [`Total ${ano}`, totP, totR, totR - totP, totP ? rpNumCsv((totR / totP) * 100, 1) : '']]));
+
   return (
     <div>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -48,7 +51,14 @@ function RPProducao({ ctx }) {
           <option value="">Todos os produtos</option>
           {opcoes.map(c => <option key={c} value={c}>{c} — {produtos[c]?.descricao || ''}</option>)}
         </select>
+        <span style={{ flex: 1 }}/>
+        <button className="btn btn--sm" onClick={exportar}>Exportar planilha</button>
       </div>
+      {dados.plano.length === 0 && dados.ordens.length === 0 && (
+        <div style={{ padding: 12, marginBottom: 12, border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--fg3)' }}>
+          Ainda não há planejamento nem OP concluída em {ano}. Esta tabela se preenche sozinha quando o Planejamento (PCP › Planejamento) for lançado e as OPs forem concluídas.
+        </div>
+      )}
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
         <table className="t pcp-grid">
           <thead><tr><th>Mês</th><th className="text-right">Planejado (meta)</th><th className="text-right">Produzido (real)</th><th className="text-right">Diferença</th><th className="text-right">Eficiência</th></tr></thead>
@@ -114,6 +124,9 @@ function RPPerdas({ ctx }) {
         <button className="btn btn--sm" onClick={() => setAno(a => a + 1)}>→</button>
       </div>
       <RPPainelPerdas ctx={ctx} ano={ano} ordens={ordens}/>
+      {ordens.length === 0 && <div style={{ padding: 12, marginBottom: 12, border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, color: 'var(--fg3)' }}>Ainda não há OP concluída em {ano}: as perdas aparecem aqui quando as OPs forem concluídas com a quantidade perdida e a causa.</div>}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: 6 }}><button className="btn btn--sm" disabled={!linhas.length} onClick={() => rpBaixar(`perdas-${ano}.csv`, rpCsv([['Produto', 'Descrição', 'OPs', 'Produção total', 'Aproveitado', 'Perdas', '% de perda'],
+        ...linhas.map(c => { const p = porProduto[c], total = p.boa + p.perdida; return [c, produtos[c]?.descricao || '', p.ops, total, p.boa, p.perdida, total ? rpNumCsv((p.perdida / total) * 100, 1) : '']; })]))}>Exportar planilha</button></div>
       <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>Detalhe por produto</h3>
       <div className="card table-wrap" style={{ overflowX: 'auto', marginBottom: 12 }}>
         <table className="t pcp-grid">
@@ -164,87 +177,10 @@ function RPPerdas({ ctx }) {
   );
 }
 
-/* ---------------- Estoque ---------------- */
-// Crítico: abaixo do mínimo · Alerta: até 50% acima do mínimo · Confortável: acima · Sem mínimo: não configurado.
-function rpStatusEstoque(atual, minimo) {
-  if (!(minimo > 0)) return 'Sem mínimo';
-  if (atual < minimo) return 'Crítico';
-  if (atual < minimo * 1.5) return 'Alerta';
-  return 'Confortável';
-}
-const RP_ORDEM_STATUS = { 'Crítico': 0, 'Alerta': 1, 'Confortável': 2, 'Sem mínimo': 3 };
-
-function RPEstoque({ ctx }) {
-  const { sb, nav } = ctx;
-  const [grupo, setGrupo] = React.useState('mp');             // 'mp' | 'produtos'
-  const [linhas, setLinhas] = React.useState(null);
-  const [filtro, setFiltro] = React.useState('');
-
-  React.useEffect(() => {
-    let vivo = true;
-    setLinhas(null);
-    let q = sb.from('pcp_produtos').select('codigo, descricao, unidade, estoque_minimo, tipo_sped, pcp_estoque(quantidade)').eq('ativo', true).order('codigo').limit(2000);
-    q = grupo === 'mp' ? q.eq('tipo_sped', '01') : q.neq('tipo_sped', '01');
-    q.then(({ data }) => { if (vivo) setLinhas(data || []); });
-    return () => { vivo = false; };
-  }, [sb, grupo]);
-
-  const dados = React.useMemo(() => (linhas || []).map(l => {
-    const atual = (l.pcp_estoque || []).reduce((s, e) => s + Number(e.quantidade || 0), 0);
-    const minimo = Number(l.estoque_minimo || 0);
-    return { ...l, atual, minimo, status: rpStatusEstoque(atual, minimo) };
-  }).sort((a, b) => RP_ORDEM_STATUS[a.status] - RP_ORDEM_STATUS[b.status] || a.codigo.localeCompare(b.codigo)), [linhas]);
-
-  if (!linhas) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
-  const conta = (s) => dados.filter(d => d.status === s).length;
-  const visiveis = dados.filter(d => !filtro || d.status === filtro);
-  const cor = { 'Crítico': 'color-mix(in srgb, var(--vp-danger, #c0392b) 25%, transparent)', 'Alerta': 'color-mix(in srgb, var(--vp-yellow) 40%, transparent)', 'Confortável': 'color-mix(in srgb, #2e9e5b 22%, transparent)' };
-  const kpi = (rot, n, st) => (
-    <button className="card pcp-total" onClick={() => setFiltro(f => f === st ? '' : st)} style={{ padding: 14, flex: '1 1 150px', textAlign: 'left', cursor: 'pointer', outline: filtro === st ? '2px solid var(--vp-yellow)' : 'none' }}>
-      <div style={{ fontSize: 12, color: 'var(--fg3)' }}>{rot}</div><div style={{ fontSize: 22, fontWeight: 500 }}>{n}</div>
-    </button>
-  );
-
-  return (
-    <div>
-      <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
-        <button className={'btn btn--sm' + (grupo === 'mp' ? ' btn--primary' : '')} onClick={() => { setGrupo('mp'); setFiltro(''); }}>Matéria-prima</button>
-        <button className={'btn btn--sm' + (grupo === 'produtos' ? ' btn--primary' : '')} onClick={() => { setGrupo('produtos'); setFiltro(''); }}>Produtos</button>
-      </div>
-      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
-        {kpi('Crítico (abaixo do mínimo)', conta('Crítico'), 'Crítico')}
-        {kpi('Alerta (até 50% acima do mínimo)', conta('Alerta'), 'Alerta')}
-        {kpi('Confortável', conta('Confortável'), 'Confortável')}
-        {kpi('Sem mínimo definido', conta('Sem mínimo'), 'Sem mínimo')}
-      </div>
-      <div className="card table-wrap" style={{ overflowX: 'auto' }}>
-        <table className="t pcp-grid">
-          <thead><tr><th>Código</th><th>Descrição</th><th>Un.</th><th className="text-right">Estoque atual</th><th className="text-right">Estoque mínimo</th><th className="text-right">Falta p/ mínimo</th><th>Status</th></tr></thead>
-          <tbody>
-            {visiveis.map(d => (
-              <tr key={d.codigo}>
-                <td><button className="pcp-cod" title="Abrir no cadastro" onClick={() => window.pcpIrPara?.(nav, grupo === 'mp' ? 'cadastro-materias-primas' : 'cadastro-produtos', 'vp_pcp_busca', d.codigo)}>{d.codigo}</button></td>
-                <td>{d.descricao}</td>
-                <td>{d.unidade || '—'}</td>
-                <td className="text-right">{rpFmt(d.atual, 2)}</td>
-                <td className="text-right">{d.minimo ? rpFmt(d.minimo, 2) : '—'}</td>
-                <td className="text-right" style={d.status === 'Crítico' ? { color: 'var(--vp-danger)', fontWeight: 500 } : { color: 'var(--fg3)' }}>{d.status === 'Crítico' ? rpFmt(d.minimo - d.atual, 2) : '—'}</td>
-                <td><span className="pcp-tag" style={cor[d.status] ? { background: cor[d.status] } : undefined}>{d.status}</span></td>
-              </tr>
-            ))}
-            {visiveis.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum item.</td></tr>}
-          </tbody>
-        </table>
-      </div>
-      <div style={{ marginTop: 8, fontSize: 12, color: 'var(--fg3)' }}>
-        Saldo sincronizado do Omie (4x por dia); o mínimo vem do cadastro do produto. Entradas e saídas do período entram quando sincronizarmos os movimentos de estoque do Omie.
-      </div>
-    </div>
-  );
-}
+/* Estoque: RPEstoque está em relatorios-pcp-extras.jsx (situação pela regra da Reposição). */
 
 /* ---------------- Pedidos / Clientes (pedidos de VENDA do Omie, só itens do PCP) ---------------- */
-const RP_ETAPA = { '00': 'Proposta', '10': 'Pedido de Venda', '20': 'Separar estoque / produção', '50': 'Faturar', '60': 'Faturado', '70': 'Entrega', '80': 'Concluído (etapa 80)' };
+const RP_ETAPA = { '00': 'Proposta', '10': 'Pedido de Venda', '20': 'Separar estoque / produção', '50': 'Faturar', '60': 'Faturado', '70': 'Entrega', '80': 'Etapa 80' };
 function rpMoeda(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
 function rpDataBr(d) { return d ? d.split('-').reverse().join('/') : '—'; }
 function rpEsc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
@@ -271,9 +207,13 @@ function RPPedidos({ ctx }) {
   const [aviso, setAviso] = React.useState(null);
   const [pedidos, setPedidos] = React.useState(null);        // registros do número consultado
   const [recentes, setRecentes] = React.useState([]);
+  const [fBusca, setFBusca] = React.useState('');
+  const [fEtapa, setFEtapa] = React.useState('');
+  const [fDe, setFDe] = React.useState('');
+  const [fAte, setFAte] = React.useState('');
 
   const carregarRecentes = React.useCallback(async () => {
-    const { data } = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, cliente_nome, data_pedido, etapa, valor_total').order('data_pedido', { ascending: false }).limit(40);
+    const { data } = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, cliente_nome, data_pedido, etapa, valor_total, cancelado').order('data_pedido', { ascending: false }).limit(500);
     setRecentes(data || []);
   }, [sb]);
   React.useEffect(() => { carregarRecentes(); }, [carregarRecentes]);
@@ -318,8 +258,15 @@ function RPPedidos({ ctx }) {
     w.document.close();
   };
 
+  const qf = fBusca.trim().toLowerCase();
+  const recFiltrados = recentes.filter(r => (!qf || (String(r.numero_pedido) + ' ' + (r.cliente_nome || '')).toLowerCase().includes(qf)) && (!fEtapa || r.etapa === fEtapa)
+    && (!fDe || (r.data_pedido || '') >= fDe) && (!fAte || (r.data_pedido || '') <= fAte));
+  const exportarRec = () => rpBaixar(`pedidos-${rpHojeBrasilia()}.csv`, rpCsv([['Pedido', 'Cliente', 'Data', 'Etapa', 'Cancelado', 'Total do pedido (Omie)'],
+    ...recFiltrados.map(r => [r.numero_pedido, r.cliente_nome || '', rpDataBr(r.data_pedido), RP_ETAPA[r.etapa] || 'Etapa ' + r.etapa, r.cancelado ? 'sim' : '', rpNumCsv(r.valor_total)])]));
+
   return (
     <div>
+      <RPCobertura sb={sb} onAtualizado={carregarRecentes}/>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <input className="input" placeholder="Nº do pedido (ex.: 29972)" value={numero} onChange={e => setNumero(e.target.value)}
           onKeyDown={e => { if (e.key === 'Enter') buscar(); }} style={{ width: 220 }}/>
@@ -338,6 +285,7 @@ function RPPedidos({ ctx }) {
             <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 8 }}>
               <b style={{ fontWeight: 500, fontSize: 16 }}>Pedido {p.numero_pedido}</b>
               <span className="pcp-tag">{RP_ETAPA[p.etapa] || 'Etapa ' + p.etapa}</span>
+              {p.cancelado && <span className="pcp-tag" style={{ background: 'color-mix(in srgb, var(--vp-danger, #c0392b) 25%, transparent)' }}>Cancelado</span>}
               <span style={{ flex: 1 }}/>
               <button className="btn btn--sm" onClick={() => imprimir(p)}>Imprimir / PDF</button>
             </div>
@@ -386,20 +334,31 @@ function RPPedidos({ ctx }) {
         );
       })}
 
-      <h3 style={{ margin: '14px 0 8px', fontWeight: 500, fontSize: 14 }}>Pedidos já consultados</h3>
+      <h3 style={{ margin: '14px 0 8px', fontWeight: 500, fontSize: 14 }}>Pedidos já lidos do Omie ({recFiltrados.length})</h3>
+      <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+        <input className="input" placeholder="Buscar nº ou cliente…" value={fBusca} onChange={e => setFBusca(e.target.value)} style={{ minWidth: 220 }}/>
+        <select className="input" value={fEtapa} onChange={e => setFEtapa(e.target.value)}>
+          <option value="">Todas as etapas</option>
+          {Object.keys(RP_ETAPA).map(k => <option key={k} value={k}>{RP_ETAPA[k]}</option>)}
+        </select>
+        <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>de <input className="input" type="date" value={fDe} onChange={e => setFDe(e.target.value)}/></label>
+        <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}>até <input className="input" type="date" value={fAte} onChange={e => setFAte(e.target.value)}/></label>
+        <span style={{ flex: 1 }}/>
+        <button className="btn btn--sm" disabled={!recFiltrados.length} onClick={exportarRec}>Exportar planilha</button>
+      </div>
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
         <table className="t pcp-grid">
           <thead><tr><th>Pedido</th><th>Cliente</th><th>Data</th><th>Etapa</th><th className="text-right">Total do pedido</th></tr></thead>
           <tbody>
-            {recentes.map(r => (
+            {recFiltrados.map(r => (
               <tr key={r.codigo_pedido}>
                 <td><button className="pcp-cod" onClick={() => { setNumero(r.numero_pedido); buscar(r.numero_pedido); }}>{r.numero_pedido}</button></td>
                 <td>{r.cliente_nome || '—'}</td><td>{rpDataBr(r.data_pedido)}</td>
-                <td><span className="pcp-tag">{RP_ETAPA[r.etapa] || 'Etapa ' + r.etapa}</span></td>
+                <td><span className="pcp-tag">{RP_ETAPA[r.etapa] || 'Etapa ' + r.etapa}</span>{r.cancelado ? <> <span className="pcp-tag" style={{ background: 'color-mix(in srgb, var(--vp-danger, #c0392b) 25%, transparent)' }}>Cancelado</span></> : null}</td>
                 <td className="text-right">{rpMoeda(r.valor_total)}</td>
               </tr>
             ))}
-            {recentes.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--fg3)' }}>Digite um número de pedido de venda para consultar no Omie.</td></tr>}
+            {recFiltrados.length === 0 && <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: 'var(--fg3)' }}>{recentes.length ? 'Nenhum pedido neste filtro.' : 'Digite um número de pedido de venda para consultar no Omie, ou use "Carregar 30/90 dias" acima.'}</td></tr>}
           </tbody>
         </table>
       </div>
@@ -417,7 +376,7 @@ function RPClientes({ ctx }) {
 
   const carregar = React.useCallback(async () => {
     const [p, i] = await Promise.all([
-      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, codigo_cliente, cliente_nome, data_pedido').neq('etapa', '00').limit(5000),
+      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, codigo_cliente, cliente_nome, data_pedido').neq('etapa', '00').eq('cancelado', false).limit(5000),
       sb.from('pcp_pedido_itens').select('codigo_pedido, codigo, codigo_original, descricao, quantidade, valor_unitario, desconto, valor_total').eq('item_pcp', true).limit(20000),
     ]);
     const itens = {}; (i.data || []).forEach(x => { (itens[x.codigo_pedido] = itens[x.codigo_pedido] || []).push(x); });
@@ -434,10 +393,26 @@ function RPClientes({ ctx }) {
   const lcs = custos ? linhas.map(l => rpLinhaCusto(custos, l)) : null;
   const totCusto = lcs ? lcs.reduce((s, l) => s + l.custo, 0) : 0, totLucro = total - totCusto;
   const nIncompletos = lcs ? lcs.filter(l => l.incompleto).length : 0;
+  const nPedidos = new Set(doCliente.map(p => p.numero_pedido)).size;     // pedido parcial = mais de um registro com o mesmo número
+
+  // Ranking: quanto cada cliente comprou (pedidos distintos, quantidade, total e — com alçada de custo — lucro bruto).
+  const ranking = Array.from(pedidos.reduce((m, p) => {
+    const k = String(p.codigo_cliente);
+    const r = m.get(k) || { id: k, nome: p.cliente_nome || k, nums: new Set(), qtd: 0, total: 0, custo: 0 };
+    r.nums.add(p.numero_pedido);
+    p.itens.forEach(i => { r.qtd += Number(i.quantidade || 0); r.total += Number(i.valor_total || 0); if (custos) r.custo += rpLinhaCusto(custos, i).custo; });
+    m.set(k, r); return m;
+  }, new Map()).values()).sort((a, b) => b.total - a.total);
+  const exportar = () => {
+    if (cliente) rpBaixar(`cliente-${cliente}-${rpHojeBrasilia()}.csv`, rpCsv([['Produto', 'Descrição', 'Data da venda', 'Pedido', 'Quantidade', 'Valor unit.', 'Desconto', 'Total', ...(lcs ? ['Custo (materiais)', 'Lucro bruto'] : [])],
+      ...linhas.map((l, k) => [l.codigo, l.descricao || '', rpDataBr(l.data), l.numero, rpNumCsv(l.quantidade, 3), rpNumCsv(l.valor_unitario), rpNumCsv(l.desconto), rpNumCsv(l.valor_total), ...(lcs ? [rpNumCsv(lcs[k].custo), rpNumCsv(lcs[k].lucro)] : [])])]));
+    else rpBaixar(`clientes-${rpHojeBrasilia()}.csv`, rpCsv([['Cliente', 'Pedidos', 'Quantidade', 'Total vendido', ...(custos ? ['Custo (materiais)', 'Lucro bruto'] : [])],
+      ...ranking.map(r => [r.nome, r.nums.size, rpNumCsv(r.qtd, 0), rpNumCsv(r.total), ...(custos ? [rpNumCsv(r.custo), rpNumCsv(r.total - r.custo)] : [])])]));
+  };
 
   const atualizar = async () => {
     setBusy(true);
-    const res = await rpAtualizarDoOmie(sb, { dias: 30 });
+    const res = await rpCarregarPeriodo(sb, 30);
     setBusy(false);
     if (!res.ok) window.toast?.('Não foi possível atualizar: ' + (res.erro || 'erro')); else window.toast?.(`Omie lido: ${res.dados.gravados} pedido(s) com itens do PCP.`);
     await carregar();
@@ -445,20 +420,34 @@ function RPClientes({ ctx }) {
 
   return (
     <div>
+      <RPCobertura sb={sb} onAtualizado={carregar}/>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <select className="input" value={cliente} onChange={e => setCliente(e.target.value)} style={{ minWidth: 340 }}>
-          <option value="">Selecione o cliente…</option>
+          <option value="">Todos os clientes (ranking)</option>
           {clientes.map(([id, nome]) => <option key={id} value={id}>{nome}</option>)}
         </select>
         <span style={{ flex: 1 }}/>
+        <button className="btn btn--sm" disabled={cliente ? !linhas.length : !ranking.length} onClick={exportar}>Exportar planilha</button>
         <button className="btn btn--sm" disabled={busy} onClick={atualizar} title="Lê no Omie os pedidos dos últimos 30 dias">{busy ? 'Atualizando…' : 'Atualizar do Omie (30 dias)'}</button>
       </div>
-      {!cliente && <div style={{ padding: 24, color: 'var(--fg3)' }}>{clientes.length ? 'Escolha um cliente para ver o que ele comprou.' : 'Nenhum pedido consultado ainda. Busque pedidos na aba Pedidos ou use “Atualizar do Omie”.'}</div>}
+      {!cliente && (ranking.length ? (
+        <div className="card table-wrap" style={{ overflowX: 'auto' }}>
+          <table className="t pcp-grid">
+            <thead><tr><th>Cliente</th><th className="text-right">Pedidos</th><th className="text-right">Quantidade</th><th className="text-right">Total vendido</th>{custos && <><th className="text-right">Custo (materiais)</th><th className="text-right">Lucro bruto</th></>}</tr></thead>
+            <tbody>{ranking.map(r => (
+              <tr key={r.id}>
+                <td><button className="pcp-cod" onClick={() => setCliente(r.id)} title="Ver o que este cliente comprou">{r.nome}</button></td>
+                <td className="text-right">{r.nums.size}</td><td className="text-right">{rpFmt(r.qtd, 0)}</td><td className="text-right"><b style={{ fontWeight: 500 }}>{rpMoeda(r.total)}</b></td>
+                {custos && <><td className="text-right">{rpMoeda(r.custo)}</td><td className="text-right" style={r.total - r.custo < 0 ? { color: 'var(--vp-danger)' } : undefined}>{rpMoeda(r.total - r.custo)}</td></>}
+              </tr>))}</tbody>
+          </table>
+        </div>
+      ) : <div style={{ padding: 24, color: 'var(--fg3)' }}>Nenhum pedido lido ainda. Busque pedidos na aba Pedidos ou use "Carregar 30/90 dias" acima.</div>)}
       {cliente && (<>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
           <div className="card pcp-total" style={{ padding: 14, flex: '1 1 180px' }}><div style={{ fontSize: 12, color: 'var(--fg3)' }}>Quantidade de produtos</div><div style={{ fontSize: 22, fontWeight: 500 }}>{rpFmt(qtd, 0)}</div></div>
           <div className="card pcp-total" style={{ padding: 14, flex: '1 1 180px' }}><div style={{ fontSize: 12, color: 'var(--fg3)' }}>Total vendido</div><div style={{ fontSize: 22, fontWeight: 500 }}>{rpMoeda(total)}</div></div>
-          <div className="card pcp-total" style={{ padding: 14, flex: '1 1 180px' }}><div style={{ fontSize: 12, color: 'var(--fg3)' }}>Pedidos</div><div style={{ fontSize: 22, fontWeight: 500 }}>{doCliente.length}</div></div>
+          <div className="card pcp-total" style={{ padding: 14, flex: '1 1 180px' }}><div style={{ fontSize: 12, color: 'var(--fg3)' }}>Pedidos</div><div style={{ fontSize: 22, fontWeight: 500 }}>{nPedidos}</div></div>
           {lcs && <div className="card pcp-total" style={{ padding: 14, flex: '1 1 220px', borderLeft: `4px solid ${totLucro < 0 ? 'var(--vp-danger)' : '#2e9e5b'}` }}><div style={{ fontSize: 12, color: 'var(--fg3)' }}>Lucro bruto (materiais)</div><div style={{ fontSize: 22, fontWeight: 500 }}>{rpMoeda(totLucro)}</div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{rpPct(total > 0 ? (totLucro / total) * 100 : null)} de margem · custo {rpMoeda(totCusto)}{nIncompletos > 0 ? ` · ⚠ ${nIncompletos} item(ns) com custo incompleto` : ''}</div></div>}
         </div>
         <div className="card table-wrap" style={{ overflowX: 'auto' }}>
@@ -484,7 +473,7 @@ function RPClientes({ ctx }) {
         </div>
       </>)}
       <div style={{ marginTop: 8, fontSize: 12, color: 'var(--fg3)' }}>
-        Vem dos pedidos de venda do Omie, só com quadros de comando, corrimãos e cabos. Propostas (etapa 00) não contam como venda.
+        Vem dos pedidos de venda do Omie, só com quadros de comando, corrimãos e cabos. Propostas (etapa 00) e pedidos cancelados não contam como venda; pedido parcial conta uma vez.
         {lcs && ' Lucro bruto = venda − custo dos materiais (estrutura × custo atual), sem mão de obra, impostos, frete nem comissão.'}
       </div>
     </div>
@@ -525,6 +514,7 @@ function RPListaPrecos({ ctx }) {
   const perm = useRPPermissoes();
   const [dados, setDados] = React.useState(null);
   const [busca, setBusca] = React.useState('');
+  const [soComPreco, setSoComPreco] = React.useState(false);
 
   React.useEffect(() => {
     let vivo = true;
@@ -557,19 +547,23 @@ function RPListaPrecos({ ctx }) {
   }, [sb, perm.custo, perm.hh]);
 
   if (!dados) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
-  const linhas = dados.produtos.filter(p => !busca.trim() || (p.codigo + ' ' + p.descricao).toLowerCase().includes(busca.trim().toLowerCase())).map(p => {
+  const semPrecoN = dados.produtos.filter(p => !(Number(p.preco_venda || 0) > 0)).length;
+  const linhas = dados.produtos.filter(p => (!soComPreco || Number(p.preco_venda || 0) > 0) && (!busca.trim() || (p.codigo + ' ' + p.descricao).toLowerCase().includes(busca.trim().toLowerCase()))).map(p => {
     const preco = Number(p.preco_venda || 0);
     const mat = perm.custo ? rpCustoUnit(p.codigo, dados.filhos, dados.custo) : null;
     const m = dados.mo[p.codigo];
     const maoObra = perm.hh && m && m.un > 0 ? m.custo / m.un : null;
     const total = (mat != null || maoObra != null) ? (mat || 0) + (maoObra || 0) : null;
     const margem = preco > 0 && total != null && (mat != null) ? ((preco - total) / preco) * 100 : null;
-    return { ...p, preco, mat, maoObra, total, margem };
+    const anomala = margem != null && (margem < -50 || margem > 95);            // margem fora do normal: quase sempre estrutura ou custo errado
+    return { ...p, preco, mat, maoObra, total, margem, anomala };
   });
+  const exportar = () => rpBaixar(`lista-de-precos-${rpHojeBrasilia()}.csv`, rpCsv([['Código', 'Descrição', 'Unidade', 'Preço de venda', ...(perm.custo ? ['Custo dos materiais'] : []), ...(perm.hh ? ['Mão de obra/un.'] : []), ...((perm.custo || perm.hh) ? ['Custo total'] : []), ...(perm.custo ? ['Margem %'] : [])],
+    ...linhas.map(l => [l.codigo, l.descricao, l.unidade || '', l.preco ? rpNumCsv(l.preco) : '', ...(perm.custo ? [rpNumCsv(l.mat)] : []), ...(perm.hh ? [rpNumCsv(l.maoObra)] : []), ...((perm.custo || perm.hh) ? [rpNumCsv(l.total)] : []), ...(perm.custo ? [l.margem != null ? rpNumCsv(l.margem, 1) : ''] : [])])]));
   const imprimir = () => {
     const w = window.open('', '_blank');
     if (!w) { window.toast?.('Permita pop-ups para imprimir.'); return; }
-    const tr = linhas.map(l => `<tr><td>${rpEsc(l.codigo)}</td><td>${rpEsc(l.descricao)}</td><td>${rpEsc(l.unidade || '')}</td><td style="text-align:right">${l.preco ? rpMoeda(l.preco) : '—'}</td></tr>`).join('');
+    const tr = linhas.filter(l => l.preco > 0).map(l => `<tr><td>${rpEsc(l.codigo)}</td><td>${rpEsc(l.descricao)}</td><td>${rpEsc(l.unidade || '')}</td><td style="text-align:right">${l.preco ? rpMoeda(l.preco) : '—'}</td></tr>`).join('');
     w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>Lista de Preços</title><style>body{font-family:Poppins,Arial,sans-serif;font-weight:300;font-size:12px;margin:28px}h1{font-size:18px;font-weight:500;text-align:center}table{border-collapse:collapse;width:100%}th,td{border:1px solid #bbb;padding:5px 8px;text-align:left}th{background:#eee;font-weight:500;font-size:11px;text-transform:uppercase}</style></head><body><h1>LISTA DE PREÇOS</h1><table><tr><th>Código</th><th>Produto</th><th>Un.</th><th>Preço de venda</th></tr>${tr}</table><p style="font-size:11px;color:#666">Emitida em ${new Date().toLocaleDateString('pt-BR')}. Preços do cadastro do Omie.</p><script>window.onload=function(){window.print()}<\/script></body></html>`);
     w.document.close();
   };
@@ -578,9 +572,11 @@ function RPListaPrecos({ ctx }) {
     <div>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <input className="input" placeholder="Buscar código ou descrição…" value={busca} onChange={e => setBusca(e.target.value)} style={{ minWidth: 260 }}/>
-        <span style={{ fontSize: 12, color: 'var(--fg3)' }}>{linhas.length} produto(s)</span>
+        <span style={{ fontSize: 12, color: 'var(--fg3)' }}>{linhas.length} produto(s) · {semPrecoN} sem preço de venda</span>
+        <label style={{ fontSize: 12, display: 'flex', gap: 4, alignItems: 'center' }}><input type="checkbox" checked={soComPreco} onChange={e => setSoComPreco(e.target.checked)}/>só com preço de venda</label>
         <span style={{ flex: 1 }}/>
-        <button className="btn btn--sm" onClick={imprimir} title="Imprime só código, produto e preço de venda (sem custos)">Imprimir lista de preços</button>
+        <button className="btn btn--sm" disabled={!linhas.length} onClick={exportar}>Exportar planilha</button>
+        <button className="btn btn--sm" onClick={imprimir} title="Imprime só código, produto e preço de venda (sem custos), apenas dos produtos que têm preço">Imprimir lista de preços</button>
       </div>
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
         <table className="t pcp-grid">
@@ -601,7 +597,7 @@ function RPListaPrecos({ ctx }) {
                 {perm.custo && <td className="text-right">{l.mat ? rpMoeda(l.mat) : <span title="Sem custo cadastrado">—</span>}</td>}
                 {perm.hh && <td className="text-right">{l.maoObra != null ? rpMoeda(l.maoObra) : <span title="Ainda não há OP concluída com mão de obra apontada">—</span>}</td>}
                 {(perm.custo || perm.hh) && <td className="text-right">{l.total ? rpMoeda(l.total) : '—'}</td>}
-                {perm.custo && <td className="text-right" style={l.margem != null && l.margem < 0 ? { color: 'var(--vp-danger)' } : undefined}>{l.margem != null ? rpPct(l.margem) : '—'}</td>}
+                {perm.custo && <td className="text-right" style={l.margem != null && l.margem < 0 ? { color: 'var(--vp-danger)' } : undefined}>{l.margem != null ? rpPct(l.margem) : '—'}{l.anomala ? <span title="Margem fora do normal: confira a estrutura e o custo dos componentes deste produto (clique no código para abrir a Montagem)." style={{ color: 'var(--vp-yellow)', cursor: 'help', marginLeft: 4 }}>⚠</span> : null}</td>}
               </tr>
             ))}
             {linhas.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum produto.</td></tr>}
@@ -622,6 +618,7 @@ function RPFluxoCaixa({ ctx }) {
   const custos = useRPCustos(sb, perm.custo);
   const [ano, setAno] = React.useState(new Date().getFullYear());
   const [d, setD] = React.useState(null);
+  const [ver, setVer] = React.useState(0);                      // força reler depois de carregar um período do Omie
 
   React.useEffect(() => {
     let vivo = true;
@@ -631,7 +628,7 @@ function RPFluxoCaixa({ ctx }) {
       const receita = Array(12).fill(0), mat = Array(12).fill(0), mo = Array(12).fill(0);
       let nItens = 0, incompletos = 0;
       // Receita: itens do PCP vendidos (pedidos de venda do Omie, exceto proposta), pelo mês do pedido.
-      const { data: ped } = await sb.from('pcp_pedidos').select('codigo_pedido, data_pedido').neq('etapa', '00').gte('data_pedido', `${ano}-01-01`).lte('data_pedido', `${ano}-12-31`).limit(5000);
+      const { data: ped } = await sb.from('pcp_pedidos').select('codigo_pedido, data_pedido').neq('etapa', '00').eq('cancelado', false).gte('data_pedido', `${ano}-01-01`).lte('data_pedido', `${ano}-12-31`).limit(5000);
       const mesPedido = {}; (ped || []).forEach(p => { mesPedido[p.codigo_pedido] = Number(p.data_pedido.slice(5, 7)) - 1; });
       if (Object.keys(mesPedido).length) {
         const { data: its } = await sb.from('pcp_pedido_itens').select('codigo_pedido, codigo, quantidade, valor_total').eq('item_pcp', true).in('codigo_pedido', Object.keys(mesPedido).map(Number)).limit(20000);
@@ -652,7 +649,7 @@ function RPFluxoCaixa({ ctx }) {
       if (vivo) setD({ receita, mat, mo, nOps: ids.length, nItens, incompletos });
     })();
     return () => { vivo = false; };
-  }, [sb, ano, perm.custo, perm.hh, custos]);
+  }, [sb, ano, perm.custo, perm.hh, custos, ver]);
 
   if (!d) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
   const soma = (a) => a.reduce((s, v) => s + v, 0);
@@ -672,7 +669,13 @@ function RPFluxoCaixa({ ctx }) {
         <button className="btn btn--sm" onClick={() => setAno(a => a - 1)}>←</button>
         <b style={{ fontWeight: 500, fontSize: 16 }}>{ano}</b>
         <button className="btn btn--sm" onClick={() => setAno(a => a + 1)}>→</button>
+        <span style={{ flex: 1 }}/>
+        <button className="btn btn--sm" onClick={() => rpBaixar(`fluxo-de-caixa-${ano}.csv`, rpCsv([['Resultado do PCP', ...RP_MESES, `Total ${ano}`],
+          ['Receita (vendas dos itens do PCP)', ...d.receita.map(v => rpNumCsv(v)), rpNumCsv(soma(d.receita))],
+          ...(perm.custo ? [['(−) Custo dos materiais vendidos', ...d.mat.map(v => rpNumCsv(-v)), rpNumCsv(-soma(d.mat))], ['Lucro bruto (sobre materiais)', ...margem.map(v => rpNumCsv(v)), rpNumCsv(soma(margem))]] : []),
+          ...(perm.hh ? [['Mão de obra apontada nas OPs (informativo)', ...d.mo.map(v => rpNumCsv(-v)), rpNumCsv(-soma(d.mo))]] : [])]))}>Exportar planilha</button>
       </div>
+      <RPCobertura sb={sb} onAtualizado={() => setVer(v => v + 1)}/>
       <RPPainelFluxo ctx={ctx} ano={ano} d={d} perm={perm}/>
       <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>Resultado do PCP por mês</h3>
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
@@ -724,7 +727,7 @@ function RelatoriosPCPPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística Interna · Relatórios</div>
           <h1 className="page-head__title">Relatórios do PCP</h1>
-          <p className="page-head__sub">Produção, perdas e estoque a partir do planejamento, das ordens de produção e do Omie.</p>
+          <p className="page-head__sub">Painel de produção, pedidos e clientes (vendas lidas do Omie), preços e margens, perdas, estoque por cobertura e fluxo de caixa do PCP.</p>
         </div>
       </div>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
