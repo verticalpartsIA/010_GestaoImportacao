@@ -34,7 +34,7 @@
     FIN_AVAL_VENDA: 'Projeto', REVISAO_INTERNA: 'Projeto', PROPOSTA_REVISADA_REENVIO: 'Projeto',
     CONTRATO_ENVIADO: 'Projeto', PROJETO_ENVIADO: 'Projeto', AGUARDA_ASSINATURA: 'Projeto',
     AGUARDA_BOLETO: 'Projeto', AVAL_PAGAMENTO: 'Projeto', CEO_APROVOU: 'Projeto',
-    OWNER_APROVOU: 'Projeto', AVAL_JURIDICO: 'Projeto', COMPRA_LIBERADA: 'Projeto',
+    OWNER_APROVOU: 'Projeto', AVAL_JURIDICO: 'Projeto', AVAL_ENGENHARIA: 'Projeto', COMPRA_LIBERADA: 'Projeto',
 
     PROJETO_CRIADO: 'Fabricação', PROJETO_APROVADO: 'Fabricação', FICHA_CRIADA: 'Fabricação',
     PI_CRIADA: 'Fabricação', PAGAMENTO_1_SOLICITADO: 'Fabricação', PAGAMENTO_1_CONFIRMADO: 'Fabricação',

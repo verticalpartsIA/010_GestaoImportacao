@@ -355,7 +355,9 @@
           é o "Aval Financeiro" do processo real, ver #503)
        2. Aval Jurídico (manual, abre junto com o Financeiro quando o
           cliente aprova a Proposta)
-       3. CEO — só se a margem efetiva ficou abaixo de 15% (ou desconhecida)
+       3. Aval Engenharia (08/10/2026): o cliente assinou o Projeto de
+          Instalação — POR COTAÇÃO, todos os projetos dela (AvalEngenhariaStore)
+       4. CEO — só se a margem efetiva ficou abaixo de 15% (ou desconhecida)
      Mostra sempre a PRIMEIRA que faltar. Deixaram de travar a compra:
      aprovação do responsável pelo sistema, sinal pago como checagem própria
      (o Aval de Pagamento já vem depois dele), contrato assinado e revisão
@@ -365,11 +367,17 @@
     const av = await getByNumeroCotacao(numeroCotacao);
     const aj = await avalJuridicoDe(av, numeroCotacao);
     const ceo = await precisaAprovacaoCeo(numeroCotacao);
+    const eng = window.AvalEngenhariaStore ? await window.AvalEngenhariaStore.status(numeroCotacao) : { estado: 'erro' };
+    const motivoEng = eng.estado === 'sem_projeto' ? 'a assinatura do Projeto de Instalação (o projeto ainda não foi salvo em "Projeto de Elevadores")'
+      : eng.estado === 'recusado' ? 'a assinatura do Projeto de Instalação (o cliente recusou — gere um novo link em "Projeto de Elevadores")'
+      : eng.estado === 'erro' ? 'a assinatura do Projeto de Instalação (não foi possível conferir agora)'
+      : `a assinatura do Projeto de Instalação (${eng.assinados} de ${eng.total} assinado${eng.total === 1 ? '' : 's'} — veja em "Projeto de Elevadores")`;
     const margemTxt = ceo.margem != null ? `margem ${(ceo.margem * 100).toFixed(1).replace('.', ',')}%, abaixo de 15%` : 'margem desconhecida';
 
     const checagens = [
       { ok: !!(av && av.aval_pagamento_confirmado), motivo: 'o Aval de Pagamento do Financeiro (depois do sinal pago — botão "Dar Aval de Pagamento" na tela "Aval Financeiro" ou em "Prazos & Pendências")' },
       { ok: aj?.status === 'aprovado', motivo: 'o Aval Jurídico (tela "Aval Jurídico")' },
+      { ok: eng.estado === 'ok', motivo: motivoEng },
       { ok: !ceo.precisa || !!(av && av.aprovacao_ceo_em), motivo: `a aprovação do CEO (Diego) — ${margemTxt}` },
     ];
     const primeiraFaltando = checagens.find((ck) => !ck.ok);

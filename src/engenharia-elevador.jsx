@@ -727,6 +727,8 @@ function ProjetoElevadorDesenhos({ abas }) {
         </table>
       </div>
 
+      <AvalEngenhariaCard versao={Object.keys(assinaturas).map((k) => k + (assinaturas[k].status || '')).join('|') + itens.length}/>
+
       {modal && <DesenhoModal onClose={() => setModal(false)} onSaved={() => { setModal(false); carregar(); }}/>}
       {modalAssin && <ModalAssinaturaProjeto key={modalAssin.id + (assinaturas[modalAssin.id] ? assinaturas[modalAssin.id].id : "")} item={modalAssin} linha={assinaturas[modalAssin.id] || null} onClose={() => setModalAssin(null)} onChanged={carregarAssinaturas}/>}
       {excluir && (
