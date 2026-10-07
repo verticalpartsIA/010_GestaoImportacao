@@ -27,14 +27,15 @@
   /* Ponto único de troca: quando houver imagem pronta pro passo, só
      preencher a URL aqui — o fallback em emoji continua funcionando
      sem imagem nenhuma. */
+  const ICONS_BASE = 'https://jxtqwzmpgofwctqajewt.supabase.co/storage/v1/object/public/engenharia/formulario-quadro-comando-publico/icones';
   const STEP_ICON_SRC = {
     boasVindas: null,
-    identificacao: null,
+    identificacao: `${ICONS_BASE}/identificacao.webp`,
     quadro: null,
-    porta: null,
-    acessorios: null,
+    porta: `${ICONS_BASE}/porta.webp`,
+    acessorios: `${ICONS_BASE}/acessorios.webp`,
     fiacao: null,
-    revisao: null,
+    revisao: `${ICONS_BASE}/revisao.webp`,
   };
 
   const VARIANTES_QUADRO = [
@@ -89,7 +90,9 @@
 
   function Icon({ passo, emoji }) {
     const src = STEP_ICON_SRC[passo];
-    if (src) return <img src={src} alt="" style={{ width: 30, height: 30, objectFit: 'contain' }}/>;
+    // Ilustrações isométricas exportadas em 320x175 (16:9-ish) — a caixa
+    // segue a mesma proporção pra `cover` não cortar nada, só encaixar.
+    if (src) return <img src={src} alt="" style={{ width: 56, height: 31, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }}/>;
     return <span style={{ fontSize: 20 }}>{emoji}</span>;
   }
 
