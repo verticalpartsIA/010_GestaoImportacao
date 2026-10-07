@@ -209,13 +209,25 @@
       fecha: 'AVAL_JURIDICO_APROVADO',
       fechamentoTipo: 'manual', rota: 'aval-juridico' },
 
+    /* Aval Engenharia (08/10/2026) — terceiro aval, POR COTAÇÃO: o cliente
+       assina o Projeto de Instalação (Projeto de Elevadores › Assinatura).
+       Abre junto com os outros dois quando o cliente aprova a Proposta e
+       fecha sozinho quando o ÚLTIMO projeto da cotação é assinado (o banco
+       enfileira PROJETO_INSTALACAO_ASSINADO — ver fluxo-pendentes.js). */
+    { key: 'AVAL_ENGENHARIA', label: 'Aguardando assinatura do Projeto de Instalação (Aval Engenharia)',
+      predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
+      nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
+      condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
+      fecha: 'PROJETO_INSTALACAO_ASSINADO',
+      fechamentoTipo: 'automatico', rota: 'eng-projeto-elevadores' },
+
     { key: 'COMPRA_LIBERADA', label: 'Compra ao Fornecedor liberada',
-      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'FS' }, { key: 'AVAL_JURIDICO', rel: 'FS' }],
+      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'FS' }, { key: 'AVAL_JURIDICO', rel: 'FS' }, { key: 'AVAL_ENGENHARIA', rel: 'FS' }],
       /* Nasce só quando OS DOIS avais manuais já aconteceram (o último a
          chegar dispara). `nasce` continua sendo o de sempre pra quem lê o
          grafo; `requerEventos` é a condição real (ver onEvento). */
       nasce: 'AVAL_PAGAMENTO_CONFIRMADO',
-      requerEventos: ['AVAL_PAGAMENTO_CONFIRMADO', 'AVAL_JURIDICO_APROVADO'],
+      requerEventos: ['AVAL_PAGAMENTO_CONFIRMADO', 'AVAL_JURIDICO_APROVADO', 'PROJETO_INSTALACAO_ASSINADO'],
       fecha: 'COMPRA_FORNECEDOR_INICIADA',
       fechamentoTipo: 'automatico' /* botão "Decidir Comprar" já existente em Cotação a Fornecedor */,
       rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },

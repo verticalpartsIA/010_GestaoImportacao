@@ -12,7 +12,7 @@
   'use strict';
   const INTERVALO_MS = 30000;
   /* Tipos que ESTA versão sabe executar — o banco só entrega estes (uma versão antiga em cache nunca pega tipo novo e o marca como falho). */
-  const TIPOS = ['proposta_assinada', 'proposta_recusada', 'proposta_revisao', 'contrato_venda_assinado', 'contrato_venda_representante', 'contrato_venda_signatario', 'contrato_instalador_assinado'];
+  const TIPOS = ['proposta_assinada', 'proposta_recusada', 'proposta_revisao', 'contrato_venda_assinado', 'contrato_venda_representante', 'contrato_venda_signatario', 'contrato_instalador_assinado', 'projeto_instalacao_assinado'];
   let rodando = false;
 
   function sb() { return (window.__VP_SB || {}).sb; }
@@ -31,6 +31,11 @@
     if (String(item.tipo).indexOf('contrato_venda_') === 0) {
       if (!window.CVStore || !window.CVStore.processarEfeitoFila) return 'módulos ainda não carregados';
       await window.CVStore.processarEfeitoFila(item.tipo, item.payload || {});
+      return null;
+    }
+    if (item.tipo === 'projeto_instalacao_assinado') {
+      if (!window.AvalEngenhariaStore || !window.AvalEngenhariaStore.processarEfeitoFila) return 'módulos ainda não carregados';
+      await window.AvalEngenhariaStore.processarEfeitoFila(item.tipo, item.payload || {});
       return null;
     }
     if (item.tipo === 'contrato_instalador_assinado') {

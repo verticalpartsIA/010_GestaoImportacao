@@ -254,6 +254,7 @@ function AFAprovacoes({ row, onSaved }) {
       {ajStatus === 'aprovado' && <Badge variant="success" dot>Aval Jurídico OK</Badge>}
       {ajStatus === 'reprovado' && <Badge variant="danger" dot>Aval Jurídico reprovado</Badge>}
       {ajStatus === 'pendente' && <Badge variant="warning" dot>Aval Jurídico pendente</Badge>}
+      <AvalEngenhariaBadge numeroCotacao={a.numero_cotacao}/>
       {ceo && !ceo.precisa && <Badge variant="neutral" dot>CEO não precisa aprovar (margem {margemTxt})</Badge>}
       {ceo && ceo.precisa && (a.aprovacao_ceo_em
         ? <Badge variant="success" dot>CEO aprovou · {new Date(a.aprovacao_ceo_em).toLocaleDateString('pt-BR')}</Badge>

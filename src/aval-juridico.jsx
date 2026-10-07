@@ -63,6 +63,7 @@ function AJRow({ row, onOpenModal }) {
         <div className="small muted">{row.contrato
           ? `Contrato ${row.contrato.numero_documento || ''} · ${row.contrato.status === 'assinado' ? 'assinado' : (row.contrato.status || '—')}`
           : 'Contrato de Venda ainda não gerado'}</div>
+        <AvaisDaCotacao numeroCotacao={a.numero_cotacao} juridicoStatus={a.status}/>
       </div>
       <AJBadge status={a.status}/>
       {a.status === 'pendente' && (
