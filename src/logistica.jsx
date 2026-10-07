@@ -1518,6 +1518,25 @@ const INBOX_REFERENCIA_TIPO_LABEL = {
   tratativa_cotacao: 'Tratativa',
 };
 
+/* 07/10 — MÃO DUPLA Inbox ⇄ Tratativas (cotação a fornecedor). A Tratativa de cada cotação a
+   fornecedor (Comercial → Cotação a Fornecedor → Tratativas) mostra os e-mails daqui ligados a ela
+   (por referencia_id). Estes dois helpers só LEEM emails_projeto/cotacoes_elevador_fornecedor:
+   • inboxRefCotacaoFornecedor — devolve a cotação a fornecedor à qual o e-mail está ligado (ou null);
+   • quem responde a um e-mail assim herda a ligação (a resposta também aparece nas Tratativas).
+   Nenhuma lógica de vínculo/matching/soft-delete do read-inbox foi tocada. */
+const INBOX_TIPOS_COTACAO_FORNECEDOR = ['cotacao_fornecedor', 'tratativa_cotacao'];
+async function inboxRefCotacaoFornecedor(sb, msg) {
+  try {
+    if (!sb || !msg || !msg.id) return null;
+    const { data } = await sb.from('emails_projeto').select('referencia_id, referencia_tipo, numero_cotacao').eq('id', msg.id).maybeSingle();
+    if (data && data.referencia_id && INBOX_TIPOS_COTACAO_FORNECEDOR.includes(data.referencia_tipo)) return { id: data.referencia_id };
+    return null;
+  } catch (e) { return null; }
+}
+function inboxIrParaRota(caminho) {
+  try { window.history.pushState({}, '', caminho); window.dispatchEvent(new PopStateEvent('popstate')); } catch (e) { window.location.assign(caminho); }
+}
+
 /* 10/09 — IMAP conectado de verdade (Edge Function read-inbox, mesma
    caixa suporte@vpsistema.com usada pra enviar em send-email). Movida do
    módulo Comercial pro módulo Geral no mesmo dia — pedido do usuário: é
@@ -1924,11 +1943,14 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
         if (r.politica !== 'silencio') { setPopupVinculo(r); setEnviandoResposta(false); return; }
       }
       const numeroEfetivo = active.numeroCotacao ?? numeroForcado.current ?? undefined;
+      /* 07/10 — resposta a e-mail de cotação a fornecedor herda a ligação (aparece também nas Tratativas) */
+      const refForn = modoCompose !== 'encaminhar' ? await inboxRefCotacaoFornecedor(sb, active) : null;
       const { data, error } = await sb.functions.invoke('send-email', {
         body: {
           to, subject, text,
           numeroCotacao: numeroEfetivo,
-          referenciaTipo: numeroEfetivo != null ? 'resposta_inbox' : undefined,
+          referenciaTipo: refForn ? 'tratativa_cotacao' : (numeroEfetivo != null ? 'resposta_inbox' : undefined),
+          referenciaId: refForn ? refForn.id : undefined,
           attachments: anexosResposta.length ? anexosResposta.map((a) => ({ filename: a.filename, contentType: a.contentType, base64: a.base64 })) : undefined,
         },
       });
@@ -2367,6 +2389,13 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
                     )}
                     {pode('editar') && !ehEnviado(active) && (active.numeroCotacao != null || active.referenciaTipo === 'cotacao_fornecedor') && window.InboxModalPrecoEmail && (
                       <Button variant="ghost" size="sm" icon="dollar" title="Lê o e-mail do fornecedor, propõe os preços e as condições e registra a resposta depois que você conferir" onClick={() => setPrecoEmailAberto(true)}>Extrair preço</Button>
+                    )}
+                    {INBOX_TIPOS_COTACAO_FORNECEDOR.includes(active.referenciaTipo) && (
+                      <Button variant="ghost" size="sm" icon="message" title="Abre a cotação a fornecedor deste e-mail, na aba Tratativas (histórico único da conversa)" onClick={async () => {
+                        const r = await inboxRefCotacaoFornecedor(window.__VP_SB?.sb, active);
+                        if (r) inboxIrParaRota('/comercial/cotacao-fornecedor-detail/' + r.id + '/tratativas');
+                        else window.toast?.('Não achei a cotação a fornecedor ligada a este e-mail.', 'warning');
+                      }}>Abrir tratativas</Button>
                     )}
                     {pode('editar') && window.InboxModalPedirDecisao && (
                       <Button variant="ghost" size="sm" icon="shield" title="Cria uma decisão na Central de Decisões ligada a este e-mail" onClick={() => setPedirDecisaoAberto(true)}>Pedir decisão</Button>
