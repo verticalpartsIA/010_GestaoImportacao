@@ -241,6 +241,7 @@
       { modulo: 'carga-maquina', label: 'Carga Máquina' },
       { modulo: 'montagem-produto', label: 'Montagem do Produto' },
       { modulo: 'simulacao-producao', label: 'Simulação' },
+      { modulo: 'mes', label: 'MES — Sistema de Execução da Manufatura' },
       { modulo: 'relatorios-pcp', label: 'Relatórios do PCP' },
       { modulo: 'expedicao', label: 'Expedição' },
       { modulo: 'pcp', label: 'PCP — Planejamento e Controle da Produção', capacidades: [
@@ -275,7 +276,7 @@
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
     'Entrega & Documentação': ['databook', 'handover'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
-    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'relatorios-pcp', 'expedicao'],
+    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'mes', 'relatorios-pcp', 'expedicao'],
     'Administração': ['logs'],
   };
 

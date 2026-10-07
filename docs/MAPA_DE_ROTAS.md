@@ -14,7 +14,7 @@
 - O 1º segmento (**módulo**) vem do `BREADCRUMB_MAP` do `shell.jsx` via `MODULE_SLUG` do `router.js`; só o 2º segmento (a rota) decide o que abre.
 - A **aba padrão** deixa a URL limpa (sem o último segmento). Aba inválida na URL cai na padrão.
 - Abas entram na URL com `window.useRouteTab(rota, padrão, [válidas], comId?)` (em `router.js`).
-- Rotas no roteador: **78** · itens de menu: **67** · telas com abas na URL: **10**.
+- Rotas no roteador: **79** · itens de menu: **68** · telas com abas na URL: **10**.
 
 ## Verificações automáticas
 
@@ -30,7 +30,7 @@
 | Notificações | `notificacoes` | `/geral/notificacoes` | — | — |
 | Central de Decisões | `decisoes` | `/geral/decisoes` | — | — |
 | Prazos & Pendências | `financeiro` | `/adm-financeiro/financeiro` | — | — |
-| Inbox | `inbox` | `/geral/inbox` | — | — |
+| Inbox | `inbox` | `/geral/inbox` | — | id na URL (passthrough) |
 
 ### CRM
 
@@ -139,6 +139,7 @@
 | Montagem do Produto | `montagem-produto` | `/logistica/montagem-produto` | — | — |
 | Simulação | `simulacao-producao` | `/logistica/simulacao-producao` | — | — |
 | PCP | `pcp` | `/logistica/pcp[/<aba>]` | **ordens**, fila, pedidos, planejamento, controle | — |
+| MES | `mes` | `/logistica/mes` | — | — |
 | Relatórios | `relatorios-pcp` | `/logistica/relatorios-pcp[/<aba>]` | **painel**, pedidos, precos, producao, perdas, estoque, fluxo, clientes, fotos | — |
 | Expedição | `expedicao` | `/logistica/expedicao` | — | — |
 
@@ -173,16 +174,16 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 |---|---|---|---|---|
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `central-documentos.jsx:79` |
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `rh-homologacao` | `/rh/rh-homologacao` | `central-documentos.jsx:81` |
-| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:337` |
+| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:338` |
 | (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:431` |
-| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1086` |
-| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1102` |
-| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:1025` |
-| (LeadDetailView em comercial.jsx) | Voltar para Leads | `leads` | `/crm/leads` | `comercial.jsx:1113` |
+| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1099` |
+| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `comercial.jsx:1115` |
+| (LeadDetailView em comercial.jsx) | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:1036` |
+| (LeadDetailView em comercial.jsx) | Voltar para Leads | `leads` | `/crm/leads` | `comercial.jsx:1126` |
 | (NcmDashboardWidget em ncm-catalogo.jsx) | Ver todas | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:988` |
-| (OndeParouWidget em dashboard.jsx) | Ver Gatilhos & Prazo | `financeiro` | `/adm-financeiro/financeiro` | `dashboard.jsx:416` |
+| (OndeParouWidget em dashboard.jsx) | Ver Prazos & Pendências | `financeiro` | `/adm-financeiro/financeiro` | `dashboard.jsx:419` |
 | (PrecificacaoDetail em precificacao.jsx) | Gerar proposta | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:279` |
-| (RPPainelProducao em painel-producao-pcp.jsx) | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `painel-producao-pcp.jsx:98` |
+| (RPPainelProducao em painel-producao-pcp.jsx) | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `painel-producao-pcp.jsx:100` |
 | (TabEquipamentos em dossier-obra.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `dossier-obra.jsx:967` |
 | art | (acionado por um handler — ver o código) | `status-obras` | `/engenharia/status-obras` | `entrega.jsx:7` |
 | cadastro-instaladores | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `cadastro-instaladores.jsx:79` |
@@ -203,33 +204,33 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | emissao-nf | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `emissao-nf.jsx:183` |
 | engenharia | Abrir obras | `status-obras` | `/engenharia/status-obras` | `operacoes.jsx:273` |
 | engenharia | Abrir obras | `status-obras` | `/engenharia/status-obras` | `operacoes.jsx:322` |
-| expedicao | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `expedicao.jsx:154` |
-| formulario-elevador | (acionado por um handler — ver o código) | `controle-cotacoes` | `/comercial/controle-cotacoes` | `formulario-elevador.jsx:1761` |
-| formulario-elevador | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `formulario-elevador.jsx:1759` |
-| formulario-quadro-comando | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `quadro-comando.jsx:997` |
-| importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:432` |
-| importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:480` |
-| importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:502` |
-| importacao | Mapa de navios | `importacao-rastreamento` | `/gestao-importacao/importacao-rastreamento` | `logistica.jsx:348` |
-| importacao | Inbox | `inbox` | `/geral/inbox` | `logistica.jsx:347` |
-| importacao-detail | Ver no Financeiro | `financeiro` | `/adm-financeiro/financeiro` | `logistica.jsx:758` |
-| importacao-detail | (acionado por um handler — ver o código) | `importacao` | `/gestao-importacao/importacao` | `logistica.jsx:586` |
-| importacao-detail | Voltar para Importação | `importacao` | `/gestao-importacao/importacao` | `logistica.jsx:591` |
-| importacao-rastreamento | Voltar para Importação | `importacao` | `/gestao-importacao/importacao` | `logistica.jsx:820` |
-| importacao-rastreamento | Abrir embarque | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:892` |
-| inbox | Voltar | `dashboard` | `/geral/dashboard` | `logistica.jsx:1665` |
-| inbox | (acionado por um handler — ver o código) | `linha-do-tempo` | `/engenharia/linha-do-tempo` | `logistica.jsx:1533` |
+| expedicao | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `expedicao.jsx:283` |
+| formulario-elevador | (acionado por um handler — ver o código) | `controle-cotacoes` | `/comercial/controle-cotacoes` | `formulario-elevador.jsx:1763` |
+| formulario-elevador | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `formulario-elevador.jsx:1761` |
+| formulario-quadro-comando | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `quadro-comando.jsx:1001` |
+| importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:437` |
+| importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:485` |
+| importacao | (acionado por um handler — ver o código) | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:507` |
+| importacao | Mapa de navios | `importacao-rastreamento` | `/gestao-importacao/importacao-rastreamento` | `logistica.jsx:353` |
+| importacao | Inbox | `inbox` | `/geral/inbox` | `logistica.jsx:352` |
+| importacao-detail | Ver no Financeiro | `financeiro` | `/adm-financeiro/financeiro` | `logistica.jsx:778` |
+| importacao-detail | (acionado por um handler — ver o código) | `importacao` | `/gestao-importacao/importacao` | `logistica.jsx:591` |
+| importacao-detail | Voltar para Importação | `importacao` | `/gestao-importacao/importacao` | `logistica.jsx:596` |
+| importacao-rastreamento | Voltar para Importação | `importacao` | `/gestao-importacao/importacao` | `logistica.jsx:981` |
+| importacao-rastreamento | Abrir embarque | `importacao-detail` | `/gestao-importacao/importacao-detail` | `logistica.jsx:1093` |
+| inbox | Voltar | `dashboard` | `/geral/dashboard` | `logistica.jsx:2158` |
+| inbox | (acionado por um handler — ver o código) | `linha-do-tempo` | `/engenharia/linha-do-tempo` | `logistica.jsx:1883` |
 | juridico | (acionado por um handler — ver o código) | `contrato-editor` | `/juridico/contrato-editor` | `operacoes.jsx:359` |
-| lead-detail | (acionado por um handler — ver o código) | `leads` | `/crm/leads` | `comercial.jsx:990` |
-| leads | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:899` |
-| leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:819` |
-| leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:874` |
+| lead-detail | (acionado por um handler — ver o código) | `leads` | `/crm/leads` | `comercial.jsx:1001` |
+| leads | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:910` |
+| leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:830` |
+| leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:885` |
 | ncm-catalogo | (acionado por um handler — ver o código) | `ficha-tecnica` | `/engenharia/ficha-tecnica` | `ncm-catalogo.jsx:424` |
 | ncm-detail | (acionado por um handler — ver o código) | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:845` |
 | ncm-detail | Voltar para Solicitações NCM | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:851` |
 | ncm-kanban | (acionado por um handler — ver o código) | `ncm-detail` | `/engenharia/ncm-detail` | `ncm-catalogo.jsx:767` |
 | ncm-kanban | (acionado por um handler — ver o código) | `ncm-detail` | `/engenharia/ncm-detail` | `ncm-catalogo.jsx:815` |
-| proposta-editor | (acionado por um handler — ver o código) | `propostas` | `/comercial/propostas` | `proposta-editor.jsx:930` |
+| proposta-editor | (acionado por um handler — ver o código) | `propostas` | `/comercial/propostas` | `proposta-editor.jsx:941` |
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:560` |
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:605` |
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:606` |
@@ -244,15 +245,16 @@ São abas de formulário/modal, filtros, modos de visualização e passos de ass
 | Onde | Componente | Estado | Valor inicial | Rotas que o exibem |
 |---|---|---|---|---|
 | `analise-tecnica.jsx:7` | AnaliseTecnicaWizard | `step` | `0` | (modal/componente interno) |
-| `comercial.jsx:588` | LeadsPage | `view` | `"lista"` | `leads` |
+| `comercial.jsx:597` | LeadsPage | `view` | `"lista"` | `leads` |
 | `cotacoes-fornecedor.jsx:76` | CotacoesFornecedorPage | `tab` | `'todos'` | `cotacoes-fornecedor` |
-| `decisoes.jsx:167` | DecisoesPage | `modoAdmin` | `false` | `decisoes` |
+| `decisoes.jsx:294` | DecisoesPage | `aba` | `'pendentes'` | `decisoes` |
+| `decisoes.jsx:298` | DecisoesPage | `modoAdmin` | `false` | `decisoes` |
 | `dossier-obra.jsx:740` | TermoEntregaPanel | `modo` | `'self_service'` | `dossier-obra`, `status-obras` |
 | `dossier-obra.jsx:1423` | FormAdicionarItemTemplate | `etapa` | `''` | `dossier-obra`, `status-obras` |
 | `embarques-importacao.jsx:278` | EmbarqueImportacaoForm | `tab` | `'identificacao'` | `embarques-importacao` |
 | `ims.jsx:74` | IMSForm | `tab` | `'identificacao'` | `ims-importacao` |
 | `ims.jsx:340` | IMSPage | `activeTab` | `'todos'` | `ims-importacao` |
-| `logistica.jsx:1370` | EmailInbox | `modoCompose` | `'responder'` | `inbox` |
+| `logistica.jsx:1715` | EmailInbox | `modoCompose` | `'responder'` | `inbox` |
 | `ncm-catalogo.jsx:678` | NcmKanbanPage | `view` | `"kanban"` | `ncm-kanban` |
 | `pi.jsx:360` | PIForm | `tab` | `'id'` | `pi-importacao` |
 | `precificacao-elevador.jsx:222` | ModalAcrescentarEquipamento | `modo` | `grupos.length ? 'identico' : '` | (modal/componente interno) |
