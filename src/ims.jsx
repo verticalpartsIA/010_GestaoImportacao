@@ -62,15 +62,15 @@ function IMSCamposTecnicos({ recurso, update }) {
 
 /* ---------- Formulário completo ---------- */
 const IMS_EMPTY = {
-  numero_solicitacao: '', status: 'Solicitado', solicitante: '', projeto: '', responsavel_interno: '',
+  numero_solicitacao: '', status: 'Solicitado', solicitante: '', projeto: '', numero_cotacao: '', responsavel_interno: '',
   recursos: [], data_inicio: '', data_fim: '', local_execucao: '', cidade: '', observacoes_operacionais: '',
   fornecedores: [], numero_pedido_compra: '', aprovado: false, aprovador: '', data_aprovacao: '', observacao_aprovacao: '',
   checkin_execucao: '', checkout_execucao: '', servico_concluido: false, avaliacao_servico: '', observacoes_finais: '',
   arquivado: false, historico: [],
 };
 
-function IMSForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
-  const [form, setForm] = React.useState(() => (initialData ? { ...IMS_EMPTY, ...initialData } : { ...IMS_EMPTY, solicitante: (window.__VP_USER || {}).nome || '' }));
+function IMSForm({ initialData, isEdit, numeroCotacaoSugerido, onSubmit, onCancel, saving }) {
+  const [form, setForm] = React.useState(() => (initialData ? { ...IMS_EMPTY, ...initialData } : { ...IMS_EMPTY, solicitante: (window.__VP_USER || {}).nome || '', numero_cotacao: numeroCotacaoSugerido || '' }));
   const [tab, setTab] = React.useState('identificacao');
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
 
@@ -110,7 +110,10 @@ function IMSForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
             <PIField label="Solicitante *"><PIInput value={form.solicitante} onChange={set('solicitante')}/></PIField>
             <PIField label="Projeto *"><PIInput value={form.projeto} onChange={set('projeto')}/></PIField>
           </div>
-          <PIField label="Responsável interno"><PIInput value={form.responsavel_interno} onChange={set('responsavel_interno')}/></PIField>
+          <div className="grid-2" style={{ gap: 12 }}>
+            <PIField label="Nº da Cotação (opcional)"><PIInput value={form.numero_cotacao} onChange={set('numero_cotacao')}/></PIField>
+            <PIField label="Responsável interno"><PIInput value={form.responsavel_interno} onChange={set('responsavel_interno')}/></PIField>
+          </div>
         </div>
       )}
 
@@ -266,6 +269,7 @@ function IMSCard({ s, onEdit, onDelete, onArchive }) {
           <div className="row gap-2" style={{ flexWrap: 'wrap', marginBottom: 6 }}>
             <span style={{ fontWeight: 800 }}>{s.numero_solicitacao || s.projeto || 'Solicitação'}</span>
             <StatusBadge status={s.status}/>
+            {s.numero_cotacao != null && <span className="badge" style={{ background: 'var(--vp-info-bg, #eef)', color: 'var(--vp-info, #44f)' }}>Cotação Nº {s.numero_cotacao}</span>}
             {(s.recursos || []).map((r, i) => r.tipo_recurso && <span key={i} className="badge">{r.tipo_recurso}</span>)}
             {s.arquivado && <span className="badge">Arquivado</span>}
             {atrasado && s.status !== 'Finalizado' && <span className="badge" style={{ color: 'var(--vp-danger, #c00)' }}>⚠ Atrasado</span>}
@@ -333,6 +337,7 @@ function IMSPage() {
   const [items, setItems] = React.useState(null);
   const [showForm, setShowForm] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
+  const [numeroCotacaoSugerido, setNumeroCotacaoSugerido] = React.useState('');
   const [search, setSearch] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('Todos');
   const [filterTipo, setFilterTipo] = React.useState('Todos');
@@ -342,6 +347,18 @@ function IMSPage() {
 
   const reload = React.useCallback(() => { window.IMSStore.listarTodas().then(setItems).catch(() => setItems([])); }, []);
   React.useEffect(() => { reload(); }, [reload]);
+
+  const abrirNova = (numeroCotacao) => {
+    setEditing(null); setNumeroCotacaoSugerido(numeroCotacao != null ? String(numeroCotacao) : ''); setShowForm(true);
+  };
+
+  /* issue #707 — "Criar IMS" a partir de uma P.I. já abre esta tela com
+     o Nº da Cotação preenchido, em vez de depender de digitação manual. */
+  React.useEffect(() => {
+    const h = window.ImportacaoHandoff?.ler();
+    if (h) abrirNova(h.numero_cotacao);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const salvar = async (form) => {
     setSaving(true);
@@ -394,13 +411,13 @@ function IMSPage() {
           <p className="page-head__sub">Controle de recursos operacionais e transportes por projeto.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setShowForm(true); }}>Nova solicitação</Button>
+          <Button variant="primary" icon="plus" onClick={() => abrirNova()}>Nova solicitação</Button>
         </div>
       </div>
 
       {showForm && (
         <div style={{ marginBottom: 20 }}>
-          <IMSForm initialData={editing} isEdit={!!editing} saving={saving}
+          <IMSForm initialData={editing} isEdit={!!editing} numeroCotacaoSugerido={numeroCotacaoSugerido} saving={saving}
             onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
         </div>
       )}

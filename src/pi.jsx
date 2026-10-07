@@ -589,7 +589,17 @@ function PIModalVincularEmbarque({ pi, embarques, onClose, onSaved }) {
 }
 
 /* ---------- Página ---------- */
-function PIPage() {
+/* issue #707 — leva o Nº da Cotação desta P.I. até a tela de RFQ/IMS
+   (ImportacaoHandoff), pra "Criar RFQ"/"Criar IMS" já nascerem com o
+   vínculo preenchido, em vez de depender do usuário digitar à mão. */
+function piCriarDoc(nav, rota, numeroCotacao) {
+  window.ImportacaoHandoff.escrever(numeroCotacao);
+  if (!nav || !nav.setRoute) return;
+  if (nav.setSubsel) nav.setSubsel(null);
+  nav.setRoute(rota);
+}
+
+function PIPage({ setRoute, setSubsel } = {}) {
   console.log('🎯 PI PAGE LOADED - v12 - FIELD REORDER SHOULD BE VISIBLE');
   const [pis, setPis] = React.useState(null);
   const [embarques, setEmbarques] = React.useState([]);
@@ -695,6 +705,8 @@ function PIPage() {
                     <div className="row gap-1">
                       <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => { setEditing(pi); setShowForm(true); }}/>
                       <Button variant="ghost" size="sm" icon="link" title="Vincular embarque" onClick={() => setVincular(pi)}/>
+                      <Button variant="ghost" size="sm" icon="send" title={pi.numero_cotacao != null ? 'Criar RFQ de frete a partir desta P.I.' : 'Informe o Nº da Cotação na P.I. primeiro'} disabled={pi.numero_cotacao == null} onClick={() => piCriarDoc({ setRoute, setSubsel }, 'rfq-importacao', pi.numero_cotacao)}/>
+                      <Button variant="ghost" size="sm" icon="truck" title={pi.numero_cotacao != null ? 'Criar IMS a partir desta P.I.' : 'Informe o Nº da Cotação na P.I. primeiro'} disabled={pi.numero_cotacao == null} onClick={() => piCriarDoc({ setRoute, setSubsel }, 'ims-importacao', pi.numero_cotacao)}/>
                       <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={() => excluir(pi)}/>
                     </div>
                   </td>

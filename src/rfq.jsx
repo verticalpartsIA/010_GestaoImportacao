@@ -11,13 +11,13 @@ function rfqFmtDate(d) { return d ? new Date(d + 'T12:00:00').toLocaleDateString
 
 /* ---------- Formulário ---------- */
 const RFQ_EMPTY = {
-  numero_rfq: '', data: '', data_validade: '', status: 'Aberta',
+  numero_rfq: '', data: '', data_validade: '', status: 'Aberta', numero_cotacao: '',
   fornecedores: [], itens: [], fornecedor_vencedor_global_id: '',
   moeda_total_item: 'BRL', observacoes: '',
 };
 
-function RFQForm({ initialData, isEdit, numeroSugerido, onSubmit, onCancel, saving }) {
-  const [form, setForm] = React.useState(() => (initialData ? { ...RFQ_EMPTY, ...initialData } : { ...RFQ_EMPTY, numero_rfq: numeroSugerido, data: new Date().toISOString().slice(0, 10) }));
+function RFQForm({ initialData, isEdit, numeroSugerido, numeroCotacaoSugerido, onSubmit, onCancel, saving }) {
+  const [form, setForm] = React.useState(() => (initialData ? { ...RFQ_EMPTY, ...initialData } : { ...RFQ_EMPTY, numero_rfq: numeroSugerido, numero_cotacao: numeroCotacaoSugerido || '', data: new Date().toISOString().slice(0, 10) }));
   const [modoGlobal, setModoGlobal] = React.useState(!!(initialData && initialData.fornecedor_vencedor_global_id));
   const [novoFornecedor, setNovoFornecedor] = React.useState('');
   const [novoItem, setNovoItem] = React.useState('');
@@ -117,6 +117,7 @@ function RFQForm({ initialData, isEdit, numeroSugerido, onSubmit, onCancel, savi
     <Card title={isEdit ? `Editar RFQ ${form.numero_rfq}` : 'Nova RFQ'}>
       <div className="grid-3" style={{ gap: 12 }}>
         <PIField label="Nº RFQ"><PIInput value={form.numero_rfq} onChange={set('numero_rfq')}/></PIField>
+        <PIField label="Nº da Cotação (opcional)"><PIInput value={form.numero_cotacao} onChange={set('numero_cotacao')}/></PIField>
         <PIField label="Data *"><PIInput type="date" value={form.data} onChange={set('data')}/></PIField>
         <PIField label="Validade"><PIInput type="date" value={form.data_validade} onChange={set('data_validade')}/></PIField>
         <PIField label="Status"><PISelect value={form.status} onChange={set('status')} options={RFQ_STATUS}/></PIField>
@@ -294,6 +295,7 @@ function RFQPage() {
   const [showForm, setShowForm] = React.useState(false);
   const [editing, setEditing] = React.useState(null);
   const [numeroSugerido, setNumeroSugerido] = React.useState('');
+  const [numeroCotacaoSugerido, setNumeroCotacaoSugerido] = React.useState('');
   const [search, setSearch] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('Todos');
   const [saving, setSaving] = React.useState(false);
@@ -301,7 +303,18 @@ function RFQPage() {
   const reload = React.useCallback(() => { window.RFQStore.listarTodas().then(setRfqs).catch(() => setRfqs([])); }, []);
   React.useEffect(() => { reload(); }, [reload]);
 
-  const abrirNova = async () => { setEditing(null); setNumeroSugerido(await window.RFQStore.gerarNumero()); setShowForm(true); };
+  const abrirNova = async (numeroCotacao) => {
+    setEditing(null); setNumeroCotacaoSugerido(numeroCotacao != null ? String(numeroCotacao) : '');
+    setNumeroSugerido(await window.RFQStore.gerarNumero()); setShowForm(true);
+  };
+
+  /* issue #707 — "Criar RFQ" a partir de uma P.I. já abre esta tela com
+     o Nº da Cotação preenchido, em vez de depender de digitação manual. */
+  React.useEffect(() => {
+    const h = window.ImportacaoHandoff?.ler();
+    if (h) abrirNova(h.numero_cotacao);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   const salvar = async (form) => {
     setSaving(true);
@@ -338,13 +351,13 @@ function RFQPage() {
           <p className="page-head__sub">Request for Quotation — cotação comparativa de produtos com fornecedores.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={abrirNova}>Nova RFQ</Button>
+          <Button variant="primary" icon="plus" onClick={() => abrirNova()}>Nova RFQ</Button>
         </div>
       </div>
 
       {showForm && (
         <div style={{ marginBottom: 20 }}>
-          <RFQForm initialData={editing} isEdit={!!editing} numeroSugerido={numeroSugerido} saving={saving}
+          <RFQForm initialData={editing} isEdit={!!editing} numeroSugerido={numeroSugerido} numeroCotacaoSugerido={numeroCotacaoSugerido} saving={saving}
             onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
         </div>
       )}
@@ -373,6 +386,7 @@ function RFQPage() {
                   <div className="row gap-2" style={{ marginBottom: 6 }}>
                     <span style={{ fontWeight: 800 }}>{r.numero_rfq}</span>
                     <StatusBadge status={r.status}/>
+                    {r.numero_cotacao != null && <span className="badge" style={{ background: 'var(--vp-info-bg, #eef)', color: 'var(--vp-info, #44f)' }}>Cotação Nº {r.numero_cotacao}</span>}
                   </div>
                   <div className="cell-sub mono">
                     Data: {rfqFmtDate(r.data)} · Validade: {rfqFmtDate(r.data_validade)} · Itens: {(r.itens || []).length} · Fornecedores: {(r.fornecedores || []).length}

@@ -39,11 +39,17 @@
     return data || null;
   }
 
+  /* issue #707 — mesmo motivo do rfq-store.js: numero_cotacao nunca era
+     gravado (só existia "Projeto", texto livre), então o evento
+     IMS_CONTRATADO (gatilhos-engine.js) sempre saía com numeroCotacao
+     undefined e o nó correspondente nunca fechava sozinho. Opcional
+     (IMS avulso, sem cotação vinculada, continua permitido). */
   function _payload(form) {
     const fornecedores = (form.fornecedores || []).map((f) => ({ ...f, valor: parseFloat(f.valor) || 0 }));
     const valorTotal = fornecedores.reduce((s, f) => s + (f.valor || 0), 0);
     return {
       numero_solicitacao: form.numero_solicitacao || null, status: form.status || 'Solicitado',
+      numero_cotacao: form.numero_cotacao !== '' && form.numero_cotacao != null ? Number(form.numero_cotacao) : null,
       solicitante: form.solicitante || null, projeto: form.projeto || null, responsavel_interno: form.responsavel_interno || null,
       recursos: form.recursos || [], data_inicio: form.data_inicio || null, data_fim: form.data_fim || null,
       local_execucao: form.local_execucao || null, cidade: form.cidade || null,
@@ -113,5 +119,5 @@
     if (error) throw error;
   }
 
-  window.IMSStore = { listarTodas, obter, criar, atualizar, remover, arquivar, diasEntre, estaAtrasado };
+  window.IMSStore = { listarTodas, obter, criar, atualizar, remover, arquivar, diasEntre, estaAtrasado, _payload };
 }());

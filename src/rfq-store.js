@@ -76,10 +76,16 @@
     return `RFQ-${ano}-${String(maior + 1).padStart(4, '0')}`;
   }
 
+  /* issue #707 — numero_cotacao é o que liga a RFQ à P.I./processo de
+     importação da mesma cotação. Sem isso, criar() registrava o evento
+     RFQ_FRETE_ENVIADO (gatilhos-engine.js) com numeroCotacao sempre
+     undefined, e o nó RFQ_FRETE nunca fechava sozinho. Opcional (RFQ
+     avulsa, sem cotação vinculada, continua permitida). */
   function _payload(form) {
     return {
       numero_rfq: form.numero_rfq, data: form.data || null, data_validade: form.data_validade || null,
       status: form.status || 'Aberta',
+      numero_cotacao: form.numero_cotacao !== '' && form.numero_cotacao != null ? Number(form.numero_cotacao) : null,
       fornecedores: form.fornecedores || [], itens: form.itens || [],
       fornecedor_vencedor_global_id: form.fornecedor_vencedor_global_id || null,
       moeda_total_item: form.moeda_total_item || 'BRL',
@@ -116,6 +122,6 @@
   window.RFQStore = {
     listarTodas, obter, criar, atualizar, remover, gerarNumero,
     novoId, fmtMoeda, totalVencedor, totalPorFornecedor,
-    SIMBOLO_MOEDA,
+    SIMBOLO_MOEDA, _payload,
   };
 }());

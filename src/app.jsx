@@ -410,7 +410,7 @@ function App() {
       case "simulacao-producao": return <window.SimulacaoProducaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "pcp": return <window.PCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "pi-importacao": return <window.PIPage/>;
+      case "pi-importacao": return <window.PIPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "rfq-importacao": return <window.RFQPage/>;
       case "ims-importacao": return <window.IMSPage/>;
       case "embarques-importacao": return <window.EmbarquesImportacaoPage/>;

@@ -1151,6 +1151,23 @@ Análise de "cumpre o papel?" → correções. Tela `FinanceiroPage` (`financeir
 - **Deploy do PR #642 conferido** na URL de produção (financeiro.jsx v42, gatilhos-engine v15, app.jsx v93).
 - **Continua em aberto (decisão/escopo seu):** RLS aberta em `decisoes_gerenciais` (issue #571); as 10 decisões de montador seguem pendentes com a Arilene; SLA de 24h úteis da "Proposta pronta" é escolha minha; menu "Prazos & Pendências" restrito a Financeiro/Admin.
 
+## RFQ/IMS — numero_cotacao + botões "Criar RFQ"/"Criar IMS" a partir da P.I. (06/10/2026, issue #707)
+
+Issue (ChatGPT Codex Connector): pedia "vínculo estrutural" (FK) entre P.I./RFQ/IMS/Embarque. Investigação achou que P.I.↔Embarque já funciona bem (`vincularEmbarque`, `numero_cotacao` derivado), mas achou um **bug real não documentado**: `rfq-store.js`/`ims-store.js` nunca gravavam `numero_cotacao` (nem o formulário pedia esse número) — `criar()` registrava os eventos `RFQ_FRETE_ENVIADO`/`IMS_CONTRATADO` com `numeroCotacao: data.numero_cotacao` sempre `undefined`, e `onEvento()` (`gatilhos-engine.js`) descarta evento sem `numeroCotacao` — então os nós `RFQ_FRETE`/`IMS_CONTRATADO`/`EQUIPAMENTO_RECEBIDO` nunca fechavam sozinhos em "Prazos & Pendências".
+
+**Decisão de não seguir a solução literal da issue**: "vínculo estrutural" (FK) quebraria o padrão que P.I./Proposta/Contrato/Embarque já usam de propósito (`numero_cotacao` solto, sem FK, pra não acoplar a catálogos ainda não unificados — ver comentário em `rfq-store.js:7-9`). Resolvido com o mesmo padrão solto.
+
+**Perguntado ao usuário se valia a pena** (campo opcional, digitado à mão, ninguém ia preencher de verdade) — usuário escolheu completar com **botões de criação a partir da P.I.**, pra o vínculo nascer sozinho em vez de depender de digitação manual.
+
+- **`rfq-store.js`/`ims-store.js`**: `_payload()` ganhou `numero_cotacao` (opcional, `Number(...)`), exportado só pra teste (`_payload`). Colunas novas `numero_cotacao integer` em `rfq_importacao`/`ims_importacao` (migration `20261006200000_rfq_ims_numero_cotacao.sql`).
+- **`rfq.jsx`/`ims.jsx`**: campo "Nº da Cotação (opcional)" no formulário + badge "Cotação Nº X" na lista.
+- **`importacao-handoff.js`** (novo, `window.ImportacaoHandoff`): leva o `numero_cotacao` de uma tela pra outra via `sessionStorage` (mesmo racional do `pcpIrPara` do PCP, nome/chave próprios porque P.I./RFQ/IMS não compartilham módulo) — `ler()` consome a chave (nunca reaplica numa tela reaberta à toa).
+- **`pi.jsx`**: 2 botões novos por linha ("Criar RFQ de frete"/"Criar IMS", ícones `send`/`truck`), desabilitados se a P.I. não tiver `numero_cotacao`; escrevem no handoff e navegam (`setRoute`/`setSubsel`, passados agora como prop — `PIPage` não recebia props antes). `rfq.jsx`/`ims.jsx` leem o handoff num `useEffect` de montagem e já abrem "Nova RFQ"/"Nova solicitação" com o número preenchido.
+- **Fora de escopo desta rodada** (resto dos 12 critérios da issue #707): aviso de duplicata, regra explícita de snapshot-vs-sincronização, painel dedicado — existe `gi-painel`/`GIPainelPage` já no roteador (`app.jsx`), não investigado se cobre isso; verificar antes de criar um painel novo.
+- Testes: `rfq-store.test.js` (3), `ims-store.test.js` (2), `importacao-handoff.test.js` (4). Suíte: 404/407 (3 falhas pré-existentes).
+- `index.html`: novo `importacao-handoff.js?v=1`, `rfq-store.js` v3→4, `ims-store.js` v2→3, `pi.jsx` v14→15, `rfq.jsx` v3→4, `ims.jsx` v3→4, `app.jsx` v95→96.
+- Não testado com clique real no navegador — validado por `node:test`.
+
 ## Compra liberada → Importação — nó "Processo de Importação a iniciar" (06/10/2026, issue #706)
 
 Issue (ChatGPT Codex Connector): a Compra ao Fornecedor é liberada pelos gates (`AvalFinanceiroStore.podeIniciarCompra` — Aval de Pagamento + Aval Jurídico + CEO se margem < 15%), mas nada sinalizava proativamente a Gestão de Importação — a cotação podia ficar parada entre a liberação e a chegada da P.I. real, sem dono nem rastro. Investigação encontrou que o `gatilhos-engine.js` **já** modela boa parte da cadeia (COMPRA_LIBERADA → NEGOCIACAO_COMPRA (SLA 7d) → CARGO_READY/RFQ_FRETE automáticos a partir de `COMPRA_FORNECEDOR_CONFIRMADA`), mas **`PI_CRIADA` nascia só do lado de Engenharia** (`PROJETO_ELEVADOR_CRIADO`), **desconectado** da cadeia de Compra — as duas cadeias corriam em paralelo sem se cruzar, que era o buraco real por trás da issue.
