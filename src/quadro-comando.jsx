@@ -978,6 +978,12 @@ function QuadroComandoDetail({ quadroId, onClose }) {
   );
 }
 
+/* URL fixa da página pública de levantamento técnico (sem login) — ver
+   formulario-quadro-comando-publico.html/.jsx e a Edge Function
+   capturar-lead-quadro-comando. Só texto/clipboard, sem chamada nenhuma
+   ao backend — por isso não precisa de store próprio. */
+const QC_LINK_PUBLICO = 'https://vpgestaoimportacao.vpsistema.com/formulario-quadro-comando-publico.html';
+
 function QuadroComandoPage({ setRoute, subsel }) {
   const initialId = typeof subsel === 'string' ? subsel : ((window.VpRouter && window.VpRouter.parseLocation().id) || null);
   const [abertoId, setAbertoId] = React.useState(() => initialId);
@@ -997,6 +1003,11 @@ function QuadroComandoPage({ setRoute, subsel }) {
     finally { setCriando(false); }
   };
 
+  const copiarLinkPublico = async () => {
+    try { await navigator.clipboard.writeText(QC_LINK_PUBLICO); } catch (e) {}
+    window.toast?.('Link copiado — envie pro cliente/instalador solicitar orçamento.', 'success');
+  };
+
   if (abertoId) {
     return <QuadroComandoDetail quadroId={abertoId} onClose={() => { setAbertoId(null); setRoute && setRoute('formularios'); }}/>;
   }
@@ -1009,7 +1020,10 @@ function QuadroComandoPage({ setRoute, subsel }) {
           <h1 className="page-head__title">Quadro de Comando</h1>
           <p className="page-head__sub">Coleta de dados pra fabricação/cotação do quadro de comando — fabricar interno ou comprar pronto de fornecedor.</p>
         </div>
-        <Button variant="primary" disabled={criando} onClick={novo}>{criando ? 'Criando…' : 'Novo quadro de comando'}</Button>
+        <div className="page-head__r">
+          <Button variant="outline" icon="copy" onClick={copiarLinkPublico}>Copiar link público (cliente)</Button>
+          <Button variant="primary" disabled={criando} onClick={novo}>{criando ? 'Criando…' : 'Novo quadro de comando'}</Button>
+        </div>
       </div>
     </div>
   );
