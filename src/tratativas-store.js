@@ -169,6 +169,56 @@
       .sort((a, b) => new Date(a.data_mensagem || 0) - new Date(b.data_mensagem || 0));
   }
 
+  /* 07/10 — HISTÓRICO INTERNO da cotação a fornecedor (mudanças de preço + decisões + eventos).
+     Reúne, SÓ LENDO, o que o resto do sistema já grava e mostra na mesma linha do tempo das Tratativas:
+       • vp_logs (alvo_id = esta cotação): "Preço do fornecedor atualizado/informado" (de → para, ver
+         CotacaoElevadorFornecedorStore.registrarMudancaPreco), registro de resposta por e-mail, exclusão…;
+       • eventos_fluxo (alvo_id = esta cotação): envio ao fornecedor, resposta, compra iniciada/confirmada, com QUEM fez;
+       • eventos_fluxo do Nº da cotação só do tipo decisão/aval/compra/precificação (Financeiro/Jurídico/CEO) —
+         exceto os de OUTRAS cotações a fornecedor do mesmo Nº (label "… · VPEL-…"), pra não misturar fornecedores;
+       • decisoes_gerenciais "compra do equipamento (CEO)" do Nº: pedida e decidida (quem, quando, motivo).
+     Cada item sai normalizado: { k, quando, quem, titulo, detalhe?, tipo: 'preco'|'decisao'|'evento'|'log', linhas? }. */
+  const TIPO_DECISAO_LABEL = { compra_equipamento_ceo: 'Compra do equipamento (aprovação do CEO)' };
+  const EVENTO_INTERNO_RE = /aval|decid|compra|precifica|boleto|score|aprov|venda/i;
+  function moneyTxt(v, moeda) {
+    const n = Number(v); if (!isFinite(n)) return String(v);
+    const m = { USD: 'US$', BRL: 'R$', EUR: '€', RMB: 'RMB', CNY: 'CN¥' }[moeda] || moeda || '';
+    return (m ? m + ' ' : '') + n.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  }
+  async function listarHistoricoInterno({ cotacaoFornecedorId, numeroCotacao } = {}) {
+    const c = sb(); if (!c || !cotacaoFornecedorId) return [];
+    const itens = [];
+    const seguro = async (fn) => { try { return (await fn()) || []; } catch (e) { console.warn('[Tratativas] histórico interno', e); return []; } };
+    const [logs, evDireto, evNumero, decisoes] = await Promise.all([
+      seguro(async () => (await c.from('vp_logs').select('id, ator_nome, modulo, acao, detalhe, criado_em').eq('alvo_id', String(cotacaoFornecedorId)).order('criado_em', { ascending: true }).limit(200)).data),
+      seguro(async () => (await c.from('eventos_fluxo').select('id, evento, ator_nome, alvo_label, alvo_id, created_at').eq('alvo_id', String(cotacaoFornecedorId)).order('created_at', { ascending: true }).limit(200)).data),
+      seguro(async () => numeroCotacao == null ? [] : (await c.from('eventos_fluxo').select('id, evento, ator_nome, alvo_label, alvo_id, created_at').eq('numero_cotacao', Number(numeroCotacao)).order('created_at', { ascending: true }).limit(300)).data),
+      seguro(async () => numeroCotacao == null ? [] : (await c.from('decisoes_gerenciais').select('id, tipo, status, decidido_por, decidido_em, motivo, criado_em, solicitado_por').eq('numero_cotacao', Number(numeroCotacao)).limit(100)).data),
+    ]);
+    logs.forEach((l) => {
+      if (/^respondeu a cotação de fornecedor/i.test(l.acao || '')) return;   // já aparece como evento "Fornecedor respondeu"
+      const d = l.detalhe || {};
+      const linhas = Array.isArray(d.itens) ? d.itens.map((i) => `${i.nome}: ${i.antes == null ? '—' : moneyTxt(i.antes, d.moeda)} → ${i.depois == null ? '—' : moneyTxt(i.depois, d.moeda)}`) : null;
+      itens.push({ k: 'log:' + l.id, quando: l.criado_em, quem: l.ator_nome || null, titulo: l.acao, tipo: linhas ? 'preco' : 'log', linhas });
+    });
+    const direto = new Set();
+    evDireto.forEach((e) => { direto.add(e.id); itens.push({ k: 'evf:' + e.id, quando: e.created_at, quem: e.ator_nome || null, titulo: e.evento, tipo: 'evento' }); });
+    evNumero.forEach((e) => {
+      if (direto.has(e.id)) return;
+      if (!EVENTO_INTERNO_RE.test(e.evento || '')) return;
+      if (/·\s*VPE[A-Z]-/i.test(e.alvo_label || '') && e.alvo_id !== String(cotacaoFornecedorId)) return;   // outro fornecedor do mesmo Nº
+      itens.push({ k: 'evn:' + e.id, quando: e.created_at, quem: e.ator_nome || null, titulo: e.evento, tipo: 'decisao' });
+    });
+    decisoes.forEach((d) => {
+      const nome = TIPO_DECISAO_LABEL[d.tipo]; if (!nome) return;
+      if (d.criado_em) itens.push({ k: 'dec:' + d.id + ':c', quando: d.criado_em, quem: d.solicitado_por || null, titulo: 'Decisão pedida — ' + nome, tipo: 'decisao' });
+      if (d.decidido_em && d.status && d.status !== 'pendente' && d.status !== 'bloqueada') {
+        itens.push({ k: 'dec:' + d.id + ':d', quando: d.decidido_em, quem: d.decidido_por || null, titulo: `Decisão ${d.status} — ${nome}`, detalhe: d.motivo || null, tipo: 'decisao' });
+      }
+    });
+    return itens.filter((i) => i.quando);
+  }
+
   async function uploadAnexo(cotacaoFornecedorId, file) {
     const c = sb(); if (!c) throw new Error('Sem conexão com o banco.');
     const path = `${cotacaoFornecedorId}/${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
@@ -178,5 +228,5 @@
     return { nome: file.name, url: data.publicUrl, tipo: file.type, tamanho: file.size, path };
   }
 
-  window.TratativasStore = { listarPorCotacao, listarEmails, enviar, uploadAnexo };
+  window.TratativasStore = { listarPorCotacao, listarEmails, listarHistoricoInterno, enviar, uploadAnexo };
 }());

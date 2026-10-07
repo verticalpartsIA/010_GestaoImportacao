@@ -704,6 +704,43 @@
     }
   }
 
+  /* ---------- Histórico de PREÇO do fornecedor (07/10/2026) ----------
+     `respostas` é sobrescrita a cada nova resposta (formulário do link reaberto ou registro por e-mail com
+     "substituir"), então o preço anterior se perdia. Aqui compara antes × depois e grava UMA linha em vp_logs
+     (alvo_id = id desta cotação) com de → para; a linha do tempo das Tratativas (TratativasStore.listarHistoricoInterno)
+     lê isso. Só registra se algo mudou (ou na 1ª vez que há preço). Best-effort: nunca quebra o fluxo de resposta. */
+  function precosDe(r) {
+    const out = {};
+    if (!r) return out;
+    (r.itens || []).forEach((i) => {
+      const nome = i.unidade_identificador || i.unidade_id || 'Equipamento';
+      if (i.preco_unitario !== '' && i.preco_unitario != null && !isNaN(Number(i.preco_unitario))) out[nome + ' (preço unitário)'] = Number(i.preco_unitario);
+    });
+    [['frete_internacional_usd', 'Frete internacional (US$)'], ['taxas_extras_usd', 'Taxas extras (US$)']].forEach(([k, nome]) => {
+      if (r[k] !== '' && r[k] != null && !isNaN(Number(r[k]))) out[nome] = Number(r[k]);
+    });
+    return out;
+  }
+  function diffPrecos(antes, depois) {
+    const a = precosDe(antes), d = precosDe(depois);
+    const nomes = [...new Set([...Object.keys(a), ...Object.keys(d)])];
+    const itens = nomes.filter((n) => a[n] !== d[n]).map((n) => ({ nome: n, antes: a[n] ?? null, depois: d[n] ?? null }));
+    return { itens, primeira: !Object.keys(a).length && Object.keys(d).length > 0 };
+  }
+  function registrarMudancaPreco(cur, novas, extra) {
+    try {
+      if (!window.VPLog || !cur) return;
+      const { itens, primeira } = diffPrecos(cur.respostas, novas);
+      if (!itens.length) return;
+      window.VPLog.registrar(Object.assign({
+        modulo: 'Cotação a Fornecedor',
+        acao: primeira ? 'Fornecedor informou os preços' : 'Preço do fornecedor atualizado',
+        alvo: cur.numero_documento, alvo_id: cur.id,
+        detalhe: { moeda: (novas && novas.moeda) || (cur.respostas && cur.respostas.moeda) || 'USD', itens },
+      }, extra || {}));
+    } catch (e) { console.warn('[CotacaoFornecedor] histórico de preço falhou', e); }
+  }
+
   /* respostas = { moeda, incoterm_porto, condicoes_pagamento, prazo_fabricacao,
      garantia, validade_dias, embalagem, container_no, documentos_embarque,
      observacoes_gerais, itens:[{unidade_id, modelo_fornecedor, floors_stops_doors,
@@ -735,6 +772,7 @@
       cambio_na_resposta_usd_brl: cambioNaResposta,
     };
     await c.from('cotacoes_elevador_fornecedor').update(patch).eq('token', token);
+    registrarMudancaPreco(cur, respostas, { ator_nome: cur.fornecedor || 'Fornecedor', ator_setor: 'fornecedor' });
     if (window.VPLog) window.VPLog.registrar({
       ator_nome: cur.fornecedor || 'Fornecedor', ator_setor: 'fornecedor',
       modulo: 'Formulário de Elevadores', acao: 'respondeu a cotação de fornecedor',
@@ -767,6 +805,7 @@
     const { data, error } = await c.from('cotacoes_elevador_fornecedor').update(patch).eq('id', id).select('id');
     if (error) throw error;
     if (!data || !data.length) throw new Error('Não consegui gravar a resposta (nenhuma linha alterada).');
+    registrarMudancaPreco(cur, respostas);
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Formulário de Elevadores', acao: 'Registrou a resposta do fornecedor a partir de um e-mail',
       alvo: cur.numero_documento, alvo_id: cur.id, detalhe: { email_id: o.emailId || null, substituiu: cur.status === 'respondido' },
@@ -861,6 +900,6 @@
     listarAnexosFormulario, urlAssinadaAnexoFormulario,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
     getByToken, marcarVisualizado, salvarResposta, registrarRespostaPorEmail, getPublicIP,
-    decidirComprar, aprovar, listarComprasAguardandoEmbarque, excluirComMotivo,
+    decidirComprar, aprovar, listarComprasAguardandoEmbarque, excluirComMotivo, diffPrecos,
   };
 }());
