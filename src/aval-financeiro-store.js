@@ -368,7 +368,7 @@
     const margemTxt = ceo.margem != null ? `margem ${(ceo.margem * 100).toFixed(1).replace('.', ',')}%, abaixo de 15%` : 'margem desconhecida';
 
     const checagens = [
-      { ok: !!(av && av.aval_pagamento_confirmado), motivo: 'o Aval de Pagamento do Financeiro (depois do sinal pago, em "Gatilhos & Prazo")' },
+      { ok: !!(av && av.aval_pagamento_confirmado), motivo: 'o Aval de Pagamento do Financeiro (depois do sinal pago — botão "Dar Aval de Pagamento" na tela "Aval Financeiro" ou em "Prazos & Pendências")' },
       { ok: aj?.status === 'aprovado', motivo: 'o Aval Jurídico (tela "Aval Jurídico")' },
       { ok: !ceo.precisa || !!(av && av.aprovacao_ceo_em), motivo: `a aprovação do CEO (Diego) — ${margemTxt}` },
     ];

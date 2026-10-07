@@ -532,6 +532,20 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
         </div>
       </div>
 
+      {/* 07/10 — o motivo do bloqueio ficava só na aba "Detalhes"; quem estava em "Tratativas" via o botão
+          desabilitado sem explicação. Agora aparece acima das abas, nas duas. */}
+      {bloqueadoDecisao && (
+        <Card style={{ marginBottom: 16 }} sharp={false}>
+          <div className="alert warning" style={{ margin: 0 }}>
+            <Icon.warning/>
+            <div style={{ flex: 1 }}>
+              <div className="alert__title">Ainda não é possível decidir a compra</div>
+              <div className="alert__sub" style={{ marginTop: 2 }}>{gate.motivo}</div>
+            </div>
+          </div>
+        </Card>
+      )}
+
       <div className="tbar">
         <div className="seg">
           <button className={tab === 'detalhes' ? 'is-active' : ''} onClick={() => setTab('detalhes')}>Detalhes</button>
@@ -540,17 +554,6 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
       </div>
 
       {tab === 'detalhes' && <>
-        {bloqueadoDecisao && (
-          <Card style={{ marginBottom: 16 }} sharp={false}>
-            <div className="alert warning" style={{ margin: 0 }}>
-              <Icon.warning/>
-              <div style={{ flex: 1 }}>
-                <div className="alert__title">Ainda não é possível decidir a compra</div>
-                <div className="alert__sub" style={{ marginTop: 2 }}>{gate.motivo}</div>
-              </div>
-            </div>
-          </Card>
-        )}
         <Card style={{ marginBottom: 16 }} sharp={false}>
           <div className="alert info" style={{ margin: 0 }}>
             <Icon.link2/>
