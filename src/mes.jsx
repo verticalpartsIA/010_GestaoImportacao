@@ -3,7 +3,7 @@
    OP (reaproveita pcp_ordens, frente 'quadro') → Kanban por macroetapa → etapa com checklist obrigatório → histórico.
    A OP só avança por "Concluir etapa" (valida o checklist); histórico imutável em mes_historico.
    Fase 2: pausas (apontamento de tempo), bloqueios e materiais da OP.
-   Fase 3: ligações elétricas, testes, NC/retrabalho e gates (furos, série). Próxima: embalagem/expedição, indicadores e painel TV.
+   Fase 3: ligações elétricas, testes, NC/retrabalho e gates (furos, série). Fase 4: dados de expedição (gate), Painel de indicadores, filtros do Kanban e Painel TV.
    ============================================================ */
 
 const MES_MACROS = ['Furação', 'Estrutura', 'Componentes', 'Fiação', 'Testes', 'Qualidade', 'Embalagem', 'Expedição'];
@@ -201,7 +201,7 @@ function MESDetalhe({ ctx, id, onVoltar }) {
   const validarGate = async (cod) => {
     const nc = await sb.from('mes_nc').select('id', { count: 'exact', head: true }).eq('ordem_id', id).neq('status', 'fechada');
     if ((nc.count || 0) > 0) return 'Há não conformidade aberta. Corrija e feche a NC (com reteste) antes de concluir.';
-    const mo = (await sb.from('mes_ordens').select('numero_serie, furos_previstos, furos_executados').eq('ordem_id', id).maybeSingle()).data || {};
+    const mo = (await sb.from('mes_ordens').select('numero_serie, furos_previstos, furos_executados, expedicao_transportadora, expedicao_saida').eq('ordem_id', id).maybeSingle()).data || {};
     if (cod === 'FURACAO' && Number(mo.furos_executados) !== Number(mo.furos_previstos)) return `Furos executados (${mo.furos_executados ?? 0}) diferente do previsto (${mo.furos_previstos}).`;
     if (cod === 'ELETRIFICACAO') {
       const l = (await sb.from('mes_ligacoes').select('status').eq('ordem_id', id).limit(5000)).data || [];
@@ -216,6 +216,7 @@ function MESDetalhe({ ctx, id, onVoltar }) {
       if (!ultimos.some(x => x.tipo === 'energizado')) return 'Falta registrar teste energizado.';
       if (ultimos.some(x => x.resultado !== 'aprovado')) return 'Há teste cujo último resultado é REPROVADO. Refaça e aprove.';
     }
+    if (cod === 'EXPEDICAO' && (!(mo.expedicao_transportadora || '').trim() || !mo.expedicao_saida)) return 'Informe a transportadora/coleta e a data de saída.';
     if (cod === 'QUALIDADE' && !(mo.numero_serie || '').trim()) return 'Registre o número de série antes de aprovar a qualidade.';
     return null;
   };
@@ -298,7 +299,7 @@ function MESDetalhe({ ctx, id, onVoltar }) {
             <div style={{ marginTop: 8 }}><button className="btn btn--primary" disabled={busy || bloqueada || !podeEditar || !proxima('AGUARDANDO')} onClick={() => iniciarEtapa(proxima('AGUARDANDO').codigo, true)}>Iniciar produção · {proxima('AGUARDANDO') ? proxima('AGUARDANDO').nome : ''}</button></div>
           </div>
         )}
-        {atual === 'EXPEDIDO' && <div className="card" style={{ padding: 16, marginBottom: 16 }}><b>Expedido</b> em {new Date(d.concluida_em).toLocaleString('pt-BR')}.</div>}
+        {atual === 'EXPEDIDO' && <div className="card" style={{ padding: 16, marginBottom: 16 }}><b>Expedido</b> em {new Date(d.concluida_em).toLocaleString('pt-BR')}{d.expedicao_transportadora ? ` · ${d.expedicao_transportadora}` : ''}{d.expedicao_saida ? ` · saída ${mesData(d.expedicao_saida)}` : ''}.</div>}
         {emAndamento && (
           <div className="card" style={{ padding: 16, marginBottom: 16 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
@@ -325,6 +326,13 @@ function MESDetalhe({ ctx, id, onVoltar }) {
                 <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
                   <label style={{ fontSize: 13 }}>Nº de série <input className="input" defaultValue={d.numero_serie || ''} disabled={!podeEditar} onBlur={e => { const v = e.target.value.trim(); if (v !== (d.numero_serie || '')) salvarCampo({ numero_serie: v || null }, `Nº de série = ${v || '—'}`); }}/></label>
                   <label style={{ fontSize: 13 }}>Revisão do projeto <input className="input" style={{ width: 90 }} defaultValue={d.revisao_projeto || ''} disabled={!podeEditar} onBlur={e => { const v = e.target.value.trim(); if (v !== (d.revisao_projeto || '')) salvarCampo({ revisao_projeto: v || null }, `Revisão do projeto = ${v || '—'}`); }}/></label>
+                </div>
+              )}
+              {atual === 'EXPEDICAO' && (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', marginBottom: 10 }}>
+                  <label style={{ fontSize: 13 }}>Transportadora / coleta <input className="input" defaultValue={d.expedicao_transportadora || ''} disabled={!podeEditar} onBlur={e => { const v = e.target.value.trim(); if (v !== (d.expedicao_transportadora || '')) salvarCampo({ expedicao_transportadora: v || null }, `Transportadora = ${v || '—'}`); }}/></label>
+                  <label style={{ fontSize: 13 }}>Data de saída <input className="input" type="date" defaultValue={d.expedicao_saida || ''} disabled={!podeEditar} onBlur={e => { const v = e.target.value || null; if (v !== (d.expedicao_saida || null)) salvarCampo({ expedicao_saida: v }, `Data de saída = ${v ? mesData(v) : '—'}`); }}/></label>
+                  <label style={{ fontSize: 13 }}>Responsável <input className="input" defaultValue={d.expedicao_responsavel || mesUser() || ''} disabled={!podeEditar} onBlur={e => { const v = e.target.value.trim(); if (v !== (d.expedicao_responsavel || '')) salvarCampo({ expedicao_responsavel: v || null }, `Responsável pela expedição = ${v || '—'}`); }}/></label>
                 </div>
               )}
               {fPausa && (
@@ -670,12 +678,95 @@ function MESApontamentos({ ctx }) {
   );
 }
 
+/* ---------------- Fase 4: Painel (indicadores) e TV ---------------- */
+const mesHojeISO = () => { const n = new Date(); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; };
+const mesAtrasada = (l) => l.etapa_atual !== 'EXPEDIDO' && l.op.prazo_entrega && l.op.prazo_entrega < mesHojeISO();
+const mesIsoLocal = (ts) => { const n = new Date(ts); return `${n.getFullYear()}-${String(n.getMonth() + 1).padStart(2, '0')}-${String(n.getDate()).padStart(2, '0')}`; };
+function mesHoras(ms) { const h = ms / 3600000; return h >= 48 ? `${(h / 24).toFixed(1)} dias` : `${h.toFixed(1)} h`; }
+
+function MESPainel({ ctx }) {
+  const { linhas, etapas, bloqueadas, ncAbertas, ncTodas } = ctx;
+  const abertas = linhas.filter(l => l.etapa_atual !== 'EXPEDIDO');
+  const concl = linhas.filter(l => l.etapa_atual === 'EXPEDIDO' && l.concluida_em);
+  const hoje = mesHojeISO();
+  const emExec = abertas.filter(l => l.etapa_atual !== 'AGUARDANDO');
+  const lead = concl.length ? concl.reduce((s, l) => s + (new Date(l.concluida_em) - new Date(l.liberada_em)), 0) / concl.length : null;
+  const comPrazo = concl.filter(l => l.op.prazo_entrega);
+  const noPrazo = comPrazo.filter(l => mesIsoLocal(l.concluida_em) <= l.op.prazo_entrega).length;
+  const opsComNc = new Set(ncTodas.map(n => n.ordem_id)).size;
+  const macroDe = (cod) => (etapas.find(e => e.codigo === cod) || {}).macro;
+  const porMacro = {};
+  emExec.forEach(l => { const m = macroDe(l.etapa_atual); if (!m) return; const x = (porMacro[m] = porMacro[m] || { n: 0, t: 0 }); x.n++; x.t += Date.now() - new Date(l.etapa_desde).getTime(); });
+  const gargalo = Object.entries(porMacro).sort((a, b) => b[1].n - a[1].n || b[1].t - a[1].t)[0];
+  const Card = ({ t, v, sub, cor }) => (
+    <div className="card" style={{ padding: 14, minWidth: 170, borderTop: cor ? '4px solid ' + cor : undefined }}>
+      <div style={{ fontSize: 12, color: 'var(--fg3)' }}>{t}</div>
+      <div style={{ fontSize: 26, fontWeight: 700 }}>{v}</div>
+      {sub && <div style={{ fontSize: 11, color: 'var(--fg3)' }}>{sub}</div>}
+    </div>
+  );
+  return (
+    <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
+      <Card t="OPs abertas" v={abertas.length}/>
+      <Card t="Em execução" v={emExec.length} cor="#d9a400"/>
+      <Card t="Atrasadas" v={abertas.filter(mesAtrasada).length} cor="var(--vp-danger, #c0392b)"/>
+      <Card t="Bloqueadas" v={abertas.filter(l => bloqueadas[l.ordem_id]).length} cor="#555"/>
+      <Card t="Em retrabalho" v={abertas.filter(l => ncAbertas[l.ordem_id]).length} cor="#7b3fa0"/>
+      <Card t="Concluídas hoje" v={concl.filter(l => mesIsoLocal(l.concluida_em) === hoje).length} cor="#2e9e5b"/>
+      <Card t="Lead time médio" v={lead == null ? '—' : mesHoras(lead)} sub={`${concl.length} OP(s) expedida(s)`}/>
+      <Card t="Cumprimento de prazo" v={comPrazo.length ? Math.round(noPrazo / comPrazo.length * 100) + '%' : '—'} sub={`${noPrazo}/${comPrazo.length} expedidas no prazo`}/>
+      <Card t="Não conformidades" v={ncTodas.length} sub={`${ncTodas.filter(n => n.status !== 'fechada').length} aberta(s)`}/>
+      <Card t="Taxa de retrabalho" v={linhas.length ? Math.round(opsComNc / linhas.length * 100) + '%' : '—'} sub={`${opsComNc} de ${linhas.length} OP(s) com NC`}/>
+      <Card t="Gargalo atual" v={gargalo ? gargalo[0] : '—'} sub={gargalo ? `${gargalo[1].n} OP(s) · ${mesHoras(gargalo[1].t / gargalo[1].n)} em média na etapa` : 'sem OP em produção'}/>
+    </div>
+  );
+}
+
+function MESTv({ ctx }) {
+  const ref = React.useRef(null);
+  const { linhas, etapas, bloqueadas, ncAbertas, operadores } = ctx;
+  const abertas = linhas.filter(l => l.etapa_atual !== 'EXPEDIDO');
+  const status = (l) => bloqueadas[l.ordem_id] ? ['BLOQUEADA', '#555'] : ncAbertas[l.ordem_id] ? ['RETRABALHO', '#7b3fa0'] : mesAtrasada(l) ? ['ATRASADA', 'var(--vp-danger, #c0392b)'] : l.etapa_atual === 'AGUARDANDO' ? ['AGUARDANDO', 'var(--fg3)'] : ['NO PRAZO', '#2e9e5b'];
+  return (
+    <div ref={ref} style={{ background: 'var(--bg1, #fff)', padding: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+        <span style={{ fontSize: 12, color: 'var(--fg3)' }}>Somente leitura · atualiza a cada 30 s</span>
+        <button className="btn btn--sm" onClick={() => { const el = ref.current; if (document.fullscreenElement) document.exitFullscreen(); else el && el.requestFullscreen && el.requestFullscreen(); }}>Tela cheia</button>
+      </div>
+      <table className="t pcp-grid" style={{ fontSize: 'clamp(14px, 1.6vw, 22px)', width: '100%' }}>
+        <thead><tr><th>OP</th><th>Cliente</th><th>Quadro</th><th>Etapa</th><th>Responsável</th><th>Progresso</th><th>Prazo</th><th>Status</th></tr></thead>
+        <tbody>
+          {abertas.map(l => { const [st, cor] = status(l); const p = mesProgresso(etapas, l.etapa_atual); return (
+            <tr key={l.ordem_id}>
+              <td><b>{l.op.numero}</b></td><td>{l.op.cliente || '—'}</td><td>{l.op.titulo || l.op.produto || '—'}</td><td>{mesNomeEtapa(etapas, l.etapa_atual)}</td>
+              <td>{(operadores[l.ordem_id] || '—').split('@')[0]}</td>
+              <td style={{ minWidth: 120 }}><div style={{ height: 12, background: 'var(--bg2, #eee)', borderRadius: 6 }}><div style={{ width: p + '%', height: 12, background: '#2e9e5b', borderRadius: 6 }}/></div>{p}%</td>
+              <td>{mesData(l.op.prazo_entrega)}</td><td style={{ color: cor, fontWeight: 700 }}>{st}</td>
+            </tr>); })}
+          {!abertas.length && <tr><td colSpan={8} style={{ padding: 24, color: 'var(--fg3)' }}>Nenhuma OP em produção.</td></tr>}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /* ---------------- Kanban e lista ---------------- */
 function MESKanban({ ctx }) {
-  const { linhas, etapas } = ctx;
+  const { etapas } = ctx;
+  const [busca, setBusca] = React.useState('');
+  const [ff, setFf] = React.useState('todas');
+  const linhas = ctx.linhas.filter(l => {
+    const q = busca.trim().toLowerCase();
+    if (q && !`${l.op.numero} ${l.op.cliente || ''} ${l.op.titulo || ''} ${l.op.produto || ''}`.toLowerCase().includes(q)) return false;
+    return ff === 'todas' || (ff === 'atrasadas' && mesAtrasada(l)) || (ff === 'bloqueadas' && ctx.bloqueadas[l.ordem_id]) || (ff === 'retrabalho' && ctx.ncAbertas[l.ordem_id]);
+  });
   const macroDe = (cod) => cod === 'AGUARDANDO' ? 'Aguardando' : (etapas.find(e => e.codigo === cod) || {}).macro;
   const cols = ['Aguardando', ...MES_MACROS];
-  return (
+  return (<>
+    <div style={{ display: 'flex', gap: 8, marginBottom: 10, flexWrap: 'wrap' }}>
+      <input className="input" placeholder="Buscar OP, cliente ou quadro" value={busca} onChange={e => setBusca(e.target.value)} style={{ minWidth: 240 }}/>
+      {[['todas', 'Todas'], ['atrasadas', 'Atrasadas'], ['bloqueadas', 'Bloqueadas'], ['retrabalho', 'Retrabalho']].map(([k, r]) => <button key={k} className={'btn btn--sm' + (ff === k ? ' btn--primary' : '')} onClick={() => setFf(k)}>{r}</button>)}
+    </div>
     <div style={{ display: 'grid', gridTemplateColumns: `repeat(${cols.length}, minmax(190px, 1fr))`, gap: 10, overflowX: 'auto' }}>
       {cols.map(c => {
         const cards = linhas.filter(l => l.etapa_atual !== 'EXPEDIDO' && macroDe(l.etapa_atual) === c);
@@ -694,7 +785,7 @@ function MESKanban({ ctx }) {
         );
       })}
     </div>
-  );
+  </>);
 }
 
 function MESOrdens({ ctx }) {
@@ -720,28 +811,32 @@ function MESOrdens({ ctx }) {
 
 function MESPage() {
   const sb = window.__VP_SB && window.__VP_SB.sb;
-  const [aba, setAba] = window.useRouteTab('mes', 'kanban', ['kanban', 'ordens', 'apontamentos'], false, true);
+  const [aba, setAba] = window.useRouteTab('mes', 'kanban', ['kanban', 'painel', 'ordens', 'apontamentos', 'tv'], false, true);
   const [opId, setOpId] = window.useRotaItem('mes', aba);
   const [etapas, setEtapas] = React.useState(null);
   const [linhas, setLinhas] = React.useState(null);
   const [erro, setErro] = React.useState(null);
   const [bloqueadas, setBloqueadas] = React.useState({});
   const [ncAbertas, setNcAbertas] = React.useState({});
+  const [ncTodas, setNcTodas] = React.useState([]);
+  const [operadores, setOperadores] = React.useState({});
   const [liberar, setLiberar] = React.useState(false);
   const [podeEditar, setPodeEditar] = React.useState(false);
 
   const recarregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase indisponível.'); return; }
-    const [e, m, bq, nq] = await Promise.all([
+    const [e, m, bq, nq, ox] = await Promise.all([
       sb.from('mes_etapas').select('*').order('sequencia'),
       sb.from('mes_ordens').select('*, op:pcp_ordens(numero, titulo, produto, cliente, prazo_entrega)').order('liberada_em', { ascending: false }).limit(500),
       sb.from('mes_bloqueios').select('ordem_id').is('fim', null).limit(1000),
-      sb.from('mes_nc').select('ordem_id').neq('status', 'fechada').limit(1000),
+      sb.from('mes_nc').select('ordem_id, status').limit(5000),
+      sb.from('mes_execucoes').select('ordem_id, operador').eq('status', 'em_andamento').limit(1000),
     ]);
     if (e.error || m.error) { setErro((e.error || m.error).message); return; }
     setEtapas(e.data || []); setLinhas(m.data || []);
     const b = {}; (bq.data || []).forEach(x => { b[x.ordem_id] = true; }); setBloqueadas(b);
-    const n = {}; (nq.data || []).forEach(x => { n[x.ordem_id] = true; }); setNcAbertas(n);
+    const n = {}; (nq.data || []).forEach(x => { if (x.status !== 'fechada') n[x.ordem_id] = true; }); setNcAbertas(n); setNcTodas(nq.data || []);
+    const o = {}; (ox.data || []).forEach(x => { o[x.ordem_id] = x.operador; }); setOperadores(o);
   }, [sb]);
   React.useEffect(() => {
     recarregar();
@@ -750,7 +845,7 @@ function MESPage() {
     return () => clearInterval(t);
   }, [recarregar]);
 
-  const ctx = etapas && linhas && { sb, etapas, linhas, bloqueadas, ncAbertas, podeEditar, recarregar, abrir: (id) => setOpId(id) };
+  const ctx = etapas && linhas && { sb, etapas, linhas, bloqueadas, ncAbertas, ncTodas, operadores, podeEditar, recarregar, abrir: (id) => setOpId(id) };
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -763,8 +858,10 @@ function MESPage() {
       {!opId && (
         <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           <button className={'btn btn--sm' + (aba === 'kanban' ? ' btn--primary' : '')} onClick={() => setAba('kanban')}>Kanban</button>
+          <button className={'btn btn--sm' + (aba === 'painel' ? ' btn--primary' : '')} onClick={() => setAba('painel')}>Painel</button>
           <button className={'btn btn--sm' + (aba === 'ordens' ? ' btn--primary' : '')} onClick={() => setAba('ordens')}>Ordens de Produção</button>
           <button className={'btn btn--sm' + (aba === 'apontamentos' ? ' btn--primary' : '')} onClick={() => setAba('apontamentos')}>Apontamentos</button>
+          <button className={'btn btn--sm' + (aba === 'tv' ? ' btn--primary' : '')} onClick={() => setAba('tv')}>Painel TV</button>
           <span style={{ flex: 1 }}/>
           <button className="btn btn--sm btn--primary" disabled={!podeEditar} onClick={() => setLiberar(true)}>Liberar OP para o MES</button>
         </div>
@@ -773,6 +870,8 @@ function MESPage() {
       {!erro && !ctx && <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>}
       {ctx && opId && <MESDetalhe ctx={ctx} id={opId} onVoltar={() => setOpId(null)}/>}
       {ctx && !opId && aba === 'kanban' && <MESKanban ctx={ctx}/>}
+      {ctx && !opId && aba === 'painel' && <MESPainel ctx={ctx}/>}
+      {ctx && !opId && aba === 'tv' && <MESTv ctx={ctx}/>}
       {ctx && !opId && aba === 'ordens' && <MESOrdens ctx={ctx}/>}
       {ctx && !opId && aba === 'apontamentos' && <MESApontamentos ctx={ctx}/>}
       {ctx && liberar && <MESLiberar ctx={ctx} onFechar={() => setLiberar(false)}/>}
