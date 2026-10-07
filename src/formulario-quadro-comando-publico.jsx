@@ -29,12 +29,12 @@
      sem imagem nenhuma. */
   const ICONS_BASE = 'https://jxtqwzmpgofwctqajewt.supabase.co/storage/v1/object/public/engenharia/formulario-quadro-comando-publico/icones';
   const STEP_ICON_SRC = {
-    boasVindas: null,
+    boasVindas: `${ICONS_BASE}/boasvindas.webp`,
     identificacao: `${ICONS_BASE}/identificacao.webp`,
-    quadro: null,
+    quadro: `${ICONS_BASE}/quadro.webp`,
     porta: `${ICONS_BASE}/porta.webp`,
     acessorios: `${ICONS_BASE}/acessorios.webp`,
-    fiacao: null,
+    fiacao: `${ICONS_BASE}/fiacao.webp`,
     revisao: `${ICONS_BASE}/revisao.webp`,
   };
 
