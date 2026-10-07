@@ -271,6 +271,7 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
   const store = window.TratativasStore;
   const [msgs, setMsgs] = React.useState([]);
   const [emails, setEmails] = React.useState([]);
+  const [hist, setHist] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [texto, setTexto] = React.useState("");
   const [anexos, setAnexos] = React.useState([]);
@@ -282,11 +283,12 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
 
   const reload = React.useCallback(async (silencioso) => {
     if (!silencioso) setLoading(true);
-    const [m, e] = await Promise.all([
+    const [m, e, h] = await Promise.all([
       store.listarPorCotacao(cotacaoFornecedorId),
       store.listarEmails({ cotacaoFornecedorId, numeroCotacao, formularioId }),
+      store.listarHistoricoInterno({ cotacaoFornecedorId, numeroCotacao }),
     ]);
-    setMsgs(m); setEmails(e); setLoading(false);
+    setMsgs(m); setEmails(e); setHist(h); setLoading(false);
   }, [cotacaoFornecedorId, numeroCotacao, formularioId]);
   React.useEffect(() => { reload(); }, [reload]);
   // E-mail novo chega pelo Inbox (cron a cada 10 min) → atualiza sozinho sem piscar a tela.
@@ -328,20 +330,24 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
     const lista = [];
     msgs.forEach(m => lista.push({ k: 'msg:' + m.id, tipo: 'msg', quando: m.created_at, m }));
     emails.forEach(e => lista.push({ k: 'em:' + e.id, tipo: 'email', quando: e.data_mensagem, e }));
+    // Histórico interno (preço, decisões, eventos com QUEM fez) — vem do vp_logs/eventos_fluxo/decisoes_gerenciais.
+    hist.forEach(h => lista.push({ k: h.k, tipo: 'hist', quando: h.quando, h }));
     if (cot) {
+      // Eventos "de calendário" da própria cotação só entram quando o histórico não tem o equivalente (cotação antiga).
+      const temEvento = (re) => hist.some(h => h.tipo === 'evento' && re.test(h.titulo || ''));
       const canal = cot.channel === 'email' ? 'por e-mail' : cot.channel === 'whatsapp' ? 'por WhatsApp' : cot.channel === 'link' ? 'por link' : '';
-      if (cot.sent_at) lista.push({ k: 'ev:sent', tipo: 'evento', quando: cot.sent_at, txt: 'Cotação enviada ao fornecedor' + (canal ? ' ' + canal : '') });
+      if (cot.sent_at && !temEvento(/enviada/i)) lista.push({ k: 'ev:sent', tipo: 'evento', quando: cot.sent_at, txt: 'Cotação enviada ao fornecedor' + (canal ? ' ' + canal : '') });
       if (cot.viewed_at) lista.push({ k: 'ev:viewed', tipo: 'evento', quando: cot.viewed_at, txt: 'Fornecedor abriu a cotação' });
-      if (cot.responded_at) lista.push({ k: 'ev:resp', tipo: 'evento', quando: cot.responded_at, txt: 'Fornecedor respondeu pelo formulário do link' });
+      if (cot.responded_at && !temEvento(/respondeu/i)) lista.push({ k: 'ev:resp', tipo: 'evento', quando: cot.responded_at, txt: 'Fornecedor respondeu pelo formulário do link' });
     }
     return lista.filter(i => i.quando).sort((a, b) => new Date(a.quando) - new Date(b.quando));
-  }, [msgs, emails, cot]);
+  }, [msgs, emails, hist, cot]);
 
   if (loading) return <div style={{ textAlign: "center", padding: "40px 0", color: "var(--fg3)", fontSize: 13 }}>Carregando…</div>;
 
   const nomeEmail = (e) => (e.direcao === 'entrada' ? (e.de_nome || e.de_email || 'Fornecedor') : 'VerticalParts');
   return (
-    <Card title="Tratativas" sub="Histórico único da conversa com o fornecedor: o que você escreve aqui sai por e-mail (e fica no Inbox), e o que chega no Inbox ligado a esta cotação aparece aqui. Responda direto aqui.">
+    <Card title="Tratativas" sub="Histórico único desta cotação com o fornecedor: mensagens (saem por e-mail e ficam no Inbox), e-mails do Inbox ligados a ela, mudanças de preço, decisões internas e eventos — tudo em ordem de data. Responda direto aqui.">
       <div className="stack" style={{ gap: 10, maxHeight: 520, overflowY: "auto", padding: "4px 2px" }}>
         {itens.length === 0 && <div className="muted small" style={{ padding: "16px 0", textAlign: "center" }}>Nenhuma mensagem ainda.</div>}
         {itens.map(it => {
@@ -349,6 +355,26 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
             return (
               <div key={it.k} className="row sb muted small" style={{ padding: "2px 6px", borderLeft: "3px solid var(--border)" }}>
                 <span>{it.txt}</span><span className="mono">{fmtTimestamp(it.quando)}</span>
+              </div>
+            );
+          }
+          if (it.tipo === 'hist') {
+            const h = it.h;
+            const cor = h.tipo === 'preco' ? '#b45309' : h.tipo === 'decisao' ? '#7c3aed' : 'var(--border)';
+            const rotulo = h.tipo === 'preco' ? 'Preço' : h.tipo === 'decisao' ? 'Decisão' : h.tipo === 'evento' ? 'Evento' : 'Registro';
+            return (
+              <div key={it.k} style={{ padding: "4px 8px", borderLeft: "3px solid " + cor, background: h.tipo === 'preco' || h.tipo === 'decisao' ? "var(--bg2, #fafafa)" : "transparent" }}>
+                <div className="row sb" style={{ gap: 6, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12.5 }}>
+                    <span className="badge" style={{ fontSize: 10, marginRight: 6 }}>{rotulo}</span>
+                    <b>{h.titulo}</b>{h.quem ? <span className="muted"> · {h.quem}</span> : null}
+                  </span>
+                  <span className="muted small mono">{fmtTimestamp(h.quando)}</span>
+                </div>
+                {h.linhas && h.linhas.length > 0 && (
+                  <ul style={{ margin: "4px 0 0 18px", padding: 0, fontSize: 12.5 }}>{h.linhas.map((l, i) => <li key={i}>{l}</li>)}</ul>
+                )}
+                {h.detalhe && <div className="muted small" style={{ marginTop: 2, whiteSpace: "pre-wrap" }}>Motivo: {h.detalhe}</div>}
               </div>
             );
           }

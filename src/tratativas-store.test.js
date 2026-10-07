@@ -113,3 +113,47 @@ test('enviar: sem nenhum e-mail, a mensagem fica registrada e o aviso diz que o 
   assert.equal(r.__email.ok, false);
   assert.equal(invokes.length, 0);
 });
+
+// ---------- Histórico interno (preço, decisões, eventos) ----------
+test('listarHistoricoInterno: junta preço (vp_logs), eventos com quem fez, decisões de compra; não mistura outro fornecedor', async () => {
+  const t = base();
+  t.vp_logs = [
+    { id: 'l1', ator_nome: 'Glarie', acao: 'Fornecedor informou os preços', alvo_id: COT, criado_em: '2026-09-12T15:30:00Z', detalhe: { moeda: 'USD', itens: [{ nome: 'VPEL-EL0955-1 (preço unitário)', antes: null, depois: 10600 }] } },
+    { id: 'l2', ator_nome: 'Glarie', acao: 'Preço do fornecedor atualizado', alvo_id: COT, criado_em: '2026-09-13T10:00:00Z', detalhe: { moeda: 'USD', itens: [{ nome: 'VPEL-EL0955-1 (preço unitário)', antes: 10600, depois: 9860 }] } },
+    { id: 'l3', ator_nome: 'Glarie', acao: 'respondeu a cotação de fornecedor', alvo_id: COT, criado_em: '2026-09-12T15:30:50Z', detalhe: {} },
+    { id: 'l4', ator_nome: 'X', acao: 'outra cotação', alvo_id: 'cot-2', criado_em: '2026-09-13T10:00:00Z' },
+  ];
+  t.eventos_fluxo = [
+    { id: 'e1', evento: 'Cotação enviada ao fornecedor', ator_nome: 'Vagner', alvo_id: COT, alvo_label: 'Glarie · VPEL-EL0955', numero_cotacao: 955, created_at: '2026-09-11T19:00:00Z' },
+    { id: 'e2', evento: 'Financeiro deu o aval pra vender', ator_nome: 'Juliana', alvo_id: 'av-1', alvo_label: 'AKAI', numero_cotacao: 955, created_at: '2026-10-06T17:55:00Z' },
+    { id: 'e3', evento: 'Compra ao fornecedor iniciada', ator_nome: 'Vagner', alvo_id: 'cot-2', alvo_label: 'Outro · VPEL-EL0955-B', numero_cotacao: 955, created_at: '2026-10-07T10:00:00Z' },
+    { id: 'e4', evento: 'Proposta enviada ao cliente', ator_nome: 'Gelson', alvo_id: 'p-1', alvo_label: 'AKAI', numero_cotacao: 955, created_at: '2026-09-28T20:00:00Z' },
+  ];
+  t.decisoes_gerenciais = [
+    { id: 'd1', tipo: 'compra_equipamento_ceo', numero_cotacao: 955, status: 'aprovada', decidido_por: 'diego@x.com', decidido_em: '2026-10-02T12:00:00Z', motivo: 'ok, margem 25%', criado_em: '2026-09-29T18:00:00Z', solicitado_por: null },
+    { id: 'd2', tipo: 'envio_proposta_gestor', numero_cotacao: 955, status: 'aprovada', decidido_em: '2026-09-28T10:00:00Z', criado_em: '2026-09-28T09:00:00Z' },
+  ];
+  const { store } = carrega(t);
+  const r = plain(await store.listarHistoricoInterno({ cotacaoFornecedorId: COT, numeroCotacao: 955 }));
+  const chaves = r.map((i) => i.k).sort();
+  assert.deepEqual(chaves, ['dec:d1:c', 'dec:d1:d', 'evf:e1', 'evn:e2', 'log:l1', 'log:l2']);
+  const l2 = r.find((i) => i.k === 'log:l2');
+  assert.equal(l2.tipo, 'preco');
+  assert.match(l2.linhas[0], /US\$\s*10\.600,00\s*→\s*US\$\s*9\.860,00/);
+  assert.equal(r.find((i) => i.k === 'dec:d1:d').detalhe, 'ok, margem 25%');
+});
+
+test('CotacaoElevadorFornecedorStore.diffPrecos: 1ª vez, mudança, igual (sem registro) e frete', () => {
+  const srcCot = fs.readFileSync(path.join(__dirname, 'cotacao-elevador-fornecedor-store.js'), 'utf8');
+  const win = { location: { origin: 'https://x.test' } };
+  vm.runInNewContext(srcCot, { window: win, console, navigator: { userAgent: 'x' }, document: {}, localStorage: { getItem: () => null }, sessionStorage: { getItem: () => null }, fetch: async () => ({ json: async () => ({}) }) });
+  const { diffPrecos } = win.CotacaoElevadorFornecedorStore;
+  const r1 = { itens: [{ unidade_identificador: 'U-1', preco_unitario: 10600 }] };
+  const r2 = { itens: [{ unidade_identificador: 'U-1', preco_unitario: 9860 }], frete_internacional_usd: '1200' };
+  const a = plain(diffPrecos(null, r1));
+  assert.equal(a.primeira, true); assert.equal(a.itens[0].depois, 10600);
+  const b = plain(diffPrecos(r1, r2));
+  assert.equal(b.primeira, false);
+  assert.deepEqual(b.itens.map((i) => [i.nome, i.antes, i.depois]), [['U-1 (preço unitário)', 10600, 9860], ['Frete internacional (US$)', null, 1200]]);
+  assert.deepEqual(plain(diffPrecos(r1, r1)).itens, []);
+});
