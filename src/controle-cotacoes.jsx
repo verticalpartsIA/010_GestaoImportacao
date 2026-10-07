@@ -76,6 +76,8 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
   const [refreshing, setRefreshing] = React.useState(false);
   const [cadeiaDe, setCadeiaDe] = React.useState(null);
   const [abrindo, setAbrindo] = React.useState(null);
+  const [abrindoTrat, setAbrindoTrat] = React.useState(null);
+  const [escolherForn, setEscolherForn] = React.useState(null);
 
   const carregar = React.useCallback(async () => {
     setRefreshing(true);
@@ -113,6 +115,32 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
       window.toast?.('Erro ao abrir Formulário: ' + e.message, 'error');
     } finally {
       setAbrindo(null);
+    }
+  };
+
+  /* Tratativas com o fornecedor: leva à aba Tratativas da cotação a fornecedor
+     (/comercial/cotacao-fornecedor-detail/<id>/tratativas). Com mais de um
+     fornecedor na cotação, pergunta de qual. */
+  const irParaTratativas = (cot) => {
+    const caminho = '/comercial/cotacao-fornecedor-detail/' + cot.id + '/tratativas';
+    try { window.history.pushState({}, '', caminho); window.dispatchEvent(new PopStateEvent('popstate')); }
+    catch (e) { window.location.assign(caminho); }
+  };
+  const abrirTratativas = async (r) => {
+    setAbrindoTrat(r.id);
+    try {
+      const lista = await window.CotacaoElevadorFornecedorStore.listarPorFormulario(r.id);
+      if (!lista || lista.length === 0) {
+        window.toast?.('Esta cotação ainda não foi enviada a nenhum fornecedor — não há tratativas.', 'warning');
+      } else if (lista.length === 1) {
+        irParaTratativas(lista[0]);
+      } else {
+        setEscolherForn({ numero: r.numero_cotacao, lista });
+      }
+    } catch (e) {
+      window.toast?.('Erro ao abrir tratativas: ' + e.message, 'error');
+    } finally {
+      setAbrindoTrat(null);
     }
   };
 
@@ -176,7 +204,7 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
             <th style={{ width: 60 }}>UF</th>
             <th style={{ width: 110 }}>Status</th>
             <th style={{ width: 90 }}>Origem</th>
-            <th style={{ width: 150 }}></th>
+            <th style={{ width: 290 }}></th>
           </tr></thead>
           <tbody>
             {rows === null && (
@@ -199,7 +227,13 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
                   <td>{r.estado_instalacao || <span className="muted">—</span>}</td>
                   <td><CcStatusChip status={r.status}/></td>
                   <td className="small" style={{ color: 'var(--fg2)' }}>{r.origem === 'historico' ? 'Planilha' : 'Formulário'}</td>
-                  <td onClick={(e) => e.stopPropagation()}>
+                  <td onClick={(e) => e.stopPropagation()} style={{ whiteSpace: 'nowrap' }}>
+                    {r.origem === 'formulario' && (
+                      <Button variant="outline" size="sm" icon="message" disabled={abrindoTrat === r.id}
+                        onClick={() => abrirTratativas(r)} style={{ marginRight: 6 }}>
+                        {abrindoTrat === r.id ? 'Abrindo…' : 'Tratativas'}
+                      </Button>
+                    )}
                     <Button variant="outline" size="sm" icon="ruler" disabled={abrindo === r.id}
                       onClick={() => abrirNoFormulario(r)}>
                       {abrindo === r.id ? 'Abrindo…' : 'Abrir no Formulário'}
@@ -211,6 +245,18 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
           </tbody>
         </table>
       </div>
+      {escolherForn && (
+        <Modal title={`Tratativas — Cotação Nº ${escolherForn.numero}`} onClose={() => setEscolherForn(null)} width={460}>
+          <p style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 0 }}>Esta cotação foi enviada a mais de um fornecedor. Escolha com qual abrir as tratativas:</p>
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+            {escolherForn.lista.map((c) => (
+              <Button key={c.id} variant="outline" onClick={() => { setEscolherForn(null); irParaTratativas(c); }}>
+                {c.fornecedor || c.recipient?.nome || c.numero_documento || 'Fornecedor'}{c.status ? ` · ${c.status}` : ''}
+              </Button>
+            ))}
+          </div>
+        </Modal>
+      )}
       {cadeiaDe != null && (
         <ModalCadeiaCotacao numeroCotacao={cadeiaDe} setRoute={setRoute} setSubsel={setSubsel} onClose={() => setCadeiaDe(null)}/>
       )}
