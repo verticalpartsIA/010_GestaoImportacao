@@ -1513,7 +1513,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       }
       setUnidades(unidadesSalvas);
       if (novoStatus) await window.FormularioElevadorStore.enviar(currentId);
-      window.toast?.(novoStatus ? 'Formulário enviado!' : 'Rascunho salvo.', 'success');
+      window.toast?.(novoStatus ? 'Formulário devolvido para a VerticalParts!' : 'Rascunho salvo.', 'success');
       if (novoStatus && avisoSemFornecedor) window.toast?.(avisoSemFornecedor, 'warning');
       onSaved?.(currentId);
       return currentId;
@@ -1690,9 +1690,15 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         </div>
       )}
       <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        {/* Link do cliente: um único botão, que devolve o formulário preenchido
+            pra VerticalParts conferir (não vai pra cotação sozinho, nem tem
+            rascunho). Dentro do sistema não existe mais "Enviar para Cotação":
+            o vendedor segue pelos botões de baixo (RFQ a fornecedores, envio
+            direto pra Precificação, Controle de Cotações). */}
         <div className="row gap-2">
-          <Button variant="outline" onClick={() => salvarTudo(null)} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>
-          <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Enviar para Cotação'}</Button>
+          {publicMode
+            ? <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Devolver para a VerticalParts'}</Button>
+            : <Button variant="outline" onClick={() => salvarTudo(null)} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>}
         </div>
       </div>
 
