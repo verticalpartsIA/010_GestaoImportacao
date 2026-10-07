@@ -533,7 +533,7 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
                   )}
                   {podeConfirmarAval && (
                     <Button size="sm" variant="primary" icon="check"
-                      onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval</Button>
+                      title="Libera a compra ao fornecedor (junto com o Aval Jurídico). Não é o aval de venda/score." onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval de Pagamento</Button>
                   )}
                 </div>
                 {cemiterio && (
