@@ -39,7 +39,7 @@
     'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias-envio', 'vistorias', 'instalacao',
     'art', 'cronograma', 'databook', 'handover',
     'rh-homologacao',
-    'almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'relatorios-pcp', 'expedicao', 'emissao-nf',
+    'almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'mes', 'relatorios-pcp', 'expedicao', 'emissao-nf',
     'logs', 'configuracoes', 'comissoes', 'pagamentos-instalador',
   ];
   const KNOWN_ROUTES_SET = new Set(KNOWN_ROUTES);
