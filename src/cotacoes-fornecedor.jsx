@@ -252,56 +252,50 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
   );
 }
 
-/* ---------- Tratativas: histórico de conversa/negociação da cotação,
-   substitui o e-mail — thread único, correlacionado pelo Nº da Cotação.
-
-   01/10 — a sub mentia um pouco: "fica registrado aqui, não em e-mail"
-   deixava de propósito foi escrito antes de existir qualquer envio por
-   e-mail, mas desde que o aviso por e-mail (tratativas-store.js) passou
-   a existir, essa frase é enganosa — tem e-mail envolvido, e se o
-   fornecedor RESPONDER esse e-mail (em vez de esperar a VerticalParts
-   escrever de novo aqui), a resposta vai pro Inbox de E-mail (tabela
-   emails_projeto), não pra esta lista (tabela tratativas_cotacao) —
-   são tabelas/telas diferentes, sem sincronização entre si. Texto e o
-   badge abaixo existem só pra deixar isso visível pra quem usa a tela,
-   sem mudar nenhuma lógica de envio/vínculo. */
-function CfTratativasEmailRespondidoBadge({ cotacaoFornecedorId }) {
-  const [temResposta, setTemResposta] = React.useState(false);
-  React.useEffect(() => {
-    let cancelado = false;
-    setTemResposta(false);
-    const sb = window.__VP_SB && window.__VP_SB.sb;
-    if (!sb || !cotacaoFornecedorId) return;
-    sb.from('emails_projeto').select('id', { count: 'exact', head: true })
-      .eq('direcao', 'entrada').is('excluido_em', null)
-      .eq('referencia_id', String(cotacaoFornecedorId))
-      .then(({ count }) => { if (!cancelado) setTemResposta((count || 0) > 0); })
-      .catch(() => { if (!cancelado) setTemResposta(false); });
-    return () => { cancelado = true; };
-  }, [cotacaoFornecedorId]);
-  if (!temResposta) return null;
-  return (
-    <span className="badge badge--info" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
-      title="Existe e-mail recebido vinculado a esta cotação/fornecedor — veja em Geral → Inbox">
-      <Icon.mail size={10}/> Fornecedor também respondeu por e-mail — ver no Inbox
-    </span>
-  );
+/* ---------- Tratativas: histórico ÚNICO da conversa com o fornecedor desta cotação.
+   07/10 — MÃO DUPLA com o Inbox (Geral → Inbox):
+   • SAÍDA: cada mensagem escrita aqui é gravada em tratativas_cotacao E enviada por e-mail ao
+     fornecedor (send-email), ficando também no Inbox (Enviados, rótulo "Tratativa").
+   • ENTRADA: o que chega no Inbox ligado a esta cotação (resposta do fornecedor, e-mails
+     enviados/respondidos pelo Inbox) aparece aqui, na ordem do tempo, ao lado das mensagens.
+   • Eventos da própria cotação (enviada, visualizada, respondida pelo formulário) entram na
+     mesma linha do tempo. Tudo só leitura, exceto as mensagens novas escritas aqui.
+   A tabela das mensagens (tratativas_cotacao) e a do Inbox (emails_projeto) continuam separadas;
+   a ligação é a referencia_id (= id desta cotação) e, quando só há 1 fornecedor, o Nº da cotação.
+   Nunca se mistura e-mail de outro fornecedor nem do cliente (regra em TratativasStore.listarEmails). */
+function irParaRota(caminho) {
+  try { window.history.pushState({}, '', caminho); window.dispatchEvent(new PopStateEvent('popstate')); } catch (e) { window.location.assign(caminho); }
 }
 
-function CfTratativas({ cotacaoFornecedorId, numeroCotacao }) {
+function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
   const store = window.TratativasStore;
   const [msgs, setMsgs] = React.useState([]);
+  const [emails, setEmails] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [texto, setTexto] = React.useState("");
   const [anexos, setAnexos] = React.useState([]);
   const [enviando, setEnviando] = React.useState(false);
   const [uploading, setUploading] = React.useState(false);
+  const [aberto, setAberto] = React.useState({});
+  const [aviso, setAviso] = React.useState(null);
+  const formularioId = cot && cot.formulario_elevador_id;
 
-  const reload = React.useCallback(() => {
-    setLoading(true);
-    return store.listarPorCotacao(cotacaoFornecedorId).then(data => { setMsgs(data); setLoading(false); });
-  }, [cotacaoFornecedorId]);
+  const reload = React.useCallback(async (silencioso) => {
+    if (!silencioso) setLoading(true);
+    const [m, e] = await Promise.all([
+      store.listarPorCotacao(cotacaoFornecedorId),
+      store.listarEmails({ cotacaoFornecedorId, numeroCotacao, formularioId }),
+    ]);
+    setMsgs(m); setEmails(e); setLoading(false);
+  }, [cotacaoFornecedorId, numeroCotacao, formularioId]);
   React.useEffect(() => { reload(); }, [reload]);
+  // E-mail novo chega pelo Inbox (cron a cada 10 min) → atualiza sozinho sem piscar a tela.
+  React.useEffect(() => {
+    const t = setInterval(() => { if (!document.hidden) reload(true); }, 60000);
+    const onVis = () => { if (!document.hidden) reload(true); };
+    document.addEventListener('visibilitychange', onVis);
+    return () => { clearInterval(t); document.removeEventListener('visibilitychange', onVis); };
+  }, [reload]);
 
   const onFiles = async (fileList) => {
     const files = Array.from(fileList || []);
@@ -319,45 +313,100 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao }) {
   const enviar = async () => {
     setEnviando(true);
     try {
-      await store.enviar({ cotacaoFornecedorId, numeroCotacao, mensagem: texto, anexos });
+      const r = await store.enviar({ cotacaoFornecedorId, numeroCotacao, mensagem: texto, anexos });
       setTexto(""); setAnexos([]);
-      await reload();
+      const em = r && r.__email;
+      if (em && em.ok) setAviso({ ok: true, txt: 'Registrado e enviado por e-mail para ' + em.para.join(', ') + '. A resposta dele chega aqui e no Inbox.' });
+      else setAviso({ ok: false, txt: 'Mensagem registrada, mas o e-mail NÃO foi enviado' + (em && em.motivo ? ': ' + em.motivo : '.') + ' Avise o fornecedor por outro canal.' });
+      await reload(true);
     } catch (e) { window.toast("Erro: " + e.message, "error"); }
     setEnviando(false);
   };
 
+  // Linha do tempo única: mensagens + e-mails do Inbox + eventos da cotação.
+  const itens = React.useMemo(() => {
+    const lista = [];
+    msgs.forEach(m => lista.push({ k: 'msg:' + m.id, tipo: 'msg', quando: m.created_at, m }));
+    emails.forEach(e => lista.push({ k: 'em:' + e.id, tipo: 'email', quando: e.data_mensagem, e }));
+    if (cot) {
+      const canal = cot.channel === 'email' ? 'por e-mail' : cot.channel === 'whatsapp' ? 'por WhatsApp' : cot.channel === 'link' ? 'por link' : '';
+      if (cot.sent_at) lista.push({ k: 'ev:sent', tipo: 'evento', quando: cot.sent_at, txt: 'Cotação enviada ao fornecedor' + (canal ? ' ' + canal : '') });
+      if (cot.viewed_at) lista.push({ k: 'ev:viewed', tipo: 'evento', quando: cot.viewed_at, txt: 'Fornecedor abriu a cotação' });
+      if (cot.responded_at) lista.push({ k: 'ev:resp', tipo: 'evento', quando: cot.responded_at, txt: 'Fornecedor respondeu pelo formulário do link' });
+    }
+    return lista.filter(i => i.quando).sort((a, b) => new Date(a.quando) - new Date(b.quando));
+  }, [msgs, emails, cot]);
+
   if (loading) return <div style={{ textAlign: "center", padding: "40px 0", color: "var(--fg3)", fontSize: 13 }}>Carregando…</div>;
 
+  const nomeEmail = (e) => (e.direcao === 'entrada' ? (e.de_nome || e.de_email || 'Fornecedor') : 'VerticalParts');
   return (
-    <Card title="Tratativas" sub="Histórico de negociação com o fornecedor. Cada mensagem aqui dispara um aviso por e-mail ao fornecedor — se ele RESPONDER esse e-mail (em vez de esperar você escrever de novo aqui), a resposta aparece no Inbox de E-mail (Geral → Inbox), não nesta lista.">
-      <div className="row" style={{ marginBottom: 8 }}>
-        <CfTratativasEmailRespondidoBadge cotacaoFornecedorId={cotacaoFornecedorId}/>
-      </div>
-      <div className="stack" style={{ gap: 10, maxHeight: 420, overflowY: "auto", padding: "4px 2px" }}>
-        {msgs.length === 0 && <div className="muted small" style={{ padding: "16px 0", textAlign: "center" }}>Nenhuma mensagem ainda.</div>}
-        {msgs.map(m => (
-          <div key={m.id} style={{ border: "1px solid var(--border)", padding: "8px 10px", borderRadius: 4 }}>
-            <div className="row sb" style={{ marginBottom: 4 }}>
-              <b style={{ fontSize: 12 }}>{m.autor}</b>
-              <span className="muted small mono">{fmtTimestamp(m.created_at)}</span>
-            </div>
-            {m.mensagem && <div style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>{m.mensagem}</div>}
-            {(m.anexos || []).length > 0 && (
-              <div className="row gap-2" style={{ flexWrap: "wrap", marginTop: 6 }}>
-                {m.anexos.map((a, i) => (
-                  <a key={i} href={a.url} target="_blank" rel="noreferrer" className="row gap-2"
-                    style={{ border: "1px solid var(--border)", padding: "4px 8px", fontSize: 12, alignItems: "center" }}>
-                    <Icon.fileText size={13}/>{a.nome}
-                  </a>
-                ))}
+    <Card title="Tratativas" sub="Histórico único da conversa com o fornecedor: o que você escreve aqui sai por e-mail (e fica no Inbox), e o que chega no Inbox ligado a esta cotação aparece aqui. Responda direto aqui.">
+      <div className="stack" style={{ gap: 10, maxHeight: 520, overflowY: "auto", padding: "4px 2px" }}>
+        {itens.length === 0 && <div className="muted small" style={{ padding: "16px 0", textAlign: "center" }}>Nenhuma mensagem ainda.</div>}
+        {itens.map(it => {
+          if (it.tipo === 'evento') {
+            return (
+              <div key={it.k} className="row sb muted small" style={{ padding: "2px 6px", borderLeft: "3px solid var(--border)" }}>
+                <span>{it.txt}</span><span className="mono">{fmtTimestamp(it.quando)}</span>
               </div>
-            )}
-          </div>
-        ))}
+            );
+          }
+          if (it.tipo === 'email') {
+            const e = it.e; const entrada = e.direcao === 'entrada'; const open = !!aberto[e.id];
+            const corpo = String(e.corpo_texto || '').trim();
+            return (
+              <div key={it.k} style={{ border: "1px solid var(--border)", borderLeft: "3px solid " + (entrada ? "var(--vp-info, #2563eb)" : "var(--fg3)"), padding: "8px 10px", borderRadius: 4, background: entrada ? "var(--bg2, #f7f9ff)" : "transparent" }}>
+                <div className="row sb" style={{ marginBottom: 4, flexWrap: "wrap", gap: 6 }}>
+                  <span className="row gap-2" style={{ alignItems: "center" }}>
+                    <Icon.mail size={12}/>
+                    <b style={{ fontSize: 12 }}>{nomeEmail(e)}</b>
+                    <span className="badge badge--info" style={{ fontSize: 10 }}>{entrada ? 'E-mail recebido (Inbox)' : 'E-mail enviado (Inbox)'}</span>
+                  </span>
+                  <span className="muted small mono">{fmtTimestamp(e.data_mensagem)}</span>
+                </div>
+                <div style={{ fontSize: 12.5, fontWeight: 600 }}>{e.assunto || '(sem assunto)'}</div>
+                {corpo && <div style={{ fontSize: 13, whiteSpace: "pre-wrap", marginTop: 4 }}>{open || corpo.length <= 400 ? corpo : corpo.slice(0, 400) + '…'}</div>}
+                <div className="row gap-2" style={{ marginTop: 6 }}>
+                  {corpo.length > 400 && <button className="btn btn--ghost btn--sm" onClick={() => setAberto(a => ({ ...a, [e.id]: !open }))}>{open ? 'Mostrar menos' : 'Ler tudo'}</button>}
+                  <button className="btn btn--ghost btn--sm" onClick={() => irParaRota('/geral/inbox/' + e.id)}>Abrir no Inbox</button>
+                </div>
+              </div>
+            );
+          }
+          const m = it.m;
+          return (
+            <div key={it.k} style={{ border: "1px solid var(--border)", padding: "8px 10px", borderRadius: 4 }}>
+              <div className="row sb" style={{ marginBottom: 4 }}>
+                <span className="row gap-2" style={{ alignItems: "center" }}>
+                  <b style={{ fontSize: 12 }}>{m.autor}</b>
+                  <span className="badge" style={{ fontSize: 10 }}>Tratativa</span>
+                </span>
+                <span className="muted small mono">{fmtTimestamp(m.created_at)}</span>
+              </div>
+              {m.mensagem && <div style={{ fontSize: 13, whiteSpace: "pre-wrap" }}>{m.mensagem}</div>}
+              {(m.anexos || []).length > 0 && (
+                <div className="row gap-2" style={{ flexWrap: "wrap", marginTop: 6 }}>
+                  {m.anexos.map((a, i) => (
+                    <a key={i} href={a.url} target="_blank" rel="noreferrer" className="row gap-2"
+                      style={{ border: "1px solid var(--border)", padding: "4px 8px", fontSize: 12, alignItems: "center" }}>
+                      <Icon.fileText size={13}/>{a.nome}
+                    </a>
+                  ))}
+                </div>
+              )}
+            </div>
+          );
+        })}
       </div>
+      {aviso && (
+        <div style={{ marginTop: 10, padding: "8px 10px", fontSize: 12, border: "1px solid " + (aviso.ok ? "#86efac" : "#fbb039"), background: aviso.ok ? "#f0fdf4" : "#fff8e6", color: aviso.ok ? "#166534" : "#8a5a00" }}>
+          {aviso.ok ? '✓ ' : '⚠ '}{aviso.txt}
+        </div>
+      )}
       <div className="stack" style={{ gap: 6, marginTop: 12, borderTop: "1px solid var(--border)", paddingTop: 12 }}>
         <textarea className="input" rows={2} value={texto} onChange={e => setTexto(e.target.value)}
-          placeholder="Escreva uma mensagem para registrar o ajuste combinado…" style={{ resize: "vertical", fontFamily: "inherit" }}/>
+          placeholder="Escreva para o fornecedor — a mensagem fica registrada aqui e é enviada por e-mail…" style={{ resize: "vertical", fontFamily: "inherit" }}/>
         {anexos.length > 0 && (
           <div className="row gap-2" style={{ flexWrap: "wrap" }}>
             {anexos.map((a, i) => (
@@ -512,7 +561,7 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
       </>}
 
       {tab === 'tratativas' && (
-        <CfTratativas cotacaoFornecedorId={cot.id} numeroCotacao={cot.dados_envio?.header?.numero_cotacao ?? null}/>
+        <CfTratativas cotacaoFornecedorId={cot.id} cot={cot} numeroCotacao={cot.dados_envio?.header?.numero_cotacao ?? (window.MasterIdEngine?.parseNumeroCotacao?.(cot.numero_documento) ?? null)}/>
       )}
 
       {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}
