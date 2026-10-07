@@ -2,7 +2,7 @@
    mes.jsx — Logística Interna · MES (Sistema de Execução da Manufatura) · Fase 1.
    OP (reaproveita pcp_ordens, frente 'quadro') → Kanban por macroetapa → etapa com checklist obrigatório → histórico.
    A OP só avança por "Concluir etapa" (valida o checklist); histórico imutável em mes_historico.
-   Fases seguintes: apontamentos/materiais/bloqueios, fiação/testes/NC, embalagem/expedição/painel TV.
+   Fase 2: pausas (apontamento de tempo), bloqueios e materiais da OP. Próximas: fiação/testes/NC, embalagem/expedição/painel TV.
    ============================================================ */
 
 const MES_MACROS = ['Furação', 'Estrutura', 'Componentes', 'Fiação', 'Testes', 'Qualidade', 'Embalagem', 'Expedição'];
@@ -77,22 +77,38 @@ function MESLiberar({ ctx, onFechar }) {
 }
 
 /* ---------------- Detalhe da OP ---------------- */
+const MES_MOTIVOS_BLOQ = {
+  falta_material: 'Falta de material', erro_projeto: 'Erro de projeto', componente_incorreto: 'Componente incorreto',
+  aguardando_engenharia: 'Aguardando engenharia', aguardando_compras: 'Aguardando compras', aguardando_decisao: 'Aguardando decisão',
+  equipamento_danificado: 'Equipamento danificado', outro: 'Outro',
+};
+const MES_MOTIVOS_PAUSA = ['Intervalo', 'Falta de material', 'Aguardando engenharia', 'Troca de turno', 'Outro'];
+const MES_STATUS_MAT = { pendente: 'Pendente', separado: 'Separado', instalado: 'Instalado', substituido: 'Substituído', faltante: 'Faltante', avariado: 'Avariado' };
+
 function MESDetalhe({ ctx, id, onVoltar }) {
   const { sb, etapas, podeEditar } = ctx;
   const [d, setD] = React.useState(null);
   const [exec, setExec] = React.useState(null);
+  const [pausa, setPausa] = React.useState(null);
   const [itens, setItens] = React.useState([]);
   const [feitos, setFeitos] = React.useState({});
   const [hist, setHist] = React.useState([]);
+  const [bloqs, setBloqs] = React.useState([]);
+  const [mats, setMats] = React.useState([]);
+  const [sub, setSub] = React.useState('etapa');
   const [busy, setBusy] = React.useState(false);
   const [erro, setErro] = React.useState(null);
+  const [fPausa, setFPausa] = React.useState(null);   // { motivo, outro }
+  const [fBloq, setFBloq] = React.useState(null);     // { motivo, detalhe }
 
   const carregar = React.useCallback(async () => {
-    const [m, h] = await Promise.all([
+    const [m, h, bl, mt] = await Promise.all([
       sb.from('mes_ordens').select('*, op:pcp_ordens(numero, titulo, produto, cliente, prazo_entrega, quantidade, observacao)').eq('ordem_id', id).maybeSingle(),
       sb.from('mes_historico').select('*').eq('ordem_id', id).order('created_at', { ascending: false }).limit(200),
+      sb.from('mes_bloqueios').select('*').eq('ordem_id', id).order('inicio', { ascending: false }),
+      sb.from('pcp_ordem_materiais').select('*').eq('ordem_id', id).order('codigo'),
     ]);
-    setHist(h.data || []);
+    setHist(h.data || []); setBloqs(bl.data || []); setMats(mt.data || []);
     const mo = m.data; setD(mo);
     if (!mo) return;
     if (!['AGUARDANDO', 'EXPEDIDO'].includes(mo.etapa_atual)) {
@@ -102,20 +118,31 @@ function MESDetalhe({ ctx, id, onVoltar }) {
       ]);
       setExec(ex.data || null); setItens(it.data || []);
       if (ex.data) {
-        const r = await sb.from('mes_checklist_resultados').select('item_id, feito').eq('execucao_id', ex.data.id);
-        const f = {}; (r.data || []).forEach(x => { f[x.item_id] = x.feito; }); setFeitos(f);
-      } else setFeitos({});
-    } else { setExec(null); setItens([]); setFeitos({}); }
+        const [r, p] = await Promise.all([
+          sb.from('mes_checklist_resultados').select('item_id, feito').eq('execucao_id', ex.data.id),
+          sb.from('mes_pausas').select('*').eq('execucao_id', ex.data.id).is('fim', null).maybeSingle(),
+        ]);
+        const f = {}; (r.data || []).forEach(x => { f[x.item_id] = x.feito; }); setFeitos(f); setPausa(p.data || null);
+      } else { setFeitos({}); setPausa(null); }
+    } else { setExec(null); setItens([]); setFeitos({}); setPausa(null); }
   }, [sb, id]);
   React.useEffect(() => { carregar(); }, [carregar]);
 
+  const bloqAberto = bloqs.filter(b => !b.fim);
+  const bloqueada = bloqAberto.length > 0;
   const proxima = (cod) => {
     const ativas = etapas.filter(e => e.ativo).sort((a, b) => a.sequencia - b.sequencia);
     const atual = ativas.find(e => e.codigo === cod);
     return cod === 'AGUARDANDO' ? ativas[0] : ativas.find(e => e.sequencia > (atual ? atual.sequencia : 0));
   };
+  // Revalida no banco (a tela pode estar desatualizada): OP bloqueada não anda.
+  const temBloqueioNoBanco = async () => {
+    const r = await sb.from('mes_bloqueios').select('id', { count: 'exact', head: true }).eq('ordem_id', id).is('fim', null);
+    return (r.count || 0) > 0;
+  };
   const iniciarEtapa = async (codigo, vindoDeAguardando) => {
     setBusy(true); setErro(null);
+    if (await temBloqueioNoBanco()) { setErro('OP bloqueada. Desbloqueie antes de iniciar.'); setBusy(false); carregar(); return; }
     const { error } = await sb.from('mes_execucoes').insert({ ordem_id: id, etapa_codigo: codigo, operador: mesUser() });
     if (error) { setErro(error.message); setBusy(false); return; }
     if (vindoDeAguardando) await sb.from('mes_ordens').update({ etapa_atual: codigo, etapa_desde: new Date().toISOString() }).eq('ordem_id', id);
@@ -128,22 +155,79 @@ function MESDetalhe({ ctx, id, onVoltar }) {
     const { error } = await sb.from('mes_checklist_resultados').upsert({ execucao_id: exec.id, item_id: item.id, feito: v, feito_por: mesUser(), feito_em: new Date().toISOString() }, { onConflict: 'execucao_id,item_id' });
     if (error) { setErro(error.message); carregar(); }
   };
+  const pausar = async () => {
+    const motivo = fPausa.motivo === 'Outro' ? (fPausa.outro || '').trim() || 'Outro' : fPausa.motivo;
+    setBusy(true); setErro(null);
+    const { error } = await sb.from('mes_pausas').insert({ execucao_id: exec.id, ordem_id: id, motivo, operador: mesUser() });
+    if (error) setErro(error.message);
+    else await mesHist(sb, id, 'pausa', d.etapa_atual, d.etapa_atual, 'Pausou ' + mesNomeEtapa(etapas, d.etapa_atual) + ' — ' + motivo);
+    setFPausa(null); await carregar(); setBusy(false);
+  };
+  const retomar = async () => {
+    if (bloqueada) { setErro('OP bloqueada. Desbloqueie para retomar.'); return; }
+    setBusy(true); setErro(null);
+    const { error } = await sb.from('mes_pausas').update({ fim: new Date().toISOString() }).eq('id', pausa.id).is('fim', null);
+    if (error) setErro(error.message);
+    else await mesHist(sb, id, 'retomada', d.etapa_atual, d.etapa_atual, 'Retomou ' + mesNomeEtapa(etapas, d.etapa_atual) + ' (parada de ' + mesDur(pausa.inicio) + ')');
+    await carregar(); setBusy(false);
+  };
+  const abrirBloqueio = async (motivo, detalhe) => {
+    const { data: bl, error } = await sb.from('mes_bloqueios').insert({ ordem_id: id, motivo, detalhe: detalhe || null, aberto_por: mesUser() }).select().maybeSingle();
+    if (error) { setErro(error.code === '23505' ? 'Já existe um bloqueio aberto com esse motivo.' : error.message); return false; }
+    // Bloquear congela a contagem: pausa a execução aberta (se ainda não estiver pausada).
+    if (exec && !pausa) await sb.from('mes_pausas').insert({ execucao_id: exec.id, ordem_id: id, motivo: 'Bloqueio: ' + MES_MOTIVOS_BLOQ[motivo], operador: mesUser(), bloqueio_id: bl.id });
+    await mesHist(sb, id, 'bloqueio', d.etapa_atual, d.etapa_atual, 'Bloqueou — ' + MES_MOTIVOS_BLOQ[motivo] + (detalhe ? ': ' + detalhe : ''));
+    window.VPLog?.registrar?.({ modulo: 'MES', acao: 'bloquear', alvo: d.op.numero, alvo_id: id, detalhe: MES_MOTIVOS_BLOQ[motivo] });
+    return true;
+  };
+  const bloquear = async () => {
+    setBusy(true); setErro(null);
+    const ok = await abrirBloqueio(fBloq.motivo, (fBloq.detalhe || '').trim());
+    if (ok) setFBloq(null);
+    await carregar(); ctx.recarregar(); setBusy(false);
+  };
+  const desbloquear = async (b) => {
+    setBusy(true); setErro(null);
+    const agora = new Date().toISOString();
+    const { error } = await sb.from('mes_bloqueios').update({ fim: agora, resolvido_por: mesUser() }).eq('id', b.id).is('fim', null);
+    if (error) { setErro(error.message); setBusy(false); return; }
+    await sb.from('mes_pausas').update({ fim: agora }).eq('bloqueio_id', b.id).is('fim', null);
+    await mesHist(sb, id, 'desbloqueio', d.etapa_atual, d.etapa_atual, 'Desbloqueou — ' + MES_MOTIVOS_BLOQ[b.motivo] + ' (parada de ' + mesDur(b.inicio) + ')');
+    window.VPLog?.registrar?.({ modulo: 'MES', acao: 'desbloquear', alvo: d.op.numero, alvo_id: id, detalhe: MES_MOTIVOS_BLOQ[b.motivo] });
+    await carregar(); ctx.recarregar(); setBusy(false);
+  };
   const concluir = async () => {
     setBusy(true); setErro(null);
-    // Revalida no banco (não confia só no estado da tela).
+    if (await temBloqueioNoBanco()) { setErro('OP bloqueada. Desbloqueie antes de concluir.'); setBusy(false); carregar(); return; }
+    const pa = await sb.from('mes_pausas').select('id', { count: 'exact', head: true }).eq('execucao_id', exec.id).is('fim', null);
+    if ((pa.count || 0) > 0) { setErro('Etapa pausada. Retome antes de concluir.'); setBusy(false); carregar(); return; }
     const r = await sb.from('mes_checklist_resultados').select('item_id, feito').eq('execucao_id', exec.id);
     const ok = new Set((r.data || []).filter(x => x.feito).map(x => x.item_id));
     const falta = itens.filter(i => i.obrigatorio && !ok.has(i.id));
     if (falta.length) { setErro(`Faltam ${falta.length} item(ns) obrigatório(s) do checklist.`); setBusy(false); return; }
-    const agora = new Date().toISOString();
-    const up = await sb.from('mes_execucoes').update({ status: 'concluida', concluida_em: agora }).eq('id', exec.id).eq('status', 'em_andamento').select('id');
+    const agora = new Date();
+    const ps = await sb.from('mes_pausas').select('inicio, fim').eq('execucao_id', exec.id);
+    const pausaMin = (ps.data || []).reduce((s, p) => s + Math.max(0, (new Date(p.fim || agora) - new Date(p.inicio)) / 60000), 0);
+    const durMin = Math.max(0, (agora - new Date(exec.iniciada_em)) / 60000 - pausaMin);
+    const up = await sb.from('mes_execucoes').update({ status: 'concluida', concluida_em: agora.toISOString(), duracao_min: Math.round(durMin * 10) / 10, pausa_min: Math.round(pausaMin * 10) / 10 }).eq('id', exec.id).eq('status', 'em_andamento').select('id');
     if (up.error || !(up.data || []).length) { setErro(up.error ? up.error.message : 'Etapa já concluída por outra pessoa.'); setBusy(false); carregar(); return; }
     const prox = proxima(d.etapa_atual);
     const para = prox ? prox.codigo : 'EXPEDIDO';
-    await sb.from('mes_ordens').update({ etapa_atual: para, etapa_desde: agora, concluida_em: prox ? null : agora }).eq('ordem_id', id);
-    await mesHist(sb, id, 'etapa_concluida', d.etapa_atual, para, `Concluiu ${mesNomeEtapa(etapas, d.etapa_atual)} (${mesDur(exec.iniciada_em)})`);
+    await sb.from('mes_ordens').update({ etapa_atual: para, etapa_desde: agora.toISOString(), concluida_em: prox ? null : agora.toISOString() }).eq('ordem_id', id);
+    await mesHist(sb, id, 'etapa_concluida', d.etapa_atual, para, `Concluiu ${mesNomeEtapa(etapas, d.etapa_atual)} (${Math.round(durMin)} min trabalhados${pausaMin >= 1 ? ', ' + Math.round(pausaMin) + ' min parado' : ''})`);
     window.VPLog?.registrar?.({ modulo: 'MES', acao: 'concluir_etapa', alvo: d.op.numero, alvo_id: id, detalhe: `${d.etapa_atual} → ${para}` });
     await carregar(); ctx.recarregar(); setBusy(false);
+  };
+  const salvarMat = async (m, patch) => {
+    if (!podeEditar) return;
+    setMats(l => l.map(x => x.id === m.id ? { ...x, ...patch } : x));
+    const { error } = await sb.from('pcp_ordem_materiais').update(patch).eq('id', m.id);
+    if (error) { setErro(error.message); carregar(); return; }
+    await mesHist(sb, id, 'material', null, null, `${m.codigo}: ` + Object.entries(patch).map(([k, v]) => `${{ separado: 'separado', qtd_instalada: 'instalado', status_mes: 'status', critico: 'crítico', lote_serie: 'lote/série' }[k] || k} = ${k === 'status_mes' ? MES_STATUS_MAT[v] : String(v)}`).join(', '));
+    // Item crítico faltante bloqueia a OP (regra do fluxo).
+    if (patch.status_mes === 'faltante' && (m.critico || patch.critico) && !bloqAberto.some(b => b.motivo === 'falta_material')) {
+      if (await abrirBloqueio('falta_material', `Item crítico faltante: ${m.codigo}`)) { await carregar(); ctx.recarregar(); }
+    }
   };
 
   if (!d) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
@@ -151,53 +235,168 @@ function MESDetalhe({ ctx, id, onVoltar }) {
   const prog = mesProgresso(etapas, atual);
   const seqAtual = (etapas.find(e => e.codigo === atual) || { sequencia: atual === 'EXPEDIDO' ? 99 : 0 }).sequencia;
   const falta = itens.filter(i => i.obrigatorio && !feitos[i.id]).length;
+  const emAndamento = !['AGUARDANDO', 'EXPEDIDO'].includes(atual);
+  const abaBtn = (k, rot) => <button className={'btn btn--sm' + (sub === k ? ' btn--primary' : '')} onClick={() => setSub(k)}>{rot}</button>;
   return (
     <div>
       <button className="btn btn--sm" onClick={onVoltar} style={{ marginBottom: 12 }}>← Voltar</button>
-      <h2 style={{ margin: '0 0 4px' }}>{d.op.numero} · {d.op.titulo || d.op.produto || '—'}</h2>
+      <h2 style={{ margin: '0 0 4px' }}>{d.op.numero} · {d.op.titulo || d.op.produto || '—'}{bloqueada && <span className="pcp-tag" style={{ marginLeft: 8, background: 'color-mix(in srgb, var(--vp-danger, #c0392b) 25%, transparent)' }}>BLOQUEADA</span>}</h2>
       <div style={{ color: 'var(--fg3)', marginBottom: 12 }}>{d.op.cliente || '—'} · qtd {d.op.quantidade} · prazo <span style={{ color: mesPrazoCor(d.op, atual === 'EXPEDIDO') }}>{mesData(d.op.prazo_entrega)}</span> · progresso <b>{prog}%</b></div>
-      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 16 }}>
+      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>
         {etapas.filter(e => e.ativo).sort((a, b) => a.sequencia - b.sequencia).map(e => {
           const feita = e.sequencia < seqAtual, cur = e.codigo === atual;
           return <span key={e.codigo} className="pcp-tag" style={{ background: feita ? 'color-mix(in srgb, #2e9e5b 25%, transparent)' : cur ? 'color-mix(in srgb, var(--vp-yellow) 45%, transparent)' : undefined, fontWeight: cur ? 700 : 400 }}>{feita ? '✓ ' : ''}{e.nome}</span>;
         })}
       </div>
+      {bloqAberto.map(b => (
+        <div key={b.id} className="card" style={{ padding: 10, marginBottom: 8, borderLeft: '5px solid var(--vp-danger, #c0392b)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+          <div style={{ flex: 1 }}><b>Bloqueada — {MES_MOTIVOS_BLOQ[b.motivo]}</b> há {mesDur(b.inicio)}{b.detalhe ? ' · ' + b.detalhe : ''}</div>
+          <button className="btn btn--sm" disabled={busy || !podeEditar} onClick={() => desbloquear(b)}>Desbloquear</button>
+        </div>
+      ))}
       {erro && <div style={{ color: 'var(--vp-danger, #c0392b)', marginBottom: 8 }}>{erro}</div>}
-      {atual === 'AGUARDANDO' && (
-        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-          <b>Aguardando início.</b> {proxima('AGUARDANDO') ? '' : 'Sem etapas ativas.'}
-          <div style={{ marginTop: 8 }}><button className="btn btn--primary" disabled={busy || !podeEditar || !proxima('AGUARDANDO')} onClick={() => iniciarEtapa(proxima('AGUARDANDO').codigo, true)}>Iniciar produção · {proxima('AGUARDANDO') ? proxima('AGUARDANDO').nome : ''}</button></div>
-        </div>
-      )}
-      {atual === 'EXPEDIDO' && <div className="card" style={{ padding: 16, marginBottom: 16 }}><b>Expedido</b> em {new Date(d.concluida_em).toLocaleString('pt-BR')}.</div>}
-      {!['AGUARDANDO', 'EXPEDIDO'].includes(atual) && (
-        <div className="card" style={{ padding: 16, marginBottom: 16 }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
-            <b>{mesNomeEtapa(etapas, atual)}</b>
-            <span style={{ color: 'var(--fg3)' }}>{exec ? `iniciada por ${exec.operador || '—'} há ${mesDur(exec.iniciada_em)}` : 'não iniciada'}</span>
+      <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
+        {abaBtn('etapa', 'Etapa')}{abaBtn('materiais', `Materiais (${mats.length})`)}{abaBtn('bloqueios', `Bloqueios (${bloqs.length})`)}{abaBtn('historico', 'Histórico')}
+      </div>
+
+      {sub === 'etapa' && (<>
+        {atual === 'AGUARDANDO' && (
+          <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+            <b>Aguardando início.</b> {proxima('AGUARDANDO') ? '' : 'Sem etapas ativas.'}
+            <div style={{ marginTop: 8 }}><button className="btn btn--primary" disabled={busy || bloqueada || !podeEditar || !proxima('AGUARDANDO')} onClick={() => iniciarEtapa(proxima('AGUARDANDO').codigo, true)}>Iniciar produção · {proxima('AGUARDANDO') ? proxima('AGUARDANDO').nome : ''}</button></div>
           </div>
-          {!exec && <div style={{ marginTop: 10 }}><button className="btn btn--primary" disabled={busy || !podeEditar} onClick={() => iniciarEtapa(atual, false)}>Iniciar etapa</button></div>}
-          {exec && (<>
-            <div style={{ margin: '10px 0' }}>
-              {itens.map(i => (
-                <label key={i.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', fontSize: 15, borderBottom: '1px solid var(--line, #eee)' }}>
-                  <input type="checkbox" style={{ width: 20, height: 20 }} checked={!!feitos[i.id]} disabled={!podeEditar} onChange={e => marcar(i, e.target.checked)}/>
-                  {i.item}{i.obrigatorio ? '' : ' (opcional)'}
-                </label>
-              ))}
+        )}
+        {atual === 'EXPEDIDO' && <div className="card" style={{ padding: 16, marginBottom: 16 }}><b>Expedido</b> em {new Date(d.concluida_em).toLocaleString('pt-BR')}.</div>}
+        {emAndamento && (
+          <div className="card" style={{ padding: 16, marginBottom: 16 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, flexWrap: 'wrap' }}>
+              <b>{mesNomeEtapa(etapas, atual)}{pausa && <span className="pcp-tag" style={{ marginLeft: 8 }}>PAUSADA — {pausa.motivo}</span>}</b>
+              <span style={{ color: 'var(--fg3)' }}>{exec ? `iniciada por ${exec.operador || '—'} há ${mesDur(exec.iniciada_em)}` : 'não iniciada'}</span>
             </div>
-            <button className="btn btn--primary" disabled={busy || !podeEditar || falta > 0} onClick={concluir}>Concluir etapa{falta ? ` · faltam ${falta}` : ''}</button>
-          </>)}
+            {!exec && <div style={{ marginTop: 10 }}><button className="btn btn--primary" disabled={busy || bloqueada || !podeEditar} onClick={() => iniciarEtapa(atual, false)}>Iniciar etapa</button></div>}
+            {exec && (<>
+              <div style={{ margin: '10px 0' }}>
+                {itens.map(i => (
+                  <label key={i.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', fontSize: 15, borderBottom: '1px solid var(--line, #eee)' }}>
+                    <input type="checkbox" style={{ width: 20, height: 20 }} checked={!!feitos[i.id]} disabled={!podeEditar || !!pausa} onChange={e => marcar(i, e.target.checked)}/>
+                    {i.item}{i.obrigatorio ? '' : ' (opcional)'}
+                  </label>
+                ))}
+              </div>
+              {fPausa && (
+                <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 10 }}>
+                  <select className="input" value={fPausa.motivo} onChange={e => setFPausa({ ...fPausa, motivo: e.target.value })}>{MES_MOTIVOS_PAUSA.map(m => <option key={m}>{m}</option>)}</select>
+                  {fPausa.motivo === 'Outro' && <input className="input" placeholder="Motivo" value={fPausa.outro || ''} onChange={e => setFPausa({ ...fPausa, outro: e.target.value })}/>}
+                  <button className="btn btn--sm btn--primary" disabled={busy} onClick={pausar}>Confirmar pausa</button>
+                  <button className="btn btn--sm" onClick={() => setFPausa(null)}>Cancelar</button>
+                </div>
+              )}
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {!pausa && <button className="btn" disabled={busy || !podeEditar} onClick={() => setFPausa({ motivo: MES_MOTIVOS_PAUSA[0] })}>Pausar</button>}
+                {pausa && <button className="btn" disabled={busy || bloqueada || !podeEditar} onClick={retomar}>Retomar</button>}
+                <button className="btn btn--primary" disabled={busy || bloqueada || !!pausa || !podeEditar || falta > 0} onClick={concluir}>Concluir etapa{falta ? ` · faltam ${falta}` : ''}</button>
+              </div>
+            </>)}
+          </div>
+        )}
+        {atual !== 'EXPEDIDO' && (
+          fBloq ? (
+            <div className="card" style={{ padding: 12, display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+              <select className="input" value={fBloq.motivo} onChange={e => setFBloq({ ...fBloq, motivo: e.target.value })}>{Object.entries(MES_MOTIVOS_BLOQ).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select>
+              <input className="input" style={{ flex: 1, minWidth: 200 }} placeholder="Detalhe (opcional)" value={fBloq.detalhe || ''} onChange={e => setFBloq({ ...fBloq, detalhe: e.target.value })}/>
+              <button className="btn btn--sm btn--primary" disabled={busy} onClick={bloquear}>Confirmar bloqueio</button>
+              <button className="btn btn--sm" onClick={() => setFBloq(null)}>Cancelar</button>
+            </div>
+          ) : <button className="btn btn--sm" disabled={busy || !podeEditar} onClick={() => setFBloq({ motivo: 'falta_material' })}>Registrar problema / Bloquear OP</button>
+        )}
+      </>)}
+
+      {sub === 'materiais' && (
+        <div className="table-wrap">
+          <table className="t pcp-grid">
+            <thead><tr><th>Código</th><th>Descrição</th><th>Previsto</th><th>Separado</th><th>Instalado</th><th>Lote/série</th><th>Crítico</th><th>Status</th></tr></thead>
+            <tbody>
+              {mats.map(m => (
+                <tr key={m.id}>
+                  <td>{m.codigo}</td><td>{m.descricao || '—'}</td><td>{Number(m.necessario)} {m.unidade || ''}</td>
+                  <td><input className="input" type="number" min="0" style={{ width: 80 }} defaultValue={Number(m.separado || 0)} disabled={!podeEditar} onBlur={e => { const v = Number(e.target.value); if (v !== Number(m.separado || 0)) salvarMat(m, { separado: v }); }}/></td>
+                  <td><input className="input" type="number" min="0" style={{ width: 80 }} defaultValue={Number(m.qtd_instalada || 0)} disabled={!podeEditar} onBlur={e => { const v = Number(e.target.value); if (v !== Number(m.qtd_instalada || 0)) salvarMat(m, { qtd_instalada: v }); }}/></td>
+                  <td><input className="input" style={{ width: 110 }} defaultValue={m.lote_serie || ''} disabled={!podeEditar} onBlur={e => { const v = e.target.value.trim(); if (v !== (m.lote_serie || '')) salvarMat(m, { lote_serie: v || null }); }}/></td>
+                  <td><input type="checkbox" checked={!!m.critico} disabled={!podeEditar} onChange={e => salvarMat(m, { critico: e.target.checked })}/></td>
+                  <td><select className="input" value={m.status_mes} disabled={!podeEditar} onChange={e => salvarMat(m, { status_mes: e.target.value })}>{Object.entries(MES_STATUS_MAT).map(([k, v]) => <option key={k} value={k}>{v}</option>)}</select></td>
+                </tr>
+              ))}
+              {!mats.length && <tr><td colSpan={8} style={{ color: 'var(--fg3)', padding: 16 }}>Esta OP não tem lista de materiais no PCP.</td></tr>}
+            </tbody>
+          </table>
+          <div style={{ fontSize: 12, color: 'var(--fg3)', padding: 8 }}>Item crítico marcado como "Faltante" bloqueia a OP automaticamente.</div>
         </div>
       )}
-      <h3>Histórico</h3>
-      <div>
-        {hist.map(h => (
-          <div key={h.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--line, #eee)', fontSize: 13 }}>
-            <span style={{ color: 'var(--fg3)' }}>{new Date(h.created_at).toLocaleString('pt-BR')}</span> · {h.usuario || '—'} · {h.descricao || h.evento}
+
+      {sub === 'bloqueios' && (
+        <div>
+          {bloqs.map(b => (
+            <div key={b.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--line, #eee)', fontSize: 14 }}>
+              <b>{MES_MOTIVOS_BLOQ[b.motivo]}</b>{b.detalhe ? ' — ' + b.detalhe : ''}
+              <div style={{ fontSize: 12, color: 'var(--fg3)' }}>{new Date(b.inicio).toLocaleString('pt-BR')} por {b.aberto_por || '—'} · {b.fim ? `resolvido em ${new Date(b.fim).toLocaleString('pt-BR')} por ${b.resolvido_por || '—'} (${Math.round((new Date(b.fim) - new Date(b.inicio)) / 60000)} min)` : 'ABERTO'}</div>
+            </div>
+          ))}
+          {!bloqs.length && <div style={{ color: 'var(--fg3)' }}>Nenhum bloqueio registrado.</div>}
+        </div>
+      )}
+
+      {sub === 'historico' && (
+        <div>
+          {hist.map(h => (
+            <div key={h.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--line, #eee)', fontSize: 13 }}>
+              <span style={{ color: 'var(--fg3)' }}>{new Date(h.created_at).toLocaleString('pt-BR')}</span> · {h.usuario || '—'} · {h.descricao || h.evento}
+            </div>
+          ))}
+          {!hist.length && <div style={{ color: 'var(--fg3)' }}>Sem registros.</div>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------------- Apontamentos ---------------- */
+function MESApontamentos({ ctx }) {
+  const { sb, etapas } = ctx;
+  const [ex, setEx] = React.useState(null);
+  React.useEffect(() => {
+    sb.from('mes_execucoes').select('*, op:pcp_ordens(numero, cliente)').order('iniciada_em', { ascending: false }).limit(300).then(r => setEx(r.data || []));
+  }, [sb]);
+  if (!ex) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
+  const nome = (c) => (etapas.find(e => e.codigo === c) || {}).nome || c;
+  const medias = {};
+  ex.filter(x => x.status === 'concluida' && x.duracao_min != null).forEach(x => { const m = (medias[x.etapa_codigo] = medias[x.etapa_codigo] || { n: 0, soma: 0 }); m.n++; m.soma += Number(x.duracao_min); });
+  const min = (v) => v == null ? '—' : Number(v) >= 60 ? `${Math.floor(v / 60)}h${String(Math.round(v % 60)).padStart(2, '0')}` : `${Math.round(v)} min`;
+  return (
+    <div>
+      <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap', marginBottom: 12 }}>
+        {etapas.filter(e => medias[e.codigo]).map(e => (
+          <div key={e.codigo} className="card" style={{ padding: 10, minWidth: 150 }}>
+            <div style={{ fontSize: 12, color: 'var(--fg3)' }}>{e.nome}</div>
+            <div style={{ fontSize: 20, fontWeight: 700 }}>{min(medias[e.codigo].soma / medias[e.codigo].n)}</div>
+            <div style={{ fontSize: 11, color: 'var(--fg3)' }}>média · {medias[e.codigo].n} apontamento(s)</div>
           </div>
         ))}
-        {!hist.length && <div style={{ color: 'var(--fg3)' }}>Sem registros.</div>}
+        {!Object.keys(medias).length && <div style={{ color: 'var(--fg3)' }}>Os tempos médios aparecem quando houver etapas concluídas.</div>}
+      </div>
+      <div className="table-wrap">
+        <table className="t pcp-grid">
+          <thead><tr><th>OP</th><th>Cliente</th><th>Etapa</th><th>Operador</th><th>Início</th><th>Fim</th><th>Trabalhado</th><th>Parado</th></tr></thead>
+          <tbody>
+            {ex.map(x => (
+              <tr key={x.id}>
+                <td>{x.op ? x.op.numero : '—'}</td><td>{x.op ? x.op.cliente || '—' : '—'}</td><td>{nome(x.etapa_codigo)}</td><td>{x.operador || '—'}</td>
+                <td>{new Date(x.iniciada_em).toLocaleString('pt-BR')}</td><td>{x.concluida_em ? new Date(x.concluida_em).toLocaleString('pt-BR') : 'em andamento'}</td>
+                <td>{min(x.duracao_min)}</td><td>{min(x.pausa_min)}</td>
+              </tr>
+            ))}
+            {!ex.length && <tr><td colSpan={8} style={{ color: 'var(--fg3)', padding: 16 }}>Sem apontamentos.</td></tr>}
+          </tbody>
+        </table>
       </div>
     </div>
   );
@@ -216,8 +415,8 @@ function MESKanban({ ctx }) {
           <div key={c} style={{ background: 'var(--bg2, #f4f4f4)', borderRadius: 10, padding: 8, minHeight: 120 }}>
             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{c} <span style={{ color: 'var(--fg3)' }}>({cards.length})</span></div>
             {cards.map(l => (
-              <div key={l.ordem_id} className="card" onClick={() => ctx.abrir(l.ordem_id)} style={{ cursor: 'pointer', padding: 10, marginBottom: 8, borderLeft: '5px solid ' + mesPrazoCor(l.op, false), fontSize: 12 }}>
-                <b>{l.op.numero}</b> · {l.op.cliente || '—'}
+              <div key={l.ordem_id} className="card" onClick={() => ctx.abrir(l.ordem_id)} style={{ cursor: 'pointer', padding: 10, marginBottom: 8, borderLeft: '5px solid ' + (ctx.bloqueadas[l.ordem_id] ? '#555' : mesPrazoCor(l.op, false)), fontSize: 12, opacity: ctx.bloqueadas[l.ordem_id] ? 0.8 : 1 }}>
+                <b>{l.op.numero}</b> · {l.op.cliente || '—'}{ctx.bloqueadas[l.ordem_id] && <span className="pcp-tag" style={{ marginLeft: 6 }}>BLOQUEADA</span>}
                 <div>{l.op.titulo || l.op.produto || '—'}</div>
                 <div style={{ color: 'var(--fg3)' }}>{mesNomeEtapa(etapas, l.etapa_atual)} · {mesProgresso(etapas, l.etapa_atual)}%</div>
                 <div style={{ color: 'var(--fg3)' }}>{mesDur(l.etapa_desde)} na etapa · prazo {mesData(l.op.prazo_entrega)}</div>
@@ -253,22 +452,25 @@ function MESOrdens({ ctx }) {
 
 function MESPage() {
   const sb = window.__VP_SB && window.__VP_SB.sb;
-  const [aba, setAba] = window.useRouteTab('mes', 'kanban', ['kanban', 'ordens'], false, true);
+  const [aba, setAba] = window.useRouteTab('mes', 'kanban', ['kanban', 'ordens', 'apontamentos'], false, true);
   const [opId, setOpId] = window.useRotaItem('mes', aba);
   const [etapas, setEtapas] = React.useState(null);
   const [linhas, setLinhas] = React.useState(null);
   const [erro, setErro] = React.useState(null);
+  const [bloqueadas, setBloqueadas] = React.useState({});
   const [liberar, setLiberar] = React.useState(false);
   const [podeEditar, setPodeEditar] = React.useState(false);
 
   const recarregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase indisponível.'); return; }
-    const [e, m] = await Promise.all([
+    const [e, m, bq] = await Promise.all([
       sb.from('mes_etapas').select('*').order('sequencia'),
       sb.from('mes_ordens').select('*, op:pcp_ordens(numero, titulo, produto, cliente, prazo_entrega)').order('liberada_em', { ascending: false }).limit(500),
+      sb.from('mes_bloqueios').select('ordem_id').is('fim', null).limit(1000),
     ]);
     if (e.error || m.error) { setErro((e.error || m.error).message); return; }
     setEtapas(e.data || []); setLinhas(m.data || []);
+    const b = {}; (bq.data || []).forEach(x => { b[x.ordem_id] = true; }); setBloqueadas(b);
   }, [sb]);
   React.useEffect(() => {
     recarregar();
@@ -277,7 +479,7 @@ function MESPage() {
     return () => clearInterval(t);
   }, [recarregar]);
 
-  const ctx = etapas && linhas && { sb, etapas, linhas, podeEditar, recarregar, abrir: (id) => setOpId(id) };
+  const ctx = etapas && linhas && { sb, etapas, linhas, bloqueadas, podeEditar, recarregar, abrir: (id) => setOpId(id) };
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -291,6 +493,7 @@ function MESPage() {
         <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
           <button className={'btn btn--sm' + (aba === 'kanban' ? ' btn--primary' : '')} onClick={() => setAba('kanban')}>Kanban</button>
           <button className={'btn btn--sm' + (aba === 'ordens' ? ' btn--primary' : '')} onClick={() => setAba('ordens')}>Ordens de Produção</button>
+          <button className={'btn btn--sm' + (aba === 'apontamentos' ? ' btn--primary' : '')} onClick={() => setAba('apontamentos')}>Apontamentos</button>
           <span style={{ flex: 1 }}/>
           <button className="btn btn--sm btn--primary" disabled={!podeEditar} onClick={() => setLiberar(true)}>Liberar OP para o MES</button>
         </div>
@@ -300,6 +503,7 @@ function MESPage() {
       {ctx && opId && <MESDetalhe ctx={ctx} id={opId} onVoltar={() => setOpId(null)}/>}
       {ctx && !opId && aba === 'kanban' && <MESKanban ctx={ctx}/>}
       {ctx && !opId && aba === 'ordens' && <MESOrdens ctx={ctx}/>}
+      {ctx && !opId && aba === 'apontamentos' && <MESApontamentos ctx={ctx}/>}
       {ctx && liberar && <MESLiberar ctx={ctx} onFechar={() => setLiberar(false)}/>}
     </div>
   );
