@@ -149,15 +149,56 @@ function AFModalSinal({ row, onClose, onSaved }) {
             <input className="input" type="date" value={pagoEm} onChange={(e) => setPagoEm(e.target.value)}/>
           </div>
         </div>
-        <p className="small muted">Depois do sinal, o Financeiro dá o Aval de Pagamento (em Gatilhos &amp; Prazo). Com ele e o Aval Jurídico, a compra na China é liberada.</p>
+        <p className="small muted">Depois do sinal, o Financeiro dá o Aval de Pagamento (aqui mesmo, ou em Prazos &amp; Pendências). Com ele e o Aval Jurídico, a compra na China é liberada.</p>
+      </div>
+    </Modal>
+  );
+}
+
+/* 07/10 — "Dar Aval de Pagamento" também aqui. Antes o botão só existia em Prazos & Pendências
+   (linha da etapa "Aguardando Aval de Pagamento"); esta tela só mostrava o selo "pendente" — na cotação 955
+   o Financeiro deu sinal pago + consulta de score + "aval pra vender" aqui e achou que estava liberado, mas o
+   Aval de Pagamento (o que libera "Decidir comprar") ficou aberto. Mesma chamada da outra tela
+   (AvalFinanceiroStore.confirmarAvalPagamento → evento AVAL_PAGAMENTO_CONFIRMADO fecha a etapa). */
+function AFModalAvalPagamento({ row, onClose, onSaved }) {
+  const [observacoes, setObservacoes] = React.useState('');
+  const [saving, setSaving] = React.useState(false);
+  const confirmar = async () => {
+    setSaving(true);
+    try {
+      await window.AvalFinanceiroStore.confirmarAvalPagamento(row.aval.id, observacoes);
+      window.toast('Aval de Pagamento confirmado. Com o Aval Jurídico, a compra na China fica liberada.', 'success');
+      onSaved(); onClose();
+    } catch (e) {
+      window.toast('Erro: ' + (e.message || e), 'error');
+    } finally {
+      setSaving(false);
+    }
+  };
+  return (
+    <Modal title="Dar Aval de Pagamento" onClose={onClose} width={440}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={confirmar} disabled={saving}>{saving ? 'Confirmando…' : 'Dar Aval de Pagamento'}</Button>
+      </>}>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+        <div className="small muted">Cliente: <b>{row.aval.cliente_nome || '—'}</b> · Proposta {row.aval.numero_documento}</div>
+        <p className="muted" style={{ fontSize: 13 }}>
+          Checkpoint manual do Financeiro depois do sinal pago. Junto com o Aval Jurídico, libera a compra ao fornecedor
+          (botão "Decidir comprar"). Não é o mesmo que o "aval pra vender" (consulta de score), que é opcional.
+        </p>
+        <div className="stack" style={{ gap: 4 }}>
+          <label className="up-eyebrow muted">Observações (opcional)</label>
+          <textarea className="input" rows={3} value={observacoes} onChange={(e) => setObservacoes(e.target.value)} placeholder="Ressalvas, conferência feita…"/>
+        </div>
       </div>
     </Modal>
   );
 }
 
 /* Status dos dois avais que liberam a compra na China (29/09/2026):
-   Aval de Pagamento (Financeiro, depois do sinal — dado em "Gatilhos &
-   Prazo") + Aval Jurídico (tela "Aval Jurídico"). A aprovação do CEO só
+   Aval de Pagamento (Financeiro, depois do sinal — dado aqui ou em "Prazos &
+   Pendências") + Aval Jurídico (tela "Aval Jurídico"). A aprovação do CEO só
    aparece quando a margem efetiva da precificação fica abaixo de 15% (ou é
    desconhecida) — "CEO só chega nele dentro de discrepâncias". A antiga
    "Minha aprovação" (responsável pelo sistema) saiu: deixou de travar a
@@ -168,6 +209,7 @@ function AFAprovacoes({ row, onSaved }) {
   const [busy, setBusy] = React.useState(false);
   const [ceo, setCeo] = React.useState(null); // {precisa, margem}
   const [aj, setAj] = React.useState(undefined); // undefined = carregando
+  const [avalPagAberto, setAvalPagAberto] = React.useState(false);
 
   React.useEffect(() => {
     let vivo = true;
@@ -202,7 +244,13 @@ function AFAprovacoes({ row, onSaved }) {
     <div className="row gap-2" style={{ flexWrap: 'wrap', alignItems: 'center' }}>
       {a.aval_pagamento_confirmado
         ? <Badge variant="success" dot>Aval de Pagamento OK</Badge>
-        : <Badge variant="warning" dot>Aval de Pagamento pendente (após o sinal)</Badge>}
+        : <>
+            <Badge variant="warning" dot>Aval de Pagamento pendente (após o sinal)</Badge>
+            <Button variant="outline" size="sm" disabled={!a.sinal_pago}
+              title={a.sinal_pago ? 'Libera a compra ao fornecedor (junto com o Aval Jurídico)' : 'Confirme o sinal pago antes'}
+              onClick={() => setAvalPagAberto(true)}>Dar Aval de Pagamento</Button>
+          </>}
+      {avalPagAberto && <AFModalAvalPagamento row={row} onClose={() => setAvalPagAberto(false)} onSaved={onSaved}/>}
       {ajStatus === 'aprovado' && <Badge variant="success" dot>Aval Jurídico OK</Badge>}
       {ajStatus === 'reprovado' && <Badge variant="danger" dot>Aval Jurídico reprovado</Badge>}
       {ajStatus === 'pendente' && <Badge variant="warning" dot>Aval Jurídico pendente</Badge>}
