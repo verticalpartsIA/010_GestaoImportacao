@@ -448,7 +448,8 @@ button.nav-item {
   width: 34px; height: 34px; padding: 5px; border-radius: 9px;
   background: #0B0B0B; object-fit: contain; flex: none;
 }
-.sidebar__brand-text { color: #111; font-size: 19px; }
+.sidebar__brand-text { color: #111; font-size: 16px; }
+.sidebar__brand-sub { display: none; } /* "v2.4": ficava atrás do botão de recolher; a versão publicada já aparece no rodapé */
 .sidebar__brand-text b { color: #111; opacity: .62; }
 .sidebar__brand-sub { color: rgba(0,0,0,.62); }
 .sidebar__scroll { padding: 14px 10px 24px; }
@@ -475,7 +476,7 @@ button.nav-item {
 .sidebar__user { border-radius: 12px; border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.06); }
 .sidebar__user-role { color: rgba(255,255,255,.55); }
 .sidebar__version { border-top-color: rgba(255,255,255,.08); color: rgba(255,255,255,.45); }
-.sidebar__collapse { border-radius: 8px; top: 17px; }
+.sidebar__collapse { border-radius: 8px; top: 17px; right: 10px; }
 
 /* ========== HEADER ================================================= */
 .header {

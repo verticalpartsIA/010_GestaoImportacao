@@ -67,3 +67,15 @@ html[data-ui="suave"] .tab .count { border-radius: var(--r-pill); }
 
 /* ---- Avisos (toast) ---- */
 html[data-ui="suave"] .toast { border-radius: var(--ui-r-ctl); }
+
+/* ---- Segmentado (.seg), busca do cabeçalho, botões do cabeçalho e seletor de papel ---- */
+html[data-ui="suave"] .seg { border-radius: var(--ui-r-ctl); overflow: hidden; }
+html[data-ui="suave"] .seg button {
+  font-size: 12.5px; font-weight: 600; letter-spacing: .01em; text-transform: none;
+}
+html[data-ui="suave"] .header__search,
+html[data-ui="suave"] .header__btn,
+html[data-ui="suave"] .icon-btn,
+html[data-ui="suave"] .role-dropdown__trigger { border-radius: var(--ui-r-ctl); }
+html[data-ui="suave"] .role-dropdown__menu { border-radius: var(--ui-r-card); overflow: hidden; }
+html[data-ui="suave"] .alert { border-radius: var(--ui-r-card); }
