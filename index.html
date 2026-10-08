@@ -12,7 +12,7 @@
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
 
   <link rel="stylesheet" href="/colors_and_type.css">
-  <link rel="stylesheet" href="/styles/app.css?v=23">
+  <link rel="stylesheet" href="/styles/app.css?v=24">
   <link rel="stylesheet" href="/styles/modules.css?v=3">
   <link rel="stylesheet" href="/styles/inbox-gmail.css?v=5">
   <link rel="stylesheet" href="/styles/pcp-tabelas.css?v=5">
@@ -59,17 +59,17 @@
        propósito: o <style> do CDN era injetado depois de todo o resto, então a cascata
        continua igual. Regerar: ver o comando em styles/tailwind.config.js. -->
   <link rel="stylesheet" href="/styles/tailwind.css?v=1">
-  <link rel="stylesheet" href="/styles/ui-suave.css?v=1">
+  <link rel="stylesheet" href="/styles/ui-suave.css?v=2">
   <script>
-    /* Visual "Suave" dos componentes globais: padrão DESLIGADO. Liga com ?ui=suave, desliga com ?ui=classico
-       (a escolha fica guardada neste navegador). Roda antes da pintura para não piscar. */
+    /* Visual "Suave" dos componentes globais: padrão LIGADO. Volta ao clássico com ?ui=classico
+       (a escolha fica guardada neste navegador); ?ui=suave religa. Roda antes da pintura para não piscar. */
     (function () {
       try {
         var q = new URLSearchParams(location.search).get('ui');
-        if (q === 'suave') localStorage.setItem('vp_ui', 'suave');
-        else if (q === 'classico') localStorage.removeItem('vp_ui');
-        if (localStorage.getItem('vp_ui') === 'suave') document.documentElement.setAttribute('data-ui', 'suave');
-      } catch (e) { /* sem localStorage: fica no visual clássico */ }
+        if (q === 'classico') localStorage.setItem('vp_ui', 'classico');
+        else if (q === 'suave') localStorage.removeItem('vp_ui');
+        if (localStorage.getItem('vp_ui') !== 'classico') document.documentElement.setAttribute('data-ui', 'suave');
+      } catch (e) { document.documentElement.setAttribute('data-ui', 'suave'); }
     })();
   </script>
 </head>
