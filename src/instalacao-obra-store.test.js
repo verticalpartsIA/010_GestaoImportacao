@@ -16,6 +16,7 @@ function mockSb(byTable) {
     const builder = {
       select: () => builder,
       eq: () => builder,
+      or: () => builder,
       order: () => builder,
       limit: () => builder,
       update: () => builder,
