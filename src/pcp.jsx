@@ -14,6 +14,10 @@ function pcpFmt(v, d = 3) { return Number(v).toLocaleString('pt-BR', { maximumFr
 function pcpData(d) { return d ? d.split('-').reverse().join('/') : '—'; }
 function pcpEsc(s) { return String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c])); }
 function pcpMoeda(v) { return Number(v || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
+/* OP de corte não grava `produto` de propósito (é o campo que libera a "Baixa no estoque do
+   Omie", que corte nunca movimenta — a NF do pedido já dá a saída). O título sempre vem como
+   "Corte — <código>" (pcpGerarOpsDoPedido/pcpGerarPedidoQuadro); só pra EXIBIR a descrição. */
+function pcpCorteCodigo(titulo) { const m = /^Corte — (.+)$/.exec(titulo || ''); return m ? m[1] : null; }
 function pcpHoje() { return new Date().toISOString().slice(0, 10); }
 function pcpUsuario() { return (window.__VP_USER && window.__VP_USER.email) || null; }
 
@@ -482,7 +486,11 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
       </div>
 
       <div className="card pcp-total" style={{ padding: 14, marginBottom: 12, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(190px, 1fr))', gap: '10px 20px', fontSize: 13 }}>
-        <div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{op.produto ? 'Produto' : 'Frente'}</div>{op.produto ? <><button className="pcp-cod" onClick={() => window.pcpIrPara?.(ctx.nav, 'montagem-produto', 'vp_pcp_pai', op.produto)}>{op.produto}</button><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{dados.prods[op.produto]?.descricao}</div></> : (op.titulo || '—')}</div>
+        <div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{op.produto || (op.frente === 'corte' && mats[0]) ? 'Produto' : 'Frente'}</div>{op.produto
+          ? <><button className="pcp-cod" onClick={() => window.pcpIrPara?.(ctx.nav, 'montagem-produto', 'vp_pcp_pai', op.produto)}>{op.produto}</button><div style={{ fontSize: 11, color: 'var(--fg3)' }}>{dados.prods[op.produto]?.descricao}</div></>
+          : (op.frente === 'corte' && mats[0])
+            ? <>{mats[0].codigo}<div style={{ fontSize: 11, color: 'var(--fg3)' }}>{mats[0].descricao}</div></>
+            : (op.titulo || '—')}</div>
         <div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>Quantidade</div>{pcpFmt(op.quantidade, 0)}</div>
         <div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>Cliente</div>{op.cliente || '—'}{op.numero_cotacao ? ` · cotação ${op.numero_cotacao}` : ''}</div>
         <div><div style={{ fontSize: 11, color: 'var(--fg3)' }}>Início previsto</div>{pcpData(op.previsao_inicio)}</div>
@@ -723,10 +731,15 @@ function PCPOrdens({ ctx }) {
                 const p = progresso[o.id] || { total: 0, ok: 0 };
                 const nivel = sobMae(o) ? 1 : 0;
                 const fr = o.frente === 'pedido' ? (ordens || []).filter(x => x.ordem_mae_id === o.id) : null;
+                const corteCod = !o.produto ? pcpCorteCodigo(o.titulo) : null;
                 return (
                   <tr key={o.id}>
                     <td style={{ paddingLeft: 12 + nivel * 22 }}>{nivel ? '↳ ' : ''}<button className="pcp-cod" onClick={() => setAberta(o.id)}>{o.numero}</button></td>
-                    <td>{o.produto ? <>{o.produto} <span style={{ color: 'var(--fg3)' }}>· {dados.prods[o.produto]?.descricao || ''}</span></> : <b style={{ fontWeight: 500 }}>{o.titulo || '—'}</b>}</td>
+                    <td>{o.produto
+                      ? <>{o.produto} <span style={{ color: 'var(--fg3)' }}>· {dados.prods[o.produto]?.descricao || ''}</span></>
+                      : corteCod
+                        ? <>{o.titulo} <span style={{ color: 'var(--fg3)' }}>· {dados.prods[corteCod]?.descricao || ''}</span></>
+                        : <b style={{ fontWeight: 500 }}>{o.titulo || '—'}</b>}</td>
                     <td className="text-right">{pcpFmt(o.quantidade, 0)}</td>
                     <td>{o.cliente || '—'}</td>
                     <td>{pcpData(o.prazo_entrega)}</td>
