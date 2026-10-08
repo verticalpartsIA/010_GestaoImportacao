@@ -356,7 +356,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
       </div>
 
       {aguardando.length > 0 && (
-        <div className="card" style={{ marginBottom: 20, borderLeft: '3px solid #7c3aed', padding: 0 }}>
+        <div className="card" style={{ marginBottom: 20, padding: 0 }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', borderBottom:'1px solid var(--border)' }}>
             <div style={{ fontWeight:700, fontSize:13 }}>Compras aguardando embarque <span style={{ color:'var(--fg3)' }}>({aguardando.length})</span></div>
             <span className="muted small">Compra confirmada no fornecedor · ainda sem embarque na Importação</span>
@@ -1035,9 +1035,9 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
                     onClick={() => setActive(s.id)}
                     style={{
                       padding: 12,
-                      background: sel ? "#000" : "#fff",
-                      color: sel ? "#fff" : "var(--fg1)",
-                      border: "1px solid " + (sel ? "#000" : "var(--border)"),
+                      background: sel ? "var(--vp-black)" : "var(--bg)",
+                      color: sel ? "var(--bg)" : "var(--fg1)",
+                      border: "1px solid " + (sel ? "var(--vp-black)" : "var(--border)"),
                       cursor: "pointer",
                       position: "relative",
                     }}>
@@ -1265,23 +1265,23 @@ function EmbarqueMapaModal({ embarque: e, onClose }) {
       <div ref={shellRef} onClick={(ev) => ev.stopPropagation()}
         style={{
           width: "min(1180px, 94vw)", height: "min(760px, 90vh)",
-          background: "#0b1220", display: "flex", flexDirection: "column",
+          background: "var(--vp-gray-900)", display: "flex", flexDirection: "column",
           overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,.45)",
         }}>
-        <div className="row sb" style={{ padding: "14px 18px", background: "#111a2e", flex: "0 0 auto" }}>
+        <div className="row sb" style={{ padding: "14px 18px", background: "var(--vp-black)", flex: "0 0 auto" }}>
           <div>
-            <div className="up-eyebrow" style={{ color: "#94a3b8" }}>{e.id} · {e.line || e.sealine}</div>
-            <div style={{ color: "#fff", fontWeight: 600, fontSize: 15 }}>{e.vessel || "Rastreamento marítimo"}</div>
-            <div style={{ fontSize: 11, marginTop: 2, color: rtChegou(e) ? "#86efac" : rtPosicaoReal(e) ? "#94a3b8" : "#fbbf24" }}>
+            <div className="up-eyebrow" style={{ color: "var(--vp-gray-300)" }}>{e.id} · {e.line || e.sealine}</div>
+            <div style={{ color: "var(--vp-white)", fontWeight: 600, fontSize: 15 }}>{e.vessel || "Rastreamento marítimo"}</div>
+            <div style={{ fontSize: 11, marginTop: 2, color: rtChegou(e) ? "var(--vp-success-tint)" : rtPosicaoReal(e) ? "var(--vp-gray-300)" : "var(--vp-yellow)" }}>
               {rtChegou(e) ? `✓ Chegada confirmada${e.chegada_confirmada_em ? " em " + rtDataBR(e.chegada_confirmada_em) : ""}` : rtPosicaoReal(e) ? `Posição real · leitura ${rtDataBR(e.tracking_updated_at)}` : `⚠ Rastreio parado — última posição conhecida${rtUltimoEvento(e) ? ": " + rtUltimoEvento(e) : ""}`}
             </div>
           </div>
           <div className="row gap-2">
-            <span className="mono small" style={{ color: "#94a3b8" }}>
+            <span className="mono small" style={{ color: "var(--vp-gray-300)" }}>
               {(e.origin || e.from || "—")} → {(e.destination || e.to || "—")}
             </span>
             <button onClick={onClose} title="Fechar"
-              style={{ border: "none", background: "rgba(255,255,255,.08)", color: "#fff", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              style={{ border: "none", background: "rgba(255,255,255,.08)", color: "var(--vp-white)", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Icon.x size={16}/>
             </button>
           </div>
@@ -1292,16 +1292,16 @@ function EmbarqueMapaModal({ embarque: e, onClose }) {
 
           <div style={{ position: "absolute", top: 12, right: 12, zIndex: 400 }}>
             <button onClick={() => setPickerOpen((o) => !o)} title="Estilo do mapa"
-              style={{ width: 34, height: 34, border: "none", background: "#111a2e", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.4)" }}>
+              style={{ width: 34, height: 34, border: "none", background: "var(--vp-black)", color: "var(--vp-white)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.4)" }}>
               <Icon.layers size={16}/>
             </button>
             {pickerOpen ? (
-              <div style={{ marginTop: 6, background: "#111a2e", boxShadow: "0 8px 24px rgba(0,0,0,.5)", minWidth: 120, overflow: "hidden" }}>
+              <div style={{ marginTop: 6, background: "var(--vp-black)", boxShadow: "0 8px 24px rgba(0,0,0,.5)", minWidth: 120, overflow: "hidden" }}>
                 {EI_MAP_STYLES.map((s) => (
                   <div key={s.key} onClick={() => { setStyleKey(s.key); setPickerOpen(false); }}
                     style={{
-                      padding: "9px 14px", fontSize: 13, cursor: "pointer", color: "#fff",
-                      background: styleKey === s.key ? "#2b3a5c" : "transparent",
+                      padding: "9px 14px", fontSize: 13, cursor: "pointer", color: "var(--vp-white)",
+                      background: styleKey === s.key ? "var(--vp-gray-700)" : "transparent",
                     }}>
                     {s.label}
                   </div>
@@ -1309,7 +1309,7 @@ function EmbarqueMapaModal({ embarque: e, onClose }) {
               </div>
             ) : null}
             <button onClick={toggleFullscreen} title={fullscreen ? "Sair da tela cheia" : "Tela cheia"}
-              style={{ marginTop: 6, width: 34, height: 34, border: "none", background: "#111a2e", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.4)" }}>
+              style={{ marginTop: 6, width: 34, height: 34, border: "none", background: "var(--vp-black)", color: "var(--vp-white)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.4)" }}>
               <Icon.expand size={15}/>
             </button>
           </div>
@@ -1392,7 +1392,7 @@ function ShipMap({ mainShip, ships = [], onClick, active }) {
       {/* Legend */}
       <div className="map-legend">
         <div className="row gap-3"><span className="sw" style={{ background: "var(--vp-yellow)", borderRadius: "50%" }}/><span>Navio ativo</span></div>
-        <div className="row gap-3"><span className="sw" style={{ background: "var(--vp-yellow)", transform: "rotate(45deg)", border: "2px solid #000" }}/><span>Porto</span></div>
+        <div className="row gap-3"><span className="sw" style={{ background: "var(--vp-yellow)", transform: "rotate(45deg)", border: "2px solid var(--vp-black)" }}/><span>Porto</span></div>
         <div className="row gap-3"><span className="sw" style={{ background: "linear-gradient(to right, var(--vp-yellow) 50%, transparent 50%) 0 / 8px 100%" }}/><span>Rota</span></div>
         <div style={{ marginTop: 8, fontSize: 9, color: "rgba(255,255,255,.6)", fontFamily: "var(--font-mono)" }}>Rastreamento AIS</div>
       </div>
@@ -1433,7 +1433,7 @@ function RouteAndShip({ start, end, cur, ship, isActive, onClick }) {
       <div className={"map-ship" + (isActive ? " is-active" : "")} style={{ left: cur.x + "%", top: cur.y + "%" }} onClick={onClick}>
         {isActive ? <div className="map-ship__pulse"/> : null}
         <div className="map-ship__icon">
-          <Icon.ship size={14} color="#000"/>
+          <Icon.ship size={14} color="var(--vp-black)"/>
         </div>
         <div className="map-ship__label">{(ship.vessel || 'Navio a definir').replace("MV ", "")}</div>
       </div>
