@@ -1,0 +1,69 @@
+/* ============================================================
+   ui-suave.css — visual "Suave" dos componentes globais.
+   SÓ vale com <html data-ui="suave">; sem o atributo, nada muda.
+   Liga/desliga por navegador: ?ui=suave  /  ?ui=classico
+   (ver o script no <head> do index.html). Só aparência: nenhum
+   tamanho de layout, lógica ou marcação é alterado.
+   ============================================================ */
+
+html[data-ui="suave"] {
+  --ui-r-card: 10px;   /* cartões, tabelas, modais, KPIs */
+  --ui-r-ctl: 8px;     /* botões e campos */
+  --ui-sombra: 0 1px 2px rgba(0,0,0,.05), 0 2px 8px rgba(0,0,0,.04);
+}
+
+/* ---- Cartões, KPIs e tabelas ---- */
+html[data-ui="suave"] .card,
+html[data-ui="suave"] .kpi,
+html[data-ui="suave"] .table-wrap {
+  border-radius: var(--ui-r-card);
+  box-shadow: var(--ui-sombra);
+}
+html[data-ui="suave"] .table-wrap { overflow-y: hidden; }
+html[data-ui="suave"] .card.sharp::before { display: none; }          /* filete amarelo do canto */
+html[data-ui="suave"] .kpi__stripe { display: none; }                  /* faixa do KPI */
+html[data-ui="suave"] .kpi--clickable:hover { box-shadow: 0 0 0 1px var(--vp-yellow), var(--ui-sombra); }
+
+/* ---- Tabelas: cabeçalho menos gritado, sem filete amarelo no hover ---- */
+html[data-ui="suave"] table.t thead th {
+  font-size: 11px; font-weight: 600; letter-spacing: .04em; text-transform: none; color: var(--fg2);
+}
+html[data-ui="suave"] table.t tbody tr:hover td:first-child { box-shadow: none; }
+
+/* ---- Botões: cantos de 8px, texto normal com peso 600, sombra macia ---- */
+html[data-ui="suave"] .btn {
+  border-radius: var(--ui-r-ctl);
+  font-weight: 600; text-transform: none; letter-spacing: .01em; font-size: 12.5px;
+}
+html[data-ui="suave"] .btn--sm { font-size: 11.5px; }
+html[data-ui="suave"] .btn--lg { font-size: 13.5px; }
+html[data-ui="suave"] .btn--primary:hover { transform: none; box-shadow: var(--shadow-md); }
+html[data-ui="suave"] .btn--outline { border-radius: var(--ui-r-ctl); }
+
+/* ---- Campos ---- */
+html[data-ui="suave"] .input { border-radius: var(--ui-r-ctl); }
+html[data-ui="suave"] .field label,
+html[data-ui="suave"] .label {
+  font-size: 12px; font-weight: 600; letter-spacing: .01em; text-transform: none;
+}
+
+/* ---- Selos: pílula, sem caixa-alta espaçada ---- */
+html[data-ui="suave"] .badge {
+  border-radius: var(--r-pill);
+  font-size: 11px; font-weight: 600; letter-spacing: .02em; text-transform: none; padding: 3px 10px;
+}
+
+/* ---- Modais: cantos arredondados, sem a barra amarela de 4px no topo ---- */
+html[data-ui="suave"] .modal {
+  border-radius: 14px; border-top: 0; overflow: hidden;
+}
+html[data-ui="suave"] .modal__title { font-size: 20px; text-transform: none; font-weight: 700; }
+
+/* ---- Abas ---- */
+html[data-ui="suave"] .tab {
+  font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none;
+}
+html[data-ui="suave"] .tab .count { border-radius: var(--r-pill); }
+
+/* ---- Avisos (toast) ---- */
+html[data-ui="suave"] .toast { border-radius: var(--ui-r-ctl); }
