@@ -89,6 +89,7 @@ function PIItensSection({ itens, onChange, moeda }) {
   const itensRef = React.useRef(itens); itensRef.current = itens;
   const onChangeRef = React.useRef(onChange); onChangeRef.current = onChange;
   const timers = React.useRef({});
+  const autoRef = React.useRef({});
   const [achado, setAchado] = React.useState({});
   const mudarCodigo = (i, v) => {
     update(i, 'codigo_produto', v);
@@ -99,12 +100,19 @@ function PIItensSection({ itens, onChange, moeda }) {
       if (!p) { if (String(v || '').trim().length >= 3) setAchado((a) => ({ ...a, [i]: 'nao' })); return; }
       const atual = itensRef.current || [];
       if (!atual[i] || atual[i].codigo_produto !== v) return; /* mudou enquanto buscava */
-      onChangeRef.current(atual.map((it, idx) => (idx === i ? {
-        ...it,
-        descricao_produto: p.descricao || it.descricao_produto,
-        unidade_medida: p.unidade || it.unidade_medida,
-        ncm: p.ncm || it.ncm,
-      } : it)));
+      /* Só preenche campo livre: vazio, ou ainda igual ao que o cadastro preencheu antes
+         (a pessoa não mexeu). O que ela digitou nunca é sobrescrito. */
+      const ant = autoRef.current[i] || {};
+      const livre = (atualV, antV, padrao) => !atualV || atualV === padrao && !antV || atualV === antV;
+      autoRef.current[i] = {};
+      onChangeRef.current(atual.map((it, idx) => {
+        if (idx !== i) return it;
+        const n = { ...it };
+        if (p.descricao && livre(it.descricao_produto, ant.descricao)) { n.descricao_produto = p.descricao; autoRef.current[i].descricao = p.descricao; }
+        if (p.unidade && livre(it.unidade_medida, ant.unidade, 'un')) { n.unidade_medida = p.unidade; autoRef.current[i].unidade = p.unidade; }
+        if (p.ncm && livre(it.ncm, ant.ncm)) { n.ncm = p.ncm; autoRef.current[i].ncm = p.ncm; }
+        return n;
+      }));
       setAchado((a) => ({ ...a, [i]: 'sim' }));
     }, 500);
   };
@@ -126,7 +134,7 @@ function PIItensSection({ itens, onChange, moeda }) {
                 <PIField label="Descrição do produto *" span={2}><PIInput value={item.descricao_produto} onChange={(v) => update(i, 'descricao_produto', v)}/></PIField>
                 <PIField label="Código">
                   <PIInput value={item.codigo_produto} onChange={(v) => mudarCodigo(i, v)} placeholder="Ex.: VPEL-031"/>
-                  {achado[i] === 'sim' && <span className="small" style={{ color: 'var(--vp-success, #1a7f37)' }}>✓ Dados preenchidos pelo cadastro</span>}
+                  {achado[i] === 'sim' && <span className="small" style={{ color: 'var(--vp-success, #1a7f37)' }}>✓ Campos vazios preenchidos pelo cadastro</span>}
                   {achado[i] === 'nao' && <span className="small muted">Código não encontrado — preencha à mão</span>}
                 </PIField>
                 <PIField label="Quantidade *"><PIInput type="number" step="0.01" value={item.quantidade} onChange={(v) => update(i, 'quantidade', v)}/></PIField>
