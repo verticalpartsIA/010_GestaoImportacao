@@ -471,6 +471,13 @@ const TUTORIAIS = {
   "cadastro-fornecedores": "fornecedores",
   "cadastro-materias-primas": "materias-primas",
   "cadastro-produtos": "produtos",
+  formularios: "formularios",
+  "controle-cotacoes": "controle-de-cotacoes",
+  "cotacoes-fornecedor": "cotacoes-a-fornecedor",
+  "cotacao-fornecedor-detail": "cotacao-a-fornecedor-detalhe",
+  "cotacao-quadro-comando": "cotacao-quadro-comando",
+  propostas: "propostas",
+  "contratos-sociais": "contratos-sociais",
 };
 
 /* Tutorial do MÓDULO (grupo do menu lateral, ex.: "Geral", que aninha várias telas): rótulo do grupo em NAV_GROUPS → pasta em
@@ -480,6 +487,7 @@ const MODULOS_TUTORIAL = {
   "Geral": "geral",
   "CRM": "crm",
   "Cadastros Mestres": "cadastros-mestres",
+  "Comercial | Pré-venda": "comercial-pre-venda",
 };
 
 /* Nome da tela como aparece no menu lateral (NAV_GROUPS). (O BREADCRUMB_MAP ganhou a rota `decisoes` em 04/10/2026 — issue #654 —,
