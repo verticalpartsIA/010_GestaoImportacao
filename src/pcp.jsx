@@ -296,8 +296,12 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
     return () => { vivo = false; };
   }, []);
   React.useEffect(() => {
+    // "Quem trabalhou" é o cadastro geral de colaboradores (espelho do vpsistema.com, Administração > Colaboradores),
+    // não a tabela `perfis` (login do VP Gestão) — a maioria do Almoxarifado/Produção não tem login, mas precisa
+    // poder ser apontada aqui. Quem não tem e-mail usa o próprio id como chave interna (a pcp-hh aceita as duas).
     if (!podeHH) return;
-    sb.from('perfis').select('email, nome, departamento').eq('ativo', true).order('nome').then(({ data }) => setPessoas(data || []));
+    sb.from('colaboradores_vpsistema').select('id, email, nome, departamento').eq('is_active', true).order('nome')
+      .then(({ data }) => setPessoas((data || []).map(c => ({ email: c.email || c.id, nome: c.nome, departamento: c.departamento }))));
   }, [sb, podeHH]);
   React.useEffect(() => {   // custo dos materiais: só é buscado por quem pode ver custo
     if (!podeVerCustoMat) { setTotalMat(null); return; }
