@@ -287,6 +287,7 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
   const [uploading, setUploading] = React.useState(false);
   const [aberto, setAberto] = React.useState({});
   const [aviso, setAviso] = React.useState(null);
+  const [docsAberto, setDocsAberto] = React.useState(false);
   const formularioId = cot && cot.formulario_elevador_id;
 
   const reload = React.useCallback(async (silencioso) => {
@@ -320,14 +321,19 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
     setUploading(false);
   };
 
+  const mostrarResultado = (r) => {
+    const em = r && r.__email;
+    if (em && em.ok) setAviso({ ok: true, txt: 'Registrado e enviado por e-mail para ' + em.para.join(', ') + '. A resposta dele chega aqui e no Inbox.' });
+    else setAviso({ ok: false, txt: 'Mensagem registrada, mas o e-mail NÃO foi enviado' + (em && em.motivo ? ': ' + em.motivo : '.') + ' Avise o fornecedor por outro canal.' });
+  };
+  const documentosLiberados = !!cot && ['em_analise', 'aprovada'].includes(cot.status);
+
   const enviar = async () => {
     setEnviando(true);
     try {
       const r = await store.enviar({ cotacaoFornecedorId, numeroCotacao, mensagem: texto, anexos });
       setTexto(""); setAnexos([]);
-      const em = r && r.__email;
-      if (em && em.ok) setAviso({ ok: true, txt: 'Registrado e enviado por e-mail para ' + em.para.join(', ') + '. A resposta dele chega aqui e no Inbox.' });
-      else setAviso({ ok: false, txt: 'Mensagem registrada, mas o e-mail NÃO foi enviado' + (em && em.motivo ? ': ' + em.motivo : '.') + ' Avise o fornecedor por outro canal.' });
+      mostrarResultado(r);
       await reload(true);
     } catch (e) { window.toast("Erro: " + e.message, "error"); }
     setEnviando(false);
@@ -452,13 +458,22 @@ function CfTratativas({ cotacaoFornecedorId, numeroCotacao, cot }) {
           </div>
         )}
         <div className="row sb">
-          <label style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content", cursor: "pointer", border: "1px solid var(--border)", padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#fff" }}>
-            <Icon.upload size={12}/> {uploading ? "Enviando…" : "Anexar arquivo"}
-            <input type="file" multiple style={{ display: "none" }} onChange={e => onFiles(e.target.files)}/>
-          </label>
+          <div className="row gap-2">
+            <label style={{ display: "inline-flex", alignItems: "center", gap: 6, width: "fit-content", cursor: "pointer", border: "1px solid var(--border)", padding: "6px 12px", fontSize: 12, fontWeight: 600, background: "#fff" }}>
+              <Icon.upload size={12}/> {uploading ? "Enviando…" : "Anexar arquivo"}
+              <input type="file" multiple style={{ display: "none" }} onChange={e => onFiles(e.target.files)}/>
+            </label>
+            <Button variant="outline" icon="fileText" disabled={!documentosLiberados || !window.CfEnviarDocumentosModal}
+              title={documentosLiberados ? 'Envia a cotação do fornecedor, o Projeto de Instalação assinado e as ID-TAGs numa só mensagem' : 'Disponível depois de "Decidir comprar"'}
+              onClick={() => setDocsAberto(true)}>Enviar documentos ao fornecedor</Button>
+          </div>
           <Button variant="primary" icon="send" disabled={enviando || uploading} onClick={enviar}>{enviando ? "Enviando…" : "Enviar"}</Button>
         </div>
       </div>
+      {docsAberto && window.CfEnviarDocumentosModal && (
+        <window.CfEnviarDocumentosModal cot={cot} numeroCotacao={numeroCotacao} onClose={() => setDocsAberto(false)}
+          onEnviado={(r) => { mostrarResultado(r); reload(true); }}/>
+      )}
     </Card>
   );
 }
@@ -549,6 +564,13 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
             <div style={{ flex: 1 }}>
               <div className="alert__title">Ainda não é possível decidir a compra</div>
               <div className="alert__sub" style={{ marginTop: 2 }}>{gate.motivo}</div>
+              {Array.isArray(gate.checagens) && gate.checagens.length > 0 && (
+                <ul style={{ margin: "6px 0 0", padding: 0, listStyle: "none", fontSize: 12.5 }}>
+                  {gate.checagens.map((ck) => (
+                    <li key={ck.rotulo} style={{ color: ck.ok ? "#166534" : "#8a5a00" }}>{ck.ok ? "✓" : "○"} {ck.rotulo} — {ck.ok ? "OK" : "pendente"}</li>
+                  ))}
+                </ul>
+              )}
             </div>
           </div>
         </Card>
@@ -591,7 +613,7 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
             <KvBlock label="Enviado em" value={fmtTimestamp(cot.sent_at)}/>
             <KvBlock label="Visualizado em" value={fmtTimestamp(cot.viewed_at)}/>
             <KvBlock label="Respondido em" value={fmtTimestamp(cot.responded_at)}/>
-            <KvBlock label="Decidido comprar em" value={cot.decidido_em ? fmtTimestamp(cot.decidido_em) : (bloqueadoDecisao ? 'Bloqueado — aguardando aval financeiro' : '—')}/>
+            <KvBlock label="Decidido comprar em" value={cot.decidido_em ? fmtTimestamp(cot.decidido_em) : (bloqueadoDecisao ? 'Bloqueado — faltam avais (veja o aviso no topo)' : '—')}/>
             <KvBlock label="Aprovado em" value={fmtTimestamp(cot.aprovado_em)}/>
           </Card>
         </div>
