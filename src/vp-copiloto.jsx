@@ -57,12 +57,62 @@ function vpcRawLabelText(el) {
   return '';
 }
 
+/* Fallback pra campo dentro de <table> sem <label> nenhum associado (padrão
+   comum em pcp.jsx/mes.jsx/almoxarifado.jsx: tabela com <thead><th>Coluna</th>
+   e cada linha só tem <td><select>/<input></td>, sem rótulo próprio) — acha o
+   <th> da MESMA coluna (mesmo índice dentro da <tr>) no <thead> da tabela.
+   Achado real: o select "Colaborador" da Mão de obra em pcp.jsx cai exatamente
+   nesse caso e saía sem rótulo nenhum pro Copiloto. */
+function vpcTableHeaderLabel(el) {
+  const td = el.closest('td,th');
+  const table = el.closest('table');
+  if (!td || !table) return '';
+  const tr = td.parentElement;
+  if (!tr) return '';
+  const idx = Array.prototype.indexOf.call(tr.children, td);
+  if (idx < 0) return '';
+  const headRow = table.querySelector('thead tr');
+  if (!headRow) return '';
+  const th = headRow.children[idx];
+  return th ? vpcClean(th.textContent || '') : '';
+}
+
+/* Fallback pro padrão de <select> "solto" (sem <label>, fora de tabela —
+   ex.: toolbar de "+ Apontar" em pcp.jsx) cuja 1ª <option> é um placeholder
+   tipo "Quem trabalhou…"/"Selecione…": usa esse texto como rótulo, já que é
+   exatamente a pergunta que o campo representa pro usuário. */
+function vpcFirstOptionLabel(el) {
+  if (el.tagName !== 'SELECT' || !el.options.length) return '';
+  const first = el.options[0];
+  if (first.value !== '' || !first.textContent.trim()) return '';
+  return vpcClean(first.textContent.replace(/[…:]+$/, ''));
+}
+
 function vpcLabelFor(el) {
   const raw = vpcRawLabelText(el);
   if (raw) return vpcClean(raw);
   const aria = el.getAttribute('aria-label');
   if (aria) return vpcClean(aria);
-  return vpcClean(el.getAttribute('placeholder') || el.name || '');
+  const ph = vpcClean(el.getAttribute('placeholder') || el.name || '');
+  if (ph) return ph;
+  const th = vpcTableHeaderLabel(el);
+  if (th) return th;
+  return vpcFirstOptionLabel(el);
+}
+
+/* Título da seção (h1-h4) mais próxima ANTES do campo, em ordem de leitura da
+   página — contexto extra pro Copiloto descrever um campo por onde ele fica
+   na tela quando o rótulo vier vazio/ambíguo, em vez de citar o índice interno
+   (idx) pro usuário, que não significa nada pra quem não é desenvolvedor. */
+function vpcSectionHint(el, headings) {
+  let best = '';
+  for (const h of headings) {
+    // POSIÇÃO: Node.DOCUMENT_POSITION_FOLLOWING (4) = h vem DEPOIS de el.
+    // Queremos o último heading que vem ANTES de el (comparação invertida).
+    const pos = h.compareDocumentPosition(el);
+    if (pos & Node.DOCUMENT_POSITION_FOLLOWING) best = h.textContent || '';
+  }
+  return vpcClean(best);
 }
 
 function vpcRequired(el) {
@@ -80,6 +130,7 @@ function vpcRequired(el) {
 function vpcScanPage() {
   const main = document.querySelector('main.main') || document.body;
   const nodes = main.querySelectorAll('input, textarea, select');
+  const headings = Array.from(main.querySelectorAll('h1, h2, h3, h4'));
   const fields = [], els = [];
   let i = 0;
   nodes.forEach((el) => {
@@ -91,9 +142,15 @@ function vpcScanPage() {
     if (!(el.offsetWidth || el.offsetHeight || el.getClientRects().length)) return;
     const isSelect = tag === 'select';
     const isCheckbox = type === 'checkbox';
+    const label = vpcLabelFor(el);
     const f = {
       idx: i,
-      label: vpcLabelFor(el),
+      label,
+      // Título da seção/card onde o campo mora — SEMPRE presente (mesmo com
+      // label preenchido), pra IA conseguir dizer "o campo X, na seção Y" em
+      // vez de só o nome solto do campo quando a tela tem campos repetidos
+      // com o mesmo rótulo em seções diferentes (ex.: "Observação").
+      hint: vpcSectionHint(el, headings),
       type: isSelect ? 'select' : (tag === 'textarea' ? 'textarea' : isCheckbox ? 'checkbox' : (type || 'text')),
       value: isCheckbox ? !!el.checked : (el.value || ''),
       required: vpcRequired(el),
@@ -403,11 +460,10 @@ function VpCopiloto({ route, role }) {
       if (mode === 'questionario') body.questionarioContext = window.__VPC_QUESTIONARIO || null;
       const resp = await vpcCall(body);
       if (resp.fills && resp.fills.length) {
-        const preview = resp.fills.map(f => ({
-          idx: f.idx,
-          label: (fieldsRef.current[f.idx] && fieldsRef.current[f.idx].label) || ('Campo ' + f.idx),
-          value: f.value,
-        }));
+        const preview = resp.fills.map(f => {
+          const fld = fieldsRef.current[f.idx];
+          return { idx: f.idx, label: (fld && (fld.label || fld.hint)) || ('Campo ' + f.idx), value: f.value };
+        });
         setPendingFill({ fills: resp.fills, preview });
       }
       if (resp.opsQuestionario && resp.opsQuestionario.length) {
@@ -508,12 +564,16 @@ function VpCopiloto({ route, role }) {
                     {it.suggestion && <div className="vpc-issue-sug">💡 {it.suggestion}</div>}
                     {idxs.length > 0 && (
                       <div className="vpc-issue-jumps">
-                        {idxs.map(idx => (
-                          <button key={idx} type="button" className="vpc-jump" onClick={() => vpcJumpTo(idx)}
-                            title="Clique para ir até o campo na tela">
-                            ↳ {(fieldsRef.current[idx] && fieldsRef.current[idx].label) || ('Campo ' + idx)}
-                          </button>
-                        ))}
+                        {idxs.map(idx => {
+                          const fld = fieldsRef.current[idx];
+                          const rotulo = (fld && (fld.label || fld.hint)) || ('Campo ' + idx);
+                          return (
+                            <button key={idx} type="button" className="vpc-jump" onClick={() => vpcJumpTo(idx)}
+                              title="Clique para ir até o campo na tela">
+                              ↳ {rotulo}
+                            </button>
+                          );
+                        })}
                       </div>
                     )}
                   </div>
