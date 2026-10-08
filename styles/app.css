@@ -435,6 +435,48 @@ button.nav-item {
 }
 .sidebar__collapse:hover { background: var(--vp-yellow); color: #000; border-color: var(--vp-yellow); }
 
+/* ---- Sidebar: visual novo (degradê amarelo -> preto) — só estilo, mesma marcação.
+   O degradê ocupa só o alto (marca + 1º grupo); abaixo é quase preto, para o texto manter contraste. ---- */
+.app { --sidebar-w: 256px; }
+.app[data-sidebar="collapsed"] { --sidebar-w: 72px; }
+.sidebar {
+  background: linear-gradient(180deg, #F5C400 0, #C9A000 56px, #4a3b00 190px, #151100 330px, #0B0B0B 460px);
+}
+.sidebar::after { display: none; }
+.sidebar__brand { border-bottom: 0; padding: 0 18px; gap: 12px; }
+.sidebar__brand-mark {
+  width: 34px; height: 34px; padding: 5px; border-radius: 9px;
+  background: #0B0B0B; object-fit: contain; flex: none;
+}
+.sidebar__brand-text { color: #111; font-size: 19px; }
+.sidebar__brand-text b { color: #111; opacity: .62; }
+.sidebar__brand-sub { color: rgba(0,0,0,.62); }
+.sidebar__scroll { padding: 14px 10px 24px; }
+.sidebar__group { margin-top: 18px; }
+.sidebar__group-label {
+  padding: 8px 8px 8px 12px; font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  color: rgba(255,255,255,.58);
+}
+.sidebar__group-sublabel { font-size: 9px; letter-spacing: .1em; color: rgba(255,255,255,.42); }
+.nav-item, button.nav-item {
+  align-items: center; gap: 12px; padding: var(--nav-py, 9px) 12px; margin-bottom: 2px;
+  border: 0; border-left: 0; border-radius: 10px; color: rgba(255,255,255,.84);
+}
+.nav-item .nav-item__icon { margin-top: 0; }
+.nav-item__icon, .nav-item__icon svg { width: 20px; height: 20px; }
+.nav-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+.nav-item.is-active {
+  background: linear-gradient(90deg, rgba(245,196,0,.24), rgba(245,196,0,.08));
+  color: #FFE27A; border-left: 0;
+}
+.nav-item__badge { border-radius: 10px; padding: 1px 7px; }
+.app[data-sidebar="collapsed"] .nav-item:hover::after { border-left: 0; border-radius: 8px; }
+.sidebar__foot { border-top-color: rgba(255,255,255,.08); padding: 12px 10px; }
+.sidebar__user { border-radius: 12px; border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.06); }
+.sidebar__user-role { color: rgba(255,255,255,.55); }
+.sidebar__version { border-top-color: rgba(255,255,255,.08); color: rgba(255,255,255,.45); }
+.sidebar__collapse { border-radius: 8px; top: 17px; }
+
 /* ========== HEADER ================================================= */
 .header {
   grid-area: header;
