@@ -133,6 +133,7 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
   if (rows === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const kpi = (pred) => rows.filter(pred).length;
+  const contagemTab = (key) => key === 'todos' ? rows.length : key === 'aguardando' ? kpi((r) => CF_AGUARDANDO.includes(r.status)) : kpi((r) => r.status === key);
 
   return (
     <div className="page fade-in">
@@ -151,19 +152,24 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
         <KPI label="Aprovadas" value={kpi((r) => r.status === 'aprovada')} sub="compra confirmada" icon="check"/>
       </div>
 
-      <div className="tbar">
-        <div className="seg">{CF_TABS.map((t) => (
-          <button key={t.key} className={tab === t.key ? 'is-active' : ''} onClick={() => setTab(t.key)}>{t.label}</button>
-        ))}</div>
-        <div className="spacer"/>
-        <select className="input" style={{ maxWidth: 180 }} value={fFornecedor} onChange={(e) => setFFornecedor(e.target.value)}>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <select className="input" style={{ maxWidth: 220 }} value={fFornecedor} onChange={(e) => setFFornecedor(e.target.value)}>
           <option value="Todos">Todos os fornecedores</option>
           {fornecedores.map((f) => <option key={f} value={f}>{f}</option>)}
         </select>
-        <select className="input" style={{ maxWidth: 200 }} value={fCategoria} onChange={(e) => setFCategoria(e.target.value)}>
+        <select className="input" style={{ maxWidth: 220 }} value={fCategoria} onChange={(e) => setFCategoria(e.target.value)}>
           <option value="Todos">Todas as categorias</option>
           {store.CATEGORIAS_PRODUTO.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
+        <span className="small" style={{ color: 'var(--fg3)' }}>{filtradas.length} cotação(ões)</span>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {CF_TABS.map((t) => (
+          <Button key={t.key} size="sm" variant={tab === t.key ? 'primary' : 'ghost'} onClick={() => setTab(t.key)}>
+            {t.label} <span style={{ opacity: .7 }}>({contagemTab(t.key)})</span>
+          </Button>
+        ))}
       </div>
 
       {selecionadas.size > 0 && (
@@ -175,8 +181,9 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
         </div>
       )}
 
-      <div className="table-wrap">
-        <table className="t">
+      <Card title="Cotações enviadas" sub="Clique numa linha para abrir o detalhe e as tratativas">
+      <div className="table-wrap" style={{ border: 0 }}>
+        <table className="t pcp-grid">
           <thead><tr>
             <th style={{ width: 32 }}>
               <input type="checkbox" aria-label="Selecionar todas"
@@ -204,25 +211,26 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
                   <input type="checkbox" aria-label={`Selecionar ${c.numero_documento}`}
                     checked={selecionadas.has(c.id)} onChange={() => toggleSelecionada(c.id)}/>
                 </td>
-                <td><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{c.numero_documento}</span></td>
-                <td><span className="mono small">{(() => {
+                <td style={{ whiteSpace: 'nowrap' }}><span className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{c.numero_documento}</span></td>
+                <td style={{ whiteSpace: 'nowrap' }}><span className="mono small">{(() => {
                   const n = c.dados_envio?.header?.numero_cotacao ?? c.formularios_elevador?.numero_cotacao;
                   return n != null ? window.MasterIdEngine.etapaId('cotacao', n) : '—';
                 })()}</span></td>
-                <td>
-                  <div className="cell-main">{cfPredioLabel(c)}</div>
+                <td style={{ maxWidth: 240 }}>
+                  <div className="cell-main" style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cfPredioLabel(c)}>{cfPredioLabel(c)}</div>
                   <div className="cell-sub">{c.formularios_elevador?.local_obra_cidade ? `${c.formularios_elevador.local_obra_cidade}/${c.formularios_elevador.local_obra_estado || ''}` : ''}</div>
                 </td>
-                <td>{c.fornecedor}</td>
+                <td style={{ whiteSpace: 'nowrap' }}>{c.fornecedor}</td>
                 <td>{cfCategoriaLabel(c.categoria_produto)}</td>
-                <td><span className="cell-num">{fmtTimestamp(c.sent_at)}</span></td>
-                <td><FECefStatusChip status={c.status}/></td>
+                <td style={{ whiteSpace: 'nowrap' }}><span className="cell-num">{fmtTimestamp(c.sent_at)}</span></td>
+                <td style={{ whiteSpace: 'nowrap' }}><FECefStatusChip status={c.status}/></td>
                 <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+      </Card>
 
       {showExcluir && (
         <Modal title={`Excluir ${selecionadas.size} cotação(ões)`}
