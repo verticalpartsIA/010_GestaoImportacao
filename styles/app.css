@@ -709,6 +709,47 @@ button.nav-item {
 .btn--icon { padding: 0; width: 36px; justify-content: center; }
 .btn[disabled] { opacity: .4; cursor: not-allowed; }
 
+/* ========== CALLOUT / PANEL-SOFT / STEP-CARD (piloto Leads) ========
+   Substituem caixas montadas com style={{}} e cores hexadecimais soltas.
+   Só usam tokens de colors_and_type.css. */
+.callout {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--vp-gray-50); color: var(--fg1);
+}
+.callout__icon { font-size: 16px; font-weight: 700; flex: none; }
+.callout__title { font-weight: 600; }
+.callout__sub { margin-top: 2px; font-size: 12px; color: var(--fg3); }
+.callout--success { background: var(--vp-success-tint); border-color: var(--vp-success); }
+.callout--success .callout__icon, .callout--success .callout__title { color: var(--vp-success-ink); }
+.callout--info { background: var(--vp-info-tint); border-color: var(--vp-info); }
+.callout--info .callout__icon, .callout--info .callout__title { color: var(--vp-info); }
+.callout--warning { background: var(--vp-warning-tint); border-color: var(--vp-warning); }
+.callout--warning .callout__icon, .callout--warning .callout__title { color: var(--vp-warning-ink); }
+
+.panel-soft {
+  background: var(--vp-gray-50); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 14px 16px;
+}
+.text-warning, .cell-sub.text-warning { color: var(--vp-warning-ink); }
+
+.step-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: var(--r-lg); background: #fff;
+}
+.step-card--current { background: var(--vp-yellow-tint); border-color: var(--vp-yellow); }
+.step-card--next { border-color: var(--border-strong); }
+.step-card--future { background: var(--vp-gray-50); opacity: .7; }
+.step-card__icon {
+  width: 34px; height: 34px; border-radius: var(--r-md); flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--vp-gray-100); color: var(--fg2);
+}
+.step-card--current .step-card__icon { background: var(--vp-black); color: var(--vp-yellow); }
+.step-card__body { flex: 1; min-width: 0; }
+.step-card__label { font-size: 13px; font-weight: 600; color: var(--fg1); }
+
 /* ========== CARDS ================================================== */
 .card {
   background: #fff;

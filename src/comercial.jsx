@@ -106,10 +106,10 @@ function precisaVerificarOmie(cli) {
 
 function OmieStatusBox({ status }) {
   const tone = status.encontrado === true
-    ? { bg: '#ecfdf5', border: '#10b981', fg: '#059669', icon: '✓' }
+    ? { cls: 'callout--success', icon: '✓' }
     : status.encontrado === false
-      ? { bg: '#f0f9ff', border: '#3b82f6', fg: '#0284c7', icon: 'ℹ' }
-      : { bg: '#fffbeb', border: '#f59e0b', fg: '#b45309', icon: '!' };
+      ? { cls: 'callout--info', icon: 'ℹ' }
+      : { cls: 'callout--warning', icon: '!' };
   const titulo = status.encontrado === true
     ? 'Cliente cadastrado no ERP' + (status.data_cadastro ? ' desde ' + status.data_cadastro : '')
     : status.encontrado === false ? 'Não encontrado no ERP' : 'Não foi possível consultar o ERP';
@@ -118,11 +118,11 @@ function OmieStatusBox({ status }) {
     : status.encontrado === false ? 'Seguindo com a consulta pública de CNPJ'
       : (status.erro ? status.erro + ' — ' : '') + 'seguindo com a consulta pública de CNPJ';
   return (
-    <div style={{ background: tone.bg, border: '1px solid ' + tone.border, padding: '10px 12px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ color: tone.fg, fontSize: 16, fontWeight: 700 }}>{tone.icon}</span>
+    <div className={'callout ' + tone.cls}>
+      <span className="callout__icon">{tone.icon}</span>
       <div>
-        <div style={{ fontWeight: 600, color: tone.fg }}>{titulo}</div>
-        {sub ? <div style={{ color: 'var(--fg3)', fontSize: 12, marginTop: 2 }}>{sub}</div> : null}
+        <div className="callout__title">{titulo}</div>
+        {sub ? <div className="callout__sub">{sub}</div> : null}
       </div>
     </div>
   );
@@ -382,13 +382,13 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
           )}
         </>}>
         <div className="stack" style={{ gap: 12 }}>
-          <div style={{ background:'var(--vp-gray-50)', border:'1px solid var(--border)', padding:'14px 16px' }}>
+          <div className="panel-soft">
             <div className="up-eyebrow muted" style={{ marginBottom:6 }}>Lead criado com sucesso</div>
             <div style={{ fontWeight:700, fontSize:15 }}>{savedLead.building}</div>
             <div className="cell-sub" style={{ marginTop:4 }}>{savedLead.id}</div>
             {savedLead.cliente_id
               ? <div className="cell-sub" style={{ marginTop:4 }}>Cliente vinculado: {savedLead.razaoSocial || savedLead.building}</div>
-              : <div className="cell-sub" style={{ marginTop:4, color:'var(--vp-orange, #b45309)' }}>Sem CNPJ/CPF vinculado ainda — pode ser resolvido no Formulário.</div>}
+              : <div className="cell-sub text-warning" style={{ marginTop:4 }}>Sem CNPJ/CPF vinculado ainda — pode ser resolvido no Formulário.</div>}
           </div>
           <p style={{ fontSize:13, color:'var(--fg2)', margin:0 }}>
             Deseja abrir o Formulário agora e alocar os equipamentos deste lead?
@@ -554,7 +554,7 @@ function ModalExcluirLead({ lead, onClose, onExcluido }) {
         </Button>
       </>}>
       <div className="stack" style={{ gap: 12 }}>
-        <div style={{ background: 'var(--vp-gray-50)', border: '1px solid var(--border)', padding: '12px 14px' }}>
+        <div className="panel-soft">
           <div style={{ fontWeight: 700, fontSize: 15 }}>{lead.building || '—'}</div>
           <div className="cell-sub" style={{ marginTop: 4 }}>
             {lead.id}{lead.contact ? ' · ' + lead.contact : ''}{lead.date ? ' · criado em ' + fmtDate(lead.date) : ''}
@@ -564,9 +564,9 @@ function ModalExcluirLead({ lead, onClose, onExcluido }) {
           <div className="muted small">Verificando dossiês, formulários e cotações ligados a este lead…</div>
         )}
         {itens.length > 0 && (
-          <div style={{ background: '#fffbeb', border: '1px solid #f59e0b', padding: '10px 12px', fontSize: 13 }}>
-            <div style={{ fontWeight: 600, color: '#b45309' }}>Este lead tem registros ligados: {itens.join(', ')}.</div>
-            <div style={{ color: 'var(--fg3)', fontSize: 12, marginTop: 2 }}>
+          <div className="callout callout--warning" style={{ display: 'block' }}>
+            <div className="callout__title">Este lead tem registros ligados: {itens.join(', ')}.</div>
+            <div className="callout__sub">
               Eles não são apagados e continuam acessíveis nos seus módulos — só o lead sai da lista.
             </div>
           </div>
@@ -1262,23 +1262,14 @@ function KvBlock({ label, value, mono }) {
 }
 function SuggestedStep({ icon, label, sub, status }) {
   const I = Icon[icon] || Icon.bolt;
-  const stylesByStatus = {
-    current: { background: "#FFFBE6", borderColor: "var(--vp-yellow)" },
-    next:    { background: "#fff", borderColor: "var(--border-strong)" },
-    future:  { background: "var(--vp-gray-50)", borderColor: "var(--border)", opacity: .7 },
-  };
+  const variante = ['current', 'next', 'future'].includes(status) ? status : 'future';
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 12,
-      padding: "12px 14px",
-      border: "1px solid var(--border)",
-      ...(stylesByStatus[status] || stylesByStatus.future)
-    }}>
-      <div style={{ width: 34, height: 34, background: status === "current" ? "#000" : "var(--vp-gray-100)", color: status === "current" ? "var(--vp-yellow)" : "var(--fg2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div className={'step-card step-card--' + variante}>
+      <div className="step-card__icon">
         <I size={18}/>
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>{label}</div>
+      <div className="step-card__body">
+        <div className="step-card__label">{label}</div>
         <div className="cell-sub">{sub}</div>
       </div>
       <Icon.chevRight size={16} color="var(--fg3)"/>
