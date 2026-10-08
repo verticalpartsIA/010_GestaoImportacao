@@ -90,10 +90,38 @@
 
   function Icon({ passo, emoji }) {
     const src = STEP_ICON_SRC[passo];
-    // Ilustrações isométricas exportadas em 320x175 (16:9-ish) — a caixa
-    // segue a mesma proporção pra `cover` não cortar nada, só encaixar.
-    if (src) return <img src={src} alt="" style={{ width: 56, height: 31, objectFit: 'cover', borderRadius: 6, flexShrink: 0 }}/>;
+    // Ilustrações isométricas exportadas em 320x175 (16:9-ish). Em vez de
+    // espremer a imagem inteira numa tira fininha dentro da barra preta
+    // (ficava pequena e "achatada"), ela ganha uma moldura branca com
+    // sombra — um selo que se destaca da barra, bem maior.
+    if (src) {
+      return (
+        <div style={{ background: '#fff', borderRadius: 10, padding: 4, boxShadow: '0 2px 10px rgba(0,0,0,0.3)', flexShrink: 0, lineHeight: 0 }}>
+          <img src={src} alt="" style={{ width: 92, height: 50, objectFit: 'cover', borderRadius: 7, display: 'block' }}/>
+        </div>
+      );
+    }
     return <span style={{ fontSize: 20 }}>{emoji}</span>;
+  }
+
+  function ChoiceCard({ emoji, title, subtitle, selected, onClick }) {
+    return (
+      <div onClick={onClick} style={{
+        flex: '1 1 220px', maxWidth: 320, cursor: 'pointer', textAlign: 'center',
+        background: selected ? 'var(--vp-yellow-tint)' : '#fff',
+        border: `2.5px solid ${selected ? 'var(--vp-yellow-press)' : 'var(--gray-300)'}`,
+        borderRadius: 14, padding: '28px 20px', transition: 'transform .12s, box-shadow .12s',
+        boxShadow: selected ? '0 6px 20px rgba(0,0,0,0.14)' : '0 2px 8px rgba(0,0,0,0.06)',
+      }}>
+        <div style={{
+          width: 72, height: 72, margin: '0 auto 14px', borderRadius: '50%',
+          background: selected ? 'var(--vp-yellow)' : 'var(--gray-100)',
+          display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 36,
+        }}>{emoji}</div>
+        <div style={{ fontFamily: 'Poppins, sans-serif', fontWeight: 700, fontSize: 16, color: 'var(--gray-900)', marginBottom: 4 }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--gray-600)' }}>{subtitle}</div>
+      </div>
+    );
   }
 
   function Field({ label, req, children, hint }) {
@@ -358,11 +386,13 @@
 
         {passo === 0 && (
           <Section icon="🚀" passo="boasVindas" title="Bem-vindo ao Portal de Especificação Técnica VerticalParts">
-            <p style={{ fontSize: 13, color: 'var(--gray-700)' }}>Informe o tipo de serviço e siga o passo a passo — leva poucos minutos.</p>
-            <Field label="Tipo de Serviço" req>
-              <RadioGroup name="tipo_servico" value={f.tipo_servico} onChange={(v) => set({ tipo_servico: v })}
-                options={[{ value: 'modernizacao', label: 'Modernização (elevador existente)' }, { value: 'elevador_novo', label: 'Elevador Novo' }]}/>
-            </Field>
+            <p style={{ fontSize: 13, color: 'var(--gray-700)', marginBottom: 4 }}>O que você deseja fazer? Escolha uma opção e siga o passo a passo — leva poucos minutos.</p>
+            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 16, justifyContent: 'center', padding: '8px 0' }}>
+              <ChoiceCard emoji="🔧" title="Modernização" subtitle="Troca de quadro de comando num elevador existente"
+                selected={f.tipo_servico === 'modernizacao'} onClick={() => set({ tipo_servico: 'modernizacao' })}/>
+              <ChoiceCard emoji="🏗️" title="Elevador Novo" subtitle="Quadro de comando pra uma instalação nova"
+                selected={f.tipo_servico === 'elevador_novo'} onClick={() => set({ tipo_servico: 'elevador_novo' })}/>
+            </div>
           </Section>
         )}
 
