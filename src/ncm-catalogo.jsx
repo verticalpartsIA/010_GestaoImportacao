@@ -537,25 +537,28 @@ function NcmCatalogoPage({ setRoute }) {
         </div>
       ) : null}
 
-      {tab !== "pedidos" && <div className="tbar">
-        <div className="seg">
-          {sitFilters.map(s => (
-            <button key={s} className={filter === s ? "is-active" : ""} onClick={() => setFilter(s)}>
-              {s === "Todos" ? "Todos" : s.charAt(0).toUpperCase() + s.slice(1) + "s"}
-            </button>
-          ))}
-        </div>
-        <div className="spacer"/>
+      {tab !== "pedidos" && <div style={{ display:"flex", gap:10, alignItems:"center", marginBottom:12, flexWrap:"wrap" }}>
+        <input className="input" style={{ maxWidth:340 }} placeholder={tab === "produtos" ? "Buscar produto, NCM, código…" : "Buscar operador, país…"} value={search} onChange={(e) => setSearch(e.target.value)}/>
+        <span className="small" style={{ color:"var(--fg3)" }}>{tab === "produtos" ? prodRows.length : opRows.length} {tab === "produtos" ? "produto(s)" : "operador(es)"}</span>
+        <div className="spacer" style={{ flex:1 }}/>
         {tab === "produtos" && nArquivados > 0 && (
-          <label className="small muted" style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer", marginRight:10 }}>
+          <label className="small muted" style={{ display:"flex", alignItems:"center", gap:6, cursor:"pointer" }}>
             <input type="checkbox" className="pf-chk" checked={mostrarArq} onChange={(e) => setMostrarArq(e.target.checked)}/>
             Mostrar arquivados ({nArquivados})
           </label>
         )}
-        <div className="search">
-          <Icon.search size={12} color="var(--fg3)"/>
-          <input placeholder={tab === "produtos" ? "Buscar produto, NCM, código…" : "Buscar operador, país…"} value={search} onChange={(e) => setSearch(e.target.value)}/>
-        </div>
+      </div>}
+
+      {tab !== "pedidos" && <div style={{ display:"flex", gap:6, marginBottom:12, flexWrap:"wrap" }}>
+        {sitFilters.map(s => {
+          const lista = tab === "produtos" ? produtos : operadores;
+          const n = s === "Todos" ? lista.length : lista.filter(x => x.situacao === s).length;
+          return (
+            <Button key={s} size="sm" variant={filter === s ? "primary" : "ghost"} onClick={() => setFilter(s)}>
+              {s === "Todos" ? "Todos" : s.charAt(0).toUpperCase() + s.slice(1) + "s"} <span style={{ opacity:.7 }}>({n})</span>
+            </Button>
+          );
+        })}
       </div>}
 
       {tab === "produtos" && sel.size > 0 && (
