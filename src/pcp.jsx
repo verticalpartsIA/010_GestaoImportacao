@@ -29,7 +29,7 @@ function pcpExplodir(raiz, filhos, mult, acc, pilha) {
 }
 
 function PCPStatusTag({ status, mapa }) {
-  const cor = status === 'concluida' ? 'color-mix(in srgb, #2e9e5b 25%, transparent)'
+  const cor = status === 'concluida' ? 'color-mix(in srgb, var(--vp-success) 25%, transparent)'
     : status === 'em_producao' || status === 'em_andamento' ? 'color-mix(in srgb, var(--vp-yellow) 35%, transparent)'
     : status === 'cancelada' ? 'color-mix(in srgb, var(--vp-danger, #c0392b) 20%, transparent)' : undefined;
   return <span className="pcp-tag" style={cor ? { background: cor } : undefined}>{mapa[status] || status}</span>;
@@ -189,7 +189,7 @@ ${jaTem} linha(s) já constam no Omie e NÃO serão tocadas.` : ''}`
             <tbody>
               {plano.linhas.map(l => (
                 <tr key={l.tipo + l.codigo}>
-                  <td><span className="pcp-tag" style={l.tipo === 'ENT' ? { background: 'color-mix(in srgb, #2e9e5b 25%, transparent)' } : undefined}>{l.tipo === 'SAI' ? 'Saída (consumo)' : 'Entrada (acabado)'}</span></td>
+                  <td><span className="pcp-tag" style={l.tipo === 'ENT' ? { background: 'color-mix(in srgb, var(--vp-success) 25%, transparent)' } : undefined}>{l.tipo === 'SAI' ? 'Saída (consumo)' : 'Entrada (acabado)'}</span></td>
                   <td>{l.codigo}</td>
                   <td>{(prods[l.codigo] || {}).descricao || ''}</td>
                   <td className="text-right">{l.tipo === 'SAI'
@@ -198,7 +198,7 @@ ${jaTem} linha(s) já constam no Omie e NÃO serão tocadas.` : ''}`
                   <td style={{ minWidth: 250, fontSize: 12 }}>
                     {l.situacao === 'novo' && <span className="pcp-tag">novo — será lançado</span>}
                     {l.situacao !== 'novo' && (<>
-                      <span className="pcp-tag" style={{ background: l.situacao === 'igual' ? 'color-mix(in srgb, #2e9e5b 25%, transparent)' : 'color-mix(in srgb, var(--vp-yellow) 40%, transparent)' }}>
+                      <span className="pcp-tag" style={{ background: l.situacao === 'igual' ? 'color-mix(in srgb, var(--vp-success) 25%, transparent)' : 'color-mix(in srgb, var(--vp-yellow) 40%, transparent)' }}>
                         {l.situacao === 'igual' ? 'já consta no Omie — não mexer' : 'Omie tem quantidade diferente'}
                       </span>
                       <div style={{ color: 'var(--fg3)' }}>{l.omie.map((o, i) => <span key={i}>{o.data.split('-').reverse().join('/')}: {o.tipo === 'SAI' ? 'saída' : 'entrada'} de {pcpFmt(o.quantidade)}{o.origem_pcp ? ' (PCP)' : ' (manual)'}{i < l.omie.length - 1 ? ' · ' : ''}</span>)}</div>
