@@ -673,21 +673,22 @@ function PropostasPage({ setRoute, setSubsel }) {
         <KPI label="Aprovadas" value={(rows || []).filter((p) => p.status === 'aprovada').length} sub="fecharam negócio" icon="check"/>
       </div>
 
-      <div className="tbar">
-        <div className="seg">
-          {['Todos'].concat(statusDisponiveis).map((s) => (
-            <button key={s} className={fStatus === s ? 'is-active' : ''} onClick={() => setFStatus(s)}>{s}</button>
-          ))}
-        </div>
-        <div className="spacer"/>
-        <div className="search">
-          <Icon.search size={12} color="var(--fg3)"/>
-          <input placeholder="Buscar por código, cliente, CNPJ, equipamento, cotação ou vendedor…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
-        </div>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <input className="input" style={{ maxWidth: 420 }} placeholder="Buscar por código, cliente, CNPJ, equipamento, cotação ou vendedor…" value={busca} onChange={(e) => setBusca(e.target.value)}/>
+        <span className="small" style={{ color: 'var(--fg3)' }}>{rows ? filtradas.length : '…'} proposta(s)</span>
       </div>
 
-      <div className="table-wrap">
-        <table className="t la-table">
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {['Todos'].concat(statusDisponiveis).map((s) => (
+          <Button key={s} size="sm" variant={fStatus === s ? 'primary' : 'ghost'} onClick={() => setFStatus(s)}>
+            {String(s).replace(/_/g, ' ')} <span style={{ opacity: .7 }}>({s === 'Todos' ? (rows ? rows.length : 0) : (rows || []).filter((r) => r.status === s).length})</span>
+          </Button>
+        ))}
+      </div>
+
+      <Card title="Propostas" sub="Clique numa proposta para abrir no editor">
+      <div className="table-wrap" style={{ border: 0 }}>
+        <table className="t pcp-grid">
           <thead><tr>
             <th>Nº Documento</th>
             <th>Cliente</th>
@@ -707,12 +708,12 @@ function PropostasPage({ setRoute, setSubsel }) {
             )}
             {filtradas.map((p) => (
               <tr key={p.id} style={{ cursor: 'pointer' }} onClick={() => abrirExistente(p)}>
-                <td><span className="mono small">{p.numero_documento || '—'}</span></td>
+                <td style={{ whiteSpace: 'nowrap' }}><span className="mono small">{p.numero_documento || '—'}</span></td>
                 <td style={{ fontSize: 12.5 }}>{p.clientes?.razao_social || p.titulo || <span className="muted">—</span>}</td>
                 <td style={{ fontSize: 12.5 }}>{p.perfis?.nome || <span className="muted">—</span>}</td>
                 <td><span className="mono small">{p.master_id || <span className="muted">—</span>}</span></td>
                 <td className="cell-money">{p.valor_total ? fmtBRL(p.valor_total) : '—'}</td>
-                <td><StatusBadge status={p.status || 'rascunho'}/></td>
+                <td style={{ whiteSpace: 'nowrap' }}><StatusBadge status={p.status || 'rascunho'}/></td>
                 <td><span className="mono small" style={{ whiteSpace: 'nowrap' }}>{p.criado_em ? new Date(p.criado_em).toLocaleDateString('pt-BR') : '—'}</span></td>
                 {podeExcluir && (
                   <td>
@@ -725,6 +726,7 @@ function PropostasPage({ setRoute, setSubsel }) {
           </tbody>
         </table>
       </div>
+      </Card>
     </div>
   );
 }
