@@ -255,3 +255,33 @@ test('calcular — GRI soma como despesa operacional, entra na base do AFRMM e a
   const metade = E.calcular({ ...inputsBase, containers, containerRateioDivisor: 2 });
   closeTo(metade.importacao.griRs, 75, 0.01, 'GRI dividida pelo rateio (card 120d compartilhado)');
 });
+
+test('ratearPorModelo — equipamento mais caro no fornecedor sai com preço de venda maior; soma fecha no total', () => {
+  const modelos = [
+    { unidadeId: 'a', quantidade: 1, valorUnitarioUsd: 16830 },
+    { unidadeId: 'b', quantidade: 1, valorUnitarioUsd: 16830 },
+    { unidadeId: 'c', quantidade: 1, valorUnitarioUsd: 17670 },
+  ];
+  const r = E.ratearPorModelo(modelos, 652551.14);
+  assert.ok(r[2].valorUnitarioRs > r[0].valorUnitarioRs, 'o 3º é mais caro');
+  assert.equal(r[0].valorUnitarioRs, r[1].valorUnitarioRs);
+  closeTo(r.reduce((s, m) => s + m.valorUnitarioRs * m.quantidade, 0), 652551.14, 0.01, 'soma = total');
+});
+
+test('ratearPorModelo — quantidade > 1 devolve valor POR equipamento; sem custo USD divide por quantidade', () => {
+  const r = E.ratearPorModelo([{ quantidade: 2, valorUnitarioUsd: 100 }, { quantidade: 1, valorUnitarioUsd: 200 }], 1000);
+  closeTo(r[0].valorUnitarioRs, 250, 0.001, 'cada um dos 2');
+  closeTo(r[1].valorUnitarioRs, 500, 0.001, 'o único');
+  const igual = E.ratearPorModelo([{ quantidade: 1 }, { quantidade: 1 }], 1000);
+  closeTo(igual[0].valorUnitarioRs, 500, 0.001, 'sem USD: igual');
+  assert.deepEqual(E.ratearPorModelo(undefined, 100), []);
+});
+
+test('calcularV2 — devolve modelos rateados sobre o preço do próprio V2', () => {
+  const out = E.calcularV2({
+    parametros: {}, vmleUsd: 1000, txCambial: 5, quantidadeEquipamentos: 2,
+    modoFormacaoPreco: 'markup_sobre_custo', markUpPct: 0.3,
+    modelos: [{ quantidade: 1, valorUnitarioUsd: 400 }, { quantidade: 1, valorUnitarioUsd: 600 }],
+  });
+  closeTo(out.modelos.reduce((s, m) => s + m.valorTotalRs, 0), out.precificacao.precoVendaProposta, 0.01, 'soma = preço V2');
+});

@@ -291,6 +291,9 @@
       versaoMotor: '2.0.0',
       modoFormacaoPreco,
       divisorValido,
+      // Rateio do preço do V2 por unidade/modelo — antes só o V1 devolvia
+      // `modelos`, então a Proposta herdava o rateio sobre o preço do V1.
+      modelos: ratearPorModelo(inputs.modelos, precoVendaProposta),
       custoEconomicoCompleto,
       componentes: { custoLiquidoImportacao, despesasOperacionais, contingenciaValor, outrosCustosNaoRecuperaveisRs },
       importacao: v1.importacao,
@@ -311,5 +314,26 @@
     };
   }
 
-  window.PrecificacaoElevadorEngine = { calcular, calcularV2, creditoElegivel };
+  /* Divide o preço de venda total entre as unidades/modelos, ponderando pelo
+     custo do fornecedor (USD × quantidade) — mesma regra do rateio do V1.
+     Equipamento mais caro no fornecedor sai com preço de venda maior; o
+     valorUnitarioRs de cada unidade já é "por equipamento" (÷ quantidade).
+     Sem custo USD em nenhuma unidade, divide igualmente pela quantidade. */
+  function ratearPorModelo(modelos, precoVendaTotal) {
+    const lista = (Array.isArray(modelos) ? modelos : []).map((m) => {
+      const quantidade = Number(m.quantidade) || 1;
+      const valorUnitarioUsd = Number(m.valorUnitarioUsd) || 0;
+      return { ...m, quantidade, valorUnitarioUsd, valorTotalUsd: quantidade * valorUnitarioUsd };
+    });
+    const totalUsd = lista.reduce((s, m) => s + m.valorTotalUsd, 0);
+    const totalQtd = lista.reduce((s, m) => s + m.quantidade, 0);
+    const total = Number(precoVendaTotal) || 0;
+    return lista.map((m) => {
+      const percentual = totalUsd > 0 ? m.valorTotalUsd / totalUsd : (totalQtd > 0 ? m.quantidade / totalQtd : 0);
+      const valorTotalRs = percentual * total;
+      return { ...m, percentual, valorTotalRs, valorUnitarioRs: valorTotalRs / m.quantidade };
+    });
+  }
+
+  window.PrecificacaoElevadorEngine = { calcular, calcularV2, creditoElegivel, ratearPorModelo };
 }());

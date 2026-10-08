@@ -52,6 +52,44 @@ function PZField({ label, children, span }) {
     </div>
   );
 }
+/* Preço de venda equipamento a equipamento (VPEL-EL0985-1 = R$ x, …). O
+   preço total é rateado pelo custo do fornecedor de cada unidade, então
+   equipamentos diferentes têm preços diferentes — a soma sozinha esconde isso.
+   Calcula na hora a partir do preço do card, então vale também para
+   precificações salvas antes do motor devolver o rateio. */
+function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal }) {
+  const E = window.PrecificacaoElevadorEngine;
+  const rateio = E && E.ratearPorModelo ? E.ratearPorModelo(modelos, precoTotal) : [];
+  const linhas = [];
+  rateio.forEach((m, i) => {
+    const fisicos = (moLookup || [])
+      .filter((x) => x.unidadeId && x.unidadeId === m.unidadeId && x.identificador)
+      .sort((a, b) => (Number(a.equipamentoIndice) || 0) - (Number(b.equipamentoIndice) || 0));
+    if (m.quantidade > 1 && fisicos.length === m.quantidade) {
+      fisicos.forEach((f) => linhas.push({ chave: `${m.unidadeId || i}-${f.identificador}`, id: f.identificador, valor: m.valorUnitarioRs }));
+    } else {
+      linhas.push({
+        chave: m.unidadeId || String(i), id: m.identificador || `Equipamento ${i + 1}`, valor: m.valorUnitarioRs,
+        extra: m.quantidade > 1 ? `cada · × ${m.quantidade}` : '',
+      });
+    }
+  });
+  if (!linhas.length) return null;
+  return (
+    <div>
+      <span className="up-eyebrow muted">Preço de venda por equipamento</span>
+      <div className="stack" style={{ gap: 4, marginTop: 4 }}>
+        {linhas.map((l) => (
+          <div key={l.chave} className="row" style={{ justifyContent: 'space-between', gap: 12 }}>
+            <span className="mono" style={{ fontSize: 13 }}>{l.id}{l.extra ? <span className="muted"> ({l.extra})</span> : null}</span>
+            <span className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(l.valor)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PZInput({ value, onChange, type = 'text', placeholder, disabled }) {
   return (
     <input className="input" type={type} value={value ?? ''}
@@ -1131,8 +1169,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <Card title={mostrarExpresso ? 'Preço de venda — 120 dias (Compartilhado)' : 'Preço de venda'} sub={mostrarExpresso ? 'container compartilhado, prazo padrão' : undefined}>
             <div className="stack" style={{ gap: 12 }}>
               <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
-              <div><span className="up-eyebrow muted">Preço de venda por equipamento</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaPorEquipamento)}{quantidadeEquipamentos > 1 ? ` × ${quantidadeEquipamentos}` : ''}</div></div>
-              <div><span className="up-eyebrow muted">Preço de venda — soma de todos os equipamentos</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
+              <PZPrecoPorEquipamento modelos={pz.modelos} moLookup={pz.mo_lookup} precoTotal={resultadoV2.precificacao.precoVendaProposta}/>
+              <div><span className="up-eyebrow muted">{quantidadeEquipamentos > 1 ? 'Total da cotação — soma dos equipamentos acima' : 'Preço de venda total'}</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
               <div className="row gap-3">
                 <div>
                   <span className="up-eyebrow muted">Margem efetiva</span>
@@ -1163,8 +1201,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             <Card title="Preço de venda — 90 dias (Exclusivo)" sub="container exclusivo, entrega mais rápida">
               <div className="stack" style={{ gap: 12 }}>
                 <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2Expresso.custoEconomicoCompleto)}</div></div>
-                <div><span className="up-eyebrow muted">Preço de venda por equipamento</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaPorEquipamento)}{quantidadeEquipamentos > 1 ? ` × ${quantidadeEquipamentos}` : ''}</div></div>
-                <div><span className="up-eyebrow muted">Preço de venda — soma de todos os equipamentos</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta)}</div></div>
+                <PZPrecoPorEquipamento modelos={pz.modelos} moLookup={pz.mo_lookup} precoTotal={resultadoV2Expresso.precificacao.precoVendaProposta}/>
+                <div><span className="up-eyebrow muted">Preço de venda total</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta)}</div></div>
                 <div className="row gap-3">
                   <div>
                     <span className="up-eyebrow muted">Margem efetiva</span>
