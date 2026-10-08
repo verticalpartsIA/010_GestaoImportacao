@@ -85,6 +85,29 @@ function PIItensSection({ itens, onChange, moeda }) {
   const add = () => onChange([...(itens || []), { descricao_produto: '', codigo_produto: '', quantidade: '', unidade_medida: 'un', ncm: '', valor_unitario: '' }]);
   const remove = (i) => onChange(itens.filter((_, idx) => idx !== i));
   const update = (i, field, v) => onChange(itens.map((it, idx) => (idx === i ? { ...it, [field]: v } : it)));
+  /* Código digitado → puxa descrição, unidade e NCM do cadastro (espera a pessoa parar de digitar) */
+  const itensRef = React.useRef(itens); itensRef.current = itens;
+  const onChangeRef = React.useRef(onChange); onChangeRef.current = onChange;
+  const timers = React.useRef({});
+  const [achado, setAchado] = React.useState({});
+  const mudarCodigo = (i, v) => {
+    update(i, 'codigo_produto', v);
+    clearTimeout(timers.current[i]);
+    setAchado((a) => ({ ...a, [i]: null }));
+    timers.current[i] = setTimeout(async () => {
+      const p = await store.buscarProdutoPorCodigo(v);
+      if (!p) { if (String(v || '').trim().length >= 3) setAchado((a) => ({ ...a, [i]: 'nao' })); return; }
+      const atual = itensRef.current || [];
+      if (!atual[i] || atual[i].codigo_produto !== v) return; /* mudou enquanto buscava */
+      onChangeRef.current(atual.map((it, idx) => (idx === i ? {
+        ...it,
+        descricao_produto: p.descricao || it.descricao_produto,
+        unidade_medida: p.unidade || it.unidade_medida,
+        ncm: p.ncm || it.ncm,
+      } : it)));
+      setAchado((a) => ({ ...a, [i]: 'sim' }));
+    }, 500);
+  };
   const total = store.calcTotalGeral(itens);
 
   return (
@@ -101,7 +124,11 @@ function PIItensSection({ itens, onChange, moeda }) {
               </div>
               <div className="grid-3" style={{ gap: 10 }}>
                 <PIField label="Descrição do produto *" span={2}><PIInput value={item.descricao_produto} onChange={(v) => update(i, 'descricao_produto', v)}/></PIField>
-                <PIField label="Código"><PIInput value={item.codigo_produto} onChange={(v) => update(i, 'codigo_produto', v)}/></PIField>
+                <PIField label="Código">
+                  <PIInput value={item.codigo_produto} onChange={(v) => mudarCodigo(i, v)} placeholder="Ex.: VPEL-031"/>
+                  {achado[i] === 'sim' && <span className="small" style={{ color: 'var(--vp-success, #1a7f37)' }}>✓ Dados preenchidos pelo cadastro</span>}
+                  {achado[i] === 'nao' && <span className="small muted">Código não encontrado — preencha à mão</span>}
+                </PIField>
                 <PIField label="Quantidade *"><PIInput type="number" step="0.01" value={item.quantidade} onChange={(v) => update(i, 'quantidade', v)}/></PIField>
                 <PIField label="Unidade"><PISelect value={item.unidade_medida} onChange={(v) => update(i, 'unidade_medida', v)} options={PI_UNIDADES}/></PIField>
                 <PIField label="NCM"><PIInput value={item.ncm} onChange={(v) => update(i, 'ncm', v)}/></PIField>
