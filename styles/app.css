@@ -709,6 +709,8 @@ button.nav-item {
 .btn--icon { padding: 0; width: 36px; justify-content: center; }
 .btn[disabled] { opacity: .4; cursor: not-allowed; }
 
+:root { --mes-retrabalho: #7b3fa0; } /* roxo = OP em retrabalho (MES); sem equivalente na paleta da marca */
+
 /* ========== CALLOUT / PANEL-SOFT / STEP-CARD (piloto Leads) ========
    Substituem caixas montadas com style={{}} e cores hexadecimais soltas.
    Só usam tokens de colors_and_type.css. */

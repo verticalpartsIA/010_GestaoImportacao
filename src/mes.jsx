@@ -15,7 +15,7 @@ function mesDur(desde) {
 function mesPrazoCor(op, concluida) {
   if (concluida || !op.prazo_entrega) return 'var(--fg3)';
   const dias = Math.floor((new Date(op.prazo_entrega + 'T23:59:59') - Date.now()) / 86400000);
-  return dias < 0 ? 'var(--vp-danger, #c0392b)' : dias <= 2 ? '#d9a400' : '#2e9e5b';
+  return dias < 0 ? 'var(--vp-danger)' : dias <= 2 ? 'var(--vp-yellow-press)' : 'var(--vp-success)';
 }
 const mesData = (d) => d ? d.split('-').reverse().join('/') : '—';
 
@@ -61,12 +61,12 @@ function MESLiberar({ ctx, onFechar }) {
   };
   return (
     <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.45)', zIndex: 1000, display: 'grid', placeItems: 'center' }} onClick={onFechar}>
-      <div className="card" style={{ background: 'var(--bg1, #fff)', padding: 20, width: 'min(640px, 94vw)', maxHeight: '80vh', overflow: 'auto', borderRadius: 12 }} onClick={e => e.stopPropagation()}>
+      <div className="card" style={{ background: 'var(--bg)', padding: 20, width: 'min(640px, 94vw)', maxHeight: '80vh', overflow: 'auto', borderRadius: 12 }} onClick={e => e.stopPropagation()}>
         <h3 style={{ marginTop: 0 }}>Liberar OP de quadro para o MES</h3>
         {!lista && <div style={{ color: 'var(--fg3)' }}>Carregando…</div>}
         {lista && !lista.length && <div style={{ color: 'var(--fg3)' }}>Nenhuma OP de quadro (frente "quadro") disponível. Gere em PCP › Pedidos de Quadro.</div>}
         {lista && lista.map(op => (
-          <div key={op.id} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--line, #eee)' }}>
+          <div key={op.id} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
             <div style={{ flex: 1 }}><b>{op.numero}</b> · {op.titulo || op.produto || '—'}<div style={{ fontSize: 12, color: 'var(--fg3)' }}>{op.cliente || '—'} · prazo {mesData(op.prazo_entrega)}</div></div>
             <button className="btn btn--sm btn--primary" disabled={busy || !ctx.podeEditar} onClick={() => liberar(op)}>Liberar</button>
           </div>
@@ -273,21 +273,21 @@ function MESDetalhe({ ctx, id, onVoltar }) {
   return (
     <div>
       <button className="btn btn--sm" onClick={onVoltar} style={{ marginBottom: 12 }}>← Voltar</button>
-      <h2 style={{ margin: '0 0 4px' }}>{d.op.numero} · {d.op.titulo || d.op.produto || '—'}{bloqueada && <span className="pcp-tag" style={{ marginLeft: 8, background: 'color-mix(in srgb, var(--vp-danger, #c0392b) 25%, transparent)' }}>BLOQUEADA</span>}{ctx.ncAbertas[id] && <span className="pcp-tag" style={{ marginLeft: 8, background: 'color-mix(in srgb, #7b3fa0 30%, transparent)' }}>EM RETRABALHO</span>}</h2>
+      <h2 style={{ margin: '0 0 4px' }}>{d.op.numero} · {d.op.titulo || d.op.produto || '—'}{bloqueada && <span className="pcp-tag" style={{ marginLeft: 8, background: 'color-mix(in srgb, var(--vp-danger) 25%, transparent)' }}>BLOQUEADA</span>}{ctx.ncAbertas[id] && <span className="pcp-tag" style={{ marginLeft: 8, background: 'color-mix(in srgb, var(--mes-retrabalho) 30%, transparent)' }}>EM RETRABALHO</span>}</h2>
       <div style={{ color: 'var(--fg3)', marginBottom: 12 }}>{d.op.cliente || '—'} · qtd {d.op.quantidade} · prazo <span style={{ color: mesPrazoCor(d.op, atual === 'EXPEDIDO') }}>{mesData(d.op.prazo_entrega)}</span> · progresso <b>{prog}%</b></div>
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>
         {etapas.filter(e => e.ativo).sort((a, b) => a.sequencia - b.sequencia).map(e => {
           const feita = e.sequencia < seqAtual, cur = e.codigo === atual;
-          return <span key={e.codigo} className="pcp-tag" style={{ background: feita ? 'color-mix(in srgb, #2e9e5b 25%, transparent)' : cur ? 'color-mix(in srgb, var(--vp-yellow) 45%, transparent)' : undefined, fontWeight: cur ? 700 : 400 }}>{feita ? '✓ ' : ''}{e.nome}</span>;
+          return <span key={e.codigo} className="pcp-tag" style={{ background: feita ? 'color-mix(in srgb, var(--vp-success) 25%, transparent)' : cur ? 'color-mix(in srgb, var(--vp-yellow) 45%, transparent)' : undefined, fontWeight: cur ? 700 : 400 }}>{feita ? '✓ ' : ''}{e.nome}</span>;
         })}
       </div>
       {bloqAberto.map(b => (
-        <div key={b.id} className="card" style={{ padding: 10, marginBottom: 8, borderLeft: '5px solid var(--vp-danger, #c0392b)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+        <div key={b.id} className="card" style={{ padding: 10, marginBottom: 8, borderLeft: '5px solid var(--vp-danger)', display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
           <div style={{ flex: 1 }}><b>Bloqueada — {MES_MOTIVOS_BLOQ[b.motivo]}</b> há {mesDur(b.inicio)}{b.detalhe ? ' · ' + b.detalhe : ''}</div>
           <button className="btn btn--sm" disabled={busy || !podeEditar} onClick={() => desbloquear(b)}>Desbloquear</button>
         </div>
       ))}
-      {erro && <div style={{ color: 'var(--vp-danger, #c0392b)', marginBottom: 8 }}>{erro}</div>}
+      {erro && <div style={{ color: 'var(--vp-danger)', marginBottom: 8 }}>{erro}</div>}
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         {abaBtn('etapa', 'Etapa')}{abaBtn('ligacoes', 'Ligações')}{abaBtn('testes', 'Testes')}{abaBtn('ncs', 'NCs')}{abaBtn('materiais', `Materiais (${mats.length})`)}{abaBtn('bloqueios', `Bloqueios (${bloqs.length})`)}{abaBtn('historico', 'Histórico')}
       </div>
@@ -310,7 +310,7 @@ function MESDetalhe({ ctx, id, onVoltar }) {
             {exec && (<>
               <div style={{ margin: '10px 0' }}>
                 {itens.map(i => (
-                  <label key={i.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', fontSize: 15, borderBottom: '1px solid var(--line, #eee)' }}>
+                  <label key={i.id} style={{ display: 'flex', gap: 10, alignItems: 'center', padding: '8px 0', fontSize: 15, borderBottom: '1px solid var(--border)' }}>
                     <input type="checkbox" style={{ width: 20, height: 20 }} checked={!!feitos[i.id]} disabled={!podeEditar || !!pausa} onChange={e => marcar(i, e.target.checked)}/>
                     {i.item}{i.obrigatorio ? '' : ' (opcional)'}
                   </label>
@@ -392,7 +392,7 @@ function MESDetalhe({ ctx, id, onVoltar }) {
       {sub === 'bloqueios' && (
         <div>
           {bloqs.map(b => (
-            <div key={b.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--line, #eee)', fontSize: 14 }}>
+            <div key={b.id} style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', fontSize: 14 }}>
               <b>{MES_MOTIVOS_BLOQ[b.motivo]}</b>{b.detalhe ? ' — ' + b.detalhe : ''}
               <div style={{ fontSize: 12, color: 'var(--fg3)' }}>{new Date(b.inicio).toLocaleString('pt-BR')} por {b.aberto_por || '—'} · {b.fim ? `resolvido em ${new Date(b.fim).toLocaleString('pt-BR')} por ${b.resolvido_por || '—'} (${Math.round((new Date(b.fim) - new Date(b.inicio)) / 60000)} min)` : 'ABERTO'}</div>
             </div>
@@ -404,7 +404,7 @@ function MESDetalhe({ ctx, id, onVoltar }) {
       {sub === 'historico' && (
         <div>
           {hist.map(h => (
-            <div key={h.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--line, #eee)', fontSize: 13 }}>
+            <div key={h.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)', fontSize: 13 }}>
               <span style={{ color: 'var(--fg3)' }}>{new Date(h.created_at).toLocaleString('pt-BR')}</span> · {h.usuario || '—'} · {h.descricao || h.evento}
             </div>
           ))}
@@ -471,7 +471,7 @@ function MESLigacoes({ ctx, id, d }) {
   return (
     <div>
       <div style={{ marginBottom: 8 }}><b>Ligações concluídas: {ok} / {l.length} ({pct}%)</b>
-        <div style={{ height: 8, background: 'var(--bg2, #eee)', borderRadius: 4, marginTop: 4 }}><div style={{ width: pct + '%', height: 8, background: '#2e9e5b', borderRadius: 4 }}/></div>
+        <div style={{ height: 8, background: 'var(--vp-gray-100)', borderRadius: 4, marginTop: 4 }}><div style={{ width: pct + '%', height: 8, background: 'var(--vp-success)', borderRadius: 4 }}/></div>
         <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 4 }}>A etapa Interligação Elétrica só conclui com todas as ligações cadastradas concluídas.</div>
       </div>
       <label style={{ fontSize: 13 }}><input type="checkbox" checked={soPend} onChange={e => setSoPend(e.target.checked)}/> só pendentes</label>
@@ -543,7 +543,7 @@ function MESTestes({ ctx, id, d, onMudou }) {
           <button className="btn btn--sm btn--primary" disabled={busy} onClick={registrar}>Registrar resultado</button>
         </div>
       ) : <div style={{ fontSize: 13, color: 'var(--fg3)', marginBottom: 8 }}>Resultados só podem ser registrados enquanto a OP está na etapa Testes.</div>}
-      {msg && <div style={{ color: 'var(--vp-danger, #c0392b)', marginBottom: 8 }}>{msg}</div>}
+      {msg && <div style={{ color: 'var(--vp-danger)', marginBottom: 8 }}>{msg}</div>}
       <div className="table-wrap">
         <table className="t pcp-grid">
           <thead><tr><th>Quando</th><th>Tipo</th><th>Teste</th><th>Resultado</th><th>Quem</th><th>Observação</th></tr></thead>
@@ -551,7 +551,7 @@ function MESTestes({ ctx, id, d, onMudou }) {
             {t.map(x => (
               <tr key={x.id}>
                 <td>{new Date(x.testado_em).toLocaleString('pt-BR')}</td><td>{MES_TESTES_TIPO[x.tipo]}</td><td>{x.nome}</td>
-                <td style={{ color: x.resultado === 'aprovado' ? '#2e9e5b' : 'var(--vp-danger, #c0392b)', fontWeight: 700 }}>{x.resultado === 'aprovado' ? 'APROVADO' : 'REPROVADO'}{x.nc ? ' · ' + x.nc.numero : ''}</td>
+                <td style={{ color: x.resultado === 'aprovado' ? 'var(--vp-success)' : 'var(--vp-danger)', fontWeight: 700 }}>{x.resultado === 'aprovado' ? 'APROVADO' : 'REPROVADO'}{x.nc ? ' · ' + x.nc.numero : ''}</td>
                 <td>{x.testado_por || '—'}</td><td>{x.observacao || '—'}</td>
               </tr>
             ))}
@@ -605,7 +605,7 @@ function MESNcs({ ctx, id, d, onMudou }) {
   if (!l) return <div style={{ color: 'var(--fg3)' }}>Carregando…</div>;
   return (
     <div>
-      {msg && <div style={{ color: 'var(--vp-danger, #c0392b)', marginBottom: 8 }}>{msg}</div>}
+      {msg && <div style={{ color: 'var(--vp-danger)', marginBottom: 8 }}>{msg}</div>}
       {podeEditar && d.etapa_atual !== 'AGUARDANDO' && d.etapa_atual !== 'EXPEDIDO' && (novo ? (
         <div className="card" style={{ padding: 12, marginBottom: 12, display: 'grid', gap: 8 }}>
           <input className="input" placeholder="Problema encontrado (obrigatório)" value={novo.descricao || ''} onChange={e => setNovo({ ...novo, descricao: e.target.value })}/>
@@ -615,7 +615,7 @@ function MESNcs({ ctx, id, d, onMudou }) {
         </div>
       ) : <button className="btn btn--sm" style={{ marginBottom: 12 }} onClick={() => setNovo({})}>Abrir NC (reprovar etapa)</button>)}
       {l.map(n => (
-        <div key={n.id} className="card" style={{ padding: 12, marginBottom: 8, borderLeft: '5px solid ' + (n.status === 'fechada' ? '#2e9e5b' : '#7b3fa0') }}>
+        <div key={n.id} className="card" style={{ padding: 12, marginBottom: 8, borderLeft: '5px solid ' + (n.status === 'fechada' ? 'var(--vp-success)' : 'var(--mes-retrabalho)') }}>
           <b>{n.numero}</b> · {n.status === 'aberta' ? 'EM RETRABALHO' : n.status === 'corrigida' ? 'CORRIGIDA — aguardando reteste' : 'FECHADA'} · etapa {mesNomeEtapa(ctx.etapas, n.etapa_codigo)}
           <div>{n.descricao}{n.componente ? ' · ' + n.componente : ''}{n.causa ? ' · causa: ' + n.causa : ''}</div>
           <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Aberta {new Date(n.aberto_em).toLocaleString('pt-BR')} por {n.aberto_por || '—'}
@@ -708,11 +708,11 @@ function MESPainel({ ctx }) {
   return (
     <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
       <Card t="OPs abertas" v={abertas.length}/>
-      <Card t="Em execução" v={emExec.length} cor="#d9a400"/>
-      <Card t="Atrasadas" v={abertas.filter(mesAtrasada).length} cor="var(--vp-danger, #c0392b)"/>
-      <Card t="Bloqueadas" v={abertas.filter(l => bloqueadas[l.ordem_id]).length} cor="#555"/>
-      <Card t="Em retrabalho" v={abertas.filter(l => ncAbertas[l.ordem_id]).length} cor="#7b3fa0"/>
-      <Card t="Concluídas hoje" v={concl.filter(l => mesIsoLocal(l.concluida_em) === hoje).length} cor="#2e9e5b"/>
+      <Card t="Em execução" v={emExec.length} cor="var(--vp-yellow-press)"/>
+      <Card t="Atrasadas" v={abertas.filter(mesAtrasada).length} cor="var(--vp-danger)"/>
+      <Card t="Bloqueadas" v={abertas.filter(l => bloqueadas[l.ordem_id]).length} cor="var(--fg2)"/>
+      <Card t="Em retrabalho" v={abertas.filter(l => ncAbertas[l.ordem_id]).length} cor="var(--mes-retrabalho)"/>
+      <Card t="Concluídas hoje" v={concl.filter(l => mesIsoLocal(l.concluida_em) === hoje).length} cor="var(--vp-success)"/>
       <Card t="Lead time médio" v={lead == null ? '—' : mesHoras(lead)} sub={`${concl.length} OP(s) expedida(s)`}/>
       <Card t="Cumprimento de prazo" v={comPrazo.length ? Math.round(noPrazo / comPrazo.length * 100) + '%' : '—'} sub={`${noPrazo}/${comPrazo.length} expedidas no prazo`}/>
       <Card t="Não conformidades" v={ncTodas.length} sub={`${ncTodas.filter(n => n.status !== 'fechada').length} aberta(s)`}/>
@@ -726,9 +726,9 @@ function MESTv({ ctx }) {
   const ref = React.useRef(null);
   const { linhas, etapas, bloqueadas, ncAbertas, operadores } = ctx;
   const abertas = linhas.filter(l => l.etapa_atual !== 'EXPEDIDO');
-  const status = (l) => bloqueadas[l.ordem_id] ? ['BLOQUEADA', '#555'] : ncAbertas[l.ordem_id] ? ['RETRABALHO', '#7b3fa0'] : mesAtrasada(l) ? ['ATRASADA', 'var(--vp-danger, #c0392b)'] : l.etapa_atual === 'AGUARDANDO' ? ['AGUARDANDO', 'var(--fg3)'] : ['NO PRAZO', '#2e9e5b'];
+  const status = (l) => bloqueadas[l.ordem_id] ? ['BLOQUEADA', 'var(--fg2)'] : ncAbertas[l.ordem_id] ? ['RETRABALHO', 'var(--mes-retrabalho)'] : mesAtrasada(l) ? ['ATRASADA', 'var(--vp-danger)'] : l.etapa_atual === 'AGUARDANDO' ? ['AGUARDANDO', 'var(--fg3)'] : ['NO PRAZO', 'var(--vp-success)'];
   return (
-    <div ref={ref} style={{ background: 'var(--bg1, #fff)', padding: 12 }}>
+    <div ref={ref} style={{ background: 'var(--bg)', padding: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
         <span style={{ fontSize: 12, color: 'var(--fg3)' }}>Somente leitura · atualiza a cada 30 s</span>
         <button className="btn btn--sm" onClick={() => { const el = ref.current; if (document.fullscreenElement) document.exitFullscreen(); else el && el.requestFullscreen && el.requestFullscreen(); }}>Tela cheia</button>
@@ -740,7 +740,7 @@ function MESTv({ ctx }) {
             <tr key={l.ordem_id}>
               <td><b>{l.op.numero}</b></td><td>{l.op.cliente || '—'}</td><td>{l.op.titulo || l.op.produto || '—'}</td><td>{mesNomeEtapa(etapas, l.etapa_atual)}</td>
               <td>{(operadores[l.ordem_id] || '—').split('@')[0]}</td>
-              <td style={{ minWidth: 120 }}><div style={{ height: 12, background: 'var(--bg2, #eee)', borderRadius: 6 }}><div style={{ width: p + '%', height: 12, background: '#2e9e5b', borderRadius: 6 }}/></div>{p}%</td>
+              <td style={{ minWidth: 120 }}><div style={{ height: 12, background: 'var(--vp-gray-100)', borderRadius: 6 }}><div style={{ width: p + '%', height: 12, background: 'var(--vp-success)', borderRadius: 6 }}/></div>{p}%</td>
               <td>{mesData(l.op.prazo_entrega)}</td><td style={{ color: cor, fontWeight: 700 }}>{st}</td>
             </tr>); })}
           {!abertas.length && <tr><td colSpan={8} style={{ padding: 24, color: 'var(--fg3)' }}>Nenhuma OP em produção.</td></tr>}
@@ -771,10 +771,10 @@ function MESKanban({ ctx }) {
       {cols.map(c => {
         const cards = linhas.filter(l => l.etapa_atual !== 'EXPEDIDO' && macroDe(l.etapa_atual) === c);
         return (
-          <div key={c} style={{ background: 'var(--bg2, #f4f4f4)', borderRadius: 10, padding: 8, minHeight: 120 }}>
+          <div key={c} style={{ background: 'var(--vp-gray-100)', borderRadius: 10, padding: 8, minHeight: 120 }}>
             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{c} <span style={{ color: 'var(--fg3)' }}>({cards.length})</span></div>
             {cards.map(l => (
-              <div key={l.ordem_id} className="card" onClick={() => ctx.abrir(l.ordem_id)} style={{ cursor: 'pointer', padding: 10, marginBottom: 8, borderLeft: '5px solid ' + (ctx.bloqueadas[l.ordem_id] ? '#555' : ctx.ncAbertas[l.ordem_id] ? '#7b3fa0' : mesPrazoCor(l.op, false)), fontSize: 12, opacity: ctx.bloqueadas[l.ordem_id] ? 0.8 : 1 }}>
+              <div key={l.ordem_id} className="card" onClick={() => ctx.abrir(l.ordem_id)} style={{ cursor: 'pointer', padding: 10, marginBottom: 8, borderLeft: '5px solid ' + (ctx.bloqueadas[l.ordem_id] ? 'var(--fg2)' : ctx.ncAbertas[l.ordem_id] ? 'var(--mes-retrabalho)' : mesPrazoCor(l.op, false)), fontSize: 12, opacity: ctx.bloqueadas[l.ordem_id] ? 0.8 : 1 }}>
                 <b>{l.op.numero}</b> · {l.op.cliente || '—'}{ctx.bloqueadas[l.ordem_id] && <span className="pcp-tag" style={{ marginLeft: 6 }}>BLOQUEADA</span>}{ctx.ncAbertas[l.ordem_id] && <span className="pcp-tag" style={{ marginLeft: 6 }}>RETRABALHO</span>}
                 <div>{l.op.titulo || l.op.produto || '—'}</div>
                 <div style={{ color: 'var(--fg3)' }}>{mesNomeEtapa(etapas, l.etapa_atual)} · {mesProgresso(etapas, l.etapa_atual)}%</div>
@@ -866,7 +866,7 @@ function MESPage() {
           <button className="btn btn--sm btn--primary" disabled={!podeEditar} onClick={() => setLiberar(true)}>Liberar OP para o MES</button>
         </div>
       )}
-      {erro && <div style={{ color: 'var(--vp-danger, #c0392b)', padding: 12 }}>{erro}</div>}
+      {erro && <div style={{ color: 'var(--vp-danger)', padding: 12 }}>{erro}</div>}
       {!erro && !ctx && <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>}
       {ctx && opId && <MESDetalhe ctx={ctx} id={opId} onVoltar={() => setOpId(null)}/>}
       {ctx && !opId && aba === 'kanban' && <MESKanban ctx={ctx}/>}
