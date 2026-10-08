@@ -38,6 +38,8 @@ test('podeIniciarCompra — só os dois avais quando a margem está dentro da re
   const r1 = await window.AvalFinanceiroStore.podeIniciarCompra(955);
   assert.equal(r1.ok, false);
   assert.match(r1.motivo, /Aval de Pagamento/);
+  // a tela mostra TODOS os avais (08/10): Pagamento pendente, Jurídico OK
+  assert.deepEqual(r1.checagens.map((c) => [c.rotulo, c.ok]).slice(0, 2), [['Aval de Pagamento (Financeiro)', false], ['Aval Jurídico', true]]);
 
   window.__VP_SB = { sb: fakeSb({ avais_financeiros: av, avais_juridicos: { status: 'pendente' } }) };
   const r2 = await window.AvalFinanceiroStore.podeIniciarCompra(955);
@@ -46,7 +48,7 @@ test('podeIniciarCompra — só os dois avais quando a margem está dentro da re
 
   // sem aprovação do CEO/responsável e sem contrato — com o projeto assinado, libera
   window.__VP_SB = { sb: fakeSb({ avais_financeiros: av, avais_juridicos: { status: 'aprovado' } }) };
-  assert.deepEqual(await window.AvalFinanceiroStore.podeIniciarCompra(955), { ok: true });
+  assert.equal((await window.AvalFinanceiroStore.podeIniciarCompra(955)).ok, true);
 });
 
 test('podeIniciarCompra — margem abaixo de 15% exige o CEO', async () => {
@@ -58,7 +60,7 @@ test('podeIniciarCompra — margem abaixo de 15% exige o CEO', async () => {
   assert.match(r.motivo, /12,0%/);
 
   window.__VP_SB = { sb: fakeSb({ avais_financeiros: { ...av, aprovacao_ceo_em: 'x' }, avais_juridicos: { status: 'aprovado' } }) };
-  assert.deepEqual(await window.AvalFinanceiroStore.podeIniciarCompra(955), { ok: true });
+  assert.equal((await window.AvalFinanceiroStore.podeIniciarCompra(955)).ok, true);
 });
 
 test('podeIniciarCompra — sem DecisoesStore mantém o CEO por segurança', async () => {
@@ -118,7 +120,7 @@ test('podeIniciarCompra — sem o Projeto de Instalação assinado a compra não
   engenharia('erro', 0, 0);
   assert.equal((await window.AvalFinanceiroStore.podeIniciarCompra(955)).ok, false);
   engenharia('ok');
-  assert.deepEqual(await window.AvalFinanceiroStore.podeIniciarCompra(955), { ok: true });
+  assert.equal((await window.AvalFinanceiroStore.podeIniciarCompra(955)).ok, true);
 });
 
 test('AvalEngenhariaStore.resumir — a cotação só fica OK com TODOS os Projetos de Instalação assinados; ID-TAG não conta', () => {

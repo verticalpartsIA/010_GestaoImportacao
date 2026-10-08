@@ -375,16 +375,19 @@
     const margemTxt = ceo.margem != null ? `margem ${(ceo.margem * 100).toFixed(1).replace('.', ',')}%, abaixo de 15%` : 'margem desconhecida';
 
     const checagens = [
-      { ok: !!(av && av.aval_pagamento_confirmado), motivo: 'o Aval de Pagamento do Financeiro (depois do sinal pago — botão "Dar Aval de Pagamento" na tela "Aval Financeiro" ou em "Prazos & Pendências")' },
-      { ok: aj?.status === 'aprovado', motivo: 'o Aval Jurídico (tela "Aval Jurídico")' },
-      { ok: eng.estado === 'ok', motivo: motivoEng },
-      { ok: !ceo.precisa || !!(av && av.aprovacao_ceo_em), motivo: `a aprovação do CEO (Diego) — ${margemTxt}` },
+      { rotulo: 'Aval de Pagamento (Financeiro)', ok: !!(av && av.aval_pagamento_confirmado), motivo: 'o Aval de Pagamento do Financeiro (depois do sinal pago — botão "Dar Aval de Pagamento" na tela "Aval Financeiro" ou em "Prazos & Pendências")' },
+      { rotulo: 'Aval Jurídico', ok: aj?.status === 'aprovado', motivo: 'o Aval Jurídico (tela "Aval Jurídico")' },
+      { rotulo: 'Assinatura do Projeto de Instalação (Engenharia)', ok: eng.estado === 'ok', motivo: motivoEng },
+      // CEO só aparece na lista quando a margem exige (senão não é um aval desta compra)
+      ...(ceo.precisa ? [{ rotulo: 'Aprovação do CEO', ok: !!(av && av.aprovacao_ceo_em), motivo: `a aprovação do CEO (Diego) — ${margemTxt}` }] : []),
     ];
+    // `checagens` (rótulo + ok) deixa a tela mostrar TODOS os avais, não só o primeiro que falta.
+    const lista = checagens.map((ck) => ({ rotulo: ck.rotulo, ok: ck.ok }));
     const primeiraFaltando = checagens.find((ck) => !ck.ok);
     if (primeiraFaltando) {
-      return { ok: false, motivo: `Ainda falta confirmar: ${primeiraFaltando.motivo}. Só então a compra no fornecedor pode ser iniciada.` };
+      return { ok: false, checagens: lista, motivo: `Ainda falta confirmar: ${primeiraFaltando.motivo}. Só então a compra no fornecedor pode ser iniciada.` };
     }
-    return { ok: true };
+    return { ok: true, checagens: lista };
   }
 
   window.AvalFinanceiroStore = {
