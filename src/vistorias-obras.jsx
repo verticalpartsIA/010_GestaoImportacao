@@ -297,12 +297,12 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
 
   const getStatusBadge = (status) => {
     const statusConfig = {
-      agendada: { label: '📅 Agendada', color: '#0066ff' },
-      em_progresso: { label: '⏳ Em Progresso', color: '#ff9900' },
-      concluida: { label: '✅ Concluída', color: '#00aa00' },
-      cancelada: { label: '❌ Cancelada', color: '#cc0000' },
+      agendada: { label: '📅 Agendada', color: 'var(--vp-info)' },
+      em_progresso: { label: '⏳ Em Progresso', color: 'var(--vp-warning)' },
+      concluida: { label: '✅ Concluída', color: 'var(--vp-success)' },
+      cancelada: { label: '❌ Cancelada', color: 'var(--vp-danger)' },
     };
-    const config = statusConfig[status] || { label: status, color: '#666' };
+    const config = statusConfig[status] || { label: status, color: 'var(--fg2)' };
     return <span style={{ color: config.color, fontWeight: 'bold' }}>{config.label}</span>;
   };
 
@@ -326,7 +326,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
         {loadingObras ? (
           <div style={{ textAlign: 'center', padding: '2rem' }}>⏳ Carregando obras...</div>
         ) : obras.length === 0 ? (
-          <div style={{ textAlign: 'center', padding: '3rem 2rem', background: '#f8f9fa', borderRadius: '8px', color: '#666' }}>
+          <div style={{ textAlign: 'center', padding: '3rem 2rem', background: 'var(--vp-gray-50)', borderRadius: '8px', color: 'var(--fg2)' }}>
             <p>Nenhuma obra cadastrada ainda (Dossiê da Obra).</p>
           </div>
         ) : (
@@ -382,12 +382,12 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
           manual desta tela. Sem conceito de "fase" numerada na vistoria
           de campo, então cada quadro é só a Nª vistoria concluída. */}
       <div style={{
-        background: obraLiberada ? '#f0fdf4' : '#f8f9fa',
-        border: '1px solid ' + (obraLiberada ? '#86efac' : '#e0e0e0'),
+        background: obraLiberada ? 'var(--vp-success-tint)' : 'var(--vp-gray-50)',
+        border: '1px solid ' + (obraLiberada ? 'var(--vp-success)' : 'var(--border)'),
         borderRadius: '8px', padding: '1rem 1.25rem', marginBottom: '1.5rem',
       }}>
         <div className="row sb" style={{ marginBottom: 10 }}>
-          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: obraLiberada ? '#166534' : 'inherit' }}>
+          <div style={{ fontSize: '0.9rem', fontWeight: 700, color: obraLiberada ? 'var(--vp-success-ink)' : 'inherit' }}>
             {obraLiberada ? '✅ Obra vistoriada e liberada (3 vistorias concluídas)' : `Progresso das vistorias inclusas — ${progressoReal.concluidas} de 3 concluídas`}
           </div>
         </div>
@@ -395,8 +395,8 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
           {fasesInclusas.map((f) => (
             <div key={f.numero} style={{
               flex: 1, textAlign: 'center', padding: '0.6rem', borderRadius: 6,
-              background: f.concluida ? '#dcfce7' : '#fff',
-              border: '1px solid ' + (f.concluida ? '#10b981' : '#ddd'),
+              background: f.concluida ? 'var(--vp-success-tint)' : 'var(--bg)',
+              border: '1px solid ' + (f.concluida ? 'var(--vp-success)' : 'var(--border)'),
               fontSize: '0.85rem', fontWeight: 600,
             }}>
               {f.concluida ? '✅' : '○'} {f.numero}ª vistoria
@@ -409,46 +409,19 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
       <ChecklistsDigitaisObra obraId={obraId}/>
 
       {/* STATS CARDS */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '1rem', marginBottom: '2rem' }}>
-        <div style={{
-          padding: '1.5rem',
-          background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-          color: 'white',
-          borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        }}>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{stats.total}</div>
-          <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Vistorias Totais</div>
-        </div>
-        <div style={{
-          padding: '1.5rem',
-          background: 'linear-gradient(135deg, #f093fb 0%, #f5576c 100%)',
-          color: 'white',
-          borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        }}>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{stats.agendadas}</div>
-          <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Agendadas</div>
-        </div>
-        <div style={{
-          padding: '1.5rem',
-          background: 'linear-gradient(135deg, #4facfe 0%, #00f2fe 100%)',
-          color: 'white',
-          borderRadius: '8px',
-          boxShadow: '0 4px 12px rgba(0,0,0,0.1)',
-        }}>
-          <div style={{ fontSize: '2rem', fontWeight: 'bold' }}>{stats.concluidas}</div>
-          <div style={{ fontSize: '0.9rem', opacity: 0.9 }}>Concluídas</div>
-        </div>
+      <div className="grid-3" style={{ marginBottom: '2rem' }}>
+        <KPI label="Vistorias totais" value={stats.total} sub="nesta obra" icon="fileText"/>
+        <KPI label="Agendadas" value={stats.agendadas} sub="aguardando execução" icon="calendar"/>
+        <KPI label="Concluídas" value={stats.concluidas} sub="já realizadas" icon="check"/>
       </div>
 
       {/* FORM AGENDAR VISTORIA */}
       {showForm && (
         <div style={{
-          background: '#f8f9fa',
+          background: 'var(--vp-gray-50)',
           padding: '2rem',
           borderRadius: '12px',
-          border: '2px solid #e0e0e0',
+          border: '2px solid var(--border)',
           marginBottom: '2rem',
         }}>
           <h3 style={{ marginBottom: '1.5rem', fontSize: '1.2rem' }}>📋 Agendar Nova Vistoria</h3>
@@ -466,7 +439,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                   style={{
                     width: '100%',
                     padding: '0.75rem',
-                    border: '1px solid #ddd',
+                    border: '1px solid var(--border)',
                     borderRadius: '6px',
                     fontSize: '0.95rem',
                   }}
@@ -487,7 +460,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                   style={{
                     width: '100%',
                     padding: '0.75rem',
-                    border: '1px solid #ddd',
+                    border: '1px solid var(--border)',
                     borderRadius: '6px',
                     fontSize: '0.95rem',
                   }}
@@ -506,7 +479,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                   style={{
                     width: '100%',
                     padding: '0.75rem',
-                    border: '1px solid #ddd',
+                    border: '1px solid var(--border)',
                     borderRadius: '6px',
                     fontSize: '0.95rem',
                   }}>
@@ -525,7 +498,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                 <select
                   value={form.numero_fase}
                   onChange={(e) => setForm({ ...form, numero_fase: e.target.value })}
-                  style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.95rem' }}>
+                  style={{ width: '100%', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.95rem' }}>
                   <option value="">Avulsa (cobrada à parte)</option>
                   <option value="1">Fase 1 (inclusa)</option>
                   <option value="2">Fase 2 (inclusa)</option>
@@ -543,7 +516,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                   placeholder="0,00"
                   value={form.custo}
                   onChange={(e) => setForm({ ...form, custo: e.target.value })}
-                  style={{ width: '100%', padding: '0.75rem', border: '1px solid #ddd', borderRadius: '6px', fontSize: '0.95rem' }}
+                  style={{ width: '100%', padding: '0.75rem', border: '1px solid var(--border)', borderRadius: '6px', fontSize: '0.95rem' }}
                 />
               </div>
             </div>
@@ -560,7 +533,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                 style={{
                   width: '100%',
                   padding: '0.75rem',
-                  border: '1px solid #ddd',
+                  border: '1px solid var(--border)',
                   borderRadius: '6px',
                   minHeight: '100px',
                   fontSize: '0.95rem',
@@ -570,7 +543,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
             </div>
 
             {/* Upload Documentos */}
-            <div style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid #ddd' }}>
+            <div style={{ marginBottom: '1.5rem', paddingBottom: '1.5rem', borderBottom: '1px solid var(--border)' }}>
               <label style={{ display: 'block', marginBottom: '0.5rem', fontWeight: 'bold', fontSize: '0.9rem' }}>
                 📄 Documentos (PDF, máx. 5 arquivos)
               </label>
@@ -591,8 +564,8 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                         justifyContent: 'space-between',
                         alignItems: 'center',
                         padding: '0.75rem',
-                        background: '#fff',
-                        border: '1px solid #e0e0e0',
+                        background: 'var(--bg)',
+                        border: '1px solid var(--border)',
                         borderRadius: '6px',
                         marginBottom: '0.5rem',
                       }}>
@@ -604,7 +577,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                         onClick={() => handleRemoveFile('documentos', idx)}
                         style={{
                           padding: '0.25rem 0.75rem',
-                          background: '#ff6b6b',
+                          background: 'var(--vp-danger)',
                           color: 'white',
                           border: 'none',
                           borderRadius: '4px',
@@ -646,7 +619,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                         borderRadius: '6px',
                         overflow: 'hidden',
                         aspectRatio: '1',
-                        border: '2px solid #e0e0e0',
+                        border: '2px solid var(--border)',
                       }}>
                       <img
                         src={img.dados}
@@ -661,7 +634,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                           top: '0.25rem',
                           right: '0.25rem',
                           padding: '0.25rem 0.5rem',
-                          background: '#ff6b6b',
+                          background: 'var(--vp-danger)',
                           color: 'white',
                           border: 'none',
                           borderRadius: '3px',
@@ -690,8 +663,8 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                 onClick={() => setShowForm(false)}
                 style={{
                   padding: '0.75rem 1.5rem',
-                  background: '#e0e0e0',
-                  color: '#333',
+                  background: 'var(--border)',
+                  color: 'var(--fg1)',
                   border: 'none',
                   borderRadius: '6px',
                   cursor: 'pointer',
@@ -711,8 +684,8 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
             onClick={() => setFilterStatus(status)}
             style={{
               padding: '0.5rem 1rem',
-              background: filterStatus === status ? 'var(--vp-primary)' : '#f0f0f0',
-              color: filterStatus === status ? 'white' : '#333',
+              background: filterStatus === status ? 'var(--vp-black)' : 'var(--vp-gray-100)',
+              color: filterStatus === status ? 'var(--vp-yellow)' : 'var(--fg1)',
               border: 'none',
               borderRadius: '6px',
               cursor: 'pointer',
@@ -730,9 +703,9 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
         <div style={{
           textAlign: 'center',
           padding: '3rem 2rem',
-          background: '#f8f9fa',
+          background: 'var(--vp-gray-50)',
           borderRadius: '8px',
-          color: '#666',
+          color: 'var(--fg2)',
         }}>
           <div style={{ fontSize: '2.5rem', marginBottom: '1rem' }}>📭</div>
           <p>Nenhuma vistoria encontrada</p>
@@ -763,7 +736,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
               key={vistoria.id || idx}
               style={{
                 background: 'white',
-                border: '1px solid #e0e0e0',
+                border: '1px solid var(--border)',
                 borderRadius: '8px',
                 padding: '1.5rem',
                 boxShadow: '0 2px 8px rgba(0,0,0,0.08)',
@@ -790,14 +763,14 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                   {vistoria.tipo?.toUpperCase() || 'VISTORIA'}
                   {vistoria.numero_fase ? ` · Fase ${vistoria.numero_fase}` : ' · Avulsa'}
                 </div>
-                <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: '0.5rem' }}>
+                <div style={{ fontSize: '0.9rem', color: 'var(--fg2)', marginBottom: '0.5rem' }}>
                   📅 {formatData(vistoria.data_agendada)}
                 </div>
-                <div style={{ fontSize: '0.9rem', color: '#666', marginBottom: vistoria.custo != null ? '0.5rem' : 0 }}>
+                <div style={{ fontSize: '0.9rem', color: 'var(--fg2)', marginBottom: vistoria.custo != null ? '0.5rem' : 0 }}>
                   👤 {vistoria.vistoriador}
                 </div>
                 {vistoria.custo != null && (
-                  <div style={{ fontSize: '0.9rem', color: '#666' }}>
+                  <div style={{ fontSize: '0.9rem', color: 'var(--fg2)' }}>
                     💰 {Number(vistoria.custo).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' })}
                   </div>
                 )}
@@ -807,8 +780,8 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
               {vistoria.observacoes && (
                 <div style={{
                   fontSize: '0.85rem',
-                  color: '#666',
-                  background: '#f8f9fa',
+                  color: 'var(--fg2)',
+                  background: 'var(--vp-gray-50)',
                   padding: '0.75rem',
                   borderRadius: '4px',
                   marginBottom: '1rem',
@@ -826,7 +799,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                   display: 'flex',
                   gap: '0.5rem',
                   fontSize: '0.85rem',
-                  color: '#666',
+                  color: 'var(--fg2)',
                   marginBottom: '1rem',
                 }}>
                   {vistoria.documentos?.length > 0 && (
@@ -842,7 +815,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
               <div style={{
                 display: 'flex',
                 gap: '0.5rem',
-                borderTop: '1px solid #eee',
+                borderTop: '1px solid var(--border)',
                 paddingTop: '1rem',
               }}>
                 {vistoria.status === 'agendada' && (
@@ -854,7 +827,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                     style={{
                       flex: 1,
                       padding: '0.5rem',
-                      background: '#00aa00',
+                      background: 'var(--vp-success)',
                       color: 'white',
                       border: 'none',
                       borderRadius: '4px',
@@ -872,7 +845,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                   style={{
                     flex: 1,
                     padding: '0.5rem',
-                    background: '#ff6b6b',
+                    background: 'var(--vp-danger)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '4px',
@@ -925,14 +898,14 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                   border: 'none',
                   fontSize: '1.5rem',
                   cursor: 'pointer',
-                  color: '#666',
+                  color: 'var(--fg2)',
                 }}>
                 ✕
               </button>
             </div>
 
             {/* Status */}
-            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: '#f8f9fa', borderRadius: '6px' }}>
+            <div style={{ marginBottom: '1.5rem', padding: '1rem', background: 'var(--vp-gray-50)', borderRadius: '6px' }}>
               <strong>Status:</strong> {getStatusBadge(selectedVistoria.status)}
             </div>
 
@@ -963,7 +936,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                     key={idx}
                     style={{
                       padding: '0.75rem',
-                      background: '#f8f9fa',
+                      background: 'var(--vp-gray-50)',
                       borderRadius: '4px',
                       marginBottom: '0.5rem',
                       display: 'flex',
@@ -1025,7 +998,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
             )}
 
             {/* Actions */}
-            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem', borderTop: '1px solid #eee', paddingTop: '1rem' }}>
+            <div style={{ display: 'flex', gap: '0.75rem', marginTop: '1.5rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
               {selectedVistoria.status === 'agendada' && (
                 <button
                   onClick={() => {
@@ -1034,7 +1007,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                   style={{
                     flex: 1,
                     padding: '0.75rem',
-                    background: '#00aa00',
+                    background: 'var(--vp-success)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '6px',
@@ -1051,7 +1024,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                 style={{
                   flex: 1,
                   padding: '0.75rem',
-                  background: '#ff6b6b',
+                  background: 'var(--vp-danger)',
                   color: 'white',
                   border: 'none',
                   borderRadius: '6px',
@@ -1065,8 +1038,8 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
                 style={{
                   flex: 1,
                   padding: '0.75rem',
-                  background: '#e0e0e0',
-                  color: '#333',
+                  background: 'var(--border)',
+                  color: 'var(--fg1)',
                   border: 'none',
                   borderRadius: '6px',
                   cursor: 'pointer',
@@ -1116,10 +1089,10 @@ function ChecklistsDigitaisObra({ obraId }) {
           const st = STATUS_ATIVIDADE_RESULTADO[a.status] || { label: a.status, variant: 'neutral' };
           return (
             <div key={a.id} onClick={() => setDetalhe(a)}
-              style={{ background: 'white', border: '1px solid #e0e0e0', borderRadius: 8, padding: '0.75rem 1rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+              style={{ background: 'white', border: '1px solid var(--border)', borderRadius: 8, padding: '0.75rem 1rem', cursor: 'pointer', display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
               <div>
                 <div style={{ fontWeight: 600, fontSize: '0.9rem' }}>{a.vistorias_questionarios?.nome}</div>
-                <div style={{ fontSize: '0.78rem', color: '#888', marginTop: 2 }}>
+                <div style={{ fontSize: '0.78rem', color: 'var(--fg3)', marginTop: 2 }}>
                   {a.equipamentos_obra?.numero_serie ? `${a.equipamentos_obra.numero_serie} · ` : ''}
                   {a.colaboradores_vpsistema?.nome || 'Técnico a definir'}
                   {a.concluido_em ? ` · concluída em ${new Date(a.concluido_em).toLocaleDateString('pt-BR')}` : ''}
@@ -1211,14 +1184,14 @@ function CampoEditavel({ pergunta, resposta, onSalvar, atividadeId }) {
         <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
           {(resposta?.anexos || []).length ? resposta.anexos.map((a, i) => (
             <div key={i} style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-              <img src={a.url} alt="" style={{ width: 70, height: 52, objectFit: 'cover', borderRadius: 4, border: '1px solid #eee', flexShrink: 0 }}/>
+              <img src={a.url} alt="" style={{ width: 70, height: 52, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border)', flexShrink: 0 }}/>
               <div style={{ flex: 1 }}>
                 <input className="input" style={{ fontSize: 12 }} defaultValue={a.legenda || ''} placeholder="Legenda"
                   onBlur={(e) => onSalvar({ anexos: resposta.anexos.map((x, idx) => (idx === i ? { ...x, legenda: e.target.value } : x)) })}/>
                 <Button size="sm" variant="ghost" onClick={() => onSalvar({ anexos: resposta.anexos.filter((_, idx) => idx !== i) })}>Remover foto</Button>
               </div>
             </div>
-          )) : <span style={{ color: '#bbb', fontSize: 13 }}>— sem fotos —</span>}
+          )) : <span style={{ color: 'var(--fg3)', fontSize: 13 }}>— sem fotos —</span>}
           <label className="btn btn--outline btn--sm" style={{ alignSelf: 'flex-start', cursor: 'pointer' }}>
             {enviandoFoto ? 'Enviando…' : 'Adicionar foto'}
             <input type="file" accept="image/*" onChange={adicionarFoto} hidden disabled={enviandoFoto}/>
@@ -1227,11 +1200,11 @@ function CampoEditavel({ pergunta, resposta, onSalvar, atividadeId }) {
       )}
       {pergunta.tipo_campo === 'assinatura' && (
         resposta?.anexo_url
-          ? <img src={resposta.anexo_url} alt="" style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid #eee' }}/>
-          : <span style={{ color: '#bbb', fontSize: 13 }}>— sem assinatura — (não editável aqui)</span>
+          ? <img src={resposta.anexo_url} alt="" style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid var(--border)' }}/>
+          : <span style={{ color: 'var(--fg3)', fontSize: 13 }}>— sem assinatura — (não editável aqui)</span>
       )}
       {!window.VistoriasQuestionariosStore.ehPerguntaCompanion(pergunta) && (
-        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: '#b91c1c', cursor: 'pointer' }}>
+        <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, color: 'var(--vp-danger-ink)', cursor: 'pointer' }}>
           <input type="checkbox" checked={!!resposta?.pendencia} onChange={(e) => onSalvar({ pendencia: e.target.checked })}/>
           Marcar como pendência
         </label>
@@ -1269,22 +1242,22 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8 }}>
           {r.anexos.map((a, i) => (
             <div key={i}>
-              <img src={a.url} alt={pergunta.texto} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid #eee', display: 'block' }}/>
-              {a.legenda && <div style={{ fontSize: 11, color: '#888', maxWidth: 160 }}>{a.legenda}</div>}
+              <img src={a.url} alt={pergunta.texto} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid var(--border)', display: 'block' }}/>
+              {a.legenda && <div style={{ fontSize: 11, color: 'var(--fg3)', maxWidth: 160 }}>{a.legenda}</div>}
             </div>
           ))}
         </div>
-      ) : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+      ) : <span style={{ color: 'var(--fg3)' }}>— sem resposta —</span>;
     }
     if (pergunta.tipo_campo === 'assinatura') {
       return r?.anexo_url
-        ? <img src={r.anexo_url} alt={pergunta.texto} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid #eee' }}/>
-        : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+        ? <img src={r.anexo_url} alt={pergunta.texto} style={{ maxWidth: 160, maxHeight: 120, borderRadius: 6, border: '1px solid var(--border)' }}/>
+        : <span style={{ color: 'var(--fg3)' }}>— sem resposta —</span>;
     }
     if (pergunta.tipo_campo === 'multipla_escolha') {
-      return (r?.valor_lista || []).length ? r.valor_lista.join(', ') : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+      return (r?.valor_lista || []).length ? r.valor_lista.join(', ') : <span style={{ color: 'var(--fg3)' }}>— sem resposta —</span>;
     }
-    return r?.valor ? r.valor : <span style={{ color: '#bbb' }}>— sem resposta —</span>;
+    return r?.valor ? r.valor : <span style={{ color: 'var(--fg3)' }}>— sem resposta —</span>;
   };
 
   const [editando, setEditando] = React.useState(false);
@@ -1339,7 +1312,7 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
           <Button variant="primary" icon="download" onClick={baixarPdf} disabled={baixandoPdf || estrutura === null}>{baixandoPdf ? 'Gerando PDF…' : 'Baixar PDF'}</Button>
         </div>
       )}>
-      <div style={{ marginBottom: 14, fontSize: 13, color: '#666', display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <div style={{ marginBottom: 14, fontSize: 13, color: 'var(--fg2)', display: 'flex', flexDirection: 'column', gap: 3 }}>
         <div>Técnico: <b>{atividade.colaboradores_vpsistema?.nome || 'a definir'}</b></div>
         {atividade.checkin_em && (
           <div>Check-in: {new Date(atividade.checkin_em).toLocaleString('pt-BR')}
@@ -1354,24 +1327,24 @@ function ResultadoAtividadeModal({ atividade, onClose }) {
       </div>
 
       {estrutura === null ? (
-        <div style={{ textAlign: 'center', padding: 24, color: '#888' }}>Carregando…</div>
+        <div style={{ textAlign: 'center', padding: 24, color: 'var(--fg3)' }}>Carregando…</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
           {estrutura.map((categoria) => {
             const pavs = window.VistoriasQuestionariosStore.pavsDaCategoria(categoria, atividade.paradas);
             return (
               <div key={categoria.id}>
-                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, textTransform: 'uppercase', color: '#555' }}>{categoria.nome}</div>
+                <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8, textTransform: 'uppercase', color: 'var(--fg2)' }}>{categoria.nome}</div>
                 {pavs.map((pav) => (
                   <div key={pav} style={{ marginBottom: pavs.length > 1 ? 10 : 0 }}>
-                    {categoria.repete_por_pavimento && <div style={{ fontSize: 11, fontWeight: 700, color: '#999', textTransform: 'uppercase', marginBottom: 6 }}>Pavimento {pav}</div>}
+                    {categoria.repete_por_pavimento && <div style={{ fontSize: 11, fontWeight: 700, color: 'var(--fg3)', textTransform: 'uppercase', marginBottom: 6 }}>Pavimento {pav}</div>}
                     <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
                       {categoria.perguntas.filter((p) => visivel(p, pav)).map((p) => {
                         if (p.tipo_campo === 'informativa') return null;
                         const r = respostas[chave(p.id, pav)];
                         return (
-                          <div key={p.id + ':' + pav} style={{ borderBottom: '1px solid #f0f0f0', paddingBottom: 8 }}>
-                            <div style={{ fontSize: 13, color: '#333', marginBottom: 4 }}>{p.texto}</div>
+                          <div key={p.id + ':' + pav} style={{ borderBottom: '1px solid var(--vp-gray-100)', paddingBottom: 8 }}>
+                            <div style={{ fontSize: 13, color: 'var(--fg1)', marginBottom: 4 }}>{p.texto}</div>
                             {editando ? (
                               <CampoEditavel pergunta={p} resposta={r} atividadeId={atividade.id} onSalvar={(campos) => salvarResposta(p.id, pav, campos)}/>
                             ) : (
@@ -1423,17 +1396,17 @@ function SeletorObrasPorCliente({ obras, equipPorObra, busca, setBusca, clienteA
         placeholder="Buscar por cliente, obra ou nº de série…"
         value={busca}
         onChange={(e) => setBusca(e.target.value)}
-        style={{ width: '100%', padding: '0.65rem 0.85rem', border: '1px solid #ddd', borderRadius: 6, fontSize: '0.9rem', marginBottom: '1rem' }}
+        style={{ width: '100%', padding: '0.65rem 0.85rem', border: '1px solid var(--border)', borderRadius: 6, fontSize: '0.9rem', marginBottom: '1rem' }}
       />
       {clientes.length === 0 ? (
-        <div style={{ textAlign: 'center', padding: '2rem', color: '#666' }}>Nenhuma obra encontrada.</div>
+        <div style={{ textAlign: 'center', padding: '2rem', color: 'var(--fg2)' }}>Nenhuma obra encontrada.</div>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
           {clientes.map((cliente) => {
             const lista = porCliente[cliente];
             const aberto = forcarAberto || clienteAberto === cliente;
             return (
-              <div key={cliente} style={{ border: '1px solid #e0e0e0', borderRadius: 8, background: 'white', overflow: 'hidden' }}>
+              <div key={cliente} style={{ border: '1px solid var(--border)', borderRadius: 8, background: 'white', overflow: 'hidden' }}>
                 <div
                   onClick={() => setClienteAberto(clienteAberto === cliente ? null : cliente)}
                   style={{
@@ -1442,7 +1415,7 @@ function SeletorObrasPorCliente({ obras, equipPorObra, busca, setBusca, clienteA
                   }}>
                   <span style={{ display: 'inline-block', transition: 'transform .15s', transform: aberto ? 'rotate(90deg)' : 'rotate(0deg)' }}>▸</span>
                   🏢 {cliente}
-                  <span style={{ fontWeight: 400, color: '#888', fontSize: '0.82rem' }}>({lista.length})</span>
+                  <span style={{ fontWeight: 400, color: 'var(--fg3)', fontSize: '0.82rem' }}>({lista.length})</span>
                 </div>
                 {aberto && (
                   <div style={{ padding: '0 0.75rem 0.75rem', display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -1453,20 +1426,20 @@ function SeletorObrasPorCliente({ obras, equipPorObra, busca, setBusca, clienteA
                           onClick={() => onEscolher(o)}
                           style={{
                             marginLeft: '1.5rem', padding: '0.6rem 0.85rem', borderRadius: 6,
-                            border: '1px solid #eee', cursor: 'pointer', display: 'flex',
+                            border: '1px solid var(--border)', cursor: 'pointer', display: 'flex',
                             justifyContent: 'space-between', alignItems: 'center', gap: 8,
                           }}
-                          onMouseEnter={(e) => { e.currentTarget.style.background = '#f8f9fa'; }}
+                          onMouseEnter={(e) => { e.currentTarget.style.background = 'var(--vp-gray-50)'; }}
                           onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}>
                           <div>
                             <div style={{ fontSize: '0.88rem', fontWeight: 600 }}>{o.building_name || 'Obra sem nome'}</div>
                             {seriais.length > 0 && (
-                              <div style={{ fontSize: '0.78rem', color: '#888', marginTop: 2 }}>
+                              <div style={{ fontSize: '0.78rem', color: 'var(--fg3)', marginTop: 2 }}>
                                 🔧 {seriais.join(', ')}
                               </div>
                             )}
                           </div>
-                          <span style={{ color: '#aaa', fontSize: '0.85rem' }}>›</span>
+                          <span style={{ color: 'var(--fg3)', fontSize: '0.85rem' }}>›</span>
                         </div>
                       );
                     })}
