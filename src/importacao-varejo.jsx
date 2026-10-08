@@ -52,8 +52,8 @@ function ivStatusDoItem(item) {
   return 'branca';
 }
 const IV_LINHA_STYLE = {
-  vermelha: { background: 'var(--vp-red-100, #fecaca)' },
-  amarela: { background: 'var(--vp-yellow-100, #fef08a)' },
+  vermelha: { background: 'var(--vp-danger-tint)' },
+  amarela: { background: 'var(--vp-warning-tint)' },
   branca: {},
 };
 
@@ -366,11 +366,6 @@ function ImportacaoVarejoPage({ setRoute }) {
         </div>
       </div>
 
-      <div className="row" style={{ gap: 16, marginBottom: 12, flexWrap: 'wrap' }}>
-        <span className="small muted">Estoque sincronizado em: <b>{ivFmtDataHora(lastEstoqueSyncAt)}</b></span>
-        <span className="small muted">Giro/Curva calculados em: <b>{ivFmtDataHora(lastGiroSyncAt)}</b></span>
-      </div>
-
       {erro && (
         <div className="alert danger" style={{ marginBottom: 16 }}>
           <Icon.warning />
@@ -414,22 +409,10 @@ function ImportacaoVarejoPage({ setRoute }) {
         />
       </div>
 
-      <div className="tbar" style={{ flexWrap: 'wrap', gap: 8 }}>
-        <input className="input" style={{ flex: 1, minWidth: 220 }} placeholder="Buscar por código ou descrição…" value={busca} onChange={(e) => setBusca(e.target.value)} />
-        <div className="seg">
-          {['todas', 'vermelha', 'amarela', 'branca'].map((v) => (
-            <button key={v} className={corFiltro === v ? 'is-active' : ''} onClick={() => setCorFiltro(v)}>
-              {v === 'todas' ? 'Todas' : v === 'vermelha' ? 'Precisa comprar' : v === 'amarela' ? 'Alerta' : 'Ok'}
-            </button>
-          ))}
-        </div>
-        <div className="seg">
-          {['todas', 'A', 'B', 'C', 'D'].map((v) => (
-            <button key={v} className={curvaFiltro === v ? 'is-active' : ''} onClick={() => setCurvaFiltro(v)}>{v === 'todas' ? 'Curva' : v}</button>
-          ))}
-        </div>
-        <div className="spacer" />
-        <span className="small muted">{filtrados.length} de {items.length} produtos</span>
+      <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
+        <input className="input" style={{ maxWidth: 340 }} placeholder="Buscar por código ou descrição…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        <span className="small" style={{ color: 'var(--fg3)' }}>{filtrados.length} de {items.length} produtos</span>
+        <div className="spacer" style={{ flex: 1 }} />
         {podeGerenciar && selecionados.size > 0 && (
           <Button variant="primary" size="sm" icon="send" onClick={() => setModalEnviar(true)}>
             Enviar {selecionados.size} ao Omie
@@ -437,8 +420,25 @@ function ImportacaoVarejoPage({ setRoute }) {
         )}
       </div>
 
-      <div className="table-wrap">
-        <table className="t">
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+        {['todas', 'vermelha', 'amarela', 'branca'].map((v) => (
+          <Button key={v} size="sm" variant={corFiltro === v ? 'primary' : 'ghost'} onClick={() => setCorFiltro(v)}>
+            {v === 'todas' ? 'Todas' : v === 'vermelha' ? 'Precisa comprar' : v === 'amarela' ? 'Alerta' : 'Ok'}{' '}
+            <span style={{ opacity: .7 }}>({v === 'todas' ? items.length : items.filter((i) => ivStatusDoItem(i) === v).length})</span>
+          </Button>
+        ))}
+        <span style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 6px' }} />
+        {['todas', 'A', 'B', 'C', 'D'].map((v) => (
+          <Button key={v} size="sm" variant={curvaFiltro === v ? 'primary' : 'ghost'} onClick={() => setCurvaFiltro(v)}>
+            {v === 'todas' ? 'Todas as curvas' : `Curva ${v}`}
+          </Button>
+        ))}
+      </div>
+
+      <Card title="Produtos importados" sub={`Estoque sincronizado em ${ivFmtDataHora(lastEstoqueSyncAt)} · Giro/Curva calculados em ${ivFmtDataHora(lastGiroSyncAt)}`}>
+      <div className="table-wrap" style={{ border: 0 }}>
+        <style>{`table.t.pcp-grid.iv-grid th,table.t.pcp-grid.iv-grid td{padding-left:6px;padding-right:6px}`}</style>
+        <table className="t pcp-grid iv-grid">
           <thead><tr>
             {podeGerenciar && (
               <th style={{ width: 32 }}>
@@ -479,8 +479,8 @@ function ImportacaoVarejoPage({ setRoute }) {
                     {podeGerenciar && (
                       <td><input type="checkbox" checked={selecionados.has(item.codigo)} onChange={() => toggleSelecionado(item.codigo)} /></td>
                     )}
-                    <td className="mono small">{item.codigo}</td>
-                    <td className="cell-main" title={item.descricao} style={{ maxWidth: 320 }}>{item.descricao}</td>
+                    <td className="mono small" style={{ whiteSpace: 'nowrap' }}>{item.codigo}</td>
+                    <td className="cell-main" title={item.descricao} style={{ maxWidth: 200 }}>{item.descricao}</td>
                     <td className="text-center"><IVCurvaBadge curva={item.curva} /></td>
                     <td className="text-right cell-num">{ivFmtNum(item.estoqueFisico)}</td>
                     <td className="text-right cell-num">{ivFmtNum(item.estoqueReservado)}</td>
@@ -504,6 +504,7 @@ function ImportacaoVarejoPage({ setRoute }) {
                     </td>
                     <td
                       className="small"
+                      style={{ whiteSpace: 'nowrap' }}
                       title={
                         item.ultimoPedidoNumero
                           ? `${item.ultimoFornecedorFonte === 'pi_importacao' ? 'P.I.' : 'Pedido'} ${item.ultimoPedidoNumero} em ${ivFmtData(item.ultimoPedidoData)}`
@@ -512,7 +513,7 @@ function ImportacaoVarejoPage({ setRoute }) {
                     >
                       {item.ultimoFornecedorNome ? (
                         <>
-                          {item.ultimoFornecedorNome}
+                          <span style={{ display: 'inline-block', maxWidth: 120, overflow: 'hidden', textOverflow: 'ellipsis', verticalAlign: 'bottom' }}>{item.ultimoFornecedorNome}</span>
                           {item.ultimoFornecedorExterior && <Badge variant="neutral" style={{ marginLeft: 6 }} title="Fornecedor estrangeiro">exterior</Badge>}
                           {item.ultimoFornecedorFonte === 'pi_importacao' && (
                             <Badge variant="info" style={{ marginLeft: 6 }} title="Veio de uma P.I. (fatura comercial real) do próprio site, não de Pedido de Compra do Omie">
@@ -554,6 +555,7 @@ function ImportacaoVarejoPage({ setRoute }) {
           )}
         </table>
       </div>
+      </Card>
 
       {modalLote && <IVModalLote item={modalLote} onClose={() => setModalLote(null)} onSaved={() => { setModalLote(null); carregar(); }} />}
       {modalComprado && <IVModalComprado item={modalComprado} onClose={() => setModalComprado(null)} onSaved={() => { setModalComprado(null); carregar(); }} />}
