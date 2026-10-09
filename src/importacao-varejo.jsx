@@ -255,8 +255,18 @@ function ImportacaoVarejoPage({ setRoute }) {
   const [corFiltro, setCorFiltro] = React.useState('todas');
   const [curvaFiltro, setCurvaFiltro] = React.useState('todas');
   const [selecionados, setSelecionados] = React.useState(() => new Set());
-  const [modalLote, setModalLote] = React.useState(null);
-  const [modalComprado, setModalComprado] = React.useState(null);
+  /* Bug real (varredura de URLs, 09/10): os modais "Revisar lote de compra" e
+     "Comprado"/"lançar" eram só useState — F5/link direto sempre voltavam
+     pra lista. A tela não tem aba (useRouteTab), então as 2 ações dividem o
+     2º segmento (/logistica/compras/<acao>:<código>), mesmo truque usado no
+     Almoxarifado. */
+  const [itemUrl, setItemUrl] = window.useRotaId('compras');
+  const [acaoUrl, codigoUrl] = itemUrl ? (() => { const i = itemUrl.indexOf(':'); return i < 0 ? [itemUrl, ''] : [itemUrl.slice(0, i), itemUrl.slice(i + 1)]; })() : ['', ''];
+  const itemModalUrl = (items && codigoUrl) ? items.find((it) => it.codigo === codigoUrl) || null : null;
+  const abrirModalIv = (acao, item) => setItemUrl(acao + ':' + item.codigo);
+  const fecharModalIv = () => setItemUrl(null);
+  const modalLote = acaoUrl === 'lote' ? itemModalUrl : null;
+  const modalComprado = acaoUrl === 'comprado' ? itemModalUrl : null;
   const [modalEnviar, setModalEnviar] = React.useState(false);
   const [podeGerenciar, setPodeGerenciar] = React.useState(false);
   const [sincronizando, setSincronizando] = React.useState(false);
@@ -489,15 +499,15 @@ function ImportacaoVarejoPage({ setRoute }) {
                     <td className="text-right cell-num">{ivFmtNum(item.pendenteOmie)}</td>
                     <td className="text-right cell-num">
                       {item.comprado > 0 ? (
-                        <button className="link-btn" onClick={() => setModalComprado(item)}>{ivFmtNum(item.comprado)}</button>
+                        <button className="link-btn" onClick={() => abrirModalIv('comprado', item)}>{ivFmtNum(item.comprado)}</button>
                       ) : podeGerenciar ? (
-                        <button className="link-btn muted" onClick={() => setModalComprado(item)}>lançar</button>
+                        <button className="link-btn muted" onClick={() => abrirModalIv('comprado', item)}>lançar</button>
                       ) : '—'}
                     </td>
                     <td className="text-right" style={{ fontWeight: 800 }}>
                       {ivFmtNum(item.sugestaoCompra)}
                       {podeGerenciar && (
-                        <button className="link-btn" title="Revisar lote de compra" onClick={() => setModalLote(item)} style={{ marginLeft: 6 }}>
+                        <button className="link-btn" title="Revisar lote de compra" onClick={() => abrirModalIv('lote', item)} style={{ marginLeft: 6 }}>
                           <Icon.ruler size={13} />
                         </button>
                       )}
@@ -557,8 +567,8 @@ function ImportacaoVarejoPage({ setRoute }) {
       </div>
       </Card>
 
-      {modalLote && <IVModalLote item={modalLote} onClose={() => setModalLote(null)} onSaved={() => { setModalLote(null); carregar(); }} />}
-      {modalComprado && <IVModalComprado item={modalComprado} onClose={() => setModalComprado(null)} onSaved={() => { setModalComprado(null); carregar(); }} />}
+      {modalLote && <IVModalLote item={modalLote} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
+      {modalComprado && <IVModalComprado item={modalComprado} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
       {modalEnviar && <IVModalEnviarOmie itens={itensSelecionados} onClose={() => setModalEnviar(false)} onEnviado={() => { setModalEnviar(false); setSelecionados(new Set()); carregar(); }} />}
     </div>
   );
