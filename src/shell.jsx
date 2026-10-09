@@ -471,6 +471,7 @@ const TUTORIAIS = {
   "cadastro-fornecedores": "fornecedores",
   "cadastro-materias-primas": "materias-primas",
   "cadastro-produtos": "produtos",
+  "cadastro-custos": "atualizacao-de-custos",
   formularios: "formularios",
   "controle-cotacoes": "controle-de-cotacoes",
   "cotacoes-fornecedor": "cotacoes-a-fornecedor",
