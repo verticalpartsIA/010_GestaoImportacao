@@ -35,6 +35,9 @@ Andreia/
 # Worktrees locais de desenvolvimento (superpowers:using-git-worktrees) — nunca versionar
 .worktrees/
 
+# Playwright (testes de fumaça — npm run test:e2e)
+test-results/
+playwright-report/
 # Instruções/testes locais para sessões Claude — não versionar
 ClaudeNãoCommite/
 query_teste.sql
