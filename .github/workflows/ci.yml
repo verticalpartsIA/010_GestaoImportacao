@@ -14,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0 # histórico completo: a checagem de ?v= compara com o commit base
 
       - name: Setup Node.js
         uses: actions/setup-node@v4
@@ -29,6 +31,11 @@ jobs:
 
       - name: Test (stub)
         run: npm run test
+
+      - name: Cache-busting (?v=) incrementado nos arquivos alterados
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha || github.event.before }}
+        run: node scripts/check-cache-bust.js "$BASE_SHA"
 
       - name: Verificar arquivos críticos
         run: |
