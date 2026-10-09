@@ -569,11 +569,23 @@ function AlmoxarifadoEstoque() {
   const [podeEscrever, setPodeEscrever] = React.useState(false);
   const [podeContar, setPodeContar] = React.useState(false);     // registra o estoque físico (contagem real)
   const [podeVerCusto, setPodeVerCusto] = React.useState(null); // null = ainda verificando
-  const [modalReq, setModalReq] = React.useState(null);
-  const [modalMov, setModalMov] = React.useState(null);
-  const [modalEd, setModalEd] = React.useState(null);
-  const [modalHist, setModalHist] = React.useState(null);
-  const [modalAcerto, setModalAcerto] = React.useState(null);
+  /* Bug real (varredura de URLs, 09/10): os 5 modais de ação por produto
+     (Requisitar/Movimentar/Editar/Histórico/Acertar) eram só useState — F5,
+     link direto ou Voltar/Avançar sempre voltavam pra lista, mesmo com um
+     modal aberto. A URL só tem 1 segmento livre sob a aba "estoque"
+     (/logistica/almoxarifado/estoque/<acao>:<código>), então as 5 ações
+     dividem o mesmo slot via useRotaItem — o código do produto só é
+     resolvido depois que `linhas` carrega. */
+  const [itemUrl, setItemUrl] = window.useRotaItem('almoxarifado', 'estoque');
+  const [acaoUrl, codigoUrl] = itemUrl ? (() => { const i = itemUrl.indexOf(':'); return i < 0 ? [itemUrl, ''] : [itemUrl.slice(0, i), itemUrl.slice(i + 1)]; })() : ['', ''];
+  const prodUrl = (linhas && codigoUrl) ? linhas.find((l) => l.codigo === codigoUrl) || null : null;
+  const abrirModal = (acao, l) => setItemUrl(acao + ':' + l.codigo);
+  const fecharModal = () => setItemUrl(null);
+  const modalReq = acaoUrl === 'requisitar' ? prodUrl : null;
+  const modalMov = acaoUrl === 'mover' ? prodUrl : null;
+  const modalEd = acaoUrl === 'editar' ? prodUrl : null;
+  const modalHist = acaoUrl === 'historico' ? prodUrl : null;
+  const modalAcerto = acaoUrl === 'acertar' ? prodUrl : null;
   // Colunas secundárias (Família, Mínimo, Custo, Lead time) ficam recolhidas para a tela caber; preferência por pessoa no navegador.
   const [maisCols, setMaisCols] = React.useState(() => { try { return localStorage.getItem('vp_alm_cols') === '1'; } catch (e) { return false; } });
   const alternarCols = () => setMaisCols((v) => { try { localStorage.setItem('vp_alm_cols', v ? '0' : '1'); } catch (e) { /* sem storage */ } return !v; });
@@ -889,9 +901,9 @@ function AlmoxarifadoEstoque() {
                           <span style={Math.abs(l.dif) > EPS ? { color: 'var(--vp-danger)', fontWeight: 600 } : { color: 'var(--fg3)' }}
                             title={Math.abs(l.dif) > EPS ? 'A contagem não bate com o Omie' : 'Bate com o Omie'}>{Math.abs(l.dif) > EPS ? (l.dif > 0 ? '+' : '') + almFmt(l.dif, 2) : 'ok'}</span>
                           {podeEscrever && Math.abs(l.dif) > EPS && (
-                            <>{' '}<Button variant="primary" size="sm" title="Acertar o saldo do Omie com esta contagem (grava no Omie, com prévia e confirmação)" onClick={() => setModalAcerto(l)}>Acertar</Button></>
+                            <>{' '}<Button variant="primary" size="sm" title="Acertar o saldo do Omie com esta contagem (grava no Omie, com prévia e confirmação)" onClick={() => abrirModal('acertar', l)}>Acertar</Button></>
                           )}
-                          {' '}<Button variant="ghost" size="sm" title="Histórico de contagens deste item" onClick={() => setModalHist(l)}>↺</Button>
+                          {' '}<Button variant="ghost" size="sm" title="Histórico de contagens deste item" onClick={() => abrirModal('historico', l)}>↺</Button>
                         </>
                       )}
                     </td>
@@ -931,19 +943,19 @@ function AlmoxarifadoEstoque() {
       {menuAcao && (
         <div role="menu" onClick={(e) => e.stopPropagation()} style={{ position: 'fixed', left: menuAcao.x, top: menuAcao.y, width: 196, zIndex: 60, background: 'var(--vp-white, #fff)', border: '1px solid var(--vp-gray-200, #d9dce1)', borderRadius: 8, boxShadow: '0 8px 24px rgba(0,0,0,.18)', padding: 4, display: 'flex', flexDirection: 'column' }}>
           <div className="small muted" style={{ padding: '4px 10px', fontFamily: 'monospace' }}>{menuAcao.l.codigo}</div>
-          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalReq(menuAcao.l); setMenuAcao(null); }}>Requisitar compra</Button>
-          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalMov(menuAcao.l); setMenuAcao(null); }}>Movimentar estoque</Button>
-          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalEd(menuAcao.l); setMenuAcao(null); }}>Editar cadastro</Button>
+          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { abrirModal('requisitar', menuAcao.l); setMenuAcao(null); }}>Requisitar compra</Button>
+          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { abrirModal('mover', menuAcao.l); setMenuAcao(null); }}>Movimentar estoque</Button>
+          <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { abrirModal('editar', menuAcao.l); setMenuAcao(null); }}>Editar cadastro</Button>
           {menuAcao.l.fisico != null && Math.abs(menuAcao.l.dif) > EPS && (
-            <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { setModalAcerto(menuAcao.l); setMenuAcao(null); }}>Acertar saldo pela contagem</Button>
+            <Button variant="ghost" size="sm" style={{ justifyContent: 'flex-start', whiteSpace: 'nowrap' }} onClick={() => { abrirModal('acertar', menuAcao.l); setMenuAcao(null); }}>Acertar saldo pela contagem</Button>
           )}
         </div>
       )}
-      {modalReq && <AlmModalRequisicao prod={modalReq} onClose={() => setModalReq(null)} onDone={carregar}/>}
-      {modalMov && <AlmModalMovimento prod={modalMov} onClose={() => setModalMov(null)} onDone={carregar}/>}
-      {modalEd && <AlmModalEditarProduto prod={modalEd} onClose={() => setModalEd(null)} onDone={carregar}/>}
-      {modalHist && <AlmModalHistoricoContagem prod={modalHist} onClose={() => setModalHist(null)}/>}
-      {modalAcerto && <AlmModalAcerto prod={modalAcerto} onClose={() => setModalAcerto(null)} onDone={carregar}/>}
+      {modalReq && <AlmModalRequisicao prod={modalReq} onClose={fecharModal} onDone={carregar}/>}
+      {modalMov && <AlmModalMovimento prod={modalMov} onClose={fecharModal} onDone={carregar}/>}
+      {modalEd && <AlmModalEditarProduto prod={modalEd} onClose={fecharModal} onDone={carregar}/>}
+      {modalHist && <AlmModalHistoricoContagem prod={modalHist} onClose={fecharModal}/>}
+      {modalAcerto && <AlmModalAcerto prod={modalAcerto} onClose={fecharModal} onDone={carregar}/>}
       {modalEnd && <AlmModalImportarEnderecos linhas={linhas} onClose={() => setModalEnd(false)} onDone={carregar}/>}
     </>
   );

@@ -27,10 +27,42 @@ function veVpobLabel(obra) {
 
 function VistoriasEnvio({ setRoute }) {
   const [aba, setAba] = window.useRouteTab('vistorias-envio', 'despacho', ['questionarios', 'despacho', 'calendario']);
-  const [questionarioAberto, setQuestionarioAberto] = React.useState(null);
+  /* Bug real (varredura de URLs, 09/10): o editor de questionário era um
+     "full-page takeover" só em useState — F5/link direto/Voltar-Avançar
+     sempre caíam na lista, perdendo qual questionário estava aberto. Usa o
+     3º segmento sob a aba "questionarios" (/vistorias-envio/questionarios/
+     <id>), mesmo padrão já usado no PCP/Decisões/Contrato de Venda. Como
+     só a lista (ListaQuestionarios) carrega os questionários, um objeto
+     recém-aberto por clique é guardado em cache local (abertoCache) pra não
+     esperar outra consulta — deep-link/F5 busca pelo id via
+     obterQuestionario(). */
+  const [questionarioId, setQuestionarioId] = window.useRotaItem('vistorias-envio', 'questionarios');
+  const [abertoCache, setAbertoCache] = React.useState(null);
+  const [carregandoAberto, setCarregandoAberto] = React.useState(false);
 
-  if (questionarioAberto) {
-    return <QuestionarioEditor questionario={questionarioAberto} onVoltar={() => setQuestionarioAberto(null)}/>;
+  React.useEffect(() => {
+    if (!questionarioId) { setAbertoCache(null); return; }
+    if (abertoCache && abertoCache.id === questionarioId) return;
+    setCarregandoAberto(true);
+    window.VistoriasQuestionariosStore.obterQuestionario(questionarioId)
+      .then((q) => {
+        setAbertoCache(q);
+        if (!q) window.toast?.('Questionário não encontrado (pode ter sido excluído).', 'warning');
+      })
+      .catch((e) => window.toast?.('Erro ao abrir questionário: ' + e.message, 'error'))
+      .finally(() => setCarregandoAberto(false));
+  }, [questionarioId]);
+
+  const abrirQuestionario = (q) => { setAbertoCache(q); setQuestionarioId(q.id); };
+  const fecharQuestionario = () => setQuestionarioId(null);
+
+  if (questionarioId) {
+    if (!abertoCache) {
+      return carregandoAberto
+        ? <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>
+        : null;
+    }
+    return <QuestionarioEditor questionario={abertoCache} onVoltar={fecharQuestionario}/>;
   }
 
   return (
