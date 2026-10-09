@@ -472,6 +472,10 @@ const TUTORIAIS = {
   "cadastro-materias-primas": "materias-primas",
   "cadastro-produtos": "produtos",
   "cadastro-custos": "atualizacao-de-custos",
+  precificacao: "precificacao",
+  "aval-financeiro": "aval-financeiro",
+  comissoes: "comissoes",
+  "aval-juridico": "aval-juridico",
   formularios: "formularios",
   "controle-cotacoes": "controle-de-cotacoes",
   "cotacoes-fornecedor": "cotacoes-a-fornecedor",
@@ -489,6 +493,7 @@ const MODULOS_TUTORIAL = {
   "CRM": "crm",
   "Cadastros Mestres": "cadastros-mestres",
   "Comercial | Pré-venda": "comercial-pre-venda",
+  "Financeiro & Preços": "financeiro-precos",
 };
 
 /* Nome da tela como aparece no menu lateral (NAV_GROUPS). (O BREADCRUMB_MAP ganhou a rota `decisoes` em 04/10/2026 — issue #654 —,
