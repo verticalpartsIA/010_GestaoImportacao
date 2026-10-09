@@ -1,0 +1,69 @@
+/* pcp-tabelas.css — tabela refinada para Logística Interna (Carga Máquina, Montagem do Produto)
+   e Cadastros (Matérias-Primas, Produtos). Usa como base o table.t do app.css. */
+table.t.pcp-grid {
+  font-family: 'Poppins', var(--font-sans, system-ui), sans-serif;
+  font-weight: 300;
+  font-size: 12.5px;
+  letter-spacing: .01em;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-variant-numeric: tabular-nums;
+}
+table.t.pcp-grid thead th {
+  font-family: 'Poppins', sans-serif;
+  font-weight: 500;
+  font-size: 10.5px;
+  text-transform: uppercase;
+  letter-spacing: .08em;
+  color: var(--fg3);
+  background: var(--vp-gray-50);
+  padding: 9px 12px;
+  border-bottom: 1px solid var(--vp-gray-200, #d9dce1);
+  border-right: 1px solid var(--vp-gray-100, #eceef1);
+  position: sticky; top: 0; z-index: 1;
+  white-space: nowrap;
+}
+table.t.pcp-grid thead th:last-child { border-right: 0; }
+table.t.pcp-grid tbody td {
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--vp-gray-100, #eceef1);
+  border-right: 1px solid var(--vp-gray-100, #eceef1);
+  vertical-align: middle;
+  color: var(--fg1, inherit);
+}
+table.t.pcp-grid tbody td:last-child { border-right: 0; }
+table.t.pcp-grid tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--vp-gray-50) 55%, transparent); }
+table.t.pcp-grid tbody tr { cursor: default; }
+table.t.pcp-grid tbody tr:hover td {
+  background: color-mix(in srgb, var(--vp-yellow) 16%, var(--vp-gray-50));
+}
+table.t.pcp-grid tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 0 var(--vp-yellow); }
+table.t.pcp-grid .pcp-cod {
+  font-weight: 500; color: inherit; text-decoration: none;
+  border: 0; border-bottom: 1px dotted var(--fg3); cursor: pointer; background: none;
+  padding: 0; font-family: inherit; font-size: inherit;
+}
+table.t.pcp-grid .pcp-cod:hover { color: var(--vp-info, #1d6fd1); border-bottom-style: solid; }
+table.t.pcp-grid .pcp-num { text-align: right; }
+table.t.pcp-grid .pcp-tag {
+  display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 10.5px; font-weight: 400;
+  background: var(--vp-gray-100, #eceef1); color: var(--fg2, inherit);
+}
+table.t.pcp-grid .pcp-tag--pcp { background: color-mix(in srgb, var(--vp-yellow) 30%, transparent); }
+table.t.pcp-grid input.input { font-family: 'Poppins', sans-serif; font-weight: 300; font-size: 12px; padding: 3px 6px; height: 28px; }
+.pcp-toolbar input.input, .pcp-toolbar select.input { font-family: 'Poppins', sans-serif; font-weight: 300; font-size: 12.5px; }
+.pcp-total { font-family: 'Poppins', sans-serif; font-weight: 300; }
+.pcp-total b { font-weight: 500; }
+table.t.pcp-grid tbody td:nth-child(2) { min-width: 280px; }
+table.t.pcp-grid tbody td:first-child { white-space: nowrap; }
+table.t.pcp-grid tbody td.pcp-num, table.t.pcp-grid tbody td.text-right { white-space: nowrap; }
+
+/* Almoxarifado › Estoque: a coluna de ações (⋯) fica sempre visível à direita, mesmo com rolagem horizontal. */
+table.t.pcp-grid.pcp-estoque tbody td:nth-child(2) { min-width: 170px; }
+table.t.pcp-grid .pcp-acao { position: sticky; right: 0; width: 44px; text-align: center; padding: 4px 6px; box-shadow: -6px 0 8px -6px rgba(0,0,0,.18); }
+table.t.pcp-grid thead th.pcp-acao { z-index: 3; }
+table.t.pcp-grid tbody tr td.pcp-acao { z-index: 2; background: var(--vp-white, #fff); }
+table.t.pcp-grid tbody tr:nth-child(even) td.pcp-acao { background: color-mix(in srgb, var(--vp-gray-50) 55%, var(--vp-white, #fff)); }
+table.t.pcp-grid tbody tr:hover td.pcp-acao { background: color-mix(in srgb, var(--vp-yellow) 16%, var(--vp-gray-50)); }
+table.t.pcp-grid.pcp-estoque thead th, table.t.pcp-grid.pcp-estoque tbody td { padding-left: 8px; padding-right: 8px; }
+table.t.pcp-grid.pcp-estoque input.input[type="number"] { width: 78px !important; }

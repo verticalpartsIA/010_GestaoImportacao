@@ -33,6 +33,73 @@
     });
   }
 
+  /* Mapa fixo ISO (tipo_tamanho, usado aqui e em EI_CONTAINER_TIPOS de
+     embarques-importacao.jsx) → tipo real de custos_containers (texto
+     livre, ver seed em supabase/migrations/20260828100000_cadastro_custos.sql).
+     Pedido do usuário (28/09): "Preço (R$)" de Cadastros → Atualização de
+     Custos → Containers precisa doar valor pro container da Precificação.
+     Decisão explícita: NÃO trocar o vocabulário ISO da Precificação pelos
+     nomes de Custos — esse tipo_tamanho também alimenta
+     EmbarquesImportacaoStore.containersDaCotacao/expandirContainers (issue
+     #384, já em produção), que só reconhece os códigos ISO. Este mapa é só
+     uma tradução interna pra achar a linha certa em custos_containers — a
+     Precificação continua salvando/mostrando "20'DV", "40'HC" etc. */
+  const CONTAINER_ISO_PARA_CUSTOS = {
+    "20'DV": '20GP (Padrão)', "40'DV": '40GP (Padrão)',
+    "20'HC": '20HC (High Cube)', "40'HC": '40HC (High Cube)',
+    "20'RF": '20 Reefer (Refrigerado)', "40'RF": '40 HC Reefer (Refrigerado Alto)',
+    "20'OT": '20 Open Top (Teto aberto)', "40'OT": '40 Open Top (Teto aberto)',
+    "20'FR": '20 Flat Rack (Sem laterais)', "40'FR": '40 Flat Rack (Sem laterais)',
+  };
+
+  /* Busca em custos_containers a linha que corresponde a um tipo_tamanho
+     ISO da Precificação/Embarques — usada pra herdar o Preço(R$) sem tocar
+     no vocabulário salvo (ver comentário do mapa acima). null quando não
+     há mapeamento (ex. 'Outro') ou a tabela de Custos não tem essa linha
+     ativa ainda. */
+  function buscarContainerCustoPorIso(tipoTamanhoIso, custosContainers) {
+    const tipoCustos = CONTAINER_ISO_PARA_CUSTOS[tipoTamanhoIso];
+    if (!tipoCustos) return null;
+    return (custosContainers || []).find((c) => c.tipo === tipoCustos && c.ativo !== false) || null;
+  }
+
+  /* Preenche preco_rs de cada container detectado no container_no do
+     fornecedor com o valor já cadastrado em Atualização de Custos — só
+     quando o container ainda não tem preço nenhum (preserva edição manual
+     de uma precificação já existente/recarregada). */
+  function enriquecerContainersComCusto(containers, custosContainers) {
+    return (containers || []).map((ct) => {
+      const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
+      if (!custo) return ct;
+      const out = { ...ct };
+      if (!(Number(ct.preco_rs) > 0)) out.preco_rs = Number(custo.preco_rs) || 0;
+      // Capatazia (01/10/2026): mesma regra do preço — herda do cadastro só
+      // quando a linha ainda não tem valor, nunca sobrescreve edição manual.
+      if (!(Number(ct.capatazia_rs) > 0) && Number(custo.capatazia_rs) > 0) out.capatazia_rs = Number(custo.capatazia_rs);
+      // GRI (01/10/2026): mesma regra da capatazia.
+      if (!(Number(ct.gri_rs) > 0) && Number(custo.gri_rs) > 0) out.gri_rs = Number(custo.gri_rs);
+      return out;
+    });
+  }
+
+  /* Avisa (não bloqueia) quando o preço do container ou a capatazia lançados
+     na Precificação divergem do cadastro de Containers (Atualização de
+     Custos) — decisão do Financeiro (01/10/2026). Só compara campos já
+     preenchidos dos dois lados. */
+  function divergenciasContainerComCadastro(containers, custosContainers) {
+    const out = [];
+    (containers || []).forEach((ct, i) => {
+      const custo = buscarContainerCustoPorIso(ct.tipo_tamanho, custosContainers);
+      if (!custo) return;
+      [['preco_rs', 'preço do container'], ['capatazia_rs', 'capatazia'], ['gri_rs', 'GRI']].forEach(([campo, rotulo]) => {
+        const atual = Number(ct[campo]) || 0;
+        const cadastro = Number(custo[campo]) || 0;
+        if (atual > 0 && cadastro > 0 && Math.abs(atual - cadastro) > 0.01) out.push({ indice: i, campo, rotulo, atual, cadastro });
+      });
+    });
+    return out;
+  }
+
   /* ============================================================
      Busca automática de mão de obra (issue "Precificação real" Fase 3).
      custos_instalacao_elevador é indexada por tração × faixa de
@@ -101,21 +168,106 @@
      e devolve a lista classificada — pronta pra virar o card "Mão de
      obra" da Precificação (Fase 4) e pra alimentar o motor V2
      (custo_economico_completo). Nunca lança: unidade sem tabela vira
-     projeto especial, não erro. */
+     projeto especial, não erro.
+
+     28/09 — uma Unidade com quantidade > 1 (o vendedor cotou "2" no
+     Formulário pra dois elevadores idênticos numa Unidade só, ver
+     feNovaUnidade em formulario-elevador.jsx) representa N equipamentos
+     físicos reais, cada um exigindo sua própria instalação — mas até aqui
+     virava só 1 linha/1 valor de MO nesta tabela (achado real: cotação
+     Nº 955 com quantidade=2 mostrava 1 linha em vez de 2, e a soma de MO
+     em pzMoTotalRs/precificacao-elevador.jsx contava só 1x). Cada Unidade
+     agora vira `quantidade` linhas (mesma classificação/valor — a tabela
+     de custo é por especificação, não por unidade física).
+
+     Numeração pedida explicitamente pelo usuário: renumerar de forma
+     contínua a partir do próprio identificador da Unidade (ex.:
+     "VPEL-EL0955-1" com quantidade=2 vira "VPEL-EL0955-1"/"VPEL-EL0955-2"),
+     não um sufixo aninhado. Risco real avisado e aceito pelo usuário:
+     como o número final de cada Unidade já é o índice de ativo real dela
+     (indice_ativo, 1 por Unidade — ver migration
+     master_id_elevador_fase1), renumerar pra cima pode bater em cima do
+     identificador de OUTRA Unidade real da mesma cotação (confirmado em
+     produção: cotação 957 tem Unidade índice 1 com quantidade=6 ao lado de
+     Unidades reais nos índices 4/6/9). getIdentificadorFisico() below só
+     usa a numeração contínua quando o número não está em uso por NENHUM
+     identificador já visto nesta chamada — nem um real (outra Unidade da
+     mesma cotação) nem um já gerado pela expansão de OUTRA Unidade com
+     quantidade > 1 processada antes (achado ao testar com >1 Unidade de
+     quantidade>1 na mesma cotação: checar só contra os identificadores
+     reais não bastava — duas Unidades diferentes geravam o mesmo número
+     "emprestado" uma da outra, ex. duas fileiras de "VPEL-EL0957-7"
+     apontando pra equipamentos físicos diferentes). Quando colide (com o
+     real ou com o já gerado), cai pra um sufixo aninhado (ex.
+     "VPEL-EL0955-1-4") só pra não fabricar um rótulo idêntico ao de outro
+     equipamento de verdade. Em ambos os casos, isso é só pra exibição/soma
+     nesta tabela — nunca grava de volta em
+     formularios_elevador_unidades.identificador.
+
+     29/09 — achado real na cotação Nº 962 (Juliana): a instalação de um
+     equipamento pode não ser por conta da VerticalParts (terceiro cuida da
+     montagem) — o vendedor/financeiro precisa poder excluir SÓ a Mão de
+     obra daquele equipamento físico, sem reduzir a quantidade cotada (isso
+     afetaria "Unidades desta cotação"/VMLE e a proposta, que leem
+     `modelos[i].quantidade` como a contagem real de equipamento vendido).
+     `m.moExcluidos` (contagem, não índice — os equipamentos físicos de uma
+     mesma Unidade são idênticos entre si) marca quantos dos `quantidade`
+     equipamentos físicos deste grupo têm a MO excluída; os últimos
+     `moExcluidos` viram `situacao: 'excluido'`/`valorRs: 0` em vez da
+     classificação normal. Nunca decrementa `quantidade`. */
   async function buscarMaoDeObraAutomatica(modelos) {
     const store = window.CadastroCustosStore;
     const lista = Array.isArray(modelos) ? modelos : [];
+    const usados = new Set(lista.map((m) => m.identificador).filter(Boolean));
+
+    function getIdentificadorFisico(identificadorBase, i, quantidade) {
+      if (quantidade <= 1 || !identificadorBase) return identificadorBase;
+      const m = /^(.*)-(\d+)$/.exec(identificadorBase);
+      if (m) {
+        const candidato = `${m[1]}-${Number(m[2]) + i}`;
+        if (i === 0) return candidato; // próprio identificador da Unidade — sempre permitido
+        if (!usados.has(candidato)) { usados.add(candidato); return candidato; }
+        console.warn('[PrecificacaoElevadorStore] numeração contínua colidiria com outro identificador desta cotação', candidato, '— usando sufixo aninhado');
+      }
+      let fallback = `${identificadorBase}-${i + 1}`;
+      while (usados.has(fallback)) fallback += '.';
+      usados.add(fallback);
+      return fallback;
+    }
+
     const resultados = [];
     for (const m of lista) {
       const capacidadeKg = m.capacidadeKg != null && m.capacidadeKg !== '' ? Number(m.capacidadeKg) : null;
+      let base;
       if (!store || !m.tracao || !m.paradas || !(capacidadeKg > 0)) {
-        resultados.push(classificarMaoDeObraUnidade(m, null));
-        continue;
+        base = classificarMaoDeObraUnidade(m, null);
+      } else {
+        let custoTabela = null;
+        try { custoTabela = await store.buscarCustoElevador(m.tracao, capacidadeKg, Number(m.paradas)); }
+        catch (e) { console.warn('[PrecificacaoElevadorStore] buscarMaoDeObraAutomatica falhou pra unidade', m.unidadeId, e); }
+        base = classificarMaoDeObraUnidade(m, custoTabela);
       }
-      let custoTabela = null;
-      try { custoTabela = await store.buscarCustoElevador(m.tracao, capacidadeKg, Number(m.paradas)); }
-      catch (e) { console.warn('[PrecificacaoElevadorStore] buscarMaoDeObraAutomatica falhou pra unidade', m.unidadeId, e); }
-      resultados.push(classificarMaoDeObraUnidade(m, custoTabela));
+      const quantidade = Math.max(1, Number(m.quantidade) || 1);
+      const moExcluidos = Math.min(quantidade, Math.max(0, Number(m.moExcluidos) || 0));
+      for (let i = 0; i < quantidade; i++) {
+        const excluido = i >= quantidade - moExcluidos;
+        const linha = excluido
+          ? {
+              ...base, origem: 'excluido_manual', situacao: 'excluido', valorRs: 0,
+              estimativa: false, projetoEspecial: false,
+              regraUsada: null, diasMontagem: null, qtdMontadores: null, dataBase: null,
+              motivo: 'Instalação não é por conta da VerticalParts — Mão de obra excluída manualmente desta Precificação (o equipamento continua na cotação).',
+            }
+          : base;
+        resultados.push({
+          ...linha,
+          identificador: getIdentificadorFisico(base.identificador, i, quantidade),
+          equipamentoIndice: i + 1,
+          equipamentoTotal: quantidade,
+          avulso: !!m.avulso,
+          moExcluido: excluido,
+        });
+      }
     }
     return resultados;
   }
@@ -162,6 +314,106 @@
     const modelos = await refrescarSpecUnidades(pz.modelos || []);
     const moLookup = await buscarMaoDeObraAutomatica(modelos);
     await salvar(id, { modelos, mo_lookup: moLookup });
+    return moLookup;
+  }
+
+  /* 28/09 — pedido do usuário: depois que a Proposta já foi enviada, o
+     cliente às vezes pede pra acrescentar ou remover equipamento(s) do
+     pedido. Isso NUNCA mexe em formularios_elevador_unidades (a Unidade
+     original do Formulário, com seu indice_ativo/Master ID real) — só no
+     snapshot `pz.modelos` desta Precificação, igual "Trocar" faz pra
+     tração/capacidade/paradas só que ali sim grava na Unidade real (ver
+     salvarSpecUnidade em precificacao-elevador.jsx). Um equipamento
+     "novo" (specs diferentes de qualquer Unidade já cotada) nasce sem
+     `unidadeId` real — ganha um id sintético (`avulso-...`) só pra ter
+     uma chave única nesta lista, marcado `avulso: true`, e um
+     identificador só descritivo (nunca um Master ID de verdade, pra não
+     fingir que existe uma Unidade real por trás). */
+  function novoIdSintetico() {
+    return `avulso-${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 8)}`;
+  }
+
+  async function acrescentarEquipamento(id, patch) {
+    const pz = await obter(id);
+    const modelos = [...(pz.modelos || [])];
+    const quantidadeAdicional = Math.max(1, Number(patch.quantidadeAdicional) || 1);
+
+    if (patch.modo === 'identico') {
+      const idx = modelos.findIndex((m) => m.unidadeId === patch.unidadeId);
+      if (idx === -1) throw new Error('Equipamento de referência não encontrado nesta precificação.');
+      modelos[idx] = { ...modelos[idx], quantidade: (Number(modelos[idx].quantidade) || 1) + quantidadeAdicional };
+    } else {
+      const numeroAvulso = modelos.filter((m) => m.avulso).length + 1;
+      modelos.push({
+        unidadeId: novoIdSintetico(),
+        identificador: `Equipamento adicional ${numeroAvulso}`,
+        modelo: patch.modelo || '',
+        quantidade: quantidadeAdicional,
+        valorUnitarioUsd: 0,
+        tracao: patch.tracao || null,
+        capacidadeKg: patch.capacidadeKg != null && patch.capacidadeKg !== '' ? Number(patch.capacidadeKg) : null,
+        paradas: patch.paradas != null && patch.paradas !== '' ? Number(patch.paradas) : null,
+        avulso: true,
+      });
+    }
+    const moLookup = await buscarMaoDeObraAutomatica(modelos);
+    await salvar(id, { modelos, mo_lookup: moLookup });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Acrescentou equipamento na Precificação',
+      alvo: pz.numero_documento || id, alvo_id: id,
+      detalhe: { modo: patch.modo, quantidadeAdicional, unidadeIdReferencia: patch.unidadeId || null, modelo: patch.modelo || null },
+    });
+    return moLookup;
+  }
+
+  /* 29/09 — corrigido depois de um achado real na cotação Nº 962: a
+     versão anterior desta função decrementava (ou removia inteiro)
+     `modelos[idx].quantidade` — o mesmo campo que "Unidades desta
+     cotação"/VMLE (precificacao-elevador.jsx, tabela logo acima do card de
+     Mão de obra) e a Proposta usam como a contagem real de equipamento
+     vendido. Juliana clicou "Remover" só pra tirar a Mão de obra de um
+     equipamento cuja instalação não é da VerticalParts — e o equipamento
+     inteiro (goods, VMLE) sumiu da cotação junto. "Remover" agora só
+     incrementa `moExcluidos` (nunca toca `quantidade`) — ver
+     buscarMaoDeObraAutomatica. Ver restaurarEquipamentoMO() pra desfazer. */
+  async function removerEquipamento(id, unidadeId) {
+    const pz = await obter(id);
+    let modelos = [...(pz.modelos || [])];
+    const idx = modelos.findIndex((m) => m.unidadeId === unidadeId);
+    if (idx === -1) throw new Error('Equipamento não encontrado nesta precificação.');
+    const itemAlvo = modelos[idx];
+    const quantidade = Math.max(1, Number(itemAlvo.quantidade) || 1);
+    const atual = Math.min(quantidade, Math.max(0, Number(itemAlvo.moExcluidos) || 0));
+    if (atual >= quantidade) throw new Error('Todos os equipamentos deste grupo já estão com a Mão de obra excluída.');
+    modelos[idx] = { ...modelos[idx], moExcluidos: atual + 1 };
+    const moLookup = await buscarMaoDeObraAutomatica(modelos);
+    await salvar(id, { modelos, mo_lookup: moLookup });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Removeu a Mão de obra de um equipamento na Precificação',
+      alvo: pz.numero_documento || id, alvo_id: id,
+      detalhe: { unidadeId, identificador: itemAlvo.identificador || null, modelo: itemAlvo.modelo || null, moExcluidosAntes: atual, moExcluidosDepois: atual + 1 },
+    });
+    return moLookup;
+  }
+
+  /* Desfaz removerEquipamento — devolve 1 equipamento físico do grupo pro
+     cálculo normal de Mão de obra. */
+  async function restaurarEquipamentoMO(id, unidadeId) {
+    const pz = await obter(id);
+    let modelos = [...(pz.modelos || [])];
+    const idx = modelos.findIndex((m) => m.unidadeId === unidadeId);
+    if (idx === -1) throw new Error('Equipamento não encontrado nesta precificação.');
+    const itemAlvo = modelos[idx];
+    const atual = Math.max(0, Number(itemAlvo.moExcluidos) || 0);
+    if (atual <= 0) throw new Error('Este equipamento já está incluído no cálculo de Mão de obra.');
+    modelos[idx] = { ...modelos[idx], moExcluidos: atual - 1 };
+    const moLookup = await buscarMaoDeObraAutomatica(modelos);
+    await salvar(id, { modelos, mo_lookup: moLookup });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Restaurou a Mão de obra de um equipamento na Precificação',
+      alvo: pz.numero_documento || id, alvo_id: id,
+      detalhe: { unidadeId, identificador: itemAlvo.identificador || null, modelo: itemAlvo.modelo || null, moExcluidosAntes: atual, moExcluidosDepois: atual - 1 },
+    });
     return moLookup;
   }
 
@@ -307,6 +559,10 @@
       freteSeguroCapataziaUsd = freteInternacionalUsd + taxasExtrasUsd;
 
       containersSeed = parseContainerNo(respostas.container_no);
+      if (containersSeed.length) {
+        const custosContainers = await window.CadastroCustosStore?.listarContainers();
+        containersSeed = enriquecerContainersComCusto(containersSeed, custosContainers);
+      }
     }
 
     const parametros = await listarParametrosFiscais();
@@ -325,6 +581,8 @@
       percentual_servicos: 0.30,
       parametros_fiscais_snapshot: parametros,
       mark_up_pct: parametros.mark_up_padrao_pct,
+      // Card 90d tem markup padrão próprio (Financeiro, 01/10/2026): 40,5% (120d) × 38,1% (90d).
+      mark_up_pct_expresso: parametros.mark_up_padrao_expresso_pct ?? null,
       // V2 (custo econômico completo) — motor oficial desde 29/08 (decisão
       // registrada em conversa, sem necessidade de aval formal do
       // Financeiro por enquanto). Nasce em modo markup_sobre_custo: mesma
@@ -391,7 +649,17 @@
     }
 
     const params = paramsCamelCase(pz.parametros_fiscais_snapshot || {});
+    /* Card base = 120 dias (container compartilhado). Com 1 equipamento o
+       container (+ capatazia) é dividido pelos equipamentos que o dividem
+       (padrão 2, editável — regra do Financeiro 01/10/2026, vem da planilha
+       FIN (120)); com 2+ o container é pago uma vez só pra cotação inteira,
+       então não divide (preço por equipamento já cai por total ÷ quantidade). */
+    const qtdEquipamentos = (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1;
+    // Um container comporta no máximo 2 elevadores (regra física, Financeiro 01/10): o equipamento
+    // sozinho em 120d viaja com outro, então divide o container por 2 — fixo, sem campo na tela.
+    const divisor120 = qtdEquipamentos <= 1 ? 2 : 1;
     const baseInputs = {
+      containerRateioDivisor: divisor120,
       vmleUsd: pz.vmle_usd, seguroUsd: pz.seguro_usd, freteSeguroCapataziaUsd: pz.frete_seguro_capatazia_usd,
       siscomexRs: pz.siscomex_rs, txCambial: pz.tx_cambial, outrasDespesasImportacaoRs: pz.outras_despesas_importacao_rs,
       despachanteDesembaracoRs: pz.despachante_desembaraco_rs, demurrageRs: pz.demurrage_rs,
@@ -449,9 +717,15 @@
        cotação comparativa, não uma aprovação final). Sem frete expresso
        preenchido, resultado_v2_expresso fica vazio — não força a
        modalidade pra quem não precisa dela. */
-    const freteExpressoUsd = Number(pz.frete_seguro_capatazia_usd_expresso) || 0;
-    const resultadoV2Expresso = freteExpressoUsd > 0
-      ? window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, freteSeguroCapataziaUsd: freteExpressoUsd, difalCustoRs, ...v2Extras })
+    // 01/10/2026 — o card de 90 dias (container exclusivo) só existe com 1 equipamento
+    // e paga o container + capatazia inteiros (rateio 1). O antigo frete expresso digitado
+    // (frete_seguro_capatazia_usd_expresso) foi removido do banco em 01/10/2026.
+    const resultadoV2Expresso = qtdEquipamentos <= 1
+      ? window.PrecificacaoElevadorEngine.calcularV2({
+          ...baseInputs, containerRateioDivisor: 1, difalCustoRs, ...v2Extras,
+          // Markup próprio do card 90d (Financeiro, 01/10). Null = usa o mesmo do 120d, como antes.
+          markUpPct: pz.mark_up_pct_expresso != null ? pz.mark_up_pct_expresso : pz.mark_up_pct,
+        })
       : {};
 
     await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, status: 'calculado' });
@@ -509,6 +783,11 @@
       status: 'finalizado', aprovado_em: now, aprovado_por: (window.__VP_USER || {}).email || null, updated_at: now,
     }).eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Aprovou a precificação',
+      alvo: pz.numero_documento || id, alvo_id: id,
+      detalhe: { margemFinal, forcarAbaixoMinima: !!forcarAbaixoMinima },
+    });
 
     /* Proposta nasce sozinha ao aprovar (pedido do usuário, 27/08) — puxa
        Lead/Cliente + o preço já calculado na Precificação (resultado.
@@ -601,7 +880,8 @@
     listarParametrosFiscais, salvarParametrosFiscais,
     listarPendentes, criar, obter, salvar, calcularEsalvar,
     camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,
-    parseContainerNo,
+    parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto, divergenciasContainerComCadastro,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra,
+    acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO,
   };
 }());

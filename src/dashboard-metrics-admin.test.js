@@ -58,6 +58,32 @@ test('alertasCriticos — detecta proposta sem contrato mesmo sem alertas manuai
   assert.equal(crit[0].ref, 904);
 });
 
+// Achado real (03/10): o KPI "Alertas críticos" contava estas 3 checagens,
+// mas clicar em "ver central" nunca as achava lá (não existem em `alertas`).
+// alertasSinteticosDetalhados() devolve o mesmo formato que
+// NotificacoesProcessamento.paraNotificacao() espera, pra a Central listar
+// e abrir cada uma de verdade.
+test('alertasSinteticosDetalhados — converte as 3 checagens pro formato de notificação', () => {
+  const out = M.alertasSinteticosDetalhados({
+    propostas: [{ id: 'p1', status: 'aprovada', numero_cotacao: 870, aprovada_em: '2026-08-28T00:00:00Z' }],
+    contratos: [{ id: 'CVE-9', valor_total_num: 0 }],
+    avais: [{ id: 'a1', numero_cotacao: 931, sinal_pago: true, contrato_venda_id: null }],
+  });
+  assert.equal(out.length, 3);
+  out.forEach((n) => {
+    assert.equal(n.level, 'danger');
+    assert.ok(n.id && n.title && n.module);
+  });
+  const propostaAlerta = out.find((n) => n.title.includes('sem contrato gerado'));
+  assert.ok(propostaAlerta.sub.includes('870'));
+  assert.equal(propostaAlerta.id, 'sintetico-proposta-sem-contrato-p1');
+});
+
+test('alertasSinteticosDetalhados — vazio sem nenhuma inconsistência', () => {
+  const out = M.alertasSinteticosDetalhados({ propostas: [], contratos: [], avais: [] });
+  assert.deepEqual(out, []);
+});
+
 test('kpis — Faturamento reflete proposta aprovada real (regressão "R$0 com venda fechada")', () => {
   const out = M.kpis({
     projetos: [], embarques: [], alertas: [],
@@ -100,6 +126,35 @@ test('kpis — com *Periodo, usa só o recorte filtrado (Projetos/Faturamento/Co
   assert.equal(out.find((k) => k.label === 'Projetos ativos').value, '1');
   assert.equal(out.find((k) => k.label.startsWith('Faturamento')).value, 'R$ 100k');
   assert.equal(out.find((k) => k.label.startsWith('Comissões')).sub, '1 registros');
+});
+
+// #612: "Projetos ativos" dava 0 em "Hoje" (recorte por start_date >= hoje =
+// "iniciados hoje") com 38 projetos em andamento no Gantt.
+test('projetosAtivosNoPeriodo — projeto iniciado antes e ainda em andamento conta como ativo em "Hoje"', () => {
+  const hojeZero = new Date('2026-10-03T00:00:00');
+  const agora = '2026-10-03T12:00:00';
+  const out = M.projetosAtivosNoPeriodo([
+    { id: 'antigo', start_date: '2026-08-01', end_date: null },
+    { id: 'novo', start_date: '2026-10-03', end_date: null },
+  ], hojeZero, agora);
+  assert.deepEqual(out.map((p) => p.id), ['antigo', 'novo']);
+});
+
+test('projetosAtivosNoPeriodo — terminou antes do período, ou ainda não começou, fica de fora', () => {
+  const desde = new Date('2026-09-26T00:00:00');
+  const agora = '2026-10-03T12:00:00';
+  const out = M.projetosAtivosNoPeriodo([
+    { id: 'terminou-antes', start_date: '2026-07-01', end_date: '2026-09-01' },
+    { id: 'terminou-dentro', start_date: '2026-07-01', end_date: '2026-09-30' },
+    { id: 'futuro', start_date: '2026-11-01', end_date: null },
+    { id: 'sem-data', start_date: null, end_date: null },
+  ], desde, agora);
+  assert.deepEqual(out.map((p) => p.id), ['terminou-dentro', 'sem-data']);
+});
+
+test('projetosAtivosNoPeriodo — sem período devolve todos (e tolera lista vazia/nula)', () => {
+  assert.equal(M.projetosAtivosNoPeriodo([{ id: 1 }, { id: 2 }], null).length, 2);
+  assert.deepEqual(M.projetosAtivosNoPeriodo(null, new Date()), []);
 });
 
 test('kpis — Embarques em trânsito e Alertas críticos ignoram *Periodo de propósito (foto do estado atual)', () => {

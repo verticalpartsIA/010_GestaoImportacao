@@ -138,6 +138,11 @@
       observacao: observacao || null,
     });
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Instalação', acao: 'Registrou lançamento de progresso na obra',
+      ator_nome: flegadoPor || 'Montador (link público)', alvo_id: dossierId,
+      detalhe: { itens: novos.map((i) => i.item_id), observacao: observacao || null },
+    });
     await _checarMetadeExecucao(dossierId);
     return novos.length;
   }
@@ -184,6 +189,10 @@
       .update({ flegado: false, desflegado_por: operadorEmail || null, desflegado_em: new Date().toISOString() })
       .eq('dossier_id', dossierId).eq('item_id', itemId);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Instalação', acao: 'Desmarcou item de progresso na obra', alvo_id: dossierId,
+      detalhe: { itemId },
+    });
   }
 
   /* statusRows: linhas de acompanhamento_obra_status já com o item

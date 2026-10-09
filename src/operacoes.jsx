@@ -215,7 +215,7 @@ function EngenhariaPage({ setRoute }) {
               </div>
             )}
             {projetos.map((p) => (
-              <div key={p.id} style={{ background: selectedProject?.id === p.id ? "var(--vp-gray-50)" : "#fff", border: "1px solid " + (selectedProject?.id === p.id ? "#000" : "var(--border)"), padding: 14, cursor: "pointer", position: "relative" }}
+              <div key={p.id} style={{ background: selectedProject?.id === p.id ? "var(--vp-gray-50)" : "var(--bg)", border: "1px solid " + (selectedProject?.id === p.id ? "var(--vp-black)" : "var(--border)"), padding: 14, cursor: "pointer", position: "relative" }}
                 onClick={() => { setSelectedProject(p); validarGatesProjeto(p.id); setGates(null); }}>
                 <span style={{ position: "absolute", top: 0, left: 0, width: 24, height: 3, background: "var(--vp-yellow)" }}/>
                 <div className="row sb">
@@ -276,30 +276,30 @@ function EngenhariaPage({ setRoute }) {
 
             {engTab === "gates" && (
               <div style={{ marginTop: 20 }}>
-                <div style={{ background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: 6, padding: 16 }}>
-                  <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "#92400e" }}>🔓 Gatilhos para Iniciar Importação (120 dias)</h3>
+                <div style={{ background: "var(--vp-warning-tint)", border: "1px solid var(--vp-warning)", borderRadius: 6, padding: 16 }}>
+                  <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "var(--vp-warning-ink)" }}>🔓 Gatilhos para Iniciar Importação (120 dias)</h3>
                   {gates === null ? (
-                    <div style={{ textAlign: "center", padding: "20px 0", color: "#666", fontSize: 13 }}>Carregando validação…</div>
+                    <div style={{ textAlign: "center", padding: "20px 0", color: "var(--fg2)", fontSize: 13 }}>Carregando validação…</div>
                   ) : gates.erro ? (
-                    <div style={{ color: "#dc2626", fontSize: 13 }}>❌ Erro ao validar: {gates.detalhe}</div>
+                    <div style={{ color: "var(--vp-danger)", fontSize: 13 }}>❌ Erro ao validar: {gates.detalhe}</div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       {gates.gates.map((g, i) => (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, background: "#fff", borderRadius: 4, border: "1px solid " + (g.ok ? "#10b981" : "#fbbf24") }}>
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, background: "var(--bg)", borderRadius: 4, border: "1px solid " + (g.ok ? "var(--vp-success)" : "var(--vp-warning)") }}>
                           <span style={{ fontSize: 16 }}>{g.ok ? "✅" : "⏳"}</span>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 600, fontSize: 13 }}>{g.nome}</div>
-                            <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>{g.descricao}</div>
+                            <div style={{ fontSize: 12, color: "var(--fg2)", marginTop: 2 }}>{g.descricao}</div>
                           </div>
                         </div>
                       ))}
                       {gates.ok && (
-                        <div style={{ marginTop: 12, padding: 12, background: "#dcfce7", border: "1px solid #86efac", borderRadius: 4, color: "#166534", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
+                        <div style={{ marginTop: 12, padding: 12, background: "var(--vp-success-tint)", border: "1px solid var(--vp-success)", borderRadius: 4, color: "var(--vp-success-ink)", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
                           ✅ TODOS OS PRÉ-REQUISITOS OK — Importação pode ser iniciada!
                         </div>
                       )}
                       {!gates.ok && (
-                        <div style={{ marginTop: 12, padding: 12, background: "#fee2e2", border: "1px solid #fca5a5", borderRadius: 4, color: "#991b1b", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
+                        <div style={{ marginTop: 12, padding: 12, background: "var(--vp-danger-tint)", border: "1px solid var(--vp-danger)", borderRadius: 4, color: "var(--vp-danger-ink)", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
                           ⏳ Aguarde todos os pré-requisitos antes de iniciar importação
                         </div>
                       )}
@@ -349,7 +349,7 @@ function JuridicoPage({ setRoute, setSubsel }) {
 
   const reload = () => {
     setLoading(true);
-    window.__VP_SB.sb.from('contratos_venda_equipamentos').select('*').order('issued_date', { ascending: false })
+    window.__VP_SB.sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false })
       .then(({ data }) => { setContratos(data || []); setLoading(false); });
   };
   React.useEffect(() => { reload(); }, []);
@@ -415,7 +415,7 @@ function JuridicoPage({ setRoute, setSubsel }) {
           <div className="stack" style={{ gap: 10 }}>
             {/* Banner preto — exatamente igual ao de Propostas */}
             <div onClick={() => setShowNovo(true)}
-              style={{ padding: 18, background: '#000', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
+              style={{ padding: 18, background: 'var(--vp-black)', color: 'var(--vp-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
               <span style={{ position: 'absolute', top: 0, left: 0, width: 24, height: 3, background: 'var(--vp-yellow)' }}/>
               <Icon.fileText size={28} color="var(--vp-yellow)"/>
               <div style={{ flex: 1 }}>
@@ -428,7 +428,7 @@ function JuridicoPage({ setRoute, setSubsel }) {
             {/* Cards de tipo — como Elevador / Escada / Esteira */}
             <div className="grid-2" style={{ gap: 8 }}>
               {/* Contrato do Cliente */}
-              <div onClick={() => setShowNovo(true)} style={{ padding: 12, background: '#fff', border: '2px solid var(--vp-yellow)', cursor: 'pointer', position: 'relative', minHeight: 140, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div onClick={() => setShowNovo(true)} style={{ padding: 12, background: 'var(--bg)', border: '2px solid var(--vp-yellow)', cursor: 'pointer', position: 'relative', minHeight: 140, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: 'var(--vp-yellow)' }}/>
                 <div style={{ paddingTop: 8 }}>
                   <div style={{ fontSize: 28, marginBottom: 4 }}>📄</div>
@@ -438,13 +438,13 @@ function JuridicoPage({ setRoute, setSubsel }) {
                 <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--fg3)', marginTop: 8 }}>{contratos.filter(c=>(c.tipo_contrato||'cliente')==='cliente').length} contratos</div>
               </div>
               {/* Contrato do Montador */}
-              <div style={{ padding: 12, background: '#fff', border: '1px solid var(--border)', cursor: 'not-allowed', position: 'relative', minHeight: 140, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', opacity: .55 }}>
+              <div style={{ padding: 12, background: 'var(--bg)', border: '1px solid var(--border)', cursor: 'not-allowed', position: 'relative', minHeight: 140, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', opacity: .55 }}>
                 <div>
                   <div style={{ fontSize: 28, marginBottom: 4 }}>🔧</div>
                   <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--fg1)', marginBottom: 4 }}>Contrato do Montador</div>
                   <div style={{ fontSize: 9, color: 'var(--fg3)', lineHeight: 1.4 }}>Prestação de serviços · Instalação · Terceiros</div>
                 </div>
-                <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', background: 'var(--vp-yellow)', color: '#000', fontWeight: 800, padding: '2px 6px', width: 'fit-content' }}>EM BREVE</div>
+                <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', background: 'var(--vp-yellow)', color: 'var(--vp-black)', fontWeight: 800, padding: '2px 6px', width: 'fit-content' }}>EM BREVE</div>
               </div>
             </div>
 
@@ -567,7 +567,7 @@ function ContractRedactor() {
               position: "absolute",
               top: 16, right: 16,
               background: "var(--vp-danger)",
-              color: "#fff",
+              color: "var(--vp-white)",
               fontSize: 10,
               fontWeight: 800,
               letterSpacing: ".14em",
@@ -651,7 +651,7 @@ function ContractRedactor() {
 function DetectedRow({ page, category, risk }) {
   const color = risk === "alto" ? "var(--vp-danger)" : "var(--vp-warning-ink)";
   return (
-    <div className="row" style={{ padding: "8px 10px", background: "var(--vp-gray-50)", borderLeft: `3px solid ${color}` }}>
+    <div className="row" style={{ padding: "8px 10px", background: "var(--vp-gray-50)", borderRadius: "var(--r-md)" }}>
       <span className="mono" style={{ fontSize: 11, fontWeight: 700, color }}>P.{String(page).padStart(2, "0")}</span>
       <span style={{ fontSize: 12, flex: 1 }}>{category}</span>
       <Badge variant={risk === "alto" ? "danger" : "warning"}>{risk}</Badge>
@@ -839,7 +839,7 @@ function EquipeChecklist({ equipe }) {
           <div style={{ fontSize:12, color:'var(--fg2)', marginBottom:8, fontWeight:600 }}>{feitos}/{itens.length} concluídas</div>
           <div className="stack" style={{ gap:6 }}>
             {itens.map(it => (
-              <div key={it.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', border:'1px solid var(--border)', background:'#fff' }}>
+              <div key={it.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', border:'1px solid var(--border)', background:'var(--bg)' }}>
                 <input type="checkbox" checked={!!it.feito} onChange={() => toggle(it)} style={{ width:16, height:16, cursor:'pointer' }}/>
                 <span style={{ flex:1, fontSize:13, textDecoration: it.feito ? 'line-through' : 'none', color: it.feito ? 'var(--fg3)' : 'var(--fg1)' }}>{it.descricao}</span>
                 <button onClick={() => remover(it)} title="Remover tarefa" style={{ border:0, background:'transparent', cursor:'pointer', color:'var(--fg3)', display:'flex' }}><Icon.trash size={14}/></button>
@@ -911,10 +911,10 @@ function InstalacaoPage() {
             {alocacoes.map((aloc, i) => {
               const diasRestantes = Math.ceil((new Date(aloc.previsao) - new Date()) / (1000*60*60*24));
               const progresso = Math.max(0, Math.min(100, 100 - (diasRestantes / 45 * 100)));
-              const statusColor = diasRestantes < 7 ? '#dc2626' : diasRestantes < 14 ? '#f59e0b' : '#10b981';
+              const statusColor = diasRestantes < 7 ? 'var(--vp-danger)' : diasRestantes < 14 ? 'var(--vp-warning-ink)' : 'var(--vp-success)';
 
               return (
-                <div key={i} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: 14 }}>
+                <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: 14 }}>
                   <div className="row sb" style={{ marginBottom: 12, alignItems: 'flex-start' }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700 }}>🏢 {aloc.parceiro?.nome || 'Parceiro não alocado'}</div>
@@ -978,9 +978,9 @@ function InstalacaoPage() {
             )}
             {equipes.map((e) => (
               <div key={e.id}
-                style={{ padding: 14, background: selectedEquipe?.id === e.id ? "var(--vp-gray-50)" : "#fff", border: "1px solid " + (selectedEquipe?.id === e.id ? "#000" : "var(--border)"), display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}
+                style={{ padding: 14, background: selectedEquipe?.id === e.id ? "var(--vp-gray-50)" : "var(--bg)", border: "1px solid " + (selectedEquipe?.id === e.id ? "var(--vp-black)" : "var(--border)"), display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}
                 onClick={() => setSelectedEquipe(e)}>
-                <div style={{ width: 44, height: 44, background: e.status === "Em campo" ? "var(--vp-yellow)" : "var(--vp-gray-100)", color: e.status === "Em campo" ? "#000" : "var(--fg2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ width: 44, height: 44, background: e.status === "Em campo" ? "var(--vp-yellow)" : "var(--vp-gray-100)", color: e.status === "Em campo" ? "var(--vp-black)" : "var(--fg2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Icon.hardhat size={22}/>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>

@@ -72,6 +72,8 @@ function FinanceiroPage({ setRoute, setSubsel }) {
   const [confirmarSinalDe, setConfirmarSinalDe] = React.useState(null);
   const [confirmarAvalDe, setConfirmarAvalDe] = React.useState(null);
   const [alertas, setAlertas] = React.useState([]);
+  const [filtroCadeia, setFiltroCadeia] = React.useState(null);   // null = escolhe sozinho (atrasadas, se houver)
+  const [buscaCadeia, setBuscaCadeia] = React.useState('');
 
   const fecharLembrete = async (id) => {
     if (window.GatilhosEngine) await window.GatilhosEngine.fecharLembrete(id);
@@ -138,7 +140,11 @@ function FinanceiroPage({ setRoute, setSubsel }) {
     setLoading(false);
   };
   const reloadAlertas = () => {
-    window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false })
+    // Mesma regra de destinatário da Central de Notificações: alerta dirigido a uma pessoa não aparece para as outras.
+    const emailAlertas = (window.__VP_USER || {}).email || null;
+    const baseAlertas = window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false);
+    (emailAlertas ? baseAlertas.or(`destinatario_email.is.null,destinatario_email.eq.${emailAlertas}`) : baseAlertas.is('destinatario_email', null))
+      .order('created_at', { ascending: false })
       .then(({ data }) => setAlertas((data || []).map(a => ({ ...a, time: window.__VP_SB.timeAgo(a.created_at) }))));
   };
   React.useEffect(() => { reloadGatilhos(); reloadAlertas(); }, []);
@@ -156,32 +162,92 @@ function FinanceiroPage({ setRoute, setSubsel }) {
   }, {});
 
   const urgentes = manuais.filter(g => (g.days_left ?? g.daysLeft ?? 99) <= 2);
-  const routeByModule = (m) =>
-    m === "Importação"  ? "importacao"  :
-    m === "Jurídico"    ? "juridico"    :
-    m === "Financeiro"  ? "financeiro"  :
-    m === "Engenharia"  ? "engenharia"  : "cotacoes-fornecedor";
+
+  /* Resumo de cada cadeia: o que está atrasado, o que é só rascunho de formulário
+     e o que já terminou. Etapas "opcionais" (score/aval de venda) e lembretes não
+     contam como pendência. */
+  const E = window.GatilhosEngine;
+  const resumoDaCadeia = (nos) => {
+    const principais = nos.filter(g => !String(g.evento_key || '').startsWith('LEMBRETE__'));
+    const encerrada = principais.some(g => g.status === 'encerrado');
+    const abertos = principais.filter(g => !g.concluido_em && !(E?.nodeByKey(g.evento_key)?.opcional));
+    const atrasadas = E ? abertos.filter(g => E.emAtraso(g)) : [];
+    const maxAtrasoMs = atrasadas.reduce((m, g) => Math.max(m, Date.now() - E.prazoEfetivo(g).getTime()), 0);
+    const soFormulario = principais.length > 0 && principais.every(g => g.evento_key === 'FORMULARIO');
+    const tipo = encerrada ? 'encerrada'
+      : abertos.length === 0 ? 'concluida'
+      : atrasadas.length ? 'atrasada'
+      : soFormulario ? 'rascunho'
+      : 'andamento';
+    return { tipo, atrasadas, abertos, maxAtrasoMs };
+  };
+  const cadeias = Object.entries(cadeiasPorCotacao).map(([numero, nos]) => ({ numero, nos, ...resumoDaCadeia(nos) }));
+  const contagem = cadeias.reduce((acc, c) => { acc[c.tipo] = (acc[c.tipo] || 0) + 1; return acc; }, {});
+  const filtroAtivo = filtroCadeia || (contagem.atrasada ? 'atrasada' : 'andamento');
+  const termoCadeia = buscaCadeia.trim().replace(/\D/g, '');
+  const cadeiasVisiveis = cadeias
+    .filter(c => filtroAtivo === 'todas' || (filtroAtivo === 'fim' ? ['concluida', 'encerrada'].includes(c.tipo) : c.tipo === filtroAtivo))
+    .filter(c => !termoCadeia || String(c.numero).includes(termoCadeia))
+    .sort((a, b) => (b.maxAtrasoMs - a.maxAtrasoMs) || (Number(b.numero) - Number(a.numero)));
+  const etapasAtrasadas = cadeias.reduce((n, c) => n + c.atrasadas.length, 0);
+
+  /* Exporta TODAS as etapas (cadeias automáticas + avulsos), não só os avulsos. */
+  const exportarFluxo = () => {
+    const f = (d) => (d ? new Date(d).toLocaleString('pt-BR') : '');
+    const linhasAuto = automaticos.map(g => {
+      const prazo = E?.prazoEfetivo(g);
+      return { cotacao: g.numero_cotacao, etapa: g.trigger_name, nasceu: f(g.nascido_em), prazo: f(prazo), concluida: f(g.concluido_em),
+        situacao: g.status === 'encerrado' ? 'encerrada' : g.concluido_em ? (E?.ehRetroativo(g) ? 'registrada retroativamente' : 'concluída') : (E?.emAtraso(g) ? 'atrasada' : 'em andamento'),
+        origem: 'automático' };
+    });
+    const linhasManuais = manuais.map(g => ({ cotacao: g.projeto || g.project_id || '', etapa: `${g.trigger || g.trigger_name || ''} — ${g.building || ''}`, nasceu: '',
+      prazo: g.due_date || '', concluida: f(g.concluido_em), situacao: g.concluido_em ? 'concluída' : (g.days_left < 0 ? 'atrasada' : 'em andamento'), origem: 'avulso' }));
+    window.csvDownload([...linhasAuto, ...linhasManuais], 'prazos-e-pendencias.csv');
+  };
+
+  /* Alerta clicado: abre o link gravado em `alertas.rota` (mesma regra da Central
+     de Notificações); sem link, cai na Central. */
+  const abrirAlerta = (a) => {
+    const NP = window.NotificacoesProcessamento;
+    const url = NP && NP.urlSegura(a.rota, window.VpRouter && window.VpRouter.isKnownRoute);
+    if (url) { window.history.pushState({}, '', url); window.dispatchEvent(new PopStateEvent('popstate')); return; }
+    setRoute?.('notificacoes');
+  };
+  const alertasPrincipais = [...alertas]
+    .sort((a, b) => (['danger', 'critical', 'warning'].includes(b.level) ? 1 : 0) - (['danger', 'critical', 'warning'].includes(a.level) ? 1 : 0))
+    .slice(0, 6);
 
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Gatilhos</div>
-          <h1 className="page-head__title">Gatilhos & Prazo</h1>
-          <p className="page-head__sub">Cada gatilho nasce automaticamente ao concluir a etapa anterior, correlacionado pelo Nº da Cotação.</p>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Geral · Prazos</div>
+          <h1 className="page-head__title">Prazos & Pendências</h1>
+          <p className="page-head__sub">Cada etapa nasce ao concluir a anterior, por Nº da Cotação. Prazos contam só segunda a sexta (exceto espera do cliente e embarque).</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="download" onClick={() => window.csvDownload(manuais.map(g => ({ projeto:g.projeto||g.project_id, building:g.building, trigger:g.trigger||g.trigger_name, valor:g.value, vencimento:g.due_date, dias_restantes:g.days_left, status:g.status })), 'gatilhos-fluxo.csv')}>Exportar fluxo</Button>
+          <Button variant="outline" icon="download" onClick={exportarFluxo}>Exportar fluxo</Button>
           <Button variant="primary" icon="plus" onClick={() => setShowGatilho(true)}>Novo gatilho</Button>
         </div>
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Cotações em andamento" value={Object.keys(cadeiasPorCotacao).length} sub="cadeias ativas" delta="—" deltaDir="up" icon="zap"/>
+        <KPI label="Cotações em andamento" value={(contagem.andamento || 0) + (contagem.atrasada || 0)} sub="já passaram do formulário, não encerradas" delta="—" deltaDir="up" icon="zap"/>
+        <KPI label="Com prazo estourado" value={contagem.atrasada || 0} sub={`${etapasAtrasadas} etapa(s) atrasada(s)`} delta="—" deltaDir="down" icon="warning"/>
         <KPI label="Ação do Financeiro pendente" value={automaticos.filter(g => ['AGUARDA_BOLETO', 'AVAL_PAGAMENTO'].includes(g.evento_key) && !g.concluido_em).length} sub="boleto ou aval de pagamento" delta="—" deltaDir="up" icon="dollar"/>
-        <KPI label="Gatilhos manuais próx. 7d" value={manuais.filter(g => (g.days_left ?? g.daysLeft ?? 99) <= 7 && (g.days_left ?? g.daysLeft ?? 99) > 0).length} sub="atenção" delta="—" deltaDir="up" icon="clock"/>
-        <KPI label="Manuais em atraso" value={manuais.filter(g => (g.days_left ?? g.daysLeft ?? 0) < 0).length} sub="ação urgente" delta="—" deltaDir="down" icon="warning"/>
+        <KPI label="Formulários sem envio" value={contagem.rascunho || 0} sub="salvos, ainda não enviados ao fornecedor" delta="—" deltaDir="up" icon="clock"/>
       </div>
+
+      {contagem.atrasada > 0 && (
+        <div className="alert danger" style={{ marginBottom: 20 }}>
+          <Icon.warning/>
+          <div style={{ flex: 1 }}>
+            <div className="alert__title">{contagem.atrasada} cotaç{contagem.atrasada > 1 ? 'ões' : 'ão'} com etapa atrasada</div>
+            <div className="alert__sub">{etapasAtrasadas} etapa(s) passaram do prazo — a mais antiga está no topo da lista abaixo. Um aviso diário é enviado à Central de Notificações.</div>
+          </div>
+          <Button variant="secondary" size="sm" iconRight="arrowRight" onClick={() => { setFiltroCadeia('atrasada'); document.getElementById('cadeia-gatilhos-cotacao')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Ver atrasadas</Button>
+        </div>
+      )}
 
       {urgentes.length > 0 && (
         <div className="alert danger" style={{ marginBottom: 20 }}>
@@ -194,47 +260,59 @@ function FinanceiroPage({ setRoute, setSubsel }) {
         </div>
       )}
 
-      <Card title="Central de Alertas" sub="ações pendentes que requerem sua atenção" style={{ marginBottom: 20 }}
-        action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute?.("notificacoes")}>Ver tudo</Button>}>
+      <Card title="Alertas recentes" sub="os que mais pedem atenção — o resto está em Notificações" style={{ marginBottom: 20 }}
+        action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute?.("notificacoes")}>Ver tudo ({alertas.length})</Button>}>
         <div className="stack">
           {alertas.length === 0 && (
             <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
               Nenhum alerta pendente.
             </div>
           )}
-          {alertas.map((a) => (
-            <AlertRow key={a.id} alert={a} onClick={() => setRoute?.(routeByModule(a.module))}/>
+          {alertasPrincipais.map((a) => (
+            <AlertRow key={a.id} alert={a} onClick={() => abrirAlerta(a)}/>
           ))}
         </div>
       </Card>
 
-      <Card id="cadeia-gatilhos-cotacao" title="Cadeia de Gatilhos por Cotação" sub={`${Object.keys(cadeiasPorCotacao).length} cotações · Formulário → Compra liberada`} style={{ marginBottom: 20 }}>
+      <Card id="cadeia-gatilhos-cotacao" title="Cadeia de etapas por Cotação" sub={`${cadeiasVisiveis.length} de ${cadeias.length} cotações · Formulário → Compra liberada · mais atrasadas primeiro`} style={{ marginBottom: 20 }}>
+        <div className="row gap-2" style={{ flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+          {[['atrasada', 'Atrasadas'], ['andamento', 'Em andamento'], ['rascunho', 'Formulário sem envio'], ['fim', 'Concluídas/Encerradas'], ['todas', 'Todas']].map(([k, label]) => {
+            const n = k === 'todas' ? cadeias.length : k === 'fim' ? (contagem.concluida || 0) + (contagem.encerrada || 0) : (contagem[k] || 0);
+            return (
+              <Button key={k} size="sm" variant={filtroAtivo === k ? 'primary' : 'outline'} onClick={() => setFiltroCadeia(k)}>{label} ({n})</Button>
+            );
+          })}
+          <input className="input" style={{ maxWidth: 160, marginLeft: 'auto' }} placeholder="Buscar Nº da cotação"
+            value={buscaCadeia} onChange={(e) => setBuscaCadeia(e.target.value)}/>
+        </div>
         <div className="stack" style={{ gap: 20 }}>
-          {Object.keys(cadeiasPorCotacao).length === 0 && (
+          {cadeias.length === 0 && (
             <div style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
               Nenhuma cadeia automática ainda — nasce ao preencher o primeiro Formulário de Elevador.
             </div>
           )}
-          {Object.entries(cadeiasPorCotacao).map(([numeroCotacao, nos]) => (
-            <CadeiaGatilhosCotacao key={numeroCotacao} numeroCotacao={numeroCotacao} nos={nos}
+          {cadeias.length > 0 && cadeiasVisiveis.length === 0 && (
+            <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
+              Nenhuma cotação neste filtro.
+            </div>
+          )}
+          {cadeiasVisiveis.map((c) => (
+            <CadeiaGatilhosCotacao key={c.numero} numeroCotacao={c.numero} nos={c.nos}
               onConfirmarSinal={setConfirmarSinalDe} onConfirmarAval={setConfirmarAvalDe}
               onFecharLembrete={fecharLembrete} onAbrirGatilho={abrirGatilho} onFecharComMotivo={reloadGatilhos}/>
           ))}
         </div>
       </Card>
 
-      <Card title="Gatilhos Financeiros Avulsos" sub={`${manuais.length} registros cadastrados manualmente`}>
-        <div className="stack" style={{ gap: 14 }}>
-          {manuais.length === 0 && (
-            <div style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
-              Nenhum registro cadastrado.
-            </div>
-          )}
-          {manuais.map((g) => (
-            <GatilhoCard key={g.id} g={g} onSaved={reloadGatilhos}/>
-          ))}
-        </div>
-      </Card>
+      {manuais.length > 0 && (
+        <Card title="Gatilhos Financeiros Avulsos" sub={`${manuais.length} registros cadastrados manualmente`}>
+          <div className="stack" style={{ gap: 14 }}>
+            {manuais.map((g) => (
+              <GatilhoCard key={g.id} g={g} onSaved={reloadGatilhos}/>
+            ))}
+          </div>
+        </Card>
+      )}
       {showGatilho && <ModalNovoGatilho onClose={() => setShowGatilho(false)} onSaved={reloadGatilhos}/>}
       {confirmarSinalDe && <ModalConfirmarSinal g={confirmarSinalDe} onClose={() => setConfirmarSinalDe(null)} onSaved={reloadGatilhos}/>}
       {confirmarAvalDe && <ModalConfirmarAvalPagamento g={confirmarAvalDe} onClose={() => setConfirmarAvalDe(null)} onSaved={reloadGatilhos}/>}
@@ -304,8 +382,9 @@ function fmtDuracao(ms) {
   const horas = ms / 3600000;
   if (horas < 1) return `${Math.max(1, Math.round(ms / 60000))}min`;
   if (horas < 24) return `${Math.round(horas)}h`;
-  const dias = Math.floor(horas / 24);
-  const restoHoras = Math.round(horas % 24);
+  const totalHoras = Math.round(horas);       // arredonda ANTES de dividir (senão saía "15d 24h")
+  const dias = Math.floor(totalHoras / 24);
+  const restoHoras = totalHoras % 24;
   return restoHoras > 0 ? `${dias}d ${restoHoras}h` : `${dias}d`;
 }
 
@@ -369,11 +448,14 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
     .reduce((acc, g) => { (acc[g.predecessor_id] = acc[g.predecessor_id] || []).push(g); return acc; }, {});
   const porChave = principais.reduce((acc, g) => { acc[g.evento_key] = g; return acc; }, {});
 
+  const ehOpcional = (g) => !!(engine?.nodeByKey(g.evento_key)?.opcional);
   const encerrada = principais.some(g => g.status === 'encerrado');
-  const concluida = principais.length > 0 && principais.every(g => g.concluido_em);
-  const noAtual = principais.find(g => !g.concluido_em) || principais[principais.length - 1];
-  const statusLabel = encerrada ? 'Encerrada' : concluida ? 'Concluída' : 'Em andamento';
-  const statusVariant = encerrada ? 'neutral' : concluida ? 'success' : 'warning';
+  const pendentes = principais.filter(g => !g.concluido_em && !ehOpcional(g));
+  const concluida = principais.length > 0 && pendentes.length === 0;
+  const noAtual = pendentes[0] || principais[principais.length - 1];
+  const atrasada = !encerrada && pendentes.some(g => engine?.emAtraso(g));
+  const statusLabel = encerrada ? 'Encerrada' : concluida ? 'Concluída' : atrasada ? 'Atrasada' : 'Em andamento';
+  const statusVariant = encerrada ? 'neutral' : concluida ? 'success' : atrasada ? 'danger' : 'warning';
 
   return (
     <div>
@@ -383,8 +465,8 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
           <div className="up-eyebrow muted">Cotação Nº {numeroCotacao}</div>
           {!aberta && noAtual && (
             <>
-              <span className="small muted">{noAtual.trigger_name}</span>
-              <GanttBarMini nascidoEm={noAtual.nascido_em} prazoEm={noAtual.prazo_em} concluidoEm={noAtual.concluido_em} encerrado={encerrada}/>
+              <span className="small muted">{engine?.nodeByKey(noAtual.evento_key)?.label || noAtual.trigger_name}</span>
+              <GanttBarMini nascidoEm={noAtual.nascido_em} prazoEm={engine?.prazoEfetivo(noAtual) || noAtual.prazo_em} concluidoEm={noAtual.concluido_em} encerrado={encerrada}/>
             </>
           )}
         </div>
@@ -412,7 +494,8 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
               );
             }
 
-            const isOpen = !g.concluido_em;
+            const isOpen = !g.concluido_em && !ehOpcional(g);
+            const retroativo = engine?.ehRetroativo(g);
             const cemiterio = isOpen && g.status === 'revisao_necessaria';
             const podeConfirmarSinal = g.evento_key === 'AGUARDA_BOLETO' && isOpen;
             const podeConfirmarAval = g.evento_key === 'AVAL_PAGAMENTO' && isOpen;
@@ -432,17 +515,17 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
                 }} onClick={clicavel ? () => onAbrirGatilho(g) : undefined} title={clicavel ? 'Abrir' : undefined}>
                   <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--fg3)', width: 20 }}>{g.tipo_relacionamento || 'FS'}</span>
                   <span className="small" style={{ color: cor, fontWeight: isOpen ? 700 : 400, flex: 1 }}>
-                    {g.trigger_name}
+                    {node.label}{ehOpcional(g) && !g.concluido_em ? ' (opcional — não trava o fluxo)' : ''}
                     {g.status === 'encerrado' && g.motivo_fechamento ? ` — encerrado: "${g.motivo_fechamento}"` : g.status === 'encerrado' ? ' — encerrado' : ''}
                   </span>
                   {g.concluido_em ? (
                     <span className="mono small" style={{ color: cor, whiteSpace: 'nowrap' }}>
-                      {g.status === 'encerrado' ? (g.motivo_fechamento ? 'fechado manualmente' : 'encerrado') : duracao ? `concluído · levou ${duracao}` : 'concluído'}
+                      {g.status === 'encerrado' ? (g.motivo_fechamento ? 'fechado manualmente' : 'encerrado') : retroativo ? 'etapa pulada · registrada retroativamente' : duracao ? `concluído · levou ${duracao}` : 'concluído'}
                     </span>
                   ) : cemiterio ? (
                     <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setFechandoMotivo(g); }}>Fechar com motivo</Button>
                   ) : (
-                    <GanttBarMini nascidoEm={g.nascido_em} prazoEm={g.prazo_em} concluidoEm={null} comLabel/>
+                    <GanttBarMini nascidoEm={g.nascido_em} prazoEm={engine?.prazoEfetivo(g) || g.prazo_em} concluidoEm={null} comLabel/>
                   )}
                   {podeConfirmarSinal && (
                     <Button size="sm" variant="primary" icon="check"
@@ -450,7 +533,7 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
                   )}
                   {podeConfirmarAval && (
                     <Button size="sm" variant="primary" icon="check"
-                      onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval</Button>
+                      title="Libera a compra ao fornecedor (junto com o Aval Jurídico). Não é o aval de venda/score." onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval de Pagamento</Button>
                   )}
                 </div>
                 {cemiterio && (
@@ -550,8 +633,8 @@ function ModalConfirmarAvalPagamento({ g, onClose, onSaved }) {
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
         <p className="muted" style={{ fontSize: 13 }}>
-          Checkpoint final do Financeiro antes de liberar a compra ao Fornecedor — distinto do
-          Aval Financeiro de score/crédito, que já rodou antes do contrato.
+          Checkpoint manual do Financeiro depois do sinal pago. Junto com o Aval Jurídico
+          (manual) e o contrato assinado, libera a compra ao Fornecedor.
         </p>
         <div className="stack" style={{ gap: 4 }}>
           <label className="up-eyebrow muted">Observações (opcional)</label>
@@ -843,7 +926,9 @@ function NotificacoesPage({ setRoute }) {
   const [prefsOpen, setPrefsOpen] = React.useState(false);
   const [details, setDetails] = React.useState(null);
   const [readIds, setReadIds] = React.useState([]);
-  const filters = ["Todas", "Não lidas"];
+  const [archivedIds, setArchivedIds] = React.useState([]);
+  const [prefs, setPrefs] = React.useState(() => window.NotificacoesLidasStore.lerPreferencias());
+  const filters = ["Todas", "Não lidas", "Arquivadas"];
   const NP = window.NotificacoesProcessamento;
   const LidasStore = window.NotificacoesLidasStore;
 
@@ -853,24 +938,20 @@ function NotificacoesPage({ setRoute }) {
   // de alertas, e reabria a query toda vez que uma notificação era marcada).
   React.useEffect(() => {
     setLoading(true);
-    const emailAtual = (window.__VP_USER || {}).email || null;
-    // Alertas sem destinatario_email são globais (comportamento de sempre,
-    // visíveis a todos); com destinatario_email preenchido, só aparecem
-    // pra quem tem esse e-mail logado (ex.: aviso de Solicitação de Produto
-    // direcionado a um gestor específico).
-    let query = window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false);
-    query = emailAtual
-      ? query.or(`destinatario_email.is.null,destinatario_email.eq.${emailAtual}`)
-      : query.is('destinatario_email', null);
-    query.order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (error) { window.toast('Erro ao carregar notificações: ' + error.message, 'error'); setAlertasRaw([]); }
-        else setAlertasRaw(data || []);
-        setLoading(false);
-      });
+    // A leitura (globais + dirigidos ao e-mail + sintéticos do Dashboard) fica no store, a MESMA que o sino do cabeçalho usa.
+    LidasStore.carregarAlertas()
+      .then((lista) => { setAlertasRaw(lista); setLoading(false); })
+      .catch((err) => { window.toast('Erro ao carregar notificações: ' + (err.message || err), 'error'); setAlertasRaw([]); setLoading(false); });
   }, []);
 
-  React.useEffect(() => { LidasStore.carregar().then(setReadIds); }, []);
+  React.useEffect(() => { LidasStore.carregarEstado().then((e) => { setReadIds(e.lidas); setArchivedIds(e.arquivadas); }); }, []);
+
+  // Preferências mudadas no modal (ou em outra aba do app) refletem aqui sem recarregar.
+  React.useEffect(() => {
+    const h = () => setPrefs(LidasStore.lerPreferencias());
+    window.addEventListener('vp:notificacoes', h);
+    return () => window.removeEventListener('vp:notificacoes', h);
+  }, []);
 
   const markRead = (id) => {
     const idStr = String(id);
@@ -879,22 +960,53 @@ function NotificacoesPage({ setRoute }) {
     LidasStore.marcarLida(id);
   };
   const markAllRead = () => {
-    const ids = alertasRaw.map((a) => String(a.id));
+    const ids = notificationsVisiveis.map((n) => String(n.id));
     setReadIds((prev) => Array.from(new Set([...prev, ...ids])));
     LidasStore.marcarTodasLidas(ids);
     window.toast("Notificações marcadas como lidas", "success");
   };
+  // Arquivar/restaurar é POR PESSOA (some só da lista de quem arquivou). Arquivar também conta como lida.
+  const archive = async (ids) => {
+    const strs = ids.map(String);
+    setArchivedIds((prev) => Array.from(new Set([...prev, ...strs])));
+    setReadIds((prev) => Array.from(new Set([...prev, ...strs])));
+    const ok = await LidasStore.arquivar(strs);
+    if (!ok) setArchivedIds((prev) => prev.filter((x) => !strs.includes(x)));
+    else window.toast(strs.length > 1 ? `${strs.length} notificações arquivadas` : 'Notificação arquivada', 'success');
+  };
+  const restore = async (ids) => {
+    const strs = ids.map(String);
+    setArchivedIds((prev) => prev.filter((x) => !strs.includes(x)));
+    const ok = await LidasStore.desarquivar(strs);
+    if (!ok) setArchivedIds((prev) => Array.from(new Set([...prev, ...strs])));
+    else window.toast('Notificação restaurada', 'success');
+  };
 
-  const notifications = NP.processarAlertas(alertasRaw, readIds);
+  // Todas as notificações respeitando as Preferências; "ativas" = sem as arquivadas desta pessoa.
+  const notificationsPref = NP.processarAlertas(alertasRaw, readIds).filter((n) => NP.visivelPorPreferencia(n, prefs));
+  const notificationsVisiveis = notificationsPref.filter((n) => !archivedIds.includes(String(n.id)));
+  const notifications = filter === "Arquivadas" ? notificationsPref.filter((n) => archivedIds.includes(String(n.id))) : notificationsVisiveis;
+  const naoLidasCount = NP.naoLidas(notificationsVisiveis).length;
+  // Avisa o sino do cabeçalho na hora (sem esperar o intervalo de 5 min).
+  React.useEffect(() => { if (!loading) LidasStore.avisar({ naoLidas: naoLidasCount }); }, [naoLidasCount, loading]);
   const modules = ["Todos", ...Array.from(new Set(notifications.map(n => n.module))).sort()];
   const rows = notifications.filter(n => {
     if (filter === "Não lidas" && !n.unread) return false;
     if (moduleFilter !== "Todos" && n.module !== moduleFilter) return false;
     return true;
   });
+  const archiveReadVisible = () => archive(notificationsVisiveis.filter((n) => !n.unread).map((n) => n.id));
   const groups = NP.agruparPorPeriodo(rows);
   const openNotification = (n) => {
     markRead(n.id);
+    // Link composto (alertas.rota, ex.: /logistica/almoxarifado/reposicao): abre a aba certa. Passa pelo roteador por URL
+    // (pushState + popstate, como o Voltar do navegador), e só aceita caminho relativo de rota conhecida (urlSegura).
+    const url = NP.urlSegura(n.rota, window.VpRouter && window.VpRouter.isKnownRoute);
+    if (url) {
+      window.history.pushState({}, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      return;
+    }
     setRoute(NP.rotaPara(n.module));
   };
 
@@ -904,11 +1016,12 @@ function NotificacoesPage({ setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Central</div>
           <h1 className="page-head__title">Notificações</h1>
-          <p className="page-head__sub">Agrupadas por módulo · respostas rápidas inline</p>
+          <p className="page-head__sub">{naoLidasCount} não lida(s) · agrupadas por período · arquivar tira da sua lista (os alertas somem sozinhos depois de 14 dias, ou 45 se forem avisos/críticos)</p>
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="settings" onClick={() => setPrefsOpen(true)}>Preferências</Button>
-          <Button variant="primary" icon="check" onClick={markAllRead}>Marcar todas como lidas</Button>
+          <Button variant="outline" icon="x" onClick={archiveReadVisible} disabled={!notificationsVisiveis.some((n) => !n.unread)}>Arquivar lidas</Button>
+          <Button variant="primary" icon="check" onClick={markAllRead} disabled={!naoLidasCount}>Marcar todas como lidas</Button>
         </div>
       </div>
 
@@ -950,8 +1063,14 @@ function NotificacoesPage({ setRoute }) {
                     </div>
                   </div>
                   <div className="row gap-2">
-                    <Button variant="ghost" size="sm" icon="check" aria-label="Marcar como lida"
-                      onClick={(e) => { e.stopPropagation(); markRead(n.id); window.toast('Notificação marcada como lida', 'success'); }}/>
+                    {filter === "Arquivadas"
+                      ? <Button variant="ghost" size="sm" aria-label="Restaurar" onClick={(e) => { e.stopPropagation(); restore([n.id]); }}>Restaurar</Button>
+                      : <>
+                          <Button variant="ghost" size="sm" icon="check" aria-label="Marcar como lida" disabled={!n.unread}
+                            onClick={(e) => { e.stopPropagation(); markRead(n.id); window.toast('Notificação marcada como lida', 'success'); }}/>
+                          <Button variant="ghost" size="sm" icon="x" aria-label="Arquivar"
+                            onClick={(e) => { e.stopPropagation(); archive([n.id]); }}/>
+                        </>}
                     <Button variant="ghost" size="sm" icon="arrowRight" aria-label="Abrir origem"
                       onClick={(e) => { e.stopPropagation(); openNotification(n); }}/>
                   </div>
@@ -964,6 +1083,9 @@ function NotificacoesPage({ setRoute }) {
       {prefsOpen && <NotificationPrefsModal onClose={() => setPrefsOpen(false)}/>}
       {details && <Modal title="Detalhe da Notificação" onClose={() => setDetails(null)} width={520}
         footer={<>
+          {archivedIds.includes(String(details.id))
+            ? <Button variant="ghost" onClick={() => { restore([details.id]); setDetails(null); }}>Restaurar</Button>
+            : <Button variant="ghost" onClick={() => { archive([details.id]); setDetails(null); }}>Arquivar</Button>}
           <Button variant="ghost" onClick={() => { markRead(details.id); setDetails(null); }}>Marcar como lida</Button>
           <Button variant="primary" iconRight="arrowRight" onClick={() => openNotification(details)}>Abrir origem</Button>
         </>}>
@@ -979,18 +1101,13 @@ function NotificacoesPage({ setRoute }) {
 }
 
 function NotificationPrefsModal({ onClose }) {
-  const [prefs, setPrefs] = React.useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('vpprd.notificacoes.preferencias') || 'null') || {
-        email: true, navegador: true, financeiro: true, operacoes: true, comercial: true,
-      };
-    } catch (e) {
-      return { email: true, navegador: true, financeiro: true, operacoes: true, comercial: true };
-    }
-  });
+  // Preferências REAIS: a Central e o contador do sino leem esta mesma configuração (NotificacoesLidasStore). Ficam neste
+  // navegador. Jurídico e Central de Decisões nunca são ocultados. (Antes: "Resumo por e-mail" e "Alertas no sistema" eram
+  // chaves salvas que nada lia — removidas; não existe envio de resumo por e-mail.)
+  const [prefs, setPrefs] = React.useState(() => window.NotificacoesLidasStore.lerPreferencias());
   const toggle = (key) => setPrefs(p => ({ ...p, [key]: !p[key] }));
   const save = () => {
-    localStorage.setItem('vpprd.notificacoes.preferencias', JSON.stringify(prefs));
+    window.NotificacoesLidasStore.salvarPreferencias(prefs);
     window.toast('Preferências salvas', 'success');
     onClose();
   };
@@ -1010,11 +1127,10 @@ function NotificationPrefsModal({ onClose }) {
         <Button variant="primary" onClick={save}>Salvar preferências</Button>
       </>}>
       <div className="stack">
-        {row('navegador', 'Alertas no sistema', 'Exibir notificações dentro do VP Gestão.')}
-        {row('email', 'Resumo por email', 'Receber consolidados operacionais no email cadastrado.')}
-        {row('financeiro', 'Financeiro', 'Gatilhos, comissões e pagamentos.')}
-        {row('operacoes', 'Operações', 'Importação, engenharia, NCM e instalação.')}
-        {row('comercial', 'Comercial', 'Leads, cotações e propostas.')}
+        <div className="muted" style={{ fontSize: 12 }}>Escolha o que aparece na Central e no contador do sino (vale só neste navegador). Jurídico e Central de Decisões sempre aparecem.</div>
+        {row('financeiro', 'Financeiro', 'Avais, estouro de teto, comissões e pagamentos.')}
+        {row('operacoes', 'Operações', 'Importação, Engenharia, Almoxarifado/PCP e instalação.')}
+        {row('comercial', 'Comercial', 'Propostas, cotações a fornecedor e compras.')}
       </div>
     </Modal>
   );
@@ -1426,7 +1542,7 @@ function ConfigIntegrations() {
   const integrations = [
     { name: "Rastreamento marítimo (AIS)", desc: "Edge function ais-sync — posição de navios" },
     { name: "IMAP — cotacoes@verticalparts.com.br", desc: "Inbox Importação" },
-    { name: "IMAP — compras@verticalparts.com.br", desc: "Inbox Compras Nacional" },
+    { name: "IMAP — compras@verticalparts.com.br", desc: "Inbox Importação Varejo" },
     { name: "SMTP — envio transacional", desc: "Notificações e propostas" },
     { name: "Assinatura digital", desc: "Assinatura de contratos e propostas" },
     { name: "Omie (faturamento)", desc: "Sincronização NF / contas a receber" },

@@ -163,6 +163,121 @@ app.post('/api/minuta', async (req, res) => {
 
 app.get('/api/health', (_req, res) => res.json({ ok: true, propostas_proxy: PROPOSTAS_ON }));
 
+/* ---------- API: Feedback -> issue do GitHub (menu Suporte "?" do cabeçalho, src/ajuda-suporte.jsx) ----------
+   O token do GitHub fica SÓ aqui, em env GITHUB_TOKEN (Hostinger › Node.js › variáveis de ambiente) — o navegador
+   nunca o vê. Token fine-grained com permissão apenas de "Issues: Read and write" no repositório abaixo.
+   GITHUB_FEEDBACK_REPO muda o repositório de destino (padrão: este). FEEDBACK_DRY_RUN=1 só monta a issue e
+   devolve, sem chamar o GitHub (testes locais). A issue leva só o primeiro nome do colaborador (server-lib/feedback-issue.js). */
+const feedbackIssue = require('./server-lib/feedback-issue');
+const FEEDBACK_REPO = process.env.GITHUB_FEEDBACK_REPO || 'verticalpartsIA/010_GestaoImportacao';
+const GITHUB_API = process.env.GITHUB_API_URL || 'https://api.github.com';   // só muda em teste local (servidor de mentira)
+
+/* Quando o GitHub recusa a criação da issue, descobre o PORQUÊ para o log (sem nunca registrar o token):
+   - permissão que o GitHub exigiu (cabeçalho x-accepted-github-permissions, ex.: "issues=write");
+   - conta dona do token (GET /user -> login): mostra se foi criado na conta certa;
+   - se o token enxerga o repositório (GET /repos/... -> 200 = enxerga, 404 = repositório fora do token);
+   - validade do token (cabeçalho github-authentication-token-expiration). Melhor esforço: falha aqui nunca derruba o envio. */
+async function feedbackDiagnostico(token, resp, data) {
+  const diag = {
+    status: resp.status,
+    mensagem: (data && data.message) || null,
+    permissao_exigida: resp.headers.get('x-accepted-github-permissions'),
+    token_expira_em: resp.headers.get('github-authentication-token-expiration'),
+    id_requisicao_github: resp.headers.get('x-github-request-id'),
+    repositorio: FEEDBACK_REPO,
+  };
+  const ler = async (rota) => {
+    try {
+      return await fetch(GITHUB_API + rota, {
+        headers: { Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28', 'User-Agent': 'vp-gestao-feedback' },
+        signal: AbortSignal.timeout(5000),
+      });
+    } catch (e) { return null; }
+  };
+  const u = await ler('/user');
+  if (u) {
+    diag.conta_do_token_status = u.status;
+    if (u.ok) { const j = await u.json().catch(() => ({})); diag.conta_do_token = j.login || null; }
+  }
+  const rp = await ler('/repos/' + FEEDBACK_REPO);
+  if (rp) diag.repositorio_status = rp.status;
+  return diag;
+}
+const feedbackPorIp = feedbackIssue.criarLimitador({ max: 5, janelaMs: 10 * 60 * 1000 });
+const feedbackGlobal = feedbackIssue.criarLimitador({ max: 60, janelaMs: 60 * 60 * 1000 });
+function feedbackOrigemOk(req) {
+  const o = req.headers.origin;
+  if (!o) return true;   // sem Origin (ex.: teste por curl): a proteção real é o limitador de envios
+  try { const h = new URL(o).host; return h === req.headers.host || /^(localhost|127\.0\.0\.1)(:\d+)?$/.test(h); } catch (e) { return false; }
+}
+app.post('/api/feedback', async (req, res) => {
+  if (!feedbackOrigemOk(req)) return res.status(403).json({ ok: false, error: 'origem_nao_permitida' });
+  const ip = String(req.headers['x-forwarded-for'] || req.socket.remoteAddress || '').split(',')[0].trim() || 'sem-ip';
+  if (!feedbackPorIp(ip) || !feedbackGlobal('global')) {
+    return res.status(429).json({ ok: false, error: 'limite', mensagem: 'Muitos envios em pouco tempo. Tente de novo em alguns minutos.' });
+  }
+  const v = feedbackIssue.validar(req.body);
+  if (!v.ok) return res.status(400).json({ ok: false, error: 'invalido', mensagem: v.erro });
+  const issue = feedbackIssue.montarIssue(v.dados, {
+    // origem do próprio site (o Origin já passou em feedbackOrigemOk: é este host ou localhost); sem Origin, usa o Host
+    baseUrl: req.headers.origin || `https://${req.headers.host}`,
+    versao: String(readVersionInfo().commit || '').slice(0, 7), navegador: req.headers['user-agent'],
+  });
+  if (process.env.FEEDBACK_DRY_RUN === '1') return res.json({ ok: true, simulado: true, numero: 0, titulo: issue.title, etiquetas: issue.labels, corpo: issue.body });
+  const token = process.env.GITHUB_TOKEN;
+  if (!token) return res.status(503).json({ ok: false, error: 'nao_configurado', mensagem: 'O envio de feedback ainda não foi ativado. Avise o gestor do site.' });
+  try {
+    const r = await fetch(`${GITHUB_API}/repos/${FEEDBACK_REPO}/issues`, {
+      method: 'POST',
+      headers: {
+        Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
+        'User-Agent': 'vp-gestao-feedback', 'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(issue),
+    });
+    const data = await r.json().catch(() => ({}));
+    if (!r.ok) {
+      const diag = await feedbackDiagnostico(token, r, data);
+      console.error('[feedback] GitHub recusou a criação da issue:', r.status, data && data.message, '| diagnóstico:', JSON.stringify(diag));
+      // 401/403/404 = o token não serve para este repositório (permissão, conta ou repositório errado): não adianta tentar de novo
+      if ([401, 403, 404].includes(r.status)) {
+        return res.status(502).json({ ok: false, error: 'github_permissao', mensagem: 'O envio de feedback está sem permissão no GitHub. Avise o gestor do site.' });
+      }
+      return res.status(502).json({ ok: false, error: 'github', mensagem: 'Não foi possível registrar agora. Tente de novo mais tarde.' });
+    }
+    // A issue já existe. O GitHub às vezes IGNORA `labels` na criação (ex.: a issue #660/#661 saíram sem etiqueta, e a
+    // triagem aguardando-gestor -> pronto-para-claude depende delas). Confere o que voltou e, se faltar, aplica num 2º passo.
+    // Falha aqui NUNCA derruba o envio (o feedback já foi registrado): só vai para o log.
+    try {
+      const aplicadas = new Set((Array.isArray(data.labels) ? data.labels : []).map((l) => l && l.name));
+      if (issue.labels.some((l) => !aplicadas.has(l))) {
+        const rl = await fetch(`${GITHUB_API}/repos/${FEEDBACK_REPO}/issues/${data.number}/labels`, {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${token}`, Accept: 'application/vnd.github+json', 'X-GitHub-Api-Version': '2022-11-28',
+            'User-Agent': 'vp-gestao-feedback', 'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ labels: issue.labels }),
+          signal: AbortSignal.timeout(8000),
+        });
+        if (rl.ok) {
+          console.log(`[feedback] issue #${data.number}: o GitHub ignorou as etiquetas na criação; aplicadas em 2º passo.`);
+        } else {
+          const dl = await rl.json().catch(() => ({}));
+          console.error(`[feedback] issue #${data.number} criada SEM etiquetas e o 2º passo falhou:`, rl.status, dl && dl.message,
+            '| permissão exigida:', rl.headers.get('x-accepted-github-permissions'));
+        }
+      }
+    } catch (e) {
+      console.error(`[feedback] issue #${data.number} criada; não foi possível conferir/aplicar as etiquetas:`, e.message);
+    }
+    return res.json({ ok: true, numero: data.number });
+  } catch (e) {
+    console.error('[feedback] falha de rede ao chamar o GitHub:', e.message);
+    return res.status(502).json({ ok: false, error: 'github', mensagem: 'Não foi possível registrar agora. Tente de novo mais tarde.' });
+  }
+});
+
 /* ---------- Rota pública de assinatura (antes do estático) ----------
    /assinar/<token> → entrega assinar.html. O token é extraído no client. */
 app.get('/assinar/:token', (_req, res) => {
@@ -246,6 +361,43 @@ app.get('/termo-entrega/:token', (_req, res) => {
    1h atrás mesmo sem nunca ter aberto a aba antes. Imagens/fonts continuam
    com cache longo — não fazem parte do bundle de código, mudam raríssimo. */
 const NO_CACHE_EXT = ['.html', '.js', '.jsx', '.css', '.json'];
+
+/* Lista de permissão do que é público. Antes `express.static(__dirname)` servia
+   a pasta inteira do repositório (docs, logs, scripts, o próprio server.js...)
+   e o catch-all devolvia o index.html (HTTP 200) para QUALQUER caminho, até
+   /api/inexistente (issue #615). Agora só passam: as páginas públicas da raiz,
+   as pastas do front (src/styles/assets) e os módulos do SPA (mesmos slugs de
+   MODULE_SLUG em src/router.js). Todo o resto responde 404. */
+const PUBLIC_ROOT_FILES = new Set([
+  'index.html', 'index-print.html', 'assinar.html', 'cotacao.html', 'cotacao-elevador-fornecedor.html',
+  'diario-obra.html', 'formulario-cliente.html', 'status-obra.html', 'termo-entrega.html',
+  'vistoria-execucao.html', 'formulario-quadro-comando-publico.html', 'colors_and_type.css', 'favicon.ico',
+]);
+/* TreinamentoVP: tutoriais passo a passo (páginas HTML estáticas, uma pasta por tela). O botão "Ajuda" do
+   app (HelpCenter, src/shell.jsx) abre /TreinamentoVP/<slug>/. Só vai o que estiver no Git. */
+const PUBLIC_DIRS = new Set(['src', 'styles', 'assets', 'TreinamentoVP']);
+const SPA_MODULES = new Set([
+  'geral', 'comercial', 'crm', 'cadastros', 'engenharia', 'logistica', 'gestao-importacao',
+  'adm-financeiro', 'juridico', 'rh', 'admin',
+]);
+function primeiroSegmento(reqPath) {
+  const seg = String(reqPath || '/').split('/').filter(Boolean);
+  return { first: seg[0] || '', depth: seg.length };
+}
+function naoEncontrado(req, res) {
+  if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found' });
+  return res.status(404).type('text/plain').send('404 — página não encontrada');
+}
+/* O navegador pede /favicon.ico sozinho e o projeto não tem ícone: 204 (vazio)
+   em vez de 404 no console — antes caía no catch-all e recebia o HTML do app. */
+app.get('/favicon.ico', (_req, res) => res.status(204).end());
+app.use((req, res, next) => {
+  const { first, depth } = primeiroSegmento(req.path);
+  if (!first || PUBLIC_DIRS.has(first) || SPA_MODULES.has(first)) return next();
+  if (depth === 1 && PUBLIC_ROOT_FILES.has(first)) return next();
+  return naoEncontrado(req, res);
+});
+
 app.use(express.static(path.join(__dirname), {
   index: 'index.html',
   setHeaders(res, filePath) {
@@ -254,8 +406,14 @@ app.use(express.static(path.join(__dirname), {
   },
 }));
 
-/* Catch-all SPA */
-app.get('*', (_req, res) => res.sendFile(path.join(__dirname, 'index.html')));
+/* Catch-all SPA — só "/" e os módulos do app recebem o index.html; um arquivo
+   estático que não existe (ex.: /src/faltando.js) agora é 404, e não o HTML do
+   app com status 200 (que o navegador tentava executar como JS). */
+app.get('*', (req, res) => {
+  const { first } = primeiroSegmento(req.path);
+  if (!first || SPA_MODULES.has(first)) return res.sendFile(path.join(__dirname, 'index.html'));
+  return naoEncontrado(req, res);
+});
 
 app.listen(PORT, () => {
   console.log(`✅ VP Gestão rodando na porta ${PORT}  · Proxy Propostas: ${PROPOSTAS_ON ? 'ON' : 'OFF'}`);

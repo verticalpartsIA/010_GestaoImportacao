@@ -8,7 +8,7 @@
   'use strict';
 
   const URL_SB  = 'https://jxtqwzmpgofwctqajewt.supabase.co';
-  const ANON_SB = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+  const ANON_SB = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
 
   const sb = window.supabase.createClient(URL_SB, ANON_SB);
 
@@ -134,6 +134,18 @@
       } catch (e) {}
       window.history.replaceState({}, '', voltarPara);
     }
+
+    // Segurança real (#571) — MODO SOMBRA: troca o login do vpsistema por uma sessão nativa do vpprd
+    // (Edge Function sso-exchange). Só observa: o cliente de dados abaixo continua com a chave pública,
+    // então nada muda para o usuário e uma falha aqui nunca quebra o app (VpAuth.init não lança).
+    try {
+      if (window.VpAuth) {
+        window.VpAuth.init({ ssoToken: ssoToken || null }).then(function () {
+          const s = window.VpAuth.status();
+          if (s.modo !== 'off') console.info('[VpAuth] modo=' + s.modo + ' estado=' + s.estado + (s.motivo ? ' (' + s.motivo + ')' : ''));
+        });
+      }
+    } catch (e) { /* sombra: nunca bloqueia */ }
   }());
 
   // ---- helpers --------------------------------------------------------
@@ -172,20 +184,22 @@
 
   async function loadDashboardData(role, period) {
     const [
-      lR, cotR, projR, alertR,
-      tarR, embR, ctR, estR,
+      lR, alertR,
+      tarR, embR, ctR,
       comR, gatR, fichasR, catalogoR,
-      propR, avaisR, ncmR,
+      propR, avaisR,
       formR, cliR, instR
     ] = await Promise.all([
       sb.from('leads').select('*').is('excluido_em', null).order('date', { ascending: false }),
-      sb.from('cotacoes').select('*').order('date', { ascending: false }),
-      sb.from('projetos').select('*').order('start_date'),
-      sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false }),
+      // Mesma regra de destinatário da Central de Notificações (antes o Dashboard contava alertas dirigidos a outras pessoas).
+      (() => {
+        const q = sb.from('alertas').select('*').eq('resolved', false);
+        const em = (window.__VP_USER || {}).email || null;
+        return (em ? q.or(`destinatario_email.is.null,destinatario_email.eq.${em}`) : q.is('destinatario_email', null)).order('created_at', { ascending: false });
+      })(),
       sb.from('tarefas').select('*').eq('role', role).eq('done', false).order('id'),
-      sb.from('embarques').select('*').order('eta'),
-      sb.from('contratos_venda_equipamentos').select('*').order('issued_date', { ascending: false }),
-      sb.from('estoque').select('*').order('sku'),
+      sb.from('embarques').select('*').eq('teste', false).order('eta'),
+      sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false }),
       sb.from('comissoes').select('*').order('id'),
       sb.from('gatilhos').select('*').order('due_date'),
       sb.from('fichas_tecnicas').select('*').order('criado_em', { ascending: false }),
@@ -198,16 +212,17 @@
       // custoInstalacaoMaoDeObraRs por equipamento, ver proposta-heranca.js),
       // não o data_json inteiro (evita puxar o JSON grande da proposta toda
       // só pra comparar custo de instalação no Dashboard).
-      sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em, ativos:data_json->ativos'),
+      // cliente_id: usado por ComercialMetrics.conversaoLeadProposta() pra
+      // casar lead → proposta pelo cliente (propostas não tem lead_id).
+      sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em, cliente_id, ativos:data_json->ativos'),
       sb.from('avais_financeiros').select('id, numero_cotacao, status, sinal_pago, contrato_venda_id'),
-      // Issue #273: o widget "Pendências NCM" do Dashboard lia um array
-      // hardcoded vazio — puxa de verdade agora (ver dashboard-metrics-engenharia.js).
-      sb.from('ncm_solicitacoes').select('id, status, created_at'),
       // Issue #274 (23/08): "Projetos em Andamento" (Gantt/Kanban/Lista) lia
       // só a tabela `projetos`, legada e sempre vazia em produção. cliente/
       // obra por numero_cotacao vêm daqui pra montar o projeto sintético
       // real em dashboard-metrics-gantt.js (projetosDaEsteira).
-      sb.from('formularios_elevador').select('numero_cotacao, cliente_id, local_obra_cidade'),
+      // vendedor/created_by: achado real (03/10) — alimenta "Responsável"
+      // no modal de detalhe do projeto (campo morto até então).
+      sb.from('formularios_elevador').select('numero_cotacao, cliente_id, local_obra_cidade, vendedor, created_by'),
       sb.from('clientes').select('id, nome_fantasia, razao_social'),
       // Instalação: contratado x previsto (Fase 3d "capítulo leve" da
       // granularidade de custo) — só os campos usados na comparação.
@@ -215,55 +230,55 @@
     ]);
 
     const leads     = lR.data    || [];
-    const cotacoes  = cotR.data  || [];
-    const projetos  = projR.data || [];
     const alertas   = (alertR.data || []).map(a => ({ ...a, time: timeAgo(a.created_at) }));
     const tarefas   = tarR.data  || [];
     const embarques = embR.data  || [];
     const contratos = ctR.data   || [];
-    const estoque   = estR.data  || [];
     const comissoes = comR.data  || [];
     const gatilhos  = gatR.data  || [];
     const fichas    = fichasR.data || [];
     const catalogo  = catalogoR.data || [];
     const propostas = propR.data  || [];
     const avais     = avaisR.data || [];
-    const ncmSolicitacoes = ncmR.data || [];
     const formularios = formR.data || [];
     const contratosInstalador = instR.data || [];
     const clientesPorId = {};
     (cliR.data || []).forEach((c) => { clientesPorId[c.id] = c; });
+
+    // ---- Esteira real (gatilhos+formulários) reconciliada em "projeto
+    // sintético" — fonte única de "projeto/cotação aberta" pro Dashboard
+    // inteiro (Gantt/Kanban/Lista, "Projetos ativos" do Admin e, desde
+    // 03/10, "Projetos abertos" da Engenharia também). Calculada ANTES dos
+    // módulos de perspectiva porque mais de um perfil precisa dela. ----
+    const GM = window.ProjetosGanttMetrics;
+    const projetosReais = GM.projetosDaEsteira({ gatilhos, formularios, clientesPorId, propostas });
 
     // ---- Comercial (dashboard-metrics-comercial.js) — 1º módulo extraído
     // da revisão de arquitetura do Dashboard. Funções puras, testadas em
     // dashboard-metrics-comercial.test.js. Os outros perfis ainda são
     // calculados aqui embaixo — extração incremental, um módulo por vez. ----
     const CM = window.ComercialMetrics;
-    const comercial = CM.compute({ leads, cotacoes, propostas, contratos });
+    const comercial = CM.compute({ leads, gatilhos, propostas, contratos });
 
     // ---- Engenharia (dashboard-metrics-engenharia.js) — 2º módulo
-    // extraído. Fecha a issue #273 (NCM sempre vazio). ----
+    // extraído. Achado real (03/10): "Projetos abertos" lia a tabela legada
+    // `projetos` (0 linhas em produção) — agora usa a mesma esteira
+    // reconciliada (projetosReais) que o Gantt/Admin já usam, nunca mais
+    // fica preso em zero. `ncmSolicitacoes` não é mais passado aqui —
+    // ver nota sobre `ncm_solicitacoes` logo abaixo (achado real 03/10). ----
     const EM = window.EngenhariaMetrics;
-    const engenharia = EM.compute({ projetos, fichas, catalogo, alertas, ncmSolicitacoes });
+    const engenharia = EM.compute({ projetos: projetosReais, fichas, catalogo, alertas });
 
     // ---- Financeiro (dashboard-metrics-financeiro.js) — 3º módulo extraído. ----
     const FM = window.FinanceiroMetrics;
     const financeiro = FM.compute({ contratos, comissoes, gatilhos, contratosInstalador, propostas });
-
-    // ---- Gantt (dashboard-metrics-gantt.js) — 4º módulo extraído.
-    // Issue #274 fechada em 23/08: projeta a esteira real (gatilhos +
-    // formulários) em vez da tabela `projetos` legada/sempre vazia.
-    // Calculado aqui (antes do Admin) porque o KPI "Projetos ativos" do
-    // Admin também precisa desse mesmo array reconciliado. ----
-    const GM = window.ProjetosGanttMetrics;
-    const projetosReais = GM.projetosDaEsteira({ gatilhos, formularios, clientesPorId });
 
     // ---- Admin (dashboard-metrics-admin.js) — 5º e último módulo
     // extraído. Único que COMPÕE outro módulo (ComercialMetrics), em vez
     // de refiltrar do zero — ver comentário no próprio arquivo. ----
     const AM = window.AdminMetrics;
     const desde = periodoParaData(period);
-    const projetosPeriodo = desde ? projetosReais.filter(p => p.start_date && new Date(p.start_date) >= desde) : undefined;
+    const projetosPeriodo = desde ? AM.projetosAtivosNoPeriodo(projetosReais, desde) : undefined;
     const propostasPeriodo = desde ? propostas.filter(p => p.aprovada_em && new Date(p.aprovada_em) >= desde) : undefined;
     const comissoesPeriodo = desde ? comissoes.filter(c => c.created_at && new Date(c.created_at) >= desde) : undefined;
     const admin = AM.compute({ projetos: projetosReais, embarques, alertas, propostas, contratos, avais, comissoes, projetosPeriodo, propostasPeriodo, comissoesPeriodo });
@@ -285,24 +300,52 @@
       admin: admin.kpis,
     };
 
-    // ---- Estoque crítico ----
-    const estoqueCritico = estoque
-      .filter(e => e.qty < e.min_qty)
-      .map(e => ({
-        sku: e.sku, name: e.name, qty: e.qty, min: e.min_qty,
-        status: e.qty <= Math.floor(e.min_qty / 2) ? 'danger' : 'warning',
-      }));
-
+    // Achado real (03/10): até aqui o Dashboard ainda consultava `estoque`
+    // (pra computar `estoqueCritico`) e `ncm_solicitacoes` (pra
+    // `engenharia.ncm`, issue #273) a cada carregamento — mas nenhum dos
+    // dois é lido em lugar nenhum de `dashboard.jsx`. O comentário de
+    // `OndeParouWidget` já confirma a causa: "Onde Parou" (23/08) substituiu
+    // os widgets "Pendências NCM" e "Estoque Crítico" que consumiam esses
+    // dados — a limpeza do back-end ficou pela metade na troca. Removidas
+    // as 2 consultas (não há mais `estoqueCritico`/`ncm` no retorno) —
+    // se um widget equivalente for pedido de novo, refazer a consulta é
+    // simples; manter uma rodando pra ninguém ler não é.
     const gantt = GM.compute({ projetos: projetosReais });
 
     return {
-      leads, cotacoes, projetos, alertas, tarefas: tarefasFmt,
-      embarques, contratos, estoque, comissoes, gatilhos, fichas, catalogo, ncm: engenharia.ncm,
-      kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars, estoqueCritico,
+      leads, projetos: projetosReais, alertas, tarefas: tarefasFmt,
+      embarques, contratos, comissoes, gatilhos, fichas, catalogo,
+      kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars,
       alertasCriticos: admin.alertasCriticos.length,
       ganttToday: gantt.ganttToday, ganttProjetos: gantt.ganttProjetos,
     };
   }
+
+  /* 04/10/2026 — Inbox fase 1: todo envio pela função send-email leva o LOGIN de quem enviou (`enviadoPor`) — é o DONO
+     do e-mail. Feito num ponto só para nenhum chamador (hoje ou futuro) esquecer. `sb.functions` cria um cliente novo a
+     cada acesso, então o invólucro é aplicado no getter. Declarado pelo navegador (não verificável — issue #571). */
+  try {
+    const descFn = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(sb), 'functions');
+    if (descFn && descFn.get) {
+      Object.defineProperty(sb, 'functions', {
+        configurable: true,
+        get() {
+          const fc = descFn.get.call(sb);
+          const invocar = fc.invoke.bind(fc);
+          fc.invoke = (nome, opts) => {
+            try {
+              if (nome === 'send-email' && opts && opts.body && typeof opts.body === 'object' && !opts.body.enviadoPor) {
+                const quem = (window.__VP_USER || {}).email;
+                if (quem) opts = { ...opts, body: { ...opts.body, enviadoPor: String(quem).toLowerCase() } };
+              }
+            } catch (_) { /* nunca atrapalha o envio */ }
+            return invocar(nome, opts);
+          };
+          return fc;
+        },
+      });
+    }
+  } catch (e) { console.warn('[supabase.js] não consegui anexar o dono nos envios de e-mail', e); }
 
   // ---- expor para componentes React ----
   window.__VP_SB = { sb, loadDashboardData, timeAgo };

@@ -30,6 +30,7 @@ const __dirname = fileURLToPath(new URL('.', import.meta.url));
 const ENTRIES = {
   pedido: { file: 'pedido-fornecedor-reactpdf.entry.js', name: 'PFReactPdfBundle', out: 'pedido-fornecedor-reactpdf.bundle.js' },
   proposta: { file: 'proposta-reactpdf.entry.js', name: 'PropostaReactPdfBundle', out: 'proposta-reactpdf.bundle.js' },
+  contrato: { file: 'contrato-venda-reactpdf.entry.js', name: 'ContratoVendaReactPdfBundle', out: 'contrato-venda-reactpdf.bundle.js' },
   vistoria: { file: 'vistoria-reactpdf.entry.js', name: 'VistoriaReactPdfBundle', out: 'vistoria-reactpdf.bundle.js' },
 };
 const chave = process.env.PDF_ENTRY || 'pedido';

@@ -34,11 +34,11 @@
     FIN_AVAL_VENDA: 'Projeto', REVISAO_INTERNA: 'Projeto', PROPOSTA_REVISADA_REENVIO: 'Projeto',
     CONTRATO_ENVIADO: 'Projeto', PROJETO_ENVIADO: 'Projeto', AGUARDA_ASSINATURA: 'Projeto',
     AGUARDA_BOLETO: 'Projeto', AVAL_PAGAMENTO: 'Projeto', CEO_APROVOU: 'Projeto',
-    OWNER_APROVOU: 'Projeto', COMPRA_LIBERADA: 'Projeto',
+    OWNER_APROVOU: 'Projeto', AVAL_JURIDICO: 'Projeto', AVAL_ENGENHARIA: 'Projeto', COMPRA_LIBERADA: 'Projeto',
 
     PROJETO_CRIADO: 'Fabricação', PROJETO_APROVADO: 'Fabricação', FICHA_CRIADA: 'Fabricação',
     PI_CRIADA: 'Fabricação', PAGAMENTO_1_SOLICITADO: 'Fabricação', PAGAMENTO_1_CONFIRMADO: 'Fabricação',
-    NEGOCIACAO_COMPRA: 'Fabricação',
+    NEGOCIACAO_COMPRA: 'Fabricação', IMPORTACAO_A_INICIAR: 'Fabricação',
 
     CARGO_READY: 'Importação', RFQ_FRETE: 'Importação', AGENTE_DEFINIDO: 'Importação',
     EMBARQUE_CRIADO: 'Importação', EMBARQUE_ATUALIZADO: 'Importação',
@@ -48,7 +48,7 @@
     DOSSIE_CRIADO: 'Instalação', VISTORIA_AGENDADA: 'Instalação', VISTORIA_REALIZADA: 'Instalação',
     PENDENCIAS_RESOLVIDAS: 'Instalação', INSTALADOR_VINCULADO: 'Instalação', CI_GERADO: 'Instalação',
     CI_ASSINADO: 'Instalação', IMS_CONTRATADO: 'Instalação', EQUIPAMENTO_RECEBIDO: 'Instalação',
-    INSTALACAO_INICIADA: 'Instalação', PENDENCIA_INSTALACAO: 'Instalação',
+    INSTALACAO_INICIADA: 'Instalação', INSTALACAO_METADE_EXECUCAO: 'Instalação', PENDENCIA_INSTALACAO: 'Instalação',
     INSTALACAO_CONCLUIDA: 'Instalação', ART_EMITIDA: 'Instalação', TESTES_REALIZADOS: 'Instalação',
     DATABOOK_MONTADO: 'Instalação',
 
@@ -56,15 +56,42 @@
     POS_VENDA_ATIVADO: 'Entrega',
   };
 
-  /* projetosDaEsteira({ gatilhos, formularios, clientesPorId }) — agrupa
-     gatilhos por numero_cotacao e devolve um "projeto" sintético por
-     cotação com pelo menos um gatilho ainda aberto (cotações com a
+  /* Achado real (03/10): o modal de detalhe do projeto (dashboard.jsx,
+     clique numa linha/barra do Gantt/Lista/Kanban) sempre mostrou
+     "Valor"/"Responsável" como campos mortos — este objeto nunca setava
+     `value` nem `responsavel`, então as 2 linhas condicionais do modal
+     nunca apareciam (sem erro, só silenciosamente invisíveis). `propostas`
+     já é buscado por loadDashboardData() (supabase.js) — melhor proposta
+     da cotação prioriza aprovada > enviada > rascunho (rank), igual ao
+     "mais avançada" de ComercialMetrics.propostasEnviadas()/
+     propostasAprovadas(), sem duplicar a definição delas aqui. */
+  function rankProposta(p) {
+    if (p.status === 'aprovada') return 2;
+    if (p.status && p.status !== 'rascunho') return 1;
+    return 0;
+  }
+  function melhorPropostaPorCotacao(propostas) {
+    const porCotacao = new Map();
+    (propostas || []).forEach((p) => {
+      if (p.numero_cotacao == null) return;
+      const atual = porCotacao.get(p.numero_cotacao);
+      if (!atual || rankProposta(p) > rankProposta(atual)) porCotacao.set(p.numero_cotacao, p);
+    });
+    return porCotacao;
+  }
+
+  /* projetosDaEsteira({ gatilhos, formularios, clientesPorId, propostas })
+     — agrupa gatilhos por numero_cotacao e devolve um "projeto" sintético
+     por cotação com pelo menos um gatilho ainda aberto (cotações com a
      cadeia inteira fechada não entram — não é mais "em andamento").
      current_phase = fase do gatilho aberto mais antigo (o gargalo
-     atual, mesma lógica de "quem tem a bola agora" do OndeParouWidget). */
-  function projetosDaEsteira({ gatilhos, formularios, clientesPorId } = {}) {
+     atual, mesma lógica de "quem tem a bola agora" do OndeParouWidget).
+     `propostas` é opcional (default []) — sem ele, `value` fica `null`
+     igual ao comportamento de antes desta mudança (compat). */
+  function projetosDaEsteira({ gatilhos, formularios, clientesPorId, propostas } = {}) {
     const porFormulario = new Map((formularios || []).map((f) => [f.numero_cotacao, f]));
     const clientes = clientesPorId || {};
+    const propostaPorCotacao = melhorPropostaPorCotacao(propostas);
     const porCotacao = new Map();
     (gatilhos || []).forEach((g) => {
       if (!g.numero_cotacao || String(g.evento_key || '').startsWith('LEMBRETE__')) return;
@@ -81,6 +108,7 @@
       const form = porFormulario.get(numeroCotacao);
       const cliente = form ? clientes[form.cliente_id] : null;
       const nomeCliente = cliente ? (cliente.nome_fantasia || cliente.razao_social) : null;
+      const proposta = propostaPorCotacao.get(numeroCotacao);
       projetos.push({
         id: numeroCotacao,
         name: nomeCliente ? `${nomeCliente} · Cotação ${numeroCotacao}` : `Cotação ${numeroCotacao}`,
@@ -89,6 +117,8 @@
         end_date: null,
         current_phase: FASE_POR_NODE[atual.evento_key] || 'Projeto',
         numero_cotacao: numeroCotacao,
+        value: proposta && proposta.valor_total != null ? Number(proposta.valor_total) || null : null,
+        responsavel: form ? (form.vendedor || form.created_by || null) : null,
       });
     });
     return projetos.sort((a, b) => a.numero_cotacao - b.numero_cotacao);
@@ -143,5 +173,6 @@
 
   window.ProjetosGanttMetrics = {
     GANTT_PHASES, FASE_POR_NODE, ganttStart, ganttToday, projetosComFases, projetosDaEsteira, compute,
+    melhorPropostaPorCotacao,
   };
 }());

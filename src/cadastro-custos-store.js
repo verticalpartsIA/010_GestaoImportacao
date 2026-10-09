@@ -29,6 +29,10 @@
     if (!payload.id) delete payload.id;
     const { data, error } = await c.from('custos_instalacao_elevador').upsert(payload).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Salvou custo de instalação de elevador', alvo_id: data.id,
+      detalhe: { tracao: data.tracao, capacidade_min_kg: data.capacidade_min_kg, paradas: data.paradas, valor_reajustado_rs: data.valor_reajustado_rs },
+    });
     return data;
   }
 
@@ -46,6 +50,9 @@
     const payload = { ...patch, atualizado_em: new Date().toISOString(), atualizado_por: quemAtualizou() };
     const { data, error } = await c.from('custos_instalacao_elevador').update(payload).eq('id', id).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Editou custo de instalação de elevador', alvo_id: id, detalhe: patch,
+    });
     return data;
   }
 
@@ -53,6 +60,9 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('custos_instalacao_elevador').delete().eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Excluiu custo de instalação de elevador', alvo_id: id,
+    });
   }
 
   /* Busca o custo de instalação pra uma unidade real (herança na
@@ -182,6 +192,9 @@
     const payload = { ...row, atualizado_em: new Date().toISOString(), atualizado_por: quemAtualizou() };
     const { data, error } = await c.from('custos_instalacao_escada_esteira').upsert(payload).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Salvou custo de instalação de escada/esteira', alvo_id: data.id, detalhe: { tipo: data.tipo },
+    });
     return data;
   }
 
@@ -208,6 +221,9 @@
     if (!payload.id) delete payload.id;
     const { data, error } = await c.from('custos_containers').upsert(payload).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Salvou custo de container', alvo_id: data.id, detalhe: { tipo: data.tipo },
+    });
     return data;
   }
 
@@ -215,6 +231,9 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('custos_containers').delete().eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Excluiu custo de container', alvo_id: id,
+    });
   }
 
   window.CadastroCustosStore = {

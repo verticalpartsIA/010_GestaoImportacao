@@ -120,6 +120,8 @@ function FtFicha({ state }) {
     id.sku && { k: 'SKU', v: id.sku },
     id.codigoProduto && { k: 'Código do Produto', v: id.codigoProduto },
     id.partNumber && { k: 'Part Number', v: id.partNumber },
+    id.marca && { k: 'Marca', v: id.marca },
+    id.modelo && { k: 'Modelo', v: id.modelo },
   ].filter(Boolean);
   const vazia = !d.grupos.length && idents.length === 0 && !(id.descricaoTecnica && id.descricaoTecnica.trim()) && !(state.descricao_duimp && state.descricao_duimp.trim());
   const orientation = useFichaOrientation(d.temMidia ? d.midia : null);
@@ -326,6 +328,18 @@ function FtEditor({ state, onIdent, onValue, onRemove, onMedia, onAddField, onNC
           <label className="ft-f"><span>Part Number</span>
             <input className="ft-mono" value={state.identificacao.partNumber} onChange={(e) => onIdent('partNumber', e.target.value)} placeholder="opcional"/>
           </label>
+          <label className="ft-f"><span>Marca</span>
+            <input value={state.identificacao.marca || ''} onChange={(e) => onIdent('marca', e.target.value)} placeholder="opcional"/>
+          </label>
+          <label className="ft-f"><span>Modelo</span>
+            <input value={state.identificacao.modelo || ''} onChange={(e) => onIdent('modelo', e.target.value)} placeholder="opcional"/>
+          </label>
+          <label className="ft-f"><span>Unidade (Omie)</span>
+            <input className="ft-mono" value={state.identificacao.unidade || ''} onChange={(e) => onIdent('unidade', e.target.value.toUpperCase())} placeholder="UN, KG, PC, M…"/>
+          </label>
+          <label className="ft-f"><span>FCI · Ficha de Conteúdo de Importação</span>
+            <input className="ft-mono" value={state.identificacao.fci || ''} onChange={(e) => onIdent('fci', e.target.value)} placeholder="opcional"/>
+          </label>
           {/* SKU é gerado automaticamente — usuário não digita (padrão único, sem interpretações) */}
           <label className="ft-f full"><span>SKU · gerado automaticamente {skuAuto.sku ? '✓' : ''}</span>
             <input className="ft-mono" value={skuAuto.sku} readOnly disabled
@@ -518,11 +532,20 @@ function FtGenerator({ initial, onSaved, onCancel }) {
   const [saving, setSaving] = _ftUS(false);
   const previewWrap = _ftUR(null);
   const [scale, setScale] = _ftUS(0.42);
+  /* Alçada — Configurações › Administração › Engenharia › Ficha Técnica ›
+     Publica (ou republica) a ficha como anexo no Omie. Admin sempre pode
+     (temCapacidade trata nivel==='Administrador' como bypass). */
+  const [podePublicarOmie, setPodePublicarOmie] = _ftUS(false);
 
   _ftUE(() => {
     const el = previewWrap.current; if (!el) return;
     const ro = new ResizeObserver(() => setScale(Math.max(0.2, Math.min(1, (el.clientWidth - 28) / 1040))));
     ro.observe(el); return () => ro.disconnect();
+  }, []);
+
+  _ftUE(() => {
+    if (!window.PropostaStore) return;
+    window.PropostaStore.temCapacidade('ficha-tecnica', 'publicar_omie').then(setPodePublicarOmie).catch(() => {});
   }, []);
 
   const setIdent = (k, v) => setState((s) => ({ ...s, identificacao: { ...s.identificacao, [k]: v } }));
@@ -690,9 +713,10 @@ function FtGenerator({ initial, onSaved, onCancel }) {
           <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M6 9V2h12v7M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2M6 14h12v8H6z"/></svg>
           Gerar PDF
         </button>
-        <button className={'ft-btn omie' + (state.identificacao.codigoProduto ? '' : ' off')}
-          disabled={!state.identificacao.codigoProduto}
+        <button className={'ft-btn omie' + ((state.identificacao.codigoProduto && podePublicarOmie) ? '' : ' off')}
+          disabled={!state.identificacao.codigoProduto || !podePublicarOmie}
           onClick={async () => {
+            if (!podePublicarOmie) { window.toast?.('Sem permissão para publicar no Omie — peça liberação em Configurações → Administração', 'error'); return; }
             if (!window.FichaOmiePublish) { window.toast?.('Sistema não carregado — recarregue a página', 'error'); return; }
             const fichaId = state.__id || (initial && initial.__id) || null;
             if (!fichaId) { window.toast?.('Salve a ficha primeiro — depois publique no Omie', 'error'); return; }
@@ -708,6 +732,7 @@ function FtGenerator({ initial, onSaved, onCancel }) {
             } catch (e) { console.error('[Omie publish]', e); }
           }}
           title={(() => {
+            if (!podePublicarOmie) return '🔒 Sem permissão para publicar no Omie — peça liberação em Configurações → Administração';
             if (!state.identificacao.nomeProduto) return '⚠️ Preencha o Nome do Produto';
             if (!state.identificacao.codigoProduto) return '⚠️ Preencha o Código do Produto (Omie)';
             if (!podeGerar) return '⚠️ Faltam campos obrigatórios marcados com * (ou descrição técnica vazia)';
@@ -1068,6 +1093,21 @@ function FichaTecnicaPage({ fichaId }) {
           if (ficha && alive) handleOpen(ficha);
         }
       } catch (e) { console.warn('[FTPage] deep-link open failed', e); }
+      /* Deep-link dos Relatórios do PCP ("Produtos com foto" › Criar ficha deste item): abre uma ficha NOVA já com o Código e o
+         Nome do produto preenchidos. Valor = JSON {codigo, nome} (aceita só o código em texto). Não grava nada: só preenche. */
+      try {
+        const novaRaw = sessionStorage.getItem('vp_pcp_ficha_nova');
+        if (novaRaw && alive) {
+          sessionStorage.removeItem('vp_pcp_ficha_nova');
+          let dado; try { dado = JSON.parse(novaRaw); } catch (e) { dado = { codigo: novaRaw }; }
+          const st = window.FT.freshState();
+          st.identificacao = Object.assign({}, st.identificacao, {
+            codigoProduto: String((dado && dado.codigo) || '').trim(),
+            nomeProduto: dado && dado.nome ? String(dado.nome).slice(0, 120) : (st.identificacao.nomeProduto || ''),
+          });
+          setInitial(st); setView('nova');
+        }
+      } catch (e) { console.warn('[FTPage] deep-link nova ficha falhou', e); }
     })();
     return () => { alive = false; };
   }, []);
@@ -1090,6 +1130,10 @@ function FichaTecnicaPage({ fichaId }) {
       omie_publicado_em: ficha.omie_publicado_em || null,
     });
     setView('nova');
+    /* Abrir uma ficha existente não mudava a URL: F5 perdia a ficha e o Voltar
+       do navegador saía da tela inteira (issue #611). `navigate` ignora a
+       chamada se a URL já é essa (deep-link por fichaId). */
+    if (window.VpRouter && ficha.id) window.VpRouter.navigate('ficha-tecnica', ficha.id);
   };
 
   /* Deep-link via URL: /engenharia/ficha-tecnica/nova-ficha-tecnica abre direto o editor */
@@ -1110,6 +1154,20 @@ function FichaTecnicaPage({ fichaId }) {
       })();
     }
   }, [fichaId, libReady]);
+
+  /* Voltar/Avançar do navegador: `VpRouter.navigate` só reescreve a URL (não
+     dispara popstate pro App), então o `fichaId` não muda e a tela ficava no
+     editor com a URL já de volta em /ficha-tecnica. Escuta o roteador direto:
+     sem id → painel; 'nova-ficha-tecnica' → editor vazio. Id de ficha real o
+     efeito acima já abre (o App atualiza o subsel no popstate). */
+  _ftUE(() => {
+    if (!window.VpRouter) return undefined;
+    return window.VpRouter.subscribe((loc) => {
+      if (!loc || loc.route !== 'ficha-tecnica') return;
+      if (!loc.id) { setView('painel'); setInitial(null); }
+      else if (loc.id === 'nova-ficha-tecnica') { setInitial(null); setView('nova'); }
+    });
+  }, []);
 
   const handleNavTo = (newView, newId) => {
     if (window.VpRouter) {

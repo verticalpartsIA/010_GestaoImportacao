@@ -33,12 +33,20 @@
     FINANCEIRO_APROVOU_VENDA:    { modulo: 'Aval Financeiro',         label: 'Financeiro deu o aval pra vender',             papel: 'Financeiro' },
     FINANCEIRO_REPROVOU_VENDA:   { modulo: 'Aval Financeiro',         label: 'Financeiro reprovou a venda',                  papel: 'Financeiro' },
     CONTRATO_VENDA_ENVIADO:      { modulo: 'Contrato de Venda',       label: 'Contrato de venda enviado',                    papel: 'Jurídico' },
+    CONTRATO_VENDA_REPRESENTANTE_ASSINOU: { modulo: 'Contrato de Venda', label: 'Representante assinou — aguardando outros signatários', papel: 'Cliente' },
+    CONTRATO_VENDA_SIGNATARIO_ASSINOU: { modulo: 'Contrato de Venda', label: 'Signatário adicional assinou (sócio/jurídico)', papel: 'Cliente' },
+    CONTRATO_VENDA_SIGNATARIO_RECUSOU: { modulo: 'Contrato de Venda', label: 'Signatário adicional recusou assinar',        papel: 'Cliente' },
     CONTRATO_VENDA_ASSINADO:     { modulo: 'Contrato de Venda',       label: 'Contrato de venda assinado',                   papel: 'Cliente' },
     SINAL_PAGO:                  { modulo: 'Aval Financeiro',         label: 'Boleto pago pelo cliente',                     papel: 'Cliente' },
     AVAL_PAGAMENTO_CONFIRMADO:   { modulo: 'Aval Financeiro',         label: 'Financeiro deu o Aval de Pagamento',           papel: 'Financeiro' },
     COMPRA_FORNECEDOR_INICIADA:  { modulo: 'Cotação a Fornecedor',    label: 'Compra do equipamento iniciada no fornecedor', papel: 'Importação' },
     COMPRA_FORNECEDOR_CONFIRMADA:{ modulo: 'Cotação a Fornecedor',    label: 'Compra do equipamento confirmada com o fornecedor', papel: 'Fornecedor' },
     PROJETO_ELEVADOR_FINALIZADO: { modulo: 'Engenharia',              label: 'Projeto de Elevadores finalizado',             papel: 'Engenharia' },
+    AVAL_JURIDICO_APROVADO:      { modulo: 'Aval Jurídico',           label: 'Jurídico deu o aval ao contrato',              papel: 'Jurídico' },
+    AVAL_JURIDICO_REPROVADO:     { modulo: 'Aval Jurídico',           label: 'Jurídico reprovou o contrato',                 papel: 'Jurídico' },
+    PROJETO_INSTALACAO_ASSINADO: { modulo: 'Engenharia',             label: 'Cliente assinou o Projeto de Instalação',      papel: 'Cliente' },
+    DESENHO_INSTALACAO_ANEXADO:  { modulo: 'Contrato de Venda',       label: 'Desenho do Projeto de Instalação anexado',     papel: 'Engenharia' },
+    DESENHO_INSTALACAO_ENVIADO:  { modulo: 'Contrato de Venda',       label: 'Desenho do Projeto de Instalação enviado ao cliente', papel: 'Engenharia' },
 
     /* ---- Extensão 23/08 — checklist completo de 73 etapas (Gatilhos.md).
        Itens 1-32 já cobertos acima; daqui pra baixo é Engenharia final,
@@ -102,7 +110,7 @@
      catálogo acima — nenhum call-site precisa passar isso.
      Nunca derruba o fluxo principal por falha aqui — é rastro, não
      obrigação transacional (mesmo padrão de proteção do VPLog.registrar). */
-  async function registrar({ evento, numeroCotacao, alvoLabel, alvoId, detalhe } = {}) {
+  async function registrar({ evento, numeroCotacao, alvoLabel, alvoId, detalhe, atorNome } = {}) {
     const def = EVENTOS[evento];
     if (!def) { console.warn('[EventosFluxo] evento desconhecido:', evento); return null; }
     try {
@@ -115,7 +123,9 @@
         alvo_label: alvoLabel || null,
         alvo_id: alvoId != null ? String(alvoId) : null,
         detalhe: detalhe || null,
-        ator_nome: user.nome || user.email || null,
+        // `atorNome` (opcional): evento disparado pelo CLIENTE na página pública mas gravado por um usuário interno (fila
+        // fluxo_pendentes) — o ator é quem de fato agiu, não quem processou.
+        ator_nome: atorNome || user.nome || user.email || null,
         ator_papel: def.papel || null,
       }).select().single();
       if (error) { console.warn('[EventosFluxo] registrar falhou', error); return null; }

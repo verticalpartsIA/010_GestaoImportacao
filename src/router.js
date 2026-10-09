@@ -25,11 +25,11 @@
   const KNOWN_ROUTES = [
     'dashboard', 'notificacoes', 'decisoes', 'financeiro', 'inbox',
     'leads', 'lead-detail', 'crm-canais', 'crm-conversao', 'crm-automacao', 'crm-analise',
-    'formularios', 'formulario-elevador', 'formulario-quadro-comando', 'controle-cotacoes',
-    'cotacoes-fornecedor', 'cotacao-fornecedor-detail', 'precificacao', 'propostas', 'proposta-editor',
+    'formularios', 'formulario-elevador', 'formulario-quadro-comando', 'cotacao-quadro-comando', 'controle-cotacoes',
+    'cotacoes-fornecedor', 'cotacao-fornecedor-detail', 'contratos-sociais', 'precificacao', 'propostas', 'proposta-editor',
     'aval-financeiro',
-    'cadastro-clientes', 'cadastro-fornecedores', 'ncm-catalogo', 'cadastro-instaladores', 'cadastro-custos',
-    'juridico', 'contrato-venda-equipamentos', 'contrato-instalador', 'contrato-editor',
+    'cadastro-clientes', 'cadastro-fornecedores', 'cadastro-materias-primas', 'cadastro-produtos', 'ncm-catalogo', 'cadastro-instaladores', 'cadastro-custos',
+    'juridico', 'contrato-venda-equipamentos', 'aval-juridico', 'contrato-instalador', 'contrato-editor',
     'importacao', 'importacao-detail', 'importacao-rastreamento',
     'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos',
     'compras', 'pedidos-acompanhamento',
@@ -39,7 +39,7 @@
     'status-obras', 'linha-do-tempo', 'central-documentos', 'dossier-obra', 'vistorias-envio', 'vistorias', 'instalacao',
     'art', 'cronograma', 'databook', 'handover',
     'rh-homologacao',
-    'almoxarifado',
+    'almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'mes', 'relatorios-pcp', 'expedicao', 'emissao-nf',
     'logs', 'configuracoes', 'comissoes', 'pagamentos-instalador',
   ];
   const KNOWN_ROUTES_SET = new Set(KNOWN_ROUTES);
@@ -129,6 +129,54 @@
     };
   }
 
+  /* ---- Aba (submódulo) de uma tela na URL ----
+     Convenção do projeto (já usada por configuracoes e dossier-obra):
+       tela de lista com abas   → /<módulo>/<rota>/<aba>        (aba = 2º segmento)
+       tela de detalhe com abas → /<módulo>/<rota>/<id>/<aba>   (aba = 3º segmento; withId)
+     Função pura (testável): devolve a aba da URL se a rota é essa e a aba é
+     válida; senão, a aba padrão. */
+  function tabFromLocation(route, defaultTab, valid, withId) {
+    const loc = parseLocation();
+    if (loc.route !== route) return defaultTab;
+    const t = withId ? loc.tab : loc.id;
+    if (!t) return defaultTab;
+    if (valid && valid.indexOf(t) === -1) return defaultTab;
+    return t;
+  }
+
+  /* Substitui `const [aba, setAba] = React.useState('padrao')` por uma linha:
+       const [aba, setAba] = window.useRouteTab('rota', 'padrao', ['padrao', 'outra']);
+     O resto da tela não muda. Clicar na aba grava na URL (a aba padrão deixa a
+     URL limpa); Voltar/Avançar do navegador e F5 restauram a aba. */
+  /* `explicit` (5º argumento, só para telas sem id): a aba padrão TAMBÉM aparece
+     na URL (/logistica/almoxarifado/estoque, não só /logistica/almoxarifado).
+     Ao abrir a tela sem aba na URL, ela é completada na hora (replaceState,
+     sem criar entrada extra no Voltar). Usado na Logística Interna. */
+  window.useRouteTab = function useRouteTab(route, defaultTab, valid, withId, explicit) {
+    const R = window.React;
+    const st = R.useState(function () { return tabFromLocation(route, defaultTab, valid, withId); });
+    const tab = st[0], setTabState = st[1];
+    R.useEffect(function () {
+      if (!explicit || withId) return;
+      const loc = parseLocation();
+      if (loc.route === route && !loc.id) navigate(route, defaultTab, null, { replace: true });
+    }, []);
+    R.useEffect(function () {
+      return subscribe(function () { setTabState(tabFromLocation(route, defaultTab, valid, withId)); });
+    }, []);
+    const setTab = R.useCallback(function (t) {
+      setTabState(t);
+      const novaTab = (t === defaultTab && !explicit) ? null : t;
+      if (withId) {
+        const loc = parseLocation();
+        navigate(route, loc.route === route ? loc.id : null, novaTab);
+      } else {
+        navigate(route, novaTab);
+      }
+    }, [route, defaultTab, withId, explicit]);
+    return [tab, setTab];
+  };
+
   window.VpRouter = {
     KNOWN_ROUTES: KNOWN_ROUTES,
     isKnownRoute: isKnownRoute,
@@ -136,5 +184,6 @@
     parseLocation: parseLocation,
     navigate: navigate,
     subscribe: subscribe,
+    tabFromLocation: tabFromLocation,
   };
 }());

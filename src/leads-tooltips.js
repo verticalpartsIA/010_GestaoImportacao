@@ -4,11 +4,15 @@
 
   const STYLE_ID = 'vp-leads-help-style';
   const MARK = 'data-vp-leads-help';
+  // "?" só nos rótulos dos indicadores (.kpi__label); botões ganham dica nativa (title). Antes o texto era procurado na página
+  // inteira e o "?" caía na barra de filtros, no título do modal "Novo Lead" e nos cabeçalhos do Kanban (issue #663).
   const HELP = [
     { find: 'Leads ativos', text: 'Total de oportunidades comerciais cadastradas no pipeline.' },
     { find: 'Em qualificação', text: 'Leads que ainda estão sendo avaliados e complementados antes de avançar no processo comercial.' },
     { find: 'Propostas no ar', text: 'Oportunidades que já possuem proposta enviada e aguardam evolução comercial.' },
-    { find: 'Valor pipeline', text: 'Soma do valor estimado de todas as oportunidades cadastradas.' },
+    { find: 'Valor pipeline', text: 'Soma do valor estimado das oportunidades em aberto (não conta Convertido nem Sem retorno).' },
+  ];
+  const BOTOES = [
     { find: 'Exportar', text: 'Exporta para CSV os Leads que estão visíveis com os filtros atuais.' },
     { find: 'Novo Lead', text: 'Abre o formulário para cadastrar uma nova oportunidade comercial.' },
   ];
@@ -76,17 +80,22 @@
   }
 
   function annotate(root, label, text) {
-    const el = exactText(root, label);
+    const el = Array.from(root.querySelectorAll('.kpi__label')).find(e => e.textContent.trim() === label);
     if (!el || el.hasAttribute(MARK)) return;
     el.setAttribute(MARK, '1');
-    const wrap = document.createElement('span'); wrap.className = 'vp-help-wrap';
-    el.parentNode.insertBefore(wrap, el); wrap.appendChild(el); wrap.appendChild(helpButton(label, text));
+    el.appendChild(helpButton(label, text));
+  }
+
+  function annotateBotao(root, label, text) {
+    const b = Array.from(root.querySelectorAll('.page-head__r button')).find(e => e.textContent.trim() === label);
+    if (!b || b.hasAttribute(MARK)) return;
+    b.setAttribute(MARK, '1'); b.title = text;
   }
 
   function annotateSearch(root) {
     const input = root.querySelector('input[placeholder*="Buscar prédio"]');
     if (!input || input.hasAttribute(MARK)) return;
-    input.setAttribute(MARK, '1'); input.title = 'Pesquise por prédio, contato ou equipamento. A busca considera toda a listagem de Leads.';
+    input.setAttribute(MARK, '1'); input.title = 'Pesquise por prédio ou contato. A busca considera toda a listagem de Leads.';
     const host = input.closest('.search') || input.parentElement; if (host) host.classList.add('vp-help-field');
   }
 
@@ -119,6 +128,7 @@
     const root = title.closest('.page') || document;
     addStyle();
     HELP.forEach(h => annotate(root, h.find, h.text));
+    BOTOES.forEach(h => annotateBotao(root, h.find, h.text));
     annotateStatus(root); annotateOwner(root); annotateSearch(root); annotateTable(root);
     if (!title.hasAttribute(MARK)) {
       title.setAttribute(MARK, '1');

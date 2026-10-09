@@ -94,7 +94,7 @@
         enviada:     { acao: 'enviou a proposta p/ assinatura' },
         visualizada: { acao: 'cliente visualizou a proposta', ator: contraparte, setor: 'externo' },
         aprovada:    { acao: 'proposta assinada', ator: (meta && meta.signerName) || contraparte, setor: 'externo' },
-        recusada:    { acao: 'assinatura da proposta recusada', ator: contraparte, setor: 'externo' },
+        recusada:    { acao: 'assinatura da proposta recusada' + (meta && meta.motivo ? ` — Motivo: ${meta.motivo}` : ''), ator: (meta && meta.nome) || contraparte, setor: 'externo' },
         revisao_solicitada: { acao: 'cliente pediu revisão da proposta', ator: contraparte, setor: 'externo' },
       };
       const m = MAP[newStatus];
@@ -110,7 +110,7 @@
         enviada:     { level: 'info',    title: `Proposta ${rec.numero_documento} enviada`, sub: `Para ${(rec.recipient && rec.recipient.name) || ''} · canal ${meta && meta.channel ? (meta.channel === 'whatsapp' ? 'WhatsApp' : 'E-mail') : '—'}` },
         visualizada: { level: 'warning', title: `Proposta ${rec.numero_documento} foi VISUALIZADA`, sub: `Aberta por ${(rec.recipient && rec.recipient.name) || ''} · ${meta && meta.ip ? 'IP ' + meta.ip + ' · ' : ''}${fmtDateTime(Date.now())}` },
         aprovada:    { level: 'info',    title: `Proposta ${rec.numero_documento} ASSINADA`, sub: `Por ${meta && meta.signerName ? meta.signerName : ''} · ${meta && meta.ip ? 'IP ' + meta.ip : ''}` },
-        recusada:    { level: 'danger',  title: `Proposta ${rec.numero_documento} foi RECUSADA`, sub: `Recusada pelo cliente em ${fmtDateTime(Date.now())}` },
+        recusada:    { level: 'danger',  title: `Proposta ${rec.numero_documento} foi RECUSADA`, sub: `Recusada por ${(meta && meta.nome) || contraparte} em ${fmtDateTime(Date.now())}${meta && meta.motivo ? ' — Motivo: ' + meta.motivo : ''}` },
         revisao_solicitada: { level: 'warning', title: `Proposta ${rec.numero_documento} — cliente pediu revisão`, sub: (meta && meta.texto) ? meta.texto.slice(0, 140) : `Em ${fmtDateTime(Date.now())}` },
       };
       const cfg = map[newStatus];
@@ -118,6 +118,7 @@
       const c = sb(); if (!c) return;
       await c.from('alertas').insert({
         id: 'prop-' + uuid(), level: cfg.level, title: cfg.title, sub: cfg.sub, module: 'Comercial', resolved: false,
+        rota: rec.id ? '/comercial/proposta-editor/' + encodeURIComponent(String(rec.id)) : null,   // abre ESTA proposta no editor
       });
     } catch (e) { console.warn('[PropostaStore] notification failed', e); }
   }
@@ -128,8 +129,39 @@
     const { data } = await c.from('propostas').select('*').eq('id', id).maybeSingle();
     return data || null;
   }
+  /* Segurança real (#571, Fase 3/Task 9): a página pública (/assinar/:token) fala com o banco por RPC `public_proposta_*`
+     (recebem só o TOKEN e mexem só naquele registro; a regra de status e a troca da modalidade 120×90 são decididas no
+     servidor). Interruptor de emergência: localStorage.vp_public_rpc = 'off' volta ao caminho antigo (update direto na
+     tabela). Se a RPC falhar por rede/erro, cada função cai no caminho antigo (enquanto as tabelas ainda estão abertas). */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+  const MSG_RPC = {
+    link_invalido: 'Link inválido ou expirado.',
+    expirada: 'Esta proposta expirou.',
+    nome_obrigatorio: 'Informe o seu nome para assinar.',
+    escolha_obrigatoria: 'Escolha a modalidade de entrega (120 ou 90 dias) para aprovar a proposta.',
+    texto_obrigatorio: 'Descreva o que você gostaria de revisar.',
+  };
+  function erroDaRpc(res) {
+    const e = res && res.erro;
+    if (MSG_RPC[e]) return new Error(MSG_RPC[e]);
+    if (e && String(e).indexOf('status_') === 0) return new Error('Esta proposta não está mais disponível para esta ação (situação atual: ' + String(e).slice(7) + ').');
+    return new Error('Não foi possível concluir a ação. Tente novamente.');
+  }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[PropostaStore] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[PropostaStore] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
   async function getByToken(token) {
     const c = sb(); if (!c) return null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_proposta_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
     const { data } = await c.from('propostas').select('*').eq('token', token).maybeSingle();
     return data || null;
   }
@@ -291,7 +323,8 @@
       } : {}),
       log, atualizado_em: now.toISOString(),
     };
-    await c.from('propostas').update(patch).eq('id', id);
+    const { error } = await c.from('propostas').update(patch).eq('id', id);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'enviada', { channel });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
@@ -316,10 +349,72 @@
     const log = (cur.log || []).slice();
     log.push({ status:'visualizada', at: now.toISOString(), meta:{ ip, ua } });
     const patch = { status: 'visualizada', viewed_at: now.toISOString(), audit, log, atualizado_em: now.toISOString() };
-    await c.from('propostas').update(patch).eq('token', token);
-    const updated = { ...cur, ...patch };
-    await pushNotification(updated, 'visualizada', { ip });
+    /* 28/09 — achado real (mesmo padrão do erro engolido em send-email):
+       este update nunca checava `.error`. Diferente de markSent/markSigned/
+       refuse (ações explícitas com toast/alert no chamador), este roda
+       sozinho no mount da página pública sem nenhum tratamento de erro do
+       lado de quem chama (assinar-app.jsx) — lançar aqui prenderia o
+       cliente pra sempre em "Carregando…" por uma falha só de auditoria.
+       Best-effort de propósito: loga pra suporte investigar, nunca trava
+       a leitura da proposta pelo cliente. */
+    let updated = null;
+    let viaRpc = false;   // via RPC o aviso (alertas) e a auditoria (vp_logs) já são gravados NO BANCO (Task 10)
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_proposta_visualizada', { p_token: token, p_audit: { viewUa: ua, viewDevice: device, viewIp: ip } });
+      if (!r.falhou && r.data && r.data.ok && r.data.rec) { updated = r.data.rec; viaRpc = true; }
+    }
+    if (!updated) {
+      const { error } = await c.from('propostas').update(patch).eq('token', token);
+      if (error) console.warn('[PropostaStore] falha ao registrar visualização (best-effort, não bloqueia o cliente)', error);
+      updated = { ...cur, ...patch };
+    }
+    if (!viaRpc) await pushNotification(updated, 'visualizada', { ip });
     return updated;
+  }
+
+  /* Cascata pós-assinatura (eventos/gatilhos, decisão do CEO, Dossiê, Lead→Cliente). Segurança real (#571, Task 10): ela
+     NÃO roda mais no navegador do cliente — a RPC `public_proposta_assinar` enfileira em `fluxo_pendentes` e um usuário
+     interno logado a executa (src/fluxo-pendentes.js chama esta MESMA função, então a regra é uma só). O caminho antigo
+     (RPC indisponível) ainda a chama inline. Cada passo é best-effort e isolado; devolve a lista de falhas. */
+  async function executarEfeitosAssinatura(updated, meta) {
+    const c = sb();
+    const falhas = [];
+    const signerName = meta && meta.signerName;
+    const passo = async (nome, fn) => { try { await fn(); } catch (e) { falhas.push(nome + ': ' + ((e && e.message) || e)); console.warn('[PropostaStore] ' + nome + ' falhou', e); } };
+    await passo('evento', async () => {
+      if (!window.EventosFluxo) return;
+      await window.EventosFluxo.registrar({
+        evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
+        alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
+        detalhe: { resposta: 'aprovada', signerName, ...(meta && meta.modalidadeEntrega ? { modalidadeEntrega: meta.modalidadeEntrega } : {}) },
+        atorNome: signerName || 'Cliente (assinatura pública)',
+      });
+    });
+    /* Cliente aprovou → dispara a aprovação do CEO pra comprar o equipamento (só quando a margem sai da regra), bem antes
+       do contrato assinado ou do sinal pago (pedido do usuário em 15/08). O "start" real da compra fica travado até os
+       outros gatilhos também liberarem — ver DecisoesStore.verificarGateCompra, checado na criação da P.I. */
+    await passo('decisão do CEO', async () => {
+      if (window.DecisoesStore && updated.numero_cotacao != null) {
+        await window.DecisoesStore.podeComprarEquipamento(updated.numero_cotacao, { proposta: updated.titulo || updated.numero_documento, origem_cliente: true });
+      }
+    });
+    /* Proposta ganha → Dossiê da Obra nasce sozinho (pedido do usuário 19/08). */
+    await passo('dossiê', async () => {
+      if (window.__DOSSIER && updated.numero_cotacao != null) await window.__DOSSIER.criarDeProposta(updated);
+    });
+    /* Cliente assinou = a venda aconteceu — é o único gatilho de conversão do Lead em Cliente (decisão 21/08). Rastreia
+       numero_cotacao -> formularios_elevador.lead_id -> leads; formulário sem Lead não tem o que converter. */
+    await passo('lead→cliente', async () => {
+      if (updated.numero_cotacao == null) return;
+      const { data: form } = await c.from('formularios_elevador').select('lead_id').eq('numero_cotacao', updated.numero_cotacao).maybeSingle();
+      if (!form?.lead_id) return;
+      const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email').eq('id', form.lead_id).maybeSingle();
+      if (!leadRow) return;
+      const { error: errLead } = await c.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id);
+      if (errLead) throw errLead;
+      if (window.CadastrosClientesStore) await window.CadastrosClientesStore.criarOuVincularDeLead(leadRow);
+    });
+    return falhas;
   }
 
   /* Marca como assinada (status 'aprovada' — já existia na tabela). sig = { type:'draw'|'type', data, signerName } */
@@ -335,9 +430,19 @@
        não o rascunho vivo — senão editar depois do envio invalidava a
        correspondência entre documento lido e documento assinado. */
     const assinado = conteudoVigente(cur);
-    const hash = await sha256Hex(JSON.stringify(assinado) + '|' + (sig.signerName || ''));
+    /* Duas modalidades de entrega (120 × 90 dias — ver proposta-opcoes.js): com as duas
+       na proposta, o cliente PRECISA escolher uma pra aprovar; a escolha entra no hash e
+       na trilha de auditoria. Proposta sem opção (caso de sempre) não muda em nada. */
+    const O = window.PropostaOpcoes;
+    const escolha = sig && sig.opcaoEntrega;
+    if (O && O.temOpcoes(assinado) && escolha !== '120' && escolha !== '90') {
+      throw new Error('Escolha a modalidade de entrega (120 ou 90 dias) para aprovar a proposta.');
+    }
+    const escolhaValida = O && O.temOpcao90(assinado) && (escolha === '120' || escolha === '90') ? escolha : null;
+    const hash = await sha256Hex(JSON.stringify(assinado) + (escolhaValida ? '|opcao:' + escolhaValida : '') + '|' + (sig.signerName || ''));
     const audit = {
       ...(cur.audit || {}),
+      ...(escolhaValida ? { opcaoEntrega: escolhaValida } : {}),
       signedAt: now.toISOString(), signIp: ip, signUa: ua, signDevice: device,
       signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data,
       consent: true, hash,
@@ -351,69 +456,84 @@
       status: 'aprovada', signed_at: now.toISOString(), aprovada_em: now.toISOString(),
       audit, log, atualizado_em: now.toISOString(),
     };
-    await c.from('propostas').update(patch).eq('token', token);
-    const updated = { ...cur, ...patch };
+    /* Modalidade escolhida vira o preço OFICIAL da proposta (é o que Contrato, Aval e
+       dashboards herdam): troca os campos de valor nos dados (rascunho e versão
+       publicada) e atualiza valor_total. A opção não escolhida fica guardada, só não aparece. */
+    if (escolhaValida) {
+      const aplicadoRascunho = O.aplicarEscolha(cur.data_json, escolhaValida);
+      patch.data_json = aplicadoRascunho;
+      if (cur.versao_publicada) patch.versao_publicada = O.aplicarEscolha(cur.versao_publicada, escolhaValida);
+      if (escolhaValida === '90') {
+        const total = O.totalOficial(aplicadoRascunho || cur.versao_publicada || {});
+        if (total > 0) patch.valor_total = total;
+      }
+    }
+    let updated = null;
+    let viaRpc = false;
+    if (usarRpcPublica()) {
+      /* O servidor decide status/valores/troca da modalidade e carimba hora e IP; daqui só vão os dados da assinatura. */
+      const r = await chamarRpcPublica(c, 'public_proposta_assinar', {
+        p_token: token,
+        p_opcao: escolhaValida || null,
+        p_audit: {
+          signUa: ua, signDevice: device, signIp: ip, signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data,
+          hash, versaoAssinada: audit.versaoAssinada, assinouRascunho: audit.assinouRascunho,
+        },
+      });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        updated = r.data.rec; viaRpc = true;
+      }
+    }
+    if (!updated) {
+      const { error } = await c.from('propostas').update(patch).eq('token', token);
+      if (error) throw error;
+      updated = { ...cur, ...patch };
+    }
+    if (viaRpc) return updated;   // aviso/auditoria já gravados no banco; a cascata abaixo roda pela fila (src/fluxo-pendentes.js) — Task 10
     await pushNotification(updated, 'aprovada', { ip, signerName: sig.signerName });
-    if (window.EventosFluxo) window.EventosFluxo.registrar({
-      evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
-      alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
-      detalhe: { resposta: 'aprovada', signerName: sig.signerName },
-    });
-    /* Cliente aprovou → dispara a aprovação do CEO pra comprar o
-       equipamento, bem antes do contrato assinado ou do sinal pago
-       (pedido do usuário em 15/08 — equipamentos caros demais pra deixar
-       sem aprovação). O "start" real da compra fica travado até os outros
-       gatilhos também liberarem — ver DecisoesStore.verificarGateCompra,
-       checado na criação da P.I. */
-    if (window.DecisoesStore && updated.numero_cotacao != null) {
-      window.DecisoesStore.podeComprarEquipamento(updated.numero_cotacao, {
-        proposta: updated.titulo || updated.numero_documento,
-      }).catch((e) => console.warn('[PropostaStore] podeComprarEquipamento falhou', e));
-    }
-    /* Proposta ganha → Dossiê da Obra nasce sozinho (pedido do usuário
-       19/08, mesmo padrão de Formulário→Proposta). Best-effort — nunca
-       trava a assinatura por isso. */
-    if (window.__DOSSIER && updated.numero_cotacao != null) {
-      window.__DOSSIER.criarDeProposta(updated).catch((e) => console.warn('[PropostaStore] criarDeProposta (Dossiê) falhou', e));
-    }
-    /* Cliente assinou = a venda aconteceu — é o único gatilho de conversão
-       do Lead em Cliente (decisão 21/08: visita, workshop, cotação, proposta
-       enviada... nada disso converte, só mantém o Lead em qualificação).
-       Rastreia numero_cotacao -> formularios_elevador.lead_id -> leads —
-       só existe esse vínculo quando o Formulário nasceu do "Criar Cotação
-       China" (comercial.jsx); formulário criado direto, sem Lead, não tem
-       o que converter, e tudo aqui é best-effort (não trava a assinatura). */
-    if (updated.numero_cotacao != null) {
-      (async () => {
-        try {
-          const { data: form } = await c.from('formularios_elevador').select('lead_id').eq('numero_cotacao', updated.numero_cotacao).maybeSingle();
-          if (!form?.lead_id) return;
-          const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email').eq('id', form.lead_id).maybeSingle();
-          if (!leadRow) return;
-          const { error: errLead } = await c.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id);
-          if (errLead) { console.warn('[PropostaStore] falha ao marcar lead como Convertido', errLead); return; }
-          if (window.CadastrosClientesStore) await window.CadastrosClientesStore.criarOuVincularDeLead(leadRow);
-        } catch (e) { console.warn('[PropostaStore] falha ao converter lead em cliente', e); }
-      })();
-    }
+    executarEfeitosAssinatura(updated, { signerName: sig.signerName, modalidadeEntrega: escolhaValida ? escolhaValida + ' dias' : null });
     return updated;
   }
 
-  async function refuse(token) {
+  /* 01/10 — mesmo achado real do Contrato de Venda (cotação 955/AKAI):
+     recusa não registrava quem recusou nem por quê. Agora recebe
+     { nome, motivo } de `assinar-app.jsx` e grava com IP/dispositivo,
+     mesmo padrão de auditoria de `markViewed`/`markSigned`. */
+  async function refuse(token, info) {
     const c = sb();
     const cur = await getByToken(token);
     if (!cur) return null;
     const now = new Date();
+    const ip = await getPublicIP();
+    const ua = navigator.userAgent;
+    const device = deviceLabel(ua);
+    const nome = ((info && info.nome) || '').trim() || null;
+    const motivo = ((info && info.motivo) || '').trim() || null;
+    const audit = { ...(cur.audit || {}), refusedAt: now.toISOString(), refusedBy: nome, refusedReason: motivo, refuseIp: ip, refuseUa: ua, refuseDevice: device };
     const log = (cur.log || []).slice();
-    log.push({ status:'recusada', at: now.toISOString() });
-    const patch = { status: 'recusada', log, atualizado_em: now.toISOString() };
-    await c.from('propostas').update(patch).eq('token', token);
-    const updated = { ...cur, ...patch };
-    await pushNotification(updated, 'recusada', {});
+    log.push({ status:'recusada', at: now.toISOString(), meta:{ nome, motivo, ip } });
+    const patch = { status: 'recusada', log, audit, atualizado_em: now.toISOString() };
+    let updated = null;
+    let viaRpc = false;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_proposta_recusar', { p_token: token, p_nome: nome, p_motivo: motivo, p_audit: { refuseUa: ua, refuseDevice: device, refuseIp: ip } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        updated = r.data.rec; viaRpc = true;
+      }
+    }
+    if (!updated) {
+      const { error } = await c.from('propostas').update(patch).eq('token', token);
+      if (error) throw error;
+      updated = { ...cur, ...patch };
+    }
+    if (viaRpc) return updated;   // aviso/auditoria no banco; o evento roda pela fila (src/fluxo-pendentes.js)
+    await pushNotification(updated, 'recusada', { nome, motivo });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
       alvoLabel: updated.titulo || updated.numero_documento, alvoId: updated.id,
-      detalhe: { resposta: 'recusada' },
+      detalhe: { resposta: 'recusada', nome, motivo },
     });
     return updated;
   }
@@ -438,8 +558,21 @@
       status: 'revisao_solicitada', revisao_texto: txt, revisao_solicitada_em: now.toISOString(),
       log, atualizado_em: now.toISOString(),
     };
-    await c.from('propostas').update(patch).eq('token', token);
-    const updated = { ...cur, ...patch };
+    let updated = null;
+    let viaRpc = false;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_proposta_revisao', { p_token: token, p_texto: txt });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        updated = r.data.rec; viaRpc = true;
+      }
+    }
+    if (!updated) {
+      const { error } = await c.from('propostas').update(patch).eq('token', token);
+      if (error) throw error;
+      updated = { ...cur, ...patch };
+    }
+    if (viaRpc) return updated;   // aviso/auditoria no banco; o evento roda pela fila (src/fluxo-pendentes.js)
     await pushNotification(updated, 'revisao_solicitada', { texto: txt });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CLIENTE_RESPONDEU_PROPOSTA', numeroCotacao: updated.numero_cotacao,
@@ -475,7 +608,8 @@
       motivo_recusa_interna: aceita ? null : motivo.trim(),
       atualizado_em: now.toISOString(),
     };
-    await c.from('propostas').update(patch).eq('id', id);
+    const { error } = await c.from('propostas').update(patch).eq('id', id);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Proposta Comercial', acao: aceita ? 'aceitou a revisão pedida pelo cliente' : 'recusou internamente a revisão pedida',
@@ -683,6 +817,57 @@
       const ehFkPrecificacaoMorta = (err) => /precificacao_id_fkey/i.test(err?.message || '');
       let precificacaoOrfa = false;
 
+      /* Trava (02/10, cotação 982): um Nº de cotação digitado ANTES de a cotação
+         andar virou "Proposta elaborada" de verdade, pulou Fornecedor e
+         Precificação na linha do tempo e colou a proposta de outro vendedor na
+         cotação do Vagner. Proposta de elevador só pode ficar ligada a um Nº que
+         já tenha Precificação OU que tenha sido enviado direto pra Precificação
+         (preço combinado por fora, formulario-elevador.jsx). Só confere quando
+         é proposta NOVA ou o Nº mudou — propostas antigas já ligadas continuam
+         salvando normalmente. */
+      if (payload.numero_cotacao != null) {
+        let numeroAnterior = null;
+        if (existing?.id) {
+          const { data: ant } = await c.from('propostas').select('numero_cotacao').eq('id', existing.id).maybeSingle();
+          numeroAnterior = ant ? ant.numero_cotacao : null;
+        }
+        if (!existing?.id || numeroAnterior !== payload.numero_cotacao) {
+          /* Um Nº de cotação, uma proposta por tipo de equipamento — outra
+             pessoa não pode "pegar" o Nº de uma proposta que já existe. */
+          const { data: dup, error: dupErr } = await c.from('propostas')
+            .select('id, numero_documento').eq('numero_cotacao', payload.numero_cotacao).eq('proposal_type', eq).limit(1);
+          if (dupErr) throw dupErr;
+          if (dup && dup.length && dup[0].id !== existing?.id) {
+            return { erro: `A cotação Nº ${payload.numero_cotacao} já tem a proposta ${dup[0].numero_documento}. Abra essa proposta em vez de criar outra com o mesmo Nº.` };
+          }
+          if (eq === 'elevador') {
+            const { data: precif, error: precifErr } = await c.from('precificacoes_elevador')
+              .select('id').eq('numero_cotacao', payload.numero_cotacao).limit(1);
+            if (precifErr) throw precifErr;
+            let liberada = !!(precif && precif.length);
+            if (!liberada) {
+              const { data: diretos, error: diretoErr } = await c.from('formularios_elevador')
+                .select('id').eq('numero_cotacao', payload.numero_cotacao)
+                .not('envio_direto_precificacao_em', 'is', null).limit(1);
+              if (diretoErr) throw diretoErr;
+              liberada = !!(diretos && diretos.length);
+            }
+            if (!liberada) {
+              return { erro: `A cotação Nº ${payload.numero_cotacao} ainda não tem Precificação (o fornecedor precisa responder e o Financeiro precificar antes). Apague o Nº da cotação pra salvar como rascunho solto, ou confira o número.` };
+            }
+          } else {
+            /* Escada/esteira não têm Precificação própria no sistema: o mínimo
+               é o Nº existir de verdade (ter nascido de um Formulário). */
+            const { data: form, error: formErr } = await c.from('formularios_elevador')
+              .select('id').eq('numero_cotacao', payload.numero_cotacao).limit(1);
+            if (formErr) throw formErr;
+            if (!form || !form.length) {
+              return { erro: `A cotação Nº ${payload.numero_cotacao} não existe (nenhum Formulário com esse número). Confira o número ou deixe em branco.` };
+            }
+          }
+        }
+      }
+
       if (existing?.id) {
         let { data: row, error } = await c.from('propostas').update(payload).eq('id', existing.id).select('id, token').single();
         if (error && ehFkPrecificacaoMorta(error)) {
@@ -718,6 +903,7 @@
     getById, getByToken, garantirToken,
     publicar, conteudoVigente, conteudoRenderizavel, resolverEq, normalizarEq,
     markSent, markViewed, markSigned, refuse, solicitarRevisao, decidirRevisao,
+    executarEfeitosAssinatura,
     salvar,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
     resolverPerfilAtual, temCapacidade, podeConcederAlcadas, resetAlcadasCache,

@@ -1,5 +1,5 @@
 /* ============================================================
-   logistica.jsx — Importação (ship map) + Compras Nacional + Email Inbox
+   logistica.jsx — Importação (ship map) + Importação Varejo + Email Inbox
    ============================================================ */
 
 /* ---------- Armadores suportados pela Sinay/Safecube Container Tracking API
@@ -89,8 +89,13 @@ function validarEmails(destinatariosStr) {
 async function runAisSync() {
   const { data, error } = await window.__VP_SB.sb.functions.invoke('ais-sync');
   if (error) { window.toast('Falha na sincronização AIS: ' + (error.message || error), 'error'); return null; }
-  const modo = data && data.mode === 'ais' ? 'AIS' : 'simulação';
-  window.toast(`Posições atualizadas (${(data && data.updated) || 0} navios · modo ${modo}).`, 'success');
+  const reais = (data && data.real) || 0;
+  if (reais > 0) window.toast(`Posições atualizadas: ${reais} navio(s) com leitura real.`, 'success');
+  else {
+    let motivo = '';
+    try { const r = await window.__VP_SB.sb.from('embarques').select('tracking_erro').eq('teste', false).neq('status', 'Entregue').not('tracking_erro', 'is', null).limit(1); motivo = rtExplicaErro(r.data && r.data[0] && r.data[0].tracking_erro); } catch (e) { /* sem motivo */ }
+    window.toast('Nenhuma leitura real obtida. ' + (motivo || 'A consulta de rastreio está com erro (veja o motivo no detalhe do embarque).'), 'error');
+  }
   return data;
 }
 
@@ -287,7 +292,7 @@ function ModalNovoEmbarque({ onClose, onSaved, prefill }) {
 function ImportacaoPage({ setRoute, setSubsel }) {
   const [embarques, setEmbarques] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [tab, setTab] = React.useState("embarques");
+  const [tab, setTab] = window.useRouteTab('importacao', 'embarques', ['embarques', 'documentos', 'aduana']);
   const [filter, setFilter] = React.useState("Todos");
   const [filterPorto, setFilterPorto] = React.useState("Todos");
   const [filterLinha, setFilterLinha] = React.useState("Todas");
@@ -297,7 +302,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
 
   const reloadEmbarques = () => {
     setLoading(true);
-    window.__VP_SB.sb.from('embarques').select('*').order('eta')
+    window.__VP_SB.sb.from('embarques').select('*').eq('teste', false).order('eta')
       .then(({ data }) => { setEmbarques(data || []); setLoading(false); });
     if (window.CotacaoElevadorFornecedorStore?.listarComprasAguardandoEmbarque) {
       window.CotacaoElevadorFornecedorStore.listarComprasAguardandoEmbarque()
@@ -305,6 +310,17 @@ function ImportacaoPage({ setRoute, setSubsel }) {
     }
   };
   React.useEffect(() => { reloadEmbarques(); }, []);
+
+  // Realtime (28/09): o cron ais-sync grava posição/status sem ninguém com a
+  // tela aberta — sem isto, só via reload manual/F5 pra ver a mudança.
+  React.useEffect(() => {
+    const sb = window.__VP_SB?.sb;
+    if (!sb) return;
+    const canal = sb.channel('embarques-lista')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'embarques' }, reloadEmbarques)
+      .subscribe();
+    return () => sb.removeChannel(canal);
+  }, []);
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
@@ -340,7 +356,7 @@ function ImportacaoPage({ setRoute, setSubsel }) {
       </div>
 
       {aguardando.length > 0 && (
-        <div className="card" style={{ marginBottom: 20, borderLeft: '3px solid #7c3aed', padding: 0 }}>
+        <div className="card" style={{ marginBottom: 20, padding: 0 }}>
           <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', padding:'12px 16px', borderBottom:'1px solid var(--border)' }}>
             <div style={{ fontWeight:700, fontSize:13 }}>Compras aguardando embarque <span style={{ color:'var(--fg3)' }}>({aguardando.length})</span></div>
             <span className="muted small">Compra confirmada no fornecedor · ainda sem embarque na Importação</span>
@@ -515,6 +531,19 @@ function ImportacaoDetail({ embarque, setRoute }) {
   const [mostrarTodosEventos, setMostrarTodosEventos] = React.useState(false);
   React.useEffect(() => { setE(embarque); }, [embarque]);
 
+  // Realtime (28/09): status/posição/docs atualizam sozinhos nesta tela
+  // quando o cron ais-sync (ou outra aba) grava — sem isto, `e` ficava
+  // congelado no snapshot passado por `subsel` na navegação.
+  React.useEffect(() => {
+    const sb = window.__VP_SB?.sb;
+    if (!sb || !embarque?.id) return;
+    const canal = sb.channel('embarque-detail-' + embarque.id)
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'embarques', filter: `id=eq.${embarque.id}` },
+        (payload) => { if (payload.new) setE(payload.new); })
+      .subscribe();
+    return () => sb.removeChannel(canal);
+  }, [embarque?.id]);
+
   const refresh = async () => {
     setSyncing(true);
     await runAisSync();
@@ -637,26 +666,41 @@ function ImportacaoDetail({ embarque, setRoute }) {
             </Card>
           )}
 
-          <Card title="Posição atual do navio" sub={(e.tracking_provider === 'sinay' ? "Rastreio Sinay/Safecube · " : "Simulação · ") + (e.last_ais_sync ? "atualizado " + window.__VP_SB.timeAgo(e.last_ais_sync) : "aguardando 1ª sync")}
-            action={<Button variant="ghost" size="sm" icon="refresh" onClick={refresh} disabled={syncing}>{syncing ? "Atualizando…" : "Atualizar"}</Button>}>
-            <div className="map-frame" style={{ height: 360 }}>
-              <ShipMap mainShip={e}/>
-            </div>
-            <div className="grid-4" style={{ marginTop: 14 }}>
-              <KvBlock label="Posição" value={e.lat ? `${e.lat}° / ${e.lng}°` : "—"} mono/>
-              <KvBlock label="Velocidade" value={e.speed ? `${e.speed} kn` : "—"} mono/>
-              <KvBlock label="Rumo" value={e.heading ? `${e.heading}°` : "—"} mono/>
-              <KvBlock label="ETA atualizada" value={fmtDateLong(e.eta)}/>
-            </div>
-            {e.tracking_provider === 'sinay'
-              ? <div className="grid-2" style={{ marginTop: 10 }}>
-                  <KvBlock label="Status Sinay" value={e.tracking_status || '—'} mono/>
-                  <KvBlock label="Atualizado (Sinay)" value={e.tracking_updated_at ? window.__VP_SB.timeAgo(e.tracking_updated_at) : '—'}/>
+          {(() => {
+            const chegou = rtChegou(e), real = rtPosicaoReal(e), etaR = rtEta(e, rtHojeBrasilia());
+            const sub = (e.tracking_provider === 'sinay' ? 'Rastreio Sinay/Safecube · ' : 'Sem rastreio configurado · ') + (chegou ? 'chegada confirmada' : real ? 'leitura real ' + window.__VP_SB.timeAgo(e.tracking_updated_at) : 'rastreio parado');
+            return (
+              <Card title="Posição atual do navio" sub={sub}
+                action={<Button variant="ghost" size="sm" icon="refresh" onClick={refresh} disabled={syncing}>{syncing ? "Atualizando…" : "Atualizar"}</Button>}>
+                {!chegou && !real && e.tracking_provider === 'sinay' ? (
+                  <div style={{ padding: 8, marginBottom: 10, border: '1px solid var(--vp-warning)', borderRadius: 8, fontSize: 12 }}>
+                    <b>⚠ Rastreio parado.</b> O mapa mostra a última posição conhecida{rtUltimoEvento(e) ? ` (${rtUltimoEvento(e)})` : ''}, que não acompanha o navio.
+                    {e.tracking_erro ? <div style={{ marginTop: 4 }}>{rtExplicaErro(e.tracking_erro)} <span style={{ color: 'var(--fg3)' }}>({e.tracking_erro})</span></div> : null}
+                  </div>
+                ) : null}
+                <div className="map-frame" style={{ height: 360, position: 'relative' }}>
+                  <RastreamentoMapa ships={[e]} activeId={e.id}/>
                 </div>
-              : (e.bl || e.container_number) && e.sealine
-                ? <p className="small muted" style={{ marginTop: 10 }}>Ainda não sincronizado com a Sinay — clique "Atualizar" ou aguarde a sincronização diária.</p>
-                : <p className="small muted" style={{ marginTop: 10 }}>Preencha BL/Container + Armador (SCAC) para habilitar rastreio real via Sinay/Safecube.</p>}
-          </Card>
+                <div className="grid-4" style={{ marginTop: 14 }}>
+                  <KvBlock label="Situação" value={chegou ? `chegou${e.chegada_confirmada_em ? ' · confirmado em ' + rtDataBR(e.chegada_confirmada_em) : ''}` : real ? 'posição real' : 'desatualizada (rastreio parado)'}/>
+                  <KvBlock label="Último evento real" value={rtUltimoEvento(e) || '—'}/>
+                  <KvBlock label="Última leitura real" value={e.tracking_updated_at ? `${rtDataBR(e.tracking_updated_at)} (${window.__VP_SB.timeAgo(e.tracking_updated_at)})` : 'nenhuma'}/>
+                  {!chegou ? <KvBlock label="Última tentativa do robô" value={e.last_ais_sync ? window.__VP_SB.timeAgo(e.last_ais_sync) : 'aguardando 1ª sync'}/> : <KvBlock label="Status do rastreio" value="encerrado — navio chegou"/>}
+                </div>
+                <div className="grid-4" style={{ marginTop: 10 }}>
+                  <KvBlock label="ETA atual" value={fmtDateLong(e.eta)}/>
+                  {e.eta_original && e.eta_original !== e.eta ? <KvBlock label="ETA original" value={fmtDateLong(e.eta_original)}/> : <KvBlock label="ETA original" value="igual ao atual"/>}
+                  <KvBlock label="Situação do ETA" value={rtSituacaoEta(etaR)}/>
+                  {real && !chegou && e.speed != null ? <KvBlock label="Velocidade / rumo" value={`${e.speed} kn · ${e.heading}°`} mono/> : <KvBlock label="Posição (lat/lng)" value={e.lat != null ? `${e.lat}° / ${e.lng}°` : '—'} mono/>}
+                </div>
+                {e.tracking_provider !== 'sinay'
+                  ? ((e.bl || e.container_number) && e.sealine
+                    ? <p className="small muted" style={{ marginTop: 10 }}>Ainda não sincronizado com a Sinay — clique "Atualizar" ou aguarde a sincronização diária.</p>
+                    : <p className="small muted" style={{ marginTop: 10 }}>Preencha BL/Container + Armador (SCAC) para habilitar rastreio real via Sinay/Safecube.</p>)
+                  : null}
+              </Card>
+            );
+          })()}
 
           <DocsCard docs={e.docs} onChange={onDocsChange}/>
         </div>
@@ -742,44 +786,197 @@ function ImportacaoDetail({ embarque, setRoute }) {
 }
 
 /* ---------- IMPORTAÇÃO · MAPA DE NAVIOS ====================== */
+/* ---------- Rastreamento de navios (pente fino 06/10/2026) ----------
+   - ETA vencida (previsão passou e o navio não chegou) e ETA adiada (maior que a original) são "atrasos"; o filtro "Atrasados" pega os dois.
+   - Mapa real (Leaflet) com todos os navios, rota marítima (eiRouteWaypoints) e portos; sem origem/destino NÃO inventa rota.
+   - Detalhe com armador (line ou sealine), BL/container, última leitura, status do rastreio e últimos eventos.
+   - A sincronização automática (ais-sync) roda 1x/dia; passou de 26h sem leitura = aviso na tela.
+   - Exporta CSV. Data de hoje no fuso de Brasília. Só leitura (o único efeito é o botão Atualizar chamar ais-sync). */
+const rtHojeBrasilia = () => new Date(Date.now() - 3 * 3600 * 1000).toISOString().slice(0, 10);
+const rtHoras = (iso) => iso ? (Date.now() - new Date(iso).getTime()) / 3.6e6 : Infinity;
+function rtEta(s, hoje) {
+  const encerrado = s.status === 'Entregue' || !!s.chegada_confirmada_em;
+  const vencidaDias = !encerrado && s.eta && s.eta < hoje ? diffDiasISO(hoje, s.eta) : 0;
+  const orig = s.eta_original || s.etaOriginal;
+  const adiadaDias = orig && s.eta && s.eta > orig ? diffDiasISO(s.eta, orig) : 0;
+  return { encerrado, vencidaDias, adiadaDias, atrasado: vencidaDias > 0 || adiadaDias > 0 };
+}
+const rtSituacaoEta = (r) => r.encerrado ? 'Chegou' : r.vencidaDias ? `ETA vencida há ${r.vencidaDias} dia(s)` : r.adiadaDias ? `ETA adiada em ${r.adiadaDias} dia(s)` : 'No prazo';
+const rtArmador = (s) => s.line || s.sealine || '—';
+// Posição REAL = última consulta à Sinay deu certo (status diferente de ERROR/RATE_LIMITED) e tem menos de 72h. Senão a função ais-sync
+// está SIMULANDO a posição (avanço de ~2%/dia, velocidade e rumo sorteados): nunca apresentar isso como dado real.
+const rtPosicaoReal = (s) => s.tracking_provider === 'sinay' && !['ERROR', 'RATE_LIMITED'].includes(String(s.tracking_status || '').toUpperCase()) && rtHoras(s.tracking_updated_at) <= 72;
+const rtChegou = (s) => !!s.chegada_confirmada_em || s.status === 'Entregue';
+const rtStatusEfetivo = (s) => s.chegada_confirmada_em ? 'Entregue' : s.status;
+const rtDataBR = (iso) => iso ? new Date(iso).toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' }) : '—';
+// Último evento REAL (isActual) vindo da Sinay — a única "posição" confiável quando o rastreio está parado.
+const rtUltimoEvento = (s) => {
+  const ev = Array.isArray(s.tracking_events) ? s.tracking_events.find(e => e.isActual) : null;
+  return ev ? `${ev.description || 'Evento'}${ev.location ? ' em ' + ev.location : ''} (${rtDataBR(ev.date)})` : null;
+};
+// Traduz o erro bruto gravado pelo ais-sync em uma frase para quem usa o sistema.
+function rtExplicaErro(txt) {
+  const s = String(txt || '');
+  if (!s) return '';
+  if (/expired|4003|403/i.test(s)) return 'A chave da Sinay expirou — avise a TI para renovar (secret SINAY_API_KEY no Supabase).';
+  if (/401|invalid|unauthor/i.test(s)) return 'A chave da Sinay foi recusada — avise a TI para conferir a chave.';
+  if (/402|credit|quota|saldo/i.test(s)) return 'Os créditos da Sinay acabaram — avise a TI/Financeiro.';
+  if (/429|limite|rate/i.test(s)) return 'A Sinay limitou as consultas — o sistema tenta de novo na próxima rodada.';
+  if (/SINAY_API_KEY/i.test(s)) return 'A chave da Sinay não está configurada no Supabase — avise a TI.';
+  return s;
+}
+// true quando a janela é estreita (celular): o mapa e a lista passam a ficar um embaixo do outro.
+function useRtEstreito(px = 900) {
+  const [e, setE] = React.useState(() => window.innerWidth < px);
+  React.useEffect(() => { const f = () => setE(window.innerWidth < px); window.addEventListener('resize', f); return () => window.removeEventListener('resize', f); }, [px]);
+  return e;
+}
+const rtDoc = (s) => s.bl || s.container_number || null;
+const rtSemRota = (s) => !(eiPortCoords(s.origin || s.from) && eiPortCoords(s.destination || s.to));
+
+function RastreamentoMapa({ ships, activeId, onSelect }) {
+  const elRef = React.useRef(null);
+  const mapRef = React.useRef(null);
+  const grpRef = React.useRef(null);
+  const tileRef = React.useRef(null);
+  const [estilo, setEstilo] = React.useState("claro");
+  const chave = ships.map(s => s.id).join(",");
+
+  React.useEffect(() => {
+    if (!window.L || !elRef.current) return undefined;
+    const map = window.L.map(elRef.current, { zoomControl: true, worldCopyJump: true });
+    mapRef.current = map;
+    grpRef.current = window.L.layerGroup().addTo(map);
+    map.setView([-5, -20], 2);
+    const t = setTimeout(() => map.invalidateSize(), 150);
+    return () => { clearTimeout(t); map.remove(); mapRef.current = null; };
+  }, []);
+
+  React.useEffect(() => {
+    const map = mapRef.current; if (!map || !window.L) return;
+    const cfg = EI_MAP_STYLES.find(s => s.key === estilo) || EI_MAP_STYLES[0];
+    if (tileRef.current) map.removeLayer(tileRef.current);
+    tileRef.current = window.L.tileLayer(cfg.url, { attribution: cfg.attribution, subdomains: cfg.subdomains || "abc", maxZoom: 19 }).addTo(map);
+    tileRef.current.bringToBack();
+  }, [estilo]);
+
+  React.useEffect(() => {
+    const map = mapRef.current, grp = grpRef.current; if (!map || !grp || !window.L) return;
+    grp.clearLayers();
+    ships.forEach(s => {
+      const ativo = s.id === activeId;
+      const origem = eiPortCoords(s.origin || s.from), destino = eiPortCoords(s.destination || s.to);
+      if (origem && destino) {
+        window.L.polyline(eiRouteWaypoints(origem, destino), { color: ativo ? "#000" : "#64748b", weight: ativo ? 3 : 1.5, opacity: ativo ? 0.9 : 0.6, dashArray: "1 8", lineCap: "round", smoothFactor: 2 }).addTo(grp);
+        const porto = (p, cor, nome) => window.L.marker(p, { icon: window.L.divIcon({ className: "", html: `<div style="width:10px;height:10px;border-radius:50%;background:${cor};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.3)"></div>`, iconSize: [10, 10], iconAnchor: [5, 5] }) }).addTo(grp).bindTooltip(nome);
+        porto(origem, "#334155", s.origin || s.from || "Origem"); porto(destino, "#dc2626", s.destination || s.to || "Destino");
+      }
+      const chegou = rtChegou(s) && destino;
+      const pos = chegou ? destino : (s.lat != null && s.lng != null ? [s.lat, s.lng] : null);
+      if (pos) {
+        const tam = ativo ? 30 : 22, estimada = !chegou && !rtPosicaoReal(s);
+        const icone = window.L.divIcon({ className: "", html: `<div style="font-size:${tam - 2}px;line-height:1;${ativo ? "background:var(--vp-yellow,#facc15);border-radius:50%;padding:2px;" : ""}${estimada ? "opacity:.55;" : ""}filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚢</div>`, iconSize: [tam, tam], iconAnchor: [tam / 2, tam / 2] });
+        window.L.marker(pos, { icon: icone, zIndexOffset: ativo ? 2000 : 1000 }).addTo(grp).bindTooltip((s.vessel || s.id) + (chegou ? ' — chegou' : estimada ? ' — ' + (rtUltimoEvento(s) || 'sem leitura real') + ' · rastreio parado' : '')).on("click", () => onSelect && onSelect(s.id));
+      }
+    });
+  }, [ships, activeId]);
+
+  React.useEffect(() => {
+    const map = mapRef.current; if (!map || !window.L) return;
+    const pts = ships.filter(s => s.lat != null && s.lng != null).map(s => [s.lat, s.lng]);
+    ships.forEach(s => { const o = eiPortCoords(s.origin || s.from), d = eiPortCoords(s.destination || s.to); if (o && d) { pts.push(o); pts.push(d); } });
+    if (pts.length > 1) map.fitBounds(window.L.latLngBounds(pts), { padding: [40, 40], maxZoom: 5 });
+    else if (pts.length === 1) map.setView(pts[0], 4);
+  }, [chave]);
+
+  if (!window.L) return <div style={{ padding: 24, color: "var(--fg3)", fontSize: 13 }}>O mapa não carregou (biblioteca Leaflet indisponível). A lista ao lado continua funcionando.</div>;
+  return (
+    <div style={{ position: "relative", height: "100%" }}>
+      <div ref={elRef} style={{ position: "absolute", inset: 0 }}/>
+      <select value={estilo} onChange={(e) => setEstilo(e.target.value)} title="Estilo do mapa" style={{ position: "absolute", top: 10, right: 10, zIndex: 500, padding: "4px 8px", fontSize: 12 }}>
+        {EI_MAP_STYLES.map(s => <option key={s.key} value={s.key}>{s.label}</option>)}
+      </select>
+    </div>
+  );
+}
+
 function ImportacaoRastreamento({ setRoute, setSubsel }) {
+  const estreito = useRtEstreito();
   const [embarques, setEmbarques] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [active, setActive] = React.useState(null);
   const [syncing, setSyncing] = React.useState(false);
+  const [grande, setGrande] = React.useState(false);
   const [filterStatus, setFilterStatus] = React.useState("Todos");
   const [filterEta, setFilterEta] = React.useState("Todos");
   const statusOptions = ["Todos", "Em trânsito", "Aguardando liberação", "Entregue"];
   const etaOptions = ["Todos", "Próximos 7 dias", "Próximos 30 dias", "Atrasados"];
 
   const load = React.useCallback(() => {
-    return window.__VP_SB.sb.from('embarques').select('*').order('eta')
+    return window.__VP_SB.sb.from('embarques').select('*').eq('teste', false).order('eta')
       .then(({ data }) => { setEmbarques(data || []); setLoading(false); });
   }, []);
   React.useEffect(() => { load(); }, [load]);
+
+  // Realtime (28/09): a posição do navio (lat/lng/heading/speed) e o status
+  // atualizam sozinhos no mapa e na lista quando o cron ais-sync grava —
+  // sem isto só via "Atualizar" manual.
+  React.useEffect(() => {
+    const sb = window.__VP_SB?.sb;
+    if (!sb) return;
+    const canal = sb.channel('embarques-rastreamento')
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'embarques' }, () => load())
+      .subscribe();
+    return () => sb.removeChannel(canal);
+  }, [load]);
 
   const onSync = async () => { setSyncing(true); await runAisSync(); await load(); setSyncing(false); };
 
   if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
 
-  const hoje = new Date().toISOString().slice(0, 10);
-  const ships = embarques.filter(e => e.lat !== null && e.lat !== undefined)
-    .filter(e => filterStatus === "Todos" || e.status === filterStatus)
+  const hoje = rtHojeBrasilia();
+  const comPosicao = embarques.filter(e => e.lat !== null && e.lat !== undefined);
+  const ships = comPosicao
+    .filter(e => filterStatus === "Todos" || rtStatusEfetivo(e) === filterStatus)
     .filter(e => {
       if (filterEta === "Todos") return true;
+      if (filterEta === "Atrasados") return rtEta(e, hoje).atrasado;
       if (!e.eta) return false;
-      if (filterEta === "Atrasados") return (e.eta_original || e.etaOriginal) && e.eta > (e.eta_original || e.etaOriginal);
       const dias = diffDiasISO(e.eta, hoje);
       if (filterEta === "Próximos 7 dias") return dias >= 0 && dias <= 7;
       if (filterEta === "Próximos 30 dias") return dias >= 0 && dias <= 30;
       return true;
     });
-  const activeId = active || (ships[0] && ships[0].id) || null;
+  const ativos = ships.filter(s => !rtChegou(s));
+  const entregues = ships.filter(rtChegou);
+  const noMapa = filterStatus === "Entregue" ? ships : ativos;
+  const activeId = (active && ships.some(s => s.id === active)) ? active : ((ativos[0] || ships[0]) && (ativos[0] || ships[0]).id) || null;
   const activeShip = ships.find(s => s.id === activeId);
-  const lastSync = ships.map(s => s.last_ais_sync).filter(Boolean).sort().pop();
+  const lastSync = comPosicao.filter(e => !rtChegou(e)).map(s => s.last_ais_sync).filter(Boolean).sort().pop();
+  const horasSync = rtHoras(lastSync);
+  const nAtrasados = comPosicao.filter(e => rtEta(e, hoje).atrasado).length;
+  const estimadas = comPosicao.filter(e => !rtChegou(e) && !rtPosicaoReal(e));
+  const ultimaReal = comPosicao.filter(e => !rtChegou(e)).map(e => e.tracking_updated_at).filter(Boolean).sort().pop();
+
+  const exportar = () => {
+    const cel = (v) => { const s = String(v ?? ''); return /[;"\n]/.test(s) ? '"' + s.replace(/"/g, '""') + '"' : s; };
+    const linhas = [['Embarque', 'Navio', 'Armador', 'BL', 'Container', 'Origem', 'Destino', 'Status', 'ETA', 'ETA original', 'Situação do ETA', 'Progresso %', 'Posição', 'Latitude', 'Longitude', 'Velocidade (kn)', 'Rumo', 'Última leitura real', 'Última tentativa do robô', 'Status do rastreio', 'Motivo do erro', 'Dias de atraso do ETA', 'Chegada confirmada']]
+      .concat(ships.map(s => [s.id, s.vessel || '', rtArmador(s) === '—' ? '' : rtArmador(s), s.bl || '', s.container_number || '', s.origin || s.from || '', s.destination || s.to || '', s.status || '',
+        s.eta ? fmtDate(s.eta) : '', (s.eta_original || s.etaOriginal) ? fmtDate(s.eta_original || s.etaOriginal) : '', rtSituacaoEta(rtEta(s, hoje)), rtChegou(s) ? 100 : Math.round((s.position || 0) * 100), rtChegou(s) ? 'chegou' : rtPosicaoReal(s) ? 'real' : 'desatualizada (rastreio parado)', s.lat ?? '', s.lng ?? '', rtPosicaoReal(s) ? (s.speed ?? '') : '', rtPosicaoReal(s) ? (s.heading ?? '') : '',
+        s.tracking_updated_at ? new Date(s.tracking_updated_at).toLocaleString('pt-BR') : '', s.last_ais_sync ? new Date(s.last_ais_sync).toLocaleString('pt-BR') : '', s.tracking_status || '',
+        rtChegou(s) ? '' : rtExplicaErro(s.tracking_erro), rtEta(s, hoje).vencidaDias || rtEta(s, hoje).adiadaDias || '', s.chegada_confirmada_em ? rtDataBR(s.chegada_confirmada_em) : '']));
+    const texto = '﻿' + linhas.map(l => l.map(cel).join(';')).join('\r\n');
+    const url = URL.createObjectURL(new Blob([texto], { type: 'text/csv;charset=utf-8' }));
+    const a = document.createElement('a'); a.href = url; a.download = `rastreamento-navios-${hoje}.csv`; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 2000);
+  };
+
+  const detalheEta = activeShip ? rtEta(activeShip, hoje) : null;
+  const eventos = activeShip && Array.isArray(activeShip.tracking_events) ? activeShip.tracking_events.slice(0, 3) : [];
 
   return (
     <div className="page fade-in" style={{ paddingBottom: 32 }}>
+      {grande && activeShip ? <EmbarqueMapaModal embarque={activeShip} onClose={() => setGrande(false)}/> : null}
       <div className="row" style={{ marginBottom: 14 }}>
         <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute("importacao")}>Voltar para Importação</Button>
       </div>
@@ -787,13 +984,24 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Rastreamento</div>
           <h1 className="page-head__title">Mapa Marítimo</h1>
-          <p className="page-head__sub">Posição dos {ships.length} navio{ships.length !== 1 ? 's' : ''} · sincronização AIS{lastSync ? ` · atualizado ${window.__VP_SB.timeAgo(lastSync)}` : ' · aguardando 1ª sync'}</p>
+          <p className="page-head__sub">{ativos.length} navio{ativos.length !== 1 ? 's' : ''} em trânsito{entregues.length ? ` · ${entregues.length} entregue${entregues.length !== 1 ? 's' : ''}` : ''}{nAtrasados ? ` · ${nAtrasados} com ETA atrasada` : ''} · {ultimaReal ? `última leitura real em ${rtDataBR(ultimaReal)}` : 'nenhuma leitura real ainda'}{lastSync ? ` · robô tentou ${window.__VP_SB.timeAgo(lastSync)}` : ''}</p>
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="refresh" onClick={onSync} disabled={syncing}>{syncing ? 'Atualizando…' : 'Atualizar'}</Button>
-          <Button variant="outline" icon="download" disabled title="Em desenvolvimento — exportação do mapa ainda não implementada">Exportar relatório</Button>
+          <Button variant="outline" icon="download" onClick={exportar} disabled={!ships.length} title="Baixa a lista que está na tela em planilha CSV">Exportar relatório</Button>
         </div>
       </div>
+
+      {estimadas.length ? (
+        <div style={{ padding: 10, marginBottom: 12, border: '1px solid var(--vp-danger, #c0392b)', borderRadius: 8, fontSize: 12 }}>
+          <b>⚠ Rastreio parado em {estimadas.length} navio(s)</b> — a consulta à Sinay/Safecube está falhando{ultimaReal ? ` (última leitura real em ${rtDataBR(ultimaReal)})` : ''}. O mapa mostra a <b>última posição conhecida</b>, que não acompanha o navio; confira no site do armador. O motivo do erro está no detalhe de cada embarque (peça à TI para verificar a chave da Sinay).
+        </div>
+      ) : null}
+      {horasSync > 26 ? (
+        <div style={{ padding: 10, marginBottom: 12, border: '1px solid var(--vp-warning)', borderRadius: 8, fontSize: 12 }}>
+          <b>⚠ Posições desatualizadas</b> — {lastSync ? `última sincronização há ${Math.round(horasSync)} h` : 'nenhuma sincronização ainda'}. A automática roda uma vez por dia (06:00 UTC); clique em "Atualizar".
+        </div>
+      ) : null}
 
       <div className="tbar" style={{ marginBottom: 16 }}>
         <div className="seg">
@@ -803,57 +1011,87 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
         </div>
         <div className="seg">
           {etaOptions.map(s => (
-            <button key={s} className={filterEta === s ? "is-active" : ""} onClick={() => setFilterEta(s)}>{s}</button>
+            <button key={s} className={filterEta === s ? "is-active" : ""} onClick={() => setFilterEta(s)}>{s === "Atrasados" ? `Atrasados (${nAtrasados})` : s}</button>
           ))}
         </div>
       </div>
 
-      <div className="grid-2" style={{ gap: 20, gridTemplateColumns: "1fr 360px" }}>
+      <div className="grid-2" style={{ gap: 20, gridTemplateColumns: estreito ? "minmax(0, 1fr)" : "1fr 360px" }}>
         <Card sharp={false} padding="0">
-          <div className="map-frame" style={{ height: 600 }}>
-            <ShipMap mainShip={activeShip} ships={ships} onClick={(s) => setActive(s.id)} active={activeId}/>
+          <div style={{ height: estreito ? 380 : 600 }}>
+            <RastreamentoMapa ships={noMapa} activeId={activeId} onSelect={(id) => setActive(id)}/>
           </div>
         </Card>
 
         <div className="stack">
-          <Card title="Navios em trânsito" sub={ships.length + " ativos"}>
+          {[['Navios em trânsito', ativos, ativos.length + ' ativos'], ['Entregues', entregues, entregues.length + ' entregue' + (entregues.length !== 1 ? 's' : '')]].filter(([, l], i) => i === 0 || l.length).map(([titulo, lista, subt]) => (
+          <Card key={titulo} title={titulo} sub={subt}>
             <div className="stack" style={{ gap: 8 }}>
-              {ships.map((s) => (
-                <div key={s.id}
-                  onClick={() => setActive(s.id)}
-                  style={{
-                    padding: 12,
-                    background: activeId === s.id ? "#000" : "#fff",
-                    color: activeId === s.id ? "#fff" : "var(--fg1)",
-                    border: "1px solid " + (activeId === s.id ? "#000" : "var(--border)"),
-                    cursor: "pointer",
-                    position: "relative",
-                  }}>
-                  {activeId === s.id ? <span style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: "var(--vp-yellow)" }}/> : null}
-                  <div className="row sb">
-                    <div className="cell-main" style={{ color: "inherit", fontSize: 13 }}>{s.vessel}</div>
-                    <span className="mono small" style={{ color: activeId === s.id ? "var(--vp-yellow)" : "var(--fg3)" }}>{Math.round(s.position * 100)}%</span>
+              {lista.length === 0 ? <div className="small muted">Nenhum navio neste filtro.</div> : null}
+              {lista.map((s) => {
+                const r = rtEta(s, hoje), sel = activeId === s.id, doc = rtDoc(s), chegou = rtChegou(s), real = rtPosicaoReal(s);
+                return (
+                  <div key={s.id}
+                    onClick={() => setActive(s.id)}
+                    style={{
+                      padding: 12,
+                      background: sel ? "var(--vp-black)" : "var(--bg)",
+                      color: sel ? "var(--bg)" : "var(--fg1)",
+                      border: "1px solid " + (sel ? "var(--vp-black)" : "var(--border)"),
+                      cursor: "pointer",
+                      position: "relative",
+                    }}>
+                    {sel ? <span style={{ position: "absolute", top: 0, left: 0, width: 4, height: "100%", background: "var(--vp-yellow)" }}/> : null}
+                    <div className="row sb">
+                      <div className="cell-main" style={{ color: "inherit", fontSize: 13 }}>{s.vessel}</div>
+                      <span className="mono small" style={{ color: sel ? "var(--vp-yellow)" : "var(--fg3)" }} title={chegou ? 'Chegada confirmada' : real ? 'Percurso' : 'Sem leitura real: percurso desconhecido'}>{chegou ? '100%' : real ? Math.round(s.position * 100) + '%' : '—'}</span>
+                    </div>
+                    <div className="cell-sub" style={{ marginTop: 4 }}>{rtArmador(s)} · {doc ? (s.bl ? `BL ${s.bl}` : `Cont. ${s.container_number}`) : 'sem BL/container'}</div>
+                    <div className="progress" style={{ marginTop: 8, background: sel ? "var(--vp-gray-900)" : "var(--vp-gray-200)" }}>
+                      <span style={{ width: (chegou ? 100 : real ? s.position * 100 : 0) + "%", opacity: 1 }}/>
+                    </div>
+                    <div className="row sb mono small" style={{ marginTop: 8, color: sel ? "rgba(255,255,255,.7)" : "var(--fg3)" }}>
+                      <span>{real && !chegou ? (s.speed != null ? `${s.speed} kn · rumo ${s.heading}°` : 'posição real') : chegou ? '' : (rtUltimoEvento(s) || 'sem leitura real')}</span>
+                      <span>ETA {fmtDate(s.eta)}</span>
+                    </div>
+                    {chegou ? <div style={{ marginTop: 6, fontSize: 11, fontWeight: 500, color: sel ? 'var(--vp-yellow)' : 'var(--vp-success-ink, #1a7f37)' }}>✓ Chegada confirmada{s.chegada_confirmada_em ? ' em ' + rtDataBR(s.chegada_confirmada_em) : ''}</div> : null}
+                    {!chegou && (s.eta_original || s.etaOriginal) && (s.eta_original || s.etaOriginal) !== s.eta ? <div style={{ marginTop: 4, fontSize: 10, opacity: .75 }}>ETA original {fmtDate(s.eta_original || s.etaOriginal)}{r.adiadaDias ? ` · adiada ${r.adiadaDias}d` : ''}</div> : null}
+                    {r.atrasado && !chegou ? <div style={{ marginTop: 6, fontSize: 11, fontWeight: 500, color: r.vencidaDias ? "#ff6b6b" : "var(--vp-warning-ink, #b45309)" }}>{r.vencidaDias ? '⚠ ' : ''}{rtSituacaoEta(r)}</div> : null}
+                    {rtSemRota(s) ? <div style={{ marginTop: 4, fontSize: 10, opacity: .7 }}>sem origem/destino: rota não desenhada</div> : null}
                   </div>
-                  <div className="cell-sub" style={{ marginTop: 4 }}>{s.line} · BL {s.bl}</div>
-                  <div className="progress" style={{ marginTop: 8, background: activeId === s.id ? "var(--vp-gray-900)" : "var(--vp-gray-200)" }}>
-                    <span style={{ width: (s.position * 100) + "%" }}/>
-                  </div>
-                  <div className="row sb mono small" style={{ marginTop: 8, color: activeId === s.id ? "rgba(255,255,255,.7)" : "var(--fg3)" }}>
-                    <span>{s.speed} kn · rumo {s.heading}°</span>
-                    <span>ETA {fmtDate(s.eta)}</span>
-                  </div>
-                </div>
-              ))}
+                );
+              })}
             </div>
           </Card>
+          ))}
 
           {activeShip ? (
             <Card title="Detalhe" sub={activeShip.id} sharp>
-              <KvBlock label="Cliente" value={activeShip.client}/>
-              <KvBlock label="Conteúdo" value={`${activeShip.containers}× ${activeShip.type || activeShip.container_type}`}/>
-              <KvBlock label="Trajeto" value={`${activeShip.from || activeShip.origin} → ${activeShip.to || activeShip.destination}`}/>
+              <KvBlock label="Navio" value={activeShip.vessel || '—'}/>
+              <KvBlock label="Armador" value={rtArmador(activeShip)}/>
+              <KvBlock label="BL / Container" value={[activeShip.bl, activeShip.container_number].filter(Boolean).join(' · ') || 'não informado'}/>
+              <KvBlock label="Cliente / embarque" value={activeShip.client || '—'}/>
+              <KvBlock label="Fornecedor" value={activeShip.supplier || '—'}/>
+              <KvBlock label="Conteúdo" value={`${activeShip.containers || '—'}× ${activeShip.type || activeShip.container_type || '—'}`}/>
+              <KvBlock label="Trajeto" value={rtSemRota(activeShip) ? `${activeShip.from || activeShip.origin || '—'} → ${activeShip.to || activeShip.destination || '—'} (não informado)` : `${activeShip.from || activeShip.origin} → ${activeShip.to || activeShip.destination}`}/>
               <KvBlock label="ETA" value={fmtDateLong(activeShip.eta)}/>
-              <Button variant="primary" size="sm" iconRight="arrowRight" style={{ width: "100%", marginTop: 8 }} onClick={() => { setSubsel?.(activeShip); setRoute("importacao-detail"); }}>Abrir embarque</Button>
+              {(activeShip.eta_original && activeShip.eta_original !== activeShip.eta) ? <KvBlock label="ETA original" value={fmtDateLong(activeShip.eta_original)}/> : null}
+              <KvBlock label="Situação do ETA" value={rtSituacaoEta(detalheEta)}/>
+              <KvBlock label="Posição" value={rtChegou(activeShip) ? 'chegou (confirmado)' : rtPosicaoReal(activeShip) ? (activeShip.speed != null ? `real · ${activeShip.speed} kn · rumo ${activeShip.heading}°` : 'real (sem velocidade/rumo)') : `DESATUALIZADA — ${rtUltimoEvento(activeShip) ? 'último evento real: ' + rtUltimoEvento(activeShip) : 'sem leitura real'}`}/>
+              <KvBlock label="Status do rastreio" value={rtChegou(activeShip) ? `encerrado — chegada confirmada${activeShip.chegada_confirmada_em ? ' em ' + rtDataBR(activeShip.chegada_confirmada_em) : ''}` : String(activeShip.tracking_status || '').toUpperCase() === 'ERROR' ? `erro na consulta à Sinay (última leitura real em ${rtDataBR(activeShip.tracking_updated_at)})` : (activeShip.tracking_status || (activeShip.tracking_provider ? '—' : 'sem rastreio configurado'))}/>
+              {activeShip.tracking_erro && !rtChegou(activeShip) ? <KvBlock label="Motivo do erro" value={activeShip.tracking_erro}/> : null}
+              <KvBlock label="Última leitura real" value={activeShip.tracking_updated_at ? `${rtDataBR(activeShip.tracking_updated_at)} (${window.__VP_SB.timeAgo(activeShip.tracking_updated_at)})${rtHoras(activeShip.tracking_updated_at) > 72 && !rtChegou(activeShip) ? ' ⚠' : ''}` : 'nenhuma'}/>
+              {!rtChegou(activeShip) ? <KvBlock label="Última tentativa do robô" value={activeShip.last_ais_sync ? `${window.__VP_SB.timeAgo(activeShip.last_ais_sync)}${rtHoras(activeShip.last_ais_sync) > 26 ? ' ⚠' : ''}` : 'aguardando 1ª sync'}/> : null}
+              {eventos.length ? (
+                <div style={{ marginTop: 8 }}>
+                  <div className="up-eyebrow muted" style={{ marginBottom: 4 }}>Últimos eventos</div>
+                  {eventos.map((ev, i) => <div key={i} className="small" style={{ marginBottom: 4 }}><span className="mono">{evDateTime(ev.date)}</span> · {ev.description || '—'}{ev.location ? ` (${ev.location})` : ''}</div>)}
+                </div>
+              ) : null}
+              <div style={{ display: 'flex', gap: 8, marginTop: 8 }}>
+                <Button variant="outline" size="sm" icon="globe" style={{ flex: 1 }} onClick={() => setGrande(true)}>Mapa grande</Button>
+                <Button variant="primary" size="sm" iconRight="arrowRight" style={{ flex: 1 }} onClick={() => { setSubsel?.(activeShip); setRoute("importacao-detail"); }}>Abrir embarque</Button>
+              </div>
             </Card>
           ) : null}
         </div>
@@ -865,7 +1103,7 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
 /* ---------- Portos conhecidos (espelho client-side do PORTS da edge
    function ais-sync — só pra desenhar origem/destino no mapa real). ------ */
 const EI_PORTS = {
-  shanghai: [31.2, 121.5], xangai: [31.2, 121.5],
+  shanghai: [31.2, 121.5], xangai: [31.2, 121.5], shangai: [31.2, 121.5],
   ningbo: [29.8, 121.5], qingdao: [36.0, 120.4],
   hamburg: [53.55, 9.99], hamburgo: [53.55, 9.99],
   santos: [-23.95, -46.3], itaguai: [-22.86, -43.75], "itaguaí": [-22.86, -43.75],
@@ -956,12 +1194,13 @@ function EmbarqueMapaModal({ embarque: e, onClose }) {
 
     const origin = eiPortCoords(e.origin || e.from);
     const destino = eiPortCoords(e.destination || e.to);
-    const atual = (e.lat != null && e.lng != null) ? [e.lat, e.lng] : null;
+    const chegou = rtChegou(e), real = rtPosicaoReal(e);
+    const atual = chegou && destino ? destino : ((e.lat != null && e.lng != null) ? [e.lat, e.lng] : null);
     const rota = eiRouteWaypoints(origin, destino);
     const pontos = [...rota, atual].filter(Boolean);
 
     const shipIcon = window.L.divIcon({
-      className: "", html: '<div style="font-size:20px;line-height:1;filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚢</div>',
+      className: "", html: `<div style="font-size:20px;line-height:1;${!chegou && !real ? 'opacity:.55;' : ''}filter:drop-shadow(0 1px 2px rgba(0,0,0,.5))">🚢</div>`,
       iconSize: [22, 22], iconAnchor: [11, 11],
     });
     const portIcon = (cor) => window.L.divIcon({
@@ -971,7 +1210,7 @@ function EmbarqueMapaModal({ embarque: e, onClose }) {
 
     if (origin) window.L.marker(origin, { icon: portIcon("#334155") }).addTo(map).bindTooltip(e.origin || e.from || "Origem");
     if (destino) window.L.marker(destino, { icon: portIcon("#dc2626") }).addTo(map).bindTooltip(e.destination || e.to || "Destino");
-    if (atual) window.L.marker(atual, { icon: shipIcon, zIndexOffset: 1000 }).addTo(map).bindTooltip(e.vessel || "Navio", { permanent: false });
+    if (atual) window.L.marker(atual, { icon: shipIcon, zIndexOffset: 1000 }).addTo(map).bindTooltip((e.vessel || "Navio") + (chegou ? " — chegou" : real ? "" : " — última posição conhecida (rastreio parado)"), { permanent: false });
 
     if (pontos.length >= 2) map.fitBounds(window.L.latLngBounds(pontos), { padding: [60, 60] });
     else if (pontos.length === 1) map.setView(pontos[0], 4);
@@ -1026,20 +1265,23 @@ function EmbarqueMapaModal({ embarque: e, onClose }) {
       <div ref={shellRef} onClick={(ev) => ev.stopPropagation()}
         style={{
           width: "min(1180px, 94vw)", height: "min(760px, 90vh)",
-          background: "#0b1220", display: "flex", flexDirection: "column",
+          background: "var(--vp-gray-900)", display: "flex", flexDirection: "column",
           overflow: "hidden", boxShadow: "0 24px 64px rgba(0,0,0,.45)",
         }}>
-        <div className="row sb" style={{ padding: "14px 18px", background: "#111a2e", flex: "0 0 auto" }}>
+        <div className="row sb" style={{ padding: "14px 18px", background: "var(--vp-black)", flex: "0 0 auto" }}>
           <div>
-            <div className="up-eyebrow" style={{ color: "#94a3b8" }}>{e.id} · {e.line || e.sealine}</div>
-            <div style={{ color: "#fff", fontWeight: 600, fontSize: 15 }}>{e.vessel || "Rastreamento marítimo"}</div>
+            <div className="up-eyebrow" style={{ color: "var(--vp-gray-300)" }}>{e.id} · {e.line || e.sealine}</div>
+            <div style={{ color: "var(--vp-white)", fontWeight: 600, fontSize: 15 }}>{e.vessel || "Rastreamento marítimo"}</div>
+            <div style={{ fontSize: 11, marginTop: 2, color: rtChegou(e) ? "var(--vp-success-tint)" : rtPosicaoReal(e) ? "var(--vp-gray-300)" : "var(--vp-yellow)" }}>
+              {rtChegou(e) ? `✓ Chegada confirmada${e.chegada_confirmada_em ? " em " + rtDataBR(e.chegada_confirmada_em) : ""}` : rtPosicaoReal(e) ? `Posição real · leitura ${rtDataBR(e.tracking_updated_at)}` : `⚠ Rastreio parado — última posição conhecida${rtUltimoEvento(e) ? ": " + rtUltimoEvento(e) : ""}`}
+            </div>
           </div>
           <div className="row gap-2">
-            <span className="mono small" style={{ color: "#94a3b8" }}>
+            <span className="mono small" style={{ color: "var(--vp-gray-300)" }}>
               {(e.origin || e.from || "—")} → {(e.destination || e.to || "—")}
             </span>
             <button onClick={onClose} title="Fechar"
-              style={{ border: "none", background: "rgba(255,255,255,.08)", color: "#fff", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              style={{ border: "none", background: "rgba(255,255,255,.08)", color: "var(--vp-white)", width: 30, height: 30, cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center" }}>
               <Icon.x size={16}/>
             </button>
           </div>
@@ -1050,16 +1292,16 @@ function EmbarqueMapaModal({ embarque: e, onClose }) {
 
           <div style={{ position: "absolute", top: 12, right: 12, zIndex: 400 }}>
             <button onClick={() => setPickerOpen((o) => !o)} title="Estilo do mapa"
-              style={{ width: 34, height: 34, border: "none", background: "#111a2e", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.4)" }}>
+              style={{ width: 34, height: 34, border: "none", background: "var(--vp-black)", color: "var(--vp-white)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.4)" }}>
               <Icon.layers size={16}/>
             </button>
             {pickerOpen ? (
-              <div style={{ marginTop: 6, background: "#111a2e", boxShadow: "0 8px 24px rgba(0,0,0,.5)", minWidth: 120, overflow: "hidden" }}>
+              <div style={{ marginTop: 6, background: "var(--vp-black)", boxShadow: "0 8px 24px rgba(0,0,0,.5)", minWidth: 120, overflow: "hidden" }}>
                 {EI_MAP_STYLES.map((s) => (
                   <div key={s.key} onClick={() => { setStyleKey(s.key); setPickerOpen(false); }}
                     style={{
-                      padding: "9px 14px", fontSize: 13, cursor: "pointer", color: "#fff",
-                      background: styleKey === s.key ? "#2b3a5c" : "transparent",
+                      padding: "9px 14px", fontSize: 13, cursor: "pointer", color: "var(--vp-white)",
+                      background: styleKey === s.key ? "var(--vp-gray-700)" : "transparent",
                     }}>
                     {s.label}
                   </div>
@@ -1067,7 +1309,7 @@ function EmbarqueMapaModal({ embarque: e, onClose }) {
               </div>
             ) : null}
             <button onClick={toggleFullscreen} title={fullscreen ? "Sair da tela cheia" : "Tela cheia"}
-              style={{ marginTop: 6, width: 34, height: 34, border: "none", background: "#111a2e", color: "#fff", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.4)" }}>
+              style={{ marginTop: 6, width: 34, height: 34, border: "none", background: "var(--vp-black)", color: "var(--vp-white)", cursor: "pointer", display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 2px 8px rgba(0,0,0,.4)" }}>
               <Icon.expand size={15}/>
             </button>
           </div>
@@ -1150,7 +1392,7 @@ function ShipMap({ mainShip, ships = [], onClick, active }) {
       {/* Legend */}
       <div className="map-legend">
         <div className="row gap-3"><span className="sw" style={{ background: "var(--vp-yellow)", borderRadius: "50%" }}/><span>Navio ativo</span></div>
-        <div className="row gap-3"><span className="sw" style={{ background: "var(--vp-yellow)", transform: "rotate(45deg)", border: "2px solid #000" }}/><span>Porto</span></div>
+        <div className="row gap-3"><span className="sw" style={{ background: "var(--vp-yellow)", transform: "rotate(45deg)", border: "2px solid var(--vp-black)" }}/><span>Porto</span></div>
         <div className="row gap-3"><span className="sw" style={{ background: "linear-gradient(to right, var(--vp-yellow) 50%, transparent 50%) 0 / 8px 100%" }}/><span>Rota</span></div>
         <div style={{ marginTop: 8, fontSize: 9, color: "rgba(255,255,255,.6)", fontFamily: "var(--font-mono)" }}>Rastreamento AIS</div>
       </div>
@@ -1191,7 +1433,7 @@ function RouteAndShip({ start, end, cur, ship, isActive, onClick }) {
       <div className={"map-ship" + (isActive ? " is-active" : "")} style={{ left: cur.x + "%", top: cur.y + "%" }} onClick={onClick}>
         {isActive ? <div className="map-ship__pulse"/> : null}
         <div className="map-ship__icon">
-          <Icon.ship size={14} color="#000"/>
+          <Icon.ship size={14} color="var(--vp-black)"/>
         </div>
         <div className="map-ship__label">{(ship.vessel || 'Navio a definir').replace("MV ", "")}</div>
       </div>
@@ -1199,146 +1441,102 @@ function RouteAndShip({ start, end, cur, ship, isActive, onClick }) {
   );
 }
 
-/* ---------- COMPRAS NACIONAL ============================== */
-function ComprasPage({ setRoute }) {
-  const [fretes, setFretes] = React.useState([]);
-  const [loading, setLoading] = React.useState(true);
-  const [filter, setFilter] = React.useState("Todos");
-  const filters = ["Todos", "Em rota", "Saiu CD", "Aguardando coleta", "Entregue", "Atraso"];
+/* ---------- IMPORTAÇÃO VAREJO — movida pra src/importacao-varejo.jsx =
+   29/09/2026: a casca vazia que existia aqui (ex-"Compras Nacional",
+   esvaziada no PR #496 pra reserva de processo novo) virou o módulo real
+   de estoque/sugestão de compra (`ImportacaoVarejoPage`, arquivo próprio
+   `src/importacao-varejo.jsx` + `-store.js`, Edge Functions
+   list-importacao-varejo/sync-importacao-varejo/
+   criar-requisicao-compra-importacao-varejo). Rota/menu continuam com o
+   id interno `compras` — ver `case "compras"` em app.jsx/print-app.jsx. */
 
-  const reloadFretes = () => {
-    setLoading(true);
-    Promise.all([
-      window.__VP_SB.sb.from('embarques').select('*').order('eta'),
-      window.__VP_SB.sb.from('dossier_obra').select('id,client_name,building_name,city,state'),
-    ]).then(([{ data, error }, { data: obrasData }]) => {
-        if (error) {
-          window.toast('Erro ao carregar fretes nacionais: ' + error.message, 'error');
-          setFretes([]);
-        } else {
-          const obrasById = {};
-          (obrasData || []).forEach(o => { obrasById[o.id] = o; });
-          setFretes((data || []).map(e => {
-            const status = e.status === 'Entregue' ? 'Entregue'
-              : e.status === 'Liberação aduaneira' ? 'Aguardando coleta'
-              : e.status === 'Em trânsito' ? 'Saiu CD'
-              : e.status || 'Aguardando coleta';
-            const obra = e.project_id ? obrasById[e.project_id] : null;
-            const destino = obra
-              ? `${obra.building_name} — ${obra.city || '?'}/${obra.state || '?'}`
-              : (e.client || 'Obra (sem cidade/UF vinculada)');
-            return {
-              id: 'FN-' + e.id,
-              origem: e.to || 'Porto',
-              destino,
-              transportadora: e.line || 'Operador logístico',
-              driver: null,
-              placa: e.bl,
-              itens: e.containers || 1,
-              peso: e.containers ? e.containers * 1200 : 0,
-              valor: null,
-              eta: e.eta ? fmtDate(e.eta) : '—',
-              status,
-              ocorrencias: e.status === 'Atraso' ? 1 : 0,
-            };
-          }));
+/* ---------- EMAIL INBOX (Importação + Compras) ============== */
+/* 30/09 — pedido do usuário: "as respostas dos fornecedores devem aparecer
+   dentro do Inbox". O fornecedor (ex.: Glarie) costuma responder pelo
+   FORMULÁRIO do link (cotacoes_elevador_fornecedor.respostas), nunca pela
+   caixa suporte@ — então essas respostas não apareciam aqui, só as por
+   e-mail. Bloco SOMENTE LEITURA, separado da lista de e-mails: não toca em
+   emails_projeto, vínculo, matching nem soft-delete. */
+function InboxRespostasFormulario({ onAbrir, verOk, liberado }) {
+  const [itens, setItens] = React.useState(null);
+  React.useEffect(() => {
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb) { setItens([]); return; }
+    let vivo = true;
+    sb.from('cotacoes_elevador_fornecedor')
+      .select('id, numero_documento, fornecedor, responded_at, respostas, dados_envio')
+      .not('responded_at', 'is', null).is('excluido_em', null)
+      .order('responded_at', { ascending: false }).limit(6)
+      .then(async ({ data }) => {
+        const linhas = data || [];
+        /* 04/10 — Inbox fase 1: estas respostas (com preço) não passam por emails_projeto, então a regra de dono
+           também vale aqui: o dono é o vendedor da cotação (formularios_elevador.created_by). */
+        const nums = [...new Set(linhas.map((c) => c.dados_envio && c.dados_envio.header ? c.dados_envio.header.numero_cotacao : null).filter((n) => n != null))];
+        let donos = {};
+        if (nums.length) {
+          const { data: fs } = await sb.from('formularios_elevador').select('numero_cotacao, created_by').in('numero_cotacao', nums);
+          (fs || []).forEach((f) => { donos[f.numero_cotacao] = f.created_by ? String(f.created_by).toLowerCase() : null; });
         }
-        setLoading(false);
-      });
-  };
-  React.useEffect(() => { reloadFretes(); }, []);
-
-  if (loading) return <div style={{ textAlign:'center', padding:'60px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
-  const rows = fretes.filter(f => {
-    if (filter === "Todos") return true;
-    if (filter === "Atraso") return f.ocorrencias > 0 || f.status === "Atraso";
-    return f.status === filter;
-  });
+        if (vivo) setItens(linhas.filter((c) => {
+          const n = c.dados_envio && c.dados_envio.header ? c.dados_envio.header.numero_cotacao : null;
+          return !verOk || verOk(n != null ? (donos[n] || null) : null);
+        }));
+      })
+      .catch(() => { if (vivo) setItens([]); });
+    return () => { vivo = false; };
+  }, [liberado]);
+  if (!itens || itens.length === 0) return null;
   return (
-    <div className="page fade-in">
-      <div className="page-head">
-        <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Compras Nacional</div>
-          <h1 className="page-head__title">Fretes Nacionais</h1>
-          <p className="page-head__sub">Movimentação entre CD Guarulhos, portos e obras. Ocorrências e CTes integrados.</p>
-        </div>
-        <div className="page-head__r">
-          <Button variant="outline" icon="mail" onClick={() => setRoute("inbox")}>Inbox</Button>
-          <Button variant="primary" icon="plus" onClick={() => setRoute("importacao")}>Novo frete via embarque</Button>
-        </div>
-      </div>
-
-      <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Em rota" value={fretes.filter(f => f.status === "Em rota" || f.status === "Em trânsito").length} sub="ativos" icon="truck"/>
-        <KPI label="Entregues (semana)" value={fretes.filter(f => f.status === "Entregue").length} sub="OK" icon="check"/>
-        <KPI label="Ocorrências" value={fretes.filter(f => f.ocorrencias > 0).length} sub="abertas" icon="warning"/>
-        <KPI label="Custo médio frete" value="—" sub="sem dados suficientes" icon="dollar"/>
-      </div>
-
-      <div className="tbar">
-        <div className="seg">
-          {filters.map(s => (
-            <button key={s} className={filter === s ? "is-active" : ""} onClick={() => setFilter(s)}>
-              {s === "Atraso" ? "Com ocorrência" : s}
-            </button>
-          ))}
-        </div>
-        <div className="spacer"/>
-        <Button variant="outline" size="sm" icon="filter" disabled title="Em desenvolvimento — filtro por transportadora ainda não implementado">Transportadora</Button>
-      </div>
-
-      <div className="table-wrap">
-        <table className="t">
-          <thead><tr>
-            <th>Frete</th>
-            <th>Trajeto</th>
-            <th>Transportadora</th>
-            <th>Motorista</th>
-            <th>Carga</th>
-            <th className="text-right">Valor</th>
-            <th>ETA</th>
-            <th>Status</th>
-            <th></th>
-          </tr></thead>
-          <tbody>
-            {rows.length === 0 && (
-              <tr><td colSpan={99} style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
-                Nenhum frete registrado.
-              </td></tr>
-            )}
-            {rows.map((f) => (
-              <tr key={f.id}>
-                <td>
-                  <div className="cell-main">{f.id}</div>
-                  <div className="cell-sub">{f.itens} itens · {f.peso}kg</div>
-                </td>
-                <td>
-                  <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12 }}>
-                    <span>{f.origem}</span>
-                    <Icon.arrowRight size={12} color="var(--vp-yellow)"/>
-                    <span>{f.destino}</span>
-                  </div>
-                </td>
-                <td>{f.transportadora}<div className="cell-sub">{f.placa}</div></td>
-                <td><div className="row gap-2"><div className="avatar sm">{(f.driver || "?").split(" ").map(w => w[0]).join("").slice(0,2)}</div><span style={{ fontSize: 12 }}>{f.driver || "—"}</span></div></td>
-                <td>
-                  <span className="cell-num">{f.itens}</span>
-                  {f.ocorrencias > 0 ? <Badge variant="danger" style={{ marginLeft: 8 }}>{f.ocorrencias} oco</Badge> : null}
-                </td>
-                <td className="cell-money">{fmtBRL(f.valor)}</td>
-                <td><span className="cell-num">{f.eta}</span></td>
-                <td><StatusBadge status={f.status}/></td>
-                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+    <div style={{ padding: '8px 12px', borderBottom: '1px solid var(--border)', background: 'var(--bg-subtle, rgba(0,0,0,.03))' }}>
+      <div className="small" style={{ fontWeight: 600, marginBottom: 4 }}>Respostas de fornecedores pelo formulário (link)</div>
+      {itens.map((c) => {
+        const num = c.dados_envio && c.dados_envio.header ? c.dados_envio.header.numero_cotacao : null;
+        const total = ((c.respostas && c.respostas.itens) || []).reduce((t, it) => t + (Number(it.preco_total) || 0), 0);
+        const moeda = (c.respostas && c.respostas.moeda) || 'USD';
+        return (
+          <div key={c.id} className="small" style={{ display: 'flex', justifyContent: 'space-between', gap: 8, padding: '3px 0', cursor: num != null ? 'pointer' : 'default' }}
+            onClick={(ev) => num != null && onAbrir(ev, num)}>
+            <span><b>{c.fornecedor}</b> respondeu {c.numero_documento}{total > 0 ? ` — ${moeda} ${total.toLocaleString('pt-BR')}` : ''}</span>
+            <span className="muted">{c.responded_at ? new Date(c.responded_at).toLocaleString('pt-BR') : ''}</span>
+          </div>
+        );
+      })}
     </div>
   );
 }
 
-/* ---------- EMAIL INBOX (Importação + Compras) ============== */
+/* 01/10 — rótulo curto por `referencia_tipo`, só pra deixar visível na
+   lista/detalhe de qual documento veio o e-mail (RFQ/Proposta/Contrato/
+   Tratativa) — antes só se via o Nº da cotação, sem saber qual dos 4+
+   fluxos que compartilham o mesmo Nº gerou aquele e-mail específico.
+   Puramente de exibição — não influencia nenhum vínculo/matching. */
+const INBOX_REFERENCIA_TIPO_LABEL = {
+  cotacao_fornecedor: 'RFQ ao fornecedor',
+  proposta: 'Proposta',
+  contrato_venda: 'Contrato de Venda',
+  contrato_instalador: 'Contrato Instalador',
+  tratativa_cotacao: 'Tratativa',
+};
+
+/* 07/10 — MÃO DUPLA Inbox ⇄ Tratativas (cotação a fornecedor). A Tratativa de cada cotação a
+   fornecedor (Comercial → Cotação a Fornecedor → Tratativas) mostra os e-mails daqui ligados a ela
+   (por referencia_id). Estes dois helpers só LEEM emails_projeto/cotacoes_elevador_fornecedor:
+   • inboxRefCotacaoFornecedor — devolve a cotação a fornecedor à qual o e-mail está ligado (ou null);
+   • quem responde a um e-mail assim herda a ligação (a resposta também aparece nas Tratativas).
+   Nenhuma lógica de vínculo/matching/soft-delete do read-inbox foi tocada. */
+const INBOX_TIPOS_COTACAO_FORNECEDOR = ['cotacao_fornecedor', 'tratativa_cotacao'];
+async function inboxRefCotacaoFornecedor(sb, msg) {
+  try {
+    if (!sb || !msg || !msg.id) return null;
+    const { data } = await sb.from('emails_projeto').select('referencia_id, referencia_tipo, numero_cotacao').eq('id', msg.id).maybeSingle();
+    if (data && data.referencia_id && INBOX_TIPOS_COTACAO_FORNECEDOR.includes(data.referencia_tipo)) return { id: data.referencia_id };
+    return null;
+  } catch (e) { return null; }
+}
+function inboxIrParaRota(caminho) {
+  try { window.history.pushState({}, '', caminho); window.dispatchEvent(new PopStateEvent('popstate')); } catch (e) { window.location.assign(caminho); }
+}
+
 /* 10/09 — IMAP conectado de verdade (Edge Function read-inbox, mesma
    caixa suporte@vpsistema.com usada pra enviar em send-email). Movida do
    módulo Comercial pro módulo Geral no mesmo dia — pedido do usuário: é
@@ -1347,20 +1545,47 @@ function ComprasPage({ setRoute }) {
    "Inbox" dentro de Importação/Compras aponta pra cá também (mesma rota).
    Sem categorização automática por módulo ainda (não fabrica um filtro
    que não existe). Sem cron: busca só quando a tela abre/atualiza. */
-function EmailInbox({ setRoute, setSubsel }) {
-  const [emails, setEmails] = React.useState([]);
+function EmailInbox({ setRoute, setSubsel, subsel }) {
+  const [emailsBase, setEmails] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState(null);
   const [activeId, setActiveId] = React.useState(null);
   const [folder, setFolder] = React.useState("inbox");
-  const [enviados, setEnviados] = React.useState([]);
+  const [enviadosBase, setEnviados] = React.useState([]);
   const [carregandoEnviados, setCarregandoEnviados] = React.useState(false);
+  const [limiteEnv, setLimiteEnv] = React.useState(50);               // fase 4B: "Carregar mais" nos Enviados
+  /* Fase 4B (04/10): a pesquisa também olha o HISTÓRICO COMPLETO no banco (inbox-historico.jsx). As linhas achadas entram
+     na lista junto das carregadas (sem duplicar); tudo mais (pastas, permissões, marcadores) trata como e-mail comum. */
+  const [busca, setBusca] = React.useState('');
+  const consulta = window.InboxBusca ? window.InboxBusca.parseConsulta(busca) : null;
+  const buscando = !!(consulta && !window.InboxBusca.vazia(consulta));
+  const hist = (window.useInboxHistorico || (() => ({ entrada: [], saida: [], carregando: false, truncado: false })))(consulta, buscando);
+  const emails = React.useMemo(() => {
+    const ids = new Set(emailsBase.map((e) => e.id));
+    return hist.entrada.length ? [...emailsBase, ...hist.entrada.filter((e) => !ids.has(e.id))] : emailsBase;
+  }, [emailsBase, hist.entrada]);
+  const enviados = React.useMemo(() => {
+    const ids = new Set(enviadosBase.map((e) => e.id));
+    return hist.saida.length ? [...enviadosBase, ...hist.saida.filter((e) => !ids.has(e.id)).map((n) => ({ id: n.id, direcao: 'saida', dono_email: n.dono, atribuido_a: n.atribuido, para: n.to, assunto: n.subject, corpo_texto: n.preview, corpo_html: n.html, data_mensagem: n.date, numero_cotacao: n.numeroCotacao, vinculo_confianca: n.vinculoConfianca, referencia_tipo: n.referenciaTipo, anexos: n.anexos }))] : enviadosBase;
+  }, [enviadosBase, hist.saida]);
+  /* 04/10 — Inbox fase 1: DONO do e-mail + permissões (Administração › Alçadas › Inbox). Quem vê o quê vem de
+     src/inbox-visibilidade.js (regras testadas): é meu → vejo; senão pelas alçadas ver_todos/equipe/departamento/áreas/triagem.
+     Começa liberado para todos. `perm` = undefined enquanto carrega, null se falhou (aí mostra tudo: organização na
+     tela, não isolamento — ver CLAUDE.md/#571). Não toca leitura/vínculo/envio. */
+  const meta = (window.useInboxMeta || (() => ({ ia: {}, dono: {}, pronto: true })))(emails);
+  const perm = (window.useInboxPermissoes || (() => null))();
+  const verOk = (dono, atribuido) => !perm || !window.InboxVisibilidade || window.InboxVisibilidade.podeVer(dono, perm, atribuido);
+  const pode = (c) => !perm || !!(perm.flags && perm.flags[c]);
+  const podeExcluirDe = (dono) => !perm || (pode('excluir') && String(dono || '').toLowerCase() === perm.eu) || pode('excluir_de_outros');
   /* Normaliza as linhas de emails_projeto (saida) pro mesmo formato que
      read-inbox devolve — reusa a mesma lista/detalhe sem duplicar JSX.
      "Para" vira o indicador principal (não "De", que seria sempre a
      própria caixa suporte@vpsistema.com — inútil pra escanear a lista). */
-  const enviadosNormalizados = React.useMemo(() => enviados.map((e) => ({
+  const enviadosNormalizados = React.useMemo(() => enviados.filter((e) => perm === undefined ? false : verOk(e.dono_email || null, e.atribuido_a || null)).map((e) => ({
     id: e.id,
+    _pasta: 'sent',
+    dono: e.dono_email || null,
+    atribuido: e.atribuido_a || null,
     from: (e.para && e.para[0]) || '',
     fromName: 'Para: ' + ((e.para || []).join(', ') || '—'),
     subject: e.assunto || '(sem assunto)',
@@ -1370,10 +1595,11 @@ function EmailInbox({ setRoute, setSubsel }) {
     html: e.corpo_html || null,
     numeroCotacao: e.numero_cotacao,
     vinculoConfianca: e.vinculo_confianca,
+    referenciaTipo: e.referencia_tipo,
     anexos: (e.anexos || []).map((a) => ({ ...a, url: a.url || null })),
     to: e.para || [],
     cc: [],
-  })), [enviados]);
+  })), [enviados, perm]);
   /* 22/09 — lixeira: soft-delete só no site (excluido_em em emails_projeto),
      NUNCA mexe na caixa real via IMAP. Caixa de entrada vem de um fetch ao
      vivo (read-inbox), que não sabe de exclusões — por isso filtra aqui,
@@ -1384,9 +1610,125 @@ function EmailInbox({ setRoute, setSubsel }) {
       .then(({ data }) => setExcluidos((data || []).map((d) => d.id)));
   }, []);
   React.useEffect(() => { carregarExcluidos(); }, [carregarExcluidos]);
-  const emailsVisiveis = React.useMemo(() => emails.filter((e) => !excluidos.includes(e.id)), [emails, excluidos]);
-  const listaAtual = folder === 'sent' ? enviadosNormalizados : emailsVisiveis;
-  const active = listaAtual.find(e => e.id === activeId);
+  const emailsVisiveis = React.useMemo(() => (perm === undefined || !meta.pronto) ? []
+    : emails.filter((e) => !excluidos.includes(e.id)).filter((e) => verOk(meta.dono[e.id] || null, (meta.atribuido || {})[e.id] || null)), [emails, excluidos, meta, perm]);
+  /* 04/10 — triagem silenciosa (estilo JEV, só regras; autorizada pelo usuário): a decisão (assunto/departamento/
+     prioridade/confiança) é calculada no banco e só LIDA aqui (inbox-triagem.jsx). Esconde apenas e-mail automático
+     com confiança suficiente (nunca apaga; "ver tudo" devolve) e destaca o que precisa de resposta. Sem classificação,
+     a tela se comporta exatamente como antes. Não toca leitura/vínculo/envio/exclusão. */
+  const iaMapa = meta.ia;
+  /* Fase 2 (04/10): lido/estrela POR PESSOA, troca de responsável, aviso ao responder e-mail de outro, pop-up de vínculo. */
+  const { estado, marcarLido, definirLido, alternarEstrela, arquivar, adiar } = (window.useInboxEstado || (() => ({ estado: {}, marcarLido() {}, definirLido() {}, alternarEstrela() {}, arquivar: async () => false, adiar: async () => false })))([...emails, ...enviados]);
+  /* Fase 4A (04/10): marcadores (pessoal/equipe), arquivar e suspender POR PESSOA, spam compartilhado — ver inbox-organizar*.js */
+  const mk = (window.useInboxMarcadores || (() => ({ marcadores: [], porEmail: {}, pronto: true, criar: async () => 'Marcadores indisponíveis.', apagar: async () => null, aplicar: async () => null })))([...emails, ...enviados]);
+  const [modalMarcador, setModalMarcador] = React.useState(false);
+  const [, setTick] = React.useState(0);
+  React.useEffect(() => { const t = setInterval(() => setTick((x) => x + 1), 60000); return () => clearInterval(t); }, []);   // e-mail suspenso volta sozinho na hora marcada, com a tela aberta
+  const naoLida = (m) => (window.InboxTriagem ? window.InboxTriagem.naoLidaPara(m.unread, estado[m.id]) : m.unread);
+  const [atribuirAberto, setAtribuirAberto] = React.useState(false);
+  const [avisoOutro, setAvisoOutro] = React.useState(null);        // { modo, responsavel }
+  const [popupVinculo, setPopupVinculo] = React.useState(null);    // resultado de inboxBuscarSugestao
+  const avisoConfirmado = React.useRef({});                         // e-mails de outra pessoa que já confirmei responder
+  const numeroForcado = React.useRef(null);
+  const vinculoDecidido = React.useRef(false);
+  const [foco, setFoco] = React.useState(true);
+  const politicaDe = (m) => (window.InboxTriagem ? window.InboxTriagem.politica(iaMapa[m.id], { vinculado: m.numeroCotacao != null }) : 'normal');
+  const silenciosos = folder === 'inbox' ? emailsVisiveis.filter((m) => politicaDe(m) === 'silencioso') : [];
+  const importantes = folder === 'inbox' ? emailsVisiveis.filter((m) => politicaDe(m) === 'precisa_de_voce').map((m) => ({ ...m, decisao: iaMapa[m.id] })) : [];
+  /* Fase 2: responsável (dono ou atribuído), sugestão de cotação (JEV) e vínculo em 1 clique. */
+  const donoDe = (m) => (m ? ((m.dono !== undefined ? m.dono : meta.dono[m.id]) || null) : null);
+  const atribuidoDe = (m) => (m ? ((m.atribuido !== undefined ? m.atribuido : (meta.atribuido || {})[m.id]) || null) : null);
+  /* Fase 3 (04/10) — fluxo de lista estilo Gmail: pasta → pesquisa (operadores) → ordem → seleção em massa.
+     Pasta + pesquisa olham o que já está carregado na tela (Caixa de entrada + Enviados); histórico completo = fase 4. */
+  const [prefs, atualizarPrefs] = (window.useInboxPrefs || (() => [{ densidade: 'padrao', painel: 'direita', ordem: 'padrao' }, () => {}]))();
+  const [configAberta, setConfigAberta] = React.useState(false);
+  const [ajudaAba, setAjudaAba] = React.useState(null);              // null | 'guia' | 'passo'
+  const [novoInicial, setNovoInicial] = React.useState(null);        // { para, assunto } — ex.: feedback
+  const [selecionados, setSelecionados] = React.useState(() => new Set());
+  const eu = perm ? perm.eu : String((window.__VP_USER || {}).email || '').toLowerCase();
+  const ehEnviado = (m) => !!m && m._pasta === 'sent';
+  const respDe = (m) => (window.InboxTriagem ? window.InboxTriagem.responsavelDe(donoDe(m), atribuidoDe(m)) : null);
+  const estrelaDe = (m) => !!(estado[m.id] && estado[m.id].estrela);
+  const todasLinhas = [...emailsVisiveis, ...enviadosNormalizados];
+  /* Fase 4C (04/10): CONVERSAS — uma linha por conversa (cabeçalho In-Reply-To; senão mesmo assunto + mesma ponta externa).
+     Ações da barra (arquivar, suspender, spam, marcador, lida, excluir) agem na conversa toda; o e-mail aberto mostra as demais mensagens. */
+  const usaConversas = prefs.conversas !== false;
+  const conv = (window.useInboxConversas || (() => ({ porId: {} })))(todasLinhas, usaConversas);
+  const conversaDe = (m) => (usaConversas && m ? conv.porId[m.id] : null) || null;
+  const expandirConv = (ids) => { const out = new Set(); (ids || []).forEach((id) => { const c = usaConversas ? conv.porId[id] : null; (c ? c.ids : [id]).forEach((x) => out.add(x)); }); return [...out]; };
+  const eMeu = (m) => !!respDe(m) && respDe(m) === eu;
+  const semResp = (m) => !ehEnviado(m) && !donoDe(m) && !atribuidoDe(m);
+  const O = window.InboxOrganizar;
+  const spamDe = (m) => !!(meta.spam && meta.spam[m.id]);
+  const marcadorPorId = Object.fromEntries((mk.marcadores || []).map((x) => [x.id, x]));
+  const mkArvore = O ? O.arvoreMarcadores(mk.marcadores || []) : [];
+  const capsOrg = { editar: pode('editar'), triagem: !perm || !!(perm.caps && perm.caps.triagem), ver_todos: !perm || !!(perm.caps && perm.caps.ver_todos) };
+  /* quem aparece em cada pasta (arquivado/suspenso/spam/marcador) vem de inbox-organizar-calc.js — regra única e testada */
+  const ctxPasta = { ehEnviado, estado: (m) => estado[m.id], spam: spamDe, eMeu, semResp, marcadores: (m) => mk.porEmail[m.id] || [], agora: new Date() };
+  const pastaLinhas = (id) => {
+    const base = id === 'inbox' ? (foco ? emailsVisiveis.filter((m) => politicaDe(m) !== 'silencioso') : emailsVisiveis) : todasLinhas;
+    return O ? base.filter((m) => O.visivelNaPasta(m, id, ctxPasta)) : base;
+  };
+  const pastaEfetiva = buscando ? (consulta.em || 'all') : folder;           // pesquisar sem "em:" olha todas as mensagens, como no Gmail
+  const listaAtual = pastaLinhas(pastaEfetiva);
+  // nos Enviados o remetente é a nossa caixa e a outra ponta é o destinatário (`de:` e `para:` precisam refletir isso)
+  const paraBusca = (m) => ({ ...m, ...(ehEnviado(m) ? { from: 'suporte@vpsistema.com', fromName: 'VerticalParts' } : {}), naoLida: naoLida(m), estrela: estrelaDe(m),
+    marcadoresNomes: (mk.porEmail[m.id] || []).map((id) => marcadorPorId[id] && marcadorPorId[id].nome).filter(Boolean) });
+  const listaFiltrada0 = buscando ? listaAtual.filter((m) => window.InboxBusca.aplicar(paraBusca(m), consulta)) : listaAtual;
+  const listaOrdenada = window.InboxBusca
+    ? window.InboxBusca.ordenar(listaFiltrada0, prefs.ordem, { naoLida, estrela: estrelaDe, importante: (m) => politicaDe(m) === 'precisa_de_voce' }) : listaFiltrada0;
+  // uma linha por conversa: a primeira da ordem (a mais recente, ou a mais relevante pelo tipo de caixa) representa as demais
+  const listaFiltrada = (() => {
+    if (!usaConversas) return listaOrdenada;
+    const vistos = new Set();
+    return listaOrdenada.filter((m) => { const c = conv.porId[m.id]; if (!c) return true; if (vistos.has(c.chave)) return false; vistos.add(c.chave); return true; });
+  })();
+  const naoLidaConv = (m) => { const c = conversaDe(m); return c ? c.ids.some((id) => { const x = todasLinhas.find((y) => y.id === id); return x && naoLida(x); }) : naoLida(m); };
+  const active = listaFiltrada.find((e) => e.id === activeId) || todasLinhas.find((e) => e.id === activeId);   // o e-mail aberto continua aberto mesmo que a pesquisa o esconda
+  /* "Pedir decisão" (04/10): decisão ligada ao e-mail aberto na Central de Decisões. Também é o destino do "Ver documento" do cartão
+     (subsel = id do e-mail): abre o e-mail; se ele não está nas listas carregadas, pesquisa o assunto no histórico e abre. */
+  const [pedirDecisaoAberto, setPedirDecisaoAberto] = React.useState(false);
+  const [precoEmailAberto, setPrecoEmailAberto] = React.useState(false);   // "Extrair preço" (04/10): propõe preço/condições do e-mail do fornecedor; só grava após conferência
+  const [tickDecisao, setTickDecisao] = React.useState(0);
+  const decisoesDoEmail = (window.useDecisoesDoEmail || (() => []))(active ? active.id : null, tickDecisao);
+  const idParaAbrir = typeof subsel === 'string' && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(subsel) ? subsel : null;
+  const buscouParaAbrir = React.useRef(null);
+  React.useEffect(() => {
+    if (!idParaAbrir || perm === undefined || loading) return;
+    if (todasLinhas.some((m) => m.id === idParaAbrir)) { setFolder('all'); setActiveId(idParaAbrir); if (setSubsel) setSubsel(null); return; }
+    if (buscouParaAbrir.current === idParaAbrir) return;
+    buscouParaAbrir.current = idParaAbrir;
+    window.__VP_SB.sb.from('emails_projeto').select('assunto').eq('id', idParaAbrir).maybeSingle().then(({ data }) => {
+      if (data && data.assunto) setBusca('assunto:"' + String(data.assunto).replace(/["]/g, ' ').trim() + '"');
+      else { window.toast?.('Não encontrei este e-mail (pode ter sido excluído).', 'warning'); if (setSubsel) setSubsel(null); }
+    });
+  }, [idParaAbrir, todasLinhas.length, perm, loading]);
+  const nomeDe = (email) => { const p = ((perm && perm.colaboradores) || []).find((x) => String(x.email).toLowerCase() === String(email || '').toLowerCase()); return (p && p.nome) || email; };
+  const pontaAtiva = active ? (ehEnviado(active) ? (active.to || []).join(',') : active.from) : '';
+  const sugAtiva = (window.useSugestaoVinculo || (() => null))(active, pontaAtiva);
+  const [vinculandoSug, setVinculandoSug] = React.useState(false);
+  const vincularA = async (numero) => {
+    if (!active) return;
+    if (!pode('editar')) { window.toast?.('Sem permissão para vincular (alçada Inbox › Editar).', 'warning'); return; }
+    setVinculandoSug(true);
+    try {
+      const { error } = await window.__VP_SB.sb.from('emails_projeto').update({ numero_cotacao: numero, vinculo_confianca: 'certo' }).eq('id', active.id);
+      if (error) throw error;
+      window.toast?.(`Vinculado à Cotação Nº ${numero}.`, 'success');
+      carregar(); carregarEnviados(); if (meta.recarregar) meta.recarregar();
+    } catch (e) { window.toast?.('Erro ao vincular: ' + (e.message || e), 'error'); }
+    finally { setVinculandoSug(false); }
+  };
+
+  /* 28/09 — pedido do usuário: campo de busca no Inbox (não existia nenhum,
+     só filtro por pasta e por Nº Cotação pra vínculo manual). Filtro em
+     memória sobre a lista já carregada (assunto/remetente/preview/nº
+     cotação) — não é busca no histórico completo de emails_projeto, só na
+     janela recente que read-inbox/Enviados já trazem. Limpa ao trocar de
+     pasta pra não confundir "sem resultado" com "pasta vazia". */
+  /* 04/10 (fase 3): `busca`, `consulta` e `listaFiltrada` agora vivem no fluxo de lista mais acima (operadores estilo Gmail,
+     inbox-busca-calc.js). A seleção em massa zera quando a pasta ou a pesquisa muda. */
+  React.useEffect(() => { setSelecionados(new Set()); }, [folder, busca]);
 
   const [respondendo, setRespondendo] = React.useState(false);
   const [modoCompose, setModoCompose] = React.useState('responder'); // 'responder' | 'responder-todos' | 'encaminhar'
@@ -1412,6 +1754,25 @@ function EmailInbox({ setRoute, setSubsel }) {
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
 
+  /* Realtime (28/09, área blindada — CLAUDE.md): o cron read-inbox-poll já
+     grava resposta de fornecedor em emails_projeto (direcao='entrada') a
+     cada 10 min mesmo sem ninguém com a tela aberta; sem isto, quem já
+     estava com a Inbox aberta só via a resposta nova fechando e reabrindo a
+     tela. NÃO troca a leitura por emails_projeto (isso sim mexeria na
+     lógica de vínculo/matching) — só chama de novo o mesmíssimo `carregar`
+     acima (a mesma chamada do refresh manual, via read-inbox/IMAP). `active`
+     é só um id (linha ~1390), então a thread aberta e a resposta em
+     digitação (`respondendo`/`respostaTexto`) não são afetadas por este
+     refetch. */
+  React.useEffect(() => {
+    const sb = window.__VP_SB?.sb;
+    if (!sb) return;
+    const canal = sb.channel('emails-projeto-entrada')
+      .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'emails_projeto', filter: 'direcao=eq.entrada' }, carregar)
+      .subscribe();
+    return () => sb.removeChannel(canal);
+  }, [carregar]);
+
   /* 11/09 — achado real do usuário: mandou o RFQ pra fornecedora, não
      apareceu em lugar nenhum ("não vi ela na inbox") — na verdade tinha
      sido enviado com sucesso (confirmado em emails_projeto), só que
@@ -1429,7 +1790,7 @@ function EmailInbox({ setRoute, setSubsel }) {
   const carregarEnviados = React.useCallback(() => {
     setCarregandoEnviados(true);
     window.__VP_SB.sb.from('emails_projeto').select('*').eq('direcao', 'saida').is('excluido_em', null)
-      .order('data_mensagem', { ascending: false }).limit(50)
+      .order('data_mensagem', { ascending: false }).limit(limiteEnv)
       .then(async ({ data }) => {
         const rows = data || [];
         const paths = [...new Set(rows.flatMap((r) => (r.anexos || []).map((a) => a.path).filter(Boolean)))];
@@ -1446,7 +1807,7 @@ function EmailInbox({ setRoute, setSubsel }) {
           setEnviados(rows);
         }
       }).finally(() => setCarregandoEnviados(false));
-  }, []);
+  }, [limiteEnv]);
   React.useEffect(() => { carregarEnviados(); }, [carregarEnviados]);
   React.useEffect(() => {
     setRespondendo(false); setModoCompose('responder'); setDestinatarioEncaminhar('');
@@ -1472,18 +1833,27 @@ function EmailInbox({ setRoute, setSubsel }) {
   const excluirEmail = async (ev, email) => {
     if (ev) ev.stopPropagation();
     if (!email) return;
+    if (!podeExcluirDe(email.dono !== undefined ? email.dono : meta.dono[email.id])) {
+      window.toast?.('Você não tem permissão para excluir este e-mail (só o dono, ou quem tem a alçada "Exclui e-mails de outras pessoas").', 'warning');
+      return;
+    }
     const assunto = email.subject || '(sem assunto)';
-    if (!window.confirm(`Tem certeza que deseja excluir este e-mail?\n\n"${assunto}"\n\nEle continua existindo na caixa de e-mail real — isso só remove da lista do site.`)) return;
+    const cv = conversaDe(email);
+    if (!window.confirm(`Tem certeza que deseja excluir este e-mail?${cv && cv.total > 1 ? `\n\n(Só esta mensagem — a conversa tem ${cv.total}. Para a conversa toda, marque a linha e use Excluir na barra.)` : ''}\n\n"${assunto}"\n\nEle continua existindo na caixa de e-mail real — isso só remove da lista do site.`)) return;
     try {
       const user = window.__VP_USER || {};
       const { error } = await window.__VP_SB.sb.from('emails_projeto')
         .update({ excluido_em: new Date().toISOString(), excluido_por: user.email || null })
         .eq('id', email.id);
       if (error) throw error;
-      if (folder === 'sent') setEnviados((prev) => prev.filter((e) => e.id !== email.id));
+      if (ehEnviado(email)) setEnviados((prev) => prev.filter((e) => e.id !== email.id));
       else setExcluidos((prev) => [...prev, email.id]);
       if (activeId === email.id) setActiveId(null);
       window.toast?.('E-mail excluído da lista.', 'success');
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Inbox de E-mail', acao: 'Excluiu e-mail da lista (soft-delete)',
+        alvo: assunto, alvo_id: email.id,
+      });
     } catch (e) {
       window.toast?.('Erro ao excluir: ' + e.message, 'error');
     }
@@ -1567,16 +1937,39 @@ function EmailInbox({ setRoute, setSubsel }) {
       }
       const erroValidacao = validarEmails(to);
       if (erroValidacao) { window.toast?.(erroValidacao, 'warning'); setEnviandoResposta(false); return; }
-      const { error } = await sb.functions.invoke('send-email', {
+      /* Fase 2 (JEV): sem Nº de cotação, sugere uma — o pop-up só aparece se há evidência (forte/perguntar). */
+      if (active.numeroCotacao == null && numeroForcado.current == null && !vinculoDecidido.current && window.inboxBuscarSugestao) {
+        const r = await window.inboxBuscarSugestao(modoCompose === 'encaminhar' ? to : active.from, subject);
+        if (r.politica !== 'silencio') { setPopupVinculo(r); setEnviandoResposta(false); return; }
+      }
+      const numeroEfetivo = active.numeroCotacao ?? numeroForcado.current ?? undefined;
+      /* 07/10 — resposta a e-mail de cotação a fornecedor herda a ligação (aparece também nas Tratativas) */
+      const refForn = modoCompose !== 'encaminhar' ? await inboxRefCotacaoFornecedor(sb, active) : null;
+      const { data, error } = await sb.functions.invoke('send-email', {
         body: {
           to, subject, text,
-          numeroCotacao: active.numeroCotacao ?? undefined,
-          referenciaTipo: active.numeroCotacao != null ? 'resposta_inbox' : undefined,
+          numeroCotacao: numeroEfetivo,
+          referenciaTipo: refForn ? 'tratativa_cotacao' : (numeroEfetivo != null ? 'resposta_inbox' : undefined),
+          referenciaId: refForn ? refForn.id : undefined,
           attachments: anexosResposta.length ? anexosResposta.map((a) => ({ filename: a.filename, contentType: a.contentType, base64: a.base64 })) : undefined,
         },
       });
       if (error) { window.toast?.('Erro ao enviar: ' + await extrairErroFuncao(error), 'error'); return; }
+      if (data && data.avisoPersistencia) window.toast?.(data.avisoPersistencia, 'warning');
       window.toast?.(modoCompose === 'encaminhar' ? 'E-mail encaminhado.' : 'Resposta enviada.', 'success');
+      /* Fase 2: vínculo confirmado no pop-up vale também para o e-mail original; e quem era o responsável é avisado. */
+      if (numeroForcado.current != null && !ehEnviado(active)) {
+        sb.from('emails_projeto').update({ numero_cotacao: numeroForcado.current, vinculo_confianca: 'certo' }).eq('id', active.id).then(() => { if (meta.recarregar) meta.recarregar(); });
+      }
+      numeroForcado.current = null; vinculoDecidido.current = false;
+      const respAnterior = window.InboxTriagem ? window.InboxTriagem.avisoOutroDono({ dono: donoDe(active), atribuido: atribuidoDe(active), eu: perm ? perm.eu : String((window.__VP_USER || {}).email || '').toLowerCase() }) : null;
+      if (respAnterior && window.inboxNotificar) window.inboxNotificar(respAnterior, 'Responderam um e-mail seu', `${nomeDe(String((window.__VP_USER || {}).email || ''))} respondeu "${active.subject || '(sem assunto)'}".`);
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Inbox de E-mail',
+        acao: modoCompose === 'encaminhar' ? 'Encaminhou e-mail' : modoCompose === 'responder-todos' ? 'Respondeu a todos' : 'Respondeu e-mail',
+        alvo: subject, alvo_id: active.id,
+        detalhe: { para: to, numeroCotacao: active.numeroCotacao ?? null },
+      });
       setRespondendo(false); setRespostaTexto(''); setAnexosResposta([]); setDestinatarioEncaminhar('');
       carregar();
     } catch (e) {
@@ -1587,6 +1980,10 @@ function EmailInbox({ setRoute, setSubsel }) {
   };
 
   const abrirCompose = (modo) => {
+    if (!pode('editar')) { window.toast?.('Sem permissão para responder ou encaminhar (alçada Inbox › Editar).', 'warning'); return; }
+    /* Fase 2: e-mail de OUTRA pessoa (dono ou atribuído) → aviso antes de responder; o responsável é avisado depois do envio. */
+    const outroResp = active && window.InboxTriagem ? window.InboxTriagem.avisoOutroDono({ dono: donoDe(active), atribuido: atribuidoDe(active), eu: perm ? perm.eu : String((window.__VP_USER || {}).email || '').toLowerCase() }) : null;
+    if (outroResp && !avisoConfirmado.current[active.id]) { setAvisoOutro({ modo, responsavel: outroResp }); return; }
     setModoCompose(modo);
     setRespondendo(true);
     setVinculando(false);
@@ -1599,6 +1996,9 @@ function EmailInbox({ setRoute, setSubsel }) {
      vendedor sempre revisa/edita antes de enviar, nunca envia sozinho. */
   const sugerirResposta = async () => {
     if (!active) return;
+    if (!pode('editar')) { window.toast?.('Sem permissão para responder (alçada Inbox › Editar).', 'warning'); return; }
+    const outroResp = window.InboxTriagem ? window.InboxTriagem.avisoOutroDono({ dono: donoDe(active), atribuido: atribuidoDe(active), eu: perm ? perm.eu : String((window.__VP_USER || {}).email || '').toLowerCase() }) : null;
+    if (outroResp && !avisoConfirmado.current[active.id]) { setAvisoOutro({ modo: 'responder', responsavel: outroResp }); return; }
     setSugerindoIA(true);
     try {
       const sb = window.__VP_SB.sb;
@@ -1625,6 +2025,7 @@ function EmailInbox({ setRoute, setSubsel }) {
      qualquer heurística automática. */
   const salvarVinculo = async () => {
     if (!active) return;
+    if (!pode('editar')) { window.toast?.('Sem permissão para vincular (alçada Inbox › Editar).', 'warning'); return; }
     const numero = parseInt(String(vincularInput).replace(/\D/g, ''), 10);
     if (!numero) { window.toast?.('Digite um Nº Cotação válido (ex.: 950).', 'warning'); return; }
     setSalvandoVinculo(true);
@@ -1644,91 +2045,303 @@ function EmailInbox({ setRoute, setSubsel }) {
     }
   };
 
+  /* ---- Fase 3: ações do layout Gmail (todas funcionam com o backend de hoje) ---- */
+  const abrirEscrever = () => {
+    if (!pode('criar')) { window.toast?.('Sem permissão para escrever e-mails (alçada Inbox › Criar).', 'warning'); return; }
+    setNovoInicial(null); setNovoEmailAberto(true);
+  };
+  const abrirAjuda = (aba) => {
+    if (aba === 'feedback') {      // feedback vira um e-mail para a caixa de suporte (mesmo fluxo de envio, fica no histórico)
+      if (!pode('criar')) { window.toast?.('Sem permissão para escrever e-mails (alçada Inbox › Criar).', 'warning'); return; }
+      setNovoInicial({ para: 'suporte@vpsistema.com', assunto: '[Feedback Inbox] ' }); setNovoEmailAberto(true); return;
+    }
+    setAjudaAba(aba);
+  };
+  const alternarSel = (id) => setSelecionados((prev) => { const n = new Set(prev); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  const alternarTodas = () => setSelecionados(listaFiltrada.length > 0 && listaFiltrada.every((m) => selecionados.has(m.id)) ? new Set() : new Set(listaFiltrada.map((m) => m.id)));
+  const marcarSelecionados = (lido) => {
+    if (!pode('editar')) { window.toast?.('Sem permissão (alçada Inbox › Editar).', 'warning'); return; }
+    const n = selecionados.size;
+    expandirConv([...selecionados]).forEach((id) => definirLido(id, lido));
+    setSelecionados(new Set());
+    window.toast?.(`${n} e-mail(s) marcado(s) como ${lido ? 'lido(s)' : 'não lido(s)'} para você.`, 'success');
+  };
+  const excluirSelecionados = async () => {
+    const idsConv = new Set(expandirConv([...selecionados]));
+    const linhas = todasLinhas.filter((m) => idsConv.has(m.id));
+    const permitidas = linhas.filter((m) => podeExcluirDe(donoDe(m)));
+    if (!permitidas.length) { window.toast?.('Você não tem permissão para excluir os e-mails selecionados (só o dono, ou quem tem a alçada “Exclui e-mails de outras pessoas”).', 'warning'); return; }
+    const pulados = linhas.length - permitidas.length;
+    if (!window.confirm(`Excluir ${permitidas.length} e-mail(s) da lista?\n\nEles continuam na caixa de e-mail real — isso só remove da lista do site.${pulados ? `\n\n${pulados} selecionado(s) de outra pessoa será(ão) mantido(s).` : ''}`)) return;
+    try {
+      const ids = permitidas.map((m) => m.id);
+      const { data, error } = await window.__VP_SB.sb.from('emails_projeto')
+        .update({ excluido_em: new Date().toISOString(), excluido_por: (window.__VP_USER || {}).email || null }).in('id', ids).select('id');
+      if (error) throw error;
+      const feitos = new Set((data || []).map((r) => r.id));
+      setEnviados((prev) => prev.filter((e) => !feitos.has(e.id)));
+      setExcluidos((prev) => [...prev, ...feitos]);
+      if (activeId && feitos.has(activeId)) setActiveId(null);
+      setSelecionados(new Set());
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Inbox de E-mail', acao: 'Excluiu e-mails da lista (soft-delete, em massa)', alvo: `${feitos.size} e-mail(s)` });
+      window.toast?.(`${feitos.size} e-mail(s) excluído(s) da lista.`, 'success');
+    } catch (e) { window.toast?.('Erro ao excluir: ' + (e.message || e), 'error'); }
+  };
+
+  /* ---- Fase 4A: Arquivar, Spam, Suspender e Marcadores. Agem nos e-mails MARCADOS ou, se nada estiver marcado, no e-mail ABERTO. ---- */
+  const alvosIds = expandirConv(selecionados.size ? [...selecionados] : (active ? [active.id] : []));
+  const alvosLinhas = alvosIds.map((id) => todasLinhas.find((m) => m.id === id)).filter(Boolean);
+  const todosArquivados = alvosLinhas.length > 0 && alvosLinhas.every((m) => estado[m.id] && estado[m.id].arquivado);
+  const concluirAcao = (msg) => { setSelecionados(new Set()); if (msg) window.toast?.(msg, 'success'); };
+  const semPermissaoEditar = () => { window.toast?.('Sem permissão (alçada Inbox › Editar).', 'warning'); };
+  const arquivarAlvos = async () => {
+    if (!pode('editar')) return semPermissaoEditar();
+    const desfazer = todosArquivados;
+    if (await arquivar(alvosIds, !desfazer)) {
+      if (!desfazer && activeId && alvosIds.includes(activeId)) setActiveId(null);
+      concluirAcao(`${alvosIds.length} e-mail(s) ${desfazer ? 'de volta à Caixa de entrada' : 'arquivado(s) — continuam em “Todos os e-mails”'}.`);
+    }
+  };
+  const spamAlvos = async (marcar) => {
+    if (!pode('editar')) return semPermissaoEditar();
+    let ids = alvosIds;
+    if (marcar) {
+      const veredito = alvosLinhas.map((m) => ({ m, r: O.podeMarcarSpam(m, ehEnviado(m)) }));
+      ids = veredito.filter((x) => x.r.ok).map((x) => x.m.id);
+      const barrados = veredito.filter((x) => !x.r.ok);
+      if (!ids.length) { window.toast?.(`Não dá para marcar como spam: ${barrados[0] ? barrados[0].r.motivo : 'nada selecionado'}.`, 'warning'); return; }
+      if (barrados.length) window.toast?.(`${barrados.length} e-mail(s) ficaram de fora do spam (ligados a cotação/documento ou enviados por nós).`, 'info');
+    }
+    try {
+      const n = await window.inboxMarcarSpam(ids, marcar);
+      if (meta.recarregar) meta.recarregar();
+      if (activeId && ids.includes(activeId)) setActiveId(null);
+      concluirAcao(marcar ? `${n} e-mail(s) marcado(s) como spam (aparece em “Spam”, para todos).` : `${n} e-mail(s) tirado(s) do spam.`);
+    } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+  };
+  const adiarAlvos = async (quando) => {
+    if (!pode('editar')) return semPermissaoEditar();
+    if (await adiar(alvosIds, quando)) {
+      if (quando && activeId && alvosIds.includes(activeId)) setActiveId(null);
+      concluirAcao(quando ? `${alvosIds.length} e-mail(s) suspenso(s) até ${new Date(quando).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}.` : 'Adiamento cancelado — de volta à Caixa de entrada.');
+    }
+  };
+  const estadoMarcador = (id) => {
+    if (!alvosIds.length) return 'nenhum';
+    const n = alvosIds.filter((e) => (mk.porEmail[e] || []).includes(id)).length;
+    return n === 0 ? 'nenhum' : n === alvosIds.length ? 'todos' : 'alguns';
+  };
+  const aplicarMarcador = async (mc, st) => {
+    if (!O.podeAplicarMarcador(mc, eu, capsOrg)) { window.toast?.('Você não pode usar este marcador.', 'warning'); return; }
+    const err = await mk.aplicar(alvosIds, mc.id, st !== 'todos');
+    if (err) window.toast?.(err, 'error');
+  };
+  const moverPara = async (mc) => {
+    if (!O.podeAplicarMarcador(mc, eu, capsOrg)) { window.toast?.('Você não pode usar este marcador.', 'warning'); return; }
+    const err = await mk.aplicar(alvosIds, mc.id, true);
+    if (err) { window.toast?.(err, 'error'); return; }
+    await arquivar(alvosIds, true);
+    if (activeId && alvosIds.includes(activeId)) setActiveId(null);
+    concluirAcao(`${alvosIds.length} e-mail(s) movido(s) para “${mc.nome}”.`);
+  };
+  const apagarMarcador = async (mc) => {
+    if (!window.confirm(`Apagar o marcador “${mc.nome}”?\n\nOs e-mails não são apagados — só perdem este marcador.`)) return;
+    const err = await mk.apagar(mc.id);
+    if (err) { window.toast?.(err, 'error'); return; }
+    if (folder === 'm:' + mc.id) setFolder('inbox');
+    window.toast?.('Marcador apagado.', 'success');
+  };
+  const contaPasta = (pasta, soNaoLidas) => (O ? todasLinhas.filter((m) => O.visivelNaPasta(m, pasta, ctxPasta) && (!soNaoLidas || naoLida(m))).length : 0);
+
+  const mostrarTriagem = !perm || !!(perm.caps && (perm.caps.triagem || perm.caps.ver_todos));
   const folders = [
-    { id: "inbox", label: "Caixa de entrada", icon: "mail", count: emails.filter(e => e.unread).length },
+    { id: "inbox", label: "Caixa de entrada", icon: "mail", count: contaPasta('inbox', true) },
+    { id: "starred", label: "Com estrela", icon: "star" },
+    { id: "adiados", label: "Adiados", icon: "clock", count: contaPasta('adiados', false) },
+    { id: "mine", label: "Atribuídos a mim", icon: "users", count: contaPasta('mine', true) },
+    ...(mostrarTriagem ? [{ id: "triagem", label: "Sem responsável", icon: "inbox", count: contaPasta('triagem', true) }] : []),
     { id: "sent", label: "Enviados", icon: "send" },
-    { id: "drafts", label: "Rascunhos", icon: "edit" },
-    { id: "archive", label: "Arquivados", icon: "package" },
+    { id: "all", label: "Todos os e-mails", icon: "layers" },
+    { id: "spam", label: "Spam", icon: "warning", count: contaPasta('spam', true) },
   ];
+
+  if (perm && !pode('ver')) {
+    return (
+      <div className="page fade-in">
+        <div className="page-head"><div className="page-head__l"><h1 className="page-head__title">Inbox</h1>
+          <p className="page-head__sub">Você não tem acesso ao Inbox. Peça ao administrador a alçada Inbox › Ver (Administração › Alçadas).</p></div></div>
+      </div>
+    );
+  }
 
   return (
     <div className="page fade-in" style={{ paddingBottom: 0, paddingRight: 24, paddingLeft: 24 }}>
-      <div className="row" style={{ marginBottom: 14 }}>
+      <div className="ig-topo">
         <Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setRoute("dashboard")}>Voltar</Button>
-      </div>
-      <div className="page-head">
-        <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Geral · Email</div>
-          <h1 className="page-head__title">Inbox</h1>
-          <p className="page-head__sub">
-            {erro ? `Falha ao conectar: ${erro}` : 'Caixa suporte@vpsistema.com — compartilhada por Comercial, Compras e Importação, sem separação automática por assunto ainda.'}
-          </p>
-        </div>
-        <div className="page-head__r row gap-2">
+        <span className="ig-topo__titulo">Inbox</span>
+        {window.InboxBarraBusca && <window.InboxBarraBusca valor={busca} onChange={setBusca} onDicas={() => abrirAjuda('guia')}/>}
+        <div className="ig-topo__fim">
           {erro ? <Badge variant="danger" dot>Erro na conexão</Badge> : <Badge variant="success" dot>Conectado</Badge>}
-          <Button variant="outline" size="sm" icon="refresh" disabled={loading} onClick={carregar}>{loading ? 'Atualizando…' : 'Atualizar'}</Button>
-          <Button variant="primary" size="sm" icon="mail" onClick={() => setNovoEmailAberto(true)}>Novo e-mail</Button>
+          <button className="ig-iconbtn ig-iconbtn--grande" title="Configurações rápidas" onClick={() => setConfigAberta((a) => !a)}><Icon.settings size={16}/></button>
         </div>
       </div>
-      {novoEmailAberto && <EmailNovoModal onClose={() => setNovoEmailAberto(false)} onEnviado={carregar}/>}
+      <div className="small muted" style={{ margin: '-4px 0 8px' }}>
+        {erro ? `Falha ao conectar: ${erro}` : 'Caixa suporte@vpsistema.com — compartilhada por Comercial, Compras e Importação.'}
+      </div>
+      {novoEmailAberto && <EmailNovoModal inicial={novoInicial} onClose={() => { setNovoEmailAberto(false); setNovoInicial(null); }} onEnviado={() => { carregar(); carregarEnviados(); }}/>}
+      {avisoOutro && window.InboxAvisoOutroDono && (
+        <window.InboxAvisoOutroDono responsavel={avisoOutro.responsavel} nomeDe={nomeDe} onCancelar={() => setAvisoOutro(null)}
+          onConfirmar={() => { if (active) avisoConfirmado.current[active.id] = true; const m = avisoOutro.modo; setAvisoOutro(null); abrirCompose(m); }}/>
+      )}
+      {popupVinculo && window.InboxPopupVinculoEnvio && (
+        <window.InboxPopupVinculoEnvio r={popupVinculo} onCancelar={() => setPopupVinculo(null)}
+          onSemVinculo={() => { vinculoDecidido.current = true; setPopupVinculo(null); enviarCompose(); }}
+          onEscolher={(n) => { numeroForcado.current = n; vinculoDecidido.current = true; setPopupVinculo(null); enviarCompose(); }}/>
+      )}
+      {modalMarcador && window.InboxModalMarcador && (
+        <window.InboxModalMarcador marcadores={mk.marcadores} caps={capsOrg} onCriar={mk.criar} onClose={() => setModalMarcador(false)}/>
+      )}
+      {precoEmailAberto && active && window.InboxModalPrecoEmail && (
+        <window.InboxModalPrecoEmail email={active} eu={eu} onClose={() => setPrecoEmailAberto(false)} onRegistrado={() => { setPrecoEmailAberto(false); }}/>
+      )}
+      {pedirDecisaoAberto && active && window.InboxModalPedirDecisao && (
+        <window.InboxModalPedirDecisao email={active} responsavel={respDe(active)} colaboradores={(perm && perm.colaboradores) || []} eu={eu}
+          onClose={() => setPedirDecisaoAberto(false)} onCriada={() => setTickDecisao((t) => t + 1)}/>
+      )}
+      {atribuirAberto && active && window.InboxModalAtribuir && (
+        <window.InboxModalAtribuir email={active} dono={donoDe(active)} atribuido={atribuidoDe(active)} decisao={iaMapa[active.id]} ctx={perm}
+          onClose={() => setAtribuirAberto(false)} onSalvo={() => { setAtribuirAberto(false); if (meta.recarregar) meta.recarregar(); carregarEnviados(); }}/>
+      )}
 
-      <div className="inbox">
+      <div className={"inbox inbox--gmail inbox--den-" + prefs.densidade}>
         <div className="inbox__folders">
+          <button className="ig-escrever" disabled={!pode('criar')} onClick={abrirEscrever} title={pode('criar') ? 'Escrever um e-mail novo' : 'Sem permissão (alçada Inbox › Criar)'}>
+            <Icon.edit size={18}/> Escrever
+          </button>
           {folders.map((f) => {
             const I = Icon[f.icon] || Icon.mail;
             return (
-              <div key={f.id} className={"inbox__folder " + (folder === f.id ? "is-active" : "")} onClick={() => setFolder(f.id)}>
+              <div key={f.id} className={"inbox__folder " + (folder === f.id && !buscando ? "is-active" : "")} onClick={() => { setBusca(''); setFolder(f.id); setActiveId(null); }}>
                 <I size={14}/>
                 <span>{f.label}</span>
                 {f.count ? <span className="count">{f.count}</span> : null}
               </div>
             );
           })}
+          {window.InboxSecaoMarcadores && O && (
+            <window.InboxSecaoMarcadores arvore={mkArvore} pasta={folder}
+              onAbrir={(id) => { setBusca(''); setFolder(id); setActiveId(null); }} onNovo={() => setModalMarcador(true)}
+              contagem={(id) => todasLinhas.filter((m) => (mk.porEmail[m.id] || []).includes(id) && naoLida(m) && !spamDe(m)).length}
+              podeGerir={(m) => O.podeGerirMarcador(m, eu, capsOrg)} onApagar={apagarMarcador}/>
+          )}
         </div>
 
+        <div className={"inbox__main inbox__main--" + prefs.painel}>
+          {(prefs.painel !== 'sem' || !active) && (
         <div className="inbox__list">
-          <div className="inbox__list-head">
-            <span>{folders.find((f) => f.id === folder)?.label || folder}</span>
-            <span className="mono">{listaAtual.length}</span>
-          </div>
-          {folder !== "inbox" && folder !== "sent" && (
-            <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
-              Esta pasta ainda não está implementada — só Caixa de entrada e Enviados leem de verdade.
+          <div className="inbox__list-toolbar">
+            {window.InboxToolbarLista && (
+              <window.InboxToolbarLista total={listaFiltrada.length} selecionadas={selecionados.size}
+                alvos={alvosIds.length} rotuloAlvo={selecionados.size ? undefined : 'E-mail aberto:'}
+                extras={O && window.InboxMenuSuspender ? (
+                  <>
+                    {pastaEfetiva === 'spam'
+                      ? <Button variant="ghost" size="sm" disabled={!pode('editar')} onClick={() => spamAlvos(false)}>Não é spam</Button>
+                      : (<>
+                          <Button variant="ghost" size="sm" disabled={!pode('editar')} onClick={arquivarAlvos}>{todosArquivados ? 'Mover para a Caixa de entrada' : 'Arquivar'}</Button>
+                          <Button variant="ghost" size="sm" disabled={!pode('editar')} onClick={() => spamAlvos(true)}>Denunciar spam</Button>
+                        </>)}
+                    {pastaEfetiva === 'adiados'
+                      ? <Button variant="ghost" size="sm" disabled={!pode('editar')} onClick={() => adiarAlvos(null)}>Cancelar adiamento</Button>
+                      : <window.InboxMenuSuspender desabilitado={!pode('editar')} onEscolher={adiarAlvos}/>}
+                    <window.InboxMenuMarcadores rotulo="Mover para" icone="arrowRight" marcadores={mk.marcadores} estadoDe={estadoMarcador}
+                      onEscolher={(mc) => moverPara(mc)} onNovo={() => setModalMarcador(true)} desabilitado={!pode('editar')}/>
+                    <window.InboxMenuMarcadores rotulo="Marcadores" icone="layers" marcadores={mk.marcadores} estadoDe={estadoMarcador}
+                      onEscolher={aplicarMarcador} onNovo={() => setModalMarcador(true)} desabilitado={!pode('editar')}/>
+                  </>) : null}
+                todasMarcadas={listaFiltrada.length > 0 && listaFiltrada.every((m) => selecionados.has(m.id))}
+                onToggleTodas={alternarTodas} onLida={() => marcarSelecionados(true)} onNaoLida={() => marcarSelecionados(false)}
+                onExcluir={excluirSelecionados} onAtualizar={() => { carregar(); carregarEnviados(); }} carregando={loading} podeEditar={pode('editar')}/>
+            )}
+            <div className="inbox__list-head">
+              <span>{buscando ? 'Resultados da pesquisa' : (folders.find((f) => f.id === folder)?.label || folder)}</span>
+              <span className="mono">{listaFiltrada.length}</span>
             </div>
+          </div>
+          {folder === "inbox" && !buscando && window.InboxFaixaImportante && (
+            <window.InboxFaixaImportante itens={importantes} ocultos={silenciosos.length} foco={foco} onToggleFoco={() => setFoco((f) => !f)} onAbrir={setActiveId}/>
           )}
-          {folder === "inbox" && !loading && emails.length === 0 && (
+          {folder === "inbox" && !buscando && perm !== undefined && <InboxRespostasFormulario onAbrir={verNaLinhaDoTempo} verOk={verOk} liberado={perm === null ? 'sem' : perm.eu + ':' + (perm.flags && perm.flags.ver_todos)}/>}
+          {folder === "inbox" && !buscando && !loading && emails.length === 0 && (
             <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
               <div style={{ fontWeight:600, color:'var(--fg2)', marginBottom:4 }}>{erro ? 'Não foi possível carregar' : 'Nenhuma mensagem'}</div>
               {erro || 'A caixa está vazia.'}
             </div>
           )}
-          {folder === "sent" && !carregandoEnviados && enviadosNormalizados.length === 0 && (
+          {pastaEfetiva === "sent" && !buscando && !carregandoEnviados && enviadosNormalizados.length === 0 && (
             <div style={{ textAlign:'center', padding:'48px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
               <div style={{ fontWeight:600, color:'var(--fg2)', marginBottom:4 }}>Nenhum e-mail enviado ainda</div>
-              Aparece aqui assim que você mandar um pelo Responder, Novo e-mail ou Cotação a Fornecedor.
+              Aparece aqui assim que você mandar um pelo Responder, Escrever ou Cotação a Fornecedor.
             </div>
           )}
-          {(folder === "inbox" || folder === "sent") && listaAtual.map((m) => (
-            <div key={m.id} className={"inbox__item " + (m.unread ? "unread " : "") + (activeId === m.id ? "is-active" : "")} onClick={() => setActiveId(m.id)}>
-              <div className="from">
-                <span>{m.fromName || m.from}</span>
-                <span className="row gap-1" style={{ alignItems: 'center' }}>
-                  <span className="time">{m.date ? new Date(m.date).toLocaleString('pt-BR') : ''}</span>
-                  <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => excluirEmail(ev, m)}/>
-                </span>
-              </div>
-              <div className="subj">{m.subject}{m.anexos && m.anexos.length > 0 ? <Icon.paperclip size={11} style={{ marginLeft: 6, verticalAlign: 'middle', opacity: .6 }}/> : null}</div>
-              <div className="preview">{m.preview}</div>
-              {m.numeroCotacao != null && (
-                <Badge variant={m.vinculoConfianca === 'certo' ? 'success' : 'warning'} onClick={(ev) => verNaLinhaDoTempo(ev, m.numeroCotacao)} style={{ cursor: 'pointer', marginTop: 4 }}>
-                  <Icon.link2 size={10}/> Cotação Nº {m.numeroCotacao}{m.vinculoConfianca === 'provavel' ? ' (provável)' : ''}
-                </Badge>
-              )}
+          {buscando && (hist.carregando || hist.entrada.length > 0 || hist.saida.length > 0) && (
+            <div className="small muted" style={{ padding:'6px 16px', borderBottom:'1px solid var(--border)' }}>
+              {hist.carregando ? 'Pesquisando em todo o histórico…'
+                : `Pesquisa no histórico completo: ${hist.entrada.length + hist.saida.length} resultado(s)${hist.truncado ? ' (mostrando os 100 mais recentes — refine a pesquisa)' : ''}.`}
             </div>
-          ))}
+          )}
+          {listaFiltrada.length === 0 && (buscando || (folder !== 'inbox' && folder !== 'sent')) && (
+            <div style={{ textAlign:'center', padding:'40px 24px', color:'var(--fg3)', fontSize:13, lineHeight:1.6 }}>
+              {buscando ? <>Nenhum resultado para “{busca}”. <a href="#" onClick={(ev) => { ev.preventDefault(); setBusca(''); }}>Limpar pesquisa</a></>
+                : folder === 'starred' ? 'Nenhum e-mail com estrela. Clique na ☆ de uma mensagem para marcá-la (só você vê).'
+                : folder === 'mine' ? 'Nenhum e-mail atribuído a você.'
+                : folder === 'triagem' ? 'Nenhum e-mail sem responsável. Tudo tem dono.'
+                : folder === 'adiados' ? 'Nada suspenso. Use “Suspender” para um e-mail voltar à Caixa de entrada na hora que você escolher.'
+                : folder === 'spam' ? 'Nenhum spam. E-mails ligados a cotação ou documento nunca vão para cá.'
+                : String(folder).startsWith('m:') ? 'Nenhum e-mail com este marcador. Selecione e-mails e use “Marcadores”.' : 'Nenhuma mensagem.'}
+            </div>
+          )}
+          {listaFiltrada.map((m) => {
+            const sent = ehEnviado(m);
+            const sel = selecionados.has(m.id);
+            const est = estrelaDe(m);
+            return (
+              <div key={m.id} className={"inbox__item inbox__row " + (naoLidaConv(m) ? "unread " : "") + (activeId === m.id ? "is-active " : "") + (sel ? "is-sel" : "")}
+                onClick={() => { setActiveId(m.id); marcarLido(m.id); }}>
+                <label className="ig-check" onClick={(ev) => ev.stopPropagation()}><input type="checkbox" checked={sel} onChange={() => alternarSel(m.id)}/></label>
+                <span className={"ig-estrela" + (est ? " on" : "")} title={est ? 'Tirar a estrela' : 'Marcar com estrela (só para você)'}
+                  onClick={(ev) => { ev.stopPropagation(); alternarEstrela(m.id, est); }}>{est ? '★' : '☆'}</span>
+                <span className="ig-quem">{m.fromName || m.from}{conversaDe(m) && conversaDe(m).total > 1 ? <span className="io-conv-n" title="Mensagens nesta conversa">{conversaDe(m).total}</span> : null}</span>
+                <span className="ig-texto"><b className="subj">{m.subject}</b>{m.preview ? <span> — {String(m.preview).replace(/\s+/g, ' ').slice(0, 160)}</span> : null}
+                  {m.anexos && m.anexos.length > 0 ? <Icon.paperclip size={11} style={{ marginLeft: 6, verticalAlign: 'middle', opacity: .6 }}/> : null}</span>
+                <span className="ig-chips">
+                  {window.InboxChipsMarcadores && <window.InboxChipsMarcadores ids={mk.porEmail[m.id]} porId={marcadorPorId}/>}
+                  {!sent && window.InboxChip && iaMapa[m.id] && <window.InboxChip decisao={iaMapa[m.id]}/>}
+                  {m.numeroCotacao != null && (
+                    <Badge variant={m.vinculoConfianca === 'certo' ? 'success' : 'warning'} onClick={(ev) => verNaLinhaDoTempo(ev, m.numeroCotacao)} style={{ cursor: 'pointer' }}>
+                      <Icon.link2 size={10}/> Cotação Nº {m.numeroCotacao}{m.vinculoConfianca === 'provavel' ? ' (provável)' : ''}
+                    </Badge>
+                  )}
+                  {INBOX_REFERENCIA_TIPO_LABEL[m.referenciaTipo] && <Badge variant="outline">{INBOX_REFERENCIA_TIPO_LABEL[m.referenciaTipo]}</Badge>}
+                </span>
+                <span className="ig-quando">{window.igQuando ? window.igQuando(m.date) : ''}</span>
+                <span className="ig-lixo"><Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => excluirEmail(ev, m)}/></span>
+              </div>
+            );
+          })}
+          {pastaEfetiva === 'sent' && !buscando && !carregandoEnviados && enviadosBase.length >= limiteEnv && (
+            <div style={{ textAlign:'center', padding:'12px' }}>
+              <Button variant="outline" size="sm" onClick={() => setLimiteEnv((n) => n + 50)}>Carregar mais enviados</Button>
+            </div>
+          )}
         </div>
+          )}
 
+          {(prefs.painel !== 'sem' || active) && (
         <div className="inbox__msg">
+          {prefs.painel === 'sem' && active && (
+            <div className="ig-voltar"><Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setActiveId(null)}>Voltar à lista</Button></div>
+          )}
           {active ? (
             <>
               <div className="inbox__msg-head">
@@ -1738,6 +2351,17 @@ function EmailInbox({ setRoute, setSubsel }) {
                     <Icon.link2 size={10}/> Ver na Linha do Tempo — Cotação Nº {active.numeroCotacao}{active.vinculoConfianca === 'provavel' ? ' (vínculo provável)' : ''}
                   </Badge>
                 )}
+                {INBOX_REFERENCIA_TIPO_LABEL[active.referenciaTipo] && (
+                  <Badge variant="outline" style={{ marginTop: 6, marginLeft: 6 }}>{INBOX_REFERENCIA_TIPO_LABEL[active.referenciaTipo]}</Badge>
+                )}
+                {(donoDe(active) || atribuidoDe(active)) ? (
+                  <div className="small muted" style={{ marginTop: 6 }}>
+                    Responsável: <b>{nomeDe(atribuidoDe(active) || donoDe(active))}</b>
+                    {atribuidoDe(active) && donoDe(active) && atribuidoDe(active) !== donoDe(active) ? <> · autor original: {nomeDe(donoDe(active))}</> : null}
+                  </div>
+                ) : (folder === 'inbox' && <div className="small muted" style={{ marginTop: 6 }}>Sem responsável — fica na fila de triagem até alguém atribuir.</div>)}
+                {window.InboxSugestaoBarra && <window.InboxSugestaoBarra s={sugAtiva} onVincular={vincularA} ocupado={vinculandoSug}/>}
+                {window.InboxFaixaConversa && <window.InboxFaixaConversa conversa={conversaDe(active)} linhas={todasLinhas} ativoId={active.id} onAbrir={(id) => { setActiveId(id); marcarLido(id); }} quando={window.igQuando}/>}
                 {gatilhoAberto && (
                   <div className="alert warning" style={{ marginTop: 8 }}>
                     <Icon.warning/>
@@ -1760,9 +2384,26 @@ function EmailInbox({ setRoute, setSubsel }) {
                   <div className="inbox__msg-actions">
                     <Button variant="outline" size="sm" icon="reply" onClick={() => (respondendo && modoCompose === 'responder' ? setRespondendo(false) : abrirCompose('responder'))}>Responder</Button>
                     <Button variant="ghost" size="sm" icon="link2" onClick={() => { setVinculando(v => !v); setRespondendo(false); setVincularInput(active.numeroCotacao != null ? String(active.numeroCotacao) : ''); }}>Vincular</Button>
+                    {perm && window.InboxVisibilidade && window.InboxVisibilidade.podeAtribuir(donoDe(active), atribuidoDe(active), perm) && (
+                      <Button variant="ghost" size="sm" icon="users" onClick={() => setAtribuirAberto(true)}>Atribuir</Button>
+                    )}
+                    {pode('editar') && !ehEnviado(active) && (active.numeroCotacao != null || active.referenciaTipo === 'cotacao_fornecedor') && window.InboxModalPrecoEmail && (
+                      <Button variant="ghost" size="sm" icon="dollar" title="Lê o e-mail do fornecedor, propõe os preços e as condições e registra a resposta depois que você conferir" onClick={() => setPrecoEmailAberto(true)}>Extrair preço</Button>
+                    )}
+                    {INBOX_TIPOS_COTACAO_FORNECEDOR.includes(active.referenciaTipo) && (
+                      <Button variant="ghost" size="sm" icon="message" title="Abre a cotação a fornecedor deste e-mail, na aba Tratativas (histórico único da conversa)" onClick={async () => {
+                        const r = await inboxRefCotacaoFornecedor(window.__VP_SB?.sb, active);
+                        if (r) inboxIrParaRota('/comercial/cotacao-fornecedor-detail/' + r.id + '/tratativas');
+                        else window.toast?.('Não achei a cotação a fornecedor ligada a este e-mail.', 'warning');
+                      }}>Abrir tratativas</Button>
+                    )}
+                    {pode('editar') && window.InboxModalPedirDecisao && (
+                      <Button variant="ghost" size="sm" icon="shield" title="Cria uma decisão na Central de Decisões ligada a este e-mail" onClick={() => setPedirDecisaoAberto(true)}>Pedir decisão</Button>
+                    )}
                     <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={(ev) => excluirEmail(ev, active)}>Excluir</Button>
                   </div>
                 </div>
+                {window.InboxFaixaDecisao && <window.InboxFaixaDecisao decisoes={decisoesDoEmail} nomeDe={nomeDe}/>}
                 {vinculando && (
                   <div className="row gap-2" style={{ marginTop: 10, alignItems: 'center' }}>
                     <input className="input" style={{ maxWidth: 180 }} placeholder="Nº Cotação (ex.: 950)" value={vincularInput}
@@ -1835,9 +2476,19 @@ function EmailInbox({ setRoute, setSubsel }) {
                 <Button variant="ghost" size="sm" icon="zap" disabled={sugerindoIA} onClick={sugerirResposta}>{sugerindoIA ? 'Pensando…' : 'Sugerir resposta (AI)'}</Button>
               </div>
             </>
-          ) : null}
+          ) : (
+            <div className="ig-msg-vazio">Selecione um e-mail para ler.</div>
+          )}
         </div>
+        )}
+        </div>
+        {configAberta && window.InboxConfigRapida && (
+          <window.InboxConfigRapida prefs={prefs} atualizar={atualizarPrefs} foco={foco} setFoco={setFoco} onClose={() => setConfigAberta(false)}/>
+        )}
       </div>
+      {ajudaAba && window.InboxAjudaModal && (
+        <window.InboxAjudaModal aba={ajudaAba} onTrocar={setAjudaAba} onClose={() => setAjudaAba(null)}/>
+      )}
     </div>
   );
 }
@@ -1848,13 +2499,17 @@ function EmailInbox({ setRoute, setSubsel }) {
    mensagem já aberta — não tinha jeito de começar um e-mail do zero.
    Mesmo send-email, com "Nº Cotação (opcional)" pra já nascer vinculado
    a um projeto, igual ao RFQ do Formulário. */
-function EmailNovoModal({ onClose, onEnviado }) {
-  const [para, setPara] = React.useState('');
-  const [assunto, setAssunto] = React.useState('');
+function EmailNovoModal({ onClose, onEnviado, inicial }) {
+  const [para, setPara] = React.useState((inicial && inicial.para) || '');
+  const [assunto, setAssunto] = React.useState((inicial && inicial.assunto) || '');
   const [corpo, setCorpo] = React.useState('');
   const [numeroCotacaoInput, setNumeroCotacaoInput] = React.useState('');
   const [anexos, setAnexos] = React.useState([]);
   const [enviando, setEnviando] = React.useState(false);
+  /* Fase 2 (JEV): sem Nº de cotação, sugere uma antes de enviar — só pergunta quando há evidência. */
+  const [popupVinculo, setPopupVinculo] = React.useState(null);
+  const numeroForcado = React.useRef(null);
+  const vinculoDecidido = React.useRef(false);
 
   const lerArquivoBase64 = (file) => new Promise((resolve, reject) => {
     const reader = new FileReader();
@@ -1884,11 +2539,15 @@ function EmailNovoModal({ onClose, onEnviado }) {
     }
     const erroValidacao = validarEmails(para);
     if (erroValidacao) { window.toast?.(erroValidacao, 'warning'); return; }
-    const numero = numeroCotacaoInput.trim() ? parseInt(numeroCotacaoInput.replace(/\D/g, ''), 10) : null;
+    const numero = numeroForcado.current != null ? numeroForcado.current : (numeroCotacaoInput.trim() ? parseInt(numeroCotacaoInput.replace(/\D/g, ''), 10) : null);
+    if (!numero && !vinculoDecidido.current && window.inboxBuscarSugestao) {
+      const r = await window.inboxBuscarSugestao(para, assunto);
+      if (r.politica !== 'silencio') { setPopupVinculo(r); return; }
+    }
     setEnviando(true);
     try {
       const sb = window.__VP_SB.sb;
-      const { error } = await sb.functions.invoke('send-email', {
+      const { data, error } = await sb.functions.invoke('send-email', {
         body: {
           to: para.trim(), subject: assunto.trim(), text: corpo,
           numeroCotacao: numero || undefined,
@@ -1897,7 +2556,12 @@ function EmailNovoModal({ onClose, onEnviado }) {
         },
       });
       if (error) { window.toast?.('Erro ao enviar: ' + await extrairErroFuncao(error), 'error'); return; }
+      if (data && data.avisoPersistencia) window.toast?.(data.avisoPersistencia, 'warning');
       window.toast?.('E-mail enviado.', 'success');
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Inbox de E-mail', acao: 'Enviou e-mail novo',
+        alvo: assunto.trim(), detalhe: { para: para.trim(), numeroCotacao: numero || null },
+      });
       onEnviado?.();
       onClose();
     } catch (e) {
@@ -1908,11 +2572,23 @@ function EmailNovoModal({ onClose, onEnviado }) {
   };
 
   return (
-    <Modal title="Novo e-mail" onClose={onClose} width={560}
-      footer={<div className="row gap-2">
-        <Button variant="primary" icon="send" disabled={enviando} onClick={enviar}>{enviando ? 'Enviando…' : 'Enviar'}</Button>
-        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-      </div>}>
+    <>
+    {popupVinculo && window.InboxPopupVinculoEnvio && (
+      <window.InboxPopupVinculoEnvio r={popupVinculo} onCancelar={() => setPopupVinculo(null)}
+        onSemVinculo={() => { vinculoDecidido.current = true; setPopupVinculo(null); enviar(); }}
+        onEscolher={(n) => { numeroForcado.current = n; vinculoDecidido.current = true; setPopupVinculo(null); enviar(); }}/>
+    )}
+    {/* Fase 3: "Escrever" abre a janela flutuante do canto da tela (como no Gmail); sem o componente novo, cai no modal de sempre. */}
+    {React.createElement(window.InboxJanela || Modal,
+      window.InboxJanela
+        ? { titulo: 'Nova mensagem', onClose, footer: <div className="row gap-2">
+            <Button variant="primary" icon="send" disabled={enviando} onClick={enviar}>{enviando ? 'Enviando…' : 'Enviar'}</Button>
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          </div> }
+        : { title: 'Novo e-mail', onClose, width: 560, footer: <div className="row gap-2">
+            <Button variant="primary" icon="send" disabled={enviando} onClick={enviar}>{enviando ? 'Enviando…' : 'Enviar'}</Button>
+            <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+          </div> },
       <div className="stack" style={{ gap: 8 }}>
         <input className="input" placeholder="Para (e-mail)" value={para} onChange={(e) => setPara(e.target.value)}/>
         <input className="input" placeholder="Assunto" value={assunto} onChange={(e) => setAssunto(e.target.value)}/>
@@ -1933,7 +2609,8 @@ function EmailNovoModal({ onClose, onEnviado }) {
           <input type="file" multiple style={{ display: 'none' }} onChange={(e) => { anexarArquivos(e.target.files); e.target.value = ''; }}/>
         </label>
       </div>
-    </Modal>
+    )}
+    </>
   );
 }
 
@@ -1952,4 +2629,4 @@ function EmailBody({ active }) {
   return <pre style={{ whiteSpace: 'pre-wrap', fontFamily: 'inherit', fontSize: 13, margin: 0 }}>{active.preview ? window.linkifyTexto(active.preview) : 'Mensagem sem conteúdo de texto.'}</pre>;
 }
 
-Object.assign(window, { ImportacaoPage, ImportacaoDetail, ImportacaoRastreamento, ComprasPage, EmailInbox });
+Object.assign(window, { ImportacaoPage, ImportacaoDetail, ImportacaoRastreamento, EmailInbox });

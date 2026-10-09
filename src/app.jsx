@@ -9,7 +9,10 @@ const ROUTE_TITLE = {
   decisoes: "Central de Decisões",
   "cadastro-clientes": "Clientes",
   "cadastro-fornecedores": "Fornecedores",
+  "cadastro-materias-primas": "Matérias-Primas",
+  "cadastro-produtos": "Produtos",
   "aval-financeiro": "Aval Financeiro",
+  "aval-juridico": "Aval Jurídico",
   "linha-do-tempo": "Linha do Tempo da Cotação",
   "gi-painel": "Gestão Importação — Painel",
   "pi-importacao": "Gestão Importação — P.I.",
@@ -20,6 +23,14 @@ const ROUTE_TITLE = {
   "pedidos-acompanhamento": "Pedidos",
   "vistorias-envio": "Vistorias de Obras",
   almoxarifado: "Almoxarifado",
+  "carga-maquina": "Carga Máquina",
+  "montagem-produto": "Montagem do Produto",
+  "simulacao-producao": "Simulação",
+  "relatorios-pcp": "Relatórios do PCP",
+  expedicao: "Expedição",
+  "emissao-nf": "Emissão de NF",
+  pcp: "PCP — Planejamento e Controle da Produção",
+  mes: "MES — Sistema de Execução da Manufatura",
   leads: "Pipeline de Leads",
   "lead-detail": "Detalhe de Lead",
   formularios: "Formulários",
@@ -28,6 +39,7 @@ const ROUTE_TITLE = {
   "formulario-elevador": "Formulário — Elevador",
   "formulario-quadro-comando": "Formulário — Quadro de Comando",
   "controle-cotacoes": "Controle de Cotações",
+  "contratos-sociais": "Contratos Social",
   "cotacoes-fornecedor": "Cotações a Fornecedor",
   "cotacao-fornecedor-detail": "Detalhe de Cotação a Fornecedor",
   precificacao: "Precificação",
@@ -59,8 +71,8 @@ const ROUTE_TITLE = {
   importacao: "Importação",
   "importacao-detail": "Detalhe de Embarque",
   "importacao-rastreamento": "Rastreamento de Navios",
-  compras: "Compras Nacional",
-  financeiro: "Gatilhos & Prazo",
+  compras: "Importação Varejo",
+  financeiro: "Prazos & Pendências",
   comissoes: "Comissões",
   "pagamentos-instalador": "Pagamentos a Instaladores",
   notificacoes: "Notificações",
@@ -132,7 +144,7 @@ function EmConstrucaoPage({ titulo, descricao }) {
    3. ASYNC_FETCH_ROUTES — subsel é o registro inteiro, sem suporte a id
       solto no componente; app.jsx busca no Supabase e só then popula
       subsel (renderPage mostra "Carregando…" enquanto isso). */
-const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador", "formulario-quadro-comando", "central-documentos", "cadastro-custos", "ficha-tecnica", "solicitacoes-produto"]);
+const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador", "formulario-quadro-comando", "central-documentos", "cadastro-custos", "ficha-tecnica", "solicitacoes-produto", "precificacao", "linha-do-tempo", "inbox"]);
 const WRAPPED_ID_KEY = { "proposta-editor": "__editId" };
 
 /* Cada fetcher recebe o id da URL e resolve pro registro (ou null se não
@@ -314,6 +326,8 @@ function App() {
     precificacao: ["financeiro", "admin"],
     financeiro: ["financeiro", "admin"],
     "aval-financeiro": ["financeiro", "admin"],
+    "emissao-nf": ["financeiro", "admin"],
+    "aval-juridico": ["juridico", "admin"],
     comissoes: ["financeiro", "admin"],
     "pagamentos-instalador": ["financeiro", "admin"],
     logs: ["admin"],
@@ -333,7 +347,7 @@ function App() {
     }
     switch (route) {
       case "dashboard": return <Dashboard role={role} setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "inbox": return <EmailInbox setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "inbox": return <EmailInbox setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
       case "leads": return <LeadsPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "crm-canais": return <CRMCanaisPage setRoute={setRoute} setSubsel={setSubsel}/>;
@@ -344,6 +358,7 @@ function App() {
       case "formulario-elevador": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel}/>;
       case "formulario-quadro-comando": return <QuadroComandoPage setRoute={setRoute} subsel={subsel}/>;
       case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "contratos-sociais": return <ContratosSociaisPage/>;
       case "cotacao-quadro-comando": return <CotacaoQuadroComandoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "status-obras": return <ObrasStatusPage setRoute={setRoute} setSubsel={setSubsel}/>;
@@ -377,9 +392,10 @@ function App() {
       case "importacao": return <ImportacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "importacao-detail": return <ImportacaoDetail embarque={subsel} setRoute={setRoute}/>;
       case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={setRoute} setSubsel={setSubsel}/>;
-      case "compras": return <ComprasPage setRoute={setRoute}/>;
+      case "compras": return <window.ImportacaoVarejoPage setRoute={setRoute}/>;
       case "financeiro": return <FinanceiroPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
+      case "aval-juridico": return <window.AvalJuridicoPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
       case "pagamentos-instalador": return <PagamentosInstaladorPage/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
@@ -388,6 +404,14 @@ function App() {
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
       case "decisoes": return <window.DecisoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
+      case "carga-maquina": return <window.CargaMaquinaPage/>;
+      case "expedicao": return <window.ExpedicaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "emissao-nf": return <window.EmissaoNFPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "relatorios-pcp": return <window.RelatoriosPCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "simulacao-producao": return <window.SimulacaoProducaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "pcp": return <window.PCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "mes": return <window.MESPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "pi-importacao": return <window.PIPage/>;
       case "rfq-importacao": return <window.RFQPage/>;
       case "ims-importacao": return <window.IMSPage/>;
@@ -397,6 +421,8 @@ function App() {
       case "pedidos-acompanhamento": return <window.PedidosAcompanhamentoPage/>;
       case "cadastro-clientes": return <window.CadastroClientesPage/>;
       case "cadastro-fornecedores": return <window.CadastroFornecedoresPage/>;
+      case "cadastro-materias-primas": return <window.CadastroMateriasPrimasPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "cadastro-produtos": return <window.CadastroProdutosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "logs": return <LogsAdminPage/>;
       case "configuracoes": return <ConfiguracoesPage/>;
       default: return <Dashboard role={role} setRoute={setRoute}/>;
@@ -480,9 +506,9 @@ function App() {
               { value: "importacao", label: "Importação (lista)" },
               { value: "importacao-detail", label: "Detalhe de Embarque" },
               { value: "importacao-rastreamento", label: "🛰️ Mapa de Navios" },
-              { value: "compras", label: "Compras Nacional" },
+              { value: "compras", label: "Importação Varejo" },
               { value: "inbox", label: "📧 Inbox" },
-              { value: "financeiro", label: "⏰ Gatilhos & Prazo" },
+              { value: "financeiro", label: "⏰ Prazos & Pendências" },
               { value: "comissoes", label: "Comissões" },
               { value: "pagamentos-instalador", label: "Pagamentos a Instaladores" },
               { value: "rh-homologacao", label: "👥 Homologação de Instaladores" },

@@ -144,6 +144,10 @@
     Object.keys(patch).forEach((k) => patch[k] === undefined && delete patch[k]);
     const { data: item, error } = await c.from('instalacao_checklist_itens').update(patch).eq('id', itemId).select('dossier_id').single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Instalação', acao: `Marcou item do checklist como "${status}"`, alvo_id: itemId,
+      detalhe: { dossierId: item?.dossier_id, observacoes: observacoes || null },
+    });
   }
 
   /* Achado A10 da auditoria (não commitar/tour.md, 10/09/2026): este
@@ -233,7 +237,7 @@
     // status + sent_at.
     if (dossier.proposta_id) {
       const { data: contrato } = await c.from('contratos_venda_equipamentos')
-        .select('status, sent_at').eq('proposta_id', dossier.proposta_id).maybeSingle();
+        .select('status, sent_at').eq('proposta_id', dossier.proposta_id).or('status.is.null,status.neq.em_preenchimento').maybeSingle();
       if (contrato) {
         const enviado = ['enviado', 'visualizado', 'assinado'].includes(contrato.status);
         itens.push({ chave: 'contrato', titulo: 'Envio de Contrato', concluido: enviado, pessoa: null, data: enviado ? contrato.sent_at : null });
@@ -273,6 +277,9 @@
       doc_instalador_enviado_por: user.nome || user.email || 'system',
     }).eq('id', dossierId);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Instalação', acao: 'Marcou documento do instalador como enviado', alvo_id: dossierId,
+    });
   }
 
   async function listarAnotacoes(dossierId) {

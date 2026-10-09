@@ -32,6 +32,7 @@
     'Financeiro': 'dollar',
     'Engenharia': 'ruler',
     'Cotações': 'mail',
+    'Inbox': 'mail',
     'Propostas': 'proposal',
     'Comissões': 'award',
     'Central de Decisões': 'check',
@@ -46,7 +47,42 @@
     'Propostas': 'propostas',
     'Comissões': 'comissoes',
     'Central de Decisões': 'decisoes',
+    'Almoxarifado': 'almoxarifado',
+    'Comercial': 'propostas',                  // 14 dos alertas eram "Comercial" e caíam no Dashboard
+    'Compras': 'cotacoes-fornecedor',
+    'Propostas': 'propostas',
+    'Inbox': 'inbox',
   };
+
+  /* Preferências da Central (Modal "Preferências"): cada módulo pertence a UMA categoria que a pessoa pode ocultar.
+     Módulo fora do mapa (Jurídico, Central de Decisões, Sistema…) NUNCA é ocultado — decisão e contrato não podem sumir. */
+  const CATEGORIA_POR_MODULO = {
+    'Financeiro': 'financeiro', 'Comissões': 'financeiro',
+    'Comercial': 'comercial', 'Propostas': 'comercial', 'Cotações': 'comercial', 'Compras': 'comercial',
+    'Importação': 'operacoes', 'Engenharia': 'operacoes', 'Almoxarifado': 'operacoes',
+  };
+  const PREFERENCIAS_PADRAO = { financeiro: true, operacoes: true, comercial: true };
+
+  function categoriaDe(module) { return CATEGORIA_POR_MODULO[module] || null; }
+
+  /* prefs: { financeiro, operacoes, comercial } (true = mostrar). Chave ausente = mostrar. */
+  function visivelPorPreferencia(notificacao, prefs) {
+    const cat = categoriaDe(notificacao && notificacao.module);
+    if (!cat) return true;
+    const p = prefs || PREFERENCIAS_PADRAO;
+    return p[cat] !== false;
+  }
+
+  /* Link composto de uma notificação (coluna `alertas.rota`, ex.: /logistica/almoxarifado/reposicao). Só devolve o caminho se
+     for RELATIVO, de uma rota conhecida do app — o campo vem do banco (gravável com a chave pública), então nunca pode virar
+     redirecionamento para fora (https://…, //…, javascript:…). `isKnownRoute` = window.VpRouter.isKnownRoute; sem ele, recusa. */
+  function urlSegura(rota, isKnownRoute) {
+    if (typeof rota !== 'string' || typeof isKnownRoute !== 'function') return null;
+    if (!/^\/[A-Za-z0-9._~\-\/%]*$/.test(rota) || rota.startsWith('//')) return null;
+    const partes = rota.split('/').filter(Boolean);
+    if (partes.length < 2 || !isKnownRoute(partes[1])) return null;
+    return rota;
+  }
 
   function iconePara(module) {
     return ICONE_POR_MODULO[module] || 'bell';
@@ -71,6 +107,7 @@
       unread: !(readIds || []).includes(alerta.id),
       module: alerta.module || 'Sistema',
       level: alerta.level,
+      rota: alerta.rota || null,
     };
   }
 
@@ -107,7 +144,8 @@
   }
 
   window.NotificacoesProcessamento = {
-    ICONE_POR_MODULO, ROTA_POR_MODULO, iconePara, rotaPara,
+    ICONE_POR_MODULO, ROTA_POR_MODULO, CATEGORIA_POR_MODULO, PREFERENCIAS_PADRAO, categoriaDe, visivelPorPreferencia,
+    iconePara, rotaPara, urlSegura,
     paraNotificacao, processarAlertas, naoLidas, agruparPorPeriodo,
   };
 }());

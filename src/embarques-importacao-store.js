@@ -195,12 +195,18 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('embarques_importacao').delete().eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Embarques', acao: 'Excluiu embarque', alvo_id: id,
+    });
   }
 
   async function arquivar(id, arquivado) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('embarques_importacao').update({ arquivado, updated_at: new Date().toISOString() }).eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Embarques', acao: arquivado ? 'Arquivou embarque' : 'Desarquivou embarque', alvo_id: id,
+    });
   }
 
   /* Issue #384 — containers que a cotação já tem estruturados, pra logística

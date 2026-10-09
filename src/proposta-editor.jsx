@@ -97,6 +97,7 @@ function makeDefaultProposta() {
       fotos: { unidade: null, teto: null, botoeira: null },
       valores: { equipamento: "", quantidade: "1", valorUnit: "", difal: "",
         forma: "40% à vista e 4 parcelas",
+        formaTipo: "parcelado", qtdParcelas: 5,
         parcelas: [
           { desc: "Sinal de 40% na assinatura do contrato", valor: "" },
           { desc: "1ª PARCELA", valor: "" },
@@ -146,7 +147,7 @@ function makeDefaultProposta() {
         arranjo: "", maquina: "", qtd: 1, valorUnit: "",
       }],
       especificidades: { tipo: "", config: "", corrimao: "", acabamento: "" },
-      valores: { equipamento: "", quantidade: "", valorUnit: "", difal: "", forma: "", parcelas: [] },
+      valores: { equipamento: "", quantidade: "", valorUnit: "", difal: "", forma: "", formaTipo: "", qtdParcelas: "", parcelas: [] },
       ajustes: { preset: "sp", cambio: "", freteMaritimo: "", reajuste: "", taxasIn: "", taxasOut: "" },
       prazo: { prazo: "prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias", condCovid: "" },
       instalacao: { instalacao: "", lubrificacao: "", transporte: "", descarregamento: "" },
@@ -162,7 +163,7 @@ function makeDefaultProposta() {
         arranjo: "", maquina: "", qtd: 1, valorUnit: "",
       }],
       especificidades: { tipo: "", config: "", corrimao: "", acabamento: "" },
-      valores: { equipamento: "", quantidade: "", valorUnit: "", difal: "", forma: "", parcelas: [] },
+      valores: { equipamento: "", quantidade: "", valorUnit: "", difal: "", forma: "", formaTipo: "", qtdParcelas: "", parcelas: [] },
       ajustes: { preset: "sp", cambio: "", freteMaritimo: "", fretePorContainer: "", ajusteFrete: "", reajuste: "", taxasIn: "", taxasOut: "" },
       prazo: { prazo: "prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias", condCovid: "" },
       instalacao: { instalacao: "", lubrificacao: "", transporte: "", descarregamento: "" },
@@ -399,9 +400,39 @@ function PropostaSendModal({ record, onClose, onSent }) {
     const contact = channel === 'whatsapp' ? telefone : email;
     setSendingChannel(channel);
     try {
-      await store.markSent(record.id, channel, { name, contact });
+      /* 30/09 — e-mail: só registra "enviada" DEPOIS de o send-email
+         confirmar (antes marcava antes de enviar, e mesmo com falha +
+         mailto o status ficava "enviada"). WhatsApp/link seguem como
+         antes (o envio em si é manual). */
+      if (channel !== 'email') await store.markSent(record.id, channel, { name, contact });
       if (channel === 'whatsapp') window.open(store.whatsAppHref(contact, message), '_blank');
-      else if (channel === 'email') window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} — VerticalParts`, message), '_blank');
+      else if (channel === 'email') {
+        /* 28/09 — pedido explícito do usuário: a Proposta deve sair "de
+           dentro do site" pro cliente (igual ao WhatsApp/link já fazem)
+           e a resposta dele deve entrar pelo Inbox — mesmo padrão do RFQ a
+           fornecedor (formulario-elevador.jsx). Envio direto via SMTP
+           (send-email edge function), com numeroCotacao +
+           referenciaTipo/referenciaId pra a linha aparecer em
+           Enviados/Linha do Tempo e pro read-inbox conseguir casar a
+           resposta do cliente de volta a esta cotação. Cai pro mailto:
+           (como sempre foi) só se o envio direto falhar — nunca deixa o
+           vendedor sem alternativa. */
+        /* 01/10 — chamada em si extraída pro EmailEnvioHelper (compartilhado
+           com RFQ/Contrato de Venda/Contrato Instalador); sucesso/falha
+           continuam decididos aqui, sem mudança de comportamento. */
+        const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: contact, subject: `Proposta ${record.numero_documento} — VerticalParts`, text: message,
+          numeroCotacao: record.numeroCotacao ?? null, referenciaTipo: 'proposta', referenciaId: record.id,
+        });
+        if (enviouDireto) {
+          await store.markSent(record.id, channel, { name, contact });
+          window.toast?.(`E-mail enviado para ${contact}.`, 'success');
+        } else {
+          window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} — VerticalParts`, message), '_blank');
+          window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado ao cliente e a proposta NÃO foi marcada como enviada. Abrindo seu e-mail padrão para envio manual; depois de enviar, use o WhatsApp/link para registrar o envio.', 'error');
+          return;
+        }
+      }
       setSent(channel);
       onSent && onSent();
     } catch (e) {
@@ -618,7 +649,7 @@ function PropostaEditor({ setRoute, subsel }) {
     const saved = await saveToSupabase();
     if (!saved || saved.erro) { window.toast?.('❌ Não foi possível salvar: ' + ((saved && saved.erro) || 'erro desconhecido'), 'error'); return; }
     const token = saved.token || await window.PropostaStore.garantirToken(saved.id);
-    setSendModal({ id: saved.id, token, numero_documento: data.numero, cliente: data.cliente, valorTotal: calcularValorTotal(data, eq) });
+    setSendModal({ id: saved.id, token, numero_documento: data.numero, numeroCotacao, cliente: data.cliente, valorTotal: calcularValorTotal(data, eq) });
   }, [data, eq, saveToSupabase]);
 
   // Autosave para localStorage (instantâneo e seguro). A persistência no
@@ -680,15 +711,18 @@ function PropostaEditor({ setRoute, subsel }) {
     return () => { cancelado = true; };
   }, [editId]);
 
-  /* Re-sincroniza o status quando a aba volta ao foco. O aceite acontece na
-     página pública /assinar (outra aba/janela); sem isto, ao voltar pro editor
-     o badge continuava "Rascunho" mesmo com a proposta já assinada no banco
-     (achado E2E). Atualiza só os campos de meta — nunca o conteúdo em edição. */
+  /* Re-sincroniza o status quando a aba volta ao foco OU quando a página
+     pública /assinar/<token> grava direto em `propostas` (Realtime, 28/09).
+     O aceite/recusa acontece numa aba/janela diferente; antes disto o badge
+     só saía de "Rascunho" se o usuário trocasse de aba (achado E2E) — o
+     Realtime cobre o caso comum (tela aberta, sem trocar de aba), o
+     visibilitychange fica como reforço pra quando o canal cair.
+     Atualiza só os campos de meta — nunca o conteúdo em edição. */
   React.useEffect(() => {
-    if (!editId) return;
+    if (!editId || !window.__VP_SB?.sb) return;
+    const sb = window.__VP_SB.sb;
     const refetch = () => {
-      if (document.visibilityState !== 'visible' || !window.__VP_SB?.sb) return;
-      window.__VP_SB.sb.from('propostas')
+      sb.from('propostas')
         .select('status, publicado_em, publicado_por, version, valor_total, atualizado_em, revisao_texto, revisao_solicitada_em, destravada_em, destravada_por, revisao_decisao, revisao_decidida_em, revisao_decidida_por, motivo_recusa_interna')
         .eq('id', editId).maybeSingle()
         .then(({ data: row }) => {
@@ -704,8 +738,12 @@ function PropostaEditor({ setRoute, subsel }) {
           }));
         });
     };
-    document.addEventListener('visibilitychange', refetch);
-    return () => document.removeEventListener('visibilitychange', refetch);
+    const onVisibility = () => { if (document.visibilityState === 'visible') refetch(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    const canal = sb.channel('proposta-status-' + editId)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'propostas', filter: `id=eq.${editId}` }, refetch)
+      .subscribe();
+    return () => { document.removeEventListener('visibilitychange', onVisibility); sb.removeChannel(canal); };
   }, [editId]);
 
   const set = React.useCallback((path, value) => {
@@ -818,7 +856,18 @@ function PropostaEditor({ setRoute, subsel }) {
     try {
       const cliente = (data.cliente?.nome || '').trim();
       const filename = (['Proposta', data.numero, cliente].filter(Boolean).join(' - ') || 'Proposta VerticalParts') + '.pdf';
-      const r = await window.PropostaReactPdf.baixar(data, filename);
+      /* Assinatura digital do cliente (REGRA TRAVADA, ver CLAUDE.md): proposta assinada sai com
+         quem assinou, data/hora, dispositivo, IP e hash. Falha = PDF sem o bloco, nunca trava. */
+      let assinaturas = [];
+      try {
+        const sb = window.__VP_SB && window.__VP_SB.sb;
+        if (sb && recordId) {
+          const { data: row } = await sb.from('propostas').select('audit').eq('id', recordId).maybeSingle();
+          const au = (row && row.audit) || {};
+          if (au.signedAt) assinaturas = [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }];
+        }
+      } catch (e) { console.warn('Assinatura digital não carregada pro PDF da proposta:', e); }
+      const r = await window.PropostaReactPdf.baixar(data, filename, assinaturas);
       /* Sem este aviso, uma falha de carregamento de imagem produzia um
          PDF completo mas SEM logo nem foto de capa, e ninguém ficava
          sabendo até abrir o arquivo (achado 20/08). */

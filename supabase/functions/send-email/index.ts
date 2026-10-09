@@ -69,6 +69,17 @@ function base64ToBytes(b64: string): Uint8Array {
    observado. */
 const MAX_ANEXO_TOTAL_BYTES = 2.5 * 1024 * 1024;
 
+/* 01/10 — travas anti-relay (issue #584). Domínios internos e endereços de teste
+   autorizados pelo usuário passam sem consulta; qualquer outro destinatário precisa
+   já existir em algum cadastro/histórico (public.email_conhecidos). Limites contam
+   envios (não destinatários) numa janela de 10 min — ver public.email_rate_check. */
+const EMAIL_RE = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]{2,}$/;
+const MAX_DESTINATARIOS = 10;
+const MAX_ENVIOS_IP_10MIN = 25;
+const MAX_ENVIOS_GLOBAL_10MIN = 60;
+const DOMINIOS_INTERNOS = ["verticalparts.com.br", "vpsistema.com"];
+const EXTRAS_PERMITIDOS = ["gelsonsimoes@gmail.com"];
+
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
   if (req.method !== "POST") return json({ error: "Método não suportado" }, 405);
@@ -94,6 +105,10 @@ Deno.serve(async (req: Request) => {
   const numeroCotacao = Number.isFinite(Number(payload?.numeroCotacao)) && payload?.numeroCotacao != null ? Number(payload.numeroCotacao) : null;
   const referenciaTipo = typeof payload?.referenciaTipo === "string" ? payload.referenciaTipo : null;
   const referenciaId = payload?.referenciaId != null ? String(payload.referenciaId) : null;
+  /* 04/10 — Inbox fase 1: DONO do e-mail = login de quem enviou (o front manda `enviadoPor`). Declarado pelo navegador
+     (não há identidade verificável por função — issue #571), por isso só valida o formato; vale como organização. */
+  const enviadoPorRaw = typeof payload?.enviadoPor === "string" ? payload.enviadoPor.trim().toLowerCase() : "";
+  const enviadoPor = enviadoPorRaw.length <= 120 && EMAIL_RE.test(enviadoPorRaw) ? enviadoPorRaw : null;
   const anexosIn: any[] = Array.isArray(payload?.attachments) ? payload.attachments : [];
 
   if (!destinatarios.length) return json({ error: "Nenhum destinatário válido em \"to\"." }, 400);
@@ -108,6 +123,52 @@ Deno.serve(async (req: Request) => {
   const totalBytesEstimado = anexos.reduce((s, a) => s + Math.floor(a.base64.length * 3 / 4), 0);
   if (totalBytesEstimado > MAX_ANEXO_TOTAL_BYTES) {
     return json({ error: `Anexos somam ~${(totalBytesEstimado / 1024 / 1024).toFixed(1)}MB — limite de ${(MAX_ANEXO_TOTAL_BYTES / 1024 / 1024).toFixed(1)}MB por envio (limite real do ambiente de envio, confirmado em teste — não é uma escolha arbitrária).` }, 400);
+  }
+
+  /* 01/10 — ClaudeNotebook (issue #584): esta função era um relay aberto (a chave
+     publishable do front chega a qualquer visitante). Três travas, todas ANTES do SMTP:
+     formato do e-mail, allowlist (só destinatários já conhecidos no sistema) e limite
+     de taxa por IP/global. Nada abaixo daqui (anexos, base64, persistência, vínculo)
+     foi alterado. Falha ao consultar o banco = bloqueia (fail-closed). */
+  const invalidos = destinatarios.filter((d) => !EMAIL_RE.test(d));
+  if (invalidos.length) return json({ error: `Destinatário inválido: ${invalidos.join(", ")}` }, 400);
+  if (destinatarios.length > MAX_DESTINATARIOS) {
+    return json({ error: `Máximo de ${MAX_DESTINATARIOS} destinatários por envio.` }, 400);
+  }
+
+  let guard: ReturnType<typeof createClient>;
+  try {
+    guard = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
+  } catch (e) {
+    console.warn("[send-email] guard: cliente de serviço indisponível", e);
+    return json({ error: "Envio temporariamente indisponível (verificação de segurança)." }, 503);
+  }
+
+  const externos = destinatarios.filter((d) => {
+    const dom = d.split("@")[1]?.toLowerCase() || "";
+    return !DOMINIOS_INTERNOS.includes(dom) && !EXTRAS_PERMITIDOS.includes(d.toLowerCase());
+  });
+  if (externos.length) {
+    const { data: conhecidos, error: errConh } = await guard.rpc("email_conhecidos", { p_emails: externos });
+    if (errConh) {
+      console.warn("[send-email] guard: email_conhecidos falhou", errConh);
+      return json({ error: "Envio temporariamente indisponível (verificação de segurança)." }, 503);
+    }
+    const ok = new Set((conhecidos as string[] | null || []).map((x) => x.toLowerCase()));
+    const desconhecidos = externos.filter((d) => !ok.has(d.toLowerCase()));
+    if (desconhecidos.length) {
+      return json({ error: `Destinatário(s) não cadastrado(s) no sistema: ${desconhecidos.join(", ")}. Cadastre o contato (cliente, fornecedor, lead ou colaborador) antes de enviar.` }, 403);
+    }
+  }
+
+  const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "desconhecido").split(",")[0].trim();
+  const { data: taxa, error: errTaxa } = await guard.rpc("email_rate_check", { p_ip: ip, p_n: destinatarios.length, p_max_ip: MAX_ENVIOS_IP_10MIN, p_max_global: MAX_ENVIOS_GLOBAL_10MIN });
+  if (errTaxa) {
+    console.warn("[send-email] guard: email_rate_check falhou", errTaxa);
+    return json({ error: "Envio temporariamente indisponível (verificação de segurança)." }, 503);
+  }
+  if (taxa !== "ok") {
+    return json({ error: "Muitos envios em pouco tempo. Aguarde alguns minutos e tente de novo." }, 429);
   }
 
   const messageId = `<${crypto.randomUUID()}@vpsistema.com>`;
@@ -136,10 +197,19 @@ Deno.serve(async (req: Request) => {
     } as any);
     await client.close();
 
+    // 29/09 — achado real: Contrato de Venda/Instalador sem Proposta de
+    // origem não tem numeroCotacao (número não bate no formato que o
+    // read-inbox reconhece), mas ainda tem referenciaId (o próprio id do
+    // contrato) — o vínculo por Message-ID (camada 'certo' do read-inbox)
+    // não depende de numeroCotacao nenhum, só precisa da linha de saída
+    // existir. Sem este `|| referenciaId != null`, esses envios nunca
+    // eram gravados em emails_projeto e a resposta nunca tinha chance de
+    // vínculo algum, nem por Message-ID. Mesma lógica pro bloco de
+    // persistência mais abaixo — mantenha as duas condições iguais.
     let anexosSalvos: { filename: string; content_type: string; size: number; path: string }[] = [];
-    if (numeroCotacao != null && anexos.length) {
+    if (anexos.length) {      // 04/10: todo envio é registrado (histórico eterno), não só os com cotação/documento
       try {
-        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
         const grupoId = crypto.randomUUID();
         for (const a of anexos) {
           const bytes = base64ToBytes(a.base64);
@@ -154,10 +224,19 @@ Deno.serve(async (req: Request) => {
       }
     }
 
-    if (numeroCotacao != null) {
+    // 28/09 — achado real: o insert abaixo nunca checava `error` (só existia
+    // o try/catch, que só pega exceção de rede/conexão) — uma falha de
+    // verdade do PostgREST (RLS, coluna, constraint) resolvia normalmente
+    // sem lançar exceção nenhuma, então o e-mail saía via SMTP mas nunca
+    // aparecia em Enviados/Linha do Tempo e ninguém era avisado. Continua
+    // "nunca derruba o envio por falha de persistência" (o e-mail já foi
+    // enviado de verdade quando chega aqui), mas agora reporta o problema
+    // pro chamador via avisoPersistencia em vez de engolir silenciosamente.
+    let avisoPersistencia: string | null = null;
+    {   // 04/10: sempre grava (antes só com cotação/documento) — sem isso, e-mail avulso não tinha dono nem aparecia em Enviados
       try {
-        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
-        await supabase.from("emails_projeto").insert({
+        const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
+        const { error: insertErr } = await supabase.from("emails_projeto").insert({
           numero_cotacao: numeroCotacao,
           referencia_tipo: referenciaTipo,
           referencia_id: referenciaId,
@@ -171,14 +250,19 @@ Deno.serve(async (req: Request) => {
           message_id: messageId,
           data_mensagem: new Date().toISOString(),
           anexos: anexosSalvos,
+          enviado_por: enviadoPor,
         });
+        if (insertErr) {
+          console.warn("[send-email] falha ao gravar em emails_projeto", insertErr);
+          avisoPersistencia = "E-mail enviado normalmente, mas não foi possível registrá-lo em Enviados/Linha do Tempo desta cotação — avise o suporte se isso persistir.";
+        }
       } catch (e) {
-        // Nunca derruba o envio (já aconteceu) por falha de persistência.
-        console.warn("[send-email] falha ao gravar em emails_projeto", e);
+        console.warn("[send-email] falha ao gravar em emails_projeto (exceção)", e);
+        avisoPersistencia = "E-mail enviado normalmente, mas não foi possível registrá-lo em Enviados/Linha do Tempo desta cotação — avise o suporte se isso persistir.";
       }
     }
 
-    return json({ ok: true, destinatarios, messageId });
+    return json({ ok: true, destinatarios, messageId, avisoPersistencia });
   } catch (e) {
     try { await client.close(); } catch (_) { /* já pode ter fechado sozinho no erro */ }
     console.warn("[send-email] falha ao enviar", e);

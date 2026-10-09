@@ -10,6 +10,11 @@ const PI_INCOTERMS = ['EXW', 'FCA', 'FAS', 'FOB', 'CFR', 'CIF', 'CPT', 'CIP', 'D
 const PI_MOEDAS = ['USD', 'EUR', 'BRL', 'CNY', 'GBP'];
 const PI_UNIDADES = ['un', 'kg', 'g', 'ton', 'm', 'm²', 'm³', 'L', 'mL', 'cx', 'pct', 'par', 'cj'];
 const PI_STATUS_PRODUCAO = ['Não iniciada', 'Em produção', 'Concluída', 'Atrasada'];
+const PI_TAXA_TIPOS = [
+  { value: '%', label: '% (percentual sobre o valor dos itens)' },
+  { value: 'BRL', label: 'Moeda Brasileira (R$)' },
+  { value: 'USD', label: 'Dólar (US$)' },
+];
 
 function fmtDate(d) { return d ? new Date(d + 'T12:00:00').toLocaleDateString('pt-BR') : '—'; }
 function fmtNum(v) { return (v == null || v === '') ? '—' : Number(v).toLocaleString('pt-BR', { minimumFractionDigits: 2 }); }
@@ -80,6 +85,37 @@ function PIItensSection({ itens, onChange, moeda }) {
   const add = () => onChange([...(itens || []), { descricao_produto: '', codigo_produto: '', quantidade: '', unidade_medida: 'un', ncm: '', valor_unitario: '' }]);
   const remove = (i) => onChange(itens.filter((_, idx) => idx !== i));
   const update = (i, field, v) => onChange(itens.map((it, idx) => (idx === i ? { ...it, [field]: v } : it)));
+  /* Código digitado → puxa descrição, unidade e NCM do cadastro (espera a pessoa parar de digitar) */
+  const itensRef = React.useRef(itens); itensRef.current = itens;
+  const onChangeRef = React.useRef(onChange); onChangeRef.current = onChange;
+  const timers = React.useRef({});
+  const autoRef = React.useRef({});
+  const [achado, setAchado] = React.useState({});
+  const mudarCodigo = (i, v) => {
+    update(i, 'codigo_produto', v);
+    clearTimeout(timers.current[i]);
+    setAchado((a) => ({ ...a, [i]: null }));
+    timers.current[i] = setTimeout(async () => {
+      const p = await store.buscarProdutoPorCodigo(v);
+      if (!p) { if (String(v || '').trim().length >= 3) setAchado((a) => ({ ...a, [i]: 'nao' })); return; }
+      const atual = itensRef.current || [];
+      if (!atual[i] || atual[i].codigo_produto !== v) return; /* mudou enquanto buscava */
+      /* Só preenche campo livre: vazio, ou ainda igual ao que o cadastro preencheu antes
+         (a pessoa não mexeu). O que ela digitou nunca é sobrescrito. */
+      const ant = autoRef.current[i] || {};
+      const livre = (atualV, antV, padrao) => !atualV || atualV === padrao && !antV || atualV === antV;
+      autoRef.current[i] = {};
+      onChangeRef.current(atual.map((it, idx) => {
+        if (idx !== i) return it;
+        const n = { ...it };
+        if (p.descricao && livre(it.descricao_produto, ant.descricao)) { n.descricao_produto = p.descricao; autoRef.current[i].descricao = p.descricao; }
+        if (p.unidade && livre(it.unidade_medida, ant.unidade, 'un')) { n.unidade_medida = p.unidade; autoRef.current[i].unidade = p.unidade; }
+        if (p.ncm && livre(it.ncm, ant.ncm)) { n.ncm = p.ncm; autoRef.current[i].ncm = p.ncm; }
+        return n;
+      }));
+      setAchado((a) => ({ ...a, [i]: 'sim' }));
+    }, 500);
+  };
   const total = store.calcTotalGeral(itens);
 
   return (
@@ -96,7 +132,11 @@ function PIItensSection({ itens, onChange, moeda }) {
               </div>
               <div className="grid-3" style={{ gap: 10 }}>
                 <PIField label="Descrição do produto *" span={2}><PIInput value={item.descricao_produto} onChange={(v) => update(i, 'descricao_produto', v)}/></PIField>
-                <PIField label="Código"><PIInput value={item.codigo_produto} onChange={(v) => update(i, 'codigo_produto', v)}/></PIField>
+                <PIField label="Código">
+                  <PIInput value={item.codigo_produto} onChange={(v) => mudarCodigo(i, v)} placeholder="Ex.: VPEL-031"/>
+                  {achado[i] === 'sim' && <span className="small" style={{ color: 'var(--vp-success, #1a7f37)' }}>✓ Campos vazios preenchidos pelo cadastro</span>}
+                  {achado[i] === 'nao' && <span className="small muted">Código não encontrado — preencha à mão</span>}
+                </PIField>
                 <PIField label="Quantidade *"><PIInput type="number" step="0.01" value={item.quantidade} onChange={(v) => update(i, 'quantidade', v)}/></PIField>
                 <PIField label="Unidade"><PISelect value={item.unidade_medida} onChange={(v) => update(i, 'unidade_medida', v)} options={PI_UNIDADES}/></PIField>
                 <PIField label="NCM"><PIInput value={item.ncm} onChange={(v) => update(i, 'ncm', v)}/></PIField>
@@ -117,6 +157,98 @@ function PIItensSection({ itens, onChange, moeda }) {
           <div style={{ fontSize: 18, fontWeight: 800 }}>{store.fmtMoeda(total, moeda)}</div>
         </div>
       </div>
+    </Card>
+  );
+}
+
+/* ---------- Taxas adicionais (Frete Local, Seguro, Taxa administrativa…) ----------
+   Pedido do usuário a partir de um Commercial Invoice real (ex.: "Local
+   Freight" somado ao "Parts Cost" pra chegar no "Total Amount"). Cada taxa
+   pergunta: (1) o tipo de valor — % sobre o valor dos itens, Moeda
+   Brasileira (R$) ou Dólar (US$); (2) qual é a taxa (descrição livre). */
+function PIModalTaxa({ initialData, onClose, onSave }) {
+  const [tipo, setTipo] = React.useState(initialData?.tipo || '%');
+  const [descricao, setDescricao] = React.useState(initialData?.descricao || '');
+  const [valor, setValor] = React.useState(initialData?.valor ?? '');
+
+  const salvar = () => {
+    if (!descricao.trim()) return window.toast?.('Informe qual é a taxa (ex.: Frete Local, Seguro).', 'warning');
+    if (valor === '' || isNaN(Number(valor)) || Number(valor) <= 0) return window.toast?.('Informe um valor válido.', 'warning');
+    onSave({ tipo, descricao: descricao.trim(), valor: Number(valor) });
+    onClose();
+  };
+
+  return (
+    <Modal title={initialData ? 'Editar taxa' : 'Adicionar Taxas'} onClose={onClose} width={440}
+      footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" onClick={salvar}>{initialData ? 'Salvar' : 'Adicionar'}</Button></>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <PIField label="Tipo de taxa *">
+          <select className="input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            {PI_TAXA_TIPOS.map((t) => <option key={t.value} value={t.value}>{t.label}</option>)}
+          </select>
+        </PIField>
+        <PIField label="Qual taxa? *">
+          <PIInput value={descricao} onChange={setDescricao} placeholder="Ex.: Frete local, Seguro, Taxa administrativa"/>
+        </PIField>
+        <PIField label={tipo === '%' ? 'Percentual (%) *' : `Valor (${tipo}) *`}>
+          <PIInput type="number" step="0.01" value={valor} onChange={setValor} placeholder={tipo === '%' ? 'Ex.: 5' : 'Ex.: 56.00'}/>
+        </PIField>
+      </div>
+    </Modal>
+  );
+}
+
+function PITaxasSection({ taxas, onChange, moeda, subtotalItens }) {
+  const store = window.PIStore;
+  const [modalAberto, setModalAberto] = React.useState(false);
+  const [editando, setEditando] = React.useState(null); // {index, taxa} | null
+
+  const adicionar = (taxa) => onChange([...(taxas || []), taxa]);
+  const salvarEdicao = (taxa) => onChange(taxas.map((t, idx) => (idx === editando.index ? taxa : t)));
+  const remove = (i) => onChange(taxas.filter((_, idx) => idx !== i));
+  const totalTaxas = store.calcTotalTaxas(taxas, subtotalItens, moeda);
+
+  return (
+    <Card title="Taxas adicionais" sub="Frete local, seguro, taxa administrativa etc. — em %, Moeda Brasileira (R$) ou Dólar (US$).">
+      {(!taxas || taxas.length === 0) ? (
+        <p className="small muted" style={{ textAlign: 'center', padding: '16px 0' }}>Nenhuma taxa adicionada.</p>
+      ) : (
+        <div className="stack" style={{ gap: 8 }}>
+          {taxas.map((t, i) => {
+            const valorCalculado = store.calcTaxaValor(t, subtotalItens);
+            const moedaCalculo = t.tipo === '%' ? moeda : t.tipo;
+            const moedaDivergente = t.tipo !== '%' && t.tipo !== moeda;
+            return (
+              <div key={i} className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 10 }}>
+                <div>
+                  <div className="small" style={{ fontWeight: 600 }}>{t.descricao || '—'}</div>
+                  <div className="small muted">
+                    {t.tipo === '%' ? `${t.valor}%` : store.fmtMoeda(t.valor, t.tipo)}
+                    <span> · calculado: </span><b>{store.fmtMoeda(valorCalculado, moedaCalculo)}</b>
+                    {moedaDivergente && <span> · moeda diferente da P.I., não somada ao total automaticamente</span>}
+                  </div>
+                </div>
+                <div className="row gap-1">
+                  <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => setEditando({ index: i, taxa: t })}/>
+                  <Button variant="ghost" size="sm" icon="trash" title="Remover" onClick={() => remove(i)}/>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+      <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 10 }} onClick={() => setModalAberto(true)}>Adicionar Taxas</Button>
+      {taxas && taxas.length > 0 && (
+        <div className="row sb" style={{ marginTop: 14, paddingTop: 10, borderTop: '1px solid var(--border)' }}>
+          <span/>
+          <div style={{ textAlign: 'right' }}>
+            <div className="small muted">Total de taxas ({moeda})</div>
+            <div style={{ fontSize: 16, fontWeight: 800 }}>{store.fmtMoeda(totalTaxas, moeda)}</div>
+          </div>
+        </div>
+      )}
+      {modalAberto && <PIModalTaxa onClose={() => setModalAberto(false)} onSave={adicionar}/>}
+      {editando && <PIModalTaxa initialData={editando.taxa} onClose={() => setEditando(null)} onSave={salvarEdicao}/>}
     </Card>
   );
 }
@@ -148,6 +280,45 @@ function PIPagamentosAdicionais({ pagamentos, onChange }) {
         </div>
       )}
       <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 10 }} onClick={add}>Adicionar pagamento</Button>
+    </Card>
+  );
+}
+
+/* ---------- Transferências de pagamento entre P.I.s ---------- */
+function PITransferencias({ transferencias, onChange, moeda }) {
+  const lista = transferencias || [];
+  const add = () => onChange([...lista, { direcao: 'recebida', pi_numero: '', data: '', valor: '', obs: '' }]);
+  const remove = (i) => onChange(lista.filter((_, idx) => idx !== i));
+  const update = (i, field, v) => onChange(lista.map((t, idx) => (idx === i ? { ...t, [field]: v } : t)));
+  return (
+    <Card title="Transferência de pagamento entre P.I.s" sub="Pagamento feito numa P.I. que quitava outra. Os pagamentos originais não mudam; só o % paga desconta o que saiu e soma o que entrou.">
+      {lista.length === 0 ? (
+        <p className="small muted" style={{ textAlign: 'center', padding: '16px 0' }}>Nenhuma transferência.</p>
+      ) : (
+        <div className="stack" style={{ gap: 8 }}>
+          {lista.map((t, i) => (
+            <div key={i} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 10 }}>
+              <div className="row sb" style={{ marginBottom: 6 }}>
+                <span className="small muted">{t.direcao === 'enviada' ? 'Enviada para' : 'Recebida de'} {t.pi_numero || 'outra P.I.'}</span>
+                <Button variant="ghost" size="sm" icon="trash" onClick={() => remove(i)}/>
+              </div>
+              <div className="grid-3" style={{ gap: 10 }}>
+                <PIField label="Sentido">
+                  <select className="input" value={t.direcao} onChange={(e) => update(i, 'direcao', e.target.value)}>
+                    <option value="recebida">Recebida (outra P.I. pagou esta)</option>
+                    <option value="enviada">Enviada (paguei aqui algo de outra P.I.)</option>
+                  </select>
+                </PIField>
+                <PIField label="Nº da outra P.I."><PIInput value={t.pi_numero} onChange={(v) => update(i, 'pi_numero', v)}/></PIField>
+                <PIField label={`Valor (${moeda || 'USD'})`}><PIInput type="number" step="0.01" value={t.valor} onChange={(v) => update(i, 'valor', v)}/></PIField>
+                <PIField label="Data do pagamento original"><PIInput type="date" value={t.data} onChange={(v) => update(i, 'data', v)}/></PIField>
+                <PIField label="Observação" span={2}><PIInput value={t.obs} onChange={(v) => update(i, 'obs', v)} placeholder="Ex.: sinal de 30% pago junto com a SCVP260522"/></PIField>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 10 }} onClick={add}>Adicionar transferência</Button>
     </Card>
   );
 }
@@ -213,10 +384,10 @@ function PIProducaoSection({ value, onChange, piId }) {
 const PI_EMPTY = {
   numero_pi: '', fornecedor: '', incoterms: '', data_solicitacao_pagamento: '', numero_requisicao: '', numero_cotacao: '',
   numeros_serie: [], categorias: [], embarque_id: '', data_abertura: '', data_prontidao: '',
-  status: 'Em andamento', moeda: 'USD', itens: [],
+  status: 'Em andamento', moeda: 'USD', itens: [], taxas: [],
   data_primeiro_pagamento: '', valor_primeiro_pagamento: '', cotacao_dolar_primeiro_pagamento: '',
   data_segundo_pagamento: '', valor_segundo_pagamento: '', cotacao_dolar_segundo_pagamento: '',
-  pagamentos_adicionais: [], producao: {}, observacoes: '',
+  pagamentos_adicionais: [], transferencias_pagamento: [], producao: {}, observacoes: '',
 };
 
 function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) {
@@ -270,11 +441,15 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
   }, [form.numero_cotacao, isEdit]);
 
   const valorTotalItens = store.calcTotalGeral(form.itens);
+  const totalTaxas = store.calcTotalTaxas(form.taxas, valorTotalItens, form.moeda);
+  const valorTotalComTaxas = valorTotalItens + totalTaxas;
   const pago1 = parseFloat(form.valor_primeiro_pagamento) || 0;
   const pago2 = parseFloat(form.valor_segundo_pagamento) || 0;
   const pagoAdicional = store.somaPagamentosAdicionais(form.pagamentos_adicionais);
   const totalPago = pago1 + pago2 + pagoAdicional;
-  const percPaga = valorTotalItens > 0 ? (totalPago / valorTotalItens) * 100 : 0;
+  const saldoTransf = store.saldoTransferencias(form.transferencias_pagamento);
+  const totalQuitado = totalPago + saldoTransf;
+  const percPaga = valorTotalComTaxas > 0 ? (totalQuitado / valorTotalComTaxas) * 100 : 0;
 
   /* Compra de equipamento — gate do CEO + gatilhos automáticos, só faz
      sentido conferir na criação (o "start" da compra) e quando a P.I. está
@@ -369,7 +544,12 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
         </div>
       )}
 
-      {tab === 'produtos' && <div style={{ marginTop: 14 }}><PIItensSection itens={form.itens} onChange={set('itens')} moeda={form.moeda}/></div>}
+      {tab === 'produtos' && (
+        <div className="stack" style={{ gap: 14, marginTop: 14 }}>
+          <PIItensSection itens={form.itens} onChange={set('itens')} moeda={form.moeda}/>
+          <PITaxasSection taxas={form.taxas} onChange={set('taxas')} moeda={form.moeda} subtotalItens={valorTotalItens}/>
+        </div>
+      )}
 
       {tab === 'pagamento' && (
         <div className="stack" style={{ gap: 14, marginTop: 14 }}>
@@ -388,11 +568,16 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
             </div>
           </Card>
           <PIPagamentosAdicionais pagamentos={form.pagamentos_adicionais} onChange={set('pagamentos_adicionais')}/>
+          <PITransferencias transferencias={form.transferencias_pagamento} onChange={set('transferencias_pagamento')} moeda={form.moeda}/>
           <div className="row sb" style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 12 }}>
             <div className="small">
               <span className="muted">Total pago: </span><b>{store.fmtMoeda(totalPago, form.moeda)}</b>
+              {saldoTransf !== 0 && <><span className="muted" style={{ margin: '0 8px' }}>·</span><span className="muted">Transferências: </span><b>{saldoTransf > 0 ? '+' : '−'}{store.fmtMoeda(Math.abs(saldoTransf), form.moeda)}</b></>}
               <span className="muted" style={{ margin: '0 8px' }}>·</span>
-              <span className="muted">Total da P.I.: </span><b>{store.fmtMoeda(valorTotalItens, form.moeda)}</b>
+              <span className="muted">Total dos itens: </span><b>{store.fmtMoeda(valorTotalItens, form.moeda)}</b>
+              {totalTaxas > 0 && <><span className="muted" style={{ margin: '0 8px' }}>·</span><span className="muted">Taxas: </span><b>{store.fmtMoeda(totalTaxas, form.moeda)}</b></>}
+              <span className="muted" style={{ margin: '0 8px' }}>·</span>
+              <span className="muted">Total da P.I.: </span><b>{store.fmtMoeda(valorTotalComTaxas, form.moeda)}</b>
             </div>
             <div style={{ textAlign: 'right' }}>
               <div className="small muted">% paga</div>
@@ -527,9 +712,7 @@ function PIPage() {
             {filtered.map((pi) => {
               const embarque = embarquesMap[pi.embarque_id];
               const itens = pi.itens || [];
-              const pagoAdicional = (pi.pagamentos_adicionais || []).reduce((s, p) => s + (Number(p.valor) || 0), 0);
-              const totalPago = (Number(pi.valor_primeiro_pagamento) || 0) + (Number(pi.valor_segundo_pagamento) || 0) + pagoAdicional;
-              const percPaga = pi.valor_total ? (totalPago / pi.valor_total) * 100 : 0;
+              const percPaga = pi.valor_total ? (window.PIStore.calcValorQuitado(pi) / pi.valor_total) * 100 : 0;
               const prod = pi.producao || {};
               return (
                 <tr key={pi.id}>

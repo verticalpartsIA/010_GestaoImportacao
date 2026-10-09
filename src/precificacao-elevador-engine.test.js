@@ -108,8 +108,32 @@ test('calcular — containers somam no mesmo bucket que Instalação e Montagem 
   });
   closeTo(comContainers.importacao.containersRs, 800, 0.01, 'containersRs deveria ser 1×500 + 1×300');
   closeTo(comContainers.importacao.despesasExtrasTotal - semContainers.importacao.despesasExtrasTotal, 800, 0.01, 'containers deveriam entrar no total de despesas extras/operacionais');
-  closeTo(comContainers.precificacao.precoVendaProposta, semContainers.precificacao.precoVendaProposta, 0.01, 'preço de venda não deveria mudar com containers (igual instalação/montagem)');
-  closeTo(semContainers.precificacao.lucroFinal - comContainers.precificacao.lucroFinal, 800, 0.01, 'lucro final deveria cair exatamente o valor dos containers');
+  // 01/10/2026: container entra na base do AFRMM (8% sobre container + capatazia) — única parte
+  // que chega ao custo da mercadoria; o valor do container em si continua despesa operacional.
+  closeTo(comContainers.importacao.afrmm - semContainers.importacao.afrmm, 64, 0.01, 'AFRMM deveria somar 8% × (500 + 300)');
+  assert.ok(comContainers.precificacao.precoVendaProposta > semContainers.precificacao.precoVendaProposta, 'só o AFRMM do container sobe o preço de venda');
+  // No V1 o preço sobe um pouco (AFRMM), compensando parte dos 800 de container no lucro.
+  const quedaLucro = semContainers.precificacao.lucroFinal - comContainers.precificacao.lucroFinal;
+  assert.ok(quedaLucro > 0 && quedaLucro < 800, `lucro final deveria cair, mas menos que os 800 dos containers (o preço sobe pelo AFRMM): caiu ${quedaLucro}`);
+});
+
+test('calcular — capatazia soma como despesa operacional e entra na base do AFRMM', () => {
+  const sem = E.calcular(inputsBase);
+  const com = E.calcular({ ...inputsBase, containers: [{ tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 1000, capatazia_rs: 250 }] });
+  closeTo(com.importacao.capataziaRs, 250, 0.01, 'capataziaRs deveria ser 1×250');
+  closeTo(com.importacao.despesasExtrasTotal - sem.importacao.despesasExtrasTotal, 1250, 0.01, 'container + capatazia entram nas despesas operacionais');
+  closeTo(com.importacao.afrmm - sem.importacao.afrmm, 100, 0.01, 'AFRMM = 8% × (1000 + 250)');
+});
+
+test('calcular — containerRateioDivisor divide container e capatazia (card 120d compartilhado)', () => {
+  const containers = [{ tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 1000, capatazia_rs: 200 }];
+  const inteiro = E.calcular({ ...inputsBase, containers });
+  const metade = E.calcular({ ...inputsBase, containers, containerRateioDivisor: 2 });
+  closeTo(metade.importacao.containersRs, inteiro.importacao.containersRs / 2, 0.01, 'container dividido por 2');
+  closeTo(metade.importacao.capataziaRs, inteiro.importacao.capataziaRs / 2, 0.01, 'capatazia dividida por 2');
+  closeTo(metade.importacao.afrmm - E.calcular(inputsBase).importacao.afrmm, 48, 0.01, 'AFRMM acompanha o valor dividido: 8% × (500 + 100)');
+  const invalido = E.calcular({ ...inputsBase, containers, containerRateioDivisor: 0 });
+  closeTo(invalido.importacao.containersRs, 1000, 0.01, 'divisor inválido (0) vale como 1');
 });
 
 test('calcular — itens avulsos de "Despesas Extras" somam no mesmo bucket que Instalação e Montagem/Containers', () => {
@@ -182,7 +206,8 @@ test('V2 — custo econômico completo soma containers e itens avulsos, não só
     modoFormacaoPreco: 'margem_sobre_venda', margemDesejadaPct: 0.2,
   });
   // 5000 (mercadoria) + 1000 (instalação) + 500 (containers) + 300 (itens avulsos) + 5 (ad-valorem)
-  closeTo(out.custoEconomicoCompleto, 6805, 0.01, 'custoEconomicoCompleto = 5000 + 1000 + 500 + 300 + 5 (ad-valorem)');
+  // + 40 (AFRMM = 8% × 500 de container, desde 01/10/2026)
+  closeTo(out.custoEconomicoCompleto, 6845, 0.01, 'custoEconomicoCompleto = 5000 + 1000 + 500 + 300 + 5 (ad-valorem) + 40 (AFRMM do container)');
 });
 
 test('V2 — contingência e outros custos não recuperáveis entram na base do preço', () => {
@@ -218,4 +243,45 @@ test('calcular — rateio por modelo soma 100% do preço de venda proposto', () 
   const somaValorTotalRs = out.modelos.reduce((s, m) => s + m.valorTotalRs, 0);
   closeTo(somaValorTotalRs, out.precificacao.precoVendaProposta, 0.01, 'soma do rateio deveria bater com o preço de venda total');
   closeTo(out.modelos[0].percentual, 0.6, 0.001, 'E1 é 60% do valor USD total (600/1000)');
+});
+
+test('calcular — GRI soma como despesa operacional, entra na base do AFRMM e acompanha o rateio', () => {
+  const sem = E.calcular(inputsBase);
+  const containers = [{ tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 1000, capatazia_rs: 250, gri_rs: 150 }];
+  const com = E.calcular({ ...inputsBase, containers });
+  closeTo(com.importacao.griRs, 150, 0.01, 'griRs deveria ser 1×150');
+  closeTo(com.importacao.despesasExtrasTotal - sem.importacao.despesasExtrasTotal, 1400, 0.01, 'container + capatazia + GRI entram nas despesas operacionais');
+  closeTo(com.importacao.afrmm - sem.importacao.afrmm, 112, 0.01, 'AFRMM = 8% × (1000 + 250 + 150)');
+  const metade = E.calcular({ ...inputsBase, containers, containerRateioDivisor: 2 });
+  closeTo(metade.importacao.griRs, 75, 0.01, 'GRI dividida pelo rateio (card 120d compartilhado)');
+});
+
+test('ratearPorModelo — equipamento mais caro no fornecedor sai com preço de venda maior; soma fecha no total', () => {
+  const modelos = [
+    { unidadeId: 'a', quantidade: 1, valorUnitarioUsd: 16830 },
+    { unidadeId: 'b', quantidade: 1, valorUnitarioUsd: 16830 },
+    { unidadeId: 'c', quantidade: 1, valorUnitarioUsd: 17670 },
+  ];
+  const r = E.ratearPorModelo(modelos, 652551.14);
+  assert.ok(r[2].valorUnitarioRs > r[0].valorUnitarioRs, 'o 3º é mais caro');
+  assert.equal(r[0].valorUnitarioRs, r[1].valorUnitarioRs);
+  closeTo(r.reduce((s, m) => s + m.valorUnitarioRs * m.quantidade, 0), 652551.14, 0.01, 'soma = total');
+});
+
+test('ratearPorModelo — quantidade > 1 devolve valor POR equipamento; sem custo USD divide por quantidade', () => {
+  const r = E.ratearPorModelo([{ quantidade: 2, valorUnitarioUsd: 100 }, { quantidade: 1, valorUnitarioUsd: 200 }], 1000);
+  closeTo(r[0].valorUnitarioRs, 250, 0.001, 'cada um dos 2');
+  closeTo(r[1].valorUnitarioRs, 500, 0.001, 'o único');
+  const igual = E.ratearPorModelo([{ quantidade: 1 }, { quantidade: 1 }], 1000);
+  closeTo(igual[0].valorUnitarioRs, 500, 0.001, 'sem USD: igual');
+  assert.deepEqual(E.ratearPorModelo(undefined, 100), []);
+});
+
+test('calcularV2 — devolve modelos rateados sobre o preço do próprio V2', () => {
+  const out = E.calcularV2({
+    parametros: {}, vmleUsd: 1000, txCambial: 5, quantidadeEquipamentos: 2,
+    modoFormacaoPreco: 'markup_sobre_custo', markUpPct: 0.3,
+    modelos: [{ quantidade: 1, valorUnitarioUsd: 400 }, { quantidade: 1, valorUnitarioUsd: 600 }],
+  });
+  closeTo(out.modelos.reduce((s, m) => s + m.valorTotalRs, 0), out.precificacao.precoVendaProposta, 0.01, 'soma = preço V2');
 });

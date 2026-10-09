@@ -3,19 +3,21 @@
    Gate do Financeiro no meio do funil comercial:
 
      Proposta aprovada (cliente assinou)
-       -> Financeiro consulta o score do cliente
-       -> Financeiro dá o aval (aprova ou reprova a venda)
-       -> [só então o Contrato de Venda pode ser enviado — ver createDraft
-          em contrato-venda-store.js]
+       -> Contrato de Venda é gerado e enviado SEM esperar o Financeiro
+          (29/09: a consulta de score/aval de venda deixou de bloquear o
+          contrato — ver podeEnviarContrato abaixo; continua disponível
+          como registro opcional na tela Aval Financeiro)
      Contrato enviado
-       -> Jurídico assina o contrato (automático, via link público)
-       -> Boleto gerado -> Financeiro confirma que foi pago (manual)
-       -> Financeiro dá o Aval de Pagamento (manual, NOVO — distinto
-          deste aval de score acima)
-       -> [só com contrato assinado + boleto pago + Aval de Pagamento
-          a Cotação a Fornecedor pode iniciar a compra na China — ver
-          decidirComprar em cotacao-elevador-fornecedor-store.js e
-          podeIniciarCompra abaixo. Ver instrucaocompra.md.]
+       -> Cliente assina (automático, via link público)
+       -> Boleto do sinal gerado -> Financeiro confirma que foi pago (manual)
+       -> Financeiro dá o Aval de Pagamento (manual) = "Aval Financeiro"
+     Em paralelo, desde a Proposta aprovada:
+       -> Jurídico dá o Aval Jurídico (manual — ver aval-juridico-store.js;
+          o registro nasce junto com este, via trigger no banco)
+     [Aval de Pagamento + Aval Jurídico (+ CEO só se a margem < 15%)
+      liberam a compra na China — ver podeIniciarCompra abaixo e
+      decidirComprar em cotacao-elevador-fornecedor-store.js. Ver
+      instrucaocompra.md. Regra de 29/09/2026 (2ª rodada do dia).]
 
    window.AvalFinanceiroStore
    ============================================================ */
@@ -49,6 +51,15 @@
     const c = sb(); if (!c || numeroCotacao == null) return null;
     const { data } = await c.from('avais_financeiros').select('*')
       .eq('numero_cotacao', numeroCotacao).order('criado_em', { ascending: false }).limit(1).maybeSingle();
+    return data || null;
+  }
+
+  /* Usado por CVDesenhoInstalacaoSection (contrato-venda.jsx) pra checar
+     sinal_pago a partir do Contrato de Venda — vincularContrato() abaixo é
+     quem grava esse contrato_venda_id. */
+  async function getByContratoVendaId(contratoVendaId) {
+    const c = sb(); if (!c || !contratoVendaId) return null;
+    const { data } = await c.from('avais_financeiros').select('*').eq('contrato_venda_id', contratoVendaId).maybeSingle();
     return data || null;
   }
 
@@ -195,12 +206,15 @@
   }
 
   /* ---------- Gates ---------- */
-  async function podeEnviarContrato(propostaId) {
-    if (!propostaId) return { ok: true }; // wizard 100% manual, sem Master ID — não trava
-    const av = await getByPropostaId(propostaId);
-    if (!av || av.status !== 'aprovado') {
-      return { ok: false, motivo: 'O Financeiro ainda não deu o aval pra essa venda. Consulte o score e aprove em "Aval Financeiro" antes de enviar o contrato.' };
-    }
+  /* 29/09 — DEIXOU de bloquear. Antes exigia o aval de score/crédito do
+     Financeiro (status 'aprovado') antes de gerar/enviar o Contrato de Venda.
+     Processo real (confirmado pelo usuário): o Aval Financeiro é um evento à
+     parte, DEPOIS do sinal pago (Aval de Pagamento, manual) — não existe
+     aprovação do Financeiro antes do contrato. A consulta de score e o
+     "aval de venda" continuam existindo na tela Aval Financeiro como
+     registro opcional. Mantida a função (mesma assinatura) só porque
+     createDraft ainda a chama. */
+  async function podeEnviarContrato(_propostaId) {
     return { ok: true };
   }
 
@@ -310,48 +324,76 @@
     });
   }
 
-  /* Gate final antes de iniciar a compra no fornecedor. Checa, na ordem de
-     prioridade pedida (mostra sempre a PRIMEIRA condição que falta, mesmo
-     que outras também estejam pendentes): aprovação do CEO, aprovação do
-     responsável, sinal pago, Aval de Pagamento, contrato assinado, revisão
-     técnica do projeto pela Engenharia. Sinal/contrato continuam
-     acontecendo quando o cliente agir — não dependem de ordem estrita com
-     as aprovações internas, só entram todos juntos na conta final. */
+  /* CEO só entra quando a margem efetiva da precificação fica abaixo de 15%
+     (ou é desconhecida) — mesma regra de LIMITE_MARGEM_SEM_CEO do envio de
+     proposta, em decisoes-store.js (29/09, usuário: "CEO só chega nele
+     dentro de discrepâncias"). Sem DecisoesStore carregado, mantém o CEO
+     por segurança. */
+  async function precisaAprovacaoCeo(numeroCotacao) {
+    const d = window.DecisoesStore;
+    if (!d || !d.precisaAprovacaoCeo) return { precisa: true, margem: null };
+    return d.precisaAprovacaoCeo(numeroCotacao);
+  }
+
+  /* Aval Jurídico da mesma venda — pela Proposta (o registro nasce junto com
+     este, quando o cliente aprova), senão pelo Nº da cotação. */
+  async function avalJuridicoDe(av, numeroCotacao) {
+    const c = sb(); if (!c) return null;
+    if (av && av.proposta_id) {
+      const { data } = await c.from('avais_juridicos').select('status').eq('proposta_id', av.proposta_id).maybeSingle();
+      if (data) return data;
+    }
+    const { data } = await c.from('avais_juridicos').select('status')
+      .eq('numero_cotacao', numeroCotacao).order('criado_em', { ascending: false }).limit(1).maybeSingle();
+    return data || null;
+  }
+
+  /* Gate final antes de iniciar a compra no fornecedor (29/09/2026, pedido
+     do usuário: "para a compra na China, dois avais precisam estar OK,
+     financeiro e jurídico"):
+       1. Aval de Pagamento do Financeiro (manual, depois do sinal pago —
+          é o "Aval Financeiro" do processo real, ver #503)
+       2. Aval Jurídico (manual, abre junto com o Financeiro quando o
+          cliente aprova a Proposta)
+       3. Aval Engenharia (08/10/2026): o cliente assinou o Projeto de
+          Instalação — POR COTAÇÃO, todos os projetos dela (AvalEngenhariaStore)
+       4. CEO — só se a margem efetiva ficou abaixo de 15% (ou desconhecida)
+     Mostra sempre a PRIMEIRA que faltar. Deixaram de travar a compra:
+     aprovação do responsável pelo sistema, sinal pago como checagem própria
+     (o Aval de Pagamento já vem depois dele), contrato assinado e revisão
+     técnica de Engenharia. */
   async function podeIniciarCompra(numeroCotacao) {
     if (numeroCotacao == null) return { ok: true }; // sem correlação — não trava
-    const c = sb();
     const av = await getByNumeroCotacao(numeroCotacao);
-
-    let contratoAssinado = false;
-    if (av && av.contrato_venda_id) {
-      const { data: contrato } = await c.from('contratos_venda_equipamentos')
-        .select('status').eq('id', av.contrato_venda_id).maybeSingle();
-      contratoAssinado = contrato?.status === 'assinado';
-    }
-
-    const { data: projeto } = await c.from('projetos_elevador')
-      .select('status').eq('numero_cotacao', numeroCotacao).order('updated_at', { ascending: false }).limit(1).maybeSingle();
-    const revisaoProjeto = projeto?.status === 'finalizado';
+    const aj = await avalJuridicoDe(av, numeroCotacao);
+    const ceo = await precisaAprovacaoCeo(numeroCotacao);
+    const eng = window.AvalEngenhariaStore ? await window.AvalEngenhariaStore.status(numeroCotacao) : { estado: 'erro' };
+    const motivoEng = eng.estado === 'sem_projeto' ? 'a assinatura do Projeto de Instalação (o projeto ainda não foi salvo em "Projeto de Elevadores")'
+      : eng.estado === 'recusado' ? 'a assinatura do Projeto de Instalação (o cliente recusou — gere um novo link em "Projeto de Elevadores")'
+      : eng.estado === 'erro' ? 'a assinatura do Projeto de Instalação (não foi possível conferir agora)'
+      : `a assinatura do Projeto de Instalação (${eng.assinados} de ${eng.total} assinado${eng.total === 1 ? '' : 's'} — veja em "Projeto de Elevadores")`;
+    const margemTxt = ceo.margem != null ? `margem ${(ceo.margem * 100).toFixed(1).replace('.', ',')}%, abaixo de 15%` : 'margem desconhecida';
 
     const checagens = [
-      { ok: !!(av && av.aprovacao_ceo_em), motivo: 'a aprovação do CEO (Diego)' },
-      { ok: !!(av && av.aprovacao_owner_em), motivo: 'a aprovação do responsável pelo sistema' },
-      { ok: !!(av && av.sinal_pago), motivo: 'o pagamento do boleto pelo cliente (Financeiro)' },
-      { ok: !!(av && av.aval_pagamento_confirmado), motivo: 'o Aval de Pagamento (Financeiro)' },
-      { ok: contratoAssinado, motivo: 'a assinatura do contrato (Jurídico)' },
-      { ok: revisaoProjeto, motivo: 'a revisão técnica do projeto (Engenharia)' },
+      { rotulo: 'Aval de Pagamento (Financeiro)', ok: !!(av && av.aval_pagamento_confirmado), motivo: 'o Aval de Pagamento do Financeiro (depois do sinal pago — botão "Dar Aval de Pagamento" na tela "Aval Financeiro" ou em "Prazos & Pendências")' },
+      { rotulo: 'Aval Jurídico', ok: aj?.status === 'aprovado', motivo: 'o Aval Jurídico (tela "Aval Jurídico")' },
+      { rotulo: 'Assinatura do Projeto de Instalação (Engenharia)', ok: eng.estado === 'ok', motivo: motivoEng },
+      // CEO só aparece na lista quando a margem exige (senão não é um aval desta compra)
+      ...(ceo.precisa ? [{ rotulo: 'Aprovação do CEO', ok: !!(av && av.aprovacao_ceo_em), motivo: `a aprovação do CEO (Diego) — ${margemTxt}` }] : []),
     ];
+    // `checagens` (rótulo + ok) deixa a tela mostrar TODOS os avais, não só o primeiro que falta.
+    const lista = checagens.map((ck) => ({ rotulo: ck.rotulo, ok: ck.ok }));
     const primeiraFaltando = checagens.find((ck) => !ck.ok);
     if (primeiraFaltando) {
-      return { ok: false, motivo: `Ainda falta confirmar: ${primeiraFaltando.motivo}. Verifique em "Aval Financeiro" antes de iniciar a compra no fornecedor.` };
+      return { ok: false, checagens: lista, motivo: `Ainda falta confirmar: ${primeiraFaltando.motivo}. Só então a compra no fornecedor pode ser iniciada.` };
     }
-    return { ok: true };
+    return { ok: true, checagens: lista };
   }
 
   window.AvalFinanceiroStore = {
-    getById, getByPropostaId, getByNumeroCotacao, garantirRegistro, listarFila,
+    getById, getByPropostaId, getByNumeroCotacao, getByContratoVendaId, garantirRegistro, listarFila,
     registrarConsulta, darAval, confirmarSinal, confirmarAvalPagamento, vincularContrato,
-    podeEnviarContrato, podeIniciarCompra, aprovarComoCEO, aprovarComoOwner, isOwner,
+    podeEnviarContrato, podeIniciarCompra, precisaAprovacaoCeo, aprovarComoCEO, aprovarComoOwner, isOwner,
     registrarCustoReal,
   };
 }());

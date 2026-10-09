@@ -58,6 +58,46 @@
     ];
   }
 
+  /* Achado real (03/10): o KPI "Alertas críticos" conta as 3 checagens
+     cruzadas acima, mas elas não existem como linha em `alertas` — clicar
+     em "ver central" nunca levava a lugar nenhum pra elas (a Central só
+     lê a tabela `alertas`). Mesmo formato que
+     NotificacoesProcessamento.paraNotificacao() já espera (id/level/module/
+     title/sub/created_at/rota), pra a Central conseguir listar/abrir/marcar
+     como lida cada uma — sem precisar de tabela nova (id determinístico,
+     sem persistência: recalculado a cada carga, igual às outras 3 funções
+     deste arquivo). Não mexe em alertasCriticos()/kpis() acima — aditivo. */
+  function alertasSinteticosDetalhados({ propostas, contratos, avais }) {
+    const semContrato = propostasSemContrato(propostas, contratos).map((p) => ({
+      id: 'sintetico-proposta-sem-contrato-' + p.id,
+      level: 'danger',
+      module: 'Propostas',
+      title: 'Proposta aprovada sem contrato gerado',
+      sub: `Cotação ${p.numero_cotacao ?? '—'}` + (p.aprovada_em ? ` · aprovada em ${new Date(p.aprovada_em).toLocaleDateString('pt-BR')}` : ''),
+      created_at: p.aprovada_em || null,
+      rota: null,
+    }));
+    const valorZero = contratosValorZero(contratos).map((c) => ({
+      id: 'sintetico-contrato-valor-zero-' + c.id,
+      level: 'danger',
+      module: 'Financeiro',
+      title: 'Contrato com valor zerado',
+      sub: `Contrato ${c.id}`,
+      created_at: null,
+      rota: null,
+    }));
+    const sinalSemContrato = avaisSinalSemContrato(avais).map((a) => ({
+      id: 'sintetico-sinal-sem-contrato-' + a.id,
+      level: 'danger',
+      module: 'Financeiro',
+      title: 'Sinal pago sem contrato vinculado',
+      sub: `Cotação ${a.numero_cotacao ?? '—'}`,
+      created_at: null,
+      rota: null,
+    }));
+    return [...semContrato, ...valorZero, ...sinalSemContrato];
+  }
+
   /* Comissão é custo (23/08, Gelson) — o ERP Omie já trata como despesa;
      aqui é só exibição, soma todos os registros de `comissoes` (mesma
      tabela que a página Gatilhos & Prazo já usa pra "Comissões
@@ -112,8 +152,23 @@
     };
   }
 
+  /* Projeto "ativo no período": já começou e ainda não terminou antes do
+     início do período (sem end_date = em andamento). Antes o recorte usava
+     `start_date >= desde` ("iniciado no período"): um projeto começado há
+     semanas e ainda em andamento sumia — "Projetos ativos" dava 0 em "Hoje"
+     enquanto o Gantt listava 38 (issue #612). Sem `desde`, devolve tudo. */
+  function projetosAtivosNoPeriodo(projetos, desde, agora) {
+    if (!desde) return projetos || [];
+    const hoje = agora ? new Date(agora) : new Date();
+    return (projetos || []).filter((p) => {
+      if (p.start_date && new Date(p.start_date) > hoje) return false; // ainda não começou
+      return !p.end_date || new Date(p.end_date) >= desde;
+    });
+  }
+
   window.AdminMetrics = {
     embarquesEmTransito, faturamentoTotal, propostasSemContrato, contratosValorZero,
-    avaisSinalSemContrato, alertasCriticos, comissaoTotal, kpis, compute,
+    avaisSinalSemContrato, alertasCriticos, alertasSinteticosDetalhados, comissaoTotal, kpis, compute,
+    projetosAtivosNoPeriodo,
   };
 }());

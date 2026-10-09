@@ -30,7 +30,7 @@ function json(body: unknown, status = 200) {
 }
 
 const SUPABASE_URL = Deno.env.get("SUPABASE_URL") || "";
-const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") || "";
+const SERVICE_KEY = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS") || "{}")["default"] || "";
 
 function campo(form: Record<string, unknown>, ...nomes: string[]) {
   for (const n of nomes) {
@@ -61,14 +61,35 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return json({ error: "Método não permitido" }, 405);
 
   try {
+    /* 02/10 — ClaudeNotebook (issue #572): webhook público (o POST vem do servidor do
+       site, sem como esconder segredo no navegador). Limite de taxa por IP/global antes
+       de gravar qualquer coisa, e tamanho máximo por campo (antes qualquer texto, de
+       qualquer tamanho, virava um lead). O IP aqui é o do servidor do WordPress, por
+       isso o teto por IP é folgado. Falha ao consultar o limite = deixa passar (lead
+       perdido é pior que lead extra) — diferente do send-email, que bloqueia. */
+    const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "desconhecido").split(",")[0].trim();
+    try {
+      const r = await fetch(`${SUPABASE_URL}/rest/v1/rpc/api_rate_check`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", apikey: SERVICE_KEY, Authorization: `Bearer ${SERVICE_KEY}` },
+        body: JSON.stringify({ p_bucket: "capturar-lead", p_ip: ip, p_max_ip: 30, p_max_global: 60, p_janela_s: 600 }),
+      });
+      const resultado = r.ok ? await r.json() : "ok";
+      if (resultado !== "ok") return json({ error: "Muitas solicitações. Tente novamente em alguns minutos." }, 429);
+    } catch (e) {
+      console.warn("[capturar-lead] limite de taxa indisponível, seguindo sem ele:", e);
+    }
+
     const payload = await req.json().catch(() => ({}));
     const form = payload.form_fields || payload.fields || payload;
 
-    const nome = campo(form, "name", "nome", "your-name");
-    const email = campo(form, "email", "your-email");
-    const telefone = campo(form, "phone", "telefone", "your-phone");
-    const empresa = campo(form, "company", "empresa", "predio", "building");
-    const mensagem = campo(form, "message", "mensagem", "your-message");
+    const corta = (s: string, n: number) => s.slice(0, n);
+    const nome = corta(campo(form, "name", "nome", "your-name"), 120);
+    const emailBruto = corta(campo(form, "email", "your-email"), 160);
+    const email = /^[^\s@<>,;]+@[^\s@<>,;]+\.[^\s@<>,;]{2,}$/.test(emailBruto) ? emailBruto : "";
+    const telefone = corta(campo(form, "phone", "telefone", "your-phone"), 40);
+    const empresa = corta(campo(form, "company", "empresa", "predio", "building"), 160);
+    const mensagem = corta(campo(form, "message", "mensagem", "your-message"), 1000);
 
     if (!nome) return json({ error: "Campo 'nome' é obrigatório" }, 400);
 

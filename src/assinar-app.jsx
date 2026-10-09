@@ -94,10 +94,28 @@ function SgSumRow({ k, v }) { return <div className="ci-sum-row"><span className
 const STATUS_ALIASES = {
   instalador: { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
   venda:      { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
+  /* Signatário adicional (sócio/jurídico do Comprador, além do
+     representante — ver contrato-venda-signatarios-store.js): mesmo
+     vocabulário de status de 'venda', é uma linha própria na tabela
+     filha, não o contrato inteiro. */
+  venda_signatario: { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
+  /* Projeto de Instalação da Obra (Engenharia sobe o PDF, o representante do cliente assina) —
+     linha própria em documento_signatarios, mesmo vocabulário de status. */
+  projeto:    { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
   proposta:   { signed: 'aprovada', refused: 'recusada', expired: 'expirada' },
 };
 
-/* Resolve a "fonte" (instalador vs venda vs proposta) a partir do token */
+/* Verdadeiro assim que ESTA pessoa (representante, signatário adicional,
+   contratada ou cliente) assinou — independente do status agregado do
+   registro (que no Contrato de Venda pode ficar 'aguardando_signatarios'
+   enquanto outros signatários ainda faltam assinar). Usar isso em vez de
+   comparar `rec.status === st.signed` evita reabrir o formulário de
+   assinatura pra quem já assinou só porque o contrato como um todo ainda
+   não fechou. */
+function jaAssinado(rec) { return !!(rec && rec.audit && rec.audit.signedAt); }
+
+/* Resolve a "fonte" (instalador vs venda vs signatário adicional vs
+   proposta) a partir do token */
 async function resolveSource(token) {
   // Tenta primeiro instalador (token mais comum nesse momento)
   if (window.CIStore) {
@@ -107,6 +125,84 @@ async function resolveSource(token) {
   if (window.CVStore) {
     const r = await window.CVStore.getByToken(token);
     if (r) return { kind: 'venda', rec: r, store: window.CVStore, Preview: window.CVContractPreview, engine: window.CV };
+  }
+  if (window.CVSignatarioStore) {
+    const s = await window.CVSignatarioStore.getByToken(token);
+    if (s) {
+      /* Mescla os dados do contrato-pai (pro documento/resumo renderizar
+         igual ao do representante) com o status/audit/token PRÓPRIOS
+         deste signatário — nunca o contrário, senão o status do
+         representante (ou de outro signatário) vazaria pra esta sessão. */
+      /* `__contratoPai` vem da RPC public_cvs_obter (Task 11b) — a página não lê mais a tabela de contratos. */
+      const contrato = s.__contratoPai || (window.CVStore ? await window.CVStore.getById(s.contrato_venda_id) : null);
+      const rec = {
+        ...(contrato || {}),
+        id: s.id, token: s.token, status: s.status, audit: s.audit || {},
+        sent_at: s.sent_at, viewed_at: s.viewed_at, signed_at: s.signed_at,
+        recipient: s.recipient, channel: s.channel,
+        signatarioPapel: s.papel, signatarioNome: s.nome,
+        contratoStatus: contrato ? contrato.status : null,
+        contratoId: contrato ? contrato.id : null,
+        contratoAudit: contrato ? contrato.audit : null,
+        contratoSignedAt: contrato ? contrato.signed_at : null,
+      };
+      return { kind: 'venda_signatario', rec, store: window.CVSignatarioStore, Preview: window.CVContractPreview, engine: window.CV };
+    }
+  }
+  /* Signatários genéricos (01/10/2026 — ver documento-signatarios-store.js):
+     e-mails marcados explicitamente "deve assinar" no envio, cada um com
+     token próprio, 1 linha em `documento_signatarios`. Hoje só Contrato de
+     Venda usa este mecanismo (reaproveita o mesmo kind 'venda_signatario' —
+     mesma UI/engine do signatário sócio/jurídico, só troca a store de
+     origem); Proposta/Contrato Instalador plugam aqui depois sem mudar nada
+     nesta função, só adicionando um `case` no mapa STORE_POR_TIPO abaixo. */
+  if (window.DocumentoSignatariosStore) {
+    const s = await window.DocumentoSignatariosStore.getByToken(token);
+    if (s) {
+      const STORE_POR_TIPO = {
+        contrato_venda: { get: (id) => window.CVStore && window.CVStore.getById(id), Preview: window.CVContractPreview, engine: window.CV, kind: 'venda_signatario' },
+      };
+      if (s.documento_tipo === 'projeto_instalacao') {
+        /* Projeto de Instalação: o "documento" é o PDF que a Engenharia subiu (bucket público
+           'engenharia'); não há engine nem Preview — a página mostra o próprio PDF. */
+        const c = window.__VP_SB && window.__VP_SB.sb;
+        let d = null;
+        if (c) {
+          const r = await c.from('projetos_elevador_desenhos')
+            .select('id,referencia,cliente_nome,numero_cotacao,equipamentos,arquivo_nome,arquivo_url,tipo_documento')
+            .eq('id', s.documento_id).maybeSingle();
+          d = r && r.data;
+        }
+        if (d) {
+          const rec = {
+            ...s, status: s.status, audit: s.audit || {},
+            numero_documento: d.numero_cotacao != null ? ('Cotação ' + d.numero_cotacao) : 'Projeto de Instalação',
+            titulo: 'Projeto de Instalação — ' + (d.referencia || ''),
+            objeto_resumo: (d.equipamentos || []).join(', ') || d.referencia || 'Projeto de Instalação da Obra',
+            comprador_razao_social: d.cliente_nome || '',
+            signatarioPapel: s.papel, signatarioNome: s.nome,
+            desenho: d,
+          };
+          return { kind: 'projeto', rec, store: window.DocumentoSignatariosStore, Preview: null, engine: null };
+        }
+      }
+      const cfg = STORE_POR_TIPO[s.documento_tipo];
+      if (cfg) {
+        const documentoPai = s.__contratoPai || (cfg.get ? await cfg.get(s.documento_id) : null);
+        const rec = {
+          ...(documentoPai || {}),
+          id: s.id, token: s.token, status: s.status, audit: s.audit || {},
+          sent_at: s.sent_at, viewed_at: s.viewed_at, signed_at: s.signed_at,
+          recipient: s.recipient, channel: s.channel,
+          signatarioPapel: s.papel, signatarioNome: s.nome,
+          contratoStatus: documentoPai ? documentoPai.status : null,
+          contratoId: documentoPai ? documentoPai.id : null,
+          contratoAudit: documentoPai ? documentoPai.audit : null,
+          contratoSignedAt: documentoPai ? documentoPai.signed_at : null,
+        };
+        return { kind: cfg.kind, rec, store: window.DocumentoSignatariosStore, Preview: cfg.Preview, engine: cfg.engine };
+      }
+    }
   }
   if (window.PropostaStore) {
     const r = await window.PropostaStore.getByToken(token);
@@ -131,12 +227,25 @@ function SgApp() {
   const [showRevisao, setShowRevisao] = _sgUS(false);
   const [textoRevisao, setTextoRevisao] = _sgUS('');
   const [enviandoRevisao, setEnviandoRevisao] = _sgUS(false);
+  const [showRecusa, setShowRecusa] = _sgUS(false);
+  const [nomeRecusa, setNomeRecusa] = _sgUS('');
+  const [motivoRecusa, setMotivoRecusa] = _sgUS('');
+  const [enviandoRecusa, setEnviandoRecusa] = _sgUS(false);
   const [scrolledEnd, setScrolledEnd] = _sgUS(false);
   const [consent, setConsent] = _sgUS(false);
-  const [sigMode, setSigMode] = _sgUS('draw');
+  const [sigMode, setSigMode] = _sgUS('type'); // digitado em letra de mão é o padrão (05/10/2026)
   const [drawData, setDrawData] = _sgUS(null);
   const [typedName, setTypedName] = _sgUS('');
   const viewerRef = _sgUR(null);
+  /* Modalidade de entrega escolhida pelo cliente ('120' | '90' | null) — só existe em proposta
+     de elevador com 1 equipamento (ver proposta-opcoes.js). Ao escolher, o documento passa a
+     mostrar só a modalidade escolhida (a outra deixa de aparecer). */
+  const [opcaoEntrega, setOpcaoEntrega] = _sgUS(null);
+  const propostaRender = (rec) => {
+    const r = window.PropostaStore.conteudoRenderizavel(rec);
+    const O = window.PropostaOpcoes;
+    return (O && opcaoEntrega) ? { ...r, data: O.aplicarEscolha(r.data, opcaoEntrega) } : r;
+  };
 
   /* Mount: localiza o contrato e marca como visualizado */
   _sgUE(() => {
@@ -147,12 +256,25 @@ function SgApp() {
 
       const r = src.rec;
       const st = STATUS_ALIASES[src.kind];
-      if (r.status === st.signed) { setSource(src); setPhase('done'); setLoading(false); return; }
+      if (jaAssinado(r)) { setSource(src); setPhase('done'); setLoading(false); return; }
       if (r.status === st.refused || r.status === st.expired) { setSource(src); setLoading(false); return; }
       if (r.status === 'revisao_solicitada') { setSource(src); setPhase('revisao'); setLoading(false); return; }
 
       const updated = await src.store.markViewed(token);
-      setSource({ ...src, rec: updated || r });
+      /* 01/10 — achado real ao testar o novo DocumentoSignatariosStore: pra
+         'venda_signatario' (sócio/jurídico OU o novo signatário genérico),
+         `r` carrega os campos do CONTRATO-PAI mesclados (numero_documento,
+         form_state, titulo…) + o status/token PRÓPRIOS do signatário — mas
+         `markViewed` da store do signatário só sabe consultar a própria
+         tabela (signatários), então `updated` tem só status/audit/viewed_at,
+         sem nenhum campo do contrato. Usar `updated` sozinho (como antes)
+         apagava numero_documento/form_state do documento renderizado assim
+         que a página marcava "visualizado" — o cliente via "VPCV-XXXX" em
+         vez do número real logo na primeira abertura do link. Mesclar por
+         cima de `r` corrige isso e continua correto pros outros kinds
+         (instalador/venda/proposta), cujo `updated` já É a linha completa
+         da própria tabela — sobrescrever tudo de `r` não perde nada ali. */
+      setSource({ ...src, rec: updated ? { ...r, ...updated } : r });
       setLoading(false);
     })();
   }, [token]);
@@ -161,7 +283,7 @@ function SgApp() {
   const doc = _sgUM(() => {
     if (!source) return null;
     const rec = source.rec;
-    if (source.kind === 'proposta') return null; // PEPreview renderiza a versão publicada (ver conteudoVigente)
+    if (source.kind === 'proposta' || source.kind === 'projeto') return null; // PEPreview / PDF do projeto renderiza a versão publicada (ver conteudoVigente)
     if (source.kind === 'instalador') {
       /* Usa o snapshot já persistido em rec.doc (gravado uma única vez em
          createDraft — CI não tem edição pós-envio, updateFormState nunca é
@@ -176,7 +298,7 @@ function SgApp() {
          antigo/malformado sem doc persistido. */
       return (rec.doc && rec.doc.clauses) ? rec.doc : window.CI.buildContract(rec.form_state, rec.numero_documento);
     }
-    // venda
+    // venda / venda_signatario (mesmo documento do representante)
     return window.CV.buildContract({
       form: rec.form_state, comprador: (rec.form_state || {}).comprador,
       valor: (rec.valor_total_num != null) ? rec.valor_total_num : window.CV.parseMoney((rec.form_state || {}).valor),
@@ -211,18 +333,74 @@ function SgApp() {
      21/08). Contratos e Escada/Esteira ainda não foram migrados e
      seguem na impressão nativa — essa continua precisando do DOM. */
   const baixarDocumento = _sgUC(async () => {
+    /* Projeto de Instalação: PDF original da Engenharia + página final com as assinaturas digitais (pdf-lib). */
+    if (source && source.kind === 'projeto') {
+      try {
+        const rp = source.rec;
+        const assinaturas = window.ProjetoAssinadoPdf.assinaturasDe([rp]);
+        const nomeP = ['Projeto de Instalação', rp.desenho.referencia, assinaturas.length ? 'assinado' : ''].filter(Boolean).join(' - ') + '.pdf';
+        await window.ProjetoAssinadoPdf.baixar(rp.desenho, assinaturas, nomeP);
+      } catch (e) {
+        console.error('PDF do projeto falhou:', e);
+        window.alert('Não foi possível gerar o PDF agora: ' + (e.message || e));
+      }
+      return;
+    }
+    /* Contrato de Venda (29/09): PDF vetorial no layout EXATO da minuta
+       oficial (cabeçalho/rodapé em toda página) — o motor recebe o mesmo
+       `doc` que a tela já renderiza, sem redigir nada. Se o motor não
+       carregou ou falhar, cai na impressão nativa como antes. Vale também
+       pra signatário adicional (sócio/jurídico do Comprador) — mesmo doc. */
+    if (source && (source.kind === 'venda' || source.kind === 'venda_signatario') && doc && window.ContratoVendaReactPdf) {
+      try {
+        const rv = source.rec;
+        const nomeV = ['Contrato', rv.numero_documento, (rv.comprador_razao_social || '').trim()].filter(Boolean).join(' - ') + '.pdf';
+        /* Assinaturas digitais (05/10/2026): monta, em ordem de assinatura, quem já
+           assinou — representante do Comprador + sócios/jurídico + "deve assinar".
+           Falha ao buscar = PDF sai sem o bloco (como antes), nunca trava o download. */
+        let assinaturas = [];
+        try {
+          const ehPai = source.kind === 'venda';
+          const cId = ehPai ? rv.id : rv.contratoId;
+          const cAudit = (ehPai ? rv.audit : rv.contratoAudit) || {};
+          const cEm = ehPai ? rv.signed_at : rv.contratoSignedAt;
+          const mapa = (papel, nome, em, au) => ({ papel, nome, em, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null });
+          const lista = [];
+          if (cAudit.signedAt || cEm) lista.push(mapa('Representante legal do Comprador', cAudit.signerName || '', cAudit.signedAt || cEm, cAudit));
+          if (cId) {
+            const [extras, genericos] = await Promise.all([
+              window.CVSignatarioStore ? window.CVSignatarioStore.listarPorContrato(cId) : [],
+              window.DocumentoSignatariosStore ? window.DocumentoSignatariosStore.listarPorDocumento('contrato_venda', cId) : [],
+            ]);
+            [...(extras || []), ...(genericos || [])].filter((s) => s.status === 'assinado').forEach((s) => {
+              const au = s.audit || {};
+              lista.push(mapa(s.papel || 'Signatário', au.signerName || s.nome || '', au.signedAt || s.signed_at, au));
+            });
+          }
+          assinaturas = lista.sort((a, b) => new Date(a.em) - new Date(b.em));
+        } catch (e) { console.warn('Assinaturas digitais não carregadas pro PDF:', e); }
+        await window.ContratoVendaReactPdf.baixar(doc, nomeV, assinaturas);
+        return;
+      } catch (e) {
+        console.error('PDF do contrato falhou, caindo pra impressão do navegador:', e);
+        window.print();
+        return;
+      }
+    }
     if (!podeReactPdf) { window.print(); return; }
     const r = source.rec;
     try {
-      const dj = window.PropostaStore.conteudoRenderizavel(r).data;
+      const dj = propostaRender(r).data;
       const nomeCliente = ((dj && dj.cliente && dj.cliente.nome) || '').trim();
       const nome = ['Proposta', r.numero_documento, nomeCliente].filter(Boolean).join(' - ') + '.pdf';
-      await window.PropostaReactPdf.baixar(dj, nome);
+      const au = r.audit || {};
+      const assinaturas = au.signedAt ? [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }] : [];
+      await window.PropostaReactPdf.baixar(dj, nome, assinaturas);
     } catch (e) {
       console.error('PDF vetorial falhou, caindo pra impressão do navegador:', e);
       window.print();
     }
-  }, [podeReactPdf, source]);
+  }, [podeReactPdf, source, doc, opcaoEntrega]);
 
   const onScroll = () => {
     const el = viewerRef.current;
@@ -251,8 +429,15 @@ function SgApp() {
     return () => { if (ro) ro.disconnect(); clearTimeout(t1); clearTimeout(t2); };
   }, [phase, source]);
 
+  /* Projeto de Instalação: o PDF aparece num iframe (não dá pra detectar a rolagem dele) — a
+     leitura fica por conta da caixa "li e concordo", que continua obrigatória. */
+  _sgUE(() => { if (source && source.kind === 'projeto') setScrolledEnd(true); }, [source]);
+
   const sigValid = sigMode === 'draw' ? !!drawData : typedName.trim().length >= 3;
-  const canSign = scrolledEnd && consent && sigValid && source;
+  /* Proposta com 2 modalidades de entrega: só dá pra aprovar depois de escolher uma. */
+  const opcoesProposta = (source && source.kind === 'proposta' && window.PropostaOpcoes && window.PropostaOpcoes.temOpcoes(window.PropostaStore.conteudoRenderizavel(source.rec).data))
+    ? window.PropostaOpcoes.opcoes(window.PropostaStore.conteudoRenderizavel(source.rec).data) : null;
+  const canSign = scrolledEnd && consent && sigValid && source && (!opcoesProposta || !!opcaoEntrega);
 
   const handleSign = async () => {
     if (!source) return;
@@ -262,27 +447,76 @@ function SgApp() {
       ? (rec.responsavel_nome || rec.contratada_nome)
       : source.kind === 'proposta'
       ? ((window.PropostaStore.conteudoRenderizavel(rec).data.cliente || {}).nome)
+      : (source.kind === 'venda_signatario' || source.kind === 'projeto')
+      ? rec.signatarioNome
       : (rec.responsavel_nome || rec.comprador_razao_social);
     const sig = sigMode === 'draw'
       ? { type: 'draw', data: drawData, signerName: defaultName }
       : { type: 'type', data: typedName.trim(), signerName: typedName.trim() };
+    if (opcaoEntrega) sig.opcaoEntrega = opcaoEntrega;
     await new Promise(r => setTimeout(r, 1200));
-    const updated = await source.store.markSigned(token, sig);
-    setSource({ ...source, rec: updated });
-    setPhase('done');
+    /* 28/09 — achado real: markSigned agora lança se a gravação no banco
+       falhar (antes engolia o erro em silêncio e a tela ia pra "done" —
+       o cliente via "assinado com sucesso" mesmo sem nada persistido).
+       Sem este try/catch, uma falha aqui deixaria a tela travada pra
+       sempre em "processing" (nunca chegaria em setPhase('done') nem em
+       lugar nenhum) — pior que o silêncio de antes. Volta pra 'sign' e
+       avisa, pra o cliente poder tentar de novo. */
+    try {
+      const updated = await source.store.markSigned(token, sig);
+      /* Mesmo cuidado do markViewed acima — mescla por cima do rec atual em
+         vez de substituir, senão o resumo/"baixar PDF" da tela 'done' perde
+         numero_documento/form_state pra um signatário extra (sócio/jurídico
+         ou o novo DocumentoSignatariosStore). */
+      setSource({ ...source, rec: updated ? { ...source.rec, ...updated } : source.rec });
+      setPhase('done');
+    } catch (e) {
+      window.alert('Não foi possível registrar sua assinatura agora. Tente novamente em instantes — se o problema continuar, entre em contato com a VerticalParts.\n\n' + (e.message || e));
+      setPhase('sign');
+    }
   };
 
   const isPropostaSrc = source && source.kind === 'proposta';
 
-  const handleRefuse = async () => {
+  /* 01/10 — achado real do usuário (cotação 955/AKAI): um contrato apareceu
+     "recusado" sem registro nenhum de QUEM recusou nem POR QUÊ — refuse()
+     nunca pediu nem gravou nada além do carimbo de data/hora. Agora abre um
+     modal (em vez do window.confirm cru de antes) pedindo nome (obrigatório)
+     e motivo (opcional) antes de confirmar — mesmo padrão visual do modal
+     de "Pedir revisão" logo abaixo. */
+  const handleRefuse = () => {
     if (!source) return;
-    const pergunta = isPropostaSrc
-      ? 'Confirma que não tem interesse nesta proposta? A VerticalParts será notificada.'
-      : 'Recusar a assinatura deste contrato? A VerticalParts será notificada.';
-    if (!window.confirm(pergunta)) return;
-    const updated = await source.store.refuse(token);
-    setSource({ ...source, rec: updated });
-    setPhase('refused');
+    const rec = source.rec;
+    const defaultName = source.kind === 'instalador'
+      ? (rec.responsavel_nome || rec.contratada_nome)
+      : source.kind === 'proposta'
+      ? ((window.PropostaStore.conteudoRenderizavel(rec).data.cliente || {}).nome)
+      : (source.kind === 'venda_signatario' || source.kind === 'projeto')
+      ? rec.signatarioNome
+      : (rec.responsavel_nome || rec.comprador_razao_social);
+    setNomeRecusa(defaultName || '');
+    setMotivoRecusa('');
+    setShowRecusa(true);
+  };
+
+  const confirmarRecusa = async () => {
+    if (!source) return;
+    const nome = nomeRecusa.trim();
+    if (!nome) { window.alert('Informe seu nome.'); return; }
+    setEnviandoRecusa(true);
+    /* 28/09 — mesmo motivo do try/catch em handleSign: refuse() agora
+       lança em falha de gravação, então precisa de tratamento aqui pra
+       não deixar a tela sem retorno nenhum pro cliente. */
+    try {
+      const updated = await source.store.refuse(token, { nome, motivo: motivoRecusa.trim() });
+      setSource({ ...source, rec: updated ? { ...source.rec, ...updated } : source.rec });
+      setShowRecusa(false);
+      setPhase('refused');
+    } catch (e) {
+      window.alert('Não foi possível registrar sua resposta agora. Tente novamente em instantes.\n\n' + (e.message || e));
+    } finally {
+      setEnviandoRecusa(false);
+    }
   };
 
   const handleSolicitarRevisao = async () => {
@@ -325,6 +559,12 @@ function SgApp() {
 
   const rec = source.rec;
   const Preview = source.Preview;
+  /* Contrato do Instalador assinado: o documento (e a impressão dele) mostra quem assinou
+     digitalmente. REGRA TRAVADA, ver CLAUDE.md. Vazio enquanto não assinado. */
+  const auI = (source.kind === 'instalador' && rec.audit) || {};
+  const assinaturasInstalador = auI.signedAt
+    ? [{ papel: 'Contratada (instalador)', nome: auI.signerName || '', em: auI.signedAt, dispositivo: auI.signDevice, ip: auI.signIp, hash: auI.hash, imagem: /^data:image\//.test(auI.signatureData || '') ? auI.signatureData : null }]
+    : [];
   const st = STATUS_ALIASES[source.kind];
 
   if (rec.status === st.expired) {
@@ -356,14 +596,30 @@ function SgApp() {
       </div>
     );
   }
-  if (phase === 'done' || rec.status === st.signed) {
+  if (phase === 'done' || jaAssinado(rec)) {
     const a = rec.audit || {};
+    /* Contrato de Venda com signatários adicionais (sócios/jurídico do
+       Comprador): quem acabou de assinar pode não ser o último — o
+       contrato só fica de fato concluído quando todos tiverem assinado
+       (ver contrato-venda-store.js). Mensagem distinta pra não dizer
+       "contrato assinado" quando ainda falta gente. */
+    const ehVendaOuSignatario = source.kind === 'venda' || source.kind === 'venda_signatario';
+    const statusContrato = source.kind === 'venda_signatario' ? rec.contratoStatus : rec.status;
+    const aindaFaltamOutros = ehVendaOuSignatario && statusContrato !== 'assinado';
     return (
       <>
         <div className="ci-sign-status">
           <div className="ci-success-check">✓</div>
-          <h1>{source.kind === 'proposta' ? 'Proposta aprovada!' : 'Contrato assinado!'}</h1>
-          <p>{source.kind === 'proposta' ? 'A proposta' : 'O contrato'} <b>{rec.numero_documento}</b> foi {source.kind === 'proposta' ? 'aprovada e assinada' : 'assinado(a)'} com sucesso.</p>
+          <h1>{source.kind === 'proposta' ? 'Proposta aprovada!' : source.kind === 'projeto' ? 'Projeto assinado!' : aindaFaltamOutros ? 'Assinatura registrada!' : 'Contrato assinado!'}</h1>
+          <p>
+            {source.kind === 'proposta'
+              ? <>A proposta <b>{rec.numero_documento}</b> foi aprovada e assinada com sucesso.</>
+              : source.kind === 'projeto'
+              ? <>O Projeto de Instalação da obra <b>{(rec.desenho || {}).referencia}</b> foi assinado com sucesso. A VerticalParts já foi avisada.</>
+              : aindaFaltamOutros
+              ? <>Sua assinatura no contrato <b>{rec.numero_documento}</b> foi registrada. Ele ainda aguarda a assinatura dos demais signatários (sócios/jurídico) para ser concluído.</>
+              : <>O contrato <b>{rec.numero_documento}</b> foi assinado com sucesso.</>}
+          </p>
           <div className="ci-protocolo">
             Protocolo: {rec.token}<br/>
             Assinado em {source.store.fmtDateTime(a.signedAt)}<br/>
@@ -377,11 +633,11 @@ function SgApp() {
            Proposta de Elevador NÃO precisa disto — o react-pdf monta o PDF
            direto dos dados, sem ler o DOM — então nem renderiza: essa cópia
            dobrava o número de páginas na tela à toa (achado 21/08). */}
-        {!podeReactPdf && (
+        {!podeReactPdf && source.kind !== 'projeto' && (
           <div className="ci-print-doc">
             {source.kind === 'proposta'
-              ? <window.PEPreview {...window.PropostaStore.conteudoRenderizavel(rec)} bare/>
-              : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>}
+              ? <window.PEPreview {...propostaRender(rec)} bare/>
+              : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={assinaturasInstalador}/>}
           </div>
         )}
       </>
@@ -401,6 +657,7 @@ function SgApp() {
   /* Resumo do card de topo varia por tipo */
   const isInstalador = source.kind === 'instalador';
   const isProposta = source.kind === 'proposta';
+  const isProjeto = source.kind === 'projeto';
   const djVigente = isProposta ? window.PropostaStore.conteudoRenderizavel(rec).data : {};
   const djCliente = (djVigente && djVigente.cliente) || {};
   const counterpartyName = isInstalador ? rec.contratada_nome : isProposta ? djCliente.nome : rec.comprador_razao_social;
@@ -412,12 +669,19 @@ function SgApp() {
   const valorFmt = isInstalador
     ? (rec.valor_total ? 'R$ ' + window.CI.fmtMoeda(rec.valor_total) : '—')
     : isProposta
-    ? (rec.valor_total ? window.CV.brl(Number(rec.valor_total)) : '—')
+    ? ((opcoesProposta && opcaoEntrega)
+        ? window.CV.brl(opcoesProposta.find((o) => o.id === opcaoEntrega).totalEquipamento)
+        : (rec.valor_total ? window.CV.brl(Number(rec.valor_total)) : '—'))
     : (rec.valor_total_num ? window.CV.brl(rec.valor_total_num) : '—');
 
-  const docNode = isProposta
-    ? <window.PEPreview {...window.PropostaStore.conteudoRenderizavel(rec)} bare/>
-    : <Preview doc={doc} highlightConditional={false} highlightInjected={false}/>;
+  const docNode = isProjeto
+    ? <div className="ci-projeto-pdf" style={{ width: '100%', height: '100%', minHeight: 560, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        <iframe title="Projeto de Instalação" src={rec.desenho.arquivo_url} style={{ flex: 1, width: '100%', minHeight: 520, border: '1px solid #d0d0d0', background: '#fff' }}/>
+        <a href={rec.desenho.arquivo_url} target="_blank" rel="noopener noreferrer" style={{ fontSize: 13 }}>Não está vendo o PDF? Abrir em nova aba ↗</a>
+      </div>
+    : isProposta
+    ? <window.PEPreview {...propostaRender(rec)} bare/>
+    : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={assinaturasInstalador}/>;
 
   return (
     <div className="ci-sign-shell ci-sign-shell--split">
@@ -427,13 +691,13 @@ function SgApp() {
       </div>
 
       <div className="ci-sign-intro">
-        <h1>{isProposta ? 'Analise sua proposta' : 'Assine seu contrato'}</h1>
-        <p>A VerticalParts enviou {isProposta ? 'esta proposta comercial para sua análise' : 'este contrato para sua assinatura digital'}. Leia o documento por inteiro ao lado{isProposta ? ' e aprove, peça uma revisão ou recuse' : ', confirme e assine'} — sem precisar de cadastro.</p>
+        <h1>{isProposta ? 'Analise sua proposta' : isProjeto ? 'Assine o Projeto de Instalação' : 'Assine seu contrato'}</h1>
+        <p>A VerticalParts enviou {isProposta ? 'esta proposta comercial para sua análise' : isProjeto ? 'o Projeto de Instalação da sua obra para sua assinatura digital' : 'este contrato para sua assinatura digital'}. Leia o documento por inteiro ao lado{isProposta ? ' e aprove, peça uma revisão ou recuse' : ', confirme e assine'} — sem precisar de cadastro.</p>
       </div>
 
       <div className="ci-sign-grid">
         <div className="ci-sign-doc-col">
-          <div className="ci-sign-label"><span className="n">1</span> Leia {isProposta ? 'a proposta' : 'o contrato'} por inteiro</div>
+          <div className="ci-sign-label"><span className="n">1</span> Leia {isProposta ? 'a proposta' : isProjeto ? 'o projeto' : 'o contrato'} por inteiro</div>
           <div className="ci-doc-viewer">
             <div className="ci-doc-viewer-scroll" ref={viewerRef} onScroll={onScroll}>
               {docNode}
@@ -453,22 +717,46 @@ function SgApp() {
             </div>
             <div className="ci-sum-rows">
               <SgSumRow k={isInstalador ? 'Contratante' : 'Vendedora'} v="VerticalParts Ltda."/>
-              <SgSumRow k={counterpartyLabel} v={counterpartyName}/>
-              <SgSumRow k="Objeto" v={objetoResumo}/>
-              <SgSumRow k="Valor total" v={valorFmt}/>
+              <SgSumRow k={isProjeto ? 'Cliente' : counterpartyLabel} v={counterpartyName}/>
+              <SgSumRow k={isProjeto ? 'Equipamento(s)' : 'Objeto'} v={objetoResumo}/>
+              {!isProjeto && <SgSumRow k="Valor total" v={valorFmt}/>}
+              {(source.kind === 'venda_signatario' || isProjeto) && <SgSumRow k="Assinando como" v={`${rec.signatarioPapel} — ${rec.signatarioNome}`}/>}
             </div>
           </div>
 
-          <div className="ci-sign-label"><span className="n">2</span> Concordância</div>
+          {opcoesProposta && (
+            <>
+              <div className="ci-sign-label"><span className="n">2</span> Escolha a modalidade de entrega</div>
+              <div className="ci-opcoes-entrega" role="radiogroup" aria-label="Modalidade de entrega" style={{ display: 'grid', gap: 10, marginBottom: 14 }}>
+                {opcoesProposta.map((o) => {
+                  const sel = opcaoEntrega === o.id;
+                  return (
+                    <div key={o.id} role="radio" aria-checked={sel} tabIndex={0} data-opcao-entrega-card={o.id}
+                      onClick={() => setOpcaoEntrega(o.id)}
+                      onKeyDown={(e) => { if (e.key === ' ' || e.key === 'Enter') { e.preventDefault(); setOpcaoEntrega(o.id); } }}
+                      style={{ cursor: 'pointer', border: sel ? '2px solid #f5b800' : '1px solid #d0d0d0', background: sel ? '#fffbea' : '#fff', borderRadius: 8, padding: '10px 14px' }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, fontWeight: 700 }}>
+                        <span>{sel ? '◉' : '○'} {o.titulo}</span>
+                        <span>{window.CV.brl(o.total)}</span>
+                      </div>
+                      <div style={{ fontSize: 12, opacity: 0.75, marginTop: 4 }}>{o.rotulo} — {o.caracteristicas[o.caracteristicas.length - 1]}</div>
+                    </div>
+                  );
+                })}
+              </div>
+            </>
+          )}
+
+          <div className="ci-sign-label"><span className="n">{opcoesProposta ? 3 : 2}</span> Concordância</div>
           <div className={'ci-consent' + (consent ? ' on' : '') + (scrolledEnd ? '' : ' disabled')}
             role="checkbox" aria-checked={consent} aria-disabled={!scrolledEnd} tabIndex={scrolledEnd ? 0 : -1}
             onClick={() => scrolledEnd && setConsent(!consent)}
             onKeyDown={(e) => { if (scrolledEnd && (e.key === ' ' || e.key === 'Enter')) { e.preventDefault(); setConsent(!consent); } }}>
             <div className="box">{consent && <span>✓</span>}</div>
-            <div className="txt">Declaro que li, compreendi e concordo com todos os termos {isProposta ? 'desta proposta' : 'deste contrato'}.</div>
+            <div className="txt">Declaro que li, compreendi e concordo com todos os termos {isProposta ? 'desta proposta' : isProjeto ? 'deste projeto' : 'deste contrato'}.</div>
           </div>
 
-          <div className="ci-sign-label"><span className="n">3</span> Sua assinatura</div>
+          <div className="ci-sign-label"><span className="n">{opcoesProposta ? 4 : 3}</span> Sua assinatura</div>
           <div className="ci-sig-tabs">
             <button className={'ci-sig-tab' + (sigMode === 'draw' ? ' on' : '')} onClick={() => setSigMode('draw')}>Desenhar</button>
             <button className={'ci-sig-tab' + (sigMode === 'type' ? ' on' : '')} onClick={() => setSigMode('type')}>Digitar nome</button>
@@ -485,7 +773,7 @@ function SgApp() {
 
           <div className="ci-sign-actionbar">
             <button className="ci-sign-btn" disabled={!canSign} onClick={handleSign}>{isProposta ? 'Aprovar proposta' : 'Confirmar e assinar'}</button>
-            {!canSign && <p className="ci-req-hint">{!scrolledEnd ? 'Leia o documento até o fim' : !consent ? 'Marque a concordância' : 'Adicione sua assinatura'}</p>}
+            {!canSign && <p className="ci-req-hint">{!scrolledEnd ? 'Leia o documento até o fim' : (opcoesProposta && !opcaoEntrega) ? 'Escolha a modalidade de entrega' : !consent ? 'Marque a concordância' : 'Adicione sua assinatura'}</p>}
             <div className="ci-sign-actionbar-row">
               {isProposta && <button className="ci-sign-sub-action ci-sign-sub-action--neutral" onClick={() => setShowRevisao(true)}>Pedir revisão</button>}
               <button className="ci-sign-sub-action" onClick={handleRefuse}>{isProposta ? 'Não tenho interesse' : 'Recusar assinatura'}</button>
@@ -493,8 +781,8 @@ function SgApp() {
           </div>
 
           <div className="ci-sign-alt">
-            <button type="button" className="ci-sign-alt-btn" onClick={baixarDocumento}>⬇ Baixar {isProposta ? 'proposta' : 'contrato'} (PDF)</button>
-            <p>Prefere assinar à mão? Baixe {isProposta ? 'a proposta' : 'o contrato'}, assine com caneta, tire uma foto ou digitalize e envie por e-mail para <a href="mailto:comercial@verticalparts.com.br">comercial@verticalparts.com.br</a>.</p>
+            <button type="button" className="ci-sign-alt-btn" onClick={baixarDocumento}>⬇ Baixar {isProposta ? 'proposta' : isProjeto ? 'projeto' : 'contrato'} (PDF)</button>
+            <p>Prefere assinar à mão? Baixe {isProposta ? 'a proposta' : isProjeto ? 'o projeto' : 'o contrato'}, assine com caneta, tire uma foto ou digitalize e envie por e-mail para <a href="mailto:comercial@verticalparts.com.br">comercial@verticalparts.com.br</a>.</p>
           </div>
         </div>
       </div>
@@ -505,7 +793,7 @@ function SgApp() {
          dados. Sem este `if`, toda proposta de Elevador renderizava o
          documento duas vezes na página (a visível pra leitura + esta cópia
          escondida) — 34 páginas no DOM pra um documento de 17 (achado 21/08). */}
-      {!podeReactPdf && <div className="ci-print-doc">{docNode}</div>}
+      {!podeReactPdf && source.kind !== 'projeto' && <div className="ci-print-doc">{docNode}</div>}
 
       {showRevisao && (
         <div className="ci-modal-backdrop" onClick={() => !enviandoRevisao && setShowRevisao(false)}>
@@ -525,6 +813,37 @@ function SgApp() {
               <button className="ci-sign-sub-action" disabled={enviandoRevisao} onClick={() => setShowRevisao(false)}>Cancelar</button>
               <button className="ci-sign-btn" disabled={enviandoRevisao || !textoRevisao.trim()} onClick={handleSolicitarRevisao}>
                 {enviandoRevisao ? 'Enviando…' : 'Enviar pedido de revisão'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {showRecusa && (
+        <div className="ci-modal-backdrop" onClick={() => !enviandoRecusa && setShowRecusa(false)}>
+          <div className="ci-modal" onClick={(e) => e.stopPropagation()}>
+            <h2>{isProposta ? 'Não tenho interesse' : 'Recusar assinatura'}</h2>
+            <p className="small">A VerticalParts será notificada. Confirme seu nome e, se quiser, conte o motivo — ajuda a equipe a te dar o retorno certo.</p>
+            <input
+              className="ci-modal-input"
+              value={nomeRecusa}
+              onChange={(e) => setNomeRecusa(e.target.value)}
+              placeholder="Seu nome completo"
+              disabled={enviandoRecusa}
+              autoFocus
+            />
+            <textarea
+              className="ci-modal-textarea"
+              rows={4}
+              value={motivoRecusa}
+              onChange={(e) => setMotivoRecusa(e.target.value)}
+              placeholder="Motivo (opcional) — ex.: preço, prazo, mudou de fornecedor..."
+              disabled={enviandoRecusa}
+            />
+            <div className="ci-modal-actions">
+              <button className="ci-sign-sub-action" disabled={enviandoRecusa} onClick={() => setShowRecusa(false)}>Cancelar</button>
+              <button className="ci-sign-btn" disabled={enviandoRecusa || !nomeRecusa.trim()} onClick={confirmarRecusa}>
+                {enviandoRecusa ? 'Enviando…' : 'Confirmar'}
               </button>
             </div>
           </div>

@@ -95,10 +95,12 @@
   }
 
   const STATUS = {
+    em_preenchimento: { id:'em_preenchimento', label:'Em preenchimento', icon:'✏', tone:'gray', order:-1 },
     rascunho:    { id:'rascunho',    label:'Rascunho',    icon:'📝', tone:'gray',   order:0 },
     enviado:     { id:'enviado',     label:'Enviado',     icon:'📤', tone:'blue',   order:1 },
     visualizado: { id:'visualizado', label:'Visualizado', icon:'👁',  tone:'yellow', order:2 },
-    assinado:    { id:'assinado',    label:'Assinado',    icon:'✍',  tone:'green',  order:3 },
+    aguardando_signatarios: { id:'aguardando_signatarios', label:'Aguardando outras assinaturas', icon:'✍', tone:'yellow', order:3 },
+    assinado:    { id:'assinado',    label:'Assinado',    icon:'✍',  tone:'green',  order:4 },
     expirado:    { id:'expirado',    label:'Expirado',    icon:'⚠',  tone:'red',    order:4 },
     recusado:    { id:'recusado',    label:'Recusado',    icon:'✕',  tone:'red',    order:4 },
   };
@@ -112,7 +114,8 @@
         enviado:     { acao: 'enviou p/ assinatura' },
         visualizado: { acao: 'contraparte visualizou', ator: contraparte, setor: 'externo' },
         assinado:    { acao: 'contrato assinado', ator: (meta && meta.signerName) || contraparte, setor: 'externo' },
-        recusado:    { acao: 'assinatura recusada', ator: contraparte, setor: 'externo' },
+        assinado_representante: { acao: 'representante assinou — aguardando outros signatários (sócios/jurídico)', ator: (meta && meta.signerName) || contraparte, setor: 'externo' },
+        recusado:    { acao: 'assinatura recusada' + (meta && meta.motivo ? ` — Motivo: ${meta.motivo}` : ''), ator: (meta && meta.nome) || contraparte, setor: 'externo' },
         expirado:    { acao: 'link de assinatura expirou', ator: 'Sistema', setor: 'sistema' },
       };
       const m = MAP[newStatus];
@@ -130,7 +133,8 @@
         enviado:     { level: 'info',    title: `Contrato venda ${num} enviado`,                 sub: `Para ${titularNome} · canal ${meta && meta.channel ? (meta.channel === 'whatsapp' ? 'WhatsApp' : meta.channel === 'email' ? 'E-mail' : 'Link') : '—'}` },
         visualizado: { level: 'warning', title: `Contrato venda ${num} foi VISUALIZADO`,         sub: `Aberto por ${titularNome} · ${meta && meta.ip ? 'IP ' + meta.ip + ' · ' : ''}${fmtDateTime(Date.now())}` },
         assinado:    { level: 'info',    title: `Contrato venda ${num} ASSINADO`,                sub: `Por ${meta && meta.signerName ? meta.signerName : titularNome} · ${meta && meta.ip ? 'IP ' + meta.ip : ''}` },
-        recusado:    { level: 'danger',  title: `Contrato venda ${num} foi RECUSADO`,            sub: `Recusado pelo destinatário em ${fmtDateTime(Date.now())}` },
+        assinado_representante: { level: 'info', title: `Contrato venda ${num} — representante assinou`, sub: `Aguardando outros signatários (sócios/jurídico) para concluir · ${meta && meta.signerName ? meta.signerName : titularNome}` },
+        recusado:    { level: 'danger',  title: `Contrato venda ${num} foi RECUSADO`,            sub: `Recusado por ${(meta && meta.nome) || titularNome || 'destinatário'} em ${fmtDateTime(Date.now())}${meta && meta.motivo ? ' — Motivo: ' + meta.motivo : ''}` },
         expirado:    { level: 'warning', title: `Contrato venda ${num} EXPIROU`,                 sub: `Link aguardando assinatura por 7 dias sem retorno` },
       };
       const cfg = map[newStatus];
@@ -157,6 +161,18 @@
     if (error) { console.warn('[CVStore] list error', error); return []; }
     return data || [];
   }
+  /* Rascunhos do assistente ("Salvar rascunho") — sem token/número, por isso
+     ficam fora de listAll (que exige token) e dos KPIs do Painel. */
+  async function listarRascunhos() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('contratos_venda_equipamentos')
+      .select('id, comprador_razao_social, objeto_resumo, valor_total_num, proposta_id, master_id, form_state, log, atualizado_em, criado_em')
+      .eq('status', 'em_preenchimento')
+      .order('atualizado_em', { ascending: false });
+    if (error) { console.warn('[CVStore] listarRascunhos error', error); return []; }
+    return data || [];
+  }
+
   /* Cria (ou reaproveita) o Dossier da Obra exigido pelo Passo 5 — Revisão.
      O fluxo Formulário → Fornecedor → Precificação → Proposta nunca passa
      pelo pipeline de Leads (onde o Dossier normalmente nasce, ver
@@ -167,10 +183,26 @@
   async function garantirDossier(formState) {
     if (formState.dossier_id) return formState.dossier_id;
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const localObra = String(formState.localObra || '').trim();
-    const m = localObra.match(/^(.*),\s*([A-Za-z]{2})$/);
-    const city = m ? m[1].trim() : (localObra || null);
-    const state = m ? m[2].toUpperCase() : null;
+    /* Reaproveita o Dossiê que já existe pra esta cotação — a assinatura da
+       Proposta já cria um (DossierStore.criarDeProposta, idempotente por
+       numero_cotacao). Antes esta função só olhava formState.dossier_id (sempre
+       null no assistente), então criava um SEGUNDO dossiê pra mesma cotação, o
+       que quebra buscas por numero_cotacao (ex.: Linha do Tempo). */
+    const numeroCotacaoExistente = window.MasterIdEngine?.parseNumeroCotacao?.(formState.masterId) ?? null;
+    if (numeroCotacaoExistente != null) {
+      const { data: existentes } = await c.from('dossier_obra').select('id')
+        .eq('numero_cotacao', numeroCotacaoExistente).order('created_at', { ascending: true }).limit(1);
+      if (existentes && existentes.length) return existentes[0].id;
+    }
+    /* Cidade/UF: preferem os campos estruturados herdados da obra; senão
+       extrai do texto "rua, nº, bairro, cidade, UF" — só o ÚLTIMO trecho
+       antes da UF é a cidade (antes a rua e o número iam junto pro campo
+       cidade). */
+    const localObra = String(formState.localObra || '').replace(/,?\s*CEP\b.*$/i, '').trim();
+    const m = localObra.match(/^(.*?)[\s,/-]+([A-Za-z]{2})$/);
+    const cidadeTexto = m ? m[1].split(',').pop().trim() : (localObra || null);
+    const city = (formState.obraCidade && String(formState.obraCidade).trim()) || cidadeTexto || null;
+    const state = ((formState.obraUf && String(formState.obraUf).trim()) || (m ? m[2] : '') || '').toUpperCase() || null;
     const equipMap = { ELEVADOR: 'elevador', ESCADA: 'escada', ESTEIRA: 'esteira' };
     const id = 'DOS-' + Date.now().toString(36).toUpperCase();
     // numero_cotacao é a chave que o resto da esteira usa pra correlacionar
@@ -204,9 +236,13 @@
       .select('id, master_id, numero_documento, titulo, valor_total, data_json, aprovada_em')
       .eq('status', 'aprovada').order('aprovada_em', { ascending: false }).limit(50);
     if (!assinadas || !assinadas.length) return [];
-    const { data: contratos } = await c.from('contratos_venda_equipamentos').select('proposta_id');
-    const comContrato = new Set((contratos || []).map((x) => x.proposta_id).filter(Boolean));
-    return assinadas.filter((p) => !comContrato.has(p.id));
+    const { data: contratos } = await c.from('contratos_venda_equipamentos').select('id, proposta_id, status');
+    /* Rascunho em preenchimento NÃO tira a proposta da fila — só marca qual é
+       o rascunho (_rascunhoId) pro botão virar "Continuar rascunho". */
+    const rascunhoPorProposta = {};
+    (contratos || []).forEach((x) => { if (x.proposta_id && x.status === 'em_preenchimento') rascunhoPorProposta[x.proposta_id] = x.id; });
+    const comContrato = new Set((contratos || []).filter((x) => x.status !== 'em_preenchimento').map((x) => x.proposta_id).filter(Boolean));
+    return assinadas.filter((p) => !comContrato.has(p.id)).map((p) => ({ ...p, _rascunhoId: rascunhoPorProposta[p.id] || null }));
   }
 
   async function getById(id) {
@@ -214,8 +250,34 @@
     const { data } = await c.from('contratos_venda_equipamentos').select('*').eq('id', id).maybeSingle();
     return data || null;
   }
+  /* Segurança real (#571, Fase 3/Task 11a): a página pública fala com o banco por RPC `public_cv_*` (recebem só o TOKEN; a regra
+     "só vira ASSINADO com o representante + todos os signatários" e o IP/hora da assinatura ficam no servidor). Interruptor de
+     emergência: localStorage.vp_public_rpc = 'off' (o mesmo da Proposta). Se a RPC falhar, cai no caminho antigo (tabelas ainda abertas). */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+  const MSG_RPC = {
+    link_invalido: 'Link inválido ou expirado.', expirada: 'Este contrato expirou.', nome_obrigatorio: 'Informe o seu nome para assinar.',
+  };
+  function erroDaRpc(res) {
+    const e = res && res.erro;
+    if (MSG_RPC[e]) return new Error(MSG_RPC[e]);
+    if (e && String(e).indexOf('status_') === 0) return new Error('Este contrato não está mais disponível para esta ação (situação atual: ' + String(e).slice(7) + ').');
+    return new Error('Não foi possível concluir a ação. Tente novamente.');
+  }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[CVStore] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[CVStore] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
   async function getByToken(token) {
     const c = sb(); if (!c) return null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cv_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
     const { data } = await c.from('contratos_venda_equipamentos').select('*').eq('token', token).maybeSingle();
     return data || null;
   }
@@ -229,14 +291,25 @@
     return data ? data.numero_cotacao : null;
   }
 
+  /* Primeiro livre entre base, base-2, base-3… */
+  function proximoNumeroLivre(base, usados) {
+    const set = new Set(usados || []);
+    if (!set.has(base)) return base;
+    let n = 2;
+    while (set.has(base + '-' + n)) n++;
+    return base + '-' + n;
+  }
+
   /* Cria rascunho. Gera VPVE numero_documento via RPC */
   async function createDraft(formState, opts) {
     opts = opts || {};
     const c = sb();
     if (!c) throw new Error('Supabase indisponível');
 
-    // Gate: Financeiro precisa ter dado o aval (consultou score + aprovou a
-    // venda) antes do contrato poder nem ser gerado — ver aval-financeiro-store.js.
+    // 29/09: o aval de score do Financeiro NÃO bloqueia mais o contrato (o
+    // Aval Financeiro real é manual e vem DEPOIS do sinal pago) — a chamada
+    // abaixo fica só por compatibilidade (podeEnviarContrato devolve sempre ok).
+    // Ver aval-financeiro-store.js / instrucaocompra.md.
     if (window.AvalFinanceiroStore && formState.propostaId) {
       const gate = await window.AvalFinanceiroStore.podeEnviarContrato(formState.propostaId);
       if (!gate.ok) throw new Error(gate.motivo);
@@ -251,7 +324,15 @@
        (idText abaixo), não mudam. Sem propostaId (raro/legado), mantém o
        número gerado pelo RPC como está. */
     const numeroCotacaoOrigem = await numeroCotacaoDaProposta(formState.propostaId);
-    if (numeroCotacaoOrigem != null) num.numero_documento = window.MasterIdEngine.etapaId('contrato_venda', numeroCotacaoOrigem);
+    if (numeroCotacaoOrigem != null) {
+      /* numero_documento é UNIQUE: um 2º contrato da mesma cotação (aditivo,
+         ex.: equipamento especial ≥ 1000 kg) batia na constraint com erro
+         técnico. Agora ganha sufixo -2, -3… (parseNumeroCotacao continua
+         extraindo o mesmo Nº da cotação). */
+      const base = window.MasterIdEngine.etapaId('contrato_venda', numeroCotacaoOrigem);
+      const { data: usados } = await c.from('contratos_venda_equipamentos').select('numero_documento').ilike('numero_documento', base + '%');
+      num.numero_documento = proximoNumeroLivre(base, (usados || []).map((r) => r.numero_documento));
+    }
 
     const valor = window.CV.parseMoney(formState.valor);
     const doc = window.CV.buildContract({
@@ -297,11 +378,75 @@
       dados: { numero_documento: num.numero_documento },
     };
 
-    const { error } = await c.from('contratos_venda_equipamentos').insert(rec);
-    if (error) throw error;
+    /* Vindo de um rascunho ("Salvar rascunho"): promove a MESMA linha (troca o
+       id provisório RASC-… e preenche número/token/doc) em vez de inserir uma
+       segunda e deixar o rascunho fantasma na lista. */
+    let promovido = false;
+    if (opts.rascunhoId) {
+      const { data: upd, error: updErr } = await c.from('contratos_venda_equipamentos').update(rec)
+        .eq('id', opts.rascunhoId).eq('status', 'em_preenchimento').select('id');
+      if (updErr) throw updErr;
+      promovido = !!(upd && upd.length);
+    }
+    if (!promovido) {
+      const { error } = await c.from('contratos_venda_equipamentos').insert(rec);
+      if (error) throw error;
+    }
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Contrato Venda', acao: 'criou o contrato', alvo: rec.numero_documento, alvo_id: rec.id, detalhe: { comprador: rec.comprador_razao_social } });
     if (window.AvalFinanceiroStore && formState.propostaId) window.AvalFinanceiroStore.vincularContrato(formState.propostaId, rec.id);
+    if (window.AvalJuridicoStore && formState.propostaId) window.AvalJuridicoStore.vincularContrato(formState.propostaId, rec.id);
     return rec;
+  }
+
+  /* "Salvar rascunho" do assistente. Não valida nada (a ideia é justamente ir
+     preenchendo aos poucos) — exige só razão social OU proposta, pra o rascunho
+     ser identificável na lista. Não gera número, token, doc, vínculo com Aval
+     nem log de "criou o contrato": isso só acontece em createDraft. Devolve
+     { id } — 1º save insere, os seguintes (opts.id) atualizam a mesma linha. */
+  async function salvarRascunho(formState, opts) {
+    opts = opts || {};
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    const comp = formState.comprador || {};
+    if (!String(comp.razao || '').trim() && !formState.propostaId) {
+      throw new Error('Para salvar o rascunho, informe a razão social do comprador ou selecione uma Proposta.');
+    }
+    const valor = window.CV.parseMoney(formState.valor);
+    const agora = new Date().toISOString();
+    const usuario = (window.__VP_USER || {}).email || null;
+    const fs = { ...formState, __rascunhoStep: opts.step || 0 };
+    const campos = {
+      titulo: 'Contrato de Venda (em preenchimento)',
+      comprador_razao_social: comp.razao || null,
+      comprador_cnpj: comp.cnpj || null,
+      responsavel_nome: comp.rep || null,
+      responsavel_cpf: comp.repCpf || '',
+      valor_total_num: valor || null,
+      objeto_resumo: window.CV.descEquipamento(formState),
+      master_id: formState.masterId || null,
+      proposta_id: formState.propostaId || null,
+      form_state: fs,
+      atualizado_em: agora,
+    };
+    if (opts.id) {
+      const { data, error } = await c.from('contratos_venda_equipamentos').update(campos)
+        .eq('id', opts.id).eq('status', 'em_preenchimento').select('id');
+      if (error) throw error;
+      if (data && data.length) return { id: opts.id };
+      // 0 linhas: rascunho excluído/promovido por outra pessoa — recria abaixo.
+    }
+    const id = 'RASC-' + uuid().replace(/-/g, '').slice(0, 12).toUpperCase();
+    const rec = {
+      id, ...campos,
+      status: 'em_preenchimento',
+      log: [{ status: 'em_preenchimento', at: agora, meta: { por: usuario } }],
+      criado_em: agora,
+      tipo_contrato: 'cliente',
+    };
+    const { error } = await c.from('contratos_venda_equipamentos').insert(rec);
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Contrato Venda', acao: 'salvou rascunho de contrato', alvo: comp.razao || id, alvo_id: id });
+    return { id };
   }
 
   async function updateFormState(id, formState) {
@@ -349,7 +494,8 @@
       log,
       atualizado_em: now.toISOString(),
     };
-    await c.from('contratos_venda_equipamentos').update(patch).eq('id', id);
+    const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('id', id);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'enviado', { channel });
     if (window.EventosFluxo) {
@@ -381,12 +527,46 @@
       audit, log,
       atualizado_em: now.toISOString(),
     };
-    await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    /* 29/09 — mesmo achado do send-email/proposta-store: best-effort de
+       propósito (console.warn, não lança) porque é rastreamento automático
+       no mount da página pública (assinar-app.jsx), sem ação do usuário —
+       lançar aqui travaria a leitura do contrato por uma falha só de
+       auditoria. */
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cv_visualizado', { p_token: token, p_audit: { viewUa: ua, viewDevice: device, viewIp: ip } });
+      if (!r.falhou && r.data && r.data.ok && r.data.rec) return r.data.rec;   // aviso/auditoria já gravados no banco
+    }
+    const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    if (error) console.warn('[CVStore] falha ao registrar visualização (best-effort, não bloqueia o cliente)', error);
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'visualizado', { ip });
     return updated;
   }
 
+  /* Recalcula D0/entrega a partir da assinatura — usado nos dois lugares
+     que podem finalizar o contrato como 'assinado' de verdade (markSigned
+     quando não há signatário extra pendente, e
+     tentarFinalizarAposSignatarioExtra quando o último deles assina). Só
+     monta o formState — quem grava é o call-site, cada um com seu próprio
+     log/patch, pra não duplicar entrada de log num caminho que só precisa
+     de 1 gravação (ver markSigned). */
+  function _formStateFinalizado(cur, now) {
+    const formState = { ...(cur.form_state || {}) };
+    if (!formState.d0_assinatura) formState.d0_assinatura = now.toISOString().slice(0, 10);
+    const d0 = window.CV.calcularD0(formState.d0_entrada, formState.d0_assinatura, formState.d0_projeto);
+    formState.d0 = d0;
+    formState.entrega_prevista = d0 ? window.CV.addDias(d0, 120) : null;
+    return formState;
+  }
+
+  /* Signatários adicionais (sócios/jurídico do Comprador, pedido do
+     usuário — ver contrato-venda-signatarios-store.js) — opcional. Um
+     contrato sem nenhum signatário adicional cadastrado se comporta
+     EXATAMENTE como antes desta feature: o representante assinando já
+     fecha tudo numa única gravação. Só quando existem signatários extras
+     é que o representante assinar primeiro deixa o contrato em
+     'aguardando_signatarios' até o último deles também assinar (ver
+     tentarFinalizarAposSignatarioExtra abaixo). */
   async function markSigned(token, sig) {
     const c = sb();
     const cur = await getByToken(token);
@@ -408,24 +588,78 @@
     const log = (cur.log || []).slice();
     log.push({ status:'assinado', at: now.toISOString(), meta:{ ip, ua, hash } });
 
-    // ISSUE #6: assinatura é um dos 3 marcos do D0 — preenche sozinho aqui
-    // (evento real), sem precisar de entrada manual, e recalcula D0/entrega.
-    const formState = { ...(cur.form_state || {}) };
-    if (!formState.d0_assinatura) formState.d0_assinatura = now.toISOString().slice(0, 10);
-    const d0 = window.CV.calcularD0(formState.d0_entrada, formState.d0_assinatura, formState.d0_projeto);
-    formState.d0 = d0;
-    formState.entrega_prevista = d0 ? window.CV.addDias(d0, 120) : null;
+    if (usarRpcPublica()) {
+      /* O servidor conta os signatários que faltam, decide assinado × aguardando_signatarios e carimba hora/IP; aviso e log no banco;
+         D0 e evento rodam pela fila (src/fluxo-pendentes.js → CVStore.processarEfeitoFila). */
+      const r = await chamarRpcPublica(c, 'public_cv_assinar', { p_token: token, p_audit: {
+        signUa: ua, signDevice: device, signIp: ip, signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data, hash,
+      } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        return r.data.rec;
+      }
+    }
 
-    const patch = {
-      status: 'assinado',
-      signed_at: now.toISOString(),
-      audit, log,
-      form_state: formState,
-      atualizado_em: now.toISOString(),
-    };
-    await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    const pendentesExtras = window.CVSignatarioStore ? await window.CVSignatarioStore.contarPendentes(cur.id) : 0;
+    const pendentesDocSig = window.DocumentoSignatariosStore ? await window.DocumentoSignatariosStore.contarPendentes('contrato_venda', cur.id) : 0;
+    const statusFinal = (pendentesExtras > 0 || pendentesDocSig > 0) ? 'aguardando_signatarios' : 'assinado';
+
+    let patch = { audit, log, status: statusFinal, atualizado_em: now.toISOString() };
+    if (statusFinal === 'assinado') {
+      // ISSUE #6: assinatura é um dos 3 marcos do D0 — preenche sozinho
+      // (evento real), sem precisar de entrada manual, e recalcula D0/entrega.
+      patch.form_state = _formStateFinalizado(cur, now);
+      patch.signed_at = now.toISOString();
+    }
+    const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
-    await pushNotification(updated, 'assinado', { ip, signerName: sig.signerName });
+
+    if (statusFinal === 'assinado') {
+      await pushNotification(updated, 'assinado', { ip, signerName: sig.signerName });
+      if (window.EventosFluxo) {
+        const numeroCotacao = await numeroCotacaoDaProposta(updated.proposta_id);
+        window.EventosFluxo.registrar({
+          evento: 'CONTRATO_VENDA_ASSINADO', numeroCotacao,
+          alvoLabel: `${updated.comprador_razao_social || ''} · ${updated.numero_documento || ''}`, alvoId: updated.id,
+        });
+      }
+    } else {
+      await pushNotification(updated, 'assinado_representante', { ip, signerName: sig.signerName });
+      if (window.EventosFluxo) {
+        const numeroCotacao = await numeroCotacaoDaProposta(updated.proposta_id);
+        window.EventosFluxo.registrar({
+          evento: 'CONTRATO_VENDA_REPRESENTANTE_ASSINOU', numeroCotacao,
+          alvoLabel: `${updated.comprador_razao_social || ''} · ${updated.numero_documento || ''}`, alvoId: updated.id,
+        });
+      }
+    }
+    return updated;
+  }
+
+  /* Chamado por CVSignatarioStore.markSigned depois de gravar a assinatura
+     de um signatário extra — só finaliza o contrato quando o representante
+     JÁ tiver assinado (audit.signedAt) e não sobrar mais ninguém pendente;
+     idempotente (não faz nada se o contrato já estiver 'assinado'). */
+  async function tentarFinalizarAposSignatarioExtra(contratoId) {
+    const c = sb();
+    const cur = await getById(contratoId);
+    if (!cur) return null;
+    if (cur.status === 'assinado') return cur;
+    if (!cur.audit || !cur.audit.signedAt) return cur; // representante ainda não assinou
+    const pendentes = window.CVSignatarioStore ? await window.CVSignatarioStore.contarPendentes(contratoId) : 0;
+    const pendentesDocSig = window.DocumentoSignatariosStore ? await window.DocumentoSignatariosStore.contarPendentes('contrato_venda', contratoId) : 0;
+    if (pendentes > 0 || pendentesDocSig > 0) return cur;
+
+    const now = new Date();
+    const formState = _formStateFinalizado(cur, now);
+    const log = (cur.log || []).slice();
+    log.push({ status: 'assinado', at: now.toISOString(), meta: { ultimoSignatario: true } });
+    const patch = { status: 'assinado', signed_at: now.toISOString(), form_state: formState, log, atualizado_em: now.toISOString() };
+    const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('id', contratoId);
+    if (error) throw error;
+    const updated = { ...cur, ...patch };
+    await pushNotification(updated, 'assinado', {});
     if (window.EventosFluxo) {
       const numeroCotacao = await numeroCotacaoDaProposta(updated.proposta_id);
       window.EventosFluxo.registrar({
@@ -436,17 +670,37 @@
     return updated;
   }
 
-  async function refuse(token) {
+  /* 01/10 — achado real (cotação 955/AKAI): recusa não registrava QUEM
+     recusou nem POR QUÊ, só o carimbo de data/hora — impossível saber se
+     foi mesmo o cliente ou com que motivo sem contatá-lo de novo. Agora
+     recebe { nome, motivo } (preenchido pela própria página pública,
+     `assinar-app.jsx`) e grava junto com IP/dispositivo, mesmo padrão de
+     auditoria que `markViewed`/`markSigned` já usam. */
+  async function refuse(token, info) {
     const c = sb();
     const cur = await getByToken(token);
     if (!cur) return null;
     const now = new Date();
+    const ip = await getPublicIP();
+    const ua = navigator.userAgent;
+    const device = deviceLabel(ua);
+    const nome = ((info && info.nome) || '').trim() || null;
+    const motivo = ((info && info.motivo) || '').trim() || null;
+    const audit = { ...(cur.audit || {}), refusedAt: now.toISOString(), refusedBy: nome, refusedReason: motivo, refuseIp: ip, refuseUa: ua, refuseDevice: device };
     const log = (cur.log || []).slice();
-    log.push({ status:'recusado', at: now.toISOString(), meta:{ at: now.toISOString() } });
-    const patch = { status:'recusado', log, atualizado_em: now.toISOString() };
-    await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    log.push({ status:'recusado', at: now.toISOString(), meta:{ nome, motivo, ip } });
+    const patch = { status:'recusado', log, audit, atualizado_em: now.toISOString() };
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cv_recusar', { p_token: token, p_nome: nome, p_motivo: motivo, p_audit: { refuseUa: ua, refuseDevice: device, refuseIp: ip } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        return r.data.rec;   // aviso/auditoria já gravados no banco
+      }
+    }
+    const { error } = await c.from('contratos_venda_equipamentos').update(patch).eq('token', token);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
-    await pushNotification(updated, 'recusado', {});
+    await pushNotification(updated, 'recusado', { nome, motivo });
     return updated;
   }
 
@@ -465,19 +719,140 @@
     }
   }
 
+  /* ---------- Desenho do Projeto de Instalação ----------
+     Deixou de ser anexado no wizard (checklist "Anexo II") e passou a ser
+     enviado separadamente pela Engenharia, só depois de sinal pago (Aval
+     Financeiro) + contrato assinado + Aval Jurídico — ver
+     CVDesenhoInstalacaoSection em contrato-venda.jsx e os gates em
+     aval-financeiro-store.js/aval-juridico-store.js. Mesmo padrão de
+     upload real de projeto-elevador-store.js (bucket `engenharia`). */
+  async function uploadDesenhoInstalacao(id, file) {
+    const c = sb(); if (!c) throw new Error('Sem conexão com o banco.');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Contrato não encontrado.');
+    const path = `desenho-instalacao/${id}/${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
+    const { error: upErr } = await c.storage.from('engenharia').upload(path, file, { upsert: true });
+    if (upErr) throw new Error(upErr.message);
+    const { data: pub } = c.storage.from('engenharia').getPublicUrl(path);
+    const now = new Date().toISOString();
+    const arquivo = {
+      nome: file.name, url: pub.publicUrl, tipo: file.type, tamanho: file.size, path,
+      anexado_por: (window.__VP_USER || {}).email || null, anexado_em: now,
+    };
+    const desenho = { ...(cur.desenho_instalacao || {}), arquivo, envios: (cur.desenho_instalacao || {}).envios || [] };
+    const { error } = await c.from('contratos_venda_equipamentos')
+      .update({ desenho_instalacao: desenho, atualizado_em: now }).eq('id', id);
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Contrato Venda', acao: 'anexou o Desenho do Projeto de Instalação',
+      alvo: cur.numero_documento, alvo_id: id,
+    });
+    if (window.EventosFluxo) {
+      const numeroCotacao = await numeroCotacaoDaProposta(cur.proposta_id);
+      window.EventosFluxo.registrar({
+        evento: 'DESENHO_INSTALACAO_ANEXADO', numeroCotacao,
+        alvoLabel: cur.comprador_razao_social || cur.numero_documento, alvoId: id,
+      });
+    }
+    return { ...cur, desenho_instalacao: desenho };
+  }
+
+  /* Envia o arquivo já anexado por e-mail real (mesma Edge Function
+     `send-email` do RFQ a fornecedor — ver formulario-elevador.jsx) — fica
+     registrado em emails_projeto (Inbox/Enviados/Linha do Tempo), não é o
+     mailto: usado no CVSendModal. Histórico em desenho_instalacao.envios
+     permite reenvio sem precisar anexar o arquivo de novo. */
+  async function enviarDesenhoInstalacao(id) {
+    const c = sb(); if (!c) throw new Error('Sem conexão com o banco.');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Contrato não encontrado.');
+    const arquivo = (cur.desenho_instalacao || {}).arquivo;
+    if (!arquivo) throw new Error('Anexe o arquivo do Desenho de Instalação antes de enviar.');
+    const destinatario = (cur.form_state && cur.form_state.comprador && cur.form_state.comprador.email) || null;
+    if (!destinatario) throw new Error('E-mail do comprador não encontrado neste contrato.');
+
+    const resp = await fetch(arquivo.url);
+    if (!resp.ok) throw new Error('Não foi possível ler o arquivo anexado pra enviar.');
+    const blob = await resp.blob();
+    const base64 = await new Promise((resolve, reject) => {
+      const reader = new FileReader();
+      reader.onloadend = () => resolve(String(reader.result).split(',')[1] || '');
+      reader.onerror = reject;
+      reader.readAsDataURL(blob);
+    });
+
+    const numeroCotacao = await numeroCotacaoDaProposta(cur.proposta_id);
+    const { data: emailData, error: emailError } = await c.functions.invoke('send-email', {
+      body: {
+        to: destinatario,
+        subject: `Projeto de Instalação — Contrato ${cur.numero_documento} — VerticalParts`,
+        text: `Olá,\n\nSegue em anexo o Desenho do Projeto de Instalação referente ao Contrato ${cur.numero_documento}.\n\nAtenciosamente,\nVerticalParts`,
+        numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: id,
+        attachments: [{ filename: arquivo.nome, contentType: arquivo.tipo || 'application/octet-stream', base64 }],
+      },
+    });
+    if (emailError) throw new Error(emailError.message || 'Falha ao enviar o e-mail.');
+
+    const now = new Date().toISOString();
+    const envios = ((cur.desenho_instalacao || {}).envios || []).slice();
+    envios.push({ enviado_em: now, enviado_por: (window.__VP_USER || {}).email || null, destinatario });
+    const desenho = { ...(cur.desenho_instalacao || {}), envios };
+    await c.from('contratos_venda_equipamentos').update({ desenho_instalacao: desenho, atualizado_em: now }).eq('id', id);
+
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Contrato Venda', acao: 'enviou o Desenho do Projeto de Instalação ao cliente',
+      alvo: cur.numero_documento, alvo_id: id,
+    });
+    if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'DESENHO_INSTALACAO_ENVIADO', numeroCotacao,
+      alvoLabel: cur.comprador_razao_social || cur.numero_documento, alvoId: id, detalhe: { destinatario },
+    });
+    if (emailData && emailData.avisoPersistencia) window.toast?.(emailData.avisoPersistencia, 'warning');
+    return { ...cur, desenho_instalacao: desenho };
+  }
+
   async function remove(id) {
     const c = sb();
     await c.from('contratos_venda_equipamentos').delete().eq('id', id);
   }
 
+  /* Efeitos de uma ação pública do Contrato de Venda, executados por um usuário interno via fila `fluxo_pendentes`
+     (src/fluxo-pendentes.js). Roda o MESMO que o navegador do cliente rodava: recálculo do D0 ao assinar e os eventos de fluxo. */
+  async function processarEfeitoFila(tipo, p) {
+    const c = sb();
+    const numeroCotacao = await numeroCotacaoDaProposta(p.proposta_id);
+    const evento = async (chave, atorNome) => {
+      if (!window.EventosFluxo) return;
+      const r = await window.EventosFluxo.registrar({ evento: chave, numeroCotacao, alvoLabel: p.label, alvoId: p.contrato_id, atorNome: atorNome || 'Cliente (link público)' });
+      if (!r) throw new Error('evento ' + chave + ' não registrado');
+    };
+    if (tipo === 'contrato_venda_assinado') {
+      const cur = await getById(p.contrato_id);
+      if (cur) {
+        const fs = _formStateFinalizado(cur, cur.signed_at ? new Date(cur.signed_at) : new Date());
+        const { error } = await c.from('contratos_venda_equipamentos').update({ form_state: fs, atualizado_em: new Date().toISOString() }).eq('id', p.contrato_id);
+        if (error) throw error;
+      }
+      return evento('CONTRATO_VENDA_ASSINADO', p.signerName);
+    }
+    if (tipo === 'contrato_venda_representante') return evento('CONTRATO_VENDA_REPRESENTANTE_ASSINOU', p.signerName);
+    if (tipo === 'contrato_venda_signatario') return evento(p.resposta === 'recusou' ? 'CONTRATO_VENDA_SIGNATARIO_RECUSOU' : 'CONTRATO_VENDA_SIGNATARIO_ASSINOU', p.nome);
+    throw new Error('tipo desconhecido: ' + tipo);
+  }
+
   window.CVStore = {
     STATUS,
+    processarEfeitoFila,
+    rpcPublica: { usar: usarRpcPublica, chamar: chamarRpcPublica, erro: erroDaRpc },
     uuid, shortToken,
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
     listAll, listarPropostasAguardandoContrato, garantirDossier, getById, getByToken,
-    createDraft, updateFormState,
+    numeroCotacaoDaProposta,
+    createDraft, salvarRascunho, listarRascunhos, updateFormState, proximoNumeroLivre,
     markSent, markViewed, markSigned, refuse,
+    tentarFinalizarAposSignatarioExtra,
+    uploadDesenhoInstalacao, enviarDesenhoInstalacao,
     sweepExpired, remove,
     getPublicIP, deviceLabel, sha256Hex,
   };

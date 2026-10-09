@@ -119,7 +119,7 @@
         enviado:     { acao: 'enviou p/ assinatura' },
         visualizado: { acao: 'contraparte visualizou', ator: contraparte, setor: 'externo' },
         assinado:    { acao: 'contrato assinado', ator: (meta && meta.signerName) || contraparte, setor: 'externo' },
-        recusado:    { acao: 'assinatura recusada', ator: contraparte, setor: 'externo' },
+        recusado:    { acao: 'assinatura recusada' + (meta && meta.motivo ? ` — Motivo: ${meta.motivo}` : ''), ator: (meta && meta.nome) || contraparte, setor: 'externo' },
         expirado:    { acao: 'link de assinatura expirou', ator: 'Sistema', setor: 'sistema' },
       };
       const m = MAP[newStatus];
@@ -135,7 +135,7 @@
         enviado:     { level: 'info',    title: `Contrato instalador ${rec.numero_documento} enviado`, sub: `Para ${(rec.recipient && rec.recipient.name) || rec.responsavel_nome || ''} · canal ${meta && meta.channel ? (meta.channel === 'whatsapp' ? 'WhatsApp' : 'E-mail') : '—'}` },
         visualizado: { level: 'warning', title: `Contrato instalador ${rec.numero_documento} foi VISUALIZADO`, sub: `Aberto por ${(rec.recipient && rec.recipient.name) || ''} · ${meta && meta.ip ? 'IP ' + meta.ip + ' · ' : ''}${fmtDateTime(Date.now())}` },
         assinado:    { level: 'info',    title: `Contrato instalador ${rec.numero_documento} ASSINADO`, sub: `Por ${meta && meta.signerName ? meta.signerName : (rec.responsavel_nome || '')} · ${meta && meta.ip ? 'IP ' + meta.ip : ''}` },
-        recusado:    { level: 'danger',  title: `Contrato instalador ${rec.numero_documento} foi RECUSADO`, sub: `Recusado pelo destinatário em ${fmtDateTime(Date.now())}` },
+        recusado:    { level: 'danger',  title: `Contrato instalador ${rec.numero_documento} foi RECUSADO`, sub: `Recusado por ${(meta && meta.nome) || (rec.recipient && rec.recipient.name) || 'destinatário'} em ${fmtDateTime(Date.now())}${meta && meta.motivo ? ' — Motivo: ' + meta.motivo : ''}` },
         expirado:    { level: 'warning', title: `Contrato instalador ${rec.numero_documento} EXPIROU`, sub: `Link aguardando assinatura por 7 dias sem retorno` },
       };
       const cfg = map[newStatus];
@@ -199,10 +199,69 @@
     const { data } = await c.from('contratos_instalador').select('*').eq('id', id).maybeSingle();
     return data || null;
   }
+  /* Colunas do Painel — sem `doc`/`form_state` (jsonb grandes, não usados na
+     lista nem no drawer), pra não puxar o texto inteiro de todos os contratos
+     a cada rodada de atualização. */
+  const COLS_PAINEL = 'id,numero_documento,token,titulo,contratada_nome,contratada_cnpj,responsavel_nome,valor_total,objeto_resumo,status,channel,recipient,log,audit,sent_at,viewed_at,signed_at,expires_at,master_id,proposta_id,criado_em';
+  async function listPainel() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('contratos_instalador').select(COLS_PAINEL).order('criado_em', { ascending: false });
+    if (error) { console.warn('[CIStore] listPainel error', error); return []; }
+    return data || [];
+  }
+  /* Segurança real (#571, Fase 3/Task 11c): a página pública fala com o banco por RPC `public_ci_*` (recebem só o TOKEN; o servidor
+     decide as transições, carimba hora/IP e faz a expiração "preguiçosa"). Interruptor: localStorage.vp_public_rpc = 'off' (o mesmo da
+     Proposta); se a RPC falhar, cai no caminho antigo (tabelas ainda abertas). */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+  function erroDaRpc(res) {
+    const e = res && res.erro;
+    if (e === 'status_expirado') return new Error('Este link de assinatura expirou. Peça um novo envio à Vertical Parts.');
+    if (e === 'status_recusado') return new Error('Este contrato foi recusado e não pode mais ser assinado.');
+    if (e === 'link_invalido') return new Error('Link inválido ou expirado.');
+    if (e === 'nome_obrigatorio') return new Error('Informe o seu nome para assinar.');
+    if (e && String(e).indexOf('status_') === 0) return new Error('Este contrato não está mais disponível para esta ação (situação atual: ' + String(e).slice(7) + ').');
+    return new Error('Não foi possível concluir a ação. Tente novamente.');
+  }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[CIStore] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[CIStore] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
   async function getByToken(token) {
     const c = sb(); if (!c) return null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_ci_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
     const { data } = await c.from('contratos_instalador').select('*').eq('token', token).maybeSingle();
-    return data || null;
+    if (!data) return null;
+    /* Expiração "preguiçosa": antes só o Painel (sweepExpired) marcava
+       'expirado', então um link vencido continuava assinável enquanto
+       ninguém abrisse o Painel. Ao abrir o link (ou assinar), já converte. */
+    if ((data.status === 'enviado' || data.status === 'visualizado') && data.expires_at && new Date(data.expires_at) < new Date()) {
+      const now = new Date();
+      const log = (data.log || []).slice();
+      log.push({ status: 'expirado', at: now.toISOString(), meta: null });
+      const patch = { status: 'expirado', log, atualizado_em: now.toISOString() };
+      const { error } = await c.from('contratos_instalador').update(patch).eq('id', data.id).in('status', ['enviado', 'visualizado']);
+      if (error) console.warn('[CIStore] falha ao marcar expirado (best-effort)', error);
+      else { const upd = { ...data, ...patch }; await pushNotification(upd, 'expirado', {}); return upd; }
+    }
+    return data;
+  }
+
+  /* Primeiro número livre a partir da base ("VPNI-0955" → "VPNI-0955",
+     depois "-2", "-3"…). numero_documento é UNIQUE no banco; a checagem aqui
+     é o que evita bater na constraint no caso normal. */
+  async function reservarNumero(base) {
+    const c = sb(); if (!c) return base;
+    const { data, error } = await c.from('contratos_instalador').select('numero_documento').ilike('numero_documento', base + '%');
+    if (error) { console.warn('[CIStore] reservarNumero falhou, usando a base', error); return base; }
+    return window.CI.proximoNumeroLivre(base, (data || []).map((r) => r.numero_documento));
   }
 
   /* Cria um novo registro de contrato a partir do estado do form.
@@ -212,16 +271,26 @@
     const c = sb();
     if (!c) throw new Error('Supabase indisponível');
 
+    formState = { ...formState };
     const { data: numRows, error: numErr } = await c.rpc('next_doc_number', { p_prefixo: 'VPNI' });
     if (numErr) throw numErr;
     const num = (Array.isArray(numRows) ? numRows[0] : numRows) || {};
-    /* Nº exibido (revisão 27/08): reaproveita o Nº da Cotação da Proposta de
-       origem (VPCM-0950 — Contrato de Montagem), em vez da sequência
-       própria "VPNI-...". Sem propostaId (raro/legado), mantém o número
-       gerado pelo RPC como está. */
+    /* Nº do contrato (29/09) nasce dos equipamentos: VPNI-<Nº da cotação>
+       quando há Proposta, VPNI-<nº de série/projeto> no avulso; um 2º
+       contrato com a mesma base (ex.: 2 montadores na mesma obra, cada um
+       com parte dos equipamentos) ganha sufixo -2, -3… Sem nenhum
+       equipamento informado (registro legado), mantém o número do RPC. */
     if (formState.propostaId) {
       const { data: prop } = await c.from('propostas').select('numero_cotacao').eq('id', formState.propostaId).maybeSingle();
-      if (prop && prop.numero_cotacao != null) num.numero_documento = window.MasterIdEngine.etapaId('contrato_montagem', prop.numero_cotacao);
+      /* formState.numeroCotacao nunca era preenchido pelo wizard, então
+         EventosFluxo/Aval Financeiro abaixo nunca disparavam. */
+      if (prop && prop.numero_cotacao != null && formState.numeroCotacao == null) formState.numeroCotacao = prop.numero_cotacao;
+    }
+    const base = formState.numeroContratoBase || window.CI.numeroBaseContrato(formState);
+    if (base) {
+      num.numero_documento = await reservarNumero(base);
+      formState.numeroContrato = num.numero_documento;
+      formState.numeroContratoBase = base;
     }
 
     const valorTotal = window.CI.moedaParaNumero(formState.valorTotal);
@@ -297,11 +366,13 @@
       master_id: formState.masterId || null,
       proposta_id: formState.propostaId || null,
       ativos_indices: formState.ativosIndices || [],
+      dossier_ids: formState.dossierIds || [],
       form_state: formState,
       doc,
       atualizado_em: new Date().toISOString(),
     };
-    await c.from('contratos_instalador').update(patch).eq('id', id);
+    const { error } = await c.from('contratos_instalador').update(patch).eq('id', id);
+    if (error) throw error;
     return { ...cur, ...patch };
   }
 
@@ -323,7 +394,8 @@
       log,
       atualizado_em: now.toISOString(),
     };
-    await c.from('contratos_instalador').update(patch).eq('id', id);
+    const { error } = await c.from('contratos_instalador').update(patch).eq('id', id);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'enviado', { channel });
     return updated;
@@ -349,7 +421,17 @@
       audit, log,
       atualizado_em: now.toISOString(),
     };
-    await c.from('contratos_instalador').update(patch).eq('token', token);
+    /* 29/09 — mesmo achado do send-email/proposta-store/CVStore: best-effort
+       de propósito (console.warn, não lança) porque é rastreamento
+       automático no mount da página pública (assinar-app.jsx), sem ação do
+       usuário — lançar aqui travaria a leitura do contrato por uma falha
+       só de auditoria. */
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_ci_visualizado', { p_token: token, p_audit: { viewUa: ua, viewDevice: device, viewIp: ip } });
+      if (!r.falhou && r.data && r.data.ok && r.data.rec) return r.data.rec;   // aviso/auditoria já gravados no banco
+    }
+    const { error } = await c.from('contratos_instalador').update(patch).eq('token', token);
+    if (error) console.warn('[CIStore] falha ao registrar visualização (best-effort, não bloqueia o cliente)', error);
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'visualizado', { ip });
     return updated;
@@ -360,11 +442,17 @@
     const c = sb();
     const cur = await getByToken(token);
     if (!cur) return null;
+    if (cur.status === 'expirado') throw new Error('Este link de assinatura expirou. Peça um novo envio à Vertical Parts.');
+    if (cur.status === 'recusado') throw new Error('Este contrato foi recusado e não pode mais ser assinado.');
+    if (cur.status === 'assinado') return cur;
     const ip = await getPublicIP();
     const ua = navigator.userAgent;
     const device = deviceLabel(ua);
     const now = new Date();
-    const hash = await sha256Hex(JSON.stringify(cur.form_state) + '|' + (sig.signerName || ''));
+    /* Hash cobre o texto do contrato (doc), os dados do formulário, o nome de
+       quem assinou e o instante — antes só form_state + nome, então o texto
+       das cláusulas e a data não eram protegidos. */
+    const hash = await sha256Hex(JSON.stringify(cur.doc) + '|' + JSON.stringify(cur.form_state) + '|' + (sig.signerName || '') + '|' + now.toISOString());
     const audit = {
       ...(cur.audit || {}),
       signedAt: now.toISOString(),
@@ -377,6 +465,16 @@
       consent: true,
       hash,
     };
+    if (usarRpcPublica()) {
+      /* O servidor grava a assinatura, carimba hora/IP, avisa e enfileira o evento (src/fluxo-pendentes.js → CIStore.processarEfeitoFila). */
+      const r = await chamarRpcPublica(c, 'public_ci_assinar', { p_token: token, p_audit: {
+        signUa: ua, signDevice: device, signIp: ip, signerName: sig.signerName, signatureType: sig.type, signatureData: sig.data, hash,
+      } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        return r.data.rec;
+      }
+    }
     const log = (cur.log || []).slice();
     log.push({ status:'assinado', at: now.toISOString(), meta:{ ip, ua, hash } });
     const patch = {
@@ -385,7 +483,8 @@
       audit, log,
       atualizado_em: now.toISOString(),
     };
-    await c.from('contratos_instalador').update(patch).eq('token', token);
+    const { error } = await c.from('contratos_instalador').update(patch).eq('token', token);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
     await pushNotification(updated, 'assinado', { ip, signerName: sig.signerName });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
@@ -395,17 +494,35 @@
     return updated;
   }
 
-  async function refuse(token) {
+  /* 01/10 — mesmo achado real do Contrato de Venda (cotação 955/AKAI):
+     recusa não registrava quem recusou nem por quê. Agora recebe
+     { nome, motivo } de `assinar-app.jsx` e grava com IP/dispositivo,
+     mesmo padrão de auditoria de `markViewed`/`markSigned`. */
+  async function refuse(token, info) {
     const c = sb();
     const cur = await getByToken(token);
     if (!cur) return null;
     const now = new Date();
+    const ip = await getPublicIP();
+    const ua = navigator.userAgent;
+    const device = deviceLabel(ua);
+    const nome = ((info && info.nome) || '').trim() || null;
+    const motivo = ((info && info.motivo) || '').trim() || null;
+    const audit = { ...(cur.audit || {}), refusedAt: now.toISOString(), refusedBy: nome, refusedReason: motivo, refuseIp: ip, refuseUa: ua, refuseDevice: device };
     const log = (cur.log || []).slice();
-    log.push({ status:'recusado', at: now.toISOString(), meta:{ at: now.toISOString() } });
-    const patch = { status:'recusado', log, atualizado_em: now.toISOString() };
-    await c.from('contratos_instalador').update(patch).eq('token', token);
+    log.push({ status:'recusado', at: now.toISOString(), meta:{ nome, motivo, ip } });
+    const patch = { status:'recusado', log, audit, atualizado_em: now.toISOString() };
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_ci_recusar', { p_token: token, p_nome: nome, p_motivo: motivo, p_audit: { refuseUa: ua, refuseDevice: device, refuseIp: ip } });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        return r.data.rec;   // aviso/auditoria já gravados no banco
+      }
+    }
+    const { error } = await c.from('contratos_instalador').update(patch).eq('token', token);
+    if (error) throw error;
     const updated = { ...cur, ...patch };
-    await pushNotification(updated, 'recusado', {});
+    await pushNotification(updated, 'recusado', { nome, motivo });
     return updated;
   }
 
@@ -425,19 +542,40 @@
     }
   }
 
+  /* Só rascunho pode ser excluído: contratos enviados/assinados/recusados/
+     expirados têm trilha de auditoria e (na assinatura) parcelas de
+     pagamento — o DELETE leva junto as parcelas (FK ON DELETE CASCADE),
+     inclusive as já pagas. Confere o status no próprio banco e trata
+     "0 linhas" como erro (RLS que barra volta sem erro). */
   async function remove(id) {
-    const c = sb();
-    await c.from('contratos_instalador').delete().eq('id', id);
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const { data, error } = await c.from('contratos_instalador').delete().eq('id', id).eq('status', 'rascunho').select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('Só é possível excluir contratos em rascunho.');
   }
 
   /* ---------- expor ---------- */
+  /* Efeito de uma ação pública do Contrato do Instalador, executado por um usuário interno via fila `fluxo_pendentes`
+     (src/fluxo-pendentes.js): o evento CONTRATO_INSTALADOR_ASSINADO que o navegador do instalador disparava ao assinar. */
+  async function processarEfeitoFila(tipo, p) {
+    if (tipo !== 'contrato_instalador_assinado') throw new Error('tipo desconhecido: ' + tipo);
+    if (!window.EventosFluxo) throw new Error('EventosFluxo indisponível');
+    const num = p.numero_cotacao != null && p.numero_cotacao !== '' ? Number(p.numero_cotacao) : null;
+    const r = await window.EventosFluxo.registrar({
+      evento: 'CONTRATO_INSTALADOR_ASSINADO', numeroCotacao: Number.isFinite(num) ? num : null,
+      alvoLabel: p.label, alvoId: p.contrato_id, atorNome: p.signerName || 'Instalador (link público)',
+    });
+    if (!r) throw new Error('evento não registrado');
+  }
+
   window.CIStore = {
     STATUS,
+    processarEfeitoFila,
     uuid, shortToken,
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
-    listAll, getById, getByToken,
-    createDraft, updateFormState,
+    listAll, listPainel, getById, getByToken,
+    createDraft, updateFormState, reservarNumero,
     markSent, markViewed, markSigned, refuse,
     sweepExpired, remove,
     getPublicIP, deviceLabel, sha256Hex,

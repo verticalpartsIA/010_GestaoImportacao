@@ -99,7 +99,12 @@
   }
 
   function _payload(form) {
-    const doc = (form.cnpj || form.cpf || '').replace(/\D/g, '');
+    // O documento vem do campo que combina com o tipo escolhido na lista (PF → CPF, PJ → CNPJ) e precisa conferir (04/10/2026).
+    const tipoDoc = form.tipo_pessoa === 'PF' ? 'PF' : 'PJ';
+    const bruto = tipoDoc === 'PF' ? form.cpf : form.cnpj;
+    const val = window.EnderecoAPI && window.EnderecoAPI.validarDocumento ? window.EnderecoAPI.validarDocumento(tipoDoc, bruto) : { ok: true, digitos: String(bruto || '').replace(/\D/g, '') };
+    if (!val.ok) throw new Error(val.msg);
+    const doc = val.digitos;
     const endereco = {
       logradouro: form.endereco_logradouro, complemento: form.endereco_complemento, bairro: form.endereco_bairro,
       cep: form.endereco_cep, cidade: form.endereco_cidade, estado: form.endereco_estado,
@@ -135,6 +140,9 @@
     const row = { ..._payload(form), codigo };
     const { data, error } = await c.from('clientes').insert(row).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Criou cliente', alvo: data.razao_social, alvo_id: data.id,
+    });
     return data;
   }
 
@@ -143,6 +151,9 @@
     const row = { ..._payload(form), atualizado_em: new Date().toISOString() };
     const { data, error } = await c.from('clientes').update(row).eq('id', id).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Editou cliente', alvo: data.razao_social, alvo_id: id,
+    });
     return data;
   }
 
@@ -150,6 +161,9 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('clientes').delete().eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Excluiu cliente', alvo_id: id,
+    });
   }
 
   /* Promoção Lead → Cliente (Central de Decisões concordou: Lead continua

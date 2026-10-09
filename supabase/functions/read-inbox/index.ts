@@ -252,7 +252,7 @@ Deno.serve(async (req: Request) => {
   try { payload = await req.json(); } catch { /* body vazio ok */ }
   const limit = Math.min(Math.max(Number(payload?.limit) || 15, 1), 25);
 
-  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
+  const supabase = createClient(Deno.env.get("SUPABASE_URL")!, JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"]);
 
   let c: ImapConn | null = null;
   try {
@@ -311,12 +311,35 @@ Deno.serve(async (req: Request) => {
 
         let numeroCotacao: number | null = null;
         let vinculo: string | null = null;
+        // 28/09 — herda referencia_id/referencia_tipo do e-mail de saída original
+        // (ex.: o id da linha em cotacoes_elevador_fornecedor) quando o vínculo é
+        // 'certo' (Message-ID). Sem isso, uma resposta não tinha como ser
+        // atribuída a UM fornecedor específico quando há 2+ cotando a mesma
+        // numero_cotacao — só dava pra saber a cotação, nunca quem respondeu.
+        let referenciaIdHerdada: string | null = null;
+        let referenciaTipoHerdada: string | null = null;
+        // 29/09 — achado real: Contrato de Venda/Instalador sem Proposta de
+        // origem não tem numero_cotacao (o número gerado, VPVE.../VPNI...,
+        // não bate no formato que extrairNumeroCotacaoDoAssunto reconhece),
+        // mas ainda tem referencia_id (o próprio id do contrato) — o vínculo
+        // por Message-ID não depende de numero_cotacao nenhum, só de achar a
+        // linha de saída. Sem o `|| pai.referencia_id != null`, essa resposta
+        // nunca ganhava vinculo_confianca nenhum, mesmo o Message-ID batendo
+        // exato — ficava indistinguível de um e-mail nunca visto antes.
         if (referenciaId) {
           const { data: pai } = await supabase.from("emails_projeto")
-            .select("numero_cotacao").eq("message_id", referenciaId).eq("direcao", "saida").maybeSingle();
-          if (pai && pai.numero_cotacao != null) { numeroCotacao = pai.numero_cotacao; vinculo = "certo"; }
+            .select("numero_cotacao, referencia_id, referencia_tipo").eq("message_id", referenciaId).eq("direcao", "saida").maybeSingle();
+          if (pai && (pai.numero_cotacao != null || pai.referencia_id != null)) {
+            numeroCotacao = pai.numero_cotacao ?? null; vinculo = "certo";
+            referenciaIdHerdada = pai.referencia_id ?? null;
+            referenciaTipoHerdada = pai.referencia_tipo ?? null;
+          }
         }
-        if (numeroCotacao == null) {
+        // Camada 'provavel' só entra se a 'certo' acima não achou nada —
+        // checar `vinculo == null` (não `numeroCotacao == null`) pra não
+        // sobrescrever um vínculo 'certo' sem numero_cotacao (caso acima)
+        // com um palpite por regex de assunto.
+        if (vinculo == null) {
           const candidato = extrairNumeroCotacaoDoAssunto(subject);
           if (candidato != null) {
             const { data: existe } = await supabase.from("formularios_elevador")
@@ -334,8 +357,18 @@ Deno.serve(async (req: Request) => {
           anexosSalvos.push({ filename: a.filename, content_type: a.contentType, size: a.bytes.length, path });
         }
 
+        // Log de auditoria (vp_logs) só quando a mensagem é NOVA — este poll
+        // roda a cada 10min e reprocessa os últimos `limit` e-mails via
+        // upsert por imap_uid, então logar sem essa checagem duplicaria uma
+        // entrada por e-mail a cada rodada do cron. Best-effort, nunca
+        // derruba a leitura do Inbox por falha aqui.
+        const { data: jaExistia } = await supabase.from("emails_projeto")
+          .select("id").eq("imap_uid", uid).maybeSingle();
+
         const row = {
           numero_cotacao: numeroCotacao,
+          referencia_id: referenciaIdHerdada,
+          referencia_tipo: referenciaTipoHerdada,
           direcao: "entrada",
           de_email: fromParsed.email,
           de_nome: fromParsed.name,
@@ -354,6 +387,18 @@ Deno.serve(async (req: Request) => {
         const { data: salvo, error: upErr } = await supabase.from("emails_projeto")
           .upsert(row, { onConflict: "imap_uid" }).select().maybeSingle();
         if (upErr) console.warn("[read-inbox] upsert falhou", uid, upErr);
+        if (!jaExistia && salvo && !upErr) {
+          const { error: logErr } = await supabase.from("vp_logs").insert({
+            ator_nome: fromParsed.name || fromParsed.email || "Remetente externo",
+            ator_setor: "externo",
+            modulo: "Inbox de E-mail",
+            acao: "E-mail recebido",
+            alvo: subject,
+            alvo_id: salvo.id,
+            detalhe: { de_email: fromParsed.email, numero_cotacao: numeroCotacao, vinculo_confianca: vinculo },
+          });
+          if (logErr) console.warn("[read-inbox] vp_logs falhou", logErr);
+        }
 
         const anexosComUrl = await Promise.all(anexosSalvos.map(async (a) => {
           const { data: signed } = await supabase.storage.from("emails-anexos").createSignedUrl(a.path, 60 * 60 * 24 * 7);
@@ -373,6 +418,12 @@ Deno.serve(async (req: Request) => {
           html: grandeDemais ? null : (html ? html.slice(0, 20000) : null),
           numeroCotacao,
           vinculoConfianca: vinculo,
+          // 01/10 — já era calculado (referenciaTipoHerdada) e gravado na
+          // linha de emails_projeto, mas nunca devolvido no JSON pro
+          // frontend — a tela do Inbox não tinha como mostrar de qual
+          // documento (RFQ/Proposta/Contrato/Tratativa) veio a resposta,
+          // só o Nº da cotação. Campo aditivo, não muda nenhum vínculo.
+          referenciaTipo: referenciaTipoHerdada,
           anexos: anexosComUrl,
           to: toList,
           cc: ccList,

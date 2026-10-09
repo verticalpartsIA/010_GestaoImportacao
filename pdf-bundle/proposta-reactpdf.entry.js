@@ -49,6 +49,11 @@ function registrarFontes() {
     family: 'Barlow Condensed',
     fonts: [{ src: barlow + '800-normal.woff', fontWeight: 800 }],
   });
+  /* Assinatura digitada em letra de mão (pedido do usuário, 05/10/2026). */
+  Font.register({
+    family: 'Caveat',
+    fonts: [{ src: 'https://cdn.jsdelivr.net/npm/@fontsource/caveat@5.0.8/files/caveat-latin-700-normal.woff', fontWeight: 700 }],
+  });
   _fontesRegistradas = true;
 }
 
@@ -385,21 +390,41 @@ function PgMarketing(S, data) {
   ]);
 }
 
+/* Linhas + agrupamento por equipamento — extraído (issue #704) pra ser
+   testável sem react-pdf. Mesma lista de campos (+tensão/tração/cabine,
+   novos nesta issue) e mesma regra de "1 bloco por equipamento" que
+   proposta-preview.jsx já usa (PreviewEspecTabela/montarLinhasEspec) —
+   antes esta função só lia especificacoes[0], então o PDF baixado pelo
+   cliente mostrava só o 1º equipamento de uma cotação com 2+ (950/955),
+   mesmo o preview HTML já mostrando todos. */
+function montarBlocosEspec(especificacoes) {
+  const lista = (especificacoes && especificacoes.length) ? especificacoes : [{}];
+  return lista.map((s) => ({
+    id: s.id,
+    linhas: [
+      ['Tipo de Empreendimento', s.empreendimento], ['Característica de Transporte', s.carac], ['Denominação', s.denominacao],
+      ['Percurso', s.percurso && `${s.percurso}mm`], ['Capacidade', s.capacidade], ['Caixa de Corrida', s.dimensoesCaixa],
+      ['Poço', s.profPoço && `${s.profPoço}mm`], ['Dimensões da Cabine', s.dimensoesCabine], ['Tensão de Alimentação', s.tensao],
+      ['Tração', s.tracao], ['Velocidade', s.vel && `${s.vel} m/s`], ['Paradas', s.andaresParadasPortas],
+      ['Modelo', s.modelo], ['Quantidade', s.qtd],
+    ].filter(([, v]) => v),
+  }));
+}
+
 function PgEspecTabela(S, data) {
   const ed = data.elevador || {};
-  const s = (ed.especificacoes || [])[0] || {};
-  const linhas = [
-    ['Tipo de Empreendimento', s.empreendimento], ['Característica de Transporte', s.carac], ['Denominação', s.denominacao],
-    ['Percurso', s.percurso && `${s.percurso}mm`], ['Capacidade', s.capacidade], ['Caixa de Corrida', s.dimensoesCaixa],
-    ['Poço', s.profPoço && `${s.profPoço}mm`], ['Velocidade', s.vel && `${s.vel} m/s`], ['Paradas', s.andaresParadasPortas],
-    ['Modelo', s.modelo], ['Quantidade', s.qtd],
-  ].filter(([, v]) => v);
+  const blocos = montarBlocosEspec(ed.especificacoes);
+  const temConteudo = blocos.some((b) => b.linhas.length);
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, 'Especificações Técnicas'),
     h(View, { style: S.secRule, key: 'r' }),
-    h(Text, { style: S.subTitle, key: 'st' }, 'Características Principais'),
-    linhas.length ? Tabela2(S, [{ label: 'Característica', flex: 1 }, { label: s.id || 'Elevador de Passageiros', flex: 1 }], linhas, 't') : Vazio(S, 'Preencha as especificações técnicas na aba "Especificações Técnicas".'),
+    ...(temConteudo
+      ? blocos.map((b, i) => b.linhas.length ? h(View, { key: 'b' + i }, [
+          h(Text, { style: S.subTitle, key: 'st' }, blocos.length > 1 ? (b.id || `Equipamento ${i + 1}`) : 'Características Principais'),
+          Tabela2(S, [{ label: 'Característica', flex: 1 }, { label: b.id || 'Elevador de Passageiros', flex: 1 }], b.linhas, 't'),
+        ]) : null)
+      : [Vazio(S, 'Preencha as especificações técnicas na aba "Especificações Técnicas".')]),
     PdfFooter(S),
   ]);
 }
@@ -460,26 +485,69 @@ function PgFotos(S, data, urls) {
   ]);
 }
 
+/* Duas modalidades de entrega (Financeiro, 01/10/2026) — enquanto o cliente não escolheu, as duas
+   aparecem, cada uma com características, tabela de preços, cronograma e campo de escolha. Mesmo
+   conteúdo de PreviewValoresOpcoes (proposta-preview.jsx); regras em src/proposta-opcoes.js
+   (carregado antes deste bundle, em window.PropostaOpcoes). */
+function PgValoresOpcoes(S, data, ops) {
+  const caixa = { borderWidth: 1, borderColor: '#d9d9d9', borderStyle: 'solid', borderRadius: 4, padding: 8, marginTop: 10 };
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, 'Valores e Pagamento'),
+    h(View, { style: S.secRule, key: 'r' }),
+    h(Text, { style: S.p, key: 'intro' }, 'Esta proposta traz duas modalidades de entrega. Escolha a que melhor atende o seu cronograma — ao escolher uma, a outra deixa de valer.'),
+    ...ops.map((o) => {
+      const linhasEq = [[o.equipamento, fmtBRL(o.totalEquipamento)]];
+      if (o.difal) linhasEq.push(['DIFAL', fmtBRL(o.difal)]);
+      linhasEq.push(['Total — ' + o.titulo.toLowerCase(), fmtBRL(o.total)]);
+      const linhasParc = o.parcelas.map((p) => [p.desc || '—', p.valor ? 'R$ ' + p.valor : '—']);
+      if (o.parcelas.length) linhasParc.push(['Total Parcelado', fmtBRL(o.totalParcelas)]);
+      return h(View, { key: 'op' + o.id, style: caixa, wrap: false }, [
+        h(Text, { style: S.subTitle, key: 'st' }, o.titulo + ' — ' + o.rotulo),
+        ...o.caracteristicas.map((c, i) => h(Text, { style: S.p, key: 'c' + i }, c)),
+        Tabela2(S, [{ label: 'Equipamento', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasEq, 'e' + o.id),
+        o.parcelas.length ? Tabela2(S, [{ label: 'Cronograma de Pagamento', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasParc, 'p' + o.id) : null,
+        h(Text, { style: [S.p, { fontWeight: 700 }], key: 'esc' }, '[   ] Escolho a modalidade: ' + o.titulo),
+      ].filter(Boolean));
+    }),
+    PdfFooter(S),
+  ]);
+}
+
 function PgValores(S, data) {
+  const O = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  if (O && O.temOpcoes(data)) return PgValoresOpcoes(S, data, O.opcoes(data));
+  const modalidade = O ? O.modalidadeEscolhida(data) : null;
   const v = (data.elevador || {}).valores || {};
   const parcelas = v.parcelas || [];
-  const qtd = parseFloat(v.quantidade) || 0;
-  const unit = numBR(v.valorUnit);
   const difal = numBR(v.difal);
-  const totalEq = qtd * unit;
+  /* v.itens (mais de 1 equipamento vindo da Precificação): 1 linha por
+     equipamento real em vez de agregar tudo numa linha só clonada — mesmo
+     ajuste feito em proposta-preview.jsx (bug real na cotação 950). Sem
+     itens, cai no formato antigo de 1 equipamento só. Tabela mostra só
+     Equipamento | Valor (já qtd × unitário somado) — Qtd./Valor Unit.
+     saíram da tabela a pedido do usuário (28/09/2026). */
+  const fonte = (Array.isArray(v.itens) && v.itens.length) ? v.itens : [v];
+  const linhas = fonte.map((it) => {
+    const qtd = parseFloat(it.quantidade) || 0;
+    const unit = numBR(it.valorUnit);
+    return { equipamento: it.equipamento, total: qtd * unit };
+  });
+  const totalEq = linhas.reduce((s, l) => s + l.total, 0);
   const totalGeral = totalEq + difal;
   const totalParcelas = parcelas.reduce((s, p) => s + numBR(p.valor), 0);
-  const linhasEq = [[v.equipamento || 'Elevador de Passageiros', qtd || '—', unit ? fmtBRL(unit) : '—', totalEq ? fmtBRL(totalEq) : '—']];
-  if (difal) linhasEq.push(['DIFAL', '', '', fmtBRL(difal)]);
-  linhasEq.push(['Total Equipamentos', '', '', fmtBRL(totalGeral)]);
+  const linhasEq = linhas.map((l) => [l.equipamento || 'Elevador de Passageiros', l.total ? fmtBRL(l.total) : '—']);
+  if (difal) linhasEq.push(['DIFAL', fmtBRL(difal)]);
+  linhasEq.push(['Total Equipamentos', fmtBRL(totalGeral)]);
   const linhasParc = parcelas.map(p => [p.desc || '—', p.valor ? 'R$ ' + p.valor : '—']);
   if (parcelas.length) linhasParc.push(['Total Parcelado', fmtBRL(totalParcelas)]);
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, 'Valores e Pagamento'),
     h(View, { style: S.secRule, key: 'r' }),
+    modalidade ? h(Text, { style: [S.p, { fontWeight: 700 }], key: 'mod' }, 'Modalidade de entrega escolhida: ' + modalidade.titulo + ' — ' + modalidade.rotulo + '.') : null,
     h(Text, { style: S.subTitle, key: 's1' }, 'Preços dos Equipamentos'),
-    Tabela2(S, [{ label: 'Equipamento', flex: 2 }, { label: 'Qtd', flex: 1, align: 'right' }, { label: 'Valor Unit.', flex: 1, align: 'right' }, { label: 'Total', flex: 1, align: 'right' }], linhasEq, 't1'),
+    Tabela2(S, [{ label: 'Equipamento', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasEq, 't1'),
     parcelas.length ? h(View, { key: 'parc' }, [
       h(Text, { style: S.subTitle, key: 's2' }, 'Cronograma de Pagamento'),
       Tabela2(S, [{ label: 'Parcela / Descrição', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasParc, 't2'),
@@ -535,7 +603,33 @@ function PgResponsabilidades(S, data) {
   ]);
 }
 
-function PgGarantia(S, data) {
+/* REGRA TRAVADA (05/10/2026, ver CLAUDE.md): proposta ASSINADA traz a assinatura
+   digital de quem assinou (nome, papel, data/hora Brasília, dispositivo, IP, hash)
+   no lugar da linha em branco. `assinaturas` = [{papel,nome,em,dispositivo,ip,hash}]
+   montado por quem chama (assinar-app / proposta-editor). Vazio = linha de sempre. */
+function fmtDataHora(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function BlocoAssinaturasDigitais(S, assinaturas) {
+  return h(View, { key: 'dig', style: { marginTop: pt(60) } }, [
+    h(Text, { style: S.subTitle, key: 'dt' }, 'Assinaturas digitais'),
+    ...assinaturas.map((a, i) => h(View, { key: 'a' + i, wrap: false, style: { marginBottom: pt(18), paddingLeft: pt(10), borderLeft: '2pt solid ' + NAVY } }, [
+      h(Text, { key: 'p', style: { fontSize: pt(12), fontWeight: 700, color: NAVY } }, a.papel || ''),
+      a.imagem
+        ? h(Image, { key: 'n', src: a.imagem, style: { height: pt(56), objectFit: 'contain', alignSelf: 'flex-start', marginVertical: pt(4) } })
+        : h(Text, { key: 'n', style: { fontFamily: 'Caveat', fontWeight: 700, fontSize: pt(30), lineHeight: 1.1 } }, a.nome || ''),
+      h(Text, { key: 'd', style: S.assinaturaSpan }, `Assinado em ${fmtDataHora(a.em)} (horário de Brasília) · ${a.dispositivo || 'dispositivo não informado'}`),
+      h(Text, { key: 'i', style: S.assinaturaSpan }, `IP: ${a.ip || 'não informado'}`),
+      h(Text, { key: 'h', style: { fontSize: pt(9), color: '#777' } }, `Hash: ${a.hash || ''}`),
+    ])),
+  ]);
+}
+
+function PgGarantia(S, data, assinaturas) {
   const g = (data.elevador || {}).garantia || {};
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
@@ -551,16 +645,18 @@ function PgGarantia(S, data) {
     ]) : null,
     h(Text, { style: S.subTitle, key: 's3' }, 'Validade da Proposta'),
     h(Text, { style: S.p, key: 'p5' }, data.validade || '30 dias'),
-    h(View, { style: S.assinaturas, key: 'ass' }, [
-      h(View, { style: S.assinatura, key: 'c' }, [h(View, { style: S.assinaturaLinha, key: 'l' }), h(Text, { style: S.assinaturaB, key: 'b' }, 'Assinatura do Cliente:'), h(Text, { style: S.assinaturaSpan, key: 's' }, 'Nome legível:')]),
-      h(View, { style: S.assinatura, key: 'v' }, [h(View, { style: S.assinaturaLinha, key: 'l' }), h(Text, { style: S.assinaturaB, key: 'b' }, 'VerticalParts:')]),
-    ]),
+    (Array.isArray(assinaturas) && assinaturas.length)
+      ? BlocoAssinaturasDigitais(S, assinaturas)
+      : h(View, { style: S.assinaturas, key: 'ass' }, [
+          h(View, { style: S.assinatura, key: 'c' }, [h(View, { style: S.assinaturaLinha, key: 'l' }), h(Text, { style: S.assinaturaB, key: 'b' }, 'Assinatura do Cliente:'), h(Text, { style: S.assinaturaSpan, key: 's' }, 'Nome legível:')]),
+          h(View, { style: S.assinatura, key: 'v' }, [h(View, { style: S.assinaturaLinha, key: 'l' }), h(Text, { style: S.assinaturaB, key: 'b' }, 'VerticalParts:')]),
+        ]),
     PdfFooter(S),
   ]);
 }
 
 /* ---------- Monta o documento completo ---------- */
-async function montarDocumento(data) {
+async function montarDocumento(data, assinaturas) {
   const S = montarStyles();
   const eq = 'elevador';
   const ed = data.elevador || {};
@@ -620,14 +716,14 @@ async function montarDocumento(data) {
     PgBlocos(S, data, 'Ajustes e Impostos', 'ajustes', [['Cláusula de Reajuste Cambial', 'clausulaCambial'], ['Faturamento', 'faturamentoTexto'], ['Taxas e Impostos Inclusos', 'taxasInclusas'], ['Taxas e Impostos Excluídos', 'taxasExcluidas']]),
     PgPrazo(S, data),
     PgResponsabilidades(S, data),
-    PgGarantia(S, data),
+    PgGarantia(S, data, assinaturas),
   ];
   return h0(Document, {}, pages);
 }
 
-async function baixar(data, filename) {
+async function baixar(data, filename, assinaturas) {
   registrarFontes();
-  const elemento = await montarDocumento(data);
+  const elemento = await montarDocumento(data, assinaturas);
   const blob = await pdf(elemento).toBlob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

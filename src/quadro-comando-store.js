@@ -35,13 +35,17 @@
     };
     const { data, error } = await c.from('quadros_comando').insert(row).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Quadro de Comando', acao: 'Criou quadro de comando',
+      alvo: data.numero_cotacao != null ? `Cotação Nº ${data.numero_cotacao}` : data.id, alvo_id: data.id,
+    });
     return data;
   }
 
   const QC_COLUNAS_VALIDAS = [
     'numero_cotacao', 'formulario_elevador_unidade_id', 'cliente_id', 'tipo_aplicacao',
     'novo_ou_modernizacao', 'origem_fabricacao', 'fabricante_comando', 'modelo_comando',
-    'status', 'escopo_fornecimento', 'cotacao_fornecedor_id',
+    'status', 'escopo_fornecimento', 'cotacao_fornecedor_id', 'configuracao',
   ];
   async function salvar(id, patchBruto) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -82,6 +86,9 @@
       excluido_em: new Date().toISOString(), excluido_por: (window.__VP_USER || {}).email || null,
     }).eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Quadro de Comando', acao: 'Excluiu quadro de comando', alvo_id: id,
+    });
   }
 
   /* ---------- Filhas 1:N — substituição total (mais simples e previsível
@@ -165,7 +172,8 @@
 
     const trechosFixa = engine.montarTrechosFiacaoFixa(quadro.geometria);
     const trechoManobra = engine.montarTrechoCaboManobra(quadro.geometria, quadro.intervalos);
-    const trechos = [...trechosFixa, trechoManobra];
+    const trechosCarro = engine.montarTrechosFiacaoCarro(quadro.geometria, quadro.configuracao);
+    const trechos = [...trechosFixa, trechoManobra, ...trechosCarro];
 
     const { error: delBomErr } = await c.from('quadros_comando_bom_itens').delete().eq('quadro_comando_id', quadroId);
     if (delBomErr) throw delBomErr;
@@ -181,6 +189,10 @@
     if (insCorteErr) throw insCorteErr;
 
     await salvar(quadroId, { status: 'cotado' });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Quadro de Comando', acao: 'Gerou BOM e lista de corte', alvo_id: quadroId,
+      detalhe: { totalItens: bomItens.length, erroVariante },
+    });
     return { bomItens, trechos, erroVariante };
   }
 
@@ -228,6 +240,10 @@
       const { error: insErr } = await c.from('quadros_comando_cruzamento_erp').insert(rows);
       if (insErr) throw insErr;
     }
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Quadro de Comando', acao: 'Cruzou BOM com o ERP (Omie)', alvo_id: quadroId,
+      detalhe: { totalLinhas: linhas.length },
+    });
     return { linhas, catalogoNaoUsado };
   }
 
@@ -270,6 +286,10 @@
     }));
     const { error } = await c.from('quadros_comando_checklist_separacao').insert(rows);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Quadro de Comando', acao: 'Gerou checklist de separação', alvo_id: quadroId,
+      detalhe: { versao: proximaVersao, total: rows.length },
+    });
     return { versao: proximaVersao, total: rows.length };
   }
 
@@ -295,6 +315,10 @@
       : { feito: false, separado_por: null, separado_em: null };
     const { error } = await c.from('quadros_comando_checklist_separacao').update(patch).eq('id', itemId);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Quadro de Comando', acao: feito ? 'Marcou item do checklist de separação como separado' : 'Desmarcou item do checklist de separação',
+      alvo_id: itemId,
+    });
   }
 
   /* ---------- Ramo B — comprar pronto de fornecedor ----------

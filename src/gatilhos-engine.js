@@ -24,7 +24,7 @@
 
   const SLA_HORAS = {
     SLA_FORNECEDOR: 48,
-    PRECIFICACAO: 5,
+    PRECIFICACAO: 2,               // 29/09: era 5h — pedido do usuário
     /* 10 dias (23/08, Gelson) — não é mais só um SLA informativo: é o
        limiar do "Cemitério". Depois disso, verificarPrazos() marca
        status 'revisao_necessaria' e a tela de Gatilhos destaca "parado
@@ -39,7 +39,68 @@
     AVAL_PAGAMENTO: 4,
     NEGOCIACAO_COMPRA: 7 * 24,     // 168h
     EMBARQUE_CHEGADA: 90 * 24,     // 2160h
+    /* 03/10: "Proposta pronta — aguardando envio manual" não tinha prazo, então
+       uma proposta parada desde agosto nunca aparecia como atrasada. 24h úteis
+       é uma escolha minha (o usuário não passou número) — ajuste aqui. */
+    PROPOSTA_PREP: 24,
   };
+
+  /* Prazos que correm em dia corrido (espera do cliente / navio). Os demais
+     contam só segunda a sexta — um SLA de 48h aberto na sexta não estoura no
+     domingo. */
+  const SLA_CALENDARIO = { AGUARDA_CLIENTE: true, EMBARQUE_CHEGADA: true };
+
+  /* Soma `horas` ao instante `inicio` pulando sábado e domingo. */
+  function somarHorasUteis(inicio, horas) {
+    let t = new Date(inicio).getTime();
+    let resto = horas * 3600000;
+    let guarda = 0;
+    while (resto > 0 && guarda++ < 400) {
+      const d = new Date(t);
+      const dia = d.getDay();
+      if (dia === 0 || dia === 6) {                       // fim de semana: salta para segunda 00:00
+        const d2 = new Date(t); d2.setHours(0, 0, 0, 0);
+        d2.setDate(d2.getDate() + (dia === 0 ? 1 : 2));
+        t = d2.getTime();
+        continue;
+      }
+      const fimDoDia = new Date(t); fimDoDia.setHours(24, 0, 0, 0);
+      const cabe = fimDoDia.getTime() - t;
+      if (resto <= cabe) { t += resto; resto = 0; } else { resto -= cabe; t = fimDoDia.getTime(); }
+    }
+    return new Date(t);
+  }
+
+  function prazoDe(key, inicio) {
+    const h = SLA_HORAS[key];
+    if (h == null) return null;
+    return SLA_CALENDARIO[key] ? new Date(new Date(inicio).getTime() + h * 3600000) : somarHorasUteis(inicio, h);
+  }
+
+  /* Prazo que vale para uma linha de `gatilhos`: o gravado ou, nas linhas antigas
+     sem prazo (ex.: Proposta pronta), o calculado pelo SLA atual do nó. */
+  function prazoEfetivo(g) {
+    if (!g || String(g.evento_key || '').startsWith('LEMBRETE__')) return null;
+    if (g.prazo_em) return new Date(g.prazo_em);
+    if (!g.nascido_em) return null;
+    return prazoDe(g.evento_key, g.nascido_em);
+  }
+
+  function emAtraso(g, agora) {
+    if (!g || g.concluido_em || g.status === 'encerrado') return false;
+    const p = prazoEfetivo(g);
+    return !!p && p.getTime() < (agora || Date.now());
+  }
+
+  /* Etapa fechada "de uma vez" por garantirNo (etapa pulada no fluxo) — não é
+     um cumprimento de prazo. Linhas antigas não têm a marca: nas etapas de
+     espera (com SLA), nascer e fechar em menos de 3s só pode ser retroativo. */
+  function ehRetroativo(g) {
+    if (!g || !g.concluido_em) return false;
+    if (g.conclusao_tipo === 'retroativo') return true;
+    if (SLA_HORAS[g.evento_key] == null || !g.nascido_em) return false;
+    return new Date(g.concluido_em) - new Date(g.nascido_em) < 3000;
+  }
 
   /* Lembretes de cobrança — nascem como um gatilho-filho (evento_key
      'LEMBRETE__<chaveDoPai>') quando o nó pai passa de X horas sem
@@ -79,6 +140,8 @@
 
   /* Cada nó: { key, label, predecessores:[{key, rel}], nasce, fecha,
      fechamentoTipo, condicaoNasce(detalhe) opcional para branches,
+     condicaoCotacao(numeroCotacao) opcional e assíncrona (ex.: CEO só com
+     margem < 15%),
      rota (nome da rota em app.jsx), resolverSubsel (opcional). */
   const NODES = [
     { key: 'FORMULARIO', label: 'Formulário preenchido',
@@ -90,7 +153,7 @@
       nasce: 'COTACAO_ENVIADA_FORNECEDOR', fecha: 'FORNECEDOR_RESPONDEU',
       fechamentoTipo: 'automatico', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
 
-    { key: 'PRECIFICACAO', label: 'Financeiro precificando (SLA 5h)',
+    { key: 'PRECIFICACAO', label: 'Financeiro precificando (SLA 2h)',
       predecessores: [{ key: 'SLA_FORNECEDOR', rel: 'FS' }],
       nasce: 'FORNECEDOR_RESPONDEU', fecha: 'PROPOSTA_ELABORADA',
       fechamentoTipo: 'automatico', rota: 'precificacao', resolverSubsel: resolverPrecificacaoElevador },
@@ -134,11 +197,53 @@
       fechamentoTipo: 'manual' /* Financeiro clica "Dar Aval de Pagamento" — confirmarAvalPagamento() */,
       rota: 'aval-financeiro' },
 
+    /* Aval Jurídico (manual) — desde 29/09 (2ª rodada) abre JUNTO com o
+       Aval Financeiro, quando o cliente aprova a Proposta (antes: só depois
+       do contrato assinado). JUNTO com o Aval de Pagamento, libera a compra
+       (COMPRA_LIBERADA abaixo exige os dois). O registro em avais_juridicos
+       nasce pelo trigger fn_avais_abrir_na_proposta no banco. */
+    { key: 'AVAL_JURIDICO', label: 'Aguardando Aval Jurídico',
+      predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
+      nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
+      condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
+      fecha: 'AVAL_JURIDICO_APROVADO',
+      fechamentoTipo: 'manual', rota: 'aval-juridico' },
+
+    /* Aval Engenharia (08/10/2026) — terceiro aval, POR COTAÇÃO: o cliente
+       assina o Projeto de Instalação (Projeto de Elevadores › Assinatura).
+       Abre junto com os outros dois quando o cliente aprova a Proposta e
+       fecha sozinho quando o ÚLTIMO projeto da cotação é assinado (o banco
+       enfileira PROJETO_INSTALACAO_ASSINADO — ver fluxo-pendentes.js). */
+    { key: 'AVAL_ENGENHARIA', label: 'Aguardando assinatura do Projeto de Instalação (Aval Engenharia)',
+      predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
+      nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
+      condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
+      fecha: 'PROJETO_INSTALACAO_ASSINADO',
+      fechamentoTipo: 'automatico', rota: 'eng-projeto-elevadores' },
+
     { key: 'COMPRA_LIBERADA', label: 'Compra ao Fornecedor liberada',
-      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'FS' }],
-      nasce: 'AVAL_PAGAMENTO_CONFIRMADO', fecha: 'COMPRA_FORNECEDOR_INICIADA',
+      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'FS' }, { key: 'AVAL_JURIDICO', rel: 'FS' }, { key: 'AVAL_ENGENHARIA', rel: 'FS' }],
+      /* Nasce só quando OS DOIS avais manuais já aconteceram (o último a
+         chegar dispara). `nasce` continua sendo o de sempre pra quem lê o
+         grafo; `requerEventos` é a condição real (ver onEvento). */
+      nasce: 'AVAL_PAGAMENTO_CONFIRMADO',
+      requerEventos: ['AVAL_PAGAMENTO_CONFIRMADO', 'AVAL_JURIDICO_APROVADO', 'PROJETO_INSTALACAO_ASSINADO'],
+      fecha: 'COMPRA_FORNECEDOR_INICIADA',
       fechamentoTipo: 'automatico' /* botão "Decidir Comprar" já existente em Cotação a Fornecedor */,
       rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
+
+    /* issue #706 — handoff automático da compra liberada pra Gestão de
+       Importação. Nasce já na COMPRA LIBERADA (decidirComprar), ANTES de
+       confirmar com o fornecedor (aprovar) — decisão explícita do usuário,
+       pra não deixar a cotação "sumir" sem pendência visível no intervalo
+       entre decidir comprar e a P.I. real chegar. Fecha sozinho quando a
+       P.I. real é registrada (PI_CRIADA, já emitido por pi-store.js) —
+       nunca inventa P.I. nenhuma. Sem SLA nesta 1ª rodada (sem número de
+       negócio definido ainda); alerta proativo fica pra entrega futura. */
+    { key: 'IMPORTACAO_A_INICIAR', label: 'Processo de Importação a iniciar (aguardando P.I.)',
+      predecessores: [{ key: 'COMPRA_LIBERADA', rel: 'FS' }],
+      nasce: 'COMPRA_FORNECEDOR_INICIADA', fecha: 'PI_CRIADA',
+      fechamentoTipo: 'automatico', rota: 'pi-importacao' },
 
     { key: 'NEGOCIACAO_COMPRA', label: 'Negociação e Compra do Produto (SLA 7 dias)',
       predecessores: [{ key: 'COMPRA_LIBERADA', rel: 'FS' }],
@@ -181,13 +286,15 @@
        condicionar `condicaoNasce` a cliente novo, e "Financeiro Responde
        Sim" cobrir as duas respostas (Score + Sinal) num fluxo só quando
        recorrente. */
-    { key: 'FIN_SCORE', label: 'Financeiro consultando score do cliente',
+    /* `opcional`: desde 29/09 (PR #503) a consulta de score/aval de venda não
+       trava contrato nem compra — não conta como pendência na tela. */
+    { key: 'FIN_SCORE', label: 'Financeiro consultando score do cliente', opcional: true,
       predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
       nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
       condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
       fecha: 'FINANCEIRO_CONSULTOU_SCORE', fechamentoTipo: 'manual', rota: 'aval-financeiro' },
 
-    { key: 'FIN_AVAL_VENDA', label: 'Financeiro decidindo o Aval de Venda',
+    { key: 'FIN_AVAL_VENDA', label: 'Financeiro decidindo o Aval de Venda', opcional: true,
       predecessores: [{ key: 'FIN_SCORE', rel: 'FS' }],
       nasce: 'FINANCEIRO_CONSULTOU_SCORE', fecha: 'FINANCEIRO_APROVOU_VENDA',
       fechamentoTipo: 'manual', rota: 'aval-financeiro' },
@@ -243,14 +350,25 @@
        construí isso ainda — precisa de mais instrução sua sobre onde essa
        conta corrente deve morar (nova tabela? campo em avais_financeiros?)
        antes de desenhar. */
-    { key: 'CEO_APROVOU', label: 'Aguardando aprovação do CEO',
+    /* 29/09: CEO só em discrepância — o nó só nasce quando a margem
+       efetiva da cotação fica abaixo de 15% (ou é desconhecida), mesma
+       regra de DecisoesStore.precisaAprovacaoCeo. */
+    { key: 'CEO_APROVOU', label: 'Aguardando aprovação do CEO (margem abaixo de 15%)',
       predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'SS' }],
       nasce: 'SINAL_PAGO', fecha: 'FINANCEIRO_APROVOU_CEO',
+      condicaoCotacao: async (numeroCotacao) => {
+        const d = window.DecisoesStore;
+        if (!d || !d.precisaAprovacaoCeo) return true;
+        return (await d.precisaAprovacaoCeo(numeroCotacao).catch(() => ({ precisa: true }))).precisa;
+      },
       fechamentoTipo: 'manual', rota: 'aval-financeiro' },
 
+    /* 29/09: a aprovação do responsável pelo sistema deixou de travar a
+       compra — o nó não nasce mais (nasce: null). Mantido no catálogo só
+       pra linhas antigas de `gatilhos` continuarem com rótulo/rota. */
     { key: 'OWNER_APROVOU', label: 'Aguardando aprovação do responsável pelo sistema',
       predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'SS' }],
-      nasce: 'SINAL_PAGO', fecha: 'FINANCEIRO_APROVOU_OWNER',
+      nasce: null, fecha: 'FINANCEIRO_APROVOU_OWNER',
       fechamentoTipo: 'manual', rota: 'aval-financeiro' },
 
     /* ---- 33-37: Engenharia final + Ficha Técnica ---- */
@@ -500,14 +618,14 @@
     return data || null;
   }
 
-  async function fecharNo(numeroCotacao, node, statusFinal) {
+  async function fecharNo(numeroCotacao, node, statusFinal, retroativo) {
     const c = sb(); if (!c) return null;
     const row = await getRow(numeroCotacao, node.key);
     if (!row || row.concluido_em) return row; // já fechado ou nunca nasceu
     const now = new Date().toISOString();
-    const { data, error } = await c.from('gatilhos').update({
-      concluido_em: now, status: statusFinal || 'ok',
-    }).eq('id', row.id).select().single();
+    const patch = { concluido_em: now, status: statusFinal || 'ok' };
+    if (retroativo) patch.conclusao_tipo = 'retroativo';   // etapa pulada — a tela não a mostra como "cumprida no prazo"
+    const { data, error } = await c.from('gatilhos').update(patch).eq('id', row.id).select().single();
     if (error) { console.warn('[GatilhosEngine] fecharNo falhou', error); return row; }
     return data;
   }
@@ -519,7 +637,7 @@
     const now = new Date();
     const nowIso = now.toISOString();
     const slaHoras = SLA_HORAS[node.key] ?? null;
-    const prazoEm = slaHoras != null ? new Date(now.getTime() + slaHoras * 3600000) : null;
+    const prazoEm = prazoDe(node.key, now);
     const relPrincipal = (node.predecessores[0] || {}).rel || 'FS';
     const row = {
       id: gtId(numeroCotacao, node.key),
@@ -553,7 +671,7 @@
   async function garantirNo(numeroCotacao, key) {
     let row = await getRow(numeroCotacao, key);
     if (row) {
-      if (!row.concluido_em) row = await fecharNo(numeroCotacao, nodeByKey(key), 'ok');
+      if (!row.concluido_em) row = await fecharNo(numeroCotacao, nodeByKey(key), 'ok', true);
       return row;
     }
     const node = nodeByKey(key);
@@ -561,7 +679,7 @@
     const predKey = (node.predecessores[0] || {}).key;
     const predRow = predKey ? await garantirNo(numeroCotacao, predKey) : null;
     row = await nascerNo(numeroCotacao, node, predRow ? predRow.id : null, predRow ? predRow.alvo_id : null);
-    if (row) row = await fecharNo(numeroCotacao, node, 'ok');
+    if (row) row = await fecharNo(numeroCotacao, node, 'ok', true);
     return row;
   }
 
@@ -571,6 +689,17 @@
      `alvoId` é o id do registro que disparou o evento (ex.: id da cotação
      a fornecedor, da proposta) — gravado no nó que nasce, pra dar pra
      clicar na linha e abrir o objeto real (ver navegarPara). */
+  /* Todos os eventos de `chaves` já foram registrados pra essa cotação?
+     (eventos_fluxo guarda o LABEL do evento, e o registro do evento atual já
+     foi gravado antes de onEvento ser chamado.) */
+  async function todosEventosRegistrados(numeroCotacao, chaves) {
+    const ev = window.EventosFluxo;
+    if (!ev || !ev.listarPorCotacao) return false;
+    const linhas = await ev.listarPorCotacao(numeroCotacao);
+    const labels = new Set((linhas || []).map((l) => l.evento));
+    return chaves.every((k) => labels.has((ev.EVENTOS[k] || {}).label));
+  }
+
   async function onEvento({ evento, numeroCotacao, alvoId, detalhe } = {}) {
     if (numeroCotacao == null) return;
     try {
@@ -598,8 +727,14 @@
 
       /* 2) nasce quem tiver esse evento como nascimento */
       for (const node of NODES) {
-        if (node.nasce !== evento) continue;
+        const dispara = node.nasce === evento || (node.requerEventos || []).includes(evento);
+        if (!dispara) continue;
         if (node.condicaoNasce && !node.condicaoNasce(detalhe)) continue;
+        if (node.condicaoCotacao && !(await node.condicaoCotacao(numeroCotacao))) continue;
+        if (node.requerEventos) {
+          const jaAconteceram = await todosEventosRegistrados(numeroCotacao, node.requerEventos);
+          if (!jaAconteceram) continue;
+        }
         const predKey = (node.predecessores[0] || {}).key;
         const predRow = predKey ? await garantirNo(numeroCotacao, predKey) : null;
         await nascerNo(numeroCotacao, node, predRow ? predRow.id : null, alvoId);
@@ -697,5 +832,6 @@
     return data;
   }
 
-  window.GatilhosEngine = { NODES, SLA_HORAS, LEMBRETES, onEvento, verificarPrazos, fecharLembrete, fecharComMotivo, navegarPara, profundidade };
+  window.GatilhosEngine = { NODES, SLA_HORAS, LEMBRETES, onEvento, verificarPrazos, fecharLembrete, fecharComMotivo, navegarPara, profundidade,
+    nodeByKey, somarHorasUteis, prazoEfetivo, emAtraso, ehRetroativo };
 }());

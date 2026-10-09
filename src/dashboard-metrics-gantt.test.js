@@ -73,6 +73,35 @@ test('projetosDaEsteira — fase atual vem do gatilho aberto mais antigo (o garg
   assert.equal(r[0].current_phase, M.FASE_POR_NODE.PRECIFICACAO);
 });
 
+// Achado real (03/10): INSTALACAO_METADE_EXECUCAO (gatilhos-engine.js) nasce
+// junto com INSTALACAO_INICIADA e fica aberto até ~50% do checklist de
+// instalação — mas não tinha entrada em FASE_POR_NODE. Se fosse o nó aberto
+// mais antigo de uma cotação (empate de nascido_em com INSTALACAO_INICIADA,
+// ou INSTALACAO_INICIADA já fechado por outro motivo), a fase caía no
+// fallback 'Projeto' — um projeto já em instalação retrocedendo pra fase
+// inicial no Gantt/Kanban.
+test('projetosDaEsteira — INSTALACAO_METADE_EXECUCAO mapeia pra fase "Instalação", não cai no fallback "Projeto"', () => {
+  const gatilhos = [
+    { numero_cotacao: 20, evento_key: 'AGUARDA_ASSINATURA', nascido_em: '2026-08-01T00:00:00Z', concluido_em: '2026-08-05T00:00:00Z' },
+    { numero_cotacao: 20, evento_key: 'INSTALACAO_METADE_EXECUCAO', nascido_em: '2026-08-05T00:00:01Z', concluido_em: null },
+  ];
+  const r = M.projetosDaEsteira({ gatilhos, formularios: [], clientesPorId: {} });
+  assert.equal(r[0].current_phase, 'Instalação');
+});
+
+// issue #706 — nó novo em gatilhos-engine.js (IMPORTACAO_A_INICIAR), mesmo
+// cuidado do achado acima: sem entrada em FASE_POR_NODE, cairia no fallback
+// 'Projeto' se fosse o gatilho aberto mais antigo de uma cotação.
+test('projetosDaEsteira — IMPORTACAO_A_INICIAR mapeia pra fase real, não cai no fallback "Projeto"', () => {
+  const gatilhos = [
+    { numero_cotacao: 21, evento_key: 'COMPRA_LIBERADA', nascido_em: '2026-09-01T00:00:00Z', concluido_em: '2026-09-02T00:00:00Z' },
+    { numero_cotacao: 21, evento_key: 'IMPORTACAO_A_INICIAR', nascido_em: '2026-09-02T00:00:01Z', concluido_em: null },
+  ];
+  const r = M.projetosDaEsteira({ gatilhos, formularios: [], clientesPorId: {} });
+  assert.equal(r[0].current_phase, M.FASE_POR_NODE.IMPORTACAO_A_INICIAR);
+  assert.notEqual(r[0].current_phase, 'Projeto');
+});
+
 test('projetosDaEsteira — ignora linhas de lembrete (LEMBRETE__*)', () => {
   const gatilhos = [
     { numero_cotacao: 7, evento_key: 'LEMBRETE__PRECIFICACAO', nascido_em: '2026-08-01T00:00:00Z', concluido_em: null },
@@ -88,4 +117,41 @@ test('projetosDaEsteira — usa nome do cliente via formulário quando disponív
   const r = M.projetosDaEsteira({ gatilhos, formularios, clientesPorId });
   assert.equal(r[0].client, 'Cliente Teste LTDA');
   assert.match(r[0].name, /Cliente Teste LTDA/);
+});
+
+// Achado real (03/10): o modal de detalhe do projeto (dashboard.jsx) nunca
+// mostrava "Valor"/"Responsável" — este objeto nunca setava os 2 campos.
+test('projetosDaEsteira — "Responsável" vem do vendedor do formulário (created_by como fallback)', () => {
+  const gatilhos = [{ numero_cotacao: 10, evento_key: 'FORMULARIO', nascido_em: '2026-08-01T00:00:00Z', concluido_em: null }];
+  const comVendedor = M.projetosDaEsteira({
+    gatilhos, clientesPorId: {},
+    formularios: [{ numero_cotacao: 10, vendedor: 'Vagner Gianini', created_by: 'vagner@verticalparts.com.br' }],
+  });
+  assert.equal(comVendedor[0].responsavel, 'Vagner Gianini');
+
+  const semVendedor = M.projetosDaEsteira({
+    gatilhos, clientesPorId: {},
+    formularios: [{ numero_cotacao: 10, vendedor: null, created_by: 'vagner@verticalparts.com.br' }],
+  });
+  assert.equal(semVendedor[0].responsavel, 'vagner@verticalparts.com.br');
+
+  const semFormulario = M.projetosDaEsteira({ gatilhos, clientesPorId: {}, formularios: [] });
+  assert.equal(semFormulario[0].responsavel, null);
+});
+
+test('projetosDaEsteira — "Valor" vem da melhor proposta da cotação (aprovada > enviada > rascunho)', () => {
+  const gatilhos = [{ numero_cotacao: 11, evento_key: 'FORMULARIO', nascido_em: '2026-08-01T00:00:00Z', concluido_em: null }];
+  const propostas = [
+    { numero_cotacao: 11, status: 'rascunho', valor_total: 999999 },
+    { numero_cotacao: 11, status: 'aprovada', valor_total: 185000 },
+    { numero_cotacao: 11, status: 'enviada', valor_total: 150000 },
+  ];
+  const r = M.projetosDaEsteira({ gatilhos, formularios: [], clientesPorId: {}, propostas });
+  assert.equal(r[0].value, 185000);
+});
+
+test('projetosDaEsteira — sem proposta vinculada, "Valor" fica null (não quebra o modal)', () => {
+  const gatilhos = [{ numero_cotacao: 12, evento_key: 'FORMULARIO', nascido_em: '2026-08-01T00:00:00Z', concluido_em: null }];
+  const r = M.projetosDaEsteira({ gatilhos, formularios: [], clientesPorId: {}, propostas: [] });
+  assert.equal(r[0].value, null);
 });

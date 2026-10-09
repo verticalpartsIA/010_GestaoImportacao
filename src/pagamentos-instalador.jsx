@@ -74,6 +74,7 @@ function PagamentosInstaladorPage() {
   const fmtData = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
   const labelGatilho = (chave) => (chave && window.EventosFluxo?.EVENTOS?.[chave]?.label) || 'manual (sem gatilho automático)';
 
+  const soma = (pred) => parcelas.filter(pred).reduce((t, p) => t + (Number(p.valor) || 0), 0);
   const contagem = {
     liberadas: parcelas.filter((p) => p.status === 'pendente' && p.liberada).length,
     aguardando: parcelas.filter((p) => p.status === 'pendente' && !p.liberada).length,
@@ -90,24 +91,35 @@ function PagamentosInstaladorPage() {
         </div>
       </div>
 
-      <div className="row gap-2" style={{ marginBottom: 14, flexWrap: 'wrap' }}>
+      <div className="grid-3" style={{ marginBottom: 20 }}>
+        <KPI label="A pagar agora" value={fmtMoeda(soma((p) => p.status === 'pendente' && p.liberada))} sub={`${contagem.liberadas} parcela(s) liberada(s)`} icon="dollar"
+          onClick={() => setFiltro(filtro === 'liberadas' ? 'todas' : 'liberadas')}
+          style={filtro === 'liberadas' ? { boxShadow: '0 0 0 2px var(--vp-yellow)' } : undefined}/>
+        <KPI label="Aguardando marco" value={fmtMoeda(soma((p) => p.status === 'pendente' && !p.liberada))} sub={`${contagem.aguardando} parcela(s) dependem da obra`} icon="clock"
+          onClick={() => setFiltro(filtro === 'aguardando' ? 'todas' : 'aguardando')}
+          style={filtro === 'aguardando' ? { boxShadow: '0 0 0 2px var(--vp-yellow)' } : undefined}/>
+        <KPI label="Pago" value={fmtMoeda(soma((p) => p.status === 'paga'))} sub={`${contagem.pagas} parcela(s) paga(s)`} icon="check"
+          onClick={() => setFiltro(filtro === 'pagas' ? 'todas' : 'pagas')}
+          style={filtro === 'pagas' ? { boxShadow: '0 0 0 2px var(--vp-yellow)' } : undefined}/>
+      </div>
+
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap', alignItems: 'center' }}>
         {[
-          { id: 'liberadas', label: `Liberadas p/ pagar (${contagem.liberadas})` },
-          { id: 'aguardando', label: `Aguardando marco (${contagem.aguardando})` },
-          { id: 'pagas', label: `Pagas (${contagem.pagas})` },
-          { id: 'todas', label: 'Todas' },
+          { id: 'liberadas', label: 'Liberadas p/ pagar', n: contagem.liberadas },
+          { id: 'aguardando', label: 'Aguardando marco', n: contagem.aguardando },
+          { id: 'pagas', label: 'Pagas', n: contagem.pagas },
+          { id: 'todas', label: 'Todas', n: parcelas.length },
         ].map((f) => (
-          <button key={f.id}
-            className="badge"
-            style={{ cursor: 'pointer', border: filtro === f.id ? '2px solid var(--vp-yellow, #ffd400)' : '1px solid var(--border)' }}
-            onClick={() => setFiltro(f.id)}>
-            {f.label}
-          </button>
+          <Button key={f.id} size="sm" variant={filtro === f.id ? 'primary' : 'ghost'} onClick={() => setFiltro(f.id)}>
+            {f.label} <span style={{ opacity: .7 }}>({f.n})</span>
+          </Button>
         ))}
       </div>
 
-      <div className="table-wrap">
-        <table className="t">
+      <Card title="Parcelas" sub="Pagar exige aprovação do Gestor Comercial na Central de Decisões">
+      <div className="table-wrap" style={{ border: 0 }}>
+        <style>{`table.t.pcp-grid.pi-grid th,table.t.pcp-grid.pi-grid td{padding-left:8px;padding-right:8px}`}</style>
+        <table className="t pcp-grid pi-grid">
           <thead><tr><th>Instalador</th><th>Contrato</th><th>Parcela</th><th>Valor</th><th>Situação</th><th>Pago em</th><th></th></tr></thead>
           <tbody>
             {filtradas.length === 0 && <tr><td colSpan={99} style={{ textAlign: 'center', padding: '48px 0', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma parcela encontrada.</td></tr>}
@@ -120,22 +132,22 @@ function PagamentosInstaladorPage() {
               return (
                 <tr key={p.id}>
                   <td><div className="cell-main">{contrato.contratada_nome || '—'}</div></td>
-                  <td className="mono">{contrato.numero_documento || '—'}</td>
-                  <td>{p.numero}. {p.descricao}</td>
-                  <td className="mono">{fmtMoeda(p.valor)}</td>
+                  <td className="mono" style={{ whiteSpace: 'nowrap' }}>{contrato.numero_documento || '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>{p.numero}. {p.descricao}</td>
+                  <td className="mono" style={{ whiteSpace: 'nowrap' }}>{fmtMoeda(p.valor)}</td>
                   <td className="small">
                     {p.status === 'paga'
                       ? <StatusBadge status="Ativo" />
                       : reprovada
-                        ? <span style={{ color: '#991b1b', fontWeight: 600 }}>Pagamento reprovado pelo Gestor</span>
+                        ? <Badge variant="danger" style={{ whiteSpace: 'nowrap' }}>Reprovado</Badge>
                         : aguardandoGestor
-                          ? <span style={{ color: '#b45309', fontWeight: 600 }}>Aguardando aprovação do Gestor Comercial</span>
+                          ? <Badge variant="warning" style={{ whiteSpace: 'nowrap' }}>Aguardando Gestor</Badge>
                           : p.liberada
-                            ? <span style={{ color: '#cc7700', fontWeight: 600 }}>{aprovada ? 'Aprovada — pronta pra pagar' : 'Liberada — aguardando pagamento'}</span>
+                            ? <Badge variant={aprovada ? 'success' : 'info'} style={{ whiteSpace: 'nowrap' }}>{aprovada ? 'Aprovada p/ pagar' : 'Liberada p/ pagar'}</Badge>
                             : <span className="muted">Aguardando: {labelGatilho(p.gatilho_evento)}</span>}
                   </td>
-                  <td className="small">{p.status === 'paga' ? `${fmtData(p.pago_em)}${p.pago_por ? ' · ' + p.pago_por : ''}` : '—'}</td>
-                  <td>
+                  <td className="small" style={{ whiteSpace: 'nowrap' }}>{p.status === 'paga' ? `${fmtData(p.pago_em)}${p.pago_por ? ' · ' + p.pago_por : ''}` : '—'}</td>
+                  <td style={{ whiteSpace: 'nowrap', textAlign: 'right' }}>
                     {p.status === 'paga'
                       ? <Button variant="ghost" size="sm" onClick={() => reabrir(p.id)}>Reabrir</Button>
                       : <Button variant="primary" size="sm" disabled={!p.liberada || reprovada} onClick={() => marcarPaga(p)}>
@@ -148,6 +160,7 @@ function PagamentosInstaladorPage() {
           </tbody>
         </table>
       </div>
+      </Card>
     </div>
   );
 }

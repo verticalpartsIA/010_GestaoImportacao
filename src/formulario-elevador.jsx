@@ -271,7 +271,15 @@ function FEFornecedorInput({ value, onChange, fornecedores, disabled }) {
       <input className="input" list={listId} value={value ?? ''} onChange={(e) => onChange(e.target.value)}
         placeholder="Digite pra filtrar (ex.: G)" disabled={disabled}/>
       <datalist id={listId}>
-        {(fornecedores || []).map((f) => <option key={f} value={f}/>)}
+        {/* `fornecedores` mistura string (RFQ configurado) e { value, label }
+            (ainda não configurado — ver fornecedoresOptions). Usar o objeto
+            direto virava value="[object Object]" (e key duplicada): o que o
+            usuário escolhia na lista era gravado em unidade.fornecedor. O
+            nome vai em `value`; o rótulo com o aviso vai em `label` (dica). */}
+        {(fornecedores || []).map((f) => {
+          const nome = typeof f === 'string' ? f : f.value;
+          return <option key={nome} value={nome} label={typeof f === 'string' ? undefined : f.label}/>;
+        })}
       </datalist>
     </>
   );
@@ -504,6 +512,7 @@ function FEAnexos({ formularioId, categoria, titulo, descricao, podeAnexar, gara
   );
 }
 
+const FE_OPCOES_ACO = ['Aço 304', 'Aço 430', 'Pintado'];
 const FE_OPCOES_VAZIAS = { teto_falso: [], piso: [], porta: [], botoeira_cabine: [], botoeira_pavimento: [] };
 
 /* ---------- Card de uma Unidade (um elevador) ---------- */
@@ -619,12 +628,12 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Portas <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tipo obrigatório, resto opcional</span></div>
             <div className="grid-3" style={{ gap: 12 }}>
               <FEField label="Tipo de abertura *"><FESelect value={unidade.porta_tipo_abertura} onChange={set('porta_tipo_abertura')} options={['Central', 'Lateral', 'Telescópica']}/></FEField>
-              <FEField label="Modelo de porta"><FESelect value={unidade.porta_modelo} onChange={set('porta_modelo')} options={opcoes.porta} placeholder="— selecione o modelo primeiro —"/></FEField>
+              <FEField label="Modelo de porta"><FESelect value={unidade.porta_modelo} onChange={set('porta_modelo')} options={FE_OPCOES_ACO} placeholder="— escolha —"/></FEField>
               <FEField label="Largura (mm)"><FEInput type="number" value={unidade.porta_largura_mm} onChange={set('porta_largura_mm')}/></FEField>
               <FEField label="Altura (mm)"><FEInput type="number" value={unidade.porta_altura_mm} onChange={set('porta_altura_mm')}/></FEField>
-              <FEField label="Aço da Cabina"><FESelect value={unidade.aco_cabina} onChange={set('aco_cabina')} options={['Aço 430', 'Aço 304']} placeholder="— escolha —"/></FEField>
-              <FEField label="Acabamento porta cabina"><FESelect value={unidade.acabamento_porta_cabina} onChange={set('acabamento_porta_cabina')} options={['Aço 430', 'Aço 304']}/></FEField>
-              <FEField label="Acabamento porta pavimento"><FESelect value={unidade.acabamento_porta_pavimento} onChange={set('acabamento_porta_pavimento')} options={['Aço 430', 'Aço 304']}/></FEField>
+              <FEField label="Aço da Cabina"><FESelect value={unidade.aco_cabina} onChange={set('aco_cabina')} options={FE_OPCOES_ACO} placeholder="— escolha —"/></FEField>
+              <FEField label="Acabamento porta cabina"><FESelect value={unidade.acabamento_porta_cabina} onChange={set('acabamento_porta_cabina')} options={FE_OPCOES_ACO}/></FEField>
+              <FEField label="Acabamento porta pavimento"><FESelect value={unidade.acabamento_porta_pavimento} onChange={set('acabamento_porta_pavimento')} options={FE_OPCOES_ACO}/></FEField>
               <FEField label="Classe corta-fogo"><FESelect value={unidade.classe_corta_fogo} onChange={set('classe_corta_fogo')} options={['Nenhuma', 'E120', 'EI60', 'EI120']}/></FEField>
             </div>
           </div>
@@ -891,7 +900,44 @@ function FEComunicacaoFornecedor({ numeroCotacao }) {
   );
 }
 
-function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedirRevisao, enviando, fornecedoresCadastro }) {
+/* 28/09 — pedido do usuário: "dá pra mostrar no Inbox que o formulário foi
+   respondido?" — o FECefStatusChip existente só cobre resposta pelo
+   FORMULÁRIO PÚBLICO (link/token) do fornecedor, nunca resposta por E-MAIL.
+   Este badge cobre o caminho de e-mail, cruzando com emails_projeto.
+   Prioriza referencia_id (aponta pra ESTA linha de cotacoes_elevador_
+   fornecedor — granularidade por fornecedor, só existe pra e-mails
+   recebidos a partir de 28/09, quando read-inbox passou a herdar esse
+   campo do e-mail de saída original via Message-ID). Cai pro fallback por
+   numero_cotacao (mais antigo/mais abrangente) só quando matchSeguro=true
+   (só 1 fornecedor nesta cotação) — com 2+ fornecedores, um match só por
+   numero_cotacao não sabe dizer QUEM respondeu (achado real da investigação:
+   read-inbox descartava essa distinção antes desta mudança), então nesse
+   caso prefere não mostrar nada a mostrar errado. */
+function FEEmailRespondidoBadge({ cotId, numeroCotacao, matchSeguro }) {
+  const [temResposta, setTemResposta] = React.useState(false);
+  React.useEffect(() => {
+    let cancelado = false;
+    setTemResposta(false);
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb || numeroCotacao == null || !cotId) return;
+    let q = sb.from('emails_projeto').select('id', { count: 'exact', head: true })
+      .eq('direcao', 'entrada').is('excluido_em', null);
+    q = matchSeguro
+      ? q.or(`referencia_id.eq.${cotId},numero_cotacao.eq.${numeroCotacao}`)
+      : q.eq('referencia_id', String(cotId));
+    q.then(({ count }) => { if (!cancelado) setTemResposta((count || 0) > 0); })
+      .catch(() => { if (!cancelado) setTemResposta(false); });
+    return () => { cancelado = true; };
+  }, [cotId, numeroCotacao, matchSeguro]);
+  if (!temResposta) return null;
+  return (
+    <Badge variant="info" style={{ marginLeft: 6 }} title="Existe e-mail recebido vinculado a esta cotação/fornecedor">
+      <Icon.mail size={10}/> Respondeu por e-mail
+    </Badge>
+  );
+}
+
+function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedirRevisao, enviando, fornecedoresCadastro, matchSeguro }) {
   const store = window.CotacaoElevadorFornecedorStore;
   /* 11/09 — contato real vem do cadastro (Cadastros → Fornecedores),
      casando nome_fantasia/razao_social com o nome livre do fornecedor
@@ -925,7 +971,12 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
     }
   }, [cadastroMatch]);
   const setR = (k) => (v) => { tocadoRef.current = true; setRecipient((r) => ({ ...r, [k]: v })); };
-  const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
+  /* 30/09 — achado real: esta chave não incluía categoriaProduto, mas
+     enviar() (FECotacaoFornecedorModal) grava `enviando` COM ela — nunca
+     casavam, então `busy` era sempre false e os botões não desabilitavam
+     durante o envio (a cotação 961 saiu 4x por e-mail em 7s). Manter as
+     duas chaves idênticas. */
+  const key = `${grupo.fornecedor}|${grupo.tipoFormulario}|${grupo.categoriaProduto}`;
   const busy = enviando === key;
 
   return (
@@ -935,7 +986,12 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
           <b>{grupo.fornecedor}</b> <span className="muted small">· {FE_TIPO_FORMULARIO_LABEL[grupo.tipoFormulario]}</span>
           <div className="small muted">Unidades: {grupo.unidades.map((u) => u.identificador || '—').join(', ')}</div>
         </div>
-        {cot && <FECefStatusChip status={cot.status}/>}
+        {cot && (
+          <div className="row gap-1" style={{ alignItems: 'center' }}>
+            <FECefStatusChip status={cot.status}/>
+            <FEEmailRespondidoBadge cotId={cot.id} numeroCotacao={numeroCotacao} matchSeguro={matchSeguro}/>
+          </div>
+        )}
       </div>
 
       {!suportado && <p className="small muted" style={{ marginTop: 8 }}>Formulário deste fornecedor ainda não configurado — em breve.</p>}
@@ -972,6 +1028,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
   const store = window.CotacaoElevadorFornecedorStore;
   const [cotacoes, setCotacoes] = React.useState([]);
   const [enviando, setEnviando] = React.useState(null);
+  const enviandoRef = React.useRef(false);
   const [fornecedoresCadastro, setFornecedoresCadastro] = React.useState([]);
   React.useEffect(() => {
     if (!window.CadastrosFornecedoresStore) return;
@@ -1026,44 +1083,71 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
 
   const enviar = async (grupo, canal, recipient) => {
     const key = `${grupo.fornecedor}|${grupo.tipoFormulario}|${grupo.categoriaProduto}`;
+    /* 30/09 — trava síncrona (ref) contra duplo clique: o state `enviando`
+       só reflete no próximo render, e dois cliques rápidos entram antes. */
+    if (enviandoRef.current) return;
+    enviandoRef.current = true;
     setEnviando(key);
     try {
       let cot = cotacaoDoGrupo(grupo);
       if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
       const url = store.cotacaoUrl(cot.token);
       const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.etapaId('cotacao', numeroCotacao)}` : '';
-      const msg = `Solicitação de cotação técnica ${cot.numero_documento}${numeroTxt} — VerticalParts\n` +
-        `Segue o link com as especificações da(s) unidade(s) ${grupo.unidades.map((u) => u.identificador).join(', ')} para cotação:\n${url}\n\n` +
-        `Este mesmo link foi enviado por WhatsApp e E-mail — responda por qualquer um dos dois, sem precisar repetir.\n` +
-        `This same link was sent via WhatsApp and Email — please reply through either one, no need to repeat.\n` +
-        `此链接已通过WhatsApp和邮件发送 — 您可以通过任一方式回复，无需重复填写。`;
-      if (canal === 'whatsapp') window.open(window.PFStore.whatsAppHref(recipient.telefone, msg), '_blank');
+      /* 06/10 — assunto e corpo em PT-BR / EN-US / 中文 (fonte única no store). */
+      const unidTxt = grupo.unidades.map((u) => u.identificador).join(', ');
+      const { subject: assuntoRfq, text: msg } = store.mensagemRfq({
+        numeroDocumento: cot.numero_documento, numeroTxt, url, linkJaEnviadoEmDoisCanais: true,
+        descricaoPt: `da(s) unidade(s) ${unidTxt}`, descricaoEn: `of unit(s) ${unidTxt}`, descricaoZh: `单元 ${unidTxt} `,
+      });
+      let registrar = true; // só registra "enviado" quando o envio de fato aconteceu
+      let avisoFinal = null;
+      if (canal === 'whatsapp') {
+        window.open(window.PFStore.whatsAppHref(recipient.telefone, msg), '_blank');
+        avisoFinal = 'WhatsApp aberto — confirme o envio na janela do WhatsApp. A cotação foi registrada como enviada por WhatsApp.';
+      }
       if (canal === 'email') {
         /* 10/09 — envio direto via SMTP (send-email edge function), sem abrir
            Outlook/cliente local. Se o SMTP ainda não tiver os secrets
            configurados (ou a chamada falhar por qualquer motivo), cai pro
-           mailto: como estava antes — nunca deixa o vendedor sem alternativa. */
-        const sb = window.__VP_SB && window.__VP_SB.sb;
-        let enviouDireto = false;
-        if (sb) {
-          const { error: emailError } = await sb.functions.invoke('send-email', {
-            body: {
-              to: recipient.email, subject: `Cotação técnica ${cot.numero_documento} — VerticalParts`, text: msg,
-              numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
-            },
-          });
-          if (!emailError) enviouDireto = true;
-          else console.warn('[FormularioElevador] send-email falhou, caindo pro mailto:', emailError);
+           mailto: como estava antes — nunca deixa o vendedor sem alternativa.
+           01/10 — chamada em si extraída pro EmailEnvioHelper (compartilhado
+           com Proposta/Contrato de Venda/Contrato Instalador); a decisão do
+           que fazer com sucesso/falha continua aqui, sem mudança. */
+        const { enviouDireto, emailData } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: recipient.email, subject: assuntoRfq, text: msg,
+          numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
+        });
+        if (enviouDireto) {
+          avisoFinal = `E-mail enviado para ${(emailData.destinatarios || []).join(', ') || recipient.email}.`;
         }
-        if (!enviouDireto) window.open(window.PFStore.mailtoHref(recipient.email, `Cotação técnica ${cot.numero_documento} — VerticalParts`, msg), '_blank');
+        /* 28/09 — achado real: essa queda pro mailto: era silenciosa (só
+           console.warn) — o vendedor só percebia pela janela do cliente de
+           e-mail local abrindo, sem entender por quê. Esse envio via mailto
+           também nunca entra em emails_projeto (sem Message-ID nosso), então
+           avisa também que não vai aparecer em Enviados/Linha do Tempo. */
+        if (!enviouDireto) {
+          /* 30/09 — antes marcava "enviada" mesmo sem nada ter saído. Agora,
+             se o envio automático falhou, NÃO registra como enviada (o
+             vendedor ainda nem enviou no e-mail padrão). */
+          registrar = false;
+          avisoFinal = null;
+          window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado ao fornecedor e a cotação NÃO foi marcada como enviada. Abrindo seu e-mail padrão para envio manual (depois use "Copiar link"/WhatsApp para registrar o envio).', 'error');
+          window.open(window.PFStore.mailtoHref(recipient.email, assuntoRfq, msg), '_blank');
+        }
       }
-      if (canal === 'link') { try { await navigator.clipboard.writeText(url); } catch (e) {} window.toast?.('Link copiado.', 'success'); }
-      await store.marcarEnviado(cot.id, canal, recipient);
-      await reload();
-      window.toast?.('Cotação marcada como enviada.', 'success');
+      if (canal === 'link') {
+        try { await navigator.clipboard.writeText(url); } catch (e) {}
+        avisoFinal = 'Link copiado — nenhum e-mail/mensagem foi enviado por aqui: cole o link no canal que preferir (a cotação fica registrada como "enviada por link").';
+      }
+      if (registrar) {
+        await store.marcarEnviado(cot.id, canal, recipient);
+        await reload();
+        if (avisoFinal) window.toast?.(avisoFinal, 'success');
+      }
     } catch (e) {
       window.toast?.('Erro ao enviar: ' + e.message, 'error');
     } finally {
+      enviandoRef.current = false;
       setEnviando(null);
     }
   };
@@ -1073,7 +1157,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
       footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
       {grupos.length === 0 && <p className="small muted">Salve o formulário e defina o Fornecedor em pelo menos uma Unidade para enviar a cotação.</p>}
       {grupos.map((g) => (
-        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}|${g.categoriaProduto}`} grupo={g} cot={cotacaoDoGrupo(g)} numeroCotacao={numeroCotacao} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando} fornecedoresCadastro={fornecedoresCadastro}/>
+        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}|${g.categoriaProduto}`} grupo={g} cot={cotacaoDoGrupo(g)} numeroCotacao={numeroCotacao} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando} fornecedoresCadastro={fornecedoresCadastro} matchSeguro={grupos.length === 1}/>
       ))}
     </Modal>
   );
@@ -1429,7 +1513,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       }
       setUnidades(unidadesSalvas);
       if (novoStatus) await window.FormularioElevadorStore.enviar(currentId);
-      window.toast?.(novoStatus ? 'Formulário enviado!' : 'Rascunho salvo.', 'success');
+      window.toast?.(novoStatus ? 'Formulário devolvido para a VerticalParts!' : 'Rascunho salvo.', 'success');
       if (novoStatus && avisoSemFornecedor) window.toast?.(avisoSemFornecedor, 'warning');
       onSaved?.(currentId);
       return currentId;
@@ -1606,9 +1690,15 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         </div>
       )}
       <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        {/* Link do cliente: um único botão, que devolve o formulário preenchido
+            pra VerticalParts conferir (não vai pra cotação sozinho, nem tem
+            rascunho). Dentro do sistema não existe mais "Enviar para Cotação":
+            o vendedor segue pelos botões de baixo (RFQ a fornecedores, envio
+            direto pra Precificação, Controle de Cotações). */}
         <div className="row gap-2">
-          <Button variant="outline" onClick={() => salvarTudo(null)} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>
-          <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Enviar para Cotação'}</Button>
+          {publicMode
+            ? <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Devolver para a VerticalParts'}</Button>
+            : <Button variant="outline" onClick={() => salvarTudo(null)} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>}
         </div>
       </div>
 

@@ -3,6 +3,15 @@
    Fluxo: Comercial (preenche) → Engenharia (completa) → Ficha Técnica
    ============================================================ */
 
+/* Cores dos selos de status (texto branco por cima, então todas escuras). Fonte única para a lista e o detalhe. */
+const SP_STATUS_CORES = {
+  novo: 'var(--vp-info)',
+  em_analise: 'var(--vp-warning-ink)',
+  aguardando_desenho: 'var(--fg2)',
+  pronto: 'var(--vp-success)',
+  convertido_em_ficha: 'var(--vp-black)',
+};
+
 function SolicitacoesProdutoPage({ solicitacaoId }) {
   const [view, setView] = React.useState(solicitacaoId ? 'detalhe' : 'lista');
   const [solicitacoes, setSolicitacoes] = React.useState([]);
@@ -10,8 +19,21 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
   const [loading, setLoading] = React.useState(false);
   const [filtroStatus, setFiltroStatus] = React.useState('');
   const [filtroTipo, setFiltroTipo] = React.useState('');
+  /* Alçada — Configurações › Administração › Engenharia › Solicitações de
+     Produto › Criar. Sem linha em alcadas_capacidade = não pode (Admin
+     sempre pode, via temCapacidade). Só trava o botão de criar; ver/abrir
+     detalhe continua livre (fluxo de análise da Engenharia não muda). */
+  const [podeCriar, setPodeCriar] = React.useState(false);
+  const [podeExcluir, setPodeExcluir] = React.useState(false);
+  const [solicitacaoExcluir, setSolicitacaoExcluir] = React.useState(null);
 
   const user = window.__VP_USER || { email: 'desconhecido', nome: 'Usuário' };
+
+  React.useEffect(() => {
+    if (!window.PropostaStore) return;
+    window.PropostaStore.temCapacidade('solicitacoes-produto', 'criar').then(setPodeCriar).catch(() => {});
+    window.PropostaStore.temCapacidade('solicitacoes-produto', 'excluir').then(setPodeExcluir).catch(() => {});
+  }, []);
 
   React.useEffect(() => {
     if (!window.SolicitacoesProdutoStore) {
@@ -85,6 +107,7 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
         <ListaView
           solicitacoes={solicitacoes}
           loading={loading}
+          podeCriar={podeCriar}
           filtroStatus={filtroStatus}
           filtroTipo={filtroTipo}
           onFiltroStatusChange={(s) => {
@@ -97,6 +120,8 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
           }}
           onNovaClick={() => setView('nova')}
           onAbrirClick={_abrirDetalhe}
+          podeExcluir={podeExcluir}
+          onExcluirClick={setSolicitacaoExcluir}
           user={user}
         />
       ) : view === 'nova' ? (
@@ -125,18 +150,102 @@ function SolicitacoesProdutoPage({ solicitacaoId }) {
           user={user}
         />
       )}
+
+      {solicitacaoExcluir && (
+        <ModalExcluirSolicitacao
+          solicitacao={solicitacaoExcluir}
+          onClose={() => setSolicitacaoExcluir(null)}
+          onExcluida={() => {
+            setSolicitacaoExcluir(null);
+            _carregarLista();
+          }}
+        />
+      )}
     </div>
   );
 }
 
-function ListaView({ solicitacoes, loading, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, user }) {
-  const statusCores = {
-    novo: '#3b82f6',
-    em_analise: '#f59e0b',
-    aguardando_desenho: '#ec4899',
-    pronto: '#10b981',
-    convertido_em_ficha: '#8b5cf6',
-  };
+/* ---------- MODAL: Excluir Solicitação ----------
+   Soft-delete (SolicitacoesProdutoStore.excluir → excluido_em/excluido_por).
+   Exige o checkbox de ciência marcado antes de liberar o botão de
+   confirmação — ninguém exclui em 1 clique só, mesmo padrão de "certeza
+   explícita" pedido pelo usuário. */
+function ModalExcluirSolicitacao({ solicitacao, onClose, onExcluida }) {
+  const [ciente, setCiente] = React.useState(false);
+  const [excluindo, setExcluindo] = React.useState(false);
+  const [erro, setErro] = React.useState('');
+
+  const jaVirouFicha = solicitacao.status === 'convertido_em_ficha';
+
+  async function confirmar() {
+    if (!ciente || excluindo) return;
+    setExcluindo(true);
+    setErro('');
+    try {
+      await window.SolicitacoesProdutoStore.excluir(solicitacao.id);
+      onExcluida();
+    } catch (e) {
+      setErro('Erro ao excluir: ' + (e.message || e));
+      setExcluindo(false);
+    }
+  }
+
+  return (
+    <div style={styles.modalShroud} onClick={excluindo ? undefined : onClose}>
+      <div style={styles.modalBox} onClick={(e) => e.stopPropagation()}>
+        <div style={styles.modalTitle}>Excluir solicitação?</div>
+
+        <div style={styles.modalInfo}>
+          <div style={{ fontWeight: 700 }}>{solicitacao.numero_solicitacao}</div>
+          <div style={{ color: 'var(--fg2)', marginTop: '4px' }}>
+            {solicitacao.cliente_nome ? solicitacao.cliente_nome + ' · ' : ''}
+            {solicitacao.categoria_sku || '—'} · {solicitacao.status.replace(/_/g, ' ').toUpperCase()}
+          </div>
+        </div>
+
+        {jaVirouFicha && (
+          <div style={styles.modalWarn}>
+            Esta solicitação já foi convertida em Ficha Técnica. A ficha não é apagada e continua
+            acessível normalmente — só esta solicitação sai da lista.
+          </div>
+        )}
+
+        <div style={styles.modalText}>
+          A solicitação sai da lista de Solicitações de Produto. O registro fica guardado no banco
+          (com data e autor da exclusão) e pode ser recuperado pelo suporte, se necessário.
+        </div>
+
+        <label style={styles.modalCheckboxRow}>
+          <input
+            type="checkbox"
+            checked={ciente}
+            onChange={(e) => setCiente(e.target.checked)}
+            style={{ marginTop: '2px' }}
+          />
+          <span>Estou ciente e tenho certeza de que quero excluir esta solicitação.</span>
+        </label>
+
+        {erro && <div style={styles.erro}>{erro}</div>}
+
+        <div style={styles.modalActions}>
+          <button style={styles.btnSecondary} onClick={onClose} disabled={excluindo}>
+            CANCELAR
+          </button>
+          <button
+            style={{ ...styles.btnDanger, ...((!ciente || excluindo) ? { opacity: 0.5, cursor: 'not-allowed' } : {}) }}
+            onClick={confirmar}
+            disabled={!ciente || excluindo}
+          >
+            {excluindo ? 'EXCLUINDO…' : 'SIM, EXCLUIR'}
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo, onFiltroStatusChange, onFiltroTipoChange, onNovaClick, onAbrirClick, podeExcluir, onExcluirClick, user }) {
+  const statusCores = SP_STATUS_CORES;
 
   const tiposLabel = {
     elevador: 'Elevador',
@@ -147,7 +256,12 @@ function ListaView({ solicitacoes, loading, filtroStatus, filtroTipo, onFiltroSt
   return (
     <div style={styles.viewContainer}>
       <div style={styles.toolbar}>
-        <button onClick={onNovaClick} style={styles.btnPrimary}>
+        <button
+          onClick={onNovaClick}
+          disabled={!podeCriar}
+          style={{ ...styles.btnPrimary, ...(podeCriar ? {} : { opacity: 0.5, cursor: 'not-allowed' }) }}
+          title={podeCriar ? undefined : 'Sem permissão para criar — peça liberação em Configurações → Administração'}
+        >
           + NOVA SOLICITAÇÃO
         </button>
       </div>
@@ -240,12 +354,24 @@ function ListaView({ solicitacoes, loading, filtroStatus, filtroTipo, onFiltroSt
                   </td>
                   <td style={styles.td}>{new Date(sol.data_criacao).toLocaleDateString('pt-BR')}</td>
                   <td style={styles.td}>
-                    <button
-                      onClick={() => onAbrirClick(sol.id)}
-                      style={styles.btnLink}
-                    >
-                      ABRIR
-                    </button>
+                    <div style={styles.acoesCell}>
+                      <button
+                        onClick={() => onAbrirClick(sol.id)}
+                        style={styles.btnLink}
+                      >
+                        ABRIR
+                      </button>
+                      {podeExcluir && (
+                        <button
+                          onClick={() => onExcluirClick(sol)}
+                          style={styles.btnIconTrash}
+                          title="Excluir solicitação"
+                          aria-label="Excluir solicitação"
+                        >
+                          🗑️
+                        </button>
+                      )}
+                    </div>
                   </td>
                 </tr>
               ))}
@@ -263,20 +389,27 @@ function NovaView({ onSalvar, onCancelar, user }) {
     categoria_sku: '',
     solicitante_nome: user.nome || 'Usuário',
     solicitante_email: user.email || '',
-    cliente_nome: '',
-    cliente_industria: '',
     descricao_inicial: '',
     observacoes_comercial: '',
-    fotos_url: [],
+    fornecedor_contato: '',
+    link_produto: '',
+    foiPedidoCliente: false,
+    cliente_nome: '',
+    cliente_industria: '',
+    cliente_contato: '',
+    anexos: [],
   });
 
   const [erros, setErros] = React.useState({});
+  const [enviandoAnexo, setEnviandoAnexo] = React.useState(false);
+  // Todos os anexos desta solicitação nova caem na mesma pasta temporária —
+  // a solicitação ainda não tem id (só existe depois do insert).
+  const pastaTempRef = React.useRef(window.SolicitacoesProdutoStore._pastaTemp());
 
   function _validar() {
     const novosErros = {};
     if (!form.categoria_sku) novosErros.categoria_sku = 'Categoria é obrigatória';
-    if (!form.cliente_nome) novosErros.cliente_nome = 'Cliente é obrigatório';
-    if (!form.descricao_inicial) novosErros.descricao_inicial = 'Descrição é obrigatória';
+    if (!form.descricao_inicial) novosErros.descricao_inicial = 'Explique o que você precisa';
     setErros(novosErros);
     return Object.keys(novosErros).length === 0;
   }
@@ -286,38 +419,173 @@ function NovaView({ onSalvar, onCancelar, user }) {
     await onSalvar(form);
   }
 
+  async function _onAnexoChange(e) {
+    const files = Array.from(e.target.files || []);
+    if (!files.length) return;
+    setEnviandoAnexo(true);
+    try {
+      for (const file of files) {
+        const anexo = await window.SolicitacoesProdutoStore.uploadAnexo(file, pastaTempRef.current);
+        setForm((s) => ({ ...s, anexos: [...s.anexos, anexo] }));
+      }
+    } catch (err) {
+      alert('Erro ao enviar anexo: ' + (err.message || err));
+    } finally {
+      setEnviandoAnexo(false);
+      e.target.value = '';
+    }
+  }
+
+  function _removerAnexo(idx) {
+    const anexo = form.anexos[idx];
+    if (anexo && anexo.path) window.SolicitacoesProdutoStore.removerAnexo(anexo.path).catch(() => {});
+    setForm((s) => ({ ...s, anexos: s.anexos.filter((_, i) => i !== idx) }));
+  }
+
   return (
     <div style={styles.viewContainer}>
       <div style={styles.formContainer}>
         <div style={styles.formTitle}>NOVA SOLICITAÇÃO DE PRODUTO</div>
+        <div style={{ fontSize: '12px', color: 'var(--fg2)', marginBottom: '16px' }}>
+          Só <b>Tipo</b>, <b>Categoria</b> e a <b>Descrição</b> são obrigatórios — preencha o resto que souber, o que faltar a Engenharia completa depois.
+        </div>
 
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Tipo de Equipamento *</label>
-          <select
-            value={form.tipo_equipamento}
-            onChange={(e) => setForm({ ...form, tipo_equipamento: e.target.value })}
-            style={styles.input}
-          >
-            <option value="elevador">Elevador</option>
-            <option value="escada_rolante">Escada Rolante</option>
-            <option value="esteira">Esteira</option>
-          </select>
+        <div style={styles.formRow}>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Tipo de Equipamento *</label>
+            <select
+              value={form.tipo_equipamento}
+              onChange={(e) => setForm({ ...form, tipo_equipamento: e.target.value })}
+              style={styles.input}
+            >
+              <option value="elevador">Elevador</option>
+              <option value="escada_rolante">Escada Rolante</option>
+              <option value="esteira">Esteira</option>
+            </select>
+          </div>
+
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Categoria (SKU) *</label>
+            <select
+              value={form.categoria_sku}
+              onChange={(e) => setForm({ ...form, categoria_sku: e.target.value })}
+              style={{ ...styles.input, borderColor: erros.categoria_sku ? 'var(--vp-danger)' : '' }}
+            >
+              <option value="">Selecione…</option>
+              {(window.SolicitacoesProdutoStore.CATEGORIAS_SKU || []).map((c) => (
+                <option key={c.valor} value={c.valor}>{c.label}</option>
+              ))}
+            </select>
+            {erros.categoria_sku && <div style={styles.erro}>{erros.categoria_sku}</div>}
+          </div>
         </div>
 
         <div style={styles.formGroup}>
-          <label style={styles.label}>Categoria (SKU) *</label>
-          <select
-            value={form.categoria_sku}
-            onChange={(e) => setForm({ ...form, categoria_sku: e.target.value })}
-            style={{ ...styles.input, borderColor: erros.categoria_sku ? '#ef4444' : '' }}
-          >
-            <option value="">Selecione…</option>
-            {(window.SolicitacoesProdutoStore.CATEGORIAS_SKU || []).map((c) => (
-              <option key={c.valor} value={c.valor}>{c.label}</option>
-            ))}
-          </select>
-          {erros.categoria_sku && <div style={styles.erro}>{erros.categoria_sku}</div>}
+          <label style={styles.label}>O que você precisa? *</label>
+          <textarea
+            value={form.descricao_inicial}
+            onChange={(e) => setForm({ ...form, descricao_inicial: e.target.value })}
+            style={{ ...styles.textarea, borderColor: erros.descricao_inicial ? 'var(--vp-danger)' : '' }}
+            placeholder="Explique com suas palavras o que é o produto e pra que serve — não precisa ser técnico, a Engenharia completa os detalhes depois."
+          />
+          {erros.descricao_inicial && <div style={styles.erro}>{erros.descricao_inicial}</div>}
         </div>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Detalhes adicionais (opcional)</label>
+          <textarea
+            value={form.observacoes_comercial}
+            onChange={(e) => setForm({ ...form, observacoes_comercial: e.target.value })}
+            style={styles.textarea}
+            placeholder="Qualquer informação a mais que possa ajudar"
+          />
+        </div>
+
+        <div style={styles.formRow}>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Contato do fornecedor (opcional)</label>
+            <input
+              type="text"
+              value={form.fornecedor_contato}
+              onChange={(e) => setForm({ ...form, fornecedor_contato: e.target.value })}
+              style={styles.input}
+              placeholder="Nome, telefone, e-mail — o que você já tiver"
+            />
+          </div>
+          <div style={styles.formGroup}>
+            <label style={styles.label}>Link do produto (opcional)</label>
+            <input
+              type="text"
+              value={form.link_produto}
+              onChange={(e) => setForm({ ...form, link_produto: e.target.value })}
+              style={styles.input}
+              placeholder="Site do fabricante, catálogo, marketplace…"
+            />
+          </div>
+        </div>
+
+        <div style={styles.formGroup}>
+          <label style={styles.label}>Imagem ou PDF do produto (opcional)</label>
+          <input type="file" accept="image/*,.pdf" multiple onChange={_onAnexoChange} disabled={enviandoAnexo}/>
+          {enviandoAnexo && <div style={{ fontSize: '12px', color: 'var(--fg2)', marginTop: '6px' }}>Enviando…</div>}
+          {form.anexos.length > 0 && (
+            <div style={{ marginTop: '8px' }}>
+              {form.anexos.map((a, idx) => (
+                <div key={a.path} style={{ display: 'flex', alignItems: 'center', gap: '8px', fontSize: '12px', padding: '4px 0' }}>
+                  <span>{a.tipo === 'imagem' ? '🖼️' : '📄'}</span>
+                  <a href={a.url} target="_blank" style={{ color: 'var(--vp-info)' }}>{a.nome}</a>
+                  <button type="button" onClick={() => _removerAnexo(idx)} style={{ border: 'none', background: 'none', color: 'var(--vp-danger)', cursor: 'pointer' }}>remover</button>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
+        <div style={styles.formGroup}>
+          <label style={{ ...styles.label, display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer' }}>
+            <input
+              type="checkbox"
+              checked={form.foiPedidoCliente}
+              onChange={(e) => setForm({ ...form, foiPedidoCliente: e.target.checked })}
+            />
+            Foi um pedido de um cliente específico?
+          </label>
+        </div>
+
+        {form.foiPedidoCliente && (
+          <div style={{ padding: '12px', background: 'var(--vp-gray-50)', borderRadius: '4px', marginBottom: '16px' }}>
+            <div style={styles.formRow}>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Cliente (opcional)</label>
+                <input
+                  type="text"
+                  value={form.cliente_nome}
+                  onChange={(e) => setForm({ ...form, cliente_nome: e.target.value })}
+                  style={styles.input}
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label style={styles.label}>Indústria (opcional)</label>
+                <input
+                  type="text"
+                  value={form.cliente_industria}
+                  onChange={(e) => setForm({ ...form, cliente_industria: e.target.value })}
+                  style={styles.input}
+                />
+              </div>
+            </div>
+            <div style={styles.formGroup}>
+              <label style={styles.label}>Contato do cliente (opcional)</label>
+              <input
+                type="text"
+                value={form.cliente_contato}
+                onChange={(e) => setForm({ ...form, cliente_contato: e.target.value })}
+                style={styles.input}
+                placeholder="Telefone, e-mail…"
+              />
+            </div>
+          </div>
+        )}
 
         <div style={styles.formRow}>
           <div style={styles.formGroup}>
@@ -338,66 +606,6 @@ function NovaView({ onSalvar, onCancelar, user }) {
               style={styles.input}
             />
           </div>
-        </div>
-
-        <div style={styles.formRow}>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Cliente *</label>
-            <input
-              type="text"
-              value={form.cliente_nome}
-              onChange={(e) => setForm({ ...form, cliente_nome: e.target.value })}
-              style={{ ...styles.input, borderColor: erros.cliente_nome ? '#ef4444' : '' }}
-            />
-            {erros.cliente_nome && <div style={styles.erro}>{erros.cliente_nome}</div>}
-          </div>
-          <div style={styles.formGroup}>
-            <label style={styles.label}>Indústria</label>
-            <input
-              type="text"
-              value={form.cliente_industria}
-              onChange={(e) => setForm({ ...form, cliente_industria: e.target.value })}
-              style={styles.input}
-            />
-          </div>
-        </div>
-
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Descrição Detalhada *</label>
-          <textarea
-            value={form.descricao_inicial}
-            onChange={(e) => setForm({ ...form, descricao_inicial: e.target.value })}
-            style={{ ...styles.textarea, borderColor: erros.descricao_inicial ? '#ef4444' : '' }}
-            placeholder="Descreva o equipamento, suas características, dimensões aproximadas, etc."
-          />
-          {erros.descricao_inicial && <div style={styles.erro}>{erros.descricao_inicial}</div>}
-        </div>
-
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Observações e Detalhes Adicionais</label>
-          <textarea
-            value={form.observacoes_comercial}
-            onChange={(e) => setForm({ ...form, observacoes_comercial: e.target.value })}
-            style={styles.textarea}
-            placeholder="Qualquer informação adicional que possa ser útil"
-          />
-        </div>
-
-        <div style={styles.formGroup}>
-          <label style={styles.label}>Fotos (opcional)</label>
-          <div style={{ fontSize: '12px', color: '#666', marginBottom: '8px' }}>
-            Você pode adicionar links para fotos do equipamento ou documentação (ex: URL de imagem, screenshot, etc)
-          </div>
-          <input
-            type="text"
-            placeholder="https://example.com/foto1.jpg (um por linha)"
-            style={{...styles.textarea, minHeight: '60px'}}
-            onBlur={(e) => {
-              const urls = e.target.value.split('\n').filter(u => u.trim());
-              setForm({ ...form, fotos_url: urls });
-            }}
-            defaultValue={form.fotos_url.join('\n')}
-          />
         </div>
 
         <div style={styles.formActions}>
@@ -425,13 +633,7 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
     complementos_descobertos: solicitacao.complementos_descobertos || '',
   });
 
-  const statusCores = {
-    novo: '#3b82f6',
-    em_analise: '#f59e0b',
-    aguardando_desenho: '#ec4899',
-    pronto: '#10b981',
-    convertido_em_ficha: '#8b5cf6',
-  };
+  const statusCores = SP_STATUS_CORES;
 
   async function _iniciarAnalise() {
     if (!confirm('Iniciar análise desta solicitação?')) return;
@@ -507,14 +709,35 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
       <div style={styles.detalheGrid}>
         <div style={styles.detalheSection}>
           <div style={styles.detalheSectionTitle}>INFORMAÇÕES COMERCIAIS</div>
-          <div style={styles.detalheRow}>
-            <div style={styles.detalheLabel}>Cliente:</div>
-            <div style={styles.detalheValue}>{solicitacao.cliente_nome}</div>
-          </div>
-          <div style={styles.detalheRow}>
-            <div style={styles.detalheLabel}>Indústria:</div>
-            <div style={styles.detalheValue}>{solicitacao.cliente_industria}</div>
-          </div>
+          {solicitacao.cliente_nome && (
+            <div style={styles.detalheRow}>
+              <div style={styles.detalheLabel}>Cliente:</div>
+              <div style={styles.detalheValue}>
+                {solicitacao.cliente_nome}
+                {solicitacao.cliente_industria ? ` (${solicitacao.cliente_industria})` : ''}
+              </div>
+            </div>
+          )}
+          {solicitacao.cliente_contato && (
+            <div style={styles.detalheRow}>
+              <div style={styles.detalheLabel}>Contato do cliente:</div>
+              <div style={styles.detalheValue}>{solicitacao.cliente_contato}</div>
+            </div>
+          )}
+          {solicitacao.fornecedor_contato && (
+            <div style={styles.detalheRow}>
+              <div style={styles.detalheLabel}>Contato do fornecedor:</div>
+              <div style={styles.detalheValue}>{solicitacao.fornecedor_contato}</div>
+            </div>
+          )}
+          {solicitacao.link_produto && (
+            <div style={styles.detalheRow}>
+              <div style={styles.detalheLabel}>Link do produto:</div>
+              <div style={styles.detalheValue}>
+                <a href={solicitacao.link_produto} target="_blank" style={styles.btnLink}>{solicitacao.link_produto}</a>
+              </div>
+            </div>
+          )}
           <div style={styles.detalheRow}>
             <div style={styles.detalheLabel}>Solicitante:</div>
             <div style={styles.detalheValue}>{solicitacao.solicitante_nome} ({solicitacao.solicitante_email})</div>
@@ -540,6 +763,18 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
             <>
               <div style={styles.detalheSectionTitle}>OBSERVAÇÕES</div>
               <div style={styles.detalheText}>{solicitacao.observacoes_comercial}</div>
+            </>
+          )}
+          {(solicitacao.anexos || []).length > 0 && (
+            <>
+              <div style={styles.detalheSectionTitle}>ANEXOS</div>
+              {solicitacao.anexos.map((a) => (
+                <div key={a.path || a.url} style={{ padding: '4px 0' }}>
+                  <a href={a.url} target="_blank" style={styles.btnLink}>
+                    {a.tipo === 'imagem' ? '🖼️' : '📄'} {a.nome}
+                  </a>
+                </div>
+              ))}
             </>
           )}
         </div>
@@ -656,59 +891,71 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
 const styles = {
   container: { padding: '20px', maxWidth: '1400px', margin: '0 auto', fontFamily: 'sans-serif' },
   header: { marginBottom: '30px' },
-  breadcrumb: { fontSize: '11px', color: '#666', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' },
+  breadcrumb: { fontSize: '11px', color: 'var(--fg2)', fontWeight: 600, textTransform: 'uppercase', marginBottom: '8px' },
   title: { fontSize: '28px', fontWeight: 700, marginBottom: '8px' },
-  subtitle: { fontSize: '13px', color: '#666', lineHeight: 1.5 },
-  viewContainer: { background: '#fff', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
+  subtitle: { fontSize: '13px', color: 'var(--fg2)', lineHeight: 1.5 },
+  viewContainer: { background: 'var(--bg)', borderRadius: '8px', padding: '20px', boxShadow: '0 1px 3px rgba(0,0,0,0.1)' },
 
   titleSection: { borderBottom: 'none' },
   toolbar: { display: 'flex', gap: '12px', marginBottom: '20px', justifyContent: 'space-between', alignItems: 'center' },
 
-  btnPrimary: { padding: '10px 20px', background: '#3b82f6', color: '#fff', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
-  btnSecondary: { padding: '10px 20px', background: '#e5e7eb', color: '#333', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
-  btnLink: { color: '#3b82f6', textDecoration: 'none', fontWeight: 600, cursor: 'pointer', fontSize: '12px', background: 'none', border: 'none', padding: 0 },
+  btnPrimary: { padding: '10px 20px', background: 'var(--vp-yellow)', color: 'var(--vp-black)', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
+  btnSecondary: { padding: '10px 20px', background: 'var(--border)', color: 'var(--fg1)', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
+  btnLink: { color: 'var(--vp-info)', textDecoration: 'none', fontWeight: 600, cursor: 'pointer', fontSize: '12px', background: 'none', border: 'none', padding: 0 },
+  btnDanger: { padding: '10px 20px', background: 'var(--vp-danger)', color: 'var(--vp-white)', border: 'none', borderRadius: '4px', fontWeight: 600, cursor: 'pointer', fontSize: '12px' },
+  acoesCell: { display: 'flex', gap: '10px', alignItems: 'center' },
+  btnIconTrash: { background: 'none', border: 'none', cursor: 'pointer', fontSize: '15px', padding: '2px 4px', lineHeight: 1 },
+
+  modalShroud: { position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000 },
+  modalBox: { background: 'var(--bg)', borderRadius: '8px', width: '460px', maxWidth: '92vw', padding: '22px', boxShadow: '0 10px 40px rgba(0,0,0,0.25)' },
+  modalTitle: { fontSize: '16px', fontWeight: 700, marginBottom: '14px' },
+  modalInfo: { background: 'var(--vp-gray-50)', border: '1px solid var(--border)', borderRadius: '4px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px' },
+  modalWarn: { background: 'var(--vp-warning-tint)', border: '1px solid var(--vp-warning)', borderRadius: '4px', padding: '10px 12px', marginBottom: '14px', fontSize: '12px', color: 'var(--vp-warning-ink)' },
+  modalText: { fontSize: '13px', color: 'var(--fg2)', lineHeight: 1.5, marginBottom: '14px' },
+  modalCheckboxRow: { display: 'flex', gap: '8px', alignItems: 'flex-start', fontSize: '13px', marginBottom: '18px', cursor: 'pointer' },
+  modalActions: { display: 'flex', gap: '10px', justifyContent: 'flex-end' },
 
   filtros: { display: 'flex', gap: '16px', marginBottom: '20px', alignItems: 'flex-end', flexWrap: 'wrap' },
   filtroGrupo: { display: 'flex', flexDirection: 'column', gap: '6px' },
-  filtroLabel: { fontSize: '11px', fontWeight: 600, color: '#666', textTransform: 'uppercase' },
-  filtroSelect: { padding: '8px 12px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '12px' },
+  filtroLabel: { fontSize: '11px', fontWeight: 600, color: 'var(--fg2)', textTransform: 'uppercase' },
+  filtroSelect: { padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: '4px', fontSize: '12px' },
 
   statsGrupo: { display: 'flex', gap: '16px', marginLeft: 'auto' },
   stat: { textAlign: 'center' },
   statNumero: { fontSize: '18px', fontWeight: 700 },
-  statLabel: { fontSize: '10px', color: '#666', fontWeight: 600, marginTop: '4px' },
+  statLabel: { fontSize: '10px', color: 'var(--fg2)', fontWeight: 600, marginTop: '4px' },
 
-  loadingContainer: { textAlign: 'center', padding: '40px', fontSize: '14px', color: '#666' },
+  loadingContainer: { textAlign: 'center', padding: '40px', fontSize: '14px', color: 'var(--fg2)' },
   emptyState: { textAlign: 'center', padding: '40px' },
   emptyIcon: { fontSize: '40px', marginBottom: '12px' },
   emptyTitle: { fontSize: '16px', fontWeight: 700, marginBottom: '6px' },
-  emptyText: { fontSize: '13px', color: '#666' },
+  emptyText: { fontSize: '13px', color: 'var(--fg2)' },
 
   tabelaContainer: { overflowX: 'auto', marginTop: '20px' },
   tabela: { width: '100%', borderCollapse: 'collapse', fontSize: '12px' },
-  theadTr: { background: '#f9fafb', borderBottom: '2px solid #e5e7eb' },
-  th: { padding: '12px', textAlign: 'left', fontWeight: 600, color: '#666', textTransform: 'uppercase', fontSize: '10px' },
-  tbodyTr: { borderBottom: '1px solid #e5e7eb', '&:hover': { background: '#f9fafb' } },
+  theadTr: { background: 'var(--vp-gray-50)', borderBottom: '2px solid var(--border)' },
+  th: { padding: '12px', textAlign: 'left', fontWeight: 600, color: 'var(--fg2)', textTransform: 'uppercase', fontSize: '10px' },
+  tbodyTr: { borderBottom: '1px solid var(--border)', '&:hover': { background: 'var(--vp-gray-50)' } },
   td: { padding: '12px', verticalAlign: 'top' },
-  badge: { display: 'inline-block', padding: '4px 8px', borderRadius: '4px', color: '#fff', fontSize: '10px', fontWeight: 600 },
+  badge: { display: 'inline-block', padding: '4px 8px', borderRadius: '4px', color: 'var(--vp-white)', fontSize: '10px', fontWeight: 600 },
 
-  formContainer: { background: '#fafafa', padding: '20px', borderRadius: '8px', marginTop: '20px' },
+  formContainer: { background: 'var(--vp-gray-50)', padding: '20px', borderRadius: '8px', marginTop: '20px' },
   formTitle: { fontSize: '16px', fontWeight: 700, marginBottom: '20px' },
   formGroup: { marginBottom: '20px' },
   formRow: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' },
-  label: { display: 'block', fontSize: '12px', fontWeight: 600, color: '#333', marginBottom: '6px' },
-  input: { width: '100%', padding: '8px 12px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' },
-  textarea: { width: '100%', padding: '8px 12px', border: '1px solid #ccc', borderRadius: '4px', fontSize: '13px', minHeight: '80px', fontFamily: 'monospace', resize: 'vertical' },
-  erro: { fontSize: '11px', color: '#ef4444', marginTop: '4px' },
+  label: { display: 'block', fontSize: '12px', fontWeight: 600, color: 'var(--fg1)', marginBottom: '6px' },
+  input: { width: '100%', padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: '4px', fontSize: '13px', fontFamily: 'monospace' },
+  textarea: { width: '100%', padding: '8px 12px', border: '1px solid var(--border-strong)', borderRadius: '4px', fontSize: '13px', minHeight: '80px', fontFamily: 'monospace', resize: 'vertical' },
+  erro: { fontSize: '11px', color: 'var(--vp-danger)', marginTop: '4px' },
   formActions: { display: 'flex', gap: '12px', marginTop: '20px', justifyContent: 'flex-end' },
 
-  detalheHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', borderBottom: '1px solid #e5e7eb', paddingBottom: '20px' },
+  detalheHeader: { display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '30px', borderBottom: '1px solid var(--border)', paddingBottom: '20px' },
   detalheNum: { fontSize: '20px', fontWeight: 700 },
   detalheGrid: { display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px', marginBottom: '20px' },
-  detalheSection: { background: '#fafafa', padding: '16px', borderRadius: '8px' },
-  detalheSectionTitle: { fontSize: '12px', fontWeight: 700, color: '#333', textTransform: 'uppercase', marginBottom: '12px', borderBottom: '1px solid #e5e7eb', paddingBottom: '8px' },
+  detalheSection: { background: 'var(--vp-gray-50)', padding: '16px', borderRadius: '8px' },
+  detalheSectionTitle: { fontSize: '12px', fontWeight: 700, color: 'var(--fg1)', textTransform: 'uppercase', marginBottom: '12px', borderBottom: '1px solid var(--border)', paddingBottom: '8px' },
   detalheRow: { display: 'grid', gridTemplateColumns: '120px 1fr', gap: '12px', marginBottom: '12px', fontSize: '12px' },
-  detalheLabel: { fontWeight: 600, color: '#666' },
-  detalheValue: { color: '#333' },
-  detalheText: { fontSize: '12px', color: '#333', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordWrap: 'break-word' },
+  detalheLabel: { fontWeight: 600, color: 'var(--fg2)' },
+  detalheValue: { color: 'var(--fg1)' },
+  detalheText: { fontSize: '12px', color: 'var(--fg1)', lineHeight: 1.6, whiteSpace: 'pre-wrap', wordWrap: 'break-word' },
 };

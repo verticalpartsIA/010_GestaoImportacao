@@ -52,6 +52,44 @@ function PZField({ label, children, span }) {
     </div>
   );
 }
+/* Preço de venda equipamento a equipamento (VPEL-EL0985-1 = R$ x, …). O
+   preço total é rateado pelo custo do fornecedor de cada unidade, então
+   equipamentos diferentes têm preços diferentes — a soma sozinha esconde isso.
+   Calcula na hora a partir do preço do card, então vale também para
+   precificações salvas antes do motor devolver o rateio. */
+function PZPrecoPorEquipamento({ modelos, moLookup, precoTotal }) {
+  const E = window.PrecificacaoElevadorEngine;
+  const rateio = E && E.ratearPorModelo ? E.ratearPorModelo(modelos, precoTotal) : [];
+  const linhas = [];
+  rateio.forEach((m, i) => {
+    const fisicos = (moLookup || [])
+      .filter((x) => x.unidadeId && x.unidadeId === m.unidadeId && x.identificador)
+      .sort((a, b) => (Number(a.equipamentoIndice) || 0) - (Number(b.equipamentoIndice) || 0));
+    if (m.quantidade > 1 && fisicos.length === m.quantidade) {
+      fisicos.forEach((f) => linhas.push({ chave: `${m.unidadeId || i}-${f.identificador}`, id: f.identificador, valor: m.valorUnitarioRs }));
+    } else {
+      linhas.push({
+        chave: m.unidadeId || String(i), id: m.identificador || `Equipamento ${i + 1}`, valor: m.valorUnitarioRs,
+        extra: m.quantidade > 1 ? `cada · × ${m.quantidade}` : '',
+      });
+    }
+  });
+  if (!linhas.length) return null;
+  return (
+    <div>
+      <span className="up-eyebrow muted">Preço de venda por equipamento</span>
+      <div className="stack" style={{ gap: 4, marginTop: 4 }}>
+        {linhas.map((l) => (
+          <div key={l.chave} className="row" style={{ justifyContent: 'space-between', gap: 12 }}>
+            <span className="mono" style={{ fontSize: 13 }}>{l.id}{l.extra ? <span className="muted"> ({l.extra})</span> : null}</span>
+            <span className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(l.valor)}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 function PZInput({ value, onChange, type = 'text', placeholder, disabled }) {
   return (
     <input className="input" type={type} value={value ?? ''}
@@ -137,18 +175,41 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
 
+  /* URL ↔ detalhe (issue #611): abrir/voltar acima gravam o id no `subsel`
+     (o App espelha na URL). Este efeito cobre o caminho inverso — Voltar/
+     Avançar do navegador mudam o `subsel` por fora: sem ele o detalhe ficava
+     aberto com a URL já de volta na lista. Só age quando o `subsel` diverge do
+     que a tela mostra (cliques da própria tela e a montagem já batem). */
+  const pzIdRef = React.useRef(pzId);
+  pzIdRef.current = pzId;
+  React.useEffect(() => {
+    const novo = subsel && typeof subsel === 'string' ? subsel : null;
+    if (novo === pzIdRef.current) return;
+    setPzId(novo);
+    if (!novo) carregar();
+  }, [subsel]);
+
   const abrir = async (item) => {
-    if (item.precificacaoId) { setPzId(item.precificacaoId); return; }
+    if (item.precificacaoId) { setPzId(item.precificacaoId); setSubsel?.(item.precificacaoId); return; }
     try {
       const pz = await window.PrecificacaoElevadorStore.criar(item.formularioElevadorId, item.cotacaoFornecedorId);
       setPzId(pz.id);
+      setSubsel?.(pz.id);
     } catch (e) {
       window.toast?.('Erro ao abrir precificação: ' + e.message, 'error');
     }
   };
 
   if (pzId) {
-    return <PrecificacaoElevadorDetalhe id={pzId} onVoltar={() => { setPzId(null); carregar(); }} setRoute={setRoute} setSubsel={setSubsel}/>;
+    return <PrecificacaoElevadorDetalhe id={pzId} onVoltar={() => {
+      setPzId(null);
+      /* O App preserva o id da URL quando o subsel vira null na mesma rota (p/
+         rotas que usam o 2º segmento como aba) — então limpa a URL antes,
+         de forma síncrona; o efeito do App vê a URL já sem id e não a refaz. */
+      window.VpRouter?.navigate('precificacao', null);
+      setSubsel?.(null);
+      carregar();
+    }} setRoute={setRoute} setSubsel={setSubsel}/>;
   }
 
   return (
@@ -190,6 +251,139 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
   );
 }
 
+/* 28/09 — pedido do usuário: depois que a Proposta já foi enviada, o
+   cliente às vezes pede pra acrescentar mais equipamentos (idênticos ou
+   com specs diferentes) ao pedido. `grupos` é 1 opção por Unidade já
+   cotada nesta Precificação (real ou já acrescentada antes), pra "igual
+   a este" oferecer a lista certa. */
+function ModalAcrescentarEquipamento({ grupos, onClose, onConfirmar }) {
+  const [modo, setModo] = React.useState(grupos.length ? 'identico' : 'novo');
+  const [unidadeId, setUnidadeId] = React.useState((grupos[0] || {}).unidadeId || '');
+  const [quantidade, setQuantidade] = React.useState(1);
+  const [tracao, setTracao] = React.useState('');
+  const [capacidadeKg, setCapacidadeKg] = React.useState('');
+  const [paradas, setParadas] = React.useState('');
+  const [modelo, setModelo] = React.useState('');
+  const [salvando, setSalvando] = React.useState(false);
+
+  const valido = modo === 'identico' ? !!unidadeId && Number(quantidade) > 0
+    : Number(quantidade) > 0; // equipamento novo pode nascer sem tração/capacidade/paradas ainda (mesma regra de "pendente" da tabela)
+
+  const confirmar = async () => {
+    if (!valido || salvando) return;
+    setSalvando(true);
+    try {
+      await onConfirmar(modo === 'identico'
+        ? { modo: 'identico', unidadeId, quantidadeAdicional: quantidade }
+        : { modo: 'novo', tracao: tracao || null, capacidadeKg, paradas, modelo, quantidadeAdicional: quantidade });
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <Modal title="Acrescentar equipamento" onClose={onClose} width={520}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={salvando}>Cancelar</Button>
+        <Button variant="primary" onClick={confirmar} disabled={!valido || salvando}>{salvando ? 'Acrescentando…' : 'Acrescentar'}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <p className="small muted" style={{ margin: 0 }}>Só entra nesta Precificação (mão de obra e totais) — não altera as Unidades do Formulário de Elevadores original.</p>
+        <div className="stack" style={{ gap: 6 }}>
+          <label className="row gap-2" style={{ alignItems: 'center' }}>
+            <input type="radio" checked={modo === 'identico'} disabled={!grupos.length} onChange={() => setModo('identico')}/>
+            <span>Idêntico a um equipamento já cotado</span>
+          </label>
+          <label className="row gap-2" style={{ alignItems: 'center' }}>
+            <input type="radio" checked={modo === 'novo'} onChange={() => setModo('novo')}/>
+            <span>Equipamento novo (especificações diferentes)</span>
+          </label>
+        </div>
+
+        {modo === 'identico' && (
+          <PZField label="Igual a">
+            <select className="input" value={unidadeId} onChange={(e) => setUnidadeId(e.target.value)}>
+              {grupos.map((g) => (
+                <option key={g.unidadeId} value={g.unidadeId}>
+                  {g.identificador} — {g.tracao || '?'} × {g.capacidadeKg != null ? `${g.capacidadeKg}kg` : '?'} × {g.paradas != null ? `${g.paradas} paradas` : '?'}
+                </option>
+              ))}
+            </select>
+          </PZField>
+        )}
+
+        {modo === 'novo' && (
+          <div className="grid-3" style={{ gap: 12 }}>
+            <PZField label="Tração">
+              <select className="input" value={tracao} onChange={(e) => setTracao(e.target.value)}>
+                <option value="">— selecione —</option>
+                {PZ_TRACOES.map((t) => <option key={t} value={t}>{t}</option>)}
+              </select>
+            </PZField>
+            <PZField label="Capacidade (kg)"><PZInput type="number" value={capacidadeKg} onChange={setCapacidadeKg}/></PZField>
+            <PZField label="Paradas"><PZInput type="number" value={paradas} onChange={setParadas}/></PZField>
+            <PZField span={3} label="Modelo (opcional)"><PZInput value={modelo} onChange={setModelo}/></PZField>
+          </div>
+        )}
+
+        <PZField label="Quantidade de equipamentos a acrescentar">
+          <input className="input" type="number" min="1" style={{ width: 120 }} value={quantidade}
+            onChange={(e) => setQuantidade(e.target.value === '' ? '' : Math.max(1, Number(e.target.value)))}/>
+        </PZField>
+      </div>
+    </Modal>
+  );
+}
+
+/* Aviso "vendedor está ciente" pedido pelo usuário — nunca exclui sem
+   confirmação explícita. `mo` é a linha física clicada.
+
+   29/09 — corrigido depois de um achado real na cotação Nº 962: a versão
+   anterior deste modal ("Remover equipamento?") decrementava a quantidade
+   cotada — o equipamento inteiro (com seu custo de mercadoria) sumia da
+   tabela "Unidades desta cotação"/VMLE e da Proposta, não só da Mão de
+   obra. O pedido real da Juliana era só excluir a Mão de obra de um
+   equipamento cuja instalação não é por conta da VerticalParts (terceiro
+   cuida da montagem) — o equipamento em si continua sendo vendido/
+   importado normalmente. Este modal (e removerEquipamento) NUNCA mais
+   mexe na quantidade — só marca a Mão de obra deste equipamento como
+   excluída do cálculo. */
+function ModalRemoverEquipamento({ mo, onClose, onConfirmar }) {
+  const [ciente, setCiente] = React.useState(false);
+  const [removendo, setRemovendo] = React.useState(false);
+
+  const confirmar = async () => {
+    if (!ciente || removendo) return;
+    setRemovendo(true);
+    try { await onConfirmar(); } finally { setRemovendo(false); }
+  };
+
+  return (
+    <Modal title="Excluir Mão de obra deste equipamento?" onClose={onClose} width={520}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={removendo}>Cancelar</Button>
+        <Button variant="danger" onClick={confirmar} disabled={!ciente || removendo}>{removendo ? 'Excluindo…' : 'Sim, excluir a Mão de obra'}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <div style={{ background: 'var(--vp-gray-50)', border: '1px solid var(--border)', padding: '12px 14px' }}>
+          <div style={{ fontWeight: 700 }}>{mo.identificador || '—'}</div>
+          <div className="cell-sub" style={{ marginTop: 4 }}>{mo.tracao || '?'} × {mo.capacidadeKg != null ? `${mo.capacidadeKg}kg` : '?'} × {mo.paradas != null ? `${mo.paradas} paradas` : '?'}</div>
+        </div>
+        <p className="small" style={{ margin: 0 }}>
+          Use isso quando a instalação deste equipamento <b>não é por conta da VerticalParts</b> (ex.: terceiro cuida da montagem). O valor de Mão de obra (R$ {mo.valorRs ? fmtBRL2(mo.valorRs) : '0,00'}) sai do total de "Instalação e Montagem".
+        </p>
+        <p className="small" style={{ margin: 0, fontWeight: 600 }}>
+          O equipamento continua normalmente na cotação — isso NÃO reduz a quantidade nem mexe em "Unidades desta cotação"/VMLE/Proposta. Dá pra desfazer depois clicando em "Devolver ao cálculo".
+        </p>
+        <label className="row gap-2" style={{ alignItems: 'flex-start' }}>
+          <input type="checkbox" checked={ciente} onChange={(e) => setCiente(e.target.checked)} style={{ marginTop: 2 }}/>
+          <span className="small">Estou ciente e tenho certeza de que a Mão de obra deste equipamento deve ser excluída do cálculo.</span>
+        </label>
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Detalhe — motor de cálculo ---------- */
 function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const [pz, setPz] = React.useState(null);
@@ -202,17 +396,40 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const [atualizandoMo, setAtualizandoMo] = React.useState(false);
   const [editandoMoUnidade, setEditandoMoUnidade] = React.useState(null);
   const [moSpecEdit, setMoSpecEdit] = React.useState({ tracao: '', capacidadeKg: '', paradas: '' });
+  const [mostrarAcrescentarEquipamento, setMostrarAcrescentarEquipamento] = React.useState(false);
+  const [removendoEquipamento, setRemovendoEquipamento] = React.useState(null); // mo (linha) sendo removida, pro modal de confirmação
   // Câmbio USD/BRL ao vivo — só referência/comparação (ver cambio-api.js).
   // Não substitui tx_cambial sozinho; o Financeiro aplica clicando "Usar".
   const [cambioVivo, setCambioVivo] = React.useState(null); // null | { valor, timestamp } | 'erro'
+  // Containers de Cadastros → Atualização de Custos — só pra herdar o
+  // Preço(R$) quando o Financeiro escolhe/troca o tipo/tamanho aqui (ver
+  // buscarContainerCustoPorIso em precificacao-elevador-store.js).
+  const [custosContainers, setCustosContainers] = React.useState([]);
 
   const carregar = React.useCallback(() => {
-    window.PrecificacaoElevadorStore.obter(id).then((data) => setPz(pzNormalizarItensInstalacao(data)));
+    window.PrecificacaoElevadorStore.obter(id).then(async (data) => {
+      const norm = pzNormalizarItensInstalacao(data);
+      // 28/09 — achado real (Gelson): a herança de Preço(R$) de Atualização
+      // de Custos (buscarContainerCustoPorIso/enriquecerContainersComCusto)
+      // só rodava ao MONTAR um rascunho novo (montarRascunho). Uma
+      // precificação já salva antes desta feature — ou salva com container
+      // sem preço por qualquer motivo — nunca passava por ali de novo, só
+      // ficava R$ 0,00 pra sempre. Reaplica aqui, toda vez que a tela
+      // carrega, pros containers que ainda não têm preço nenhum — nunca
+      // sobrescreve um valor já digitado (mesma regra de sempre).
+      // 01/10/2026: a capatazia herda do cadastro com a mesma regra (só se ainda vazia).
+      if ((norm.containers || []).some((c) => !(Number(c.preco_rs) > 0) || !(Number(c.capatazia_rs) > 0) || !(Number(c.gri_rs) > 0))) {
+        const custos = await window.CadastroCustosStore?.listarContainers();
+        norm.containers = window.PrecificacaoElevadorStore.enriquecerContainersComCusto(norm.containers, custos);
+      }
+      setPz(norm);
+    });
   }, [id]);
   React.useEffect(() => { carregar(); }, [carregar]);
   React.useEffect(() => {
     window.CambioAPI.buscarUsdBrl().then(setCambioVivo).catch(() => setCambioVivo('erro'));
   }, []);
+  React.useEffect(() => { window.CadastroCustosStore?.listarContainers().then(setCustosContainers); }, []);
 
   const ressincronizarDoFornecedor = async () => {
     setRessincronizando(true);
@@ -281,6 +498,52 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     }
   };
 
+  /* 28/09 — pedido do usuário: depois que a Proposta já foi enviada, o
+     cliente às vezes pede pra acrescentar ou remover equipamento(s). Nunca
+     mexe na Unidade real do Formulário (diferente de "Trocar" acima) — só
+     no snapshot pz.modelos desta Precificação, ver comentário em
+     acrescentarEquipamento/removerEquipamento (precificacao-elevador-store.js). */
+  const acrescentarEquipamento = async (patch) => {
+    setAtualizandoMo(true);
+    try {
+      await window.PrecificacaoElevadorStore.acrescentarEquipamento(pz.id, patch);
+      await carregar();
+      setMostrarAcrescentarEquipamento(false);
+      window.toast?.('Equipamento acrescentado — mão de obra recalculada.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao acrescentar equipamento: ' + e.message, 'error');
+    } finally {
+      setAtualizandoMo(false);
+    }
+  };
+
+  const removerEquipamento = async (unidadeId) => {
+    setAtualizandoMo(true);
+    try {
+      await window.PrecificacaoElevadorStore.removerEquipamento(pz.id, unidadeId);
+      await carregar();
+      setRemovendoEquipamento(null);
+      window.toast?.('Mão de obra excluída — o equipamento continua na cotação.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao excluir Mão de obra: ' + e.message, 'error');
+    } finally {
+      setAtualizandoMo(false);
+    }
+  };
+
+  const devolverEquipamentoMO = async (unidadeId) => {
+    setAtualizandoMo(true);
+    try {
+      await window.PrecificacaoElevadorStore.restaurarEquipamentoMO(pz.id, unidadeId);
+      await carregar();
+      window.toast?.('Equipamento devolvido pro cálculo normal de Mão de obra.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao devolver equipamento: ' + e.message, 'error');
+    } finally {
+      setAtualizandoMo(false);
+    }
+  };
+
   if (!pz) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   const set = (k) => (v) => setPz((p) => ({ ...p, [k]: v }));
@@ -300,11 +563,25 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const addContainer = () => setPz((p) => ({ ...p, containers: [...(p.containers || []), { tipo_tamanho: '', quantidade: 1, preco_rs: 0 }] }));
   const setContainer = (i, k) => (v) => setPz((p) => {
     const arr = [...(p.containers || [])];
-    arr[i] = { ...arr[i], [k]: v };
+    const linha = { ...arr[i], [k]: v };
+    // Trocar o tipo/tamanho herda o Preço(R$) de Atualização de Custos —
+    // só quando ainda não tem preço nenhum (não sobrescreve valor que o
+    // Financeiro já digitou na mão pra essa linha).
+    if (k === 'tipo_tamanho') {
+      const custo = window.PrecificacaoElevadorStore.buscarContainerCustoPorIso(v, custosContainers);
+      if (custo && !(Number(linha.preco_rs) > 0)) linha.preco_rs = Number(custo.preco_rs) || 0;
+      if (custo && !(Number(linha.capatazia_rs) > 0) && Number(custo.capatazia_rs) > 0) linha.capatazia_rs = Number(custo.capatazia_rs);
+      if (custo && !(Number(linha.gri_rs) > 0) && Number(custo.gri_rs) > 0) linha.gri_rs = Number(custo.gri_rs);
+    }
+    arr[i] = linha;
     return { ...p, containers: arr };
   });
   const removeContainer = (i) => setPz((p) => ({ ...p, containers: (p.containers || []).filter((_, idx) => idx !== i) }));
   const containersTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.preco_rs) || 0), 0);
+  const capataziaTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.capatazia_rs) || 0), 0);
+  const griTotalRs = (pz.containers || []).reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.gri_rs) || 0), 0);
+  // Aviso (não bloqueia) quando container/capatazia divergem do cadastro de Containers.
+  const divergenciasContainer = window.PrecificacaoElevadorStore.divergenciasContainerComCadastro(pz.containers, custosContainers);
 
   const addItemExtra = () => setPz((p) => ({ ...p, itens_despesas_extras: [...(p.itens_despesas_extras || []), { descricao: '', valor: 0 }] }));
   const setItemExtra = (i, k) => (v) => setPz((p) => {
@@ -316,14 +593,13 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
   const payloadSalvar = () => ({
     vmle_usd: pz.vmle_usd, seguro_usd: pz.seguro_usd, frete_seguro_capatazia_usd: pz.frete_seguro_capatazia_usd,
-    frete_seguro_capatazia_usd_expresso: pz.frete_seguro_capatazia_usd_expresso,
     siscomex_rs: pz.siscomex_rs, tx_cambial: pz.tx_cambial, outras_despesas_importacao_rs: pz.outras_despesas_importacao_rs,
     despachante_desembaraco_rs: pz.despachante_desembaraco_rs, demurrage_rs: pz.demurrage_rs,
     frete_interno_rs: pz.frete_interno_rs, armazenagem_rs: pz.armazenagem_rs,
     itens_instalacao_montagem: pz.itens_instalacao_montagem, containers: pz.containers,
     itens_despesas_extras: pz.itens_despesas_extras, percentual_servicos: pz.percentual_servicos,
     modelos: pz.modelos, parametros_fiscais_snapshot: pz.parametros_fiscais_snapshot,
-    mark_up_pct: pz.mark_up_pct, comissao_consultoria_pct: pz.comissao_consultoria_pct,
+    mark_up_pct: pz.mark_up_pct, mark_up_pct_expresso: pz.mark_up_pct_expresso ?? null, comissao_consultoria_pct: pz.comissao_consultoria_pct,
     comissao_vendedor_pct: pz.comissao_vendedor_pct, comissao_indicacao_pct: pz.comissao_indicacao_pct,
     modo_formacao_preco: pz.modo_formacao_preco, margem_desejada_pct: pz.margem_desejada_pct,
     contingencia_valor: pz.contingencia_valor, outros_custos_nao_recuperaveis_rs: pz.outros_custos_nao_recuperaveis_rs,
@@ -382,6 +658,15 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const resultadoV2 = pz.resultado_v2 && pz.resultado_v2.precificacao ? pz.resultado_v2 : null;
   const margemEfetivaV2Negativa = !!resultadoV2 && resultadoV2.precificacao.margemEfetivaPct < 0;
   const resultadoV2Expresso = pz.resultado_v2_expresso && pz.resultado_v2_expresso.precificacao ? pz.resultado_v2_expresso : null;
+  // Mesma soma usada em calcularEsalvar() (precificacao-elevador-store.js) pra
+  // formar quantidadeEquipamentos — reaproveitada aqui só pra exibir "× N"
+  // ao lado do preço por equipamento, sem recalcular nada do motor.
+  const quantidadeEquipamentos = (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1;
+  /* Regra do Financeiro (01/10): 2 cards (120d compartilhado × 90d exclusivo)
+     só com UM equipamento — importar 1 equipamento sozinho em 90 dias não
+     compensa o frete, então vale a comparação. Com 2+ o container já é
+     compartilhado: só o card base (120d), sem citar prazo. */
+  const mostrarExpresso = !!resultadoV2Expresso && quantidadeEquipamentos <= 1;
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
   const margemMinima = Number(params.margem_minima_pct) || 0;
@@ -514,7 +799,12 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
       <Card title="Mão de obra — busca automática" sub="tração × capacidade × paradas em Cadastros → Atualização de Custos"
         style={{ marginTop: 16 }}
-        action={<Button variant="outline" size="sm" icon="refresh" onClick={atualizarMaoDeObra} disabled={atualizandoMo}>{atualizandoMo ? 'Recalculando…' : 'Recalcular'}</Button>}>
+        action={
+          <div className="row gap-2">
+            <Button variant="outline" size="sm" icon="plus" onClick={() => setMostrarAcrescentarEquipamento(true)} disabled={atualizandoMo}>Acrescentar equipamento</Button>
+            <Button variant="outline" size="sm" icon="refresh" onClick={atualizarMaoDeObra} disabled={atualizandoMo}>{atualizandoMo ? 'Recalculando…' : 'Recalcular'}</Button>
+          </div>
+        }>
         {!(pz.mo_lookup || []).length && <p className="small muted" style={{ margin: 0 }}>Nenhuma unidade elevador com dados suficientes ainda.</p>}
         {!!(pz.mo_lookup || []).length && (
           <div className="table-wrap">
@@ -522,10 +812,19 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               <thead><tr><th>Unidade</th><th>Tração</th><th>Capacidade</th><th>Paradas</th><th>Situação</th><th>Regra usada</th><th>Valor (R$)</th><th></th></tr></thead>
               <tbody>
                 {pz.mo_lookup.map((mo, i) => {
-                  const editando = editandoMoUnidade && editandoMoUnidade === mo.unidadeId;
+                  // Unidade com quantidade > 1 vira várias linhas (mesmo unidadeId,
+                  // uma por equipamento físico — ver buscarMaoDeObraAutomatica).
+                  // "Trocar" aparece em TODAS as linhas do grupo (tração/capacidade/
+                  // paradas são da Unidade inteira, então editar de qualquer uma
+                  // delas salva pra todo o grupo) — editandoMoUnidade guarda a
+                  // `chave` (linha física exata clicada, não só o unidadeId
+                  // compartilhado) pra abrir a edição só ali, nunca em todas as
+                  // linhas do grupo ao mesmo tempo.
+                  const chave = `${mo.unidadeId || 'x'}-${mo.equipamentoIndice || i}`;
+                  const editando = editandoMoUnidade === chave;
                   if (editando) {
                     return (
-                      <tr key={mo.unidadeId || i} style={{ background: 'var(--vp-gray-50)' }}>
+                      <tr key={chave} style={{ background: 'var(--vp-gray-50)' }}>
                         <td>{mo.identificador || '—'}</td>
                         <td>
                           <select className="input" style={{ minWidth: 90 }} value={moSpecEdit.tracao}
@@ -554,8 +853,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                     );
                   }
                   return (
-                    <tr key={mo.unidadeId || i}>
-                      <td>{mo.identificador || '—'}</td>
+                    <tr key={chave}>
+                      <td>{mo.identificador || '—'}{mo.avulso && <span className="badge" style={{ background: 'var(--vp-gray-100)', color: 'var(--fg2)', padding: '2px 6px', borderRadius: 4, fontSize: 10, marginLeft: 6 }} title="Acrescentado nesta Precificação — não existe como Unidade no Formulário de Elevadores">manual</span>}</td>
                       <td>{mo.tracao || '—'}</td>
                       <td>{mo.capacidadeKg != null ? `${mo.capacidadeKg} kg` : '—'}</td>
                       <td>{mo.paradas != null ? mo.paradas : '—'}</td>
@@ -564,19 +863,34 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                         {mo.estimativa && <span className="badge" style={{ background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Estimativa — não confirmada</span>}
                         {mo.projetoEspecial && <span className="badge" style={{ background: '#fee2e2', color: '#991b1b', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Projeto especial</span>}
                         {mo.situacao === 'pendente' && !mo.projetoEspecial && <span className="badge" style={{ background: '#fffbeb', color: '#b45309', padding: '2px 8px', borderRadius: 4, fontSize: 11 }}>Pendente</span>}
+                        {mo.situacao === 'excluido' && <span className="badge" style={{ background: 'var(--vp-gray-200)', color: 'var(--fg2)', padding: '2px 8px', borderRadius: 4, fontSize: 11 }} title={mo.motivo || ''}>Fora do escopo VP</span>}
                       </td>
                       <td className="small muted" title={mo.motivo || ''}>{mo.regraUsada || mo.motivo || '—'}</td>
                       <td className="mono">{mo.valorRs ? fmtBRL2(mo.valorRs) : '—'}</td>
                       <td>
-                        {mo.unidadeId && (
-                          <Button variant="ghost" size="sm" icon="edit" title="Trocar tração/capacidade/paradas desta unidade"
-                            onClick={() => {
-                              setMoSpecEdit({ tracao: mo.tracao || '', capacidadeKg: mo.capacidadeKg ?? '', paradas: mo.paradas ?? '' });
-                              setEditandoMoUnidade(mo.unidadeId);
-                            }}>
-                            Trocar
-                          </Button>
-                        )}
+                        <div className="row gap-1">
+                          {mo.unidadeId && !mo.avulso && (
+                            <Button variant="ghost" size="sm" icon="edit" title={mo.equipamentoTotal > 1 ? `Trocar tração/capacidade/paradas desta unidade (vale para os ${mo.equipamentoTotal} equipamentos)` : 'Trocar tração/capacidade/paradas desta unidade'}
+                              onClick={() => {
+                                setMoSpecEdit({ tracao: mo.tracao || '', capacidadeKg: mo.capacidadeKg ?? '', paradas: mo.paradas ?? '' });
+                                setEditandoMoUnidade(chave);
+                              }}>
+                              Trocar
+                            </Button>
+                          )}
+                          {mo.unidadeId && mo.situacao !== 'excluido' && (
+                            <Button variant="ghost" size="sm" icon="trash" title="Excluir a Mão de obra deste equipamento (instalação não é por conta da VerticalParts) — o equipamento continua na cotação"
+                              onClick={() => setRemovendoEquipamento(mo)}>
+                              Remover
+                            </Button>
+                          )}
+                          {mo.unidadeId && mo.situacao === 'excluido' && (
+                            <Button variant="ghost" size="sm" icon="refresh" disabled={atualizandoMo} title="Devolver este equipamento pro cálculo normal de Mão de obra"
+                              onClick={() => devolverEquipamentoMO(mo.unidadeId)}>
+                              Devolver ao cálculo
+                            </Button>
+                          )}
+                        </div>
                       </td>
                     </tr>
                   );
@@ -601,11 +915,15 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         <div className="grid-3" style={{ gap: 12 }}>
           <PZField label="VMLE (USD)"><PZCurrencyInput moeda="USD" value={pz.vmle_usd} onChange={set('vmle_usd')}/></PZField>
           <PZField label="Seguro (USD)"><PZCurrencyInput moeda="USD" value={pz.seguro_usd} onChange={set('seguro_usd')}/></PZField>
-          <PZField label="Frete + Seguro + Capatazia — Padrão 120d, container compartilhado (USD)"><PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd} onChange={set('frete_seguro_capatazia_usd')}/></PZField>
-          <PZField label="Frete + Seguro + Capatazia — Expresso 90d, container exclusivo (USD)">
-            <PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd_expresso} onChange={set('frete_seguro_capatazia_usd_expresso')}/>
-            <div className="small muted" style={{ marginTop: 4 }}>Deixe em branco/zero se o cliente não pediu a opção expressa.</div>
-          </PZField>
+          {/* 01/10/2026 — container e capatazia vêm do cadastro (Despesa Operacional); este
+              campo só aparece quando já há um frete internacional lançado (informado pelo
+              fornecedor na cotação, ou precificação antiga) pra poder ser conferido/zerado. */}
+          {Number(pz.frete_seguro_capatazia_usd) > 0 && (
+            <PZField label="Frete internacional informado (USD)">
+              <PZCurrencyInput moeda="USD" value={pz.frete_seguro_capatazia_usd} onChange={set('frete_seguro_capatazia_usd')}/>
+              <div className="small muted" style={{ marginTop: 4 }}>Container e capatazia vêm do cadastro de Containers — não some aqui de novo. Zere se este valor já os incluía.</div>
+            </PZField>
+          )}
           <PZField label="Siscomex (R$)"><PZCurrencyInput moeda="BRL" value={pz.siscomex_rs} onChange={set('siscomex_rs')}/></PZField>
           <PZField label="Câmbio (R$/US$)">
             <PZInput type="number" value={pz.tx_cambial} onChange={set('tx_cambial')}/>
@@ -625,20 +943,36 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
         <div style={{ marginTop: 20 }}>
           <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>
-            Containers <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tamanho/quantidade herdados da resposta do fornecedor quando possível; preço do frete por container, digitado pelo Financeiro</span>
+            Containers <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tipo/quantidade vêm da resposta do fornecedor; preço e capatazia herdados do cadastro de Containers (Atualização de Custos) — Despesa Operacional</span>
           </div>
+          {divergenciasContainer.length > 0 && (
+            <div style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #fde68a', padding: '8px 12px', marginBottom: 8, borderRadius: 6 }}>
+              ⚠ Difere do cadastro de Containers: {divergenciasContainer.map((d) => `${d.rotulo} da linha ${d.indice + 1} (${fmtBRL2(d.atual)} × cadastro ${fmtBRL2(d.cadastro)})`).join('; ')}. Pode ser edição intencional.
+            </div>
+          )}
           <div className="stack" style={{ gap: 8 }}>
+            {(pz.containers || []).length > 0 && (
+              <div className="row gap-2 up-eyebrow muted" style={{ fontSize: 11 }}>
+                <div style={{ width: 140 }}>Tipo</div>
+                <div style={{ width: 100 }}>Qtd</div>
+                <div style={{ width: 160 }}>Preço do container (R$)</div>
+                <div style={{ width: 160 }}>Capatazia (R$)</div>
+                <div style={{ width: 160 }}>GRI (R$)</div>
+              </div>
+            )}
             {(pz.containers || []).map((ct, i) => (
               <div key={i} className="row gap-2">
                 <div style={{ width: 140 }}><PZSelect value={ct.tipo_tamanho} onChange={setContainer(i, 'tipo_tamanho')} options={PZ_CONTAINER_TIPOS} placeholder="Tamanho"/></div>
                 <input className="input" style={{ width: 100 }} type="number" value={ct.quantidade ?? 1} onChange={(e) => setContainer(i, 'quantidade')(Number(e.target.value) || 0)} placeholder="Qtd"/>
                 <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.preco_rs} onChange={setContainer(i, 'preco_rs')}/></div>
+                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.capatazia_rs} onChange={setContainer(i, 'capatazia_rs')}/></div>
+                <div style={{ width: 160 }}><PZCurrencyInput moeda="BRL" value={ct.gri_rs} onChange={setContainer(i, 'gri_rs')}/></div>
                 <Button variant="ghost" size="sm" icon="trash" onClick={() => removeContainer(i)}/>
               </div>
             ))}
           </div>
           <Button variant="outline" size="sm" icon="plus" style={{ marginTop: 8 }} onClick={addContainer}>+ Adicionar container</Button>
-          {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b></div>}
+          {(pz.containers || []).length > 0 && <div className="small muted" style={{ marginTop: 8 }}>Subtotal Containers: <b>{fmtBRL2(containersTotalRs)}</b> · Capatazia: <b>{fmtBRL2(capataziaTotalRs)}</b> · GRI: <b>{fmtBRL2(griTotalRs)}</b></div>}
         </div>
       </Card>
 
@@ -725,7 +1059,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             + (Number(impImportacao.cofins) || 0) + (Number(impImportacao.icms) || 0)
           : null;
         const somaRs = custosEquipamentosRs + custosFreteRs + moRs + custosOperacionaisRs + freteInternoRs
-          + despesasImportacaoRs + armazenagemRs + containersTotalRs + despesasExtrasRs + contingenciaOutrosRs
+          + despesasImportacaoRs + armazenagemRs + containersTotalRs + capataziaTotalRs + griTotalRs + despesasExtrasRs + contingenciaOutrosRs
           + (custosImpostoRs || 0);
         const linha = (label, valor) => (
           <div className="row sb" style={{ padding: '4px 0' }}>
@@ -744,6 +1078,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               {linha('Despesas de Importação (Siscomex, Despachante, Demurrage, Outras)', despesasImportacaoRs)}
               {linha('Armazenagem', armazenagemRs)}
               {linha('Containers', containersTotalRs)}
+              {linha('Capatazia', capataziaTotalRs)}
+              {linha('GRI', griTotalRs)}
               {linha('Despesas Extras (itens avulsos)', despesasExtrasRs)}
               {linha('Contingência e Outros custos não recuperáveis', contingenciaOutrosRs)}
               {linha('Custos Imposto', custosImpostoRs)}
@@ -761,10 +1097,16 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
       <Card title="Alavancas do Financeiro" style={{ marginTop: 16 }}>
         <div className="grid-3" style={{ gap: 12 }}>
-          <PZField label="Markup sobre o custo (%)">
+          <PZField label={mostrarExpresso ? 'Markup sobre o custo — 120 dias (%)' : 'Markup sobre o custo (%)'}>
             <PZPercentInput value={pz.mark_up_pct} onChange={set('mark_up_pct')}/>
             {markUpForaFaixa && <div style={{ color: '#991b1b', fontSize: 11, marginTop: 4 }}>Markup de {fmtPct2(pz.mark_up_pct)} parece implausível — confira o valor (zera o preço de venda no V1).</div>}
           </PZField>
+          {mostrarExpresso && (
+            <PZField label="Markup sobre o custo — 90 dias (%)">
+              <PZPercentInput value={pz.mark_up_pct_expresso ?? pz.mark_up_pct} onChange={set('mark_up_pct_expresso')}/>
+              <div className="small muted" style={{ marginTop: 4 }}>Só vale pro card de 90 dias (exclusivo).</div>
+            </PZField>
+          )}
           <PZField label="Comissão consultoria (%)"><PZPercentInput value={pz.comissao_consultoria_pct} onChange={set('comissao_consultoria_pct')}/></PZField>
           <PZField label="Comissão vendedor (%)"><PZPercentInput value={pz.comissao_vendedor_pct} onChange={set('comissao_vendedor_pct')}/></PZField>
           <PZField label="Comissão indicação (%)"><PZPercentInput value={pz.comissao_indicacao_pct} onChange={set('comissao_indicacao_pct')}/></PZField>
@@ -823,11 +1165,12 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       </Card>
 
       {resultadoV2 && (
-        <div className={resultadoV2Expresso ? 'grid-2' : ''} style={{ gap: 16, marginTop: 16 }}>
-          <Card title="Preço de venda — 120 dias (Compartilhado)" sub="container compartilhado, prazo padrão">
+        <div className={mostrarExpresso ? 'grid-2' : ''} style={{ gap: 16, marginTop: 16 }}>
+          <Card title={mostrarExpresso ? 'Preço de venda — 120 dias (Compartilhado)' : 'Preço de venda'} sub={mostrarExpresso ? 'container compartilhado, prazo padrão' : undefined}>
             <div className="stack" style={{ gap: 12 }}>
               <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
-              <div><span className="up-eyebrow muted">Preço de venda</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
+              <PZPrecoPorEquipamento modelos={pz.modelos} moLookup={pz.mo_lookup} precoTotal={resultadoV2.precificacao.precoVendaProposta}/>
+              <div><span className="up-eyebrow muted">{quantidadeEquipamentos > 1 ? 'Total da cotação — soma dos equipamentos acima' : 'Preço de venda total'}</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
               <div className="row gap-3">
                 <div>
                   <span className="up-eyebrow muted">Margem efetiva</span>
@@ -854,11 +1197,12 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             )}
           </Card>
 
-          {resultadoV2Expresso && (
+          {mostrarExpresso && (
             <Card title="Preço de venda — 90 dias (Exclusivo)" sub="container exclusivo, entrega mais rápida">
               <div className="stack" style={{ gap: 12 }}>
                 <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2Expresso.custoEconomicoCompleto)}</div></div>
-                <div><span className="up-eyebrow muted">Preço de venda</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta)}</div></div>
+                <PZPrecoPorEquipamento modelos={pz.modelos} moLookup={pz.mo_lookup} precoTotal={resultadoV2Expresso.precificacao.precoVendaProposta}/>
+                <div><span className="up-eyebrow muted">Preço de venda total</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta)}</div></div>
                 <div className="row gap-3">
                   <div>
                     <span className="up-eyebrow muted">Margem efetiva</span>
@@ -870,7 +1214,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               </div>
               {resultadoV2Expresso.precificacao.margemEfetivaPct < 0 && (
                 <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
-                  ⚠ Margem efetiva negativa no cenário expresso — mesmo cobrindo o frete mais caro, confira se o preço faz sentido antes de oferecer ao cliente.
+                  ⚠ Margem efetiva negativa no cenário de 90 dias — o container inteiro recai sobre um equipamento só; confira se o preço faz sentido antes de oferecer ao cliente.
                 </p>
               )}
             </Card>
@@ -900,6 +1244,21 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             <div><span className="up-eyebrow muted">Diferença motor atual − V1 (120 dias)</span><div className="cell-money" style={{ fontSize: 16 }}>{resultadoV2 ? fmtBRL2(resultadoV2.precificacao.precoVendaProposta - resultado.precoVendaProposta) : '—'}</div></div>
           </div>
         </Card>
+      )}
+
+      {mostrarAcrescentarEquipamento && (
+        <ModalAcrescentarEquipamento
+          grupos={pz.modelos || []}
+          onClose={() => setMostrarAcrescentarEquipamento(false)}
+          onConfirmar={acrescentarEquipamento}
+        />
+      )}
+      {removendoEquipamento && (
+        <ModalRemoverEquipamento
+          mo={removendoEquipamento}
+          onClose={() => setRemovendoEquipamento(null)}
+          onConfirmar={() => removerEquipamento(removendoEquipamento.unidadeId)}
+        />
       )}
     </div>
   );

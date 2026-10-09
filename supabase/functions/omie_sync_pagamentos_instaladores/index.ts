@@ -41,7 +41,7 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const supabaseUrl = Deno.env.get("SUPABASE_URL")!;
-const supabaseServiceKey = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!;
+const supabaseServiceKey = JSON.parse(Deno.env.get("SUPABASE_SECRET_KEYS")!)["default"];
 const omieKey = Deno.env.get("OMIE_API_KEY") || "";
 const omieSecret = Deno.env.get("OMIE_API_SECRET") || "";
 // Gate pros ramos debug_* — sem isso, qualquer chamador com a ANON_SB
@@ -201,6 +201,28 @@ Deno.serve(async (req) => {
         const resp = await omieCall("geral/clientes", "ConsultarCliente", { codigo_cliente_omie: debug_cliente_codigo });
         return json(resp.data);
       }
+    }
+
+    /* 02/10 — ClaudeNotebook (issue #572): esta função só LÊ do Omie (grava o cache local),
+       mas quem chamasse em loop esgotaria a cota da API do Omie ("consumo redundante") e
+       travaria os outros fluxos que dependem dele. Dois baldes: sync por empresa (o front
+       dispara um por vínculo, pode vir em rajada → folgado) e sync completo (varre todas as
+       empresas → apertado). Falha ao consultar o limite = bloqueia (503). */
+    {
+      const ip = (req.headers.get("cf-connecting-ip") || req.headers.get("x-forwarded-for") || "desconhecido").split(",")[0].trim();
+      const porEmpresa = !!empresa_id;
+      const { data: taxa, error: errTaxa } = await sb.rpc("api_rate_check", {
+        p_bucket: porEmpresa ? "omie-sync-pag-empresa" : "omie-sync-pag-completo",
+        p_ip: ip,
+        p_max_ip: porEmpresa ? 40 : 4,
+        p_max_global: porEmpresa ? 80 : 8,
+        p_janela_s: 600,
+      });
+      if (errTaxa) {
+        console.warn("[omie_sync_pagamentos] limite de taxa indisponível", errTaxa);
+        return json({ error: "Sincronização temporariamente indisponível (verificação de segurança)." }, 503);
+      }
+      if (taxa !== "ok") return json({ error: "Muitas sincronizações em pouco tempo. Aguarde alguns minutos e tente de novo." }, 429);
     }
 
     // ---- Sync completo ----

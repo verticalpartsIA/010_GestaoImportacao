@@ -53,6 +53,9 @@ const PRIORITY_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
    lista (antes só existiam nos filtros; nenhuma tela deixava escolher,
    então todo lead ficava "Em qualificação" até a Proposta assinada
    marcar "Convertido"). */
+/* Comissão do lead: manual (campo "Comissão (%)"); sem valor informado vale o padrão de 2% (decisão do usuário, 04/10/2026). */
+const COMISSAO_PADRAO_PCT = 2;
+const comissaoDoLead = (lead) => (lead && lead.comissao_pct != null && Number.isFinite(Number(lead.comissao_pct)) ? Number(lead.comissao_pct) : COMISSAO_PADRAO_PCT);
 const LEAD_STATUSES = ['Em qualificação', 'Aguardando cotação', 'Proposta enviada', 'Negociação', 'Convertido', 'Sem retorno'];
 
 /* "Está no Omie desde" (26/09) — a data pertence ao CLIENTE (CNPJ/CPF),
@@ -103,10 +106,10 @@ function precisaVerificarOmie(cli) {
 
 function OmieStatusBox({ status }) {
   const tone = status.encontrado === true
-    ? { bg: '#ecfdf5', border: '#10b981', fg: '#059669', icon: '✓' }
+    ? { cls: 'callout--success', icon: '✓' }
     : status.encontrado === false
-      ? { bg: '#f0f9ff', border: '#3b82f6', fg: '#0284c7', icon: 'ℹ' }
-      : { bg: '#fffbeb', border: '#f59e0b', fg: '#b45309', icon: '!' };
+      ? { cls: 'callout--info', icon: 'ℹ' }
+      : { cls: 'callout--warning', icon: '!' };
   const titulo = status.encontrado === true
     ? 'Cliente cadastrado no ERP' + (status.data_cadastro ? ' desde ' + status.data_cadastro : '')
     : status.encontrado === false ? 'Não encontrado no ERP' : 'Não foi possível consultar o ERP';
@@ -115,11 +118,11 @@ function OmieStatusBox({ status }) {
     : status.encontrado === false ? 'Seguindo com a consulta pública de CNPJ'
       : (status.erro ? status.erro + ' — ' : '') + 'seguindo com a consulta pública de CNPJ';
   return (
-    <div style={{ background: tone.bg, border: '1px solid ' + tone.border, padding: '10px 12px', fontSize: 13, display: 'flex', alignItems: 'center', gap: 8 }}>
-      <span style={{ color: tone.fg, fontSize: 16, fontWeight: 700 }}>{tone.icon}</span>
+    <div className={'callout ' + tone.cls}>
+      <span className="callout__icon">{tone.icon}</span>
       <div>
-        <div style={{ fontWeight: 600, color: tone.fg }}>{titulo}</div>
-        {sub ? <div style={{ color: 'var(--fg3)', fontSize: 12, marginTop: 2 }}>{sub}</div> : null}
+        <div className="callout__title">{titulo}</div>
+        {sub ? <div className="callout__sub">{sub}</div> : null}
       </div>
     </div>
   );
@@ -133,13 +136,14 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     tipoPessoa: 'PJ', cnpj: '', cpf: '', documentoPendente: !!lead.documento_pendente, razaoSocial: '',
     origin: lead.origin || 'Site', status: lead.status || 'Em qualificação',
     owner: lead.owner || '', value: lead.value != null ? String(lead.value) : '',
+    comissaoPct: lead.comissao_pct != null ? String(lead.comissao_pct) : '',
     priority: ({ alta: 'Alta', media: 'Média', baixa: 'Baixa' }[String(lead.priority || '').toLowerCase()] || lead.priority || 'Alta'),
     next: lead.next_action || lead.next || '',
   } : {
     building:'', contact:'', role:'', phone:'', email:'',
     tipoPessoa:'PJ', cnpj:'', cpf:'', documentoPendente:false, razaoSocial:'',
     origin:'Site', status:'Em qualificação',
-    owner:'', value:'', priority:'Alta', next:'',
+    owner:'', value:'', comissaoPct:'', priority:'Alta', next:'',
   });
   const [buscandoCnpj, setBuscandoCnpj] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -182,8 +186,8 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
   const buscarCnpj = async () => {
     const api = window.EnderecoAPI;
     const cnpjDigits = (f.cnpj || '').replace(/\D/g, '');
-    const valido = api?.isCnpjValido ? api.isCnpjValido(f.cnpj) : cnpjDigits.length === 14;
-    if (!valido) return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
+    const v = api?.validarDocumento ? api.validarDocumento('PJ', f.cnpj) : { ok: cnpjDigits.length === 14, msg: 'CNPJ inválido — informe 14 dígitos.' };
+    if (!cnpjDigits || !v.ok) return window.toast(v.msg || 'Informe o CNPJ.', 'warning');
 
     setBuscandoCnpj(true);
     setStatusOmie(null);
@@ -220,13 +224,13 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     if (!f.contact.trim())  return window.toast('Contato é obrigatório.', 'warning');
     const cnpjDigits = (f.cnpj || '').replace(/\D/g, '');
     const cpfDigits = (f.cpf || '').replace(/\D/g, '');
-    if (!f.documentoPendente) {
-      if (f.tipoPessoa === 'PF') {
-        if (cpfDigits && !window.EnderecoAPI?.isCpfValido(cpfDigits)) return window.toast('CPF inválido — informe 11 dígitos.', 'warning');
-      } else if (cnpjDigits && !window.EnderecoAPI?.isCnpjValido(cnpjDigits)) {
-        return window.toast('CNPJ inválido — informe 14 dígitos.', 'warning');
-      }
+    if (!f.documentoPendente && window.EnderecoAPI?.validarDocumento) {
+      // O número precisa combinar com o tipo escolhido na lista (PF → CPF, PJ → CNPJ) e ter dígitos verificadores corretos.
+      const v = window.EnderecoAPI.validarDocumento(f.tipoPessoa, f.tipoPessoa === 'PF' ? f.cpf : f.cnpj);
+      if (!v.ok) return window.toast(v.msg, 'warning');
     }
+    const comissaoTxt = String(f.comissaoPct == null ? '' : f.comissaoPct).replace(',', '.').trim();
+    if (comissaoTxt !== '' && !(Number(comissaoTxt) >= 0 && Number(comissaoTxt) <= 100)) return window.toast('Comissão deve ser um percentual entre 0 e 100 (deixe em branco para usar 2%).', 'warning');
     const sb = comercialSb();
     if (!sb) return window.toast('Banco de dados indisponível — recarregue a página.', 'error');
     setSaving(true);
@@ -239,6 +243,8 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       priority: ({ 'Alta': 'alta', 'Média': 'media', 'Baixa': 'baixa' }[f.priority] || 'media'),
       next_action: f.next || null,
       documento_pendente: f.documentoPendente,
+      // Comissão manual; em branco = padrão de 2% (COMISSAO_PADRAO_PCT) — grava null para não "congelar" o padrão.
+      comissao_pct: comissaoTxt === '' ? null : Number(comissaoTxt),
     };
 
     let error = null;
@@ -376,13 +382,13 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
           )}
         </>}>
         <div className="stack" style={{ gap: 12 }}>
-          <div style={{ background:'var(--vp-gray-50)', border:'1px solid var(--border)', padding:'14px 16px' }}>
+          <div className="panel-soft">
             <div className="up-eyebrow muted" style={{ marginBottom:6 }}>Lead criado com sucesso</div>
             <div style={{ fontWeight:700, fontSize:15 }}>{savedLead.building}</div>
             <div className="cell-sub" style={{ marginTop:4 }}>{savedLead.id}</div>
             {savedLead.cliente_id
               ? <div className="cell-sub" style={{ marginTop:4 }}>Cliente vinculado: {savedLead.razaoSocial || savedLead.building}</div>
-              : <div className="cell-sub" style={{ marginTop:4, color:'var(--vp-orange, #b45309)' }}>Sem CNPJ/CPF vinculado ainda — pode ser resolvido no Formulário.</div>}
+              : <div className="cell-sub text-warning" style={{ marginTop:4 }}>Sem CNPJ/CPF vinculado ainda — pode ser resolvido no Formulário.</div>}
           </div>
           <p style={{ fontSize:13, color:'var(--fg2)', margin:0 }}>
             Deseja abrir o Formulário agora e alocar os equipamentos deste lead?
@@ -471,6 +477,9 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
           {fld('Responsável (Comercial)', 'owner', 'text', 'Nome do vendedor')}
           {fld('Valor estimado (R$)', 'value', 'number', '0')}
         </div>
+        <div className="grid-2" style={{ gap:12 }}>
+          {fld('Comissão (%) — manual', 'comissaoPct', 'number', `${COMISSAO_PADRAO_PCT} (padrão, se deixar em branco)`)}
+        </div>
         {fld('Próxima ação', 'next', 'text', 'Ex.: Enviar proposta, Agendar visita…')}
       </div>
     </Modal>
@@ -545,7 +554,7 @@ function ModalExcluirLead({ lead, onClose, onExcluido }) {
         </Button>
       </>}>
       <div className="stack" style={{ gap: 12 }}>
-        <div style={{ background: 'var(--vp-gray-50)', border: '1px solid var(--border)', padding: '12px 14px' }}>
+        <div className="panel-soft">
           <div style={{ fontWeight: 700, fontSize: 15 }}>{lead.building || '—'}</div>
           <div className="cell-sub" style={{ marginTop: 4 }}>
             {lead.id}{lead.contact ? ' · ' + lead.contact : ''}{lead.date ? ' · criado em ' + fmtDate(lead.date) : ''}
@@ -555,9 +564,9 @@ function ModalExcluirLead({ lead, onClose, onExcluido }) {
           <div className="muted small">Verificando dossiês, formulários e cotações ligados a este lead…</div>
         )}
         {itens.length > 0 && (
-          <div style={{ background: '#fffbeb', border: '1px solid #f59e0b', padding: '10px 12px', fontSize: 13 }}>
-            <div style={{ fontWeight: 600, color: '#b45309' }}>Este lead tem registros ligados: {itens.join(', ')}.</div>
-            <div style={{ color: 'var(--fg3)', fontSize: 12, marginTop: 2 }}>
+          <div className="callout callout--warning" style={{ display: 'block' }}>
+            <div className="callout__title">Este lead tem registros ligados: {itens.join(', ')}.</div>
+            <div className="callout__sub">
               Eles não são apagados e continuam acessíveis nos seus módulos — só o lead sai da lista.
             </div>
           </div>
@@ -717,7 +726,9 @@ function LeadsPage({ setRoute, setSubsel }) {
     total: allLeads.length,
     qualif: allLeads.filter(l => l.status === "Em qualificação").length,
     proposta: allLeads.filter(l => l.status === "Proposta enviada").length,
-    valor: allLeads.reduce((a, l) => a + (l.value || 0), 0),
+    // pipeline = só o que ainda está em aberto (Convertido e Sem retorno já saíram do funil — issue #663)
+    valor: allLeads.filter(l => l.status !== "Convertido" && l.status !== "Sem retorno").reduce((a, l) => a + (l.value || 0), 0),
+    convertidos: allLeads.filter(l => l.status === "Convertido").length,
   };
 
   if (leads === null) {
@@ -740,7 +751,7 @@ function LeadsPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>CRM · Leads</div>
           <h1 className="page-head__title">Pipeline de Leads</h1>
-          <p className="page-head__sub">{allLeads.length} leads ativos · pipeline {fmtBRL(stats.valor)} · conversão média 27%</p>
+          <p className="page-head__sub">{allLeads.length} leads ativos · pipeline {fmtBRL(stats.valor)} · {stats.convertidos} convertido{stats.convertidos === 1 ? "" : "s"} ({stats.total ? Math.round((stats.convertidos / stats.total) * 100) : 0}%)</p>
         </div>
         <div className="page-head__r">
           <div className="seg" role="group" aria-label="Modo de visualização">
@@ -756,10 +767,11 @@ function LeadsPage({ setRoute, setSubsel }) {
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Leads ativos" value={stats.total} sub="mês" delta={stats.total > 0 ? `+${stats.total}` : "0"} deltaDir="up" icon="flag"/>
-        <KPI label="Em qualificação" value={stats.qualif} sub="hot leads" delta={`+${stats.qualif}`} deltaDir="up" icon="zap"/>
-        <KPI label="Propostas no ar" value={stats.proposta} sub="aguardando" delta="0" deltaDir="up" icon="fileText"/>
-        <KPI label="Valor pipeline" value={fmtBRL(stats.valor)} sub="potencial" delta="—" deltaDir="up" icon="dollar"/>
+        {/* Sem "variação" inventada: não há comparação com mês anterior nesta tela (issue #663). */}
+        <KPI label="Leads ativos" value={stats.total} sub="no total" icon="flag"/>
+        <KPI label="Em qualificação" value={stats.qualif} sub="em avaliação" icon="zap"/>
+        <KPI label="Propostas no ar" value={stats.proposta} sub="aguardando o cliente" icon="fileText"/>
+        <KPI label="Valor pipeline" value={fmtBRL(stats.valor)} sub="em aberto" icon="dollar"/>
       </div>
 
       <div className="tbar">
@@ -1029,7 +1041,9 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
   const [history, setHistory] = React.useState(null); // null = carregando
   const fmtHistTs = (ts) => {
     if (!ts) return "—";
-    const d = new Date(ts);
+    // "aaaa-mm-dd" puro vira meia-noite UTC e, no fuso do Brasil, cai no dia anterior (issue #663): monta a data local.
+    const soData = typeof ts === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ts.trim());
+    const d = soData ? new Date(Number(ts.slice(0, 4)), Number(ts.slice(5, 7)) - 1, Number(ts.slice(8, 10))) : new Date(ts);
     if (isNaN(d.getTime())) return "—";
     const dateStr = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
     const hasTime = typeof ts === "string" && ts.includes("T");
@@ -1131,7 +1145,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
           </div>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="message" onClick={() => { const p = (lead.phone || '').replace(/\D/g,''); p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
+          <Button variant="outline" icon="message" onClick={() => { const p0 = (lead.phone || '').replace(/\D/g,''); const p = (p0.length > 11 && p0.startsWith('55')) ? p0.slice(2) : p0; p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
           <Button variant="outline" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
           <Button variant="outline" icon="edit" onClick={() => setShowEditLead(true)}>Editar Lead</Button>
           <Button variant="outline" icon="ruler" onClick={abrirFormulario}>Abrir Formulário</Button>
@@ -1207,7 +1221,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
             <KvBlock label="Telefone" value={lead.phone} mono/>
             <KvBlock label="Email" value={lead.email} mono/>
             <div className="row gap-2" style={{ marginTop: 14 }}>
-              <Button variant="secondary" size="sm" icon="message" onClick={() => { const p = (lead.phone || '').replace(/\D/g,''); p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
+              <Button variant="secondary" size="sm" icon="message" onClick={() => { const p0 = (lead.phone || '').replace(/\D/g,''); const p = (p0.length > 11 && p0.startsWith('55')) ? p0.slice(2) : p0; p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
               <Button variant="outline" size="sm" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
             </div>
           </Card>
@@ -1215,7 +1229,7 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
           <Card title="Atribuição">
             <KvBlock label="Vendedor" value={lead.owner || '—'}/>
             <KvBlock label="Origem" value={lead.origin}/>
-            {lead.value ? <KvBlock label="Comissão prevista" value={fmtBRL(lead.value * 0.04, { decimals: 0 }) + " (4%)"} mono/> : null}
+            {lead.value ? <KvBlock label="Comissão prevista" value={fmtBRL(lead.value * (comissaoDoLead(lead) / 100), { decimals: 0 }) + " (" + String(comissaoDoLead(lead)).replace('.', ',') + "%" + (lead.comissao_pct == null ? " — padrão" : "") + ")"} mono/> : null}
           </Card>
         </div>
       </div>
@@ -1248,23 +1262,14 @@ function KvBlock({ label, value, mono }) {
 }
 function SuggestedStep({ icon, label, sub, status }) {
   const I = Icon[icon] || Icon.bolt;
-  const stylesByStatus = {
-    current: { background: "#FFFBE6", borderColor: "var(--vp-yellow)" },
-    next:    { background: "#fff", borderColor: "var(--border-strong)" },
-    future:  { background: "var(--vp-gray-50)", borderColor: "var(--border)", opacity: .7 },
-  };
+  const variante = ['current', 'next', 'future'].includes(status) ? status : 'future';
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 12,
-      padding: "12px 14px",
-      border: "1px solid var(--border)",
-      ...(stylesByStatus[status] || stylesByStatus.future)
-    }}>
-      <div style={{ width: 34, height: 34, background: status === "current" ? "#000" : "var(--vp-gray-100)", color: status === "current" ? "var(--vp-yellow)" : "var(--fg2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div className={'step-card step-card--' + variante}>
+      <div className="step-card__icon">
         <I size={18}/>
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>{label}</div>
+      <div className="step-card__body">
+        <div className="step-card__label">{label}</div>
         <div className="cell-sub">{sub}</div>
       </div>
       <Icon.chevRight size={16} color="var(--fg3)"/>

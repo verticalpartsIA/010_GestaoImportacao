@@ -78,3 +78,70 @@ test('navigate — não escreve na URL se já é a mesma (evita loop com popstat
   win.VpRouter.navigate('dashboard');
   assert.equal(pushed, false);
 });
+
+/* ---- Aba (submódulo) na URL: tabFromLocation + useRouteTab ---- */
+test('tabFromLocation — aba de tela de lista vem do 2º segmento', () => {
+  const R = loadRouter('/comercial/leads/kanban');
+  assert.equal(R.tabFromLocation('leads', 'lista', ['lista', 'kanban']), 'kanban');
+});
+
+test('tabFromLocation — sem aba na URL, rota diferente ou aba inválida caem no padrão', () => {
+  assert.equal(loadRouter('/comercial/leads').tabFromLocation('leads', 'lista', ['lista', 'kanban']), 'lista');
+  assert.equal(loadRouter('/geral/dashboard/kanban').tabFromLocation('leads', 'lista', ['lista', 'kanban']), 'lista');
+  assert.equal(loadRouter('/comercial/leads/inventada').tabFromLocation('leads', 'lista', ['lista', 'kanban']), 'lista');
+});
+
+test('tabFromLocation — sem lista de válidas aceita qualquer aba; com id lê o 3º segmento', () => {
+  assert.equal(loadRouter('/comercial/leads/qualquer').tabFromLocation('leads', 'lista'), 'qualquer');
+  const R = loadRouter('/comercial/lead-detail/42/tratativas');
+  assert.equal(R.tabFromLocation('lead-detail', 'detalhes', ['detalhes', 'tratativas'], true), 'tratativas');
+  assert.equal(R.tabFromLocation('lead-detail', 'detalhes', ['detalhes'], true), 'detalhes');
+});
+
+test('tabFromLocation — aba decodificada (ex.: "Importação" em pedidos-acompanhamento)', () => {
+  const R = loadRouter('/comercial/leads/Importa%C3%A7%C3%A3o');
+  assert.equal(R.tabFromLocation('leads', 'Nacional', ['Nacional', 'Importação']), 'Importação');
+});
+
+/* React de mentira: o suficiente pra exercitar o hook sem DOM. */
+function loadHook(path) {
+  const win = makeFakeWindow(path);
+  const state = [];
+  let cursor = 0;
+  win.React = {
+    useState(init) {
+      const i = cursor++;
+      if (!(i in state)) state[i] = typeof init === 'function' ? init() : init;
+      return [state[i], (v) => { state[i] = v; }];
+    },
+    useEffect(fn) { fn(); },
+    useCallback(fn) { return fn; },
+  };
+  global.window = win;
+  delete require.cache[require.resolve('./router.js')];
+  require('./router.js');
+  const run = (...args) => { cursor = 0; return win.useRouteTab(...args); };
+  return { win, run };
+}
+
+test('useRouteTab — começa na aba da URL e clicar grava na URL (aba padrão deixa a URL limpa)', () => {
+  const { win, run } = loadHook('/comercial/leads/kanban');
+  let [tab, setTab] = run('leads', 'lista', ['lista', 'kanban']);
+  assert.equal(tab, 'kanban');
+  setTab('lista');
+  assert.equal(win.location.pathname, '/comercial/leads');
+  setTab('kanban');
+  assert.equal(win.location.pathname, '/comercial/leads/kanban');
+  [tab] = run('leads', 'lista', ['lista', 'kanban']);
+  assert.equal(tab, 'kanban');
+});
+
+test('useRouteTab — com id preserva o id e grava a aba no 3º segmento', () => {
+  const { win, run } = loadHook('/comercial/lead-detail/42');
+  const [tab, setTab] = run('lead-detail', 'detalhes', ['detalhes', 'tratativas'], true);
+  assert.equal(tab, 'detalhes');
+  setTab('tratativas');
+  assert.equal(win.location.pathname, '/comercial/lead-detail/42/tratativas');
+  setTab('detalhes');
+  assert.equal(win.location.pathname, '/comercial/lead-detail/42');
+});

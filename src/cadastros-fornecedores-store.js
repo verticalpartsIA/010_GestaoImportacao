@@ -55,7 +55,12 @@
   }
 
   function _payload(form) {
-    const doc = (form.cnpj || form.cpf || '').replace(/\D/g, '');
+    // O documento vem do campo que combina com o tipo escolhido na lista (PF → CPF, PJ → CNPJ) e precisa conferir (04/10/2026).
+    const tipoDoc = form.tipo_pessoa === 'PF' ? 'PF' : 'PJ';
+    const bruto = tipoDoc === 'PF' ? form.cpf : form.cnpj;
+    const val = window.EnderecoAPI && window.EnderecoAPI.validarDocumento ? window.EnderecoAPI.validarDocumento(tipoDoc, bruto) : { ok: true, digitos: String(bruto || '').replace(/\D/g, '') };
+    if (!val.ok) throw new Error(val.msg);
+    const doc = val.digitos;
     return {
       razao_social: form.razao_social || null, nome_fantasia: form.nome_fantasia || null,
       tipo_pessoa: form.tipo_pessoa || 'PJ',
@@ -78,6 +83,9 @@
     const row = { ..._payload(form), codigo, criado_por: (window.__VP_USER || {}).email || null };
     const { data, error } = await c.from('fornecedores').insert(row).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Criou fornecedor', alvo: data.razao_social, alvo_id: data.id,
+    });
     return data;
   }
 
@@ -86,6 +94,9 @@
     const row = { ..._payload(form), atualizado_em: new Date().toISOString() };
     const { data, error } = await c.from('fornecedores').update(row).eq('id', id).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Editou fornecedor', alvo: data.razao_social, alvo_id: id,
+    });
     return data;
   }
 
@@ -93,6 +104,9 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('fornecedores').delete().eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Excluiu fornecedor', alvo_id: id,
+    });
   }
 
   /* ---------- Avaliações — nota + comentário, histórico por fornecedor ---------- */
@@ -110,6 +124,9 @@
     const row = { fornecedor_id: fornecedorId, nota, comentario: comentario || null, avaliado_por: user.nome || user.email || null };
     const { data, error } = await c.from('fornecedores_avaliacoes').insert(row).select().single();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Avaliou fornecedor', alvo_id: fornecedorId, detalhe: { nota, comentario: comentario || null },
+    });
     return data;
   }
 
@@ -117,6 +134,9 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('fornecedores_avaliacoes').delete().eq('id', id);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Removeu avaliação de fornecedor', alvo_id: id,
+    });
   }
 
   /* Média + contagem por fornecedor, pra mostrar na lista sem N+1 query. */

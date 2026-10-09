@@ -132,18 +132,44 @@
       { modulo: 'dashboard', label: 'Dashboard' },
       { modulo: 'notificacoes', label: 'Notificações' },
       { modulo: 'decisoes', label: 'Central de Decisões' },
-      { modulo: 'financeiro', label: 'Gatilhos & Prazo' },
+      { modulo: 'financeiro', label: 'Prazos & Pendências' },
+      /* 04/10/2026 — Inbox na grade de alçadas. Dono do e-mail = LOGIN de quem enviou (a resposta herda o dono do
+         e-mail que responde; senão o dono da cotação; senão "sem dono"). Quem vê o dos outros é por pessoa.
+         Tudo começa MARCADO (migration 20261004120000) = comportamento de hoje; o administrador desmarca.
+         Regras em src/inbox-visibilidade.js (testadas). É organização na tela, não isolamento real (issue #571). */
+      { modulo: 'inbox', label: 'Inbox', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'ver_todos', label: 'Vê os e-mails de todos (CEO/administração)' },
+        { chave: 'ver_equipe', label: 'Vê os e-mails de quem responde a ele (equipe)' },
+        { chave: 'ver_departamento', label: 'Vê os e-mails do próprio departamento' },
+        { chave: 'ver_area_comercial', label: 'Vê e-mails da área Comercial (interação entre áreas)' },
+        { chave: 'ver_area_financeiro', label: 'Vê e-mails da área Adm/Financeiro (interação entre áreas)' },
+        { chave: 'ver_area_engenharia', label: 'Vê e-mails da área Engenharia (interação entre áreas)' },
+        { chave: 'ver_area_logistica', label: 'Vê e-mails da área Logística/Almoxarifado/Produção (interação entre áreas)' },
+        { chave: 'ver_area_juridico_importacao', label: 'Vê e-mails da área Jurídico/Importação/Suprimentos (interação entre áreas)' },
+        { chave: 'ver_area_gente_gestao', label: 'Vê e-mails da área Gente & Gestão (interação entre áreas)' },
+        { chave: 'ver_area_marketing', label: 'Vê e-mails da área Marketing (interação entre áreas)' },
+        { chave: 'triagem', label: 'Recebe os e-mails sem dono (fila de triagem)' },
+        { chave: 'excluir_de_outros', label: 'Exclui e-mails de outras pessoas (por padrão só o dono exclui)' },
+      ]},
     ]},
     { grupo: 'Cadastros', itens: [
       { modulo: 'cadastro-clientes', label: 'Clientes' },
       { modulo: 'cadastro-fornecedores', label: 'Fornecedores' },
+      { modulo: 'cadastro-materias-primas', label: 'Matérias-Primas' },
+      { modulo: 'cadastro-produtos', label: 'Produtos' },
       { modulo: 'ncm-catalogo', label: 'Produtos' },
       { modulo: 'cadastro-instaladores', label: 'Empresas Instaladoras' },
       { modulo: 'cadastro-custos', label: 'Atualização de Custos' },
     ]},
     { grupo: 'Comercial', itens: [
       { modulo: 'leads', label: 'Leads' },
-      { modulo: 'formularios', label: 'Formulários' },
+      { modulo: 'formularios', label: 'Formulários', capacidades: [
+        ...ACOES_PADRAO,
+        /* 02/10/2026: sem esta alçada o vendedor só vê/edita as cotações que ELE criou
+           (formulario-elevador-store.js). Quem não tem fica restrito aos próprios. */
+        { chave: 'ver_de_outros', label: 'Vê e edita formulários/cotações de outros vendedores' },
+      ]},
       { modulo: 'propostas', label: 'Propostas', capacidades: [
         { chave: 'ver_todas', label: 'Vê propostas de outros vendedores' },
         { chave: 'precificar_manual', label: 'Precifica manualmente' },
@@ -151,14 +177,17 @@
         { chave: 'excluir', label: 'Exclui propostas' },
       ]},
       { modulo: 'controle-cotacoes', label: 'Controle de Cotações' },
+      { modulo: 'contratos-sociais', label: 'Contratos Social' },
     ]},
     { grupo: 'ADM/ Financeiro', itens: [
       { modulo: 'cotacoes-fornecedor', label: 'Cotações a Fornecedor' },
       { modulo: 'precificacao', label: 'Precificação' },
       { modulo: 'aval-financeiro', label: 'Aval Financeiro' },
+      { modulo: 'emissao-nf', label: 'Emissão de NF' },
     ]},
     { grupo: 'Jurídico', itens: [
       { modulo: 'contrato-venda-equipamentos', label: 'Contrato Venda de Equipamentos' },
+      { modulo: 'aval-juridico', label: 'Aval Jurídico' },
       { modulo: 'contrato-instalador', label: 'Contrato Instalador' },
       { modulo: 'juridico', label: 'Contratos & Minutas' },
     ]},
@@ -170,7 +199,7 @@
       { modulo: 'ims-importacao', label: 'IMS' },
       { modulo: 'embarques-importacao', label: 'Embarques' },
       { modulo: 'gi-analise-precos', label: 'Análise de Preços' },
-      { modulo: 'compras', label: 'Compras Nacional' },
+      { modulo: 'compras', label: 'Importação Varejo' },
       { modulo: 'pedidos-acompanhamento', label: 'Pedidos' },
     ]},
     { grupo: 'Engenharia', itens: [
@@ -178,7 +207,14 @@
       { modulo: 'eng-projeto-elevadores', label: 'Projeto de Elevadores' },
       { modulo: 'eng-configurador', label: 'Projeto de Equipamento' },
       { modulo: 'desenho-tecnico', label: 'Projetos ER/Es' },
-      { modulo: 'ficha-tecnica', label: 'Ficha Técnica' },
+      { modulo: 'solicitacoes-produto', label: 'Solicitações de Produto' },
+      { modulo: 'ficha-tecnica', label: 'Ficha Técnica', capacidades: [
+        { chave: 'ver', label: 'Ver' },
+        { chave: 'criar', label: 'Criar' },
+        { chave: 'editar', label: 'Editar' },
+        { chave: 'excluir', label: 'Excluir' },
+        { chave: 'publicar_omie', label: 'Publica (ou republica) a ficha como anexo no Omie' },
+      ]},
       { modulo: 'vistorias', label: 'Vistorias de Obras' },
       { modulo: 'instalacao', label: 'Instalação em Campo' },
       { modulo: 'status-obras', label: 'Status de Obras' },
@@ -192,12 +228,91 @@
       { modulo: 'rh-homologacao', label: 'Homologação de Instaladores' },
     ]},
     { grupo: 'Logística', itens: [
-      { modulo: 'almoxarifado', label: 'Almoxarifado' },
+      { modulo: 'almoxarifado', label: 'Almoxarifado', capacidades: [
+        { chave: 'ver', label: 'Ver' },
+        { chave: 'criar', label: 'Criar' },
+        { chave: 'editar', label: 'Editar' },
+        { chave: 'excluir', label: 'Excluir' },
+        { chave: 'ver_custo', label: 'Vê os preços de custo dos itens do estoque' },
+        { chave: 'escrever_omie', label: 'Grava no Omie: requisição de compra e movimento de estoque (entrada, saída, ajuste)' },
+        { chave: 'custo_manual', label: 'Informa o custo manual (estimado) de itens que o Omie ainda não tem custo' },
+        { chave: 'reposicao_config', label: 'Define os parâmetros da Reposição (prazo de chegada, folga, ciclo de compra)' },
+      ]},
+      { modulo: 'carga-maquina', label: 'Carga Máquina' },
+      { modulo: 'montagem-produto', label: 'Montagem do Produto' },
+      { modulo: 'simulacao-producao', label: 'Simulação' },
+      { modulo: 'mes', label: 'MES — Sistema de Execução da Manufatura' },
+      { modulo: 'relatorios-pcp', label: 'Relatórios do PCP' },
+      { modulo: 'expedicao', label: 'Expedição' },
+      { modulo: 'pcp', label: 'PCP — Planejamento e Controle da Produção', capacidades: [
+        { chave: 'ver', label: 'Ver' },
+        { chave: 'criar', label: 'Criar' },
+        { chave: 'editar', label: 'Editar' },
+        { chave: 'excluir', label: 'Excluir' },
+        { chave: 'apontar_hh', label: 'Escolhe quem trabalhou na OP e as horas (mão de obra). O valor da hora é buscado no Omie e fica oculto' },
+        { chave: 'ver_hh', label: 'Vê o valor da hora-homem e o custo de mão de obra das OPs (dado salarial)' },
+      ]},
     ]},
     { grupo: 'Portal Admin', itens: [
       { modulo: 'logs', label: 'Logs de Atividade' },
     ]},
   ];
+
+  /* Grupo da sidebar (GRUPOS_MODULO) → módulos do CATALOGO_MODULOS que
+     moram nele. Os dois vocabulários de grupo são diferentes (o catálogo
+     é por área de alçada, a sidebar é navegação), então o vínculo é este
+     mapa explícito. Marcar o grupo de um colaborador concede TODAS as
+     ações desses módulos; "admin.conceder_alcadas" fica de fora de
+     propósito — poder de dar poder a terceiros nunca vem de tabela. */
+  const MODULOS_POR_GRUPO_SIDEBAR = {
+    'Geral': ['dashboard', 'notificacoes', 'decisoes', 'financeiro'],
+    'CRM': ['leads'],
+    'Cadastros Mestres': ['cadastro-clientes', 'cadastro-fornecedores', 'cadastro-materias-primas', 'cadastro-produtos'],
+    'Comercial | Pré-venda': ['formularios', 'controle-cotacoes', 'cotacoes-fornecedor', 'propostas', 'contratos-sociais'],
+    'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro', 'emissao-nf'],
+    'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
+    'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'compras', 'pedidos-acompanhamento'],
+    'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
+    'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
+    'Entrega & Documentação': ['databook', 'handover'],
+    'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
+    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'mes', 'relatorios-pcp', 'expedicao'],
+    'Administração': ['logs'],
+  };
+
+  /* Lista { modulo, capacidade } de tudo que o grupo inteiro cobre. */
+  function capacidadesDoGrupo(grupo) {
+    const ids = new Set(MODULOS_POR_GRUPO_SIDEBAR[grupo] || []);
+    const out = [];
+    CATALOGO_MODULOS.forEach((g) => g.itens.forEach((it) => {
+      if (!ids.has(it.modulo)) return;
+      (it.capacidades || ACOES_PADRAO).forEach((a) => out.push({ modulo: it.modulo, capacidade: a.chave }));
+    }));
+    return out;
+  }
+
+  /* Concede (ou retira) em lote todas as ações do grupo. Devolve a lista
+     afetada pra tela atualizar os checkboxes sem reler o banco. */
+  async function concederGrupoInteiro(colaboradorId, grupo, conceder) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const lista = capacidadesDoGrupo(grupo);
+    if (!lista.length) return lista;
+    if (conceder) {
+      const por = (window.__VP_USER || {}).email || null;
+      const agora = new Date().toISOString();
+      const { error } = await c.from('alcadas_capacidade').upsert(
+        lista.map((l) => ({ perfil_id: colaboradorId, modulo: l.modulo, capacidade: l.capacidade, concedido_por: por, concedido_em: agora })),
+        { onConflict: 'perfil_id,modulo,capacidade' },
+      );
+      if (error) throw error;
+    } else {
+      const modulos = [...new Set(lista.map((l) => l.modulo))];
+      const { error } = await c.from('alcadas_capacidade').delete().eq('perfil_id', colaboradorId).in('modulo', modulos);
+      if (error) throw error;
+    }
+    if (window.PropostaStore) window.PropostaStore.resetAlcadasCache();
+    return lista;
+  }
 
   async function listarCapacidadesConcedidas() {
     const c = sb(); if (!c) return [];
@@ -248,5 +363,6 @@
     GRUPOS_MODULO, listarColaboradores, listarAlocacoes, arvoreDepartamentos,
     alocar, desalocar, removerTodasAlocacoes, enriquecerUsuarioLogado,
     ACOES_PADRAO, CATALOGO_MODULOS, listarCapacidadesConcedidas, concederCapacidade,
+    MODULOS_POR_GRUPO_SIDEBAR, capacidadesDoGrupo, concederGrupoInteiro,
   };
 }());

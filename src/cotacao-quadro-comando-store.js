@@ -57,6 +57,10 @@ window.CotacaoQuadroComandoStore = {
     const { error: errUpd } = await c.from('quadros_comando')
       .update({ numero_cotacao: numeroCotacao }).eq('id', quadroId);
     if (errUpd) throw errUpd;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Quadro de Comando', acao: 'Gerou número de cotação do quadro de comando',
+      alvo: `Cotação Nº ${numeroCotacao}`, alvo_id: quadroId,
+    });
 
     return { numeroCotacao, quadro };
   },
@@ -69,5 +73,8 @@ window.CotacaoQuadroComandoStore = {
       .update({ status: novoStatus, updated_at: new Date().toISOString() })
       .eq('id', quadroId);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Quadro de Comando', acao: `Alterou status da cotação de quadro para "${novoStatus}"`, alvo_id: quadroId,
+    });
   },
 };

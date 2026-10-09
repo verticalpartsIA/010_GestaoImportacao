@@ -345,6 +345,29 @@ function PreviewElevadorMarketing({ data }) {
   );
 }
 
+/* Linhas da tabela de especificações de 1 equipamento — extraída (issue
+   #704) pra ser testável sem montar o React inteiro; tensão/tração/
+   dimensões da cabine entram aqui pela 1ª vez (vinham sendo coletadas
+   no Formulário, nunca chegavam à Proposta). */
+function montarLinhasEspec(s) {
+  return [
+    ["Tipo de Empreendimento", s.empreendimento],
+    ["Característica de Transporte", s.carac],
+    ["Denominação", s.denominacao],
+    ["Percurso", s.percurso && `${s.percurso}mm`],
+    ["Capacidade", s.capacidade],
+    ["Caixa de Corrida", s.dimensoesCaixa],
+    ["Poço", s.profPoço && `${s.profPoço}mm`],
+    ["Dimensões da Cabine", s.dimensoesCabine],
+    ["Tensão de Alimentação", s.tensao],
+    ["Tração", s.tracao],
+    ["Velocidade", s.vel && `${s.vel} m/s`],
+    ["Paradas", s.andaresParadasPortas],
+    ["Modelo", s.modelo],
+    ["Quantidade", s.qtd],
+  ].filter(([, v]) => v);
+}
+
 /* ---------- Página 6: Especificações Técnicas (tabela) ---------- */
 function PreviewEspecTabela({ data }) {
   const ed = data.elevador;
@@ -354,19 +377,7 @@ function PreviewEspecTabela({ data }) {
   const lista = (ed.especificacoes && ed.especificacoes.length) ? ed.especificacoes : [{}];
   const blocos = lista.map((s) => ({
     id: s.id,
-    linhas: [
-      ["Tipo de Empreendimento", s.empreendimento],
-      ["Característica de Transporte", s.carac],
-      ["Denominação", s.denominacao],
-      ["Percurso", s.percurso && `${s.percurso}mm`],
-      ["Capacidade", s.capacidade],
-      ["Caixa de Corrida", s.dimensoesCaixa],
-      ["Poço", s.profPoço && `${s.profPoço}mm`],
-      ["Velocidade", s.vel && `${s.vel} m/s`],
-      ["Paradas", s.andaresParadasPortas],
-      ["Modelo", s.modelo],
-      ["Quantidade", s.qtd],
-    ].filter(([, v]) => v),
+    linhas: montarLinhasEspec(s),
   }));
   const temConteudo = blocos.some((b) => b.linhas.length);
   return (
@@ -537,7 +548,54 @@ function PreviewFotos({ data }) {
 }
 
 /* ---------- Página 12: Valores e Pagamento (2 tabelas) ---------- */
+/* Duas modalidades de entrega (Financeiro, 01/10/2026): enquanto o cliente não
+   escolheu, as duas aparecem — cada uma com suas características, tabela de
+   preços e cronograma, e um campo de escolha. Ao escolher (na assinatura), a
+   outra deixa de aparecer: o documento volta ao formato de sempre (PreviewValoresTabelas
+   com os valores da modalidade escolhida). Ver proposta-opcoes.js. */
+function PreviewValoresOpcoes({ data }) {
+  const ops = window.PropostaOpcoes.opcoes(data) || [];
+  const fmt = (n) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (
+    <div className="pe__pdf">
+      <div className="pe__pdf-inner">
+        <PdfHeader numero={data.numero}/>
+        <h2 className="pdf-sec-title">Valores e Pagamento</h2>
+        <div className="pdf-sec-rule"/>
+        <p>Esta proposta traz duas modalidades de entrega. Escolha a que melhor atende o seu cronograma — ao escolher uma, a outra deixa de valer.</p>
+        {ops.map((o) => (
+          <div key={o.id} data-opcao-entrega={o.id} style={{ border: "1px solid #d9d9d9", borderRadius: 6, padding: "10px 14px", marginTop: 14 }}>
+            <h3 className="pdf-sub-title" style={{ marginTop: 0 }}>{o.titulo} <span style={{ fontWeight: 400, opacity: 0.7 }}>— {o.rotulo}</span></h3>
+            {o.caracteristicas.map((c, i) => <p key={i} style={{ margin: "2px 0" }}>{c}</p>)}
+            <table className="pdf-table2" style={{ marginTop: 8 }}>
+              <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
+              <tbody>
+                <tr><td>{o.equipamento}</td><td style={{ textAlign: "right" }}><b>{fmt(o.totalEquipamento)}</b></td></tr>
+                {o.difal ? <tr><td>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(o.difal)}</td></tr> : null}
+                <tr className="pdf-total-row"><td>Total — {o.titulo.toLowerCase()}</td><td style={{ textAlign: "right" }}>{fmt(o.total)}</td></tr>
+              </tbody>
+            </table>
+            {o.parcelas.length ? (
+              <table className="pdf-table2" style={{ marginTop: 8 }}>
+                <thead><tr><th>Cronograma de Pagamento</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
+                <tbody>
+                  {o.parcelas.map((p, i) => <tr key={i}><td>{p.desc || "—"}</td><td style={{ textAlign: "right" }}>{p.valor ? "R$ " + p.valor : "—"}</td></tr>)}
+                  <tr className="pdf-total-row"><td>Total Parcelado</td><td style={{ textAlign: "right" }}>{fmt(o.totalParcelas)}</td></tr>
+                </tbody>
+              </table>
+            ) : null}
+            <p style={{ marginTop: 10, fontWeight: 700 }}>☐ Escolho a modalidade: {o.titulo}</p>
+          </div>
+        ))}
+      </div>
+      <PdfFooter/>
+    </div>
+  );
+}
+
 function PreviewValoresTabelas({ data }) {
+  if (window.PropostaOpcoes && window.PropostaOpcoes.temOpcoes(data)) return <PreviewValoresOpcoes data={data}/>;
+  const modalidade = window.PropostaOpcoes ? window.PropostaOpcoes.modalidadeEscolhida(data) : null;
   const v = data.elevador.valores;
   const parcelas = v.parcelas || [];
   const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
@@ -553,10 +611,12 @@ function PreviewValoresTabelas({ data }) {
     const unit = parseFloat((it.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
     /* Desconto ativo (Frentes B+C): mostra o valor original riscado ao lado
        do atual — histórico visível pro cliente e pra VerticalParts, mesmo
-       reabrindo a proposta depois. */
+       reabrindo a proposta depois. Comparado já totalizado (× qtd), já que
+       a coluna de Qtd./Valor Unit. saiu da tabela — só Equipamento | Valor. */
     const original = it.valorOriginal != null ? parseFloat(String(it.valorOriginal).replace(/\./g, "").replace(",", ".")) || 0 : null;
     const temDesconto = it.desconto && original != null && original > unit;
-    return { equipamento: it.equipamento, qtd, unit, original: temDesconto ? original : null, total: qtd * unit };
+    const total = qtd * unit;
+    return { equipamento: it.equipamento, original: temDesconto ? original * (qtd || 1) : null, total };
   });
   const totalEq = linhas.reduce((s, l) => s + l.total, 0);
   const totalGeral = totalEq + difal;
@@ -568,23 +628,22 @@ function PreviewValoresTabelas({ data }) {
         <h2 className="pdf-sec-title">Valores e Pagamento</h2>
         <div className="pdf-sec-rule"/>
 
+        {modalidade && <p><b>Modalidade de entrega escolhida:</b> {modalidade.titulo} — {modalidade.rotulo}.</p>}
         <h3 className="pdf-sub-title">Preços dos Equipamentos</h3>
         <table className="pdf-table2">
-          <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Qtd</th><th style={{ textAlign: "right" }}>Valor Unit.</th><th style={{ textAlign: "right" }}>Total</th></tr></thead>
+          <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
           <tbody>
             {linhas.map((l, i) => (
               <tr key={i}>
                 <td>{l.equipamento || "Elevador de Passageiros"}</td>
-                <td style={{ textAlign: "right" }}>{l.qtd || "—"}</td>
                 <td style={{ textAlign: "right" }}>
                   {l.original != null && <span style={{ textDecoration: "line-through", opacity: 0.6, marginRight: 6 }}>{fmt(l.original)}</span>}
-                  {l.unit ? fmt(l.unit) : "—"}
+                  <b>{l.total ? fmt(l.total) : "—"}</b>
                 </td>
-                <td style={{ textAlign: "right", fontWeight: 700 }}>{l.total ? fmt(l.total) : "—"}</td>
               </tr>
             ))}
-            {difal ? <tr><td colSpan={3}>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(difal)}</td></tr> : null}
-            <tr className="pdf-total-row"><td colSpan={3}>Total Equipamentos</td><td style={{ textAlign: "right" }}>{fmt(totalGeral)}</td></tr>
+            {difal ? <tr><td>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(difal)}</td></tr> : null}
+            <tr className="pdf-total-row"><td>Total Equipamentos</td><td style={{ textAlign: "right" }}>{fmt(totalGeral)}</td></tr>
           </tbody>
         </table>
 

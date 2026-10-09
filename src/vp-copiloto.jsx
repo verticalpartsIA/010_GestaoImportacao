@@ -12,14 +12,14 @@
 const { useState: _vpUS, useRef: _vpUR, useEffect: _vpUE } = React;
 
 const VPC_ENDPOINT = 'https://jxtqwzmpgofwctqajewt.supabase.co/functions/v1/vp-copiloto';
-const VPC_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+const VPC_ANON_KEY = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
 const VPC_LS_OPEN = 'vpc_open_v1';
 
 /* ---------- API ---------- */
 async function vpcCall(body) {
   const res = await fetch(VPC_ENDPOINT, {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + VPC_ANON_KEY, 'Content-Type': 'application/json' },
+    headers: { 'apikey': VPC_ANON_KEY, 'Authorization': 'Bearer ' + VPC_ANON_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!res.ok) {

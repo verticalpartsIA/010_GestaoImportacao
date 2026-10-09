@@ -74,11 +74,16 @@ window.SolicitacoesProdutoStore = (() => {
         categoria_sku: dados.categoria_sku,
         solicitante_nome: dados.solicitante_nome,
         solicitante_email: dados.solicitante_email,
-        cliente_nome: dados.cliente_nome,
-        cliente_industria: dados.cliente_industria,
+        // Cliente só entra se a solicitação de fato nasceu de um pedido de
+        // cliente (form.foiPedidoCliente) — nunca obrigatório.
+        cliente_nome: dados.foiPedidoCliente ? (dados.cliente_nome || null) : null,
+        cliente_industria: dados.foiPedidoCliente ? (dados.cliente_industria || null) : null,
+        cliente_contato: dados.foiPedidoCliente ? (dados.cliente_contato || null) : null,
         descricao_inicial: dados.descricao_inicial,
         observacoes_comercial: dados.observacoes_comercial,
-        fotos_url: dados.fotos_url || [],
+        fornecedor_contato: dados.fornecedor_contato || null,
+        link_produto: dados.link_produto || null,
+        anexos: dados.anexos || [],
       };
 
       const { data, error } = await window.__VP_SB.sb
@@ -89,6 +94,11 @@ window.SolicitacoesProdutoStore = (() => {
 
       if (error) throw error;
       console.log('[SolicitacoesProdutoStore] Solicitação criada:', data);
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Solicitações de Produto', acao: 'Criou solicitação de produto',
+        alvo: data.numero_solicitacao, alvo_id: data.id,
+        detalhe: { tipo_equipamento: data.tipo_equipamento, categoria_sku: data.categoria_sku, cliente_nome: data.cliente_nome || null },
+      });
       _notificarEngenharia(data);
       return data;
     } catch (e) {
@@ -101,7 +111,8 @@ window.SolicitacoesProdutoStore = (() => {
     try {
       let query = window.__VP_SB.sb
         .from('solicitacoes_produto')
-        .select('*');
+        .select('*')
+        .is('excluido_em', null);
 
       if (filtros.status) {
         query = query.eq('status', filtros.status);
@@ -163,11 +174,16 @@ window.SolicitacoesProdutoStore = (() => {
     const agora = new Date().toISOString();
     const user = window.__VP_USER || {};
 
-    return atualizar(id, {
+    const atualizada = await atualizar(id, {
       status: 'em_analise',
       engenheiro_responsavel: user.email,
       data_inicio_analise: agora,
     });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Solicitações de Produto', acao: 'Iniciou análise da solicitação',
+      alvo: atualizada.numero_solicitacao, alvo_id: id,
+    });
+    return atualizada;
   }
 
   async function marcarPronto(id, especificacoes, desenho_url, complementos_descobertos) {
@@ -178,15 +194,79 @@ window.SolicitacoesProdutoStore = (() => {
       complementos_descobertos: complementos_descobertos,
       data_conclusao: new Date().toISOString(),
     });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Solicitações de Produto', acao: 'Marcou solicitação como pronta',
+      alvo: atualizada.numero_solicitacao, alvo_id: id,
+    });
     _notificarImportacao(atualizada);
     return atualizada;
   }
 
   async function converterEmFicha(id, ficha_tecnica_id) {
-    return atualizar(id, {
+    const atualizada = await atualizar(id, {
       status: 'convertido_em_ficha',
       ficha_tecnica_id: ficha_tecnica_id,
     });
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Solicitações de Produto', acao: 'Converteu solicitação em Ficha Técnica',
+      alvo: atualizada.numero_solicitacao, alvo_id: id, detalhe: { ficha_tecnica_id },
+    });
+    return atualizada;
+  }
+
+  /* Soft-delete (excluido_em/excluido_por) — nada aponta de volta pra
+     solicitacoes_produto (sem FK), então não há risco de registro órfão,
+     mas o registro fica guardado no banco (recuperável pelo suporte) em
+     vez de apagado de verdade, mesmo padrão de leads (comercial.jsx).
+     .select('id') pra confirmar que a linha foi mesmo alterada — um update
+     barrado por RLS volta sem erro e sem linhas. */
+  async function excluir(id) {
+    try {
+      const { data, error } = await window.__VP_SB.sb
+        .from('solicitacoes_produto')
+        .update({
+          excluido_em: new Date().toISOString(),
+          excluido_por: (window.__VP_USER && window.__VP_USER.email) || null,
+        })
+        .eq('id', id)
+        .select('id');
+
+      if (error) throw error;
+      if (!data || !data.length) throw new Error('nenhum registro foi alterado');
+      console.log('[SolicitacoesProdutoStore] Solicitação excluída:', id);
+      if (window.VPLog) window.VPLog.registrar({
+        modulo: 'Solicitações de Produto', acao: 'Excluiu solicitação de produto', alvo_id: id,
+      });
+      return true;
+    } catch (e) {
+      console.error('[SolicitacoesProdutoStore] Erro ao excluir:', e);
+      throw e;
+    }
+  }
+
+  /* ---------- Anexos (imagem/PDF do produto) ----------
+     Mesmo bucket público "engenharia" já usado por Projeto de Elevadores/
+     P.I./Termo de Entrega — sem bucket novo. A solicitação ainda não tem
+     id no momento do upload (formulário "Nova"), então usa uma pasta
+     temporária (tmp-<random>), igual ao padrão já usado em fichas-imagens. */
+  function _pastaTemp() { return 'tmp-' + Math.random().toString(36).slice(2, 10); }
+
+  async function uploadAnexo(file, solicitacaoIdOuPastaTemp) {
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c) throw new Error('Supabase não carregado');
+    const pasta = solicitacaoIdOuPastaTemp || _pastaTemp();
+    const path = `solicitacoes/${pasta}/${Date.now()}_${file.name.replace(/[^\w.\-]/g, '_')}`;
+    const { error } = await c.storage.from('engenharia').upload(path, file, { upsert: true });
+    if (error) throw new Error(error.message);
+    const { data } = c.storage.from('engenharia').getPublicUrl(path);
+    const tipo = file.type && file.type.startsWith('image/') ? 'imagem' : 'pdf';
+    return { nome: file.name, url: data.publicUrl, tipo, path };
+  }
+
+  async function removerAnexo(path) {
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c || !path) return;
+    await c.storage.from('engenharia').remove([path]);
   }
 
   return {
@@ -197,8 +277,12 @@ window.SolicitacoesProdutoStore = (() => {
     listar,
     obter,
     atualizar,
+    uploadAnexo,
+    removerAnexo,
+    _pastaTemp,
     iniciarAnalise,
     marcarPronto,
     converterEmFicha,
+    excluir,
   };
 })();

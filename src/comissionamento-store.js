@@ -32,6 +32,9 @@
       ...patch, updated_at: new Date().toISOString(), updated_by: (window.__VP_USER || {}).email || null,
     }).eq('origem_venda', origemVenda);
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Comissionamento', acao: 'Editou regra de comissionamento', alvo: origemVenda, detalhe: patch,
+    });
   }
 
   /* Um split "requer aprovação de diretoria" quando o pct pedido ultrapassa
@@ -105,6 +108,11 @@
 
     const { data, error } = await c.from('comissoes').insert(linhas).select();
     if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Comissionamento', acao: 'Gerou comissões a partir da proposta',
+      alvo: proposta.numero_cotacao != null ? `Cotação Nº ${proposta.numero_cotacao}` : propostaId, alvo_id: propostaId,
+      detalhe: { origemVenda, totalLinhas: linhas.length, valorTotal },
+    });
     return data;
   }
 

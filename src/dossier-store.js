@@ -61,9 +61,12 @@ window.__DOSSIER = window.__DOSSIER || (() => {
        por numero_cotacao — reabrir/reassinar não duplica o Dossiê. */
     async criarDeProposta(proposta) {
       if (!proposta || proposta.numero_cotacao == null) return null;
-      const { data: existente } = await sb.from('dossier_obra')
-        .select('id').eq('numero_cotacao', proposta.numero_cotacao).maybeSingle();
-      if (existente) return existente;
+      /* limit(1) em vez de maybeSingle(): com 2+ dossiês pra mesma cotação o
+         maybeSingle() dava erro e `existente` ficava undefined — criava um
+         terceiro. */
+      const { data: existentes } = await sb.from('dossier_obra')
+        .select('id').eq('numero_cotacao', proposta.numero_cotacao).order('created_at', { ascending: true }).limit(1);
+      if (existentes && existentes.length) return existentes[0];
 
       const dj = proposta.data_json || {};
       const cliente = dj.cliente || {};

@@ -26,8 +26,42 @@
   function somaPagamentosAdicionais(pagamentos) {
     return (pagamentos || []).reduce((s, p) => s + (parseFloat(p.valor) || 0), 0);
   }
+  /* Transferência de pagamento entre P.I.s (30/09): um pagamento feito na P.I.
+     de origem que, na verdade, quitava (parte de) outra P.I. — ex.: o sinal da
+     SCVP260522-2 foi pago junto com a SCVP260522. Os pagamentos originais não
+     mudam; só o "% paga" desconta o que saiu ('enviada') e soma o que entrou
+     ('recebida'). Saldo líquido = recebidas − enviadas. */
+  function saldoTransferencias(transf) {
+    return (transf || []).reduce((s, t) => {
+      const v = parseFloat(t.valor) || 0;
+      return s + (t.direcao === 'enviada' ? -v : v);
+    }, 0);
+  }
+  /* Valor que conta pra quitar ESTA P.I. (pagamentos próprios + transferências). */
+  function calcValorQuitado(pi) {
+    const pago = (parseFloat(pi.valor_primeiro_pagamento) || 0) + (parseFloat(pi.valor_segundo_pagamento) || 0)
+      + somaPagamentosAdicionais(pi.pagamentos_adicionais);
+    return pago + saldoTransferencias(pi.transferencias_pagamento);
+  }
   function fmtMoeda(valor, moeda) {
     return `${moeda || 'USD'} ${Number(valor || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+  }
+
+  /* Taxas adicionais (Frete Local, Seguro, Taxa administrativa etc.).
+     tipo: '%' calcula sobre o subtotal dos itens; 'BRL'/'USD' é um valor
+     fixo nessa moeda. Uma taxa em moeda diferente da moeda da P.I. não é
+     somada automaticamente ao total (não há taxa de câmbio confiável aqui —
+     mesma cautela já usada em `cotacao_dolar_*` dos pagamentos). */
+  function calcTaxaValor(taxa, subtotalItens) {
+    const v = parseFloat(taxa.valor) || 0;
+    if (taxa.tipo === '%') return (subtotalItens || 0) * (v / 100);
+    return v;
+  }
+  function calcTotalTaxas(taxas, subtotalItens, moedaPI) {
+    return (taxas || []).reduce((s, t) => {
+      if (t.tipo === '%' || t.tipo === moedaPI) return s + calcTaxaValor(t, subtotalItens);
+      return s;
+    }, 0);
   }
 
   async function listarTodas() {
@@ -49,6 +83,12 @@
       const v = parseFloat(i.valor_unitario) || 0;
       return { ...i, quantidade: q, valor_unitario: v, valor_total: q * v };
     });
+    const moeda = form.moeda || 'USD';
+    const taxas = (form.taxas || []).map((t) => ({
+      tipo: t.tipo || '%', descricao: (t.descricao || '').trim(),
+      valor: t.valor !== '' && t.valor != null ? Number(t.valor) : null,
+    })).filter((t) => t.descricao || t.valor);
+    const subtotalItens = calcTotalGeral(itens);
     const cleanArr = (arr) => (arr || []).map((s) => (s || '').trim()).filter(Boolean);
     return {
       numero_pi: form.numero_pi, fornecedor: form.fornecedor || null, incoterms: form.incoterms || null,
@@ -56,8 +96,8 @@
       numero_cotacao: form.numero_cotacao !== '' && form.numero_cotacao != null ? Number(form.numero_cotacao) : null,
       numeros_serie: cleanArr(form.numeros_serie), categorias: cleanArr(form.categorias),
       embarque_id: form.embarque_id || null, data_abertura: form.data_abertura || null, data_prontidao: form.data_prontidao || null,
-      status: form.status || 'Em andamento', moeda: form.moeda || 'USD',
-      itens, valor_total: calcTotalGeral(itens),
+      status: form.status || 'Em andamento', moeda,
+      itens, valor_total: subtotalItens + calcTotalTaxas(taxas, subtotalItens, moeda),
       data_primeiro_pagamento: form.data_primeiro_pagamento || null,
       valor_primeiro_pagamento: form.valor_primeiro_pagamento !== '' && form.valor_primeiro_pagamento != null ? Number(form.valor_primeiro_pagamento) : null,
       cotacao_dolar_primeiro_pagamento: form.cotacao_dolar_primeiro_pagamento !== '' && form.cotacao_dolar_primeiro_pagamento != null ? Number(form.cotacao_dolar_primeiro_pagamento) : null,
@@ -68,7 +108,11 @@
         data: p.data || null, valor: p.valor !== '' && p.valor != null ? Number(p.valor) : null,
         cotacao_dolar: p.cotacao_dolar !== '' && p.cotacao_dolar != null ? Number(p.cotacao_dolar) : null,
       })).filter((p) => p.data || p.valor),
-      producao: form.producao || {}, observacoes: form.observacoes || null,
+      transferencias_pagamento: (form.transferencias_pagamento || []).map((t) => ({
+        direcao: t.direcao === 'enviada' ? 'enviada' : 'recebida', pi_numero: (t.pi_numero || '').trim(),
+        data: t.data || null, valor: t.valor !== '' && t.valor != null ? Number(t.valor) : null, obs: (t.obs || '').trim(),
+      })).filter((t) => t.pi_numero || t.valor),
+      taxas, producao: form.producao || {}, observacoes: form.observacoes || null,
     };
   }
 
@@ -131,9 +175,43 @@
     await c.storage.from('engenharia').remove([path]);
   }
 
+  /* Busca o produto pelo código para preencher o item da P.I.
+     Fontes (nesta ordem): catálogo de importação do Omie (descrição/unidade/NCM),
+     cadastro do PCP e Ficha Técnica (só completa o que faltar). Só leitura. */
+  const UNIDADE_PI = { PC: 'un', PÇ: 'un', UN: 'un', UND: 'un', PEÇA: 'un', PECA: 'un', KG: 'kg', G: 'g', TON: 'ton', T: 'ton', M: 'm', MT: 'm', 'M²': 'm²', M2: 'm²', 'M³': 'm³', M3: 'm³', L: 'L', LT: 'L', ML: 'mL', CX: 'cx', CAIXA: 'cx', PCT: 'pct', PAR: 'par', CJ: 'cj', KIT: 'cj', JG: 'cj' };
+  const _cacheProduto = new Map();
+  async function buscarProdutoPorCodigo(codigo) {
+    const cod = String(codigo || '').trim();
+    if (cod.length < 3) return null;
+    const chave = cod.toUpperCase();
+    if (_cacheProduto.has(chave)) return _cacheProduto.get(chave);
+    const c = sb(); if (!c) return null;
+    const un = (u) => UNIDADE_PI[String(u || '').trim().toUpperCase()] || '';
+    let r = { descricao: '', unidade: '', ncm: '' };
+    try {
+      const q = (t, cols) => c.from(t).select(cols).ilike(t === 'fichas_tecnicas' ? 'codigo_produto' : 'codigo', cod).limit(1);
+      const [iv, pcp, ft] = await Promise.all([
+        q('importacao_varejo_produtos', 'descricao,unidade,ncm'),
+        q('pcp_produtos', 'descricao,unidade,ncm'),
+        q('fichas_tecnicas', 'nome_produto,ncm_recomendado').eq('arquivado', false).limit(1),
+      ]);
+      const a = (iv.data || [])[0] || {}, b = (pcp.data || [])[0] || {}, f = (ft.error ? [] : ft.data || [])[0] || {};
+      r = {
+        descricao: a.descricao || b.descricao || f.nome_produto || '',
+        unidade: un(a.unidade) || un(b.unidade),
+        ncm: a.ncm || b.ncm || f.ncm_recomendado || '',
+      };
+    } catch (e) { console.warn('[PIStore] buscarProdutoPorCodigo', e); return null; }
+    const out = (r.descricao || r.ncm) ? r : null;
+    if (out) _cacheProduto.set(chave, out);
+    return out;
+  }
+
   window.PIStore = {
+    buscarProdutoPorCodigo,
     listarTodas, obter, criar, atualizar, remover, vincularEmbarque,
     uploadAnexoProducao, removerAnexoProducao,
     calcItemTotal, calcTotalGeral, somaPagamentosAdicionais, fmtMoeda,
+    calcTaxaValor, calcTotalTaxas, saldoTransferencias, calcValorQuitado,
   };
 }());

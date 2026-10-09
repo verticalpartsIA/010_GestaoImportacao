@@ -80,7 +80,122 @@
      usado em respostas.itens[].divergencias quando o fornecedor propõe um
      valor diferente do enviado pela VerticalParts. ---------- */
   function cefMm(v) { return (v === '' || v === null || v === undefined) ? '' : `${v}mm`; }
-  function cefSimNao(v) { return v ? 'Sim / Yes' : 'Não / No'; }
+  function cefSimNao(v) { return v ? 'Sim / Yes' : 'Não / No'; }  // cefValorI18n acrescenta o chinês
+
+  /* ---------- 06/10 — PT / EN / 中文 no que o fornecedor lê ----------
+     Rótulos (por `key` da definição), títulos de seção e VALORES conhecidos.
+     Só afeta a exibição pro fornecedor (unitSpecSecoes com {i18n:true}); a
+     visão interna e o que fica gravado em dados_envio continuam como antes.
+     Texto livre que o vendedor digitou e que não está no dicionário chega
+     como foi digitado. Tradução do chinês feita por IA — sujeita a revisão. */
+  const CEF_ZH_LABEL = {
+    numero_elevador: '电梯编号', qtd_unidades: '相同电梯数量', modelo_elevador: '电梯型号', estrutura: '井道结构',
+    casa_maquinas: '机房类型', capacidade: '额定载重', velocidade: '额定速度', andares_paradas_portas: '层/站/门',
+    pavimentos_desc: '楼层标识', modelo_controle: '控制方式', tamanho_caixa: '井道尺寸（宽×深）', overhead: '顶层高度',
+    poco: '底坑深度', percurso: '提升高度', porta_oposta: '贯通门（对开门）',
+    cabina_largura: '轿厢宽度', cabina_profundidade: '轿厢深度', cabina_altura: '轿厢高度', teto_falso: '轿厢吊顶',
+    piso_cabina: '轿厢地板', corrimao: '轿厢扶手',
+    porta_tipo_abertura: '开门方式', porta_modelo: '门型号', porta_largura: '门宽', porta_altura: '门高',
+    acabamento_porta_cabina: '轿门饰面', acabamento_porta_pavimento: '层门饰面', classe_corta_fogo: '防火等级',
+    botoeira_cabine: '轿内操纵箱（COP）类型', botoeira_pavimento: '层站召唤箱（LOP）类型',
+    ard: 'ARD 自动救援装置', camera: '轿厢摄像头', anuncio_voz: '语音报站', exigencias_especiais: '特殊要求',
+    // Quadro de Comando
+    quantidade_quadros: '相同控制柜数量', aplicacao: '应用', novo_modernizacao: '新装/改造',
+    fabricante_desejado: '期望品牌', modelo_desejado: '期望型号', paradas: '站数',
+    controle: '控制（单梯/双梯/群控）', tensao_rede: '电网电压', tipo_controle: '控制类型',
+    regeneracao_energia: '能量回馈', tipo_maquina: '曳引机类型', potencia_kw: '曳引机额定功率',
+    corrente_a: '曳引机额定电流', freio_tensao_acionamento: '制动器吸合电压', freio_tensao_manutencao: '制动器保持电压',
+    tensao_limitador_mrl: '限速器电压（无机房）', cop_modelo_acabamento: '轿内操纵箱型号/饰面',
+    lop_modelo_acabamento: '层站召唤箱型号/饰面', indicador_posicao_tipo: '位置显示器',
+    chave_incendio_tipo: '消防开关（集成/独立）', interfone_5_canais: '五方对讲', gongo: '到站钟',
+    pesador_carga: '称重装置', botoeira_inspecao_cabina: '轿顶检修盒', botoeira_inspecao_poco: '底坑检修盒',
+    caixa_emergencia_poco: '底坑急停盒', ultima_altura: '顶层高度', distancia_quadro_maquina: '控制柜至曳引机距离',
+    distancia_quadro_limitador: '控制柜至限速器距离', distancia_quadro_entrada_caixa: '控制柜至井道入口距离',
+    cabo_paralelo: '并联电缆（双梯）',
+  };
+  const CEF_ZH_SECAO = {
+    'A. Especificações Principais / Main Specification': 'A. 主要规格',
+    'B. Cabine / Car': 'B. 轿厢',
+    'C. Portas / Door': 'C. 门',
+    'D. COP e LOP': 'D. 操纵箱与召唤箱（COP / LOP）',
+    'E. Opcionais / Options': 'E. 选配项',
+    'A. Identificação do pedido / Order Identification': 'A. 订单信息',
+    'B. Especificação básica do elevador atendido / Base Lift Specification': 'B. 所服务电梯的基本规格',
+    'C. Comando / Control Cabinet': 'C. 控制柜',
+    'D. Máquina, freio e encoder / Machine, Brake & Encoder': 'D. 曳引机、制动器和编码器',
+    'E. Botoeiras e interface humana / Human Interface': 'E. 操纵箱与人机界面',
+    'F. Acessórios elétricos / Electric Accessories': 'F. 电气附件',
+    'G. Geometria para fiação / Cable System Geometry': 'G. 布线几何尺寸',
+  };
+  /* valor PT (minúsculo, sem espaços nas pontas) → [EN, 中文] */
+  const CEF_VALORES_I18N = {
+    'sim': ['Yes', '是'], 'não': ['No', '否'], 'nao': ['No', '否'], 'nenhuma': ['None', '无'],
+    'aço 304': ['Stainless steel 304', '304不锈钢'], 'aço 430': ['Stainless steel 430', '430不锈钢'],
+    'pintado': ['Painted', '喷漆'],
+    'central': ['Center opening', '中分门'], 'lateral': ['Side opening', '旁开门'],
+    'telescópica': ['Telescopic', '双折门（伸缩门）'], 'telescopica': ['Telescopic', '双折门（伸缩门）'],
+    'concreto': ['Concrete', '混凝土'], 'alvenaria': ['Masonry', '砖石'], 'aço': ['Steel', '钢结构'],
+    'metálica': ['Metal structure', '钢结构'], 'metalica': ['Metal structure', '钢结构'],
+    'home lift': ['Home Lift', '家用电梯'],
+    'passenger lift': ['', '乘客电梯'], 'freight lift': ['', '载货电梯'],
+    'hospital (bed) lift': ['', '医用（病床）电梯'], 'sightseeing/panoramic lift': ['', '观光电梯'],
+    'machine room': ['', '有机房'], 'machine room less': ['', '无机房'],
+    'simplex': ['', '单梯控制'], 'duplex': ['', '双梯并联'], 'triplex': ['', '三梯并联'], 'group control': ['', '群控'],
+  };
+  /* Opções do catálogo (o que é gravado na Unidade é o CÓDIGO). */
+  const CEF_OPCOES_I18N = {
+    'COP-004C': ['Aço Inox Escovado c/ IPD', 'Brushed stainless steel with IPD', '拉丝不锈钢，带IPD显示器'],
+    'COP-05C': ['Totem em Aço Inox Escovado c/ IPD', 'Brushed stainless steel totem with IPD', '拉丝不锈钢立柱式，带IPD显示器'],
+    'COP-17TFT10': ['Totem em Aço Inox Escovado c/ TFT 10"', 'Brushed stainless steel totem with 10" TFT', '拉丝不锈钢立柱式，带10寸TFT屏'],
+    'COP-5TFT10': ['Totem em Aço Inox Escovado c/ IPD — TFT 10"', 'Brushed stainless steel totem with IPD — 10" TFT', '拉丝不锈钢立柱式，带IPD — 10寸TFT屏'],
+    'COP-26': ['Botoeira "Touch" (Homelift)', '"Touch" panel (Homelift)', '“触摸式”操纵箱（家用梯）'],
+    'COP-27': ['Botoeira "Touch" (Homelift)', '"Touch" panel (Homelift)', '“触摸式”操纵箱（家用梯）'],
+    'COP-29': ['Botoeira "Touch" (Homelift)', '"Touch" panel (Homelift)', '“触摸式”操纵箱（家用梯）'],
+    'LOP-12C': ['Aço Inox Escovado c/ IPD', 'Brushed stainless steel with IPD', '拉丝不锈钢，带IPD显示器'],
+    'LOP-35': ['Botoeira "Touch" (Homelift)', '"Touch" panel (Homelift)', '“触摸式”召唤箱（家用梯）'],
+    'LOP-36': ['Botoeira "Touch" (Homelift)', '"Touch" panel (Homelift)', '“触摸式”召唤箱（家用梯）'],
+    'LOP-41': ['Botoeira "Touch" (Homelift)', '"Touch" panel (Homelift)', '“触摸式”召唤箱（家用梯）'],
+    'LOP-M7': ['Vidro branco c/ IPD Vermelho', 'White glass with red IPD', '白色玻璃面板，红色IPD显示器'],
+    'CLIENTE': ['A ser instalado pelo cliente', 'To be installed by the customer', '由客户自行安装'],
+    'PS-034': ['Mármore Resinado — padrão PS-034', 'Resin marble — pattern PS-034', '树脂大理石 — 花纹 PS-034'],
+    'PS-035': ['Mármore Resinado — padrão PS-035', 'Resin marble — pattern PS-035', '树脂大理石 — 花纹 PS-035'],
+    'PS-036': ['Mármore Resinado — padrão PS-036', 'Resin marble — pattern PS-036', '树脂大理石 — 花纹 PS-036'],
+    'PS-037': ['Mármore Resinado — padrão PS-037', 'Resin marble — pattern PS-037', '树脂大理石 — 花纹 PS-037'],
+    'PS-102': ['PVC Cinza', 'Grey PVC', '灰色PVC'],
+    'PS-201': ['Aço Xadrez', 'Checkered steel plate', '花纹钢板'],
+    'REBAIXO': ['Com rebaixo (sem piso de fábrica)', 'Recessed (no factory floor)', '地面下沉（不含出厂地板）'],
+    'P-01': ['Aço Inox Escovado', 'Brushed stainless steel', '拉丝不锈钢'],
+    'P-01-VIDRO': ['Aço Inox Escovado / Vidro', 'Brushed stainless steel / glass', '拉丝不锈钢 / 玻璃'],
+    'P-100': ['Aço Inox Escovado (variante)', 'Brushed stainless steel (variant)', '拉丝不锈钢（变体）'],
+    'P-301': ['Aço Pintado', 'Painted steel', '喷漆钢板'],
+    'SUB-001': ['Aço Inox Escovado e Led', 'Brushed stainless steel and LED', '拉丝不锈钢及LED灯'],
+    'SUB-230': ['Aço Inox Escovado e Led (variante dourada)', 'Brushed stainless steel and LED (gold variant)', '拉丝不锈钢及LED灯（金色款）'],
+    'VPV-TETO-ACRILICO': ['Teto Acrílico em Led', 'Acrylic LED ceiling', 'LED亚克力吊顶'],
+    'VPV-TETO-INOX': ['Teto Inox em Led', 'Stainless steel LED ceiling', 'LED不锈钢吊顶'],
+  };
+  function cefValorUm(t) {
+    const k = String(t).trim();
+    if (CEF_OPCOES_I18N[k]) { const [pt, en, zh] = CEF_OPCOES_I18N[k]; return `${k} — ${pt} / ${en} / ${zh}`; }
+    const m = CEF_VALORES_I18N[k.toLowerCase()];
+    if (!m) return null;
+    const [en, zh] = m;
+    return en ? `${k} / ${en} / ${zh}` : `${k} / ${zh}`;
+  }
+  /* "Sim / Yes" e "Não / No" (já bilíngues) e valores já com EN ganham só o chinês. */
+  function cefValorI18n(v) {
+    if (typeof v !== 'string') return v;
+    const t = v.trim();
+    if (t === 'Sim / Yes') return 'Sim / Yes / 是';
+    if (t === 'Não / No') return 'Não / No / 否';
+    const um = cefValorUm(t);
+    if (um) return um;
+    const partes = t.split('/').map((x) => x.trim()).filter(Boolean);
+    if (partes.length > 1) {
+      const trad = partes.map(cefValorUm);
+      if (trad.every(Boolean)) return trad.join(' ; ');
+    }
+    return v;
+  }
 
   const CEF_SPEC_DEFS = [
     { key: 'numero_elevador', pt: 'Número do elevador', en: 'Lift No.', secao: 'A', get: (u) => u.identificador },
@@ -204,15 +319,50 @@
      categoriaProduto (opcional, default 'elevador') escolhe qual conjunto
      de definições usar — CEF_SPEC_DEFS (elevador) ou
      CEF_SPEC_DEFS_QUADRO_COMANDO (quadro de comando comprado pronto). */
-  function unitSpecSecoes(u, tipoFormulario, categoriaProduto) {
+  function unitSpecSecoes(u, tipoFormulario, categoriaProduto, opts) {
+    const i18n = !!(opts && opts.i18n);
     const { defs, titulos } = cefDefsPorCategoria(categoriaProduto);
     const isElevator = tipoFormulario === 'elevator';
     const porSecao = {};
     defs.forEach((d) => {
       if (d.onlyElevator && !isElevator) return;
-      (porSecao[d.secao] = porSecao[d.secao] || []).push([d.key, d.pt, d.en, d.get(u)]);
+      const valor = d.get(u);
+      /* i18n: a linha ganha o rótulo em chinês (5º item) e o valor conhecido
+         é traduzido; sem i18n nada muda (visão interna). */
+      const linha = i18n
+        ? [d.key, d.pt, d.en, cefValorI18n(valor), CEF_ZH_LABEL[d.key] || '']
+        : [d.key, d.pt, d.en, valor];
+      (porSecao[d.secao] = porSecao[d.secao] || []).push(linha);
     });
-    return Object.keys(titulos).filter((s) => porSecao[s]).map((s) => ({ titulo: titulos[s], linhas: porSecao[s] }));
+    return Object.keys(titulos).filter((sc) => porSecao[sc]).map((sc) => ({
+      titulo: i18n && CEF_ZH_SECAO[titulos[sc]] ? `${titulos[sc]} / ${CEF_ZH_SECAO[titulos[sc]]}` : titulos[sc],
+      linhas: porSecao[sc],
+    }));
+  }
+
+  /* ---------- 06/10 — assunto e corpo do RFQ em PT-BR / EN-US / 中文 ----------
+     Fonte única pro Formulário de Elevador e pro Quadro de Comando. */
+  function mensagemRfq({ numeroDocumento, numeroTxt, descricaoPt, descricaoEn, descricaoZh, url, linkJaEnviadoEmDoisCanais }) {
+    const subject = `Cotação técnica ${numeroDocumento} — VerticalParts | Technical quotation ${numeroDocumento} — VerticalParts | 技术询价 ${numeroDocumento} — VerticalParts`;
+    const numEn = (numeroTxt || '').replace('Cotação Nº', 'Quotation No.');
+    const numZh = (numeroTxt || '').replace('Cotação Nº', '询价编号');
+    let text =
+      `🇧🇷 Português (Brasil)\n` +
+      `Solicitação de cotação técnica ${numeroDocumento}${numeroTxt || ''} — VerticalParts\n` +
+      `Segue o link com as especificações ${descricaoPt} para cotação:\n${url}\n\n` +
+      `🇺🇸 English (US)\n` +
+      `Technical quotation request ${numeroDocumento}${numEn} — VerticalParts\n` +
+      `Please find the link with the specifications ${descricaoEn} for quotation:\n${url}\n\n` +
+      `🇨🇳 中文\n` +
+      `技术询价请求 ${numeroDocumento}${numZh} — VerticalParts\n` +
+      `请通过以下链接查看${descricaoZh}的规格并报价：\n${url}`;
+    if (linkJaEnviadoEmDoisCanais) {
+      text += `\n\n—\n` +
+        `Este mesmo link foi enviado por WhatsApp e E-mail — responda por qualquer um dos dois, sem precisar repetir.\n` +
+        `This same link was sent via WhatsApp and Email — please reply through either one, no need to repeat.\n` +
+        `此链接已通过WhatsApp和邮件发送 — 您可以通过任一方式回复，无需重复填写。`;
+    }
+    return { subject, text };
   }
 
   function unitSpecFieldLabel(key, categoriaProduto) {
@@ -537,13 +687,13 @@
      fornecedor não pode ficar travado por causa de um serviço de IA
      instável, só fica sem a linha traduzida. */
   const VP_TRANSLATE_URL = 'https://jxtqwzmpgofwctqajewt.supabase.co/functions/v1/vp-translate-to-pt';
-  const VP_TRANSLATE_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+  const VP_TRANSLATE_ANON_KEY = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
   async function traduzirConfirmacaoTecnica(text) {
     if (!text || !text.trim()) return null;
     try {
       const res = await fetch(VP_TRANSLATE_URL, {
         method: 'POST',
-        headers: { Authorization: 'Bearer ' + VP_TRANSLATE_ANON_KEY, 'Content-Type': 'application/json' },
+        headers: { apikey: VP_TRANSLATE_ANON_KEY, Authorization: 'Bearer ' + VP_TRANSLATE_ANON_KEY, 'Content-Type': 'application/json' },
         body: JSON.stringify({ text }),
       });
       if (!res.ok) return null;
@@ -552,6 +702,43 @@
     } catch (e) {
       return null;
     }
+  }
+
+  /* ---------- Histórico de PREÇO do fornecedor (07/10/2026) ----------
+     `respostas` é sobrescrita a cada nova resposta (formulário do link reaberto ou registro por e-mail com
+     "substituir"), então o preço anterior se perdia. Aqui compara antes × depois e grava UMA linha em vp_logs
+     (alvo_id = id desta cotação) com de → para; a linha do tempo das Tratativas (TratativasStore.listarHistoricoInterno)
+     lê isso. Só registra se algo mudou (ou na 1ª vez que há preço). Best-effort: nunca quebra o fluxo de resposta. */
+  function precosDe(r) {
+    const out = {};
+    if (!r) return out;
+    (r.itens || []).forEach((i) => {
+      const nome = i.unidade_identificador || i.unidade_id || 'Equipamento';
+      if (i.preco_unitario !== '' && i.preco_unitario != null && !isNaN(Number(i.preco_unitario))) out[nome + ' (preço unitário)'] = Number(i.preco_unitario);
+    });
+    [['frete_internacional_usd', 'Frete internacional (US$)'], ['taxas_extras_usd', 'Taxas extras (US$)']].forEach(([k, nome]) => {
+      if (r[k] !== '' && r[k] != null && !isNaN(Number(r[k]))) out[nome] = Number(r[k]);
+    });
+    return out;
+  }
+  function diffPrecos(antes, depois) {
+    const a = precosDe(antes), d = precosDe(depois);
+    const nomes = [...new Set([...Object.keys(a), ...Object.keys(d)])];
+    const itens = nomes.filter((n) => a[n] !== d[n]).map((n) => ({ nome: n, antes: a[n] ?? null, depois: d[n] ?? null }));
+    return { itens, primeira: !Object.keys(a).length && Object.keys(d).length > 0 };
+  }
+  function registrarMudancaPreco(cur, novas, extra) {
+    try {
+      if (!window.VPLog || !cur) return;
+      const { itens, primeira } = diffPrecos(cur.respostas, novas);
+      if (!itens.length) return;
+      window.VPLog.registrar(Object.assign({
+        modulo: 'Cotação a Fornecedor',
+        acao: primeira ? 'Fornecedor informou os preços' : 'Preço do fornecedor atualizado',
+        alvo: cur.numero_documento, alvo_id: cur.id,
+        detalhe: { moeda: (novas && novas.moeda) || (cur.respostas && cur.respostas.moeda) || 'USD', itens },
+      }, extra || {}));
+    } catch (e) { console.warn('[CotacaoFornecedor] histórico de preço falhou', e); }
   }
 
   /* respostas = { moeda, incoterm_porto, condicoes_pagamento, prazo_fabricacao,
@@ -585,12 +772,45 @@
       cambio_na_resposta_usd_brl: cambioNaResposta,
     };
     await c.from('cotacoes_elevador_fornecedor').update(patch).eq('token', token);
+    registrarMudancaPreco(cur, respostas, { ator_nome: cur.fornecedor || 'Fornecedor', ator_setor: 'fornecedor' });
     if (window.VPLog) window.VPLog.registrar({
       ator_nome: cur.fornecedor || 'Fornecedor', ator_setor: 'fornecedor',
       modulo: 'Formulário de Elevadores', acao: 'respondeu a cotação de fornecedor',
       alvo: cur.numero_documento, alvo_id: cur.id, detalhe: { ip },
     });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'FORNECEDOR_RESPONDEU',
+      numeroCotacao: cur.dados_envio?.header?.numero_cotacao,
+      alvoLabel: `${cur.fornecedor || 'Fornecedor'} · ${cur.numero_documento || ''}`, alvoId: cur.id,
+    });
+    return { ...cur, ...patch };
+  }
+
+  /* ---------- Resposta do fornecedor REGISTRADA A PARTIR DE UM E-MAIL (Inbox, 04/10/2026) ----------
+     O fornecedor respondeu por e-mail em vez do link. Uma pessoa confere os valores propostos pelo Inbox (src/inbox-preco*.js) e
+     confirma: aqui grava no MESMO formato do formulário (`salvarResposta`) — status 'respondido', câmbio congelado, evento
+     FORNECEDOR_RESPONDEU (fecha a etapa de espera) —, mas com _meta.origem = 'email' (sem IP/navegador do fornecedor) e quem registrou.
+     Não sobrescreve resposta já dada pelo formulário, a menos que `substituir` seja pedido explicitamente. */
+  async function registrarRespostaPorEmail(id, respostas, opcoes) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Cotação do fornecedor não encontrada.');
+    const o = opcoes || {};
+    if (cur.status === 'respondido' && !o.substituir) throw new Error('Este fornecedor já respondeu pelo formulário — confirme "substituir" para atualizar.');
+    const now = new Date().toISOString();
+    const payload = { ...respostas, _meta: { origem: 'email', email_id: o.emailId || null, registrado_por: o.por || null, respondido_em: now, ...(cur.respostas && cur.respostas._meta && cur.status === 'respondido' ? { substitui: cur.respostas._meta } : {}) } };
+    let cambioNaResposta = cur.cambio_na_resposta_usd_brl ?? null;
+    try { cambioNaResposta = (await window.CambioAPI.buscarUsdBrl()).valor; } catch (e) { /* segue sem câmbio novo */ }
+    const patch = { status: 'respondido', respostas: payload, responded_at: now, updated_at: now, cambio_na_resposta_usd_brl: cambioNaResposta };
+    const { data, error } = await c.from('cotacoes_elevador_fornecedor').update(patch).eq('id', id).select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('Não consegui gravar a resposta (nenhuma linha alterada).');
+    registrarMudancaPreco(cur, respostas);
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Registrou a resposta do fornecedor a partir de um e-mail',
+      alvo: cur.numero_documento, alvo_id: cur.id, detalhe: { email_id: o.emailId || null, substituiu: cur.status === 'respondido' },
+    });
+    if (window.EventosFluxo && cur.status !== 'respondido') window.EventosFluxo.registrar({
       evento: 'FORNECEDOR_RESPONDEU',
       numeroCotacao: cur.dados_envio?.header?.numero_cotacao,
       alvoLabel: `${cur.fornecedor || 'Fornecedor'} · ${cur.numero_documento || ''}`, alvoId: cur.id,
@@ -675,11 +895,11 @@
   window.CotacaoElevadorFornecedorStore = {
     cotacaoUrl, tipoFormularioPara, liftModelLabel, machineRoomLabel, controleLabel,
     CATEGORIAS_PRODUTO, STATUS_LABEL, STATUS_COR, STATUS_GROUP_LABEL, statusGroupLabel,
-    unitSpecSecoes, unitSpecFieldLabel, assetMasterId,
+    unitSpecSecoes, unitSpecFieldLabel, assetMasterId, mensagemRfq, cefValorI18n,
     listarAnexosResposta, anexarArquivoResposta, urlAssinadaAnexoResposta, removerAnexoResposta,
     listarAnexosFormulario, urlAssinadaAnexoFormulario,
     gerar, marcarEnviado, listarPorFormulario, listarTodas, getById,
-    getByToken, marcarVisualizado, salvarResposta, getPublicIP,
-    decidirComprar, aprovar, listarComprasAguardandoEmbarque, excluirComMotivo,
+    getByToken, marcarVisualizado, salvarResposta, registrarRespostaPorEmail, getPublicIP,
+    decidirComprar, aprovar, listarComprasAguardandoEmbarque, excluirComMotivo, diffPrecos,
   };
 }());
