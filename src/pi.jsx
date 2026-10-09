@@ -625,15 +625,20 @@ function PIModalVincularEmbarque({ pi, embarques, onClose, onSaved }) {
 
 /* ---------- Página ---------- */
 function PIPage() {
-  console.log('🎯 PI PAGE LOADED - v12 - FIELD REORDER SHOULD BE VISIBLE');
+  console.log('🎯 PI PAGE LOADED - v13 - URL reflete Nova/Editar/Vincular');
   const [pis, setPis] = React.useState(null);
   const [embarques, setEmbarques] = React.useState([]);
-  const [showForm, setShowForm] = React.useState(false);
-  const [editing, setEditing] = React.useState(null);
-  const [vincular, setVincular] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [filterStatus, setFilterStatus] = React.useState('Todos');
   const [saving, setSaving] = React.useState(false);
+
+  /* Formulário (Nova/Editar) e o modal de vincular embarque refletidos na URL:
+     /gestao-importacao/pi-importacao              → lista
+     /gestao-importacao/pi-importacao/novo         → nova P.I.
+     /gestao-importacao/pi-importacao/<id>         → editar aquela P.I.
+     /gestao-importacao/pi-importacao/<id>/vincular → modal de vínculo, sobre a lista */
+  const [rotaId] = window.useRotaId('pi-importacao');
+  const [sub] = window.useRotaItem('pi-importacao', rotaId);
 
   const reload = React.useCallback(() => {
     window.PIStore.listarTodas().then(setPis).catch(() => setPis([]));
@@ -643,13 +648,22 @@ function PIPage() {
 
   const embarquesMap = React.useMemo(() => Object.fromEntries(embarques.map((e) => [e.id, e])), [embarques]);
 
+  const showForm = rotaId === 'novo' || (!!rotaId && sub !== 'vincular');
+  const editing = (pis && rotaId && rotaId !== 'novo' && sub !== 'vincular') ? (pis.find((p) => p.id === rotaId) || null) : null;
+  const vincular = (pis && rotaId && sub === 'vincular') ? (pis.find((p) => p.id === rotaId) || null) : null;
+
+  const abrirNova = () => { if (window.VpRouter) window.VpRouter.navigate('pi-importacao', 'novo'); };
+  const abrirEditar = (pi) => { if (window.VpRouter) window.VpRouter.navigate('pi-importacao', pi.id); };
+  const abrirVincular = (pi) => { if (window.VpRouter) window.VpRouter.navigate('pi-importacao', pi.id, 'vincular'); };
+  const fecharModal = () => { if (window.VpRouter) window.VpRouter.navigate('pi-importacao', null); };
+
   const salvar = async (form) => {
     setSaving(true);
     try {
       if (editing) await window.PIStore.atualizar(editing.id, form);
       else await window.PIStore.criar(form);
       window.toast?.(editing ? 'P.I. atualizada.' : 'P.I. criada.', 'success');
-      setShowForm(false); setEditing(null); reload();
+      fecharModal(); reload();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setSaving(false); }
   };
@@ -680,14 +694,14 @@ function PIPage() {
           <p className="page-head__sub">Gerencie todas as P.I. e vincule-as aos embarques.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setShowForm(true); }}>Nova P.I.</Button>
+          <Button variant="primary" icon="plus" onClick={abrirNova}>Nova P.I.</Button>
         </div>
       </div>
 
       {showForm && (
         <div style={{ marginBottom: 20 }}>
           <PIForm embarques={embarques} initialData={editing} isEdit={!!editing} saving={saving}
-            onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
+            onSubmit={salvar} onCancel={fecharModal}/>
         </div>
       )}
 
@@ -728,8 +742,8 @@ function PIPage() {
                   <td>{embarque ? <span className="small">{embarqueLabel(embarque)}</span> : <span className="muted small">Não vinculada</span>}</td>
                   <td>
                     <div className="row gap-1">
-                      <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => { setEditing(pi); setShowForm(true); }}/>
-                      <Button variant="ghost" size="sm" icon="link" title="Vincular embarque" onClick={() => setVincular(pi)}/>
+                      <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => abrirEditar(pi)}/>
+                      <Button variant="ghost" size="sm" icon="link" title="Vincular embarque" onClick={() => abrirVincular(pi)}/>
                       <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={() => excluir(pi)}/>
                     </div>
                   </td>
@@ -740,7 +754,7 @@ function PIPage() {
         </table>
       </div>
 
-      {vincular && <PIModalVincularEmbarque pi={vincular} embarques={embarques} onClose={() => setVincular(null)} onSaved={reload}/>}
+      {vincular && <PIModalVincularEmbarque pi={vincular} embarques={embarques} onClose={fecharModal} onSaved={reload}/>}
     </div>
   );
 }

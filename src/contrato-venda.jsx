@@ -1463,7 +1463,10 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
   const [loading, setLoading] = _cvUS(true);
   const [filter, setFilter] = _cvUS('todos');
   const [query, setQuery] = _cvUS('');
-  const [drawerId, setDrawerId] = _cvUS(null);
+  // Item aberto (drawer de auditoria) vive na URL — /contrato-venda-equipamentos/painel/<id>,
+  // mesmo padrão de useRotaItem já usado no PCP (src/rota-pcp.js). Reload/compartilhar o
+  // link reabre o drawer do contrato certo.
+  const [drawerId, setDrawerId] = window.useRotaItem('contrato-venda-equipamentos', 'painel');
   const [sendRec, setSendRec] = _cvUS(null);
   const [aguardando, setAguardando] = _cvUS([]);
   const [rascunhos, setRascunhos] = _cvUS([]);
@@ -1648,11 +1651,44 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
    PAGE — abas Painel / Novo
    ============================================================ */
 function ContratoVendaEquipamentosPage() {
-  const [tab, setTab] = _cvUS('painel');
+  // Aba (Painel/Novo) na URL — /contrato-venda-equipamentos/novo, mesmo padrão
+  // de useRouteTab já usado no PCP/Almoxarifado (router.js).
+  const [tab, setTab] = window.useRouteTab('contrato-venda-equipamentos', 'painel', ['painel', 'novo']);
+  // Qual proposta/rascunho originou o assistente "Novo contrato" — vai no 3º
+  // segmento da URL (prop-<id> / rasc-<id>) pra reload/link direto reabrir o
+  // mesmo assistente em vez de um formulário em branco.
+  const [novoItem, setNovoItem] = window.useRotaItem('contrato-venda-equipamentos', 'novo');
   const [prefillProposta, setPrefillProposta] = _cvUS(null);
   const [rascunhoEdit, setRascunhoEdit] = _cvUS(null);
-  const criarDeProposta = (p) => { setRascunhoEdit(null); setPrefillProposta(p); setTab('novo'); };
-  const continuarRascunho = (r) => { setPrefillProposta(null); setRascunhoEdit(r); setTab('novo'); };
+  // Ordem importa: setTab() navega sem 3º segmento (o padrão de useRouteTab sem
+  // id), então setNovoItem() tem que vir DEPOIS — é a chamada que fixa aba+item
+  // juntos na URL final (useRotaItem sempre grava os dois segmentos de uma vez).
+  const criarDeProposta = (p) => { setRascunhoEdit(null); setPrefillProposta(p); setTab('novo'); setNovoItem('prop-' + p.id); };
+  const continuarRascunho = (r) => { setPrefillProposta(null); setRascunhoEdit(r); setTab('novo'); setNovoItem('rasc-' + r.id); };
+
+  // Deep link / reload na aba "Novo" com item na URL, mas sem o prefill em
+  // memória ainda (reload de verdade, não clique local) — refaz a busca.
+  _cvUE(() => {
+    if (tab !== 'novo' || !novoItem || prefillProposta || rascunhoEdit) return;
+    let vivo = true;
+    (async () => {
+      try {
+        if (novoItem.indexOf('prop-') === 0) {
+          const id = novoItem.slice(5);
+          const lista = await window.CVStore.listarPropostasAguardandoContrato();
+          const p = (lista || []).find((x) => x.id === id);
+          if (vivo && p) setPrefillProposta(p);
+        } else if (novoItem.indexOf('rasc-') === 0) {
+          const id = novoItem.slice(5);
+          const lista = await window.CVStore.listarRascunhos();
+          const r = (lista || []).find((x) => x.id === id);
+          if (vivo && r) setRascunhoEdit(r);
+        }
+      } catch (e) { /* fica no assistente em branco, melhor que travar */ }
+    })();
+    return () => { vivo = false; };
+  }, [tab, novoItem]);
+
   return (
     <div className="ci-page">
       <div className="ci-page-head">
@@ -1664,14 +1700,14 @@ function ContratoVendaEquipamentosPage() {
         <div className="ci-page-actions-wrap">
           <div className="ci-page-actions">
             <button className={'ci-tab' + (tab === 'painel' ? ' on' : '')} onClick={() => setTab('painel')}>▦ Painel</button>
-            <button className={'ci-tab' + (tab === 'novo' ? ' on' : '')} onClick={() => { setPrefillProposta(null); setRascunhoEdit(null); setTab('novo'); }}>+ Novo contrato</button>
+            <button className={'ci-tab' + (tab === 'novo' ? ' on' : '')} onClick={() => { setPrefillProposta(null); setRascunhoEdit(null); setNovoItem(null); setTab('novo'); }}>+ Novo contrato</button>
           </div>
         </div>
       </div>
       <div className="ci-page-body">
         {tab === 'painel'
           ? <CVDashboard onCriarDeProposta={criarDeProposta} onContinuarRascunho={continuarRascunho}/>
-          : <CVWizard key={rascunhoEdit ? rascunhoEdit.id : 'novo'} rascunho={rascunhoEdit} prefillProposta={prefillProposta} onCreated={() => { setPrefillProposta(null); setRascunhoEdit(null); setTab('painel'); }}/>}
+          : <CVWizard key={rascunhoEdit ? rascunhoEdit.id : 'novo'} rascunho={rascunhoEdit} prefillProposta={prefillProposta} onCreated={() => { setPrefillProposta(null); setRascunhoEdit(null); setNovoItem(null); setTab('painel'); }}/>}
       </div>
     </div>
   );

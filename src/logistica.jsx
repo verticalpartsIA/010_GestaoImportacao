@@ -1550,6 +1550,10 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   const [loading, setLoading] = React.useState(true);
   const [erro, setErro] = React.useState(null);
   const [activeId, setActiveId] = React.useState(null);
+  /* Abrir um e-mail (clique na linha, na conversa, na faixa "precisa de você"…) também grava
+     na URL (/geral/inbox/<id>) — antes só setActiveId, então o endereço na barra do navegador
+     nunca refletia qual e-mail estava aberto. Fechar (null) volta pra /geral/inbox. */
+  const abrirEmail = (id) => { setActiveId(id); if (setSubsel) setSubsel(id); };
   const [folder, setFolder] = React.useState("inbox");
   const [enviadosBase, setEnviados] = React.useState([]);
   const [carregandoEnviados, setCarregandoEnviados] = React.useState(false);
@@ -1848,7 +1852,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
       if (error) throw error;
       if (ehEnviado(email)) setEnviados((prev) => prev.filter((e) => e.id !== email.id));
       else setExcluidos((prev) => [...prev, email.id]);
-      if (activeId === email.id) setActiveId(null);
+      if (activeId === email.id) abrirEmail(null);
       window.toast?.('E-mail excluído da lista.', 'success');
       if (window.VPLog) window.VPLog.registrar({
         modulo: 'Inbox de E-mail', acao: 'Excluiu e-mail da lista (soft-delete)',
@@ -2081,7 +2085,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
       const feitos = new Set((data || []).map((r) => r.id));
       setEnviados((prev) => prev.filter((e) => !feitos.has(e.id)));
       setExcluidos((prev) => [...prev, ...feitos]);
-      if (activeId && feitos.has(activeId)) setActiveId(null);
+      if (activeId && feitos.has(activeId)) abrirEmail(null);
       setSelecionados(new Set());
       if (window.VPLog) window.VPLog.registrar({ modulo: 'Inbox de E-mail', acao: 'Excluiu e-mails da lista (soft-delete, em massa)', alvo: `${feitos.size} e-mail(s)` });
       window.toast?.(`${feitos.size} e-mail(s) excluído(s) da lista.`, 'success');
@@ -2098,7 +2102,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     if (!pode('editar')) return semPermissaoEditar();
     const desfazer = todosArquivados;
     if (await arquivar(alvosIds, !desfazer)) {
-      if (!desfazer && activeId && alvosIds.includes(activeId)) setActiveId(null);
+      if (!desfazer && activeId && alvosIds.includes(activeId)) abrirEmail(null);
       concluirAcao(`${alvosIds.length} e-mail(s) ${desfazer ? 'de volta à Caixa de entrada' : 'arquivado(s) — continuam em “Todos os e-mails”'}.`);
     }
   };
@@ -2115,14 +2119,14 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     try {
       const n = await window.inboxMarcarSpam(ids, marcar);
       if (meta.recarregar) meta.recarregar();
-      if (activeId && ids.includes(activeId)) setActiveId(null);
+      if (activeId && ids.includes(activeId)) abrirEmail(null);
       concluirAcao(marcar ? `${n} e-mail(s) marcado(s) como spam (aparece em “Spam”, para todos).` : `${n} e-mail(s) tirado(s) do spam.`);
     } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
   };
   const adiarAlvos = async (quando) => {
     if (!pode('editar')) return semPermissaoEditar();
     if (await adiar(alvosIds, quando)) {
-      if (quando && activeId && alvosIds.includes(activeId)) setActiveId(null);
+      if (quando && activeId && alvosIds.includes(activeId)) abrirEmail(null);
       concluirAcao(quando ? `${alvosIds.length} e-mail(s) suspenso(s) até ${new Date(quando).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', hour: '2-digit', minute: '2-digit' })}.` : 'Adiamento cancelado — de volta à Caixa de entrada.');
     }
   };
@@ -2141,7 +2145,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
     const err = await mk.aplicar(alvosIds, mc.id, true);
     if (err) { window.toast?.(err, 'error'); return; }
     await arquivar(alvosIds, true);
-    if (activeId && alvosIds.includes(activeId)) setActiveId(null);
+    if (activeId && alvosIds.includes(activeId)) abrirEmail(null);
     concluirAcao(`${alvosIds.length} e-mail(s) movido(s) para “${mc.nome}”.`);
   };
   const apagarMarcador = async (mc) => {
@@ -2221,7 +2225,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
           {folders.map((f) => {
             const I = Icon[f.icon] || Icon.mail;
             return (
-              <div key={f.id} className={"inbox__folder " + (folder === f.id && !buscando ? "is-active" : "")} onClick={() => { setBusca(''); setFolder(f.id); setActiveId(null); }}>
+              <div key={f.id} className={"inbox__folder " + (folder === f.id && !buscando ? "is-active" : "")} onClick={() => { setBusca(''); setFolder(f.id); abrirEmail(null); }}>
                 <I size={14}/>
                 <span>{f.label}</span>
                 {f.count ? <span className="count">{f.count}</span> : null}
@@ -2230,7 +2234,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
           })}
           {window.InboxSecaoMarcadores && O && (
             <window.InboxSecaoMarcadores arvore={mkArvore} pasta={folder}
-              onAbrir={(id) => { setBusca(''); setFolder(id); setActiveId(null); }} onNovo={() => setModalMarcador(true)}
+              onAbrir={(id) => { setBusca(''); setFolder(id); abrirEmail(null); }} onNovo={() => setModalMarcador(true)}
               contagem={(id) => todasLinhas.filter((m) => (mk.porEmail[m.id] || []).includes(id) && naoLida(m) && !spamDe(m)).length}
               podeGerir={(m) => O.podeGerirMarcador(m, eu, capsOrg)} onApagar={apagarMarcador}/>
           )}
@@ -2269,7 +2273,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
             </div>
           </div>
           {folder === "inbox" && !buscando && window.InboxFaixaImportante && (
-            <window.InboxFaixaImportante itens={importantes} ocultos={silenciosos.length} foco={foco} onToggleFoco={() => setFoco((f) => !f)} onAbrir={setActiveId}/>
+            <window.InboxFaixaImportante itens={importantes} ocultos={silenciosos.length} foco={foco} onToggleFoco={() => setFoco((f) => !f)} onAbrir={abrirEmail}/>
           )}
           {folder === "inbox" && !buscando && perm !== undefined && <InboxRespostasFormulario onAbrir={verNaLinhaDoTempo} verOk={verOk} liberado={perm === null ? 'sem' : perm.eu + ':' + (perm.flags && perm.flags.ver_todos)}/>}
           {folder === "inbox" && !buscando && !loading && emails.length === 0 && (
@@ -2307,7 +2311,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
             const est = estrelaDe(m);
             return (
               <div key={m.id} className={"inbox__item inbox__row " + (naoLidaConv(m) ? "unread " : "") + (activeId === m.id ? "is-active " : "") + (sel ? "is-sel" : "")}
-                onClick={() => { setActiveId(m.id); marcarLido(m.id); }}>
+                onClick={() => { abrirEmail(m.id); marcarLido(m.id); }}>
                 <label className="ig-check" onClick={(ev) => ev.stopPropagation()}><input type="checkbox" checked={sel} onChange={() => alternarSel(m.id)}/></label>
                 <span className={"ig-estrela" + (est ? " on" : "")} title={est ? 'Tirar a estrela' : 'Marcar com estrela (só para você)'}
                   onClick={(ev) => { ev.stopPropagation(); alternarEstrela(m.id, est); }}>{est ? '★' : '☆'}</span>
@@ -2340,7 +2344,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
           {(prefs.painel !== 'sem' || active) && (
         <div className="inbox__msg">
           {prefs.painel === 'sem' && active && (
-            <div className="ig-voltar"><Button variant="ghost" size="sm" icon="chevLeft" onClick={() => setActiveId(null)}>Voltar à lista</Button></div>
+            <div className="ig-voltar"><Button variant="ghost" size="sm" icon="chevLeft" onClick={() => abrirEmail(null)}>Voltar à lista</Button></div>
           )}
           {active ? (
             <>
@@ -2361,7 +2365,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
                   </div>
                 ) : (folder === 'inbox' && <div className="small muted" style={{ marginTop: 6 }}>Sem responsável — fica na fila de triagem até alguém atribuir.</div>)}
                 {window.InboxSugestaoBarra && <window.InboxSugestaoBarra s={sugAtiva} onVincular={vincularA} ocupado={vinculandoSug}/>}
-                {window.InboxFaixaConversa && <window.InboxFaixaConversa conversa={conversaDe(active)} linhas={todasLinhas} ativoId={active.id} onAbrir={(id) => { setActiveId(id); marcarLido(id); }} quando={window.igQuando}/>}
+                {window.InboxFaixaConversa && <window.InboxFaixaConversa conversa={conversaDe(active)} linhas={todasLinhas} ativoId={active.id} onAbrir={(id) => { abrirEmail(id); marcarLido(id); }} quando={window.igQuando}/>}
                 {gatilhoAberto && (
                   <div className="alert warning" style={{ marginTop: 8 }}>
                     <Icon.warning/>

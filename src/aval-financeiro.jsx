@@ -203,13 +203,12 @@ function AFModalAvalPagamento({ row, onClose, onSaved }) {
    desconhecida) — "CEO só chega nele dentro de discrepâncias". A antiga
    "Minha aprovação" (responsável pelo sistema) saiu: deixou de travar a
    compra. Ver AvalFinanceiroStore.podeIniciarCompra. */
-function AFAprovacoes({ row, onSaved }) {
+function AFAprovacoes({ row, onSaved, avalPagAberto, onAbrirPagamento, onFecharPagamento }) {
   const a = row.aval;
   const propostaId = row.proposta ? row.proposta.id : null;
   const [busy, setBusy] = React.useState(false);
   const [ceo, setCeo] = React.useState(null); // {precisa, margem}
   const [aj, setAj] = React.useState(undefined); // undefined = carregando
-  const [avalPagAberto, setAvalPagAberto] = React.useState(false);
 
   React.useEffect(() => {
     let vivo = true;
@@ -248,9 +247,9 @@ function AFAprovacoes({ row, onSaved }) {
             <Badge variant="warning" dot>Aval de Pagamento pendente (após o sinal)</Badge>
             <Button variant="outline" size="sm" disabled={!a.sinal_pago}
               title={a.sinal_pago ? 'Libera a compra ao fornecedor (junto com o Aval Jurídico)' : 'Confirme o sinal pago antes'}
-              onClick={() => setAvalPagAberto(true)}>Dar Aval de Pagamento</Button>
+              onClick={onAbrirPagamento}>Dar Aval de Pagamento</Button>
           </>}
-      {avalPagAberto && <AFModalAvalPagamento row={row} onClose={() => setAvalPagAberto(false)} onSaved={onSaved}/>}
+      {avalPagAberto && <AFModalAvalPagamento row={row} onClose={onFecharPagamento} onSaved={onSaved}/>}
       {ajStatus === 'aprovado' && <Badge variant="success" dot>Aval Jurídico OK</Badge>}
       {ajStatus === 'reprovado' && <Badge variant="danger" dot>Aval Jurídico reprovado</Badge>}
       {ajStatus === 'pendente' && <Badge variant="warning" dot>Aval Jurídico pendente</Badge>}
@@ -267,7 +266,7 @@ function AFAprovacoes({ row, onSaved }) {
   );
 }
 
-function AFRow({ row, onOpenModal, onSaved }) {
+function AFRow({ row, onOpenModal, onSaved, avalPagAberto, onAbrirPagamento, onFecharPagamento }) {
   const a = row.aval;
   const status = a.status;
   return (
@@ -296,7 +295,8 @@ function AFRow({ row, onOpenModal, onSaved }) {
           )}
         </div>
       </div>
-      {status !== 'reprovado' && <AFAprovacoes row={row} onSaved={onSaved}/>}
+      {status !== 'reprovado' && <AFAprovacoes row={row} onSaved={onSaved}
+        avalPagAberto={avalPagAberto} onAbrirPagamento={onAbrirPagamento} onFecharPagamento={onFecharPagamento}/>}
     </div>
   );
 }
@@ -304,7 +304,18 @@ function AFRow({ row, onOpenModal, onSaved }) {
 function AvalFinanceiroPage({ setRoute }) {
   const [fila, setFila] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [modal, setModal] = React.useState(null); // { type, row }
+  // Modal aberto (qual ação, sobre qual proposta) vive na URL —
+  // /aval-financeiro/<propostaId>/<tipo> ('consulta'|'aprovar'|'reprovar'|
+  // 'sinal'|'pagamento') — reload e link direto reabrem o modal certo sobre
+  // a proposta certa. `useRotaId` lê o 2º segmento; `useRotaItem` o 3º —
+  // como aqui o "aba" (2º segmento) é um id dinâmico, não um nome fixo de
+  // modo, passamos o próprio `rotaId` lido como `aba`: na mesma renderização
+  // ele já bate com `loc.id`, então o 3º segmento sai certo (ver rota-pcp.js).
+  const [rotaId] = window.useRotaId('aval-financeiro');
+  const [tipoUrl] = window.useRotaItem('aval-financeiro', rotaId);
+  const modal = (tipoUrl && rotaId) ? { type: tipoUrl, row: fila.find((r) => r.proposta.id === rotaId) || null } : null;
+  const abrirModal = (type, row) => { if (window.VpRouter) window.VpRouter.navigate('aval-financeiro', row.proposta.id, type); };
+  const fecharModal = () => { if (window.VpRouter) window.VpRouter.navigate('aval-financeiro', null); };
 
   const reload = React.useCallback(() => {
     setLoading(true);
@@ -346,15 +357,18 @@ function AvalFinanceiroPage({ setRoute }) {
             </div>
           )}
           {fila.map((row) => (
-            <AFRow key={row.proposta.id} row={row} onOpenModal={(type, row) => setModal({ type, row })} onSaved={reload}/>
+            <AFRow key={row.proposta.id} row={row} onOpenModal={abrirModal} onSaved={reload}
+              avalPagAberto={!!(modal && modal.type === 'pagamento' && modal.row && modal.row.proposta.id === row.proposta.id)}
+              onAbrirPagamento={() => abrirModal('pagamento', row)}
+              onFecharPagamento={fecharModal}/>
           ))}
         </div>
       </Card>
 
-      {modal?.type === 'consulta' && <AFModalConsulta row={modal.row} onClose={() => setModal(null)} onSaved={reload}/>}
-      {modal?.type === 'aprovar' && <AFModalAval row={modal.row} aprovado onClose={() => setModal(null)} onSaved={reload}/>}
-      {modal?.type === 'reprovar' && <AFModalAval row={modal.row} aprovado={false} onClose={() => setModal(null)} onSaved={reload}/>}
-      {modal?.type === 'sinal' && <AFModalSinal row={modal.row} onClose={() => setModal(null)} onSaved={reload}/>}
+      {modal?.type === 'consulta' && modal.row && <AFModalConsulta row={modal.row} onClose={fecharModal} onSaved={reload}/>}
+      {modal?.type === 'aprovar' && modal.row && <AFModalAval row={modal.row} aprovado onClose={fecharModal} onSaved={reload}/>}
+      {modal?.type === 'reprovar' && modal.row && <AFModalAval row={modal.row} aprovado={false} onClose={fecharModal} onSaved={reload}/>}
+      {modal?.type === 'sinal' && modal.row && <AFModalSinal row={modal.row} onClose={fecharModal} onSaved={reload}/>}
     </div>
   );
 }
