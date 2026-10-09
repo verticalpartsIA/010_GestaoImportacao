@@ -7,8 +7,13 @@
    MODOS (localStorage.vp_auth_mode): 'off' | 'shadow' (padrão) | 'on'.
    - shadow: cria/mantém a sessão e só OBSERVA. O cliente de dados do app (supabase.js) continua com a chave pública,
      então NADA muda para o usuário e nenhuma falha aqui pode quebrar o app (tudo é try/catch, nunca lança).
-   - on: reservado para a Fase 4 (o cliente de dados passa a usar este token). Só ligar depois de as tabelas terem
-     políticas para `authenticated`; hoje 15 tabelas só têm política para `anon`.
+   - on: o cliente de dados (supabase.js) passa a mandar ESTE token nas consultas ao banco (/rest/v1) — o banco
+     fica sabendo quem pede (papel `authenticated` + e-mail), base para as regras por pessoa (fase F0, Gelson 09/10/2026).
+   Quem decide: localStorage.vp_auth_mode, se definido, manda (manual: 'off' | 'shadow' | 'on'); senão o BANCO
+   decide pela lista de piloto (rpc vp_auth_modo → 'on' para quem está em vp_auth_piloto; '*' = todos).
+   Desligar o piloto = tirar a pessoa da lista (vale no próximo carregamento, sem publicar o site).
+   Rede de segurança: se o banco recusar um pedido feito com a sessão (401/403), o mesmo pedido é refeito com a
+   chave pública e o recuo fica registrado (VpAuth.status().recuos) — o app nunca trava por causa da sessão.
    Sem segredo no navegador: as chaves abaixo são as PÚBLICAS do app (as mesmas de supabase.js).
    ============================================================ */
 (function () {
@@ -17,9 +22,15 @@
   const ANON_SB = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
   const FUNCAO = URL_SB + '/functions/v1/sso-exchange';
 
-  function modo() {
-    try { return localStorage.getItem('vp_auth_mode') || 'shadow'; } catch (e) { return 'shadow'; }
+  function modoManual() {
+    try { return localStorage.getItem('vp_auth_mode') || null; } catch (e) { return null; }
   }
+  function modo() { return modoManual() || 'shadow'; }
+
+  let remoto = null;   // o que a lista de piloto do banco disse ('on' | 'shadow' | null = não perguntou)
+  let recuos = [];     // pedidos recusados com a sessão e refeitos com a chave pública
+  let avisarPronto;
+  const pronto = new Promise(function (r) { avisarPronto = r; });
 
   let cli = null;
   let estado = 'inicial'; // inicial | desligado | ok | sem_sessao | sem_acesso | falhou
@@ -53,6 +64,16 @@
   function marca(e, m) { estado = e; motivo = m || null; }
 
   async function init(opts) {
+    try { return await initSessao(opts); }
+    finally {
+      if (estado === 'ok' && !modoManual()) {
+        try { const r = await cliente().rpc('vp_auth_modo'); remoto = (r && !r.error && r.data) || null; } catch (e) { remoto = null; }
+      }
+      avisarPronto();
+    }
+  }
+
+  async function initSessao(opts) {
     const m = modo();
     if (m === 'off') { marca('desligado'); return null; }
     try {
@@ -100,6 +121,40 @@
     } catch (e) { return null; }
   }
 
+  // As consultas de dados devem ir com a sessão desta pessoa?
+  function dadosComSessao() {
+    const man = modoManual();
+    if (man === 'off' || man === 'shadow') return false;
+    if (estado !== 'ok') return false;
+    return man === 'on' || remoto === 'on';
+  }
+
+  async function tokenParaDados() {
+    await Promise.race([pronto, new Promise(function (r) { setTimeout(r, 4000); })]);
+    if (!dadosComSessao()) return null;
+    return getAccessToken();
+  }
+
+  // fetch do cliente de dados (supabase.js): só /rest/v1 leva a sessão; o resto segue como sempre.
+  async function fetchDados(input, init) {
+    const url = typeof input === 'string' ? input : String((input && input.url) || '');
+    if (url.indexOf('/rest/v1/') === -1) return fetch(input, init);
+    let tok = null;
+    try { tok = await tokenParaDados(); } catch (e) { tok = null; }
+    if (!tok) return fetch(input, init);
+    const h = new Headers((init && init.headers) || undefined);
+    h.set('Authorization', 'Bearer ' + tok);
+    const r = await fetch(input, Object.assign({}, init, { headers: h }));
+    if (r.status === 401 || r.status === 403) {
+      const rec = { status: r.status, metodo: (init && init.method) || 'GET', url: url.split('?')[0], em: new Date().toISOString() };
+      recuos.push(rec);
+      if (recuos.length > 50) recuos = recuos.slice(-50);
+      try { console.warn('[VpAuth] banco recusou com a sessão — refeito com a chave pública', rec); } catch (e) {}
+      return fetch(input, init);
+    }
+    return r;
+  }
+
   // Diagnóstico (modo sombra): pergunta ao banco quem ele acha que somos, usando a sessão nativa.
   async function quemSouEuNoBanco() {
     try { const r = await cliente().rpc('vp_whoami'); return r && r.data ? r.data : null; } catch (e) { return null; }
@@ -109,7 +164,9 @@
     init: init,
     getAccessToken: getAccessToken,
     getUser: function () { return usuario; },
-    status: function () { return { modo: modo(), estado: estado, motivo: motivo }; },
+    status: function () { return { modo: modo(), estado: estado, motivo: motivo, piloto: remoto, dados: dadosComSessao() ? 'sessao' : 'publica', recuos: recuos.slice() }; },
+    tokenParaDados: tokenParaDados,
+    fetchDados: fetchDados,
     onChange: function (f) { ouvintes.push(f); },
     quemSouEuNoBanco: quemSouEuNoBanco,
     signOut: async function () { try { await cliente().auth.signOut(); } catch (e) {} usuario = null; marca('sem_sessao'); },
