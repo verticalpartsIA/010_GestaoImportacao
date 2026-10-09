@@ -18,7 +18,7 @@ Abaixo está o **comando estruturado para o Claude Code**, com todos os prós, c
 Você está atuando como arquiteto de software no projeto **VP Gestão** (VerticalParts).
 
 **REPOSITÓRIO:** https://github.com/verticalpartsIA/010_GestaoImportacao.git
-**AMBIENTE ATUAL:** Aplicação React 18 (SPA) já em produção em https://vpgestaoimportacao.vpsistema.com/
+**AMBIENTE ATUAL:** Aplicação React 18 (SPA) já em produção em https://hub.vpsistema.com/
 **PROBLEMA IDENTIFICADO:** O sistema opera com um único endereço URL (`/`). A navegação entre telas é feita por estado interno (ex: `useState`), sem refletir a tela atual na barra de endereços. Isso impede:
 - Compartilhamento de links diretos para telas específicas
 - Uso do botão "voltar" do navegador
@@ -97,7 +97,7 @@ iframe), criando uma integração transparente.
 
 **CONTRAS E RISCOS (O QUE PRECISAMOS CUIDAR)**
 
-1. **Compatibilidade com links existentes** – Se alguém já tem o link `https://vpgestaoimportacao.vpsistema.com/` salvo, ele continuará funcionando (redirecionando para `/geral/dashboard`). Mas qualquer link direto para telas internas (que não existem hoje) será quebrado – isso é esperado, pois nunca existiram.
+1. **Compatibilidade com links existentes** – Se alguém já tem o link `https://hub.vpsistema.com/` salvo, ele continuará funcionando (redirecionando para `/geral/dashboard`). Mas qualquer link direto para telas internas (que não existem hoje) será quebrado – isso é esperado, pois nunca existiram.
 2. **Estado compartilhado entre rotas** – Se duas telas compartilham o mesmo estado global (ex: `useStore`), precisamos garantir que o estado não seja perdido ao navegar entre rotas. O Zustand/Jotai já persistem o estado em memória, então isso não deve ser um problema.
 3. **Lazy loading** – Se implementarmos code-splitting, precisamos garantir que os chunks sejam carregados corretamente ao navegar.
 4. **Sidebar ativa** – Precisamos de lógica para destacar o item da sidebar correspondente à rota atual (usando `useLocation`).
@@ -164,7 +164,7 @@ apenas a camada de navegação será modificada.
 **ENTREGÁVEL ESPERADO**
 
 Após a implementação, o sistema deve:
-- Responder a URLs como `https://vpgestaoimportacao.vpsistema.com/geral/dashboard`
+- Responder a URLs como `https://hub.vpsistema.com/geral/dashboard`
 - Manter a mesma experiência de usuário, mas com navegação baseada em URL
 - Permitir que o usuário compartilhe links diretos para qualquer tela
 - Estar preparado para futura integração com o OpenFieldPro via rota `/vistorias`

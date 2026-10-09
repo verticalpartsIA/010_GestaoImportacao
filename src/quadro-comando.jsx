@@ -982,7 +982,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
    formulario-quadro-comando-publico.html/.jsx e a Edge Function
    capturar-lead-quadro-comando. Só texto/clipboard, sem chamada nenhuma
    ao backend — por isso não precisa de store próprio. */
-const QC_LINK_PUBLICO = 'https://vpgestaoimportacao.vpsistema.com/formulario-quadro-comando-publico.html';
+const QC_LINK_PUBLICO = 'https://hub.vpsistema.com/formulario-quadro-comando-publico.html';
 
 function QuadroComandoPage({ setRoute, subsel }) {
   const initialId = typeof subsel === 'string' ? subsel : ((window.VpRouter && window.VpRouter.parseLocation().id) || null);

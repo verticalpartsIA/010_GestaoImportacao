@@ -2,7 +2,7 @@
 
 ## 1. Objetivo e escopo
 
-Este documento é uma **engenharia reversa máxima** do sistema VP Gestão (`vpgestaoimportacao.vpsistema.com`, repositório `verticalpartsIA/010_GestaoImportacao`) e, ao mesmo tempo, a especificação da base de conhecimento e arquitetura de **Geração Aumentada por Recuperação (RAG)** para esse sistema. Foi elaborado inteiramente a partir do código-fonte real do repositório (sem invenção de campos, botões ou regras que não existam no código) e deve servir simultaneamente como:
+Este documento é uma **engenharia reversa máxima** do sistema VP Gestão (`hub.vpsistema.com`, repositório `verticalpartsIA/010_GestaoImportacao`) e, ao mesmo tempo, a especificação da base de conhecimento e arquitetura de **Geração Aumentada por Recuperação (RAG)** para esse sistema. Foi elaborado inteiramente a partir do código-fonte real do repositório (sem invenção de campos, botões ou regras que não existam no código) e deve servir simultaneamente como:
 
 - **mapa funcional completo** de cada tela, rota, campo, botão e alçada do sistema — pra qualquer humano ou IA entender "o que faz o quê" sem precisar abrir o código;
 - referência funcional das telas para um futuro assistente de IA (Copiloto VP, já embrionário em `vp-copiloto.jsx`) responder perguntas sobre o sistema;
@@ -600,7 +600,7 @@ Dois bugs simultâneos em `_snapshotTetoCusto()`: (1) filtro `.eq('status', 'apr
 Migration de 28/08 trocou o domínio do campo (`local`/`sao_paulo`/`sem_mao_de_obra` → `verticalparts`/`cliente`) e criou a nova CHECK constraint como `NOT VALID` — o que pula a validação em massa das linhas existentes, mas o Postgres **continua validando em qualquer UPDATE** dessas linhas, mesmo tocando outra coluna. Resultado: "Salvar rascunho" quebrava com `violates check constraint` para 3 formulários com valor antigo. Corrigido 29/08 (dados zerados nos 3 registros afetados + constraint revalidada).
 
 ### 21.4 [ACHADO, NÃO CORRIGIDO] `/comercial/proposta-editor` — performance e SEO real muito baixos
-Auditoria Lighthouse fornecida pelo usuário nesta sessão (`vpgestaoimportacao.vpsistema.com-20260829T124833.json/.html`), rodada em produção real contra essa URL:
+Auditoria Lighthouse fornecida pelo usuário nesta sessão (`hub.vpsistema.com-20260829T124833.json/.html`), rodada em produção real contra essa URL:
 
 | Categoria | Score |
 |---|---:|

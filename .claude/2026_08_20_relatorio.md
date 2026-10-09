@@ -2,7 +2,7 @@
 
 > **Projeto:** VP Gestão — Plataforma de Importação, Engenharia e Comercial · VerticalParts
 > **Repositório:** https://github.com/verticalpartsIA/010_GestaoImportacao
-> **URL em produção:** https://vpgestaoimportacao.vpsistema.com
+> **URL em produção:** https://hub.vpsistema.com
 > **Data:** 20/08/2026
 > **Responsável técnico:** Gelson Simões + Claude Sonnet 5
 > **Deploy:** automático via integração nativa Git do Hostinger (push em `main`)
