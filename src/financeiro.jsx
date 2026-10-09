@@ -1387,13 +1387,14 @@ function ConfigPermissions() {
    capacidade pode dar QUALQUER uma das 4, inclusive essa mesma, pra
    qualquer pessoa (assim Diego/Gelson repassam o poder sem precisar de
    código novo). Card só aparece pra quem já tem essa capacidade — não é
-   um ajuste que qualquer um com acesso a Configurações consiga mexer. */
+   um ajuste que qualquer um com acesso a Configurações consiga mexer.
+   Desde 09/10/2026 (árvore de alçadas) o card é SÓ LEITURA: quem concede é
+   o vpsistema.com/administracao; "Concede alçadas" deixou de existir aqui. */
 const ALCADAS_PROPOSTAS = [
   { modulo: 'propostas', capacidade: 'ver_todas', label: 'Vê todas as propostas', hint: 'Sem isso, só vê as próprias.' },
   { modulo: 'propostas', capacidade: 'precificar_manual', label: 'Precifica manualmente', hint: 'Preço combinado por fora (CEO/Financeiro), sem depender de Cotação + Precificação formal.' },
   { modulo: 'propostas', capacidade: 'destravar_aprovada', label: 'Destrava proposta aprovada', hint: 'Reabre pra edição uma proposta já aprovada pelo cliente.' },
   { modulo: 'propostas', capacidade: 'excluir', label: 'Exclui propostas', hint: 'Apaga a proposta de vez — sem volta.' },
-  { modulo: 'admin', capacidade: 'conceder_alcadas', label: 'Concede alçadas', hint: 'Pode dar (ou tirar) qualquer uma destas capacidades pra qualquer pessoa.' },
   { modulo: 'quadro_comando', capacidade: 'decidir_fabricacao', label: 'Decide fabricar interno ou comprar pronto (Quadro de Comando)', hint: 'Sem isso, a Origem de Fabricação do Quadro de Comando fica travada em "Fabricar interno".' },
   { modulo: 'instalacao', capacidade: 'editar_status_obra', label: 'Edita status do Acompanhamento de Obra', hint: 'Pode desflegar uma atividade do Diário de Obra e avançar/reverter manualmente o status do card em Cadastro de Instaladores.' },
   { modulo: 'decisoes', capacidade: 'ceo', label: 'Atua como CEO (Central de Decisões)', hint: 'Aprova/reprova qualquer decisão que hoje só o CEO decide (envio de proposta, desconto acima de 7%, etc.), além do e-mail fixo do Diego — uso normal: só pra teste. Só vale pra decisões criadas depois de conceder.' },
@@ -1401,55 +1402,27 @@ const ALCADAS_PROPOSTAS = [
 ];
 
 function ConfigAlcadasPropostas() {
-  const sb = window.__VP_SB.sb;
-  const [autorizado, setAutorizado] = React.useState(null);
   const [perfis, setPerfis] = React.useState(null);
   const [concedidas, setConcedidas] = React.useState({});
-  const [salvandoChave, setSalvandoChave] = React.useState(null);
 
-  const load = React.useCallback(async () => {
-    const pode = await window.PropostaStore.podeConcederAlcadas();
-    setAutorizado(pode);
-    if (!pode) return;
-    const { perfis: p, concedidas: c } = await window.PropostaStore.listarAlcadas();
-    setPerfis(p);
-    const map = {};
-    c.forEach((row) => { map[row.perfil_id + '.' + row.modulo + '.' + row.capacidade] = true; });
-    setConcedidas(map);
+  React.useEffect(() => {
+    window.PropostaStore.listarAlcadas().then(({ perfis: p, concedidas: c }) => {
+      const map = {};
+      c.forEach((row) => { map[row.perfil_id + '.' + row.modulo + '.' + row.capacidade] = true; });
+      setConcedidas(map);
+      setPerfis(p);
+    });
   }, []);
-  React.useEffect(() => { load(); }, [load]);
 
-  const alternar = async (perfil, modulo, capacidade, conceder) => {
-    const chave = perfil.id + '.' + modulo + '.' + capacidade;
-    setSalvandoChave(chave);
-    try {
-      await window.PropostaStore.concederAlcada(perfil.id, modulo, capacidade, conceder);
-      if (window.VPLog) window.VPLog.registrar({ modulo: 'Admin', acao: 'Alçada alterada', alvo: perfil.email, detalhe: { modulo, capacidade, conceder } });
-      setConcedidas((prev) => { const n = { ...prev }; if (conceder) n[chave] = true; else delete n[chave]; return n; });
-    } catch (e) {
-      window.toast?.('Erro: ' + (e.message || e), 'error');
-    } finally {
-      setSalvandoChave(null);
-    }
-  };
-
-  if (autorizado === null || (autorizado && !perfis)) {
+  if (!perfis) {
     return <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
-  }
-  if (!autorizado) {
-    return (
-      <Card title="Alçadas de Propostas">
-        <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
-          Você não tem a alçada "Concede alçadas" — peça pra quem já tem liberar essa tela pra você.
-        </div>
-      </Card>
-    );
   }
 
   return (
-    <Card title="Alçadas de Propostas" sub="Quem pode ver tudo, precificar manualmente, destravar aprovada ou conceder essas alçadas pra outros">
+    <Card title="Alçadas de Propostas" sub="Quem pode ver tudo, precificar manualmente, destravar aprovada…">
+      {window.AvisoAlcadasNoVpsistema ? <window.AvisoAlcadasNoVpsistema/> : null}
       <div style={{ padding: "10px 12px", marginBottom: 14, background: "var(--vp-warning-tint, #f8eed7)", border: "1px solid var(--border)", fontSize: 12, color: "var(--fg2)" }}>
-        Administradores sempre têm as 4 primeiras alçadas (traço = já tem, automático). <b>"Atua como CEO" e "Atua como Gestor Comercial" são diferentes</b> — nem Administrador tem isso de graça, precisa ligar o toggle mesmo sendo Admin (é a Central de Decisões que decide quem aprova o quê, não o nível de acesso).
+        Administradores sempre têm as alçadas fora da Central de Decisões (traço = já tem, automático). <b>"Atua como CEO" e "Atua como Gestor Comercial" são diferentes</b> — nem Administrador tem isso de graça, precisa estar marcado no vpsistema mesmo sendo Admin (é a Central de Decisões que decide quem aprova o quê, não o nível de acesso).
       </div>
       {/* Lista de colaboradores costuma passar de uma tela — cabeçalho fixo
          (sticky, relativo a este container com scroll próprio) e barra de
@@ -1489,8 +1462,7 @@ function ConfigAlcadasPropostas() {
                         {bypassAdmin ? (
                           <span className="small muted" title="Administrador sempre tem">—</span>
                         ) : (
-                          <input type="checkbox" checked={tem} disabled={salvandoChave === chave}
-                            onChange={(e) => alternar(p, a.modulo, a.capacidade, e.target.checked)}
+                          <input type="checkbox" checked={tem} disabled readOnly
                             style={{ width: 18, height: 18, accentColor: 'var(--vp-yellow)' }}/>
                         )}
                       </td>

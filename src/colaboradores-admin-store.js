@@ -291,28 +291,11 @@
     return out;
   }
 
-  /* Concede (ou retira) em lote todas as ações do grupo. Devolve a lista
-     afetada pra tela atualizar os checkboxes sem reler o banco. */
-  async function concederGrupoInteiro(colaboradorId, grupo, conceder) {
-    const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const lista = capacidadesDoGrupo(grupo);
-    if (!lista.length) return lista;
-    if (conceder) {
-      const por = (window.__VP_USER || {}).email || null;
-      const agora = new Date().toISOString();
-      const { error } = await c.from('alcadas_capacidade').upsert(
-        lista.map((l) => ({ perfil_id: colaboradorId, modulo: l.modulo, capacidade: l.capacidade, concedido_por: por, concedido_em: agora })),
-        { onConflict: 'perfil_id,modulo,capacidade' },
-      );
-      if (error) throw error;
-    } else {
-      const modulos = [...new Set(lista.map((l) => l.modulo))];
-      const { error } = await c.from('alcadas_capacidade').delete().eq('perfil_id', colaboradorId).in('modulo', modulos);
-      if (error) throw error;
-    }
-    if (window.PropostaStore) window.PropostaStore.resetAlcadasCache();
-    return lista;
-  }
+  /* Conceder/retirar alçadas saiu do HUB (árvore de alçadas, Gelson
+     09/10/2026): quem concede agora é o vpsistema.com/administracao, que
+     alimenta alcadas_capacidade pela edge function vpsistema-sync. O banco
+     já recusa gravação vinda do navegador; aqui só deixamos a mensagem clara. */
+  async function concederGrupoInteiro() { throw new Error('As alçadas agora são geridas em vpsistema.com/administracao.'); }
 
   async function listarCapacidadesConcedidas() {
     const c = sb(); if (!c) return [];
@@ -321,22 +304,8 @@
     return data || [];
   }
 
-  async function concederCapacidade(colaboradorId, modulo, capacidade, conceder) {
-    const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    if (conceder) {
-      const por = (window.__VP_USER || {}).email || null;
-      const { error } = await c.from('alcadas_capacidade').upsert(
-        { perfil_id: colaboradorId, modulo, capacidade, concedido_por: por, concedido_em: new Date().toISOString() },
-        { onConflict: 'perfil_id,modulo,capacidade' },
-      );
-      if (error) throw error;
-    } else {
-      const { error } = await c.from('alcadas_capacidade').delete()
-        .eq('perfil_id', colaboradorId).eq('modulo', modulo).eq('capacidade', capacidade);
-      if (error) throw error;
-    }
-    if (window.PropostaStore) window.PropostaStore.resetAlcadasCache();
-  }
+  async function concederCapacidade() { throw new Error('As alçadas agora são geridas em vpsistema.com/administracao.'); }
+
 
   /* Roda quando a identidade chega (evento 'vpprd:user' de supabase.js) —
      acha o colaborador correspondente pelo id (vem do JWT do vpsistema,
