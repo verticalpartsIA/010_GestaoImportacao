@@ -1254,7 +1254,9 @@ function CIDashboard() {
   const [loading, setLoading] = _ciUS(true);
   const [filter, setFilter] = _ciUS('todos');
   const [query, setQuery] = _ciUS('');
-  const [drawerId, setDrawerId] = _ciUS(null);
+  // Item aberto (drawer de auditoria) na URL — /contrato-instalador/painel/<id>,
+  // mesmo padrão de useRotaItem já usado no PCP e no Contrato de Venda.
+  const [drawerId, setDrawerId] = window.useRotaItem('contrato-instalador', 'painel');
   const [sendRec, setSendRec] = _ciUS(null);
 
   const refresh = async () => {
@@ -1368,7 +1370,9 @@ function CIDashboard() {
    PAGE — abas Wizard (novo) / Dashboard (painel)
    ============================================================ */
 function ContratoInstaladorPage() {
-  const [tab, setTab] = _ciUS('painel');
+  // Aba (Painel/Novo) na URL — /contrato-instalador/novo, mesmo padrão de
+  // useRouteTab já usado no PCP/Almoxarifado/Contrato de Venda.
+  const [tab, setTab] = window.useRouteTab('contrato-instalador', 'painel', ['painel', 'novo']);
   return (
     <EnterprisePageBase
       module="JURÍDICO"

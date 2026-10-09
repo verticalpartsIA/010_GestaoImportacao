@@ -59,6 +59,17 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
       return data || [];
     },
 
+    /* Usada só pra restaurar o editor a partir da URL (/vistorias-envio/
+       questionarios/<id>) — ListaQuestionarios já carrega a lista inteira
+       pra exibição normal, isto é só o caso de deep-link/F5/Voltar-Avançar. */
+    async obterQuestionario(id) {
+      if (!id) return null;
+      const { data, error } = await sb().from('vistorias_questionarios')
+        .select('*').eq('id', id).maybeSingle();
+      if (error) throw error;
+      return data || null;
+    },
+
     async criarQuestionario({ nome, tipo }) {
       const { data, error } = await sb().from('vistorias_questionarios')
         .insert({ nome, tipo: tipo || 'vistoria', criado_por: window.__VP_USER?.email || 'system' })

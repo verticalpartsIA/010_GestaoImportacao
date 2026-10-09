@@ -103,6 +103,20 @@ function FinanceiroPage({ setRoute, setSubsel }) {
         return;
       }
     }
+    /* Contrato de Venda guarda o item aberto no 3º segmento, dentro da aba
+       "painel" (/contrato-venda-equipamentos/painel/<id>) — o setSubsel
+       genérico abaixo só escreve o 2º segmento, então navega direto pro 3º
+       (mesmo padrão já usado em decisoes.jsx pro Almoxarifado). */
+    if (alvo.rota === 'contrato-venda-equipamentos' && alvo.subsel != null) {
+      setRoute?.(alvo.rota);
+      if (window.VpRouter) {
+        setTimeout(() => {
+          window.VpRouter.navigate(alvo.rota, 'painel', alvo.subsel);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }, 0);
+      }
+      return;
+    }
     if (alvo.subsel !== null) setSubsel?.(alvo.subsel);
     setRoute?.(alvo.rota);
   };

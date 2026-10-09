@@ -71,8 +71,26 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
 
   const selectEmpresa = async (emp) => {
     setSelected(emp);
+    if (window.VpRouter) window.VpRouter.navigate('cadastro-instaladores', emp.id);
     await Promise.all([reloadColaboradores(emp.id), reloadObras(emp.id)]);
   };
+
+  /* Deep link direto (vindo da Central de Decisões — "Ver documento" de uma
+     decisão de montador, tabela parceiros_instaladores — ou de um link
+     compartilhado): essa página nunca recebia `subsel` de app.jsx, então o
+     2º segmento da URL (/cadastro-instaladores/<id>) era escrito mas nunca
+     lido — "Ver documento" abria a lista sem abrir a empresa certa. Lê a
+     URL de verdade (não um snapshot de render) quando a lista termina de
+     carregar, que é quando o `pushState` já aconteceu. */
+  React.useEffect(() => {
+    if (!empresas) return;
+    const loc = window.VpRouter && window.VpRouter.parseLocation();
+    const idUrl = loc && loc.route === 'cadastro-instaladores' ? loc.id : null;
+    if (!idUrl || (selected && selected.id === idUrl)) return;
+    const emp = empresas.find((e) => e.id === idUrl);
+    if (emp) selectEmpresa(emp);
+    else window.toast?.('Empresa instaladora não encontrada (pode ter sido excluída).', 'warning');
+  }, [empresas]);
 
   const abrirObra = (obraId) => {
     setSubsel && setSubsel(obraId);
@@ -84,7 +102,7 @@ function CadastroInstaladoresPage({ setRoute, setSubsel }) {
     try {
       await window.RHHomologacao.excluirMontador(emp.id);
       window.toast?.('Empresa excluída.', 'success');
-      if (selected?.id === emp.id) { setSelected(null); setColaboradores([]); setObras(null); }
+      if (selected?.id === emp.id) { setSelected(null); setColaboradores([]); setObras(null); if (window.VpRouter) window.VpRouter.navigate('cadastro-instaladores', null); }
       reloadEmpresas();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
   };

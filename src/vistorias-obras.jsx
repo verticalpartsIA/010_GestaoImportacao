@@ -31,13 +31,43 @@
 function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded, onChanged }) {
   const [obraId, setObraId] = React.useState(obraIdProp || null);
   const [obra, setObra] = React.useState(obraProp || null);
+  /* Bug real (varredura de URLs, 09/10): a rota "vistorias" não recebe
+     `setSubsel` de app.jsx (só `obraId={subsel}`), então escolher uma obra
+     no seletor (abaixo) nunca escrevia a URL — F5 ou compartilhar o link
+     sempre voltava pro seletor de obras, mesmo depois de escolher uma.
+     `obraIdProp` também só era lido uma vez no mount — Voltar/Avançar do
+     navegador (ou um link de outra tela, ex. Gatilhos, que PASSA setSubsel)
+     não trocava a obra aberta. Escreve/lê o 2º segmento direto
+     (/engenharia/vistorias/<obraId>) sem depender de setSubsel; não mexe
+     no modo `embedded` (usado dentro do Dossiê da Obra, sem rota própria). */
+  React.useEffect(() => { setObraId(obraIdProp || null); }, [obraIdProp]);
+  const escolherObra = (o) => {
+    setObraId(o.id); setObra({ nome: o.building_name });
+    if (!embedded && window.VpRouter) window.VpRouter.navigate('vistorias', o.id);
+  };
   const [obras, setObras] = React.useState([]);
   const [equipPorObra, setEquipPorObra] = React.useState({}); // dossier_id -> [numero_serie,...]
   const [loadingObras, setLoadingObras] = React.useState(!obraIdProp);
   const [buscaObra, setBuscaObra] = React.useState('');
   const [clienteAberto, setClienteAberto] = React.useState(null);
   const [vistorias, setVistorias] = React.useState([]);
-  const [selectedVistoria, setSelectedVistoria] = React.useState(null);
+  /* Bug real (varredura de URLs, 09/10): o detalhe da vistoria aberta era só
+     useState — F5/link direto/Voltar-Avançar sempre voltavam pra lista de
+     vistorias da obra. Usa o 3º segmento (/engenharia/vistorias/<obraId>/
+     <vistoriaId>) só quando a tela TEM rota própria (não `embedded`, usado
+     dentro do Dossiê da Obra — ali escrever essa URL trocaria a tela por
+     engano). `setSelectedVistoria` preserva a mesma assinatura (recebe o
+     objeto inteiro ou null) nos 5 call sites já existentes. */
+  const [selectedVistoriaIdUrl, setSelectedVistoriaIdUrl] = window.useRotaItem('vistorias', obraId || '');
+  const [selectedVistoriaLocal, setSelectedVistoriaLocal] = React.useState(null);
+  const selectedVistoriaId = embedded ? null : selectedVistoriaIdUrl;
+  const selectedVistoria = embedded
+    ? selectedVistoriaLocal
+    : (selectedVistoriaId ? vistorias.find((v) => String(v.id) === selectedVistoriaId) || null : null);
+  const setSelectedVistoria = (v) => {
+    if (embedded) { setSelectedVistoriaLocal(v); return; }
+    setSelectedVistoriaIdUrl(v ? String(v.id) : null);
+  };
   const [showForm, setShowForm] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [filterStatus, setFilterStatus] = React.useState('todas');
@@ -337,7 +367,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
             setBusca={setBuscaObra}
             clienteAberto={clienteAberto}
             setClienteAberto={setClienteAberto}
-            onEscolher={(o) => { setObraId(o.id); setObra({ nome: o.building_name }); }}
+            onEscolher={escolherObra}
           />
         )}
       </div>

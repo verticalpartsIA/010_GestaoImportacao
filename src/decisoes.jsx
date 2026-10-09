@@ -152,10 +152,13 @@ function DecModalCancelar({ decisao, onClose, onSaved }) {
 const DEC_STATUS_LABEL = { pendente: 'Pendente', bloqueada_por_dependencia: 'Bloqueada', aprovada: 'Aprovada', reprovada: 'Reprovada', cancelada: 'Cancelada' };
 const DEC_STATUS_COR = { aprovada: 'var(--vp-success, #1a7f37)', reprovada: 'var(--vp-danger, #c62828)', cancelada: 'var(--fg3)' };
 
-function DecCard({ decisao, onReload, setRoute, setSubsel, modoAdmin, historico }) {
-  const [reprovando, setReprovando] = React.useState(false);
-  const [aprovando, setAprovando] = React.useState(false);
-  const [cancelando, setCancelando] = React.useState(false);
+function DecCard({ decisao, onReload, setRoute, setSubsel, modoAdmin, historico, modalAberto, onAbrirModal, onFecharModal }) {
+  // Qual modal (aprovar/reprovar/cancelar) está aberto vem da URL
+  // (/geral/decisoes/<id>/<tipo>) — ver DecisoesPage. Antes era só useState
+  // local, então abrir um modal nunca aparecia no endereço do navegador.
+  const aprovando = modalAberto === 'aprovar';
+  const reprovando = modalAberto === 'reprovar';
+  const cancelando = modalAberto === 'cancelar';
   const [abrindo, setAbrindo] = React.useState(false);
   const [reabrindo, setReabrindo] = React.useState(false);
   const ctx = decisao.contexto || {};
@@ -274,18 +277,18 @@ function DecCard({ decisao, onReload, setRoute, setSubsel, modoAdmin, historico 
         {linkDocumento && <Button variant="outline" size="sm" onClick={abrirDocumento} disabled={abrindo}>{abrindo ? 'Abrindo…' : 'Ver documento'}</Button>}
         {emAberto && souAprovador && !bloqueada && (
           <>
-            <Button variant="danger" size="sm" onClick={() => setReprovando(true)}>Reprovar</Button>
-            <Button variant="primary" size="sm" onClick={() => setAprovando(true)}>Aprovar</Button>
+            <Button variant="danger" size="sm" onClick={() => onAbrirModal('reprovar')}>Reprovar</Button>
+            <Button variant="primary" size="sm" onClick={() => onAbrirModal('aprovar')}>Aprovar</Button>
           </>
         )}
-        {emAberto && modoAdmin && <Button variant="ghost" size="sm" onClick={() => setCancelando(true)}>Cancelar</Button>}
+        {emAberto && modoAdmin && <Button variant="ghost" size="sm" onClick={() => onAbrirModal('cancelar')}>Cancelar</Button>}
         {historico && (decisao.status === 'reprovada' || decisao.status === 'cancelada') && (
           <Button variant="outline" size="sm" onClick={reabrir} disabled={reabrindo}>{reabrindo ? 'Solicitando…' : 'Solicitar novamente'}</Button>
         )}
       </div>
-      {aprovando && <DecModalAprovar decisao={decisao} resumo={resumo} onClose={() => setAprovando(false)} onSaved={onReload}/>}
-      {reprovando && <DecModalReprovar decisao={decisao} onClose={() => setReprovando(false)} onSaved={onReload}/>}
-      {cancelando && <DecModalCancelar decisao={decisao} onClose={() => setCancelando(false)} onSaved={onReload}/>}
+      {aprovando && <DecModalAprovar decisao={decisao} resumo={resumo} onClose={onFecharModal} onSaved={onReload}/>}
+      {reprovando && <DecModalReprovar decisao={decisao} onClose={onFecharModal} onSaved={onReload}/>}
+      {cancelando && <DecModalCancelar decisao={decisao} onClose={onFecharModal} onSaved={onReload}/>}
     </div>
   );
 }
@@ -298,6 +301,13 @@ function DecisoesPage({ setRoute, setSubsel }) {
   const [modoAdmin, setModoAdmin] = React.useState(false);
   const [busca, setBusca] = React.useState('');
   const [tipo, setTipo] = React.useState('');
+  // Modal aberto (aprovar/reprovar/cancelar) de uma decisão específica,
+  // refletido na URL (/geral/decisoes/<id da decisão>/<tipo>) — antes
+  // ficava só em useState dentro de cada DecCard, sem aparecer no endereço.
+  const [rotaId] = window.useRotaId('decisoes');
+  const [tipoModal] = window.useRotaItem('decisoes', rotaId);
+  const abrirModalDecisao = (decisaoId, tipo) => { if (window.VpRouter) window.VpRouter.navigate('decisoes', decisaoId, tipo); };
+  const fecharModalDecisao = () => { if (window.VpRouter) window.VpRouter.navigate('decisoes', null); };
 
   /* "Ver tudo" pra Administrador — pedido explícito do usuário (criador do
      site): precisa entender/instruir qualquer decisão do sistema, mesmo
@@ -381,7 +391,12 @@ function DecisoesPage({ setRoute, setSubsel }) {
                 : modoAdmin ? 'Nenhuma decisão em aberto no sistema no momento.' : 'Nenhuma decisão pendente pra você no momento.'}
             </div>
           )}
-          {lista.map((d) => <DecCard key={d.id} decisao={d} onReload={reload} setRoute={setRoute} setSubsel={setSubsel} modoAdmin={modoAdmin} historico={historico}/>)}
+          {lista.map((d) => (
+            <DecCard key={d.id} decisao={d} onReload={reload} setRoute={setRoute} setSubsel={setSubsel} modoAdmin={modoAdmin} historico={historico}
+              modalAberto={rotaId === String(d.id) ? tipoModal : null}
+              onAbrirModal={(tipo) => abrirModalDecisao(d.id, tipo)}
+              onFecharModal={fecharModalDecisao}/>
+          ))}
         </div>
       </Card>
     </div>

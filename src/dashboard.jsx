@@ -178,7 +178,12 @@ function Dashboard({ role, setRoute, setSubsel }) {
   const [projectView, setProjectView] = React.useState('gantt');
   const [period, setPeriod] = React.useState('Hoje');
   const [showTask, setShowTask] = React.useState(false);
-  const [detalheProjeto, setDetalheProjeto] = React.useState(null);
+  // Projeto aberto no modal de detalhe refletido na URL (/geral/dashboard/<id>) —
+  // 3 pontos de entrada (Gantt/Lista/Kanban) abrem o MESMO modal; antes era só
+  // useState, perdido no F5/Voltar e sem link direto pra um projeto específico.
+  const [rotaProjetoId] = window.useRotaId('dashboard');
+  const abrirProjeto = (p) => { if (window.VpRouter) window.VpRouter.navigate('dashboard', p && p.id != null ? String(p.id) : null); };
+  const fecharProjeto = () => { if (window.VpRouter) window.VpRouter.navigate('dashboard', null); };
   const periods = ['Hoje','7 dias','30 dias','90 dias'];
   const reloadDashboard = React.useCallback(() => {
     if (!window.__VP_SB) { setLoading(false); return Promise.resolve(); }
@@ -201,6 +206,7 @@ function Dashboard({ role, setRoute, setSubsel }) {
   const tasks       = sbData?.tarefas || [];
   const projetos    = sbData?.ganttProjetos || [];
   const alertasCrit = sbData?.alertasCriticos ?? 0;
+  const detalheProjeto = rotaProjetoId ? projetos.find((p) => String(p.id) === rotaProjetoId) || null : null;
 
   const u         = (window.ROLE_MAP || {})[role] || { name: 'VP Gestão', initials: 'VP', title: 'Sistema' };
   const firstName = (u.name || 'Usuário').split(" ")[0];
@@ -269,9 +275,9 @@ function Dashboard({ role, setRoute, setSubsel }) {
               mais antigo de cada cotação — muda sozinha quando a etapa
               real fecha, por isso não há mais botão de "mover fase"
               manual (não existe ação real por trás disso agora). */}
-          {projectView === 'gantt'  && <GanttChart projetos={projetos} onClick={setDetalheProjeto} today={sbData?.ganttToday ?? 60}/>}
-          {projectView === 'lista'  && <ProjectList projetos={projetos} onClick={setDetalheProjeto}/>}
-          {projectView === 'kanban' && <ProjectKanban projetos={projetos} onClick={setDetalheProjeto}/>}
+          {projectView === 'gantt'  && <GanttChart projetos={projetos} onClick={abrirProjeto} today={sbData?.ganttToday ?? 60}/>}
+          {projectView === 'lista'  && <ProjectList projetos={projetos} onClick={abrirProjeto}/>}
+          {projectView === 'kanban' && <ProjectKanban projetos={projetos} onClick={abrirProjeto}/>}
         </Card>
 
         <Card title="Tarefas de Hoje" sub={tasks.length + " pendentes"} action={<Button variant="ghost" size="sm" icon="plus" onClick={() => setShowTask(true)}/>}>
@@ -301,8 +307,8 @@ function Dashboard({ role, setRoute, setSubsel }) {
 
       {showTask && <ModalNovaTask role={role} onClose={() => setShowTask(false)} onSaved={reloadDashboard}/>}
       {detalheProjeto && (
-        <Modal title={detalheProjeto.name || 'Projeto'} onClose={() => setDetalheProjeto(null)} width={420}
-          footer={<Button variant="ghost" onClick={() => setDetalheProjeto(null)}>Fechar</Button>}>
+        <Modal title={detalheProjeto.name || 'Projeto'} onClose={fecharProjeto} width={420}
+          footer={<Button variant="ghost" onClick={fecharProjeto}>Fechar</Button>}>
           <div className="stack" style={{ gap: 10, fontSize: 13 }}>
             <div><span className="muted">ID</span> <span className="mono">{detalheProjeto.id}</span></div>
             <div><span className="muted">Cliente</span> {detalheProjeto.client || '—'}</div>
@@ -408,10 +414,23 @@ function OndeParouWidget({ gatilhos, setRoute, setSubsel }) {
   const abrir = async (g) => {
     if (!window.GatilhosEngine) return;
     const dest = await window.GatilhosEngine.navegarPara(g);
-    if (dest?.rota) {
-      if (dest.subsel != null && setSubsel) setSubsel(dest.subsel);
+    if (!dest?.rota) return;
+    /* Contrato de Venda guarda o item aberto no 3º segmento, dentro da aba
+       "painel" (/contrato-venda-equipamentos/painel/<id>) — setSubsel só
+       escreve o 2º segmento, então navega direto pro 3º (mesmo padrão já
+       usado em financeiro.jsx/decisoes.jsx). */
+    if (dest.rota === 'contrato-venda-equipamentos' && dest.subsel != null) {
       setRoute(dest.rota);
+      if (window.VpRouter) {
+        setTimeout(() => {
+          window.VpRouter.navigate(dest.rota, 'painel', dest.subsel);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }, 0);
+      }
+      return;
     }
+    if (dest.subsel != null && setSubsel) setSubsel(dest.subsel);
+    setRoute(dest.rota);
   };
 
   return (

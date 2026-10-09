@@ -982,12 +982,24 @@ function QuadroComandoDetail({ quadroId, onClose }) {
    formulario-quadro-comando-publico.html/.jsx e a Edge Function
    capturar-lead-quadro-comando. Só texto/clipboard, sem chamada nenhuma
    ao backend — por isso não precisa de store próprio. */
-const QC_LINK_PUBLICO = 'https://vpgestaoimportacao.vpsistema.com/formulario-quadro-comando-publico.html';
+const QC_LINK_PUBLICO = 'https://hub.vpsistema.com/formulario-quadro-comando-publico.html';
 
 function QuadroComandoPage({ setRoute, subsel }) {
   const initialId = typeof subsel === 'string' ? subsel : ((window.VpRouter && window.VpRouter.parseLocation().id) || null);
   const [abertoId, setAbertoId] = React.useState(() => initialId);
   const [criando, setCriando] = React.useState(false);
+
+  /* Bug real (varredura de URLs, 09/10): `abertoId` só era inicializado uma
+     vez no mount (`initialId`) — Voltar/Avançar do navegador muda `subsel`
+     (via App, popstate) sem remontar este componente, então o detalhe nunca
+     fechava/trocava sozinho, ficando preso na 1ª cotação aberta enquanto a
+     URL já mostrava outra coisa. `novo()` abaixo navega direto via
+     `VpRouter.navigate` (sem passar por `setSubsel`, que esta tela nem
+     recebe), então este efeito nunca reage a esse caso — só a mudanças reais
+     de `subsel` vindas do App. */
+  React.useEffect(() => {
+    setAbertoId(typeof subsel === 'string' ? subsel : null);
+  }, [subsel]);
 
   // Sem número de cotação fixo aqui: lista geral (por cotação) fica pra uma
   // fase futura — hoje o ponto de entrada real é "Novo quadro de comando"

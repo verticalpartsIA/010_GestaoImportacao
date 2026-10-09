@@ -205,8 +205,16 @@ function ProjetoElevadorEspecificacao({ abas }) {
   const store = window.ProjetoElevadorStore;
   const [projetos, setProjetos] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
-  const [edit, setEdit] = React.useState(null);
-  const [showModal, setShowModal] = React.useState(false);
+  /* Bug real (varredura de URLs, 09/10): "Novo"/abrir uma linha pra editar
+     era só useState — F5/link direto/Voltar-Avançar sempre voltavam pra
+     lista. Usa o 3º segmento sob a aba "especificacao"
+     (/engenharia/eng-projeto-elevadores/especificacao/novo|<id>). */
+  const [rotaId, setRotaId] = window.useRotaItem('eng-projeto-elevadores', 'especificacao');
+  const showModal = rotaId === 'novo' || !!rotaId;
+  const edit = (rotaId && rotaId !== 'novo') ? (projetos.find((p) => p.id === rotaId) || null) : null;
+  const abrirNovo = () => setRotaId('novo');
+  const abrirEditar = (p) => setRotaId(p.id);
+  const fecharModal = () => setRotaId(null);
 
   const reload = React.useCallback(() => {
     setLoading(true);
@@ -225,7 +233,7 @@ function ProjetoElevadorEspecificacao({ abas }) {
           <p className="page-head__sub">Especificação técnica do poço/cabine/porta de cada unidade — trata e traduz os desenhos que o fornecedor manda, amarrado ao Nº da Cotação.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => { setEdit(null); setShowModal(true); }}>Novo projeto de elevadores</Button>
+          <Button variant="primary" icon="plus" onClick={abrirNovo}>Novo projeto de elevadores</Button>
         </div>
       </div>
 
@@ -246,7 +254,7 @@ function ProjetoElevadorEspecificacao({ abas }) {
               <tr><td colSpan={99}><div className="empty"><h4>Nenhum projeto de elevadores</h4><p>Clique em "Novo projeto de elevadores" para tratar o desenho técnico de uma cotação.</p></div></td></tr>
             )}
             {projetos.map(p => (
-              <tr key={p.id} style={{ cursor: "pointer" }} onClick={() => { setEdit(p); setShowModal(true); }}>
+              <tr key={p.id} style={{ cursor: "pointer" }} onClick={() => abrirEditar(p)}>
                 <td><div className="cell-main">{p.referencia || "—"}</div><div className="cell-sub">{p.responsavel || "—"}</div></td>
                 <td><span className="mono small">{p.numero_cotacao ?? "—"}</span></td>
                 <td><span className="small">{(p.unidades || []).length} unid. · {(p.unidades || []).map(u => u.identificador).join(", ")}</span></td>
@@ -259,7 +267,7 @@ function ProjetoElevadorEspecificacao({ abas }) {
         </table>
       </div>
 
-      {showModal && <ProjetoElevadorModal projeto={edit} onClose={() => { setShowModal(false); setEdit(null); }} onSaved={reload}/>}
+      {showModal && <ProjetoElevadorModal projeto={edit} onClose={fecharModal} onSaved={reload}/>}
     </div>
   );
 }

@@ -90,8 +90,6 @@ function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
 
 function CadastroClientesPage() {
   const [items, setItems] = React.useState(null);
-  const [showForm, setShowForm] = React.useState(false);
-  const [editing, setEditing] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [saving, setSaving] = React.useState(false);
   /* 27/09 — achado real: "Editar" parecia não funcionar. O formulário abre
@@ -100,10 +98,23 @@ function CadastroClientesPage() {
      aberto, clicar "Editar" em outro registro não trocava os dados
      (useState só lê initialData na montagem) — por isso o key={id}. */
   const formRef = React.useRef(null);
+  /* Formulário (Novo/Editar) e o modal de Histórico refletidos na URL:
+     /cadastros-mestres/cadastro-clientes               → lista
+     /cadastros-mestres/cadastro-clientes/novo          → novo cliente
+     /cadastros-mestres/cadastro-clientes/<id>          → editar aquele cliente
+     /cadastros-mestres/cadastro-clientes/<id>/historico → modal de histórico */
+  const [rotaId] = window.useRotaId('cadastro-clientes');
+  const [sub] = window.useRotaItem('cadastro-clientes', rotaId);
+  const showForm = rotaId === 'novo' || (!!rotaId && sub !== 'historico');
+  const editing = (items && rotaId && rotaId !== 'novo' && sub !== 'historico') ? (items.find((c) => c.id === rotaId) || null) : null;
+  const historicoDe = (items && rotaId && sub === 'historico') ? (items.find((c) => c.id === rotaId) || null) : null;
+  const abrirNovo = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-clientes', 'novo'); };
+  const abrirEditar = (c) => { if (window.VpRouter) window.VpRouter.navigate('cadastro-clientes', c.id); };
+  const abrirHistorico = (c) => { if (window.VpRouter) window.VpRouter.navigate('cadastro-clientes', c.id, 'historico'); };
+  const fecharModal = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-clientes', null); };
   React.useEffect(() => {
     if (showForm && formRef.current) formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
   }, [showForm, editing]);
-  const [historicoDe, setHistoricoDe] = React.useState(null);
 
   const reload = React.useCallback(() => { window.CadastrosClientesStore.listarTodos().then(setItems).catch(() => setItems([])); }, []);
   React.useEffect(() => { reload(); }, [reload]);
@@ -114,7 +125,7 @@ function CadastroClientesPage() {
       if (editing) await window.CadastrosClientesStore.atualizar(editing.id, form);
       else await window.CadastrosClientesStore.criar(form);
       window.toast?.(editing ? 'Cliente atualizado.' : 'Cliente cadastrado.', 'success');
-      setShowForm(false); setEditing(null); reload();
+      fecharModal(); reload();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setSaving(false); }
   };
@@ -142,13 +153,13 @@ function CadastroClientesPage() {
           <p className="page-head__sub">Cadastro central de clientes — inclui os criados automaticamente pelo Formulário.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setShowForm(true); }}>Novo cliente</Button>
+          <Button variant="primary" icon="plus" onClick={abrirNovo}>Novo cliente</Button>
         </div>
       </div>
 
       {showForm && (
         <div ref={formRef} style={{ marginBottom: 20, scrollMarginTop: 16 }}>
-          <ClienteForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
+          <ClienteForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={fecharModal}/>
         </div>
       )}
 
@@ -173,8 +184,8 @@ function CadastroClientesPage() {
                 <td>{c.ativo === false ? <span className="badge">Inativo</span> : <StatusBadge status="Ativo"/>}</td>
                 <td>
                   <div className="row gap-1">
-                    <Button variant="ghost" size="sm" icon="history" title="Histórico" onClick={() => setHistoricoDe(c)}/>
-                    <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => { setEditing(c); setShowForm(true); }}/>
+                    <Button variant="ghost" size="sm" icon="history" title="Histórico" onClick={() => abrirHistorico(c)}/>
+                    <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => abrirEditar(c)}/>
                     <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={() => excluir(c)}/>
                   </div>
                 </td>
@@ -184,7 +195,7 @@ function CadastroClientesPage() {
         </table>
       </div>
 
-      {historicoDe && <ClienteHistoricoModal cliente={historicoDe} onClose={() => setHistoricoDe(null)} />}
+      {historicoDe && <ClienteHistoricoModal cliente={historicoDe} onClose={fecharModal} />}
     </div>
   );
 }
@@ -404,12 +415,20 @@ function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
 
 function CadastroFornecedoresPage() {
   const [items, setItems] = React.useState(null);
-  const [showForm, setShowForm] = React.useState(false);
-  const [editing, setEditing] = React.useState(null);
   const [search, setSearch] = React.useState('');
   const [filterCategoria, setFilterCategoria] = React.useState('Todas');
   const [saving, setSaving] = React.useState(false);
-  /* Mesmo ajuste de CadastroClientesPage (rolar até o form + key={id}). */
+  /* Mesmo ajuste de CadastroClientesPage (rolar até o form + key={id}), e o
+     mesmo reflexo de Novo/Editar na URL:
+     /cadastros-mestres/cadastro-fornecedores        → lista
+     /cadastros-mestres/cadastro-fornecedores/novo   → novo fornecedor
+     /cadastros-mestres/cadastro-fornecedores/<id>   → editar aquele fornecedor */
+  const [rotaId] = window.useRotaId('cadastro-fornecedores');
+  const showForm = rotaId === 'novo' || !!rotaId;
+  const editing = (items && rotaId && rotaId !== 'novo') ? (items.find((f) => f.id === rotaId) || null) : null;
+  const abrirNovo = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-fornecedores', 'novo'); };
+  const abrirEditar = (f) => { if (window.VpRouter) window.VpRouter.navigate('cadastro-fornecedores', f.id); };
+  const fecharForm = () => { if (window.VpRouter) window.VpRouter.navigate('cadastro-fornecedores', null); };
   const formRef = React.useRef(null);
   React.useEffect(() => {
     if (showForm && formRef.current) formRef.current.scrollIntoView({ behavior: 'smooth', block: 'start' });
@@ -429,7 +448,7 @@ function CadastroFornecedoresPage() {
       if (editing) await window.CadastrosFornecedoresStore.atualizar(editing.id, form);
       else await window.CadastrosFornecedoresStore.criar(form);
       window.toast?.(editing ? 'Fornecedor atualizado.' : 'Fornecedor cadastrado.', 'success');
-      setShowForm(false); setEditing(null); reload();
+      fecharForm(); reload();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setSaving(false); }
   };
@@ -459,13 +478,13 @@ function CadastroFornecedoresPage() {
           <p className="page-head__sub">Cadastro único — Fornecedor, Agente de Carga, Transportador e Prestador IMS, marcados por categoria.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="primary" icon="plus" onClick={() => { setEditing(null); setShowForm(true); }}>Novo fornecedor</Button>
+          <Button variant="primary" icon="plus" onClick={abrirNovo}>Novo fornecedor</Button>
         </div>
       </div>
 
       {showForm && (
         <div ref={formRef} style={{ marginBottom: 20, scrollMarginTop: 16 }}>
-          <FornecedorForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={() => { setShowForm(false); setEditing(null); }}/>
+          <FornecedorForm key={editing ? editing.id : 'novo'} initialData={editing} isEdit={!!editing} saving={saving} onSubmit={salvar} onCancel={fecharForm}/>
         </div>
       )}
 
@@ -494,7 +513,7 @@ function CadastroFornecedoresPage() {
                 <td>{f.ativo === false ? <span className="badge">Inativo</span> : <StatusBadge status="Ativo"/>}</td>
                 <td>
                   <div className="row gap-1">
-                    <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => { setEditing(f); setShowForm(true); }}/>
+                    <Button variant="ghost" size="sm" icon="edit" title="Editar" onClick={() => abrirEditar(f)}/>
                     <Button variant="ghost" size="sm" icon="trash" title="Excluir" onClick={() => excluir(f)}/>
                   </div>
                 </td>

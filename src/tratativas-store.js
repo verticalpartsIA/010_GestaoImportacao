@@ -79,7 +79,7 @@
     let aviso = { ok: false, para: [], motivo: 'Nenhum e-mail do fornecedor encontrado (RFQ ou cadastro).' };
     if (destinos.length) {
       const nome = autor || autorAtual();
-      const base = (window.location.origin || 'https://vpgestaoimportacao.vpsistema.com');
+      const base = (window.location.origin || 'https://hub.vpsistema.com');
       const linksAnexos = (anexos || []).map((a) => `- ${a.nome}: ${a.url}`).join('\n');
       const texto = `Você recebeu uma nova mensagem sobre a cotação${numeroCotacao ? ' Nº ' + numeroCotacao : ''}.\n\n`
         + `${nome}:\n${mensagem?.trim() || '(Sem texto, apenas anexos)'}\n`
