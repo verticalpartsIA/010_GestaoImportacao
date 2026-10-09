@@ -31,7 +31,11 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
   const [filtro, setFiltro] = React.useState('aguardando');
   const [busy, setBusy] = React.useState(false);
   const [podeEditar, setPodeEditar] = React.useState(false);
-  const [aberto, setAberto] = React.useState(null);              // numero_pedido em conferência
+  /* Bug real (varredura de URLs, 09/10): a rota recebe setSubsel mas não está
+     em nenhum dos 3 mecanismos de deep-link de app.jsx — escreve/lê o 2º
+     segmento direto (/adm-financeiro/emissao-nf/<numero_pedido>), sem
+     depender de subsel, mesmo padrão do Mapa de Navios. */
+  const [aberto, setAberto] = window.useRotaId('emissao-nf');    // numero_pedido em conferência
   const [form, setForm] = React.useState({ conferencia: 'pendente', historico: false, observacao: '' });
 
   const carregar = React.useCallback(async () => {
@@ -58,6 +62,14 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
     Promise.resolve(window.PropostaStore?.temCapacidade?.('emissao-nf', 'editar')).then(v => { if (vivo) setPodeEditar(!!v); }).catch(() => {});
     return () => { vivo = false; };
   }, []);
+  // Restaura o form de conferência ao chegar pela URL (deep-link/F5/Voltar-Avançar).
+  React.useEffect(() => {
+    if (!aberto || !dados) return;
+    const g = dados.grupos.find((x) => x.numero === aberto);
+    if (!g) return;
+    const ac = dados.acomp[g.numero] || null;
+    setForm({ conferencia: (ac && ac.conferencia) || 'pendente', historico: !!(ac && ac.historico), observacao: (ac && ac.observacao) || '' });
+  }, [dados, aberto]);
 
   const atualizarOmie = async () => {
     setBusy(true);

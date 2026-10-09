@@ -46,7 +46,11 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
   const [filtro, setFiltro] = React.useState('pronto');
   const [busca, setBusca] = React.useState('');
   const [mostrarHist, setMostrarHist] = React.useState(false);
-  const [aberto, setAberto] = React.useState(null);          // codigo_pedido em edição
+  /* Bug real (varredura de URLs, 09/10): a rota recebe setSubsel mas não está
+     em nenhum dos 3 mecanismos de deep-link de app.jsx — escreve/lê o 2º
+     segmento direto (/logistica/expedicao/<codigo_pedido>), sem depender de
+     subsel, mesmo padrão do Mapa de Navios/Emissão de NF. */
+  const [aberto, setAberto] = window.useRotaId('expedicao');  // codigo_pedido em edição
   const [itens, setItens] = React.useState([]);
   const [form, setForm] = React.useState({});
   const [busy, setBusy] = React.useState(false);
@@ -114,6 +118,13 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
     const { data } = await sb.from('pcp_pedido_itens').select('seq, codigo, descricao, unidade, quantidade, item_pcp').eq('codigo_pedido', p.codigo_pedido).order('seq');
     setItens(data || []);
   };
+  // Restaura o pedido aberto ao chegar pela URL (deep-link/F5/Voltar-Avançar).
+  React.useEffect(() => {
+    if (!aberto || !dados) return;
+    const p = dados.pedidos.find((x) => x.codigo_pedido === aberto);
+    if (p) abrir(p);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [dados, aberto]);
   const gravar = async (p, status) => {
     const nPedido = p.numero_pedido;
     if (status === 'despachado' && !form.retirada && !String(form.transportadora).trim()) { window.toast?.('Informe a transportadora (ou marque retirada pelo cliente).'); return; }
