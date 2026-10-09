@@ -322,9 +322,21 @@ function MatrizPermissoes() {
 function ColaboradoresAdminPage() {
   const [arvore, setArvore] = React.useState(null);
   const [search, setSearch] = React.useState('');
-  const [editando, setEditando] = React.useState(null);
   const [recolhidos, setRecolhidos] = React.useState(() => new Set());
-  const [visualizacao, setVisualizacao] = React.useState('padrão');
+  /* Esta tela vive dentro da aba "administracao" de Configurações
+     (financeiro.jsx › ConfiguracoesPage), que já escreve o 2º segmento da
+     URL com o nome da aba — aqui lê/escreve o 3º (/admin/configuracoes/
+     administracao/<id do colaborador>|matriz), igual ao padrão já usado no
+     PCP (window.useRotaItem). "Alocar em Módulo" e "Ver em matriz" trocam a
+     tela inteira (sem lista por trás), então os dois cabem no mesmo slot. */
+  const [rotaItem, setRotaItem] = window.useRotaItem('configuracoes', 'administracao');
+  const editando = (arvore && rotaItem && rotaItem !== 'matriz')
+    ? arvore.flatMap((g) => g.colaboradores).find((c) => c.id === rotaItem) || null
+    : null;
+  const visualizacao = rotaItem === 'matriz' ? 'matriz' : 'padrão';
+  const abrirEditar = (c) => setRotaItem(c.id);
+  const abrirMatriz = () => setRotaItem('matriz');
+  const fecharPainel = () => setRotaItem(null);
 
   const reload = React.useCallback(() => { window.ColaboradoresAdminStore.arvoreDepartamentos().then(setArvore).catch(() => setArvore([])); }, []);
   React.useEffect(() => { reload(); }, [reload]);
@@ -340,14 +352,14 @@ function ColaboradoresAdminPage() {
   if (arvore === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   if (editando) {
-    return <PainelAlocacaoModulos colaborador={editando} onVoltar={() => setEditando(null)} onChange={reload}/>;
+    return <PainelAlocacaoModulos colaborador={editando} onVoltar={fecharPainel} onChange={reload}/>;
   }
 
   if (visualizacao === 'matriz') {
     return (
       <div>
         <div className="row gap-2" style={{ marginBottom: 16 }}>
-          <button onClick={() => setVisualizacao('padrão')} style={{ padding: '8px 14px', background: 'transparent', border: '0.5px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
+          <button onClick={fecharPainel} style={{ padding: '8px 14px', background: 'transparent', border: '0.5px solid var(--border)', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500, color: 'var(--text-primary)' }}>
             ← Voltar
           </button>
           <div className="small muted">Visualização em matriz — clique rápido para alterar permissões</div>
@@ -373,7 +385,7 @@ function ColaboradoresAdminPage() {
             O que dá pra editar é a <b>alocação de módulos do VP Gestão</b>.
           </p>
         </div>
-        <button onClick={() => setVisualizacao('matriz')} style={{ padding: '8px 14px', background: 'var(--fill-accent)', color: 'white', border: '0.5px solid var(--fill-accent)', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>
+        <button onClick={abrirMatriz} style={{ padding: '8px 14px', background: 'var(--fill-accent)', color: 'white', border: '0.5px solid var(--fill-accent)', borderRadius: 6, cursor: 'pointer', fontSize: 13, fontWeight: 500, whiteSpace: 'nowrap' }}>
           Ver em matriz →
         </button>
       </div>
@@ -401,7 +413,7 @@ function ColaboradoresAdminPage() {
               {!recolhido && (
                 <div style={{ padding: '0 14px' }}>
                   {g.colaboradores.map((c) => (
-                    <ColabRow key={c.id} colaborador={c} onEditar={() => setEditando(c)} onExcluir={() => excluirAcesso(c)}/>
+                    <ColabRow key={c.id} colaborador={c} onEditar={() => abrirEditar(c)} onExcluir={() => excluirAcesso(c)}/>
                   ))}
                 </div>
               )}

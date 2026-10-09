@@ -31,6 +31,20 @@
 function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded, onChanged }) {
   const [obraId, setObraId] = React.useState(obraIdProp || null);
   const [obra, setObra] = React.useState(obraProp || null);
+  /* Bug real (varredura de URLs, 09/10): a rota "vistorias" não recebe
+     `setSubsel` de app.jsx (só `obraId={subsel}`), então escolher uma obra
+     no seletor (abaixo) nunca escrevia a URL — F5 ou compartilhar o link
+     sempre voltava pro seletor de obras, mesmo depois de escolher uma.
+     `obraIdProp` também só era lido uma vez no mount — Voltar/Avançar do
+     navegador (ou um link de outra tela, ex. Gatilhos, que PASSA setSubsel)
+     não trocava a obra aberta. Escreve/lê o 2º segmento direto
+     (/engenharia/vistorias/<obraId>) sem depender de setSubsel; não mexe
+     no modo `embedded` (usado dentro do Dossiê da Obra, sem rota própria). */
+  React.useEffect(() => { setObraId(obraIdProp || null); }, [obraIdProp]);
+  const escolherObra = (o) => {
+    setObraId(o.id); setObra({ nome: o.building_name });
+    if (!embedded && window.VpRouter) window.VpRouter.navigate('vistorias', o.id);
+  };
   const [obras, setObras] = React.useState([]);
   const [equipPorObra, setEquipPorObra] = React.useState({}); // dossier_id -> [numero_serie,...]
   const [loadingObras, setLoadingObras] = React.useState(!obraIdProp);
@@ -337,7 +351,7 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
             setBusca={setBuscaObra}
             clienteAberto={clienteAberto}
             setClienteAberto={setClienteAberto}
-            onEscolher={(o) => { setObraId(o.id); setObra({ nome: o.building_name }); }}
+            onEscolher={escolherObra}
           />
         )}
       </div>

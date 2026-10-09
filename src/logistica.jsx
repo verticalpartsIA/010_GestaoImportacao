@@ -912,6 +912,24 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
   const statusOptions = ["Todos", "Em trânsito", "Aguardando liberação", "Entregue"];
   const etaOptions = ["Todos", "Próximos 7 dias", "Próximos 30 dias", "Atrasados"];
 
+  /* Bug real (varredura de URLs, 09/10): a rota "importacao-rastreamento" recebe
+     `setSubsel` de app.jsx, mas não está em nenhum dos 3 mecanismos de deep-link
+     (SYNC_PASSTHROUGH_ROUTES/WRAPPED_ID_KEY/ASYNC_FETCH_ROUTES) — escrever via
+     `setSubsel` funcionaria, mas ler uma URL recebida (link direto, Voltar/
+     Avançar) nunca restaurava o navio selecionado (resolveIncomingLocation cai
+     sempre em subsel:null pra rota não registrada). Lê/escreve o 2º segmento
+     direto pelo VpRouter, sem depender de subsel, mesmo padrão já usado nas
+     telas "zero-props".*/
+  React.useEffect(() => {
+    if (!embarques.length) return;
+    const loc = window.VpRouter && window.VpRouter.parseLocation();
+    const idUrl = loc && loc.route === 'importacao-rastreamento' ? loc.id : null;
+    if (!idUrl) return;
+    const emb = embarques.find((e) => String(e.id) === String(idUrl));
+    if (emb) setActive(emb.id);
+  }, [embarques]);
+  const abrirNavio = (id) => { setActive(id); if (window.VpRouter) window.VpRouter.navigate('importacao-rastreamento', id); };
+
   const load = React.useCallback(() => {
     return window.__VP_SB.sb.from('embarques').select('*').eq('teste', false).order('eta')
       .then(({ data }) => { setEmbarques(data || []); setLoading(false); });
@@ -1019,7 +1037,7 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
       <div className="grid-2" style={{ gap: 20, gridTemplateColumns: estreito ? "minmax(0, 1fr)" : "1fr 360px" }}>
         <Card sharp={false} padding="0">
           <div style={{ height: estreito ? 380 : 600 }}>
-            <RastreamentoMapa ships={noMapa} activeId={activeId} onSelect={(id) => setActive(id)}/>
+            <RastreamentoMapa ships={noMapa} activeId={activeId} onSelect={abrirNavio}/>
           </div>
         </Card>
 
@@ -1032,7 +1050,7 @@ function ImportacaoRastreamento({ setRoute, setSubsel }) {
                 const r = rtEta(s, hoje), sel = activeId === s.id, doc = rtDoc(s), chegou = rtChegou(s), real = rtPosicaoReal(s);
                 return (
                   <div key={s.id}
-                    onClick={() => setActive(s.id)}
+                    onClick={() => abrirNavio(s.id)}
                     style={{
                       padding: 12,
                       background: sel ? "var(--vp-black)" : "var(--bg)",
