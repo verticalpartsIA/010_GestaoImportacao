@@ -408,10 +408,23 @@ function OndeParouWidget({ gatilhos, setRoute, setSubsel }) {
   const abrir = async (g) => {
     if (!window.GatilhosEngine) return;
     const dest = await window.GatilhosEngine.navegarPara(g);
-    if (dest?.rota) {
-      if (dest.subsel != null && setSubsel) setSubsel(dest.subsel);
+    if (!dest?.rota) return;
+    /* Contrato de Venda guarda o item aberto no 3º segmento, dentro da aba
+       "painel" (/contrato-venda-equipamentos/painel/<id>) — setSubsel só
+       escreve o 2º segmento, então navega direto pro 3º (mesmo padrão já
+       usado em financeiro.jsx/decisoes.jsx). */
+    if (dest.rota === 'contrato-venda-equipamentos' && dest.subsel != null) {
       setRoute(dest.rota);
+      if (window.VpRouter) {
+        setTimeout(() => {
+          window.VpRouter.navigate(dest.rota, 'painel', dest.subsel);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }, 0);
+      }
+      return;
     }
+    if (dest.subsel != null && setSubsel) setSubsel(dest.subsel);
+    setRoute(dest.rota);
   };
 
   return (

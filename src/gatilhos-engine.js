@@ -114,9 +114,11 @@
 
   /* Resolvers de navegação (etapa 3) — dado o alvo_id gravado no nó,
      devolvem o `subsel` no formato que a rota de destino já espera (ver
-     app.jsx). Onde a tela ainda não aceita deep-link (Contrato de Venda,
-     Aval Financeiro, Projeto de Engenharia, Precificação), o nó só
-     declara `rota` — clique pousa na lista, sem subsel. */
+     app.jsx). Contrato de Venda e Aval Financeiro/Jurídico passaram a
+     aceitar deep-link (varredura de URLs de 09/10) — ver resolvers abaixo.
+     Onde a tela ainda não tem um registro específico pra abrir (Projeto de
+     Engenharia por cotação, P.I. ainda não criada), o nó só declara `rota`
+     — clique pousa na lista, sem subsel. */
   const resolverIdDireto = async (alvoId) => alvoId || null;
   const resolverEditProposta = async (alvoId) => (alvoId ? { __editId: alvoId } : null);
   /* 23/08 (achado real, Gelson): clicar em "Financeiro precificando" caía
@@ -136,6 +138,40 @@
     if (!alvoId || !window.CotacaoElevadorFornecedorStore) return null;
     try { return await window.CotacaoElevadorFornecedorStore.getById(alvoId); }
     catch (e) { console.warn('[GatilhosEngine] resolverCotacaoFornecedor falhou', e); return null; }
+  };
+  /* 09/10 (varredura de URLs) — AVAL_PAGAMENTO nasce em SINAL_PAGO/
+     AVAL_PAGAMENTO_CONFIRMADO (aval-financeiro-store.js), cujo alvoId já é
+     o id da PRÓPRIA linha de `avais_financeiros` — a tela (aval-financeiro.jsx)
+     agora lê a URL como id da PROPOSTA (`rotaId === r.proposta.id`), então
+     é preciso traduzir aval → proposta antes de navegar. */
+  const resolverAvalFinanceiroPorAval = async (alvoId) => {
+    if (!alvoId || !window.AvalFinanceiroStore) return null;
+    try { const av = await window.AvalFinanceiroStore.getById(alvoId); return av ? av.proposta_id : null; }
+    catch (e) { console.warn('[GatilhosEngine] resolverAvalFinanceiroPorAval falhou', e); return null; }
+  };
+  /* AGUARDA_BOLETO nasce em CONTRATO_VENDA_ASSINADO, cujo alvoId é o id do
+     próprio Contrato de Venda — mesma tradução acima, mas pelo vínculo
+     contrato_venda_id (CVStore.vincularContrato grava isso no aval). */
+  const resolverAvalFinanceiroPorContrato = async (alvoId) => {
+    if (!alvoId || !window.AvalFinanceiroStore) return null;
+    try { const av = await window.AvalFinanceiroStore.getByContratoVendaId(alvoId); return av ? av.proposta_id : null; }
+    catch (e) { console.warn('[GatilhosEngine] resolverAvalFinanceiroPorContrato falhou', e); return null; }
+  };
+  /* AVAL_JURIDICO nasce em CLIENTE_RESPONDEU_PROPOSTA (aprovada), cujo
+     alvoId é a proposta — sempre o caso de aval ligado a Proposta (nunca o
+     avulso por Contrato Instalador, "c-..."), ver AvalJuridicoStore.listarFila. */
+  const resolverAvalJuridico = async (alvoId) => (alvoId ? 'p-' + alvoId : null);
+  /* CONTRATO_ENVIADO/AGUARDA_ASSINATURA nascem em CLIENTE_RESPONDEU_PROPOSTA,
+     alvoId = proposta — mas o Contrato de Venda guarda/abre pelo PRÓPRIO id
+     (CVDashboard.drawerId), então resolve o contrato real desta proposta. */
+  const resolverContratoVendaPorProposta = async (alvoId) => {
+    const c = sb(); if (!c || !alvoId) return null;
+    try {
+      const { data } = await c.from('contratos_venda_equipamentos').select('id')
+        .eq('proposta_id', alvoId).or('status.is.null,status.neq.em_preenchimento')
+        .order('criado_em', { ascending: false }).limit(1).maybeSingle();
+      return data ? data.id : null;
+    } catch (e) { console.warn('[GatilhosEngine] resolverContratoVendaPorProposta falhou', e); return null; }
   };
 
   /* Cada nó: { key, label, predecessores:[{key, rel}], nasce, fecha,
@@ -172,7 +208,7 @@
       predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
       nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
       condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
-      fecha: 'CONTRATO_VENDA_ENVIADO', fechamentoTipo: 'automatico', rota: 'contrato-venda-equipamentos' },
+      fecha: 'CONTRATO_VENDA_ENVIADO', fechamentoTipo: 'automatico', rota: 'contrato-venda-equipamentos', resolverSubsel: resolverContratoVendaPorProposta },
 
     { key: 'PROJETO_ENVIADO', label: 'Projeto de Engenharia enviado ao Cliente (SLA 24h)',
       predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }, { key: 'CONTRATO_ENVIADO', rel: 'SS' }],
@@ -183,19 +219,19 @@
     { key: 'AGUARDA_ASSINATURA', label: 'Aguardando assinatura do Contrato (SLA 5 dias)',
       predecessores: [{ key: 'CONTRATO_ENVIADO', rel: 'FS' }],
       nasce: 'CONTRATO_VENDA_ENVIADO', fecha: 'CONTRATO_VENDA_ASSINADO',
-      fechamentoTipo: 'automatico', rota: 'contrato-venda-equipamentos' },
+      fechamentoTipo: 'automatico', rota: 'contrato-venda-equipamentos', resolverSubsel: resolverContratoVendaPorProposta },
 
     { key: 'AGUARDA_BOLETO', label: 'Aguardando pagamento do Boleto (SLA 3 dias)',
       predecessores: [{ key: 'AGUARDA_ASSINATURA', rel: 'FS' }],
       nasce: 'CONTRATO_VENDA_ASSINADO', fecha: 'SINAL_PAGO',
       fechamentoTipo: 'manual' /* Financeiro clica "Boleto pago" — AvalFinanceiroStore.confirmarSinal() */,
-      rota: 'aval-financeiro' },
+      rota: 'aval-financeiro', resolverSubsel: resolverAvalFinanceiroPorContrato },
 
     { key: 'AVAL_PAGAMENTO', label: 'Aguardando Aval de Pagamento (SLA 4h)',
       predecessores: [{ key: 'AGUARDA_BOLETO', rel: 'FS' }],
       nasce: 'SINAL_PAGO', fecha: 'AVAL_PAGAMENTO_CONFIRMADO',
       fechamentoTipo: 'manual' /* Financeiro clica "Dar Aval de Pagamento" — confirmarAvalPagamento() */,
-      rota: 'aval-financeiro' },
+      rota: 'aval-financeiro', resolverSubsel: resolverAvalFinanceiroPorAval },
 
     /* Aval Jurídico (manual) — desde 29/09 (2ª rodada) abre JUNTO com o
        Aval Financeiro, quando o cliente aprova a Proposta (antes: só depois
@@ -207,7 +243,7 @@
       nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
       condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
       fecha: 'AVAL_JURIDICO_APROVADO',
-      fechamentoTipo: 'manual', rota: 'aval-juridico' },
+      fechamentoTipo: 'manual', rota: 'aval-juridico', resolverSubsel: resolverAvalJuridico },
 
     /* Aval Engenharia (08/10/2026) — terceiro aval, POR COTAÇÃO: o cliente
        assina o Projeto de Instalação (Projeto de Elevadores › Assinatura).

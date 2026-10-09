@@ -44,6 +44,21 @@ function ModalCadeiaCotacao({ numeroCotacao, setRoute, setSubsel, onClose }) {
     if (!window.GatilhosEngine) return;
     const alvo = await window.GatilhosEngine.navegarPara(g);
     if (!alvo) return;
+    /* Contrato de Venda guarda o item aberto no 3º segmento, dentro da aba
+       "painel" (/contrato-venda-equipamentos/painel/<id>) — setSubsel só
+       escreve o 2º segmento, então navega direto pro 3º (mesmo padrão já
+       usado em financeiro.jsx/dashboard.jsx/decisoes.jsx). */
+    if (alvo.rota === 'contrato-venda-equipamentos' && alvo.subsel != null) {
+      setRoute?.(alvo.rota);
+      onClose();
+      if (window.VpRouter) {
+        setTimeout(() => {
+          window.VpRouter.navigate(alvo.rota, 'painel', alvo.subsel);
+          window.dispatchEvent(new PopStateEvent('popstate'));
+        }, 0);
+      }
+      return;
+    }
     if (alvo.subsel !== null) setSubsel?.(alvo.subsel);
     setRoute?.(alvo.rota);
     onClose();
@@ -80,7 +95,10 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
   const [busca, setBusca] = React.useState('');
   const [fStatus, setFStatus] = React.useState('Todos');
   const [refreshing, setRefreshing] = React.useState(false);
-  const [cadeiaDe, setCadeiaDe] = React.useState(null);
+  // Modal "Tratativas — Cotação Nº X" (cadeia de Gatilhos) refletido na URL
+  // (/comercial/controle-cotacoes/<nº da cotação>) — antes era só useState.
+  const [rotaCadeiaDe, setRotaCadeiaDe] = window.useRotaId('controle-cotacoes');
+  const cadeiaDe = rotaCadeiaDe ? Number(rotaCadeiaDe) : null;
   const [abrindo, setAbrindo] = React.useState(null);
   const [abrindoTrat, setAbrindoTrat] = React.useState(null);
   const [escolherForn, setEscolherForn] = React.useState(null);
@@ -235,7 +253,7 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
                   <tr key={r.id ? `${r.origem}-${r.id}` : `${r.origem}-${r.numero_cotacao}-${i}`}
                     style={clicavel ? { cursor: 'pointer' } : undefined}
                     title={clicavel ? 'Abrir tratativas desta cotação' : undefined}
-                    onClick={clicavel ? () => setCadeiaDe(r.numero_cotacao) : undefined}>
+                    onClick={clicavel ? () => setRotaCadeiaDe(String(r.numero_cotacao)) : undefined}>
                     <td style={{ whiteSpace: 'nowrap' }}><span className="mono small">{r.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', r.numero_cotacao) : '—'}</span></td>
                     <td style={{ whiteSpace: 'nowrap' }}><span className="mono small">{ccDataBR(r.data)}</span></td>
                     <td style={{ fontSize: 12.5 }}>{r.nome_cliente || <span className="muted">—</span>}</td>
@@ -274,7 +292,7 @@ function ControleCotacoesPage({ setRoute, setSubsel }) {
         </Modal>
       )}
       {cadeiaDe != null && (
-        <ModalCadeiaCotacao numeroCotacao={cadeiaDe} setRoute={setRoute} setSubsel={setSubsel} onClose={() => setCadeiaDe(null)}/>
+        <ModalCadeiaCotacao numeroCotacao={cadeiaDe} setRoute={setRoute} setSubsel={setSubsel} onClose={() => setRotaCadeiaDe(null)}/>
       )}
     </div>
   );

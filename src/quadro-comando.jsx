@@ -989,6 +989,18 @@ function QuadroComandoPage({ setRoute, subsel }) {
   const [abertoId, setAbertoId] = React.useState(() => initialId);
   const [criando, setCriando] = React.useState(false);
 
+  /* Bug real (varredura de URLs, 09/10): `abertoId` só era inicializado uma
+     vez no mount (`initialId`) — Voltar/Avançar do navegador muda `subsel`
+     (via App, popstate) sem remontar este componente, então o detalhe nunca
+     fechava/trocava sozinho, ficando preso na 1ª cotação aberta enquanto a
+     URL já mostrava outra coisa. `novo()` abaixo navega direto via
+     `VpRouter.navigate` (sem passar por `setSubsel`, que esta tela nem
+     recebe), então este efeito nunca reage a esse caso — só a mudanças reais
+     de `subsel` vindas do App. */
+  React.useEffect(() => {
+    setAbertoId(typeof subsel === 'string' ? subsel : null);
+  }, [subsel]);
+
   // Sem número de cotação fixo aqui: lista geral (por cotação) fica pra uma
   // fase futura — hoje o ponto de entrada real é "Novo quadro de comando"
   // abaixo (avulso) ou a partir do Formulário de Elevador.
