@@ -5,7 +5,8 @@ import postgres from 'npm:postgres@3.4.4'
 //   (rpc verify_hub_sync_secret) — a senha vive só no cofre do vpsistema.
 // • Gravação: conexão interna do banco do HUB (SUPABASE_DB_URL) — não usa
 //   chave de API (as legadas do HUB foram desligadas em 28/09/2026).
-// Ações: set_alcadas → vpsistema_set_alcadas ; set_email → vpsistema_set_email.
+// Ações: set_alcadas → vpsistema_set_alcadas ; set_email → vpsistema_set_email ;
+//        set_valores → vpsistema_set_valores (quem vê R$).
 
 const VPSISTEMA_URL = 'https://ubdkoqxfwcraftesgmbw.supabase.co'
 // Chave PÚBLICA (anon) do vpsistema — a mesma que está no site; só chama o verificador.
@@ -38,6 +39,10 @@ Deno.serve(async (req) => {
       }
       if (body.action === 'set_email') {
         const [row] = await sql`select public.vpsistema_set_email(${body.p_old}, ${body.p_new}) as r`
+        return json(row.r)
+      }
+      if (body.action === 'set_valores') {
+        const [row] = await sql`select public.vpsistema_set_valores(${body.p_email}, ${body.p_modo}, ${body.p_liberar ?? []}::text[], ${body.p_esconder ?? []}::text[]) as r`
         return json(row.r)
       }
       return json({ error: 'ação desconhecida' }, 400)

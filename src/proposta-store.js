@@ -708,19 +708,9 @@
     ]);
     return { perfis: perfis || [], concedidas: concedidas || [] };
   }
-  async function concederAlcada(perfilId, modulo, capacidade, conceder) {
-    const c = sb(); if (!c) return;
-    if (conceder) {
-      const por = (window.__VP_USER || {}).email || null;
-      await c.from('alcadas_capacidade').upsert(
-        { perfil_id: perfilId, modulo, capacidade, concedido_por: por, concedido_em: new Date().toISOString() },
-        { onConflict: 'perfil_id,modulo,capacidade' },
-      );
-    } else {
-      await c.from('alcadas_capacidade').delete().eq('perfil_id', perfilId).eq('modulo', modulo).eq('capacidade', capacidade);
-    }
-    resetAlcadasCache();
-  }
+  /* Conceder saiu do HUB — quem concede é o vpsistema.com/administracao
+     (árvore de alçadas, 09/10/2026). O banco já recusa gravação do navegador. */
+  async function concederAlcada() { throw new Error('As alçadas agora são geridas em vpsistema.com/administracao.'); }
 
   /* ---------- Trava por aprovação ----------
      Cliente aprovou = editor trava pro vendedor. Quem tem a capacidade
