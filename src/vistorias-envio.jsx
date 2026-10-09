@@ -536,7 +536,10 @@ function DespacharVistoria() {
   const [erroMasterId, setErroMasterId] = React.useState(null);
   const [hidratado, setHidratado] = React.useState(null); // { obra, unidade } — última resolução via Master ID
   const [telefoneEnvio, setTelefoneEnvio] = React.useState('');
-  const [detalhe, setDetalhe] = React.useState(null); // atividade aberta no modal de resultado (ResultadoAtividadeModal, definido em vistorias-obras.jsx — mesmo escopo global do resto dos módulos)
+  // atividade aberta no modal de resultado (ResultadoAtividadeModal, definido em vistorias-obras.jsx) —
+  // URL-backed (/vistorias-envio/despacho/<id>) pra sobreviver a F5/Voltar-Avançar/link direto.
+  const [detalheId, setDetalheId] = window.useRotaItem('vistorias-envio', 'despacho');
+  const detalhe = (despachos && detalheId) ? despachos.find((a) => String(a.id) === detalheId) || null : null;
   const Store = window.VistoriasQuestionariosStore;
 
   const carregar = React.useCallback(() => {
@@ -872,7 +875,7 @@ function DespacharVistoria() {
                       <td className="mono" style={{ fontSize: 11, color: 'var(--fg3)' }}>{a.enviado_em ? new Date(a.enviado_em).toLocaleString('pt-BR') : '—'}</td>
                       <td>
                         <div className="row" style={{ gap: 4 }}>
-                          <Button variant="ghost" size="sm" icon="eye" onClick={() => setDetalhe(a)}>Ver resultado</Button>
+                          <Button variant="ghost" size="sm" icon="eye" onClick={() => setDetalheId(String(a.id))}>Ver resultado</Button>
                           {a.status !== 'concluida' && (
                             <Button variant="ghost" size="sm" icon="refresh" title="Trocar vistoriador / reenviar link" onClick={() => setTrocandoAtividade(a)}/>
                           )}
@@ -888,7 +891,7 @@ function DespacharVistoria() {
         )}
       </Card>
 
-      {detalhe && <ResultadoAtividadeModal atividade={detalhe} onClose={() => setDetalhe(null)}/>}
+      {detalhe && <ResultadoAtividadeModal atividade={detalhe} onClose={() => setDetalheId(null)}/>}
       {trocandoAtividade && (
         <TrocarVistoriadorModal atividade={trocandoAtividade} tecnicos={tecnicos}
           onClose={() => setTrocandoAtividade(null)} onTrocado={carregar}/>
@@ -974,7 +977,9 @@ function CalendarioVistorias() {
   const hoje = React.useMemo(() => new Date(), []);
   const [mesRef, setMesRef] = React.useState(new Date(hoje.getFullYear(), hoje.getMonth(), 1));
   const [atividades, setAtividades] = React.useState(null);
-  const [detalhe, setDetalhe] = React.useState(null);
+  // URL-backed (/vistorias-envio/calendario/<id>) — mesmo motivo do detalhe de DespacharVistoria.
+  const [detalheId, setDetalheId] = window.useRotaItem('vistorias-envio', 'calendario');
+  const detalhe = (atividades && detalheId) ? atividades.find((a) => String(a.id) === detalheId) || null : null;
 
   React.useEffect(() => {
     window.VistoriasQuestionariosStore.listarAtividadesAgendadas()
@@ -1038,7 +1043,7 @@ function CalendarioVistorias() {
                       const cor = { warning: '#b45309', info: '#1d4ed8', success: '#15803d', neutral: '#666' }[st.variant] || '#666';
                       const hora = new Date(a.agendado_para).toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
                       return (
-                        <div key={a.id} onClick={() => setDetalhe(a)}
+                        <div key={a.id} onClick={() => setDetalheId(String(a.id))}
                           title={`${hora} · ${a.dossier_obra?.building_name || ''}`}
                           style={{ fontSize: 10, padding: '2px 4px', borderRadius: 3, background: cor + '20', color: cor, cursor: 'pointer', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                           {hora} {a.dossier_obra?.building_name || a.dossier_obra?.client_name || '—'}
@@ -1055,7 +1060,7 @@ function CalendarioVistorias() {
       )}
 
       {detalhe && (
-        <Modal title={detalhe.vistorias_questionarios?.nome || 'Vistoria agendada'} onClose={() => setDetalhe(null)} width={440}>
+        <Modal title={detalhe.vistorias_questionarios?.nome || 'Vistoria agendada'} onClose={() => setDetalheId(null)} width={440}>
           <div className="stack" style={{ gap: 6, fontSize: 13 }}>
             <div><b>Obra:</b> {detalhe.dossier_obra?.client_name} — {detalhe.dossier_obra?.building_name || '—'}</div>
             {detalhe.equipamentos_obra?.numero_serie && <div><b>Equipamento:</b> {detalhe.equipamentos_obra.numero_serie}</div>}

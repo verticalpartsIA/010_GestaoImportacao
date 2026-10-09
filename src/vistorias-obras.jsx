@@ -51,7 +51,23 @@ function VistoriasObras({ obraId: obraIdProp, obra: obraProp, setRoute, embedded
   const [buscaObra, setBuscaObra] = React.useState('');
   const [clienteAberto, setClienteAberto] = React.useState(null);
   const [vistorias, setVistorias] = React.useState([]);
-  const [selectedVistoria, setSelectedVistoria] = React.useState(null);
+  /* Bug real (varredura de URLs, 09/10): o detalhe da vistoria aberta era só
+     useState — F5/link direto/Voltar-Avançar sempre voltavam pra lista de
+     vistorias da obra. Usa o 3º segmento (/engenharia/vistorias/<obraId>/
+     <vistoriaId>) só quando a tela TEM rota própria (não `embedded`, usado
+     dentro do Dossiê da Obra — ali escrever essa URL trocaria a tela por
+     engano). `setSelectedVistoria` preserva a mesma assinatura (recebe o
+     objeto inteiro ou null) nos 5 call sites já existentes. */
+  const [selectedVistoriaIdUrl, setSelectedVistoriaIdUrl] = window.useRotaItem('vistorias', obraId || '');
+  const [selectedVistoriaLocal, setSelectedVistoriaLocal] = React.useState(null);
+  const selectedVistoriaId = embedded ? null : selectedVistoriaIdUrl;
+  const selectedVistoria = embedded
+    ? selectedVistoriaLocal
+    : (selectedVistoriaId ? vistorias.find((v) => String(v.id) === selectedVistoriaId) || null : null);
+  const setSelectedVistoria = (v) => {
+    if (embedded) { setSelectedVistoriaLocal(v); return; }
+    setSelectedVistoriaIdUrl(v ? String(v.id) : null);
+  };
   const [showForm, setShowForm] = React.useState(false);
   const [loading, setLoading] = React.useState(false);
   const [filterStatus, setFilterStatus] = React.useState('todas');
