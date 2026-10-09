@@ -22,8 +22,8 @@ function CefSpecTable({ linhas }) {
   if (!preenchidas.length) return null;
   return (
     <table className="co-specs"><tbody>
-      {preenchidas.map(([pt, en, v], i) => (
-        <tr key={i}><td className="co-spec-k">{pt} / {en}</td><td className="co-spec-v">{String(v)}</td></tr>
+      {preenchidas.map(([pt, en, v, zh], i) => (
+        <tr key={i}><td className="co-spec-k">{pt} / {en}{zh ? ` / ${zh}` : ''}</td><td className="co-spec-v">{String(v)}</td></tr>
       ))}
     </tbody></table>
   );
@@ -43,9 +43,9 @@ function CefSpecTableDivergente({ linhas, divergencias, onChange, readOnly }) {
         <th>VerticalParts</th>
         <th>Fornecedor propõe (se diferente) · Supplier proposal (if different) · 如有不同，请在此填写</th>
       </tr>
-      {preenchidas.map(([key, pt, en, v]) => (
+      {preenchidas.map(([key, pt, en, v, zh]) => (
         <tr key={key}>
-          <td className="co-spec-k">{pt} / {en}</td>
+          <td className="co-spec-k">{pt} / {en}{zh ? ` / ${zh}` : ''}</td>
           <td className="co-spec-v">{String(v)}</td>
           <td className="co-spec-diverge">
             <input className="co-inp" value={(divergencias && divergencias[key]) || ''}
@@ -57,12 +57,12 @@ function CefSpecTableDivergente({ linhas, divergencias, onChange, readOnly }) {
   );
 }
 
-function CefUnidadeRead({ u, tipoFormulario, idx, codigoAtivo, divergencias, onDivergenciaChange, readOnly }) {
+function CefUnidadeRead({ u, tipoFormulario, categoriaProduto, idx, codigoAtivo, divergencias, onDivergenciaChange, readOnly }) {
   const store = window.CotacaoElevadorFornecedorStore;
-  const secoes = store.unitSpecSecoes(u, tipoFormulario);
+  const secoes = store.unitSpecSecoes(u, tipoFormulario, categoriaProduto, { i18n: true });
   return (
     <div className="co-block">
-      <div className="co-sec-lbl">Unidade {u.identificador || idx + 1}{codigoAtivo ? ` · ${codigoAtivo}` : ''}</div>
+      <div className="co-sec-lbl">Unidade · Unit · 单元 {u.identificador || idx + 1}{codigoAtivo ? ` · ${codigoAtivo}` : ''}</div>
       {secoes.map((s) => (
         <div key={s.titulo} style={{ marginTop: 10 }}>
           <b style={{ fontSize: 12 }}>{s.titulo}</b>
@@ -73,31 +73,34 @@ function CefUnidadeRead({ u, tipoFormulario, idx, codigoAtivo, divergencias, onD
   );
 }
 
-function CefUnidadeFill({ u, val, onChange, readOnly }) {
+function CefUnidadeFill({ u, categoriaProduto, val, onChange, readOnly }) {
   const f = (k) => (e) => onChange(k, e.target.value);
+  const ehQuadroComando = categoriaProduto === 'quadro_comando';
   return (
     <div className="co-fill" style={{ background: '#fcfcf7', borderRadius: 12, marginTop: 10 }}>
-      <b style={{ fontSize: 12 }}>Resposta — Unidade {u.identificador}{u.quantidade > 1 ? ` (${u.quantidade} unidades idênticas)` : ''}</b>
+      <b style={{ fontSize: 12 }}>Resposta · Reply · 回复 — {ehQuadroComando ? 'Quadro de Comando · Control Panel · 控制柜' : `Unidade · Unit · 单元 ${u.identificador}`}{u.quantidade > 1 ? ` (${u.quantidade} unidades idênticas · identical units · 相同单元)` : ''}</b>
       <label className="co-f">
-        <span>Modelo do fornecedor / Supplier model</span>
-        <input className="co-inp" value={val.modelo_fornecedor || ''} onChange={f('modelo_fornecedor')} placeholder="ex.: GEP-MRL" disabled={readOnly}/>
+        <span>Modelo do fornecedor / Supplier model / 供应商型号</span>
+        <input className="co-inp" value={val.modelo_fornecedor || ''} onChange={f('modelo_fornecedor')} placeholder={ehQuadroComando ? 'ex.: NICE3000 MRL' : 'ex.: GEP-MRL'} disabled={readOnly}/>
       </label>
-      <label className="co-f">
-        <span>Andares/Paradas/Portas confirmados / Confirmed Floors-Stops-Doors</span>
-        <input className="co-inp" value={val.floors_stops_doors || ''} onChange={f('floors_stops_doors')} placeholder="ex.: 9/9/9" disabled={readOnly}/>
-      </label>
+      {!ehQuadroComando && (
+        <label className="co-f">
+          <span>Andares/Paradas/Portas confirmados / Confirmed Floors-Stops-Doors / 确认的层/站/门</span>
+          <input className="co-inp" value={val.floors_stops_doors || ''} onChange={f('floors_stops_doors')} placeholder="ex.: 9/9/9" disabled={readOnly}/>
+        </label>
+      )}
       <div className="co-f-row">
         <label className="co-f">
-          <span>Preço unitário / Unit Price</span>
+          <span>Preço unitário / Unit Price / 单价</span>
           <input className="co-inp" inputMode="decimal" value={val.preco_unitario || ''} onChange={f('preco_unitario')} placeholder="0.00" disabled={readOnly}/>
         </label>
         <label className="co-f">
-          <span>Preço total ({u.quantidade || 1} un.) / Total Price</span>
+          <span>Preço total ({u.quantidade || 1} un.) / Total Price / 总价</span>
           <input className="co-inp" inputMode="decimal" value={val.preco_total || ''} onChange={f('preco_total')} placeholder="0.00" disabled={readOnly}/>
         </label>
       </div>
       <label className="co-f">
-        <span>Confirmação técnica / Technical confirmation <span className="co-en">(marca da máquina, do controle, distância entre guias etc.)</span></span>
+        <span>Confirmação técnica / Technical confirmation / 技术确认 <span className="co-en">(marca da máquina, do controle, distância entre guias etc. · machine/control brand, rail distance, etc. · 曳引机/控制品牌、导轨间距等)</span></span>
         <textarea className="co-inp" rows={2} value={val.confirmacao_tecnica || ''} onChange={f('confirmacao_tecnica')} disabled={readOnly}/>
       </label>
     </div>
@@ -179,13 +182,13 @@ function CotacaoElevadorFornecedorApp() {
     ...prev, [uid]: { ...(prev[uid] || {}), divergencias: { ...((prev[uid] || {}).divergencias || {}), [key]: v } },
   }));
 
-  if (loading) return <div className="co-status"><div className="co-spinner"/><h1>Carregando cotação…</h1><p>Validando o link.</p></div>;
+  if (loading) return <div className="co-status"><div className="co-spinner"/><h1>Carregando cotação… · Loading quotation… · 正在加载询价…</h1><p>Validando o link. · Validating link. · 正在验证链接。</p></div>;
   if (notFound || !cot) {
     return (
       <div className="co-shell"><div className="co-err">
-        <h1>Link inválido</h1>
+        <h1>Link inválido · Invalid link · 链接无效</h1>
         <p>Esta cotação não foi encontrada, ainda não foi enviada ou o link expirou.<br/>
-        <span className="co-en">This quotation request was not found, was not sent yet, or the link expired.</span></p>
+        <span className="co-en">This quotation request was not found, was not sent yet, or the link expired.<br/>未找到该询价请求、尚未发送，或链接已过期。</span></p>
       </div></div>
     );
   }
@@ -202,7 +205,7 @@ function CotacaoElevadorFornecedorApp() {
         const novo = await store.anexarArquivoResposta(cot.id, file);
         setAnexos((prev) => [novo, ...prev]);
       } catch (e) {
-        alert('Falha no upload de ' + file.name + ': ' + (e.message || e));
+        alert('Falha no upload / Upload failed / 上传失败: ' + file.name + ': ' + (e.message || e));
       }
     }
     setUploadingAnexo(false);
@@ -213,14 +216,14 @@ function CotacaoElevadorFornecedorApp() {
       await store.removerAnexoResposta(anexo);
       setAnexos((prev) => prev.filter((a) => a.id !== anexo.id));
     } catch (e) {
-      alert('Falha ao remover: ' + (e.message || e));
+      alert('Falha ao remover / Failed to remove / 删除失败: ' + (e.message || e));
     }
   };
 
   const abrirAnexoFormulario = async (a) => {
     const url = await store.urlAssinadaAnexoFormulario(a.path);
     if (url) window.open(url, '_blank');
-    else alert('Não foi possível abrir o arquivo.');
+    else alert('Não foi possível abrir o arquivo. · Could not open the file. · 无法打开文件。');
   };
 
   const enviar = async () => {
@@ -231,7 +234,14 @@ function CotacaoElevadorFornecedorApp() {
       embalagem, container_no: containerNo, documentos_embarque: documentosEmbarque,
       frete_internacional_usd: freteInternacionalUsd, taxas_extras_usd: taxasExtrasUsd,
       observacoes_gerais: observacoesGerais,
-      itens: unidades.map((u) => ({ unidade_id: u.unidade_id, unidade_identificador: u.identificador, ...(itemVals[u.unidade_id] || {}) })),
+      itens: unidades.map((u) => {
+        const it = itemVals[u.unidade_id] || {};
+        return {
+          unidade_id: u.unidade_id, unidade_identificador: u.identificador, ...it,
+          preco_unitario: it.preco_unitario ? window.parseMoeda(it.preco_unitario) : '',
+          preco_total: it.preco_total ? window.parseMoeda(it.preco_total) : '',
+        };
+      }),
     };
     try {
       const updated = await store.salvarResposta(token, respostas);
@@ -239,67 +249,67 @@ function CotacaoElevadorFornecedorApp() {
       setPhase('done');
       window.scrollTo({ top: 0, behavior: 'smooth' });
     } catch (e) {
-      alert('Erro ao enviar / Error: ' + (e.message || e));
+      alert('Erro ao enviar / Error / 错误: ' + (e.message || e));
       setPhase('fill');
     }
   };
 
-  if (phase === 'sending') return <div className="co-status"><div className="co-spinner"/><h1>Enviando cotação…</h1></div>;
+  if (phase === 'sending') return <div className="co-status"><div className="co-spinner"/><h1>Enviando cotação… · Submitting quotation… · 正在提交报价…</h1></div>;
 
   return (
     <div className="co-shell">
       <div className="co-top">
         <img src="/assets/logo-mark-yellow.png" alt="VerticalParts"/>
-        <span className="co-secure">🔒 Seguro · Secure</span>
+        <span className="co-secure">🔒 Seguro · Secure · 安全</span>
       </div>
 
       {phase === 'done' && (
         <div className="co-done-banner">
           <div className="co-check">✓</div>
           <div>
-            <b>Cotação enviada! · Quotation submitted!</b>
-            <div className="co-done-sub">Obrigado. A VerticalParts recebeu sua cotação. · Thank you, VerticalParts received your quotation.</div>
+            <b>Cotação enviada! · Quotation submitted! · 报价已提交！</b>
+            <div className="co-done-sub">Obrigado. A VerticalParts recebeu sua cotação. · Thank you, VerticalParts received your quotation. · 谢谢，VerticalParts 已收到您的报价。</div>
           </div>
         </div>
       )}
 
       <div className="co-intro-head">
-        <h1>Solicitação de Cotação Técnica · Technical Quotation Request</h1>
+        <h1>Solicitação de Cotação Técnica · Technical Quotation Request · 技术询价请求</h1>
         <div className="co-num">
-          {cot.numero_documento}{header.numero_cotacao != null ? ` · Project / Cotação Nº ${window.MasterIdEngine.baseId('elevador', header.numero_cotacao)}` : ''} · {header.data}
+          {cot.numero_documento}{header.numero_cotacao != null ? ` · Project / Cotação Nº / 项目编号 ${window.MasterIdEngine.etapaId('cotacao', header.numero_cotacao)}` : ''} · {header.data}
         </div>
         {!readOnly && (
           <p className="co-lead">
             A VerticalParts solicita sua cotação para o(s) elevador(es) abaixo. Preencha os campos de resposta ao final de cada unidade.<br/>
-            <span className="co-en">VerticalParts requests your quotation for the elevator(s) below. Fill in the response fields at the end of each unit.</span>
+            <span className="co-en">VerticalParts requests your quotation for the elevator(s) below. Fill in the response fields at the end of each unit.<br/>VerticalParts 请您对以下电梯报价。请在每个单元末尾填写回复栏位。</span>
           </p>
         )}
       </div>
 
       <div className="co-parties">
         <div className="co-party">
-          <div className="co-party-lbl">Comprador · Buyer</div>
+          <div className="co-party-lbl">Comprador · Buyer · 买方</div>
           <b>VerticalParts</b>
         </div>
         <div className="co-party">
-          <div className="co-party-lbl">Fornecedor · Supplier</div>
+          <div className="co-party-lbl">Fornecedor · Supplier · 供应商</div>
           <b>{cot.fornecedor}</b>
         </div>
       </div>
 
       <div className="co-block">
-        <div className="co-sec-lbl">Dados gerais do projeto / Project data</div>
+        <div className="co-sec-lbl">Dados gerais do projeto / Project data / 项目概况</div>
         <CefSpecTable linhas={[
-          ['Nº da Cotação', 'Project Name', header.numero_cotacao != null ? window.MasterIdEngine.baseId('elevador', header.numero_cotacao) : header.numero_cotacao],
-          ['País', 'Country', header.pais],
-          ['Norma de projeto', 'Design Standard', header.norma_projeto],
-          ['Voltagem — Elevador', 'Main Power', header.tensao_principal],
-          ['Voltagem — Iluminação', 'Lighting Power', header.tensao_iluminacao],
+          ['Nº da Cotação', 'Project Name', header.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', header.numero_cotacao) : header.numero_cotacao, '项目名称/询价编号'],
+          ['País', 'Country', header.pais, '国家'],
+          ['Norma de projeto', 'Design Standard', header.norma_projeto, '设计标准'],
+          ['Voltagem — Elevador', 'Main Power', header.tensao_principal, '电梯主电源电压'],
+          ['Voltagem — Iluminação', 'Lighting Power', header.tensao_iluminacao, '照明电压'],
         ]}/>
         {anexosFormulario.length > 0 && (
           <div style={{ marginTop: 10 }}>
             <span className="co-spec-k" style={{ display: 'block', marginBottom: 4 }}>
-              Anexos do projeto (VerticalParts) · Project attachments
+              Anexos do projeto (VerticalParts) · Project attachments · 项目附件
             </span>
             <ul style={{ margin: 0, paddingLeft: 0, listStyle: 'none' }}>
               {anexosFormulario.map((a) => (
@@ -317,71 +327,71 @@ function CotacaoElevadorFornecedorApp() {
 
       {unidades.map((u, i) => (
         <div key={u.unidade_id || i}>
-          <CefUnidadeRead u={u} tipoFormulario={cot.tipo_formulario} idx={i}
+          <CefUnidadeRead u={u} tipoFormulario={cot.tipo_formulario} categoriaProduto={cot.categoria_produto} idx={i}
             codigoAtivo={store.assetMasterId(cot, u.indice_ativo)}
             divergencias={(itemVals[u.unidade_id] || {}).divergencias || {}}
             onDivergenciaChange={(k, v) => setDivergencia(u.unidade_id, k, v)}
             readOnly={readOnly}/>
-          <CefUnidadeFill u={u} val={itemVals[u.unidade_id] || {}} onChange={(k, v) => setItemVal(u.unidade_id, k, v)} readOnly={readOnly}/>
+          <CefUnidadeFill u={u} categoriaProduto={cot.categoria_produto} val={itemVals[u.unidade_id] || {}} onChange={(k, v) => setItemVal(u.unidade_id, k, v)} readOnly={readOnly}/>
         </div>
       ))}
 
       <div className="co-global">
-        <div className="co-sec-lbl">Condições da cotação · Quotation terms</div>
+        <div className="co-sec-lbl">Condições da cotação · Quotation terms · 报价条款</div>
         <div className="co-global-grid">
           <label className="co-f">
-            <span>Moeda · Currency</span>
+            <span>Moeda · Currency · 币种</span>
             <select className="co-inp" value={moeda} onChange={(e) => setMoeda(e.target.value)} disabled={readOnly}>
               {CEF_MOEDAS.map((m) => <option key={m.v} value={m.v}>{m.l}</option>)}
             </select>
           </label>
           <label className="co-f">
-            <span>Incoterm / Porto · Incoterm / Port</span>
+            <span>Incoterm / Porto · Incoterm / Port · 贸易术语 / 港口</span>
             <input className="co-inp" value={incotermPorto} onChange={(e) => setIncotermPorto(e.target.value)} placeholder="ex.: FOB Shanghai" disabled={readOnly}/>
           </label>
           <label className="co-f">
-            <span>Frete internacional (USD) · International freight</span>
+            <span>Frete internacional (USD) · International freight · 国际运费 (USD)</span>
             <input className="co-inp" inputMode="decimal" value={freteInternacionalUsd} onChange={(e) => setFreteInternacionalUsd(e.target.value)} placeholder="0.00" disabled={readOnly}/>
           </label>
           <label className="co-f">
-            <span>Outras taxas/despesas (USD) · Other fees</span>
+            <span>Outras taxas/despesas (USD) · Other fees · 其他费用 (USD)</span>
             <input className="co-inp" inputMode="decimal" value={taxasExtrasUsd} onChange={(e) => setTaxasExtrasUsd(e.target.value)} placeholder="0.00" disabled={readOnly}/>
           </label>
           <label className="co-f">
-            <span>Prazo de fabricação · Delivery time</span>
+            <span>Prazo de fabricação · Delivery time · 生产/交货周期</span>
             <input className="co-inp" value={prazoFabricacao} onChange={(e) => setPrazoFabricacao(e.target.value)} placeholder="ex.: 30 dias após confirmação" disabled={readOnly}/>
           </label>
           <label className="co-f">
-            <span>Garantia · Warranty</span>
+            <span>Garantia · Warranty · 质保</span>
             <input className="co-inp" value={garantia} onChange={(e) => setGarantia(e.target.value)} placeholder="ex.: 24 meses" disabled={readOnly}/>
           </label>
           <label className="co-f">
-            <span>Validade da proposta (dias) · Valid period (days)</span>
+            <span>Validade da proposta (dias) · Valid period (days) · 报价有效期（天）</span>
             <input className="co-inp" inputMode="numeric" value={validadeDias} onChange={(e) => setValidadeDias(e.target.value)} disabled={readOnly}/>
           </label>
           <label className="co-f">
-            <span>Container</span>
+            <span>Container · 集装箱</span>
             <input className="co-inp" value={containerNo} onChange={(e) => setContainerNo(e.target.value)} placeholder="ex.: 1x20GP" disabled={readOnly}/>
           </label>
           <label className="co-f">
-            <span>Embalagem · Packing</span>
+            <span>Embalagem · Packing · 包装</span>
             <input className="co-inp" value={embalagem} onChange={(e) => setEmbalagem(e.target.value)} disabled={readOnly}/>
           </label>
           <label className="co-f">
-            <span>Documentos no embarque · Documents with shipment</span>
+            <span>Documentos no embarque · Documents with shipment · 随货文件</span>
             <input className="co-inp" value={documentosEmbarque} onChange={(e) => setDocumentosEmbarque(e.target.value)} disabled={readOnly}/>
           </label>
         </div>
         <label className="co-f" style={{ marginTop: 10 }}>
-          <span>Observações gerais · General remarks</span>
+          <span>Observações gerais · General remarks · 备注</span>
           <textarea className="co-inp" rows={2} value={observacoesGerais} onChange={(e) => setObservacoesGerais(e.target.value)} disabled={readOnly}/>
         </label>
 
         <div className="co-f" style={{ marginTop: 14 }}>
-          <span>Anexos — PDF, DWG, imagens · Attachments — PDF, DWG, images</span>
+          <span>Anexos — PDF, DWG, imagens · Attachments — PDF, DWG, images · 附件 — PDF、DWG、图片</span>
           {!readOnly && (
             <label style={{ display: 'inline-block', marginTop: 6, padding: '8px 14px', border: '1px dashed #999', cursor: 'pointer', fontSize: 13 }}>
-              {uploadingAnexo ? 'Enviando… · Uploading…' : '+ Anexar arquivo · Attach file'}
+              {uploadingAnexo ? 'Enviando… · Uploading… · 上传中…' : '+ Anexar arquivo · Attach file · 添加文件'}
               <input type="file" multiple accept=".pdf,.dwg,.dxf,image/*" style={{ display: 'none' }}
                 disabled={uploadingAnexo} onChange={(e) => { onAnexoFiles(e.target.files); e.target.value = ''; }}/>
             </label>
@@ -394,7 +404,7 @@ function CotacaoElevadorFornecedorApp() {
                   <span style={{ color: '#888' }}>{a.tamanho_bytes ? `(${Math.round(a.tamanho_bytes / 1024)} KB)` : ''}</span>
                   {!readOnly && (
                     <button type="button" onClick={() => removerAnexo(a)}
-                      style={{ border: 'none', background: 'transparent', color: '#c00', cursor: 'pointer', fontSize: 12 }}>remover</button>
+                      style={{ border: 'none', background: 'transparent', color: '#c00', cursor: 'pointer', fontSize: 12 }}>remover · remove · 删除</button>
                   )}
                 </li>
               ))}
@@ -405,8 +415,8 @@ function CotacaoElevadorFornecedorApp() {
 
       {!readOnly && (
         <div className="co-actionbar">
-          <button className="co-send-btn" onClick={enviar}>Enviar cotação · Submit quotation</button>
-          <p className="co-foot-meta">Ao enviar, registramos data/hora e IP para confirmação. · By submitting, we log date/time and IP for confirmation.</p>
+          <button className="co-send-btn" onClick={enviar}>Enviar cotação · Submit quotation · 提交报价</button>
+          <p className="co-foot-meta">Ao enviar, registramos data/hora e IP para confirmação. · By submitting, we log date/time and IP for confirmation. · 提交时我们会记录日期/时间和 IP 以作确认。</p>
         </div>
       )}
     </div>

@@ -97,6 +97,7 @@ function makeDefaultProposta() {
       fotos: { unidade: null, teto: null, botoeira: null },
       valores: { equipamento: "", quantidade: "1", valorUnit: "", difal: "",
         forma: "40% à vista e 4 parcelas",
+        formaTipo: "parcelado", qtdParcelas: 5,
         parcelas: [
           { desc: "Sinal de 40% na assinatura do contrato", valor: "" },
           { desc: "1ª PARCELA", valor: "" },
@@ -146,7 +147,7 @@ function makeDefaultProposta() {
         arranjo: "", maquina: "", qtd: 1, valorUnit: "",
       }],
       especificidades: { tipo: "", config: "", corrimao: "", acabamento: "" },
-      valores: { equipamento: "", quantidade: "", valorUnit: "", difal: "", forma: "", parcelas: [] },
+      valores: { equipamento: "", quantidade: "", valorUnit: "", difal: "", forma: "", formaTipo: "", qtdParcelas: "", parcelas: [] },
       ajustes: { preset: "sp", cambio: "", freteMaritimo: "", reajuste: "", taxasIn: "", taxasOut: "" },
       prazo: { prazo: "prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias", condCovid: "" },
       instalacao: { instalacao: "", lubrificacao: "", transporte: "", descarregamento: "" },
@@ -162,66 +163,12 @@ function makeDefaultProposta() {
         arranjo: "", maquina: "", qtd: 1, valorUnit: "",
       }],
       especificidades: { tipo: "", config: "", corrimao: "", acabamento: "" },
-      valores: { equipamento: "", quantidade: "", valorUnit: "", difal: "", forma: "", parcelas: [] },
+      valores: { equipamento: "", quantidade: "", valorUnit: "", difal: "", forma: "", formaTipo: "", qtdParcelas: "", parcelas: [] },
       ajustes: { preset: "sp", cambio: "", freteMaritimo: "", fretePorContainer: "", ajusteFrete: "", reajuste: "", taxasIn: "", taxasOut: "" },
       prazo: { prazo: "prazo de 120 (cento e vinte) a 150 (cento e cinquenta) dias", condCovid: "" },
       instalacao: { instalacao: "", lubrificacao: "", transporte: "", descarregamento: "" },
       garantia: { garantia: "", condicoes: "" },
     }
-  };
-}
-
-/* Propostas criadas antes deste Editor guardaram o data_json num formato
-   diferente (chaves em inglês: client/specs/elevatorUnits...). Convertemos
-   pros campos que o Editor atual usa (cliente/obra/elevador.especificacoes)
-   pra abrir com os dados reais, em vez de aparecer em branco.
-   Detecção: data_json tem `client` mas não tem `cliente`. */
-function ehPropostaSchemaLegado(dj) {
-  return !!(dj && dj.client && !dj.cliente);
-}
-/* O gerador antigo gravava `client.name` vazio — o nome real do cliente só
-   sobreviveu na coluna `titulo` da linha, no formato "<Cliente> - <Equipamento>".
-   Recuperamos daí (tirando só o sufixo de equipamento) pra proposta antiga
-   não abrir como "Sem cliente". */
-function clienteDoTitulo(titulo) {
-  if (!titulo) return '';
-  return String(titulo).replace(/\s*-\s*(Elevador|Escada Rolante|Esteira Rolante)\s*$/i, '').trim();
-}
-
-function converterPropostaLegado(dj, titulo) {
-  const cli = dj.client || {};
-  const obra = dj.elevatorWork || dj.work || {};
-  const mapUnidade = (u, prefixo) => ({
-    id: u.name || prefixo, modelo: u.model || '', empreendimento: u.buildingType || '',
-    carac: u.transportChar || '', denominacao: u.denomination || '',
-    percurso: (u.travelDistance || u.rise || '').replace(/mm$/, ''),
-    capacidade: u.capacity || '', dimensoesCaixa: u.shaftDimensions || '',
-    profPoço: (u.pitDepth || '').replace(/mm$/, ''), vel: (u.speed || '').replace(/\s*m\/s$/, ''),
-    andaresParadasPortas: u.stops || '', qtd: u.quantity || 1,
-  });
-  const elevadorUnidades = dj.elevatorUnits || [];
-  const somaQtd = (arr) => String(arr.reduce((s, u) => s + (Number(u.quantity) || 0), 0)) || '1';
-
-  return {
-    numero: dj.number || '',
-    cliente: {
-      nome: cli.name || clienteDoTitulo(titulo), cnpj: cli.cnpj || '', responsavel: cli.contactPerson || '',
-      endereco: cli.address || '', numero: '', bairro: '', cidade: cli.city || '', uf: cli.state || '', cep: cli.zip || '',
-      email: cli.email || '', telefone: cli.phone || '',
-    },
-    obra: {
-      nome: obra.projectName || '', endereco: obra.address || '', numero: obra.number || '',
-      bairro: obra.neighborhood || '', cidade: obra.city || '', uf: obra.state || '', cep: obra.zip || '',
-    },
-    elevador: elevadorUnidades.length ? {
-      especificacoes: elevadorUnidades.map((u) => mapUnidade(u, 'Elevador')),
-      valores: {
-        equipamento: (dj.elevatorProducts && dj.elevatorProducts[0] && dj.elevatorProducts[0].title) || dj.specs?.type || '',
-        quantidade: somaQtd(elevadorUnidades),
-        valorUnit: String(dj.financials?.unitPrice || dj.specs?.price || ''),
-        difal: '',
-      },
-    } : undefined,
   };
 }
 
@@ -259,18 +206,18 @@ function getSections(eq) {
   ];
   if (eq === "elevador") {
     return [...common,
-      { id: "beneficiosDiferenciais", title: "Benefícios e Diferenciais", icon: "star", group: "Apresentação" },
       { id: "espec", title: "Especificações Técnicas", icon: "ruler", group: "Produto" },
       { id: "acabamentos", title: "Acabamentos", icon: "star", group: "Produto" },
-      { id: "caracteristicas", title: "Características Principais", icon: "check", group: "Produto" },
-      { id: "recursos", title: "Recursos Inclusos", icon: "list", group: "Produto" },
-      { id: "infra", title: "Infraestrutura e Instalação", icon: "hardhat", group: "Produto" },
+      /* Conteúdo dinâmico (Frente A) — substitui os 5 blocos antigos de
+         Benefícios/Diferenciais/Características/Recursos/Infraestrutura/
+         Responsabilidades: menu de categorias com checkbox, igual à Ficha
+         Técnica, biblioteca compartilhada entre propostas. */
+      { id: "conteudo", title: "Conteúdo da Proposta", icon: "star", group: "Produto" },
       { id: "fotos", title: "Fotos do Equipamento", icon: "package", group: "Produto" },
       { id: "valores", title: "Valores e Pagamento", icon: "dollar", group: "Comercial" },
       { id: "condicoesPagto", title: "Condições Gerais de Pagamento", icon: "scale", group: "Comercial" },
       { id: "ajustes", title: "Ajustes, Impostos e Câmbio", icon: "globe", group: "Comercial" },
       { id: "prazo", title: "Prazo e Entrega", icon: "truck", group: "Operacional" },
-      { id: "responsabilidades", title: "Responsabilidades", icon: "shield", group: "Operacional" },
       { id: "garantia", title: "Garantia e Condições", icon: "award", group: "Operacional" },
     ];
   }
@@ -359,6 +306,7 @@ function deepMergeHeranca(base, prefill) {
 const PE_STATUS_LABEL = {
   rascunho: 'Rascunho', enviada: 'Enviada', visualizada: 'Visualizada pelo cliente',
   aprovada: 'Assinada', recusada: 'Recusada', expirada: 'Expirada', cancelada: 'Cancelada',
+  revisao_solicitada: 'Revisão solicitada',
 };
 
 /* Estado que o badge mostra. O `status` sozinho contava só metade da história:
@@ -388,6 +336,16 @@ function tempoRelativo(ts) {
    agora também vai pra coluna valor_total, alimentando a listagem. */
 function calcularValorTotal(data, eq) {
   const v = (data[eq] && data[eq].valores) || {};
+  /* Mais de 1 equipamento (v.itens): soma item a item, pra refletir na
+     hora um desconto aprovado nalgum deles — senão o total ficava preso
+     no valor agregado antigo, sem contar o desconto. */
+  if (Array.isArray(v.itens) && v.itens.length) {
+    return v.itens.reduce((s, it) => {
+      const unit = Number(String(it.valorUnit || '').replace(/\./g, '').replace(',', '.')) || 0;
+      const qtd = Number(it.quantidade) || 1;
+      return s + unit * qtd;
+    }, 0);
+  }
   const unit = Number(String(v.valorUnit || '').replace(/\./g, '').replace(',', '.')) || 0;
   const qtd = Number(v.quantidade) || 1;
   return unit * qtd;
@@ -397,20 +355,6 @@ function fmtValorProposta(data, eq) {
   const total = calcularValorTotal(data, eq);
   if (!total) return '—';
   return total.toLocaleString('pt-BR', { style: 'currency', currency: 'BRL', maximumFractionDigits: 0 });
-}
-
-/* vendedor_id aponta pra public.perfis; a identidade vem do SSO (e-mail).
-   Cacheado por sessão — não faz sentido consultar a cada salvamento. */
-let _vendedorIdCache;
-async function resolverVendedorId() {
-  if (_vendedorIdCache !== undefined) return _vendedorIdCache;
-  const email = (window.__VP_USER || {}).email;
-  if (!email || !window.__VP_SB?.sb) { _vendedorIdCache = null; return null; }
-  try {
-    const { data } = await window.__VP_SB.sb.from('perfis').select('id').eq('email', email).maybeSingle();
-    _vendedorIdCache = data ? data.id : null;
-  } catch (e) { _vendedorIdCache = null; }
-  return _vendedorIdCache;
 }
 
 function PEChip({ label, value, mono, destaque }) {
@@ -456,9 +400,39 @@ function PropostaSendModal({ record, onClose, onSent }) {
     const contact = channel === 'whatsapp' ? telefone : email;
     setSendingChannel(channel);
     try {
-      await store.markSent(record.id, channel, { name, contact });
+      /* 30/09 — e-mail: só registra "enviada" DEPOIS de o send-email
+         confirmar (antes marcava antes de enviar, e mesmo com falha +
+         mailto o status ficava "enviada"). WhatsApp/link seguem como
+         antes (o envio em si é manual). */
+      if (channel !== 'email') await store.markSent(record.id, channel, { name, contact });
       if (channel === 'whatsapp') window.open(store.whatsAppHref(contact, message), '_blank');
-      else if (channel === 'email') window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} — VerticalParts`, message), '_blank');
+      else if (channel === 'email') {
+        /* 28/09 — pedido explícito do usuário: a Proposta deve sair "de
+           dentro do site" pro cliente (igual ao WhatsApp/link já fazem)
+           e a resposta dele deve entrar pelo Inbox — mesmo padrão do RFQ a
+           fornecedor (formulario-elevador.jsx). Envio direto via SMTP
+           (send-email edge function), com numeroCotacao +
+           referenciaTipo/referenciaId pra a linha aparecer em
+           Enviados/Linha do Tempo e pro read-inbox conseguir casar a
+           resposta do cliente de volta a esta cotação. Cai pro mailto:
+           (como sempre foi) só se o envio direto falhar — nunca deixa o
+           vendedor sem alternativa. */
+        /* 01/10 — chamada em si extraída pro EmailEnvioHelper (compartilhado
+           com RFQ/Contrato de Venda/Contrato Instalador); sucesso/falha
+           continuam decididos aqui, sem mudança de comportamento. */
+        const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: contact, subject: `Proposta ${record.numero_documento} — VerticalParts`, text: message,
+          numeroCotacao: record.numeroCotacao ?? null, referenciaTipo: 'proposta', referenciaId: record.id,
+        });
+        if (enviouDireto) {
+          await store.markSent(record.id, channel, { name, contact });
+          window.toast?.(`E-mail enviado para ${contact}.`, 'success');
+        } else {
+          window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} — VerticalParts`, message), '_blank');
+          window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado ao cliente e a proposta NÃO foi marcada como enviada. Abrindo seu e-mail padrão para envio manual; depois de enviar, use o WhatsApp/link para registrar o envio.', 'error');
+          return;
+        }
+      }
       setSent(channel);
       onSent && onSent();
     } catch (e) {
@@ -544,6 +518,56 @@ function PropostaEditor({ setRoute, subsel }) {
   // retorno do primeiro "Salvar"/"Enviar". "Publicar" precisa dele.
   const [recordId, setRecordId] = React.useState(editId || null);
   const [publicando, setPublicando] = React.useState(false);
+
+  /* Subcircuito de revisão de proposta (23/08, achado do Dossiê PCB §9.6) —
+     decisão INTERNA da VerticalParts sobre o pedido de revisão do cliente,
+     distinta de aceitar/recusar a proposta em si. */
+  const [decidindoRevisao, setDecidindoRevisao] = React.useState(false);
+  const [mostrarRecusaRevisao, setMostrarRecusaRevisao] = React.useState(false);
+  const [motivoRecusaRevisao, setMotivoRecusaRevisao] = React.useState('');
+
+  const decidirRevisao = async (aceita, motivo) => {
+    if (!recordId) return;
+    setDecidindoRevisao(true);
+    try {
+      const updated = await window.PropostaStore.decidirRevisao(recordId, aceita, motivo);
+      setMeta((m) => ({ ...(m || {}), ...updated }));
+      setMostrarRecusaRevisao(false);
+      setMotivoRecusaRevisao('');
+      window.toast(aceita ? 'Revisão aceita — edite e reenvie a proposta.' : 'Revisão recusada internamente.', 'success');
+    } catch (e) {
+      window.toast('Erro: ' + (e.message || e), 'error');
+    } finally {
+      setDecidindoRevisao(false);
+    }
+  };
+
+  /* Trava por aprovação: proposta 'aprovada' sem destravada_em bloqueia
+     Salvar/Enviar/Publicar (mesma checagem que o store faz de novo antes
+     de gravar). podeDestravar só é resolvido se a proposta estiver
+     travada — não faz sentido consultar alçada em proposta nova. */
+  const [podeDestravar, setPodeDestravar] = React.useState(false);
+  const [destravando, setDestravando] = React.useState(false);
+  const travada = meta?.status === 'aprovada' && !meta?.destravada_em;
+  React.useEffect(() => {
+    if (!travada) { setPodeDestravar(false); return; }
+    let cancelado = false;
+    window.PropostaStore.temCapacidade('propostas', 'destravar_aprovada').then((v) => { if (!cancelado) setPodeDestravar(v); });
+    return () => { cancelado = true; };
+  }, [travada]);
+  const destravarAgora = async () => {
+    if (!recordId) return;
+    setDestravando(true);
+    try {
+      const r = await window.PropostaStore.destravar(recordId);
+      setMeta((m) => ({ ...(m || {}), destravada_em: r.destravada_em, destravada_por: r.destravada_por }));
+      window.toast?.('Proposta destravada — fica editável até o próximo Salvar.', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao destravar: ' + (e.message || e), 'error');
+    } finally {
+      setDestravando(false);
+    }
+  };
   // Overlay fullscreen do PDF (mesmo padrão da Ficha Técnica): a leitura
   // de verdade e o "Salvar PDF"/"Imprimir" acontecem aqui, em tamanho real —
   // a coluna lateral é só um preview em miniatura.
@@ -567,80 +591,17 @@ function PropostaEditor({ setRoute, subsel }) {
 
   // Save to Supabase
   // SSO / portas abertas: a identidade vem do vpsistema (window.__VP_USER),
-  // NÃO de um login separado. Antes exigia sb.auth.getUser() (sessão Supabase
-  // Auth), que nunca existe neste modelo — por isso a proposta nunca salvava.
-  // Aqui persiste com a anon key + identidade do SSO, mapeando para as colunas
-  // REAIS da tabela `propostas` (sem alterar o schema do banco).
-  // Retorna { id, token } da linha salva (ou null em falha) — precisamos do
-  // id/token pra abrir o modal de envio por assinatura digital.
+  // NÃO de um login separado — proposta-store.js persiste com a anon key +
+  // identidade do SSO, mapeando pras colunas reais da tabela `propostas`.
+  // Retorna { id, token } da linha salva (ou { erro } em falha) — precisamos
+  // do id/token pra abrir o modal de envio por assinatura digital.
+  // Montar a linha (payload, resolver vendedor_id, decidir insert-vs-update)
+  // é responsabilidade do store (PropostaStore.salvar) — revisão de
+  // arquitetura 18/08, candidato 2: isso morava aqui na UI antes.
   const saveToSupabase = React.useCallback(async () => {
-    if (!window.__VP_SB?.sb) return { erro: 'Sem conexão com o sistema.' };
-    // Evita poluir a tabela real com rascunhos em branco: só persiste com cliente.
-    if (!data?.cliente?.nome?.trim()) return { erro: 'Preencha o nome do cliente para salvar.' };
-
-    const vpUser = window.__VP_USER || {};
-    const chave = (data.numero || '').trim() || null;   // → numero_documento (texto)
-    try {
-      const payload = {
-        numero_documento: chave,
-        proposal_type: eq,
-        titulo: [data.cliente?.nome, data.obra?.nome].filter(Boolean).join(' · ') || chave,
-        data_json: { ...data, _vp_user: { email: vpUser.email || null, nome: vpUser.nome || null } },
-        master_id: data.masterId || null,
-        precificacao_id: data.precificacaoId || null,
-        // Sem isto a listagem congelava no valor antigo e proposta nova ficava sem valor.
-        valor_total: calcularValorTotal(data, eq),
-        // Elo persistido com a cotação de origem (herança).
-        numero_cotacao: window.MasterIdEngine.parseNumeroCotacao(data.numeroCotacao),
-        atualizado_em: new Date().toISOString(),
-      };
-
-      /* vendedor_id era NOT NULL e nunca era enviado — todo INSERT de
-         proposta nova falhava. Resolvemos pelo e-mail do SSO em `perfis`;
-         só mandamos quando resolve, pra um update não apagar o vendedor
-         que já estava gravado. */
-      const vendedorId = await resolverVendedorId();
-      if (vendedorId) payload.vendedor_id = vendedorId;
-
-      // Alvo do update: se veio de "Editar" (editId), usa o id diretamente;
-      // senão, chave de negócio = numero_documento (texto). O `numero` (int)
-      // é auto-sequencial no banco, então não o enviamos no insert. Status
-      // só é definido na CRIAÇÃO — salvar de novo não regride o status de
-      // uma proposta já enviada/assinada.
-      let existing = editId ? { id: editId } : null;
-      if (!existing && chave) {
-        const { data: rows } = await window.__VP_SB.sb
-          .from('propostas')
-          .select('id')
-          .eq('numero_documento', chave)
-          .order('criado_em', { ascending: false })
-          .limit(1);
-        existing = rows && rows[0];
-      }
-
-      if (existing?.id) {
-        const { data: row, error } = await window.__VP_SB.sb
-          .from('propostas').update(payload).eq('id', existing.id).select('id, token').single();
-        if (error) throw error;
-        setRecordId(row.id);
-        return row;
-      } else {
-        const { data: row, error } = await window.__VP_SB.sb
-          .from('propostas').insert([{ ...payload, status: 'rascunho' }]).select('id, token').single();
-        if (error) throw error;
-        setRecordId(row.id);
-        window.EventosFluxo?.registrar({
-          evento: 'PROPOSTA_ELABORADA', numeroCotacao: payload.numero_cotacao,
-          alvoLabel: payload.titulo, alvoId: row.id,
-        });
-        return row;
-      }
-    } catch (e) {
-      // Antes o erro era engolido e o usuário via "salva localmente" — uma
-      // falha total (ex.: not-null de vendedor_id) parecia sucesso parcial.
-      console.error('Supabase save failed:', e);
-      return { erro: e.message || String(e) };
-    }
+    const row = await window.PropostaStore.salvar({ data, eq, editId, valorTotal: calcularValorTotal(data, eq) });
+    if (row?.id) setRecordId(row.id);
+    return row;
   }, [data, eq, editId]);
 
   /* ---- Publicar = congelar a versão oficial (ver proposta-store.js) ----
@@ -658,6 +619,9 @@ function PropostaEditor({ setRoute, subsel }) {
         if (!salvo || salvo.erro) {
           window.toast?.('❌ Não foi possível salvar: ' + ((salvo && salvo.erro) || 'erro desconhecido'), 'error');
           return;
+        }
+        if (salvo.precificacaoOrfa) {
+          window.toast?.('⚠ O vínculo com a Precificação original não existe mais — proposta salva sem ele (nada foi perdido nos dados).', 'warning');
         }
         id = salvo.id;
       }
@@ -685,7 +649,7 @@ function PropostaEditor({ setRoute, subsel }) {
     const saved = await saveToSupabase();
     if (!saved || saved.erro) { window.toast?.('❌ Não foi possível salvar: ' + ((saved && saved.erro) || 'erro desconhecido'), 'error'); return; }
     const token = saved.token || await window.PropostaStore.garantirToken(saved.id);
-    setSendModal({ id: saved.id, token, numero_documento: data.numero, cliente: data.cliente, valorTotal: calcularValorTotal(data, eq) });
+    setSendModal({ id: saved.id, token, numero_documento: data.numero, numeroCotacao, cliente: data.cliente, valorTotal: calcularValorTotal(data, eq) });
   }, [data, eq, saveToSupabase]);
 
   // Autosave para localStorage (instantâneo e seguro). A persistência no
@@ -709,7 +673,7 @@ function PropostaEditor({ setRoute, subsel }) {
     let cancelado = false;
     setLoadingExisting(true);
     window.__VP_SB.sb.from('propostas')
-      .select('proposal_type, data_json, status, numero_documento, master_id, valor_total, token, titulo, atualizado_em, publicado_em, publicado_por, version')
+      .select('proposal_type, data_json, status, numero_documento, master_id, valor_total, token, titulo, atualizado_em, publicado_em, publicado_por, version, revisao_texto, revisao_solicitada_em, destravada_em, destravada_por, revisao_decisao, revisao_decidida_em, revisao_decidida_por, motivo_recusa_interna')
       .eq('id', editId).maybeSingle()
       .then(({ data: row }) => {
         if (cancelado || !row) return;
@@ -718,32 +682,48 @@ function PropostaEditor({ setRoute, subsel }) {
            o data_json original em __legadoOriginal. Sem isso, salvar apagava
            de vez tudo que só existia no formato antigo (termos, recursos,
            blocos de escada/esteira, textos jurídicos). */
-        const carregado = ehPropostaSchemaLegado(dj)
-          ? { ...deepMergeProposta(makeDefaultProposta(), converterPropostaLegado(dj, row.titulo)), __legadoOriginal: dj }
+        const ehLegado = window.PropostaLegado.ehPropostaSchemaLegado(dj);
+        const convertido = ehLegado ? window.PropostaLegado.converterPropostaLegado(dj, row.titulo) : null;
+        const carregado = ehLegado
+          ? { ...deepMergeProposta(makeDefaultProposta(), convertido), __legadoOriginal: dj }
           : (row.data_json || makeDefaultProposta());
         setData(carregado);
-        setEq(row.proposal_type || 'elevador');
+        /* eq deduzido do conteúdo, não de proposal_type: o campo está NULO
+           em 290 das 311 propostas (todas as importadas), e o antigo
+           `proposal_type || 'elevador'` fazia 16 propostas de Escada e 23 de
+           Esteira abrirem com o layout de Elevador (achado 21/08).
+           Passa `convertido` (não `carregado`): o merge com o default
+           preenche .elevador mesmo numa proposta de escada, o que
+           enganaria a detecção. */
+        setEq(window.PropostaStore.resolverEq(row, convertido));
         setMeta({
           status: row.status, numero_documento: row.numero_documento,
           master_id: row.master_id, valor_total: row.valor_total,
           token: row.token, atualizado_em: row.atualizado_em,
           publicado_em: row.publicado_em, publicado_por: row.publicado_por, version: row.version,
+          revisao_texto: row.revisao_texto, revisao_solicitada_em: row.revisao_solicitada_em,
+          destravada_em: row.destravada_em, destravada_por: row.destravada_por,
+          revisao_decisao: row.revisao_decisao, revisao_decidida_em: row.revisao_decidida_em,
+          revisao_decidida_por: row.revisao_decidida_por, motivo_recusa_interna: row.motivo_recusa_interna,
         });
       })
       .finally(() => { if (!cancelado) setLoadingExisting(false); });
     return () => { cancelado = true; };
   }, [editId]);
 
-  /* Re-sincroniza o status quando a aba volta ao foco. O aceite acontece na
-     página pública /assinar (outra aba/janela); sem isto, ao voltar pro editor
-     o badge continuava "Rascunho" mesmo com a proposta já assinada no banco
-     (achado E2E). Atualiza só os campos de meta — nunca o conteúdo em edição. */
+  /* Re-sincroniza o status quando a aba volta ao foco OU quando a página
+     pública /assinar/<token> grava direto em `propostas` (Realtime, 28/09).
+     O aceite/recusa acontece numa aba/janela diferente; antes disto o badge
+     só saía de "Rascunho" se o usuário trocasse de aba (achado E2E) — o
+     Realtime cobre o caso comum (tela aberta, sem trocar de aba), o
+     visibilitychange fica como reforço pra quando o canal cair.
+     Atualiza só os campos de meta — nunca o conteúdo em edição. */
   React.useEffect(() => {
-    if (!editId) return;
+    if (!editId || !window.__VP_SB?.sb) return;
+    const sb = window.__VP_SB.sb;
     const refetch = () => {
-      if (document.visibilityState !== 'visible' || !window.__VP_SB?.sb) return;
-      window.__VP_SB.sb.from('propostas')
-        .select('status, publicado_em, publicado_por, version, valor_total, atualizado_em')
+      sb.from('propostas')
+        .select('status, publicado_em, publicado_por, version, valor_total, atualizado_em, revisao_texto, revisao_solicitada_em, destravada_em, destravada_por, revisao_decisao, revisao_decidida_em, revisao_decidida_por, motivo_recusa_interna')
         .eq('id', editId).maybeSingle()
         .then(({ data: row }) => {
           if (!row) return;
@@ -751,11 +731,19 @@ function PropostaEditor({ setRoute, subsel }) {
             ...(m || {}),
             status: row.status, publicado_em: row.publicado_em, publicado_por: row.publicado_por,
             version: row.version, valor_total: row.valor_total, atualizado_em: row.atualizado_em,
+            revisao_texto: row.revisao_texto, revisao_solicitada_em: row.revisao_solicitada_em,
+            destravada_em: row.destravada_em, destravada_por: row.destravada_por,
+            revisao_decisao: row.revisao_decisao, revisao_decidida_em: row.revisao_decidida_em,
+            revisao_decidida_por: row.revisao_decidida_por, motivo_recusa_interna: row.motivo_recusa_interna,
           }));
         });
     };
-    document.addEventListener('visibilitychange', refetch);
-    return () => document.removeEventListener('visibilitychange', refetch);
+    const onVisibility = () => { if (document.visibilityState === 'visible') refetch(); };
+    document.addEventListener('visibilitychange', onVisibility);
+    const canal = sb.channel('proposta-status-' + editId)
+      .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'propostas', filter: `id=eq.${editId}` }, refetch)
+      .subscribe();
+    return () => { document.removeEventListener('visibilitychange', onVisibility); sb.removeChannel(canal); };
   }, [editId]);
 
   const set = React.useCallback((path, value) => {
@@ -796,65 +784,102 @@ function PropostaEditor({ setRoute, subsel }) {
     }
   }, [data.numeroCotacao]);
 
-  /* ---- Gerar PDF (overlay em tela cheia) ----
-     Cada .pe__pdf já nasce em tamanho físico real (210×297mm — ver CSS),
-     então 1 seção = 1 folha A4, sem esticar/distorcer nada — mesmo padrão
-     usado pelo sistema de referência (002_proposta_comercial): captura
-     cada bloco com html2canvas passando width/height explícitos (evita
-     qualquer ambiguidade de layout), scrollIntoView antes de cada captura
-     (garante que o bloco esteja realmente renderizado/visível) e
-     addImage sempre no tamanho cheio da folha (0,0,210,297). */
-  const gerarPdfArquivo = React.useCallback(async () => {
-    if (!window.html2canvas || !window.jspdf) {
-      window.toast?.('Biblioteca de PDF ainda carregando…', 'error');
-      return;
-    }
-    const overlayEl = document.querySelector('.pe-pdf-overlay');
-    const paginas = Array.from(overlayEl?.querySelectorAll('.pe__pdf') || []);
-    if (!paginas.length) return;
-    const safeName = (data.cliente?.nome || data.numero || 'proposta')
-      .normalize('NFD').replace(/[̀-ͯ]/g, '')
-      .replace(/[^a-zA-Z0-9]+/g, '-').replace(/^-|-$/g, '').toLowerCase();
-    window.toast?.('Gerando PDF…', 'info');
-    try {
-      // Fotos do equipamento (upload) só terminam de carregar depois do
-      // primeiro paint — sem isso, html2canvas podia capturar a página
-      // de fotos ainda em branco.
-      const imgs = overlayEl.querySelectorAll('img');
-      await Promise.all(Array.from(imgs).map((img) => img.complete
-        ? Promise.resolve()
-        : new Promise((res) => { img.onload = res; img.onerror = res; setTimeout(res, 5000); })));
-      const { jsPDF } = window.jspdf;
-      const pdf = new jsPDF({ orientation: 'portrait', unit: 'mm', format: 'a4' });
-      const pw = 210, ph = 297;
-      for (let i = 0; i < paginas.length; i++) {
-        const el = paginas[i];
-        el.scrollIntoView({ behavior: 'instant', block: 'start' });
-        await new Promise((r) => setTimeout(r, 200));
-        const canvas = await window.html2canvas(el, {
-          scale: 3, useCORS: true, allowTaint: true, backgroundColor: '#ffffff',
-          logging: false, width: el.offsetWidth, height: el.offsetHeight,
-        });
-        const img = canvas.toDataURL('image/jpeg', 0.98);
-        if (i > 0) pdf.addPage();
-        pdf.addImage(img, 'JPEG', 0, 0, pw, ph);
-      }
-      pdf.save(`Proposta-${safeName}.pdf`);
-    } catch (e) {
-      console.error('PDF error', e);
-      window.toast?.('Erro ao gerar PDF: ' + (e.message || e), 'error');
-    }
-  }, [data]);
+  /* Auto-herda uma vez ao abrir — pedido do usuário 19/08: "conforme os
+     inputs forem acontecendo a proposta vai se auto preenchendo". Uma
+     Proposta nascida direto do Formulário (sem preço ainda) só ganha o
+     valor quando alguém digita na mão OU quando reabre esta tela depois
+     que uma Precificação foi calculada em algum outro lugar — o herdar()
+     acima já só completa campo vazio, nunca sobrescreve, então repetir
+     aqui é seguro. Só roda depois que o carregamento (se for edição)
+     termina, e só uma vez por sessão de tela. */
+  const autoHerdadoRef = React.useRef(false);
+  React.useEffect(() => {
+    if (autoHerdadoRef.current || loadingExisting || !data.numeroCotacao) return;
+    autoHerdadoRef.current = true;
+    herdar();
+  }, [loadingExisting, data.numeroCotacao, herdar]);
 
-  const imprimirOverlay = React.useCallback(() => {
+  /* ---- Salvar PDF / Imprimir ----
+     Era html2canvas + jsPDF: capturava cada seção como FOTO e colava no
+     PDF. Resultado: arquivo gigante (6,7MB pra 16 páginas), texto não
+     selecionável/pesquisável, e distorção vertical em qualquer seção mais
+     longa que 297mm (`.pe__pdf` usa min-height de propósito, pra não
+     cortar conteúdo). O usuário descreveu certo: "age como um GoFullPage,
+     desce tirando fotos" — não era isso que se queria (19/08).
+     Agora usa a impressão nativa do navegador: PDF vetorial de verdade,
+     texto real, sem distorção, arquivo leve. O usuário escolhe "Salvar
+     como PDF" no destino da caixa de impressão. */
+  const imprimirOverlay = React.useCallback(async () => {
     let inj = document.getElementById('__pe-print-page');
     if (inj) inj.remove();
     inj = document.createElement('style');
     inj.id = '__pe-print-page';
+    /* @page precisa vir do runtime: ficha-tecnica.css também declara um
+       @page global e a última declaração vence — injetar aqui garante que
+       a Proposta imprima com a régua dela. margin 0 porque .pe__pdf já
+       tem a margem interna própria (padding do .pe__pdf-inner). */
     inj.textContent = '@page { size: A4; margin: 0; }';
     document.head.appendChild(inj);
-    setTimeout(() => window.print(), 60);
-  }, []);
+    /* Fotos do equipamento só terminam de carregar depois do primeiro
+       paint — imprimir antes disso saía com espaço em branco no lugar. */
+    const overlayEl = document.querySelector('.pe-pdf-overlay');
+    const imgs = overlayEl ? overlayEl.querySelectorAll('img') : [];
+    await Promise.all(Array.from(imgs).map((img) => img.complete
+      ? Promise.resolve()
+      : new Promise((res) => { img.onload = res; img.onerror = res; setTimeout(res, 5000); })));
+
+    /* O Chrome usa document.title como nome do arquivo E como Título do
+       PDF. Sem isto o cliente recebia "Editor de Proposta · VP Gestão.pdf"
+       — nome de tela interna do sistema (achado 20/08). */
+    const tituloOriginal = document.title;
+    const cliente = (data.cliente?.nome || '').trim();
+    document.title = ['Proposta', data.numero, cliente].filter(Boolean).join(' - ') || 'Proposta VerticalParts';
+    const restaurar = () => { document.title = tituloOriginal; window.removeEventListener('afterprint', restaurar); };
+    window.addEventListener('afterprint', restaurar);
+    setTimeout(restaurar, 60000); // rede de segurança se afterprint não disparar
+
+    setTimeout(() => window.print(), 80);
+  }, [data]);
+
+  /* ---- Baixar PDF (react-pdf) — Fase 2 da migração (plano aprovado 20/08) ----
+     Só Elevador por enquanto: é o fluxo de referência (17 páginas), o
+     mesmo que sofreu 3 rodadas de bug de paginação na impressão nativa
+     (grid, aspect-ratio, conteúdo maior que a página — todos achados
+     reais, cross-browser). react-pdf pagina sozinho, de forma
+     determinística, sem depender do motor de impressão de nenhum
+     navegador — a mesma abordagem já provada no RFQ (Fase 1). Escada/
+     Esteira continuam no fluxo antigo (impressão nativa) por enquanto. */
+  const [baixandoPdf, setBaixandoPdf] = React.useState(false);
+  const baixarPdfReactPdf = React.useCallback(async () => {
+    if (!window.PropostaReactPdf) { window.toast?.('Motor de PDF ainda carregando — tente de novo em instantes.', 'warning'); return; }
+    setBaixandoPdf(true);
+    try {
+      const cliente = (data.cliente?.nome || '').trim();
+      const filename = (['Proposta', data.numero, cliente].filter(Boolean).join(' - ') || 'Proposta VerticalParts') + '.pdf';
+      /* Assinatura digital do cliente (REGRA TRAVADA, ver CLAUDE.md): proposta assinada sai com
+         quem assinou, data/hora, dispositivo, IP e hash. Falha = PDF sem o bloco, nunca trava. */
+      let assinaturas = [];
+      try {
+        const sb = window.__VP_SB && window.__VP_SB.sb;
+        if (sb && recordId) {
+          const { data: row } = await sb.from('propostas').select('audit').eq('id', recordId).maybeSingle();
+          const au = (row && row.audit) || {};
+          if (au.signedAt) assinaturas = [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }];
+        }
+      } catch (e) { console.warn('Assinatura digital não carregada pro PDF da proposta:', e); }
+      const r = await window.PropostaReactPdf.baixar(data, filename, assinaturas);
+      /* Sem este aviso, uma falha de carregamento de imagem produzia um
+         PDF completo mas SEM logo nem foto de capa, e ninguém ficava
+         sabendo até abrir o arquivo (achado 20/08). */
+      if (r && r.falhasDeImagem && r.falhasDeImagem.length) {
+        window.toast?.('⚠ PDF gerado, mas sem imagens: ' + r.falhasDeImagem.join('; '), 'warning');
+      }
+    } catch (e) {
+      window.toast?.('❌ Erro ao gerar PDF: ' + (e.message || String(e)), 'error');
+    } finally {
+      setBaixandoPdf(false);
+    }
+  }, [data]);
 
   const resetProposal = () => {
     if (confirm("Descartar todas as alterações e reiniciar a proposta?")) {
@@ -940,10 +965,25 @@ function PropostaEditor({ setRoute, subsel }) {
                   <Icon.check size={11}/> Publicado {window.PropostaStore ? window.PropostaStore.fmtDateTime(meta.publicado_em) : ""} · v{meta.version || 1}
                 </span>
               ) : null}
+              {travada && (
+                <span className="pe-top__publicado" title="Cliente já aprovou. Peça destrave a quem tem essa alçada pra editar de novo.">
+                  <Icon.warning size={11}/> Travada
+                </span>
+              )}
+              {meta?.destravada_em && meta?.status === 'aprovada' && (
+                <span className="pe-top__publicado" title={"Destravada por " + (meta.destravada_por || '—')}>
+                  <Icon.check size={11}/> Destravada — edite e salve
+                </span>
+              )}
             </div>
           </div>
 
           <div className="pe-top__actions">
+            {travada && podeDestravar && (
+              <Button variant="outline" size="sm" icon="warning" disabled={destravando} onClick={destravarAgora}>
+                {destravando ? "Destravando…" : "Destravar"}
+              </Button>
+            )}
             <button className="pe-top__ghost pe-top__ghost--preview" onClick={() => setShowPreview((v) => !v)}
               title={showPreview ? "Ocultar pré-visualização" : "Mostrar pré-visualização"}>
               <Icon.eye size={14}/> {showPreview ? "Ocultar preview" : "Ver preview"}
@@ -951,20 +991,30 @@ function PropostaEditor({ setRoute, subsel }) {
             <button className="pe-top__ghost" onClick={resetProposal} title="Descartar e recomeçar">
               <Icon.copy size={14}/> Reiniciar
             </button>
-            <Button variant="outline" size="sm" icon="upload" disabled={publicando}
-              title="Congela esta versão como a oficial — é o que o cliente vai ler e assinar"
+            <Button variant="outline" size="sm" icon="upload" disabled={publicando || travada}
+              title={travada ? "Proposta travada — peça destrave" : "Congela esta versão como a oficial — é o que o cliente vai ler e assinar"}
               onClick={publicar}>
               {publicando ? "Publicando…" : (meta?.publicado_em ? "Republicar" : "Publicar")}
             </Button>
             <Button variant="outline" size="sm" icon="download" onClick={() => setPdfOverlay(true)}>Gerar PDF</Button>
-            <Button variant="secondary" size="sm" icon="check" onClick={async () => {
+            <Button variant="secondary" size="sm" icon="check" disabled={travada}
+              title={travada ? "Proposta travada — peça destrave" : undefined}
+              onClick={async () => {
               window.toast("Salvando proposta...", "info");
               const salvo = await saveToSupabase();
               setSavedAt(Date.now());
-              if (salvo && !salvo.erro) window.toast("✓ Proposta salva no sistema", "success");
+              if (salvo && !salvo.erro) {
+                window.toast("✓ Proposta salva no sistema", "success");
+                if (salvo.precificacaoOrfa) {
+                  window.toast('⚠ O vínculo com a Precificação original não existe mais — proposta salva sem ele (nada foi perdido nos dados).', 'warning');
+                }
+                if (meta?.destravada_em) setMeta((m) => ({ ...(m || {}), destravada_em: null, destravada_por: null }));
+              }
               else window.toast("❌ Não salvou: " + ((salvo && salvo.erro) || 'erro desconhecido'), "error");
             }}>Salvar</Button>
-            <Button variant="primary" size="sm" icon="send" onClick={abrirEnvio}>Enviar p/ Cliente</Button>
+            <Button variant="primary" size="sm" icon="send" disabled={travada}
+              title={travada ? "Proposta travada — peça destrave" : undefined}
+              onClick={abrirEnvio}>Enviar p/ Cliente</Button>
           </div>
         </div>
 
@@ -983,6 +1033,63 @@ function PropostaEditor({ setRoute, subsel }) {
           ))}
         </nav>
       </header>
+
+      {/* Cliente pediu revisão na página pública (/assinar) — mostra o texto
+         livre que ele digitou pra quem for renegociar não precisar caçar em
+         log/notificação. Some sozinho quando o vendedor reenvia (markSent
+         recoloca em 'enviada', tirando a proposta desse estado). */}
+      {meta?.status === 'revisao_solicitada' && !meta.revisao_decisao && (
+        <div className="alert info" style={{ margin: '16px 24px 0', flexDirection: 'column', alignItems: 'stretch', gap: 10 }}>
+          <div className="row gap-2" style={{ alignItems: 'flex-start' }}>
+            <Icon.warning/>
+            <div style={{ flex: 1 }}>
+              <div className="alert__title">Cliente pediu revisão desta proposta</div>
+              <div className="alert__sub">"{meta.revisao_texto}"{meta.revisao_solicitada_em ? ` — ${window.PropostaStore ? window.PropostaStore.fmtDateTime(meta.revisao_solicitada_em) : ''}` : ''}</div>
+            </div>
+          </div>
+          <div style={{ fontSize: 12, color: 'var(--fg3)' }}>
+            Decisão da VerticalParts: aceitar (edite e reenvie normalmente) ou recusar internamente (a proposta original segue valendo, sem alteração).
+          </div>
+          {!mostrarRecusaRevisao ? (
+            <div className="row gap-2">
+              <Button variant="primary" size="sm" disabled={decidindoRevisao} onClick={() => decidirRevisao(true, null)}>Aceitar revisão</Button>
+              <Button variant="outline" size="sm" disabled={decidindoRevisao} onClick={() => setMostrarRecusaRevisao(true)}>Recusar internamente</Button>
+            </div>
+          ) : (
+            <div className="stack" style={{ gap: 8 }}>
+              <textarea className="input" rows={2} value={motivoRecusaRevisao} onChange={(e) => setMotivoRecusaRevisao(e.target.value)}
+                placeholder="Motivo da recusa (ex.: fora de norma, margem insuficiente, prazo inviável…)" autoFocus/>
+              <div className="row gap-2">
+                <Button variant="danger" size="sm" disabled={decidindoRevisao} onClick={() => decidirRevisao(false, motivoRecusaRevisao)}>Confirmar recusa</Button>
+                <Button variant="ghost" size="sm" onClick={() => { setMostrarRecusaRevisao(false); setMotivoRecusaRevisao(''); }}>Cancelar</Button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {meta?.status === 'revisao_solicitada' && meta.revisao_decisao === 'aceita' && (
+        <div className="alert info" style={{ margin: '16px 24px 0' }}>
+          <Icon.check/>
+          <div style={{ flex: 1 }}>
+            <div className="alert__title">Revisão aceita — edite e reenvie a proposta</div>
+            <div className="alert__sub">"{meta.revisao_texto}"</div>
+          </div>
+        </div>
+      )}
+
+      {meta?.status === 'revisao_solicitada' && meta.revisao_decisao === 'recusada_interna' && (
+        <div className="alert" style={{ margin: '16px 24px 0' }}>
+          <Icon.info/>
+          <div style={{ flex: 1 }}>
+            <div className="alert__title">Revisão recusada internamente — proposta original segue valendo</div>
+            <div className="alert__sub">
+              Pedido do cliente: "{meta.revisao_texto}" — Motivo da recusa: "{meta.motivo_recusa_interna}"
+              {meta.revisao_decidida_por ? ` · por ${meta.revisao_decidida_por}` : ''}
+            </div>
+          </div>
+        </div>
+      )}
 
       {/* Body */}
       <div className={"pe" + (showPreview ? "" : " pe--no-preview")}>
@@ -1005,6 +1112,12 @@ function PropostaEditor({ setRoute, subsel }) {
                   const I = Icon[s.icon] || Icon.bolt;
                   const isActive = activeSection === s.id;
                   const isDone = f.kind === "full";
+                  if (s.id === "conteudo") {
+                    return (
+                      <S_ContSidebarNav key={s.id} d={data} set={set} isActive={isActive} icon={I}
+                        onHeaderClick={() => jump(s.id)}/>
+                    );
+                  }
                   return (
                     <div key={s.id} className={"pe__sidenav-item " + (isActive ? "is-active" : "") + (isDone && !isActive ? " is-done" : "")}
                       onClick={() => jump(s.id)}>
@@ -1033,7 +1146,7 @@ function PropostaEditor({ setRoute, subsel }) {
                   fill={f}
                   collapsed={isCollapsed}
                   onToggle={() => setCollapsed((c) => ({ ...c, [s.id]: !c[s.id] }))}>
-                  {renderSection(s.id, eq, data, set, { herdar, herdando, heranca })}
+                  {renderSection(s.id, eq, data, set, { herdar, herdando, heranca, recordId })}
                 </PESection>
               );
             })}
@@ -1059,8 +1172,22 @@ function PropostaEditor({ setRoute, subsel }) {
           <div className="pe-pdf-bar">
             <span>Proposta — {data.cliente?.nome || data.numero || 'Nova proposta'}</span>
             <div className="pe-pdf-actions">
-              <Button variant="primary" size="sm" icon="download" onClick={gerarPdfArquivo}>Salvar PDF</Button>
-              <Button variant="outline" size="sm" icon="print" onClick={imprimirOverlay}>Imprimir</Button>
+              {/* Elevador: SÓ "Baixar PDF" (react-pdf). O botão de imprimir
+                  foi removido de propósito — era ele que produzia a página
+                  em branco que o usuário reportou repetidamente, e manter
+                  os dois caminhos só mantinha o defeito vivo. Escada/Esteira
+                  ainda não foram migradas, então lá a impressão continua. */}
+              {eq === 'elevador' ? (
+                <Button variant="primary" size="sm" icon="download" onClick={baixarPdfReactPdf} disabled={baixandoPdf}
+                  title="Gera e baixa o PDF direto — sem diálogo de impressão">
+                  {baixandoPdf ? 'Gerando…' : 'Baixar PDF'}
+                </Button>
+              ) : (
+                <Button variant="primary" size="sm" icon="print" onClick={imprimirOverlay}
+                  title="Abre a impressão do navegador — escolha 'Salvar como PDF' para baixar o arquivo">
+                  Salvar PDF / Imprimir
+                </Button>
+              )}
               <Button variant="ghost" size="sm" onClick={() => setPdfOverlay(false)}>Fechar</Button>
             </div>
           </div>
@@ -1090,17 +1217,13 @@ function renderSection(sid, eq, data, set, extras) {
     case "acabamentos": return <S_Acabamentos d={data} set={set}/>;
     case "especificidades": return <S_Especificidades d={data} set={set} eq={eq}/>;
 
-    case "beneficiosDiferenciais": return <S_BeneficiosDiferenciais d={data} set={set}/>;
-    case "caracteristicas": return <S_CaracteristicasEquip d={data} set={set}/>;
-    case "recursos": return <S_RecursosNomeados d={data} set={set}/>;
-    case "infra": return <S_InfraestruturaNomeada d={data} set={set}/>;
+    case "conteudo": return <S_Conteudo d={data} set={set}/>;
     case "fotos": return <S_FotosEquipamento d={data} set={set}/>;
 
-    case "valores": return <S_Valores d={data} set={set} eq={eq}/>;
+    case "valores": return <S_Valores d={data} set={set} eq={eq} recordId={extras.recordId}/>;
     case "condicoesPagto": return <S_CondPagamentoElev d={data} set={set}/>;
     case "ajustes": return <S_Ajustes d={data} set={set} eq={eq}/>;
     case "prazo": return <S_PrazoEntrega d={data} set={set} eq={eq}/>;
-    case "responsabilidades": return <S_Responsabilidades d={data} set={set}/>;
     case "instalacao": return <S_InstalacaoMontagem d={data} set={set} eq={eq}/>;
     case "garantia": return <S_GarantiaCondicoes d={data} set={set} eq={eq}/>;
     default: return null;

@@ -80,7 +80,11 @@ Deno.serve(async (req: Request) => {
     resp = await fetch(ANTHROPIC_URL, {
       method: "POST",
       headers: { "x-api-key": KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: MODEL, max_tokens: 4096, temperature: 0.2, system: SYSTEM, messages: [{ role: "user", content }] }),
+      // `temperature` removido — a API da Anthropic passa a rejeitar esse
+      // parâmetro pro modelo em uso (invalid_request_error: "temperature is
+      // deprecated for this model"), quebrando toda chamada com 500. Ver
+      // mesmo fix em vp-copiloto/index.ts (21/09).
+      body: JSON.stringify({ model: MODEL, max_tokens: 4096, system: SYSTEM, messages: [{ role: "user", content }] }),
     });
   } catch (e) {
     return json({ error: "Falha ao contatar a IA", detail: String(e) }, 503);

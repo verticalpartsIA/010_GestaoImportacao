@@ -12,14 +12,14 @@
 const { useState: _vpUS, useRef: _vpUR, useEffect: _vpUE } = React;
 
 const VPC_ENDPOINT = 'https://jxtqwzmpgofwctqajewt.supabase.co/functions/v1/vp-copiloto';
-const VPC_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+const VPC_ANON_KEY = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
 const VPC_LS_OPEN = 'vpc_open_v1';
 
 /* ---------- API ---------- */
 async function vpcCall(body) {
   const res = await fetch(VPC_ENDPOINT, {
     method: 'POST',
-    headers: { 'Authorization': 'Bearer ' + VPC_ANON_KEY, 'Content-Type': 'application/json' },
+    headers: { 'apikey': VPC_ANON_KEY, 'Authorization': 'Bearer ' + VPC_ANON_KEY, 'Content-Type': 'application/json' },
     body: JSON.stringify(body),
   });
   if (!res.ok) {
@@ -32,21 +32,36 @@ async function vpcCall(body) {
 /* ---------- Leitura da página (DOM → campos) ---------- */
 function vpcClean(s) { return (s || '').replace(/\s+/g, ' ').replace(/\*\s*$/, '').trim(); }
 
-function vpcLabelFor(el) {
+/* Texto cru do <label> associado (sem limpar o "*"), usado tanto pro
+   rótulo exibido (vpcLabelFor, que limpa) quanto pra detectar obrigatório
+   por convenção de UI (vpcRequired, que olha o "*" antes de limpar). */
+function vpcRawLabelText(el) {
+  // Checkbox direto dentro de <label>texto<input/></label> (padrão usado em
+  // "usar padrão comercial" / "Confirmado pela engenharia" etc.) — o
+  // <label> É o próprio pai, não um descendente de um pai mais acima.
+  if (el.parentElement && el.parentElement.tagName === 'LABEL') {
+    return el.parentElement.textContent || '';
+  }
   if (el.id) {
     try {
       const sel = 'label[for="' + (window.CSS && CSS.escape ? CSS.escape(el.id) : el.id) + '"]';
       const l = document.querySelector(sel);
-      if (l) return vpcClean(l.textContent);
+      if (l) return l.textContent || '';
     } catch (e) {}
   }
-  const aria = el.getAttribute('aria-label');
-  if (aria) return vpcClean(aria);
   let p = el.parentElement;
   for (let d = 0; d < 4 && p; d++, p = p.parentElement) {
     const lab = p.querySelector('label');
-    if (lab) return vpcClean(lab.textContent);
+    if (lab) return lab.textContent || '';
   }
+  return '';
+}
+
+function vpcLabelFor(el) {
+  const raw = vpcRawLabelText(el);
+  if (raw) return vpcClean(raw);
+  const aria = el.getAttribute('aria-label');
+  if (aria) return vpcClean(aria);
   return vpcClean(el.getAttribute('placeholder') || el.name || '');
 }
 
@@ -54,6 +69,9 @@ function vpcRequired(el) {
   if (el.required) return true;
   const f = el.closest('.cv-field, .ci-field, .pe-field, .ft-field, .field');
   if (f && f.querySelector('.cv-req, .ci-req, .pe-req, .req, .required')) return true;
+  // Convenção visual mais comum no app: rótulo termina com "*"
+  // (ex.: "Cidade da obra *"), sem atributo/classe formal de obrigatório.
+  if (/\*\s*$/.test(vpcRawLabelText(el).trim())) return true;
   return false;
 }
 
@@ -67,16 +85,17 @@ function vpcScanPage() {
   nodes.forEach((el) => {
     const tag = el.tagName.toLowerCase();
     const type = (el.getAttribute('type') || '').toLowerCase();
-    if (['hidden', 'file', 'submit', 'button', 'checkbox', 'radio', 'range'].includes(type)) return;
+    if (['hidden', 'file', 'submit', 'button', 'radio', 'range'].includes(type)) return;
     if (el.disabled || el.readOnly) return;
     // visível?
     if (!(el.offsetWidth || el.offsetHeight || el.getClientRects().length)) return;
     const isSelect = tag === 'select';
+    const isCheckbox = type === 'checkbox';
     const f = {
       idx: i,
       label: vpcLabelFor(el),
-      type: isSelect ? 'select' : (tag === 'textarea' ? 'textarea' : (type || 'text')),
-      value: el.value || '',
+      type: isSelect ? 'select' : (tag === 'textarea' ? 'textarea' : isCheckbox ? 'checkbox' : (type || 'text')),
+      value: isCheckbox ? !!el.checked : (el.value || ''),
       required: vpcRequired(el),
     };
     if (isSelect) f.options = Array.from(el.options).map(o => o.value).filter(v => v !== '');
@@ -95,6 +114,13 @@ function vpcDocText() {
 /* ---------- Preenchimento (React-compatível) ---------- */
 function vpcSetValue(el, value) {
   const tag = el.tagName;
+  if (tag === 'INPUT' && el.type === 'checkbox') {
+    const desc = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'checked');
+    if (desc && desc.set) desc.set.call(el, !!value); else el.checked = !!value;
+    el.dispatchEvent(new Event('input', { bubbles: true }));
+    el.dispatchEvent(new Event('change', { bubbles: true }));
+    return;
+  }
   const proto = tag === 'TEXTAREA' ? window.HTMLTextAreaElement.prototype
     : tag === 'SELECT' ? window.HTMLSelectElement.prototype
     : window.HTMLInputElement.prototype;
@@ -117,8 +143,21 @@ function vpcApplyFills(fills, els) {
         || opts.find(o => o.textContent.trim().toLowerCase() === String(v).toLowerCase());
       if (!m) continue;
       v = m.value;
+    } else if (el.tagName === 'INPUT' && el.type === 'checkbox') {
+      v = (v === true || v === 'true' || v === 1 || v === '1');
     }
-    vpcSetValue(el, v);
+    // flushSync força o React a confirmar (re-renderizar) este campo ANTES do
+    // próximo — sem isso, N dispatches síncronos de 'input'/'change' num loop
+    // entram todos no MESMO batch do React 18; qualquer tela cujo onChange
+    // faça setState(objeto) a partir de closure (ex.: `set = (patch) =>
+    // onChange({...estadoAtual, ...patch})`, padrão comum em
+    // quadro-comando.jsx) lê o MESMO estado obsoleto em todas as chamadas —
+    // cada setState novo substitui o anterior por inteiro, então só o ÚLTIMO
+    // campo do lote sobrevive e os demais são perdidos silenciosamente (achado
+    // real: "preencher com dados fictícios" preenchia 23 campos mas só o
+    // último aparecia na tela).
+    if (window.ReactDOM && window.ReactDOM.flushSync) window.ReactDOM.flushSync(() => vpcSetValue(el, v));
+    else vpcSetValue(el, v);
     try {
       el.classList.add('vpc-flash');
       el.scrollIntoView({ block: 'center', behavior: 'smooth' });
@@ -129,22 +168,216 @@ function vpcApplyFills(fills, els) {
   return n;
 }
 
+/* ---------- Questionário (mode 'questionario') ---------- */
+/* Resolve id→rótulo lendo window.__VPC_QUESTIONARIO (mesma estrutura que foi
+   mandada pra IA), pra prévia ficar legível mesmo quando a op só tem id. */
+function vpcRotuloPergunta(id) {
+  const ctx = window.__VPC_QUESTIONARIO;
+  if (!ctx) return id;
+  for (const c of (ctx.estrutura || [])) {
+    const p = (c.perguntas || []).find((p) => p.id === id);
+    if (p) return p.texto;
+  }
+  return id;
+}
+function vpcRotuloCategoria(id) {
+  const ctx = window.__VPC_QUESTIONARIO;
+  if (!ctx) return id;
+  const c = (ctx.estrutura || []).find((c) => c.id === id);
+  return c ? c.nome : id;
+}
+
+function vpcPreviewOpsQuestionario(ops) {
+  return ops.map((op) => {
+    if (op.op === 'add_categoria') return `+ Categoria "${op.nome}"`;
+    if (op.op === 'add_pergunta') {
+      const cond = op.regraPaiTexto ? ` — só aparece se "${op.regraPaiTexto}" = "${op.regraValorGatilho}"` : '';
+      const opcoes = op.opcoes && op.opcoes.length ? ` [${op.opcoes.join(', ')}]` : '';
+      return `+ Pergunta em "${op.categoriaNome}": "${op.texto}" (${op.tipoCampo})${opcoes}${cond}`;
+    }
+    if (op.op === 'editar_pergunta') return `✎ Editar "${vpcRotuloPergunta(op.perguntaId)}": ${JSON.stringify(op.patch || {})}`;
+    if (op.op === 'excluir_pergunta') return `🗑 Excluir pergunta "${vpcRotuloPergunta(op.perguntaId)}"`;
+    if (op.op === 'excluir_categoria') return `🗑 Excluir categoria "${vpcRotuloCategoria(op.categoriaId)}" (e todas as perguntas dela)`;
+    return `? ${op.op}`;
+  });
+}
+
+/* Aplica em sequência via VistoriasQuestionariosStore — nomeToId/textoToId
+   crescem conforme categorias/perguntas novas são criadas, pra uma op
+   seguinte poder referenciar algo que acabou de ser criado nesta mesma
+   leva (ex.: pergunta condicional cujo pai foi criado 2 ops antes). */
+async function vpcAplicarOpsQuestionario(ops) {
+  const store = window.VistoriasQuestionariosStore;
+  const ctx = window.__VPC_QUESTIONARIO;
+  if (!store || !ctx) throw new Error('Nenhum questionário aberto nesta tela.');
+
+  const nomeToId = {};
+  (ctx.estrutura || []).forEach((c) => { nomeToId[c.nome.trim().toLowerCase()] = c.id; });
+  const textoToId = {};
+  (ctx.estrutura || []).forEach((c) => (c.perguntas || []).forEach((p) => { textoToId[p.texto.trim().toLowerCase()] = p.id; }));
+
+  let aplicadas = 0;
+  for (const op of ops) {
+    if (op.op === 'add_categoria') {
+      const nova = await store.criarCategoria(ctx.questionarioId, op.nome);
+      nomeToId[String(op.nome).trim().toLowerCase()] = nova.id;
+    } else if (op.op === 'add_pergunta') {
+      const catId = nomeToId[String(op.categoriaNome || '').trim().toLowerCase()];
+      if (!catId) throw new Error(`Categoria "${op.categoriaNome}" não encontrada (${aplicadas} op(s) já aplicada(s)).`);
+      const campos = { texto: op.texto, tipo_campo: op.tipoCampo, obrigatoria: op.obrigatoria !== false };
+      if (op.opcoes && op.opcoes.length) campos.opcoes = op.opcoes;
+      if (op.regraPaiTexto) {
+        const paiId = textoToId[String(op.regraPaiTexto).trim().toLowerCase()];
+        if (paiId) { campos.regra_pai_pergunta_id = paiId; campos.regra_valor_gatilho = op.regraValorGatilho || null; }
+      }
+      const nova = await store.criarPergunta(catId, campos);
+      textoToId[String(op.texto).trim().toLowerCase()] = nova.id;
+    } else if (op.op === 'editar_pergunta') {
+      await store.atualizarPergunta(op.perguntaId, op.patch || {});
+    } else if (op.op === 'excluir_pergunta') {
+      await store.excluirPergunta(op.perguntaId);
+    } else if (op.op === 'excluir_categoria') {
+      await store.excluirCategoria(op.categoriaId);
+    }
+    aplicadas++;
+  }
+  return aplicadas;
+}
+
 /* ============================================================
    Componente
    ============================================================ */
 function VpCopiloto({ route, role }) {
   const [open, setOpen] = _vpUS(() => { try { return localStorage.getItem(VPC_LS_OPEN) === '1'; } catch (e) { return false; } });
   const [msgs, setMsgs] = _vpUS([
-    { role: 'assistant', content: 'Oi! Sou o Copiloto VP 🟡 Posso responder dúvidas, preencher o formulário desta tela ou revisar o documento à procura de erros. É só pedir.' },
+    { role: 'assistant', content: 'Oi! Sou o Copiloto VP 🟡 Posso responder dúvidas, preencher o formulário desta tela, revisar erros ou analisar um documento (Excel/Markdown) pra preencher automaticamente. É só pedir ou anexar um arquivo.' },
   ]);
   const [input, setInput] = _vpUS('');
   const [loading, setLoading] = _vpUS(false);
   const [pendingMode, setPendingMode] = _vpUS(null); // 'fill' enquanto há perguntas em aberto
+  // Preenchimento sugerido pelo Copiloto, ainda não aplicado na tela —
+  // achado "Melhoria" da auditoria de código: antes vpcApplyFills rodava
+  // direto na resposta da IA, sem o usuário ver o que ia mudar. Agora só
+  // aplica quando confirmar em confirmarFill().
+  const [pendingFill, setPendingFill] = _vpUS(null); // null | { fills, preview }
+  // Prévia de "opsQuestionario" (mode 'questionario') — mesmo princípio do
+  // pendingFill: a IA nunca escreve direto no banco, só propõe; só aplica
+  // via VistoriasQuestionariosStore se o usuário confirmar em confirmarOpsQuestionario().
+  const [pendingOpsQuestionario, setPendingOpsQuestionario] = _vpUS(null); // null | { ops, preview }
   const elsRef = _vpUR([]);
+  const fieldsRef = _vpUR([]);
   const bodyRef = _vpUR(null);
+  const fileInputRef = _vpUR(null);
+  // Campos sublinhados por "Revisar erros" (issues com idx) — limpos a
+  // cada nova análise/troca de tela, e individualmente quando o usuário
+  // preenche o campo (o sublinhado deixa de fazer sentido).
+  const highlightedRef = _vpUR([]); // [{ el, handler }]
+
+  const vpcClearHighlights = () => {
+    for (const h of highlightedRef.current) {
+      try {
+        h.el.classList.remove('vpc-underline', 'vpc-underline--required', 'vpc-underline--optional');
+        h.el.removeEventListener('input', h.handler);
+      } catch (e) {}
+    }
+    highlightedRef.current = [];
+  };
+
+  /* Parseia Excel ou Markdown e envia pra IA preencher */
+  const parseDocument = async (file) => {
+    if (!file) return;
+    try {
+      setLoading(true);
+      let docContent = '';
+
+      if (file.name.endsWith('.xlsx') || file.name.endsWith('.xls')) {
+        // Parsear Excel usando SheetJS (carrega sob demanda via CDN)
+        if (!window.XLSX) {
+          const script = document.createElement('script');
+          script.src = 'https://cdn.jsdelivr.net/npm/xlsx@latest/dist/xlsx.full.min.js';
+          await new Promise((resolve, reject) => {
+            script.onload = resolve;
+            script.onerror = reject;
+            document.head.appendChild(script);
+          });
+        }
+        const arrayBuffer = await file.arrayBuffer();
+        const workbook = window.XLSX.read(arrayBuffer, { type: 'array' });
+        const sheets = workbook.SheetNames;
+        for (const sheetName of sheets) {
+          const worksheet = workbook.Sheets[sheetName];
+          const range = worksheet['!ref'];
+          if (range) {
+            const data = window.XLSX.utils.sheet_to_txt(worksheet);
+            docContent += `\n### Planilha: ${sheetName}\n${data}`;
+          }
+        }
+      } else if (file.name.endsWith('.md') || file.type === 'text/markdown' || file.type === 'text/plain') {
+        // Ler Markdown ou texto simples
+        docContent = await file.text();
+      } else {
+        throw new Error('Formato não suportado. Use .xlsx, .xls ou .md');
+      }
+
+      if (docContent.trim().length === 0) throw new Error('Documento está vazio.');
+
+      // Enviar documento pra IA preencher — instrução clara de mapeamento
+      const promptComDoc = `📄 DOCUMENTO ANEXADO (${file.name}):\n\n${docContent.slice(0, 10000)}\n\n---\n\nAnalise este documento e preencha CADA CAMPO DO FORMULÁRIO com os dados correspondentes. Mapeie cada informação do documento ao campo mais relevante da tela.`;
+      await send('fill', promptComDoc);
+    } catch (e) {
+      setMsgs(m => [...m, { role: 'assistant', content: '⚠️ Erro ao ler documento: ' + e.message }]);
+    } finally {
+      setLoading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files?.[0];
+    if (file) parseDocument(file);
+  };
+
+  const vpcHighlightIssues = (issues, els, fields) => {
+    vpcClearHighlights();
+    const next = [];
+    for (const it of issues) {
+      const idxs = Array.isArray(it.idxs) ? it.idxs : [];
+      for (const idx of idxs) {
+        if (typeof idx !== 'number') continue;
+        const el = els[idx];
+        if (!el || next.some(h => h.el === el)) continue;
+        const required = !!(fields[idx] && fields[idx].required);
+        const cls = required ? 'vpc-underline--required' : 'vpc-underline--optional';
+        el.classList.add('vpc-underline', cls);
+        const handler = () => {
+          el.classList.remove('vpc-underline', 'vpc-underline--required', 'vpc-underline--optional');
+          el.removeEventListener('input', handler);
+        };
+        el.addEventListener('input', handler);
+        next.push({ el, handler });
+      }
+    }
+    highlightedRef.current = next;
+  };
+
+  const vpcJumpTo = (idx) => {
+    const el = elsRef.current[idx];
+    if (!el) return;
+    try {
+      el.scrollIntoView({ block: 'center', behavior: 'smooth' });
+      el.classList.add('vpc-flash');
+      setTimeout(() => el.classList.remove('vpc-flash'), 1600);
+    } catch (e) {}
+  };
 
   _vpUE(() => { try { localStorage.setItem(VPC_LS_OPEN, open ? '1' : '0'); } catch (e) {} }, [open]);
   _vpUE(() => { if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight; }, [msgs, loading, open]);
+  // Troca de tela → os elementos sublinhados não existem mais no DOM novo,
+  // e o modo "questionario" grudado não faz mais sentido fora de vistorias-envio.
+  _vpUE(() => {
+    vpcClearHighlights();
+    setPendingMode((p) => (p === 'questionario' && route !== 'vistorias-envio' ? null : p));
+  }, [route]);
 
   const send = async (mode, text) => {
     const userText = (text != null ? text : input).trim();
@@ -156,6 +389,7 @@ function VpCopiloto({ route, role }) {
     try {
       const { fields, els } = vpcScanPage();
       elsRef.current = els;
+      fieldsRef.current = fields;
       const body = {
         mode,
         message: userText,
@@ -166,17 +400,31 @@ function VpCopiloto({ route, role }) {
         page: { route, title: document.title.replace(' · VP Gestão', ''), fields },
       };
       if (mode === 'analyze') body.documentText = vpcDocText();
+      if (mode === 'questionario') body.questionarioContext = window.__VPC_QUESTIONARIO || null;
       const resp = await vpcCall(body);
-      let filled = 0;
-      if (resp.fills && resp.fills.length) filled = vpcApplyFills(resp.fills, elsRef.current);
+      if (resp.fills && resp.fills.length) {
+        const preview = resp.fills.map(f => ({
+          idx: f.idx,
+          label: (fieldsRef.current[f.idx] && fieldsRef.current[f.idx].label) || ('Campo ' + f.idx),
+          value: f.value,
+        }));
+        setPendingFill({ fills: resp.fills, preview });
+      }
+      if (resp.opsQuestionario && resp.opsQuestionario.length) {
+        setPendingOpsQuestionario({ ops: resp.opsQuestionario, preview: vpcPreviewOpsQuestionario(resp.opsQuestionario) });
+      }
       setMsgs(m => [...m, {
         role: 'assistant',
         content: resp.reply || '',
         questions: resp.questions || [],
         issues: resp.issues || [],
-        filled,
+        filled: 0,
       }]);
-      setPendingMode(resp.questions && resp.questions.length ? 'fill' : null);
+      // 'questionario' fica "grudado" enquanto o usuário continua digitando
+      // comandos — cada mensagem seguinte ainda é tratada como pedido de
+      // ajuste do MESMO questionário aberto, até ele trocar de tela.
+      setPendingMode(resp.questions && resp.questions.length ? 'fill' : (mode === 'questionario' ? 'questionario' : null));
+      if (mode === 'analyze') vpcHighlightIssues(resp.issues || [], els, fields);
     } catch (e) {
       setMsgs(m => [...m, { role: 'assistant', content: '⚠️ Não consegui responder agora: ' + e.message }]);
     } finally {
@@ -185,6 +433,36 @@ function VpCopiloto({ route, role }) {
   };
 
   const onSubmit = (e) => { e.preventDefault(); send(pendingMode || 'chat'); };
+
+  const confirmarFill = () => {
+    if (!pendingFill) return;
+    const n = vpcApplyFills(pendingFill.fills, elsRef.current);
+    setMsgs(m => [...m, { role: 'assistant', content: '', filled: n }]);
+    setPendingFill(null);
+  };
+  const descartarFill = () => {
+    setMsgs(m => [...m, { role: 'assistant', content: 'Ok, não apliquei essas mudanças.' }]);
+    setPendingFill(null);
+  };
+
+  const confirmarOpsQuestionario = async () => {
+    if (!pendingOpsQuestionario) return;
+    setLoading(true);
+    try {
+      const n = await vpcAplicarOpsQuestionario(pendingOpsQuestionario.ops);
+      window.dispatchEvent(new CustomEvent('vpc-questionario-atualizado'));
+      setMsgs(m => [...m, { role: 'assistant', content: `✓ Apliquei ${n} ${n === 1 ? 'mudança' : 'mudanças'} no questionário.` }]);
+    } catch (e) {
+      setMsgs(m => [...m, { role: 'assistant', content: '⚠️ Parei no meio: ' + e.message }]);
+    } finally {
+      setPendingOpsQuestionario(null);
+      setLoading(false);
+    }
+  };
+  const descartarOpsQuestionario = () => {
+    setMsgs(m => [...m, { role: 'assistant', content: 'Ok, não mudei o questionário.' }]);
+    setPendingOpsQuestionario(null);
+  };
 
   if (!open) {
     return (
@@ -218,7 +496,9 @@ function VpCopiloto({ route, role }) {
 
             {m.issues && m.issues.length > 0 && (
               <div className="vpc-issues">
-                {m.issues.map((it, j) => (
+                {m.issues.map((it, j) => {
+                  const idxs = (Array.isArray(it.idxs) ? it.idxs : []).filter(idx => typeof idx === 'number' && !!elsRef.current[idx]);
+                  return (
                   <div key={j} className={'vpc-issue vpc-issue--' + (it.severity || 'media')}>
                     <div className="vpc-issue-head">
                       <span className="vpc-sev">{it.severity || 'media'}</span>
@@ -226,8 +506,19 @@ function VpCopiloto({ route, role }) {
                     </div>
                     <div className="vpc-issue-prob">{it.problem}</div>
                     {it.suggestion && <div className="vpc-issue-sug">💡 {it.suggestion}</div>}
+                    {idxs.length > 0 && (
+                      <div className="vpc-issue-jumps">
+                        {idxs.map(idx => (
+                          <button key={idx} type="button" className="vpc-jump" onClick={() => vpcJumpTo(idx)}
+                            title="Clique para ir até o campo na tela">
+                            ↳ {(fieldsRef.current[idx] && fieldsRef.current[idx].label) || ('Campo ' + idx)}
+                          </button>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>
@@ -235,9 +526,46 @@ function VpCopiloto({ route, role }) {
         {loading && <div className="vpc-msg vpc-msg--assistant"><div className="vpc-typing"><i /><i /><i /></div></div>}
       </div>
 
+      {pendingFill && (
+        <div className="vpc-confirm">
+          <div className="vpc-confirm-title">
+            Aplicar {pendingFill.preview.length} {pendingFill.preview.length === 1 ? 'alteração' : 'alterações'} na tela?
+          </div>
+          <ul className="vpc-confirm-list">
+            {pendingFill.preview.map((p, i) => (
+              <li key={i}><b>{p.label}</b>: {String(p.value).trim() ? String(p.value).slice(0, 60) : '(vazio)'}</li>
+            ))}
+          </ul>
+          <div className="vpc-confirm-actions">
+            <button className="vpc-act vpc-act--ghost" disabled={loading} onClick={descartarFill}>Descartar</button>
+            <button className="vpc-act vpc-act--primary" disabled={loading} onClick={confirmarFill}>Aplicar</button>
+          </div>
+        </div>
+      )}
+
+      {pendingOpsQuestionario && (
+        <div className="vpc-confirm">
+          <div className="vpc-confirm-title">
+            Aplicar {pendingOpsQuestionario.preview.length} {pendingOpsQuestionario.preview.length === 1 ? 'mudança' : 'mudanças'} no questionário?
+          </div>
+          <ul className="vpc-confirm-list">
+            {pendingOpsQuestionario.preview.map((p, i) => <li key={i}>{p}</li>)}
+          </ul>
+          <div className="vpc-confirm-actions">
+            <button className="vpc-act vpc-act--ghost" disabled={loading} onClick={descartarOpsQuestionario}>Descartar</button>
+            <button className="vpc-act vpc-act--primary" disabled={loading} onClick={confirmarOpsQuestionario}>Aplicar</button>
+          </div>
+        </div>
+      )}
+
       <div className="vpc-actions">
-        <button className="vpc-act" disabled={loading} onClick={() => send('fill')}>✨ Preencher página</button>
-        <button className="vpc-act" disabled={loading} onClick={() => send('analyze')}>🔍 Revisar erros</button>
+        <button className="vpc-act" disabled={loading || !!pendingFill} onClick={() => send('fill')}>✨ Preencher página</button>
+        <button className="vpc-act" disabled={loading || !!pendingFill} onClick={() => send('analyze')}>🔍 Revisar erros</button>
+        <button className="vpc-act" disabled={loading || !!pendingFill} onClick={() => fileInputRef.current?.click()}>📎 Anexar doc</button>
+        {route === 'vistorias-envio' && (
+          <button className="vpc-act" disabled={loading || !!pendingOpsQuestionario} onClick={() => send('questionario')}>🧩 Editar questionário</button>
+        )}
+        <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.md,.txt" onChange={handleFileUpload} style={{ display: 'none' }} />
       </div>
 
       <form className="vpc-input-row" onSubmit={onSubmit}>
@@ -245,7 +573,9 @@ function VpCopiloto({ route, role }) {
           className="vpc-input"
           value={input}
           onChange={(e) => setInput(e.target.value)}
-          placeholder={pendingMode === 'fill' ? 'Responda para eu continuar preenchendo…' : 'Pergunte ou peça algo…'}
+          placeholder={pendingMode === 'fill' ? 'Responda para eu continuar preenchendo…'
+            : pendingMode === 'questionario' ? 'Descreva o que mudar no questionário…'
+            : 'Pergunte ou peça algo…'}
           disabled={loading}
         />
         <button className="vpc-send" type="submit" disabled={loading || !input.trim()} aria-label="Enviar">➤</button>

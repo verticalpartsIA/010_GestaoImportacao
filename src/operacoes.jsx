@@ -94,7 +94,7 @@ function ModalNovoContrato({ onClose, onSaved, tipoDefault = 'cliente' }) {
     setSaving(true);
     const ano = new Date().getFullYear();
     const id = 'CTR-' + String(Date.now()).slice(-4) + '/' + ano;
-    const { error } = await window.__VP_SB.sb.from('contratos_venda_equipamentos').insert({
+    const novoContrato = {
       id,
       client: f.client,
       project_id: f.projeto || null,
@@ -106,11 +106,18 @@ function ModalNovoContrato({ onClose, onSaved, tipoDefault = 'cliente' }) {
       days_pending: 0,
       tipo_contrato: f.tipo_contrato,
       dados: { numero: id, propostaRef: f.projeto },
-    });
+    };
+    const { error } = await window.__VP_SB.sb.from('contratos_venda_equipamentos').insert(novoContrato);
     setSaving(false);
     if (error) return window.toast('Erro: ' + error.message, 'error');
     window.toast('Contrato criado! Preencha os dados no editor.', 'success');
-    onSaved?.(); onClose();
+    /* 15/09 — achado real (auditoria do tour.md): o botão diz "Criar e
+       Abrir Editor" e o toast promete "Preencha os dados no editor", mas
+       onSaved() não recebia nada — o chamador só recarregava a lista,
+       deixando o usuário na tela de lista, tendo que achar o card novo e
+       clicar Editar manualmente. Repassa o registro recém-criado pro
+       onSaved poder abrir o editor de verdade. */
+    onSaved?.(novoContrato); onClose();
   };
 
   const fld = (label, key, type = 'text', ph = '', opts = null) => (
@@ -159,8 +166,6 @@ function EngenhariaPage({ setRoute }) {
   const [selectedProject, setSelectedProject] = React.useState(null);
   const [showNovoProjeto, setShowNovoProjeto] = React.useState(false);
   const [gates, setGates] = React.useState(null);
-  const [vistoria, setVistoria] = React.useState(null);
-  const [editingFase, setEditingFase] = React.useState(null);
   // Stable photo IDs so they don't shuffle on re-render
   const photoIds = React.useMemo(() => ([3142, 5891, 7204, 2057, 4396, 6128]), []);
 
@@ -174,25 +179,6 @@ function EngenhariaPage({ setRoute }) {
     if (window.ProjectGates && window.ProjectGates.validarGatesImportacao) {
       const result = await window.ProjectGates.validarGatesImportacao(projectId);
       setGates(result);
-    }
-  };
-
-  const carregarVistoria = async (projectId) => {
-    if (window.VistoriaTracker) {
-      const v = await window.VistoriaTracker.obterVistoria(projectId);
-      setVistoria(v);
-    }
-  };
-
-  const salvarFaseVistoria = async (numeroFase, dadosFase) => {
-    if (!selectedProject || !window.VistoriaTracker) return;
-    try {
-      const v = await window.VistoriaTracker.atualizarFaseVistoria(selectedProject.id, numeroFase, dadosFase);
-      setVistoria(v);
-      setEditingFase(null);
-      window.toast(`Fase ${numeroFase} da vistoria atualizada!`, 'success');
-    } catch (err) {
-      window.toast('Erro: ' + err.message, 'error');
     }
   };
 
@@ -229,8 +215,8 @@ function EngenhariaPage({ setRoute }) {
               </div>
             )}
             {projetos.map((p) => (
-              <div key={p.id} style={{ background: selectedProject?.id === p.id ? "var(--vp-gray-50)" : "#fff", border: "1px solid " + (selectedProject?.id === p.id ? "#000" : "var(--border)"), padding: 14, cursor: "pointer", position: "relative" }}
-                onClick={() => { setSelectedProject(p); validarGatesProjeto(p.id); carregarVistoria(p.id); setGates(null); setVistoria(null); }}>
+              <div key={p.id} style={{ background: selectedProject?.id === p.id ? "var(--vp-gray-50)" : "var(--bg)", border: "1px solid " + (selectedProject?.id === p.id ? "var(--vp-black)" : "var(--border)"), padding: 14, cursor: "pointer", position: "relative" }}
+                onClick={() => { setSelectedProject(p); validarGatesProjeto(p.id); setGates(null); }}>
                 <span style={{ position: "absolute", top: 0, left: 0, width: 24, height: 3, background: "var(--vp-yellow)" }}/>
                 <div className="row sb">
                   <div>
@@ -274,114 +260,46 @@ function EngenhariaPage({ setRoute }) {
               { key: "docs", label: "Documentos", icon: "package" },
               { key: "bom", label: "BOM", icon: "list" },
               { key: "visita", label: "Visita", icon: "calendar" },
-              { key: "vistoria", label: "Vistoria (1/2/3)", icon: "checklist" },
+              { key: "vistoria", label: "Vistoria", icon: "checklist" },
               { key: "ncm", label: "NCM / Ficha Técnica", icon: "package" },
               { key: "gates", label: "Gatilhos Importação", icon: "zap" },
             ]} active={engTab} onChange={setEngTab}/>
 
             {engTab === "vistoria" && (
-              <div style={{ marginTop: 20 }}>
-                {!vistoria ? (
-                  <div style={{ textAlign:'center', padding:'40px 0', color:'var(--fg3)', fontSize:13 }}>
-                    <Button variant="primary" onClick={() => window.VistoriaTracker?.criarVistoria(selectedProject.id, 0).then(v => setVistoria(v))}>
-                      Criar Plano de Vistorias
-                    </Button>
-                  </div>
-                ) : (
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
-                    <div style={{ background: '#f3f4f6', border: '1px solid var(--border)', borderRadius: 6, padding: 14 }}>
-                      <div className="row sb" style={{ marginBottom: 10 }}>
-                        <div>
-                          <div style={{ fontSize: 13, fontWeight: 700 }}>Progresso de Vistorias</div>
-                          <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 2 }}>
-                            {window.VistoriaTracker?.calcularProgresso(vistoria) || 0}% concluído
-                          </div>
-                        </div>
-                        <span style={{ fontSize: 28, fontWeight: 800 }}>{window.VistoriaTracker?.calcularProgresso(vistoria) || 0}%</span>
-                      </div>
-                      <div className="progress" style={{ marginTop: 8 }}>
-                        <span style={{ width: (window.VistoriaTracker?.calcularProgresso(vistoria) || 0) + '%' }}/>
-                      </div>
-                    </div>
-
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 12 }}>
-                      {vistoria.fases?.map((fase, i) => (
-                        <div key={fase.numero} style={{
-                          border: '1px solid ' + (fase.status === 'concluida' ? '#10b981' : 'var(--border)'),
-                          background: fase.status === 'concluida' ? '#f0fdf4' : '#fff',
-                          borderRadius: 6,
-                          padding: 12
-                        }}>
-                          <div className="row sb" style={{ marginBottom: 8 }}>
-                            <div className="up-eyebrow muted">Fase {fase.numero}</div>
-                            <span style={{ fontSize: 16 }}>
-                              {fase.status === 'concluida' ? '✅' : fase.status === 'em_progresso' ? '⏳' : '—'}
-                            </span>
-                          </div>
-                          <div style={{ fontSize: 13, fontWeight: 600, marginBottom: 8 }}>
-                            {fase.data ? window.VistoriaTracker?.fmtData(fase.data) : 'Não iniciada'}
-                          </div>
-                          <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 10 }}>
-                            Custo: {window.VistoriaTracker?.fmtBRL(fase.custo)}
-                          </div>
-                          <Button variant="outline" size="sm" onClick={() => setEditingFase(fase.numero)} style={{ width: '100%' }}>
-                            {fase.data ? 'Editar' : 'Registrar'}
-                          </Button>
-                        </div>
-                      ))}
-                    </div>
-
-                    {vistoria.custos_excedentes > 0 && (
-                      <div style={{ background: '#fee2e2', border: '1px solid #fca5a5', borderRadius: 6, padding: 12 }}>
-                        <div style={{ fontSize: 13, fontWeight: 700, color: '#991b1b', marginBottom: 4 }}>
-                          ⚠️ Custo excedente detectado
-                        </div>
-                        <div style={{ fontSize: 12, color: '#7f1d1d' }}>
-                          Orçamento: {window.VistoriaTracker?.fmtBRL(vistoria.orcamento_inicial)} |
-                          Total: {window.VistoriaTracker?.fmtBRL(vistoria.custo_total)} |
-                          Excedente: {window.VistoriaTracker?.fmtBRL(vistoria.custos_excedentes)}
-                        </div>
-                      </div>
-                    )}
-
-                    {editingFase && (
-                      <ModalEditarFaseVistoria
-                        fase={vistoria.fases.find(f => f.numero === editingFase)}
-                        onSave={(dados) => salvarFaseVistoria(editingFase, dados)}
-                        onCancel={() => setEditingFase(null)}
-                      />
-                    )}
-                  </div>
-                )}
+              <div style={{ marginTop: 20, textAlign:'center', padding:'28px 20px', border:'1px solid var(--border)', background:'var(--vp-gray-50)' }}>
+                <p style={{ fontSize:13, color:'var(--fg1)', margin:'0 0 14px' }}>
+                  As vistorias desta obra agora ficam num lugar só: <b>Vistorias de Obras</b>, dentro da aba <b>Instalação</b> do <b>Dossiê da Obra</b> correspondente — não mais aqui, pra não duplicar registro em duas telas diferentes.
+                </p>
+                <Button variant="primary" size="sm" icon="arrowRight" onClick={() => setRoute && setRoute('status-obras')}>Abrir obras</Button>
               </div>
             )}
 
             {engTab === "gates" && (
               <div style={{ marginTop: 20 }}>
-                <div style={{ background: "#fef3c7", border: "1px solid #fbbf24", borderRadius: 6, padding: 16 }}>
-                  <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "#92400e" }}>🔓 Gatilhos para Iniciar Importação (120 dias)</h3>
+                <div style={{ background: "var(--vp-warning-tint)", border: "1px solid var(--vp-warning)", borderRadius: 6, padding: 16 }}>
+                  <h3 style={{ margin: "0 0 14px", fontSize: 14, fontWeight: 700, color: "var(--vp-warning-ink)" }}>🔓 Gatilhos para Iniciar Importação (120 dias)</h3>
                   {gates === null ? (
-                    <div style={{ textAlign: "center", padding: "20px 0", color: "#666", fontSize: 13 }}>Carregando validação…</div>
+                    <div style={{ textAlign: "center", padding: "20px 0", color: "var(--fg2)", fontSize: 13 }}>Carregando validação…</div>
                   ) : gates.erro ? (
-                    <div style={{ color: "#dc2626", fontSize: 13 }}>❌ Erro ao validar: {gates.detalhe}</div>
+                    <div style={{ color: "var(--vp-danger)", fontSize: 13 }}>❌ Erro ao validar: {gates.detalhe}</div>
                   ) : (
                     <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
                       {gates.gates.map((g, i) => (
-                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, background: "#fff", borderRadius: 4, border: "1px solid " + (g.ok ? "#10b981" : "#fbbf24") }}>
+                        <div key={i} style={{ display: "flex", alignItems: "center", gap: 12, padding: 10, background: "var(--bg)", borderRadius: 4, border: "1px solid " + (g.ok ? "var(--vp-success)" : "var(--vp-warning)") }}>
                           <span style={{ fontSize: 16 }}>{g.ok ? "✅" : "⏳"}</span>
                           <div style={{ flex: 1 }}>
                             <div style={{ fontWeight: 600, fontSize: 13 }}>{g.nome}</div>
-                            <div style={{ fontSize: 12, color: "#666", marginTop: 2 }}>{g.descricao}</div>
+                            <div style={{ fontSize: 12, color: "var(--fg2)", marginTop: 2 }}>{g.descricao}</div>
                           </div>
                         </div>
                       ))}
                       {gates.ok && (
-                        <div style={{ marginTop: 12, padding: 12, background: "#dcfce7", border: "1px solid #86efac", borderRadius: 4, color: "#166534", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
+                        <div style={{ marginTop: 12, padding: 12, background: "var(--vp-success-tint)", border: "1px solid var(--vp-success)", borderRadius: 4, color: "var(--vp-success-ink)", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
                           ✅ TODOS OS PRÉ-REQUISITOS OK — Importação pode ser iniciada!
                         </div>
                       )}
                       {!gates.ok && (
-                        <div style={{ marginTop: 12, padding: 12, background: "#fee2e2", border: "1px solid #fca5a5", borderRadius: 4, color: "#991b1b", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
+                        <div style={{ marginTop: 12, padding: 12, background: "var(--vp-danger-tint)", border: "1px solid var(--vp-danger)", borderRadius: 4, color: "var(--vp-danger-ink)", fontSize: 13, fontWeight: 600, textAlign: "center" }}>
                           ⏳ Aguarde todos os pré-requisitos antes de iniciar importação
                         </div>
                       )}
@@ -407,7 +325,7 @@ function EngenhariaPage({ setRoute }) {
             {(engTab === "bom" || engTab === "visita" || engTab === "ncm") && (
               <div style={{ textAlign:'center', padding:'32px 20px', color:'var(--fg3)', fontSize:13 }}>
                 {engTab === "ncm" ? "Ficha técnica e NCM do produto ficam no Catálogo de Produtos / Solicitações NCM."
-                 : engTab === "visita" ? "As vistorias estão na aba Vistoria (1/2/3) deste projeto e no módulo Vistorias de Obras."
+                 : engTab === "visita" ? "As vistorias estão na aba Vistoria deste projeto — que abre o módulo Vistorias de Obras, dentro do Dossiê da Obra correspondente."
                  : "A lista de materiais (BOM) vem do Projeto de Equipamento / Ficha Técnica do produto."}
               </div>
             )}
@@ -423,58 +341,6 @@ function EngenhariaPage({ setRoute }) {
   );
 }
 
-function ModalEditarFaseVistoria({ fase, onSave, onCancel }) {
-  const [data, setData] = React.useState(fase?.data ? fase.data.slice(0, 10) : '');
-  const [custo, setCusto] = React.useState(fase?.custo || '');
-  const [observacoes, setObservacoes] = React.useState(fase?.observacoes || '');
-  const [status, setStatus] = React.useState(fase?.status || 'pendente');
-
-  const save = () => {
-    if (!data) return window.toast('Data é obrigatória.', 'warning');
-    onSave({ data: new Date(data).toISOString(), custo: parseFloat(custo) || 0, observacoes, status });
-  };
-
-  return (
-    <Modal title={`Editar Fase ${fase?.numero}`} onClose={onCancel} width={480}
-      footer={<>
-        <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-        <Button variant="primary" onClick={save}>Salvar</Button>
-      </>}>
-      <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
-        <div className="stack" style={{ gap:4 }}>
-          <label className="up-eyebrow muted">Data da vistoria *</label>
-          <input className="input" type="date" value={data} onChange={e => setData(e.target.value)}/>
-        </div>
-        <div className="grid-2" style={{ gap:12 }}>
-          <div className="stack" style={{ gap:4 }}>
-            <label className="up-eyebrow muted">Status</label>
-            <select className="input" value={status} onChange={e => setStatus(e.target.value)}>
-              <option value="pendente">Pendente</option>
-              <option value="em_progresso">Em progresso</option>
-              <option value="concluida">Concluída</option>
-            </select>
-          </div>
-          <div className="stack" style={{ gap:4 }}>
-            <label className="up-eyebrow muted">Custo (R$)</label>
-            <div style={{ display:'flex', alignItems:'center', gap:6 }}>
-              <span style={{ fontSize:13, color:'var(--fg3)', fontWeight:700 }}>R$</span>
-              <input className="input" type="number" min="0" step="0.01" value={custo}
-                onChange={e => setCusto(e.target.value)} style={{ flex:1 }}/>
-            </div>
-          </div>
-        </div>
-        <div className="stack" style={{ gap:4 }}>
-          <label className="up-eyebrow muted">Observações</label>
-          <textarea className="input" rows={2} value={observacoes}
-            onChange={e => setObservacoes(e.target.value)}
-            placeholder="Notas da vistoria..."
-            style={{ resize:'vertical' }}/>
-        </div>
-      </div>
-    </Modal>
-  );
-}
-
 /* ---------- JURÍDICO — lista idêntica ao PropostasPage =================== */
 function JuridicoPage({ setRoute, setSubsel }) {
   const [contratos, setContratos] = React.useState([]);
@@ -483,7 +349,7 @@ function JuridicoPage({ setRoute, setSubsel }) {
 
   const reload = () => {
     setLoading(true);
-    window.__VP_SB.sb.from('contratos_venda_equipamentos').select('*').order('issued_date', { ascending: false })
+    window.__VP_SB.sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false })
       .then(({ data }) => { setContratos(data || []); setLoading(false); });
   };
   React.useEffect(() => { reload(); }, []);
@@ -502,7 +368,7 @@ function JuridicoPage({ setRoute, setSubsel }) {
           <p className="page-head__sub">Minuta contratual, preenchimento, redação de páginas confidenciais e envio para assinatura digital.</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="upload" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='.pdf,.docx'; inp.onchange = e => { const f=e.target.files?.[0]; if(f) window.toast(`Minuta "${f.name}" importada.`,'success'); }; inp.click(); }}>Importar minuta</Button>
+          <Button variant="outline" icon="upload" disabled title="Em desenvolvimento — upload de minuta ainda não persiste o arquivo">Importar minuta</Button>
           <Button variant="primary" icon="plus" onClick={() => setShowNovo(true)}>Novo contrato</Button>
         </div>
       </div>
@@ -549,7 +415,7 @@ function JuridicoPage({ setRoute, setSubsel }) {
           <div className="stack" style={{ gap: 10 }}>
             {/* Banner preto — exatamente igual ao de Propostas */}
             <div onClick={() => setShowNovo(true)}
-              style={{ padding: 18, background: '#000', color: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
+              style={{ padding: 18, background: 'var(--vp-black)', color: 'var(--vp-white)', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 14, position: 'relative' }}>
               <span style={{ position: 'absolute', top: 0, left: 0, width: 24, height: 3, background: 'var(--vp-yellow)' }}/>
               <Icon.fileText size={28} color="var(--vp-yellow)"/>
               <div style={{ flex: 1 }}>
@@ -562,7 +428,7 @@ function JuridicoPage({ setRoute, setSubsel }) {
             {/* Cards de tipo — como Elevador / Escada / Esteira */}
             <div className="grid-2" style={{ gap: 8 }}>
               {/* Contrato do Cliente */}
-              <div onClick={() => setShowNovo(true)} style={{ padding: 12, background: '#fff', border: '2px solid var(--vp-yellow)', cursor: 'pointer', position: 'relative', minHeight: 140, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
+              <div onClick={() => setShowNovo(true)} style={{ padding: 12, background: 'var(--bg)', border: '2px solid var(--vp-yellow)', cursor: 'pointer', position: 'relative', minHeight: 140, display: 'flex', flexDirection: 'column', justifyContent: 'space-between' }}>
                 <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 4, background: 'var(--vp-yellow)' }}/>
                 <div style={{ paddingTop: 8 }}>
                   <div style={{ fontSize: 28, marginBottom: 4 }}>📄</div>
@@ -572,13 +438,13 @@ function JuridicoPage({ setRoute, setSubsel }) {
                 <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', color: 'var(--fg3)', marginTop: 8 }}>{contratos.filter(c=>(c.tipo_contrato||'cliente')==='cliente').length} contratos</div>
               </div>
               {/* Contrato do Montador */}
-              <div style={{ padding: 12, background: '#fff', border: '1px solid var(--border)', cursor: 'not-allowed', position: 'relative', minHeight: 140, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', opacity: .55 }}>
+              <div style={{ padding: 12, background: 'var(--bg)', border: '1px solid var(--border)', cursor: 'not-allowed', position: 'relative', minHeight: 140, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', opacity: .55 }}>
                 <div>
                   <div style={{ fontSize: 28, marginBottom: 4 }}>🔧</div>
                   <div style={{ fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.1em', color: 'var(--fg1)', marginBottom: 4 }}>Contrato do Montador</div>
                   <div style={{ fontSize: 9, color: 'var(--fg3)', lineHeight: 1.4 }}>Prestação de serviços · Instalação · Terceiros</div>
                 </div>
-                <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', background: 'var(--vp-yellow)', color: '#000', fontWeight: 800, padding: '2px 6px', width: 'fit-content' }}>EM BREVE</div>
+                <div style={{ fontSize: 9, fontFamily: 'var(--font-mono)', background: 'var(--vp-yellow)', color: 'var(--vp-black)', fontWeight: 800, padding: '2px 6px', width: 'fit-content' }}>EM BREVE</div>
               </div>
             </div>
 
@@ -591,7 +457,7 @@ function JuridicoPage({ setRoute, setSubsel }) {
         <ModalNovoContrato
           tipoDefault="cliente"
           onClose={() => setShowNovo(false)}
-          onSaved={() => { reload(); setShowNovo(false); }}/>
+          onSaved={(novoContrato) => { setShowNovo(false); if (novoContrato) openEditor(novoContrato); else reload(); }}/>
       )}
     </div>
   );
@@ -701,7 +567,7 @@ function ContractRedactor() {
               position: "absolute",
               top: 16, right: 16,
               background: "var(--vp-danger)",
-              color: "#fff",
+              color: "var(--vp-white)",
               fontSize: 10,
               fontWeight: 800,
               letterSpacing: ".14em",
@@ -785,7 +651,7 @@ function ContractRedactor() {
 function DetectedRow({ page, category, risk }) {
   const color = risk === "alto" ? "var(--vp-danger)" : "var(--vp-warning-ink)";
   return (
-    <div className="row" style={{ padding: "8px 10px", background: "var(--vp-gray-50)", borderLeft: `3px solid ${color}` }}>
+    <div className="row" style={{ padding: "8px 10px", background: "var(--vp-gray-50)", borderRadius: "var(--r-md)" }}>
       <span className="mono" style={{ fontSize: 11, fontWeight: 700, color }}>P.{String(page).padStart(2, "0")}</span>
       <span style={{ fontSize: 12, flex: 1 }}>{category}</span>
       <Badge variant={risk === "alto" ? "danger" : "warning"}>{risk}</Badge>
@@ -973,7 +839,7 @@ function EquipeChecklist({ equipe }) {
           <div style={{ fontSize:12, color:'var(--fg2)', marginBottom:8, fontWeight:600 }}>{feitos}/{itens.length} concluídas</div>
           <div className="stack" style={{ gap:6 }}>
             {itens.map(it => (
-              <div key={it.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', border:'1px solid var(--border)', background:'#fff' }}>
+              <div key={it.id} style={{ display:'flex', alignItems:'center', gap:10, padding:'8px 10px', border:'1px solid var(--border)', background:'var(--bg)' }}>
                 <input type="checkbox" checked={!!it.feito} onChange={() => toggle(it)} style={{ width:16, height:16, cursor:'pointer' }}/>
                 <span style={{ flex:1, fontSize:13, textDecoration: it.feito ? 'line-through' : 'none', color: it.feito ? 'var(--fg3)' : 'var(--fg1)' }}>{it.descricao}</span>
                 <button onClick={() => remover(it)} title="Remover tarefa" style={{ border:0, background:'transparent', cursor:'pointer', color:'var(--fg3)', display:'flex' }}><Icon.trash size={14}/></button>
@@ -1045,10 +911,10 @@ function InstalacaoPage() {
             {alocacoes.map((aloc, i) => {
               const diasRestantes = Math.ceil((new Date(aloc.previsao) - new Date()) / (1000*60*60*24));
               const progresso = Math.max(0, Math.min(100, 100 - (diasRestantes / 45 * 100)));
-              const statusColor = diasRestantes < 7 ? '#dc2626' : diasRestantes < 14 ? '#f59e0b' : '#10b981';
+              const statusColor = diasRestantes < 7 ? 'var(--vp-danger)' : diasRestantes < 14 ? 'var(--vp-warning-ink)' : 'var(--vp-success)';
 
               return (
-                <div key={i} style={{ background: '#fff', border: '1px solid var(--border)', borderRadius: 6, padding: 14 }}>
+                <div key={i} style={{ background: 'var(--bg)', border: '1px solid var(--border)', borderRadius: 6, padding: 14 }}>
                   <div className="row sb" style={{ marginBottom: 12, alignItems: 'flex-start' }}>
                     <div>
                       <div style={{ fontSize: 13, fontWeight: 700 }}>🏢 {aloc.parceiro?.nome || 'Parceiro não alocado'}</div>
@@ -1112,9 +978,9 @@ function InstalacaoPage() {
             )}
             {equipes.map((e) => (
               <div key={e.id}
-                style={{ padding: 14, background: selectedEquipe?.id === e.id ? "var(--vp-gray-50)" : "#fff", border: "1px solid " + (selectedEquipe?.id === e.id ? "#000" : "var(--border)"), display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}
+                style={{ padding: 14, background: selectedEquipe?.id === e.id ? "var(--vp-gray-50)" : "var(--bg)", border: "1px solid " + (selectedEquipe?.id === e.id ? "var(--vp-black)" : "var(--border)"), display: "flex", alignItems: "center", gap: 14, cursor: "pointer" }}
                 onClick={() => setSelectedEquipe(e)}>
-                <div style={{ width: 44, height: 44, background: e.status === "Em campo" ? "var(--vp-yellow)" : "var(--vp-gray-100)", color: e.status === "Em campo" ? "#000" : "var(--fg2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                <div style={{ width: 44, height: 44, background: e.status === "Em campo" ? "var(--vp-yellow)" : "var(--vp-gray-100)", color: e.status === "Em campo" ? "var(--vp-black)" : "var(--fg2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                   <Icon.hardhat size={22}/>
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -1131,7 +997,7 @@ function InstalacaoPage() {
           <Card title={`Checklist · ${selectedEquipe.nome}`}
             sub={selectedEquipe.lider || ""}
             action={<>
-              <Button variant="outline" size="sm" icon="upload" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange = e => { const f = e.target.files?.[0]; if (f) window.toast(`Foto "${f.name}" selecionada. Upload via Supabase Storage.`, 'success'); }; inp.click(); }}>Foto</Button>
+              <Button variant="outline" size="sm" icon="upload" onClick={() => { const inp = document.createElement('input'); inp.type='file'; inp.accept='image/*'; inp.onchange = e => { const f = e.target.files?.[0]; if (f) window.toast(`"${f.name}" selecionada (${Math.round(f.size/1024)}kb). Upload via Supabase Storage — configurar bucket.`, 'info'); }; inp.click(); }}>Foto</Button>
               <Button variant="primary" size="sm" icon="signature" onClick={() => { window.toast("Gerando laudo final — abrindo impressão.", "info"); setTimeout(() => window.print(), 200); }}>Laudo final</Button>
             </>}>
             <EquipeChecklist equipe={selectedEquipe}/>

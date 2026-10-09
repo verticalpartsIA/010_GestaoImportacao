@@ -27,3 +27,20 @@ version.json
 
 # Material de referência local (não versionado, não é parte do produto)
 Andreia/
+
+# hyperresearch (repo clonado à parte + config local do vault) — ferramenta, não é parte do produto
+/hyperresearch/
+.hyperresearch/
+
+# Worktrees locais de desenvolvimento (superpowers:using-git-worktrees) — nunca versionar
+.worktrees/
+
+# Playwright (testes de fumaça — npm run test:e2e)
+test-results/
+playwright-report/
+# Instruções/testes locais para sessões Claude — não versionar
+ClaudeNãoCommite/
+query_teste.sql
+
+# Estado local do Supabase CLI
+supabase/.temp/

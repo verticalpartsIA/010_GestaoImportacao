@@ -19,6 +19,8 @@
        vmleUsd, seguroUsd, freteSeguroCapataziaUsd, siscomexRs, txCambial, outrasDespesasImportacaoRs,
        despachanteDesembaracoRs, demurrageRs, freteInternoRs, armazenagemRs,
        itensInstalacaoMontagem: [{descricao, valor}],
+       containers: [{tipo_tamanho, quantidade, preco_rs}],
+       itensDespesasExtras: [{descricao, valor}],
        quantidadeEquipamentos, percentualServicos,
        modelos: [{unidadeId, identificador, modelo, quantidade, valorUnitarioUsd}],
        parametros: { regimeTributario, icmsImportacaoPct, ipiImportacaoPct, pisImportacaoPct, cofinsImportacaoPct,
@@ -38,7 +40,19 @@
     const D9_siscomexRs = Number(inputs.siscomexRs) || 0;
     const D12_txCambial = Number(inputs.txCambial) || 0;
     const D13_outrasDespesasRs = Number(inputs.outrasDespesasImportacaoRs) || 0;
-    const D11_afrmmRs = D8_freteSeguroCapataziaUsd * 0.08 * D12_txCambial;
+    /* Container e capatazia são Despesa Operacional (herdados do cadastro de
+       Containers, decisão do Financeiro 01/10/2026). `containerRateioDivisor`
+       divide os dois quando o container é compartilhado (card 120d com 1
+       equipamento); 1 = container inteiro (card 90d / 2+ equipamentos). */
+    const containers = Array.isArray(inputs.containers) ? inputs.containers : [];
+    const rateio = Math.max(Number(inputs.containerRateioDivisor) || 1, 1);
+    const K13_containersRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.preco_rs) || 0), 0) / rateio;
+    const K13b_capataziaRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.capatazia_rs) || 0), 0) / rateio;
+    // GRI (General Rate Increase) — sobretaxa do frete marítimo, vem do cadastro de Containers
+    // (01/10/2026), mesma mecânica da capatazia: despesa operacional, dividida no rateio.
+    const K13c_griRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * (Number(c.gri_rs) || 0), 0) / rateio;
+    // AFRMM = 8% do frete marítimo: frete informado (USD) + container + capatazia + GRI (R$).
+    const D11_afrmmRs = (D8_freteSeguroCapataziaUsd * D12_txCambial + K13_containersRs + K13b_capataziaRs + K13c_griRs) * 0.08;
 
     // ---------- Despesas extras (K6:K12) ----------
     const itensInstalacao = Array.isArray(inputs.itensInstalacaoMontagem) ? inputs.itensInstalacaoMontagem : [];
@@ -47,6 +61,14 @@
     const K8_demurrageRs = Number(inputs.demurrageRs) || 0;
     const K9_freteInternoRs = Number(inputs.freteInternoRs) || 0;
     const K10_armazenagemRs = Number(inputs.armazenagemRs) || 0;
+    // K13_containersRs não é célula original da planilha — extensão (28/08) pro
+    // card "Despesas Operacionais" (Containers), soma no mesmo bucket que
+    // Instalação e Montagem já usava (K11).
+    // (K13_containersRs e K13b_capataziaRs já calculados acima, junto do AFRMM.)
+    // K14_despesasExtrasItensRs também não é célula original — lista avulsa
+    // do card catch-all "Despesas Extras", mesmo bucket de K11/K13.
+    const itensExtras = Array.isArray(inputs.itensDespesasExtras) ? inputs.itensDespesasExtras : [];
+    const K14_despesasExtrasItensRs = itensExtras.reduce((s, it) => s + (Number(it.valor) || 0), 0);
 
     // ---------- VMLE/Seguro/Frete convertidos p/ R$ (Q20:S23) ----------
     const S20_vmleRs = D6_vmleUsd * D12_txCambial;
@@ -55,7 +77,7 @@
     const S23_vmldRs = S20_vmleRs + S21_seguroRs + S22_freteRs;
 
     const K7_adValoremRs = S23_vmldRs * 0.001; // Ad-Valorem = VMLD * 0,1%
-    const K12_despesasExtrasTotalRs = K6_despachanteRs + K7_adValoremRs + K8_demurrageRs + K9_freteInternoRs + K10_armazenagemRs + K11_instalacaoMontagemRs;
+    const K12_despesasExtrasTotalRs = K6_despachanteRs + K7_adValoremRs + K8_demurrageRs + K9_freteInternoRs + K10_armazenagemRs + K11_instalacaoMontagemRs + K13_containersRs + K13b_capataziaRs + K13c_griRs + K14_despesasExtrasItensRs;
 
     // ---------- Cascata de impostos na importação (M24:S30) ----------
     const M24_bcII = S23_vmldRs;
@@ -171,7 +193,8 @@
         totalNotaFiscal: U31_totalNotaFiscal, despesasInstalacaoMontagem: U32_despesasInstalacaoMontagem,
         totalDesembolso: U33_totalDesembolso, creditos: U34_creditos,
         custoTotalMercadorias: U35_custoTotalMercadorias, custoPorEquipamento: U36_custoPorEquipamento,
-        afrmm: D11_afrmmRs, adValorem: K7_adValoremRs, despesasExtrasTotal: K12_despesasExtrasTotalRs,
+        afrmm: D11_afrmmRs, adValorem: K7_adValoremRs, despesasExtrasTotal: K12_despesasExtrasTotalRs, containersRs: K13_containersRs, capataziaRs: K13b_capataziaRs, griRs: K13c_griRs,
+        itensDespesasExtrasRs: K14_despesasExtrasItensRs,
       },
       modelos: modelosComRateio,
       precificacao: {
@@ -193,5 +216,124 @@
     };
   }
 
-  window.PrecificacaoElevadorEngine = { calcular, creditoElegivel };
+  /* ============================================================
+     calcularV2 — motor de custo econômico completo (issue: "Precificação
+     real"). Corrige a fragilidade herdada da planilha: despesas
+     operacionais/instalação (K12/U32 no V1) só entravam no lucro depois de
+     formado o preço, então markup positivo podia conviver com margem
+     negativa (ver precificacao-elevador-engine.test.js, bloco "V2 — bug
+     replicado"). V2 reusa a cascata de importação/créditos do V1 (mesma
+     fonte de verdade fiscal) e muda apenas a BASE e o DIVISOR do preço:
+     custo_economico_completo entra inteiro na base, e markup/margem viram
+     modos explícitos e mutuamente exclusivos. Não substitui calcular() —
+     os dois convivem pra permitir comparação lado a lado (V1 x V2) até a
+     migração ser aceita pelo Financeiro. */
+  function calcularV2(inputs) {
+    const v1 = calcular(inputs);
+    const p = inputs.parametros || {};
+
+    const modoFormacaoPreco = inputs.modoFormacaoPreco === 'markup_sobre_custo' ? 'markup_sobre_custo' : 'margem_sobre_venda';
+    const markUpPct = Number(inputs.markUpPct ?? p.markUpPct) || 0;
+    const margemDesejadaPct = Number(inputs.margemDesejadaPct) || 0;
+    const contingenciaValor = Number(inputs.contingenciaValor) || 0;
+    const outrosCustosNaoRecuperaveisRs = Number(inputs.outrosCustosNaoRecuperaveisRs) || 0;
+
+    // custo_economico_completo = custo_liquido_importacao + despesas_operacionais
+    // (despachante + ad-valorem + demurrage + frete interno + armazenagem +
+    // instalação/montagem + containers + itens avulsos — já unificados em
+    // U32 no V1) + contingência + outros custos não recuperáveis.
+    const custoLiquidoImportacao = v1.importacao.custoTotalMercadorias;
+    const despesasOperacionais = v1.importacao.despesasInstalacaoMontagem;
+    const custoEconomicoCompleto = custoLiquidoImportacao + despesasOperacionais + contingenciaValor + outrosCustosNaoRecuperaveisRs;
+
+    const impostosPagarProdutoPct = v1.precificacao.impostosPagarProdutoPct;
+    const comissaoConsultoriaPct = Number(inputs.comissaoConsultoriaPct ?? p.comissaoConsultoriaPct) || 0;
+    const comissaoVendedorPct = Number(inputs.comissaoVendedorPct ?? p.comissaoVendedorPct) || 0;
+    const comissaoIndicacaoPct = Number(inputs.comissaoIndicacaoPct ?? p.comissaoIndicacaoPct) || 0;
+    // Percentuais que incidem sobre o preço de venda (não sobre o custo) —
+    // entram no divisor pra não serem contados duas vezes, conforme regra
+    // financeira principal do documento de origem.
+    const percentuaisSobreVenda = impostosPagarProdutoPct + comissaoConsultoriaPct + comissaoVendedorPct + comissaoIndicacaoPct;
+
+    let divisor, precoVendaProposta;
+    if (modoFormacaoPreco === 'markup_sobre_custo') {
+      // preco_antes_despesas_percentuais = custo_economico_completo * (1 + markup_pct);
+      // resolvido pelo divisor pra não contar os percentuais de venda 2x.
+      divisor = 1 - percentuaisSobreVenda;
+      precoVendaProposta = divisor > 0 ? (custoEconomicoCompleto * (1 + markUpPct)) / divisor : 0;
+    } else {
+      // preco_venda = custos_fixos_totais / (1 - margem_desejada_pct - percentuais_incidentes_sobre_venda)
+      divisor = 1 - margemDesejadaPct - percentuaisSobreVenda;
+      precoVendaProposta = divisor > 0 ? custoEconomicoCompleto / divisor : 0;
+    }
+    const divisorValido = divisor > 0;
+
+    const quantidadeEquipamentos = Number(inputs.quantidadeEquipamentos) || 1;
+    const percentualServicos = Number(inputs.percentualServicos) || 0;
+    const precoVendaProduto = precoVendaProposta * (1 - percentualServicos);
+    const precoVendaServicos = precoVendaProposta * percentualServicos;
+    const impostosPagarProdutoRs = precoVendaProduto * impostosPagarProdutoPct;
+    const impostosPagarServicosPct = Number(p.impostosPagarServicosPct) || 0;
+    const impostosPagarServicosRs = precoVendaServicos * impostosPagarServicosPct;
+    const comissaoConsultoriaRs = precoVendaProposta * comissaoConsultoriaPct;
+    const comissaoVendedorRs = precoVendaProposta * comissaoVendedorPct;
+    const comissaoIndicacaoRs = precoVendaProposta * comissaoIndicacaoPct;
+    const totalComissaoRs = comissaoVendedorRs + comissaoIndicacaoRs;
+    const difalRs = Number(inputs.difalCustoRs) || 0;
+
+    // Diferente do V1 (S71), despesasOperacionais NÃO é subtraída de novo
+    // aqui — ela já está dentro de custoEconomicoCompleto, que é o que o
+    // preço foi formado pra cobrir. Subtrair de novo seria contar 2x.
+    const lucroFinal = precoVendaProposta - custoEconomicoCompleto - impostosPagarProdutoRs - impostosPagarServicosRs - comissaoConsultoriaRs - totalComissaoRs - difalRs;
+    const margemEfetivaPct = precoVendaProposta > 0 ? lucroFinal / precoVendaProposta : 0;
+
+    return {
+      versaoMotor: '2.0.0',
+      modoFormacaoPreco,
+      divisorValido,
+      // Rateio do preço do V2 por unidade/modelo — antes só o V1 devolvia
+      // `modelos`, então a Proposta herdava o rateio sobre o preço do V1.
+      modelos: ratearPorModelo(inputs.modelos, precoVendaProposta),
+      custoEconomicoCompleto,
+      componentes: { custoLiquidoImportacao, despesasOperacionais, contingenciaValor, outrosCustosNaoRecuperaveisRs },
+      importacao: v1.importacao,
+      precificacao: {
+        precoVendaProposta, precoVendaProduto, precoVendaServicos,
+        precoVendaPorEquipamento: precoVendaProposta / quantidadeEquipamentos,
+        percentuaisSobreVenda, impostosPagarProdutoPct, markUpPct, margemDesejadaPct,
+        impostosPagarProdutoRs, impostosPagarServicosRs,
+        comissaoConsultoriaRs, comissaoVendedorRs, comissaoIndicacaoRs, totalComissaoRs,
+        difalRs, lucroFinal, margemEfetivaPct,
+        lucroPorEquipamento: lucroFinal / quantidadeEquipamentos,
+      },
+      v1Comparacao: {
+        precoVendaProposta: v1.precificacao.precoVendaProposta,
+        lucroFinal: v1.precificacao.lucroFinal,
+        margemFinalPct: v1.precificacao.margemFinalPct,
+      },
+    };
+  }
+
+  /* Divide o preço de venda total entre as unidades/modelos, ponderando pelo
+     custo do fornecedor (USD × quantidade) — mesma regra do rateio do V1.
+     Equipamento mais caro no fornecedor sai com preço de venda maior; o
+     valorUnitarioRs de cada unidade já é "por equipamento" (÷ quantidade).
+     Sem custo USD em nenhuma unidade, divide igualmente pela quantidade. */
+  function ratearPorModelo(modelos, precoVendaTotal) {
+    const lista = (Array.isArray(modelos) ? modelos : []).map((m) => {
+      const quantidade = Number(m.quantidade) || 1;
+      const valorUnitarioUsd = Number(m.valorUnitarioUsd) || 0;
+      return { ...m, quantidade, valorUnitarioUsd, valorTotalUsd: quantidade * valorUnitarioUsd };
+    });
+    const totalUsd = lista.reduce((s, m) => s + m.valorTotalUsd, 0);
+    const totalQtd = lista.reduce((s, m) => s + m.quantidade, 0);
+    const total = Number(precoVendaTotal) || 0;
+    return lista.map((m) => {
+      const percentual = totalUsd > 0 ? m.valorTotalUsd / totalUsd : (totalQtd > 0 ? m.quantidade / totalQtd : 0);
+      const valorTotalRs = percentual * total;
+      return { ...m, percentual, valorTotalRs, valorUnitarioRs: valorTotalRs / m.quantidade };
+    });
+  }
+
+  window.PrecificacaoElevadorEngine = { calcular, calcularV2, creditoElegivel, ratearPorModelo };
 }());

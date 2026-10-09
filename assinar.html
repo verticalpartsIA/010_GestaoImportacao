@@ -3,14 +3,14 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1">
-  <meta name="description" content="Assinatura digital de contrato — Vertical Parts">
+  <meta name="description" content="Analise, aprove ou peça revisão da sua proposta — VerticalParts">
   <meta name="robots" content="noindex, nofollow">
-  <title>Assinar Contrato · Vertical Parts</title>
+  <title>Analise a Proposta VerticalParts</title>
 
   <link rel="stylesheet" href="/colors_and_type.css">
-  <link rel="stylesheet" href="/styles/contrato-instalador.css?v=4">
-  <link rel="stylesheet" href="/styles/contrato-venda.css?v=2">
-  <link rel="stylesheet" href="/styles/proposta-editor.css?v=12">
+  <link rel="stylesheet" href="/styles/contrato-instalador.css?v=8">
+  <link rel="stylesheet" href="/styles/contrato-venda.css?v=4">
+  <link rel="stylesheet" href="/styles/proposta-editor.css?v=19">
   <style>
     body { margin: 0; background: #f4f4f4; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Arial, sans-serif; color: #111; }
     #ci-sign-root { min-height: 100vh; }
@@ -36,32 +36,62 @@
   <script>
     (function () {
       const URL_SB  = 'https://jxtqwzmpgofwctqajewt.supabase.co';
-      const ANON_SB = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+      const ANON_SB = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
       window.__VP_SB = { sb: window.supabase.createClient(URL_SB, ANON_SB) };
     }());
   </script>
 
   <!-- Primitivos de UI (Card/Button/Icon/Badge) — usados pelo PEPreview da Proposta -->
-  <script type="text/babel" src="/src/primitives.jsx?v=4"></script>
+  <script type="text/babel" src="/src/primitives.jsx?v=5"></script>
 
   <!-- Engines + Stores + Previews dos 3 tipos (Instalador + Venda Equipamentos + Proposta) -->
   <script src="/src/vp-log.js?v=2"></script>
   <!-- Gatilhos & Prazo — motor precisa estar carregado ANTES de
        eventos-fluxo-store.js também nas páginas públicas, senão os
        eventos que o cliente dispara (assinatura) não avançam a cadeia. -->
-  <script src="/src/gatilhos-engine.js?v=4"></script>
-  <script src="/src/eventos-fluxo-store.js?v=4"></script>
-  <script src="/src/contrato-instalador-engine.js?v=2"></script>
-  <script src="/src/contrato-instalador-store.js?v=5"></script>
-  <script type="text/babel" src="/src/contrato-instalador-preview.jsx?v=1"></script>
-  <script src="/src/contrato-venda-engine.js?v=4"></script>
-  <script src="/src/contrato-venda-store.js?v=7"></script>
-  <script type="text/babel" src="/src/contrato-venda-preview.jsx?v=2"></script>
-  <script src="/src/proposta-store.js?v=5"></script>
+  <script src="/src/gatilhos-engine.js?v=16"></script>
+  <script src="/src/eventos-fluxo-store.js?v=12"></script>
+  <script src="/src/contrato-instalador-engine.js?v=6"></script>
+  <script src="/src/contrato-instalador-store.js?v=12"></script>
+  <script type="text/babel" src="/src/contrato-instalador-preview.jsx?v=4"></script>
+  <script src="/src/contrato-venda-engine.js?v=15"></script>
+  <!-- Signatários com token individual — genérico (Proposta/Contrato Venda/Contrato
+       Instalador), ver documento-signatarios-store.js. Precisa vir ANTES de
+       contrato-venda-store.js, que checa window.DocumentoSignatariosStore ao
+       finalizar a assinatura. -->
+  <script src="/src/documento-signatarios-store.js?v=3"></script>
+  <!-- pdf-lib: anexa a página de assinaturas digitais ao PDF do Projeto de Instalação (projeto-assinado-pdf.js) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js" integrity="sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js" integrity="sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" crossorigin="anonymous"></script>
+  <script src="/src/projeto-assinado-pdf.js?v=2"></script>
+  <script src="/src/contrato-venda-store.js?v=19"></script>
+  <script src="/src/contrato-venda-signatarios-store.js?v=3"></script>
+  <script type="text/babel" src="/src/contrato-venda-preview.jsx?v=3"></script>
+  <!-- Dossiê da Obra — proposta assinada cria o Dossiê sozinha (ver proposta-store.js markSigned) -->
+  <script src="/src/dossier-store.js?v=6"></script>
+  <!-- Conversor das propostas importadas do sistema antigo. Precisa vir
+       ANTES do store, que o usa em conteudoRenderizavel(). Faltava aqui:
+       178 propostas legadas chegavam ao cliente no formato antigo cru, que
+       o PEPreview não entende — ou seja, documento VAZIO pra quem abre o
+       link (achado 21/08, conferindo a LEGADO-405 em produção). -->
+  <script src="/src/proposta-legado.js?v=1"></script>
+  <script src="/src/proposta-opcoes.js?v=1"></script>
+  <script src="/src/proposta-store.js?v=23"></script>
   <script src="/src/proposta-imagens.js?v=1"></script>
-  <script type="text/babel" src="/src/proposta-preview.jsx?v=12"></script>
+  <!-- Motor de PDF da Proposta (react-pdf). Esta página é a que o CLIENTE
+       abre — sem isto o botão "Baixar proposta (PDF)" daqui caía na
+       impressão do navegador, justamente o caminho que gerava a página em
+       branco (achado 21/08: o cliente recebia um PDF pior que o do
+       vendedor). Ver pdf-bundle/proposta-reactpdf.entry.js. -->
+  <script src="/src/proposta-reactpdf.bundle.js?v=11"></script>
+  <script type="text/babel" src="/src/proposta-preview.jsx?v=17"></script>
+
+  <!-- Motor de PDF do Contrato de Venda (react-pdf) — layout idêntico à minuta
+       oficial, com cabeçalho/rodapé em toda página. Ver
+       pdf-bundle/contrato-venda-reactpdf.entry.js. -->
+  <script src="/src/contrato-venda-reactpdf.bundle.js?v=5"></script>
 
   <!-- App unificado de assinatura (auto-detecta o tipo pelo token) -->
-  <script type="text/babel" src="/src/assinar-app.jsx?v=7"></script>
+  <script type="text/babel" src="/src/assinar-app.jsx?v=22"></script>
 </body>
 </html>

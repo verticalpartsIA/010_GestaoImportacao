@@ -81,6 +81,12 @@
     const { unidades, cotacao, precificacao } = fontes;
     const envio = (cotacao && cotacao.dados_envio && cotacao.dados_envio.unidades) || [];
     const modelos = (precificacao && precificacao.modelos) || [];
+    /* Rateio calculado (valorUnitarioRs por unidade) mora em resultado(_v2)
+       .modelos — é OUTPUT do motor, não o snapshot de entrada acima (que só
+       tem modelo/quantidade/valorUnitarioUsd). Mesma seleção V1/V2 de
+       montarPrefill(). */
+    const modelosCalc = (precificacao && precificacao.resultado_v2 && precificacao.resultado_v2.modelos)
+      || (precificacao && precificacao.resultado && precificacao.resultado.modelos) || [];
     const cefStore = window.CotacaoElevadorFornecedorStore;
 
     const base = unidades.length ? unidades : envio.map((u) => ({ ...u, id: u.unidade_id }));
@@ -89,25 +95,43 @@
       const uid = u.id || u.unidade_id;
       const tec = envio.find((e) => e.unidade_id === uid) || {};
       const mod = modelos.find((m) => m.unidadeId === uid) || {};
+      const modCalc = modelosCalc.find((m) => m.unidadeId === uid) || {};
       const capKg = u.capacidade_kg || tec.capacidade_kg;
       const capPass = u.capacidade_pessoas || tec.capacidade_pessoas;
       const largura = u.caixa_largura_mm || tec.caixa_largura_mm;
       const prof = u.caixa_profundidade_mm || tec.caixa_profundidade_mm;
       const paradas = u.paradas || tec.paradas;
+      const tipo = u.tipo || tec.tipo || '';
+      const cabLargura = u.cabina_largura_mm || tec.cabina_largura_mm;
+      const cabProf = u.cabina_profundidade_mm || tec.cabina_profundidade_mm;
+      /* Elevador de Carga também pode ter capacidade de passageiros (não é
+         exclusividade do tipo Passageiro) — o "4000 Passageiros" visto na
+         cotação 950 era só o vendedor tendo digitado o número errado no
+         Formulário (corrigido pra 53 depois), não uma regra de categoria.
+         Não suprimir por tipo aqui. */
       return {
         id: u.identificador || tec.identificador || '',
         modelo: mod.modelo || u.modelo || tec.modelo || '',
         empreendimento: '',
-        carac: u.tipo || tec.tipo || '',
+        carac: tipo,
         denominacao: u.pavimentos_desc || tec.pavimentos_desc || '',
         percurso: String(u.percurso_mm || tec.percurso_mm || ''),
         capacidade: capKg ? `${capPass ? capPass + ' Passageiros x ' : ''}${capKg}Kg` : '',
         dimensoesCaixa: (largura || prof) ? `${largura || '?'} x ${prof || '?'}mm` : '',
         profPoço: String(u.poco_mm || tec.poco_mm || ''),
+        dimensoesCabine: (cabLargura || cabProf) ? `${cabLargura || '?'} x ${cabProf || '?'}mm` : '',
+        tensao: u.tensao_principal || tec.tensao_principal || '',
+        tracao: u.tracao || tec.tracao || '',
         vel: String(u.velocidade_ms || tec.velocidade_ms || ''),
         andaresParadasPortas: paradas ? `${paradas} Paradas` : '',
         qtd: Number(u.quantidade || tec.quantidade) || 1,
         codigoAtivo: (cotacao && cefStore) ? cefStore.assetMasterId(cotacao, u.indice_ativo ?? tec.indice_ativo) : null,
+        /* Valor rateado por equipamento (ponderado pelo custo USD real do
+           modelo, ver precificacao-elevador-engine.js) — distinto de
+           precoVendaPorEquipamento, que é só a média. Usado em
+           montarPrefill() pra dar a cada item da proposta seu valor real,
+           em vez do mesmo valor clonado pra todos. */
+        valorUnitarioRs: Number(modCalc.valorUnitarioRs) || null,
       };
     });
   }
@@ -115,28 +139,82 @@
   /* Lista granular de ativos — o que Contrato de Venda e Contrato
      Instalador consomem depois (Master ID Fase 2). */
   function montarAtivos(fontes) {
-    const { unidades, cotacao } = fontes;
+    const { unidades, cotacao, precificacao } = fontes;
     const envio = (cotacao && cotacao.dados_envio && cotacao.dados_envio.unidades) || [];
     const cefStore = window.CotacaoElevadorFornecedorStore;
     const base = unidades.length ? unidades : envio.map((u) => ({ ...u, id: u.unidade_id }));
-    return base.map((u) => {
+    /* Mão de obra de instalação já é calculada por unidade em Precificação
+       (pz.mo_lookup, ver precificacao-elevador.jsx) — é a parcela dominante
+       (e a única hoje genuinamente por equipamento) do custo de instalação.
+       Expõe aqui pra granularidade sobreviver até Contrato Instalador/Diário
+       de Obra consumirem (ainda não consomem — ver Fase 3b/3c do projeto).
+       As demais categorias (ART, andaime, talha, empilhadeira, ajudantes)
+       continuam só como total da cotação inteira — não têm dado de origem
+       por unidade, então não são rateadas aqui (ratear sem base real seria
+       inventar um número, não "a mais pura verdade"). */
+    const moLookup = (precificacao && precificacao.mo_lookup) || [];
+    const modelosPz = (precificacao && precificacao.modelos) || [];
+    /* Uma linha por UNIDADE do Formulário (visão antiga) → cada uma pode ter
+       `quantidade` > 1 = vários equipamentos físicos. A Precificação já
+       expande isso em mo_lookup (1 linha por equipamento físico, com o
+       identificador real VPEL-EL0955-1/-2). Antes esta lista tinha 1 ativo
+       por Unidade, então uma Unidade de quantidade 2 aparecia como 1 ativo só
+       (e 1 só custo de MO) no Contrato Instalador/painel financeiro. */
+    const porUnidade = base.map((u) => {
       const uid = u.id || u.unidade_id;
       const tec = envio.find((e) => e.unidade_id === uid) || {};
       const indice = u.indice_ativo ?? tec.indice_ativo ?? null;
+      const linhasMo = moLookup.filter((m) => m.unidadeId === uid)
+        .sort((x, y) => (Number(x.equipamentoIndice) || 0) - (Number(y.equipamentoIndice) || 0));
+      const mod = modelosPz.find((m) => m.unidadeId === uid) || {};
       return {
-        indice,
+        uid, indice, linhasMo,
         codigo: (cotacao && cefStore) ? cefStore.assetMasterId(cotacao, indice) : null,
         identificador: u.identificador || tec.identificador || '',
-        modelo: u.modelo || tec.modelo || '',
+        // mesmo critério de montarEspecificacoes: o modelo da Precificação vence
+        modelo: mod.modelo || u.modelo || tec.modelo || '',
       };
-    }).filter((a) => a.indice != null);
+    }).filter((x) => x.indice != null);
+
+    const expandiu = porUnidade.some((x) => x.linhasMo.length > 1);
+    if (!expandiu) {
+      // caso comum (1 equipamento por Unidade) — formato de sempre
+      return porUnidade.map((x) => ({
+        indice: x.indice, codigo: x.codigo, identificador: x.identificador, modelo: x.modelo,
+        custoInstalacaoMaoDeObraRs: Number((x.linhasMo[0] || {}).valorRs) || null,
+      }));
+    }
+    // Há Unidade com vários equipamentos: 1 ativo por equipamento físico e
+    // `indice` sequencial único (1..N) — os consumidores (Contrato Instalador,
+    // dashboard financeiro) identificam o ativo por esse índice.
+    const out = [];
+    porUnidade.forEach((x) => {
+      if (x.linhasMo.length > 1) {
+        x.linhasMo.forEach((l) => out.push({
+          indice: out.length + 1, codigo: l.identificador || x.codigo, identificador: l.identificador || x.identificador,
+          modelo: x.modelo, unidadeId: x.uid, equipamentoIndice: l.equipamentoIndice ?? null,
+          custoInstalacaoMaoDeObraRs: Number(l.valorRs) || null,
+        }));
+      } else {
+        out.push({
+          indice: out.length + 1, codigo: x.codigo, identificador: x.identificador, modelo: x.modelo,
+          unidadeId: x.uid, equipamentoIndice: 1,
+          custoInstalacaoMaoDeObraRs: Number((x.linhasMo[0] || {}).valorRs) || null,
+        });
+      }
+    });
+    return out;
   }
 
   /* ---------- Prefill no formato do PropostaEditor ---------- */
   function montarPrefill(fontes) {
     if (!fontes || !fontes.encontrado) return null;
     const { formulario, cliente, cotacao, precificacao, numeroCotacao } = fontes;
-    const resultado = (precificacao && precificacao.resultado && precificacao.resultado.precificacao) || null;
+    // V2 (custo econômico completo) é o motor oficial desde 29/08 — usa o
+    // preço dele; cai pro V1 só em precificação antiga que nunca rodou o
+    // V2 (nunca recalculada desde a migração).
+    const resultado = (precificacao && precificacao.resultado_v2 && precificacao.resultado_v2.precificacao)
+      || (precificacao && precificacao.resultado && precificacao.resultado.precificacao) || null;
     const difal = (precificacao && precificacao.difal) || null;
     const especificacoes = montarEspecificacoes(fontes);
 
@@ -184,6 +262,83 @@
     if (difal && difal.difal_aplicavel && difal.responsavel_recolhimento === 'emitente_verticalparts') {
       valores.difal = String(Math.round(difal.valor_difal));
     }
+    /* Mais de 1 equipamento na cotação: monta uma linha por unidade (não só
+       o agregado acima) pra Preview mostrar cada equipamento separado, em
+       vez de uma linha só somando tudo (bug real na cotação 950 — 2
+       elevadores viravam 1 linha "GEF, GEP" com quantidade errada).
+       Cada item usa seu valor real (e.valorUnitarioRs, rateado por modelo
+       em precificacao-elevador-engine.js) — só cai pra precoVendaPorEquipamento
+       (a média) quando o rateio não está disponível (cotação antiga, ou
+       modelos[] incompleto). */
+    if (especificacoes.length > 1 && resultado
+      && (resultado.precoVendaPorEquipamento || especificacoes.some((e) => e.valorUnitarioRs))) {
+      const mediaFallback = Math.round(resultado.precoVendaPorEquipamento) || 0;
+      valores.itens = especificacoes.map((e, i) => {
+        const unit = Math.round(e.valorUnitarioRs) || mediaFallback;
+        return {
+          id: e.id || e.codigoAtivo || `Equipamento ${i + 1}`,
+          /* Só o Nº do equipamento (VPEL-EL0950-1) — combinado é esse, sem
+             anexar o código interno de modelo do fabricante junto. */
+          equipamento: e.id || equipamentos || 'Elevador de Passageiros',
+          quantidade: String(Number(e.qtd) || 1),
+          valorUnit: String(unit),
+          /* valorOriginal: congelado no nascimento — nunca sobrescrito por um
+             desconto (proposta-desconto.js só mexe em valorUnit/desconto*). */
+          valorOriginal: String(unit),
+          desconto: null, descontoPendente: null, descontoLog: [],
+        };
+      });
+    }
+    /* "VALORES DE PAGAMENTOS" (Forma de Pagamento + Parcelas) — assim que
+       precificado, a Proposta já nasce com o template padrão (Sinal 40% +
+       4 parcelas iguais, mesmo texto que já era usado como sugestão fixa
+       em proposta-editor.jsx) em vez do vendedor precisar montar na mão.
+       deepMergeHeranca() (proposta-editor.jsx) garante que isso só entra
+       se o vendedor ainda não tiver mexido nesses campos — nunca sobrescreve
+       parcelas já digitadas/ajustadas. */
+    if (Object.keys(valores).length) {
+      const totalItens = Array.isArray(valores.itens)
+        ? valores.itens.reduce((s, it) => s + (Number(it.valorUnit) || 0) * (Number(it.quantidade) || 1), 0)
+        : (Number(valores.quantidade) || 0) * (Number(valores.valorUnit) || 0);
+      const totalComDifal = totalItens + (Number(valores.difal) || 0);
+      if (totalComDifal > 0) {
+        const QTD_PADRAO = 5;
+        const sinal = totalComDifal * 0.4;
+        const restCount = QTD_PADRAO - 1;
+        const cadaParcela = (totalComDifal - sinal) / restCount;
+        const fmt2 = (x) => x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        valores.formaTipo = 'parcelado';
+        valores.qtdParcelas = QTD_PADRAO;
+        valores.forma = `40% à vista e ${restCount} parcelas`;
+        valores.parcelas = [
+          { desc: 'Sinal de 40% na assinatura do contrato', valor: fmt2(sinal) },
+          ...Array.from({ length: restCount }, (_, i) => ({ desc: `${i + 1}ª Parcela`, valor: fmt2(cadaParcela) })),
+        ];
+      }
+    }
+
+    /* Duas modalidades de entrega (Financeiro, 01/10/2026): com 1 equipamento a
+       Precificação calcula também o preço de 90 dias (container exclusivo) —
+       vai na Proposta como alternativa (opcao90) ao de 120 dias (o "oficial"
+       acima). O cliente escolhe na assinatura (ver proposta-opcoes.js). Com
+       2+ equipamentos não existe resultado_v2_expresso, então nada muda. */
+    const expresso = precificacao && precificacao.resultado_v2_expresso && precificacao.resultado_v2_expresso.precificacao;
+    if (expresso && especificacoes.length === 1 && window.PropostaOpcoes) {
+      const difalOpc = (difal && difal.difal_aplicavel && difal.responsavel_recolhimento === 'emitente_verticalparts') ? difal.valor_difal : 0;
+      const fmt2 = (x) => x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+      const opcao90 = window.PropostaOpcoes.montarOpcao90({
+        precoVendaPorEquipamento: expresso.precoVendaPorEquipamento, difal: difalOpc, qtdParcelas: 5,
+        parcelasFn: (qtd, total) => {
+          const rest = Math.max(qtd - 1, 0);
+          const sinal = total * 0.4;
+          const cada = rest > 0 ? (total - sinal) / rest : 0;
+          return [{ desc: 'Sinal de 40% na assinatura do contrato', valor: fmt2(sinal) },
+            ...Array.from({ length: rest }, (_, i) => ({ desc: `${i + 1}ª Parcela`, valor: fmt2(cada) }))];
+        },
+      });
+      if (opcao90) valores.opcao90 = opcao90;
+    }
+
     if (especificacoes.length || Object.keys(valores).length) {
       prefill.elevador = {};
       if (especificacoes.length) prefill.elevador.especificacoes = especificacoes;
@@ -208,5 +363,5 @@
     return partes.join(' · ');
   }
 
-  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes };
+  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes };
 }());

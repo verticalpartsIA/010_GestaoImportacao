@@ -1,0 +1,137 @@
+/* ============================================================
+   dashboard-metrics-comercial.js
+   Dashboard · métricas da perspectiva Comercial — extraído de
+   loadDashboardData() (supabase.js), que virou um orquestrador fino:
+   busca as tabelas brutas e passa arrays prontos pra cada módulo de
+   perspectiva. Funções puras, zero I/O — testadas em
+   dashboard-metrics-comercial.test.js sem mockar Supabase nenhum.
+
+   propostasAprovadas() e idsComContrato() também são consumidas por
+   dashboard-metrics-admin.js (reaproveita em vez de recalcular —
+   raiz dos 3 bugs de produção já documentados no histórico do
+   Dashboard: a mesma definição de "proposta aprovada" divergindo
+   entre pontos diferentes do código).
+
+   window.ComercialMetrics
+   ============================================================ */
+(function () {
+  'use strict';
+
+  function leadsDoMes(leads, hoje) {
+    const mesAtual = (hoje || new Date()).toISOString().slice(0, 7);
+    return (leads || []).filter((l) => (l.date || '').startsWith(mesAtual));
+  }
+
+  /* Achado real (03/10): lia a tabela `cotacoes` — 0 linhas em produção,
+     nunca escrita por ninguém no fluxo real (só lida pelo módulo jurídico
+     legado `contrato-editor.jsx`, mesma tabela física, fluxo diferente).
+     O KPI sempre mostrava 0, desconectado da esteira real de verdade.
+     Fonte agora: `gatilhos` (já carregado pelo Dashboard) — cotação
+     "em China" = tem um nó aberto de "aguardando resposta do fornecedor"
+     (SLA_FORNECEDOR) ou "financeiro precificando" (PRECIFICACAO),
+     equivalente aos 3 status antigos (aguardando/recebida/em análise).
+     Devolve nº de cotações DISTINTAS, não linhas de gatilho (um nó por
+     cotação nessas 2 chaves, mas sem essa garantia explícita um dia
+     poderia duplicar). */
+  const COTACAO_ABERTA_NODES = ['SLA_FORNECEDOR', 'PRECIFICACAO'];
+  function cotacoesAbertas(gatilhos) {
+    const abertos = (gatilhos || []).filter((g) => !g.concluido_em && COTACAO_ABERTA_NODES.includes(g.evento_key));
+    return Array.from(new Set(abertos.map((g) => g.numero_cotacao).filter((n) => n != null)));
+  }
+
+  /* Antes filtrava leads.status === 'Proposta enviada' — número sem
+     relação com a tabela real `propostas` (achado "Importante" da
+     auditoria de código: o Funil Pipeline, na mesma tela, já usava
+     `propostas` corretamente; o KPI de topo contava outra coisa com o
+     mesmo rótulo). Fonte única agora: qualquer status além de rascunho
+     já saiu de "ainda não enviada". */
+  function propostasEnviadas(propostas) {
+    return (propostas || []).filter((p) => p.status !== 'rascunho');
+  }
+
+  function leadsConvertidos(leads) {
+    return (leads || []).filter((l) => l.status === 'Convertido');
+  }
+
+  /* Achado real (02/10): a versão anterior dividia o TOTAL histórico de
+     propostas enviadas (309, de todas as cotações já feitas) pelo nº de
+     leads ainda não excluídos na tela de Leads (12) — populações sem
+     relação, dava 2575% em produção. propostas não tem `lead_id`, mas
+     tem `cliente_id` (igual a `leads.cliente_id`) — conta como "lead que
+     virou proposta" só o lead cujo cliente já tem pelo menos 1 proposta
+     enviada vinculada. Sempre ≤ 100%, nunca divide por populações
+     diferentes. Lead sem `cliente_id` (ainda não qualificado) não conta. */
+  function leadsComPropostaVinculada(leads, propEnviadas) {
+    const clientesComProposta = new Set((propEnviadas || []).map((p) => p.cliente_id).filter(Boolean));
+    return (leads || []).filter((l) => l.cliente_id && clientesComProposta.has(l.cliente_id));
+  }
+
+  function conversaoLeadProposta(leads, propEnviadas) {
+    const total = (leads || []).length;
+    if (!total) return 0;
+    return Math.round((leadsComPropostaVinculada(leads, propEnviadas).length / total) * 100);
+  }
+
+  /* Propostas (tabela real `propostas`, distinta do status textual dos
+     `leads`) — status 'aprovada' = cliente assinou. Fonte única desta
+     definição: qualquer outro módulo que precise de "proposta aprovada"
+     chama esta função em vez de refiltrar. */
+  function propostasAprovadas(propostas) {
+    return (propostas || []).filter((p) => p.status === 'aprovada');
+  }
+
+  /* proposta_id de todo contrato já emitido — usado pra saber quais
+     propostas aprovadas AINDA não viraram contrato (pipeline e alertas). */
+  function idsComContrato(contratos) {
+    return new Set((contratos || []).map((c) => c.proposta_id).filter(Boolean));
+  }
+
+  function kpis({ leads, gatilhos, propEnviadas, convPct }) {
+    return [
+      { label: 'Leads do mês', value: String(leadsDoMes(leads).length), unit: '', delta: leadsDoMes(leads).length > 0 ? `+${leadsDoMes(leads).length}` : '0', deltaDir: 'up', sub: 'vs. mês anterior' },
+      { label: 'Cot. em China', value: String(cotacoesAbertas(gatilhos).length), unit: '', delta: `${cotacoesAbertas(gatilhos).length}`, deltaDir: 'up', sub: 'abertas' },
+      { label: 'Propostas enviadas', value: String((propEnviadas || []).length), unit: '', delta: '', deltaDir: 'up', sub: 'no período' },
+      { label: 'Conversão Lead→Proposta', value: String(convPct), unit: '%', delta: '', deltaDir: convPct >= 25 ? 'up' : 'down', sub: 'meta 25%' },
+    ];
+  }
+
+  /* Funil Leads → Propostas enviadas → Propostas assinadas (sem contrato
+     ainda) → Contratos. Volume por estágio ATUAL, não histórico acumulado:
+     uma proposta que virou contrato conta só em "Contrato". */
+  function pipeline({ leads, propostas, contratos }) {
+    const enviadas = propostasEnviadas(propostas);
+    const aprovadas = propostasAprovadas(propostas);
+    const comContrato = idsComContrato(contratos);
+    const aprovadasComContrato = aprovadas.filter((p) => comContrato.has(p.id)).length;
+    return [
+      { label: 'Leads', value: (leads || []).length, color: '#000' },
+      { label: 'Propostas enviadas', value: enviadas.length, color: 'var(--vp-gray-700)' },
+      { label: 'Propostas assinadas', value: aprovadas.length - aprovadasComContrato, color: 'var(--vp-yellow-press)' },
+      { label: 'Contratos', value: (contratos || []).length, color: 'var(--vp-yellow)' },
+    ];
+  }
+
+  function origemBars(leads) {
+    const originMap = {}, originConv = {};
+    (leads || []).forEach((l) => { if (l.origin) originMap[l.origin] = (originMap[l.origin] || 0) + 1; });
+    leadsConvertidos(leads).forEach((l) => { if (l.origin) originConv[l.origin] = (originConv[l.origin] || 0) + 1; });
+    return Object.entries(originMap)
+      .map(([l, v]) => ({ l, v, conv: v > 0 ? Math.round(((originConv[l] || 0) / v) * 100) : 0 }))
+      .sort((a, b) => b.v - a.v);
+  }
+
+  function compute({ leads, gatilhos, propostas, contratos }) {
+    const propEnviadas = propostasEnviadas(propostas);
+    const convPct = conversaoLeadProposta(leads, propEnviadas);
+    return {
+      kpis: kpis({ leads, gatilhos, propEnviadas, convPct }),
+      pipelineStages: pipeline({ leads, propostas, contratos }),
+      originBars: origemBars(leads),
+    };
+  }
+
+  window.ComercialMetrics = {
+    leadsDoMes, COTACAO_ABERTA_NODES, cotacoesAbertas, propostasEnviadas, leadsConvertidos, leadsComPropostaVinculada, conversaoLeadProposta,
+    propostasAprovadas, idsComContrato, kpis, pipeline, origemBars, compute,
+  };
+}());

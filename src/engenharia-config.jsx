@@ -378,14 +378,17 @@ function ConfiguradorPage({ setRoute }) {
         <KPI label="Finalizados" value={specs.filter(s => s.status === "finalizado").length} sub="prontos p/ compra" icon="check"/>
       </div>
 
-      <div className="tbar">
-        <div className="seg">
-          {tipos.map(t => <button key={t} className={filter === t ? "is-active" : ""} onClick={() => setFilter(t)}>{t === "Todos" ? "Todos" : tipoLabel(t)}</button>)}
-        </div>
+      <div style={{ display: 'flex', gap: 6, marginBottom: 12, flexWrap: 'wrap' }}>
+        {tipos.map(t => (
+          <Button key={t} size="sm" variant={filter === t ? 'primary' : 'ghost'} onClick={() => setFilter(t)}>
+            {t === "Todos" ? "Todos" : tipoLabel(t)} <span style={{ opacity: .7 }}>({t === "Todos" ? specs.length : specs.filter(s => s.tipo === t).length})</span>
+          </Button>
+        ))}
       </div>
 
-      <div className="table-wrap">
-        <table className="t">
+      <Card title="Equipamentos especificados" sub="Clique numa linha para abrir a especificação">
+      <div className="table-wrap" style={{ border: 0 }}>
+        <table className="t pcp-grid">
           <thead><tr><th>Referência</th><th>Tipo</th><th>Configuração</th><th>Capacidade</th><th>Anexos</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {rows.length === 0 && (
@@ -396,8 +399,8 @@ function ConfiguradorPage({ setRoute }) {
                 <td><div className="cell-main">{s.referencia || "—"}</div><div className="cell-sub">{s.id}{s.responsavel ? ` · ${s.responsavel}` : ""}</div></td>
                 <td>{tipoLabel(s.tipo)}</td>
                 <td><span className="small">{eqResumo(s.tipo, s.params || {})}</span></td>
-                <td><span className="mono small">{s.computed && s.computed.capacidade ? s.computed.capacidade.toLocaleString("pt-BR") + " p/h" : "—"}</span></td>
-                <td><span className="mono small">{(s.anexos || []).length} arq.</span></td>
+                <td style={{ whiteSpace: "nowrap" }}><span className="mono small">{s.computed && s.computed.capacidade ? s.computed.capacidade.toLocaleString("pt-BR") + " p/h" : "—"}</span></td>
+                <td style={{ whiteSpace: "nowrap" }}><span className="mono small">{(s.anexos || []).length} arq.</span></td>
                 <td><Badge variant={s.status === "finalizado" ? "success" : "warning"} dot>{s.status === "finalizado" ? "Finalizado" : "Rascunho"}</Badge></td>
                 <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
               </tr>
@@ -405,6 +408,7 @@ function ConfiguradorPage({ setRoute }) {
           </tbody>
         </table>
       </div>
+      </Card>
 
       {showModal && <ConfiguradorModal spec={edit} onClose={() => { setShowModal(false); setEdit(null); }} onSaved={reload}/>}
     </div>

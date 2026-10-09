@@ -2,64 +2,138 @@
    shell.jsx — Sidebar + Header + role switcher
    ============================================================ */
 
-/* Ordem segue o workflow operacional: pré-venda → contrato/importação/suprimentos →
-   engenharia → RH → logística → admin. ADM/Financeiro é transversal. */
+/* Reorganização IA Fase 1 (auditoria 2026-09-03, "não commitar/Imagens da
+   tela/Auditoria_Sidebar..."): grupos passam de organograma departamental
+   para jornada operacional. Só rótulo/agrupamento/ordem mudou — nenhum
+   `id` de rota foi alterado (preserva URLs, ver router.js/MODULE_SLUG,
+   que lê de BREADCRUMB_MAP, não deste array). Rótulos de grupo também
+   controlam permissão via alocação de colaborador (ver grupoVisivel
+   abaixo e colaboradores-admin-store.js/GRUPOS_MODULO) — renomear um
+   label aqui exige migrar colaborador_alocacoes junto (feito em 2026-09-03). */
 const NAV_GROUPS = [
   { label: "Geral", items: [
     { id: "dashboard", label: "Dashboard", icon: "home" },
     { id: "notificacoes", label: "Notificações", icon: "bell" },
     { id: "decisoes", label: "Central de Decisões", icon: "check" },
-    { id: "financeiro", label: "Gatilhos & Prazo", icon: "dollar", restrict: ["financeiro", "admin"] },
+    { id: "financeiro", label: "Prazos & Pendências", icon: "dollar", restrict: ["financeiro", "admin"] },
+    { id: "inbox", label: "Inbox", icon: "mail" },
   ]},
-  { label: "Comercial", items: [
+  /* Leads (Pipeline + Kanban) migrou de "Comercial | Pré-venda" pra cá
+     26/09/2026, a pedido do usuário — este era o espaço reservado desde o
+     início para o CRM. `colaborador_alocacoes` foi migrado junto (mesmo
+     padrão da reorganização de 2026-09-03): todo colaborador que tinha
+     "Comercial | Pré-venda" ganhou "CRM" também, senão perderia a
+     visibilidade do Leads sem aviso. */
+  { label: "CRM", items: [
     { id: "leads", label: "Leads", icon: "flag" },
-    { id: "formularios", label: "Formulários", icon: "layers" },
-    { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
-    { id: "propostas", label: "Propostas", icon: "proposal" },
+    { id: "crm-canais", label: "Canais", icon: "mail" },
+    { id: "crm-conversao", label: "Conversão", icon: "arrowRight" },
+    { id: "crm-automacao", label: "Automação", icon: "bolt" },
+    { id: "crm-analise", label: "Análise", icon: "trending" },
   ]},
-  { label: "ADM/ Financeiro", items: [
+  /* Só os cadastros mestres de verdade (usados por múltiplos domínios) ficam
+     aqui. Produtos, Empresas Instaladoras e Atualização de Custos migraram
+     pro domínio que efetivamente os usa. */
+  { label: "Cadastros Mestres", items: [
+    { id: "cadastro-clientes", label: "Clientes", icon: "users" },
+    { id: "cadastro-fornecedores", label: "Fornecedores", icon: "truck" },
+    { id: "cadastro-materias-primas", label: "Matérias-Primas", icon: "layers" },
+    { id: "cadastro-produtos", label: "Produtos", icon: "package" },
+  ]},
+  { label: "Comercial | Pré-venda", items: [
+    { id: "formularios", label: "Formulários", icon: "layers" },
+    { id: "controle-cotacoes", label: "Controle de Cotações", icon: "history" },
+    { id: "cotacoes-fornecedor", label: "Cotações a Fornecedor", icon: "globe" },
+    { id: "cotacao-quadro-comando", label: "Cotação Quadro de Comando", icon: "grid" },
+    { id: "propostas", label: "Propostas", icon: "proposal" },
+    { id: "contratos-sociais", label: "Contratos Social", icon: "fileText" },
+  ]},
+  { label: "Financeiro & Preços", items: [
+    { id: "cadastro-custos", label: "Atualização de Custos", icon: "calculator" },
     { id: "precificacao", label: "Precificação", icon: "calculator", restrict: ["financeiro", "admin"] },
     { id: "aval-financeiro", label: "Aval Financeiro", icon: "shield", restrict: ["financeiro", "admin"] },
+    { id: "emissao-nf", label: "Emissão de NF", icon: "fileText", restrict: ["financeiro", "admin"] },
+    { id: "comissoes", label: "Comissões", icon: "award", restrict: ["financeiro", "admin"] },
   ]},
-  { label: "Jurídico | Importação | Suprimentos", sublabel: "Contratos, Siscomex & Compras", items: [
-    { id: "juridico", label: "Jurídico", icon: "scale" },
+  { label: "Contratos & Jurídico", items: [
     { id: "contrato-venda-equipamentos", label: "Contrato Venda de Equipamentos", icon: "fileText" },
-    { id: "ncm-catalogo", label: "Catálogo de Produtos", icon: "fileSearch" },
-    { id: "importacao", label: "Importação", icon: "ship" },
+    { id: "aval-juridico", label: "Aval Jurídico", icon: "scale" },
+    { id: "juridico", label: "Contratos & Minutas", icon: "scale" },
+  ]},
+  { label: "Suprimentos & Importação", sublabel: "Siscomex & Compras", items: [
     /* Sub-telas da Importação — consolidação de uma solução de importação
        já usada pela equipe (P.I., Embarques, RFQ, IMS), trazida pra dentro
        do VP Gestão em fases. Só P.I. está pronta; as demais entram indentadas
-       aqui conforme forem migradas. */
+       aqui conforme forem migradas. "Importação" (legado — embarques em
+       trânsito + AIS) fica logo após Embarques por decisão do usuário
+       (25/08); sobreposição de conteúdo entre as duas telas é assunto
+       para outra rodada, não resolvida aqui (Fase 2 da reorganização). */
     { label: "Gestão Importação", subheader: true },
+    { id: "gi-painel", label: "Painel", icon: "home", indent: true },
     { id: "pi-importacao", label: "P.I.", icon: "fileText", indent: true },
-    { id: "compras", label: "Compras Nacional", icon: "truck" },
+    { id: "rfq-importacao", label: "RFQ", icon: "fileSearch", indent: true },
+    { id: "ims-importacao", label: "IMS", icon: "package", indent: true },
+    { id: "embarques-importacao", label: "Embarques", icon: "ship", indent: true },
+    { id: "importacao", label: "Importação", icon: "ship", indent: true },
+    { id: "gi-analise-precos", label: "Análise de Preços", icon: "calculator", indent: true },
+    { id: "compras", label: "Importação Varejo", icon: "truck" },
+    { id: "pedidos-acompanhamento", label: "Pedidos", icon: "package" },
   ]},
-  { label: "Engenharia", items: [
+  /* Só o que define/projeta o produto. Vistoria, instalação, entrega e
+     documentação saíram daqui — Engenharia parava de ser "gaveta de tudo". */
+  { label: "Engenharia & Produto", items: [
     { id: "engenharia", label: "Engenharia", icon: "ruler" },
     { id: "eng-projeto-elevadores", label: "Projeto de Elevadores", icon: "grid" },
     { id: "eng-configurador", label: "Projeto de Equipamento", icon: "grid" },
     { id: "desenho-tecnico", label: "Projetos ER/Es", icon: "ruler" },
+    { id: "solicitacoes-produto", label: "Solicitações de Produto", icon: "inbox" },
     { id: "ficha-tecnica", label: "Ficha Técnica", icon: "fileText" },
-    { id: "contrato-instalador", label: "Contrato Instalador", icon: "hardhat" },
-    { id: "vistorias", label: "Vistorias de Obras", icon: "search" },
+    { id: "ncm-catalogo", label: "Catálogo Siscomex", icon: "fileSearch" },
+    { id: "linha-do-tempo", label: "Linha do Tempo da Cotação", icon: "clock" },
+  ]},
+  /* Novo grupo — execução da obra. "Dossiês de Obras" é a tela que já lista
+     as obras e abre o Dossiê de cada uma (ObrasStatusPage, ex-"Status de
+     Obras"); só o rótulo mudou pra deixar isso descobrível (Achado 01 da
+     auditoria). Vistorias de Obras/Resultado seguem como 2 itens — fundi-los
+     numa aba só é Fase 2, não Fase 1. */
+  { label: "Obras & Instalação", items: [
+    { id: "status-obras", label: "Dossiês de Obras", icon: "building" },
+    { id: "vistorias-envio", label: "Vistorias de Obras", icon: "send" },
+    { id: "vistorias", label: "Resultado Vistorias de Obras", icon: "history" },
     { id: "instalacao", label: "Instalação em Campo", icon: "hardhat" },
-    { id: "status-obras", label: "Status de Obras", icon: "building" },
-    { id: "art", label: "ART", icon: "scale" },
     { id: "cronograma", label: "Cronograma", icon: "clock" },
+    { id: "art", label: "ART", icon: "scale" },
+  ]},
+  /* Novo grupo — fechamento documental/entrega, separado de execução de obra. */
+  { label: "Entrega & Documentação", items: [
+    { id: "central-documentos", label: "Central de Documentos", icon: "fileSearch" },
     { id: "databook", label: "Data Book & Termo", icon: "fileSearch" },
     { id: "handover", label: "Entrega Final", icon: "package" },
   ]},
-  { label: "Recursos Humanos", items: [
-    { id: "rh-homologacao", label: "Homologação de Parceiros Instaladores", icon: "users", restrict: ["admin"] },
+  /* Novo grupo — o ciclo inteiro do parceiro instalador (cadastro → homologação
+     → contrato → pagamento) num só lugar. Permissão de edição continua
+     separada por item (RH edita homologação, Jurídico edita contrato,
+     Financeiro edita pagamento) — só a localização visual mudou. Substitui
+     o antigo grupo "RH Operacional" (1 item só). */
+  { label: "Parceiros & Instaladores", items: [
+    { id: "cadastro-instaladores", label: "Empresas Instaladoras", icon: "hardhat" },
+    { id: "rh-homologacao", label: "Homologação de Instaladores", icon: "hardhat" },
+    { id: "contrato-instalador", label: "Contrato Instalador", icon: "hardhat" },
+    { id: "pagamentos-instalador", label: "Pagamentos a Instaladores", icon: "dollar", restrict: ["financeiro", "admin"] },
   ]},
-  /* Submódulos ainda sem rota própria — apenas anunciam o que vai morar aqui,
-     sem simular navegação que não existe (ver item.planned no render). */
-  { label: "Logística", items: [
+  /* Placeholders sem rota própria (Expedição/Logística) ocultados — item
+     visível deve significar "posso entrar e fazer algo" (Achado 12). */
+  { label: "Logística Interna", items: [
     { id: "almoxarifado", label: "Almoxarifado", icon: "package" },
-    { label: "Expedição", icon: "truck", planned: true },
-    { label: "Logística", icon: "ship", planned: true },
+    { id: "carga-maquina", label: "Carga Máquina", icon: "calculator" },
+    { id: "montagem-produto", label: "Montagem do Produto", icon: "layers" },
+    { id: "simulacao-producao", label: "Simulação", icon: "history" },
+    { id: "pcp", label: "PCP", icon: "calendar" },
+    { id: "mes", label: "MES", icon: "settings" },
+    { id: "relatorios-pcp", label: "Relatórios", icon: "fileText" },
+    { id: "expedicao", label: "Expedição", icon: "truck" },
   ]},
-  { label: "Portal Admin", items: [
+  { label: "Administração", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
     { id: "configuracoes", label: "Configurações do Sistema", icon: "settings", restrict: ["admin"] },
   ]},
@@ -86,6 +160,27 @@ const GROUPS_LS_KEY = "vp_sidebar_collapsed_groups";
 
 function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   const filterVisible = (item) => !item.restrict || item.restrict.includes(role);
+  /* Badge de decisões pendentes — o dado já existia em DecisoesStore
+     (listarPendentesParaMim, usado por decisoes.jsx), só nunca tinha sido
+     plugado no nav. Sidebar já re-renderiza a cada navegação (recebe
+     `route`), reaproveita isso pra recalcular ao sair de /decisoes. */
+  const [pendentesDecisoes, setPendentesDecisoes] = React.useState(0);
+  React.useEffect(() => {
+    const atualizar = () => window.DecisoesStore?.listarPendentesParaMim().then((l) => setPendentesDecisoes(l.length)).catch(() => {});
+    atualizar();
+    /* Além de a cada navegação: a Central avisa (vp:decisoes) quando algo muda e há uma conferência a cada 3 min,
+       para a decisão nova de outra pessoa aparecer no badge sem F5. */
+    const t = setInterval(() => { if (!document.hidden) atualizar(); }, 180000);
+    window.addEventListener('vp:decisoes', atualizar);
+    return () => { clearInterval(t); window.removeEventListener('vp:decisoes', atualizar); };
+  }, [route]);
+  /* Alocação de módulos (Administração › Configurações) — só filtra grupo
+     quando o colaborador tem pelo menos 1 alocação; sem isso, comportamento
+     de sempre (mostra tudo, igual antes desta feature existir). "Geral" é
+     nav básico e sempre aparece, independente de alocação. */
+  const gruposAlocados = (window.__VP_USER || {}).gruposAlocados;
+  const filtrarPorAlocacao = Array.isArray(gruposAlocados) && gruposAlocados.length > 0;
+  const grupoVisivel = (group) => !filtrarPorAlocacao || group.label === "Geral" || group.empty || gruposAlocados.includes(group.label);
   /* Módulos recolhidos individualmente (clique no título) — persiste por navegador. */
   const [collapsedGroups, setCollapsedGroups] = React.useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(GROUPS_LS_KEY) || "[]")); }
@@ -118,7 +213,7 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
-        <img src="assets/logo-mark-yellow.png" alt="" className="sidebar__brand-mark"/>
+        <img src="/assets/logo-mark-yellow.png" alt="" className="sidebar__brand-mark"/>
         <div className="sidebar__brand-text">VERTICAL<b>PARTS</b></div>
         <div className="sidebar__brand-sub">v2.4</div>
       </div>
@@ -126,7 +221,7 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
         {collapsed ? <Icon.chevRight size={12}/> : <Icon.chevLeft size={12}/>}
       </button>
       <div className="sidebar__scroll">
-        {NAV_GROUPS.map((group) => {
+        {NAV_GROUPS.filter((group) => grupoVisivel(group)).map((group) => {
           const items = group.items.filter(filterVisible);
           /* Seção com `empty: true` é placeholder proposital sem nenhum item —
              mostra o label mesmo assim. Seção comum sem itens visíveis
@@ -137,16 +232,26 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
           const isCollapsed = !collapsed && collapsedGroups.has(group.label);
           return (
             <div className={"sidebar__group " + (isCollapsed ? "is-collapsed" : "")} key={group.label}>
-              <button type="button" className="sidebar__group-label" onClick={() => toggleGroup(group.label)}
-                aria-expanded={!isCollapsed} title={isCollapsed ? "Expandir módulo" : "Recolher módulo"}>
-                <span className="sidebar__group-label__text">
-                  <span>{group.label}</span>
-                  {group.sublabel ? <span className="sidebar__group-sublabel">{group.sublabel}</span> : null}
-                </span>
-                <span className="sidebar__group-toggle">
-                  <Icon.chevDown size={13}/>
-                </span>
-              </button>
+              <div className="sidebar__group-head">
+                <button type="button" className="sidebar__group-label" onClick={() => toggleGroup(group.label)}
+                  aria-expanded={!isCollapsed} title={isCollapsed ? "Expandir módulo" : "Recolher módulo"}>
+                  <span className="sidebar__group-label__text">
+                    <span>{group.label}</span>
+                    {group.sublabel ? <span className="sidebar__group-sublabel">{group.sublabel}</span> : null}
+                  </span>
+                  <span className="sidebar__group-toggle">
+                    <Icon.chevDown size={13}/>
+                  </span>
+                </button>
+                {/* "?" do módulo: irmão do botão de recolher (botão dentro de botão é inválido e o clique recolheria o grupo).
+                    Só nos grupos que têm tutorial do módulo (MODULOS_TUTORIAL). Abre o tutorial direto, em nova aba. */}
+                {MODULOS_TUTORIAL[group.label] ? (
+                  <button type="button" className="sidebar__group-help"
+                    aria-label={"Tutorial do módulo " + group.label}
+                    title={"Tutorial do módulo " + group.label + " (abre em nova aba)"}
+                    onClick={() => window.open('/TreinamentoVP/' + MODULOS_TUTORIAL[group.label] + '/', '_blank', 'noopener')}>?</button>
+                ) : null}
+              </div>
               {isCollapsed ? null : <>
               {!items.length && group.empty && (
                 <div className="nav-item nav-item--empty" style={{ color: 'var(--fg3)', cursor: 'default', fontStyle: 'italic' }}>
@@ -155,7 +260,7 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
               )}
               {items.map((item) => {
                 /* Rótulo indentado de sub-grupo (ex.: "Gestão Importação" dentro de
-                   Jurídico|Importação|Suprimentos) — não navega, só organiza. */
+                   Importação | Suprimentos) — não navega, só organiza. */
                 if (item.subheader) {
                   return (
                     <div className="nav-item nav-item--subheader" key={item.label}
@@ -186,7 +291,8 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
                     data-tooltip={item.label}>
                     <span className="nav-item__icon">{ItemIcon}</span>
                     <span className="nav-item__label">{item.label}</span>
-                    {item.badge ? <span className="nav-item__badge">{item.badge}</span> : null}
+                    {(item.id === 'decisoes' ? pendentesDecisoes : item.badge)
+                      ? <span className="nav-item__badge">{item.id === 'decisoes' ? pendentesDecisoes : item.badge}</span> : null}
                   </button>
                 );
               })}
@@ -197,7 +303,9 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
       </div>
       <div className="sidebar__foot">
         <div className="sidebar__user">
-          <div className="avatar">{(window.__VP_USER || {}).iniciais || (ROLE_MAP[role] || {}).initials || "VP"}</div>
+          {window.AvatarColaborador
+            ? <window.AvatarColaborador src={(window.__VP_USER || {}).avatarUrl} nome={(window.__VP_USER || {}).nome || (ROLE_MAP[role] || {}).name}/>
+            : <div className="avatar">{(window.__VP_USER || {}).iniciais || (ROLE_MAP[role] || {}).initials || "VP"}</div>}
           <div className="sidebar__user-info">
             <div className="sidebar__user-name">{(window.__VP_USER || {}).nome || (ROLE_MAP[role] || {}).name || "VP Gestão"}</div>
             <div className="sidebar__user-role" title={(window.__VP_USER || {}).email || ""}>
@@ -217,71 +325,120 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
 const BREADCRUMB_MAP = {
   dashboard:     { module: "Dashboard", page: "Visão Geral", icon: "home" },
   notificacoes:  { module: "Notificações", page: "Central de Alertas", icon: "bell" },
-  leads:         { module: "Comercial", page: "Leads", icon: "flag" },
-  "lead-detail": { module: "Comercial", page: "Detalhe de Lead", icon: "flag" },
+  inbox:         { module: "Geral", page: "Inbox", icon: "mail" },
+  decisoes:      { module: "Geral", page: "Central de Decisões", icon: "check" },
+  leads:         { module: "CRM", page: "Leads", icon: "flag" },
+  "lead-detail": { module: "CRM", page: "Detalhe de Lead", icon: "flag" },
+  "crm-canais":     { module: "CRM", page: "Canais", icon: "mail" },
+  "crm-conversao":  { module: "CRM", page: "Conversão", icon: "arrowRight" },
+  "crm-automacao":  { module: "CRM", page: "Automação", icon: "bolt" },
+  "crm-analise":    { module: "CRM", page: "Análise", icon: "trending" },
   formularios:   { module: "Comercial", page: "Formulários", icon: "layers" },
   "formulario-elevador": { module: "Comercial", page: "Formulário — Elevador", icon: "layers" },
+  "formulario-quadro-comando": { module: "Comercial", page: "Quadro de Comando", icon: "layers" },
   "controle-cotacoes":   { module: "Comercial", page: "Controle de Cotações", icon: "history" },
-  "cotacoes-fornecedor": { module: "Comercial", page: "Cotações a Fornecedor", icon: "globe" },
+  "cotacao-quadro-comando": { module: "Comercial", page: "Cotação Quadro de Comando", icon: "grid" },
+  "contratos-sociais": { module: "Comercial", page: "Contratos Social", icon: "fileText" },
+  "cotacoes-fornecedor": { module: "Financeiro", page: "Cotações a Fornecedor", icon: "globe" },
   "cotacao-fornecedor-detail": { module: "Comercial", page: "Detalhe de Cotação", icon: "globe" },
   precificacao:  { module: "Comercial", page: "Precificação", icon: "calculator" },
   propostas:     { module: "Comercial", page: "Propostas", icon: "proposal" },
   "proposta-editor": { module: "Comercial", page: "Editor de Proposta", icon: "proposal" },
-  "dossier-obra":  { module: "Operações", page: "Dossiê da Obra", icon: "briefcase" },
-  "status-obras":  { module: "Operações", page: "Status de Obras", icon: "building" },
-  juridico:      { module: "Jurídico", page: "Jurídico", icon: "scale" },
+  "dossier-obra":  { module: "Engenharia", page: "Dossiê da Obra", icon: "briefcase" },
+  "status-obras":  { module: "Engenharia", page: "Status de Obras", icon: "building" },
+  "linha-do-tempo": { module: "Engenharia", page: "Linha do Tempo da Cotação", icon: "clock" },
+  "central-documentos": { module: "Engenharia", page: "Central de Documentos", icon: "fileSearch" },
+  juridico:      { module: "Jurídico", page: "Contratos & Minutas", icon: "scale" },
+  "aval-juridico": { module: "Jurídico", page: "Aval Jurídico", icon: "scale" },
   "contrato-editor": { module: "Jurídico", page: "Editor de Contrato", icon: "fileText" },
   "contrato-venda-equipamentos": { module: "Jurídico", page: "Contrato Venda de Equipamentos", icon: "fileText" },
   "contrato-instalador":         { module: "Jurídico", page: "Contrato Instalador", icon: "hardhat" },
+  "cadastro-clientes":     { module: "Cadastros", page: "Clientes", icon: "users" },
+  "cadastro-fornecedores": { module: "Cadastros", page: "Fornecedores", icon: "truck" },
+  "cadastro-materias-primas": { module: "Cadastros", page: "Matérias-Primas", icon: "layers" },
+  "cadastro-produtos": { module: "Cadastros", page: "Produtos", icon: "package" },
   engenharia:    { module: "Engenharia", page: "Engenharia", icon: "ruler" },
-  "ncm-catalogo": { module: "Engenharia", page: "Catálogo de Produtos", icon: "fileSearch" },
+  "ncm-catalogo": { module: "Cadastros", page: "Produtos", icon: "fileSearch" },
+  "cadastro-instaladores": { module: "Cadastros", page: "Empresas Instaladoras", icon: "hardhat" },
+  "cadastro-custos": { module: "Cadastros", page: "Atualização de Custos", icon: "calculator" },
   "ncm-kanban": { module: "Engenharia", page: "Solicitações NCM", icon: "fileSearch" },
   "ncm-detail": { module: "Engenharia", page: "Detalhe da Solicitação NCM", icon: "fileSearch" },
   "eng-projeto-elevadores": { module: "Engenharia", page: "Projeto de Elevadores", icon: "grid" },
   "eng-configurador": { module: "Engenharia", page: "Projeto de Equipamento", icon: "grid" },
   "desenho-tecnico": { module: "Engenharia", page: "Desenho Técnico ER | ES", icon: "ruler" },
+  "solicitacoes-produto": { module: "Engenharia", page: "Solicitações de Produto", icon: "inbox" },
   "ficha-tecnica":   { module: "Engenharia", page: "Ficha Técnica", icon: "fileText" },
-  importacao:    { module: "Logística", page: "Importação", icon: "ship" },
+  importacao:    { module: "Importação", page: "Gestão Importação — Importação (AIS)", icon: "ship" },
   "pi-importacao": { module: "Importação", page: "Gestão Importação — P.I.", icon: "fileText" },
-  "importacao-detail":        { module: "Logística", page: "Detalhe de Embarque", icon: "ship" },
-  "importacao-rastreamento":  { module: "Logística", page: "Rastreamento de Navios", icon: "mapIcon" },
-  "importacao-email":         { module: "Logística", page: "Inbox Importação", icon: "mail" },
-  compras:       { module: "Logística", page: "Compras Nacional", icon: "truck" },
-  "compras-email": { module: "Logística", page: "Inbox Compras", icon: "mail" },
-  vistorias:     { module: "Instalação & Entrega", page: "Vistorias de Obras", icon: "search" },
+  "rfq-importacao": { module: "Importação", page: "Gestão Importação — RFQ", icon: "fileSearch" },
+  "ims-importacao": { module: "Importação", page: "Gestão Importação — IMS", icon: "package" },
+  "embarques-importacao": { module: "Importação", page: "Gestão Importação — Embarques", icon: "ship" },
+  "gi-painel": { module: "Importação", page: "Gestão Importação — Painel", icon: "home" },
+  "gi-analise-precos": { module: "Importação", page: "Gestão Importação — Análise de Preços", icon: "calculator" },
+  "pedidos-acompanhamento": { module: "Suprimentos", page: "Pedidos", icon: "package" },
+  "importacao-detail":        { module: "Importação", page: "Gestão Importação — Detalhe de Embarque", icon: "ship" },
+  "importacao-rastreamento":  { module: "Importação", page: "Gestão Importação — Rastreamento de Navios", icon: "mapIcon" },
+  compras:       { module: "Logística", page: "Importação Varejo", icon: "truck" },
+  almoxarifado: { module: "Logística", page: "Almoxarifado", icon: "package" },
+  "carga-maquina": { module: "Logística", page: "Carga Máquina", icon: "calculator" },
+  "montagem-produto": { module: "Logística", page: "Montagem do Produto", icon: "layers" },
+  "simulacao-producao": { module: "Logística", page: "Simulação", icon: "history" },
+  "relatorios-pcp": { module: "Logística", page: "Relatórios", icon: "fileText" },
+  expedicao: { module: "Logística", page: "Expedição", icon: "truck" },
+  "emissao-nf": { module: "Financeiro", page: "Emissão de NF", icon: "fileText" },
+  pcp:           { module: "Logística", page: "PCP — Planejamento e Controle da Produção", icon: "calendar" },
+  mes:           { module: "Logística", page: "MES — Sistema de Execução da Manufatura", icon: "settings" },
+  "vistorias-envio": { module: "Instalação & Entrega", page: "Vistorias de Obras", icon: "send" },
+  vistorias:     { module: "Instalação & Entrega", page: "Resultado Vistorias de Obras", icon: "history" },
   instalacao:    { module: "Instalação & Entrega", page: "Instalação em Campo", icon: "hardhat" },
   art:           { module: "Instalação & Entrega", page: "ART de Instalação", icon: "scale" },
   cronograma:    { module: "Instalação & Entrega", page: "Cronograma de Instalação", icon: "clock" },
   databook:      { module: "Instalação & Entrega", page: "Data Book & Termo", icon: "fileSearch" },
   handover:      { module: "Instalação & Entrega", page: "Handover & Pós-venda", icon: "package" },
-  financeiro:    { module: "Financeiro", page: "Gatilhos & Prazo", icon: "dollar" },
+  financeiro:    { module: "Financeiro", page: "Prazos & Pendências", icon: "dollar" },
   "aval-financeiro": { module: "Financeiro", page: "Aval Financeiro", icon: "shield" },
   comissoes:     { module: "Financeiro", page: "Comissões", icon: "award" },
-  "rh-homologacao": { module: "Recursos Humanos", page: "Homologação de Parceiros", icon: "users" },
+  "pagamentos-instalador": { module: "Financeiro", page: "Pagamentos a Instaladores", icon: "dollar" },
+  "rh-homologacao": { module: "RH Operacional", page: "Homologação de Instaladores", icon: "hardhat" },
   logs: { module: "Admin", page: "Logs de Atividade", icon: "history" },
   configuracoes: { module: "Admin", page: "Configurações", icon: "settings" },
 };
+// Exposto pra src/router.js montar o prefixo de módulo na URL (Fase 1
+// da roteirização, issue #279) sem duplicar este mapa.
+window.BREADCRUMB_MAP = BREADCRUMB_MAP;
 
 /* Rota "home" de cada módulo do breadcrumb — usada pra tornar o segmento
    do meio clicável (ex.: clicar em "Engenharia" volta pro landing da Engenharia). */
 const MODULE_HOME = {
   "Dashboard": "dashboard",
   "Notificações": "notificacoes",
-  "Comercial": "leads",
-  "Operações": "status-obras",
+  "Cadastros": "cadastro-clientes",
+  "Comercial": "formularios",
+  "CRM": "leads",
   "Jurídico": "juridico",
   "Engenharia": "engenharia",
-  "Logística": "importacao",
-  "Instalação & Entrega": "vistorias",
+  "RH Operacional": "rh-homologacao",
+  "Logística": "compras",
+  "Importação": "gi-painel",
+  "Instalação & Entrega": "vistorias-envio",
   "Financeiro": "financeiro",
-  "Recursos Humanos": "rh-homologacao",
   "Admin": "logs",
 };
 
 /* Ajuda contextual por rota — texto curto do que a tela faz / próximos passos. */
 const HELP_TOPICS = {
   dashboard: "Visão geral do dia: KPIs, tarefas de hoje, projetos em andamento (Gantt/Lista/Kanban) e alertas críticos.",
-  leads: "Pipeline comercial. Crie e qualifique leads; a partir do lead você abre formulário, cotação e proposta.",
+  notificacoes: "Seu painel de avisos: o sistema escreve aqui quando algo importante acontece (proposta aprovada, decisão esperando por você, prazo vencido, resposta por e-mail). Um aviso só informa: para agir, clique em Abrir origem e resolva na tela certa. Marcar como lida e Arquivar valem só para você; em Arquivadas fica o que você guardou; Preferências escolhe o que aparece para você aqui e no sino. Os avisos somem sozinhos (informativos em 14 dias, os demais em 45).",
+  decisoes: "Pedidos de aprovação que vêm de outras telas (envio de proposta, desconto, compra, montador). Em Pendentes está o que espera por você: leia o cartão, use Ver documento para conferir e depois Aprovar ou Reprovar (a reprovação pede o motivo). Em Decididas fica o histórico. “Bloqueada” quer dizer que depende de outra decisão ser aprovada antes.",
+  leads: "O pipeline de possíveis clientes, na lista ou no quadro Kanban. O lead guarda só a identificação do cliente (prédio, contato, telefone, e-mail, CNPJ/CPF); o equipamento é escolhido depois, no Formulário, que o lead abre com os dados já preenchidos. Ao digitar o CNPJ, o sistema consulta o Omie (só leitura) e mostra se o cliente já existe. Use Qualificar → Dossier para criar o Dossiê da obra (um só por lead). O lead vira Convertido quando a proposta é assinada (ou quando você muda o status) e passa a entrar nos indicadores.",
+  "crm-canais": "As formas de falar com um lead: aqui o CRM oferece o WhatsApp, com um clique e mensagem de apresentação pronta. A lista traz os leads ativos que têm telefone ou e-mail, do mais novo para o mais antigo; clicar na linha abre o detalhe do lead. Esta tela só consulta e chama: ela não cadastra nem edita leads (use Leads) e não envia e-mails (o e-mail é feito pelo Inbox).",
+  "crm-conversao": "De onde vêm os seus leads: a tela conta quantos leads ativos foram capturados e mostra, com uma barra para comparar, quantos vieram de cada origem (indicação, site, evento, LinkedIn…). Lead sem origem entra em \"Não informado\"; os excluídos não contam; o formulário do site verticalparts.com.br cria o lead sozinho e ele passa a contar aqui. É uma tela só de consulta: a origem é escolhida por quem cadastra o lead, na tela Leads.",
+  "crm-automacao": "Confira se o lead que fechou virou cliente: quando um lead passa a Convertido (a proposta foi assinada, por exemplo), o sistema o cadastra como cliente sozinho. Esta tela mostra essa regra, lista os leads convertidos e se cada um já tem cliente vinculado; nos que ficaram sem vínculo, use o botão Vincular agora. Ela não envia e-mails nem mensagens em massa.",
+  "crm-analise": "Como está o funil de leads: a tela mostra quatro indicadores (total de leads, convertidos, taxa de conversão e sem retorno), quantos leads estão em cada status do funil e quantos cada responsável tem. Conta apenas os leads cadastrados no sistema (não é análise de site nem de anúncios) e é só de consulta: para mudar um número, atualize o lead na tela Leads.",
+  "cadastro-clientes": "O cadastro dos clientes da empresa: pesquise na lista, cadastre um cliente novo, edite e abra o histórico dele (leads, obras e score de relacionamento). O CNPJ/CPF é conferido ao salvar e precisa combinar com o tipo escolhido (CPF para Pessoa Física, CNPJ para Pessoa Jurídica). Exclua com cuidado.",
+  "cadastro-fornecedores": "O cadastro dos fornecedores: pesquise e filtre por categoria, veja a avaliação em estrelas, cadastre um fornecedor novo (escolhendo as categorias), edite e avalie com nota e comentário. O CNPJ/CPF é conferido ao salvar.",
+  "cadastro-materias-primas": "Tela só de consulta: as matérias-primas vêm do Omie. Pesquise por código ou descrição, filtre por família e leia cada coluna (NCM, peso, endereço). Se um dado estiver errado, a correção é feita no Omie, não aqui.",
+  "cadastro-produtos": "Tela só de consulta: os produtos vêm do Omie. Pesquise por código ou descrição, filtre por família e leia cada coluna; o código do produto abre a Montagem do Produto. Se um dado estiver errado, a correção é feita no Omie, não aqui.",
   formularios: "Formulários de intake por tipo de equipamento. O de Elevador coleta os dados que alimentam cotação e precificação.",
   "cotacoes-fornecedor": "Cotações enviadas aos fornecedores (Glarie/Seloon…). Acompanhe status, tratativas e a decisão de compra.",
   precificacao: "Precificação a partir da cotação respondida. Só libera depois da Análise Técnica aprovada.",
@@ -291,41 +448,54 @@ const HELP_TOPICS = {
   "ncm-kanban": "Fila de solicitações NCM por status. Abra um produto para ver a ficha e exportar para o LogComex.",
   juridico: "Contratos e minutas. O contrato de venda nasce da proposta aprovada; contrato do instalador exige homologação.",
   importacao: "Embarques, rastreamento de navios (AIS) e inbox. Vincule o embarque à obra do Dossiê.",
-  financeiro: "Gatilhos, prazos, comissões e aval financeiro.",
+  inbox: "A caixa de e-mail compartilhada da empresa (suporte@vpsistema.com): nela chegam as respostas de fornecedores e clientes, e dela saem as cotações, propostas e contratos enviados pelo sistema. A faixa “Precisa de você” mostra o que pede ação; a etiqueta amarela é só uma sugestão do sistema (assunto, área e prioridade). Cada e-mail tem um responsável, e Atribuir passa o e-mail para outra pessoa. Vincule o e-mail à cotação para ele entrar no histórico dela. Organize com estrela, marcadores, arquivar, suspender e spam, e pesquise na caixa de cima. O que você vê e faz depende das suas alçadas. Excluir só tira o e-mail da lista do sistema: ele continua na caixa real.",
+  financeiro: "Painel de controle de prazos: cada cotação percorre uma sequência de etapas (do Formulário ao Pós-venda); cada etapa nasce sozinha quando a anterior termina, tem um prazo e fecha sozinha quando a ação acontece na tela de origem. Os prazos contam só de segunda a sexta (exceto a espera do cliente e o embarque). Clique numa etapa para abrir o documento real. Só duas ações dependem de uma pessoa: Boleto pago e Dar Aval; Fechar com motivo encerra uma cotação parada, e Exportar fluxo baixa as etapas em planilha. Todo dia útil, às 7h20, um resumo das etapas vencidas chega em Notificações.",
   "rh-homologacao": "Homologação de parceiros instaladores e controle documental (NRs, ASO, PGR…).",
 };
 
-function HelpCenter({ route, bc, onClose }) {
-  const ctx = HELP_TOPICS[route];
-  return (
-    <Modal title="Central de Ajuda" onClose={onClose} width={620}
-      footer={<>
-        <Button variant="ghost" size="sm" onClick={onClose}>Fechar</Button>
-        <Button variant="primary" size="sm" icon="mail"
-          onClick={() => window.open('mailto:suporte@verticalparts.com.br?subject=' + encodeURIComponent('Ajuda VP Gestão — ' + (bc.page || '')), '_blank')}>
-          Falar com o suporte
-        </Button>
-      </>}>
-      <div className="help-ctx">
-        <div className="up-eyebrow muted" style={{ marginBottom: 6 }}>Você está em</div>
-        <div style={{ fontWeight: 600, marginBottom: 4 }}>{bc.module} · {bc.page}</div>
-        <p className="vp-small" style={{ marginTop: 0 }}>
-          {ctx || "Use o menu à esquerda para navegar entre os módulos. Cada tela tem suas próprias ações no topo e na lista."}
-        </p>
-      </div>
-      <div className="up-eyebrow muted" style={{ margin: "16px 0 8px" }}>Perguntas frequentes</div>
-      <dl className="help-faq">
-        <dt>Como faço login?</dt>
-        <dd>O acesso é via SSO do portal vpsistema.com — você entra pelo portal e o VP Gestão abre já autenticado.</dd>
-        <dt>Não encontro um módulo no menu</dt>
-        <dd>O menu respeita o seu perfil (Comercial/Engenharia/Financeiro/Admin). Troque o perfil no topo à direita se tiver permissão.</dd>
-        <dt>Um botão não fez nada</dt>
-        <dd>Alguns fluxos dependem de uma etapa anterior (ex.: precificar exige Análise Técnica aprovada). Verifique o status da obra no Dossiê.</dd>
-        <dt>Preciso de suporte humano</dt>
-        <dd>Use o botão “Falar com o suporte” abaixo — ele abre um e-mail já com a tela atual no assunto.</dd>
-      </dl>
-    </Modal>
-  );
+/* Tutoriais passo a passo publicados em /TreinamentoVP/<pasta>/ (páginas HTML geradas por outra sessão do Claude;
+   ver CLAUDE.md, seção "Tutoriais"). Tutorial novo = uma linha aqui: rota do app → pasta.
+   Rota sem linha: o item "Treinamento" do menu "?" (src/ajuda-suporte.jsx) aparece apagado ("em breve"). */
+const TUTORIAIS = {
+  dashboard: "dashboard",
+  decisoes: "central-de-decisoes",
+  notificacoes: "notificacoes",
+  financeiro: "prazos-e-pendencias",   // a rota interna continua `financeiro`; só o rótulo do menu virou "Prazos & Pendências"
+  inbox: "inbox",
+  leads: "leads",
+  "crm-canais": "canais",
+  "crm-conversao": "conversao",
+  "crm-automacao": "automacao",
+  "crm-analise": "analise",
+  "cadastro-clientes": "clientes",
+  "cadastro-fornecedores": "fornecedores",
+  "cadastro-materias-primas": "materias-primas",
+  "cadastro-produtos": "produtos",
+  "cadastro-custos": "atualizacao-de-custos",
+  formularios: "formularios",
+  "controle-cotacoes": "controle-de-cotacoes",
+  "cotacoes-fornecedor": "cotacoes-a-fornecedor",
+  "cotacao-fornecedor-detail": "cotacao-a-fornecedor-detalhe",
+  "cotacao-quadro-comando": "cotacao-quadro-comando",
+  propostas: "propostas",
+  "contratos-sociais": "contratos-sociais",
+};
+
+/* Tutorial do MÓDULO (grupo do menu lateral, ex.: "Geral", que aninha várias telas): rótulo do grupo em NAV_GROUPS → pasta em
+   /TreinamentoVP/. Grupo com linha aqui ganha um "?" no título do grupo (ao lado da setinha de recolher) que abre o tutorial
+   direto, em nova aba. O rótulo é a chave porque é ele que `NAV_GROUPS` usa para permissão. Grupo sem linha: sem "?". */
+const MODULOS_TUTORIAL = {
+  "Geral": "geral",
+  "CRM": "crm",
+  "Cadastros Mestres": "cadastros-mestres",
+  "Comercial | Pré-venda": "comercial-pre-venda",
+};
+
+/* Nome da tela como aparece no menu lateral (NAV_GROUPS). (O BREADCRUMB_MAP ganhou a rota `decisoes` em 04/10/2026 — issue #654 —,
+   mas o nome do menu continua sendo a fonte certa para o formulário de feedback.) */
+function nomeDaTela(route, bc) {
+  for (const g of NAV_GROUPS) for (const it of (g.items || [])) if (it.id === route) return it.label;
+  return (bc && bc.page) || "VP Gestão";
 }
 
 /* Busca global — consulta leads/projetos/contratos/embarques no Supabase e
@@ -338,7 +508,7 @@ async function runGlobalSearch(term) {
   const like = "%" + clean + "%";
   const safe = (p) => p.then((r) => r).catch(() => ({ data: [], error: true }));
   const [L, P, C, E] = await Promise.all([
-    safe(sb.from("leads").select("*").or(`building.ilike.${like},contact.ilike.${like},email.ilike.${like}`).limit(6)),
+    safe(sb.from("leads").select("*").is("excluido_em", null).or(`building.ilike.${like},contact.ilike.${like},email.ilike.${like}`).limit(6)),
     safe(sb.from("projetos").select("*").or(`name.ilike.${like},client.ilike.${like}`).limit(6)),
     safe(sb.from("contratos_venda_equipamentos").select("*").ilike("client", like).limit(6)),
     safe(sb.from("embarques").select("*").or(`client.ilike.${like},vessel.ilike.${like},bl.ilike.${like},container_number.ilike.${like}`).limit(6)),
@@ -462,9 +632,20 @@ function RoleSwitch({ role, setRole }) {
   );
 }
 
+/* Sino do cabeçalho: contador REAL de não lidas (antes era um ponto vermelho fixo, sempre aceso). Mesma fonte e mesmas
+   regras da Central (NotificacoesLidasStore.useNaoLidas: destinatário, arquivadas e Preferências). Sem não lidas, sem ponto. */
+function SinoNotificacoes({ onClick }) {
+  const n = window.NotificacoesLidasStore && window.NotificacoesLidasStore.useNaoLidas ? window.NotificacoesLidasStore.useNaoLidas() : 0;
+  return (
+    <button className="header__btn" data-tip={n ? `Notificações (${n} não lida${n > 1 ? 's' : ''})` : 'Notificações'} aria-label={n ? `${n} notificações não lidas` : 'Notificações'} onClick={onClick}>
+      <Icon.bell size={16}/>
+      {n > 0 && <span style={{ position: 'absolute', top: -6, right: -6, minWidth: 16, height: 16, padding: '0 4px', borderRadius: 8, background: 'var(--vp-danger)', color: '#fff', fontSize: 10, fontWeight: 700, lineHeight: '16px', textAlign: 'center', border: '1.5px solid #fff' }}>{n > 99 ? '99+' : n}</span>}
+    </button>
+  );
+}
+
 function Header({ route, role, setRole, onSearch, onNavigate }) {
   const bc = BREADCRUMB_MAP[route] || BREADCRUMB_MAP.dashboard;
-  const [showHelp, setShowHelp] = React.useState(false);
   const moduleHome = MODULE_HOME[bc.module];
   return (
     <header className="header">
@@ -481,12 +662,8 @@ function Header({ route, role, setRole, onSearch, onNavigate }) {
       </div>
       <GlobalSearch onNavigate={onNavigate}/>
       <RoleSwitch role={role} setRole={setRole}/>
-      <button className="header__btn" data-tip="Notificações" onClick={() => onSearch?.("notificacoes")}>
-        <Icon.bell size={16}/>
-        <span className="dot"/>
-      </button>
-      <button className="header__btn" data-tip="Ajuda" aria-label="Central de Ajuda" onClick={() => setShowHelp(true)}><Icon.info size={16}/></button>
-      {showHelp ? <HelpCenter route={route} bc={bc} onClose={() => setShowHelp(false)}/> : null}
+      <SinoNotificacoes onClick={() => onSearch?.("notificacoes")}/>
+      {window.AjudaSuporte ? <window.AjudaSuporte route={route} telaNome={nomeDaTela(route, bc)} ajudaTexto={HELP_TOPICS[route]} tutorial={TUTORIAIS[route]}/> : null}
     </header>
   );
 }

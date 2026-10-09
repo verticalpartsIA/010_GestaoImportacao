@@ -5,13 +5,41 @@
 /* Títulos por rota — atualiza document.title ao navegar */
 const ROUTE_TITLE = {
   dashboard: "Dashboard",
+  inbox: "Inbox",
+  decisoes: "Central de Decisões",
+  "cadastro-clientes": "Clientes",
+  "cadastro-fornecedores": "Fornecedores",
+  "cadastro-materias-primas": "Matérias-Primas",
+  "cadastro-produtos": "Produtos",
+  "aval-financeiro": "Aval Financeiro",
+  "aval-juridico": "Aval Jurídico",
+  "linha-do-tempo": "Linha do Tempo da Cotação",
+  "gi-painel": "Gestão Importação — Painel",
+  "pi-importacao": "Gestão Importação — P.I.",
+  "rfq-importacao": "Gestão Importação — RFQ",
+  "ims-importacao": "Gestão Importação — IMS",
+  "embarques-importacao": "Gestão Importação — Embarques",
+  "gi-analise-precos": "Gestão Importação — Análise de Preços",
+  "pedidos-acompanhamento": "Pedidos",
+  "vistorias-envio": "Vistorias de Obras",
+  almoxarifado: "Almoxarifado",
+  "carga-maquina": "Carga Máquina",
+  "montagem-produto": "Montagem do Produto",
+  "simulacao-producao": "Simulação",
+  "relatorios-pcp": "Relatórios do PCP",
+  expedicao: "Expedição",
+  "emissao-nf": "Emissão de NF",
+  pcp: "PCP — Planejamento e Controle da Produção",
+  mes: "MES — Sistema de Execução da Manufatura",
   leads: "Pipeline de Leads",
   "lead-detail": "Detalhe de Lead",
   formularios: "Formulários",
   "dossier-obra": "Dossier da Obra",
   "status-obras": "Status de Obras",
   "formulario-elevador": "Formulário — Elevador",
+  "formulario-quadro-comando": "Formulário — Quadro de Comando",
   "controle-cotacoes": "Controle de Cotações",
+  "contratos-sociais": "Contratos Social",
   "cotacoes-fornecedor": "Cotações a Fornecedor",
   "cotacao-fornecedor-detail": "Detalhe de Cotação a Fornecedor",
   precificacao: "Precificação",
@@ -25,25 +53,28 @@ const ROUTE_TITLE = {
   "eng-configurador": "Projeto de Equipamento",
   "desenho-tecnico": "Desenho Técnico ER | ES",
   "ficha-tecnica": "Ficha Técnica",
+  "solicitacoes-produto": "Solicitações de Produto",
   juridico: "Contratos & Minutas",
   "contrato-editor": "Editor de Contrato",
   "contrato-venda-equipamentos": "Contrato Venda de Equipamentos",
   "contrato-instalador": "Contrato Instalador",
-  vistorias: "Vistorias de Obras",
+  vistorias: "Resultado Vistorias de Obras",
   instalacao: "Instalação em Campo",
+  "central-documentos": "Central de Documentos",
   art: "ART de Instalação",
   cronograma: "Cronograma de Instalação",
   databook: "Data Book & Termo",
   handover: "Entrega Final",
-  "rh-homologacao": "Homologação de Parceiros",
+  "rh-homologacao": "Homologação de Instaladores",
+  "cadastro-instaladores": "Empresas Instaladoras",
+  "cadastro-custos": "Atualização de Custos",
   importacao: "Importação",
   "importacao-detail": "Detalhe de Embarque",
   "importacao-rastreamento": "Rastreamento de Navios",
-  "importacao-email": "Inbox Importação",
-  compras: "Compras Nacional",
-  "compras-email": "Inbox Compras",
-  financeiro: "Gatilhos & Prazo",
+  compras: "Importação Varejo",
+  financeiro: "Prazos & Pendências",
   comissoes: "Comissões",
+  "pagamentos-instalador": "Pagamentos a Instaladores",
   notificacoes: "Notificações",
   logs: "Logs de Atividade",
   configuracoes: "Configurações",
@@ -99,6 +130,77 @@ function EmConstrucaoPage({ titulo, descricao }) {
   );
 }
 
+/* ---- Roteamento por URL — Fase 2 (issue #280): deep link real por ID ----
+   Três formas como uma rota de detalhe recebe seu registro via `subsel`:
+
+   1. SYNC_PASSTHROUGH_ROUTES — subsel É o id (string), e o componente já
+      sabia buscar por conta própria antes desta Fase existir (dossier-obra,
+      vistorias) ou aprende a fazer isso só de receber o id (formulario-
+      elevador, via FormularioElevadorStore.obter — nenhuma mudança de
+      componente precisou ser feita).
+   2. WRAPPED_ID_KEY — subsel é um objeto-envelope com o id numa chave
+      conhecida (proposta-editor usa `{__editId}`, convenção que o próprio
+      editor já lia pra herdar proposta existente).
+   3. ASYNC_FETCH_ROUTES — subsel é o registro inteiro, sem suporte a id
+      solto no componente; app.jsx busca no Supabase e só then popula
+      subsel (renderPage mostra "Carregando…" enquanto isso). */
+const SYNC_PASSTHROUGH_ROUTES = new Set(["dossier-obra", "vistorias", "formulario-elevador", "formulario-quadro-comando", "central-documentos", "cadastro-custos", "ficha-tecnica", "solicitacoes-produto", "precificacao", "linha-do-tempo", "inbox"]);
+const WRAPPED_ID_KEY = { "proposta-editor": "__editId" };
+
+/* Cada fetcher recebe o id da URL e resolve pro registro (ou null se não
+   encontrado) — nunca rejeita, pra sempre cair no fallback em vez de
+   quebrar a tela. */
+const ASYNC_FETCH_ROUTES = {
+  "lead-detail": (id) => window.__VP_SB.sb.from("leads").select("*").eq("id", id).maybeSingle()
+    .then((r) => r.data || null).catch(() => null),
+  "cotacao-fornecedor-detail": (id) => window.CotacaoElevadorFornecedorStore
+    ? window.CotacaoElevadorFornecedorStore.getById(id).catch(() => null)
+    : Promise.resolve(null),
+  "contrato-editor": (id) => window.__VP_SB.sb.from("contratos_venda_equipamentos").select("*").eq("id", id).maybeSingle()
+    .then((r) => r.data || null).catch(() => null),
+  "importacao-detail": (id) => window.__VP_SB.sb.from("embarques").select("*").eq("id", id).maybeSingle()
+    .then((r) => r.data || null).catch(() => null),
+  // `ncm_solicitacoes` foi dropada (issue #273) e recriada depois (achado
+  // "Urgente #1" da auditoria de código) — NcmDetailPage espera o registro
+  // dentro de `{ ncmProduct }`, mesma forma que NcmKanbanPage já usa em
+  // setSubsel({ ncmProduct: s }), então o fetcher embrulha aqui.
+  "ncm-detail": (id) => window.__VP_SB.sb.from("ncm_solicitacoes").select("*").eq("id", id).maybeSingle()
+    .then((r) => (r.data ? { ncmProduct: r.data } : null)).catch(() => null),
+};
+
+/* Pra onde cair quando não dá pra montar a tela de detalhe: id ausente na
+   URL, registro não encontrado, ou fetch com erro. */
+const SUBSEL_FALLBACK_ROUTE = {
+  "lead-detail": "leads",
+  "cotacao-fornecedor-detail": "cotacoes-fornecedor",
+  "contrato-editor": "juridico",
+  "ncm-detail": "ncm-kanban",
+  "importacao-detail": "importacao",
+};
+
+function deriveIdForRoute(route, subsel) {
+  if (subsel == null) return null;
+  if (typeof subsel === "string" || typeof subsel === "number") return subsel;
+  if (WRAPPED_ID_KEY[route]) return subsel[WRAPPED_ID_KEY[route]] != null ? subsel[WRAPPED_ID_KEY[route]] : null;
+  if (route === "ncm-detail") return subsel.ncmProduct && subsel.ncmProduct.id;
+  return subsel.id != null ? subsel.id : null;
+}
+
+/* Traduz { route, id } (vindo da URL, no mount ou de um popstate) pro trio
+   que o App precisa: rota final a renderizar, subsel pronto pra usar (ou
+   null) e um id pendente de fetch (ou null). Usada nos dois pontos onde
+   uma navegação "de fora" chega — nunca duplica a decisão. */
+function resolveIncomingLocation(loc) {
+  const r = loc && loc.route;
+  const id = loc && loc.id;
+  if (!r) return { route: null, subsel: null, pendingFetchId: null };
+  if (SYNC_PASSTHROUGH_ROUTES.has(r)) return { route: r, subsel: id, pendingFetchId: null };
+  if (WRAPPED_ID_KEY[r]) return { route: r, subsel: id ? { [WRAPPED_ID_KEY[r]]: id } : null, pendingFetchId: null };
+  if (ASYNC_FETCH_ROUTES[r] && id) return { route: r, subsel: null, pendingFetchId: id };
+  if (SUBSEL_FALLBACK_ROUTE[r]) return { route: SUBSEL_FALLBACK_ROUTE[r], subsel: null, pendingFetchId: null };
+  return { route: r, subsel: null, pendingFetchId: null };
+}
+
 function App() {
   const [t, setTweak] = useTweaks(TWEAK_DEFAULTS);
 
@@ -111,19 +213,87 @@ function App() {
     try { localStorage.setItem("vpprd." + k, JSON.stringify(v)); } catch (e) {}
   };
 
+  // Estado inicial: URL manda, se tiver uma rota reconhecível (deep link,
+  // refresh); senão cai no localStorage de sempre (comportamento antigo,
+  // preservado durante a transição).
+  const initialLoc = (window.VpRouter && window.VpRouter.parseLocation()) || { route: null, id: null };
+  const initialResolved = resolveIncomingLocation(initialLoc);
+
   const [role, setRole] = React.useState(() => readLS("role", t.initialRole));
-  const [route, setRoute] = React.useState(() => readLS("route", t.initialRoute));
+  const [route, setRoute] = React.useState(() => initialResolved.route || readLS("route", t.initialRoute));
   // Auto-collapse below 1024px
   const [collapsed, setCollapsed] = React.useState(() => {
     if (typeof window !== "undefined" && window.innerWidth < 1024) return true;
     return readLS("sidebarCollapsed", t.sidebarCollapsed);
   });
-  const [subsel, setSubsel] = React.useState(null);
+  const [subsel, setSubsel] = React.useState(() => initialResolved.route ? initialResolved.subsel : null);
+  // Id ainda sendo buscado no Supabase pra uma ASYNC_FETCH_ROUTE — enquanto
+  // não resolve, `subsel` continua null e renderPage mostra "Carregando…"
+  // em vez de tentar montar a tela de detalhe sem dado nenhum.
+  const [pendingFetchId, setPendingFetchId] = React.useState(() => initialResolved.route ? initialResolved.pendingFetchId : null);
 
   // Persist navigation state
   React.useEffect(() => writeLS("role", role), [role]);
   React.useEffect(() => writeLS("route", route), [route]);
   React.useEffect(() => writeLS("sidebarCollapsed", collapsed), [collapsed]);
+
+  // Espelha route/subsel na URL (pushState) e escuta voltar/avançar do
+  // navegador (popstate). Sem-op se a URL já bate com o estado atual —
+  // evita loop entre este effect e o handler de popstate abaixo. Usa
+  // pendingFetchId como id quando subsel ainda não chegou, pra não perder
+  // o link original da barra de endereço enquanto o fetch está em voo.
+  React.useEffect(() => {
+    if (!window.VpRouter) return;
+    const id = deriveIdForRoute(route, subsel);
+    // Preserva a aba (3º segmento) se a URL atual já é dessa mesma rota —
+    // páginas com abas internas (ex.: dossier-obra) escrevem seu próprio
+    // 3º segmento; sem isso, este efeito genérico apagaria a aba assim
+    // que rodasse (ex.: no mount de um deep link .../DOS-M034/documentos).
+    const atual = window.VpRouter.parseLocation();
+    const tabAtual = atual.route === route ? atual.tab : null;
+    // Mesma ideia, mas pro 2º segmento (id): rotas sem id de registro
+    // (ex.: configuracoes) não têm subsel/deriveIdForRoute próprio, então
+    // usam esse 2º segmento como identificador de aba (ver
+    // ConfiguracoesPage) — sem preservar aqui, este efeito zeraria a aba
+    // assim que rodasse no mount de um deep link .../configuracoes/permissoes.
+    const idAtualPreservado = (id == null && pendingFetchId == null && atual.route === route) ? atual.id : null;
+    window.VpRouter.navigate(route, id != null ? id : (pendingFetchId != null ? pendingFetchId : idAtualPreservado), tabAtual);
+  }, [route, subsel, pendingFetchId]);
+
+  React.useEffect(() => {
+    if (!window.VpRouter) return;
+    return window.VpRouter.subscribe((loc) => {
+      if (!loc.route) return;
+      const resolved = resolveIncomingLocation(loc);
+      setSubsel(resolved.subsel);
+      setPendingFetchId(resolved.pendingFetchId);
+      setRoute(resolved.route);
+    });
+  }, []);
+
+  // Busca de verdade das ASYNC_FETCH_ROUTES — dispara sempre que há um id
+  // pendente pra rota atual (mount com deep link, ou popstate landing numa
+  // dessas rotas). Nunca deixa a tela quebrada: sem resultado ou com erro,
+  // cai na rota de lista correspondente.
+  React.useEffect(() => {
+    if (!pendingFetchId) return;
+    const loader = ASYNC_FETCH_ROUTES[route];
+    if (!loader) { setPendingFetchId(null); return; }
+    let vivo = true;
+    loader(pendingFetchId).then((registro) => {
+      if (!vivo) return;
+      setPendingFetchId(null);
+      if (registro) { setSubsel(registro); return; }
+      window.toast?.("Registro não encontrado.", "warning");
+      setRoute(SUBSEL_FALLBACK_ROUTE[route] || "dashboard");
+    }).catch(() => {
+      if (!vivo) return;
+      setPendingFetchId(null);
+      window.toast?.("Erro ao carregar o registro.", "error");
+      setRoute(SUBSEL_FALLBACK_ROUTE[route] || "dashboard");
+    });
+    return () => { vivo = false; };
+  }, [route, pendingFetchId]);
 
   // Auto-collapse on resize
   React.useEffect(() => {
@@ -143,17 +313,23 @@ function App() {
     if (t.sidebarCollapsed !== collapsed) setCollapsed(t.sidebarCollapsed);
   }, [t.sidebarCollapsed]);
 
-  // Atualiza document.title ao mudar de rota
+  // Atualiza document.title ao mudar de rota — sem sufixo "· VP Gestão"
+  // genérico; dossier-obra.jsx assume o próprio título (obra + aba ativa).
   React.useEffect(() => {
+    if (route === "dossier-obra") return;
     const label = ROUTE_TITLE[route];
-    document.title = label ? label + " · VP Gestão" : "VP Gestão · VerticalParts";
+    document.title = label || "VP Gestão";
   }, [route]);
 
   // AuthZ — impede acesso a rotas restritas independente de como a navegação ocorreu
   const RESTRICTED = {
     precificacao: ["financeiro", "admin"],
     financeiro: ["financeiro", "admin"],
+    "aval-financeiro": ["financeiro", "admin"],
+    "emissao-nf": ["financeiro", "admin"],
+    "aval-juridico": ["juridico", "admin"],
     comissoes: ["financeiro", "admin"],
+    "pagamentos-instalador": ["financeiro", "admin"],
     logs: ["admin"],
     configuracoes: ["admin"],
   };
@@ -164,18 +340,32 @@ function App() {
   }, [role, route]); // react em mudança de role E de rota
 
   const renderPage = () => {
+    // Deep link numa ASYNC_FETCH_ROUTE ainda buscando o registro no
+    // Supabase — subsel só chega quando o fetch (effect acima) resolver.
+    if (pendingFetchId && ASYNC_FETCH_ROUTES[route]) {
+      return <div style={{ textAlign: "center", padding: "60px 0", color: "var(--fg3)", fontSize: 13 }}>Carregando…</div>;
+    }
     switch (route) {
-      case "dashboard": return <Dashboard role={role} setRoute={setRoute}/>;
+      case "dashboard": return <Dashboard role={role} setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "inbox": return <EmailInbox setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
       case "leads": return <LeadsPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "lead-detail": return <LeadDetail lead={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "crm-canais": return <CRMCanaisPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "crm-conversao": return <CRMConversaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "crm-automacao": return <CRMAutomacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "crm-analise": return <CRMAnalisePage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formularios": return <FormulariosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "formulario-elevador": return <FormularioElevadorPage setRoute={setRoute} subsel={subsel}/>;
-      case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute}/>;
-      case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute}/>;
+      case "formulario-quadro-comando": return <QuadroComandoPage setRoute={setRoute} subsel={subsel}/>;
+      case "controle-cotacoes": return <ControleCotacoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "contratos-sociais": return <ContratosSociaisPage/>;
+      case "cotacao-quadro-comando": return <CotacaoQuadroComandoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "dossier-obra": return <DossierObraPage dossierId={subsel} setRoute={setRoute} setSubsel={setSubsel}/>;
       case "status-obras": return <ObrasStatusPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "linha-do-tempo": return <window.LinhaDoTempoPage subsel={subsel}/>;
       case "cotacoes-fornecedor": return <CotacoesFornecedorPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "cotacao-fornecedor-detail": return <CotacaoFornecedorDetalhe cot={subsel} setRoute={setRoute}/>;
-      case "precificacao": return <PrecificacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "precificacao": return <PrecificacaoPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
       case "propostas": return <PropostasPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "proposta-editor": return <PropostaEditor setRoute={setRoute} subsel={subsel}/>;
       case "engenharia": return <EngenhariaPage setRoute={setRoute}/>;
@@ -185,31 +375,54 @@ function App() {
       case "eng-projeto-elevadores": return <window.ProjetoElevadorPage setRoute={setRoute}/>;
       case "eng-configurador": return <ConfiguradorPage setRoute={setRoute}/>;
       case "desenho-tecnico": return <DesenhoTecnicoPage setRoute={setRoute}/>;
-      case "ficha-tecnica": return <FichaTecnicaPage/>;
+      case "ficha-tecnica": return <FichaTecnicaPage fichaId={subsel}/>; /* deep-link support: /nova-ficha-tecnica */
+      case "solicitacoes-produto": return <SolicitacoesProdutoPage solicitacaoId={subsel}/>; /* deep-link support */
       case "juridico": return <JuridicoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "contrato-editor": return <ContratoEditorPage contrato={subsel} setRoute={setRoute} onSaved={() => {}} />;
       case "contrato-venda-equipamentos": return <ContratoVendaEquipamentosPage/>;
       case "contrato-instalador": return <ContratoInstaladorPage/>;
+      case "vistorias-envio": return <VistoriasEnvio setRoute={setRoute}/>;
       case "vistorias": return <VistoriasObras obraId={subsel} setRoute={setRoute}/>;
       case "instalacao": return <InstalacaoPage/>;
+      case "central-documentos": return <window.CentralDocumentosPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
       case "art": return <ArtPage setRoute={setRoute}/>;
       case "cronograma": return <CronogramaPage/>;
-      case "databook": return <DataBookPage/>;
+      case "databook": return <DataBookPage setRoute={setRoute}/>;
       case "handover": return <window.HandoverManutencaoPage/>;
       case "importacao": return <ImportacaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "importacao-detail": return <ImportacaoDetail embarque={subsel} setRoute={setRoute}/>;
-      case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={setRoute}/>;
-      case "importacao-email": return <EmailInbox kind="importacao" setRoute={setRoute}/>;
-      case "compras": return <ComprasPage setRoute={setRoute}/>;
-      case "compras-email": return <EmailInbox kind="compras" setRoute={setRoute}/>;
+      case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "compras": return <window.ImportacaoVarejoPage setRoute={setRoute}/>;
       case "financeiro": return <FinanceiroPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
+      case "aval-juridico": return <window.AvalJuridicoPage setRoute={setRoute}/>;
       case "comissoes": return <ComissoesPage/>;
+      case "pagamentos-instalador": return <PagamentosInstaladorPage/>;
       case "rh-homologacao": return <window.RHHomologacaoPage/>;
+      case "cadastro-instaladores": return <window.CadastroInstaladoresPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "cadastro-custos": return <window.CadastroCustosPage setSubsel={setSubsel} subsel={subsel}/>;
       case "notificacoes": return <NotificacoesPage setRoute={setRoute}/>;
-      case "decisoes": return <window.DecisoesPage/>;
+      case "decisoes": return <window.DecisoesPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
+      case "carga-maquina": return <window.CargaMaquinaPage/>;
+      case "expedicao": return <window.ExpedicaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "emissao-nf": return <window.EmissaoNFPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "relatorios-pcp": return <window.RelatoriosPCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "simulacao-producao": return <window.SimulacaoProducaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "pcp": return <window.PCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "mes": return <window.MESPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "pi-importacao": return <window.PIPage/>;
+      case "rfq-importacao": return <window.RFQPage/>;
+      case "ims-importacao": return <window.IMSPage/>;
+      case "embarques-importacao": return <window.EmbarquesImportacaoPage/>;
+      case "gi-painel": return <window.GIPainelPage/>;
+      case "gi-analise-precos": return <window.GIAnalisePrecosPage/>;
+      case "pedidos-acompanhamento": return <window.PedidosAcompanhamentoPage/>;
+      case "cadastro-clientes": return <window.CadastroClientesPage/>;
+      case "cadastro-fornecedores": return <window.CadastroFornecedoresPage/>;
+      case "cadastro-materias-primas": return <window.CadastroMateriasPrimasPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "cadastro-produtos": return <window.CadastroProdutosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "logs": return <LogsAdminPage/>;
       case "configuracoes": return <ConfiguracoesPage/>;
       default: return <Dashboard role={role} setRoute={setRoute}/>;
@@ -285,6 +498,7 @@ function App() {
               { value: "contrato-venda-equipamentos", label: "📄 Contrato Venda de Equipamentos" },
               { value: "contrato-instalador", label: "👷 Contrato Instalador" },
               { value: "instalacao", label: "Instalação + Checklist" },
+              { value: "central-documentos", label: "📁 Central de Documentos" },
               { value: "art", label: "ART de Instalação" },
               { value: "cronograma", label: "Cronograma de Instalação" },
               { value: "databook", label: "Data Book & Termo" },
@@ -292,12 +506,14 @@ function App() {
               { value: "importacao", label: "Importação (lista)" },
               { value: "importacao-detail", label: "Detalhe de Embarque" },
               { value: "importacao-rastreamento", label: "🛰️ Mapa de Navios" },
-              { value: "importacao-email", label: "📧 Inbox Importação" },
-              { value: "compras", label: "Compras Nacional" },
-              { value: "compras-email", label: "📧 Inbox Compras" },
-              { value: "financeiro", label: "⏰ Gatilhos & Prazo" },
+              { value: "compras", label: "Importação Varejo" },
+              { value: "inbox", label: "📧 Inbox" },
+              { value: "financeiro", label: "⏰ Prazos & Pendências" },
               { value: "comissoes", label: "Comissões" },
-              { value: "rh-homologacao", label: "👥 Homologação de Parceiros" },
+              { value: "pagamentos-instalador", label: "Pagamentos a Instaladores" },
+              { value: "rh-homologacao", label: "👥 Homologação de Instaladores" },
+              { value: "cadastro-instaladores", label: "🏢 Empresas Instaladoras" },
+              { value: "cadastro-custos", label: "💰 Atualização de Custos" },
               { value: "notificacoes", label: "🔔 Notificações" },
               { value: "configuracoes", label: "Configurações" },
             ]}/>

@@ -112,9 +112,9 @@ function Button({ variant = "outline", size, icon, iconRight, children, "aria-la
 }
 
 /* ---- Badge ---- */
-function Badge({ variant = "neutral", dot, children, style }) {
+function Badge({ variant = "neutral", dot, children, style, onClick }) {
   return (
-    <span className={"badge badge--" + variant} style={style}>
+    <span className={"badge badge--" + variant} style={style} onClick={onClick}>
       {dot ? <span className="dot"/> : null}
       {children}
     </span>
@@ -161,9 +161,9 @@ function StatusBadge({ status }) {
 }
 
 /* ---- Card ---- */
-function Card({ title, sub, action, children, sharp = true, style, className = "", padding }) {
+function Card({ id, title, sub, action, children, sharp = true, style, className = "", padding }) {
   return (
-    <div className={(sharp ? "card sharp " : "card ") + className} style={{ padding: padding, ...style }}>
+    <div id={id} className={(sharp ? "card sharp " : "card ") + className} style={{ padding: padding, ...style }}>
       {(title || action) ? (
         <div className="card__head">
           <div>
@@ -179,10 +179,13 @@ function Card({ title, sub, action, children, sharp = true, style, className = "
 }
 
 /* ---- KPI ---- */
-function KPI({ label, value, unit, delta, deltaDir, sub, icon }) {
+function KPI({ label, value, unit, delta, deltaDir, sub, icon, onClick, style }) {
   const cls = "delta " + (deltaDir === "up" ? "up" : deltaDir === "down" ? "down" : "flat");
+  const clickProps = onClick
+    ? { onClick, role: "button", tabIndex: 0, onKeyDown: (e) => { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); onClick(e); } } }
+    : {};
   return (
-    <div className="kpi">
+    <div className={"kpi" + (onClick ? " kpi--clickable" : "")} style={style} {...clickProps}>
       <span className="kpi__stripe" />
       <div className="kpi__label">{icon ? React.createElement(Icon[icon] || Icon.bolt) : null}{label}</div>
       <div className="kpi__value">{value}{unit ? <span className="unit">{unit}</span> : null}</div>

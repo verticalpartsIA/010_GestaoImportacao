@@ -44,7 +44,7 @@ FASE 4 (opcional) — ui-audit-agent
 ### Fase 1 — Verificar tabelas Supabase
 ```bash
 curl -s "https://jxtqwzmpgofwctqajewt.supabase.co/rest/v1/leads?select=id&limit=1" \
-  -H "apikey: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc"
+  -H "apikey: sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP"
 ```
 Esperado: `[]` ou `[...]` com HTTP 200.
 

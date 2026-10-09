@@ -1,0 +1,176 @@
+<!doctype html>
+<html lang="pt-BR">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Protótipo — Sidebar degradê (isolado, não faz parte do site)</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --yellow: #F5C400;
+    --yellow-soft: #FFE27A;
+    --ink: #0B0B0B;
+    --ink-2: #151515;
+    --line: rgba(255,255,255,.08);
+    --txt: rgba(255,255,255,.82);
+    --txt-dim: rgba(255,255,255,.52);
+    --ease: cubic-bezier(.22,1,.36,1);
+    --w: 272px;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; height: 100%; font-family: Inter, system-ui, sans-serif; font-size: 14px; background: #F4F4F2; color: #1a1a1a; }
+  .app { display: grid; grid-template-columns: var(--w) minmax(0,1fr); height: 100vh; transition: grid-template-columns .3s var(--ease); }
+  .app[data-collapsed="true"] { --w: 76px; }
+
+  /* ===== Sidebar: degradê amarelo → preto, só no alto; o resto é preto para o texto ter contraste ===== */
+  .sb {
+    position: relative; display: flex; flex-direction: column; min-height: 0; overflow: hidden;
+    color: var(--txt);
+    background:
+      linear-gradient(180deg, #F5C400 0%, #C9A000 7%, #5a4700 18%, #1a1500 30%, var(--ink) 44%, var(--ink) 100%);
+  }
+  .sb__brand { display: flex; align-items: center; gap: 12px; padding: 22px 20px 18px; color: #111; min-height: 76px; }
+  .sb__mark { width: 34px; height: 34px; border-radius: 9px; background: #111; color: var(--yellow); display: grid; place-items: center; flex: none; }
+  .sb__name { font-family: "Barlow Condensed", Inter, sans-serif; font-weight: 700; font-size: 22px; letter-spacing: .01em; line-height: 1; white-space: nowrap; }
+  .sb__name small { display: block; font-family: Inter, sans-serif; font-weight: 500; font-size: 11px; letter-spacing: 0; margin-top: 3px; opacity: .75; }
+
+  .sb__search { margin: 6px 16px 10px; position: relative; }
+  .sb__search input {
+    width: 100%; height: 38px; border-radius: 10px; border: 1px solid var(--line);
+    background: rgba(255,255,255,.06); color: #fff; padding: 0 12px 0 38px; font: inherit; outline: none;
+    transition: border-color .2s var(--ease), background .2s var(--ease);
+  }
+  .sb__search input::placeholder { color: var(--txt-dim); }
+  .sb__search input:focus { border-color: var(--yellow); background: rgba(255,255,255,.09); }
+  .sb__search svg { position: absolute; left: 12px; top: 10px; width: 18px; height: 18px; color: var(--txt-dim); }
+  .sb__search kbd { position: absolute; right: 10px; top: 9px; font: 500 11px Inter; color: var(--txt-dim); border: 1px solid var(--line); border-radius: 5px; padding: 1px 6px; }
+
+  .sb__scroll { flex: 1; min-height: 0; overflow-y: auto; padding: 4px 12px 12px; scrollbar-width: thin; scrollbar-color: rgba(255,255,255,.18) transparent; }
+  .grp { margin-top: 18px; }
+  .grp__label { padding: 0 12px 8px; font-size: 11px; font-weight: 600; letter-spacing: .08em; text-transform: uppercase; color: var(--txt-dim); white-space: nowrap; }
+
+  .item {
+    display: flex; align-items: center; gap: 12px; width: 100%; height: 40px; padding: 0 12px; margin-bottom: 2px;
+    border: 0; border-radius: 10px; background: transparent; color: var(--txt); font: 500 14px Inter; text-align: left; cursor: pointer; position: relative;
+    transition: background .18s var(--ease), color .18s var(--ease);
+  }
+  .item svg { width: 20px; height: 20px; flex: none; stroke-width: 1.7; }
+  .item span { flex: 1; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .item:hover { background: rgba(255,255,255,.07); color: #fff; }
+  .item:focus-visible { outline: 2px solid var(--yellow); outline-offset: 1px; }
+  .item.is-active { background: linear-gradient(90deg, rgba(245,196,0,.22), rgba(245,196,0,.08)); color: var(--yellow-soft); font-weight: 600; }
+  .item .badge { flex: none; min-width: 20px; height: 20px; padding: 0 6px; border-radius: 10px; background: var(--yellow); color: #111; font: 700 11px/20px Inter; text-align: center; }
+
+  .sb__foot { padding: 12px 16px 16px; border-top: 1px solid var(--line); display: flex; align-items: center; gap: 12px; }
+  .avatar { width: 36px; height: 36px; border-radius: 50%; background: var(--yellow); color: #111; font: 700 13px Inter; display: grid; place-items: center; flex: none; }
+  .who { min-width: 0; flex: 1; }
+  .who b { display: block; color: #fff; font-weight: 600; font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .who small { color: var(--txt-dim); font-size: 12px; }
+  .collapse { flex: none; width: 32px; height: 32px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--txt); cursor: pointer; display: grid; place-items: center; }
+  .collapse:hover { background: rgba(255,255,255,.08); color: #fff; }
+  .collapse:focus-visible { outline: 2px solid var(--yellow); }
+  .collapse svg { width: 16px; height: 16px; transition: transform .3s var(--ease); }
+
+  /* ===== Recolhida: só ícones ===== */
+  .app[data-collapsed="true"] .sb__name,
+  .app[data-collapsed="true"] .sb__search,
+  .app[data-collapsed="true"] .item span,
+  .app[data-collapsed="true"] .item .badge,
+  .app[data-collapsed="true"] .who { display: none; }
+  .app[data-collapsed="true"] .grp__label { font-size: 0; padding-bottom: 6px; border-bottom: 1px solid var(--line); margin: 0 6px 8px; }
+  .app[data-collapsed="true"] .item { justify-content: center; padding: 0; }
+  .app[data-collapsed="true"] .sb__brand { justify-content: center; padding: 22px 0 18px; }
+  .app[data-collapsed="true"] .sb__foot { flex-direction: column; padding: 12px 0; }
+  .app[data-collapsed="true"] .collapse svg { transform: rotate(180deg); }
+
+  /* ===== Conteúdo fictício só para dar contexto ===== */
+  main { padding: 28px 32px; overflow: auto; }
+  main h1 { font: 700 30px "Barlow Condensed", Inter; margin: 0 0 4px; }
+  main p { margin: 0 0 24px; color: #666; }
+  .ph { height: 120px; border-radius: 12px; background: #fff; border: 1px solid #e6e6e2; margin-bottom: 14px; display: grid; place-items: center; color: #999; }
+  @media (prefers-reduced-motion: reduce) { * { transition: none !important; } }
+</style>
+</head>
+<body>
+<div class="app" id="app" data-collapsed="false">
+  <aside class="sb" aria-label="Navegação principal">
+    <div class="sb__brand">
+      <div class="sb__mark" aria-hidden="true"><svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 20 12 4l8 16"/><path d="M8 14h8"/></svg></div>
+      <div class="sb__name">VP Gestão<small>Vertical Parts</small></div>
+    </div>
+
+    <label class="sb__search">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+      <input id="q" type="search" placeholder="Buscar tela…" aria-label="Buscar tela no menu">
+      <kbd>/</kbd>
+    </label>
+
+    <nav class="sb__scroll" id="nav"></nav>
+
+    <div class="sb__foot">
+      <div class="avatar" aria-hidden="true">GS</div>
+      <div class="who"><b>Gelson Simões</b><small>Administrador</small></div>
+      <button class="collapse" id="toggle" aria-label="Recolher menu" title="Recolher menu"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 6-6 6 6 6"/></svg></button>
+    </div>
+  </aside>
+
+  <main>
+    <h1>Painel</h1>
+    <p>Área de conteúdo fictícia. Este arquivo é só um protótipo da sidebar e não é carregado pelo site.</p>
+    <div class="ph">conteúdo da tela</div><div class="ph">conteúdo da tela</div>
+  </main>
+</div>
+
+<script>
+  const I = {
+    home:'<path d="M3 11 12 4l9 7"/><path d="M5 10v10h14V10"/>',
+    inbox:'<path d="M4 13h4l1 3h6l1-3h4"/><path d="M4 13 6 5h12l2 8v6H4z"/>',
+    bell:'<path d="M6 16V11a6 6 0 1 1 12 0v5l2 2H4z"/><path d="M10 21h4"/>',
+    check:'<circle cx="12" cy="12" r="9"/><path d="m8 12 3 3 5-6"/>',
+    users:'<circle cx="9" cy="8" r="3.5"/><path d="M2.5 20c.5-4 3-6 6.5-6s6 2 6.5 6"/><path d="M16 5a3.5 3.5 0 0 1 0 7M18 14c2 .6 3.3 2.5 3.5 6"/>',
+    file:'<path d="M7 3h7l5 5v13H7z"/><path d="M14 3v5h5"/>',
+    doc:'<rect x="5" y="3" width="14" height="18" rx="2"/><path d="M9 8h6M9 12h6M9 16h4"/>',
+    box:'<path d="m12 3 8 4v10l-8 4-8-4V7z"/><path d="m4 7 8 4 8-4M12 11v10"/>',
+    ship:'<path d="M3 17h18l-2 4H5z"/><path d="M5 17V9h14v8"/><path d="M9 9V5h6v4"/>',
+    gear:'<circle cx="12" cy="12" r="3"/><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M18.4 5.6l-2.1 2.1M7.7 16.3l-2.1 2.1"/>',
+    money:'<rect x="3" y="6" width="18" height="12" rx="2"/><circle cx="12" cy="12" r="2.5"/>',
+    wrench:'<path d="M14.5 6.5a4 4 0 0 0 5 5L10 21a2.1 2.1 0 0 1-3-3z"/><path d="M14 7l3-3"/>'
+  };
+  const MENU = [
+    { g:'Geral', items:[['home','Dashboard',0,1],['inbox','Inbox',3],['bell','Notificações',12],['check','Central de Decisões',4]] },
+    { g:'Comercial', items:[['users','Leads'],['doc','Formulário de Elevador'],['file','Propostas'],['doc','Controle de Cotações']] },
+    { g:'Importação', items:[['ship','Embarques'],['file','P.I. de Importação'],['box','Importação Varejo']] },
+    { g:'Logística Interna', items:[['box','Almoxarifado'],['wrench','PCP'],['gear','MES']] },
+    { g:'Financeiro', items:[['money','Prazos & Pendências'],['check','Aval Financeiro'],['file','Contas a Pagar']] }
+  ];
+  const nav = document.getElementById('nav');
+  function render(filter=''){
+    const f = filter.trim().toLowerCase();
+    nav.innerHTML = MENU.map(m => {
+      const its = m.items.filter(x => !f || x[1].toLowerCase().includes(f));
+      if(!its.length) return '';
+      return `<div class="grp"><div class="grp__label">${m.g}</div>` + its.map(x =>
+        `<button class="item${x[3]?' is-active':''}" ${x[3]?'aria-current="page"':''} title="${x[1]}">
+           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round">${I[x[0]]}</svg>
+           <span>${x[1]}</span>${x[2]?`<em class="badge" style="font-style:normal">${x[2]}</em>`:''}
+         </button>`).join('') + `</div>`;
+    }).join('') || '<p style="padding:12px;color:var(--txt-dim)">Nenhuma tela encontrada.</p>';
+  }
+  render();
+  const q = document.getElementById('q');
+  q.addEventListener('input', () => render(q.value));
+  addEventListener('keydown', e => { if(e.key==='/' && document.activeElement!==q){ e.preventDefault(); q.focus(); } });
+  const app = document.getElementById('app');
+  document.getElementById('toggle').addEventListener('click', () => {
+    const c = app.dataset.collapsed === 'true';
+    app.dataset.collapsed = String(!c);
+  });
+  nav.addEventListener('click', e => {
+    const b = e.target.closest('.item'); if(!b) return;
+    nav.querySelectorAll('.item').forEach(x => x.classList.remove('is-active'));
+    b.classList.add('is-active');
+  });
+</script>
+</body>
+</html>

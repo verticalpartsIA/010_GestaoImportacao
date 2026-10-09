@@ -19,8 +19,8 @@ const PRINT_SCREENS = [
   { id: "importacao",     title: "Importação",                 module: "Logística",   role: "admin",      sub: "embarques · BL · ETA tracking" },
   { id: "importacao-detail", title: "Embarque — Detalhe",      module: "Logística",   role: "admin",      sub: "navio · timeline · documentos" },
   { id: "importacao-rastreamento", title: "Mapa de Navios",    module: "Logística",   role: "admin",      sub: "MarineTraffic API · rota Shanghai → Santos" },
-  { id: "importacao-email", title: "Inbox Importação",         module: "Logística",   role: "admin",      sub: "IMAP · BL · invoice · aduana" },
-  { id: "compras",        title: "Compras Nacional",           module: "Logística",   role: "admin",      sub: "fretes · ocorrências · CTes" },
+  { id: "inbox",           title: "Inbox",                     module: "Geral",       role: "admin",      sub: "IMAP · caixa compartilhada suporte@vpsistema.com" },
+  { id: "compras",        title: "Importação Varejo",          module: "Logística",   role: "admin",      sub: "reservado — processo em definição" },
   { id: "financeiro",     title: "Gatilhos & Prazo",   module: "Financeiro",  role: "financeiro", sub: "cadeia automática por Nº da Cotação" },
   { id: "comissoes",      title: "Comissões Q2/26",            module: "Financeiro",  role: "financeiro", sub: "vendedor · % · aprovação · pagamento" },
   { id: "notificacoes",   title: "Central de Notificações",    module: "Geral",       role: "admin",      sub: "estilo Linear · agrupadas" },
@@ -48,9 +48,9 @@ function renderPrintPage(scr) {
     case "instalacao":     return <InstalacaoPage/>;
     case "importacao":     return <ImportacaoPage setRoute={noop} setSubsel={noop}/>;
     case "importacao-detail": return <ImportacaoDetail embarque={null} setRoute={noop}/>;
-    case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={noop}/>;
-    case "importacao-email": return <EmailInbox kind="importacao" setRoute={noop}/>;
-    case "compras":        return <ComprasPage setRoute={noop}/>;
+    case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={noop} setSubsel={noop}/>;
+    case "inbox": return <EmailInbox setRoute={noop}/>;
+    case "compras":        return <window.ImportacaoVarejoPage setRoute={noop}/>;
     case "financeiro":     return <FinanceiroPage/>;
     case "comissoes":      return <ComissoesPage/>;
     case "notificacoes":   return <NotificacoesPage setRoute={noop}/>;
@@ -62,7 +62,7 @@ function renderPrintPage(scr) {
 function PrintHeader({ scr, idx, total }) {
   return (
     <div className="print-page__head">
-      <img className="brand" src="assets/logo-verticalparts-white.png" alt="VerticalParts"/>
+      <img className="brand" src="/assets/logo-verticalparts-white.png" alt="VerticalParts"/>
       <span className="pgnum">{String(idx).padStart(2, "0")}</span>
       <span className="pgnum-total">/ {String(total).padStart(2, "0")}</span>
       <div style={{ display: "flex", flexDirection: "column", gap: 2, marginLeft: 8 }}>
@@ -83,8 +83,8 @@ function PrintApp() {
       <div className="print-cover">
         <div className="print-cover__body">
           <div className="print-cover__brand">
-            <img src="assets/logo-mark-yellow.png" alt="" style={{ height: 64 }}/>
-            <img src="assets/logo-verticalparts-white.png" alt="VerticalParts" style={{ height: 38 }}/>
+            <img src="/assets/logo-mark-yellow.png" alt="" style={{ height: 64 }}/>
+            <img src="/assets/logo-verticalparts-white.png" alt="VerticalParts" style={{ height: 38 }}/>
           </div>
           <span className="print-cover__eyebrow">▎ Sistema interno · Protótipo Hi-Fi</span>
           <h1 className="print-cover__title">VP Gestão<br/><b>Tour Completo</b></h1>

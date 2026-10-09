@@ -826,8 +826,13 @@
   @page { margin: 0; }
   html, body { margin: 0 !important; padding: 0 !important; background: #fff !important; }
   /* display:none é crítico — visibility:hidden mantinha o espaço do app,
-     empurrava a ficha pra baixo e gerava página em branco antes. */
-  body > *:not(.ft-ficha-overlay) { display: none !important; }
+     empurrava a ficha pra baixo e gerava página em branco antes.
+     `body:has(.ft-ficha-overlay)` é obrigatório: este CSS é global (carrega
+     em todo o app), então sem o :has() esta regra escondia QUALQUER coisa
+     que não fosse a Ficha Técnica em qualquer impressão do sistema —
+     inclusive o overlay da Proposta, que imprimia em branco (achado real,
+     19/08). Mesma classe de bug que o :has() de proposta-editor.css. */
+  body:has(.ft-ficha-overlay) > *:not(.ft-ficha-overlay) { display: none !important; }
   .ft-ficha-overlay {
     position: static !important;
     inset: auto !important;

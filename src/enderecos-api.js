@@ -10,7 +10,35 @@
     return (v || '').replace(/\D/g, '');
   }
   function isCepValido(cep) { return sanitizeDigits(cep).length === 8; }
-  function isCnpjValido(cnpj) { return sanitizeDigits(cnpj).length === 14; }
+  /* CPF/CNPJ de verdade (04/10/2026): tamanho + dígitos verificadores; recusa sequência repetida (000.000.000-00 etc.). */
+  function cpfConfere(d) {
+    if (d.length !== 11 || /^(\d)\1{10}$/.test(d)) return false;
+    const dv = (n) => { let s = 0; for (let i = 0; i < n; i++) s += Number(d[i]) * (n + 1 - i); const r = (s * 10) % 11; return r === 10 ? 0 : r; };
+    return dv(9) === Number(d[9]) && dv(10) === Number(d[10]);
+  }
+  function cnpjConfere(d) {
+    if (d.length !== 14 || /^(\d)\1{13}$/.test(d)) return false;
+    const dv = (n) => { const pesos = n === 12 ? [5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2] : [6, 5, 4, 3, 2, 9, 8, 7, 6, 5, 4, 3, 2]; let s = 0; for (let i = 0; i < n; i++) s += Number(d[i]) * pesos[i]; const r = s % 11; return r < 2 ? 0 : 11 - r; };
+    return dv(12) === Number(d[12]) && dv(13) === Number(d[13]);
+  }
+  function isCnpjValido(cnpj) { return cnpjConfere(sanitizeDigits(cnpj)); }
+  function isCpfValido(cpf) { return cpfConfere(sanitizeDigits(cpf)); }
+  /* O documento tem que COINCIDIR com o tipo escolhido na lista (PF = CPF de 11 dígitos; PJ = CNPJ de 14). Vazio é aceito (documento
+     pendente) — quem chama decide se é obrigatório. Devolve { ok, digitos, msg }. */
+  function validarDocumento(tipoPessoa, valor) {
+    const d = sanitizeDigits(valor);
+    if (!d) return { ok: true, digitos: '', msg: '' };
+    const pf = tipoPessoa === 'PF';
+    const nome = pf ? 'CPF' : 'CNPJ';
+    const esperado = pf ? 11 : 14;
+    if (d.length !== esperado) {
+      const outro = d.length === 14 ? ' (parece um CNPJ)' : d.length === 11 ? ' (parece um CPF)' : '';
+      const sugestao = d.length === 14 && pf ? ' Troque o tipo para Pessoa Jurídica ou corrija o número.' : d.length === 11 && !pf ? ' Troque o tipo para Pessoa Física ou corrija o número.' : '';
+      return { ok: false, digitos: d, msg: `${pf ? 'Pessoa Física' : 'Pessoa Jurídica'} pede ${nome} com ${esperado} dígitos, mas o número tem ${d.length}${outro}.${sugestao}` };
+    }
+    if (!(pf ? cpfConfere(d) : cnpjConfere(d))) return { ok: false, digitos: d, msg: `${nome} inválido — os dígitos verificadores não conferem. Confira o número.` };
+    return { ok: true, digitos: d, msg: '' };
+  }
 
   async function fetchComTimeout(url, ms) {
     const controller = new AbortController();
@@ -128,5 +156,5 @@
     };
   }
 
-  window.EnderecoAPI = { sanitizeDigits, isCepValido, isCnpjValido, buscarCEP, buscarCNPJ, extrairNumeroLogradouro, mesclarLogradouro };
+  window.EnderecoAPI = { sanitizeDigits, isCepValido, isCnpjValido, isCpfValido, validarDocumento, buscarCEP, buscarCNPJ, extrairNumeroLogradouro, mesclarLogradouro };
 })();

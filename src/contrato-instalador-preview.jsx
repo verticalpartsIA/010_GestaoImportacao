@@ -9,7 +9,7 @@ function CI_ClauseItem({ it }) {
   if (it.bank) {
     return (
       <div className="ci-doc-item ci-doc-bank">
-        <p><span className="ci-doc-n">{it.n === 'BANK' ? '5.1.3' : it.n}</span>{it.text}</p>
+        <p><span className="ci-doc-n">{it.n}</span>{it.text}</p>
         <div className="ci-doc-bank-grid">
           <div><span>Banco</span><b>{it.bank.banco}</b></div>
           <div><span>Agência</span><b>{it.bank.ag}</b></div>
@@ -31,13 +31,23 @@ function CI_ClauseItem({ it }) {
   );
 }
 
-function CIContractPreview({ doc, highlightConditional }) {
+/* REGRA TRAVADA (05/10/2026, ver CLAUDE.md): contrato ASSINADO mostra quem assinou
+   digitalmente (papel, nome, data/hora Brasília, dispositivo, IP, hash). `assinaturas`
+   = [{papel,nome,em,dispositivo,ip,hash}]; vazio/ausente = documento como sempre foi. */
+function CI_fmtDataHora(iso) {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return String(iso);
+  return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+function CIContractPreview({ doc, highlightConditional, assinaturas }) {
   const ct = doc.contratante;
   const cd = doc.contratada;
   return (
     <div className="ci-doc-sheet" id="ci-contract-doc">
       <div className="ci-doc-head">
-        <img className="ci-doc-logo" src="assets/logo-black-yellow.png" alt="VerticalParts" />
+        <img className="ci-doc-logo" src="/assets/logo-black-yellow.png" alt="VerticalParts" />
         <div className="ci-doc-meta">
           <span className="ci-doc-meta-label">Nº do Contrato</span>
           <span className="ci-doc-meta-num">{doc.numero}</span>
@@ -88,6 +98,23 @@ function CIContractPreview({ doc, highlightConditional }) {
           <span className="ci-doc-sign-cpf">CPF: {cd.cpf}</span>
         </div>
       </div>
+
+      {Array.isArray(assinaturas) && assinaturas.length > 0 && (
+        <div className="ci-doc-digital">
+          <span className="ci-doc-sign-role">ASSINATURAS DIGITAIS</span>
+          {assinaturas.map((a, i) => (
+            <div className="ci-doc-digital-item" key={i}>
+              <span className="ci-doc-digital-role">{a.papel}</span>
+              {a.imagem
+                ? <img className="ci-doc-digital-img" src={a.imagem} alt={'Assinatura de ' + a.nome} />
+                : <span className="ci-doc-digital-name">{a.nome}</span>}
+              <span className="ci-doc-digital-meta">Assinado em {CI_fmtDataHora(a.em)} (horário de Brasília) · {a.dispositivo || 'dispositivo não informado'}</span>
+              <span className="ci-doc-digital-meta">IP: {a.ip || 'não informado'}</span>
+              <span className="ci-doc-digital-hash">Hash: {a.hash || ''}</span>
+            </div>
+          ))}
+        </div>
+      )}
 
       <div className="ci-doc-witness">
         <div className="ci-doc-sign">

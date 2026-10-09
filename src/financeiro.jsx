@@ -72,6 +72,8 @@ function FinanceiroPage({ setRoute, setSubsel }) {
   const [confirmarSinalDe, setConfirmarSinalDe] = React.useState(null);
   const [confirmarAvalDe, setConfirmarAvalDe] = React.useState(null);
   const [alertas, setAlertas] = React.useState([]);
+  const [filtroCadeia, setFiltroCadeia] = React.useState(null);   // null = escolhe sozinho (atrasadas, se houver)
+  const [buscaCadeia, setBuscaCadeia] = React.useState('');
 
   const fecharLembrete = async (id) => {
     if (window.GatilhosEngine) await window.GatilhosEngine.fecharLembrete(id);
@@ -86,6 +88,21 @@ function FinanceiroPage({ setRoute, setSubsel }) {
     if (!window.GatilhosEngine) return;
     const alvo = await window.GatilhosEngine.navegarPara(g);
     if (!alvo) return;
+    /* 23/08 (achado real, Gelson): cotação 903 tem o nó "Financeiro
+       precificando" fechado, mas nasceu via garantirNo (backfill retroativo
+       de etapa pulada) — nunca existiu precificacoes_elevador de verdade.
+       Sem essa checagem o clique caía direto na lista genérica sem
+       explicação. Nó com resolverSubsel que não achou nada = ser honesto,
+       não fingir que existe documento. */
+    if (alvo.subsel === null) {
+      const node = window.GatilhosEngine.NODES.find(
+        (n) => n.key === String(g.evento_key || '').replace(/^LEMBRETE__/, '')
+      );
+      if (node?.resolverSubsel) {
+        alert('Não há documento real para esta etapa — provavelmente foi registrada retroativamente (etapa pulada no fluxo) e nunca teve um documento gerado de verdade.');
+        return;
+      }
+    }
     if (alvo.subsel !== null) setSubsel?.(alvo.subsel);
     setRoute?.(alvo.rota);
   };
@@ -103,11 +120,31 @@ function FinanceiroPage({ setRoute, setSubsel }) {
         rows = data2 || rows;
       }
     }
+    /* Vistorias não agendadas dentro do prazo (23/08) — mesmo padrão sem
+       cron, roda toda vez que a tela abre. Não altera `rows`, só gera
+       alertas em `alertas` (recarregados por reloadAlertas logo abaixo). */
+    if (window.InstalacaoObraStore) window.InstalacaoObraStore.verificarPrazoVistorias().then(() => reloadAlertas());
+    /* Gatilhos manuais gravam days_left como número fixo na criação
+       (ver ModalNovoGatilho.save) e nada recalculava depois — "vence em
+       Xd"/"atrasado há Xd" e os KPIs de 7d/atrasados ficavam desatualizados
+       com o passar do tempo. Recalcula aqui, a cada carregamento da tela,
+       a partir de due_date — mesmo padrão que os gatilhos automáticos já
+       usam (recalculam via GanttBarMini/labelPrazo a cada render). Não
+       grava de volta no banco: é só a leitura que passa a ser fresca. */
+    rows = rows.map((g) => (
+      g.origem !== 'automatico' && g.due_date
+        ? { ...g, days_left: Math.round((new Date(g.due_date) - new Date()) / 86400000) }
+        : g
+    ));
     setGatilhos(rows);
     setLoading(false);
   };
   const reloadAlertas = () => {
-    window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false })
+    // Mesma regra de destinatário da Central de Notificações: alerta dirigido a uma pessoa não aparece para as outras.
+    const emailAlertas = (window.__VP_USER || {}).email || null;
+    const baseAlertas = window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false);
+    (emailAlertas ? baseAlertas.or(`destinatario_email.is.null,destinatario_email.eq.${emailAlertas}`) : baseAlertas.is('destinatario_email', null))
+      .order('created_at', { ascending: false })
       .then(({ data }) => setAlertas((data || []).map(a => ({ ...a, time: window.__VP_SB.timeAgo(a.created_at) }))));
   };
   React.useEffect(() => { reloadGatilhos(); reloadAlertas(); }, []);
@@ -125,32 +162,92 @@ function FinanceiroPage({ setRoute, setSubsel }) {
   }, {});
 
   const urgentes = manuais.filter(g => (g.days_left ?? g.daysLeft ?? 99) <= 2);
-  const routeByModule = (m) =>
-    m === "Importação"  ? "importacao"  :
-    m === "Jurídico"    ? "juridico"    :
-    m === "Financeiro"  ? "financeiro"  :
-    m === "Engenharia"  ? "engenharia"  : "cotacoes-fornecedor";
+
+  /* Resumo de cada cadeia: o que está atrasado, o que é só rascunho de formulário
+     e o que já terminou. Etapas "opcionais" (score/aval de venda) e lembretes não
+     contam como pendência. */
+  const E = window.GatilhosEngine;
+  const resumoDaCadeia = (nos) => {
+    const principais = nos.filter(g => !String(g.evento_key || '').startsWith('LEMBRETE__'));
+    const encerrada = principais.some(g => g.status === 'encerrado');
+    const abertos = principais.filter(g => !g.concluido_em && !(E?.nodeByKey(g.evento_key)?.opcional));
+    const atrasadas = E ? abertos.filter(g => E.emAtraso(g)) : [];
+    const maxAtrasoMs = atrasadas.reduce((m, g) => Math.max(m, Date.now() - E.prazoEfetivo(g).getTime()), 0);
+    const soFormulario = principais.length > 0 && principais.every(g => g.evento_key === 'FORMULARIO');
+    const tipo = encerrada ? 'encerrada'
+      : abertos.length === 0 ? 'concluida'
+      : atrasadas.length ? 'atrasada'
+      : soFormulario ? 'rascunho'
+      : 'andamento';
+    return { tipo, atrasadas, abertos, maxAtrasoMs };
+  };
+  const cadeias = Object.entries(cadeiasPorCotacao).map(([numero, nos]) => ({ numero, nos, ...resumoDaCadeia(nos) }));
+  const contagem = cadeias.reduce((acc, c) => { acc[c.tipo] = (acc[c.tipo] || 0) + 1; return acc; }, {});
+  const filtroAtivo = filtroCadeia || (contagem.atrasada ? 'atrasada' : 'andamento');
+  const termoCadeia = buscaCadeia.trim().replace(/\D/g, '');
+  const cadeiasVisiveis = cadeias
+    .filter(c => filtroAtivo === 'todas' || (filtroAtivo === 'fim' ? ['concluida', 'encerrada'].includes(c.tipo) : c.tipo === filtroAtivo))
+    .filter(c => !termoCadeia || String(c.numero).includes(termoCadeia))
+    .sort((a, b) => (b.maxAtrasoMs - a.maxAtrasoMs) || (Number(b.numero) - Number(a.numero)));
+  const etapasAtrasadas = cadeias.reduce((n, c) => n + c.atrasadas.length, 0);
+
+  /* Exporta TODAS as etapas (cadeias automáticas + avulsos), não só os avulsos. */
+  const exportarFluxo = () => {
+    const f = (d) => (d ? new Date(d).toLocaleString('pt-BR') : '');
+    const linhasAuto = automaticos.map(g => {
+      const prazo = E?.prazoEfetivo(g);
+      return { cotacao: g.numero_cotacao, etapa: g.trigger_name, nasceu: f(g.nascido_em), prazo: f(prazo), concluida: f(g.concluido_em),
+        situacao: g.status === 'encerrado' ? 'encerrada' : g.concluido_em ? (E?.ehRetroativo(g) ? 'registrada retroativamente' : 'concluída') : (E?.emAtraso(g) ? 'atrasada' : 'em andamento'),
+        origem: 'automático' };
+    });
+    const linhasManuais = manuais.map(g => ({ cotacao: g.projeto || g.project_id || '', etapa: `${g.trigger || g.trigger_name || ''} — ${g.building || ''}`, nasceu: '',
+      prazo: g.due_date || '', concluida: f(g.concluido_em), situacao: g.concluido_em ? 'concluída' : (g.days_left < 0 ? 'atrasada' : 'em andamento'), origem: 'avulso' }));
+    window.csvDownload([...linhasAuto, ...linhasManuais], 'prazos-e-pendencias.csv');
+  };
+
+  /* Alerta clicado: abre o link gravado em `alertas.rota` (mesma regra da Central
+     de Notificações); sem link, cai na Central. */
+  const abrirAlerta = (a) => {
+    const NP = window.NotificacoesProcessamento;
+    const url = NP && NP.urlSegura(a.rota, window.VpRouter && window.VpRouter.isKnownRoute);
+    if (url) { window.history.pushState({}, '', url); window.dispatchEvent(new PopStateEvent('popstate')); return; }
+    setRoute?.('notificacoes');
+  };
+  const alertasPrincipais = [...alertas]
+    .sort((a, b) => (['danger', 'critical', 'warning'].includes(b.level) ? 1 : 0) - (['danger', 'critical', 'warning'].includes(a.level) ? 1 : 0))
+    .slice(0, 6);
 
   return (
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Gatilhos</div>
-          <h1 className="page-head__title">Gatilhos & Prazo</h1>
-          <p className="page-head__sub">Cada gatilho nasce automaticamente ao concluir a etapa anterior, correlacionado pelo Nº da Cotação.</p>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Geral · Prazos</div>
+          <h1 className="page-head__title">Prazos & Pendências</h1>
+          <p className="page-head__sub">Cada etapa nasce ao concluir a anterior, por Nº da Cotação. Prazos contam só segunda a sexta (exceto espera do cliente e embarque).</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="download" onClick={() => window.csvDownload(manuais.map(g => ({ projeto:g.projeto||g.project_id, building:g.building, trigger:g.trigger||g.trigger_name, valor:g.value, vencimento:g.due_date, dias_restantes:g.days_left, status:g.status })), 'gatilhos-fluxo.csv')}>Exportar fluxo</Button>
+          <Button variant="outline" icon="download" onClick={exportarFluxo}>Exportar fluxo</Button>
           <Button variant="primary" icon="plus" onClick={() => setShowGatilho(true)}>Novo gatilho</Button>
         </div>
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Cotações em andamento" value={Object.keys(cadeiasPorCotacao).length} sub="cadeias ativas" delta="—" deltaDir="up" icon="zap"/>
+        <KPI label="Cotações em andamento" value={(contagem.andamento || 0) + (contagem.atrasada || 0)} sub="já passaram do formulário, não encerradas" delta="—" deltaDir="up" icon="zap"/>
+        <KPI label="Com prazo estourado" value={contagem.atrasada || 0} sub={`${etapasAtrasadas} etapa(s) atrasada(s)`} delta="—" deltaDir="down" icon="warning"/>
         <KPI label="Ação do Financeiro pendente" value={automaticos.filter(g => ['AGUARDA_BOLETO', 'AVAL_PAGAMENTO'].includes(g.evento_key) && !g.concluido_em).length} sub="boleto ou aval de pagamento" delta="—" deltaDir="up" icon="dollar"/>
-        <KPI label="Gatilhos manuais próx. 7d" value={manuais.filter(g => (g.days_left ?? g.daysLeft ?? 99) <= 7 && (g.days_left ?? g.daysLeft ?? 99) > 0).length} sub="atenção" delta="—" deltaDir="up" icon="clock"/>
-        <KPI label="Manuais em atraso" value={manuais.filter(g => (g.days_left ?? g.daysLeft ?? 0) < 0).length} sub="ação urgente" delta="—" deltaDir="down" icon="warning"/>
+        <KPI label="Formulários sem envio" value={contagem.rascunho || 0} sub="salvos, ainda não enviados ao fornecedor" delta="—" deltaDir="up" icon="clock"/>
       </div>
+
+      {contagem.atrasada > 0 && (
+        <div className="alert danger" style={{ marginBottom: 20 }}>
+          <Icon.warning/>
+          <div style={{ flex: 1 }}>
+            <div className="alert__title">{contagem.atrasada} cotaç{contagem.atrasada > 1 ? 'ões' : 'ão'} com etapa atrasada</div>
+            <div className="alert__sub">{etapasAtrasadas} etapa(s) passaram do prazo — a mais antiga está no topo da lista abaixo. Um aviso diário é enviado à Central de Notificações.</div>
+          </div>
+          <Button variant="secondary" size="sm" iconRight="arrowRight" onClick={() => { setFiltroCadeia('atrasada'); document.getElementById('cadeia-gatilhos-cotacao')?.scrollIntoView({ behavior: 'smooth', block: 'start' }); }}>Ver atrasadas</Button>
+        </div>
+      )}
 
       {urgentes.length > 0 && (
         <div className="alert danger" style={{ marginBottom: 20 }}>
@@ -159,51 +256,63 @@ function FinanceiroPage({ setRoute, setSubsel }) {
             <div className="alert__title">{urgentes.length} gatilho{urgentes.length > 1 ? 's' : ''} vence{urgentes.length === 1 ? '' : 'm'} em até 2 dias</div>
             <div className="alert__sub">Verifique os gatilhos abaixo e confirme os pagamentos pendentes.</div>
           </div>
-          <Button variant="secondary" size="sm" iconRight="arrowRight">Ver agora</Button>
+          <Button variant="secondary" size="sm" iconRight="arrowRight" onClick={() => document.getElementById('cadeia-gatilhos-cotacao')?.scrollIntoView({ behavior: 'smooth', block: 'start' })}>Ver agora</Button>
         </div>
       )}
 
-      <Card title="Central de Alertas" sub="ações pendentes que requerem sua atenção" style={{ marginBottom: 20 }}
-        action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute?.("notificacoes")}>Ver tudo</Button>}>
+      <Card title="Alertas recentes" sub="os que mais pedem atenção — o resto está em Notificações" style={{ marginBottom: 20 }}
+        action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute?.("notificacoes")}>Ver tudo ({alertas.length})</Button>}>
         <div className="stack">
           {alertas.length === 0 && (
             <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
               Nenhum alerta pendente.
             </div>
           )}
-          {alertas.map((a) => (
-            <AlertRow key={a.id} alert={a} onClick={() => setRoute?.(routeByModule(a.module))}/>
+          {alertasPrincipais.map((a) => (
+            <AlertRow key={a.id} alert={a} onClick={() => abrirAlerta(a)}/>
           ))}
         </div>
       </Card>
 
-      <Card title="Cadeia de Gatilhos por Cotação" sub={`${Object.keys(cadeiasPorCotacao).length} cotações · Formulário → Compra liberada`} style={{ marginBottom: 20 }}>
+      <Card id="cadeia-gatilhos-cotacao" title="Cadeia de etapas por Cotação" sub={`${cadeiasVisiveis.length} de ${cadeias.length} cotações · Formulário → Compra liberada · mais atrasadas primeiro`} style={{ marginBottom: 20 }}>
+        <div className="row gap-2" style={{ flexWrap: 'wrap', alignItems: 'center', marginBottom: 14 }}>
+          {[['atrasada', 'Atrasadas'], ['andamento', 'Em andamento'], ['rascunho', 'Formulário sem envio'], ['fim', 'Concluídas/Encerradas'], ['todas', 'Todas']].map(([k, label]) => {
+            const n = k === 'todas' ? cadeias.length : k === 'fim' ? (contagem.concluida || 0) + (contagem.encerrada || 0) : (contagem[k] || 0);
+            return (
+              <Button key={k} size="sm" variant={filtroAtivo === k ? 'primary' : 'outline'} onClick={() => setFiltroCadeia(k)}>{label} ({n})</Button>
+            );
+          })}
+          <input className="input" style={{ maxWidth: 160, marginLeft: 'auto' }} placeholder="Buscar Nº da cotação"
+            value={buscaCadeia} onChange={(e) => setBuscaCadeia(e.target.value)}/>
+        </div>
         <div className="stack" style={{ gap: 20 }}>
-          {Object.keys(cadeiasPorCotacao).length === 0 && (
+          {cadeias.length === 0 && (
             <div style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
               Nenhuma cadeia automática ainda — nasce ao preencher o primeiro Formulário de Elevador.
             </div>
           )}
-          {Object.entries(cadeiasPorCotacao).map(([numeroCotacao, nos]) => (
-            <CadeiaGatilhosCotacao key={numeroCotacao} numeroCotacao={numeroCotacao} nos={nos}
+          {cadeias.length > 0 && cadeiasVisiveis.length === 0 && (
+            <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
+              Nenhuma cotação neste filtro.
+            </div>
+          )}
+          {cadeiasVisiveis.map((c) => (
+            <CadeiaGatilhosCotacao key={c.numero} numeroCotacao={c.numero} nos={c.nos}
               onConfirmarSinal={setConfirmarSinalDe} onConfirmarAval={setConfirmarAvalDe}
-              onFecharLembrete={fecharLembrete} onAbrirGatilho={abrirGatilho}/>
+              onFecharLembrete={fecharLembrete} onAbrirGatilho={abrirGatilho} onFecharComMotivo={reloadGatilhos}/>
           ))}
         </div>
       </Card>
 
-      <Card title="Gatilhos Financeiros Avulsos" sub={`${manuais.length} registros cadastrados manualmente`}>
-        <div className="stack" style={{ gap: 14 }}>
-          {manuais.length === 0 && (
-            <div style={{ textAlign:'center', padding:'48px 0', color:'var(--fg3)', fontSize:13 }}>
-              Nenhum registro cadastrado.
-            </div>
-          )}
-          {manuais.map((g) => (
-            <GatilhoCard key={g.id} g={g} onSaved={reloadGatilhos}/>
-          ))}
-        </div>
-      </Card>
+      {manuais.length > 0 && (
+        <Card title="Gatilhos Financeiros Avulsos" sub={`${manuais.length} registros cadastrados manualmente`}>
+          <div className="stack" style={{ gap: 14 }}>
+            {manuais.map((g) => (
+              <GatilhoCard key={g.id} g={g} onSaved={reloadGatilhos}/>
+            ))}
+          </div>
+        </Card>
+      )}
       {showGatilho && <ModalNovoGatilho onClose={() => setShowGatilho(false)} onSaved={reloadGatilhos}/>}
       {confirmarSinalDe && <ModalConfirmarSinal g={confirmarSinalDe} onClose={() => setConfirmarSinalDe(null)} onSaved={reloadGatilhos}/>}
       {confirmarAvalDe && <ModalConfirmarAvalPagamento g={confirmarAvalDe} onClose={() => setConfirmarAvalDe(null)} onSaved={reloadGatilhos}/>}
@@ -263,25 +372,90 @@ function GanttBarMini({ nascidoEm, prazoEm, concluidoEm, encerrado, comLabel }) 
   );
 }
 
+/* "levou 2h" / "levou 3d 4h" — tempo REAL que uma etapa concluída levou,
+   registrado depois do fato (nascido_em → concluido_em). Sem SLA nenhum
+   envolvido — decisão de 23/08: nada de prazo previsto pras etapas novas,
+   só o fato consumado. Depois de 4-6 casos reais dá pra pensar em prazo
+   fixo; hoje é só observação. */
+function fmtDuracao(ms) {
+  if (ms == null || ms < 0) return null;
+  const horas = ms / 3600000;
+  if (horas < 1) return `${Math.max(1, Math.round(ms / 60000))}min`;
+  if (horas < 24) return `${Math.round(horas)}h`;
+  const totalHoras = Math.round(horas);       // arredonda ANTES de dividir (senão saía "15d 24h")
+  const dias = Math.floor(totalHoras / 24);
+  const restoHoras = totalHoras % 24;
+  return restoHoras > 0 ? `${dias}d ${restoHoras}h` : `${dias}d`;
+}
+
+/* Modal de fechamento manual — hoje só usado pelo "Cemitério" (Aguardando
+   Cliente parado há mais de 10 dias, ver SLA_HORAS.AGUARDA_CLIENTE em
+   gatilhos-engine.js). Só o cliente tem poder de matar o fluxo (decisão
+   de 23/08) — este botão é o vendedor registrando o que descobriu por
+   fora (ligou, sumiu, concorrente, etc.), nunca um fechamento automático. */
+function ModalFecharComMotivo({ g, onClose, onSaved }) {
+  const [motivo, setMotivo] = React.useState('');
+  const [salvando, setSalvando] = React.useState(false);
+
+  const salvar = async () => {
+    if (!motivo.trim()) return window.toast('Descreva o motivo antes de fechar.', 'warning');
+    setSalvando(true);
+    try {
+      await window.GatilhosEngine.fecharComMotivo(g.id, motivo);
+      window.toast('Ciclo encerrado.', 'success');
+      onSaved?.();
+    } catch (e) {
+      window.toast('Erro: ' + (e.message || e), 'error');
+    } finally {
+      setSalvando(false);
+    }
+  };
+
+  return (
+    <Modal title="Fechar ciclo com motivo" onClose={onClose} width={480}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Encerrar ciclo'}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 10 }}>
+        <div className="small muted">{g.trigger_name} — Cotação Nº {g.numero_cotacao}</div>
+        <label className="up-eyebrow muted">O que aconteceu?</label>
+        <textarea className="input" rows={4} value={motivo} onChange={(e) => setMotivo(e.target.value)}
+          placeholder="Ex.: cliente não responde há 3 semanas, liguei e caiu na caixa postal duas vezes…" autoFocus/>
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Cadeia automática (GatilhosEngine) ----------
    Fechada: uma linha-resumo por cotação (clicável, mini-Gantt do nó
-   atual). Aberta: árvore vertical, cada nó indentado pela profundidade
-   na cadeia (irmãos II/SS ficam no mesmo nível) — não mais cards lado
-   a lado, que não escalam quando há muitas cotações na tela. */
-function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho }) {
-  const [aberta, setAberta] = React.useState(false);
+   atual). Aberta: percorre as 47 etapas da engine (não só as que já
+   nasceram na tabela `gatilhos`) — decisão de 23/08: a cadeia inteira
+   fica sempre visível, concluídas mostram tempo real que levaram, a(s)
+   etapa(s) atual(is) ficam destacadas, e o resto aparece opaco (sem
+   número inventado) até chegar a vez. Etapas com `fecha: null` (sem
+   ponto de ação real no código ainda, ver gatilhos-engine.js) ganham
+   rótulo "sem rastreio automático" em vez de fingir monitoramento. */
+function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirmarAval, onFecharLembrete, onAbrirGatilho, onFecharComMotivo, defaultOpen }) {
+  const [aberta, setAberta] = React.useState(!!defaultOpen);
+  const [fechandoMotivo, setFechandoMotivo] = React.useState(null);
   const engine = window.GatilhosEngine;
+  const NODES = engine?.NODES || [];
 
   const principais = nos.filter(g => !String(g.evento_key || '').startsWith('LEMBRETE__'))
     .sort((a, b) => new Date(a.nascido_em || 0) - new Date(b.nascido_em || 0));
   const lembretesPorPai = nos.filter(g => String(g.evento_key || '').startsWith('LEMBRETE__'))
     .reduce((acc, g) => { (acc[g.predecessor_id] = acc[g.predecessor_id] || []).push(g); return acc; }, {});
+  const porChave = principais.reduce((acc, g) => { acc[g.evento_key] = g; return acc; }, {});
 
+  const ehOpcional = (g) => !!(engine?.nodeByKey(g.evento_key)?.opcional);
   const encerrada = principais.some(g => g.status === 'encerrado');
-  const concluida = principais.every(g => g.concluido_em);
-  const noAtual = principais.find(g => !g.concluido_em) || principais[principais.length - 1];
-  const statusLabel = encerrada ? 'Encerrada (proposta recusada)' : concluida ? 'Concluída' : 'Em andamento';
-  const statusVariant = encerrada ? 'neutral' : concluida ? 'success' : 'warning';
+  const pendentes = principais.filter(g => !g.concluido_em && !ehOpcional(g));
+  const concluida = principais.length > 0 && pendentes.length === 0;
+  const noAtual = pendentes[0] || principais[principais.length - 1];
+  const atrasada = !encerrada && pendentes.some(g => engine?.emAtraso(g));
+  const statusLabel = encerrada ? 'Encerrada' : concluida ? 'Concluída' : atrasada ? 'Atrasada' : 'Em andamento';
+  const statusVariant = encerrada ? 'neutral' : concluida ? 'success' : atrasada ? 'danger' : 'warning';
 
   return (
     <div>
@@ -291,8 +465,8 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
           <div className="up-eyebrow muted">Cotação Nº {numeroCotacao}</div>
           {!aberta && noAtual && (
             <>
-              <span className="small muted">{noAtual.trigger_name}</span>
-              <GanttBarMini nascidoEm={noAtual.nascido_em} prazoEm={noAtual.prazo_em} concluidoEm={noAtual.concluido_em} encerrado={encerrada}/>
+              <span className="small muted">{engine?.nodeByKey(noAtual.evento_key)?.label || noAtual.trigger_name}</span>
+              <GanttBarMini nascidoEm={noAtual.nascido_em} prazoEm={engine?.prazoEfetivo(noAtual) || noAtual.prazo_em} concluidoEm={noAtual.concluido_em} encerrado={encerrada}/>
             </>
           )}
         </div>
@@ -301,38 +475,72 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
 
       {aberta && (
         <div style={{ marginTop: 8, marginLeft: 20 }}>
-          {principais.map((g) => {
-            const isOpen = !g.concluido_em;
-            const revisao = g.status === 'revisao_necessaria';
+          {NODES.map((node) => {
+            const g = porChave[node.key];
+            const nivel = engine ? engine.profundidade(node.key) : 0;
+            const semAutomacao = node.fecha == null;
+
+            /* Etapa futura — ainda não nasceu na tabela `gatilhos`.
+               Aparece opaca, sem número de prazo inventado. */
+            if (!g) {
+              return (
+                <div key={node.key} className="row gap-2" style={{
+                  alignItems: 'center', padding: '5px 8px', marginLeft: nivel * 20, opacity: 0.4,
+                }}>
+                  <span className="mono" style={{ fontSize: 9, fontWeight: 700, width: 20 }}>{(node.predecessores[0] || {}).rel || 'FS'}</span>
+                  <span className="small" style={{ flex: 1 }}>{node.label}</span>
+                  {semAutomacao && <span className="mono" style={{ fontSize: 9 }}>sem rastreio automático</span>}
+                </div>
+              );
+            }
+
+            const isOpen = !g.concluido_em && !ehOpcional(g);
+            const retroativo = engine?.ehRetroativo(g);
+            const cemiterio = isOpen && g.status === 'revisao_necessaria';
             const podeConfirmarSinal = g.evento_key === 'AGUARDA_BOLETO' && isOpen;
             const podeConfirmarAval = g.evento_key === 'AVAL_PAGAMENTO' && isOpen;
             const lembretes = lembretesPorPai[g.id] || [];
-            const nodeDef = (engine?.NODES || []).find((n) => n.key === g.evento_key);
-            const clicavel = !!(nodeDef && nodeDef.rota);
-            const nivel = engine ? engine.profundidade(g.evento_key) : 0;
-            const cor = revisao ? 'var(--vp-warning)' : g.concluido_em ? 'var(--vp-success)' : 'var(--fg2)';
+            const clicavel = !!node.rota;
+            const duracao = g.concluido_em && g.nascido_em ? fmtDuracao(new Date(g.concluido_em) - new Date(g.nascido_em)) : null;
+            const cor = cemiterio ? 'var(--vp-warning)' : g.status === 'encerrado' ? 'var(--fg3)' : g.concluido_em ? 'var(--vp-success)' : 'var(--fg1)';
+            const diasParado = cemiterio && g.nascido_em ? Math.floor((Date.now() - new Date(g.nascido_em).getTime()) / 86400000) : null;
+
             return (
               <div key={g.id}>
                 <div className="row gap-2" style={{
                   alignItems: 'center', padding: '6px 8px', marginLeft: nivel * 20,
                   borderLeft: nivel > 0 ? '2px solid var(--border)' : 'none',
+                  background: isOpen && !cemiterio ? 'var(--vp-gray-50)' : 'transparent',
                   cursor: clicavel ? 'pointer' : 'default',
                 }} onClick={clicavel ? () => onAbrirGatilho(g) : undefined} title={clicavel ? 'Abrir' : undefined}>
                   <span className="mono" style={{ fontSize: 9, fontWeight: 700, color: 'var(--fg3)', width: 20 }}>{g.tipo_relacionamento || 'FS'}</span>
-                  <span className="small" style={{ color: cor, fontWeight: g.concluido_em ? 400 : 700, flex: 1 }}>
-                    {g.trigger_name}
-                    {revisao ? ' — requer revisão' : ''}
+                  <span className="small" style={{ color: cor, fontWeight: isOpen ? 700 : 400, flex: 1 }}>
+                    {node.label}{ehOpcional(g) && !g.concluido_em ? ' (opcional — não trava o fluxo)' : ''}
+                    {g.status === 'encerrado' && g.motivo_fechamento ? ` — encerrado: "${g.motivo_fechamento}"` : g.status === 'encerrado' ? ' — encerrado' : ''}
                   </span>
-                  <GanttBarMini nascidoEm={g.nascido_em} prazoEm={g.prazo_em} concluidoEm={g.concluido_em} comLabel/>
+                  {g.concluido_em ? (
+                    <span className="mono small" style={{ color: cor, whiteSpace: 'nowrap' }}>
+                      {g.status === 'encerrado' ? (g.motivo_fechamento ? 'fechado manualmente' : 'encerrado') : retroativo ? 'etapa pulada · registrada retroativamente' : duracao ? `concluído · levou ${duracao}` : 'concluído'}
+                    </span>
+                  ) : cemiterio ? (
+                    <Button size="sm" variant="outline" onClick={(e) => { e.stopPropagation(); setFechandoMotivo(g); }}>Fechar com motivo</Button>
+                  ) : (
+                    <GanttBarMini nascidoEm={g.nascido_em} prazoEm={engine?.prazoEfetivo(g) || g.prazo_em} concluidoEm={null} comLabel/>
+                  )}
                   {podeConfirmarSinal && (
                     <Button size="sm" variant="primary" icon="check"
                       onClick={(e) => { e.stopPropagation(); onConfirmarSinal(g); }}>Boleto pago</Button>
                   )}
                   {podeConfirmarAval && (
                     <Button size="sm" variant="primary" icon="check"
-                      onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval</Button>
+                      title="Libera a compra ao fornecedor (junto com o Aval Jurídico). Não é o aval de venda/score." onClick={(e) => { e.stopPropagation(); onConfirmarAval(g); }}>Dar Aval de Pagamento</Button>
                   )}
                 </div>
+                {cemiterio && (
+                  <div style={{ marginLeft: (nivel + 1) * 20, padding: '4px 8px', fontSize: 11, color: 'var(--vp-warning)' }}>
+                    ⚠ Parado há {diasParado} dia{diasParado === 1 ? '' : 's'} sem resposta do cliente — investigue e feche o ciclo, ou deixe em aberto se ainda faz sentido esperar.
+                  </div>
+                )}
                 {lembretes.map((l) => (
                   <div key={l.id} className="row sb" style={{
                     marginLeft: (nivel + 1) * 20, padding: '4px 8px', fontSize: 11,
@@ -348,6 +556,11 @@ function CadeiaGatilhosCotacao({ numeroCotacao, nos, onConfirmarSinal, onConfirm
             );
           })}
         </div>
+      )}
+
+      {fechandoMotivo && (
+        <ModalFecharComMotivo g={fechandoMotivo} onClose={() => setFechandoMotivo(null)}
+          onSaved={() => { setFechandoMotivo(null); onFecharComMotivo?.(); }}/>
       )}
     </div>
   );
@@ -420,8 +633,8 @@ function ModalConfirmarAvalPagamento({ g, onClose, onSaved }) {
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
         <p className="muted" style={{ fontSize: 13 }}>
-          Checkpoint final do Financeiro antes de liberar a compra ao Fornecedor — distinto do
-          Aval Financeiro de score/crédito, que já rodou antes do contrato.
+          Checkpoint manual do Financeiro depois do sinal pago. Junto com o Aval Jurídico
+          (manual) e o contrato assinado, libera a compra ao Fornecedor.
         </p>
         <div className="stack" style={{ gap: 4 }}>
           <label className="up-eyebrow muted">Observações (opcional)</label>
@@ -706,108 +919,95 @@ function ComissoesPage() {
 
 /* ---------- NOTIFICAÇÕES ---------- */
 function NotificacoesPage({ setRoute }) {
-  const [notifications, setNotifications] = React.useState([]);
+  const [alertasRaw, setAlertasRaw] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
   const [filter, setFilter] = React.useState("Todas");
   const [moduleFilter, setModuleFilter] = React.useState("Todos");
   const [prefsOpen, setPrefsOpen] = React.useState(false);
   const [details, setDetails] = React.useState(null);
-  const [readIds, setReadIds] = React.useState(() => {
-    try { return JSON.parse(localStorage.getItem('vpprd.notificacoes.lidas') || '[]'); }
-    catch (e) { return []; }
-  });
-  const filters = ["Todas", "Não lidas", "Menções", "Aprovações"];
+  const [readIds, setReadIds] = React.useState([]);
+  const [archivedIds, setArchivedIds] = React.useState([]);
+  const [prefs, setPrefs] = React.useState(() => window.NotificacoesLidasStore.lerPreferencias());
+  const filters = ["Todas", "Não lidas", "Arquivadas"];
+  const NP = window.NotificacoesProcessamento;
+  const LidasStore = window.NotificacoesLidasStore;
 
-  const ICON_MAP = { "user-plus": "users", "check": "check", "ship": "ship", "mail": "mail", "at-sign": "at", "dollar": "dollar", "calendar": "calendar" };
-  const routeByModule = {
-    "Importação": "importacao",
-    "Jurídico": "juridico",
-    "Financeiro": "financeiro",
-    "Engenharia": "engenharia",
-    "Cotações": "cotacoes-fornecedor",
-    "Propostas": "propostas",
-    "Comissões": "comissoes",
-  };
-  const timeAgo = (ts) => {
-    if (!ts) return '—';
-    const diff = Date.now() - new Date(ts).getTime();
-    const mins = Math.floor(diff / 60000);
-    if (mins < 2) return 'agora';
-    if (mins < 60) return `há ${mins}min`;
-    const h = Math.floor(mins / 60);
-    if (h < 24) return `há ${h}h`;
-    const d = Math.floor(h / 24);
-    if (d === 1) return 'ontem';
-    return `há ${d}d`;
-  };
-  const groupLabel = (n) => {
-    if ((n.time || '').includes('agora') || (n.time || '').includes('min') || (n.time || '').includes('h')) return 'Hoje';
-    if ((n.time || '') === 'ontem') return 'Ontem';
-    return 'Anteriores';
-  };
-  const iconByModule = (module) => ({
-    "Importação": "ship",
-    "Jurídico": "fileText",
-    "Financeiro": "dollar",
-    "Engenharia": "ruler",
-    "Cotações": "mail",
-    "Propostas": "proposal",
-    "Comissões": "award",
-  })[module] || "bell";
-
-  const persistReadIds = (ids) => {
-    setReadIds(ids);
-    localStorage.setItem('vpprd.notificacoes.lidas', JSON.stringify(ids));
-  };
-  const markRead = (id) => {
-    if (!readIds.includes(id)) persistReadIds([...readIds, id]);
-  };
-
+  // Busca de alertas e leitura do estado "lido" são independentes: carregar
+  // uma não deve refazer a outra (candidato 2 da revisão de arquitetura —
+  // antes o estado "lido" vinha do localStorage embutido na própria busca
+  // de alertas, e reabria a query toda vez que uma notificação era marcada).
   React.useEffect(() => {
     setLoading(true);
-    window.__VP_SB.sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false })
-      .then(({ data, error }) => {
-        if (error) {
-          window.toast('Erro ao carregar notificações: ' + error.message, 'error');
-          setNotifications([]);
-        } else {
-          setNotifications((data || []).map(a => ({
-            id: a.id,
-            title: a.title,
-            sub: a.sub,
-            time: timeAgo(a.created_at),
-            icon: iconByModule(a.module),
-            unread: !readIds.includes(a.id),
-            module: a.module || 'Sistema',
-            level: a.level,
-          })));
-        }
-        setLoading(false);
-      });
-  }, [readIds.join('|')]);
+    // A leitura (globais + dirigidos ao e-mail + sintéticos do Dashboard) fica no store, a MESMA que o sino do cabeçalho usa.
+    LidasStore.carregarAlertas()
+      .then((lista) => { setAlertasRaw(lista); setLoading(false); })
+      .catch((err) => { window.toast('Erro ao carregar notificações: ' + (err.message || err), 'error'); setAlertasRaw([]); setLoading(false); });
+  }, []);
 
+  React.useEffect(() => { LidasStore.carregarEstado().then((e) => { setReadIds(e.lidas); setArchivedIds(e.arquivadas); }); }, []);
+
+  // Preferências mudadas no modal (ou em outra aba do app) refletem aqui sem recarregar.
+  React.useEffect(() => {
+    const h = () => setPrefs(LidasStore.lerPreferencias());
+    window.addEventListener('vp:notificacoes', h);
+    return () => window.removeEventListener('vp:notificacoes', h);
+  }, []);
+
+  const markRead = (id) => {
+    const idStr = String(id);
+    if (readIds.includes(idStr)) return;
+    setReadIds((prev) => [...prev, idStr]);
+    LidasStore.marcarLida(id);
+  };
+  const markAllRead = () => {
+    const ids = notificationsVisiveis.map((n) => String(n.id));
+    setReadIds((prev) => Array.from(new Set([...prev, ...ids])));
+    LidasStore.marcarTodasLidas(ids);
+    window.toast("Notificações marcadas como lidas", "success");
+  };
+  // Arquivar/restaurar é POR PESSOA (some só da lista de quem arquivou). Arquivar também conta como lida.
+  const archive = async (ids) => {
+    const strs = ids.map(String);
+    setArchivedIds((prev) => Array.from(new Set([...prev, ...strs])));
+    setReadIds((prev) => Array.from(new Set([...prev, ...strs])));
+    const ok = await LidasStore.arquivar(strs);
+    if (!ok) setArchivedIds((prev) => prev.filter((x) => !strs.includes(x)));
+    else window.toast(strs.length > 1 ? `${strs.length} notificações arquivadas` : 'Notificação arquivada', 'success');
+  };
+  const restore = async (ids) => {
+    const strs = ids.map(String);
+    setArchivedIds((prev) => prev.filter((x) => !strs.includes(x)));
+    const ok = await LidasStore.desarquivar(strs);
+    if (!ok) setArchivedIds((prev) => Array.from(new Set([...prev, ...strs])));
+    else window.toast('Notificação restaurada', 'success');
+  };
+
+  // Todas as notificações respeitando as Preferências; "ativas" = sem as arquivadas desta pessoa.
+  const notificationsPref = NP.processarAlertas(alertasRaw, readIds).filter((n) => NP.visivelPorPreferencia(n, prefs));
+  const notificationsVisiveis = notificationsPref.filter((n) => !archivedIds.includes(String(n.id)));
+  const notifications = filter === "Arquivadas" ? notificationsPref.filter((n) => archivedIds.includes(String(n.id))) : notificationsVisiveis;
+  const naoLidasCount = NP.naoLidas(notificationsVisiveis).length;
+  // Avisa o sino do cabeçalho na hora (sem esperar o intervalo de 5 min).
+  React.useEffect(() => { if (!loading) LidasStore.avisar({ naoLidas: naoLidasCount }); }, [naoLidasCount, loading]);
   const modules = ["Todos", ...Array.from(new Set(notifications.map(n => n.module))).sort()];
   const rows = notifications.filter(n => {
     if (filter === "Não lidas" && !n.unread) return false;
-    if (filter === "Menções" && !String(n.title || '').includes('@')) return false;
-    if (filter === "Aprovações" && !/aprova|assinatura|confirm/i.test(String(n.title || ''))) return false;
     if (moduleFilter !== "Todos" && n.module !== moduleFilter) return false;
     return true;
   });
-  const groups = rows.reduce((acc, n) => {
-    const key = groupLabel(n);
-    acc[key] = acc[key] || [];
-    acc[key].push(n);
-    return acc;
-  }, {});
-  const markAllRead = () => {
-    persistReadIds(Array.from(new Set([...readIds, ...notifications.map(n => n.id)])));
-    window.toast("Notificações marcadas como lidas", "success");
-  };
+  const archiveReadVisible = () => archive(notificationsVisiveis.filter((n) => !n.unread).map((n) => n.id));
+  const groups = NP.agruparPorPeriodo(rows);
   const openNotification = (n) => {
     markRead(n.id);
-    const target = routeByModule[n.module] || "dashboard";
-    setRoute(target);
+    // Link composto (alertas.rota, ex.: /logistica/almoxarifado/reposicao): abre a aba certa. Passa pelo roteador por URL
+    // (pushState + popstate, como o Voltar do navegador), e só aceita caminho relativo de rota conhecida (urlSegura).
+    const url = NP.urlSegura(n.rota, window.VpRouter && window.VpRouter.isKnownRoute);
+    if (url) {
+      window.history.pushState({}, '', url);
+      window.dispatchEvent(new PopStateEvent('popstate'));
+      return;
+    }
+    setRoute(NP.rotaPara(n.module));
   };
 
   return (
@@ -816,11 +1016,12 @@ function NotificacoesPage({ setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Central</div>
           <h1 className="page-head__title">Notificações</h1>
-          <p className="page-head__sub">Agrupadas por módulo · respostas rápidas inline</p>
+          <p className="page-head__sub">{naoLidasCount} não lida(s) · agrupadas por período · arquivar tira da sua lista (os alertas somem sozinhos depois de 14 dias, ou 45 se forem avisos/críticos)</p>
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="settings" onClick={() => setPrefsOpen(true)}>Preferências</Button>
-          <Button variant="primary" icon="check" onClick={markAllRead}>Marcar todas como lidas</Button>
+          <Button variant="outline" icon="x" onClick={archiveReadVisible} disabled={!notificationsVisiveis.some((n) => !n.unread)}>Arquivar lidas</Button>
+          <Button variant="primary" icon="check" onClick={markAllRead} disabled={!naoLidasCount}>Marcar todas como lidas</Button>
         </div>
       </div>
 
@@ -849,7 +1050,7 @@ function NotificacoesPage({ setRoute }) {
           <div key={grp}>
             <div style={{ padding: "10px 20px", background: "var(--vp-gray-100)", fontSize: 10, fontWeight: 800, letterSpacing: ".18em", textTransform: "uppercase", color: "var(--fg2)", borderBottom: "1px solid var(--border)" }}>{grp}</div>
             {items.map((n) => {
-              const I = Icon[ICON_MAP[n.icon] || "bell"] || Icon.bell;
+              const I = Icon[n.icon] || Icon.bell;
               return (
                 <div key={n.id} className={"notif-row " + (n.unread ? "unread" : "")} onClick={() => setDetails(n)}>
                   <div className="notif-row__icon"><I size={16}/></div>
@@ -862,8 +1063,14 @@ function NotificacoesPage({ setRoute }) {
                     </div>
                   </div>
                   <div className="row gap-2">
-                    <Button variant="ghost" size="sm" icon="check" aria-label="Marcar como lida"
-                      onClick={(e) => { e.stopPropagation(); markRead(n.id); window.toast('Notificação marcada como lida', 'success'); }}/>
+                    {filter === "Arquivadas"
+                      ? <Button variant="ghost" size="sm" aria-label="Restaurar" onClick={(e) => { e.stopPropagation(); restore([n.id]); }}>Restaurar</Button>
+                      : <>
+                          <Button variant="ghost" size="sm" icon="check" aria-label="Marcar como lida" disabled={!n.unread}
+                            onClick={(e) => { e.stopPropagation(); markRead(n.id); window.toast('Notificação marcada como lida', 'success'); }}/>
+                          <Button variant="ghost" size="sm" icon="x" aria-label="Arquivar"
+                            onClick={(e) => { e.stopPropagation(); archive([n.id]); }}/>
+                        </>}
                     <Button variant="ghost" size="sm" icon="arrowRight" aria-label="Abrir origem"
                       onClick={(e) => { e.stopPropagation(); openNotification(n); }}/>
                   </div>
@@ -876,6 +1083,9 @@ function NotificacoesPage({ setRoute }) {
       {prefsOpen && <NotificationPrefsModal onClose={() => setPrefsOpen(false)}/>}
       {details && <Modal title="Detalhe da Notificação" onClose={() => setDetails(null)} width={520}
         footer={<>
+          {archivedIds.includes(String(details.id))
+            ? <Button variant="ghost" onClick={() => { restore([details.id]); setDetails(null); }}>Restaurar</Button>
+            : <Button variant="ghost" onClick={() => { archive([details.id]); setDetails(null); }}>Arquivar</Button>}
           <Button variant="ghost" onClick={() => { markRead(details.id); setDetails(null); }}>Marcar como lida</Button>
           <Button variant="primary" iconRight="arrowRight" onClick={() => openNotification(details)}>Abrir origem</Button>
         </>}>
@@ -891,18 +1101,13 @@ function NotificacoesPage({ setRoute }) {
 }
 
 function NotificationPrefsModal({ onClose }) {
-  const [prefs, setPrefs] = React.useState(() => {
-    try {
-      return JSON.parse(localStorage.getItem('vpprd.notificacoes.preferencias') || 'null') || {
-        email: true, navegador: true, financeiro: true, operacoes: true, comercial: true,
-      };
-    } catch (e) {
-      return { email: true, navegador: true, financeiro: true, operacoes: true, comercial: true };
-    }
-  });
+  // Preferências REAIS: a Central e o contador do sino leem esta mesma configuração (NotificacoesLidasStore). Ficam neste
+  // navegador. Jurídico e Central de Decisões nunca são ocultados. (Antes: "Resumo por e-mail" e "Alertas no sistema" eram
+  // chaves salvas que nada lia — removidas; não existe envio de resumo por e-mail.)
+  const [prefs, setPrefs] = React.useState(() => window.NotificacoesLidasStore.lerPreferencias());
   const toggle = (key) => setPrefs(p => ({ ...p, [key]: !p[key] }));
   const save = () => {
-    localStorage.setItem('vpprd.notificacoes.preferencias', JSON.stringify(prefs));
+    window.NotificacoesLidasStore.salvarPreferencias(prefs);
     window.toast('Preferências salvas', 'success');
     onClose();
   };
@@ -922,11 +1127,10 @@ function NotificationPrefsModal({ onClose }) {
         <Button variant="primary" onClick={save}>Salvar preferências</Button>
       </>}>
       <div className="stack">
-        {row('navegador', 'Alertas no sistema', 'Exibir notificações dentro do VP Gestão.')}
-        {row('email', 'Resumo por email', 'Receber consolidados operacionais no email cadastrado.')}
-        {row('financeiro', 'Financeiro', 'Gatilhos, comissões e pagamentos.')}
-        {row('operacoes', 'Operações', 'Importação, engenharia, NCM e instalação.')}
-        {row('comercial', 'Comercial', 'Leads, cotações e propostas.')}
+        <div className="muted" style={{ fontSize: 12 }}>Escolha o que aparece na Central e no contador do sino (vale só neste navegador). Jurídico e Central de Decisões sempre aparecem.</div>
+        {row('financeiro', 'Financeiro', 'Avais, estouro de teto, comissões e pagamentos.')}
+        {row('operacoes', 'Operações', 'Importação, Engenharia, Almoxarifado/PCP e instalação.')}
+        {row('comercial', 'Comercial', 'Propostas, cotações a fornecedor e compras.')}
       </div>
     </Modal>
   );
@@ -934,7 +1138,21 @@ function NotificationPrefsModal({ onClose }) {
 
 /* ---------- CONFIGURAÇÕES ---------- */
 function ConfiguracoesPage() {
-  const [tab, setTab] = React.useState("usuarios");
+  /* Aba inicial vem da URL quando é deep link (ex.: .../admin/configuracoes/permissoes)
+     — mesmo padrão de dossier-obra.jsx. "configuracoes" não tem id de
+     registro (não é uma tela de detalhe), então o 2º segmento da URL é
+     usado como identificador da aba em vez de um id de banco. */
+  const [tab, setTab] = React.useState(() =>
+    (window.VpRouter && window.VpRouter.parseLocation().id) || "usuarios");
+
+  /* Espelha a aba ativa na URL — replace (não push) pra não lotar o
+     histórico a cada clique de aba. Roda independente do efeito de
+     sincronização de rota em app.jsx (que não reage a mudança de aba). */
+  React.useEffect(() => {
+    if (!window.VpRouter) return;
+    window.VpRouter.navigate('configuracoes', tab, null, { replace: true });
+  }, [tab]);
+
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -946,6 +1164,7 @@ function ConfiguracoesPage() {
       </div>
 
       <Tabs tabs={[
+        { key: "administracao", label: "Administração", icon: "users" },
         { key: "usuarios", label: "Usuários & Perfis", icon: "users" },
         { key: "permissoes", label: "Permissões (RLS)", icon: "shield" },
         { key: "parametros", label: "Parâmetros", icon: "settings" },
@@ -954,6 +1173,7 @@ function ConfiguracoesPage() {
       ]} active={tab} onChange={setTab}/>
 
       <div style={{ marginTop: 24 }}>
+        {tab === "administracao" && <window.ColaboradoresAdminPage/>}
         {tab === "usuarios" && <ConfigUsers/>}
         {tab === "permissoes" && <ConfigPermissions/>}
         {tab === "parametros" && <ConfigParams/>}
@@ -1015,7 +1235,7 @@ function ConfigUsers() {
                   <td><span className="mono small">{u.email}</span></td>
                   <td><span className="mono small muted">{u.last_login ? fmtDate(u.last_login) : "—"}</span></td>
                   <td><Badge variant={u.active !== false ? "success" : "neutral"} dot>{u.active !== false ? "Ativo" : "Inativo"}</Badge></td>
-                  <td><Button variant="ghost" size="sm" icon="more"/></td>
+                  <td><Button variant="ghost" size="sm" icon="more" disabled title="Em desenvolvimento — ações do usuário ainda não implementadas"/></td>
                 </tr>
               ))}
             </tbody>
@@ -1113,27 +1333,158 @@ function ConfigPermissions() {
     { role: "Instalação", access: ["-", "-", "-", "-", "-", "r", "-", "r", "r", "rwx", "-"] },
   ];
   return (
-    <Card title="Matriz de Permissões — modelo de referência" sub="r=leitura · w=criar/editar · x=ações restritas">
-      <div style={{ padding: "10px 12px", marginBottom: 14, background: "var(--vp-warning-tint, #f8eed7)", border: "1px solid var(--border)", fontSize: 12, color: "var(--fg2)" }}>
-        Este quadro documenta o <b>modelo de acesso planejado</b> por perfil. O controle por linha (RLS) ainda não é gerido por esta tela — alterações de permissão são feitas via políticas no Supabase.
+    <>
+      <ConfigAlcadasPropostas/>
+      <div style={{ marginTop: 16 }}>
+        <Card title="Matriz de Permissões — modelo de referência" sub="r=leitura · w=criar/editar · x=ações restritas">
+          <div style={{ padding: "10px 12px", marginBottom: 14, background: "var(--vp-warning-tint, #f8eed7)", border: "1px solid var(--border)", fontSize: 12, color: "var(--fg2)" }}>
+            Este quadro documenta o <b>modelo de acesso planejado</b> por perfil. O controle por linha (RLS) ainda não é gerido por esta tela — alterações de permissão são feitas via políticas no Supabase.
+          </div>
+          <div style={{ overflowX: "auto" }}>
+            <table className="t" style={{ minWidth: 880 }}>
+              <thead><tr>
+                <th style={{ position: "sticky", left: 0, background: "var(--vp-gray-50)", zIndex: 2 }}>Perfil</th>
+                {modules.map(m => <th key={m} style={{ textAlign: "center" }}>{m}</th>)}
+              </tr></thead>
+              <tbody>
+                {perms.map(p => (
+                  <tr key={p.role}>
+                    <td style={{ position: "sticky", left: 0, background: "#fff", zIndex: 1, fontWeight: 700 }}>{p.role}</td>
+                    {p.access.map((a, i) => (
+                      <td key={i} style={{ textAlign: "center" }}>
+                        <PermCell value={a}/>
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
       </div>
-      <div style={{ overflowX: "auto" }}>
-        <table className="t" style={{ minWidth: 880 }}>
+    </>
+  );
+}
+
+/* Alçadas de Propostas — sistema genérico e delegável (pedido do usuário,
+   19/08): nada de lista de e-mail fixa no código. Administrador sempre tem
+   tudo (perfis.nivel); qualquer outra pessoa só tem o que estiver marcado
+   em alcadas_capacidade. "Conceder alçadas" é recursiva — quem tem essa
+   capacidade pode dar QUALQUER uma das 4, inclusive essa mesma, pra
+   qualquer pessoa (assim Diego/Gelson repassam o poder sem precisar de
+   código novo). Card só aparece pra quem já tem essa capacidade — não é
+   um ajuste que qualquer um com acesso a Configurações consiga mexer. */
+const ALCADAS_PROPOSTAS = [
+  { modulo: 'propostas', capacidade: 'ver_todas', label: 'Vê todas as propostas', hint: 'Sem isso, só vê as próprias.' },
+  { modulo: 'propostas', capacidade: 'precificar_manual', label: 'Precifica manualmente', hint: 'Preço combinado por fora (CEO/Financeiro), sem depender de Cotação + Precificação formal.' },
+  { modulo: 'propostas', capacidade: 'destravar_aprovada', label: 'Destrava proposta aprovada', hint: 'Reabre pra edição uma proposta já aprovada pelo cliente.' },
+  { modulo: 'propostas', capacidade: 'excluir', label: 'Exclui propostas', hint: 'Apaga a proposta de vez — sem volta.' },
+  { modulo: 'admin', capacidade: 'conceder_alcadas', label: 'Concede alçadas', hint: 'Pode dar (ou tirar) qualquer uma destas capacidades pra qualquer pessoa.' },
+  { modulo: 'quadro_comando', capacidade: 'decidir_fabricacao', label: 'Decide fabricar interno ou comprar pronto (Quadro de Comando)', hint: 'Sem isso, a Origem de Fabricação do Quadro de Comando fica travada em "Fabricar interno".' },
+  { modulo: 'instalacao', capacidade: 'editar_status_obra', label: 'Edita status do Acompanhamento de Obra', hint: 'Pode desflegar uma atividade do Diário de Obra e avançar/reverter manualmente o status do card em Cadastro de Instaladores.' },
+  { modulo: 'decisoes', capacidade: 'ceo', label: 'Atua como CEO (Central de Decisões)', hint: 'Aprova/reprova qualquer decisão que hoje só o CEO decide (envio de proposta, desconto acima de 7%, etc.), além do e-mail fixo do Diego — uso normal: só pra teste. Só vale pra decisões criadas depois de conceder.' },
+  { modulo: 'decisoes', capacidade: 'gestor_comercial', label: 'Atua como Gestor Comercial (Central de Decisões)', hint: 'Aprova/reprova qualquer decisão que hoje só o Gestor Comercial decide (liberar envio de proposta ao cliente, desconto até 7%, pagamento de parcela ao instalador), além dos e-mails fixos de Regiane/Guilherme. Só vale pra decisões criadas depois de conceder.' },
+];
+
+function ConfigAlcadasPropostas() {
+  const sb = window.__VP_SB.sb;
+  const [autorizado, setAutorizado] = React.useState(null);
+  const [perfis, setPerfis] = React.useState(null);
+  const [concedidas, setConcedidas] = React.useState({});
+  const [salvandoChave, setSalvandoChave] = React.useState(null);
+
+  const load = React.useCallback(async () => {
+    const pode = await window.PropostaStore.podeConcederAlcadas();
+    setAutorizado(pode);
+    if (!pode) return;
+    const { perfis: p, concedidas: c } = await window.PropostaStore.listarAlcadas();
+    setPerfis(p);
+    const map = {};
+    c.forEach((row) => { map[row.perfil_id + '.' + row.modulo + '.' + row.capacidade] = true; });
+    setConcedidas(map);
+  }, []);
+  React.useEffect(() => { load(); }, [load]);
+
+  const alternar = async (perfil, modulo, capacidade, conceder) => {
+    const chave = perfil.id + '.' + modulo + '.' + capacidade;
+    setSalvandoChave(chave);
+    try {
+      await window.PropostaStore.concederAlcada(perfil.id, modulo, capacidade, conceder);
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Admin', acao: 'Alçada alterada', alvo: perfil.email, detalhe: { modulo, capacidade, conceder } });
+      setConcedidas((prev) => { const n = { ...prev }; if (conceder) n[chave] = true; else delete n[chave]; return n; });
+    } catch (e) {
+      window.toast?.('Erro: ' + (e.message || e), 'error');
+    } finally {
+      setSalvandoChave(null);
+    }
+  };
+
+  if (autorizado === null || (autorizado && !perfis)) {
+    return <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>Carregando…</div>;
+  }
+  if (!autorizado) {
+    return (
+      <Card title="Alçadas de Propostas">
+        <div style={{ textAlign:'center', padding:'32px 0', color:'var(--fg3)', fontSize:13 }}>
+          Você não tem a alçada "Concede alçadas" — peça pra quem já tem liberar essa tela pra você.
+        </div>
+      </Card>
+    );
+  }
+
+  return (
+    <Card title="Alçadas de Propostas" sub="Quem pode ver tudo, precificar manualmente, destravar aprovada ou conceder essas alçadas pra outros">
+      <div style={{ padding: "10px 12px", marginBottom: 14, background: "var(--vp-warning-tint, #f8eed7)", border: "1px solid var(--border)", fontSize: 12, color: "var(--fg2)" }}>
+        Administradores sempre têm as 4 primeiras alçadas (traço = já tem, automático). <b>"Atua como CEO" e "Atua como Gestor Comercial" são diferentes</b> — nem Administrador tem isso de graça, precisa ligar o toggle mesmo sendo Admin (é a Central de Decisões que decide quem aprova o quê, não o nível de acesso).
+      </div>
+      {/* Lista de colaboradores costuma passar de uma tela — cabeçalho fixo
+         (sticky, relativo a este container com scroll próprio) e barra de
+         rolagem horizontal visível pra tabela larga (muitas capacidades),
+         só nesta tabela — não mexe na classe .table-wrap compartilhada
+         pelo resto do sistema. */}
+      <div className="table-wrap" style={{ border: 0, overflowX: 'auto', overflowY: 'auto', maxHeight: '65vh' }}>
+        <table className="t">
           <thead><tr>
-            <th style={{ position: "sticky", left: 0, background: "var(--vp-gray-50)", zIndex: 2 }}>Perfil</th>
-            {modules.map(m => <th key={m} style={{ textAlign: "center" }}>{m}</th>)}
+            <th style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--vp-gray-50)' }}>Nome</th>
+            <th style={{ position: 'sticky', top: 0, zIndex: 1, background: 'var(--vp-gray-50)' }}>Nível</th>
+            {ALCADAS_PROPOSTAS.map((a) => (
+              <th key={a.modulo + a.capacidade} style={{ textAlign:'center', position: 'sticky', top: 0, zIndex: 1, background: 'var(--vp-gray-50)' }} title={a.hint}>{a.label}</th>
+            ))}
           </tr></thead>
           <tbody>
-            {perms.map(p => (
-              <tr key={p.role}>
-                <td style={{ position: "sticky", left: 0, background: "#fff", zIndex: 1, fontWeight: 700 }}>{p.role}</td>
-                {p.access.map((a, i) => (
-                  <td key={i} style={{ textAlign: "center" }}>
-                    <PermCell value={a}/>
-                  </td>
-                ))}
-              </tr>
-            ))}
+            {perfis.map((p) => {
+              const admin = p.nivel === 'Administrador';
+              return (
+                <tr key={p.id}>
+                  <td><span className="cell-main">{p.nome || p.email}</span><br/><span className="mono small muted">{p.email}</span></td>
+                  <td><Badge variant="ink">{p.nivel}</Badge></td>
+                  {ALCADAS_PROPOSTAS.map((a) => {
+                    const chave = p.id + '.' + a.modulo + '.' + a.capacidade;
+                    /* "Administrador sempre tem" só vale pras 4 alçadas originais
+                       (checadas por temCapacidade(), que trata nivel==='Administrador'
+                       como bypass automático). "Atua como CEO"/"Atua como Gestor
+                       Comercial" (modulo='decisoes') são resolvidas por
+                       decisoes-store.js, que NUNCA olha o nível — só e-mail fixo
+                       ou concessão real nesta mesma tabela. Mostrar "—" pra Admin
+                       nessas duas colunas seria mentir: ele não tem esse poder só
+                       por ser Admin, precisa do toggle igual todo mundo. */
+                    const bypassAdmin = admin && a.modulo !== 'decisoes';
+                    const tem = bypassAdmin || !!concedidas[chave];
+                    return (
+                      <td key={chave} style={{ textAlign:'center' }}>
+                        {bypassAdmin ? (
+                          <span className="small muted" title="Administrador sempre tem">—</span>
+                        ) : (
+                          <input type="checkbox" checked={tem} disabled={salvandoChave === chave}
+                            onChange={(e) => alternar(p, a.modulo, a.capacidade, e.target.checked)}
+                            style={{ width: 18, height: 18, accentColor: 'var(--vp-yellow)' }}/>
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       </div>
@@ -1191,7 +1542,7 @@ function ConfigIntegrations() {
   const integrations = [
     { name: "Rastreamento marítimo (AIS)", desc: "Edge function ais-sync — posição de navios" },
     { name: "IMAP — cotacoes@verticalparts.com.br", desc: "Inbox Importação" },
-    { name: "IMAP — compras@verticalparts.com.br", desc: "Inbox Compras Nacional" },
+    { name: "IMAP — compras@verticalparts.com.br", desc: "Inbox Importação Varejo" },
     { name: "SMTP — envio transacional", desc: "Notificações e propostas" },
     { name: "Assinatura digital", desc: "Assinatura de contratos e propostas" },
     { name: "Omie (faturamento)", desc: "Sincronização NF / contas a receber" },

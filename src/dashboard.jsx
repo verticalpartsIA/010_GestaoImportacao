@@ -93,14 +93,16 @@ function ProjectKanban({ projetos, onMove, onClick }) {
               <div className="kanban__card-eyebrow">{p.id}</div>
               <div className="kanban__card-title">{p.name}</div>
               <div className="kanban__card-ncm muted">{p.client}</div>
-              <div className="kanban__card-foot" onClick={(e) => e.stopPropagation()}>
-                <Button variant="ghost" size="sm" icon="chevLeft" aria-label={`Mover ${p.name} para fase anterior`}
-                  disabled={phases.indexOf(ph) === 0}
-                  onClick={() => onMove?.(p, phases[Math.max(0, phases.indexOf(ph) - 1)])}/>
-                <Button variant="ghost" size="sm" icon="chevRight" aria-label={`Mover ${p.name} para próxima fase`}
-                  disabled={phases.indexOf(ph) === phases.length - 1}
-                  onClick={() => onMove?.(p, phases[Math.min(phases.length - 1, phases.indexOf(ph) + 1)])}/>
-              </div>
+              {onMove && (
+                <div className="kanban__card-foot" onClick={(e) => e.stopPropagation()}>
+                  <Button variant="ghost" size="sm" icon="chevLeft" aria-label={`Mover ${p.name} para fase anterior`}
+                    disabled={phases.indexOf(ph) === 0}
+                    onClick={() => onMove?.(p, phases[Math.max(0, phases.indexOf(ph) - 1)])}/>
+                  <Button variant="ghost" size="sm" icon="chevRight" aria-label={`Mover ${p.name} para próxima fase`}
+                    disabled={phases.indexOf(ph) === phases.length - 1}
+                    onClick={() => onMove?.(p, phases[Math.min(phases.length - 1, phases.indexOf(ph) + 1)])}/>
+                </div>
+              )}
             </div>
           ))}
           {!byPhase[ph].length && <div style={{ color: 'var(--fg3)', fontSize: 11, padding: 18, textAlign: 'center' }}>vazio</div>}
@@ -170,7 +172,7 @@ function ModalNovaTask({ role, onClose, onSaved }) {
   );
 }
 
-function Dashboard({ role, setRoute }) {
+function Dashboard({ role, setRoute, setSubsel }) {
   const [sbData, setSbData] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
   const [projectView, setProjectView] = React.useState('gantt');
@@ -183,38 +185,21 @@ function Dashboard({ role, setRoute }) {
     setLoading(true);
     // Timeout de 3s: se Supabase não responder, renderiza vazio
     const timeoutId = setTimeout(() => {
-      setSbData({ kpis: {}, tarefas: [], alertas: [], ganttProjetos: [], estoqueCritico: [], alertasCriticos: 0 });
+      setSbData({ kpis: {}, tarefas: [], alertas: [], ganttProjetos: [], alertasCriticos: 0 });
       setLoading(false);
     }, 3000);
-    return window.__VP_SB.loadDashboardData(role)
+    return window.__VP_SB.loadDashboardData(role, period)
       .then(data => { clearTimeout(timeoutId); setSbData(data); setLoading(false); })
       .catch((err) => { clearTimeout(timeoutId); setLoading(false); window.toast?.('Erro ao atualizar dashboard: ' + err.message, 'error'); });
-  }, [role]);
+  }, [role, period]);
 
   React.useEffect(() => {
     reloadDashboard();
   }, [reloadDashboard]);
 
-  const moveProject = async (project, phase) => {
-    if (!project || !phase || project.current_phase === phase) return;
-    const before = sbData;
-    setSbData(prev => ({
-      ...prev,
-      ganttProjetos: (prev?.ganttProjetos || []).map(p => p.id === project.id ? { ...p, current_phase: phase } : p),
-    }));
-    const { error } = await window.__VP_SB.sb.from('projetos').update({ current_phase: phase }).eq('id', project.id);
-    if (error) {
-      setSbData(before);
-      return window.toast('Erro ao mover projeto: ' + error.message, 'error');
-    }
-    window.toast(`${project.name} movido para ${phase}`, 'success');
-    reloadDashboard();
-  };
-
   const kpis        = sbData?.kpis?.[role] || [];
   const tasks       = sbData?.tarefas || [];
   const projetos    = sbData?.ganttProjetos || [];
-  const stocks      = sbData?.estoqueCritico || [];
   const alertasCrit = sbData?.alertasCriticos ?? 0;
 
   const u         = (window.ROLE_MAP || {})[role] || { name: 'VP Gestão', initials: 'VP', title: 'Sistema' };
@@ -259,9 +244,12 @@ function Dashboard({ role, setRoute }) {
         </div>
       </div>
 
-      <div className="grid-4" style={{ marginBottom: 20 }}>
+      <div className="grid-5" style={{ marginBottom: 20 }}>
         {kpis.map((k, i) => (
-          <KPI key={i} {...k} icon={["flag","globe","proposal","trending","ruler","fileText","calendar","clock","dollar","award","zap","trending","briefcase","ship","warning","trending"][i % 16]}/>
+          <KPI key={i} {...k}
+            icon={["flag","globe","proposal","trending","ruler","fileText","calendar","clock","dollar","award","zap","trending","briefcase","ship","warning","trending"][i % 16]}
+            onClick={k.label === 'Alertas críticos' && Number(k.value) > 0 ? () => setRoute('notificacoes') : undefined}
+          />
         ))}
       </div>
 
@@ -275,22 +263,27 @@ function Dashboard({ role, setRoute }) {
             </div>
             <Button variant="ghost" size="sm" icon="expand" onClick={() => { if (document.fullscreenElement) document.exitFullscreen(); else document.documentElement.requestFullscreen().catch(() => {}); }}/>
           </>}>
-          {/* A tabela `projetos` (Gantt/Lista/Kanban) é uma origem legada,
-              sem numero_cotacao/proposta_id — não tem como abrir o
-              detalhe real de proposta/contrato daqui (achado #50: o
-              clique mandava TODO projeto pra "Propostas", sempre a mesma
-              tela, independente de qual card). Mostra os dados que o
-              próprio card já tem, honesto sobre o que existe. */}
+          {/* 23/08 (issue #274): "projetos" agora vem da esteira real
+              (gatilhos + formulários), não da tabela legada `projetos`
+              (0 linhas em produção). A fase é derivada do gatilho aberto
+              mais antigo de cada cotação — muda sozinha quando a etapa
+              real fecha, por isso não há mais botão de "mover fase"
+              manual (não existe ação real por trás disso agora). */}
           {projectView === 'gantt'  && <GanttChart projetos={projetos} onClick={setDetalheProjeto} today={sbData?.ganttToday ?? 60}/>}
           {projectView === 'lista'  && <ProjectList projetos={projetos} onClick={setDetalheProjeto}/>}
-          {projectView === 'kanban' && <ProjectKanban projetos={projetos} onMove={moveProject} onClick={setDetalheProjeto}/>}
+          {projectView === 'kanban' && <ProjectKanban projetos={projetos} onClick={setDetalheProjeto}/>}
         </Card>
 
         <Card title="Tarefas de Hoje" sub={tasks.length + " pendentes"} action={<Button variant="ghost" size="sm" icon="plus" onClick={() => setShowTask(true)}/>}>
           <div className="stack">
             {tasks.map((t, i) => (
               <div key={i} className="task-row">
-                <input type="checkbox"/>
+                <input type="checkbox" defaultChecked={false} onChange={async () => {
+                  if (!t.id) return;
+                  const { error } = await window.__VP_SB.sb.from('tarefas').update({ done: true }).eq('id', t.id);
+                  if (error) return window.toast('Erro: ' + error.message, 'error');
+                  reloadDashboard();
+                }}/>
                 <div className="task-row__body">
                   <div className="task-row__title">{t.t}</div>
                   <div className="task-row__meta">
@@ -326,21 +319,10 @@ function Dashboard({ role, setRoute }) {
         <Card title="Pipeline Comercial" sub="acumulado">
           <PipelineFunnel stages={sbData?.pipelineStages}/>
         </Card>
-        <Card title="Conversão por Origem" sub="todos os leads">
+        <Card title="Conversão por Origem" sub="leads marcados como Convertido">
           <OriginBars data={sbData?.originBars}/>
         </Card>
-        <div>
-          <NcmDashboardWidget setRoute={setRoute} ncm={sbData?.ncm || []}/>
-          <div style={{ height: 16 }}/>
-          <Card title="Estoque Crítico" sub="peças com saldo abaixo do mínimo"
-            action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute('compras')}>Detalhar</Button>}>
-            <div className="stack">
-              {stocks.length === 0
-              ? <div className="muted" style={{ padding: '16px 0', textAlign: 'center', fontSize: 13 }}>Nenhum item abaixo do mínimo.</div>
-              : stocks.map((e, i) => <StockRow key={e.sku || i} {...e}/>)}
-            </div>
-          </Card>
-        </div>
+        <OndeParouWidget gatilhos={sbData?.gatilhos || []} setRoute={setRoute} setSubsel={setSubsel}/>
       </div>
     </div>
   );
@@ -348,9 +330,17 @@ function Dashboard({ role, setRoute }) {
 
 function PipelineFunnel({ stages }) {
   const data = stages || [];
-  const max  = data[0]?.value || 1;
+  // leadsValue = estágio "Leads" (data[0]), usado só na % de conversão —
+  // não confundir com maxBar, o maior valor entre os estágios, usado pra
+  // escalar a largura das barras. Estágios do funil vêm em ordem de
+  // negócio fixa (dashboard-metrics-comercial.js), não por tamanho —
+  // "Propostas enviadas" pode superar "Leads" de verdade (achado ao vivo:
+  // Leads=5, Propostas enviadas=308), o que fazia a barra passar de 100%
+  // de largura e vazar pra fora do card (sem overflow:hidden no CSS).
+  const leadsValue = data[0]?.value || 0;
+  const maxBar = Math.max(1, ...data.map((s) => s.value || 0));
   const last = data[data.length - 1]?.value || 0;
-  const conv = max > 0 ? ((last / max) * 100).toFixed(1) : "0.0";
+  const conv = leadsValue > 0 ? ((last / leadsValue) * 100).toFixed(1) : "0.0";
   if (!data.length) return (
     <div className="muted" style={{ padding: '24px 0', textAlign: 'center', fontSize: 13 }}>Aguardando dados de leads.</div>
   );
@@ -360,14 +350,14 @@ function PipelineFunnel({ stages }) {
         <div key={s.label} className="funnel-row">
           <div className="funnel-row__lbl">{s.label}</div>
           <div className="funnel-row__bar">
-            <div style={{ width: (s.value / max * 100) + "%", background: s.color }}>
+            <div style={{ width: Math.min(100, (s.value || 0) / maxBar * 100) + "%", background: s.color }}>
               <span>{s.value}</span>
             </div>
           </div>
         </div>
       ))}
       <div style={{ display: "flex", justifyContent: "space-between", marginTop: 10, paddingTop: 12, borderTop: "1px solid var(--border)" }}>
-        <span className="muted small">Conversão Lead→Contrato</span>
+        <span className="muted small" title="Nº de contratos dividido pelo nº de leads (volume do funil, sem vínculo lead a lead)">Contratos ÷ Leads (volume)</span>
         <span className="mono" style={{ fontWeight: 700 }}>{conv}%</span>
       </div>
     </div>
@@ -398,19 +388,54 @@ function OriginBars({ data }) {
   );
 }
 
-function StockRow({ sku, name, qty, min, status }) {
+/* ---- "Onde Parou" (23/08) — substitui Pendências NCM (lia tabela
+   dropada, sempre vazio) e Estoque Crítico. Mostra as cotações com
+   gatilho aberto e prazo estourado — quem tem a bola agora, não só
+   "está verde/vermelho". Fonte: tabela `gatilhos`, já carregada pelo
+   Dashboard (supabase.js), motor em gatilhos-engine.js. */
+function OndeParouWidget({ gatilhos, setRoute, setSubsel }) {
+  const agora = Date.now();
+  const E = window.GatilhosEngine;
+  /* Mesmo critério da tela Prazos & Pendências: prazo efetivo (inclui etapas antigas sem prazo
+     gravado), sem etapas opcionais nem encerradas. */
+  const atrasados = (gatilhos || [])
+    .filter((g) => E ? (E.emAtraso(g, agora) && !(E.nodeByKey(g.evento_key) || {}).opcional)
+      : (!g.concluido_em && g.prazo_em && new Date(g.prazo_em).getTime() < agora))
+    .map((g) => ({ ...g, diasAtraso: Math.floor((agora - (E ? E.prazoEfetivo(g) : new Date(g.prazo_em)).getTime()) / 86400000) }))
+    .sort((a, b) => b.diasAtraso - a.diasAtraso)
+    .slice(0, 6);
+
+  const abrir = async (g) => {
+    if (!window.GatilhosEngine) return;
+    const dest = await window.GatilhosEngine.navegarPara(g);
+    if (dest?.rota) {
+      if (dest.subsel != null && setSubsel) setSubsel(dest.subsel);
+      setRoute(dest.rota);
+    }
+  };
+
   return (
-    <div className="stock-row">
-      <div className="status-dot" style={{ background: status === "danger" ? "var(--vp-danger)" : status === "warning" ? "var(--vp-warning)" : "var(--vp-success)" }}/>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div className="cell-main" style={{ fontSize: 12 }}>{name}</div>
-        <div className="cell-sub">{sku} · min {min}</div>
+    <Card title="Onde Parou" sub="cotações com etapa atrasada — quem tem a bola agora"
+      action={<Button variant="ghost" size="sm" iconRight="arrowRight" onClick={() => setRoute('financeiro')}>Ver Prazos & Pendências</Button>}>
+      <div className="stack">
+        {atrasados.length === 0
+          ? <div className="muted" style={{ padding: '16px 0', textAlign: 'center', fontSize: 13 }}>Nada atrasado agora. 🎉</div>
+          : atrasados.map((g) => (
+            <div key={g.id} className="row sb" style={{ padding: '8px 0', borderBottom: '1px solid var(--border)', cursor: 'pointer' }}
+              onClick={() => abrir(g)}>
+              <div style={{ minWidth: 0 }}>
+                <div className="cell-main" style={{ fontSize: 12 }}>{g.trigger_name || g.evento_key}</div>
+                <div className="cell-sub">Cotação {g.numero_cotacao ?? '—'}</div>
+              </div>
+              <div style={{ textAlign: 'right', flexShrink: 0 }}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--vp-danger, #c0392b)' }}>
+                  {g.diasAtraso}d atrasado
+                </span>
+              </div>
+            </div>
+          ))}
       </div>
-      <div style={{ textAlign: "right" }}>
-        <div className="mono tabular" style={{ fontSize: 16, fontWeight: 700 }}>{qty}</div>
-        <div className="cell-sub">em estoque</div>
-      </div>
-    </div>
+    </Card>
   );
 }
 

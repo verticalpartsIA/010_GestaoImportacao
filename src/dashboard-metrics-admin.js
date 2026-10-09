@@ -1,0 +1,174 @@
+/* ============================================================
+   dashboard-metrics-admin.js
+   Dashboard · métricas da perspectiva Admin — 5º e último módulo
+   extraído de loadDashboardData() (ver dashboard-metrics-comercial.js
+   pro raciocínio completo). Funções puras, zero I/O.
+
+   Único módulo que COMPÕE os outros — reaproveita
+   ComercialMetrics.propostasAprovadas()/idsComContrato() em vez de
+   refiltrar do zero (raiz dos 3 bugs de produção já documentados:
+   a mesma definição de "proposta aprovada" divergindo em lugares
+   diferentes do código). As checagens de consistência cruzada
+   (proposta sem contrato, sinal sem contrato) moram só aqui — não
+   pertencem a nenhuma perspectiva sozinha.
+
+   Depende de window.ComercialMetrics já estar carregado — ver ordem
+   dos <script> em index.html.
+
+   window.AdminMetrics
+   ============================================================ */
+(function () {
+  'use strict';
+
+  function embarquesEmTransito(embarques) {
+    return (embarques || []).filter((e) => e.status === 'Em trânsito');
+  }
+
+  /* Soma das propostas aprovadas pelo cliente — não mais da tabela
+     `projetos` (legada/desconectada, mostrava R$0 com venda fechada). */
+  function faturamentoTotal(propostas) {
+    const CM = window.ComercialMetrics;
+    return CM.propostasAprovadas(propostas).reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
+  }
+
+  function propostasSemContrato(propostas, contratos) {
+    const CM = window.ComercialMetrics;
+    const aprovadas = CM.propostasAprovadas(propostas);
+    const comContrato = CM.idsComContrato(contratos);
+    return aprovadas.filter((p) => !comContrato.has(p.id));
+  }
+
+  function contratosValorZero(contratos) {
+    return (contratos || []).filter((c) => !c.valor_total_num || Number(c.valor_total_num) === 0);
+  }
+
+  function avaisSinalSemContrato(avais) {
+    return (avais || []).filter((a) => a.sinal_pago && !a.contrato_venda_id);
+  }
+
+  /* Além dos `alertas` manuais, detecta inconsistências entre módulos
+     que o E2E encontrou escondidas (proposta assinada sem contrato,
+     contrato com valor zerado, sinal pago sem contrato vinculado). */
+  function alertasCriticos({ alertas, propostas, contratos, avais }) {
+    return [
+      ...(alertas || []).filter((a) => a.level === 'danger'),
+      ...propostasSemContrato(propostas, contratos).map((p) => ({ tipo: 'proposta_sem_contrato', ref: p.numero_cotacao })),
+      ...contratosValorZero(contratos).map((c) => ({ tipo: 'contrato_valor_zero', ref: c.id })),
+      ...avaisSinalSemContrato(avais).map((a) => ({ tipo: 'sinal_sem_contrato', ref: a.numero_cotacao })),
+    ];
+  }
+
+  /* Achado real (03/10): o KPI "Alertas críticos" conta as 3 checagens
+     cruzadas acima, mas elas não existem como linha em `alertas` — clicar
+     em "ver central" nunca levava a lugar nenhum pra elas (a Central só
+     lê a tabela `alertas`). Mesmo formato que
+     NotificacoesProcessamento.paraNotificacao() já espera (id/level/module/
+     title/sub/created_at/rota), pra a Central conseguir listar/abrir/marcar
+     como lida cada uma — sem precisar de tabela nova (id determinístico,
+     sem persistência: recalculado a cada carga, igual às outras 3 funções
+     deste arquivo). Não mexe em alertasCriticos()/kpis() acima — aditivo. */
+  function alertasSinteticosDetalhados({ propostas, contratos, avais }) {
+    const semContrato = propostasSemContrato(propostas, contratos).map((p) => ({
+      id: 'sintetico-proposta-sem-contrato-' + p.id,
+      level: 'danger',
+      module: 'Propostas',
+      title: 'Proposta aprovada sem contrato gerado',
+      sub: `Cotação ${p.numero_cotacao ?? '—'}` + (p.aprovada_em ? ` · aprovada em ${new Date(p.aprovada_em).toLocaleDateString('pt-BR')}` : ''),
+      created_at: p.aprovada_em || null,
+      rota: null,
+    }));
+    const valorZero = contratosValorZero(contratos).map((c) => ({
+      id: 'sintetico-contrato-valor-zero-' + c.id,
+      level: 'danger',
+      module: 'Financeiro',
+      title: 'Contrato com valor zerado',
+      sub: `Contrato ${c.id}`,
+      created_at: null,
+      rota: null,
+    }));
+    const sinalSemContrato = avaisSinalSemContrato(avais).map((a) => ({
+      id: 'sintetico-sinal-sem-contrato-' + a.id,
+      level: 'danger',
+      module: 'Financeiro',
+      title: 'Sinal pago sem contrato vinculado',
+      sub: `Cotação ${a.numero_cotacao ?? '—'}`,
+      created_at: null,
+      rota: null,
+    }));
+    return [...semContrato, ...valorZero, ...sinalSemContrato];
+  }
+
+  /* Comissão é custo (23/08, Gelson) — o ERP Omie já trata como despesa;
+     aqui é só exibição, soma todos os registros de `comissoes` (mesma
+     tabela que a página Gatilhos & Prazo já usa pra "Comissões
+     pendentes", ver dashboard-metrics-financeiro.js — aqui é o total,
+     não só o pendente). */
+  function comissaoTotal(comissoes) {
+    return (comissoes || []).reduce((s, c) => s + (Number(c.comissao) || 0), 0);
+  }
+
+  /* projetosPeriodo/propostasPeriodo/comissoesPeriodo (opcionais, default =
+     array completo) — recortes já filtrados por período (Hoje/7/30/90 dias)
+     que supabase.js monta a partir de start_date/aprovada_em/created_at.
+     Só afetam os 3 KPIs abaixo com data limpa e sem função de checagem de
+     consistência (Embarques em trânsito é foto do status atual; Alertas
+     críticos mistura achados sem data — nenhum dos dois faz sentido
+     "no período" sem inventar semântica nova, então continuam usando o
+     universo completo). Achado A02 da auditoria: o seletor de período
+     mudava de rótulo sem filtrar nada. */
+  function kpis({ projetos, embarques, alertas, propostas, contratos, avais, comissoes, projetosPeriodo, propostasPeriodo, comissoesPeriodo }) {
+    const CM = window.ComercialMetrics;
+    const crit = alertasCriticos({ alertas, propostas, contratos, avais });
+    const propostasFat = propostasPeriodo || propostas;
+    const projetosCount = projetosPeriodo || projetos;
+    const comissoesSoma = comissoesPeriodo || comissoes;
+    const aprovadas = CM.propostasAprovadas(propostasFat);
+    return [
+      // Issue #274 fechada em 23/08: `projetos` aqui é o array já
+      // reconciliado com a esteira real (ver GM.projetosDaEsteira em
+      // dashboard-metrics-gantt.js, chamado por supabase.js antes deste
+      // compute) — não é mais a tabela legada `projetos` (sempre 0 linhas).
+      { label: 'Projetos ativos', value: String((projetosCount || []).length), unit: '', delta: '', deltaDir: 'up', sub: 'todos módulos' },
+      { label: 'Embarques em trânsito', value: String(embarquesEmTransito(embarques).length), unit: '', delta: '', deltaDir: 'up', sub: 'Santos+Itaguaí' },
+      { label: 'Alertas críticos', value: String(crit.length), unit: '', delta: '', deltaDir: crit.length > 0 ? 'down' : 'up', sub: 'ver central' },
+      { label: 'Faturamento (propostas assinadas)', value: fmtBRL(faturamentoTotal(propostasFat)), unit: '', delta: '', deltaDir: 'up', sub: `${aprovadas.length} propostas` },
+      { label: 'Comissões (custo)', value: fmtBRL(comissaoTotal(comissoesSoma)), unit: '', delta: '', deltaDir: 'down', sub: `${(comissoesSoma || []).length} registros` },
+    ];
+  }
+
+  /* Mesmo formato compacto (R$ 1.2M / R$ 5k) do FinanceiroMetrics —
+     cópia local de propósito, ver o comentário lá pro porquê. */
+  function fmtBRL(n) {
+    if (!n) return 'R$ 0';
+    if (n >= 1_000_000) return 'R$ ' + (n / 1_000_000).toFixed(1) + 'M';
+    if (n >= 1_000)     return 'R$ ' + Math.round(n / 1_000) + 'k';
+    return 'R$ ' + n;
+  }
+
+  function compute({ projetos, embarques, alertas, propostas, contratos, avais, comissoes, projetosPeriodo, propostasPeriodo, comissoesPeriodo }) {
+    return {
+      kpis: kpis({ projetos, embarques, alertas, propostas, contratos, avais, comissoes, projetosPeriodo, propostasPeriodo, comissoesPeriodo }),
+      alertasCriticos: alertasCriticos({ alertas, propostas, contratos, avais }),
+    };
+  }
+
+  /* Projeto "ativo no período": já começou e ainda não terminou antes do
+     início do período (sem end_date = em andamento). Antes o recorte usava
+     `start_date >= desde` ("iniciado no período"): um projeto começado há
+     semanas e ainda em andamento sumia — "Projetos ativos" dava 0 em "Hoje"
+     enquanto o Gantt listava 38 (issue #612). Sem `desde`, devolve tudo. */
+  function projetosAtivosNoPeriodo(projetos, desde, agora) {
+    if (!desde) return projetos || [];
+    const hoje = agora ? new Date(agora) : new Date();
+    return (projetos || []).filter((p) => {
+      if (p.start_date && new Date(p.start_date) > hoje) return false; // ainda não começou
+      return !p.end_date || new Date(p.end_date) >= desde;
+    });
+  }
+
+  window.AdminMetrics = {
+    embarquesEmTransito, faturamentoTotal, propostasSemContrato, contratosValorZero,
+    avaisSinalSemContrato, alertasCriticos, alertasSinteticosDetalhados, comissaoTotal, kpis, compute,
+    projetosAtivosNoPeriodo,
+  };
+}());

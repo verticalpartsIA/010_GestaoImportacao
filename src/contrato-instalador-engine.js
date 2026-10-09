@@ -30,9 +30,9 @@
   ];
 
   const EQUIPAMENTOS = [
-    { id: 'elevador', label: 'Elevador',        gen: 'o' },
-    { id: 'escada',   label: 'Escada Rolante',  gen: 'a' },
-    { id: 'esteira',  label: 'Esteira Rolante', gen: 'a' },
+    { id: 'elevador', label: 'Elevador',        plural: 'Elevadores',       gen: 'o' },
+    { id: 'escada',   label: 'Escada Rolante',  plural: 'Escadas Rolantes', gen: 'a' },
+    { id: 'esteira',  label: 'Esteira Rolante', plural: 'Esteiras Rolantes', gen: 'a' },
   ];
 
   const TIPOS_ELEVADOR = [
@@ -115,6 +115,29 @@
     return result;
   }
 
+  /* Divide `valor` (R$) em n parcelas, em centavos inteiros — a diferença de
+     arredondamento vai pra ÚLTIMA parcela, então a soma bate exatamente com
+     o total (antes: 100,00/3 virava 3×33,33 = 99,99 e 100,01/2 virava
+     2×50,01 = 100,02). */
+  function dividirEmParcelas(valor, n) {
+    const total = Math.round((Number(valor) || 0) * 100);
+    const base = Math.floor(total / n);
+    const out = Array(n).fill(base / 100);
+    out[n - 1] = (total - base * (n - 1)) / 100;
+    return out;
+  }
+
+  /* Extenso com concordância de gênero (1→uma, 2→duas, 200→duzentas) —
+     usado pra Escada/Esteira Rolante (feminino). */
+  function inteiroExtensoGen(n, fem) {
+    const t = inteiroExtenso(n);
+    if (!fem) return t;
+    return t
+      .replace(/\bum\b(?! (mil|milh|bilh|trilh))/g, 'uma')
+      .replace(/\bdois\b/g, 'duas')
+      .replace(/\b(duz|trez|quatroc|quinh|seisc|setec|oitoc|novec)entos\b/g, '$1entas');
+  }
+
   function valorExtenso(valor) {
     const v = Number(valor) || 0;
     const reais = Math.floor(v);
@@ -155,8 +178,32 @@
   }
   function fmtMoeda(num) { return (Number(num) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 }); }
 
-  function isCNPJValid(v) { return onlyDigits(v).length === 14; }
-  function isCPFValid(v) { return onlyDigits(v).length === 11; }
+  /* Valida tamanho + dígitos verificadores (mod 11) — antes só checava o
+     tamanho, então "111.111.111-11" ou um CNPJ digitado errado passavam. */
+  function isCNPJValid(v) {
+    const d = onlyDigits(v);
+    if (d.length !== 14 || /^(\d)\1+$/.test(d)) return false;
+    const dv = (base) => {
+      let soma = 0, peso = base.length - 7;
+      for (let i = 0; i < base.length; i++) { soma += parseInt(base[i], 10) * peso--; if (peso < 2) peso = 9; }
+      const r = soma % 11;
+      return r < 2 ? 0 : 11 - r;
+    };
+    return dv(d.slice(0, 12)) === parseInt(d[12], 10) && dv(d.slice(0, 13)) === parseInt(d[13], 10);
+  }
+  function isCPFValid(v) {
+    const d = onlyDigits(v);
+    if (d.length !== 11 || /^(\d)\1+$/.test(d)) return false;
+    const dv = (base) => {
+      let soma = 0;
+      for (let i = 0; i < base.length; i++) soma += parseInt(base[i], 10) * (base.length + 1 - i);
+      const r = (soma * 10) % 11;
+      return r === 10 ? 0 : r;
+    };
+    return dv(d.slice(0, 9)) === parseInt(d[9], 10) && dv(d.slice(0, 10)) === parseInt(d[10], 10);
+  }
+  /* CNPJ da própria Contratante não pode ser usado como Contratada. */
+  function isCNPJContratante(v) { return onlyDigits(v) === onlyDigits(CONTRATANTE.cnpj); }
   function isCEPValid(v) { return onlyDigits(v).length === 8; }
 
   function pad2(n) { return String(n).padStart(2,'0'); }
@@ -166,6 +213,18 @@
     return {
       modalidade: 'instalacao',
       masterId: null, propostaId: null, ativosIndices: [],  // Master ID Fase 2
+      /* Snapshot dos ativos da Proposta selecionada (com custoInstalacaoMaoDeObraRs
+         por equipamento, ver proposta-heranca.js) — usado só pra sugerir o
+         Valor total do contrato (Passo 5), nunca lido pelo documento em si. */
+      ativosSnapshot: [],
+      dossierIds: [],  // Dossiê(s) reais cobertos (pagamento por marco — Trilha B)
+      /* Nº do contrato nasce dos equipamentos (29/09): numeroContratoBase =
+         "VPNI-0955" (cotação) ou "VPNI-<nº de série/projeto>" (avulso);
+         numeroContrato = base + sufixo -2/-3 se já existir outro contrato
+         com a mesma base (ex.: 2 montadores na mesma cotação). Fixo depois
+         de nascer. equipamentosManuais = nº de série / Master ID digitados
+         (obrigatório no avulso; opcional junto de uma Proposta). */
+      numeroCotacao: null, numeroContrato: null, numeroContratoBase: null, equipamentosManuais: [],
       c_razao:'', c_cnpj:'', c_rua:'', c_numero:'', c_bairro:'', c_cidade:'', c_estado:'', c_cep:'',
       r_nome:'', r_nacionalidade:'brasileiro(a)', r_estadoCivil:'', r_profissao:'',
       r_rg:'', r_cpf:'', r_mesmoEndereco: true,
@@ -177,12 +236,45 @@
       logResponsavel:'contratada', logModo:'despesas', logDiasExtra:'',
       valorTotal:'', formaPagamento:'2', parcelas:[],
       banco:'', agencia:'', conta:'', pix:'',
-      anexos: ANEXOS.reduce((a,x) => (a[x.id]=false, a), {}),
       cidadeAssinatura: 'Guarulhos',
       dataDia: pad2(hoje.getDate()),
       dataMes: MESES[hoje.getMonth()],
       dataAno: String(hoje.getFullYear()),
     };
+  }
+
+  /* ---------- Equipamentos e Nº do contrato ---------- */
+  /* Equipamentos cobertos: ativos marcados da Proposta (identificador
+     VPEL-EL0955-1…) + nº de série / projeto digitados. Sem duplicata. */
+  function equipamentosDoContrato(s) {
+    const marcados = (s.ativosSnapshot || [])
+      .filter((a) => (s.ativosIndices || []).includes(a.indice))
+      .map((a) => String(a.identificador || a.codigo || '').trim());
+    const manuais = (s.equipamentosManuais || []).map((v) => String(v).trim());
+    const out = [];
+    marcados.concat(manuais).forEach((v) => { if (v && !out.includes(v)) out.push(v); });
+    return out;
+  }
+  function slugEquipamento(v) {
+    return String(v || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '')
+      .toUpperCase().trim().replace(/\s+/g, '-').replace(/[^A-Z0-9._-]/g, '').replace(/^-+|-+$/g, '');
+  }
+  /* Base do nº do contrato: com Proposta → VPNI-<Nº da cotação, 4 dígitos>;
+     sem Proposta → VPNI-<1º nº de série/projeto informado>. null = ainda
+     não dá pra nascer (nenhum equipamento mencionado). */
+  function numeroBaseContrato(s) {
+    if (!equipamentosDoContrato(s).length) return null;
+    if (s.numeroCotacao != null && s.numeroCotacao !== '') return 'VPNI-' + String(s.numeroCotacao).padStart(4, '0');
+    const primeiro = (s.equipamentosManuais || []).map(slugEquipamento).find(Boolean);
+    return primeiro ? 'VPNI-' + primeiro : null;
+  }
+  /* 1º livre entre base, base-2, base-3… dado o conjunto de nºs já usados. */
+  function proximoNumeroLivre(base, usados) {
+    const set = usados instanceof Set ? usados : new Set(usados || []);
+    if (!set.has(base)) return base;
+    let n = 2;
+    while (set.has(base + '-' + n)) n++;
+    return base + '-' + n;
   }
 
   /* ---------- Regras condicionais ---------- */
@@ -207,9 +299,18 @@
   /* ---------- Builder do documento ---------- */
   function vBlank(v, ph) { return (v && String(v).trim()) ? String(v).trim() : ph; }
 
+  /* Só prefixa "Rua " quando o usuário não digitou o tipo do logradouro
+     (senão "Avenida Paulista" virava "Rua Avenida Paulista"). */
+  const TIPO_LOGRADOURO = /^(rua|r\.|avenida|av\.?|alameda|al\.|travessa|tv\.|estrada|estr\.|rodovia|rod\.|pra[cç]a|p[cç]a\.?|largo|viela|via|beco|parque|jardim)(\s|$)/i;
+  function logradouro(v) {
+    const t = vBlank(v, '');
+    if (!t) return 'Rua XXX';
+    return TIPO_LOGRADOURO.test(t) ? t : 'Rua ' + t;
+  }
+
   function buildEnderecoContratada(s) {
     return [
-      'Rua ' + vBlank(s.c_rua, 'XXX'),
+      logradouro(s.c_rua),
       'nº ' + vBlank(s.c_numero, 'XXX'),
       vBlank(s.c_bairro, 'bairro'),
       vBlank(s.c_cidade, 'cidade') + '/' + vBlank(s.c_estado, 'UF'),
@@ -219,7 +320,7 @@
   function buildEnderecoResponsavel(s) {
     if (s.r_mesmoEndereco) return buildEnderecoContratada(s);
     return [
-      'Rua ' + vBlank(s.r_rua, 'XXX'),
+      logradouro(s.r_rua),
       'nº ' + vBlank(s.r_numero, 'XXX'),
       vBlank(s.r_bairro, 'bairro'),
       vBlank(s.r_cidade, 'cidade') + '/' + vBlank(s.r_estado, 'UF'),
@@ -260,7 +361,8 @@
       frase += '.';
       return frase;
     }
-    return `Faz parte do escopo desse serviço a ${verboModalidade(s)} de ${qtd} (${qtdExt}) ${eq.label} da Marca Vertical Parts.`;
+    const fem = eq.gen === 'a';
+    return `Faz parte do escopo desse serviço a ${verboModalidade(s)} de ${qtd} (${inteiroExtensoGen(qtd, fem)}) ${qtd > 1 ? eq.plural : eq.label} da Marca Vertical Parts.`;
   }
 
   function buildPagamentoItems(s) {
@@ -269,20 +371,20 @@
     const valorExt = valor ? ' (' + valorExtenso(valor) + ')' : ' (valor por extenso)';
     const items = [];
     if (s.formaPagamento === '2') {
-      const metade = valor ? valor/2 : 0;
-      const mFmt = metade ? 'R$ ' + fmtMoeda(metade) : 'R$ XX.XXX,XX';
-      const mExt = metade ? ' (' + valorExtenso(metade) + ')' : ' (valor por extenso)';
+      const [p1, p2] = dividirEmParcelas(valor, 2);
+      const f = (v) => v ? 'R$ ' + fmtMoeda(v) : 'R$ XX.XXX,XX';
+      const e = (v) => v ? ' (' + valorExtenso(v) + ')' : ' (valor por extenso)';
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago em 2 (duas) parcelas via depósito em conta bancária, da seguinte forma:` });
-      items.push({ n:'5.1.1', text:`${mFmt}${mExt} na data de início dos trabalhos;` });
-      items.push({ n:'5.1.2', text:`${mFmt}${mExt} após a finalização do serviço, com o equipamento apto ao pleno funcionamento e mediante nota fiscal de serviço.` });
+      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos;` });
+      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} após a finalização do serviço, com o equipamento apto ao pleno funcionamento e mediante nota fiscal de serviço.` });
     } else if (s.formaPagamento === '3') {
-      const terco = valor ? valor/3 : 0;
-      const tFmt = terco ? 'R$ ' + fmtMoeda(terco) : 'R$ XX.XXX,XX';
-      const tExt = terco ? ' (' + valorExtenso(terco) + ')' : ' (valor por extenso)';
+      const [p1, p2, p3] = dividirEmParcelas(valor, 3);
+      const f = (v) => v ? 'R$ ' + fmtMoeda(v) : 'R$ XX.XXX,XX';
+      const e = (v) => v ? ' (' + valorExtenso(v) + ')' : ' (valor por extenso)';
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago em 3 (três) parcelas via depósito em conta bancária, da seguinte forma:` });
-      items.push({ n:'5.1.1', text:`${tFmt}${tExt} na data de início dos trabalhos;` });
-      items.push({ n:'5.1.2', text:`${tFmt}${tExt} na metade da execução dos serviços;` });
-      items.push({ n:'5.1.3', text:`${tFmt}${tExt} após a finalização do serviço, mediante nota fiscal de serviço.` });
+      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos;` });
+      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} na metade da execução dos serviços;` });
+      items.push({ n:'5.1.3', text:`${f(p3)}${e(p3)} após a finalização do serviço, mediante nota fiscal de serviço.` });
     } else {
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago via depósito em conta bancária, da seguinte forma:` });
       const parc = (s.parcelas && s.parcelas.length) ? s.parcelas : [];
@@ -302,8 +404,36 @@
     const ag    = vBlank(s.agencia, '____');
     const conta = vBlank(s.conta, '____');
     const pix   = vBlank(s.pix, '____');
-    items.push({ n:'BANK', text:'Dados bancários da CONTRATADA:', bank:{ banco, ag, conta, pix } });
+    /* Nº do item bancário calculado a partir do último item de fato (não
+       fixo em "5.1.3") — senão desalinha sempre que a forma de pagamento
+       não é a de 2 parcelas (3 parcelas usa até 5.1.3, personalizado usa
+       um número de itens variável). */
+    const lastN = items.length ? items[items.length - 1].n : '5.1';
+    items.push({ n: bumpItemNumber(lastN), text:'Dados bancários da CONTRATADA:', bank:{ banco, ag, conta, pix } });
     return items;
+  }
+
+  function bumpItemNumber(n) {
+    const parts = String(n).split('.');
+    const last = parseInt(parts[parts.length - 1], 10);
+    parts[parts.length - 1] = String((isNaN(last) ? 0 : last) + 1);
+    return parts.join('.');
+  }
+
+  /* Os números "n" dos itens (ex.: "2.1", "5.1.2") nascem hardcoded
+     assumindo a ordem-base do contrato SEM nenhuma cláusula condicional
+     (Equipamento Especial / Logística). Quando uma condicional entra, ela
+     é inserida no meio do array sem número de cláusula próprio (usa EE./LG.),
+     empurrando o ORDINAL (c.ord, "CLÁUSULA TERCEIRA...") de tudo que vem
+     depois — mas o número dos itens ficava parado no valor hardcoded,
+     desalinhando cabeçalho x corpo (ex.: "CLÁUSULA TERCEIRA" com itens
+     "2.1, 2.2..."). renumClauseItems corrige isso reescrevendo só o
+     primeiro segmento do "n" (o número da cláusula) pro valor real da
+     posição, preservando o resto (".1", ".13" etc.). */
+  function renumClauseItems(clause, actualNum) {
+    if (!clause.baseNum || clause.baseNum === actualNum) return;
+    const re = new RegExp('^' + clause.baseNum + '(?=[.\\D]|$)');
+    clause.items.forEach(it => { if (it.n) it.n = it.n.replace(re, String(actualNum)); });
   }
 
   /* Monta o documento completo. Recebe o estado do form + o numero_documento já gerado.
@@ -317,6 +447,8 @@
       { n:'1.',  text:`O objeto do presente contrato consiste na ${objetoFrase(s)}, referente aos equipamentos e condições a seguir:` },
       { n:'1.1', text: escopoFrase(s) },
     ];
+    const equips = equipamentosDoContrato(s);
+    if (equips.length) objetoItems.push({ n:'1.1.1', text:`Equipamento${equips.length > 1 ? 's' : ''} objeto deste contrato (nº de série / identificação): ${equips.join(', ')}.` });
     if (s.descricaoServicos && s.descricaoServicos.trim()) objetoItems.push({ n:'1.2', text:'Descrição dos serviços: ' + s.descricaoServicos.trim() });
     else objetoItems.push({ n:'1.2', text:'Descrição dos serviços: (detalhar os serviços a executar)' });
     objetoItems.push({ n:'1.3', text:'Local do serviço: ' + vBlank(s.localServico, '(endereço completo de onde será realizado o serviço)') });
@@ -324,7 +456,7 @@
       const lbl = s.modalidade === 'remocao_adequacao' ? 'Local da nova instalação' : 'Destino do equipamento removido';
       objetoItems.push({ n:'1.4', text:`${lbl}: ` + vBlank(s.destino, '(informar o destino / local)') });
     }
-    clauses.push({ id:'objeto', titulo:'DO OBJETO', items:objetoItems });
+    clauses.push({ id:'objeto', titulo:'DO OBJETO', baseNum:1, items:objetoItems });
 
     /* EQUIPAMENTO ESPECIAL (condicional) */
     if (isCargaEspecial(s)) {
@@ -341,7 +473,7 @@
 
     /* OBRIGAÇÕES DA CONTRATADA */
     clauses.push({
-      id:'obrig_contratada', titulo:'DA OBRIGAÇÃO DO CONTRATADO',
+      id:'obrig_contratada', titulo:'DA OBRIGAÇÃO DO CONTRATADO', baseNum:2,
       items: [
         { n:'2.1', text:'Fica responsável a CONTRATADA por todos os serviços que lhe forem apontados, durante o tempo necessário para ' + (isRemocao(s) ? 'remoção' : 'instalação') + ' e finalização do mesmo, conforme especificado no item 1.1.' },
         { n:'2.2', text:'A CONTRATADA deverá seguir as normas estabelecidas pela CONTRATANTE, como horário de funcionamento do local onde serão executados os serviços e quanto às regras de utilização de ferramentas, como a obrigatoriedade do uso de Equipamentos de Proteção Individual (EPIs).' },
@@ -361,7 +493,7 @@
 
     /* OBRIGAÇÕES DA CONTRATANTE */
     clauses.push({
-      id:'obrig_contratante', titulo:'DAS OBRIGAÇÕES DA CONTRATANTE',
+      id:'obrig_contratante', titulo:'DAS OBRIGAÇÕES DA CONTRATANTE', baseNum:3,
       items: [
         { n:'3.1', text:'Prestar as informações e os esclarecimentos que venham a ser solicitados pela CONTRATADA, desde que necessários para a prestação dos serviços ora contratados.' },
         { n:'3.2', text:'A CONTRATANTE se responsabiliza a prestar todo apoio técnico necessário para que a CONTRATADA realize os serviços acordados neste instrumento.' },
@@ -371,7 +503,7 @@
 
     /* RESPONSABILIDADE DA CONTRATADA */
     clauses.push({
-      id:'resp_contratada', titulo:'DA RESPONSABILIDADE DA CONTRATADA',
+      id:'resp_contratada', titulo:'DA RESPONSABILIDADE DA CONTRATADA', baseNum:4,
       items: [
         { n:'4.1', text:'A CONTRATADA responderá pelos encargos trabalhistas, fiscais, comerciais e previdenciários resultantes da execução deste contrato, não transferindo à CONTRATANTE, em caso de inadimplência da CONTRATADA com referência a esses encargos, a responsabilidade por seu pagamento, nem podendo onerar o objeto deste contrato.' },
         { n:'4.2', text:'Caberão à CONTRATADA os prejuízos causados à CONTRATANTE ou a terceiros, por atos de sua responsabilidade e decorrentes da execução dos serviços estipulados neste contrato, por culpa ou dolo, excluídos os casos em que a CONTRATANTE der causa, seja por sua ação ou omissão.' },
@@ -379,7 +511,7 @@
     });
 
     /* PAGAMENTO */
-    clauses.push({ id:'pagamento', titulo:'DO PAGAMENTO', items: buildPagamentoItems(s) });
+    clauses.push({ id:'pagamento', titulo:'DO PAGAMENTO', baseNum:5, items: buildPagamentoItems(s) });
 
     /* LOGÍSTICA (condicional) */
     if (isLongaDistancia(s)) {
@@ -400,12 +532,12 @@
     }
 
     /* CESSÃO */
-    clauses.push({ id:'cessao', titulo:'DA CESSÃO OU TRANSFERÊNCIA', items:[
+    clauses.push({ id:'cessao', titulo:'DA CESSÃO OU TRANSFERÊNCIA', baseNum:6, items:[
       { n:'6.1', text:'O contrato não poderá ser objeto de cessão ou transferência, no todo ou em parte, a não ser com prévio e expresso consentimento da CONTRATANTE, sob pena de imediata rescisão do mesmo.' },
     ]});
 
     /* RESCISÃO */
-    clauses.push({ id:'rescisao', titulo:'DA RESCISÃO', items:[
+    clauses.push({ id:'rescisao', titulo:'DA RESCISÃO', baseNum:7, items:[
       { n:'7.1', text:'Constituem motivos para a rescisão deste contrato:', list:[
         'não cumprimento de cláusulas, especificações e prazos;',
         'atraso ou paralisação injustificada e/ou sem comunicação à CONTRATANTE na execução dos serviços;',
@@ -421,23 +553,23 @@
     ]});
 
     /* VIGÊNCIA */
-    clauses.push({ id:'vigencia', titulo:'DA VIGÊNCIA', items:[
+    clauses.push({ id:'vigencia', titulo:'DA VIGÊNCIA', baseNum:8, items:[
       { n:'8.1', text:'Para efeito deste contrato, a vigência terá seu início na data de assinatura deste instrumento e se findará automaticamente com a finalização dos serviços ora contratados.' },
       { n:'8.2', text:'Este contrato é válido até o término do serviço objeto deste contrato, vide Cláusula __OBJETO__, não ficando as partes isentas de seus compromissos éticos após a invalidação do mesmo, podendo ser prorrogado e/ou alterado por acordo entre as partes, mediante termo aditivo.', ref:'objeto' },
     ]});
 
     /* PENALIDADES */
-    clauses.push({ id:'penalidades', titulo:'DAS PENALIDADES', items:[
+    clauses.push({ id:'penalidades', titulo:'DAS PENALIDADES', baseNum:9, items:[
       { n:'9.1', text:'Em caso de rescisão sem justo motivo por uma das partes antes do prazo final do contrato, ou de qualquer uma das ocorrências previstas na Cláusula __RESCISAO__ deste instrumento, este Contrato será rescindido automaticamente e caberá à parte infratora multa equivalente a 20% (vinte por cento) sobre o total do contrato, a ser paga em até 5 (cinco) dias corridos da rescisão.', ref:'rescisao' },
     ]});
 
     /* TOLERÂNCIA */
-    clauses.push({ id:'tolerancia', titulo:'DA TOLERÂNCIA', items:[
+    clauses.push({ id:'tolerancia', titulo:'DA TOLERÂNCIA', baseNum:10, items:[
       { n:'10.1', text:'A eventual tolerância, pela CONTRATANTE, com relação ao descumprimento de qualquer termo ou condição aqui ajustado, não será considerada como desistência em exigir o cumprimento de disposição nele contida, nem representará novação com relação à obrigação passada, presente ou futura, no tocante ao termo ou condição cujo descumprimento foi tolerado.' },
     ]});
 
     /* DISPOSIÇÕES GERAIS */
-    clauses.push({ id:'disposicoes', titulo:'DAS DISPOSIÇÕES GERAIS', items:[
+    clauses.push({ id:'disposicoes', titulo:'DAS DISPOSIÇÕES GERAIS', baseNum:11, items:[
       { n:'11.1', text:'Este é um contrato típico de prestação de serviços, conforme nomeado pelo Código Civil, e no caso de qualquer omissão deste contrato serão aplicáveis as regras previstas na Legislação.' },
       { n:'11.2', text:'A execução deste contrato será acompanhada e fiscalizada por empregado da CONTRATANTE, o qual será também responsável pelo recebimento dos serviços, avaliação e aceite.' },
       { n:'11.3', text:'A CONTRATANTE não será responsável por eventual prejuízo sofrido e/ou causado pelos profissionais da CONTRATADA em decorrência deste contrato, bem como não terá qualquer responsabilidade por eventuais danos e/ou encargos fiscais, trabalhistas, civis, securitários e/ou sociais relacionados com a execução do objeto contratual pela CONTRATADA.' },
@@ -445,13 +577,17 @@
     ]});
 
     /* FORO */
-    clauses.push({ id:'foro', titulo:'DO FORO', items:[
+    clauses.push({ id:'foro', titulo:'DO FORO', baseNum:12, items:[
       { n:'12.1', text:'As partes convencionam que o Foro para dirimir quaisquer dúvidas ou questões oriundas do presente contrato é o Foro da Comarca de Guarulhos, São Paulo, com exclusão de qualquer outro, por mais privilegiado que seja.' },
     ]});
 
     /* Resolve referências cruzadas */
     const ordById = {};
-    clauses.forEach((c, i) => { ordById[c.id] = ORDINAIS_REF[i] || ('#'+(i+1)); c.ord = ORDINAIS[i] || ('#'+(i+1)); });
+    clauses.forEach((c, i) => {
+      ordById[c.id] = ORDINAIS_REF[i] || ('#'+(i+1));
+      c.ord = ORDINAIS[i] || ('#'+(i+1));
+      renumClauseItems(c, i + 1);
+    });
     clauses.forEach(c => c.items.forEach(it => {
       if (it.ref) it.text = it.text.replace(`__${it.ref.toUpperCase()}__`, ordById[it.ref] || '____');
       if (it.refInList && it.list) it.list = it.list.map(li => li.replace(`__${it.refInList.toUpperCase()}__`, ordById[it.refInList] || '____'));
@@ -488,7 +624,9 @@
     ORDINAIS, ORDINAIS_REF, MESES,
     inteiroExtenso, valorExtenso,
     onlyDigits, maskCNPJ, maskCPF, maskCEP, maskRG, maskMoeda, moedaParaNumero, fmtMoeda,
-    isCNPJValid, isCPFValid, isCEPValid,
+    isCNPJValid, isCPFValid, isCEPValid, isCNPJContratante,
+    dividirEmParcelas, inteiroExtensoGen, logradouro,
+    equipamentosDoContrato, slugEquipamento, numeroBaseContrato, proximoNumeroLivre,
     defaultState, pad2,
     isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals,
     buildContract,

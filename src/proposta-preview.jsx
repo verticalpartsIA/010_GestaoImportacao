@@ -48,6 +48,7 @@ function PEPreview({ data, eq, overlay, bare }) {
     pageList = [
       PreviewCapa,
       PreviewSobre,
+      PreviewSobreCont,
       PreviewClienteObra,
       PreviewSaudacao,
       PreviewElevadorMarketing,
@@ -101,7 +102,7 @@ function PdfHeader({ numero }) {
   return (
     <div className="pdf-page-header">
       <div className="pdf-page-header-brand">
-        <img src="assets/logo-verticalparts-color.png" alt="VerticalParts"/>
+        <img src="/assets/logo-verticalparts-color.png" alt="VerticalParts"/>
         <span>Elevando você e o seu negócio</span>
       </div>
       <div className="pdf-page-header-num">
@@ -125,9 +126,42 @@ function PdfFooter() {
   );
 }
 
-/* Placeholder consistente pra campo ainda vazio */
-function Vazio({ children }) {
-  return <p style={{ color: "var(--vp-gray-400)", fontStyle: "italic" }}>{children}</p>;
+/* CNPJ/CPF do cadastro vem só com dígitos ("88818299000137") e ia cru
+   pro documento do cliente. Formata pra máscara oficial; se não tiver o
+   tamanho esperado, devolve como está (não inventa formato). */
+function fmtDoc(v) {
+  const d = String(v || "").replace(/\D/g, "");
+  if (d.length === 14) return d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, "$1.$2.$3/$4-$5");
+  if (d.length === 11) return d.replace(/^(\d{3})(\d{3})(\d{3})(\d{2})$/, "$1.$2.$3-$4");
+  return v || "";
+}
+
+/* O nome do cliente às vezes vem digitado já com o CNPJ colado dentro
+   ("Fulano - Prefeitura X, CNPJ 888182990001-37"), e aí o documento
+   mostrava o CNPJ duas vezes — uma no nome, outra no campo próprio
+   (achado na análise do PDF de 20/08, pág. 5). Limpa o sufixo do nome
+   quando o campo CNPJ já existe. */
+function nomeSemDoc(nome, doc) {
+  if (!nome || !doc) return nome || "";
+  return String(nome)
+    .replace(/[,;–-]?\s*(CNPJ|CPF)\s*:?\s*[\d./-]+\s*$/i, "")
+    .trim()
+    .replace(/[,;–-]\s*$/, "");
+}
+
+/* Placeholder de campo vazio. O texto que o VENDEDOR lê ("Preencha os
+   acabamentos na aba...") é instrução interna do sistema e não pode
+   chegar ao cliente — saía impresso no PDF entregue (achado real na
+   análise do PDF de 20/08, pág. 9: "ACABAMENTO — Preencha os acabamentos
+   na aba Acabamentos"). Na tela mostra a instrução; no PDF/impressão
+   mostra só "A definir.", que é o que faz sentido pro cliente ler. */
+function Vazio({ children, print = "A definir." }) {
+  return (
+    <>
+      <p className="pe-vazio-tela" style={{ color: "var(--vp-gray-400)", fontStyle: "italic" }}>{children}</p>
+      <p className="pe-vazio-print" style={{ color: "#777", fontStyle: "italic" }}>{print}</p>
+    </>
+  );
 }
 
 /* ---------- Página 1: Capa ---------- */
@@ -143,10 +177,10 @@ function PreviewCapa({ data, eq, pg, total }) {
             <dt>Nº da Proposta</dt>
             <dt>Vendedor</dt>
             <dd>{data.numero || <span style={{ color: "var(--vp-gray-300)" }}>VP-2026-XXX</span>}</dd>
-            <dd>{v.nome || <span style={{ color: "var(--vp-gray-300)" }}>—</span>}</dd>
+            <dd>{v.nome || <span style={{ color: "var(--vp-gray-300)" }}>Equipe Comercial</span>}</dd>
             <dt>Contato</dt>
             <dt>&nbsp;</dt>
-            <dd>{v.email || <span style={{ color: "var(--vp-gray-300)" }}>@verticalparts.com.br</span>}</dd>
+            <dd>{v.email || "comercial@verticalparts.com.br"}</dd>
             <dd>&nbsp;</dd>
           </dl>
           <div className="pe__pdf-capa-foot">
@@ -155,12 +189,20 @@ function PreviewCapa({ data, eq, pg, total }) {
           </div>
         </div>
       </div>
-      <div className="pe__pdf-pgnum">Página {pg} de {total}</div>
     </div>
   );
 }
 
-/* ---------- Página 2: Sobre a VerticalParts (institucional, fixo) ---------- */
+/* ---------- Página 2: Sobre a VerticalParts (institucional, fixo) ----------
+   Dividida em 2 páginas (achado 20/08): o conteúdo inteiro (título + foto +
+   5 parágrafos + cards) media ~1626px de altura real contra os ~1123px de
+   uma folha A4 — 45% maior que cabe numa página só. Com tudo num único
+   `.pe__pdf`, o navegador decidia sozinho onde cortar pra impressão, e
+   Chrome e Firefox faziam isso de formas diferentes e inconsistentes
+   (uma página em branco sobrando, às vezes antes às vezes depois do
+   conteúdo real). Separar em 2 `.pe__pdf` de verdade — o mesmo padrão que
+   já funciona sem falha nas outras 18 páginas do documento — tira essa
+   decisão do navegador. */
 function PreviewSobre({ eq }) {
   return (
     <div className="pe__pdf">
@@ -170,11 +212,26 @@ function PreviewSobre({ eq }) {
         </h1>
         <div className="pe__pdf-sobre-img" data-eq={eq}/>
         <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 17 }}>
-          <img src="assets/logo-verticalparts-color.png" alt="VerticalParts" style={{ height: 26 }}/>
+          <img src="/assets/logo-verticalparts-color.png" alt="VerticalParts" style={{ height: 26 }}/>
           <span className="pdf-sub-title" style={{ margin: 0 }}>Sobre a VerticalParts</span>
         </div>
         <p>Desde 2012 no mercado de mobilidade vertical, a VerticalParts se destaca como líder fornecedora de soluções personalizadas e competitivas para o transporte de passageiros. Nosso compromisso é oferecer produtos de alta qualidade e serviços excepcionais para atender às necessidades específicas de cada cliente.</p>
         <p>Especializados na venda de equipamentos como escadas, esteiras rolantes, elevadores e peças de reposição, nos orgulhamos de oferecer uma ampla variedade de opções para aprimorar a mobilidade em diversos setores. Nosso objetivo é proporcionar soluções eficientes e seguras que atendam às demandas de espaços comerciais, residenciais e públicos.</p>
+      </div>
+      <PdfFooter/>
+    </div>
+  );
+}
+
+/* ---------- Página 2b: continuação de "Sobre a VerticalParts" ---------- */
+function PreviewSobreCont() {
+  return (
+    <div className="pe__pdf">
+      <div className="pe__pdf-inner">
+        <div style={{ display: "flex", alignItems: "center", gap: 13, marginBottom: 17 }}>
+          <img src="/assets/logo-verticalparts-color.png" alt="VerticalParts" style={{ height: 26 }}/>
+          <span className="pdf-sub-title" style={{ margin: 0 }}>Sobre a VerticalParts</span>
+        </div>
         <p>Além disso, a VerticalParts se destaca pela sua dedicação em manter um amplo estoque de peças de reposição para escadas e esteiras rolantes. Isso nos permite suprir todas as suas necessidades de forma rápida e eficiente, garantindo a máxima disponibilidade e funcionamento contínuo dos seus equipamentos.</p>
         <p>Nossa equipe altamente qualificada está pronta para oferecer suporte técnico especializado e auxiliar na seleção, instalação e manutenção dos produtos. Valorizamos a satisfação do cliente e buscamos estabelecer parcerias duradouras baseadas na confiança e na excelência dos nossos serviços.</p>
         <p>Se você está em busca de soluções personalizadas e confiáveis em mobilidade vertical, conte com a VerticalParts.</p>
@@ -205,8 +262,8 @@ function PreviewClienteObra({ data }) {
 
         <h2 className="pdf-sub-title">Dados do Cliente</h2>
         <div className="pdf-box">
-          <p><b>{c.nome || "—"}</b></p>
-          {c.cnpj ? <p>CNPJ: {c.cnpj}</p> : null}
+          <p><b>{nomeSemDoc(c.nome, c.cnpj) || c.nome || "—"}</b></p>
+          {c.cnpj ? <p>CNPJ: {fmtDoc(c.cnpj)}</p> : null}
           {c.responsavel ? <p>A/C: {c.responsavel}</p> : null}
           <p>{[c.endereco, c.numero].filter(Boolean).join(", ") || "—"}</p>
           <p>{[c.bairro, c.cidade, c.uf].filter(Boolean).join(" - ") || "—"}</p>
@@ -288,11 +345,12 @@ function PreviewElevadorMarketing({ data }) {
   );
 }
 
-/* ---------- Página 6: Especificações Técnicas (tabela) ---------- */
-function PreviewEspecTabela({ data }) {
-  const ed = data.elevador;
-  const s = (ed.especificacoes || [])[0] || {};
-  const linhas = [
+/* Linhas da tabela de especificações de 1 equipamento — extraída (issue
+   #704) pra ser testável sem montar o React inteiro; tensão/tração/
+   dimensões da cabine entram aqui pela 1ª vez (vinham sendo coletadas
+   no Formulário, nunca chegavam à Proposta). */
+function montarLinhasEspec(s) {
+  return [
     ["Tipo de Empreendimento", s.empreendimento],
     ["Característica de Transporte", s.carac],
     ["Denominação", s.denominacao],
@@ -300,24 +358,43 @@ function PreviewEspecTabela({ data }) {
     ["Capacidade", s.capacidade],
     ["Caixa de Corrida", s.dimensoesCaixa],
     ["Poço", s.profPoço && `${s.profPoço}mm`],
+    ["Dimensões da Cabine", s.dimensoesCabine],
+    ["Tensão de Alimentação", s.tensao],
+    ["Tração", s.tracao],
     ["Velocidade", s.vel && `${s.vel} m/s`],
     ["Paradas", s.andaresParadasPortas],
     ["Modelo", s.modelo],
     ["Quantidade", s.qtd],
   ].filter(([, v]) => v);
+}
+
+/* ---------- Página 6: Especificações Técnicas (tabela) ---------- */
+function PreviewEspecTabela({ data }) {
+  const ed = data.elevador;
+  /* Uma tabela por equipamento — antes só lia especificacoes[0], então a 2ª
+     unidade em diante (cotação com mais de 1 elevador) nunca aparecia aqui,
+     mesmo com o dado certo (bug real na cotação 950). */
+  const lista = (ed.especificacoes && ed.especificacoes.length) ? ed.especificacoes : [{}];
+  const blocos = lista.map((s) => ({
+    id: s.id,
+    linhas: montarLinhasEspec(s),
+  }));
+  const temConteudo = blocos.some((b) => b.linhas.length);
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
         <PdfHeader numero={data.numero}/>
         <h2 className="pdf-sec-title">Especificações Técnicas</h2>
         <div className="pdf-sec-rule"/>
-        <h3 className="pdf-sub-title">Características Principais</h3>
-        {linhas.length ? (
-          <table className="pdf-table2">
-            <thead><tr><th>Característica</th><th>{s.id || "Elevador de Passageiros"}</th></tr></thead>
-            <tbody>{linhas.map(([k, v], i) => <tr key={i}><td>{k}</td><td>{v}</td></tr>)}</tbody>
-          </table>
-        ) : <Vazio>Preencha as especificações técnicas na aba "Especificações Técnicas".</Vazio>}
+        {temConteudo ? blocos.map((b, i) => b.linhas.length ? (
+          <div key={i}>
+            <h3 className="pdf-sub-title">{blocos.length > 1 ? (b.id || `Equipamento ${i + 1}`) : "Características Principais"}</h3>
+            <table className="pdf-table2">
+              <thead><tr><th>Característica</th><th>{b.id || "Elevador de Passageiros"}</th></tr></thead>
+              <tbody>{b.linhas.map(([k, v], j) => <tr key={j}><td>{k}</td><td>{v}</td></tr>)}</tbody>
+            </table>
+          </div>
+        ) : null) : <Vazio>Preencha as especificações técnicas na aba "Especificações Técnicas".</Vazio>}
       </div>
       <PdfFooter/>
     </div>
@@ -326,23 +403,30 @@ function PreviewEspecTabela({ data }) {
 
 /* ---------- Página 7: Acabamento (tabela) ---------- */
 function PreviewAcabamentoTabela({ data }) {
-  const a = data.elevador.acabamentos;
-  const linhas = [
-    ["Modelo da Cabine", a.modeloCabine],
-    ["Acabamentos", a.acabamentoMat],
-    ["Sub-teto", a.subTeto],
-    ["Botoeira de Cabine", a.painelOperacao],
-    ["Piso", a.pisoCabina],
-    ["Medidas", a.medidasPiso],
-    ["Porta de Cabine", a.modeloPorta],
-    ["Medidas Porta de Cabine", a.dimPortaCabine],
-    ["Modelo de Porta", a.acabPortaCabine],
-    ["Portas de Pavimento", a.portasPavimento],
-    ["Botoeiras de Pavimento", a.botoeirasPavimento],
-    ["Sinalização", a.sinalizacao],
-    ["Pavimentos Inox", a.pavInox],
-    ["Demais", a.demais],
-  ].filter(([, v]) => v);
+  const ed = data.elevador;
+  /* acabamentosCats (novo, dinâmico — categorias/campos com checkbox
+     "ativo", igual à Ficha Técnica): só entra no PDF o que está marcado.
+     Sem acabamentosCats (proposta antiga, nunca reaberta no editor novo):
+     cai no formato fixo de sempre — mostra o que estiver preenchido. */
+  const a = ed.acabamentos || {};
+  const linhas = (Array.isArray(ed.acabamentosCats) && ed.acabamentosCats.length)
+    ? ed.acabamentosCats.flatMap((c) => c.campos.filter((f) => f.ativo && f.valor).map((f) => [f.nome, f.valor]))
+    : [
+        ["Modelo da Cabine", a.modeloCabine],
+        ["Acabamentos", a.acabamentoMat],
+        ["Sub-teto", a.subTeto],
+        ["Botoeira de Cabine", a.painelOperacao],
+        ["Piso", a.pisoCabina],
+        ["Medidas", a.medidasPiso],
+        ["Porta de Cabine", a.modeloPorta],
+        ["Medidas Porta de Cabine", a.dimPortaCabine],
+        ["Modelo de Porta", a.acabPortaCabine],
+        ["Portas de Pavimento", a.portasPavimento],
+        ["Botoeiras de Pavimento", a.botoeirasPavimento],
+        ["Sinalização", a.sinalizacao],
+        ["Pavimentos Inox", a.pavInox],
+        ["Demais", a.demais],
+      ].filter(([, v]) => v);
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
@@ -464,16 +548,78 @@ function PreviewFotos({ data }) {
 }
 
 /* ---------- Página 12: Valores e Pagamento (2 tabelas) ---------- */
+/* Duas modalidades de entrega (Financeiro, 01/10/2026): enquanto o cliente não
+   escolheu, as duas aparecem — cada uma com suas características, tabela de
+   preços e cronograma, e um campo de escolha. Ao escolher (na assinatura), a
+   outra deixa de aparecer: o documento volta ao formato de sempre (PreviewValoresTabelas
+   com os valores da modalidade escolhida). Ver proposta-opcoes.js. */
+function PreviewValoresOpcoes({ data }) {
+  const ops = window.PropostaOpcoes.opcoes(data) || [];
+  const fmt = (n) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  return (
+    <div className="pe__pdf">
+      <div className="pe__pdf-inner">
+        <PdfHeader numero={data.numero}/>
+        <h2 className="pdf-sec-title">Valores e Pagamento</h2>
+        <div className="pdf-sec-rule"/>
+        <p>Esta proposta traz duas modalidades de entrega. Escolha a que melhor atende o seu cronograma — ao escolher uma, a outra deixa de valer.</p>
+        {ops.map((o) => (
+          <div key={o.id} data-opcao-entrega={o.id} style={{ border: "1px solid #d9d9d9", borderRadius: 6, padding: "10px 14px", marginTop: 14 }}>
+            <h3 className="pdf-sub-title" style={{ marginTop: 0 }}>{o.titulo} <span style={{ fontWeight: 400, opacity: 0.7 }}>— {o.rotulo}</span></h3>
+            {o.caracteristicas.map((c, i) => <p key={i} style={{ margin: "2px 0" }}>{c}</p>)}
+            <table className="pdf-table2" style={{ marginTop: 8 }}>
+              <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
+              <tbody>
+                <tr><td>{o.equipamento}</td><td style={{ textAlign: "right" }}><b>{fmt(o.totalEquipamento)}</b></td></tr>
+                {o.difal ? <tr><td>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(o.difal)}</td></tr> : null}
+                <tr className="pdf-total-row"><td>Total — {o.titulo.toLowerCase()}</td><td style={{ textAlign: "right" }}>{fmt(o.total)}</td></tr>
+              </tbody>
+            </table>
+            {o.parcelas.length ? (
+              <table className="pdf-table2" style={{ marginTop: 8 }}>
+                <thead><tr><th>Cronograma de Pagamento</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
+                <tbody>
+                  {o.parcelas.map((p, i) => <tr key={i}><td>{p.desc || "—"}</td><td style={{ textAlign: "right" }}>{p.valor ? "R$ " + p.valor : "—"}</td></tr>)}
+                  <tr className="pdf-total-row"><td>Total Parcelado</td><td style={{ textAlign: "right" }}>{fmt(o.totalParcelas)}</td></tr>
+                </tbody>
+              </table>
+            ) : null}
+            <p style={{ marginTop: 10, fontWeight: 700 }}>☐ Escolho a modalidade: {o.titulo}</p>
+          </div>
+        ))}
+      </div>
+      <PdfFooter/>
+    </div>
+  );
+}
+
 function PreviewValoresTabelas({ data }) {
+  if (window.PropostaOpcoes && window.PropostaOpcoes.temOpcoes(data)) return <PreviewValoresOpcoes data={data}/>;
+  const modalidade = window.PropostaOpcoes ? window.PropostaOpcoes.modalidadeEscolhida(data) : null;
   const v = data.elevador.valores;
   const parcelas = v.parcelas || [];
-  const qtd = parseFloat(v.quantidade) || 0;
-  const unit = parseFloat((v.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
   const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
-  const totalEq = qtd * unit;
-  const totalGeral = totalEq + difal;
   const fmt = (n) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const totalParcelas = parcelas.reduce((s, p) => s + (parseFloat((p.valor || "0").toString().replace(/\./g, "").replace(",", ".")) || 0), 0);
+
+  /* v.itens (mais de 1 equipamento na cotação): uma linha por unidade em vez
+     de uma linha só somando tudo — sem isso 2 elevadores viravam "GEF, GEP"
+     numa linha única (bug real na cotação 950). Sem itens (caso de sempre,
+     proposta com 1 equipamento só), cai no formato antigo de sempre. */
+  const linhas = (Array.isArray(v.itens) && v.itens.length ? v.itens : [v]).map((it) => {
+    const qtd = parseFloat(it.quantidade) || 0;
+    const unit = parseFloat((it.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
+    /* Desconto ativo (Frentes B+C): mostra o valor original riscado ao lado
+       do atual — histórico visível pro cliente e pra VerticalParts, mesmo
+       reabrindo a proposta depois. Comparado já totalizado (× qtd), já que
+       a coluna de Qtd./Valor Unit. saiu da tabela — só Equipamento | Valor. */
+    const original = it.valorOriginal != null ? parseFloat(String(it.valorOriginal).replace(/\./g, "").replace(",", ".")) || 0 : null;
+    const temDesconto = it.desconto && original != null && original > unit;
+    const total = qtd * unit;
+    return { equipamento: it.equipamento, original: temDesconto ? original * (qtd || 1) : null, total };
+  });
+  const totalEq = linhas.reduce((s, l) => s + l.total, 0);
+  const totalGeral = totalEq + difal;
 
   return (
     <div className="pe__pdf">
@@ -482,18 +628,22 @@ function PreviewValoresTabelas({ data }) {
         <h2 className="pdf-sec-title">Valores e Pagamento</h2>
         <div className="pdf-sec-rule"/>
 
+        {modalidade && <p><b>Modalidade de entrega escolhida:</b> {modalidade.titulo} — {modalidade.rotulo}.</p>}
         <h3 className="pdf-sub-title">Preços dos Equipamentos</h3>
         <table className="pdf-table2">
-          <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Qtd</th><th style={{ textAlign: "right" }}>Valor Unit.</th><th style={{ textAlign: "right" }}>Total</th></tr></thead>
+          <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
           <tbody>
-            <tr>
-              <td>{v.equipamento || "Elevador de Passageiros"}</td>
-              <td style={{ textAlign: "right" }}>{qtd || "—"}</td>
-              <td style={{ textAlign: "right" }}>{unit ? fmt(unit) : "—"}</td>
-              <td style={{ textAlign: "right", fontWeight: 700 }}>{totalEq ? fmt(totalEq) : "—"}</td>
-            </tr>
-            {difal ? <tr><td colSpan={3}>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(difal)}</td></tr> : null}
-            <tr className="pdf-total-row"><td colSpan={3}>Total Equipamentos</td><td style={{ textAlign: "right" }}>{fmt(totalGeral)}</td></tr>
+            {linhas.map((l, i) => (
+              <tr key={i}>
+                <td>{l.equipamento || "Elevador de Passageiros"}</td>
+                <td style={{ textAlign: "right" }}>
+                  {l.original != null && <span style={{ textDecoration: "line-through", opacity: 0.6, marginRight: 6 }}>{fmt(l.original)}</span>}
+                  <b>{l.total ? fmt(l.total) : "—"}</b>
+                </td>
+              </tr>
+            ))}
+            {difal ? <tr><td>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(difal)}</td></tr> : null}
+            <tr className="pdf-total-row"><td>Total Equipamentos</td><td style={{ textAlign: "right" }}>{fmt(totalGeral)}</td></tr>
           </tbody>
         </table>
 
@@ -752,6 +902,7 @@ function PreviewValoresSimples({ data, eq, pg, total }) {
   const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
   const totalEq = qtd * unit;
   const totalDifal = totalEq + difal;
+  const totalParcelado = parcelas.reduce((s, p) => s + (parseFloat((p.valor || "0").toString().replace(/\./g, "").replace(",", ".")) || 0), 0);
   const fmt = (n) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (
     <div className="pe__pdf">
@@ -778,7 +929,10 @@ function PreviewValoresSimples({ data, eq, pg, total }) {
             <h3 className="pdf-h3" style={{ marginTop: 10 }}>Parcelamento</h3>
             <table className="pdf-table">
               <thead><tr><th>#</th><th>Descrição</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
-              <tbody>{parcelas.map((p, i) => <tr key={i}><td style={{ width: 18 }}>{i + 1}</td><td>{p.desc || "—"}</td><td style={{ textAlign: "right", fontFamily: "var(--font-mono)" }}>{p.valor ? "R$ " + p.valor : "—"}</td></tr>)}</tbody>
+              <tbody>
+                {parcelas.map((p, i) => <tr key={i}><td style={{ width: 18 }}>{i + 1}</td><td>{p.desc || "—"}</td><td style={{ textAlign: "right", fontFamily: "var(--font-mono)" }}>{p.valor ? "R$ " + p.valor : "—"}</td></tr>)}
+                <tr><td colSpan={2} style={{ fontWeight: 700 }}>Total Parcelado</td><td style={{ textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 700 }}>{fmt(totalParcelado)}</td></tr>
+              </tbody>
             </table>
           </>
         ) : null}

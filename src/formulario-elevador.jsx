@@ -8,10 +8,19 @@
    ============================================================ */
 
 const FE_TIPOS = ['Passageiro', 'Carga', 'Hospitalar', 'Panorâmico', 'Home Lift'];
-const FE_MAO_DE_OBRA = [
-  { value: 'local', label: 'Mão de Obra Local' },
-  { value: 'sao_paulo', label: 'Mão de Obra de São Paulo' },
-  { value: 'sem_mao_de_obra', label: 'Sem Mão de Obra' },
+// Tração (2:1/4:1) — mesmos 2 valores de custos_instalacao_elevador.tracao
+// (Cadastros → Atualização de Custos). Pré-requisito pra busca automática
+// de mão de obra na Precificação (issue "Precificação real" Fase 3):
+// sem isso o sistema não sabe qual coluna da tabela MO consultar.
+const FE_TRACOES = ['2:1', '4:1'];
+// Renomeado de "Tipo de mão de obra" pra "Instalação Será" (pedido do
+// usuário, 28/08) — valores viram 'verticalparts'/'cliente', mesmo padrão
+// de FE_RESPONSAVEL_ENTREGA (campo distinto: aqui é quem INSTALA, lá é quem
+// é responsável pela ENTREGA). A coluna no banco continua se chamando
+// tipo_mao_de_obra (ver migration) — só a UI mudou de nome/opções.
+const FE_INSTALACAO_SERA = [
+  { value: 'verticalparts', label: 'VerticalParts' },
+  { value: 'cliente', label: 'Cliente' },
 ];
 const FE_RESPONSAVEL_ENTREGA = [
   { value: 'cliente', label: 'Cliente' },
@@ -22,20 +31,203 @@ const FE_ORIGEM_VENDA = [
   'Indicação VerticalParts',
   'Indicação Escamax + Vendedor',
   'Indicação Terceiros',
+  'Site VerticalParts',
 ];
 const FE_NORMAS = ['Glarie Standard', 'China Standard', 'EN81-20/50', 'EN81-20/50/70', 'EN81-41'];
+
+/* 15/08 — "camaleão": card de equipamento muda de campo conforme o tipo
+   (reunião de vendedores — cotação pode ter elevador + escada + esteira
+   juntos, cada um com seus próprios ativos VPEL-EL/VPER-ER/VPES-ES). Elevador
+   continua usando as colunas reais de sempre (intocadas, zero risco pro que
+   já funciona — RFQ, precificação etc. dependem delas). Escada/esteira usam
+   `especificacoes` (jsonb) com os campos das planilhas técnicas que o
+   usuário passou — texto livre com o valor típico como placeholder (as
+   planilhas chamam de "opções típicas", não é uma lista fechada de verdade,
+   então virar <select> obrigatório inventaria uma rigidez que a spec não
+   tem). */
+const FE_TIPOS_EQUIPAMENTO = [
+  { value: 'elevador', label: 'Elevador' },
+  { value: 'escada', label: 'Escada Rolante' },
+  { value: 'esteira', label: 'Esteira Rolante' },
+];
+
+const FE_SECOES_ESCADA = [
+  { titulo: 'Dados Gerais', campos: [
+    ['tipo_edificacao', 'Tipo de edificação', 'Comercial, residencial, hospitalar, aeroporto, metrô, shopping, institucional'],
+    ['uso_previsto', 'Uso previsto', 'Público (alto tráfego) / privado (médio/baixo tráfego)'],
+    ['horario_pico', 'Horário de pico estimado', 'Passageiros/hora em cada sentido'],
+  ] },
+  { titulo: 'Dados Geométricos', campos: [
+    ['desnivel_elevacao', 'Desnível (altura de elevação)', 'ex.: 5,04 m'],
+    ['inclinacao', 'Inclinação', '27,3° / 30° / 35°'],
+    ['largura_degrau', 'Largura do degrau', '600 / 800 / 1.000 mm'],
+    ['velocidade_nominal', 'Velocidade nominal', '0,50 / 0,65 / 0,75 m/s'],
+    ['comprimento_abertura_piso', 'Comprimento da abertura no piso', ''],
+    ['largura_rasgo_laje', 'Largura do rasgo na laje', ''],
+    ['profundidade_poco_inferior', 'Profundidade do poço inferior', ''],
+    ['headroom', 'Última altura (headroom)', ''],
+    ['sentido_circulacao', 'Sentido de circulação', 'Subida / descida / reversível'],
+    ['degraus_planos_patamar', 'Nº de degraus planos no patamar', '2 ou 3'],
+    ['disposicao_espaco', 'Disposição no espaço', 'Simples / paralelas / cruzadas'],
+  ] },
+  { titulo: 'Especificações Técnicas', campos: [
+    ['tipo_acionamento', 'Tipo de acionamento', 'Motorredutor direto / VVVF'],
+    ['sistema_economia_energia', 'Sistema de economia de energia', 'Stand-by com sensor de presença'],
+    ['capacidade_transporte', 'Capacidade de transporte', '4.500 a 13.500 pessoas/hora'],
+    ['tipo_degrau', 'Tipo de degrau', 'Aço inoxidável / liga de alumínio'],
+    ['altura_degrau', 'Altura do degrau', '~200 mm, máx. 240 mm'],
+    ['profundidade_degrau', 'Profundidade do degrau', '> 380 mm'],
+    ['balaustrada', 'Balaustrada / guarda-corpo', '80cm ou 90cm — vidro/inox'],
+    ['corrimao_equip', 'Corrimão', 'Borracha preta/colorida/LED'],
+    ['protecao_lateral', 'Proteção lateral', 'Painéis de inox/vidro'],
+    ['iluminacao', 'Iluminação', 'LED balaustrada/teto/patamares'],
+    ['protecao_patamar', 'Proteção de patamar', 'Pente de alumínio/borracha'],
+    ['sistema_seguranca', 'Sistema de segurança', 'Freio serviço+segurança, sensor objeto preso'],
+    ['comunicacao', 'Comunicação', 'Intercomunicador/alarme/indicadores'],
+  ] },
+  { titulo: 'Condições Ambientais', campos: [
+    ['local_instalacao', 'Local de instalação', 'Interior / exterior / ambiente controlado'],
+    ['protecao_intemperies', 'Proteção contra intempéries', 'Cobertura / toldo / totalmente exposta'],
+    ['temp_min', 'Temperatura ambiente mínima', '°C'],
+    ['temp_max', 'Temperatura ambiente máxima', '°C'],
+    ['umidade_relativa', 'Umidade relativa', '%'],
+    ['poeira_salinidade_quimicos', 'Poeira, salinidade ou agentes químicos', 'Sim / Não'],
+    ['acesso_icamento', 'Acesso para içamento da máquina', 'Guindaste / elevador de carga / escada / manual'],
+    ['energia_obra', 'Disponibilidade de energia na obra', 'Provisória / definitiva / não há ainda'],
+    ['poco_inferior', 'Poço inferior', 'Já existe / será construído'],
+    ['caixa_corrida_rasgo', 'Caixa de corrida / rasgo no piso', 'Já executada / será executada'],
+  ] },
+  { titulo: 'Dados Elétricos', campos: [
+    ['tensao_alimentacao_equip', 'Tensão de alimentação', '220V / 380V / 440V trifásica'],
+    ['frequencia_equip', 'Frequência', '60 Hz (Brasil) / 50 Hz'],
+    ['potencia_estimada', 'Potência estimada disponível', 'kVA'],
+    ['aterramento_equip', 'Aterramento', 'Existe / será executado / tipo'],
+    ['quadro_distribuicao_proximo', 'Quadro de distribuição próximo', 'Sim/Não — distância aproximada'],
+    ['disjuntor_dedicado', 'Disjuntor dedicado', 'Sim/Não — capacidade em A'],
+    ['gerador_emergencia', 'Gerador de emergência', 'Sim / Não'],
+    ['alarme_incendio', 'Sistema de alarme de incêndio', 'Sim / Não'],
+    ['monitoramento_remoto', 'Monitoramento remoto', 'Sim / Não'],
+  ] },
+  { titulo: 'Acabamentos', campos: [
+    ['acabamento_degraus', 'Acabamento dos degraus', 'Inox escovado/polido/antiderrapante/colorido'],
+    ['acabamento_laterais', 'Acabamento das laterais', 'Inox / pintura / vidro'],
+    ['acabamento_patamares', 'Acabamento dos patamares', 'Inox / granito / porcelanato'],
+    ['cor_corrimao', 'Cor do corrimão', 'Preto / cinza / personalizado'],
+    ['iluminacao_decorativa', 'Iluminação decorativa', 'LED RGB fixo/programável/branco'],
+    ['indicadores_pavimento', 'Indicadores de pavimento', 'Display LED / LCD / simples'],
+    ['revestimento_teto', 'Revestimento do teto interno', 'Inox / pintura / outro'],
+    ['protecao_impacto_lateral', 'Proteção de impacto nas laterais', 'Sim / Não'],
+  ] },
+];
+
+const FE_SECOES_ESTEIRA = [
+  { titulo: 'Dados Gerais', campos: FE_SECOES_ESCADA[0].campos },
+  { titulo: 'Dados Geométricos', campos: [
+    ['comprimento_total', 'Comprimento total (desnível horizontal)', 'até 80m comercial / 120m público / 140m especial'],
+    ['desnivel_vertical', 'Desnível vertical (altura de elevação)', '2.500 a 8.000 mm'],
+    ['inclinacao', 'Inclinação', '0°–6° padrão / 10°/11° sob demanda / 12° inclinada'],
+    ['largura_palete', 'Largura do palete', '800/1.000mm comercial, até 1.400mm público'],
+    ['velocidade_nominal', 'Velocidade nominal', '0,50 / 0,60 / 0,75 m/s'],
+    ['comprimento_rasgo_piso', 'Comprimento do rasgo no piso', ''],
+    ['largura_rasgo_laje', 'Largura do rasgo na laje', ''],
+    ['profundidade_poco_inferior', 'Profundidade do poço inferior', ''],
+    ['headroom', 'Última altura (headroom)', ''],
+    ['sentido_circulacao', 'Sentido de circulação', 'Unidirecional / reversível'],
+    ['paletes_planos_patamar', 'Nº de paletes planos no patamar', '2 ou 3'],
+    ['disposicao_espaco', 'Disposição no espaço', 'Simples / paralelas / cruzadas / em série'],
+    ['raio_curva', 'Raio de curva (se aplicável)', 'esteiras curvas, em metros'],
+  ] },
+  { titulo: 'Especificações Técnicas', campos: [
+    ['tipo_acionamento', 'Tipo de acionamento', 'Motorredutor direto / VVVF / corrente'],
+    ['sistema_economia_energia', 'Sistema de economia de energia', 'Stand-by, baixa velocidade em vazio'],
+    ['capacidade_transporte', 'Capacidade de transporte', 'depende largura+velocidade — tabela do fabricante'],
+    ['tipo_palete', 'Tipo de palete', 'Aço inox / liga alumínio / aço carbono tratado'],
+    ['espessura_palete', 'Espessura do palete', 'mm — resistência à deformação'],
+    ['balaustrada', 'Balaustrada / guarda-corpo', '80/90/100cm — vidro/inox'],
+    ['corrimao_equip', 'Corrimão', 'Borracha preta/cinza/colorida/LED/antiderrapante'],
+    ['protecao_lateral', 'Proteção lateral', 'Painéis inox/vidro/sólidos até o piso'],
+    ['iluminacao', 'Iluminação', 'LED balaustrada/teto/patamares/piso'],
+    ['protecao_patamar', 'Proteção de patamar (pente)', 'Alumínio / borracha / inox'],
+    ['sistema_seguranca', 'Sistema de segurança', 'Freio+sensor+parada emergência+chave inspeção'],
+    ['sistema_travamento', 'Sistema de travamento', 'Trava mecânica manutenção / automática emergência'],
+    ['comunicacao', 'Comunicação', 'Intercomunicador/alarme/setas/display'],
+    ['sistema_lubrificacao', 'Sistema de lubrificação', 'Centralizado automático / manual / autolubrificante'],
+  ] },
+  { titulo: 'Condições Ambientais', campos: [
+    ...FE_SECOES_ESCADA[3].campos,
+    ['exposicao_chuva', 'Exposição à chuva direta', 'Sim/Não — determina IP elevado'],
+    ['piso_acabado_patamares', 'Piso acabado nos patamares', 'Granito/porcelanato/cerâmica/concreto'],
+  ] },
+  { titulo: 'Dados Elétricos', campos: [
+    ...FE_SECOES_ESCADA[4].campos,
+    ['controle_acesso', 'Sistema de controle de acesso', 'Sim/Não — integração com catracas/torniquetes'],
+  ] },
+  { titulo: 'Acabamentos', campos: [
+    ['acabamento_paletes', 'Acabamento dos paletes', 'Inox escovado/polido/antiderrapante/colorido'],
+    ['acabamento_laterais', 'Acabamento das laterais (frizos)', 'Inox / pintura / vidro'],
+    ['acabamento_patamares', 'Acabamento dos patamares', 'Inox / granito / porcelanato / antiderrapante'],
+    ['cor_corrimao', 'Cor do corrimão', 'Preto/cinza/azul/verde/personalizado'],
+    ['iluminacao_decorativa', 'Iluminação decorativa', 'LED RGB fixo/programável/sem'],
+    ['indicadores_direcao', 'Indicadores de direção', 'Display/LCD/setas/placas'],
+    ['revestimento_teto', 'Revestimento do teto interno', 'Inox / pintura / painel'],
+    ['protecao_impacto_lateral', 'Proteção de impacto nas laterais', 'Sim / Não'],
+    ['sinalizacao_tatil', 'Sinalização tátil', 'Sim/Não — NBR 9050'],
+    ['contraste_visual', 'Contraste visual', 'Sim/Não — deficientes visuais'],
+    ['anuncio_publicitario', 'Anúncio publicitário / branding', 'Sim / Não'],
+  ] },
+];
+
+const FE_SECOES_POR_TIPO = { escada: FE_SECOES_ESCADA, esteira: FE_SECOES_ESTEIRA };
+
+/* Campos das planilhas técnicas do usuário (escada/esteira) — texto livre,
+   sem select/obrigatoriedade: são "opções típicas", não lista fechada. */
+function FEEspecificacoesGenericas({ tipoEquipamento, especificacoes, onChange }) {
+  const secoes = FE_SECOES_POR_TIPO[tipoEquipamento] || [];
+  const set = (chave) => (v) => onChange({ ...(especificacoes || {}), [chave]: v });
+  return (
+    <div className="stack" style={{ gap: 18 }}>
+      {secoes.map((sec) => (
+        <div key={sec.titulo}>
+          <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>{sec.titulo}</div>
+          <div className="grid-3" style={{ gap: 12 }}>
+            {sec.campos.map(([chave, label, placeholder]) => (
+              <FEField key={chave} label={label}>
+                <FEInput value={(especificacoes || {})[chave]} onChange={set(chave)} placeholder={placeholder}/>
+              </FEField>
+            ))}
+          </div>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+/* Mapeia tipo_equipamento (chave curta usada no formulário) pra
+   categoriaProduto (chave que o MasterIdEngine espera). */
+const FE_CATEGORIA_MASTERID = { elevador: 'elevador', escada: 'escada_rolante', esteira: 'esteira_rolante' };
+
+/* Código real do equipamento (VPEL-EL0917-1, VPER-ER0917-2...) — só existe
+   depois que a cotação tem número (gerado no primeiro save) e a unidade tem
+   indice_ativo (gerado pelo INSERT). Antes disso, null — a UI mostra
+   "gerado ao salvar", igual ao badge de Nº da Cotação. */
+function feCodigoUnidade(tipoEquip, numeroCotacao, indiceAtivo) {
+  if (numeroCotacao == null || indiceAtivo == null) return null;
+  const categoria = FE_CATEGORIA_MASTERID[tipoEquip] || 'elevador';
+  return window.MasterIdEngine.masterId({ categoriaProduto: categoria, numeroCotacao, indiceAtivo });
+}
 
 function feNovaUnidade(identificador) {
   return {
     identificador: identificador || '', quantidade: 1,
+    tipo_equipamento: 'elevador', especificacoes: {},
     fornecedor: '', modelo: '',
-    tipo: '', capacidade_kg: '', capacidade_pessoas: '', velocidade_ms: '',
+    tipo: '', tracao: '', capacidade_kg: '', capacidade_pessoas: '', velocidade_ms: '',
     paradas: '', pavimentos_desc: '', casa_maquinas: '', agrupamento: '', porta_oposta: '',
     estrutura_caixa: '', caixa_largura_mm: '', caixa_profundidade_mm: '',
     percurso_mm: '', overhead_mm: '', poco_mm: '',
     cabina_largura_mm: '', cabina_profundidade_mm: '', cabina_altura_mm: '', teto_falso: '', piso_cabina: '', corrimao: '',
     porta_tipo_abertura: '', porta_modelo: '', porta_largura_mm: '', porta_altura_mm: '',
-    acabamento_porta_cabina: '', acabamento_porta_pavimento: '', classe_corta_fogo: '',
+    aco_cabina: '', acabamento_porta_cabina: '', acabamento_porta_pavimento: '', classe_corta_fogo: '',
     tensao_principal: '', tensao_iluminacao: '', norma_projeto: '',
     botoeira_cabine: '', botoeira_pavimento: '',
     cop_lop_tipo: '', ard: false, camera: false, anuncio_voz: false, exigencias_especiais: '',
@@ -64,6 +256,34 @@ function FESelect({ value, onChange, options, placeholder, disabled }) {
     </select>
   );
 }
+/* Lista de Fornecedores (fornecedores_elevador) é grande demais pra um
+   <select> nativo — ele só pula pro primeiro item que começa com a letra
+   digitada, não filtra de verdade. Texto + <datalist> filtra por qualquer
+   trecho digitado (ex.: "G" mostra todos os fornecedores com G), pedido do
+   usuário 28/08. Continua texto livre por baixo (mesmo padrão de
+   CadFornecedorDatalist em pi.jsx) — o campo já alimenta o agrupamento por
+   nome exato em Cotação a Fornecedor, então o vendedor deve escolher da
+   lista, não inventar um nome novo. */
+function FEFornecedorInput({ value, onChange, fornecedores, disabled }) {
+  const listId = React.useId();
+  return (
+    <>
+      <input className="input" list={listId} value={value ?? ''} onChange={(e) => onChange(e.target.value)}
+        placeholder="Digite pra filtrar (ex.: G)" disabled={disabled}/>
+      <datalist id={listId}>
+        {/* `fornecedores` mistura string (RFQ configurado) e { value, label }
+            (ainda não configurado — ver fornecedoresOptions). Usar o objeto
+            direto virava value="[object Object]" (e key duplicada): o que o
+            usuário escolhia na lista era gravado em unidade.fornecedor. O
+            nome vai em `value`; o rótulo com o aviso vai em `label` (dica). */}
+        {(fornecedores || []).map((f) => {
+          const nome = typeof f === 'string' ? f : f.value;
+          return <option key={nome} value={nome} label={typeof f === 'string' ? undefined : f.label}/>;
+        })}
+      </datalist>
+    </>
+  );
+}
 function FECheck({ label, checked, onChange }) {
   return (
     <label className="row gap-2" style={{ alignItems: 'center', fontSize: 13, cursor: 'pointer' }}>
@@ -86,7 +306,7 @@ function FENumeroCotacaoBadge({ numeroCotacao }) {
       color: numeroCotacao != null ? '#FBB039' : '#71717a', fontWeight: 700,
       padding: '6px 12px', borderRadius: 6, fontSize: 13, letterSpacing: '.02em',
     }}>
-      Cotação Nº {numeroCotacao != null ? window.MasterIdEngine.baseId('elevador', numeroCotacao) : '— (gerado ao salvar)'}
+      Cotação Nº {numeroCotacao != null ? window.MasterIdEngine.etapaId('cotacao', numeroCotacao) : '— (gerado ao salvar)'}
     </div>
   );
 }
@@ -113,6 +333,86 @@ function FEEndereco({ prefix, header, setH, requiredLogradouro, onBuscarCep }) {
       <FEField label="UF">
         <FEInput value={header[k('estado')]} onChange={setH(k('estado'))} placeholder="SP"/>
       </FEField>
+    </div>
+  );
+}
+
+/* ---------- Cliente por busca (15/08) ----------
+   Vendedor busca o cliente já cadastrado em Cadastros (aba própria criada
+   ontem) em vez de redigitar CNPJ/endereço/telefone aqui de novo — reduz
+   redigitação e evita duas versões do mesmo cliente divergindo. Filtro
+   client-side (listarTodos()) — volume ainda pequeno, sem necessidade de
+   busca no servidor. */
+function FEClientePicker({ clienteId, onSelecionar, onCriarNovo }) {
+  const [busca, setBusca] = React.useState('');
+  const [todos, setTodos] = React.useState(null);
+  const [selecionado, setSelecionado] = React.useState(null);
+  const [focado, setFocado] = React.useState(false);
+
+  React.useEffect(() => {
+    window.CadastrosClientesStore?.listarTodos().then(setTodos).catch(() => setTodos([]));
+  }, []);
+
+  React.useEffect(() => {
+    if (!clienteId || !todos) { if (!clienteId) setSelecionado(null); return; }
+    const c = todos.find((t) => t.id === clienteId);
+    if (c) setSelecionado(c);
+    else window.CadastrosClientesStore?.obter(clienteId).then(setSelecionado).catch(() => {});
+  }, [clienteId, todos]);
+
+  const termo = busca.trim().toLowerCase();
+  const termoDigitos = termo.replace(/\D/g, '');
+  /* termoDigitos vazio (busca só com letras) não pode entrar no .includes()
+     de CNPJ/CPF — "qualquer coisa".includes("") é sempre true em JS, então
+     sem essa guarda a busca por nome trazia TODO MUNDO, sem filtrar nada
+     (bug pego em teste ao vivo). */
+  const resultados = termo && todos ? todos.filter((c) =>
+    (c.razao_social || '').toLowerCase().includes(termo) ||
+    (termoDigitos && (c.cnpj || '').replace(/\D/g, '').includes(termoDigitos)) ||
+    (termoDigitos && (c.cpf || '').replace(/\D/g, '').includes(termoDigitos)) ||
+    (c.codigo || '').toLowerCase().includes(termo)
+  ).slice(0, 8) : [];
+
+  if (selecionado) {
+    return (
+      <div style={{ border: '1px solid var(--border)', borderRadius: 6, padding: 12, background: 'var(--vp-gray-50)' }}>
+        <div className="row sb" style={{ alignItems: 'flex-start' }}>
+          <div>
+            <div style={{ fontSize: 13, fontWeight: 700 }}>{selecionado.razao_social} <span className="mono muted small">({selecionado.codigo})</span></div>
+            <div className="small muted" style={{ marginTop: 2 }}>
+              {selecionado.cnpj || selecionado.cpf || 'sem documento'} · {selecionado.telefone || 'sem telefone'} · {selecionado.cidade}{selecionado.cidade && selecionado.estado ? '/' : ''}{selecionado.estado}
+            </div>
+          </div>
+          <Button variant="ghost" size="sm" onClick={() => { setSelecionado(null); onSelecionar(null); setBusca(''); }}>Trocar</Button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <div style={{ position: 'relative' }}>
+        <input className="input" placeholder="Buscar cliente por nome, CNPJ/CPF ou código…" value={busca}
+          onChange={(e) => setBusca(e.target.value)} onFocus={() => setFocado(true)} onBlur={() => setTimeout(() => setFocado(false), 150)}/>
+        {focado && termo && (
+          <div style={{ position: 'absolute', zIndex: 10, top: '100%', left: 0, right: 0, background: '#fff', border: '1px solid var(--border)', borderRadius: 6, marginTop: 4, maxHeight: 240, overflowY: 'auto', boxShadow: '0 4px 12px rgba(0,0,0,.1)' }}>
+            {todos === null ? (
+              <div className="small muted" style={{ padding: 10 }}>Carregando…</div>
+            ) : resultados.length === 0 ? (
+              <div className="small muted" style={{ padding: 10 }}>Nenhum cliente encontrado com "{busca}".</div>
+            ) : resultados.map((c) => (
+              <div key={c.id} style={{ padding: '8px 12px', cursor: 'pointer', borderBottom: '1px solid var(--border)' }}
+                onMouseDown={() => { setSelecionado(c); onSelecionar(c); }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{c.razao_social}</div>
+                <div className="small muted">{c.cnpj || c.cpf || 'sem documento'} · {c.codigo}</div>
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+      <p className="small muted" style={{ margin: '8px 0 0' }}>
+        Não achou? <a href="#" onClick={(e) => { e.preventDefault(); onCriarNovo(); }}>cadastrar cliente novo aqui mesmo</a> (fica salvo em Cadastros também).
+      </p>
     </div>
   );
 }
@@ -212,10 +512,11 @@ function FEAnexos({ formularioId, categoria, titulo, descricao, podeAnexar, gara
   );
 }
 
+const FE_OPCOES_ACO = ['Aço 304', 'Aço 430', 'Pintado'];
 const FE_OPCOES_VAZIAS = { teto_falso: [], piso: [], porta: [], botoeira_cabine: [], botoeira_pavimento: [] };
 
 /* ---------- Card de uma Unidade (um elevador) ---------- */
-function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, modelos, publicMode }) {
+function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornecedores, modelos, publicMode, numeroCotacao }) {
   const [open, setOpen] = React.useState(true);
   const [opcoes, setOpcoes] = React.useState(FE_OPCOES_VAZIAS);
   const set = (k) => (v) => onChange({ ...unidade, [k]: v });
@@ -230,14 +531,31 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, model
   }, [unidade.modelo]);
 
   const modelosDisponiveis = (modelos || []).filter((m) => !unidade.tipo || m.tipo === unidade.tipo);
+  const tipoEquip = unidade.tipo_equipamento || 'elevador';
+  const tipoEquipLabel = (FE_TIPOS_EQUIPAMENTO.find((t) => t.value === tipoEquip) || {}).label || 'Equipamento';
+
+  /* 15/08 — o "E1"/"E2" digitado à mão não dizia nada; o número da cotação
+     + indice_ativo (que o INSERT já gera) já formam o código real do
+     equipamento (VPEL-EL0917-1, VPER-ER0917-2...). Assim que os dois
+     existirem, sincroniza `identificador` pra esse código — é ele que
+     aparece em RFQ/precificação/engenharia daqui pra frente. Antes do
+     primeiro save (sem numeroCotacao/indice_ativo ainda), mantém o rótulo
+     provisório E1/E2 só pra diferenciar os cards na tela. */
+  const codigoUnidade = feCodigoUnidade(tipoEquip, numeroCotacao, unidade.indice_ativo);
+  React.useEffect(() => {
+    if (codigoUnidade && unidade.identificador !== codigoUnidade) set('identificador')(codigoUnidade);
+  }, [codigoUnidade]);
 
   return (
     <Card
-      title={`Elevador ${unidade.identificador || index + 1}${Number(unidade.quantidade) > 1 ? ` × ${unidade.quantidade}` : ''}`}
-      sub={`${unidade.tipo || 'Tipo não definido'}${unidade.indice_ativo ? ` · Ativo #${unidade.indice_ativo}` : ''}`}
+      title={codigoUnidade || `${tipoEquipLabel} ${unidade.identificador || index + 1}${Number(unidade.quantidade) > 1 ? ` × ${unidade.quantidade}` : ''}`}
+      sub={`${tipoEquip === 'elevador' ? (unidade.tipo || 'Tipo não definido') : tipoEquipLabel}${codigoUnidade ? '' : ' · código gerado ao salvar'}`}
       action={
         <div className="row gap-2">
           <Button variant="ghost" size="sm" icon={open ? 'chevUp' : 'chevDown'} onClick={() => setOpen((o) => !o)}/>
+          {!publicMode && onDuplicate && (
+            <Button variant="outline" size="sm" icon="copy" onClick={onDuplicate} title="Copia todos os campos deste equipamento pra um card novo — útil quando só muda paradas/velocidade">Duplicar</Button>
+          )}
           <Button variant="ghost" size="sm" icon="trash" onClick={onRemove}>Remover</Button>
         </div>
       }
@@ -245,31 +563,43 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, model
       {open && (
         <div className="stack" style={{ gap: 18 }}>
           <div>
-            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Identificação do elevador</div>
+            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Identificação do equipamento</div>
             <div className={publicMode ? 'grid-3' : 'grid-4'} style={{ gap: 12 }}>
-              <FEField label="Identificador (E1, E2...)"><FEInput value={unidade.identificador} onChange={set('identificador')} placeholder="E1"/></FEField>
+              <FEField label="Código do equipamento">
+                <FEInput value={codigoUnidade || 'Gerado ao salvar'} onChange={() => {}} disabled/>
+              </FEField>
               <FEField label="Quantidade idêntica"><FEInput type="number" value={unidade.quantidade ?? 1} onChange={(v) => set('quantidade')(Math.max(1, Number(v) || 1))} placeholder="1"/></FEField>
-              <FEField label="Tipo *"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>
-              <FEField label="Modelo"><FESelect value={unidade.modelo} onChange={set('modelo')} options={modelosDisponiveis.map((m) => ({ value: m.codigo, label: `${m.codigo} — ${m.nome}` }))} placeholder="— selecione o modelo —"/></FEField>
-              <FEField label="Norma de projeto"><FESelect value={unidade.norma_projeto} onChange={set('norma_projeto')} options={FE_NORMAS}/></FEField>
-              {!publicMode && <FEField label="Fornecedor"><FESelect value={unidade.fornecedor} onChange={set('fornecedor')} options={fornecedores || []}/></FEField>}
+              <FEField label="Tipo de equipamento *"><FESelect value={tipoEquip} onChange={set('tipo_equipamento')} options={FE_TIPOS_EQUIPAMENTO}/></FEField>
+              {tipoEquip === 'elevador' && <FEField label="Tipo *"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>}
+              {tipoEquip === 'elevador' && <FEField label="Modelo"><FESelect value={unidade.modelo} onChange={set('modelo')} options={modelosDisponiveis.map((m) => ({ value: m.codigo, label: `${m.codigo} — ${m.nome}` }))} placeholder="— selecione o modelo —"/></FEField>}
+              {tipoEquip === 'elevador' && <FEField label="Norma de projeto"><FESelect value={unidade.norma_projeto} onChange={set('norma_projeto')} options={FE_NORMAS}/></FEField>}
+              {!publicMode && <FEField label="Fornecedor"><FEFornecedorInput value={unidade.fornecedor} onChange={set('fornecedor')} fornecedores={fornecedores}/></FEField>}
             </div>
             <p style={{ fontSize: 12, color: 'var(--fg3)', margin: '8px 0 0' }}>
-              Se o cliente quer vários elevadores idênticos, informe a quantidade aqui em vez de adicionar um card pra cada — use "+ Adicionar elevador diferente" abaixo só quando a especificação mudar (ex.: um modelo/tipo distinto).
-              {!unidade.modelo && ' Selecione o modelo do elevador para ver as opções disponíveis de teto falso, piso, porta e botoeiras.'}
+              Se o cliente quer vários equipamentos idênticos, informe a quantidade aqui em vez de adicionar um card pra cada — use "+ Adicionar equipamento diferente" abaixo só quando a especificação mudar (ex.: um modelo/tipo distinto, ou mais paradas).
+              {tipoEquip === 'elevador' && !unidade.modelo && ' Selecione o modelo do elevador para ver as opções disponíveis de teto falso, piso, porta e botoeiras.'}
             </p>
-            <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
-              <FEField label="Capacidade (kg)"><FEInput type="number" value={unidade.capacidade_kg} onChange={set('capacidade_kg')} placeholder="630"/></FEField>
-              <FEField label="Capacidade (passageiros)"><FEInput type="number" value={unidade.capacidade_pessoas} onChange={set('capacidade_pessoas')} placeholder="8"/></FEField>
-              <FEField label="Velocidade (m/s) *"><FEInput type="number" value={unidade.velocidade_ms} onChange={set('velocidade_ms')} placeholder="1.0"/></FEField>
-              <FEField label="Paradas *"><FEInput type="number" value={unidade.paradas} onChange={set('paradas')} placeholder="4"/></FEField>
-              <FEField label="Descrição dos pavimentos *" span="2"><FEInput value={unidade.pavimentos_desc} onChange={set('pavimentos_desc')} placeholder="Térreo, 1, 2, 3"/></FEField>
-              <FEField label="Casa de máquinas *"><FESelect value={unidade.casa_maquinas} onChange={set('casa_maquinas')} options={[{ value: 'com', label: 'Com casa de máquinas' }, { value: 'sem', label: 'Sem casa de máquinas (MRL)' }]}/></FEField>
-              <FEField label="Agrupamento *"><FESelect value={unidade.agrupamento} onChange={set('agrupamento')} options={[{ value: 'simplex', label: 'Simplex' }, { value: 'duplex', label: 'Duplex' }, { value: 'triplex', label: 'Triplex' }, { value: 'group', label: 'Group control' }]}/></FEField>
-              <FEField label="Porta oposta / múltiplas entradas *"><FEInput value={unidade.porta_oposta} onChange={set('porta_oposta')} placeholder="Não / Sim - 180°"/></FEField>
-            </div>
+            {tipoEquip === 'elevador' && (
+              <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
+                <FEField label="Tração *"><FESelect value={unidade.tracao} onChange={set('tracao')} options={FE_TRACOES} placeholder="— selecione —"/></FEField>
+                <FEField label="Capacidade (kg)"><FEInput type="number" value={unidade.capacidade_kg} onChange={set('capacidade_kg')} placeholder="630"/></FEField>
+                <FEField label="Capacidade (passageiros)"><FEInput type="number" value={unidade.capacidade_pessoas} onChange={set('capacidade_pessoas')} placeholder="8"/></FEField>
+                <FEField label="Velocidade (m/s) *"><FEInput type="number" value={unidade.velocidade_ms} onChange={set('velocidade_ms')} placeholder="1.0"/></FEField>
+                <FEField label="Paradas *"><FEInput type="number" value={unidade.paradas} onChange={set('paradas')} placeholder="4"/></FEField>
+                <FEField label="Descrição dos pavimentos *" span="2"><FEInput value={unidade.pavimentos_desc} onChange={set('pavimentos_desc')} placeholder="Térreo, 1, 2, 3"/></FEField>
+                <FEField label="Casa de máquinas *"><FESelect value={unidade.casa_maquinas} onChange={set('casa_maquinas')} options={[{ value: 'com', label: 'Com casa de máquinas' }, { value: 'sem', label: 'Sem casa de máquinas (MRL)' }]}/></FEField>
+                <FEField label="Agrupamento *"><FESelect value={unidade.agrupamento} onChange={set('agrupamento')} options={[{ value: 'simplex', label: 'Simplex' }, { value: 'duplex', label: 'Duplex' }, { value: 'triplex', label: 'Triplex' }, { value: 'group', label: 'Group control' }]}/></FEField>
+                <FEField label="Porta oposta / múltiplas entradas *"><FEInput value={unidade.porta_oposta} onChange={set('porta_oposta')} placeholder="Não / Sim - 180°"/></FEField>
+              </div>
+            )}
           </div>
 
+          {tipoEquip !== 'elevador' && (
+            <FEEspecificacoesGenericas tipoEquipamento={tipoEquip} especificacoes={unidade.especificacoes} onChange={set('especificacoes')}/>
+          )}
+
+          {tipoEquip === 'elevador' && (
+          <React.Fragment>
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Estrutura e dimensões da obra <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— opcional, Engenharia complementa na vistoria</span></div>
             <div className="grid-3" style={{ gap: 12 }}>
@@ -298,11 +628,12 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, model
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Portas <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tipo obrigatório, resto opcional</span></div>
             <div className="grid-3" style={{ gap: 12 }}>
               <FEField label="Tipo de abertura *"><FESelect value={unidade.porta_tipo_abertura} onChange={set('porta_tipo_abertura')} options={['Central', 'Lateral', 'Telescópica']}/></FEField>
-              <FEField label="Modelo de porta"><FESelect value={unidade.porta_modelo} onChange={set('porta_modelo')} options={opcoes.porta} placeholder="— selecione o modelo primeiro —"/></FEField>
+              <FEField label="Modelo de porta"><FESelect value={unidade.porta_modelo} onChange={set('porta_modelo')} options={FE_OPCOES_ACO} placeholder="— escolha —"/></FEField>
               <FEField label="Largura (mm)"><FEInput type="number" value={unidade.porta_largura_mm} onChange={set('porta_largura_mm')}/></FEField>
               <FEField label="Altura (mm)"><FEInput type="number" value={unidade.porta_altura_mm} onChange={set('porta_altura_mm')}/></FEField>
-              <FEField label="Acabamento porta cabina"><FEInput value={unidade.acabamento_porta_cabina} onChange={set('acabamento_porta_cabina')}/></FEField>
-              <FEField label="Acabamento porta pavimento"><FEInput value={unidade.acabamento_porta_pavimento} onChange={set('acabamento_porta_pavimento')}/></FEField>
+              <FEField label="Aço da Cabina"><FESelect value={unidade.aco_cabina} onChange={set('aco_cabina')} options={FE_OPCOES_ACO} placeholder="— escolha —"/></FEField>
+              <FEField label="Acabamento porta cabina"><FESelect value={unidade.acabamento_porta_cabina} onChange={set('acabamento_porta_cabina')} options={FE_OPCOES_ACO}/></FEField>
+              <FEField label="Acabamento porta pavimento"><FESelect value={unidade.acabamento_porta_pavimento} onChange={set('acabamento_porta_pavimento')} options={FE_OPCOES_ACO}/></FEField>
               <FEField label="Classe corta-fogo"><FESelect value={unidade.classe_corta_fogo} onChange={set('classe_corta_fogo')} options={['Nenhuma', 'E120', 'EI60', 'EI120']}/></FEField>
             </div>
           </div>
@@ -334,6 +665,8 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, fornecedores, model
               <FEField label="Exigências especiais" span="3"><textarea className="input" rows={2} value={unidade.exigencias_especiais || ''} onChange={(e) => set('exigencias_especiais')(e.target.value)}/></FEField>
             </div>
           </div>
+          </React.Fragment>
+          )}
         </div>
       )}
     </Card>
@@ -479,6 +812,11 @@ function FECotacaoRespostaModal({ cot, onClose }) {
                 <div style={{ marginTop: 6 }}>
                   <span className="up-eyebrow muted">Confirmação técnica</span>
                   <p className="small" style={{ marginTop: 2 }}>{item.confirmacao_tecnica}</p>
+                  {item.confirmacao_tecnica_pt && (
+                    <p className="small" style={{ marginTop: 2, color: 'var(--fg2)', fontStyle: 'italic' }}>
+                      🌐 {item.confirmacao_tecnica_pt}
+                    </p>
+                  )}
                 </div>
               )}
             </div>
@@ -497,17 +835,148 @@ function FECotacaoRespostaModal({ cot, onClose }) {
   );
 }
 
-function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, onPedirRevisao, enviando }) {
+/* 10/09 — bug real: RFQ só estava "pronto" pra Glarie (achado #92, comentário
+   em fornecedoresOptions abaixo). Cotação VPCT-0954 pro fornecedor
+   "VERTICALPARTS" (fornecedor interno real, cadastrado com a Victória como
+   contato) nunca teve botão de envio — o modal só mostrava "ainda não
+   configurado", silenciosamente, sem erro.
+   11/09 — o e-mail da Victória ficou hardcoded aqui, desalinhado do
+   cadastro real (Cadastros → Fornecedores). Achado do usuário: RFQ
+   "enviado com sucesso" mas ela não recebia — o e-mail em si estava
+   certo (bateu com o cadastro), causa real era filtro de spam do
+   Outlook dela (verticalparts.com.br usa Microsoft 365 — confirmado via
+   MX; nosso SPF/DKIM/DMARC em vpsistema.com estão corretos). Mas o
+   hardcode continuava errado por princípio: se alguém editasse o e-mail
+   em Cadastros → Fornecedores, o RFQ continuaria mandando pro endereço
+   velho. Agora FECotacaoFornecedorGrupo busca o contato do cadastro real
+   (fornecedores.email/telefone/contato via CadastrosFornecedoresStore) e
+   só cai neste mapa como fallback pra fornecedor sem cadastro ainda
+   (ex.: Glarie, fornecedor chinês fora do cadastro local). */
+const FE_RFQ_CONTATOS_PADRAO = {
+  Glarie: { nome: 'Kimmy (Glarie)', email: 'kimmy.kuai@glarie.com, carrie.han@glarie.com, sam.zhang@glarie.com', telefone: '8618751801577' },
+};
+/* 10/09 — pedido do usuário: "os e-mails desse projeto deveriam ficar
+   juntos". Lê emails_projeto (send-email/read-inbox) pelo numero_cotacao
+   — mesma chave que amarra Formulário/Cotação/Proposta/Contrato/P.I./
+   Embarque no resto do sistema (ver linha-do-tempo-store.js). Carrega só
+   quando o vendedor clica (evita bater no banco toda vez que o modal
+   abre, a maioria das cotações nunca vai ser aberta pra ver isso). */
+function FEComunicacaoFornecedor({ numeroCotacao }) {
+  const [aberto, setAberto] = React.useState(false);
+  const [msgs, setMsgs] = React.useState(null);
+  const [carregando, setCarregando] = React.useState(false);
+  if (numeroCotacao == null) return null;
+  const abrir = () => {
+    setAberto((v) => !v);
+    if (msgs) return;
+    setCarregando(true);
+    window.__VP_SB.sb.from('emails_projeto').select('*').eq('numero_cotacao', numeroCotacao)
+      .order('data_mensagem', { ascending: false }).limit(20)
+      .then(({ data }) => setMsgs(data || [])).finally(() => setCarregando(false));
+  };
+  return (
+    <div style={{ marginTop: 10 }}>
+      <Button variant="ghost" size="sm" icon="mail" onClick={abrir}>{aberto ? 'Ocultar comunicação' : 'Ver comunicação desta cotação'}</Button>
+      {aberto && (
+        <div className="card" style={{ padding: 10, marginTop: 6, maxHeight: 320, overflowY: 'auto' }}>
+          {carregando && <p className="small muted">Carregando…</p>}
+          {!carregando && msgs && msgs.length === 0 && <p className="small muted">Nenhum e-mail vinculado à Cotação Nº {numeroCotacao} ainda.</p>}
+          {!carregando && msgs && msgs.map((m) => (
+            <div key={m.id} style={{ padding: '6px 0', borderBottom: '1px solid var(--border)' }}>
+              <div className="row gap-2" style={{ justifyContent: 'space-between' }}>
+                <b className="small">{m.direcao === 'saida' ? `Enviado → ${(m.para || []).join(', ')}` : `Recebido — ${m.de_nome || m.de_email}`}</b>
+                <span className="small muted">{m.data_mensagem ? new Date(m.data_mensagem).toLocaleString('pt-BR') : ''}</span>
+              </div>
+              <div className="small">{m.assunto}</div>
+              {m.corpo_texto && <p className="small muted" style={{ marginTop: 2, whiteSpace: 'pre-wrap' }}>{window.linkifyTexto(m.corpo_texto.slice(0, 300))}</p>}
+              {m.anexos && m.anexos.length > 0 && (
+                <div className="small muted" style={{ marginTop: 2 }}><Icon.paperclip size={10} style={{ verticalAlign: 'middle' }}/> {m.anexos.map((a) => a.filename).join(', ')}</div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* 28/09 — pedido do usuário: "dá pra mostrar no Inbox que o formulário foi
+   respondido?" — o FECefStatusChip existente só cobre resposta pelo
+   FORMULÁRIO PÚBLICO (link/token) do fornecedor, nunca resposta por E-MAIL.
+   Este badge cobre o caminho de e-mail, cruzando com emails_projeto.
+   Prioriza referencia_id (aponta pra ESTA linha de cotacoes_elevador_
+   fornecedor — granularidade por fornecedor, só existe pra e-mails
+   recebidos a partir de 28/09, quando read-inbox passou a herdar esse
+   campo do e-mail de saída original via Message-ID). Cai pro fallback por
+   numero_cotacao (mais antigo/mais abrangente) só quando matchSeguro=true
+   (só 1 fornecedor nesta cotação) — com 2+ fornecedores, um match só por
+   numero_cotacao não sabe dizer QUEM respondeu (achado real da investigação:
+   read-inbox descartava essa distinção antes desta mudança), então nesse
+   caso prefere não mostrar nada a mostrar errado. */
+function FEEmailRespondidoBadge({ cotId, numeroCotacao, matchSeguro }) {
+  const [temResposta, setTemResposta] = React.useState(false);
+  React.useEffect(() => {
+    let cancelado = false;
+    setTemResposta(false);
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb || numeroCotacao == null || !cotId) return;
+    let q = sb.from('emails_projeto').select('id', { count: 'exact', head: true })
+      .eq('direcao', 'entrada').is('excluido_em', null);
+    q = matchSeguro
+      ? q.or(`referencia_id.eq.${cotId},numero_cotacao.eq.${numeroCotacao}`)
+      : q.eq('referencia_id', String(cotId));
+    q.then(({ count }) => { if (!cancelado) setTemResposta((count || 0) > 0); })
+      .catch(() => { if (!cancelado) setTemResposta(false); });
+    return () => { cancelado = true; };
+  }, [cotId, numeroCotacao, matchSeguro]);
+  if (!temResposta) return null;
+  return (
+    <Badge variant="info" style={{ marginLeft: 6 }} title="Existe e-mail recebido vinculado a esta cotação/fornecedor">
+      <Icon.mail size={10}/> Respondeu por e-mail
+    </Badge>
+  );
+}
+
+function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedirRevisao, enviando, fornecedoresCadastro, matchSeguro }) {
   const store = window.CotacaoElevadorFornecedorStore;
-  const suportado = grupo.fornecedor === 'Glarie';
+  /* 11/09 — contato real vem do cadastro (Cadastros → Fornecedores),
+     casando nome_fantasia/razao_social com o nome livre do fornecedor
+     nesta cotação (fornecedores_elevador.nome). Cai no mapa hardcoded só
+     se o fornecedor ainda não tiver cadastro.
+     23/09 — achado real: "Glarie" (nome livre usado na Unidade) nunca
+     batia com o cadastro real "GLARIE ELEVATOR CO.,LTD" (razão social
+     completa) — igualdade exata nunca casava, então o cadastro ficava
+     esquecido e o RFQ sempre usava o fallback hardcoded, mesmo depois de
+     cadastrado. Trocado pra "contém" (bidirecional, nome curto dentro do
+     nome longo ou vice-versa) — exige >=3 caracteres pra evitar match
+     degenerado (nome curto demais casando com qualquer coisa). */
+  const norm = (s) => String(s || '').trim().toUpperCase();
+  const combina = (a, b) => {
+    if (!a || !b || a.length < 3 || b.length < 3) return false;
+    return a.includes(b) || b.includes(a);
+  };
+  const cadastroMatch = React.useMemo(() => (fornecedoresCadastro || []).find((f) =>
+    combina(norm(f.nome_fantasia), norm(grupo.fornecedor)) || combina(norm(f.razao_social), norm(grupo.fornecedor))
+  ), [fornecedoresCadastro, grupo.fornecedor]);
+  const contatoPadrao = cadastroMatch
+    ? { nome: cadastroMatch.contato || cadastroMatch.nome_fantasia || '', email: cadastroMatch.email || '', telefone: cadastroMatch.telefone || '' }
+    : (FE_RFQ_CONTATOS_PADRAO[grupo.fornecedor] || { nome: '', email: '', telefone: '' });
+  const suportado = !!cadastroMatch || Object.prototype.hasOwnProperty.call(FE_RFQ_CONTATOS_PADRAO, grupo.fornecedor);
   const [verResp, setVerResp] = React.useState(false);
-  const [recipient, setRecipient] = React.useState(() => (
-    grupo.fornecedor === 'Glarie'
-      ? { nome: 'Kimmy (Glarie)', email: 'kimmy.kuai@glarie.com', telefone: '8618751801577' }
-      : { nome: '', email: '', telefone: '' }
-  ));
-  const setR = (k) => (v) => setRecipient((r) => ({ ...r, [k]: v }));
-  const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
+  const [recipient, setRecipient] = React.useState(() => contatoPadrao);
+  const tocadoRef = React.useRef(false);
+  React.useEffect(() => {
+    if (cadastroMatch && !tocadoRef.current) {
+      setRecipient({ nome: cadastroMatch.contato || cadastroMatch.nome_fantasia || '', email: cadastroMatch.email || '', telefone: cadastroMatch.telefone || '' });
+    }
+  }, [cadastroMatch]);
+  const setR = (k) => (v) => { tocadoRef.current = true; setRecipient((r) => ({ ...r, [k]: v })); };
+  /* 30/09 — achado real: esta chave não incluía categoriaProduto, mas
+     enviar() (FECotacaoFornecedorModal) grava `enviando` COM ela — nunca
+     casavam, então `busy` era sempre false e os botões não desabilitavam
+     durante o envio (a cotação 961 saiu 4x por e-mail em 7s). Manter as
+     duas chaves idênticas. */
+  const key = `${grupo.fornecedor}|${grupo.tipoFormulario}|${grupo.categoriaProduto}`;
   const busy = enviando === key;
 
   return (
@@ -517,7 +986,12 @@ function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, onPedirRevisao, envian
           <b>{grupo.fornecedor}</b> <span className="muted small">· {FE_TIPO_FORMULARIO_LABEL[grupo.tipoFormulario]}</span>
           <div className="small muted">Unidades: {grupo.unidades.map((u) => u.identificador || '—').join(', ')}</div>
         </div>
-        {cot && <FECefStatusChip status={cot.status}/>}
+        {cot && (
+          <div className="row gap-1" style={{ alignItems: 'center' }}>
+            <FECefStatusChip status={cot.status}/>
+            <FEEmailRespondidoBadge cotId={cot.id} numeroCotacao={numeroCotacao} matchSeguro={matchSeguro}/>
+          </div>
+        )}
       </div>
 
       {!suportado && <p className="small muted" style={{ marginTop: 8 }}>Formulário deste fornecedor ainda não configurado — em breve.</p>}
@@ -526,6 +1000,7 @@ function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, onPedirRevisao, envian
         <div style={{ marginTop: 10 }}>
           <div className="row gap-2">
             <Button variant="outline" size="sm" icon="fileText" onClick={() => setVerResp(true)}>Ver resposta do fornecedor</Button>
+            <Button variant="ghost" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>Reenviar por e-mail</Button>
             <Button variant="ghost" size="sm" icon="refresh" disabled={busy} onClick={() => onPedirRevisao(grupo)}>Pedir nova revisão</Button>
           </div>
           {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}
@@ -538,12 +1013,13 @@ function FECotacaoFornecedorGrupo({ grupo, cot, onEnviar, onPedirRevisao, envian
             <FEInput value={recipient.telefone} onChange={setR('telefone')} placeholder="WhatsApp (DDI+DDD+número)"/>
           </div>
           <div className="row gap-2" style={{ marginTop: 8 }}>
-            <Button variant="outline" size="sm" icon="message" disabled={busy} onClick={() => onEnviar(grupo, 'whatsapp', recipient)}>WhatsApp</Button>
-            <Button variant="outline" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>E-mail</Button>
+            <Button variant="outline" size="sm" icon="message" disabled={busy} onClick={() => onEnviar(grupo, 'whatsapp', recipient)}>{cot ? 'Reenviar por WhatsApp' : 'WhatsApp'}</Button>
+            <Button variant="outline" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>{cot ? 'Reenviar por e-mail' : 'E-mail'}</Button>
             <Button variant="ghost" size="sm" icon="copy" disabled={busy} onClick={() => onEnviar(grupo, 'link', recipient)}>Copiar link</Button>
           </div>
         </div>
       )}
+      <FEComunicacaoFornecedor numeroCotacao={numeroCotacao}/>
     </div>
   );
 }
@@ -552,6 +1028,12 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
   const store = window.CotacaoElevadorFornecedorStore;
   const [cotacoes, setCotacoes] = React.useState([]);
   const [enviando, setEnviando] = React.useState(null);
+  const enviandoRef = React.useRef(false);
+  const [fornecedoresCadastro, setFornecedoresCadastro] = React.useState([]);
+  React.useEffect(() => {
+    if (!window.CadastrosFornecedoresStore) return;
+    window.CadastrosFornecedoresStore.listarAtivos('Fornecedor').then(setFornecedoresCadastro).catch(() => {});
+  }, []);
 
   const reload = () => store.listarPorFormulario(formularioId).then(setCotacoes).catch(() => {});
   React.useEffect(() => { reload(); }, [formularioId]);
@@ -560,14 +1042,22 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
     const map = {};
     unidades.filter((u) => u.id && u.fornecedor).forEach((u) => {
       const tipoFormulario = store.tipoFormularioPara(u.tipo);
-      const key = `${u.fornecedor}|${tipoFormulario}`;
-      if (!map[key]) map[key] = { fornecedor: u.fornecedor, tipoFormulario, unidades: [] };
+      /* categoriaProduto real da unidade (elevador/escada_rolante/
+         esteira_rolante) — antes o grupo só separava por fornecedor+
+         tipoFormulario (esse último só distingue elevador-padrão de
+         home-lift, sempre dentro de "elevador"), então unidades de
+         escada/esteira caíam no mesmo grupo que elevador e a cotação
+         nascia com categoria_produto='elevador' hardcoded, mesmo pra
+         unidade de outro tipo. */
+      const categoriaProduto = FE_CATEGORIA_MASTERID[u.tipo_equipamento || 'elevador'] || 'elevador';
+      const key = `${u.fornecedor}|${tipoFormulario}|${categoriaProduto}`;
+      if (!map[key]) map[key] = { fornecedor: u.fornecedor, tipoFormulario, categoriaProduto, unidades: [] };
       map[key].unidades.push(u);
     });
     return Object.values(map);
   }, [unidades]);
 
-  const cotacaoDoGrupo = (g) => cotacoes.find((c) => c.fornecedor === g.fornecedor && c.tipo_formulario === g.tipoFormulario);
+  const cotacaoDoGrupo = (g) => cotacoes.find((c) => c.fornecedor === g.fornecedor && c.tipo_formulario === g.tipoFormulario && c.categoria_produto === g.categoriaProduto);
 
   /* Pedir revisão = documento novo inteiro (mais simples por enquanto, ver
      issue de revisão): cria uma nova cotação (revisão auto-incrementada por
@@ -577,11 +1067,11 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
      (listarPorFormulario ordena por created_at desc), então o card volta
      sozinho pro estado "aguardando envio" com os campos de contato prontos. */
   const pedirRevisao = async (grupo) => {
-    const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
+    const key = `${grupo.fornecedor}|${grupo.tipoFormulario}|${grupo.categoriaProduto}`;
     if (!window.confirm(`Isso cria um novo documento de cotação (revisão) para ${grupo.fornecedor}, com um novo link. A resposta anterior continua salva e pode ser vista em Cotações a Fornecedor. Deseja continuar?`)) return;
     setEnviando(key);
     try {
-      await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, 'elevador');
+      await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
       await reload();
       window.toast?.('Nova revisão criada — preencha o contato e envie.', 'success');
     } catch (e) {
@@ -592,24 +1082,72 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
   };
 
   const enviar = async (grupo, canal, recipient) => {
-    const key = `${grupo.fornecedor}|${grupo.tipoFormulario}`;
+    const key = `${grupo.fornecedor}|${grupo.tipoFormulario}|${grupo.categoriaProduto}`;
+    /* 30/09 — trava síncrona (ref) contra duplo clique: o state `enviando`
+       só reflete no próximo render, e dois cliques rápidos entram antes. */
+    if (enviandoRef.current) return;
+    enviandoRef.current = true;
     setEnviando(key);
     try {
       let cot = cotacaoDoGrupo(grupo);
-      if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, 'elevador');
+      if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
       const url = store.cotacaoUrl(cot.token);
-      const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.baseId('elevador', numeroCotacao)}` : '';
-      const msg = `Solicitação de cotação técnica ${cot.numero_documento}${numeroTxt} — VerticalParts\n` +
-        `Segue o link com as especificações da(s) unidade(s) ${grupo.unidades.map((u) => u.identificador).join(', ')} para cotação:\n${url}`;
-      if (canal === 'whatsapp') window.open(window.PFStore.whatsAppHref(recipient.telefone, msg), '_blank');
-      if (canal === 'email') window.open(window.PFStore.mailtoHref(recipient.email, `Cotação técnica ${cot.numero_documento} — VerticalParts`, msg), '_blank');
-      if (canal === 'link') { try { await navigator.clipboard.writeText(url); } catch (e) {} window.toast?.('Link copiado.', 'success'); }
-      await store.marcarEnviado(cot.id, canal, recipient);
-      await reload();
-      window.toast?.('Cotação marcada como enviada.', 'success');
+      const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.etapaId('cotacao', numeroCotacao)}` : '';
+      /* 06/10 — assunto e corpo em PT-BR / EN-US / 中文 (fonte única no store). */
+      const unidTxt = grupo.unidades.map((u) => u.identificador).join(', ');
+      const { subject: assuntoRfq, text: msg } = store.mensagemRfq({
+        numeroDocumento: cot.numero_documento, numeroTxt, url, linkJaEnviadoEmDoisCanais: true,
+        descricaoPt: `da(s) unidade(s) ${unidTxt}`, descricaoEn: `of unit(s) ${unidTxt}`, descricaoZh: `单元 ${unidTxt} `,
+      });
+      let registrar = true; // só registra "enviado" quando o envio de fato aconteceu
+      let avisoFinal = null;
+      if (canal === 'whatsapp') {
+        window.open(window.PFStore.whatsAppHref(recipient.telefone, msg), '_blank');
+        avisoFinal = 'WhatsApp aberto — confirme o envio na janela do WhatsApp. A cotação foi registrada como enviada por WhatsApp.';
+      }
+      if (canal === 'email') {
+        /* 10/09 — envio direto via SMTP (send-email edge function), sem abrir
+           Outlook/cliente local. Se o SMTP ainda não tiver os secrets
+           configurados (ou a chamada falhar por qualquer motivo), cai pro
+           mailto: como estava antes — nunca deixa o vendedor sem alternativa.
+           01/10 — chamada em si extraída pro EmailEnvioHelper (compartilhado
+           com Proposta/Contrato de Venda/Contrato Instalador); a decisão do
+           que fazer com sucesso/falha continua aqui, sem mudança. */
+        const { enviouDireto, emailData } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: recipient.email, subject: assuntoRfq, text: msg,
+          numeroCotacao, referenciaTipo: 'cotacao_fornecedor', referenciaId: cot.id,
+        });
+        if (enviouDireto) {
+          avisoFinal = `E-mail enviado para ${(emailData.destinatarios || []).join(', ') || recipient.email}.`;
+        }
+        /* 28/09 — achado real: essa queda pro mailto: era silenciosa (só
+           console.warn) — o vendedor só percebia pela janela do cliente de
+           e-mail local abrindo, sem entender por quê. Esse envio via mailto
+           também nunca entra em emails_projeto (sem Message-ID nosso), então
+           avisa também que não vai aparecer em Enviados/Linha do Tempo. */
+        if (!enviouDireto) {
+          /* 30/09 — antes marcava "enviada" mesmo sem nada ter saído. Agora,
+             se o envio automático falhou, NÃO registra como enviada (o
+             vendedor ainda nem enviou no e-mail padrão). */
+          registrar = false;
+          avisoFinal = null;
+          window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado ao fornecedor e a cotação NÃO foi marcada como enviada. Abrindo seu e-mail padrão para envio manual (depois use "Copiar link"/WhatsApp para registrar o envio).', 'error');
+          window.open(window.PFStore.mailtoHref(recipient.email, assuntoRfq, msg), '_blank');
+        }
+      }
+      if (canal === 'link') {
+        try { await navigator.clipboard.writeText(url); } catch (e) {}
+        avisoFinal = 'Link copiado — nenhum e-mail/mensagem foi enviado por aqui: cole o link no canal que preferir (a cotação fica registrada como "enviada por link").';
+      }
+      if (registrar) {
+        await store.marcarEnviado(cot.id, canal, recipient);
+        await reload();
+        if (avisoFinal) window.toast?.(avisoFinal, 'success');
+      }
     } catch (e) {
       window.toast?.('Erro ao enviar: ' + e.message, 'error');
     } finally {
+      enviandoRef.current = false;
       setEnviando(null);
     }
   };
@@ -619,7 +1157,7 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
       footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
       {grupos.length === 0 && <p className="small muted">Salve o formulário e defina o Fornecedor em pelo menos uma Unidade para enviar a cotação.</p>}
       {grupos.map((g) => (
-        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}`} grupo={g} cot={cotacaoDoGrupo(g)} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando}/>
+        <FECotacaoFornecedorGrupo key={`${g.fornecedor}|${g.tipoFormulario}|${g.categoriaProduto}`} grupo={g} cot={cotacaoDoGrupo(g)} numeroCotacao={numeroCotacao} onEnviar={enviar} onPedirRevisao={pedirRevisao} enviando={enviando} fornecedoresCadastro={fornecedoresCadastro} matchSeguro={grupos.length === 1}/>
       ))}
     </Modal>
   );
@@ -634,7 +1172,7 @@ function FELinkClienteModal({ url, numeroCotacao, header, onClose }) {
   const [telefone, setTelefone] = React.useState(header.telefone || '');
   const [email, setEmail] = React.useState(header.email || '');
 
-  const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.baseId('elevador', numeroCotacao)}` : '';
+  const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.etapaId('cotacao', numeroCotacao)}` : '';
   const msg = `Olá! Segue o link para preencher os dados do seu elevador${numeroTxt} — VerticalParts:\n${url}\n\n` +
     `Assim que enviar, nossa equipe já recebe os dados automaticamente para preparar a cotação.`;
 
@@ -686,7 +1224,7 @@ const FE_FINALIDADE_COMPRA = [
 ];
 
 const FE_HEADER_KEYS = [
-  'tipo_pessoa', 'razao_social', 'cnpj', 'cpf', 'inscricao_estadual', 'contribuinte_icms', 'finalidade_compra',
+  'tipo_pessoa', 'razao_social', 'contato', 'predio_empreendimento', 'cnpj', 'cpf', 'inscricao_estadual', 'contribuinte_icms', 'finalidade_compra',
   'endereco_logradouro', 'endereco_complemento', 'endereco_bairro', 'endereco_cep', 'endereco_cidade', 'endereco_estado',
   'telefone', 'email',
   'local_obra_cidade', 'local_obra_estado', 'endereco_obra_diferente',
@@ -715,18 +1253,42 @@ function feHeaderPick(obj) {
 }
 
 /* ---------- Página / componente principal ---------- */
-function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, onControleCotacoes }) {
+function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onSaved, onVoltar, onControleCotacoes }) {
   const [loading, setLoading] = React.useState(!!formularioId);
   const [saving, setSaving] = React.useState(false);
   const [id, setId] = React.useState(formularioId || null);
   const [header, setHeader] = React.useState(feHeaderDefaults());
   const [unidades, setUnidades] = React.useState([feNovaUnidade('E1')]);
+  /* 15/08 — vendedor busca o cliente já cadastrado em Cadastros em vez de
+     redigitar tudo aqui (Cadastros existe desde ontem). `criarClienteInline`
+     é a válvula de escape: se o cliente ainda não existir lá, mostra o
+     formulário antigo (os mesmos campos de sempre) só pra esse caso — não
+     bloqueia o vendedor esperando alguém cadastrar em outra tela. Canal
+     self_service (link público pro cliente preencher sozinho) sempre usa o
+     formulário completo — não faz sentido pedir pro cliente "se buscar". */
+  const [clienteId, setClienteId] = React.useState(null);
+  const [criarClienteInline, setCriarClienteInline] = React.useState(false);
   const [linkPublico, setLinkPublico] = React.useState(null);
   const [numeroCotacao, setNumeroCotacao] = React.useState(null);
   const [fornecedores, setFornecedores] = React.useState([]);
   const [modelos, setModelos] = React.useState([]);
   const [showCotacaoFornecedor, setShowCotacaoFornecedor] = React.useState(false);
   const [showLinkCliente, setShowLinkCliente] = React.useState(false);
+
+  /* 14/09 — achado real (auditoria do tour.md): "Enviar direto para
+     Precificação" (preço combinado por fora) ficava visível pra
+     qualquer usuário, sem checar nenhuma alçada — só um window.confirm
+     de texto. A alçada propostas.precificar_manual já existia em
+     Configurações → Permissões (hint: "Preço combinado por fora
+     (CEO/Financeiro)..."), mas nunca era consultada em lugar nenhum do
+     código. Administrador (perfis.nivel) já passa automaticamente via
+     temCapacidade; Financeiro recebe a alçada explicitamente (não é
+     um nivel, é um departamento). */
+  const [podePrecificarManual, setPodePrecificarManual] = React.useState(false);
+  React.useEffect(() => {
+    if (publicMode || !window.PropostaStore) return;
+    window.PropostaStore.temCapacidade('propostas', 'precificar_manual').then(setPodePrecificarManual).catch(() => {});
+  }, [publicMode]);
 
   React.useEffect(() => {
     if (publicMode) return;
@@ -740,7 +1302,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
      configurado" DEPOIS de o vendedor escolher e tentar enviar (achado #92).
      Marca visualmente no próprio seletor quem está pronto. */
   const fornecedoresOptions = React.useMemo(() => fornecedores.map((nome) => (
-    nome === 'Glarie' ? nome : { value: nome, label: `${nome} (RFQ ainda não configurado)` }
+    Object.prototype.hasOwnProperty.call(FE_RFQ_CONTATOS_PADRAO, nome) ? nome : { value: nome, label: `${nome} (RFQ ainda não configurado)` }
   )), [fornecedores]);
 
   React.useEffect(() => {
@@ -754,10 +1316,42 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       setId(f.id);
       setHeader((h) => ({ ...h, ...feHeaderPick(f) }));
       setNumeroCotacao(f.numero_cotacao ?? null);
+      setClienteId(f.cliente_id || null);
+      if (!f.cliente_id && (f.razao_social || f.contato || f.predio_empreendimento)) setCriarClienteInline(true); // formulário antigo, sem vínculo — mantém editável do jeito que já estava
       if (f.unidades && f.unidades.length) setUnidades(f.unidades);
       setLoading(false);
     }).catch((e) => { window.toast?.('Erro ao carregar formulário: ' + e.message, 'error'); setLoading(false); });
   }, [formularioId]);
+
+  /* Handoff vindo do Lead ("Abrir Formulário", comercial.jsx) — preenche
+     telefone/e-mail/observações e, quando o Lead já tem cliente_id
+     (CNPJ resolvido no cadastro do Lead), seleciona o cliente direto no
+     picker — sem precisar redigitar CNPJ. Equipamento NÃO vem do Lead:
+     é sempre alocado aqui dentro, podendo ter quantos itens/tipos o
+     vendedor precisar (é o motivo do Lead ter parado de coletar
+     equipamento — revisão do fluxo Lead→Formulário).
+     Editável, não trava nada — mesmo espírito do autopreenchimento por
+     CEP/CNPJ já existente aqui. */
+  React.useEffect(() => {
+    if (formularioId || !prefillFromLead) return;
+    const lead = prefillFromLead;
+    setHeader((h) => ({
+      ...h,
+      telefone: lead.phone || h.telefone,
+      email: lead.email || h.email,
+      contato: lead.contact || h.contato,
+      predio_empreendimento: lead.building || h.predio_empreendimento,
+      observacoes: [
+        `Originado do Lead ${lead.id} (${lead.building || ''}).`,
+        lead.contact ? `Contato: ${lead.contact}${lead.role ? ' — ' + lead.role : ''}.` : null,
+      ].filter(Boolean).join(' '),
+    }));
+    if (lead.cliente_id) setClienteId(lead.cliente_id);
+    // Lead ainda sem CNPJ/CPF vinculado (ex.: veio do "será inserido depois")
+    // → mostra direto os campos de cliente (Contato/Prédio já preenchidos)
+    // em vez do buscador de cliente cadastrado, que não teria o que achar.
+    else setCriarClienteInline(true);
+  }, [formularioId, prefillFromLead]);
 
   const setH = (k) => (v) => setHeader((h) => ({ ...h, [k]: v }));
 
@@ -806,22 +1400,59 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
   const setUnidade = (idx) => (u) => setUnidades((arr) => arr.map((x, i) => (i === idx ? u : x)));
   const addUnidade = () => setUnidades((arr) => [...arr, feNovaUnidade(`E${arr.length + 1}`)]);
   const removeUnidade = (idx) => setUnidades((arr) => (arr.length > 1 ? arr.filter((_, i) => i !== idx) : arr));
+  /* Duplicar (15/08): copia os ~40 campos técnicos do elevador pra um card
+     novo — pedido do vendedor pra quando só muda paradas/velocidade entre
+     dois elevadores da mesma cotação (ex.: 2 MRL-4-paradas + 3
+     MRL-6-paradas). Tira id/formulario_id/created_at/indice_ativo pra
+     salvarTudo() tratar como unidade NOVA (mesma lógica de sempre: sem id
+     → adicionarUnidade), com identificador/E-número seguinte. */
+  const duplicarUnidade = (idx) => setUnidades((arr) => {
+    const origem = arr[idx];
+    const { id, formulario_id, created_at, indice_ativo, ...campos } = origem;
+    const copia = { ...campos, identificador: `E${arr.length + 1}` };
+    return [...arr.slice(0, idx + 1), copia, ...arr.slice(idx + 1)];
+  });
+
+  const usaClientePicker = !publicMode && !criarClienteInline;
+
+  // Sem CNPJ/CPF ainda (comum quando o Lead marcou "documento será inserido
+  // depois") — Nome/Razão Social deixou de ser o único jeito de identificar o
+  // cliente aqui: Contato ou Prédio/Empreendimento bastam pra gerar a
+  // cotação, e o resto (CNPJ/CPF, razão social) é completado depois.
+  const temIdentificacaoMinima = () =>
+    !!(header.razao_social?.trim() || header.contato?.trim() || header.predio_empreendimento?.trim());
 
   const validar = () => {
-    if (!header.razao_social?.trim()) return 'Nome/Razão Social do cliente é obrigatório.';
+    if (usaClientePicker ? !clienteId : !temIdentificacaoMinima()) return 'Informe Nome/Razão Social, Contato ou Prédio/Empreendimento antes de continuar.';
     if (!header.local_obra_cidade?.trim() || !header.local_obra_estado?.trim()) return 'Local da obra (cidade/UF) é obrigatório.';
-    if (!header.tipo_mao_de_obra) return 'Tipo de mão de obra é obrigatório.';
+    if (!header.tipo_mao_de_obra) return 'Instalação Será é obrigatório.';
     if (!header.responsavel_entrega) return 'Responsável pela entrega é obrigatório.';
     if (header.endereco_obra_diferente && (!header.endereco_obra_logradouro?.trim() || !header.endereco_obra_bairro?.trim() || !header.endereco_obra_cep?.trim() || !header.endereco_obra_cidade?.trim() || !header.endereco_obra_estado?.trim())) {
       return 'Informe o endereço completo da obra (logradouro, bairro, CEP, cidade e UF).';
     }
     for (const u of unidades) {
-      if (!u.tipo || !u.velocidade_ms || !u.paradas || !u.pavimentos_desc || !u.casa_maquinas || !u.agrupamento || !u.porta_oposta || !u.estrutura_caixa || !u.percurso_mm || !u.porta_tipo_abertura || !u.tensao_principal || !u.tensao_iluminacao) {
-        return `Elevador ${u.identificador || ''}: preencha os campos obrigatórios (*).`;
+      // Escada/esteira usam `especificacoes` (jsonb) em texto livre, sem
+      // obrigatoriedade — a lista de campos "*" abaixo é específica do
+      // elevador (colunas reais que outros módulos, RFQ/precificação,
+      // dependem diretamente).
+      if ((u.tipo_equipamento || 'elevador') !== 'elevador') continue;
+      if (!u.tipo || !u.tracao || !u.velocidade_ms || !u.paradas || !u.pavimentos_desc || !u.casa_maquinas || !u.agrupamento || !u.porta_oposta || !u.estrutura_caixa || !u.percurso_mm || !u.porta_tipo_abertura || !u.tensao_principal || !u.tensao_iluminacao) {
+        return `Equipamento ${u.identificador || ''}: preencha os campos obrigatórios (*).`;
       }
     }
     return null;
   };
+
+  /* Issue #383 — `fornecedor` da unidade não entra em validar() de
+     propósito (aviso, não bloqueio: o vendedor pode enviar o formulário e
+     definir o fornecedor depois), mas sem ele a unidade nunca aparece em
+     "Enviar cotação a fornecedores" e o RFQ não sai. Só no canal
+     assistido — no self-service o cliente nem vê esse campo. */
+  const unidadesSemFornecedor = publicMode ? [] : unidades.filter((u) => !String(u.fornecedor || '').trim());
+  const avisoSemFornecedor = unidadesSemFornecedor.length === 0 ? null
+    : unidadesSemFornecedor.length === unidades.length
+      ? 'Nenhum equipamento tem Fornecedor definido — o pedido de cotação (RFQ) não sai para fornecedor nenhum até você definir e usar "Enviar cotação a fornecedores".'
+      : `${unidadesSemFornecedor.length} de ${unidades.length} equipamentos estão sem Fornecedor (${unidadesSemFornecedor.map((u) => u.identificador).filter(Boolean).join(', ')}) — eles ficam fora do pedido de cotação (RFQ).`;
 
   /* Retorna o id salvo (não um boolean) — quem chama precisa do valor real,
      não do estado `id`, que só reflete o setId em um próximo render (issue
@@ -831,8 +1462,8 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
     // no banco, então salvar sem isso derrubava com um 400 silencioso (sem
     // toast nenhum), travando em "Cotação Nº — (gerado ao salvar)" pra
     // sempre. O resto de `validar()` continua opcional pra rascunho.
-    if (!header.razao_social?.trim()) {
-      window.toast?.('Preencha o Nome/Razão Social do cliente antes de salvar.', 'warning');
+    if (usaClientePicker ? !clienteId : !temIdentificacaoMinima()) {
+      window.toast?.(usaClientePicker ? 'Selecione o cliente antes de salvar.' : 'Preencha Nome/Razão Social, Contato ou Prédio/Empreendimento antes de salvar.', 'warning');
       return null;
     }
     const erro = validar();
@@ -840,13 +1471,20 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
     setSaving(true);
     try {
       let cliente = null;
-      if (!publicMode || header.cnpj || header.cpf) {
-        cliente = await window.FormularioElevadorStore.buscarOuCriarCliente(header);
+      if (usaClientePicker) {
+        cliente = { id: clienteId };
+      } else if (!publicMode || header.cnpj || header.cpf) {
+        // clienteIdProvisorio: se um cliente já foi criado numa chamada
+        // anterior desta mesma sessão de rascunho (sem CNPJ/CPF ainda), o
+        // store atualiza esse registro em vez de duplicar a cada save.
+        cliente = await window.FormularioElevadorStore.buscarOuCriarCliente({ ...header, clienteIdProvisorio: clienteId });
+        setClienteId(cliente.id);
       }
       let currentId = id;
       if (!currentId) {
         const f = await window.FormularioElevadorStore.criar({
           ...feHeaderPick(header), cliente_id: cliente?.id, canal: publicMode ? 'self_service' : 'assistido',
+          lead_id: prefillFromLead?.id || null,
         });
         currentId = f.id;
         setId(currentId);
@@ -875,7 +1513,8 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       }
       setUnidades(unidadesSalvas);
       if (novoStatus) await window.FormularioElevadorStore.enviar(currentId);
-      window.toast?.(novoStatus ? 'Formulário enviado!' : 'Rascunho salvo.', 'success');
+      window.toast?.(novoStatus ? 'Formulário devolvido para a VerticalParts!' : 'Rascunho salvo.', 'success');
+      if (novoStatus && avisoSemFornecedor) window.toast?.(avisoSemFornecedor, 'warning');
       onSaved?.(currentId);
       return currentId;
     } catch (e) {
@@ -907,7 +1546,7 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
         <div className="page-head">
           <div className="page-head__l">
             <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Formulários</div>
-            <h1 className="page-head__title">Formulário — Elevador</h1>
+            <h1 className="page-head__title">Formulário — Equipamento</h1>
             <FENumeroCotacaoBadge numeroCotacao={numeroCotacao}/>
             <p className="page-head__sub">
               Coleta de dados da obra e do equipamento para envio de cotação aos fornecedores.
@@ -937,32 +1576,54 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
 
       <Card title="Dados do cliente e da obra">
         <div className="stack" style={{ gap: 14 }}>
+          <div>
+            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Cliente</div>
+            {usaClientePicker ? (
+              <FEClientePicker clienteId={clienteId} onSelecionar={(c) => setClienteId(c ? c.id : null)} onCriarNovo={() => setCriarClienteInline(true)}/>
+            ) : (
+              <>
+                <div className="grid-3" style={{ gap: 12 }}>
+                  <FEField label="Tipo de pessoa"><FESelect value={header.tipo_pessoa} onChange={setH('tipo_pessoa')} options={[{ value: 'PJ', label: 'Pessoa Jurídica' }, { value: 'PF', label: 'Pessoa Física' }]}/></FEField>
+                  <FEField label="Nome / Razão Social" span="2"><FEInput value={header.razao_social} onChange={setH('razao_social')} placeholder="Nome do cliente"/></FEField>
+                  {header.tipo_pessoa === 'PF'
+                    ? <FEField label="CPF"><FEInput value={header.cpf} onChange={setH('cpf')} placeholder="000.000.000-00"/></FEField>
+                    : <FEField label="CNPJ"><FEInput value={header.cnpj} onChange={setH('cnpj')} placeholder="00.000.000/0000-00" onBlur={() => buscarCnpjEPreencher(header.cnpj)}/></FEField>}
+                  <FEField label="Inscrição Estadual"><FEInput value={header.inscricao_estadual} onChange={setH('inscricao_estadual')} disabled={header.tipo_pessoa === 'PF'}/></FEField>
+                  <FEField label="Contribuinte de ICMS?"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
+                  <FEField label="Telefone"><FEInput value={header.telefone} onChange={setH('telefone')}/></FEField>
+                  <FEField label="E-mail" span="2"><FEInput type="email" value={header.email} onChange={setH('email')}/></FEField>
+                  <FEField label="Contato"><FEInput value={header.contato} onChange={setH('contato')} placeholder="Nome do síndico / responsável"/></FEField>
+                  <FEField label="Prédio / Empreendimento" span="2"><FEInput value={header.predio_empreendimento} onChange={setH('predio_empreendimento')} placeholder="Ed. Itacolomi, Shopping Vila Olímpia…"/></FEField>
+                </div>
+                <p className="small muted" style={{ margin: '8px 0 0' }}>
+                  Sem Nome/Razão Social, CNPJ ou CPF ainda? Informe pelo menos o Contato ou o
+                  Prédio/Empreendimento acima — dá pra completar o resto depois, aqui mesmo.
+                </p>
+                <div style={{ marginTop: 14 }}>
+                  <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Endereço</div>
+                  <FEEndereco prefix="endereco_" header={header} setH={setH} onBuscarCep={buscarCepEPreencher('endereco_')}/>
+                </div>
+                {!publicMode && (
+                  <p className="small muted" style={{ margin: '8px 0 0' }}>
+                    <a href="#" onClick={(e) => { e.preventDefault(); setCriarClienteInline(false); }}>voltar a buscar cliente já cadastrado</a>
+                  </p>
+                )}
+              </>
+            )}
+          </div>
           <div className="grid-3" style={{ gap: 12 }}>
-            <FEField label="Tipo de pessoa"><FESelect value={header.tipo_pessoa} onChange={setH('tipo_pessoa')} options={[{ value: 'PJ', label: 'Pessoa Jurídica' }, { value: 'PF', label: 'Pessoa Física' }]}/></FEField>
-            <FEField label="Nome / Razão Social *" span="2"><FEInput value={header.razao_social} onChange={setH('razao_social')} placeholder="Nome do cliente"/></FEField>
-            {header.tipo_pessoa === 'PF'
-              ? <FEField label="CPF"><FEInput value={header.cpf} onChange={setH('cpf')} placeholder="000.000.000-00"/></FEField>
-              : <FEField label="CNPJ"><FEInput value={header.cnpj} onChange={setH('cnpj')} placeholder="00.000.000/0000-00" onBlur={() => buscarCnpjEPreencher(header.cnpj)}/></FEField>}
-            <FEField label="Inscrição Estadual"><FEInput value={header.inscricao_estadual} onChange={setH('inscricao_estadual')} disabled={header.tipo_pessoa === 'PF'}/></FEField>
-            <FEField label="Contribuinte de ICMS?"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
             <FEField label="Finalidade da compra"><FESelect value={header.finalidade_compra} onChange={setH('finalidade_compra')} options={FE_FINALIDADE_COMPRA}/></FEField>
-            <FEField label="Telefone"><FEInput value={header.telefone} onChange={setH('telefone')}/></FEField>
-            <FEField label="E-mail" span="2"><FEInput type="email" value={header.email} onChange={setH('email')}/></FEField>
           </div>
           {header.finalidade_compra === 'revenda' && header.contribuinte_icms === false && (
             <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #FBB039', padding: '8px 12px', margin: 0 }}>
               Atenção: Não Contribuintes do ICMS não podem comprar mercadorias com finalidade de Revenda.
             </p>
           )}
-          <div>
-            <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Endereço</div>
-            <FEEndereco prefix="endereco_" header={header} setH={setH} onBuscarCep={buscarCepEPreencher('endereco_')}/>
-          </div>
           <div className="grid-3" style={{ gap: 12 }}>
             <FEField label="Cidade da obra *"><FEInput value={header.local_obra_cidade} onChange={setH('local_obra_cidade')}/></FEField>
             <FEField label="UF da obra *"><FEInput value={header.local_obra_estado} onChange={setH('local_obra_estado')} placeholder="SP"/></FEField>
             <FEField label="Prazo mínimo desejado em obra"><FEInput value={header.prazo_desejado} onChange={setH('prazo_desejado')} placeholder="3 a 4 meses"/></FEField>
-            <FEField label="Tipo de mão de obra *"><FESelect value={header.tipo_mao_de_obra} onChange={setH('tipo_mao_de_obra')} options={FE_MAO_DE_OBRA}/></FEField>
+            <FEField label="Instalação Será *"><FESelect value={header.tipo_mao_de_obra} onChange={setH('tipo_mao_de_obra')} options={FE_INSTALACAO_SERA}/></FEField>
             <FEField label="Responsável pela entrega *"><FESelect value={header.responsavel_entrega} onChange={setH('responsavel_entrega')} options={FE_RESPONSAVEL_ENTREGA}/></FEField>
             {!publicMode && <FEField label="Origem da venda"><FESelect value={header.origem_venda} onChange={setH('origem_venda')} options={FE_ORIGEM_VENDA}/></FEField>}
             {!publicMode && <FEField label="Vendedor"><FEInput value={header.vendedor} onChange={setH('vendedor')} placeholder="Iniciais ou nome"/></FEField>}
@@ -1014,25 +1675,77 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
       <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0 }}>
         {unidades.map((u, i) => (
           <div key={u.id || i} style={{ marginTop: 16 }}>
-            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode}/>
+            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} onDuplicate={() => duplicarUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode} numeroCotacao={numeroCotacao}/>
           </div>
         ))}
 
         <div style={{ marginTop: 16 }}>
-          <Button variant="outline" icon="plus" onClick={addUnidade}>+ Adicionar elevador diferente</Button>
+          <Button variant="outline" icon="plus" onClick={addUnidade}>+ Adicionar equipamento diferente</Button>
         </div>
       </fieldset>
 
+      {avisoSemFornecedor && (
+        <div style={{ marginTop: 16, padding: '10px 12px', background: '#fff8e6', border: '1px solid #FBB039', borderRadius: 6, fontSize: 12, color: '#8a5a00' }}>
+          ⚠ {avisoSemFornecedor}
+        </div>
+      )}
       <div style={{ marginTop: 16, display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+        {/* Link do cliente: um único botão, que devolve o formulário preenchido
+            pra VerticalParts conferir (não vai pra cotação sozinho, nem tem
+            rascunho). Dentro do sistema não existe mais "Enviar para Cotação":
+            o vendedor segue pelos botões de baixo (RFQ a fornecedores, envio
+            direto pra Precificação, Controle de Cotações). */}
         <div className="row gap-2">
-          <Button variant="outline" onClick={() => salvarTudo(null)} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>
-          <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Enviar para Cotação'}</Button>
+          {publicMode
+            ? <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Devolver para a VerticalParts'}</Button>
+            : <Button variant="outline" onClick={() => salvarTudo(null)} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>}
         </div>
       </div>
 
       {!publicMode && (id || onControleCotacoes) && (
         <div className="row gap-2" style={{ marginTop: 16, justifyContent: 'center' }}>
           {id && <Button variant="ghost" icon="send" onClick={() => setShowCotacaoFornecedor(true)}>Enviar cotação a fornecedores</Button>}
+          {id && podePrecificarManual && (
+            <Button variant="ghost" icon="calculator" title="Preço já combinado por fora (CEO/Financeiro) — a Proposta já nasce agora, com o preço em aberto pra preencher"
+              onClick={async () => {
+                if (!unidades.length) { window.toast?.('Adicione ao menos um equipamento antes de enviar.', 'warning'); return; }
+                if (!window.confirm('A proposta nasce agora, mesmo sem preço — alguém preenche o valor depois (na própria Proposta ou pela fila de Precificação). Confirma?')) return;
+                try {
+                  await window.FormularioElevadorStore.enviarDiretoParaPrecificacao(id);
+                  /* Proposta nasce na hora, já com cliente/obra/equipamento —
+                     preço fica em aberto (0) até alguém preencher, na própria
+                     Proposta ou via Precificação depois (herdar() no editor
+                     "auto-preenche" quando reaberta, sem sobrescrever o que
+                     já foi digitado — pedido do usuário, 19/08). */
+                  if (window.PropostaHeranca && numeroCotacao) {
+                    const r = await window.PropostaHeranca.prefillPorNumeroCotacao(numeroCotacao);
+                    if (r.encontrado) {
+                      const numero = window.MasterIdEngine.etapaId('proposta', numeroCotacao);
+                      /* r.prefill é só o pedaço colhido do Formulário/Cotação/
+                         Precificação — precisa entrar por cima da "forma
+                         completa" de uma proposta (acabamentos, condições,
+                         garantia, textos padrão...), senão salva faltando
+                         chave e a tela de preview quebra ao reabrir (achado
+                         ao vivo, 19/08 — proposta 921 crashava com "Cannot
+                         read properties of undefined (reading 'modeloCabine')").
+                         Mesma mistura que herdar() já faz no editor. */
+                      /* deepMergeProposta (não deepMergeHeranca): esta é sempre uma
+                         proposta nova (editId: null) — não existe "digitação do
+                         vendedor" pra proteger aqui. deepMergeHeranca tratava o
+                         array/objeto placeholder do makeDefaultProposta() como se
+                         já fosse conteúdo real e descartava a herança de verdade
+                         quando havia mais de 1 equipamento (achado na cotação 950). */
+                      const dadosCompletos = deepMergeProposta(makeDefaultProposta(), { ...r.prefill, numero });
+                      const salvo = await window.PropostaStore.salvar({ data: dadosCompletos, eq: 'elevador', editId: null, valorTotal: 0 });
+                      if (salvo?.erro) window.toast?.('Enviado, mas não consegui criar a Proposta agora: ' + salvo.erro, 'warning');
+                      else window.toast?.('Proposta criada, aguardando preço.', 'success');
+                    } else {
+                      window.toast?.('Enviado — não consegui montar a Proposta agora, mas ela pode ser criada depois.', 'warning');
+                    }
+                  }
+                } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+              }}>Enviar direto para Precificação</Button>
+          )}
           {onControleCotacoes && <Button variant="ghost" icon="history" onClick={onControleCotacoes}>Controle de Cotações</Button>}
         </div>
       )}
@@ -1046,9 +1759,11 @@ function FormularioElevadorForm({ formularioId, publicMode, onSaved, onVoltar, o
 
 /* ---------- Wrapper interno (rota "formulario-elevador") ---------- */
 function FormularioElevadorPage({ setRoute, subsel }) {
+  const prefillFromLead = subsel && typeof subsel === 'object' ? subsel.__prefillFromLead : null;
   return (
     <FormularioElevadorForm
       formularioId={typeof subsel === 'string' ? subsel : null}
+      prefillFromLead={prefillFromLead}
       onVoltar={() => setRoute('formularios')}
       onSaved={() => {}}
       onControleCotacoes={() => setRoute('controle-cotacoes')}

@@ -46,7 +46,7 @@ input, textarea, select { font-family: inherit; }
 .toast--danger  .toast__icon { color: var(--vp-danger); }
 .toast__body { flex: 1; display: flex; flex-direction: column; gap: 2px; min-width: 0; }
 .toast__msg { font-size: 13px; line-height: 1.4; }
-.toast__desc { font-size: 11px; color: rgba(255,255,255,.6); line-height: 1.3; }
+.toast__desc { font-size: 11px; color: rgba(255,255,255,.6); line-height: 1.4; white-space: pre-line; }
 .toast__action {
   background: var(--vp-yellow);
   color: #000;
@@ -266,6 +266,20 @@ body[data-density="airy"] {
   color: #000;
 }
 .sidebar__group.is-collapsed .sidebar__group-toggle { transform: rotate(-90deg); }
+/* "?" do módulo (tutorial do módulo): sobreposto ao título do grupo, à ESQUERDA do círculo da setinha, mas como IRMÃO do botão de
+   recolher (src/shell.jsx) — 8px de padding + 20px da setinha + 8px de respiro = 36px da borda direita. */
+.sidebar__group-head { position: relative; }
+.sidebar__group-help {
+  position: absolute; top: 50%; right: 36px; transform: translateY(-50%);
+  width: 20px; height: 20px; padding: 0;
+  display: flex; align-items: center; justify-content: center;
+  border-radius: 50%; border: 1px solid var(--vp-gray-700); background: none;
+  color: var(--vp-gray-400); font-size: 11px; font-weight: 700; line-height: 1; cursor: pointer;
+  transition: background var(--dur-fast) var(--ease-out), border-color var(--dur-fast) var(--ease-out), color var(--dur-fast) var(--ease-out);
+}
+.sidebar__group-help:hover,
+.sidebar__group-help:focus-visible { background: var(--vp-yellow); border-color: var(--vp-yellow); color: #000; }
+.app[data-sidebar="collapsed"] .sidebar__group-help { display: none; }
 .sidebar__group-sublabel {
   font-size: 8px;
   font-weight: 700;
@@ -382,14 +396,19 @@ button.nav-item {
 .sidebar__user:hover { border-color: var(--vp-yellow); }
 .avatar {
   width: 30px; height: 30px;
-  background: var(--vp-yellow);
-  color: #000;
+  border-radius: 50%;
+  background: var(--vp-gray-800, #2a2f3a);
+  color: #fff;
   font-weight: 800;
   display: inline-flex; align-items: center; justify-content: center;
   font-size: 11px;
   letter-spacing: .04em;
   flex-shrink: 0;
+  overflow: hidden;
 }
+/* Quando existe foto real (colaboradores_vpsistema.avatar_url), o círculo
+   vira moldura da foto em vez do fundo de iniciais. */
+.avatar img { width: 100%; height: 100%; object-fit: cover; display: block; border-radius: 50%; }
 .avatar.lg { width: 40px; height: 40px; font-size: 14px; }
 .avatar.sm { width: 22px; height: 22px; font-size: 9px; }
 .sidebar__user-info { flex: 1; min-width: 0; }
@@ -415,6 +434,49 @@ button.nav-item {
   transition: all var(--dur-fast) var(--ease-out);
 }
 .sidebar__collapse:hover { background: var(--vp-yellow); color: #000; border-color: var(--vp-yellow); }
+
+/* ---- Sidebar: visual novo (degradê amarelo -> preto) — só estilo, mesma marcação.
+   O degradê ocupa só o alto (marca + 1º grupo); abaixo é quase preto, para o texto manter contraste. ---- */
+.app { --sidebar-w: 256px; }
+.app[data-sidebar="collapsed"] { --sidebar-w: 72px; }
+.sidebar {
+  background: linear-gradient(180deg, #F5C400 0, #C9A000 56px, #4a3b00 190px, #151100 330px, #0B0B0B 460px);
+}
+.sidebar::after { display: none; }
+.sidebar__brand { border-bottom: 0; padding: 0 18px; gap: 12px; }
+.sidebar__brand-mark {
+  width: 34px; height: 34px; padding: 5px; border-radius: 9px;
+  background: #0B0B0B; object-fit: contain; flex: none;
+}
+.sidebar__brand-text { color: #111; font-size: 16px; }
+.sidebar__brand-sub { display: none; } /* "v2.4": ficava atrás do botão de recolher; a versão publicada já aparece no rodapé */
+.sidebar__brand-text b { color: #111; opacity: .62; }
+.sidebar__brand-sub { color: rgba(0,0,0,.62); }
+.sidebar__scroll { padding: 14px 10px 24px; }
+.sidebar__group { margin-top: 18px; }
+.sidebar__group-label {
+  padding: 8px 8px 8px 12px; font-size: 11px; font-weight: 600; letter-spacing: .08em;
+  color: rgba(255,255,255,.58);
+}
+.sidebar__group-sublabel { font-size: 9px; letter-spacing: .1em; color: rgba(255,255,255,.42); }
+.nav-item, button.nav-item {
+  align-items: center; gap: 12px; padding: var(--nav-py, 9px) 12px; margin-bottom: 2px;
+  border: 0; border-left: 0; border-radius: 10px; color: rgba(255,255,255,.84);
+}
+.nav-item .nav-item__icon { margin-top: 0; }
+.nav-item__icon, .nav-item__icon svg { width: 20px; height: 20px; }
+.nav-item:hover { background: rgba(255,255,255,.07); color: #fff; }
+.nav-item.is-active {
+  background: linear-gradient(90deg, rgba(245,196,0,.24), rgba(245,196,0,.08));
+  color: #FFE27A; border-left: 0;
+}
+.nav-item__badge { border-radius: 10px; padding: 1px 7px; }
+.app[data-sidebar="collapsed"] .nav-item:hover::after { border-left: 0; border-radius: 8px; }
+.sidebar__foot { border-top-color: rgba(255,255,255,.08); padding: 12px 10px; }
+.sidebar__user { border-radius: 12px; border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.06); }
+.sidebar__user-role { color: rgba(255,255,255,.55); }
+.sidebar__version { border-top-color: rgba(255,255,255,.08); color: rgba(255,255,255,.45); }
+.sidebar__collapse { border-radius: 8px; top: 17px; right: 10px; }
 
 /* ========== HEADER ================================================= */
 .header {
@@ -648,6 +710,49 @@ button.nav-item {
 .btn--icon { padding: 0; width: 36px; justify-content: center; }
 .btn[disabled] { opacity: .4; cursor: not-allowed; }
 
+:root { --mes-retrabalho: #7b3fa0; } /* roxo = OP em retrabalho (MES); sem equivalente na paleta da marca */
+
+/* ========== CALLOUT / PANEL-SOFT / STEP-CARD (piloto Leads) ========
+   Substituem caixas montadas com style={{}} e cores hexadecimais soltas.
+   Só usam tokens de colors_and_type.css. */
+.callout {
+  display: flex; align-items: center; gap: 10px;
+  padding: 10px 12px; font-size: 13px;
+  border: 1px solid var(--border); border-radius: var(--r-lg);
+  background: var(--vp-gray-50); color: var(--fg1);
+}
+.callout__icon { font-size: 16px; font-weight: 700; flex: none; }
+.callout__title { font-weight: 600; }
+.callout__sub { margin-top: 2px; font-size: 12px; color: var(--fg3); }
+.callout--success { background: var(--vp-success-tint); border-color: var(--vp-success); }
+.callout--success .callout__icon, .callout--success .callout__title { color: var(--vp-success-ink); }
+.callout--info { background: var(--vp-info-tint); border-color: var(--vp-info); }
+.callout--info .callout__icon, .callout--info .callout__title { color: var(--vp-info); }
+.callout--warning { background: var(--vp-warning-tint); border-color: var(--vp-warning); }
+.callout--warning .callout__icon, .callout--warning .callout__title { color: var(--vp-warning-ink); }
+
+.panel-soft {
+  background: var(--vp-gray-50); border: 1px solid var(--border);
+  border-radius: var(--r-lg); padding: 14px 16px;
+}
+.text-warning, .cell-sub.text-warning { color: var(--vp-warning-ink); }
+
+.step-card {
+  display: flex; align-items: center; gap: 12px; padding: 12px 14px;
+  border: 1px solid var(--border); border-radius: var(--r-lg); background: #fff;
+}
+.step-card--current { background: var(--vp-yellow-tint); border-color: var(--vp-yellow); }
+.step-card--next { border-color: var(--border-strong); }
+.step-card--future { background: var(--vp-gray-50); opacity: .7; }
+.step-card__icon {
+  width: 34px; height: 34px; border-radius: var(--r-md); flex: none;
+  display: flex; align-items: center; justify-content: center;
+  background: var(--vp-gray-100); color: var(--fg2);
+}
+.step-card--current .step-card__icon { background: var(--vp-black); color: var(--vp-yellow); }
+.step-card__body { flex: 1; min-width: 0; }
+.step-card__label { font-size: 13px; font-weight: 600; color: var(--fg1); }
+
 /* ========== CARDS ================================================== */
 .card {
   background: #fff;
@@ -690,6 +795,9 @@ button.nav-item {
   transition: border-color var(--dur-fast) var(--ease-out);
 }
 .kpi:hover { border-color: var(--vp-yellow); }
+.kpi--clickable { cursor: pointer; }
+.kpi--clickable:hover { box-shadow: 0 0 0 1px var(--vp-yellow); }
+.kpi--clickable:focus-visible { outline: 2px solid var(--vp-yellow); outline-offset: 2px; }
 .kpi__stripe { position: absolute; top: 0; left: 0; width: 24px; height: 3px; background: var(--vp-yellow); }
 .kpi__label {
   font-size: 10px;
@@ -761,10 +869,19 @@ button.nav-item {
 }
 
 /* ========== TABLE ================================================== */
+/* 14/09 — bug real achado ao vivo: overflow:hidden cortava a coluna de
+   ações (Histórico/Editar/Excluir) sem dar nenhuma forma de rolar até
+   ela quando uma linha tinha conteúdo largo (razão social longa, CNPJ +
+   endereço etc.) — o botão existia e funcionava (confirmado clicando via
+   JS), só ficava inacessível na tela. Afeta as 45 telas que reusam esta
+   classe (grep confirma), não só Clientes. overflow-x:auto dá rolagem
+   horizontal real em vez de cortar; overflow-y:hidden preserva o clip
+   vertical que a borda arredondada já dependia. */
 .table-wrap {
   background: #fff;
   border: 1px solid var(--border);
-  overflow: hidden;
+  overflow-x: auto;
+  overflow-y: hidden;
 }
 table.t {
   width: 100%;
@@ -904,12 +1021,13 @@ select.input { appearance: none; -webkit-appearance: none; background-image: lin
 .grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: var(--grid-gap, 16px); }
 .grid-3 { display: grid; grid-template-columns: repeat(3, 1fr); gap: var(--grid-gap, 16px); }
 .grid-4 { display: grid; grid-template-columns: repeat(4, 1fr); gap: var(--grid-gap, 16px); }
+.grid-5 { display: grid; grid-template-columns: repeat(5, 1fr); gap: var(--grid-gap, 16px); }
 
 /* ===== Responsividade global (#49) — grids, split, header, page-head =====
    Sem breakpoints o app.css usava grids fixos (4/3 col) + split fixo + busca
    de 320px, que comprimiam/truncavam em telas médias e pequenas. */
 @media (max-width: 1100px) {
-  .grid-4 { grid-template-columns: repeat(2, 1fr); }
+  .grid-4, .grid-5 { grid-template-columns: repeat(2, 1fr); }
   .split, .split--wide { grid-template-columns: 1fr; }
 }
 @media (max-width: 1024px) {
@@ -927,7 +1045,7 @@ select.input { appearance: none; -webkit-appearance: none; background-image: lin
   .page-head__r { display: flex; flex-wrap: wrap; gap: 8px; }
 }
 @media (max-width: 620px) {
-  .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
+  .grid-2, .grid-3, .grid-4, .grid-5 { grid-template-columns: 1fr; }
   /* sidebar de 240px consome a tela no mobile — colapsa para ícones. */
   .app { --sidebar-w: 56px; }
   .sidebar__brand-text, .sidebar__brand-sub, .sidebar__version,

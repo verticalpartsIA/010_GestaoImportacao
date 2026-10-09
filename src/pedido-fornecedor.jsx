@@ -282,6 +282,15 @@ function PedidoPreviewOverlay({ pedido, onClose, onSaved }) {
     const el = docRef.current ? docRef.current.querySelector('.pf-doc') : null;
     if (el) await pfSalvarPDF(el, `Cotacao-${pedido.numero_documento}.pdf`);
   };
+  /* Fase 1 da migração pra @react-pdf/renderer (plano aprovado 20/08) —
+     roda em paralelo ao botão acima, não substitui ainda. */
+  const [gerandoNovo, setGerandoNovo] = _pfUS(false);
+  const salvarPdfNovo = async () => {
+    setGerandoNovo(true);
+    try { await window.PFReactPdf.baixar(doc, `Cotacao-${pedido.numero_documento}.pdf`); }
+    catch (e) { window.toast('Erro no novo motor de PDF: ' + e.message, 'error'); }
+    finally { setGerandoNovo(false); }
+  };
 
   return ReactDOM.createPortal(
     <div className="pf-overlay">
@@ -289,6 +298,10 @@ function PedidoPreviewOverlay({ pedido, onClose, onSaved }) {
         <div className="pf-overlay-title">Cotação {pedido.numero_documento}</div>
         <div className="row gap-2">
           <Button variant="primary" size="sm" icon="download" onClick={salvarPdf}>Salvar PDF</Button>
+          <Button variant="outline" size="sm" icon="download" onClick={salvarPdfNovo} disabled={gerandoNovo}
+            title="Fase 1 da migração pra @react-pdf/renderer — PDF vetorial, em teste">
+            {gerandoNovo ? 'Gerando…' : 'Salvar PDF (novo motor)'}
+          </Button>
           <Button variant="outline" size="sm" icon="check" onClick={salvarBanco} disabled={saving}>{saving ? 'Salvando…' : 'Salvar'}</Button>
           <Button variant="secondary" size="sm" icon="send" onClick={abrirEnvio} disabled={saving}>Enviar</Button>
           <Button variant="ghost" size="sm" icon="x" onClick={onClose}>Fechar</Button>
@@ -449,8 +462,10 @@ function PedidosList({ onReopen }) {
   };
 
   return (
-    <div className="table-wrap">
-      <table className="t">
+    <>
+    <Card title="Pedidos a fornecedor" sub={`${rows.length} cotação(ões) — clique numa linha para reabrir ou ver a resposta`}>
+    <div className="table-wrap" style={{ border: 0 }}>
+      <table className="t pcp-grid">
         <thead><tr><th>Cotação</th><th>Fornecedor</th><th>Itens</th><th>Idioma</th><th>Situação</th><th>Data</th><th></th></tr></thead>
         <tbody>
           {rows.map(r => {
@@ -458,7 +473,7 @@ function PedidosList({ onReopen }) {
             const respondido = r.status === 'respondido';
             return (
               <tr key={r.id} style={{ cursor: 'pointer' }} onClick={() => (respondido ? setVerResp(r) : onReopen(r))}>
-                <td><span className="mono small">{r.numero_documento}</span></td>
+                <td style={{ whiteSpace: 'nowrap' }}><span className="mono small">{r.numero_documento}</span></td>
                 <td>{(r.fornecedor && r.fornecedor.nome) || '—'} <span className="muted small">({(r.fornecedor && r.fornecedor.tipo) === 'nacional' ? 'Nacional' : 'Importação'})</span></td>
                 <td>{(r.itens || []).length}</td>
                 <td className="small">{r.idioma === 'bilingue' ? 'PT|EN' : (r.idioma || '').toUpperCase()}</td>
@@ -476,8 +491,10 @@ function PedidosList({ onReopen }) {
           })}
         </tbody>
       </table>
-      {verResp && <CotacaoRespostaModal pedido={verResp} onClose={() => setVerResp(null)}/>}
     </div>
+    </Card>
+    {verResp && <CotacaoRespostaModal pedido={verResp} onClose={() => setVerResp(null)}/>}
+    </>
   );
 }
 

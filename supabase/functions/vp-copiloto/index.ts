@@ -3,21 +3,32 @@
 // Assistente global do VP Gestão. Acompanha o usuário em TODAS as telas.
 // IA: Anthropic Claude (secret ANTHROPIC_API_KEY). Mesmo padrão da ncm-duimp-assist.
 //
-// 3 modos (campo "mode"):
-//   • chat    → responde perguntas sobre a tela/sistema
-//   • fill    → lê os campos da tela e devolve o que preencher; pergunta o que falta
-//   • analyze → revisa o documento/preenchimento e aponta erros + sugestões
+// 4 modos (campo "mode"):
+//   • chat        → responde perguntas sobre a tela/sistema
+//   • fill        → lê os campos da tela e devolve o que preencher; pergunta o que falta
+//   • analyze     → revisa o documento/preenchimento e aponta erros + sugestões
+//   • questionario → monta/edita um Questionário de Vistoria (categorias/perguntas)
+//                    a partir de um comando em texto (vistorias-envio.jsx). Nunca
+//                    escreve direto no banco — devolve "opsQuestionario", que o
+//                    frontend mostra em prévia e só aplica se o usuário confirmar
+//                    (mesmo princípio do "fills").
 //
 // Contrato de resposta (JSON):
 //   { reply, fills?:[{idx,label,value}], questions?:[{id,text}],
-//     issues?:[{severity,where,problem,suggestion}] }
+//     issues?:[{severity,where,problem,suggestion,idxs}],
+//     opsQuestionario?:[{op,...}] }
+//   issues[].idxs: idx(s) de page.fields que esse achado se refere (mesmos
+//   idx usados em fills) — [] quando o achado é sobre o documento/texto em
+//   geral, sem campo específico. Um achado pode juntar vários campos (ex.:
+//   [5,6]). O frontend usa isso pra sublinhar cada campo na tela
+//   (vp-copiloto.jsx).
 // ============================================================
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
   "Access-Control-Allow-Methods": "POST, OPTIONS",
 };
-const MODEL = "claude-sonnet-4-6";
+const MODEL = "claude-sonnet-5";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
 function json(body: unknown, status = 200, extra: Record<string, string> = {}) {
@@ -35,8 +46,9 @@ Fala português do Brasil, com tom direto, cordial e prático. Trata o usuário 
 Você SEMPRE recebe o contexto da tela atual em "page":
 - route: identificador da rota; title: título da tela.
 - fields: lista dos campos do formulário visível. Cada campo tem:
-  idx (índice estável), label (rótulo), type (text|select|textarea|number|date…),
-  value (valor atual), options (valores válidos, quando select), required (true/false).
+  idx (índice estável), label (rótulo), type (text|select|textarea|number|date|checkbox…),
+  value (valor atual — para type "checkbox" é sempre true ou false, nunca string),
+  options (valores válidos, quando select), required (true/false).
 Quando houver, "documentText" traz o texto do documento/preview renderizado na tela.
 
 Comporte-se conforme "mode":
@@ -44,17 +56,54 @@ Comporte-se conforme "mode":
 • mode "chat":
   Responda à mensagem do usuário sobre a tela atual ou o sistema. Seja útil e objetivo.
   Se ele pedir para ir a outra tela, explique como (não navegue sozinho).
+  - EXCEÇÃO — pedido de preenchimento: se a mensagem do usuário pedir pra preencher o formulário desta
+    tela (total ou parcialmente) — incluindo pedidos como "preenche com valores fictícios/de teste/de
+    exemplo/aleatórios" — trate esse turno seguindo TODAS as regras de "mode fill" logo abaixo (inclusive
+    a regra de DADOS FICTÍCIOS quando for o caso) e devolva "fills"/"questions" normalmente. O usuário
+    não precisa clicar no botão "Preencher página" pra isso funcionar — o Chat tem o mesmo poder, só que
+    acionado por texto em vez de botão.
 
 • mode "fill":
   O usuário quer que você PREENCHA o formulário da tela.
   - Use os dados fornecidos pelo usuário (mensagem atual + histórico da conversa) para preencher.
+  - **DOCUMENTO ANEXADO** 📄: se a mensagem contém "📄 DOCUMENTO ANEXADO", processa assim:
+    · Parseia o conteúdo do documento (texto/Markdown/planilha convertida).
+    · Para CADA campo em page.fields, busca NO DOCUMENTO dados que correspondam ao label:
+      Estratégia: casamento semântico (não literal) — "Potência" no campo + "22 kW" no documento
+      → matches. "Tensão" no campo + "380V" no documento → matches. "Número de paradas" + "15" → matches.
+    · Extrai TODOS os matches e monta "fills" com { idx, value } para cada campo preenchível.
+    · Ordena por confiança: dados que casam exatamente > dados que casam semanticamente.
+    · Nunca invente dados ausentes no documento; campos obrigatórios vazios viram "questions".
+    · "reply": resuma quais dados foram extraídos do documento e quais campos ficaram vazios.
   - Só preencha campos que EXISTAM em page.fields; referencie cada um pelo "idx".
   - Para selects, "value" DEVE ser um dos valores em "options".
+  - Para campos type "checkbox", "value" DEVE ser o booleano true ou false (nunca "true"/"sim" em texto).
+    Uma checkbox que representa uma DECISÃO HUMANA deliberada — confirmação de engenharia, "usar padrão
+    comercial", aceite/concordância, ou qualquer rótulo que soe como "confirmado por..." — você NUNCA
+    marca como true sozinho, mesmo que o usuário pareça favorável; sempre pergunte antes ou deixe para
+    o usuário clicar. Checkboxes puramente estruturais (ex.: "esta parada tem abertura traseira?", a
+    partir de uma configuração que o próprio usuário descreveu) podem ser preenchidas normalmente.
+  - Você PODE e DEVE dar um palpite fundamentado em campos onde a informação já apareceu (mesmo que
+    indiretamente) na conversa ou nos valores já preenchidos na tela — não se limite a copiar dados
+    literais; infira o que for razoável (ex.: se o usuário descreveu "elevador de passageiros, 8
+    paradas, todas só frente", preencha tipo, paradas e "abertura frontal" de cada uma). Só vire
+    "questions" quando o dado for realmente desconhecido e não dedutível do contexto — não pergunte o
+    que já dá pra inferir.
   - Para campos OBRIGATÓRIOS (ou claramente necessários) cujo valor você não tem como saber
-    (ex.: CNPJ, razão social, endereço, valor do contrato), NÃO INVENTE. Em vez disso gere
-    "questions" perguntando exatamente o que falta — perguntas curtas, específicas, uma por dado.
+    (ex.: CNPJ, razão social, endereço, valor do contrato, medidas físicas da obra), NÃO INVENTE. Em vez
+    disso gere "questions" perguntando exatamente o que falta — perguntas curtas, específicas, uma por
+    dado.
   - Em "fills" devolva apenas os campos que você consegue preencher com segurança AGORA.
   - "reply": resuma o que preencheu e/ou diga que precisa das respostas das perguntas.
+  - **DADOS FICTÍCIOS/DE TESTE**: se o usuário pedir explicitamente pra preencher com dados fictícios,
+    de teste, de exemplo, "qualquer coisa", aleatórios etc. (ou seja, não pediu dados REAIS específicos),
+    a regra "NÃO INVENTE" acima NÃO se aplica a esse pedido — invente valores plausíveis e realistas
+    (dentro do domínio de cada campo — um CNPJ com o formato certo, uma data razoável, um valor
+    monetário coerente com o resto do formulário) para TODOS os campos, inclusive os obrigatórios, e
+    NÃO gere "questions" para eles (não faz sentido perguntar o dado real se o pedido foi por dado
+    fictício). Ainda assim, NUNCA marque como true uma checkbox de "decisão humana deliberada" (ver
+    regra acima) só por o pedido ser fictício — essas continuam exigindo confirmação humana real, e
+    viram "questions" mesmo em modo fictício.
 
 • mode "analyze":
   O usuário quer que você REVISE o documento/preenchimento procurando erros.
@@ -62,17 +111,1249 @@ Comporte-se conforme "mode":
     valores suspeitos (datas, CNPJ, moeda), cláusulas problemáticas ou ambíguas, riscos.
   - Para cada achado gere um item em "issues" com:
     severity ("alta"|"media"|"baixa"), where (onde está), problem (o que está errado),
-    suggestion (sugestão concreta de melhoria — pode propor um texto melhor).
+    suggestion (sugestão concreta de melhoria — pode propor um texto melhor),
+    idxs (lista dos "idx" de page.fields a que o achado se refere — os MESMOS
+    números usados em "fills" — quando o achado for sobre um ou mais campos
+    específicos vazios/incorretos; ex.: [5,6] se o achado junta 2 campos.
+    Use [] (lista vazia) quando for sobre o documento/texto em geral, sem
+    campo correspondente). O frontend usa "idxs" pra sublinhar CADA campo
+    citado na tela, então SEMPRE inclua todo idx real mencionado no "where"
+    ou "problem" — nunca cite "idx N" no texto sem também colocar N em "idxs".
+    Isso vale igual pra campos type "checkbox" — se o problema é uma checkbox
+    marcada/desmarcada de forma inconsistente com outro campo (ex.: uma opção
+    "abertura traseira" marcada mas o campo de quantidade correspondente
+    vazio ou zero), inclua o idx da checkbox em "idxs" pra ela ser sublinhada
+    igual a qualquer outro campo.
   - Se estiver tudo certo, devolva issues vazio e diga isso em "reply".
   - Liste no máximo os ~10 achados MAIS RELEVANTES (prioridade alta > média > baixa),
     para manter a resposta concisa e dentro do limite de tokens.
 
+• mode "questionario":
+  O usuário quer ACRESCENTAR ou EDITAR perguntas/categorias de um Questionário de
+  Vistoria (vistorias-envio.jsx). Você recebe em "QUESTIONÁRIO ABERTO" a estrutura
+  completa atual: categorias (id, nome) e, dentro de cada uma, as perguntas
+  (id, texto, tipo_campo, opcoes, obrigatoria, regra_pai_pergunta_id/regra_valor_gatilho).
+  - REGRA DE OURO: "Mantenha o conteúdo" significa NÃO reescrever nem remover nada que
+    já existe — só ACRESCENTE ou edite exatamente o que foi pedido. Nunca proponha
+    excluir uma pergunta/categoria a menos que o usuário peça isso explicitamente.
+  - tipo_campo válido: texto, numerico, data, sim_nao, selecao_unica, multipla_escolha,
+    foto, assinatura, informativa. "opcoes" (array de strings) só faz sentido pra
+    selecao_unica/multipla_escolha.
+  - Perguntas condicionais (só aparecem se a resposta de outra pergunta bater um
+    valor): use regraPaiTexto = o TEXTO EXATO de uma pergunta já existente na
+    estrutura recebida (nunca invente um texto de pergunta-pai que não existe) e
+    regraValorGatilho = o valor que dispara (ex.: "Sim"). Sem isso, a pergunta é
+    incondicional.
+  - Cada operação vira um item em "opsQuestionario":
+    · {"op":"add_categoria","nome":"..."} — cria categoria nova.
+    · {"op":"add_pergunta","categoriaNome":"...","texto":"...","tipoCampo":"...",
+       "opcoes":["..."]?,"obrigatoria":true,"regraPaiTexto":"..."?,"regraValorGatilho":"..."?}
+      — "categoriaNome" pode ser de uma categoria JÁ EXISTENTE (bata o nome exato) ou
+      de uma categoria sendo criada NESTE MESMO "opsQuestionario" (nesse caso ela é
+      aplicada primeiro, na ordem do array).
+    · {"op":"editar_pergunta","perguntaId":"...","patch":{...campos a mudar...}}
+    · {"op":"excluir_pergunta","perguntaId":"..."} — só quando pedido explicitamente.
+    · {"op":"excluir_categoria","categoriaId":"..."} — só quando pedido explicitamente.
+  - "reply": resuma em 1-3 frases o que você propõe adicionar/mudar — o frontend
+    mostra a lista detalhada de "opsQuestionario" pro usuário confirmar, então não
+    precisa listar cada campo na resposta em texto.
+  - Sem "QUESTIONÁRIO ABERTO" no contexto, devolva opsQuestionario vazio e peça pro
+    usuário abrir/criar um questionário primeiro.
+
 REGRAS DE SAÍDA (obrigatórias):
 - Responda APENAS com um único JSON válido, sem nenhum texto fora dele, sem markdown, sem cercas.
 - Formato:
-  {"reply":"...","fills":[{"idx":0,"label":"...","value":"..."}],"questions":[{"id":"cnpj","text":"..."}],"issues":[{"severity":"alta","where":"...","problem":"...","suggestion":"..."}]}
+  {"reply":"...","fills":[{"idx":0,"label":"...","value":"..."}],"questions":[{"id":"cnpj","text":"..."}],"issues":[{"severity":"alta","where":"...","problem":"...","suggestion":"...","idxs":[43]}],"opsQuestionario":[{"op":"add_pergunta","categoriaNome":"...","texto":"...","tipoCampo":"sim_nao"}]}
 - Inclua somente as chaves relevantes ao modo. "reply" é SEMPRE obrigatório (1 a 3 frases).
 - Nunca invente CNPJ, valores, nomes ou datas: o que não souber, pergunte.`;
+
+// ============================================================
+// ROUTE_DOCS — conhecimento específico por tela (chave = page.route,
+// mesmo id de src/router.js KNOWN_ROUTES). Injetado no contexto da IA
+// só quando bate com a tela atual — não polui token de telas que não
+// têm nada a ver. Pedido do usuário (31/08): Copiloto precisa saber
+// "100%" sobre cada tela, não só os labels de campo que o scanner
+// genérico já lê sozinho — aqui entra a REGRA DE NEGÓCIO por trás dos
+// campos/badges/botões, que nenhum scanner de DOM adivinha.
+// Convenção de cada entrada: o que a tela faz, cada seção/campo/botão
+// importante, e as regras de negócio que um usuário perguntaria "por
+// que isso está assim?". Mantenha atualizado a cada mudança real na
+// tela (ver commits de 29-31/08 pra o histórico da Precificação).
+// ============================================================
+const ROUTE_DOCS: Record<string, string> = {
+  precificacao: `TELA: Precificação de Elevador (Financeiro).
+
+LISTAGEM (antes de abrir uma cotação): mostra cotações de fornecedor já
+respondidas (ou formulários enviados direto com preço combinado por
+fora), prontas para calcular o preço de venda. Clicar numa linha abre o
+detalhe/cálculo.
+
+DETALHE — DE CIMA PRA BAIXO:
+
+1. "Unidades desta cotação" — herdado do Formulário de Elevadores +
+   resposta do fornecedor (custo em USD por unidade, PTAX no dia da
+   cotação vs. PTAX agora ao vivo). Botão "Ressincronizar do Fornecedor"
+   busca de novo a resposta mais recente do fornecedor.
+
+2. "Mão de obra — busca automática" — tração × capacidade × paradas
+   casados contra a tabela de referência em Cadastros → Atualização de
+   Custos (custos_instalacao_elevador). Botão "Recalcular" refaz a busca
+   pra TODAS as unidades a partir do dado mais atual do Formulário
+   (útil se alguém corrigiu tração/capacidade/paradas lá depois).
+   Situação de cada linha:
+   - "Confirmado" (verde) — achou uma linha REAL da tabela (cotação de
+     instalador de verdade) pra essa tração+capacidade+paradas exatas.
+   - "Estimativa — não confirmada" (amarelo) — achou uma linha, mas o
+     valor foi gerado por regressão estatística (extrapolação sobre
+     linhas reais da mesma tração), não é cotação real de instalador.
+     Exige aprovação técnica/financeira igual "Projeto especial" antes
+     de aprovar a precificação — não é preço garantido.
+   - "Projeto especial" (vermelho) — a combinação tração+capacidade+
+     paradas está fora de qualquer faixa cadastrada. O valor NÃO entra
+     sozinho em lugar nenhum — precisa digitar manualmente em
+     "Instalação e Montagem" quando tiver uma cotação real de
+     instalador/engenharia.
+   - "Pendente" (amarelo) — falta tração, capacidade ou paradas no
+     Formulário de Elevadores dessa unidade.
+   Botão "Trocar" em qualquer linha abre edição inline de tração/
+   capacidade/paradas — grava direto no Formulário de Elevadores da
+   unidade (fonte da verdade) e já recalcula a busca de MO na hora. Útil
+   quando a tração escolhida está errada ou pra testar outra config.
+
+3. "Despesas de Importação" — VMLE, Seguro, Frete+Seguro+Capatazia em
+   USD (dois campos separados: "Padrão 120d, container compartilhado" e
+   "Expresso 90d, container exclusivo" — deixar o expresso em
+   branco/zero se o cliente não pediu essa opção), Siscomex, Câmbio
+   (com atalho "Usar" pro dólar ao vivo), Outras despesas, Despachante +
+   Desembaraço, Demurrage, e Containers (tamanho/quantidade herdados da
+   resposta do fornecedor quando possível, preço do frete digitado pelo
+   Financeiro).
+
+4. "Instalação e Montagem" — lista FIXA de 7 itens, sempre nesta ordem
+   (não dá pra adicionar/remover item): Mão de Obra, Custos Engenharia,
+   ART, Andaime, Talha, Empilhadeira, Ajudantes. "Mão de Obra" é
+   SOMENTE LEITURA — herda automaticamente a soma de TODAS as linhas da
+   tabela "Mão de obra — busca automática" acima (Confirmado +
+   Estimativa somados juntos). Os outros 6 continuam digitados à mão
+   pelo Financeiro (preenchimento avulso de Engenharia/Logística).
+
+5. "Despesas Extras" — catch-all: Frete interno (Brasil), Armazenagem,
+   % de Serviços, Contingência, Outros custos não recuperáveis (esses
+   dois últimos só entram no motor oficial V2, o V1 legado ignora), e
+   Itens avulsos (lista livre, pode adicionar/remover).
+
+6. "Resumo de Custos" — visão consolidada, cada linha soma campos das
+   seções acima, nada digitado aqui: Custos Equipamentos (VMLE×câmbio),
+   Custos com Frete (Seguro+Frete/Capatazia padrão, em R$), Mão de Obra
+   (mesmo valor do item 1 da lista fixa acima), Custos Operacionais
+   (soma dos outros 6 itens da lista fixa — Empilhadeira, Munck etc.),
+   Frete Interno (Brasil), Custos Imposto (II+IPI+PIS+COFINS+ICMS — só
+   aparece depois de clicar "Calcular" pelo menos uma vez, porque
+   precisa da cascata fiscal completa; antes disso mostra "—", nunca
+   zero fingindo que não há imposto), e Soma (total).
+
+7. "Alavancas do Financeiro" — Markup sobre custo, comissões
+   (consultoria/vendedor/indicação), Margem mínima configurada. Link
+   "Ver/editar parâmetros fiscais" expande regime tributário e
+   alíquotas de importação/venda (ICMS/IPI/PIS/COFINS/IRPJ/CSLL).
+
+8. "Formação do Preço" — escolhe o MODO: "Markup sobre o custo" (usa o
+   % das Alavancas acima) ou "Margem desejada sobre a venda" (% próprio
+   deste card). Depois de "Calcular", aparecem dois cards lado a lado:
+   - "Preço de venda — 120 dias (Compartilhado)": custo econômico
+     completo (= custo líquido de importação + despesas operacionais +
+     contingência + outros custos não recuperáveis — TUDO isso entra na
+     BASE do preço, não só descontado do lucro depois, decisão de
+     29/08), preço de venda, margem efetiva (compara com a mínima
+     configurada — fica laranja/aviso se abaixo), lucro final. Avisos
+     possíveis: "divisor inválido" (markup/margem+impostos+comissões
+     somam 100%+, impossível formar preço), "margem efetiva negativa"
+     (não deveria aprovar assim), "margem abaixo da mínima" (pode
+     aprovar mesmo assim, com confirmação).
+   - "Preço de venda — 90 dias (Exclusivo)" — só aparece se o campo
+     "Frete... Expresso 90d" (item 3) tiver valor. MESMO custo base,
+     só o frete internacional muda (container exclusivo é mais caro) —
+     é OUTRO custo econômico completo, não o mesmo número do card de
+     120 dias. Serve pra oferecer as duas opções ao cliente na mesma
+     conversa. Mostra "R$X a mais que os 120 dias".
+   Link "Ver comparação técnica (motor antigo)" no fim — abre um card
+   com o resultado do motor V1 (legado, fórmula antiga da planilha
+   Excel original). Só existe pra auditoria/comparação: NÃO trava mais
+   aprovação nem alimenta a Proposta desde 29/08 (decisão do usuário) —
+   antes disso o V1 subprecificava porque não colocava instalação/
+   operacional na base do preço, só descontava do lucro depois (podia
+   dar markup positivo com margem real negativa, bug corrigido).
+
+BOTÕES DO TOPO: "Salvar rascunho" (grava sem calcular), "Calcular"
+(roda o motor, popula Resumo de Custos → Imposto e Formação do Preço),
+"Aprovar Precificação" (trava o registro, usa a margem do motor V2
+oficial — cai pro V1 só se a precificação nunca foi recalculada desde a
+migração —, permite aprovar abaixo da margem mínima com confirmação
+explícita).`,
+
+  dashboard: `TELA: Dashboard (Geral, todos os perfis).
+
+Visão do dia, conteúdo varia por role (Comercial/Engenharia/Financeiro/Admin).
+Mostra KPIs do perfil, projetos em andamento (visão Gantt/Lista/Kanban),
+tarefas de hoje, funil comercial e "Onde Parou" (cotações atrasadas).
+
+REGRA NOTÁVEL: o Gantt de projetos é derivado da esteira REAL de gatilhos
+(GatilhosEngine), não de uma tabela "projetos" legada (essa está zerada,
+issue #274) — o que aparece no Gantt reflete o estado real de cada cotação
+em andamento. A fase mostrada no Kanban é só TEXTO informativo: não existe
+botão pra mover um card manualmente entre fases — a fase muda sozinha
+quando a etapa real correspondente é concluída em outra tela (decisão
+23/08, evita degradar em painel Post-it que ninguém atualiza).
+
+AÇÕES: trocar período do resumo; "Relatório CSV"; "Ir para Leads"; "Nova
+Tarefa"; clicar num item navega direto pra tela relevante daquele gatilho.`,
+
+  notificacoes: `TELA: Central de Notificações/Alertas (todos os perfis).
+
+Lista todos os "alertas" com resolved=false, agrupados por período/módulo.
+
+REGRA NOTÁVEL: um alerta não tem destinatário específico — é visível a
+TODO MUNDO que abre a tela, não só a quem deveria agir (limitação de
+arquitetura conhecida, candidata a revisão futura — não confundir com bug,
+é assim mesmo hoje).`,
+
+  decisoes: `TELA: Central de Decisões (visível só pra quem é aprovador de algo).
+
+Inbox pessoal de decisões gerenciais — cada linha é um gate do tipo
+"alguém específico precisa aprovar isto pra destravar o próximo passo".
+Só aparece pra quem está em "aprovadores_esperados" (papéis fixos: CEO,
+Owner, Gestor Comercial, RH, Líder de Engenharia, Líder de Logística).
+
+AÇÕES: Aprovar; Reprovar (exige motivo obrigatório).
+
+REGRA NOTÁVEL: decisões podem nascer "bloqueada_por_dependencia" e se
+destravam sozinhas quando a(s) decisão(ões)-pai são aprovadas — não
+precisa mexer manualmente. Toda resolução (aprovar/reprovar) dispara uma
+notificação pro solicitante. Gates codificados hoje: envio de proposta
+(Gestor Comercial→CEO), contratação de mão de obra (CEO), montador entra
+na obra (RH), compra de equipamento no fornecedor (CEO), compra de
+varejo/Almoxarifado (Chefe de Logística). Esta tela é o motor por trás de
+travas que aparecem em várias outras (ex.: "Decidir comprar" desabilitado
+em Cotação a Fornecedor, "Enviar contrato" travado no Contrato de Venda).`,
+
+  financeiro: `TELA: Gatilhos & Prazo (Financeiro/Admin).
+
+NÃO confundir com Precificação nem com Aval Financeiro — são 3 telas
+distintas, arquivos separados. Esta é o painel da cadeia AUTOMÁTICA de
+gatilhos por cotação (GatilhosEngine — sem cron, reprocessa toda vez que a
+tela é aberta), mais gatilhos manuais/avulsos criados à mão.
+
+AÇÕES: Novo gatilho; Exportar CSV; Confirmar sinal / Aval de Pagamento por
+nó da cadeia; Fechar gatilho com motivo.
+
+REGRA NOTÁVEL: propositalmente sem SLA embutido nas etapas — decisão do
+usuário (23/08): "só o fato consumado", ou seja, a tela mostra o que já
+aconteceu e o que está pendente, sem alarme automático por atraso. A barra
+de Gantt visual interpola de azul pra vermelho conforme o prazo se
+aproxima, mas isso é só indicação visual, não gera alerta sozinho.`,
+
+  leads: `TELA: Pipeline de Leads (Comercial).
+
+Entrada do funil comercial — cadastro do cliente/contato/prédio. Desde
+15/08 NÃO coleta mais equipamento junto (antes um Lead ficava preso a 1
+único equipamento) — o equipamento é alocado depois, no Formulário.
+
+REGRA NOTÁVEL: validação mínima pra salvar é só Prédio + Contato. CNPJ/CPF
+é OPCIONAL — vira "documento pendente" (estado válido do cliente, não
+impede seguir o funil). Ao editar um lead que já tem cliente vinculado, a
+sincronização com o cadastro de cliente roda mesmo sem documento
+preenchido — de propósito, pra não fazer o toast dizer "atualizado" quando
+na verdade a sincronização falhou silenciosamente.`,
+
+  'lead-detail': `TELA: Detalhe de Lead (Comercial).
+
+Mostra o cliente vinculado ao lead, histórico real de eventos (vp_logs) e
+uma comissão PREVISTA (4% fixo no código, só informativo — não é o cálculo
+real de comissão, que acontece em Comissões).
+
+REGRA NOTÁVEL: o botão "Qualificar → Dossiê" só fica disponível quando o
+status do lead é "Em qualificação" ou "Aguardando cotação" — em outros
+status fica escondido/desabilitado.`,
+
+  formularios: `TELA: Formulários (hub, Comercial).
+
+Grid estático de categorias de formulário técnico. Hoje só "Equipamento"
+está implementada de verdade (Elevador/Escada/Esteira moram juntas no
+mesmo formulário desde 15/08) — as outras 5 categorias mostradas no grid
+são placeholders "Em breve", sem tela por trás ainda.`,
+
+  'formulario-elevador': `TELA: Formulário — Equipamento (Elevador/Escada/Esteira).
+
+Mesmo componente serve DOIS canais: uso interno assistido pelo vendedor
+(rota "formulario-elevador", precisa de login) e o formulário público
+standalone que o próprio cliente preenche (link com token, sem SSO,
+"self_service" — página separada, não é uma rota do shell). Coleta um
+Header (dados do cliente, fiscal, logística) + N "Unidades" (um bloco por
+elevador/escada/esteira do mesmo pedido).
+
+"CAMALEÃO" (15/08): o card de cada unidade muda os campos mostrados
+conforme o tipo escolhido (Elevador / Escada Rolante / Esteira Rolante).
+Elevador usa as colunas reais de sempre (intocadas — RFQ, Precificação
+etc. dependem delas). Escada e Esteira usam um campo 'especificacoes'
+(jsonb) com os ~55-60 campos técnicos das planilhas de spec do setor,
+digitados como texto livre (com o valor típico como placeholder, não como
+opção fechada — as planilhas do setor chamam isso de "opções típicas", não
+uma lista rígida, então virar <select> obrigatório inventaria uma rigidez
+que a spec real não tem).
+
+CAMPOS-CHAVE DA UNIDADE ELEVADOR: Tipo (Passageiro/Carga/Hospitalar/
+Panorâmico/Home Lift), Tração (2:1 ou 4:1 — pré-requisito pra Precificação
+achar a linha certa na tabela de mão de obra em Cadastros → Atualização de
+Custos; sem tração preenchida a busca automática de MO fica "Pendente"),
+Capacidade (kg), Paradas, Norma (Glarie Standard/China Standard/EN81-…),
+"Instalação Será" (VerticalParts ou Cliente — renomeado de "Tipo de mão de
+obra" em 28/08, mesmo campo do banco por trás, mesmo nome de coluna
+'tipo_mao_de_obra'), Responsável pela Entrega (campo distinto — quem
+INSTALA vs. quem é responsável pela ENTREGA física, não confundir os
+dois), Origem da Venda (Conquista Vendedor / Indicação VerticalParts /
+Indicação Escamax+Vendedor / Indicação Terceiros / Site).
+
+REGRA NOTÁVEL: pra salvar como RASCUNHO a exigência é mínima (nome,
+contato, prédio — não exige CNPJ, porque 'clientes.razao_social' é
+NOT NULL no banco e travava silenciosamente se exigisse documento cedo
+demais). Para ENVIAR (gerar RFQ pro fornecedor) todos os campos técnicos
+marcados com "*" de cada unidade são obrigatórios. O formulário inteiro
+fica com 'fieldset disabled' durante o salvamento, pra evitar edição
+concorrente enquanto grava.
+
+ALIMENTA: Cotação a Fornecedores (gera o RFQ), Controle de Cotações,
+Precificação (herda tração/capacidade/paradas pra achar a mão de obra
+automática) e a Proposta.`,
+
+  'controle-cotacoes': `TELA: Controle de Cotações (Comercial).
+
+Une num só lugar o histórico legado (tabela 'cotacoes_elevador_historico')
+com as cotações novas nascidas do Formulário.
+
+REGRA NOTÁVEL: uma linha do histórico legado não tem cadeia real por trás
+— clicar nela não abre nada de útil, porque esse dado é só um resquício da
+época anterior ao Formulário atual. O botão "Abrir no Formulário" numa
+linha legada faz a cotação "ressuscitar" na hora, criando um Formulário
+real a partir dos dados antigos — é a forma de trazer uma cotação velha
+pro fluxo atual.`,
+
+  'cotacoes-fornecedor': `TELA: Cotações a Fornecedor (lista).
+
+Lista todas as solicitações técnicas de RFQ enviadas a fornecedores (hoje
+só Glarie/elevador está de fato implementado, mas a tela foi desenhada
+para qualquer categoria futura). Substitui a antiga "Cotações China"
+(mock) — cada linha aqui vem de um envio real originado do Formulário de
+Elevadores.
+
+CAMPOS: Nº Documento, Nº Cotação, Prédio/Cliente, Fornecedor, Categoria,
+Enviado em, Status, Equipamentos (Master ID por unidade).
+
+AÇÕES: abas de status (Todos/Aguardando/Recebida/Em análise/Aprovada);
+filtros por Fornecedor e Categoria; seleção em lote + "Excluir
+selecionadas" (exige motivo digitado); clicar numa linha abre o detalhe.
+
+REGRA NOTÁVEL: excluir SEMPRE exige justificativa textual — não existe
+exclusão silenciosa aqui.`,
+
+  'cotacao-fornecedor-detail': `TELA: Detalhe de Cotação a Fornecedor.
+
+O portal PÚBLICO que o fornecedor de fato preenche é outra página, sem
+rota interna do shell (acessado via link com token). Esta tela é a visão
+INTERNA: link público gerado, resposta recebida, linha do tempo
+(enviado→visualizado→respondido→decidido→aprovado).
+
+AÇÕES: "Copiar link público"; "Ver resposta do fornecedor" (mostra o que o
+fornecedor de fato preencheu, inclusive o campo de container — hoje texto
+livre, ex.: "1x40HC + 1x20GP"); "Decidir comprar"; "Aprovar compra"; aba
+"Tratativas" (thread de mensagens + anexos com o fornecedor).
+
+REGRA NOTÁVEL: "Decidir comprar" fica desabilitado (com tooltip
+explicando o motivo) enquanto o gate financeiro ('podeIniciarCompra') não
+estiver liberado — precisa de contrato assinado + sinal pago + aval
+financeiro concedido. Antes disso o botão simplesmente não fazia nada e
+mostrava um toast genérico, sem dizer o motivo real — corrigido.
+
+ALIMENTA: aprovar a compra libera a cotação na fila de "respondidas" na
+Precificação, e adiante a compra de fato junto ao fornecedor.`,
+
+  propostas: `TELA: Propostas Comerciais (lista).
+
+Visibilidade por vendedor: quem não tem a capacidade "ver_todas"
+(configurável em Configurações → Permissões) só enxerga as próprias
+propostas.
+
+REGRA NOTÁVEL: a aba "Prontas para enviar" inclui propostas em status
+'calculado' E 'finalizado' juntas (antes só incluía 'calculado' e a
+proposta sumia da lista no momento errado assim que era finalizada — bug
+corrigido). O KPI de valor total só soma propostas que já têm
+'numero_documento' atribuído, justamente pra não inflar o número com
+rascunhos/demos sem numeração oficial.`,
+
+  'proposta-editor': `TELA: Editor de Proposta (Comercial).
+
+Top tabs por tipo de equipamento (Elevador/Escada/Esteira), com preview de
+PDF ao vivo enquanto edita.
+
+REGRA NOTÁVEL: uma proposta já 'aprovada' mas sem 'destravada_em'
+preenchido fica TRAVADA pra edição — só quem tem a capacidade
+"destravar_aprovada" (concedida em Configurações → Permissões) consegue
+reabrir. Herança de dados (do Formulário/Precificação) só preenche campo
+que estiver VAZIO — nunca sobrescreve algo que o vendedor já digitou à
+mão — e roda automaticamente 1x só, na primeira abertura. O tipo de
+equipamento mostrado ('eq') é deduzido do CONTEÚDO da proposta, não de um
+campo 'proposal_type' — porque esse campo ficou nulo em ~290 de 311
+propostas migradas do sistema antigo (bug real, corrigido 21/08: sem essa
+dedução, propostas antigas abririam com a aba errada). Geração de PDF
+migrou de html2canvas (arquivo de 6-7MB, pesado) para react-pdf/impressão
+nativa (vetorial, muito mais leve).
+
+ALIMENTA: assinatura digital pública do cliente, depois Contrato de
+Venda / Contrato Instalador.`,
+
+  'aval-financeiro': `TELA: Aval Financeiro (Financeiro/Admin + CEO + Owner).
+
+Gate em DUAS etapas, cada uma com aprovadores diferentes:
+1) Proposta aprovada → Contrato: precisa de consulta de score de crédito
+   do cliente + aval financeiro (aprovar/reprovar).
+2) Contrato assinado → Compra no fornecedor: precisa de sinal pago
+   confirmado + Aval de Pagamento + aprovação do CEO (Diego, hoje sem
+   login próprio no sistema) + aprovação do Owner (trava por lista fixa de
+   e-mails, 'OWNER_EMAILS').
+
+STATUS POSSÍVEIS (badge): "Aguardando consulta" (cinza), "Aguardando
+aval" (amarelo), "Aprovado" (verde), "Reprovado" (vermelho).
+
+SEÇÕES/AÇÕES: "Consultar score" (modal — fonte Serasa/SPC/Boa Vista/
+Outro, score/resultado, classificação, observações); "Dar aval" ou
+"Reprovar" (com observações); "Confirmar sinal" (valor + data); Aprovação
+CEO; "Minha aprovação" (Owner).
+
+REGRA NOTÁVEL: o "teto de custo" do CEO é calculado como
+'preço de venda (motor V2 oficial) × (1 − margem mínima configurada)'.
+Um gasto real lançado depois ('registrarCustoReal') que estoura esse teto
+NUNCA bloqueia sozinho — só gera um alerta. O gate final
+'podeIniciarCompra' checa em ordem fixa: aprovação CEO → aprovação Owner →
+sinal pago → Aval de Pagamento → contrato assinado → revisão técnica de
+Engenharia liberada.
+
+ALIMENTA: libera criar o rascunho do Contrato de Venda e o botão "Decidir
+comprar" na Cotação a Fornecedor.`,
+
+  'cadastro-clientes': `TELA: Cadastro de Clientes (Cadastros, transversal).
+
+Cadastro central usado por Comercial, Importação e Engenharia — não é
+duplicado em cada módulo, é sempre o mesmo registro. CNPJ/CPF pode ficar
+como "documento pendente" (ver regra de Leads).`,
+
+  'cadastro-fornecedores': `TELA: Cadastro de Fornecedores (Cadastros, transversal).
+
+Cadastro único que serve pra Fornecedor, Agente de Carga, Transportador e
+Prestador IMS ao mesmo tempo — cada registro marca sua(s) categoria(s) via
+chips de multi-seleção (um fornecedor pode ser mais de uma coisa).
+
+REGRA NOTÁVEL: a média de avaliação de um fornecedor arredonda pra BAIXO
+de propósito ('Math.floor', não 'Math.round') — decisão deliberada pra
+nunca superestimar a nota de um fornecedor por causa de arredondamento.`,
+
+  'ncm-catalogo': `TELA: Catálogo de Produtos (NCM/DUIMP).
+
+Modelo baseado em DUIMP: Produtos + Operadores Estrangeiros, mais um
+kanban de Solicitações NCM (ver 'ncm-kanban').
+
+REGRA NOTÁVEL: a maioria dos produtos chega aqui por HERANÇA da Ficha
+Técnica, não por cadastro manual direto — a Ficha Técnica é a origem
+normal de um produto novo no catálogo. Excluir um produto que tem ficha
+técnica vinculada remove a ficha técnica junto (a tela pede confirmação
+explícita antes, justamente porque é uma exclusão em cascata).`,
+
+  'cadastro-instaladores': `TELA: Empresas Instaladoras (Cadastros).
+
+Cadastro RASO — só empresa + colaborador básico. Certificações,
+homologação e documentos de compliance (RG/CNH/ASO/NRs/vacinas) ficam em
+outra tela (RH → Homologação de Instaladores), embora usem a mesma tabela
+por trás ('parceiros_instaladores') — ou seja: o cadastro simples fica
+aqui, o compliance documental fica lá, mas é o mesmo registro.`,
+
+  'cadastro-custos': `TELA: Cadastros → Atualização de Custos.
+
+3 abas: Instalação de Elevadores (por Tração × Capacidade × Paradas),
+Instalação de Escada/Esteira (por estado — SP vs. Outros Estados) e
+Containers (specs ISO por tipo). Tudo aqui é o que a Precificação herda
+automaticamente pra montar o custo de mão de obra e frete de uma cotação
+— editar um valor aqui não muda precificações JÁ calculadas, só afeta
+buscas futuras.
+
+Cada linha da tabela de Elevadores tem: Tração (2:1 ou 4:1 — 21 tipos de
+container também cadastrados aqui pra casar com o campo de container do
+fornecedor), Capacidade (faixa mín-máx em kg), Paradas, Dias de montagem,
+Qtd. de montadores, Valor.
+
+REGRA NOTÁVEL: quando uma linha ainda não tem valor digitado mas já tem
+paradas/dias/montadores/capacidade suficientes, a tela sugere um valor por
+REGRESSÃO ESTATÍSTICA sobre as linhas REAIS já cotadas da mesma tração —
+mas essa sugestão nunca se auto-aplica, precisa clicar em "Usar", e o
+valor resultante fica marcado como estimativa (mesmo badge amarelo
+"Estimativa — não confirmada" que aparece depois na Precificação), nunca
+como preço confirmado de instalador de verdade. Cada linha pode ser
+adicionada/removida; a aba lembra a tração escolhida na própria URL
+(deep-link).`,
+
+  juridico: `TELA: Contratos & Minutas (tela-índice do Jurídico).
+
+Lista 'contratos_venda_equipamentos' com KPIs e atalhos rápidos.
+
+AÇÕES: "Importar minuta" (hoje só mostra um toast, não persiste nada de
+verdade — ainda não implementado); "Novo contrato"; Acesso Rápido
+(Contrato Cliente ativo, Contrato Montador ainda desabilitado/"Em breve").
+
+REGRA NOTÁVEL: os KPIs desta tela usam rótulos de status LEGADOS,
+diferentes dos status normalizados usados no dashboard de Contrato de
+Venda ('CVDashboard') — são duas visões distintas da mesma tabela, não é
+inconsistência de dado, é vocabulário diferente por tela.`,
+
+  'contrato-venda-equipamentos': `TELA: Contrato Venda de Equipamentos.
+
+Wizard + painel pra gerar/enviar/acompanhar o contrato de venda ao cliente
+final, com assinatura digital pública auditável (registra IP, user-agent e
+hash SHA-256 de cada assinatura).
+
+CAMPOS-CHAVE: Comprador, valor, sinal (%), parcelas, Anexo I (a Proposta
+já assinada, anexada automaticamente).
+
+AÇÕES: Enviar/Reenviar link de assinatura pro cliente.
+
+REGRA NOTÁVEL: criar o rascunho do contrato ('createDraft') exige que o
+Financeiro já tenha dado aval ('podeEnviarContrato') — sem isso a ação
+lança um erro explicando o motivo, não deixa criar contrato "solto" sem
+aval.
+
+ALIMENTA: contrato com 'status='assinado'' é uma das condições do gate
+'podeIniciarCompra' (Aval Financeiro).`,
+
+  'contrato-instalador': `TELA: Contrato Instalador.
+
+Wizard/painel análogo ao Contrato de Venda, mas para prestação de serviço
+com instaladores terceiros (abas Painel / Novo contrato).
+
+REGRA NOTÁVEL: ainda marcado como "EM BREVE" no card de Acesso Rápido do
+Jurídico — o fluxo recomendado hoje continua sendo o Contrato de Venda
+para formalização.
+
+ALIMENTA: o custo real de instalação lançado aqui pode ser registrado como
+custo real ('registrarCustoReal') contra o teto do Aval Financeiro.`,
+
+  'contrato-editor': `TELA: Editor de Contrato (Jurídico).
+
+Editor full-page em 5 seções: Dados do Contrato, Comprador, Objeto, Preço
+e Pagamento (parcelas), Assinatura. Herda dados a partir do número da
+proposta vinculada.
+
+AÇÕES: Salvar; Gerar PDF; Assinar; Adicionar parcela.
+
+REGRA NOTÁVEL: existe uma barra de progresso por seção ('sectionFill')
+mostrando o quanto cada bloco está preenchido. As parcelas recalculam
+automaticamente sempre que o valor total do contrato muda. Igual à regra
+da Proposta, a herança de dados nunca sobrescreve um campo que o usuário
+já preencheu manualmente — só entra em campo vazio.`,
+
+  importacao: `TELA: Gestão Importação — Importação (rastreio AIS/Sinay).
+
+Usa a tabela 'embarques' (DIFERENTE de 'embarques_importacao', usada pela
+tela rica "Embarques" dentro de Gestão Importação). ATUALIZADO 31/08:
+a sobreposição entre as duas foi resolvida — "Embarques" (rota
+'embarques-importacao') agora É a fonte da verdade: quando alguém
+preenche AWB/BL + Armador (SCAC) lá, o sistema cria/atualiza
+AUTOMATICAMENTE o registro correspondente aqui em 'embarques' (via coluna
+'origem_embarque_importacao_id'), incluindo já disparar a 1ª sincronização
+de rastreio. Não existe mais duplicação manual — só quando alguém usa o
+botão "Novo embarque" direto nesta tela (fluxo legado, ainda funciona,
+mas o normal agora é cadastrar em "Embarques"). Mostra embarques em
+trânsito + rastreamento AIS.
+
+ALIMENTA: 'importacao-detail', 'importacao-rastreamento',
+'importacao-email'; é a ponte com Cotação a Fornecedor via a lista
+"Compras aguardando embarque".`,
+
+  'importacao-detail': `TELA: Gestão Importação — Detalhe de Embarque.
+
+Painel de detalhe de um embarque específico da tabela 'embarques'.
+
+BOTÃO "Ver mapa" (adicionado 29/08) abre um POPUP GRANDE com mapa real
+(Leaflet, não mais SVG estático) — engenharia reversa do site Safecube/
+Sinay (fornecedor da API de rastreio). Trocador de estilo no canto
+superior direito: Claro / Escuro / Ruas / Satélite (tiles Esri Canvas +
+OpenStreetMap + Esri World Imagery, todos gratuitos, sem chave). A rota
+desenhada usa WAYPOINTS MARÍTIMOS REAIS (Estreito de Malaca → Índico →
+Cabo da Boa Esperança → Atlântico Sul p/ Ásia↔Brasil) — nunca uma linha
+reta (uma reta Xangai-Santos cruzaria o continente africano, bug real
+corrigido no dia).
+
+"Linha Do Tempo De Eventos" mostra o histórico real vindo da Sinay
+(Container Arrival/Departure/Gate-In etc., coluna 'tracking_events',
+populada pela edge function 'ais-sync') quando o embarque já sincronizou
+pelo menos uma vez; antes disso cai numa timeline genérica de 9 fases
+(sem dado real ainda).
+
+Card "Trigger Financeiro" foi corrigido em 29/08 — antes mostrava um
+valor 100% inventado (R$ 620.000 fixo no código, sem base real nenhuma).
+Hoje mostra um estado honesto: avisa que não existe gatilho financeiro
+automático ligado a embarques ainda, e só exibe o valor real da invoice
+como referência quando cadastrado.
+
+REGRA NOTÁVEL: o botão "Reportar chegada" só pode ser usado UMA vez por
+embarque — ao clicar, cria automaticamente 2 tarefas (uma pra Engenharia,
+uma pra Instalação), então clicar de novo não duplica nada porque a ação
+já fica indisponível depois da primeira vez.`,
+
+  'importacao-rastreamento': `TELA: Mapa Marítimo / Rastreamento de Navios.
+
+Integração real via Edge Function 'ais-sync', ajustada nesta sessão pra
+rodar a cada 24h (era 6h antes).
+
+REGRA NOTÁVEL: existem 3 modos de rastreamento, escolhidos automaticamente
+por prioridade (o modo usado é mostrado no toast, então dá pra saber qual
+foi usado): (1) Sinay/Safecube REAL — se houver chave 'SINAY_API_KEY' e o
+embarque tiver BL/número de container; (2) AIS genérico por número IMO do
+navio — fallback legado; (3) simulação por interpolação de posição — usado
+quando não há nenhuma chave/dado disponível, é uma posição estimada, não
+real. Nunca finge ser dado real quando é simulado — o toast avisa.`,
+
+  'importacao-email': `TELA: Inbox de Importação (e-mails).
+
+ACHADO REAL: a integração IMAP não está configurada — a lista de e-mails é
+um array vazio fixo no código, com aviso honesto na tela dizendo isso
+("sem mock"). Existem corpos de e-mail de exemplo no código, mas nunca são
+exibidos de fato — a tela hoje não tem conteúdo real pra mostrar.`,
+
+  'gi-painel': `TELA: Gestão Importação — Painel.
+
+Dashboard somente-leitura que agrega P.I. / RFQ / IMS / Embarques em
+paralelo (um 'Promise.all' que busca as 4 fontes ao mesmo tempo). Não tem
+tabela própria — é 100% agregação do que já existe nas outras telas.`,
+
+  'pi-importacao': `TELA: Gestão Importação — Proforma Invoices (P.I.).
+
+Fase 1 da consolidação do fluxo de importação. Gerencia P.I.s com
+itens/pagamentos/produção, com vínculo opcional a um Embarque.
+
+REGRA NOTÁVEL: ao preencher o Nº da Cotação numa P.I. nova, a tela checa o
+gate de compra do CEO ('DecisoesStore.verificarGateCompra') — se a compra
+daquela cotação ainda não foi liberada pelo CEO, a criação da P.I. é
+bloqueada. Não dá pra criar P.I. de uma cotação cuja compra ainda não foi
+aprovada.`,
+
+  'rfq-importacao': `TELA: Gestão Importação — RFQ.
+
+Fase 2 da consolidação. Cotação comparativa entre N fornecedores × N
+itens, com vencedor definido por item individual ou de forma global (todo
+o pedido pro mesmo fornecedor).
+
+ALIMENTA: o histórico de preços das RFQs aqui alimenta a tela "Análise de
+Preços" ('gi-analise-precos').`,
+
+  'ims-importacao': `TELA: Gestão Importação — IMS (recursos operacionais).
+
+Fase 3 da consolidação. Gerencia Transporte / Munck / Empilhadeira /
+Andaime / Mão de obra por projeto — os campos técnicos variam conforme o
+tipo de recurso escolhido, com cotação de fornecedor e execução real
+(check-in/check-out, avaliação de 1 a 5 estrelas do prestador).`,
+
+  'embarques-importacao': `TELA: Gestão Importação — Embarques (versão rica, FONTE DA VERDADE).
+
+Fase 4 da consolidação. Usa a tabela 'embarques_importacao' (diferente de
+'embarques', usada pelo rastreio AIS na rota 'importacao'). Embarque
+completo vinculado à(s) P.I.(s), com dados de fornecedor/pagamentos
+herdados SÓ-LEITURA (não dá pra editar aqui, só ver — a edição é lá na
+P.I.). Traz canal aduaneiro (Verde/Amarelo/Vermelho/Cinza) por embarque.
+
+ATUALIZADO 31/08 — ANTES: esta tela e a de rastreio AIS ('importacao')
+não tinham relação nenhuma, precisava cadastrar o embarque duas vezes
+(sobreposição não resolvida). AGORA: a aba "Embarque" tem um campo
+"Armador (SCAC)" novo, ao lado do AWB/BL já existente. Quando os dois
+estão preenchidos, salvar (criar OU editar) este embarque cria/atualiza
+AUTOMATICAMENTE o registro espelho em 'embarques' (rastreio AIS/Sinay),
+já disparando a 1ª sincronização de posição/timeline na criação. É
+upsert por 'origem_embarque_importacao_id' — nunca duplica, mesmo salvando
+várias vezes. Esta tela virou a fonte única pra cadastrar um embarque com
+rastreio real; a tela de Importação (AIS) só passou a EXIBIR.
+
+Suporta múltiplos containers estruturados por embarque (componente
+'EIContainers') — hoje ainda não conectado automaticamente ao campo de
+container que o fornecedor preenche na resposta da Cotação (esse campo
+continua sendo texto livre único do lado do fornecedor; a estruturação diz
+respeito só ao lado interno de Embarques).`,
+
+  'gi-analise-precos': `TELA: Gestão Importação — Análise de Preços.
+
+Somente leitura. Agrupa o histórico de RFQs por item (comparação
+case-insensitive de nome de item), ordenado do menor pro maior preço —
+serve pra ver rapidamente qual foi o menor preço já cotado pra um item
+específico em RFQs anteriores.`,
+
+  compras: `TELA: Fretes Nacionais (módulo Compras).
+
+Reaproveita a MESMA tabela 'embarques' da Importação legada, só
+remapeando os status pro vocabulário de frete nacional (não é uma tabela
+separada).
+
+ACHADO REAL: os campos "Valor" e "Motorista" mostrados na tela não existem
+de fato na tabela — aparecem sempre em branco/"—", não é bug, é campo que
+nunca foi implementado. "Ocorrências" mostra '1' só quando o status é
+"Atraso" — não é um registro de ocorrência de verdade, é um contador
+derivado do status. O botão "Novo frete" redireciona pra tela 'importacao'
+em vez de criar o frete direto aqui.`,
+
+  'compras-email': `TELA: Inbox de Compras (e-mails).
+
+Mesma limitação da Inbox de Importação: integração IMAP não configurada,
+lista de e-mails vazia com aviso honesto na UI.`,
+
+  'pedidos-acompanhamento': `TELA: Pedidos (módulo Suprimentos).
+
+Abas Nacional / Importação. Distinto do "Pedido a Fornecedor" que aparece
+em Cotações a Fornecedor — aquele é o RFQ ainda em negociação, este é o
+PEDIDO já confirmado e em acompanhamento de entrega.`,
+
+  engenharia: `TELA: Projetos de Engenharia (lista).
+
+Lista/detalha projetos de engenharia (visita técnica, laudo) e valida os
+gates de importação ('ProjectGates.validarGatesImportacao') — ou seja,
+checа se o projeto já cumpriu os pré-requisitos técnicos pra seguir pro
+fluxo de importação.
+
+REGRA NOTÁVEL: as abas Vistoria/Documentos/NCM dentro desta tela são
+placeholders que só REDIRECIONAM pras telas reais correspondentes (evita
+duplicar o mesmo registro em dois lugares — "agora fica num lugar só").`,
+
+  'solicitacoes-produto': `TELA: Solicitação de Produto (Engenharia/Comercial).
+
+Formulário pensado pra quem NÃO é técnico pedir a criação de um SKU/produto
+novo — a Engenharia completa os detalhes técnicos depois. Fluxo: qualquer
+setor preenche e clica "ENVIAR PARA ENGENHARIA" → a Engenharia (Arilene) é
+avisada automaticamente e faz a análise/desenho → quando pronto, a
+Importação (Bianca) é avisada pra avaliar → vira Ficha Técnica de produto.
+
+IMPORTANTE — como se referir aos campos: cite SEMPRE o rótulo exatamente
+como aparece na tela (ex.: "Foi um pedido de um cliente específico?",
+"Categoria (SKU)") — nunca o nome interno da variável (ex.: nunca diga
+"categoria_sku" ou "foiPedidoCliente"). O usuário não sabe e não precisa
+saber que existe um nome de campo por trás do rótulo.
+
+CAMPOS DO FORMULÁRIO DE NOVA SOLICITAÇÃO, na ordem em que aparecem:
+
+- "Tipo de Equipamento" — select: Elevador, Escada Rolante ou Esteira. Já
+  vem com "Elevador" selecionado.
+- "Categoria (SKU)" — select, define o prefixo do código do produto no
+  Omie. Opções: "VPEL — Peça de Elevador (VerticalParts)",
+  "VPER — Peça de Escada/Esteira Rolante (VerticalParts)",
+  "VPB — Peça fornecida por BST", "VPMP — Matéria-Prima (VerticalParts)".
+  Qualquer setor pode escolher qualquer categoria, não tem trava por área.
+- "O que você precisa?" — texto livre, em palavras simples, do que é o
+  produto e pra que serve. Não precisa ser técnico — a Engenharia completa
+  os detalhes depois.
+- "Detalhes adicionais (opcional)" — qualquer informação extra que ajude.
+- "Contato do fornecedor (opcional)" — nome/telefone/e-mail do fornecedor,
+  se o usuário já tiver.
+- "Link do produto (opcional)" — site do fabricante, catálogo ou
+  marketplace onde o produto foi visto.
+- "Imagem ou PDF do produto (opcional)" — anexo de verdade (sobe pro
+  Storage), aceita imagem ou PDF, pode anexar mais de um arquivo.
+- "Foi um pedido de um cliente específico?" — checkbox. É o GATILHO de um
+  bloco condicional (ver abaixo).
+- "Solicitante" e "E-mail" — já vêm preenchidos com o nome/e-mail de quem
+  está logado; raramente precisam ser alterados.
+
+NA VERDADE só DOIS campos bloqueiam o envio se vazios: "Categoria (SKU)" e
+"O que você precisa?". Os demais campos marcados com "*" na tela (Tipo de
+Equipamento, Solicitante, E-mail) já nascem preenchidos por padrão, então
+na prática nunca impedem o envio.
+
+CAMPO CONDICIONAL (só aparece depois de um clique) — regra de negócio
+importante: marcar a checkbox "Foi um pedido de um cliente específico?"
+revela 3 campos novos, que ficam escondidos até isso acontecer:
+  - "Cliente (opcional)" — nome do cliente.
+  - "Indústria (opcional)" — ramo/indústria do cliente.
+  - "Contato do cliente (opcional)" — telefone, e-mail etc.
+**Se a checkbox continuar DESMARCADA, qualquer coisa digitada nesses 3
+campos é DESCARTADA ao enviar** (o sistema só grava esses dados quando a
+checkbox está marcada — é assim mesmo mesmo que os campos já tenham sido
+preenchidos antes de desmarcar). Se o usuário te der nome/indústria/
+contato de um cliente pra você preencher, marque também a checkbox "Foi
+um pedido de um cliente específico?" como marcada — senão os dados dele
+somem silenciosamente e ele nunca vai saber por quê.
+
+DEPOIS DE ENVIAR: a solicitação nasce com o status "NOVO", ganha um número
+(formato SOL-AAAAMMDD-#####) e some pra fila da Engenharia. Ciclo de
+status que aparece como selo na listagem (o solicitante só ACOMPANHA,
+não controla essas mudanças): NOVO → EM ANALISE (Engenharia está
+trabalhando nela) → AGUARDANDO DESENHO → PRONTO (Importação foi avisada
+pra avaliar) → CONVERTIDO EM FICHA (virou uma Ficha Técnica de produto de
+verdade).
+
+Você pode conduzir a conversa perguntando os dados um de cada vez e
+preencher a solicitação inteira (mesmas regras gerais de "mode fill" do
+sistema): comece pelos dois campos obrigatórios se ainda não tiver essa
+informação, e SEMPRE pergunte "foi um pedido de algum cliente específico"
+antes de preencher os campos de cliente, justamente pra saber se marca a
+checkbox — sem isso o preenchimento do cliente não serve pra nada.`,
+
+  'eng-projeto-elevadores': `TELA: Projeto de Elevadores (Engenharia).
+
+Traduz os desenhos técnicos enviados pelo fornecedor (poço/cabine/porta/
+COP-LOP) por unidade, correlacionando pelo Nº da Cotação.`,
+
+  'eng-configurador': `TELA: Projeto de Equipamento — Configurador (Escada/Esteira).
+
+Configurador técnico ao vivo, inspirado em configuradores de mercado
+(ex.: TK eSlider), seguindo normas EN/NBR do setor.
+
+REGRA NOTÁVEL: a velocidade máxima permitida da escada é 0,75 m/s se o
+ângulo de inclinação for ≤30°, e cai pra 0,50 m/s acima disso — regra de
+norma técnica embutida no configurador, não é limite arbitrário do
+sistema.`,
+
+  'desenho-tecnico': `TELA: Desenho Técnico ER | ES (Engenharia).
+
+100% cálculo local, SEM Supabase — funciona inteiramente no navegador
+("Claude Designer" embarcado no projeto).
+
+REGRA NOTÁVEL: o botão "Cotar" hoje só mostra um toast — não integra de
+fato com o módulo de Cotações ainda, é um placeholder visual da intenção
+futura.`,
+
+  'ficha-tecnica': `TELA: Ficha Técnica (Engenharia).
+
+Gerador de ficha técnica de produto — preview em tela + exportação em PDF
+(html2canvas+jsPDF) + impressão nativa. Documento cresce em múltiplas
+páginas A4 conforme o conteúdo (paginação trata cada grupo/descrição/
+rodapé como bloco indivisível, nunca corta um bloco no meio entre
+páginas).
+
+CATEGORIAS E CAMPOS CUSTOMIZADOS: além das 9 categorias nativas do
+sistema, qualquer usuário pode criar categoria/campo novo ("+ Nova
+categoria" / "+ Adicionar campo") — isso alimenta uma BIBLIOTECA
+COMPARTILHADA (tabelas 'fichas_lib_categorias'/'fichas_lib_campos') que
+toda ficha NOVA passa a oferecer. Uma ficha já salva guarda um SNAPSHOT
+independente das categorias no momento em que foi criada — ou seja, mudar
+ou limpar a biblioteca compartilhada depois NUNCA afeta fichas já
+existentes, só o que fichas futuras vão oferecer. Nome de categoria/campo
+duplicado é bloqueado na criação (comparação sem acento/maiúsculas).
+
+REGRA NOTÁVEL: o rodapé mostra "· Criado por {e-mail}" pequeno — dado real
+de quem gerou a ficha, não decorativo.`,
+
+  'ncm-kanban': `TELA: Solicitações de Classificação NCM (Kanban).
+
+Funil fixo de 5 colunas: Em Preenchimento → Aguardando Jurídico →
+Aprovado → Aprovado (Pronto) → Cadastrado.`,
+
+  'ncm-detail': `TELA: Detalhe da Solicitação NCM.
+
+Checklist de 6 itens obrigatórios que precisam estar marcados antes do
+botão "Copiar dados formatados" (formato pronto pra colar no LogComex)
+ficar habilitado.`,
+
+  'status-obras': `TELA: Status de Obras (lista consolidada).
+
+Lista todas as obras em andamento — é a porta de entrada pro Dossiê de
+cada obra individual, não tem dado próprio além da agregação.`,
+
+  'linha-do-tempo': `TELA: Linha do Tempo da Cotação.
+
+Busca por Nº de Cotação e agrega eventos de TODAS as fontes/módulos do
+sistema numa única timeline cronológica — rastreabilidade cross-módulo de
+ponta a ponta. Somente leitura, não edita nada.`,
+
+  'central-documentos': `TELA: Central de Documentos.
+
+Fase 1 apenas: leitura agregada de documentos vindos de Vistoria +
+Documentos + RH num só painel. "Sem pipeline de envio ainda" (comentário
+real do código) — a única ação que a tela de fato persiste é "marcar como
+enviado", não faz upload/envio de verdade.`,
+
+  'dossier-obra': `TELA: Dossiê da Obra (hub central pós-venda).
+
+Hub que TODAS as outras telas do pipeline pós-venda (ART, Data Book,
+Handover, etc.) redirecionam pra dentro — a aba ativa fica espelhada no
+3º segmento da URL. É o lugar único onde o histórico documental completo
+de uma obra vive de verdade.`,
+
+  vistorias: `TELA: Vistorias de Obras.
+
+ACHADO REAL: esta era 1 de 3 implementações PARALELAS de vistoria que
+existiam ao mesmo tempo, sem se comunicar entre si — consolidadas em
+15/08 nesta única tela; as outras duas foram aposentadas.`,
+
+  instalacao: `TELA: Instalação em Campo.
+
+Progresso calculado por dias restantes até a previsão de entrega
+(data-base + 45 dias) — a cor do indicador muda conforme o prazo se
+aproxima.`,
+
+  art: `TELA: ART de Instalação.
+
+Tela de REDIRECT — não tem dado próprio. Só orienta o usuário e manda
+direto pro Dossiê da Obra (aba Documentos), que é onde o dado de verdade
+fica.`,
+
+  cronograma: `TELA: Cronograma de Pagamento da Instalação.
+
+4 fases de pagamento, cada uma atrelada a um marco físico da instalação do
+equipamento.
+
+REGRA NOTÁVEL: a soma das 4 fases precisa fechar EXATAMENTE com o valor
+disponível (tolerância de R$0,01) — o sistema bloqueia salvar se as fases
+não somarem certo, não deixa ficar "quase" batendo.`,
+
+  databook: `TELA: Data Book & Termo.
+
+Tela de REDIRECT — sem dado próprio, manda pro Dossiê da Obra (aba
+Documentos). Antes lia a tabela legada 'projetos' (desconectada, issue
+#274) — virou redirect justamente por causa disso, achado classificado
+como "Importante" na auditoria.`,
+
+  handover: `TELA: Entrega Final / Handover.
+
+Checklist de entrega + transferência de responsabilidade pra Escamax
+(sistema de manutenção preventiva pós-venda). A fonte de dados foi trocada
+da tabela legada 'projetos' pra 'dossier_obra' — mesmo padrão de correção
+aplicado ao Data Book.`,
+
+  'rh-homologacao': `TELA: Homologação de Instaladores (RH Operacional).
+
+Compliance documental em cadeia Empresa → Colaborador → Documentos
+(RG/CNH/ASO/NRs e outros, cada um com data de vencimento). O cadastro RASO
+(empresa+colaborador básico) fica em Cadastros → Empresas Instaladoras;
+esta tela é só o compliance por cima do mesmo registro.
+
+REGRA NOTÁVEL: a Carteira de Vacinação (documento DOC-080) vira um
+checklist de vacinas reais dentro do formulário, gravando múltiplas linhas
+(uma por vacina), não um único campo de "vacinado sim/não".
+
+ALIMENTA: é pré-requisito do gate de RH em Central de Decisões (aprovação
+"montador entra na obra") e também do Contrato Instalador.`,
+
+  almoxarifado: `TELA: Almoxarifado.
+
+Pedidos de compra de VAREJO (insumos/reposição) — distinto de compra de
+equipamento pra revenda.
+
+REGRA NOTÁVEL: a aprovação não acontece dentro desta tela — é feita pelo
+Chefe de Logística de dentro da Central de Decisões
+('criarDecisaoCompraVarejo'). A frase que resume a regra no código é "o
+pedido É o gatilho": criar o pedido aqui já gera automaticamente a decisão
+pendente lá.`,
+
+  comissoes: `TELA: Comissões (Financeiro/Admin).
+
+Gera comissões a partir de propostas já assinadas, com split configurável
+por 'origem_venda' (issue #68) — configurável sem precisar de deploy.
+
+CAMPOS: Vendedor, Faturamento líquido, % de comissão, Progresso vs. meta,
+Status.
+
+AÇÕES: Gerar comissão; Aprovar todas ou individualmente; Pagar; exportar
+Folha de pagamento em CSV.
+
+REGRA NOTÁVEL: geração é IDEMPOTENTE — dá erro se tentar gerar comissão de
+novo pra uma proposta que já tem. Um split de comissão acima do
+'limite_sem_aprovacao_pct' configurado exige aprovação extra da diretoria
+('requer_aprovacao_diretoria') antes de poder ser pago.`,
+
+  logs: `TELA: Logs de Atividade (Admin).
+
+Auditoria append-only e imutável — quem fez o quê, onde, quando, sobre
+qual alvo. Limite de 400 registros por consulta (não é o histórico
+completo, é uma janela recente).
+
+ALIMENTA: destino de eventos registrados por outras telas (convite de
+usuário, alteração de alçada/permissão, etc.) — se uma ação sensível
+aconteceu no sistema, ela deveria aparecer aqui.`,
+
+  configuracoes: `TELA: Configurações do Sistema (Admin).
+
+Hub em 6 abas, com diferença IMPORTANTE entre o que é editável de verdade
+e o que é só documentação estática:
+
+1. "Administração" — aloca módulos por colaborador (nome/foto vêm do
+   sistema vpsistema, aqui só se edita QUAIS módulos aparecem no menu
+   daquele colaborador via 'gruposAlocados').
+2. "Usuários & Perfis" — tabela de usuários + convites pendentes. Criar o
+   LOGIN de fato é feito pelo TI via SSO; esta tela só registra o convite,
+   não cria a conta.
+3. "Permissões (RLS)" — duas partes: (a) Alçadas de Propostas, 5
+   capacidades delegáveis ('ver_todas', 'precificar_manual',
+   'destravar_aprovada', 'excluir', 'conceder_alcadas' — esta última é
+   recursiva, quem tem ela pode conceder as outras pra alguém); (b) Matriz
+   de Permissões, tabela ESTÁTICA hardcoded só pra documentação — "RLS
+   ainda não é gerido de fato por esta tela", não muda nada no banco.
+4. "Parâmetros" — 100% estático/hardcoded hoje (câmbio manual, margem
+   mínima 22%, margem padrão 32%, comissão 4%, ICMS 18%, II 14%, SLAs) —
+   editar aqui NÃO persiste, é só referência visual.
+5. "Integrações" — lista estática, todas marcadas "Não configurado" (AIS,
+   IMAP importação/compras, SMTP, assinatura digital, Omie, WhatsApp
+   Business) — o frontend não monitora saúde real de nenhuma, é só
+   previsão do que vai existir.
+6. "Buckets Storage" — esta é REAL: lista os 6 buckets de verdade do
+   Supabase Storage do projeto (engenharia, tratativas,
+   cotacao-fornecedor-anexos, formulario-elevador-anexos,
+   propostas-imagens, fichas-imagens).
+
+Ao responder sobre esta tela, deixe claro pro usuário quais abas realmente
+persistem mudança (1, 2, 3a, 6) e quais são só estáticas/documentação
+(3b, 4, 5) — é fácil o usuário achar que mudar um parâmetro na aba 4
+afeta o cálculo real, e hoje isso não acontece.`,
+
+  'formulario-quadro-comando': `TELA: Quadro de Comando (Comercial → Formulários).
+
+Coleta os dados técnicos do quadro de comando (painel elétrico NICE3000
+MRL) de um elevador e, a partir deles, gera a especificação completa de
+fabricação/compra: lista de materiais (BOM), lista de corte de fiação, e
+um checklist digital de separação por chão de fábrica. Entrada real hoje:
+botão "Novo quadro de comando" na listagem (avulso) — uma lista futura
+"por cotação" ainda não existe.
+
+TOPO DA PÁGINA (sempre visível, fora das abas):
+
+CARD "Origem de fabricação" — decide entre 2 ramos:
+- "Fabricar interno (VerticalParts)" (Ramo A) — VerticalParts monta o
+  quadro com peças próprias; usa as abas de baixo (Escopo, Configuração e
+  portas, Quadro/máquina, Geometria p/ fiação, BOM/lista de corte/
+  checklist).
+- "Comprar pronto de fornecedor" (Ramo B) — compra um quadro já pronto de
+  um fornecedor (ex.: BST/NICE3000); substitui as 5 abas por 2 cards de
+  vínculo+envio de cotação (ver abaixo). Não gera BOM/corte/checklist
+  (isso só existe pro Ramo A).
+- Esse campo (select "Fabricar interno" / "Comprar pronto") só é editável
+  por quem tem a alçada "quadro_comando"/"decidir_fabricacao" (concedida
+  em Configurações → Permissões → Alçadas de Propostas, rótulo "Decide
+  fabricar interno ou comprar pronto (Quadro de Comando)"). Sem essa
+  alçada o campo aparece TRAVADO (disabled) com uma nota explicando o
+  motivo ao lado — Administradores (nível) sempre passam nessa checagem.
+- Também neste card: "Tipo de aplicação" (MR com casa de máquinas / MRL
+  sem casa de máquinas), "Novo ou modernização", "Fabricante do comando"
+  (texto livre) — estes 3 campos são editáveis por qualquer um, só a
+  origem de fabricação em si é que é travada pela alçada.
+
+RAMO A — ABAS (só aparecem quando origem_fabricacao = "interno"):
+
+1. "Escopo" — tabela de 11 itens do escopo do pedido (COP, LOP, LIP/
+   indicadores, Operador de porta, Resgate automático, Interfone, Inspeção
+   no teto, Caixa e botão de parada do poço, Iluminação/tomada, Acessórios
+   de segurança, Cabos — fiação fixa + cabo de manobra). Para CADA item:
+   decisão (Fornecer / Reutilizar existente / Fornecido por terceiro / Não
+   se aplica) + campo livre de Qtd/modelo (só habilitado depois de
+   escolher uma decisão que não seja "Não se aplica").
+
+2. "Configuração e portas" (paradas) — uma linha por parada: Identificação
+   (texto livre), Abertura frontal / Abertura traseira (checkboxes — uma
+   parada pode ter as duas), Tipo de porta do pavimento, Tipo de porta da
+   cabina, Qtd. LOP frontal, Qtd. LOP traseira (só habilitado se a
+   abertura traseira estiver marcada). REGRA: o número de paradas NÃO
+   determina sozinho a quantidade de portas/botoeiras quando há frentes
+   opostas — por isso cada parada tem seus próprios campos frontal/
+   traseiro, em vez de um único total global.
+
+3. "Quadro/máquina" — Tipo de máquina (Síncrona/ímãs permanentes ou
+   Assíncrona/indução), Fabricante/modelo, Potência (kW), Corrente (A),
+   Tensão da rede (220V/380V), Velocidade (rpm), Freio (tipo, tensão de
+   acionamento, tensão de manutenção), Encoder (fabricante, modelo/
+   referência exata, tecnologia/protocolo — ex. incremental/EnDat/
+   Hiperface). A "variante do quadro" é reconhecida automaticamente a
+   partir de Potência × Tensão (só existem 4 variantes cadastradas hoje:
+   7,5kW/220V, 7,5kW/380V, 15kW/220V, 15kW/380V — cada uma tem sua própria
+   BOM fixa/variável tirada da planilha real do fornecedor). Combinação de
+   potência/tensão fora dessas 4, ou encoder incomum, não é uma variante
+   "corrigida" automaticamente — some da tela como "não reconhecida" e a
+   geração de BOM vai reportar erro em vez de inventar peças.
+
+4. "Geometria p/ fiação" — 4 cards:
+   a) "Geometria da caixa (medida em mm)": Profundidade do poço (S),
+      Última altura (K), Largura/Profundidade da caixa de corrida,
+      Largura/Profundidade da cabina. Poço e Última altura têm um
+      checkbox "usar padrão comercial" (1500mm e 4400mm respectivamente)
+      — só ativa esse padrão se o usuário marcar explicitamente; por
+      padrão o sistema exige a medida REAL da obra, nunca assume o padrão
+      sozinho. Se K (Última altura) ficar acima de 4400mm, aparece aviso
+      "fora do padrão — encaminhar pra análise da engenharia".
+   b) "Distância entre pisos por intervalo": um valor de distância (mm)
+      por intervalo entre paradas (De/Para), cada linha marcada como
+      "Medido" ou "Estimado (3000mm)". REGRA: nunca multiplicar um mínimo
+      presumido por N intervalos — cada intervalo tem seu próprio valor,
+      porque intervalos reais raramente são todos iguais.
+   c) "Posição do quadro e rotas de fiação": Lado do quadro / Lado tripé-
+      máquina / Lado da guia solitária (Esquerda/Direita — relativos, o
+      espelhamento preserva as RELAÇÕES entre eles, não o rótulo em si),
+      e 3 distâncias em mm (quadro→máquina, quadro→limitador, quadro→
+      entrada da caixa) que alimentam diretamente a lista de corte da
+      fiação FIXA (item d abaixo).
+   d) "Cabo de manobra — seio e folga": Seio do cabo (mm) + checkbox
+      "Definição do seio confirmada pela engenharia?", Folga (mm) +
+      checkbox "Regra de folga confirmada pela engenharia?". REGRA CRÍTICA
+      (não relaxar nunca ao responder sobre isso): o corte do cabo de
+      manobra só é calculado com confiança "Confirmado" se AMBOS os
+      checkboxes estiverem marcados; sem isso o corte fica marcado
+      "Pendente de engenharia" e NÃO deve ser tratado como medida
+      definitiva — o sistema propositalmente nunca assume uma definição
+      de "seio" ou aplica a folga sozinho sem confirmação explícita da
+      engenharia (histórico: os dados de referência do fornecedor eram
+      ambíguos demais nesse ponto pra virar regra automática segura).
+
+   FÓRMULAS EXATAS por trás do card (a)/(b) — use estes números ao
+   explicar de onde vem um resultado, nunca aproxime:
+   - Padrões comerciais de ESTIMATIVA (nunca são medição real da obra):
+     poço 1.500mm, intervalo mínimo típico entre pisos 3.000mm, última
+     altura usual 4.400mm.
+   - 'percurso = soma de todas as distâncias entre pisos' (cada intervalo
+     tem seu próprio valor real; só vira '(N-1) × d' quando TODOS os
+     intervalos são iguais a d — nunca presuma igualdade sem checar).
+   - 'altura_total = poço + percurso + última_altura'. Não confundir
+     altura total da caixa com comprimento de um fio ou percurso da
+     cabina — são grandezas diferentes.
+   - Perímetro de contorno da caixa: '2 × (largura + profundidade)'. Ex.:
+     caixa 1.500×1.500mm → perímetro de 6.000mm. Um trecho fixo que de
+     fato passa pela laje E pelo poço pode orçar até 2 perímetros (12.000mm
+     no total) — mas um ramal que termina ANTES do poço (ex.: numa parada
+     intermediária) nunca recebe o perímetro do poço lançado automaticamente.
+
+   REGRA CRÍTICA sobre o cabo de manobra comercial (28 vias): ele aparece
+   como UM pedaço com seu próprio comprimento, sujeito à verificação do
+   seio — NUNCA como 28 pedaços iguais, e nunca multiplique o comprimento
+   por 28 achando que isso vira "metros de cabo comprado" (28× o
+   comprimento representa metros de CONDUTORES internos, não metros do
+   cabo 28 vias em si). Da mesma forma, "5m de folga" é um parâmetro
+   EDITÁVEL informado pelo usuário como padrão — nunca acrescente esses 5m
+   automaticamente em cada curva nem aplique por fio por presunção;
+   enquanto a regra de folga não estiver com a checkbox de confirmação da
+   engenharia marcada, o corte fica "Pendente de engenharia".
+
+   TABELA DE BORNES (referência do esquema NICE3000, use se o usuário
+   perguntar "o que é o borne X" ou "pra que serve a interface Y"):
+   AA/AB = interfaces de cabina e cabo de manobra (checar ocupação real
+   das 28 vias, nunca presumir todas ocupadas); BA = cadeia de segurança,
+   poço, trincos e outros contatos (vários pontos, pode ter derivações);
+   BB = alimentação/comunicação das botoeiras de pavimento; BC =
+   comunicação/interfone do poço; BD/BE = limites superior/inferior de
+   desaceleração, quando instalados na caixa; MT = freio e retornos da
+   máquina; U/V/W = potência da máquina (PE é especificado à parte); OS =
+   limitador de velocidade; HW = contato do volante de manobra manual.
+   REGRA NOTÁVEL: um endereço de borne NÃO equivale a um fio contínuo do
+   quadro até o poço — há identificações repetidas, contatos em série e
+   ramais que terminam em alturas distintas; os pedaços de corte se
+   calculam pelos PONTOS FÍSICOS de origem/destino, nunca pela contagem
+   bruta de bornes (ex.: "26 posições de borne BA–BE" não vira "26 fios
+   integrais").
+
+5. "BOM / lista de corte / checklist" (aba "resultado"):
+   - Botão "Gerar BOM + lista de corte" — recalcula do ZERO a cada clique
+     a partir do que está preenchido nas abas acima (idempotente, nunca
+     acumula duplicado); NÃO altera nada do que foi digitado no
+     formulário. Gera 2 tabelas: "Lista de compra (BOM)" (SKU, Descrição,
+     Grupo, Qtd, Unidade, Confiança) e "Lista de corte" (fiação fixa +
+     cabo de manobra: Tipo de cabo, Origem física, Destino físico,
+     Comprimento final, Confiança, Fórmula usada). Cada linha mostra um
+     badge de confiança: "Confirmado" (verde), "Estimado" (amarelo) ou
+     "Pendente de engenharia" (vermelho) — o vermelho significa que aquele
+     número NÃO deve ser usado pra cortar material de verdade sem
+     validação humana antes.
+   - Botão "Gerar checklist de separação" (só habilita depois de já ter
+     gerado a BOM pelo menos uma vez) — cria um checklist versionado
+     (nunca apaga/sobrescreve uma versão anterior, cada geração é uma
+     versão nova) agrupado em 3 blocos físicos de separação: "Caixa
+     metálica", "Componentes internos", "Fiação de poço e cabo de
+     manobra". Cada item tem um checkbox "feito" que qualquer um pode
+     marcar/desmarcar (chão de fábrica). REGRA NOTÁVEL, sempre repetir se
+     perguntado: este checklist é DISPARADO MANUALMENTE, nunca gerado
+     sozinho na aprovação do cliente — decisão explícita do usuário, ele
+     só quer o checklist no momento em que a fábrica for de fato começar
+     a separar os materiais, não antes.
+
+RAMO B — 2 CARDS (só aparecem quando origem_fabricacao = "comprado"),
+reaproveitando o MESMO mecanismo do RFQ de Elevadores (token público,
+portal de resposta do fornecedor, envio por WhatsApp/E-mail/Link, Inbox
+de e-mails):
+
+1. "Vínculo com Formulário de Elevador" — OBRIGATÓRIO antes de poder
+   enviar cotação. Busca por "Nº da Cotação" traz as Unidades daquele
+   Formulário de Elevador (identificação, tipo, capacidade, velocidade);
+   clicar "Vincular" numa delas grava o vínculo no quadro. Motivo real
+   dessa exigência (explique se perguntado "por que preciso vincular"):
+   'cotacoes_elevador_fornecedor.formulario_elevador_id' é uma
+   FOREIGN KEY NOT NULL no banco — não existe RFQ "solto" sem elevador
+   associado, então um Quadro de Comando avulso (Ramo B) tem que
+   emprestar o vínculo de uma Unidade de Elevador já cadastrada antes de
+   poder gerar cotação de fornecedor.
+   Já vinculado, mostra o id da Unidade com botão "Trocar vínculo".
+
+2. "Enviar cotação técnica ao fornecedor" — escolhe Fornecedor (lista do
+   cadastro de fornecedores de elevador), Telefone/E-mail de contato, e 3
+   botões (WhatsApp / E-mail / Copiar link). Ao clicar qualquer um deles
+   pela 1ª vez, cria (se ainda não existir) a cotação de fornecedor com
+   categoria_produto='quadro_comando' — reaproveita as mesmas seções
+   bilíngues (PT/EN) de especificação técnica do RFQ de elevador normal,
+   adaptadas: identificação do pedido, especificação básica do elevador
+   atendido, comando, máquina/freio/encoder, botoeiras e interface humana,
+   acessórios elétricos, geometria para fiação — os valores vêm
+   derivados do que foi preenchido no próprio Quadro de Comando e na
+   Unidade de Elevador vinculada, nunca inventados. Depois de criada, a
+   cotação fica fixa (reusa a mesma sempre, não cria uma nova a cada
+   clique) e a tela passa a mostrar status + quantas vezes já foi
+   enviada, com a busca/vínculo escondidos.
+
+REGRA GERAL DE TODA A TELA (badges "Confirmado"/"Estimado"/"Pendente de
+engenharia"): sempre que o usuário perguntar sobre um número específico do
+BOM ou da lista de corte, verifique mentalmente qual badge acompanha
+aquela linha antes de tratá-lo como definitivo — "Pendente de engenharia"
+significa literalmente que ninguém confirmou aquele valor ainda, não é um
+erro do sistema.
+
+COMO PREENCHER (mode "fill") NESTA TELA ESPECIFICAMENTE:
+- PODE dar palpite/preencher com confiança, a partir do que o usuário
+  descrever em texto livre: Tipo de aplicação, Novo ou modernização,
+  Fabricante do comando; Tipo de máquina, Fabricante/modelo da máquina,
+  Potência, Corrente, Tensão da rede, Velocidade, Freio, Encoder (sempre
+  que o usuário der esses dados, mesmo que soltos numa frase); toda a
+  tabela de Escopo (decisão fornecer/reutilizar/terceiro/não se aplica +
+  detalhe, deduzido da descrição do pedido); toda a tabela de Paradas
+  (identificação, abertura frontal/traseira — inclusive as checkboxes —,
+  tipo de porta, qtd. LOP, a partir da configuração que o usuário
+  descrever, ex.: "8 paradas, todas só frente" já basta pra preencher
+  frontal=true/traseira=false em todas).
+- NUNCA dar palpite, mesmo que o usuário pareça favorável ou peça pra
+  "usar o padrão" — sempre gere "questions" perguntando a medida real, ou
+  no máximo preencha o número reportado pelo próprio usuário deixando a
+  checkbox de estimativa/confirmação para ELE marcar: geometria em mm
+  (poço, última altura, largura/profundidade da caixa e da cabina),
+  distância entre pisos por intervalo, as 3 distâncias de posição do
+  quadro (quadro→máquina/limitador/entrada da caixa), seio do cabo e
+  folga. As checkboxes "usar padrão comercial", "Definição do seio
+  confirmada pela engenharia?" e "Regra de folga confirmada pela
+  engenharia?" são decisões humanas deliberadas — nunca marque nenhuma
+  delas como true sozinho, mesmo com instrução explícita do usuário no
+  chat; responda que essa confirmação precisa ser feita por ele
+  clicando na tela, é assim por desenho (ver CLAUDE.md do projeto).
+
+COMO REVISAR (mode "analyze") NESTA TELA ESPECIFICAMENTE — aponte como
+"issues" (sempre com o idx de cada campo citado em "idxs"):
+- Potência × Tensão preenchidos mas fora das 4 variantes reconhecidas
+  (7,5kW/220V, 7,5kW/380V, 15kW/220V, 15kW/380V) — avise que a geração de
+  BOM vai reportar erro em vez de reconhecer a variante.
+- Uma parada com "Abertura traseira" marcada (true) mas "Qtd. LOP
+  traseira" vazio ou zero (inconsistência) — ou o inverso, LOP traseira
+  preenchido com abertura traseira desmarcada.
+- Distância "Última altura (K)" preenchida acima de 4400mm sem qualquer
+  observação — lembre que isso deveria ir pra análise da engenharia.
+- Geometria com ALGUM campo de distância preenchido e outros da mesma
+  seção vazios (preenchimento parcial da geometria de fiação) — sinalize
+  os campos vazios, não os preenchidos.
+- Seio do cabo ou Folga preenchidos em mm mas a checkbox de confirmação
+  da engenharia correspondente ainda desmarcada — isso é o estado normal
+  de "pendente de engenharia", não é necessariamente um erro, mas vale
+  avisar se o usuário perguntar "está tudo pronto pra cortar?".
+- "Origem de fabricação" ainda não definida (nenhuma opção selecionada).
+- Um item do Escopo com decisão diferente de "Não se aplica" mas o campo
+  de Qtd/modelo vazio.`,
+};
 
 function extractJson(text: string): any {
   const a = text.indexOf("{");
@@ -91,7 +1372,7 @@ Deno.serve(async (req: Request) => {
   let payload: any;
   try { payload = await req.json(); } catch { return json({ error: "JSON inválido" }, 400); }
 
-  const mode: string = ["chat", "fill", "analyze"].includes(payload?.mode) ? payload.mode : "chat";
+  const mode: string = ["chat", "fill", "analyze", "questionario"].includes(payload?.mode) ? payload.mode : "chat";
   const message: string = typeof payload?.message === "string" ? payload.message : "";
   const history: any[] = Array.isArray(payload?.history) ? payload.history.slice(-12) : [];
   const page = payload?.page ?? {};
@@ -106,11 +1387,18 @@ Deno.serve(async (req: Request) => {
     if (content) messages.push({ role, content });
   }
 
+  const routeDoc = typeof page.route === "string" ? ROUTE_DOCS[page.route] : undefined;
+  const questionarioContext = payload?.questionarioContext ?? null;
+
   const ctx =
     `MODO: ${mode}\n` +
     `TELA ATUAL: ${JSON.stringify({ route: page.route ?? "", title: page.title ?? "" })}\n` +
-    `CAMPOS DA TELA:\n${JSON.stringify(page.fields ?? [], null, 1)}\n` +
+    (routeDoc ? `\nCONHECIMENTO DESTA TELA (use pra responder qualquer pergunta sobre o que ela faz, campos, botões e regras de negócio — não é opcional, é a fonte de verdade):\n${routeDoc}\n` : "") +
+    `\nCAMPOS DA TELA:\n${JSON.stringify(page.fields ?? [], null, 1)}\n` +
     (documentText ? `\nTEXTO DO DOCUMENTO NA TELA:\n"""${documentText}"""\n` : "") +
+    (mode === "questionario"
+      ? `\nQUESTIONÁRIO ABERTO:\n${questionarioContext ? JSON.stringify(questionarioContext, null, 1) : "(nenhum questionário aberto)"}\n`
+      : "") +
     `\nMENSAGEM DO USUÁRIO:\n${message || "(sem texto — use o modo e o contexto acima)"}`;
   messages.push({ role: "user", content: ctx });
 
@@ -119,7 +1407,11 @@ Deno.serve(async (req: Request) => {
     resp = await fetch(ANTHROPIC_URL, {
       method: "POST",
       headers: { "x-api-key": KEY, "anthropic-version": "2023-06-01", "content-type": "application/json" },
-      body: JSON.stringify({ model: MODEL, max_tokens: 4096, temperature: 0.2, system: SYSTEM, messages }),
+      // 21/09 — a API da Anthropic passou a rejeitar `temperature` pro
+      // modelo claude-sonnet-5 ("`temperature` is deprecated for this
+      // model") — toda chamada falhava com invalid_request_error, sempre
+      // 500 pro usuário. Parâmetro removido.
+      body: JSON.stringify({ model: MODEL, max_tokens: 4096, system: SYSTEM, messages }),
     });
   } catch (e) {
     return json({ error: "Falha ao contatar a IA", detail: String(e) }, 503);
@@ -134,13 +1426,23 @@ Deno.serve(async (req: Request) => {
     return json({ error: "Erro na IA", detail: t.slice(0, 300) }, resp.status >= 500 ? 503 : 500);
   }
 
+  let text = "";
   let out: any;
   try {
     const data = await resp.json();
-    const text = (data.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
+    text = (data.content ?? []).filter((c: any) => c.type === "text").map((c: any) => c.text).join("\n");
     out = extractJson(text);
   } catch (e) {
-    return json({ error: "Resposta da IA ilegível", detail: String(e) }, 500);
+    // A IA às vezes foge do "só JSON, sem texto fora dele" (raro, mas real —
+    // foi o que deixou o Copiloto parecendo "fora do ar" pro usuário: um 500
+    // puro em vez de aproveitar o texto que ela mandou). Se sobrou texto,
+    // usa ele como "reply" em vez de falhar a chamada inteira; só erra de
+    // verdade quando não veio nada.
+    if (text.trim()) {
+      out = { reply: text.trim() };
+    } else {
+      return json({ error: "Resposta da IA ilegível", detail: String(e) }, 500);
+    }
   }
 
   // Normaliza o contrato — devolve sempre as chaves, vazias quando não se aplicam.
@@ -148,6 +1450,15 @@ Deno.serve(async (req: Request) => {
     reply: typeof out.reply === "string" ? out.reply : "",
     fills: Array.isArray(out.fills) ? out.fills : [],
     questions: Array.isArray(out.questions) ? out.questions : [],
-    issues: Array.isArray(out.issues) ? out.issues : [],
+    issues: Array.isArray(out.issues) ? out.issues.map((it: any) => ({
+      severity: typeof it?.severity === "string" ? it.severity : "media",
+      where: typeof it?.where === "string" ? it.where : "",
+      problem: typeof it?.problem === "string" ? it.problem : "",
+      suggestion: typeof it?.suggestion === "string" ? it.suggestion : "",
+      idxs: Array.isArray(it?.idxs) ? it.idxs.filter((n: any) => typeof n === "number") : [],
+    })) : [],
+    opsQuestionario: Array.isArray(out.opsQuestionario)
+      ? out.opsQuestionario.filter((o: any) => o && typeof o.op === "string")
+      : [],
   });
 });

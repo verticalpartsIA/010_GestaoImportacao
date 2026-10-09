@@ -9,6 +9,34 @@
 
   function sb() { return (window.__VP_SB || {}).sb; }
 
+  const ANEXOS_BUCKET = 'parceiros-instaladores-anexos';
+
+  /* Documento/imagem da certificação (curso NR-10 etc.) — 1 arquivo por
+     certificação, upsert substitui o anterior direto no mesmo path. */
+  async function uploadCertificadoArquivo(montadorId, chave, file) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+    const path = `${montadorId}/${chave}.${ext}`;
+    const { error } = await c.storage.from(ANEXOS_BUCKET).upload(path, file, { upsert: true });
+    if (error) throw error;
+    return { path, nome: file.name, tipo: file.type || null, tamanho: file.size, enviado_em: new Date().toISOString() };
+  }
+
+  async function urlCertificadoArquivo(path, ttlSeconds) {
+    const c = sb();
+    if (!c || !path) return null;
+    const { data, error } = await c.storage.from(ANEXOS_BUCKET).createSignedUrl(path, ttlSeconds || 3600);
+    if (error) throw error;
+    return data.signedUrl;
+  }
+
+  async function removerCertificadoArquivo(path) {
+    const c = sb();
+    if (!c || !path) return;
+    await c.storage.from(ANEXOS_BUCKET).remove([path]);
+  }
+
   const CERTIFICACOES = {
     nr10: { label: 'NR-10: Segurança em Instalações Elétricas', categoria: 'seguranca' },
     nr35: { label: 'NR-35: Trabalho em Altura', categoria: 'seguranca' },
@@ -55,6 +83,65 @@
       .order('nome', { ascending: true });
 
     return data || [];
+  }
+
+  /* Estatísticas rápidas por empresa pro Card "Empresas Instaladoras"
+     (pedido do usuário 01/09) — funcionários e elevadores são contagens
+     reais (batch de 4 queries, não N+1 por empresa); "Pagamentos" fica
+     de fora por enquanto — depende do motor de pagamento (Trilha B),
+     combinado pra ligar numa próxima rodada. Elevadores = dossiê único
+     (união dos 3 vínculos possíveis, mesma dedupe de
+     listarHierarquiaClientesDoInstalador), não linha de equipamento —
+     dossier_obra é 1 linha por equipamento nesta base. */
+  async function estatisticasTodasEmpresas() {
+    const c = sb();
+    if (!c) return {};
+    const [{ data: colabs }, { data: principal }, { data: roster }, { data: porEquip }] = await Promise.all([
+      c.from('parceiros_colaboradores').select('empresa_id'),
+      c.from('dossier_obra').select('id, parceiro_instalador_id').not('parceiro_instalador_id', 'is', null),
+      c.from('dossier_obra_instaladores').select('dossier_id, parceiro_instalador_id'),
+      c.from('equipamentos_obra').select('dossier_id, parceiro_instalador_id').not('parceiro_instalador_id', 'is', null),
+    ]);
+
+    const funcionariosPorEmpresa = {};
+    (colabs || []).forEach((r) => { if (r.empresa_id) funcionariosPorEmpresa[r.empresa_id] = (funcionariosPorEmpresa[r.empresa_id] || 0) + 1; });
+
+    const dossiersPorEmpresa = {};
+    const addDossier = (empresaId, dossierId) => {
+      if (!empresaId || !dossierId) return;
+      (dossiersPorEmpresa[empresaId] = dossiersPorEmpresa[empresaId] || new Set()).add(dossierId);
+    };
+    (principal || []).forEach((r) => addDossier(r.parceiro_instalador_id, r.id));
+    (roster || []).forEach((r) => addDossier(r.parceiro_instalador_id, r.dossier_id));
+    (porEquip || []).forEach((r) => addDossier(r.parceiro_instalador_id, r.dossier_id));
+
+    const empresaIds = new Set([...Object.keys(funcionariosPorEmpresa), ...Object.keys(dossiersPorEmpresa)]);
+    const resultado = {};
+    empresaIds.forEach((id) => {
+      resultado[id] = { funcionarios: funcionariosPorEmpresa[id] || 0, elevadores: dossiersPorEmpresa[id]?.size || 0 };
+    });
+    return resultado;
+  }
+
+  async function excluirMontador(montadorId) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    const { error } = await c.from('parceiros_instaladores').delete().eq('id', montadorId);
+    if (error) throw error;
+  }
+
+  /* Desvincula uma empresa de uma obra na hierarquia "Clientes atendidos"
+     (cadastro-instaladores.jsx) — zera os 3 vínculos possíveis de uma vez
+     (principal, roster, por equipamento), já que a lista ali é a união
+     deduplicada dos três e o usuário não escolhe qual tipo remover. */
+  async function desvincularDaObra(empresaId, dossierId) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    await Promise.all([
+      c.from('dossier_obra').update({ parceiro_instalador_id: null }).eq('id', dossierId).eq('parceiro_instalador_id', empresaId),
+      c.from('dossier_obra_instaladores').delete().eq('dossier_id', dossierId).eq('parceiro_instalador_id', empresaId),
+      c.from('equipamentos_obra').update({ parceiro_instalador_id: null }).eq('dossier_id', dossierId).eq('parceiro_instalador_id', empresaId),
+    ]);
   }
 
   function validarCertificacoes(certificacoes) {
@@ -113,14 +200,289 @@
     return new Date(dateStr).toLocaleDateString('pt-BR');
   }
 
+  /* ---------- Colaboradores (pessoa física, dentro de uma empresa) ---------- */
+
+  async function listarColaboradoresTodos() {
+    const c = sb();
+    if (!c) return [];
+    const { data } = await c.from('parceiros_colaboradores').select('*').order('nome_completo');
+    return data || [];
+  }
+
+  async function listarColaboradoresPorEmpresa(empresaId) {
+    const c = sb();
+    if (!c || !empresaId) return [];
+    const { data } = await c.from('parceiros_colaboradores')
+      .select('*').eq('empresa_id', empresaId).order('nome_completo');
+    return data || [];
+  }
+
+  async function obterColaborador(colaboradorId) {
+    const c = sb();
+    if (!c || !colaboradorId) return null;
+    const { data } = await c.from('parceiros_colaboradores').select('*').eq('id', colaboradorId).single();
+    return data || null;
+  }
+
+  async function salvarColaborador(dados) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    if (!dados.id) dados.id = 'COLAB-' + Date.now().toString().slice(-8);
+    const { error } = await c.from('parceiros_colaboradores').upsert(dados);
+    if (error) throw error;
+    return dados.id;
+  }
+
+  /* Excluir direto quebrava com FK violation (parceiros_documentos_colaborador
+     referencia colaborador_id, sem ON DELETE CASCADE) — usuário Felipe
+     reportou 08/09 com print do erro. Apaga os documentos do colaborador
+     primeiro. */
+  async function excluirColaborador(colaboradorId) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    const { error: errDocs } = await c.from('parceiros_documentos_colaborador').delete().eq('colaborador_id', colaboradorId);
+    if (errDocs) throw errDocs;
+    const { error } = await c.from('parceiros_colaboradores').delete().eq('id', colaboradorId);
+    if (error) throw error;
+  }
+
+  /* ---------- Catálogo de documentos (79 tipos: colaborador/empresa/obra) ---------- */
+
+  let _catalogoCache = null;
+  async function listarDocCatalogo() {
+    if (_catalogoCache) return _catalogoCache;
+    const c = sb();
+    if (!c) return [];
+    const { data } = await c.from('parceiros_doc_catalogo').select('*').order('nome');
+    _catalogoCache = data || [];
+    return _catalogoCache;
+  }
+
+  /* ---------- Documentos por colaborador (com vencimento real) ---------- */
+
+  async function listarDocumentosColaborador(colaboradorId) {
+    const c = sb();
+    if (!c || !colaboradorId) return [];
+    const { data } = await c.from('parceiros_documentos_colaborador')
+      .select('*, parceiros_doc_catalogo(nome, periodicidade, obrigatorio)')
+      .eq('colaborador_id', colaboradorId)
+      .order('data_vencimento', { ascending: true, nullsFirst: false });
+    return data || [];
+  }
+
+  async function salvarDocumentoColaborador(dados) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    if (!dados.id) dados.id = 'DOCCOL-' + Date.now().toString().slice(-8);
+    const { error } = await c.from('parceiros_documentos_colaborador').upsert(dados);
+    if (error) throw error;
+    return dados.id;
+  }
+
+  /* Status real dos documentos ESCOPO EMPRESA (PGR, PCMSO, NRs da empresa
+     etc.) de um parceiro instalador, cruzando o catálogo completo com o
+     que já foi de fato registrado em parceiros_documentos_empresa. Criada
+     01/09 pro Contrato Instalador (Cláusula 2.13 do wizard) parar de usar
+     um checklist manual solto e mostrar o status real de homologação —
+     mesma ideia de statusGeralPorColaboradores, mas pro escopo empresa
+     (que aquela função não cobre). Tabela parceiros_documentos_empresa
+     ainda tem poucos registros reais (migração de planilha antiga,
+     25/08) — "sem_registro" pra maioria dos documentos hoje é esperado e
+     reflete a realidade, não um bug. */
+  async function statusDocumentosEmpresa(empresaId) {
+    const c = sb();
+    if (!c || !empresaId) return [];
+    const catalogo = await listarDocCatalogo();
+    const catEmpresa = catalogo.filter((t) => t.escopo === 'empresa');
+    const { data: docs } = await c.from('parceiros_documentos_empresa')
+      .select('documento_id, status, data_vencimento').eq('empresa_id', empresaId);
+    const porTipo = {};
+    (docs || []).forEach((d) => { porTipo[d.documento_id] = d; });
+    return catEmpresa.map((t) => {
+      const d = porTipo[t.id];
+      const status = !d ? 'sem_registro' : (d.status === 'VENCIDO' ? 'vencido' : 'entregue');
+      return { documento_id: t.id, nome: t.nome, obrigatorio: t.obrigatorio, status, data_vencimento: d ? d.data_vencimento : null };
+    }).sort((a, b) => a.nome.localeCompare(b.nome));
+  }
+
+  /* Resumo de status (vencido/válido/N-A) por empresa — 1 query, agrupado no
+     cliente. Usado pra pintar a lista de empresas sem precisar de N+1. */
+  async function resumoDocumentosPorEmpresa() {
+    const c = sb();
+    if (!c) return {};
+    const { data } = await c
+      .from('parceiros_documentos_colaborador')
+      .select('status, colaborador:parceiros_colaboradores!inner(empresa_id)');
+    const map = {};
+    (data || []).forEach((r) => {
+      const eid = r.colaborador?.empresa_id;
+      if (!eid) return;
+      const m = map[eid] || { vencido: 0, valido: 0, na: 0, total: 0 };
+      m.total += 1;
+      if (r.status === 'VENCIDO') m.vencido += 1;
+      else if (r.status === 'VALIDO') m.valido += 1;
+      else m.na += 1;
+      map[eid] = m;
+    });
+    return map;
+  }
+
+  /* Homologação real da empresa via parceiros_documentos_colaborador (schema
+     pós-migração 25/08) — NÃO usa parceiros_instaladores.certificacoes (jsonb
+     de 5 certs fixas), que ficou obsoleto: a tela RH Homologação não grava
+     mais nele desde a migração, então um gate que lesse esse campo nunca
+     seria satisfeito por documentos anexados hoje. Usado pelo gate "obra
+     pronta pra instalação" (instalacao-obra-store.js).
+     Status: 'vazio' (sem colaborador cadastrado), 'expirado' (algum
+     documento VENCIDO), 'incompleto' (falta algum documento obrigatório em
+     algum colaborador), 'ok' (documentação completa e em dia). */
+  async function statusGeralPorColaboradores(empresaId) {
+    const c = sb();
+    if (!c || !empresaId) return { status: 'vazio', detalhe: 'Supabase indisponível' };
+
+    const { data: colaboradores } = await c.from('parceiros_colaboradores')
+      .select('id, nome_completo').eq('empresa_id', empresaId);
+    if (!colaboradores || colaboradores.length === 0) {
+      return { status: 'vazio', detalhe: 'Nenhum colaborador cadastrado' };
+    }
+
+    const catalogo = await listarDocCatalogo();
+    const catalogoObrig = catalogo.filter((t) => t.escopo === 'colaborador' && t.obrigatorio);
+
+    let vencidos = 0;
+    let faltando = 0;
+    for (const col of colaboradores) {
+      const { data: docs } = await c.from('parceiros_documentos_colaborador')
+        .select('documento_id, status').eq('colaborador_id', col.id);
+      const tiposPresentes = new Set((docs || []).map((d) => d.documento_id));
+      vencidos += (docs || []).filter((d) => d.status === 'VENCIDO').length;
+      faltando += catalogoObrig.filter((t) => !tiposPresentes.has(t.id)).length;
+    }
+
+    if (vencidos > 0) return { status: 'expirado', detalhe: `${vencidos} documento(s) vencido(s)` };
+    if (faltando > 0) return { status: 'incompleto', detalhe: `${faltando} documento(s) obrigatório(s) faltando` };
+    return { status: 'ok', detalhe: `${colaboradores.length} colaborador(es), documentação em dia` };
+  }
+
+  /* Obras vinculadas a este instalador — une os dois vínculos que existem
+     hoje (dossier_obra.parceiro_instalador_id, a nível de obra inteira, e
+     equipamentos_obra.parceiro_instalador_id, por equipamento individual),
+     dedupe por obra. Usado pela aba "Obras" em Cadastros → Empresas
+     Instaladoras (Empresa → quais obras montou/está montando). */
+  async function listarObrasPorInstalador(empresaId) {
+    const c = sb();
+    if (!c || !empresaId) return [];
+    const [{ data: diretas }, { data: viaEquip }] = await Promise.all([
+      c.from('dossier_obra').select('id, client_name, building_name, status_master').eq('parceiro_instalador_id', empresaId),
+      c.from('equipamentos_obra').select('dossier_obra(id, client_name, building_name, status_master)').eq('parceiro_instalador_id', empresaId),
+    ]);
+    const map = {};
+    (diretas || []).forEach((o) => { map[o.id] = o; });
+    (viaEquip || []).forEach((e) => { const o = e.dossier_obra; if (o && !map[o.id]) map[o.id] = o; });
+    return Object.values(map);
+  }
+
+  /* Hierarquia Empresa -> Cliente -> Equipamentos ("Vida da Instaladora").
+     Une os 3 vínculos possíveis (obra principal, roster
+     dossier_obra_instaladores, por equipamento) numa lista única por
+     obra, dedupe por dossier_id (prioriza o dado mais específico —
+     nº de série vem do vínculo por equipamento quando existe), depois
+     agrupa por client_name pra virar a árvore. */
+  async function listarHierarquiaClientesDoInstalador(empresaId) {
+    const c = sb();
+    if (!c || !empresaId) return [];
+    const [{ data: diretas }, { data: viaRoster }, { data: viaEquip }] = await Promise.all([
+      c.from('dossier_obra').select('id, client_name, building_name, status_master').eq('parceiro_instalador_id', empresaId),
+      c.from('dossier_obra_instaladores').select('dossier_obra(id, client_name, building_name, status_master)').eq('parceiro_instalador_id', empresaId),
+      c.from('equipamentos_obra').select('numero_serie, montador_responsavel:parceiros_colaboradores(nome_completo), dossier_obra(id, client_name, building_name, status_master)').eq('parceiro_instalador_id', empresaId),
+    ]);
+
+    const porDossier = {};
+    (diretas || []).forEach((o) => { porDossier[o.id] = { ...o, numero_serie: null, montador_responsavel_nome: null }; });
+    (viaRoster || []).forEach((r) => { const o = r.dossier_obra; if (o && !porDossier[o.id]) porDossier[o.id] = { ...o, numero_serie: null, montador_responsavel_nome: null }; });
+    (viaEquip || []).forEach((e) => {
+      const o = e.dossier_obra; if (!o) return;
+      porDossier[o.id] = {
+        ...o,
+        numero_serie: e.numero_serie || porDossier[o.id]?.numero_serie || null,
+        montador_responsavel_nome: e.montador_responsavel?.nome_completo || porDossier[o.id]?.montador_responsavel_nome || null,
+      };
+    });
+
+    /* Progresso real do Diário de Obra (Acompanhamento de Obra) por
+       dossiê (não o status_master genérico) — 1 query em lote pra
+       todos os dossiês da empresa, não N+1. Sem
+       AcompanhamentoObraStore carregado (ordem de load-time
+       improvável, mas defensivo) cai pro badge antigo (checklist=null).
+       Trocado de InstalacaoChecklistStore pra este em 04/09 — o card
+       agora é alimentado pelos flags datados que o Montador envia pelo
+       link fixo do diário, não pelo Cronograma de Instalação interno. */
+    const dossierIds = Object.keys(porDossier);
+    let porDossierChecklist = {};
+    if (dossierIds.length && window.AcompanhamentoObraStore) {
+      porDossierChecklist = await window.AcompanhamentoObraStore.resumoProgressoBatch(dossierIds);
+    }
+
+    /* Situação de pagamento (Trilha B) — pra badge "Obra Concluída" quando
+       checklist 100% E todas as parcelas do contrato que cobre esse
+       dossiê já estão pagas. Sem contrato vinculado, fica null (badge
+       cai pro comportamento da Trilha A). */
+    let porDossierPagamento = {};
+    if (dossierIds.length && window.ContratoInstaladorParcelasStore) {
+      porDossierPagamento = await window.ContratoInstaladorParcelasStore.resumoPagamentoPorDossier(dossierIds);
+    }
+
+    const porCliente = {};
+    Object.values(porDossier).forEach((o) => {
+      const chave = o.client_name || '(sem cliente)';
+      (porCliente[chave] = porCliente[chave] || []).push({
+        ...o, checklist: porDossierChecklist[o.id] || null, pagamento: porDossierPagamento[o.id] || null,
+      });
+    });
+    return Object.entries(porCliente)
+      .map(([cliente, obras]) => ({ cliente, obras }))
+      .sort((a, b) => a.cliente.localeCompare(b.cliente));
+  }
+
+  function uploadDocumentoColaboradorArquivo(colaboradorId, documentoId, file) {
+    const c = sb();
+    if (!c) throw new Error('Supabase indisponível');
+    const ext = (file.name.split('.').pop() || 'bin').toLowerCase();
+    const path = `colaboradores/${colaboradorId}/${documentoId}.${ext}`;
+    return c.storage.from(ANEXOS_BUCKET).upload(path, file, { upsert: true }).then(({ error }) => {
+      if (error) throw error;
+      return { path, nome: file.name, tipo: file.type || null, tamanho: file.size, enviado_em: new Date().toISOString() };
+    });
+  }
+
   window.RHHomologacao = {
     CERTIFICACOES,
     salvarMontador,
     obterMontador,
     listarMontadores,
+    excluirMontador,
+    desvincularDaObra,
+    estatisticasTodasEmpresas,
     validarCertificacoes,
     statusGeral,
     statusVariant,
     fmtData,
+    uploadCertificadoArquivo,
+    urlCertificadoArquivo,
+    removerCertificadoArquivo,
+    listarColaboradoresTodos,
+    listarColaboradoresPorEmpresa,
+    obterColaborador,
+    salvarColaborador,
+    excluirColaborador,
+    listarDocCatalogo,
+    listarDocumentosColaborador,
+    salvarDocumentoColaborador,
+    resumoDocumentosPorEmpresa,
+    statusGeralPorColaboradores,
+    statusDocumentosEmpresa,
+    listarObrasPorInstalador,
+    listarHierarquiaClientesDoInstalador,
+    uploadDocumentoColaboradorArquivo,
   };
 })();

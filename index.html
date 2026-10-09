@@ -11,33 +11,35 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@300;400;500&display=swap" rel="stylesheet">
 
-  <link rel="stylesheet" href="colors_and_type.css">
-  <link rel="stylesheet" href="styles/app.css?v=13">
-  <link rel="stylesheet" href="styles/modules.css?v=2">
-  <link rel="stylesheet" href="styles/proposta-editor.css?v=12">
-  <link rel="stylesheet" href="styles/ncm.css">
-  <link rel="stylesheet" href="styles/desenho-tecnico.css?v=1">
-  <link rel="stylesheet" href="styles/contrato-instalador.css?v=4">
-  <link rel="stylesheet" href="styles/contrato-venda.css?v=2">
-  <link rel="stylesheet" href="styles/ficha-tecnica.css?v=6">
-  <link rel="stylesheet" href="styles/vp-copiloto.css?v=1">
-  <link rel="stylesheet" href="styles/pedido-fornecedor.css?v=3">
-  <link rel="stylesheet" href="styles/ficha-workflow.css?v=1">
-  <link rel="stylesheet" href="styles/logs-admin.css?v=1">
+  <link rel="stylesheet" href="/colors_and_type.css">
+  <link rel="stylesheet" href="/styles/app.css?v=24">
+  <link rel="stylesheet" href="/styles/modules.css?v=3">
+  <link rel="stylesheet" href="/styles/inbox-gmail.css?v=5">
+  <link rel="stylesheet" href="/styles/pcp-tabelas.css?v=5">
+  <link rel="stylesheet" href="/styles/proposta-editor.css?v=21">
+  <link rel="stylesheet" href="/styles/ncm.css">
+  <link rel="stylesheet" href="/styles/desenho-tecnico.css?v=1">
+  <link rel="stylesheet" href="/styles/contrato-instalador.css?v=8">
+  <link rel="stylesheet" href="/styles/contrato-venda.css?v=4">
+  <link rel="stylesheet" href="/styles/ficha-tecnica.css?v=7">
+  <link rel="stylesheet" href="/styles/vp-copiloto.css?v=4">
+  <link rel="stylesheet" href="/styles/pedido-fornecedor.css?v=3">
+  <link rel="stylesheet" href="/styles/ficha-workflow.css?v=1">
+  <link rel="stylesheet" href="/styles/logs-admin.css?v=1">
 
   <!-- React pinned versions. Babel Standalone NÃO carrega mais aqui — o
        jsx-loader.js abaixo só injeta babel.min.js sob demanda, quando há
        cache-miss (1ª carga / após um ?v= novo). Cargas seguintes com tudo
        em cache nem baixam nem executam o Babel. -->
-  <script src="https://unpkg.com/react@18.3.1/umd/react.development.js" integrity="sha384-hD6/rw4ppMLGNu3tX5cjIb+uRZ7UkRJ6BPkLpg4hAu/6onKUg4lLsHAs9EBPT82L" crossorigin="anonymous"></script>
-  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.development.js" integrity="sha384-u6aeetuaXnQ38mYT8rp6sbXaQe3NL9t+IBXmnYxwkUI2Hw4bsp2Wvmx4yRQF1uAm" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js" integrity="sha384-DGyLxAyjq0f9SPpVevD6IgztCFlnMF6oW/XQGmfe+IsZ8TqEiDrcHkMLKI6fiB/Z" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js" integrity="sha384-gTGxhz21lVGYNMcdJOyq01Edg0jhn/c22nsx0kyqP0TxaV5WVdsSH1fSDUf5YJj1" crossorigin="anonymous"></script>
 
   <!-- Cache de compilação JSX (IndexedDB) — compila cada .jsx uma vez e reusa
        nas cargas seguintes, em vez de rodar o Babel em ~40 arquivos toda vez.
        Os .jsx abaixo usam type="text/vp-jsx" pra que ESTE loader os controle
        (e o auto-runner do Babel os ignore, já que nem carrega mais aqui). Ver
        src/jsx-loader.js. -->
-  <script src="src/jsx-loader.js?v=4"></script>
+  <script src="/src/jsx-loader.js?v=4"></script>
 
   <!-- Supabase JS client (CDN, sem build step) -->
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2/dist/umd/supabase.js"></script>
@@ -47,6 +49,29 @@
        o canvas e adicionamos como 1 imagem num PDF A4 — 1 página garantida. -->
   <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js"></script>
+
+  <!-- Leaflet — mapa real (tiles) do popup "Ver mapa" em Importação/Logística. -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin=""/>
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+
+  <!-- Tailwind CSS 3.4.17 ESTÁTICO (antes: cdn.tailwindcss.com, compilado no navegador a cada
+       carga e desaconselhado em produção — issue #614). Fica por ÚLTIMO no <head> de
+       propósito: o <style> do CDN era injetado depois de todo o resto, então a cascata
+       continua igual. Regerar: ver o comando em styles/tailwind.config.js. -->
+  <link rel="stylesheet" href="/styles/tailwind.css?v=1">
+  <link rel="stylesheet" href="/styles/ui-suave.css?v=2">
+  <script>
+    /* Visual "Suave" dos componentes globais: padrão LIGADO. Volta ao clássico com ?ui=classico
+       (a escolha fica guardada neste navegador); ?ui=suave religa. Roda antes da pintura para não piscar. */
+    (function () {
+      try {
+        var q = new URLSearchParams(location.search).get('ui');
+        if (q === 'classico') localStorage.setItem('vp_ui', 'classico');
+        else if (q === 'suave') localStorage.removeItem('vp_ui');
+        if (localStorage.getItem('vp_ui') !== 'classico') document.documentElement.setAttribute('data-ui', 'suave');
+      } catch (e) { document.documentElement.setAttribute('data-ui', 'suave'); }
+    })();
+  </script>
 </head>
 <body class="vp" data-density="cozy">
   <div id="root"></div>
@@ -56,7 +81,7 @@
     text-align:center;padding:24px;">
     <p style="font-size:13px;font-weight:700;letter-spacing:.08em;color:#64748b;
       text-transform:uppercase;margin:0 0 4px;">Bem-vindo ao Portal</p>
-    <video id="vp-boot-video" src="assets/boot-video.mp4" autoplay muted playsinline
+    <video id="vp-boot-video" src="/assets/boot-video.mp4" autoplay muted playsinline
       style="width:100%;max-width:360px;border-radius:12px;box-shadow:0 8px 24px rgba(0,0,0,.08);"></video>
     <p style="font-family:'Poppins',sans-serif;font-weight:300;font-size:20px;letter-spacing:.02em;
       color:#C99E00;margin:16px 0 0;">portal.vpsistema.com</p>
@@ -69,160 +94,330 @@
   <style>@keyframes vp-spin{to{transform:rotate(360deg)}}</style>
 
   <!-- Verificação de versão publicada — roda o quanto antes, sem depender de nada -->
-  <script src="src/version-check.js?v=3"></script>
+  <script src="/src/version-check.js?v=6"></script>
 
   <!-- Utilitários globais sem dados de demonstração -->
-  <script src="src/utils.js?v=1"></script>
-  <script src="src/ncm-data.js?v=7"></script>
+  <script src="/src/utils.js?v=3"></script>
+  <script src="/src/ncm-data.js?v=7"></script>
 
   <!-- Supabase loader + carregador de dados reais -->
-  <script src="src/supabase.js?v=11"></script>
+  <!-- Métricas do Dashboard, por perspectiva — carrega antes de supabase.js
+       (loadDashboardData chama window.ComercialMetrics.compute() etc). -->
+  <script src="/src/dashboard-metrics-comercial.js?v=4"></script>
+  <script src="/src/dashboard-metrics-engenharia.js?v=3"></script>
+  <script src="/src/dashboard-metrics-financeiro.js?v=3"></script>
+  <script src="/src/dashboard-metrics-gantt.js?v=7"></script>
+  <script src="/src/dashboard-metrics-admin.js?v=5"></script>
+  <script src="/src/vp-auth.js?v=1"></script>
+  <script src="/src/supabase.js?v=33"></script>
+  <!-- Roteamento por URL (Fase 1 da roteirização, issue #279) — carrega
+       depois do guard de SSO (mexe só na query string, nunca no pathname)
+       e antes de shell.jsx/app.jsx, que o consomem. -->
+  <script src="/src/router.js?v=27"></script>
+
+  <script src="/src/notificacoes-processamento.js?v=5"></script>
+  <script src="/src/notificacoes-lidas-store.js?v=2"></script>
+
+  <!-- Administração — espelho de colaboradores (vpsistema) + alocação de
+       módulos do VP Gestão. Carrega cedo pra enriquecer window.__VP_USER
+       (foto + grupos alocados) assim que a identidade SSO chegar. -->
+  <script src="/src/colaboradores-admin-store.js?v=30"></script>
 
   <!-- Registro central de atividades (auditoria global) -->
-  <script src="src/vp-log.js?v=2"></script>
+  <script src="/src/vp-log.js?v=2"></script>
+
+  <!-- Envio de e-mail direto (SMTP) + fallback mailto: — compartilhado por
+       RFQ/Proposta/Contrato de Venda/Contrato Instalador -->
+  <script src="/src/email-envio-helper.js?v=1"></script>
+  <script src="/src/inbox-triagem-calc.js?v=5"></script>
+  <script src="/src/inbox-visibilidade.js?v=2"></script>
+  <script src="/src/inbox-busca-calc.js?v=3"></script>
+  <script src="/src/inbox-conversas-calc.js?v=2"></script>
+  <script src="/src/inbox-preco-calc.js?v=1"></script>
+  <script src="/src/inbox-organizar-calc.js?v=1"></script>
 
   <!-- Gatilhos & Prazo — motor que nasce/fecha nós automaticamente a partir
        dos eventos de eventos-fluxo-store.js (carrega ANTES dele) -->
-  <script src="src/gatilhos-engine.js?v=4"></script>
+  <script src="/src/gatilhos-engine.js?v=17"></script>
 
   <!-- Trilha genérica do fluxo operacional (Formulário → Fornecedor → Proposta → Cliente) -->
-  <script src="src/eventos-fluxo-store.js?v=4"></script>
+  <script src="/src/eventos-fluxo-store.js?v=14"></script>
 
   <!-- Central de Decisões — decisão gerencial genérica (CEO, Owner, Gestor Comercial, RH...) -->
-  <script src="src/decisoes-store.js?v=3"></script>
-  <script src="src/pedidos-varejo-store.js?v=1"></script>
+  <script src="/src/decisoes-store.js?v=19"></script>
+  <script src="/src/pedidos-varejo-store.js?v=4"></script>
 
   <!-- Gestão Importação — Fase 1: P.I. (Proforma Invoice) -->
-  <script src="src/pi-store.js?v=1"></script>
+  <script src="/src/pi-store.js?v=7"></script>
+  <!-- Gestão Importação — Fase 2: RFQ (Request for Quotation) -->
+  <script src="/src/rfq-store.js?v=3"></script>
+  <!-- Gestão Importação — Fase 3: IMS (recursos operacionais) -->
+  <script src="/src/ims-store.js?v=2"></script>
+  <!-- Gestão Importação — Fase 4: Embarques -->
+  <script src="/src/embarques-importacao-store.js?v=9"></script>
+  <!-- Pedidos — acompanhamento de status (Nacional/Importação) -->
+  <script src="/src/pedidos-acompanhamento-store.js?v=2"></script>
+
+  <!-- Linha do Tempo da Cotação — agrega dados de várias tabelas por Nº Cotação -->
+  <script src="/src/linha-do-tempo-store.js?v=6"></script>
+  <script src="/src/instalacao-checklist-store.js?v=8"></script>
+  <script src="/src/acompanhamento-obra-store.js?v=6"></script>
 
   <!-- Aval Financeiro — gate entre Proposta aprovada/Contrato e Contrato assinado/Compra -->
-  <script src="src/aval-financeiro-store.js?v=4"></script>
+  <script src="/src/aval-engenharia-store.js?v=1"></script>
+  <script src="/src/aval-financeiro-store.js?v=14"></script>
+
+  <!-- Aval Jurídico — gate entre Contrato de Venda assinado e envio do Desenho de Instalação -->
+  <script src="/src/aval-juridico-store.js?v=3"></script>
 
   <!-- Tweaks panel framework -->
-  <script type="text/vp-jsx" src="src/tweaks-panel.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="/src/tweaks-panel.jsx?v=3"></script>
 
   <!-- Components in dependency order -->
-  <script type="text/vp-jsx" src="src/primitives.jsx?v=4"></script>
-  <script type="text/vp-jsx" src="src/toast.jsx?v=6"></script>
-  <script type="text/vp-jsx" src="src/shell.jsx?v=35"></script>
-  <script type="text/vp-jsx" src="src/dashboard.jsx?v=11"></script>
-  <script type="text/vp-jsx" src="src/comercial.jsx?v=17"></script>
+  <script type="text/vp-jsx" src="/src/primitives.jsx?v=8"></script>
+  <script type="text/vp-jsx" src="/src/toast.jsx?v=6"></script>
+  <script type="text/vp-jsx" src="/src/ajuda-suporte.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="/src/shell.jsx?v=100"></script>
+  <script type="text/vp-jsx" src="/src/dashboard.jsx?v=22"></script>
+  <script type="text/vp-jsx" src="/src/comercial.jsx?v=38"></script>
+  <script type="text/vp-jsx" src="/src/crm.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/linha-do-tempo.jsx?v=5"></script>
 
   <!-- Padrão universal de codificação de IDs (Master ID) — Fase 1 -->
-  <script src="src/master-id-engine.js?v=2"></script>
+  <script src="/src/master-id-engine.js?v=5"></script>
+
+  <!-- Cadastros — Clientes & Fornecedores (transversal: Comercial, Importação, Engenharia) -->
+  <script src="/src/cadastros-clientes-store.js?v=10"></script>
+  <script src="/src/cadastros-fornecedores-store.js?v=6"></script>
 
   <!-- Formulário de Coleta de Dados — Elevadores (Comercial) — ISSUE #66 -->
-  <script src="src/enderecos-api.js?v=2"></script>
-  <script src="src/formulario-elevador-store.js?v=14"></script>
-  <script src="src/cotacao-elevador-fornecedor-store.js?v=14"></script>
-  <script type="text/vp-jsx" src="src/formulario-elevador.jsx?v=27"></script>
+  <script src="/src/enderecos-api.js?v=4"></script>
+  <!-- Câmbio USD/BRL ao vivo (AwesomeAPI) — usado pela Precificação de
+       Elevador pra comparar o câmbio congelado da cotação com o de hoje. -->
+  <script src="/src/cambio-api.js?v=2"></script>
+  <script src="/src/formulario-elevador-store.js?v=22"></script>
+  <script src="/src/cotacao-elevador-fornecedor-store.js?v=25"></script>
+  <script type="text/vp-jsx" src="/src/formulario-elevador.jsx?v=12"></script>
+
+  <!-- Quadro de Comando (Comercial · Formulários) — BOM + lista de corte
+       + checklist digital de separação quando fabricado internamente. -->
+  <script src="/src/quadro-comando-bom-engine.js?v=5"></script>
+  <script src="/src/quadro-comando-store.js?v=9"></script>
+  <script type="text/vp-jsx" src="/src/quadro-comando.jsx?v=22"></script>
+
+  <!-- Cotação Quadro de Comando — fluxo completo como elevador -->
+  <script src="/src/contratos-sociais-store.js?v=1"></script>
+  <script type="text/vp-jsx" src="/src/contratos-sociais.jsx?v=2"></script>
+  <script src="/src/cotacao-quadro-comando-store.js?v=2"></script>
+  <script type="text/vp-jsx" src="/src/cotacao-quadro-comando.jsx?v=5"></script>
 
   <!-- Controle de Cotações — histórico + Formulário de Elevadores — ISSUE #79 -->
-  <script type="text/vp-jsx" src="src/controle-cotacoes.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="/src/controle-cotacoes.jsx?v=9"></script>
 
   <!-- Cotações a Fornecedor — substitui a antiga "Cotações China" (mock) -->
-  <script src="src/tratativas-store.js?v=1"></script>
-  <script type="text/vp-jsx" src="src/cotacoes-fornecedor.jsx?v=7"></script>
+  <script src="/src/tratativas-store.js?v=4"></script>
+  <script type="text/vp-jsx" src="/src/cotacoes-fornecedor.jsx?v=17"></script>
+  <script type="text/vp-jsx" src="/src/enviar-documentos-fornecedor.jsx?v=1"></script>
 
   <!-- Precificação de Elevador (ADM/Financeiro) + DIFAL -->
-  <script src="src/difal-engine.js?v=1"></script>
-  <script src="src/precificacao-elevador-engine.js?v=1"></script>
-  <script src="src/precificacao-elevador-store.js?v=5"></script>
-  <script type="text/vp-jsx" src="src/precificacao-elevador.jsx?v=11"></script>
+  <script src="/src/difal-engine.js?v=1"></script>
+  <script src="/src/precificacao-elevador-engine.js?v=7"></script>
+  <script src="/src/precificacao-elevador-store.js?v=31"></script>
+  <script type="text/vp-jsx" src="/src/precificacao-elevador.jsx?v=48"></script>
 
-  <script type="text/vp-jsx" src="src/precificacao.jsx?v=17"></script>
-  <script type="text/vp-jsx" src="src/proposta-form.jsx?v=7"></script>
-  <script type="text/vp-jsx" src="src/proposta-preview.jsx?v=12"></script>
-  <script src="src/proposta-store.js?v=5"></script>
-  <script src="src/proposta-heranca.js?v=4"></script>
-  <script src="src/proposta-imagens.js?v=1"></script>
-  <script type="text/vp-jsx" src="src/proposta-editor.jsx?v=24"></script>
-  <script type="text/vp-jsx" src="src/ncm.jsx?v=6"></script>
+  <script type="text/vp-jsx" src="/src/precificacao.jsx?v=29"></script>
+  <script src="/src/proposta-acabamentos-engine.js?v=1"></script>
+  <script src="/src/proposta-conteudo-engine.js?v=1"></script>
+  <script src="/src/proposta-acabamentos-store.js?v=1"></script>
+  <script src="/src/proposta-opcoes.js?v=1"></script>
+  <script type="text/vp-jsx" src="/src/proposta-form.jsx?v=16"></script>
+  <script type="text/vp-jsx" src="/src/proposta-preview.jsx?v=21"></script>
+  <script src="/src/proposta-store.js?v=23"></script>
+  <script src="/src/proposta-legado.js?v=1"></script>
+  <script src="/src/proposta-heranca.js?v=16"></script>
+  <!-- Desconto por equipamento com histórico + aprovação por alçada
+       (Frentes B+C do estudo do editor de Proposta) — reaproveita
+       decisoes-store.js, sem tabela nova. -->
+  <script src="/src/proposta-desconto.js?v=1"></script>
+  <script src="/src/proposta-imagens.js?v=1"></script>
+  <!-- Fase 2 da migração pra @react-pdf/renderer (plano aprovado 20/08) —
+       gerado por `npm run build:pdf:proposta` a partir de
+       pdf-bundle/proposta-reactpdf.entry.js. Só Elevador por enquanto. -->
+  <script src="/src/proposta-reactpdf.bundle.js?v=12"></script>
+  <script type="text/vp-jsx" src="/src/proposta-editor.jsx?v=50"></script>
+  <script type="text/vp-jsx" src="/src/ncm.jsx?v=6"></script>
 
   <!-- Funil de pré-venda por setores (workflow + histórico) — antes do Catálogo -->
-  <script src="src/project-gates.js?v=1"></script>
-  <script src="src/vistoria-tracker.js?v=1"></script>
-  <script src="src/ficha-workflow-engine.js?v=1"></script>
-  <script src="src/ficha-workflow-store.js?v=3"></script>
-  <script type="text/vp-jsx" src="src/ficha-workflow.jsx?v=1"></script>
+  <script src="/src/project-gates.js?v=1"></script>
+  <script src="/src/ficha-workflow-engine.js?v=1"></script>
+  <script src="/src/ficha-workflow-store.js?v=3"></script>
+  <script type="text/vp-jsx" src="/src/ficha-workflow.jsx?v=1"></script>
 
-  <script type="text/vp-jsx" src="src/ncm-catalogo.jsx?v=22"></script>
-  <script type="text/vp-jsx" src="src/operacoes.jsx?v=14"></script>
-  <script type="text/vp-jsx" src="src/logistica.jsx?v=19"></script>
-  <script src="src/comissionamento-store.js?v=1"></script>
-  <script type="text/vp-jsx" src="src/financeiro.jsx?v=18"></script>
-  <script type="text/vp-jsx" src="src/aval-financeiro.jsx?v=2"></script>
-  <script type="text/vp-jsx" src="src/decisoes.jsx?v=2"></script>
-  <script type="text/vp-jsx" src="src/almoxarifado.jsx?v=1"></script>
-  <script type="text/vp-jsx" src="src/pi.jsx?v=2"></script>
+  <script type="text/vp-jsx" src="/src/ncm-catalogo.jsx?v=26"></script>
+  <script type="text/vp-jsx" src="/src/operacoes.jsx?v=19"></script>
+  <script type="text/vp-jsx" src="/src/inbox-triagem.jsx?v=5"></script>
+  <script type="text/vp-jsx" src="/src/inbox-gmail.jsx?v=5"></script>
+  <script type="text/vp-jsx" src="/src/inbox-organizar.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/inbox-historico.jsx?v=2"></script>
+  <script type="text/vp-jsx" src="/src/inbox-conversas.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/inbox-decisao.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/inbox-preco.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/logistica.jsx?v=68"></script>
+  <script src="/src/importacao-varejo-store.js?v=2"></script>
+  <script type="text/vp-jsx" src="/src/importacao-varejo.jsx?v=8"></script>
+  <script src="/src/comissionamento-store.js?v=2"></script>
+  <script type="text/vp-jsx" src="/src/colaboradores-admin.jsx?v=5"></script>
+  <script type="text/vp-jsx" src="/src/financeiro.jsx?v=43"></script>
+  <script type="text/vp-jsx" src="/src/aval-engenharia.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/aval-financeiro.jsx?v=6"></script>
+  <script type="text/vp-jsx" src="/src/aval-juridico.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="/src/decisoes.jsx?v=7"></script>
+  <script src="/src/custo-calc.js?v=2"></script>
+  <script type="text/vp-jsx" src="/src/almoxarifado.jsx?v=28"></script>
+  <script type="text/vp-jsx" src="/src/almoxarifado-compras.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="/src/pcp.jsx?v=23"></script>
+  <script type="text/vp-jsx" src="/src/painel-producao-pcp.jsx?v=2"></script>
+  <script type="text/vp-jsx" src="/src/painel-perdas-pcp.jsx?v=4"></script>
+  <script src="/src/pcp-etapas-omie.js?v=1"></script>
+  <script type="text/vp-jsx" src="/src/painel-fluxo-pcp.jsx?v=5"></script>
+  <script type="text/vp-jsx" src="/src/painel-fotos-pcp.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="/src/relatorios-pcp-custos.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="/src/relatorios-pcp-extras.jsx?v=2"></script>
+  <script type="text/vp-jsx" src="/src/relatorios-pcp.jsx?v=17"></script>
+  <script type="text/vp-jsx" src="/src/expedicao.jsx?v=3"></script>
+  <script src="/src/pcp-pedido-sla.js?v=1"></script>
+  <script src="/src/rota-pcp.js?v=1"></script>
+  <script src="/src/reposicao-calc.js?v=3"></script>
+  <script type="text/vp-jsx" src="/src/compra-pcp.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/reposicao-pcp.jsx?v=5"></script>
+  <script src="/src/necessidade-calc.js?v=2"></script>
+  <script type="text/vp-jsx" src="/src/necessidade-pcp.jsx?v=6"></script>
+  <script type="text/vp-jsx" src="/src/emissao-nf.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="/src/carga-maquina.jsx?v=7"></script>
+  <script type="text/vp-jsx" src="/src/montagem-produto.jsx?v=5"></script>
+  <script type="text/vp-jsx" src="/src/simulacao-producao.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/mes.jsx?v=6"></script>
+  <script type="text/vp-jsx" src="/src/cadastro-itens.jsx?v=2"></script>
+  <script type="text/vp-jsx" src="/src/pi.jsx?v=16"></script>
+  <script type="text/vp-jsx" src="/src/rfq.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="/src/ims.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="/src/embarques-importacao.jsx?v=6"></script>
+  <script type="text/vp-jsx" src="/src/gestao-importacao-painel.jsx?v=3"></script>
+  <script type="text/vp-jsx" src="/src/pedidos-acompanhamento.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="/src/cadastros.jsx?v=9"></script>
 
   <!-- Dossier da Obra (entidade central) — ISSUE #2 -->
-  <script src="src/dossier-store.js?v=3"></script>
-  <script type="text/vp-jsx" src="src/dossier-obra.jsx?v=6"></script>
+  <script src="/src/dossier-store.js?v=14"></script>
+  <script src="/src/fluxo-pendentes.js?v=4"></script>
+  <script src="/src/termo-entrega-store.js?v=2"></script>
+  <script type="text/vp-jsx" src="/src/dossier-obra.jsx?v=37"></script>
 
   <!-- Análise Técnica (ISSUE #3) -->
-  <script src="src/analise-tecnica-store.js?v=1"></script>
-  <script type="text/vp-jsx" src="src/analise-tecnica.jsx?v=2"></script>
+  <script src="/src/analise-tecnica-store.js?v=5"></script>
+  <script type="text/vp-jsx" src="/src/analise-tecnica.jsx?v=2"></script>
 
   <!-- Vistorias de Obras (Instalação & Entrega) -->
-  <script type="text/vp-jsx" src="src/vistorias-obras.jsx?v=1"></script>
+  <script src="/src/vistorias-questionarios-store.js?v=15"></script>
+  <script src="/src/vistoria-reactpdf.bundle.js?v=2"></script>
+  <script type="text/vp-jsx" src="/src/vistorias-envio.jsx?v=16"></script>
+  <script type="text/vp-jsx" src="/src/vistorias-obras.jsx?v=15"></script>
+
+  <!-- Central de Documentos (Biblioteca Virtual) — Fase 1: leitura agregada -->
+  <script src="/src/central-documentos-store.js?v=6"></script>
+  <script type="text/vp-jsx" src="/src/central-documentos.jsx?v=7"></script>
 
   <!-- Etapas finais do workflow (ART, Cronograma, Data Book) -->
-  <script src="src/data-book-store.js?v=1"></script>
-  <script src="src/handover-manutencao.js?v=1"></script>
-  <script type="text/vp-jsx" src="src/entrega.jsx?v=6"></script>
-  <script type="text/vp-jsx" src="src/handover-manutencao.jsx?v=2"></script>
+  <script src="/src/handover-manutencao.js?v=3"></script>
+  <script type="text/vp-jsx" src="/src/entrega.jsx?v=7"></script>
+  <script type="text/vp-jsx" src="/src/handover-manutencao.jsx?v=4"></script>
 
   <!-- Jurídico · Editor de Contrato do Cliente -->
-  <script type="text/vp-jsx" src="src/contrato-editor.jsx?v=5"></script>
+  <script type="text/vp-jsx" src="/src/contrato-editor.jsx?v=5"></script>
 
   <!-- Engenharia · Configurador de Equipamentos (escada/esteira rolante) -->
-  <script type="text/vp-jsx" src="src/engenharia-config.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="/src/engenharia-config.jsx?v=5"></script>
 
   <!-- Engenharia · Projeto de Elevadores (poço/cabine/porta, correlacionado por Nº da Cotação) -->
-  <script src="src/projeto-elevador-store.js?v=3"></script>
-  <script type="text/vp-jsx" src="src/engenharia-elevador.jsx?v=3"></script>
+  <script src="/src/projeto-elevador-store.js?v=8"></script>
+  <script type="text/vp-jsx" src="/src/engenharia-elevador.jsx?v=9"></script>
 
   <!-- Engenharia · Desenho Técnico ER|ES (porte Claude Designer) -->
-  <script type="text/vp-jsx" src="src/desenho-tecnico.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/desenho-tecnico.jsx?v=1"></script>
 
   <!-- Recursos Humanos · Homologação de Parceiros Instaladores -->
-  <script src="src/rh-homologacao-store.js?v=1"></script>
-  <script src="src/instalacao-obra-store.js?v=2"></script>
-  <script type="text/vp-jsx" src="src/rh-homologacao.jsx?v=1"></script>
+  <script src="/src/rh-homologacao-store.js?v=13"></script>
+  <script src="/src/instalacao-obra-store.js?v=15"></script>
+  <script src="/src/omie-pagamentos-store.js?v=6"></script>
+  <script type="text/vp-jsx" src="/src/rh-homologacao.jsx?v=8"></script>
+  <script type="text/vp-jsx" src="/src/cadastro-instaladores.jsx?v=17"></script>
+
+  <!-- Cadastros · Atualização de Custos (Instalação Elevador/Escada·Esteira + Containers) —
+       herança automática pra Precificação, ver cadastro-custos-store.js -->
+  <script src="/src/cadastro-custos-store.js?v=7"></script>
+  <script type="text/vp-jsx" src="/src/cadastro-custos.jsx?v=11"></script>
 
   <!-- Jurídico · Contrato Instalador (wizard + dashboard + assinatura digital) -->
-  <script src="src/contrato-instalador-engine.js?v=2"></script>
-  <script src="src/contrato-instalador-store.js?v=5"></script>
-  <script type="text/vp-jsx" src="src/contrato-instalador-preview.jsx?v=1"></script>
-  <script type="text/vp-jsx" src="src/contrato-instalador.jsx?v=3"></script>
+  <script src="/src/contrato-instalador-engine.js?v=8"></script>
+  <script src="/src/contrato-instalador-parcelas-store.js?v=3"></script>
+  <script src="/src/contrato-instalador-store.js?v=14"></script>
+  <script type="text/vp-jsx" src="/src/contrato-instalador-preview.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="/src/contrato-instalador.jsx?v=17"></script>
+  <script type="text/vp-jsx" src="/src/pagamentos-instalador.jsx?v=4"></script>
 
   <!-- Jurídico · Contrato Venda de Equipamentos (cliente final) -->
-  <script src="src/contrato-venda-engine.js?v=5"></script>
-  <script src="src/contrato-venda-store.js?v=10"></script>
-  <script type="text/vp-jsx" src="src/contrato-venda-preview.jsx?v=2"></script>
-  <script type="text/vp-jsx" src="src/contrato-venda.jsx?v=10"></script>
+  <script src="/src/contrato-venda-engine.js?v=18"></script>
+  <!-- Signatários com token individual — genérico (Proposta/Contrato Venda/Contrato
+       Instalador), ver documento-signatarios-store.js. Precisa vir ANTES de
+       contrato-venda-store.js, que checa window.DocumentoSignatariosStore ao
+       finalizar a assinatura. -->
+  <script src="/src/documento-signatarios-store.js?v=3"></script>
+  <!-- pdf-lib: anexa a página de assinaturas digitais ao PDF do Projeto de Instalação (projeto-assinado-pdf.js) -->
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf-lib/1.17.1/pdf-lib.min.js" integrity="sha384-weMABwrltA6jWR8DDe9Jp5blk+tZQh7ugpCsF3JwSA53WZM9/14PjS5LAJNHNjAI" crossorigin="anonymous"></script>
+  <script src="https://unpkg.com/@pdf-lib/fontkit@1.1.1/dist/fontkit.umd.min.js" integrity="sha384-2p6U+1mmqF10USehFeRiyG2ESG9FwIqN+jxULn5w9jjQIihSn9Pt13dVCn/Hawjn" crossorigin="anonymous"></script>
+  <script src="/src/projeto-assinado-pdf.js?v=2"></script>
+  <script src="/src/contrato-venda-store.js?v=20"></script>
+  <script src="/src/contrato-venda-signatarios-store.js?v=3"></script>
+  <!-- Motor de PDF do Contrato de Venda (react-pdf) — layout idêntico à minuta oficial. Ver pdf-bundle/contrato-venda-reactpdf.entry.js -->
+  <script src="/src/contrato-venda-reactpdf.bundle.js?v=5"></script>
+  <script type="text/vp-jsx" src="/src/contrato-venda-preview.jsx?v=4"></script>
+  <script type="text/vp-jsx" src="/src/contrato-venda.jsx?v=31"></script>
 
   <!-- Engenharia · Ficha Técnica (gerador universal) -->
-  <script src="src/ficha-tecnica-engine.js?v=9"></script>
-  <script src="src/ficha-tecnica-store.js?v=4"></script>
-  <script src="src/ficha-tecnica-imagens.js?v=1"></script>
-  <script src="src/ficha-omie-publish.js?v=5"></script>
-  <script type="text/vp-jsx" src="src/ficha-tecnica.jsx?v=19"></script>
-  <script type="text/vp-jsx" src="src/ficha-tecnica-copiloto.jsx?v=3"></script>
+  <script src="/src/ficha-tecnica-engine.js?v=10"></script>
+  <script src="/src/ficha-tecnica-store.js?v=5"></script>
+  <script src="/src/ficha-tecnica-imagens.js?v=1"></script>
+  <script src="/src/ficha-omie-publish.js?v=5"></script>
+  <script type="text/vp-jsx" src="/src/ficha-tecnica.jsx?v=24"></script>
+  <script type="text/vp-jsx" src="/src/ficha-tecnica-copiloto.jsx?v=3"></script>
+
+  <!-- Engenharia · Solicitações de Produto (fluxo Comercial → Engenharia → Ficha Técnica) -->
+  <script src="/src/solicitacoes-produto-store.js?v=8"></script>
+  <script type="text/vp-jsx" src="/src/solicitacoes-produto.jsx?v=11"></script>
 
   <!-- Catálogo · Pedido a Fornecedor (RFQ bilíngue PT|EN) -->
-  <script src="src/pedido-fornecedor-engine.js?v=3"></script>
-  <script src="src/pedido-fornecedor-store.js?v=5"></script>
-  <script type="text/vp-jsx" src="src/pedido-fornecedor.jsx?v=3"></script>
+  <script src="/src/pedido-fornecedor-engine.js?v=3"></script>
+  <script src="/src/pedido-fornecedor-store.js?v=6"></script>
+  <!-- Fase 1 da migração pra @react-pdf/renderer (plano aprovado 20/08) —
+       Caminho A (CDN ESM sem bundler) travou de verdade em pdf().toBlob()
+       ["Cannot read properties of null (reading 'props')"], em esm.sh E
+       jsDelivr, com e sem instância de React pareada — falha conhecida do
+       próprio pacote fora de um bundler real. Este arquivo é gerado por
+       `npm run build:pdf` (pdf-bundle/vite.config.js) a partir de
+       pdf-bundle/pedido-fornecedor-reactpdf.entry.js — React/ReactDOM
+       ficam "external", usam o window.React já carregado abaixo, sem
+       segunda cópia. É um <script> comum daqui pra frente, igual
+       jsPDF/html2canvas — só a GERAÇÃO dele usa Vite, o app servido
+       continua sem build step. -->
+  <script src="/src/pedido-fornecedor-reactpdf.bundle.js?v=3"></script>
+  <script type="text/vp-jsx" src="/src/pedido-fornecedor.jsx?v=5"></script>
 
   <!-- Copiloto VP · bolinha global (chat + preenchimento + revisão) -->
   <!-- Admin: Logs de Atividade -->
-  <script type="text/vp-jsx" src="src/logs-admin.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/logs-admin.jsx?v=2"></script>
 
-  <script type="text/vp-jsx" src="src/vp-copiloto.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/vp-copiloto.jsx?v=9"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="src/app.jsx?v=38"></script>
+  <script type="text/vp-jsx" src="/src/app.jsx?v=96"></script>
 </body>
 </html>

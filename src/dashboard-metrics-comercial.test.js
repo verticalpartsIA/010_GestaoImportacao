@@ -1,0 +1,168 @@
+/* ============================================================
+   dashboard-metrics-comercial.test.js
+   node --test src/dashboard-metrics-comercial.test.js
+   (ou `npm test`, que roda node --test em todo src/)
+
+   Sem framework externo — node:test é nativo (Node 18+), zero
+   dependência nova no package.json.
+   ============================================================ */
+'use strict';
+const test = require('node:test');
+const assert = require('node:assert/strict');
+
+// dashboard-metrics-comercial.js é um script de browser (window.ComercialMetrics,
+// sem module.exports) — carrega num window de mentira só pra rodar fora do browser.
+global.window = global.window || {};
+require('./dashboard-metrics-comercial.js');
+const M = window.ComercialMetrics;
+
+test('leadsDoMes — filtra só leads do mês corrente', () => {
+  const hoje = new Date('2026-08-17T12:00:00Z');
+  const leads = [
+    { id: 1, date: '2026-08-01' },
+    { id: 2, date: '2026-08-16' },
+    { id: 3, date: '2026-07-31' }, // mês anterior — não conta
+    { id: 4, date: '' },           // sem data — não conta
+  ];
+  const r = M.leadsDoMes(leads, hoje);
+  assert.deepEqual(r.map((l) => l.id), [1, 2]);
+});
+
+// Achado real (03/10): a versão anterior lia a tabela órfã `cotacoes` —
+// 0 linhas em produção, nunca escrita pelo fluxo real. Fonte agora:
+// `gatilhos` (SLA_FORNECEDOR/PRECIFICACAO abertos = cotação em China).
+test('cotacoesAbertas — conta cotações distintas com SLA_FORNECEDOR/PRECIFICACAO abertos', () => {
+  const gatilhos = [
+    { numero_cotacao: 955, evento_key: 'SLA_FORNECEDOR', concluido_em: null },
+    { numero_cotacao: 960, evento_key: 'PRECIFICACAO', concluido_em: null },
+    { numero_cotacao: 961, evento_key: 'SLA_FORNECEDOR', concluido_em: '2026-09-01' }, // fechado — não conta
+    { numero_cotacao: 962, evento_key: 'AGUARDA_CLIENTE', concluido_em: null }, // fase diferente — não conta
+  ];
+  assert.deepEqual(M.cotacoesAbertas(gatilhos).sort(), [955, 960]);
+});
+
+test('cotacoesAbertas — mesma cotação com os 2 nós abertos conta só 1 vez', () => {
+  const gatilhos = [
+    { numero_cotacao: 955, evento_key: 'SLA_FORNECEDOR', concluido_em: null },
+    { numero_cotacao: 955, evento_key: 'PRECIFICACAO', concluido_em: null },
+  ];
+  assert.equal(M.cotacoesAbertas(gatilhos).length, 1);
+});
+
+test('conversaoLeadProposta — sem leads não divide por zero', () => {
+  assert.equal(M.conversaoLeadProposta([], []), 0);
+});
+
+test('conversaoLeadProposta — casa lead com proposta pelo cliente_id, não pela contagem bruta', () => {
+  const leads = [{ id: 1, cliente_id: 'c1' }, { id: 2, cliente_id: 'c2' }, { id: 3, cliente_id: 'c3' }, { id: 4, cliente_id: null }];
+  const enviadas = [{ id: 'p1', cliente_id: 'c1' }];
+  assert.equal(M.conversaoLeadProposta(leads, enviadas), 25);
+});
+
+// Regressão do bug real de produção (02/10): 12 leads × 309 propostas
+// históricas (de clientes em grande parte distintos dos 12 leads atuais)
+// dava 2575% na razão bruta propostas/leads. Com o casamento por
+// cliente_id, o percentual nunca passa de 100% e só conta lead cujo
+// cliente já tem proposta de verdade — aqui, de 4 leads, só 1 bate.
+test('conversaoLeadProposta — nunca passa de 100% mesmo com muito mais propostas que leads', () => {
+  const leads = [{ id: 1, cliente_id: 'c1' }, { id: 2, cliente_id: 'c2' }, { id: 3, cliente_id: 'c3' }, { id: 4, cliente_id: 'c4' }];
+  const enviadas = Array.from({ length: 50 }, (_, i) => ({ id: 'p' + i, cliente_id: 'c1' }));
+  assert.equal(M.conversaoLeadProposta(leads, enviadas), 25);
+});
+
+test('conversaoLeadProposta — lead sem cliente_id (ainda não qualificado) nunca conta como convertido', () => {
+  const leads = [{ id: 1, cliente_id: null }];
+  const enviadas = [{ id: 'p1', cliente_id: null }];
+  assert.equal(M.conversaoLeadProposta(leads, enviadas), 0);
+});
+
+test('propostasAprovadas — só status "aprovada"', () => {
+  const propostas = [
+    { id: 'a', status: 'aprovada' },
+    { id: 'b', status: 'enviada' },
+    { id: 'c', status: 'aprovada' },
+  ];
+  assert.deepEqual(M.propostasAprovadas(propostas).map((p) => p.id), ['a', 'c']);
+});
+
+test('idsComContrato — Set dos proposta_id com contrato emitido', () => {
+  const contratos = [{ proposta_id: 'a' }, { proposta_id: null }, { proposta_id: 'c' }];
+  const s = M.idsComContrato(contratos);
+  assert.equal(s.has('a'), true);
+  assert.equal(s.has('b'), false);
+  assert.equal(s.size, 2);
+});
+
+// Regressão do bug histórico documentado em supabase.js: pipeline zerado
+// mesmo com proposta assinada real — o funil precisa refletir a esteira
+// Leads → Propostas enviadas → Propostas assinadas → Contratos usando as
+// tabelas de verdade (propostas/contratos), não a tabela órfã `cotacoes`.
+test('pipeline — proposta aprovada SEM contrato conta em "Propostas assinadas"', () => {
+  const stages = M.pipeline({
+    leads: [{ id: 1 }],
+    propostas: [{ id: 'p1', status: 'aprovada' }],
+    contratos: [],
+  });
+  const assinadas = stages.find((s) => s.label === 'Propostas assinadas');
+  assert.equal(assinadas.value, 1);
+});
+
+test('pipeline — proposta aprovada COM contrato sai de "assinadas" e conta em "Contratos"', () => {
+  const stages = M.pipeline({
+    leads: [{ id: 1 }],
+    propostas: [{ id: 'p1', status: 'aprovada' }],
+    contratos: [{ proposta_id: 'p1' }],
+  });
+  const assinadas = stages.find((s) => s.label === 'Propostas assinadas');
+  const contratosStage = stages.find((s) => s.label === 'Contratos');
+  assert.equal(assinadas.value, 0);
+  assert.equal(contratosStage.value, 1);
+});
+
+test('propostasEnviadas — conta da tabela propostas, não de leads.status', () => {
+  const propostas = [
+    { id: 'p1', status: 'enviada' },
+    { id: 'p2', status: 'rascunho' }, // ainda não enviada — não conta
+    { id: 'p3', status: 'aprovada' }, // já saiu de rascunho — conta
+  ];
+  assert.deepEqual(M.propostasEnviadas(propostas).map((p) => p.id), ['p1', 'p3']);
+});
+
+test('KPI "Propostas enviadas" e o Funil Pipeline concordam (regressão do achado da auditoria)', () => {
+  const leads = [{ id: 1 }];
+  const propostas = [
+    { id: 'p1', status: 'enviada' },
+    { id: 'p2', status: 'rascunho' },
+  ];
+  const out = M.compute({ leads, gatilhos: [], propostas, contratos: [] });
+  const kpi = out.kpis.find((k) => k.label === 'Propostas enviadas');
+  const funil = out.pipelineStages.find((s) => s.label === 'Propostas enviadas');
+  assert.equal(kpi.value, '1');
+  assert.equal(funil.value, 1);
+});
+
+test('origemBars — volume e conversão por origem, ordenado por volume desc', () => {
+  const leads = [
+    { origin: 'Site', status: 'Convertido' },
+    { origin: 'Site', status: 'Novo' },
+    { origin: 'Indicação', status: 'Convertido' },
+  ];
+  const bars = M.origemBars(leads);
+  assert.equal(bars[0].l, 'Site');
+  assert.equal(bars[0].v, 2);
+  assert.equal(bars[0].conv, 50);
+  assert.equal(bars[1].l, 'Indicação');
+  assert.equal(bars[1].conv, 100);
+});
+
+test('compute — devolve o shape completo esperado pelo Dashboard', () => {
+  const out = M.compute({
+    leads: [{ id: 1, date: '2026-08-01', origin: 'Site', status: 'Convertido' }],
+    gatilhos: [{ numero_cotacao: 1, evento_key: 'SLA_FORNECEDOR', concluido_em: null }],
+    propostas: [{ id: 'p1', status: 'aprovada' }],
+    contratos: [],
+  });
+  assert.ok(Array.isArray(out.kpis) && out.kpis.length === 4);
+  assert.ok(Array.isArray(out.pipelineStages) && out.pipelineStages.length === 4);
+  assert.ok(Array.isArray(out.originBars));
+});

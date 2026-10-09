@@ -41,6 +41,8 @@ const OPTIONS = {
   caracTransporteEsc:  ["Alto Tráfego", "Comercial"],
   caracTransporteEst:  ["Alto Tráfego", "Comercial"],
 
+  tracaoElev: ["2:1", "4:1"],
+
   // Elevador — Acabamentos
   modeloCabine: ["VP-004","VP-200","VP-221","VP-224","VP-228","VP-229","VP-230","VP-301","VP-302","VPY","HC165","HC160"],
   acabamentoMaterial: ["Aço Inox - 304", "Aço Inox - 430", "Aço pintado", "Aço Inox com painel traseiro espelhado"],
@@ -381,7 +383,7 @@ function S_DescricaoElevador({ d, set }) {
 function S_EspecElevador({ d, set }) {
   const items = d.elevador.especificacoes;
   const update = (i, k, v) => { const arr = [...items]; arr[i] = { ...arr[i], [k]: v }; set("elevador.especificacoes", arr); };
-  const add = () => set("elevador.especificacoes", [...items, { id: "", modelo: "", empreendimento: "", carac: "", denominacao: "", percurso: "", capacidade: "", dimensoesCaixa: "", profPoço: "", vel: "", andaresParadasPortas: "", qtd: 1 }]);
+  const add = () => set("elevador.especificacoes", [...items, { id: "", modelo: "", empreendimento: "", carac: "", denominacao: "", percurso: "", capacidade: "", dimensoesCaixa: "", profPoço: "", dimensoesCabine: "", tensao: "", tracao: "", vel: "", andaresParadasPortas: "", qtd: 1 }]);
   const remove = (i) => set("elevador.especificacoes", items.filter((_, j) => j !== i));
   const dup = (i) => { const arr = [...items]; arr.splice(i + 1, 0, { ...items[i] }); set("elevador.especificacoes", arr); };
 
@@ -403,8 +405,12 @@ function S_EspecElevador({ d, set }) {
             <PEField label="Dimensões da Caixa" tag="LxP mm"><PETextInput value={it.dimensoesCaixa} onChange={(v) => update(i, "dimensoesCaixa", v)} placeholder="1600 x 1840mm"/></PEField>
 
             <PEField label="Profundidade do Poço" tag="mm"><PENumber value={it.profPoço} onChange={(v) => update(i, "profPoço", v)} suffix="mm" placeholder="1500"/></PEField>
+            <PEField label="Dimensões da Cabine" tag="LxP mm"><PETextInput value={it.dimensoesCabine} onChange={(v) => update(i, "dimensoesCabine", v)} placeholder="1500 x 1700mm"/></PEField>
             <PEField label="Velocidade" tag="m/s"><PENumber value={it.vel} onChange={(v) => update(i, "vel", v)} suffix="m/s" placeholder="1"/></PEField>
+
             <PEField label="Andares / Paradas / Portas"><PETextInput value={it.andaresParadasPortas} onChange={(v) => update(i, "andaresParadasPortas", v)} placeholder="18 Paradas (-1, 0, 1 a 16)"/></PEField>
+            <PEField label="Tensão de Alimentação"><PETextInput value={it.tensao} onChange={(v) => update(i, "tensao", v)} placeholder="380V/3P/60Hz"/></PEField>
+            <PEField label="Tração"><PESelect value={it.tracao} onChange={(v) => update(i, "tracao", v)} options={OPTIONS.tracaoElev}/></PEField>
 
             <PEField label="Quantidade" required><PENumber value={it.qtd} onChange={(v) => update(i, "qtd", v)} placeholder="1"/></PEField>
           </div>
@@ -415,30 +421,178 @@ function S_EspecElevador({ d, set }) {
   );
 }
 
-function S_Acabamentos({ d, set, eq = "elevador" }) {
-  const a = d.elevador.acabamentos;
-  const u = (k) => (v) => set(`elevador.acabamentos.${k}`, v);
+/* ---- Acabamentos: campo com checkbox "ativo" (só o marcado entra no PDF)
+   + valor inline quando marcado — mesmo padrão da Ficha Técnica. ---- */
+function S_AcabField({ fld, onToggle, onValue, onRemove }) {
+  const opts = fld.opcoesKey ? OPTIONS[fld.opcoesKey] : null;
   return (
-    <div className="pe-grid cols-2">
-      <PEField label="Modelo da Cabine"><PESelect value={a.modeloCabine} onChange={u("modeloCabine")} options={OPTIONS.modeloCabine}/></PEField>
-      <PEField label="Acabamento (material)"><PESelect value={a.acabamentoMat} onChange={u("acabamentoMat")} options={OPTIONS.acabamentoMaterial}/></PEField>
-      <PEField label="Sub-teto"><PESelect value={a.subTeto} onChange={u("subTeto")} options={OPTIONS.subTeto}/></PEField>
-      <PEField label="Painel de Operação / Botoeira de Cabine"><PESelect value={a.painelOperacao} onChange={u("painelOperacao")} options={OPTIONS.painelOperacao}/></PEField>
+    <div className="pe-acab-row">
+      <label className={"pe-acab-check" + (fld.ativo ? " on" : "")}>
+        <input type="checkbox" checked={!!fld.ativo} onChange={onToggle}/>
+        <span>{fld.nome}</span>
+      </label>
+      {fld.custom && (
+        <button type="button" className="pe-acab-rm" onClick={onRemove} title="Excluir campo" aria-label="Excluir campo">×</button>
+      )}
+      {fld.ativo && (
+        <div className="pe-acab-value">
+          {fld.tipo === "select"
+            ? <PESelect value={fld.valor} onChange={onValue} options={opts || []}/>
+            : fld.tipo === "textarea"
+              ? <PETextarea rows={2} value={fld.valor} onChange={onValue}/>
+              : <PETextInput value={fld.valor} onChange={onValue}/>}
+        </div>
+      )}
+    </div>
+  );
+}
 
-      <PEField label="Piso da Cabina"><PESelect value={a.pisoCabina} onChange={u("pisoCabina")} options={OPTIONS.pisoCabina}/></PEField>
-      <PEField label="Medidas do Piso"><PETextInput value={a.medidasPiso} onChange={u("medidasPiso")} placeholder="800 x 2100mm"/></PEField>
+/* Reaproveita o Modal/Button globais (mesmo padrão do PropostaSendModal em
+   proposta-editor.jsx) em vez de css/markup de modal próprio. */
+function S_AcabAddFieldModal({ onAdd, onClose }) {
+  const [nome, setNome] = React.useState("");
+  const [tipo, setTipo] = React.useState("text");
+  return (
+    <Modal title="Novo campo de acabamento" onClose={onClose} width={420}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={() => nome.trim() && onAdd({ nome: nome.trim(), tipo })}>Adicionar</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <PEField label="Nome do campo"><PETextInput value={nome} onChange={setNome} placeholder="Ex.: Corrimão"/></PEField>
+        <PEField label="Tipo">
+          <select className="pe-input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <option value="text">Texto curto</option>
+            <option value="textarea">Texto longo</option>
+          </select>
+        </PEField>
+      </div>
+    </Modal>
+  );
+}
 
-      <PEField label="Modelo de Porta"><PESelect value={a.modeloPorta} onChange={u("modeloPorta")} options={OPTIONS.modeloPorta}/></PEField>
-      <PEField label="Dimensão da Porta de Cabine" tag="mm"><PETextInput value={a.dimPortaCabine} onChange={u("dimPortaCabine")} placeholder="800x2100mm"/></PEField>
+function S_AcabAddCategoryModal({ onAdd, onClose }) {
+  const [nome, setNome] = React.useState("");
+  return (
+    <Modal title="Nova categoria de acabamento" onClose={onClose} width={420}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={() => nome.trim() && onAdd(nome.trim())}>Criar</Button>
+      </>}>
+      <PEField label="Nome da categoria"><PETextInput value={nome} onChange={setNome} placeholder="Ex.: Sinalização de Emergência"/></PEField>
+    </Modal>
+  );
+}
 
-      <PEField label="Acabamento Porta Cabine"><PESelect value={a.acabPortaCabine} onChange={u("acabPortaCabine")} options={OPTIONS.acabPortaCabine}/></PEField>
-      <PEField label="Portas de Pavimento"><PESelect value={a.portasPavimento} onChange={u("portasPavimento")} options={OPTIONS.portasPavimento}/></PEField>
+/* Categorias/campos dinâmicos com checkbox "ativo" — mesmo padrão da Ficha
+   Técnica (engenharia/ficha-tecnica): o vendedor marca o que quer que entre
+   na proposta e pode criar campo/categoria novos, que ficam disponíveis
+   pras próximas propostas via biblioteca compartilhada (tabelas
+   propostas_lib_categorias/propostas_lib_campos, PropostaAcabamentosStore).
+   Os 13 campos que já existiam viram a categoria nativa "Acabamentos" —
+   proposta salva antes dessa mudança migra sozinha, sem perder valor. */
+function S_Acabamentos({ d, set }) {
+  const engine = window.PropostaAcabamentosEngine;
+  const store = window.PropostaAcabamentosStore;
+  const [libLoaded, setLibLoaded] = React.useState(false);
+  const [modal, setModal] = React.useState(null); // { type: 'campo'|'categoria', catId? }
 
-      <PEField label="Botoeiras de Pavimento"><PESelect value={a.botoeirasPavimento} onChange={u("botoeirasPavimento")} options={OPTIONS.botoeirasPavimento}/></PEField>
-      <PEField label="Sinalização"><PETextInput value={a.sinalizacao} onChange={u("sinalizacao")} placeholder="Display TFT 4.3'' colorido"/></PEField>
+  React.useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!store || !engine) return;
+      const lib = await store.loadLibrary();
+      if (cancelado) return;
+      engine.setLibraryExtras(lib);
+      setLibLoaded((n) => !n); // força recomputar cats com a lib carregada
+    })();
+    return () => { cancelado = true; };
+  }, []);
 
-      <PEField label="Pavimentos com acabamento Inox" span="2" help="Demais pavimentos receberão pintura padrão."><PETextInput value={a.pavInox} onChange={u("pavInox")} placeholder="0 inox e demais Pintura"/></PEField>
-      <PEField label="Demais acabamentos" span="2"><PETextarea rows={2} value={a.demais} onChange={u("demais")} placeholder="Corrimão tubular inox, espelho 3/4, ventilação 80m³/h..."/></PEField>
+  const cats = engine ? engine.garantirCats(d.elevador) : [];
+
+  /* Só na 1ª vez (proposta ainda sem acabamentosCats): grava o resultado da
+     migração como estado real, pra não ficar recalculando do legado a
+     cada render. */
+  React.useEffect(() => {
+    if (engine && !(Array.isArray(d.elevador.acabamentosCats) && d.elevador.acabamentosCats.length)) {
+      set("elevador.acabamentosCats", cats);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libLoaded]);
+
+  if (!engine) return <div className="pe-hint">Carregando…</div>;
+
+  const updateCats = (novo) => set("elevador.acabamentosCats", novo);
+
+  const toggleField = (catId, k) => updateCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, ativo: !f.ativo }),
+  }));
+  const setFieldValue = (catId, k, valor) => updateCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, valor }),
+  }));
+  const removeField = (catId, k) => {
+    updateCats(cats.map((c) => c.id !== catId ? c : { ...c, campos: c.campos.filter((f) => f.k !== k) }));
+    store && store.deleteFieldFromLibrary(catId, k);
+  };
+  const removeCategory = (catId) => {
+    updateCats(cats.filter((c) => c.id !== catId));
+    store && store.deleteCategoryFromLibrary(catId);
+  };
+  const addField = (catId, def) => {
+    const cat = cats.find((c) => c.id === catId);
+    if (cat && cat.campos.some((f) => engine.normalizeNome(f.nome) === engine.normalizeNome(def.nome))) {
+      window.toast?.("Já existe um campo com esse nome nessa categoria.", "warning");
+      return;
+    }
+    const k = engine.fieldKey(def.nome);
+    updateCats(cats.map((c) => c.id !== catId ? c : {
+      ...c, campos: [...c.campos, { k, nome: def.nome, tipo: def.tipo, opcoesKey: null, valor: "", ativo: true, ordem: c.campos.length, custom: true }],
+    }));
+    store && store.saveFieldToLibrary(catId, def);
+  };
+  const addCategory = (nome) => {
+    if (cats.some((c) => engine.normalizeNome(c.nome) === engine.normalizeNome(nome))) {
+      window.toast?.("Já existe uma categoria com esse nome.", "warning");
+      return;
+    }
+    const id = engine.slugCategoria(nome);
+    updateCats([...cats, { id, nome, custom: true, campos: [] }]);
+    store && store.saveCategoryToLibrary({ id, nome });
+  };
+
+  return (
+    <div className="pe-acab">
+      {cats.map((c) => (
+        <div className="pe-acab-cat" key={c.id}>
+          <div className="pe-acab-cat-head">
+            <span className="pe-acab-cat-nome">{c.nome}</span>
+            {c.custom && (
+              <button type="button" className="pe-acab-rm" onClick={() => removeCategory(c.id)} title="Excluir categoria" aria-label="Excluir categoria">×</button>
+            )}
+          </div>
+          <div className="pe-acab-fields">
+            {c.campos.map((fld) => (
+              <S_AcabField
+                key={fld.k}
+                fld={fld}
+                onToggle={() => toggleField(c.id, fld.k)}
+                onValue={(v) => setFieldValue(c.id, fld.k, v)}
+                onRemove={() => removeField(c.id, fld.k)}
+              />
+            ))}
+          </div>
+          <button type="button" className="pe-acab-addfield" onClick={() => setModal({ type: "campo", catId: c.id })}>+ Adicionar campo</button>
+        </div>
+      ))}
+      <button type="button" className="pe-acab-addcat" onClick={() => setModal({ type: "categoria" })}>+ Nova categoria</button>
+
+      {modal?.type === "campo" && (
+        <S_AcabAddFieldModal onClose={() => setModal(null)} onAdd={(def) => { addField(modal.catId, def); setModal(null); }}/>
+      )}
+      {modal?.type === "categoria" && (
+        <S_AcabAddCategoryModal onClose={() => setModal(null)} onAdd={(nome) => { addCategory(nome); setModal(null); }}/>
+      )}
     </div>
   );
 }
@@ -466,51 +620,328 @@ function S_RepText({ items, setItems, addLabel, placeholder, single = false }) {
   );
 }
 
-function S_Valores({ d, set, eq }) {
+/* ---- Desconto por equipamento (Frentes B + C do estudo do editor de
+   Proposta) — só aparece quando a cotação tem mais de 1 equipamento
+   (v.itens existe, ver proposta-heranca.js). Pedido de desconto vira uma
+   decisão pendente na Central de Decisões (≤7% Gestor Comercial, >7% só
+   CEO) — nada muda de preço até alguém com a alçada certa aprovar. ---- */
+function S_ItemDescontoModal({ item, onClose, onSolicitar }) {
+  const [tipo, setTipo] = React.useState("percentual");
+  const [valor, setValor] = React.useState("");
+  const [motivo, setMotivo] = React.useState("");
+  const [saving, setSaving] = React.useState(false);
+  const engine = window.PropostaDesconto;
+  const pct = engine ? engine.pctDoDesconto(item, tipo, valor) : 0;
+  const papel = engine ? engine.papelParaPct(pct) : null;
+  const submit = async () => {
+    setSaving(true);
+    try { await onSolicitar({ tipo, valor, motivo }); onClose(); }
+    catch (e) { window.toast?.("Erro: " + (e.message || e), "error"); }
+    finally { setSaving(false); }
+  };
+  return (
+    <Modal title={`Solicitar desconto — ${item.id || item.equipamento}`} onClose={onClose} width={440}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={submit} disabled={saving || !(Number(valor) > 0)}>{saving ? "Enviando…" : "Enviar para aprovação"}</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <PEField label="Tipo de desconto">
+          <select className="pe-input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <option value="percentual">Percentual (%)</option>
+            <option value="valor">Valor fixo (R$)</option>
+          </select>
+        </PEField>
+        <PEField label={tipo === "percentual" ? "Desconto (%)" : "Desconto (R$)"}>
+          <PETextInput value={valor} onChange={setValor} placeholder={tipo === "percentual" ? "5" : "15.000,00"}/>
+        </PEField>
+        <PEField label="Motivo"><PETextarea rows={2} value={motivo} onChange={setMotivo} placeholder="Ex.: pedido do cliente na revisão da proposta"/></PEField>
+        {Number(valor) > 0 && (
+          <div className="small muted" style={{ padding: "8px 10px", background: "var(--vp-gray-50)", borderRadius: 6 }}>
+            Equivale a {(pct * 100).toFixed(1)}% do valor original — precisa de aprovação do{" "}
+            <b>{papel === "ceo" ? "CEO (acima de 7%)" : "Gestor Comercial"}</b>.
+          </div>
+        )}
+      </div>
+    </Modal>
+  );
+}
+
+function S_ItemDescontoLog({ log }) {
+  const [aberto, setAberto] = React.useState(false);
+  if (!log || !log.length) return null;
+  const ACAO_LABEL = { solicitado: "Solicitado", aprovado: "Aprovado", reprovado: "Reprovado", removido: "Removido" };
+  return (
+    <div style={{ marginTop: 4 }}>
+      <button type="button" className="pe-acab-addfield" style={{ marginTop: 0, fontSize: 11 }} onClick={() => setAberto((v) => !v)}>
+        {aberto ? "Ocultar histórico" : `Ver histórico (${log.length})`}
+      </button>
+      {aberto && (
+        <ul style={{ margin: "6px 0 0", paddingLeft: 18, fontSize: 11.5, color: "var(--fg2)" }}>
+          {log.slice().reverse().map((l, i) => (
+            <li key={i}>
+              {ACAO_LABEL[l.acao] || l.acao} por <b>{l.por || "—"}</b> em {l.em ? new Date(l.em).toLocaleString("pt-BR") : "—"}
+              {l.tipo && l.valor != null ? ` — ${l.tipo === "percentual" ? l.valor + "%" : "R$ " + l.valor}` : ""}
+              {l.motivo ? ` (${l.motivo})` : ""}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  );
+}
+
+function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
+  const [modalItem, setModalItem] = React.useState(null);
+  const engine = window.PropostaDesconto;
+  const fmt = (n) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  // Reconcilia pedidos pendentes ao abrir a seção — se alguém já decidiu na
+  // Central de Decisões, aplica (ou descarta) sem o vendedor precisar fazer nada.
+  React.useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!engine) return;
+      const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(proposta.numeroCotacao) ?? null;
+      const pendentes = itens.some((it) => it.descontoPendente);
+      if (!pendentes) return;
+      const atualizados = await Promise.all(itens.map((it) => engine.reconciliar(it, numeroCotacao)));
+      if (!cancelado && atualizados.some((it, i) => it !== itens[i])) onChangeItens(atualizados);
+    })();
+    return () => { cancelado = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const solicitar = async (item, payload) => {
+    const atualizado = await engine.solicitar(proposta, item, payload);
+    onChangeItens(itens.map((it) => (it.id === item.id ? atualizado : it)));
+    window.toast?.("Pedido de desconto enviado para aprovação.", "success");
+  };
+  const remover = (item) => {
+    const atualizado = engine.removerDesconto(item);
+    onChangeItens(itens.map((it) => (it.id === item.id ? atualizado : it)));
+  };
+
+  return (
+    <div style={{ marginBottom: 16 }}>
+      {itens.map((it) => {
+        const original = engine ? engine.parseNum(it.valorOriginal ?? it.valorUnit) : Number(it.valorUnit) || 0;
+        const atual = engine ? engine.parseNum(it.valorUnit) : Number(it.valorUnit) || 0;
+        const qtd = Number(it.quantidade) || 1;
+        const temDesconto = it.desconto && atual < original;
+        return (
+          <div key={it.id} className="pe-acab-cat">
+            <div className="pe-acab-cat-head">
+              <span className="pe-acab-cat-nome">{it.id || it.equipamento}</span>
+            </div>
+            <div className="row gap-2" style={{ alignItems: "baseline", flexWrap: "wrap" }}>
+              {temDesconto && <span className="small muted" style={{ textDecoration: "line-through" }}>{fmt(original * qtd)}</span>}
+              <b style={{ fontSize: 16 }}>{fmt(atual * qtd)}</b>
+              {it.descontoPendente && <span className="pe-tag" style={{ background: "var(--vp-warning-tint, #f8eed7)" }}>Aguardando aprovação ({it.descontoPendente.papel === "ceo" ? "CEO" : "Gestor Comercial"})</span>}
+            </div>
+            <div className="row gap-2" style={{ marginTop: 8 }}>
+              {!it.descontoPendente && (
+                <button type="button" className="pe-acab-addfield" onClick={() => setModalItem(it)}>
+                  {temDesconto ? "Alterar desconto" : "Solicitar desconto"}
+                </button>
+              )}
+              {temDesconto && !it.descontoPendente && (
+                <button type="button" className="pe-acab-addfield" onClick={() => remover(it)}>Remover desconto</button>
+              )}
+            </div>
+            <S_ItemDescontoLog log={it.descontoLog}/>
+          </div>
+        );
+      })}
+      {modalItem && (
+        <S_ItemDescontoModal item={modalItem} onClose={() => setModalItem(null)} onSolicitar={(payload) => solicitar(modalItem, payload)}/>
+      )}
+    </div>
+  );
+}
+
+/* Sinal de 40% + restante dividido em partes iguais entre as demais parcelas
+   — mesmo template que já era usado como texto fixo no elevador ("40% à
+   vista e 4 parcelas"), agora gerado de verdade a partir da Quantidade de
+   Parcelas escolhida, em vez de vir só como sugestão estática no default. */
+function gerarParcelasAutomaticas(qtd, total) {
+  const n = Math.max(1, Number(qtd) || 0);
+  const fmt2 = (x) => x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+  if (n <= 1) return [{ desc: "Pagamento integral na assinatura do contrato", valor: fmt2(total) }];
+  const sinal = total * 0.4;
+  const restCount = n - 1;
+  const cadaParcela = restCount > 0 ? (total - sinal) / restCount : 0;
+  const linhas = [{ desc: "Sinal de 40% na assinatura do contrato", valor: fmt2(sinal) }];
+  for (let i = 1; i <= restCount; i++) linhas.push({ desc: `${i}ª Parcela`, valor: fmt2(cadaParcela) });
+  return linhas;
+}
+const QTD_PARCELAS_OPTIONS = Array.from({ length: 11 }, (_, i) => String(i + 2)); // 2..12
+
+function S_Valores({ d, set, eq, recordId }) {
   const v = d[eq].valores;
   const u = (k) => (val) => set(`${eq}.valores.${k}`, val);
   const parcelas = v.parcelas || [];
   const setParcelas = (arr) => set(`${eq}.valores.parcelas`, arr);
+  const temItens = Array.isArray(v.itens) && v.itens.length > 0;
 
   const qtd = parseFloat(v.quantidade) || 0;
   const unit = parseFloat((v.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
   const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
-  const totalEq = qtd * unit;
+  const totalEq = temItens
+    ? v.itens.reduce((s, it) => s + (parseFloat((it.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0) * (Number(it.quantidade) || 1), 0)
+    : qtd * unit;
   const totalDifal = totalEq + difal;
+  /* Parcelas eram digitadas aqui mas a soma delas nunca aparecia nem era
+     conferida contra o Total com DIFAL — vendedor só descobria a conta
+     errada depois, olhando o PDF (achado real, 19/08). */
+  const totalParcelado = parcelas.reduce((s, p) => s + (parseFloat((p.valor || "0").toString().replace(/\./g, "").replace(",", ".")) || 0), 0);
+  const diferencaParcelas = totalDifal - totalParcelado;
+  const parcelasBatem = parcelas.length === 0 || Math.abs(diferencaParcelas) < 0.01;
 
   const formatBR = (n) => n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
   const formaPagLabel = eq === "esteira" ? "Condições de Pagamento" : "Forma de Pagamento";
 
+  /* formaTipo/qtdParcelas controlam a UI (select "À vista"/"Parcelado" +
+     Qtd. de Parcelas); v.forma continua sendo o texto legível exibido na
+     capa da proposta (PreviewCapa) — nunca deixado de fora, sempre
+     recalculado junto pra não desincronizar do que a tabela mostra. */
+  const formaTipo = v.formaTipo || "";
+  const qtdParcelas = v.qtdParcelas || "";
+
+  const aplicarFormaTipo = (tipo) => {
+    set(`${eq}.valores.formaTipo`, tipo);
+    if (tipo === "vista") {
+      set(`${eq}.valores.forma`, "100% à vista");
+      setParcelas([]);
+    } else if (tipo === "parcelado") {
+      const qtd = Number(v.qtdParcelas) || 5;
+      const restCount = Math.max(qtd - 1, 0);
+      set(`${eq}.valores.qtdParcelas`, qtd);
+      set(`${eq}.valores.forma`, restCount > 0 ? `40% à vista e ${restCount} parcela${restCount > 1 ? "s" : ""}` : "100% à vista");
+      setParcelas(gerarParcelasAutomaticas(qtd, totalDifal));
+    }
+  };
+  const aplicarQtdParcelas = (qtdStr) => {
+    const qtd = Number(qtdStr) || 0;
+    const restCount = Math.max(qtd - 1, 0);
+    set(`${eq}.valores.qtdParcelas`, qtd);
+    set(`${eq}.valores.forma`, restCount > 0 ? `40% à vista e ${restCount} parcela${restCount > 1 ? "s" : ""}` : "100% à vista");
+    setParcelas(gerarParcelasAutomaticas(qtd, totalDifal));
+  };
+  /* Total com DIFAL pode mudar depois das parcelas já geradas (ex.: preço
+     herdado da Precificação atualizado, desconto aplicado) — "Recalcular"
+     reaplica o mesmo template (Sinal 40% + resto igual) sem o vendedor
+     precisar trocar a Qtd. de Parcelas pra forçar a regeneração. */
+  const recalcularParcelas = () => {
+    const qtd = Number(v.qtdParcelas) || parcelas.length || 5;
+    setParcelas(gerarParcelasAutomaticas(qtd, totalDifal));
+  };
+
+  const propostaRef = { id: recordId, numeroCotacao: d.numeroCotacao, cliente: d.cliente, titulo: d.cliente?.nome };
+
+  /* Solicitar/remover desconto precisa ficar salvo na hora, não só no state
+     local — senão o pedido pendente (e a decisão já criada de verdade na
+     Central de Decisões) se perde ao sair da tela sem clicar em "Salvar"
+     antes (achado real testando ao vivo, 09/09). set() sozinho não basta
+     porque o React ainda não comitou o novo state no momento da chamada —
+     monta o objeto final na mão e salva direto, sem depender de closure. */
+  const persistirItens = (novosItens) => {
+    set(`${eq}.valores.itens`, novosItens);
+    if (!window.PropostaStore) return;
+    const novoData = { ...d, [eq]: { ...d[eq], valores: { ...d[eq].valores, itens: novosItens } } };
+    const valorTotal = typeof calcularValorTotal === "function" ? calcularValorTotal(novoData, eq) : undefined;
+    window.PropostaStore.salvar({ data: novoData, eq, editId: recordId, valorTotal });
+  };
+
   return (
     <>
-      <div className="pe-grid cols-4">
-        <PEField label="Equipamento" span="2">
-          <PETextInput value={v.equipamento} onChange={u("equipamento")} placeholder={
-            eq === "elevador" ? "Elevador VB 2405 — Configuração A" :
-            eq === "escada" ? "Escada Rolante VP-ER 4000" :
-            "Esteira Rolante VP-ET 6000"
-          }/>
-        </PEField>
-        <PEField label="Quantidade"><PENumber value={v.quantidade} onChange={u("quantidade")} placeholder="1"/></PEField>
-        <PEField label="Valor Unitário"><PECurrency value={v.valorUnit} onChange={u("valorUnit")} placeholder="480.000,00"/></PEField>
-        <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
-        <PEField label={formaPagLabel} span="3"><PESelect value={v.forma} onChange={u("forma")}/></PEField>
-      </div>
-
-      <div style={{ marginTop: 18, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
-        <div className="pe-field-label">Parcelas <span className="pe-tag">{parcelas.length} parcela{parcelas.length !== 1 ? "s" : ""}</span></div>
-      </div>
-
-      {parcelas.map((p, i) => (
-        <div key={i} className="pe-parcela-row">
-          <span className="pe-parcela-row__idx">{i + 1}</span>
-          <input className="pe-input" value={p.desc || ""} onChange={(e) => { const a = [...parcelas]; a[i] = { ...a[i], desc: e.target.value }; setParcelas(a); }} placeholder="30% — Entrada (assinatura)"/>
-          <div className="pe-input-grp"><span className="pe-input-prefix">R$</span><input className="pe-input" value={p.valor || ""} onChange={(e) => { const a = [...parcelas]; a[i] = { ...a[i], valor: e.target.value }; setParcelas(a); }} placeholder="144.000,00"/></div>
-          <button type="button" className="pe-parcela-row__del" onClick={() => setParcelas(parcelas.filter((_, j) => j !== i))}><Icon.x size={12}/></button>
+      {temItens ? (
+        <S_ItensValores
+          eq={eq}
+          itens={v.itens}
+          proposta={propostaRef}
+          onChangeItens={persistirItens}
+        />
+      ) : (
+        <div className="pe-grid cols-4">
+          <PEField label="Equipamento" span="2">
+            <PETextInput value={v.equipamento} onChange={u("equipamento")} placeholder={
+              eq === "elevador" ? "Elevador VB 2405 — Configuração A" :
+              eq === "escada" ? "Escada Rolante VP-ER 4000" :
+              "Esteira Rolante VP-ET 6000"
+            }/>
+          </PEField>
+          <PEField label="Quantidade"><PENumber value={v.quantidade} onChange={u("quantidade")} placeholder="1"/></PEField>
+          <PEField label="Valor Unitário"><PECurrency value={v.valorUnit} onChange={u("valorUnit")} placeholder="480.000,00"/></PEField>
+          <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
+          <PEField label={formaPagLabel} span={formaTipo === "parcelado" ? "1" : "2"}>
+            <PESelect value={formaTipo} onChange={aplicarFormaTipo} options={[{ value: "vista", label: "À vista" }, { value: "parcelado", label: "Parcelado" }]}/>
+          </PEField>
+          {formaTipo === "parcelado" && (
+            <PEField label="Quantidade de Parcelas">
+              <PESelect value={String(qtdParcelas || "")} onChange={aplicarQtdParcelas} options={QTD_PARCELAS_OPTIONS}/>
+            </PEField>
+          )}
         </div>
-      ))}
-      <PERepAdd label="+ Adicionar Parcela" onAdd={() => setParcelas([...parcelas, { desc: "", valor: "" }])}/>
+      )}
+      {temItens && (
+        <div className="pe-grid cols-4">
+          <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
+          <PEField label={formaPagLabel} span={formaTipo === "parcelado" ? "1" : "2"}>
+            <PESelect value={formaTipo} onChange={aplicarFormaTipo} options={[{ value: "vista", label: "À vista" }, { value: "parcelado", label: "Parcelado" }]}/>
+          </PEField>
+          {formaTipo === "parcelado" && (
+            <PEField label="Quantidade de Parcelas">
+              <PESelect value={String(qtdParcelas || "")} onChange={aplicarQtdParcelas} options={QTD_PARCELAS_OPTIONS}/>
+            </PEField>
+          )}
+        </div>
+      )}
+
+      {formaTipo !== "vista" && (
+        <>
+          <div style={{ marginTop: 18, marginBottom: 10, display: "flex", alignItems: "center", justifyContent: "space-between" }}>
+            <div className="pe-field-label">Parcelas <span className="pe-tag">{parcelas.length} parcela{parcelas.length !== 1 ? "s" : ""}</span></div>
+            {parcelas.length > 0 && (
+              <button type="button" className="pe-acab-addfield" onClick={recalcularParcelas}>Recalcular</button>
+            )}
+          </div>
+
+          {parcelas.map((p, i) => (
+            <div key={i} className="pe-parcela-row">
+              <span className="pe-parcela-row__idx">{i + 1}</span>
+              <input className="pe-input" value={p.desc || ""} onChange={(e) => { const a = [...parcelas]; a[i] = { ...a[i], desc: e.target.value }; setParcelas(a); }} placeholder="30% — Entrada (assinatura)"/>
+              <div className="pe-input-grp"><span className="pe-input-prefix">R$</span><input className="pe-input" value={p.valor || ""} onChange={(e) => { const a = [...parcelas]; a[i] = { ...a[i], valor: e.target.value }; setParcelas(a); }} placeholder="144.000,00"/></div>
+              <button type="button" className="pe-parcela-row__del" onClick={() => setParcelas(parcelas.filter((_, j) => j !== i))}><Icon.x size={12}/></button>
+            </div>
+          ))}
+          <PERepAdd label="+ Adicionar Parcela" onAdd={() => setParcelas([...parcelas, { desc: "", valor: "" }])}/>
+        </>
+      )}
+
+      {eq === "elevador" && window.PropostaOpcoes && window.PropostaOpcoes.temOpcao90(d) && (() => {
+        /* Modalidade alternativa (90 dias, container exclusivo) vinda da Precificação — o preço
+           de 120 dias é o que está acima; o cliente escolhe uma das duas na assinatura
+           (ver proposta-opcoes.js). Só aparece com 1 equipamento. */
+        const ops = window.PropostaOpcoes.opcoes(d);
+        const o90 = ops && ops[1];
+        const escolhida = window.PropostaOpcoes.modalidadeEscolhida(d);
+        return (
+          <div className="pe-totais" style={{ marginTop: 14 }}>
+            <div className="pe-totais-row">
+              <span><b>Modalidade alternativa — {o90.titulo}</b> ({o90.rotulo})</span>
+              <b>R$ {formatBR(o90.total)}</b>
+            </div>
+            <div className="pe-totais-row" style={{ opacity: .75 }}>
+              <span>{escolhida ? `Escolhida pelo cliente: ${escolhida.titulo}.` : "O cliente escolhe entre 120 dias (valores acima) e 90 dias ao aprovar a proposta."}</span>
+              {!escolhida && (
+                <button type="button" className="pe-acab-addfield" onClick={() => set(`${eq}.valores.opcao90`, null)}>Oferecer só 120 dias</button>
+              )}
+            </div>
+          </div>
+        );
+      })()}
 
       <div className="pe-totais">
         <div className="pe-totais-row">
@@ -525,6 +956,12 @@ function S_Valores({ d, set, eq }) {
           <span>Total com DIFAL</span>
           <b>R$ {formatBR(totalDifal)}</b>
         </div>
+        {parcelas.length > 0 && (
+          <div className="pe-totais-row" style={parcelasBatem ? undefined : { color: 'var(--vp-danger, #c62828)' }}>
+            <span>Total Parcelado {parcelasBatem ? '' : `— diferença de R$ ${formatBR(Math.abs(diferencaParcelas))}`}</span>
+            <b>R$ {formatBR(totalParcelado)}</b>
+          </div>
+        )}
       </div>
     </>
   );
@@ -570,6 +1007,324 @@ function S_PrazoEntrega({ d, set, eq }) {
     <div className="pe-grid cols-1">
       <PEField label="Prazo de Entrega"><PETextInput value={p.prazo} onChange={u("prazo")} placeholder="120 dias após assinatura + 45 dias instalação"/></PEField>
       <PEField label="Condições Gerais e Covid"><PETextarea rows={3} value={p.condCovid} onChange={u("condCovid")} placeholder="Os prazos podem ser revisados em caso de eventos extraordinários relacionados a pandemia..."/></PEField>
+    </div>
+  );
+}
+
+/* ---- Conteúdo da Proposta (Frente A): categorias/campos dinâmicos com
+   checkbox "ativo", igual à Ficha Técnica e aos Acabamentos — substitui
+   Benefícios/Diferenciais/Características/Recursos/Infraestrutura/
+   Responsabilidades. Reaproveita PropostaAcabamentosStore (mesmas 2
+   tabelas de biblioteca — genéricas o bastante pra servir os dois). ---- */
+function S_ContField({ fld, onToggle, onValue, onNome, onRemove }) {
+  return (
+    <div className="pe-acab-row">
+      <label className={"pe-acab-check" + (fld.ativo ? " on" : "")}>
+        <input type="checkbox" checked={!!fld.ativo} onChange={onToggle}/>
+        <span>{fld.nome}</span>
+      </label>
+      {fld.custom && (
+        <button type="button" className="pe-acab-rm" onClick={onRemove} title="Excluir campo" aria-label="Excluir campo">×</button>
+      )}
+      {fld.ativo && (
+        <div className="pe-acab-value">
+          {fld.tipo === "nome_desc" ? (
+            <div className="stack" style={{ gap: 6 }}>
+              <PETextInput value={fld.nome} onChange={onNome} placeholder="Nome do item"/>
+              <PETextarea rows={2} value={fld.valor} onChange={onValue} placeholder="Descrição"/>
+            </div>
+          ) : fld.tipo === "textarea"
+            ? <PETextarea rows={2} value={fld.valor} onChange={onValue}/>
+            : <PETextInput value={fld.valor} onChange={onValue}/>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function S_ContAddFieldModal({ onAdd, onClose }) {
+  const [nome, setNome] = React.useState("");
+  const [tipo, setTipo] = React.useState("texto");
+  return (
+    <Modal title="Novo campo" onClose={onClose} width={420}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={() => nome.trim() && onAdd({ nome: nome.trim(), tipo })}>Adicionar</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <PEField label="Nome / texto do campo"><PETextInput value={nome} onChange={setNome} placeholder="Ex.: Garantia estendida disponível"/></PEField>
+        <PEField label="Tipo">
+          <select className="pe-input" value={tipo} onChange={(e) => setTipo(e.target.value)}>
+            <option value="texto">Texto curto (bullet único)</option>
+            <option value="textarea">Texto longo</option>
+            <option value="nome_desc">Nome + descrição (ex.: recurso, item de infra)</option>
+          </select>
+        </PEField>
+      </div>
+    </Modal>
+  );
+}
+
+function S_ContAddCategoryModal({ onAdd, onClose }) {
+  const [nome, setNome] = React.useState("");
+  return (
+    <Modal title="Nova categoria" onClose={onClose} width={420}
+      footer={<>
+        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+        <Button variant="primary" onClick={() => nome.trim() && onAdd(nome.trim())}>Criar</Button>
+      </>}>
+      <PEField label="Nome da categoria"><PETextInput value={nome} onChange={setNome} placeholder="Ex.: Diferenciais de Instalação"/></PEField>
+    </Modal>
+  );
+}
+
+function S_Conteudo({ d, set }) {
+  const engine = window.PropostaConteudoEngine;
+  const store = window.PropostaAcabamentosStore; // biblioteca genérica, reaproveitada
+  const [libLoaded, setLibLoaded] = React.useState(false);
+  const [modal, setModal] = React.useState(null);
+
+  React.useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!store || !engine) return;
+      const lib = await store.loadLibrary();
+      if (cancelado) return;
+      engine.setLibraryExtras(lib);
+      setLibLoaded((n) => !n);
+    })();
+    return () => { cancelado = true; };
+  }, []);
+
+  const cats = engine ? engine.garantirCats(d.elevador) : [];
+
+  const persistirCats = (novosCats) => {
+    set("elevador.conteudoCats", novosCats);
+    if (!engine) return;
+    const legado = engine.derivarLegado(novosCats);
+    Object.keys(legado).forEach((k) => set(`elevador.${k}`, legado[k]));
+  };
+
+  React.useEffect(() => {
+    if (engine && !(Array.isArray(d.elevador.conteudoCats) && d.elevador.conteudoCats.length)) {
+      persistirCats(cats);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libLoaded]);
+
+  if (!engine) return <div className="pe-hint">Carregando…</div>;
+
+  const toggleField = (catId, k) => persistirCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, ativo: !f.ativo }),
+  }));
+  const setFieldValor = (catId, k, valor) => persistirCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, valor }),
+  }));
+  const setFieldNome = (catId, k, nome) => persistirCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, nome }),
+  }));
+  const removeField = (catId, k) => {
+    persistirCats(cats.map((c) => c.id !== catId ? c : { ...c, campos: c.campos.filter((f) => f.k !== k) }));
+    store && store.deleteFieldFromLibrary(catId, k);
+  };
+  const removeCategory = (catId) => {
+    persistirCats(cats.filter((c) => c.id !== catId));
+    store && store.deleteCategoryFromLibrary(catId);
+  };
+  const addField = (catId, defIn) => {
+    const cat = cats.find((c) => c.id === catId);
+    if (cat && cat.campos.some((f) => engine.normalizeNome(f.nome) === engine.normalizeNome(defIn.nome))) {
+      window.toast?.("Já existe um campo com esse nome nessa categoria.", "warning");
+      return;
+    }
+    const k = engine.fieldKey(defIn.nome) + "_" + Date.now();
+    const novoValor = defIn.tipo === "nome_desc" ? "" : defIn.nome;
+    persistirCats(cats.map((c) => c.id !== catId ? c : {
+      ...c, campos: [...c.campos, { k, nome: defIn.nome, tipo: defIn.tipo, valor: novoValor, ativo: true, ordem: c.campos.length, custom: true }],
+    }));
+    store && store.saveFieldToLibrary(catId, defIn);
+  };
+  const addCategory = (nome) => {
+    if (cats.some((c) => engine.normalizeNome(c.nome) === engine.normalizeNome(nome))) {
+      window.toast?.("Já existe uma categoria com esse nome.", "warning");
+      return;
+    }
+    const id = engine.slugCategoria(nome);
+    persistirCats([...cats, { id, nome, custom: true, campos: [] }]);
+    store && store.saveCategoryToLibrary({ id, nome });
+  };
+
+  return (
+    <div className="pe-acab">
+      {cats.map((c) => (
+        <div className="pe-acab-cat" key={c.id}>
+          <div className="pe-acab-cat-head">
+            <span className="pe-acab-cat-nome">{c.nome}</span>
+            {c.custom && (
+              <button type="button" className="pe-acab-rm" onClick={() => removeCategory(c.id)} title="Excluir categoria" aria-label="Excluir categoria">×</button>
+            )}
+          </div>
+          <div className="pe-acab-fields">
+            {c.campos.map((fld) => (
+              <S_ContField
+                key={fld.k}
+                fld={fld}
+                onToggle={() => toggleField(c.id, fld.k)}
+                onValue={(v) => setFieldValor(c.id, fld.k, v)}
+                onNome={(v) => setFieldNome(c.id, fld.k, v)}
+                onRemove={() => removeField(c.id, fld.k)}
+              />
+            ))}
+          </div>
+          <button type="button" className="pe-acab-addfield" onClick={() => setModal({ type: "campo", catId: c.id })}>+ Adicionar campo</button>
+        </div>
+      ))}
+      <button type="button" className="pe-acab-addcat" onClick={() => setModal({ type: "categoria" })}>+ Nova categoria</button>
+
+      {modal?.type === "campo" && (
+        <S_ContAddFieldModal onClose={() => setModal(null)} onAdd={(def) => { addField(modal.catId, def); setModal(null); }}/>
+      )}
+      {modal?.type === "categoria" && (
+        <S_ContAddCategoryModal onClose={() => setModal(null)} onAdd={(nome) => { addCategory(nome); setModal(null); }}/>
+      )}
+    </div>
+  );
+}
+
+/* Versão "menu lateral" do Conteúdo da Proposta — mesmo padrão de árvore
+   (categoria expansível + checkbox por campo) que a Ficha Técnica usa na
+   barra lateral dela. Roda a mesma lógica de persistência de S_Conteudo
+   (acima), só que renderizado dentro do pe__sidenav em vez do painel
+   principal — os dois ficam sincronizados via d/set (mesmo dado). */
+function S_ContSidebarNav({ d, set, isActive, icon, onHeaderClick }) {
+  const engine = window.PropostaConteudoEngine;
+  const store = window.PropostaAcabamentosStore;
+  const [libLoaded, setLibLoaded] = React.useState(false);
+  const [expanded, setExpanded] = React.useState(false);
+  const [openCat, setOpenCat] = React.useState({});
+  const [modal, setModal] = React.useState(null);
+
+  React.useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!store || !engine) return;
+      const lib = await store.loadLibrary();
+      if (cancelado) return;
+      engine.setLibraryExtras(lib);
+      setLibLoaded((n) => !n);
+    })();
+    return () => { cancelado = true; };
+  }, []);
+
+  const cats = engine ? engine.garantirCats(d.elevador) : [];
+
+  const persistirCats = (novosCats) => {
+    set("elevador.conteudoCats", novosCats);
+    if (!engine) return;
+    const legado = engine.derivarLegado(novosCats);
+    Object.keys(legado).forEach((k) => set(`elevador.${k}`, legado[k]));
+  };
+
+  React.useEffect(() => {
+    if (engine && !(Array.isArray(d.elevador.conteudoCats) && d.elevador.conteudoCats.length)) {
+      persistirCats(cats);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libLoaded]);
+
+  if (!engine) return null;
+
+  const toggleField = (catId, k) => persistirCats(cats.map((c) => c.id !== catId ? c : {
+    ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, ativo: !f.ativo }),
+  }));
+  const removeField = (catId, k) => {
+    persistirCats(cats.map((c) => c.id !== catId ? c : { ...c, campos: c.campos.filter((f) => f.k !== k) }));
+    store && store.deleteFieldFromLibrary(catId, k);
+  };
+  const removeCategory = (catId) => {
+    persistirCats(cats.filter((c) => c.id !== catId));
+    store && store.deleteCategoryFromLibrary(catId);
+  };
+  const addField = (catId, defIn) => {
+    const cat = cats.find((c) => c.id === catId);
+    if (cat && cat.campos.some((f) => engine.normalizeNome(f.nome) === engine.normalizeNome(defIn.nome))) {
+      window.toast?.("Já existe um campo com esse nome nessa categoria.", "warning");
+      return;
+    }
+    const k = engine.fieldKey(defIn.nome) + "_" + Date.now();
+    const novoValor = defIn.tipo === "nome_desc" ? "" : defIn.nome;
+    persistirCats(cats.map((c) => c.id !== catId ? c : {
+      ...c, campos: [...c.campos, { k, nome: defIn.nome, tipo: defIn.tipo, valor: novoValor, ativo: true, ordem: c.campos.length, custom: true }],
+    }));
+    store && store.saveFieldToLibrary(catId, defIn);
+  };
+  const addCategory = (nome) => {
+    if (cats.some((c) => engine.normalizeNome(c.nome) === engine.normalizeNome(nome))) {
+      window.toast?.("Já existe uma categoria com esse nome.", "warning");
+      return;
+    }
+    const id = engine.slugCategoria(nome);
+    persistirCats([...cats, { id, nome, custom: true, campos: [] }]);
+    store && store.saveCategoryToLibrary({ id, nome });
+  };
+
+  const IconComp = icon || Icon.bolt;
+  const totalAtivos = cats.reduce((s, c) => s + c.campos.filter((f) => f.ativo).length, 0);
+
+  return (
+    <div className="pe__conttree">
+      <div className={"pe__sidenav-item" + (isActive ? " is-active" : "")}
+        onClick={() => { onHeaderClick(); setExpanded((e) => !e); }}>
+        <span className="pe__sidenav-icon"><IconComp/></span>
+        <span style={{ flex: 1 }}>Conteúdo da Proposta</span>
+        {totalAtivos > 0 && <span className="pe__conttree-badge">{totalAtivos}</span>}
+        <svg className={"pe__conttree-chev" + (expanded ? " on" : "")} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+      </div>
+      {expanded && (
+        <div className="pe__conttree-body">
+          {cats.map((c) => {
+            const aberto = !!openCat[c.id];
+            const nAtivos = c.campos.filter((f) => f.ativo).length;
+            return (
+              <div className="pe__conttree-cat" key={c.id}>
+                <div className="pe__conttree-cathead-row">
+                  <button type="button" className="pe__conttree-cathead" onClick={() => setOpenCat((o) => ({ ...o, [c.id]: !o[c.id] }))}>
+                    <svg className={"pe__conttree-chev sm" + (aberto ? " on" : "")} width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
+                    <span>{c.nome}</span>
+                    {nAtivos > 0 && <span className="pe__conttree-badge sm">{nAtivos}</span>}
+                  </button>
+                  {c.custom && (
+                    <button type="button" className="pe__conttree-rm" onClick={() => removeCategory(c.id)} title="Excluir categoria" aria-label="Excluir categoria">×</button>
+                  )}
+                </div>
+                {aberto && (
+                  <div className="pe__conttree-fields">
+                    {c.campos.map((f) => (
+                      <div className="pe__conttree-fldrow" key={f.k}>
+                        <label className={"pe__conttree-fld" + (f.ativo ? " on" : "")}>
+                          <input type="checkbox" checked={!!f.ativo} onChange={() => toggleField(c.id, f.k)}/>
+                          <span>{f.nome || "(sem nome)"}</span>
+                        </label>
+                        {f.custom && (
+                          <button type="button" className="pe__conttree-rm sm" onClick={() => removeField(c.id, f.k)} title="Excluir campo" aria-label="Excluir campo">×</button>
+                        )}
+                      </div>
+                    ))}
+                    <button type="button" className="pe__conttree-addfield" onClick={() => setModal({ type: "campo", catId: c.id })}>+ Adicionar campo</button>
+                  </div>
+                )}
+              </div>
+            );
+          })}
+          <button type="button" className="pe__conttree-addcat" onClick={() => setModal({ type: "categoria" })}>+ Nova categoria</button>
+        </div>
+      )}
+      {modal?.type === "campo" && (
+        <S_ContAddFieldModal onClose={() => setModal(null)} onAdd={(def) => { addField(modal.catId, def); setModal(null); }}/>
+      )}
+      {modal?.type === "categoria" && (
+        <S_ContAddCategoryModal onClose={() => setModal(null)} onAdd={(nome) => { addCategory(nome); setModal(null); }}/>
+      )}
     </div>
   );
 }

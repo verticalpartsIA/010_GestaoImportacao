@@ -35,7 +35,7 @@
   <script>
     (function () {
       const URL_SB  = 'https://jxtqwzmpgofwctqajewt.supabase.co';
-      const ANON_SB = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+      const ANON_SB = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
       window.__VP_SB = { sb: window.supabase.createClient(URL_SB, ANON_SB) };
     }());
   </script>
@@ -45,19 +45,19 @@
   <script type="text/babel" src="/src/toast.jsx?v=5"></script>
 
   <!-- Padrão universal de codificação de IDs (Master ID) — Fase 1 -->
-  <script src="/src/master-id-engine.js?v=2"></script>
+  <script src="/src/master-id-engine.js?v=3"></script>
 
   <!-- Formulário de Elevadores (store + componente compartilhado com o app interno) -->
-  <script src="/src/enderecos-api.js?v=1"></script>
+  <script src="/src/enderecos-api.js?v=3"></script>
   <!-- Gatilhos & Prazo — motor precisa estar carregado ANTES de
        eventos-fluxo-store.js também nas páginas públicas, senão o
        Formulário self-service não nasce o gatilho raiz da cadeia. -->
-  <script src="/src/gatilhos-engine.js?v=4"></script>
-  <script src="/src/eventos-fluxo-store.js?v=4"></script>
-  <script src="/src/formulario-elevador-store.js?v=14"></script>
-  <script type="text/babel" src="/src/formulario-elevador.jsx?v=24"></script>
+  <script src="/src/gatilhos-engine.js?v=11"></script>
+  <script src="/src/eventos-fluxo-store.js?v=8"></script>
+  <script src="/src/formulario-elevador-store.js?v=17"></script>
+  <script type="text/babel" src="/src/formulario-elevador.jsx?v=32"></script>
 
   <!-- Mount público -->
-  <script type="text/babel" src="/src/formulario-elevador-public.jsx?v=1"></script>
+  <script type="text/babel" src="/src/formulario-elevador-public.jsx?v=2"></script>
 </body>
 </html>

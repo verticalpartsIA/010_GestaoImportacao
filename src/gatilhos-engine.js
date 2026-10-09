@@ -24,8 +24,14 @@
 
   const SLA_HORAS = {
     SLA_FORNECEDOR: 48,
-    PRECIFICACAO: 5,
-    AGUARDA_CLIENTE: 15 * 24,      // 360h
+    PRECIFICACAO: 2,               // 29/09: era 5h — pedido do usuário
+    /* 10 dias (23/08, Gelson) — não é mais só um SLA informativo: é o
+       limiar do "Cemitério". Depois disso, verificarPrazos() marca
+       status 'revisao_necessaria' e a tela de Gatilhos destaca "parado
+       há Xd sem resposta do cliente", com botão pro vendedor investigar
+       e fechar o ciclo com motivo (fecharComMotivo) — só o cliente tem
+       poder de matar o fluxo; até lá, ninguém mais fecha essa etapa. */
+    AGUARDA_CLIENTE: 10 * 24,      // 240h — limiar do Cemitério
     CONTRATO_ENVIADO: 24,
     PROJETO_ENVIADO: 24,
     AGUARDA_ASSINATURA: 5 * 24,    // 120h
@@ -33,7 +39,68 @@
     AVAL_PAGAMENTO: 4,
     NEGOCIACAO_COMPRA: 7 * 24,     // 168h
     EMBARQUE_CHEGADA: 90 * 24,     // 2160h
+    /* 03/10: "Proposta pronta — aguardando envio manual" não tinha prazo, então
+       uma proposta parada desde agosto nunca aparecia como atrasada. 24h úteis
+       é uma escolha minha (o usuário não passou número) — ajuste aqui. */
+    PROPOSTA_PREP: 24,
   };
+
+  /* Prazos que correm em dia corrido (espera do cliente / navio). Os demais
+     contam só segunda a sexta — um SLA de 48h aberto na sexta não estoura no
+     domingo. */
+  const SLA_CALENDARIO = { AGUARDA_CLIENTE: true, EMBARQUE_CHEGADA: true };
+
+  /* Soma `horas` ao instante `inicio` pulando sábado e domingo. */
+  function somarHorasUteis(inicio, horas) {
+    let t = new Date(inicio).getTime();
+    let resto = horas * 3600000;
+    let guarda = 0;
+    while (resto > 0 && guarda++ < 400) {
+      const d = new Date(t);
+      const dia = d.getDay();
+      if (dia === 0 || dia === 6) {                       // fim de semana: salta para segunda 00:00
+        const d2 = new Date(t); d2.setHours(0, 0, 0, 0);
+        d2.setDate(d2.getDate() + (dia === 0 ? 1 : 2));
+        t = d2.getTime();
+        continue;
+      }
+      const fimDoDia = new Date(t); fimDoDia.setHours(24, 0, 0, 0);
+      const cabe = fimDoDia.getTime() - t;
+      if (resto <= cabe) { t += resto; resto = 0; } else { resto -= cabe; t = fimDoDia.getTime(); }
+    }
+    return new Date(t);
+  }
+
+  function prazoDe(key, inicio) {
+    const h = SLA_HORAS[key];
+    if (h == null) return null;
+    return SLA_CALENDARIO[key] ? new Date(new Date(inicio).getTime() + h * 3600000) : somarHorasUteis(inicio, h);
+  }
+
+  /* Prazo que vale para uma linha de `gatilhos`: o gravado ou, nas linhas antigas
+     sem prazo (ex.: Proposta pronta), o calculado pelo SLA atual do nó. */
+  function prazoEfetivo(g) {
+    if (!g || String(g.evento_key || '').startsWith('LEMBRETE__')) return null;
+    if (g.prazo_em) return new Date(g.prazo_em);
+    if (!g.nascido_em) return null;
+    return prazoDe(g.evento_key, g.nascido_em);
+  }
+
+  function emAtraso(g, agora) {
+    if (!g || g.concluido_em || g.status === 'encerrado') return false;
+    const p = prazoEfetivo(g);
+    return !!p && p.getTime() < (agora || Date.now());
+  }
+
+  /* Etapa fechada "de uma vez" por garantirNo (etapa pulada no fluxo) — não é
+     um cumprimento de prazo. Linhas antigas não têm a marca: nas etapas de
+     espera (com SLA), nascer e fechar em menos de 3s só pode ser retroativo. */
+  function ehRetroativo(g) {
+    if (!g || !g.concluido_em) return false;
+    if (g.conclusao_tipo === 'retroativo') return true;
+    if (SLA_HORAS[g.evento_key] == null || !g.nascido_em) return false;
+    return new Date(g.concluido_em) - new Date(g.nascido_em) < 3000;
+  }
 
   /* Lembretes de cobrança — nascem como um gatilho-filho (evento_key
      'LEMBRETE__<chaveDoPai>') quando o nó pai passa de X horas sem
@@ -52,6 +119,19 @@
      declara `rota` — clique pousa na lista, sem subsel. */
   const resolverIdDireto = async (alvoId) => alvoId || null;
   const resolverEditProposta = async (alvoId) => (alvoId ? { __editId: alvoId } : null);
+  /* 23/08 (achado real, Gelson): clicar em "Financeiro precificando" caía
+     na lista genérica de Precificação, não no documento da cotação — a
+     rota não tinha resolverSubsel. precificacoes_elevador.cotacao_
+     fornecedor_id é o mesmo id gravado como alvo_id neste nó (nasce em
+     FORNECEDOR_RESPONDEU, cujo alvoId é a cotação a fornecedor). */
+  const resolverPrecificacaoElevador = async (alvoId) => {
+    const c = sb(); if (!c || !alvoId) return null;
+    try {
+      const { data } = await c.from('precificacoes_elevador').select('id')
+        .eq('cotacao_fornecedor_id', alvoId).order('created_at', { ascending: false }).limit(1).maybeSingle();
+      return data ? data.id : null;
+    } catch (e) { console.warn('[GatilhosEngine] resolverPrecificacaoElevador falhou', e); return null; }
+  };
   const resolverCotacaoFornecedor = async (alvoId) => {
     if (!alvoId || !window.CotacaoElevadorFornecedorStore) return null;
     try { return await window.CotacaoElevadorFornecedorStore.getById(alvoId); }
@@ -60,6 +140,8 @@
 
   /* Cada nó: { key, label, predecessores:[{key, rel}], nasce, fecha,
      fechamentoTipo, condicaoNasce(detalhe) opcional para branches,
+     condicaoCotacao(numeroCotacao) opcional e assíncrona (ex.: CEO só com
+     margem < 15%),
      rota (nome da rota em app.jsx), resolverSubsel (opcional). */
   const NODES = [
     { key: 'FORMULARIO', label: 'Formulário preenchido',
@@ -71,17 +153,17 @@
       nasce: 'COTACAO_ENVIADA_FORNECEDOR', fecha: 'FORNECEDOR_RESPONDEU',
       fechamentoTipo: 'automatico', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
 
-    { key: 'PRECIFICACAO', label: 'Financeiro precificando (SLA 5h)',
+    { key: 'PRECIFICACAO', label: 'Financeiro precificando (SLA 2h)',
       predecessores: [{ key: 'SLA_FORNECEDOR', rel: 'FS' }],
       nasce: 'FORNECEDOR_RESPONDEU', fecha: 'PROPOSTA_ELABORADA',
-      fechamentoTipo: 'automatico', rota: 'precificacao' },
+      fechamentoTipo: 'automatico', rota: 'precificacao', resolverSubsel: resolverPrecificacaoElevador },
 
     { key: 'PROPOSTA_PREP', label: 'Proposta pronta — aguardando envio manual',
       predecessores: [{ key: 'PRECIFICACAO', rel: 'FS' }],
       nasce: 'PROPOSTA_ELABORADA', fecha: 'PROPOSTA_ENVIADA',
       fechamentoTipo: 'manual', rota: 'proposta-editor', resolverSubsel: resolverEditProposta },
 
-    { key: 'AGUARDA_CLIENTE', label: 'Aguardando resposta do Cliente (SLA 15 dias)',
+    { key: 'AGUARDA_CLIENTE', label: 'Aguardando resposta do Cliente (SLA 10 dias)',
       predecessores: [{ key: 'PROPOSTA_PREP', rel: 'FS' }],
       nasce: 'PROPOSTA_ENVIADA', fecha: 'CLIENTE_RESPONDEU_PROPOSTA',
       fechamentoTipo: 'automatico', rota: 'proposta-editor', resolverSubsel: resolverEditProposta },
@@ -115,11 +197,53 @@
       fechamentoTipo: 'manual' /* Financeiro clica "Dar Aval de Pagamento" — confirmarAvalPagamento() */,
       rota: 'aval-financeiro' },
 
+    /* Aval Jurídico (manual) — desde 29/09 (2ª rodada) abre JUNTO com o
+       Aval Financeiro, quando o cliente aprova a Proposta (antes: só depois
+       do contrato assinado). JUNTO com o Aval de Pagamento, libera a compra
+       (COMPRA_LIBERADA abaixo exige os dois). O registro em avais_juridicos
+       nasce pelo trigger fn_avais_abrir_na_proposta no banco. */
+    { key: 'AVAL_JURIDICO', label: 'Aguardando Aval Jurídico',
+      predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
+      nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
+      condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
+      fecha: 'AVAL_JURIDICO_APROVADO',
+      fechamentoTipo: 'manual', rota: 'aval-juridico' },
+
+    /* Aval Engenharia (08/10/2026) — terceiro aval, POR COTAÇÃO: o cliente
+       assina o Projeto de Instalação (Projeto de Elevadores › Assinatura).
+       Abre junto com os outros dois quando o cliente aprova a Proposta e
+       fecha sozinho quando o ÚLTIMO projeto da cotação é assinado (o banco
+       enfileira PROJETO_INSTALACAO_ASSINADO — ver fluxo-pendentes.js). */
+    { key: 'AVAL_ENGENHARIA', label: 'Aguardando assinatura do Projeto de Instalação (Aval Engenharia)',
+      predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
+      nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
+      condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
+      fecha: 'PROJETO_INSTALACAO_ASSINADO',
+      fechamentoTipo: 'automatico', rota: 'eng-projeto-elevadores' },
+
     { key: 'COMPRA_LIBERADA', label: 'Compra ao Fornecedor liberada',
-      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'FS' }],
-      nasce: 'AVAL_PAGAMENTO_CONFIRMADO', fecha: 'COMPRA_FORNECEDOR_INICIADA',
+      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'FS' }, { key: 'AVAL_JURIDICO', rel: 'FS' }, { key: 'AVAL_ENGENHARIA', rel: 'FS' }],
+      /* Nasce só quando OS DOIS avais manuais já aconteceram (o último a
+         chegar dispara). `nasce` continua sendo o de sempre pra quem lê o
+         grafo; `requerEventos` é a condição real (ver onEvento). */
+      nasce: 'AVAL_PAGAMENTO_CONFIRMADO',
+      requerEventos: ['AVAL_PAGAMENTO_CONFIRMADO', 'AVAL_JURIDICO_APROVADO', 'PROJETO_INSTALACAO_ASSINADO'],
+      fecha: 'COMPRA_FORNECEDOR_INICIADA',
       fechamentoTipo: 'automatico' /* botão "Decidir Comprar" já existente em Cotação a Fornecedor */,
       rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
+
+    /* issue #706 — handoff automático da compra liberada pra Gestão de
+       Importação. Nasce já na COMPRA LIBERADA (decidirComprar), ANTES de
+       confirmar com o fornecedor (aprovar) — decisão explícita do usuário,
+       pra não deixar a cotação "sumir" sem pendência visível no intervalo
+       entre decidir comprar e a P.I. real chegar. Fecha sozinho quando a
+       P.I. real é registrada (PI_CRIADA, já emitido por pi-store.js) —
+       nunca inventa P.I. nenhuma. Sem SLA nesta 1ª rodada (sem número de
+       negócio definido ainda); alerta proativo fica pra entrega futura. */
+    { key: 'IMPORTACAO_A_INICIAR', label: 'Processo de Importação a iniciar (aguardando P.I.)',
+      predecessores: [{ key: 'COMPRA_LIBERADA', rel: 'FS' }],
+      nasce: 'COMPRA_FORNECEDOR_INICIADA', fecha: 'PI_CRIADA',
+      fechamentoTipo: 'automatico', rota: 'pi-importacao' },
 
     { key: 'NEGOCIACAO_COMPRA', label: 'Negociação e Compra do Produto (SLA 7 dias)',
       predecessores: [{ key: 'COMPRA_LIBERADA', rel: 'FS' }],
@@ -130,6 +254,347 @@
       predecessores: [{ key: 'NEGOCIACAO_COMPRA', rel: 'FS' }],
       nasce: 'COMPRA_FORNECEDOR_CONFIRMADA', fecha: null /* ainda sem evento — logística não é wired em eventos_fluxo */,
       fechamentoTipo: 'manual', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
+
+    /* ==========================================================
+       Extensão 23/08 — checklist completo de 73 etapas (ver Gatilhos.md
+       do usuário). Cobre os itens que a versão original da engine (acima)
+       deixava de fora: gates 21/22/27/28 (existiam como evento, sem nó),
+       e 33-73 inteiros (Engenharia final, Compra/Embarque, Dossiê/Vistoria,
+       RH/Instalador, Instalação, Documentação final/Handover).
+
+       `fecha: null` = o evento existe no catálogo (eventos-fluxo-store.js)
+       mas NENHUM lugar do código dispara ele ainda — ou porque a ação não
+       tem tela/campo hoje (ex.: aprovação do Projeto pelo Cliente), ou
+       porque é um dado sem ponto de ação claro (ex.: Cargo Ready, hoje
+       provavelmente só uma data digitada, não um clique). Isso é
+       intencional: fica visível no checklist como "planejado, não
+       automatizado" em vez de fingir que existe.
+       ========================================================== */
+
+    /* ---- Gates 21/22 (Score + Aval de Venda) — evento já existia
+       (aval-financeiro-store.js), só faltava o nó. Nasce junto com
+       Contrato/Projeto Enviado (mesmo gatilho de disparo: proposta
+       aprovada pelo cliente).
+
+       Nuance registrada por Gelson (23/08), ainda não modelada no código:
+       Score só é *obrigatório* consultar se o cliente é NOVO; cliente
+       recorrente já é "VerticalParts" e o Score pode ou não ser
+       reconsultado. Hoje o nó FIN_SCORE trata os dois casos igual
+       (nasce sempre, fecha manual sempre) — não há campo "cliente novo vs
+       recorrente" em `clientes` pra diferenciar automaticamente ainda.
+       Refinamento futuro: se esse campo existir, FIN_SCORE deveria
+       condicionar `condicaoNasce` a cliente novo, e "Financeiro Responde
+       Sim" cobrir as duas respostas (Score + Sinal) num fluxo só quando
+       recorrente. */
+    /* `opcional`: desde 29/09 (PR #503) a consulta de score/aval de venda não
+       trava contrato nem compra — não conta como pendência na tela. */
+    { key: 'FIN_SCORE', label: 'Financeiro consultando score do cliente', opcional: true,
+      predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
+      nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
+      condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'aprovada',
+      fecha: 'FINANCEIRO_CONSULTOU_SCORE', fechamentoTipo: 'manual', rota: 'aval-financeiro' },
+
+    { key: 'FIN_AVAL_VENDA', label: 'Financeiro decidindo o Aval de Venda', opcional: true,
+      predecessores: [{ key: 'FIN_SCORE', rel: 'FS' }],
+      nasce: 'FINANCEIRO_CONSULTOU_SCORE', fecha: 'FINANCEIRO_APROVOU_VENDA',
+      fechamentoTipo: 'manual', rota: 'aval-financeiro' },
+
+    /* ---- Subcircuito de revisão de proposta (23/08, achado do Dossiê PCB) —
+       separa "cliente pediu revisão" de "VerticalParts aceita/recusa o
+       pedido". O desfecho de recusa é tratado como caso especial em
+       onEvento() (ver acima) — este nó fecha oficialmente em
+       VERTICALPARTS_ACEITOU_REVISAO, mas VERTICALPARTS_RECUSOU_REVISAO
+       também o encerra, como 'encerrado'. Loop de múltiplas rodadas de
+       revisão (sugestão do documento: máx. 3 sem decisão gerencial) NÃO
+       implementado nesta primeira passada — cada rodada nova de revisão
+       hoje reabriria o mesmo AGUARDA_CLIENTE por cima, o que já funciona
+       (fecharNo é idempotente, não quebra), só não tem alerta de "3ª vez
+       sem decisão" ainda. */
+    { key: 'REVISAO_INTERNA', label: 'VerticalParts decidindo sobre a revisão pedida pelo cliente',
+      predecessores: [{ key: 'AGUARDA_CLIENTE', rel: 'FS' }],
+      nasce: 'CLIENTE_RESPONDEU_PROPOSTA',
+      condicaoNasce: (detalhe) => (detalhe || {}).resposta === 'revisao_solicitada',
+      fecha: 'VERTICALPARTS_ACEITOU_REVISAO', fechamentoTipo: 'manual', rota: 'proposta-editor', resolverSubsel: resolverEditProposta },
+
+    { key: 'PROPOSTA_REVISADA_REENVIO', label: 'Proposta revisada — aguardando reenvio ao cliente',
+      predecessores: [{ key: 'REVISAO_INTERNA', rel: 'FS' }],
+      nasce: 'VERTICALPARTS_ACEITOU_REVISAO', fecha: 'PROPOSTA_REENVIADA',
+      fechamentoTipo: 'automatico', rota: 'proposta-editor', resolverSubsel: resolverEditProposta },
+
+    /* ---- Gates 27/28 (CEO + Owner) — mesmo padrão: evento já existia
+       (aprovarComoCEO/aprovarComoOwner em aval-financeiro-store.js,
+       parte do gate podeIniciarCompra), só faltava o nó. Nascem junto
+       com o Aval de Pagamento, quando o sinal é pago.
+
+       ESPECIFICAÇÃO PENDENTE (23/08, Gelson) — o CEO_APROVOU aqui é só o
+       gate único pré-compra que já existe hoje. Existe uma segunda coisa,
+       AINDA NÃO IMPLEMENTADA, que não é este nó: um TETO DE CUSTO contínuo
+       por cotação.
+         - O Formulário de Precificação precisa listar TODOS os custos
+           previstos da cotação (equipamento, ART, frete, locação de
+           andaime/munck, contrato instalador etc.) — isso vira o teto
+           (ex.: custo 100k, venda 135k → 35k de margem é o teto de gasto
+           extra aceito sem aviso).
+         - Cada ação que gera custo real ao longo da cotação (compra ao
+           fornecedor, emissão de ART, contratação de frete/munck,
+           Contrato Instalador assinado, IMS contratado etc.) precisa
+           SOMAR ao acumulado da cotação e comparar contra o teto.
+         - Se o acumulado ULTRAPASSAR o teto em qualquer ponto (não só na
+           liberação da compra) — mesmo passado o CEO_APROVOU inicial —
+           um alerta novo precisa acionar o CEO de novo, especificando
+           qual compra estourou e por quanto.
+       Isso exige: (1) campos de custo obrigatórios no formulário de
+       precificação, hoje inexistentes; (2) uma "conta corrente" por
+       numero_cotacao somando custo real vs. teto; (3) um alerta disparado
+       no ponto de cada compra, não só um gate único no início. Não
+       construí isso ainda — precisa de mais instrução sua sobre onde essa
+       conta corrente deve morar (nova tabela? campo em avais_financeiros?)
+       antes de desenhar. */
+    /* 29/09: CEO só em discrepância — o nó só nasce quando a margem
+       efetiva da cotação fica abaixo de 15% (ou é desconhecida), mesma
+       regra de DecisoesStore.precisaAprovacaoCeo. */
+    { key: 'CEO_APROVOU', label: 'Aguardando aprovação do CEO (margem abaixo de 15%)',
+      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'SS' }],
+      nasce: 'SINAL_PAGO', fecha: 'FINANCEIRO_APROVOU_CEO',
+      condicaoCotacao: async (numeroCotacao) => {
+        const d = window.DecisoesStore;
+        if (!d || !d.precisaAprovacaoCeo) return true;
+        return (await d.precisaAprovacaoCeo(numeroCotacao).catch(() => ({ precisa: true }))).precisa;
+      },
+      fechamentoTipo: 'manual', rota: 'aval-financeiro' },
+
+    /* 29/09: a aprovação do responsável pelo sistema deixou de travar a
+       compra — o nó não nasce mais (nasce: null). Mantido no catálogo só
+       pra linhas antigas de `gatilhos` continuarem com rótulo/rota. */
+    { key: 'OWNER_APROVOU', label: 'Aguardando aprovação do responsável pelo sistema',
+      predecessores: [{ key: 'AVAL_PAGAMENTO', rel: 'SS' }],
+      nasce: null, fecha: 'FINANCEIRO_APROVOU_OWNER',
+      fechamentoTipo: 'manual', rota: 'aval-financeiro' },
+
+    /* ---- 33-37: Engenharia final + Ficha Técnica ---- */
+    { key: 'PROJETO_CRIADO', label: 'Projeto de Elevadores criado',
+      predecessores: [{ key: 'AGUARDA_ASSINATURA', rel: 'FS' }],
+      nasce: 'CONTRATO_VENDA_ASSINADO', fecha: 'PROJETO_ELEVADOR_CRIADO',
+      fechamentoTipo: 'automatico', rota: 'eng-projeto-elevadores' },
+
+    { key: 'PROJETO_APROVADO', label: 'Aguardando Cliente aprovar o Projeto',
+      predecessores: [{ key: 'PROJETO_CRIADO', rel: 'FS' }],
+      nasce: 'PROJETO_ELEVADOR_CRIADO',
+      fecha: null /* sem fluxo de aprovação do projeto pelo cliente hoje — item pendente de decisão de produto */,
+      fechamentoTipo: 'manual', rota: 'eng-projeto-elevadores' },
+    /* Item 36 "Engenharia Finalizou Projeto" já é coberto pelo nó
+       PROJETO_ENVIADO (acima), que fecha em PROJETO_ELEVADOR_FINALIZADO —
+       não duplicado aqui de propósito. */
+
+    { key: 'FICHA_CRIADA', label: 'Ficha Técnica criada',
+      predecessores: [{ key: 'PROJETO_CRIADO', rel: 'SS' }],
+      nasce: 'PROJETO_ELEVADOR_CRIADO',
+      fecha: null /* Ficha Técnica é por PRODUTO (catalogo_produtos), sem numero_cotacao — não dá pra fechar
+                     um nó de cotação a partir dela sem redesenhar o schema. Mesma limitação de Instalador
+                     Homologado (52). Evento FICHA_TECNICA_CRIADA fica no catálogo, sem call-site. */,
+      fechamentoTipo: 'manual', rota: 'ficha-tecnica' },
+
+    /* ---- 38-47: Compra / Embarque (38 = COMPRA_LIBERADA, já existe acima) ----
+       PI_CRIADA nasce direto do Projeto (não da Ficha) — ver nota acima
+       sobre por que a Ficha não fecha nada nesta cadeia. */
+    { key: 'PI_CRIADA', label: 'P.I. criada',
+      predecessores: [{ key: 'PROJETO_CRIADO', rel: 'SS' }],
+      nasce: 'PROJETO_ELEVADOR_CRIADO', fecha: 'PI_CRIADA',
+      fechamentoTipo: 'automatico', rota: 'pi-importacao' },
+
+    { key: 'PAGAMENTO_1_SOLICITADO', label: '1º pagamento ao fornecedor — solicitar',
+      predecessores: [{ key: 'PI_CRIADA', rel: 'FS' }],
+      nasce: 'PI_CRIADA',
+      fecha: null /* sem campo/ação distinta em pi-store.js hoje */,
+      fechamentoTipo: 'manual', rota: 'pi-importacao' },
+
+    { key: 'PAGAMENTO_1_CONFIRMADO', label: '1º pagamento ao fornecedor — confirmar',
+      predecessores: [{ key: 'PAGAMENTO_1_SOLICITADO', rel: 'FS' }],
+      nasce: 'PAGAMENTO_FORNECEDOR_1_SOLICITADO',
+      fecha: null /* idem — depende do nó anterior nunca fechar sozinho hoje */,
+      fechamentoTipo: 'manual', rota: 'pi-importacao' },
+    /* Item 42 "Produção Acompanhada" já é coberto pelo nó NEGOCIACAO_COMPRA
+       (acima), que fecha em COMPRA_FORNECEDOR_CONFIRMADA — não duplicado. */
+
+    { key: 'CARGO_READY', label: 'Aguardando Cargo Ready',
+      /* 23/08 — resolvido: o app de importação da Andreia (Base44) confirmou
+         que embarques_importacao.data_carregamento é o campo certo (mesmo
+         schema herdado de lá). Fecha na transição vazio→preenchido, ver
+         embarques-importacao-store.js:atualizar. */
+      predecessores: [{ key: 'NEGOCIACAO_COMPRA', rel: 'FS' }],
+      nasce: 'COMPRA_FORNECEDOR_CONFIRMADA', fecha: 'CARGO_READY_CONFIRMADO',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
+
+    { key: 'RFQ_FRETE', label: 'RFQ de frete enviado',
+      /* (Gelson me deve instrução: hoje disparo em CIMA de qualquer RFQ
+         criado, não só RFQ de frete especificamente — rfq-importacao não
+         distingue tipo de RFQ. Confirmar se precisa separar.) */
+      predecessores: [{ key: 'CARGO_READY', rel: 'SS' }],
+      nasce: 'COMPRA_FORNECEDOR_CONFIRMADA', fecha: 'RFQ_FRETE_ENVIADO',
+      fechamentoTipo: 'automatico', rota: 'rfq-importacao' },
+
+    { key: 'AGENTE_DEFINIDO', label: 'Agente de carga definido',
+      /* 23/08 — resolvido: embarques_importacao.agente_carga já existe
+         (texto — mesmo campo do app de referência da Andreia, que também
+         não usa FK aqui, só texto). Fecha na transição vazio→preenchido. */
+      predecessores: [{ key: 'RFQ_FRETE', rel: 'FS' }],
+      nasce: 'RFQ_FRETE_ENVIADO', fecha: 'AGENTE_CARGA_DEFINIDO',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
+
+    { key: 'EMBARQUE_CRIADO', label: 'Embarque criado',
+      predecessores: [{ key: 'AGENTE_DEFINIDO', rel: 'FS' }],
+      nasce: 'AGENTE_CARGA_DEFINIDO', fecha: 'EMBARQUE_CRIADO',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
+
+    { key: 'EMBARQUE_ATUALIZADO', label: 'Embarque em acompanhamento',
+      predecessores: [{ key: 'EMBARQUE_CRIADO', rel: 'FS' }],
+      nasce: 'EMBARQUE_CRIADO', fecha: 'EMBARQUE_ATUALIZADO',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
+
+    /* 23/08 — 2 nós novos, resolvidos pelo mesmo achado (campos reais já
+       existentes em embarques_importacao, só faltava disparar evento na
+       transição): chegada = canal_parametrizacao preenchido pela primeira
+       vez (só acontece depois que a carga chega e a DUIMP é registrada —
+       sinal mais confiável que eta_santos, que é só estimativa). Entrega
+       na obra = data_entrega preenchida. */
+    { key: 'EMBARQUE_CHEGADA_BRASIL', label: 'Embarque chegou no Brasil (canal aduaneiro atribuído)',
+      predecessores: [{ key: 'EMBARQUE_ATUALIZADO', rel: 'FS' }],
+      nasce: 'EMBARQUE_CRIADO', fecha: 'EMBARQUE_CHEGOU_BRASIL',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
+
+    { key: 'EMBARQUE_ENTREGA_OBRA', label: 'Equipamento entregue na obra',
+      predecessores: [{ key: 'EMBARQUE_CHEGADA_BRASIL', rel: 'FS' }],
+      nasce: 'EMBARQUE_CHEGOU_BRASIL', fecha: 'EMBARQUE_ENTREGUE_OBRA',
+      fechamentoTipo: 'automatico', rota: 'embarques-importacao' },
+
+    /* ---- 48-51: Dossiê + Vistoria ---- */
+    { key: 'DOSSIE_CRIADO', label: 'Dossiê da Obra criado',
+      predecessores: [{ key: 'AGUARDA_ASSINATURA', rel: 'FS' }],
+      nasce: 'CONTRATO_VENDA_ASSINADO', fecha: 'DOSSIE_CRIADO',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+
+    { key: 'VISTORIA_AGENDADA', label: 'Vistoria agendada',
+      predecessores: [{ key: 'DOSSIE_CRIADO', rel: 'FS' }],
+      nasce: 'DOSSIE_CRIADO', fecha: 'VISTORIA_AGENDADA',
+      fechamentoTipo: 'automatico', rota: 'vistorias', resolverSubsel: resolverIdDireto },
+
+    { key: 'VISTORIA_REALIZADA', label: 'Vistoria realizada',
+      predecessores: [{ key: 'VISTORIA_AGENDADA', rel: 'FS' }],
+      nasce: 'VISTORIA_AGENDADA', fecha: 'VISTORIA_REALIZADA',
+      fechamentoTipo: 'automatico', rota: 'vistorias', resolverSubsel: resolverIdDireto },
+
+    { key: 'PENDENCIAS_RESOLVIDAS', label: 'Pendências da obra resolvidas',
+      predecessores: [{ key: 'VISTORIA_REALIZADA', rel: 'FS' }],
+      nasce: 'VISTORIA_REALIZADA', fecha: 'PENDENCIA_RESOLVIDA',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+    /* Item 52 "Instalador Homologado" NÃO virou nó aqui de propósito: é
+       uma qualificação do PARCEIRO (parceiros_instaladores), não uma
+       etapa por Nº de Cotação — não encaixa no modelo de `gatilhos`
+       (chave numero_cotacao). Evento fica no catálogo pra uso futuro
+       (ex.: um painel separado por instalador), sem nó na cadeia. */
+
+    /* ---- 53-55: Instalador ---- */
+    { key: 'INSTALADOR_VINCULADO', label: 'Instalador vinculado à obra',
+      predecessores: [{ key: 'PENDENCIAS_RESOLVIDAS', rel: 'FS' }],
+      nasce: 'PENDENCIA_RESOLVIDA', fecha: 'INSTALADOR_VINCULADO',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+
+    { key: 'CI_GERADO', label: 'Contrato Instalador gerado',
+      predecessores: [{ key: 'INSTALADOR_VINCULADO', rel: 'FS' }],
+      nasce: 'INSTALADOR_VINCULADO', fecha: 'CONTRATO_INSTALADOR_GERADO',
+      fechamentoTipo: 'automatico', rota: 'contrato-instalador' },
+
+    { key: 'CI_ASSINADO', label: 'Contrato Instalador assinado',
+      predecessores: [{ key: 'CI_GERADO', rel: 'FS' }],
+      nasce: 'CONTRATO_INSTALADOR_GERADO', fecha: 'CONTRATO_INSTALADOR_ASSINADO',
+      fechamentoTipo: 'automatico', rota: 'contrato-instalador' },
+
+    /* ---- 56-63: Recursos + Instalação ---- */
+    { key: 'IMS_CONTRATADO', label: 'Recursos IMS contratados',
+      predecessores: [{ key: 'CI_ASSINADO', rel: 'FS' }],
+      nasce: 'CONTRATO_INSTALADOR_ASSINADO', fecha: 'IMS_CONTRATADO',
+      fechamentoTipo: 'automatico', rota: 'ims-importacao' },
+    /* Item 56 "Recursos Verificados" não virou nó — não achei ação
+       distinta de "contratar" (IMS_CONTRATADO acima) no código; evento
+       fica no catálogo, sem nó, mesmo motivo de itens acima. */
+
+    { key: 'EQUIPAMENTO_RECEBIDO', label: 'Equipamento recebido na obra',
+      predecessores: [{ key: 'IMS_CONTRATADO', rel: 'FS' }],
+      nasce: 'IMS_CONTRATADO', fecha: 'EQUIPAMENTO_RECEBIDO',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+    /* Item 59 "Equipamento Conferido" não virou nó — instalacao-obra-store
+       só tem marcarEquipamentoEntregue, sem campo de conferência distinto
+       de recebimento; mesmo call-site cobre os dois hoje. */
+
+    { key: 'INSTALACAO_INICIADA', label: 'Instalação iniciada',
+      predecessores: [{ key: 'EQUIPAMENTO_RECEBIDO', rel: 'FS' }],
+      nasce: 'EQUIPAMENTO_RECEBIDO', fecha: 'INSTALACAO_INICIADA',
+      fechamentoTipo: 'automatico', rota: 'instalacao' },
+
+    /* Nasce junto com INSTALACAO_INICIADA (não bloqueia a aresta pra
+       INSTALACAO_CONCLUIDA) — fecha sozinho quando o Cronograma de
+       Instalação (checklist por dossiê) bate ~50% dos itens concluídos.
+       Existe pra alimentar a 2ª parcela do contrato de instalador nos
+       formatos de 2/3 parcelas ("metade da execução") — disparado em
+       instalacao-checklist-store.js:marcarItem. */
+    { key: 'INSTALACAO_METADE_EXECUCAO', label: 'Metade da execução da instalação',
+      predecessores: [{ key: 'INSTALACAO_INICIADA', rel: 'SS' }],
+      nasce: 'INSTALACAO_INICIADA', fecha: 'INSTALACAO_METADE_EXECUCAO',
+      fechamentoTipo: 'automatico', rota: 'instalacao' },
+
+    { key: 'PENDENCIA_INSTALACAO', label: 'Pendência de instalação em aberto',
+      predecessores: [{ key: 'INSTALACAO_INICIADA', rel: 'SS' }],
+      nasce: 'INSTALACAO_INICIADA', fecha: 'PENDENCIA_INSTALACAO_REGISTRADA',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+
+    { key: 'INSTALACAO_CONCLUIDA', label: 'Instalação concluída',
+      predecessores: [{ key: 'INSTALACAO_INICIADA', rel: 'FS' }],
+      nasce: 'INSTALACAO_INICIADA', fecha: 'INSTALACAO_CONCLUIDA',
+      fechamentoTipo: 'automatico', rota: 'instalacao' },
+
+    /* ---- 64-68: ART, testes, Data Book ---- */
+    { key: 'ART_EMITIDA', label: 'ART emitida',
+      predecessores: [{ key: 'INSTALACAO_CONCLUIDA', rel: 'FS' }],
+      nasce: 'INSTALACAO_CONCLUIDA', fecha: 'ART_EMITIDA',
+      fechamentoTipo: 'automatico', rota: 'art' },
+
+    { key: 'TESTES_REALIZADOS', label: 'Testes realizados',
+      predecessores: [{ key: 'INSTALACAO_CONCLUIDA', rel: 'SS' }],
+      nasce: 'INSTALACAO_CONCLUIDA',
+      fecha: null /* sem checklist/campo distinto de "teste" hoje — costuma estar embutido no checklist geral de instalação */,
+      fechamentoTipo: 'manual', rota: 'instalacao' },
+
+    { key: 'DATABOOK_MONTADO', label: 'Data Book montado',
+      predecessores: [{ key: 'ART_EMITIDA', rel: 'FS' }],
+      nasce: 'ART_EMITIDA', fecha: 'DATABOOK_MONTADO',
+      fechamentoTipo: 'automatico', rota: 'databook' },
+    /* Itens 67/68 "Data Book Enviado" / "Cliente Aprovou Data Book" não
+       viraram nó — hoje só existe o upload (item 66, acima); não há
+       envio/aprovação distintos rastreados. */
+
+    /* ---- 69-73: Termo de Entrega + Handover (construído nesta mesma sessão) ---- */
+    { key: 'TERMO_PREPARADO', label: 'Termo de Entrega — link gerado',
+      predecessores: [{ key: 'DATABOOK_MONTADO', rel: 'FS' }],
+      nasce: 'DATABOOK_MONTADO', fecha: 'TERMO_PREPARADO',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+    /* Item 70 "Termo Enviado" não virou nó separado — gerar o link (69) e
+       "enviar" são o mesmo clique hoje (o link sai por WhatsApp fora do
+       sistema, não há botão de "enviar" distinto). */
+
+    { key: 'TERMO_ASSINADO', label: 'Termo de Entrega assinado',
+      predecessores: [{ key: 'TERMO_PREPARADO', rel: 'FS' }],
+      nasce: 'TERMO_PREPARADO', fecha: 'TERMO_ASSINADO',
+      fechamentoTipo: 'automatico', rota: 'dossier-obra', resolverSubsel: resolverIdDireto },
+
+    { key: 'HANDOVER_CONCLUIDO', label: 'Handover concluído',
+      predecessores: [{ key: 'TERMO_ASSINADO', rel: 'FS' }],
+      nasce: 'TERMO_ASSINADO', fecha: 'HANDOVER_CONCLUIDO',
+      fechamentoTipo: 'automatico', rota: 'handover' },
+
+    { key: 'POS_VENDA_ATIVADO', label: 'Pós-venda ativado',
+      predecessores: [{ key: 'HANDOVER_CONCLUIDO', rel: 'FS' }],
+      nasce: 'HANDOVER_CONCLUIDO', fecha: 'POS_VENDA_ATIVADO',
+      fechamentoTipo: 'automatico', rota: 'handover' },
   ];
 
   function nodeByKey(key) { return NODES.find((n) => n.key === key); }
@@ -153,14 +618,14 @@
     return data || null;
   }
 
-  async function fecharNo(numeroCotacao, node, statusFinal) {
+  async function fecharNo(numeroCotacao, node, statusFinal, retroativo) {
     const c = sb(); if (!c) return null;
     const row = await getRow(numeroCotacao, node.key);
     if (!row || row.concluido_em) return row; // já fechado ou nunca nasceu
     const now = new Date().toISOString();
-    const { data, error } = await c.from('gatilhos').update({
-      concluido_em: now, status: statusFinal || 'ok',
-    }).eq('id', row.id).select().single();
+    const patch = { concluido_em: now, status: statusFinal || 'ok' };
+    if (retroativo) patch.conclusao_tipo = 'retroativo';   // etapa pulada — a tela não a mostra como "cumprida no prazo"
+    const { data, error } = await c.from('gatilhos').update(patch).eq('id', row.id).select().single();
     if (error) { console.warn('[GatilhosEngine] fecharNo falhou', error); return row; }
     return data;
   }
@@ -172,7 +637,7 @@
     const now = new Date();
     const nowIso = now.toISOString();
     const slaHoras = SLA_HORAS[node.key] ?? null;
-    const prazoEm = slaHoras != null ? new Date(now.getTime() + slaHoras * 3600000) : null;
+    const prazoEm = prazoDe(node.key, now);
     const relPrincipal = (node.predecessores[0] || {}).rel || 'FS';
     const row = {
       id: gtId(numeroCotacao, node.key),
@@ -206,7 +671,7 @@
   async function garantirNo(numeroCotacao, key) {
     let row = await getRow(numeroCotacao, key);
     if (row) {
-      if (!row.concluido_em) row = await fecharNo(numeroCotacao, nodeByKey(key), 'ok');
+      if (!row.concluido_em) row = await fecharNo(numeroCotacao, nodeByKey(key), 'ok', true);
       return row;
     }
     const node = nodeByKey(key);
@@ -214,7 +679,7 @@
     const predKey = (node.predecessores[0] || {}).key;
     const predRow = predKey ? await garantirNo(numeroCotacao, predKey) : null;
     row = await nascerNo(numeroCotacao, node, predRow ? predRow.id : null, predRow ? predRow.alvo_id : null);
-    if (row) row = await fecharNo(numeroCotacao, node, 'ok');
+    if (row) row = await fecharNo(numeroCotacao, node, 'ok', true);
     return row;
   }
 
@@ -224,6 +689,17 @@
      `alvoId` é o id do registro que disparou o evento (ex.: id da cotação
      a fornecedor, da proposta) — gravado no nó que nasce, pra dar pra
      clicar na linha e abrir o objeto real (ver navegarPara). */
+  /* Todos os eventos de `chaves` já foram registrados pra essa cotação?
+     (eventos_fluxo guarda o LABEL do evento, e o registro do evento atual já
+     foi gravado antes de onEvento ser chamado.) */
+  async function todosEventosRegistrados(numeroCotacao, chaves) {
+    const ev = window.EventosFluxo;
+    if (!ev || !ev.listarPorCotacao) return false;
+    const linhas = await ev.listarPorCotacao(numeroCotacao);
+    const labels = new Set((linhas || []).map((l) => l.evento));
+    return chaves.every((k) => labels.has((ev.EVENTOS[k] || {}).label));
+  }
+
   async function onEvento({ evento, numeroCotacao, alvoId, detalhe } = {}) {
     if (numeroCotacao == null) return;
     try {
@@ -233,6 +709,16 @@
          Contrato/Projeto. Precisa decidir o status ANTES de fechar —
          fecharNo é idempotente e não deixa reabrir pra trocar depois. */
       const recusada = evento === 'CLIENTE_RESPONDEU_PROPOSTA' && (detalhe || {}).resposta === 'recusada';
+      /* Recusa INTERNA de revisão (23/08) — mesmo padrão da recusa do
+         cliente acima, mas fecha o nó REVISAO_INTERNA como 'encerrado' em
+         vez do nó cujo `fecha` bate literalmente com o evento (esse nó
+         fecha oficialmente em VERTICALPARTS_ACEITOU_REVISAO — a recusa é
+         o outro desfecho possível do mesmo nó, não um evento que ele
+         "escuta" via campo fecha). */
+      if (evento === 'VERTICALPARTS_RECUSOU_REVISAO') {
+        const revisaoNode = nodeByKey('REVISAO_INTERNA');
+        if (revisaoNode) await fecharNo(numeroCotacao, revisaoNode, 'encerrado');
+      }
       for (const node of NODES) {
         if (node.fecha !== evento) continue;
         const status = recusada && node.key === 'AGUARDA_CLIENTE' ? 'encerrado' : 'ok';
@@ -241,8 +727,14 @@
 
       /* 2) nasce quem tiver esse evento como nascimento */
       for (const node of NODES) {
-        if (node.nasce !== evento) continue;
+        const dispara = node.nasce === evento || (node.requerEventos || []).includes(evento);
+        if (!dispara) continue;
         if (node.condicaoNasce && !node.condicaoNasce(detalhe)) continue;
+        if (node.condicaoCotacao && !(await node.condicaoCotacao(numeroCotacao))) continue;
+        if (node.requerEventos) {
+          const jaAconteceram = await todosEventosRegistrados(numeroCotacao, node.requerEventos);
+          if (!jaAconteceram) continue;
+        }
         const predKey = (node.predecessores[0] || {}).key;
         const predRow = predKey ? await garantirNo(numeroCotacao, predKey) : null;
         await nascerNo(numeroCotacao, node, predRow ? predRow.id : null, alvoId);
@@ -314,6 +806,22 @@
     return mudou;
   }
 
+  /* Fecha manualmente um gatilho que nunca vai receber o evento normal de
+     conclusão — hoje só o "Cemitério" (AGUARDA_CLIENTE parado há mais de
+     10 dias, ver SLA_HORAS acima): o cliente sumiu, o vendedor investigou
+     por fora e decide encerrar o ciclo com uma justificativa em texto
+     livre (23/08, Gelson — "só o cliente mata o fluxo", então isso é
+     sempre uma decisão humana registrada, nunca automática). */
+  async function fecharComMotivo(id, motivo) {
+    const c = sb(); if (!c) return null;
+    if (!motivo || !motivo.trim()) throw new Error('Motivo é obrigatório.');
+    const { data, error } = await c.from('gatilhos').update({
+      concluido_em: new Date().toISOString(), status: 'encerrado', motivo_fechamento: motivo.trim(),
+    }).eq('id', id).select().single();
+    if (error) { console.warn('[GatilhosEngine] fecharComMotivo falhou', error); throw error; }
+    return data;
+  }
+
   /* Fecha um gatilho-filho de lembrete manualmente ("marquei que já cobrei o cliente"). */
   async function fecharLembrete(id) {
     const c = sb(); if (!c) return null;
@@ -324,5 +832,6 @@
     return data;
   }
 
-  window.GatilhosEngine = { NODES, SLA_HORAS, LEMBRETES, onEvento, verificarPrazos, fecharLembrete, navegarPara, profundidade };
+  window.GatilhosEngine = { NODES, SLA_HORAS, LEMBRETES, onEvento, verificarPrazos, fecharLembrete, fecharComMotivo, navegarPara, profundidade,
+    nodeByKey, somarHorasUteis, prazoEfetivo, emAtraso, ehRetroativo };
 }());

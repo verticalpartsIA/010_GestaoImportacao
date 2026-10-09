@@ -16,13 +16,14 @@ const CP_LS_POS = 'ft_copiloto_pos_v1';
 const CP_LS_OPEN = 'ft_copiloto_open_v1';
 
 const CP_ENDPOINT = 'https://jxtqwzmpgofwctqajewt.supabase.co/functions/v1/ncm-duimp-assist';
-const CP_ANON_KEY = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+const CP_ANON_KEY = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
 
 /* ---------- API call ---------- */
 async function callNcmAssist(payload) {
   const res = await fetch(CP_ENDPOINT, {
     method: 'POST',
     headers: {
+      'apikey': CP_ANON_KEY,
       'Authorization': 'Bearer ' + CP_ANON_KEY,
       'Content-Type': 'application/json',
     },

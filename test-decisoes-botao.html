@@ -1,0 +1,141 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Teste - Botão Ver Documento</title>
+  <style>
+    body { font-family: system-ui; margin: 20px; background: #f5f5f5; }
+    .container { max-width: 800px; margin: 0 auto; }
+    .card {
+      background: white;
+      border: 1px solid #e0e0e0;
+      border-radius: 6px;
+      padding: 14px 18px;
+      display: flex;
+      align-items: center;
+      gap: 16px;
+      margin-bottom: 16px;
+    }
+    .content { flex: 1; }
+    .label { font-size: 12px; color: #999; text-transform: uppercase; font-weight: 600; }
+    .title { font-size: 15px; font-weight: 800; margin: 6px 0; }
+    .meta { font-size: 13px; color: #666; margin: 4px 0; font-family: monospace; }
+    .buttons { display: flex; gap: 8px; flex-wrap: wrap; }
+    button {
+      padding: 6px 12px;
+      border: none;
+      border-radius: 4px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+      transition: all 0.2s;
+    }
+    .btn-outline {
+      background: white;
+      border: 1px solid #ddd;
+      color: #333;
+    }
+    .btn-outline:hover { background: #f9f9f9; border-color: #999; }
+    .btn-danger {
+      background: #f44336;
+      color: white;
+    }
+    .btn-danger:hover { background: #da190b; }
+    .btn-primary {
+      background: #2196F3;
+      color: white;
+    }
+    .btn-primary:hover { background: #0b7dda; }
+    .h2 { margin-top: 30px; margin-bottom: 10px; }
+  </style>
+</head>
+<body>
+<div class="container">
+  <h1>Teste: Botão "Ver Documento" na Central de Decisões</h1>
+
+  <h2 class="h2">Caso 1: Decisão com número de cotação (botão aparece e navega)</h2>
+  <div class="card">
+    <div class="content">
+      <div class="label">Aprovação de Cotação</div>
+      <div class="title">Elevador XY - Cliente ABC</div>
+      <div class="meta">Cotação 12345 · 10 un · João Silva · R$ 50.000,00</div>
+      <div class="meta">Aberta em 17/09/2026 às 10:30</div>
+    </div>
+    <div class="buttons">
+      <button class="btn-outline" onclick="navegar('?page=formulario-elevador&id=12345')">Ver documento</button>
+      <button class="btn-danger">Reprovar</button>
+      <button class="btn-primary">Aprovar</button>
+    </div>
+  </div>
+
+  <h2 class="h2">Caso 2: Decisão com dossier (botão aparece e navega)</h2>
+  <div class="card">
+    <div class="content">
+      <div class="label">Aprovação de Dossier</div>
+      <div class="title">Obra Centro Comercial - São Paulo</div>
+      <div class="meta">Dossier #5678 · 1 Dossier · Eng. Maria · R$ 150.000,00</div>
+      <div class="meta">Aberta em 16/09/2026 às 14:15</div>
+    </div>
+    <div class="buttons">
+      <button class="btn-outline" onclick="navegar('?page=dossier-obra&id=5678')">Ver documento</button>
+      <button class="btn-danger">Reprovar</button>
+      <button class="btn-primary">Aprovar</button>
+    </div>
+  </div>
+
+  <h2 class="h2">Caso 3: Decisão com referência genérica RFQ (botão aparece)</h2>
+  <div class="card">
+    <div class="content">
+      <div class="label">Aprovação de RFQ</div>
+      <div class="title">Solicitação de Cotação #999</div>
+      <div class="meta">RFQ 999 · 5 itens · Admin · R$ 75.000,00</div>
+      <div class="meta">Aberta em 15/09/2026 às 09:45</div>
+    </div>
+    <div class="buttons">
+      <button class="btn-outline" onclick="navegar('?page=formulario-rfq&id=999')">Ver documento</button>
+      <button class="btn-danger">Reprovar</button>
+      <button class="btn-primary">Aprovar</button>
+    </div>
+  </div>
+
+  <h2 class="h2">Caso 4: Decisão sem link navegável (botão NÃO aparece)</h2>
+  <div class="card">
+    <div class="content">
+      <div class="label">Aprovação de Tópico Genérico</div>
+      <div class="title">Decisão sem contexto de documento</div>
+      <div class="meta">Sem referência · Sem cotação · Sem dossier · R$ 0,00</div>
+      <div class="meta">Aberta em 14/09/2026 às 08:00</div>
+    </div>
+    <div class="buttons">
+      <!-- Sem botão "Ver documento" porque não há link -->
+      <button class="btn-danger">Reprovar</button>
+      <button class="btn-primary">Aprovar</button>
+    </div>
+  </div>
+
+  <h2 class="h2">Resumo da Implementação</h2>
+  <div style="background: #f9f9f9; padding: 16px; border-radius: 6px; border-left: 4px solid #2196F3;">
+    <p><strong>Função <code>gerarLinkDecisao(decisao)</code>:</strong></p>
+    <ul>
+      <li>Retorna URL <code>?page=formulario-elevador&id=XXX</code> se <code>decisao.numero_cotacao</code> existe</li>
+      <li>Retorna URL <code>?page=dossier-obra&id=XXX</code> se <code>decisao.dossier_id</code> existe</li>
+      <li>Retorna URL <code>?page=XXX&id=YYY</code> se <code>referencia_tabela</code> + <code>referencia_id</code> existem</li>
+      <li>Retorna <code>null</code> caso nenhum campo navegável exista</li>
+    </ul>
+    <p><strong>Integração no DecCard:</strong></p>
+    <ul>
+      <li>Botão "Ver documento" aparece apenas se <code>linkDocumento</code> é não-nulo</li>
+      <li>Clique navega com <code>window.location.href = linkDocumento</code></li>
+      <li>Posicionado antes de "Reprovar" e "Aprovar" (visualmente lógico)</li>
+      <li>Aparência: <code>variant="outline"</code> (botão claro e suave)</li>
+    </ul>
+  </div>
+
+  <script>
+    function navegar(url) {
+      alert('Clique funcionaria!\n\nNavegaria para: ' + url + '\n\nNeste teste, apenas mostrando a URL.');
+    }
+  </script>
+</div>
+</body>
+</html>

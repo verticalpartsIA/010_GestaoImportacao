@@ -8,7 +8,7 @@
   'use strict';
 
   const URL_SB  = 'https://jxtqwzmpgofwctqajewt.supabase.co';
-  const ANON_SB = 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imp4dHF3em1wZ29md2N0cWFqZXd0Iiwicm9sZSI6ImFub24iLCJpYXQiOjE3Nzk0ODk3NzcsImV4cCI6MjA5NTA2NTc3N30.hoNuKfSaSLFDKqJ2F331QSDQkzsiphWhLk3xtZh6Bpc';
+  const ANON_SB = 'sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP';
 
   const sb = window.supabase.createClient(URL_SB, ANON_SB);
 
@@ -52,6 +52,21 @@
     try { window.dispatchEvent(new CustomEvent('vpprd:user', { detail: u })); } catch (e) {}
   }
 
+  // Link direto perdido no round-trip do SSO (issue #279/#281): o card do
+  // vpsistema.com sempre abre a raiz do app, então um deep link
+  // (/comercial/lead-detail/42) acessado sem sessão ativa virava sempre
+  // dashboard depois do login. Guardamos o path pretendido antes de sair
+  // e restauramos assim que o token confirmar a volta — funciona mesmo
+  // sem nenhuma cooperação do vpsistema.com (é outro sistema, fora deste
+  // repo; não dá pra garantir que ele devolva algo). ?vp_return= vai
+  // junto por via das dúvidas, best-effort, caso o portal algum dia passe
+  // a repassar esse parâmetro — não é o mecanismo principal.
+  const PENDING_DEEPLINK_KEY = 'vpprd_pending_deeplink';
+  function currentDeepLinkPath() {
+    const p = window.location.pathname;
+    return p && p !== '/' ? p : null; // raiz não é link específico de nada
+  }
+
   (function ssoGuard() {
     const params   = new URLSearchParams(window.location.search);
     const ssoToken = params.get('sso_token');
@@ -64,7 +79,12 @@
 
     // Sem token SSO E sem flag de aba E não está em localhost → acesso direto bloqueado
     if (!ssoToken && !hasTabFlag && !isLocalhost) {
-      window.location.replace('https://vpsistema.com');
+      const pending = currentDeepLinkPath();
+      if (pending) {
+        try { localStorage.setItem(PENDING_DEEPLINK_KEY, pending); } catch (e) {}
+      }
+      const returnParam = pending ? '?vp_return=' + encodeURIComponent(pending) : '';
+      window.location.replace('https://vpsistema.com' + returnParam);
       return;
     }
 
@@ -101,8 +121,31 @@
         })
         .catch(function () { /* offline/expirado: mantém o decode local */ });
 
-      window.history.replaceState({}, '', window.location.pathname);
+      // Restaura o link pretendido, se algum ficou guardado antes do
+      // redirecionamento pro login — senão mantém o pathname atual
+      // (comportamento de sempre: vpsistema.com manda pra raiz).
+      let voltarPara = window.location.pathname;
+      try {
+        const pendente = localStorage.getItem(PENDING_DEEPLINK_KEY);
+        if (pendente) {
+          voltarPara = pendente;
+          localStorage.removeItem(PENDING_DEEPLINK_KEY);
+        }
+      } catch (e) {}
+      window.history.replaceState({}, '', voltarPara);
     }
+
+    // Segurança real (#571) — MODO SOMBRA: troca o login do vpsistema por uma sessão nativa do vpprd
+    // (Edge Function sso-exchange). Só observa: o cliente de dados abaixo continua com a chave pública,
+    // então nada muda para o usuário e uma falha aqui nunca quebra o app (VpAuth.init não lança).
+    try {
+      if (window.VpAuth) {
+        window.VpAuth.init({ ssoToken: ssoToken || null }).then(function () {
+          const s = window.VpAuth.status();
+          if (s.modo !== 'off') console.info('[VpAuth] modo=' + s.modo + ' estado=' + s.estado + (s.motivo ? ' (' + s.motivo + ')' : ''));
+        });
+      }
+    } catch (e) { /* sombra: nunca bloqueia */ }
   }());
 
   // ---- helpers --------------------------------------------------------
@@ -120,30 +163,43 @@
     return `há ${d}d`;
   }
 
-  function fmtBRL(n) {
-    if (!n) return 'R$ 0';
-    if (n >= 1_000_000) return 'R$ ' + (n / 1_000_000).toFixed(1) + 'M';
-    if (n >= 1_000)     return 'R$ ' + Math.round(n / 1_000) + 'k';
-    return 'R$ ' + n;
-  }
+  // fmtBRL (compacto, R$ 1.2M/R$ 5k) migrou pra dentro de
+  // dashboard-metrics-financeiro.js/dashboard-metrics-admin.js — únicos
+  // lugares que ainda formatam moeda pro Dashboard.
 
   // ---- carregador principal -------------------------------------------
 
-  async function loadDashboardData(role) {
+  /* Achado A02 da auditoria: o seletor Hoje/7/30/90 dias do Dashboard
+     mudava o rótulo do botão sem filtrar nenhum dado. period vem como o
+     rótulo exato mostrado na tela; undefined preserva o comportamento
+     antigo (sem filtro) pra não quebrar chamadas existentes. */
+  function periodoParaData(period) {
+    if (!period) return null;
+    const agora = new Date();
+    if (period === 'Hoje') { const d = new Date(agora); d.setHours(0, 0, 0, 0); return d; }
+    const dias = { '7 dias': 7, '30 dias': 30, '90 dias': 90 }[period];
+    if (!dias) return null;
+    return new Date(agora.getTime() - dias * 24 * 60 * 60 * 1000);
+  }
+
+  async function loadDashboardData(role, period) {
     const [
-      lR, cotR, projR, alertR,
-      tarR, embR, ctR, estR,
+      lR, alertR,
+      tarR, embR, ctR,
       comR, gatR, fichasR, catalogoR,
-      propR, avaisR
+      propR, avaisR,
+      formR, cliR, instR
     ] = await Promise.all([
-      sb.from('leads').select('*').order('date', { ascending: false }),
-      sb.from('cotacoes').select('*').order('date', { ascending: false }),
-      sb.from('projetos').select('*').order('start_date'),
-      sb.from('alertas').select('*').eq('resolved', false).order('created_at', { ascending: false }),
+      sb.from('leads').select('*').is('excluido_em', null).order('date', { ascending: false }),
+      // Mesma regra de destinatário da Central de Notificações (antes o Dashboard contava alertas dirigidos a outras pessoas).
+      (() => {
+        const q = sb.from('alertas').select('*').eq('resolved', false);
+        const em = (window.__VP_USER || {}).email || null;
+        return (em ? q.or(`destinatario_email.is.null,destinatario_email.eq.${em}`) : q.is('destinatario_email', null)).order('created_at', { ascending: false });
+      })(),
       sb.from('tarefas').select('*').eq('role', role).eq('done', false).order('id'),
-      sb.from('embarques').select('*').order('eta'),
-      sb.from('contratos_venda_equipamentos').select('*').order('issued_date', { ascending: false }),
-      sb.from('estoque').select('*').order('sku'),
+      sb.from('embarques').select('*').eq('teste', false).order('eta'),
+      sb.from('contratos_venda_equipamentos').select('*').or('status.is.null,status.neq.em_preenchimento').order('issued_date', { ascending: false }),
       sb.from('comissoes').select('*').order('id'),
       sb.from('gatilhos').select('*').order('due_date'),
       sb.from('fichas_tecnicas').select('*').order('criado_em', { ascending: false }),
@@ -152,160 +208,144 @@
       // pra corrigir os KPIs do Dashboard Admin, que antes só liam a tabela
       // legada/desconectada `projetos` (achado E2E: Faturamento Total R$0 e
       // Alertas Críticos 0 com proposta assinada de R$185mil e sinal pago).
-      sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em'),
+      // ativos:data_json->ativos — só o array de ativos (com
+      // custoInstalacaoMaoDeObraRs por equipamento, ver proposta-heranca.js),
+      // não o data_json inteiro (evita puxar o JSON grande da proposta toda
+      // só pra comparar custo de instalação no Dashboard).
+      // cliente_id: usado por ComercialMetrics.conversaoLeadProposta() pra
+      // casar lead → proposta pelo cliente (propostas não tem lead_id).
+      sb.from('propostas').select('id, status, valor_total, numero_cotacao, aprovada_em, cliente_id, ativos:data_json->ativos'),
       sb.from('avais_financeiros').select('id, numero_cotacao, status, sinal_pago, contrato_venda_id'),
+      // Issue #274 (23/08): "Projetos em Andamento" (Gantt/Kanban/Lista) lia
+      // só a tabela `projetos`, legada e sempre vazia em produção. cliente/
+      // obra por numero_cotacao vêm daqui pra montar o projeto sintético
+      // real em dashboard-metrics-gantt.js (projetosDaEsteira).
+      // vendedor/created_by: achado real (03/10) — alimenta "Responsável"
+      // no modal de detalhe do projeto (campo morto até então).
+      sb.from('formularios_elevador').select('numero_cotacao, cliente_id, local_obra_cidade, vendedor, created_by'),
+      sb.from('clientes').select('id, nome_fantasia, razao_social'),
+      // Instalação: contratado x previsto (Fase 3d "capítulo leve" da
+      // granularidade de custo) — só os campos usados na comparação.
+      sb.from('contratos_instalador').select('id, valor_total, proposta_id, ativos_indices, status'),
     ]);
 
     const leads     = lR.data    || [];
-    const cotacoes  = cotR.data  || [];
-    const projetos  = projR.data || [];
     const alertas   = (alertR.data || []).map(a => ({ ...a, time: timeAgo(a.created_at) }));
     const tarefas   = tarR.data  || [];
     const embarques = embR.data  || [];
     const contratos = ctR.data   || [];
-    const estoque   = estR.data  || [];
     const comissoes = comR.data  || [];
     const gatilhos  = gatR.data  || [];
     const fichas    = fichasR.data || [];
     const catalogo  = catalogoR.data || [];
-    const ncm       = [];  // legado removido — vazio pra compat de loops abaixo
     const propostas = propR.data  || [];
     const avais     = avaisR.data || [];
+    const formularios = formR.data || [];
+    const contratosInstalador = instR.data || [];
+    const clientesPorId = {};
+    (cliR.data || []).forEach((c) => { clientesPorId[c.id] = c; });
+
+    // ---- Esteira real (gatilhos+formulários) reconciliada em "projeto
+    // sintético" — fonte única de "projeto/cotação aberta" pro Dashboard
+    // inteiro (Gantt/Kanban/Lista, "Projetos ativos" do Admin e, desde
+    // 03/10, "Projetos abertos" da Engenharia também). Calculada ANTES dos
+    // módulos de perspectiva porque mais de um perfil precisa dela. ----
+    const GM = window.ProjetosGanttMetrics;
+    const projetosReais = GM.projetosDaEsteira({ gatilhos, formularios, clientesPorId, propostas });
+
+    // ---- Comercial (dashboard-metrics-comercial.js) — 1º módulo extraído
+    // da revisão de arquitetura do Dashboard. Funções puras, testadas em
+    // dashboard-metrics-comercial.test.js. Os outros perfis ainda são
+    // calculados aqui embaixo — extração incremental, um módulo por vez. ----
+    const CM = window.ComercialMetrics;
+    const comercial = CM.compute({ leads, gatilhos, propostas, contratos });
+
+    // ---- Engenharia (dashboard-metrics-engenharia.js) — 2º módulo
+    // extraído. Achado real (03/10): "Projetos abertos" lia a tabela legada
+    // `projetos` (0 linhas em produção) — agora usa a mesma esteira
+    // reconciliada (projetosReais) que o Gantt/Admin já usam, nunca mais
+    // fica preso em zero. `ncmSolicitacoes` não é mais passado aqui —
+    // ver nota sobre `ncm_solicitacoes` logo abaixo (achado real 03/10). ----
+    const EM = window.EngenhariaMetrics;
+    const engenharia = EM.compute({ projetos: projetosReais, fichas, catalogo, alertas });
+
+    // ---- Financeiro (dashboard-metrics-financeiro.js) — 3º módulo extraído. ----
+    const FM = window.FinanceiroMetrics;
+    const financeiro = FM.compute({ contratos, comissoes, gatilhos, contratosInstalador, propostas });
+
+    // ---- Admin (dashboard-metrics-admin.js) — 5º e último módulo
+    // extraído. Único que COMPÕE outro módulo (ComercialMetrics), em vez
+    // de refiltrar do zero — ver comentário no próprio arquivo. ----
+    const AM = window.AdminMetrics;
+    const desde = periodoParaData(period);
+    const projetosPeriodo = desde ? AM.projetosAtivosNoPeriodo(projetosReais, desde) : undefined;
+    const propostasPeriodo = desde ? propostas.filter(p => p.aprovada_em && new Date(p.aprovada_em) >= desde) : undefined;
+    const comissoesPeriodo = desde ? comissoes.filter(c => c.created_at && new Date(c.created_at) >= desde) : undefined;
+    const admin = AM.compute({ projetos: projetosReais, embarques, alertas, propostas, contratos, avais, comissoes, projetosPeriodo, propostasPeriodo, comissoesPeriodo });
 
     // ---- tarefas no formato esperado pelo Dashboard ----
     const tarefasFmt = tarefas.map(t => ({
+      id: t.id,
       t: t.title,
       time: t.due_time,
       prio: ({ alta: 'Alta', media: 'Média', baixa: 'Baixa' }[String(t.priority || '').toLowerCase()] || t.priority || 'Média'),
       module: t.module,
     }));
 
-    // ---- métricas derivadas ----
-    const mesAtual     = new Date().toISOString().slice(0, 7);
-    const leadsDoMes   = leads.filter(l => (l.date || '').startsWith(mesAtual));
-    const cotAbertas   = cotacoes.filter(c => ['Aguardando China', 'Recebida', 'Em análise'].includes(c.status));
-    const propEnviadas = leads.filter(l => l.status === 'Proposta enviada');
-    const convertidos  = leads.filter(l => l.status === 'Convertido');
-    const convPct      = leads.length ? Math.round((propEnviadas.length / leads.length) * 100) : 0;
-    const emTransito   = embarques.filter(e => e.status === 'Em trânsito');
-    const comPend      = comissoes.filter(c => c.status === 'Aguardando').reduce((s, c) => s + (c.comissao || 0), 0);
-    const gatProx7     = gatilhos.filter(g => (g.days_left || 0) <= 7);
-    const aReceber     = contratos.filter(c => c.status !== 'Assinado').reduce((s, c) => s + (c.value || 0), 0);
-    const fichasDoMes  = fichas.filter(f => (f.criado_em || '').startsWith(mesAtual)).length;
-    const catProdAtivos = catalogo.filter(p => p.situacao === 'ativado').length;
-
-    // ---- Faturamento total (esteira real) — soma das propostas assinadas
-    // pelo cliente (status 'aprovada'), não mais da tabela `projetos`
-    // (legada/desconectada, 1 linha demo — mostrava R$0 com venda fechada). ----
-    const propostasAprovadas = propostas.filter(p => p.status === 'aprovada');
-    const fatTotal = propostasAprovadas.reduce((s, p) => s + (Number(p.valor_total) || 0), 0);
-
-    // ---- Alertas críticos (esteira real) — além dos `alertas` manuais,
-    // detecta inconsistências entre módulos que o E2E encontrou escondidas
-    // (proposta assinada sem contrato, contrato com valor zerado, sinal
-    // pago sem contrato/importação vinculados). ----
-    const idsComContrato = new Set(contratos.map(c => c.proposta_id).filter(Boolean));
-    const propostasSemContrato = propostasAprovadas.filter(p => !idsComContrato.has(p.id));
-    const contratosValorZero = contratos.filter(c => !c.valor_total_num || Number(c.valor_total_num) === 0);
-    const avaisSinalSemContrato = avais.filter(a => a.sinal_pago && !a.contrato_venda_id);
-    const alertasCrit = [
-      ...alertas.filter(a => a.level === 'danger'),
-      ...propostasSemContrato.map(p => ({ tipo: 'proposta_sem_contrato', ref: p.numero_cotacao })),
-      ...contratosValorZero.map(c => ({ tipo: 'contrato_valor_zero', ref: c.id })),
-      ...avaisSinalSemContrato.map(a => ({ tipo: 'sinal_sem_contrato', ref: a.numero_cotacao })),
-    ];
-
     // ---- KPIs por perfil ----
     const kpis = {
-      comercial: [
-        { label: 'Leads do mês',            value: String(leadsDoMes.length),   unit: '', delta: leadsDoMes.length > 0 ? `+${leadsDoMes.length}` : '0', deltaDir: 'up',   sub: 'vs. mês anterior' },
-        { label: 'Cot. em China',           value: String(cotAbertas.length),   unit: '', delta: `${cotAbertas.length}`,    deltaDir: 'up',   sub: 'abertas' },
-        { label: 'Propostas enviadas',      value: String(propEnviadas.length), unit: '', delta: '',                        deltaDir: 'up',   sub: 'no período' },
-        { label: 'Conversão Lead→Proposta', value: String(convPct),             unit: '%',delta: '',                        deltaDir: convPct >= 25 ? 'up' : 'down', sub: 'meta 25%' },
-      ],
-      engenharia: [
-        { label: 'Projetos abertos',  value: String(projetos.length),        unit: '', delta: '', deltaDir: 'up', sub: 'ativos' },
-        { label: 'Fichas técnicas',   value: String(fichas.length),          unit: '', delta: fichasDoMes > 0 ? `+${fichasDoMes}` : '0', deltaDir: 'up', sub: 'no mês' },
-        { label: 'Catálogo (ativos)', value: String(catProdAtivos),          unit: '', delta: '', deltaDir: 'up', sub: 'produtos no catálogo' },
-        { label: 'Alertas engenharia',value: String(alertas.filter(a => a.module === 'Engenharia').length), unit: '', delta: '', deltaDir: 'up', sub: 'pendentes' },
-      ],
-      financeiro: [
-        { label: 'A receber',           value: fmtBRL(aReceber),     unit: '',  delta: '', deltaDir: 'up', sub: 'contratos abertos' },
-        { label: 'Comissões pendentes', value: fmtBRL(comPend),      unit: '',  delta: '', deltaDir: 'up', sub: 'aguardando pagamento' },
-        { label: 'Gatilhos próx. 7d',   value: String(gatProx7.length), unit:'', delta: '', deltaDir: gatProx7.length > 3 ? 'down' : 'up', sub: 'atenção' },
-        { label: 'Contratos abertos',   value: String(contratos.filter(c => c.status !== 'Assinado').length), unit: '', delta: '', deltaDir: 'up', sub: 'em andamento' },
-      ],
-      admin: [
-        { label: 'Projetos ativos',       value: String(projetos.length),    unit: '',  delta: '', deltaDir: 'up', sub: 'todos módulos' },
-        { label: 'Embarques em trânsito', value: String(emTransito.length),  unit: '',  delta: '', deltaDir: 'up', sub: 'Santos+Itaguaí' },
-        { label: 'Alertas críticos',      value: String(alertasCrit.length), unit: '',  delta: '', deltaDir: alertasCrit.length > 0 ? 'down' : 'up', sub: 'ver central' },
-        { label: 'Faturamento (propostas assinadas)', value: fmtBRL(fatTotal), unit: '', delta: '', deltaDir: 'up', sub: `${propostasAprovadas.length} propostas` },
-      ],
+      comercial: comercial.kpis,
+      engenharia: engenharia.kpis,
+      financeiro: financeiro.kpis,
+      admin: admin.kpis,
     };
 
-    // ---- Pipeline Funnel (real) — esteira Leads→Proposta→Contrato, não mais
-    // a tabela órfã `cotacoes` ("Cotação China", módulo substituído pelas
-    // Cotações a Fornecedor) — achado E2E: pipeline zerava mesmo com
-    // proposta/contrato reais. Mostra volume por estágio atual (não histórico
-    // acumulado: uma proposta que virou contrato conta só em "Contrato"). ----
-    const maxPipeline = leads.length || 1;
-    const propostasComContrato = propostasAprovadas.filter(p => idsComContrato.has(p.id)).length;
-    const pipelineStages = [
-      { label: 'Leads',                value: leads.length,                                    color: '#000' },
-      { label: 'Propostas enviadas',   value: propostas.length,                                color: 'var(--vp-gray-700)' },
-      { label: 'Propostas assinadas',  value: propostasAprovadas.length - propostasComContrato, color: 'var(--vp-yellow-press)' },
-      { label: 'Contratos',            value: contratos.length,                                color: 'var(--vp-yellow)' },
-    ];
-
-    // ---- Conversão por Origem (real) ----
-    const originMap = {}, originConv = {};
-    leads.forEach(l => { if (l.origin) originMap[l.origin] = (originMap[l.origin] || 0) + 1; });
-    convertidos.forEach(l => { if (l.origin) originConv[l.origin] = (originConv[l.origin] || 0) + 1; });
-    const originBars = Object.entries(originMap)
-      .map(([l, v]) => ({ l, v, conv: v > 0 ? Math.round(((originConv[l] || 0) / v) * 100) : 0 }))
-      .sort((a, b) => b.v - a.v);
-
-    // ---- Estoque crítico ----
-    const estoqueCritico = estoque
-      .filter(e => e.qty < e.min_qty)
-      .map(e => ({
-        sku: e.sku, name: e.name, qty: e.qty, min: e.min_qty,
-        status: e.qty <= Math.floor(e.min_qty / 2) ? 'danger' : 'warning',
-      }));
-
-    // ---- Gantt: hoje em dias desde o início do projeto mais antigo ----
-    const startMs = projetos.map(p => +new Date(p.start_date)).filter(Boolean);
-    const ganttStart  = startMs.length ? Math.min(...startMs) : Date.now();
-    const ganttToday  = Math.max(0, Math.floor((Date.now() - ganttStart) / 86_400_000));
-
-    // ---- Gantt: converte projetos Supabase → formato GanttChart (fases sintéticas) ----
-    const GANTT_PHASES = ['Projeto', 'Fabricação', 'Importação', 'Instalação', 'Entrega'];
-    const ganttProjetos = projetos.map(p => {
-      const pStart = p.start_date ? +new Date(p.start_date) : ganttStart;
-      const pEnd   = p.end_date   ? +new Date(p.end_date)   : pStart + 150 * 86_400_000;
-      const pDay0  = Math.max(0, Math.floor((pStart - ganttStart) / 86_400_000));
-      const totalD = Math.max(30, Math.floor((pEnd - pStart) / 86_400_000));
-      const phLen  = Math.floor(totalD / GANTT_PHASES.length);
-      const curIdx = Math.max(0, GANTT_PHASES.findIndex(ph => (p.current_phase || '').includes(ph)));
-      return {
-        ...p,
-        phases: GANTT_PHASES.map((name, i) => ({
-          name,
-          start:  pDay0 + i * phLen,
-          end:    pDay0 + (i + 1) * phLen,
-          status: i < curIdx ? 'done' : i === curIdx ? 'current' : 'future',
-        })),
-      };
-    });
+    // Achado real (03/10): até aqui o Dashboard ainda consultava `estoque`
+    // (pra computar `estoqueCritico`) e `ncm_solicitacoes` (pra
+    // `engenharia.ncm`, issue #273) a cada carregamento — mas nenhum dos
+    // dois é lido em lugar nenhum de `dashboard.jsx`. O comentário de
+    // `OndeParouWidget` já confirma a causa: "Onde Parou" (23/08) substituiu
+    // os widgets "Pendências NCM" e "Estoque Crítico" que consumiam esses
+    // dados — a limpeza do back-end ficou pela metade na troca. Removidas
+    // as 2 consultas (não há mais `estoqueCritico`/`ncm` no retorno) —
+    // se um widget equivalente for pedido de novo, refazer a consulta é
+    // simples; manter uma rodando pra ninguém ler não é.
+    const gantt = GM.compute({ projetos: projetosReais });
 
     return {
-      leads, cotacoes, projetos, alertas, tarefas: tarefasFmt,
-      embarques, contratos, estoque, comissoes, gatilhos, fichas, catalogo, ncm,
-      kpis, pipelineStages, originBars, estoqueCritico,
-      alertasCriticos: alertasCrit.length,
-      ganttToday, ganttProjetos,
+      leads, projetos: projetosReais, alertas, tarefas: tarefasFmt,
+      embarques, contratos, comissoes, gatilhos, fichas, catalogo,
+      kpis, pipelineStages: comercial.pipelineStages, originBars: comercial.originBars,
+      alertasCriticos: admin.alertasCriticos.length,
+      ganttToday: gantt.ganttToday, ganttProjetos: gantt.ganttProjetos,
     };
   }
+
+  /* 04/10/2026 — Inbox fase 1: todo envio pela função send-email leva o LOGIN de quem enviou (`enviadoPor`) — é o DONO
+     do e-mail. Feito num ponto só para nenhum chamador (hoje ou futuro) esquecer. `sb.functions` cria um cliente novo a
+     cada acesso, então o invólucro é aplicado no getter. Declarado pelo navegador (não verificável — issue #571). */
+  try {
+    const descFn = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(sb), 'functions');
+    if (descFn && descFn.get) {
+      Object.defineProperty(sb, 'functions', {
+        configurable: true,
+        get() {
+          const fc = descFn.get.call(sb);
+          const invocar = fc.invoke.bind(fc);
+          fc.invoke = (nome, opts) => {
+            try {
+              if (nome === 'send-email' && opts && opts.body && typeof opts.body === 'object' && !opts.body.enviadoPor) {
+                const quem = (window.__VP_USER || {}).email;
+                if (quem) opts = { ...opts, body: { ...opts.body, enviadoPor: String(quem).toLowerCase() } };
+              }
+            } catch (_) { /* nunca atrapalha o envio */ }
+            return invocar(nome, opts);
+          };
+          return fc;
+        },
+      });
+    }
+  } catch (e) { console.warn('[supabase.js] não consegui anexar o dono nos envios de e-mail', e); }
 
   // ---- expor para componentes React ----
   window.__VP_SB = { sb, loadDashboardData, timeAgo };

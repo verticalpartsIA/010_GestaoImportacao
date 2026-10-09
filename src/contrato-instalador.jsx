@@ -45,12 +45,12 @@ function CIMoneyField({ label, value, onChange, error, hint, required, width }) 
   );
 }
 
-function CITextArea({ label, value, onChange, placeholder, rows, hint }) {
+function CITextArea({ label, value, onChange, placeholder, rows, hint, error }) {
   return (
     <div className="ci-field ci-field--full">
       <label>{label}</label>
-      <textarea className="ci-input ci-textarea" rows={rows || 3} value={value || ''} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}></textarea>
-      {hint && <span className="ci-field-hint">{hint}</span>}
+      <textarea className={'ci-input ci-textarea' + (error ? ' ci-input--error' : '')} rows={rows || 3} value={value || ''} onChange={(e) => onChange(e.target.value)} placeholder={placeholder}></textarea>
+      {error ? <span className="ci-field-err">{error}</span> : (hint ? <span className="ci-field-hint">{hint}</span> : null)}
     </div>
   );
 }
@@ -143,6 +143,44 @@ function CIStepModalidade({ s, set }) {
   );
 }
 
+/* Aviso de homologação (achado "Melhoria" da auditoria de código):
+   a seleção de parceiro instalador no Contrato Instalador não checava
+   RHHomologacao — o alerta só existia rio abaixo, na liberação da
+   Instalação (InstalacaoObraStore). Aqui é aviso, não bloqueio: uma
+   contratação pode legitimamente começar antes da homologação estar
+   completa, mas quem está criando o contrato precisa ver isso na hora,
+   não só quando a obra já estiver pronta pra começar. */
+function CIHomologacaoAviso({ cnpj }) {
+  const [match, setMatch] = React.useState(null); // null | {found:false} | {found:true, nome, status}
+
+  React.useEffect(() => {
+    let vivo = true;
+    if (!window.CI.isCNPJValid(cnpj) || !window.RHHomologacao) { setMatch(null); return; }
+    const digits = window.CI.onlyDigits(cnpj);
+    window.RHHomologacao.listarMontadores().then(async (lista) => {
+      if (!vivo) return;
+      const m = (lista || []).find((p) => window.CI.onlyDigits(p.cnpj || '') === digits);
+      if (!m) { setMatch({ found: false }); return; }
+      // statusGeralPorColaboradores lê parceiros_documentos_colaborador (schema
+      // pós-migração 25/08) — statusGeral() antigo lia certificacoes (jsonb
+      // obsoleto, ninguém mais grava nele desde a migração).
+      const { status } = await window.RHHomologacao.statusGeralPorColaboradores(m.id);
+      if (!vivo) return;
+      setMatch({ found: true, nome: m.nome, status });
+    }).catch(() => { if (vivo) setMatch(null); });
+    return () => { vivo = false; };
+  }, [cnpj]);
+
+  if (!match) return null;
+  if (!match.found) {
+    return <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Este CNPJ não está cadastrado em Homologação de Parceiros Instaladores — o contrato pode ser criado, mas a obra só libera com parceiro homologado.</div>;
+  }
+  if (match.status !== 'ok') {
+    return <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Parceiro "{match.nome}" encontrado em Homologação, mas o status está <b>{match.status}</b> — confira certificações antes de iniciar a obra.</div>;
+  }
+  return null;
+}
+
 function CIStepPartes({ s, set, errors }) {
   return (
     <div className="ci-step">
@@ -158,15 +196,16 @@ function CIStepPartes({ s, set, errors }) {
           <CIField label="Razão social" required width="full" value={s.c_razao} onChange={(v) => set('c_razao', v)} placeholder="Ex.: Montagem Vertical Serviços Ltda." error={errors.c_razao} />
           <CIField label="CNPJ" required mask="maskCNPJ" mono value={s.c_cnpj} onChange={(v) => set('c_cnpj', v)} placeholder="00.000.000/0000-00" error={errors.c_cnpj} />
         </div>
+        <CIHomologacaoAviso cnpj={s.c_cnpj} />
         <div className="ci-grid">
-          <CIField label="Logradouro (Rua/Av.)" width="wide" value={s.c_rua} onChange={(v) => set('c_rua', v)} placeholder="Rua Exemplo" />
-          <CIField label="Número" width="narrow" value={s.c_numero} onChange={(v) => set('c_numero', v)} placeholder="123" />
+          <CIField label="Logradouro (Rua/Av.)" required width="wide" value={s.c_rua} onChange={(v) => set('c_rua', v)} placeholder="Rua Exemplo" error={errors.c_rua} />
+          <CIField label="Número" required width="narrow" value={s.c_numero} onChange={(v) => set('c_numero', v)} placeholder="123" error={errors.c_numero} />
         </div>
         <div className="ci-grid">
-          <CIField label="Bairro" value={s.c_bairro} onChange={(v) => set('c_bairro', v)} placeholder="Centro" />
-          <CIField label="Cidade" value={s.c_cidade} onChange={(v) => set('c_cidade', v)} placeholder="São Paulo" />
-          <CIField label="UF" width="narrow" value={s.c_estado} onChange={(v) => set('c_estado', v.toUpperCase().slice(0, 2))} placeholder="SP" />
-          <CIField label="CEP" mask="maskCEP" mono value={s.c_cep} onChange={(v) => set('c_cep', v)} placeholder="00000-000" />
+          <CIField label="Bairro" required value={s.c_bairro} onChange={(v) => set('c_bairro', v)} placeholder="Centro" error={errors.c_bairro} />
+          <CIField label="Cidade" required value={s.c_cidade} onChange={(v) => set('c_cidade', v)} placeholder="São Paulo" error={errors.c_cidade} />
+          <CIField label="UF" required width="narrow" value={s.c_estado} onChange={(v) => set('c_estado', v.toUpperCase().slice(0, 2))} placeholder="SP" error={errors.c_estado} />
+          <CIField label="CEP" required mask="maskCEP" mono value={s.c_cep} onChange={(v) => set('c_cep', v)} placeholder="00000-000" error={errors.c_cep} />
         </div>
       </div>
       <div className="ci-field-group">
@@ -175,23 +214,23 @@ function CIStepPartes({ s, set, errors }) {
           <CIField label="Nome completo" required width="full" value={s.r_nome} onChange={(v) => set('r_nome', v)} placeholder="Nome do responsável" error={errors.r_nome} />
         </div>
         <div className="ci-grid">
-          <CIField label="Nacionalidade" value={s.r_nacionalidade} onChange={(v) => set('r_nacionalidade', v)} placeholder="brasileiro(a)" />
-          <CIField label="Estado civil" value={s.r_estadoCivil} onChange={(v) => set('r_estadoCivil', v)} placeholder="casado(a)" />
-          <CIField label="Profissão" value={s.r_profissao} onChange={(v) => set('r_profissao', v)} placeholder="empresário(a)" />
+          <CIField label="Nacionalidade" required value={s.r_nacionalidade} onChange={(v) => set('r_nacionalidade', v)} placeholder="brasileiro(a)" error={errors.r_nacionalidade} />
+          <CIField label="Estado civil" required value={s.r_estadoCivil} onChange={(v) => set('r_estadoCivil', v)} placeholder="casado(a)" error={errors.r_estadoCivil} />
+          <CIField label="Profissão" required value={s.r_profissao} onChange={(v) => set('r_profissao', v)} placeholder="empresário(a)" error={errors.r_profissao} />
         </div>
         <div className="ci-grid">
-          <CIField label="RG" mask="maskRG" mono value={s.r_rg} onChange={(v) => set('r_rg', v)} placeholder="00.000.000-0" />
+          <CIField label="RG" required mask="maskRG" mono value={s.r_rg} onChange={(v) => set('r_rg', v)} placeholder="00.000.000-0" error={errors.r_rg} />
           <CIField label="CPF" required mask="maskCPF" mono value={s.r_cpf} onChange={(v) => set('r_cpf', v)} placeholder="000.000.000-00" error={errors.r_cpf} />
         </div>
         <CICheckRow checked={s.r_mesmoEndereco} onChange={(v) => set('r_mesmoEndereco', v)} label="Responsável reside no mesmo endereço da empresa" />
         {!s.r_mesmoEndereco && (
           <div className="ci-grid ci-grid--indent">
-            <CIField label="Logradouro" width="wide" value={s.r_rua} onChange={(v) => set('r_rua', v)} placeholder="Rua Exemplo" />
-            <CIField label="Número" width="narrow" value={s.r_numero} onChange={(v) => set('r_numero', v)} placeholder="123" />
-            <CIField label="Bairro" value={s.r_bairro} onChange={(v) => set('r_bairro', v)} placeholder="Centro" />
-            <CIField label="Cidade" value={s.r_cidade} onChange={(v) => set('r_cidade', v)} placeholder="São Paulo" />
-            <CIField label="UF" width="narrow" value={s.r_estado} onChange={(v) => set('r_estado', v.toUpperCase().slice(0, 2))} placeholder="SP" />
-            <CIField label="CEP" mask="maskCEP" mono value={s.r_cep} onChange={(v) => set('r_cep', v)} placeholder="00000-000" />
+            <CIField label="Logradouro" required width="wide" value={s.r_rua} onChange={(v) => set('r_rua', v)} placeholder="Rua Exemplo" error={errors.r_rua} />
+            <CIField label="Número" required width="narrow" value={s.r_numero} onChange={(v) => set('r_numero', v)} placeholder="123" error={errors.r_numero} />
+            <CIField label="Bairro" required value={s.r_bairro} onChange={(v) => set('r_bairro', v)} placeholder="Centro" error={errors.r_bairro} />
+            <CIField label="Cidade" required value={s.r_cidade} onChange={(v) => set('r_cidade', v)} placeholder="São Paulo" error={errors.r_cidade} />
+            <CIField label="UF" required width="narrow" value={s.r_estado} onChange={(v) => set('r_estado', v.toUpperCase().slice(0, 2))} placeholder="SP" error={errors.r_estado} />
+            <CIField label="CEP" required mask="maskCEP" mono value={s.r_cep} onChange={(v) => set('r_cep', v)} placeholder="00000-000" error={errors.r_cep} />
           </div>
         )}
       </div>
@@ -204,14 +243,14 @@ function CIStepPartes({ s, set, errors }) {
    este contrato de instalação cobre — ex.: Instalador X monta os ativos
    1 e 2, Instalador Y monta o ativo 3, na mesma obra. Some silenciosamente
    se ainda não houver nenhuma Proposta com Master ID. */
-function CISeletorProposta({ propostaId, ativosIndices, onSelecionarProposta, onToggleAtivo }) {
+function CISeletorProposta({ propostaId, ativosIndices, onSelecionarProposta, onLimparProposta, onToggleAtivo }) {
   const [propostas, setPropostas] = _ciUS(null);
 
   _ciUE(() => {
     window.__VP_SB?.sb.from('propostas')
-      .select('id, numero_documento, master_id, titulo, data_json')
+      .select('id, numero_documento, numero_cotacao, master_id, titulo, data_json')
       .not('master_id', 'is', null)
-      .order('criado_em', { ascending: false }).limit(50)
+      .order('criado_em', { ascending: false }).limit(200)
       .then(({ data }) => setPropostas(data || []));
   }, []);
 
@@ -223,7 +262,12 @@ function CISeletorProposta({ propostaId, ativosIndices, onSelecionarProposta, on
     <div className="ci-field-group">
       <h3 className="ci-group-title">Herdar de uma Proposta (Master ID)</h3>
       <CISelect label="Proposta" value={propostaId || ''}
-        onChange={(id) => { const p = propostas.find((x) => x.id === id); if (p) onSelecionarProposta(p); }}
+        onChange={(id) => {
+          /* "— selecione —" desvincula (antes não fazia nada, e não dava
+             pra voltar a contrato avulso depois de escolher uma Proposta). */
+          if (!id) { onLimparProposta(); return; }
+          const p = propostas.find((x) => x.id === id); if (p) onSelecionarProposta(p);
+        }}
         options={[{ value: '', label: '— selecione uma proposta —' }, ...propostas.map((p) => ({ value: p.id, label: `${p.master_id} · ${p.numero_documento} · ${p.titulo || ''}` }))]}
         width="full"/>
       {ativos.length > 0 && (
@@ -240,25 +284,194 @@ function CISeletorProposta({ propostaId, ativosIndices, onSelecionarProposta, on
   );
 }
 
-function CIStepObjeto({ s, set }) {
+/* Vínculo real com dossier_obra (Trilha B, 01/09) — sem isso, as parcelas
+   do contrato não têm como saber qual checklist observar pra liberar
+   pagamento automaticamente. Busca simples por cliente/obra/id; múltiplos
+   dossiês cobertos pelo mesmo contrato (ex.: instalador monta 2 elevadores
+   da mesma obra sob um único contrato). */
+function CISeletorObras({ dossierIds, onToggle }) {
+  const [busca, setBusca] = _ciUS('');
+  const [resultados, setResultados] = _ciUS([]);
+  const [selecionados, setSelecionados] = _ciUS([]);
+
+  _ciUE(() => {
+    if (!dossierIds || !dossierIds.length) { setSelecionados([]); return; }
+    window.__VP_SB?.sb.from('dossier_obra').select('id, client_name, building_name').in('id', dossierIds)
+      .then(({ data }) => setSelecionados(data || []));
+  }, [JSON.stringify(dossierIds || [])]);
+
+  _ciUE(() => {
+    /* Tira caracteres que quebram a sintaxe do filtro .or() do PostgREST
+       (vírgula, parênteses, %, *) — digitar "Silva, Jose" dava erro mudo. */
+    const q = busca.replace(/[,()%*\\]/g, ' ').trim();
+    if (q.length < 2) { setResultados([]); return; }
+    const t = setTimeout(() => {
+      window.__VP_SB?.sb.from('dossier_obra').select('id, client_name, building_name')
+        .or(`client_name.ilike.%${q}%,building_name.ilike.%${q}%,id.ilike.%${q}%`)
+        .limit(15).then(({ data }) => setResultados(data || []));
+    }, 300);
+    return () => clearTimeout(t);
+  }, [busca]);
+
+  return (
+    <div className="ci-field-group">
+      <h3 className="ci-group-title">Obra / Dossiê vinculado</h3>
+      <p className="ci-field-hint" style={{ marginBottom: 8 }}>
+        Vincule o(s) dossiê(s)/equipamento(s) reais cobertos por este contrato — é o que libera as parcelas automaticamente conforme a instalação avança.
+      </p>
+      {selecionados.length > 0 && (
+        <div style={{ marginBottom: 10, display: 'flex', flexDirection: 'column', gap: 6 }}>
+          {selecionados.map((d) => (
+            <div key={d.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', background: '#f0f8f0', border: '1px solid #cce6cc', borderRadius: 6, padding: '6px 10px', fontSize: 13 }}>
+              <span>✓ {d.id} — {d.building_name || d.client_name}</span>
+              <button type="button" className="ci-btn ci-btn--ghost" onClick={() => onToggle(d.id)}>remover</button>
+            </div>
+          ))}
+        </div>
+      )}
+      <input className="ci-input" placeholder="Buscar por cliente, obra ou nº do dossiê (DOS-...)" value={busca} onChange={(e) => setBusca(e.target.value)} />
+      {resultados.length > 0 && (
+        <div style={{ marginTop: 6, border: '1px solid #ddd', borderRadius: 6 }}>
+          {resultados.map((d) => (
+            <div key={d.id} style={{ padding: 8, cursor: 'pointer', display: 'flex', justifyContent: 'space-between', fontSize: 13 }}
+              onClick={() => { onToggle(d.id); setBusca(''); setResultados([]); }}>
+              <span>{d.id} — {d.building_name || d.client_name}</span>
+              {(dossierIds || []).includes(d.id) && <span>✓</span>}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* Equipamentos cobertos + Nº do contrato (29/09). O Nº nasce assim que há ao
+   menos um equipamento (ativo da Proposta marcado, ou nº de série/projeto
+   digitado) e fica FIXO depois — trocar equipamentos não muda o número.
+   Com Proposta: VPNI-<Nº da cotação>. Sem Proposta: VPNI-<1º nº informado>.
+   Já existindo contrato com a mesma base (ex.: 2 montadores na mesma obra),
+   o novo ganha -2, -3… */
+function CIEquipamentosNumero({ s, set, errors }) {
+  const [texto, setTexto] = _ciUS('');
+  const [conflitos, setConflitos] = _ciUS([]);
+  const lista = window.CI.equipamentosDoContrato(s);
+  const base = window.CI.numeroBaseContrato(s);
+
+  _ciUE(() => {
+    let vivo = true;
+    if (s.numeroContrato || !base) return;
+    window.CIStore.reservarNumero(base).then((n) => {
+      if (!vivo || !n) return;
+      set('numeroContratoBase', base);
+      set('numeroContrato', n);
+    });
+    return () => { vivo = false; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [base, s.numeroContrato]);
+
+  /* Aviso (não bloqueia): ativo já coberto por outro contrato da mesma Proposta. */
+  _ciUE(() => {
+    let vivo = true;
+    setConflitos([]);
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb || !s.propostaId || !(s.ativosIndices || []).length) return;
+    sb.from('contratos_instalador').select('numero_documento, ativos_indices, status').eq('proposta_id', s.propostaId)
+      .then(({ data }) => {
+        if (!vivo) return;
+        setConflitos((data || []).filter((c) => c.status !== 'recusado' && c.status !== 'expirado'
+          && (c.ativos_indices || []).some((i) => (s.ativosIndices || []).includes(i))).map((c) => c.numero_documento));
+      });
+    return () => { vivo = false; };
+  }, [s.propostaId, JSON.stringify(s.ativosIndices || [])]);
+
+  const adicionar = () => {
+    const novos = texto.split(/[,;\n]/).map((v) => v.trim().toUpperCase()).filter(Boolean);
+    if (!novos.length) return;
+    const atual = s.equipamentosManuais || [];
+    set('equipamentosManuais', [...atual, ...novos.filter((v, i) => !atual.includes(v) && novos.indexOf(v) === i)]);
+    setTexto('');
+  };
+  const remover = (v) => set('equipamentosManuais', (s.equipamentosManuais || []).filter((x) => x !== v));
+
+  return (
+    <div className="ci-field-group">
+      <h3 className="ci-group-title">Equipamentos cobertos por este contrato *</h3>
+      <p className="ci-field-hint" style={{ marginBottom: 8 }}>
+        {s.propostaId
+          ? 'Marque os ativos da Proposta acima e/ou digite nº de série. Cada montador tem o seu contrato, com os equipamentos que ele vai montar — o número do contrato nasce daqui.'
+          : 'Sem Proposta: informe o nº do projeto ou o nº de série de cada equipamento (separe por vírgula). O número do contrato nasce do 1º informado.'}
+      </p>
+      {lista.length > 0 && (
+        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+          {lista.map((v) => {
+            const manual = (s.equipamentosManuais || []).includes(v);
+            return (
+              <span key={v} className="ci-cond-pill ci-cond-pill--info" style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                {v}{manual && <button type="button" className="ci-btn ci-btn--ghost" style={{ padding: '0 4px' }} onClick={() => remover(v)} title="Remover">✕</button>}
+              </span>
+            );
+          })}
+        </div>
+      )}
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input className={'ci-input' + (errors.equipamentos ? ' ci-input--error' : '')} value={texto} placeholder="Nº do projeto ou nº de série (Enter para adicionar)"
+          onChange={(e) => setTexto(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); adicionar(); } }} />
+        <button type="button" className="ci-btn ci-btn--dark" onClick={adicionar}>Adicionar</button>
+      </div>
+      {errors.equipamentos && <span className="ci-field-err">{errors.equipamentos}</span>}
+      <div className="ci-contratante-note" style={{ marginTop: 10 }}>
+        <span className="ci-cn-label">Nº do contrato</span>
+        <strong>{s.numeroContrato || (base ? 'gerando…' : 'nasce quando você informar os equipamentos')}</strong>
+        {s.numeroContrato && <span className="ci-cn-meta">Fixo — trocar os equipamentos depois não muda o número.</span>}
+      </div>
+      {conflitos.length > 0 && (
+        <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Atenção: algum(ns) destes ativos já consta(m) em outro contrato desta Proposta ({conflitos.join(', ')}). Confirme que não é uma contratação em duplicidade.</div>
+      )}
+    </div>
+  );
+}
+
+function CIStepObjeto({ s, set, errors }) {
+  errors = errors || {};
   const isElevador = s.equipamento === 'elevador';
   const remocao = window.CI.isRemocao(s);
   const especial = window.CI.isCargaEspecial(s);
 
   const aplicarProposta = (p) => {
     set('masterId', p.master_id); set('propostaId', p.id); set('ativosIndices', []);
+    set('numeroContrato', null); set('numeroContratoBase', null);  // número nasce de novo a partir da cotação
+    /* Nº da cotação (alimenta EventosFluxo/Aval Financeiro no createDraft —
+       antes nunca era preenchido). Cai pro parse do Master ID se a coluna
+       vier vazia. */
+    set('numeroCotacao', p.numero_cotacao ?? window.MasterIdEngine?.parseNumeroCotacao?.(p.master_id) ?? null);
+    /* Snapshot dos ativos (com custoInstalacaoMaoDeObraRs por equipamento) —
+       usado no Passo 5 pra sugerir o Valor total (Fase 3b da granularidade). */
+    set('ativosSnapshot', (p.data_json && p.data_json.ativos) || []);
     const valores = p.data_json?.elevador?.valores;
     if (valores?.quantidade) set('quantidade', Number(valores.quantidade) || s.quantidade);
+  };
+  const limparProposta = () => {
+    set('masterId', null); set('propostaId', null); set('ativosIndices', []); set('ativosSnapshot', []); set('numeroCotacao', null);
+    set('numeroContrato', null); set('numeroContratoBase', null);
   };
   const toggleAtivo = (indice) => {
     const atual = s.ativosIndices || [];
     set('ativosIndices', atual.includes(indice) ? atual.filter((i) => i !== indice) : [...atual, indice]);
   };
+  const toggleDossier = (dossierId) => {
+    const atual = s.dossierIds || [];
+    set('dossierIds', atual.includes(dossierId) ? atual.filter((i) => i !== dossierId) : [...atual, dossierId]);
+  };
 
   return (
     <div className="ci-step">
       <CIStepHeader kicker="Passo 3 — Objeto" title="Objeto do contrato" desc="Defina o equipamento e o escopo. Os campos mudam conforme o tipo selecionado." />
-      <CISeletorProposta propostaId={s.propostaId} ativosIndices={s.ativosIndices} onSelecionarProposta={aplicarProposta} onToggleAtivo={toggleAtivo}/>
+      <CISeletorObras dossierIds={s.dossierIds} onToggle={toggleDossier} />
+      <CISeletorProposta propostaId={s.propostaId} ativosIndices={s.ativosIndices} onSelecionarProposta={aplicarProposta} onLimparProposta={limparProposta} onToggleAtivo={toggleAtivo}/>
+      {!s.propostaId && (
+        <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Contrato avulso (sem Proposta vinculada): o envio continua exigindo aprovação do CEO na Central de Decisões, e o vínculo automático de respostas por e-mail só funciona quando o instalador responde ao próprio e-mail enviado (sem Nº de Cotação não há vínculo por assunto). Se possível, selecione a Proposta de origem acima antes de continuar.</div>
+      )}
+      <CIEquipamentosNumero s={s} set={set} errors={errors} />
       <div className="ci-field-group">
         <h3 className="ci-group-title">Equipamento</h3>
         <CIRadioCards value={s.equipamento} onChange={(v) => set('equipamento', v)} options={window.CI.EQUIPAMENTOS} columns={3} />
@@ -276,7 +489,7 @@ function CIStepObjeto({ s, set }) {
           <div className="ci-grid">
             <CISelect label="Tipo de elevador" value={s.tipoElevador} onChange={(v) => set('tipoElevador', v)} options={window.CI.TIPOS_ELEVADOR.map(t => ({ value: t.id, label: t.label }))} />
             <CISelect label="Quantidade de paradas" value={s.paradas} onChange={(v) => set('paradas', v)} options={window.CI.PARADAS_OPCOES.map(p => ({ value: p, label: p }))} />
-            {s.paradas === 'Personalizado' && <CIField label="Paradas (qtd.)" width="narrow" mono value={s.paradasCustom} onChange={(v) => set('paradasCustom', v.replace(/\D/g, ''))} placeholder="30" />}
+            {s.paradas === 'Personalizado' && <CIField label="Paradas (qtd.)" required width="narrow" mono value={s.paradasCustom} onChange={(v) => set('paradasCustom', v.replace(/\D/g, ''))} placeholder="30" error={errors.paradasCustom} />}
           </div>
           <div className="ci-grid">
             <CIField label="Capacidade de carga (kg)" mono value={s.capacidadeCarga} onChange={(v) => set('capacidadeCarga', v.replace(/[^\d.,]/g, ''))} placeholder="1000" hint="Acima de 1.000 kg ativa a cláusula de equipamento especial." />
@@ -288,19 +501,20 @@ function CIStepObjeto({ s, set }) {
       {remocao && (
         <div className="ci-field-group ci-field-group--cond">
           <h3 className="ci-group-title">{s.modalidade === 'remocao_adequacao' ? 'Nova instalação' : 'Destino da remoção'}</h3>
-          <CIField label={s.modalidade === 'remocao_adequacao' ? 'Local da nova instalação' : 'Destino do equipamento removido'} width="full" value={s.destino} onChange={(v) => set('destino', v)} placeholder="Endereço / destino" />
+          <CIField label={s.modalidade === 'remocao_adequacao' ? 'Local da nova instalação' : 'Destino do equipamento removido'} required width="full" value={s.destino} onChange={(v) => set('destino', v)} placeholder="Endereço / destino" error={errors.destino} />
         </div>
       )}
       <div className="ci-field-group">
         <h3 className="ci-group-title">Escopo</h3>
-        <CITextArea label="Descrição dos serviços" value={s.descricaoServicos} onChange={(v) => set('descricaoServicos', v)} rows={3} placeholder="Detalhe os serviços (montagem, alinhamento, testes, etc.)" />
-        <CITextArea label="Local do serviço" value={s.localServico} onChange={(v) => set('localServico', v)} rows={2} placeholder="Endereço completo de onde será realizado o serviço" hint="Endereço da obra onde o serviço acontece." />
+        <CITextArea label="Descrição dos serviços *" value={s.descricaoServicos} onChange={(v) => set('descricaoServicos', v)} rows={3} placeholder="Detalhe os serviços (montagem, alinhamento, testes, etc.)" error={errors.descricaoServicos} />
+        <CITextArea label="Local do serviço *" value={s.localServico} onChange={(v) => set('localServico', v)} rows={2} placeholder="Endereço completo de onde será realizado o serviço" hint="Endereço da obra onde o serviço acontece." error={errors.localServico} />
       </div>
     </div>
   );
 }
 
-function CIStepLogistica({ s, set }) {
+function CIStepLogistica({ s, set, errors }) {
+  errors = errors || {};
   const longa = window.CI.isLongaDistancia(s);
   const km = parseFloat(String(s.distancia).replace(',', '.')) || 0;
   return (
@@ -308,8 +522,8 @@ function CIStepLogistica({ s, set }) {
       <CIStepHeader kicker="Passo 4 — Logística" title="Logística e local" desc="Localização da obra e distância de Guarulhos/SP. A partir de 100 km uma cláusula de deslocamento é inserida." />
       <div className="ci-field-group">
         <div className="ci-grid">
-          <CIField label="Cidade da obra" value={s.obraCidade} onChange={(v) => set('obraCidade', v)} placeholder="Campinas" />
-          <CIField label="UF" width="narrow" value={s.obraEstado} onChange={(v) => set('obraEstado', v.toUpperCase().slice(0, 2))} placeholder="SP" />
+          <CIField label="Cidade da obra" required={longa} value={s.obraCidade} onChange={(v) => set('obraCidade', v)} placeholder="Campinas" error={errors.obraCidade} />
+          <CIField label="UF" required={longa} width="narrow" value={s.obraEstado} onChange={(v) => set('obraEstado', v.toUpperCase().slice(0, 2))} placeholder="SP" error={errors.obraEstado} />
           <CIField label="Distância de Guarulhos/SP (km)" mono value={s.distancia} onChange={(v) => set('distancia', v.replace(/[^\d.,]/g, ''))} placeholder="0" hint="≥ 100 km ativa a cláusula de logística." />
         </div>
         <div className={'ci-distance-gauge' + (longa ? ' ci-distance-gauge--on' : '')}>
@@ -330,7 +544,7 @@ function CIStepLogistica({ s, set }) {
           )}
           {s.logModo === 'prazo' && (
             <div className="ci-grid" style={{ marginTop: 16 }}>
-              <CIField label="Dias adicionais de prazo" width="narrow" mono value={s.logDiasExtra} onChange={(v) => set('logDiasExtra', v.replace(/\D/g, ''))} placeholder="10" />
+              <CIField label="Dias adicionais de prazo" required width="narrow" mono value={s.logDiasExtra} onChange={(v) => set('logDiasExtra', v.replace(/\D/g, ''))} placeholder="10" error={errors.logDiasExtra} />
             </div>
           )}
         </div>
@@ -339,7 +553,54 @@ function CIStepLogistica({ s, set }) {
   );
 }
 
+/* Pré-preenche banco/agência/conta/PIX a partir do cadastro da empresa
+   (Cadastros → Empresas Instaladoras / RH Operacional → Homologação —
+   mesma tabela parceiros_instaladores) pelo CNPJ já digitado no Passo 2.
+   Só preenche se os 4 campos ainda estiverem vazios — nunca sobrescreve o
+   que o usuário já digitou nesse contrato (reabrir rascunho, editar,
+   corrigir dado desatualizado do cadastro etc.). Sem dado bancário
+   cadastrado na empresa, some silenciosamente — comportamento de hoje
+   (digitar na mão) continua igual. */
+function CIBancoPrefill({ cnpj, s, set }) {
+  const [status, setStatus] = _ciUS(null); // null | 'found'
+
+  _ciUE(() => {
+    let vivo = true;
+    if (!window.CI.isCNPJValid(cnpj) || !window.RHHomologacao) return;
+    if (s.banco || s.agencia || s.conta || s.pix) return;
+    const digits = window.CI.onlyDigits(cnpj);
+    window.RHHomologacao.listarMontadores().then((lista) => {
+      if (!vivo) return;
+      const m = (lista || []).find((p) => window.CI.onlyDigits(p.cnpj || '') === digits);
+      if (!m || (!m.banco && !m.agencia && !m.conta && !m.pix)) return;
+      set('banco', m.banco || '');
+      set('agencia', m.agencia || '');
+      set('conta', m.conta || '');
+      set('pix', m.pix || '');
+      setStatus('found');
+    }).catch(() => {});
+    return () => { vivo = false; };
+  }, [cnpj]);
+
+  if (status !== 'found') return null;
+  return <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Dados bancários preenchidos automaticamente a partir do cadastro da empresa (Cadastros → Empresas Instaladoras). Confira antes de gerar o contrato.</div>;
+}
+
 function CIStepPagamento({ s, set, errors }) {
+  /* Sugestão de valor (Fase 3b da granularidade) — soma o custo de mão de
+     obra de instalação (calculado por equipamento em Precificação) dos
+     ativos vinculados a este contrato. Só sugere: pré-preenche o campo
+     enquanto ele estiver vazio, nunca sobrescreve um valor já digitado. */
+  const sugestaoInstalacao = (s.ativosSnapshot || [])
+    .filter((a) => (s.ativosIndices || []).includes(a.indice))
+    .reduce((t, a) => t + (Number(a.custoInstalacaoMaoDeObraRs) || 0), 0);
+  _ciUE(() => {
+    if (sugestaoInstalacao > 0 && !s.valorTotal) {
+      set('valorTotal', window.CI.maskMoeda(String(Math.round(sugestaoInstalacao * 100))));
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sugestaoInstalacao]);
+
   const addParcela = () => set('parcelas', [...(s.parcelas || []), { valor: '', data: '', descricao: '' }]);
   const updateParcela = (i, k, v) => {
     const arr = [...s.parcelas];
@@ -354,6 +615,15 @@ function CIStepPagamento({ s, set, errors }) {
         <div className="ci-grid">
           <CIMoneyField label="Valor total do contrato" required width="wide" value={s.valorTotal} onChange={(v) => set('valorTotal', v)} error={errors.valorTotal} />
         </div>
+        {sugestaoInstalacao > 0 && (
+          <p className="ci-field-hint">
+            Sugestão com base na Precificação: <b>R$ {window.CI.fmtMoeda(sugestaoInstalacao)}</b> (mão de obra do(s) equipamento(s) vinculado(s)).{' '}
+            <button type="button" className="ci-btn ci-btn--ghost" style={{ padding: '0 4px' }}
+              onClick={() => set('valorTotal', window.CI.maskMoeda(String(Math.round(sugestaoInstalacao * 100))))}>
+              Usar este valor
+            </button>
+          </p>
+        )}
         <label className="ci-mini-label">Forma de pagamento</label>
         <CISegmented value={s.formaPagamento} onChange={(v) => set('formaPagamento', v)} options={[
           { value: '2', label: '2 parcelas (50/50)' },
@@ -376,11 +646,25 @@ function CIStepPagamento({ s, set, errors }) {
               </div>
             ))}
             <button type="button" className="ci-add-parcela" onClick={addParcela}>+ Adicionar parcela</button>
+            {(() => {
+              const total = Math.round(window.CI.moedaParaNumero(s.valorTotal) * 100);
+              const soma = (s.parcelas || []).reduce((t, p) => t + Math.round(window.CI.moedaParaNumero(p.valor) * 100), 0);
+              if (!total) return null;
+              const dif = total - soma;
+              return <p className={dif === 0 ? 'ci-field-hint' : 'ci-field-err'}>
+                {dif === 0 ? '✓ Soma das parcelas confere com o valor total.' : `Soma das parcelas: R$ ${window.CI.fmtMoeda(soma / 100)} — ${dif > 0 ? 'faltam' : 'sobram'} R$ ${window.CI.fmtMoeda(Math.abs(dif) / 100)} para fechar o valor total.`}
+              </p>;
+            })()}
+            {errors.parcelas && <span className="ci-field-err">{errors.parcelas}</span>}
           </div>
+        )}
+        {(s.dossierIds || []).length === 0 && s.formaPagamento !== 'custom' && (
+          <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Sem obra/dossiê vinculado (Passo 3): só a 1ª parcela ("início dos trabalhos") nasce liberada para pagamento; as demais só liberam automaticamente quando o contrato estiver ligado a um dossiê.</div>
         )}
       </div>
       <div className="ci-field-group">
         <h3 className="ci-group-title">Dados bancários da Contratada</h3>
+        <CIBancoPrefill cnpj={s.c_cnpj} s={s} set={set} />
         <div className="ci-grid">
           <CIField label="Banco" value={s.banco} onChange={(v) => set('banco', v)} placeholder="Banco do Brasil" />
           <CIField label="Agência" width="narrow" mono value={s.agencia} onChange={(v) => set('agencia', v)} placeholder="0000" />
@@ -392,35 +676,78 @@ function CIStepPagamento({ s, set, errors }) {
   );
 }
 
-function CIStepRevisao({ s, set }) {
-  const allAnexos = window.CI.ANEXOS.every(a => s.anexos[a.id]);
-  const toggleAll = () => {
-    const next = {};
-    window.CI.ANEXOS.forEach(a => next[a.id] = !allAnexos);
-    set('anexos', next);
-  };
+/* Anexos obrigatórios (Cláusula 2.13) — até 01/09 era um checklist manual
+   solto (`s.anexos`, 10 itens fixos), sem nenhuma ligação com o status real
+   de homologação da Contratada — marcar/desmarcar aqui não refletia (nem
+   alimentava) parceiros_documentos_empresa/-colaborador. Vira leitura
+   automática, somente leitura: busca a empresa pelo CNPJ do Passo 2 e
+   mostra o status real (escopo empresa) vindo do catálogo completo via
+   RHHomologacao.statusDocumentosEmpresa. Não bloqueia gerar o contrato
+   mesmo com pendência — mesmo espírito não-bloqueante do aviso do Passo 2
+   (CIHomologacaoAviso): quem está montando o contrato precisa VER o real,
+   a decisão de seguir ou não é dela. */
+function CIAnexosStatus({ cnpj }) {
+  const [estado, setEstado] = _ciUS(null); // null=carregando | 'sem-cnpj' | 'nao-cadastrada' | {docs:[...]}
+
+  _ciUE(() => {
+    let vivo = true;
+    if (!window.CI.isCNPJValid(cnpj) || !window.RHHomologacao) { setEstado('sem-cnpj'); return; }
+    setEstado(null);
+    const digits = window.CI.onlyDigits(cnpj);
+    window.RHHomologacao.listarMontadores().then(async (lista) => {
+      if (!vivo) return;
+      const m = (lista || []).find((p) => window.CI.onlyDigits(p.cnpj || '') === digits);
+      if (!m) { setEstado('nao-cadastrada'); return; }
+      const docs = await window.RHHomologacao.statusDocumentosEmpresa(m.id);
+      if (vivo) setEstado({ nome: m.nome, docs });
+    }).catch(() => { if (vivo) setEstado('nao-cadastrada'); });
+    return () => { vivo = false; };
+  }, [cnpj]);
+
+  const ICON = { entregue: '✓', vencido: '⚠', sem_registro: '—' };
+  const COR = { entregue: '#00aa00', vencido: '#cc2222', sem_registro: '#999' };
+  const LABEL = { entregue: 'Entregue', vencido: 'Vencido', sem_registro: 'Sem registro' };
+
+  return (
+    <div className="ci-field-group">
+      <h3 className="ci-group-title">Anexos obrigatórios (Cláusula 2.13)</h3>
+      {estado === null && <p className="ci-field-hint">Carregando status real de homologação…</p>}
+      {estado === 'sem-cnpj' && <p className="ci-field-hint">Preencha o CNPJ da Contratada no Passo 2 pra ver o status real dos documentos.</p>}
+      {estado === 'nao-cadastrada' && (
+        <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Empresa não encontrada em Homologação — cadastre em Cadastros → Empresas Instaladoras pra rastrear os documentos aqui. O contrato pode ser gerado mesmo assim; a lista de anexos exigidos continua na Cláusula 2.13.</div>
+      )}
+      {estado && typeof estado === 'object' && (
+        <>
+          <p className="ci-field-hint" style={{ marginBottom: 8 }}>Status real de homologação de <b>{estado.nome}</b> — não bloqueia gerar o contrato, é só pra você ver o que falta antes de enviar.</p>
+          <div className="ci-anexos-grid">
+            {estado.docs.map((d) => (
+              <div key={d.documento_id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, padding: '4px 0' }}>
+                <span style={{ color: COR[d.status], fontWeight: 700, width: 16, textAlign: 'center' }}>{ICON[d.status]}</span>
+                <span>{d.nome}{!d.obrigatorio && <span style={{ color: '#999' }}> · opcional</span>}</span>
+                <span style={{ color: COR[d.status], marginLeft: 'auto', fontSize: 11 }}>{LABEL[d.status]}</span>
+              </div>
+            ))}
+          </div>
+        </>
+      )}
+    </div>
+  );
+}
+
+function CIStepRevisao({ s, set, errors }) {
+  errors = errors || {};
   const conds = window.CI.activeConditionals(s);
   return (
     <div className="ci-step">
       <CIStepHeader kicker="Passo 6 — Revisão" title="Anexos e assinatura" desc="Confirme os documentos obrigatórios e a data. Depois é só gerar o contrato." />
-      <div className="ci-field-group">
-        <div className="ci-anexos-head">
-          <h3 className="ci-group-title" style={{ margin: 0 }}>Anexos obrigatórios (Cláusula 2.13)</h3>
-          <button type="button" className="ci-link-btn" onClick={toggleAll}>{allAnexos ? 'Desmarcar todos' : 'Marcar todos'}</button>
-        </div>
-        <div className="ci-anexos-grid">
-          {window.CI.ANEXOS.map(a => (
-            <CICheckRow key={a.id} checked={!!s.anexos[a.id]} onChange={(v) => set('anexos', { ...s.anexos, [a.id]: v })} label={a.label} />
-          ))}
-        </div>
-      </div>
+      <CIAnexosStatus cnpj={s.c_cnpj} />
       <div className="ci-field-group">
         <h3 className="ci-group-title">Local e data</h3>
         <div className="ci-grid">
-          <CIField label="Cidade" value={s.cidadeAssinatura} onChange={(v) => set('cidadeAssinatura', v)} placeholder="Guarulhos" />
-          <CIField label="Dia" width="narrow" mono value={s.dataDia} onChange={(v) => set('dataDia', v.replace(/\D/g, '').slice(0, 2))} placeholder="01" />
+          <CIField label="Cidade" value={s.cidadeAssinatura} onChange={(v) => set('cidadeAssinatura', v)} placeholder="Guarulhos" error={errors.cidadeAssinatura} />
+          <CIField label="Dia" width="narrow" mono value={s.dataDia} onChange={(v) => set('dataDia', v.replace(/\D/g, '').slice(0, 2))} placeholder="01" error={errors.dataDia} />
           <CISelect label="Mês" value={s.dataMes} onChange={(v) => set('dataMes', v)} options={window.CI.MESES.map(m => ({ value: m, label: m }))} />
-          <CIField label="Ano" width="narrow" mono value={s.dataAno} onChange={(v) => set('dataAno', v.replace(/\D/g, '').slice(0, 4))} placeholder="2026" />
+          <CIField label="Ano" width="narrow" mono value={s.dataAno} onChange={(v) => set('dataAno', v.replace(/\D/g, '').slice(0, 4))} placeholder="2026" error={errors.dataAno} />
         </div>
       </div>
       <div className="ci-field-group">
@@ -461,7 +788,7 @@ function CISendModal({ record, onClose, onSent }) {
   const handleSend = async () => {
     if (sending) return;
     const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(record.master_id) ?? null;
-    if (window.DecisoesStore && numeroCotacao != null) {
+    if (window.DecisoesStore) {
       const gate = await window.DecisoesStore.podeContratarInstalador(numeroCotacao, {
         contratoInstaladorId: record.id, contratada: record.contratada_nome, valor: record.valor_total,
       });
@@ -469,11 +796,43 @@ function CISendModal({ record, onClose, onSent }) {
     }
     setSending(true);
     try {
-      const updated = await window.CIStore.markSent(record.id, channel, { name, contact });
+      /* 30/09 — e-mail: só registra "enviado" DEPOIS de o send-email
+         confirmar (antes marcava antes, e com falha + mailto o status
+         ficava "enviado" sem nada ter saído). */
+      let updated = null;
+      if (channel !== 'email') updated = await window.CIStore.markSent(record.id, channel, { name, contact });
       if (channel === 'whatsapp') {
         window.open(window.CIStore.whatsAppHref(contact, message), '_blank');
       } else if (channel === 'email') {
-        window.open(window.CIStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
+        /* 29/09 — mesmo padrão já aplicado em RFQ, Proposta e Contrato de
+           Venda: tenta send-email (SMTP direto) primeiro, com referenciaTipo/
+           referenciaId (+ numeroCotacao quando existir, já resolvido acima
+           pro gate de alçada) pra ficar em Enviados/Linha do Tempo e o
+           read-inbox conseguir casar a resposta do instalador de volta a
+           este contrato. Cai pro mailto: (como sempre foi) só se o envio
+           direto falhar — nunca deixa o vendedor sem alternativa.
+           29/09 (2) — achado real corrigido: contrato sem Proposta/
+           Formulário de origem (numeroCotacao null) antes pulava o
+           send-email inteiro — nunca tentava registrar nada. `send-email`/
+           `read-inbox` agora aceitam vínculo só por `referenciaId` (sem
+           numeroCotacao) — o vínculo por Message-ID não depende de Nº de
+           Cotação nenhum. Sempre tenta send-email; numeroCotacao null não
+           é mais motivo pra pular. */
+        /* 01/10 — chamada em si extraída pro EmailEnvioHelper (compartilhado
+           com RFQ/Proposta/Contrato de Venda); sucesso/falha continuam
+           decididos aqui, sem mudança de comportamento. */
+        const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
+          to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
+          numeroCotacao, referenciaTipo: 'contrato_instalador', referenciaId: record.id,
+        });
+        if (enviouDireto) {
+          updated = await window.CIStore.markSent(record.id, channel, { name, contact });
+          window.toast?.(`E-mail enviado para ${contact}.`, 'success');
+        } else {
+          window.open(window.CIStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
+          window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado e o contrato NÃO foi marcado como enviado. Abrindo seu e-mail padrão para envio manual; depois de enviar, use WhatsApp/Link para registrar o envio.', 'error');
+          return;
+        }
       }
       setSent(true);
       onSent && onSent(updated);
@@ -571,16 +930,59 @@ const CI_WIZ_STEPS = [
   { id: 'revisao', label: 'Revisão', sub: 'Anexos & assinatura' },
 ];
 
-function validateStep(idx, s) {
+function ciValidateStep(idx, s) {
   const e = {};
+  const vazio = (v) => !v || !String(v).trim();
+  const obrig = (k, msg) => { if (vazio(s[k])) e[k] = msg; };
+  const endereco = (pre) => {
+    obrig(pre + 'rua', 'Informe o logradouro.');
+    obrig(pre + 'numero', 'Informe o número.');
+    if (pre === 'c_') obrig('c_bairro', 'Informe o bairro.'); else obrig('r_bairro', 'Informe o bairro.');
+    obrig(pre + 'cidade', 'Informe a cidade.');
+    if (!/^[A-Za-z]{2}$/.test((s[pre + 'estado'] || '').trim())) e[pre + 'estado'] = 'UF com 2 letras.';
+    if (!window.CI.isCEPValid(s[pre + 'cep'])) e[pre + 'cep'] = 'CEP incompleto (8 dígitos).';
+  };
   if (idx === 1) {
-    if (!s.c_razao || !s.c_razao.trim()) e.c_razao = 'Informe a razão social.';
-    if (!window.CI.isCNPJValid(s.c_cnpj)) e.c_cnpj = 'CNPJ incompleto (14 dígitos).';
-    if (!s.r_nome || !s.r_nome.trim()) e.r_nome = 'Informe o responsável.';
-    if (!window.CI.isCPFValid(s.r_cpf)) e.r_cpf = 'CPF incompleto (11 dígitos).';
+    obrig('c_razao', 'Informe a razão social.');
+    if (!window.CI.isCNPJValid(s.c_cnpj)) e.c_cnpj = 'CNPJ inválido (confira os dígitos).';
+    else if (window.CI.isCNPJContratante(s.c_cnpj)) e.c_cnpj = 'Este é o CNPJ da Vertical Parts — informe o da empresa contratada.';
+    endereco('c_');
+    obrig('r_nome', 'Informe o responsável.');
+    obrig('r_nacionalidade', 'Informe a nacionalidade.');
+    obrig('r_estadoCivil', 'Informe o estado civil.');
+    obrig('r_profissao', 'Informe a profissão.');
+    obrig('r_rg', 'Informe o RG.');
+    if (!window.CI.isCPFValid(s.r_cpf)) e.r_cpf = 'CPF inválido (confira os dígitos).';
+    if (!s.r_mesmoEndereco) endereco('r_');
+  }
+  if (idx === 2) {
+    if (!window.CI.equipamentosDoContrato(s).length) e.equipamentos = 'Informe ao menos um equipamento (nº de série, nº do projeto ou ativo da Proposta) coberto por este contrato.';
+    obrig('descricaoServicos', 'Descreva os serviços a executar.');
+    obrig('localServico', 'Informe o endereço onde o serviço será realizado.');
+    if (s.equipamento === 'elevador' && s.paradas === 'Personalizado') obrig('paradasCustom', 'Informe a quantidade de paradas.');
+    if (window.CI.isRemocao(s)) obrig('destino', 'Informe o destino / local.');
+  }
+  if (idx === 3 && window.CI.isLongaDistancia(s)) {
+    obrig('obraCidade', 'Informe a cidade da obra.');
+    if (!/^[A-Za-z]{2}$/.test((s.obraEstado || '').trim())) e.obraEstado = 'UF com 2 letras.';
+    if (s.logModo === 'prazo') obrig('logDiasExtra', 'Informe os dias adicionais.');
   }
   if (idx === 4) {
-    if (window.CI.moedaParaNumero(s.valorTotal) <= 0) e.valorTotal = 'Informe o valor total.';
+    const total = Math.round(window.CI.moedaParaNumero(s.valorTotal) * 100);
+    if (total <= 0) e.valorTotal = 'Informe o valor total.';
+    if (s.formaPagamento === 'custom') {
+      const parc = s.parcelas || [];
+      const valores = parc.map((p) => Math.round(window.CI.moedaParaNumero(p.valor) * 100));
+      if (!parc.length) e.parcelas = 'Adicione ao menos uma parcela.';
+      else if (valores.some((v) => v <= 0)) e.parcelas = 'Todas as parcelas precisam ter valor maior que zero.';
+      else if (total > 0 && valores.reduce((t, v) => t + v, 0) !== total) e.parcelas = 'A soma das parcelas precisa ser igual ao valor total do contrato.';
+    }
+  }
+  if (idx === 5) {
+    const d = parseInt(s.dataDia, 10);
+    if (!(d >= 1 && d <= 31)) e.dataDia = 'Dia inválido.';
+    if (!/^\d{4}$/.test(s.dataAno || '')) e.dataAno = 'Ano com 4 dígitos.';
+    obrig('cidadeAssinatura', 'Informe a cidade.');
   }
   return e;
 }
@@ -597,11 +999,11 @@ function CIWizard({ onCreated, initial }) {
 
   const set = (k, v) => setS(prev => ({ ...prev, [k]: v }));
 
-  const docPreview = _ciUM(() => window.CI.buildContract(s, 'VPNI' + '________'), [s]);
+  const docPreview = _ciUM(() => window.CI.buildContract(s, s.numeroContrato || 'VPNI________'), [s]);
   const conds = window.CI.activeConditionals(s);
 
   const goNext = () => {
-    const e = validateStep(step, s);
+    const e = ciValidateStep(step, s);
     setErrors(e);
     if (Object.keys(e).length > 0) return;
     if (step < CI_WIZ_STEPS.length - 1) setStep(step + 1);
@@ -611,10 +1013,14 @@ function CIWizard({ onCreated, initial }) {
 
   const completeAll = () => {
     let all = {};
-    [1, 4].forEach(i => { all = { ...all, ...validateStep(i, s) }; });
-    if (Object.keys(all).length > 0) {
+    let firstBad = -1;
+    [1, 2, 3, 4, 5].forEach(i => {
+      const er = ciValidateStep(i, s);
+      if (Object.keys(er).length && firstBad < 0) firstBad = i;
+      all = { ...all, ...er };
+    });
+    if (firstBad >= 0) {
       setErrors(all);
-      const firstBad = Object.keys(validateStep(1, s)).length ? 1 : 4;
       setStep(firstBad);
       return false;
     }
@@ -626,8 +1032,11 @@ function CIWizard({ onCreated, initial }) {
     setCreating(true);
     try {
       const rec = await window.CIStore.createDraft(s);
+      /* Só abre o modal de envio. Antes chamava onCreated aqui, que troca a
+         aba pro Painel e desmontava o wizard (e o modal junto) na hora —
+         o usuário nunca via a tela de enviar. onCreated agora roda ao
+         fechar o modal (abaixo). */
       setSendRec(rec);
-      onCreated && onCreated(rec);
     } catch (e) {
       alert('Erro ao gerar contrato: ' + (e.message || e));
     } finally {
@@ -677,7 +1086,7 @@ function CIWizard({ onCreated, initial }) {
         </div>
       </div>
 
-      {sendRec && <CISendModal record={sendRec} onClose={() => { setSendRec(null); setS(window.CI.defaultState()); setStep(0); }} onSent={() => {}} />}
+      {sendRec && <CISendModal record={sendRec} onClose={() => { const r = sendRec; setSendRec(null); setS(window.CI.defaultState()); setStep(0); onCreated && onCreated(r); }} onSent={() => {}} />}
     </div>
   );
 }
@@ -688,6 +1097,34 @@ function CIWizard({ onCreated, initial }) {
 function CIBadge({ status }) {
   const st = window.CIStore.STATUS[status] || window.CIStore.STATUS.rascunho;
   return <span className={'ci-badge ci-badge--' + st.tone}><span className="ci-badge-dot"></span>{st.label}</span>;
+}
+
+/* 29/09 — indicador "respondeu por e-mail" (mesma investigação/correção do
+   Contrato de Venda, ver CVEmailRespondidoBadge em contrato-venda.jsx).
+   Só usa `referencia_id` (aponta pra ESTE contrato) — de propósito sem
+   fallback por numero_cotacao, porque o mesmo numero_cotacao é
+   compartilhado por RFQ/Proposta/Contrato de Venda/Contrato Instalador do
+   mesmo negócio — um match só por numero_cotacao não sabe dizer se a
+   resposta é sobre ESTE contrato ou outro documento da mesma cotação. */
+function CIEmailRespondidoBadge({ contratoId }) {
+  const [temResposta, setTemResposta] = React.useState(false);
+  React.useEffect(() => {
+    let cancelado = false;
+    setTemResposta(false);
+    const sb = window.__VP_SB && window.__VP_SB.sb;
+    if (!sb || !contratoId) return;
+    sb.from('emails_projeto').select('id', { count: 'exact', head: true })
+      .eq('direcao', 'entrada').is('excluido_em', null).eq('referencia_id', String(contratoId))
+      .then(({ count }) => { if (!cancelado) setTemResposta((count || 0) > 0); })
+      .catch(() => { if (!cancelado) setTemResposta(false); });
+    return () => { cancelado = true; };
+  }, [contratoId]);
+  if (!temResposta) return null;
+  return (
+    <span className="ci-badge ci-badge--blue" style={{ marginLeft: 6 }} title="Existe e-mail recebido vinculado a este contrato (Message-ID)">
+      <span className="ci-badge-dot"></span>Respondeu por e-mail
+    </span>
+  );
 }
 
 const CI_TL_SEQ = ['rascunho', 'enviado', 'visualizado', 'assinado'];
@@ -723,6 +1160,10 @@ function CITimeline({ rec }) {
               {s.entry ? window.CIStore.fmtDateTime(s.entry.at) : 'Pendente'}
               {s.entry && s.entry.meta && s.entry.meta.channel ? ' · ' + (s.entry.meta.channel === 'whatsapp' ? 'WhatsApp' : 'E-mail') : ''}
               {s.entry && s.entry.meta && s.entry.meta.ip ? ' · IP ' + s.entry.meta.ip : ''}
+              {/* 01/10 — recusa agora traz quem recusou e o motivo (mesmo
+                 achado real do Contrato de Venda, cotação 955/AKAI) */}
+              {s.entry && s.entry.meta && s.entry.meta.nome ? ' · Por ' + s.entry.meta.nome : ''}
+              {s.entry && s.entry.meta && s.entry.meta.motivo ? <div>Motivo: {s.entry.meta.motivo}</div> : ''}
             </div>
           </div>
         </div>
@@ -738,8 +1179,13 @@ function CIAuditRow({ k, v }) {
 function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
   const a = rec.audit || {};
   const del = async () => {
-    if (!window.confirm('Excluir este contrato do painel?')) return;
-    await window.CIStore.remove(rec.id);
+    if (!window.confirm('Excluir este rascunho? Esta ação não pode ser desfeita.')) return;
+    try {
+      await window.CIStore.remove(rec.id);
+    } catch (e) {
+      alert('Não foi possível excluir: ' + (e.message || e));
+      return;
+    }
     onClose();
     onRefresh();
   };
@@ -752,7 +1198,7 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
           <div>
             <h2>{rec.numero_documento}</h2>
             <div className="ci-drawer-co">{rec.contratada_nome}</div>
-            <div style={{ marginTop: 10 }}><CIBadge status={rec.status} /></div>
+            <div style={{ marginTop: 10 }}><CIBadge status={rec.status} /><CIEmailRespondidoBadge contratoId={rec.id}/></div>
           </div>
           <button className="ci-drawer-x" onClick={onClose}>✕</button>
         </div>
@@ -794,7 +1240,7 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
               <a className="ci-btn ci-btn--ghost" href={signUrl} target="_blank" rel="noopener">Abrir link de assinatura ↗</a>
               {(rec.status === 'enviado' || rec.status === 'visualizado' || rec.status === 'expirado' || rec.status === 'rascunho') &&
                 <button className="ci-btn ci-btn--primary" onClick={() => onResend(rec)}>{rec.status === 'rascunho' ? 'Enviar' : 'Reenviar link'}</button>}
-              <button className="ci-btn ci-btn--danger" onClick={del}>Excluir</button>
+              {rec.status === 'rascunho' && <button className="ci-btn ci-btn--danger" onClick={del}>Excluir rascunho</button>}
             </div>
           </div>
         </div>
@@ -813,14 +1259,14 @@ function CIDashboard() {
 
   const refresh = async () => {
     setLoading(true);
-    const list = await window.CIStore.listAll();
+    const list = await window.CIStore.listPainel();
     setContracts(list);
     setLoading(false);
   };
 
   _ciUE(() => {
     window.CIStore.sweepExpired().then(refresh);
-    const t = setInterval(refresh, 5000);
+    const t = setInterval(refresh, 15000);
     return () => clearInterval(t);
   }, []);
 

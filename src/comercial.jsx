@@ -2,80 +2,345 @@
    comercial.jsx — Leads, Cotações, Precificação, Propostas
    ============================================================ */
 
-/* ---------- MODAL: Novo Lead ---------- */
-/* ---------- constantes do formulário de equipamentos ---------- */
-const EQUIP_OPTS = [
-  { key: 'elevador', label: 'Elevador' },
-  { key: 'escada',   label: 'Escada Rolante' },
-  { key: 'esteira',  label: 'Esteira' },
-];
-const TIPO_EQUIP_OPTS = ['Residencial','Comercial','Escritório','Escola','Hospital','Industrial','Local Público','Outro'];
-const ABERTURA_OPTS   = ['Central','Telescópica Direita','Telescópica Esquerda'];
+/* ---------- MODAL: Novo Lead ----------
+   15/08 → revisão do fluxo Lead→Formulário: o cadastro de Lead NÃO coleta
+   mais equipamento (elevador/escada/esteira) — isso ficava preso a um
+   único item, obrigava specs cedo demais e nunca virava dado estruturado
+   de verdade (era um texto solto em `leads.equip`). Lead agora é só
+   identificação do cliente (CNPJ + contato); a alocação de quantos
+   equipamentos/tipos forem necessários acontece no Formulário, chamado
+   a partir daqui ou da tela de Detalhe do Lead. */
+/* Cliente do banco — sempre via este helper (null quando o Supabase não
+   carregou), nunca `window.__VP_SB.sb` direto: se o script do Supabase
+   falhar, o acesso direto quebra a tela inteira (E03/E10, 26/09). */
+function comercialSb() {
+  return (window.__VP_SB && window.__VP_SB.sb) || null;
+}
 
-function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
-  const [f, setF] = React.useState({
+/* Consulta se o CNPJ/CPF já é cliente no Omie — Edge Function
+   omie-buscar-cliente (o frontend nunca fala com o Omie direto).
+   Retorna { encontrado: true, razao_social, data_cadastro, telefone,
+   email, inativo } | { encontrado: false } | { encontrado: null, erro }
+   — null = falha de consulta, NÃO confundir com "não cadastrado". */
+async function buscarClienteOmie(doc) {
+  const sb = comercialSb();
+  if (!sb) return { encontrado: null, erro: 'Banco de dados indisponível' };
+  try {
+    const { data, error } = await sb.functions.invoke('omie-buscar-cliente', { body: { cnpj_cpf: doc } });
+    if (error) {
+      // invoke() só devolve "non-2xx status code" — o status real fica em error.context.
+      const st = error.context && error.context.status;
+      const erro = st === 401 ? 'sessão sem permissão pra consultar o ERP (faça login de novo)'
+        : st ? 'ERP respondeu HTTP ' + st : (error.message || 'falha ao consultar o ERP');
+      return { encontrado: null, erro };
+    }
+    return data || { encontrado: null, erro: 'Resposta vazia do ERP' };
+  } catch (e) {
+    return { encontrado: null, erro: e.message || 'Falha ao consultar o ERP' };
+  }
+}
+
+/* Prioridade vem do banco em minúsculo ('alta'/'media'/'baixa'), mas
+   registros antigos têm 'Alta'/'Média'/'ALTA' — normaliza tudo (sem
+   acento/case) antes de escolher cor/rótulo (E04). */
+function priorityKey(p) {
+  return String(p || '').normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim();
+}
+const PRIORITY_VARIANT = { alta: 'danger', media: 'warning', baixa: 'neutral' };
+const PRIORITY_LABEL = { alta: 'Alta', media: 'Média', baixa: 'Baixa' };
+
+/* Status do lead — fonte única pro campo do formulário e pros filtros da
+   lista (antes só existiam nos filtros; nenhuma tela deixava escolher,
+   então todo lead ficava "Em qualificação" até a Proposta assinada
+   marcar "Convertido"). */
+/* Comissão do lead: manual (campo "Comissão (%)"); sem valor informado vale o padrão de 2% (decisão do usuário, 04/10/2026). */
+const COMISSAO_PADRAO_PCT = 2;
+const comissaoDoLead = (lead) => (lead && lead.comissao_pct != null && Number.isFinite(Number(lead.comissao_pct)) ? Number(lead.comissao_pct) : COMISSAO_PADRAO_PCT);
+const LEAD_STATUSES = ['Em qualificação', 'Aguardando cotação', 'Proposta enviada', 'Negociação', 'Convertido', 'Sem retorno'];
+
+/* "Está no Omie desde" (26/09) — a data pertence ao CLIENTE (CNPJ/CPF),
+   guardada em clientes.omie_cadastrado_desde (+ codigo_cliente_omie,
+   omie_verificado_em). Grava o resultado de uma consulta ao Omie:
+     encontrado true  → data de inclusão (dd/mm/aaaa → aaaa-mm-dd) + código
+     encontrado false → data vazia, marca como verificado
+     encontrado null  → falha de consulta: NÃO grava nada (não é "não está")
+   Retorna os campos gravados (pra atualizar a tela sem recarregar) ou null. */
+function dataOmieParaIso(dmy) {
+  const m = /^(\d{2})\/(\d{2})\/(\d{4})$/.exec(String(dmy || ''));
+  return m ? `${m[3]}-${m[2]}-${m[1]}` : null;
+}
+// aaaa-mm-dd → dd/mm/aaaa direto no texto (sem new Date: evita o dia
+// "voltar um" pelo fuso, e o fmtDate global corta o ano pra 2 dígitos).
+function isoParaDataBR(iso) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(iso || ''));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : '';
+}
+async function gravarOmieNoCliente(clienteId, omie) {
+  const sb = comercialSb();
+  if (!sb || !clienteId || !omie || omie.encontrado == null) return null;
+  const campos = omie.encontrado
+    ? { omie_cadastrado_desde: dataOmieParaIso(omie.data_cadastro), codigo_cliente_omie: omie.codigo_cliente_omie || null, omie_verificado_em: new Date().toISOString() }
+    : { omie_cadastrado_desde: null, omie_verificado_em: new Date().toISOString() };
+  try {
+    const { error } = await sb.from('clientes').update(campos).eq('id', clienteId);
+    if (error) { console.warn('[comercial] gravar Omie no cliente falhou:', error.message); return null; }
+    return campos;
+  } catch (e) {
+    console.warn('[comercial] gravar Omie no cliente falhou:', e);
+    return null;
+  }
+}
+/* Precisa (re)consultar o Omie? Nunca verificado → sim. Verificado e não
+   encontrado há mais de 7 dias → sim (o cliente pode ter sido cadastrado
+   no Omie depois). Encontrado → não (a data de inclusão não muda). */
+const OMIE_REVERIFICAR_DIAS = 7;
+function precisaVerificarOmie(cli) {
+  if (!cli) return false;
+  // Documento incompleto nunca vai achar nada — não gasta consulta com ele.
+  const dig = String(cli.cnpj || cli.cpf || '').replace(/\D/g, '');
+  if (dig.length !== 14 && dig.length !== 11) return false;
+  if (!cli.omie_verificado_em) return true;
+  if (cli.omie_cadastrado_desde) return false;
+  return (Date.now() - new Date(cli.omie_verificado_em).getTime()) > OMIE_REVERIFICAR_DIAS * 86400000;
+}
+
+function OmieStatusBox({ status }) {
+  const tone = status.encontrado === true
+    ? { cls: 'callout--success', icon: '✓' }
+    : status.encontrado === false
+      ? { cls: 'callout--info', icon: 'ℹ' }
+      : { cls: 'callout--warning', icon: '!' };
+  const titulo = status.encontrado === true
+    ? 'Cliente cadastrado no ERP' + (status.data_cadastro ? ' desde ' + status.data_cadastro : '')
+    : status.encontrado === false ? 'Não encontrado no ERP' : 'Não foi possível consultar o ERP';
+  const sub = status.encontrado === true
+    ? [status.razao_social, status.inativo ? 'cadastro INATIVO no Omie' : null].filter(Boolean).join(' · ')
+    : status.encontrado === false ? 'Seguindo com a consulta pública de CNPJ'
+      : (status.erro ? status.erro + ' — ' : '') + 'seguindo com a consulta pública de CNPJ';
+  return (
+    <div className={'callout ' + tone.cls}>
+      <span className="callout__icon">{tone.icon}</span>
+      <div>
+        <div className="callout__title">{titulo}</div>
+        {sub ? <div className="callout__sub">{sub}</div> : null}
+      </div>
+    </div>
+  );
+}
+
+function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
+  const isEdit = !!lead;
+  const [f, setF] = React.useState(() => isEdit ? {
+    building: lead.building || '', contact: lead.contact || '', role: lead.role || '',
+    phone: lead.phone || '', email: lead.email || '',
+    tipoPessoa: 'PJ', cnpj: '', cpf: '', documentoPendente: !!lead.documento_pendente, razaoSocial: '',
+    origin: lead.origin || 'Site', status: lead.status || 'Em qualificação',
+    owner: lead.owner || '', value: lead.value != null ? String(lead.value) : '',
+    comissaoPct: lead.comissao_pct != null ? String(lead.comissao_pct) : '',
+    priority: ({ alta: 'Alta', media: 'Média', baixa: 'Baixa' }[String(lead.priority || '').toLowerCase()] || lead.priority || 'Alta'),
+    next: lead.next_action || lead.next || '',
+  } : {
     building:'', contact:'', role:'', phone:'', email:'',
+    tipoPessoa:'PJ', cnpj:'', cpf:'', documentoPendente:false, razaoSocial:'',
     origin:'Site', status:'Em qualificação',
-    owner:'', value:'', priority:'Alta', next:'',
+    owner:'', value:'', comissaoPct:'', priority:'Alta', next:'',
   });
-  const [equips, setEquips] = React.useState({
-    elevador: { checked: false, qty: 1, paradas: 1 },
-    escada:   { checked: false, qty: 1 },
-    esteira:  { checked: false, qty: 1 },
-  });
-  const [tipoEquip, setTipoEquip] = React.useState('');
-  const [elevSpec, setElevSpec] = React.useState({ carga: '', abertura: 'Central', vao: '', acabamento: 'Inox' });
+  const [buscandoCnpj, setBuscandoCnpj] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
   const [savedLead, setSavedLead] = React.useState(null);
 
   const set = (k, v) => setF(p => ({ ...p, [k]: v }));
-  const setElev = (k, v) => setElevSpec(p => ({ ...p, [k]: v }));
-  const setEquipField = (key, field, value) => setEquips(p => ({ ...p, [key]: { ...p[key], [field]: value } }));
 
-  const hasEquip    = Object.values(equips).some(e => e.checked);
-  const hasElevador = equips.elevador.checked;
+  /* Edição: o CNPJ/CPF/Razão Social não vivem no Lead — só no `clientes`
+     vinculado (lead.cliente_id). Busca depois do mount (não trava a
+     abertura do modal esperando essa consulta) e preenche por cima do
+     estado inicial, só quando os dados chegam. */
+  React.useEffect(() => {
+    if (!isEdit || !lead.cliente_id) return;
+    let alive = true;
+    const store = window.CadastrosClientesStore;
+    if (!store?.obter) return;
+    Promise.resolve(store.obter(lead.cliente_id)).then((c) => {
+      if (!alive || !c) return;
+      setF((p) => ({
+        ...p,
+        tipoPessoa: c.tipo_pessoa || p.tipoPessoa,
+        cnpj: c.cnpj || p.cnpj,
+        cpf: c.cpf || p.cpf,
+        razaoSocial: c.razao_social || p.razaoSocial,
+      }));
+    }).catch((e) => {
+      console.warn('[comercial] Erro ao carregar cliente do lead:', e);
+      if (alive) window.toast?.('Não foi possível carregar os dados do cliente vinculado.', 'warning');
+    });
+    return () => { alive = false; };
+  }, [isEdit, lead?.cliente_id]);
+
+  /* Busca do CNPJ (26/09): 1º no ERP Omie — se já é cliente, mostra
+     "Cliente cadastrado desde dd/mm/aaaa" e preenche com o cadastro de
+     lá, sem ir na API pública; senão (ou se o Omie falhar), cai na
+     EnderecoAPI como antes. `statusOmie`: null = ainda não buscou;
+     { encontrado: true|false|null } — null = não deu pra consultar o
+     ERP (mostrado como tal, nunca como "não cadastrado"). */
+  const [statusOmie, setStatusOmie] = React.useState(null);
+  const buscarCnpj = async () => {
+    const api = window.EnderecoAPI;
+    const cnpjDigits = (f.cnpj || '').replace(/\D/g, '');
+    const v = api?.validarDocumento ? api.validarDocumento('PJ', f.cnpj) : { ok: cnpjDigits.length === 14, msg: 'CNPJ inválido — informe 14 dígitos.' };
+    if (!cnpjDigits || !v.ok) return window.toast(v.msg || 'Informe o CNPJ.', 'warning');
+
+    setBuscandoCnpj(true);
+    setStatusOmie(null);
+    try {
+      const omie = await buscarClienteOmie(cnpjDigits);
+      if (omie.encontrado === true) {
+        setStatusOmie(omie);
+        setF(p => ({
+          ...p,
+          razaoSocial: omie.razao_social || p.razaoSocial,
+          phone: p.phone || omie.telefone || '',
+          email: p.email || omie.email || '',
+        }));
+        window.toast('Cliente encontrado no ERP Omie.', 'success');
+        return;
+      }
+      setStatusOmie(omie.encontrado === false ? { encontrado: false } : { encontrado: null, erro: omie.erro });
+
+      if (!api?.buscarCNPJ) {
+        return window.toast('Módulo de endereço indisponível. Recarregue a página e tente novamente.', 'error');
+      }
+      const dados = await api.buscarCNPJ(f.cnpj);
+      setF(p => ({ ...p, razaoSocial: dados.razao_social || p.razaoSocial, phone: p.phone || dados.telefone || '' }));
+      window.toast('Dados do CNPJ preenchidos via consulta pública.', 'success');
+    } catch (e) {
+      window.toast('Erro ao buscar CNPJ: ' + e.message, 'warning');
+    } finally {
+      setBuscandoCnpj(false);
+    }
+  };
 
   const save = async () => {
     if (!f.building.trim()) return window.toast('Prédio é obrigatório.', 'warning');
     if (!f.contact.trim())  return window.toast('Contato é obrigatório.', 'warning');
-    if (!hasEquip)          return window.toast('Selecione ao menos um equipamento.', 'warning');
-    if (!tipoEquip)         return window.toast('Tipo de empreendimento é obrigatório.', 'warning');
-    if (hasElevador) {
-      if (!elevSpec.carga) return window.toast('Informe a carga do elevador (kg).', 'warning');
-      if (!elevSpec.vao)   return window.toast('Informe o vão de porta (cm).', 'warning');
+    const cnpjDigits = (f.cnpj || '').replace(/\D/g, '');
+    const cpfDigits = (f.cpf || '').replace(/\D/g, '');
+    if (!f.documentoPendente && window.EnderecoAPI?.validarDocumento) {
+      // O número precisa combinar com o tipo escolhido na lista (PF → CPF, PJ → CNPJ) e ter dígitos verificadores corretos.
+      const v = window.EnderecoAPI.validarDocumento(f.tipoPessoa, f.tipoPessoa === 'PF' ? f.cpf : f.cnpj);
+      if (!v.ok) return window.toast(v.msg, 'warning');
     }
+    const comissaoTxt = String(f.comissaoPct == null ? '' : f.comissaoPct).replace(',', '.').trim();
+    if (comissaoTxt !== '' && !(Number(comissaoTxt) >= 0 && Number(comissaoTxt) <= 100)) return window.toast('Comissão deve ser um percentual entre 0 e 100 (deixe em branco para usar 2%).', 'warning');
+    const sb = comercialSb();
+    if (!sb) return window.toast('Banco de dados indisponível — recarregue a página.', 'error');
     setSaving(true);
-    const id = 'LD-' + Date.now().toString().slice(-6);
-
-    const equipItens = EQUIP_OPTS.filter(o => equips[o.key].checked)
-      .map(o => o.key === 'elevador'
-        ? { tipo: o.label, quantidade: equips[o.key].qty, paradas: equips.elevador.paradas }
-        : { tipo: o.label, quantidade: equips[o.key].qty });
-    const equipStr = equipItens.map(i =>
-      i.paradas !== undefined
-        ? `${i.quantidade}× ${i.tipo} (${i.paradas} paradas)`
-        : `${i.quantidade}× ${i.tipo}`
-    ).join(', ')
-      + ` · ${tipoEquip}`
-      + (hasElevador ? ` · ${elevSpec.carga}kg ${elevSpec.abertura}` : '');
-
-    const { error } = await window.__VP_SB.sb.from('leads').insert({
-      id,
+    const id = isEdit ? lead.id : 'LD-' + Date.now().toString().slice(-6);
+    const payload = {
       building: f.building, contact: f.contact, role: f.role || null,
-      phone: f.phone || null, email: f.email || null, equip: equipStr,
+      phone: f.phone || null, email: f.email || null,
       origin: f.origin, status: f.status, owner: f.owner || null,
       value: f.value ? parseFloat(f.value) : null,
       priority: ({ 'Alta': 'alta', 'Média': 'media', 'Baixa': 'baixa' }[f.priority] || 'media'),
       next_action: f.next || null,
-      date: new Date().toISOString().slice(0, 10),
-    });
+      documento_pendente: f.documentoPendente,
+      // Comissão manual; em branco = padrão de 2% (COMISSAO_PADRAO_PCT) — grava null para não "congelar" o padrão.
+      comissao_pct: comissaoTxt === '' ? null : Number(comissaoTxt),
+    };
+
+    let error = null;
+    try {
+      ({ error } = isEdit
+        ? await sb.from('leads').update(payload).eq('id', id)
+        : await sb.from('leads').insert({ id, ...payload, date: new Date().toISOString().slice(0, 10) }));
+    } catch (e) {
+      error = e;
+    }
+    if (error) { setSaving(false); return window.toast('Erro: ' + (error.message || error), 'error'); }
+
+    /* CNPJ/CPF informado (e não marcado como "será inserido depois") →
+       resolve/cria o cliente (mesma dedup por documento do Formulário,
+       window.FormularioElevadorStore.buscarOuCriarCliente) e já vincula
+       leads.cliente_id — assim o Formulário, quando chamar este Lead,
+       abre com o cliente pronto, sem redigitar CNPJ/CPF.
+
+       Na edição, se o Lead JÁ tem cliente_id, sincroniza esse registro
+       sempre — mesmo sem CNPJ/CPF ainda (documento pendente) — senão editar
+       só a Razão Social de um cliente provisório fecha com "Lead
+       atualizado" mas descarta a edição em silêncio (achado real via
+       review). `clienteIdProvisorio` faz o store atualizar esse mesmo
+       registro em vez de criar um novo. */
+    const docDigits = f.tipoPessoa === 'PF' ? cpfDigits : cnpjDigits;
+    let clienteId = isEdit ? (lead.cliente_id || null) : null;
+    let clienteAtualizado = null;
+    if ((isEdit && lead.cliente_id) || (!f.documentoPendente && docDigits)) {
+      try {
+        if (!window.FormularioElevadorStore?.buscarOuCriarCliente) {
+          throw new Error('módulo de clientes (FormularioElevadorStore) não carregou — recarregue a página');
+        }
+        const cliente = await window.FormularioElevadorStore.buscarOuCriarCliente({
+          [f.tipoPessoa === 'PF' ? 'cpf' : 'cnpj']: docDigits, tipo_pessoa: f.tipoPessoa,
+          razao_social: f.razaoSocial || f.building,
+          contato: f.contact, telefone: f.phone || null, email: f.email || null,
+          clienteIdProvisorio: isEdit ? (lead.cliente_id || null) : null,
+        });
+        if (cliente.id !== (isEdit ? lead.cliente_id : null)) {
+          const { error: vincErr } = await sb.from('leads').update({ cliente_id: cliente.id }).eq('id', id);
+          if (vincErr) throw vincErr;
+        }
+        clienteId = cliente.id;
+        clienteAtualizado = cliente;
+      } catch (e) {
+        window.toast((isEdit ? 'Lead atualizado, mas' : 'Lead criado, mas') + ' falhou ao vincular cliente: ' + e.message, 'warning');
+      }
+    }
+
+    /* Lead convertido tem que virar cliente de verdade (pedido do usuário,
+       26/09) — o bloco de CNPJ/CPF acima já cobre a maioria dos casos, mas
+       um Lead marcado "Convertido" sem CNPJ ainda (documento pendente)
+       ficaria sem cliente. criarOuVincularDeLead() é o mesmo dedup (por
+       nome) que proposta-store.js usa quando a Proposta é assinada —
+       idempotente, não duplica se já tem cliente_id. */
+    if (payload.status === "Convertido" && !clienteId && window.CadastrosClientesStore) {
+      try {
+        const vinculado = await window.CadastrosClientesStore.criarOuVincularDeLead({ id, building: f.building, contact: f.contact, phone: f.phone || null, email: f.email || null });
+        if (vinculado) clienteId = vinculado;
+      } catch (e) {
+        console.warn("[comercial] Erro ao converter lead em cliente:", e);
+      }
+    }
+
+    /* "Está no Omie desde": grava no cliente vinculado, em segundo plano
+       (não atrasa o save). Reaproveita o resultado do "Buscar CNPJ" desta
+       mesma abertura do modal — statusOmie zera sempre que o CNPJ muda,
+       então, se existe, é deste documento; senão consulta agora (ex.: CPF,
+       que não tem botão de busca). Falha de consulta não grava nada. */
+    let omieSync = null;
+    if (clienteId && docDigits && !f.documentoPendente) {
+      const jaConsultado = f.tipoPessoa !== 'PF' && statusOmie && statusOmie.encontrado != null ? statusOmie : null;
+      omieSync = (jaConsultado ? Promise.resolve(jaConsultado) : buscarClienteOmie(docDigits))
+        .then((omie) => gravarOmieNoCliente(clienteId, omie))
+        .catch(() => null);
+    }
+
     setSaving(false);
-    if (error) return window.toast('Erro: ' + error.message, 'error');
+    if (isEdit) {
+      window.toast('Lead atualizado.', 'success');
+      /* Passa o cliente sincronizado de volta — a tela de Detalhe do Lead
+         depende só de lead.cliente_id pra refazer essa busca, e esse id não
+         muda quando só os DADOS do cliente (razão social, CNPJ...) mudam,
+         então sem isso o card "Cliente" ficava com dado velho até recarregar
+         a página (2º achado do review). */
+      onSaved?.({ ...lead, ...payload, cliente_id: clienteId }, clienteAtualizado);
+      onClose();
+      return;
+    }
     onSaved?.();
+    // Recarrega a lista de novo quando a data do Omie chegar (reloadLeads
+    // não zera a lista, então não pisca nem desmonta este modal).
+    if (omieSync) omieSync.then((gravou) => { if (gravou) onSaved?.(); });
     setSavedLead({
-      id, building: f.building, equipItens, tipoEquip,
-      elevSpec: hasElevador ? { ...elevSpec } : null,
-      totalEquip: equipItens.reduce((s, i) => s + i.quantidade, 0),
+      id, building: f.building, contact: f.contact, role: f.role, phone: f.phone, email: f.email,
+      cliente_id: clienteId, razaoSocial: f.razaoSocial,
     });
   };
 
@@ -103,36 +368,30 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
     }
   }, [savedLead, onClose]);
 
-  /* ---- pós-save: confirmar criação de cotação ---- */
+  /* ---- pós-save: seguir pro Formulário (aloca equipamento lá) ---- */
   if (savedLead) {
     return (
       <Modal title="✓ Lead Criado! (fechará em 4s)" onClose={() => { setSavedLead(null); onClose(); }} width={500}
         footer={<>
           <Button variant="ghost" onClick={onClose}>Fechar</Button>
-          {onCreateCotacao && (
-            <Button variant="primary" icon="globe"
-              onClick={() => { onClose(); onCreateCotacao(savedLead); }}>
-              Criar Cotação China →
+          {onOpenFormulario && (
+            <Button variant="primary" icon="ruler"
+              onClick={() => { onClose(); onOpenFormulario(savedLead); }}>
+              Abrir Formulário →
             </Button>
           )}
         </>}>
         <div className="stack" style={{ gap: 12 }}>
-          <div style={{ background:'var(--vp-gray-50)', border:'1px solid var(--border)', padding:'14px 16px' }}>
+          <div className="panel-soft">
             <div className="up-eyebrow muted" style={{ marginBottom:6 }}>Lead criado com sucesso</div>
             <div style={{ fontWeight:700, fontSize:15 }}>{savedLead.building}</div>
             <div className="cell-sub" style={{ marginTop:4 }}>{savedLead.id}</div>
-            <div className="cell-sub" style={{ marginTop:4 }}>
-              {savedLead.equipItens.map(i =>
-                i.paradas !== undefined
-                  ? `${i.quantidade}× ${i.tipo} (${i.paradas} paradas)`
-                  : `${i.quantidade}× ${i.tipo}`
-              ).join(', ')}
-              {' · '}{savedLead.tipoEquip}
-              {savedLead.elevSpec && ` · ${savedLead.elevSpec.carga}kg · ${savedLead.elevSpec.abertura}`}
-            </div>
+            {savedLead.cliente_id
+              ? <div className="cell-sub" style={{ marginTop:4 }}>Cliente vinculado: {savedLead.razaoSocial || savedLead.building}</div>
+              : <div className="cell-sub text-warning" style={{ marginTop:4 }}>Sem CNPJ/CPF vinculado ainda — pode ser resolvido no Formulário.</div>}
           </div>
           <p style={{ fontSize:13, color:'var(--fg2)', margin:0 }}>
-            Deseja criar uma cotação China para este lead agora?
+            Deseja abrir o Formulário agora e alocar os equipamentos deste lead?
           </p>
         </div>
       </Modal>
@@ -140,11 +399,11 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
   }
 
   return (
-    <Modal title="Novo Lead" onClose={onClose} width={600}
+    <Modal title={isEdit ? 'Editar Lead' : 'Novo Lead'} onClose={onClose} width={600}
       footer={<>
         <Button variant="ghost" onClick={onClose}>Cancelar</Button>
         <Button variant="primary" onClick={save} disabled={saving}>
-          {saving ? 'Salvando…' : 'Criar Lead'}
+          {saving ? 'Salvando…' : (isEdit ? 'Salvar Alterações' : 'Criar Lead')}
         </Button>
       </>}>
       <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
@@ -158,112 +417,59 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
           {fld('Email', 'email', 'email', 'contato@email.com')}
         </div>
 
-        {/* ---- EQUIPAMENTO ---- */}
+        {/* ---- CLIENTE (CNPJ/CPF) ---- */}
         <div style={{ border:'1px solid var(--border)', padding:'12px 14px', display:'flex', flexDirection:'column', gap:10 }}>
-          <label className="up-eyebrow muted">Equipamento *</label>
-
-          {/* checkboxes + qty */}
-          {EQUIP_OPTS.map(({ key, label }) => (
-            <div key={key} style={{ display:'flex', alignItems:'center', gap:10 }}>
-              <input type="checkbox" id={`eq-${key}`}
-                checked={equips[key].checked}
-                onChange={e => setEquipField(key, 'checked', e.target.checked)}
-                style={{ width:16, height:16, accentColor:'#f5c400', cursor:'pointer', flexShrink:0 }}/>
-              <label htmlFor={`eq-${key}`}
-                style={{ fontSize:13, fontWeight:500, cursor:'pointer', flex:1 }}>
-                {label}
-              </label>
-
-              {/* Elevador marcado: dois campos com labels */}
-              {key === 'elevador' && equips.elevador.checked && (
-                <div style={{ display:'flex', gap:8, alignItems:'flex-end' }}>
-                  <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                    <span style={{ fontSize:9, fontWeight:800, letterSpacing:'.07em', textTransform:'uppercase', color:'var(--fg2)', whiteSpace:'nowrap' }}>Qtd. equip.</span>
-                    <input type="number" className="input" min="1" max="99"
-                      value={equips.elevador.qty}
-                      onChange={e => setEquipField('elevador', 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                      aria-label="Quantidade de Elevadores"
-                      style={{ width:68, textAlign:'center' }}/>
-                  </div>
-                  <div style={{ display:'flex', flexDirection:'column', gap:2 }}>
-                    <span style={{ fontSize:9, fontWeight:800, letterSpacing:'.07em', textTransform:'uppercase', color:'var(--fg2)', whiteSpace:'nowrap' }}>Qtd. paradas</span>
-                    <input type="number" className="input" min="1" max="99"
-                      value={equips.elevador.paradas}
-                      onChange={e => setEquipField('elevador', 'paradas', Math.max(1, parseInt(e.target.value) || 1))}
-                      aria-label="Quantidade de paradas do elevador"
-                      style={{ width:82, textAlign:'center' }}/>
-                  </div>
-                </div>
-              )}
-
-              {/* Outros equipamentos marcados: campo simples */}
-              {key !== 'elevador' && equips[key].checked && (
-                <input type="number" className="input" min="1" max="99"
-                  value={equips[key].qty}
-                  onChange={e => setEquipField(key, 'qty', Math.max(1, parseInt(e.target.value) || 1))}
-                  placeholder="Qtd"
-                  aria-label={`Quantidade de ${label}`}
-                  style={{ width:72, textAlign:'center' }}/>
-              )}
-            </div>
-          ))}
-
-          {/* tipo de empreendimento — aparece ao selecionar ao menos 1 */}
-          {hasEquip && (
-            <div className="stack" style={{ gap:4, marginTop:2 }}>
-              <label className="up-eyebrow muted">Tipo de empreendimento *</label>
-              <select className="input" value={tipoEquip} onChange={e => setTipoEquip(e.target.value)}>
-                <option value="">Selecione…</option>
-                {TIPO_EQUIP_OPTS.map(o => <option key={o}>{o}</option>)}
+          <label className="up-eyebrow muted">Cliente (CNPJ/CPF)</label>
+          <div className="grid-2" style={{ gap:12 }}>
+            <div className="stack" style={{ gap:4 }}>
+              <label className="up-eyebrow muted">Tipo de pessoa</label>
+              <select className="input" value={f.tipoPessoa} onChange={e => set('tipoPessoa', e.target.value)}>
+                <option value="PJ">Pessoa Jurídica</option>
+                <option value="PF">Pessoa Física</option>
               </select>
             </div>
-          )}
-
-          {/* especificações do elevador — aparece quando elevador marcado */}
-          {hasElevador && (
-            <div style={{ background:'var(--vp-gray-50)', border:'1px solid var(--border)', padding:'10px 12px', marginTop:2 }}>
-              <div style={{ fontSize:11, fontWeight:800, letterSpacing:'.1em', textTransform:'uppercase', marginBottom:10 }}>
-                Especificações do Elevador
-              </div>
-              <div className="grid-2" style={{ gap:10 }}>
-                <div className="stack" style={{ gap:4 }}>
-                  <label className="up-eyebrow muted">Carga (kg) *</label>
-                  <input className="input" type="number"
-                    value={elevSpec.carga} onChange={e => setElev('carga', e.target.value)}
-                    placeholder="Ex: 450, 600, 1000"/>
-                </div>
-                <div className="stack" style={{ gap:4 }}>
-                  <label className="up-eyebrow muted">Vão de porta (cm) *</label>
-                  <input className="input" type="text"
-                    value={elevSpec.vao} onChange={e => setElev('vao', e.target.value)}
-                    placeholder="Ex: 90, 100, 110"/>
-                </div>
-                <div className="stack" style={{ gap:4 }}>
-                  <label className="up-eyebrow muted">Tipo de abertura *</label>
-                  <select className="input" value={elevSpec.abertura} onChange={e => setElev('abertura', e.target.value)}>
-                    {ABERTURA_OPTS.map(o => <option key={o}>{o}</option>)}
-                  </select>
-                </div>
-                <div className="stack" style={{ gap:4 }}>
-                  <label className="up-eyebrow muted">Acabamento *</label>
-                  <div style={{ display:'flex', gap:20, alignItems:'center', height:32 }}>
-                    {['Bege','Inox'].map(op => (
-                      <label key={op} style={{ display:'flex', alignItems:'center', gap:6, cursor:'pointer', fontSize:13 }}>
-                        <input type="radio" name="elev-acabamento" value={op}
-                          checked={elevSpec.acabamento === op}
-                          onChange={() => setElev('acabamento', op)}
-                          style={{ accentColor:'#f5c400' }}/>
-                        {op}
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              </div>
+          </div>
+          <div className="row gap-2" style={{ alignItems:'flex-end' }}>
+            <div className="stack" style={{ gap:4, flex:1 }}>
+              <label className="up-eyebrow muted">{f.tipoPessoa === 'PF' ? 'CPF' : 'CNPJ'}</label>
+              <input className="input" type="text"
+                value={f.tipoPessoa === 'PF' ? f.cpf : f.cnpj}
+                onChange={e => { set(f.tipoPessoa === 'PF' ? 'cpf' : 'cnpj', e.target.value); setStatusOmie(null); }}
+                placeholder={f.tipoPessoa === 'PF' ? '000.000.000-00' : '00.000.000/0000-00'}
+                disabled={f.documentoPendente}/>
             </div>
+            {f.tipoPessoa !== 'PF' && (
+              <Button variant="outline" onClick={buscarCnpj} disabled={buscandoCnpj || f.documentoPendente}>
+                {buscandoCnpj ? 'Buscando…' : 'Buscar CNPJ'}
+              </Button>
+            )}
+          </div>
+          {statusOmie && f.tipoPessoa !== 'PF' && !f.documentoPendente && (
+            <OmieStatusBox status={statusOmie}/>
           )}
+          <label className="row gap-2" style={{ alignItems:'center', fontSize:12.5, cursor:'pointer' }}>
+            <input type="checkbox" checked={f.documentoPendente}
+              onChange={e => {
+                const checked = e.target.checked;
+                setF(p => ({ ...p, documentoPendente: checked, ...(checked ? { cnpj:'', cpf:'' } : {}) }));
+              }}/>
+            CPF ou CNPJ será inserido depois
+          </label>
+          <div className="stack" style={{ gap:4 }}>
+            <label className="up-eyebrow muted">Razão Social</label>
+            <input className="input" type="text" value={f.razaoSocial}
+              onChange={e => set('razaoSocial', e.target.value)} placeholder="Preenchido automaticamente pelo CNPJ"/>
+          </div>
+          <p style={{ fontSize:11.5, color:'var(--fg3)', margin:0 }}>
+            Sem CNPJ/CPF ainda? Marque a opção acima, ou deixe em branco e complete depois — direto no
+            Formulário (busca o mesmo jeito, e evita duplicar cliente).
+          </p>
         </div>
 
-        <div className="grid-2" style={{ gap:12 }}>
+        <div className="grid-3" style={{ gap:12 }}>
+          {/* Status antigo fora da lista padrão continua selecionável, pra
+              editar um lead não trocar o status dele sem querer. */}
+          {fld('Status', 'status', 'text', '', LEAD_STATUSES.includes(f.status) ? LEAD_STATUSES : [f.status, ...LEAD_STATUSES])}
           {fld('Origem', 'origin', 'text', '', ['Site','Indicação','LinkedIn','Cold Call','Evento','WhatsApp','Email'])}
           {fld('Prioridade', 'priority', 'text', '', ['Alta','Média','Baixa'])}
         </div>
@@ -271,7 +477,107 @@ function ModalNovoLead({ onClose, onSaved, onCreateCotacao }) {
           {fld('Responsável (Comercial)', 'owner', 'text', 'Nome do vendedor')}
           {fld('Valor estimado (R$)', 'value', 'number', '0')}
         </div>
+        <div className="grid-2" style={{ gap:12 }}>
+          {fld('Comissão (%) — manual', 'comissaoPct', 'number', `${COMISSAO_PADRAO_PCT} (padrão, se deixar em branco)`)}
+        </div>
         {fld('Próxima ação', 'next', 'text', 'Ex.: Enviar proposta, Agendar visita…')}
+      </div>
+    </Modal>
+  );
+}
+
+/* ---------- MODAL: Excluir Lead (26/09) ----------
+   Sempre com confirmação. Soft-delete (leads.excluido_em/excluido_por) —
+   o registro continua no banco; só sai das listagens. Hard delete não
+   serve: cotacoes/formularios_elevador têm FK NO ACTION pra leads
+   (bloqueariam) e dossier_obra.lead_id ficaria órfão. Antes de confirmar,
+   mostra o que está ligado a este lead, pra ninguém excluir às cegas um
+   lead que já virou obra. */
+function ModalExcluirLead({ lead, onClose, onExcluido }) {
+  const [vinculos, setVinculos] = React.useState(null); // null = carregando
+  const [excluindo, setExcluindo] = React.useState(false);
+
+  React.useEffect(() => {
+    let alive = true;
+    const sb = comercialSb();
+    if (!sb) { setVinculos({ erro: true }); return; }
+    // Limite de 6s por consulta: a verificação é só informativa — se a
+    // rede travar, o modal avisa "não foi possível verificar" e libera a
+    // confirmação, em vez de deixar o botão desabilitado pra sempre.
+    const contar = (tabela) => Promise.race([
+      Promise.resolve(
+        sb.from(tabela).select('id', { count: 'exact', head: true }).eq('lead_id', String(lead.id))
+      ).then(({ count, error }) => (error ? null : (count || 0))).catch(() => null),
+      new Promise((res) => setTimeout(() => res(null), 6000)),
+    ]);
+    Promise.all([contar('dossier_obra'), contar('formularios_elevador'), contar('cotacoes')])
+      .then(([dossier, formularios, cotacoes]) => {
+        if (alive) setVinculos({ dossier, formularios, cotacoes });
+      });
+    return () => { alive = false; };
+  }, [lead.id]);
+
+  const confirmar = async () => {
+    const sb = comercialSb();
+    if (!sb) return window.toast('Banco de dados indisponível — recarregue a página.', 'error');
+    setExcluindo(true);
+    try {
+      // .select() pra confirmar que a linha foi mesmo alterada — um update
+      // barrado por RLS volta sem erro e sem linhas.
+      const { data, error } = await sb.from('leads')
+        .update({ excluido_em: new Date().toISOString(), excluido_por: (window.__VP_USER && window.__VP_USER.email) || null })
+        .eq('id', lead.id).select('id');
+      if (error) throw error;
+      if (!data || !data.length) throw new Error('nenhum registro foi alterado');
+      window.VPLog && window.VPLog.registrar({ modulo: 'Comercial', acao: 'Lead excluído', alvo: lead.building, alvo_id: lead.id });
+      window.toast('Lead excluído.', 'success');
+      onExcluido(lead.id);
+    } catch (e) {
+      window.toast('Erro ao excluir lead: ' + (e.message || e), 'error');
+      setExcluindo(false);
+    }
+  };
+
+  const itens = vinculos && !vinculos.erro ? [
+    vinculos.dossier ? `${vinculos.dossier} Dossiê(s) da Obra` : null,
+    vinculos.formularios ? `${vinculos.formularios} Formulário(s)` : null,
+    vinculos.cotacoes ? `${vinculos.cotacoes} Cotação(ões)` : null,
+  ].filter(Boolean) : [];
+  const vinculosFalharam = vinculos && (vinculos.erro || vinculos.dossier === null || vinculos.formularios === null || vinculos.cotacoes === null);
+
+  return (
+    <Modal title="Excluir lead?" onClose={excluindo ? () => {} : onClose} width={500}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={excluindo}>Cancelar</Button>
+        <Button variant="danger" icon="trash" onClick={confirmar} disabled={excluindo || vinculos === null}>
+          {excluindo ? 'Excluindo…' : 'Sim, excluir lead'}
+        </Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="panel-soft">
+          <div style={{ fontWeight: 700, fontSize: 15 }}>{lead.building || '—'}</div>
+          <div className="cell-sub" style={{ marginTop: 4 }}>
+            {lead.id}{lead.contact ? ' · ' + lead.contact : ''}{lead.date ? ' · criado em ' + fmtDate(lead.date) : ''}
+          </div>
+        </div>
+        {vinculos === null && (
+          <div className="muted small">Verificando dossiês, formulários e cotações ligados a este lead…</div>
+        )}
+        {itens.length > 0 && (
+          <div className="callout callout--warning" style={{ display: 'block' }}>
+            <div className="callout__title">Este lead tem registros ligados: {itens.join(', ')}.</div>
+            <div className="callout__sub">
+              Eles não são apagados e continuam acessíveis nos seus módulos — só o lead sai da lista.
+            </div>
+          </div>
+        )}
+        {vinculosFalharam && (
+          <div className="muted small">Não foi possível verificar todos os registros ligados a este lead (dossiê, formulário, cotação).</div>
+        )}
+        <p style={{ fontSize: 13, color: 'var(--fg2)', margin: 0 }}>
+          O lead sai da lista de Leads, da busca e do Dashboard. O registro fica guardado no banco
+          (com data e autor da exclusão) e pode ser recuperado pelo suporte, se necessário.
+        </p>
       </div>
     </Modal>
   );
@@ -284,36 +590,145 @@ function LeadsPage({ setRoute, setSubsel }) {
   const [search, setSearch] = React.useState("");
   const [owner, setOwner] = React.useState("Todos");
   const [showLead, setShowLead] = React.useState(false);
-  const [cotacaoPrefill, setCotacaoPrefill] = React.useState(null);
-  const [showCotFromLead, setShowCotFromLead] = React.useState(false);
+  const [leadExcluir, setLeadExcluir] = React.useState(null);
   const [page, setPage] = React.useState(0);
-  const PAGE_SIZE = 15;
+  const [pageSize, setPageSize] = React.useState(15);
+  const PAGE_SIZE = pageSize;
+  const [view, setView] = React.useState("lista");
 
+  // Não reseta `leads` pra null aqui: fazer isso re-renderiza LeadsPage no
+  // branch de "carregando" (que não inclui o modal na árvore) e desmonta
+  // qualquer ModalNovoLead aberto no meio do save — a tela "✓ Lead Criado!"
+  // nunca chegava a aparecer, reabria um modal novo em branco (bug real,
+  // achado testando o fluxo completo). `leads` já nasce null no useState
+  // inicial, então a primeira carga continua mostrando o esqueleto normal.
+  // Sem Supabase / erro de rede → lista vazia + toast, nunca "Carregando…"
+  // eterno (E03).
   const reloadLeads = () => {
-    setLeads(null);
-    window.__VP_SB.sb.from('leads').select('*').order('date', { ascending: false })
-      .then(({ data }) => setLeads(data || []));
+    const sb = comercialSb();
+    if (!sb) {
+      window.toast('Falha ao conectar com o banco de dados.', 'error');
+      setLeads([]);
+      return;
+    }
+    // cliente_omie = cliente vinculado (FK leads.cliente_id → clientes),
+    // só com o necessário pra coluna "Está no Omie desde".
+    Promise.resolve(sb.from('leads')
+      .select('*, cliente_omie:clientes(id, cnpj, cpf, omie_cadastrado_desde, omie_verificado_em)')
+      .is('excluido_em', null).order('date', { ascending: false }))
+      .then(({ data, error }) => {
+        if (error) {
+          window.toast('Erro ao carregar leads: ' + error.message, 'error');
+          setLeads((prev) => prev || []);
+          return;
+        }
+        setLeads(data || []);
+        verificarOmiePendentes(data || []);
+      })
+      .catch((e) => {
+        window.toast('Erro de conexão ao carregar leads: ' + (e.message || e), 'error');
+        setLeads((prev) => prev || []);
+      });
+  };
+
+  /* Clientes ainda não verificados no Omie (ou não encontrados há mais de
+     7 dias) são consultados em segundo plano, um por vez (o Omie tem
+     rate-limit), no máximo OMIE_LOTE por carga da lista — cada resultado
+     já aparece na coluna sem recarregar. Cobre clientes criados fora do
+     modal de Lead (ex.: pelo Formulário). */
+  const OMIE_LOTE = 10;
+  const verificandoOmie = React.useRef(new Set());
+  const verificarOmiePendentes = async (rows) => {
+    const pendentes = [];
+    rows.forEach((l) => {
+      const cli = l.cliente_omie;
+      if (cli && precisaVerificarOmie(cli) && !verificandoOmie.current.has(cli.id) && !pendentes.some((c) => c.id === cli.id)) pendentes.push(cli);
+    });
+    for (const cli of pendentes.slice(0, OMIE_LOTE)) {
+      verificandoOmie.current.add(cli.id);
+      try {
+        const omie = await buscarClienteOmie(String(cli.cnpj || cli.cpf).replace(/\D/g, ''));
+        const gravou = await gravarOmieNoCliente(cli.id, omie);
+        if (gravou) {
+          setLeads((prev) => (prev || []).map((l) => (
+            l.cliente_omie && l.cliente_omie.id === cli.id ? { ...l, cliente_omie: { ...l.cliente_omie, ...gravou } } : l
+          )));
+        }
+      } finally {
+        verificandoOmie.current.delete(cli.id);
+      }
+    }
   };
   React.useEffect(() => { reloadLeads(); }, []);
 
-  const statuses = ["Todos", "Em qualificação", "Aguardando cotação", "Proposta enviada", "Negociação", "Convertido", "Sem retorno"];
+  /* Kanban: arrasta o card pra outra coluna = muda o status do lead.
+     Atualização otimista (move na hora) + rollback se o update falhar;
+     mesmo padrão de log do resto do arquivo (window.VPLog.registrar). */
+  const moverLeadStatus = async (lead, novoStatus) => {
+    if (!lead || lead.status === novoStatus) return;
+    const anterior = lead.status;
+    setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, status: novoStatus } : l)));
+    const sb = comercialSb();
+    if (!sb) {
+      window.toast("Banco de dados indisponível — recarregue a página.", "error");
+      setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, status: anterior } : l)));
+      return;
+    }
+    const { error } = await sb.from("leads").update({ status: novoStatus }).eq("id", lead.id);
+    if (error) {
+      setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, status: anterior } : l)));
+      window.toast("Erro ao mover lead: " + error.message, "error");
+      return;
+    }
+    window.VPLog && window.VPLog.registrar({
+      modulo: "Comercial", acao: 'Lead movido de "' + anterior + '" para "' + novoStatus + '"',
+      alvo: lead.building, alvo_id: lead.id, detalhe: { de: anterior, para: novoStatus },
+    });
+
+    /* Lead convertido tem que virar cliente de verdade (pedido do usuário,
+       26/09) — criarOuVincularDeLead() é idempotente (não duplica se o
+       lead já tem cliente_id) e é a mesma função que proposta-store.js já
+       usa quando uma Proposta é assinada. */
+    if (novoStatus === "Convertido" && window.CadastrosClientesStore) {
+      try {
+        const clienteId = await window.CadastrosClientesStore.criarOuVincularDeLead(lead);
+        if (clienteId) setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, cliente_id: l.cliente_id || clienteId } : l)));
+      } catch (e) {
+        console.warn("[comercial] Erro ao converter lead em cliente (Kanban):", e);
+      }
+    }
+  };
+
+  const statuses = ["Todos", ...LEAD_STATUSES];
   const allLeads = leads || [];
   const owners = ["Todos", ...Array.from(new Set(allLeads.filter(l => l.owner).map(l => l.owner))).sort()];
 
   const rows = allLeads.filter(l => {
     if (status !== "Todos" && l.status !== status) return false;
     if (owner !== "Todos" && l.owner !== owner) return false;
-    if (search && !((l.building || "") + (l.contact || "") + (l.equip || "")).toLowerCase().includes(search.toLowerCase())) return false;
+    if (search && !((l.building || "") + (l.contact || "")).toLowerCase().includes(search.toLowerCase())) return false;
+    return true;
+  });
+  // Kanban ignora o filtro de status (as colunas SÃO os status) mas
+  // respeita responsável/busca, iguais à lista.
+  const kanbanRows = allLeads.filter(l => {
+    if (owner !== "Todos" && l.owner !== owner) return false;
+    if (search && !((l.building || "") + (l.contact || "")).toLowerCase().includes(search.toLowerCase())) return false;
     return true;
   });
   const totalPages = Math.max(1, Math.ceil(rows.length / PAGE_SIZE));
+  // Excluir o último lead da última página (ou filtrar) não pode deixar a
+  // tela numa página que não existe mais.
+  React.useEffect(() => { if (page > totalPages - 1) setPage(totalPages - 1); }, [page, totalPages]);
   const pageRows = rows.slice(page * PAGE_SIZE, (page + 1) * PAGE_SIZE);
 
   const stats = {
     total: allLeads.length,
     qualif: allLeads.filter(l => l.status === "Em qualificação").length,
     proposta: allLeads.filter(l => l.status === "Proposta enviada").length,
-    valor: allLeads.reduce((a, l) => a + (l.value || 0), 0),
+    // pipeline = só o que ainda está em aberto (Convertido e Sem retorno já saíram do funil — issue #663)
+    valor: allLeads.filter(l => l.status !== "Convertido" && l.status !== "Sem retorno").reduce((a, l) => a + (l.value || 0), 0),
+    convertidos: allLeads.filter(l => l.status === "Convertido").length,
   };
 
   if (leads === null) {
@@ -321,7 +736,7 @@ function LeadsPage({ setRoute, setSubsel }) {
       <div className="page fade-in">
         <div className="page-head">
           <div className="page-head__l">
-            <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Leads</div>
+            <div className="page-head__eyebrow"><span className="vp-rule"/>CRM · Leads</div>
             <h1 className="page-head__title">Pipeline de Leads</h1>
           </div>
         </div>
@@ -334,12 +749,16 @@ function LeadsPage({ setRoute, setSubsel }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Comercial · Leads</div>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>CRM · Leads</div>
           <h1 className="page-head__title">Pipeline de Leads</h1>
-          <p className="page-head__sub">{allLeads.length} leads ativos · pipeline {fmtBRL(stats.valor)} · conversão média 27%</p>
+          <p className="page-head__sub">{allLeads.length} leads ativos · pipeline {fmtBRL(stats.valor)} · {stats.convertidos} convertido{stats.convertidos === 1 ? "" : "s"} ({stats.total ? Math.round((stats.convertidos / stats.total) * 100) : 0}%)</p>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="download" onClick={() => window.csvDownload(rows.map(l => ({ id:l.id, predio:l.building, contato:l.contact, cargo:l.role, telefone:l.phone, email:l.email, equipamento:l.equip, origem:l.origin, status:l.status, responsavel:l.owner, valor:l.value, prioridade:l.priority, proxima_acao:l.next_action || l.next, data:l.date })), 'leads.csv')}>Exportar</Button>
+          <div className="seg" role="group" aria-label="Modo de visualização">
+            <button className={view === "lista" ? "is-active" : ""} onClick={() => setView("lista")} title="Lista" aria-label="Ver como lista"><Icon.list size={14}/></button>
+            <button className={view === "kanban" ? "is-active" : ""} onClick={() => setView("kanban")} title="Kanban" aria-label="Ver como quadro Kanban"><Icon.grid size={14}/></button>
+          </div>
+          <Button variant="outline" icon="download" onClick={() => window.csvDownload(rows.map(l => ({ id:l.id, predio:l.building, contato:l.contact, cargo:l.role, telefone:l.phone, email:l.email, equipamento:l.equip, origem:l.origin, status:l.status, responsavel:l.owner, valor:l.value, prioridade:l.priority, proxima_acao:l.next_action || l.next, data:l.date, no_omie_desde:isoParaDataBR(l.cliente_omie && l.cliente_omie.omie_cadastrado_desde) })), 'leads.csv')}>Exportar</Button>
           {/* Removido o botão "Filtros" (era só um toast ecoando o estado dos
               filtros de status/responsável que já existem, visíveis e
               funcionais, logo abaixo — CTA redundante, achado #47). */}
@@ -348,41 +767,54 @@ function LeadsPage({ setRoute, setSubsel }) {
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
-        <KPI label="Leads ativos" value={stats.total} sub="mês" delta={stats.total > 0 ? `+${stats.total}` : "0"} deltaDir="up" icon="flag"/>
-        <KPI label="Em qualificação" value={stats.qualif} sub="hot leads" delta={`+${stats.qualif}`} deltaDir="up" icon="zap"/>
-        <KPI label="Propostas no ar" value={stats.proposta} sub="aguardando" delta="0" deltaDir="up" icon="fileText"/>
-        <KPI label="Valor pipeline" value={fmtBRL(stats.valor)} sub="potencial" delta="—" deltaDir="up" icon="dollar"/>
+        {/* Sem "variação" inventada: não há comparação com mês anterior nesta tela (issue #663). */}
+        <KPI label="Leads ativos" value={stats.total} sub="no total" icon="flag"/>
+        <KPI label="Em qualificação" value={stats.qualif} sub="em avaliação" icon="zap"/>
+        <KPI label="Propostas no ar" value={stats.proposta} sub="aguardando o cliente" icon="fileText"/>
+        <KPI label="Valor pipeline" value={fmtBRL(stats.valor)} sub="em aberto" icon="dollar"/>
       </div>
 
       <div className="tbar">
-        <div className="seg">
-          {statuses.map(s => (
-            <button key={s} className={status === s ? "is-active" : ""} onClick={() => setStatus(s)}>{s}</button>
-          ))}
-        </div>
-        <div className="divider-v"/>
-        <select className="input" style={{ width: 160, height: 28, fontSize: 12 }} value={owner} onChange={(e) => setOwner(e.target.value)}>
+        {view === "lista" && (
+          <>
+            <div className="seg">
+              {statuses.map(s => (
+                <button key={s} className={status === s ? "is-active" : ""} onClick={() => setStatus(s)}>{s}</button>
+              ))}
+            </div>
+            <div className="divider-v"/>
+          </>
+        )}
+        <select className="input" style={{ width: 160, height: 28, fontSize: 12 }} value={owner} onChange={(e) => { setOwner(e.target.value); setPage(0); }}>
           {owners.map(o => <option key={o}>{o}</option>)}
         </select>
+        {view === "lista" && (
+          <select className="input" style={{ width: 130, height: 28, fontSize: 12 }} value={pageSize}
+            onChange={(e) => { setPageSize(Number(e.target.value)); setPage(0); }} aria-label="Leads por página">
+            {[10, 15, 25, 50].map(n => <option key={n} value={n}>{n} por página</option>)}
+          </select>
+        )}
         <div className="spacer"/>
         <div className="search">
           <Icon.search size={12} color="var(--fg3)"/>
-          <input placeholder="Buscar prédio, contato, equipamento…" value={search} onChange={(e) => setSearch(e.target.value)}/>
+          <input placeholder="Buscar prédio, contato…" value={search} onChange={(e) => setSearch(e.target.value)}/>
         </div>
       </div>
 
+      {view === "lista" && (
+      <>
       <div className="table-wrap">
         <table className="t">
           <thead><tr>
             <th>ID</th>
             <th>Lead / Prédio</th>
             <th>Contato</th>
-            <th>Equipamento</th>
             <th>Origem</th>
             <th>Status</th>
             <th>Resp.</th>
             <th className="text-right">Valor</th>
             <th>Próx. Ação</th>
+            <th title="Data de cadastro do cliente (CNPJ/CPF) no ERP Omie. Em branco: não está no Omie ou o lead ainda não tem CNPJ/CPF.">Está no Omie desde</th>
             <th></th>
           </tr></thead>
           <tbody>
@@ -405,7 +837,6 @@ function LeadsPage({ setRoute, setSubsel }) {
                   <div className="cell-main">{l.contact}</div>
                   <div className="cell-sub">{l.role} · {l.phone}</div>
                 </td>
-                <td><span style={{ fontSize: 12.5, color: "var(--fg2)" }}>{l.equip}</span></td>
                 <td><Badge variant="outline">{l.origin}</Badge></td>
                 <td><StatusBadge status={l.status}/></td>
                 <td>
@@ -417,11 +848,22 @@ function LeadsPage({ setRoute, setSubsel }) {
                 <td className="cell-money">{fmtBRL(l.value)}</td>
                 <td>
                   <div style={{ fontSize: 12, color: "var(--fg1)", fontWeight: 500 }}>{l.next_action || l.next || "—"}</div>
-                  <Badge variant={String(l.priority).toLowerCase() === "alta" ? "danger" : String(l.priority).toLowerCase() === "media" || l.priority === "Média" ? "warning" : "neutral"} style={{ marginTop: 4 }}>
-                    {({ alta: "Alta", media: "Média", baixa: "Baixa" }[String(l.priority || "").toLowerCase()] || l.priority || "—")}
+                  <Badge variant={PRIORITY_VARIANT[priorityKey(l.priority)] || "neutral"} style={{ marginTop: 4 }}>
+                    {PRIORITY_LABEL[priorityKey(l.priority)] || l.priority || "—"}
                   </Badge>
                 </td>
-                <td><Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button></td>
+                {/* Em branco (pedido do usuário) quando não está no Omie, sem
+                    CNPJ/CPF ou ainda não verificado. */}
+                <td><span className="mono" style={{ fontSize: 12 }}>
+                  {isoParaDataBR(l.cliente_omie && l.cliente_omie.omie_cadastrado_desde)}
+                </span></td>
+                <td>
+                  <div className="row gap-2" style={{ justifyContent: "flex-end" }}>
+                    <Button variant="ghost" size="sm" icon="chevRight" title="Abrir" aria-label="Abrir">Abrir</Button>
+                    <Button variant="ghost" size="sm" icon="trash" title="Excluir lead" aria-label="Excluir lead"
+                      onClick={(ev) => { ev.stopPropagation(); setLeadExcluir(l); }}/>
+                  </div>
+                </td>
               </tr>
             ))}
           </tbody>
@@ -436,36 +878,120 @@ function LeadsPage({ setRoute, setSubsel }) {
           <Button variant="ghost" size="sm" icon="chevRight" onClick={() => setPage(p => Math.min(totalPages - 1, p + 1))} disabled={page >= totalPages - 1}/>
         </div>
       </div>
+      </>
+      )}
+
+      {view === "kanban" && (
+        <LeadsKanban rows={kanbanRows} onOpen={(l) => { setSubsel(l); setRoute("lead-detail"); }} onMove={moverLeadStatus}/>
+      )}
+
+      {leadExcluir && (
+        <ModalExcluirLead
+          lead={leadExcluir}
+          onClose={() => setLeadExcluir(null)}
+          onExcluido={(id) => {
+            setLeadExcluir(null);
+            setLeads((prev) => (prev || []).filter((x) => x.id !== id));
+          }}
+        />
+      )}
 
       {showLead && (
         <ModalNovoLead
           onClose={() => setShowLead(false)}
           onSaved={reloadLeads}
-          onCreateCotacao={(lead) => {
+          onOpenFormulario={(lead) => {
             setShowLead(false);
-            setCotacaoPrefill(lead);
-            setShowCotFromLead(true);
+            /* Formulário aceita { __prefillFromLead } no subsel e
+               pré-preenche telefone/e-mail/observações + cliente (quando o
+               Lead já tem cliente_id) — equipamento é sempre alocado lá
+               dentro, nunca herdado do Lead. */
+            setSubsel({ __prefillFromLead: lead });
+            setRoute('formulario-elevador');
           }}
-        />
-      )}
-      {showCotFromLead && (
-        <ModalNovaCotacao
-          onClose={() => { setShowCotFromLead(false); setCotacaoPrefill(null); }}
-          onSaved={() => {
-            reloadLeads();
-            window.toast('Cotação criada! Acesse Comercial → Cotações China.', 'success');
-          }}
-          prefill={cotacaoPrefill}
         />
       )}
     </div>
   );
 }
 
-/* ---------- LEAD DETAIL ---------- */
-function LeadDetail({ lead, setRoute, setSubsel }) {
-  const [creatingDossier, setCreatingDossier] = React.useState(false);
+/* ---------- LEADS KANBAN ---------- */
+/* Quadro por status (LEAD_STATUSES) - arrastar um card muda o status via
+   onMove (mesma escrita que o modal de edicao usa). Ignora paginacao (a
+   base de leads real e pequena hoje; sem isso um card "sumiria" ao trocar
+   de pagina no meio do drag). Leads com status legado fora de
+   LEAD_STATUSES (dado antigo, pre-26/09) caem numa coluna "Outros" so de
+   leitura - nao da pra arrastar PARA la (nao e um status valido) mas o
+   lead continua visivel em vez de desaparecer do quadro. */
+function LeadsKanban({ rows, onOpen, onMove }) {
+  const [dragId, setDragId] = React.useState(null);
+  const [overCol, setOverCol] = React.useState(null);
 
+  const conhecidos = new Set(LEAD_STATUSES);
+  const colunas = LEAD_STATUSES.map((s) => ({ status: s, label: s, leads: rows.filter((l) => l.status === s) }));
+  const outros = rows.filter((l) => !conhecidos.has(l.status));
+  if (outros.length) colunas.push({ status: null, label: "Outros", leads: outros });
+
+  return (
+    <div className="row" style={{ gap: 12, overflowX: "auto", paddingBottom: 8, alignItems: "flex-start" }}>
+      {colunas.map((col) => {
+        const valorTotal = col.leads.reduce((a, l) => a + (l.value || 0), 0);
+        return (
+          <div key={col.label}
+            onDragOver={(e) => { if (col.status) { e.preventDefault(); setOverCol(col.label); } }}
+            onDragLeave={() => setOverCol((c) => (c === col.label ? null : c))}
+            onDrop={(e) => {
+              e.preventDefault();
+              setOverCol(null);
+              const id = e.dataTransfer.getData("text/lead-id");
+              const lead = rows.find((l) => l.id === id);
+              if (lead && col.status) onMove(lead, col.status);
+            }}
+            style={{
+              flex: "0 0 260px", background: overCol === col.label ? "var(--bg2)" : "var(--bg1)",
+              border: "1px solid var(--border)", borderRadius: 8, padding: 10, minHeight: 160,
+            }}>
+            <div className="row sb" style={{ marginBottom: 4 }}>
+              <div style={{ fontSize: 12, fontWeight: 600 }}>{col.label}</div>
+              <Badge variant="neutral">{col.leads.length}</Badge>
+            </div>
+            <div style={{ fontSize: 11, color: "var(--fg3)", marginBottom: 10 }}>{fmtBRL(valorTotal)}</div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {col.leads.length === 0 ? (
+                <div style={{ fontSize: 11, color: "var(--fg3)", textAlign: "center", padding: "16px 0" }}>Sem leads</div>
+              ) : col.leads.map((l) => (
+                <div key={l.id}
+                  draggable={!!col.status}
+                  onDragStart={(e) => { e.dataTransfer.setData("text/lead-id", l.id); setDragId(l.id); }}
+                  onDragEnd={() => setDragId(null)}
+                  onClick={() => onOpen(l)}
+                  className="card sharp"
+                  style={{ padding: 10, cursor: col.status ? "grab" : "default", opacity: dragId === l.id ? 0.4 : 1 }}>
+                  <div style={{ fontSize: 12, fontWeight: 600 }}>{l.building}</div>
+                  <div style={{ fontSize: 11, color: "var(--fg3)", marginBottom: 6 }}>{l.contact}</div>
+                  <div className="row sb">
+                    <Badge variant={PRIORITY_VARIANT[priorityKey(l.priority)] || "neutral"}>
+                      {PRIORITY_LABEL[priorityKey(l.priority)] || l.priority || "-"}
+                    </Badge>
+                    <span style={{ fontSize: 11, fontWeight: 600 }}>{fmtBRL(l.value)}</span>
+                  </div>
+                  {l.owner ? <div style={{ fontSize: 10, color: "var(--fg3)", marginTop: 6 }}>{l.owner}</div> : null}
+                </div>
+              ))}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+/* ---------- LEAD DETAIL ---------- */
+/* E11 (26/09): o `if (!lead) return` ficava ANTES de vários hooks — se a
+   mesma instância alternasse entre sem lead e com lead, o React quebrava
+   ("Rendered more hooks than during the previous render"). O estado vazio
+   fica aqui fora e os hooks todos em LeadDetailView, sempre na mesma ordem. */
+function LeadDetail({ lead, setRoute, setSubsel }) {
   if (!lead) {
     return <EmptyStateRedirect
       icon="flag"
@@ -474,12 +1000,50 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
       ctaLabel="Ir para Listagem de Leads"
       onCta={() => setRoute("leads")}/>;
   }
+  return <LeadDetailView lead={lead} setRoute={setRoute} setSubsel={setSubsel}/>;
+}
+
+function LeadDetailView({ lead, setRoute, setSubsel }) {
+  const [creatingDossier, setCreatingDossier] = React.useState(false);
+  const [showEditLead, setShowEditLead] = React.useState(false);
+  /* Cliente vinculado (CNPJ) — busca real via lead.cliente_id. Sem vínculo
+     ainda → null, e a tela oferece "Abrir Formulário" pra completar lá
+     (mesma busca por CNPJ, sem duplicar cliente). */
+  const [cliente, setCliente] = React.useState(undefined); // undefined = carregando, null = sem vínculo
+  React.useEffect(() => {
+    let alive = true;
+    /* E11: trocar de lead (A com cliente → B) mantinha o cliente de A na
+       tela até a nova busca responder. Zera pra "carregando" na hora; o
+       `alive` descarta a resposta atrasada do lead anterior. */
+    setCliente(lead.cliente_id ? undefined : null);
+    if (!lead.cliente_id) return;
+    const store = window.CadastrosClientesStore;
+    if (!store?.obter) { setCliente(null); return; }
+    Promise.resolve(store.obter(lead.cliente_id))
+      .then((c) => { if (alive) setCliente(c || null); })
+      .catch((e) => {
+        console.warn('[comercial] Erro ao carregar cliente do lead:', e);
+        if (alive) {
+          setCliente(null); // sai do "Carregando…"
+          window.toast?.('Erro ao carregar dados do cliente.', 'warning');
+        }
+      });
+    return () => { alive = false; };
+  }, [lead.cliente_id]);
+
+  const abrirFormulario = () => {
+    setSubsel({ __prefillFromLead: lead });
+    setRoute('formulario-elevador');
+  };
+
   /* Histórico real por lead: criação (intrínseca) + eventos do VPLog que
      têm alvo_id = lead.id. Sem dados → estado vazio honesto (não mais mock). */
   const [history, setHistory] = React.useState(null); // null = carregando
   const fmtHistTs = (ts) => {
     if (!ts) return "—";
-    const d = new Date(ts);
+    // "aaaa-mm-dd" puro vira meia-noite UTC e, no fuso do Brasil, cai no dia anterior (issue #663): monta a data local.
+    const soData = typeof ts === "string" && /^\d{4}-\d{2}-\d{2}$/.test(ts.trim());
+    const d = soData ? new Date(Number(ts.slice(0, 4)), Number(ts.slice(5, 7)) - 1, Number(ts.slice(8, 10))) : new Date(ts);
     if (isNaN(d.getTime())) return "—";
     const dateStr = d.toLocaleDateString("pt-BR", { day: "2-digit", month: "short" });
     const hasTime = typeof ts === "string" && ts.includes("T");
@@ -487,11 +1051,12 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
   };
   React.useEffect(() => {
     let alive = true;
+    setHistory(null); // E11: não mostra o histórico do lead anterior enquanto carrega
     (async () => {
       const rows = [];
       if (lead.date) rows.push({ t: "Lead criado" + (lead.origin ? " via " + lead.origin : ""), who: lead.owner || "Sistema", ts: lead.date, icon: "plus" });
       try {
-        const sb = window.__VP_SB && window.__VP_SB.sb;
+        const sb = comercialSb();
         if (sb && lead.id != null) {
           const { data } = await sb.from("vp_logs").select("*").eq("alvo_id", String(lead.id)).order("criado_em", { ascending: false }).limit(50);
           (data || []).forEach((l) => rows.push({
@@ -508,15 +1073,44 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
     return () => { alive = false; };
   }, [lead.id]);
 
+  /* 14/09 — achado real (auditoria do tour.md): "Qualificar → Dossier"
+     sempre criava um Dossier novo, nunca checava se este Lead já tinha
+     um — clicar duas vezes enquanto o status ainda permitia duplicava o
+     prontuário da obra. Agora checa por lead_id antes de criar; se já
+     existe, o botão abre o existente em vez de criar outro. */
+  const [dossierExistente, setDossierExistente] = React.useState(undefined); // undefined = carregando, null = não existe
+  React.useEffect(() => {
+    let alive = true;
+    setDossierExistente(undefined); // E11: senão "Abrir Dossier" abriria o dossier do lead anterior
+    const sb = comercialSb();
+    if (!sb || lead.id == null) { setDossierExistente(null); return; }
+    Promise.resolve(sb.from('dossier_obra').select('id').eq('lead_id', lead.id).maybeSingle())
+      .then(({ data }) => { if (alive) setDossierExistente(data || null); })
+      .catch(() => { if (alive) setDossierExistente(null); });
+    return () => { alive = false; };
+  }, [lead.id]);
+
   const criarDossier = async () => {
+    // Checagem de dossier existente ainda em andamento — criar agora podia
+    // duplicar o prontuário (mesma proteção do achado de 14/09).
+    if (dossierExistente === undefined) return window.toast('Verificando se este lead já tem Dossier… tente de novo em instantes.', 'info');
+    if (dossierExistente) {
+      setSubsel?.(dossierExistente.id);
+      setRoute('dossier-obra');
+      return;
+    }
     if (lead.status !== "Em qualificação" && lead.status !== "Aguardando cotação") {
       return window.toast('Lead já está avançado. Crie Dossier manualmente.', 'warning');
+    }
+    if (!window.__DOSSIER?.criarDeDossier) {
+      return window.toast('Módulo de Dossier indisponível — recarregue a página.', 'error');
     }
     setCreatingDossier(true);
     try {
       const dossier = await window.__DOSSIER.criarDeDossier(lead);
       window.VPLog && window.VPLog.registrar({ modulo: "Comercial", acao: "Lead convertido em Dossiê da Obra", alvo: lead.building, alvo_id: lead.id, detalhe: { dossier_id: dossier.id } });
       window.toast('Dossier criado com sucesso! ID: ' + dossier.id, 'success');
+      setDossierExistente({ id: dossier.id });
       setSubsel?.(dossier.id);
       setRoute('dossier-obra');
     } catch (e) {
@@ -535,43 +1129,53 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>{lead.id} · {lead.origin}</div>
           <h1 className="page-head__title">{lead.building}</h1>
-          <p className="page-head__sub">{lead.equip}</p>
+          <p className="page-head__sub">
+            {cliente
+              ? `${cliente.razao_social || '—'}${cliente.cnpj ? ' · ' + (window.cadFmtDoc ? window.cadFmtDoc(cliente.cnpj) : cliente.cnpj) : ''}`
+              : cliente === undefined ? 'Carregando cliente…' : (lead.equip || 'Sem cliente (CNPJ) vinculado ainda')}
+          </p>
           <div className="row gap-3" style={{ marginTop: 4 }}>
             <StatusBadge status={lead.status}/>
-            <Badge variant={String(lead.priority).toLowerCase() === "alta" ? "danger" : "warning"} dot>
-              {({ alta: "Alta", media: "Média", baixa: "Baixa" }[String(lead.priority || "").toLowerCase()] || lead.priority)}
+            <Badge variant={PRIORITY_VARIANT[priorityKey(lead.priority)] || "neutral"} dot>
+              {PRIORITY_LABEL[priorityKey(lead.priority)] || lead.priority || "—"}
             </Badge>
-            <span className="muted small">Última atualização: —</span>
+            {/* leads não tem updated_at — usa o evento mais recente do
+                histórico (vp_logs), senão a criação do lead (E08). */}
+            <span className="muted small">Última atualização: {fmtHistTs((history && history[0] && history[0].ts) || lead.created_at || lead.date)}</span>
           </div>
         </div>
         <div className="page-head__r">
-          <Button variant="outline" icon="message" onClick={() => { const p = (lead.phone || '').replace(/\D/g,''); p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
+          <Button variant="outline" icon="message" onClick={() => { const p0 = (lead.phone || '').replace(/\D/g,''); const p = (p0.length > 11 && p0.startsWith('55')) ? p0.slice(2) : p0; p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
           <Button variant="outline" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
+          <Button variant="outline" icon="edit" onClick={() => setShowEditLead(true)}>Editar Lead</Button>
+          <Button variant="outline" icon="ruler" onClick={abrirFormulario}>Abrir Formulário</Button>
           <Button variant="primary" icon="zap" onClick={criarDossier} disabled={creatingDossier}>
-            {creatingDossier ? 'Criando…' : 'Qualificar → Dossier'}
+            {creatingDossier ? 'Criando…' : dossierExistente ? 'Abrir Dossier' : 'Qualificar → Dossier'}
           </Button>
         </div>
       </div>
 
       <div className="split">
         <div className="stack">
-          <Card title="Resumo da oportunidade" sub="dados do prédio + escopo">
-            <div className="grid-3" style={{ gap: 24 }}>
-              <KvBlock label="Valor estimado" value={fmtBRL(lead.value)} mono/>
-              <KvBlock label="Marca do equipamento" value="Atlas Schindler 9300AE"/>
-              <KvBlock label="Quantidade" value="4 elevadores + 2 esc."/>
-              <KvBlock label="Ano construção prédio" value="1998"/>
-              <KvBlock label="Tipo serviço" value="Modernização total"/>
-              <KvBlock label="Prazo desejado" value="Q3 2026"/>
-            </div>
-            <div className="hr"/>
-            <div className="up-eyebrow muted">Descrição enviada pelo cliente</div>
-            <p className="vp-small" style={{ marginTop: 8 }}>
-              "Estamos buscando proposta para modernização completa dos 4 elevadores Schindler 9300AE
-              (incluindo botoeiras, displays, quadro de comando e cabos de tração). Prioridade alta —
-              os elevadores apresentam falhas frequentes e estamos com reclamações dos moradores.
-              Por favor, agendar visita técnica o quanto antes."
-            </p>
+          <Card title="Cliente" sub="identificação — equipamento é alocado no Formulário">
+            {cliente === undefined ? (
+              <div className="muted small" style={{ padding: "8px 0" }}>Carregando…</div>
+            ) : cliente ? (
+              <div className="grid-3" style={{ gap: 24 }}>
+                <KvBlock label="Razão social" value={cliente.razao_social}/>
+                <KvBlock label="CNPJ" value={window.cadFmtDoc ? window.cadFmtDoc(cliente.cnpj) : cliente.cnpj} mono/>
+                <KvBlock label="Valor estimado" value={fmtBRL(lead.value)} mono/>
+              </div>
+            ) : (
+              <div className="stack" style={{ gap: 10 }}>
+                <p className="vp-small muted" style={{ margin: 0 }}>
+                  Este lead ainda não tem CNPJ/cliente vinculado.
+                </p>
+                <Button variant="outline" size="sm" icon="ruler" onClick={abrirFormulario} style={{ alignSelf: 'flex-start' }}>
+                  Abrir Formulário e vincular cliente
+                </Button>
+              </div>
+            )}
           </Card>
 
           <Card title="Histórico de Atividades" sub={history == null ? "carregando…" : history.length + (history.length === 1 ? " evento" : " eventos")}>
@@ -596,12 +1200,11 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
             )}
           </Card>
 
-          <Card title="Próximos passos sugeridos" sub="orquestração automática">
+          <Card title="Próximo passo" sub="fluxo Lead → Formulário → Cotação">
             <div className="stack" style={{ gap: 10 }}>
-              <SuggestedStep icon="globe" label="Aguardar retorno cotação China" sub="CT-2026-118 · prazo 17/mai" status="current"/>
-              <SuggestedStep icon="ruler" label="Visita técnica e laudo preliminar" sub="agendado 15/mai · Engenharia" status="next"/>
-              <SuggestedStep icon="calculator" label="Calcular precificação final" sub="após laudo + cotação" status="future"/>
-              <SuggestedStep icon="proposal" label="Enviar proposta + minuta jurídica" sub="estimativa 22/mai" status="future"/>
+              <SuggestedStep icon="ruler" label="Abrir Formulário e alocar equipamento(s)"
+                sub={cliente ? 'Cliente já vinculado — abre pronto' : 'Ainda sem CNPJ — resolve lá dentro'}
+                status="current"/>
             </div>
           </Card>
         </div>
@@ -618,28 +1221,33 @@ function LeadDetail({ lead, setRoute, setSubsel }) {
             <KvBlock label="Telefone" value={lead.phone} mono/>
             <KvBlock label="Email" value={lead.email} mono/>
             <div className="row gap-2" style={{ marginTop: 14 }}>
-              <Button variant="secondary" size="sm" icon="message" onClick={() => { const p = (lead.phone || '').replace(/\D/g,''); p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
+              <Button variant="secondary" size="sm" icon="message" onClick={() => { const p0 = (lead.phone || '').replace(/\D/g,''); const p = (p0.length > 11 && p0.startsWith('55')) ? p0.slice(2) : p0; p ? window.open('https://wa.me/55'+p,'_blank') : window.toast('Telefone não cadastrado.','warning'); }}>WhatsApp</Button>
               <Button variant="outline" size="sm" icon="mail" onClick={() => { lead.email ? window.open('mailto:'+lead.email) : window.toast('Email não cadastrado.','warning'); }}>Email</Button>
             </div>
           </Card>
 
           <Card title="Atribuição">
-            <KvBlock label="Vendedor" value={lead.owner}/>
-            <KvBlock label="Equipe" value="Comercial Capital"/>
+            <KvBlock label="Vendedor" value={lead.owner || '—'}/>
             <KvBlock label="Origem" value={lead.origin}/>
-            <KvBlock label="Comissão prevista" value={fmtBRL(lead.value * 0.04, { decimals: 0 }) + " (4%)"} mono/>
-          </Card>
-
-          <Card title="Etiquetas">
-            <div className="row wrap gap-2">
-              <Badge variant="outline">Modernização</Badge>
-              <Badge variant="outline">Schindler</Badge>
-              <Badge variant="yellow">+R$ 400k</Badge>
-              <Badge variant="info">Capital SP</Badge>
-            </div>
+            {lead.value ? <KvBlock label="Comissão prevista" value={fmtBRL(lead.value * (comissaoDoLead(lead) / 100), { decimals: 0 }) + " (" + String(comissaoDoLead(lead)).replace('.', ',') + "%" + (lead.comissao_pct == null ? " — padrão" : "") + ")"} mono/> : null}
           </Card>
         </div>
       </div>
+
+      {showEditLead && (
+        <ModalNovoLead
+          lead={lead}
+          onClose={() => setShowEditLead(false)}
+          onSaved={(updatedLead, clienteAtualizado) => {
+            setSubsel?.(updatedLead);
+            // lead.cliente_id pode não mudar (só os DADOS do cliente
+            // mudaram, ex.: razão social) — o efeito acima só refaz a busca
+            // quando o id muda, então atualiza aqui direto pra não deixar
+            // o card "Cliente" com dado velho até recarregar a página.
+            if (clienteAtualizado) setCliente(clienteAtualizado);
+          }}
+        />
+      )}
     </div>
   );
 }
@@ -654,23 +1262,14 @@ function KvBlock({ label, value, mono }) {
 }
 function SuggestedStep({ icon, label, sub, status }) {
   const I = Icon[icon] || Icon.bolt;
-  const stylesByStatus = {
-    current: { background: "#FFFBE6", borderColor: "var(--vp-yellow)" },
-    next:    { background: "#fff", borderColor: "var(--border-strong)" },
-    future:  { background: "var(--vp-gray-50)", borderColor: "var(--border)", opacity: .7 },
-  };
+  const variante = ['current', 'next', 'future'].includes(status) ? status : 'future';
   return (
-    <div style={{
-      display: "flex", alignItems: "center", gap: 12,
-      padding: "12px 14px",
-      border: "1px solid var(--border)",
-      ...stylesByStatus[status]
-    }}>
-      <div style={{ width: 34, height: 34, background: status === "current" ? "#000" : "var(--vp-gray-100)", color: status === "current" ? "var(--vp-yellow)" : "var(--fg2)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+    <div className={'step-card step-card--' + variante}>
+      <div className="step-card__icon">
         <I size={18}/>
       </div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 13, fontWeight: 600, color: "var(--fg1)" }}>{label}</div>
+      <div className="step-card__body">
+        <div className="step-card__label">{label}</div>
         <div className="cell-sub">{sub}</div>
       </div>
       <Icon.chevRight size={16} color="var(--fg3)"/>
@@ -679,14 +1278,17 @@ function SuggestedStep({ icon, label, sub, status }) {
 }
 
 /* ---------- FORMULÁRIOS (placeholder — estrutura interna vem em sessão futura) ---------- */
+/* 15/08 — Elevador, Escada Rolante e Esteira Rolante deixaram de ser
+   categorias/formulários separados: agora moram todos dentro do mesmo
+   Formulário — Equipamento (reunião de vendedores, uma cotação pode ter
+   vários tipos de equipamento juntos). O card único abaixo leva pro mesmo
+   formulário; lá dentro o vendedor escolhe o tipo por card de unidade. */
 const FE_CATEGORIAS = [
-  { id: 'elevador', label: 'Elevador', icon: 'ruler', route: 'formulario-elevador', pronto: true },
-  { id: 'escada', label: 'Escada Rolante', icon: 'ruler', pronto: false },
-  { id: 'esteira', label: 'Esteira Rolante', icon: 'ruler', pronto: false },
+  { id: 'equipamento', label: 'Equipamento', icon: 'ruler', route: 'formulario-elevador', pronto: true, subLabel: 'Elevador · Escada Rolante · Esteira Rolante' },
   { id: 'mod-elevador', label: 'Modernização Elevador', icon: 'tool', pronto: false },
   { id: 'mod-er-es', label: 'Modernização Escadas e Esteiras', icon: 'tool', pronto: false },
   { id: 'maquina-tracao', label: 'Máquina de Tração', icon: 'grid', pronto: false },
-  { id: 'quadro-comando', label: 'Quadro de Comando', icon: 'grid', pronto: false },
+  { id: 'quadro-comando', label: 'Quadro de Comando', icon: 'grid', route: 'formulario-quadro-comando', pronto: true },
   { id: 'portas', label: 'Portas', icon: 'grid', pronto: false },
 ];
 
@@ -702,19 +1304,20 @@ function FormulariosPage({ setRoute, setSubsel }) {
       </div>
       <div className="grid-4" style={{ gap: 14 }}>
         {FE_CATEGORIAS.map((c) => (
-          <Card key={c.id} title={c.label} sub={c.pronto ? 'Disponível' : 'Em breve'}
-            style={!c.pronto ? { opacity: .55, cursor: 'not-allowed' } : { cursor: 'pointer' }}
-            action={<Icon.chevRight/>}>
-            <div
-              onClick={() => { if (c.pronto) { setSubsel && setSubsel(null); setRoute(c.route); } }}
-              style={{ minHeight: 40, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--fg2)', fontSize: 12.5 }}>
-              {c.pronto ? 'Clique para preencher um novo formulário.' : 'Estrutura prevista para fase futura.'}
-            </div>
-          </Card>
+          <div key={c.id}
+            onClick={() => { if (c.pronto) { setSubsel && setSubsel(null); setRoute(c.route); } }}
+            style={!c.pronto ? { opacity: .55, cursor: 'not-allowed' } : { cursor: 'pointer' }}>
+            <Card title={c.label} sub={c.pronto ? (c.subLabel || 'Disponível') : 'Em breve'}
+              action={<Icon.chevRight/>}>
+              <div style={{ minHeight: 40, display: 'flex', alignItems: 'center', gap: 10, color: 'var(--fg2)', fontSize: 12.5 }}>
+                {c.pronto ? '🔵 Clique para preencher um novo formulário.' : 'Estrutura prevista para fase futura.'}
+              </div>
+            </Card>
+          </div>
         ))}
       </div>
     </div>
   );
 }
 
-Object.assign(window, { LeadsPage, LeadDetail });
+Object.assign(window, { LeadsPage, LeadDetail, comercialSb, LEAD_STATUSES });

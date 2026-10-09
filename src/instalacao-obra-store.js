@@ -16,99 +16,166 @@
 
   function sb() { return (window.__VP_SB || {}).sb; }
 
-  /* ---------- Vistorias (3 fases inclusas + avulsas) ---------- */
-  async function obterVistoria(dossierId) {
-    const c = sb(); if (!c || !dossierId) return null;
-    const { data } = await c.from('dossier_obra').select('vistoria').eq('id', dossierId).maybeSingle();
-    return (data && data.vistoria) || null;
-  }
+  /* ---------- Vistorias ----------
+     Consolidação (15/08): as 3 fases inclusas + avulsas viviam num jsonb
+     próprio (dossier_obra.vistoria), duplicando duas outras implementações
+     de vistoria que já existiam no sistema (vistorias-obras.jsx e
+     vistoria-tracker.js) sem nenhuma delas se falar — achado documentado
+     no FluxogramaPortal.md. Consolidado em `vistorias_obras`.
 
-  async function criarVistoria(dossierId, orcamentoInicial) {
-    const c = sb(); if (!c || !dossierId) throw new Error('dossierId inválido');
-    const vistoria = {
-      fases: [
-        { numero: 1, status: 'pendente', data: null, custo: 0, observacoes: '' },
-        { numero: 2, status: 'pendente', data: null, custo: 0, observacoes: '' },
-        { numero: 3, status: 'pendente', data: null, custo: 0, observacoes: '' },
-      ],
-      avulsas: [], // vistorias além das 3 inclusas — cobradas à parte (regra do issue #9)
-      orcamento_inicial: orcamentoInicial || 0,
-      liberada: false, liberada_em: null,
-      criado_em: new Date().toISOString(),
-      atualizado_em: new Date().toISOString(),
-    };
-    const { error } = await c.from('dossier_obra').update({ vistoria, updated_at: new Date().toISOString() }).eq('id', dossierId);
-    if (error) throw error;
-    return vistoria;
-  }
-
-  async function atualizarFaseVistoria(dossierId, numeroFase, dadosFase) {
-    const c = sb(); if (!c || !dossierId) throw new Error('dossierId inválido');
-    const vistoria = await obterVistoria(dossierId);
-    if (!vistoria) throw new Error('Nenhum plano de vistorias criado ainda.');
-    vistoria.fases = vistoria.fases.map((f) => f.numero === numeroFase ? { ...f, ...dadosFase, status: dadosFase.status || 'concluida' } : f);
-    vistoria.atualizado_em = new Date().toISOString();
-    const { error } = await c.from('dossier_obra').update({ vistoria, updated_at: new Date().toISOString() }).eq('id', dossierId);
-    if (error) throw error;
-    return vistoria;
-  }
-
-  /* Vistoria avulsa — além das 3 inclusas, cobrada à parte e registrada no dossiê. */
-  async function adicionarVistoriaAvulsa(dossierId, { data, custo, observacoes }) {
-    const c = sb(); if (!c || !dossierId) throw new Error('dossierId inválido');
-    const vistoria = await obterVistoria(dossierId);
-    if (!vistoria) throw new Error('Nenhum plano de vistorias criado ainda.');
-    vistoria.avulsas = [...(vistoria.avulsas || []), {
-      data: data || new Date().toISOString(), custo: Number(custo) || 0, observacoes: observacoes || '',
-    }];
-    vistoria.atualizado_em = new Date().toISOString();
-    const { error } = await c.from('dossier_obra').update({ vistoria, updated_at: new Date().toISOString() }).eq('id', dossierId);
-    if (error) throw error;
-    return vistoria;
-  }
-
-  async function liberarObraVistoriada(dossierId) {
-    const c = sb(); if (!c || !dossierId) throw new Error('dossierId inválido');
-    const vistoria = await obterVistoria(dossierId);
-    if (!vistoria) throw new Error('Nenhum plano de vistorias criado ainda.');
-    vistoria.liberada = true;
-    vistoria.liberada_em = new Date().toISOString();
-    const { error } = await c.from('dossier_obra').update({ vistoria, updated_at: new Date().toISOString() }).eq('id', dossierId);
-    if (error) throw error;
-    return vistoria;
-  }
-
-  function calcularProgressoVistoria(vistoria) {
-    if (!vistoria) return 0;
-    const concluidas = (vistoria.fases || []).filter((f) => f.status === 'concluida').length;
-    return Math.round((concluidas / 3) * 100);
+     2ª consolidação (04/09): `vistorias_obras` era um agendador manual
+     (status marcado à mão, nunca preenchido pelo técnico de verdade) —
+     ficou obsoleto quando o módulo real de vistorias de campo
+     (`vistorias_atividades`/vistorias-envio.jsx, dispatch por Master ID,
+     questionário digital, fotos, PDF) foi construído, e os dois nunca se
+     falaram: essa tela achava "obra não vistoriada" mesmo com vistorias de
+     verdade concluídas. Fonte de verdade agora é `vistorias_atividades`
+     (dossier_id) — sem conceito formal de "fase 1/2/3" nessa tabela, então
+     "liberada" passa a ser "3 ou mais vistorias concluídas nesta obra"
+     (qualquer questionário), não mais 3 números de fase específicos. */
+  async function obterProgressoVistoria(dossierId) {
+    const c = sb(); if (!c || !dossierId) return { fases: [], liberada: false, concluidas: 0 };
+    const { data } = await c.from('vistorias_atividades').select('status').eq('dossier_id', dossierId);
+    const concluidas = (data || []).filter((a) => a.status === 'concluida').length;
+    const fases = [1, 2, 3].map((n) => ({ numero: n, concluida: concluidas >= n }));
+    return { fases, liberada: concluidas >= 3, concluidas };
   }
 
   function fmtBRL(v) { return (Number(v) || 0).toLocaleString('pt-BR', { style: 'currency', currency: 'BRL' }); }
   function fmtData(d) { return d ? new Date(d).toLocaleDateString('pt-BR') : '—'; }
 
+  /* ---------- Prazo de agendamento das Vistorias (23/08, Gelson) ----------
+     "logo após a importação" = quando o gatilho NEGOCIACAO_COMPRA fecha
+     (evento COMPRA_FORNECEDOR_CONFIRMADA, ver gatilhos-engine.js), a
+     Engenharia tem que MARCAR (agendar) as 3 vistorias obrigatórias
+     (numero_fase 1/2/3 em vistorias_obras — agendamento é sempre manual,
+     isso aqui só cobra o prazo, não agenda sozinho). Dois limiares:
+       10 dias sem as 3 agendadas → alerta pro líder do departamento
+         Engenharia (hoje Arilene, mas é dinâmico via
+         colaboradores_vpsistema.is_department_lead).
+       15 dias → alerta pro CEO (departamento 'CEO').
+     Sem cron neste projeto — chamada sob demanda quando a tela de
+     Gatilhos & Prazo ou Vistorias abre, mesmo padrão de verificarPrazos()
+     em gatilhos-engine.js. O disparo de WhatsApp em si ainda não existe
+     (ver memória whatsapp-alertas-gestores-planejado) — hoje só grava em
+     `alertas`, que já aparece na Central de Alertas (Dashboard/
+     Financeiro) com cor por nível (warning/danger). */
+  async function _liderDepartamento(departamentoLike) {
+    const c = sb(); if (!c) return null;
+    const { data } = await c.from('colaboradores_vpsistema')
+      .select('nome, email').ilike('departamento', `%${departamentoLike}%`)
+      .eq('is_department_lead', true).eq('is_active', true).limit(1).maybeSingle();
+    return data;
+  }
+
+  async function verificarPrazoVistorias() {
+    const c = sb(); if (!c) return false;
+    const agora = Date.now();
+
+    const { data: dossiers } = await c.from('dossier_obra')
+      .select('id, numero_cotacao, building_name, vistorias_alerta_10d_em, vistorias_alerta_15d_em')
+      .not('numero_cotacao', 'is', null).is('vistorias_alerta_15d_em', null);
+    if (!dossiers || !dossiers.length) return false;
+
+    let mudou = false;
+    for (const d of dossiers) {
+      const { data: gCompra } = await c.from('gatilhos')
+        .select('concluido_em').eq('numero_cotacao', d.numero_cotacao).eq('evento_key', 'NEGOCIACAO_COMPRA')
+        .not('concluido_em', 'is', null).maybeSingle();
+      if (!gCompra || !gCompra.concluido_em) continue;
+
+      /* 04/09: trocado de vistorias_obras (agendador manual obsoleto) pra
+         vistorias_atividades — dispatch (Despachar em vistorias-envio.jsx)
+         já É o ato de agendar, então "agendada" aqui é "existe uma
+         atividade despachada", independente do status dela ainda. */
+      const { data: vistorias } = await c.from('vistorias_atividades').select('id').eq('dossier_id', d.id);
+      const qtdAgendadas = (vistorias || []).length;
+      if (qtdAgendadas >= 3) continue; // as 3 já foram agendadas, nada a alertar
+
+      const diasPassados = Math.floor((agora - new Date(gCompra.concluido_em).getTime()) / 86400000);
+
+      if (diasPassados >= 15 && !d.vistorias_alerta_15d_em) {
+        const ceo = await _liderDepartamento('CEO');
+        await c.from('alertas').insert({
+          id: 'vist15-' + d.id, level: 'danger',
+          title: `Cotação ${d.numero_cotacao} — vistorias não agendadas há ${diasPassados} dias`,
+          sub: `${d.building_name || d.id} · faltam ${3 - qtdAgendadas} de 3 vistorias obrigatórias · CEO${ceo ? ' (' + ceo.nome + ')' : ''} precisa saber o motivo`,
+          module: 'Engenharia', resolved: false,
+          rota: '/engenharia/dossier-obra/' + encodeURIComponent(String(d.id)),
+        });
+        await c.from('dossier_obra').update({ vistorias_alerta_15d_em: new Date().toISOString() }).eq('id', d.id);
+        mudou = true;
+      } else if (diasPassados >= 10 && !d.vistorias_alerta_10d_em) {
+        const lider = await _liderDepartamento('Engenharia');
+        await c.from('alertas').insert({
+          id: 'vist10-' + d.id, level: 'warning',
+          title: `Cotação ${d.numero_cotacao} — vistorias não agendadas há ${diasPassados} dias`,
+          sub: `${d.building_name || d.id} · faltam ${3 - qtdAgendadas} de 3 vistorias obrigatórias · ${lider ? lider.nome : 'líder da Engenharia'} precisa agendar`,
+          module: 'Engenharia', resolved: false,
+          rota: '/engenharia/dossier-obra/' + encodeURIComponent(String(d.id)),
+        });
+        await c.from('dossier_obra').update({ vistorias_alerta_10d_em: new Date().toISOString() }).eq('id', d.id);
+        mudou = true;
+      }
+    }
+    return mudou;
+  }
+
   /* ---------- Checklist de obra pronta ---------- */
-  /* Marca manual dos dois itens que não têm sinal em nenhum outro módulo. */
-  async function marcarEquipamentoEntregue(dossierId, entregue) {
+  /* Marca manual dos itens que não têm sinal em nenhum outro módulo.
+     `recebidoPor`/`qtdPessoas` registram quem recebeu o equipamento e com
+     quantas pessoas — vazio real detectado no WBS: a recepção mínima de
+     2 pessoas no cliente não tinha nenhum campo até aqui. */
+  async function marcarEquipamentoEntregue(dossierId, entregue, { recebidoPor, qtdPessoas } = {}) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
-    const { error } = await c.from('dossier_obra').update({
+    const patch = {
       equipamento_entregue: !!entregue,
       equipamento_entregue_em: entregue ? new Date().toISOString() : null,
       updated_at: new Date().toISOString(),
-    }).eq('id', dossierId);
+    };
+    if (entregue) {
+      patch.equipamento_recebido_por = recebidoPor || null;
+      patch.equipamento_qtd_pessoas_recebimento = qtdPessoas != null && qtdPessoas !== '' ? Number(qtdPessoas) : null;
+    } else {
+      patch.equipamento_recebido_por = null;
+      patch.equipamento_qtd_pessoas_recebimento = null;
+    }
+    const { error } = await c.from('dossier_obra').update(patch).eq('id', dossierId);
     if (error) throw error;
+    if (entregue && window.EventosFluxo) {
+      const { data: dossier } = await c.from('dossier_obra').select('numero_cotacao, building_name').eq('id', dossierId).maybeSingle();
+      window.EventosFluxo.registrar({
+        evento: 'EQUIPAMENTO_RECEBIDO', numeroCotacao: dossier?.numero_cotacao ?? null,
+        alvoLabel: dossier?.building_name, alvoId: dossierId,
+      });
+    }
   }
 
-  async function marcarAndaimeMunck(dossierId, { necessario, providenciado }) {
+  async function marcarAndaimeMunck(dossierId, { necessario, providenciado, valor }) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const patch = { updated_at: new Date().toISOString() };
     if (necessario != null) patch.andaime_munck_necessario = !!necessario;
     if (providenciado != null) {
       patch.andaime_munck_providenciado = !!providenciado;
       patch.andaime_munck_em = providenciado ? new Date().toISOString() : null;
+      /* 23/08 (Gelson) — correção do entendimento inicial: não é uma regra
+         especial deste campo. Não informar valor aqui é normal (pode ser
+         que a obra nem precise contratar de verdade). A regra real é
+         genérica — se ALGUÉM gastar de verdade em qualquer coisa (aqui
+         incluso) e isso estourar o teto da cotação, o AvalFinanceiroStore.
+         registrarCustoReal() já alerta o CEO sozinho, sem precisar de nada
+         especial aqui. Esse campo só registra o valor quando existir. */
+      patch.andaime_munck_valor = providenciado ? (valor != null && valor !== '' ? Number(valor) : null) : null;
     }
-    const { error } = await c.from('dossier_obra').update(patch).eq('id', dossierId);
+    const { data: dossier, error } = await c.from('dossier_obra').update(patch).eq('id', dossierId)
+      .select('numero_cotacao, building_name').single();
     if (error) throw error;
+    if (providenciado && window.AvalFinanceiroStore && dossier?.numero_cotacao != null && valor != null && valor !== '') {
+      window.AvalFinanceiroStore.registrarCustoReal({
+        numeroCotacao: dossier.numero_cotacao, origem: 'andaime_munck',
+        descricao: 'Andaime/Munck — ' + (dossier.building_name || dossierId), valor,
+      });
+    }
   }
 
   /* Vincular um parceiro dispara a decisão do RH pra ESTE par (obra,
@@ -118,12 +185,27 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('dossier_obra').update({ parceiro_instalador_id: parceiroId || null, updated_at: new Date().toISOString() }).eq('id', dossierId);
     if (error) throw error;
-    if (parceiroId && window.DecisoesStore) {
-      const { data: dossier } = await c.from('dossier_obra').select('building_name, client_name').eq('id', dossierId).maybeSingle();
-      const { data: parceiro } = await c.from('parceiros_instaladores').select('nome').eq('id', parceiroId).maybeSingle();
-      await window.DecisoesStore.podeMontadorEntrarObra(dossierId, parceiroId, {
-        obra: dossier && dossier.building_name, cliente: dossier && dossier.client_name, parceiro: parceiro && parceiro.nome,
+    /* Preenche como padrão os equipamentos que ainda não têm instalador
+       próprio — nunca sobrescreve um equipamento que já tem um valor
+       explícito (obra pode legitimamente ter mais de um instalador). */
+    if (parceiroId) {
+      await c.from('equipamentos_obra').update({ parceiro_instalador_id: parceiroId })
+        .eq('dossier_id', dossierId).is('parceiro_instalador_id', null);
+    }
+    if (parceiroId) {
+      const { data: dossier } = await c.from('dossier_obra').select('numero_cotacao, building_name, client_name').eq('id', dossierId).maybeSingle();
+      if (window.DecisoesStore) {
+        const { data: parceiro } = await c.from('parceiros_instaladores').select('nome').eq('id', parceiroId).maybeSingle();
+        await window.DecisoesStore.podeMontadorEntrarObra(dossierId, parceiroId, {
+          obra: dossier && dossier.building_name, cliente: dossier && dossier.client_name, parceiro: parceiro && parceiro.nome,
+        });
+      }
+      if (window.EventosFluxo) window.EventosFluxo.registrar({
+        evento: 'INSTALADOR_VINCULADO', numeroCotacao: dossier?.numero_cotacao ?? null,
+        alvoLabel: dossier?.building_name, alvoId: dossierId,
       });
+      // Conciliação empresa↔obra nasceu — provoca a busca de pagamentos no Omie sozinha (04/09).
+      window.OmiePagamentosStore?.dispararSyncSilencioso(parceiroId);
     }
   }
 
@@ -148,7 +230,7 @@
     const { data: propostaDaCotacao } = await c.from('propostas').select('id').eq('numero_cotacao', numeroCotacao).maybeSingle();
     let contrato = null;
     if (propostaDaCotacao) {
-      const { data } = await c.from('contratos_venda_equipamentos').select('signed_at').eq('proposta_id', propostaDaCotacao.id).maybeSingle();
+      const { data } = await c.from('contratos_venda_equipamentos').select('signed_at').eq('proposta_id', propostaDaCotacao.id).or('status.is.null,status.neq.em_preenchimento').maybeSingle();
       contrato = data;
     }
     const contratoAssinado = !!(contrato && contrato.signed_at);
@@ -165,31 +247,39 @@
     itens.push({ chave: 'projeto', ok: projetoAprovado, label: 'Projeto traduzido/aprovado pela Engenharia', detalhe: projeto ? projeto.status : 'Não iniciado' });
 
     // 4. Equipamento entregue e armazenado na obra (manual)
-    itens.push({ chave: 'equipamento', ok: !!dossier.equipamento_entregue, label: 'Equipamento entregue e armazenado na obra', detalhe: dossier.equipamento_entregue ? fmtData(dossier.equipamento_entregue_em) : 'Pendente' });
+    let equipamentoDetalhe = 'Pendente';
+    if (dossier.equipamento_entregue) {
+      equipamentoDetalhe = fmtData(dossier.equipamento_entregue_em);
+      if (dossier.equipamento_recebido_por) equipamentoDetalhe += ` · recebido por ${dossier.equipamento_recebido_por}`;
+      if (dossier.equipamento_qtd_pessoas_recebimento) equipamentoDetalhe += ` · ${dossier.equipamento_qtd_pessoas_recebimento} pessoa(s) na recepção`;
+    }
+    itens.push({ chave: 'equipamento', ok: !!dossier.equipamento_entregue, label: 'Equipamento entregue e armazenado na obra', detalhe: equipamentoDetalhe });
 
-    // 5. Obra vistoriada e liberada
-    const vistoria = dossier.vistoria;
-    const vistoriada = !!(vistoria && vistoria.liberada);
-    itens.push({ chave: 'vistoria', ok: vistoriada, label: 'Obra vistoriada e liberada', detalhe: vistoriada ? fmtData(vistoria.liberada_em) : (vistoria ? `${calcularProgressoVistoria(vistoria)}% das vistorias concluídas` : 'Nenhuma vistoria iniciada') });
+    // 5. Obra vistoriada e liberada (3 fases inclusas concluídas em vistorias_obras)
+    const progressoVistoria = await obterProgressoVistoria(dossierId);
+    const concluidasCount = progressoVistoria.fases.filter((f) => f.concluida).length;
+    itens.push({ chave: 'vistoria', ok: progressoVistoria.liberada, label: 'Obra vistoriada e liberada', detalhe: progressoVistoria.liberada ? '3 de 3 fases concluídas' : `${concluidasCount} de 3 fases concluídas` });
 
-    // 6. Parceiro instalador homologado (certificações válidas em geral)
+    // 6. Parceiro instalador homologado — lê parceiros_documentos_colaborador
+    // (schema pós-migração 25/08), não mais parceiros_instaladores.certificacoes
+    // (jsonb de 5 certs fixas, obsoleto: a tela RH Homologação não grava mais
+    // nele, então esse gate nunca refletia documento anexado de verdade).
     let certOk = false, certDetalhe = 'Nenhum parceiro vinculado';
     if (dossier.parceiro_instalador_id && window.RHHomologacao) {
-      const { data: parceiro } = await c.from('parceiros_instaladores').select('*').eq('id', dossier.parceiro_instalador_id).maybeSingle();
+      const { data: parceiro } = await c.from('parceiros_instaladores').select('id, nome').eq('id', dossier.parceiro_instalador_id).maybeSingle();
       if (parceiro) {
-        const status = window.RHHomologacao.statusGeral(parceiro);
+        const { status, detalhe } = await window.RHHomologacao.statusGeralPorColaboradores(parceiro.id);
         certOk = status === 'ok';
-        certDetalhe = `${parceiro.nome} — ${status}`;
+        certDetalhe = `${parceiro.nome} — ${detalhe}`;
       }
     }
-    itens.push({ chave: 'parceiro', ok: certOk, label: 'Parceiro instalador homologado (NRs/ASO/PCMSO/PGR válidos)', detalhe: certDetalhe });
+    itens.push({ chave: 'parceiro', ok: certOk, label: 'Parceiro instalador homologado (documentação dos colaboradores em dia)', detalhe: certDetalhe });
 
     // 7. RH liberou ESTE montador pra ESTA obra (issue #9 Fase 2) — distinto
     // da homologação geral: a certificação pode estar válida e ainda assim
     // o RH não ter liberado a entrada dele nesta obra específica.
     if (dossier.parceiro_instalador_id) {
-      const { data: decisaoRh } = await c.from('decisoes_gerenciais').select('*')
-        .eq('dossier_id', dossierId).eq('tipo', 'montador_entra_obra_rh').eq('referencia_id', dossier.parceiro_instalador_id).maybeSingle();
+      const decisaoRh = await window.DecisoesStore.statusMontadorObra(dossierId, dossier.parceiro_instalador_id);
       const rhOk = decisaoRh && decisaoRh.status === 'aprovada';
       const rhDetalhe = !decisaoRh ? 'Aguardando RH'
         : decisaoRh.status === 'aprovada' ? `Liberado por ${decisaoRh.decidido_por || 'RH'}`
@@ -208,8 +298,9 @@
   }
 
   window.InstalacaoObraStore = {
-    obterVistoria, criarVistoria, atualizarFaseVistoria, adicionarVistoriaAvulsa, liberarObraVistoriada, calcularProgressoVistoria,
+    obterProgressoVistoria,
     marcarEquipamentoEntregue, marcarAndaimeMunck, vincularParceiroInstalador, obterChecklistObraPronta,
+    verificarPrazoVistorias,
     fmtBRL, fmtData,
   };
 }());

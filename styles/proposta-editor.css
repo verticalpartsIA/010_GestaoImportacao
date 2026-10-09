@@ -132,6 +132,7 @@
 .pe-top__status.is-aprovada { background: var(--vp-success-tint); color: var(--vp-success-ink); }
 .pe-top__status.is-recusada,
 .pe-top__status.is-expirada { background: #FDE8E8; color: #9f1239; }
+.pe-top__status.is-revisao_solicitada { background: var(--vp-warning-tint); color: var(--vp-warning-ink); }
 
 /* "Publicar" congelou uma versão oficial — sinal visual separado do status
    de envio/assinatura, porque são coisas diferentes (uma proposta pode
@@ -204,9 +205,26 @@
 /* ---- Impressão ----
    Sem isto, "PDF" chamava window.print() e saía a aplicação inteira
    (sidebar, menu, formulário). Agora imprime só as páginas da proposta —
-   tanto pelo overlay quanto pela coluna lateral, se ela estiver visível. */
+   tanto pelo overlay quanto pela coluna lateral, se ela estiver visível.
+   `body:has(.pe-pdf-overlay)` é obrigatório: este CSS também é carregado
+   em assinar.html (página pública de assinatura), que reaproveita o
+   preview da proposta mas nunca renderiza `.pe-pdf-overlay`. Sem o
+   :has(), a regra escondia `#ci-sign-root` inteiro (único filho de
+   body ali, e não bate com `.pe-pdf-overlay`) — incluindo o
+   `.ci-print-doc` que o botão "Baixar (PDF)" da página pública precisa
+   pra imprimir, o que gerava PDF em branco (achado 19/08). */
 @media print {
-  body > *:not(.pe-pdf-overlay) { display: none !important; }
+  /* Sem isto o Chrome descarta background-image/background-color na
+     impressão nativa por padrão (a menos que o usuário marque manualmente
+     "Imprimir gráficos de plano de fundo" no diálogo) — é o que apagava a
+     foto de capa e a foto de "Sobre a VerticalParts" (ambas via CSS
+     background-image, não <img>), deixando vão em branco no lugar
+     (achado 20/08, comparado com print real gerado em produção). */
+  .pe-pdf-overlay * {
+    -webkit-print-color-adjust: exact !important;
+    print-color-adjust: exact !important;
+  }
+  body:has(.pe-pdf-overlay) > *:not(.pe-pdf-overlay) { display: none !important; }
   .pe-pdf-overlay {
     position: static !important; inset: auto !important; background: #fff !important;
   }
@@ -214,17 +232,63 @@
   .pe-pdf-scroll {
     display: block !important; padding: 0 !important; overflow: visible !important;
   }
+  /* O overlay renderiza o preview com zoom 0.5 (ver proposta-preview.jsx:
+     em overlay o ResizeObserver não roda e o estado inicial fica em 0.5).
+     Sem zerar isso aqui, a impressão nativa sairia na METADE do tamanho —
+     o antigo gerador via html2canvas não sofria disso porque lia
+     offsetWidth, que ignora zoom (achado 19/08). */
+  .pe__preview-scaler { zoom: 1 !important; width: auto !important; }
+  .pe__preview-wrap, .pe__preview-pages { display: block !important; }
+
+  /* ---- Paginação sem páginas fantasma ----
+     O layout de tela reserva 130px de padding no rodapé de `.pe__pdf-inner`
+     porque `.pdf-page-footer` é absoluto (bottom: 0). Na impressão isso
+     virava altura VAZIA além dos 297mm da folha: uma seção que terminava
+     em 280mm virava caixa de ~314mm, e os 17mm de puro padding
+     transbordavam pra uma segunda folha só com o fundo — as "páginas
+     fantasma" (2 e 20 do PDF analisado em 20/08). O mesmo efeito, com
+     conteúdo real curto sobrando, produzia a "página órfã" (uma linha
+     solta + rodapé, pág. 12).
+     Correção: na impressão a página vira flex-column, o rodapé entra no
+     fluxo empurrado por margin-top:auto (continua colado embaixo) e o
+     padding reservado some. Assim a caixa só passa de 297mm quando há
+     CONTEÚDO de verdade transbordando — nunca por espaço vazio. Também
+     troco break-after (depois) por break-before (antes) na página
+     seguinte: `break-after: always` na última página gerava uma folha
+     extra em branco no fim. */
   .pe__pdf {
     max-width: none !important;
     width: 100% !important;
+    height: auto !important;
+    min-height: 297mm !important;
     aspect-ratio: auto !important;
     box-shadow: none !important;
-    page-break-after: always;
-    break-after: page;
+    overflow: visible !important;
+    display: flex !important;
+    flex-direction: column !important;
+    break-after: auto !important;
+    page-break-after: auto !important;
+    break-inside: auto;
   }
-  .pe__pdf:last-child { page-break-after: auto; break-after: auto; }
-  @page { size: A4; margin: 12mm; }
+  .pe__pdf + .pe__pdf { break-before: page; page-break-before: always; }
+  .pe__pdf-inner { padding-bottom: 25px !important; flex: 1 1 auto !important; }
+  .pe__pdf-capa { flex: 1 1 auto !important; }
+  .pdf-page-footer {
+    position: static !important;
+    margin-top: auto !important;
+  }
+  /* Blocos que nunca devem partir no meio entre duas folhas. */
+  .pdf-table, .pdf-table2, .pdf-total, .pdf-spec-grid,
+  .pdf-page-header, .pdf-page-footer { break-inside: avoid; }
+
+  /* Instrução interna some; texto neutro pro cliente aparece. */
+  .pe-vazio-tela { display: none !important; }
+  .pe-vazio-print { display: block !important; }
+  @page { size: A4; margin: 0; }
 }
+
+/* Fora da impressão é o contrário: o vendedor vê a instrução. */
+.pe-vazio-print { display: none; }
 
 /* ---- Responsivo: as 3 colunas fixas espremiam o formulário ---- */
 @media (max-width: 1400px) {
@@ -295,6 +359,44 @@
 }
 .pe__sidenav-progress-lbl { font-size: 9.5px; font-weight: 800; letter-spacing: .14em; text-transform: uppercase; color: var(--fg3); }
 .pe__sidenav-progress-val { font-family: var(--font-display); font-weight: 800; font-size: 24px; margin: 4px 0 6px; }
+
+/* Árvore do "Conteúdo da Proposta" dentro do próprio menu lateral —
+   mesmo espírito da barra lateral da Ficha Técnica (categoria expansível
+   + checkbox por campo direto no menu). */
+.pe__conttree-badge {
+  font-size: 10px; font-weight: 800; background: var(--vp-gray-100); color: var(--fg2);
+  border-radius: 999px; padding: 1px 7px; margin-left: 6px; flex-shrink: 0;
+}
+.pe__conttree-badge.sm { font-size: 9px; padding: 0 5px; }
+.pe__conttree-chev { color: var(--fg3); transition: transform .15s; flex-shrink: 0; }
+.pe__conttree-chev.on { transform: rotate(90deg); }
+.pe__conttree-body { padding: 2px 0 6px 14px; }
+.pe__conttree-cat { margin-bottom: 2px; }
+.pe__conttree-cathead-row { display: flex; align-items: center; }
+.pe__conttree-cathead {
+  flex: 1; display: flex; align-items: center; gap: 6px; background: none; border: none; cursor: pointer;
+  padding: 5px 4px; font-size: 11.5px; font-weight: 600; color: var(--fg2); text-align: left;
+}
+.pe__conttree-cathead:hover { color: var(--fg1); }
+.pe__conttree-fields { padding: 0 0 4px 18px; display: flex; flex-direction: column; gap: 1px; }
+.pe__conttree-fldrow { display: flex; align-items: center; gap: 2px; }
+.pe__conttree-fld { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; padding: 3px 4px; border-radius: 6px; cursor: pointer; font-size: 11px; color: var(--fg3); }
+.pe__conttree-fld:hover { background: var(--vp-gray-50); }
+.pe__conttree-fld.on { color: var(--fg1); }
+.pe__conttree-fld input { accent-color: var(--vp-yellow); width: 12px; height: 12px; cursor: pointer; flex-shrink: 0; }
+.pe__conttree-fld span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pe__conttree-rm {
+  border: none; background: none; color: var(--fg3); cursor: pointer; font-size: 14px; line-height: 1; padding: 2px 6px; flex-shrink: 0;
+}
+.pe__conttree-rm:hover { color: var(--vp-danger); }
+.pe__conttree-rm.sm { font-size: 12px; padding: 1px 5px; }
+.pe__conttree-addfield, .pe__conttree-addcat {
+  display: block; background: none; border: 1px dashed var(--border); border-radius: 6px; color: var(--fg3); cursor: pointer;
+  font-size: 10.5px; font-weight: 600; padding: 4px 8px; text-align: left;
+}
+.pe__conttree-addfield { margin: 2px 0 4px 18px; }
+.pe__conttree-addcat { margin: 4px 16px 0; }
+.pe__conttree-addfield:hover, .pe__conttree-addcat:hover { border-color: var(--fg3); color: var(--fg2); }
 
 .pe__form {
   overflow-y: auto;
@@ -701,16 +803,25 @@ select.pe-input.is-empty {
   color: var(--fg3);
 }
 
-/* Capa — a imagem tem proporção própria (aspect-ratio), não depende da
-   altura do pai pra calcular sua altura. */
+/* Capa — a foto usa altura fixa (mm), não aspect-ratio: é a ÚNICA página
+   do documento com aspect-ratio, e era a ÚNICA que perdia conteúdo na
+   impressão do Firefox mesmo depois de trocar o grid da grade por flex
+   (achado 20/08) — sinal de que a causa real era aspect-ratio dentro de
+   um contexto de paginação, não grid em si. 118mm ≈ 210mm × 9/16,
+   mesma proporção visual de antes, só que sem a propriedade que o
+   Firefox mistrata ao paginar. */
 .pe__pdf-capa { padding: 0; }
 .pe__pdf-capa-img {
-  width: 100%; aspect-ratio: 16 / 10;
+  width: 100%; height: 118mm;
   background-size: cover;
   background-position: center;
   background-repeat: no-repeat;
 }
-.pe__pdf-capa-body { padding: 42px 58px 58px; }
+/* padding-bottom reduzido de 58 pra 34: a capa (foto + título + grid +
+   rodapé de contato) estava passando de 297mm em produção — o rodapé de
+   contato vazava pra uma 2ª página quase em branco antes da página "Sobre
+   a VerticalParts" (achado 20/08, comparando PDF real gerado x código). */
+.pe__pdf-capa-body { padding: 34px 58px 34px; }
 .pe__pdf-capa-title {
   font-family: var(--font-display);
   font-weight: 800;
@@ -721,12 +832,22 @@ select.pe-input.is-empty {
   color: #29261b;
   margin: 0 0 28px;
 }
+/* flex, não grid: o Firefox (cairo) descarta em silêncio conteúdo em
+   display:grid que ultrapassa a página na impressão, em vez de deixar
+   passar pra próxima como o Chrome faz — foi assim que a grade
+   Nº da Proposta/Vendedor/Contato inteira sumiu de um PDF gerado no
+   Firefox (achado 20/08, comparando com o mesmo PDF gerado no Chrome,
+   onde a grade aparece normal). flex-wrap com os itens a 50% reproduz
+   a mesma disposição 2 colunas × 4 linhas do grid original. */
 .pe__pdf-capa-grid {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
+  display: flex;
+  flex-wrap: wrap;
   gap: 13px 38px;
   font-size: 17px;
   line-height: 1.4;
+}
+.pe__pdf-capa-grid dt, .pe__pdf-capa-grid dd {
+  flex: 0 0 calc(50% - 19px);
 }
 .pe__pdf-capa-grid dt {
   font-weight: 800;
@@ -886,3 +1007,39 @@ select.pe-input.is-empty {
 .pdf-assinatura-linha { border-top: 1px solid #999; margin-bottom: 8px; }
 .pdf-assinatura b { display: block; font-size: 14px; color: #1b2a4a; }
 .pdf-assinatura span { font-size: 13px; color: #777; }
+
+/* ============================================================
+   Acabamentos dinâmicos (categorias/campos com checkbox "ativo" —
+   mesmo padrão da Ficha Técnica, engenharia/ficha-tecnica.css)
+   ============================================================ */
+.pe-hint { font-size: 12px; color: var(--fg3); padding: 8px 0; }
+
+.pe-acab-cat { border: 1px solid var(--border); border-radius: 10px; padding: 12px 14px; margin-bottom: 12px; }
+.pe-acab-cat-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 8px; }
+.pe-acab-cat-nome { font-size: 13px; font-weight: 600; color: var(--fg1); }
+
+.pe-acab-fields { display: flex; flex-direction: column; gap: 2px; }
+.pe-acab-row { display: flex; align-items: center; flex-wrap: wrap; gap: 8px; padding: 4px 6px; border-radius: 8px; }
+.pe-acab-row:hover { background: var(--vp-gray-50); }
+
+.pe-acab-check { display: flex; align-items: center; gap: 8px; cursor: pointer; flex: 1; min-width: 220px; }
+.pe-acab-check input { accent-color: var(--vp-yellow); width: 14px; height: 14px; cursor: pointer; }
+.pe-acab-check span { font-size: 12.5px; color: var(--fg2); }
+.pe-acab-check.on span { color: var(--fg1); font-weight: 600; }
+
+.pe-acab-value { flex-basis: 100%; padding-left: 22px; }
+.pe-acab-value .pe-input { max-width: 360px; }
+
+.pe-acab-rm {
+  border: none; background: none; color: var(--fg3); cursor: pointer;
+  font-size: 15px; line-height: 1; padding: 2px 6px; border-radius: 6px;
+}
+.pe-acab-rm:hover { color: var(--vp-danger); background: var(--vp-gray-100); }
+
+.pe-acab-addfield, .pe-acab-addcat {
+  display: inline-flex; align-items: center; gap: 6px;
+  border: 1px dashed var(--border); background: none; color: var(--fg2);
+  font-size: 12px; padding: 7px 12px; border-radius: 8px; cursor: pointer; margin-top: 8px;
+}
+.pe-acab-addfield:hover, .pe-acab-addcat:hover { background: var(--vp-gray-50); border-color: var(--fg3); }
+.pe-acab-addcat { border-style: solid; }
