@@ -662,15 +662,46 @@
     }).sort((a, b) => String(b.quando || '').localeCompare(String(a.quando || '')));
   }
 
-  /* ---------- Portal público (/cotacao-elevador-fornecedor/:token) ---------- */
+  /* ---------- Portal público (/cotacao-elevador-fornecedor/:token) ----------
+     Segurança real (#571, F1): a página pública fala com o banco por RPC `public_cef_*` (recebem só o TOKEN e mexem só
+     naquela cotação; devolvem só o que a página mostra — sem destinatários, envios, câmbio ou o `_meta` da resposta; a
+     regra de status e a lista de campos aceitos na resposta ficam no servidor). Interruptor de emergência:
+     localStorage.vp_public_rpc = 'off' volta ao caminho antigo (tabela direto). Se a RPC falhar por rede/erro ou ainda
+     não existir no banco, cada função cai no caminho antigo (enquanto a tabela ainda está aberta). Só o portal público
+     chama getByToken/marcarVisualizado/salvarResposta — o app interno usa getById e não muda. */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[CotacaoFornecedor] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[CotacaoFornecedor] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
+  function erroDaRpc(res) {
+    const e = String((res && res.erro) || '');
+    if (e === 'link_invalido') return new Error('Link inválido ou expirado · Invalid or expired link · 链接无效或已过期');
+    if (e.indexOf('status_') === 0) return new Error('Esta cotação já foi respondida ou não aceita mais respostas · This quotation was already answered or no longer accepts answers · 该询价已回复或不再接受回复 (' + e.slice(7) + ')');
+    return new Error('Não foi possível enviar. Tente novamente · Could not submit, please try again · 无法提交，请重试');
+  }
+
   async function getByToken(token) {
     const c = sb(); if (!c || !token) return null;
+    if (usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cef_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
     const { data } = await c.from('cotacoes_elevador_fornecedor').select('*').eq('token', token).maybeSingle();
     return data || null;
   }
 
   async function marcarVisualizado(token) {
     const c = sb();
+    if (c && token && usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cef_visualizado', { p_token: token });
+      if (!r.falhou) return (r.data && r.data.ok) ? r.data.rec : null;
+    }
     const cur = await getByToken(token);
     if (!cur) return null;
     if (cur.status !== 'enviado') return cur;
@@ -747,8 +778,9 @@
      preco_unitario, preco_total, confirmacao_tecnica, confirmacao_tecnica_pt}] } */
   async function salvarResposta(token, respostas) {
     const c = sb();
-    const cur = await getByToken(token);
-    if (!cur) return null;
+    const viaRpc = !!(c && token && usarRpcPublica());
+    const cur = viaRpc ? null : await getByToken(token);
+    if (!viaRpc && !cur) return null;
     // Traduz cada "confirmação técnica" em paralelo — não atrasa o envio
     // sequencialmente item a item, e nunca bloqueia se a IA falhar.
     if (Array.isArray(respostas.itens) && respostas.itens.length) {
@@ -767,11 +799,30 @@
        Nunca bloqueia o envio se a API de câmbio falhar. */
     let cambioNaResposta = null;
     try { cambioNaResposta = (await window.CambioAPI.buscarUsdBrl()).valor; } catch (e) { /* segue sem — Precificação fica sem o congelado */ }
+    if (viaRpc) {
+      /* O servidor confere status, aceita só os campos do formulário, carimba IP/hora e grava o câmbio (faixa válida). */
+      const r = await chamarRpcPublica(c, 'public_cef_responder', {
+        p_token: token, p_respostas: respostas, p_meta: { ip, ua: navigator.userAgent }, p_cambio: cambioNaResposta,
+      });
+      if (!r.falhou) {
+        if (!r.data || !r.data.ok) throw erroDaRpc(r.data);
+        const rec = r.data.rec;
+        efeitosResposta({ ...rec, respostas: r.data.antes }, respostas, r.data.ip || ip);
+        return rec;
+      }
+    }
+    const atual = cur || await getByToken(token);
+    if (!atual) return null;
     const patch = {
       status: 'respondido', respostas: payload, responded_at: now, updated_at: now,
       cambio_na_resposta_usd_brl: cambioNaResposta,
     };
     await c.from('cotacoes_elevador_fornecedor').update(patch).eq('token', token);
+    efeitosResposta(atual, respostas, ip);
+    return { ...atual, ...patch };
+  }
+  /* Depois de gravar a resposta (RPC ou caminho antigo): histórico de preço, log e evento — iguais aos de antes. */
+  function efeitosResposta(cur, respostas, ip) {
     registrarMudancaPreco(cur, respostas, { ator_nome: cur.fornecedor || 'Fornecedor', ator_setor: 'fornecedor' });
     if (window.VPLog) window.VPLog.registrar({
       ator_nome: cur.fornecedor || 'Fornecedor', ator_setor: 'fornecedor',
@@ -783,7 +834,6 @@
       numeroCotacao: cur.dados_envio?.header?.numero_cotacao,
       alvoLabel: `${cur.fornecedor || 'Fornecedor'} · ${cur.numero_documento || ''}`, alvoId: cur.id,
     });
-    return { ...cur, ...patch };
   }
 
   /* ---------- Resposta do fornecedor REGISTRADA A PARTIR DE UM E-MAIL (Inbox, 04/10/2026) ----------
