@@ -285,3 +285,109 @@ test('calcularV2 — devolve modelos rateados sobre o preço do próprio V2', ()
   });
   closeTo(out.modelos.reduce((s, m) => s + m.valorTotalRs, 0), out.precificacao.precoVendaProposta, 0.01, 'soma = preço V2');
 });
+
+/* ============================================================
+   Método da planilha — GOLDEN da cotação Nº 963 (10/10/2026)
+   Insumos e resultados copiados da planilha do Financeiro
+   "JA - COTAÇÃO N° 963 - 27 EL" (aba FIN - ELEVADOR, valores calculados
+   pelo Excel). Se este teste quebrar, o motor deixou de reproduzir a planilha.
+   ============================================================ */
+const GOLDEN_963 = {
+  vmleUsd: 351100, seguroUsd: 0, freteSeguroCapataziaUsd: 96589.79, siscomexRs: 214.5, txCambial: 5.5, outrasDespesasImportacaoRs: 0,
+  despachanteDesembaracoRs: 2702.7, demurrageRs: 0, freteInternoRs: 279400, armazenagemRs: 15910.8,
+  itensInstalacaoMontagem: [{ descricao: 'Instalação e montagem', valor: 669831 }],
+  containers: [], containerRateioDivisor: 1, itensDespesasExtras: [],
+  quantidadeEquipamentos: 27, percentualServicos: 0, difalCustoRs: 1433824.4, modelos: [],
+  markUpPct: 0.53, comissaoConsultoriaPct: 0, comissaoVendedorPct: 0.01, comissaoIndicacaoPct: 0.01,
+  modoFormacaoPreco: 'planilha',
+  parametros: {
+    regimeTributario: 'Presumido', icmsImportacaoPct: 0.12, ipiImportacaoPct: 0, pisImportacaoPct: 0.021, cofinsImportacaoPct: 0.1025, iiImportacaoPct: 0.2,
+    icmsVendaPct: 0.04, ipiVendaPct: 0, pisVendaPct: 0.0065, cofinsVendaPct: 0.03, irpjVendaPct: 0.0132, csllVendaPct: 0.01188, irpjAdicionalPct: 0, impostosPagarServicosPct: 0.16,
+  },
+};
+
+test('Método da planilha — golden 963: reproduz o Excel (preço, impostos, comissões, lucro, por equipamento)', () => {
+  const r = E.calcularV2(GOLDEN_963); // modo 'planilha' desvia para calcularPlanilha
+  assert.equal(r.modoFormacaoPreco, 'planilha');
+  closeTo(r.importacao.afrmm, 42499.51, 0.01, 'AFRMM (D11)');
+  closeTo(r.importacao.vmldRs, 2462293.85, 0.02, 'VMLD (S23)');
+  closeTo(r.importacao.totalNotaFiscal, 3751772.63, 0.02, 'Total da nota (U31)');
+  closeTo(r.importacao.despesasExtrasTotal, 970306.79, 0.01, 'Despesas extras (K12)');
+  closeTo(r.importacao.custoTotalMercadorias, 3301559.91, 0.02, 'Custo p/ precificação (U35)');
+  closeTo(r.precificacao.precoVendaProposta, 8961402.51, 0.02, 'Preço de venda (S66)');
+  closeTo(r.precificacao.precoVendaPorEquipamento, 331903.80, 0.01, 'Preço por equipamento (U70)');
+  closeTo(r.precificacao.impostosPagarProdutoRs, 447002.90, 0.02, 'Impostos a pagar produto (S49, sinal positivo = custo)');
+  closeTo(r.precificacao.totalComissaoRs, 179228.05, 0.02, 'Total comissões (U60)');
+  closeTo(r.precificacao.lucroFinal, 2629480.45, 0.02, 'Lucro da venda (S72)');
+  closeTo(r.precificacao.margemEfetivaPct, 0.29342287, 0.000001, 'Percentual de lucro líquido (U79)');
+});
+
+test('Método da planilha — o mark-up é margem sobre o PREÇO (divisor), e preço-alvo por equipamento fecha ao contrário', () => {
+  // quero R$ 300 mil por equipamento (27 un.) => markup necessário ≈ 49,08%
+  const alvoTotal = 300000 * 27;
+  const base = E.calcularV2(GOLDEN_963);
+  const custoU35 = base.importacao.custoTotalMercadorias;
+  const markNecessario = 1 - base.precificacao.impostosPagarProdutoPct - custoU35 / alvoTotal;
+  closeTo(markNecessario, 0.4908, 0.0001, 'markup necessário');
+  const r = E.calcularV2({ ...GOLDEN_963, markUpPct: markNecessario });
+  closeTo(r.precificacao.precoVendaPorEquipamento, 300000, 0.01, 'preço por equipamento atingido');
+});
+
+test('Método da planilha — containers do cadastro (R$) viram US$ no frete e entram na base de impostos', () => {
+  const sem = E.calcularV2({ ...GOLDEN_963, freteSeguroCapataziaUsd: 0 });
+  const com = E.calcularV2({ ...GOLDEN_963, freteSeguroCapataziaUsd: 0, containers: [{ tipo_tamanho: "40'HC", quantidade: 2, preco_rs: 35000, capatazia_rs: 1500, gri_rs: 500 }] });
+  closeTo(com.planilha.containersRs, 2 * 37000, 0.001, 'containers em R$');
+  closeTo(com.planilha.containersUsd, 74000 / 5.5, 0.001, 'containers em US$');
+  assert.ok(com.importacao.vmldRs > sem.importacao.vmldRs, 'o frete dos containers aumenta a base (VMLD) — como na planilha');
+  assert.ok(com.importacao.ii > sem.importacao.ii, 'e paga II sobre ele');
+  assert.ok(com.importacao.afrmm > sem.importacao.afrmm, 'e entra no AFRMM');
+});
+
+test('Modos antigos (markup_sobre_custo / margem_sobre_venda) continuam intactos', () => {
+  const m = E.calcularV2({ ...GOLDEN_963, modoFormacaoPreco: 'markup_sobre_custo', markUpPct: 0.4 });
+  assert.equal(m.versaoMotor, '2.0.0');
+  assert.equal(m.modoFormacaoPreco, 'markup_sobre_custo');
+});
+
+test('alavancaParaPreco — "VLR Sugerido CEO": a alavanca devolvida fecha EXATAMENTE no preço-alvo, nos 3 modos', () => {
+  const alvo = 8100000; // 27 equipamentos × R$ 300.000
+  // planilha
+  const pl = E.calcularV2(GOLDEN_963);
+  const a1 = E.alavancaParaPreco(pl, alvo);
+  assert.equal(a1.campo, 'mark_up_pct'); assert.ok(a1.valido);
+  closeTo(E.calcularV2({ ...GOLDEN_963, markUpPct: a1.valor }).precificacao.precoVendaProposta, alvo, 0.01, 'planilha');
+  // markup sobre o custo (V2)
+  const base2 = { ...GOLDEN_963, modoFormacaoPreco: 'markup_sobre_custo', markUpPct: 0.9, containers: [{ tipo_tamanho: "40'HC", quantidade: 11, preco_rs: 36450.4, capatazia_rs: 1827.77, gri_rs: 5222.2 }], freteSeguroCapataziaUsd: 0 };
+  const a2 = E.alavancaParaPreco(E.calcularV2(base2), alvo);
+  assert.equal(a2.campo, 'mark_up_pct'); assert.ok(a2.valido);
+  closeTo(E.calcularV2({ ...base2, markUpPct: a2.valor }).precificacao.precoVendaProposta, alvo, 0.01, 'markup sobre custo');
+  // margem sobre a venda (V2)
+  const base3 = { ...base2, modoFormacaoPreco: 'margem_sobre_venda', margemDesejadaPct: 0.2 };
+  const a3 = E.alavancaParaPreco(E.calcularV2(base3), alvo);
+  assert.equal(a3.campo, 'margem_desejada_pct'); assert.ok(a3.valido);
+  closeTo(E.calcularV2({ ...base3, margemDesejadaPct: a3.valor }).precificacao.precoVendaProposta, alvo, 0.01, 'margem sobre venda');
+});
+
+test('alavancaParaPreco — preço-alvo abaixo do custo é inválido (ex.: R$ 35 mil por equipamento na 963)', () => {
+  const a = E.alavancaParaPreco(E.calcularV2(GOLDEN_963), 35000 * 27);
+  assert.equal(a.valido, false);
+  assert.equal(E.alavancaParaPreco(E.calcularV2(GOLDEN_963), 0), null);
+});
+
+test('ratearLucroPorEquipamento — a soma fecha no lucro total e a mão de obra de cada equipamento pesa só nele', () => {
+  const linhas = [{ preco: 250000, mo: 15000 }, { preco: 300000, mo: 30000 }, { preco: 450000, mo: 15000 }];
+  const lucros = E.ratearLucroPorEquipamento({ lucroTotal: 400000, precoTotal: 1000000, linhas });
+  closeTo(lucros.reduce((s, v) => s + v, 0), 400000, 0.001, 'soma = lucro total');
+  // mesmo preço-base (rateio), mas quem tem mais mão de obra deixa menos líquido: 2º (30k) × 1º (15k)
+  const lucrosMesmoPreco = E.ratearLucroPorEquipamento({ lucroTotal: 400000, precoTotal: 600000, linhas: [{ preco: 300000, mo: 15000 }, { preco: 300000, mo: 45000 }] });
+  closeTo(lucrosMesmoPreco[0] - lucrosMesmoPreco[1], 30000, 0.001, 'diferença = diferença de mão de obra');
+  // exemplo à mão: (400.000 + 60.000) × 25% − 15.000 = 100.000
+  closeTo(lucros[0], 100000, 0.001, 'equipamento 1');
+});
+
+test('ratearLucroPorEquipamento — golden 963 (V2 oficial): soma dos 27 líquidos = lucro total', () => {
+  const r = E.calcularV2({ ...GOLDEN_963, modelos: [{ unidadeId: 'a', quantidade: 27, valorUnitarioUsd: 13000 }] });
+  const linhas = Array.from({ length: 27 }, (_, i) => ({ preco: r.precificacao.precoVendaProposta / 27, mo: 20000 + i * 500 }));
+  const lucros = E.ratearLucroPorEquipamento({ lucroTotal: r.precificacao.lucroFinal, precoTotal: r.precificacao.precoVendaProposta, linhas });
+  closeTo(lucros.reduce((s, v) => s + v, 0), r.precificacao.lucroFinal, 0.01, 'soma');
+});

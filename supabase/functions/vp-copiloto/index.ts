@@ -31,6 +31,31 @@ const corsHeaders = {
 const MODEL = "claude-sonnet-5";
 const ANTHROPIC_URL = "https://api.anthropic.com/v1/messages";
 
+// ---- Conhecimento em tabela (10/10/2026) ----------------------------------
+// As regras de resposta, o MAPA DO ECOSSISTEMA (GPS) e o conhecimento de cada tela moram na tabela
+// public.vp_copiloto_docs (id = 'regras' | 'ecossistema' | 'rota:<rota>'). A função lê com a chave de serviço
+// (a tabela tem RLS sem políticas: o navegador não lê). Ajustar o que o Copiloto sabe = UPDATE na tabela, sem redeploy.
+// Cache de 60 s por rota; se o banco não responder, cai no ROUTE_DOCS embutido abaixo (nunca derruba o Copiloto).
+const SUPABASE_URL = Deno.env.get("SUPABASE_URL") ?? "";
+const SERVICE_KEY = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY") ?? "";
+const docsCache = new Map<string, { at: number; rows: Record<string, string> }>();
+async function carregarDocs(route: string): Promise<Record<string, string>> {
+  const chave = route || "-";
+  const hit = docsCache.get(chave);
+  if (hit && Date.now() - hit.at < 60_000) return hit.rows;
+  const rows: Record<string, string> = {};
+  if (!SUPABASE_URL || !SERVICE_KEY) return rows;
+  try {
+    const ids = ["regras", "ecossistema", ...(route ? ["rota:" + route] : [])];
+    const lista = ids.map((i) => '"' + i + '"').join(",");
+    const url = SUPABASE_URL + "/rest/v1/vp_copiloto_docs?select=id,conteudo&id=in.(" + encodeURIComponent(lista) + ")";
+    const r = await fetch(url, { headers: { apikey: SERVICE_KEY, Authorization: "Bearer " + SERVICE_KEY } });
+    if (r.ok) for (const row of await r.json()) rows[row.id] = row.conteudo;
+  } catch (_) { /* fallback: ROUTE_DOCS embutido */ }
+  if (Object.keys(rows).length) docsCache.set(chave, { at: Date.now(), rows });
+  return rows;
+}
+
 function json(body: unknown, status = 200, extra: Record<string, string> = {}) {
   return new Response(JSON.stringify(body), {
     status,
@@ -46,10 +71,38 @@ Fala português do Brasil, com tom direto, cordial e prático. Trata o usuário 
 Você SEMPRE recebe o contexto da tela atual em "page":
 - route: identificador da rota; title: título da tela.
 - fields: lista dos campos do formulário visível. Cada campo tem:
-  idx (índice estável), label (rótulo), type (text|select|textarea|number|date|checkbox…),
-  value (valor atual — para type "checkbox" é sempre true ou false, nunca string),
-  options (valores válidos, quando select), required (true/false).
+  idx (índice estável — USO INTERNO, ver regra abaixo), label (rótulo exibido na
+  tela — pode vir vazio, ver regra abaixo), hint (título da seção/card onde o
+  campo mora, ex. "Mão de obra (hora-homem)" — sempre tente usar isso pra
+  contextualizar, principalmente se dois campos tiverem o mesmo label em
+  seções diferentes, ex. duas "Observação"), type (text|select|textarea|
+  number|date|checkbox…), value (valor atual — para type "checkbox" é sempre
+  true ou false, nunca string), options (valores válidos, quando select),
+  required (true/false).
 Quando houver, "documentText" traz o texto do documento/preview renderizado na tela.
+Além disso você recebe, quando existirem: "REGRAS DE OURO" (como nomear campos, GPS, segurança), "MAPA DO ECOSSISTEMA" (o fluxo inteiro e onde cada
+tela fica), "POSIÇÃO ATUAL (GPS)" (endereço, caminho no menu, aba ativa), "CONHECIMENTO DESTA TELA" (cada campo, quem doa o dado e quem herda) e
+"VISÃO DA TELA" (fotografia do que está visível agora: títulos, valores, tabelas, botões, campos somente leitura). Trate todos como fonte de verdade
+e siga as REGRAS DE OURO à risca — principalmente: cite campos pelo RÓTULO EXATO da tela, nunca por nome técnico de código.
+
+⚠️ REGRA CRÍTICA — NUNCA EXPONHA "idx"/ÍNDICE AO USUÁRIO: "idx" é um número de
+posição interno, só serve pra você preencher "fills"/"issues[].idxs"
+corretamente (o frontend usa isso pra aplicar o valor no campo CERTO da
+tela) — o usuário NUNCA vê esse número nem sabe o que ele significa. Na sua
+"reply" e em "questions[].text", refira-se a um campo SEMPRE pelo "label"
+exatamente como aparece na tela (ex.: "Colaborador", "Categoria (SKU)").
+NUNCA escreva "idx 0", "campo 0", "índice 3" ou qualquer variação disso em
+texto dirigido ao usuário — isso é incompreensível pra quem não é
+desenvolvedor e é exatamente o tipo de erro que você deve evitar.
+- Se "label" vier PREENCHIDO: use-o literalmente.
+- Se "label" vier VAZIO (campo sem rótulo capturável na tela — acontece em
+  selects/inputs dentro de tabela sem <th> correspondente, por exemplo):
+  descreva o campo pelo "hint" (seção onde ele está) + "type" + "options"
+  (se for select, liste as opções pra dar contexto, ex.: "o campo de seleção
+  na seção 'Mão de obra', com as opções X/Y/Z"). NUNCA diga "o campo sem
+  nome" nem cite o idx — construa uma descrição útil a partir do que você
+  tem (hint, type, options, value atual, e o que a conversa já deixou claro
+  sobre o que o usuário está tentando fazer).
 
 Comporte-se conforme "mode":
 
@@ -165,7 +218,84 @@ REGRAS DE SAÍDA (obrigatórias):
 - Formato:
   {"reply":"...","fills":[{"idx":0,"label":"...","value":"..."}],"questions":[{"id":"cnpj","text":"..."}],"issues":[{"severity":"alta","where":"...","problem":"...","suggestion":"...","idxs":[43]}],"opsQuestionario":[{"op":"add_pergunta","categoriaNome":"...","texto":"...","tipoCampo":"sim_nao"}]}
 - Inclua somente as chaves relevantes ao modo. "reply" é SEMPRE obrigatório (1 a 3 frases).
-- Nunca invente CNPJ, valores, nomes ou datas: o que não souber, pergunte.`;
+- Nunca invente CNPJ, valores, nomes ou datas: o que não souber, pergunte.
+- Antes de responder, releia "reply" e cada "questions[].text": se algum tiver a palavra "idx",
+  "índice" ou um número solto sem explicação referindo-se a um campo, REESCREVA usando o "label"
+  (ou "hint" se label vazio) daquele campo. Isso é obrigatório em TODA resposta, não só quando
+  "page.route" for de um módulo específico.`;
+
+// ============================================================
+// OMIE_KNOWLEDGE — conhecimento geral do ERP Omie, injetado só nas telas
+// que de fato dependem dele (ver OMIE_ROUTES abaixo). O Copiloto NÃO tem
+// acesso de API ao Omie (não chama nada em tempo real) — isso é
+// conhecimento ESTÁTICO sobre como o VP Gestão se integra com ele, pra
+// responder perguntas de usuário sem inventar. Pedido explícito do usuário
+// (08/10/2026): "ser o maior expert... inclusive saber tudo sobre o
+// omie" — decisão de arquitetura: dar PODER de chamar a API do Omie a um
+// chatbot embutido no app, exposto com chave pública, é uma mudança de
+// escopo/segurança grande (credenciais de escrita do ERP acessíveis pelo
+// navegador de qualquer usuário logado) — não implementado sem decisão
+// explícita adicional. O que resolve o problema real (usuário sem
+// resposta) é este bloco: conhecimento forte, sem poder de ação.
+// ============================================================
+const OMIE_KNOWLEDGE = `CONHECIMENTO GERAL SOBRE O OMIE (ERP), pra responder dúvidas de usuário:
+
+- O Omie é a FONTE DA VERDADE de cadastro de produto, estoque, estrutura
+  (BOM), compras e vendas. O VP Gestão espelha e acrescenta o que o Omie
+  não tem (ex.: checklist de produção, mão de obra, carga máquina) — nunca
+  o contrário. Se um dado parecer errado, a causa raiz quase sempre está
+  no cadastro do Omie, não no VP Gestão.
+- "Produto de importação" é definido pelo campo fiscal "origem da
+  mercadoria = Estrangeira" no cadastro do produto, NÃO pelo prefixo do
+  código (existem VPEL/VPER/VPB/VPMP tanto nacionais quanto importados).
+- Prefixos de código de produto usados pela VerticalParts: VPEL = peça de
+  Elevador, VPER = peça de Escada/Esteira Rolante, VPB = peça fornecida
+  pela BST, VPMP = Matéria-Prima.
+- PEDIDO DE VENDA tem um fluxo de etapas (cada conta Omie pode
+  customizar as próprias) — NESTA conta da VerticalParts, o fluxo real
+  observado é: "Proposta Comercial" → "Pedido de Venda" (código customizado
+  "80", NÃO o genérico "10" de outras contas — nunca assuma "10" sem
+  confirmar) → "Separar Estoque / Produção" (código "20" — é a ÚNICA etapa
+  que o PCP ("Pedidos para Produzir") vigia pra gerar Ordem de Produção
+  automaticamente) → "Faturar" (50) → "Faturado" (60) → "Entrega" (70).
+  Um pedido parado em "Pedido de Venda" (80) só vira trabalho pro PCP
+  depois que alguém no Omie (Comercial/Financeiro) avança manualmente pra
+  "Separar Estoque / Produção" (20) — o PCP NÃO lê/avança a etapa 80
+  sozinho, isso é por design, não falta de recurso.
+- REQUISIÇÃO DE COMPRA ≠ PEDIDO DE COMPRA: o VP Gestão (Reposição,
+  Necessidade, Carga Máquina) só cria REQUISIÇÃO de compra no Omie — um
+  pedido de intenção, sem fornecedor obrigatório. Alguém no Omie converte
+  a requisição num Pedido de Compra de verdade, decidindo o fornecedor
+  real ali. Nenhuma tela do VP Gestão fecha um Pedido de Compra sozinha.
+- NOTA FISCAL é sempre emitida DENTRO do Omie, pelo setor Fiscal — nenhuma
+  tela do VP Gestão emite NF; "Emissão de NF" só ACOMPANHA a situação.
+- O "custo" mostrado nas telas do PCP normalmente é o CMC (Custo Médio
+  Contábil) do Omie — uma média móvel de todo o histórico de compra,
+  não o preço da última compra nem um preço "hoje". Produto nunca comprado
+  não tem CMC nenhum (aparece "sem custo").
+- "Baixa de produção" no PCP (concluir uma OP com produto acabado) lança
+  um AJUSTE DE ESTOQUE no Omie (saída dos componentes + entrada do
+  produto pronto) — sempre com confirmação explícita de um humano, nunca
+  automático, e sempre comparando antes com o que já foi lançado no Omie
+  pra não lançar em dobro.
+- O Omie tem limites reais de API que o VP Gestão respeita (ex.: no
+  máximo 100 registros por página em algumas consultas, e a API pode
+  recusar temporariamente chamadas repetidas "redundantes" em sequência
+  rápida) — se um usuário perguntar "por que demorou/deu erro ao
+  sincronizar", a causa mais provável é esse tipo de limite, não uma
+  falha do VP Gestão.
+`;
+
+// Rotas onde o Omie é central o bastante pra justificar o bloco acima no
+// contexto da IA (evita gastar tokens com isso em toda tela do sistema).
+const OMIE_ROUTES = new Set([
+  "pcp", "mes", "almoxarifado", "carga-maquina", "montagem-produto",
+  "simulacao-producao", "relatorios-pcp", "expedicao", "emissao-nf",
+  "compras", "pi-importacao", "rfq-importacao", "ims-importacao",
+  "embarques-importacao", "importacao", "ncm-catalogo",
+  "cadastro-produtos", "cadastro-materias-primas", "solicitacoes-produto",
+  "ficha-tecnica",
+]);
 
 // ============================================================
 // ROUTE_DOCS — conhecimento específico por tela (chave = page.route,
@@ -181,115 +311,8 @@ REGRAS DE SAÍDA (obrigatórias):
 // tela (ver commits de 29-31/08 pra o histórico da Precificação).
 // ============================================================
 const ROUTE_DOCS: Record<string, string> = {
-  precificacao: `TELA: Precificação de Elevador (Financeiro).
-
-LISTAGEM (antes de abrir uma cotação): mostra cotações de fornecedor já
-respondidas (ou formulários enviados direto com preço combinado por
-fora), prontas para calcular o preço de venda. Clicar numa linha abre o
-detalhe/cálculo.
-
-DETALHE — DE CIMA PRA BAIXO:
-
-1. "Unidades desta cotação" — herdado do Formulário de Elevadores +
-   resposta do fornecedor (custo em USD por unidade, PTAX no dia da
-   cotação vs. PTAX agora ao vivo). Botão "Ressincronizar do Fornecedor"
-   busca de novo a resposta mais recente do fornecedor.
-
-2. "Mão de obra — busca automática" — tração × capacidade × paradas
-   casados contra a tabela de referência em Cadastros → Atualização de
-   Custos (custos_instalacao_elevador). Botão "Recalcular" refaz a busca
-   pra TODAS as unidades a partir do dado mais atual do Formulário
-   (útil se alguém corrigiu tração/capacidade/paradas lá depois).
-   Situação de cada linha:
-   - "Confirmado" (verde) — achou uma linha REAL da tabela (cotação de
-     instalador de verdade) pra essa tração+capacidade+paradas exatas.
-   - "Estimativa — não confirmada" (amarelo) — achou uma linha, mas o
-     valor foi gerado por regressão estatística (extrapolação sobre
-     linhas reais da mesma tração), não é cotação real de instalador.
-     Exige aprovação técnica/financeira igual "Projeto especial" antes
-     de aprovar a precificação — não é preço garantido.
-   - "Projeto especial" (vermelho) — a combinação tração+capacidade+
-     paradas está fora de qualquer faixa cadastrada. O valor NÃO entra
-     sozinho em lugar nenhum — precisa digitar manualmente em
-     "Instalação e Montagem" quando tiver uma cotação real de
-     instalador/engenharia.
-   - "Pendente" (amarelo) — falta tração, capacidade ou paradas no
-     Formulário de Elevadores dessa unidade.
-   Botão "Trocar" em qualquer linha abre edição inline de tração/
-   capacidade/paradas — grava direto no Formulário de Elevadores da
-   unidade (fonte da verdade) e já recalcula a busca de MO na hora. Útil
-   quando a tração escolhida está errada ou pra testar outra config.
-
-3. "Despesas de Importação" — VMLE, Seguro, Frete+Seguro+Capatazia em
-   USD (dois campos separados: "Padrão 120d, container compartilhado" e
-   "Expresso 90d, container exclusivo" — deixar o expresso em
-   branco/zero se o cliente não pediu essa opção), Siscomex, Câmbio
-   (com atalho "Usar" pro dólar ao vivo), Outras despesas, Despachante +
-   Desembaraço, Demurrage, e Containers (tamanho/quantidade herdados da
-   resposta do fornecedor quando possível, preço do frete digitado pelo
-   Financeiro).
-
-4. "Instalação e Montagem" — lista FIXA de 7 itens, sempre nesta ordem
-   (não dá pra adicionar/remover item): Mão de Obra, Custos Engenharia,
-   ART, Andaime, Talha, Empilhadeira, Ajudantes. "Mão de Obra" é
-   SOMENTE LEITURA — herda automaticamente a soma de TODAS as linhas da
-   tabela "Mão de obra — busca automática" acima (Confirmado +
-   Estimativa somados juntos). Os outros 6 continuam digitados à mão
-   pelo Financeiro (preenchimento avulso de Engenharia/Logística).
-
-5. "Despesas Extras" — catch-all: Frete interno (Brasil), Armazenagem,
-   % de Serviços, Contingência, Outros custos não recuperáveis (esses
-   dois últimos só entram no motor oficial V2, o V1 legado ignora), e
-   Itens avulsos (lista livre, pode adicionar/remover).
-
-6. "Resumo de Custos" — visão consolidada, cada linha soma campos das
-   seções acima, nada digitado aqui: Custos Equipamentos (VMLE×câmbio),
-   Custos com Frete (Seguro+Frete/Capatazia padrão, em R$), Mão de Obra
-   (mesmo valor do item 1 da lista fixa acima), Custos Operacionais
-   (soma dos outros 6 itens da lista fixa — Empilhadeira, Munck etc.),
-   Frete Interno (Brasil), Custos Imposto (II+IPI+PIS+COFINS+ICMS — só
-   aparece depois de clicar "Calcular" pelo menos uma vez, porque
-   precisa da cascata fiscal completa; antes disso mostra "—", nunca
-   zero fingindo que não há imposto), e Soma (total).
-
-7. "Alavancas do Financeiro" — Markup sobre custo, comissões
-   (consultoria/vendedor/indicação), Margem mínima configurada. Link
-   "Ver/editar parâmetros fiscais" expande regime tributário e
-   alíquotas de importação/venda (ICMS/IPI/PIS/COFINS/IRPJ/CSLL).
-
-8. "Formação do Preço" — escolhe o MODO: "Markup sobre o custo" (usa o
-   % das Alavancas acima) ou "Margem desejada sobre a venda" (% próprio
-   deste card). Depois de "Calcular", aparecem dois cards lado a lado:
-   - "Preço de venda — 120 dias (Compartilhado)": custo econômico
-     completo (= custo líquido de importação + despesas operacionais +
-     contingência + outros custos não recuperáveis — TUDO isso entra na
-     BASE do preço, não só descontado do lucro depois, decisão de
-     29/08), preço de venda, margem efetiva (compara com a mínima
-     configurada — fica laranja/aviso se abaixo), lucro final. Avisos
-     possíveis: "divisor inválido" (markup/margem+impostos+comissões
-     somam 100%+, impossível formar preço), "margem efetiva negativa"
-     (não deveria aprovar assim), "margem abaixo da mínima" (pode
-     aprovar mesmo assim, com confirmação).
-   - "Preço de venda — 90 dias (Exclusivo)" — só aparece se o campo
-     "Frete... Expresso 90d" (item 3) tiver valor. MESMO custo base,
-     só o frete internacional muda (container exclusivo é mais caro) —
-     é OUTRO custo econômico completo, não o mesmo número do card de
-     120 dias. Serve pra oferecer as duas opções ao cliente na mesma
-     conversa. Mostra "R$X a mais que os 120 dias".
-   Link "Ver comparação técnica (motor antigo)" no fim — abre um card
-   com o resultado do motor V1 (legado, fórmula antiga da planilha
-   Excel original). Só existe pra auditoria/comparação: NÃO trava mais
-   aprovação nem alimenta a Proposta desde 29/08 (decisão do usuário) —
-   antes disso o V1 subprecificava porque não colocava instalação/
-   operacional na base do preço, só descontava do lucro depois (podia
-   dar markup positivo com margem real negativa, bug corrigido).
-
-BOTÕES DO TOPO: "Salvar rascunho" (grava sem calcular), "Calcular"
-(roda o motor, popula Resumo de Custos → Imposto e Formação do Preço),
-"Aprovar Precificação" (trava o registro, usa a margem do motor V2
-oficial — cai pro V1 só se a precificação nunca foi recalculada desde a
-migração —, permite aprovar abaixo da margem mínima com confirmação
-explícita).`,
+  precificacao: `TELA: Precificação (Financeiro & Preços). O conhecimento completo e atualizado desta tela fica na tabela vp_copiloto_docs (id "rota:precificacao"); se esta
+mensagem apareceu, o banco não respondeu agora. Responda com o que a VISÃO DA TELA mostra e avise que o detalhamento não pôde ser carregado.`,
 
   dashboard: `TELA: Dashboard (Geral, todos os perfis).
 
@@ -790,18 +813,33 @@ case-insensitive de nome de item), ordenado do menor pro maior preço —
 serve pra ver rapidamente qual foi o menor preço já cotado pra um item
 específico em RFQs anteriores.`,
 
-  compras: `TELA: Fretes Nacionais (módulo Compras).
+  compras: `TELA: Importação Varejo ("Compras Nacional" no menu — nome
+histórico, o conteúdo de hoje não tem nada a ver com frete nacional).
 
-Reaproveita a MESMA tabela 'embarques' da Importação legada, só
-remapeando os status pro vocabulário de frete nacional (não é uma tabela
-separada).
+Lista TODOS os produtos de importação direta e ativos do Omie (identificado
+pelo campo fiscal "origem da mercadoria" = Estrangeira, não por prefixo de
+código) com estoque, Curva ABC-D de giro (A/B/C por volume faturado desde
+01/01/2024; D = sem venda no período) e sugestão de compra calculada.
 
-ACHADO REAL: os campos "Valor" e "Motorista" mostrados na tela não existem
-de fato na tabela — aparecem sempre em branco/"—", não é bug, é campo que
-nunca foi implementado. "Ocorrências" mostra '1' só quando o status é
-"Atraso" — não é um registro de ocorrência de verdade, é um contador
-derivado do status. O botão "Novo frete" redireciona pra tela 'importacao'
-em vez de criar o frete direto aqui.`,
+CAMPOS/CARDS DO TOPO: "Precisa comprar" e "Alerta (no mínimo)" são
+clicáveis — funcionam como atalho pros mesmos botões de filtro de cor
+(Todas/Precisa comprar/Alerta/OK) logo abaixo. "Valores a pagar
+(estimado)": soma sugestão × último preço pago — se você MARCAR produtos
+na lista (checkbox), o card passa a somar só os SELECIONADOS, em vez do
+total da tela inteira.
+
+COLUNAS DA TABELA: estoque sincronizado do Omie 4x/dia (não é "ao vivo" —
+tem um botão "Sincronizar estoque agora" pra forçar), conselho de compra
+(Curva D com estoque parado sugere "não comprar mais"), Último Fornecedor
+(com selo "exterior" quando aplicável) e Último Preço Unitário (do
+histórico real de Pedidos de Compra do Omie, ou de P.I. quando mais
+recente — selo "P.I." nesse caso).
+
+AÇÕES: checkbox por linha + "Selecionar todas" (respeita o filtro atual);
+"Enviar requisição de compra em massa" abre um modal com Fornecedor/Preço
+Unit. editáveis por item (pré-preenchidos do histórico, o comprador
+confirma ou corrige) — cria uma Requisição de Compra REAL no Omie, nunca
+automático, sempre com confirmação explícita.`,
 
   'compras-email': `TELA: Inbox de Compras (e-mails).
 
@@ -1033,16 +1071,259 @@ checklist de vacinas reais dentro do formulário, gravando múltiplas linhas
 ALIMENTA: é pré-requisito do gate de RH em Central de Decisões (aprovação
 "montador entra na obra") e também do Contrato Instalador.`,
 
-  almoxarifado: `TELA: Almoxarifado.
+  almoxarifado: `TELA: Almoxarifado (Logística Interna → PCP).
 
-Pedidos de compra de VAREJO (insumos/reposição) — distinto de compra de
-equipamento pra revenda.
+Estoque e cadastro de materiais do PCP (Planejamento e Controle da
+Produção) — serve a Quadros de Comando, Corrimãos, Cabos de Aço e Cabos de
+Manobra (itens cortados sob medida). O Omie é a FONTE dos dados de
+cadastro/estoque/estrutura — esta tela espelha e acrescenta o que o Omie
+não tem (reposição por consumo, necessidade por carteira, custo manual).
 
-REGRA NOTÁVEL: a aprovação não acontece dentro desta tela — é feita pelo
-Chefe de Logística de dentro da Central de Decisões
-('criarDecisaoCompraVarejo'). A frase que resume a regra no código é "o
-pedido É o gatilho": criar o pedido aqui já gera automaticamente a decisão
-pendente lá.`,
+ABAS (sempre visíveis no topo, cada uma com URL própria):
+
+1. "Estoque" — lista de produtos/matérias-primas do PCP com físico,
+   reservado, disponível, mínimo (vem do Omie — a maioria dos itens NÃO
+   tem mínimo cadastrado lá, aparece "Sem mínimo") e endereço de prateleira
+   (campo livre, ex. "A-01-02"). Botão "Sincronizar com Omie" força uma
+   releitura; também roda sozinho 4x/dia. Clicar numa linha abre o
+   detalhe/histórico daquele item.
+
+2. "Estrutura" — a árvore de componentes (BOM) de um produto: busca por
+   "Código ou descrição…", lista "Componente" + "Quantidade por unidade do
+   produto". 'origem' de cada linha é "omie" (vem do cadastro oficial,
+   só leitura) ou "pcp" (acrescentada aqui — essas sim podem ser
+   removidas). Serve pra saber de quanto de cada matéria-prima um produto
+   acabado precisa.
+
+3. "Custos" — preenchimento MANUAL de custo pra componente que nunca foi
+   comprado no Omie (não tem CMC, ficaria "sem custo" pra sempre nos
+   relatórios). Campo "Valor unitário (R$)" + checkbox de confirmação.
+   REGRA: o custo do OMIE sempre vale quando existe; o manual só é usado
+   enquanto o Omie não tiver custo nenhum — assim que o item for comprado
+   de verdade, o CMC do Omie assume sozinho. Exige a alçada
+   "almoxarifado.custo_manual" pra gravar (ver "ver_custo" abaixo, que é
+   diferente: só pra ENXERGAR custo, sem poder editar).
+
+4. "Reposição" — "o que comprar com base no CONSUMO HISTÓRICO", não no
+   estoque mínimo (decisão do usuário: a maioria dos itens é importada,
+   ~90 dias de prazo — esperar bater no mínimo já é tarde). Mostra consumo
+   médio mensal, cobertura em dias, tendência (▲/▼) e 3 situações por cor:
+   vermelho = crítico (acaba antes do prazo de reposição chegar), amarelo
+   = "comprar" (ponto de pedido), verde = ok. Clicar nos cards "Precisa
+   comprar"/"Alerta" no topo filtra a lista por aquela cor. Checkbox por
+   linha + "Selecionar todas" + botão "Enviar compra ao Omie (N)" abre um
+   modal que PRECISA simular antes de liberar o envio real (cria uma
+   Requisição de Compra de verdade no Omie — nunca confunda simular com
+   enviar). Itens FABRICADOS (que têm Estrutura) não entram aqui, aparecem
+   como "Produzir" em vez de "Comprar".
+
+5. "Necessidade de materiais" — pergunta diferente da Reposição: "o que já
+   foi VENDIDO (pedidos abertos no Omie) e falta de material pra entregar
+   no prazo". Mostra pedidos de origem, data de entrega mais cedo, "comprar
+   até" (= entrega − prazo de importação) e o aviso "não chega a tempo"
+   quando já é tarde pra encomendar. Mesmo botão de enviar compra ao Omie
+   da aba Reposição — as duas abas NÃO são somadas automaticamente.
+
+6. "Pedidos de compra" — histórico de requisições já enviadas ao Omie por
+   estas telas (não editável, só consulta).
+
+REGRA DE ACESSO NOTÁVEL: custo (de material e de mão de obra) só aparece
+pra quem tem a alçada "almoxarifado.ver_custo" — sem ela, a coluna some ou
+mostra valor borrado/falso, NUNCA o valor real escondido só visualmente.
+Isso é proteção de dado sensível (salário/custo), não um bug de tela em
+branco.`,
+
+  'carga-maquina': `TELA: Carga Máquina (Logística Interna → PCP).
+
+Mostra se a capacidade de produção (máquinas + mão de obra) aguenta o que
+está planejado, por período.
+
+ABAS: "Capacidade" (visão consolidada, alerta de sobrecarga acima de 85%
+amarelo / 100% vermelho — limites fixos, não configuráveis pela tela),
+"Máquinas" (cadastro: Código — ex. "MAQ-01" — e dados da máquina/posto de
+trabalho), "Roteiro" (horas por unidade de produto em cada recurso/máquina
+— é o que alimenta o cálculo de capacidade) e "Recursos" (cadastro de
+recursos de mão de obra, ex. "MO-01", separado de máquina física).
+
+REGRA NOTÁVEL: o campo "Horas" no Roteiro é por UNIDADE do produto, nunca
+uma estimativa de lote — ele é multiplicado pela quantidade planejada pra
+calcular a carga total daquele recurso no período.`,
+
+  'montagem-produto': `TELA: Montagem do Produto — Estrutura e Custo
+(Logística Interna → PCP).
+
+Visualiza/edita a estrutura (BOM) e o custo de um produto específico,
+buscado por "Código do item…" no topo. É uma visão focada em 1 produto de
+cada vez (diferente da aba "Estrutura" do Almoxarifado, que é a lista
+geral de todas as estruturas).
+
+REGRA NOTÁVEL: componentes de origem "omie" vêm do cadastro oficial do
+Omie (só leitura); só os de origem "pcp" (acrescentados aqui) podem ser
+removidos/editados — nunca tente apagar um componente que veio do Omie por
+esta tela.`,
+
+  'simulacao-producao': `TELA: Simulação de Produção (Logística Interna →
+PCP).
+
+Simula "se eu produzir X unidades de um produto, o material e a capacidade
+aguentam?" ANTES de abrir uma Ordem de Produção de verdade — não grava
+nada no banco, é só cálculo hipotético. Campo "Produzir" recebe a
+quantidade a simular; o resultado mostra se falta material (comparando com
+o estoque/Estrutura) e se a Carga Máquina do período suporta.`,
+
+  pcp: `TELA: PCP — Planejamento e Controle da Produção (Logística
+Interna). O módulo inteiro gira em torno da ORDEM DE PRODUÇÃO (OP, tabela
+'pcp_ordens') — a unidade de trabalho que a produção de fato executa.
+
+ABAS (cada uma com URL própria — um link direto tipo ".../pcp/ordens/<id>"
+abre aquela OP específica dentro da aba "Ordens de Produção"):
+
+1. "Ordens de Produção" — lista + detalhe de toda OP já criada.
+2. "Pedidos para Produzir" — pedidos de venda do Omie na etapa "Separar
+   Estoque / Produção" que ainda não viraram OP. Botão "Gerar OPs" cria a
+   OP-mãe do pedido (checklist de separação dos itens que NÃO são do PCP)
+   + uma OP-filha por quadro de comando ("-Q") ou por corte de cabo ("-C")
+   dentro dele.
+3. "Pedidos de Quadro" — fluxo específico do Quadro de Comando: gera
+   OP-mãe + uma OP por FRENTE (quadro/fiação/botoeiras/cabos de aço) a
+   partir do "Escopo do pedido" preenchido no Formulário/Quadro de
+   Comando.
+4. "Planejamento" e "Controle" — visões agregadas de acompanhamento (não
+   criam OP, só leitura/ajuste de datas).
+
+DETALHE DE UMA OP (o que o usuário vê ao abrir uma linha — ex. o link
+".../pcp/ordens/<id>"), de cima pra baixo:
+
+- Cabeçalho: número da OP, "Produto" (código+descrição — numa OP de CORTE
+  de cabo, que não grava produto de propósito porque corte nunca baixa
+  estoque sozinho, o nome aparece como "Corte — <código>"), "Frente"
+  (quadro/fiação/botoeiras/cabos_aco/corte/pedido), status (Aguardando/Em
+  produção/Concluída/Cancelada), "Início previsto" (data), "Prazo de
+  entrega".
+- Botões de ação: "Iniciar produção" (só quando status = Aguardando),
+  "Concluir OP" (só habilita quando TODAS as etapas/frentes já estão
+  concluídas — o tooltip explica o motivo quando desabilitado), "Concluir
+  pedido" (na OP-mãe, quando todas as frentes dela terminaram).
+- Ao concluir, pede: "Produzidas" (quantidade boa), "Perdidas" (quantidade
+  com perda), "Causa da perda (se houver)" e "Ação corretiva" — texto
+  livre nos dois últimos, alimentam os relatórios de Perdas.
+- Tabela de ETAPAS — colunas "#", "Etapa", "Setor", "Responsável",
+  "Prevista", "Concluída em", "Status" (select: Pendente/Em
+  andamento/Concluída, editável linha a linha).
+- Seção "Mão de obra (hora-homem)" — tabela com colunas "Colaborador"
+  (quem trabalhou — select de pessoas ATIVAS do cadastro geral de
+  colaboradores, não só quem tem login no sistema), "Setor", "Horas",
+  e (só pra quem tem a alçada "pcp.ver_hh") "Valor da hora"/"Custo". Botão
+  "Apontar" grava a hora-homem; "Trocar"/"Remover" editam uma linha já
+  apontada. Exige a alçada "pcp.apontar_hh" pra lançar.
+- Se a OP já está "Concluída" e TEM produto (ou seja, não é corte): card
+  "Baixa no estoque do Omie" — simula a saída dos componentes +
+  entrada do produto acabado, deixa corrigir a quantidade antes de
+  confirmar, e só então lança DE VERDADE no Omie (nunca automático).
+
+REGRA NOTÁVEL — não confundir "Mão de obra (hora-homem)" com "Colaborador"
+de outra tela: aqui o campo que pergunta "quem trabalhou" sempre se chama
+"Colaborador" na coluna da tabela — se um campo parecido aparecer sem
+rótulo capturável, é esse mesmo (contexto: seção "Mão de obra").
+
+ALIMENTA: MES (só OP com frente='quadro' pode ser "liberada para o MES" —
+ver tela 'mes'); Emissão de NF e Expedição dependem da OP-mãe do pedido
+estar concluída.`,
+
+  mes: `TELA: MES — Sistema de Execução da Manufatura (Logística Interna).
+Acompanha a produção DETALHADA de um Quadro de Comando (OP com
+frente='quadro') passo a passo, por 12 etapas reais de chão de fábrica —
+diferente do PCP, que só controla a OP como um todo.
+
+A OP só avança por "Concluir etapa" (nunca pulando) — cada etapa valida um
+GATE antes de deixar concluir: ex. FURACAO exige os furos previstos todos
+executados; TESTES exige pelo menos um teste sem potência E um energizado
+aprovados; QUALIDADE exige número de série preenchido; EXPEDICAO exige
+transportadora e data de saída.
+
+ABAS: "Kanban" (colunas por etapa; cor do card: verde/amarelo/vermelho =
+prazo, CINZA = bloqueada, ROXO = em retrabalho — filtros "Atrasadas /
+Bloqueadas / Retrabalho"), "Painel" (indicadores agregados), "Ordens"
+(lista), "Apontamentos" (tempo médio por etapa), "Painel TV" (só leitura,
+tela cheia, recarrega sozinho a cada 30s — pra deixar numa TV do chão de
+fábrica).
+
+DENTRO DE UMA OP, abas internas: "Etapa" (botão "Iniciar etapa" → depois
+"Concluir etapa", que só habilita quando o checklist da etapa está
+completo — o texto do botão mostra "faltam N" enquanto não está),
+"Ligações" (cadastro de ligações elétricas previstas × concluídas, usado
+pelo gate da etapa ELETRIFICACAO), "Testes" (um teste REPROVADO exige
+descrição do problema e ABRE UMA NC automaticamente), "NCs" (Não
+Conformidade: aberta → corrigida → fechada; uma NC nascida de um teste só
+fecha com um teste novo aprovado depois da correção), "Materiais"
+(consumo real, com item CRÍTICO marcado faltante travando a OP sozinho),
+"Bloqueios" (botão "Registrar problema / Bloquear OP" — 8 motivos; bloquear
+PAUSA a execução em andamento automaticamente), "Histórico" (trilha
+imutável, nunca editável/apagável).
+
+REGRA NOTÁVEL: só OP com frente='quadro' aparece no MES — OP de corte de
+cabo, fiação avulsa etc. ficam só no PCP normal, nunca entram aqui.`,
+
+  'relatorios-pcp': `TELA: Relatórios do PCP (Logística Interna). Hub com
+várias abas, cada uma um relatório distinto — todas só leitura.
+
+ABAS: "Painel" (produção — pedidos em produção, OPs atrasadas, % de
+perda do mês, pedidos sem OP gerada ainda), "Pedidos" (lista de pedidos de
+venda do Omie já lidos pelo PCP), "Lista de Preços", "Produção" (planejado
+× produzido no ano), "Perdas" (% por mês com faixas de referência
+verde≤2%/amarelo≤5%/vermelho>5%, causas mais frequentes, custo estimado da
+perda — custo só aparece com a alçada "almoxarifado.ver_custo"),
+"Estoque", "Fluxo de Caixa" (receita pedida/faturada/carteira a
+faturar — NÃO é o caixa do banco, é o resultado agregado do PCP + Omie),
+"Clientes" (maiores clientes/produtos), "Fotos" (catálogo visual puxando a
+foto da Ficha Técnica de cada produto — a maioria dos itens do PCP ainda
+não tem ficha/foto cadastrada, então aparece "sem foto" com frequência,
+isso é esperado, não é falha da tela).
+
+REGRA NOTÁVEL: margem/lucro e custo da perda só aparecem (não borrados,
+nem inventados) pra quem tem a alçada "almoxarifado.ver_custo" — sem ela a
+tela some o dado ou mostra "—", nunca um número falso.`,
+
+  expedicao: `TELA: Expedição (Logística Interna).
+
+Despacha pedidos já produzidos pro cliente. Checkbox "mostrar histórico e
+já entregues" controla se a lista traz também o que já foi finalizado;
+campo de busca filtra por pedido/cliente.
+
+CAMPOS DO FORMULÁRIO DE DESPACHO, por pedido: checkbox "Retirada pelo
+cliente" (quando marcada, esconde "Transportadora" — não faz sentido
+pedir transportadora de uma retirada); "Transportadora" (texto livre, com
+sugestões de transportadoras já usadas antes); "Volumes" (quantidade);
+"Saída" (data); "Rastreio / nº do conhecimento" (pode ficar vazio e ser
+preenchido depois da saída); botão "Salvar rastreio". Depois do despacho:
+"Entrega" (data) + "Canhoto / comprovante" (upload de PDF/imagem) + botão
+"Confirmar entrega". Campo "Observação" é livre, aplica ao pedido inteiro.
+
+REGRA CRÍTICA (trava no banco, não só na tela): um pedido só pode ser
+despachado/entregue depois que a NOTA FISCAL dele já foi emitida no Omie
+("faturado") — tentar despachar sem NF é recusado pelo próprio banco, não
+é um botão "esquecido" de desabilitar.`,
+
+  'emissao-nf': `TELA: Emissão de NF (Logística Interna/Financeiro).
+
+ACOMPANHA a emissão de Nota Fiscal — a emissão em si acontece no Omie,
+feita pelo setor Fiscal; esta tela nunca emite nada sozinha, só mostra a
+situação (emitida/aguardando/em produção sem OP ainda) e mede o SLA de
+cada etapa (OP criada em até 1 dia útil, produção até a previsão, NF em
+até 1 dia útil depois de produzir, despacho em até 1 dia útil depois da
+NF).
+
+CAMPOS: "Conferência proposta × NF" (o colaborador confere se bate com o
+que foi vendido), "Observação" (texto livre, ex.: "entregue em 09/2026; NF
+da máquina cobre o quadro" — útil quando uma única NF cobre mais de um
+item do pedido), checkbox "Histórico (já entregue antes do sistema — sem
+SLA)" — marca um pedido antigo como fora da régua de prazo, pra não poluir
+o relatório de atraso com algo que nunca teve chance de cumprir o SLA.
+Botão "Conferir" grava a conferência e fica no histórico do pedido.
+
+REGRA NOTÁVEL: o mesmo número de pedido pode ter MAIS DE UM registro no
+Omie (entrega parcial) — "NF emitida" só aparece quando TODOS os registros
+daquele pedido estão faturados; com só parte, mostra "NF parcial".`,
 
   comissoes: `TELA: Comissões (Financeiro/Admin).
 
@@ -1388,12 +1669,25 @@ Deno.serve(async (req: Request) => {
   }
 
   const routeDoc = typeof page.route === "string" ? ROUTE_DOCS[page.route] : undefined;
+  const omieDoc = typeof page.route === "string" && OMIE_ROUTES.has(page.route) ? OMIE_KNOWLEDGE : undefined;
   const questionarioContext = payload?.questionarioContext ?? null;
+  const docs = await carregarDocs(typeof page.route === "string" ? page.route : "");
+  const conhecimento = (typeof page.route === "string" ? docs["rota:" + page.route] : undefined) ?? routeDoc;
+  const visao = page.visao && typeof page.visao === "object" ? page.visao : null;
+  const gps = visao
+    ? JSON.stringify({ endereco: String(visao.url ?? ""), caminho: String(visao.breadcrumb ?? ""), menu: visao.menu ?? {}, abasAtivas: Array.isArray(visao.abasAtivas) ? visao.abasAtivas : [], papel: String(visao.papel ?? "") })
+    : "";
+  const visaoTexto = visao && typeof visao.texto === "string" ? visao.texto.slice(0, 14000) : "";
 
   const ctx =
     `MODO: ${mode}\n` +
     `TELA ATUAL: ${JSON.stringify({ route: page.route ?? "", title: page.title ?? "" })}\n` +
-    (routeDoc ? `\nCONHECIMENTO DESTA TELA (use pra responder qualquer pergunta sobre o que ela faz, campos, botões e regras de negócio — não é opcional, é a fonte de verdade):\n${routeDoc}\n` : "") +
+    (docs.regras ? `\nREGRAS DE OURO (obrigatórias):\n${docs.regras}\n` : "") +
+    (docs.ecossistema ? `\nMAPA DO ECOSSISTEMA (GPS):\n${docs.ecossistema}\n` : "") +
+    (gps ? `\nPOSIÇÃO ATUAL (GPS) — onde o usuário está agora: ${gps}\n` : "") +
+    (conhecimento ? `\nCONHECIMENTO DESTA TELA (use pra responder qualquer pergunta sobre o que ela faz, campos, botões, quem doa e quem herda os dados e regras de negócio — não é opcional, é a fonte de verdade):\n${conhecimento}\n` : "") +
+    (visaoTexto ? `\nVISÃO DA TELA (o que o usuário está vendo AGORA — valores reais, abas, tabelas, botões):\n${visaoTexto}\n` : "") +
+    (omieDoc ? `\n${omieDoc}\n` : "") +
     `\nCAMPOS DA TELA:\n${JSON.stringify(page.fields ?? [], null, 1)}\n` +
     (documentText ? `\nTEXTO DO DOCUMENTO NA TELA:\n"""${documentText}"""\n` : "") +
     (mode === "questionario"

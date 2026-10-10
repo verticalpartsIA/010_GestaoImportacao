@@ -519,7 +519,17 @@ const FE_OPCOES_VAZIAS = { teto_falso: [], piso: [], porta: [], botoeira_cabine:
 function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornecedores, modelos, publicMode, numeroCotacao }) {
   const [open, setOpen] = React.useState(true);
   const [opcoes, setOpcoes] = React.useState(FE_OPCOES_VAZIAS);
-  const set = (k) => (v) => onChange({ ...unidade, [k]: v });
+  /* 10/10/2026 — passageiros = Capacidade (kg) ÷ 75, calculado (regra única em capacidade-passageiros.js). Elevador de
+     CARGA não leva pessoas: só os kg importam e o campo de passageiros nem aparece. Recalcula ao mudar kg ou tipo. */
+  const CP = window.CapacidadePassageiros;
+  const set = (k) => (v) => {
+    const novo = { ...unidade, [k]: v };
+    if (CP && (k === 'capacidade_kg' || k === 'tipo')) {
+      const p = CP.passageiros(novo.capacidade_kg, novo.tipo);
+      novo.capacidade_pessoas = p == null ? '' : p;
+    }
+    onChange(novo);
+  };
 
   React.useEffect(() => {
     let cancelado = false;
@@ -583,7 +593,9 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
               <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
                 <FEField label="Tração *"><FESelect value={unidade.tracao} onChange={set('tracao')} options={FE_TRACOES} placeholder="— selecione —"/></FEField>
                 <FEField label="Capacidade (kg)"><FEInput type="number" value={unidade.capacidade_kg} onChange={set('capacidade_kg')} placeholder="630"/></FEField>
-                <FEField label="Capacidade (passageiros)"><FEInput type="number" value={unidade.capacidade_pessoas} onChange={set('capacidade_pessoas')} placeholder="8"/></FEField>
+                {CP && CP.ehCarga(unidade.tipo)
+                  ? <FEField label="Capacidade (passageiros)"><div className="small muted" style={{ padding: '8px 0' }}>Elevador de carga não leva pessoas — só a capacidade em kg vale.</div></FEField>
+                  : <FEField label="Capacidade (passageiros) — calculada"><FEInput type="number" value={CP ? (CP.passageiros(unidade.capacidade_kg, unidade.tipo) ?? '') : unidade.capacidade_pessoas} onChange={() => {}} disabled placeholder="kg ÷ 75"/></FEField>}
                 <FEField label="Velocidade (m/s) *"><FEInput type="number" value={unidade.velocidade_ms} onChange={set('velocidade_ms')} placeholder="1.0"/></FEField>
                 <FEField label="Paradas *"><FEInput type="number" value={unidade.paradas} onChange={set('paradas')} placeholder="4"/></FEField>
                 <FEField label="Descrição dos pavimentos *" span="2"><FEInput value={unidade.pavimentos_desc} onChange={set('pavimentos_desc')} placeholder="Térreo, 1, 2, 3"/></FEField>
@@ -1267,6 +1279,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
      self_service (link público pro cliente preencher sozinho) sempre usa o
      formulário completo — não faz sentido pedir pro cliente "se buscar". */
   const [clienteId, setClienteId] = React.useState(null);
+  const [clienteSel, setClienteSel] = React.useState(null); // cliente escolhido no seletor (traz contribuinte_icms do cadastro)
   const [criarClienteInline, setCriarClienteInline] = React.useState(false);
   const [linkPublico, setLinkPublico] = React.useState(null);
   const [numeroCotacao, setNumeroCotacao] = React.useState(null);
@@ -1427,6 +1440,15 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
     if (!header.local_obra_cidade?.trim() || !header.local_obra_estado?.trim()) return 'Local da obra (cidade/UF) é obrigatório.';
     if (!header.tipo_mao_de_obra) return 'Instalação Será é obrigatório.';
     if (!header.responsavel_entrega) return 'Responsável pela entrega é obrigatório.';
+    /* 10/10/2026 — pedido do usuário: sem estes dois o DIFAL não calcula (cotação Nº 984, obra em SC, ficou
+       sem DIFAL porque o vendedor não respondeu). Finalidade da compra e Contribuinte de ICMS definem se
+       há DIFAL e quem recolhe — viram obrigatórios para ENVIAR a cotação (rascunho continua livre). */
+    if (!header.finalidade_compra) return 'Finalidade da compra é obrigatória — ela define se incide DIFAL.';
+    if (usaClientePicker ? (clienteSel && clienteSel.contribuinte_icms == null) : (header.contribuinte_icms === '' || header.contribuinte_icms == null)) {
+      return usaClientePicker
+        ? 'O cliente escolhido não tem "Contribuinte de ICMS" no cadastro — complete em Cadastros → Clientes (define quem recolhe o DIFAL).'
+        : 'Informe se o cliente é Contribuinte de ICMS — define quem recolhe o DIFAL.';
+    }
     if (header.endereco_obra_diferente && (!header.endereco_obra_logradouro?.trim() || !header.endereco_obra_bairro?.trim() || !header.endereco_obra_cep?.trim() || !header.endereco_obra_cidade?.trim() || !header.endereco_obra_estado?.trim())) {
       return 'Informe o endereço completo da obra (logradouro, bairro, CEP, cidade e UF).';
     }
@@ -1579,7 +1601,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Cliente</div>
             {usaClientePicker ? (
-              <FEClientePicker clienteId={clienteId} onSelecionar={(c) => setClienteId(c ? c.id : null)} onCriarNovo={() => setCriarClienteInline(true)}/>
+              <FEClientePicker clienteId={clienteId} onSelecionar={(c) => { setClienteId(c ? c.id : null); setClienteSel(c || null); }} onCriarNovo={() => setCriarClienteInline(true)}/>
             ) : (
               <>
                 <div className="grid-3" style={{ gap: 12 }}>
@@ -1589,7 +1611,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
                     ? <FEField label="CPF"><FEInput value={header.cpf} onChange={setH('cpf')} placeholder="000.000.000-00"/></FEField>
                     : <FEField label="CNPJ"><FEInput value={header.cnpj} onChange={setH('cnpj')} placeholder="00.000.000/0000-00" onBlur={() => buscarCnpjEPreencher(header.cnpj)}/></FEField>}
                   <FEField label="Inscrição Estadual"><FEInput value={header.inscricao_estadual} onChange={setH('inscricao_estadual')} disabled={header.tipo_pessoa === 'PF'}/></FEField>
-                  <FEField label="Contribuinte de ICMS?"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
+                  <FEField label="Contribuinte de ICMS? *"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
                   <FEField label="Telefone"><FEInput value={header.telefone} onChange={setH('telefone')}/></FEField>
                   <FEField label="E-mail" span="2"><FEInput type="email" value={header.email} onChange={setH('email')}/></FEField>
                   <FEField label="Contato"><FEInput value={header.contato} onChange={setH('contato')} placeholder="Nome do síndico / responsável"/></FEField>
@@ -1612,7 +1634,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
             )}
           </div>
           <div className="grid-3" style={{ gap: 12 }}>
-            <FEField label="Finalidade da compra"><FESelect value={header.finalidade_compra} onChange={setH('finalidade_compra')} options={FE_FINALIDADE_COMPRA}/></FEField>
+            <FEField label="Finalidade da compra *"><FESelect value={header.finalidade_compra} onChange={setH('finalidade_compra')} options={FE_FINALIDADE_COMPRA}/></FEField>
           </div>
           {header.finalidade_compra === 'revenda' && header.contribuinte_icms === false && (
             <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #FBB039', padding: '8px 12px', margin: 0 }}>

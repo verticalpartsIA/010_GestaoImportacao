@@ -117,7 +117,9 @@
     const tracao = modelo.tracao || null;
     const capacidadeKg = modelo.capacidadeKg != null && modelo.capacidadeKg !== '' ? Number(modelo.capacidadeKg) : null;
     const paradas = modelo.paradas != null && modelo.paradas !== '' ? Number(modelo.paradas) : null;
-    const base = { unidadeId, identificador, tracao, capacidadeKg, paradas };
+    const tipo = modelo.tipo || null;
+    const passageiros = window.CapacidadePassageiros ? window.CapacidadePassageiros.passageiros(capacidadeKg, tipo) : null; // carga = null
+    const base = { unidadeId, identificador, tracao, capacidadeKg, paradas, tipo, passageiros };
 
     if (!tracao || !paradas || !(capacidadeKg > 0)) {
       return {
@@ -143,7 +145,7 @@
       return {
         ...base, origem: 'tabela_referencia', situacao: 'confirmado', estimativa: true,
         valorRs: Number(custoTabela.valor_reajustado_rs) || 0,
-        regraUsada: `tração ${tracao} × ${custoTabela.capacidade_min_kg}-${custoTabela.capacidade_max_kg}kg × ${paradas} paradas`,
+        regraUsada: `tração ${tracao} × até ${custoTabela.capacidade_max_kg}kg × ${paradas} paradas`,
         diasMontagem: custoTabela.dias_montagem ?? null,
         qtdMontadores: custoTabela.qtd_montadores ?? null,
         dataBase: custoTabela.atualizado_em || null,
@@ -154,7 +156,7 @@
     return {
       ...base, origem: 'tabela_referencia', situacao: 'confirmado', estimativa: false,
       valorRs: Number(custoTabela.valor_reajustado_rs) || 0,
-      regraUsada: `tração ${tracao} × ${custoTabela.capacidade_min_kg}-${custoTabela.capacidade_max_kg}kg × ${paradas} paradas`,
+      regraUsada: `tração ${tracao} × até ${custoTabela.capacidade_max_kg}kg × ${paradas} paradas`,
       diasMontagem: custoTabela.dias_montagem ?? null,
       qtdMontadores: custoTabela.qtd_montadores ?? null,
       dataBase: custoTabela.atualizado_em || null,
@@ -215,24 +217,52 @@
      equipamentos físicos deste grupo têm a MO excluída; os últimos
      `moExcluidos` viram `situacao: 'excluido'`/`valorRs: 0` em vez da
      classificação normal. Nunca decrementa `quantidade`. */
+  /* 10/10 — regra do usuário (cotação Nº 963, 27 equipamentos em 10 linhas):
+     quando uma Unidade com quantidade > 1 é explodida e a cotação tem 2+
+     equipamentos físicos, os códigos passam a ser CORRIDOS de 1 a N
+     (VPEL-EL0963-1 … VPEL-EL0963-27), ordenados da MENOR para a MAIOR
+     quantidade de paradas — empate: menor capacidade (kg) pega o código
+     mais baixo; persistindo o empate, vale a ordem original (o código/
+     antiguidade). NUNCA existe sufixo aninhado (-1-2, -4-3) nem "-1-1":
+     a única letra/sufixo permitida num código é a de REVISÃO (-A, ver
+     master-id-engine.js), que é outra regra. Equipamento avulso
+     ("Equipamento adicional N") não entra nessa numeração — continua só
+     descritivo, no fim da lista. Cotação sem explosão (cada Unidade com
+     1 equipamento) mantém os códigos reais das Unidades do Formulário. */
+  function renumerarPorParadas(linhas) {
+    const lista = Array.isArray(linhas) ? linhas : [];
+    const numeraveis = lista.filter((l) => !l.avulso);
+    // Cotação com UM equipamento: é o -1 e ponto final (mesmo que a Unidade do Formulário seja outro índice).
+    if (numeraveis.length === 1) {
+      const m1 = /^(.*)-(\d+)$/.exec(numeraveis[0].identificador || '');
+      return m1 ? lista.map((l) => (l === numeraveis[0] ? { ...l, identificador: `${m1[1]}-1` } : l)) : lista;
+    }
+    const explodiu = numeraveis.some((l) => Number(l.equipamentoTotal) > 1);
+    if (numeraveis.length < 2 || !explodiu) return lista;
+    let prefixo = null;
+    for (const l of numeraveis) {
+      const m = /^(.*)-(\d+)$/.exec(l.identificador || '');
+      if (m) { prefixo = m[1]; break; }
+    }
+    if (!prefixo) return lista;
+    const chave = (v) => (v == null || v === '' || !Number.isFinite(Number(v)) ? Infinity : Number(v));
+    const ordenados = numeraveis
+      .map((l, idx) => ({ l, idx }))
+      .sort((a, b) => (chave(a.l.paradas) - chave(b.l.paradas)) || (chave(a.l.capacidadeKg) - chave(b.l.capacidadeKg)) || (a.idx - b.idx))
+      .map((x, n) => ({ ...x.l, identificador: `${prefixo}-${n + 1}` }));
+    return [...ordenados, ...lista.filter((l) => l.avulso)];
+  }
+
   async function buscarMaoDeObraAutomatica(modelos) {
     const store = window.CadastroCustosStore;
     const lista = Array.isArray(modelos) ? modelos : [];
-    const usados = new Set(lista.map((m) => m.identificador).filter(Boolean));
 
+    /* Código provisório só pra dar identidade a cada equipamento físico;
+       os definitivos saem de renumerarPorParadas() no fim. */
     function getIdentificadorFisico(identificadorBase, i, quantidade) {
       if (quantidade <= 1 || !identificadorBase) return identificadorBase;
       const m = /^(.*)-(\d+)$/.exec(identificadorBase);
-      if (m) {
-        const candidato = `${m[1]}-${Number(m[2]) + i}`;
-        if (i === 0) return candidato; // próprio identificador da Unidade — sempre permitido
-        if (!usados.has(candidato)) { usados.add(candidato); return candidato; }
-        console.warn('[PrecificacaoElevadorStore] numeração contínua colidiria com outro identificador desta cotação', candidato, '— usando sufixo aninhado');
-      }
-      let fallback = `${identificadorBase}-${i + 1}`;
-      while (usados.has(fallback)) fallback += '.';
-      usados.add(fallback);
-      return fallback;
+      return m ? `${m[1]}-${Number(m[2]) + i}` : `${identificadorBase}-${i + 1}`;
     }
 
     const resultados = [];
@@ -269,7 +299,7 @@
         });
       }
     }
-    return resultados;
+    return renumerarPorParadas(resultados);
   }
 
   /* pz.modelos é um snapshot congelado em montarRascunho() na hora em que a
@@ -288,7 +318,7 @@
     const unidadeIds = (modelos || []).map((m) => m.unidadeId).filter(Boolean);
     if (!unidadeIds.length) return modelos;
     const { data: unidadesForm, error } = await c.from('formularios_elevador_unidades')
-      .select('id, tracao, capacidade_kg, paradas').in('id', unidadeIds);
+      .select('id, tipo, tracao, capacidade_kg, paradas').in('id', unidadeIds);
     if (error) { console.warn('[PrecificacaoElevadorStore] refrescarSpecUnidades falhou', error); return modelos; }
     const porId = {}; (unidadesForm || []).forEach((u) => { porId[u.id] = u; });
     return modelos.map((m) => {
@@ -296,6 +326,7 @@
       if (!u) return m;
       return {
         ...m,
+        tipo: u.tipo || null,
         tracao: u.tracao || null,
         capacidadeKg: u.capacidade_kg != null ? Number(u.capacidade_kg) : null,
         paradas: u.paradas != null ? Number(u.paradas) : null,
@@ -514,12 +545,13 @@
     let modelos, vmleUsd, freteSeguroCapataziaUsd, containersSeed = [];
     if (!cotacaoFornecedorId) {
       const { data: unidadesForm, error: e3 } = await c.from('formularios_elevador_unidades')
-        .select('id, identificador, modelo, quantidade, tracao, capacidade_kg, paradas').eq('formulario_id', formularioElevadorId).order('indice_ativo');
+        .select('id, identificador, modelo, quantidade, tipo, tracao, capacidade_kg, paradas').eq('formulario_id', formularioElevadorId).order('indice_ativo');
       if (e3) throw e3;
       modelos = (unidadesForm || []).map((u) => ({
         unidadeId: u.id, identificador: u.identificador,
         modelo: u.modelo || '', quantidade: Number(u.quantidade) || 1,
         valorUnitarioUsd: 0,
+        tipo: u.tipo || null,
         tracao: u.tracao || null,
         capacidadeKg: u.capacidade_kg != null ? Number(u.capacidade_kg) : null,
         paradas: u.paradas != null ? Number(u.paradas) : null,
@@ -542,6 +574,7 @@
           modelo: item.modelo_fornecedor || u.modelo || '',
           quantidade: Number(u.quantidade) || 1,
           valorUnitarioUsd: window.parseMoeda(item.preco_unitario),
+          tipo: u.tipo || null,
           tracao: u.tracao || null,
           capacidadeKg: u.capacidade_kg != null ? Number(u.capacidade_kg) : null,
           paradas: u.paradas != null ? Number(u.paradas) : null,
@@ -590,9 +623,11 @@
       // sobre o custo completo em vez de só a mercadoria — "aplicar 22%
       // precisa ser real". margem_desejada_pct fica preenchida como
       // referência caso o Financeiro troque de modo na tela.
-      modo_formacao_preco: 'markup_sobre_custo',
+      modo_formacao_preco: 'planilha',
       margem_desejada_pct: Number(parametros.margem_minima_pct) || 0.2,
-      comissao_consultoria_pct: parametros.comissao_consultoria_pct,
+      // 10/10/2026 — OBRIGATÓRIO e do Financeiro: nasce em branco (null) e a tela exige digitar de 0% a 5% (0 vale)
+      // antes de Calcular. Precificações já existentes mantêm o valor que têm.
+      comissao_consultoria_pct: null,
       comissao_vendedor_pct: parametros.comissao_vendedor_pct,
       comissao_indicacao_pct: parametros.comissao_indicacao_pct,
       _formulario: formulario, // usado só em memória p/ montar o DIFAL — não é persistido
@@ -635,6 +670,38 @@
     if (error) throw error;
   }
 
+  /* Insumos do motor a partir de uma precificação (função pura — também usada pela
+     "Memória de cálculo" da tela, que recalcula o método da planilha ao vivo).
+     Card base = 120 dias (container compartilhado). Com 1 equipamento o
+     container (+ capatazia) é dividido pelos equipamentos que o dividem
+     (padrão 2, editável — regra do Financeiro 01/10/2026, vem da planilha
+     FIN (120)); com 2+ o container é pago uma vez só pra cotação inteira,
+     então não divide (preço por equipamento já cai por total ÷ quantidade).
+     Um container comporta no máximo 2 elevadores (regra física, Financeiro 01/10):
+     o equipamento sozinho em 120d viaja com outro, então divide o container por 2
+     — fixo, sem campo na tela. */
+  function montarBaseInputs(pz) {
+    const params = paramsCamelCase(pz.parametros_fiscais_snapshot || {});
+    const qtdEquipamentos = (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1;
+    const divisor120 = qtdEquipamentos <= 1 ? 2 : 1;
+    const baseInputs = {
+      containerRateioDivisor: divisor120,
+      vmleUsd: pz.vmle_usd, seguroUsd: pz.seguro_usd, freteSeguroCapataziaUsd: pz.frete_seguro_capatazia_usd,
+      siscomexRs: pz.siscomex_rs, txCambial: pz.tx_cambial, outrasDespesasImportacaoRs: pz.outras_despesas_importacao_rs,
+      despachanteDesembaracoRs: pz.despachante_desembaraco_rs, demurrageRs: pz.demurrage_rs,
+      freteInternoRs: pz.frete_interno_rs, armazenagemRs: pz.armazenagem_rs,
+      itensInstalacaoMontagem: pz.itens_instalacao_montagem || [],
+      containers: pz.containers || [],
+      itensDespesasExtras: pz.itens_despesas_extras || [],
+      quantidadeEquipamentos: qtdEquipamentos,
+      percentualServicos: pz.percentual_servicos, modelos: pz.modelos || [],
+      markUpPct: pz.mark_up_pct, comissaoConsultoriaPct: pz.comissao_consultoria_pct,
+      comissaoVendedorPct: pz.comissao_vendedor_pct, comissaoIndicacaoPct: pz.comissao_indicacao_pct,
+      parametros: params,
+    };
+    return { baseInputs, params, qtdEquipamentos, divisor120 };
+  }
+
   /* ---------- Calcula (2 passadas por causa do DIFAL — ver nota abaixo) e salva ---------- */
   async function calcularEsalvar(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -648,34 +715,22 @@
       cliente = data;
     }
 
-    const params = paramsCamelCase(pz.parametros_fiscais_snapshot || {});
-    /* Card base = 120 dias (container compartilhado). Com 1 equipamento o
-       container (+ capatazia) é dividido pelos equipamentos que o dividem
-       (padrão 2, editável — regra do Financeiro 01/10/2026, vem da planilha
-       FIN (120)); com 2+ o container é pago uma vez só pra cotação inteira,
-       então não divide (preço por equipamento já cai por total ÷ quantidade). */
-    const qtdEquipamentos = (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1;
-    // Um container comporta no máximo 2 elevadores (regra física, Financeiro 01/10): o equipamento
-    // sozinho em 120d viaja com outro, então divide o container por 2 — fixo, sem campo na tela.
-    const divisor120 = qtdEquipamentos <= 1 ? 2 : 1;
-    const baseInputs = {
-      containerRateioDivisor: divisor120,
-      vmleUsd: pz.vmle_usd, seguroUsd: pz.seguro_usd, freteSeguroCapataziaUsd: pz.frete_seguro_capatazia_usd,
-      siscomexRs: pz.siscomex_rs, txCambial: pz.tx_cambial, outrasDespesasImportacaoRs: pz.outras_despesas_importacao_rs,
-      despachanteDesembaracoRs: pz.despachante_desembaraco_rs, demurrageRs: pz.demurrage_rs,
-      freteInternoRs: pz.frete_interno_rs, armazenagemRs: pz.armazenagem_rs,
-      itensInstalacaoMontagem: pz.itens_instalacao_montagem || [],
-      containers: pz.containers || [],
-      itensDespesasExtras: pz.itens_despesas_extras || [],
-      quantidadeEquipamentos: (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1,
-      percentualServicos: pz.percentual_servicos, modelos: pz.modelos || [],
-      markUpPct: pz.mark_up_pct, comissaoConsultoriaPct: pz.comissao_consultoria_pct,
-      comissaoVendedorPct: pz.comissao_vendedor_pct, comissaoIndicacaoPct: pz.comissao_indicacao_pct,
-      parametros: params,
-    };
+    const { baseInputs, params, qtdEquipamentos } = montarBaseInputs(pz);
 
     // 1ª passada — sem DIFAL, só pra ter um "Valor da Operação" de referência.
     const pass1 = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs: 0 });
+    /* 10/10/2026 — BUG real (cotação Nº 963): o "Valor da Operação" do DIFAL vinha do preço do V1,
+       que dá R$ 0,00 quando o mark-up é "sobre o custo" (90,83% estoura o divisor do V1) — o DIFAL
+       saía R$ 0,00 mesmo sendo devido (SP → DF, uso e consumo, base única 20% − 4%). A planilha usa
+       preço × (alíquota interna − interestadual) = R$ 1.433.824,40. Agora a base é o preço do MODO
+       ESCOLHIDO (V2/planilha). O DIFAL só abate do lucro, nunca forma o preço nesses modos, então
+       uma passada já dá o valor exato. V1 fica só de reserva (precificação antiga sem V2). */
+    const pass1V2 = window.PrecificacaoElevadorEngine.calcularV2({
+      ...baseInputs, difalCustoRs: 0, modoFormacaoPreco: 'planilha',
+      margemDesejadaPct: pz.margem_desejada_pct != null ? pz.margem_desejada_pct : (params.margemMinimaPct || 0.2),
+      contingenciaValor: pz.contingencia_valor, outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
+    });
+    const valorOperacaoDifal = pass1V2.precificacao.precoVendaProposta > 0 ? pass1V2.precificacao.precoVendaProposta : pass1.precificacao.precoVendaProposta;
 
     const ufFaturamento = cliente ? cliente.endereco_estado : null;
     const ufDestino = formulario.local_obra_estado || ufFaturamento;
@@ -683,7 +738,7 @@
     const difal = window.DifalEngine.calcular({
       ufFaturamento, ufEntrega: formulario.local_obra_estado,
       finalidadeCompra: formulario.finalidade_compra, contribuinteIcms: cliente ? cliente.contribuinte_icms : null,
-      valorOperacao: pass1.precificacao.precoVendaProposta, estadoDestino,
+      valorOperacao: valorOperacaoDifal, estadoDestino,
     });
     const difalCustoRs = difal.responsavel_recolhimento === 'emitente_verticalparts' ? difal.valor_difal : 0;
 
@@ -700,7 +755,7 @@
     // artificialmente baixo, sem o usuário nunca ter escolhido isso.
     const margemDesejadaPct = pz.margem_desejada_pct != null ? pz.margem_desejada_pct : (params.margemMinimaPct || 0.2);
     const v2Extras = {
-      modoFormacaoPreco: pz.modo_formacao_preco,
+      modoFormacaoPreco: 'planilha',
       margemDesejadaPct,
       contingenciaValor: pz.contingencia_valor,
       outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
@@ -728,7 +783,9 @@
         })
       : {};
 
-    await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, status: 'calculado' });
+    /* 10/10/2026 — o método da planilha do Financeiro é o ÚNICO método de formação de preço; precificação antiga
+       (markup sobre o custo / margem sobre a venda) é convertida ao calcular de novo. */
+    await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, modo_formacao_preco: 'planilha', status: 'calculado' });
     return { resultado, resultadoV2, resultadoV2Expresso, difal };
   }
 
@@ -755,6 +812,9 @@
        e ela agora conta pro teto de custo do CEO (ver
        aval-financeiro-store.js), então precisa estar preenchida. */
     if (!(Number(pz.comissao_vendedor_pct) > 0)) faltando.push('Comissão do vendedor (%)');
+    // Comissão de consultoria: o Financeiro precisa ter digitado um valor de 0% a 5% (0 vale; vazio não).
+    const cons = pz.comissao_consultoria_pct;
+    if (cons === null || cons === undefined || cons === '' || Number(cons) < 0 || Number(cons) > 0.05 + 1e-9) faltando.push('Comissão de consultoria (%) — de 0% a 5%');
     return faltando;
   }
 
@@ -881,7 +941,7 @@
     listarPendentes, criar, obter, salvar, calcularEsalvar,
     camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,
     parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto, divergenciasContainerComCadastro,
-    classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra,
+    classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra, renumerarPorParadas, montarBaseInputs,
     acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO,
   };
 }());
