@@ -7,6 +7,7 @@
 // Limites: dia a dia (não horas); não enxerga o texto dentro das imagens (prints) — esses exigem conferência humana;
 // arquivos alterados mas ainda não commitados contam como "agora".
 import fs from 'node:fs';
+import path from 'node:path';
 import { execSync } from 'node:child_process';
 
 const shell = fs.readFileSync('src/shell.jsx', 'utf8');
@@ -14,13 +15,14 @@ const bloco = (shell.match(/const TUTORIAIS = \{([\s\S]*?)\};/) || [])[1] || '';
 const noMenu = Object.fromEntries([...bloco.matchAll(/(\w+):\s*"([^"]+)"/g)].map((m) => [m[2], m[1]]));   // pasta → rota
 
 // pasta do tutorial → arquivos que compõem a tela (acrescente aqui ao publicar um tutorial novo)
+// Chave = caminho do tutorial (pai/tela). Tela sem lista aqui aparece como aviso "desatualização não conferida".
 const TELAS = {
-  'central-de-decisoes': ['src/decisoes.jsx', 'src/decisoes-store.js'],
-  dashboard: ['src/dashboard.jsx'],
-  notificacoes: ['src/notificacoes-processamento.js', 'src/notificacoes-lidas-store.js'],
-  'prazos-e-pendencias': ['src/gatilhos-engine.js'],
-  inbox: ['src/logistica.jsx', 'src/inbox-gmail.jsx', 'src/inbox-triagem.jsx', 'src/inbox-organizar.jsx', 'src/inbox-conversas.jsx', 'src/inbox-decisao.jsx', 'src/inbox-preco.jsx', 'src/inbox-historico.jsx'],
-  leads: ['src/comercial.jsx', 'src/leads-tooltips.js'],
+  'geral/central-de-decisoes': ['src/decisoes.jsx', 'src/decisoes-store.js'],
+  'geral/dashboard': ['src/dashboard.jsx'],
+  'geral/notificacoes': ['src/notificacoes-processamento.js', 'src/notificacoes-lidas-store.js'],
+  'geral/prazos-e-pendencias': ['src/gatilhos-engine.js'],
+  'geral/inbox': ['src/logistica.jsx', 'src/inbox-gmail.jsx', 'src/inbox-triagem.jsx', 'src/inbox-organizar.jsx', 'src/inbox-conversas.jsx', 'src/inbox-decisao.jsx', 'src/inbox-preco.jsx', 'src/inbox-historico.jsx'],
+  'crm/leads': ['src/comercial.jsx', 'src/leads-tooltips.js'],
   geral: [],   // visão do módulo: depende dos tutoriais de cada tela
 };
 const EMAILS_PERMITIDOS = /^(suporte@verticalparts\.com\.br|suporte@vpsistema\.com)$/i;
@@ -30,7 +32,17 @@ const avisos = [];
 const git = (cmd) => { try { return execSync(cmd, { encoding: 'utf8' }).trim(); } catch (_) { return ''; } };
 const sujos = new Set(git('git status --porcelain').split('\n').map((l) => l.slice(3).trim()).filter(Boolean));
 
-const pastas = fs.readdirSync('TreinamentoVP', { withFileTypes: true }).filter((d) => d.isDirectory() && fs.existsSync(`TreinamentoVP/${d.name}/index.html`)).map((d) => d.name);
+// pasta = caminho relativo a TreinamentoVP: "geral" (visão do módulo) ou "geral/dashboard" (tela do módulo)
+const pastas = [];
+(function varrer(rel, nivel) {
+  const base = rel ? `TreinamentoVP/${rel}` : 'TreinamentoVP';
+  for (const d of fs.readdirSync(base, { withFileTypes: true })) {
+    if (!d.isDirectory() || d.name.startsWith('.') || d.name === 'img' || d.name === 'node_modules') continue;
+    const caminho = rel ? `${rel}/${d.name}` : d.name;
+    if (fs.existsSync(`TreinamentoVP/${caminho}/index.html`)) pastas.push(caminho);
+    if (nivel < 2) varrer(caminho, nivel + 1);
+  }
+})('', 1);
 for (const [pasta, rota] of Object.entries(noMenu)) if (!pastas.includes(pasta)) problemas.push(`${pasta}: a rota "${rota}" do menu "?" aponta para um tutorial que não existe`);
 
 for (const pasta of pastas) {
@@ -57,11 +69,14 @@ for (const pasta of pastas) {
   if (docs.length) problemas.push(`${pasta}: DADO REAL? CNPJ/CPF no texto: ${docs.slice(0, 5).join(', ')}`);
 
   // 3) links relacionados para tutoriais que não existem
-  const alvos = [...new Set([...html.matchAll(/href="\.\.\/([a-z0-9-]+)\/?"/gi)].map((m) => m[1]))];
-  for (const a of alvos) if (!pastas.includes(a)) problemas.push(`${pasta}: link para "../${a}/" que ainda não existe (404 até esse tutorial ser publicado)`);
+  const alvos = [...new Set([...html.matchAll(/href="(\.\.?\/[^"#?]*)"/g)].map((m) => m[1]))];
+  for (const h of alvos) {
+    const dir = path.posix.normalize(path.posix.join(pasta, h.replace(/index\.html$/, '')));
+    if (!fs.existsSync(`TreinamentoVP/${dir}/index.html`)) problemas.push(`${pasta}: link "${h}" aponta para um tutorial que ainda não existe (404 até ser publicado)`);
+  }
 
-  // 4) pronto mas fora do menu
-  if (pasta !== 'geral' && !noMenu[pasta]) avisos.push(`${pasta}: tutorial pronto, ainda não ligado ao menu "?" (falta 1 linha em TUTORIAIS no src/shell.jsx)`);
+  // 4) pronto mas fora do menu (visão do módulo não tem linha em TUTORIAIS: é ligada em MODULOS_TUTORIAL)
+  if (pasta.includes('/') && !noMenu[pasta]) avisos.push(`${pasta}: tutorial pronto, ainda não ligado ao menu "?" (falta 1 linha em TUTORIAIS no src/shell.jsx)`);
 }
 
 console.log(`Tutoriais encontrados: ${pastas.length} (${pastas.join(', ')}) · ligados ao menu "?": ${Object.keys(noMenu).length}`);
