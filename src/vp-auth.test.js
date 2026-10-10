@@ -159,3 +159,25 @@ test('F0: banco recusou com a sessão (401/403) → refaz com a chave pública e
   assert.equal(rec[0].metodo, 'PATCH');
   assert.equal(rec[0].url, 'https://x.supabase.co/rest/v1/propostas');
 });
+
+test('F1: recusa da trava de valores (hint vp_valores) NÃO é refeita com a chave pública', async () => {
+  const { ctx, V, chamadas } = ambiente({ sessao: SESSAO, piloto: 'on' });
+  await V.init({});
+  const corpo = JSON.stringify({ code: '42501', hint: 'vp_valores', message: 'Sem liberação de valores' });
+  const recusa = { status: 403, clone: () => ({ text: async () => corpo }) };
+  ctx.fetch = async (url, opts) => { chamadas.fetch.push({ url, opts }); return recusa; };
+  const r = await V.fetchDados(REST, { method: 'PATCH', headers: { Authorization: 'Bearer pub' }, body: '{}' });
+  assert.equal(r, recusa);
+  assert.equal(chamadas.fetch.length, 1);
+  assert.equal(V.status().recuos.length, 0);
+});
+
+test('F1: outro 403 (sem hint vp_valores) continua sendo refeito com a chave pública', async () => {
+  const { ctx, V, chamadas } = ambiente({ sessao: SESSAO, piloto: 'on' });
+  await V.init({});
+  const respostas = [{ status: 403, clone: () => ({ text: async () => '{"code":"42501","message":"x"}' }) }, { status: 200 }];
+  ctx.fetch = async (url, opts) => { chamadas.fetch.push({ url, opts }); return respostas.shift(); };
+  const r = await V.fetchDados(REST, { method: 'GET', headers: { Authorization: 'Bearer pub' } });
+  assert.equal(r.status, 200);
+  assert.equal(chamadas.fetch.length, 2);
+});
