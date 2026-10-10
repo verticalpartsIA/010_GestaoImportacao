@@ -51,6 +51,30 @@ window.VistoriasQuestionariosStore = window.VistoriasQuestionariosStore || (() =
     TIPO_LABEL,
     ehPerguntaCompanion,
 
+    /* ---- Página pública /vistoria/:token ----
+       Segurança real (#571, F1): a atividade é lida por RPC `public_vistoria_obter` (recebe só o TOKEN; devolve a
+       atividade + cliente/prédio da obra + nº de série + questionário — sem o navegador ler dossier_obra). Interruptor de
+       emergência: localStorage.vp_public_rpc = 'off' volta ao caminho antigo. Se a RPC falhar (rede, ou migração ainda
+       não aplicada), cai no caminho antigo (select com join embutido). Mesmo formato de retorno nos dois caminhos. */
+    async obterAtividadePorToken(token) {
+      const c = sb();
+      if (!c || !token) return null;
+      let usarRpc = true;
+      try { usarRpc = localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { usarRpc = true; }
+      if (usarRpc) {
+        try {
+          const { data, error } = await c.rpc('public_vistoria_obter', { p_token: token });
+          if (!error) return data || null;
+          console.warn('[VistoriasQuestionariosStore] RPC public_vistoria_obter falhou — usando caminho antigo', error);
+        } catch (e) { console.warn('[VistoriasQuestionariosStore] RPC public_vistoria_obter indisponível — usando caminho antigo', e); }
+      }
+      const { data, error } = await c.from('vistorias_atividades')
+        .select('*, dossier_obra(client_name, building_name), equipamentos_obra(numero_serie), vistorias_questionarios(id, nome, tipo)')
+        .eq('token', token).maybeSingle();
+      if (error) throw error;
+      return data || null;
+    },
+
     /* ---- Questionários ---- */
     async listarQuestionarios() {
       const { data, error } = await sb().from('vistorias_questionarios')
