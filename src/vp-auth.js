@@ -14,6 +14,7 @@
    Desligar o piloto = tirar a pessoa da lista (vale no próximo carregamento, sem publicar o site).
    Rede de segurança: se o banco recusar um pedido feito com a sessão (401/403), o mesmo pedido é refeito com a
    chave pública e o recuo fica registrado (VpAuth.status().recuos) — o app nunca trava por causa da sessão.
+   Exceção: recusa da trava de valores em R$ (hint 'vp_valores', fase F1) volta como está — refazer furaria a regra.
    Sem segredo no navegador: as chaves abaixo são as PÚBLICAS do app (as mesmas de supabase.js).
    ============================================================ */
 (function () {
@@ -135,6 +136,11 @@
     return getAccessToken();
   }
 
+  // O banco marca a recusa por falta de liberação de valores com hint 'vp_valores' (vp_valores_guarda).
+  async function ehRecusaDeValores(r) {
+    try { const c = JSON.parse(await r.clone().text()); return !!(c && c.hint === 'vp_valores'); } catch (e) { return false; }
+  }
+
   // fetch do cliente de dados (supabase.js): só /rest/v1 leva a sessão; o resto segue como sempre.
   async function fetchDados(input, init) {
     const url = typeof input === 'string' ? input : String((input && input.url) || '');
@@ -146,6 +152,8 @@
     h.set('Authorization', 'Bearer ' + tok);
     const r = await fetch(input, Object.assign({}, init, { headers: h }));
     if (r.status === 401 || r.status === 403) {
+      // Recusa da trava de valores (F1): é a regra funcionando, não falha da sessão — nunca refazer com a chave pública.
+      if (r.status === 403 && await ehRecusaDeValores(r)) return r;
       const rec = { status: r.status, metodo: (init && init.method) || 'GET', url: url.split('?')[0], em: new Date().toISOString() };
       recuos.push(rec);
       if (recuos.length > 50) recuos = recuos.slice(-50);
