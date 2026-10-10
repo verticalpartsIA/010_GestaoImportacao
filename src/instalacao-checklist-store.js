@@ -26,6 +26,34 @@
 
   function sb() { return (window.__VP_SB || {}).sb; }
 
+  /* Segurança real (#571, F1): as páginas públicas /status-obra/:token e /status-obra-interno/:token falam com o banco
+     por RPC `public_status_obra_*` (recebem só o TOKEN; devolvem só cabeçalho, cronograma e Sessão Administrativa — sem
+     ler dossier_obra/propostas/contratos/vistorias_obras direto). Interruptor de emergência: localStorage.vp_public_rpc =
+     'off' volta ao caminho antigo. Se a RPC falhar (rede, ou migração ainda não aplicada), cai no caminho antigo. */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+  async function chamarRpcPublica(c, nome, args) {
+    try {
+      const { data, error } = await c.rpc(nome, args);
+      if (error) { console.warn('[InstalacaoChecklistStore] RPC ' + nome + ' falhou — usando caminho antigo', error); return { falhou: true }; }
+      return { data };
+    } catch (e) { console.warn('[InstalacaoChecklistStore] RPC ' + nome + ' indisponível — usando caminho antigo', e); return { falhou: true }; }
+  }
+  /* dossierId -> { token, modo } das leituras feitas por token (só a página pública preenche isto); usado por
+     obterSessaoAdministrativa para pedir a sessão por RPC em vez de ler as tabelas. */
+  const _tokenPorDossier = new Map();
+
+  async function obterPorTokenRpc(token, modo) {
+    const c = sb(); if (!c || !token) return { falhou: true };
+    if (!usarRpcPublica()) return { falhou: true };
+    const r = await chamarRpcPublica(c, 'public_status_obra_obter', { p_token: token, p_modo: modo });
+    if (r.falhou) return r;
+    const res = r.data || null;
+    if (res && res.dossier) _tokenPorDossier.set(res.dossier.id, { token, modo });
+    return { data: res ? { dossier: res.dossier, itens: res.itens || [] } : null };
+  }
+
   /* dossier_obra.equip_type tem lixo histórico (ex.: "1× elevador (1
      paradas)" em vez de "elevador") — normaliza pra bater com o
      tipo_equipamento do template. */
@@ -180,6 +208,8 @@
 
   async function obterPorToken(token) {
     const c = sb(); if (!c || !token) return null;
+    const r = await obterPorTokenRpc(token, 'cliente');
+    if (!r.falhou) return r.data;
     const { data: dossier } = await c.from('dossier_obra').select('*').eq('link_publico_token', token).maybeSingle();
     if (!dossier) return null;
     const itens = await listarPorDossier(dossier.id);
@@ -204,6 +234,8 @@
 
   async function obterPorTokenInterno(token) {
     const c = sb(); if (!c || !token) return null;
+    const r = await obterPorTokenRpc(token, 'interno');
+    if (!r.falhou) return r.data;
     const { data: dossier } = await c.from('dossier_obra').select('*').eq('link_interno_token', token).maybeSingle();
     if (!dossier) return null;
     const itens = await listarPorDossier(dossier.id);
@@ -220,6 +252,11 @@
      e quando). */
   async function obterSessaoAdministrativa(dossier) {
     const c = sb(); if (!c) return [];
+    const viaToken = dossier && _tokenPorDossier.get(dossier.id);
+    if (viaToken && usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_status_obra_sessao', { p_token: viaToken.token, p_modo: viaToken.modo });
+      if (!r.falhou) return Array.isArray(r.data) ? r.data : [];
+    }
     const itens = [];
 
     // Vendedor — via proposta vinculada -> lead
