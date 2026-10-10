@@ -18,7 +18,7 @@
   async function listarCustosElevador() {
     const c = sb(); if (!c) return [];
     const { data, error } = await c.from('custos_instalacao_elevador').select('*')
-      .order('tracao').order('capacidade_min_kg').order('paradas');
+      .order('tracao').order('capacidade_max_kg').order('paradas');
     if (error) { console.warn('[CadastroCustosStore] listarCustosElevador falhou', error); return []; }
     return data || [];
   }
@@ -31,7 +31,7 @@
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Cadastros', acao: 'Salvou custo de instalação de elevador', alvo_id: data.id,
-      detalhe: { tracao: data.tracao, capacidade_min_kg: data.capacidade_min_kg, paradas: data.paradas, valor_reajustado_rs: data.valor_reajustado_rs },
+      detalhe: { tracao: data.tracao, capacidade_max_kg: data.capacidade_max_kg, paradas: data.paradas, valor_reajustado_rs: data.valor_reajustado_rs },
     });
     return data;
   }
@@ -81,16 +81,19 @@
     const c = sb(); if (!c || !tracao || !paradas) return null;
     const { data, error } = await c.from('custos_instalacao_elevador').select('*')
       .eq('ativo', true).eq('tracao', tracao).eq('paradas', paradas)
-      .lte('capacidade_min_kg', capacidadeKg).gte('capacidade_max_kg', capacidadeKg);
+      .gte('capacidade_max_kg', capacidadeKg);
     if (error) { console.warn('[CadastroCustosStore] buscarCustoElevador falhou', error); return null; }
+    /* 10/10/2026 — a "Capacidade mín." deixou de existir: só a Capacidade máx. (kg) doa dado. A faixa que vale é a
+       MENOR capacidade máxima que ainda comporta o elevador (ex.: 500 kg → faixa de 630 kg). Dentro dela, valor > 0
+       primeiro e cotação real antes de estimativa. */
     const linhas = data || [];
     if (linhas.length <= 1) return linhas[0] || null;
-    const largura = (l) => Number(l.capacidade_max_kg) - Number(l.capacidade_min_kg);
     const escolhida = [...linhas].sort((a, b) =>
-      ((Number(b.valor_reajustado_rs) > 0) - (Number(a.valor_reajustado_rs) > 0))
-      || ((!!a.is_estimativa) - (!!b.is_estimativa))
-      || (largura(a) - largura(b)))[0];
-    console.warn(`[CadastroCustosStore] ${linhas.length} faixas de MO sobrepostas pra tração ${tracao} × ${paradas} paradas × ${capacidadeKg}kg — usando ${escolhida.capacidade_min_kg}-${escolhida.capacidade_max_kg}kg (id ${escolhida.id}). Revise em Cadastros → Atualização de Custos.`, linhas);
+      (Number(a.capacidade_max_kg) - Number(b.capacidade_max_kg))
+      || ((Number(b.valor_reajustado_rs) > 0) - (Number(a.valor_reajustado_rs) > 0))
+      || ((!!a.is_estimativa) - (!!b.is_estimativa)))[0];
+    const empatadas = linhas.filter((l) => Number(l.capacidade_max_kg) === Number(escolhida.capacidade_max_kg));
+    if (empatadas.length > 1) console.warn(`[CadastroCustosStore] ${empatadas.length} linhas de MO com a mesma capacidade máx. (${escolhida.capacidade_max_kg}kg) pra tração ${tracao} × ${paradas} paradas — usando id ${escolhida.id}. Revise em Cadastros → Atualização de Custos.`, empatadas);
     return escolhida;
   }
 
@@ -148,7 +151,7 @@
     if (error || !data || data.length < 4) return null;
 
     const pontos = data.map((r) => ({
-      capacidade: (Number(r.capacidade_min_kg) + Number(r.capacidade_max_kg)) / 2,
+      capacidade: Number(r.capacidade_max_kg),
       homemDia: Number(r.dias_montagem || 0) * Number(r.qtd_montadores || 0),
       valor: Number(r.valor_reajustado_rs),
     }));
@@ -236,9 +239,114 @@
     });
   }
 
+  /* ---------- Frete interno (Santos → capitais) — 10/10/2026 ----------
+     Tabela das 2 transportadoras (carreta L = carga solta, LS = container
+     fechado) copiada da aba FRETE da planilha do Financeiro, que não tem
+     fórmula nenhuma (é só consulta digitada). A Precificação sugere o frete
+     interno a partir daqui: cidade da obra × nº de containers; o usuário
+     troca transportadora/modalidade e pode digitar o valor que quiser. */
+  async function listarFrete() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('custos_frete_interno').select('*').order('destino');
+    if (error) { console.warn('[CadastroCustosStore] listarFrete falhou', error); return []; }
+    return data || [];
+  }
+
+  async function atualizarCampoFrete(id, patch) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const payload = { ...patch, atualizado_em: new Date().toISOString(), atualizado_por: quemAtualizou() };
+    const { data, error } = await c.from('custos_frete_interno').update(payload).eq('id', id).select().single();
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Cadastros', acao: 'Editou custo de frete interno', alvo: data.destino, alvo_id: id, detalhe: patch,
+    });
+    return data;
+  }
+
+  async function listarFreteObservacoes() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('custos_frete_observacoes').select('*').eq('ativo', true).order('bloco').order('ordem');
+    if (error) { console.warn('[CadastroCustosStore] listarFreteObservacoes falhou', error); return []; }
+    return data || [];
+  }
+
+  async function atualizarFreteObservacao(id, texto) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.from('custos_frete_observacoes')
+      .update({ texto, atualizado_em: new Date().toISOString(), atualizado_por: quemAtualizou() }).eq('id', id).select().single();
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cadastros', acao: 'Editou observação de frete', alvo_id: id, detalhe: { bloco: data.bloco } });
+    return data;
+  }
+
+  /* Sem acento/maiúscula/espaço sobrando — "Brasilia", "BRASÍLIA " e "brasília" são a mesma cidade. */
+  function normalizarTexto(s) {
+    return String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').toLowerCase().trim().replace(/\s+/g, ' ');
+  }
+
+  const FRETE_OPCOES = [
+    { transportadora: 1, modalidade: 'LS', campo: 'transp1_ls_rs' },
+    { transportadora: 2, modalidade: 'LS', campo: 'transp2_ls_rs' },
+    { transportadora: 1, modalidade: 'L', campo: 'transp1_l_rs' },
+    { transportadora: 2, modalidade: 'L', campo: 'transp2_l_rs' },
+  ];
+
+  /* SUGESTÃO AUTOMÁTICA do frete interno (função pura, testável).
+     - Destino: cidade da obra se for uma das capitais da tabela; senão a
+       capital do estado (UF) — avisa "porUf" porque a tabela só vale a até
+       20 km da capital (observação 4 da planilha).
+     - Modalidade padrão = LS (caminhão compatível com CONTAINER FECHADO, que é
+       como a carga importada chega); vence a transportadora mais barata.
+       L (carga solta) só entra como padrão se nenhuma LS tiver valor.
+     - Valor é POR CONTAINER (observação 5): total = valor × nº de containers.
+     - Campo vazio/zero ("cotado caso a caso") não é opção. */
+  function sugerirFrete(linhas, { cidade, uf, containers, transportadora, modalidade } = {}) {
+    const lista = Array.isArray(linhas) ? linhas.filter((l) => l.ativo !== false) : [];
+    const alvo = normalizarTexto(cidade);
+    let destino = alvo ? lista.find((l) => normalizarTexto(l.destino) === alvo) : null;
+    let porUf = false;
+    if (!destino && uf) {
+      destino = lista.find((l) => String(l.uf || '').toUpperCase() === String(uf).toUpperCase()) || null;
+      porUf = !!destino;
+    }
+    if (!destino) return { destino: null, porUf: false, opcoes: [], escolhida: null, valorPorContainer: 0, containers: Number(containers) || 0, total: 0 };
+    const opcoes = FRETE_OPCOES
+      .map((o) => ({ ...o, valor: Number(destino[o.campo]) || 0 }))
+      .filter((o) => o.valor > 0);
+    const pedida = (transportadora && modalidade)
+      ? opcoes.find((o) => o.transportadora === Number(transportadora) && o.modalidade === modalidade)
+      : null;
+    const menor = (arr) => arr.slice().sort((a, b) => a.valor - b.valor)[0] || null;
+    const escolhida = pedida || menor(opcoes.filter((o) => o.modalidade === 'LS')) || menor(opcoes);
+    const qtd = Math.max(0, Number(containers) || 0);
+    const valorPorContainer = escolhida ? escolhida.valor : 0;
+    return { destino, porUf, opcoes, escolhida, valorPorContainer, containers: qtd, total: Math.round(valorPorContainer * qtd * 100) / 100 };
+  }
+
+  /* ---------- DIFAL por estado (10/10/2026) ----------
+     Mesma tabela da aba BASE do DIFAL.xlsx do Financeiro (categoria, alíquota interna, interestadual
+     nacional/estrangeira e fundo de combate por UF). O DifalEngine lê daqui; antes não havia tela para
+     manter esses valores. Origem fixa SP (sede da VerticalParts). */
+  async function listarDifalEstados() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('difal_estados').select('*').order('uf');
+    if (error) { console.warn('[CadastroCustosStore] listarDifalEstados falhou', error); return []; }
+    return data || [];
+  }
+
+  async function atualizarDifalEstado(uf, patch) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.from('difal_estados').update(patch).eq('uf', uf).select().single();
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cadastros', acao: 'Editou DIFAL do estado', alvo: uf, alvo_id: uf, detalhe: patch });
+    return data;
+  }
+
   window.CadastroCustosStore = {
+    listarDifalEstados, atualizarDifalEstado,
     listarCustosElevador, salvarCustoElevador, atualizarCampoElevador, removerCustoElevador, buscarCustoElevador, estimarValorElevador,
     listarCustosEscadaEsteira, salvarCustoEscadaEsteira, buscarCustoEscadaEsteira,
     listarContainers, salvarContainer, removerContainer,
+    listarFrete, atualizarCampoFrete, listarFreteObservacoes, atualizarFreteObservacao, sugerirFrete, normalizarTexto,
   };
 }());

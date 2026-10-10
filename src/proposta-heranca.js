@@ -97,18 +97,16 @@
       const mod = modelos.find((m) => m.unidadeId === uid) || {};
       const modCalc = modelosCalc.find((m) => m.unidadeId === uid) || {};
       const capKg = u.capacidade_kg || tec.capacidade_kg;
-      const capPass = u.capacidade_pessoas || tec.capacidade_pessoas;
+      /* 10/10/2026 — passageiros = Capacidade máx. (kg) ÷ 75 (regra única, capacidade-passageiros.js); Elevador de CARGA
+         não leva pessoas: só os kg. Antes valia o número digitado à mão no Formulário (o "4000 Passageiros" da 950). */
+      const CP = window.CapacidadePassageiros;
+      const capPass = CP ? CP.passageiros(capKg, u.tipo || tec.tipo) : (u.capacidade_pessoas || tec.capacidade_pessoas);
       const largura = u.caixa_largura_mm || tec.caixa_largura_mm;
       const prof = u.caixa_profundidade_mm || tec.caixa_profundidade_mm;
       const paradas = u.paradas || tec.paradas;
       const tipo = u.tipo || tec.tipo || '';
       const cabLargura = u.cabina_largura_mm || tec.cabina_largura_mm;
       const cabProf = u.cabina_profundidade_mm || tec.cabina_profundidade_mm;
-      /* Elevador de Carga também pode ter capacidade de passageiros (não é
-         exclusividade do tipo Passageiro) — o "4000 Passageiros" visto na
-         cotação 950 era só o vendedor tendo digitado o número errado no
-         Formulário (corrigido pra 53 depois), não uma regra de categoria.
-         Não suprimir por tipo aqui. */
       return {
         id: u.identificador || tec.identificador || '',
         modelo: mod.modelo || u.modelo || tec.modelo || '',
@@ -187,21 +185,28 @@
     // Há Unidade com vários equipamentos: 1 ativo por equipamento físico e
     // `indice` sequencial único (1..N) — os consumidores (Contrato Instalador,
     // dashboard financeiro) identificam o ativo por esse índice.
+    /* 10/10 — na explosão os códigos vêm CORRIDOS (1..N, menor → maior
+       paradas) de mo_lookup (ver renumerarPorParadas em
+       precificacao-elevador-store.js): a ordem e o código dos ativos
+       seguem a Precificação, não a ordem das Unidades do Formulário. */
+    const porUid = new Map(porUnidade.map((x) => [x.uid, x]));
     const out = [];
+    moLookup.forEach((l) => {
+      const x = porUid.get(l.unidadeId);
+      if (!x) return; // equipamento avulso (sem Unidade real) fica de fora, como sempre
+      out.push({
+        indice: out.length + 1, codigo: l.identificador || x.codigo, identificador: l.identificador || x.identificador,
+        modelo: x.modelo, unidadeId: x.uid, equipamentoIndice: l.equipamentoIndice ?? null,
+        custoInstalacaoMaoDeObraRs: Number(l.valorRs) || null,
+      });
+    });
+    // Unidade sem nenhuma linha em mo_lookup mantém o formato de sempre
     porUnidade.forEach((x) => {
-      if (x.linhasMo.length > 1) {
-        x.linhasMo.forEach((l) => out.push({
-          indice: out.length + 1, codigo: l.identificador || x.codigo, identificador: l.identificador || x.identificador,
-          modelo: x.modelo, unidadeId: x.uid, equipamentoIndice: l.equipamentoIndice ?? null,
-          custoInstalacaoMaoDeObraRs: Number(l.valorRs) || null,
-        }));
-      } else {
-        out.push({
-          indice: out.length + 1, codigo: x.codigo, identificador: x.identificador, modelo: x.modelo,
-          unidadeId: x.uid, equipamentoIndice: 1,
-          custoInstalacaoMaoDeObraRs: Number((x.linhasMo[0] || {}).valorRs) || null,
-        });
-      }
+      if (x.linhasMo.length) return;
+      out.push({
+        indice: out.length + 1, codigo: x.codigo, identificador: x.identificador, modelo: x.modelo,
+        unidadeId: x.uid, equipamentoIndice: 1, custoInstalacaoMaoDeObraRs: null,
+      });
     });
     return out;
   }

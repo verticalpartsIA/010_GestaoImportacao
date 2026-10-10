@@ -60,6 +60,7 @@
        continua igual. Regerar: ver o comando em styles/tailwind.config.js. -->
   <link rel="stylesheet" href="/styles/tailwind.css?v=1">
   <link rel="stylesheet" href="/styles/ui-suave.css?v=2">
+  <link rel="stylesheet" href="/styles/planilha.css?v=3">
   <script>
     /* Visual "Suave" dos componentes globais: padrão LIGADO. Volta ao clássico com ?ui=classico
        (a escolha fica guardada neste navegador); ?ui=suave religa. Roda antes da pintura para não piscar. */
@@ -196,8 +197,9 @@
        Elevador pra comparar o câmbio congelado da cotação com o de hoje. -->
   <script src="/src/cambio-api.js?v=2"></script>
   <script src="/src/formulario-elevador-store.js?v=22"></script>
+  <script src="/src/capacidade-passageiros.js?v=1"></script>
   <script src="/src/cotacao-elevador-fornecedor-store.js?v=26"></script>
-  <script type="text/vp-jsx" src="/src/formulario-elevador.jsx?v=12"></script>
+  <script type="text/vp-jsx" src="/src/formulario-elevador.jsx?v=14"></script>
 
   <!-- Quadro de Comando (Comercial · Formulários) — BOM + lista de corte
        + checklist digital de separação quando fabricado internamente. -->
@@ -221,9 +223,10 @@
 
   <!-- Precificação de Elevador (ADM/Financeiro) + DIFAL -->
   <script src="/src/difal-engine.js?v=1"></script>
-  <script src="/src/precificacao-elevador-engine.js?v=7"></script>
-  <script src="/src/precificacao-elevador-store.js?v=31"></script>
-  <script type="text/vp-jsx" src="/src/precificacao-elevador.jsx?v=48"></script>
+  <script src="/src/precificacao-elevador-engine.js?v=10"></script>
+  <script src="/src/precificacao-elevador-store.js?v=38"></script>
+  <script type="text/vp-jsx" src="/src/precificacao-elevador.jsx?v=64"></script>
+  <script type="text/vp-jsx" src="/src/precificacao-memoria.jsx?v=5"></script>
 
   <script type="text/vp-jsx" src="/src/precificacao.jsx?v=29"></script>
   <script src="/src/proposta-acabamentos-engine.js?v=1"></script>
@@ -234,7 +237,7 @@
   <script type="text/vp-jsx" src="/src/proposta-preview.jsx?v=21"></script>
   <script src="/src/proposta-store.js?v=24"></script>
   <script src="/src/proposta-legado.js?v=1"></script>
-  <script src="/src/proposta-heranca.js?v=16"></script>
+  <script src="/src/proposta-heranca.js?v=18"></script>
   <!-- Desconto por equipamento com histórico + aprovação por alçada
        (Frentes B+C do estudo do editor de Proposta) — reaproveita
        decisoes-store.js, sem tabela nova. -->
@@ -353,8 +356,8 @@
 
   <!-- Cadastros · Atualização de Custos (Instalação Elevador/Escada·Esteira + Containers) —
        herança automática pra Precificação, ver cadastro-custos-store.js -->
-  <script src="/src/cadastro-custos-store.js?v=7"></script>
-  <script type="text/vp-jsx" src="/src/cadastro-custos.jsx?v=11"></script>
+  <script src="/src/cadastro-custos-store.js?v=10"></script>
+  <script type="text/vp-jsx" src="/src/cadastro-custos.jsx?v=14"></script>
 
   <!-- Jurídico · Contrato Instalador (wizard + dashboard + assinatura digital) -->
   <script src="/src/contrato-instalador-engine.js?v=8"></script>
@@ -415,7 +418,7 @@
   <!-- Admin: Logs de Atividade -->
   <script type="text/vp-jsx" src="/src/logs-admin.jsx?v=2"></script>
 
-  <script type="text/vp-jsx" src="/src/vp-copiloto.jsx?v=9"></script>
+  <script type="text/vp-jsx" src="/src/vp-copiloto.jsx?v=10"></script>
 
   <!-- Main app last -->
   <script type="text/vp-jsx" src="/src/app.jsx?v=96"></script>

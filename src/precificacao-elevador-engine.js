@@ -229,6 +229,8 @@
      os dois convivem pra permitir comparação lado a lado (V1 x V2) até a
      migração ser aceita pelo Financeiro. */
   function calcularV2(inputs) {
+    // 10/10/2026 — terceiro modo: "Método da planilha" (planilha do Financeiro é a mãe).
+    if (inputs.modoFormacaoPreco === 'planilha') return calcularPlanilha(inputs);
     const v1 = calcular(inputs);
     const p = inputs.parametros || {};
 
@@ -314,6 +316,70 @@
     };
   }
 
+  /* ============================================================
+     calcularPlanilha — "Método da planilha" (10/10/2026).
+     A planilha do Financeiro ("JA - COTAÇÃO N° 963", aba FIN - ELEVADOR) é a
+     mãe do projeto: o preço sai de  S66 = U35 / (1 − impostos da venda −
+     MARK-UP), onde o MARK-UP é uma margem sobre o PREÇO DE VENDA (divisor),
+     não sobre o custo, e as despesas extras (despachante, ad-valorem, frete
+     interno, armazenagem, instalação…) só entram no LUCRO, depois do preço.
+     A cascata é a do V1 (que reproduz a planilha ao centavo — ver o teste
+     "golden 963"). Diferença de insumo em relação ao V2: na planilha o frete
+     internacional (container + capatazia + GRI) está DENTRO do valor CIF
+     (célula D8, em US$) e portanto entra na base de II/PIS/COFINS/ICMS e
+     do AFRMM; aqui os containers do cadastro (R$) são convertidos para US$ pelo
+     câmbio da cotação e somados ao frete informado. Contingência e outros
+     custos não recuperáveis não existem na planilha: se informados, abatem do
+     lucro (nunca entram no preço). Mesmo formato de saída do V2, para os
+     cartões, a Proposta e a aprovação lerem sem mudar nada. */
+  function calcularPlanilha(inputs) {
+    const tx = Number(inputs.txCambial) || 0;
+    const containers = Array.isArray(inputs.containers) ? inputs.containers : [];
+    const rateio = Math.max(Number(inputs.containerRateioDivisor) || 1, 1);
+    const containersRs = containers.reduce((s, c) => s + (Number(c.quantidade) || 0) * ((Number(c.preco_rs) || 0) + (Number(c.capatazia_rs) || 0) + (Number(c.gri_rs) || 0)), 0) / rateio;
+    const containersUsd = tx > 0 ? containersRs / tx : 0;
+    const freteSeguroCapataziaUsd = (Number(inputs.freteSeguroCapataziaUsd) || 0) + containersUsd;
+    const v1 = calcular({ ...inputs, freteSeguroCapataziaUsd, containers: [], containerRateioDivisor: 1 });
+    const p = inputs.parametros || {};
+
+    const contingenciaValor = Number(inputs.contingenciaValor) || 0;
+    const outrosCustosNaoRecuperaveisRs = Number(inputs.outrosCustosNaoRecuperaveisRs) || 0;
+    const q = Number(inputs.quantidadeEquipamentos) || 1;
+    const pv = v1.precificacao;
+    const precoVendaProposta = pv.precoVendaProposta;
+    const lucroFinal = pv.lucroVenda - contingenciaValor - outrosCustosNaoRecuperaveisRs;
+    const margemEfetivaPct = precoVendaProposta > 0 ? (lucroFinal + pv.comissaoConsultoriaRs) / precoVendaProposta : 0;
+    const custoEconomicoCompleto = v1.importacao.custoTotalMercadorias + v1.importacao.despesasInstalacaoMontagem + contingenciaValor + outrosCustosNaoRecuperaveisRs;
+
+    return {
+      versaoMotor: 'planilha-1.0',
+      modoFormacaoPreco: 'planilha',
+      divisorValido: pv.precoVendaPct > 0,
+      modelos: ratearPorModelo(inputs.modelos, precoVendaProposta),
+      custoEconomicoCompleto,
+      componentes: {
+        custoLiquidoImportacao: v1.importacao.custoTotalMercadorias,
+        despesasOperacionais: v1.importacao.despesasInstalacaoMontagem,
+        contingenciaValor, outrosCustosNaoRecuperaveisRs,
+      },
+      planilha: { containersRs, containersUsd, freteSeguroCapataziaUsdNaBase: freteSeguroCapataziaUsd },
+      importacao: v1.importacao,
+      precificacao: {
+        ...pv,
+        precoVendaPorEquipamento: precoVendaProposta / q,
+        percentuaisSobreVenda: pv.impostosPagarProdutoPct + (Number(inputs.markUpPct ?? p.markUpPct) || 0),
+        markUpPct: Number(inputs.markUpPct ?? p.markUpPct) || 0,
+        margemDesejadaPct: null,
+        // líquido de créditos, como "IMPOSTOS A PAGAR – PRODUTO" da planilha (sinal positivo = custo)
+        impostosPagarProdutoRs: -pv.impostosPagarProdutoRs,
+        impostosPagarServicosRs: -pv.impostosPagarServicosRs,
+        difalRs: pv.difalRs, lucroFinal, margemEfetivaPct,
+        lucroPorEquipamento: lucroFinal / q,
+      },
+      v1Comparacao: { precoVendaProposta: pv.precoVendaProposta, lucroFinal: pv.lucroFinal, margemFinalPct: pv.margemFinalPct },
+    };
+  }
+
   /* Divide o preço de venda total entre as unidades/modelos, ponderando pelo
      custo do fornecedor (USD × quantidade) — mesma regra do rateio do V1.
      Equipamento mais caro no fornecedor sai com preço de venda maior; o
@@ -335,5 +401,46 @@
     });
   }
 
-  window.PrecificacaoElevadorEngine = { calcular, calcularV2, creditoElegivel, ratearPorModelo };
+  /* Inverso do preço (10/10/2026): dado um resultado de calcularV2/calcularPlanilha e um PREÇO-ALVO total,
+     devolve a alavanca da tela que produz exatamente esse preço — "VLR Sugerido CEO" → o que digitar em
+     Mark-up/Margem para chegar lá. Os três modos têm fórmula fechada (o preço é custo ÷ divisor):
+       planilha ........... mark-up (% do preço) = 1 − impostos da venda − custo da nota ÷ preço
+       markup_sobre_custo . mark-up (% do custo) = preço × (1 − % sobre a venda) ÷ custo completo − 1
+       margem_sobre_venda . margem desejada      = 1 − % sobre a venda − custo completo ÷ preço
+     `valido` = a alavanca fica numa faixa possível (preço-alvo acima do custo + impostos). */
+  function alavancaParaPreco(res, precoAlvo) {
+    const P = Number(precoAlvo) || 0;
+    if (!(P > 0) || !res || !res.precificacao) return null;
+    const pv = res.precificacao;
+    const modo = res.modoFormacaoPreco;
+    if (modo === 'planilha') {
+      const m = 1 - pv.impostosPagarProdutoPct - res.componentes.custoLiquidoImportacao / P;
+      return { modo, campo: 'mark_up_pct', valor: m, valido: m > 0 && m < 1 };
+    }
+    const custo = res.custoEconomicoCompleto;
+    if (!(custo > 0)) return null;
+    if (modo === 'markup_sobre_custo') {
+      const m = P * (1 - pv.percentuaisSobreVenda) / custo - 1;
+      return { modo, campo: 'mark_up_pct', valor: m, valido: m >= 0 && m < 1 };
+    }
+    const marg = 1 - pv.percentuaisSobreVenda - custo / P;
+    return { modo, campo: 'margem_desejada_pct', valor: marg, valido: marg > 0 && marg < 1 };
+  }
+
+  /* Lucro LÍQUIDO de cada equipamento (10/10/2026) — resposta oficial para "quanto cada equipamento deixa de lucro?".
+     Tudo o que é custo ou imposto é rateado pela participação do equipamento no PREÇO (e o preço já é rateado pelo custo
+     em US$ de cada modelo, então mercadoria, despesas gerais, impostos da venda, comissões, DIFAL e contingência seguem
+     a mesma proporção). A ÚNICA exceção é a MÃO DE OBRA, que é específica de cada equipamento (tabela tração × capacidade
+     × paradas): cada um paga a sua. Fórmula, para o equipamento i:
+        líquido_i = (lucro total + Σ mão de obra) × (VLR Proposta_i ÷ preço total) − mão de obra_i
+     A soma dos líquidos é SEMPRE o lucro total da precificação. linhas = [{ preco, mo }] (VLR Proposta e mão de obra, R$). */
+  function ratearLucroPorEquipamento({ lucroTotal, precoTotal, linhas }) {
+    const lista = Array.isArray(linhas) ? linhas : [];
+    const P = Number(precoTotal) > 0 ? Number(precoTotal) : lista.reduce((s, l) => s + (Number(l.preco) || 0), 0);
+    const L = Number(lucroTotal) || 0;
+    const somaMo = lista.reduce((s, l) => s + (Number(l.mo) || 0), 0);
+    return lista.map((l) => (P > 0 ? (L + somaMo) * ((Number(l.preco) || 0) / P) - (Number(l.mo) || 0) : 0));
+  }
+
+  window.PrecificacaoElevadorEngine = { calcular, calcularV2, calcularPlanilha, alavancaParaPreco, ratearLucroPorEquipamento, creditoElegivel, ratearPorModelo };
 }());

@@ -112,7 +112,7 @@ test('buscarMaoDeObraAutomatica — quantidade=2 numa única Unidade (cotação 
   }
 });
 
-test('buscarMaoDeObraAutomatica — quantidade=1 continua com o mesmo identificador, sem sufixo', async () => {
+test('buscarMaoDeObraAutomatica — cotação com 1 equipamento é sempre o -1 (ponto final), sem sufixo', async () => {
   const antigo = window.CadastroCustosStore;
   window.CadastroCustosStore = stubCadastroCustos(9999);
   try {
@@ -120,13 +120,13 @@ test('buscarMaoDeObraAutomatica — quantidade=1 continua com o mesmo identifica
       { unidadeId: 'u2', identificador: 'VPEL-EL0958-2', tracao: '2:1', capacidadeKg: 800, paradas: 4, quantidade: 1 },
     ]);
     assert.equal(out.length, 1);
-    assert.equal(out[0].identificador, 'VPEL-EL0958-2');
+    assert.equal(out[0].identificador, 'VPEL-EL0958-1');
   } finally {
     window.CadastroCustosStore = antigo;
   }
 });
 
-test('buscarMaoDeObraAutomatica — sufixo contínuo nunca colide com o identificador de outra Unidade real da mesma cotação (cotação Nº 957 real)', async () => {
+test('buscarMaoDeObraAutomatica — 21 equipamentos (cotação Nº 957 real): códigos corridos 1..21, sem repetir e sem sufixo aninhado', async () => {
   const antigo = window.CadastroCustosStore;
   window.CadastroCustosStore = stubCadastroCustos(5000);
   try {
@@ -137,14 +137,47 @@ test('buscarMaoDeObraAutomatica — sufixo contínuo nunca colide com o identifi
       { unidadeId: 'u9', identificador: 'VPEL-EL0957-9', tracao: '2:1', capacidadeKg: 1050, paradas: 3, quantidade: 3 },
     ]);
     assert.equal(out.length, 21);
-    const identificadores = out.map((o) => o.identificador);
-    const duplicados = identificadores.filter((v, i) => identificadores.indexOf(v) !== i);
-    assert.deepEqual(duplicados, [], 'nenhum identificador pode se repetir entre Unidades físicas diferentes');
-    // as próprias Unidades reais (1ª linha de cada grupo) preservam o identificador original intacto
-    assert.equal(out.find((o) => o.unidadeId === 'u1').identificador, 'VPEL-EL0957-1');
-    assert.equal(out.find((o) => o.unidadeId === 'u4').identificador, 'VPEL-EL0957-4');
-    assert.equal(out.find((o) => o.unidadeId === 'u6').identificador, 'VPEL-EL0957-6');
-    assert.equal(out.find((o) => o.unidadeId === 'u9').identificador, 'VPEL-EL0957-9');
+    assert.deepEqual(out.map((o) => o.identificador), Array.from({ length: 21 }, (_, i) => `VPEL-EL0957-${i + 1}`));
+    // tudo igual (paradas e capacidade): desempata a ordem original (antiguidade)
+    assert.deepEqual(out.slice(0, 6).map((o) => o.unidadeId), ['u1', 'u1', 'u1', 'u1', 'u1', 'u1']);
+    assert.equal(out[20].unidadeId, 'u9');
+  } finally {
+    window.CadastroCustosStore = antigo;
+  }
+});
+
+// Regra do usuário (10/10, cotação Nº 963: 27 equipamentos agrupados em 10 linhas):
+// códigos corridos 1..N, da MENOR para a MAIOR quantidade de paradas; empate de
+// paradas → menor capacidade fica com o código mais baixo; nunca "-1-2"/"-1-1".
+test('buscarMaoDeObraAutomatica — explode e numera 1..N por paradas (menor → maior), desempate por capacidade', async () => {
+  const antigo = window.CadastroCustosStore;
+  window.CadastroCustosStore = stubCadastroCustos(1000);
+  try {
+    const out = await buscarMaoDeObraAutomatica([
+      { unidadeId: 'a', identificador: 'VPEL-EL0963-1', tracao: '2:1', capacidadeKg: 1050, paradas: 9, quantidade: 2 },
+      { unidadeId: 'b', identificador: 'VPEL-EL0963-2', tracao: '2:1', capacidadeKg: 560, paradas: 10, quantidade: 1 },
+      { unidadeId: 'c', identificador: 'VPEL-EL0963-3', tracao: '2:1', capacidadeKg: 840, paradas: 6, quantidade: 2 },
+      { unidadeId: 'd', identificador: 'VPEL-EL0963-4', tracao: '2:1', capacidadeKg: 420, paradas: 6, quantidade: 1 },
+    ]);
+    assert.equal(out.length, 6);
+    // 6 paradas: d (420 kg) antes de c (840 kg); depois 9 paradas (a ×2); depois 10 (b)
+    assert.deepEqual(out.map((o) => o.unidadeId), ['d', 'c', 'c', 'a', 'a', 'b']);
+    assert.deepEqual(out.map((o) => o.identificador), [1, 2, 3, 4, 5, 6].map((n) => `VPEL-EL0963-${n}`));
+    out.forEach((o) => assert.doesNotMatch(o.identificador, /-\d+-\d+$/, 'nunca sufixo aninhado'));
+  } finally {
+    window.CadastroCustosStore = antigo;
+  }
+});
+
+test('buscarMaoDeObraAutomatica — cotação sem explosão (1 equipamento por Unidade) mantém os códigos reais das Unidades', async () => {
+  const antigo = window.CadastroCustosStore;
+  window.CadastroCustosStore = stubCadastroCustos(1000);
+  try {
+    const out = await buscarMaoDeObraAutomatica([
+      { unidadeId: 'a', identificador: 'VPEL-EL0970-1', tracao: '2:1', capacidadeKg: 800, paradas: 9, quantidade: 1 },
+      { unidadeId: 'b', identificador: 'VPEL-EL0970-2', tracao: '2:1', capacidadeKg: 800, paradas: 3, quantidade: 1 },
+    ]);
+    assert.deepEqual(out.map((o) => o.identificador), ['VPEL-EL0970-1', 'VPEL-EL0970-2']);
   } finally {
     window.CadastroCustosStore = antigo;
   }
