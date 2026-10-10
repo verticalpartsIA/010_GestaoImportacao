@@ -88,8 +88,26 @@
     return { dossier, status: status || [], lancamentos: lancamentos || [], equipamentos: equipamentos || [] };
   }
 
+  /* Segurança real (#571, F1): a página pública /diario-obra/:token lê o estado por RPC `public_diario_obter` (recebe só
+     o TOKEN; devolve cabeçalho, itens/status e nº de série — sem ler dossier_obra direto). Interruptor de emergência:
+     localStorage.vp_public_rpc = 'off' volta ao caminho antigo. Se a RPC falhar (rede, ou migração ainda não aplicada),
+     cai no caminho antigo. As gravações do Montador (registrarLancamento) seguem nas tabelas acompanhamento_obra_*. */
+  function usarRpcPublica() {
+    try { return localStorage.getItem('vp_public_rpc') !== 'off'; } catch (e) { return true; }
+  }
+
   async function obterEstadoPorToken(token) {
     const c = sb();
+    if (c && token && usarRpcPublica()) {
+      try {
+        const { data, error } = await c.rpc('public_diario_obter', { p_token: token });
+        if (!error) {
+          if (!data) return null;
+          return { link: data.link, dossier: data.dossier || null, status: data.status || [], lancamentos: data.lancamentos || [], equipamentos: data.equipamentos || [] };
+        }
+        console.warn('[AcompanhamentoObraStore] RPC public_diario_obter falhou — usando caminho antigo', error);
+      } catch (e) { console.warn('[AcompanhamentoObraStore] RPC public_diario_obter indisponível — usando caminho antigo', e); }
+    }
     const { data: link } = await c.from('acompanhamento_obra_links').select('*').eq('token', token).maybeSingle();
     if (!link) return null;
     const estado = await obterEstadoDossier(link.dossier_id);
