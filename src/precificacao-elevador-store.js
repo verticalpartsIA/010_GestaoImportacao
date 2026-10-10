@@ -775,13 +775,9 @@
     // 01/10/2026 — o card de 90 dias (container exclusivo) só existe com 1 equipamento
     // e paga o container + capatazia inteiros (rateio 1). O antigo frete expresso digitado
     // (frete_seguro_capatazia_usd_expresso) foi removido do banco em 01/10/2026.
-    const resultadoV2Expresso = qtdEquipamentos <= 1
-      ? window.PrecificacaoElevadorEngine.calcularV2({
-          ...baseInputs, containerRateioDivisor: 1, difalCustoRs, ...v2Extras,
-          // Markup próprio do card 90d (Financeiro, 01/10). Null = usa o mesmo do 120d, como antes.
-          markUpPct: pz.mark_up_pct_expresso != null ? pz.mark_up_pct_expresso : pz.mark_up_pct,
-        })
-      : {};
+    // 10/10/2026 — o cenário de 90 dias (container exclusivo) saiu por decisão do Financeiro: só existe o de 120 dias.
+    // resultado_v2_expresso fica vazio; sem ele a Proposta também não oferece a modalidade de 90 dias.
+    const resultadoV2Expresso = {};
 
     /* 10/10/2026 — o método da planilha do Financeiro é o ÚNICO método de formação de preço; precificação antiga
        (markup sobre o custo / margem sobre a venda) é convertida ao calcular de novo. */

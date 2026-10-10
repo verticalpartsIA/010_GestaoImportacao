@@ -871,16 +871,12 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
   const resultado = pz.resultado && pz.resultado.precificacao;
   const resultadoV2 = pz.resultado_v2 && pz.resultado_v2.precificacao ? pz.resultado_v2 : null;
   const margemEfetivaV2Negativa = !!resultadoV2 && resultadoV2.precificacao.margemEfetivaPct < 0;
-  const resultadoV2Expresso = pz.resultado_v2_expresso && pz.resultado_v2_expresso.precificacao ? pz.resultado_v2_expresso : null;
   // Mesma soma usada em calcularEsalvar() (precificacao-elevador-store.js) pra
   // formar quantidadeEquipamentos — reaproveitada aqui só pra exibir "× N"
   // ao lado do preço por equipamento, sem recalcular nada do motor.
   const quantidadeEquipamentos = (pz.modelos || []).reduce((s, m) => s + (Number(m.quantidade) || 0), 0) || 1;
-  /* Regra do Financeiro (01/10): 2 cards (120d compartilhado × 90d exclusivo)
-     só com UM equipamento — importar 1 equipamento sozinho em 90 dias não
-     compensa o frete, então vale a comparação. Com 2+ o container já é
-     compartilhado: só o card base (120d), sem citar prazo. */
-  const mostrarExpresso = !!resultadoV2Expresso && quantidadeEquipamentos <= 1;
+  /* 10/10/2026 — decisão do Financeiro: UM card de preço só ("Preço de venda"), sempre o de 120 dias (container
+     compartilhado, dividido por 2 com 1 equipamento). O card/cálculo de 90 dias (container exclusivo) saiu. */
   const difal = pz.difal && pz.difal.mensagem ? pz.difal : null;
   const params = pz.parametros_fiscais_snapshot || {};
   const margemMinima = Number(params.margem_minima_pct) || 0;
@@ -1375,16 +1371,10 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
       <Card title="Alavancas do Financeiro" style={{ marginTop: 16 }}>
         <div className="grid-3" style={{ gap: 12 }}>
-          <PZField label={mostrarExpresso ? 'MARK-UP (% do preço) — 120 dias' : 'MARK-UP (% do preço de venda)'} obrigatorio faltando={f('mark_up_pct')}>
+          <PZField label="MARK-UP (% do preço de venda)" obrigatorio faltando={f('mark_up_pct')}>
             <PZPercentInput value={pz.mark_up_pct} onChange={set('mark_up_pct')}/>
             {markUpForaFaixa && <div style={{ color: '#991b1b', fontSize: 11, marginTop: 4 }}>Markup de {fmtPct2(pz.mark_up_pct)} parece implausível — confira o valor (o mark-up é % do preço de venda e precisa ficar abaixo de 100% menos os impostos).</div>}
           </PZField>
-          {mostrarExpresso && (
-            <PZField label="MARK-UP (% do preço) — 90 dias">
-              <PZPercentInput value={pz.mark_up_pct_expresso ?? pz.mark_up_pct} onChange={set('mark_up_pct_expresso')}/>
-              <div className="small muted" style={{ marginTop: 4 }}>Só vale pro card de 90 dias (exclusivo).</div>
-            </PZField>
-          )}
           <PZField label="Comissão consultoria (%) — 0 a 5%" obrigatorio faltando={f('comissao_consultoria_pct')} aviso="Obrigatório: digite de 0% a 5% (0 vale)." ><PZPercentInput value={pz.comissao_consultoria_pct} onChange={set('comissao_consultoria_pct')}/></PZField>
           <PZField label="Comissão vendedor (%)" obrigatorio faltando={f('comissao_vendedor_pct')}><PZPercentInput value={pz.comissao_vendedor_pct} onChange={set('comissao_vendedor_pct')}/></PZField>
           <PZField label="Comissão indicação (%)"><PZPercentInput value={pz.comissao_indicacao_pct} onChange={set('comissao_indicacao_pct')}/></PZField>
@@ -1435,8 +1425,8 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
       </Card>
 
       {resultadoV2 && (
-        <div className={mostrarExpresso ? 'grid-2' : ''} style={{ gap: 16, marginTop: 16 }}>
-          <Card title={mostrarExpresso ? 'Preço de venda — 120 dias (Compartilhado)' : 'Preço de venda'} sub={mostrarExpresso ? 'container compartilhado, prazo padrão' : undefined}>
+        <div style={{ marginTop: 16 }}>
+          <Card title="Preço de venda">
             <div className="stack" style={{ gap: 12 }}>
               <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2.custoEconomicoCompleto)}</div></div>
               <PZPrecoPorEquipamento modelos={pz.modelos} moLookup={pz.mo_lookup} precoTotal={resultadoV2.precificacao.precoVendaProposta}
@@ -1470,28 +1460,6 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
             )}
           </Card>
 
-          {mostrarExpresso && (
-            <Card title="Preço de venda — 90 dias (Exclusivo)" sub="container exclusivo, entrega mais rápida">
-              <div className="stack" style={{ gap: 12 }}>
-                <div><span className="up-eyebrow muted">Custo econômico completo</span><div className="cell-money" style={{ fontSize: 15 }}>{fmtBRL2(resultadoV2Expresso.custoEconomicoCompleto)}</div></div>
-                <PZPrecoPorEquipamento modelos={pz.modelos} moLookup={pz.mo_lookup} precoTotal={resultadoV2Expresso.precificacao.precoVendaProposta}/>
-                <div><span className="up-eyebrow muted">Preço de venda total</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta)}</div></div>
-                <div className="row gap-3">
-                  <div>
-                    <span className="up-eyebrow muted">Margem efetiva</span>
-                    <div className="cell-money" style={{ fontSize: 16, color: resultadoV2Expresso.precificacao.margemEfetivaPct < margemMinima ? 'var(--vp-warning-ink)' : 'var(--vp-success)' }}>{fmtPct2(resultadoV2Expresso.precificacao.margemEfetivaPct)}</div>
-                  </div>
-                  <div><span className="up-eyebrow muted">Lucro final</span><div className="cell-money" style={{ fontSize: 16, color: resultadoV2Expresso.precificacao.lucroFinal >= 0 ? 'var(--vp-success)' : 'var(--vp-warning-ink)' }}>{fmtBRL2(resultadoV2Expresso.precificacao.lucroFinal)}</div></div>
-                </div>
-                <div className="small muted">{fmtBRL2(resultadoV2Expresso.precificacao.precoVendaProposta - resultadoV2.precificacao.precoVendaProposta)} a mais que os 120 dias</div>
-              </div>
-              {resultadoV2Expresso.precificacao.margemEfetivaPct < 0 && (
-                <p style={{ fontSize: 12, color: '#991b1b', background: '#fee2e2', border: '1px solid #fca5a5', padding: '8px 12px', marginTop: 12, borderRadius: 6 }}>
-                  ⚠ Margem efetiva negativa no cenário de 90 dias — o container inteiro recai sobre um equipamento só; confira se o preço faz sentido antes de oferecer ao cliente.
-                </p>
-              )}
-            </Card>
-          )}
         </div>
       )}
 
