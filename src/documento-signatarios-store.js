@@ -105,6 +105,22 @@
     return data || null;
   }
 
+  /* Segurança real (#571, F1): desenho do Projeto de Instalação para a página pública — RPC `public_projeto_desenho_obter`
+     (TOKEN do signatário; devolve só as colunas que a página usa). Mesmo interruptor `vp_public_rpc='off'`; se a RPC falhar
+     ou ainda não existir, cai na leitura antiga de `projetos_elevador_desenhos` pelo ID do documento. */
+  async function obterDesenhoProjeto(token, documentoId) {
+    const c = sb(); if (!c) return null;
+    if (token && usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_projeto_desenho_obter', { p_token: token });
+      if (!r.falhou) return r.data || null;
+    }
+    if (!documentoId) return null;
+    const r = await c.from('projetos_elevador_desenhos')
+      .select('id,referencia,cliente_nome,numero_cotacao,equipamentos,arquivo_nome,arquivo_url,tipo_documento')
+      .eq('id', documentoId).maybeSingle();
+    return (r && r.data) || null;
+  }
+
   async function listarPorDocumento(documentoTipo, documentoId) {
     const c = sb(); if (!c || !documentoId) return [];
     const { data, error } = await c.from('documento_signatarios').select('*')
@@ -277,7 +293,7 @@
   }
 
   window.DocumentoSignatariosStore = {
-    shortToken, signUrl, getByToken, listarPorDocumento, listarPorTipo, contarPendentes,
+    shortToken, signUrl, getByToken, obterDesenhoProjeto, listarPorDocumento, listarPorTipo, contarPendentes,
     criar, remover, marcarEnviado, markViewed, markSigned, refuse,
     getPublicIP, deviceLabel, sha256Hex,
     /* achado real (01/10, teste E2E): a tela final de assinatura chama

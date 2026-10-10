@@ -282,6 +282,24 @@
     return data || null;
   }
 
+  /* Segurança real (#571, F1): o bloco de assinaturas digitais do PDF ("Baixar PDF" da página pública) vem da RPC
+     `public_cv_assinaturas` — recebe o TOKEN de quem está na página (representante, signatário adicional ou "deve assinar")
+     e devolve só quem JÁ assinou, sem token/e-mail de ninguém. Mesmo interruptor `vp_public_rpc='off'`; se a RPC falhar ou
+     ainda não existir, cai nas leituras antigas por ID do contrato (listarPorContrato/listarPorDocumento). */
+  async function assinaturasDoContrato(token, contratoId) {
+    const c = sb();
+    if (c && token && usarRpcPublica()) {
+      const r = await chamarRpcPublica(c, 'public_cv_assinaturas', { p_token: token });
+      if (!r.falhou && r.data && r.data.ok) return { extras: r.data.extras || [], genericos: r.data.genericos || [] };
+    }
+    if (!contratoId) return { extras: [], genericos: [] };
+    const [extras, genericos] = await Promise.all([
+      window.CVSignatarioStore ? window.CVSignatarioStore.listarPorContrato(contratoId) : [],
+      window.DocumentoSignatariosStore ? window.DocumentoSignatariosStore.listarPorDocumento('contrato_venda', contratoId) : [],
+    ]);
+    return { extras: extras || [], genericos: genericos || [] };
+  }
+
   /* Contrato de Venda não guarda numero_cotacao direto — só dá pra
      correlacionar em eventos_fluxo indo buscar na Proposta de origem. */
   async function numeroCotacaoDaProposta(propostaId) {
@@ -847,7 +865,7 @@
     uuid, shortToken,
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
-    listAll, listarPropostasAguardandoContrato, garantirDossier, getById, getByToken,
+    listAll, listarPropostasAguardandoContrato, garantirDossier, getById, getByToken, assinaturasDoContrato,
     numeroCotacaoDaProposta,
     createDraft, salvarRascunho, listarRascunhos, updateFormState, proximoNumeroLivre,
     markSent, markViewed, markSigned, refuse,
