@@ -1,0 +1,168 @@
+{
+  "titulo": "Cadastrar um novo lead",
+  "modulo": "CRM · Leads",
+  "resumo": "Registre uma nova oportunidade comercial — o primeiro passo da jornada do VP Gestão, do lead ao equipamento entregue.",
+  "perfil": "comercial",
+  "tempo": "3 minutos",
+  "saida": "img",
+  "dadosDemo": "demo.json",
+  "antes": [
+    "Acesse o VP Gestão pelo card no portal [vpsistema.com](https://vpsistema.com) — o login é automático.",
+    "Tenha em mãos o nome do prédio, o contato responsável e, se possível, o CNPJ do cliente."
+  ],
+  "passos": [
+    {
+      "id": "01-menu-leads",
+      "ir": "/geral/dashboard",
+      "titulo": "Abra a tela de Leads",
+      "texto": "No menu lateral, dentro do grupo **CRM**, clique em [[Leads]].",
+      "destacar": [
+        {
+          "alvo": ".sidebar .nav-item:has(.nav-item__label:text-is(\"Leads\"))",
+          "texto": "CRM › Leads"
+        }
+      ],
+      "recortar": "destaque"
+    },
+    {
+      "id": "02-novo-lead",
+      "ir": "/crm/leads",
+      "esperar": "h1:has-text('Pipeline de Leads')",
+      "titulo": "Clique em Novo Lead",
+      "texto": "O **Pipeline de Leads** mostra todas as oportunidades ativas. No canto superior direito, clique em [[Novo Lead]].",
+      "dica": "Use os botões de visualização ao lado para alternar entre **lista** e **quadro Kanban**.",
+      "destacar": [
+        {
+          "alvo": "button:has-text('Novo Lead')",
+          "texto": "Novo Lead"
+        }
+      ],
+      "recortar": "destaque"
+    },
+    {
+      "id": "03-dados-contato",
+      "acoes": [
+        {
+          "clicar": "button:has-text('Novo Lead')"
+        },
+        {
+          "preencher": "input[placeholder^='Ed. Itacolomi']",
+          "valor": "Edifício Mirante do Parque"
+        },
+        {
+          "preencher": "input[placeholder^='Nome do síndico']",
+          "valor": "Juliana Prado"
+        },
+        {
+          "preencher": "input[placeholder^='Síndico, Gerente']",
+          "valor": "Síndica"
+        },
+        {
+          "preencher": "input[placeholder^='(11)']",
+          "valor": "(11) 91234-5678"
+        },
+        {
+          "preencher": "input[placeholder='contato@email.com']",
+          "valor": "juliana@exemplo.com"
+        }
+      ],
+      "titulo": "Preencha prédio e contato",
+      "texto": "Informe o **Prédio / Empreendimento** e o **Contato** — os dois campos com asterisco são obrigatórios.\nCargo, telefone e e-mail ajudam o time a dar sequência no atendimento.",
+      "recortar": ".modal",
+      "margem": 0,
+      "destacar": [
+        {
+          "alvo": "input[placeholder^='Ed. Itacolomi']",
+          "numero": 1
+        },
+        {
+          "alvo": "input[placeholder^='Nome do síndico']",
+          "numero": 2
+        }
+      ]
+    },
+    {
+      "id": "04-cliente",
+      "titulo": "Vincule o cliente pelo CNPJ",
+      "texto": "Digite o CNPJ e clique em [[Buscar CNPJ]] — a razão social é preenchida automaticamente.\nAinda não tem o documento? Marque **CPF ou CNPJ será inserido depois** e complete mais tarde no Formulário.",
+      "atencao": "Buscar pelo CNPJ evita cadastrar o mesmo cliente duas vezes.",
+      "acoes": [
+        {
+          "rolarAte": "button:has-text('Buscar CNPJ')"
+        }
+      ],
+      "recortar": ".modal",
+      "margem": 0,
+      "destacar": [
+        {
+          "alvo": "button:has-text('Buscar CNPJ')",
+          "numero": 1
+        },
+        {
+          "alvo": "label:has-text('CPF ou CNPJ será inserido depois')",
+          "numero": 2
+        }
+      ]
+    },
+    {
+      "id": "05-qualificacao",
+      "titulo": "Qualifique a oportunidade",
+      "texto": "Escolha **Status**, **Origem** e **Prioridade**, informe o vendedor responsável e o valor estimado do negócio.",
+      "acoes": [
+        {
+          "rolarAte": "input[placeholder='Nome do vendedor']"
+        },
+        {
+          "preencher": "input[placeholder='Nome do vendedor']",
+          "valor": "Rafael"
+        },
+        {
+          "preencher": "input[placeholder='0']",
+          "valor": "420000"
+        }
+      ],
+      "recortar": ".modal",
+      "margem": 0,
+      "destacar": [
+        {
+          "alvo": "button:has-text('Criar Lead')",
+          "texto": "Revise e clique em Criar Lead"
+        }
+      ]
+    },
+    {
+      "id": "06-criado",
+      "acoes": [
+        {
+          "clicar": "button:has-text('Criar Lead')"
+        },
+        {
+          "esperarMs": 1200
+        }
+      ],
+      "titulo": "Confira o lead no pipeline",
+      "texto": "O sistema confirma a criação e o lead aparece no topo da lista, pronto para seguir para o **Formulário** e a **Cotação**."
+    }
+  ],
+  "resultado": "Seu lead está no pipeline. O próximo passo é abrir o lead e preencher o **Formulário de especificação** do equipamento.",
+  "problemas": [
+    {
+      "pergunta": "O botão Criar Lead não faz nada",
+      "resposta": "Confira se **Prédio** e **Contato** estão preenchidos — são obrigatórios."
+    },
+    {
+      "pergunta": "Apareceu \"CNPJ inválido\"",
+      "resposta": "O CNPJ precisa ter 14 dígitos. Se ainda não tiver o documento, marque **CPF ou CNPJ será inserido depois**."
+    }
+  ],
+  "relacionados": [
+    {
+      "titulo": "Preencher o formulário do elevador",
+      "link": "../formulario-elevador/index.html"
+    },
+    {
+      "titulo": "Solicitar cotação ao fornecedor",
+      "link": "../cotacao-fornecedor/index.html"
+    }
+  ]
+}
