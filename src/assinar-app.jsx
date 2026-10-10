@@ -165,14 +165,8 @@ async function resolveSource(token) {
       if (s.documento_tipo === 'projeto_instalacao') {
         /* Projeto de Instalação: o "documento" é o PDF que a Engenharia subiu (bucket público
            'engenharia'); não há engine nem Preview — a página mostra o próprio PDF. */
-        const c = window.__VP_SB && window.__VP_SB.sb;
-        let d = null;
-        if (c) {
-          const r = await c.from('projetos_elevador_desenhos')
-            .select('id,referencia,cliente_nome,numero_cotacao,equipamentos,arquivo_nome,arquivo_url,tipo_documento')
-            .eq('id', s.documento_id).maybeSingle();
-          d = r && r.data;
-        }
+        /* F1 (#571): por RPC com o token (public_projeto_desenho_obter), com queda para a leitura antiga — ver a store. */
+        const d = await window.DocumentoSignatariosStore.obterDesenhoProjeto(token, s.documento_id);
         if (d) {
           const rec = {
             ...s, status: s.status, audit: s.audit || {},
@@ -368,10 +362,13 @@ function SgApp() {
           const lista = [];
           if (cAudit.signedAt || cEm) lista.push(mapa('Representante legal do Comprador', cAudit.signerName || '', cAudit.signedAt || cEm, cAudit));
           if (cId) {
-            const [extras, genericos] = await Promise.all([
-              window.CVSignatarioStore ? window.CVSignatarioStore.listarPorContrato(cId) : [],
-              window.DocumentoSignatariosStore ? window.DocumentoSignatariosStore.listarPorDocumento('contrato_venda', cId) : [],
-            ]);
+            /* F1 (#571): quem já assinou vem da RPC public_cv_assinaturas (token desta página), com queda para a leitura antiga. */
+            const { extras, genericos } = (window.CVStore && window.CVStore.assinaturasDoContrato)
+              ? await window.CVStore.assinaturasDoContrato(token, cId)
+              : {
+                  extras: window.CVSignatarioStore ? await window.CVSignatarioStore.listarPorContrato(cId) : [],
+                  genericos: window.DocumentoSignatariosStore ? await window.DocumentoSignatariosStore.listarPorDocumento('contrato_venda', cId) : [],
+                };
             [...(extras || []), ...(genericos || [])].filter((s) => s.status === 'assinado').forEach((s) => {
               const au = s.audit || {};
               lista.push(mapa(s.papel || 'Signatário', au.signerName || s.nome || '', au.signedAt || s.signed_at, au));
