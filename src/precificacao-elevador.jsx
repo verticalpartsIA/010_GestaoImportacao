@@ -768,7 +768,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
 
   const payloadSalvar = () => ({
     vmle_usd: pz.vmle_usd, seguro_usd: pz.seguro_usd, frete_seguro_capatazia_usd: pz.frete_seguro_capatazia_usd,
-    siscomex_rs: pz.siscomex_rs, tx_cambial: pz.tx_cambial, outras_despesas_importacao_rs: pz.outras_despesas_importacao_rs,
+    siscomex_rs: pz.siscomex_rs, tx_cambial: pz.tx_cambial, cambio_base: pz.cambio_base ?? null, cambio_spread_pct: pz.cambio_spread_pct ?? null, outras_despesas_importacao_rs: pz.outras_despesas_importacao_rs,
     despachante_desembaraco_rs: pz.despachante_desembaraco_rs, demurrage_rs: pz.demurrage_rs,
     frete_interno_rs: pz.frete_interno_rs, armazenagem_rs: pz.armazenagem_rs,
     itens_instalacao_montagem: pz.itens_instalacao_montagem, containers: pz.containers,
@@ -846,6 +846,26 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     } finally {
       setCalculando(false);
     }
+  };
+
+  /* 10/10/2026 — Dólar do cálculo = PTAX escolhida (do dia da cotação OU de agora) × (1 + % sobre o dólar).
+     O resultado alimenta o campo "Câmbio (R$/US$)" (tx_cambial), que é o que o motor usa. */
+  const ptaxCotacaoNum = Number(pz.cambio_na_cotacao_usd_brl) > 0 ? Number(pz.cambio_na_cotacao_usd_brl) : null;
+  const ptaxAgoraNum = cambioVivo && cambioVivo !== 'erro' ? Number(cambioVivo.valor) : null;
+  const cambioBase = pz.cambio_base || null; // null = o Câmbio está como foi digitado (nenhuma PTAX marcada ainda)
+  const baseParaPercentual = cambioBase || (ptaxCotacaoNum ? 'cotacao' : 'agora');
+  const cambioSpread = Number(pz.cambio_spread_pct) || 0;
+  const ptaxBaseValor = cambioBase === 'cotacao' ? ptaxCotacaoNum : cambioBase === 'agora' ? ptaxAgoraNum : null;
+  const dolarAplicado = ptaxBaseValor ? round(ptaxBaseValor * (1 + cambioSpread), 4) : null;
+  const dolarDoCalculo = dolarAplicado != null ? dolarAplicado : (Number(pz.tx_cambial) || null);
+  const cambioDoUltimoCalculo = (pz.resultado_v2 && pz.resultado_v2.importacao && Number(pz.vmle_usd) > 0 && Number(pz.resultado_v2.importacao.vmleRs) > 0)
+    ? Number(pz.resultado_v2.importacao.vmleRs) / Number(pz.vmle_usd) : null;
+  const precoDesatualizado = cambioDoUltimoCalculo != null && Number(pz.tx_cambial) > 0 && Math.abs(cambioDoUltimoCalculo - Number(pz.tx_cambial)) > 0.00005;
+  const fmtDolar = (v) => (v == null ? '—' : 'R$ ' + Number(v).toFixed(4).replace('.', ','));
+  const aplicarDolar = (base, spread) => {
+    const bv = base === 'cotacao' ? ptaxCotacaoNum : ptaxAgoraNum;
+    const sp = spread === '' || spread == null ? 0 : Number(spread);
+    setPz((p) => ({ ...p, cambio_base: base, cambio_spread_pct: spread === '' ? null : spread, ...(bv ? { tx_cambial: round(bv * (1 + sp), 4) } : {}) }));
   };
 
   const resultado = pz.resultado && pz.resultado.precificacao;
@@ -953,17 +973,39 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <table className="t">
             <thead><tr>
               <th>UNIDADE</th><th>Modelo (fornecedor)</th><th>Quantidade</th>
-              <th>(USD) PTAX No dia da Cotação</th><th>(USD) PTAX Agora</th><th>Custo Fornecedor (USD)</th>
+              <th style={{ minWidth: 110 }} title="Percentual somado ao dólar escolhido ao lado (ex.: 3% eleva o dólar em 3%). O resultado vira o Câmbio do cálculo.">
+                <div>% sobre o dólar</div>
+                <PZPercentInput value={pz.cambio_spread_pct ?? ''} onChange={(v) => aplicarDolar(baseParaPercentual, v)} placeholder="0"/>
+              </th>
+              <th title="Marque qual dólar vale para o cálculo.">
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: ptaxCotacaoNum ? 'pointer' : 'not-allowed' }}>
+                  <input type="radio" name="pz-cambio-base" checked={cambioBase === 'cotacao'} disabled={!ptaxCotacaoNum} onChange={() => aplicarDolar('cotacao', pz.cambio_spread_pct ?? '')}/>
+                  (USD) PTAX No dia da Cotação
+                </label>
+              </th>
+              <th title="Marque qual dólar vale para o cálculo.">
+                <label style={{ display: 'flex', gap: 6, alignItems: 'center', cursor: ptaxAgoraNum ? 'pointer' : 'not-allowed' }}>
+                  <input type="radio" name="pz-cambio-base" checked={cambioBase === 'agora'} disabled={!ptaxAgoraNum} onChange={() => aplicarDolar('agora', pz.cambio_spread_pct ?? '')}/>
+                  (USD) PTAX Agora
+                </label>
+              </th>
+              <th>Custo Fornecedor (USD)</th>
+              <th style={{ background: 'var(--vp-yellow, #FBB039)', color: '#111' }} title="Custo do fornecedor em US$ × o dólar usado no cálculo (PTAX marcada + %). É este valor que o cálculo usa.">Custo Fornecedor (R$) — dólar do cálculo</th>
               <th>R$ no dia da cotação</th><th>R$ agora (ao vivo)</th>
             </tr></thead>
             <tbody>
               {(pz.modelos || []).length === 0 && (
-                <tr><td colSpan={8} style={{ textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma unidade encontrada.</td></tr>
+                <tr><td colSpan={10} style={{ textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma unidade encontrada.</td></tr>
               )}
               {(pz.modelos || []).map((m, i) => {
                 const custoUsd = Number(m.valorUnitarioUsd) || 0;
                 const ptaxCotacao = pz.cambio_na_cotacao_usd_brl;
                 const ptaxAgora = cambioVivo && cambioVivo !== 'erro' ? cambioVivo.valor : null;
+                // O % incide só sobre o dólar ESCOLHIDO; o outro fica como referência.
+                const usaCot = cambioBase === 'cotacao' && cambioSpread > 0 && ptaxCotacao != null;
+                const usaAgo = cambioBase === 'agora' && cambioSpread > 0 && ptaxAgora != null;
+                const ptaxCotacaoUsada = usaCot ? ptaxCotacao * (1 + cambioSpread) : ptaxCotacao;
+                const ptaxAgoraUsada = usaAgo ? ptaxAgora * (1 + cambioSpread) : ptaxAgora;
 
                 return (
                   <tr key={m.unidadeId || i}>
@@ -983,24 +1025,52 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                     </td>
                     <td><PZInput value={m.modelo} onChange={setModelo(i, 'modelo')}/></td>
                     <td><PZInput type="number" value={m.quantidade} onChange={setModelo(i, 'quantidade')}/></td>
+                    <td className="mono muted">{cambioSpread > 0 ? `+${fmtPct2(cambioSpread)}` : '—'}</td>
                     <td className="mono muted" title="PTAX congelada no dia em que o fornecedor respondeu.">
                       {ptaxCotacao != null ? fmtBRL2(ptaxCotacao) : '—'}
+                      {usaCot && <div style={{ color: 'var(--fg1)', fontWeight: 700 }}>→ {fmtBRL2(ptaxCotacaoUsada)}</div>}
                     </td>
                     <td className="mono muted" title="PTAX consultada agora, para referência ao vivo.">
                       {ptaxAgora != null ? fmtBRL2(ptaxAgora) : 'indisponível'}
+                      {usaAgo && <div style={{ color: 'var(--fg1)', fontWeight: 700 }}>→ {fmtBRL2(ptaxAgoraUsada)}</div>}
                     </td>
                     <td><PZInput type="number" value={m.valorUnitarioUsd} onChange={setModelo(i, 'valorUnitarioUsd')}/></td>
+                    <td className="mono" style={{ fontWeight: 700, background: 'rgba(251,176,57,.14)' }} title={dolarDoCalculo ? `US$ ${custoUsd} × ${fmtDolar(dolarDoCalculo)}` : 'informe o câmbio'}>
+                      {dolarDoCalculo ? fmtBRL2(custoUsd * dolarDoCalculo) : '—'}
+                    </td>
                     <td className="mono muted" title="PTAX do dia da cotação × custo em USD — referência; o cálculo oficial continua usando o Câmbio abaixo.">
-                      {ptaxCotacao != null ? fmtBRL2(custoUsd * ptaxCotacao) : '—'}
+                      {ptaxCotacao != null ? fmtBRL2(custoUsd * ptaxCotacaoUsada) : '—'}
                     </td>
                     <td className="mono muted" title="PTAX de agora × custo em USD — referência ao vivo; o cálculo oficial continua usando o Câmbio abaixo.">
-                      {ptaxAgora != null ? fmtBRL2(custoUsd * ptaxAgora) : '—'}
+                      {ptaxAgora != null ? fmtBRL2(custoUsd * ptaxAgoraUsada) : '—'}
                     </td>
                   </tr>
                 );
               })}
+              {(pz.modelos || []).length > 0 && (() => {
+                const totUsd = (pz.modelos || []).reduce((acc, m) => acc + (Number(m.valorUnitarioUsd) || 0) * (Number(m.quantidade) || 0), 0);
+                return (
+                  <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)' }}>
+                    <td colSpan={4} style={{ textAlign: 'right' }}>Total do fornecedor (VMLE)</td>
+                    <td/><td/>
+                    <td className="mono">{'US$ ' + totUsd.toFixed(2)}</td>
+                    <td className="mono" style={{ background: 'rgba(251,176,57,.14)' }}>{dolarDoCalculo ? fmtBRL2(totUsd * dolarDoCalculo) : '—'}</td>
+                    <td/><td/>
+                  </tr>
+                );
+              })()}
             </tbody>
           </table>
+        </div>
+        {precoDesatualizado && (
+          <div style={{ marginTop: 10, padding: '8px 12px', background: '#fffbeb', border: '1px solid #FBB039', fontSize: 13 }}>
+            ⚠ O preço de venda ainda está calculado com o dólar antigo ({fmtDolar(cambioDoUltimoCalculo)}). Clique em <b>Calcular</b> para refazer tudo com {fmtDolar(Number(pz.tx_cambial))}.
+          </div>
+        )}
+        <div className="pl-note" style={{ marginTop: 10 }}>
+          <b>Dólar usado no cálculo:</b> {dolarAplicado == null
+            ? <>{fmtDolar(Number(pz.tx_cambial) || null)} — digitado em "Câmbio (R$/US$)". Marque a PTAX do dia da cotação ou a de agora no cabeçalho (e, se quiser, informe um % sobre o dólar) para calcular a partir dela.</>
+            : <>{fmtDolar(dolarAplicado)} = PTAX {cambioBase === 'cotacao' ? 'do dia da cotação' : 'de agora'} ({fmtDolar(ptaxBaseValor)}){cambioSpread > 0 ? ` + ${fmtPct2(cambioSpread)}` : ''}. Esse valor vai para o campo "Câmbio (R$/US$)" abaixo.</>}
         </div>
       </Card>
 
