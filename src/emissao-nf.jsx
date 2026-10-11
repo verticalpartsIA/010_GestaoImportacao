@@ -109,7 +109,11 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
     else situacao = 'producao';
     return { mae, ac, fat, situacao, sla, valor: g.regs.reduce((s, r) => s + Number(r.valor_total || 0), 0), nfEm };
   };
-  const linhas = dados.grupos.map(g => ({ g, r: resumo(g) }));
+  // Proposta (etapa 00) e pedido só previsto (etapa 10) não são trabalho de NF: ficam em pcp_pedidos para os relatórios de
+  // vendas, mas aqui contariam como "em produção / sem OP" e atrasariam o SLA (mesma regra da Expedição e do alerta de prazos).
+  const ehAberto = (g) => g.regs.every(r => r.etapa === '00' || r.etapa === '10');
+  const ocultosAbertos = dados.grupos.filter(ehAberto).length;
+  const linhas = dados.grupos.filter(g => !ehAberto(g)).map(g => ({ g, r: resumo(g) }));
   const contagem = { aguardando: 0, producao: 0, parcial: 0, emitida: 0, atrasados: 0, historico: 0 };
   linhas.forEach(({ r }) => {
     if (r.sla.historico) contagem.historico++;
@@ -165,7 +169,7 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Financeiro · Fiscal</div>
           <h1 className="page-head__title">Emissão de NF</h1>
-          <p className="page-head__sub">Acompanha os pedidos fabricados, o SLA de cada etapa e a conferência proposta × NF. A nota é emitida no Omie. Leitura automática do Omie a cada 30 min (seg–sex, 7h–19h) · última: {ultimaLeitura ? new Date(ultimaLeitura).toLocaleString('pt-BR') : '—'}.</p>
+          <p className="page-head__sub">Acompanha os pedidos fabricados, o SLA de cada etapa e a conferência proposta × NF. A nota é emitida no Omie. Leitura automática do Omie a cada 30 min (seg–sex, 7h–19h) · última: {ultimaLeitura ? new Date(ultimaLeitura).toLocaleString('pt-BR') : '—'}.{ocultosAbertos > 0 ? ` ${ocultosAbertos} proposta(s)/pedido(s) em etapa 00/10 não entram aqui.` : ''}</p>
         </div>
       </div>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>

@@ -21,7 +21,11 @@
     const [, setN] = React.useState(0);
     React.useEffect(() => {
       if (!R()) return undefined;
-      return R().subscribe((loc) => { if (loc && loc.route === rota) setN((n) => n + 1); });
+      const unsub = R().subscribe((loc) => { if (loc && loc.route === rota) setN((n) => n + 1); });
+      // navigate() chamado direto por outra parte da tela (não pelo setter deste hook) — ver router.js.
+      const onNav = () => { const loc = R().parseLocation(); if (loc && loc.route === rota) setN((n) => n + 1); };
+      window.addEventListener('vp:navigate', onNav);
+      return () => { unsub(); window.removeEventListener('vp:navigate', onNav); };
     }, []);
     return () => setN((n) => n + 1);
   }
