@@ -213,9 +213,9 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
   return (
     <aside className="sidebar">
       <div className="sidebar__brand">
-        <img src="/assets/logo-mark-yellow.png" alt="" className="sidebar__brand-mark"/>
-        <div className="sidebar__brand-text">VERTICAL<b>PARTS</b></div>
-        <div className="sidebar__brand-sub">v2.4</div>
+        {collapsed
+          ? <img src="/assets/logo-mark-metal.png?v=3" alt="VerticalParts" className="sidebar__brand-mark"/>
+          : <img src="/assets/logo-verticalparts-metal.png?v=3" alt="VerticalParts" className="sidebar__brand-logo"/>}
       </div>
       <button className="sidebar__collapse" onClick={onToggle} aria-label="Toggle sidebar">
         {collapsed ? <Icon.chevRight size={12}/> : <Icon.chevLeft size={12}/>}
