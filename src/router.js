@@ -120,6 +120,10 @@
     if (path === window.location.pathname) return;
     if (opts.replace) window.history.replaceState({}, '', path);
     else window.history.pushState({}, '', path);
+    /* Avisa SÓ os hooks useRotaId/useRotaItem (rota-pcp.js), que leem a URL a cada render: sem isto, telas que abrem
+       modal chamando navigate() direto (Central de Decisões, Avais, Cadastros, P.I., Dashboard) trocavam a URL e o modal
+       não aparecia até outro re-render. Evento próprio de propósito: o App só escuta popstate/subscribe e não reage. */
+    try { window.dispatchEvent(new Event('vp:navigate')); } catch (e) { /* navegador sem Event construtor */ }
   }
 
   function subscribe(fn) {

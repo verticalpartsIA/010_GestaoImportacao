@@ -394,6 +394,17 @@
     });
   }
 
+  /* Unidade já enviada a fornecedor (RFQ não excluído)? Usado antes de deixar o vendedor remover um equipamento salvo:
+     a resposta/preço do fornecedor e a Precificação ficam ligados a esse id — apagar quebraria esse vínculo em silêncio.
+     Falha de leitura = trata como "cotada" (melhor bloquear a remoção do que apagar um equipamento já cotado). */
+  async function unidadeJaCotada(unidadeId) {
+    const c = sb(); if (!c || !unidadeId) return false;
+    const { data, error } = await c.from('cotacoes_elevador_fornecedor')
+      .select('id, fornecedor').contains('unidade_ids', [unidadeId]).is('excluido_em', null).limit(1);
+    if (error) return { erro: true };
+    return (data && data[0]) ? { fornecedor: data[0].fornecedor || 'fornecedor' } : false;
+  }
+
   async function listar(filtros = {}) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     let q = c.from('formularios_elevador').select('*, formularios_elevador_unidades(count)').order('created_at', { ascending: false });
@@ -558,7 +569,7 @@
     buscarOuCriarCliente,
     criar, salvar, obter, obterPorToken, gerarLinkPublico, enviar, enviarDiretoParaPrecificacao, listar, listarCotacoes,
     abrirOuConverterHistorico,
-    adicionarUnidade, atualizarUnidade, removerUnidade,
+    adicionarUnidade, atualizarUnidade, removerUnidade, unidadeJaCotada,
     publicUrl, formatarEndereco, listarFornecedores,
     listarModelosElevador, listarOpcoesElevador,
     listarAnexos, anexarArquivo, urlAssinadaAnexo, removerAnexo,

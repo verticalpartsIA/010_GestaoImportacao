@@ -1367,6 +1367,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       setClienteId(f.cliente_id || null);
       if (!f.cliente_id && (f.razao_social || f.contato || f.predio_empreendimento)) setCriarClienteInline(true); // formulário antigo, sem vínculo — mantém editável do jeito que já estava
       if (f.unidades && f.unidades.length) setUnidades(f.unidades);
+      removidasRef.current = [];
       setLoading(false);
     }).catch((e) => { window.toast?.('Erro ao carregar formulário: ' + e.message, 'error'); setLoading(false); });
   }, [formularioId]);
@@ -1447,7 +1448,26 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
 
   const setUnidade = (idx) => (u) => setUnidades((arr) => arr.map((x, i) => (i === idx ? u : x)));
   const addUnidade = () => setUnidades((arr) => [...arr, feNovaUnidade(`E${arr.length + 1}`)]);
-  const removeUnidade = (idx) => setUnidades((arr) => (arr.length > 1 ? arr.filter((_, i) => i !== idx) : arr));
+  /* Remover equipamento: antes só tirava da tela — o save nunca apagava no banco e o equipamento voltava ao reabrir
+     (e seguia para RFQ/Precificação/Proposta). Agora unidade já salva vai para `removidasRef` e é apagada no próximo
+     salvar; unidade já enviada a fornecedor não pode ser removida aqui (o preço/Precificação dependem dela). */
+  const removidasRef = React.useRef([]);
+  const removeUnidade = async (idx) => {
+    if (unidades.length <= 1) return;
+    const alvo = unidades[idx];
+    if (alvo && alvo.id) {
+      const cotada = window.FormularioElevadorStore.unidadeJaCotada
+        ? await window.FormularioElevadorStore.unidadeJaCotada(alvo.id) : false;
+      if (cotada && cotada.erro) { window.toast?.('Não foi possível conferir se este equipamento já foi cotado. Tente de novo.', 'error'); return; }
+      if (cotada) {
+        window.toast?.(`Este equipamento já foi enviado para cotação (${cotada.fornecedor}) e não pode ser removido daqui. Exclua a cotação a fornecedor antes, ou mantenha o equipamento.`, 'warning');
+        return;
+      }
+      if (!window.confirm(`Remover o equipamento ${alvo.identificador || ''}? Ele será apagado ao salvar o formulário.`)) return;
+      removidasRef.current = [...removidasRef.current, alvo.id];
+    }
+    setUnidades((arr) => (arr.length > 1 ? arr.filter((_, i) => i !== idx) : arr));
+  };
   /* Duplicar (15/08): copia os ~40 campos técnicos do elevador pra um card
      novo — pedido do vendedor pra quando só muda paradas/velocidade entre
      dois elevadores da mesma cotação (ex.: 2 MRL-4-paradas + 3
@@ -1594,6 +1614,11 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       // Sequencial de propósito: adicionarUnidade calcula indice_ativo
       // consultando as unidades já existentes, então rodar em paralelo
       // arriscaria duas unidades novas caírem no mesmo índice.
+      // Apaga primeiro as unidades salvas que o vendedor removeu da tela (ver removeUnidade).
+      for (const uid of removidasRef.current) {
+        await window.FormularioElevadorStore.removerUnidade(uid);
+      }
+      removidasRef.current = [];
       const unidadesSalvas = [];
       for (const u of unidades) {
         const payload = { ...u };
