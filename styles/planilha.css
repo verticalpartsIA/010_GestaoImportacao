@@ -160,3 +160,14 @@
   animation: pl-pisca 1.1s ease-in-out 4;
 }
 .pl .pl-faltando__msg { color: #b91c1c; font-size: 11.5px; font-weight: 600; }
+
+/* Formulário público do cliente (fe-public): só o "acender" de obrigatório, sem o resto do visual da planilha */
+.fe-public .pl-faltando > label { color: #b91c1c; }
+.fe-public .pl-faltando .input,
+.fe-public .pl-faltando input,
+.fe-public .pl-faltando select {
+  border-color: #dc2626 !important;
+  background: #fee2e2 !important;
+  animation: pl-pisca 1.1s ease-in-out 4;
+}
+.fe-public .pl-faltando__msg { color: #b91c1c; font-size: 11.5px; font-weight: 600; }
