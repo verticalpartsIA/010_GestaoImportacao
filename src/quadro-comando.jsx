@@ -844,6 +844,87 @@ function QcRamoBComprado({ quadro, setQuadro, quadroId }) {
   );
 }
 
+/* ---------- Respostas do cliente (formulário público) ----------
+   Mostra, só leitura, exatamente o que o cliente/instalador respondeu na página
+   pública (quadro.respostas_publico). Os campos estruturados das outras abas já
+   vêm pré-preenchidos pela Edge Function quando deu para mapear; este card é a
+   fonte fiel do que foi dito. */
+const QC_RESP_VALORES = {
+  modernizacao: 'Modernização', elevador_novo: 'Elevador novo',
+  residencial: 'Residencial', comercial: 'Comercial', hospitalar: 'Hospitalar', industrial: 'Industrial',
+  simplex: 'Simplex', duplex: 'Duplex', triplex: 'Triplex', quadriplex: 'Quadriplex',
+  manual: 'Manual', eixo_vertical: 'Eixo vertical', simultanea: 'Simultânea', pantografica: 'Pantográfica',
+  vvvf: 'VVVF', trifasico: 'Trifásico', monofasico: 'Monofásico', corr_continua: 'Corr. contínua',
+  bobina_tensao: 'Bobina — tensão', tipo_bs: 'Tipo BS', moto_freio: 'Moto freio', nao_possui: 'Não possui',
+  vf: 'VVVF — inversor de frequência', ca: 'CA — por contatores', hd: 'HD — hidráulico',
+  com_casa: 'Com casa de máquinas', sem_casa: 'Sem casa de máquinas',
+  sem_encoder: 'Sem encoder', com_encoder: 'Com encoder',
+};
+const QC_RESP_BLOCOS = [
+  { titulo: 'Quem preencheu', campos: [['solicitante', 'Solicitante'], ['empresa', 'Empresa'], ['cnpj', 'CNPJ'], ['telefone', 'Telefone'], ['email', 'E-mail']] },
+  { titulo: 'Obra', campos: [['tipo_servico', 'Tipo de serviço'], ['identificacao', 'Identificação da obra'], ['num_paradas', 'Nº de paradas']] },
+  { titulo: 'Quadro e motor', campos: [['variante_quadro', 'Modelo do quadro'], ['tensao_rede', 'Tensão da rede (V)'], ['tensao_rede_outro', 'Tensão da rede — outra'], ['potencia_motor', 'Potência do motor (kW)'], ['tensao_motor', 'Tensão do motor (V)'], ['corrente_nominal', 'Corrente nominal (A)'], ['aplicacao', 'Aplicação'], ['atendimento', 'Atendimento'], ['num_botoeiras', 'Nº de botoeiras']] },
+  { titulo: 'Porta e acionamento', campos: [['tipo_porta', 'Tipo de porta'], ['operador_porta', 'Operador de porta'], ['tipo_freio', 'Tipo de freio'], ['tensao_freio', 'Tensão do freio (V)'], ['acionamento', 'Acionamento'], ['encoder', 'Encoder'], ['engrenagem', 'Engrenagem'], ['casa_maquinas', 'Casa de máquinas']] },
+  { titulo: 'Acessórios', campos: [['acessorios', 'Acessórios solicitados'], ['ind_cor', 'Cor do indicador'], ['observacoes', 'Observações']] },
+  { titulo: 'Fiação (metros)', campos: [['f_l1', 'L1'], ['f_ua', 'UA'], ['f_tr', 'TR'], ['f_bp', 'BP'], ['f_lim', 'LIM'], ['f_fp', 'FP'], ['obs_fiacao', 'Observações da fiação']] },
+];
+
+function QcRespostasPublico({ quadro }) {
+  const r = quadro.respostas_publico;
+  const [aberto, setAberto] = React.useState(true);
+  if (!r || typeof r !== 'object') return null;
+  const fmt = (k, v) => {
+    if (v == null || v === '') return null;
+    if (k === 'cnpj') {
+      const d = String(v).replace(/\D/g, '');
+      return d.length === 14 ? d.replace(/^(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})$/, '$1.$2.$3/$4-$5') : d;
+    }
+    if (k === 'variante_quadro') return String(v).replace('_', ' kW / ') + ' V';
+    return QC_RESP_VALORES[v] || String(v);
+  };
+  const dist = Array.isArray(r.dist) ? r.dist.filter((x) => x && x.m) : [];
+  const irParaLead = () => {
+    window.history.pushState({}, '', '/comercial/leads');
+    window.dispatchEvent(new PopStateEvent('popstate'));
+  };
+  return (
+    <Card title="Respostas enviadas pelo cliente"
+      sub={`Preenchido na página pública · protocolo ${quadro.lead_id || ('QC-' + quadro.numero_pedido)}${quadro.lead_id ? '' : ' · cliente já cadastrado no Omie (não é lead)'}${quadro.created_at ? ` · ${new Date(quadro.created_at).toLocaleString('pt-BR')}` : ''}. Somente leitura — o que deu para mapear já foi levado para as abas abaixo.`}
+      action={<Button variant="ghost" size="sm" onClick={() => setAberto(!aberto)}>{aberto ? 'Recolher' : 'Expandir'}</Button>}>
+      {aberto && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
+          {QC_RESP_BLOCOS.map((b) => {
+            const linhas = b.campos.map(([k, l]) => [l, fmt(k, r[k])]).filter(([, v]) => v);
+            if (!linhas.length) return null;
+            return (
+              <div key={b.titulo}>
+                <h4 className="small muted" style={{ textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>{b.titulo}</h4>
+                <div className="grid-3" style={{ gap: 10 }}>
+                  {linhas.map(([l, v]) => (
+                    <div key={l}><span className="small muted">{l}</span><div style={{ fontWeight: 600, whiteSpace: 'pre-wrap' }}>{v}</div></div>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
+          {dist.length > 0 && (
+            <div>
+              <h4 className="small muted" style={{ textTransform: 'uppercase', letterSpacing: .5, marginBottom: 6 }}>Distâncias entre pavimentos</h4>
+              <div className="table-wrap" style={{ border: 0 }}>
+                <table className="t"><thead><tr><th>De</th><th>Até</th><th>Metros</th></tr></thead>
+                  <tbody>{dist.map((x, i) => <tr key={i}><td>{x.de}</td><td>{x.ate}</td><td>{x.m}</td></tr>)}</tbody></table>
+              </div>
+            </div>
+          )}
+          {quadro.lead_id && (
+            <div><Button variant="outline" size="sm" onClick={irParaLead}>Ver lead {quadro.lead_id} em Comercial · Leads</Button></div>
+          )}
+        </div>
+      )}
+    </Card>
+  );
+}
+
 /* ---------- Página principal ---------- */
 function QuadroComandoDetail({ quadroId, onClose }) {
   const [quadro, setQuadro] = React.useState(null);
@@ -927,6 +1008,8 @@ function QuadroComandoDetail({ quadroId, onClose }) {
           <Button variant="primary" disabled={saving} onClick={salvarTudo}>{saving ? 'Salvando…' : 'Salvar'}</Button>
         </div>
       </div>
+
+      <QcRespostasPublico quadro={quadro}/>
 
       <Card title="Origem de fabricação" sub="Decide se este quadro é fabricado pela VerticalParts (Ramo A) ou comprado pronto de um fornecedor (Ramo B, mesmo fluxo do RFQ de elevadores).">
         <div className="row gap-3" style={{ alignItems: 'center' }}>
