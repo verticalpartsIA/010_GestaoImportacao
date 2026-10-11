@@ -37,7 +37,8 @@ const TELAS = {
   'cadastros-mestres/produtos': ['src/cadastro-itens.jsx'],
   'cadastros-mestres': [],
   // Comercial | Pré-venda
-  'comercial-pre-venda/formularios': ['src/comercial.jsx', 'src/formulario-elevador.jsx', 'src/formulario-elevador-store.js'],
+  // a tela-hub (FormulariosPage) mora em src/comercial.jsx, junto com Leads: Leads mudando acende falso alerta aqui. O formulário do elevador (src/formulario-elevador.jsx) é OUTRA tela, sem tutorial ainda.
+  'comercial-pre-venda/formularios': ['src/comercial.jsx'],
   'comercial-pre-venda/controle-de-cotacoes': ['src/controle-cotacoes.jsx'],
   'comercial-pre-venda/cotacoes-a-fornecedor': ['src/cotacoes-fornecedor.jsx', 'src/cotacao-elevador-fornecedor-store.js'],
   'comercial-pre-venda/cotacao-a-fornecedor-detalhe': ['src/cotacoes-fornecedor.jsx', 'src/cotacao-elevador-fornecedor-store.js'],
