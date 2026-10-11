@@ -344,8 +344,25 @@
     return unidades || [];
   }
 
+  /* Nº da cotação do Formulário dono da Unidade. Antes o vínculo gravava só a Unidade e quadros_comando.numero_cotacao
+     ficava nulo para sempre (64 de 64 em 11/10) — e o RFQ do quadro exige o Nº (MasterIdEngine), então nunca saía. */
+  async function numeroCotacaoDaUnidade(unidadeElevadorId) {
+    const c = sb(); if (!c || !unidadeElevadorId) return null;
+    const { data: un, error: e1 } = await c.from('formularios_elevador_unidades').select('formulario_id').eq('id', unidadeElevadorId).maybeSingle();
+    if (e1) throw e1;
+    if (!un) return null;
+    const { data: f, error: e2 } = await c.from('formularios_elevador').select('numero_cotacao').eq('id', un.formulario_id).maybeSingle();
+    if (e2) throw e2;
+    return f ? (f.numero_cotacao ?? null) : null;
+  }
+
   async function vincularFormularioElevador(quadroId, unidadeElevadorId) {
-    await salvar(quadroId, { formulario_elevador_unidade_id: unidadeElevadorId || null });
+    const patch = { formulario_elevador_unidade_id: unidadeElevadorId || null };
+    if (unidadeElevadorId) {
+      const n = await numeroCotacaoDaUnidade(unidadeElevadorId);
+      if (n != null) patch.numero_cotacao = n;
+    }
+    await salvar(quadroId, patch);
   }
 
   /* Monta o objeto "unidade" sintético que CEF_SPEC_DEFS_QUADRO_COMANDO
@@ -423,8 +440,15 @@
     if (eUn) throw eUn;
     if (!unidadeElevador) throw new Error('A Unidade do Formulário de Elevador vinculada não foi encontrada — vincule novamente.');
 
+    // Quadros vinculados antes da correção de 11/10 não têm o Nº: completa a partir do Formulário da Unidade.
+    let numeroCotacao = quadro.numero_cotacao;
+    if (numeroCotacao == null) {
+      numeroCotacao = await numeroCotacaoDaUnidade(quadro.formulario_elevador_unidade_id);
+      if (numeroCotacao == null) throw new Error('O Formulário de Elevador vinculado ainda não tem Nº da Cotação — confira o vínculo antes de enviar.');
+      await salvar(quadroId, { numero_cotacao: numeroCotacao });
+    }
     const unidadeSintetica = construirUnidadeSintetica(quadro, unidadeElevador);
-    const cot = await store.gerar(unidadeElevador.formulario_id, [unidadeSintetica], fornecedor, quadro.numero_cotacao, 'quadro_comando');
+    const cot = await store.gerar(unidadeElevador.formulario_id, [unidadeSintetica], fornecedor, numeroCotacao, 'quadro_comando');
     await salvar(quadroId, { cotacao_fornecedor_id: cot.id });
     return cot;
   }

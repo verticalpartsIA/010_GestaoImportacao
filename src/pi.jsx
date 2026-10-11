@@ -398,6 +398,9 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
   const [cotacaoInfo, setCotacaoInfo] = React.useState(null); // {checking} | {encontrada:false} | {encontrada:true, masterId, resumo}
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
   const store = window.PIStore;
+  /* Nº da cotação: antes só na criação (as 13 P.I. reais ficaram sem Nº e a cadeia Compra → P.I. → Embarque nunca
+     fechou). Agora P.I. salva sem Nº pode receber o Nº na edição; depois de gravado, fica travado. */
+  const cotacaoTravada = !!(isEdit && initialData && initialData.numero_cotacao != null && initialData.numero_cotacao !== '');
 
   /* O Nº da Cotação precisa corresponder a uma cotação de verdade — sem
      isso a P.I. fica "solta", sem ligação nenhuma com o que o cliente
@@ -408,7 +411,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
      popula automaticamente form.itens com os modelos/quantidades/valores
      da precificação. Só em Nova P.I., não em edição. */
   React.useEffect(() => {
-    if (isEdit || !form.numero_cotacao || !window.PropostaHeranca || !window.MasterIdEngine) { setCotacaoInfo(null); return; }
+    if (cotacaoTravada || !form.numero_cotacao || !window.PropostaHeranca || !window.MasterIdEngine) { setCotacaoInfo(null); return; }
     let cancelado = false;
     setCotacaoInfo({ checking: true });
     window.PropostaHeranca.buscarFontes(Number(form.numero_cotacao))
@@ -421,7 +424,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
         setCotacaoInfo({ encontrada: true, masterId, cliente, fornecedor });
 
         /* Herança automática dos Produtos (modelos da precificação) */
-        if (fontes.precificacao && fontes.precificacao.modelos && fontes.precificacao.modelos.length > 0) {
+        if (!isEdit && fontes.precificacao && fontes.precificacao.modelos && fontes.precificacao.modelos.length > 0) { // edição: não sobrescreve os itens já lançados
           const itensHerdados = fontes.precificacao.modelos.map((m) => ({
             descricao_produto: m.modelo || 'Equipamento',
             codigo_produto: '',
@@ -438,7 +441,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
       })
       .catch(() => { if (!cancelado) setCotacaoInfo({ encontrada: false }); });
     return () => { cancelado = true; };
-  }, [form.numero_cotacao, isEdit]);
+  }, [form.numero_cotacao, cotacaoTravada]);
 
   const valorTotalItens = store.calcTotalGeral(form.itens);
   const totalTaxas = store.calcTotalTaxas(form.taxas, valorTotalItens, form.moeda);
@@ -455,7 +458,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
      sentido conferir na criação (o "start" da compra) e quando a P.I. está
      vinculada a uma cotação. Ver decisoes-store.js › verificarGateCompra. */
   React.useEffect(() => {
-    if (isEdit || !form.numero_cotacao || !window.DecisoesStore) { setGate(null); return; }
+    if (cotacaoTravada || !form.numero_cotacao || !window.DecisoesStore) { setGate(null); return; }
     let cancelado = false;
     setCheckingGate(true);
     window.DecisoesStore.verificarGateCompra(Number(form.numero_cotacao))
@@ -463,14 +466,14 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
       .catch(() => { if (!cancelado) setGate(null); })
       .finally(() => { if (!cancelado) setCheckingGate(false); });
     return () => { cancelado = true; };
-  }, [form.numero_cotacao, isEdit]);
+  }, [form.numero_cotacao, cotacaoTravada]);
 
   const submit = async () => {
     if (!form.numero_pi.trim()) return window.toast?.('Informe o número da P.I.', 'warning');
-    if (!isEdit && form.numero_cotacao && cotacaoInfo && cotacaoInfo.encontrada === false) {
+    if (!cotacaoTravada && form.numero_cotacao && cotacaoInfo && cotacaoInfo.encontrada === false) {
       return window.toast?.(`Nenhuma cotação Nº ${form.numero_cotacao} encontrada — confira o número antes de continuar.`, 'warning');
     }
-    if (!isEdit && form.numero_cotacao && window.DecisoesStore) {
+    if (!cotacaoTravada && form.numero_cotacao && window.DecisoesStore) {
       const r = await window.DecisoesStore.verificarGateCompra(Number(form.numero_cotacao));
       if (!r.ok) return window.toast?.(r.motivo, 'warning');
     }
@@ -490,7 +493,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
         <div className="stack" style={{ gap: 14, marginTop: 14 }}>
           <div className="grid-3" style={{ gap: 12 }}>
             <PIField label="Número da P.I. *"><PIInput value={form.numero_pi} onChange={set('numero_pi')}/></PIField>
-            <PIField label="Nº Cotação (gate de compra do CEO)"><PIInput type="number" value={form.numero_cotacao} onChange={set('numero_cotacao')} disabled={isEdit}/></PIField>
+            <PIField label="Nº Cotação (gate de compra do CEO)"><PIInput type="number" value={form.numero_cotacao} onChange={set('numero_cotacao')} disabled={cotacaoTravada}/></PIField>
             <PIField label="Data de abertura *"><PIInput type="date" value={form.data_abertura} onChange={set('data_abertura')}/></PIField>
             <PIField label="Status"><PISelect value={form.status} onChange={set('status')} options={PI_STATUS}/></PIField>
             <PIField label="Data de prontidão do pedido"><PIInput type="date" value={form.data_prontidao} onChange={set('data_prontidao')}/></PIField>
@@ -515,7 +518,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
             <PIMultiText label="Categorias" values={form.categorias} onChange={set('categorias')} placeholder="Categoria do equipamento"/>
           </div>
 
-          {!isEdit && form.numero_cotacao && (
+          {!cotacaoTravada && form.numero_cotacao && (
             <div style={{
               padding: '10px 14px', borderRadius: 6, fontSize: 12.5,
               background: cotacaoInfo?.checking ? 'var(--vp-gray-50)' : cotacaoInfo?.encontrada ? '#eafaf0' : '#fdecea',
@@ -529,7 +532,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
             </div>
           )}
 
-          {!isEdit && form.numero_cotacao && (
+          {!cotacaoTravada && form.numero_cotacao && (
             <div style={{
               padding: '10px 14px', borderRadius: 6, fontSize: 12.5,
               background: checkingGate ? 'var(--vp-gray-50)' : gate?.ok ? '#eafaf0' : '#fff8e6',

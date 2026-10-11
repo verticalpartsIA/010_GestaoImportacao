@@ -146,7 +146,7 @@
     const { data, error } = await c.from('embarques_importacao').insert(row).select().single();
     if (error) throw error;
     if (window.EventosFluxo) window.EventosFluxo.registrar({
-      evento: 'EMBARQUE_CRIADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.nome || data.id, alvoId: data.id,
+      evento: 'EMBARQUE_CRIADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.nome_embarque || data.id, alvoId: data.id,
     });
     await _sincronizarRastreio(data.id, data);
     return data;
@@ -170,8 +170,13 @@
     if (window.EventosFluxo) {
       const alvoLabel = data.nome_embarque || data.id;
       window.EventosFluxo.registrar({ evento: 'EMBARQUE_ATUALIZADO', numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id });
+      /* Embarque costuma nascer sem P.I. (a tela pede "salve para vincular") e só ganha o Nº da cotação depois — os
+         eventos disparados antes saíram sem Nº e o motor de gatilhos os ignorou. Na transição "sem Nº → com Nº" repete
+         EMBARQUE_CRIADO e as transições de campo já preenchidas, agora com o Nº (auditoria de 11/10). */
+      const ganhouCotacao = !!(antes && antes.numero_cotacao == null && data.numero_cotacao != null);
+      if (ganhouCotacao) window.EventosFluxo.registrar({ evento: 'EMBARQUE_CRIADO', numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id });
       const transicao = (campo, evento) => {
-        if (antes && !antes[campo] && data[campo]) {
+        if ((antes && !antes[campo] && data[campo]) || (ganhouCotacao && data[campo])) {
           window.EventosFluxo.registrar({ evento, numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id, detalhe: { [campo]: data[campo] } });
         }
       };
@@ -255,5 +260,21 @@
     )));
   }
 
-  window.EmbarquesImportacaoStore = { listarTodas, obter, listarPIsVinculadas, resumoPIs, criar, atualizar, remover, arquivar, containersDaCotacao, expandirContainers };
+  /* Chamado por PIStore quando o Nº da cotação chega ao embarque fora de atualizar() (vínculo pela P.I.): registra os
+     eventos que tinham saído sem Nº e atualiza o espelho do rastreio (embarques.numero_cotacao). */
+  async function aoGanharCotacao(id) {
+    const data = await obter(id);
+    if (!data || data.numero_cotacao == null) return;
+    if (window.EventosFluxo) {
+      const alvoLabel = data.nome_embarque || data.id;
+      window.EventosFluxo.registrar({ evento: 'EMBARQUE_CRIADO', numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id });
+      [['agente_carga', 'AGENTE_CARGA_DEFINIDO'], ['data_carregamento', 'CARGO_READY_CONFIRMADO'],
+       ['canal_parametrizacao', 'EMBARQUE_CHEGOU_BRASIL'], ['data_entrega', 'EMBARQUE_ENTREGUE_OBRA']].forEach(([campo, evento]) => {
+        if (data[campo]) window.EventosFluxo.registrar({ evento, numeroCotacao: data.numero_cotacao, alvoLabel, alvoId: data.id, detalhe: { [campo]: data[campo] } });
+      });
+    }
+    await _sincronizarRastreio(data.id, data);
+  }
+
+  window.EmbarquesImportacaoStore = { aoGanharCotacao, listarTodas, obter, listarPIsVinculadas, resumoPIs, criar, atualizar, remover, arquivar, containersDaCotacao, expandirContainers };
 }());
