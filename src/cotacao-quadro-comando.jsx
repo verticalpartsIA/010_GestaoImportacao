@@ -108,7 +108,11 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
     try {
       if (!window.__VP_SB || !window.__VP_SB.sb) throw new Error('Supabase não inicializado');
       const userEmail = (window.__VP_USER || {}).email;
-      const { data, error } = await window.__VP_SB.sb.from('quadros_comando').select('*').eq('criado_por', userEmail).is('excluido_em', null).order('created_at', { ascending: false }).limit(200);
+      /* Meus pedidos + os que chegaram pelo formulário público (o cliente não tem
+         login, então esses não têm "criado_por" — aparecem para todos que abrem a tela). */
+      let q = window.__VP_SB.sb.from('quadros_comando').select('*, cliente:clientes(razao_social, codigo, codigo_cliente_omie)').is('excluido_em', null);
+      q = userEmail ? q.or(`criado_por.eq.${userEmail},origem_envio.eq.formulario_publico`) : q.eq('origem_envio', 'formulario_publico');
+      const { data, error } = await q.order('created_at', { ascending: false }).limit(200);
       if (error) throw error;
       setRows(data || []);
     } catch (e) {
@@ -146,9 +150,15 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
     if (!rows) return [];
     return rows.filter(r => {
       const matchStatus = fStatus === 'Todos' || r.status === fStatus;
-      const matchBusca = !busca.trim() ||
-        String(r.numero_pedido || '').includes(busca) ||
-        String(r.numero_cotacao || '').includes(busca);
+      const resp = r.respostas_publico || {};
+      const termo = busca.trim().toLowerCase();
+      const matchBusca = !termo ||
+        String(r.numero_pedido || '').includes(termo) ||
+        String(r.numero_cotacao || '').includes(termo) ||
+        String(r.lead_id || '').toLowerCase().includes(termo) ||
+        String(resp.empresa || '').toLowerCase().includes(termo) ||
+        String(resp.solicitante || '').toLowerCase().includes(termo) ||
+        String(resp.identificacao || '').toLowerCase().includes(termo);
       return matchStatus && matchBusca;
     });
   }, [rows, busca, fStatus]);
@@ -185,6 +195,7 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
             <thead><tr>
               <th>Pedido Nº</th>
               <th>Nº Cotação</th>
+              <th>Origem / Solicitante</th>
               <th>Status</th>
               <th>Criado em</th>
               <th></th>
@@ -194,6 +205,23 @@ function CotacaoQuadroComandoPage({ setRoute, setSubsel }) {
                 <tr key={r.id}>
                   <td><strong>#{r.numero_pedido}</strong></td>
                   <td><span className="mono">{r.numero_cotacao || '—'}</span></td>
+                  <td>
+                    {r.origem_envio === 'formulario_publico' ? (
+                      <div>
+                        <span className="badge" style={{ background: '#fff4d6', color: '#8a6300', fontSize: 11 }}>Formulário público</span>
+                        {r.cliente_id
+                          ? <span className="badge" style={{ background: '#e6f4ea', color: '#1e7a34', fontSize: 11, marginLeft: 6 }} title="O CNPJ já está cadastrado no Omie — por regra, quem já é cliente não é lead.">Cliente (já no Omie)</span>
+                          : <span className="badge" style={{ background: '#e8f0fe', color: '#1a4fa0', fontSize: 11, marginLeft: 6 }} title="CNPJ fora do Omie (ou sem CNPJ): é lead até comprar.">Lead</span>}
+                        <div className="small" style={{ marginTop: 4 }}>
+                          <b>{(r.respostas_publico || {}).solicitante || '—'}</b>
+                          {(r.respostas_publico || {}).empresa ? ` · ${r.respostas_publico.empresa}` : ''}
+                        </div>
+                        {(r.respostas_publico || {}).identificacao && <div className="small muted">Obra: {r.respostas_publico.identificacao}</div>}
+                        {r.cliente && <div className="small muted">Cliente cadastrado: {r.cliente.codigo ? `${r.cliente.codigo} · ` : ''}{r.cliente.razao_social}</div>}
+                        {r.lead_id && <div className="small muted mono">{r.lead_id}</div>}
+                      </div>
+                    ) : <span className="small muted">Criado por {r.criado_por || '—'}</span>}
+                  </td>
                   <td><StatusChip status={r.status}/></td>
                   <td>{r.created_at ? new Date(r.created_at).toLocaleDateString('pt-BR') : '—'}</td>
                   <td className="row gap-1">

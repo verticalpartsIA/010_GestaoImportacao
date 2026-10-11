@@ -348,6 +348,7 @@
         const corpo = {
           ...f,
           acessorios: acessoriosLista.join(', '),
+          acessorios_chaves: ACESSORIOS.filter(([k]) => f.acessorios[k]).map(([k]) => k),
           distancias: (f.dist || []).map((d, i) => `${i + 1}# - De: ${d.de} - Até: ${d.ate} - Metros: ${d.m}`).filter((_, i) => f.dist[i] && f.dist[i].m).join('\n'),
         };
         const resp = await fetch(EDGE_URL, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(corpo) });
