@@ -12,7 +12,7 @@ import { execSync } from 'node:child_process';
 
 const shell = fs.readFileSync('src/shell.jsx', 'utf8');
 const bloco = (shell.match(/const TUTORIAIS = \{([\s\S]*?)\};/) || [])[1] || '';
-const noMenu = Object.fromEntries([...bloco.matchAll(/(\w+):\s*"([^"]+)"/g)].map((m) => [m[2], m[1]]));   // pasta → rota
+const noMenu = Object.fromEntries([...bloco.matchAll(/(?:(\w+)|"([^"]+)"):\s*"([^"]+)"/g)].map((m) => [m[3], m[1] || m[2]]));   // pasta → rota
 
 // pasta do tutorial → arquivos que compõem a tela (acrescente aqui ao publicar um tutorial novo)
 // Chave = caminho do tutorial (pai/tela). Tela sem lista aqui aparece como aviso "desatualização não conferida".
@@ -24,6 +24,39 @@ const TELAS = {
   'geral/inbox': ['src/logistica.jsx', 'src/inbox-gmail.jsx', 'src/inbox-triagem.jsx', 'src/inbox-organizar.jsx', 'src/inbox-conversas.jsx', 'src/inbox-decisao.jsx', 'src/inbox-preco.jsx', 'src/inbox-historico.jsx'],
   'crm/leads': ['src/comercial.jsx', 'src/leads-tooltips.js'],
   geral: [],   // visão do módulo: depende dos tutoriais de cada tela
+  // CRM
+  'crm/canais': ['src/crm.jsx'],
+  'crm/conversao': ['src/crm.jsx'],
+  'crm/automacao': ['src/crm.jsx'],
+  'crm/analise': ['src/crm.jsx'],
+  crm: [],
+  // Cadastros Mestres
+  'cadastros-mestres/clientes': ['src/cadastros.jsx', 'src/cadastros-clientes-store.js'],
+  'cadastros-mestres/fornecedores': ['src/cadastros.jsx', 'src/cadastros-fornecedores-store.js'],
+  'cadastros-mestres/materias-primas': ['src/cadastro-itens.jsx'],
+  'cadastros-mestres/produtos': ['src/cadastro-itens.jsx'],
+  'cadastros-mestres': [],
+  // Comercial | Pré-venda
+  'comercial-pre-venda/formularios': ['src/comercial.jsx', 'src/formulario-elevador.jsx', 'src/formulario-elevador-store.js'],
+  'comercial-pre-venda/controle-de-cotacoes': ['src/controle-cotacoes.jsx'],
+  'comercial-pre-venda/cotacoes-a-fornecedor': ['src/cotacoes-fornecedor.jsx', 'src/cotacao-elevador-fornecedor-store.js'],
+  'comercial-pre-venda/cotacao-a-fornecedor-detalhe': ['src/cotacoes-fornecedor.jsx', 'src/cotacao-elevador-fornecedor-store.js'],
+  'comercial-pre-venda/cotacao-a-fornecedor-tratativas': ['src/cotacoes-fornecedor.jsx', 'src/tratativas-store.js'],
+  'comercial-pre-venda/cotacao-quadro-comando': ['src/cotacao-quadro-comando.jsx', 'src/cotacao-quadro-comando-store.js'],
+  'comercial-pre-venda/propostas': ['src/precificacao.jsx', 'src/proposta-heranca.js', 'src/proposta-store.js', 'src/proposta-editor.jsx', 'src/proposta-preview.jsx'],
+  'comercial-pre-venda/contratos-sociais': ['src/contratos-sociais.jsx', 'src/contratos-sociais-store.js'],
+  'comercial-pre-venda': [],
+  // Financeiro & Preços
+  'financeiro-precos/precificacao': ['src/precificacao.jsx', 'src/precificacao-elevador.jsx', 'src/precificacao-elevador-engine.js', 'src/precificacao-elevador-store.js', 'src/precificacao-memoria.jsx'],
+  'financeiro-precos/atualizacao-de-custos': ['src/cadastro-custos.jsx', 'src/cadastro-custos-store.js'],
+  'financeiro-precos/aval-financeiro': ['src/aval-financeiro.jsx', 'src/aval-financeiro-store.js'],
+  'financeiro-precos/comissoes': ['src/financeiro.jsx', 'src/comissionamento-store.js'],
+  'financeiro-precos': [],
+  // Contratos & Jurídico
+  'contratos-juridico/contrato-venda-equipamentos': ['src/contrato-venda.jsx', 'src/contrato-venda-store.js', 'src/contrato-venda-engine.js', 'src/contrato-venda-preview.jsx'],
+  'contratos-juridico/contratos-minutas': ['src/operacoes.jsx', 'src/contrato-editor.jsx'],
+  'contratos-juridico/aval-juridico': ['src/aval-juridico.jsx', 'src/aval-juridico-store.js'],
+  'contratos-juridico': [],
 };
 const EMAILS_PERMITIDOS = /^(suporte@verticalparts\.com\.br|suporte@vpsistema\.com)$/i;
 const meses = { janeiro: 0, fevereiro: 1, 'março': 2, abril: 3, maio: 4, junho: 5, julho: 6, agosto: 7, setembro: 8, outubro: 9, novembro: 10, dezembro: 11 };
