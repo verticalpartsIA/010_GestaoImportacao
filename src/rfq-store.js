@@ -78,7 +78,8 @@
 
   function _payload(form) {
     return {
-      numero_rfq: form.numero_rfq, data: form.data || null, data_validade: form.data_validade || null,
+      numero_rfq: form.numero_rfq, numero_cotacao: form.numero_cotacao !== '' && form.numero_cotacao != null ? Number(form.numero_cotacao) : null,
+      data: form.data || null, data_validade: form.data_validade || null,
       status: form.status || 'Aberta',
       fornecedores: form.fornecedores || [], itens: form.itens || [],
       fornecedor_vencedor_global_id: form.fornecedor_vencedor_global_id || null,
@@ -101,9 +102,14 @@
 
   async function atualizar(id, form) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: antes } = await c.from('rfq_importacao').select('numero_cotacao').eq('id', id).maybeSingle();
     const row = { ..._payload(form), updated_at: new Date().toISOString() };
     const { data, error } = await c.from('rfq_importacao').update(row).eq('id', id).select().single();
     if (error) throw error;
+    // RFQ criada sem Nº (o campo não existia até 11/10) que ganhou o Nº agora: registra o evento com o Nº para o motor.
+    if (antes && antes.numero_cotacao == null && data.numero_cotacao != null && window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'RFQ_FRETE_ENVIADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.numero_rfq, alvoId: data.id,
+    });
     return data;
   }
 

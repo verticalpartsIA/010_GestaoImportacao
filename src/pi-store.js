@@ -125,16 +125,53 @@
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'PI_CRIADA', numeroCotacao: data.numero_cotacao, alvoLabel: data.numero_pi, alvoId: data.id,
     });
+    if (data.numero_cotacao != null && data.embarque_id) await propagarCotacaoAoEmbarque(c, data.numero_cotacao, data.embarque_id);
     return data;
   }
 
   async function atualizar(id, form) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: antes, error: errAntes } = await c.from('pi_importacao').select('numero_cotacao, embarque_id').eq('id', id).maybeSingle();
+    if (errAntes) throw errAntes;
     const row = { ..._payload(form), updated_at: new Date().toISOString() };
+    // Nº da cotação, uma vez gravado, não muda por aqui (a tela trava o campo; isto protege contra versão antiga em cache).
+    if (antes && antes.numero_cotacao != null) row.numero_cotacao = antes.numero_cotacao;
     const { data, error } = await c.from('pi_importacao').update(row).eq('id', id).select().single();
     if (error) throw error;
+    /* P.I. antiga criada sem Nº (todas as 13 em 11/10) ganhou o Nº agora: emite PI_CRIADA com o Nº (fecha a etapa
+       "Importação a iniciar") e leva o Nº ao embarque vinculado. Antes o Nº só era aceito na criação. */
+    if (antes && antes.numero_cotacao == null && data.numero_cotacao != null) {
+      if (window.EventosFluxo) window.EventosFluxo.registrar({
+        evento: 'PI_CRIADA', numeroCotacao: data.numero_cotacao, alvoLabel: data.numero_pi, alvoId: data.id,
+      });
+    }
+    // Embarque escolhido pelo formulário da P.I. (não pelo "Vincular") também recebe o Nº — antes só o "Vincular" levava.
+    const ganhou = antes && antes.numero_cotacao == null && data.numero_cotacao != null;
+    const trocouEmbarque = antes && data.embarque_id && data.embarque_id !== antes.embarque_id;
+    if (data.numero_cotacao != null && data.embarque_id && (ganhou || trocouEmbarque)) {
+      await propagarCotacaoAoEmbarque(c, data.numero_cotacao, data.embarque_id);
+    }
     return data;
   }
+
+  /* Leva o Nº da cotação da P.I. ao embarque (só se o embarque ainda não tiver um) e registra os eventos do embarque. */
+  async function propagarCotacaoAoEmbarque(c, numeroCotacao, embarqueId) {
+    // Não derruba o salvamento da P.I. (já gravada): falha aqui vira aviso, não erro.
+    try {
+      const { data: emb, error: e1 } = await c.from('embarques_importacao').select('numero_cotacao').eq('id', embarqueId).maybeSingle();
+      if (e1) throw e1;
+      if (!emb || emb.numero_cotacao != null) return;
+      const { error: e2 } = await c.from('embarques_importacao').update({ numero_cotacao: numeroCotacao }).eq('id', embarqueId);
+      if (e2) throw e2;
+      if (window.EmbarquesImportacaoStore && window.EmbarquesImportacaoStore.aoGanharCotacao) {
+        await window.EmbarquesImportacaoStore.aoGanharCotacao(embarqueId);
+      }
+    } catch (e) {
+      console.warn('[PIStore] Nº da cotação não chegou ao embarque', e);
+      window.toast?.('P.I. salva, mas o Nº da cotação não foi levado ao embarque: ' + (e.message || e), 'warning');
+    }
+  }
+
 
   async function remover(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -151,13 +188,9 @@
        é, quem sabe é a P.I. Só preenche se o embarque ainda não tiver um
        (não sobrescreve um valor já definido por outra P.I. vinculada). */
     if (embarqueId) {
-      const { data: pi } = await c.from('pi_importacao').select('numero_cotacao').eq('id', id).maybeSingle();
-      if (pi && pi.numero_cotacao != null) {
-        const { data: emb } = await c.from('embarques_importacao').select('numero_cotacao').eq('id', embarqueId).maybeSingle();
-        if (emb && emb.numero_cotacao == null) {
-          await c.from('embarques_importacao').update({ numero_cotacao: pi.numero_cotacao }).eq('id', embarqueId);
-        }
-      }
+      const { data: pi, error: e0 } = await c.from('pi_importacao').select('numero_cotacao').eq('id', id).maybeSingle();
+      if (e0) throw e0;
+      if (pi && pi.numero_cotacao != null) await propagarCotacaoAoEmbarque(c, pi.numero_cotacao, embarqueId);
     }
   }
 

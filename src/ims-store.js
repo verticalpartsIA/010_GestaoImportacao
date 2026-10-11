@@ -44,6 +44,7 @@
     const valorTotal = fornecedores.reduce((s, f) => s + (f.valor || 0), 0);
     return {
       numero_solicitacao: form.numero_solicitacao || null, status: form.status || 'Solicitado',
+      numero_cotacao: form.numero_cotacao !== '' && form.numero_cotacao != null ? Number(form.numero_cotacao) : null,
       solicitante: form.solicitante || null, projeto: form.projeto || null, responsavel_interno: form.responsavel_interno || null,
       recursos: form.recursos || [], data_inicio: form.data_inicio || null, data_fim: form.data_fim || null,
       local_execucao: form.local_execucao || null, cidade: form.cidade || null,
@@ -95,9 +96,14 @@
     const user = window.__VP_USER || {};
     const userLabel = user.nome || user.email || 'Sistema';
     const historico = _addHistorico(form, anterior, userLabel);
+    const { data: antes } = await c.from('ims_importacao').select('numero_cotacao').eq('id', id).maybeSingle();
     const row = { ..._payload({ ...form, historico }), updated_at: new Date().toISOString() };
     const { data, error } = await c.from('ims_importacao').update(row).eq('id', id).select().single();
     if (error) throw error;
+    // IMS criado sem Nº (o campo não existia até 11/10) que ganhou o Nº agora: registra o evento com o Nº para o motor.
+    if (antes && antes.numero_cotacao == null && data.numero_cotacao != null && window.EventosFluxo) window.EventosFluxo.registrar({
+      evento: 'IMS_CONTRATADO', numeroCotacao: data.numero_cotacao, alvoLabel: data.projeto, alvoId: data.id,
+    });
     return data;
   }
 
