@@ -435,23 +435,25 @@ button.nav-item {
 }
 .sidebar__collapse:hover { background: var(--vp-yellow); color: #000; border-color: var(--vp-yellow); }
 
-/* ---- Sidebar: visual novo (degradê amarelo -> preto) — só estilo, mesma marcação.
-   O degradê ocupa só o alto (marca + 1º grupo); abaixo é quase preto, para o texto manter contraste. ---- */
+/* ---- Sidebar: degradê amarelo -> preto no alto (marca + 1º grupo); abaixo é quase preto, para o texto manter contraste.
+   Logo oficial em aço escovado (assets/logo-*-metal.png) flutuando sobre o amarelo. ---- */
 .app { --sidebar-w: 256px; }
 .app[data-sidebar="collapsed"] { --sidebar-w: 72px; }
 .sidebar {
-  background: linear-gradient(180deg, #F5C400 0, #C9A000 56px, #4a3b00 190px, #151100 330px, #0B0B0B 460px);
+  background: linear-gradient(180deg, #F5C400 0, #C9A000 86px, #4a3b00 220px, #151100 360px, #0B0B0B 490px);
 }
 .sidebar::after { display: none; }
-.sidebar__brand { border-bottom: 0; padding: 0 18px; gap: 12px; }
-.sidebar__brand-mark {
-  width: 34px; height: 34px; padding: 5px; border-radius: 9px;
-  background: #0B0B0B; object-fit: contain; flex: none;
+.sidebar__brand { height: 86px; border-bottom: 0; padding: 0 44px 0 18px; }
+.sidebar__brand img.sidebar__brand-logo {
+  width: 100%; max-width: 200px; height: auto; flex: none;
+  border-radius: 12px;
+  box-shadow: 0 10px 22px rgba(0,0,0,.42), 0 3px 6px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.35);
 }
-.sidebar__brand-text { color: #111; font-size: 16px; }
-.sidebar__brand-sub { display: none; } /* "v2.4": ficava atrás do botão de recolher; a versão publicada já aparece no rodapé */
-.sidebar__brand-text b { color: #111; opacity: .62; }
-.sidebar__brand-sub { color: rgba(0,0,0,.62); }
+.sidebar__brand img.sidebar__brand-mark {
+  width: 42px; height: 42px; object-fit: cover; flex: none; border-radius: 11px;
+  box-shadow: 0 8px 18px rgba(0,0,0,.42), 0 2px 5px rgba(0,0,0,.28), 0 0 0 1px rgba(0,0,0,.35);
+}
+.app[data-sidebar="collapsed"] .sidebar__brand { padding: 0; height: 72px; }
 .sidebar__scroll { padding: 14px 10px 24px; }
 .sidebar__group { margin-top: 18px; }
 .sidebar__group-label {
@@ -476,7 +478,8 @@ button.nav-item {
 .sidebar__user { border-radius: 12px; border-color: rgba(255,255,255,.08); background: rgba(255,255,255,.06); }
 .sidebar__user-role { color: rgba(255,255,255,.55); }
 .sidebar__version { border-top-color: rgba(255,255,255,.08); color: rgba(255,255,255,.45); }
-.sidebar__collapse { border-radius: 8px; top: 17px; right: 10px; }
+.sidebar__collapse { border-radius: 8px; top: 32px; right: 10px; }
+.app[data-sidebar="collapsed"] .sidebar__collapse { top: 68px; right: 25px; }
 
 /* ========== HEADER ================================================= */
 .header {
