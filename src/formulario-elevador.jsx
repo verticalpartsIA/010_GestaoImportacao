@@ -235,13 +235,43 @@ function feNovaUnidade(identificador) {
 }
 
 /* ---------- Campos genéricos (mesmo padrão visual de ModalNovoLead) ---------- */
-function FEField({ label, children, span }) {
+/* 10/10/2026 — campo obrigatório vazio "acende" (borda/fundo vermelhos + mensagem), igual à Precificação.
+   `chave` liga o campo à lista de faltantes que vem do contexto (cabeçalho ou equipamento); só acende depois que o
+   usuário tenta salvar/enviar (ctx.mostrar). Estilo em styles/planilha.css (.pl-faltando). */
+const FEFaltandoCtx = React.createContext({ mostrar: false, falta: () => false });
+function FEField({ label, children, span, chave, aviso }) {
+  const ctx = React.useContext(FEFaltandoCtx);
+  const faltando = !!chave && ctx.mostrar && ctx.falta(chave);
   return (
-    <div className="stack" style={{ gap: 4, gridColumn: span ? `span ${span}` : undefined }}>
+    <div className={'stack' + (faltando ? ' pl-faltando' : '')} style={{ gap: 4, gridColumn: span ? `span ${span}` : undefined }}>
       <label className="up-eyebrow muted">{label}</label>
       {children}
+      {faltando && <div className="pl-faltando__msg">{aviso || 'Campo obrigatório — preencha para enviar.'}</div>}
     </div>
   );
+}
+function FEFaltaBox({ chave, aviso, children }) {
+  const ctx = React.useContext(FEFaltandoCtx);
+  const faltando = ctx.mostrar && ctx.falta(chave);
+  return (
+    <div className={faltando ? 'pl-faltando' : undefined}>
+      {children}
+      {faltando && <div className="pl-faltando__msg">{aviso || 'Campo obrigatório — preencha para enviar.'}</div>}
+    </div>
+  );
+}
+
+/* Campos obrigatórios do equipamento ELEVADOR (os mesmos de validar(); escada/esteira são texto livre, sem obrigatórios). */
+const FE_UNID_OBRIG = [
+  ['tipo', 'Tipo'], ['tracao', 'Tração'], ['velocidade_ms', 'Velocidade (m/s)'], ['paradas', 'Paradas'],
+  ['pavimentos_desc', 'Descrição dos pavimentos'], ['casa_maquinas', 'Casa de máquinas'], ['agrupamento', 'Agrupamento'],
+  ['porta_oposta', 'Porta oposta / múltiplas entradas'], ['estrutura_caixa', 'Tipo de estrutura da caixa'],
+  ['percurso_mm', 'Percurso / altura de viagem (mm)'], ['porta_tipo_abertura', 'Tipo de abertura (portas)'],
+  ['tensao_principal', 'Tensão de alimentação principal'], ['tensao_iluminacao', 'Tensão de iluminação'],
+];
+function feFaltandoUnidade(u) {
+  if ((u.tipo_equipamento || 'elevador') !== 'elevador') return [];
+  return FE_UNID_OBRIG.filter(([k]) => !u[k]).map(([k, nome]) => ({ chave: k, nome }));
 }
 function FEInput({ value, onChange, placeholder, type = 'text', disabled, onBlur }) {
   return <input className="input" type={type} value={value ?? ''} onChange={(e) => onChange(e.target.value)} onBlur={onBlur} placeholder={placeholder} disabled={disabled}/>;
@@ -315,22 +345,22 @@ function FEEndereco({ prefix, header, setH, requiredLogradouro, onBuscarCep }) {
   const k = (suf) => `${prefix}${suf}`;
   return (
     <div className="grid-3" style={{ gap: 12 }}>
-      <FEField label={`Logradouro${requiredLogradouro ? ' *' : ''}`} span="2">
+      <FEField label={`Logradouro${requiredLogradouro ? ' *' : ''}`} span="2" chave={requiredLogradouro ? k('logradouro') : undefined}>
         <FEInput value={header[k('logradouro')]} onChange={setH(k('logradouro'))} placeholder="Rua São Paulo, 150"/>
       </FEField>
       <FEField label="Complemento">
         <FEInput value={header[k('complemento')]} onChange={setH(k('complemento'))} placeholder="Apto 22, Bloco B"/>
       </FEField>
-      <FEField label="Bairro">
+      <FEField label={`Bairro${requiredLogradouro ? ' *' : ''}`} chave={requiredLogradouro ? k('bairro') : undefined}>
         <FEInput value={header[k('bairro')]} onChange={setH(k('bairro'))} placeholder="Jardim Paraíso"/>
       </FEField>
-      <FEField label="CEP">
+      <FEField label={`CEP${requiredLogradouro ? ' *' : ''}`} chave={requiredLogradouro ? k('cep') : undefined}>
         <FEInput value={header[k('cep')]} onChange={setH(k('cep'))} placeholder="07140-000" onBlur={() => onBuscarCep?.(header[k('cep')])}/>
       </FEField>
-      <FEField label="Cidade">
+      <FEField label={`Cidade${requiredLogradouro ? ' *' : ''}`} chave={requiredLogradouro ? k('cidade') : undefined}>
         <FEInput value={header[k('cidade')]} onChange={setH(k('cidade'))} placeholder="Guarulhos"/>
       </FEField>
-      <FEField label="UF">
+      <FEField label={`UF${requiredLogradouro ? ' *' : ''}`} chave={requiredLogradouro ? k('estado') : undefined}>
         <FEInput value={header[k('estado')]} onChange={setH(k('estado'))} placeholder="SP"/>
       </FEField>
     </div>
@@ -516,8 +546,10 @@ const FE_OPCOES_ACO = ['Aço 304', 'Aço 430', 'Pintado'];
 const FE_OPCOES_VAZIAS = { teto_falso: [], piso: [], porta: [], botoeira_cabine: [], botoeira_pavimento: [] };
 
 /* ---------- Card de uma Unidade (um elevador) ---------- */
-function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornecedores, modelos, publicMode, numeroCotacao }) {
+function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornecedores, modelos, publicMode, numeroCotacao, mostrarObrig }) {
   const [open, setOpen] = React.useState(true);
+  const faltaU = new Set(feFaltandoUnidade(unidade).map((x) => x.chave));
+  const ctxU = { mostrar: !!mostrarObrig, falta: (k) => faltaU.has(k) };
   const [opcoes, setOpcoes] = React.useState(FE_OPCOES_VAZIAS);
   /* 10/10/2026 — passageiros = Capacidade (kg) ÷ 75, calculado (regra única em capacidade-passageiros.js). Elevador de
      CARGA não leva pessoas: só os kg importam e o campo de passageiros nem aparece. Recalcula ao mudar kg ou tipo. */
@@ -571,6 +603,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
       }
     >
       {open && (
+        <FEFaltandoCtx.Provider value={ctxU}>
         <div className="stack" style={{ gap: 18 }}>
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Identificação do equipamento</div>
@@ -580,7 +613,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
               </FEField>
               <FEField label="Quantidade idêntica"><FEInput type="number" value={unidade.quantidade ?? 1} onChange={(v) => set('quantidade')(Math.max(1, Number(v) || 1))} placeholder="1"/></FEField>
               <FEField label="Tipo de equipamento *"><FESelect value={tipoEquip} onChange={set('tipo_equipamento')} options={FE_TIPOS_EQUIPAMENTO}/></FEField>
-              {tipoEquip === 'elevador' && <FEField label="Tipo *"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>}
+              {tipoEquip === 'elevador' && <FEField label="Tipo *" chave="tipo"><FESelect value={unidade.tipo} onChange={set('tipo')} options={FE_TIPOS}/></FEField>}
               {tipoEquip === 'elevador' && <FEField label="Modelo"><FESelect value={unidade.modelo} onChange={set('modelo')} options={modelosDisponiveis.map((m) => ({ value: m.codigo, label: `${m.codigo} — ${m.nome}` }))} placeholder="— selecione o modelo —"/></FEField>}
               {tipoEquip === 'elevador' && <FEField label="Norma de projeto"><FESelect value={unidade.norma_projeto} onChange={set('norma_projeto')} options={FE_NORMAS}/></FEField>}
               {!publicMode && <FEField label="Fornecedor"><FEFornecedorInput value={unidade.fornecedor} onChange={set('fornecedor')} fornecedores={fornecedores}/></FEField>}
@@ -591,17 +624,17 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
             </p>
             {tipoEquip === 'elevador' && (
               <div className="grid-3" style={{ gap: 12, marginTop: 12 }}>
-                <FEField label="Tração *"><FESelect value={unidade.tracao} onChange={set('tracao')} options={FE_TRACOES} placeholder="— selecione —"/></FEField>
+                <FEField label="Tração *" chave="tracao"><FESelect value={unidade.tracao} onChange={set('tracao')} options={FE_TRACOES} placeholder="— selecione —"/></FEField>
                 <FEField label="Capacidade (kg)"><FEInput type="number" value={unidade.capacidade_kg} onChange={set('capacidade_kg')} placeholder="630"/></FEField>
                 {CP && CP.ehCarga(unidade.tipo)
                   ? <FEField label="Capacidade (passageiros)"><div className="small muted" style={{ padding: '8px 0' }}>Elevador de carga não leva pessoas — só a capacidade em kg vale.</div></FEField>
                   : <FEField label="Capacidade (passageiros) — calculada"><FEInput type="number" value={CP ? (CP.passageiros(unidade.capacidade_kg, unidade.tipo) ?? '') : unidade.capacidade_pessoas} onChange={() => {}} disabled placeholder="kg ÷ 75"/></FEField>}
-                <FEField label="Velocidade (m/s) *"><FEInput type="number" value={unidade.velocidade_ms} onChange={set('velocidade_ms')} placeholder="1.0"/></FEField>
-                <FEField label="Paradas *"><FEInput type="number" value={unidade.paradas} onChange={set('paradas')} placeholder="4"/></FEField>
-                <FEField label="Descrição dos pavimentos *" span="2"><FEInput value={unidade.pavimentos_desc} onChange={set('pavimentos_desc')} placeholder="Térreo, 1, 2, 3"/></FEField>
-                <FEField label="Casa de máquinas *"><FESelect value={unidade.casa_maquinas} onChange={set('casa_maquinas')} options={[{ value: 'com', label: 'Com casa de máquinas' }, { value: 'sem', label: 'Sem casa de máquinas (MRL)' }]}/></FEField>
-                <FEField label="Agrupamento *"><FESelect value={unidade.agrupamento} onChange={set('agrupamento')} options={[{ value: 'simplex', label: 'Simplex' }, { value: 'duplex', label: 'Duplex' }, { value: 'triplex', label: 'Triplex' }, { value: 'group', label: 'Group control' }]}/></FEField>
-                <FEField label="Porta oposta / múltiplas entradas *"><FEInput value={unidade.porta_oposta} onChange={set('porta_oposta')} placeholder="Não / Sim - 180°"/></FEField>
+                <FEField label="Velocidade (m/s) *" chave="velocidade_ms"><FEInput type="number" value={unidade.velocidade_ms} onChange={set('velocidade_ms')} placeholder="1.0"/></FEField>
+                <FEField label="Paradas *" chave="paradas"><FEInput type="number" value={unidade.paradas} onChange={set('paradas')} placeholder="4"/></FEField>
+                <FEField label="Descrição dos pavimentos *" span="2" chave="pavimentos_desc"><FEInput value={unidade.pavimentos_desc} onChange={set('pavimentos_desc')} placeholder="Térreo, 1, 2, 3"/></FEField>
+                <FEField label="Casa de máquinas *" chave="casa_maquinas"><FESelect value={unidade.casa_maquinas} onChange={set('casa_maquinas')} options={[{ value: 'com', label: 'Com casa de máquinas' }, { value: 'sem', label: 'Sem casa de máquinas (MRL)' }]}/></FEField>
+                <FEField label="Agrupamento *" chave="agrupamento"><FESelect value={unidade.agrupamento} onChange={set('agrupamento')} options={[{ value: 'simplex', label: 'Simplex' }, { value: 'duplex', label: 'Duplex' }, { value: 'triplex', label: 'Triplex' }, { value: 'group', label: 'Group control' }]}/></FEField>
+                <FEField label="Porta oposta / múltiplas entradas *" chave="porta_oposta"><FEInput value={unidade.porta_oposta} onChange={set('porta_oposta')} placeholder="Não / Sim - 180°"/></FEField>
               </div>
             )}
           </div>
@@ -615,10 +648,10 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Estrutura e dimensões da obra <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— opcional, Engenharia complementa na vistoria</span></div>
             <div className="grid-3" style={{ gap: 12 }}>
-              <FEField label="Tipo de estrutura da caixa *"><FEInput value={unidade.estrutura_caixa} onChange={set('estrutura_caixa')} placeholder="Concreto / Alvenaria / Aço"/></FEField>
+              <FEField label="Tipo de estrutura da caixa *" chave="estrutura_caixa"><FEInput value={unidade.estrutura_caixa} onChange={set('estrutura_caixa')} placeholder="Concreto / Alvenaria / Aço"/></FEField>
               <FEField label="Caixa — largura (mm)"><FEInput type="number" value={unidade.caixa_largura_mm} onChange={set('caixa_largura_mm')}/></FEField>
               <FEField label="Caixa — profundidade (mm)"><FEInput type="number" value={unidade.caixa_profundidade_mm} onChange={set('caixa_profundidade_mm')}/></FEField>
-              <FEField label="Percurso / altura de viagem (mm) *"><FEInput type="number" value={unidade.percurso_mm} onChange={set('percurso_mm')}/></FEField>
+              <FEField label="Percurso / altura de viagem (mm) *" chave="percurso_mm"><FEInput type="number" value={unidade.percurso_mm} onChange={set('percurso_mm')}/></FEField>
               <FEField label="Última altura / overhead (mm)"><FEInput type="number" value={unidade.overhead_mm} onChange={set('overhead_mm')}/></FEField>
               <FEField label="Profundidade do poço (mm)"><FEInput type="number" value={unidade.poco_mm} onChange={set('poco_mm')}/></FEField>
             </div>
@@ -639,7 +672,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Portas <span style={{ opacity: .6, fontWeight: 400, textTransform: 'none' }}>— tipo obrigatório, resto opcional</span></div>
             <div className="grid-3" style={{ gap: 12 }}>
-              <FEField label="Tipo de abertura *"><FESelect value={unidade.porta_tipo_abertura} onChange={set('porta_tipo_abertura')} options={['Central', 'Lateral', 'Telescópica']}/></FEField>
+              <FEField label="Tipo de abertura *" chave="porta_tipo_abertura"><FESelect value={unidade.porta_tipo_abertura} onChange={set('porta_tipo_abertura')} options={['Central', 'Lateral', 'Telescópica']}/></FEField>
               <FEField label="Modelo de porta"><FESelect value={unidade.porta_modelo} onChange={set('porta_modelo')} options={FE_OPCOES_ACO} placeholder="— escolha —"/></FEField>
               <FEField label="Largura (mm)"><FEInput type="number" value={unidade.porta_largura_mm} onChange={set('porta_largura_mm')}/></FEField>
               <FEField label="Altura (mm)"><FEInput type="number" value={unidade.porta_altura_mm} onChange={set('porta_altura_mm')}/></FEField>
@@ -653,8 +686,8 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Elétrico</div>
             <div className="grid-3" style={{ gap: 12 }}>
-              <FEField label="Tensão de alimentação principal *"><FEInput value={unidade.tensao_principal} onChange={set('tensao_principal')} placeholder="380V/3P/60Hz"/></FEField>
-              <FEField label="Tensão de iluminação *"><FEInput value={unidade.tensao_iluminacao} onChange={set('tensao_iluminacao')} placeholder="220V/1P/60Hz"/></FEField>
+              <FEField label="Tensão de alimentação principal *" chave="tensao_principal"><FEInput value={unidade.tensao_principal} onChange={set('tensao_principal')} placeholder="380V/3P/60Hz"/></FEField>
+              <FEField label="Tensão de iluminação *" chave="tensao_iluminacao"><FEInput value={unidade.tensao_iluminacao} onChange={set('tensao_iluminacao')} placeholder="220V/1P/60Hz"/></FEField>
             </div>
           </div>
 
@@ -680,6 +713,7 @@ function FEUnidadeCard({ unidade, index, onChange, onRemove, onDuplicate, fornec
           </React.Fragment>
           )}
         </div>
+        </FEFaltandoCtx.Provider>
       )}
     </Card>
   );
@@ -1266,6 +1300,7 @@ function feHeaderPick(obj) {
 
 /* ---------- Página / componente principal ---------- */
 function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onSaved, onVoltar, onControleCotacoes }) {
+  const [mostrarObrig, setMostrarObrig] = React.useState(false); // campos obrigatórios acendem depois de uma tentativa de salvar/enviar
   const [loading, setLoading] = React.useState(!!formularioId);
   const [saving, setSaving] = React.useState(false);
   const [id, setId] = React.useState(formularioId || null);
@@ -1435,6 +1470,43 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
   const temIdentificacaoMinima = () =>
     !!(header.razao_social?.trim() || header.contato?.trim() || header.predio_empreendimento?.trim());
 
+  /* Campos obrigatórios do cabeçalho (mesmas regras de validar(), em forma de lista para "acender" na tela). */
+  const listaFaltandoHeader = () => {
+    const f = [];
+    if (usaClientePicker ? !clienteId : !temIdentificacaoMinima()) f.push({ chave: 'cliente', nome: usaClientePicker ? 'Cliente' : 'Nome/Razão Social, Contato ou Prédio/Empreendimento' });
+    if (!header.local_obra_cidade?.trim()) f.push({ chave: 'local_obra_cidade', nome: 'Cidade da obra' });
+    if (!header.local_obra_estado?.trim()) f.push({ chave: 'local_obra_estado', nome: 'UF da obra' });
+    if (!header.tipo_mao_de_obra) f.push({ chave: 'tipo_mao_de_obra', nome: 'Instalação Será' });
+    if (!header.responsavel_entrega) f.push({ chave: 'responsavel_entrega', nome: 'Responsável pela entrega' });
+    if (!header.finalidade_compra) f.push({ chave: 'finalidade_compra', nome: 'Finalidade da compra' });
+    if (usaClientePicker ? (clienteSel && clienteSel.contribuinte_icms == null) : (header.contribuinte_icms === '' || header.contribuinte_icms == null)) f.push({ chave: 'contribuinte_icms', nome: 'Contribuinte de ICMS' });
+    if (header.endereco_obra_diferente) {
+      [['logradouro', 'Logradouro da obra'], ['bairro', 'Bairro da obra'], ['cep', 'CEP da obra'], ['cidade', 'Cidade (endereço da obra)'], ['estado', 'UF (endereço da obra)']]
+        .forEach(([suf, nome]) => { if (!header['endereco_obra_' + suf]?.trim()) f.push({ chave: 'endereco_obra_' + suf, nome }); });
+    }
+    return f;
+  };
+  const faltaHeader = new Set(listaFaltandoHeader().map((x) => x.chave));
+  const ctxHeader = { mostrar: mostrarObrig, falta: (k) => faltaHeader.has(k) };
+  /* Resumo de TODOS os faltantes (cabeçalho + cada equipamento) para a mensagem e para o clique em "enviar". */
+  const resumoFaltando = () => {
+    const partes = listaFaltandoHeader().map((x) => x.nome);
+    unidades.forEach((u, i) => {
+      const fu = feFaltandoUnidade(u);
+      if (fu.length) partes.push(`${u.identificador || 'Equipamento ' + (i + 1)}: ${fu.map((x) => x.nome).join(', ')}`);
+    });
+    return partes;
+  };
+  /* Acende tudo e leva a tela até o primeiro campo faltante. Devolve true se havia algo faltando. */
+  const acenderObrigatorios = (prefixo) => {
+    const partes = resumoFaltando();
+    if (!partes.length) return false;
+    setMostrarObrig(true);
+    window.toast?.(`${prefixo || 'Faltam campos obrigatórios'} (em vermelho): ${partes.join(' · ')}.`, 'warning');
+    setTimeout(() => { const el = document.querySelector('.pl-faltando'); el?.scrollIntoView?.({ behavior: 'smooth', block: 'center' }); }, 80);
+    return true;
+  };
+
   const validar = () => {
     if (usaClientePicker ? !clienteId : !temIdentificacaoMinima()) return 'Informe Nome/Razão Social, Contato ou Prédio/Empreendimento antes de continuar.';
     if (!header.local_obra_cidade?.trim() || !header.local_obra_estado?.trim()) return 'Local da obra (cidade/UF) é obrigatório.';
@@ -1485,11 +1557,12 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
     // toast nenhum), travando em "Cotação Nº — (gerado ao salvar)" pra
     // sempre. O resto de `validar()` continua opcional pra rascunho.
     if (usaClientePicker ? !clienteId : !temIdentificacaoMinima()) {
+      setMostrarObrig(true);
       window.toast?.(usaClientePicker ? 'Selecione o cliente antes de salvar.' : 'Preencha Nome/Razão Social, Contato ou Prédio/Empreendimento antes de salvar.', 'warning');
       return null;
     }
     const erro = validar();
-    if (novoStatus === 'enviado' && erro) { window.toast?.(erro, 'warning'); return null; }
+    if (novoStatus === 'enviado' && erro) { setMostrarObrig(true); window.toast?.(erro, 'warning'); return null; }
     setSaving(true);
     try {
       let cliente = null;
@@ -1563,7 +1636,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
   if (loading) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
   return (
-    <div className={publicMode ? 'fe-public' : 'page fade-in'}>
+    <div className={publicMode ? 'fe-public' : 'page fade-in pl'}>
       {!publicMode && (
         <div className="page-head">
           <div className="page-head__l">
@@ -1592,30 +1665,46 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         </div>
       )}
 
+      {!publicMode && (
+        <div className="pl-legenda">
+          <span><i className="pl-l-edit"/> Campo para preencher</span>
+          <span><i className="pl-l-calc"/> Calculado automaticamente</span>
+          <span><b style={{ color: '#b91c1c' }}>*</b> Obrigatório para enviar a cotação (rascunho pode ficar incompleto) — o que faltar acende em vermelho</span>
+        </div>
+      )}
+
       {!publicMode && showLinkCliente && linkPublico && (
         <FELinkClienteModal url={linkPublico} numeroCotacao={numeroCotacao} header={header} onClose={() => setShowLinkCliente(false)}/>
       )}
 
+      <FEFaltandoCtx.Provider value={ctxHeader}>
       <Card title="Dados do cliente e da obra">
         <div className="stack" style={{ gap: 14 }}>
           <div>
             <div className="up-eyebrow muted" style={{ marginBottom: 8 }}>Cliente</div>
             {usaClientePicker ? (
-              <FEClientePicker clienteId={clienteId} onSelecionar={(c) => { setClienteId(c ? c.id : null); setClienteSel(c || null); }} onCriarNovo={() => setCriarClienteInline(true)}/>
+              <>
+                <FEFaltaBox chave="cliente" aviso="Escolha o cliente (ou cadastre um novo aqui mesmo).">
+                  <FEClientePicker clienteId={clienteId} onSelecionar={(c) => { setClienteId(c ? c.id : null); setClienteSel(c || null); }} onCriarNovo={() => setCriarClienteInline(true)}/>
+                </FEFaltaBox>
+                {mostrarObrig && faltaHeader.has('contribuinte_icms') && (
+                  <div className="pl-faltando__msg pl-faltando" style={{ marginTop: 6 }}>O cliente escolhido não tem "Contribuinte de ICMS" no cadastro — complete em Cadastros → Clientes (define quem recolhe o DIFAL).</div>
+                )}
+              </>
             ) : (
               <>
                 <div className="grid-3" style={{ gap: 12 }}>
                   <FEField label="Tipo de pessoa"><FESelect value={header.tipo_pessoa} onChange={setH('tipo_pessoa')} options={[{ value: 'PJ', label: 'Pessoa Jurídica' }, { value: 'PF', label: 'Pessoa Física' }]}/></FEField>
-                  <FEField label="Nome / Razão Social" span="2"><FEInput value={header.razao_social} onChange={setH('razao_social')} placeholder="Nome do cliente"/></FEField>
+                  <FEField label="Nome / Razão Social" span="2" chave="cliente" aviso="Informe ao menos um: Nome/Razão Social, Contato ou Prédio/Empreendimento."><FEInput value={header.razao_social} onChange={setH('razao_social')} placeholder="Nome do cliente"/></FEField>
                   {header.tipo_pessoa === 'PF'
                     ? <FEField label="CPF"><FEInput value={header.cpf} onChange={setH('cpf')} placeholder="000.000.000-00"/></FEField>
                     : <FEField label="CNPJ"><FEInput value={header.cnpj} onChange={setH('cnpj')} placeholder="00.000.000/0000-00" onBlur={() => buscarCnpjEPreencher(header.cnpj)}/></FEField>}
                   <FEField label="Inscrição Estadual"><FEInput value={header.inscricao_estadual} onChange={setH('inscricao_estadual')} disabled={header.tipo_pessoa === 'PF'}/></FEField>
-                  <FEField label="Contribuinte de ICMS? *"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
+                  <FEField label="Contribuinte de ICMS? *" chave="contribuinte_icms"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
                   <FEField label="Telefone"><FEInput value={header.telefone} onChange={setH('telefone')}/></FEField>
                   <FEField label="E-mail" span="2"><FEInput type="email" value={header.email} onChange={setH('email')}/></FEField>
-                  <FEField label="Contato"><FEInput value={header.contato} onChange={setH('contato')} placeholder="Nome do síndico / responsável"/></FEField>
-                  <FEField label="Prédio / Empreendimento" span="2"><FEInput value={header.predio_empreendimento} onChange={setH('predio_empreendimento')} placeholder="Ed. Itacolomi, Shopping Vila Olímpia…"/></FEField>
+                  <FEField label="Contato" chave="cliente" aviso="Informe ao menos um: Nome/Razão Social, Contato ou Prédio/Empreendimento."><FEInput value={header.contato} onChange={setH('contato')} placeholder="Nome do síndico / responsável"/></FEField>
+                  <FEField label="Prédio / Empreendimento" span="2" chave="cliente" aviso="Informe ao menos um: Nome/Razão Social, Contato ou Prédio/Empreendimento."><FEInput value={header.predio_empreendimento} onChange={setH('predio_empreendimento')} placeholder="Ed. Itacolomi, Shopping Vila Olímpia…"/></FEField>
                 </div>
                 <p className="small muted" style={{ margin: '8px 0 0' }}>
                   Sem Nome/Razão Social, CNPJ ou CPF ainda? Informe pelo menos o Contato ou o
@@ -1634,7 +1723,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
             )}
           </div>
           <div className="grid-3" style={{ gap: 12 }}>
-            <FEField label="Finalidade da compra *"><FESelect value={header.finalidade_compra} onChange={setH('finalidade_compra')} options={FE_FINALIDADE_COMPRA}/></FEField>
+            <FEField label="Finalidade da compra *" chave="finalidade_compra"><FESelect value={header.finalidade_compra} onChange={setH('finalidade_compra')} options={FE_FINALIDADE_COMPRA}/></FEField>
           </div>
           {header.finalidade_compra === 'revenda' && header.contribuinte_icms === false && (
             <p style={{ fontSize: 12, color: '#b45309', background: '#fffbeb', border: '1px solid #FBB039', padding: '8px 12px', margin: 0 }}>
@@ -1642,11 +1731,11 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
             </p>
           )}
           <div className="grid-3" style={{ gap: 12 }}>
-            <FEField label="Cidade da obra *"><FEInput value={header.local_obra_cidade} onChange={setH('local_obra_cidade')}/></FEField>
-            <FEField label="UF da obra *"><FEInput value={header.local_obra_estado} onChange={setH('local_obra_estado')} placeholder="SP"/></FEField>
+            <FEField label="Cidade da obra *" chave="local_obra_cidade"><FEInput value={header.local_obra_cidade} onChange={setH('local_obra_cidade')}/></FEField>
+            <FEField label="UF da obra *" chave="local_obra_estado"><FEInput value={header.local_obra_estado} onChange={setH('local_obra_estado')} placeholder="SP"/></FEField>
             <FEField label="Prazo mínimo desejado em obra"><FEInput value={header.prazo_desejado} onChange={setH('prazo_desejado')} placeholder="3 a 4 meses"/></FEField>
-            <FEField label="Instalação Será *"><FESelect value={header.tipo_mao_de_obra} onChange={setH('tipo_mao_de_obra')} options={FE_INSTALACAO_SERA}/></FEField>
-            <FEField label="Responsável pela entrega *"><FESelect value={header.responsavel_entrega} onChange={setH('responsavel_entrega')} options={FE_RESPONSAVEL_ENTREGA}/></FEField>
+            <FEField label="Instalação Será *" chave="tipo_mao_de_obra"><FESelect value={header.tipo_mao_de_obra} onChange={setH('tipo_mao_de_obra')} options={FE_INSTALACAO_SERA}/></FEField>
+            <FEField label="Responsável pela entrega *" chave="responsavel_entrega"><FESelect value={header.responsavel_entrega} onChange={setH('responsavel_entrega')} options={FE_RESPONSAVEL_ENTREGA}/></FEField>
             {!publicMode && <FEField label="Origem da venda"><FESelect value={header.origem_venda} onChange={setH('origem_venda')} options={FE_ORIGEM_VENDA}/></FEField>}
             {!publicMode && <FEField label="Vendedor"><FEInput value={header.vendedor} onChange={setH('vendedor')} placeholder="Iniciais ou nome"/></FEField>}
           </div>
@@ -1674,6 +1763,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
           <FEField label="Observações"><textarea className="input" rows={2} value={header.observacoes || ''} onChange={(e) => setH('observacoes')(e.target.value)}/></FEField>
         </div>
       </Card>
+      </FEFaltandoCtx.Provider>
 
       {/* Sem `id &&`: um formulário novo (ainda não salvo) também mostra
           estas seções — FEAnexos salva o rascunho na hora, por trás, se o
@@ -1697,7 +1787,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0 }}>
         {unidades.map((u, i) => (
           <div key={u.id || i} style={{ marginTop: 16 }}>
-            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} onDuplicate={() => duplicarUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode} numeroCotacao={numeroCotacao}/>
+            <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} onDuplicate={() => duplicarUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode} numeroCotacao={numeroCotacao} mostrarObrig={mostrarObrig}/>
           </div>
         ))}
 
@@ -1720,17 +1810,18 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         <div className="row gap-2">
           {publicMode
             ? <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Devolver para a VerticalParts'}</Button>
-            : <Button variant="outline" onClick={() => salvarTudo(null)} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>}
+            : <Button variant="outline" onClick={async () => { const r = await salvarTudo(null); if (r) acenderObrigatorios('Rascunho salvo, mas ainda faltam campos obrigatórios'); }} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>}
         </div>
       </div>
 
       {!publicMode && (id || onControleCotacoes) && (
         <div className="row gap-2" style={{ marginTop: 16, justifyContent: 'center' }}>
-          {id && <Button variant="ghost" icon="send" onClick={() => setShowCotacaoFornecedor(true)}>Enviar cotação a fornecedores</Button>}
+          {id && <Button variant="ghost" icon="send" onClick={() => { if (acenderObrigatorios('Preencha antes de enviar a cotação ao fornecedor')) return; setShowCotacaoFornecedor(true); }}>Enviar cotação a fornecedores</Button>}
           {id && podePrecificarManual && (
             <Button variant="ghost" icon="calculator" title="Preço já combinado por fora (CEO/Financeiro) — a Proposta já nasce agora, com o preço em aberto pra preencher"
               onClick={async () => {
                 if (!unidades.length) { window.toast?.('Adicione ao menos um equipamento antes de enviar.', 'warning'); return; }
+                acenderObrigatorios('Atenção: faltam campos obrigatórios');
                 if (!window.confirm('A proposta nasce agora, mesmo sem preço — alguém preenche o valor depois (na própria Proposta ou pela fila de Precificação). Confirma?')) return;
                 try {
                   await window.FormularioElevadorStore.enviarDiretoParaPrecificacao(id);
