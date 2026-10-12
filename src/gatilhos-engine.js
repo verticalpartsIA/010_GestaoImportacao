@@ -288,8 +288,8 @@
 
     { key: 'EMBARQUE_CHEGADA', label: 'Embarque até chegada no Brasil (SLA 90 dias)',
       predecessores: [{ key: 'NEGOCIACAO_COMPRA', rel: 'FS' }],
-      nasce: 'COMPRA_FORNECEDOR_CONFIRMADA', fecha: null /* ainda sem evento — logística não é wired em eventos_fluxo */,
-      fechamentoTipo: 'manual', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
+      nasce: 'COMPRA_FORNECEDOR_CONFIRMADA', fecha: 'EMBARQUE_CHEGOU_BRASIL' /* mesmo evento que fecha EMBARQUE_CHEGADA_BRASIL (canal aduaneiro atribuído) */,
+      fechamentoTipo: 'automatico', rota: 'cotacao-fornecedor-detail', resolverSubsel: resolverCotacaoFornecedor },
 
     /* ==========================================================
        Extensão 23/08 — checklist completo de 73 etapas (ver Gatilhos.md

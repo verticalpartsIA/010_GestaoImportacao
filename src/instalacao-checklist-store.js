@@ -44,6 +44,10 @@
      obterSessaoAdministrativa para pedir a sessão por RPC em vez de ler as tabelas. */
   const _tokenPorDossier = new Map();
 
+  /* dossierId -> 'cliente' das leituras públicas que caíram no fallback sem RPC: a página pública não
+     pode mostrar mais do que a RPC mostra (ex.: o vendedor fica de fora). */
+  const _modoFallback = new Map();
+
   async function obterPorTokenRpc(token, modo) {
     const c = sb(); if (!c || !token) return { falhou: true };
     if (!usarRpcPublica()) return { falhou: true };
@@ -212,6 +216,7 @@
     if (!r.falhou) return r.data;
     const { data: dossier } = await c.from('dossier_obra').select('*').eq('link_publico_token', token).maybeSingle();
     if (!dossier) return null;
+    _modoFallback.set(dossier.id, 'cliente');
     const itens = await listarPorDossier(dossier.id);
     return { dossier, itens };
   }
@@ -259,13 +264,18 @@
     }
     const itens = [];
 
-    // Vendedor — via proposta vinculada -> lead
-    if (dossier.proposta_id) {
-      const { data: prop } = await c.from('propostas').select('lead_id').eq('id', dossier.proposta_id).maybeSingle();
-      if (prop && prop.lead_id) {
-        const { data: lead } = await c.from('leads').select('owner').eq('id', prop.lead_id).maybeSingle();
-        if (lead && lead.owner) itens.push({ chave: 'vendedor', titulo: 'Vendedor', pessoa: lead.owner, data: null, informativo: true });
-      }
+    // Vendedor — só no app interno; a página pública (cliente) não o mostra, nem no fallback sem RPC.
+    // Lead do dossiê (gravado pela Proposta assinada); sem ele, o lead do
+    // Formulário da mesma cotação. (propostas não tem coluna lead_id.)
+    let leadId = _modoFallback.get(dossier.id) === 'cliente' ? null : (dossier.lead_id || null);
+    if (!leadId && _modoFallback.get(dossier.id) !== 'cliente' && dossier.numero_cotacao != null) {
+      const { data: form } = await c.from('formularios_elevador').select('lead_id')
+        .eq('numero_cotacao', dossier.numero_cotacao).limit(1).maybeSingle();
+      leadId = form && form.lead_id || null;
+    }
+    if (leadId) {
+      const { data: lead } = await c.from('leads').select('owner').eq('id', leadId).maybeSingle();
+      if (lead && lead.owner) itens.push({ chave: 'vendedor', titulo: 'Vendedor', pessoa: lead.owner, data: null, informativo: true });
     }
 
     // Contrato de Venda — tabela real é "contratos_venda_equipamentos" (plural,

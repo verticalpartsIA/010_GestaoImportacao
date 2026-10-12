@@ -107,6 +107,20 @@ test('status-obra — obterSessaoAdministrativa do app interno (dossiê sem toke
   assert.ok(sb.calls.from.includes('vistorias_atividades'));
 });
 
+test('status-obra — fallback público (sem RPC) não expõe o vendedor; o app interno expõe', async () => {
+  localStorage.setItem('vp_public_rpc', 'off');
+  const sb = usar(mockSb({ byTable: {
+    dossier_obra: { data: { id: 'DOS-V', lead_id: 'LD-1', numero_cotacao: 955 } }, instalacao_checklist_itens: { data: [] },
+    leads: { data: { owner: 'Fulano Vendedor' } },
+  } }));
+  const r = await IC.obterPorToken('tok-publico-v');
+  const sessao = await IC.obterSessaoAdministrativa(r.dossier);
+  assert.ok(!sessao.some((i) => i.chave === 'vendedor'));
+  assert.ok(!sb.calls.from.includes('leads'));
+  const interno = await IC.obterSessaoAdministrativa({ id: 'DOS-I', lead_id: 'LD-1', proposta_id: null });
+  assert.ok(interno.some((i) => i.chave === 'vendedor' && i.pessoa === 'Fulano Vendedor'));
+});
+
 /* ---------- diario-obra ---------- */
 test('diário — obterEstadoPorToken usa a RPC e devolve o mesmo formato', async () => {
   const sb = usar(mockSb({ rpcs: { public_diario_obter: { data: {
