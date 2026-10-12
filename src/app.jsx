@@ -31,6 +31,7 @@ const ROUTE_TITLE = {
   "emissao-nf": "Emissão de NF",
   pcp: "PCP — Planejamento e Controle da Produção",
   mes: "MES — Sistema de Execução da Manufatura",
+  "mes-cadastros": "MES — Cadastros do chão de fábrica",
   leads: "Pipeline de Leads",
   "lead-detail": "Detalhe de Lead",
   formularios: "Formulários",
@@ -412,6 +413,7 @@ function App() {
       case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "pcp": return <window.PCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "mes": return <window.MESPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "mes-cadastros": return <window.MESCadastrosPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "pi-importacao": return <window.PIPage/>;
       case "rfq-importacao": return <window.RFQPage/>;
       case "ims-importacao": return <window.IMSPage/>;
