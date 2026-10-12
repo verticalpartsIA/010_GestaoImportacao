@@ -638,14 +638,13 @@ function AlmoxarifadoEstoque() {
         const saldo = (p.pcp_estoque || []).reduce((s, e) => s + Number(e.quantidade || 0), 0);
         const ps = pos[p.codigo];
         const cm = cam[p.codigo];
-        const pendOmie = ps && ps.pendente != null ? Number(ps.pendente) : null;
         const reservado = ps && ps.reservado != null ? Number(ps.reservado) : null;
         return {
           ...p,
           saldo,
           temSaldo: (p.pcp_estoque || []).length > 0,
           reservado,
-          pendente: cm || pendOmie != null ? Math.max(cm ? cm.qtd : 0, pendOmie || 0) : null,
+          pendente: cm ? cm.qtd : 0,   // só pedidos de compra: o nPendente do Omie é de pedidos de venda (#843 A2)
           pedidosAbertos: cm ? cm.pedidos : [],
           disponivel: reservado != null ? saldo - reservado : null,
           fisico: f ? Number(f.quantidade) : null,

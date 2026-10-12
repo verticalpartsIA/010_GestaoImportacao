@@ -4,7 +4,7 @@
    CHEGADA — não do estoque mínimo (ver reposicao-calc.js). A maior parte é importada (~90 dias): comprar só quando encosta
    no mínimo é comprar tarde; por isso a tela mostra cobertura em dias e o ponto de pedido.
    Regras que existem por motivo real:
-   - Dados vêm de cache no Supabase (pcp_consumo_mov / pcp_posicao_compra), abastecido pela função sync-pcp-consumo
+   - Dados vêm de cache no Supabase (pcp_consumo_mov / pcp_posicao_compra / pcp_compras_itens), abastecido pela função sync-pcp-consumo
      (cron diário 04:30/04:50 + botão "Atualizar"). O navegador nunca fala com o Omie.
    - Parâmetros (prazo importado/nacional, folga, ciclo, origens fora do consumo) em pcp_reposicao_config; só quem tem a
      alçada almoxarifado.reposicao_config altera (administrador sempre passa).
@@ -125,12 +125,13 @@ function AlmoxarifadoReposicao() {
     if (!sb) { setErro('Supabase não carregou.'); return; }
     try {
       const campos = 'codigo, descricao, unidade, familia, tipo_sped, altura_cm, largura_cm, profundidade_cm, nao_repor, nao_repor_motivo' + (perm.custo ? ', preco_custo, custo_manual, custo_compra' : '');
-      const [c, cur, prods, estoque, pos, movs, estr, ultMov] = await Promise.all([
+      const [c, cur, prods, estoque, pos, compras, movs, estr, ultMov] = await Promise.all([
         sb.from('pcp_reposicao_config').select('*').eq('id', true).maybeSingle(),
         sb.from('pcp_consumo_cursor').select('concluido_ate, atualizado_em, proxima_data').eq('id', true).maybeSingle(),
         repLerTudo(() => sb.from('pcp_produtos').select(campos).eq('ativo', true).order('codigo')),
         repLerTudo(() => sb.from('pcp_estoque').select('codigo, quantidade').order('codigo')),
-        repLerTudo(() => sb.from('pcp_posicao_compra').select('codigo, disponivel, pendente, atualizado_em').order('codigo')),
+        repLerTudo(() => sb.from('pcp_posicao_compra').select('codigo, disponivel, atualizado_em').order('codigo')),
+        repLerTudo(() => sb.from('pcp_compras_itens').select('codigo, quantidade, qtde_recebida').order('pedido_id').order('item_id')),
         repLerTudo(() => sb.from('pcp_consumo_mov').select('codigo, dt_mov, qtde, cod_origem').order('id_mov')),
         repLerTudo(() => sb.from('pcp_estrutura').select('codigo_pai').order('codigo_pai')),
         sb.from('pcp_consumo_mov').select('atualizado_em').order('atualizado_em', { ascending: false }).limit(1),
@@ -142,9 +143,12 @@ function AlmoxarifadoReposicao() {
       const porCod = {}; movs.forEach(m => { (porCod[m.codigo] = porCod[m.codigo] || []).push(m); });
       const fis = {}; estoque.forEach(e => { fis[e.codigo] = (fis[e.codigo] || 0) + Number(e.quantidade || 0); });
       const posic = {}; pos.forEach(p => { posic[p.codigo] = p; });
+      // "A caminho" = o que ainda falta chegar nos pedidos de compra em aberto do Omie (pcp_compras_itens). O nPendente do Omie
+      // NÃO serve: é saldo pendente de pedidos de VENDA (auditoria #843 A2), não compra a chegar.
+      const caminho = {}; compras.forEach(x => { const f = Number(x.quantidade || 0) - Number(x.qtde_recebida || 0); if (f > 1e-9) caminho[x.codigo] = (caminho[x.codigo] || 0) + f; });
       setCfg(c.data); setEdit(c.data);
       const fabricados = new Set(estr.map(x => x.codigo_pai));      // têm estrutura no PCP = fabricados aqui, não comprados
-      setD({ prods, porCod, fis, posic, fabricados, cursor: cur.data || {}, nMovs: movs.length, frescor });
+      setD({ prods, porCod, fis, posic, caminho, fabricados, cursor: cur.data || {}, nMovs: movs.length, frescor });
       setErro(null);
     } catch (e) { setErro(e.message || String(e)); }
   }, [sb, perm.custo]);
@@ -157,7 +161,7 @@ function AlmoxarifadoReposicao() {
       const ps = d.posic[p.codigo];
       let r = window.PcpReposicao.calcularItem({
         codigo: p.codigo, movs: d.porCod[p.codigo], hoje, cfg,
-        disponivel: ps ? ps.disponivel : (d.fis[p.codigo] || 0), pendente: ps ? ps.pendente : 0,
+        disponivel: ps ? ps.disponivel : (d.fis[p.codigo] || 0), pendente: d.caminho[p.codigo] || 0,
       });
       if (p.nao_repor) r = { ...r, status: 'nao_repor', sugestao: 0, excesso: 0 };      // marcado pela equipe: fora de sugestões e alertas
       const m3un = (Number(p.altura_cm) * Number(p.largura_cm) * Number(p.profundidade_cm)) / 1e6;
