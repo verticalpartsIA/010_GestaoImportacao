@@ -306,7 +306,14 @@
     // `id` fica de fora do merge pra não trocar o id do formulário pelo do cliente.
     const { clientes, ...resto } = header;
     const { id: _clienteId, ...clienteCampos } = clientes || {};
-    return { ...resto, ...clienteCampos, unidades: unidades || [] };
+    /* As colunas endereco_* existem nas DUAS tabelas: o endereço do cliente sobrescrevia o do formulário ao abrir e o próximo
+       "Salvar" gravava esse valor de volta (5 de 42 formulários já divergiam — auditoria de 11/10). O que o formulário já tem
+       preenchido vence; o do cliente só completa o que está vazio. */
+    const merged = { ...resto, ...clienteCampos };
+    Object.keys(resto).forEach((k) => {
+      if (/^endereco_(logradouro|complemento|bairro|cep|cidade|estado)$/.test(k) && resto[k] != null && String(resto[k]).trim() !== '') merged[k] = resto[k];
+    });
+    return { ...merged, unidades: unidades || [] };
   }
 
   async function obterPorToken(token) {
