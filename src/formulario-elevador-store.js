@@ -567,9 +567,20 @@
     if (e0) throw e0;
     if (atual.formulario_id) return atual.formulario_id;
 
-    const cnpjDigits = (atual.cnpj_comprador || '').replace(/\D/g, '');
+    /* A planilha guarda CPF e CNPJ na mesma coluna: 11 dígitos = Pessoa Física.
+       Documento que não confere (dígito verificador) fica de fora em vez de
+       barrar a conversão — o cliente nasce com documento pendente e a
+       observação registra o valor original (12/10/2026). */
+    const docOriginal = (atual.cnpj_comprador || '').replace(/\D/g, '');
+    const ehPF = docOriginal.length === 11;
+    let docValido = '';
+    if (docOriginal) {
+      const v = window.EnderecoAPI && window.EnderecoAPI.validarDocumento
+        ? window.EnderecoAPI.validarDocumento(ehPF ? 'PF' : 'PJ', docOriginal) : { ok: true, digitos: docOriginal };
+      if (v.ok) docValido = v.digitos;
+    }
     const cliente = await buscarOuCriarCliente({
-      cnpj: cnpjDigits, tipo_pessoa: 'PJ',
+      ...(ehPF ? { cpf: docValido } : { cnpj: docValido }), tipo_pessoa: ehPF ? 'PF' : 'PJ',
       razao_social: atual.nome_cliente || atual.nome_instalacao || atual.nome_contato || null,
       predio_empreendimento: atual.nome_instalacao || null,
       contato: atual.nome_contato || null,
@@ -582,6 +593,7 @@
       atual.status ? `Status original: ${atual.status}.` : null,
       atual.motivo ? `Motivo: ${atual.motivo}.` : null,
       atual.valor_conquistado ? `Valor conquistado: ${atual.valor_conquistado}.` : null,
+      docOriginal && !docValido ? `Documento original da planilha (não conferiu, não cadastrado): ${docOriginal}.` : null,
       atual.endereco_instalacao ? `Endereço da obra (original): ${atual.endereco_instalacao}.` : null,
     ].filter(Boolean).join(' ');
 
