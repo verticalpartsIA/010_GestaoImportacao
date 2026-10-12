@@ -269,6 +269,39 @@
     });
     await desbloquearDependentes(c, id);
     await notificarResultado(c, { ...decisao, motivo: motivo || null }, 'aprovada');
+    // Compra do CEO aprovada aqui também vale para o gate "Decidir comprar" (avais_financeiros) — ver aval-financeiro-store.
+    if (decisao.tipo === 'compra_equipamento_ceo' && decisao.numero_cotacao != null && window.AvalFinanceiroStore && window.AvalFinanceiroStore.registrarAprovacaoCeo) {
+      try { await window.AvalFinanceiroStore.registrarAprovacaoCeo(decisao.numero_cotacao, meuEmail()); }
+      catch (e) { console.warn('[DecisoesStore] aprovação do CEO não registrada no Aval Financeiro', e); }
+    }
+  }
+
+  /* Usada pela tela Aval Financeiro: aprova o cartão `compra_equipamento_ceo` pendente da cotação, se houver e se quem
+     clica for aprovador dele. Não chama de volta o Aval Financeiro (quem chamou já gravou lá). */
+  async function aprovarCompraCeoSeAberta(numeroCotacao, motivo) {
+    const c = sb(); if (!c || numeroCotacao == null) return false;
+    const { data, error } = await c.from('decisoes_gerenciais').select('*')
+      .eq('tipo', 'compra_equipamento_ceo').eq('numero_cotacao', numeroCotacao).eq('status', 'pendente').limit(1);
+    if (error) throw error;
+    if (!data || !data.length) return false;
+    const [decisao] = await atualizarAprovadores([data[0]]);
+    if (!souAprovador(decisao)) return false;
+    const now = new Date().toISOString();
+    const { error: e2 } = await c.from('decisoes_gerenciais').update({
+      status: 'aprovada', decidido_por: meuEmail(), decidido_em: now, motivo: motivo || null, atualizado_em: now,
+    }).eq('id', decisao.id).eq('status', 'pendente');
+    if (e2) throw e2;
+    await desbloquearDependentes(c, decisao.id);
+    await notificarResultado(c, { ...decisao, motivo: motivo || null }, 'aprovada');
+    return true;
+  }
+
+  async function compraCeoAprovadaNaCentral(numeroCotacao) {
+    const c = sb(); if (!c || numeroCotacao == null) return false;
+    const { data, error } = await c.from('decisoes_gerenciais').select('id')
+      .eq('tipo', 'compra_equipamento_ceo').eq('numero_cotacao', numeroCotacao).eq('status', 'aprovada').limit(1);
+    if (error) throw error;
+    return !!(data && data.length);
   }
 
   async function reprovar(id, motivo) {
@@ -548,7 +581,12 @@
     }
     decisao = await garantirAtiva(decisao);
     if (decisao.status === 'reprovada') return { ok: false, motivo: `Compra do equipamento reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
-    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para comprar o equipamento deste pedido.' };
+    if (decisao.status !== 'aprovada') {
+      // Aprovado pela tela Aval Financeiro (avais_financeiros.aprovacao_ceo_em) também vale — mesma regra, outra porta.
+      const { data: av } = await sb().from('avais_financeiros').select('aprovacao_ceo_em').eq('numero_cotacao', numeroCotacao).limit(1);
+      if (av && av[0] && av[0].aprovacao_ceo_em) return { ok: true };
+      return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para comprar o equipamento deste pedido.' };
+    }
     return { ok: true };
   }
 
@@ -566,7 +604,7 @@
     if (!aprovacaoCeo.ok) return aprovacaoCeo;
     const { data } = await c.from('gatilhos').select('status').eq('numero_cotacao', numeroCotacao).eq('evento_key', 'COMPRA_LIBERADA').maybeSingle();
     if (!data || data.status !== 'ok') {
-      return { ok: false, motivo: 'O início da compra ainda depende dos dois avais: Aval de Pagamento do Financeiro (depois do sinal) + Aval Jurídico (nó "Compra ao Fornecedor liberada").' };
+      return { ok: false, motivo: 'O início da compra ainda depende dos três avais: Aval de Pagamento do Financeiro (depois do sinal), Aval Jurídico e assinatura do Projeto de Instalação pelo cliente (nó "Compra ao Fornecedor liberada").' };
     }
     return { ok: true };
   }
@@ -606,7 +644,7 @@
     criarDecisao, criarDecisaoSeNaoExiste, contextoDaCotacao,
     cancelar, reabrir,
     listarPendentesParaMim, listarTodasEmAberto, listarDecididas, listarPorCotacao, listarPorDossier, statusMontadorObra,
-    aprovar, reprovar,
+    aprovar, reprovar, aprovarCompraCeoSeAberta, compraCeoAprovadaNaCentral,
     podeEnviarProposta, podeContratarInstalador, podeMontadorEntrarObra,
     podeComprarEquipamento, verificarGateCompra, precisaAprovacaoCeo,
     criarDecisaoCompraVarejo, podePagarParcela, pedirDecisaoInbox,
