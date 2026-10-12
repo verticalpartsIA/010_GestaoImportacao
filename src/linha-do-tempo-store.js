@@ -65,8 +65,9 @@
       const { data: historico } = await c.from('dossier_history').select('*').eq('dossier_id', dossier.id).order('created_at', { ascending: true });
       (historico || []).forEach((h) => add(h.created_at, PAPEL_STATUS_DOSSIER[h.status_to] || 'Engenharia', `Status: ${h.status_from || '—'} → ${h.status_to}${h.notes ? ' — ' + h.notes : ''}`, h.actor, 'Dossiê da Obra'));
 
-      const { data: vistorias } = await c.from('vistorias_obras').select('*').eq('obra_id', dossier.id).eq('status', 'concluida');
-      (vistorias || []).forEach((v) => add(v.data_conclusao || v.atualizado_em, 'Engenharia', `Vistoria ${v.numero_fase ? 'Fase ' + v.numero_fase : 'avulsa'} concluída`, v.vistoriador, 'Vistoria'));
+      // Vistorias concluídas: fonte = vistorias_atividades (vistorias_obras era o agendador antigo e está vazia — auditoria de 11/10).
+      const { data: vistorias } = await c.from('vistorias_atividades').select('numero_sequencial, concluido_em, atualizado_em').eq('dossier_id', dossier.id).eq('status', 'concluida');
+      (vistorias || []).forEach((v) => add(v.concluido_em || v.atualizado_em, 'Engenharia', `Vistoria${v.numero_sequencial ? ' Nº ' + v.numero_sequencial : ''} concluída`, null, 'Vistoria'));
 
       if (dossier.equipamento_entregue_em) {
         add(dossier.equipamento_entregue_em, 'Cliente', 'Equipamento recebido na obra' + (dossier.equipamento_qtd_pessoas_recebimento ? ` (${dossier.equipamento_qtd_pessoas_recebimento} pessoa(s))` : ''), dossier.equipamento_recebido_por, 'Dossiê da Obra');
@@ -112,7 +113,7 @@
        cliente, despachante...) — usa 'Fornecedor' como aproximação mais
        comum hoje (RFQ técnico é o fluxo que mais gera e-mail vinculado),
        o nome real do remetente sempre aparece em `ator`. */
-    const { data: emails } = await c.from('emails_projeto').select('*').eq('numero_cotacao', numeroCotacao).order('data_mensagem', { ascending: true });
+    const { data: emails } = await c.from('emails_projeto').select('*').eq('numero_cotacao', numeroCotacao).is('excluido_em', null).order('data_mensagem', { ascending: true });
     (emails || []).forEach((e) => {
       const saida = e.direcao === 'saida';
       add(e.data_mensagem || e.criado_em, saida ? 'Vendedor' : 'Fornecedor',

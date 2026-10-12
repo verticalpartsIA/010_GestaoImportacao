@@ -104,7 +104,7 @@ test('status-obra — obterSessaoAdministrativa do app interno (dossiê sem toke
   const sb = usar(mockSb());
   await IC.obterSessaoAdministrativa({ id: 'DOS-INTERNO', proposta_id: null });
   assert.equal(sb.calls.rpc.length, 0);
-  assert.ok(sb.calls.from.includes('vistorias_obras'));
+  assert.ok(sb.calls.from.includes('vistorias_atividades'));
 });
 
 /* ---------- diario-obra ---------- */

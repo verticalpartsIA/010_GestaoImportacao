@@ -246,7 +246,7 @@
      (não duplica nada): vendedor (leads.owner via proposta), status do
      Contrato Venda (rascunho/enviado/assinado — dossier_id nem sempre
      preenchido lá, item some se não achar), as 3 vistorias inclusas
-     (vistorias_obras.numero_fase), envio da doc. do instalador (campo
+     (vistorias_atividades concluídas, por data), envio da doc. do instalador (campo
      simples em dossier_obra, controlado pela Central de Documentos) e os
      documentos VerticalParts anexados (dossier_documentos, já grava quem
      e quando). */
@@ -281,11 +281,20 @@
       }
     }
 
-    // 3 vistorias inclusas
-    const { data: vistorias } = await c.from('vistorias_obras').select('numero_fase, vistoriador, status, atualizado_em').eq('obra_id', dossier.id).in('numero_fase', [1, 2, 3]);
+    // 3 vistorias inclusas — fonte = vistorias_atividades (a mesma do checklist da obra, InstalacaoObraStore.obterProgressoVistoria).
+    // vistorias_obras era o agendador manual antigo e está vazia; lá a obra aparecia "não vistoriada" mesmo com vistoria concluída.
+    // Sem "fase" nessa tabela: Vistoria Nº N = N-ésima vistoria concluída da obra, por data de conclusão.
+    const { data: vistorias } = await c.from('vistorias_atividades').select('tecnico_id, status, concluido_em, atualizado_em').eq('dossier_id', dossier.id).eq('status', 'concluida');
+    const concluidas = (vistorias || []).slice().sort((a, b) => String(a.concluido_em || a.atualizado_em || '').localeCompare(String(b.concluido_em || b.atualizado_em || '')));
+    const idsTec = [...new Set(concluidas.map((v) => v.tecnico_id).filter(Boolean))];
+    const nomeTec = {};
+    if (idsTec.length) {
+      const { data: tecs } = await c.from('colaboradores_vpsistema').select('id, nome').in('id', idsTec);
+      (tecs || []).forEach((t) => { nomeTec[t.id] = t.nome; });
+    }
     [1, 2, 3].forEach((n) => {
-      const v = (vistorias || []).find((x) => x.numero_fase === n && x.status === 'concluida');
-      itens.push({ chave: `vistoria_${n}`, titulo: `Vistoria Nº ${n}`, concluido: !!v, pessoa: v?.vistoriador || null, data: v?.atualizado_em || null });
+      const v = concluidas[n - 1];
+      itens.push({ chave: `vistoria_${n}`, titulo: `Vistoria Nº ${n}`, concluido: !!v, pessoa: v ? (nomeTec[v.tecnico_id] || null) : null, data: v ? (v.concluido_em || v.atualizado_em) : null });
     });
 
     // Envio da documentação do instalador — controle simples (botão em

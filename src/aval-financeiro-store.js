@@ -259,21 +259,40 @@
     };
   }
 
-  async function aprovarComoCEO(numeroCotacao) {
+  /* Aprovação do CEO para a compra — UMA regra, duas portas (auditoria de 11/10): o botão desta tela grava em
+     avais_financeiros.aprovacao_ceo_em, e a Central de Decisões aprova a decisão `compra_equipamento_ceo`. Antes uma não
+     via a outra: quem aprovava na Central continuava travando o "Decidir comprar", e quem aprovava aqui travava a P.I.
+     Agora cada porta grava nas duas (registrarAprovacaoCeo aqui, aprovarCompraCeoSeAberta na Central) e os dois gates
+     aceitam qualquer uma das duas. */
+  async function registrarAprovacaoCeo(numeroCotacao, por) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const av = await getByNumeroCotacao(numeroCotacao);
-    if (!av) throw new Error('Aval financeiro não encontrado para esta cotação.');
+    if (!av) return false;                       // cotação sem aval financeiro — a decisão da Central basta
+    if (av.aprovacao_ceo_em) return true;        // já registrado (idempotente)
     const now = new Date().toISOString();
     const teto = await _snapshotTetoCusto(numeroCotacao);
     const { error } = await c.from('avais_financeiros').update({
-      aprovacao_ceo_em: now, aprovacao_ceo_por: (window.__VP_USER || {}).email || 'CEO (Diego)', atualizado_em: now,
+      aprovacao_ceo_em: now, aprovacao_ceo_por: por || (window.__VP_USER || {}).email || 'CEO (Diego)', atualizado_em: now,
       ...(teto || {}),
     }).eq('id', av.id);
     if (error) throw error;
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'FINANCEIRO_APROVOU_CEO', numeroCotacao, alvoLabel: av.cliente_nome || av.numero_documento, alvoId: av.id,
     });
+    return true;
   }
+
+  async function aprovarComoCEO(numeroCotacao) {
+    const av = await getByNumeroCotacao(numeroCotacao);
+    if (!av) throw new Error('Aval financeiro não encontrado para esta cotação.');
+    await registrarAprovacaoCeo(numeroCotacao);
+    // Fecha também o cartão da Central de Decisões (se houver um aberto e a pessoa for aprovadora dele).
+    if (window.DecisoesStore && window.DecisoesStore.aprovarCompraCeoSeAberta) {
+      try { await window.DecisoesStore.aprovarCompraCeoSeAberta(numeroCotacao, 'Aprovado pela tela Aval Financeiro'); }
+      catch (e) { console.warn('[AvalFinanceiroStore] decisão da Central não fechada', e); }
+    }
+  }
+
 
   /* Extrato de gasto real (23/08, Gelson) — chamada por qualquer módulo que
      incorre custo real numa cotação já aprovada pelo CEO (Contrato
@@ -372,6 +391,11 @@
       : eng.estado === 'recusado' ? 'a assinatura do Projeto de Instalação (o cliente recusou — gere um novo link em "Projeto de Elevadores")'
       : eng.estado === 'erro' ? 'a assinatura do Projeto de Instalação (não foi possível conferir agora)'
       : `a assinatura do Projeto de Instalação (${eng.assinados} de ${eng.total} assinado${eng.total === 1 ? '' : 's'} — veja em "Projeto de Elevadores")`;
+    // CEO aprovou por qualquer das duas portas (tela Aval Financeiro ou Central de Decisões) — ver registrarAprovacaoCeo.
+    let ceoAprovou = !!(av && av.aprovacao_ceo_em);
+    if (ceo.precisa && !ceoAprovou && window.DecisoesStore && window.DecisoesStore.compraCeoAprovadaNaCentral) {
+      try { ceoAprovou = await window.DecisoesStore.compraCeoAprovadaNaCentral(numeroCotacao); } catch (e) { ceoAprovou = false; }
+    }
     const margemTxt = ceo.margem != null ? `margem ${(ceo.margem * 100).toFixed(1).replace('.', ',')}%, abaixo de 15%` : 'margem desconhecida';
 
     const checagens = [
@@ -379,7 +403,7 @@
       { rotulo: 'Aval Jurídico', ok: aj?.status === 'aprovado', motivo: 'o Aval Jurídico (tela "Aval Jurídico")' },
       { rotulo: 'Assinatura do Projeto de Instalação (Engenharia)', ok: eng.estado === 'ok', motivo: motivoEng },
       // CEO só aparece na lista quando a margem exige (senão não é um aval desta compra)
-      ...(ceo.precisa ? [{ rotulo: 'Aprovação do CEO', ok: !!(av && av.aprovacao_ceo_em), motivo: `a aprovação do CEO (Diego) — ${margemTxt}` }] : []),
+      ...(ceo.precisa ? [{ rotulo: 'Aprovação do CEO', ok: ceoAprovou, motivo: `a aprovação do CEO (Diego) — ${margemTxt}` }] : []),
     ];
     // `checagens` (rótulo + ok) deixa a tela mostrar TODOS os avais, não só o primeiro que falta.
     const lista = checagens.map((ck) => ({ rotulo: ck.rotulo, ok: ck.ok }));
@@ -393,7 +417,7 @@
   window.AvalFinanceiroStore = {
     getById, getByPropostaId, getByNumeroCotacao, getByContratoVendaId, garantirRegistro, listarFila,
     registrarConsulta, darAval, confirmarSinal, confirmarAvalPagamento, vincularContrato,
-    podeEnviarContrato, podeIniciarCompra, precisaAprovacaoCeo, aprovarComoCEO, aprovarComoOwner, isOwner,
+    podeEnviarContrato, podeIniciarCompra, precisaAprovacaoCeo, aprovarComoCEO, registrarAprovacaoCeo, aprovarComoOwner, isOwner,
     registrarCustoReal,
   };
 }());
