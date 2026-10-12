@@ -61,3 +61,9 @@ test('IMPORTACAO_A_INICIAR — nasce na compra liberada, fecha na P.I. real, pre
   assert.equal(node.fechamentoTipo, 'automatico');
   assert.equal((node.predecessores[0] || {}).key, 'COMPRA_LIBERADA');
 });
+
+test('EMBARQUE_CHEGADA (SLA 90 dias) — fecha quando o embarque chega ao Brasil, não fica aberto para sempre', () => {
+  const node = E().nodeByKey('EMBARQUE_CHEGADA');
+  assert.equal(node.fecha, 'EMBARQUE_CHEGOU_BRASIL');
+  assert.equal(node.fechamentoTipo, 'automatico');
+});
