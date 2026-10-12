@@ -259,13 +259,17 @@
     }
     const itens = [];
 
-    // Vendedor — via proposta vinculada -> lead
-    if (dossier.proposta_id) {
-      const { data: prop } = await c.from('propostas').select('lead_id').eq('id', dossier.proposta_id).maybeSingle();
-      if (prop && prop.lead_id) {
-        const { data: lead } = await c.from('leads').select('owner').eq('id', prop.lead_id).maybeSingle();
-        if (lead && lead.owner) itens.push({ chave: 'vendedor', titulo: 'Vendedor', pessoa: lead.owner, data: null, informativo: true });
-      }
+    // Vendedor — lead do dossiê (gravado pela Proposta assinada); sem ele, o lead do
+    // Formulário da mesma cotação. (propostas não tem coluna lead_id.)
+    let leadId = dossier.lead_id || null;
+    if (!leadId && dossier.numero_cotacao != null) {
+      const { data: form } = await c.from('formularios_elevador').select('lead_id')
+        .eq('numero_cotacao', dossier.numero_cotacao).limit(1).maybeSingle();
+      leadId = form && form.lead_id || null;
+    }
+    if (leadId) {
+      const { data: lead } = await c.from('leads').select('owner').eq('id', leadId).maybeSingle();
+      if (lead && lead.owner) itens.push({ chave: 'vendedor', titulo: 'Vendedor', pessoa: lead.owner, data: null, informativo: true });
     }
 
     // Contrato de Venda — tabela real é "contratos_venda_equipamentos" (plural,
