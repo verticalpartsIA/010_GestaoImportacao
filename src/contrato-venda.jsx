@@ -1381,7 +1381,7 @@ function CVAuditDrawer({ rec, onClose, onResend, onRefresh }) {
   const a = rec.audit || {};
   const del = async () => {
     if (!window.confirm('Excluir este contrato do painel?')) return;
-    await window.CVStore.remove(rec.id);
+    try { await window.CVStore.remove(rec.id); } catch (e) { alert('Erro ao excluir: ' + (e.message || e)); return; }
     onClose(); onRefresh();
   };
   const valorFmt = rec.valor_total_num ? window.CV.brl(rec.valor_total_num) : '—';

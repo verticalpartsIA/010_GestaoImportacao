@@ -831,7 +831,11 @@
 
   async function remove(id) {
     const c = sb();
-    await c.from('contratos_venda_equipamentos').delete().eq('id', id);
+    /* Auditoria 12/10: sem policy de DELETE (e sem checar o retorno) a exclusão "funcionava" sem apagar nada. Agora só apaga
+       rascunho não enviado (a policy também exige isso) e trata 0 linhas como erro. */
+    const { data, error } = await c.from('contratos_venda_equipamentos').delete().eq('id', id).in('status', ['em_preenchimento', 'rascunho']).select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('Nada foi excluído: só rascunho ainda não enviado pode ser apagado.');
   }
 
   /* Efeitos de uma ação pública do Contrato de Venda, executados por um usuário interno via fila `fluxo_pendentes`
