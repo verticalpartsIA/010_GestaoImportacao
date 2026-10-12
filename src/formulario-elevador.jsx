@@ -1338,6 +1338,37 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
     window.PropostaStore.temCapacidade('propostas', 'precificar_manual').then(setPodePrecificarManual).catch(() => {});
   }, [publicMode]);
 
+  /* 12/10/2026 — trava após a Precificação (ver formulario-elevador-store.js › estadoTrava). Banner + campos desabilitados;
+     o vendedor "pede destrave", o Líder (alçada formularios.destravar) destrava com motivo. */
+  const [trava, setTrava] = React.useState({ travado: false });
+  const [podeDestravarForm, setPodeDestravarForm] = React.useState(false);
+  const [modalTrava, setModalTrava] = React.useState(null); // null | 'pedir' | 'destravar'
+  const [motivoTrava, setMotivoTrava] = React.useState('');
+  const [salvandoTrava, setSalvandoTrava] = React.useState(false);
+  const recarregarTrava = React.useCallback(() => {
+    if (publicMode || !id) { setTrava({ travado: false }); return; }
+    window.FormularioElevadorStore.estadoTrava(id).then(setTrava).catch(() => {});
+  }, [id, publicMode]);
+  React.useEffect(() => { recarregarTrava(); }, [recarregarTrava]);
+  React.useEffect(() => {
+    if (publicMode) return;
+    window.FormularioElevadorStore.podeDestravar().then(setPodeDestravarForm).catch(() => {});
+  }, [publicMode]);
+  const confirmarTrava = async () => {
+    setSalvandoTrava(true);
+    try {
+      if (modalTrava === 'destravar') {
+        await window.FormularioElevadorStore.destravar(id, motivoTrava);
+        window.toast?.('Cotação destravada para edição. O vendedor foi avisado.', 'success');
+      } else {
+        const n = await window.FormularioElevadorStore.pedirDestrave(id, motivoTrava);
+        window.toast?.(`Pedido enviado ao Líder (${n} pessoa${n > 1 ? 's' : ''}).`, 'success');
+      }
+      setModalTrava(null); setMotivoTrava(''); recarregarTrava();
+    } catch (e) { window.toast?.(e.message || String(e), 'error'); }
+    finally { setSalvandoTrava(false); }
+  };
+
   React.useEffect(() => {
     if (publicMode) return;
     window.FormularioElevadorStore.listarFornecedores().then(setFornecedores).catch(() => {});
@@ -1605,7 +1636,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         setId(currentId);
         setNumeroCotacao(f.numero_cotacao ?? null);
       } else {
-        await window.FormularioElevadorStore.salvar(currentId, { ...feHeaderPick(header), cliente_id: cliente?.id });
+        await window.FormularioElevadorStore.salvar(currentId, { ...feHeaderPick(header), cliente_id: cliente?.id }, { origem: 'formulario' });
       }
       // Sincroniza unidades: atualiza as que já têm id, cria as que não têm —
       // e hidrata o estado com o id real de cada unidade nova (issue #91:
@@ -1616,7 +1647,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
       // arriscaria duas unidades novas caírem no mesmo índice.
       // Apaga primeiro as unidades salvas que o vendedor removeu da tela (ver removeUnidade).
       for (const uid of removidasRef.current) {
-        await window.FormularioElevadorStore.removerUnidade(uid);
+        await window.FormularioElevadorStore.removerUnidade(uid, { origem: 'formulario' });
       }
       removidasRef.current = [];
       const unidadesSalvas = [];
@@ -1624,10 +1655,10 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         const payload = { ...u };
         delete payload.id; delete payload.formulario_id; delete payload.created_at;
         if (u.id) {
-          await window.FormularioElevadorStore.atualizarUnidade(u.id, payload);
+          await window.FormularioElevadorStore.atualizarUnidade(u.id, payload, { origem: 'formulario' });
           unidadesSalvas.push(u);
         } else {
-          const nova = await window.FormularioElevadorStore.adicionarUnidade(currentId, payload);
+          const nova = await window.FormularioElevadorStore.adicionarUnidade(currentId, payload, { origem: 'formulario' });
           unidadesSalvas.push({ ...u, id: nova.id, indice_ativo: nova.indice_ativo });
         }
       }
@@ -1698,11 +1729,31 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         </div>
       )}
 
+      {!publicMode && id && (trava.travado || trava.destravado) && (
+        <div style={{ marginBottom: 12, padding: '12px 14px', borderRadius: 6, fontSize: 13, border: '1px solid ' + (trava.travado ? '#b91c1c' : '#FBB039'), background: trava.travado ? '#fef2f2' : '#fff8e6', color: trava.travado ? '#7f1d1d' : '#8a5a00' }}>
+          {trava.travado
+            ? <>🔒 <b>Cotação travada</b> — já foi precificada. Para mudar equipamento ou dados, o <b>Líder</b> precisa destravar (ele vê discrepâncias e dados que faltam).</>
+            : <>🔓 <b>Destravada por {trava.destravadoPor}</b> — motivo: “{trava.motivo}”. Ao devolver a cotação (Enviar direto para Precificação) ela trava de novo.</>}
+          <div className="row gap-2" style={{ marginTop: 8 }}>
+            {trava.travado && !podeDestravarForm && <Button variant="outline" size="sm" icon="send" onClick={() => { setMotivoTrava(''); setModalTrava('pedir'); }}>Pedir destrave</Button>}
+            {trava.travado && podeDestravarForm && <Button variant="primary" size="sm" icon="check" onClick={() => { setMotivoTrava(''); setModalTrava('destravar'); }}>Destravar (informar motivo)</Button>}
+          </div>
+        </div>
+      )}
+      {modalTrava && (
+        <Modal title={modalTrava === 'destravar' ? 'Destravar a cotação' : 'Pedir destrave ao Líder'} onClose={() => setModalTrava(null)}
+          footer={<><Button variant="ghost" onClick={() => setModalTrava(null)}>Cancelar</Button><Button variant="primary" disabled={salvandoTrava || motivoTrava.trim().length < 10} onClick={confirmarTrava}>{salvandoTrava ? 'Enviando…' : (modalTrava === 'destravar' ? 'Destravar' : 'Enviar pedido')}</Button></>}>
+          <p style={{ fontSize: 13, marginBottom: 8 }}>{modalTrava === 'destravar' ? 'Explique o que está errado ou faltando (fica no histórico e avisa o vendedor).' : 'Explique o que precisa mudar e por quê (o Líder recebe um aviso).'}</p>
+          <textarea className="input" rows={4} style={{ width: '100%' }} value={motivoTrava} onChange={(e) => setMotivoTrava(e.target.value)} placeholder="Mínimo 10 letras"/>
+        </Modal>
+      )}
+
       {!publicMode && showLinkCliente && linkPublico && (
         <FELinkClienteModal url={linkPublico} numeroCotacao={numeroCotacao} header={header} onClose={() => setShowLinkCliente(false)}/>
       )}
 
       <FEFaltandoCtx.Provider value={ctxHeader}>
+      <fieldset disabled={trava.travado} style={{ border: 0, padding: 0, margin: 0, minWidth: 0 }}>
       <Card title="Dados do cliente e da obra">
         <div className="stack" style={{ gap: 14 }}>
           <div>
@@ -1788,6 +1839,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
           <FEField label="Observações"><textarea className="input" rows={2} value={header.observacoes || ''} onChange={(e) => setH('observacoes')(e.target.value)}/></FEField>
         </div>
       </Card>
+      </fieldset>
       </FEFaltandoCtx.Provider>
 
       {/* Sem `id &&`: um formulário novo (ainda não salvo) também mostra
@@ -1809,7 +1861,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
           pra editar `unidades` no meio do save e o setUnidades(unidadesSalvas)
           no final sobrescrevia essas edições com o snapshot antigo (achado
           do Codex no PR #167, issue #91). */}
-      <fieldset disabled={saving} style={{ border: 0, padding: 0, margin: 0 }}>
+      <fieldset disabled={saving || trava.travado} style={{ border: 0, padding: 0, margin: 0 }}>
         {unidades.map((u, i) => (
           <div key={u.id || i} style={{ marginTop: 16 }}>
             <FEUnidadeCard unidade={u} index={i} onChange={setUnidade(i)} onRemove={() => removeUnidade(i)} onDuplicate={() => duplicarUnidade(i)} fornecedores={fornecedoresOptions} modelos={modelos} publicMode={publicMode} numeroCotacao={numeroCotacao} mostrarObrig={mostrarObrig}/>
@@ -1835,7 +1887,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
         <div className="row gap-2">
           {publicMode
             ? <Button variant="primary" onClick={() => salvarTudo('enviado')} disabled={saving}>{saving ? 'Enviando…' : 'Devolver para a VerticalParts'}</Button>
-            : <Button variant="outline" onClick={async () => { const r = await salvarTudo(null); if (r) acenderObrigatorios('Rascunho salvo, mas ainda faltam campos obrigatórios'); }} disabled={saving}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>}
+            : <Button variant="outline" onClick={async () => { const r = await salvarTudo(null); if (r) acenderObrigatorios('Rascunho salvo, mas ainda faltam campos obrigatórios'); }} disabled={saving || trava.travado}>{saving ? 'Salvando…' : 'Salvar rascunho'}</Button>}
         </div>
       </div>
 

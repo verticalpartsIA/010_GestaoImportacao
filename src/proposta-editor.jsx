@@ -548,7 +548,7 @@ function PropostaEditor({ setRoute, subsel }) {
      travada — não faz sentido consultar alçada em proposta nova. */
   const [podeDestravar, setPodeDestravar] = React.useState(false);
   const [destravando, setDestravando] = React.useState(false);
-  const travada = meta?.status === 'aprovada' && !meta?.destravada_em;
+  const travada = ['enviada','visualizada','revisao_solicitada','aprovada'].includes(meta?.status) && !meta?.destravada_em;
   React.useEffect(() => {
     if (!travada) { setPodeDestravar(false); return; }
     let cancelado = false;
@@ -557,9 +557,11 @@ function PropostaEditor({ setRoute, subsel }) {
   }, [travada]);
   const destravarAgora = async () => {
     if (!recordId) return;
+    const motivo = window.prompt('Motivo do destrave (obrigatório — mínimo 10 letras):');
+    if (motivo == null) return;
     setDestravando(true);
     try {
-      const r = await window.PropostaStore.destravar(recordId);
+      const r = await window.PropostaStore.destravar(recordId, motivo);
       setMeta((m) => ({ ...(m || {}), destravada_em: r.destravada_em, destravada_por: r.destravada_por }));
       window.toast?.('Proposta destravada — fica editável até o próximo Salvar.', 'success');
     } catch (e) {
@@ -970,7 +972,7 @@ function PropostaEditor({ setRoute, subsel }) {
                   <Icon.warning size={11}/> Travada
                 </span>
               )}
-              {meta?.destravada_em && meta?.status === 'aprovada' && (
+              {meta?.destravada_em && (
                 <span className="pe-top__publicado" title={"Destravada por " + (meta.destravada_por || '—')}>
                   <Icon.check size={11}/> Destravada — edite e salve
                 </span>

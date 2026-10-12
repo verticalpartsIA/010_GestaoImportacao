@@ -169,6 +169,8 @@
         /* 02/10/2026: sem esta alçada o vendedor só vê/edita as cotações que ELE criou
            (formulario-elevador-store.js). Quem não tem fica restrito aos próprios. */
         { chave: 'ver_de_outros', label: 'Vê e edita formulários/cotações de outros vendedores' },
+        /* 12/10/2026: depois da 1ª Precificação o formulário trava; só quem tem esta alçada (o Líder, ex.: Regiane) destrava, com motivo. */
+        { chave: 'destravar', label: 'Destrava formulário/cotação após a precificação (Líder)' },
       ]},
       { modulo: 'propostas', label: 'Propostas', capacidades: [
         { chave: 'ver_todas', label: 'Vê propostas de outros vendedores' },
