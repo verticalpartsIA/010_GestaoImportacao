@@ -44,3 +44,16 @@ query_teste.sql
 
 # Estado local do Supabase CLI
 supabase/.temp/
+
+# Pasta local de material que não é do site (auditorias, relatórios, rascunhos, credenciais, dumps)
+NoCommit/
+
+# Logs e artefatos de ferramentas
+*.log
+repomix-output*.md
+.playwright-mcp/
+supateste/
+*.zip
+
+# Capturas coladas / anexos soltos
+uploads/pasted-*
