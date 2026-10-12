@@ -9,7 +9,7 @@ const vm = require('node:vm');
 
 const SRC = fs.readFileSync(path.join(__dirname, 'projeto-elevador-store.js'), 'utf8');
 
-function carrega(desenhosExistentes) {
+function carrega(desenhosExistentes, falhaNoUploadDe) {
   const tabela = desenhosExistentes.slice();
   const eventos = [];
   const consulta = () => {
@@ -24,7 +24,7 @@ function carrega(desenhosExistentes) {
   };
   const sb = {
     from: () => ({ ...consulta(), insert: ([obj]) => ({ select: () => ({ single: async () => { const n = { id: 'd' + tabela.length, ...obj }; tabela.push(n); return { data: n, error: null }; } }) }) }),
-    storage: { from: () => ({ upload: async () => ({ error: null }), getPublicUrl: () => ({ data: { publicUrl: 'https://x/y' } }), remove: async () => ({}) }) },
+    storage: { from: () => ({ upload: async (p) => ({ error: falhaNoUploadDe && p.includes(falhaNoUploadDe) ? { message: 'falhou' } : null }), getPublicUrl: () => ({ data: { publicUrl: 'https://x/y' } }), remove: async () => ({}) }) },
   };
   const win = { __VP_SB: { sb }, __VP_USER: { email: 'eng@x.test' }, EventosFluxo: { registrar: async (e) => { eventos.push(e.evento); } } };
   vm.runInNewContext(SRC, { window: win, console, crypto: { randomUUID: () => 'abcdef12-0000' } });
@@ -61,4 +61,12 @@ test('sem Nº de cotação não emite evento', async () => {
   const { store, eventos } = carrega([]);
   await store.salvarDesenhos({ ...base, numeroCotacao: null, docs: [{ tipo: 'projeto_instalacao', files: [arq('p.pdf')] }] });
   assert.deepEqual(eventos, []);
+});
+
+test('upload posterior que falha não perde o evento do que já foi salvo (nem suprime na nova tentativa)', async () => {
+  const { store, eventos } = carrega([], 'id_tag');
+  await assert.rejects(() => store.salvarDesenhos({ ...base, docs: [
+    { tipo: 'projeto_instalacao', files: [arq('p.pdf')] }, { tipo: 'id_tag', files: [arq('t.pdf')] },
+  ] }), /falhou/);
+  assert.deepEqual(eventos, ['PROJETO_ELEVADOR_CRIADO', 'PROJETO_ELEVADOR_FINALIZADO']);
 });

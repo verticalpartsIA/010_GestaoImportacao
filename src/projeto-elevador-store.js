@@ -220,17 +220,19 @@
         throw new Error(error.message);
       }
       salvos.push(data);
+      // Evento logo após o insert: se um upload seguinte falhar, o que já foi salvo não perde o evento
+      // (e a nova tentativa, que já vê esse desenho, não o suprimiria para sempre).
+      if (numeroCotacao != null && window.EventosFluxo) {
+        const ev = { numeroCotacao, alvoLabel: data.referencia, alvoId: data.id };
+        try {
+          if (novoParaFluxo.criado) { novoParaFluxo.criado = false; await window.EventosFluxo.registrar({ evento: 'PROJETO_ELEVADOR_CRIADO', ...ev }); }
+          if (novoParaFluxo.finalizado && tipo === 'projeto_instalacao') { novoParaFluxo.finalizado = false; await window.EventosFluxo.registrar({ evento: 'PROJETO_ELEVADOR_FINALIZADO', ...ev }); }
+        } catch (e) { console.warn('[ProjetoElevador] evento de fluxo falhou', e); }
+      }
       if (window.VPLog) window.VPLog.registrar({
         modulo: 'Projeto de Elevadores', acao: 'Salvou desenho', alvo: data.referencia, alvo_id: data.id,
         detalhe: { arquivo: data.arquivo_nome, numero_cotacao: data.numero_cotacao, tipo: data.tipo_documento, equipamentos: data.equipamentos },
       });
-    }
-    if (numeroCotacao != null && salvos.length && window.EventosFluxo) {
-      const ev = { numeroCotacao, alvoLabel: salvos[0].referencia, alvoId: salvos[0].id };
-      try {
-        if (novoParaFluxo.criado) await window.EventosFluxo.registrar({ evento: 'PROJETO_ELEVADOR_CRIADO', ...ev });
-        if (novoParaFluxo.finalizado) await window.EventosFluxo.registrar({ evento: 'PROJETO_ELEVADOR_FINALIZADO', ...ev });
-      } catch (e) { console.warn('[ProjetoElevador] evento de fluxo falhou', e); }
     }
     return salvos;
   }
