@@ -332,17 +332,18 @@
     if (error) throw error;
     if (window.ContratoInstaladorParcelasStore) {
       try { await window.ContratoInstaladorParcelasStore.criarParcelas(rec.id, formState); }
-      catch (e) { console.warn('[CIStore] criarParcelas falhou', e); }
+      catch (e) {
+        console.warn('[CIStore] criarParcelas falhou', e);
+        rec._parcelasFalharam = true;
+        window.toast?.('O contrato foi criado, mas as parcelas de pagamento NÃO foram geradas (' + (e.message || 'erro') + '). Avise o Financeiro.', 'error');
+      }
     }
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Contrato Instalador', acao: 'criou o contrato', alvo: rec.numero_documento, alvo_id: rec.id, detalhe: { contratada: rec.contratada_nome } });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CONTRATO_INSTALADOR_GERADO', numeroCotacao: formState.numeroCotacao ?? null,
       alvoLabel: rec.numero_documento, alvoId: rec.id,
     });
-    if (window.AvalFinanceiroStore && formState.numeroCotacao != null) window.AvalFinanceiroStore.registrarCustoReal({
-      numeroCotacao: formState.numeroCotacao, origem: 'contrato_instalador',
-      descricao: 'Contrato Instalador ' + rec.numero_documento, valor: valorTotal,
-    });
+    /* O custo real só entra quando o instalador ASSINA (rascunho/recusado não é gasto) — ver lancarCustoReal. */
     return rec;
   }
 
@@ -491,7 +492,20 @@
       evento: 'CONTRATO_INSTALADOR_ASSINADO', numeroCotacao: cur.form_state?.numeroCotacao ?? null,
       alvoLabel: cur.numero_documento, alvoId: cur.id,
     });
+    await lancarCustoReal(cur);
     return updated;
+  }
+
+  /* Custo real do contrato (alimenta o teto de custo da cotação). Só na assinatura;
+     idempotente (não repete se já existe a linha deste contrato). */
+  async function lancarCustoReal(rec) {
+    const c = sb();
+    const num = rec && rec.form_state ? rec.form_state.numeroCotacao : null;
+    if (!c || !window.AvalFinanceiroStore || num == null || num === '') return;
+    const descricao = 'Contrato Instalador ' + rec.numero_documento;
+    const { data: ja } = await c.from('cotacao_custos_reais').select('id').eq('numero_cotacao', num).eq('origem', 'contrato_instalador').eq('descricao', descricao).limit(1);
+    if (ja && ja.length) return;
+    await window.AvalFinanceiroStore.registrarCustoReal({ numeroCotacao: num, origem: 'contrato_instalador', descricao, valor: Number(rec.valor_total) || 0 });
   }
 
   /* 01/10 — mesmo achado real do Contrato de Venda (cotação 955/AKAI):
@@ -566,6 +580,8 @@
       alvoLabel: p.label, alvoId: p.contrato_id, atorNome: p.signerName || 'Instalador (link público)',
     });
     if (!r) throw new Error('evento não registrado');
+    const cur = await getById(p.contrato_id);
+    if (cur) await lancarCustoReal(cur);
   }
 
   window.CIStore = {

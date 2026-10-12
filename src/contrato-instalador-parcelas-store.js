@@ -75,7 +75,7 @@
       status: 'pendente',
     }));
     const { error } = await c.from('contrato_instalador_parcelas').insert(insertRows);
-    if (error) console.warn('[ContratoInstaladorParcelasStore] criarParcelas falhou', error);
+    if (error) throw error;   /* quem chama avisa o usuário — antes só console.warn e o contrato ficava sem parcelas */
   }
 
   async function listarParcelas(contratoId) {
@@ -89,7 +89,7 @@
   async function listarTodasComContrato() {
     const c = sb(); if (!c) return [];
     const { data, error } = await c.from('contrato_instalador_parcelas')
-      .select('*, contratos_instalador(numero_documento, contratada_nome, dossier_ids)')
+      .select('*, contratos_instalador(numero_documento, contratada_nome, dossier_ids, status)')
       .order('criado_em', { ascending: false });
     if (error) { console.warn('[ContratoInstaladorParcelasStore] listarTodasComContrato falhou', error); return []; }
     return data || [];
