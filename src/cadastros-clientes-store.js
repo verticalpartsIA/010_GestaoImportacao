@@ -76,9 +76,19 @@
       .select('id, building, origin, owner, status, date').eq('cliente_id', clienteId)
       .order('date', { ascending: true });
 
-    const { data: obras } = await c.from('dossier_obra')
-      .select('id, building_name, status_master, created_at').eq('cliente_id', clienteId)
-      .order('created_at', { ascending: true });
+    /* Auditoria 12/10: só 2 de 67 dossiês têm cliente_id gravado — a "Vida do Cliente" quase nunca mostrava obras.
+       Agora a obra do cliente = dossiê com cliente_id OU ligado a um lead dele OU a uma cotação (formulário) dele. */
+    const colunas = 'id, building_name, status_master, created_at';
+    const leadIds = (leads || []).map((l) => l.id);
+    const { data: forms } = await c.from('formularios_elevador').select('numero_cotacao').eq('cliente_id', clienteId);
+    const cotacoes = (forms || []).map((f) => f.numero_cotacao).filter((n) => n != null);
+    const consultas = [c.from('dossier_obra').select(colunas).eq('cliente_id', clienteId)];
+    if (leadIds.length) consultas.push(c.from('dossier_obra').select(colunas).in('lead_id', leadIds));
+    if (cotacoes.length) consultas.push(c.from('dossier_obra').select(colunas).in('numero_cotacao', cotacoes));
+    const resultados = await Promise.all(consultas);
+    const porId = new Map();
+    resultados.forEach((r) => (r.data || []).forEach((o) => porId.set(o.id, o)));
+    const obras = [...porId.values()].sort((a, b) => String(a.created_at).localeCompare(String(b.created_at)));
 
     const dossierIds = (obras || []).map((o) => o.id);
     let equipamentos = [], roster = [];
