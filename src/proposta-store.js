@@ -406,12 +406,25 @@
        numero_cotacao -> formularios_elevador.lead_id -> leads; formulário sem Lead não tem o que converter. */
     await passo('lead→cliente', async () => {
       if (updated.numero_cotacao == null) return;
-      const { data: form } = await c.from('formularios_elevador').select('lead_id').eq('numero_cotacao', updated.numero_cotacao).maybeSingle();
+      const { data: form } = await c.from('formularios_elevador').select('lead_id, cliente_id').eq('numero_cotacao', updated.numero_cotacao).maybeSingle();
       if (!form?.lead_id) return;
-      const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email').eq('id', form.lead_id).maybeSingle();
+      const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email, cliente_id').eq('id', form.lead_id).maybeSingle();
       if (!leadRow) return;
       const { error: errLead } = await c.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id);
       if (errLead) throw errLead;
+      /* Auditoria #843 B2: o cliente certo do negócio é o do Formulário (achado pelo CNPJ). Se o Lead ainda não tem cliente e o
+         Formulário tem, grava ESTE no Lead antes de qualquer busca por nome — criarOuVincularDeLead casa pelo nome do prédio e,
+         quando ele difere da razão social, criava um cliente duplicado. Lead que já tem cliente, ou Formulário sem cliente (ou
+         com cliente que não existe mais), segue o caminho de sempre. */
+      if (!leadRow.cliente_id && form.cliente_id) {
+        const { data: cli, error: errCli } = await c.from('clientes').select('id').eq('id', form.cliente_id).maybeSingle();
+        if (errCli) throw errCli;
+        if (cli) {
+          const { error: errVinc } = await c.from('leads').update({ cliente_id: cli.id }).eq('id', leadRow.id);
+          if (errVinc) throw errVinc;
+          return;
+        }
+      }
       if (window.CadastrosClientesStore) await window.CadastrosClientesStore.criarOuVincularDeLead(leadRow);
     });
     return falhas;
