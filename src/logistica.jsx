@@ -169,9 +169,40 @@ function ModalNovoEmbarque({ onClose, onSaved, prefill }) {
     if (!f.client.trim()) return window.toast('Cliente é obrigatório.', 'warning');
     if (!f.eta) return window.toast('ETA é obrigatória.', 'warning');
     setSaving(true);
+    /* Portão único (auditoria 12/10): o embarque nasce em `embarques_importacao` (fonte da verdade, Gestão Importação)
+       e `embarques` fica só como espelho de rastreio (origem_embarque_importacao_id). Antes esta tela inseria direto em
+       `embarques`, sem origem — embarque órfão, fora da Gestão Importação e sem vínculo com P.I./cotação. */
+    let origemId = null;
+    if (window.EmbarquesImportacaoStore?.criar) {
+      try {
+        const ei = await window.EmbarquesImportacaoStore.criar({
+          nome_embarque: f.client, numero_cotacao: prefill?.numeroCotacao ?? null,
+          navio: f.vessel, awb_bl: f.bl, sealine: f.sealine,
+          porto_origem: f.from, porto_destino: f.to, etd_original: f.etd, etd_atual: f.etd, eta_santos: f.eta,
+          containers: f.containerNumber ? [{ numero: f.containerNumber, tipo_tamanho: f.type }] : [],
+        }, []);
+        origemId = ei?.id || null;
+      } catch (e) { console.warn('[ModalNovoEmbarque] não criou em embarques_importacao', e); }
+    }
+    if (origemId) {
+      const { data: espelho } = await window.__VP_SB.sb.from('embarques').select('id').eq('origem_embarque_importacao_id', origemId).maybeSingle();
+      if (espelho) { // o store já espelhou (tinha BL/container): só completa os campos desta tela
+        setSaving(false);
+        await window.__VP_SB.sb.from('embarques').update({
+          supplier: f.supplier || null, project_id: f.obraId || null, imo: f.imo || null,
+          invoice_number: f.invoiceNumber || null, invoice_value: f.invoiceValue ? parseFloat(f.invoiceValue) : null,
+          invoice_currency: f.invoiceCurrency || 'USD', seal: f.seal || null, freight_condition: f.freight,
+          cotacao_fornecedor_id: prefill?.cotacaoFornecedorId || null,
+        }).eq('id', espelho.id);
+        window.toast('Embarque criado!', 'success'); onSaved?.(); onClose();
+        if (f.status !== 'Entregue') runAisSync();
+        return;
+      }
+    }
     const id = 'EM-' + Date.now().toString().slice(-6);
     const { error } = await window.__VP_SB.sb.from('embarques').insert({
       id,
+      origem_embarque_importacao_id: origemId,
       client: f.client, supplier: f.supplier || null,
       project_id: f.obraId || null,
       cotacao_fornecedor_id: prefill?.cotacaoFornecedorId || null,
