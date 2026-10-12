@@ -674,12 +674,39 @@ function DetalheView({ solicitacao, loading, onVoltar, onAtualizar, user }) {
         ? `${solicitacao.tipo_equipamento} — ${solicitacao.cliente_nome}`
         : solicitacao.tipo_equipamento;
       state.identificacao.descricaoComercial = solicitacao.descricao_inicial || '';
-      state.identificacao.descricaoTecnica = solicitacao.complementos_descobertos || '';
+      // Antes só nome e descrições passavam e a Engenharia redigitava o resto (auditoria de 11/10). Agora também:
+      // categoria (tipo de equipamento), especificações levantadas (entram na descrição técnica, que é pública na ficha —
+      // por isso contato do fornecedor, link do produto e dados do cliente NÃO são copiados) e a imagem anexada → foto/desenho.
+      state.identificacao.categoriaProduto = solicitacao.tipo_equipamento || '';
+      const specs = solicitacao.especificacoes_completas;
+      const linhasSpec = (specs && typeof specs === 'object' && !Array.isArray(specs))
+        ? Object.entries(specs).filter(([, v]) => v != null && String(v).trim() !== '').map(([k, v]) => `${k}: ${typeof v === 'object' ? JSON.stringify(v) : v}`)
+        : [];
+      state.identificacao.descricaoTecnica = [solicitacao.complementos_descobertos || '', linhasSpec.length ? 'Especificações:\n' + linhasSpec.join('\n') : '']
+        .filter(Boolean).join('\n\n');
+
+      const copiarImagem = async (url, slot) => {
+        try {
+          const blob = await (await fetch(url)).blob();
+          if (!/^image\//.test(blob.type)) return false;
+          const dataURL = await new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(r.result); r.onerror = rej; r.readAsDataURL(blob); });
+          const { path } = await window.FTImg.compressAndUpload(dataURL, { fichaId: state.__id, tipo: slot, nomeProduto: state.identificacao.nomeProduto });
+          state.midia[slot] = path;
+          return true;
+        } catch (e) { console.warn('[Solicitação→Ficha] imagem não copiada', slot, e); return false; }
+      };
+      let semImagem = false;
+      if (window.FTImg) {
+        const imgAnexo = (solicitacao.anexos || []).find((a) => a && a.tipo === 'imagem' && a.url);
+        if (imgAnexo && !(await copiarImagem(imgAnexo.url, 'foto'))) semImagem = true;
+        if (solicitacao.desenho_url && !(await copiarImagem(solicitacao.desenho_url, 'desenho'))) semImagem = true;
+      }
 
       const rec = await window.FTStore.createDraft(state);
       await window.SolicitacoesProdutoStore.converterEmFicha(solicitacao.id, rec.id);
       onAtualizar({});
-      alert('Ficha técnica criada! Abrindo editor…');
+      const familia = solicitacao.categoria_sku ? ` Família do código: ${solicitacao.categoria_sku} — informe o Código do Produto completo (ex.: ${solicitacao.categoria_sku}-258).` : '';
+      alert('Ficha técnica criada!' + familia + (semImagem ? '\nA imagem anexada não pôde ser copiada — anexe a foto na ficha.' : '') + '\nAbrindo editor…');
       if (window.VpRouter) {
         window.VpRouter.navigate('ficha-tecnica', rec.id);
         // navigate() só faz pushState (não dispara popstate); o app.jsx só
