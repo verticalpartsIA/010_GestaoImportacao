@@ -1,7 +1,7 @@
 /* ============================================================
    sync-pcp-pedidos — Edge Function (vpprd) · PCP, relatórios Pedidos e Clientes.
 
-   SÓ LÊ do Omie (ListarPedidos de produtos/pedido e ConsultarCliente de geral/clientes) e grava
+   SÓ LÊ do Omie (ListarPedidos de produtos/pedido, ConsultarCliente de geral/clientes e ListarNF de produtos/nfconsultar) e grava
    em pcp_pedidos / pcp_pedido_itens. Nada é escrito no Omie.
 
    Guarda apenas os itens "do PCP": quadros de comando, corrimãos e cabos (aço / manobra),
@@ -236,8 +236,19 @@ Deno.serve(async (req) => {
     // 2) Mantém só pedidos com item do PCP; resolve cliente; grava.
     const clientes = new Map<number, any>();
     let gravados = 0, ignorados = 0;
+    // Pedido que JÁ está em pcp_pedidos e voltou para a etapa 10 segue o caminho normal (atualiza a etapa; a limpeza horária
+    // pcp_pedidos_tirar_etapa10 só enxerga linhas com etapa '10' gravada e preserva as com OP-mãe/expedição). Só o que ainda
+    // NÃO está gravado é descartado.
+    const codigosEtapa10 = pedidos.filter((p) => String(p.cabecalho?.etapa) === "10").map((p) => Number(p.cabecalho?.codigo_pedido)).filter((n) => n > 0);
+    const jaGravados = new Set<number>();
+    if (codigosEtapa10.length) {
+      const rows = await pgSelect<{ codigo_pedido: number }>("pcp_pedidos", `select=codigo_pedido&codigo_pedido=in.(${codigosEtapa10.join(",")})`);
+      for (const r of rows) jaGravados.add(Number(r.codigo_pedido));
+    }
     for (const p of pedidos) {
       const c = p.cabecalho || {};
+      // Etapa 10 é só previsão (pcp_previsao_pedidos, via {"etapa":"10"}): um pedido novo nessa etapa nunca entra em pcp_pedidos, em qualquer modo de leitura (#843 C4).
+      if (String(c.etapa) === "10" && !jaGravados.has(Number(c.codigo_pedido))) { ignorados++; continue; }
       const todos = (p.det || []).map((d: any, i: number) => ({ d: d.produto || {}, seq: i + 1 }));
       const itens = todos.filter((x: any) => ehPcp(x.d.codigo));
       if (!itens.length) { ignorados++; continue; }       // só guardamos pedidos que têm item do PCP; nesses, o pedido inteiro (a Expedição envia tudo)
