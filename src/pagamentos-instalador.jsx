@@ -22,6 +22,8 @@ function PagamentosInstaladorPage() {
 
   const reload = React.useCallback(() => {
     window.ContratoInstaladorParcelasStore.listarTodasComContrato().then(async (lista) => {
+      /* Só contratos ASSINADOS geram parcela a pagar — rascunho, enviado, recusado ou expirado não (ainda) é dívida. */
+      lista = (lista || []).filter((p) => (p.contratos_instalador || {}).status === 'assinado');
       setParcelas(lista);
       // Trava de aprovação (Gestor Comercial) — busca de uma vez as decisões
       // já existentes pra essas parcelas, pra mostrar "aguardando aprovação"
