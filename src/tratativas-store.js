@@ -80,11 +80,18 @@
     if (destinos.length) {
       const nome = autor || autorAtual();
       const base = (window.location.origin || 'https://hub.vpsistema.com');
+      /* Link do portal COM o token da cotação do fornecedor (sem ele o portal mostra "cotação não encontrada" — auditoria de
+         11/10). Mesmo formato do RFQ (CotacaoElevadorFornecedorStore.cotacaoUrl). Falha ao ler o token → só avisa, sem link. */
+      let portalUrl = null;
+      try {
+        const { data: cf } = await c.from('cotacoes_elevador_fornecedor').select('token').eq('id', cotacaoFornecedorId).maybeSingle();
+        if (cf && cf.token) portalUrl = `${base}/cotacao-elevador-fornecedor/${encodeURIComponent(cf.token)}`;
+      } catch (e) { console.warn('[Tratativas] token do portal não lido', e); }
       const linksAnexos = (anexos || []).map((a) => `- ${a.nome}: ${a.url}`).join('\n');
       const texto = `Você recebeu uma nova mensagem sobre a cotação${numeroCotacao ? ' Nº ' + numeroCotacao : ''}.\n\n`
         + `${nome}:\n${mensagem?.trim() || '(Sem texto, apenas anexos)'}\n`
         + (linksAnexos ? `\nAnexos:\n${linksAnexos}\n` : '')
-        + `\nVocê pode responder diretamente este e-mail.\nPortal da cotação: ${base}/cotacao-elevador-fornecedor`;
+        + `\nVocê pode responder diretamente este e-mail.` + (portalUrl ? `\nPortal da cotação: ${portalUrl}` : '');
       try {
         /* ATENÇÃO — o corpo precisa ir em `body:`. A versão anterior passava {to, subject, html}
            direto como 2º argumento do invoke (sem `body`), então o send-email recebia um corpo
@@ -100,7 +107,7 @@
             html: `<p>Você recebeu uma nova mensagem sobre a cotação${numeroCotacao ? ' Nº ' + numeroCotacao : ''}.</p>`
               + `<p><strong>${nome}:</strong></p><p>${(mensagem?.trim() || '(Sem texto, apenas anexos)').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br/>')}</p>`
               + ((anexos || []).length ? '<p>Anexos:<br/>' + anexos.map((a) => `<a href="${a.url}">${a.nome}</a>`).join('<br/>') + '</p>' : '')
-              + `<p>Você pode responder diretamente este e-mail.</p><p><a href="${base}/cotacao-elevador-fornecedor">Ver cotação no portal</a></p>`,
+              + `<p>Você pode responder diretamente este e-mail.</p>` + (portalUrl ? `<p><a href="${portalUrl}">Ver cotação no portal</a></p>` : ''),
             numeroCotacao: numeroCotacao ?? undefined,
             referenciaTipo: 'tratativa_cotacao',
             referenciaId: cotacaoFornecedorId,
