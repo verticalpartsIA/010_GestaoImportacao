@@ -54,6 +54,30 @@
     return data;
   }
 
+  /* Linhas de "Comprado" ainda abertas de um produto (com id), lidas direto da tabela: a lista da tela vem da função
+     list-importacao-varejo, que não traz o id — sem ele não dá para corrigir a previsão nem excluir um lançamento. */
+  async function listarCompradoAberto(codigo) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.from('importacao_varejo_comprado')
+      .select('id, quantidade, previsao_chegada, requisicao_omie, origem')
+      .eq('codigo', codigo).eq('recebido', false).order('previsao_chegada', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function atualizarPrevisaoComprado(id, previsaoChegada) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (!previsaoChegada) throw new Error('Informe a previsão de chegada.');
+    const { data, error } = await c.from('importacao_varejo_comprado').update({ previsao_chegada: previsaoChegada }).eq('id', id).select('id, codigo').maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error('Lançamento não encontrado (já foi excluído?).');
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Importação Varejo', acao: 'Corrigiu previsão de "Comprado"', alvo: data.codigo, alvo_id: id,
+      detalhe: { previsao_chegada: previsaoChegada },
+    });
+    return data;
+  }
+
   async function excluirComprado(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('importacao_varejo_comprado').delete().eq('id', id);
@@ -112,6 +136,6 @@
   }
 
   window.ImportacaoVarejoStore = {
-    carregar, salvarLoteConfig, lancarComprado, excluirComprado, enviarRequisicaoOmie, previsaoPadrao, dispararSyncManual, dispararSyncEstoqueManual,
+    carregar, salvarLoteConfig, lancarComprado, listarCompradoAberto, atualizarPrevisaoComprado, excluirComprado, enviarRequisicaoOmie, previsaoPadrao, dispararSyncManual, dispararSyncEstoqueManual,
   };
 }());
