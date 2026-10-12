@@ -98,6 +98,19 @@ function IVModalComprado({ item, onClose, onSaved }) {
   const [quantidade, setQuantidade] = React.useState('');
   const [previsao, setPrevisao] = React.useState('');
   const [saving, setSaving] = React.useState(false);
+  const [linhas, setLinhas] = React.useState(null); // null = carregando; linhas abertas (com id) deste produto
+  const [mudou, setMudou] = React.useState(false);
+  const carregarLinhas = React.useCallback(() => {
+    window.ImportacaoVarejoStore.listarCompradoAberto(item.codigo).then(setLinhas)
+      .catch((e) => { setLinhas([]); window.toast?.('Erro ao ler os lançamentos: ' + e.message, 'error'); });
+  }, [item.codigo]);
+  React.useEffect(() => { carregarLinhas(); }, [carregarLinhas]);
+  // A lista atrás do modal só recarrega se algo mudou aqui (onSaved fecha o modal e recarrega).
+  const fechar = () => (mudou ? onSaved() : onClose());
+  const corrigirPrevisao = async (id, data) => {
+    try { await window.ImportacaoVarejoStore.atualizarPrevisaoComprado(id, data); setMudou(true); carregarLinhas(); }
+    catch (e) { window.toast?.('Erro ao corrigir a previsão: ' + e.message, 'error'); carregarLinhas(); }
+  };
   const lancar = async () => {
     setSaving(true);
     try {
@@ -109,23 +122,26 @@ function IVModalComprado({ item, onClose, onSaved }) {
   };
   const excluir = async (id) => {
     if (!window.confirm('Excluir este lançamento?')) return;
-    try { await window.ImportacaoVarejoStore.excluirComprado(id); onSaved(); }
+    try { await window.ImportacaoVarejoStore.excluirComprado(id); setMudou(true); carregarLinhas(); }
     catch (e) { window.toast?.('Erro ao excluir: ' + e.message, 'error'); }
   };
   return (
-    <Modal title={`Comprado — ${item.codigo}`} onClose={onClose} width={440}
+    <Modal title={`Comprado — ${item.codigo}`} onClose={fechar} width={440}
       footer={<>
-        <Button variant="ghost" onClick={onClose}>Fechar</Button>
+        <Button variant="ghost" onClick={fechar}>Fechar</Button>
         <Button variant="primary" onClick={lancar} disabled={saving}>{saving ? 'Salvando…' : 'Lançar'}</Button>
       </>}>
       <div className="stack" style={{ gap: 12 }}>
         <div className="small muted">{item.descricao}</div>
-        {item.pedidosComprado.length > 0 && (
+        {linhas && linhas.length > 0 && (
           <div className="stack" style={{ gap: 6 }}>
             <div className="small" style={{ fontWeight: 700 }}>Já lançado (aguardando previsão)</div>
-            {item.pedidosComprado.map((p, i) => (
-              <div key={i} className="row sb small" style={{ background: 'var(--vp-gray-50)', borderRadius: 6, padding: '6px 10px' }}>
-                <span>{ivFmtNum(p.quantidade)} — chega {ivFmtData(p.previsao)}</span>
+            {linhas.map((l) => (
+              <div key={l.id} className="row sb small" style={{ background: 'var(--vp-gray-50)', borderRadius: 6, padding: '6px 10px', gap: 8, alignItems: 'center' }}>
+                <span>{ivFmtNum(l.quantidade)}{l.requisicao_omie ? ` · REQ ${l.requisicao_omie}` : ''} — chega</span>
+                <input className="input" type="date" style={{ width: 150 }} defaultValue={l.previsao_chegada}
+                  onBlur={(e) => { if (e.target.value && e.target.value !== l.previsao_chegada) corrigirPrevisao(l.id, e.target.value); }} />
+                <Button variant="ghost" onClick={() => excluir(l.id)}>Excluir</Button>
               </div>
             ))}
           </div>
@@ -188,6 +204,7 @@ function IVModalEnviarOmie({ itens, onClose, onEnviado }) {
       } else {
         window.toast?.(`Requisição de compra ${resultado.codReqCompra} criada no Omie com ${resultado.quantidadeItens} itens.`, 'success');
       }
+      if (resultado.avisoRegistro) window.toast?.('Atenção: a requisição foi criada no Omie, mas não consegui registrá-la em "Comprado" (' + resultado.avisoRegistro + '). NÃO envie de novo; lance o "Comprado" na linha para a sugestão abater.', 'warning');
       onEnviado();
     } catch (e) { window.toast?.('Erro ao criar requisição no Omie: ' + e.message, 'error'); }
     finally { setEnviando(false); }

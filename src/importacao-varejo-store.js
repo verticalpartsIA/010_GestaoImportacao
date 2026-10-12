@@ -54,10 +54,42 @@
     return data;
   }
 
+  /* Linhas de "Comprado" ainda abertas de um produto (com id), lidas direto da tabela: a lista da tela vem da função
+     list-importacao-varejo, que não traz o id — sem ele não dá para corrigir a previsão nem excluir um lançamento. */
+  async function listarCompradoAberto(codigo) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.from('importacao_varejo_comprado')
+      .select('id, quantidade, previsao_chegada, requisicao_omie, origem')
+      .eq('codigo', codigo).eq('recebido', false).order('previsao_chegada', { ascending: true });
+    if (error) throw error;
+    return data || [];
+  }
+
+  async function atualizarPrevisaoComprado(id, previsaoChegada) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (!previsaoChegada) throw new Error('Informe a previsão de chegada.');
+    const { data, error } = await c.from('importacao_varejo_comprado').update({ previsao_chegada: previsaoChegada }).eq('id', id).select('id, codigo').maybeSingle();
+    if (error) throw error;
+    if (!data) throw new Error('Lançamento não encontrado (já foi excluído?).');
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Importação Varejo', acao: 'Corrigiu previsão de "Comprado"', alvo: data.codigo, alvo_id: id,
+      detalhe: { previsao_chegada: previsaoChegada },
+    });
+    return data;
+  }
+
   async function excluirComprado(id) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { error } = await c.from('importacao_varejo_comprado').delete().eq('id', id);
     if (error) throw error;
+  }
+
+  /* Prazo padrão até a chegada de uma requisição enviada (importação ≈ 90 dias, o mesmo prazo do PCP).
+     Editável: o "Comprado" da linha pode ser excluído e relançado com a previsão real. */
+  const PRAZO_IMPORTACAO_DIAS = 90;
+  function previsaoPadrao(hoje, dias) {
+    const d = new Date(hoje.getFullYear(), hoje.getMonth(), hoje.getDate() + (dias == null ? PRAZO_IMPORTACAO_DIAS : dias));
+    return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-' + String(d.getDate()).padStart(2, '0');
   }
 
   async function enviarRequisicaoOmie(itens) {
@@ -65,9 +97,24 @@
     const { data, error } = await c.functions.invoke('criar-requisicao-compra-importacao-varejo', { body: { itens } });
     if (error) throw new Error((window.extrairErroFuncao && window.extrairErroFuncao(error)) || error.message || 'Falha ao criar requisição no Omie.');
     if (data && data.error) throw new Error(data.error);
+    // Registra o que foi pedido em "Comprado": a sugestão passa a abater a requisição até a previsão e o mesmo item
+    // não é reenviado. A requisição já existe no Omie — se o registro falhar, NÃO lança (o usuário reenviaria e duplicaria):
+    // devolve `avisoRegistro` para a tela avisar.
+    const comErro = new Set(((data && data.itensComErro) || []).map((e) => e.codigo));
+    const incluidos = (itens || []).filter((i) => !comErro.has(i.codigo) && Number(i.quantidade) > 0);
+    if (data && incluidos.length) {
+      const u = usuario();
+      const previsao = previsaoPadrao(new Date());
+      const { error: errReg } = await c.from('importacao_varejo_comprado').insert(incluidos.map((i) => ({
+        codigo: i.codigo, quantidade: Number(i.quantidade), previsao_chegada: previsao,
+        requisicao_omie: data.codReqCompra || null, origem: 'requisicao',
+        criado_por: u.email || null, criado_por_nome: u.name || u.email || null,
+      })));
+      if (errReg) { console.warn('[ImportacaoVarejo] requisição criada, mas o "Comprado" não foi registrado', errReg); data.avisoRegistro = errReg.message || 'erro desconhecido'; }
+    }
     if (window.VPLog) window.VPLog.registrar({
       modulo: 'Importação Varejo', acao: 'Enviou Requisição de Compra ao Omie',
-      alvo: 'REQ ' + data.codReqCompra, detalhe: { quantidadeItens: data.quantidadeItens },
+      alvo: 'REQ ' + data.codReqCompra, detalhe: { quantidadeItens: data.quantidadeItens, registradoComoComprado: !data.avisoRegistro },
     });
     return data;
   }
@@ -89,6 +136,6 @@
   }
 
   window.ImportacaoVarejoStore = {
-    carregar, salvarLoteConfig, lancarComprado, excluirComprado, enviarRequisicaoOmie, dispararSyncManual, dispararSyncEstoqueManual,
+    carregar, salvarLoteConfig, lancarComprado, listarCompradoAberto, atualizarPrevisaoComprado, excluirComprado, enviarRequisicaoOmie, previsaoPadrao, dispararSyncManual, dispararSyncEstoqueManual,
   };
 }());
