@@ -182,13 +182,19 @@
     if (!nome) return null;
 
     let cliente = null;
-    const { data: existente } = await c.from('clientes').select('id').ilike('razao_social', nome).maybeSingle();
+    /* Auditoria 12/10: `.maybeSingle()` dava erro com 2+ clientes de mesmo nome (o erro era ignorado → criava
+       mais um duplicado) e `%`/`_` no nome viravam curinga do ilike. Agora escapa os curingas e usa limit(1). */
+    const nomeLike = nome.replace(/[\\%_]/g, (m) => '\\' + m);
+    const { data: achados, error: errBusca } = await c.from('clientes').select('id').ilike('razao_social', nomeLike).limit(1);
+    if (errBusca) throw errBusca;
+    const existente = achados && achados[0];
     if (existente) {
       cliente = existente;
     } else {
       cliente = await criar({ razao_social: nome, contato: lead.contact || null, telefone: lead.phone || null, email: lead.email || null });
     }
-    await c.from('leads').update({ cliente_id: cliente.id }).eq('id', lead.id);
+    const { error: errVinc } = await c.from('leads').update({ cliente_id: cliente.id }).eq('id', lead.id);
+    if (errVinc) throw errVinc;
     return cliente.id;
   }
 
