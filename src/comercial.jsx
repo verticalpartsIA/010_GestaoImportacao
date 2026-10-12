@@ -1226,6 +1226,20 @@ function LeadDetailView({ lead, setRoute, setSubsel }) {
             </div>
           </Card>
 
+          {lead.especificacao_tecnica && typeof lead.especificacao_tecnica === 'object' ? (() => {
+            /* Respostas do formulário público (Quadro de Comando): só leitura, genérico por chave. */
+            const fmt = (v) => Array.isArray(v) ? v.filter((x) => x != null && x !== '').join(', ')
+              : (v && typeof v === 'object') ? Object.entries(v).filter(([, x]) => x != null && x !== '' && x !== false).map(([k, x]) => (x === true ? k : k + ': ' + x)).join('; ')
+              : v === true ? 'Sim' : v === false ? 'Não' : String(v ?? '');
+            const linhas = Object.entries(lead.especificacao_tecnica).map(([k, v]) => [k, fmt(v)]).filter(([, v]) => v !== '');
+            if (!linhas.length) return null;
+            return (
+              <Card title="Especificação técnica" sub="respondida no formulário público">
+                {linhas.map(([k, v]) => <KvBlock key={k} label={k.replace(/_/g, ' ')} value={v}/>)}
+              </Card>
+            );
+          })() : null}
+
           <Card title="Atribuição">
             <KvBlock label="Vendedor" value={lead.owner || '—'}/>
             <KvBlock label="Origem" value={lead.origin}/>
