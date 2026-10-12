@@ -388,9 +388,9 @@ function naoEncontrado(req, res) {
   if (req.path.startsWith('/api/')) return res.status(404).json({ error: 'not_found' });
   return res.status(404).type('text/plain').send('404 — página não encontrada');
 }
-/* O navegador pede /favicon.ico sozinho e o projeto não tem ícone: 204 (vazio)
-   em vez de 404 no console — antes caía no catch-all e recebia o HTML do app. */
-app.get('/favicon.ico', (_req, res) => res.status(204).end());
+/* O navegador pede /favicon.ico sozinho (aba, favoritos, histórico). Entrega o ícone do símbolo VerticalParts
+   (assets/favicon.ico, 16/32/48px); as páginas também apontam para ele via <link rel="icon">. */
+app.get('/favicon.ico', (_req, res) => res.sendFile(path.join(__dirname, 'assets', 'favicon.ico'), { maxAge: '1d' }));
 app.use((req, res, next) => {
   const { first, depth } = primeiroSegmento(req.path);
   if (!first || PUBLIC_DIRS.has(first) || SPA_MODULES.has(first)) return next();
