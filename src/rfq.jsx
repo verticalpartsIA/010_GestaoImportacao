@@ -118,7 +118,7 @@ function RFQForm({ initialData, isEdit, numeroSugerido, onSubmit, onCancel, savi
     <Card title={isEdit ? `Editar RFQ ${form.numero_rfq}` : 'Nova RFQ'}>
       <div className="grid-3" style={{ gap: 12 }}>
         <PIField label="Nº RFQ"><PIInput value={form.numero_rfq} onChange={set('numero_rfq')}/></PIField>
-        <PIField label="Nº Cotação (liga ao fluxo da cotação)"><PIInput type="number" value={form.numero_cotacao ?? ''} onChange={set('numero_cotacao')}/></PIField>
+        <PIField label="Nº Cotação — só se for de equipamento (vazio = varejo/estoque)"><PIInput type="number" value={form.numero_cotacao ?? ''} onChange={set('numero_cotacao')}/></PIField>
         <PIField label="Data *"><PIInput type="date" value={form.data} onChange={set('data')}/></PIField>
         <PIField label="Validade"><PIInput type="date" value={form.data_validade} onChange={set('data_validade')}/></PIField>
         <PIField label="Status"><PISelect value={form.status} onChange={set('status')} options={RFQ_STATUS}/></PIField>
