@@ -48,7 +48,7 @@
   <script type="text/babel" src="/src/primitives.jsx?v=5"></script>
 
   <!-- Engines + Stores + Previews dos 3 tipos (Instalador + Venda Equipamentos + Proposta) -->
-  <script src="/src/vp-log.js?v=2"></script>
+  <script src="/src/vp-log.js?v=3"></script>
   <!-- Gatilhos & Prazo — motor precisa estar carregado ANTES de
        eventos-fluxo-store.js também nas páginas públicas, senão os
        eventos que o cliente dispara (assinatura) não avançam a cadeia. -->
@@ -71,7 +71,7 @@
   <script src="/src/contrato-venda-signatarios-store.js?v=3"></script>
   <script type="text/babel" src="/src/contrato-venda-preview.jsx?v=3"></script>
   <!-- Dossiê da Obra — proposta assinada cria o Dossiê sozinha (ver proposta-store.js markSigned) -->
-  <script src="/src/dossier-store.js?v=6"></script>
+  <script src="/src/dossier-store.js?v=7"></script>
   <!-- Conversor das propostas importadas do sistema antigo. Precisa vir
        ANTES do store, que o usa em conteudoRenderizavel(). Faltava aqui:
        178 propostas legadas chegavam ao cliente no formato antigo cru, que

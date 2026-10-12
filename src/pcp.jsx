@@ -1248,7 +1248,7 @@ function pcpMontarPedidoQuadro(b, extra) {
   // Botoeiras
   pos = 0;
   const botoeiras = [];
-  const temFuracao = !!esc.botoeiras_furacoes_totem && esc.botoeiras_furacoes_totem !== 'nao';
+  const temFuracao = !!esc.botoeiras_furacoes_totem && !['nao', 'nenhuma'].includes(esc.botoeiras_furacoes_totem); // o formulário grava 'nenhuma' para "Sem furação" (antes só 'nao' era reconhecido)
   if (forn('cop')) botoeiras.push(ck('botoeira', 'COP — Botoeira de cabina', det('cop') || 1, 'un.', esc.cop_com_display ? 'display: ' + (esc.cop_display_modelo || esc.cop_com_display) : null));
   if (forn('lop')) botoeiras.push(ck('botoeira', 'LOP — Botoeira de pavimento', det('lop') || lopTotal || 1, 'un.', null));
   if (forn('lip')) botoeiras.push(ck('botoeira', 'LIP — Indicador de posição sobre as portas', det('lip') || 1, 'un.', null));

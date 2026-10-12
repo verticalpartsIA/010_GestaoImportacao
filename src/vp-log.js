@@ -33,6 +33,8 @@
       const c = sb(); if (!c || !ev || !ev.acao) return;
       const a = ator();
       let detalhe = ev.detalhe || null;
+      // Texto solto vira { texto } — senão o espalhamento abaixo transforma "OP liberada" em {0:'O',1:'P',…} (logs do MES).
+      if (typeof detalhe === 'string') detalhe = { texto: detalhe };
       /* anexa o e-mail real do SSO quando o ator é o usuário logado */
       if (!ev.ator_nome && a.email) detalhe = { ...(detalhe || {}), email: a.email };
       await c.from('vp_logs').insert({

@@ -355,6 +355,8 @@ function JuridicoPage({ setRoute, setSubsel }) {
   React.useEffect(() => { reload(); }, []);
 
   const openEditor = (c) => {
+    // Contrato do fluxo novo (tem token) abre na tela própria, não no editor legado (que o rebaixaria/marcaria "Assinado" sem gates).
+    if (c && c.token) { setSubsel && setSubsel(null); setRoute('contrato-venda-equipamentos'); return; }
     setSubsel && setSubsel(c);
     setRoute('contrato-editor');
   };
