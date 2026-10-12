@@ -37,7 +37,7 @@
       if (typeof detalhe === 'string') detalhe = { texto: detalhe };
       /* anexa o e-mail real do SSO quando o ator é o usuário logado */
       if (!ev.ator_nome && a.email) detalhe = { ...(detalhe || {}), email: a.email };
-      await c.from('vp_logs').insert({
+      const { error } = await c.from('vp_logs').insert({
         ator_nome: ev.ator_nome || a.nome,
         ator_setor: ev.ator_setor || a.setor,
         modulo: ev.modulo || 'Sistema',
@@ -46,6 +46,8 @@
         alvo_id: ev.alvo_id != null ? String(ev.alvo_id) : null,
         detalhe,
       });
+      // supabase-js não lança em erro do PostgREST (RLS, constraint): sem isto a falha some em silêncio.
+      if (error) console.warn('[VPLog] registrar não gravou', error.message || error);
     } catch (e) { console.warn('[VPLog] registrar falhou', e); }
   }
 

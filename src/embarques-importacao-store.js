@@ -124,17 +124,21 @@
     };
 
     try {
-      const { data: existente } = await c.from('embarques').select('id')
+      const { data: existente, error: errBusca } = await c.from('embarques').select('id')
         .eq('origem_embarque_importacao_id', embarqueImportacaoId).maybeSingle();
+      if (errBusca) throw errBusca;
       if (existente) {
-        await c.from('embarques').update(patch).eq('id', existente.id);
+        const { error } = await c.from('embarques').update(patch).eq('id', existente.id);
+        if (error) throw error;
       } else {
         const id = 'EM-' + Date.now().toString().slice(-6);
-        await c.from('embarques').insert({ id, position: 0, docs: [], milestones: [], ...patch, origem_embarque_importacao_id: embarqueImportacaoId });
+        const { error } = await c.from('embarques').insert({ id, position: 0, docs: [], milestones: [], ...patch, origem_embarque_importacao_id: embarqueImportacaoId });
+        if (error) throw error;
         c.functions.invoke('ais-sync').catch(() => {}); // popula posição/timeline já na criação
       }
     } catch (e) {
       console.warn('[EmbarquesImportacaoStore] _sincronizarRastreio falhou (não bloqueia o salvamento do embarque)', e);
+      window.toast?.('Embarque salvo, mas o espelho do rastreamento não foi atualizado: ' + ((e && e.message) || 'erro desconhecido'), 'error');
     }
   }
 
