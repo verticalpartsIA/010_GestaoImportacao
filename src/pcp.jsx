@@ -1282,6 +1282,9 @@ async function pcpGerarPedidoQuadro(sb, b, opcoes, extra) {
     titulo: `Pedido ${b.quadro.numero_pedido}${opcoes.cliente ? ' — ' + opcoes.cliente : ''}`, frente: 'pedido', quadro_comando_id: b.quadro.id,
     quantidade: 1, cliente: opcoes.cliente || null, numero_cotacao: PCP_ESCOPO_NUM(b.quadro.numero_cotacao),
     previsao_inicio: opcoes.previsao_inicio || null, prazo_entrega: opcoes.prazo_entrega || null, criado_por: quem,
+    // Vínculo com o pedido de venda do Omie (escolhido na hora de gerar): é por `pedido_codigo` que Emissão de NF, Expedição, o
+    // Painel e a fila "Pedidos para Produzir" acham a OP-mãe. O nº do pedido do quadro é uma sequência interna, NÃO o nº do Omie.
+    pedido_codigo: opcoes.pedido_codigo ? Number(opcoes.pedido_codigo) : null,
     observacao: `Gerada do pedido de quadro Nº ${b.quadro.numero_pedido} (${b.quadro.novo_ou_modernizacao || 'sem tipo'}).`,
   }).select('id, numero').single();
   if (e0 || !mae) throw new Error(e0?.message || 'sem permissão');
@@ -1337,11 +1340,21 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
       sb.from('quadros_comando').select('*').eq('id', r.id).single(),
       r.cliente_id ? sb.from('clientes').select('razao_social, nome_fantasia').eq('id', r.cliente_id).maybeSingle() : Promise.resolve({ data: null }),
     ]);
+    // Pedidos de venda do Omie que ainda podem receber esta produção: abertos (etapas 20 a 59), não cancelados e sem OP-mãe.
+    const [pv, maesPed] = await Promise.all([
+      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, data_pedido').eq('cancelado', false).gte('etapa', '20').lt('etapa', '60').order('data_pedido', { ascending: false }).limit(300),
+      sb.from('pcp_ordens').select('pedido_codigo').eq('frente', 'pedido').not('pedido_codigo', 'is', null),
+    ]);
+    const comMae = new Set((maesPed.data || []).map(x => String(x.pedido_codigo)));
+    const grupos = {};
+    (pv.data || []).forEach(x => { (grupos[x.numero_pedido] = grupos[x.numero_pedido] || []).push(x); });
+    const pedidosOmie = Object.values(grupos).filter(g => !g.some(x => comMae.has(String(x.codigo_pedido))))
+      .map(g => ({ codigo_pedido: g[0].codigo_pedido, numero_pedido: g[0].numero_pedido, cliente_nome: g[0].cliente_nome, etapa: g[0].etapa, data_pedido: g[0].data_pedido }));
     const bundle = { quadro: q.data, paradas: pa.data || [], bom: bo.data || [], cortes: co.data || [], maquina: ma.data };
     const vkey = ((q.data && q.data.escopo_fornecimento && q.data.escopo_fornecimento.quadro_comando) || {}).detalhe || r.variante;
     setPreparo({
-      bundle,
-      opcoes: { produto: variantes[vkey] || '', cliente: (cl.data && (cl.data.razao_social || cl.data.nome_fantasia)) || '', previsao_inicio: '', prazo_entrega: '' },
+      bundle, pedidosOmie,
+      opcoes: { pedido_codigo: '', produto: variantes[vkey] || '', cliente: (cl.data && (cl.data.razao_social || cl.data.nome_fantasia)) || '', previsao_inicio: '', prazo_entrega: '' },
     });
     setBusy(false);
   };
@@ -1349,6 +1362,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
   const criar = async () => {
     const o = preparo.opcoes;
     if (montagem.frentes.some(f => f.frente === 'quadro') && !o.produto) { window.toast?.('Escolha o produto do quadro de comando.'); return; }
+    if (!o.pedido_codigo && !window.confirm('Nenhum pedido de venda do Omie foi escolhido. Sem ele, esta produção NÃO aparece na Emissão de NF nem na Expedição, e o pedido pode gerar outro conjunto de OPs em "Pedidos para Produzir". Criar mesmo assim?')) return;
     setBusy(true);
     try {
       const mae = await pcpGerarPedidoQuadro(sb, preparo.bundle, o, { dados, produto: o.produto });
@@ -1370,6 +1384,13 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
             <select className="input" value={preparo.opcoes.produto} onChange={e => setOpc('produto', e.target.value)} style={{ minWidth: 300 }}>
               <option value="">Produto do quadro de comando…</option>
               {ctx.pais.map(c => <option key={c} value={c}>{c} — {dados.prods[c]?.descricao || ''}</option>)}
+            </select>
+            <select className="input" value={preparo.opcoes.pedido_codigo} onChange={e => {
+              const pv = (preparo.pedidosOmie || []).find(x => String(x.codigo_pedido) === e.target.value);
+              setPreparo(p => ({ ...p, opcoes: { ...p.opcoes, pedido_codigo: e.target.value, cliente: p.opcoes.cliente || (pv && pv.cliente_nome) || '' } }));
+            }} style={{ minWidth: 300 }} title="Liga esta produção ao pedido de venda do Omie — sem isso ela não aparece na Emissão de NF nem na Expedição">
+              <option value="">Pedido de venda do Omie (recomendado)…</option>
+              {(preparo.pedidosOmie || []).map(x => <option key={x.codigo_pedido} value={x.codigo_pedido}>{x.numero_pedido} — {x.cliente_nome || 'sem cliente'} · etapa {x.etapa}</option>)}
             </select>
             <input className="input" placeholder="Cliente" value={preparo.opcoes.cliente} onChange={e => setOpc('cliente', e.target.value)} style={{ width: 220 }}/>
             <label style={{ fontSize: 12, color: 'var(--fg3)' }}>Início <input className="input" type="date" value={preparo.opcoes.previsao_inicio} onChange={e => setOpc('previsao_inicio', e.target.value)}/></label>
