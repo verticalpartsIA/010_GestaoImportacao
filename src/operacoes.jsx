@@ -376,10 +376,12 @@ function JuridicoPage({ setRoute, setSubsel }) {
       </div>
 
       <div className="grid-4" style={{ marginBottom: 20 }}>
+        {/* Auditoria 12/10: os KPIs comparavam com status do editor legado ("Assinado", "Em redação") e o fluxo novo grava
+            minúsculo (assinado, enviado…) — "Assinados" mostrava 0 com contratos assinados. Agora conta os dois vocabulários. */}
         <KPI label="Contratos no ar"    value={contratos.length}                                                    sub="total de contratos"   icon="fileText"/>
-        <KPI label="Em assinatura"      value={contratos.filter(c => c.status === "Em assinatura digital").length}  sub="aguardando cliente"   icon="signature"/>
-        <KPI label="Assinados"          value={contratos.filter(c => c.status === "Assinado").length}               sub="fase Compra liberada"  icon="check"/>
-        <KPI label="Em redação"         value={contratos.filter(c => c.status === "Em redação").length}             sub="aguardando jurídico"   icon="edit"/>
+        <KPI label="Em assinatura"      value={contratos.filter(c => ["enviado","visualizado","aguardando_signatarios","Em assinatura digital"].includes(c.status)).length}  sub="aguardando cliente"   icon="signature"/>
+        <KPI label="Assinados"          value={contratos.filter(c => ["assinado","Assinado"].includes(c.status)).length}               sub="fase Compra liberada"  icon="check"/>
+        <KPI label="Em redação"         value={contratos.filter(c => ["rascunho","Em redação"].includes(c.status)).length}             sub="aguardando jurídico"   icon="edit"/>
       </div>
 
       {/* ===== GRID-2: lista + acesso rápido (idêntico ao PropostasPage) ===== */}
