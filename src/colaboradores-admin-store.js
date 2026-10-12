@@ -169,6 +169,8 @@
         /* 02/10/2026: sem esta alçada o vendedor só vê/edita as cotações que ELE criou
            (formulario-elevador-store.js). Quem não tem fica restrito aos próprios. */
         { chave: 'ver_de_outros', label: 'Vê e edita formulários/cotações de outros vendedores' },
+        /* 12/10/2026: espelha a ação formularios.destravar do catálogo do vpsistema. */
+        { chave: 'destravar', label: 'Destrava formulário/cotação travado' },
       ]},
       { modulo: 'propostas', label: 'Propostas', capacidades: [
         { chave: 'ver_todas', label: 'Vê propostas de outros vendedores' },
