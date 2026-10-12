@@ -186,6 +186,17 @@
       if (!DESENHO_EXT.test(f.name)) throw new Error(`"${f.name}": use PDF, PNG, JPG, DWG ou DXF.`);
       if (f.size > DESENHO_MAX_BYTES) throw new Error(`"${f.name}" passa de 25 MB.`);
     }
+    // Fluxo (#843 A1): só emite o evento na 1ª vez que a cotação ganha desenho / Projeto de Instalação.
+    const novoParaFluxo = { criado: false, finalizado: false };
+    if (numeroCotacao != null) {
+      const { data: antes, error: errAntes } = await c.from('projetos_elevador_desenhos')
+        .select('tipo_documento').eq('numero_cotacao', numeroCotacao).is('excluido_em', null);
+      if (!errAntes) {
+        const lista = antes || [];
+        novoParaFluxo.criado = lista.length === 0;
+        novoParaFluxo.finalizado = lote.some(l => l.tipo === 'projeto_instalacao') && !lista.some(r => r.tipo_documento === 'projeto_instalacao');
+      }
+    }
     const user = window.__VP_USER || {};
     const pasta = numeroCotacao != null ? String(numeroCotacao) : 'avulso';
     const salvos = [];
@@ -213,6 +224,13 @@
         modulo: 'Projeto de Elevadores', acao: 'Salvou desenho', alvo: data.referencia, alvo_id: data.id,
         detalhe: { arquivo: data.arquivo_nome, numero_cotacao: data.numero_cotacao, tipo: data.tipo_documento, equipamentos: data.equipamentos },
       });
+    }
+    if (numeroCotacao != null && salvos.length && window.EventosFluxo) {
+      const ev = { numeroCotacao, alvoLabel: salvos[0].referencia, alvoId: salvos[0].id };
+      try {
+        if (novoParaFluxo.criado) await window.EventosFluxo.registrar({ evento: 'PROJETO_ELEVADOR_CRIADO', ...ev });
+        if (novoParaFluxo.finalizado) await window.EventosFluxo.registrar({ evento: 'PROJETO_ELEVADOR_FINALIZADO', ...ev });
+      } catch (e) { console.warn('[ProjetoElevador] evento de fluxo falhou', e); }
     }
     return salvos;
   }
