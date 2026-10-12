@@ -188,6 +188,7 @@ function IVModalEnviarOmie({ itens, onClose, onEnviado }) {
       } else {
         window.toast?.(`Requisição de compra ${resultado.codReqCompra} criada no Omie com ${resultado.quantidadeItens} itens.`, 'success');
       }
+      if (resultado.avisoRegistro) window.toast?.('Atenção: a requisição foi criada no Omie, mas não consegui registrá-la em "Comprado" (' + resultado.avisoRegistro + '). NÃO envie de novo; lance o "Comprado" na linha para a sugestão abater.', 'warning');
       onEnviado();
     } catch (e) { window.toast?.('Erro ao criar requisição no Omie: ' + e.message, 'error'); }
     finally { setEnviando(false); }
