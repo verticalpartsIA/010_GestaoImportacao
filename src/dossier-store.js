@@ -44,7 +44,7 @@ window.__DOSSIER = window.__DOSSIER || (() => {
         equip_type: lead.equip?.split('·')[0]?.toLowerCase()?.trim() || null,
         status_master: 'Dossier criado',
         created_by: window.__VP_USER?.email || 'system'
-      });
+      }).select();
 
       if (error) throw error;
       await this.registrarHistorico(id, 'Lead qualificado', 'Dossier criado', 'Criação automática');
@@ -61,12 +61,48 @@ window.__DOSSIER = window.__DOSSIER || (() => {
        por numero_cotacao — reabrir/reassinar não duplica o Dossiê. */
     async criarDeProposta(proposta) {
       if (!proposta || proposta.numero_cotacao == null) return null;
+      /* Auditoria de 11/10: o dossiê nascido aqui não guardava proposta_id/cliente_id/lead_id (Status da Obra nunca achava
+         a proposta; "Vida do Cliente" nunca achava a obra) e ignorava o dossiê que o vendedor já tinha criado pelo Lead
+         ("Qualificar → Dossier"), gerando 2 dossiês da mesma obra. Agora: (1) dossiê da cotação existe → só completa os
+         vínculos que faltam; (2) existe dossiê do mesmo Lead ainda sem cotação → adota esse; (3) senão cria, já com os
+         vínculos. Nunca sobrescreve um vínculo já preenchido. */
+      const { data: forms } = await sb.from('formularios_elevador')
+        .select('lead_id, cliente_id').eq('numero_cotacao', proposta.numero_cotacao).limit(1);
+      const form = (forms || [])[0] || {};
+      const vinc = { proposta_id: proposta.id || null, cliente_id: proposta.cliente_id || form.cliente_id || null, lead_id: form.lead_id || null };
+      const completar = async (existente) => {
+        const patch = {};
+        Object.keys(vinc).forEach((k) => { if (vinc[k] && !existente[k]) patch[k] = vinc[k]; });
+        if (Object.keys(patch).length) {
+          const { error } = await sb.from('dossier_obra').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', existente.id);
+          if (error) console.warn('[DossierStore] vínculos do dossiê não completados', error);
+        }
+        return { id: existente.id };
+      };
+
       /* limit(1) em vez de maybeSingle(): com 2+ dossiês pra mesma cotação o
          maybeSingle() dava erro e `existente` ficava undefined — criava um
          terceiro. */
       const { data: existentes } = await sb.from('dossier_obra')
-        .select('id').eq('numero_cotacao', proposta.numero_cotacao).order('created_at', { ascending: true }).limit(1);
-      if (existentes && existentes.length) return existentes[0];
+        .select('id, proposta_id, cliente_id, lead_id').eq('numero_cotacao', proposta.numero_cotacao).order('created_at', { ascending: true }).limit(1);
+      if (existentes && existentes.length) return completar(existentes[0]);
+
+      if (vinc.lead_id) {
+        const { data: doLead } = await sb.from('dossier_obra')
+          .select('id, proposta_id, cliente_id, lead_id, status_master').eq('lead_id', vinc.lead_id).is('numero_cotacao', null)
+          .order('created_at', { ascending: true }).limit(1);
+        if (doLead && doLead.length) {
+          const d = doLead[0];
+          const { error } = await sb.from('dossier_obra').update({ numero_cotacao: proposta.numero_cotacao, status_master: 'Contrato assinado', updated_at: new Date().toISOString() }).eq('id', d.id);
+          if (error) throw error;
+          await completar(d);
+          await this.registrarHistorico(d.id, d.status_master || 'Dossier criado', 'Contrato assinado', `Proposta da cotação Nº ${proposta.numero_cotacao} assinada — dossiê do Lead ligado à cotação`);
+          if (window.EventosFluxo) window.EventosFluxo.registrar({
+            evento: 'DOSSIE_CRIADO', numeroCotacao: proposta.numero_cotacao, alvoLabel: proposta.titulo || d.id, alvoId: d.id,
+          });
+          return { id: d.id };
+        }
+      }
 
       const dj = proposta.data_json || {};
       const cliente = dj.cliente || {};
@@ -81,6 +117,9 @@ window.__DOSSIER = window.__DOSSIER || (() => {
         state: obra.uf || null,
         equip_type: proposta.proposal_type || null,
         numero_cotacao: proposta.numero_cotacao,
+        proposta_id: vinc.proposta_id,
+        cliente_id: vinc.cliente_id,
+        lead_id: vinc.lead_id,
         status_master: 'Contrato assinado',
         created_by: window.__VP_USER?.email || 'system',
       });

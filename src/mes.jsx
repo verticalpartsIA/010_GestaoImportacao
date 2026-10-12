@@ -104,7 +104,7 @@ function MESDetalhe({ ctx, id, onVoltar }) {
 
   const carregar = React.useCallback(async () => {
     const [m, h, bl, mt] = await Promise.all([
-      sb.from('mes_ordens').select('*, op:pcp_ordens(numero, titulo, produto, cliente, prazo_entrega, quantidade, observacao)').eq('ordem_id', id).maybeSingle(),
+      sb.from('mes_ordens').select('*, op:pcp_ordens(numero, titulo, produto, cliente, prazo_entrega, quantidade, observacao, status)').eq('ordem_id', id).maybeSingle(),
       sb.from('mes_historico').select('*').eq('ordem_id', id).order('created_at', { ascending: false }).limit(200),
       sb.from('mes_bloqueios').select('*').eq('ordem_id', id).order('inicio', { ascending: false }),
       sb.from('pcp_ordem_materiais').select('*').eq('ordem_id', id).order('codigo'),
@@ -146,7 +146,11 @@ function MESDetalhe({ ctx, id, onVoltar }) {
     if (await temBloqueioNoBanco()) { setErro('OP bloqueada. Desbloqueie antes de iniciar.'); setBusy(false); carregar(); return; }
     const { error } = await sb.from('mes_execucoes').insert({ ordem_id: id, etapa_codigo: codigo, operador: mesUser() });
     if (error) { setErro(error.message); setBusy(false); return; }
-    if (vindoDeAguardando) await sb.from('mes_ordens').update({ etapa_atual: codigo, etapa_desde: new Date().toISOString() }).eq('ordem_id', id);
+    if (vindoDeAguardando) {
+      await sb.from('mes_ordens').update({ etapa_atual: codigo, etapa_desde: new Date().toISOString() }).eq('ordem_id', id);
+      // Avisa o PCP: a OP passou a estar em produção (antes o PCP ficava "Aguardando" com o chão de fábrica já trabalhando).
+      await sb.from('pcp_ordens').update({ status: 'em_producao' }).eq('id', id).eq('status', 'aguardando');
+    }
     await mesHist(sb, id, 'etapa_iniciada', vindoDeAguardando ? 'AGUARDANDO' : codigo, codigo, 'Iniciou ' + mesNomeEtapa(etapas, codigo));
     await carregar(); ctx.recarregar(); setBusy(false);
   };
@@ -241,6 +245,17 @@ function MESDetalhe({ ctx, id, onVoltar }) {
     const para = prox ? prox.codigo : 'EXPEDIDO';
     await sb.from('mes_ordens').update({ etapa_atual: para, etapa_desde: agora.toISOString(), concluida_em: prox ? null : agora.toISOString() }).eq('ordem_id', id);
     await mesHist(sb, id, 'etapa_concluida', d.etapa_atual, para, `Concluiu ${mesNomeEtapa(etapas, d.etapa_atual)} (${Math.round(durMin)} min trabalhados${pausaMin >= 1 ? ', ' + Math.round(pausaMin) + ' min parado' : ''})`);
+    /* Última etapa do MES concluída → conclui a OP no PCP (auditoria de 11/10: o MES nunca devolvia nada ao PCP, então a
+       OP ficava "Em produção", a baixa no Omie não aparecia e a Emissão de NF não via a produção pronta). Quantidade
+       produzida = quantidade da OP, sem perda (o MES não registra perda; quem tiver perda corrige na OP do PCP). Só mexe em
+       OP ainda aberta — nunca reabre nem sobrescreve uma OP já concluída/cancelada à mão. */
+    if (!prox) {
+      const fimPcp = await sb.from('pcp_ordens').update({
+        status: 'concluida', data_finalizacao: agora.toISOString().slice(0, 10), qtd_produzida: d.op.quantidade, qtd_perdida: 0,
+      }).eq('id', id).in('status', ['aguardando', 'em_producao']).select('id');
+      if (fimPcp.error) setErro('Etapas do MES concluídas, mas a OP não foi concluída no PCP: ' + fimPcp.error.message + '. Conclua a OP em PCP › Ordens.');
+      else if ((fimPcp.data || []).length) await mesHist(sb, id, 'op_concluida_pcp', para, para, 'OP concluída no PCP (fim do fluxo do MES)');
+    }
     window.VPLog?.registrar?.({ modulo: 'MES', acao: 'concluir_etapa', alvo: d.op.numero, alvo_id: id, detalhe: `${d.etapa_atual} → ${para}` });
     await carregar(); ctx.recarregar(); setBusy(false);
   };
