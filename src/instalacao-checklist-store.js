@@ -44,6 +44,10 @@
      obterSessaoAdministrativa para pedir a sessão por RPC em vez de ler as tabelas. */
   const _tokenPorDossier = new Map();
 
+  /* dossierId -> 'cliente' das leituras públicas que caíram no fallback sem RPC: a página pública não
+     pode mostrar mais do que a RPC mostra (ex.: o vendedor fica de fora). */
+  const _modoFallback = new Map();
+
   async function obterPorTokenRpc(token, modo) {
     const c = sb(); if (!c || !token) return { falhou: true };
     if (!usarRpcPublica()) return { falhou: true };
@@ -212,6 +216,7 @@
     if (!r.falhou) return r.data;
     const { data: dossier } = await c.from('dossier_obra').select('*').eq('link_publico_token', token).maybeSingle();
     if (!dossier) return null;
+    _modoFallback.set(dossier.id, 'cliente');
     const itens = await listarPorDossier(dossier.id);
     return { dossier, itens };
   }
@@ -259,10 +264,11 @@
     }
     const itens = [];
 
-    // Vendedor — lead do dossiê (gravado pela Proposta assinada); sem ele, o lead do
+    // Vendedor — só no app interno; a página pública (cliente) não o mostra, nem no fallback sem RPC.
+    // Lead do dossiê (gravado pela Proposta assinada); sem ele, o lead do
     // Formulário da mesma cotação. (propostas não tem coluna lead_id.)
-    let leadId = dossier.lead_id || null;
-    if (!leadId && dossier.numero_cotacao != null) {
+    let leadId = _modoFallback.get(dossier.id) === 'cliente' ? null : (dossier.lead_id || null);
+    if (!leadId && _modoFallback.get(dossier.id) !== 'cliente' && dossier.numero_cotacao != null) {
       const { data: form } = await c.from('formularios_elevador').select('lead_id')
         .eq('numero_cotacao', dossier.numero_cotacao).limit(1).maybeSingle();
       leadId = form && form.lead_id || null;
