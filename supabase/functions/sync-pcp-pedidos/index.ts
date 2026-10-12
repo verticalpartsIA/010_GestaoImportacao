@@ -1,7 +1,7 @@
 /* ============================================================
    sync-pcp-pedidos — Edge Function (vpprd) · PCP, relatórios Pedidos e Clientes.
 
-   SÓ LÊ do Omie (ListarPedidos de produtos/pedido e ConsultarCliente de geral/clientes) e grava
+   SÓ LÊ do Omie (ListarPedidos de produtos/pedido, ConsultarCliente de geral/clientes e ListarNF de produtos/nfconsultar) e grava
    em pcp_pedidos / pcp_pedido_itens. Nada é escrito no Omie.
 
    Guarda apenas os itens "do PCP": quadros de comando, corrimãos e cabos (aço / manobra),
@@ -238,6 +238,8 @@ Deno.serve(async (req) => {
     let gravados = 0, ignorados = 0;
     for (const p of pedidos) {
       const c = p.cabecalho || {};
+      // Etapa 10 é só previsão (pcp_previsao_pedidos, via {"etapa":"10"}): nunca entra em pcp_pedidos, qualquer que seja o modo de leitura (#843 C4).
+      if (String(c.etapa) === "10") { ignorados++; continue; }
       const todos = (p.det || []).map((d: any, i: number) => ({ d: d.produto || {}, seq: i + 1 }));
       const itens = todos.filter((x: any) => ehPcp(x.d.codigo));
       if (!itens.length) { ignorados++; continue; }       // só guardamos pedidos que têm item do PCP; nesses, o pedido inteiro (a Expedição envia tudo)
