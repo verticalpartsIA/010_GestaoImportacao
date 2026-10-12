@@ -294,7 +294,9 @@ Deno.serve(async (req) => {
 
     /* ---- 2) Necessidade (mesma montagem da demanda da tela) ---- */
     const historico = new Set(acomp.filter((a) => a.historico).map((a) => a.numero_pedido));
-    const abertos = pedidos.filter((p) => !historico.has(p.numero_pedido) && p.etapa !== "00");
+    /* Carteira firme = etapas 20 a 59 (mesma regra da tela Necessidade, necEtapaFirme): 00/10 ainda não são venda firme e 60+ já saiu do estoque. */
+    const etapaFirme = (e: any) => { const n = Number(e); return n >= 20 && n < 60; };
+    const abertos = pedidos.filter((p) => !historico.has(p.numero_pedido) && etapaFirme(p.etapa));
     const porCodigo = new Map(abertos.map((p) => [p.codigo_pedido, p]));
     const demanda: any[] = [];
     itens.forEach((i) => {
