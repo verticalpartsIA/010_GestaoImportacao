@@ -56,11 +56,102 @@
     const { data } = await c.from('formularios_elevador').select('created_by, numero_cotacao').eq('id', formularioId).maybeSingle();
     if (data) await exigirAcesso(data.created_by, data.numero_cotacao);
   }
+  async function formularioDaUnidade(unidadeId) {
+    const c = sb(); if (!c) return null;
+    const { data } = await c.from('formularios_elevador_unidades').select('formulario_id').eq('id', unidadeId).maybeSingle();
+    return data ? data.formulario_id : null;
+  }
   async function exigirAcessoDaUnidade(unidadeId) {
     if (!emailAtual()) return;
     const c = sb(); if (!c) return;
     const { data } = await c.from('formularios_elevador_unidades').select('formulario_id').eq('id', unidadeId).maybeSingle();
     if (data && data.formulario_id) await exigirAcessoAoFormulario(data.formulario_id);
+  }
+
+  /* ---------- Trava após a Precificação + destrave pelo Líder (12/10/2026, pedido do usuário) ----------
+     Fluxo: o vendedor preenche → envia ao fornecedor → vem a cotação → o Financeiro precifica ("TRAVA").
+     Dali em diante o formulário (e suas unidades) só volta a ser editado se o Líder do setor destravar, com
+     motivo (o Líder vê discrepância, dado faltando etc.). O vendedor só PEDE o destrave (alerta ao Líder).
+     "Precificado" = existe precificação da cotação (precificacoes_elevador) OU o formulário foi mandado direto
+     para a Precificação. O destrave dura até o vendedor devolver a cotação (enviar / enviar direto) — aí trava de novo.
+     Quem edita pela tela do Formulário passa { origem: 'formulario' } e é barrado; a Precificação ("Trocar", do
+     Financeiro) não passa nada e segue livre (é o Financeiro corrigindo a cotação dele).
+     Limite honesto: checagem do front (RLS aberta, issue #571) — como a visão por vendedor. */
+  const COLUNAS_TRAVA = 'id, numero_cotacao, created_by, envio_direto_precificacao_em, destravado_em, destravado_por, destrave_motivo';
+  async function estadoTrava(formularioId) {
+    const c = sb();
+    const vazio = { travado: false, precificado: false, destravado: false };
+    if (!c || !formularioId) return vazio;
+    const { data: f, error } = await c.from('formularios_elevador').select(COLUNAS_TRAVA).eq('id', formularioId).maybeSingle();
+    if (error || !f) return vazio; // falha de leitura não trava o trabalho do vendedor
+    let precificado = !!f.envio_direto_precificacao_em;
+    if (!precificado) {
+      const { data: pr } = await c.from('precificacoes_elevador').select('id').eq('formulario_elevador_id', formularioId).limit(1);
+      precificado = !!(pr && pr.length);
+    }
+    const destravado = !!f.destravado_em;
+    return {
+      travado: precificado && !destravado, precificado, destravado,
+      destravadoEm: f.destravado_em || null, destravadoPor: f.destravado_por || null, motivo: f.destrave_motivo || null,
+      numeroCotacao: f.numero_cotacao, donoEmail: f.created_by || null,
+    };
+  }
+  async function exigirDestravado(formularioId, opts) {
+    if (!opts || opts.origem !== 'formulario') return;
+    if (!emailAtual()) return; // página pública do cliente (link do formulário): não passa por aqui
+    const st = await estadoTrava(formularioId);
+    if (st.travado) throw new Error(`A cotação Nº ${st.numeroCotacao} está TRAVADA: já foi precificada. Só o Líder (ex.: Regiane) destrava, com o motivo. Use "Pedir destrave".`);
+  }
+  async function podeDestravar() {
+    const ps = window.PropostaStore;
+    return !!(ps && ps.temCapacidade && await ps.temCapacidade('formularios', 'destravar'));
+  }
+  async function inserirAlerta(row) {
+    const c = sb(); if (!c) return;
+    try { await c.from('alertas').insert({ resolved: false, ...row }); } catch (e) { console.warn('[FormularioElevadorStore] alerta falhou', e); }
+  }
+  function textoMotivo(m) { return String(m || '').trim(); }
+  async function destravar(formularioId, motivo) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const m = textoMotivo(motivo);
+    if (m.length < 10) throw new Error('Explique o motivo do destrave (mínimo 10 letras): o que está errado ou faltando.');
+    if (!(await podeDestravar())) throw new Error('Só quem tem a alçada "Destrava formulário/proposta" (o Líder) pode destravar.');
+    const st = await estadoTrava(formularioId);
+    const { data, error } = await c.from('formularios_elevador')
+      .update({ destravado_em: new Date().toISOString(), destravado_por: emailAtual(), destrave_motivo: m })
+      .eq('id', formularioId).select('id');
+    if (error) throw error;
+    if (!data || !data.length) throw new Error('Nada foi destravado (formulário não encontrado ou sem permissão no banco).');
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Formulário de Elevadores', acao: 'Destravou o formulário após a precificação', alvo_id: formularioId, detalhe: { cotacao: st.numeroCotacao, motivo: m } });
+    if (st.donoEmail) await inserirAlerta({
+      id: `form-destravado-${formularioId}-${Date.now()}`, level: 'info', module: 'Comercial',
+      title: `Cotação Nº ${st.numeroCotacao} destravada para edição`, sub: `Motivo do Líder: ${m}`,
+      destinatario_email: st.donoEmail, rota: `/comercial/formulario-elevador/${formularioId}`,
+    });
+  }
+  async function pedirDestrave(formularioId, motivo) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const m = textoMotivo(motivo);
+    if (m.length < 10) throw new Error('Explique o que precisa mudar e por quê (mínimo 10 letras).');
+    const st = await estadoTrava(formularioId);
+    const { data: lideres } = await c.from('alcadas_capacidade').select('perfil_id').eq('modulo', 'formularios').eq('capacidade', 'destravar');
+    const ids = [...new Set((lideres || []).map((l) => l.perfil_id))];
+    let emails = [];
+    if (ids.length) { const { data: ps } = await c.from('perfis').select('email').in('id', ids); emails = (ps || []).map((p) => p.email).filter(Boolean); }
+    if (!emails.length) throw new Error('Nenhum Líder tem a alçada de destrave cadastrada. Avise o administrador.');
+    for (const em of emails) {
+      await inserirAlerta({
+        id: `form-pedido-destrave-${formularioId}-${em}-${Date.now()}`, level: 'warning', module: 'Comercial',
+        title: `Pedido de destrave — cotação Nº ${st.numeroCotacao}`, sub: `${emailAtual()} pede para editar: ${m}`,
+        destinatario_email: em, rota: `/comercial/formulario-elevador/${formularioId}`,
+      });
+    }
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Formulário de Elevadores', acao: 'Pediu destrave do formulário', alvo_id: formularioId, detalhe: { cotacao: st.numeroCotacao, motivo: m } });
+    return emails.length;
+  }
+  async function travarNovamente(formularioId) {
+    const c = sb(); if (!c) return;
+    await c.from('formularios_elevador').update({ destravado_em: null, destravado_por: null, destrave_motivo: null }).eq('id', formularioId).not('destravado_em', 'is', null);
   }
 
   /* ---------- Fornecedores (cadastro expansível) ---------- */
@@ -270,9 +361,10 @@
     'vendedor', 'finalidade_compra', 'envio_direto_precificacao_em',
   ]);
 
-  async function salvar(id, patch) {
+  async function salvar(id, patch, opts) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     await exigirAcessoAoFormulario(id);
+    await exigirDestravado(id, opts);
     const resolved = {};
     Object.keys(patch).forEach((k) => { if (FE_COLUNAS_VALIDAS.has(k)) resolved[k] = patch[k]; });
     if (resolved.endereco_obra_diferente !== undefined) {
@@ -339,6 +431,7 @@
 
   async function enviar(id) {
     await salvar(id, { status: 'enviado' });
+    await travarNovamente(id); // devolveu a cotação: o destrave acaba
   }
 
   /* "Enviar direto para Precificação" — pedido do usuário 19/08: preço já
@@ -348,6 +441,7 @@
      PrecificacaoElevadorStore.listarPendentes() (precificacao-elevador-store.js). */
   async function enviarDiretoParaPrecificacao(id) {
     await salvar(id, { status: 'enviado', envio_direto_precificacao_em: new Date().toISOString() });
+    await travarNovamente(id);
   }
 
   /* ---------- Unidades (um elevador por linha) ---------- */
@@ -365,9 +459,10 @@
     return out;
   }
 
-  async function adicionarUnidade(formularioId, unidade) {
+  async function adicionarUnidade(formularioId, unidade, opts) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     await exigirAcessoAoFormulario(formularioId);
+    await exigirDestravado(formularioId, opts);
     const id = novoId('FEU');
     const { data: existentes } = await c.from('formularios_elevador_unidades')
       .select('indice_ativo').eq('formulario_id', formularioId);
@@ -379,9 +474,10 @@
     return data;
   }
 
-  async function atualizarUnidade(unidadeId, patch) {
+  async function atualizarUnidade(unidadeId, patch, opts) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     await exigirAcessoDaUnidade(unidadeId);
+    if (opts && opts.origem === 'formulario') { const fid = await formularioDaUnidade(unidadeId); if (fid) await exigirDestravado(fid, opts); }
     const { error } = await c.from('formularios_elevador_unidades').update(limparVazios(patch)).eq('id', unidadeId);
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({
@@ -390,9 +486,10 @@
     });
   }
 
-  async function removerUnidade(unidadeId) {
+  async function removerUnidade(unidadeId, opts) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     await exigirAcessoDaUnidade(unidadeId);
+    if (opts && opts.origem === 'formulario') { const fid = await formularioDaUnidade(unidadeId); if (fid) await exigirDestravado(fid, opts); }
     const { error } = await c.from('formularios_elevador_unidades').delete().eq('id', unidadeId);
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({
@@ -577,6 +674,7 @@
     criar, salvar, obter, obterPorToken, gerarLinkPublico, enviar, enviarDiretoParaPrecificacao, listar, listarCotacoes,
     abrirOuConverterHistorico,
     adicionarUnidade, atualizarUnidade, removerUnidade, unidadeJaCotada,
+    estadoTrava, destravar, pedirDestrave, podeDestravar,
     publicUrl, formatarEndereco, listarFornecedores,
     listarModelosElevador, listarOpcoesElevador,
     listarAnexos, anexarArquivo, urlAssinadaAnexo, removerAnexo,

@@ -716,12 +716,25 @@
      Cliente aprovou = editor trava pro vendedor. Quem tem a capacidade
      'destravar_aprovada' pode reabrir — fica editável até o próximo
      Salvar, que retrava sozinho (não fica aberto pra sempre). */
-  async function destravar(id) {
+  /* 12/10/2026: a trava passou a valer desde o envio ao cliente (enviada,
+     visualizada, revisão pedida) e não só na aprovação — qualquer edição
+     depois disso exige o destrave do Líder, com motivo obrigatório. */
+  const STATUS_TRAVADOS = ['enviada', 'visualizada', 'revisao_solicitada', 'aprovada'];
+  async function destravar(id, motivo) {
+    const txt = String(motivo || '').trim();
+    if (txt.length < 10) throw new Error('Informe o motivo do destrave (mínimo 10 letras).');
+    if (!(await temCapacidade('propostas', 'destravar_aprovada'))) throw new Error('Você não tem a alçada para destravar propostas.');
     const c = sb(); if (!c) throw new Error('Supabase indisponível');
     const por = (window.__VP_USER || {}).email || null;
     const now = new Date().toISOString();
-    const { error } = await c.from('propostas').update({ destravada_em: now, destravada_por: por }).eq('id', id);
+    const { data: cur } = await c.from('propostas').select('log, numero_cotacao').eq('id', id).maybeSingle();
+    const log = Array.isArray(cur?.log) ? cur.log.slice() : [];
+    log.push({ status: 'destravada', at: now, meta: { por, motivo: txt } });
+    const { error } = await c.from('propostas').update({ destravada_em: now, destravada_por: por, log }).eq('id', id);
     if (error) throw error;
+    try {
+      window.VPLog?.registrar({ modulo: 'Propostas', acao: 'Destravou a proposta', alvo: 'Proposta', alvo_id: id, detalhe: { motivo: txt, cotacao: cur?.numero_cotacao || null } });
+    } catch (_) {}
     return { destravada_em: now, destravada_por: por };
   }
 
@@ -760,8 +773,8 @@
       let destravadaAgora = false;
       if (editId) {
         const { data: atual } = await c.from('propostas').select('status, destravada_em').eq('id', editId).maybeSingle();
-        if (atual && atual.status === 'aprovada' && !atual.destravada_em) {
-          return { erro: 'Proposta aprovada está travada para edição. Peça destrave a quem tem essa alçada.' };
+        if (atual && STATUS_TRAVADOS.includes(atual.status) && !atual.destravada_em) {
+          return { erro: 'Proposta enviada ao cliente está travada para edição. Peça o destrave ao Líder (informando o motivo).' };
         }
         if (atual && atual.destravada_em) destravadaAgora = true;
       }
