@@ -105,7 +105,7 @@ function IMSForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
         <div className="stack" style={{ gap: 12, marginTop: 14 }}>
           <div className="grid-2" style={{ gap: 12 }}>
             <PIField label="Nº embarque (opcional)"><PIInput value={form.numero_solicitacao} onChange={set('numero_solicitacao')}/></PIField>
-            <PIField label="Nº Cotação (liga ao fluxo da cotação)"><PIInput type="number" value={form.numero_cotacao ?? ''} onChange={set('numero_cotacao')}/></PIField>
+            <PIField label="Nº Cotação — só se for de equipamento (vazio = varejo/estoque)"><PIInput type="number" value={form.numero_cotacao ?? ''} onChange={set('numero_cotacao')}/></PIField>
             <PIField label="Status"><PISelect value={form.status} onChange={set('status')} options={IMS_STATUS}/></PIField>
           </div>
           <div className="grid-2" style={{ gap: 12 }}>

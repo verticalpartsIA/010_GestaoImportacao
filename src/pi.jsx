@@ -493,7 +493,7 @@ function PIForm({ embarques, initialData, isEdit, onSubmit, onCancel, saving }) 
         <div className="stack" style={{ gap: 14, marginTop: 14 }}>
           <div className="grid-3" style={{ gap: 12 }}>
             <PIField label="Número da P.I. *"><PIInput value={form.numero_pi} onChange={set('numero_pi')}/></PIField>
-            <PIField label="Nº Cotação (gate de compra do CEO)"><PIInput type="number" value={form.numero_cotacao} onChange={set('numero_cotacao')} disabled={cotacaoTravada}/></PIField>
+            <PIField label="Nº Cotação — só para equipamento (vazio = varejo/estoque)"><PIInput type="number" value={form.numero_cotacao} onChange={set('numero_cotacao')} disabled={cotacaoTravada}/></PIField>
             <PIField label="Data de abertura *"><PIInput type="date" value={form.data_abertura} onChange={set('data_abertura')}/></PIField>
             <PIField label="Status"><PISelect value={form.status} onChange={set('status')} options={PI_STATUS}/></PIField>
             <PIField label="Data de prontidão do pedido"><PIInput type="date" value={form.data_prontidao} onChange={set('data_prontidao')}/></PIField>
