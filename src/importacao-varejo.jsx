@@ -48,9 +48,87 @@ function IVCurvaBadge({ curva }) {
 
 function ivStatusDoItem(item) {
   if (item.sugestaoCompra > 0) return 'vermelha';
+  if (item.precisaRevisao) return 'amarela';   // venda esporádica aguardando o comprador
+  // Com sugestão de estoque calculada: amarelo = a posição está a menos de 25% acima do mínimo sugerido (vai precisar comprar logo).
+  if (item.estMaxSug != null) return item.estMaxSug > 0 && item.posicaoEstoque <= item.estMinSug * 1.25 ? 'amarela' : 'branca';
   if (item.estoqueDisponivel <= item.estoqueMinimo) return 'amarela';
   return 'branca';
 }
+
+const IV_MESES = ['jan', 'fev', 'mar', 'abr', 'mai', 'jun', 'jul', 'ago', 'set', 'out', 'nov', 'dez'];
+function ivRotuloMes(iso, comAno) {
+  if (!iso) return '';
+  const [y, m] = String(iso).slice(0, 10).split('-').map(Number);
+  return IV_MESES[m - 1] + (comAno ? '/' + String(y).slice(2) : '');
+}
+// mês i da série (0 = o mais antigo) a partir do mês inicial
+function ivMesDaSerie(inicioIso, i) {
+  const [y, m] = String(inicioIso).slice(0, 10).split('-').map(Number);
+  const d = new Date(y, m - 1 + i, 1);
+  return d.getFullYear() + '-' + String(d.getMonth() + 1).padStart(2, '0') + '-01';
+}
+const IV_TEND = {
+  alta:      { seta: '▲', cor: 'var(--vp-green-700, #047857)', rotulo: 'em alta' },
+  baixa:     { seta: '▼', cor: 'var(--vp-danger, #b91c1c)',    rotulo: 'em baixa' },
+  estavel:   { seta: '►', cor: 'var(--fg3, #6b7280)',          rotulo: 'estável' },
+  nova:      { seta: '▲', cor: 'var(--vp-info, #1d4ed8)',      rotulo: 'voltou a vender' },
+  sem_venda: { seta: '—', cor: 'var(--fg3, #6b7280)',          rotulo: 'sem venda' },
+};
+/* Gráfico de linha dos últimos 12 meses de venda (unidades): ponto verde = mês de maior venda, vermelho = mês de menor venda. */
+function IVSparkline({ serie, inicio, cor, pico, vale }) {
+  if (!serie || serie.length < 2) return null;
+  const W = 92, H = 26, P = 3;
+  const max = Math.max(...serie, 1);
+  const x = (i) => P + (i * (W - 2 * P)) / (serie.length - 1);
+  const y = (v) => H - P - (v / max) * (H - 2 * P);
+  const pts = serie.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
+  const idx = (iso) => { for (let i = 0; i < serie.length; i++) if (ivMesDaSerie(inicio, i) === String(iso).slice(0, 10)) return i; return -1; };
+  const ip = pico ? idx(pico) : -1, iv = vale ? idx(vale) : -1;
+  const dica = serie.map((v, i) => ivRotuloMes(ivMesDaSerie(inicio, i), true) + ': ' + ivFmtNum(v)).join('\n');
+  return (
+    <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Vendas dos últimos 12 meses" style={{ display: 'block' }}>
+      <title>{dica}</title>
+      <polyline points={pts} fill="none" stroke={cor} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
+      {ip >= 0 && <circle cx={x(ip)} cy={y(serie[ip])} r="2.6" fill="var(--vp-green-700, #047857)" />}
+      {iv >= 0 && iv !== ip && <circle cx={x(iv)} cy={y(serie[iv])} r="2.6" fill="var(--vp-danger, #b91c1c)" />}
+    </svg>
+  );
+}
+/* Célula de texto/número editável direto na tabela: grava ao sair do campo ou com Enter; Esc desfaz.
+   Sem permissão de gerenciar, mostra só o valor. */
+function IVCelulaEditavel({ valor, tipo, placeholder, podeEditar, onSave, largura, alinhar }) {
+  const [txt, setTxt] = React.useState(valor == null ? '' : String(valor));
+  const [salvando, setSalvando] = React.useState(false);
+  React.useEffect(() => { setTxt(valor == null ? '' : String(valor)); }, [valor]);
+  if (!podeEditar) return <span>{valor == null || valor === '' ? '—' : valor}</span>;
+  const confirmar = async () => {
+    const novo = txt.trim();
+    if (novo === (valor == null ? '' : String(valor))) return;
+    setSalvando(true);
+    try { await onSave(novo); }
+    catch (e) { window.toast?.('Erro ao salvar: ' + (e.message || e), 'error'); setTxt(valor == null ? '' : String(valor)); }
+    finally { setSalvando(false); }
+  };
+  return (
+    <input
+      className="input"
+      type={tipo === 'numero' ? 'number' : 'text'}
+      min={tipo === 'numero' ? '0' : undefined}
+      step={tipo === 'numero' ? 'any' : undefined}
+      value={txt}
+      placeholder={placeholder}
+      disabled={salvando}
+      onChange={(e) => setTxt(e.target.value)}
+      onBlur={confirmar}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter') e.currentTarget.blur();
+        if (e.key === 'Escape') { setTxt(valor == null ? '' : String(valor)); e.currentTarget.blur(); }
+      }}
+      style={{ width: largura || 80, height: 28, padding: '2px 6px', fontSize: 12, textAlign: alinhar || 'left' }}
+    />
+  );
+}
+
 const IV_LINHA_STYLE = {
   vermelha: { background: 'var(--vp-danger-tint)' },
   amarela: { background: 'var(--vp-warning-tint)' },
@@ -261,6 +339,67 @@ function IVModalEnviarOmie({ itens, onClose, onEnviado }) {
   );
 }
 
+/* ---------- Modal: revisão do comprador (mínimo/máximo) ---------- */
+function IVModalRevisao({ item, onClose, onSaved }) {
+  const [minimo, setMinimo] = React.useState(String(item.estMinSug != null ? item.estMinSug : ''));
+  const [maximo, setMaximo] = React.useState(String(item.estMaxSug != null ? item.estMaxSug : ''));
+  const [obs, setObs] = React.useState((item.revisao && item.revisao.observacao) || '');
+  const [saving, setSaving] = React.useState(false);
+  const executar = async (acao) => {
+    setSaving(true);
+    try {
+      await window.ImportacaoVarejoStore.salvarRevisao({ item, acao, minimo, maximo, observacao: obs });
+      window.toast?.({ aprovar: 'Sugestão aprovada.', ajustar: 'Mínimo e máximo ajustados.', descartar: 'Produto marcado para não repor.', desfazer: 'Revisão desfeita.' }[acao], 'success');
+      onSaved();
+    } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+    finally { setSaving(false); }
+  };
+  const origem = { calculado: 'calculado pelo sistema', aprovado: 'sugestão aprovada pelo comprador', manual: 'ajustado pelo comprador', descartado: 'marcado para não repor' }[item.estOrigem] || '';
+  const revisadoPor = item.revisao && item.revisao.revisado_por ? ` · ${item.revisao.revisado_por}, ${ivFmtData(item.revisao.revisado_em)}` : '';
+  return (
+    <Modal title={`Revisão do comprador — ${item.codigo}`} onClose={onClose} width={520}
+      footer={<>
+        <Button variant="ghost" onClick={onClose} disabled={saving}>Fechar</Button>
+        {item.revisao && item.revisao.status !== 'pendente' && <Button variant="ghost" onClick={() => executar('desfazer')} disabled={saving}>Desfazer revisão</Button>}
+        <Button variant="outline" onClick={() => executar('descartar')} disabled={saving}>Não repor</Button>
+        <Button variant="outline" onClick={() => executar('aprovar')} disabled={saving || !(item.estMaxSugCalc > 0)}>Aprovar sugestão</Button>
+        <Button variant="primary" onClick={() => executar('ajustar')} disabled={saving}>Salvar ajuste</Button>
+      </>}>
+      <div className="stack" style={{ gap: 12 }}>
+        <div className="small muted">{item.descricao}</div>
+        {item.estSerie && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+            <IVSparkline serie={item.estSerie} inicio={item.estSerieInicio} cor={(IV_TEND[item.estTendencia] || IV_TEND.estavel).cor} pico={item.estMesPico} vale={item.estMesVale} />
+            <div className="small">
+              Vendeu em <b>{item.estMesesVenda} de 6</b> meses · demanda base <b>{ivFmtNum(item.estDemandaMensal)}</b>/mês · confiança <b>{item.estConfianca}</b>
+              {item.estMesPico && <> · maior venda em {ivRotuloMes(item.estMesPico, true)}</>}
+            </div>
+          </div>
+        )}
+        <div className="small" style={{ background: 'var(--vp-gray-50)', borderRadius: 6, padding: '8px 10px' }}>
+          Sistema sugere: mínimo <b>{ivFmtNum(item.estMinSugCalc)}</b> · máximo <b>{ivFmtNum(item.estMaxSugCalc)}</b> (prazo {item.estPrazoDias} d + ciclo {item.estCicloDias} d).<br />
+          Posição hoje: <b>{ivFmtNum(item.posicaoEstoque)}</b> (disponível + pendente + comprado). Em uso: {origem}{revisadoPor}.
+          {item.precisaRevisao && <> Enquanto não for revisado, <b>este produto não gera compra</b>{item.sugestaoSeAprovada > 0 ? <> (aprovando, a sugestão seria <b>{ivFmtNum(item.sugestaoSeAprovada)}</b>)</> : null}.</>}
+        </div>
+        <div style={{ display: 'flex', gap: 12 }}>
+          <div style={{ flex: 1 }}>
+            <label className="up-eyebrow muted">Mínimo (ponto de pedido)</label>
+            <input className="input" type="number" min="0" step="1" value={minimo} onChange={(e) => setMinimo(e.target.value)} />
+          </div>
+          <div style={{ flex: 1 }}>
+            <label className="up-eyebrow muted">Máximo (comprar até)</label>
+            <input className="input" type="number" min="0" step="1" value={maximo} onChange={(e) => setMaximo(e.target.value)} />
+          </div>
+        </div>
+        <div>
+          <label className="up-eyebrow muted">Observação (opcional)</label>
+          <input className="input" value={obs} onChange={(e) => setObs(e.target.value)} placeholder="ex.: projeto especial do cliente X, comprar só sob pedido…" />
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
 function ImportacaoVarejoPage({ setRoute }) {
   const [items, setItems] = React.useState([]);
   const [loading, setLoading] = React.useState(true);
@@ -271,6 +410,9 @@ function ImportacaoVarejoPage({ setRoute }) {
   const [busca, setBusca] = React.useState('');
   const [corFiltro, setCorFiltro] = React.useState('todas');
   const [curvaFiltro, setCurvaFiltro] = React.useState('todas');
+  const [contFiltro, setContFiltro] = React.useState('todas');   // todas | divergentes | semcontagem
+  const [tendFiltro, setTendFiltro] = React.useState('todas');   // todas | alta | baixa
+  const [avisoContagem, setAvisoContagem] = React.useState(null);
   const [selecionados, setSelecionados] = React.useState(() => new Set());
   /* Bug real (varredura de URLs, 09/10): os modais "Revisar lote de compra" e
      "Comprado"/"lançar" eram só useState — F5/link direto sempre voltavam
@@ -284,6 +426,8 @@ function ImportacaoVarejoPage({ setRoute }) {
   const fecharModalIv = () => setItemUrl(null);
   const modalLote = acaoUrl === 'lote' ? itemModalUrl : null;
   const modalComprado = acaoUrl === 'comprado' ? itemModalUrl : null;
+  const modalRevisao = acaoUrl === 'revisao' ? itemModalUrl : null;
+  const [soRevisar, setSoRevisar] = React.useState(false);
   const [modalEnviar, setModalEnviar] = React.useState(false);
   const [podeGerenciar, setPodeGerenciar] = React.useState(false);
   const [sincronizando, setSincronizando] = React.useState(false);
@@ -300,6 +444,7 @@ function ImportacaoVarejoPage({ setRoute }) {
         setLastEstoqueSyncAt(data.lastEstoqueSyncAt || null);
         setLastGiroSyncAt(data.lastGiroSyncAt || null);
         setAviso(data.aviso || null);
+        setAvisoContagem(data.avisoContagem || null);
       })
       .catch((e) => setErro(e.message))
       .finally(() => setLoading(false));
@@ -312,9 +457,34 @@ function ImportacaoVarejoPage({ setRoute }) {
       const combinaTexto = !q || i.codigo.toLowerCase().includes(q) || i.descricao.toLowerCase().includes(q);
       const combinaCor = corFiltro === 'todas' || ivStatusDoItem(i) === corFiltro;
       const combinaCurva = curvaFiltro === 'todas' || i.curva === curvaFiltro;
-      return combinaTexto && combinaCor && combinaCurva;
+      const combinaCont = contFiltro === 'todas'
+        || (contFiltro === 'divergentes' && i.acuracia && !i.acuracia.ok)
+        || (contFiltro === 'semcontagem' && i.baseEstoque === 'omie');
+      if (soRevisar && !i.precisaRevisao) return false;
+      const combinaTend = tendFiltro === 'todas' || i.estTendencia === tendFiltro || (tendFiltro === 'alta' && i.estTendencia === 'nova');
+      return combinaTexto && combinaCor && combinaCurva && combinaCont && combinaTend;
     });
-  }, [items, busca, corFiltro, curvaFiltro]);
+  }, [items, busca, corFiltro, curvaFiltro, contFiltro, tendFiltro, soRevisar]);
+  const nParaRevisar = React.useMemo(() => items.filter((i) => i.precisaRevisao).length, [items]);
+
+  // Acuracidade = % de itens contados em que a prateleira bateu com o sistema no dia da contagem.
+  const resumoAcuracia = React.useMemo(() => {
+    const contados = items.filter((i) => i.acuracia);
+    const ok = contados.filter((i) => i.acuracia.ok).length;
+    return {
+      contados: contados.length, ok, divergentes: contados.length - ok,
+      pct: contados.length ? Math.round((ok / contados.length) * 1000) / 10 : null,
+      semContagemValida: items.filter((i) => i.baseEstoque === 'omie').length,
+    };
+  }, [items]);
+
+  // Grava contagem/endereço e atualiza só a linha (sem recarregar a tela inteira): a sugestão da linha é recalculada na hora.
+  const salvarContagemItem = async (item, campos) => {
+    const row = await window.ImportacaoVarejoStore.salvarContagem({ item, ...campos });
+    const linha = { quantidade: row.quantidade != null ? row.quantidade : null, saldo_sistemico: row.saldo_sistemico != null ? row.saldo_sistemico : null, contado_em: row.contado_em || null, contado_por: row.contado_por || null, endereco: row.endereco, observacao: row.observacao };
+    setItems((prev) => prev.map((x) => (x.codigo === item.codigo ? window.ImportacaoVarejoStore.aplicarContagem(x, linha) : x)));
+    window.toast?.(campos.quantidade != null && campos.quantidade !== '' ? 'Contagem registrada.' : 'Endereço salvo.', 'success');
+  };
 
   const calcularTotais = (lista) => lista.reduce((acc, i) => {
     const temPrecoEPrecisaComprar = i.sugestaoCompra > 0 && i.ultimoPrecoUnitario != null;
@@ -322,11 +492,12 @@ function ImportacaoVarejoPage({ setRoute }) {
       estoqueFisico: acc.estoqueFisico + i.estoqueFisico,
       estoqueDisponivel: acc.estoqueDisponivel + i.estoqueDisponivel,
       sugestaoCompra: acc.sugestaoCompra + i.sugestaoCompra,
+      sugAteMax: acc.sugAteMax + (i.sugAteMax || 0),
       comprado: acc.comprado + i.comprado,
       valorAPagar: acc.valorAPagar + (temPrecoEPrecisaComprar ? i.sugestaoCompra * i.ultimoPrecoUnitario : 0),
       itensSemPreco: acc.itensSemPreco + (i.sugestaoCompra > 0 && i.ultimoPrecoUnitario == null ? 1 : 0),
     };
-  }, { estoqueFisico: 0, estoqueDisponivel: 0, sugestaoCompra: 0, comprado: 0, valorAPagar: 0, itensSemPreco: 0 });
+  }, { estoqueFisico: 0, estoqueDisponivel: 0, sugestaoCompra: 0, sugAteMax: 0, comprado: 0, valorAPagar: 0, itensSemPreco: 0 });
   const totais = React.useMemo(() => calcularTotais(filtrados), [filtrados]);
 
   const forcarSync = async () => {
@@ -376,7 +547,7 @@ function ImportacaoVarejoPage({ setRoute }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule" />Logística · Importação Varejo</div>
           <h1 className="page-head__title">Importação Varejo</h1>
-          <p className="page-head__sub">Estoque (sincronizado 4x/dia), giro de vendas (desde 01/01/2024) e Sugestão de Compra dos produtos importados vendidos avulsos.</p>
+          <p className="page-head__sub">Estoque (sincronizado 4x/dia), vendas reais do Omie (atualizadas todo dia) e Sugestão de Compra dos produtos importados vendidos avulsos: compra-se quando a posição chega ao mínimo sugerido e a quantidade leva até o máximo sugerido.</p>
         </div>
         <div className="page-head__r">
           {podeGerenciar && (
@@ -403,6 +574,24 @@ function ImportacaoVarejoPage({ setRoute }) {
         <div className="alert warning" style={{ marginBottom: 16 }}>
           <Icon.warning />
           <div><div className="alert__title">Catálogo vazio</div><div className="alert__sub">{aviso}</div></div>
+        </div>
+      )}
+
+      {avisoContagem && !erro && (
+        <div className="alert warning" style={{ marginBottom: 16 }}>
+          <Icon.warning />
+          <div><div className="alert__title">Contagens físicas indisponíveis</div><div className="alert__sub">{avisoContagem}</div></div>
+        </div>
+      )}
+
+      {nParaRevisar > 0 && !erro && (
+        <div className="alert warning" style={{ marginBottom: 16 }}>
+          <Icon.warning />
+          <div style={{ flex: 1 }}>
+            <div className="alert__title">{nParaRevisar} produto(s) de venda esporádica aguardam revisão do comprador</div>
+            <div className="alert__sub">Vendem em poucos meses, então o sistema não gera compra automática para eles. Abra cada um, veja o histórico e aprove, ajuste mínimo/máximo ou marque "não repor".</div>
+          </div>
+          <Button size="sm" variant={soRevisar ? 'primary' : 'outline'} onClick={() => setSoRevisar(!soRevisar)}>{soRevisar ? 'Mostrar todos' : 'Ver a fila'}</Button>
         </div>
       )}
 
@@ -460,9 +649,26 @@ function ImportacaoVarejoPage({ setRoute }) {
             {v === 'todas' ? 'Todas as curvas' : `Curva ${v}`}
           </Button>
         ))}
+        <span style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 6px' }} />
+        <Button size="sm" variant={soRevisar ? 'primary' : 'ghost'} onClick={() => setSoRevisar(!soRevisar)} data-tip="Produtos de venda esporádica: o sistema não compra sozinho. O comprador aprova, ajusta ou marca 'não repor'.">
+          ⚑ Para revisar <span style={{ opacity: .7 }}>({nParaRevisar})</span>
+        </Button>
+        <Button size="sm" variant={tendFiltro === 'alta' ? 'primary' : 'ghost'} onClick={() => setTendFiltro(tendFiltro === 'alta' ? 'todas' : 'alta')} data-tip="Vendas dos últimos 3 meses pelo menos 20% acima dos 3 meses anteriores (ou produto que voltou a vender)">
+          ▲ Em alta <span style={{ opacity: .7 }}>({items.filter((i) => i.estTendencia === 'alta' || i.estTendencia === 'nova').length})</span>
+        </Button>
+        <Button size="sm" variant={tendFiltro === 'baixa' ? 'primary' : 'ghost'} onClick={() => setTendFiltro(tendFiltro === 'baixa' ? 'todas' : 'baixa')} data-tip="Vendas dos últimos 3 meses pelo menos 20% abaixo dos 3 meses anteriores">
+          ▼ Em baixa <span style={{ opacity: .7 }}>({items.filter((i) => i.estTendencia === 'baixa').length})</span>
+        </Button>
+        <span style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 6px' }} />
+        <Button size="sm" variant={contFiltro === 'divergentes' ? 'primary' : 'ghost'} onClick={() => setContFiltro(contFiltro === 'divergentes' ? 'todas' : 'divergentes')} data-tip="Itens em que a contagem da prateleira não bateu com o saldo do sistema no dia da contagem">
+          Divergentes <span style={{ opacity: .7 }}>({resumoAcuracia.divergentes})</span>
+        </Button>
+        <Button size="sm" variant={contFiltro === 'semcontagem' ? 'primary' : 'ghost'} onClick={() => setContFiltro(contFiltro === 'semcontagem' ? 'todas' : 'semcontagem')} data-tip="Sem contagem física nos últimos 30 dias: a sugestão usa só o saldo do Omie, que pode estar errado">
+          Saldo não conferido <span style={{ opacity: .7 }}>({resumoAcuracia.semContagemValida})</span>
+        </Button>
       </div>
 
-      <Card title="Produtos importados" sub={`Estoque sincronizado em ${ivFmtDataHora(lastEstoqueSyncAt)} · Giro/Curva calculados em ${ivFmtDataHora(lastGiroSyncAt)}`}>
+      <Card title="Produtos importados" sub={`Estoque sincronizado em ${ivFmtDataHora(lastEstoqueSyncAt)} · Giro/Curva calculados em ${ivFmtDataHora(lastGiroSyncAt)} · Acuracidade da contagem: ${resumoAcuracia.pct != null ? resumoAcuracia.pct.toLocaleString('pt-BR') + '% (' + resumoAcuracia.ok + ' de ' + resumoAcuracia.contados + ' itens contados batem)' : 'sem contagens'} · Saldo não conferido (sem contagem dos últimos ${window.ImportacaoVarejoStore.CONTAGEM_VALIDADE_DIAS} dias): ${resumoAcuracia.semContagemValida} itens`}>
       <div className="table-wrap" style={{ border: 0 }}>
         <style>{`table.t.pcp-grid.iv-grid th,table.t.pcp-grid.iv-grid td{padding-left:6px;padding-right:6px}`}</style>
         <table className="t pcp-grid iv-grid">
@@ -482,14 +688,20 @@ function ImportacaoVarejoPage({ setRoute }) {
             )}
             <th>Código</th>
             <th>Descrição</th>
+            <th>Endereço</th>
             <th className="text-center">Curva</th>
             <th className="text-right">Físico</th>
             <th className="text-right">Reservado</th>
             <th className="text-right">Disponível</th>
+            <th className="text-right" title="Quantidade contada na prateleira. Vale por 30 dias e passa a mandar na sugestão de compra.">Contado</th>
+            <th className="text-center" title="OK = a contagem bateu com o saldo do sistema no dia da contagem">Acuracidade</th>
             <th className="text-right">Mínimo</th>
+            <th className="text-right" title="Sugerido pelo sistema a partir das vendas reais do Omie (6 meses): ponto de pedido = demanda × prazo + segurança. Atualiza todo dia.">Mín. sug.</th>
+            <th className="text-right" title="Sugerido pelo sistema: mínimo + demanda de um ciclo de compra (60 dias). Atualiza todo dia.">Máx. sug.</th>
             <th className="text-right">Pendente</th>
             <th className="text-right">Comprado</th>
             <th className="text-right">Sugestão</th>
+            <th title="Vendas mês a mês dos últimos 12 meses. Seta = últimos 3 meses × 3 meses anteriores. Ponto verde = mês de maior venda; ponto vermelho = mês de menor venda.">Tendência (12 meses)</th>
             <th>Último Fornecedor</th>
             <th className="text-right">Último Preço Unit.</th>
             <th></th>
@@ -508,11 +720,49 @@ function ImportacaoVarejoPage({ setRoute }) {
                     )}
                     <td className="mono small" style={{ whiteSpace: 'nowrap' }}>{item.codigo}</td>
                     <td className="cell-main" title={item.descricao} style={{ maxWidth: 200 }}>{item.descricao}</td>
+                    <td>
+                      <IVCelulaEditavel valor={item.endereco} podeEditar={podeGerenciar} placeholder="ex.: G13" largura={90}
+                        onSave={(v) => salvarContagemItem(item, { endereco: v })} />
+                    </td>
                     <td className="text-center"><IVCurvaBadge curva={item.curva} /></td>
                     <td className="text-right cell-num">{ivFmtNum(item.estoqueFisico)}</td>
                     <td className="text-right cell-num">{ivFmtNum(item.estoqueReservado)}</td>
-                    <td className="text-right cell-num" style={{ fontWeight: 700 }}>{ivFmtNum(item.estoqueDisponivel)}</td>
+                    <td className="text-right cell-num" style={{ fontWeight: 700 }}>
+                      {ivFmtNum(item.estoqueDisponivel)}
+                      {item.baseEstoque === 'contado'
+                        ? <div className="small" style={{ fontWeight: 400, color: 'var(--vp-green-700, #047857)' }} title="Disponível = contado − reservado do Omie">contado</div>
+                        : <div className="small" style={{ fontWeight: 400, color: 'var(--vp-amber-700, #b45309)' }} title={item.contagem && item.contagem.vencida ? 'Última contagem é antiga (mais de ' + window.ImportacaoVarejoStore.CONTAGEM_VALIDADE_DIAS + ' dias): vale o saldo do Omie' : 'Nunca contado: vale o saldo do Omie'}>não conferido</div>}
+                    </td>
+                    <td className="text-right cell-num">
+                      <IVCelulaEditavel valor={item.contagem && item.contagem.quantidade != null ? item.contagem.quantidade : ''} tipo="numero" podeEditar={podeGerenciar} placeholder="contar" largura={70} alinhar="right"
+                        onSave={(v) => (v === '' ? Promise.resolve() : salvarContagemItem(item, { quantidade: v }))} />
+                      {item.contagem && item.contagem.quantidade != null && (
+                        <div className="small" style={{ fontWeight: 400, color: item.contagem.vencida ? 'var(--vp-amber-700, #b45309)' : 'var(--fg3)', whiteSpace: 'nowrap' }}
+                          title={item.contagem.vencida ? 'Contagem vencida (mais de ' + window.ImportacaoVarejoStore.CONTAGEM_VALIDADE_DIAS + ' dias)' : ''}>
+                          {ivFmtData(item.contagem.contadoEm)}{item.contagem.contadoPor ? ' · ' + item.contagem.contadoPor : ''}
+                        </div>
+                      )}
+                    </td>
+                    <td className="text-center" style={{ whiteSpace: 'nowrap' }}>
+                      {item.acuracia
+                        ? (item.acuracia.ok
+                          ? <Badge variant="success" title={'Sistema dizia ' + ivFmtNum(item.contagem.saldoSistemico) + ' e a prateleira tinha ' + ivFmtNum(item.contagem.quantidade)}>OK</Badge>
+                          : <Badge variant="danger" title={'Sistema dizia ' + ivFmtNum(item.contagem.saldoSistemico) + ' e a prateleira tinha ' + ivFmtNum(item.contagem.quantidade)}>N/OK {item.acuracia.diferenca > 0 ? '+' : ''}{ivFmtNum(item.acuracia.diferenca)}</Badge>)
+                        : <span className="muted">—</span>}
+                    </td>
                     <td className="text-right cell-num">{ivFmtNum(item.estoqueMinimo)}</td>
+                    {(() => {
+                      const dica = item.estMaxSug == null ? '' : `Demanda ${ivFmtNum(item.estDemandaMensal)}/mês · ${item.estMesesVenda} de 6 meses com venda · prazo ${item.estPrazoDias} d · ciclo ${item.estCicloDias} d · segurança ${ivFmtNum(item.estSeguranca)} · confiança ${item.estConfianca}`;
+                      const cor = item.estConfianca === 'baixa' ? 'var(--fg3)' : undefined;
+                      return item.estMaxSug == null
+                        ? <><td className="text-right muted">—</td><td className="text-right muted">—</td></>
+                        : <>
+                            <td className="text-right cell-num" title={dica + (podeGerenciar ? ' · clique para revisar' : '')} style={{ color: cor, fontWeight: item.abaixoMinSug ? 800 : 400, cursor: podeGerenciar ? 'pointer' : undefined }}
+                              onClick={podeGerenciar ? () => abrirModalIv('revisao', item) : undefined}>{ivFmtNum(item.estMinSug)}{item.estOrigem === 'manual' && <span title="Ajustado pelo comprador"> ✎</span>}</td>
+                            <td className="text-right cell-num" title={dica + (podeGerenciar ? ' · clique para revisar' : '')} style={{ color: cor, cursor: podeGerenciar ? 'pointer' : undefined }}
+                              onClick={podeGerenciar ? () => abrirModalIv('revisao', item) : undefined}>{ivFmtNum(item.estMaxSug)}{item.estOrigem === 'manual' && <span title="Ajustado pelo comprador"> ✎</span>}</td>
+                          </>;
+                    })()}
                     <td className="text-right cell-num">{ivFmtNum(item.pendenteOmie)}</td>
                     <td className="text-right cell-num">
                       {item.comprado > 0 ? (
@@ -521,13 +771,42 @@ function ImportacaoVarejoPage({ setRoute }) {
                         <button className="link-btn muted" onClick={() => abrirModalIv('comprado', item)}>lançar</button>
                       ) : '—'}
                     </td>
-                    <td className="text-right" style={{ fontWeight: 800 }}>
-                      {ivFmtNum(item.sugestaoCompra)}
+                    <td className="text-right" style={{ fontWeight: 800 }}
+                      title={item.estMaxSug == null ? '' : (item.abaixoMinSug
+                        ? `Posição ${ivFmtNum(item.posicaoEstoque)} ≤ mínimo sugerido ${ivFmtNum(item.estMinSug)}: comprar até o máximo sugerido ${ivFmtNum(item.estMaxSug)}`
+                        : `Posição ${ivFmtNum(item.posicaoEstoque)} acima do mínimo sugerido ${ivFmtNum(item.estMinSug)}: ainda não precisa comprar`)}>
+                      {item.precisaRevisao
+                        ? (podeGerenciar
+                          ? <button className="link-btn" onClick={() => abrirModalIv('revisao', item)} title={'Venda esporádica: não compra sozinho' + (item.sugestaoSeAprovada > 0 ? ' (se aprovar, sugere ' + ivFmtNum(item.sugestaoSeAprovada) + ')' : '')} style={{ color: 'var(--vp-amber-700, #b45309)', fontWeight: 800 }}>⚑ revisar</button>
+                          : <span title="Aguardando revisão do comprador" style={{ color: 'var(--vp-amber-700, #b45309)' }}>⚑ revisar</span>)
+                        : ivFmtNum(item.sugestaoCompra)}
                       {podeGerenciar && (
                         <button className="link-btn" title="Revisar lote de compra" onClick={() => abrirModalIv('lote', item)} style={{ marginLeft: 6 }}>
                           <Icon.ruler size={13} />
                         </button>
                       )}
+                    </td>
+                    <td style={{ whiteSpace: 'nowrap' }}>
+                      {(() => {
+                        const t = IV_TEND[item.estTendencia];
+                        if (!t || !item.estSerie) return <span className="muted">—</span>;
+                        return (
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <div title={t.rotulo + (item.estTendenciaPct != null ? ' (' + (item.estTendenciaPct > 0 ? '+' : '') + ivFmtNum(item.estTendenciaPct) + '%)' : '')} style={{ color: t.cor, fontWeight: 800, fontSize: 12, minWidth: 54 }}>
+                              {t.seta} {item.estTendenciaPct != null ? (item.estTendenciaPct > 0 ? '+' : '') + Math.round(item.estTendenciaPct) + '%' : t.rotulo}
+                            </div>
+                            <div>
+                              <IVSparkline serie={item.estSerie} inicio={item.estSerieInicio} cor={t.cor} pico={item.estMesPico} vale={item.estMesVale} />
+                              {item.estMesPico && (
+                                <div className="small" style={{ fontSize: 10, color: 'var(--fg3)', lineHeight: 1.2 }}>
+                                  <span style={{ color: 'var(--vp-green-700, #047857)' }}>● {ivRotuloMes(item.estMesPico)}</span>
+                                  {item.estMesVale && <span style={{ color: 'var(--vp-danger, #b91c1c)', marginLeft: 6 }}>● {ivRotuloMes(item.estMesVale)}</span>}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        );
+                      })()}
                     </td>
                     <td
                       className="small"
@@ -567,13 +846,14 @@ function ImportacaoVarejoPage({ setRoute }) {
           {filtrados.length > 0 && (
             <tfoot>
               <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)' }}>
-                <td colSpan={podeGerenciar ? 4 : 3}>Total</td>
+                <td colSpan={podeGerenciar ? 5 : 4}>Total</td>
                 <td className="text-right">{ivFmtNum(totais.estoqueFisico)}</td>
                 <td></td>
                 <td className="text-right">{ivFmtNum(totais.estoqueDisponivel)}</td>
-                <td colSpan={2}></td>
+                <td colSpan={6}></td>
                 <td className="text-right">{ivFmtNum(totais.comprado)}</td>
                 <td className="text-right">{ivFmtNum(totais.sugestaoCompra)}</td>
+                <td></td>
                 <td></td>
                 <td className="text-right">{ivFmtMoeda(totais.valorAPagar)}</td>
                 <td></td>
@@ -586,6 +866,7 @@ function ImportacaoVarejoPage({ setRoute }) {
 
       {modalLote && <IVModalLote item={modalLote} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
       {modalComprado && <IVModalComprado item={modalComprado} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
+      {modalRevisao && <IVModalRevisao item={modalRevisao} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
       {modalEnviar && <IVModalEnviarOmie itens={itensSelecionados} onClose={() => setModalEnviar(false)} onEnviado={() => { setModalEnviar(false); setSelecionados(new Set()); carregar(); }} />}
     </div>
   );
