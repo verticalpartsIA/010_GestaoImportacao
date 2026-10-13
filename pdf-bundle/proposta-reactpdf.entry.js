@@ -291,7 +291,7 @@ function PgCapa(S, data, eq) {
         h(View, { style: S.capaGridItem, key: 'd' }),
       ]),
       h(View, { style: S.capaFoot, key: 'foot' }, [
-        h(Text, { style: S.capaFootTxt, key: '1' }, v.celular || v.fixo || '(11) 2528-6473'),
+        h(Text, { style: S.capaFootTxt, key: '1' }, [v.celular, v.fixo].filter(Boolean).join('  ·  ') || '(11) 2528-6473'),
         h(Text, { style: S.capaFootTxt, key: '2' }, 'Rua Armandina Braga de Almeida, 383'),
       ]),
     ]),
@@ -343,6 +343,8 @@ function PgClienteObra(S, data) {
       h(Text, { style: [S.boxP, { fontWeight: 700 }], key: 'n' }, nomeSemDoc(c.nome, c.cnpj) || c.nome || '—'),
       c.cnpj ? h(Text, { style: S.boxP, key: 'cnpj' }, 'CNPJ: ' + fmtDoc(c.cnpj)) : null,
       c.responsavel ? h(Text, { style: S.boxP, key: 'ac' }, 'A/C: ' + c.responsavel) : null,
+      c.telefone ? h(Text, { style: S.boxP, key: 'tel' }, 'Telefone: ' + c.telefone) : null,
+      c.email ? h(Text, { style: S.boxP, key: 'mail' }, 'E-mail: ' + c.email) : null,
       h(Text, { style: S.boxP, key: 'end' }, [c.endereco, c.numero].filter(Boolean).join(', ') || '—'),
       h(Text, { style: S.boxP, key: 'cid' }, [c.bairro, c.cidade, c.uf].filter(Boolean).join(' - ') || '—'),
       c.cep ? h(Text, { style: S.boxP, key: 'cep' }, 'CEP: ' + c.cep) : null,
@@ -450,13 +452,8 @@ function PgEspecTabela(S, data) {
 }
 
 function PgAcabamento(S, data) {
-  const a = (data.elevador || {}).acabamentos || {};
-  const linhas = [
-    ['Modelo da Cabine', a.modeloCabine], ['Acabamentos', a.acabamentoMat], ['Sub-teto', a.subTeto], ['Botoeira de Cabine', a.painelOperacao],
-    ['Piso', a.pisoCabina], ['Medidas', a.medidasPiso], ['Porta de Cabine', a.modeloPorta], ['Medidas Porta de Cabine', a.dimPortaCabine],
-    ['Modelo de Porta', a.acabPortaCabine], ['Portas de Pavimento', a.portasPavimento], ['Botoeiras de Pavimento', a.botoeirasPavimento],
-    ['Sinalização', a.sinalizacao], ['Pavimentos Inox', a.pavInox], ['Demais', a.demais],
-  ].filter(([, v]) => v);
+  const OPa = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  const linhas = OPa ? OPa.linhasAcabamento(data.elevador) : [];
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, 'Acabamento'),
@@ -577,15 +574,16 @@ function PgValores(S, data) {
     caixaDifal,
     parcelas.length ? h(View, { key: 'parc' }, [
       h(Text, { style: S.subTitle, key: 's2' }, 'Cronograma de Pagamento'),
+      v.forma ? h(Text, { style: S.p, key: 'fp' }, 'Forma de pagamento: ' + v.forma) : null,
       Tabela2(S, [{ label: 'Parcela / Descrição', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasParc, 't2'),
     ]) : null,
     PdfFooter(S),
   ]);
 }
 
-function PgBlocos(S, data, titulo, campo, pares) {
+function PgBlocos(S, data, titulo, campo, pares, prontos) {
   const obj = (data.elevador || {})[campo] || {};
-  const blocos = pares.map(([lbl, k]) => [lbl, obj[k]]).filter(([, v]) => v);
+  const blocos = prontos || pares.map(([lbl, k]) => [lbl, obj[k]]).filter(([, v]) => v);
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, titulo),
@@ -740,7 +738,7 @@ async function montarDocumento(data, assinaturas) {
     ...(temFotos ? [PgFotos(S, data, urls)] : []),
     PgValores(S, data),
     PgBlocos(S, data, 'Condições Gerais de Pagamento', 'condicoesPagto', [['Venda de Equipamentos', 'venda'], ['Impostos e Serviços', 'impostos'], ['Ajuste de Frete Marítimo', 'ajusteFrete'], ['Reajuste', 'reajuste']]),
-    PgBlocos(S, data, 'Ajustes e Impostos', 'ajustes', [['Cláusula de Reajuste Cambial', 'clausulaCambial'], ['Faturamento', 'faturamentoTexto'], ['Taxas e Impostos Inclusos', 'taxasInclusas'], ['Taxas e Impostos Excluídos', 'taxasExcluidas']]),
+    PgBlocos(S, data, 'Ajustes e Impostos', 'ajustes', [], (typeof window !== 'undefined' && window.PropostaOpcoes) ? window.PropostaOpcoes.blocosAjustes(data.elevador) : []),
     PgPrazo(S, data),
     PgResponsabilidades(S, data),
     PgGarantia(S, data, assinaturas),

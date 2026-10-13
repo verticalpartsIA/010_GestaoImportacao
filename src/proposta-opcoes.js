@@ -173,6 +173,40 @@
     return m ? String(Number(m[2])) : r;
   }
 
+  /* Linhas da página ACABAMENTO — fonte única de PDF e preview (bug da 985: o PDF lia só o formato antigo fixo
+     `acabamentos`, vazio, enquanto o editor grava em `acabamentosCats` — categorias/campos com checkbox "ativo").
+     Com acabamentosCats: só entra o campo marcado e preenchido. Sem ele (proposta antiga): o formato fixo. */
+  function linhasAcabamento(ed) {
+    const e = ed || {};
+    if (Array.isArray(e.acabamentosCats) && e.acabamentosCats.length) {
+      return e.acabamentosCats.flatMap((c) => (c.campos || []).filter((f) => f.ativo && f.valor).map((f) => [f.nome, f.valor]));
+    }
+    const a = e.acabamentos || {};
+    return [
+      ['Modelo da Cabine', a.modeloCabine], ['Acabamentos', a.acabamentoMat], ['Sub-teto', a.subTeto], ['Botoeira de Cabine', a.painelOperacao],
+      ['Piso', a.pisoCabina], ['Medidas', a.medidasPiso], ['Porta de Cabine', a.modeloPorta], ['Medidas Porta de Cabine', a.dimPortaCabine],
+      ['Modelo de Porta', a.acabPortaCabine], ['Portas de Pavimento', a.portasPavimento], ['Botoeiras de Pavimento', a.botoeirasPavimento],
+      ['Sinalização', a.sinalizacao], ['Pavimentos Inox', a.pavInox], ['Demais', a.demais],
+    ].filter(([, v]) => v);
+  }
+
+  /* Blocos da página AJUSTES E IMPOSTOS — fonte única de PDF e preview. A seção "Ajustes, Impostos e Câmbio" do editor
+     tem campos "da página" (clausulaCambial, faturamentoTexto, taxasInclusas, taxasExcluidas) e campos gerais
+     (cambio, faturamento, reajuste, taxasIn, taxasOut). Tudo o que o vendedor digitar entra: o campo da página vence;
+     vazio, vale o geral (nunca imprime os dois com o mesmo sentido). Preset (Fora do Estado/SP/…) é só interno. */
+  function blocosAjustes(ed) {
+    const a = (ed && ed.ajustes) || {};
+    const cambio = String(a.cambio || '').trim();
+    return [
+      ['Cláusula de Reajuste Cambial', a.clausulaCambial],
+      ['Taxa de Câmbio de Referência (USD)', cambio ? (/^R\$/.test(cambio) ? cambio : 'R$ ' + cambio) : ''],
+      ['Faturamento', a.faturamentoTexto || a.faturamento],
+      ['Reajuste', a.reajuste],
+      ['Taxas e Impostos Inclusos', a.taxasInclusas || a.taxasIn],
+      ['Taxas e Impostos Excluídos', a.taxasExcluidas || a.taxasOut],
+    ].filter(([, v]) => v && String(v).trim());
+  }
+
   /* Modelos distintos da proposta, na ordem dos códigos: "GEP / GEP-MRL" (título da página do equipamento). */
   function modelosDistintos(especs) {
     const out = [];
@@ -199,5 +233,5 @@
     return { totalEq, difal, totalGeral: totalEq + difal };
   }
 
-  window.PropostaOpcoes = { TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, _num: num };
+  window.PropostaOpcoes = { TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, blocosAjustes, _num: num };
 }());
