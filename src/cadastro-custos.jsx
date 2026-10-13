@@ -396,21 +396,23 @@ function CCContainersTab() {
       <div className="table-wrap">
         <table className="t">
           <thead><tr>
-            <th>Tipo</th><th>Compr. (m)</th><th>Altura</th><th>Capac. (m³)</th>
-            <th className="text-right">Preço (USD)</th><th className="text-right">Preço (R$)</th>
-            <th className="text-right">Capatazia (USD)</th><th className="text-right">Capatazia (R$)</th>
-            <th className="text-right">GRI (USD)</th><th className="text-right">GRI (R$)</th>
-            <th className="text-right" title="Adicional ao Frete para Renovação da Marinha Mercante: sempre 8% de Preço + Capatazia + GRI. Calculado automaticamente.">AFRMM (USD)</th>
-            <th className="text-right" title="8% de Preço + Capatazia + GRI em R$. Calculado automaticamente.">AFRMM (R$)</th>
-            <th>Data cotação</th><th>Fornecedor</th><th>Observações</th><th></th>
+            {/* Larguras mínimas (13/10/2026): o valor digitado tem que caber inteiro na célula — antes as colunas
+                encolhiam e cortavam "6000.00", "1.827,77", "20HC (High Cube)" etc. */}
+            <th style={{ minWidth: 180 }}>Tipo</th><th style={{ minWidth: 90 }}>Compr. (m)</th><th style={{ minWidth: 140 }}>Altura</th><th style={{ minWidth: 90 }}>Capac. (m³)</th>
+            <th className="text-right" style={{ minWidth: 135 }}>Preço (USD)</th><th className="text-right" style={{ minWidth: 175 }}>Preço (R$)</th>
+            <th className="text-right" style={{ minWidth: 135 }}>Capatazia (USD)</th><th className="text-right" style={{ minWidth: 165 }}>Capatazia (R$)</th>
+            <th className="text-right" style={{ minWidth: 135 }}>GRI (USD)</th><th className="text-right" style={{ minWidth: 165 }}>GRI (R$)</th>
+            <th className="text-right" style={{ minWidth: 135 }} title="Adicional ao Frete para Renovação da Marinha Mercante: sempre 8% de Preço + Capatazia + GRI. Calculado automaticamente.">AFRMM (USD)</th>
+            <th className="text-right" style={{ minWidth: 150 }} title="8% de Preço + Capatazia + GRI em R$. Calculado automaticamente.">AFRMM (R$)</th>
+            <th style={{ minWidth: 150 }}>Data cotação</th><th style={{ minWidth: 150 }}>Fornecedor</th><th style={{ minWidth: 220 }}>Observações</th><th></th>
           </tr></thead>
           <tbody>
             {rows.map((r) => (
               <tr key={r.id} style={{ opacity: saving === r.id || removendo === r.id ? .5 : 1 }}>
-                <td><input className="input" style={{ width: 130 }} defaultValue={r.tipo || ''}
+                <td><input className="input" style={{ width: '100%' }} defaultValue={r.tipo || ''}
                   onBlur={(e) => { const v = e.target.value.trim(); if (v && v !== (r.tipo || '')) salvarCampo(r, 'tipo', v); }}/></td>
                 <td><CCInputNum value={r.comprimento_m} width={80} onBlurSave={(v) => salvarCampo(r, 'comprimento_m', v)}/></td>
-                <td><input className="input" style={{ width: 100 }} defaultValue={r.altura_desc || ''}
+                <td><input className="input" style={{ width: '100%' }} defaultValue={r.altura_desc || ''}
                   onBlur={(e) => { if (e.target.value !== (r.altura_desc || '')) salvarCampo(r, 'altura_desc', e.target.value || null); }}/></td>
                 <td><CCInputNum value={r.capacidade_m3} width={80} onBlurSave={(v) => salvarCampo(r, 'capacidade_m3', v)}/></td>
                 <td className="text-right"><PZCurrencyInput moeda="USD" value={r.preco_usd} onChange={(v) => salvarUsdComCambio(r, v)}/></td>
@@ -458,12 +460,12 @@ function CCContainersTab() {
                   {fmtBrlCC(CC_AFRMM_PCT * ((Number(r.preco_rs) || 0) + (Number(r.capatazia_rs) || 0) + (Number(r.gri_rs) || 0)))}
                 </td>
                 <td>
-                  <input className="input" type="date" style={{ width: 140 }} value={r.data_cotacao || ''}
+                  <input className="input" type="date" style={{ width: '100%' }} value={r.data_cotacao || ''}
                     onChange={(e) => salvarCampo(r, 'data_cotacao', e.target.value || null)}/>
                 </td>
-                <td><input className="input" style={{ width: 120 }} defaultValue={r.fornecedor || ''}
+                <td><input className="input" style={{ width: '100%' }} defaultValue={r.fornecedor || ''}
                   onBlur={(e) => { if (e.target.value !== (r.fornecedor || '')) salvarCampo(r, 'fornecedor', e.target.value || null); }}/></td>
-                <td><input className="input" style={{ width: 180 }} defaultValue={r.observacoes || ''}
+                <td><input className="input" style={{ width: '100%' }} defaultValue={r.observacoes || ''}
                   onBlur={(e) => { if (e.target.value !== (r.observacoes || '')) salvarCampo(r, 'observacoes', e.target.value || null); }}/></td>
                 <td><Button variant="ghost" size="sm" icon="trash" title="Remover container" onClick={() => removerContainer(r)} disabled={removendo === r.id}/></td>
               </tr>
