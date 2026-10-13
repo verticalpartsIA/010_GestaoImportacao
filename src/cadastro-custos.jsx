@@ -276,6 +276,12 @@ function CCEscadaEsteiraTab() {
    usuário: câmbio é sugestão, não trava o campo) — por isso o botão
    "Recalcular" ao lado, pra reaplicar o câmbio de hoje numa linha que já
    tinha USD/R$ preenchidos antes desta feature existir. */
+/* AFRMM (13/10/2026): Adicional ao Frete para Renovação da Marinha Mercante — sempre 8% de
+   Preço + Capatazia + GRI. Só exibição (automático, não gravado). */
+const CC_AFRMM_PCT = 0.08;
+const fmtUsdCC = (v) => 'US$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+const fmtBrlCC = (v) => 'R$ ' + (Number(v) || 0).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
 function CCContainersTab() {
   const [rows, setRows] = React.useState(null);
   const [saving, setSaving] = React.useState(null);
@@ -394,6 +400,8 @@ function CCContainersTab() {
             <th className="text-right">Preço (USD)</th><th className="text-right">Preço (R$)</th>
             <th className="text-right">Capatazia (USD)</th><th className="text-right">Capatazia (R$)</th>
             <th className="text-right">GRI (USD)</th><th className="text-right">GRI (R$)</th>
+            <th className="text-right" title="Adicional ao Frete para Renovação da Marinha Mercante: sempre 8% de Preço + Capatazia + GRI. Calculado automaticamente.">AFRMM (USD)</th>
+            <th className="text-right" title="8% de Preço + Capatazia + GRI em R$. Calculado automaticamente.">AFRMM (R$)</th>
             <th>Data cotação</th><th>Fornecedor</th><th>Observações</th><th></th>
           </tr></thead>
           <tbody>
@@ -441,6 +449,13 @@ function CCContainersTab() {
                       </Button>
                     </div>
                   )}
+                </td>
+                {/* AFRMM (13/10/2026): automático, sempre 8% de Preço + Capatazia + GRI — não é editável nem gravado. */}
+                <td className="text-right mono" style={{ background: 'var(--bg-subtle, #f3f4f6)' }}>
+                  {fmtUsdCC(CC_AFRMM_PCT * ((Number(r.preco_usd) || 0) + (Number(r.capatazia_usd) || 0) + (Number(r.gri_usd) || 0)))}
+                </td>
+                <td className="text-right mono" style={{ background: 'var(--bg-subtle, #f3f4f6)' }}>
+                  {fmtBrlCC(CC_AFRMM_PCT * ((Number(r.preco_rs) || 0) + (Number(r.capatazia_rs) || 0) + (Number(r.gri_rs) || 0)))}
                 </td>
                 <td>
                   <input className="input" type="date" style={{ width: 140 }} value={r.data_cotacao || ''}

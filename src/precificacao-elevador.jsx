@@ -1332,8 +1332,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           ? (Number(impImportacao.ii) || 0) + (Number(impImportacao.ipi) || 0) + (Number(impImportacao.pis) || 0)
             + (Number(impImportacao.cofins) || 0) + (Number(impImportacao.icms) || 0)
           : null;
+        /* AFRMM (13/10/2026): 8% do frete marítimo (container + capatazia + GRI), já calculado
+           pelo motor — aqui só aparece no resumo. Como o imposto, só depois de "Calcular". */
+        const afrmmRs = impImportacao && impImportacao.afrmm != null ? Number(impImportacao.afrmm) || 0 : null;
         const somaRs = custosEquipamentosRs + custosFreteRs + moRs + custosOperacionaisRs + freteInternoRs
-          + despesasImportacaoRs + armazenagemRs + containersTotalRs + capataziaTotalRs + griTotalRs + despesasExtrasRs + contingenciaOutrosRs
+          + despesasImportacaoRs + armazenagemRs + containersTotalRs + capataziaTotalRs + griTotalRs + (afrmmRs || 0) + despesasExtrasRs + contingenciaOutrosRs
           + (custosImpostoRs || 0);
         const linha = (label, valor) => (
           <div className="row sb" style={{ padding: '4px 0' }}>
@@ -1354,6 +1357,7 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
               {linha('Containers', containersTotalRs)}
               {linha('Capatazia', capataziaTotalRs)}
               {linha('GRI', griTotalRs)}
+              {linha('AFRMM (8% de Containers + Capatazia + GRI)', afrmmRs)}
               {linha('Despesas Extras (itens avulsos)', despesasExtrasRs)}
               {linha('Contingência e Outros custos não recuperáveis', contingenciaOutrosRs)}
               {linha('Custos Imposto', custosImpostoRs)}
