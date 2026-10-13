@@ -13,12 +13,239 @@
   function sb() { return (window.__VP_SB || {}).sb; }
   function usuario() { return window.__VP_USER || {}; }
 
+  /* ---------- Contagem física (acuracidade) ----------
+     Quem decide a compra precisa saber se o saldo do Omie está certo. A contagem da prateleira (importacao_varejo_contagem)
+     vale por CONTAGEM_VALIDADE_DIAS; dentro do prazo, ela substitui o "disponível" do Omie na sugestão (físico contado − reservado do Omie,
+     já que a prateleira conta também o que está reservado). Vencida ou inexistente: vale o Omie e a tela avisa "não conferido". */
+  const CONTAGEM_VALIDADE_DIAS = 30;
+  const MS_DIA = 24 * 3600 * 1000;
+
+  function diasDesde(isoData, hoje) {
+    if (!isoData) return null;
+    const [y, m, d] = String(isoData).slice(0, 10).split('-').map(Number);
+    const ini = Date.UTC(y, m - 1, d);
+    const fim = Date.UTC(hoje.getFullYear(), hoje.getMonth(), hoje.getDate());
+    return Math.floor((fim - ini) / MS_DIA);
+  }
+
+  /* Mesma conta de list-importacao-varejo (Edge Function): necessidade = mínimo − disponível + pendente − comprado, arredondada pra cima e ajustada por lote. */
+  function ajustaLote(item, bruta) {
+    let sug = bruta;
+    const mult = Number(item.multiploCompra), lote = Number(item.loteMinimo);
+    if (bruta > 0 && (mult > 0 || lote > 0)) {
+      sug = mult > 0 ? Math.ceil(Math.max(bruta, lote || 0) / mult) * mult : Math.max(bruta, lote || 0);
+    }
+    return sug;
+  }
+  function sugestaoDe(item, disponivel) {
+    const necessidade = Math.max(0, (item.estoqueMinimo || 0) - disponivel + (item.pendenteOmie || 0) - (item.comprado || 0));
+    const bruta = Math.ceil(necessidade);
+    return { bruta, sug: ajustaLote(item, bruta) };
+  }
+
+  /* Aplica a contagem (linha de importacao_varejo_contagem) a um item vindo da Edge Function. Idempotente: parte sempre do disponível do Omie. */
+  function aplicarContagem(item, linha, hoje) {
+    hoje = hoje || new Date();
+    const dispOmie = item.estoqueDisponivelOmie != null ? item.estoqueDisponivelOmie : item.estoqueDisponivel;
+    const out = Object.assign({}, item, { estoqueDisponivelOmie: dispOmie });
+    const temQtd = !!linha && linha.quantidade != null;
+    const dias = temQtd ? diasDesde(linha.contado_em, hoje) : null;
+    const vencida = temQtd && (dias == null || dias > CONTAGEM_VALIDADE_DIAS);
+    out.contagem = linha ? {
+      quantidade: temQtd ? Number(linha.quantidade) : null,
+      saldoSistemico: linha.saldo_sistemico != null ? Number(linha.saldo_sistemico) : null,
+      contadoEm: linha.contado_em || null, contadoPor: linha.contado_por || null,
+      endereco: linha.endereco || '', observacao: linha.observacao || '',
+      dias, vencida,
+    } : null;
+    out.endereco = linha && linha.endereco ? linha.endereco : '';
+    // Acuracidade = o que a prateleira tinha × o que o sistema dizia NO DIA da contagem (não o saldo de hoje, que já andou com vendas/entradas).
+    out.acuracia = temQtd && out.contagem.saldoSistemico != null
+      ? { ok: Math.abs(out.contagem.quantidade - out.contagem.saldoSistemico) < 1e-9, diferenca: out.contagem.quantidade - out.contagem.saldoSistemico }
+      : null;
+    const usaContado = temQtd && !vencida;
+    out.baseEstoque = usaContado ? 'contado' : 'omie';
+    out.estoqueDisponivel = usaContado ? Math.max(0, out.contagem.quantidade - (item.estoqueReservado || 0)) : dispOmie;
+    const s = sugestaoDe(out, out.estoqueDisponivel);
+    out.sugestaoBruta = s.bruta;
+    out.sugestaoCompra = s.sug;
+    // Sugestão de estoque mínimo/máximo (calculada no banco a partir das vendas reais do Omie — ver iv_calcular_sugestao_estoque).
+    // "Comprar até o máximo" = máximo sugerido − (disponível + pendente + comprado), em coluna à parte: não troca a Sugestão existente.
+    // REGRA ATUAL (pedido do usuário, 12/10): compra-se quando a posição (disponível + pendente + comprado) chega ao MÍNIMO sugerido,
+    // e a quantidade leva a posição até o MÁXIMO sugerido. Sem sugestão calculada para o item, vale a regra antiga (mínimo × disponível).
+    const se = item.sugestaoEstoque;
+    if (se) {
+      const posicao = out.estoqueDisponivel + (item.pendenteOmie || 0) + (item.comprado || 0);
+      out.posicaoEstoque = posicao;
+      // Revisão do comprador: ajuste manual vale no lugar do cálculo; "não repor" zera; venda esporádica (confiança baixa) sem revisão não compra.
+      const rev = item.revisao || null;
+      let mn = Number(se.minimo_sugerido) || 0, mx = Number(se.maximo_sugerido) || 0, origemEst = 'calculado';
+      if (rev && rev.status === 'ajustado') { mn = Number(rev.minimo_manual) || 0; mx = Number(rev.maximo_manual) || 0; origemEst = 'manual'; }
+      else if (rev && rev.status === 'descartado') { mn = 0; mx = 0; origemEst = 'descartado'; }
+      else if (rev && rev.status === 'aprovado') origemEst = 'aprovado';
+      const revisado = !!rev && ['aprovado', 'ajustado', 'descartado'].includes(rev.status);
+      out.precisaRevisao = se.confianca === 'baixa' && mx > 0 && !revisado;
+      out.estOrigem = origemEst;
+      out.estMinSugCalc = Number(se.minimo_sugerido) || 0;   // o que o sistema calculou, mesmo com ajuste manual
+      out.estMaxSugCalc = Number(se.maximo_sugerido) || 0;
+      out.estMinSug = mn;
+      out.estMaxSug = mx;
+      out.estConfianca = se.confianca || 'baixa';
+      out.estDemandaMensal = Number(se.demanda_mensal) || 0;
+      out.estMesesVenda = se.meses_com_venda || 0;
+      out.estPrazoDias = se.prazo_dias;
+      out.estCicloDias = se.ciclo_dias;
+      out.estSeguranca = Number(se.seguranca) || 0;
+      out.estSerie = Array.isArray(se.serie_12m) ? se.serie_12m.map(Number) : null;
+      out.estSerieInicio = se.serie_inicio || null;
+      out.estTendencia = se.tendencia || null;
+      out.estTendenciaPct = se.tendencia_pct != null ? Number(se.tendencia_pct) : null;
+      out.estMesPico = se.mes_pico || null;
+      out.estMesVale = se.mes_vale || null;
+      out.abaixoMinSug = out.estMaxSug > 0 && posicao <= out.estMinSug;
+      const aMax = out.estMaxSug > 0 ? Math.ceil(Math.max(0, out.estMaxSug - posicao)) : 0;
+      const compraSeLiberada = out.abaixoMinSug ? ajustaLote(item, aMax) : 0;
+      out.sugestaoSeAprovada = compraSeLiberada;           // o que compraria se o comprador aprovasse (aparece na fila de revisão)
+      out.sugestaoBruta = out.abaixoMinSug && !out.precisaRevisao ? aMax : 0;
+      out.sugestaoCompra = out.precisaRevisao ? 0 : compraSeLiberada;
+      out.sugAteMax = out.sugestaoCompra;
+    }
+    out.conselho = item.curva === 'D' && out.estoqueDisponivel > 0
+      ? 'Curva D — baixo giro (sem venda registrada desde 01/01/2024 o suficiente pra sair de D). Considere não comprar mais até vender o estoque parado.'
+      : null;
+    return out;
+  }
+
+  async function carregarContagens() {
+    const c = sb(); if (!c) return {};
+    const mapa = {};
+    for (let off = 0; ; off += 1000) {
+      const { data, error } = await c.from('importacao_varejo_contagem')
+        .select('codigo, quantidade, saldo_sistemico, contado_em, contado_por, endereco, observacao')
+        .order('codigo').range(off, off + 999);
+      if (error) throw error;
+      (data || []).forEach((l) => { mapa[String(l.codigo).toUpperCase()] = l; });
+      if (!data || data.length < 1000) break;
+    }
+    return mapa;
+  }
+
+  async function carregarSugestoesEstoque() {
+    const c = sb(); if (!c) return {};
+    const mapa = {};
+    for (let off = 0; ; off += 1000) {
+      const { data, error } = await c.from('importacao_varejo_sugestao_estoque')
+        .select('codigo, demanda_mensal, meses_com_venda, prazo_dias, ciclo_dias, seguranca, minimo_sugerido, maximo_sugerido, confianca, serie_12m, serie_inicio, tendencia, tendencia_pct, mes_pico, mes_vale')
+        .order('codigo').range(off, off + 999);
+      if (error) throw error;
+      (data || []).forEach((l) => { mapa[String(l.codigo).toUpperCase()] = l; });
+      if (!data || data.length < 1000) break;
+    }
+    return mapa;
+  }
+
+  async function carregarRevisoes() {
+    const c = sb(); if (!c) return {};
+    const mapa = {};
+    for (let off = 0; ; off += 1000) {
+      const { data, error } = await c.from('importacao_varejo_revisao')
+        .select('codigo, status, minimo_manual, maximo_manual, observacao, revisado_por, revisado_em')
+        .order('codigo').range(off, off + 999);
+      if (error) throw error;
+      (data || []).forEach((l) => { mapa[String(l.codigo).toUpperCase()] = l; });
+      if (!data || data.length < 1000) break;
+    }
+    return mapa;
+  }
+
+  /* Revisão do comprador: acao = 'aprovar' | 'ajustar' | 'descartar' | 'desfazer'. */
+  async function salvarRevisao({ item, acao, minimo, maximo, observacao }) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const u = usuario();
+    const codigo = String(item.codigo).toUpperCase();
+    const status = { aprovar: 'aprovado', ajustar: 'ajustado', descartar: 'descartado', desfazer: 'pendente' }[acao];
+    if (!status) throw new Error('Ação de revisão inválida.');
+    const row = {
+      codigo, status,
+      minimo_manual: null, maximo_manual: null,
+      observacao: observacao != null && String(observacao).trim() ? String(observacao).trim() : null,
+      minimo_calculado: item.estMinSugCalc != null ? item.estMinSugCalc : null,
+      maximo_calculado: item.estMaxSugCalc != null ? item.estMaxSugCalc : null,
+      revisado_por: u.name || u.email || null, revisado_em: new Date().toISOString(),
+    };
+    if (status === 'ajustado') {
+      const mn = Number(minimo), mx = Number(maximo);
+      if (!(mn >= 0) || !(mx >= 0)) throw new Error('Informe mínimo e máximo (zero ou mais).');
+      if (mx < mn) throw new Error('O máximo não pode ser menor que o mínimo.');
+      row.minimo_manual = mn; row.maximo_manual = mx;
+    }
+    const { error } = await c.from('importacao_varejo_revisao').upsert(row, { onConflict: 'codigo' });
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Importação Varejo', acao: 'Revisão do comprador: ' + status, alvo: codigo,
+      detalhe: { minimo_manual: row.minimo_manual, maximo_manual: row.maximo_manual, calculado: [row.minimo_calculado, row.maximo_calculado] },
+    });
+    return row;
+  }
+
   async function carregar() {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data, error } = await c.functions.invoke('list-importacao-varejo', { body: {} });
     if (error) throw new Error((window.extrairErroFuncao && window.extrairErroFuncao(error)) || error.message || 'Falha ao consultar Importação Varejo.');
     if (data && data.error) throw new Error(data.error);
+    // Falha ao ler as contagens não derruba a tela: cai no saldo do Omie, como antes, e avisa.
+    let mapa = {}, avisoContagem = null;
+    try { mapa = await carregarContagens(); } catch (e) { avisoContagem = 'Não foi possível ler as contagens físicas (' + (e.message || e) + '). A sugestão usa só o saldo do Omie.'; }
+    let sugs = {};
+    try { sugs = await carregarSugestoesEstoque(); } catch (e) { console.warn('[ImportacaoVarejo] sem sugestão de estoque mín/máx', e); }
+    let revs = {};
+    try { revs = await carregarRevisoes(); } catch (e) { console.warn('[ImportacaoVarejo] sem revisões do comprador', e); }
+    const hoje = new Date();
+    data.items = (data.items || []).map((i) => {
+      const cod = String(i.codigo).toUpperCase();
+      return aplicarContagem(Object.assign({}, i, { sugestaoEstoque: sugs[cod] || null, revisao: revs[cod] || null }), mapa[cod], hoje);
+    });
+    if (avisoContagem) data.avisoContagem = avisoContagem;
     return data;
+  }
+
+  /* Grava contagem e/ou endereço de um item. `quantidade` vazia = só endereço (não é uma contagem). */
+  async function salvarContagem({ item, quantidade, endereco, observacao }) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const u = usuario();
+    const quem = u.name || u.email || null;
+    const codigo = String(item.codigo).toUpperCase();
+    const contou = quantidade != null && quantidade !== '';
+    if (contou && !(Number(quantidade) >= 0)) throw new Error('Informe uma quantidade contada válida (zero ou mais).');
+    const hojeIso = new Date().toISOString().slice(0, 10);
+    const antes = item.contagem || null;
+    const row = {
+      codigo,
+      endereco: endereco != null ? (String(endereco).trim() || null) : (antes && antes.endereco) || null,
+      observacao: observacao != null ? (String(observacao).trim() || null) : (antes && antes.observacao) || null,
+      atualizado_em: new Date().toISOString(), atualizado_por: u.email || null,
+    };
+    if (contou) {
+      row.quantidade = Number(quantidade);
+      row.saldo_sistemico = Number(item.estoqueFisico) || 0;     // o que o Omie dizia na hora da contagem
+      row.contado_em = hojeIso; row.contado_por = quem;
+    } else if (antes) {
+      row.quantidade = antes.quantidade; row.saldo_sistemico = antes.saldoSistemico; row.contado_em = antes.contadoEm; row.contado_por = antes.contadoPor;
+    }
+    const { error } = await c.from('importacao_varejo_contagem').upsert(row, { onConflict: 'codigo' });
+    if (error) throw error;
+    if (contou) {
+      const { error: eh } = await c.from('importacao_varejo_contagem_hist').insert({
+        codigo, quantidade: row.quantidade, saldo_sistemico: row.saldo_sistemico, diferenca: row.quantidade - row.saldo_sistemico,
+        contado_em: hojeIso, contado_por: quem, endereco: row.endereco, observacao: row.observacao, origem: 'tela', registrado_por: u.email || null,
+      });
+      if (eh) console.warn('[ImportacaoVarejo] contagem salva, mas o histórico não foi gravado', eh);
+    }
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Importação Varejo', acao: contou ? 'Registrou contagem física' : 'Atualizou endereço', alvo: codigo,
+      detalhe: contou ? { contado: row.quantidade, sistema: row.saldo_sistemico } : { endereco: row.endereco },
+    });
+    return row;
   }
 
   async function salvarLoteConfig({ codigo, multiploCompra, loteMinimo }) {
@@ -136,6 +363,6 @@
   }
 
   window.ImportacaoVarejoStore = {
-    carregar, salvarLoteConfig, lancarComprado, listarCompradoAberto, atualizarPrevisaoComprado, excluirComprado, enviarRequisicaoOmie, previsaoPadrao, dispararSyncManual, dispararSyncEstoqueManual,
+    carregar, aplicarContagem, salvarContagem, salvarRevisao, CONTAGEM_VALIDADE_DIAS, salvarLoteConfig, lancarComprado, listarCompradoAberto, atualizarPrevisaoComprado, excluirComprado, enviarRequisicaoOmie, previsaoPadrao, dispararSyncManual, dispararSyncEstoqueManual,
   };
 }());
