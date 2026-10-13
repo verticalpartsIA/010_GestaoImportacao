@@ -18,6 +18,7 @@
      vale por CONTAGEM_VALIDADE_DIAS; dentro do prazo, ela substitui o "disponível" do Omie na sugestão (físico contado − reservado do Omie,
      já que a prateleira conta também o que está reservado). Vencida ou inexistente: vale o Omie e a tela avisa "não conferido". */
   const CONTAGEM_VALIDADE_DIAS = 30;
+  const DIA_D_AVISO_DIAS = 15;            // acorda o comprador quando faltam ≤ 15 d para o Dia D (importacao_varejo_sugestao_config.dia_d_aviso_dias)
   const MS_DIA = 24 * 3600 * 1000;
 
   function diasDesde(isoData, hoje) {
@@ -110,6 +111,19 @@
       out.estTendenciaPct = se.tendencia_pct != null ? Number(se.tendencia_pct) : null;
       out.estMesPico = se.mes_pico || null;
       out.estMesVale = se.mes_vale || null;
+      out.estAtrasoDias = se.atraso_dias != null ? Number(se.atraso_dias) : 0;       // criar o pedido + decidir (45 + 5 d nos importados)
+      out.estMesesRuptura = se.meses_ruptura != null ? Number(se.meses_ruptura) : 0;
+      out.estRuptura = Array.isArray(se.ruptura_12m) ? se.ruptura_12m.map(Number) : null;   // fração de dias sem estoque em cada um dos 12 meses
+      // DIA D = data-limite para decidir o pedido: hoje + (cobertura da posição em dias − prazo total até o estoque chegar).
+      out.estLeadTotalDias = (Number(se.prazo_dias) || 0) + out.estAtrasoDias;
+      out.estCoberturaDias = null; out.estDiaDDias = null; out.estDiaDData = null; out.estDiaDStatus = null;
+      if (out.estDemandaMensal > 0 && out.estMaxSug > 0) {
+        out.estCoberturaDias = Math.floor(posicao / (out.estDemandaMensal / 30));
+        out.estDiaDDias = out.estCoberturaDias - out.estLeadTotalDias;
+        const d = new Date(); d.setDate(d.getDate() + out.estDiaDDias);
+        out.estDiaDData = d.toISOString().slice(0, 10);
+        out.estDiaDStatus = out.estDiaDDias <= 0 ? 'atrasado' : out.estDiaDDias <= DIA_D_AVISO_DIAS ? 'acordar' : 'ok';
+      }
       out.abaixoMinSug = out.estMaxSug > 0 && posicao <= out.estMinSug;
       const aMax = out.estMaxSug > 0 ? Math.ceil(Math.max(0, out.estMaxSug - posicao)) : 0;
       const compraSeLiberada = out.abaixoMinSug ? ajustaLote(item, aMax) : 0;
@@ -143,7 +157,7 @@
     const mapa = {};
     for (let off = 0; ; off += 1000) {
       const { data, error } = await c.from('importacao_varejo_sugestao_estoque')
-        .select('codigo, demanda_mensal, meses_com_venda, prazo_dias, ciclo_dias, seguranca, minimo_sugerido, maximo_sugerido, confianca, serie_12m, serie_inicio, tendencia, tendencia_pct, mes_pico, mes_vale, custo_unitario, custo_origem, margem_unitaria, margem_origem, prazo_origem, demanda_12m, motivo, valor_max_estoque')
+        .select('codigo, demanda_mensal, meses_com_venda, prazo_dias, ciclo_dias, seguranca, minimo_sugerido, maximo_sugerido, confianca, serie_12m, serie_inicio, tendencia, tendencia_pct, mes_pico, mes_vale, custo_unitario, custo_origem, margem_unitaria, margem_origem, prazo_origem, demanda_12m, motivo, valor_max_estoque, atraso_dias, meses_ruptura, ruptura_12m')
         .order('codigo').range(off, off + 999);
       if (error) throw error;
       (data || []).forEach((l) => { mapa[String(l.codigo).toUpperCase()] = l; });

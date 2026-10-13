@@ -139,3 +139,19 @@ test('"não repor" zera mínimo e máximo; confiança média/alta não precisa d
   assert.equal(m.precisaRevisao, false);
   assert.equal(m.sugestaoCompra, 40);
 });
+
+test('Dia D: cobertura da posição menos (chegada + 50 d para criar e decidir o pedido)', () => {
+  // demanda 30/mês = 1/dia; posição 200 → cobertura 200 d; prazo total 90 + 50 = 140 → Dia D em 60 dias
+  const it = comSug(20, 50, { estoqueDisponivel: 200, pendenteOmie: 0, comprado: 0 });
+  it.sugestaoEstoque = Object.assign({}, it.sugestaoEstoque, { demanda_mensal: 30, prazo_dias: 90, atraso_dias: 50, meses_ruptura: 2, ruptura_12m: [0, 1] });
+  const r = S.aplicarContagem(it, null, HOJE);
+  assert.equal(r.estCoberturaDias, 200);
+  assert.equal(r.estLeadTotalDias, 140);
+  assert.equal(r.estDiaDDias, 60);
+  assert.equal(r.estDiaDStatus, 'ok');
+  it.estoqueDisponivel = 150;   // cobertura 150 → Dia D em 10 dias → acordar o comprador
+  assert.equal(S.aplicarContagem(it, null, HOJE).estDiaDStatus, 'acordar');
+  it.estoqueDisponivel = 100;   // já passou
+  assert.equal(S.aplicarContagem(it, null, HOJE).estDiaDStatus, 'atrasado');
+  assert.equal(r.estMesesRuptura, 2);
+});
