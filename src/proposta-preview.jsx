@@ -184,7 +184,7 @@ function PreviewCapa({ data, eq, pg, total }) {
             <dd>&nbsp;</dd>
           </dl>
           <div className="pe__pdf-capa-foot">
-            <span><Icon.message size={13}/> {v.celular || v.fixo || "(11) 2528-6473"}</span>
+            <span><Icon.message size={13}/> {[v.celular, v.fixo].filter(Boolean).join("  ·  ") || "(11) 2528-6473"}</span>
             <span><Icon.pin size={13}/> Rua Armandina Braga de Almeida, 383</span>
           </div>
         </div>
@@ -265,6 +265,8 @@ function PreviewClienteObra({ data }) {
           <p><b>{nomeSemDoc(c.nome, c.cnpj) || c.nome || "—"}</b></p>
           {c.cnpj ? <p>CNPJ: {fmtDoc(c.cnpj)}</p> : null}
           {c.responsavel ? <p>A/C: {c.responsavel}</p> : null}
+          {c.telefone ? <p>Telefone: {c.telefone}</p> : null}
+          {c.email ? <p>E-mail: {c.email}</p> : null}
           <p>{[c.endereco, c.numero].filter(Boolean).join(", ") || "—"}</p>
           <p>{[c.bairro, c.cidade, c.uf].filter(Boolean).join(" - ") || "—"}</p>
           {c.cep ? <p>CEP: {c.cep}</p> : null}
@@ -417,25 +419,7 @@ function PreviewAcabamentoTabela({ data }) {
      "ativo", igual à Ficha Técnica): só entra no PDF o que está marcado.
      Sem acabamentosCats (proposta antiga, nunca reaberta no editor novo):
      cai no formato fixo de sempre — mostra o que estiver preenchido. */
-  const a = ed.acabamentos || {};
-  const linhas = (Array.isArray(ed.acabamentosCats) && ed.acabamentosCats.length)
-    ? ed.acabamentosCats.flatMap((c) => c.campos.filter((f) => f.ativo && f.valor).map((f) => [f.nome, f.valor]))
-    : [
-        ["Modelo da Cabine", a.modeloCabine],
-        ["Acabamentos", a.acabamentoMat],
-        ["Sub-teto", a.subTeto],
-        ["Botoeira de Cabine", a.painelOperacao],
-        ["Piso", a.pisoCabina],
-        ["Medidas", a.medidasPiso],
-        ["Porta de Cabine", a.modeloPorta],
-        ["Medidas Porta de Cabine", a.dimPortaCabine],
-        ["Modelo de Porta", a.acabPortaCabine],
-        ["Portas de Pavimento", a.portasPavimento],
-        ["Botoeiras de Pavimento", a.botoeirasPavimento],
-        ["Sinalização", a.sinalizacao],
-        ["Pavimentos Inox", a.pavInox],
-        ["Demais", a.demais],
-      ].filter(([, v]) => v);
+  const linhas = window.PropostaOpcoes ? window.PropostaOpcoes.linhasAcabamento(ed) : [];
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
@@ -658,6 +642,7 @@ function PreviewValoresTabelas({ data }) {
         {parcelas.length ? (
           <>
             <h3 className="pdf-sub-title">Cronograma de Pagamento</h3>
+            {v.forma ? <p>Forma de pagamento: {v.forma}</p> : null}
             <table className="pdf-table2">
               <thead><tr><th>Parcela / Descrição</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
               <tbody>
@@ -701,13 +686,7 @@ function PreviewCondicoesPagamento({ data }) {
 
 /* ---------- Página 14: Ajustes e Impostos ---------- */
 function PreviewAjustesImpostos({ data }) {
-  const a = data.elevador.ajustes || {};
-  const blocos = [
-    ["Cláusula de Reajuste Cambial", a.clausulaCambial],
-    ["Faturamento", a.faturamentoTexto],
-    ["Taxas e Impostos Inclusos", a.taxasInclusas],
-    ["Taxas e Impostos Excluídos", a.taxasExcluidas],
-  ].filter(([, v]) => v);
+  const blocos = window.PropostaOpcoes ? window.PropostaOpcoes.blocosAjustes(data.elevador) : [];
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">

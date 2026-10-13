@@ -41,3 +41,25 @@ test('item sem códigos físicos (proposta antiga) vira 1 linha agregada, sem in
   assert.deepStrictEqual(l.map((x) => x.equipamento), ['VPEL-EL0963-1 — 2 un.']);
   assert.strictEqual(l[0].total, 20);
 });
+
+test('linhasAcabamento: lê acabamentosCats (só campo ativo e preenchido); sem ele cai no formato antigo', () => {
+  const O = carregar();
+  const ed = { acabamentos: { modeloCabine: '' }, acabamentosCats: [{ nome: 'Cabine', campos: [
+    { nome: 'Modelo da Cabine', valor: 'VP-004', ativo: true },
+    { nome: 'Sub-teto', valor: 'SUB-001', ativo: false },
+    { nome: 'Piso', valor: '', ativo: true },
+  ] }] };
+  assert.deepStrictEqual(O.linhasAcabamento(ed), [['Modelo da Cabine', 'VP-004']]);
+  assert.deepStrictEqual(O.linhasAcabamento({ acabamentos: { modeloCabine: 'X' } }), [['Modelo da Cabine', 'X']]);
+  assert.deepStrictEqual(O.linhasAcabamento({}), []);
+});
+
+test('blocosAjustes: campo da página vence; vazio, vale o geral; câmbio vira R$; nada vazio entra', () => {
+  const O = carregar();
+  const b = O.blocosAjustes({ ajustes: { clausulaCambial: 'CC', cambio: '5,18', faturamento: 'Pela matriz', faturamentoTexto: '', reajuste: 'IPCA', taxasIn: 'II', taxasInclusas: 'INCL', taxasOut: 'ICMS', taxasExcluidas: '' } });
+  assert.deepStrictEqual(b, [
+    ['Cláusula de Reajuste Cambial', 'CC'], ['Taxa de Câmbio de Referência (USD)', 'R$ 5,18'], ['Faturamento', 'Pela matriz'],
+    ['Reajuste', 'IPCA'], ['Taxas e Impostos Inclusos', 'INCL'], ['Taxas e Impostos Excluídos', 'ICMS'],
+  ]);
+  assert.deepStrictEqual(O.blocosAjustes({ ajustes: {} }), []);
+});
