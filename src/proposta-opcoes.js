@@ -123,5 +123,81 @@
     };
   }
 
-  window.PropostaOpcoes = { TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, _num: num };
+  /* Uma linha por EQUIPAMENTO FÍSICO (pedido do Financeiro, 10/10/2026): "Preços dos Equipamentos" mostra
+     os 27 elevadores de uma proposta de 27, cada um com seu valor unitário — nunca "6 × valor" numa linha só.
+     O código de cada um vem de data.ativos (VPEL-EL0963-1…N) pelo `unidadeId` do item; item sem `unidadeId`
+     (proposta herdada antes desta regra) cai em "<código> (k/N)". `original` só existe com desconto ativo. */
+  function linhasUnitarias(d, eq) {
+    const v = valores(d, eq);
+    const ativos = Array.isArray(d && d.ativos) ? d.ativos : [];
+    const fonte = (Array.isArray(v.itens) && v.itens.length) ? v.itens : [v];
+    const out = [];
+    fonte.forEach((it) => {
+      const qtd = Math.max(1, Math.round(parseFloat(it.quantidade) || 1));
+      const unit = num(it.valorUnit);
+      const orig = it.valorOriginal != null ? num(it.valorOriginal) : null;
+      const original = (it.desconto && orig != null && orig > unit) ? orig : null;
+      const codigos = it.unidadeId
+        ? ativos.filter((a) => a.unidadeId === it.unidadeId)
+            .sort((a, b) => (Number(a.equipamentoIndice) || 0) - (Number(b.equipamentoIndice) || 0))
+            .map((a) => a.codigo || a.identificador).filter(Boolean)
+        : [];
+      const nome = it.equipamento || 'Elevador de Passageiros';
+      if (qtd === 1 || codigos.length === qtd) {
+        for (let k = 0; k < qtd; k++) out.push({ equipamento: codigos.length === qtd ? codigos[k] : nome, unit, original, total: unit });
+      } else {
+        // Sem os códigos físicos (proposta antiga): nunca inventa numeração — 1 linha agregada, com a quantidade.
+        out.push({ equipamento: `${nome} — ${qtd} un.`, unit, original: original != null ? original * qtd : null, total: unit * qtd });
+      }
+    });
+    return out;
+  }
+
+  /* Especificações na ordem dos códigos dos equipamentos (…-1, -2, … -27), não na ordem das Unidades do Formulário. */
+  function ordenarEspecs(lista) {
+    const menor = (s) => {
+      const cods = Array.isArray(s && s.codigos) && s.codigos.length ? s.codigos : [s && s.id];
+      const ns = cods.map((c) => { const m = /-(\d+)$/.exec(String(c || '')); return m ? Number(m[1]) : Infinity; });
+      return Math.min(...ns);
+    };
+    return (Array.isArray(lista) ? lista.slice() : []).sort((a, b) => menor(a) - menor(b));
+  }
+
+  /* Tabela-resumo "Prezados Senhores(as)": UMA linha por equipamento físico (código único), com modelo, capacidade e
+     Andares / Paradas / Portas. "09/09/09" é esse campo livre do editor (Andares/Paradas/Portas): quando vem como
+     três números separados por "/" vira 3 colunas; qualquer outro texto fica inteiro na coluna Paradas. */
+  /* Só as PARADAS: "09/09/09" (andares/paradas/portas) vira "9"; texto livre fica como veio. */
+  function paradasDe(raw) {
+    const r = String(raw || '').trim();
+    const m = /^(\d+)\s*\/\s*(\d+)\s*\/\s*(\d+)$/.exec(r);
+    return m ? String(Number(m[2])) : r;
+  }
+
+  /* Modelos distintos da proposta, na ordem dos códigos: "GEP / GEP-MRL" (título da página do equipamento). */
+  function modelosDistintos(especs) {
+    const out = [];
+    ordenarEspecs(especs).forEach((s) => { if (s && s.modelo && !out.includes(s.modelo)) out.push(s.modelo); });
+    return out.join(' / ');
+  }
+
+  function resumoEquipamentos(especs) {
+    const rows = [];
+    (Array.isArray(especs) ? especs : []).forEach((s) => {
+      const cods = (Array.isArray(s.codigos) && s.codigos.length) ? s.codigos : [s.id || '—'];
+      const paradas = paradasDe(s.andaresParadasPortas) || '—';
+      cods.forEach((c) => rows.push({ codigo: c, modelo: s.modelo || '—', capacidade: s.capacidade || '—', paradas }));
+    });
+    const nc = (r) => { const m = /-(\d+)$/.exec(r.codigo); return m ? Number(m[1]) : Infinity; };
+    return rows.sort((a, b) => nc(a) - nc(b));
+  }
+
+  /* Totais isolados: equipamentos, DIFAL (nunca misturado ao valor dos equipamentos) e o conjunto. */
+  function totaisValores(d, eq) {
+    const v = valores(d, eq);
+    const totalEq = linhasUnitarias(d, eq).reduce((s, l) => s + l.total, 0);
+    const difal = num(v.difal);
+    return { totalEq, difal, totalGeral: totalEq + difal };
+  }
+
+  window.PropostaOpcoes = { TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, _num: num };
 }());

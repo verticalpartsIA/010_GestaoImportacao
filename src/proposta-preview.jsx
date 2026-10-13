@@ -286,20 +286,29 @@ function PreviewClienteObra({ data }) {
 /* ---------- Página 4: Saudação + resumo do fornecimento ---------- */
 function PreviewSaudacao({ data }) {
   const ed = data.elevador;
-  const s = (ed.especificacoes || [])[0] || {};
   const qtd = ed.valores?.quantidade || "1";
-  const resumo = [s.id, s.modelo, s.carac, s.capacidade ? `Capacidade para ${s.capacidade}` : "", s.andaresParadasPortas]
-    .filter(Boolean).join(" - ");
+  /* Tabela, uma linha por equipamento (código único), sem cores alternadas. */
+  const rows = window.PropostaOpcoes ? window.PropostaOpcoes.resumoEquipamentos(ed.especificacoes) : [];
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
         <PdfHeader numero={data.numero}/>
         <p>Prezados Senhores(as):</p>
         <p>Proposta Comercial para o fornecimento de {qtd} Elevador(es) de Passageiros.</p>
-        <div className="pdf-box">
-          {resumo ? <p>{resumo}</p> : <Vazio>Preencha as especificações técnicas do equipamento.</Vazio>}
-          <p>Marca: VerticalParts</p>
-        </div>
+        {rows.length ? (
+          <table className="pdf-table2" style={{ fontSize: "0.86em" }}>
+            <thead><tr><th>Equipamento</th><th>Modelo</th><th>Capacidade</th><th style={{ textAlign: "center" }}>Paradas</th></tr></thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} style={{ background: "transparent", breakInside: "avoid" }}>
+                  <td><b>{r.codigo}</b></td><td>{r.modelo}</td><td>{r.capacidade}</td>
+                  <td style={{ textAlign: "center" }}>{r.paradas}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <Vazio>Preencha as especificações técnicas do equipamento.</Vazio>}
+        <p style={{ marginTop: 10 }}>Marca: VerticalParts</p>
       </div>
       <PdfFooter/>
     </div>
@@ -310,7 +319,7 @@ function PreviewSaudacao({ data }) {
 function PreviewElevadorMarketing({ data }) {
   const ed = data.elevador;
   const s = (ed.especificacoes || [])[0] || {};
-  const titulo = ["Elevador de Passageiros", s.modelo].filter(Boolean).join(" ");
+  const titulo = ["Elevador de Passageiros", window.PropostaOpcoes ? window.PropostaOpcoes.modelosDistintos(ed.especificacoes) : s.modelo].filter(Boolean).join(" ");
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
@@ -362,7 +371,7 @@ function montarLinhasEspec(s) {
     ["Tensão de Alimentação", s.tensao],
     ["Tração", s.tracao],
     ["Velocidade", s.vel && `${s.vel} m/s`],
-    ["Paradas", s.andaresParadasPortas],
+    ["Paradas", (typeof window !== "undefined" && window.PropostaOpcoes) ? window.PropostaOpcoes.paradasDe(s.andaresParadasPortas) : s.andaresParadasPortas],
     ["Modelo", s.modelo],
     ["Quantidade", s.qtd],
   ].filter(([, v]) => v);
@@ -374,7 +383,7 @@ function PreviewEspecTabela({ data }) {
   /* Uma tabela por equipamento — antes só lia especificacoes[0], então a 2ª
      unidade em diante (cotação com mais de 1 elevador) nunca aparecia aqui,
      mesmo com o dado certo (bug real na cotação 950). */
-  const lista = (ed.especificacoes && ed.especificacoes.length) ? ed.especificacoes : [{}];
+  const lista = (ed.especificacoes && ed.especificacoes.length) ? (window.PropostaOpcoes ? window.PropostaOpcoes.ordenarEspecs(ed.especificacoes) : ed.especificacoes) : [{}];
   const blocos = lista.map((s) => ({
     id: s.id,
     linhas: montarLinhasEspec(s),
@@ -387,8 +396,8 @@ function PreviewEspecTabela({ data }) {
         <h2 className="pdf-sec-title">Especificações Técnicas</h2>
         <div className="pdf-sec-rule"/>
         {temConteudo ? blocos.map((b, i) => b.linhas.length ? (
-          <div key={i}>
-            <h3 className="pdf-sub-title">{blocos.length > 1 ? (b.id || `Equipamento ${i + 1}`) : "Características Principais"}</h3>
+          <div key={i} style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
+            {blocos.length > 1 ? null : <h3 className="pdf-sub-title">Características Principais</h3>}
             <table className="pdf-table2">
               <thead><tr><th>Característica</th><th>{b.id || "Elevador de Passageiros"}</th></tr></thead>
               <tbody>{b.linhas.map(([k, v], j) => <tr key={j}><td>{k}</td><td>{v}</td></tr>)}</tbody>
@@ -606,18 +615,10 @@ function PreviewValoresTabelas({ data }) {
      de uma linha só somando tudo — sem isso 2 elevadores viravam "GEF, GEP"
      numa linha única (bug real na cotação 950). Sem itens (caso de sempre,
      proposta com 1 equipamento só), cai no formato antigo de sempre. */
-  const linhas = (Array.isArray(v.itens) && v.itens.length ? v.itens : [v]).map((it) => {
-    const qtd = parseFloat(it.quantidade) || 0;
-    const unit = parseFloat((it.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
-    /* Desconto ativo (Frentes B+C): mostra o valor original riscado ao lado
-       do atual — histórico visível pro cliente e pra VerticalParts, mesmo
-       reabrindo a proposta depois. Comparado já totalizado (× qtd), já que
-       a coluna de Qtd./Valor Unit. saiu da tabela — só Equipamento | Valor. */
-    const original = it.valorOriginal != null ? parseFloat(String(it.valorOriginal).replace(/\./g, "").replace(",", ".")) || 0 : null;
-    const temDesconto = it.desconto && original != null && original > unit;
-    const total = qtd * unit;
-    return { equipamento: it.equipamento, original: temDesconto ? original * (qtd || 1) : null, total };
-  });
+  /* 10/10/2026 (Financeiro): uma linha por EQUIPAMENTO físico (27 = 27 linhas, cada uma com o valor
+     unitário) e o DIFAL à parte do total dos equipamentos. Desconto ativo (Frentes B+C): valor original
+     riscado ao lado do atual — vem em `original` de linhasUnitarias. */
+  const linhas = window.PropostaOpcoes ? window.PropostaOpcoes.linhasUnitarias(data) : [];
   const totalEq = linhas.reduce((s, l) => s + l.total, 0);
   const totalGeral = totalEq + difal;
 
@@ -642,10 +643,17 @@ function PreviewValoresTabelas({ data }) {
                 </td>
               </tr>
             ))}
-            {difal ? <tr><td>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(difal)}</td></tr> : null}
-            <tr className="pdf-total-row"><td>Total Equipamentos</td><td style={{ textAlign: "right" }}>{fmt(totalGeral)}</td></tr>
+            <tr className="pdf-total-row"><td>Total Equipamentos</td><td style={{ textAlign: "right" }}>{fmt(totalEq)}</td></tr>
           </tbody>
         </table>
+        {difal ? (
+          <table className="pdf-table2" style={{ marginTop: 12, border: "1.5px solid #e0b400", background: "#fffbe6" }}>
+            <tbody>
+              <tr><td><b>DIFAL (Diferencial de Alíquota)</b></td><td style={{ textAlign: "right" }}><b>{fmt(difal)}</b></td></tr>
+              <tr className="pdf-total-row"><td>TOTAL + DIFAL</td><td style={{ textAlign: "right" }}>{fmt(totalGeral)}</td></tr>
+            </tbody>
+          </table>
+        ) : null}
 
         {parcelas.length ? (
           <>
