@@ -7,6 +7,8 @@ import postgres from 'npm:postgres@3.4.4'
 //   chave de API (as legadas do HUB foram desligadas em 28/09/2026).
 // Ações: set_alcadas → vpsistema_set_alcadas ; set_email → vpsistema_set_email ;
 //        set_valores → vpsistema_set_valores (quem vê R$).
+// Se o corpo trouxer p_perfil, o perfil é criado antes (vpsistema_ensure_perfil)
+// quando o e-mail ainda não existe no HUB — evita 'sem_perfil_no_hub'.
 
 const VPSISTEMA_URL = 'https://ubdkoqxfwcraftesgmbw.supabase.co'
 // Chave PÚBLICA (anon) do vpsistema — a mesma que está no site; só chama o verificador.
@@ -33,6 +35,10 @@ Deno.serve(async (req) => {
     const body = await req.json()
     const sql = postgres(dbUrl, { prepare: false, max: 1 })
     try {
+      if (body.p_perfil && (body.action === 'set_alcadas' || body.action === 'set_valores')) {
+        // ::text::jsonb — com ::jsonb direto o postgres.js serializa de novo e a função recebe uma string JSON.
+        await sql`select public.vpsistema_ensure_perfil(${JSON.stringify(body.p_perfil)}::text::jsonb)`
+      }
       if (body.action === 'set_alcadas') {
         const [row] = await sql`select public.vpsistema_set_alcadas(${body.p_email}, ${body.p_caps ?? []}::text[], ${body.p_modulos ?? []}::text[]) as r`
         return json(row.r)
