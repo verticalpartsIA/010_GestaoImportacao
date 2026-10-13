@@ -39,10 +39,59 @@ const CLI_EMPTY = {
   ativo: true,
 };
 
+/* Consulta de CNPJ "Omie primeiro" (cliente/fornecedor): preenche só o que está vazio, nunca sobrescreve o digitado.
+   Devolve { fonte, patch, erro }. fonte null = consulta falhou (não trava o cadastro). */
+async function cadConsultarCnpj(form) {
+  const api = window.EnderecoAPI;
+  if (!api?.consultarCnpjOmieFirst) return { fonte: null, patch: {}, erro: 'Módulo de consulta indisponível — recarregue a página.' };
+  const r = await api.consultarCnpjOmieFirst(form.cnpj);
+  if (!r.fonte) return { fonte: null, patch: {}, erro: r.erro };
+  const d = r.dados;
+  const vazio = (v) => !String(v ?? '').trim();
+  const patch = {};
+  const poe = (campo, valor) => { if (valor && vazio(form[campo])) patch[campo] = valor; };
+  poe('razao_social', d.razao_social); poe('nome_fantasia', d.nome_fantasia); poe('telefone', d.telefone); poe('email', d.email);
+  poe('endereco_logradouro', d.endereco.logradouro); poe('endereco_complemento', d.endereco.complemento); poe('endereco_bairro', d.endereco.bairro);
+  poe('endereco_cep', d.endereco.cep); poe('endereco_cidade', d.endereco.cidade); poe('endereco_estado', d.endereco.estado);
+  return { fonte: r.fonte, patch, erro: null };
+}
+
+/* Botão + regra "obrigatória": CNPJ informado precisa ter sido consultado antes de salvar. Se ainda não foi, a consulta roda
+   no salvar; se trouxe dados novos, para para a pessoa conferir (clicar de novo salva). Falha de consulta só avisa. */
+function useCnpjOmieFirst(form, setForm) {
+  const [buscando, setBuscando] = React.useState(false);
+  const consultadoRef = React.useRef('');
+  const digitos = window.EnderecoAPI?.sanitizeDigits(form.cnpj) || '';
+  const aplicar = async (silencioso) => {
+    setBuscando(true);
+    try {
+      const r = await cadConsultarCnpj(form);
+      if (!r.fonte) { window.toast?.(`Não foi possível consultar o CNPJ (${r.erro || 'serviço indisponível'}). Confira os dados manualmente.`, 'warning'); return { ok: false, mudou: false }; }
+      consultadoRef.current = digitos;
+      const mudou = Object.keys(r.patch).length > 0;
+      if (mudou) setForm((f) => ({ ...f, ...r.patch }));
+      window.toast?.(r.fonte === 'omie' ? 'CNPJ já cadastrado no ERP Omie — dados trazidos de lá.' : 'CNPJ não está no Omie — dados trazidos da consulta pública.', 'success');
+      return { ok: true, mudou };
+    } finally { setBuscando(false); }
+  };
+  /* Retorna true se pode salvar. */
+  const garantirConsulta = async () => {
+    if (form.tipo_pessoa === 'PF' || form.documento_pendente || !digitos) return true;
+    if (!window.EnderecoAPI?.isCnpjValido(digitos)) { window.toast?.('CNPJ inválido — confira os dígitos (ou marque "documento pendente").', 'warning'); return false; }
+    if (consultadoRef.current === digitos) return true;
+    const r = await aplicar(true);
+    if (r.ok && r.mudou) { window.toast?.('Dados preenchidos pela consulta de CNPJ. Confira e clique em salvar de novo.', 'info'); return false; }
+    return true;
+  };
+  return { buscando, buscar: () => (window.EnderecoAPI?.isCnpjValido(digitos) ? aplicar(false) : window.toast?.('Informe um CNPJ válido para buscar.', 'warning')), garantirConsulta };
+}
+
 function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
   const [form, setForm] = React.useState(() => (initialData ? { ...CLI_EMPTY, ...initialData } : CLI_EMPTY));
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
-  const submit = () => {
+  const cnpjBusca = useCnpjOmieFirst(form, setForm);
+  const submit = async () => {
+    if (!(await cnpjBusca.garantirConsulta())) return;
     if (!form.razao_social.trim()) return window.toast?.('Informe a razão social / nome.', 'warning');
     onSubmit(form);
   };
@@ -50,7 +99,12 @@ function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
     <Card title={isEdit ? `Editar cliente ${initialData.codigo || ''}` : 'Novo cliente'}>
       <div className="grid-3" style={{ gap: 10 }}>
         <PIField label="Tipo de pessoa"><PISelect value={form.tipo_pessoa} onChange={set('tipo_pessoa')} options={['PJ', 'PF']}/></PIField>
-        <PIField label={form.tipo_pessoa === 'PF' ? 'CPF' : 'CNPJ'}><PIInput value={form.tipo_pessoa === 'PF' ? form.cpf : form.cnpj} onChange={set(form.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj')}/></PIField>
+        <PIField label={form.tipo_pessoa === 'PF' ? 'CPF' : 'CNPJ'}>
+          <div className="row gap-2">
+            <div style={{ flex: 1 }}><PIInput value={form.tipo_pessoa === 'PF' ? form.cpf : form.cnpj} onChange={set(form.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj')}/></div>
+            {form.tipo_pessoa !== 'PF' && <Button variant="outline" size="sm" onClick={cnpjBusca.buscar} disabled={cnpjBusca.buscando}>{cnpjBusca.buscando ? 'Buscando…' : 'Buscar CNPJ'}</Button>}
+          </div>
+        </PIField>
         <PIField label="Inscrição estadual"><PIInput value={form.inscricao_estadual} onChange={set('inscricao_estadual')}/></PIField>
         <PIField label="Razão social / Nome *" span={2}><PIInput value={form.razao_social} onChange={set('razao_social')}/></PIField>
         <PIField label="Nome fantasia"><PIInput value={form.nome_fantasia} onChange={set('nome_fantasia')}/></PIField>
@@ -365,7 +419,9 @@ function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
   const [form, setForm] = React.useState(() => (initialData ? { ...FOR_EMPTY, ...initialData } : FOR_EMPTY));
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
   const toggleCategoria = (cat) => setForm((f) => ({ ...f, categorias: f.categorias.includes(cat) ? f.categorias.filter((x) => x !== cat) : [...f.categorias, cat] }));
-  const submit = () => {
+  const cnpjBusca = useCnpjOmieFirst(form, setForm);
+  const submit = async () => {
+    if (!(await cnpjBusca.garantirConsulta())) return;
     if (!form.razao_social.trim()) return window.toast?.('Informe a razão social / nome.', 'warning');
     if (form.categorias.length === 0) return window.toast?.('Selecione ao menos uma categoria.', 'warning');
     onSubmit(form);
@@ -385,7 +441,12 @@ function FornecedorForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
       </div>
       <div className="grid-3" style={{ gap: 10, marginTop: 14 }}>
         <PIField label="Tipo de pessoa"><PISelect value={form.tipo_pessoa} onChange={set('tipo_pessoa')} options={['PJ', 'PF']}/></PIField>
-        <PIField label={form.tipo_pessoa === 'PF' ? 'CPF' : 'CNPJ'}><PIInput value={form.tipo_pessoa === 'PF' ? form.cpf : form.cnpj} onChange={set(form.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj')}/></PIField>
+        <PIField label={form.tipo_pessoa === 'PF' ? 'CPF' : 'CNPJ'}>
+          <div className="row gap-2">
+            <div style={{ flex: 1 }}><PIInput value={form.tipo_pessoa === 'PF' ? form.cpf : form.cnpj} onChange={set(form.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj')}/></div>
+            {form.tipo_pessoa !== 'PF' && <Button variant="outline" size="sm" onClick={cnpjBusca.buscar} disabled={cnpjBusca.buscando}>{cnpjBusca.buscando ? 'Buscando…' : 'Buscar CNPJ'}</Button>}
+          </div>
+        </PIField>
         <PIField label="Razão social / Nome *"><PIInput value={form.razao_social} onChange={set('razao_social')}/></PIField>
         <PIField label="Nome fantasia"><PIInput value={form.nome_fantasia} onChange={set('nome_fantasia')}/></PIField>
         <PIField label="E-mail"><PIInput value={form.email} onChange={set('email')}/></PIField>
