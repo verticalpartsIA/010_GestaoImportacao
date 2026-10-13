@@ -247,6 +247,16 @@
       { modulo: 'mes-cadastros', label: 'MES — Cadastros do chão de fábrica' },
       { modulo: 'relatorios-pcp', label: 'Relatórios do PCP' },
       { modulo: 'expedicao', label: 'Expedição' },
+      /* VP Estoque (app de coleta, 013_Estoque). As chaves abaixo são as que o SQL confere por e-mail
+         (estoque_cap_email / estoque_exige) — migrations 20261013120000 e 20261013130000. Não renomeie sem mudar o SQL. */
+      { modulo: 'estoque', label: 'VP Estoque — app de coleta (recebimento, contagem, saída, inventário)', capacidades: [
+        { chave: 'contar', label: 'Conta o estoque no app (contagem e inventário)' },
+        { chave: 'receber', label: 'Registra recebimento de mercadoria no app' },
+        { chave: 'saida', label: 'Registra saída de material no app (ordem de produção, obra, consumo interno)' },
+        { chave: 'abrir_sessao', label: 'Abre sessões de contagem/inventário e congela a lista esperada' },
+        { chave: 'revisar', label: 'Revisa as sessões: vê o saldo do sistema e as diferenças, pede recontagem, decide e rejeita leituras' },
+        { chave: 'aprovar', label: 'Aprova a contagem (grava o contado no hub) e fecha a sessão' },
+      ]},
       { modulo: 'pcp', label: 'PCP — Planejamento e Controle da Produção', capacidades: [
         { chave: 'ver', label: 'Ver' },
         { chave: 'criar', label: 'Criar' },
