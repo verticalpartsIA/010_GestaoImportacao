@@ -1278,6 +1278,20 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
           <PZField label="% de Serviços"><PZPercentInput value={pz.percentual_servicos} onChange={set('percentual_servicos')}/></PZField>
           <PZField label="Contingência (R$)"><PZCurrencyInput moeda="BRL" value={pz.contingencia_valor} onChange={set('contingencia_valor')}/></PZField>
           <PZField label="Outros custos não recuperáveis (R$)"><PZCurrencyInput moeda="BRL" value={pz.outros_custos_nao_recuperaveis_rs} onChange={set('outros_custos_nao_recuperaveis_rs')}/></PZField>
+          {(() => {
+            /* Ad-Valorem (13/10/2026): automático, 0,1% do VMLD (Valor das Mercadorias no Local de Destino),
+               como na planilha do Financeiro. Só exibição — o motor já calcula e abate do lucro. Aparece depois de "Calcular". */
+            const impAV = (pz.resultado_v2 || pz.resultado || {}).importacao;
+            const av = impAV && impAV.adValorem != null ? Number(impAV.adValorem) || 0 : null;
+            return (
+              <PZField label="Ad - Valorem (R$)">
+                <input className="input" disabled value={av == null ? '—' : fmtBRL2(av)} style={{ background: 'var(--bg-subtle, #f3f4f6)' }}/>
+                <div className="small muted" style={{ marginTop: 4 }}>
+                  {av == null ? 'Calculado ao clicar em "Calcular".' : `0,1% do VMLD (${fmtBRL2(Number(impAV.vmldRs) || 0)}) — automático.`}
+                </div>
+              </PZField>
+            );
+          })()}
         </div>
         <PZFreteSugestao pz={pz} onUsar={set('frete_interno_rs')}/>
         <p className="small muted" style={{ marginTop: 8 }}>Contingência e outros custos não recuperáveis não entram no preço de venda: só abatem do lucro (como na planilha do Financeiro).</p>

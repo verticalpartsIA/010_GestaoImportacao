@@ -934,6 +934,16 @@ A planilha do Financeiro ("JA - COTAÇÃO N° 963 - 27 EL", aba FIN-ELEVADOR) é
 - **Correção de produção**: `vp_valores_guarda` (trigger da F1 de #571) chamava `vp_pode_valores` sem checar o papel e bloqueava toda escrita do app (anon) nas 17 tabelas de valores; migration `20261010220000` consulta a função só para `authenticated`.
 - Não testado com clique real: Formulário com o campo de passageiros/Carga e Proposta no editor.
 
+## AFRMM em Containers + Resumo de Custos (13/10/2026, PR #873, squash `df3e409`)
+
+Pedido do usuário: mostrar o AFRMM (Adicional ao Frete para Renovação da Marinha Mercante) ao lado de Preço/Capatazia/GRI.
+- **Atualização de Custos › Containers** (`cadastro-custos.jsx` v15): colunas **AFRMM (USD)** e **AFRMM (R$)**, **automáticas, sempre 8%** de Preço + Capatazia + GRI (`CC_AFRMM_PCT`), cinza, sem edição e **sem coluna no banco** (calculado na renderização). R$ = 8% da soma das colunas em R$ (não recalcula pelo câmbio na hora). Hoje: 20HC US$ 588,00 / R$ 3.063,45; 40HC US$ 702,47 / R$ 3.668,44. Decisão do usuário: "Automático sempre 8%" — não virar campo editável sem pedir.
+- **Precificação › Resumo de Custos** (`precificacao-elevador.jsx` v69): nova linha **AFRMM** com `resultado.importacao.afrmm` do motor (só depois de "Calcular", como Custos Imposto) e **incluída na Soma**. **O motor e o preço de venda não foram alterados** — o motor já calculava o AFRMM; só passou a aparecer no resumo.
+- **Divergência conhecida (não resolvida):** a base do AFRMM no motor também soma o "Frete internacional informado" do fornecedor × câmbio; o usuário descreveu a base só como Container + Capatazia + GRI. Só difere quando esse campo não está zerado (a tela já pede para zerá-lo). Perguntas 2 e 3 do alinhamento ficaram sem resposta explícita; seguiu-se "não mudar a Precificação".
+- **Ad - Valorem na Precificação (13/10/2026, `precificacao-elevador.jsx` v70):** campo só leitura no card **Despesas Extras**, depois de "Outros custos não recuperáveis" = 0,1% do VMLD (`resultado.importacao.adValorem`, que o motor já calculava e abate do lucro; só aparece depois de "Calcular", antes mostra "—"). Conferido com a planilha do Financeiro (Ad-Valorem R$ 2.462,29 = 0,1% do VMLD R$ 2.462.293,85). Não entra no Resumo de Custos (o usuário pediu só o campo); preço de venda inalterado. Na 963: VMLD R$ 2.283.864,88 → R$ 2.283,86.
+- Efeito colateral esperado: a **Soma** do resumo pode subir nas precificações com container (o AFRMM antes não entrava nela).
+- Verificado no navegador (valores acima); o resumo foi conferido na VPPC-0983, que não tem container, então o AFRMM aparece R$ 0,00 — **não testado com container real + Calcular**.
+
 ## Importação Varejo — contagem física, estoque mín./máx. sugerido, tendência e revisão do comprador (12/10/2026)
 
 Pedido do usuário: a tela `/logistica/compras` é "o motivo de existência da VerticalParts" — o comprador precisa de certeza para comprar. 4 entregas na mesma sessão (tudo já aplicado em produção pelo MCP; o código sobe com este PR).
