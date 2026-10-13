@@ -72,7 +72,7 @@ const pt = (px) => Math.round(px * 0.75 * 100) / 100;
 
 function montarStyles() {
   return StyleSheet.create({
-    page: { fontFamily: 'Inter', fontSize: pt(15.5), color: TXT, paddingTop: pt(63), paddingBottom: pt(95), paddingLeft: pt(58), paddingRight: pt(58) },
+    page: { fontFamily: 'Inter', fontSize: pt(15.5), color: TXT, paddingTop: pt(63), paddingBottom: pt(120), paddingLeft: pt(58), paddingRight: pt(58) },
     pageNoPad: { fontFamily: 'Inter', padding: 0 },
 
     // Capa
@@ -236,7 +236,8 @@ function numBR(s) { return parseFloat((s || '0').toString().replace(/\./g, '').r
 
 /* ---------- Peças compartilhadas ---------- */
 function PdfHeader(S, numero) {
-  return h(View, { style: S.pageHeader }, [
+  /* fixed: o cabeçalho se repete nas páginas de continuação (antes só a 1ª página da seção o tinha). */
+  return h(View, { style: S.pageHeader, fixed: true }, [
     h(View, { key: 'l' }, [
       IMG.logo ? h(Image, { key: 'logo', src: IMG.logo, style: S.headerLogo }) : null,
       h(Text, { style: S.headerTag, key: 't' }, 'Elevando você e o seu negócio'),
@@ -359,25 +360,43 @@ function PgClienteObra(S, data) {
 
 function PgSaudacao(S, data) {
   const ed = data.elevador || {};
-  const s = (ed.especificacoes || [])[0] || {};
+  /* Um resumo por EQUIPAMENTO (não só o 1º) — cada Unidade cita sua quantidade ("6 un."). */
+  const OP = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
   const qtd = ed.valores?.quantidade || '1';
-  const resumo = [s.id, s.modelo, s.carac, s.capacidade ? `Capacidade para ${s.capacidade}` : '', s.andaresParadasPortas].filter(Boolean).join(' - ');
+  /* Tabela (não texto corrido): uma linha por equipamento, com o código único dele. Sem cores alternadas;
+     a cada 24 linhas recomeça com o cabeçalho, pra tabela longa não perder as colunas na página seguinte. */
+  const rows = OP ? OP.resumoEquipamentos(ed.especificacoes) : [];
+  const cols = [
+    { label: 'Equipamento', flex: 2.2 }, { label: 'Modelo', flex: 1.3 }, { label: 'Capacidade', flex: 3.2 },
+    { label: 'Paradas', flex: 1.1, align: 'center' },
+  ];
+  const cel = (flex, align, bold) => ({ flex, textAlign: align || 'left', fontSize: pt(13), padding: `${pt(4)}pt ${pt(8)}pt`, color: TXT, fontWeight: bold ? 700 : 400 });
+  const pedacos = [];
+  for (let i = 0, n = 27; i < rows.length; i += n, n = 34) pedacos.push(rows.slice(i, i + n));
+  const tabelas = pedacos.map((ps, ti) => h(View, { key: 'tb' + ti, break: ti > 0, style: { marginTop: pt(ti ? 0 : 6), border: '1pt solid #ddd' } }, [
+    h(View, { key: 'h', wrap: false, minPresenceAhead: pt(90), style: { flexDirection: 'row', backgroundColor: GRAY_100, borderBottom: '1pt solid #ccc' } },
+      cols.map((c, i) => h(Text, { key: i, style: { ...cel(c.flex, c.align, true), fontSize: pt(12), textTransform: 'uppercase' } }, c.label))),
+    ...ps.map((r, ri) => h(View, { key: 'r' + ri, wrap: false, style: { flexDirection: 'row', borderBottom: ri === ps.length - 1 ? 0 : '1pt solid #eee' } }, [
+      h(Text, { key: 0, style: cel(cols[0].flex, 'left', true) }, r.codigo),
+      h(Text, { key: 1, style: cel(cols[1].flex) }, r.modelo),
+      h(Text, { key: 2, style: cel(cols[2].flex) }, r.capacidade),
+      h(Text, { key: 3, style: cel(cols[3].flex, 'center') }, r.paradas),
+    ])),
+  ]));
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.p, key: 'p1' }, 'Prezados Senhores(as):'),
     h(Text, { style: S.p, key: 'p2' }, `Proposta Comercial para o fornecimento de ${qtd} Elevador(es) de Passageiros.`),
-    h(View, { style: S.box, key: 'b' }, [
-      resumo ? h(Text, { style: S.boxP, key: 'r' }, resumo) : Vazio(S, 'A definir.'),
-      h(Text, { style: S.boxP, key: 'm' }, 'Marca: VerticalParts'),
-    ]),
+    ...(tabelas.length ? tabelas : [Vazio(S, 'A definir.')]),
+    h(Text, { style: [S.p, { marginTop: pt(10) }], key: 'm' }, 'Marca: VerticalParts'),
     PdfFooter(S),
   ]);
 }
 
 function PgMarketing(S, data) {
   const ed = data.elevador || {};
-  const s = (ed.especificacoes || [])[0] || {};
-  const titulo = ['Elevador de Passageiros', s.modelo].filter(Boolean).join(' ');
+  const OPm = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  const titulo = ['Elevador de Passageiros', OPm ? OPm.modelosDistintos(ed.especificacoes) : ((ed.especificacoes || [])[0] || {}).modelo].filter(Boolean).join(' ');
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, titulo),
@@ -398,14 +417,15 @@ function PgMarketing(S, data) {
    cliente mostrava só o 1º equipamento de uma cotação com 2+ (950/955),
    mesmo o preview HTML já mostrando todos. */
 function montarBlocosEspec(especificacoes) {
-  const lista = (especificacoes && especificacoes.length) ? especificacoes : [{}];
+  const O = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  const lista = (especificacoes && especificacoes.length) ? (O ? O.ordenarEspecs(especificacoes) : especificacoes) : [{}];
   return lista.map((s) => ({
     id: s.id,
     linhas: [
       ['Tipo de Empreendimento', s.empreendimento], ['Característica de Transporte', s.carac], ['Denominação', s.denominacao],
       ['Percurso', s.percurso && `${s.percurso}mm`], ['Capacidade', s.capacidade], ['Caixa de Corrida', s.dimensoesCaixa],
       ['Poço', s.profPoço && `${s.profPoço}mm`], ['Dimensões da Cabine', s.dimensoesCabine], ['Tensão de Alimentação', s.tensao],
-      ['Tração', s.tracao], ['Velocidade', s.vel && `${s.vel} m/s`], ['Paradas', s.andaresParadasPortas],
+      ['Tração', s.tracao], ['Velocidade', s.vel && `${s.vel} m/s`], ['Paradas', O ? O.paradasDe(s.andaresParadasPortas) : s.andaresParadasPortas],
       ['Modelo', s.modelo], ['Quantidade', s.qtd],
     ].filter(([, v]) => v),
   }));
@@ -420,8 +440,8 @@ function PgEspecTabela(S, data) {
     h(Text, { style: S.secTitle, key: 't' }, 'Especificações Técnicas'),
     h(View, { style: S.secRule, key: 'r' }),
     ...(temConteudo
-      ? blocos.map((b, i) => b.linhas.length ? h(View, { key: 'b' + i }, [
-          h(Text, { style: S.subTitle, key: 'st' }, blocos.length > 1 ? (b.id || `Equipamento ${i + 1}`) : 'Características Principais'),
+      ? blocos.map((b, i) => b.linhas.length ? h(View, { key: 'b' + i, wrap: false }, [
+          blocos.length > 1 ? null : h(Text, { style: S.subTitle, key: 'st' }, 'Características Principais'),
           Tabela2(S, [{ label: 'Característica', flex: 1 }, { label: b.id || 'Elevador de Passageiros', flex: 1 }], b.linhas, 't'),
         ]) : null)
       : [Vazio(S, 'Preencha as especificações técnicas na aba "Especificações Técnicas".')]),
@@ -527,18 +547,24 @@ function PgValores(S, data) {
      itens, cai no formato antigo de 1 equipamento só. Tabela mostra só
      Equipamento | Valor (já qtd × unitário somado) — Qtd./Valor Unit.
      saíram da tabela a pedido do usuário (28/09/2026). */
-  const fonte = (Array.isArray(v.itens) && v.itens.length) ? v.itens : [v];
-  const linhas = fonte.map((it) => {
-    const qtd = parseFloat(it.quantidade) || 0;
-    const unit = numBR(it.valorUnit);
-    return { equipamento: it.equipamento, total: qtd * unit };
-  });
+  /* 10/10/2026 (Financeiro): UMA linha por equipamento físico (27 elevadores = 27 linhas, cada um com o
+     valor unitário) e o DIFAL num bloco À PARTE — nunca somado ao "Total Equipamentos". */
+  const linhas = O ? O.linhasUnitarias(data) : [];
   const totalEq = linhas.reduce((s, l) => s + l.total, 0);
   const totalGeral = totalEq + difal;
   const totalParcelas = parcelas.reduce((s, p) => s + numBR(p.valor), 0);
   const linhasEq = linhas.map((l) => [l.equipamento || 'Elevador de Passageiros', l.total ? fmtBRL(l.total) : '—']);
-  if (difal) linhasEq.push(['DIFAL', fmtBRL(difal)]);
-  linhasEq.push(['Total Equipamentos', fmtBRL(totalGeral)]);
+  linhasEq.push(['Total Equipamentos', fmtBRL(totalEq)]);
+  const caixaDifal = difal ? h(View, { key: 'difal', wrap: false, style: { marginTop: pt(14), borderWidth: 1, borderColor: YELLOW, borderStyle: 'solid', borderRadius: 4, padding: pt(10), backgroundColor: '#fffbe6' } }, [
+    h(View, { style: { flexDirection: 'row', justifyContent: 'space-between' }, key: 'd' }, [
+      h(Text, { style: [S.p, { fontWeight: 700, marginBottom: 0 }], key: 'l' }, 'DIFAL (Diferencial de Alíquota)'),
+      h(Text, { style: [S.p, { fontWeight: 700, marginBottom: 0 }], key: 'v' }, fmtBRL(difal)),
+    ]),
+    h(View, { style: { flexDirection: 'row', justifyContent: 'space-between', marginTop: pt(6) }, key: 't' }, [
+      h(Text, { style: [S.p, { fontWeight: 700, marginBottom: 0 }], key: 'l' }, 'TOTAL + DIFAL'),
+      h(Text, { style: [S.p, { fontWeight: 700, marginBottom: 0 }], key: 'v' }, fmtBRL(totalGeral)),
+    ]),
+  ]) : null;
   const linhasParc = parcelas.map(p => [p.desc || '—', p.valor ? 'R$ ' + p.valor : '—']);
   if (parcelas.length) linhasParc.push(['Total Parcelado', fmtBRL(totalParcelas)]);
   return h(Page, { size: 'A4', style: S.page }, [
@@ -548,6 +574,7 @@ function PgValores(S, data) {
     modalidade ? h(Text, { style: [S.p, { fontWeight: 700 }], key: 'mod' }, 'Modalidade de entrega escolhida: ' + modalidade.titulo + ' — ' + modalidade.rotulo + '.') : null,
     h(Text, { style: S.subTitle, key: 's1' }, 'Preços dos Equipamentos'),
     Tabela2(S, [{ label: 'Equipamento', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasEq, 't1'),
+    caixaDifal,
     parcelas.length ? h(View, { key: 'parc' }, [
       h(Text, { style: S.subTitle, key: 's2' }, 'Cronograma de Pagamento'),
       Tabela2(S, [{ label: 'Parcela / Descrição', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasParc, 't2'),

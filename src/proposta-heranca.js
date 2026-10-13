@@ -107,8 +107,20 @@
       const tipo = u.tipo || tec.tipo || '';
       const cabLargura = u.cabina_largura_mm || tec.cabina_largura_mm;
       const cabProf = u.cabina_profundidade_mm || tec.cabina_profundidade_mm;
+      /* REGRA (Financeiro, 10/10/2026): cada equipamento físico é ÚNICO e tem o SEU código (VPEL-EL0963-1 … -27,
+         numeração corrida da Precificação — mo_lookup). O identificador da Unidade do Formulário NÃO é código de
+         equipamento quando a Unidade tem quantidade > 1. Aqui ficam todos os códigos físicos desta Unidade. */
+      const codigos = ((precificacao && precificacao.mo_lookup) || [])
+        .filter((l) => l.unidadeId === uid && l.identificador)
+        .sort((a, b) => (Number(a.equipamentoIndice) || 0) - (Number(b.equipamentoIndice) || 0))
+        .map((l) => l.identificador);
+      const idUnidade = u.identificador || tec.identificador || '';
       return {
-        id: u.identificador || tec.identificador || '',
+        id: codigos.length ? codigos.join(', ') : idUnidade,
+        codigos: codigos.length ? codigos : (idUnidade ? [idUnidade] : []),
+        /* Liga a especificação (e o item de valores) aos ativos físicos VPEL-ELxxxx-k — é o que
+           permite listar os N equipamentos de uma Unidade de quantidade N, cada um com seu código. */
+        unidadeId: uid || '',
         modelo: mod.modelo || u.modelo || tec.modelo || '',
         empreendimento: '',
         carac: tipo,
@@ -275,24 +287,35 @@
        em precificacao-elevador-engine.js) — só cai pra precoVendaPorEquipamento
        (a média) quando o rateio não está disponível (cotação antiga, ou
        modelos[] incompleto). */
-    if (especificacoes.length > 1 && resultado
+    if ((qtdTotal > 1 || especificacoes.length > 1) && resultado
       && (resultado.precoVendaPorEquipamento || especificacoes.some((e) => e.valorUnitarioRs))) {
       const mediaFallback = Math.round(resultado.precoVendaPorEquipamento) || 0;
-      valores.itens = especificacoes.map((e, i) => {
+      /* UM item por EQUIPAMENTO FÍSICO, com o código dele (VPEL-EL0963-13…): cada equipamento é único e o
+         cliente pode pedir mudança num específico. Unidade de quantidade N vira N itens (quantidade 1). */
+      valores.itens = [];
+      especificacoes.forEach((e, i) => {
         const unit = Math.round(e.valorUnitarioRs) || mediaFallback;
-        return {
-          id: e.id || e.codigoAtivo || `Equipamento ${i + 1}`,
-          /* Só o Nº do equipamento (VPEL-EL0950-1) — combinado é esse, sem
-             anexar o código interno de modelo do fabricante junto. */
-          equipamento: e.id || equipamentos || 'Elevador de Passageiros',
-          quantidade: String(Number(e.qtd) || 1),
-          valorUnit: String(unit),
-          /* valorOriginal: congelado no nascimento — nunca sobrescrito por um
-             desconto (proposta-desconto.js só mexe em valorUnit/desconto*). */
-          valorOriginal: String(unit),
-          desconto: null, descontoPendente: null, descontoLog: [],
-        };
+        const n = Math.max(1, Number(e.qtd) || 1);
+        const codigos = (Array.isArray(e.codigos) && e.codigos.length === n) ? e.codigos : null;
+        for (let k = 0; k < n; k++) {
+          const cod = codigos ? codigos[k] : (n === 1 ? (e.id || e.codigoAtivo || `Equipamento ${i + 1}`) : null);
+          valores.itens.push({
+            id: cod || e.id || `Equipamento ${i + 1}`,
+            unidadeId: e.unidadeId || '',
+            equipamento: cod || e.id || equipamentos || 'Elevador de Passageiros',
+            quantidade: cod ? '1' : String(n),
+            valorUnit: String(unit),
+            /* valorOriginal: congelado no nascimento — nunca sobrescrito por um
+               desconto (proposta-desconto.js só mexe em valorUnit/desconto*). */
+            valorOriginal: String(unit),
+            desconto: null, descontoPendente: null, descontoLog: [],
+          });
+          if (!cod) break; // sem código físico conhecido: mantém 1 item agregado (nunca inventa numeração)
+        }
       });
+      // Lista na ordem dos códigos (…-1, -2, … -27), não na ordem das Unidades.
+      const nCod = (it) => { const m = /-(\d+)$/.exec(it.equipamento || ''); return m ? Number(m[1]) : Infinity; };
+      valores.itens.sort((a, b) => nCod(a) - nCod(b));
     }
     /* "VALORES DE PAGAMENTOS" (Forma de Pagamento + Parcelas) — assim que
        precificado, a Proposta já nasce com o template padrão (Sinal 40% +
