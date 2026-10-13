@@ -131,7 +131,12 @@
     { grupo: 'Geral', itens: [
       { modulo: 'dashboard', label: 'Dashboard' },
       { modulo: 'notificacoes', label: 'Notificações' },
-      { modulo: 'decisoes', label: 'Central de Decisões' },
+      /* 13/10/2026: as duas alçadas de decisão que o vpsistema declara existiam no banco mas sem caixa nesta tela. */
+      { modulo: 'decisoes', label: 'Central de Decisões', capacidades: [
+        ...ACOES_PADRAO,
+        { chave: 'ceo', label: 'Decide como CEO' },
+        { chave: 'gestor_comercial', label: 'Decide como Gestor Comercial' },
+      ]},
       { modulo: 'financeiro', label: 'Prazos & Pendências' },
       /* 04/10/2026 — Inbox na grade de alçadas. Dono do e-mail = LOGIN de quem enviou (a resposta herda o dono do
          e-mail que responde; senão o dono da cotação; senão "sem dono"). Quem vê o dos outros é por pessoa.
@@ -179,6 +184,10 @@
         { chave: 'excluir', label: 'Exclui propostas' },
       ]},
       { modulo: 'controle-cotacoes', label: 'Controle de Cotações' },
+      /* 13/10/2026: declarada no vpsistema (só esta ação, sem Ver/Criar/Editar/Excluir) — antes sem caixa nesta tela. */
+      { modulo: 'quadro_comando', label: 'Quadro de Comando', capacidades: [
+        { chave: 'decidir_fabricacao', label: 'Decide fabricar interno ou comprar pronto' },
+      ]},
       { modulo: 'contratos-sociais', label: 'Contratos Social' },
     ]},
     { grupo: 'ADM/ Financeiro', itens: [
@@ -218,7 +227,11 @@
         { chave: 'publicar_omie', label: 'Publica (ou republica) a ficha como anexo no Omie' },
       ]},
       { modulo: 'vistorias', label: 'Vistorias de Obras' },
-      { modulo: 'instalacao', label: 'Instalação em Campo' },
+      { modulo: 'instalacao', label: 'Instalação em Campo', capacidades: [
+        ...ACOES_PADRAO,
+        /* 13/10/2026: declarada no vpsistema; antes sem caixa nesta tela. */
+        { chave: 'editar_status_obra', label: 'Edita status do Acompanhamento de Obra' },
+      ]},
       { modulo: 'status-obras', label: 'Status de Obras' },
       { modulo: 'linha-do-tempo', label: 'Linha do Tempo da Cotação' },
       { modulo: 'art', label: 'ART' },
