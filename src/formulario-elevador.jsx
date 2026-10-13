@@ -1456,25 +1456,32 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
   /* Autopreenchimento por CNPJ — preenche o formulário inteiro do cliente,
      mas o endereço pode não bater com o real (por isso o CEP acima é a via
      preferencial), então tudo continua editável manualmente. */
+  /* Omie primeiro: se o CNPJ já é cliente no ERP, usa o cadastro de lá; senão traz da consulta pública. */
+  const cnpjConsultadoRef = React.useRef('');
   const buscarCnpjEPreencher = async (cnpjRaw) => {
     if (!window.EnderecoAPI?.isCnpjValido(cnpjRaw)) return;
-    try {
-      const dados = await window.EnderecoAPI.buscarCNPJ(cnpjRaw);
-      setHeader((h) => ({
-        ...h,
-        razao_social: dados.razao_social || h.razao_social,
-        telefone: h.telefone || dados.telefone,
-        endereco_logradouro: window.EnderecoAPI.mesclarLogradouro(h.endereco_logradouro, dados.endereco.logradouro),
-        endereco_complemento: dados.endereco.complemento || h.endereco_complemento,
-        endereco_bairro: dados.endereco.bairro || h.endereco_bairro,
-        endereco_cep: dados.endereco.cep || h.endereco_cep,
-        endereco_cidade: dados.endereco.cidade || h.endereco_cidade,
-        endereco_estado: dados.endereco.estado || h.endereco_estado,
-      }));
-      window.toast?.('Dados do CNPJ preenchidos automaticamente.', 'success');
-    } catch (e) {
-      window.toast?.(e.message, 'warning');
+    const digits = window.EnderecoAPI.sanitizeDigits(cnpjRaw);
+    if (cnpjConsultadoRef.current === digits) return;
+    const r = await window.EnderecoAPI.consultarCnpjOmieFirst(cnpjRaw);
+    if (!r.fonte) {
+      window.toast?.(`Não foi possível consultar o CNPJ (${r.erro || 'serviço indisponível'}). Preencha os dados manualmente.`, 'warning');
+      return;
     }
+    cnpjConsultadoRef.current = digits;
+    const dados = r.dados;
+    setHeader((h) => ({
+      ...h,
+      razao_social: dados.razao_social || h.razao_social,
+      telefone: h.telefone || dados.telefone,
+      email: h.email || dados.email || h.email,
+      endereco_logradouro: dados.endereco.logradouro ? window.EnderecoAPI.mesclarLogradouro(h.endereco_logradouro, dados.endereco.logradouro) : h.endereco_logradouro,
+      endereco_complemento: dados.endereco.complemento || h.endereco_complemento,
+      endereco_bairro: dados.endereco.bairro || h.endereco_bairro,
+      endereco_cep: dados.endereco.cep || h.endereco_cep,
+      endereco_cidade: dados.endereco.cidade || h.endereco_cidade,
+      endereco_estado: dados.endereco.estado || h.endereco_estado,
+    }));
+    window.toast?.(r.fonte === 'omie' ? 'Cliente encontrado no ERP Omie — dados preenchidos.' : 'CNPJ não está no Omie — dados preenchidos pela consulta pública.', 'success');
   };
 
   const setUnidade = (idx) => (u) => setUnidades((arr) => arr.map((x, i) => (i === idx ? u : x)));
@@ -1614,6 +1621,8 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
     }
     const erro = validar();
     if (novoStatus === 'enviado' && erro) { setMostrarObrig(true); window.toast?.(erro, 'warning'); return null; }
+    /* CNPJ digitado e ainda não consultado (ex.: não saiu do campo antes de salvar) → consulta Omie/pública agora; falha não trava. */
+    if (!usaClientePicker && header.tipo_pessoa !== 'PF') await buscarCnpjEPreencher(header.cnpj);
     setSaving(true);
     try {
       let cliente = null;
