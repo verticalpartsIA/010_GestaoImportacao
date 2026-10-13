@@ -377,7 +377,12 @@ function IVModalRevisao({ item, onClose, onSaved }) {
           </div>
         )}
         <div className="small" style={{ background: 'var(--vp-gray-50)', borderRadius: 6, padding: '8px 10px' }}>
-          Sistema sugere: mínimo <b>{ivFmtNum(item.estMinSugCalc)}</b> · máximo <b>{ivFmtNum(item.estMaxSugCalc)}</b> (prazo {item.estPrazoDias} d + ciclo {item.estCicloDias} d).<br />
+          <b>Por quê:</b> {item.estMotivo || '—'}.<br />
+          Prazo de reposição <b>{item.estPrazoDias} dias</b> ({{ fornecedor_exterior: 'fornecedor do exterior', fornecedor_nacional: 'fornecedor nacional', codigo_n: 'código terminado em N = nacional', padrao_importado: 'sem fornecedor conhecido: padrão importado' }[item.estPrazoOrigem] || '—'}).{' '}
+          {item.estCusto != null
+            ? <>Custo <b>{ivFmtMoeda(item.estCusto)}</b> ({item.estCustoOrigem === 'ultimo_preco' ? 'último preço pago' : 'custo médio do Omie'}), margem <b>{ivFmtMoeda(item.estMargem)}</b> ({item.estMargemOrigem === 'preco_venda' ? 'preço de venda − custo' : 'estimada em 30% do custo'}){item.estCapitalMax != null && item.estMaxSug > 0 ? <>; no máximo, <b>{ivFmtMoeda(item.estCapitalMax)}</b> parados em estoque</> : null}.</>
+            : <>Custo desconhecido: o valor do item não entrou na conta.</>}
+          <br />Sistema sugere: mínimo <b>{ivFmtNum(item.estMinSugCalc)}</b> · máximo <b>{ivFmtNum(item.estMaxSugCalc)}</b> (prazo {item.estPrazoDias} d + ciclo {item.estCicloDias} d).<br />
           Posição hoje: <b>{ivFmtNum(item.posicaoEstoque)}</b> (disponível + pendente + comprado). Em uso: {origem}{revisadoPor}.
           {item.precisaRevisao && <> Enquanto não for revisado, <b>este produto não gera compra</b>{item.sugestaoSeAprovada > 0 ? <> (aprovando, a sugestão seria <b>{ivFmtNum(item.sugestaoSeAprovada)}</b>)</> : null}.</>}
         </div>
@@ -695,7 +700,7 @@ function ImportacaoVarejoPage({ setRoute }) {
             <th className="text-right">Disponível</th>
             <th className="text-right" title="Quantidade contada na prateleira. Vale por 30 dias e passa a mandar na sugestão de compra.">Contado</th>
             <th className="text-center" title="OK = a contagem bateu com o saldo do sistema no dia da contagem">Acuracidade</th>
-            <th className="text-right">Mínimo</th>
+            <th className="text-right" title="Mínimo cadastrado à mão no Omie (número inteiro). O mínimo que o sistema recomenda está na coluna ao lado.">Mín. Omie</th>
             <th className="text-right" title="Sugerido pelo sistema a partir das vendas reais do Omie (6 meses): ponto de pedido = demanda × prazo + segurança. Atualiza todo dia.">Mín. sug.</th>
             <th className="text-right" title="Sugerido pelo sistema: mínimo + demanda de um ciclo de compra (60 dias). Atualiza todo dia.">Máx. sug.</th>
             <th className="text-right">Pendente</th>
@@ -752,8 +757,12 @@ function ImportacaoVarejoPage({ setRoute }) {
                     </td>
                     <td className="text-right cell-num">{ivFmtNum(item.estoqueMinimo)}</td>
                     {(() => {
-                      const dica = item.estMaxSug == null ? '' : `Demanda ${ivFmtNum(item.estDemandaMensal)}/mês · ${item.estMesesVenda} de 6 meses com venda · prazo ${item.estPrazoDias} d · ciclo ${item.estCicloDias} d · segurança ${ivFmtNum(item.estSeguranca)} · confiança ${item.estConfianca}`;
+                      const dica = item.estMaxSug == null ? '' : `${item.estMotivo ? item.estMotivo + ' · ' : ''}${item.estCusto != null ? 'custo ' + ivFmtMoeda(item.estCusto) + ' · ' : ''}Demanda ${ivFmtNum(item.estDemandaMensal)}/mês · ${item.estMesesVenda} de 6 meses com venda · prazo ${item.estPrazoDias} d · ciclo ${item.estCicloDias} d · segurança ${ivFmtNum(item.estSeguranca)} · confiança ${item.estConfianca}`;
                       const cor = item.estConfianca === 'baixa' ? 'var(--fg3)' : undefined;
+                      if (item.estMaxSug === 0 && item.estOrigem !== 'manual') {
+                        return <td colSpan={2} className="text-center small muted" title="Vende muito pouco: não vale manter estoque. Comprar só quando houver pedido de cliente. Clique para revisar."
+                          style={{ cursor: podeGerenciar ? 'pointer' : undefined }} onClick={podeGerenciar ? () => abrirModalIv('revisao', item) : undefined}>sob demanda</td>;
+                      }
                       return item.estMaxSug == null
                         ? <><td className="text-right muted">—</td><td className="text-right muted">—</td></>
                         : <>

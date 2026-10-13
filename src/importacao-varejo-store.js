@@ -96,6 +96,14 @@
       out.estPrazoDias = se.prazo_dias;
       out.estCicloDias = se.ciclo_dias;
       out.estSeguranca = Number(se.seguranca) || 0;
+      out.estCusto = se.custo_unitario != null ? Number(se.custo_unitario) : null;
+      out.estCustoOrigem = se.custo_origem || null;            // 'ultimo_preco' | 'cmc'
+      out.estMargem = se.margem_unitaria != null ? Number(se.margem_unitaria) : null;
+      out.estMargemOrigem = se.margem_origem || null;          // 'preco_venda' | 'estimada'
+      out.estPrazoOrigem = se.prazo_origem || null;
+      out.estDemanda12m = se.demanda_12m != null ? Number(se.demanda_12m) : null;
+      out.estMotivo = se.motivo || '';
+      out.estCapitalMax = se.valor_max_estoque != null ? Number(se.valor_max_estoque) : null;
       out.estSerie = Array.isArray(se.serie_12m) ? se.serie_12m.map(Number) : null;
       out.estSerieInicio = se.serie_inicio || null;
       out.estTendencia = se.tendencia || null;
@@ -135,7 +143,7 @@
     const mapa = {};
     for (let off = 0; ; off += 1000) {
       const { data, error } = await c.from('importacao_varejo_sugestao_estoque')
-        .select('codigo, demanda_mensal, meses_com_venda, prazo_dias, ciclo_dias, seguranca, minimo_sugerido, maximo_sugerido, confianca, serie_12m, serie_inicio, tendencia, tendencia_pct, mes_pico, mes_vale')
+        .select('codigo, demanda_mensal, meses_com_venda, prazo_dias, ciclo_dias, seguranca, minimo_sugerido, maximo_sugerido, confianca, serie_12m, serie_inicio, tendencia, tendencia_pct, mes_pico, mes_vale, custo_unitario, custo_origem, margem_unitaria, margem_origem, prazo_origem, demanda_12m, motivo, valor_max_estoque')
         .order('codigo').range(off, off + 999);
       if (error) throw error;
       (data || []).forEach((l) => { mapa[String(l.codigo).toUpperCase()] = l; });
@@ -188,6 +196,20 @@
     return row;
   }
 
+  /* Mínimo cadastrado à mão no Omie (inteiro). A coluna "Mínimo" da tela é SÓ este: o antigo "média mensal × 3" gerava 0,53 / 1,32
+     (meia polia?) e foi aposentado — quem decide quanto manter é o Mín./Máx. sugerido (sempre número inteiro). */
+  async function carregarMinimoOmie() {
+    const c = sb(); if (!c) return {};
+    const mapa = {};
+    for (let off = 0; ; off += 1000) {
+      const { data, error } = await c.from('importacao_varejo_estoque').select('codigo, minimo_omie').order('codigo').range(off, off + 999);
+      if (error) throw error;
+      (data || []).forEach((l) => { mapa[String(l.codigo).toUpperCase()] = Math.ceil(Number(l.minimo_omie) || 0); });
+      if (!data || data.length < 1000) break;
+    }
+    return mapa;
+  }
+
   async function carregar() {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data, error } = await c.functions.invoke('list-importacao-varejo', { body: {} });
@@ -200,10 +222,18 @@
     try { sugs = await carregarSugestoesEstoque(); } catch (e) { console.warn('[ImportacaoVarejo] sem sugestão de estoque mín/máx', e); }
     let revs = {};
     try { revs = await carregarRevisoes(); } catch (e) { console.warn('[ImportacaoVarejo] sem revisões do comprador', e); }
+    let minOmie = {};
+    try { minOmie = await carregarMinimoOmie(); } catch (e) { console.warn('[ImportacaoVarejo] sem mínimo do Omie', e); }
     const hoje = new Date();
     data.items = (data.items || []).map((i) => {
       const cod = String(i.codigo).toUpperCase();
-      return aplicarContagem(Object.assign({}, i, { sugestaoEstoque: sugs[cod] || null, revisao: revs[cod] || null }), mapa[cod], hoje);
+      // estoqueMinimo (da Edge Function) = média de venda × 3, fracionado — aposentado. Vale só o mínimo do Omie (inteiro);
+      // se a leitura do Omie falhou (mapa vazio), cai no antigo arredondado para cima; produto sem registro no Omie = 0.
+      const base = Object.assign({}, i, { sugestaoEstoque: sugs[cod] || null, revisao: revs[cod] || null });
+      base.estoqueMinimo = Object.keys(minOmie).length
+        ? (minOmie[cod] || 0)
+        : Math.ceil(Number(i.estoqueMinimo) || 0);
+      return aplicarContagem(base, mapa[cod], hoje);
     });
     if (avisoContagem) data.avisoContagem = avisoContagem;
     return data;
