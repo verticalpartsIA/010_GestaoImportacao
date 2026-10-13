@@ -82,5 +82,7 @@ begin
 end;
 $$;
 
--- Ajuste único (já feito em produção em 13/10/2026): 7 pessoas ganharam 19 grupos no menu.
--- select p.id, public.vpsistema_completar_alocacoes(p.id) from public.perfis p where p.ativo;
+-- Ajuste das pessoas que já existem (idempotente; em produção, em 13/10/2026, 7 pessoas ganharam 19 grupos).
+-- Roda na própria migration para que outros ambientes (staging, bancos restaurados) fiquem iguais sem esperar o
+-- próximo reenvio de cada pessoa pelo vpsistema_set_alcadas.
+select public.vpsistema_completar_alocacoes(p.id) from public.perfis p where p.ativo;
