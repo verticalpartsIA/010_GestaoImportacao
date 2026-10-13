@@ -75,7 +75,7 @@ const IV_TEND = {
   sem_venda: { seta: '—', cor: 'var(--fg3, #6b7280)',          rotulo: 'sem venda' },
 };
 /* Gráfico de linha dos últimos 12 meses de venda (unidades): ponto verde = mês de maior venda, vermelho = mês de menor venda. */
-function IVSparkline({ serie, inicio, cor, pico, vale }) {
+function IVSparkline({ serie, inicio, cor, pico, vale, rup }) {
   if (!serie || serie.length < 2) return null;
   const W = 92, H = 26, P = 3;
   const max = Math.max(...serie, 1);
@@ -84,10 +84,12 @@ function IVSparkline({ serie, inicio, cor, pico, vale }) {
   const pts = serie.map((v, i) => x(i).toFixed(1) + ',' + y(v).toFixed(1)).join(' ');
   const idx = (iso) => { for (let i = 0; i < serie.length; i++) if (ivMesDaSerie(inicio, i) === String(iso).slice(0, 10)) return i; return -1; };
   const ip = pico ? idx(pico) : -1, iv = vale ? idx(vale) : -1;
-  const dica = serie.map((v, i) => ivRotuloMes(ivMesDaSerie(inicio, i), true) + ': ' + ivFmtNum(v)).join('\n');
+  const rupOk = Array.isArray(rup) && rup.length === serie.length;
+  const dica = serie.map((v, i) => ivRotuloMes(ivMesDaSerie(inicio, i), true) + ': ' + ivFmtNum(v) + (rupOk && rup[i] >= 0.3 ? '  ⚠ sem estoque em ' + Math.round(rup[i] * 100) + '% dos dias' : '')).join('\n');
   return (
     <svg width={W} height={H} viewBox={`0 0 ${W} ${H}`} role="img" aria-label="Vendas dos últimos 12 meses" style={{ display: 'block' }}>
       <title>{dica}</title>
+      {rupOk && serie.map((v, i) => rup[i] >= 0.3 && <rect key={i} x={x(i) - 3} y={H - 3} width="6" height="3" rx="1" fill="var(--vp-amber-700, #b45309)" />)}
       <polyline points={pts} fill="none" stroke={cor} strokeWidth="1.6" strokeLinejoin="round" strokeLinecap="round" />
       {ip >= 0 && <circle cx={x(ip)} cy={y(serie[ip])} r="2.6" fill="var(--vp-green-700, #047857)" />}
       {iv >= 0 && iv !== ip && <circle cx={x(iv)} cy={y(serie[iv])} r="2.6" fill="var(--vp-danger, #b91c1c)" />}
@@ -378,7 +380,7 @@ function IVModalRevisao({ item, onClose, onSaved }) {
         )}
         <div className="small" style={{ background: 'var(--vp-gray-50)', borderRadius: 6, padding: '8px 10px' }}>
           <b>Por quê:</b> {item.estMotivo || '—'}.<br />
-          Prazo de reposição <b>{item.estPrazoDias} dias</b> ({{ fornecedor_exterior: 'fornecedor do exterior', fornecedor_nacional: 'fornecedor nacional', codigo_n: 'código terminado em N = nacional', padrao_importado: 'sem fornecedor conhecido: padrão importado' }[item.estPrazoOrigem] || '—'}).{' '}
+          Prazo de reposição <b>{item.estPrazoDias} dias</b> ({{ historico_exterior: 'prazo real das P.I.: da abertura à entrada no estoque, percentil 80', historico_nacional: 'prazo real dos pedidos nacionais no Omie, percentil 80', historico_produto: 'prazo real do próprio produto, percentil 80', fornecedor_exterior: 'fornecedor do exterior', fornecedor_nacional: 'fornecedor nacional', codigo_n: 'código terminado em N = nacional', padrao_importado: 'sem fornecedor conhecido: padrão importado' }[item.estPrazoOrigem] || '—'}).{' '}
           {item.estCusto != null
             ? <>Custo <b>{ivFmtMoeda(item.estCusto)}</b> ({item.estCustoOrigem === 'ultimo_preco' ? 'último preço pago' : 'custo médio do Omie'}), margem <b>{ivFmtMoeda(item.estMargem)}</b> ({item.estMargemOrigem === 'preco_venda' ? 'preço de venda − custo' : 'estimada em 30% do custo'}){item.estCapitalMax != null && item.estMaxSug > 0 ? <>; no máximo, <b>{ivFmtMoeda(item.estCapitalMax)}</b> parados em estoque</> : null}.</>
             : <>Custo desconhecido: o valor do item não entrou na conta.</>}
@@ -417,6 +419,7 @@ function ImportacaoVarejoPage({ setRoute }) {
   const [curvaFiltro, setCurvaFiltro] = React.useState('todas');
   const [contFiltro, setContFiltro] = React.useState('todas');   // todas | divergentes | semcontagem
   const [tendFiltro, setTendFiltro] = React.useState('todas');   // todas | alta | baixa
+  const [soDiaD, setSoDiaD] = React.useState(false);              // só itens com Dia D vencido ou chegando
   const [avisoContagem, setAvisoContagem] = React.useState(null);
   const [selecionados, setSelecionados] = React.useState(() => new Set());
   /* Bug real (varredura de URLs, 09/10): os modais "Revisar lote de compra" e
@@ -466,10 +469,11 @@ function ImportacaoVarejoPage({ setRoute }) {
         || (contFiltro === 'divergentes' && i.acuracia && !i.acuracia.ok)
         || (contFiltro === 'semcontagem' && i.baseEstoque === 'omie');
       if (soRevisar && !i.precisaRevisao) return false;
+      if (soDiaD && !(i.estDiaDStatus === 'atrasado' || i.estDiaDStatus === 'acordar')) return false;
       const combinaTend = tendFiltro === 'todas' || i.estTendencia === tendFiltro || (tendFiltro === 'alta' && i.estTendencia === 'nova');
       return combinaTexto && combinaCor && combinaCurva && combinaCont && combinaTend;
     });
-  }, [items, busca, corFiltro, curvaFiltro, contFiltro, tendFiltro, soRevisar]);
+  }, [items, busca, corFiltro, curvaFiltro, contFiltro, tendFiltro, soRevisar, soDiaD]);
   const nParaRevisar = React.useMemo(() => items.filter((i) => i.precisaRevisao).length, [items]);
 
   // Acuracidade = % de itens contados em que a prateleira bateu com o sistema no dia da contagem.
@@ -658,6 +662,9 @@ function ImportacaoVarejoPage({ setRoute }) {
         <Button size="sm" variant={soRevisar ? 'primary' : 'ghost'} onClick={() => setSoRevisar(!soRevisar)} data-tip="Produtos de venda esporádica: o sistema não compra sozinho. O comprador aprova, ajusta ou marca 'não repor'.">
           ⚑ Para revisar <span style={{ opacity: .7 }}>({nParaRevisar})</span>
         </Button>
+        <Button size="sm" variant={soDiaD ? 'primary' : 'ghost'} onClick={() => setSoDiaD(!soDiaD)} data-tip="Itens cujo Dia D (data-limite para decidir o pedido: 45 d para criar + 5 d de decisão + prazo de chegada) já passou ou chega em até 15 dias">
+          ⏰ Dia D <span style={{ opacity: .7 }}>({items.filter((i) => i.estDiaDStatus === 'atrasado' || i.estDiaDStatus === 'acordar').length})</span>
+        </Button>
         <Button size="sm" variant={tendFiltro === 'alta' ? 'primary' : 'ghost'} onClick={() => setTendFiltro(tendFiltro === 'alta' ? 'todas' : 'alta')} data-tip="Vendas dos últimos 3 meses pelo menos 20% acima dos 3 meses anteriores (ou produto que voltou a vender)">
           ▲ Em alta <span style={{ opacity: .7 }}>({items.filter((i) => i.estTendencia === 'alta' || i.estTendencia === 'nova').length})</span>
         </Button>
@@ -674,8 +681,9 @@ function ImportacaoVarejoPage({ setRoute }) {
       </div>
 
       <Card title="Produtos importados" sub={`Estoque sincronizado em ${ivFmtDataHora(lastEstoqueSyncAt)} · Giro/Curva calculados em ${ivFmtDataHora(lastGiroSyncAt)} · Acuracidade da contagem: ${resumoAcuracia.pct != null ? resumoAcuracia.pct.toLocaleString('pt-BR') + '% (' + resumoAcuracia.ok + ' de ' + resumoAcuracia.contados + ' itens contados batem)' : 'sem contagens'} · Saldo não conferido (sem contagem dos últimos ${window.ImportacaoVarejoStore.CONTAGEM_VALIDADE_DIAS} dias): ${resumoAcuracia.semContagemValida} itens`}>
-      <div className="table-wrap" style={{ border: 0 }}>
-        <style>{`table.t.pcp-grid.iv-grid th,table.t.pcp-grid.iv-grid td{padding-left:6px;padding-right:6px}`}</style>
+      <div className="table-wrap" style={{ border: 0, maxHeight: 'calc(100vh - 150px)', overflow: 'auto' }}>
+        <style>{`table.t.pcp-grid.iv-grid th,table.t.pcp-grid.iv-grid td{padding-left:6px;padding-right:6px}
+table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var(--vp-surface,#fff);box-shadow:0 1px 0 var(--vp-border,#e5e5e5)}`}</style>
         <table className="t pcp-grid iv-grid">
           <thead><tr>
             {podeGerenciar && (
@@ -706,6 +714,7 @@ function ImportacaoVarejoPage({ setRoute }) {
             <th className="text-right">Pendente</th>
             <th className="text-right">Comprado</th>
             <th className="text-right">Sugestão</th>
+            <th title="Dia D = data-limite para decidir o pedido = hoje + (dias de cobertura da posição − prazo total). Prazo total = criar e decidir o pedido (importados: 45 + 5 d) + prazo de chegada. Vermelho: já passou; âmbar: faltam até 15 dias.">Dia D</th>
             <th title="Vendas mês a mês dos últimos 12 meses. Seta = últimos 3 meses × 3 meses anteriores. Ponto verde = mês de maior venda; ponto vermelho = mês de menor venda.">Tendência (12 meses)</th>
             <th>Último Fornecedor</th>
             <th className="text-right">Último Preço Unit.</th>
@@ -795,6 +804,16 @@ function ImportacaoVarejoPage({ setRoute }) {
                         </button>
                       )}
                     </td>
+                    <td style={{ whiteSpace: 'nowrap', fontSize: 12 }}
+                      title={item.estDiaDDias == null ? '' : `Cobertura ${ivFmtNum(item.estCoberturaDias)} d (posição ${ivFmtNum(item.posicaoEstoque)} ÷ ${ivFmtNum(item.estDemandaMensal)}/mês) − prazo total ${item.estLeadTotalDias} d (chegada ${item.estPrazoDias} d + ${item.estAtrasoDias} d para criar e decidir o pedido)`}>
+                      {item.estDiaDDias == null || item.precisaRevisao ? <span className="muted">—</span> : (
+                        <span style={{ fontWeight: item.estDiaDStatus === 'ok' ? 400 : 800, color: item.estDiaDStatus === 'atrasado' ? 'var(--vp-danger, #b91c1c)' : item.estDiaDStatus === 'acordar' ? 'var(--vp-amber-700, #b45309)' : undefined }}>
+                          {item.estDiaDDias <= 0 ? `atrasado ${-item.estDiaDDias} d` : ivFmtData(item.estDiaDData)}
+                          {item.estDiaDDias > 0 && <span style={{ opacity: .7 }}> (+{item.estDiaDDias} d)</span>}
+                        </span>
+                      )}
+                      {item.estMesesRuptura > 0 && <div style={{ fontSize: 10, color: 'var(--vp-amber-700, #b45309)' }} title="Meses em que o item ficou sem estoque em ≥ 30% dos dias: a venda baixa desses meses foi corrigida no cálculo">⚠ {item.estMesesRuptura} mês(es) sem estoque</div>}
+                    </td>
                     <td style={{ whiteSpace: 'nowrap' }}>
                       {(() => {
                         const t = IV_TEND[item.estTendencia];
@@ -805,7 +824,7 @@ function ImportacaoVarejoPage({ setRoute }) {
                               {t.seta} {item.estTendenciaPct != null ? (item.estTendenciaPct > 0 ? '+' : '') + Math.round(item.estTendenciaPct) + '%' : t.rotulo}
                             </div>
                             <div>
-                              <IVSparkline serie={item.estSerie} inicio={item.estSerieInicio} cor={t.cor} pico={item.estMesPico} vale={item.estMesVale} />
+                              <IVSparkline serie={item.estSerie} inicio={item.estSerieInicio} cor={t.cor} pico={item.estMesPico} vale={item.estMesVale} rup={item.estRuptura} />
                               {item.estMesPico && (
                                 <div className="small" style={{ fontSize: 10, color: 'var(--fg3)', lineHeight: 1.2 }}>
                                   <span style={{ color: 'var(--vp-green-700, #047857)' }}>● {ivRotuloMes(item.estMesPico)}</span>
@@ -859,7 +878,7 @@ function ImportacaoVarejoPage({ setRoute }) {
                 <td className="text-right">{ivFmtNum(totais.estoqueFisico)}</td>
                 <td></td>
                 <td className="text-right">{ivFmtNum(totais.estoqueDisponivel)}</td>
-                <td colSpan={6}></td>
+                <td colSpan={7}></td>
                 <td className="text-right">{ivFmtNum(totais.comprado)}</td>
                 <td className="text-right">{ivFmtNum(totais.sugestaoCompra)}</td>
                 <td></td>
