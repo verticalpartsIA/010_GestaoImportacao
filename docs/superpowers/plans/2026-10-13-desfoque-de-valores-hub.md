@@ -185,9 +185,10 @@
 **Interfaces:** a função recebe o JWT da sessão (`verify_jwt: true`), resolve o e-mail, chama `vp_ve_valores` (ou `vp_ve_valor`) e **omite/zera** os campos de R$ quando não pode.
 
 - [ ] **Step 1:** Listar as funções que devolvem R$ ao navegador; **avisar o Gelson** se tocar em área blindada.
-- [ ] **Step 2:** Implementar a checagem; fail-closed; não logar valores.
-- [ ] **Step 3:** Testar em cópia descartável (`<função>-teste`), depois publicar; apagar a cópia.
-- [ ] **Step 4: Commit/PR.**
+- [ ] **Step 2:** **Levar a sessão até a função.** Hoje `VpAuth.fetchDados` (`src/vp-auth.js`) só troca o `Authorization` em `/rest/v1/`; `sb.functions.invoke` segue com a chave pública. Só ligar `verify_jwt: true` faria a função enxergar **anônimo** e, em fail-closed, esconder valores até de quem pode. Anexar `VpAuth.getAccessToken()` (cliente de funções compartilhado ou cada chamador afetado) **antes** de publicar a checagem.
+- [ ] **Step 3:** Implementar a checagem na função; fail-closed; não logar valores. Testar **as duas identidades** (quem pode ver e quem não pode) e o caso sem sessão.
+- [ ] **Step 4:** Testar em cópia descartável (`<função>-teste`), depois publicar; apagar a cópia.
+- [ ] **Step 5: Commit/PR.**
 
 ---
 
@@ -209,7 +210,8 @@
 ### Task 10: Cobrir as 13 etiquetas restantes no banco
 
 - [ ] **Step 1:** Para cada etiqueta "sem regra" cujo valor mora em **tabela**, inserir a regra em `vp_valores_regra` (`fechada` ou `mista`) e o gatilho `vp_valores_guarda`; as que vêm de função ficam cobertas pela Task 8.
-- [ ] **Step 2:** Migration com rollback; testar com a sonda de RLS. **Commit/PR.**
+- [ ] **Step 2:** **Regra `fechada` nova também precisa da política de leitura.** O laço de `20261010130000_f1_valores_no_banco.sql` só criou `vp_valores_leitura` (RESTRICTIVE, `to authenticated`, `using (vp_pode_valores('<tabela>'))`) uma vez, para as 17 regras da época. Para cada tabela `fechada` nova a migration cria essa política explicitamente (e o rollback a remove). Só inserir em `vp_valores_regra` + gatilho **não** restringe a leitura.
+- [ ] **Step 3:** Migration com rollback; testar com a sonda de RLS (autenticado sem a etiqueta lê 0 linhas; com a etiqueta lê). **Commit/PR.**
 
 ### Task 11: Simular, ligar por etapas, e reverter se preciso
 
@@ -237,8 +239,10 @@ from pt group by email, modo having count(*) filter (where not ve and trabalha) 
 ### Task 12: Fechar a chave pública nas tabelas de valores (F4 da #571)
 
 - [ ] **Step 1:** Depender da Task 9 (todos com sessão) e da Fase 3 da #571 (caminhos públicos fora das tabelas).
-- [ ] **Step 2:** `vp_fechar_tabela(<tabela>, 'interno', '<ticket>')` nas 17 tabelas de valores, uma onda por vez, com `vp_policy_backup` e rollback testado.
-- [ ] **Step 3:** Sonda: `anon` não lê/grava nenhuma tabela de valores.
+- [ ] **Step 2:** **O conjunto de tabelas sai de `vp_valores_regra` DEPOIS da Task 10** (não fixar em 17): `select tabela, modo from vp_valores_regra`. Tabela fora do conjunto fica acessível pela chave pública, e `vp_valores_guarda` não age sobre `anon`.
+- [ ] **Step 3:** Tabelas **`fechada`**: `vp_fechar_tabela(<tabela>, 'interno', '<ticket>')` mantém a `vp_valores_leitura` restritiva por cima. Uma onda por vez, com `vp_policy_backup` e rollback testado.
+- [ ] **Step 4:** Tabelas **`mista`** (propostas, contratos, embarques, PI, IMS…): **não bastam** `vp_fechar_tabela('interno')` — ele cria `vp_int_sel` para todo usuário ativo e a regra `mista` não restringe leitura, então o R$ real continua saindo pelo REST para quem a etiqueta nega. Escolher por tabela: (a) tornar `fechada` (some a leitura de quem não pode; a tela mostra o registro sem o bloco) ou (b) leitura só por RPC/view que **remove os campos de R$** (inclusive dentro de jsonb) para quem não pode, e negar o SELECT direto. Sem isso, a inspeção da Task 13 falha.
+- [ ] **Step 5:** Sonda: `anon` não lê/grava nenhuma tabela do conjunto; autenticado sem a etiqueta não recebe R$ real em **nenhuma** delas (fechada: 0 linhas; mista: campos removidos).
 
 ### Task 13: Verificação final e documentação
 
