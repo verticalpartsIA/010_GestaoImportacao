@@ -58,15 +58,16 @@
 
   async function obter(id) {
     const c = sb(); if (!c) return null;
-    const [{ data: header }, { data: paradas }, { data: intervalos }, { data: geometria }, { data: maquina }] = await Promise.all([
+    const [{ data: header }, { data: paradas }, { data: intervalos }, { data: geometria }, { data: maquina }, { data: componentes }] = await Promise.all([
       c.from('quadros_comando').select('*').eq('id', id).maybeSingle(),
       c.from('quadros_comando_paradas').select('*').eq('quadro_comando_id', id).order('ordem'),
       c.from('quadros_comando_intervalos_piso').select('*').eq('quadro_comando_id', id).order('ordem'),
       c.from('quadros_comando_geometria').select('*').eq('quadro_comando_id', id).maybeSingle(),
       c.from('quadros_comando_maquina').select('*').eq('quadro_comando_id', id).maybeSingle(),
+      c.from('quadros_comando_componentes').select('*').eq('quadro_comando_id', id).maybeSingle(),
     ]);
     if (!header) return null;
-    return { ...header, paradas: paradas || [], intervalos: intervalos || [], geometria: geometria || {}, maquina: maquina || {} };
+    return { ...header, paradas: paradas || [], intervalos: intervalos || [], geometria: geometria || {}, maquina: maquina || {}, componentes: componentes || {} };
   }
 
   async function listarPorNumeroCotacao(numeroCotacao) {

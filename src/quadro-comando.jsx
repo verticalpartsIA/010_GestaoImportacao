@@ -458,7 +458,12 @@ function QcComponentesSecao({ componentes, onChange, disabled }) {
 }
 
 /* ---------- Geometria para fiação (item 4/5) ---------- */
-function QcGeometriaSecao({ geometria, intervalos, onGeom, onIntervalos, disabled }) {
+const QC_FIACAO_POCO_ROTULOS = [
+  ['l1', 'L1 — Quadro → entrada do poço'], ['ua', 'UA — Entrada do poço → botoeira'], ['tr', 'TR — Contato de TRICO → calha'],
+  ['bp', 'BP — Botoeira → calha'], ['lim', 'LIM — Limites → calha'], ['fp', 'FP — PAP → calha'],
+];
+
+function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos, disabled }) {
   const set = (patch) => onGeom({ ...geometria, ...patch });
   const addIntervalo = () => onIntervalos([...intervalos, { de_parada: '', para_parada: '', distancia_mm: null, origem: 'medido' }]);
   const updIntervalo = (i, patch) => onIntervalos(intervalos.map((it, idx) => idx === i ? { ...it, ...patch } : it));
@@ -492,6 +497,16 @@ function QcGeometriaSecao({ geometria, intervalos, onGeom, onIntervalos, disable
           {perimetro != null && <> · Perímetro da caixa: <b>{perimetro} mm</b> (referência de contorno, não lançar automaticamente num ramal específico)</>}
         </div>
       </Card>
+
+      {config && config.fiacao_poco_cliente_m && (
+        <Card title="Fiação de poço informada pelo cliente (metros)" sub="Medidas do formulário público, só leitura. A L1 também já foi levada para a distância 'quadro → entrada da caixa'; as demais ainda não têm campo próprio no cálculo da lista de corte — confira antes de gerar.">
+          <div className="grid-3" style={{ gap: 10 }}>
+            {QC_FIACAO_POCO_ROTULOS.filter(([k]) => config.fiacao_poco_cliente_m[k] != null).map(([k, l]) => (
+              <div key={k}><span className="small muted">{l}</span><div style={{ fontWeight: 600 }}>{config.fiacao_poco_cliente_m[k]} m</div></div>
+            ))}
+          </div>
+        </Card>
+      )}
 
       <Card title="Distância entre pisos por intervalo" sub="Um valor por intervalo — não multiplicar um mínimo presumido se os intervalos forem diferentes entre si."
         action={!disabled && <Button variant="outline" size="sm" icon="plus" onClick={addIntervalo}>Adicionar intervalo</Button>}>
@@ -1051,7 +1066,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
             {tab === 'paradas' && <QcParadasSecao paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, paradas: v })}/>}
             {tab === 'maquina' && <QcMaquinaSecao maquina={quadro.maquina} varianteLabel={varianteLabel} errosVisiveis={errosVisiveis} onChange={(v) => setQuadro({ ...quadro, maquina: v })}/>}
             {tab === 'componentes' && <QcComponentesSecao componentes={quadro.componentes || {}} onChange={(v) => setQuadro({ ...quadro, componentes: v })}/>}
-            {tab === 'geometria' && <QcGeometriaSecao geometria={quadro.geometria} intervalos={quadro.intervalos}
+            {tab === 'geometria' && <QcGeometriaSecao geometria={quadro.geometria} intervalos={quadro.intervalos} config={quadro.configuracao || {}}
               onGeom={(v) => setQuadro({ ...quadro, geometria: v })} onIntervalos={(v) => setQuadro({ ...quadro, intervalos: v })}/>}
             {tab === 'resultado' && <QcResultadoSecao quadroId={quadroId} podeGerar={true}/>}
           </div>
