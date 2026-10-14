@@ -1315,6 +1315,15 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
      formulário completo — não faz sentido pedir pro cliente "se buscar". */
   const [clienteId, setClienteId] = React.useState(null);
   const [clienteSel, setClienteSel] = React.useState(null); // cliente escolhido no seletor (traz contribuinte_icms do cadastro)
+  /* Formulário já salvo reabre com clienteId mas o seletor não avisa o pai — sem isto clienteSel ficava
+     nulo e a obrigatoriedade do Contribuinte de ICMS deixava de valer. */
+  React.useEffect(() => {
+    if (!clienteId) return undefined;
+    if (clienteSel && clienteSel.id === clienteId) return undefined;
+    let vivo = true;
+    window.CadastrosClientesStore?.obter(clienteId).then((c) => { if (vivo && c) setClienteSel(c); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [clienteId]); // eslint-disable-line
   const [criarClienteInline, setCriarClienteInline] = React.useState(false);
   const [linkPublico, setLinkPublico] = React.useState(null);
   const [numeroCotacao, setNumeroCotacao] = React.useState(null);
@@ -1576,8 +1585,8 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
     if (!header.finalidade_compra) return 'Finalidade da compra é obrigatória — ela define se incide DIFAL.';
     if (usaClientePicker ? (clienteSel && clienteSel.contribuinte_icms == null) : (header.contribuinte_icms === '' || header.contribuinte_icms == null)) {
       return usaClientePicker
-        ? 'O cliente escolhido não tem "Contribuinte de ICMS" no cadastro — complete em Cadastros → Clientes (define quem recolhe o DIFAL).'
-        : 'Informe se o cliente é Contribuinte de ICMS — define quem recolhe o DIFAL.';
+        ? 'Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL. (Complete em Cadastros → Clientes.)'
+        : 'Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL.';
     }
     if (header.endereco_obra_diferente && (!header.endereco_obra_logradouro?.trim() || !header.endereco_obra_bairro?.trim() || !header.endereco_obra_cep?.trim() || !header.endereco_obra_cidade?.trim() || !header.endereco_obra_estado?.trim())) {
       return 'Informe o endereço completo da obra (logradouro, bairro, CEP, cidade e UF).';
@@ -1772,8 +1781,8 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
                 <FEFaltaBox chave="cliente" aviso="Escolha o cliente (ou cadastre um novo aqui mesmo).">
                   <FEClientePicker clienteId={clienteId} onSelecionar={(c) => { setClienteId(c ? c.id : null); setClienteSel(c || null); }} onCriarNovo={() => setCriarClienteInline(true)}/>
                 </FEFaltaBox>
-                {mostrarObrig && faltaHeader.has('contribuinte_icms') && (
-                  <div className="pl-faltando__msg pl-faltando" style={{ marginTop: 6 }}>O cliente escolhido não tem "Contribuinte de ICMS" no cadastro — complete em Cadastros → Clientes (define quem recolhe o DIFAL).</div>
+                {faltaHeader.has('contribuinte_icms') && (
+                  <div className="pl-faltando__msg pl-faltando" style={{ marginTop: 6 }}>Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL. (Complete em Cadastros → Clientes.)</div>
                 )}
               </>
             ) : (
@@ -1785,7 +1794,7 @@ function FormularioElevadorForm({ formularioId, publicMode, prefillFromLead, onS
                     ? <FEField label="CPF"><FEInput value={header.cpf} onChange={setH('cpf')} placeholder="000.000.000-00"/></FEField>
                     : <FEField label="CNPJ"><FEInput value={header.cnpj} onChange={setH('cnpj')} placeholder="00.000.000/0000-00" onBlur={() => buscarCnpjEPreencher(header.cnpj)}/></FEField>}
                   <FEField label="Inscrição Estadual"><FEInput value={header.inscricao_estadual} onChange={setH('inscricao_estadual')} disabled={header.tipo_pessoa === 'PF'}/></FEField>
-                  <FEField label="Contribuinte de ICMS? *" chave="contribuinte_icms"><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
+                  <FEField label="Contribuinte de ICMS? *" chave="contribuinte_icms" aviso="Informe se o cliente é Contribuinte de ICMS para determinar o responsável pelo recolhimento do DIFAL."><FESelect value={header.contribuinte_icms === '' ? '' : String(header.contribuinte_icms)} onChange={(v) => setH('contribuinte_icms')(v === '' ? '' : v === 'true')} options={[{ value: 'true', label: 'Sim' }, { value: 'false', label: 'Não' }]}/></FEField>
                   <FEField label="Telefone"><FEInput value={header.telefone} onChange={setH('telefone')}/></FEField>
                   <FEField label="E-mail" span="2"><FEInput type="email" value={header.email} onChange={setH('email')}/></FEField>
                   <FEField label="Contato" chave="cliente" aviso="Informe ao menos um: Nome/Razão Social, Contato ou Prédio/Empreendimento."><FEInput value={header.contato} onChange={setH('contato')} placeholder="Nome do síndico / responsável"/></FEField>
