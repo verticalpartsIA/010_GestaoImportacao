@@ -62,3 +62,34 @@ test('Inspeção: cabina (VPB-208) e poço (VPB-380) entram na BOM só quando "f
   assert.equal(so.length, 1);
   assert.deepEqual(E.montarItensInspecao({}), []);
 });
+
+const P = (f, t, extra) => ({ abertura_frontal: true, abertura_traseira: !!t, qtd_lop_frontal: f, qtd_lop_traseira: t || 0, ...extra });
+
+test('LOP por paradas: frontal e traseira em 4 paradas = 2× a lista de um lado só', () => {
+  const it = E.montarItensLopParadas([P(1, 1), P(1, 1), P(1, 1), P(1, 1)], 2);
+  assert.equal(qtd(it, 'VPB-034'), 2);
+  assert.equal(qtd(it, 'VPB-033'), 2);
+  assert.equal(qtd(it, 'VPB-035'), 4);
+});
+
+test('LOP por paradas: traseira só em algumas paradas usa a ordem dentro da face traseira', () => {
+  // traseira só nas paradas 2, 3 e 4 → térreo da face traseira = parada 2, último = parada 4
+  const it = E.montarItensLopParadas([P(1, 0), P(1, 1), P(1, 1), P(1, 1)], 2);
+  assert.equal(qtd(it, 'VPB-034'), 2);
+  assert.equal(qtd(it, 'VPB-033'), 2);
+  assert.equal(qtd(it, 'VPB-035'), 3);
+});
+
+test('LOP por paradas: quantidade manual por parada multiplica e 0 tira a parada da face', () => {
+  const it = E.montarItensLopParadas([P(2, 0), P(0, 0, { abertura_frontal: true }), P(1, 0), P(1, 0)], 2);
+  // face frontal: [2,1,1] → térreo ×2, intermediário ×1 (dois botões), último ×1
+  assert.equal(qtd(it, 'VPB-034'), 2);
+  assert.equal(qtd(it, 'VPB-035'), 1);
+  assert.equal(qtd(it, 'VPB-033'), 1);
+});
+
+test('LOP por paradas: sem qtd informada assume 1 frontal (igual ao cálculo por nº de paradas)', () => {
+  const a = E.montarItensLopParadas([{}, {}, {}, {}], 2).map((i) => [i.sku, i.quantidade]);
+  const b = E.montarItensLop(4, 2).map((i) => [i.sku, i.quantidade]);
+  assert.deepEqual(a.sort(), b.sort());
+});

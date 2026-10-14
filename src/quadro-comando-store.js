@@ -177,7 +177,12 @@
       const pub = quadro.respostas_publico || {};
       const nParadas = (quadro.paradas || []).length || parseInt(pub.num_paradas, 10) || 0;
       const botoes = lopEsc.botoes_intermediarios || pub.lop_botoes || '2';
-      bomItens = [...bomItens, ...engine.montarItensLop(nParadas, botoes, catalogo, lopEsc.com_display === true || lopEsc.com_display === 'sim')];
+      const comDisplay = lopEsc.com_display === true || lopEsc.com_display === 'sim';
+      // Com paradas cadastradas, usa a qtd de LOP frontal/traseira de cada uma; senão (só o nº de paradas do formulário público) assume 1 frontal por parada.
+      const itensLop = (quadro.paradas || []).length
+        ? engine.montarItensLopParadas(quadro.paradas, botoes, catalogo, comDisplay)
+        : engine.montarItensLop(nParadas, botoes, catalogo, comDisplay);
+      bomItens = [...bomItens, ...itensLop];
     }
 
     bomItens = [...bomItens, ...engine.montarItensInspecao(quadro.escopo_fornecimento, catalogo)];

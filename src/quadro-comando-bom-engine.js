@@ -540,8 +540,43 @@
     }));
   }
 
+  /* LOP lendo a quantidade de cada parada (frontal e traseira). Cada face é uma
+     sequência: 1ª parada com LOP = térreo (Seta Subida), última = Seta Descida,
+     as do meio = 2 botões (ou 1 botão). A quantidade manual da parada multiplica. */
+  function montarItensLopParadas(paradas, botoesIntermediarios, catalogoPorSku, comDisplay) {
+    const qtdDe = (v, padrao) => { const t = String(v == null ? '' : v).trim(); if (t === '') return padrao; const n = Number(t.replace(',', '.')); return Number.isFinite(n) && n >= 0 ? n : padrao; };
+    const faces = [
+      (paradas || []).filter((p) => p.abertura_frontal !== false).map((p) => qtdDe(p.qtd_lop_frontal, 1)),
+      (paradas || []).filter((p) => p.abertura_traseira).map((p) => qtdDe(p.qtd_lop_traseira, 1)),
+    ].map((l) => l.filter((q) => q > 0));
+    const dois = Number(botoesIntermediarios) !== 1;
+    let sobe = 0, desce = 0, meio = 0, umNoMeio = 0, nFaces = 0;
+    faces.forEach((l) => {
+      if (l.length < 2) return;
+      nFaces += 1;
+      l.forEach((q, i) => {
+        if (i === 0) sobe += q; else if (i === l.length - 1) desce += q; else if (dois) meio += q; else umNoMeio += q;
+      });
+    });
+    if (!nFaces) return [];
+    const cat = catalogoPorSku || {};
+    const m = LOP_MODELOS[comDisplay ? 'com' : 'sem'];
+    const regra = `${nFaces === 2 ? 'Frontal e traseira' : 'Uma face'}: primeira parada ▲ (Seta Subida), última ▼ (Seta Descida), ${dois ? 'intermediárias com 2 botões (1 Sobe e 1 Desce)' : 'intermediárias com 1 botão'}; usa as quantidades de LOP de cada parada.`;
+    const linha = (modelo, quantidade, confianca, extra) => ({
+      sku: modelo[0], descricao: (cat[modelo[0]] && cat[modelo[0]].descricao) || modelo[1], unidade: 'un',
+      grupo_separacao: 'componentes', quantidade, origem: 'calculado_geometria', confianca,
+      memoria_calculo: regra + (extra ? ' ' + extra : ''),
+    });
+    const itens = [];
+    if (umNoMeio) itens.push(linha(m.sobe, sobe + umNoMeio, 'estimado', 'Intermediárias com 1 botão usam a Seta Subida (a confirmar com a produção).'));
+    else itens.push(linha(m.sobe, sobe, 'confirmado', 'Térreo.'));
+    itens.push(linha(m.desce, desce, 'confirmado', 'Último andar.'));
+    if (meio) itens.push(linha(m.dois, meio, 'confirmado', 'Andares intermediários.'));
+    return itens;
+  }
+
   window.QuadroComandoBomEngine = {
-    calcularLop, montarItensLop, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS,
+    calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS,
     listarVariantes, chaveVariante, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
     montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,
