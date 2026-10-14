@@ -283,7 +283,27 @@ Deno.serve(async (req) => {
       if (escopo.lip && indCor) (escopo.lip as Record<string, unknown>).detalhe = `cor: ${indCor}`;
 
       const casa = str(d.casa_maquinas, 20);
+
+      // ---- Mapeamento para as abas estruturadas (só o que o formulário pergunta de verdade) ----
+      // Aba Configuração: local/obra e responsável. Fiação de poço (L1..FP, em metros) vai junto, só leitura.
+      const configuracao: Record<string, unknown> = {};
+      if (obra) configuracao.local_obra = obra;
+      configuracao.responsavel_medicao = [solicitante, telefone].filter(Boolean).join(" · ");
+      const metros = (v: unknown) => {
+        const n = num(v);
+        return n != null && n > 0 && n < 1000 ? n : null;
+      };
+      const fiacaoPoco: Record<string, number> = {};
+      if (d.fiacao_omitida !== true) {
+        for (const [k, campo] of [["l1", "f_l1"], ["ua", "f_ua"], ["tr", "f_tr"], ["bp", "f_bp"], ["lim", "f_lim"], ["fp", "f_fp"]]) {
+          const m = metros(d[campo]);
+          if (m != null) fiacaoPoco[k] = m;
+        }
+      }
+      if (Object.keys(fiacaoPoco).length) configuracao.fiacao_poco_cliente_m = fiacaoPoco;
+
       const quadro = await restInsert("quadros_comando", {
+        configuracao,
         tipo_aplicacao: casa === "com_casa" ? "MR" : casa === "sem_casa" ? "MRL" : null,
         novo_ou_modernizacao: tipoServico === "modernizacao" ? "modernizacao" : tipoServico === "elevador_novo" ? "novo" : null,
         origem_fabricacao: "interno",
@@ -321,6 +341,52 @@ Deno.serve(async (req) => {
           origem: "medido",
         }));
       if (intervalos.length) await restInsert("quadros_comando_intervalos_piso", intervalos);
+
+      // Cada bloco abaixo é independente: se um falhar, só avisa — o pedido e as respostas já estão gravados.
+      // Aba Paradas e portas: 1 linha por parada informada (frente aberta; LOP só se o cliente pediu LOP).
+      try {
+        const nParadas = Math.min(Math.max(parseInt(str(d.num_paradas, 4), 10) || 0, 0), 64);
+        const portaRotulo: Record<string, string> = { manual: "Manual", eixo_vertical: "Eixo vertical", simultanea: "Simultânea", pantografica: "Pantográfica" };
+        const porta = portaRotulo[str(d.tipo_porta, 30)] || "";
+        if (nParadas > 0) {
+          const paradas = Array.from({ length: nParadas }, (_, i) => ({
+            quadro_comando_id: quadro.id,
+            ordem: i,
+            identificacao: `Parada ${i + 1}`,
+            abertura_frontal: true,
+            abertura_traseira: false,
+            tipo_porta_pavimento: porta,
+            tipo_porta_cabina: porta,
+            qtd_lop_frontal: escopo.lop ? 1 : 0,
+            qtd_lop_traseira: 0,
+          }));
+          await restInsert("quadros_comando_paradas", paradas);
+        }
+      } catch (e) {
+        console.warn("[capturar-lead-quadro-comando] Aviso: não gravou as paradas:", e);
+      }
+
+      // Aba Geometria: L1 (quadro → entrada do poço) é a distância "quadro → entrada da caixa" do cálculo (m → mm).
+      try {
+        if (fiacaoPoco.l1 != null) {
+          await restInsert("quadros_comando_geometria", {
+            quadro_comando_id: quadro.id,
+            distancia_quadro_entrada_caixa_mm: Math.round(fiacaoPoco.l1 * 1000),
+          });
+        }
+      } catch (e) {
+        console.warn("[capturar-lead-quadro-comando] Aviso: não gravou a geometria:", e);
+      }
+
+      // Aba Componentes: com acionamento VVVF o inversor tem a potência do motor informado.
+      try {
+        const potenciaMotor = num(d.potencia_motor);
+        if (str(d.acionamento, 20) === "vf" && potenciaMotor != null) {
+          await restInsert("quadros_comando_componentes", { quadro_comando_id: quadro.id, inversor_potencia_kw: potenciaMotor });
+        }
+      } catch (e) {
+        console.warn("[capturar-lead-quadro-comando] Aviso: não gravou os componentes:", e);
+      }
     } catch (qErr) {
       console.warn("[capturar-lead-quadro-comando] Aviso: não criou a cotação de quadro:", qErr);
       if (!lead) lead = await criarLead(); // cliente do Omie sem cotação gravada: garante o registro como lead
