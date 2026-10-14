@@ -35,7 +35,7 @@ window.AvisoAlcadasNoVpsistema = AvisoAlcadasNoVpsistema;
    uma unidade a mais. Sem capacidades definidas usa ACOES_PADRAO
    (Ver/Criar/Editar/Excluir); Propostas (e futuros módulos especiais)
    trazem as próprias. */
-function CatalogoItemLinha({ item, concedidas }) {
+function CatalogoItemLinha({ item, concedidas, manual, onToggle }) {
   const [aberto, setAberto] = React.useState(false);
   const acoes = item.capacidades || window.ColaboradoresAdminStore.ACOES_PADRAO.map((a) => ({ chave: a.chave, label: a.label }));
   const nConcedidas = acoes.filter((a) => concedidas.has(item.modulo + '.' + a.chave)).length;
@@ -55,7 +55,7 @@ function CatalogoItemLinha({ item, concedidas }) {
             const tem = concedidas.has(chave);
             return (
               <label key={chave} className="row gap-2" style={{ alignItems: 'center', padding: '5px 0' }}>
-                <input type="checkbox" checked={tem} disabled readOnly/>
+                <input type="checkbox" checked={tem} disabled={!manual} readOnly={!manual} onChange={() => manual && onToggle(item.modulo, a.chave, !tem)}/>
                 <span className="small">{a.label}</span>
               </label>
             );
@@ -68,7 +68,7 @@ function CatalogoItemLinha({ item, concedidas }) {
 
 /* Um grupo (Comercial, Engenharia...) — abre e mostra os módulos daquele
    grupo, cada um com sua própria linha expansível (CatalogoItemLinha). */
-function CatalogoGrupo({ grupo, itens, concedidas }) {
+function CatalogoGrupo({ grupo, itens, concedidas, manual, onToggle }) {
   const [aberto, setAberto] = React.useState(false);
   return (
     <div style={{ border: '1px solid var(--border)', borderRadius: 6, background: '#fff', marginBottom: 6 }}>
@@ -83,7 +83,7 @@ function CatalogoGrupo({ grupo, itens, concedidas }) {
       {aberto && (
         <div style={{ padding: '0 14px' }}>
           {itens.map((item) => (
-            <CatalogoItemLinha key={item.modulo} item={item} concedidas={concedidas}/>
+            <CatalogoItemLinha key={item.modulo} item={item} concedidas={concedidas} manual={manual} onToggle={onToggle}/>
           ))}
         </div>
       )}
@@ -97,12 +97,47 @@ function CatalogoGrupo({ grupo, itens, concedidas }) {
    de colaboradores enquanto aberto; "Voltar" retorna pra lista. */
 function PainelAlocacaoModulos({ colaborador, onVoltar }) {
   const [concedidas, setConcedidas] = React.useState(null);
+  const [manual, setManual] = React.useState(false);
+  const [grupos, setGrupos] = React.useState(new Set());
+  const [ocupado, setOcupado] = React.useState(false);
+  const S = window.ColaboradoresAdminStore;
+  const avisar = (m, tipo) => (window.toast ? window.toast(m, tipo) : window.alert(m));
+
+  const carregarGrupos = React.useCallback(() => S.listarAlocacoes().then((rows) => setGrupos(new Set(rows.filter((r) => r.colaborador_id === colaborador.id).map((r) => r.grupo_modulo)))), [colaborador.id]);
 
   React.useEffect(() => {
-    window.ColaboradoresAdminStore.listarCapacidadesConcedidas().then((rows) => {
+    S.listarCapacidadesConcedidas().then((rows) => {
       setConcedidas(new Set(rows.filter((r) => r.perfil_id === colaborador.id).map((r) => r.modulo + '.' + r.capacidade)));
     });
+    S.acessoManual(colaborador.id).then(setManual);
+    carregarGrupos();
   }, [colaborador.id]);
+
+  const alternarManual = async (ligar) => {
+    const msg = ligar
+      ? 'Preencher manualmente? A partir de agora o vpsistema.com NÃO altera mais as alçadas nem o menu desta pessoa; quem marca é você, aqui.'
+      : 'Voltar a sincronizar com o vpsistema.com? As próximas sincronizações podem apagar o que foi marcado aqui.';
+    if (!window.confirm(msg)) return;
+    setOcupado(true);
+    try { await S.definirAcessoManual(colaborador.id, ligar); setManual(ligar); avisar(ligar ? 'Modo manual ligado.' : 'Voltou a sincronizar com o vpsistema.', 'success'); }
+    catch (e) { avisar(e.message || 'Não foi possível alterar.', 'error'); }
+    setOcupado(false);
+  };
+
+  const alternarCapacidade = async (modulo, cap, concedida) => {
+    const chave = modulo + '.' + cap;
+    setConcedidas((s) => { const n = new Set(s); concedida ? n.add(chave) : n.delete(chave); return n; });
+    try { await S.definirAlcadaManual(colaborador.id, modulo, cap, concedida); }
+    catch (e) {
+      setConcedidas((s) => { const n = new Set(s); concedida ? n.delete(chave) : n.add(chave); return n; });
+      avisar(e.message || 'Não foi possível gravar.', 'error');
+    }
+  };
+
+  const alternarGrupo = async (grupo, ligar) => {
+    try { ligar ? await S.alocar(colaborador.id, grupo) : await S.desalocar(colaborador.id, grupo); await carregarGrupos(); }
+    catch (e) { avisar(e.message || 'Não foi possível gravar o menu.', 'error'); }
+  };
 
   return (
     <div>
@@ -119,13 +154,36 @@ function PainelAlocacaoModulos({ colaborador, onVoltar }) {
         </div>
       </div>
 
-      <AvisoAlcadasNoVpsistema/>
+      {manual ? (
+        <div style={{ padding: '10px 12px', marginBottom: 16, background: 'var(--vp-info-tint, #e6f0fa)', border: '1px solid var(--border)', borderRadius: 6, fontSize: 12.5, color: 'var(--fg2)' }}>
+          <b>Preenchimento manual.</b> O vpsistema.com não altera mais as alçadas nem o menu desta pessoa — marque abaixo. Só Administrador grava.{' '}
+          <button type="button" className="btn" disabled={ocupado} onClick={() => alternarManual(false)} style={{ marginLeft: 8 }}>Voltar a sincronizar com o vpsistema</button>
+        </div>
+      ) : (
+        <div>
+          <AvisoAlcadasNoVpsistema/>
+          <button type="button" className="btn" disabled={ocupado} onClick={() => alternarManual(true)} style={{ marginBottom: 16 }}>Preencher manualmente</button>
+        </div>
+      )}
+
+      {manual && (
+        <div style={{ border: '1px solid var(--border)', borderRadius: 6, background: '#fff', marginBottom: 12, padding: '10px 14px' }}>
+          <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 6 }}>Grupos do menu lateral</div>
+          <div className="small muted" style={{ marginBottom: 8 }}>Sem nenhum grupo marcado a pessoa vê só "Geral".</div>
+          {S.GRUPOS_MODULO.map((g) => (
+            <label key={g} className="row gap-2" style={{ alignItems: 'center', padding: '4px 0' }}>
+              <input type="checkbox" checked={grupos.has(g)} onChange={(e) => alternarGrupo(g, e.target.checked)}/>
+              <span className="small">{g}</span>
+            </label>
+          ))}
+        </div>
+      )}
 
       {concedidas === null ? (
         <div style={{ textAlign: 'center', padding: '32px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>
       ) : (
         window.ColaboradoresAdminStore.CATALOGO_MODULOS.map((g) => (
-          <CatalogoGrupo key={g.grupo} grupo={g.grupo} itens={g.itens} concedidas={concedidas}/>
+          <CatalogoGrupo key={g.grupo} grupo={g.grupo} itens={g.itens} concedidas={concedidas} manual={manual} onToggle={alternarCapacidade}/>
         ))
       )}
     </div>
