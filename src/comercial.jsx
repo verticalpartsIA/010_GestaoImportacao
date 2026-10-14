@@ -308,6 +308,11 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
         console.warn("[comercial] Erro ao converter lead em cliente:", e);
       }
     }
+    /* Lead convertido que já tinha cliente (CNPJ resolvido acima não passa por criarOuVincularDeLead): os pedidos
+       de Quadro de Comando dele também passam a apontar para o cliente. */
+    if (payload.status === "Convertido" && clienteId && window.CadastrosClientesStore?.vincularQuadrosDoLead) {
+      await window.CadastrosClientesStore.vincularQuadrosDoLead(id, clienteId);
+    }
 
     /* "Está no Omie desde": grava no cliente vinculado, em segundo plano
        (não atrasa o save). Reaproveita o resultado do "Buscar CNPJ" desta
@@ -692,9 +697,15 @@ function LeadsPage({ setRoute, setSubsel }) {
     if (novoStatus === "Convertido" && window.CadastrosClientesStore) {
       try {
         const clienteId = await window.CadastrosClientesStore.criarOuVincularDeLead(lead);
-        if (clienteId) setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, cliente_id: l.cliente_id || clienteId } : l)));
+        if (clienteId) {
+          setLeads((prev) => (prev || []).map((l) => (l.id === lead.id ? { ...l, cliente_id: l.cliente_id || clienteId } : l)));
+          window.toast("Lead convertido — agora ele está em Cadastros › Clientes.", "success");
+        } else {
+          window.toast("Lead convertido, mas o cliente não foi criado (sem nome). Ele só aparece no filtro Convertido de Leads.", "warning");
+        }
       } catch (e) {
         console.warn("[comercial] Erro ao converter lead em cliente (Kanban):", e);
+        window.toast("Lead convertido, mas não foi possível criar o cliente: " + (e.message || e) + ". Ele só aparece no filtro Convertido de Leads.", "warning");
       }
     }
   };
@@ -703,7 +714,11 @@ function LeadsPage({ setRoute, setSubsel }) {
   const allLeads = leads || [];
   const owners = ["Todos", ...Array.from(new Set(allLeads.filter(l => l.owner).map(l => l.owner))).sort()];
 
+  /* Lead convertido deixa de morar em Leads e passa a morar em Cadastros › Clientes (pedido do usuário, 14/10/2026).
+     "Todos" = só os em aberto; o filtro "Convertido" continua existindo para consultar o histórico, e os
+     indicadores (stats, Dashboard, CRM) seguem contando os convertidos. */
   const rows = allLeads.filter(l => {
+    if (status === "Todos" && l.status === "Convertido") return false;
     if (status !== "Todos" && l.status !== status) return false;
     if (owner !== "Todos" && l.owner !== owner) return false;
     if (search && !((l.building || "") + (l.contact || "")).toLowerCase().includes(search.toLowerCase())) return false;
@@ -712,6 +727,7 @@ function LeadsPage({ setRoute, setSubsel }) {
   // Kanban ignora o filtro de status (as colunas SÃO os status) mas
   // respeita responsável/busca, iguais à lista.
   const kanbanRows = allLeads.filter(l => {
+    if (l.status === "Convertido") return false; // convertido já está em Clientes
     if (owner !== "Todos" && l.owner !== owner) return false;
     if (search && !((l.building || "") + (l.contact || "")).toLowerCase().includes(search.toLowerCase())) return false;
     return true;
@@ -779,7 +795,8 @@ function LeadsPage({ setRoute, setSubsel }) {
           <>
             <div className="seg">
               {statuses.map(s => (
-                <button key={s} className={status === s ? "is-active" : ""} onClick={() => setStatus(s)}>{s}</button>
+                <button key={s} className={status === s ? "is-active" : ""} onClick={() => setStatus(s)}
+                  title={s === "Todos" ? "Leads em aberto — os convertidos já estão em Cadastros › Clientes (use o filtro Convertido para ver o histórico)" : undefined}>{s === "Todos" ? "Em aberto" : s}</button>
               ))}
             </div>
             <div className="divider-v"/>
@@ -882,7 +899,7 @@ function LeadsPage({ setRoute, setSubsel }) {
       )}
 
       {view === "kanban" && (
-        <LeadsKanban rows={kanbanRows} onOpen={(l) => { setSubsel(l); setRoute("lead-detail"); }} onMove={moverLeadStatus}/>
+        <LeadsKanban rows={kanbanRows} convertidos={stats.convertidos} onOpen={(l) => { setSubsel(l); setRoute("lead-detail"); }} onMove={moverLeadStatus}/>
       )}
 
       {leadExcluir && (
@@ -923,12 +940,14 @@ function LeadsPage({ setRoute, setSubsel }) {
    LEAD_STATUSES (dado antigo, pre-26/09) caem numa coluna "Outros" so de
    leitura - nao da pra arrastar PARA la (nao e um status valido) mas o
    lead continua visivel em vez de desaparecer do quadro. */
-function LeadsKanban({ rows, onOpen, onMove }) {
+function LeadsKanban({ rows, convertidos, onOpen, onMove }) {
   const [dragId, setDragId] = React.useState(null);
   const [overCol, setOverCol] = React.useState(null);
 
   const conhecidos = new Set(LEAD_STATUSES);
-  const colunas = LEAD_STATUSES.map((s) => ({ status: s, label: s, leads: rows.filter((l) => l.status === s) }));
+  /* "Convertido" é só o destino do arrastar: o lead convertido vira cliente e sai do quadro (rows já vem sem
+     eles), então a coluna não lista cards — mostra só quantos já foram convertidos. */
+  const colunas = LEAD_STATUSES.map((s) => ({ status: s, label: s, destino: s === "Convertido", leads: rows.filter((l) => l.status === s) }));
   const outros = rows.filter((l) => !conhecidos.has(l.status));
   if (outros.length) colunas.push({ status: null, label: "Outros", leads: outros });
 
@@ -953,11 +972,13 @@ function LeadsKanban({ rows, onOpen, onMove }) {
             }}>
             <div className="row sb" style={{ marginBottom: 4 }}>
               <div style={{ fontSize: 12, fontWeight: 600 }}>{col.label}</div>
-              <Badge variant="neutral">{col.leads.length}</Badge>
+              <Badge variant="neutral">{col.destino ? (convertidos || 0) : col.leads.length}</Badge>
             </div>
-            <div style={{ fontSize: 11, color: "var(--fg3)", marginBottom: 10 }}>{fmtBRL(valorTotal)}</div>
+            <div style={{ fontSize: 11, color: "var(--fg3)", marginBottom: 10 }}>{col.destino ? "já viraram cliente" : fmtBRL(valorTotal)}</div>
             <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-              {col.leads.length === 0 ? (
+              {col.destino ? (
+                <div style={{ fontSize: 11, color: "var(--fg3)", textAlign: "center", padding: "16px 0" }}>Arraste para cá para converter — o lead vira cliente e sai do quadro.</div>
+              ) : col.leads.length === 0 ? (
                 <div style={{ fontSize: 11, color: "var(--fg3)", textAlign: "center", padding: "16px 0" }}>Sem leads</div>
               ) : col.leads.map((l) => (
                 <div key={l.id}
