@@ -515,7 +515,6 @@ function PgValoresOpcoes(S, data, ops) {
     h(Text, { style: S.p, key: 'intro' }, 'Esta proposta traz duas modalidades de entrega. Escolha a que melhor atende o seu cronograma — ao escolher uma, a outra deixa de valer.'),
     ...ops.map((o) => {
       const linhasEq = [[o.equipamento, fmtBRL(o.totalEquipamento)]];
-      if (o.difal) linhasEq.push(['DIFAL', fmtBRL(o.difal)]);
       linhasEq.push(['Total — ' + o.titulo.toLowerCase(), fmtBRL(o.total)]);
       const linhasParc = o.parcelas.map((p) => [p.desc || '—', p.valor ? 'R$ ' + p.valor : '—']);
       if (o.parcelas.length) linhasParc.push(['Total Parcelado', fmtBRL(o.totalParcelas)]);
@@ -537,7 +536,6 @@ function PgValores(S, data) {
   const modalidade = O ? O.modalidadeEscolhida(data) : null;
   const v = (data.elevador || {}).valores || {};
   const parcelas = v.parcelas || [];
-  const difal = numBR(v.difal);
   /* v.itens (mais de 1 equipamento vindo da Precificação): 1 linha por
      equipamento real em vez de agregar tudo numa linha só clonada — mesmo
      ajuste feito em proposta-preview.jsx (bug real na cotação 950). Sem
@@ -548,20 +546,9 @@ function PgValores(S, data) {
      valor unitário) e o DIFAL num bloco À PARTE — nunca somado ao "Total Equipamentos". */
   const linhas = O ? O.linhasUnitarias(data) : [];
   const totalEq = linhas.reduce((s, l) => s + l.total, 0);
-  const totalGeral = totalEq + difal;
   const totalParcelas = parcelas.reduce((s, p) => s + numBR(p.valor), 0);
   const linhasEq = linhas.map((l) => [l.equipamento || 'Elevador de Passageiros', l.total ? fmtBRL(l.total) : '—']);
   linhasEq.push(['Total Equipamentos', fmtBRL(totalEq)]);
-  const caixaDifal = difal ? h(View, { key: 'difal', wrap: false, style: { marginTop: pt(14), borderWidth: 1, borderColor: YELLOW, borderStyle: 'solid', borderRadius: 4, padding: pt(10), backgroundColor: '#fffbe6' } }, [
-    h(View, { style: { flexDirection: 'row', justifyContent: 'space-between' }, key: 'd' }, [
-      h(Text, { style: [S.p, { fontWeight: 700, marginBottom: 0 }], key: 'l' }, 'DIFAL (Diferencial de Alíquota)'),
-      h(Text, { style: [S.p, { fontWeight: 700, marginBottom: 0 }], key: 'v' }, fmtBRL(difal)),
-    ]),
-    h(View, { style: { flexDirection: 'row', justifyContent: 'space-between', marginTop: pt(6) }, key: 't' }, [
-      h(Text, { style: [S.p, { fontWeight: 700, marginBottom: 0 }], key: 'l' }, 'TOTAL + DIFAL'),
-      h(Text, { style: [S.p, { fontWeight: 700, marginBottom: 0 }], key: 'v' }, fmtBRL(totalGeral)),
-    ]),
-  ]) : null;
   const linhasParc = parcelas.map(p => [p.desc || '—', p.valor ? 'R$ ' + p.valor : '—']);
   if (parcelas.length) linhasParc.push(['Total Parcelado', fmtBRL(totalParcelas)]);
   return h(Page, { size: 'A4', style: S.page }, [
@@ -571,7 +558,6 @@ function PgValores(S, data) {
     modalidade ? h(Text, { style: [S.p, { fontWeight: 700 }], key: 'mod' }, 'Modalidade de entrega escolhida: ' + modalidade.titulo + ' — ' + modalidade.rotulo + '.') : null,
     h(Text, { style: S.subTitle, key: 's1' }, 'Preços dos Equipamentos'),
     Tabela2(S, [{ label: 'Equipamento', flex: 3 }, { label: 'Valor', flex: 1, align: 'right' }], linhasEq, 't1'),
-    caixaDifal,
     parcelas.length ? h(View, { key: 'parc' }, [
       h(Text, { style: S.subTitle, key: 's2' }, 'Cronograma de Pagamento'),
       v.forma ? h(Text, { style: S.p, key: 'fp' }, 'Forma de pagamento: ' + v.forma) : null,

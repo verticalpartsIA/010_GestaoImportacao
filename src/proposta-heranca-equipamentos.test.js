@@ -40,7 +40,7 @@ test('2 Unidades (1 + 3 equipamentos): 4 itens, 1 por código, na ordem -1…-4,
     [{ unidadeId: 'U1', valorUnitarioRs: 300 }, { unidadeId: 'U2', valorUnitarioRs: 200 }])).elevador;
   const itens = p.valores.itens;
   assert.deepEqual(itens.map((i) => i.equipamento), ['VPEL-EL0970-1', 'VPEL-EL0970-2', 'VPEL-EL0970-3', 'VPEL-EL0970-4']);
-  assert.deepEqual(itens.map((i) => i.valorUnit), ['200', '300', '300', '300']);
+  assert.deepEqual(itens.map((i) => i.valorUnit), ['200,00', '300,00', '300,00', '300,00']);
   assert.ok(itens.every((i) => i.quantidade === '1'));
   assert.deepEqual(O.resumoEquipamentos(p.especificacoes).map((r) => r.codigo), ['VPEL-EL0970-1', 'VPEL-EL0970-2', 'VPEL-EL0970-3', 'VPEL-EL0970-4']);
 });

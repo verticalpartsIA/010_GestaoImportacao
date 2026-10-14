@@ -27,11 +27,11 @@ test('temOpcoes — só com opcao90 válida e sem escolha feita', () => {
   assert.equal(O.temOpcoes(null), false);
 });
 
-test('opcoes — par [120, 90] com total = equipamento + DIFAL e características de cada modalidade', () => {
+test('opcoes — par [120, 90] com total = só o preço (DIFAL nunca soma) e características de cada modalidade', () => {
   const [a, b] = O.opcoes(proposta());
   assert.equal(a.id, '120'); assert.equal(b.id, '90');
-  assert.equal(a.total, 191546 + 24178);
-  assert.equal(b.total, 224913 + 24178);
+  assert.equal(a.total, 191546);
+  assert.equal(b.total, 224913);
   assert.match(a.caracteristicas.join(' '), /120 dias/);
   assert.match(b.caracteristicas.join(' '), /90 dias/);
   assert.equal(O.opcoes(proposta({ opcao90: null })), null);
@@ -75,8 +75,8 @@ test('montarOpcao90 — arredonda, gera parcelas pelo template e rejeita preço 
     parcelasFn: (qtd, total) => [{ desc: 'x', valor: String(Math.round(total)) }],
   });
   assert.equal(o.valorUnit, '224913');
-  assert.equal(o.difal, '24178');
+  assert.equal(o.difal, '');
   assert.equal(o.forma, '40% à vista e 4 parcelas');
-  assert.equal(o.parcelas[0].valor, String(224913 + 24178));
+  assert.equal(o.parcelas[0].valor, String(224913));
   assert.equal(O.montarOpcao90({ precoVendaPorEquipamento: 0 }), null);
 });

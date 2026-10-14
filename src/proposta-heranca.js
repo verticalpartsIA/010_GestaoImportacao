@@ -232,7 +232,6 @@
     // V2 (nunca recalculada desde a migração).
     const resultado = (precificacao && precificacao.resultado_v2 && precificacao.resultado_v2.precificacao)
       || (precificacao && precificacao.resultado && precificacao.resultado.precificacao) || null;
-    const difal = (precificacao && precificacao.difal) || null;
     const especificacoes = montarEspecificacoes(fontes);
 
     const qtdTotal = especificacoes.reduce((s, e) => s + (Number(e.qtd) || 0), 0) || 1;
@@ -274,11 +273,10 @@
     if (equipamentos) valores.equipamento = equipamentos;
     if (qtdTotal) valores.quantidade = String(qtdTotal);
     if (resultado && resultado.precoVendaPorEquipamento) {
-      valores.valorUnit = String(Math.round(resultado.precoVendaPorEquipamento));
+      valores.valorUnit = window.PropostaOpcoes ? window.PropostaOpcoes.textoBR(resultado.precoVendaPorEquipamento) : String(Math.round(resultado.precoVendaPorEquipamento));
     }
-    if (difal && difal.difal_aplicavel && difal.responsavel_recolhimento === 'emitente_verticalparts') {
-      valores.difal = String(Math.round(difal.valor_difal));
-    }
+    /* DIFAL NÃO vai para a proposta (Financeiro, 13/10/2026): o preço de venda já o contém, a proposta mostra
+       só o valor da venda. Ele continua na Precificação como custo da VerticalParts. */
     /* Mais de 1 equipamento na cotação: monta uma linha por unidade (não só
        o agregado acima) pra Preview mostrar cada equipamento separado, em
        vez de uma linha só somando tudo (bug real na cotação 950 — 2
@@ -289,12 +287,15 @@
        modelos[] incompleto). */
     if ((qtdTotal > 1 || especificacoes.length > 1) && resultado
       && (resultado.precoVendaPorEquipamento || especificacoes.some((e) => e.valorUnitarioRs))) {
-      const mediaFallback = Math.round(resultado.precoVendaPorEquipamento) || 0;
+      const O = window.PropostaOpcoes;
+      const c2 = O ? O.c2 : (x) => Math.round((Number(x) || 0) * 100) / 100;
+      const txt = O ? O.textoBR : (x) => String(Math.round(x));
+      const mediaFallback = c2(resultado.precoVendaPorEquipamento) || 0;
       /* UM item por EQUIPAMENTO FÍSICO, com o código dele (VPEL-EL0963-13…): cada equipamento é único e o
          cliente pode pedir mudança num específico. Unidade de quantidade N vira N itens (quantidade 1). */
       valores.itens = [];
       especificacoes.forEach((e, i) => {
-        const unit = Math.round(e.valorUnitarioRs) || mediaFallback;
+        const unit = c2(e.valorUnitarioRs) || mediaFallback;
         const n = Math.max(1, Number(e.qtd) || 1);
         const codigos = (Array.isArray(e.codigos) && e.codigos.length === n) ? e.codigos : null;
         for (let k = 0; k < n; k++) {
@@ -304,10 +305,10 @@
             unidadeId: e.unidadeId || '',
             equipamento: cod || e.id || equipamentos || 'Elevador de Passageiros',
             quantidade: cod ? '1' : String(n),
-            valorUnit: String(unit),
+            valorUnit: txt(unit),
             /* valorOriginal: congelado no nascimento — nunca sobrescrito por um
                desconto (proposta-desconto.js só mexe em valorUnit/desconto*). */
-            valorOriginal: String(unit),
+            valorOriginal: txt(unit),
             desconto: null, descontoPendente: null, descontoLog: [],
           });
           if (!cod) break; // sem código físico conhecido: mantém 1 item agregado (nunca inventa numeração)
@@ -316,6 +317,20 @@
       // Lista na ordem dos códigos (…-1, -2, … -27), não na ordem das Unidades.
       const nCod = (it) => { const m = /-(\d+)$/.exec(it.equipamento || ''); return m ? Number(m[1]) : Infinity; };
       valores.itens.sort((a, b) => nCod(a) - nCod(b));
+      /* Fecha no centavo: a soma dos equipamentos tem que ser EXATAMENTE o preço da Precificação
+         (R$ 8.961.402,72 na 963). O arredondamento por item deixa até alguns centavos de diferença;
+         o último equipamento de quantidade 1 absorve. */
+      const alvo = Math.round(c2(resultado.precoVendaProposta) * 100);
+      if (alvo > 0) {
+        const cent = (it) => Math.round(c2(String(it.valorUnit).replace(',', '.')) * 100) * (Number(it.quantidade) || 1);
+        const soma = valores.itens.reduce((s, it) => s + cent(it), 0);
+        const dif = alvo - soma;
+        const alvoItem = [...valores.itens].reverse().find((it) => Number(it.quantidade) === 1);
+        if (dif !== 0 && Math.abs(dif) <= 100 * valores.itens.length && alvoItem) {
+          const novo = txt((cent(alvoItem) + dif) / 100);
+          alvoItem.valorUnit = novo; alvoItem.valorOriginal = novo;
+        }
+      }
     }
     /* "VALORES DE PAGAMENTOS" (Forma de Pagamento + Parcelas) — assim que
        precificado, a Proposta já nasce com o template padrão (Sinal 40% +
@@ -325,23 +340,18 @@
        se o vendedor ainda não tiver mexido nesses campos — nunca sobrescreve
        parcelas já digitadas/ajustadas. */
     if (Object.keys(valores).length) {
+      const pbr = (x) => parseFloat(String(x == null ? '0' : x).replace(/\./g, '').replace(',', '.')) || 0;
       const totalItens = Array.isArray(valores.itens)
-        ? valores.itens.reduce((s, it) => s + (Number(it.valorUnit) || 0) * (Number(it.quantidade) || 1), 0)
-        : (Number(valores.quantidade) || 0) * (Number(valores.valorUnit) || 0);
-      const totalComDifal = totalItens + (Number(valores.difal) || 0);
+        ? valores.itens.reduce((s, it) => s + pbr(it.valorUnit) * (Number(it.quantidade) || 1), 0)
+        : (Number(valores.quantidade) || 0) * pbr(valores.valorUnit);
+      const totalComDifal = totalItens;
       if (totalComDifal > 0) {
         const QTD_PADRAO = 5;
-        const sinal = totalComDifal * 0.4;
         const restCount = QTD_PADRAO - 1;
-        const cadaParcela = (totalComDifal - sinal) / restCount;
-        const fmt2 = (x) => x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
         valores.formaTipo = 'parcelado';
         valores.qtdParcelas = QTD_PADRAO;
         valores.forma = `40% à vista e ${restCount} parcelas`;
-        valores.parcelas = [
-          { desc: 'Sinal de 40% na assinatura do contrato', valor: fmt2(sinal) },
-          ...Array.from({ length: restCount }, (_, i) => ({ desc: `${i + 1}ª Parcela`, valor: fmt2(cadaParcela) })),
-        ];
+        valores.parcelas = window.PropostaOpcoes.parcelasPadrao(QTD_PADRAO, totalComDifal);
       }
     }
 
@@ -352,17 +362,9 @@
        2+ equipamentos não existe resultado_v2_expresso, então nada muda. */
     const expresso = precificacao && precificacao.resultado_v2_expresso && precificacao.resultado_v2_expresso.precificacao;
     if (expresso && especificacoes.length === 1 && window.PropostaOpcoes) {
-      const difalOpc = (difal && difal.difal_aplicavel && difal.responsavel_recolhimento === 'emitente_verticalparts') ? difal.valor_difal : 0;
-      const fmt2 = (x) => x.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
       const opcao90 = window.PropostaOpcoes.montarOpcao90({
-        precoVendaPorEquipamento: expresso.precoVendaPorEquipamento, difal: difalOpc, qtdParcelas: 5,
-        parcelasFn: (qtd, total) => {
-          const rest = Math.max(qtd - 1, 0);
-          const sinal = total * 0.4;
-          const cada = rest > 0 ? (total - sinal) / rest : 0;
-          return [{ desc: 'Sinal de 40% na assinatura do contrato', valor: fmt2(sinal) },
-            ...Array.from({ length: rest }, (_, i) => ({ desc: `${i + 1}ª Parcela`, valor: fmt2(cada) }))];
-        },
+        precoVendaPorEquipamento: expresso.precoVendaPorEquipamento, qtdParcelas: 5,
+        parcelasFn: (qtd, total) => window.PropostaOpcoes.parcelasPadrao(qtd, total),
       });
       if (opcao90) valores.opcao90 = opcao90;
     }
