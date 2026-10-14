@@ -473,7 +473,75 @@
     return { linhas, catalogoNaoUsado };
   }
 
+  /* ---------- LOP — Botoeira de Pavimento ----------
+     Elevador coletivo: térreo só ▲ (Seta Subida), último andar só ▼ (Seta Descida)
+     e intermediários com 2 botões (1 Sobe + 1 Desce) ou, se o cliente escolher,
+     1 botão. Cada posição é uma botoeira pronta BST (vidro preto sem display
+     ou VTP com display). */
+  const LOP_MODELOS = {
+    sem: {
+      desce: ['VPB-033', 'Botoeira de Pavimento Vidro Preto com 1 Botão "Seta Descida" em Led Branco, sem Display, para Elevador - Ref.: BST VPB-033'],
+      sobe: ['VPB-034', 'Botoeira de Pavimento Vidro Preto com 1 Botão "Seta Subida" em Led Branco, sem Display, para Elevador - Ref.: BST VPB-034'],
+      dois: ['VPB-035', 'Botoeira de Pavimento Vidro Preto com 2 Botões, "1 Sobe e 1 Desce" em Led Branco, sem Display, para Elevador - Ref.: BST VPB-035'],
+    },
+    com: {
+      desce: ['VPB-038', 'Botoeira de Pavimento VTP com 1 Botão "Seta Descida" em Led Branco, com Display em Led Branco, para Elevador - Ref.: BST VPB-038'],
+      sobe: ['VPB-039', 'Botoeira de Pavimento VTP com 1 Botão "Seta Subida" em Led Branco, com Display em Led Branco, para Elevador - Ref.: BST VPB-039'],
+      dois: ['VPB-037', 'Botoeira de Pavimento VTP, 2 Botões, "1 Sobe e 1 Desce" em Led Branco, com Display em Led Branco, para Elevador-Ref.: BST VPB-037'],
+    },
+  };
+
+  function calcularLop(numParadas, botoesIntermediarios) {
+    const n = parseInt(numParadas, 10);
+    if (!Number.isFinite(n) || n < 2) return null;
+    const dois = Number(botoesIntermediarios) !== 1;
+    const inter = n - 2;
+    return {
+      paradas: n, intermediarios: inter, doisBotoes: dois,
+      botoeiras1: 2 + (dois ? 0 : inter), // térreo + último (+ intermediários de 1 botão)
+      botoeiras2: dois ? inter : 0,
+      botoesTotal: 2 + inter * (dois ? 2 : 1),
+    };
+  }
+
+  function montarItensLop(numParadas, botoesIntermediarios, catalogoPorSku, comDisplay) {
+    const r = calcularLop(numParadas, botoesIntermediarios);
+    if (!r) return [];
+    const cat = catalogoPorSku || {};
+    const m = LOP_MODELOS[comDisplay ? 'com' : 'sem'];
+    const regra = `${r.paradas} paradas: térreo ▲ (Seta Subida), último ▼ (Seta Descida), ${r.doisBotoes ? 'intermediários com 2 botões (1 Sobe e 1 Desce)' : 'intermediários com 1 botão'}.`;
+    const linha = (modelo, quantidade, confianca, extra) => ({
+      sku: modelo[0], descricao: (cat[modelo[0]] && cat[modelo[0]].descricao) || modelo[1], unidade: 'un',
+      grupo_separacao: 'componentes', quantidade, origem: 'calculado_geometria', confianca,
+      memoria_calculo: regra + (extra ? ' ' + extra : ''),
+    });
+    const itens = [linha(m.sobe, 1, 'confirmado', 'Térreo.'), linha(m.desce, 1, 'confirmado', 'Último andar.')];
+    if (r.intermediarios > 0) {
+      if (r.doisBotoes) itens.push(linha(m.dois, r.intermediarios, 'confirmado', 'Andares intermediários.'));
+      else {
+        // Sem modelo "1 botão" definido para intermediários: usa a Seta Subida — a confirmar com a produção.
+        itens[0] = linha(m.sobe, 1 + r.intermediarios, 'estimado', 'Intermediários com 1 botão usam a Seta Subida (a confirmar com a produção).');
+      }
+    }
+    return itens;
+  }
+
+  /* ---------- Botoeiras de inspeção (cabina e poço) — 1 de cada, quando fornecemos ---------- */
+  const INSPECAO_MODELOS = [
+    ['botoeira_inspecao_cabina', 'VPB-208', 'Botoeira de Inspeção sobre a Cabina de Elevador B3 - Ref.: BST | VPB-208'],
+    ['botoeira_inspecao_poco', 'VPB-380', 'Botoeira de Inspeção P5Y do Poço de Elevador - Ref.: BST | VPB-380'],
+  ];
+
+  function montarItensInspecao(escopo, catalogoPorSku) {
+    const cat = catalogoPorSku || {};
+    return INSPECAO_MODELOS.filter(([chave]) => ((escopo || {})[chave] || {}).decisao === 'fornecer').map(([, sku, desc]) => ({
+      sku, descricao: (cat[sku] && cat[sku].descricao) || desc, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+      origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: 'Escopo: fornecer. 1 botoeira por elevador.',
+    }));
+  }
+
   window.QuadroComandoBomEngine = {
+    calcularLop, montarItensLop, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS,
     listarVariantes, chaveVariante, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
     montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,

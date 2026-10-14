@@ -171,6 +171,17 @@
       erroVariante = 'Potência/tensão da máquina não preenchida ou fora das 4 variantes conhecidas (7,5/15 kW × 220/380 V) — BOM fixo não gerado. Preencha Máquina/Freio/Encoder e gere novamente.';
     }
 
+    // LOP — botoeiras de pavimento prontas (Sobe / Desce / 2 botões) pela posição de cada parada; só se vamos fornecer.
+    const lopEsc = (quadro.escopo_fornecimento || {}).lop || {};
+    if (lopEsc.decisao === 'fornecer') {
+      const pub = quadro.respostas_publico || {};
+      const nParadas = (quadro.paradas || []).length || parseInt(pub.num_paradas, 10) || 0;
+      const botoes = lopEsc.botoes_intermediarios || pub.lop_botoes || '2';
+      bomItens = [...bomItens, ...engine.montarItensLop(nParadas, botoes, catalogo, lopEsc.com_display === true || lopEsc.com_display === 'sim')];
+    }
+
+    bomItens = [...bomItens, ...engine.montarItensInspecao(quadro.escopo_fornecimento, catalogo)];
+
     const trechosFixa = engine.montarTrechosFiacaoFixa(quadro.geometria);
     const trechoManobra = engine.montarTrechoCaboManobra(quadro.geometria, quadro.intervalos);
     const trechosCarro = engine.montarTrechosFiacaoCarro(quadro.geometria, quadro.configuracao);

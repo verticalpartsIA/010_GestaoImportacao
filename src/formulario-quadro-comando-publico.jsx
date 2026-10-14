@@ -83,7 +83,7 @@
     corrente_nominal: '', aplicacao: '', atendimento: '', num_botoeiras: '',
     tipo_porta: '', operador_porta: '', tipo_freio: '', tensao_freio: '',
     acionamento: '', encoder: '', engrenagem: '', casa_maquinas: '',
-    acessorios: {}, ind_cor: '', observacoes: '',
+    acessorios: {}, lop_botoes: '', ind_cor: '', observacoes: '',
     fiacao_omitida: false, dist: [], f_l1: '', f_ua: '', f_tr: '', f_bp: '', f_lim: '', f_fp: '',
     obs_fiacao: '',
   };
@@ -320,6 +320,7 @@
         if (!f.acionamento) e.push('Tipo de Acionamento');
         if (f.acionamento === 'vf' && !f.casa_maquinas) e.push('Casa de Máquinas');
       }
+      if (p === 4 && f.acessorios.lop && !f.lop_botoes) e.push('LOP: 1 ou 2 botões nos andares intermediários');
       if (p === 5 && !f.fiacao_omitida) {
         if (!f.f_l1) e.push('Fiação: L1');
         if (!f.f_ua) e.push('Fiação: UA');
@@ -519,6 +520,12 @@
                   <CheckOption key={key} label={label} checked={!!f.acessorios[key]} onChange={(v) => setAcessorio(key, v)}/>
                 ))}
               </div>
+              {f.acessorios.lop && (
+                <Field label="LOP — nos andares intermediários, a botoeira terá:" req hint="Térreo leva só ▲ e o último andar só ▼. Nos intermediários: 2 botões (▲ e ▼) ou 1 botão só.">
+                  <RadioGroup name="lop_botoes" value={f.lop_botoes} onChange={(v) => set({ lop_botoes: v })}
+                    options={[{ value: '2', label: '2 botões (▲ subir e ▼ descer)' }, { value: '1', label: '1 botão' }]}/>
+                </Field>
+              )}
             </Section>
             <Section icon="📝" passo="acessorios" title="Observações">
               <Field label="Observações gerais" hint="Qualquer detalhe adicional relevante pro orçamento">
@@ -595,6 +602,7 @@
                 ['Tipo de Freio', lbl(f.tipo_freio) + (f.tensao_freio ? ` — ${f.tensao_freio} V` : '')],
                 ['Acionamento', lbl(f.acionamento)], ['Casa de Máquinas', lbl(f.casa_maquinas)],
                 ['Acessórios', ACESSORIOS.filter(([k]) => f.acessorios[k]).map(([, l]) => l).join(' · ') || 'Nenhum'],
+                ...(f.acessorios.lop ? [['LOP nos intermediários', f.lop_botoes === '1' ? '1 botão' : '2 botões (▲ e ▼)']] : []),
                 ['Observações', f.observacoes || '—'],
                 ['Fiação de Poço', f.fiacao_omitida ? 'Omitida — valores padrão' : `L1:${f.f_l1}m UA:${f.f_ua}m TR:${f.f_tr}m BP:${f.f_bp}m LIM:${f.f_lim}m FP:${f.f_fp}m`],
               ].filter(([, v]) => v).map(([k, v]) => (
