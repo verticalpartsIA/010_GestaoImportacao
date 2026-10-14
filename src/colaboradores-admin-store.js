@@ -332,6 +332,27 @@
 
   async function concederCapacidade() { throw new Error('As alçadas agora são geridas em vpsistema.com/administracao.'); }
 
+  /* Modo MANUAL por pessoa (14/10/2026, Gelson): com perfis.acesso_manual o
+     vpsistema-sync não mexe nas alçadas nem no menu dela; um Administrador
+     marca/desmarca aqui. Gravação só pelas RPCs (conferem Administrador no banco). */
+  async function acessoManual(perfilId) {
+    const c = sb(); if (!c) return false;
+    const { data } = await c.from('perfis').select('acesso_manual').eq('id', perfilId).maybeSingle();
+    return !!(data && data.acesso_manual);
+  }
+  async function rpcManual(nome, args) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.rpc(nome, args);
+    if (error) throw error;
+    if (!data || data.ok !== true) {
+      const m = { so_administrador: 'Só Administrador pode fazer isso.', perfil_nao_esta_em_modo_manual: 'Esta pessoa não está em modo manual.', perfil_inexistente: 'Perfil não encontrado.' };
+      throw new Error(m[data && data.motivo] || 'O banco recusou a alteração.');
+    }
+    return data;
+  }
+  const definirAcessoManual = (perfilId, manual) => rpcManual('hub_set_acesso_manual', { p_perfil: perfilId, p_manual: !!manual });
+  const definirAlcadaManual = (perfilId, modulo, capacidade, concedida) => rpcManual('hub_set_alcada_manual', { p_perfil: perfilId, p_modulo: modulo, p_capacidade: capacidade, p_concedida: !!concedida });
+
 
   /* Roda quando a identidade chega (evento 'vpprd:user' de supabase.js) —
      acha o colaborador correspondente pelo id (vem do JWT do vpsistema,
@@ -359,5 +380,6 @@
     alocar, desalocar, removerTodasAlocacoes, enriquecerUsuarioLogado,
     ACOES_PADRAO, CATALOGO_MODULOS, listarCapacidadesConcedidas, concederCapacidade,
     MODULOS_POR_GRUPO_SIDEBAR, capacidadesDoGrupo, concederGrupoInteiro,
+    acessoManual, definirAcessoManual, definirAlcadaManual,
   };
 }());
