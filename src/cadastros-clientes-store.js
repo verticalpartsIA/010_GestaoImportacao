@@ -183,10 +183,22 @@
      Lead não tem CNPJ (só captura isso lá no Formulário), então o
      dedup aqui é por razao_social exata — best-effort, não tem doc pra
      casar com precisão como buscarOuCriarCliente (CNPJ) já faz. */
+  /* Lead convertido deixa de ser lead e passa a ser cliente (pedido do usuário, 14/10/2026): os pedidos de
+     Quadro de Comando que nasceram desse lead (quadros_comando.lead_id) passam a apontar para o cliente.
+     Só preenche quem ainda não tem cliente (nunca troca um vínculo que já existe) e nunca derruba a
+     conversão: falha só avisa no console, o vínculo é refeito na próxima conversão/edição do lead. */
+  async function vincularQuadrosDoLead(leadId, clienteId) {
+    const c = sb(); if (!c || !leadId || !clienteId) return 0;
+    const { data, error } = await c.from('quadros_comando')
+      .update({ cliente_id: clienteId }).eq('lead_id', leadId).is('cliente_id', null).select('id');
+    if (error) { console.warn('[clientes] não vinculou os pedidos de quadro do lead ao cliente:', error); return 0; }
+    return (data || []).length;
+  }
+
   async function criarOuVincularDeLead(lead) {
     const c = sb(); if (!c || !lead) return null;
     const { data: leadRow } = await c.from('leads').select('cliente_id').eq('id', lead.id).maybeSingle();
-    if (leadRow?.cliente_id) return leadRow.cliente_id;
+    if (leadRow?.cliente_id) { await vincularQuadrosDoLead(lead.id, leadRow.cliente_id); return leadRow.cliente_id; }
 
     const nome = (lead.building || lead.contact || '').trim();
     if (!nome) return null;
@@ -205,8 +217,9 @@
     }
     const { error: errVinc } = await c.from('leads').update({ cliente_id: cliente.id }).eq('id', lead.id);
     if (errVinc) throw errVinc;
+    await vincularQuadrosDoLead(lead.id, cliente.id);
     return cliente.id;
   }
 
-  window.CadastrosClientesStore = { gerarCodigo, listarTodos, obter, criar, atualizar, remover, criarOuVincularDeLead, historicoCliente };
+  window.CadastrosClientesStore = { gerarCodigo, listarTodos, obter, criar, atualizar, remover, criarOuVincularDeLead, vincularQuadrosDoLead, historicoCliente };
 }());
