@@ -564,7 +564,6 @@ function PreviewValoresOpcoes({ data }) {
               <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
               <tbody>
                 <tr><td>{o.equipamento}</td><td style={{ textAlign: "right" }}><b>{fmt(o.totalEquipamento)}</b></td></tr>
-                {o.difal ? <tr><td>DIFAL</td><td style={{ textAlign: "right" }}>{fmt(o.difal)}</td></tr> : null}
                 <tr className="pdf-total-row"><td>Total — {o.titulo.toLowerCase()}</td><td style={{ textAlign: "right" }}>{fmt(o.total)}</td></tr>
               </tbody>
             </table>
@@ -591,7 +590,6 @@ function PreviewValoresTabelas({ data }) {
   const modalidade = window.PropostaOpcoes ? window.PropostaOpcoes.modalidadeEscolhida(data) : null;
   const v = data.elevador.valores;
   const parcelas = v.parcelas || [];
-  const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
   const fmt = (n) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const totalParcelas = parcelas.reduce((s, p) => s + (parseFloat((p.valor || "0").toString().replace(/\./g, "").replace(",", ".")) || 0), 0);
 
@@ -604,7 +602,6 @@ function PreviewValoresTabelas({ data }) {
      riscado ao lado do atual — vem em `original` de linhasUnitarias. */
   const linhas = window.PropostaOpcoes ? window.PropostaOpcoes.linhasUnitarias(data) : [];
   const totalEq = linhas.reduce((s, l) => s + l.total, 0);
-  const totalGeral = totalEq + difal;
 
   return (
     <div className="pe__pdf">
@@ -630,14 +627,6 @@ function PreviewValoresTabelas({ data }) {
             <tr className="pdf-total-row"><td>Total Equipamentos</td><td style={{ textAlign: "right" }}>{fmt(totalEq)}</td></tr>
           </tbody>
         </table>
-        {difal ? (
-          <table className="pdf-table2" style={{ marginTop: 12, border: "1.5px solid #e0b400", background: "#fffbe6" }}>
-            <tbody>
-              <tr><td><b>DIFAL (Diferencial de Alíquota)</b></td><td style={{ textAlign: "right" }}><b>{fmt(difal)}</b></td></tr>
-              <tr className="pdf-total-row"><td>TOTAL + DIFAL</td><td style={{ textAlign: "right" }}>{fmt(totalGeral)}</td></tr>
-            </tbody>
-          </table>
-        ) : null}
 
         {parcelas.length ? (
           <>
@@ -886,9 +875,7 @@ function PreviewValoresSimples({ data, eq, pg, total }) {
   const parcelas = v.parcelas || [];
   const qtd = parseFloat(v.quantidade) || 0;
   const unit = parseFloat((v.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
-  const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
   const totalEq = qtd * unit;
-  const totalDifal = totalEq + difal;
   const totalParcelado = parcelas.reduce((s, p) => s + (parseFloat((p.valor || "0").toString().replace(/\./g, "").replace(",", ".")) || 0), 0);
   const fmt = (n) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   return (
@@ -908,9 +895,8 @@ function PreviewValoresSimples({ data, eq, pg, total }) {
               <td style={{ textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 700 }}>{totalEq ? fmt(totalEq) : "—"}</td>
             </tr>
           </tbody>
-          <tfoot><tr><td colSpan={3}>DIFAL</td><td style={{ textAlign: "right", fontFamily: "var(--font-mono)" }}>{difal ? fmt(difal) : "—"}</td></tr></tfoot>
         </table>
-        <div className="pdf-total"><span>Total com DIFAL</span><b>{fmt(totalDifal)}</b></div>
+        <div className="pdf-total"><span>Total da Proposta</span><b>{fmt(totalEq)}</b></div>
         {parcelas.length > 0 ? (
           <>
             <h3 className="pdf-h3" style={{ marginTop: 10 }}>Parcelamento</h3>

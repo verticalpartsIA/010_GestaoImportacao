@@ -53,7 +53,8 @@
 
   function visao(id, src, qtd, equipamento) {
     const unit = num(src.valorUnit);
-    const difal = num(src.difal);
+    /* DIFAL não aparece na proposta (Financeiro, 13/10/2026): o preço já o contém. */
+    const difal = 0;
     const totalEq = unit * qtd;
     const parcelas = src.parcelas || [];
     return {
@@ -85,7 +86,7 @@
     let nv = { ...v, escolhaEntrega: escolha };
     if (escolha === '90') {
       const o = v.opcao90;
-      nv = { ...nv, valorUnit: o.valorUnit, difal: o.difal, formaTipo: o.formaTipo, qtdParcelas: o.qtdParcelas, forma: o.forma, parcelas: o.parcelas };
+      nv = { ...nv, valorUnit: o.valorUnit, difal: '', formaTipo: o.formaTipo, qtdParcelas: o.qtdParcelas, forma: o.forma, parcelas: o.parcelas };
     }
     return { ...d, [chave]: { ...d[chave], valores: nv } };
   }
@@ -106,16 +107,15 @@
 
   /* Opção 90 a partir do resultado V2 exclusivo da Precificação (1 equipamento). `parcelasFn`
      gera as parcelas no mesmo template da proposta (sinal 40% + resto igual). */
-  function montarOpcao90({ precoVendaPorEquipamento, difal, qtdParcelas, parcelasFn }) {
+  function montarOpcao90({ precoVendaPorEquipamento, qtdParcelas, parcelasFn }) {
     const unit = Math.round(Number(precoVendaPorEquipamento) || 0);
     if (!(unit > 0)) return null;
-    const dif = Math.round(Number(difal) || 0);
-    const total = unit + dif;
+    const total = unit;
     const qtd = qtdParcelas || 5;
     const rest = Math.max(qtd - 1, 0);
     return {
       valorUnit: String(unit),
-      difal: dif ? String(dif) : '',
+      difal: '',
       formaTipo: 'parcelado',
       qtdParcelas: qtd,
       forma: rest > 0 ? `40% à vista e ${rest} parcela${rest > 1 ? 's' : ''}` : '100% à vista',
@@ -225,13 +225,36 @@
     return rows.sort((a, b) => nc(a) - nc(b));
   }
 
-  /* Totais isolados: equipamentos, DIFAL (nunca misturado ao valor dos equipamentos) e o conjunto. */
+  /* Total da proposta = soma dos equipamentos. O DIFAL nunca aparece nem soma (Financeiro, 13/10/2026):
+     o preço de venda já o contém. `difal` fica 0 só por compatibilidade com quem ainda lê o campo. */
   function totaisValores(d, eq) {
-    const v = valores(d, eq);
     const totalEq = linhasUnitarias(d, eq).reduce((s, l) => s + l.total, 0);
-    const difal = num(v.difal);
-    return { totalEq, difal, totalGeral: totalEq + difal };
+    return { totalEq, difal: 0, totalGeral: totalEq };
   }
 
-  window.PropostaOpcoes = { TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, blocosAjustes, _num: num };
+  /* Dinheiro em CENTAVOS exatos (o valor da Precificação tem centavos: R$ 8.961.402,72). Texto no padrão pt-BR
+     sem milhar ("257025,50"), que num()/numBR()/calcularValorTotal() leem certo. */
+  const c2 = (x) => Math.round((Number(x) || 0) * 100) / 100;
+  const textoBR = (x) => c2(x).toFixed(2).replace('.', ',');
+  const milharBR = (x) => c2(x).toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+
+  /* Sinal de 40% + parcelas iguais; a ÚLTIMA absorve o centavo que sobra, então a soma é sempre o total exato. */
+  function parcelasPadrao(qtd, total) {
+    const n = Math.max(1, Number(qtd) || 1);
+    const tot = Math.round(c2(total) * 100);
+    if (n <= 1) return [{ desc: 'Pagamento integral na assinatura do contrato', valor: milharBR(tot / 100) }];
+    const sinal = Math.round(tot * 0.4);
+    const rest = n - 1;
+    const cada = Math.round((tot - sinal) / rest);
+    const linhas = [{ desc: 'Sinal de 40% na assinatura do contrato', valor: milharBR(sinal / 100) }];
+    let acumulado = sinal;
+    for (let i = 1; i <= rest; i++) {
+      const v = i === rest ? tot - acumulado : cada;
+      acumulado += v;
+      linhas.push({ desc: `${i}ª Parcela`, valor: milharBR(v / 100) });
+    }
+    return linhas;
+  }
+
+  window.PropostaOpcoes = { c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, blocosAjustes, _num: num };
 }());

@@ -765,15 +765,7 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
    vista e 4 parcelas"), agora gerado de verdade a partir da Quantidade de
    Parcelas escolhida, em vez de vir só como sugestão estática no default. */
 function gerarParcelasAutomaticas(qtd, total) {
-  const n = Math.max(1, Number(qtd) || 0);
-  const fmt2 = (x) => x.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  if (n <= 1) return [{ desc: "Pagamento integral na assinatura do contrato", valor: fmt2(total) }];
-  const sinal = total * 0.4;
-  const restCount = n - 1;
-  const cadaParcela = restCount > 0 ? (total - sinal) / restCount : 0;
-  const linhas = [{ desc: "Sinal de 40% na assinatura do contrato", valor: fmt2(sinal) }];
-  for (let i = 1; i <= restCount; i++) linhas.push({ desc: `${i}ª Parcela`, valor: fmt2(cadaParcela) });
-  return linhas;
+  return window.PropostaOpcoes.parcelasPadrao(qtd, total); // centavos exatos; a última parcela absorve a sobra
 }
 const QTD_PARCELAS_OPTIONS = Array.from({ length: 11 }, (_, i) => String(i + 2)); // 2..12
 
@@ -786,11 +778,11 @@ function S_Valores({ d, set, eq, recordId }) {
 
   const qtd = parseFloat(v.quantidade) || 0;
   const unit = parseFloat((v.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
-  const difal = parseFloat((v.difal || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
+  /* DIFAL não aparece na proposta (Financeiro, 13/10/2026): o preço de venda já o contém. */
   const totalEq = temItens
     ? v.itens.reduce((s, it) => s + (parseFloat((it.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0) * (Number(it.quantidade) || 1), 0)
     : qtd * unit;
-  const totalDifal = totalEq + difal;
+  const totalDifal = totalEq; // nome histórico: é o total da proposta
   /* Parcelas eram digitadas aqui mas a soma delas nunca aparecia nem era
      conferida contra o Total com DIFAL — vendedor só descobria a conta
      errada depois, olhando o PDF (achado real, 19/08). */
@@ -874,7 +866,6 @@ function S_Valores({ d, set, eq, recordId }) {
           </PEField>
           <PEField label="Quantidade"><PENumber value={v.quantidade} onChange={u("quantidade")} placeholder="1"/></PEField>
           <PEField label="Valor Unitário"><PECurrency value={v.valorUnit} onChange={u("valorUnit")} placeholder="480.000,00"/></PEField>
-          <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
           <PEField label={formaPagLabel} span={formaTipo === "parcelado" ? "1" : "2"}>
             <PESelect value={formaTipo} onChange={aplicarFormaTipo} options={[{ value: "vista", label: "À vista" }, { value: "parcelado", label: "Parcelado" }]}/>
           </PEField>
@@ -887,7 +878,6 @@ function S_Valores({ d, set, eq, recordId }) {
       )}
       {temItens && (
         <div className="pe-grid cols-4">
-          <PEField label="DIFAL" tag="diferencial alíquota"><PECurrency value={v.difal} onChange={u("difal")} placeholder="0,00"/></PEField>
           <PEField label={formaPagLabel} span={formaTipo === "parcelado" ? "1" : "2"}>
             <PESelect value={formaTipo} onChange={aplicarFormaTipo} options={[{ value: "vista", label: "À vista" }, { value: "parcelado", label: "Parcelado" }]}/>
           </PEField>
@@ -944,17 +934,9 @@ function S_Valores({ d, set, eq, recordId }) {
       })()}
 
       <div className="pe-totais">
-        <div className="pe-totais-row">
-          <span>Total dos Equipamentos</span>
-          <b>R$ {formatBR(totalEq)}</b>
-        </div>
-        <div className="pe-totais-row">
-          <span>DIFAL aplicado</span>
-          <b>R$ {formatBR(difal)}</b>
-        </div>
         <div className="pe-totais-row final">
-          <span>Total com DIFAL</span>
-          <b>R$ {formatBR(totalDifal)}</b>
+          <span>Total da Proposta</span>
+          <b>R$ {formatBR(totalEq)}</b>
         </div>
         {parcelas.length > 0 && (
           <div className="pe-totais-row" style={parcelasBatem ? undefined : { color: 'var(--vp-danger, #c62828)' }}>
@@ -975,7 +957,7 @@ function S_Ajustes({ d, set, eq }) {
       <div style={{ marginBottom: 16 }}>
         <div className="pe-field-label" style={{ marginBottom: 6 }}>Preset Financeiro</div>
         <PEPresets value={a.preset} onChange={u("preset")} options={[
-          { value: "fora", label: "Fora do Estado", sub: "DIFAL aplicável" },
+          { value: "fora", label: "Fora do Estado", sub: "outro estado" },
           { value: "sp",   label: "São Paulo",     sub: "alíquota interna" },
           { value: "livre", label: "Diferenciado", sub: "livre / negociado" },
         ]}/>
