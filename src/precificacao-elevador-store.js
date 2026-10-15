@@ -734,6 +734,20 @@
 
     const ufFaturamento = cliente ? cliente.endereco_estado : null;
     const ufDestino = formulario.local_obra_estado || ufFaturamento;
+
+    /* 15/10/2026 — ICMS da venda vem da regra por UF de destino (Atualização de Custos › Regras de ICMS),
+       não mais do 4% global (alíquota interestadual de importado; SP→SP é 12%). Sem regra, mantém o
+       valor do snapshot e registra o aviso. A alíquota usada fica no snapshot pra Memória de cálculo mostrar. */
+    let regraIcms = null;
+    try {
+      regraIcms = window.CadastroCustosStore && ufDestino
+        ? await window.CadastroCustosStore.buscarRegraIcmsVenda({ ufDestino: String(ufDestino).toUpperCase() }) : null;
+    } catch (e) { console.warn('[Precificação] regra de ICMS não consultada', e); }
+    const snapshotBase = pz.parametros_fiscais_snapshot || {};
+    const snapshotIcms = regraIcms
+      ? { ...snapshotBase, icms_venda_pct: Number(regraIcms.aliquota_pct), icms_venda_regra: { id: regraIcms.id, uf_origem: regraIcms.uf_origem, uf_destino: regraIcms.uf_destino, ncm: regraIcms.ncm || null, fundamento: regraIcms.fundamento || null } }
+      : { ...snapshotBase, icms_venda_regra: { sem_regra: true, uf_destino: ufDestino ? String(ufDestino).toUpperCase() : null } };
+    baseInputs.parametros = { ...baseInputs.parametros, icmsVendaPct: snapshotIcms.icms_venda_pct };
     const estadoDestino = await window.DifalEngine.buscarEstado(ufDestino);
     const difal = window.DifalEngine.calcular({
       ufFaturamento, ufEntrega: formulario.local_obra_estado,
@@ -781,7 +795,7 @@
 
     /* 10/10/2026 — o método da planilha do Financeiro é o ÚNICO método de formação de preço; precificação antiga
        (markup sobre o custo / margem sobre a venda) é convertida ao calcular de novo. */
-    await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, modo_formacao_preco: 'planilha', status: 'calculado' });
+    await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, parametros_fiscais_snapshot: snapshotIcms, modo_formacao_preco: 'planilha', status: 'calculado' });
     return { resultado, resultadoV2, resultadoV2Expresso, difal };
   }
 

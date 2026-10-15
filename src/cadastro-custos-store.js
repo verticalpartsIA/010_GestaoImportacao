@@ -342,7 +342,46 @@
     return data;
   }
 
+  /* ---------- Regras de ICMS na venda (15/10/2026) ----------
+     A Precificação achava o ICMS da venda num % global fixo (4% = alíquota interestadual de importado,
+     Res. Senado 13/2012), igual pra qualquer cliente. Agora consulta esta tabela pela UF de destino:
+     SP→SP importado = 12%. Sem regra cadastrada, quem chama cai no % global e avisa. */
+  async function listarRegrasIcmsVenda() {
+    const c = sb(); if (!c) return [];
+    const { data, error } = await c.from('regras_icms_venda').select('*').order('uf_origem').order('uf_destino');
+    if (error) { console.warn('[CadastroCustosStore] listarRegrasIcmsVenda falhou', error); return []; }
+    return data || [];
+  }
+
+  async function salvarRegraIcmsVenda(regra) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const row = {
+      uf_origem: String(regra.uf_origem || 'SP').toUpperCase(), uf_destino: String(regra.uf_destino || '').toUpperCase(),
+      origem_mercadoria: regra.origem_mercadoria || 'Estrangeira', ncm: (regra.ncm || '').trim() || null,
+      aliquota_pct: Number(regra.aliquota_pct), fundamento: regra.fundamento || null, ativo: regra.ativo !== false,
+      updated_at: new Date().toISOString(), updated_by: (window.__VP_USER || {}).email || null,
+    };
+    if (!row.uf_destino) throw new Error('Informe a UF de destino.');
+    if (!(row.aliquota_pct >= 0 && row.aliquota_pct <= 1)) throw new Error('Alíquota inválida.');
+    const q = regra.id ? c.from('regras_icms_venda').update(row).eq('id', regra.id) : c.from('regras_icms_venda').insert(row);
+    const { data, error } = await q.select().single();
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cadastros', acao: regra.id ? 'Editou regra de ICMS na venda' : 'Criou regra de ICMS na venda', alvo: `${row.uf_origem}→${row.uf_destino}`, alvo_id: data.id, detalhe: row });
+    return data;
+  }
+
+  /* Devolve a regra ativa mais específica (NCM em branco vale pra qualquer NCM) ou null. */
+  async function buscarRegraIcmsVenda({ ufOrigem = 'SP', ufDestino, origemMercadoria = 'Estrangeira' } = {}) {
+    const c = sb(); if (!c || !ufDestino) return null;
+    const { data, error } = await c.from('regras_icms_venda').select('*').eq('ativo', true)
+      .eq('uf_origem', String(ufOrigem).toUpperCase()).eq('uf_destino', String(ufDestino).toUpperCase()).eq('origem_mercadoria', origemMercadoria);
+    if (error) { console.warn('[CadastroCustosStore] buscarRegraIcmsVenda falhou', error); return null; }
+    const lista = data || [];
+    return lista.find((r) => !r.ncm) || lista[0] || null;
+  }
+
   window.CadastroCustosStore = {
+    listarRegrasIcmsVenda, salvarRegraIcmsVenda, buscarRegraIcmsVenda,
     listarDifalEstados, atualizarDifalEstado,
     listarCustosElevador, salvarCustoElevador, atualizarCampoElevador, removerCustoElevador, buscarCustoElevador, estimarValorElevador,
     listarCustosEscadaEsteira, salvarCustoEscadaEsteira, buscarCustoEscadaEsteira,
