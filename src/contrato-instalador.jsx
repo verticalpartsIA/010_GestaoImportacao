@@ -268,39 +268,48 @@ function CIDossieEntrada({ s, setMany }) {
   const [buscando, setBuscando] = _ciUS(false);
 
   const puxar = async () => {
-    const id = texto.trim().toUpperCase();
-    if (!id) return;
+    const ids = window.CIDossie.extrairNumeros(texto);
+    if (!ids.length) return;
     setBuscando(true); setEstado(null);
     try {
       const sb = window.__VP_SB?.sb;
-      const { data: dossie, error } = await sb.from('dossier_obra')
-        .select('id, client_name, building_name, city, state, equip_type, parceiro_instalador_id, cliente_id').eq('id', id).maybeSingle();
+      const { data: achados, error } = await sb.from('dossier_obra')
+        .select('id, client_name, building_name, city, state, equip_type, parceiro_instalador_id, cliente_id').in('id', ids);
       if (error) throw error;
-      if (!dossie) { setEstado({ tipo: 'erro', msg: `Dossiê ${id} não encontrado. Confira o número (ex.: DOS-M013).` }); setBuscando(false); return; }
-      const acordo = await window.InstaladorAcordosStore?.obterAtivoPorDossier(id);
-      const parceiroId = (acordo && acordo.parceiro_instalador_id) || dossie.parceiro_instalador_id;
+      const mapa = {}; (achados || []).forEach((d) => { mapa[d.id] = d; });
+      const faltando = ids.filter((id) => !mapa[id]);
+      if (faltando.length) { setEstado({ tipo: 'erro', msg: `Dossiê não encontrado: ${faltando.join(', ')}. Confira o número (ex.: DOS-M013).` }); setBuscando(false); return; }
+      const dossies = ids.map((id) => mapa[id]);
+      const acordos = {};
+      for (const id of ids) { const a = await window.InstaladorAcordosStore?.obterAtivoPorDossier(id); if (a) acordos[id] = a; }
+      const r = window.CIDossie.montarPatchVarios({ dossies, acordos, mask: window.CI.maskMoeda });
+      if (r.erro) { setEstado({ tipo: 'erro', msg: r.erro }); setBuscando(false); return; }
+      const patch = r.patch;
+      const parceiroId = (acordos[ids[0]] && acordos[ids[0]].parceiro_instalador_id) || dossies.map((d) => d.parceiro_instalador_id).find(Boolean)
+        || ids.map((id) => acordos[id] && acordos[id].parceiro_instalador_id).find(Boolean);
       const parceiro = parceiroId ? await window.RHHomologacao?.obterMontador(parceiroId) : null;
-      const patch = window.CIDossie.montarPatch({ dossie, acordo, mask: window.CI.maskMoeda });
       if (parceiro) {
         Object.assign(patch, ciPatchContratada(parceiro));
         Object.assign(patch, await ciBuscarResponsavel(parceiro.id));
       }
       setMany(patch);
       const faltas = [];
-      if (!parceiro) faltas.push('empresa instaladora (o Dossiê não tem instalador — escolha no Passo 2)');
-      if (!acordo) faltas.push('preço combinado (a Engenharia cadastra em Pagamentos a Instaladores › Preços combinados)');
+      if (!parceiro) faltas.push('empresa instaladora (os Dossiês não têm instalador — escolha no Passo 2)');
+      if (!ids.every((id) => acordos[id])) faltas.push('preço combinado de ' + ids.filter((id) => !acordos[id]).join(', ') + ' (a Engenharia cadastra em Pagamentos a Instaladores › Preços combinados)');
       if (parceiro && !patch.r_nome) faltas.push('responsável legal (cadastre um colaborador Proprietário/Sócio na empresa)');
-      setEstado({ tipo: faltas.length ? 'aviso' : 'ok', msg: `Dossiê ${id} carregado: ${dossie.client_name} — ${dossie.building_name}.`, faltas });
-    } catch (e) { setEstado({ tipo: 'erro', msg: 'Não foi possível ler o Dossiê: ' + (e.message || e) }); }
+      (r.avisos || []).forEach((v) => faltas.push(v));
+      const resumo = ids.length === 1 ? `${dossies[0].client_name} — ${dossies[0].building_name}` : `${ids.length} equipamentos (${ids.join(', ')}) — ${dossies[0].client_name}`;
+      setEstado({ tipo: faltas.length ? 'aviso' : 'ok', msg: `Dossiê(s) carregado(s): ${resumo}.`, faltas });
+    } catch (e) { setEstado({ tipo: 'erro', msg: 'Não foi possível ler os Dossiês: ' + (e.message || e) }); }
     setBuscando(false);
   };
 
   return (
     <div className="ci-field-group">
-      <h3 className="ci-group-title">Número do Dossiê</h3>
-      <p className="ci-field-hint" style={{ marginBottom: 8 }}>Informe o Dossiê e o contrato já nasce com equipamento, obra, cliente, empresa instaladora, valor e parcelas. O que faltar aparece abaixo.</p>
+      <h3 className="ci-group-title">Número(s) do Dossiê</h3>
+      <p className="ci-field-hint" style={{ marginBottom: 8 }}>Informe o Dossiê (ou vários, separados por vírgula — ex.: DOS-M013, DOS-M014, da mesma empresa instaladora) e o contrato já nasce com equipamento, obra, cliente, empresa instaladora, valor e parcelas. O que faltar aparece abaixo.</p>
       <div style={{ display: 'flex', gap: 8 }}>
-        <input className="ci-input ci-input--mono" value={texto} placeholder="DOS-M013"
+        <input className="ci-input ci-input--mono" value={texto} placeholder="DOS-M013, DOS-M014"
           onChange={(e) => setTexto(e.target.value.toUpperCase())} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); puxar(); } }} />
         <button type="button" className="ci-btn ci-btn--dark" disabled={buscando || !texto.trim()} onClick={puxar}>{buscando ? 'Buscando…' : 'Puxar dados'}</button>
       </div>
