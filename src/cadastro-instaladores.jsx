@@ -295,6 +295,7 @@ const COL_ENDERECO_EMPTY = {
 function ModalColaborador({ empresaId, initialData, isEdit, onClose, onSaved }) {
   const [f, setF] = React.useState(() => ({
     nome_completo: '', cpf: '', rg: '', cnh: '', tipo_vinculo: '', status: 'Ativo', observacao: '',
+    nacionalidade: '', estado_civil: '', profissao: '',
     ...COL_ENDERECO_EMPTY,
     ...(initialData || {}),
   }));
@@ -338,8 +339,13 @@ function ModalColaborador({ empresaId, initialData, isEdit, onClose, onSaved }) 
           {fld('CNH', 'cnh')}
         </div>
         <div className="grid-2" style={{ gap: 12 }}>
-          {fld('Tipo de vínculo', 'tipo_vinculo', 'text', 'CLT, MEI, autônomo…')}
+          {fld('Tipo de vínculo', 'tipo_vinculo', 'text', 'Proprietário ou Sócio = responsável legal')}
           <PIField label="Status"><PISelect value={f.status} onChange={setField('status')} options={['Ativo', 'Inativo', 'A_CONFIRMAR']} /></PIField>
+        </div>
+        <div className="grid-3" style={{ gap: 12 }}>
+          {fld('Nacionalidade', 'nacionalidade', 'text', 'brasileiro(a)')}
+          {fld('Estado civil', 'estado_civil', 'text', 'casado(a)')}
+          {fld('Profissão', 'profissao', 'text', 'empresário(a)')}
         </div>
         <div>
           <h4 style={{ margin: '0 0 8px', fontSize: 14, fontWeight: 700 }}>Endereço</h4>

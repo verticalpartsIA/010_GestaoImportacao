@@ -246,6 +246,23 @@ function CIRazaoSocialCombo({ s, set, errors }) {
     if (p.endereco_cidade) set('c_cidade', p.endereco_cidade);
     if (p.endereco_estado) set('c_estado', String(p.endereco_estado).toUpperCase().slice(0, 2));
     if (p.endereco_cep) set('c_cep', window.CI.maskCEP ? window.CI.maskCEP(p.endereco_cep) : p.endereco_cep);
+    preencherResponsavel(p.id);
+  };
+  /* Responsável legal = colaborador Proprietário/Sócio da empresa. Só preenche
+     campo vazio; com mais de um, usa o 1º (o Jurídico ajusta se precisar). */
+  const preencherResponsavel = (empresaId) => {
+    (window.RHHomologacao?.listarColaboradoresPorEmpresa?.(empresaId) || Promise.resolve([])).then((cols) => {
+      const resp = (cols || []).filter((c) => /propriet|s[oó]cio/i.test(c.tipo_vinculo || '') && (c.status || 'Ativo') !== 'Inativo')
+        .sort((a, b) => _ciNorm(a.nome_completo).localeCompare(_ciNorm(b.nome_completo)))[0];
+      if (!resp) return;
+      const ponha = (k, v) => { if (v && !(s[k] || '').trim()) set(k, v); };
+      ponha('r_nome', resp.nome_completo);
+      if (resp.cpf && !(s.r_cpf || '').trim()) set('r_cpf', window.CI.maskCPF ? window.CI.maskCPF(resp.cpf) : resp.cpf);
+      if (resp.rg && !(s.r_rg || '').trim()) set('r_rg', window.CI.maskRG ? window.CI.maskRG(resp.rg) : resp.rg);
+      if (resp.nacionalidade && s.r_nacionalidade === 'brasileiro(a)') set('r_nacionalidade', resp.nacionalidade);
+      ponha('r_estadoCivil', resp.estado_civil);
+      ponha('r_profissao', resp.profissao);
+    }).catch(() => {});
   };
   return (
     <div className="ci-field ci-field--full">
