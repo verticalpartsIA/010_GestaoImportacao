@@ -59,6 +59,7 @@ const PAGINAS_PUBLICAS = [
   { url: '/status-obra-interno/e2e-token', root: '#so-root' }, // modo interno (equipe): outro caminho no status-obra-app.jsx
   { url: '/diario-obra/e2e-token', root: '#do-root' },
   { url: '/termo-entrega/e2e-token', root: '#te-root' },
+  { url: '/recibo/e2e-token', root: '#rc-root' },
 ];
 
 test.describe('Páginas públicas', () => {
