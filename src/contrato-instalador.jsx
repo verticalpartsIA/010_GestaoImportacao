@@ -775,10 +775,16 @@ function CISendModal({ record, onClose, onSent }) {
   const real = window.CIStore.signUrl(record.token);
   const valorFmt = record.valor_total ? 'R$ ' + window.CI.fmtMoeda(record.valor_total) : '—';
 
+  /* 15/10 — texto enxuto (feedback do usuário no teste real de e-mail). Assunto SEM acento/travessão e curto:
+     um assunto longo com "—" foi codificado/quebrado de forma errada e o Gmail mostrou os cabeçalhos MIME como corpo. */
+  const obraNome = ((record.form_state && record.form_state.localServico) || '').trim();
+  const assuntoEmail = `Contrato ${record.numero_documento} - Assinatura digital`;
   const message =
-    `Olá${name ? ' ' + name.split(' ')[0] : ''}! A Vertical Parts enviou um contrato para sua assinatura digital.\n\n` +
-    `Contrato ${record.numero_documento}\n${record.titulo}\nValor: ${valorFmt}\n\n` +
-    `Assine pelo link seguro (válido por 7 dias):\n${real}`;
+    `Olá${name ? ' ' + name.split(' ')[0] : ''},\n\n` +
+    `Segue o link para assinatura do contrato de instalação de equipamentos${obraNome ? ' da obra ' + obraNome : ''}.\n\n` +
+    `Contrato ${record.numero_documento} · Valor: ${valorFmt}\n\n` +
+    `Assine pelo link seguro (válido por 7 dias):\n${real}\n\n` +
+    `Atenciosamente,\nVertical Parts`;
 
   const copyLink = () => {
     navigator.clipboard && navigator.clipboard.writeText(real);
@@ -822,14 +828,14 @@ function CISendModal({ record, onClose, onSent }) {
            com RFQ/Proposta/Contrato de Venda); sucesso/falha continuam
            decididos aqui, sem mudança de comportamento. */
         const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
+          to: contact, subject: assuntoEmail, text: message,
           numeroCotacao, referenciaTipo: 'contrato_instalador', referenciaId: record.id,
         });
         if (enviouDireto) {
           updated = await window.CIStore.markSent(record.id, channel, { name, contact });
           window.toast?.(`E-mail enviado para ${contact}.`, 'success');
         } else {
-          window.open(window.CIStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
+          window.open(window.CIStore.mailtoHref(contact, assuntoEmail, message), '_blank');
           window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado e o contrato NÃO foi marcado como enviado. Abrindo seu e-mail padrão para envio manual; depois de enviar, use WhatsApp/Link para registrar o envio.', 'error');
           return;
         }
