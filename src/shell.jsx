@@ -119,7 +119,7 @@ const NAV_GROUPS = [
     { id: "cadastro-instaladores", label: "Empresas Instaladoras", icon: "hardhat" },
     { id: "rh-homologacao", label: "Homologação de Instaladores", icon: "hardhat" },
     { id: "contrato-instalador", label: "Contrato Instalador", icon: "hardhat" },
-    { id: "pagamentos-instalador", label: "Pagamentos a Instaladores", icon: "dollar", restrict: ["financeiro", "admin"] },
+    { id: "pagamentos-instalador", label: "Pagamentos a Instaladores", icon: "dollar", restrict: ["financeiro", "engenharia", "admin"] },
   ]},
   /* Placeholders sem rota própria (Expedição/Logística) ocultados — item
      visível deve significar "posso entrar e fazer algo" (Achado 12). */
