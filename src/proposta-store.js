@@ -260,6 +260,12 @@
 
   function resolverEq(rec, dadosConvertidos) {
     const d = dadosConvertidos;
+    /* Escolha gravada pelo próprio editor (salvar grava proposal_type = eq,
+       valor exato) vale mais que a dedução pelo conteúdo: uma proposta de
+       Escada que recebeu o bloco `elevador` (herança antiga) reabria como
+       Elevador. As legadas têm NULO ou outros formatos e seguem abaixo. */
+    const gravado = rec && rec.proposal_type;
+    if (gravado === 'elevador' || gravado === 'escada' || gravado === 'esteira') return gravado;
     if (d) {
       /* MESMA ORDEM do converterPropostaLegado (elevador → escada →
          esteira). Inverter aqui daria resultado diferente do conversor
