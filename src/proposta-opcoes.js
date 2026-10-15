@@ -256,5 +256,59 @@
     return linhas;
   }
 
-  window.PropostaOpcoes = { c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, blocosAjustes, _num: num };
+  /* ---------- Escada Rolante / Esteira Rolante ----------
+     A proposta se comporta conforme o equipamento (pedido 15/10/2026): textos, tabelas e rótulos próprios,
+     e NUNCA "paradas"/"elevador". Fonte única de PDF (proposta-reactpdf.entry.js) e preview (proposta-preview.jsx). */
+  const EQ_INFO = {
+    elevador: { nome: 'Elevador de Passageiros', curto: 'Elevador', pluralTxt: (n) => `${n} Elevador(es) de Passageiros` },
+    escada: { nome: 'Escada Rolante', curto: 'Escada', pluralTxt: (n) => `${n} Escada(s) Rolante(s)`, degrau: 'Largura do Degrau', acabDegrau: 'Acabamento dos Degraus' },
+    esteira: { nome: 'Esteira Rolante', curto: 'Esteira', pluralTxt: (n) => `${n} Esteira(s) Rolante(s)`, degrau: 'Largura do Pallet', acabDegrau: 'Acabamento dos Pallets' },
+  };
+  const eqInfo = (eq) => EQ_INFO[eq] || EQ_INFO.elevador;
+  const comMm = (v) => { const t = String(v == null ? '' : v).trim(); return t && /^\d+([.,]\d+)?$/.test(t) ? `${t}mm` : t; };
+
+  /* Linhas da tabela "Especificações Técnicas" de 1 unidade de escada/esteira. */
+  function linhasEspecEscEst(s, eq) {
+    const e = s || {};
+    const info = eqInfo(eq);
+    return [
+      ['Tipo de Empreendimento', e.empreendimento],
+      ['Característica de Transporte', e.carac],
+      [eq === 'esteira' ? 'Desnível / Comprimento' : 'Desnível', comMm(eq === 'esteira' ? e.desnivelComp : e.desnivel)],
+      ['Inclinação', e.incl],
+      [info.degrau, eq === 'esteira' ? e.largPallet : e.largDegrau],
+      ['Altura da Balaustrada', e.balaustrada],
+      ['Velocidade', e.vel],
+      [eq === 'esteira' ? 'Alimentação Elétrica' : 'Alimentação', e.alimentacao],
+      ['Arranjo', e.arranjo],
+      ['Máquina', e.maquina],
+      ['Quantidade', e.qtd],
+    ].filter(([, v]) => v);
+  }
+
+  /* Tabela-resumo "Prezados Senhores(as)" de escada/esteira: 1 linha por unidade (sem modelo/capacidade/paradas). */
+  function resumoEscEst(especs, eq) {
+    return (Array.isArray(especs) ? especs : []).map((s) => ({
+      codigo: s.id || '—',
+      empreendimento: s.empreendimento || '—',
+      incl: s.incl || '—',
+      desnivel: comMm(eq === 'esteira' ? s.desnivelComp : s.desnivel) || '—',
+      qtd: s.qtd || 1,
+    }));
+  }
+
+  /* Pares [rótulo, valor] da página "Especificidades" (só os preenchidos). */
+  function linhasEspecificidades(ed, eq) {
+    const s = (ed && ed.especificidades) || {};
+    return [['Tipo de Equipamento', s.tipo], ['Configuração', s.config], ['Corrimão', s.corrimao], [eqInfo(eq).acabDegrau, s.acabamento]].filter(([, v]) => v);
+  }
+
+  /* Blocos da página "Instalação e Montagem" (só os preenchidos). */
+  function blocosInstalacao(ed) {
+    const i = (ed && ed.instalacao) || {};
+    return [['Instalação', i.instalacao], ['Lubrificação', i.lubrificacao], ['Transporte', i.transporte], ['Descarregamento', i.descarregamento]]
+      .filter(([, v]) => v && String(v).trim());
+  }
+
+  window.PropostaOpcoes = { c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, blocosAjustes, eqInfo, linhasEspecEscEst, resumoEscEst, linhasEspecificidades, blocosInstalacao, _num: num };
 }());
