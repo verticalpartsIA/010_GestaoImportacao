@@ -225,7 +225,7 @@
          de nascer. equipamentosManuais = nº de série / Master ID digitados
          (obrigatório no avulso; opcional junto de uma Proposta). */
       numeroCotacao: null, numeroContrato: null, numeroContratoBase: null, equipamentosManuais: [],
-      c_razao:'', c_cnpj:'', c_rua:'', c_numero:'', c_bairro:'', c_cidade:'', c_estado:'', c_cep:'',
+      clienteObraId:null, clienteObraNome:'', clienteObraNovo:false, c_razao:'', c_cnpj:'', c_rua:'', c_numero:'', c_bairro:'', c_cidade:'', c_estado:'', c_cep:'',
       r_nome:'', r_nacionalidade:'brasileiro(a)', r_estadoCivil:'', r_profissao:'',
       r_rg:'', r_cpf:'', r_mesmoEndereco: true,
       r_rua:'', r_numero:'', r_bairro:'', r_cidade:'', r_estado:'', r_cep:'',
