@@ -1401,7 +1401,7 @@ function CITimeline({ rec }) {
             <div className="ci-tl-line"></div>
           </div>
           <div className="ci-tl-body">
-            <div className="ci-tl-title">{s.st.label}</div>
+            <div className="ci-tl-title">{s.entry && s.entry.meta && s.entry.meta.anulado ? 'Anulado' : s.st.label}</div>
             <div className="ci-tl-meta">
               {s.entry ? window.CIStore.fmtDateTime(s.entry.at) : 'Pendente'}
               {s.entry && s.entry.meta && s.entry.meta.channel ? ' · ' + (s.entry.meta.channel === 'whatsapp' ? 'WhatsApp' : 'E-mail') : ''}
@@ -1432,6 +1432,27 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
       alert('Não foi possível excluir: ' + (e.message || e));
       return;
     }
+    onClose();
+    onRefresh();
+  };
+  const [podeAnular, setPodeAnular] = _ciUS(false);
+  _ciUE(() => {
+    let vivo = true;
+    (async () => {
+      try { const ok = await window.PropostaStore.temCapacidade('contrato-instalador', 'editar'); if (vivo) setPodeAnular(!!ok); } catch (_) { if (vivo) setPodeAnular(false); }
+    })();
+    return () => { vivo = false; };
+  }, []);
+  const anular = async () => {
+    const motivo = window.prompt('ANULAR a assinatura de ' + rec.numero_documento + '?\n\nO link atual deixa de funcionar e o contrato sai do fluxo (nada é apagado, fica no histórico). Depois, troque o montador em Pagamentos a Instaladores > Preços combinados e crie/envie o contrato correto.\n\nMotivo (obrigatório, mínimo 10 letras):');
+    if (motivo == null) return;
+    try {
+      await window.CIStore.anularAssinatura(rec.id, motivo);
+    } catch (e) {
+      alert('Não foi possível anular: ' + (e.message || e));
+      return;
+    }
+    alert('Contrato anulado. Agora ajuste o montador em "Preços combinados" e gere o novo contrato.');
     onClose();
     onRefresh();
   };
@@ -1487,6 +1508,7 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
               {(rec.status === 'enviado' || rec.status === 'visualizado' || rec.status === 'expirado' || rec.status === 'rascunho') &&
                 <button className="ci-btn ci-btn--primary" onClick={() => onResend(rec)}>{rec.status === 'rascunho' ? 'Enviar' : 'Reenviar link'}</button>}
               {rec.status === 'rascunho' && <button className="ci-btn ci-btn--danger" onClick={del}>Excluir rascunho</button>}
+              {podeAnular && ['enviado', 'visualizado', 'assinado', 'recusado'].includes(rec.status) && <button className="ci-btn ci-btn--danger" onClick={anular}>Anular assinatura / enviado ao montador errado</button>}
             </div>
           </div>
         </div>

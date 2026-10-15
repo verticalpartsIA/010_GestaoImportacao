@@ -572,6 +572,49 @@
     if (!data || !data.length) throw new Error('Só é possível excluir contratos em rascunho.');
   }
 
+  /* Anula um contrato já enviado/assinado (ex.: link foi para o montador errado).
+     Nada é apagado: a assinatura e a auditoria antigas ficam guardadas em audit.anulacao.assinaturaAnterior.
+     O contrato vira 'expirado' (o link público deixa de assinar), o acordo de preço volta a 'combinado'
+     (pode trocar o montador em Pagamentos a Instaladores > Preços combinados) e as parcelas AINDA PENDENTES saem
+     (as do novo contrato nascem na criação dele). Bloqueia se já houver parcela paga ou recibo ativo. */
+  async function anularAssinatura(id, motivo) {
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const m = String(motivo || '').trim();
+    if (m.length < 10) throw new Error('Explique o motivo (mínimo 10 letras).');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Contrato não encontrado.');
+    if (cur.status === 'rascunho') throw new Error('Rascunho não precisa ser anulado: exclua-o.');
+    if (cur.status === 'expirado' && cur.audit && cur.audit.anulacao) throw new Error('Este contrato já foi anulado.');
+    const { data: parc, error: ep } = await c.from('contrato_instalador_parcelas').select('id,status').eq('contrato_id', id);
+    if (ep) throw ep;
+    if ((parc || []).some((p) => p.status !== 'pendente')) throw new Error('Há parcela já paga neste contrato — fale com o Financeiro antes de anular.');
+    const { data: rec, error: er } = await c.from('instalador_recibos').select('id,status').eq('contrato_id', id).neq('status', 'cancelado');
+    if (er) throw er;
+    if ((rec || []).length) throw new Error('Há recibo vinculado a este contrato — cancele o recibo antes de anular.');
+    const u = window.__VP_USER || {};
+    const nome = u.nome || u.email || 'usuário';
+    const now = new Date().toISOString();
+    const anulacao = { em: now, por: nome, motivo: m, statusAnterior: cur.status, assinaturaAnterior: cur.audit || {}, assinadoEmAnterior: cur.signed_at || null };
+    const log = (cur.log || []).slice();
+    log.push({ status: 'expirado', at: now, meta: { anulado: true, nome, motivo: m, de: cur.status } });
+    const patch = { status: 'expirado', signed_at: null, expires_at: now, audit: { anulacao }, log, atualizado_em: now };
+    const { data: up, error } = await c.from('contratos_instalador').update(patch).eq('id', id).select('id');
+    if (error) throw error;
+    if (!up || !up.length) throw new Error('Não foi possível anular (sem permissão).');
+    const { error: ed } = await c.from('contrato_instalador_parcelas').delete().eq('contrato_id', id).eq('status', 'pendente');
+    if (ed) console.warn('[CIStore] anular: parcelas não removidas', ed);
+    try {
+      await c.from('instalador_acordos').update({ status: 'combinado', contrato_id: null, atualizado_em: now }).eq('contrato_id', id).eq('status', 'contratado');
+    } catch (e) { console.warn('[CIStore] anular: acordo não reaberto', e); }
+    try {
+      await c.from('eventos_outbox').update({ status: 'falha', ultimo_erro: 'contrato anulado' }).eq('status', 'pendente').eq('entidade->>id', id);
+    } catch (e) { /* aviso pendente é só conveniência */ }
+    try {
+      window.VPLog?.registrar({ modulo: 'Contrato Instalador', acao: 'Anulou a assinatura do contrato', alvo: cur.numero_documento, alvo_id: id, detalhe: { motivo: m, status_anterior: cur.status } });
+    } catch (_) { /* log nunca impede */ }
+    return { ...cur, ...patch };
+  }
+
   /* ---------- expor ---------- */
   /* Efeito de uma ação pública do Contrato do Instalador, executado por um usuário interno via fila `fluxo_pendentes`
      (src/fluxo-pendentes.js): o evento CONTRATO_INSTALADOR_ASSINADO que o navegador do instalador disparava ao assinar. */
@@ -597,7 +640,7 @@
     listAll, listPainel, getById, getByToken,
     createDraft, updateFormState, reservarNumero,
     markSent, markViewed, markSigned, refuse,
-    sweepExpired, remove,
+    sweepExpired, remove, anularAssinatura,
     getPublicIP, deviceLabel, sha256Hex,
   };
 }());
