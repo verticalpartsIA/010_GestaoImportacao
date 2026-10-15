@@ -581,36 +581,60 @@
     const c = sb(); if (!c) throw new Error('Supabase indisponível');
     const m = String(motivo || '').trim();
     if (m.length < 10) throw new Error('Explique o motivo (mínimo 10 letras).');
+    const u = window.__VP_USER || {};
+    const nome = u.nome || u.email || 'usuário';
+    const { data, error } = await c.rpc('anular_contrato_instalador', { p_id: id, p_motivo: m, p_nome: nome });
+    if (error) throw error;
+    if (!data || !data.ok) {
+      const msg = {
+        sem_sessao: 'Sessão não identificada — entre de novo pelo portal.',
+        sem_permissao: 'Você não tem a alçada "Contrato Instalador › Editar".',
+        motivo_curto: 'Explique o motivo (mínimo 10 letras).',
+        nao_encontrado: 'Contrato não encontrado.',
+        rascunho: 'Rascunho não precisa ser anulado: exclua-o.',
+        ja_anulado: 'Este contrato já foi anulado.',
+        parcela_paga: 'Há parcela já paga neste contrato — fale com o Financeiro antes de anular.',
+        recibo_ativo: 'Há recibo vinculado a este contrato — cancele o recibo antes de anular.',
+      }[data && data.erro];
+      throw new Error(msg || 'Não foi possível anular.');
+    }
+    try {
+      window.VPLog?.registrar({ modulo: 'Contrato Instalador', acao: 'Anulou a assinatura do contrato', alvo: id, alvo_id: id, detalhe: { motivo: m } });
+    } catch (_) { /* log nunca impede */ }
+    return data;
+  }
+
+  /* Contrato anulado (link ao montador errado) volta a poder ser enviado: LINK NOVO (o antigo continua expirado),
+     status rascunho, parcelas recriadas e acordo de preço religado. A anulação fica no histórico (audit.anulacoes). */
+  async function reabrirAnulado(id) {
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
     const cur = await getById(id);
     if (!cur) throw new Error('Contrato não encontrado.');
-    if (cur.status === 'rascunho') throw new Error('Rascunho não precisa ser anulado: exclua-o.');
-    if (cur.status === 'expirado' && cur.audit && cur.audit.anulacao) throw new Error('Este contrato já foi anulado.');
-    const { data: parc, error: ep } = await c.from('contrato_instalador_parcelas').select('id,status').eq('contrato_id', id);
-    if (ep) throw ep;
-    if ((parc || []).some((p) => p.status !== 'pendente')) throw new Error('Há parcela já paga neste contrato — fale com o Financeiro antes de anular.');
-    const { data: rec, error: er } = await c.from('instalador_recibos').select('id,status').eq('contrato_id', id).neq('status', 'cancelado');
-    if (er) throw er;
-    if ((rec || []).length) throw new Error('Há recibo vinculado a este contrato — cancele o recibo antes de anular.');
+    const an = cur.audit && cur.audit.anulacao;
+    if (cur.status !== 'expirado' || !an) throw new Error('Este contrato não está anulado.');
     const u = window.__VP_USER || {};
     const nome = u.nome || u.email || 'usuário';
     const now = new Date().toISOString();
-    const anulacao = { em: now, por: nome, motivo: m, statusAnterior: cur.status, assinaturaAnterior: cur.audit || {}, assinadoEmAnterior: cur.signed_at || null };
-    const log = (cur.log || []).slice();
-    log.push({ status: 'expirado', at: now, meta: { anulado: true, nome, motivo: m, de: cur.status } });
-    const patch = { status: 'expirado', signed_at: null, expires_at: now, audit: { anulacao }, log, atualizado_em: now };
-    const { data: up, error } = await c.from('contratos_instalador').update(patch).eq('id', id).select('id');
+    const patch = {
+      status: 'rascunho', token: shortToken(), channel: null, sent_at: null, signed_at: null, expires_at: null,
+      audit: { anulacoes: [...((cur.audit && cur.audit.anulacoes) || []), an] },
+      log: [...(cur.log || []), { status: 'rascunho', at: now, meta: { reaberto: true, nome } }],
+      atualizado_em: now,
+    };
+    const { data, error } = await c.from('contratos_instalador').update(patch).eq('id', id).eq('status', 'expirado').select('id');
     if (error) throw error;
-    if (!up || !up.length) throw new Error('Não foi possível anular (sem permissão).');
-    const { error: ed } = await c.from('contrato_instalador_parcelas').delete().eq('contrato_id', id).eq('status', 'pendente');
-    if (ed) console.warn('[CIStore] anular: parcelas não removidas', ed);
+    if (!data || !data.length) throw new Error('Não foi possível gerar o novo link (contrato mudou de estado).');
     try {
-      await c.from('instalador_acordos').update({ status: 'combinado', contrato_id: null, atualizado_em: now }).eq('contrato_id', id).eq('status', 'contratado');
-    } catch (e) { console.warn('[CIStore] anular: acordo não reaberto', e); }
+      const { data: ex } = await c.from('contrato_instalador_parcelas').select('id').eq('contrato_id', id).limit(1);
+      if (!ex || !ex.length) await window.ContratoInstaladorParcelasStore.criarParcelas(id, cur.form_state || {});
+    } catch (e) { console.warn('[CIStore] reabrir: parcelas não recriadas', e); }
     try {
-      await c.from('eventos_outbox').update({ status: 'falha', ultimo_erro: 'contrato anulado' }).eq('status', 'pendente').eq('entidade->>id', id);
-    } catch (e) { /* aviso pendente é só conveniência */ }
+      for (const d of ((cur.form_state && cur.form_state.dossierIds) || [])) {
+        if (window.InstaladorAcordosStore) await window.InstaladorAcordosStore.vincularContrato(d, id);
+      }
+    } catch (e) { console.warn('[CIStore] reabrir: acordo não religado', e); }
     try {
-      window.VPLog?.registrar({ modulo: 'Contrato Instalador', acao: 'Anulou a assinatura do contrato', alvo: cur.numero_documento, alvo_id: id, detalhe: { motivo: m, status_anterior: cur.status } });
+      window.VPLog?.registrar({ modulo: 'Contrato Instalador', acao: 'Gerou novo link após anulação', alvo: cur.numero_documento, alvo_id: id });
     } catch (_) { /* log nunca impede */ }
     return { ...cur, ...patch };
   }
@@ -640,7 +664,7 @@
     listAll, listPainel, getById, getByToken,
     createDraft, updateFormState, reservarNumero,
     markSent, markViewed, markSigned, refuse,
-    sweepExpired, remove, anularAssinatura,
+    sweepExpired, remove, anularAssinatura, reabrirAnulado,
     getPublicIP, deviceLabel, sha256Hex,
   };
 }());
