@@ -181,6 +181,80 @@ function CIHomologacaoAviso({ cnpj }) {
   return null;
 }
 
+/* Seletores do Jurídico (15/10): empresa instaladora e cliente da obra, em
+   ordem alfabética. Só preenchem/guardam dados — o texto do contrato não muda. */
+const _ciNorm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+const _ciOrdenar = (lista, chave) => [...lista].sort((a, b) => _ciNorm(chave(a)).localeCompare(_ciNorm(chave(b)), 'pt-BR'));
+
+function CISeletorInstalador({ s, set }) {
+  const [lista, setLista] = React.useState(null);
+  React.useEffect(() => {
+    let vivo = true;
+    (window.RHHomologacao?.listarMontadores?.() || Promise.resolve([]))
+      .then((l) => { if (vivo) setLista(_ciOrdenar(l || [], (p) => p.nome)); })
+      .catch(() => { if (vivo) setLista([]); });
+    return () => { vivo = false; };
+  }, []);
+  const escolher = (id) => {
+    const p = (lista || []).find((x) => String(x.id) === id);
+    if (!p) return;
+    set('c_razao', p.nome || '');
+    if (p.cnpj) set('c_cnpj', window.CI.maskCNPJ ? window.CI.maskCNPJ(p.cnpj) : p.cnpj);
+    if (p.endereco_logradouro) set('c_rua', p.endereco_logradouro);
+    if (p.endereco_bairro) set('c_bairro', p.endereco_bairro);
+    if (p.endereco_cidade) set('c_cidade', p.endereco_cidade);
+    if (p.endereco_estado) set('c_estado', String(p.endereco_estado).toUpperCase().slice(0, 2));
+    if (p.endereco_cep) set('c_cep', window.CI.maskCEP ? window.CI.maskCEP(p.endereco_cep) : p.endereco_cep);
+  };
+  const atual = (lista || []).find((p) => window.CI.onlyDigits(p.cnpj || '') && window.CI.onlyDigits(p.cnpj || '') === window.CI.onlyDigits(s.c_cnpj || ''));
+  return (
+    <div className="ci-field ci-field--full">
+      <label>Empresa instaladora cadastrada</label>
+      <select className="ci-input" value={atual ? String(atual.id) : ''} onChange={(e) => escolher(e.target.value)}>
+        <option value="">{lista === null ? 'Carregando…' : '— escolher da lista (A–Z) ou digitar abaixo —'}</option>
+        {(lista || []).map((p) => <option key={p.id} value={String(p.id)}>{p.nome}</option>)}
+      </select>
+      <span className="ci-field-hint">Instaladores de Cadastros › Instaladores. Ao escolher, razão social, CNPJ e endereço são preenchidos (você pode ajustar). Empresa nova? Digite os dados abaixo.</span>
+    </div>
+  );
+}
+
+function CISeletorClienteObra({ s, set }) {
+  const [lista, setLista] = React.useState(null);
+  React.useEffect(() => {
+    let vivo = true;
+    (window.CadastrosClientesStore?.listarTodos?.() || Promise.resolve([]))
+      .then((l) => {
+        if (!vivo) return;
+        const ok = (l || []).filter((c) => c.ativo !== false && (c.razao_social || c.nome_fantasia));
+        setLista(_ciOrdenar(ok, (c) => c.razao_social || c.nome_fantasia));
+      })
+      .catch(() => { if (vivo) setLista([]); });
+    return () => { vivo = false; };
+  }, []);
+  const novo = !!s.clienteObraNovo;
+  return (
+    <div className="ci-field-group">
+      <h3 className="ci-group-title">Cliente da obra</h3>
+      <p className="ci-field-hint" style={{ marginBottom: 8 }}>Para qual cliente o instalador vai montar o equipamento. Fica registrado no contrato (não altera o texto).</p>
+      {!novo && (
+        <div className="ci-field ci-field--full">
+          <select className="ci-input" value={s.clienteObraId || ''} onChange={(e) => {
+            const c = (lista || []).find((x) => String(x.id) === e.target.value);
+            set('clienteObraId', c ? c.id : null);
+            set('clienteObraNome', c ? (c.razao_social || c.nome_fantasia) : '');
+          }}>
+            <option value="">{lista === null ? 'Carregando…' : '— escolher cliente (A–Z) —'}</option>
+            {(lista || []).map((c) => <option key={c.id} value={String(c.id)}>{c.razao_social || c.nome_fantasia}</option>)}
+          </select>
+        </div>
+      )}
+      <CICheckRow checked={novo} onChange={(v) => { set('clienteObraNovo', v); set('clienteObraId', null); set('clienteObraNome', ''); }} label="Cliente ainda não cadastrado (digitar o nome)" />
+      {novo && <CIField label="Nome do cliente" width="full" value={s.clienteObraNome} onChange={(v) => set('clienteObraNome', v)} placeholder="Razão social do cliente da obra" hint="Depois cadastre o cliente em Cadastros › Clientes." />}
+    </div>
+  );
+}
+
 function CIStepPartes({ s, set, errors }) {
   return (
     <div className="ci-step">
@@ -192,6 +266,7 @@ function CIStepPartes({ s, set, errors }) {
       </div>
       <div className="ci-field-group">
         <h3 className="ci-group-title">Empresa</h3>
+        <CISeletorInstalador s={s} set={set} />
         <div className="ci-grid">
           <CIField label="Razão social" required width="full" value={s.c_razao} onChange={(v) => set('c_razao', v)} placeholder="Ex.: Montagem Vertical Serviços Ltda." error={errors.c_razao} />
           <CIField label="CNPJ" required mask="maskCNPJ" mono value={s.c_cnpj} onChange={(v) => set('c_cnpj', v)} placeholder="00.000.000/0000-00" error={errors.c_cnpj} />
@@ -472,6 +547,7 @@ function CIStepObjeto({ s, set, errors }) {
         <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Contrato avulso (sem Proposta vinculada): o envio continua exigindo aprovação do CEO na Central de Decisões, e o vínculo automático de respostas por e-mail só funciona quando o instalador responde ao próprio e-mail enviado (sem Nº de Cotação não há vínculo por assunto). Se possível, selecione a Proposta de origem acima antes de continuar.</div>
       )}
       <CIEquipamentosNumero s={s} set={set} errors={errors} />
+      <CISeletorClienteObra s={s} set={set} />
       <div className="ci-field-group">
         <h3 className="ci-group-title">Equipamento</h3>
         <CIRadioCards value={s.equipamento} onChange={(v) => set('equipamento', v)} options={window.CI.EQUIPAMENTOS} columns={3} />
