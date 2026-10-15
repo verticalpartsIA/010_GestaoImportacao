@@ -37,3 +37,26 @@ test('montarPatch herda Dossiê + acordo', () => {
   assert.equal(p.valorTotal, '18.000,00'); assert.equal(p.formaPagamento, '3'); assert.deepEqual(p.dossierIds, ['DOS-M013']);
   assert.equal(p.paradas, '10'); assert.equal(p.capacidadeCarga, '600'); assert.equal(p.clienteObraNome, 'PRIVILEGIO SPE'); assert.equal(p.obraEstado, 'SP');
 });
+
+test('extrairNumeros aceita vírgula, "e", linhas e ignora repetição', () => {
+  assert.deepEqual(D.extrairNumeros('DOS-M013, DOS-M014'), ['DOS-M013', 'DOS-M014']);
+  assert.deepEqual(D.extrairNumeros('dos-m013 e dos-m014\nDOS-M013'), ['DOS-M013', 'DOS-M014']);
+  assert.deepEqual(D.extrairNumeros(''), []);
+});
+const doss = (id, extra) => Object.assign({ id, building_name: 'Elevador de Passageiros – 600 – 10 – 29,2 – MRL – 1 Porta ', equip_type: 'elevador', city: 'São Paulo', state: 'SP', client_name: 'PRIVILEGIO SPE', cliente_id: 'c1', parceiro_instalador_id: null }, extra || {});
+test('montarPatchVarios: 2 Dossiês, mesma empresa — soma valor, 2 equipamentos, 1 contrato', () => {
+  const r = D.montarPatchVarios({ dossies: [doss('DOS-M013'), doss('DOS-M014')],
+    acordos: { 'DOS-M013': { id: 'A1', parceiro_instalador_id: 'MNT-1', valor_combinado: 18000, parcelas_qtd: 3 }, 'DOS-M014': { id: 'A2', parceiro_instalador_id: 'MNT-1', valor_combinado: 17500.5, parcelas_qtd: 3 } }, mask });
+  assert.equal(r.erro, null); assert.deepEqual(r.patch.dossierIds, ['DOS-M013', 'DOS-M014']); assert.deepEqual(r.patch.equipamentosManuais, ['DOS-M013', 'DOS-M014']);
+  assert.equal(r.patch.quantidade, 2); assert.equal(r.patch.valorTotal, '35.500,50'); assert.equal(r.patch.formaPagamento, '3'); assert.equal(r.avisos.length, 0);
+});
+test('montarPatchVarios: empresas diferentes bloqueia', () => {
+  const r = D.montarPatchVarios({ dossies: [doss('DOS-M013'), doss('DOS-M014')],
+    acordos: { 'DOS-M013': { id: 'A1', parceiro_instalador_id: 'MNT-1', valor_combinado: 1, parcelas_qtd: 2 }, 'DOS-M014': { id: 'A2', parceiro_instalador_id: 'MNT-2', valor_combinado: 1, parcelas_qtd: 2 } }, mask });
+  assert.ok(r.erro);
+});
+test('montarPatchVarios: sem acordo em um dos Dossiês não preenche o valor e avisa; equipamentos diferentes avisam', () => {
+  const r = D.montarPatchVarios({ dossies: [doss('DOS-M013'), doss('DOS-M014', { building_name: 'Elevador de Carga – 2000 – 08 – 23,5 – MRL' })],
+    acordos: { 'DOS-M013': { id: 'A1', parceiro_instalador_id: 'MNT-1', valor_combinado: 18000, parcelas_qtd: 2 } }, mask });
+  assert.equal(r.erro, null); assert.equal(r.patch.valorTotal, undefined); assert.equal(r.avisos.length, 2);
+});

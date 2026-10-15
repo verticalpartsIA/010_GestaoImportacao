@@ -102,5 +102,59 @@
     return patch;
   }
 
-  window.CIDossie = { parseEquipamento, splitLogradouro, formaPagamentoDoAcordo, montarPatch, dividir };
+  /* Extrai os números de Dossiê de um texto livre ("DOS-M013, DOS-M014" / "DOS-M013 e DOS-M014" / uma por linha). Sem repetir, em ordem. */
+  function extrairNumeros(texto) {
+    const achados = String(texto || '').toUpperCase().match(/DOS-[A-Z0-9]+/g);
+    const lista = achados && achados.length ? achados : String(texto || '').toUpperCase().split(/[\s,;]+/).filter(Boolean);
+    return lista.filter((v, i) => lista.indexOf(v) === i);
+  }
+
+  /* Vários Dossiês no MESMO contrato (um contrato = uma empresa instaladora). Devolve { patch, avisos, erro }.
+     - mais de uma empresa instaladora nos Dossiês/acordos → erro (cada empresa tem o seu contrato);
+     - valor = soma dos preços combinados (só quando TODOS têm acordo); parcelas = a do acordo (iguais) ou a maior;
+     - tipo/capacidade/paradas vêm do 1º; se os equipamentos diferirem, avisa pra conferir no Passo 3. */
+  function montarPatchVarios({ dossies, acordos, mask }) {
+    const avisos = [];
+    const lista = dossies || [];
+    if (!lista.length) return { patch: {}, avisos, erro: 'Nenhum Dossiê informado.' };
+    const porId = acordos || {};
+    const primeiro = lista[0];
+    const patch = montarPatch({ dossie: primeiro, acordo: null, mask });
+    if (lista.length === 1) {
+      const a = porId[primeiro.id];
+      if (a) Object.assign(patch, montarPatch({ dossie: primeiro, acordo: a, mask }));
+      return { patch, avisos, erro: null };
+    }
+    const ids = lista.map((d) => d.id);
+    const parceiros = [...new Set(lista.map((d) => (porId[d.id] && porId[d.id].parceiro_instalador_id) || d.parceiro_instalador_id).filter(Boolean))];
+    if (parceiros.length > 1) return { patch: {}, avisos, erro: 'Estes Dossiês têm empresas instaladoras diferentes — cada empresa tem o seu contrato. Informe só os Dossiês da mesma empresa.' };
+    patch.dossierIds = ids;
+    patch.equipamentosManuais = ids;
+    patch.dossieNumero = ids.join(', ');
+    patch.quantidade = ids.length;
+    const eqs = lista.map((d) => parseEquipamento(d.building_name, d.equip_type));
+    const difere = (k) => eqs.some((e) => e[k] !== eqs[0][k]);
+    if (difere('equipamento')) avisos.push('Os Dossiês são de tipos de equipamento diferentes (elevador/escada/esteira): o contrato usa o do 1º — confira o Passo 3.');
+    else if (difere('capacidadeCarga') || difere('paradas') || difere('tipoElevador')) avisos.push('Os equipamentos têm capacidade/paradas/tipo diferentes: o contrato usa os dados do 1º — confira o Passo 3.');
+    if (new Set(lista.map((d) => d.client_name)).size > 1) avisos.push('Os Dossiês são de clientes/obras diferentes — confira o cliente da obra no Passo 3.');
+    patch.clienteObraNome = primeiro.client_name || '';
+    const local = [primeiro.building_name && String(primeiro.building_name).trim(), [primeiro.city, primeiro.state].filter(Boolean).join('/')].filter(Boolean).join(' — ');
+    patch.localServico = `Obra ${primeiro.client_name || ''} — ${local} (Dossiês: ${ids.join(', ')})`.replace('Obra  — ', 'Obra — ');
+    const semAcordo = ids.filter((id) => !porId[id]);
+    if (semAcordo.length) {
+      avisos.push(`Falta o preço combinado de: ${semAcordo.join(', ')} (Pagamentos a Instaladores › Preços combinados). O valor total não foi preenchido.`);
+      delete patch.valorTotal;
+    } else {
+      const soma = ids.reduce((t, id) => t + Math.round(Number(porId[id].valor_combinado) * 100), 0) / 100;
+      const qtds = ids.map((id) => Number(porId[id].parcelas_qtd) || 2);
+      const parcelas = qtds.every((q) => q === qtds[0]) ? qtds[0] : Math.max(...qtds);
+      if (!qtds.every((q) => q === qtds[0])) avisos.push(`Os acordos têm números de parcelas diferentes (${[...new Set(qtds)].join(', ')}): usei ${parcelas}x — ajuste no Passo 5 se precisar.`);
+      patch.valorTotal = mask(String(Math.round(soma * 100)));
+      Object.assign(patch, formaPagamentoDoAcordo(parcelas, soma, mask));
+      patch.acordoId = porId[ids[0]].id;
+    }
+    return { patch, avisos, erro: null };
+  }
+
+  window.CIDossie = { parseEquipamento, splitLogradouro, formaPagamentoDoAcordo, montarPatch, dividir, extrairNumeros, montarPatchVarios };
 }());
