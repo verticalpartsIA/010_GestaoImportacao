@@ -19,7 +19,8 @@ function PagamentosInstaladorPage() {
   const [parcelas, setParcelas] = React.useState(null);
   const [decisoesPorParcela, setDecisoesPorParcela] = React.useState({});
   const [filtro, setFiltro] = React.useState('liberadas');
-  const [aba, setAba] = window.useRouteTab('pagamentos-instalador', 'parcelas', ['parcelas', 'acordos']);
+  const [recibosAss, setRecibosAss] = React.useState([]);
+  const [aba, setAba] = window.useRouteTab('pagamentos-instalador', 'parcelas', ['parcelas', 'acordos', 'recibos']);
 
   const reload = React.useCallback(() => {
     window.ContratoInstaladorParcelasStore.listarTodasComContrato().then(async (lista) => {
@@ -40,7 +41,7 @@ function PagamentosInstaladorPage() {
       }
     }).catch(() => setParcelas([]));
   }, []);
-  React.useEffect(() => { reload(); }, [reload]);
+  React.useEffect(() => { reload(); window.InstaladorRecibosStore?.listar().then((l) => setRecibosAss(l || [])).catch(() => {}); }, [reload]);
 
   const marcarPaga = async (p) => {
     try {
@@ -77,6 +78,11 @@ function PagamentosInstaladorPage() {
   const fmtData = (d) => (d ? new Date(d).toLocaleDateString('pt-BR') : '—');
   const labelGatilho = (chave) => (chave && window.EventosFluxo?.EVENTOS?.[chave]?.label) || 'manual (sem gatilho automático)';
 
+  /* Abatimento: adiantamentos ASSINADOS descontam das parcelas pendentes do mesmo contrato. */
+  const abatimentoPorContrato = {};
+  [...new Set(parcelas.map((p) => p.contrato_id))].forEach((cid) => {
+    abatimentoPorContrato[cid] = window.InstaladorRecibosStore.aplicarAbatimento(parcelas.filter((p) => p.contrato_id === cid), recibosAss.filter((r) => r.contrato_id === cid));
+  });
   const soma = (pred) => parcelas.filter(pred).reduce((t, p) => t + (Number(p.valor) || 0), 0);
   const contagem = {
     liberadas: parcelas.filter((p) => p.status === 'pendente' && p.liberada).length,
@@ -94,9 +100,9 @@ function PagamentosInstaladorPage() {
         </div>
       </div>
 
-      <Tabs active={aba} onChange={setAba} tabs={[{ key: 'parcelas', label: 'Parcelas' }, { key: 'acordos', label: 'Preços combinados' }]} />
+      <Tabs active={aba} onChange={setAba} tabs={[{ key: 'parcelas', label: 'Parcelas' }, { key: 'acordos', label: 'Preços combinados' }, { key: 'recibos', label: 'Recibos' }]} />
       <div style={{ height: 14 }} />
-      {aba === 'acordos' ? <window.PagamentosAcordosAba /> : (<>
+      {aba === 'acordos' ? <window.PagamentosAcordosAba /> : aba === 'recibos' ? <window.PagamentosRecibosAba /> : (<>
       <div className="grid-3" style={{ marginBottom: 20 }}>
         <KPI label="A pagar agora" value={fmtMoeda(soma((p) => p.status === 'pendente' && p.liberada))} sub={`${contagem.liberadas} parcela(s) liberada(s)`} icon="dollar"
           onClick={() => setFiltro(filtro === 'liberadas' ? 'todas' : 'liberadas')}
@@ -140,7 +146,9 @@ function PagamentosInstaladorPage() {
                   <td><div className="cell-main">{contrato.contratada_nome || '—'}</div></td>
                   <td className="mono" style={{ whiteSpace: 'nowrap' }}>{contrato.numero_documento || '—'}</td>
                   <td style={{ whiteSpace: 'nowrap' }}>{p.numero}. {p.descricao}</td>
-                  <td className="mono" style={{ whiteSpace: 'nowrap' }}>{fmtMoeda(p.valor)}</td>
+                  <td className="mono" style={{ whiteSpace: 'nowrap' }}>{fmtMoeda(p.valor)}
+                    {(() => { const ab = ((abatimentoPorContrato[p.contrato_id] || {}).porParcela || {})[p.id]; return ab && ab.abatido > 0
+                      ? <div className="small" style={{ color: '#16794a' }}>− {fmtMoeda(ab.abatido)} (recibo) → a pagar <b>{fmtMoeda(ab.aPagar)}</b></div> : null; })()}</td>
                   <td className="small">
                     {p.status === 'paga'
                       ? <StatusBadge status="Ativo" />

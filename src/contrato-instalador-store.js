@@ -338,6 +338,10 @@
         window.toast?.('O contrato foi criado, mas as parcelas de pagamento NÃO foram geradas (' + (e.message || 'erro') + '). Avise o Financeiro.', 'error');
       }
     }
+    /* Preço combinado do(s) Dossiê(s) passa a 'contratado' (não pode mais ser alterado). Falha aqui não desfaz o contrato. */
+    if (window.InstaladorAcordosStore) {
+      for (const d of (formState.dossierIds || [])) { try { await window.InstaladorAcordosStore.vincularContrato(d, rec.id); } catch (_) { /* aviso no console do store */ } }
+    }
     if (window.VPLog) window.VPLog.registrar({ modulo: 'Contrato Instalador', acao: 'criou o contrato', alvo: rec.numero_documento, alvo_id: rec.id, detalhe: { contratada: rec.contratada_nome } });
     if (window.EventosFluxo) window.EventosFluxo.registrar({
       evento: 'CONTRATO_INSTALADOR_GERADO', numeroCotacao: formState.numeroCotacao ?? null,

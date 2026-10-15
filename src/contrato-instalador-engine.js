@@ -218,6 +218,7 @@
          Valor total do contrato (Passo 5), nunca lido pelo documento em si. */
       ativosSnapshot: [],
       dossierIds: [],  // Dossiê(s) reais cobertos (pagamento por marco — Trilha B)
+      dossieNumero: '', acordoId: null,   // Dossiê informado no Passo 1 e preço combinado herdado dele (15/10/2026)
       /* Nº do contrato nasce dos equipamentos (29/09): numeroContratoBase =
          "VPNI-0955" (cotação) ou "VPNI-<nº de série/projeto>" (avulso);
          numeroContrato = base + sufixo -2/-3 se já existir outro contrato
