@@ -312,7 +312,7 @@ function SgApp() {
     return window.PropostaStore.conteudoRenderizavel(source.rec).eq;
   }, [source]);
   const podeReactPdf = !!source && source.kind === 'proposta'
-    && eqResolvido === 'elevador' && !!window.PropostaReactPdf;
+    && !!window.PropostaReactPdf;
 
   /* ---- Download do documento pelo CLIENTE ----
      Definido AQUI (antes dos early returns de phase 'done'/'refused')
@@ -392,7 +392,7 @@ function SgApp() {
       const nome = ['Proposta', r.numero_documento, nomeCliente].filter(Boolean).join(' - ') + '.pdf';
       const au = r.audit || {};
       const assinaturas = au.signedAt ? [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }] : [];
-      await window.PropostaReactPdf.baixar(dj, nome, assinaturas);
+      await window.PropostaReactPdf.baixar(dj, nome, assinaturas, eqResolvido);
     } catch (e) {
       console.error('PDF vetorial falhou, caindo pra impressão do navegador:', e);
       window.print();

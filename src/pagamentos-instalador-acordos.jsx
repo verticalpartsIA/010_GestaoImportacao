@@ -129,7 +129,7 @@ function PagamentosAcordosAba() {
   const [podeEditar, setPodeEditar] = React.useState(false);
   React.useEffect(() => {
     let vivo = true;
-    Promise.resolve(window.PropostaStore?.temCapacidade?.('pagamentos-instalador', 'editar')).then((ok) => { if (vivo) setPodeEditar(!!ok); }).catch(() => {});
+    Promise.resolve(window.PropostaStore?.temCapacidade?.('contrato-instalador', 'editar')).then((ok) => { if (vivo) setPodeEditar(!!ok); }).catch(() => {});
     return () => { vivo = false; };
   }, []);
 

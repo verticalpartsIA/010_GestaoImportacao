@@ -134,10 +134,11 @@ function CIStepHeader({ kicker, title, desc }) {
 /* ============================================================
    WIZARD STEPS
    ============================================================ */
-function CIStepModalidade({ s, set }) {
+function CIStepModalidade({ s, set, setMany }) {
   return (
     <div className="ci-step">
       <CIStepHeader kicker="Passo 1 — Início" title="Modalidade do contrato" desc="Escolha o tipo de serviço. As cláusulas se adaptam automaticamente." />
+      <CIDossieEntrada s={s} setMany={setMany} />
       <CIRadioCards value={s.modalidade} onChange={(v) => set('modalidade', v)} options={window.CI.MODALIDADES} columns={1} />
     </div>
   );
@@ -226,6 +227,93 @@ function CIComboLista({ value, onTexto, opcoes, onEscolher, placeholder, erro, c
   );
 }
 
+/* Dados da empresa instaladora (cadastro) → campos da Contratada. O nº do logradouro é extraído do texto
+   ("Rua X, 123 - sala 4" → rua "Rua X - sala 4", nº "123"); sem nº reconhecível o campo fica pro operador. */
+function ciPatchContratada(p, nomeFallback) {
+  const out = { c_razao: p.nome || nomeFallback || '' };
+  if (p.cnpj) out.c_cnpj = window.CI.maskCNPJ ? window.CI.maskCNPJ(p.cnpj) : p.cnpj;
+  if (p.endereco_logradouro) {
+    const l = window.CIDossie ? window.CIDossie.splitLogradouro(p.endereco_logradouro) : { rua: p.endereco_logradouro, numero: '', complemento: '' };
+    out.c_rua = l.complemento ? `${l.rua} - ${l.complemento}` : l.rua;
+    if (l.numero) out.c_numero = l.numero;
+  }
+  if (p.endereco_bairro) out.c_bairro = p.endereco_bairro;
+  if (p.endereco_cidade) out.c_cidade = p.endereco_cidade;
+  if (p.endereco_estado) out.c_estado = String(p.endereco_estado).toUpperCase().slice(0, 2);
+  if (p.endereco_cep) out.c_cep = window.CI.maskCEP ? window.CI.maskCEP(p.endereco_cep) : p.endereco_cep;
+  return out;
+}
+/* Responsável legal = colaborador Proprietário/Sócio da empresa (o 1º, por ordem alfabética). Devolve só o que existe. */
+async function ciBuscarResponsavel(empresaId) {
+  try {
+    const cols = await (window.RHHomologacao?.listarColaboradoresPorEmpresa?.(empresaId) || Promise.resolve([]));
+    const resp = (cols || []).filter((c) => /propriet|s[oó]cio/i.test(c.tipo_vinculo || '') && (c.status || 'Ativo') !== 'Inativo')
+      .sort((a, b) => _ciNorm(a.nome_completo).localeCompare(_ciNorm(b.nome_completo)))[0];
+    if (!resp) return {};
+    const out = {};
+    if (resp.nome_completo) out.r_nome = resp.nome_completo;
+    if (resp.cpf) out.r_cpf = window.CI.maskCPF ? window.CI.maskCPF(resp.cpf) : resp.cpf;
+    if (resp.rg) out.r_rg = window.CI.maskRG ? window.CI.maskRG(resp.rg) : resp.rg;
+    if (resp.nacionalidade) out.r_nacionalidade = resp.nacionalidade;
+    if (resp.estado_civil) out.r_estadoCivil = resp.estado_civil;
+    if (resp.profissao) out.r_profissao = resp.profissao;
+    return out;
+  } catch (_) { return {}; }
+}
+
+/* Passo 1: o nº do Dossiê (DOS-M013) já identifica equipamento, obra, cliente, instalador e o preço combinado. */
+function CIDossieEntrada({ s, setMany }) {
+  const [texto, setTexto] = _ciUS(s.dossieNumero || '');
+  const [estado, setEstado] = _ciUS(null);   // null | {tipo:'ok'|'aviso'|'erro', msg, faltas?}
+  const [buscando, setBuscando] = _ciUS(false);
+
+  const puxar = async () => {
+    const id = texto.trim().toUpperCase();
+    if (!id) return;
+    setBuscando(true); setEstado(null);
+    try {
+      const sb = window.__VP_SB?.sb;
+      const { data: dossie, error } = await sb.from('dossier_obra')
+        .select('id, client_name, building_name, city, state, equip_type, parceiro_instalador_id, cliente_id').eq('id', id).maybeSingle();
+      if (error) throw error;
+      if (!dossie) { setEstado({ tipo: 'erro', msg: `Dossiê ${id} não encontrado. Confira o número (ex.: DOS-M013).` }); setBuscando(false); return; }
+      const acordo = await window.InstaladorAcordosStore?.obterAtivoPorDossier(id);
+      const parceiroId = (acordo && acordo.parceiro_instalador_id) || dossie.parceiro_instalador_id;
+      const parceiro = parceiroId ? await window.RHHomologacao?.obterMontador(parceiroId) : null;
+      const patch = window.CIDossie.montarPatch({ dossie, acordo, mask: window.CI.maskMoeda });
+      if (parceiro) {
+        Object.assign(patch, ciPatchContratada(parceiro));
+        Object.assign(patch, await ciBuscarResponsavel(parceiro.id));
+      }
+      setMany(patch);
+      const faltas = [];
+      if (!parceiro) faltas.push('empresa instaladora (o Dossiê não tem instalador — escolha no Passo 2)');
+      if (!acordo) faltas.push('preço combinado (a Engenharia cadastra em Pagamentos a Instaladores › Preços combinados)');
+      if (parceiro && !patch.r_nome) faltas.push('responsável legal (cadastre um colaborador Proprietário/Sócio na empresa)');
+      setEstado({ tipo: faltas.length ? 'aviso' : 'ok', msg: `Dossiê ${id} carregado: ${dossie.client_name} — ${dossie.building_name}.`, faltas });
+    } catch (e) { setEstado({ tipo: 'erro', msg: 'Não foi possível ler o Dossiê: ' + (e.message || e) }); }
+    setBuscando(false);
+  };
+
+  return (
+    <div className="ci-field-group">
+      <h3 className="ci-group-title">Número do Dossiê</h3>
+      <p className="ci-field-hint" style={{ marginBottom: 8 }}>Informe o Dossiê e o contrato já nasce com equipamento, obra, cliente, empresa instaladora, valor e parcelas. O que faltar aparece abaixo.</p>
+      <div style={{ display: 'flex', gap: 8 }}>
+        <input className="ci-input ci-input--mono" value={texto} placeholder="DOS-M013"
+          onChange={(e) => setTexto(e.target.value.toUpperCase())} onKeyDown={(e) => { if (e.key === 'Enter') { e.preventDefault(); puxar(); } }} />
+        <button type="button" className="ci-btn ci-btn--dark" disabled={buscando || !texto.trim()} onClick={puxar}>{buscando ? 'Buscando…' : 'Puxar dados'}</button>
+      </div>
+      {estado && (
+        <div className={estado.tipo === 'erro' ? 'ci-field-err' : 'ci-cond-alert'} style={{ marginTop: 8 }}>
+          <div>{estado.tipo === 'ok' ? '✓ ' : ''}{estado.msg}</div>
+          {estado.faltas && estado.faltas.length > 0 && <ul style={{ margin: '6px 0 0 18px' }}>{estado.faltas.map((f) => <li key={f}>Falta: {f}</li>)}</ul>}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CIRazaoSocialCombo({ s, set, errors }) {
   const [lista, setLista] = React.useState([]);
   React.useEffect(() => {
@@ -239,30 +327,12 @@ function CIRazaoSocialCombo({ s, set, errors }) {
     set('c_razao', v);
     const p = lista.find((x) => _ciNorm(x.nome) === _ciNorm(v));
     if (!p) return;
-    set('c_razao', p.nome || v);
-    if (p.cnpj) set('c_cnpj', window.CI.maskCNPJ ? window.CI.maskCNPJ(p.cnpj) : p.cnpj);
-    if (p.endereco_logradouro) set('c_rua', p.endereco_logradouro);
-    if (p.endereco_bairro) set('c_bairro', p.endereco_bairro);
-    if (p.endereco_cidade) set('c_cidade', p.endereco_cidade);
-    if (p.endereco_estado) set('c_estado', String(p.endereco_estado).toUpperCase().slice(0, 2));
-    if (p.endereco_cep) set('c_cep', window.CI.maskCEP ? window.CI.maskCEP(p.endereco_cep) : p.endereco_cep);
-    preencherResponsavel(p.id);
-  };
-  /* Responsável legal = colaborador Proprietário/Sócio da empresa. Só preenche
-     campo vazio; com mais de um, usa o 1º (o Jurídico ajusta se precisar). */
-  const preencherResponsavel = (empresaId) => {
-    (window.RHHomologacao?.listarColaboradoresPorEmpresa?.(empresaId) || Promise.resolve([])).then((cols) => {
-      const resp = (cols || []).filter((c) => /propriet|s[oó]cio/i.test(c.tipo_vinculo || '') && (c.status || 'Ativo') !== 'Inativo')
-        .sort((a, b) => _ciNorm(a.nome_completo).localeCompare(_ciNorm(b.nome_completo)))[0];
-      if (!resp) return;
-      const ponha = (k, v) => { if (v && !(s[k] || '').trim()) set(k, v); };
-      ponha('r_nome', resp.nome_completo);
-      if (resp.cpf && !(s.r_cpf || '').trim()) set('r_cpf', window.CI.maskCPF ? window.CI.maskCPF(resp.cpf) : resp.cpf);
-      if (resp.rg && !(s.r_rg || '').trim()) set('r_rg', window.CI.maskRG ? window.CI.maskRG(resp.rg) : resp.rg);
-      if (resp.nacionalidade && s.r_nacionalidade === 'brasileiro(a)') set('r_nacionalidade', resp.nacionalidade);
-      ponha('r_estadoCivil', resp.estado_civil);
-      ponha('r_profissao', resp.profissao);
-    }).catch(() => {});
+    Object.entries(ciPatchContratada(p, v)).forEach(([k, val]) => set(k, val));
+    ciBuscarResponsavel(p.id).then((patch) => {
+      Object.entries(patch).forEach(([k, val]) => {
+        if (k === 'r_nacionalidade' ? s.r_nacionalidade === 'brasileiro(a)' : !(s[k] || '').trim()) set(k, val);
+      });
+    });
   };
   return (
     <div className="ci-field ci-field--full">
@@ -1132,6 +1202,7 @@ function CIWizard({ onCreated, initial }) {
   _ciUE(() => { if (formScrollRef.current) formScrollRef.current.scrollTop = 0; }, [step]);
 
   const set = (k, v) => setS(prev => ({ ...prev, [k]: v }));
+  const setMany = (patch) => setS(prev => ({ ...prev, ...patch }));
 
   const docPreview = _ciUM(() => window.CI.buildContract(s, s.numeroContrato || 'VPNI________'), [s]);
   const conds = window.CI.activeConditionals(s);
@@ -1195,7 +1266,7 @@ function CIWizard({ onCreated, initial }) {
       <div className="ci-wiz-body">
         <div className="ci-form-col" ref={formScrollRef}>
           <div className="ci-form-inner">
-            <StepComp s={s} set={set} errors={errors} goTo={goTo} />
+            <StepComp s={s} set={set} setMany={setMany} errors={errors} goTo={goTo} />
           </div>
           <div className="ci-form-foot">
             <button className="ci-btn ci-btn--ghost" onClick={goPrev} disabled={step === 0}>← Voltar</button>

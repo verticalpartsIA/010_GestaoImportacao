@@ -784,12 +784,20 @@ function PropostaEditor({ setRoute, subsel }) {
         if (eq === 'escada' || eq === 'esteira') {
           const { elevador: _descartado, ...comum } = prefill;
           prefill = comum;
-          const qtd = (r.fontes.unidades || [])
-            .filter((u) => u.tipo_equipamento === eq)
-            .reduce((s, u) => s + (Number(u.quantidade) || 1), 0);
-          if (qtd) prefill[eq] = { valores: { quantidade: String(qtd) } };
+          const bloco = window.PropostaHeranca.montarBlocoEscadaEsteira(r.fontes, eq);
+          if (bloco) prefill[eq] = bloco;
         }
-        setData((d) => deepMergeHeranca(d, prefill));
+        setData((d) => {
+          /* A lista padrão de escada/esteira nasce com 1 unidade em branco, e o
+             merge só preenche lista vazia: sem esvaziá-la a herança não entrava. */
+          let base = d;
+          const lista = d[eq] && d[eq].especificacoes;
+          if ((eq === 'escada' || eq === 'esteira') && Array.isArray(lista)
+              && lista.every((u) => !Object.entries(u || {}).some(([k, v]) => k !== 'qtd' && v))) {
+            base = { ...d, [eq]: { ...d[eq], especificacoes: [] } };
+          }
+          return deepMergeHeranca(base, prefill);
+        });
         setHeranca({ tipo: 'ok', texto: 'Herdado de: ' + window.PropostaHeranca.resumoFontes(r.fontes) });
         window.toast?.(`✓ Dados herdados da cotação ${num}`, 'success');
       }
@@ -883,7 +891,7 @@ function PropostaEditor({ setRoute, subsel }) {
           if (au.signedAt) assinaturas = [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }];
         }
       } catch (e) { console.warn('Assinatura digital não carregada pro PDF da proposta:', e); }
-      const r = await window.PropostaReactPdf.baixar(data, filename, assinaturas);
+      const r = await window.PropostaReactPdf.baixar(data, filename, assinaturas, eq);
       /* Sem este aviso, uma falha de carregamento de imagem produzia um
          PDF completo mas SEM logo nem foto de capa, e ninguém ficava
          sabendo até abrir o arquivo (achado 20/08). */
@@ -895,7 +903,7 @@ function PropostaEditor({ setRoute, subsel }) {
     } finally {
       setBaixandoPdf(false);
     }
-  }, [data]);
+  }, [data, eq, recordId]);
 
   const resetProposal = () => {
     if (confirm("Descartar todas as alterações e reiniciar a proposta?")) {

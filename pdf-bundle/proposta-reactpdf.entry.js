@@ -666,10 +666,116 @@ function PgGarantia(S, data, assinaturas) {
   ]);
 }
 
+/* ============================================================
+   Páginas — Escada Rolante / Esteira Rolante (15/10/2026). Recebem `data` com `data.elevador` = bloco do
+   equipamento (ver montarDocumento). Linhas e textos vêm de window.PropostaOpcoes (fonte única com o preview).
+   ============================================================ */
+function PgSaudacaoEscEst(S, data, eq) {
+  const OP = window.PropostaOpcoes;
+  const ed = data.elevador || {};
+  const rows = OP.resumoEscEst(ed.especificacoes, eq);
+  const qtd = ed.valores?.quantidade || String(rows.reduce((s, r) => s + (Number(r.qtd) || 0), 0) || 1);
+  const cols = [
+    { label: 'Equipamento', flex: 2.4 }, { label: 'Empreendimento', flex: 1.6 }, { label: 'Inclinação', flex: 1.1 },
+    { label: eq === 'esteira' ? 'Desnível / Comp.' : 'Desnível', flex: 1.4 }, { label: 'Qtd.', flex: 0.8, align: 'center' },
+  ];
+  const cel = (flex, align, bold) => ({ flex, textAlign: align || 'left', fontSize: pt(13), padding: `${pt(4)}pt ${pt(8)}pt`, color: TXT, fontWeight: bold ? 700 : 400 });
+  const pedacos = [];
+  for (let i = 0, n = 27; i < rows.length; i += n, n = 34) pedacos.push(rows.slice(i, i + n));
+  const tabelas = pedacos.map((ps, ti) => h(View, { key: 'tb' + ti, break: ti > 0, style: { marginTop: pt(ti ? 0 : 6), border: '1pt solid #ddd' } }, [
+    h(View, { key: 'h', wrap: false, minPresenceAhead: pt(90), style: { flexDirection: 'row', backgroundColor: GRAY_100, borderBottom: '1pt solid #ccc' } },
+      cols.map((c, i) => h(Text, { key: i, style: { ...cel(c.flex, c.align, true), fontSize: pt(12), textTransform: 'uppercase' } }, c.label))),
+    ...ps.map((r, ri) => h(View, { key: 'r' + ri, wrap: false, style: { flexDirection: 'row', borderBottom: ri === ps.length - 1 ? 0 : '1pt solid #eee' } }, [
+      h(Text, { key: 0, style: cel(cols[0].flex, 'left', true) }, r.codigo),
+      h(Text, { key: 1, style: cel(cols[1].flex) }, r.empreendimento),
+      h(Text, { key: 2, style: cel(cols[2].flex) }, r.incl),
+      h(Text, { key: 3, style: cel(cols[3].flex) }, r.desnivel),
+      h(Text, { key: 4, style: cel(cols[4].flex, 'center') }, String(r.qtd)),
+    ])),
+  ]));
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.p, key: 'p1' }, 'Prezados Senhores(as):'),
+    h(Text, { style: S.p, key: 'p2' }, `Proposta Comercial para o fornecimento de ${OP.eqInfo(eq).pluralTxt(qtd)}.`),
+    ...(tabelas.length ? tabelas : [Vazio(S, 'A definir.')]),
+    h(Text, { style: [S.p, { marginTop: pt(10) }], key: 'm' }, 'Marca: VerticalParts'),
+    PdfFooter(S),
+  ]);
+}
+
+function PgApresentacaoEscEst(S, data, eq) {
+  const ed = data.elevador || {};
+  const desc = (ed.descricao || []).filter((d) => d && (d.titulo || d.desc || d.beneficios || d.linha));
+  const lista = (t) => String(t || '').split('\n').map((x) => x.trim()).filter(Boolean);
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, window.PropostaOpcoes.eqInfo(eq).nome),
+    h(View, { style: S.secRule, key: 'r' }),
+    ed.textoProposta ? h(Text, { style: S.p, key: 'p' }, ed.textoProposta) : Vazio(S),
+    ed.textoModelos ? h(View, { key: 'modelos' }, [h(Text, { style: S.subTitle, key: 't' }, 'Linha de Modelos'), h(Text, { style: S.p, key: 'p' }, ed.textoModelos)]) : null,
+    ...desc.map((d, i) => h(View, { key: 'd' + i, wrap: false }, [
+      d.titulo ? h(Text, { style: S.subTitle, key: 't' }, d.titulo) : null,
+      d.linha ? h(Text, { style: [S.p, { fontWeight: 600 }], key: 'l' }, d.linha) : null,
+      d.desc ? h(Text, { style: S.p, key: 'p' }, d.desc) : null,
+      lista(d.beneficios).length ? Lista(S, lista(d.beneficios), 'b') : null,
+    ].filter(Boolean))),
+    PdfFooter(S),
+  ]);
+}
+
+function PgEspecEscEst(S, data, eq) {
+  const OP = window.PropostaOpcoes;
+  const ed = data.elevador || {};
+  const lista = (ed.especificacoes && ed.especificacoes.length) ? ed.especificacoes : [{}];
+  const blocos = lista.map((s) => ({ id: s.id, linhas: OP.linhasEspecEscEst(s, eq) }));
+  const temConteudo = blocos.some((b) => b.linhas.length);
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, 'Especificações Técnicas'),
+    h(View, { style: S.secRule, key: 'r' }),
+    ...(temConteudo
+      ? blocos.map((b, i) => b.linhas.length ? h(View, { key: 'b' + i, wrap: false }, [
+          blocos.length > 1 ? null : h(Text, { style: S.subTitle, key: 'st' }, 'Características Principais'),
+          Tabela2(S, [{ label: 'Característica', flex: 1 }, { label: b.id || OP.eqInfo(eq).nome, flex: 1 }], b.linhas, 't'),
+        ]) : null)
+      : [Vazio(S, 'Preencha as especificações técnicas na aba "Especificações Técnicas".')]),
+    PdfFooter(S),
+  ]);
+}
+
+function PgEspecificidades(S, data, eq) {
+  const OP = window.PropostaOpcoes;
+  const linhas = OP.linhasEspecificidades(data.elevador, eq);
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, 'Especificidades'),
+    h(View, { style: S.secRule, key: 'r' }),
+    Tabela2(S, [{ label: 'Item', flex: 1 }, { label: OP.eqInfo(eq).nome, flex: 1 }], linhas, 't'),
+    PdfFooter(S),
+  ]);
+}
+
+function PgInstalacao(S, data) {
+  const blocos = window.PropostaOpcoes.blocosInstalacao(data.elevador);
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, 'Instalação e Montagem'),
+    h(View, { style: S.secRule, key: 'r' }),
+    ...blocos.map(([t, txt], i) => h(View, { key: i }, [h(Text, { style: S.subTitle, key: 't' }, t), h(Text, { style: S.p, key: 'p' }, txt)])),
+    PdfFooter(S),
+  ]);
+}
+
 /* ---------- Monta o documento completo ---------- */
-async function montarDocumento(data, assinaturas) {
+async function montarDocumento(data, assinaturas, eqParam) {
   const S = montarStyles();
-  const eq = 'elevador';
+  const eq = (eqParam === 'escada' || eqParam === 'esteira') ? eqParam : 'elevador';
+  /* Escada/Esteira: as páginas compartilhadas leem `data.elevador`; aqui esse bloco é o do equipamento. */
+  if (eq !== 'elevador') {
+    const bloco = data[eq] || {};
+    const nomeEq = window.PropostaOpcoes.eqInfo(eq).nome;
+    data = { ...data, elevador: { ...bloco, valores: { ...(bloco.valores || {}), equipamento: (bloco.valores || {}).equipamento || nomeEq } } };
+  }
   const ed = data.elevador || {};
   const fotos = ed.fotos || {};
   const temFotos = !!(fotos.unidade || fotos.teto || fotos.botoeira);
@@ -709,7 +815,8 @@ async function montarDocumento(data, assinaturas) {
       .catch((e) => { IMG.capa = null; montarDocumento.ultimasFalhas.push(e.message); }),
   ]);
 
-  const pages = [
+  const OPx = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  const pages = eq === 'elevador' ? [
     PgCapa(S, data, eq),
     PgSobre(S, eq),
     PgSobreCont(S),
@@ -728,13 +835,27 @@ async function montarDocumento(data, assinaturas) {
     PgPrazo(S, data),
     PgResponsabilidades(S, data),
     PgGarantia(S, data, assinaturas),
+  ] : [
+    PgCapa(S, data, eq),
+    PgSobre(S, eq),
+    PgSobreCont(S),
+    PgClienteObra(S, data),
+    PgSaudacaoEscEst(S, data, eq),
+    PgApresentacaoEscEst(S, data, eq),
+    PgEspecEscEst(S, data, eq),
+    ...(OPx.linhasEspecificidades(data.elevador, eq).length ? [PgEspecificidades(S, data, eq)] : []),
+    PgValores(S, data),
+    ...(OPx.blocosInstalacao(data.elevador).length ? [PgInstalacao(S, data)] : []),
+    ...(OPx.blocosAjustes(data.elevador).length ? [PgBlocos(S, data, 'Ajustes e Impostos', 'ajustes', [], OPx.blocosAjustes(data.elevador))] : []),
+    PgPrazo(S, data),
+    PgGarantia(S, data, assinaturas),
   ];
   return h0(Document, {}, pages);
 }
 
-async function baixar(data, filename, assinaturas) {
+async function baixar(data, filename, assinaturas, eq) {
   registrarFontes();
-  const elemento = await montarDocumento(data, assinaturas);
+  const elemento = await montarDocumento(data, assinaturas, eq);
   const blob = await pdf(elemento).toBlob();
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

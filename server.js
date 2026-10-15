@@ -353,6 +353,12 @@ app.get('/termo-entrega/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'termo-entrega.html'));
 });
 
+/* /recibo/<token> → recibo-instalador.html (recibo de pagamento ao montador; o montador assina sem login — RPCs por token). */
+app.get('/recibo/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'recibo-instalador.html'));
+});
+
 /* ---------- Estáticos ----------
    Código (html/js/jsx/css) e version.json vão sempre com no-cache: o navegador
    é obrigado a revalidar com o servidor antes de usar a cópia salva (ETag/
@@ -371,7 +377,7 @@ const NO_CACHE_EXT = ['.html', '.js', '.jsx', '.css', '.json'];
 const PUBLIC_ROOT_FILES = new Set([
   'index.html', 'index-print.html', 'assinar.html', 'cotacao.html', 'cotacao-elevador-fornecedor.html',
   'diario-obra.html', 'formulario-cliente.html', 'status-obra.html', 'termo-entrega.html',
-  'vistoria-execucao.html', 'formulario-quadro-comando-publico.html', 'colors_and_type.css', 'favicon.ico',
+  'vistoria-execucao.html', 'formulario-quadro-comando-publico.html', 'recibo-instalador.html', 'colors_and_type.css', 'favicon.ico',
 ]);
 /* TreinamentoVP: tutoriais passo a passo (páginas HTML estáticas, uma pasta por tela). O botão "Ajuda" do
    app (HelpCenter, src/shell.jsx) abre /TreinamentoVP/<slug>/. Só vai o que estiver no Git. */
