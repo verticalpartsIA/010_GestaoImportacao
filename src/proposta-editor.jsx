@@ -891,7 +891,7 @@ function PropostaEditor({ setRoute, subsel }) {
           if (au.signedAt) assinaturas = [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }];
         }
       } catch (e) { console.warn('Assinatura digital não carregada pro PDF da proposta:', e); }
-      const r = await window.PropostaReactPdf.baixar(data, filename, assinaturas);
+      const r = await window.PropostaReactPdf.baixar(data, filename, assinaturas, eq);
       /* Sem este aviso, uma falha de carregamento de imagem produzia um
          PDF completo mas SEM logo nem foto de capa, e ninguém ficava
          sabendo até abrir o arquivo (achado 20/08). */
@@ -903,7 +903,7 @@ function PropostaEditor({ setRoute, subsel }) {
     } finally {
       setBaixandoPdf(false);
     }
-  }, [data]);
+  }, [data, eq, recordId]);
 
   const resetProposal = () => {
     if (confirm("Descartar todas as alterações e reiniciar a proposta?")) {

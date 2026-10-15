@@ -66,12 +66,29 @@ function PEPreview({ data, eq, overlay, bare }) {
       PreviewGarantiaValidade,
     ];
   } else {
-    // Escada/Esteira: fluxo antigo, mais simples (fora do escopo da
-    // referência que o usuário mandou — ainda não redesenhado).
-    pageList = [PreviewCapa, PreviewClienteObraSimples, PreviewTexto, PreviewDescricaoEspec, PreviewValoresSimples, PreviewGarantiaSimples];
+    /* Escada/Esteira (15/10/2026): mesmo documento do Elevador, com textos/tabelas do próprio equipamento
+       (sem "paradas"/"elevador"). As páginas compartilhadas leem `data.elevador`; aqui esse bloco é o do
+       equipamento da proposta (pageData abaixo). Páginas sem conteúdo (especificidades, instalação,
+       ajustes) só entram se o vendedor preencheu. */
+    const ed = data[eqLabel] || {};
+    const OP = window.PropostaOpcoes;
+    pageList = [
+      PreviewCapa, PreviewSobre, PreviewSobreCont, PreviewClienteObra,
+      PreviewSaudacaoEscEst, PreviewApresentacaoEscEst, PreviewEspecEscEst,
+      ...(OP && OP.linhasEspecificidades(ed, eqLabel).length ? [PreviewEspecificidades] : []),
+      PreviewValoresTabelas,
+      ...(OP && OP.blocosInstalacao(ed).length ? [PreviewInstalacao] : []),
+      ...(OP && OP.blocosAjustes(ed).length ? [PreviewAjustesImpostos] : []),
+      PreviewPrazoEntrega, PreviewGarantiaValidade,
+    ];
   }
   const total = pageList.length;
-  const pages = pageList.map((C, i) => <C key={i} data={data} eq={eqLabel} eqName={eqName} pg={i + 1} total={total}/>);
+  const pageData = eqLabel === "elevador" ? data : (() => {
+    const bloco = data[eqLabel] || {};
+    const nomeEq = window.PropostaOpcoes ? window.PropostaOpcoes.eqInfo(eqLabel).nome : eqName;
+    return { ...data, elevador: { ...bloco, valores: { ...(bloco.valores || {}), equipamento: (bloco.valores || {}).equipamento || nomeEq } } };
+  })();
+  const pages = pageList.map((C, i) => <C key={i} data={pageData} eq={eqLabel} eqName={eqName} pg={i + 1} total={total}/>);
 
   const scaled = (
     <div className="pe__preview-wrap" ref={previewWrap}>
@@ -771,170 +788,126 @@ function PreviewGarantiaValidade({ data }) {
 }
 
 /* ============================================================
-   Escada / Esteira — fluxo anterior, mais simples (fora do escopo da
-   referência que o usuário mandou pra Elevador; ainda não redesenhado).
+   Escada / Esteira — páginas próprias do equipamento (15/10/2026). Recebem `data` com `data.elevador`
+   = bloco do equipamento (ver PEPreview). Regras/linhas em PropostaOpcoes (fonte única com o PDF).
    ============================================================ */
-function PreviewClienteObraSimples({ data, eq, pg, total }) {
-  const c = data.cliente, o = data.obra;
+function PreviewSaudacaoEscEst({ data, eq }) {
+  const OP = window.PropostaOpcoes;
+  const info = OP.eqInfo(eq);
+  const ed = data.elevador;
+  const rows = OP.resumoEscEst(ed.especificacoes, eq);
+  const qtd = ed.valores?.quantidade || String(rows.reduce((s, r) => s + (Number(r.qtd) || 0), 0) || 1);
   return (
     <div className="pe__pdf">
-      <div className="pe__pdf-pgmark">P. {String(pg).padStart(2, "0")} · Identificação</div>
       <div className="pe__pdf-inner">
-        <div className="pdf-eyebrow">▎ Cliente & Obra</div>
-        <h2 className="pdf-h2">Identificação</h2>
-        <div className="pdf-rule"/>
-        <h3 className="pdf-h3">Dados do Cliente</h3>
-        <div className="pdf-spec-grid">
-          <div><span>Razão Social</span><b>{c.nome || "—"}</b></div>
-          <div><span>CNPJ</span><b>{c.cnpj || "—"}</b></div>
-          <div><span>A/C</span><b>{c.responsavel || "—"}</b></div>
-          <div><span>Telefone</span><b>{c.telefone || "—"}</b></div>
-          <div><span>E-mail</span><b>{c.email || "—"}</b></div>
-          <div><span>CEP</span><b>{c.cep || "—"}</b></div>
-          <div><span>Endereço</span><b>{[c.endereco, c.numero].filter(Boolean).join(", ") || "—"}</b></div>
-          <div><span>Bairro / Cidade</span><b>{[c.bairro, c.cidade, c.uf].filter(Boolean).join(" · ") || "—"}</b></div>
-        </div>
-        <h3 className="pdf-h3">Dados da Obra</h3>
-        <div className="pdf-spec-grid">
-          <div><span>Empreendimento</span><b>{o.nome || "—"}</b></div>
-          <div><span>CEP</span><b>{o.cep || "—"}</b></div>
-          <div><span>Endereço</span><b>{[o.endereco, o.numero].filter(Boolean).join(", ") || "—"}</b></div>
-          <div><span>Bairro / Cidade / UF</span><b>{[o.bairro, o.cidade, o.uf].filter(Boolean).join(" · ") || "—"}</b></div>
-        </div>
+        <PdfHeader numero={data.numero}/>
+        <p>Prezados Senhores(as):</p>
+        <p>Proposta Comercial para o fornecimento de {info.pluralTxt(qtd)}.</p>
+        {rows.length ? (
+          <table className="pdf-table2" style={{ fontSize: "0.86em" }}>
+            <thead><tr><th>Equipamento</th><th>Empreendimento</th><th>Inclinação</th><th>{eq === "esteira" ? "Desnível / Comp." : "Desnível"}</th><th style={{ textAlign: "center" }}>Qtd.</th></tr></thead>
+            <tbody>
+              {rows.map((r, i) => (
+                <tr key={i} style={{ background: "transparent", breakInside: "avoid" }}>
+                  <td><b>{r.codigo}</b></td><td>{r.empreendimento}</td><td>{r.incl}</td><td>{r.desnivel}</td><td style={{ textAlign: "center" }}>{r.qtd}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        ) : <Vazio>Preencha as especificações técnicas do equipamento.</Vazio>}
+        <p style={{ marginTop: 10 }}>Marca: VerticalParts</p>
       </div>
-      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
+      <PdfFooter/>
     </div>
   );
 }
 
-function PreviewTexto({ data, eq, eqName, pg, total }) {
-  const ed = data[eq];
+function PreviewApresentacaoEscEst({ data, eq }) {
+  const info = window.PropostaOpcoes.eqInfo(eq);
+  const ed = data.elevador;
+  const desc = (ed.descricao || []).filter((d) => d && (d.titulo || d.desc || d.beneficios || d.linha));
+  const lista = (t) => String(t || "").split("\n").map((x) => x.trim()).filter(Boolean);
   return (
     <div className="pe__pdf">
-      <div className="pe__pdf-pgmark">P. {String(pg).padStart(2, "0")} · Apresentação</div>
       <div className="pe__pdf-inner">
-        <div className="pdf-eyebrow">▎ Comercial</div>
-        <h2 className="pdf-h2">{eqName}</h2>
-        <div className="pdf-rule"/>
-        {data.dataLinha ? <p style={{ fontWeight: 700, marginBottom: 8 }}>{data.dataLinha}</p> : <Vazio>São Paulo, [data]</Vazio>}
-        {ed.textoProposta ? <p>{ed.textoProposta}</p> : <Vazio>O texto da proposta aparecerá aqui conforme preenchimento.</Vazio>}
-        <h3 className="pdf-h3">Linha de Modelos</h3>
-        {ed.textoModelos ? <p>{ed.textoModelos}</p> : <Vazio>Descreva a linha do produto neste campo.</Vazio>}
-      </div>
-      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
-    </div>
-  );
-}
-
-function PreviewDescricaoEspec({ data, eq, pg, total }) {
-  const ed = data[eq];
-  const desc = ed.descricao || [];
-  const espec = ed.especificacoes || [];
-  return (
-    <div className="pe__pdf">
-      <div className="pe__pdf-pgmark">P. {String(pg).padStart(2, "0")} · Especificação Técnica</div>
-      <div className="pe__pdf-inner">
-        <div className="pdf-eyebrow">▎ Produto</div>
-        <h2 className="pdf-h2">Especificação Técnica</h2>
-        <div className="pdf-rule"/>
-        {desc.slice(0, 1).map((d, i) => (
-          <div key={i} style={{ marginBottom: 8 }}>
-            <h3 className="pdf-h3">{d.titulo || `Produto ${i + 1}`}</h3>
+        <PdfHeader numero={data.numero}/>
+        <h2 className="pdf-sec-title">{info.nome}</h2>
+        <div className="pdf-sec-rule"/>
+        {ed.textoProposta ? <p>{ed.textoProposta}</p> : <Vazio>Descreva a linha do produto neste campo.</Vazio>}
+        {ed.textoModelos ? (<><h3 className="pdf-sub-title">Linha de Modelos</h3><p>{ed.textoModelos}</p></>) : null}
+        {desc.map((d, i) => (
+          <div key={i} style={{ breakInside: "avoid" }}>
+            {d.titulo ? <h3 className="pdf-sub-title">{d.titulo}</h3> : null}
             {d.linha ? <p style={{ fontWeight: 600 }}>{d.linha}</p> : null}
             {d.desc ? <p>{d.desc}</p> : null}
-            {d.beneficios ? <p style={{ whiteSpace: "pre-line" }}>{d.beneficios}</p> : null}
+            {lista(d.beneficios).length ? <ul className="pdf-list">{lista(d.beneficios).map((b, j) => <li key={j}>{b}</li>)}</ul> : null}
           </div>
         ))}
-        {espec.slice(0, 2).map((s, i) => (
-          <div key={i} style={{ marginBottom: 8 }}>
-            <h3 className="pdf-h3">{s.id || `Unidade ${i + 1}`}</h3>
-            <div className="pdf-spec-grid">
-              <div><span>Tipo de Empreendimento</span><b>{s.empreendimento || "—"}</b></div>
-              <div><span>Característica</span><b>{s.carac || "—"}</b></div>
-              <div><span>{eq === "escada" ? "Desnível" : "Desnível / Comp."}</span><b>{(eq === "escada" ? s.desnivel : s.desnivelComp) ? `${(eq === "escada" ? s.desnivel : s.desnivelComp)}mm` : "—"}</b></div>
-              <div><span>Inclinação</span><b>{s.incl || "—"}</b></div>
-              <div><span>{eq === "escada" ? "Largura Degrau" : "Largura Pallet"}</span><b>{(eq === "escada" ? s.largDegrau : s.largPallet) || "—"}</b></div>
-              <div><span>Balaustrada</span><b>{s.balaustrada || "—"}</b></div>
-              <div><span>Velocidade</span><b>{s.vel || "—"}</b></div>
-              <div><span>Alimentação</span><b>{s.alimentacao || "—"}</b></div>
-              <div><span>Arranjo</span><b>{s.arranjo || "—"}</b></div>
-              <div><span>Máquina</span><b>{s.maquina || "—"}</b></div>
-              <div><span>Quantidade</span><b>{s.qtd || "1"}</b></div>
-            </div>
-          </div>
-        ))}
-        {(desc.length === 0 && espec.length === 0) ? <Vazio>Preencha pelo menos uma descrição e uma especificação técnica.</Vazio> : null}
       </div>
-      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
+      <PdfFooter/>
     </div>
   );
 }
 
-function PreviewValoresSimples({ data, eq, pg, total }) {
-  const v = data[eq].valores;
-  const parcelas = v.parcelas || [];
-  const qtd = parseFloat(v.quantidade) || 0;
-  const unit = parseFloat((v.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
-  const totalEq = qtd * unit;
-  const totalParcelado = parcelas.reduce((s, p) => s + (parseFloat((p.valor || "0").toString().replace(/\./g, "").replace(",", ".")) || 0), 0);
-  const fmt = (n) => "R$ " + n.toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+function PreviewEspecEscEst({ data, eq }) {
+  const OP = window.PropostaOpcoes;
+  const info = OP.eqInfo(eq);
+  const lista = (data.elevador.especificacoes && data.elevador.especificacoes.length) ? data.elevador.especificacoes : [{}];
+  const blocos = lista.map((s) => ({ id: s.id, linhas: OP.linhasEspecEscEst(s, eq) }));
+  const temConteudo = blocos.some((b) => b.linhas.length);
   return (
     <div className="pe__pdf">
-      <div className="pe__pdf-pgmark">P. {String(pg).padStart(2, "0")} · Valores</div>
       <div className="pe__pdf-inner">
-        <div className="pdf-eyebrow">▎ Comercial</div>
-        <h2 className="pdf-h2">Valores e Pagamento</h2>
-        <div className="pdf-rule"/>
-        <table className="pdf-table">
-          <thead><tr><th>Equipamento</th><th style={{ textAlign: "right" }}>Qtd</th><th style={{ textAlign: "right" }}>Valor Unit.</th><th style={{ textAlign: "right" }}>Total</th></tr></thead>
-          <tbody>
-            <tr>
-              <td>{v.equipamento || "—"}</td>
-              <td style={{ textAlign: "right" }}>{qtd || "—"}</td>
-              <td style={{ textAlign: "right", fontFamily: "var(--font-mono)" }}>{unit ? fmt(unit) : "—"}</td>
-              <td style={{ textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 700 }}>{totalEq ? fmt(totalEq) : "—"}</td>
-            </tr>
-          </tbody>
-        </table>
-        <div className="pdf-total"><span>Total da Proposta</span><b>{fmt(totalEq)}</b></div>
-        {parcelas.length > 0 ? (
-          <>
-            <h3 className="pdf-h3" style={{ marginTop: 10 }}>Parcelamento</h3>
-            <table className="pdf-table">
-              <thead><tr><th>#</th><th>Descrição</th><th style={{ textAlign: "right" }}>Valor</th></tr></thead>
-              <tbody>
-                {parcelas.map((p, i) => <tr key={i}><td style={{ width: 18 }}>{i + 1}</td><td>{p.desc || "—"}</td><td style={{ textAlign: "right", fontFamily: "var(--font-mono)" }}>{p.valor ? "R$ " + p.valor : "—"}</td></tr>)}
-                <tr><td colSpan={2} style={{ fontWeight: 700 }}>Total Parcelado</td><td style={{ textAlign: "right", fontFamily: "var(--font-mono)", fontWeight: 700 }}>{fmt(totalParcelado)}</td></tr>
-              </tbody>
+        <PdfHeader numero={data.numero}/>
+        <h2 className="pdf-sec-title">Especificações Técnicas</h2>
+        <div className="pdf-sec-rule"/>
+        {temConteudo ? blocos.map((b, i) => b.linhas.length ? (
+          <div key={i} style={{ breakInside: "avoid", pageBreakInside: "avoid" }}>
+            {blocos.length > 1 ? null : <h3 className="pdf-sub-title">Características Principais</h3>}
+            <table className="pdf-table2">
+              <thead><tr><th>Característica</th><th>{b.id || info.nome}</th></tr></thead>
+              <tbody>{b.linhas.map(([k, v], j) => <tr key={j}><td>{k}</td><td>{v}</td></tr>)}</tbody>
             </table>
-          </>
-        ) : null}
-        <p style={{ marginTop: 13, fontSize: 14, color: "var(--fg3)" }}>Forma de pagamento: <b>{v.forma || "a definir"}</b></p>
+          </div>
+        ) : null) : <Vazio>Preencha as especificações técnicas na aba "Especificações Técnicas".</Vazio>}
       </div>
-      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
+      <PdfFooter/>
     </div>
   );
 }
 
-function PreviewGarantiaSimples({ data, eq, pg, total }) {
-  const g = data[eq].garantia;
+function PreviewEspecificidades({ data, eq }) {
+  const OP = window.PropostaOpcoes;
+  const linhas = OP.linhasEspecificidades(data.elevador, eq);
   return (
     <div className="pe__pdf">
-      <div className="pe__pdf-pgmark">P. {String(pg).padStart(2, "0")} · Garantia</div>
       <div className="pe__pdf-inner">
-        <div className="pdf-eyebrow">▎ Jurídico</div>
-        <h2 className="pdf-h2">Garantia & Condições</h2>
-        <div className="pdf-rule"/>
-        <h3 className="pdf-h3">Garantia</h3>
-        {g.garantia ? <p>{g.garantia}</p> : <Vazio>Texto de garantia será preenchido.</Vazio>}
-        <h3 className="pdf-h3">Condições Gerais</h3>
-        {g.condicoes ? <p>{g.condicoes}</p> : <Vazio>Condições gerais serão preenchidas.</Vazio>}
-        <div className="pdf-footer">
-          <span>VerticalParts · CNPJ XX.XXX.XXX/0001-XX</span>
-          <span>{data.numero || "VP-2026-XXX"}</span>
-        </div>
+        <PdfHeader numero={data.numero}/>
+        <h2 className="pdf-sec-title">Especificidades</h2>
+        <div className="pdf-sec-rule"/>
+        <table className="pdf-table2">
+          <thead><tr><th>Item</th><th>{OP.eqInfo(eq).nome}</th></tr></thead>
+          <tbody>{linhas.map(([k, v], i) => <tr key={i}><td>{k}</td><td>{v}</td></tr>)}</tbody>
+        </table>
       </div>
-      <div className="pe__pdf-pgnum">Seção {pg} de {total}</div>
+      <PdfFooter/>
+    </div>
+  );
+}
+
+function PreviewInstalacao({ data }) {
+  const blocos = window.PropostaOpcoes.blocosInstalacao(data.elevador);
+  return (
+    <div className="pe__pdf">
+      <div className="pe__pdf-inner">
+        <PdfHeader numero={data.numero}/>
+        <h2 className="pdf-sec-title">Instalação e Montagem</h2>
+        <div className="pdf-sec-rule"/>
+        {blocos.map(([t, txt], i) => (
+          <React.Fragment key={i}><h3 className="pdf-sub-title">{t}</h3><p>{txt}</p></React.Fragment>
+        ))}
+      </div>
+      <PdfFooter/>
     </div>
   );
 }
