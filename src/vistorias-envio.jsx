@@ -86,7 +86,7 @@ function VistoriasEnvio({ setRoute }) {
       />
 
       <div style={{ marginTop: 16 }}>
-        {aba === 'questionarios' && <ListaQuestionarios onAbrir={setQuestionarioAberto}/>}
+        {aba === 'questionarios' && <ListaQuestionarios onAbrir={abrirQuestionario}/>}
         {aba === 'despacho' && <DespacharVistoria/>}
         {aba === 'calendario' && <CalendarioVistorias/>}
       </div>
