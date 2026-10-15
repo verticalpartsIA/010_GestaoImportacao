@@ -715,7 +715,32 @@
       cliente = data;
     }
 
-    const { baseInputs, params, qtdEquipamentos } = montarBaseInputs(pz);
+    const ufFaturamento = cliente ? cliente.endereco_estado : null;
+    const ufDestino = formulario.local_obra_estado || ufFaturamento;
+
+    /* 15/10/2026 — ICMS da venda vem da regra por UF de destino (Atualização de Custos › Regras de ICMS),
+       não mais do 4% global (alíquota interestadual de importado; SP→SP é 12%). Resolvida ANTES da 1ª
+       passada pra o preço usado como base do DIFAL já ter a alíquota certa. Falha ao consultar a regra
+       interrompe o cálculo (nunca cai em silêncio no 4%). Sem regra: se o snapshot veio de uma regra
+       (hoje desativada ou UF trocada), volta ao % global dos Parâmetros Fiscais; senão mantém o que está
+       no snapshot (inclusive ajuste manual). A alíquota e a regra usadas ficam no snapshot (Memória de cálculo). */
+    const ufDestinoUp = ufDestino ? String(ufDestino).toUpperCase() : null;
+    let regraIcms = null;
+    if (ufDestinoUp) {
+      if (!window.CadastroCustosStore) throw new Error('Regras de ICMS indisponíveis (CadastroCustosStore não carregou).');
+      regraIcms = await window.CadastroCustosStore.buscarRegraIcmsVenda({ ufDestino: ufDestinoUp });
+    }
+    const snapshotBase = pz.parametros_fiscais_snapshot || {};
+    let snapshotIcms;
+    if (regraIcms) {
+      snapshotIcms = { ...snapshotBase, icms_venda_pct: Number(regraIcms.aliquota_pct), icms_venda_regra: { id: regraIcms.id, uf_origem: regraIcms.uf_origem, uf_destino: regraIcms.uf_destino, ncm: regraIcms.ncm || null, fundamento: regraIcms.fundamento || null } };
+    } else {
+      const vinhaDeRegra = !!(snapshotBase.icms_venda_regra && snapshotBase.icms_venda_regra.id);
+      const icmsFallback = vinhaDeRegra ? (await listarParametrosFiscais()).icms_venda_pct : snapshotBase.icms_venda_pct;
+      snapshotIcms = { ...snapshotBase, icms_venda_pct: icmsFallback, icms_venda_regra: { sem_regra: true, uf_destino: ufDestinoUp } };
+    }
+
+    const { baseInputs, params, qtdEquipamentos } = montarBaseInputs({ ...pz, parametros_fiscais_snapshot: snapshotIcms });
 
     // 1ª passada — sem DIFAL, só pra ter um "Valor da Operação" de referência.
     const pass1 = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs: 0 });
@@ -732,8 +757,7 @@
     });
     const valorOperacaoDifal = pass1V2.precificacao.precoVendaProposta > 0 ? pass1V2.precificacao.precoVendaProposta : pass1.precificacao.precoVendaProposta;
 
-    const ufFaturamento = cliente ? cliente.endereco_estado : null;
-    const ufDestino = formulario.local_obra_estado || ufFaturamento;
+    // ufFaturamento/ufDestino e a regra de ICMS já foram resolvidos acima, antes da 1ª passada.
     const estadoDestino = await window.DifalEngine.buscarEstado(ufDestino);
     const difal = window.DifalEngine.calcular({
       ufFaturamento, ufEntrega: formulario.local_obra_estado,
@@ -781,7 +805,7 @@
 
     /* 10/10/2026 — o método da planilha do Financeiro é o ÚNICO método de formação de preço; precificação antiga
        (markup sobre o custo / margem sobre a venda) é convertida ao calcular de novo. */
-    await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, modo_formacao_preco: 'planilha', status: 'calculado' });
+    await salvar(id, { resultado, resultado_v2: resultadoV2, resultado_v2_expresso: resultadoV2Expresso, difal, parametros_fiscais_snapshot: snapshotIcms, modo_formacao_preco: 'planilha', status: 'calculado' });
     return { resultado, resultadoV2, resultadoV2Expresso, difal };
   }
 

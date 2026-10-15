@@ -679,14 +679,76 @@ function CCDifalTab() {
   );
 }
 
+function CCIcmsTab() {
+  const [rows, setRows] = React.useState(null);
+  const [saving, setSaving] = React.useState(null);
+  const [nova, setNova] = React.useState({ uf_origem: 'SP', uf_destino: '', origem_mercadoria: 'Estrangeira', ncm: '', aliquota_pct: 0, fundamento: '' });
+  const reload = () => window.CadastroCustosStore.listarRegrasIcmsVenda().then(setRows);
+  React.useEffect(() => { reload(); }, []);
+  const salvar = async (regra, patch) => {
+    setSaving(regra.id || 'nova');
+    try { await window.CadastroCustosStore.salvarRegraIcmsVenda({ ...regra, ...patch }); await reload(); return true; }
+    catch (e) { window.toast?.('Erro ao salvar: ' + (e.message || e), 'error'); return false; }
+    finally { setSaving(null); }
+  };
+  if (rows === null) return <div className="muted small" style={{ padding: '24px 0' }}>Carregando…</div>;
+  return (
+    <>
+      <Card title="Regras de ICMS na venda" sub="a Precificação procura aqui a alíquota pela UF de destino da obra (origem fixa SP) — antes usava 4% fixo pra todos os clientes">
+        <div className="table-wrap">
+          <table className="t">
+            <thead><tr><th>Origem</th><th>Destino</th><th>Mercadoria</th><th>NCM</th><th>Alíquota efetiva</th><th>Fundamento</th><th>Ativa</th></tr></thead>
+            <tbody>
+              {rows.map((r) => (
+                <tr key={r.id} style={{ opacity: saving === r.id ? .5 : 1 }}>
+                  <td style={{ fontWeight: 700, textAlign: 'center' }}>{r.uf_origem}</td>
+                  <td style={{ fontWeight: 700, textAlign: 'center' }}>{r.uf_destino}</td>
+                  <td>{r.origem_mercadoria === 'Estrangeira' ? 'Importada' : 'Nacional'}</td>
+                  <td>{r.ncm || 'Qualquer'}</td>
+                  <td><CCPctInput value={r.aliquota_pct} onSave={(v) => salvar(r, { aliquota_pct: v })}/></td>
+                  <td style={{ minWidth: 320 }}>{r.fundamento || '—'}</td>
+                  <td><input type="checkbox" checked={!!r.ativo} onChange={(e) => salvar(r, { ativo: e.target.checked })}/></td>
+                </tr>
+              ))}
+              {rows.length === 0 && <tr><td colSpan={7} className="muted small" style={{ padding: 16 }}>Nenhuma regra cadastrada — a Precificação usa o ICMS venda global (aviso na Memória de cálculo).</td></tr>}
+            </tbody>
+          </table>
+        </div>
+        <div className="pl-note">Sem regra para a UF de destino, a Precificação cai no ICMS venda global (4%) e avisa na Memória de cálculo. Alíquotas em %, ex.: 12 = 12%.</div>
+      </Card>
+
+      <Card title="Nova regra" sub="uma linha por UF de destino (e NCM, se a alíquota mudar por produto)" style={{ marginTop: 16 }}>
+        <div className="grid-3" style={{ gap: 12 }}>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">UF de destino</label>
+            <input className="input" maxLength={2} value={nova.uf_destino} onChange={(e) => setNova((n) => ({ ...n, uf_destino: e.target.value.toUpperCase() }))}/></div>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Mercadoria</label>
+            <select className="input" value={nova.origem_mercadoria} onChange={(e) => setNova((n) => ({ ...n, origem_mercadoria: e.target.value }))}>
+              <option value="Estrangeira">Importada</option><option value="Nacional">Nacional</option></select></div>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">NCM (opcional)</label>
+            <input className="input" value={nova.ncm} onChange={(e) => setNova((n) => ({ ...n, ncm: e.target.value }))}/></div>
+          <div className="stack" style={{ gap: 4 }}><label className="up-eyebrow muted">Alíquota efetiva</label>
+            <CCPctInput value={nova.aliquota_pct} onSave={(v) => setNova((n) => ({ ...n, aliquota_pct: v }))}/></div>
+          <div className="stack" style={{ gap: 4, gridColumn: 'span 2' }}><label className="up-eyebrow muted">Fundamento</label>
+            <input className="input" value={nova.fundamento} onChange={(e) => setNova((n) => ({ ...n, fundamento: e.target.value }))}/></div>
+        </div>
+        <div style={{ marginTop: 12 }}>
+          <Button size="sm" disabled={saving === 'nova'} onClick={async () => {
+            if (await salvar(nova, {})) setNova({ uf_origem: 'SP', uf_destino: '', origem_mercadoria: 'Estrangeira', ncm: '', aliquota_pct: 0, fundamento: '' });
+          }}>Adicionar regra</Button>
+        </div>
+      </Card>
+    </>
+  );
+}
+
 /* ---------- Página ----------
    Cada aba tem sua própria URL (/cadastros/cadastro-custos/<slug>) — rota
    registrada como SYNC_PASSTHROUGH em app.jsx, subsel É o slug (string),
    sem fetch nenhum. Link direto/recarregar/compartilhar já abre na aba
    certa; sem subsel ainda (1º acesso pelo menu), populamos o slug padrão
    na URL pra ela nunca ficar "sem aba" pra quem copiar o link depois. */
-const CC_SLUG_TO_ABA = { 'instalacao-elevadores': 'elevador', 'instalacao-escada-esteira': 'escada', 'containers': 'containers', 'frete': 'frete', 'difal': 'difal' };
-const CC_ABA_TO_SLUG = { elevador: 'instalacao-elevadores', escada: 'instalacao-escada-esteira', containers: 'containers', frete: 'frete', difal: 'difal' };
+const CC_SLUG_TO_ABA = { 'instalacao-elevadores': 'elevador', 'instalacao-escada-esteira': 'escada', 'containers': 'containers', 'frete': 'frete', 'difal': 'difal', 'regras-icms': 'icms' };
+const CC_ABA_TO_SLUG = { elevador: 'instalacao-elevadores', escada: 'instalacao-escada-esteira', containers: 'containers', frete: 'frete', difal: 'difal', icms: 'regras-icms' };
 
 function CadastroCustosPage({ setSubsel, subsel }) {
   const aba = CC_SLUG_TO_ABA[subsel] || 'elevador';
@@ -714,7 +776,7 @@ function CadastroCustosPage({ setSubsel, subsel }) {
           <div className="page-head__eyebrow"><span className="vp-rule"/>Cadastros · Atualização de Custos</div>
           <h1 className="page-head__title">Atualização de Custos</h1>
           <p className="page-head__sub">
-            Tabelas de referência de custo — Instalação de Equipamentos, Containers, Frete interno e DIFAL. A Precificação herda
+            Tabelas de referência de custo — Instalação de Equipamentos, Containers, Frete interno, DIFAL e Regras de ICMS. A Precificação herda
             esses valores automaticamente conforme as specs escolhidas lá (paradas, capacidade, tração, container, cidade da obra).
           </p>
         </div>
@@ -727,6 +789,7 @@ function CadastroCustosPage({ setSubsel, subsel }) {
           <button className={aba === 'containers' ? 'is-active' : ''} onClick={() => irPara('containers')}>Containers</button>
           <button className={aba === 'frete' ? 'is-active' : ''} onClick={() => irPara('frete')}>Frete interno</button>
           <button className={aba === 'difal' ? 'is-active' : ''} onClick={() => irPara('difal')}>DIFAL</button>
+          <button className={aba === 'icms' ? 'is-active' : ''} onClick={() => irPara('icms')}>Regras de ICMS</button>
         </div>
       </div>
 
@@ -740,6 +803,7 @@ function CadastroCustosPage({ setSubsel, subsel }) {
       {aba === 'containers' && <CCContainersTab/>}
       {aba === 'frete' && <CCFreteTab/>}
       {aba === 'difal' && <CCDifalTab/>}
+      {aba === 'icms' && <CCIcmsTab/>}
     </div>
   );
 }

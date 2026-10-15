@@ -155,7 +155,7 @@ function PZMemoriaCalculo({ pz }) {
 
       {aba === 'venda' && (
         <PMTabela colunas={['Item', 'Alíquota · Valor']}>
-          <PMLinha rotulo="ICMS na venda" nota="sobre o preço de venda do produto" valor={`${pmPct(par.icmsVendaPct)}  ·  ${pmBrl(pv.custosIcmsVenda)}`}/>
+          <PMLinha rotulo="ICMS na venda" nota={(pz.parametros_fiscais_snapshot || {}).icms_venda_regra && (pz.parametros_fiscais_snapshot || {}).icms_venda_regra.id ? `regra ${(pz.parametros_fiscais_snapshot.icms_venda_regra.uf_origem)}→${(pz.parametros_fiscais_snapshot.icms_venda_regra.uf_destino)} (Atualização de Custos › Regras de ICMS)` : (pz.parametros_fiscais_snapshot || {}).icms_venda_regra && (pz.parametros_fiscais_snapshot.icms_venda_regra.sem_regra) ? 'ATENÇÃO: sem regra de ICMS para esta UF de destino — usando o ICMS venda global' : 'sobre o preço de venda do produto'} valor={`${pmPct(par.icmsVendaPct)}  ·  ${pmBrl(pv.custosIcmsVenda)}`}/>
           <PMLinha rotulo="IPI na venda" valor={`${pmPct(par.ipiVendaPct)}  ·  ${pmBrl(pv.custosIpiVenda)}`}/>
           <PMLinha rotulo="PIS na venda" nota="base = preço − ICMS" valor={`${pmPct(par.pisVendaPct, 3)}  ·  ${pmBrl(pv.custosPisVenda)}`}/>
           <PMLinha rotulo="COFINS na venda" nota="base = preço − ICMS" valor={`${pmPct(par.cofinsVendaPct)}  ·  ${pmBrl(pv.custosCofinsVenda)}`}/>
