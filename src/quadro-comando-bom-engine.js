@@ -473,7 +473,110 @@
     return { linhas, catalogoNaoUsado };
   }
 
+  /* ---------- LOP — Botoeira de Pavimento ----------
+     Elevador coletivo: térreo só ▲ (Seta Subida), último andar só ▼ (Seta Descida)
+     e intermediários com 2 botões (1 Sobe + 1 Desce) ou, se o cliente escolher,
+     1 botão. Cada posição é uma botoeira pronta BST (vidro preto sem display
+     ou VTP com display). */
+  const LOP_MODELOS = {
+    sem: {
+      desce: ['VPB-033', 'Botoeira de Pavimento Vidro Preto com 1 Botão "Seta Descida" em Led Branco, sem Display, para Elevador - Ref.: BST VPB-033'],
+      sobe: ['VPB-034', 'Botoeira de Pavimento Vidro Preto com 1 Botão "Seta Subida" em Led Branco, sem Display, para Elevador - Ref.: BST VPB-034'],
+      dois: ['VPB-035', 'Botoeira de Pavimento Vidro Preto com 2 Botões, "1 Sobe e 1 Desce" em Led Branco, sem Display, para Elevador - Ref.: BST VPB-035'],
+    },
+    com: {
+      desce: ['VPB-038', 'Botoeira de Pavimento VTP com 1 Botão "Seta Descida" em Led Branco, com Display em Led Branco, para Elevador - Ref.: BST VPB-038'],
+      sobe: ['VPB-039', 'Botoeira de Pavimento VTP com 1 Botão "Seta Subida" em Led Branco, com Display em Led Branco, para Elevador - Ref.: BST VPB-039'],
+      dois: ['VPB-037', 'Botoeira de Pavimento VTP, 2 Botões, "1 Sobe e 1 Desce" em Led Branco, com Display em Led Branco, para Elevador-Ref.: BST VPB-037'],
+    },
+  };
+
+  function calcularLop(numParadas, botoesIntermediarios) {
+    const n = parseInt(numParadas, 10);
+    if (!Number.isFinite(n) || n < 2) return null;
+    const dois = Number(botoesIntermediarios) !== 1;
+    const inter = n - 2;
+    return {
+      paradas: n, intermediarios: inter, doisBotoes: dois,
+      botoeiras1: 2 + (dois ? 0 : inter), // térreo + último (+ intermediários de 1 botão)
+      botoeiras2: dois ? inter : 0,
+      botoesTotal: 2 + inter * (dois ? 2 : 1),
+    };
+  }
+
+  function montarItensLop(numParadas, botoesIntermediarios, catalogoPorSku, comDisplay) {
+    const r = calcularLop(numParadas, botoesIntermediarios);
+    if (!r) return [];
+    const cat = catalogoPorSku || {};
+    const m = LOP_MODELOS[comDisplay ? 'com' : 'sem'];
+    const regra = `${r.paradas} paradas: térreo ▲ (Seta Subida), último ▼ (Seta Descida), ${r.doisBotoes ? 'intermediários com 2 botões (1 Sobe e 1 Desce)' : 'intermediários com 1 botão'}.`;
+    const linha = (modelo, quantidade, confianca, extra) => ({
+      sku: modelo[0], descricao: (cat[modelo[0]] && cat[modelo[0]].descricao) || modelo[1], unidade: 'un',
+      grupo_separacao: 'componentes', quantidade, origem: 'calculado_geometria', confianca,
+      memoria_calculo: regra + (extra ? ' ' + extra : ''),
+    });
+    const itens = [linha(m.sobe, 1, 'confirmado', 'Térreo.'), linha(m.desce, 1, 'confirmado', 'Último andar.')];
+    if (r.intermediarios > 0) {
+      if (r.doisBotoes) itens.push(linha(m.dois, r.intermediarios, 'confirmado', 'Andares intermediários.'));
+      else {
+        // Sem modelo "1 botão" definido para intermediários: usa a Seta Subida — a confirmar com a produção.
+        itens[0] = linha(m.sobe, 1 + r.intermediarios, 'estimado', 'Intermediários com 1 botão usam a Seta Subida (a confirmar com a produção).');
+      }
+    }
+    return itens;
+  }
+
+  /* ---------- Botoeiras de inspeção (cabina e poço) — 1 de cada, quando fornecemos ---------- */
+  const INSPECAO_MODELOS = [
+    ['botoeira_inspecao_cabina', 'VPB-208', 'Botoeira de Inspeção sobre a Cabina de Elevador B3 - Ref.: BST | VPB-208'],
+    ['botoeira_inspecao_poco', 'VPB-380', 'Botoeira de Inspeção P5Y do Poço de Elevador - Ref.: BST | VPB-380'],
+  ];
+
+  function montarItensInspecao(escopo, catalogoPorSku) {
+    const cat = catalogoPorSku || {};
+    return INSPECAO_MODELOS.filter(([chave]) => ((escopo || {})[chave] || {}).decisao === 'fornecer').map(([, sku, desc]) => ({
+      sku, descricao: (cat[sku] && cat[sku].descricao) || desc, unidade: 'un', grupo_separacao: 'componentes', quantidade: 1,
+      origem: 'calculado_geometria', confianca: 'confirmado', memoria_calculo: 'Escopo: fornecer. 1 botoeira por elevador.',
+    }));
+  }
+
+  /* LOP lendo a quantidade de cada parada (frontal e traseira). Cada face é uma
+     sequência: 1ª parada com LOP = térreo (Seta Subida), última = Seta Descida,
+     as do meio = 2 botões (ou 1 botão). A quantidade manual da parada multiplica. */
+  function montarItensLopParadas(paradas, botoesIntermediarios, catalogoPorSku, comDisplay) {
+    const qtdDe = (v, padrao) => { const t = String(v == null ? '' : v).trim(); if (t === '') return padrao; const n = Number(t.replace(',', '.')); return Number.isFinite(n) && n >= 0 ? n : padrao; };
+    const faces = [
+      (paradas || []).filter((p) => p.abertura_frontal !== false).map((p) => qtdDe(p.qtd_lop_frontal, 1)),
+      (paradas || []).filter((p) => p.abertura_traseira).map((p) => qtdDe(p.qtd_lop_traseira, 1)),
+    ].map((l) => l.filter((q) => q > 0));
+    const dois = Number(botoesIntermediarios) !== 1;
+    let sobe = 0, desce = 0, meio = 0, umNoMeio = 0, nFaces = 0;
+    faces.forEach((l) => {
+      if (l.length < 2) return;
+      nFaces += 1;
+      l.forEach((q, i) => {
+        if (i === 0) sobe += q; else if (i === l.length - 1) desce += q; else if (dois) meio += q; else umNoMeio += q;
+      });
+    });
+    if (!nFaces) return [];
+    const cat = catalogoPorSku || {};
+    const m = LOP_MODELOS[comDisplay ? 'com' : 'sem'];
+    const regra = `${nFaces === 2 ? 'Frontal e traseira' : 'Uma face'}: primeira parada ▲ (Seta Subida), última ▼ (Seta Descida), ${dois ? 'intermediárias com 2 botões (1 Sobe e 1 Desce)' : 'intermediárias com 1 botão'}; usa as quantidades de LOP de cada parada.`;
+    const linha = (modelo, quantidade, confianca, extra) => ({
+      sku: modelo[0], descricao: (cat[modelo[0]] && cat[modelo[0]].descricao) || modelo[1], unidade: 'un',
+      grupo_separacao: 'componentes', quantidade, origem: 'calculado_geometria', confianca,
+      memoria_calculo: regra + (extra ? ' ' + extra : ''),
+    });
+    const itens = [];
+    if (umNoMeio) itens.push(linha(m.sobe, sobe + umNoMeio, 'estimado', 'Intermediárias com 1 botão usam a Seta Subida (a confirmar com a produção).'));
+    else itens.push(linha(m.sobe, sobe, 'confirmado', 'Térreo.'));
+    itens.push(linha(m.desce, desce, 'confirmado', 'Último andar.'));
+    if (meio) itens.push(linha(m.dois, meio, 'confirmado', 'Andares intermediários.'));
+    return itens;
+  }
+
   window.QuadroComandoBomEngine = {
+    calcularLop, montarItensLop, montarItensLopParadas, LOP_MODELOS, montarItensInspecao, INSPECAO_MODELOS,
     listarVariantes, chaveVariante, montarBomFixo,
     somaIntervalos, alturaTotalMm, perimetroCaixaMm,
     montarTrechosFiacaoFixa, montarTrechoCaboManobra, montarChecklist,

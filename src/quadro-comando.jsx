@@ -142,7 +142,7 @@ function QcCabosAcoCard({ escopo, onChange, disabled }) {
   );
 }
 
-function QcEscopoSecao({ escopo, onChange, disabled }) {
+function QcEscopoSecao({ escopo, onChange, disabled, paradasCount, lopPublico }) {
   return (
     <>
       <Card title="Escopo do pedido" sub="Para cada item: fornecer / reutilizar existente / fornecido por terceiro / não se aplica.">
@@ -163,10 +163,24 @@ function QcEscopoSecao({ escopo, onChange, disabled }) {
                       {it.especial === 'variante'
                         ? <QcSelect value={v.detalhe} disabled={disabled || v.decisao !== 'fornecer'} placeholder="Modelo…" options={QC_VARIANTES_QUADRO}
                             onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>
+                        : it.key === 'lop'
+                          ? <div>
+                              <QcSelect value={v.botoes_intermediarios || lopPublico || '2'} disabled={disabled || v.decisao !== 'fornecer'}
+                                options={[{ value: '2', label: 'LOP com 2 botões (▲ e ▼) nos intermediários' }, { value: '1', label: 'LOP com 1 botão nos intermediários' }]}
+                                onChange={(val) => onChange({ ...escopo, lop: { ...v, botoes_intermediarios: val } })}/>
+                              <label className="small" style={{ display: 'block', marginTop: 4 }}><input type="checkbox" checked={!!v.com_display} disabled={disabled || v.decisao !== 'fornecer'}
+                                onChange={(e) => onChange({ ...escopo, lop: { ...v, com_display: e.target.checked } })}/> Com display (VTP)</label>
+                              {v.decisao === 'fornecer' && (() => {
+                                const lop = window.QuadroComandoBomEngine && window.QuadroComandoBomEngine.calcularLop(paradasCount, v.botoes_intermediarios || lopPublico || '2');
+                                return <div className="small muted" style={{ marginTop: 4 }}>{lop
+                                  ? `${lop.paradas} paradas: térreo ▲ + último ▼${lop.intermediarios ? ` + ${lop.intermediarios} intermediária(s) com ${lop.doisBotoes ? '2 botões' : '1 botão'}` : ''}`
+                                  : 'Informe as paradas na aba Paradas para calcular as botoeiras.'}</div>;
+                              })()}
+                            </div>
                         : it.especial === 'cabos_aco'
                           ? <span className="small muted">{v.decisao === 'fornecer' ? 'preencha o card abaixo' : '—'}</span>
                           : <QcInput value={v.detalhe} disabled={disabled || v.decisao === 'nao_aplica' || !v.decisao}
-                              placeholder="qtd/modelo" onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>}
+                              placeholder={it.key === 'botoeira_inspecao_cabina' ? 'BST VPB-208 (B3)' : it.key === 'botoeira_inspecao_poco' ? 'BST VPB-380 (P5Y)' : 'qtd/modelo'} onChange={(val) => onChange({ ...escopo, [it.key]: { ...v, detalhe: val } })}/>}
                     </td>
                   </tr>
                 );
@@ -565,7 +579,7 @@ function QcGeometriaSecao({ geometria, intervalos, config, onGeom, onIntervalos,
 }
 
 /* ---------- Resultado: BOM + lista de corte + checklist ---------- */
-function QcResultadoSecao({ quadroId, podeGerar }) {
+function QcResultadoSecao({ quadroId, podeGerar, salvarAntes }) {
   const [bom, setBom] = React.useState([]);
   const [cortes, setCortes] = React.useState([]);
   const [checklist, setChecklist] = React.useState([]);
@@ -585,6 +599,8 @@ function QcResultadoSecao({ quadroId, podeGerar }) {
   const gerarBom = async () => {
     setGerando(true);
     try {
+      // Grava o que está na tela antes: o BOM é calculado do que está SALVO no banco.
+      if (salvarAntes && !(await salvarAntes())) return;
       const r = await window.QuadroComandoStore.gerarBomECortes(quadroId);
       if (r.erroVariante) window.toast?.(r.erroVariante, 'warning');
       else window.toast?.('BOM e lista de corte gerados.', 'success');
@@ -629,7 +645,7 @@ function QcResultadoSecao({ quadroId, podeGerar }) {
     <>
       <Card title="Especificação de fabricação / compra"
         action={<Button variant="primary" size="sm" disabled={gerando || !podeGerar} onClick={gerarBom}>{gerando ? 'Gerando…' : 'Gerar BOM + lista de corte'}</Button>}>
-        <div className="small muted" style={{ marginBottom: 10 }}>Recalcula do zero a partir do que está preenchido acima — não altera o que já foi digitado no formulário.</div>
+        <div className="small muted" style={{ marginBottom: 10 }}>Salva o formulário e recalcula do zero a partir do que está preenchido — não altera o que já foi digitado.</div>
         {!bom.length && !cortes.length && <div className="small muted" style={{ padding: 16, textAlign: 'center' }}>Nada gerado ainda.</div>}
         {!!bom.length && (
           <>
@@ -880,7 +896,7 @@ const QC_RESP_BLOCOS = [
   { titulo: 'Obra', campos: [['tipo_servico', 'Tipo de serviço'], ['identificacao', 'Identificação da obra'], ['num_paradas', 'Nº de paradas']] },
   { titulo: 'Quadro e motor', campos: [['variante_quadro', 'Modelo do quadro'], ['tensao_rede', 'Tensão da rede (V)'], ['tensao_rede_outro', 'Tensão da rede — outra'], ['potencia_motor', 'Potência do motor (kW)'], ['tensao_motor', 'Tensão do motor (V)'], ['corrente_nominal', 'Corrente nominal (A)'], ['aplicacao', 'Aplicação'], ['atendimento', 'Atendimento'], ['num_botoeiras', 'Nº de botoeiras']] },
   { titulo: 'Porta e acionamento', campos: [['tipo_porta', 'Tipo de porta'], ['operador_porta', 'Operador de porta'], ['tipo_freio', 'Tipo de freio'], ['tensao_freio', 'Tensão do freio (V)'], ['acionamento', 'Acionamento'], ['encoder', 'Encoder'], ['engrenagem', 'Engrenagem'], ['casa_maquinas', 'Casa de máquinas']] },
-  { titulo: 'Acessórios', campos: [['acessorios', 'Acessórios solicitados'], ['ind_cor', 'Cor do indicador'], ['observacoes', 'Observações']] },
+  { titulo: 'Acessórios', campos: [['acessorios', 'Acessórios solicitados'], ['lop_botoes', 'LOP — botões nos intermediários (1 ou 2)'], ['ind_cor', 'Cor do indicador'], ['observacoes', 'Observações']] },
   { titulo: 'Fiação (metros)', campos: [['f_l1', 'L1'], ['f_ua', 'UA'], ['f_tr', 'TR'], ['f_bp', 'BP'], ['f_lim', 'LIM'], ['f_fp', 'FP'], ['obs_fiacao', 'Observações da fiação']] },
 ];
 
@@ -986,7 +1002,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
       const primeiroErro = Object.keys(errosMap)[0];
       window.toast?.(`Campo obrigatório: ${primeiroErro.replace(/_/g, ' ')}`, 'warning');
       setTimeout(() => scrollParaCampoComErro(primeiroErro), 100);
-      return;
+      return false;
     }
     setErrosVisiveis({});
     setSaving(true);
@@ -1004,7 +1020,8 @@ function QuadroComandoDetail({ quadroId, onClose }) {
       await window.QuadroComandoStore.salvarComponentes(quadroId, quadro.componentes);
       window.toast?.('Quadro de comando salvo.', 'success');
       reload();
-    } catch (e) { window.toast?.('Erro ao salvar: ' + e.message, 'error'); }
+      return true;
+    } catch (e) { window.toast?.('Erro ao salvar: ' + e.message, 'error'); return false; }
     finally { setSaving(false); }
   };
 
@@ -1059,7 +1076,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
             { key: 'resultado', label: 'BOM / lista de corte / checklist' },
           ]} active={tab} onChange={setTab}/>
           <div style={{ marginTop: 16 }}>
-            {tab === 'escopo' && <QcEscopoSecao escopo={quadro.escopo_fornecimento || {}} onChange={(v) => setQuadro({ ...quadro, escopo_fornecimento: v })}/>}
+            {tab === 'escopo' && <QcEscopoSecao lopPublico={(quadro.respostas_publico || {}).lop_botoes} paradasCount={(quadro.paradas || []).length || parseInt((quadro.respostas_publico || {}).num_paradas, 10) || 0} escopo={quadro.escopo_fornecimento || {}} onChange={(v) => setQuadro({ ...quadro, escopo_fornecimento: v })}/>}
             {tab === 'configuracao' && <QcConfiguracaoSecao config={quadro.configuracao || {}} paradas={quadro.paradas} onChange={(v) => setQuadro({ ...quadro, configuracao: v })}/>}
             {tab === 'cabina' && <QcCabinaSecao geometria={quadro.geometria} config={quadro.configuracao || {}}
               onGeom={(v) => setQuadro({ ...quadro, geometria: v })}/>}
@@ -1068,7 +1085,7 @@ function QuadroComandoDetail({ quadroId, onClose }) {
             {tab === 'componentes' && <QcComponentesSecao componentes={quadro.componentes || {}} onChange={(v) => setQuadro({ ...quadro, componentes: v })}/>}
             {tab === 'geometria' && <QcGeometriaSecao geometria={quadro.geometria} intervalos={quadro.intervalos} config={quadro.configuracao || {}}
               onGeom={(v) => setQuadro({ ...quadro, geometria: v })} onIntervalos={(v) => setQuadro({ ...quadro, intervalos: v })}/>}
-            {tab === 'resultado' && <QcResultadoSecao quadroId={quadroId} podeGerar={true}/>}
+            {tab === 'resultado' && <QcResultadoSecao quadroId={quadroId} podeGerar={true} salvarAntes={salvarTudo}/>}
           </div>
         </>
       )}
