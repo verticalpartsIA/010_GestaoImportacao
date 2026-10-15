@@ -774,8 +774,22 @@ function PropostaEditor({ setRoute, subsel }) {
       if (!r.encontrado) {
         setHeranca({ tipo: 'aviso', texto: `Nenhum formulário encontrado para a Cotação nº ${num}. Você pode seguir preenchendo a proposta manualmente.` });
       } else {
-        setData((d) => deepMergeHeranca(d, r.prefill));
-        setEq('elevador');
+        /* Herança mantém o equipamento da proposta (13/10→15/10/2026): antes um
+           `setEq('elevador')` fixo trocava Escada/Esteira Rolante para Elevador
+           ao clicar em "Herdar dados". O motor de herança monta só o bloco
+           `elevador` (especificações/valores da Precificação de elevador); em
+           Escada/Esteira herdamos o que é comum (nº da cotação, cliente, obra)
+           e a quantidade das unidades DAQUELE tipo no Formulário. */
+        let prefill = r.prefill;
+        if (eq === 'escada' || eq === 'esteira') {
+          const { elevador: _descartado, ...comum } = prefill;
+          prefill = comum;
+          const qtd = (r.fontes.unidades || [])
+            .filter((u) => u.tipo_equipamento === eq)
+            .reduce((s, u) => s + (Number(u.quantidade) || 1), 0);
+          if (qtd) prefill[eq] = { valores: { quantidade: String(qtd) } };
+        }
+        setData((d) => deepMergeHeranca(d, prefill));
         setHeranca({ tipo: 'ok', texto: 'Herdado de: ' + window.PropostaHeranca.resumoFontes(r.fontes) });
         window.toast?.(`✓ Dados herdados da cotação ${num}`, 'success');
       }
@@ -784,7 +798,7 @@ function PropostaEditor({ setRoute, subsel }) {
     } finally {
       setHerdando(false);
     }
-  }, [data.numeroCotacao]);
+  }, [data.numeroCotacao, eq]);
 
   /* Auto-herda uma vez ao abrir — pedido do usuário 19/08: "conforme os
      inputs forem acontecendo a proposta vai se auto preenchendo". Uma
