@@ -186,19 +186,20 @@ function CIHomologacaoAviso({ cnpj }) {
 const _ciNorm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const _ciOrdenar = (lista, chave) => [...lista].sort((a, b) => _ciNorm(chave(a)).localeCompare(_ciNorm(chave(b)), 'pt-BR'));
 
-function CISeletorInstalador({ s, set }) {
-  const [lista, setLista] = React.useState(null);
+function CIRazaoSocialCombo({ s, set, errors }) {
+  const [lista, setLista] = React.useState([]);
   React.useEffect(() => {
     let vivo = true;
     (window.RHHomologacao?.listarMontadores?.() || Promise.resolve([]))
       .then((l) => { if (vivo) setLista(_ciOrdenar(l || [], (p) => p.nome)); })
-      .catch(() => { if (vivo) setLista([]); });
+      .catch(() => {});
     return () => { vivo = false; };
   }, []);
-  const escolher = (id) => {
-    const p = (lista || []).find((x) => String(x.id) === id);
+  const preencher = (v) => {
+    set('c_razao', v);
+    const p = lista.find((x) => _ciNorm(x.nome) === _ciNorm(v));
     if (!p) return;
-    set('c_razao', p.nome || '');
+    set('c_razao', p.nome || v);
     if (p.cnpj) set('c_cnpj', window.CI.maskCNPJ ? window.CI.maskCNPJ(p.cnpj) : p.cnpj);
     if (p.endereco_logradouro) set('c_rua', p.endereco_logradouro);
     if (p.endereco_bairro) set('c_bairro', p.endereco_bairro);
@@ -206,15 +207,15 @@ function CISeletorInstalador({ s, set }) {
     if (p.endereco_estado) set('c_estado', String(p.endereco_estado).toUpperCase().slice(0, 2));
     if (p.endereco_cep) set('c_cep', window.CI.maskCEP ? window.CI.maskCEP(p.endereco_cep) : p.endereco_cep);
   };
-  const atual = (lista || []).find((p) => window.CI.onlyDigits(p.cnpj || '') && window.CI.onlyDigits(p.cnpj || '') === window.CI.onlyDigits(s.c_cnpj || ''));
   return (
     <div className="ci-field ci-field--full">
-      <label>Empresa instaladora cadastrada</label>
-      <select className="ci-input" value={atual ? String(atual.id) : ''} onChange={(e) => escolher(e.target.value)}>
-        <option value="">{lista === null ? 'Carregando…' : '— escolher da lista (A–Z) ou digitar abaixo —'}</option>
-        {(lista || []).map((p) => <option key={p.id} value={String(p.id)}>{p.nome}</option>)}
-      </select>
-      <span className="ci-field-hint">Instaladores de Cadastros › Instaladores. Ao escolher, razão social, CNPJ e endereço são preenchidos (você pode ajustar). Empresa nova? Digite os dados abaixo.</span>
+      <label>Razão social<span className="ci-req">*</span></label>
+      <input className={'ci-input' + (errors.c_razao ? ' ci-input--error' : '')} list="ci-instaladores-dl" value={s.c_razao || ''} onChange={(e) => preencher(e.target.value)}
+        placeholder="Clique e escolha a empresa instaladora (A–Z) ou digite uma nova" autoComplete="off" />
+      <datalist id="ci-instaladores-dl">
+        {lista.map((p) => <option key={p.id} value={p.nome} />)}
+      </datalist>
+      {errors.c_razao ? <span className="ci-field-err">{errors.c_razao}</span> : <span className="ci-field-hint">Empresas de Cadastros › Instaladores. Ao escolher, CNPJ e endereço são preenchidos. Empresa nova? Basta digitar.</span>}
     </div>
   );
 }
@@ -266,9 +267,8 @@ function CIStepPartes({ s, set, errors }) {
       </div>
       <div className="ci-field-group">
         <h3 className="ci-group-title">Empresa</h3>
-        <CISeletorInstalador s={s} set={set} />
         <div className="ci-grid">
-          <CIField label="Razão social" required width="full" value={s.c_razao} onChange={(v) => set('c_razao', v)} placeholder="Ex.: Montagem Vertical Serviços Ltda." error={errors.c_razao} />
+          <CIRazaoSocialCombo s={s} set={set} errors={errors} />
           <CIField label="CNPJ" required mask="maskCNPJ" mono value={s.c_cnpj} onChange={(v) => set('c_cnpj', v)} placeholder="00.000.000/0000-00" error={errors.c_cnpj} />
         </div>
         <CIHomologacaoAviso cnpj={s.c_cnpj} />
