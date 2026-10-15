@@ -375,7 +375,8 @@
     const c = sb(); if (!c || !ufDestino) return null;
     const { data, error } = await c.from('regras_icms_venda').select('*').eq('ativo', true)
       .eq('uf_origem', String(ufOrigem).toUpperCase()).eq('uf_destino', String(ufDestino).toUpperCase()).eq('origem_mercadoria', origemMercadoria);
-    if (error) { console.warn('[CadastroCustosStore] buscarRegraIcmsVenda falhou', error); return null; }
+    // Falha de consulta NÃO vira "sem regra": o cálculo para em vez de precificar com a alíquota errada.
+    if (error) throw new Error('Não foi possível consultar as Regras de ICMS: ' + (error.message || error));
     const lista = data || [];
     return lista.find((r) => !r.ncm) || lista[0] || null;
   }
