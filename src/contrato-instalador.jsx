@@ -186,6 +186,46 @@ function CIHomologacaoAviso({ cnpj }) {
 const _ciNorm = (x) => String(x || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
 const _ciOrdenar = (lista, chave) => [...lista].sort((a, b) => _ciNorm(chave(a)).localeCompare(_ciNorm(chave(b)), 'pt-BR'));
 
+/* Lista suspensa de verdade: abre ao clicar/focar, mostra todas as opções
+   (A–Z), filtra ao digitar e fecha ao escolher ou clicar fora. */
+function CIComboLista({ value, onTexto, opcoes, onEscolher, placeholder, erro, carregando }) {
+  const [aberto, setAberto] = React.useState(false);
+  const [filtrar, setFiltrar] = React.useState(false);
+  const ref = React.useRef(null);
+  React.useEffect(() => {
+    const fora = (e) => { if (ref.current && !ref.current.contains(e.target)) setAberto(false); };
+    document.addEventListener('mousedown', fora);
+    return () => document.removeEventListener('mousedown', fora);
+  }, []);
+  const q = _ciNorm(value);
+  const visiveis = filtrar && q ? opcoes.filter((o) => _ciNorm(o.label).includes(q)) : opcoes;
+  return (
+    <div ref={ref} style={{ position: 'relative' }}>
+      <input className={'ci-input' + (erro ? ' ci-input--error' : '')} style={{ paddingRight: 30 }} value={value || ''} autoComplete="off"
+        placeholder={placeholder}
+        onFocus={() => { setFiltrar(false); setAberto(true); }}
+        onClick={() => { setFiltrar(false); setAberto(true); }}
+        onChange={(e) => { setFiltrar(true); setAberto(true); onTexto(e.target.value); }}
+        onKeyDown={(e) => { if (e.key === 'Escape') setAberto(false); }} />
+      <span onMouseDown={(e) => { e.preventDefault(); setFiltrar(false); setAberto((a) => !a); }}
+        style={{ position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)', cursor: 'pointer', color: 'var(--ci-fg3)' }}>▾</span>
+      {aberto && (
+        <div style={{ position: 'absolute', zIndex: 60, left: 0, right: 0, top: '100%', marginTop: 2, maxHeight: 260, overflowY: 'auto',
+          background: '#fff', color: '#111', border: '1px solid var(--ci-line)', borderRadius: 3, boxShadow: '0 6px 18px rgba(0,0,0,.15)' }}>
+          {carregando && <div style={{ padding: '9px 11px', fontSize: 13 }}>Carregando…</div>}
+          {!carregando && visiveis.length === 0 && <div style={{ padding: '9px 11px', fontSize: 13, color: 'var(--ci-fg3)' }}>Nenhum cadastro encontrado — pode digitar um novo.</div>}
+          {visiveis.map((o) => (
+            <div key={o.id} onMouseDown={(e) => { e.preventDefault(); onEscolher(o); setAberto(false); }}
+              style={{ padding: '8px 11px', fontSize: 13, cursor: 'pointer' }}
+              onMouseEnter={(e) => { e.currentTarget.style.background = '#fff4d6'; }}
+              onMouseLeave={(e) => { e.currentTarget.style.background = ''; }}>{o.label}</div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function CIRazaoSocialCombo({ s, set, errors }) {
   const [lista, setLista] = React.useState([]);
   React.useEffect(() => {
@@ -210,11 +250,9 @@ function CIRazaoSocialCombo({ s, set, errors }) {
   return (
     <div className="ci-field ci-field--full">
       <label>Razão social<span className="ci-req">*</span></label>
-      <input className={'ci-input' + (errors.c_razao ? ' ci-input--error' : '')} list="ci-instaladores-dl" value={s.c_razao || ''} onChange={(e) => preencher(e.target.value)}
-        placeholder="Clique e escolha a empresa instaladora (A–Z) ou digite uma nova" autoComplete="off" />
-      <datalist id="ci-instaladores-dl">
-        {lista.map((p) => <option key={p.id} value={p.nome} />)}
-      </datalist>
+      <CIComboLista value={s.c_razao} onTexto={preencher} erro={!!errors.c_razao}
+        opcoes={lista.map((p) => ({ id: p.id, label: p.nome }))} onEscolher={(o) => preencher(o.label)}
+        placeholder="Clique para escolher a empresa instaladora ou digite uma nova" />
       {errors.c_razao ? <span className="ci-field-err">{errors.c_razao}</span> : <span className="ci-field-hint">Empresas de Cadastros › Instaladores. Ao escolher, CNPJ e endereço são preenchidos. Empresa nova? Basta digitar.</span>}
     </div>
   );
@@ -240,14 +278,11 @@ function CISeletorClienteObra({ s, set }) {
       <p className="ci-field-hint" style={{ marginBottom: 8 }}>Para qual cliente o instalador vai montar o equipamento. Fica registrado no contrato (não altera o texto).</p>
       {!novo && (
         <div className="ci-field ci-field--full">
-          <select className="ci-input" value={s.clienteObraId || ''} onChange={(e) => {
-            const c = (lista || []).find((x) => String(x.id) === e.target.value);
-            set('clienteObraId', c ? c.id : null);
-            set('clienteObraNome', c ? (c.razao_social || c.nome_fantasia) : '');
-          }}>
-            <option value="">{lista === null ? 'Carregando…' : '— escolher cliente (A–Z) —'}</option>
-            {(lista || []).map((c) => <option key={c.id} value={String(c.id)}>{c.razao_social || c.nome_fantasia}</option>)}
-          </select>
+          <CIComboLista value={s.clienteObraNome} carregando={lista === null}
+            onTexto={(v) => { set('clienteObraNome', v); set('clienteObraId', null); }}
+            opcoes={(lista || []).map((c) => ({ id: c.id, label: c.razao_social || c.nome_fantasia }))}
+            onEscolher={(o) => { set('clienteObraId', o.id); set('clienteObraNome', o.label); }}
+            placeholder="Clique para escolher o cliente (A–Z)" />
         </div>
       )}
       <CICheckRow checked={novo} onChange={(v) => { set('clienteObraNovo', v); set('clienteObraId', null); set('clienteObraNome', ''); }} label="Cliente ainda não cadastrado (digitar o nome)" />
