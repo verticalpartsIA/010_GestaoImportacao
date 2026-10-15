@@ -803,7 +803,7 @@
     const { data: emailData, error: emailError } = await c.functions.invoke('send-email', {
       body: {
         to: destinatario,
-        subject: `Projeto de Instalação — Contrato ${cur.numero_documento} — VerticalParts`,
+        subject: `Projeto de Instalacao - Contrato ${cur.numero_documento} - VerticalParts`,
         text: `Olá,\n\nSegue em anexo o Desenho do Projeto de Instalação referente ao Contrato ${cur.numero_documento}.\n\nAtenciosamente,\nVerticalParts`,
         numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: id,
         attachments: [{ filename: arquivo.nome, contentType: arquivo.tipo || 'application/octet-stream', base64 }],

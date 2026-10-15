@@ -92,7 +92,7 @@ test('enviar: grava a tratativa e manda o e-mail com `body` (referência da cota
   assert.equal(b.referenciaTipo, 'tratativa_cotacao');
   assert.equal(b.referenciaId, COT);
   assert.equal(b.numeroCotacao, 955);
-  assert.match(b.subject, /Cotação Nº 955/);
+  assert.match(b.subject, /Cota[cç][aã]o N[ºo] 955/);
   assert.match(b.text, /Please update ST 304/);
 });
 

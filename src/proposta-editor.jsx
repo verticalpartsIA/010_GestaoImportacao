@@ -421,14 +421,14 @@ function PropostaSendModal({ record, onClose, onSent }) {
            com RFQ/Contrato de Venda/Contrato Instalador); sucesso/falha
            continuam decididos aqui, sem mudança de comportamento. */
         const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: contact, subject: `Proposta ${record.numero_documento} — VerticalParts`, text: message,
+          to: contact, subject: `Proposta ${record.numero_documento} - VerticalParts`, text: message,
           numeroCotacao: record.numeroCotacao ?? null, referenciaTipo: 'proposta', referenciaId: record.id,
         });
         if (enviouDireto) {
           await store.markSent(record.id, channel, { name, contact });
           window.toast?.(`E-mail enviado para ${contact}.`, 'success');
         } else {
-          window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} — VerticalParts`, message), '_blank');
+          window.open(store.mailtoHref(contact, `Proposta ${record.numero_documento} - VerticalParts`, message), '_blank');
           window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado ao cliente e a proposta NÃO foi marcada como enviada. Abrindo seu e-mail padrão para envio manual; depois de enviar, use o WhatsApp/link para registrar o envio.', 'error');
           return;
         }

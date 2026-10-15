@@ -386,7 +386,7 @@ function CVSendModal({ record, onClose, onSent }) {
             `Olá${nomeExtra ? ' ' + nomeExtra.split(' ')[0] : ''}! A Vertical Parts enviou o contrato ${record.numero_documento} também para a sua assinatura digital.\n\n` +
             `${record.titulo}\nValor: ${valorFmt}\n\nAssine pelo seu link individual e seguro (válido por 7 dias):\n${url}`;
           const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
-            to: emailExtra, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: msgExtra,
+            to: emailExtra, subject: `Contrato ${record.numero_documento} - Assinatura digital`, text: msgExtra,
             numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
           });
           if (enviouDireto) {
@@ -402,7 +402,7 @@ function CVSendModal({ record, onClose, onSent }) {
           `Olá${nomeExtra ? ' ' + nomeExtra.split(' ')[0] : ''}! Você está recebendo, em cópia informativa, o contrato ${record.numero_documento} enviado pela Vertical Parts para assinatura de ${name || record.comprador_razao_social}.\n\n` +
           `${record.titulo}\nValor: ${valorFmt}\n\nEste e-mail é só um aviso — não é necessário assinar nada aqui.`;
         const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: emailExtra, subject: `[Cópia] Contrato ${record.numero_documento} — Vertical Parts`, text: msgCopia,
+          to: emailExtra, subject: `[Copia] Contrato ${record.numero_documento} - Vertical Parts`, text: msgCopia,
           numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
         });
         if (!enviouDireto) window.toast?.(`Falha ao enviar cópia informativa para ${emailExtra}.`, 'error');
@@ -441,14 +441,14 @@ function CVSendModal({ record, onClose, onSent }) {
            decididos aqui, sem mudança de comportamento. */
         const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(record.numero_documento) ?? null;
         const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: contact, subject: `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, text: message,
+          to: contact, subject: `Contrato ${record.numero_documento} - Assinatura digital`, text: message,
           numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: record.id,
         });
         if (enviouDireto) {
           updated = await window.CVStore.markSent(record.id, channel, { name, contact });
           window.toast?.(`E-mail enviado para ${contact}.`, 'success');
         } else {
-          window.open(window.CVStore.mailtoHref(contact, `Contrato ${record.numero_documento} — Assinatura digital | Vertical Parts`, message), '_blank');
+          window.open(window.CVStore.mailtoHref(contact, `Contrato ${record.numero_documento} - Assinatura digital`, message), '_blank');
           window.toast?.('O envio automático por e-mail FALHOU — nada foi enviado e o contrato NÃO foi marcado como enviado. Abrindo seu e-mail padrão para envio manual; depois de enviar, use WhatsApp/Link para registrar o envio.', 'error');
           return;
         }
@@ -1199,7 +1199,7 @@ function CVDocumentoSignatariosSection({ rec }) {
         const msg = `Olá${s.nome ? ' ' + s.nome.split(' ')[0] : ''}! Lembrete: o contrato ${rec.numero_documento} ainda aguarda sua assinatura digital.\n\nAssine pelo seu link individual:\n${url}`;
         const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(rec.numero_documento) ?? null;
         const { enviouDireto } = await window.EmailEnvioHelper.tentarEnviarDireto({
-          to: s.email, subject: `Lembrete — Contrato ${rec.numero_documento} — Assinatura digital | Vertical Parts`, text: msg,
+          to: s.email, subject: `Lembrete - Contrato ${rec.numero_documento} - Assinatura digital`, text: msg,
           numeroCotacao, referenciaTipo: 'contrato_venda', referenciaId: rec.id,
         });
         if (enviouDireto) { await window.DocumentoSignatariosStore.marcarEnviado(s.id, 'email', { name: s.nome, contact: s.email }); window.toast?.('Lembrete enviado.', 'success'); }
