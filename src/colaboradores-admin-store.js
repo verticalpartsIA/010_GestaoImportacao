@@ -195,7 +195,6 @@
       { modulo: 'precificacao', label: 'Precificação' },
       { modulo: 'aval-financeiro', label: 'Aval Financeiro' },
       { modulo: 'emissao-nf', label: 'Emissão de NF' },
-      { modulo: 'pagamentos-instalador', label: 'Pagamentos a Instaladores' },
     ]},
     { grupo: 'Jurídico', itens: [
       { modulo: 'contrato-venda-equipamentos', label: 'Contrato Venda de Equipamentos' },
