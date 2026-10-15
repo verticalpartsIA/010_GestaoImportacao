@@ -330,7 +330,7 @@ function App() {
     "emissao-nf": ["financeiro", "admin"],
     "aval-juridico": ["juridico", "admin"],
     comissoes: ["financeiro", "admin"],
-    "pagamentos-instalador": ["financeiro", "admin"],
+    "pagamentos-instalador": ["financeiro", "engenharia", "admin"],
     logs: ["admin"],
     configuracoes: ["admin"],
   };

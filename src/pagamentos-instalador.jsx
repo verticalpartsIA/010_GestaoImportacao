@@ -19,6 +19,7 @@ function PagamentosInstaladorPage() {
   const [parcelas, setParcelas] = React.useState(null);
   const [decisoesPorParcela, setDecisoesPorParcela] = React.useState({});
   const [filtro, setFiltro] = React.useState('liberadas');
+  const [aba, setAba] = window.useRouteTab('pagamentos-instalador', 'parcelas', ['parcelas', 'acordos']);
 
   const reload = React.useCallback(() => {
     window.ContratoInstaladorParcelasStore.listarTodasComContrato().then(async (lista) => {
@@ -89,10 +90,13 @@ function PagamentosInstaladorPage() {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule" />ADM/ Financeiro</div>
           <h1 className="page-head__title">Pagamentos a Instaladores</h1>
-          <p className="page-head__sub">Parcelas do Contrato Instalador — liberadas automaticamente conforme a instalação avança no Acompanhamento de Obra (Diário). Confirmar o pagamento exige aprovação do Gestor Comercial (Central de Decisões).</p>
+          <p className="page-head__sub">Preço combinado por equipamento e parcelas do Contrato Instalador — liberadas automaticamente conforme a instalação avança no Acompanhamento de Obra (Diário). Confirmar o pagamento exige aprovação do Gestor Comercial (Central de Decisões).</p>
         </div>
       </div>
 
+      <Tabs active={aba} onChange={setAba} tabs={[{ key: 'parcelas', label: 'Parcelas' }, { key: 'acordos', label: 'Preços combinados' }]} />
+      <div style={{ height: 14 }} />
+      {aba === 'acordos' ? <window.PagamentosAcordosAba /> : (<>
       <div className="grid-3" style={{ marginBottom: 20 }}>
         <KPI label="A pagar agora" value={fmtMoeda(soma((p) => p.status === 'pendente' && p.liberada))} sub={`${contagem.liberadas} parcela(s) liberada(s)`} icon="dollar"
           onClick={() => setFiltro(filtro === 'liberadas' ? 'todas' : 'liberadas')}
@@ -163,6 +167,7 @@ function PagamentosInstaladorPage() {
         </table>
       </div>
       </Card>
+      </>)}
     </div>
   );
 }
