@@ -724,6 +724,30 @@ function CIStepLogistica({ s, set, errors }) {
   errors = errors || {};
   const longa = window.CI.isLongaDistancia(s);
   const km = parseFloat(String(s.distancia).replace(',', '.')) || 0;
+  /* Distância automática (15/10/2026): da sede (Guarulhos) até o centro da cidade da obra, por estrada. Só roda enquanto o
+     campo está vazio ou foi preenchido pelo próprio cálculo; se o operador digitar um valor, passa a valer o dele. */
+  const [calc, setCalc] = _ciUS(null);   // { estado: 'calculando'|'ok'|'erro', fonte?, msg? }
+  const [tick, setTick] = _ciUS(0);
+  const cid = (s.obraCidade || '').trim();
+  const uf = (s.obraEstado || '').trim();
+  _ciUE(() => {
+    if (!cid || uf.length !== 2 || !window.DistanciaObra) return;
+    if (s.distancia && s.distanciaAuto !== true) return;   // valor manual: não mexe
+    let vivo = true;
+    setCalc({ estado: 'calculando' });
+    const t = setTimeout(async () => {
+      try {
+        const r = await window.DistanciaObra.calcular({ cidade: cid, uf });
+        if (!vivo) return;
+        set('distancia', window.DistanciaObra.formatarKm(r.km));
+        set('distanciaAuto', true);
+        setCalc({ estado: 'ok', fonte: r.fonte });
+      } catch (e) { if (vivo) setCalc({ estado: 'erro', msg: e.message || 'Não foi possível calcular.' }); }
+    }, 700);
+    return () => { vivo = false; clearTimeout(t); };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cid, uf, tick]);
+  const perto = km >= 85 && km <= 115;
   return (
     <div className="ci-step">
       <CIStepHeader kicker="Passo 4 — Logística" title="Logística e local" desc="Localização da obra e distância de Guarulhos/SP. A partir de 100 km uma cláusula de deslocamento é inserida." />
@@ -731,8 +755,16 @@ function CIStepLogistica({ s, set, errors }) {
         <div className="ci-grid">
           <CIField label="Cidade da obra" required={longa} value={s.obraCidade} onChange={(v) => set('obraCidade', v)} placeholder="Campinas" error={errors.obraCidade} />
           <CIField label="UF" required={longa} width="narrow" value={s.obraEstado} onChange={(v) => set('obraEstado', v.toUpperCase().slice(0, 2))} placeholder="SP" error={errors.obraEstado} />
-          <CIField label="Distância de Guarulhos/SP (km)" mono value={s.distancia} onChange={(v) => set('distancia', v.replace(/[^\d.,]/g, ''))} placeholder="0" hint="≥ 100 km ativa a cláusula de logística." />
+          <CIField label="Distância de Guarulhos/SP (km)" mono value={s.distancia} onChange={(v) => { set('distancia', v.replace(/[^\d.,]/g, '')); set('distanciaAuto', false); }} placeholder={calc && calc.estado === 'calculando' ? 'calculando…' : '0'}
+            hint={s.distanciaAuto === true && calc && calc.estado === 'ok'
+              ? (calc.fonte === 'rota' ? `Calculada pela estrada, da sede (Rua Armandina Braga de Almeida, 383, Guarulhos) até o centro de ${cid}/${uf}. Pode editar.` : 'Estimativa em linha reta × 1,3 (a rota por estrada não respondeu). Pode editar.')
+              : '≥ 100 km ativa a cláusula de logística.'} />
         </div>
+        {calc && calc.estado === 'erro' && <div className="ci-field-err" style={{ marginTop: 6 }}>{calc.msg} Digite a distância manualmente.</div>}
+        {s.distanciaAuto !== true && cid && uf.length === 2 && (
+          <div style={{ marginTop: 6 }}><button type="button" className="ci-btn ci-btn--ghost" onClick={() => { set('distanciaAuto', true); setTick((n) => n + 1); }}>↻ Calcular automaticamente (sede → {cid}/{uf})</button></div>
+        )}
+        {perto && s.distanciaAuto === true && <div className="ci-cond-alert"><span className="ci-cond-dot"></span>A distância está perto do limite de 100 km (medida até o centro da cidade). Se a obra fica longe do centro, confira e ajuste o valor.</div>}
         <div className={'ci-distance-gauge' + (longa ? ' ci-distance-gauge--on' : '')}>
           <div className="ci-dg-track"><div className="ci-dg-fill" style={{ width: Math.min(100, (km / 200) * 100) + '%' }}></div><div className="ci-dg-mark" style={{ left: '50%' }}><span>100 km</span></div></div>
           <div className="ci-dg-status">{longa ? `${km} km — cláusula de logística ativada` : (km > 0 ? `${km} km — dentro do raio padrão` : 'Informe a distância')}</div>
