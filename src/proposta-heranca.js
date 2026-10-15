@@ -377,6 +377,66 @@
     return prefill;
   }
 
+  /* ---------- Escada / Esteira Rolante ----------
+     No Formulário, escada/esteira guardam as especificações em
+     `formularios_elevador_unidades.especificacoes` (jsonb, texto livre das
+     planilhas técnicas); a proposta usa SELECTS com listas fixas (OPTIONS em
+     proposta-form.jsx). Por isso cada valor é normalizado para a opção
+     equivalente — texto que não casa com nenhuma opção ficaria em branco no
+     select. Não há Precificação própria de escada/esteira: sem valores. */
+  const ESC_OPTS = {
+    escada: {
+      empreendimento: ['Comercial', 'Supermercado', 'Shopping', 'Hospital', 'Aeroporto'],
+      incl: ['30º', '35º'], largura: ['600mm', '800mm', '1000mm'], bal: ['900mm', '1000mm'],
+      vel: ['0.5 m/s', '0.65 m/s', '0.75 m/s'], alim: (v) => `${v}V Trifásico`, arranjo: ['Paralelo', 'Cruzada', 'Simples'],
+    },
+    esteira: {
+      empreendimento: ['Supermercado', 'Shopping', 'Aeroporto'],
+      incl: ['0º', '10º', '11º', '12º'], largura: ['800mm', '1000mm'], bal: ['900mm', '1000mm'],
+      vel: ['0.5 m/s', '0.65 m/s'], alim: (v) => `Trifásico ${v}V`, arranjo: ['Paralelo', 'Cruzada', 'Simples'],
+    },
+  };
+  const _t = (v) => String(v == null ? '' : v).trim();
+  const _num = (v) => { const m = /(\d+(?:[.,]\d+)?)/.exec(_t(v).replace(/\.(?=\d{3}\b)/g, '')); return m ? parseFloat(m[1].replace(',', '.')) : null; };
+  const _mm = (v) => { const n = _num(v); if (n == null) return ''; return String(/\bmm\b/i.test(_t(v)) || n >= 100 ? Math.round(n) : Math.round(n * 1000)); };
+  const _opt = (v, opts) => { const n = _num(v); if (n == null) return ''; return opts.find((o) => _num(o) === n) || ''; };
+  const _txt = (v, opts) => { const t = _t(v).toLowerCase(); return t ? (opts.find((o) => t.includes(o.toLowerCase())) || '') : ''; };
+
+  function montarBlocoEscadaEsteira(fontes, tipo) {
+    if (!fontes || !fontes.encontrado || (tipo !== 'escada' && tipo !== 'esteira')) return null;
+    const O = ESC_OPTS[tipo];
+    const unidades = (fontes.unidades || []).filter((u) => (u.tipo_equipamento || 'elevador') === tipo);
+    if (!unidades.length) return null;
+    const especificacoes = unidades.map((u, i) => {
+      const e = u.especificacoes || {};
+      const tensao = _num(e.tensao_alimentacao_equip);
+      const alimentacao = tensao === 220 || tensao === 380 ? O.alim(tensao) : '';
+      const disp = _t(e.disposicao_espaco).toLowerCase();
+      const arranjo = /cruz/.test(disp) ? 'Cruzada' : /paralel/.test(disp) ? 'Paralelo' : /simples/.test(disp) ? 'Simples' : '';
+      const uso = _t(e.uso_previsto).toLowerCase();
+      const carac = /alto/.test(uso) || _num(e.horario_pico) >= 8000 ? 'Alto Tráfego' : uso ? 'Comercial' : '';
+      const base = {
+        id: u.identificador || `${tipo === 'escada' ? 'Escada' : 'Esteira'} ${i + 1}`,
+        unidadeId: u.id,
+        empreendimento: _txt(e.tipo_edificacao, O.empreendimento),
+        carac,
+        incl: _opt(e.inclinacao, O.incl),
+        balaustrada: _opt(e.balaustrada, O.bal),
+        vel: _opt(e.velocidade_nominal, O.vel),
+        alimentacao, arranjo, maquina: '',
+        qtd: Number(u.quantidade) || 1, valorUnit: '',
+      };
+      return tipo === 'escada'
+        ? { ...base, desnivel: _mm(e.desnivel_elevacao), largDegrau: _opt(e.largura_degrau, O.largura) }
+        : { ...base, desnivelComp: _mm(e.desnivel_vertical || e.comprimento_total), largPallet: _opt(e.largura_palete, O.largura) };
+    });
+    const qtd = especificacoes.reduce((s, x) => s + (Number(x.qtd) || 0), 0);
+    return {
+      especificacoes,
+      valores: { equipamento: tipo === 'escada' ? 'Escada Rolante' : 'Esteira Rolante', quantidade: String(qtd) },
+    };
+  }
+
   /* Atalho usado pelo editor: número → prefill (ou null se não achar). */
   async function prefillPorNumeroCotacao(numeroCotacao) {
     const fontes = await buscarFontes(numeroCotacao);
@@ -393,5 +453,5 @@
     return partes.join(' · ');
   }
 
-  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes };
+  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, montarBlocoEscadaEsteira };
 }());
