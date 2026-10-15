@@ -1422,6 +1422,20 @@ function CIAuditRow({ k, v }) {
   return <div className="ci-audit-row"><span className="k">{k}</span><span className="v">{v || '—'}</span></div>;
 }
 
+/* Contrato anulado: "Reenviar" gera link NOVO (o antigo fica expirado) antes de abrir o envio. */
+async function ciReenviar(rec, abrir) {
+  try {
+    if (rec.status === 'expirado' && rec.audit && rec.audit.anulacao) {
+      const novo = await window.CIStore.reabrirAnulado(rec.id);
+      abrir(novo);
+    } else {
+      abrir(rec);
+    }
+  } catch (e) {
+    alert('Não foi possível gerar o novo link: ' + (e.message || e));
+  }
+}
+
 function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
   const a = rec.audit || {};
   const del = async () => {
@@ -1506,7 +1520,7 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
             <div className="ci-drawer-actions">
               <a className="ci-btn ci-btn--ghost" href={signUrl} target="_blank" rel="noopener">Abrir link de assinatura ↗</a>
               {(rec.status === 'enviado' || rec.status === 'visualizado' || rec.status === 'expirado' || rec.status === 'rascunho') &&
-                <button className="ci-btn ci-btn--primary" onClick={() => onResend(rec)}>{rec.status === 'rascunho' ? 'Enviar' : 'Reenviar link'}</button>}
+                <button className="ci-btn ci-btn--primary" onClick={() => ciReenviar(rec, onResend)}>{rec.status === 'rascunho' ? 'Enviar' : 'Reenviar link'}</button>}
               {rec.status === 'rascunho' && <button className="ci-btn ci-btn--danger" onClick={del}>Excluir rascunho</button>}
               {podeAnular && ['enviado', 'visualizado', 'assinado', 'recusado'].includes(rec.status) && <button className="ci-btn ci-btn--danger" onClick={anular}>Anular assinatura / enviado ao montador errado</button>}
             </div>
@@ -1618,7 +1632,7 @@ function CIDashboard() {
                       <button className="ci-icon-btn" title="Auditoria" onClick={() => setDrawerId(c.id)}>👁</button>
                       <a className="ci-icon-btn" title="Abrir assinatura" href={window.CIStore.signUrl(c.token)} target="_blank" rel="noopener">🔗</a>
                       {(c.status === 'enviado' || c.status === 'visualizado' || c.status === 'rascunho' || c.status === 'expirado') &&
-                        <button className="ci-mini-btn" onClick={() => setSendRec(c)}>{c.status === 'rascunho' ? 'Enviar' : 'Reenviar'}</button>}
+                        <button className="ci-mini-btn" onClick={() => ciReenviar(c, (r) => { setSendRec(r); refresh(); })}>{c.status === 'rascunho' ? 'Enviar' : 'Reenviar'}</button>}
                     </div>
                   </td>
                 </tr>
