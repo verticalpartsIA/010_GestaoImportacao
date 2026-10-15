@@ -233,7 +233,7 @@
       equipamento: 'elevador', quantidade: 1, localServico:'', descricaoServicos:'',
       tipoElevador: 'social', capacidadeCarga:'', cargaEspecial: false,
       paradas: '5', paradasCustom:'', destino:'',
-      obraCidade:'', obraEstado:'', distancia:'',
+      obraCidade:'', obraEstado:'', distancia:'', distanciaAuto:true,
       logResponsavel:'contratada', logModo:'despesas', logDiasExtra:'',
       valorTotal:'', formaPagamento:'2', parcelas:[],
       banco:'', agencia:'', conta:'', pix:'',
