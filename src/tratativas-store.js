@@ -102,7 +102,7 @@
         const { data: r, error: emailError } = await c.functions.invoke('send-email', {
           body: {
             to: destinos.join(', '),
-            subject: `Nova mensagem — Cotação Nº ${numeroCotacao || ''} — VerticalParts`,
+            subject: `Nova mensagem - Cotacao No ${numeroCotacao || ''} - VerticalParts`,
             text: texto,
             html: `<p>Você recebeu uma nova mensagem sobre a cotação${numeroCotacao ? ' Nº ' + numeroCotacao : ''}.</p>`
               + `<p><strong>${nome}:</strong></p><p>${(mensagem?.trim() || '(Sem texto, apenas anexos)').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/\n/g, '<br/>')}</p>`
