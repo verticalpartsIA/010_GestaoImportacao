@@ -108,7 +108,7 @@ function PagamentosRecibosAba() {
     reload();
     window.InstaladorAcordosStore.listar().then((l) => setAcordos((l || []).filter((a) => a.status !== 'cancelado'))).catch(() => {});
     window.RHHomologacao?.listarMontadores().then((l) => setMontadores(l || [])).catch(() => {});
-    Promise.resolve(window.PropostaStore?.temCapacidade?.('pagamentos-instalador', 'editar')).then((ok) => setPodeEditar(!!ok)).catch(() => {});
+    Promise.resolve(window.PropostaStore?.temCapacidade?.('contrato-instalador', 'editar')).then((ok) => setPodeEditar(!!ok)).catch(() => {});
   }, [reload]);
 
   if (recibos === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
