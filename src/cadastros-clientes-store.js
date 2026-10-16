@@ -213,7 +213,8 @@
     if (existente) {
       cliente = existente;
     } else {
-      cliente = await criar({ razao_social: nome, contato: lead.contact || null, telefone: lead.phone || null, email: lead.email || null });
+      cliente = await criar({ razao_social: nome, contato: lead.contact || null, telefone: lead.phone || null, email: lead.email || null,
+        contribuinte_icms: typeof lead.contribuinte_icms === 'boolean' ? lead.contribuinte_icms : null });
     }
     const { error: errVinc } = await c.from('leads').update({ cliente_id: cliente.id }).eq('id', lead.id);
     if (errVinc) throw errVinc;

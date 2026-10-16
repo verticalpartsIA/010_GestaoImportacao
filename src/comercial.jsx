@@ -137,13 +137,14 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
     origin: lead.origin || 'Site', status: lead.status || 'Em qualificação',
     owner: lead.owner || '', value: lead.value != null ? String(lead.value) : '',
     comissaoPct: lead.comissao_pct != null ? String(lead.comissao_pct) : '',
+    contribuinteIcms: typeof lead.contribuinte_icms === 'boolean' ? String(lead.contribuinte_icms) : '',
     priority: ({ alta: 'Alta', media: 'Média', baixa: 'Baixa' }[String(lead.priority || '').toLowerCase()] || lead.priority || 'Alta'),
     next: lead.next_action || lead.next || '',
   } : {
     building:'', contact:'', role:'', phone:'', email:'',
     tipoPessoa:'PJ', cnpj:'', cpf:'', documentoPendente:false, razaoSocial:'',
     origin:'Site', status:'Em qualificação',
-    owner:'', value:'', comissaoPct:'', priority:'Alta', next:'',
+    owner:'', value:'', comissaoPct:'', contribuinteIcms:'', priority:'Alta', next:'',
   });
   const [buscandoCnpj, setBuscandoCnpj] = React.useState(false);
   const [saving, setSaving] = React.useState(false);
@@ -229,6 +230,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       const v = window.EnderecoAPI.validarDocumento(f.tipoPessoa, f.tipoPessoa === 'PF' ? f.cpf : f.cnpj);
       if (!v.ok) return window.toast(v.msg, 'warning');
     }
+    if (f.contribuinteIcms !== 'true' && f.contribuinteIcms !== 'false') return window.toast('Informe se o cliente é Contribuinte de ICMS (Sim ou Não) — define quem recolhe o DIFAL na venda.', 'warning');
     const comissaoTxt = String(f.comissaoPct == null ? '' : f.comissaoPct).replace(',', '.').trim();
     if (comissaoTxt !== '' && !(Number(comissaoTxt) >= 0 && Number(comissaoTxt) <= 100)) return window.toast('Comissão deve ser um percentual entre 0 e 100 (deixe em branco para usar 2%).', 'warning');
     const sb = comercialSb();
@@ -243,6 +245,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
       priority: ({ 'Alta': 'alta', 'Média': 'media', 'Baixa': 'baixa' }[f.priority] || 'media'),
       next_action: f.next || null,
       documento_pendente: f.documentoPendente,
+      contribuinte_icms: f.contribuinteIcms === 'true',
       // Comissão manual; em branco = padrão de 2% (COMISSAO_PADRAO_PCT) — grava null para não "congelar" o padrão.
       comissao_pct: comissaoTxt === '' ? null : Number(comissaoTxt),
     };
@@ -302,7 +305,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
        idempotente, não duplica se já tem cliente_id. */
     if (payload.status === "Convertido" && !clienteId && window.CadastrosClientesStore) {
       try {
-        const vinculado = await window.CadastrosClientesStore.criarOuVincularDeLead({ id, building: f.building, contact: f.contact, phone: f.phone || null, email: f.email || null });
+        const vinculado = await window.CadastrosClientesStore.criarOuVincularDeLead({ id, building: f.building, contact: f.contact, phone: f.phone || null, email: f.email || null, contribuinte_icms: f.contribuinteIcms === 'true' });
         if (vinculado) clienteId = vinculado;
       } catch (e) {
         console.warn("[comercial] Erro ao converter lead em cliente:", e);
@@ -464,6 +467,17 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
             <label className="up-eyebrow muted">Razão Social</label>
             <input className="input" type="text" value={f.razaoSocial}
               onChange={e => set('razaoSocial', e.target.value)} placeholder="Preenchido automaticamente pelo CNPJ"/>
+          </div>
+          <div className="stack" style={{ gap:4 }}>
+            <label className="up-eyebrow muted">Contribuinte de ICMS? *</label>
+            <select className="input" value={f.contribuinteIcms} onChange={e => set('contribuinteIcms', e.target.value)}>
+              <option value="">Selecione…</option>
+              <option value="true">Sim — contribuinte (tem inscrição estadual)</option>
+              <option value="false">Não — não contribuinte</option>
+            </select>
+            <span style={{ fontSize:11.5, color:'var(--fg3)' }}>
+              Obrigatório. Define quem paga o DIFAL nas vendas interestaduais: não contribuinte = a VerticalParts recolhe (custo na Precificação); contribuinte = o próprio cliente recolhe.
+            </span>
           </div>
           <p style={{ fontSize:11.5, color:'var(--fg3)', margin:0 }}>
             Sem CNPJ/CPF ainda? Marque a opção acima, ou deixe em branco e complete depois — direto no
