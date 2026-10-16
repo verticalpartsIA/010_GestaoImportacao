@@ -41,7 +41,22 @@ function CI_fmtDataHora(iso) {
   return d.toLocaleString('pt-BR', { timeZone: 'America/Sao_Paulo', day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' });
 }
 
-function CIContractPreview({ doc, highlightConditional, assinaturas }) {
+/* Assinatura da fila da VerticalParts (Contratante — CEO, Testemunha 1 e 2): nome, data/hora e hash, ou "aguardando assinatura". */
+function CI_FilaSlot({ f }) {
+  if (!f) return null;
+  const au = f.audit || {};
+  if (f.status !== 'assinado' || !au.signedAt) return <span className="ci-doc-digital-meta ci-doc-fila-aguarda">aguardando assinatura</span>;
+  return (
+    <div className="ci-doc-digital-item">
+      {au.signatureData ? <img className="ci-doc-digital-img" src={au.signatureData} alt={'Assinatura de ' + (au.signerName || f.nome)} /> : <span className="ci-doc-digital-name">{au.signerName || f.nome}</span>}
+      <span className="ci-doc-digital-meta">Assinado em {CI_fmtDataHora(au.signedAt)} (horário de Brasília)</span>
+      <span className="ci-doc-digital-hash">Hash: {au.hash || ''}</span>
+    </div>
+  );
+}
+
+function CIContractPreview({ doc, highlightConditional, assinaturas, fila }) {
+  const filaPorOrdem = (n) => (Array.isArray(fila) ? fila.find((f) => f.ordem === n) : null);
   const ct = doc.contratante;
   const cd = doc.contratada;
   return (
@@ -89,6 +104,7 @@ function CIContractPreview({ doc, highlightConditional, assinaturas }) {
           <div className="ci-doc-sign-line"></div>
           <span className="ci-doc-sign-name">{doc.contratante.representante}</span>
           <span className="ci-doc-sign-cpf">CPF: {doc.contratante.repCPF}</span>
+          <CI_FilaSlot f={filaPorOrdem(1)}/>
         </div>
         <div className="ci-doc-sign">
           <span className="ci-doc-sign-role">CONTRATADA:</span>
@@ -121,11 +137,13 @@ function CIContractPreview({ doc, highlightConditional, assinaturas }) {
           <span className="ci-doc-sign-role">TESTEMUNHA 1:</span>
           <div className="ci-doc-sign-line"></div>
           <span className="ci-doc-sign-cpf">Nome: &nbsp; CPF:</span>
+          <CI_FilaSlot f={filaPorOrdem(2)}/>
         </div>
         <div className="ci-doc-sign">
           <span className="ci-doc-sign-role">TESTEMUNHA 2:</span>
           <div className="ci-doc-sign-line"></div>
           <span className="ci-doc-sign-cpf">Nome: &nbsp; CPF:</span>
+          <CI_FilaSlot f={filaPorOrdem(3)}/>
         </div>
       </div>
     </div>

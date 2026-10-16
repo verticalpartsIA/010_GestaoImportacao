@@ -515,3 +515,4 @@
 .ci-doc-digital-img { height: 36pt; max-width: 220pt; object-fit: contain; align-self: flex-start; margin: 2pt 0; }
 .ci-doc-digital-meta { font-size: 8pt; }
 .ci-doc-digital-hash { font-size: 6.5pt; word-break: break-all; }
+.ci-doc-fila-aguarda { font-style: italic; color: #555; margin-top: 4pt; display: block; }
