@@ -28,8 +28,8 @@
     ceo: ['diego@verticalparts.com.br'],
     owner: ['gelson.simoes@verticalparts.com.br'],
     gestor_comercial: ['regiane.rocha@verticalparts.com.br', 'guilherme@verticalparts.com.br'],
-    rh: ['arilene.avila@verticalparts.com.br'],
-    engenharia_lider: ['arilene.avila@verticalparts.com.br'],
+    rh: ['mauricio.araujo@verticalparts.com.br'],                // 16/10/2026: Maurício assume (Arilene inativa)
+    engenharia_lider: ['mauricio.araujo@verticalparts.com.br'],  // 16/10/2026: Maurício assume (Arilene inativa)
     logistica_lider: ['danilo@verticalparts.com.br'],
   };
 
@@ -537,7 +537,7 @@
       decisao = await criarDecisao({ tipo: 'montador_entra_obra_rh', papelRequerido: 'rh', dossierId, referenciaTabela: 'parceiros_instaladores', referenciaId: parceiroId, contexto });
     }
     if (decisao.status === 'reprovada') return { ok: false, motivo: `Entrada na obra reprovada pela Engenharia (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
-    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação da Engenharia (Arilene) para este montador entrar na obra.' };
+    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação da Engenharia (Maurício) para este montador entrar na obra.' };
     return { ok: true };
   }
 
