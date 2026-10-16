@@ -1,5 +1,5 @@
 // ============================================================
-// send-email — Edge Function (vpprd)
+// send-email — Edge Function (vpprd) — v22 (16/10): assunto codificado por nós (assuntoSeguro).
 // Envio de e-mail direto (sem abrir Outlook/cliente local) via SMTP da
 // própria VerticalParts (Hostinger). Genérica — qualquer tela do site
 // pode chamar, não só o envio de RFQ ao fornecedor.
@@ -79,6 +79,34 @@ const MAX_ENVIOS_IP_10MIN = 25;
 const MAX_ENVIOS_GLOBAL_10MIN = 60;
 const DOMINIOS_INTERNOS = ["verticalparts.com.br", "vpsistema.com"];
 const EXTRAS_PERMITIDOS = ["gelsonsimoes@gmail.com"];
+
+/* 16/10 — ASSUNTO com acento/travessão/chinês chegava QUEBRADO no Gmail (cabeçalhos MIME apareciam como corpo).
+   Causa (lida no código do denomailer 1.6.0): ele embrulha o assunto inteiro numa única palavra codificada
+   `=?utf-8?Q?...?=` e o codificador insere quebras suaves `=\r\n` a cada 74 caracteres DENTRO dessa palavra; num
+   cabeçalho, `=\r\n` termina a linha sem espaço de continuação — o resto vira corpo da mensagem. Acontece com
+   qualquer assunto não-ASCII cuja versão codificada passe de 74 caracteres (o RFQ trilíngue sempre passa).
+   Correção: codificamos o assunto nós mesmos (RFC 2047, base64, palavras de até 60 caracteres base64 = 45 bytes,
+   cortadas só entre caracteres) e entregamos ao denomailer um texto SÓ ASCII que não começa com "=?": nesse caso
+   ele o repassa sem mexer. ASCII puro segue como sempre. CR/LF são removidos (injeção de cabeçalho). */
+function assuntoSeguro(raw: string): string {
+  const s = String(raw).replace(/[\r\n]+/g, " ").trim();
+  if (/^[\x20-\x7e]*$/.test(s) && !s.startsWith("=?")) return s;
+  const enc = new TextEncoder();
+  const palavras: string[] = [];
+  let atual: number[] = [];
+  const fecha = () => {
+    if (!atual.length) return;
+    palavras.push(`=?UTF-8?B?${btoa(String.fromCharCode(...atual))}?=`);
+    atual = [];
+  };
+  for (const ch of s) {
+    const b = Array.from(enc.encode(ch));
+    if (atual.length + b.length > 45) fecha();
+    atual.push(...b);
+  }
+  fecha();
+  return " " + palavras.join("\r\n ");
+}
 
 Deno.serve(async (req: Request) => {
   if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: corsHeaders });
@@ -187,7 +215,7 @@ Deno.serve(async (req: Request) => {
       from: `${FROM_NAME} <${USER}>`,
       to: destinatarios,
       replyTo: replyTo || undefined,
-      subject,
+      subject: assuntoSeguro(subject),
       content: text || "Ver versão HTML.",
       html: html || undefined,
       headers: { "Message-ID": messageId },
