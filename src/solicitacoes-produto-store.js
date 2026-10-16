@@ -15,11 +15,11 @@ window.SolicitacoesProdutoStore = (() => {
   ];
 
   // Fluxo definido com o usuário em 20/09/2026:
-  // 1) Solicitação enviada avisa Arilene (Engenharia), que designa quem da
+  // 1) Solicitação enviada avisa a Engenharia (Maurício), que designa quem da
   //    equipe resolve.
   // 2) Engenharia termina (marcarPronto) avisa Bianca (Importação), que
   //    avalia/aprova/reprova e designa quem publica no Omie.
-  const EMAIL_ENGENHARIA_RESPONSAVEL = 'arilene.avila@verticalparts.com.br';
+  const EMAIL_ENGENHARIA_RESPONSAVEL = 'mauricio.araujo@verticalparts.com.br'; // 16/10/2026: Maurício no lugar da Arilene (inativa)
   const EMAIL_IMPORTACAO_RESPONSAVEL = 'bianca@verticalparts.com.br';
 
   async function _notificarEngenharia(solicitacao) {
