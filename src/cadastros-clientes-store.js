@@ -195,10 +195,16 @@
     return (data || []).length;
   }
 
+  /* Resposta de Contribuinte de ICMS dada no Lead completa o cliente só se ele ainda não tem (nunca troca valor já definido). */
+  async function completarContribuinte(clienteId, valor) {
+    const c = sb(); if (!c || typeof valor !== 'boolean') return;
+    await c.from('clientes').update({ contribuinte_icms: valor }).eq('id', clienteId).is('contribuinte_icms', null);
+  }
+
   async function criarOuVincularDeLead(lead) {
     const c = sb(); if (!c || !lead) return null;
     const { data: leadRow } = await c.from('leads').select('cliente_id').eq('id', lead.id).maybeSingle();
-    if (leadRow?.cliente_id) { await vincularQuadrosDoLead(lead.id, leadRow.cliente_id); return leadRow.cliente_id; }
+    if (leadRow?.cliente_id) { await completarContribuinte(leadRow.cliente_id, lead.contribuinte_icms); await vincularQuadrosDoLead(lead.id, leadRow.cliente_id); return leadRow.cliente_id; }
 
     const nome = (lead.building || lead.contact || '').trim();
     if (!nome) return null;
@@ -212,6 +218,7 @@
     const existente = achados && achados[0];
     if (existente) {
       cliente = existente;
+      await completarContribuinte(existente.id, lead.contribuinte_icms);
     } else {
       cliente = await criar({ razao_social: nome, contato: lead.contact || null, telefone: lead.phone || null, email: lead.email || null,
         contribuinte_icms: typeof lead.contribuinte_icms === 'boolean' ? lead.contribuinte_icms : null });

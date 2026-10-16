@@ -414,7 +414,7 @@
       if (updated.numero_cotacao == null) return;
       const { data: form } = await c.from('formularios_elevador').select('lead_id, cliente_id').eq('numero_cotacao', updated.numero_cotacao).maybeSingle();
       if (!form?.lead_id) return;
-      const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email, cliente_id').eq('id', form.lead_id).maybeSingle();
+      const { data: leadRow } = await c.from('leads').select('id, building, contact, phone, email, cliente_id, contribuinte_icms').eq('id', form.lead_id).maybeSingle();
       if (!leadRow) return;
       const { error: errLead } = await c.from('leads').update({ status: 'Convertido' }).eq('id', leadRow.id);
       if (errLead) throw errLead;
