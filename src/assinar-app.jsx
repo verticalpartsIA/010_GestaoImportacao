@@ -254,6 +254,11 @@ function SgApp() {
       if (r.status === st.refused || r.status === st.expired) { setSource(src); setLoading(false); return; }
       if (r.status === 'revisao_solicitada') { setSource(src); setPhase('revisao'); setLoading(false); return; }
 
+      /* 16/10/2026 (Gelson) — quem gera o contrato do instalador abria o link no próprio navegador do HUB e
+         o sistema avisava "o instalador visualizou" (M002, M009, M010). Navegador que já usou o HUB
+         (localStorage vpprd.route/vpprd.role) é da equipe: mostra o contrato sem marcar visualizado. */
+      const navegadorDaEquipe = (() => { try { return localStorage.getItem('vpprd.route') !== null || localStorage.getItem('vpprd.role') !== null; } catch (e) { return false; } })();
+      if (src.kind === 'instalador' && navegadorDaEquipe) { setSource(src); setLoading(false); return; }
       const updated = await src.store.markViewed(token);
       /* 01/10 — achado real ao testar o novo DocumentoSignatariosStore: pra
          'venda_signatario' (sócio/jurídico OU o novo signatário genérico),
