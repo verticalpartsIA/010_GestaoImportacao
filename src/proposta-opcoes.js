@@ -194,6 +194,28 @@
      tem campos "da página" (clausulaCambial, faturamentoTexto, taxasInclusas, taxasExcluidas) e campos gerais
      (cambio, faturamento, reajuste, taxasIn, taxasOut). Tudo o que o vendedor digitar entra: o campo da página vence;
      vazio, vale o geral (nunca imprime os dois com o mesmo sentido). Preset (Fora do Estado/SP/…) é só interno. */
+  /* DIFAL não aparece em NENHUMA proposta (Financeiro, 16/10/2026): o preço de venda já o contém. Propostas antigas
+     têm a palavra gravada nos textos jurídicos (ex.: "a exemplo de DIFAL de ICMS e de tributos…", "ICMS final destino
+     (DIFAL conforme…)"), então ela é tirada na EXIBIÇÃO (preview, PDF e página de assinatura) — o dado gravado não muda. */
+  function semDifal(txt) {
+    let t = String(txt == null ? '' : txt);
+    if (!/difal/i.test(t)) return t;
+    t = t.replace(/\s*ICMS\s+final\s+destino\s*\([^)]*difal[^)]*\)\.?/gi, '')
+      .replace(/\s*\([^)]*difal[^)]*\)/gi, '')
+      .replace(/\bDIFAL(?:\s+(?:de|do)\s+ICMS)?(?:\s*,\s*|\s+e\s+(?:de\s+)?)?/gi, '')
+      .replace(/\s+([,.;])/g, '$1').replace(/\(\s*\)/g, '').replace(/[ \t]{2,}/g, ' ').trim();
+    return t;
+  }
+
+  /* Blocos da página CONDIÇÕES GERAIS DE PAGAMENTO — fonte única de PDF e preview (elevador, escada e esteira). */
+  function blocosCondicoes(ed) {
+    const c = (ed && ed.condicoesPagto) || {};
+    return [
+      ['Venda de Equipamentos', c.venda], ['Impostos e Serviços', c.impostos],
+      ['Ajuste de Frete Marítimo', c.ajusteFrete], ['Reajuste', c.reajuste],
+    ].map(([t, v]) => [t, semDifal(v)]).filter(([, v]) => v && String(v).trim());
+  }
+
   function blocosAjustes(ed) {
     const a = (ed && ed.ajustes) || {};
     const cambio = String(a.cambio || '').trim();
@@ -204,7 +226,7 @@
       ['Reajuste', a.reajuste],
       ['Taxas e Impostos Inclusos', a.taxasInclusas || a.taxasIn],
       ['Taxas e Impostos Excluídos', a.taxasExcluidas || a.taxasOut],
-    ].filter(([, v]) => v && String(v).trim());
+    ].map(([t, v]) => [t, semDifal(v)]).filter(([, v]) => v && String(v).trim());
   }
 
   /* Modelos distintos da proposta, na ordem dos códigos: "GEP / GEP-MRL" (título da página do equipamento). */
@@ -310,5 +332,15 @@
       .filter(([, v]) => v && String(v).trim());
   }
 
-  window.PropostaOpcoes = { c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, blocosAjustes, eqInfo, linhasEspecEscEst, resumoEscEst, linhasEspecificidades, blocosInstalacao, _num: num };
+  /* Páginas de lista nomeada (nome + texto) de escada/esteira: Acabamento e Características Técnicas. Só entra o item
+     com nome e texto preenchidos. */
+  function itensNomeados(lista) {
+    return (Array.isArray(lista) ? lista : []).filter((i) => i && String(i.nome || '').trim() && String(i.desc || '').trim())
+      .map((i) => ({ nome: String(i.nome).trim(), desc: String(i.desc).trim() }));
+  }
+
+  /* Lista da página Responsabilidades (itens preenchidos). */
+  const itensTexto = (arr) => (Array.isArray(arr) ? arr : []).map((x) => String(x == null ? '' : x).trim()).filter(Boolean);
+
+  window.PropostaOpcoes = { semDifal, blocosCondicoes, itensNomeados, itensTexto, c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, blocosAjustes, eqInfo, linhasEspecEscEst, resumoEscEst, linhasEspecificidades, blocosInstalacao, _num: num };
 }());

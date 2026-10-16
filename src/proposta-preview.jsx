@@ -76,10 +76,15 @@ function PEPreview({ data, eq, overlay, bare }) {
       PreviewCapa, PreviewSobre, PreviewSobreCont, PreviewClienteObra,
       PreviewSaudacaoEscEst, PreviewApresentacaoEscEst, PreviewEspecEscEst,
       ...(OP && OP.linhasEspecificidades(ed, eqLabel).length ? [PreviewEspecificidades] : []),
-      PreviewValoresTabelas,
+      ...(OP && OP.itensNomeados(ed.acabamentosLista).length ? [PreviewAcabamentoEscEst] : []),
+      ...(OP && OP.itensNomeados(ed.caracteristicasTec).length ? [PreviewCaracTecEscEst] : []),
       ...(OP && OP.blocosInstalacao(ed).length ? [PreviewInstalacao] : []),
+      PreviewValoresTabelas,
+      ...(OP && OP.blocosCondicoes(ed).length ? [PreviewCondicoesPagamento] : []),
       ...(OP && OP.blocosAjustes(ed).length ? [PreviewAjustesImpostos] : []),
-      PreviewPrazoEntrega, PreviewGarantiaValidade,
+      PreviewPrazoEntrega,
+      ...(OP && (OP.itensTexto((ed.responsabilidades || {}).vendedor).length || OP.itensTexto((ed.responsabilidades || {}).comprador).length) ? [PreviewResponsabilidadesNova] : []),
+      PreviewGarantiaValidade,
     ];
   }
   const total = pageList.length;
@@ -668,13 +673,7 @@ function PreviewValoresTabelas({ data }) {
 
 /* ---------- Página 13: Condições Gerais de Pagamento ---------- */
 function PreviewCondicoesPagamento({ data }) {
-  const c = data.elevador.condicoesPagto || {};
-  const blocos = [
-    ["Venda de Equipamentos", c.venda],
-    ["Impostos e Serviços", c.impostos],
-    ["Ajuste de Frete Marítimo", c.ajusteFrete],
-    ["Reajuste", c.reajuste],
-  ].filter(([, v]) => v);
+  const blocos = window.PropostaOpcoes.blocosCondicoes(data.elevador);
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
@@ -893,6 +892,32 @@ function PreviewEspecificidades({ data, eq }) {
       <PdfFooter/>
     </div>
   );
+}
+
+/* Lista nome + texto (Acabamento / Características Técnicas) — o texto da página cresce (min-height) como no elevador. */
+function PreviewListaNomeada({ data, titulo, itens }) {
+  return (
+    <div className="pe__pdf">
+      <div className="pe__pdf-inner">
+        <PdfHeader numero={data.numero}/>
+        <h2 className="pdf-sec-title">{titulo}</h2>
+        <div className="pdf-sec-rule"/>
+        {itens.map((it, i) => (
+          <div key={i} style={{ breakInside: "avoid", marginBottom: 10 }}>
+            <h3 className="pdf-sub-title" style={{ textTransform: "uppercase", marginBottom: 2 }}>{it.nome}:</h3>
+            <p style={{ margin: 0 }}>{it.desc}</p>
+          </div>
+        ))}
+      </div>
+      <PdfFooter/>
+    </div>
+  );
+}
+function PreviewAcabamentoEscEst({ data }) {
+  return <PreviewListaNomeada data={data} titulo="Acabamento" itens={window.PropostaOpcoes.itensNomeados(data.elevador.acabamentosLista)}/>;
+}
+function PreviewCaracTecEscEst({ data }) {
+  return <PreviewListaNomeada data={data} titulo="Características Técnicas" itens={window.PropostaOpcoes.itensNomeados(data.elevador.caracteristicasTec)}/>;
 }
 
 function PreviewInstalacao({ data }) {

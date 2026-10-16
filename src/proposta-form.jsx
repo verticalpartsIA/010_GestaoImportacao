@@ -971,7 +971,7 @@ function S_Ajustes({ d, set, eq }) {
         <PEField label="Reajuste" span={eq === "elevador" ? "3" : "2"}><PETextarea rows={2} value={a.reajuste} onChange={u("reajuste")} placeholder="Reajuste anual conforme IPCA acumulado..."/></PEField>
         <PEField label="Taxas e Impostos Inclusos" span="3"><PETextarea rows={2} value={a.taxasIn} onChange={u("taxasIn")} placeholder="II, IPI, PIS/COFINS sobre importação..."/></PEField>
         <PEField label="Taxas e Impostos Exclusos" span="3"><PETextarea rows={2} value={a.taxasOut} onChange={u("taxasOut")} placeholder="ICMS interestadual, taxa de inspeção CREA..."/></PEField>
-        {eq === "elevador" ? <>
+        {true ? <>
           <PEField label='Cláusula de Reajuste Cambial (página "Ajustes e Impostos")' span="3"><PETextarea rows={3} value={a.clausulaCambial} onChange={u("clausulaCambial")} placeholder="O valor total desta proposta está baseado na taxa de câmbio..."/></PEField>
           <PEField label='Faturamento (página "Ajustes e Impostos")' span="3"><PETextarea rows={2} value={a.faturamentoTexto} onChange={u("faturamentoTexto")} placeholder="Venda de Equipamentos serão faturadas pela empresa..."/></PEField>
           <PEField label="Taxas e Impostos Inclusos no Preço" span="3"><PETextarea rows={2} value={a.taxasInclusas} onChange={u("taxasInclusas")} placeholder="Inclusos no preço todos os impostos decorrentes de..."/></PEField>
@@ -1311,15 +1311,16 @@ function S_ContSidebarNav({ d, set, isActive, icon, onHeaderClick }) {
   );
 }
 
-function S_Responsabilidades({ d, set }) {
-  const r = d.elevador.responsabilidades;
+function S_Responsabilidades({ d, set, eq = "elevador" }) {
+  const r = d[eq].responsabilidades || {};
+  const nomeEq = eq === "escada" ? "escadas rolantes" : eq === "esteira" ? "esteiras rolantes" : "elevadores";
   return (
     <>
       <div className="pe-field-label" style={{ marginBottom: 6 }}>A cargo do Vendedor (VerticalParts)</div>
-      <S_RepText items={r.vendedor || []} setItems={(v) => set("elevador.responsabilidades.vendedor", v)}
-        addLabel="+ Adicionar item" placeholder="Ex.: Montagem completa dos elevadores"/>
+      <S_RepText items={r.vendedor || []} setItems={(v) => set(`${eq}.responsabilidades.vendedor`, v)}
+        addLabel="+ Adicionar item" placeholder={`Ex.: Montagem completa das ${nomeEq}`}/>
       <div className="pe-field-label" style={{ margin: "18px 0 6px" }}>A cargo do Comprador</div>
-      <S_RepText items={r.comprador || []} setItems={(v) => set("elevador.responsabilidades.comprador", v)}
+      <S_RepText items={r.comprador || []} setItems={(v) => set(`${eq}.responsabilidades.comprador`, v)}
         addLabel="+ Adicionar item" placeholder="Ex.: Preparo do(s) poço(s) e caixa(s) de acordo com as nossas indicações"/>
     </>
   );
@@ -1345,14 +1346,14 @@ function S_GarantiaCondicoes({ d, set, eq }) {
     <div className="pe-grid cols-1">
       <PEField label="Garantia"><PETextarea rows={3} value={g.garantia} onChange={u("garantia")} placeholder="24 (vinte e quatro) meses contra defeitos de fabricação + 12 meses de serviço..."/></PEField>
       <PEField label="Condições Gerais"><PETextarea rows={4} value={g.condicoes} onChange={u("condicoes")} placeholder="Esta proposta é válida por 30 dias. Quaisquer alterações no escopo deverão ser formalizadas por aditivo..."/></PEField>
-      {eq === "elevador" ? <PEField label="Horário dos Serviços de Instalação/Montagem"><PETextInput value={g.horario} onChange={u("horario")} placeholder="Segunda à Sexta das 08:00 às 17:12hs"/></PEField> : null}
+      <PEField label="Horário dos Serviços de Instalação/Montagem"><PETextInput value={g.horario} onChange={u("horario")} placeholder="Segunda à Sexta das 08:00 às 17:12hs"/></PEField>
     </div>
   );
 }
 
-function S_CondPagamentoElev({ d, set }) {
-  const c = d.elevador.condicoesPagto;
-  const u = (k) => (v) => set(`elevador.condicoesPagto.${k}`, v);
+function S_CondPagamentoElev({ d, set, eq = "elevador" }) {
+  const c = d[eq].condicoesPagto || {};
+  const u = (k) => (v) => set(`${eq}.condicoesPagto.${k}`, v);
   return (
     <div className="pe-grid cols-1">
       <PEField label="Venda de Equipamentos"><PETextarea rows={2} value={c.venda} onChange={u("venda")} placeholder="Condições aplicáveis sobre a venda dos equipamentos..."/></PEField>
@@ -1393,7 +1394,7 @@ function S_CaracteristicasEquip({ d, set }) {
 
 /* === Item nomeado (nome + descrição) — usado em Recursos Inclusos e
    Infraestrutura e Instalação === */
-function S_RepNomeDesc({ items, setItems, addLabel }) {
+function S_RepNomeDesc({ items, setItems, addLabel, nomePh = "Ex.: Retorno Automático", descPh = "Descreva o recurso..." }) {
   const update = (i, k, v) => { const arr = [...items]; arr[i] = { ...arr[i], [k]: v }; setItems(arr); };
   const add = () => setItems([...items, { nome: "", desc: "" }]);
   const remove = (i) => setItems(items.filter((_, j) => j !== i));
@@ -1401,8 +1402,8 @@ function S_RepNomeDesc({ items, setItems, addLabel }) {
     <>
       {items.map((it, i) => (
         <div key={i} className="pe-grid cols-1" style={{ position: "relative", marginBottom: 10, paddingBottom: 10, borderBottom: "1px dashed var(--border)" }}>
-          <PEField label="Nome"><PETextInput value={it.nome} onChange={(v) => update(i, "nome", v)} placeholder="Ex.: Retorno Automático"/></PEField>
-          <PEField label="Descrição"><PETextarea rows={2} value={it.desc} onChange={(v) => update(i, "desc", v)} placeholder="Descreva o recurso..."/></PEField>
+          <PEField label="Nome"><PETextInput value={it.nome} onChange={(v) => update(i, "nome", v)} placeholder={nomePh}/></PEField>
+          <PEField label="Descrição"><PETextarea rows={2} value={it.desc} onChange={(v) => update(i, "desc", v)} placeholder={descPh}/></PEField>
           <button type="button" onClick={() => remove(i)} className="pe-parcela-row__del"
             style={{ position: "absolute", top: 0, right: 0, height: 28, width: 28 }}>
             <Icon.x size={12}/>
@@ -1416,6 +1417,17 @@ function S_RepNomeDesc({ items, setItems, addLabel }) {
 
 function S_RecursosNomeados({ d, set }) {
   return <S_RepNomeDesc items={d.elevador.recursosNomeados || []} setItems={(v) => set("elevador.recursosNomeados", v)} addLabel="+ Adicionar recurso"/>;
+}
+
+/* Escada/Esteira: páginas "Acabamento" e "Características Técnicas" (lista nome + texto, como no elevador). */
+function S_AcabamentoEscEst({ d, set, eq }) {
+  return <S_RepNomeDesc items={d[eq].acabamentosLista || []} setItems={(v) => set(`${eq}.acabamentosLista`, v)} addLabel="+ Adicionar item de acabamento"
+    nomePh="Ex.: Tipo de Balaustrada" descPh="Descreva o acabamento..."/>;
+}
+
+function S_CaracTecEscEst({ d, set, eq }) {
+  return <S_RepNomeDesc items={d[eq].caracteristicasTec || []} setItems={(v) => set(`${eq}.caracteristicasTec`, v)} addLabel="+ Adicionar característica"
+    nomePh="Ex.: Comando" descPh="Descreva a característica técnica..."/>;
 }
 
 function S_InfraestruturaNomeada({ d, set }) {
@@ -1584,4 +1596,5 @@ Object.assign(window, {
   S_RepText, S_Valores, S_Ajustes, S_PrazoEntrega, S_Responsabilidades,
   S_InstalacaoMontagem, S_GarantiaCondicoes, S_CondPagamentoElev,
   S_DescricaoSimples, S_EspecEscada, S_Especificidades,
+  S_AcabamentoEscEst, S_CaracTecEscEst,
 });

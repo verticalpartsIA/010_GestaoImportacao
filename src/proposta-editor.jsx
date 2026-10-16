@@ -11,7 +11,7 @@ function makeDefaultProposta() {
   const hoje = new Date();
   const meses = ["janeiro","fevereiro","março","abril","maio","junho","julho","agosto","setembro","outubro","novembro","dezembro"];
   const anoAtual = hoje.getFullYear();
-  return {
+  const base = {
     numero: `VP-${anoAtual}-001`,
     dataLinha: `São Paulo, ${hoje.getDate()} de ${meses[hoje.getMonth()]} de ${anoAtual}`,
     validade: "30 dias",
@@ -170,6 +170,40 @@ function makeDefaultProposta() {
       garantia: { garantia: "", condicoes: "" },
     }
   };
+  /* Escada/Esteira nascem com o MESMO conteúdo do elevador (Financeiro, 16/10/2026): Garantia, Condições Gerais,
+     Condições de Pagamento, Ajustes, Prazo (vêm do bloco do elevador acima) + os textos próprios do equipamento
+     (Acabamento, Características Técnicas, Instalação, Responsabilidades — proposta-padroes-escest.js). */
+  base.escada = { ...base.escada, ...padroesEscEst("escada", base.elevador) };
+  base.esteira = { ...base.esteira, ...padroesEscEst("esteira", base.elevador) };
+  return base;
+}
+
+/* Conteúdo padrão de escada/esteira = comuns do elevador + textos do equipamento (ver acima). Também usado para
+   completar rascunhos antigos (só campos VAZIOS — nunca sobrescreve o que o vendedor digitou). */
+function padroesEscEst(eq, elevador) {
+  const ele = elevador || makeDefaultProposta().elevador;
+  const PE = window.PropostaPadroesEscEst;
+  const proprios = PE ? PE.padroes(eq) : {};
+  const comuns = {
+    condicoesPagto: ele.condicoesPagto,
+    ajustes: { clausulaCambial: ele.ajustes.clausulaCambial, faturamentoTexto: ele.ajustes.faturamentoTexto, reajuste: ele.ajustes.reajuste,
+      taxasIn: ele.ajustes.taxasIn, taxasOut: ele.ajustes.taxasOut, taxasInclusas: ele.ajustes.taxasInclusas, taxasExcluidas: ele.ajustes.taxasExcluidas },
+    prazo: { prazo: ele.prazo.prazo, condCovid: ele.prazo.condCovid },
+    garantia: { garantia: ele.garantia.garantia, condicoes: ele.garantia.condicoes, horario: ele.garantia.horario },
+  };
+  const out = { ...comuns, ...proprios };
+  /* "Frete marítimo" por contêiner de esteira não é do elevador — cada equipamento mantém os seus campos próprios. */
+  return out;
+}
+
+/* Rascunho de escada/esteira aberto no editor: completa o que está vazio com os textos padrão. Proposta já enviada,
+   assinada ou travada NÃO é tocada (o documento do cliente não muda sozinho). */
+function completarPadroesEscEst(data, eq, status) {
+  if ((eq !== "escada" && eq !== "esteira") || !data || !data[eq]) return data;
+  if (status && status !== "rascunho") return data;
+  const PE = window.PropostaPadroesEscEst;
+  if (!PE) return data;
+  return { ...data, [eq]: PE.completar(data[eq], padroesEscEst(eq)) };
 }
 
 /* deep set/get via dot-notation */
@@ -225,10 +259,14 @@ function getSections(eq) {
     { id: "descricao", title: "Descrição do Produto", icon: "package", group: "Produto" },
     { id: "espec", title: "Especificações Técnicas", icon: "ruler", group: "Produto" },
     { id: "especificidades", title: "Especificidades", icon: "tool", group: "Produto" },
+    { id: "acabamentosLista", title: "Acabamento", icon: "star", group: "Produto" },
+    { id: "caracteristicasTec", title: "Características Técnicas", icon: "ruler", group: "Produto" },
     { id: "valores", title: "Valores e Pagamento", icon: "dollar", group: "Comercial" },
+    { id: "condicoesPagto", title: "Condições Gerais de Pagamento", icon: "scale", group: "Comercial" },
     { id: "ajustes", title: "Ajustes, Impostos e Câmbio", icon: "globe", group: "Comercial" },
     { id: "prazo", title: "Prazo e Entrega", icon: "truck", group: "Operacional" },
     { id: "instalacao", title: "Instalação e Montagem", icon: "hardhat", group: "Operacional" },
+    { id: "responsabilidades", title: "Responsabilidades", icon: "hardhat", group: "Operacional" },
     { id: "garantia", title: "Garantia e Condições", icon: "award", group: "Operacional" },
   ];
 }
@@ -689,7 +727,10 @@ function PropostaEditor({ setRoute, subsel }) {
         const carregado = ehLegado
           ? { ...deepMergeProposta(makeDefaultProposta(), convertido), __legadoOriginal: dj }
           : (row.data_json || makeDefaultProposta());
-        setData(carregado);
+        /* Rascunho de escada/esteira antigo: completa só o que está vazio com os textos padrão (Garantia,
+           Condições, Acabamento…). O eq real é resolvido logo abaixo; antes de saber, tenta os dois. */
+        const eqReal = window.PropostaStore.resolverEq(row, convertido);
+        setData(completarPadroesEscEst(carregado, eqReal, row.status));
         /* eq deduzido do conteúdo, não de proposal_type: o campo está NULO
            em 290 das 311 propostas (todas as importadas), e o antigo
            `proposal_type || 'elevador'` fazia 16 propostas de Escada e 23 de
@@ -1245,7 +1286,10 @@ function renderSection(sid, eq, data, set, extras) {
     case "fotos": return <S_FotosEquipamento d={data} set={set}/>;
 
     case "valores": return <S_Valores d={data} set={set} eq={eq} recordId={extras.recordId}/>;
-    case "condicoesPagto": return <S_CondPagamentoElev d={data} set={set}/>;
+    case "acabamentosLista": return <S_AcabamentoEscEst d={data} set={set} eq={eq}/>;
+    case "caracteristicasTec": return <S_CaracTecEscEst d={data} set={set} eq={eq}/>;
+    case "responsabilidades": return <S_Responsabilidades d={data} set={set} eq={eq}/>;
+    case "condicoesPagto": return <S_CondPagamentoElev d={data} set={set} eq={eq}/>;
     case "ajustes": return <S_Ajustes d={data} set={set} eq={eq}/>;
     case "prazo": return <S_PrazoEntrega d={data} set={set} eq={eq}/>;
     case "instalacao": return <S_InstalacaoMontagem d={data} set={set} eq={eq}/>;
