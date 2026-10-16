@@ -99,6 +99,8 @@ const STATUS_ALIASES = {
      vocabulário de status de 'venda', é uma linha própria na tabela
      filha, não o contrato inteiro. */
   venda_signatario: { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
+  /* Contrato do Instalador — fila de assinaturas da VerticalParts (Diego, Juliana, Maurício): linha própria em documento_signatarios. */
+  instalador_signatario: { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
   /* Projeto de Instalação da Obra (Engenharia sobe o PDF, o representante do cliente assina) —
      linha própria em documento_signatarios, mesmo vocabulário de status. */
   projeto:    { signed: 'assinado', refused: 'recusado', expired: 'expirado' },
@@ -161,6 +163,7 @@ async function resolveSource(token) {
     if (s) {
       const STORE_POR_TIPO = {
         contrato_venda: { get: (id) => window.CVStore && window.CVStore.getById(id), Preview: window.CVContractPreview, engine: window.CV, kind: 'venda_signatario' },
+        contrato_instalador: { get: (id) => window.CIStore && window.CIStore.getById(id), Preview: window.CIContractPreview, engine: window.CI, kind: 'instalador_signatario' },
       };
       if (s.documento_tipo === 'projeto_instalacao') {
         /* Projeto de Instalação: o "documento" é o PDF que a Engenharia subiu (bucket público
@@ -194,7 +197,9 @@ async function resolveSource(token) {
           contratoAudit: documentoPai ? documentoPai.audit : null,
           contratoSignedAt: documentoPai ? documentoPai.signed_at : null,
         };
-        return { kind: cfg.kind, rec, store: window.DocumentoSignatariosStore, Preview: cfg.Preview, engine: cfg.engine };
+        /* Contrato do Instalador: só a linha da vez pode assinar (a RPC também barra). Linha ainda 'pendente' sem liberação = aguardando. */
+        const aguardando = s.documento_tipo === 'contrato_instalador' && !s.liberada_em && s.status === 'pendente';
+        return { kind: cfg.kind, rec, store: window.DocumentoSignatariosStore, Preview: cfg.Preview, engine: cfg.engine, aguardando };
       }
     }
   }
@@ -235,6 +240,15 @@ function SgApp() {
      de elevador com 1 equipamento (ver proposta-opcoes.js). Ao escolher, o documento passa a
      mostrar só a modalidade escolhida (a outra deixa de aparecer). */
   const [opcaoEntrega, setOpcaoEntrega] = _sgUS(null);
+  /* Contrato do Instalador: fila de assinaturas da VerticalParts (quem já assinou aparece nos blocos do documento). */
+  const [filaCI, setFilaCI] = _sgUS([]);
+  const ehCIKind = !!source && (source.kind === 'instalador' || source.kind === 'instalador_signatario');
+  _sgUE(() => {
+    if (!ehCIKind || !window.DocumentoSignatariosStore) return undefined;
+    let vivo = true;
+    window.DocumentoSignatariosStore.filaInstalador(token).then((l) => { if (vivo) setFilaCI(l || []); });
+    return () => { vivo = false; };
+  }, [ehCIKind, phase, token]);
   const propostaRender = (rec) => {
     const r = window.PropostaStore.conteudoRenderizavel(rec);
     const O = window.PropostaOpcoes;
@@ -250,6 +264,7 @@ function SgApp() {
 
       const r = src.rec;
       const st = STATUS_ALIASES[src.kind];
+      if (src.aguardando) { setSource(src); setLoading(false); return; }
       if (jaAssinado(r)) { setSource(src); setPhase('done'); setLoading(false); return; }
       if (r.status === st.refused || r.status === st.expired) { setSource(src); setLoading(false); return; }
       if (r.status === 'revisao_solicitada') { setSource(src); setPhase('revisao'); setLoading(false); return; }
@@ -258,7 +273,7 @@ function SgApp() {
          o sistema avisava "o instalador visualizou" (M002, M009, M010). Navegador que já usou o HUB
          (localStorage vpprd.route/vpprd.role) é da equipe: mostra o contrato sem marcar visualizado. */
       const navegadorDaEquipe = (() => { try { return localStorage.getItem('vpprd.route') !== null || localStorage.getItem('vpprd.role') !== null; } catch (e) { return false; } })();
-      if (src.kind === 'instalador' && navegadorDaEquipe) { setSource(src); setLoading(false); return; }
+      if ((src.kind === 'instalador' || src.kind === 'instalador_signatario') && navegadorDaEquipe) { setSource(src); setLoading(false); return; }
       const updated = await src.store.markViewed(token);
       /* 01/10 — achado real ao testar o novo DocumentoSignatariosStore: pra
          'venda_signatario' (sócio/jurídico OU o novo signatário genérico),
@@ -283,7 +298,7 @@ function SgApp() {
     if (!source) return null;
     const rec = source.rec;
     if (source.kind === 'proposta' || source.kind === 'projeto') return null; // PEPreview / PDF do projeto renderiza a versão publicada (ver conteudoVigente)
-    if (source.kind === 'instalador') {
+    if (source.kind === 'instalador' || source.kind === 'instalador_signatario') {
       /* Usa o snapshot já persistido em rec.doc (gravado uma única vez em
          createDraft — CI não tem edição pós-envio, updateFormState nunca é
          chamado pra este tipo) em vez de reconstruir com buildContract
@@ -449,7 +464,7 @@ function SgApp() {
       ? (rec.responsavel_nome || rec.contratada_nome)
       : source.kind === 'proposta'
       ? ((window.PropostaStore.conteudoRenderizavel(rec).data.cliente || {}).nome)
-      : (source.kind === 'venda_signatario' || source.kind === 'projeto')
+      : (source.kind === 'venda_signatario' || source.kind === 'instalador_signatario' || source.kind === 'projeto')
       ? rec.signatarioNome
       : (rec.responsavel_nome || rec.comprador_razao_social);
     const sig = sigMode === 'draw'
@@ -493,7 +508,7 @@ function SgApp() {
       ? (rec.responsavel_nome || rec.contratada_nome)
       : source.kind === 'proposta'
       ? ((window.PropostaStore.conteudoRenderizavel(rec).data.cliente || {}).nome)
-      : (source.kind === 'venda_signatario' || source.kind === 'projeto')
+      : (source.kind === 'venda_signatario' || source.kind === 'instalador_signatario' || source.kind === 'projeto')
       ? rec.signatarioNome
       : (rec.responsavel_nome || rec.comprador_razao_social);
     setNomeRecusa(defaultName || '');
@@ -563,12 +578,24 @@ function SgApp() {
   const Preview = source.Preview;
   /* Contrato do Instalador assinado: o documento (e a impressão dele) mostra quem assinou
      digitalmente. REGRA TRAVADA, ver CLAUDE.md. Vazio enquanto não assinado. */
-  const auI = (source.kind === 'instalador' && rec.audit) || {};
+  const ehCI = source.kind === 'instalador' || source.kind === 'instalador_signatario';
+  /* Quem assinou como Contratada fica no próprio contrato (contratoAudit quando a página é de um signatário da fila). */
+  const auI = (source.kind === 'instalador' && rec.audit) || (source.kind === 'instalador_signatario' && rec.contratoAudit) || {};
   const assinaturasInstalador = auI.signedAt
     ? [{ papel: 'Contratada (instalador)', nome: auI.signerName || '', em: auI.signedAt, dispositivo: auI.signDevice, ip: auI.signIp, hash: auI.hash, imagem: /^data:image\//.test(auI.signatureData || '') ? auI.signatureData : null }]
     : [];
   const st = STATUS_ALIASES[source.kind];
 
+  if (source.aguardando) {
+    return (
+      <div className="ci-sign-shell">
+        <div className="ci-err-state">
+          <h1>Ainda não é a sua vez</h1>
+          <p>Este contrato será liberado para a sua assinatura assim que a pessoa anterior da fila assinar. Você receberá o link no WhatsApp.</p>
+        </div>
+      </div>
+    );
+  }
   if (rec.status === st.expired) {
     return (
       <div className="ci-sign-shell">
@@ -607,7 +634,7 @@ function SgApp() {
        "contrato assinado" quando ainda falta gente. */
     const ehVendaOuSignatario = source.kind === 'venda' || source.kind === 'venda_signatario';
     const statusContrato = source.kind === 'venda_signatario' ? rec.contratoStatus : rec.status;
-    const aindaFaltamOutros = ehVendaOuSignatario && statusContrato !== 'assinado';
+    const aindaFaltamOutros = (ehVendaOuSignatario && statusContrato !== 'assinado') || source.kind === 'instalador_signatario';
     return (
       <>
         <div className="ci-sign-status">
@@ -619,7 +646,7 @@ function SgApp() {
               : source.kind === 'projeto'
               ? <>O Projeto de Instalação da obra <b>{(rec.desenho || {}).referencia}</b> foi assinado com sucesso. A VerticalParts já foi avisada.</>
               : aindaFaltamOutros
-              ? <>Sua assinatura no contrato <b>{rec.numero_documento}</b> foi registrada. Ele ainda aguarda a assinatura dos demais signatários (sócios/jurídico) para ser concluído.</>
+              ? <>Sua assinatura no contrato <b>{rec.numero_documento}</b> foi registrada. Ele ainda aguarda a assinatura dos demais signatários para ser concluído.</>
               : <>O contrato <b>{rec.numero_documento}</b> foi assinado com sucesso.</>}
           </p>
           <div className="ci-protocolo">
@@ -639,7 +666,7 @@ function SgApp() {
           <div className="ci-print-doc">
             {source.kind === 'proposta'
               ? <window.PEPreview {...propostaRender(rec)} bare/>
-              : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={assinaturasInstalador}/>}
+              : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={assinaturasInstalador} fila={filaCI}/>}
           </div>
         )}
       </>
@@ -657,7 +684,7 @@ function SgApp() {
   }
 
   /* Resumo do card de topo varia por tipo */
-  const isInstalador = source.kind === 'instalador';
+  const isInstalador = ehCI;
   const isProposta = source.kind === 'proposta';
   const isProjeto = source.kind === 'projeto';
   const djVigente = isProposta ? window.PropostaStore.conteudoRenderizavel(rec).data : {};
@@ -683,7 +710,7 @@ function SgApp() {
       </div>
     : isProposta
     ? <window.PEPreview {...propostaRender(rec)} bare/>
-    : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={assinaturasInstalador}/>;
+    : <Preview doc={doc} highlightConditional={false} highlightInjected={false} assinaturas={assinaturasInstalador} fila={filaCI}/>;
 
   return (
     <div className="ci-sign-shell ci-sign-shell--split">
@@ -722,7 +749,7 @@ function SgApp() {
               <SgSumRow k={isProjeto ? 'Cliente' : counterpartyLabel} v={counterpartyName}/>
               <SgSumRow k={isProjeto ? 'Equipamento(s)' : 'Objeto'} v={objetoResumo}/>
               {!isProjeto && <SgSumRow k="Valor total" v={valorFmt}/>}
-              {(source.kind === 'venda_signatario' || isProjeto) && <SgSumRow k="Assinando como" v={`${rec.signatarioPapel} — ${rec.signatarioNome}`}/>}
+              {(source.kind === 'venda_signatario' || source.kind === 'instalador_signatario' || isProjeto) && <SgSumRow k="Assinando como" v={`${rec.signatarioPapel} — ${rec.signatarioNome}`}/>}
             </div>
           </div>
 

@@ -1436,6 +1436,38 @@ async function ciReenviar(rec, abrir) {
   }
 }
 
+/* Fila de assinaturas da VerticalParts depois que o Contratado assinou (16/10/2026): Diego → Juliana → Maurício. Só leitura + reenviar o aviso da vez. */
+function CIFilaAssinaturas({ rec, podeEditar }) {
+  const [linhas, setLinhas] = _ciUS([]);
+  const [msg, setMsg] = _ciUS('');
+  const carregar = async () => {
+    try { setLinhas(await window.DocumentoSignatariosStore.listarPorDocumento('contrato_instalador', rec.id) || []); } catch (_) { setLinhas([]); }
+  };
+  _ciUE(() => { carregar(); }, [rec.id, rec.status]);
+  const ativas = linhas.filter((l) => l.status !== 'expirado');
+  if (!ativas.length) return null;
+  const situacao = (l) => l.status === 'assinado' ? '✅ assinado' : l.status === 'recusado' ? '❌ recusou' : l.liberada_em ? '⏳ é a vez' : 'aguardando';
+  const reenviar = async () => {
+    setMsg('');
+    try { const r = await window.DocumentoSignatariosStore.reenviarAvisoVezInstalador(rec.id); setMsg('Aviso reenviado para ' + r.para + '.'); }
+    catch (e) { setMsg(e.message || String(e)); }
+  };
+  const haVez = ativas.some((l) => l.liberada_em && ['enviado', 'visualizado'].includes(l.status));
+  return (
+    <div className="ci-drawer-sec">
+      <h3 className="ci-drawer-sec-title">Assinaturas da VerticalParts (em sequência)</h3>
+      <div className="ci-audit-rows">
+        <CIAuditRow k="1. Contratada (instalador)" v={rec.status === 'assinado' ? '✅ assinado' : '—'} />
+        {ativas.map((l) => (
+          <CIAuditRow key={l.id} k={(l.ordem + 1) + '. ' + l.papel + ' — ' + l.nome} v={situacao(l) + (l.signed_at ? ' em ' + window.CIStore.fmtDateTime(l.signed_at) : '')} />
+        ))}
+      </div>
+      {podeEditar && haVez && <div className="ci-drawer-actions" style={{ marginTop: 8 }}><button className="ci-btn ci-btn--ghost" onClick={reenviar}>Reenviar aviso da vez</button></div>}
+      {msg && <div className="ci-legal-note">{msg}</div>}
+    </div>
+  );
+}
+
 function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
   const a = rec.audit || {};
   const del = async () => {
@@ -1515,6 +1547,7 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
               </div>
             )}
           </div>
+          <CIFilaAssinaturas rec={rec} podeEditar={podeAnular} />
           <div className="ci-drawer-sec">
             <h3 className="ci-drawer-sec-title">Ações</h3>
             <div className="ci-drawer-actions">
