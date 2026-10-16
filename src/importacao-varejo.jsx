@@ -462,7 +462,7 @@ function ImportacaoVarejoPage({ setRoute }) {
   const filtrados = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return items.filter((i) => {
-      const combinaTexto = !q || i.codigo.toLowerCase().includes(q) || i.descricao.toLowerCase().includes(q);
+      const combinaTexto = !q || i.codigo.toLowerCase().includes(q) || i.descricao.toLowerCase().includes(q) || (i.ultimoFornecedorNome || '').toLowerCase().includes(q);
       const combinaCor = corFiltro === 'todas' || ivStatusDoItem(i) === corFiltro;
       const combinaCurva = curvaFiltro === 'todas' || i.curva === curvaFiltro;
       const combinaCont = contFiltro === 'todas'
@@ -635,7 +635,7 @@ function ImportacaoVarejoPage({ setRoute }) {
       </div>
 
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginBottom: 12, flexWrap: 'wrap' }}>
-        <input className="input" style={{ maxWidth: 340 }} placeholder="Buscar por código ou descrição…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        <input className="input" style={{ maxWidth: 340 }} placeholder="Buscar por código, descrição ou fornecedor…" value={busca} onChange={(e) => setBusca(e.target.value)} />
         <span className="small" style={{ color: 'var(--fg3)' }}>{filtrados.length} de {items.length} produtos</span>
         <div className="spacer" style={{ flex: 1 }} />
         {podeGerenciar && selecionados.size > 0 && (
