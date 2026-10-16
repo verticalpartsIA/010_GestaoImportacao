@@ -38,8 +38,16 @@
     }
     return sug;
   }
+  /* O que ainda vai entrar no estoque: "Comprado" (pedido do comprador, ainda sem P.I. embarcada) + "A caminho"
+     (P.I. com embarque, ainda sem nota de importação) + P.I. ainda não embarcada + chegou e falta a nota.
+     O comprado manual/requisição é abatido pelo que a P.I. já cobre (a requisição virou P.I.), para não contar 2x. */
+  function posicaoFutura(item) {
+    const caminho = item.caminhoTotal || 0;
+    const comprado = item.compradoEf != null ? item.compradoEf : (item.comprado || 0);
+    return comprado + caminho;
+  }
   function sugestaoDe(item, disponivel) {
-    const necessidade = Math.max(0, (item.estoqueMinimo || 0) - disponivel + (item.pendenteOmie || 0) - (item.comprado || 0));
+    const necessidade = Math.max(0, (item.estoqueMinimo || 0) - disponivel + (item.pendenteOmie || 0) - posicaoFutura(item));
     const bruta = Math.ceil(necessidade);
     return { bruta, sug: ajustaLote(item, bruta) };
   }
@@ -76,7 +84,7 @@
     // e a quantidade leva a posição até o MÁXIMO sugerido. Sem sugestão calculada para o item, vale a regra antiga (mínimo × disponível).
     const se = item.sugestaoEstoque;
     if (se) {
-      const posicao = out.estoqueDisponivel + (item.pendenteOmie || 0) + (item.comprado || 0);
+      const posicao = out.estoqueDisponivel + (item.pendenteOmie || 0) + posicaoFutura(item);
       out.posicaoEstoque = posicao;
       // Revisão do comprador: ajuste manual vale no lugar do cálculo; "não repor" zera; venda esporádica (confiança baixa) sem revisão não compra.
       const rev = item.revisao || null;
@@ -166,6 +174,26 @@
     return mapa;
   }
 
+  /* Por chegar, por produto (visão importacao_varejo_a_caminho: P.I. + embarque − notas de importação já lançadas no Omie). */
+  async function carregarACaminho() {
+    const c = sb(); if (!c) return {};
+    const mapa = {};
+    for (let off = 0; ; off += 1000) {
+      const { data, error } = await c.from('importacao_varejo_a_caminho')
+        .select('codigo, a_caminho, chegou_sem_nota, comprado_pi, detalhes')
+        .order('codigo').range(off, off + 999);
+      if (error) throw error;
+      (data || []).forEach((l) => {
+        mapa[String(l.codigo).toUpperCase()] = {
+          aCaminho: Number(l.a_caminho) || 0, chegouSemNota: Number(l.chegou_sem_nota) || 0,
+          compradoPi: Number(l.comprado_pi) || 0, detalhes: l.detalhes || [],
+        };
+      });
+      if (!data || data.length < 1000) break;
+    }
+    return mapa;
+  }
+
   async function carregarRevisoes() {
     const c = sb(); if (!c) return {};
     const mapa = {};
@@ -238,12 +266,21 @@
     try { revs = await carregarRevisoes(); } catch (e) { console.warn('[ImportacaoVarejo] sem revisões do comprador', e); }
     let minOmie = {};
     try { minOmie = await carregarMinimoOmie(); } catch (e) { console.warn('[ImportacaoVarejo] sem mínimo do Omie', e); }
+    let caminho = {};
+    try { caminho = await carregarACaminho(); } catch (e) { console.warn('[ImportacaoVarejo] sem "a caminho" (P.I. × notas)', e); }
     const hoje = new Date();
     data.items = (data.items || []).map((i) => {
       const cod = String(i.codigo).toUpperCase();
       // estoqueMinimo (da Edge Function) = média de venda × 3, fracionado — aposentado. Vale só o mínimo do Omie (inteiro);
       // se a leitura do Omie falhou (mapa vazio), cai no antigo arredondado para cima; produto sem registro no Omie = 0.
       const base = Object.assign({}, i, { sugestaoEstoque: sugs[cod] || null, revisao: revs[cod] || null });
+      const cm = caminho[cod] || null;
+      base.aCaminho = cm ? cm.aCaminho : 0;
+      base.chegouSemNota = cm ? cm.chegouSemNota : 0;
+      base.compradoPi = cm ? cm.compradoPi : 0;
+      base.caminhoTotal = base.aCaminho + base.chegouSemNota + base.compradoPi;
+      base.caminhoDetalhe = cm ? cm.detalhes : [];
+      base.compradoEf = Math.max(0, (Number(i.comprado) || 0) - base.caminhoTotal);
       base.estoqueMinimo = Object.keys(minOmie).length
         ? (minOmie[cod] || 0)
         : Math.ceil(Number(i.estoqueMinimo) || 0);

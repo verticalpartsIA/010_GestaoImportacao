@@ -155,3 +155,17 @@ test('Dia D: cobertura da posição menos (chegada + 50 d para criar e decidir o
   assert.equal(S.aplicarContagem(it, null, HOJE).estDiaDStatus, 'atrasado');
   assert.equal(r.estMesesRuptura, 2);
 });
+
+test('A caminho (P.I. sem nota) entra na posição e abate a sugestão; o Comprado coberto pela P.I. não conta 2x', () => {
+  // mínimo 10, disponível 0: sem nada por chegar, pede 10
+  assert.equal(S.aplicarContagem(base(), null, HOJE).sugestaoCompra, 10);
+  // 6 embarcados cobrem parte: pede só 4
+  const parte = Object.assign(base(), { aCaminho: 6, caminhoTotal: 6, compradoEf: 0 });
+  assert.equal(S.aplicarContagem(parte, null, HOJE).sugestaoCompra, 4);
+  // 12 a caminho cobrem tudo: não pede
+  const tudo = Object.assign(base(), { aCaminho: 12, caminhoTotal: 12, compradoEf: 0 });
+  assert.equal(S.aplicarContagem(tudo, null, HOJE).sugestaoCompra, 0);
+  // Comprado 5 (requisição) + P.I. de 5 a caminho = os mesmos 5: posição 5, pede 5 (e não 0)
+  const requisicaoViraPi = Object.assign(base(), { comprado: 5, aCaminho: 5, caminhoTotal: 5, compradoEf: 0 });
+  assert.equal(S.aplicarContagem(requisicaoViraPi, null, HOJE).sugestaoCompra, 5);
+});

@@ -173,6 +173,51 @@ function IVModalLote({ item, onClose, onSaved }) {
   );
 }
 
+/* ---------- Modal: o que está por chegar (P.I. + embarque, descontadas as notas de importação já lançadas) ---------- */
+const IV_ESTAGIO_ROTULO = {
+  a_caminho: 'A caminho (embarcado)',
+  chegou_sem_nota: 'Chegou — falta lançar a nota no Omie',
+  comprado_pi: 'Comprado — P.I. ainda não embarcou',
+};
+function ivFmtDataIso(s) {
+  if (!s) return '—';
+  const [y, m, d] = String(s).slice(0, 10).split('-');
+  return y && m && d ? `${d}/${m}/${y}` : '—';
+}
+function IVModalACaminho({ item, onClose }) {
+  const linhas = item.caminhoDetalhe || [];
+  return (
+    <Modal title={`A caminho — ${item.codigo}`} onClose={onClose} width={680}
+      footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
+      <div className="small muted" style={{ marginBottom: 8 }}>
+        Quantidade das P.I. deste produto que <b>ainda não virou nota de importação</b> no Omie. O status do embarque é preenchido à mão
+        na Gestão de Importação; a nota no Omie é quem confirma que a mercadoria chegou.
+      </div>
+      <table className="t">
+        <thead><tr>
+          <th>P.I.</th><th>Fornecedor</th><th>Embarque</th><th>Situação</th><th>ETA</th><th className="text-right">Qtd.</th>
+        </tr></thead>
+        <tbody>
+          {linhas.map((l, idx) => (
+            <tr key={idx}>
+              <td>{l.pi}</td>
+              <td>{l.fornecedor}</td>
+              <td>{l.embarque || <span className="muted">sem embarque</span>}{l.status_embarque ? <div className="small muted">{l.status_embarque}</div> : null}</td>
+              <td>{IV_ESTAGIO_ROTULO[l.estagio] || l.estagio}</td>
+              <td>{ivFmtDataIso(l.eta)}</td>
+              <td className="text-right cell-num">{ivFmtNum(l.quantidade)}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+      <div className="small muted" style={{ marginTop: 8 }}>
+        Essas quantidades já entram na posição do estoque da sugestão de compra, para o sistema não pedir de novo o que está vindo.
+        {item.compradoEf != null && item.comprado > item.compradoEf ? ` O "Comprado" lançado (${ivFmtNum(item.comprado)}) foi abatido pelo que a P.I. já cobre.` : ''}
+      </div>
+    </Modal>
+  );
+}
+
 /* ---------- Modal: lançar "Comprado" ---------- */
 function IVModalComprado({ item, onClose, onSaved }) {
   const [quantidade, setQuantidade] = React.useState('');
@@ -420,6 +465,7 @@ function ImportacaoVarejoPage({ setRoute }) {
   const [contFiltro, setContFiltro] = React.useState('todas');   // todas | divergentes | semcontagem
   const [tendFiltro, setTendFiltro] = React.useState('todas');   // todas | alta | baixa
   const [soDiaD, setSoDiaD] = React.useState(false);              // só itens com Dia D vencido ou chegando
+  const [soCaminho, setSoCaminho] = React.useState(false);        // só itens com mercadoria por chegar (P.I. sem nota)
   const [avisoContagem, setAvisoContagem] = React.useState(null);
   const [selecionados, setSelecionados] = React.useState(() => new Set());
   /* Bug real (varredura de URLs, 09/10): os modais "Revisar lote de compra" e
@@ -434,6 +480,7 @@ function ImportacaoVarejoPage({ setRoute }) {
   const fecharModalIv = () => setItemUrl(null);
   const modalLote = acaoUrl === 'lote' ? itemModalUrl : null;
   const modalComprado = acaoUrl === 'comprado' ? itemModalUrl : null;
+  const modalCaminho = acaoUrl === 'caminho' ? itemModalUrl : null;
   const modalRevisao = acaoUrl === 'revisao' ? itemModalUrl : null;
   const [soRevisar, setSoRevisar] = React.useState(false);
   const [modalEnviar, setModalEnviar] = React.useState(false);
@@ -470,11 +517,20 @@ function ImportacaoVarejoPage({ setRoute }) {
         || (contFiltro === 'semcontagem' && i.baseEstoque === 'omie');
       if (soRevisar && !i.precisaRevisao) return false;
       if (soDiaD && !(i.estDiaDStatus === 'atrasado' || i.estDiaDStatus === 'acordar')) return false;
+      if (soCaminho && !(i.caminhoTotal > 0)) return false;
       const combinaTend = tendFiltro === 'todas' || i.estTendencia === tendFiltro || (tendFiltro === 'alta' && i.estTendencia === 'nova');
       return combinaTexto && combinaCor && combinaCurva && combinaCont && combinaTend;
     });
-  }, [items, busca, corFiltro, curvaFiltro, contFiltro, tendFiltro, soRevisar, soDiaD]);
+  }, [items, busca, corFiltro, curvaFiltro, contFiltro, tendFiltro, soRevisar, soDiaD, soCaminho]);
   const nParaRevisar = React.useMemo(() => items.filter((i) => i.precisaRevisao).length, [items]);
+  const resumoCaminho = React.useMemo(() => {
+    const lista = items.filter((i) => i.caminhoTotal > 0);
+    return {
+      produtos: lista.length,
+      unidades: lista.reduce((s, i) => s + i.caminhoTotal, 0),
+      semNota: lista.filter((i) => i.chegouSemNota > 0).length,
+    };
+  }, [items]);
 
   // Acuracidade = % de itens contados em que a prateleira bateu com o sistema no dia da contagem.
   const resumoAcuracia = React.useMemo(() => {
@@ -503,10 +559,11 @@ function ImportacaoVarejoPage({ setRoute }) {
       sugestaoCompra: acc.sugestaoCompra + i.sugestaoCompra,
       sugAteMax: acc.sugAteMax + (i.sugAteMax || 0),
       comprado: acc.comprado + i.comprado,
+      caminho: acc.caminho + (i.caminhoTotal || 0),
       valorAPagar: acc.valorAPagar + (temPrecoEPrecisaComprar ? i.sugestaoCompra * i.ultimoPrecoUnitario : 0),
       itensSemPreco: acc.itensSemPreco + (i.sugestaoCompra > 0 && i.ultimoPrecoUnitario == null ? 1 : 0),
     };
-  }, { estoqueFisico: 0, estoqueDisponivel: 0, sugestaoCompra: 0, sugAteMax: 0, comprado: 0, valorAPagar: 0, itensSemPreco: 0 });
+  }, { estoqueFisico: 0, estoqueDisponivel: 0, sugestaoCompra: 0, sugAteMax: 0, comprado: 0, caminho: 0, valorAPagar: 0, itensSemPreco: 0 });
   const totais = React.useMemo(() => calcularTotais(filtrados), [filtrados]);
 
   const forcarSync = async () => {
@@ -590,6 +647,20 @@ function ImportacaoVarejoPage({ setRoute }) {
         <div className="alert warning" style={{ marginBottom: 16 }}>
           <Icon.warning />
           <div><div className="alert__title">Contagens físicas indisponíveis</div><div className="alert__sub">{avisoContagem}</div></div>
+        </div>
+      )}
+
+      {resumoCaminho.produtos > 0 && !erro && (
+        <div className="alert info" style={{ marginBottom: 16 }}>
+          <Icon.info />
+          <div style={{ flex: 1 }}>
+            <div className="alert__title">{resumoCaminho.produtos} produto(s) com mercadoria por chegar ({ivFmtNum(resumoCaminho.unidades)} un.)</div>
+            <div className="alert__sub">
+              Vem de P.I. já abertas, cruzadas com as notas de importação do Omie. Já entra na posição do estoque, então a sugestão não pede de novo o que está vindo.
+              {resumoCaminho.semNota > 0 ? ` ${resumoCaminho.semNota} item(ns) já chegaram e esperam a nota ser lançada (⚑).` : ''}
+            </div>
+          </div>
+          <Button size="sm" variant={soCaminho ? 'primary' : 'outline'} onClick={() => setSoCaminho(!soCaminho)}>{soCaminho ? 'Mostrar todos' : 'Ver quais'}</Button>
         </div>
       )}
 
@@ -712,7 +783,8 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
             <th className="text-right" title="Sugerido pelo sistema a partir das vendas reais do Omie (6 meses): ponto de pedido = demanda × prazo + segurança. Atualiza todo dia.">Mín. sug.</th>
             <th className="text-right" title="Sugerido pelo sistema: mínimo + demanda de um ciclo de compra (60 dias). Atualiza todo dia.">Máx. sug.</th>
             <th className="text-right">Pendente</th>
-            <th className="text-right">Comprado</th>
+            <th className="text-right" title="Pedido feito pelo comprador (requisição ou lançamento manual) que ainda não virou P.I.">Comprado</th>
+            <th className="text-right" title="Já tem P.I.: embarcado, chegou sem nota lançada, ou comprado e ainda não embarcou. Sai daqui quando a nota de importação é lançada no Omie. Clique para ver o detalhe.">A caminho</th>
             <th className="text-right">Sugestão</th>
             <th title="Dia D = data-limite para decidir o pedido = hoje + (dias de cobertura da posição − prazo total). Prazo total = criar e decidir o pedido (importados: 45 + 5 d) + prazo de chegada. Vermelho: já passou; âmbar: faltam até 15 dias.">Dia D</th>
             <th title="Vendas mês a mês dos últimos 12 meses. Seta = últimos 3 meses × 3 meses anteriores. Ponto verde = mês de maior venda; ponto vermelho = mês de menor venda.">Tendência (12 meses)</th>
@@ -787,6 +859,14 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
                         <button className="link-btn" onClick={() => abrirModalIv('comprado', item)}>{ivFmtNum(item.comprado)}</button>
                       ) : podeGerenciar ? (
                         <button className="link-btn muted" onClick={() => abrirModalIv('comprado', item)}>lançar</button>
+                      ) : '—'}
+                    </td>
+                    <td className="text-right cell-num">
+                      {item.caminhoTotal > 0 ? (
+                        <button className="link-btn" onClick={() => abrirModalIv('caminho', item)}
+                          title={[item.aCaminho > 0 && `${ivFmtNum(item.aCaminho)} embarcado(s)`, item.chegouSemNota > 0 && `${ivFmtNum(item.chegouSemNota)} chegou(aram), falta a nota`, item.compradoPi > 0 && `${ivFmtNum(item.compradoPi)} ainda não embarcou`].filter(Boolean).join(' · ')}>
+                          {ivFmtNum(item.caminhoTotal)}{item.chegouSemNota > 0 ? ' ⚑' : ''}
+                        </button>
                       ) : '—'}
                     </td>
                     <td className="text-right" style={{ fontWeight: 800 }}
@@ -880,6 +960,7 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
                 <td className="text-right">{ivFmtNum(totais.estoqueDisponivel)}</td>
                 <td colSpan={7}></td>
                 <td className="text-right">{ivFmtNum(totais.comprado)}</td>
+                <td className="text-right">{ivFmtNum(totais.caminho)}</td>
                 <td className="text-right">{ivFmtNum(totais.sugestaoCompra)}</td>
                 <td></td>
                 <td></td>
@@ -894,6 +975,7 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
 
       {modalLote && <IVModalLote item={modalLote} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
       {modalComprado && <IVModalComprado item={modalComprado} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
+      {modalCaminho && <IVModalACaminho item={modalCaminho} onClose={fecharModalIv} />}
       {modalRevisao && <IVModalRevisao item={modalRevisao} onClose={fecharModalIv} onSaved={() => { fecharModalIv(); carregar(); }} />}
       {modalEnviar && <IVModalEnviarOmie itens={itensSelecionados} onClose={() => setModalEnviar(false)} onEnviado={() => { setModalEnviar(false); setSelecionados(new Set()); carregar(); }} />}
     </div>
