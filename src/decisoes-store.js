@@ -30,6 +30,7 @@
     gestor_comercial: ['regiane.rocha@verticalparts.com.br', 'guilherme@verticalparts.com.br'],
     rh: ['karla.silva@verticalparts.com.br'],                    // 16/10/2026: Karla é a líder de RH (Gelson)
     engenharia_lider: ['mauricio.araujo@verticalparts.com.br'],  // 16/10/2026: Maurício assume (Arilene inativa)
+    supervisor_obra: ['mauricio.araujo@verticalparts.com.br'],   // 16/10/2026: Supervisor de Obra (Gelson)
     logistica_lider: ['danilo@verticalparts.com.br'],
   };
 
@@ -42,6 +43,7 @@
     owner: 'Dono do Sistema',
     gestor_comercial: 'Gestor Comercial',
     rh: 'RH',
+    supervisor_obra: 'Supervisor de Obra',
     engenharia_lider: 'Engenharia',
     logistica_lider: 'Logística',
   };
@@ -54,7 +56,7 @@
     envio_proposta_gestor: 'Envio de proposta — aprovação do Gestor Comercial',
     envio_proposta_ceo: 'Envio de proposta — aprovação do CEO',
     contratacao_mao_obra_ceo: 'Contratação de mão de obra — aprovação do CEO',
-    montador_entra_obra_rh: 'Montador entra na obra — aprovação da Engenharia',
+    montador_entra_obra_rh: 'Montador entra na obra — aprovação do Supervisor de Obra',
     compra_equipamento_ceo: 'Compra do equipamento — aprovação do CEO',
     compra_varejo_logistica: 'Compra de varejo — aprovação da Logística',
     desconto_proposta: 'Desconto em proposta',
@@ -524,7 +526,8 @@
   }
 
   /* Montador entra na obra (parceiro vinculado a um dossiê) exige aprovação
-     do RH — por obra, mesmo que o parceiro já esteja homologado em geral.
+     do Supervisor de Obra (16/10/2026, Gelson; antes era o papel 'rh' — o RH fica
+     para a homologação/documentação do montador, etapa futura) — por obra, mesmo que o parceiro já esteja homologado em geral.
      Chave é (dossierId, parceiroId): trocar o parceiro vinculado exige uma
      decisão nova, não reaproveita a aprovação de um montador diferente. */
   async function podeMontadorEntrarObra(dossierId, parceiroId, contexto) {
@@ -534,10 +537,10 @@
       .eq('dossier_id', dossierId).eq('tipo', 'montador_entra_obra_rh').eq('referencia_id', parceiroId);
     let decisao = (existentes || [])[0];
     if (!decisao) {
-      decisao = await criarDecisao({ tipo: 'montador_entra_obra_rh', papelRequerido: 'rh', dossierId, referenciaTabela: 'parceiros_instaladores', referenciaId: parceiroId, contexto });
+      decisao = await criarDecisao({ tipo: 'montador_entra_obra_rh', papelRequerido: 'supervisor_obra', dossierId, referenciaTabela: 'parceiros_instaladores', referenciaId: parceiroId, contexto });
     }
-    if (decisao.status === 'reprovada') return { ok: false, motivo: `Entrada na obra reprovada pela Engenharia (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
-    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do RH (Karla) para este montador entrar na obra.' };
+    if (decisao.status === 'reprovada') return { ok: false, motivo: `Entrada na obra reprovada pelo Supervisor de Obra (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+    if (decisao.status !== 'aprovada') return { ok: false, motivo: 'Aguardando aprovação do Supervisor de Obra (Maurício) para este montador entrar na obra.' };
     return { ok: true };
   }
 
