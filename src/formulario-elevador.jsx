@@ -294,24 +294,25 @@ function FESelect({ value, onChange, options, placeholder, disabled }) {
    CadFornecedorDatalist em pi.jsx) — o campo já alimenta o agrupamento por
    nome exato em Cotação a Fornecedor, então o vendedor deve escolher da
    lista, não inventar um nome novo. */
+/* 16/10 — LISTA FECHADA (pedido do usuário): o campo era texto livre e a
+   cotação 992 foi gravada com "Seloon" (typo de Seelon), que não casa com
+   nenhum cadastro e travava o envio do RFQ. Agora só dá pra escolher o que
+   existe em fornecedores_elevador. Valor antigo já gravado fora da lista
+   (ex.: "verticalparts") continua aparecendo como opção marcada, pra não
+   sumir da tela nem ser trocado em silêncio — o vendedor escolhe um da lista. */
 function FEFornecedorInput({ value, onChange, fornecedores, disabled }) {
-  const listId = React.useId();
+  /* `fornecedores` mistura string (RFQ configurado) e { value, label }
+     (ainda não configurado — ver fornecedoresOptions). O nome vai em `value`;
+     o rótulo com o aviso vai em `label`. */
+  const opcoes = (fornecedores || []).map((f) => (typeof f === 'string' ? { value: f, label: f } : f));
+  const atual = value ?? '';
+  const foraDaLista = atual && !opcoes.some((o) => o.value === atual);
   return (
-    <>
-      <input className="input" list={listId} value={value ?? ''} onChange={(e) => onChange(e.target.value)}
-        placeholder="Digite pra filtrar (ex.: G)" disabled={disabled}/>
-      <datalist id={listId}>
-        {/* `fornecedores` mistura string (RFQ configurado) e { value, label }
-            (ainda não configurado — ver fornecedoresOptions). Usar o objeto
-            direto virava value="[object Object]" (e key duplicada): o que o
-            usuário escolhia na lista era gravado em unidade.fornecedor. O
-            nome vai em `value`; o rótulo com o aviso vai em `label` (dica). */}
-        {(fornecedores || []).map((f) => {
-          const nome = typeof f === 'string' ? f : f.value;
-          return <option key={nome} value={nome} label={typeof f === 'string' ? undefined : f.label}/>;
-        })}
-      </datalist>
-    </>
+    <select className="input" value={atual} onChange={(e) => onChange(e.target.value)} disabled={disabled}>
+      <option value="">— Selecione o fornecedor —</option>
+      {foraDaLista && <option value={atual}>{atual} (fora da lista — escolha um da lista)</option>}
+      {opcoes.map((o) => <option key={o.value} value={o.value}>{o.label}</option>)}
+    </select>
   );
 }
 function FECheck({ label, checked, onChange }) {
