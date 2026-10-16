@@ -706,6 +706,16 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
     }
   };
 
+  const devolverAoVendas = async () => {
+    if (!window.confirm('Devolver esta precificação ao Vendas? O vendedor da cotação recebe um aviso para informar se o cliente é Contribuinte de ICMS.')) return;
+    try {
+      const r = await window.PrecificacaoElevadorStore.devolverParaVendas(pz.id);
+      window.toast?.(r.para ? `Devolvida ao Vendas (${r.para}). Quando o cadastro estiver completo, clique em Calcular.` : 'Aviso registrado (vendedor não identificado — avise o Vendas).', 'success');
+    } catch (e) {
+      window.toast?.('Erro ao devolver ao Vendas: ' + e.message, 'error');
+    }
+  };
+
   const devolverEquipamentoMO = async (unidadeId) => {
     setAtualizandoMo(true);
     try {
@@ -1423,7 +1433,18 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
         )}
       </Card>
 
-      {difal && (
+      {difal && (difal.contribuinte_icms !== true && difal.contribuinte_icms !== false && /^Informe se o cliente/.test(difal.mensagem || '')) && (
+        <Card title="DIFAL — cadastro do cliente incompleto" style={{ marginTop: 16 }}>
+          <p style={{ fontSize: 13, margin: 0 }}>
+            O cadastro do cliente não informa se ele é <b>Contribuinte de ICMS</b>, então o DIFAL não pôde ser calculado. Essa informação é
+            preenchida pelo <b>Vendas</b> (no Formulário da cotação ou em Cadastros → Clientes), não pelo Financeiro.
+          </p>
+          <div style={{ marginTop: 10 }}>
+            <Button variant="outline" size="sm" icon="refresh" onClick={devolverAoVendas}>Devolver ao Vendas para completar o cadastro</Button>
+          </div>
+        </Card>
+      )}
+      {difal && !(difal.contribuinte_icms !== true && difal.contribuinte_icms !== false && /^Informe se o cliente/.test(difal.mensagem || '')) && (
         <Card title="DIFAL" style={{ marginTop: 16 }}>
           <p style={{ fontSize: 13, margin: 0 }}>{difal.mensagem}</p>
           {difal.alerta && (
