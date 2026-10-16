@@ -755,6 +755,21 @@ function PgEspecificidades(S, data, eq) {
   ]);
 }
 
+/* Acabamento / Características Técnicas de escada e esteira: título em negrito + texto, um item após o outro
+   (a página quebra sozinha — mesmo conteúdo de PreviewListaNomeada em proposta-preview.jsx). */
+function PgListaNomeada(S, data, titulo, itens) {
+  return h(Page, { size: 'A4', style: S.page }, [
+    PdfHeader(S, data.numero),
+    h(Text, { style: S.secTitle, key: 't' }, titulo),
+    h(View, { style: S.secRule, key: 'r' }),
+    ...itens.map((it, i) => h(View, { style: S.namedItem, key: 'i' + i, wrap: false }, [
+      h(Text, { style: S.namedItemLbl, key: 'n' }, String(it.nome).toUpperCase() + ':'),
+      h(Text, { style: S.namedItemTxt, key: 'd' }, it.desc),
+    ])),
+    PdfFooter(S),
+  ]);
+}
+
 function PgInstalacao(S, data) {
   const blocos = window.PropostaOpcoes.blocosInstalacao(data.elevador);
   return h(Page, { size: 'A4', style: S.page }, [
@@ -830,7 +845,7 @@ async function montarDocumento(data, assinaturas, eqParam) {
     PgItensNomeados(S, data, 'Infraestrutura e Instalação', 'infraestruturaNomeada', 'Adicione os itens de infraestrutura.'),
     ...(temFotos ? [PgFotos(S, data, urls)] : []),
     PgValores(S, data),
-    PgBlocos(S, data, 'Condições Gerais de Pagamento', 'condicoesPagto', [['Venda de Equipamentos', 'venda'], ['Impostos e Serviços', 'impostos'], ['Ajuste de Frete Marítimo', 'ajusteFrete'], ['Reajuste', 'reajuste']]),
+    PgBlocos(S, data, 'Condições Gerais de Pagamento', 'condicoesPagto', [], OPx.blocosCondicoes(data.elevador)),
     PgBlocos(S, data, 'Ajustes e Impostos', 'ajustes', [], (typeof window !== 'undefined' && window.PropostaOpcoes) ? window.PropostaOpcoes.blocosAjustes(data.elevador) : []),
     PgPrazo(S, data),
     PgResponsabilidades(S, data),
@@ -844,10 +859,14 @@ async function montarDocumento(data, assinaturas, eqParam) {
     PgApresentacaoEscEst(S, data, eq),
     PgEspecEscEst(S, data, eq),
     ...(OPx.linhasEspecificidades(data.elevador, eq).length ? [PgEspecificidades(S, data, eq)] : []),
-    PgValores(S, data),
+    ...(OPx.itensNomeados(data.elevador.acabamentosLista).length ? [PgListaNomeada(S, data, 'Acabamento', OPx.itensNomeados(data.elevador.acabamentosLista))] : []),
+    ...(OPx.itensNomeados(data.elevador.caracteristicasTec).length ? [PgListaNomeada(S, data, 'Características Técnicas', OPx.itensNomeados(data.elevador.caracteristicasTec))] : []),
     ...(OPx.blocosInstalacao(data.elevador).length ? [PgInstalacao(S, data)] : []),
+    PgValores(S, data),
+    ...(OPx.blocosCondicoes(data.elevador).length ? [PgBlocos(S, data, 'Condições Gerais de Pagamento', 'condicoesPagto', [], OPx.blocosCondicoes(data.elevador))] : []),
     ...(OPx.blocosAjustes(data.elevador).length ? [PgBlocos(S, data, 'Ajustes e Impostos', 'ajustes', [], OPx.blocosAjustes(data.elevador))] : []),
     PgPrazo(S, data),
+    ...((OPx.itensTexto((data.elevador.responsabilidades || {}).vendedor).length || OPx.itensTexto((data.elevador.responsabilidades || {}).comprador).length) ? [PgResponsabilidades(S, data)] : []),
     PgGarantia(S, data, assinaturas),
   ];
   return h0(Document, {}, pages);
