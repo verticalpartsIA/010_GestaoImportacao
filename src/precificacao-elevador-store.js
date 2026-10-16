@@ -956,7 +956,35 @@
     return { modelos, vmle_usd: vmleUsd, diffs };
   }
 
+  /* 16/10/2026 — Dados fiscais do cliente incompletos (Contribuinte de ICMS não informado): quem preenche é o
+     Vendas (Formulário/Cadastro de Clientes), nunca o Financeiro. O Financeiro devolve a Precificação ao vendedor
+     dono da cotação: aviso individual na Central de Notificações (link direto p/ o cadastro do cliente) + log. */
+  async function devolverParaVendas(id, motivo) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const pz = await obter(id);
+    const { data: f } = await c.from('formularios_elevador')
+      .select('id, numero_cotacao, created_by, vendedor, cliente_id, razao_social').eq('id', pz.formulario_elevador_id).maybeSingle();
+    const quem = ((window.__VP_USER || {}).email || '').toLowerCase();
+    const destinatario = f && f.created_by ? String(f.created_by).toLowerCase() : null;
+    const cot = (f && f.numero_cotacao) || pz.numero_cotacao;
+    const texto = (motivo || '').trim() || 'Contribuinte de ICMS não informado no cadastro do cliente.';
+    const rota = f && f.cliente_id ? '/cadastros/cadastro-clientes' : '/comercial/formulario-elevador';
+    const { error } = await c.from('alertas').insert({
+      id: `prec-devolvida-${id}-${Date.now()}`, level: 'warning', module: 'Comercial', resolved: false,
+      title: `Cotação Nº ${cot} — Precificação devolvida ao Vendas`,
+      sub: `${texto} Complete o cadastro do cliente (Cadastros → Clientes) e avise o Financeiro para recalcular.`,
+      destinatario_email: destinatario, rota,
+    });
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Formulário de Elevadores', acao: 'Devolveu a precificação ao Vendas',
+      alvo: pz.numero_documento || id, alvo_id: id, detalhe: { texto, para: destinatario, por: quem },
+    });
+    return { para: destinatario };
+  }
+
   window.PrecificacaoElevadorStore = {
+    devolverParaVendas,
     listarParametrosFiscais, salvarParametrosFiscais,
     listarPendentes, criar, obter, salvar, calcularEsalvar,
     camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,

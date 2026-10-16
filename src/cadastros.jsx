@@ -34,7 +34,7 @@ function CadEnderecoFields({ form, set }) {
    ============================================================ */
 const CLI_EMPTY = {
   razao_social: '', nome_fantasia: '', tipo_pessoa: 'PJ', cnpj: '', cpf: '', inscricao_estadual: '',
-  contribuinte_icms: false, email: '', telefone: '', contato: '', documento_pendente: false,
+  contribuinte_icms: null, email: '', telefone: '', contato: '', documento_pendente: false,
   endereco_logradouro: '', endereco_complemento: '', endereco_bairro: '', endereco_cep: '', endereco_cidade: '', endereco_estado: '',
   ativo: true,
 };
@@ -93,6 +93,7 @@ function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
   const submit = async () => {
     if (!(await cnpjBusca.garantirConsulta())) return;
     if (!form.razao_social.trim()) return window.toast?.('Informe a razão social / nome.', 'warning');
+    if (typeof form.contribuinte_icms !== 'boolean') return window.toast?.('Informe se o cliente é Contribuinte de ICMS (Sim ou Não) — é isso que define quem recolhe o DIFAL na venda.', 'warning');
     onSubmit(form);
   };
   return (
@@ -112,10 +113,18 @@ function ClienteForm({ initialData, isEdit, onSubmit, onCancel, saving }) {
         <PIField label="Telefone"><PIInput value={form.telefone} onChange={set('telefone')}/></PIField>
         <PIField label="Contato"><PIInput value={form.contato} onChange={set('contato')}/></PIField>
       </div>
-      <label className="row gap-2" style={{ cursor: 'pointer', margin: '10px 0' }}>
-        <input type="checkbox" checked={!!form.contribuinte_icms} onChange={(e) => set('contribuinte_icms')(e.target.checked)}/>
-        <span className="small">Contribuinte de ICMS</span>
-      </label>
+      <div className="grid-3" style={{ gap: 10, margin: '10px 0' }}>
+        <PIField label="Contribuinte de ICMS? *">
+          <select className="input" value={typeof form.contribuinte_icms === 'boolean' ? String(form.contribuinte_icms) : ''} onChange={(e) => set('contribuinte_icms')(e.target.value === '' ? null : e.target.value === 'true')}>
+            <option value="">Selecione…</option>
+            <option value="true">Sim — contribuinte (tem inscrição estadual)</option>
+            <option value="false">Não — não contribuinte</option>
+          </select>
+        </PIField>
+      </div>
+      <p className="small muted" style={{ margin: '-4px 0 10px' }}>
+        Obrigatório. Define quem paga o DIFAL nas vendas interestaduais: <b>não contribuinte</b> = a VerticalParts recolhe (entra como custo na Precificação); <b>contribuinte</b> = o próprio cliente recolhe.
+      </p>
       {/* 14/09 — achado real (auditoria do tour.md): documento_pendente já
           existia na tabela clientes, gravado por Leads e pelo Formulário
           (cliente criado sem CNPJ/CPF ainda), mas o cadastro mestre de
