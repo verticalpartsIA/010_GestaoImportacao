@@ -963,12 +963,17 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const pz = await obter(id);
     const { data: f } = await c.from('formularios_elevador')
-      .select('id, numero_cotacao, created_by, vendedor, cliente_id, razao_social').eq('id', pz.formulario_elevador_id).maybeSingle();
+      .select('id, numero_cotacao, created_by, vendedor, cliente_id').eq('id', pz.formulario_elevador_id).maybeSingle();
     const quem = ((window.__VP_USER || {}).email || '').toLowerCase();
     const destinatario = f && f.created_by ? String(f.created_by).toLowerCase() : null;
     const cot = (f && f.numero_cotacao) || pz.numero_cotacao;
     const texto = (motivo || '').trim() || 'Contribuinte de ICMS não informado no cadastro do cliente.';
     const rota = f && f.cliente_id ? '/cadastros/cadastro-clientes' : '/comercial/formulario-elevador';
+    // Sem dono gravado (cotação antiga): não publica aviso global (todos veriam dados do cliente) — o Financeiro avisa o Vendas manualmente.
+    if (!destinatario) {
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Formulário de Elevadores', acao: 'Devolveu a precificação ao Vendas (sem vendedor identificado)', alvo: pz.numero_documento || id, alvo_id: id, detalhe: { texto, por: quem } });
+      return { para: null };
+    }
     const { error } = await c.from('alertas').insert({
       id: `prec-devolvida-${id}-${Date.now()}`, level: 'warning', module: 'Comercial', resolved: false,
       title: `Cotação Nº ${cot} — Precificação devolvida ao Vendas`,

@@ -275,7 +275,14 @@
     if (doc) {
       const campo = dados.tipo_pessoa === 'PF' ? 'cpf' : 'cnpj';
       const { data: existente } = await c.from('clientes').select('*').eq(campo, doc).maybeSingle();
-      if (existente) return existente;
+      if (existente) {
+        /* Contribuinte de ICMS informado agora (ex.: pelo Lead) e ainda vazio no cadastro: completa. Nunca troca um valor já definido. */
+        if (existente.contribuinte_icms == null && typeof dados.contribuinte_icms === 'boolean') {
+          const { data: completado } = await c.from('clientes').update({ contribuinte_icms: dados.contribuinte_icms }).eq('id', existente.id).select().maybeSingle();
+          if (completado) return completado;
+        }
+        return existente;
+      }
     }
     const codigo = window.CadastrosClientesStore ? await window.CadastrosClientesStore.gerarCodigo() : null;
     const { data, error } = await c.from('clientes').insert({ codigo, ..._camposCliente(dados, doc) }).select().single();

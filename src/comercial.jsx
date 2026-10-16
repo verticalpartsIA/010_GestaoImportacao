@@ -285,6 +285,7 @@ function ModalNovoLead({ onClose, onSaved, onOpenFormulario, lead }) {
           razao_social: f.razaoSocial || f.building,
           contato: f.contact, telefone: f.phone || null, email: f.email || null,
           clienteIdProvisorio: isEdit ? (lead.cliente_id || null) : null,
+          contribuinte_icms: f.contribuinteIcms === 'true',
         });
         if (cliente.id !== (isEdit ? lead.cliente_id : null)) {
           const { error: vincErr } = await sb.from('leads').update({ cliente_id: cliente.id }).eq('id', id);
