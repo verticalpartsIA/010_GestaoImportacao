@@ -89,7 +89,7 @@ Subpáginas **identificadas mas não abertas** (podem ter detalhe útil, mas sã
 
 ### 5.2 O que não dá para igualar (e a alternativa)
 - **TIBCO/Jaspersoft:** é uma ferramenta de desktop que exige instalar software e conhecer relatórios. **Não recomendo copiar.** O editor do hub fará o mesmo papel dentro do navegador, com campos fixos e posição ajustável.
-- **WMS CONNECTOR (impressão silenciosa):** a Senior usa um programa local instalado que imprime direto na impressora sem abrir janela. No hub, a impressão passa pelo **navegador** (abrir o PDF e imprimir com o diálogo do sistema). Impressão sem diálogo exigiria um agente local ou o QZ Tray (pago em produção) — fica como **fase futura**, se o diálogo incomodar.
+- **WMS CONNECTOR (impressão silenciosa):** a Senior usa um programa local instalado que imprime direto na impressora sem abrir janela. No hub, a impressão direta passa por um **adaptador** (Zebra Browser Print, QZ Tray ou WebUSB), com o PDF pelo diálogo do navegador como plano B. Ver 9.4. (Correção: o QZ Tray não é "pago": é de código aberto; o que costuma ser pago é o certificado de assinatura que tira o pop-up de permissão.)
 - **Consulta SQL / REST como fonte de dados livre:** perigoso no nosso modelo de segurança. Cada tipo terá **fontes de dados fixas e revisadas** (funções do banco), não SQL digitado pelo usuário.
 
 ### 5.3 Conclusão
@@ -214,10 +214,75 @@ Funções do banco **uma por tipo**, só leitura, que devolvem as linhas para im
 - **QR Code:** biblioteca pequena (calcula a matriz de módulos) empacotada no bundle, desenhada em SVG. Nível de correção M ou superior; tamanho mínimo do módulo respeitando a impressora (203 dpi ≈ 0,125 mm por ponto).
 - **Dígito verificador de endereço:** campo opcional do tipo `ENDERECO`, calculado de forma determinística a partir do código (a definir, pergunta 11.7); entra no texto, não no QR.
 
-### 9.3 Impressoras
-- Etiquetas térmicas aceitam PDF pelo driver do sistema. O PDF deve sair **sem margem** e na escala 100%.
-- Teste de calibração: uma página com régua e QR de teste.
-- Impressão silenciosa (sem diálogo) e ZPL ficam para a fase 4, se necessário.
+### 9.3 Impressoras — decisão do Gelson (17/10/2026)
+- **Impressora da casa:** Zebra **ZD220**, rolo de **100 × 50 mm**. Esse é o formato padrão de todas as etiquetas (ver 9.5).
+- **Preparar para outras marcas de boa qualidade**, sem reescrever o módulo: Zebra (ZD220, ZD230, ZT421), Elgin (L42 Pro Full) e Argox (OS-214 Plus / OS-2140).
+- **Meta de uso:** conectou a impressora, o site a reconhece e imprime. Ver 9.4 para o que isso significa na prática (um navegador sozinho não enxerga impressora).
+- O PDF pelo diálogo do navegador continua existindo como **plano B universal** (qualquer impressora com driver), mas não é o caminho principal: perde precisão de QR/barras e exige clicar no diálogo a cada impressão.
+
+### 9.4 Camada de impressão: perfis, linguagens e "plugins" (adaptadores)
+
+**Ideia:** separar três coisas, para trocar uma sem mexer nas outras.
+1. **Layout** (o modelo JSON da seção 8.2, em milímetros) — igual para qualquer impressora.
+2. **Linguagem da impressora** — um *renderizador* converte o layout em comandos.
+3. **Transporte** — um *adaptador* (plugin) leva os comandos até a impressora.
+
+#### 9.4.1 Fatos levantados (fontes na seção 15)
+| Impressora | Resolução | Largura máx. | Conexão | Linguagens |
+|---|---|---|---|---|
+| **Zebra ZD220** | 203 dpi (8 pontos/mm) | 104 mm (4,09") | **USB 2.0** (sem Ethernet no modelo base) | ZPL II e EPL2 |
+| **Elgin L42 Pro Full** | 203 dpi (300 opcional) | 108 mm | USB, Ethernet e Serial | EPL, ZPL, PPLA, PPLB (reconhecimento automático, segundo lojas) |
+| **Argox OS-214 plus Pro** | 203 dpi | a confirmar | USB e RS-232 | PPLA, PPLB, PPLZ (emulação de ZPL **parcial**; documentação não cita ZPL completo) |
+- O rolo 100 × 50 mm cabe nas três (800 × 400 pontos a 203 dpi).
+- Dados de lojas/fichas comerciais divergem em detalhes; **a confirmar nos manuais e na bancada**.
+
+#### 9.4.2 Renderizadores (linguagem de comando)
+| Renderizador | Atende | Observação |
+|---|---|---|
+| **ZPL II** (padrão) | Zebra, Elgin | Texto, Code 128 e QR nativos; é a referência |
+| **EPL2** | Zebra/Elgin antigas | Só se alguma impressora não aceitar ZPL |
+| **PPLB / PPLZ** | Argox | PPLZ lembra o ZPL, mas é um subconjunto; **não assumir compatibilidade total** |
+| **TSPL** | TSC e outras | Fase futura |
+| **Imagem (raster)** | Qualquer uma | Etiqueta inteira como bitmap de 1 bit, a 203/300 dpi; mais lento e menos nítido, mas funciona em qualquer linguagem |
+
+Cada perfil de impressora escolhe **um renderizador**; o layout não muda.
+
+**Cuidados de ZPL:** acentos e "ç" exigem a página de código UTF-8 (`^CI28`), que **depende do firmware**; se a ZD220 não aceitar, o texto vai como imagem e só as barras/QR ficam nativos. O QR e o Code 128 são sempre nativos (leitura mais confiável que imagem). Largura e comprimento da etiqueta são enviados em toda impressão (`^PW`, `^LL`); sensor de intervalo ou contínuo definido no perfil.
+
+#### 9.4.3 Transportes (adaptadores / "plugins")
+Todo adaptador cumpre o mesmo contrato: `detectar()`, `listar()`, `status()`, `enviar(comandos|pdf)`.
+
+| Adaptador | O que é | Instala algo? | Reconhece sozinho? | Pontos de atenção |
+|---|---|---|---|---|
+| **zebra-browser-print** | Programa gratuito da Zebra que fica no computador; o site conversa com ele em `localhost` (portas 9100/9101) | Sim (1 vez por computador) | **Sim**, lista impressoras Zebra USB/rede | Só Zebra e só ZPL II. A lista oficial **que consegui ler** (guia v1.3) cita ZD410/ZD420/ZD620… e **não cita a ZD220**; pode funcionar, **precisa de teste com a sua** |
+| **qz-tray** | Programa de código aberto (LGPL) que fala com **qualquer impressora instalada**, em qualquer marca, com comandos brutos ou PDF | Sim (1 vez por computador) | **Sim**, lista as impressoras do sistema | Sem certificado de assinatura aparece **pop-up de permissão**; impressão 100% silenciosa exige assinatura (planos pagos, ou configurar a própria raiz de confiança, **a confirmar com a QZ**) |
+| **webusb** | O próprio navegador (Chrome/Edge) fala com a impressora pela USB | **Não** | Parcial: pede **um clique de autorização**; depois lembra | **No Windows, o driver da impressora costuma bloquear** o acesso (erro "Access denied", relatado para Zebra); contorno exige trocar o driver (WinUSB) |
+| **browser-pdf** | Abre o PDF e usa o diálogo de impressão do sistema | Não | Usa a impressora padrão | Plano B; menos preciso; sem status |
+| **ponte local própria** (futuro) | Pequeno serviço nosso no computador | Sim | Sim | Só se os de cima não servirem; é manutenção nossa |
+
+**Ponto honesto:** nenhum site, sozinho, descobre uma impressora só porque ela foi ligada na USB. É preciso **um agente local** (Browser Print ou QZ Tray) ou **a autorização de WebUSB**. O que o hub promete é o seguinte: ao abrir a tela de impressoras, o hub **pergunta aos adaptadores presentes**, lista o que cada um enxerga e deixa escolher o padrão; a escolha fica lembrada por computador.
+
+**Impressão pela rede:** o navegador não abre conexão direta com impressora na rede, e o servidor do hub (na Hostinger) não alcança a rede interna do galpão. Impressora de rede (Elgin L42 Pro Full) também passa por agente local ou ponte.
+
+#### 9.4.4 Perfil de impressora (cadastro)
+Tabela `etiqueta_impressoras` (uma linha por impressora): `marca`, `modelo`, `dpi` (203/300), `largura_max_mm`, `renderizador` (zpl/epl/pplb/pplz/raster), `adaptador`, `nome_no_sistema` (como o adaptador a chama), `rolo_padrao` (ex.: 100×50), `sensor` (gap/contínuo), `utf8` (aceita acento nativo?), `local`, `ativa`.
+- **Perfis de fábrica** (prontos, editáveis): Zebra ZD220 (ZPL II, 203 dpi, 100×50), Zebra ZD230, Zebra ZT421 (203/300 dpi), Elgin L42 Pro Full, Argox OS-214 Plus/2140.
+- **Reconhecimento:** o adaptador devolve fabricante/modelo; o hub casa com o perfil de fábrica mais próximo. Se não casar, abre como "impressora genérica" (PDF ou imagem) e pede para escolher um perfil.
+- **Padrão por computador:** guardado no navegador do posto (`localStorage`), com cópia no banco por usuário.
+
+#### 9.4.5 Recomendação
+1. **Fase 1:** renderizador **ZPL II** e adaptador **zebra-browser-print**, **testados na bancada com a sua ZD220** (primeira tarefa). Se o Browser Print não a enxergar, passamos para o **qz-tray** (aceita qualquer marca; avaliar o pop-up de permissão).
+2. **Sempre** manter o **browser-pdf** como plano B.
+3. **Elgin e Argox:** perfis prontos; só se tornam "garantidos" depois de teste com a impressora física (pelo menos uma etiqueta impressa e lida).
+4. **WebUSB** fica experimental (útil sem instalar, mas arriscado no Windows).
+
+### 9.5 Rolo padrão 100 × 50 mm e o que muda nos layouts
+- 100 × 50 mm = **800 × 400 pontos** a 203 dpi. O módulo mínimo do QR/Code 128 será de **3 pontos (≈ 0,37 mm)**; o QR `END:R2A4` cabe com folga em ~16 mm de lado.
+- **Todos os tipos nascem em 100 × 50**, para o almoxarife usar **um rolo só**:
+  - `ENDERECO`, `ITEM`, `RECEBIMENTO`, `AVARIA`, `IDTAG_EQUIPAMENTO`, `OP_QUADRO`, `PALETE`: cabem em 100 × 50 (as medidas da seção 7 viram **recomendação visual**, valem os 100 × 50).
+  - `SEPARACAO` / volume: o layout de 100 × 100 da seção 7.4 **não cabe**; versão compacta em 100 × 50 (pedido, volume n/N, cliente, QR) na fase 1; versão grande só se existir rolo 100 × 100 (pergunta 11.10).
+- Para impressão **fora de 100 × 50** (outro rolo): o modelo guarda `largura_mm × altura_mm` e o perfil informa o rolo carregado; o hub avisa se o rolo não confere.
+- **Etiqueta de teste de bancada:** régua em mm, QR e Code 128 de teste, bordas e a letra "ç/ã/é", para calibrar e validar acentos.
 
 ## 10. Telas do módulo no hub
 
@@ -250,7 +315,7 @@ Funções do banco **uma por tipo**, só leitura, que devolvem as linhas para im
 
 ## 11. Decisões pendentes (do Gelson)
 
-1. **Impressora:** modelo, resolução (203/300 dpi), largura do rolo, e se é térmica direta ou transferência. Define os tamanhos finais.
+1. ~~**Impressora**~~ **Respondida:** Zebra ZD220, rolo 100 × 50 mm, preparada para Elgin e Argox (ver 9.3 a 9.5). **Falta:** a ZD220 é térmica direta ou com ribbon (transferência)? Qual o sistema do computador do almoxarife (Windows/Mac) e o navegador?
 2. **Tamanho do endereço:** viga horizontal ou quadrado maior? Distância de leitura pelo celular.
 3. **Quais etiquetas entram na 1ª entrega?** Sugestão: `ENDERECO`, `ITEM`, `ENDERECO_LOTE`; depois `RECEBIMENTO` e `SEPARACAO`.
 4. **`IDTAG_EQUIPAMENTO` e `OP_QUADRO`:** são etiquetas que vocês querem?
@@ -262,7 +327,8 @@ Funções do banco **uma por tipo**, só leitura, que devolvem as linhas para im
 
 ## 12. Faseamento proposto (sem código até aprovar)
 
-- **Fase 1 — Núcleo:** tabelas, tipos fixos, geração em PDF de `ENDERECO` e `ITEM` (modelos padrão), pré-visualização, impressão pelo navegador, histórico. Teste de calibração.
+- **Fase 0 — Bancada (antes de tudo):** com a ZD220 real, testar Zebra Browser Print, QZ Tray e PDF; imprimir a etiqueta de teste (régua, QR, Code 128, acentos) e ler com o celular/leitor do app de estoque. O resultado escolhe o adaptador principal e confirma se a ZD220 aceita UTF-8.
+- **Fase 1 — Núcleo:** tabelas (inclui `etiqueta_impressoras`), tipos fixos, renderizador ZPL II e adaptador escolhido na Fase 0, geração de `ENDERECO` e `ITEM` em 100 × 50, pré-visualização, plano B em PDF, histórico.
 - **Fase 2 — Lote e recebimento:** `ENDERECO_LOTE`, `RECEBIMENTO`, `SEPARACAO`; reimpressão com motivo.
 - **Fase 3 — Personalização:** cópia de modelos, editor visual, ativar/desativar por tela, campos protegidos.
 - **Fase 4 — Opcional:** `AVARIA`, `PALETE`, `IDTAG_EQUIPAMENTO`, `OP_QUADRO`; impressão silenciosa; ZPL.
@@ -276,7 +342,22 @@ Funções do banco **uma por tipo**, só leitura, que devolvem as linhas para im
 
 ## 14. Riscos
 
+- **ZD220 e o Browser Print:** a lista oficial que consegui ler (guia v1.3) não cita a ZD220; só a bancada confirma.
+- **Acentos na ZPL:** depende do firmware da impressora; plano B é imprimir o texto como imagem.
+- **Elgin e Argox:** a compatibilidade vem de fichas comerciais; o PPLZ da Argox é um subconjunto do ZPL. Só valem como "garantidas" depois de teste físico.
+- **Pop-up do QZ Tray** e **bloqueio de driver no WebUSB (Windows)** podem tornar a impressão menos fluida do que o desejado.
+
 - **Impressora desconhecida:** tamanhos e qualidade de QR dependem dela.
 - **Leitura de QR a distância:** prever teste de campo no galpão (altura da viga, luz).
 - **Fidelidade ao layout da Senior:** os modelos deles não estão disponíveis; copiamos a **ideia** (campos e propósito), não o arquivo.
 - **Custos de biblioteca de QR no bundle:** pequeno, mas precisa ser testado no iOS.
+
+## 15. Fontes da pesquisa de impressoras
+
+- Zebra ZD220, ficha técnica oficial (203 dpi, 104 mm, USB 2.0, ZPL II e EPL2): https://prod-www.zebra.com/content/dam/zebra_dam/en/tech-specs/zd220-tech-specs-en-us.pdf
+- Zebra Browser Print, guia do usuário v1.3 (SOs, navegadores, impressoras suportadas, ZPL II, portas 9100/9101, USB e rede): https://www.zebra.com/content/dam/zebra_dam/en/guide/portfolio/zebra-browser-print-user-guide-v1-3-en-us.pdf
+- QZ Tray, assinatura de mensagens (pop-ups sem assinatura, planos): https://qz.io/wiki/signing
+- Elgin L42 Pro Full, fichas de lojas (EPL, ZPL, PPLA, PPLB; 203 dpi; USB/Ethernet/Serial; 108 mm): https://www.kabum.com.br/produto/404780/impressora-termica-de-etiquetas-elgin-l42-pro-full-usb-ethernet-e-serial-preta
+- Argox OS-214 Pro / OS-214plus Pro, folheto oficial (PPLA, PPLB, PPLZ; 203 dpi; USB/RS-232): https://argox.com/docfile/brochure/OS-214%20Pro_OS-214plus_Pro_brochure_en_v1.0.pdf
+- WebUSB com impressoras Zebra no Windows (erro "Access denied", driver do sistema): https://developer.zebra.com/content/domexception-failed-execute-open-usbdevice-access-denied
+- WebZLP (biblioteca WebUSB para EPL/ZPL): https://app.unpkg.com/webzlp@2.0.3/files/README.md
