@@ -271,9 +271,19 @@
         }
       } catch (e) { console.warn('[CotacoesVarejo] fotos da ficha', e); }
     }
+    // 2ª foto do produto (curadoria do banco de imagens), se existir
+    const segunda = {};
+    try {
+      const { data: r2 } = await c.from('produto_fotos').select('codigo, url2').in('codigo', codigos).not('url2', 'is', null);
+      (r2 || []).forEach((r) => { segunda[r.codigo] = r.url2; });
+    } catch (e) { console.warn('[CotacoesVarejo] 2ª foto', e); }
     for (const i of (itens || [])) {
+      const patch = {};
       const url = banco[i.codigo];
-      if (url && url !== i.foto_url) await c.from('iv_cotacao_itens').update({ foto_url: url }).eq('id', i.id);
+      if (url && url !== i.foto_url) patch.foto_url = url;
+      const url2 = segunda[i.codigo];
+      if (url2 && url2 !== i.foto_url2) patch.foto_url2 = url2;
+      if (Object.keys(patch).length) await c.from('iv_cotacao_itens').update(patch).eq('id', i.id);
     }
     return banco;
   }

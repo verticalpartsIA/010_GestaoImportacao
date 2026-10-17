@@ -116,7 +116,7 @@ function Portal() {
               const x = form[i.id]; if (!x) return null;
               return (
                 <tr key={i.id}>
-                  <td style={td}>{i.foto_url ? <img src={i.foto_url} alt={i.codigo} style={{ width: 64, height: 64, objectFit: 'cover', borderRadius: 6 }} /> : <div style={{ width: 64, height: 64, background: '#f0f0ec', borderRadius: 6 }} />}</td>
+                  <td style={td}><div style={{ display: 'flex', gap: 6 }}>{[i.foto_url, i.foto_url2].filter(Boolean).map((u, k) => <a key={k} href={u} target="_blank" rel="noopener noreferrer" title="Click to enlarge · 点击放大"><img src={u} alt={i.codigo} style={{ width: 96, height: 96, objectFit: 'contain', background: '#fff', border: '1px solid #e5e5df', borderRadius: 6 }} /></a>)}{!i.foto_url && <div style={{ width: 64, height: 64, background: '#f0f0ec', borderRadius: 6 }} />}</div></td>
                   <td style={{ ...td, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{i.codigo}</td>
                   <td style={{ ...td, maxWidth: 260 }}>{i.descricao}{i.obs_vp && <div style={{ fontSize: 12, color: '#8a6d00', marginTop: 4 }}>VerticalParts: {i.obs_vp}</div>}</td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><b>{Number(i.quantidade).toLocaleString('en-US')}</b> {i.unidade || ''}</td>
