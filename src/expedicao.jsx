@@ -59,7 +59,7 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
   const carregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase indisponível.'); return; }
     const [p, o, e, h] = await Promise.all([
-      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_endereco, cliente_telefone, data_pedido, data_previsao, faturado, data_faturamento, nf_autorizada, numero_nf, transportadora_nome, modalidade_frete, cancelado, volumes, peso_bruto, valor_total').eq('cancelado', false).order('data_previsao', { ascending: true }).limit(500),
+      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_endereco, cliente_telefone, data_pedido, data_previsao, faturado, data_faturamento, nf_autorizada, numero_nf, transportadora_nome, modalidade_frete, cancelado, volumes, peso_bruto, valor_total').eq('cancelado', false).eq('so_separacao', false).order('data_previsao', { ascending: true }).limit(500),
       sb.from('pcp_ordens').select('id, numero, pedido_codigo, status').eq('frente', 'pedido').not('pedido_codigo', 'is', null),
       sb.from('pcp_expedicoes').select('*').limit(1000),
       sb.from('pcp_pedido_acompanhamento').select('numero_pedido').eq('historico', true).limit(5000),

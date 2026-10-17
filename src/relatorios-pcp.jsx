@@ -213,7 +213,7 @@ function RPPedidos({ ctx }) {
   const [fAte, setFAte] = React.useState('');
 
   const carregarRecentes = React.useCallback(async () => {
-    const { data } = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, cliente_nome, data_pedido, etapa, valor_total, cancelado').order('data_pedido', { ascending: false }).limit(500);
+    const { data } = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, cliente_nome, data_pedido, etapa, valor_total, cancelado').eq('so_separacao', false).order('data_pedido', { ascending: false }).limit(500);
     setRecentes(data || []);
   }, [sb]);
   React.useEffect(() => { carregarRecentes(); }, [carregarRecentes]);
@@ -377,7 +377,7 @@ function RPClientes({ ctx }) {
 
   const carregar = React.useCallback(async () => {
     const [p, i] = await Promise.all([
-      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, codigo_cliente, cliente_nome, data_pedido').neq('etapa', '00').eq('cancelado', false).limit(5000),
+      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, codigo_cliente, cliente_nome, data_pedido').neq('etapa', '00').eq('cancelado', false).eq('so_separacao', false).limit(5000),
       sb.from('pcp_pedido_itens').select('codigo_pedido, codigo, codigo_original, descricao, quantidade, valor_unitario, desconto, valor_total').eq('item_pcp', true).limit(20000),
     ]);
     const itens = {}; (i.data || []).forEach(x => { (itens[x.codigo_pedido] = itens[x.codigo_pedido] || []).push(x); });
@@ -636,7 +636,7 @@ function RPFluxoCaixa({ ctx }) {
       const receita = Array(12).fill(0), mat = Array(12).fill(0), mo = Array(12).fill(0);
       let nItens = 0, incompletos = 0;
       // Receita: itens do PCP vendidos (pedidos de venda do Omie, exceto proposta), pelo mês do pedido.
-      const { data: ped } = await sb.from('pcp_pedidos').select('codigo_pedido, data_pedido').neq('etapa', '00').eq('cancelado', false).gte('data_pedido', `${ano}-01-01`).lte('data_pedido', `${ano}-12-31`).limit(5000);
+      const { data: ped } = await sb.from('pcp_pedidos').select('codigo_pedido, data_pedido').neq('etapa', '00').eq('cancelado', false).eq('so_separacao', false).gte('data_pedido', `${ano}-01-01`).lte('data_pedido', `${ano}-12-31`).limit(5000);
       const mesPedido = {}; (ped || []).forEach(p => { mesPedido[p.codigo_pedido] = Number(p.data_pedido.slice(5, 7)) - 1; });
       if (Object.keys(mesPedido).length) {
         const { data: its } = await sb.from('pcp_pedido_itens').select('codigo_pedido, codigo, quantidade, valor_total').eq('item_pcp', true).in('codigo_pedido', Object.keys(mesPedido).map(Number)).limit(20000);

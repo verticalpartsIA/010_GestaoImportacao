@@ -28,7 +28,7 @@ function RPPainelProducao({ ctx }) {
       const [o, p, f, m] = await Promise.all([
         sb.from('pcp_ordens').select('id, numero, titulo, produto, quantidade, status, frente, prazo_entrega, data_abertura, data_finalizacao, qtd_produzida, qtd_perdida, causa_perda, pedido_codigo, cliente').neq('status', 'cancelada').limit(5000),
         sb.from('pcp_plano').select('produto, mes, quantidade').eq('ano', ano).limit(5000),
-        sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, cliente_nome, entrada_em, data_previsao, valor_total').eq('etapa', '20').eq('cancelado', false).limit(500),
+        sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, cliente_nome, entrada_em, data_previsao, valor_total').eq('etapa', '20').eq('cancelado', false).eq('so_separacao', false).limit(500),
         sb.from('pcp_ordens').select('pedido_codigo').eq('frente', 'pedido').not('pedido_codigo', 'is', null),
       ]);
       const err = o.error || p.error || f.error || m.error;

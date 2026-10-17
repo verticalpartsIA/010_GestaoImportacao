@@ -147,7 +147,7 @@ Deno.serve(async (req) => {
     const corte = somarDias(hoje, -60);
     const prefixoId = email ? "pcp-teste" : "pcp";
     const [pedidos, maes, exps, acomp] = await Promise.all([
-      pgSelectAll<any>("pcp_pedidos", "select=codigo_pedido,numero_pedido,etapa,cliente_nome,cliente_fantasia,data_previsao,entrada_em,faturado,data_faturamento&cancelado=eq.false&order=codigo_pedido"),
+      pgSelectAll<any>("pcp_pedidos", "select=codigo_pedido,numero_pedido,etapa,cliente_nome,cliente_fantasia,data_previsao,entrada_em,faturado,data_faturamento&cancelado=eq.false&so_separacao=eq.false&order=codigo_pedido"),
       pgSelectAll<any>("pcp_ordens", "select=pedido_codigo,status,created_at,data_finalizacao,prazo_entrega&frente=eq.pedido&pedido_codigo=not.is.null"),
       pgSelectAll<any>("pcp_expedicoes", "select=pedido_codigo,data_saida"),
       pgSelectAll<any>("pcp_pedido_acompanhamento", "select=numero_pedido,historico"),
