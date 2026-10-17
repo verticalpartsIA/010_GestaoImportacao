@@ -315,7 +315,7 @@ Tabela `etiqueta_impressoras` (uma linha por impressora): `marca`, `modelo`, `dp
 
 ## 11. Decisões pendentes (do Gelson)
 
-1. ~~**Impressora**~~ **Respondida:** Zebra ZD220, rolo 100 × 50 mm, preparada para Elgin e Argox (ver 9.3 a 9.5). **Falta:** a ZD220 é térmica direta ou com ribbon (transferência)? Qual o sistema do computador do almoxarife (Windows/Mac) e o navegador?
+1. ~~**Impressora**~~ **Respondida:** Zebra ZD220, rolo 100 × 50 mm, preparada para Elgin e Argox (ver 9.3 a 9.5). **Respondido (17/10):** ZD220 **térmica direta** (sem ribbon; etiqueta própria para térmica direta e sensor de intervalo), computador do almoxarife **Windows com Chrome**. Efeito: o WebUSB fica de lado (bloqueio de driver no Windows); o Browser Print suporta Windows e Chrome 75+. O Gelson vai testar o Browser Print na bancada (Fase 0).
 2. **Tamanho do endereço:** viga horizontal ou quadrado maior? Distância de leitura pelo celular.
 3. **Quais etiquetas entram na 1ª entrega?** Sugestão: `ENDERECO`, `ITEM`, `ENDERECO_LOTE`; depois `RECEBIMENTO` e `SEPARACAO`.
 4. **`IDTAG_EQUIPAMENTO` e `OP_QUADRO`:** são etiquetas que vocês querem?
