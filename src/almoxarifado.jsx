@@ -497,9 +497,10 @@ function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
   const itens = React.useMemo(() => texto.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).map((x) => {
     const [cod, ...resto] = x.split(/[;\t]/); const end = resto.join(' ').trim().toUpperCase().slice(0, 60);
     const l = porCodigo[String(cod || '').trim().toUpperCase()];
-    return { cod: String(cod || '').trim(), end, l };
+    const v = end && window.EtiquetasCalc?.validarEnderecoNovo ? window.EtiquetasCalc.validarEnderecoNovo(end, l && l.endereco) : { ok: true, codigo: end };
+    return { cod: String(cod || '').trim(), end: v.ok && v.codigo ? v.codigo : end, l, endInvalido: !v.ok, endMsg: v.msg };
   }), [texto, porCodigo]);
-  const validos = itens.filter((i) => i.l && i.end);
+  const validos = itens.filter((i) => i.l && i.end && !i.endInvalido);
   const usos = {};      // endereço (normalizado) -> códigos, somando os já cadastrados e os do arquivo
   linhas.forEach((l) => { const e = String(l.endereco || '').trim().toUpperCase(); if (e) (usos[e] = usos[e] || new Set()).add(l.codigo); });
   validos.forEach((i) => { (usos[i.end] = usos[i.end] || new Set()).add(i.l.codigo); });
@@ -522,7 +523,7 @@ function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
       footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={!validos.length || saving} onClick={aplicar}>{saving ? 'Gravando…' : `Gravar ${validos.length} endereço(s)`}</Button></>}>
       <div className="stack" style={{ gap: 10 }}>
         <div className="small muted">Cole uma linha por item: <b>código;endereço</b> (também aceita o que vem copiado de uma planilha, com tab). O endereço é só do PCP — nada vai ao Omie.</div>
-        <textarea className="input" rows={7} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'VPMP-178;A-01-02\nVPEL-229;B-03-01'} style={{ fontFamily: 'monospace', fontSize: 12 }}/>
+        <textarea className="input" rows={7} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'VPMP-178;R2A4\nVPEL-229;R3B1'} style={{ fontFamily: 'monospace', fontSize: 12 }}/>
         {itens.length > 0 && (
           <div className="table-wrap" style={{ maxHeight: 220, overflowY: 'auto', border: 0 }}>
             <table className="t pcp-grid">
@@ -532,8 +533,8 @@ function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
                 return (
                   <tr key={k}>
                     <td className="mono">{i.cod}</td><td>{i.end || '—'}</td>
-                    <td style={{ fontSize: 12, color: !i.l || !i.end ? 'var(--vp-danger)' : rep.length ? 'var(--vp-warning-ink, #b45309)' : undefined }}>
-                      {!i.l ? 'código não encontrado' : !i.end ? 'sem endereço na linha' : rep.length ? `⚠ já usado por ${rep.slice(0, 3).join(', ')}${rep.length > 3 ? '…' : ''} (grava mesmo assim)` : (String(i.l.endereco || '').trim() ? `troca "${i.l.endereco}"` : 'novo')}
+                    <td style={{ fontSize: 12, color: !i.l || !i.end || i.endInvalido ? 'var(--vp-danger)' : rep.length ? 'var(--vp-warning-ink, #b45309)' : undefined }}>
+                      {!i.l ? 'código não encontrado' : !i.end ? 'sem endereço na linha' : i.endInvalido ? 'endereço não existe no galpão (use ex.: R2A4) — não grava' : rep.length ? `⚠ já usado por ${rep.slice(0, 3).join(', ')}${rep.length > 3 ? '…' : ''} (grava mesmo assim)` : (String(i.l.endereco || '').trim() ? `troca "${i.l.endereco}"` : 'novo')}
                     </td>
                   </tr>
                 );
@@ -689,8 +690,11 @@ function AlmoxarifadoEstoque() {
   const salvarEndereco = async (l, valor) => {
     const c = window.__VP_SB && window.__VP_SB.sb;
     if (!c) return;
-    const novo = String(valor || '').trim().slice(0, 60);
+    let novo = String(valor || '').trim().slice(0, 60);
     if (novo === String(l.endereco || '').trim()) return;
+    const v = window.EtiquetasCalc?.validarEnderecoNovo?.(novo, l.endereco);
+    if (v && !v.ok) { window.toast?.(v.msg, 'error'); carregar(); return; }
+    if (v && v.codigo) novo = v.codigo;
     const r = await c.from('pcp_produtos').update({ endereco: novo || null }).eq('codigo', l.codigo).select('codigo');
     if (r.error || !r.data || r.data.length === 0) { window.toast?.('Não foi possível salvar o endereço' + (r.error ? ': ' + r.error.message : '.')); carregar(); return; }
     window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Definiu o endereço do item', alvo: `${l.codigo}: ${novo || '(vazio)'}` });

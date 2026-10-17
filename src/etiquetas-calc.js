@@ -294,8 +294,20 @@
       paginasSvg.map((s) => `<div class="pg">${s}</div>`).join('') + '</body></html>';
   }
 
+  /* Confere um endereço digitado à mão (regra do galpão, a mesma do app de estoque). Só vale para valor NOVO:
+     se o texto é igual ao que já estava gravado (endereço antigo, ex.: "G13"), passa sem mexer — nunca apagamos dado existente.
+     Devolve { ok, codigo, antigo, msg }; codigo = forma canônica (R2A4) ou null quando vazio. */
+  function validarEnderecoNovo(texto, anterior) {
+    const bruto = String(texto == null ? '' : texto).trim();
+    if (!bruto) return { ok: true, codigo: null, antigo: false, msg: '' };
+    const p = parseEndereco(bruto);
+    if (p) return { ok: true, codigo: p.codigo, antigo: false, msg: '' };
+    if (anterior != null && normalizarEndereco(bruto) === normalizarEndereco(anterior)) return { ok: true, codigo: bruto, antigo: true, msg: '' };
+    return { ok: false, codigo: null, antigo: false, msg: `Endereço "${bruto}" não existe no galpão. Use o formato R<rua><vão><nível>, ex.: R2A4 (ruas 1–4, vãos A–J, níveis 1–8) ou EXP.` };
+  }
+
   window.EtiquetasCalc = {
-    DV_PESOS, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo,
+    DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
     dadosEndereco, dadosItem, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderSVG, htmlImpressao,
   };

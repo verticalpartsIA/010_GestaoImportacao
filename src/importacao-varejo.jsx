@@ -862,7 +862,7 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
                       )}
                     </td>
                     <td>
-                      <IVCelulaEditavel valor={item.endereco} podeEditar={podeGerenciar} placeholder="ex.: G13" largura={90}
+                      <IVCelulaEditavel valor={item.endereco} podeEditar={podeGerenciar} placeholder="ex.: R2A4" largura={90}
                         onSave={(v) => salvarContagemItem(item, { endereco: v })} />
                     </td>
                     <td className="text-center"><IVCurvaBadge curva={item.curva} /></td>

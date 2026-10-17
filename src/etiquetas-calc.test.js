@@ -163,3 +163,13 @@ test('modelos padrão: todos 100 x 50, ids únicos, campos usados existem em dad
   }
   assert.equal(E.modelosDoTipo('ENDERECO').length, 1);
 });
+
+test('validarEnderecoNovo: aceita existente (normaliza), recusa inexistente, preserva antigo igual', () => {
+  assert.deepEqual(E.validarEnderecoNovo(' end: r2a4 ', null), { ok: true, codigo: 'R2A4', antigo: false, msg: '' });
+  assert.equal(E.validarEnderecoNovo('exp', null).codigo, 'EXP');
+  assert.equal(E.validarEnderecoNovo('', 'G13').codigo, null);
+  assert.equal(E.validarEnderecoNovo('R1J1', null).ok, false);
+  assert.equal(E.validarEnderecoNovo('G14', 'G13').ok, false);
+  const igual = E.validarEnderecoNovo('g13', 'G13');
+  assert.equal(igual.ok, true); assert.equal(igual.antigo, true);
+});
