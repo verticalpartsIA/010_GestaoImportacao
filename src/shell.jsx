@@ -134,6 +134,7 @@ const NAV_GROUPS = [
     { id: "mes-cadastros", label: "MES · Cadastros", icon: "layers" },
     { id: "relatorios-pcp", label: "Relatórios", icon: "fileText" },
     { id: "expedicao", label: "Expedição", icon: "truck" },
+    { id: "separacao", label: "Separação", icon: "layers" },
     { id: "etiquetas", label: "Etiquetas", icon: "fileText" },
   ]},
   { label: "Administração", items: [
@@ -389,6 +390,7 @@ const BREADCRUMB_MAP = {
   "simulacao-producao": { module: "Logística", page: "Simulação", icon: "history" },
   "relatorios-pcp": { module: "Logística", page: "Relatórios", icon: "fileText" },
   expedicao: { module: "Logística", page: "Expedição", icon: "truck" },
+  separacao: { module: "Logística", page: "Separação", icon: "layers" },
   etiquetas: { module: "Logística", page: "Etiquetas", icon: "fileText" },
   "emissao-nf": { module: "Financeiro", page: "Emissão de NF", icon: "fileText" },
   pcp:           { module: "Logística", page: "PCP — Planejamento e Controle da Produção", icon: "calendar" },

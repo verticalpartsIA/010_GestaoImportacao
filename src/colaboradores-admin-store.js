@@ -261,6 +261,10 @@
       { modulo: 'mes-cadastros', label: 'MES — Cadastros do chão de fábrica' },
       { modulo: 'relatorios-pcp', label: 'Relatórios do PCP' },
       { modulo: 'expedicao', label: 'Expedição' },
+      { modulo: 'separacao', label: 'Separação (painel TV dos pedidos a separar)', capacidades: [
+        { chave: 'ver', label: 'Vê os links do painel TV e o SLA da separação' },
+        { chave: 'editar', label: 'Gera e revoga links do painel TV e muda o SLA da separação' },
+      ]},
       /* Etiquetas (endereço, item…). Spec: docs/superpowers/specs/2026-10-17-modulo-etiquetas-design.md. As chaves são as que o SQL confere
          (migration 20261017160000: política de etiqueta_impressoes). Só quem tem 'imprimir' imprime; 'reimprimir' é outra alçada e exige motivo. */
       { modulo: 'etiquetas', label: 'Etiquetas (endereço, item, palete…)', capacidades: [
@@ -312,7 +316,7 @@
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
     'Entrega & Documentação': ['databook', 'handover'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
-    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'etiquetas'],
+    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas'],
     'Administração': ['logs'],
   };
 
