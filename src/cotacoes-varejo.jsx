@@ -352,7 +352,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                   <tr key={it.id}>
                     <td>
                       <label style={{ cursor: editavel ? 'pointer' : 'default' }} title={editavel ? 'Trocar a foto (fica no banco de fotos, nomeada pelo código)' : ''}>
-                        {it.foto_url ? <img src={it.foto_url} alt={it.codigo} title={it.foto_url2 ? 'Este produto tem uma 2ª foto (vai no convite ao fornecedor)' : ''} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} /> :<div style={{ width: 52, height: 52, border: '1px dashed var(--border, #ccc)', borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 10, color: 'var(--fg3)' }}>sem foto</div>}
+                        {it.foto_url ? <span style={{ display: 'inline-flex', gap: 4 }}><img src={it.foto_url} alt={it.codigo} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />{it.foto_url2 && <img src={it.foto_url2} alt={it.codigo + ' (2)'} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />}</span> :<div style={{ width: 52, height: 52, border: '1px dashed var(--border, #ccc)', borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 10, color: 'var(--fg3)' }}>sem foto</div>}
                         {editavel && <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => trocarFoto(it, e.target.files && e.target.files[0])} />}
                       </label>
                     </td>
