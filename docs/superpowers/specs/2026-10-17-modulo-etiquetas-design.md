@@ -221,7 +221,14 @@ Funções do banco **uma por tipo**, só leitura, que devolvem as linhas para im
 
 ## 10. Telas do módulo no hub
 
-Local sugerido: **Logística Interna › Etiquetas** (rota nova `etiquetas`), alçada própria.
+**Decidido (Gelson, 17/10/2026):** novo item **"Etiquetas"** no grupo **Logística Interna** do menu, **depois de "Expedição"** (último item do grupo). Rota `/logistica/etiquetas`; alçada própria.
+
+- **Posição:** a ordem do grupo segue o fluxo (Almoxarifado → planejamento → produção → Relatórios → Expedição); Etiquetas é ferramenta transversal e fica no fim, sem deslocar nenhum item atual. Nada no código depende da ordem (o menu é uma lista; o teste de telas lê `KNOWN_ROUTES`).
+- **Abas (cada uma com URL própria, via `useRouteTab`):** `gerar` (padrão), `modelos`, `historico`. Editor de modelo em `/logistica/etiquetas/modelos/<id>` (`useRotaItem`). Aba nova entra na lista de abas válidas.
+- **Quem vê:** todos que fazem parte de **Logística, Almoxarifado, PCP e Expedição**. O menu lateral só filtra por perfil (Comercial, Engenharia, Financeiro, Admin) e **não existe perfil "Logística"**, então o item **não leva `restrict`**; quem entra na tela é decidido pela alçada `etiquetas.ver`, concedida (carga inicial) às pessoas desses quatro departamentos. Quem não tem `ver` e abre o link vê "Você não tem acesso" (mesmo padrão do Inbox). Perfil novo nasce sem a alçada. Administrador passa sempre.
+- **A conferir na implementação:** a lista de pessoas dos quatro departamentos (consultar `colaboradores_vpsistema.departamento`) antes de conceder `ver`.
+- **Arquivos previstos:** `src/shell.jsx` (menu, título e breadcrumb), `src/router.js` (`KNOWN_ROUTES`), `src/app.jsx` (`case`), `src/colaboradores-admin-store.js` (catálogo de alçadas), novos `src/etiquetas.jsx` e `src/etiquetas-store.js`, `?v=` no `index.html`, `docs/MAPA_DE_ROTAS.md` (via `node scripts/gerar-mapa-rotas.js`).
+- **Fase 2:** botão "Imprimir etiqueta" dentro das telas existentes (linha do item no Almoxarifado, pedido na Expedição), abrindo a mesma geração já preenchida (equivalente ao "Impressos" da Senior).
 
 1. **Gerar etiquetas:** tipo → modelo → seleção (filtros por rua/família/pedido/embarque) → pré-visualização → imprimir.
 2. **Modelos:** lista por tipo (padrão e da empresa), ativar/desativar, copiar, editar, excluir (só os da empresa).
@@ -230,7 +237,8 @@ Local sugerido: **Logística Interna › Etiquetas** (rota nova `etiquetas`), al
 5. **Endereços** (reaproveita `estoque_enderecos`): impressão em lote por rua, com contador das etiquetas já impressas.
 
 ### 10.1 Alçadas (módulo `etiquetas`)
-- `ver`, `imprimir`, `reimprimir` (exige motivo), `editar_modelos`, `administrar` (modelos padrão e vínculos). Administrador passa em tudo.
+- `ver` (concedida a Logística, Almoxarifado, PCP e Expedição), `imprimir`, `reimprimir` (exige motivo), `editar_modelos`, `administrar` (modelos padrão e vínculos). Administrador passa em tudo.
+- Pergunta em aberto: `imprimir` e `reimprimir` também para os quatro departamentos, ou só para os almoxarifes? (ver 11.6)
 
 ### 10.2 Integrações com o que já existe
 - `estoque_enderecos` → etiqueta `ENDERECO`.
