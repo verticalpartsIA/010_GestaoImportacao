@@ -90,12 +90,13 @@ function Cartao({ p, sla }) {
   );
 }
 
-function Coluna({ titulo, cor, lista, sla, vazio, larga }) {
+function Coluna({ titulo, cor, lista, total, sla, vazio, larga }) {
   return (
     <div style={{ minWidth: 0 }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, borderBottom: `3px solid ${cor}`, paddingBottom: 6 }}>
         <span style={{ fontSize: 'clamp(16px, 1.8vw, 28px)', fontWeight: 800, letterSpacing: '.04em', color: cor }}>{titulo}</span>
-        <span style={{ fontSize: 'clamp(16px, 1.8vw, 28px)', fontWeight: 800, color: COR.texto }}>{lista.length}</span>
+        <span style={{ fontSize: 'clamp(16px, 1.8vw, 28px)', fontWeight: 800, color: COR.texto }}>{total}</span>
+        {total > lista.length && <span style={{ fontSize: 'clamp(11px, 1vw, 15px)', color: COR.mudo }}>(mostrando {lista.length})</span>}
       </div>
       <div style={larga ? { display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(330px, 1fr))', columnGap: 12 } : undefined}>
         {lista.map((p) => <Cartao key={p.id} p={p} sla={sla} />)}
@@ -194,7 +195,9 @@ function Painel() {
   const aguardando = pedidos.filter((p) => p.status === 'aguardando');
   const emSep = pedidos.filter((p) => p.status === 'em_separacao');
   const separados = pedidos.filter((p) => p.status === 'separado').sort((a, b) => String(b.separado_em).localeCompare(String(a.separado_em)));
-  const atrasados = [...aguardando, ...emSep].filter((p) => p.decorrido_min >= sla).length;
+  const tot = dados.totais || {};      // totais sem corte (as listas acima vêm limitadas por coluna); sem `totais` (RPC antiga), cai nas listas
+  const nAguardando = tot.aguardando ?? aguardando.length, nEmSep = tot.em_separacao ?? emSep.length, nSeparados = tot.separados ?? separados.length;
+  const atrasados = tot.atrasados ?? [...aguardando, ...emSep].filter((p) => p.decorrido_min >= sla).length;
   const hora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const data = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: 'long' });
   const btn = { background: 'transparent', border: `1px solid ${COR.borda}`, color: COR.mudo, borderRadius: 8, padding: '6px 12px', fontSize: 13, cursor: 'pointer', fontFamily: 'inherit' };
@@ -233,9 +236,9 @@ function Painel() {
       )}
 
       <div className="st-grade" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr)', gap: 18, alignItems: 'start' }}>
-        <Coluna titulo="AGUARDANDO" cor={COR.amarelo} lista={aguardando} sla={sla} vazio="Nenhum pedido na fila." larga />
-        <Coluna titulo="EM SEPARAÇÃO" cor="#4da3ff" lista={emSep} sla={sla} vazio="Ninguém separando agora." />
-        <Coluna titulo="SEPARADOS HOJE" cor={COR.verde} lista={separados} sla={sla} vazio="Nenhum separado hoje." />
+        <Coluna titulo="AGUARDANDO" cor={COR.amarelo} lista={aguardando} total={nAguardando} sla={sla} vazio="Nenhum pedido na fila." larga />
+        <Coluna titulo="EM SEPARAÇÃO" cor="#4da3ff" lista={emSep} total={nEmSep} sla={sla} vazio="Ninguém separando agora." />
+        <Coluna titulo="SEPARADOS HOJE" cor={COR.verde} lista={separados} total={nSeparados} sla={sla} vazio="Nenhum separado hoje." />
       </div>
 
       <div style={{ marginTop: 14, fontSize: 12, color: COR.mudo, textAlign: 'right' }}>
