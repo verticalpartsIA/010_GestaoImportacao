@@ -104,7 +104,7 @@ function AlmoxarifadoNecessidade() {
       const campos = 'codigo, descricao, unidade' + (custoOk ? ', preco_custo, custo_manual, custo_compra' : '');
       const [cfg, pedidos, acomp, itens, ordens, estr, prods, pos, compras, est, prevPed, prevItens] = await Promise.all([
         sb.from('pcp_reposicao_config').select('*').eq('id', true).maybeSingle(),
-        necLerTudo(() => sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_fantasia, data_previsao, atualizado_em').eq('faturado', false).eq('cancelado', false).order('codigo_pedido')),
+        necLerTudo(() => sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_fantasia, data_previsao, atualizado_em').eq('faturado', false).eq('cancelado', false).eq('so_separacao', false).order('codigo_pedido')),
         necLerTudo(() => sb.from('pcp_pedido_acompanhamento').select('numero_pedido, historico').order('numero_pedido')),
         necLerTudo(() => sb.from('pcp_pedido_itens').select('codigo_pedido, codigo, quantidade').eq('item_pcp', true).order('id')),
         necLerTudo(() => sb.from('pcp_ordens').select('id, numero, produto, quantidade, qtd_produzida, status, prazo_entrega, pedido_codigo, ordem_mae_id, cliente, observacao').not('status', 'in', '(concluida,cancelada)').order('created_at')),

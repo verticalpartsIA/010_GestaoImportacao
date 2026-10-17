@@ -41,7 +41,7 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
   const carregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase indisponível.'); return; }
     const [p, o, e, a] = await Promise.all([
-      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_documento, data_pedido, data_previsao, entrada_em, faturado, data_faturamento, nf_autorizada, cancelado, valor_total, atualizado_em').eq('cancelado', false).order('data_previsao', { ascending: true }).limit(500),
+      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, cliente_documento, data_pedido, data_previsao, entrada_em, faturado, data_faturamento, nf_autorizada, cancelado, valor_total, atualizado_em').eq('cancelado', false).eq('so_separacao', false).order('data_previsao', { ascending: true }).limit(500),
       sb.from('pcp_ordens').select('id, numero, pedido_codigo, status, created_at, data_finalizacao, prazo_entrega').eq('frente', 'pedido').not('pedido_codigo', 'is', null),
       sb.from('pcp_expedicoes').select('pedido_codigo, status, data_saida').limit(1000),
       sb.from('pcp_pedido_acompanhamento').select('*').limit(1000),

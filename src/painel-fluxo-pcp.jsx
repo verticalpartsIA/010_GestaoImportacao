@@ -28,7 +28,7 @@ function RPPainelFluxo({ ctx, ano, d, perm }) {
     setX(null);
     (async () => {
       const [p, a] = await Promise.all([
-        sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, cliente_nome, etapa, faturado, data_faturamento, data_pedido, entrada_em').neq('etapa', '00').eq('cancelado', false).limit(5000),
+        sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, cliente_nome, etapa, faturado, data_faturamento, data_pedido, entrada_em').neq('etapa', '00').eq('cancelado', false).eq('so_separacao', false).limit(5000),
         sb.from('pcp_pedido_acompanhamento').select('numero_pedido, historico').eq('historico', true).limit(5000),
       ]);
       const ids = (p.data || []).map(r => r.codigo_pedido);

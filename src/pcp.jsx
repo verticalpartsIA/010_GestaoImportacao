@@ -1088,7 +1088,7 @@ function PCPFilaProducao({ ctx, abrirOp }) {
   const [preparo, setPreparo] = React.useState(null);
 
   const carregar = React.useCallback(async () => {
-    const { data: p } = await sb.from('pcp_pedidos').select('*').eq('etapa', '20').eq('cancelado', false).order('data_previsao', { ascending: true }).limit(200);
+    const { data: p } = await sb.from('pcp_pedidos').select('*').eq('etapa', '20').eq('cancelado', false).eq('so_separacao', false).order('data_previsao', { ascending: true }).limit(200);
     const ids = (p || []).map(x => x.codigo_pedido);
     const [i, o] = await Promise.all([
       ids.length ? sb.from('pcp_pedido_itens').select('codigo_pedido, seq, codigo, descricao, unidade, quantidade, item_pcp').in('codigo_pedido', ids).order('seq').limit(5000) : Promise.resolve({ data: [] }),
@@ -1104,7 +1104,7 @@ function PCPFilaProducao({ ctx, abrirOp }) {
     setBusy(true);
     const r = await pcpSyncPedidos(sb, { etapa: '20' });
     setBusy(false);
-    if (!r.ok) window.toast?.('Não foi possível ler o Omie: ' + (r.erro || 'erro')); else window.toast?.(`Omie lido: ${r.dados.lidos} pedido(s) na etapa 20; ${r.dados.gravados} com quadro, corrimão ou cabo.`);
+    if (!r.ok) window.toast?.('Não foi possível ler o Omie: ' + (r.erro || 'erro')); else window.toast?.(`Omie lido: ${r.dados.lidos} pedido(s) na etapa 20; ${r.dados.gravados} gravado(s) (os sem quadro, corrimão ou cabo ficam só na fila de separação do almoxarifado).`);
     carregar();
   };
   const criar = async () => {
@@ -1342,7 +1342,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
     ]);
     // Pedidos de venda do Omie que ainda podem receber esta produção: abertos (etapas 20 a 59), não cancelados e sem OP-mãe.
     const [pv, maesPed] = await Promise.all([
-      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, data_pedido').eq('cancelado', false).gte('etapa', '20').lt('etapa', '60').order('data_pedido', { ascending: false }).limit(300),
+      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido, etapa, cliente_nome, data_pedido').eq('cancelado', false).eq('so_separacao', false).gte('etapa', '20').lt('etapa', '60').order('data_pedido', { ascending: false }).limit(300),
       sb.from('pcp_ordens').select('pedido_codigo').eq('frente', 'pedido').not('pedido_codigo', 'is', null),
     ]);
     const comMae = new Set((maesPed.data || []).map(x => String(x.pedido_codigo)));

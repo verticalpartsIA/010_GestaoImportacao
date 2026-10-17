@@ -265,7 +265,7 @@ Deno.serve(async (req) => {
       pgSelectAll<any>("pcp_estoque", "select=codigo,quantidade&order=codigo"),
       pgSelectAll<any>("pcp_posicao_compra", "select=codigo,fisico,disponivel&order=codigo"),
       pgSelectAll<any>("pcp_compras_itens", "select=codigo,quantidade,qtde_recebida&order=pedido_id,item_id"),
-      pgSelectAll<any>("pcp_pedidos", "select=codigo_pedido,numero_pedido,etapa,data_previsao&faturado=eq.false&cancelado=eq.false&order=codigo_pedido"),
+      pgSelectAll<any>("pcp_pedidos", "select=codigo_pedido,numero_pedido,etapa,data_previsao&faturado=eq.false&cancelado=eq.false&so_separacao=eq.false&order=codigo_pedido"),
       pgSelectAll<any>("pcp_pedido_acompanhamento", "select=numero_pedido,historico&order=numero_pedido"),
       pgSelectAll<any>("pcp_pedido_itens", "select=codigo_pedido,codigo,quantidade&item_pcp=eq.true&order=id"),
       pgSelectAll<any>("pcp_ordens", "select=id,numero,produto,quantidade,qtd_produzida,prazo_entrega,pedido_codigo,ordem_mae_id,observacao&status=not.in.(concluida,cancelada)&order=created_at"),
