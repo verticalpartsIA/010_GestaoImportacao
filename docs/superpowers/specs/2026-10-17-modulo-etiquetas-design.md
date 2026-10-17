@@ -113,9 +113,9 @@ Regra de contrato: o texto do QR do item é exatamente o código do produto; qua
 | `RECEBIMENTO` | Marca a carga que chegou: embarque/P.I./NF, fornecedor, data, quantidade, item. Alimenta a fila de conferência | Ordem de Recebimento + Lote | Alta |
 | `SEPARACAO` | Identifica o pedido de venda do Omie e o volume "n/N" na área `EXP` | Identificação de Separação + Volume | Alta |
 | `AVARIA` | Retém o que chegou danificado ou aguarda decisão | Produtos Danificados | Média |
-| `PALETE` | Identifica um palete inteiro, com conteúdo e etapa | LPN | Só se vocês paletizam |
-| `IDTAG_EQUIPAMENTO` | Identifica cada elevador (ex.: `VPEL-EL0985-1`), o mesmo código das propostas/precificações | — | A confirmar |
-| `OP_QUADRO` | Identifica a OP do PCP e o nº de série do quadro de comando (exigido na Qualidade do MES) | Ordem de Serviço | A confirmar |
+| `PALETE` | Identifica um palete inteiro, com conteúdo e etapa | LPN | Sim (decidido) |
+| `IDTAG_EQUIPAMENTO` | Identifica cada elevador (ex.: `VPEL-EL0985-1`), o mesmo código das propostas/precificações | — | Sim (decidido) |
+| `OP_QUADRO` | Identifica a OP do PCP e o nº de série do quadro de comando (exigido na Qualidade do MES) | Ordem de Serviço | Sim (decidido) |
 | `ENDERECO_LOTE` | Folha com vários endereços para imprimir e colar de uma vez | Local Modelo 8 | Média |
 
 ### 6.3 Fora do escopo (não traz valor agora)
@@ -313,17 +313,34 @@ Tabela `etiqueta_impressoras` (uma linha por impressora): `marca`, `modelo`, `dp
 - MES/OP → etiqueta `OP_QUADRO` (se aprovada).
 - App de estoque: **nenhuma mudança de contrato** (QR do item e `END:`); a validação do endereço (`estoque_endereco_normalizar`) continua igual.
 
-## 11. Decisões pendentes (do Gelson)
+## 11. Decisões do Gelson (17/10/2026) e pendências
 
-1. ~~**Impressora**~~ **Respondida:** Zebra ZD220, rolo 100 × 50 mm, preparada para Elgin e Argox (ver 9.3 a 9.5). **Respondido (17/10):** ZD220 **térmica direta** (sem ribbon; etiqueta própria para térmica direta e sensor de intervalo), computador do almoxarife **Windows com Chrome**. Efeito: o WebUSB fica de lado (bloqueio de driver no Windows); o Browser Print suporta Windows e Chrome 75+. O Gelson vai testar o Browser Print na bancada (Fase 0).
+### 11.1 Respondidas
+1. **Impressora:** Zebra ZD220 térmica direta, rolo 100 × 50 mm, Windows + Chrome; preparada para Elgin e Argox (9.3 a 9.5). O teste de bancada (Fase 0) com o Browser Print está **em andamento** (Browser Print instalado e certificado aceito; falta o teste com a impressora na mão).
+2. **Quais etiquetas:** "quase tudo o que a spec oferece". **Entram todos os tipos da seção 6** (`ENDERECO`, `ITEM`, `ENDERECO_LOTE`, `RECEBIMENTO`, `SEPARACAO`, `AVARIA`, `PALETE`, `IDTAG_EQUIPAMENTO`, `OP_QUADRO`). A **ordem de entrega** continua pelas fases da seção 12.
+3. **`IDTAG_EQUIPAMENTO` e `OP_QUADRO`:** **sim**, entram.
+4. **`PALETE`:** **sim**, entra (precisa definir a regra de etapa/status do palete, como o LPN da Senior; ver 11.2).
+5. **Dígito verificador (DV) no endereço:** **sim**, mas **a regra da VerticalParts é diferente** da exemplificada na Senior. Outra sessão está definindo; a pergunta está em 11.3. Até lá o DV é **campo opcional**, e o código/QR não dependem dele.
+6. **Rolo 100 × 100 mm:** **sim, existe** (resposta "Sim" à pergunta 5 da rodada anterior; **confirmar** se foi essa a leitura). Então o volume de `SEPARACAO` pode usar o layout grande (7.4); o compacto 100 × 50 fica como alternativa.
+
+### 11.2 Ainda abertas
+1. **Quem imprime e quem reimprime:** só almoxarifes ou todos com alçada nos quatro departamentos?
 2. **Tamanho do endereço:** viga horizontal ou quadrado maior? Distância de leitura pelo celular.
-3. **Quais etiquetas entram na 1ª entrega?** Sugestão: `ENDERECO`, `ITEM`, `ENDERECO_LOTE`; depois `RECEBIMENTO` e `SEPARACAO`.
-4. **`IDTAG_EQUIPAMENTO` e `OP_QUADRO`:** são etiquetas que vocês querem?
-5. **Foto na etiqueta de item:** ajuda ou polui? (padrão: sem foto)
-6. **Quem imprime e quem reimprime:** só almoxarifes ou qualquer pessoa com alçada?
-7. **Dígito verificador no endereço:** vale a pena? Se sim, qual regra (soma ponderada do código, 3 dígitos, como o exemplo da Senior)?
-8. **Palete/LPN:** vocês paletizam e rastreiam palete? Se não, `PALETE` fica de fora.
-9. **Editor visual:** é importante já na 1ª entrega, ou começamos só com os modelos padrão e a cópia com ajustes simples (posição/fonte), deixando o arrastar para depois?
+3. **Foto na etiqueta de item:** ajuda ou polui? (padrão: sem foto)
+4. **Editor visual:** na 1ª entrega, ou começamos com modelos padrão + cópia com ajustes simples (posição/fonte)? (padrão da spec: ajustes simples primeiro, arrastar depois)
+5. **Palete:** quando um palete nasce e quando se desfaz (recebimento, estoque, expedição); quem o cria; se o conteúdo vem do recebimento ou da contagem.
+6. **Os dois rolos:** quando a impressora está com 100 × 100, o hub deve avisar se alguém tenta imprimir 100 × 50 (e vice-versa). Confirmar quem troca o rolo e como o hub sabe qual está carregado (cadastro no perfil da impressora).
+
+### 11.3 Pergunta para a sessão que define o DV do endereço
+Preciso da regra para gerar e validar o **dígito verificador dos endereços do almoxarifado** (formato `R<rua><vão><nível>`, ex.: `R2A4`; 236 posições + `EXP`):
+1. **Como se calcula?** (a partir de quais caracteres do código, que fórmula, quantos dígitos).
+2. **Onde aparece?** Só texto impresso na etiqueta, ou também dentro do QR (`END:R2A4` hoje)? O contrato do app de estoque (`END:` + código) muda?
+3. **Quem usa?** O app de estoque deve exigir o DV quando alguém **digita** o endereço à mão? E ao **bipar** o QR, o DV é conferido?
+4. **`EXP`** tem DV?
+5. **5 exemplos reais** (endereço → DV), para eu criar o teste automático.
+6. Se o DV vier a ser guardado, em qual coluna de `estoque_enderecos`?
+
+Enquanto a regra não chega: o DV é um **campo opcional** do tipo `ENDERECO`, calculado por uma função isolada, para trocar a fórmula sem refazer as etiquetas.
 
 ## 12. Faseamento proposto (sem código até aprovar)
 
