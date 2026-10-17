@@ -182,7 +182,8 @@ const IV_ESTAGIO_ROTULO = {
 /* Filtros de mercadoria por chegar. "Comprado" = pedido sem embarque (lançamento do comprador ou P.I. ainda não embarcada). */
 function ivCombinaCaminho(i, filtro) {
   if (filtro === 'tudo') return i.caminhoTotal > 0;
-  if (filtro === 'comprado') return (i.comprado > 0) || (i.compradoPi > 0);
+  // compradoEf = "Comprado" já abatido pelo que a P.I. cobre (o pedido que virou P.I. embarcada não é mais "sem embarque")
+  if (filtro === 'comprado') return ((i.compradoEf != null ? i.compradoEf : i.comprado) > 0) || (i.compradoPi > 0);
   if (filtro === 'caminho') return i.aCaminho > 0;
   if (filtro === 'semnota') return i.chegouSemNota > 0;
   return true;
