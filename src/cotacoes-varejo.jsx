@@ -190,7 +190,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
   // Fotos: procura no banco / traz da Ficha Técnica uma vez por abertura.
   React.useEffect(() => {
     if (!dados || fotosTentadas.current) return;
-    if (dados.itens.some((i) => !i.foto_url)) { fotosTentadas.current = true; S.resolverFotos(dados.lote.id, dados.itens).then(() => carregar()).catch(() => {}); }
+    if (dados.itens.some((i) => !i.foto_url || !i.foto_url2)) { fotosTentadas.current = true; S.resolverFotos(dados.lote.id, dados.itens).then(() => carregar()).catch(() => {}); }
   }, [dados && dados.lote.id]);
 
   if (erro) return <div className="page fade-in"><div className="alert danger"><Icon.warning /><div><div className="alert__title">Erro</div><div className="alert__sub">{erro}</div></div></div><Button variant="outline" onClick={onVoltar}>← Voltar</Button></div>;
@@ -352,7 +352,7 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                   <tr key={it.id}>
                     <td>
                       <label style={{ cursor: editavel ? 'pointer' : 'default' }} title={editavel ? 'Trocar a foto (fica no banco de fotos, nomeada pelo código)' : ''}>
-                        {it.foto_url ? <img src={it.foto_url} alt={it.codigo} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} /> : <div style={{ width: 52, height: 52, border: '1px dashed var(--border, #ccc)', borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 10, color: 'var(--fg3)' }}>sem foto</div>}
+                        {it.foto_url ? <span style={{ display: 'inline-flex', gap: 4 }}><img src={it.foto_url} alt={it.codigo} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />{it.foto_url2 && <img src={it.foto_url2} alt={it.codigo + ' (2)'} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />}</span> :<div style={{ width: 52, height: 52, border: '1px dashed var(--border, #ccc)', borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 10, color: 'var(--fg3)' }}>sem foto</div>}
                         {editavel && <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => trocarFoto(it, e.target.files && e.target.files[0])} />}
                       </label>
                     </td>
