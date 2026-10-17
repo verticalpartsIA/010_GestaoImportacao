@@ -15,6 +15,9 @@
 //     soltar  { codigo_pedido }                     (devolve à fila; só quem pegou, ou quem tem alçada `revisar`)
 //     separar { codigo_pedido, codigo, quantidade, endereco }   (quantidade é DELTA; endereço precisa existir em estoque_enderecos)
 //     concluir { codigo_pedido, forcar? }           (com falta só conclui se `forcar` = true)
+//     chegadas                                      -> { chegadas: [{ codigo_pedido, itens_faltando, aguardando_chegada, sem_previsao, proxima_chegada }] }
+//     chegadas { codigo_pedido }                    -> { chegadas: [{ codigo, pedida, fisico, situacao, a_caminho, chegou_sem_nota, comprado_pi, proxima_chegada, embarque }] }
+//                                                      (só leitura: estoque físico do Omie × quantidade pedida × importação por chegar)
 //   Erros: 401 token ausente/inválido · 403 sem alçada · 400 regra/pedido inválido (mensagem em `error`) · 413 corpo grande ·
 //          429 limite · 502/503 indisponível.
 //
@@ -36,7 +39,7 @@ function chaveServico(): string {
 const SVC = chaveServico();
 const svcHeaders = { apikey: SVC, Authorization: `Bearer ${SVC}`, "Content-Type": "application/json" };
 
-const ACOES = new Set(["fila", "itens", "pegar", "assumir", "soltar", "separar", "concluir"]);
+const ACOES = new Set(["fila", "itens", "pegar", "assumir", "soltar", "separar", "concluir", "chegadas"]);
 const MAX_BYTES = 200_000;
 
 function corsHeaders(req: Request): Record<string, string> {
@@ -106,7 +109,9 @@ Deno.serve(async (req) => {
   const { acao: _a, ...args } = body;
 
   try {
-    const r = await rpc("estoque_separacao_chamar", { p_email: email, p_acao: acao, p_args: args });
+    const r = acao === "chegadas"
+      ? await rpc("estoque_separacao_chegadas", { p_email: email, p_codigo_pedido: args.codigo_pedido ? Number(args.codigo_pedido) : null })
+      : await rpc("estoque_separacao_chamar", { p_email: email, p_acao: acao, p_args: args });
     if (!r.ok) {
       const msg = String(r.data?.message || "falha ao executar a ação");
       if (r.status >= 500 && !/^estoque:/.test(msg)) return resp(req, { error: "falha ao executar a ação" }, 502);
