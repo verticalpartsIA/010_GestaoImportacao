@@ -121,6 +121,19 @@ Regra de contrato: o texto do QR do item é exatamente o código do produto; qua
 ### 6.3 Fora do escopo (não traz valor agora)
 GS1-128, INMETRO, cartão de presente, crachá, DANFE simplificado (a NF sai do Omie), rastreio de transportadora (depende de contrato).
 
+### 6.4 Ciclo do palete (`PALETE`) — decisão do Gelson: nasce na importação, desfaz no pedido de venda
+
+**Onde olhar no hub:** `/logistica/compras` (Importação Varejo: filtros *Comprado*, *A caminho* e *Chegou, falta a nota*) e `/logistica/pcp` (abas *Ordens de Produção*, *Pedidos para Produzir*, *Pedidos de Quadro*, *Planejamento*, *Controle*; os pedidos de venda do Omie entram pela etapa 20 e alimentam a fila de separação do app de estoque).
+
+**6.4.1 Nasce:** quando a mercadoria da importação **chega** (item que sai de "a caminho" para "chegou", com a P.I./embarque de origem). O palete herda: código do palete, **P.I./embarque**, data de chegada e **lista de itens com quantidade** (código, quantidade). A etiqueta `PALETE` é impressa nesse momento.
+**6.4.2 Vive:** o palete recebe **endereço** (`END:R2A4`) quando guardado no porta-palete. Etapas (inspiradas no LPN da Senior, simplificadas): `recebimento` → `estoque` → `separacao` → `desfeito`. Status: disponível, em uso, bloqueado (avaria).
+**6.4.3 Se desfaz:** quando o palete é **consumido pelo pedido de venda** (separação para um pedido do Omie, etapa 20, rumo à área `EXP`). O que sobra do palete vira item solto no endereço (ver 6.4.4).
+**6.4.4 A decidir pelo Gelson:**
+1. **Separação parcial:** se um pedido tira só parte do palete, o palete é **desfeito inteiro** (o que sobrou vira item solto, sem palete) ou **só se desfaz quando esvazia**? (Proposta: só desfaz quando esvazia; antes disso o palete mostra a quantidade restante.)
+2. **Um palete pode misturar itens de P.I. diferentes**, ou é **um palete por P.I.**? (Proposta: um palete por P.I./embarque, itens podem ser vários.)
+
+**Limites:** o palete **não baixa estoque nem escreve no Omie** (como a separação: quem baixa é a NF). O estoque do Omie continua por **local**, não por palete; o palete é só do hub.
+
 ## 7. Layouts propostos
 
 Tamanhos de partida (a validar com a impressora). Unidades em mm. Fonte sans-serif; texto grande em negrito.
@@ -303,7 +316,7 @@ Tabela `etiqueta_impressoras` (uma linha por impressora): `marca`, `modelo`, `dp
 
 ### 10.1 Alçadas (módulo `etiquetas`)
 - `ver` (concedida a Logística, Almoxarifado, PCP e Expedição), `imprimir`, `reimprimir` (exige motivo), `editar_modelos`, `administrar` (modelos padrão e vínculos). Administrador passa em tudo.
-- **Decidido (17/10):** só quem tem a alçada imprime (`imprimir`); `reimprimir` exige alçada própria e motivo. Falta apenas a lista de pessoas da carga inicial (11.2, item 1).
+- **Decidido (17/10):** só quem tem a alçada imprime (`imprimir`); `reimprimir` exige alçada própria e motivo. **Carga inicial:** todos do departamento "Logística/Almoxarifado/Produção" (que cobre Logística, Almoxarifado, PCP e Expedição); lista a conferir (11.2).
 
 ### 10.2 Integrações com o que já existe
 - `estoque_enderecos` → etiqueta `ENDERECO`.
@@ -320,19 +333,18 @@ Tabela `etiqueta_impressoras` (uma linha por impressora): `marca`, `modelo`, `dp
 2. **Quais etiquetas:** "quase tudo o que a spec oferece". **Entram todos os tipos da seção 6** (`ENDERECO`, `ITEM`, `ENDERECO_LOTE`, `RECEBIMENTO`, `SEPARACAO`, `AVARIA`, `PALETE`, `IDTAG_EQUIPAMENTO`, `OP_QUADRO`). A **ordem de entrega** continua pelas fases da seção 12.
 3. **`IDTAG_EQUIPAMENTO` e `OP_QUADRO`:** **sim**, entram.
 4. **`PALETE`:** **sim**, entra (precisa definir a regra de etapa/status do palete, como o LPN da Senior; ver 11.2).
-5. **Dígito verificador (DV) no endereço:** **não existe regra definida** (resposta da sessão do app de estoque, 17/10: sem fórmula, sem coluna em `estoque_enderecos`, QR `END:R2A4` sem dígito, `EXP` sem dígito). O "sim" anterior do Gelson fica **em suspenso** até ele escolher a opção de 11.3. Até lá o DV é **campo opcional desligado**, e o código/QR não dependem dele.
+5. **Dígito verificador (DV) no endereço:** o Gelson quer **implementar e deixar pronto** (17/10). Como não existia regra (resposta da sessão do app de estoque), adota-se a **opção B** de 11.3 (1 dígito, impresso, fora do QR, exigido só quando o endereço é digitado) **com a fórmula proposta**, que é **trocável** (função isolada). **A confirmar:** se o Gelson aprova a fórmula ou quer outra.
 6. **Rolo 100 × 100 mm:** **existe** (confirmado pelo Gelson em 17/10). O volume de `SEPARACAO` usa o layout grande (7.4); o compacto 100 × 50 fica como alternativa. A impressora terá **um rolo por vez** (100 × 50 ou 100 × 100), e o perfil informa qual está carregado.
 7. **Quem imprime:** **só quem tem alçada** (`etiquetas.imprimir`; reimpressão exige `etiquetas.reimprimir` e motivo). Quem só tem `ver` consulta e visualiza, mas não imprime.
 
-### 11.2 Ainda abertas
-1. ~~Quem imprime~~ **Respondida** (11.1, item 7). Falta só decidir **quais pessoas recebem** `imprimir` e `reimprimir` na carga inicial (lista dos quatro departamentos, a conferir).
-2. **Tamanho do endereço:** viga horizontal ou quadrado maior? Distância de leitura pelo celular.
-3. **Foto na etiqueta de item:** ajuda ou polui? (padrão: sem foto)
-4. **Editor visual:** na 1ª entrega, ou começamos com modelos padrão + cópia com ajustes simples (posição/fonte)? (padrão da spec: ajustes simples primeiro, arrastar depois)
-5. **Palete:** quando um palete nasce e quando se desfaz (recebimento, estoque, expedição); quem o cria; se o conteúdo vem do recebimento ou da contagem.
-6. **Os dois rolos:** quando a impressora está com 100 × 100, o hub deve avisar se alguém tenta imprimir 100 × 50 (e vice-versa). Confirmar quem troca o rolo e como o hub sabe qual está carregado (cadastro no perfil da impressora).
+### 11.2 Respondidas em 17/10 (segunda rodada) e o que ainda falta
+- **Quem recebe `imprimir` (carga inicial):** todos do departamento de **Logística, Expedição e PCP**. No cadastro (`colaboradores_vpsistema`) **não existe departamento "Expedição" nem "PCP"**: todos estão em **"Logística/Almoxarifado/Produção"** (16 ativos). Antes de conceder: **conferir a lista** (há contas compartilhadas "Almoxarifado" e "Produção Corrimão", dois cadastros do Franklin e uma analista de Qualidade) e quem da Expedição esteja em outro departamento (a NF é emitida pelo Fiscal/Financeiro, que **não** entra).
+- **Tamanho do endereço:** **viga horizontal** (100 × 50 no rolo padrão; 100 × 35 útil, seção 7.1).
+- **Foto na etiqueta de item:** **não leva foto**.
+- **Editor visual (pergunta que o Gelson não entendeu, reformulada):** é a tela para **mudar o desenho** de uma etiqueta (mover um campo, aumentar a letra, tirar um item) **arrastando com o mouse**. **Proposta:** na 1ª entrega os modelos vêm prontos e a pessoa ajusta **digitando valores** (posição e tamanho); o **arrastar com o mouse** entra depois. Pendente: o Gelson confirmar se serve (sim/não).
+- **Ciclo do palete:** nasce na importação e se desfaz no pedido de venda (6.4). **Falta decidir** os dois pontos de 6.4.4.
 
-### 11.3 Dígito verificador: situação real e opções (decisão do Gelson)
+### 11.3 Dígito verificador: situação real e opções (Gelson escolheu implementar: opção B)
 **Fatos** (conferidos pela sessão do app de estoque, 17/10): não há fórmula, não há coluna, o QR é `END:R2A4` sem dígito e o app só lê o texto depois de `END:`. Quem confere é o hub: normaliza (tira `END:`, maiúscula, sem espaços) e recusa endereço que não existe entre as 236 posições mais `EXP`. **Essa recusa só está ligada na ação de separar; em contagem, recebimento e saída ainda não está.**
 
 **O que o DV evitaria:** digitar à mão um endereço que existe mas é o errado (ex.: `R2A3` no lugar de `R2A4`). A validação atual não pega isso. Digitar à mão deve ser raro, porque o endereço vem do QR.
@@ -342,7 +354,7 @@ Tabela `etiqueta_impressoras` (uma linha por impressora): `marca`, `modelo`, `dp
 - **B:** DV de **1 dígito** impresso pequeno ao lado do código (não entra no QR), exigido pelo app **só quando o endereço é digitado**. Sugestão de fórmula para o Gelson aprovar ou trocar: soma ponderada `rua×3 + vão×5 + nível×7` (vão A=1 … J=10), resto da divisão por 10. Ex.: `R2A4` → 6+5+28 = 39 → **DV 9**; `R2A3` → 32 → DV 2 (o erro é pego). Exige coluna nova e mudança no app.
 - **C:** DV de 3 dígitos como o da Senior (mais longo, pouco ganho com 236 posições).
 
-Enquanto o Gelson não escolher, **vale a opção A** e o campo DV fica desligado no tipo `ENDERECO` (função isolada, para ligar depois sem refazer as etiquetas).
+**Adotada: opção B**, a fórmula acima, até o Gelson aprovar ou trocar (função isolada: trocar a fórmula não refaz etiquetas já impressas, mas **etiquetas antigas ficariam com DV da regra velha**; por isso a fórmula deve ser confirmada **antes de imprimir as 236 etiquetas**). A opção A (recusar endereço inexistente em contagem, recebimento e saída) continua **recomendada em paralelo**: o DV não substitui essa validação.
 
 ### 11.4 Regra do contrato (issue #862)
 Qualquer **formato novo de QR/etiqueta** exige **comentário na issue `010_GestaoImportacao#862` antes de mudar** (spec do app, 3.4). Hoje só `ITEM` (QR e Code 128 = `codigo`) e `ENDERECO` (`END:`+endereço) estão no contrato. Os formatos propostos para os demais tipos (recebimento, separação, palete, ID-TAG, OP) são **novos** e serão registrados na #862 **antes de qualquer código** que os gere.
