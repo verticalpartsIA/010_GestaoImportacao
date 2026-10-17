@@ -32,7 +32,7 @@
     'juridico', 'contrato-venda-equipamentos', 'aval-juridico', 'contrato-instalador', 'contrato-editor',
     'importacao', 'importacao-detail', 'importacao-rastreamento',
     'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos',
-    'compras', 'pedidos-acompanhamento',
+    'compras', 'cotacoes-varejo', 'pedidos-acompanhamento',
     'engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'ficha-tecnica',
     'solicitacoes-produto',
     'ncm-kanban', 'ncm-detail',

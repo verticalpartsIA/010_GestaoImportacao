@@ -73,6 +73,7 @@ const ROUTE_TITLE = {
   "importacao-detail": "Detalhe de Embarque",
   "importacao-rastreamento": "Rastreamento de Navios",
   compras: "Importação Varejo",
+  "cotacoes-varejo": "Cotações de Varejo",
   financeiro: "Prazos & Pendências",
   comissoes: "Comissões",
   "pagamentos-instalador": "Pagamentos a Instaladores",
@@ -394,6 +395,7 @@ function App() {
       case "importacao-detail": return <ImportacaoDetail embarque={subsel} setRoute={setRoute}/>;
       case "importacao-rastreamento": return <ImportacaoRastreamento setRoute={setRoute} setSubsel={setSubsel}/>;
       case "compras": return <window.ImportacaoVarejoPage setRoute={setRoute}/>;
+      case "cotacoes-varejo": return <window.CotacoesVarejoPage setRoute={setRoute}/>;
       case "financeiro": return <FinanceiroPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "aval-financeiro": return <window.AvalFinanceiroPage setRoute={setRoute}/>;
       case "aval-juridico": return <window.AvalJuridicoPage setRoute={setRoute}/>;
@@ -509,6 +511,7 @@ function App() {
               { value: "importacao-detail", label: "Detalhe de Embarque" },
               { value: "importacao-rastreamento", label: "🛰️ Mapa de Navios" },
               { value: "compras", label: "Importação Varejo" },
+              { value: "cotacoes-varejo", label: "Cotações de Varejo" },
               { value: "inbox", label: "📧 Inbox" },
               { value: "financeiro", label: "⏰ Prazos & Pendências" },
               { value: "comissoes", label: "Comissões" },
