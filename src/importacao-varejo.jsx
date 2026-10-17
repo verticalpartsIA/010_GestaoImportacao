@@ -565,6 +565,8 @@ function ImportacaoVarejoPage({ setRoute }) {
     return {
       estoqueFisico: acc.estoqueFisico + i.estoqueFisico,
       estoqueDisponivel: acc.estoqueDisponivel + i.estoqueDisponivel,
+      estoqueReservado: acc.estoqueReservado + (i.estoqueReservado || 0),
+      pendente: acc.pendente + (i.pendenteOmie || 0),
       sugestaoCompra: acc.sugestaoCompra + i.sugestaoCompra,
       sugAteMax: acc.sugAteMax + (i.sugAteMax || 0),
       comprado: acc.comprado + i.comprado,
@@ -572,7 +574,7 @@ function ImportacaoVarejoPage({ setRoute }) {
       valorAPagar: acc.valorAPagar + (temPrecoEPrecisaComprar ? i.sugestaoCompra * i.ultimoPrecoUnitario : 0),
       itensSemPreco: acc.itensSemPreco + (i.sugestaoCompra > 0 && i.ultimoPrecoUnitario == null ? 1 : 0),
     };
-  }, { estoqueFisico: 0, estoqueDisponivel: 0, sugestaoCompra: 0, sugAteMax: 0, comprado: 0, caminho: 0, valorAPagar: 0, itensSemPreco: 0 });
+  }, { estoqueFisico: 0, estoqueDisponivel: 0, estoqueReservado: 0, pendente: 0, sugestaoCompra: 0, sugAteMax: 0, comprado: 0, caminho: 0, valorAPagar: 0, itensSemPreco: 0 });
   const totais = React.useMemo(() => calcularTotais(filtrados), [filtrados]);
 
   const forcarSync = async () => {
@@ -974,15 +976,16 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
             <tfoot>
               <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)' }}>
                 <td colSpan={podeGerenciar ? 5 : 4}>Total</td>
+                {/* Uma célula por coluna do cabeçalho (conferido em 16/10: o bloco em branco tinha 7 colunas para 6 e deslocava todos os totais). */}
                 <td className="text-right">{ivFmtNum(totais.estoqueFisico)}</td>
-                <td></td>
+                <td className="text-right">{ivFmtNum(totais.estoqueReservado)}</td>
                 <td className="text-right">{ivFmtNum(totais.estoqueDisponivel)}</td>
-                <td colSpan={7}></td>
+                <td colSpan={5}></td>{/* Contado, Acuracidade, Mín. Omie, Mín. sug., Máx. sug. */}
+                <td className="text-right">{ivFmtNum(totais.pendente)}</td>
                 <td className="text-right">{ivFmtNum(totais.comprado)}</td>
                 <td className="text-right">{ivFmtNum(totais.caminho)}</td>
                 <td className="text-right">{ivFmtNum(totais.sugestaoCompra)}</td>
-                <td></td>
-                <td></td>
+                <td colSpan={3}></td>{/* Dia D, Tendência, Último Fornecedor */}
                 <td className="text-right">{ivFmtMoeda(totais.valorAPagar)}</td>
                 <td></td>
               </tr>
