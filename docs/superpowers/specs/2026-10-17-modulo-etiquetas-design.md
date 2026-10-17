@@ -303,7 +303,7 @@ Tabela `etiqueta_impressoras` (uma linha por impressora): `marca`, `modelo`, `dp
 
 ### 10.1 Alçadas (módulo `etiquetas`)
 - `ver` (concedida a Logística, Almoxarifado, PCP e Expedição), `imprimir`, `reimprimir` (exige motivo), `editar_modelos`, `administrar` (modelos padrão e vínculos). Administrador passa em tudo.
-- Pergunta em aberto: `imprimir` e `reimprimir` também para os quatro departamentos, ou só para os almoxarifes? (ver 11.6)
+- **Decidido (17/10):** só quem tem a alçada imprime (`imprimir`); `reimprimir` exige alçada própria e motivo. Falta apenas a lista de pessoas da carga inicial (11.2, item 1).
 
 ### 10.2 Integrações com o que já existe
 - `estoque_enderecos` → etiqueta `ENDERECO`.
@@ -320,27 +320,32 @@ Tabela `etiqueta_impressoras` (uma linha por impressora): `marca`, `modelo`, `dp
 2. **Quais etiquetas:** "quase tudo o que a spec oferece". **Entram todos os tipos da seção 6** (`ENDERECO`, `ITEM`, `ENDERECO_LOTE`, `RECEBIMENTO`, `SEPARACAO`, `AVARIA`, `PALETE`, `IDTAG_EQUIPAMENTO`, `OP_QUADRO`). A **ordem de entrega** continua pelas fases da seção 12.
 3. **`IDTAG_EQUIPAMENTO` e `OP_QUADRO`:** **sim**, entram.
 4. **`PALETE`:** **sim**, entra (precisa definir a regra de etapa/status do palete, como o LPN da Senior; ver 11.2).
-5. **Dígito verificador (DV) no endereço:** **sim**, mas **a regra da VerticalParts é diferente** da exemplificada na Senior. Outra sessão está definindo; a pergunta está em 11.3. Até lá o DV é **campo opcional**, e o código/QR não dependem dele.
-6. **Rolo 100 × 100 mm:** **sim, existe** (resposta "Sim" à pergunta 5 da rodada anterior; **confirmar** se foi essa a leitura). Então o volume de `SEPARACAO` pode usar o layout grande (7.4); o compacto 100 × 50 fica como alternativa.
+5. **Dígito verificador (DV) no endereço:** **não existe regra definida** (resposta da sessão do app de estoque, 17/10: sem fórmula, sem coluna em `estoque_enderecos`, QR `END:R2A4` sem dígito, `EXP` sem dígito). O "sim" anterior do Gelson fica **em suspenso** até ele escolher a opção de 11.3. Até lá o DV é **campo opcional desligado**, e o código/QR não dependem dele.
+6. **Rolo 100 × 100 mm:** **existe** (confirmado pelo Gelson em 17/10). O volume de `SEPARACAO` usa o layout grande (7.4); o compacto 100 × 50 fica como alternativa. A impressora terá **um rolo por vez** (100 × 50 ou 100 × 100), e o perfil informa qual está carregado.
+7. **Quem imprime:** **só quem tem alçada** (`etiquetas.imprimir`; reimpressão exige `etiquetas.reimprimir` e motivo). Quem só tem `ver` consulta e visualiza, mas não imprime.
 
 ### 11.2 Ainda abertas
-1. **Quem imprime e quem reimprime:** só almoxarifes ou todos com alçada nos quatro departamentos?
+1. ~~Quem imprime~~ **Respondida** (11.1, item 7). Falta só decidir **quais pessoas recebem** `imprimir` e `reimprimir` na carga inicial (lista dos quatro departamentos, a conferir).
 2. **Tamanho do endereço:** viga horizontal ou quadrado maior? Distância de leitura pelo celular.
 3. **Foto na etiqueta de item:** ajuda ou polui? (padrão: sem foto)
 4. **Editor visual:** na 1ª entrega, ou começamos com modelos padrão + cópia com ajustes simples (posição/fonte)? (padrão da spec: ajustes simples primeiro, arrastar depois)
 5. **Palete:** quando um palete nasce e quando se desfaz (recebimento, estoque, expedição); quem o cria; se o conteúdo vem do recebimento ou da contagem.
 6. **Os dois rolos:** quando a impressora está com 100 × 100, o hub deve avisar se alguém tenta imprimir 100 × 50 (e vice-versa). Confirmar quem troca o rolo e como o hub sabe qual está carregado (cadastro no perfil da impressora).
 
-### 11.3 Pergunta para a sessão que define o DV do endereço
-Preciso da regra para gerar e validar o **dígito verificador dos endereços do almoxarifado** (formato `R<rua><vão><nível>`, ex.: `R2A4`; 236 posições + `EXP`):
-1. **Como se calcula?** (a partir de quais caracteres do código, que fórmula, quantos dígitos).
-2. **Onde aparece?** Só texto impresso na etiqueta, ou também dentro do QR (`END:R2A4` hoje)? O contrato do app de estoque (`END:` + código) muda?
-3. **Quem usa?** O app de estoque deve exigir o DV quando alguém **digita** o endereço à mão? E ao **bipar** o QR, o DV é conferido?
-4. **`EXP`** tem DV?
-5. **5 exemplos reais** (endereço → DV), para eu criar o teste automático.
-6. Se o DV vier a ser guardado, em qual coluna de `estoque_enderecos`?
+### 11.3 Dígito verificador: situação real e opções (decisão do Gelson)
+**Fatos** (conferidos pela sessão do app de estoque, 17/10): não há fórmula, não há coluna, o QR é `END:R2A4` sem dígito e o app só lê o texto depois de `END:`. Quem confere é o hub: normaliza (tira `END:`, maiúscula, sem espaços) e recusa endereço que não existe entre as 236 posições mais `EXP`. **Essa recusa só está ligada na ação de separar; em contagem, recebimento e saída ainda não está.**
 
-Enquanto a regra não chega: o DV é um **campo opcional** do tipo `ENDERECO`, calculado por uma função isolada, para trocar a fórmula sem refazer as etiquetas.
+**O que o DV evitaria:** digitar à mão um endereço que existe mas é o errado (ex.: `R2A3` no lugar de `R2A4`). A validação atual não pega isso. Digitar à mão deve ser raro, porque o endereço vem do QR.
+
+**Opções:**
+- **A (recomendada por ora):** **sem DV**. Em vez disso, **ligar a recusa de endereço inexistente também em contagem, recebimento e saída** (tarefa do hub/app de estoque, fora do módulo de etiquetas). Ganha-se segurança sem mudar etiqueta nem QR.
+- **B:** DV de **1 dígito** impresso pequeno ao lado do código (não entra no QR), exigido pelo app **só quando o endereço é digitado**. Sugestão de fórmula para o Gelson aprovar ou trocar: soma ponderada `rua×3 + vão×5 + nível×7` (vão A=1 … J=10), resto da divisão por 10. Ex.: `R2A4` → 6+5+28 = 39 → **DV 9**; `R2A3` → 32 → DV 2 (o erro é pego). Exige coluna nova e mudança no app.
+- **C:** DV de 3 dígitos como o da Senior (mais longo, pouco ganho com 236 posições).
+
+Enquanto o Gelson não escolher, **vale a opção A** e o campo DV fica desligado no tipo `ENDERECO` (função isolada, para ligar depois sem refazer as etiquetas).
+
+### 11.4 Regra do contrato (issue #862)
+Qualquer **formato novo de QR/etiqueta** exige **comentário na issue `010_GestaoImportacao#862` antes de mudar** (spec do app, 3.4). Hoje só `ITEM` (QR e Code 128 = `codigo`) e `ENDERECO` (`END:`+endereço) estão no contrato. Os formatos propostos para os demais tipos (recebimento, separação, palete, ID-TAG, OP) são **novos** e serão registrados na #862 **antes de qualquer código** que os gere.
 
 ## 12. Faseamento proposto (sem código até aprovar)
 
