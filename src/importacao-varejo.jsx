@@ -179,6 +179,15 @@ const IV_ESTAGIO_ROTULO = {
   chegou_sem_nota: 'Chegou — falta lançar a nota no Omie',
   comprado_pi: 'Comprado — P.I. ainda não embarcou',
 };
+/* Filtros de mercadoria por chegar. "Comprado" = pedido sem embarque (lançamento do comprador ou P.I. ainda não embarcada). */
+function ivCombinaCaminho(i, filtro) {
+  if (filtro === 'tudo') return i.caminhoTotal > 0;
+  // compradoEf = "Comprado" já abatido pelo que a P.I. cobre (o pedido que virou P.I. embarcada não é mais "sem embarque")
+  if (filtro === 'comprado') return ((i.compradoEf != null ? i.compradoEf : i.comprado) > 0) || (i.compradoPi > 0);
+  if (filtro === 'caminho') return i.aCaminho > 0;
+  if (filtro === 'semnota') return i.chegouSemNota > 0;
+  return true;
+}
 function ivFmtDataIso(s) {
   if (!s) return '—';
   const [y, m, d] = String(s).slice(0, 10).split('-');
@@ -465,7 +474,8 @@ function ImportacaoVarejoPage({ setRoute }) {
   const [contFiltro, setContFiltro] = React.useState('todas');   // todas | divergentes | semcontagem
   const [tendFiltro, setTendFiltro] = React.useState('todas');   // todas | alta | baixa
   const [soDiaD, setSoDiaD] = React.useState(false);              // só itens com Dia D vencido ou chegando
-  const [soCaminho, setSoCaminho] = React.useState(false);        // só itens com mercadoria por chegar (P.I. sem nota)
+  // Mercadoria por chegar: todas | tudo (qualquer coisa por chegar) | comprado (pedido sem embarque) | caminho (embarcado) | semnota (chegou, falta a nota)
+  const [caminhoFiltro, setCaminhoFiltro] = React.useState('todas');
   const [avisoContagem, setAvisoContagem] = React.useState(null);
   const [selecionados, setSelecionados] = React.useState(() => new Set());
   /* Bug real (varredura de URLs, 09/10): os modais "Revisar lote de compra" e
@@ -517,11 +527,11 @@ function ImportacaoVarejoPage({ setRoute }) {
         || (contFiltro === 'semcontagem' && i.baseEstoque === 'omie');
       if (soRevisar && !i.precisaRevisao) return false;
       if (soDiaD && !(i.estDiaDStatus === 'atrasado' || i.estDiaDStatus === 'acordar')) return false;
-      if (soCaminho && !(i.caminhoTotal > 0)) return false;
+      if (caminhoFiltro !== 'todas' && !ivCombinaCaminho(i, caminhoFiltro)) return false;
       const combinaTend = tendFiltro === 'todas' || i.estTendencia === tendFiltro || (tendFiltro === 'alta' && i.estTendencia === 'nova');
       return combinaTexto && combinaCor && combinaCurva && combinaCont && combinaTend;
     });
-  }, [items, busca, corFiltro, curvaFiltro, contFiltro, tendFiltro, soRevisar, soDiaD, soCaminho]);
+  }, [items, busca, corFiltro, curvaFiltro, contFiltro, tendFiltro, soRevisar, soDiaD, caminhoFiltro]);
   const nParaRevisar = React.useMemo(() => items.filter((i) => i.precisaRevisao).length, [items]);
   const resumoCaminho = React.useMemo(() => {
     const lista = items.filter((i) => i.caminhoTotal > 0);
@@ -556,6 +566,8 @@ function ImportacaoVarejoPage({ setRoute }) {
     return {
       estoqueFisico: acc.estoqueFisico + i.estoqueFisico,
       estoqueDisponivel: acc.estoqueDisponivel + i.estoqueDisponivel,
+      estoqueReservado: acc.estoqueReservado + (i.estoqueReservado || 0),
+      pendente: acc.pendente + (i.pendenteOmie || 0),
       sugestaoCompra: acc.sugestaoCompra + i.sugestaoCompra,
       sugAteMax: acc.sugAteMax + (i.sugAteMax || 0),
       comprado: acc.comprado + i.comprado,
@@ -563,7 +575,7 @@ function ImportacaoVarejoPage({ setRoute }) {
       valorAPagar: acc.valorAPagar + (temPrecoEPrecisaComprar ? i.sugestaoCompra * i.ultimoPrecoUnitario : 0),
       itensSemPreco: acc.itensSemPreco + (i.sugestaoCompra > 0 && i.ultimoPrecoUnitario == null ? 1 : 0),
     };
-  }, { estoqueFisico: 0, estoqueDisponivel: 0, sugestaoCompra: 0, sugAteMax: 0, comprado: 0, caminho: 0, valorAPagar: 0, itensSemPreco: 0 });
+  }, { estoqueFisico: 0, estoqueDisponivel: 0, estoqueReservado: 0, pendente: 0, sugestaoCompra: 0, sugAteMax: 0, comprado: 0, caminho: 0, valorAPagar: 0, itensSemPreco: 0 });
   const totais = React.useMemo(() => calcularTotais(filtrados), [filtrados]);
 
   const forcarSync = async () => {
@@ -660,7 +672,7 @@ function ImportacaoVarejoPage({ setRoute }) {
               {resumoCaminho.semNota > 0 ? ` ${resumoCaminho.semNota} item(ns) já chegaram e esperam a nota ser lançada (⚑).` : ''}
             </div>
           </div>
-          <Button size="sm" variant={soCaminho ? 'primary' : 'outline'} onClick={() => setSoCaminho(!soCaminho)}>{soCaminho ? 'Mostrar todos' : 'Ver quais'}</Button>
+          <Button size="sm" variant={caminhoFiltro === 'tudo' ? 'primary' : 'outline'} onClick={() => setCaminhoFiltro(caminhoFiltro === 'tudo' ? 'todas' : 'tudo')}>{caminhoFiltro === 'tudo' ? 'Mostrar todos' : 'Ver quais'}</Button>
         </div>
       )}
 
@@ -741,6 +753,16 @@ function ImportacaoVarejoPage({ setRoute }) {
         </Button>
         <Button size="sm" variant={tendFiltro === 'baixa' ? 'primary' : 'ghost'} onClick={() => setTendFiltro(tendFiltro === 'baixa' ? 'todas' : 'baixa')} data-tip="Vendas dos últimos 3 meses pelo menos 20% abaixo dos 3 meses anteriores">
           ▼ Em baixa <span style={{ opacity: .7 }}>({items.filter((i) => i.estTendencia === 'baixa').length})</span>
+        </Button>
+        <span style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 6px' }} />
+        <Button size="sm" variant={caminhoFiltro === 'comprado' ? 'primary' : 'ghost'} onClick={() => setCaminhoFiltro(caminhoFiltro === 'comprado' ? 'todas' : 'comprado')} data-tip="Pedido feito, ainda sem embarque: 'Comprado' lançado pelo comprador (requisição) ou P.I. aberta que ainda não embarcou">
+          📦 Comprado <span style={{ opacity: .7 }}>({items.filter((i) => ivCombinaCaminho(i, 'comprado')).length})</span>
+        </Button>
+        <Button size="sm" variant={caminhoFiltro === 'caminho' ? 'primary' : 'ghost'} onClick={() => setCaminhoFiltro(caminhoFiltro === 'caminho' ? 'todas' : 'caminho')} data-tip="Já embarcou (P.I. com embarque em andamento) e ainda não tem nota de importação no Omie">
+          🚢 A caminho <span style={{ opacity: .7 }}>({items.filter((i) => ivCombinaCaminho(i, 'caminho')).length})</span>
+        </Button>
+        <Button size="sm" variant={caminhoFiltro === 'semnota' ? 'primary' : 'ghost'} onClick={() => setCaminhoFiltro(caminhoFiltro === 'semnota' ? 'todas' : 'semnota')} data-tip="Embarque concluído, mas a nota de importação ainda não foi lançada no Omie (o estoque só entra com a nota)">
+          ⚑ Chegou, falta a nota <span style={{ opacity: .7 }}>({items.filter((i) => ivCombinaCaminho(i, 'semnota')).length})</span>
         </Button>
         <span style={{ width: 1, height: 18, background: 'var(--border)', margin: '0 6px' }} />
         <Button size="sm" variant={contFiltro === 'divergentes' ? 'primary' : 'ghost'} onClick={() => setContFiltro(contFiltro === 'divergentes' ? 'todas' : 'divergentes')} data-tip="Itens em que a contagem da prateleira não bateu com o saldo do sistema no dia da contagem">
@@ -955,15 +977,16 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
             <tfoot>
               <tr style={{ fontWeight: 700, borderTop: '2px solid var(--border)' }}>
                 <td colSpan={podeGerenciar ? 5 : 4}>Total</td>
+                {/* Uma célula por coluna do cabeçalho (conferido em 16/10: o bloco em branco tinha 7 colunas para 6 e deslocava todos os totais). */}
                 <td className="text-right">{ivFmtNum(totais.estoqueFisico)}</td>
-                <td></td>
+                <td className="text-right">{ivFmtNum(totais.estoqueReservado)}</td>
                 <td className="text-right">{ivFmtNum(totais.estoqueDisponivel)}</td>
-                <td colSpan={7}></td>
+                <td colSpan={5}></td>{/* Contado, Acuracidade, Mín. Omie, Mín. sug., Máx. sug. */}
+                <td className="text-right">{ivFmtNum(totais.pendente)}</td>
                 <td className="text-right">{ivFmtNum(totais.comprado)}</td>
                 <td className="text-right">{ivFmtNum(totais.caminho)}</td>
                 <td className="text-right">{ivFmtNum(totais.sugestaoCompra)}</td>
-                <td></td>
-                <td></td>
+                <td colSpan={3}></td>{/* Dia D, Tendência, Último Fornecedor */}
                 <td className="text-right">{ivFmtMoeda(totais.valorAPagar)}</td>
                 <td></td>
               </tr>
