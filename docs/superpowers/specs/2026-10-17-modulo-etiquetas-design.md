@@ -367,6 +367,18 @@ Qualquer **formato novo de QR/etiqueta** exige **comentário na issue `010_Gesta
 - **Fase 3 — Personalização:** cópia de modelos, editor visual, ativar/desativar por tela, campos protegidos.
 - **Fase 4 — Opcional:** `AVARIA`, `PALETE`, `IDTAG_EQUIPAMENTO`, `OP_QUADRO`; impressão silenciosa; ZPL.
 
+## 12.1 Estado da fase 1 (implementada em 17/10/2026, ainda não publicada)
+
+Feito (branch `claude/inspiring-bardeen-i4v2d2`): tela **Logística Interna › Etiquetas** (`/logistica/etiquetas/gerar|modelos|historico`), tipos **Endereço** e **Item** em 100 × 50, etiqueta de **teste de bancada**, histórico com reimpressão (motivo + alçada), perfis de fábrica (Zebra ZD220/ZD230/ZT421/genérica, Elgin L42 Pro, Argox, genérica), adaptadores **Zebra Browser Print** (ZPL) e **diálogo do navegador**, DV opcional (desligado). Arquivos: `src/etiquetas-calc.js` (regras, ZPL, SVG), `etiquetas-impressoras.js`, `etiquetas-store.js`, `etiquetas.jsx`, migration `20261017160000_etiquetas_fase1.sql`, testes `src/etiquetas-*.test.js` e `e2e/etiquetas.spec.js`.
+
+**Diferenças em relação ao desenho original (decididas para a fase 1 ficar enxuta):**
+- Os **tipos e os modelos padrão ficam no código**, não em tabela; `etiqueta_modelos` (cópia e edição) nasce na **fase 3**, junto com o editor.
+- **Não há tabela `etiqueta_impressoras`**: o perfil e o rolo de cada computador ficam no navegador do posto (`localStorage`), com perfis de fábrica no código. A tabela entra se a empresa quiser a configuração compartilhada.
+- O plano B de impressão é **HTML/SVG com `@page` em mm** pelo diálogo do navegador (sem o bundle react-pdf), com a biblioteca **bwip-js 4.5.1** carregada só quando a tela abre (SRI).
+- **Editor visual, `PALETE`, `RECEBIMENTO`, `SEPARACAO`, `IDTAG_EQUIPAMENTO`, `OP_QUADRO`, `AVARIA` e `ENDERECO_LOTE`** ficam para as fases 2 a 4. Nenhum formato novo de QR foi criado (só os do contrato: item = código, endereço = `END:`), então **não precisou comentar na issue #862** ainda; os QR dos tipos novos serão registrados lá antes de cada fase.
+
+**Pendências para a fase 1 valer na prática:** (1) aplicar a migration no Supabase (cria o histórico e concede `ver`, `imprimir` e `reimprimir` aos perfis ativos do departamento "Logística/Almoxarifado/Produção" que têm login: hoje 9; exige o "CONFIRMO" do Gelson); (2) **teste de bancada com a ZD220** (Fase 0): o código foi testado com um Browser Print simulado, **não com a impressora real**, e a lista oficial do Browser Print não cita a ZD220; (3) aprovar a **fórmula do DV** antes de imprimir as 236 etiquetas de endereço.
+
 ## 13. Verificação (antes de declarar pronto)
 
 - PDF impresso em **papel real**: medir com régua (tolerância de 0,5 mm) e ler o QR/barras com o app de estoque, com celular e com leitor Bluetooth.

@@ -261,6 +261,15 @@
       { modulo: 'mes-cadastros', label: 'MES — Cadastros do chão de fábrica' },
       { modulo: 'relatorios-pcp', label: 'Relatórios do PCP' },
       { modulo: 'expedicao', label: 'Expedição' },
+      /* Etiquetas (endereço, item…). Spec: docs/superpowers/specs/2026-10-17-modulo-etiquetas-design.md. As chaves são as que o SQL confere
+         (migration 20261017160000: política de etiqueta_impressoes). Só quem tem 'imprimir' imprime; 'reimprimir' é outra alçada e exige motivo. */
+      { modulo: 'etiquetas', label: 'Etiquetas (endereço, item, palete…)', capacidades: [
+        { chave: 'ver', label: 'Vê a tela de Etiquetas, os modelos e o histórico de impressões' },
+        { chave: 'imprimir', label: 'Imprime etiquetas' },
+        { chave: 'reimprimir', label: 'Reimprime uma etiqueta já impressa (exige motivo)' },
+        { chave: 'editar_modelos', label: 'Cria e edita modelos de etiqueta da empresa (fase 3)' },
+        { chave: 'administrar', label: 'Administra modelos padrão, vínculos e impressoras (fase 3)' },
+      ]},
       /* VP Estoque (app de coleta, 013_Estoque). As chaves abaixo são as que o SQL confere por e-mail
          (estoque_cap_email / estoque_exige) — migrations 20261013120000 e 20261013130000. Não renomeie sem mudar o SQL. */
       { modulo: 'estoque', label: 'VP Estoque — app de coleta (recebimento, contagem, saída, inventário)', capacidades: [
@@ -303,7 +312,7 @@
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
     'Entrega & Documentação': ['databook', 'handover'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
-    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao'],
+    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'etiquetas'],
     'Administração': ['logs'],
   };
 
