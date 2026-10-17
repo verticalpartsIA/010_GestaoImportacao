@@ -151,12 +151,12 @@ test('HTML de impressão: página com o tamanho do modelo e sem margem', () => {
   assert.equal((h.match(/class="pg"/g) || []).length, 2);
 });
 
-test('modelos padrão: todos 100 x 50, ids únicos, campos usados existem em dados de exemplo', () => {
+test('modelos padrão: largura 100 (altura 50 ou 100), ids únicos, campos usados existem em dados de exemplo', () => {
   const ids = E.MODELOS.map((m) => m.id);
   assert.equal(new Set(ids).size, ids.length);
   for (const m of E.MODELOS) {
     assert.equal(m.largura_mm, 100);
-    assert.equal(m.altura_mm, 50);
+    assert.ok(m.altura_mm === 50 || m.altura_mm === 100);
     for (const el of m.elementos) if (el.campo) {
       for (const c of (el.campo.match(/\{(\w+)\}/g) || [])) assert.ok(m.campos.includes(c.slice(1, -1)), `${m.id}: ${c} não está em campos`);
     }
@@ -172,4 +172,27 @@ test('validarEnderecoNovo: aceita existente (normaliza), recusa inexistente, pre
   assert.equal(E.validarEnderecoNovo('G14', 'G13').ok, false);
   const igual = E.validarEnderecoNovo('g13', 'G13');
   assert.equal(igual.ok, true); assert.equal(igual.antigo, true);
+});
+
+test('recebimento: QR e barras = código do item (contrato do tipo Item), textos montados', () => {
+  const d = E.dadosRecebimento({ data: '17/10/2026', embarque: '146', pi: 'SCVP260522-2', fornecedor: 'Ningbo', codigo: ' VPEL-156 ', descricao: 'Rolete', quantidade: 40, unidade: 'UN', nf: '123' });
+  assert.equal(d.qr, 'VPEL-156'); assert.equal(d.barras, 'VPEL-156');
+  assert.equal(d.origem, 'Embarque 146 · P.I. SCVP260522-2');
+  assert.equal(d.quantidade_txt, 'Qtd: 40 UN'); assert.equal(d.nf_txt, 'NF: 123');
+  assert.equal(E.dadosRecebimento({ codigo: 'X' }).nf_txt, '');
+});
+
+test('separação: volume n/N limitado ao total e QR PED:<pedido>', () => {
+  const d = E.dadosSeparacao({ pedido: '30570', volume: 9, total_volumes: 5, cliente: 'AKAI' });
+  assert.equal(d.volume_txt, 'VOL 5 / 5'); assert.equal(d.qr, 'PED:30570'); assert.equal(d.pedido_txt, 'PEDIDO 30570');
+  assert.equal(E.dadosSeparacao({ pedido: '1' }).volume_txt, 'VOL 1 / 1');
+});
+
+test('modelos novos: rolos 100x50 e 100x100 e ZPL com a página certa', () => {
+  const r = E.modeloPorId('RECEBIMENTO_100x50'), s = E.modeloPorId('SEPARACAO_100x100');
+  assert.equal(r.altura_mm, 50); assert.equal(s.altura_mm, 100);
+  const z = E.renderZPL(s, E.dadosSeparacao({ pedido: '30570', volume: 2, total_volumes: 5, cliente: 'AKAI KB' }), { dpi: 203 });
+  assert.match(z.zpl, /\^PW800/); assert.match(z.zpl, /\^LL800/); assert.match(z.zpl, /PED:30570/);
+  const zr = E.renderZPL(r, E.dadosRecebimento({ codigo: 'VPEL-156', descricao: 'Rolete ção', quantidade: 4, unidade: 'UN' }), { dpi: 203 });
+  assert.match(zr.zpl, /\^LL400/); assert.match(zr.zpl, /VPEL-156/);
 });

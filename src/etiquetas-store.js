@@ -42,6 +42,42 @@
     } catch (e) { return { itens: [], erro: e.message }; }
   }
 
+  // P.I. recentes com seus itens (para a etiqueta de Recebimento). Embarque vem de embarques_importacao.nome_embarque.
+  async function listarPIs(texto) {
+    const sb = sbCli();
+    if (!sb) return { pis: [], erro: 'Supabase indisponível.' };
+    try {
+      const { data, error } = await sb.from('pi_importacao').select('id, numero_pi, fornecedor, embarque_id, itens, created_at').order('created_at', { ascending: false }).limit(200);
+      if (error) return { pis: [], erro: error.message };
+      const t = String(texto || '').trim().toLowerCase();
+      let pis = (data || []).filter((p) => Array.isArray(p.itens) && p.itens.length);
+      if (t) pis = pis.filter((p) => String(p.numero_pi || '').toLowerCase().includes(t) || String(p.fornecedor || '').toLowerCase().includes(t));
+      const ids = Array.from(new Set(pis.map((p) => p.embarque_id).filter(Boolean)));
+      let nomes = {};
+      if (ids.length) {
+        const r = await sb.from('embarques_importacao').select('id, nome_embarque').in('id', ids);
+        (r.data || []).forEach((e) => { nomes[e.id] = e.nome_embarque; });
+      }
+      return { pis: pis.slice(0, 40).map((p) => ({ ...p, embarque: nomes[p.embarque_id] || '' })), erro: null };
+    } catch (e) { return { pis: [], erro: e.message }; }
+  }
+
+  // Pedidos de venda do Omie já lidos pelo PCP (não cancelados). Um nº de pedido pode ter mais de um registro: agrupa por número.
+  async function listarPedidos(texto) {
+    const sb = sbCli();
+    if (!sb) return { pedidos: [], erro: 'Supabase indisponível.' };
+    try {
+      const { data, error } = await sb.from('pcp_pedidos').select('numero_pedido, cliente_nome, etapa, volumes, data_previsao').eq('cancelado', false).order('data_previsao', { ascending: false }).limit(300);
+      if (error) return { pedidos: [], erro: error.message };
+      const t = String(texto || '').trim().toLowerCase();
+      const mapa = new Map();
+      (data || []).forEach((p) => { if (p.numero_pedido && !mapa.has(p.numero_pedido)) mapa.set(p.numero_pedido, p); });
+      let lista = Array.from(mapa.values());
+      if (t) lista = lista.filter((p) => String(p.numero_pedido).toLowerCase().includes(t) || String(p.cliente_nome || '').toLowerCase().includes(t));
+      return { pedidos: lista.slice(0, 40), erro: null };
+    } catch (e) { return { pedidos: [], erro: e.message }; }
+  }
+
   /* reg: { tipo, modelo, referencia, dados:{itens:[{ref,dados,copias}],…}, quantidade, impressora, adaptador, sucesso, erro, reimpressao, motivo } */
   async function registrarImpressao(reg) {
     const sb = sbCli();
@@ -74,5 +110,5 @@
     } catch (e) { return { linhas: [], erro: e.message }; }
   }
 
-  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, registrarImpressao, listarHistorico };
+  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, registrarImpressao, listarHistorico };
 }());

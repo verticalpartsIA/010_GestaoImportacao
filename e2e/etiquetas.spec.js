@@ -145,12 +145,15 @@ test.describe('Etiquetas', () => {
     }
   });
 
-  test('aba Modelos mostra os 3 modelos padrão com prévia', async ({ page }) => {
+  test('aba Modelos mostra os 5 modelos padrão com prévia', async ({ page }) => {
     await page.addInitScript(COM_ALCADA);
     await page.goto('/logistica/etiquetas/modelos');
     await expect(page.getByText('Endereço — viga horizontal', { exact: true })).toBeVisible({ timeout: 60_000 });
     await expect(page.getByText('Item — código e descrição', { exact: true })).toBeVisible();
     await expect(page.getByText('Teste de bancada', { exact: true })).toBeVisible();
-    await expect(page.locator('svg[viewBox="0 0 100 50"]')).toHaveCount(3, { timeout: 20_000 });
+    await expect(page.getByText('Recebimento — carga que chegou', { exact: true })).toBeVisible();
+    await expect(page.getByText('Separação — volume do pedido', { exact: true })).toBeVisible();
+    await expect(page.locator('svg[viewBox="0 0 100 50"]')).toHaveCount(4, { timeout: 20_000 });
+    await expect(page.locator('svg[viewBox="0 0 100 100"]')).toHaveCount(1);
   });
 });

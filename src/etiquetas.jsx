@@ -54,7 +54,10 @@ function useEtqBwip() {
 const ETQ_TIPOS = [
   { id: 'ENDERECO', nome: 'Endereço', modelo: 'ENDERECO_VIGA_100x50', desc: 'Posição do porta-palete (QR END:R2A4)' },
   { id: 'ITEM', nome: 'Item', modelo: 'ITEM_100x50', desc: 'Produto: QR e Code 128 com o código' },
+  { id: 'RECEBIMENTO', nome: 'Recebimento', modelo: 'RECEBIMENTO_100x50', desc: 'Carga que chegou: P.I., fornecedor, item e quantidade' },
+  { id: 'SEPARACAO', nome: 'Separação', modelo: 'SEPARACAO_100x100', desc: 'Volume n/N de um pedido de venda (rolo 100 × 100)' },
 ];
+const etqHoje = () => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 const ETQ_ROLOS = ['100x50', '100x100'];
 const etqChaveDv = 'vp_etiquetas_dv';
 const etqLerDv = () => { try { return localStorage.getItem(etqChaveDv) === '1'; } catch (e) { return false; } };
@@ -194,25 +197,66 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   }, [qItem]);
   const alternarItem = (p) => setSelItem((m) => { const n = new Map(m); n.has(p.codigo) ? n.delete(p.codigo) : n.set(p.codigo, p); return n; });
 
+  /* Recebimento: escolhe a P.I., marca os itens, ajusta quantidade e NF */
+  const [qPi, setQPi] = React.useState('');
+  const [pis, setPis] = React.useState({ pis: [], erro: null });
+  const [piSel, setPiSel] = React.useState(null);
+  const [recQtd, setRecQtd] = React.useState({});
+  const [recSel, setRecSel] = React.useState(() => new Set());
+  const [recNf, setRecNf] = React.useState('');
+  React.useEffect(() => {
+    if (tipo !== 'RECEBIMENTO') return undefined;
+    const t = setTimeout(() => { S.listarPIs(qPi).then(setPis); }, 300);
+    return () => clearTimeout(t);
+  }, [tipo, qPi]);
+  const escolherPi = (p) => {
+    setPiSel(p); setRecSel(new Set());
+    const q = {}; (p.itens || []).forEach((i) => { q[i.codigo_produto] = i.quantidade; }); setRecQtd(q);
+  };
+  const itensPi = (piSel && piSel.itens || []).filter((i) => i.codigo_produto);
+  const recDados = (i) => C.dadosRecebimento({ data: etqHoje(), embarque: piSel.embarque, pi: piSel.numero_pi, fornecedor: piSel.fornecedor, codigo: i.codigo_produto, descricao: i.descricao, quantidade: recQtd[i.codigo_produto], unidade: i.unidade, nf: recNf });
+
+  /* Separação: escolhe o pedido e quantos volumes; imprime 1..N */
+  const [qPed, setQPed] = React.useState('');
+  const [peds, setPeds] = React.useState({ pedidos: [], erro: null });
+  const [pedSel, setPedSel] = React.useState(null);
+  const [sepTotal, setSepTotal] = React.useState(1);
+  const [sepDe, setSepDe] = React.useState(1);
+  const [sepPor, setSepPor] = React.useState('');
+  React.useEffect(() => {
+    if (tipo !== 'SEPARACAO') return undefined;
+    const t = setTimeout(() => { S.listarPedidos(qPed).then(setPeds); }, 300);
+    return () => clearTimeout(t);
+  }, [tipo, qPed]);
+  const sepN = Math.max(1, Math.min(99, Math.floor(Number(sepTotal) || 1)));
+  const sepDados = (v) => C.dadosSeparacao({ pedido: pedSel.numero_pedido, volume: v, total_volumes: sepN, cliente: pedSel.cliente_nome, separador: sepPor, data: etqHoje() });
+
   const linhasParaImprimir = () => {
+    if (tipo === 'RECEBIMENTO') return itensPi.filter((i) => recSel.has(i.codigo_produto)).map((i) => ({ ref: i.codigo_produto, dados: recDados(i), copias }));
+    if (tipo === 'SEPARACAO') {
+      const ini = Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1)));
+      return Array.from({ length: sepN - ini + 1 }, (_, k) => ini + k).map((v) => ({ ref: `${pedSel.numero_pedido} vol ${v}/${sepN}`, dados: sepDados(v), copias }));
+    }
     if (tipo === 'ENDERECO') {
       const ordem = (ends || []).filter((e) => selEnd.has(e.codigo));
       return ordem.map((e) => ({ ref: e.codigo, dados: C.dadosEndereco(e.codigo, { dv: usarDv }), copias }));
     }
     return Array.from(selItem.values()).map((p) => ({ ref: p.codigo, dados: C.dadosItem(p), copias }));
   };
-  const nSel = tipo === 'ENDERECO' ? selEnd.size : selItem.size;
+  const nSel = tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
   const primeiraRef = tipo === 'ENDERECO'
     ? (Array.from(selEnd)[0] || (filtrados[0] && filtrados[0].codigo))
     : (Array.from(selItem.keys())[0] || (achados.itens[0] && achados.itens[0].codigo));
   const dadosPrevia = React.useMemo(() => {
     try {
+      if (tipo === 'RECEBIMENTO') { const i = itensPi.find((x) => recSel.has(x.codigo_produto)) || itensPi[0]; return piSel && i ? recDados(i) : null; }
+      if (tipo === 'SEPARACAO') return pedSel ? sepDados(Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1)))) : null;
       if (!primeiraRef) return null;
       if (tipo === 'ENDERECO') return C.dadosEndereco(primeiraRef, { dv: usarDv });
       const p = selItem.get(primeiraRef) || achados.itens.find((x) => x.codigo === primeiraRef);
       return p ? C.dadosItem(p) : null;
     } catch (e) { return null; }
-  }, [tipo, primeiraRef, usarDv, selItem, achados]);
+  }, [tipo, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor]);
 
   const copiasValidas = Math.max(1, Math.min(50, Math.floor(Number(copias) || 1)));
   const totalEtiquetas = nSel * copiasValidas;
@@ -224,12 +268,78 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
         {ETQ_TIPOS.map((t) => (
           <button key={t.id} className={'btn btn--sm' + (tipo === t.id ? ' btn--primary' : '')} onClick={() => setTipo(t.id)} title={t.desc}>{t.nome}</button>
         ))}
-        <span style={{ fontSize: 12, color: 'var(--fg3)', alignSelf: 'center' }}>Recebimento, separação, palete, ID-TAG, OP e avaria entram nas próximas fases.</span>
+        <span style={{ fontSize: 12, color: 'var(--fg3)', alignSelf: 'center' }}>Palete, ID-TAG, OP e avaria entram nas próximas fases.</span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(300px, 1fr)', gap: 16, alignItems: 'start' }}>
         <div>
-          {tipo === 'ENDERECO' ? (
+          {tipo === 'RECEBIMENTO' ? (
+            <>
+              <input className="input" placeholder="Buscar P.I. por número ou fornecedor…" value={qPi} onChange={(e) => setQPi(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
+              {pis.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>Não consegui buscar: {pis.erro}</div> : null}
+              <div className="card table-wrap" style={{ maxHeight: 180, overflow: 'auto', marginBottom: 10 }}>
+                <table className="t pcp-grid">
+                  <thead><tr><th>P.I.</th><th>Fornecedor</th><th>Embarque</th><th>Itens</th></tr></thead>
+                  <tbody>
+                    {pis.pis.map((p) => (
+                      <tr key={p.id} onClick={() => escolherPi(p)} style={{ cursor: 'pointer', background: piSel && piSel.id === p.id ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
+                        <td><b style={{ fontWeight: 600 }}>{p.numero_pi}</b></td><td>{p.fornecedor || '—'}</td><td>{p.embarque || '—'}</td><td>{(p.itens || []).length}</td>
+                      </tr>
+                    ))}
+                    {!pis.pis.length ? <tr><td colSpan={4} style={{ color: 'var(--fg3)' }}>Nenhuma P.I. com itens encontrada.</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+              {piSel ? (
+                <>
+                  <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>NF de entrada (opcional)
+                    <input className="input" value={recNf} onChange={(e) => setRecNf(e.target.value)} style={{ width: 160 }}/>
+                  </label>
+                  <div className="card table-wrap" style={{ maxHeight: 260, overflow: 'auto' }}>
+                    <table className="t pcp-grid">
+                      <thead><tr><th style={{ width: 34 }}><input type="checkbox" aria-label="Marcar todos os itens" checked={itensPi.length > 0 && itensPi.every((i) => recSel.has(i.codigo_produto))} onChange={(e) => setRecSel(e.target.checked ? new Set(itensPi.map((i) => i.codigo_produto)) : new Set())}/></th><th>Código</th><th>Descrição</th><th>Qtd. recebida</th></tr></thead>
+                      <tbody>
+                        {itensPi.map((i) => (
+                          <tr key={i.codigo_produto}>
+                            <td><input type="checkbox" checked={recSel.has(i.codigo_produto)} onChange={() => setRecSel((s) => { const n = new Set(s); n.has(i.codigo_produto) ? n.delete(i.codigo_produto) : n.add(i.codigo_produto); return n; })}/></td>
+                            <td><b style={{ fontWeight: 600 }}>{i.codigo_produto}</b></td><td>{i.descricao}</td>
+                            <td><input className="input" type="number" min="0" style={{ width: 90 }} value={recQtd[i.codigo_produto] ?? ''} onChange={(e) => setRecQtd((q) => ({ ...q, [i.codigo_produto]: e.target.value }))}/> {i.unidade || ''}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                  <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>Itens da P.I. sem código de produto não aparecem. A quantidade vem da P.I.; ajuste para o que de fato chegou.</div>
+                </>
+              ) : <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Escolha uma P.I. para listar os itens.</div>}
+            </>
+          ) : tipo === 'SEPARACAO' ? (
+            <>
+              <input className="input" placeholder="Buscar pedido por número ou cliente…" value={qPed} onChange={(e) => setQPed(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
+              {peds.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>Não consegui buscar: {peds.erro}</div> : null}
+              <div className="card table-wrap" style={{ maxHeight: 240, overflow: 'auto', marginBottom: 10 }}>
+                <table className="t pcp-grid">
+                  <thead><tr><th>Pedido</th><th>Cliente</th><th>Etapa</th><th>Volumes</th></tr></thead>
+                  <tbody>
+                    {peds.pedidos.map((p) => (
+                      <tr key={p.numero_pedido} onClick={() => { setPedSel(p); setSepTotal(p.volumes || 1); setSepDe(1); }} style={{ cursor: 'pointer', background: pedSel && pedSel.numero_pedido === p.numero_pedido ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
+                        <td><b style={{ fontWeight: 600 }}>{p.numero_pedido}</b></td><td>{p.cliente_nome || '—'}</td><td>{p.etapa}</td><td>{p.volumes ?? '—'}</td>
+                      </tr>
+                    ))}
+                    {!peds.pedidos.length ? <tr><td colSpan={4} style={{ color: 'var(--fg3)' }}>Nenhum pedido encontrado.</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+              {pedSel ? (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Total de volumes<input className="input" type="number" min="1" max="99" value={sepTotal} onChange={(e) => setSepTotal(e.target.value)} style={{ width: 90 }}/></label>
+                  <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Imprimir a partir do volume<input className="input" type="number" min="1" max="99" value={sepDe} onChange={(e) => setSepDe(e.target.value)} style={{ width: 90 }}/></label>
+                  <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Separado por<input className="input" value={sepPor} onChange={(e) => setSepPor(e.target.value)} style={{ width: 180 }}/></label>
+                </div>
+              ) : <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Escolha um pedido. Imprime uma etiqueta por volume (1/N … N/N).</div>}
+              <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>Rolo de 100 × 100 mm. O QR leva "PED:número" — formato novo, ainda a registrar na issue #862 antes de o app de estoque ler.</div>
+            </>
+          ) : tipo === 'ENDERECO' ? (
             <>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
                 <select className="input" style={{ width: 'auto', minWidth: 170 }} value={rua} onChange={(e) => setRua(e.target.value)} aria-label="Rua">
@@ -324,6 +434,8 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
 function EtqModelos() {
   const C = ETQ_CALC();
   const exemplo = (m) => (m.tipo === 'ENDERECO' ? C.dadosEndereco('R2A4', { dv: true })
+    : m.tipo === 'RECEBIMENTO' ? C.dadosRecebimento({ data: '17/10/2026', embarque: '146', pi: 'SCVP260522-2', fornecedor: 'Ningbo Senchen', codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', quantidade: 40, unidade: 'UN', nf: '11082199' })
+    : m.tipo === 'SEPARACAO' ? C.dadosSeparacao({ pedido: '30570', volume: 2, total_volumes: 5, cliente: 'AKAI KB MAGAZINE', separador: 'Tiago', data: '17/10/2026 14:32' })
     : m.tipo === 'ITEM' ? C.dadosItem({ codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', unidade: 'UN', familia: 'VPEL', endereco: 'R2A4' }) : C.DADOS_TESTE);
   return (
     <div>

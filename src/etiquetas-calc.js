@@ -6,6 +6,7 @@
    - modelos padrão de etiqueta (layout em milímetros, igual para qualquer impressora);
    - renderizador ZPL II (impressoras Zebra e compatíveis) e renderizador SVG (pré-visualização e impressão pelo navegador).
    Regras que existem por motivo:
+   - Fase 2: RECEBIMENTO (QR = código do item) e SEPARACAO (QR = PED:<pedido>, formato novo -> registrar na issue #862).
    - O CONTRATO com o app de estoque não muda: item = QR e Code 128 com o `codigo` exato; endereço = QR "END:" + código.
      Formato novo de QR exige comentário na issue #862 ANTES de mudar (spec do app, 3.4). O DV nunca entra no QR.
    - DV = (rua×3 + vão×5 + nível×7) mod 10, vão A=1 … J=10. Fórmula PROPOSTA, ainda não aprovada pelo Gelson: por isso o DV nasce
@@ -90,6 +91,41 @@
     };
   }
 
+  // Recebimento: carga que chegou. QR = código do item (mesmo contrato do tipo ITEM, nenhum formato novo).
+  function dadosRecebimento(r) {
+    const t = (v) => String(v == null ? '' : v).trim();
+    const qtd = r.quantidade != null && r.quantidade !== '' ? `Qtd: ${t(r.quantidade)}${t(r.unidade) ? ' ' + t(r.unidade) : ''}` : '';
+    return {
+      titulo: `ENTRADA ${t(r.data)}`.trim(),
+      origem: [t(r.embarque) && `Embarque ${t(r.embarque)}`, t(r.pi) && `P.I. ${t(r.pi)}`].filter(Boolean).join(' · '),
+      fornecedor: t(r.fornecedor) ? `Fornecedor: ${t(r.fornecedor)}` : '',
+      codigo: t(r.codigo),
+      descricao: t(r.descricao),
+      quantidade_txt: qtd,
+      nf_txt: t(r.nf) ? `NF: ${t(r.nf)}` : '',
+      conferencia: 'Conf.: ___ / ___',
+      qr: t(r.codigo),
+      barras: t(r.codigo),
+    };
+  }
+  // Separação: volume n/N de um pedido de venda do Omie, rumo à área EXP. QR = "PED:<nº do pedido>" (formato NOVO: registrar na issue #862).
+  function dadosSeparacao(r) {
+    const t = (v) => String(v == null ? '' : v).trim();
+    const pedido = t(r.pedido);
+    const total = Math.max(1, Math.floor(Number(r.total_volumes) || 1));
+    const vol = Math.max(1, Math.min(total, Math.floor(Number(r.volume) || 1)));
+    return {
+      pedido_txt: `PEDIDO ${pedido}`,
+      volume_txt: `VOL ${vol} / ${total}`,
+      cliente_txt: t(r.cliente) ? `Cliente: ${t(r.cliente)}` : '',
+      destino_txt: 'Destino: EXP',
+      separador_txt: t(r.separador) ? `Separado por: ${t(r.separador)}` : '',
+      data_txt: t(r.data),
+      qr: `PED:${pedido}`,
+      barras: pedido,
+    };
+  }
+
   /* ---------- Modelos padrão (layout em mm) ----------
      Elementos: caixa (borda) · linha · texto ({campo}, h = altura do texto, linhas) · qr (w = lado) · code128 (w × h). */
   const MODELOS = [
@@ -119,6 +155,41 @@
         { tipo: 'texto', campo: '{linha_unidade}', x: 32, y: 26.5, w: 64, h: 4.2 },
         { tipo: 'texto', campo: '{endereco_txt}', x: 32, y: 31.5, w: 64, h: 3.8 },
         { tipo: 'code128', campo: '{barras}', x: 4, y: 37, w: 92, h: 9 },
+      ],
+    },
+    {
+      id: 'RECEBIMENTO_100x50', tipo: 'RECEBIMENTO', nome: 'Recebimento — carga que chegou', largura_mm: 100, altura_mm: 50,
+      proposito: 'Marca a carga recebida (embarque, P.I., fornecedor, item, quantidade). O QR leva o código do item, como na etiqueta Item.',
+      campos: ['titulo', 'origem', 'fornecedor', 'codigo', 'descricao', 'quantidade_txt', 'nf_txt', 'conferencia', 'qr', 'barras'],
+      elementos: [
+        { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.4 },
+        { tipo: 'texto', campo: '{titulo}', x: 4, y: 2.5, w: 92, h: 5.5 },
+        { tipo: 'linha', x: 4, y: 9, w: 92, esp: 0.4 },
+        { tipo: 'qr', campo: '{qr}', x: 4, y: 11, w: 22 },
+        { tipo: 'texto', campo: '{origem}', x: 30, y: 11, w: 66, h: 4 },
+        { tipo: 'texto', campo: '{fornecedor}', x: 30, y: 16, w: 66, h: 4 },
+        { tipo: 'texto', campo: '{codigo}', x: 30, y: 21, w: 66, h: 6 },
+        { tipo: 'texto', campo: '{descricao}', x: 30, y: 28, w: 66, h: 3.8, linhas: 2 },
+        { tipo: 'texto', campo: '{quantidade_txt}', x: 4, y: 37, w: 46, h: 5.5 },
+        { tipo: 'texto', campo: '{nf_txt}', x: 52, y: 37, w: 44, h: 4.5, alinhamento: 'dir' },
+        { tipo: 'texto', campo: '{conferencia}', x: 4, y: 43.5, w: 92, h: 4 },
+      ],
+    },
+    {
+      id: 'SEPARACAO_100x100', tipo: 'SEPARACAO', nome: 'Separação — volume do pedido', largura_mm: 100, altura_mm: 100,
+      proposito: 'Identifica o volume n/N de um pedido de venda do Omie na área de expedição (EXP). Rolo 100 × 100 mm.',
+      campos: ['pedido_txt', 'volume_txt', 'cliente_txt', 'destino_txt', 'separador_txt', 'data_txt', 'qr', 'barras'],
+      elementos: [
+        { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 99, esp: 0.5 },
+        { tipo: 'texto', campo: '{pedido_txt}', x: 5, y: 5, w: 55, h: 9 },
+        { tipo: 'texto', campo: '{volume_txt}', x: 60, y: 6, w: 35, h: 8, alinhamento: 'dir' },
+        { tipo: 'linha', x: 5, y: 17, w: 90, esp: 0.5 },
+        { tipo: 'texto', campo: '{cliente_txt}', x: 5, y: 20, w: 90, h: 6, linhas: 2 },
+        { tipo: 'qr', campo: '{qr}', x: 5, y: 36, w: 40 },
+        { tipo: 'texto', campo: '{destino_txt}', x: 50, y: 38, w: 45, h: 7 },
+        { tipo: 'texto', campo: '{separador_txt}', x: 50, y: 50, w: 45, h: 4.5, linhas: 2 },
+        { tipo: 'texto', campo: '{data_txt}', x: 50, y: 64, w: 45, h: 4.5 },
+        { tipo: 'code128', campo: '{barras}', x: 5, y: 82, w: 90, h: 12 },
       ],
     },
     {
@@ -309,6 +380,6 @@
   window.EtiquetasCalc = {
     DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
-    dadosEndereco, dadosItem, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderSVG, htmlImpressao,
+    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderSVG, htmlImpressao,
   };
 }());
