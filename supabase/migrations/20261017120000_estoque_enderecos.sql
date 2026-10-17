@@ -1,10 +1,10 @@
 -- VP Estoque · tabela de endereços do almoxarifado (hub). Decisão do Gelson em 17/10/2026:
 --   4 ruas; Rua 1 e Rua 4 só com porta-palete à ESQUERDA; Ruas 2 e 3 com ESQUERDA e DIREITA;
---   cada lado com 10 vãos (A–J) e 4 níveis. Nível ÍMPAR = esquerda (1,3,5,7), PAR = direita (2,4,6,8).
+--   cada lado com 10 vãos (A–J) e 4 níveis, EXCETO a Rua 1, que tem só 9 vãos (A–I). Nível ÍMPAR = esquerda (1,3,5,7), PAR = direita (2,4,6,8).
 --   Código = R<rua><vão><nível> (ex.: R2A4) e o QR da etiqueta é END:R2A4. O vão A de um lado fica de frente com o vão A do outro.
---   Total: 6 lados x 10 vãos x 4 níveis = 240 posições, mais o endereço único EXP (área de expedição: itens já separados
+--   Total: 5 lados x 10 vãos x 4 níveis + Rua 1 (9 vãos x 4 níveis) = 236 posições, mais o endereço único EXP (área de expedição: itens já separados
 --   para um pedido de venda, aguardando a NF; sai do porta-palete no sistema sem baixar estoque).
--- Esta migration só cria a tabela, a validação e a carga das 240 posições. NÃO mexe em estoque_eventos nem nas funções existentes:
+-- Esta migration só cria a tabela, a validação e a carga das 236 posições. NÃO mexe em estoque_eventos nem nas funções existentes:
 -- ligar a validação "o app recusa endereço que não existe" a estoque_registrar_eventos é um passo seguinte.
 -- Tabela nasce FECHADA (RLS, sem acesso anon), conforme o plano da issue #571.
 
@@ -26,7 +26,9 @@ create table if not exists public.estoque_enderecos (
     (tipo = 'posicao' and rua is not null and vao is not null and nivel is not null
        and codigo = 'R' || rua::text || vao || nivel::text
        -- Rua 1 e Rua 4 só têm lado esquerdo (níveis ímpares)
-       and (rua in (2, 3) or nivel % 2 = 1))
+       and (rua in (2, 3) or nivel % 2 = 1)
+       -- Rua 1 só vai até o vão I
+       and not (rua = 1 and vao = 'J'))
     or
     (tipo = 'expedicao' and codigo = 'EXP' and rua is null and vao is null and nivel is null)
   )
@@ -46,13 +48,14 @@ create policy estoque_end_adm on public.estoque_enderecos for all to authenticat
   using ((select public.vp_eh_admin())) with check ((select public.vp_eh_admin()));
 grant insert, update, delete on public.estoque_enderecos to authenticated;   -- limitado pela política acima
 
--- Carga: 240 posições + EXP (idempotente)
+-- Carga: 236 posições + EXP (idempotente)
 insert into public.estoque_enderecos (codigo, tipo, rua, vao, nivel)
 select 'R' || r || v || n, 'posicao', r, v, n
 from generate_series(1, 4) as r,
      unnest(array['A','B','C','D','E','F','G','H','I','J']) as v,
      generate_series(1, 8) as n
-where r in (2, 3) or n % 2 = 1
+where (r in (2, 3) or n % 2 = 1)
+  and not (r = 1 and v = 'J')
 on conflict (codigo) do nothing;
 
 insert into public.estoque_enderecos (codigo, tipo, observacao)
