@@ -300,6 +300,11 @@
     if (contou && !(Number(quantidade) >= 0)) throw new Error('Informe uma quantidade contada válida (zero ou mais).');
     const hojeIso = new Date().toISOString().slice(0, 10);
     const antes = item.contagem || null;
+    if (endereco != null && window.EtiquetasCalc && window.EtiquetasCalc.validarEnderecoNovo) {
+      const v = window.EtiquetasCalc.validarEnderecoNovo(endereco, antes && antes.endereco);
+      if (!v.ok) throw new Error(v.msg);
+      endereco = v.codigo || '';
+    }
     const row = {
       codigo,
       endereco: endereco != null ? (String(endereco).trim() || null) : (antes && antes.endereco) || null,

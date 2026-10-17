@@ -14,7 +14,7 @@
 - O 1º segmento (**módulo**) vem do `BREADCRUMB_MAP` do `shell.jsx` via `MODULE_SLUG` do `router.js`; só o 2º segmento (a rota) decide o que abre.
 - A **aba padrão** deixa a URL limpa (sem o último segmento). Aba inválida na URL cai na padrão.
 - Abas entram na URL com `window.useRouteTab(rota, padrão, [válidas], comId?)` (em `router.js`).
-- Rotas no roteador: **81** · itens de menu: **70** · telas com abas na URL: **14**.
+- Rotas no roteador: **82** · itens de menu: **71** · telas com abas na URL: **15**.
 
 ## Verificações automáticas
 
@@ -144,6 +144,7 @@
 | MES · Cadastros | `mes-cadastros` | `/logistica/mes-cadastros` | — | — |
 | Relatórios | `relatorios-pcp` | `/logistica/relatorios-pcp[/<aba>]` | **painel**, pedidos, precos, producao, perdas, estoque, fluxo, clientes, fotos | — |
 | Expedição | `expedicao` | `/logistica/expedicao` | — | — |
+| Etiquetas | `etiquetas` | `/logistica/etiquetas[/<aba>]` | **gerar**, modelos, historico | — |
 
 ### Administração
 
@@ -176,7 +177,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 |---|---|---|---|---|
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `central-documentos.jsx:79` |
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `rh-homologacao` | `/rh/rh-homologacao` | `central-documentos.jsx:81` |
-| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:340` |
+| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:341` |
 | (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:431` |
 | (CVDetalhe em cotacoes-varejo.jsx) | (acionado por um handler — ver o código) | `cadastro-fornecedores` | `/cadastros/cadastro-fornecedores` | `cotacoes-varejo.jsx:323` |
 | (CVLista em cotacoes-varejo.jsx) | Ir para Importação Varejo | `compras` | `/logistica/compras` | `cotacoes-varejo.jsx:49` |
