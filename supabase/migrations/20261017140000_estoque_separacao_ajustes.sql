@@ -3,6 +3,7 @@
 --      ex. 'I 02', 'I 01   R1 - 01', que o `separar` recusaria);
 --   2) `assumir`, `separar` e `concluir` revalidam que o pedido ainda está na etapa 20, não cancelado e não faturado (antes só o `pegar`).
 --      `soltar` continua permitido para devolver à fila um pedido que saiu da etapa 20.
+--   3) corrige `concluir`, que falhava com "subquery uses ungrouped column" (achado no teste em transação desfeita, 17/10).
 -- Só recria a função (mesma assinatura e mesmas permissões).
 
 create or replace function public.estoque_separacao_chamar(p_email text, p_acao text, p_args jsonb default '{}'::jsonb)
@@ -147,10 +148,11 @@ begin
       end if;
       v_forcar := coalesce((p_args->>'forcar')::boolean, false);
       select coalesce(jsonb_agg(jsonb_build_object('codigo', t.c, 'pedida', t.pedida, 'separada', t.sep)), '[]'::jsonb) into v_faltas from (
-        select upper(i.codigo) c, sum(i.quantidade) pedida,
+        select g.c, g.pedida,
                coalesce((select sum(si.qtd_separada) from public.estoque_separacao_itens si
-                          where si.codigo_pedido = v_ped and si.codigo = upper(i.codigo)), 0) sep
-          from public.pcp_pedido_itens i where i.codigo_pedido = v_ped group by upper(i.codigo)) t
+                          where si.codigo_pedido = v_ped and si.codigo = g.c), 0) sep
+          from (select upper(i.codigo) c, sum(i.quantidade) pedida from public.pcp_pedido_itens i
+                 where i.codigo_pedido = v_ped group by upper(i.codigo)) g) t
        where t.sep < t.pedida;
       if jsonb_array_length(v_faltas) > 0 and not v_forcar then
         raise exception 'estoque: faltam % item(ns) para separar — confirme para concluir com falta', jsonb_array_length(v_faltas);
