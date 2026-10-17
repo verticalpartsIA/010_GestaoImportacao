@@ -28,6 +28,7 @@ const ROUTE_TITLE = {
   "simulacao-producao": "Simulação",
   "relatorios-pcp": "Relatórios do PCP",
   expedicao: "Expedição",
+  separacao: "Separação",
   etiquetas: "Etiquetas",
   "emissao-nf": "Emissão de NF",
   pcp: "PCP — Planejamento e Controle da Produção",
@@ -410,6 +411,7 @@ function App() {
       case "almoxarifado": return <window.AlmoxarifadoPage/>;
       case "carga-maquina": return <window.CargaMaquinaPage/>;
       case "expedicao": return <window.ExpedicaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "separacao": return <window.SeparacaoPage/>;
       case "etiquetas": return <window.EtiquetasPage/>;
       case "emissao-nf": return <window.EmissaoNFPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "relatorios-pcp": return <window.RelatoriosPCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
