@@ -25,7 +25,7 @@
     'Geral', 'CRM', 'Cadastros Mestres', 'Comercial | Pré-venda', 'Financeiro & Preços',
     'Contratos & Jurídico', 'Suprimentos & Importação', 'Engenharia & Produto',
     'Obras & Instalação', 'Entrega & Documentação', 'Parceiros & Instaladores',
-    'Logística Interna', 'Administração',
+    'Logística Interna', 'Fabricação', 'Administração',
   ];
 
   async function listarColaboradores() {
@@ -317,6 +317,8 @@
     'Entrega & Documentação': ['databook', 'handover'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
     'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas'],
+    /* Fabricação saiu de Logística Interna (17/10/2026). Logística Interna mantém a lista completa de propósito: quem já tinha o grupo alocado não perde nada. */
+    'Fabricação': ['pcp', 'mes', 'mes-cadastros', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'relatorios-pcp'],
     'Administração': ['logs'],
   };
 
