@@ -211,6 +211,7 @@
       { modulo: 'embarques-importacao', label: 'Embarques' },
       { modulo: 'gi-analise-precos', label: 'Análise de Preços' },
       { modulo: 'compras', label: 'Importação Varejo' },
+      { modulo: 'cotacoes-varejo', label: 'Cotações de Varejo' },
       { modulo: 'pedidos-acompanhamento', label: 'Pedidos' },
     ]},
     { grupo: 'Engenharia', itens: [
@@ -297,7 +298,7 @@
     'Comercial | Pré-venda': ['formularios', 'controle-cotacoes', 'cotacoes-fornecedor', 'propostas', 'contratos-sociais'],
     'Financeiro & Preços': ['cadastro-custos', 'precificacao', 'aval-financeiro', 'emissao-nf'],
     'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
-    'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'compras', 'pedidos-acompanhamento'],
+    'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'compras', 'cotacoes-varejo', 'pedidos-acompanhamento'],
     'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
     'Entrega & Documentação': ['databook', 'handover'],

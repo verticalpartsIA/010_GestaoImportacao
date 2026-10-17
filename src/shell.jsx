@@ -77,6 +77,7 @@ const NAV_GROUPS = [
     { id: "importacao", label: "Importação", icon: "ship", indent: true },
     { id: "gi-analise-precos", label: "Análise de Preços", icon: "calculator", indent: true },
     { id: "compras", label: "Importação Varejo", icon: "truck" },
+    { id: "cotacoes-varejo", label: "Cotações de Varejo", icon: "fileSearch" },
     { id: "pedidos-acompanhamento", label: "Pedidos", icon: "package" },
   ]},
   /* Só o que define/projeta o produto. Vistoria, instalação, entrega e
@@ -380,6 +381,7 @@ const BREADCRUMB_MAP = {
   "importacao-detail":        { module: "Importação", page: "Gestão Importação — Detalhe de Embarque", icon: "ship" },
   "importacao-rastreamento":  { module: "Importação", page: "Gestão Importação — Rastreamento de Navios", icon: "mapIcon" },
   compras:       { module: "Logística", page: "Importação Varejo", icon: "truck" },
+  "cotacoes-varejo": { module: "Suprimentos", page: "Cotações de Varejo", icon: "fileSearch" },
   almoxarifado: { module: "Logística", page: "Almoxarifado", icon: "package" },
   "carga-maquina": { module: "Logística", page: "Carga Máquina", icon: "calculator" },
   "montagem-produto": { module: "Logística", page: "Montagem do Produto", icon: "layers" },
@@ -441,6 +443,7 @@ const HELP_TOPICS = {
   "cadastro-clientes": "O cadastro dos clientes da empresa: pesquise na lista, cadastre um cliente novo, edite e abra o histórico dele (leads, obras e score de relacionamento). O CNPJ/CPF é conferido ao salvar e precisa combinar com o tipo escolhido (CPF para Pessoa Física, CNPJ para Pessoa Jurídica). Exclua com cuidado.",
   "cadastro-fornecedores": "O cadastro dos fornecedores: pesquise e filtre por categoria, veja a avaliação em estrelas, cadastre um fornecedor novo (escolhendo as categorias), edite e avalie com nota e comentário. O CNPJ/CPF é conferido ao salvar.",
   "cadastro-materias-primas": "Tela só de consulta: as matérias-primas vêm do Omie. Pesquise por código ou descrição, filtre por família e leia cada coluna (NCM, peso, endereço). Se um dado estiver errado, a correção é feita no Omie, não aqui.",
+  "cotacoes-varejo": "Os lotes de cotação que o comprador pediu na Importação Varejo. Abra um lote, convide fornecedores já cadastrados e envie o link; cada um responde com preço por faixa de quantidade, prazo e MOQ. No mapa comparativo digite quanto comprar de cada fornecedor (pode dividir, e pode ser mais ou menos que o pedido) e aprove: só então a requisição vai ao Omie.",
   "cadastro-produtos": "Tela só de consulta: os produtos vêm do Omie. Pesquise por código ou descrição, filtre por família e leia cada coluna; o código do produto abre a Montagem do Produto. Se um dado estiver errado, a correção é feita no Omie, não aqui.",
   formularios: "Formulários de intake por tipo de equipamento. O de Elevador coleta os dados que alimentam cotação e precificação.",
   "formulario-elevador": "Formulário de coleta de dados do elevador, da escada ou da esteira. Escolha o cliente, informe a obra e cadastre cada equipamento: o rascunho sempre salva, e os campos com * são obrigatórios para enviar a cotação (o que faltar acende em vermelho). Com o formulário salvo, use Enviar cotação a fornecedores. O botão Link p/ cliente preencher deixa o próprio cliente preencher.",

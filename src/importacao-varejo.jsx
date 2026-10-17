@@ -598,6 +598,26 @@ function ImportacaoVarejoPage({ setRoute }) {
     finally { setSincronizandoEstoque(false); }
   };
 
+  /* Cotações de Varejo (16/10/2026): "Pedir cotação" cria um LOTE com os produtos marcados (nada vai ao Omie) e leva para a
+     página Cotações de Varejo, onde os fornecedores respondem. O selo "em cotação" não abate a sugestão: só a compra aprovada abate. */
+  const [emCotacao, setEmCotacao] = React.useState({});
+  React.useEffect(() => { window.CotacoesVarejoStore?.codigosEmCotacao().then(setEmCotacao).catch(() => setEmCotacao({})); }, [items]);
+  const [pedindoCotacao, setPedindoCotacao] = React.useState(false);
+  const pedirCotacao = async () => {
+    if (!window.CotacoesVarejoStore) { window.toast?.('Módulo de cotações não carregou — recarregue a página.', 'error'); return; }
+    setPedindoCotacao(true);
+    try {
+      const lote = await window.CotacoesVarejoStore.criarLote(itensSelecionados.map((i) => ({
+        codigo: i.codigo, descricao: i.descricao, quantidade: i.sugestaoCompra > 0 ? i.sugestaoCompra : 1,
+      })));
+      window.toast?.('Lote ' + lote.numero + ' criado com ' + itensSelecionados.length + ' produto(s). Escolha os fornecedores e envie.', 'success');
+      setSelecionados(new Set());
+      window.VpRouter.navigate('cotacoes-varejo', lote.id);
+      setRoute && setRoute('cotacoes-varejo');
+    } catch (e) { window.toast?.('Erro ao criar o lote de cotação: ' + (e.message || e), 'error'); }
+    finally { setPedindoCotacao(false); }
+  };
+
   const toggleSelecionado = (codigo) => setSelecionados((prev) => {
     const next = new Set(prev);
     if (next.has(codigo)) next.delete(codigo); else next.add(codigo);
@@ -722,8 +742,15 @@ function ImportacaoVarejoPage({ setRoute }) {
         <span className="small" style={{ color: 'var(--fg3)' }}>{filtrados.length} de {items.length} produtos</span>
         <div className="spacer" style={{ flex: 1 }} />
         {podeGerenciar && selecionados.size > 0 && (
-          <Button variant="primary" size="sm" icon="send" onClick={() => setModalEnviar(true)}>
-            Enviar {selecionados.size} ao Omie
+          <Button variant="primary" size="sm" icon="send" onClick={pedirCotacao} disabled={pedindoCotacao}
+            data-tip="Cria um lote de cotação com os produtos marcados. Nada vai ao Omie até a compra ser aprovada na página Cotações de Varejo.">
+            {pedindoCotacao ? 'Criando lote…' : 'Pedir cotação (' + selecionados.size + ')'}
+          </Button>
+        )}
+        {podeGerenciar && selecionados.size > 0 && (
+          <Button variant="outline" size="sm" icon="send" onClick={() => setModalEnviar(true)}
+            data-tip="Compra direta, sem cotação: cria a Requisição de Compra no Omie agora, com o fornecedor/preço que você confirmar.">
+            Comprar direto no Omie ({selecionados.size})
           </Button>
         )}
       </div>
@@ -827,7 +854,13 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
                       <td><input type="checkbox" checked={selecionados.has(item.codigo)} onChange={() => toggleSelecionado(item.codigo)} /></td>
                     )}
                     <td className="mono small" style={{ whiteSpace: 'nowrap' }}>{item.codigo}</td>
-                    <td className="cell-main" title={item.descricao} style={{ maxWidth: 200 }}>{item.descricao}</td>
+                    <td className="cell-main" title={item.descricao} style={{ maxWidth: 200 }}>{item.descricao}
+                      {emCotacao[item.codigo] && (
+                        <div><button className="link-btn" title="Este produto está em um lote de cotação ainda não aprovado (não abate a sugestão)"
+                          onClick={() => { window.VpRouter.navigate('cotacoes-varejo', emCotacao[item.codigo].id); setRoute && setRoute('cotacoes-varejo'); }}
+                          style={{ fontSize: 11, fontWeight: 800 }}>🧾 em cotação · {emCotacao[item.codigo].numero}</button></div>
+                      )}
+                    </td>
                     <td>
                       <IVCelulaEditavel valor={item.endereco} podeEditar={podeGerenciar} placeholder="ex.: G13" largura={90}
                         onSave={(v) => salvarContagemItem(item, { endereco: v })} />
