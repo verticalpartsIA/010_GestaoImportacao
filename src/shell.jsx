@@ -126,16 +126,19 @@ const NAV_GROUPS = [
      visível deve significar "posso entrar e fazer algo" (Achado 12). */
   { label: "Logística Interna", items: [
     { id: "almoxarifado", label: "Almoxarifado", icon: "package" },
-    { id: "carga-maquina", label: "Carga Máquina", icon: "calculator" },
-    { id: "montagem-produto", label: "Montagem do Produto", icon: "layers" },
-    { id: "simulacao-producao", label: "Simulação", icon: "history" },
-    { id: "pcp", label: "PCP", icon: "calendar" },
-    { id: "mes", label: "MES", icon: "settings" },
-    { id: "mes-cadastros", label: "MES · Cadastros", icon: "layers" },
-    { id: "relatorios-pcp", label: "Relatórios", icon: "fileText" },
     { id: "expedicao", label: "Expedição", icon: "truck" },
     { id: "separacao", label: "Separação", icon: "layers" },
     { id: "etiquetas", label: "Etiquetas", icon: "fileText" },
+  ]},
+  /* Fabricação (17/10/2026): só reagrupa no menu o que já era PCP/MES. As rotas e URLs continuam /logistica/<rota> (mudar a URL é outra decisão). */
+  { label: "Fabricação", items: [
+    { id: "pcp", label: "PCP", icon: "calendar" },
+    { id: "mes", label: "MES", icon: "settings" },
+    { id: "mes-cadastros", label: "MES · Cadastros", icon: "layers" },
+    { id: "carga-maquina", label: "Carga Máquina", icon: "calculator" },
+    { id: "montagem-produto", label: "Montagem do Produto", icon: "layers" },
+    { id: "simulacao-producao", label: "Simulação", icon: "history" },
+    { id: "relatorios-pcp", label: "Relatórios", icon: "fileText" },
   ]},
   { label: "Administração", items: [
     { id: "logs", label: "Logs de Atividade", icon: "history", restrict: ["admin"] },
@@ -184,7 +187,9 @@ function Sidebar({ route, setRoute, role, collapsed, onToggle }) {
      nav básico e sempre aparece, independente de alocação. */
   const gruposAlocados = (window.__VP_USER || {}).gruposAlocados;
   const filtrarPorAlocacao = Array.isArray(gruposAlocados) && gruposAlocados.length > 0;
-  const grupoVisivel = (group) => !filtrarPorAlocacao || group.label === "Geral" || group.empty || gruposAlocados.includes(group.label);
+  /* Quem já tinha "Logística Interna" alocada continua vendo o grupo novo (o PCP/MES saiu de lá). */
+  const GRUPO_ALIAS = { "Fabricação": ["Logística Interna"] };
+  const grupoVisivel = (group) => !filtrarPorAlocacao || group.label === "Geral" || group.empty || gruposAlocados.includes(group.label) || (GRUPO_ALIAS[group.label] || []).some((a) => gruposAlocados.includes(a));
   /* Módulos recolhidos individualmente (clique no título) — persiste por navegador. */
   const [collapsedGroups, setCollapsedGroups] = React.useState(() => {
     try { return new Set(JSON.parse(localStorage.getItem(GROUPS_LS_KEY) || "[]")); }
