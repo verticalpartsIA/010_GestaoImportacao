@@ -37,8 +37,6 @@ const NAV_GROUPS = [
   { label: "Cadastros Mestres", items: [
     { id: "cadastro-clientes", label: "Clientes", icon: "users" },
     { id: "cadastro-fornecedores", label: "Fornecedores", icon: "truck" },
-    { id: "cadastro-materias-primas", label: "Matérias-Primas", icon: "layers" },
-    { id: "cadastro-produtos", label: "Produtos", icon: "package" },
   ]},
   { label: "Comercial | Pré-venda", items: [
     { id: "formularios", label: "Formulários", icon: "layers" },
@@ -136,6 +134,9 @@ const NAV_GROUPS = [
     { id: "mes", label: "MES", icon: "settings" },
     { id: "mes-cadastros", label: "MES · Cadastros", icon: "layers" },
     { id: "carga-maquina", label: "Carga Máquina", icon: "calculator" },
+    /* 18/10/2026: Matérias-Primas (só VPMP) e Produtos saíram de Cadastros Mestres — quem consome é a Fabricação. Rotas/URLs/alçadas não mudaram. */
+    { id: "cadastro-materias-primas", label: "Matérias-Primas", icon: "layers" },
+    { id: "cadastro-produtos", label: "Produtos", icon: "package" },
     { id: "montagem-produto", label: "Montagem do Produto", icon: "layers" },
     { id: "simulacao-producao", label: "Simulação", icon: "history" },
     { id: "relatorios-pcp", label: "Relatórios", icon: "fileText" },
@@ -364,8 +365,8 @@ const BREADCRUMB_MAP = {
   "contrato-instalador":         { module: "Jurídico", page: "Contrato Instalador", icon: "hardhat" },
   "cadastro-clientes":     { module: "Cadastros", page: "Clientes", icon: "users" },
   "cadastro-fornecedores": { module: "Cadastros", page: "Fornecedores", icon: "truck" },
-  "cadastro-materias-primas": { module: "Cadastros", page: "Matérias-Primas", icon: "layers" },
-  "cadastro-produtos": { module: "Cadastros", page: "Produtos", icon: "package" },
+  "cadastro-materias-primas": { module: "Fabricação", page: "Matérias-Primas", icon: "layers" },
+  "cadastro-produtos": { module: "Fabricação", page: "Produtos", icon: "package" },
   engenharia:    { module: "Engenharia", page: "Engenharia", icon: "ruler" },
   "ncm-catalogo": { module: "Cadastros", page: "Produtos", icon: "fileSearch" },
   "cadastro-instaladores": { module: "Cadastros", page: "Empresas Instaladoras", icon: "hardhat" },

@@ -27,7 +27,7 @@ const PF_TIPOS = [
   { id: 'mp', rot: 'Matéria-prima' }, { id: 'consumivel', rot: 'Consumíveis' },
 ];
 function pfTipo(p) {
-  if (p.tipo_sped === '01') return 'mp';
+  if (window.pcpEhMateriaPrima(p.codigo)) return 'mp';
   if (/^VPP?KIT-/i.test(p.codigo) || /^kit\b/i.test(p.descricao || '')) return 'kit';
   if (p.tipo_sped === '10') return 'consumivel';
   return 'acabado';
