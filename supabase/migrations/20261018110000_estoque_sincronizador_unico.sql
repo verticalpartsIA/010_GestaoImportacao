@@ -5,7 +5,7 @@
 --   sync-pcp-consumo-posicao (04:50, diário)      → pcp_posicao_compra
 -- Agora: sync-estoque-omie (:00, 4x/dia) lê o Omie UMA vez e grava nos três destinos. O sync-pcp-omie continua, mas só com
 -- cadastro (:20) e estrutura (:40) — sem repetir a leitura de estoque. As funções antigas seguem existindo (botões manuais).
--- Só aplicar DEPOIS de sync-estoque-omie estar no ar e conferido (simulação + uma rodada real); aplicada por MCP.
+-- Aplicada no banco em 18/10/2026 (por MCP), depois de sync-estoque-omie ser conferido (simulação + rodada real idênticas às rotinas antigas).
 
 select cron.unschedule('sync-importacao-varejo-estoque-4x-dia');
 select cron.unschedule('sync-pcp-consumo-posicao');
@@ -48,6 +48,6 @@ select cron.schedule('sync-estoque-omie-4x-dia', '0 10,14,18,22 * * *', $cmd$
       'Authorization', 'Bearer sb_publishable_aPe0GZxLn9orlrNYFr8U1g_xnMfNgcP'
     ),
     body := '{}'::jsonb,
-    timeout_milliseconds := 120000
+    timeout_milliseconds := 150000
   );
 $cmd$);
