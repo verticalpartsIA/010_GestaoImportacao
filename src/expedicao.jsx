@@ -278,7 +278,7 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
       </div>
 
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
-        <table className="t pcp-grid">
+        <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
           <thead><tr><th>Pedido</th><th>Cliente</th><th>Produção</th><th>NF</th><th>Previsão</th><th>Expedição</th><th></th></tr></thead>
           <tbody>
             {lista.map(p => {

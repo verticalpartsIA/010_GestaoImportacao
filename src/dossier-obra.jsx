@@ -85,7 +85,7 @@ function ObrasStatusPage({ setRoute, setSubsel }) {
       </div>
 
       <div className="table-wrap">
-        <table className="t">
+        <table className="t tab-cruz">
           <thead><tr>
             <th>Obra Nº</th>
             <th>Prédio / Obra</th>

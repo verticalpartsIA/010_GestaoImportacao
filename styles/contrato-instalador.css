@@ -516,3 +516,11 @@
 .ci-doc-digital-meta { font-size: 8pt; }
 .ci-doc-digital-hash { font-size: 6.5pt; word-break: break-all; }
 .ci-doc-fila-aguarda { font-style: italic; color: #555; margin-top: 4pt; display: block; }
+
+/* Linhas intercaladas + linha e coluna acendem ao passar o mouse (mesmo padrão das tabelas do PCP; a coluna é marcada por src/rota-pcp.js). */
+.ci-table tbody tr:nth-child(even) td { background: #fafafa; }
+.ci-table tbody tr:hover td { background: color-mix(in srgb, #FFD400 16%, #fafafa); }
+.ci-table tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 0 #FFD400; }
+.ci-table tbody td.pcp-col-hot { background: color-mix(in srgb, #FFD400 9%, #fafafa); }
+.ci-table thead th.pcp-col-hot { background: color-mix(in srgb, #FFD400 28%, #fafafa); }
+.ci-table tbody tr:hover td.pcp-col-hot { background: color-mix(in srgb, #FFD400 34%, #fafafa); }

@@ -57,7 +57,7 @@ function MescFrentes({ pode }) {
   const lista = dados.filter(f => inativos || f.ativo);
   return (
     <div className="card table-wrap">
-      <table className="t pcp-grid">
+      <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
         <thead><tr><th>Código</th><th>Nome</th><th className="text-right">Ordem</th><th>Situação</th><th></th></tr></thead>
         <tbody>
           {lista.map(f => (
@@ -137,7 +137,7 @@ function MescPostos({ pode }) {
   const semFrente = dados.postos.filter(p => p.ativo && !p.frente_codigo).length;
   return (
     <div className="card table-wrap">
-      <table className="t pcp-grid">
+      <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
         <thead><tr><th>Código</th><th>Nome</th><th>Tipo</th><th>Frente</th><th>Situação</th><th></th></tr></thead>
         <tbody>
           {lista.map(p => (
@@ -201,7 +201,7 @@ function MescEtapas({ pode }) {
   if (est) return est;
   return (
     <div className="card table-wrap">
-      <table className="t pcp-grid">
+      <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
         <thead><tr><th className="text-right">#</th><th>Etapa</th><th>Setor</th><th>Tipo</th><th className="text-right">Operadores</th><th>Situação</th><th></th></tr></thead>
         <tbody>
           {dados.map(e => (
@@ -301,7 +301,7 @@ function MescOperadores({ pode }) {
         <span style={{ fontSize: 12, color: 'var(--fg3)' }}>{lista.length} de {dados.pessoas.length} colaboradores</span>
       </div>
       <div className="card table-wrap">
-        <table className="t pcp-grid">
+        <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
           <thead><tr><th>Colaborador</th><th>Departamento</th><th>Cargo</th><th>Posto padrão</th></tr></thead>
           <tbody>
             {lista.map(p => (

@@ -188,7 +188,7 @@ ${jaTem} linha(s) já constam no Omie e NÃO serão tocadas.` : ''}`
       )}
       {plano && (
         <div className="table-wrap" style={{ overflowX: 'auto', marginTop: 10 }}>
-          <table className="t pcp-grid">
+          <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
             <thead><tr><th>Movimento</th><th>Código</th><th>Descrição</th><th className="text-right">Quantidade</th><th>Situação no Omie</th></tr></thead>
             <tbody>
               {plano.linhas.map(l => (
@@ -528,7 +528,7 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
       {(!ehMae || hh.length > 0) && (<>
         <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>Mão de obra (hora-homem){hh.length ? ` · ${pcpFmt(totalHoras)} h` : ''}</h3>
         <div className="card table-wrap" style={{ overflowX: 'auto', marginBottom: 16 }}>
-          <table className="t pcp-grid">
+          <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
             <thead><tr>{ehMae && <th>OP</th>}<th>Colaborador</th><th>Setor</th><th className="text-right">Horas</th>{verHH && <th className="text-right">Valor da hora</th>}{verHH && <th className="text-right">Custo</th>}<th></th></tr></thead>
             <tbody>
               {hh.map(a => {
@@ -585,7 +585,7 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
       {ehMae && (<>
         <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>Frentes de produção</h3>
         <div className="card table-wrap" style={{ overflowX: 'auto', marginBottom: 16 }}>
-          <table className="t pcp-grid">
+          <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
             <thead><tr><th>OP</th><th>Frente</th><th>Produto</th><th>Status</th></tr></thead>
             <tbody>
               {filhos.map(f => (
@@ -605,7 +605,7 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
       {lista.length > 0 && (<>
         <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>Checklist {lista.filter(i => i.feito).length}/{lista.length}</h3>
         <div className="card table-wrap" style={{ overflowX: 'auto', marginBottom: 16 }}>
-          <table className="t pcp-grid">
+          <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
             <thead><tr><th style={{ width: 40 }}></th><th>Item</th><th className="text-right">Qtd</th><th>Un.</th><th>Observação</th><th>Feito por</th></tr></thead>
             <tbody>
               {lista.map(it => (
@@ -626,7 +626,7 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
       {!ehMae && (<>
       <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>Etapas</h3>
       <div className="card table-wrap" style={{ overflowX: 'auto', marginBottom: 16 }}>
-        <table className="t pcp-grid">
+        <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
           <thead><tr><th>#</th><th>Etapa</th><th>Setor</th><th>Responsável</th><th>Prevista</th><th>Concluída em</th><th>Status</th></tr></thead>
           <tbody>
             {etapas.map(e => (
@@ -651,7 +651,7 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
       {(mats.length > 0 || !op.frente) && (<>
       <h3 style={{ margin: '8px 0', fontWeight: 500, fontSize: 14 }}>Materiais</h3>
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
-        <table className="t pcp-grid">
+        <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
           <thead><tr><th>Código</th><th>Componente</th><th className="text-right">Por unidade</th><th className="text-right">Total necessário</th><th>Un.</th><th className="text-right">Em estoque</th><th className="text-right">Falta</th><th className="text-right">Separado</th></tr></thead>
           <tbody>
             {mats.map(m => {
@@ -728,7 +728,7 @@ function PCPOrdens({ ctx }) {
       {!ordens && <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>}
       {ordens && (
         <div className="card table-wrap" style={{ overflowX: 'auto' }}>
-          <table className="t pcp-grid">
+          <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
             <thead><tr><th>Nº</th><th>Produto</th><th className="text-right">Qtd</th><th>Cliente</th><th>Prazo</th><th>Etapas</th><th>Status</th></tr></thead>
             <tbody>
               {lista.map(o => {
@@ -838,7 +838,7 @@ function PCPPlanejamento({ ctx }) {
         </>)}
       </div>
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
-        <table className="t pcp-grid">
+        <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
           <thead><tr>
             <th>Produto</th>
             {PCP_MESES.map(m => <th key={m} className="text-right">{m}</th>)}
@@ -969,7 +969,7 @@ function PCPControle({ ctx }) {
         {kpi('OPs atrasadas', nAtrasadas, 'abertas vencidas + concluídas fora do prazo', nAtrasadas ? { color: 'var(--vp-danger)' } : undefined)}
       </div>
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
-        <table className="t pcp-grid">
+        <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
           <thead><tr>
             <th>OP</th><th>Produto</th><th>Prazo</th><th>Finalização</th><th>Status</th>
             <th className="text-right">Planejada</th><th className="text-right">Produzida</th><th className="text-right">Perdida</th>
@@ -1137,7 +1137,7 @@ function PCPFilaProducao({ ctx, abrirOp }) {
             <label style={{ fontSize: 12, color: 'var(--fg3)' }}>Início <input className="input" type="date" value={preparo.opcoes.previsao_inicio} onChange={e => setPreparo({ ...preparo, opcoes: { ...preparo.opcoes, previsao_inicio: e.target.value } })}/></label>
             <label style={{ fontSize: 12, color: 'var(--fg3)' }}>Prazo <input className="input" type="date" value={preparo.opcoes.prazo_entrega} onChange={e => setPreparo({ ...preparo, opcoes: { ...preparo.opcoes, prazo_entrega: e.target.value } })}/></label>
           </div>
-          <table className="t pcp-grid">
+          <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
             <thead><tr><th>Será criado</th><th>Conteúdo</th></tr></thead>
             <tbody>
               <tr><td><b style={{ fontWeight: 500 }}>OP-mãe (o pedido)</b></td><td>{plano.outros.length ? `Checklist de separação com ${plano.outros.length} item(ns) que não são fabricados (botoeiras, máquina, portas…)` : 'Sem itens de separação'}</td></tr>
@@ -1158,7 +1158,7 @@ function PCPFilaProducao({ ctx, abrirOp }) {
       )}
 
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
-        <table className="t pcp-grid">
+        <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
           <thead><tr><th>Pedido</th><th>Cliente</th><th>Previsão</th><th>Itens do PCP</th><th className="text-right">Outros itens</th><th className="text-right">Total do pedido</th><th>OP no PCP</th></tr></thead>
           <tbody>
             {pedidos.map(p => {
@@ -1396,7 +1396,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
             <label style={{ fontSize: 12, color: 'var(--fg3)' }}>Início <input className="input" type="date" value={preparo.opcoes.previsao_inicio} onChange={e => setOpc('previsao_inicio', e.target.value)}/></label>
             <label style={{ fontSize: 12, color: 'var(--fg3)' }}>Prazo <input className="input" type="date" value={preparo.opcoes.prazo_entrega} onChange={e => setOpc('prazo_entrega', e.target.value)}/></label>
           </div>
-          <table className="t pcp-grid">
+          <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
             <thead><tr><th>Será criado</th><th>Conteúdo</th></tr></thead>
             <tbody>
               <tr><td><b style={{ fontWeight: 500 }}>OP-mãe (o pedido)</b></td><td>Checklist de separação: {montagem.separacao.map(s => s.descricao.split(' (')[0]).join(', ') || '—'}</td></tr>
@@ -1413,7 +1413,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
         </div>
       )}
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
-        <table className="t pcp-grid">
+        <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
           <thead><tr><th>Pedido</th><th>Cotação</th><th>Tipo</th><th>Máquina</th><th className="text-right">Paradas</th><th className="text-right">Itens da lista</th><th className="text-right">Cortes</th><th>Formulário</th><th>OP no PCP</th></tr></thead>
           <tbody>
             {linhas.map(r => {

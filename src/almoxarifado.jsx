@@ -855,7 +855,7 @@ function AlmoxarifadoEstoque() {
       )}
       <Card title="Estoque do PCP" sub="Saldo do Omie × contagem real da prateleira · clique no título da coluna para ordenar">
         <div className="table-wrap" style={{ border: 0 }}>
-          <table className="t pcp-grid pcp-estoque">
+          <table className="t pcp-grid pcp-estoque pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
             <thead>
               <tr>
                 <Th chave="codigo">Código</Th><Th chave="descricao">Descrição</Th>{maisCols && <Th chave="familia">Família</Th>}<th>Un.</th>
