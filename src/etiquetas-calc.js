@@ -6,6 +6,7 @@
    - modelos padrão de etiqueta (layout em milímetros, igual para qualquer impressora);
    - renderizador ZPL II (impressoras Zebra e compatíveis) e renderizador SVG (pré-visualização e impressão pelo navegador).
    Regras que existem por motivo:
+   - Fase 4: PALETE (QR PAL:), ID-TAG (QR EQP:), OP_QUADRO (QR OP:), AVARIA (QR = código do item). Os 3 prefixos novos precisam estar na issue #862.
    - Fase 2: RECEBIMENTO (QR = código do item) e SEPARACAO (QR = PED:<pedido>, formato novo -> registrar na issue #862).
    - O CONTRATO com o app de estoque não muda: item = QR e Code 128 com o `codigo` exato; endereço = QR "END:" + código.
      Formato novo de QR exige comentário na issue #862 ANTES de mudar (spec do app, 3.4). O DV nunca entra no QR.
@@ -126,6 +127,68 @@
     };
   }
 
+  // Palete: QR = "PAL:<código do palete>" (formato NOVO, registrado na issue #862). itens = [{codigo, quantidade, unidade}].
+  function dadosPalete(r) {
+    const t = (v) => String(v == null ? '' : v).trim();
+    const itens = (r.itens || []).filter((i) => t(i.codigo));
+    const mostra = itens.slice(0, 6).map((i) => `${t(i.codigo)} x${t(i.quantidade) || '?'}`);
+    const resto = itens.length - mostra.length;
+    const codigo = t(r.codigo).toUpperCase();
+    return {
+      titulo: 'PALETE',
+      codigo,
+      origem: [t(r.embarque) && `Embarque ${t(r.embarque)}`, t(r.pi) && `P.I. ${t(r.pi)}`].filter(Boolean).join(' · '),
+      data_txt: t(r.data) ? `Chegada: ${t(r.data)}` : '',
+      itens_txt: mostra.join(' · ') + (resto > 0 ? ` · +${resto} item(ns)` : ''),
+      total_txt: `${itens.length} item(ns)`,
+      qr: `PAL:${codigo}`,
+      barras: codigo,
+    };
+  }
+  // ID-TAG do equipamento (elevador): QR = "EQP:<código>" (formato NOVO).
+  function dadosIdTag(r) {
+    const t = (v) => String(v == null ? '' : v).trim();
+    const codigo = t(r.codigo).toUpperCase();
+    return {
+      titulo: 'ID-TAG EQUIPAMENTO',
+      codigo,
+      cliente_txt: t(r.cliente),
+      obra_txt: [t(r.predio), [t(r.cidade), t(r.uf)].filter(Boolean).join('/')].filter(Boolean).join(' · '),
+      cotacao_txt: t(r.cotacao) ? `Cotação Nº ${t(r.cotacao)}` : '',
+      qr: `EQP:${codigo}`,
+      barras: codigo,
+    };
+  }
+  // OP do quadro de comando: QR = "OP:<número da OP>" (formato NOVO). O nº de série é exigido na Qualidade do MES.
+  function dadosOpQuadro(r) {
+    const t = (v) => String(v == null ? '' : v).trim();
+    const numero = t(r.numero);
+    return {
+      titulo: 'QUADRO DE COMANDO',
+      op_txt: `OP ${numero}`,
+      produto_txt: t(r.produto) || t(r.titulo),
+      cliente_txt: t(r.cliente) ? `Cliente: ${t(r.cliente)}` : '',
+      serie_txt: t(r.serie) ? `Nº de série: ${t(r.serie)}` : 'Nº de série: ____________',
+      data_txt: t(r.data),
+      qr: `OP:${numero}`,
+      barras: numero,
+    };
+  }
+  // Avaria: material retido. QR = código do item (contrato do tipo Item).
+  function dadosAvaria(r) {
+    const t = (v) => String(v == null ? '' : v).trim();
+    return {
+      titulo: 'AVARIA - RETIDO',
+      codigo: t(r.codigo),
+      descricao: t(r.descricao),
+      quantidade_txt: t(r.quantidade) ? `Qtd: ${t(r.quantidade)}${t(r.unidade) ? ' ' + t(r.unidade) : ''}` : '',
+      motivo_txt: t(r.motivo) ? `Motivo: ${t(r.motivo)}` : '',
+      quem_txt: [t(r.responsavel) && `Por: ${t(r.responsavel)}`, t(r.data)].filter(Boolean).join(' · '),
+      qr: t(r.codigo),
+      barras: t(r.codigo),
+    };
+  }
+
   /* ---------- Modelos padrão (layout em mm) ----------
      Elementos: caixa (borda) · linha · texto ({campo}, h = altura do texto, linhas) · qr (w = lado) · code128 (w × h). */
   const MODELOS = [
@@ -190,6 +253,70 @@
         { tipo: 'texto', campo: '{separador_txt}', x: 50, y: 50, w: 45, h: 4.5, linhas: 2 },
         { tipo: 'texto', campo: '{data_txt}', x: 50, y: 64, w: 45, h: 4.5 },
         { tipo: 'code128', campo: '{barras}', x: 5, y: 82, w: 90, h: 12 },
+      ],
+    },
+    {
+      id: 'PALETE_100x50', tipo: 'PALETE', nome: 'Palete — conteúdo e origem', largura_mm: 100, altura_mm: 50,
+      proposito: 'Identifica um palete inteiro: código, P.I./embarque e os itens com quantidade. Não baixa estoque nem escreve no Omie.',
+      campos: ['titulo', 'codigo', 'origem', 'data_txt', 'itens_txt', 'total_txt', 'qr', 'barras'],
+      elementos: [
+        { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.4 },
+        { tipo: 'qr', campo: '{qr}', x: 4, y: 4, w: 26 },
+        { tipo: 'texto', campo: '{titulo}', x: 34, y: 3, w: 40, h: 4.5 },
+        { tipo: 'texto', campo: '{total_txt}', x: 74, y: 3.5, w: 22, h: 4, alinhamento: 'dir' },
+        { tipo: 'texto', campo: '{codigo}', x: 34, y: 9, w: 62, h: 9 },
+        { tipo: 'texto', campo: '{origem}', x: 34, y: 20, w: 62, h: 4 },
+        { tipo: 'texto', campo: '{data_txt}', x: 34, y: 25, w: 62, h: 3.8 },
+        { tipo: 'texto', campo: '{itens_txt}', x: 4, y: 33, w: 92, h: 3.8, linhas: 3 },
+      ],
+    },
+    {
+      id: 'IDTAG_100x50', tipo: 'IDTAG_EQUIPAMENTO', nome: 'ID-TAG do equipamento', largura_mm: 100, altura_mm: 50,
+      proposito: 'Identifica cada elevador (ex.: VPEL-EL0985-1), o mesmo código das propostas e precificações.',
+      campos: ['titulo', 'codigo', 'cliente_txt', 'obra_txt', 'cotacao_txt', 'qr', 'barras'],
+      elementos: [
+        { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.4 },
+        { tipo: 'texto', campo: '{titulo}', x: 4, y: 3, w: 92, h: 4.5 },
+        { tipo: 'linha', x: 4, y: 9, w: 92, esp: 0.4 },
+        { tipo: 'qr', campo: '{qr}', x: 4, y: 12, w: 28 },
+        { tipo: 'texto', campo: '{codigo}', x: 36, y: 12, w: 60, h: 7 },
+        { tipo: 'texto', campo: '{cliente_txt}', x: 36, y: 22, w: 60, h: 4.5, linhas: 2 },
+        { tipo: 'texto', campo: '{obra_txt}', x: 36, y: 32, w: 60, h: 3.8 },
+        { tipo: 'texto', campo: '{cotacao_txt}', x: 36, y: 37, w: 60, h: 3.8 },
+        { tipo: 'code128', campo: '{barras}', x: 4, y: 42, w: 92, h: 5 },
+      ],
+    },
+    {
+      id: 'OP_QUADRO_100x50', tipo: 'OP_QUADRO', nome: 'OP do quadro — número de série', largura_mm: 100, altura_mm: 50,
+      proposito: 'Identifica a OP do PCP e o nº de série do quadro de comando (exigido na Qualidade do MES).',
+      campos: ['titulo', 'op_txt', 'produto_txt', 'cliente_txt', 'serie_txt', 'data_txt', 'qr', 'barras'],
+      elementos: [
+        { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.4 },
+        { tipo: 'texto', campo: '{titulo}', x: 4, y: 3, w: 70, h: 4.5 },
+        { tipo: 'texto', campo: '{data_txt}', x: 70, y: 3.5, w: 26, h: 4, alinhamento: 'dir' },
+        { tipo: 'linha', x: 4, y: 9, w: 92, esp: 0.4 },
+        { tipo: 'qr', campo: '{qr}', x: 4, y: 12, w: 28 },
+        { tipo: 'texto', campo: '{op_txt}', x: 36, y: 12, w: 60, h: 9 },
+        { tipo: 'texto', campo: '{produto_txt}', x: 36, y: 23, w: 60, h: 4.2, linhas: 2 },
+        { tipo: 'texto', campo: '{cliente_txt}', x: 36, y: 33, w: 60, h: 3.8 },
+        { tipo: 'texto', campo: '{serie_txt}', x: 36, y: 38.5, w: 60, h: 5 },
+        { tipo: 'code128', campo: '{barras}', x: 4, y: 43.5, w: 28, h: 4 },
+      ],
+    },
+    {
+      id: 'AVARIA_100x50', tipo: 'AVARIA', nome: 'Avaria — material retido', largura_mm: 100, altura_mm: 50,
+      proposito: 'Retém o que chegou danificado ou aguarda decisão. O QR leva o código do item.',
+      campos: ['titulo', 'codigo', 'descricao', 'quantidade_txt', 'motivo_txt', 'quem_txt', 'qr', 'barras'],
+      elementos: [
+        { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 1.2 },
+        { tipo: 'texto', campo: '{titulo}', x: 4, y: 3, w: 92, h: 6.5 },
+        { tipo: 'linha', x: 4, y: 11, w: 92, esp: 0.6 },
+        { tipo: 'qr', campo: '{qr}', x: 4, y: 14, w: 24 },
+        { tipo: 'texto', campo: '{codigo}', x: 32, y: 14, w: 64, h: 6 },
+        { tipo: 'texto', campo: '{descricao}', x: 32, y: 22, w: 64, h: 4, linhas: 2 },
+        { tipo: 'texto', campo: '{quantidade_txt}', x: 32, y: 31, w: 64, h: 4.5 },
+        { tipo: 'texto', campo: '{motivo_txt}', x: 4, y: 39, w: 92, h: 4, linhas: 2 },
+        { tipo: 'texto', campo: '{quem_txt}', x: 4, y: 45, w: 92, h: 3.2 },
       ],
     },
     {
@@ -380,6 +507,6 @@
   window.EtiquetasCalc = {
     DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
-    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderSVG, htmlImpressao,
+    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderSVG, htmlImpressao,
   };
 }());

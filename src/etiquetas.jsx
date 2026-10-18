@@ -56,6 +56,10 @@ const ETQ_TIPOS = [
   { id: 'ITEM', nome: 'Item', modelo: 'ITEM_100x50', desc: 'Produto: QR e Code 128 com o código' },
   { id: 'RECEBIMENTO', nome: 'Recebimento', modelo: 'RECEBIMENTO_100x50', desc: 'Carga que chegou: P.I., fornecedor, item e quantidade' },
   { id: 'SEPARACAO', nome: 'Separação', modelo: 'SEPARACAO_100x100', desc: 'Volume n/N de um pedido de venda (rolo 100 × 100)' },
+  { id: 'PALETE', nome: 'Palete', modelo: 'PALETE_100x50', desc: 'Palete inteiro: código, P.I. e itens com quantidade' },
+  { id: 'IDTAG_EQUIPAMENTO', nome: 'ID-TAG', modelo: 'IDTAG_100x50', desc: 'Identifica cada elevador (VPEL-EL0985-1…)' },
+  { id: 'OP_QUADRO', nome: 'OP / série do quadro', modelo: 'OP_QUADRO_100x50', desc: 'OP do PCP e nº de série do quadro de comando' },
+  { id: 'AVARIA', nome: 'Avaria', modelo: 'AVARIA_100x50', desc: 'Material danificado, retido' },
 ];
 const etqHoje = () => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 const ETQ_ROLOS = ['100x50', '100x100'];
@@ -228,10 +232,41 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     const t = setTimeout(() => { S.listarPedidos(qPed).then(setPeds); }, 300);
     return () => clearTimeout(t);
   }, [tipo, qPed]);
+  /* Palete: reaproveita a escolha da P.I. e dos itens do Recebimento */
+  const [palCod, setPalCod] = React.useState('');
+  const palCodigo = (palCod.trim() || (piSel ? `PAL-${piSel.numero_pi}-1` : '')).toUpperCase();
+  const palDados = () => C.dadosPalete({ codigo: palCodigo, pi: piSel.numero_pi, embarque: piSel.embarque, data: etqHoje(), itens: itensPi.filter((i) => recSel.has(i.codigo_produto)).map((i) => ({ codigo: i.codigo_produto, quantidade: recQtd[i.codigo_produto], unidade: i.unidade })) });
+  /* ID-TAG */
+  const [qCot, setQCot] = React.useState('');
+  const [obraTag, setObraTag] = React.useState({ obra: null, erro: null, buscou: false });
+  const [tagSel, setTagSel] = React.useState(() => new Set());
+  const buscarTag = async () => { const r = await S.buscarEquipamentos(qCot.trim()); setObraTag({ ...r, buscou: true }); setTagSel(new Set(r.obra ? r.obra.equipamentos : [])); };
+  const tagDados = (cod) => C.dadosIdTag({ codigo: cod, cliente: obraTag.obra.clienteNome, predio: obraTag.obra.predio, cidade: obraTag.obra.cidade, uf: obraTag.obra.uf, cotacao: obraTag.obra.numeroCotacao });
+  /* OP / série do quadro */
+  const [qOp, setQOp] = React.useState('');
+  const [ops, setOps] = React.useState({ ops: [], erro: null });
+  const [opSel, setOpSel] = React.useState(null);
+  const [opSerie, setOpSerie] = React.useState('');
+  React.useEffect(() => {
+    if (tipo !== 'OP_QUADRO') return undefined;
+    const t = setTimeout(() => { S.listarOPsQuadro(qOp).then(setOps); }, 300);
+    return () => clearTimeout(t);
+  }, [tipo, qOp]);
+  const opDados = () => C.dadosOpQuadro({ numero: opSel.numero, produto: opSel.produto, titulo: opSel.titulo, cliente: opSel.cliente, serie: opSerie, data: etqHoje() });
+  /* Avaria */
+  const [avQtd, setAvQtd] = React.useState('');
+  const [avMotivo, setAvMotivo] = React.useState('');
+  const avItem = Array.from(selItem.values())[0] || null;
+  const avDados = () => C.dadosAvaria({ codigo: avItem.codigo, descricao: avItem.descricao, quantidade: avQtd, unidade: avItem.unidade, motivo: avMotivo, responsavel: (window.__VP_USER && (window.__VP_USER.name || window.__VP_USER.email || '')).split('@')[0], data: etqHoje() });
+
   const sepN = Math.max(1, Math.min(99, Math.floor(Number(sepTotal) || 1)));
   const sepDados = (v) => C.dadosSeparacao({ pedido: pedSel.numero_pedido, volume: v, total_volumes: sepN, cliente: pedSel.cliente_nome, separador: sepPor, data: etqHoje() });
 
   const linhasParaImprimir = () => {
+    if (tipo === 'PALETE') return [{ ref: palCodigo, dados: palDados(), copias }];
+    if (tipo === 'IDTAG_EQUIPAMENTO') return obraTag.obra.equipamentos.filter((c) => tagSel.has(c)).map((c) => ({ ref: c, dados: tagDados(c), copias }));
+    if (tipo === 'OP_QUADRO') return [{ ref: opSel.numero, dados: opDados(), copias }];
+    if (tipo === 'AVARIA') return [{ ref: avItem.codigo, dados: avDados(), copias }];
     if (tipo === 'RECEBIMENTO') return itensPi.filter((i) => recSel.has(i.codigo_produto)).map((i) => ({ ref: i.codigo_produto, dados: recDados(i), copias }));
     if (tipo === 'SEPARACAO') {
       const ini = Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1)));
@@ -243,12 +278,16 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     }
     return Array.from(selItem.values()).map((p) => ({ ref: p.codigo, dados: C.dadosItem(p), copias }));
   };
-  const nSel = tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
+  const nSel = tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
   const primeiraRef = tipo === 'ENDERECO'
     ? (Array.from(selEnd)[0] || (filtrados[0] && filtrados[0].codigo))
     : (Array.from(selItem.keys())[0] || (achados.itens[0] && achados.itens[0].codigo));
   const dadosPrevia = React.useMemo(() => {
     try {
+      if (tipo === 'PALETE') return piSel && recSel.size && palCodigo ? palDados() : null;
+      if (tipo === 'IDTAG_EQUIPAMENTO') { const c = obraTag.obra && (obraTag.obra.equipamentos.find((x) => tagSel.has(x)) || obraTag.obra.equipamentos[0]); return c ? tagDados(c) : null; }
+      if (tipo === 'OP_QUADRO') return opSel ? opDados() : null;
+      if (tipo === 'AVARIA') return avItem ? avDados() : null;
       if (tipo === 'RECEBIMENTO') { const i = itensPi.find((x) => recSel.has(x.codigo_produto)) || itensPi[0]; return piSel && i ? recDados(i) : null; }
       if (tipo === 'SEPARACAO') return pedSel ? sepDados(Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1)))) : null;
       if (!primeiraRef) return null;
@@ -256,7 +295,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
       const p = selItem.get(primeiraRef) || achados.itens.find((x) => x.codigo === primeiraRef);
       return p ? C.dadosItem(p) : null;
     } catch (e) { return null; }
-  }, [tipo, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor]);
+  }, [tipo, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor, palCod, obraTag, tagSel, opSel, opSerie, avQtd, avMotivo]);
 
   const copiasValidas = Math.max(1, Math.min(50, Math.floor(Number(copias) || 1)));
   const totalEtiquetas = nSel * copiasValidas;
@@ -268,12 +307,80 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
         {ETQ_TIPOS.map((t) => (
           <button key={t.id} className={'btn btn--sm' + (tipo === t.id ? ' btn--primary' : '')} onClick={() => setTipo(t.id)} title={t.desc}>{t.nome}</button>
         ))}
-        <span style={{ fontSize: 12, color: 'var(--fg3)', alignSelf: 'center' }}>Palete, ID-TAG, OP e avaria entram nas próximas fases.</span>
+        <span style={{ fontSize: 12, color: 'var(--fg3)', alignSelf: 'center' }}>Os tipos novos de QR (PED, PAL, EQP, OP) estão registrados na issue #862.</span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(300px, 1fr)', gap: 16, alignItems: 'start' }}>
         <div>
-          {tipo === 'RECEBIMENTO' ? (
+          {tipo === 'IDTAG_EQUIPAMENTO' ? (
+            <>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                <input className="input" placeholder="Nº da cotação (ex.: 985)" value={qCot} onChange={(e) => setQCot(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') buscarTag(); }} style={{ width: 200 }}/>
+                <button className="btn btn--sm" onClick={buscarTag} disabled={!(Number(qCot) > 0)}>Buscar equipamentos</button>
+              </div>
+              {obraTag.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>{obraTag.erro}</div> : null}
+              {obraTag.buscou && !obraTag.obra && !obraTag.erro ? <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Nenhuma cotação com esse número.</div> : null}
+              {obraTag.obra ? (
+                <>
+                  <div style={{ fontSize: 12, marginBottom: 6 }}><b style={{ fontWeight: 600 }}>{obraTag.obra.clienteNome || '—'}</b> · {obraTag.obra.predio || '—'} · {obraTag.obra.cidade}/{obraTag.obra.uf}</div>
+                  <div className="card table-wrap" style={{ maxHeight: 280, overflow: 'auto' }}>
+                    <table className="t pcp-grid">
+                      <thead><tr><th style={{ width: 34 }}><input type="checkbox" aria-label="Marcar todos" checked={obraTag.obra.equipamentos.length > 0 && obraTag.obra.equipamentos.every((c) => tagSel.has(c))} onChange={(e) => setTagSel(e.target.checked ? new Set(obraTag.obra.equipamentos) : new Set())}/></th><th>Equipamento</th></tr></thead>
+                      <tbody>
+                        {obraTag.obra.equipamentos.map((c) => (
+                          <tr key={c}><td><input type="checkbox" checked={tagSel.has(c)} onChange={() => setTagSel((s) => { const n = new Set(s); n.has(c) ? n.delete(c) : n.add(c); return n; })}/></td><td><b style={{ fontWeight: 600 }}>{c}</b></td></tr>
+                        ))}
+                        {!obraTag.obra.equipamentos.length ? <tr><td colSpan={2} style={{ color: 'var(--fg3)' }}>Esta cotação ainda não tem equipamentos com código (Proposta/Precificação).</td></tr> : null}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </>
+          ) : tipo === 'OP_QUADRO' ? (
+            <>
+              <input className="input" placeholder="Buscar OP por número, produto ou cliente…" value={qOp} onChange={(e) => setQOp(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
+              {ops.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>Não consegui buscar: {ops.erro}</div> : null}
+              <div className="card table-wrap" style={{ maxHeight: 240, overflow: 'auto', marginBottom: 10 }}>
+                <table className="t pcp-grid">
+                  <thead><tr><th>OP</th><th>Produto</th><th>Cliente</th><th>Série (MES)</th></tr></thead>
+                  <tbody>
+                    {ops.ops.map((o) => (
+                      <tr key={o.id} onClick={() => { setOpSel(o); setOpSerie(o.serie || ''); }} style={{ cursor: 'pointer', background: opSel && opSel.id === o.id ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
+                        <td><b style={{ fontWeight: 600 }}>{o.numero}</b></td><td>{o.produto || o.titulo || '—'}</td><td>{o.cliente || '—'}</td><td>{o.serie || '—'}</td>
+                      </tr>
+                    ))}
+                    {!ops.ops.length ? <tr><td colSpan={4} style={{ color: 'var(--fg3)' }}>Nenhuma OP de quadro encontrada.</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+              {opSel ? <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>Nº de série <input className="input" value={opSerie} onChange={(e) => setOpSerie(e.target.value)} style={{ width: 220 }}/><span style={{ color: 'var(--fg3) ' }}>Em branco imprime a linha para escrever à mão. Se a OP já tem série no MES, ela vem preenchida.</span></label> : null}
+            </>
+          ) : tipo === 'AVARIA' ? (
+            <>
+              <input className="input" placeholder="Buscar produto por código ou descrição (mín. 2 letras)…" value={qItem} onChange={(e) => setQItem(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
+              <div className="card table-wrap" style={{ maxHeight: 200, overflow: 'auto', marginBottom: 10 }}>
+                <table className="t pcp-grid">
+                  <thead><tr><th>Código</th><th>Descrição</th><th>Un.</th></tr></thead>
+                  <tbody>
+                    {achados.itens.map((p) => (
+                      <tr key={p.codigo} onClick={() => setSelItem(new Map([[p.codigo, p]]))} style={{ cursor: 'pointer', background: selItem.has(p.codigo) ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
+                        <td><b style={{ fontWeight: 600 }}>{p.codigo}</b></td><td>{p.descricao}</td><td>{p.unidade}</td>
+                      </tr>
+                    ))}
+                    {!achados.itens.length ? <tr><td colSpan={3} style={{ color: 'var(--fg3)' }}>{qItem.trim().length < 2 ? 'Digite para buscar.' : 'Nenhum produto ativo encontrado.'}</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+              {avItem ? (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Quantidade avariada<input className="input" type="number" min="0" value={avQtd} onChange={(e) => setAvQtd(e.target.value)} style={{ width: 120 }}/></label>
+                  <label style={{ fontSize: 12, display: 'grid', gap: 3, flex: 1, minWidth: 240 }}>Motivo (obrigatório)<input className="input" value={avMotivo} onChange={(e) => setAvMotivo(e.target.value)} placeholder="ex.: caixa amassada, peça trincada"/></label>
+                </div>
+              ) : <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Escolha o produto, informe a quantidade e o motivo.</div>}
+            </>
+          ) : null}
+          {tipo === 'RECEBIMENTO' || tipo === 'PALETE' ? (
             <>
               <input className="input" placeholder="Buscar P.I. por número ou fornecedor…" value={qPi} onChange={(e) => setQPi(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
               {pis.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>Não consegui buscar: {pis.erro}</div> : null}
@@ -292,9 +399,16 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
               </div>
               {piSel ? (
                 <>
-                  <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>NF de entrada (opcional)
-                    <input className="input" value={recNf} onChange={(e) => setRecNf(e.target.value)} style={{ width: 160 }}/>
-                  </label>
+                  {tipo === 'RECEBIMENTO' ? (
+                    <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>NF de entrada (opcional)
+                      <input className="input" value={recNf} onChange={(e) => setRecNf(e.target.value)} style={{ width: 160 }}/>
+                    </label>
+                  ) : (
+                    <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>Código do palete
+                      <input className="input" value={palCod} placeholder={`PAL-${piSel.numero_pi}-1`} onChange={(e) => setPalCod(e.target.value)} style={{ width: 220 }}/>
+                      <span style={{ color: 'var(--fg3)' }}>1 etiqueta com os itens marcados. Mais de 6 itens: os demais saem como "+N".</span>
+                    </label>
+                  )}
                   <div className="card table-wrap" style={{ maxHeight: 260, overflow: 'auto' }}>
                     <table className="t pcp-grid">
                       <thead><tr><th style={{ width: 34 }}><input type="checkbox" aria-label="Marcar todos os itens" checked={itensPi.length > 0 && itensPi.every((i) => recSel.has(i.codigo_produto))} onChange={(e) => setRecSel(e.target.checked ? new Set(itensPi.map((i) => i.codigo_produto)) : new Set())}/></th><th>Código</th><th>Descrição</th><th>Qtd. recebida</th></tr></thead>
@@ -436,6 +550,10 @@ function EtqModelos() {
   const exemplo = (m) => (m.tipo === 'ENDERECO' ? C.dadosEndereco('R2A4', { dv: true })
     : m.tipo === 'RECEBIMENTO' ? C.dadosRecebimento({ data: '17/10/2026', embarque: '146', pi: 'SCVP260522-2', fornecedor: 'Ningbo Senchen', codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', quantidade: 40, unidade: 'UN', nf: '11082199' })
     : m.tipo === 'SEPARACAO' ? C.dadosSeparacao({ pedido: '30570', volume: 2, total_volumes: 5, cliente: 'AKAI KB MAGAZINE', separador: 'Tiago', data: '17/10/2026 14:32' })
+    : m.tipo === 'PALETE' ? C.dadosPalete({ codigo: 'PAL-SCVP260522-1', pi: 'SCVP260522-2', embarque: '146', data: '17/10/2026', itens: [{ codigo: 'VPEL-156', quantidade: 40 }, { codigo: 'VPEL-157', quantidade: 12 }] })
+    : m.tipo === 'IDTAG_EQUIPAMENTO' ? C.dadosIdTag({ codigo: 'VPEL-EL0985-1', cliente: 'AKAI KB MAGAZINE', predio: 'Loja em Shopping', cidade: 'Praia Grande', uf: 'SP', cotacao: 985 })
+    : m.tipo === 'OP_QUADRO' ? C.dadosOpQuadro({ numero: 'OP-0001', produto: 'VPEL-709b Quadro 30 kW 380 V', cliente: 'VITALTEC', serie: 'QC-2610-0007', data: '17/10/2026' })
+    : m.tipo === 'AVARIA' ? C.dadosAvaria({ codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', quantidade: 2, unidade: 'UN', motivo: 'caixa amassada', responsavel: 'tiago', data: '17/10/2026' })
     : m.tipo === 'ITEM' ? C.dadosItem({ codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', unidade: 'UN', familia: 'VPEL', endereco: 'R2A4' }) : C.DADOS_TESTE);
   return (
     <div>
