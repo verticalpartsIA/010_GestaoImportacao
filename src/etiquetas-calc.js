@@ -338,8 +338,43 @@
     },
   ];
   const DADOS_TESTE = { qr: 'END:R2A4', barras: 'VPEL-156' };
-  const modeloPorId = (id) => MODELOS.find((m) => m.id === id) || null;
-  const modelosDoTipo = (tipo) => MODELOS.filter((m) => m.tipo === tipo);
+  /* Modelos da empresa (cópias editadas, tabela etiqueta_modelos). Ficam num registro à parte: o padrão nunca é alterado.
+     id do modelo da empresa = "C:<uuid>" (o histórico guarda esse id, então dá para reimprimir). */
+  let CUSTOM = [];
+  function registrarModelos(linhas) {
+    CUSTOM = (linhas || []).map((l) => ({
+      id: 'C:' + l.id, tipo: l.tipo, nome: l.nome, largura_mm: Number(l.largura_mm), altura_mm: Number(l.altura_mm),
+      proposito: 'Modelo da empresa (cópia de ' + l.base_id + ').', campos: l.campos || [], elementos: l.elementos || [],
+      empresa: true, ativo: l.ativo !== false, base_id: l.base_id, uuid: l.id,
+    }));
+  }
+  const modeloPorId = (id) => MODELOS.find((m) => m.id === id) || CUSTOM.find((m) => m.id === id) || null;
+  const modelosDoTipo = (tipo) => MODELOS.filter((m) => m.tipo === tipo).concat(CUSTOM.filter((m) => m.tipo === tipo && m.ativo));
+  const modelosDaEmpresa = () => CUSTOM.slice();
+
+  /* Valida um modelo editado contra o padrão de origem. Devolve lista de erros (vazia = pode salvar).
+     Regras: tudo dentro da página; só campos do dicionário do tipo; os elementos "protegidos" do padrão (QR e Code 128) não
+     podem ser apagados nem trocar de campo (o app de estoque depende do conteúdo deles). */
+  function validarModelo(modelo, padrao) {
+    const erros = [];
+    const W = Number(modelo.largura_mm), H = Number(modelo.altura_mm);
+    const campos = new Set(padrao.campos || []);
+    (modelo.elementos || []).forEach((el, i) => {
+      const nome = `Elemento ${i + 1}`;
+      const nums = ['x', 'y', 'w'].concat(el.tipo === 'linha' || el.tipo === 'qr' ? [] : ['h']);
+      for (const k of nums) if (!(Number(el[k]) >= 0) || el[k] === '' || el[k] == null) erros.push(`${nome}: "${k}" inválido.`);
+      const h = el.tipo === 'qr' ? Number(el.w) : el.tipo === 'linha' ? Number(el.esp || 0.4) : Number(el.h);
+      if (Number(el.x) + Number(el.w) > W + 0.01 || Number(el.y) + h > H + 0.01) erros.push(`${nome} sai da etiqueta (${W} × ${H} mm).`);
+      if (el.tipo === 'texto' && !(Number(el.h) >= 2)) erros.push(`${nome}: altura do texto mínima de 2 mm.`);
+      if (el.tipo === 'qr' && Number(el.w) < 12) erros.push(`${nome}: QR muito pequeno (mínimo 12 mm para leitura).`);
+      if (el.tipo === 'code128' && Number(el.h) < 4) erros.push(`${nome}: código de barras muito baixo (mínimo 4 mm).`);
+      for (const c of (String(el.campo || '').match(/\{(\w+)\}/g) || [])) if (!campos.has(c.slice(1, -1))) erros.push(`${nome}: campo ${c} não existe neste tipo.`);
+    });
+    for (const orig of padrao.elementos.filter((e) => e.tipo === 'qr' || e.tipo === 'code128')) {
+      if (!(modelo.elementos || []).some((e) => e.tipo === orig.tipo && e.campo === orig.campo)) erros.push(`O ${orig.tipo === 'qr' ? 'QR Code' : 'código de barras'} (${orig.campo}) é obrigatório neste tipo e não pode ser apagado.`);
+    }
+    return erros;
+  }
 
   // "{campo}" -> valor de dados (vazio se não existir)
   function aplicar(modelo, dados) {
@@ -505,7 +540,7 @@
   }
 
   window.EtiquetasCalc = {
-    DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo,
+    DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo, registrarModelos, modelosDaEmpresa, validarModelo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
     dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderSVG, htmlImpressao,
   };

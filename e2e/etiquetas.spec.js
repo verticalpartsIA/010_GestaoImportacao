@@ -173,4 +173,46 @@ test.describe('Etiquetas', () => {
     await page.getByRole('button', { name: 'Separação', exact: true }).last().click();
     await expect(page.getByPlaceholder('Buscar pedido por número ou cliente…')).toBeVisible();
   });
+
+  test('editor de modelo da empresa: abre pela URL, protege o QR, valida e salva', async ({ page }) => {
+    await page.addInitScript(() => {
+      let valor;
+      Object.defineProperty(window, 'EtiquetasStore', {
+        configurable: true,
+        get() { return valor; },
+        set(v) {
+          v.temCapacidade = async () => true;
+          v.listarModelos = async () => {
+            const base = window.EtiquetasCalc.modeloPorId('ITEM_100x50');
+            return { erro: null, modelos: [{ id: 'u1', tipo: 'ITEM', nome: 'Item da casa', base_id: 'ITEM_100x50', largura_mm: 100, altura_mm: 50, campos: base.campos, elementos: JSON.parse(JSON.stringify(base.elementos)), ativo: true }] };
+          };
+          window.__salvos = [];
+          v.salvarModelo = async (id, patch) => { window.__salvos.push({ id, patch }); return { ok: true }; };
+          valor = v;
+        },
+      });
+    });
+    await page.goto('/logistica/etiquetas/modelos/u1');
+    await expect(page.getByRole('button', { name: '← Modelos' })).toBeVisible({ timeout: 60_000 });
+    await expect(page.getByLabel('Nome do modelo')).toHaveValue('Item da casa');
+    await expect(page.getByText('✓ Modelo válido.')).toBeVisible();
+    // o QR é obrigatório: o botão Apagar da linha dele fica desabilitado
+    const linhaQr = page.locator('tr', { hasText: '2. QR' });
+    await expect(linhaQr.getByRole('button', { name: 'Apagar' })).toBeDisabled();
+    // tirar o elemento do papel invalida e bloqueia o salvamento
+    await page.locator('tr', { hasText: '3. Texto {codigo}' }).locator('td').first().click();
+    await page.locator('label', { hasText: /^x/ }).locator('input').fill('120');
+    await expect(page.getByText(/sai da etiqueta/)).toBeVisible();
+    await page.getByRole('button', { name: 'Salvar modelo' }).click();
+    await expect(page.getByText(/Corrija antes de salvar/)).toBeVisible();
+    expect(await page.evaluate(() => window.__salvos.length)).toBe(0);
+    // volta para uma posição válida e salva
+    await page.locator('label', { hasText: /^x/ }).locator('input').fill('36');
+    await expect(page.getByText('✓ Modelo válido.')).toBeVisible();
+    await page.getByRole('button', { name: 'Salvar modelo' }).click();
+    await expect.poll(() => page.evaluate(() => window.__salvos.length)).toBe(1);
+    const salvo = await page.evaluate(() => window.__salvos[0]);
+    expect(salvo.id).toBe('u1');
+    expect(salvo.patch.elementos.find((e) => e.campo === '{codigo}').x).toBe(36);
+  });
 });

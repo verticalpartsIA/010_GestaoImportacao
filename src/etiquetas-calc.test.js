@@ -215,3 +215,23 @@ test('fase 4: palete, ID-TAG, OP do quadro e avaria — dados e QR', () => {
     const z = E.renderZPL(m, dados, { dpi: 203 }); assert.match(z.zpl, /\^XA[\s\S]*\^XZ/);
   }
 });
+
+test('fase 3: modelos da empresa — registro, validação e campos protegidos', () => {
+  const base = E.modeloPorId('ITEM_100x50');
+  const copia = () => ({ ...JSON.parse(JSON.stringify(base)), id: 'x', tipo: 'ITEM' });
+  assert.deepEqual(E.validarModelo(copia(), base), []);
+  const semQr = copia(); semQr.elementos = semQr.elementos.filter((e) => e.tipo !== 'qr');
+  assert.ok(E.validarModelo(semQr, base).some((m) => /QR Code/.test(m)));
+  const fora = copia(); fora.elementos[1].x = 90; fora.elementos[1].w = 30;
+  assert.ok(E.validarModelo(fora, base).some((m) => /sai da etiqueta/.test(m)));
+  const campo = copia(); campo.elementos.push({ tipo: 'texto', campo: '{inexistente}', x: 5, y: 5, w: 20, h: 4 });
+  assert.ok(E.validarModelo(campo, base).some((m) => /não existe neste tipo/.test(m)));
+  const pequeno = copia(); pequeno.elementos.find((e) => e.tipo === 'qr').w = 8;
+  assert.ok(E.validarModelo(pequeno, base).some((m) => /QR muito pequeno/.test(m)));
+  E.registrarModelos([{ id: 'u1', tipo: 'ITEM', nome: 'Item da casa', base_id: 'ITEM_100x50', largura_mm: 100, altura_mm: 50, campos: base.campos, elementos: base.elementos, ativo: true }, { id: 'u2', tipo: 'ITEM', nome: 'Inativo', base_id: 'ITEM_100x50', largura_mm: 100, altura_mm: 50, campos: [], elementos: [], ativo: false }]);
+  assert.equal(E.modeloPorId('C:u1').nome, 'Item da casa');
+  assert.equal(E.modelosDoTipo('ITEM').length, 2);   // padrão + 1 ativo (o inativo não aparece)
+  assert.equal(E.modelosDaEmpresa().length, 2);
+  E.registrarModelos([]);
+  assert.equal(E.modeloPorId('C:u1'), null);
+});

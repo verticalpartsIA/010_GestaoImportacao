@@ -107,6 +107,52 @@
     } catch (e) { return { obra: null, erro: e.message }; }
   }
 
+  /* ---------- Modelos da empresa (etiqueta_modelos) ---------- */
+  async function listarModelos() {
+    const sb = sbCli();
+    if (!sb) return { modelos: [], erro: 'Supabase indisponível.' };
+    try {
+      const { data, error } = await sb.from('etiqueta_modelos').select('*').order('tipo').order('nome');
+      if (error) return { modelos: [], erro: error.message };
+      return { modelos: data || [], erro: null };
+    } catch (e) { return { modelos: [], erro: e.message }; }
+  }
+  // Copia um modelo padrão (ou da empresa) com nome novo. Devolve { ok, modelo|erro }.
+  async function copiarModelo(base, nome) {
+    const sb = sbCli();
+    if (!sb) return { ok: false, erro: 'Supabase indisponível.' };
+    const linha = { tipo: base.tipo, nome: String(nome || '').trim(), base_id: base.base_id || base.id, largura_mm: base.largura_mm, altura_mm: base.altura_mm,
+      campos: base.campos, elementos: JSON.parse(JSON.stringify(base.elementos)) };
+    try {
+      const { data, error } = await sb.from('etiqueta_modelos').insert(linha).select().single();
+      if (error) return { ok: false, erro: /duplicate|unique/i.test(error.message) ? 'Já existe um modelo com esse nome neste tipo.' : error.message };
+      try { window.VPLog?.registrar?.({ modulo: 'Etiquetas', acao: 'Copiou modelo de etiqueta', alvo: base.tipo, alvo_id: data.id, detalhe: { nome: linha.nome, base: linha.base_id } }); } catch (e) { /* log é complemento */ }
+      return { ok: true, modelo: data };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  }
+  async function salvarModelo(id, patch) {
+    const sb = sbCli();
+    if (!sb) return { ok: false, erro: 'Supabase indisponível.' };
+    try {
+      const { data, error } = await sb.from('etiqueta_modelos').update(patch).eq('id', id).select('id');
+      if (error) return { ok: false, erro: /duplicate|unique/i.test(error.message) ? 'Já existe um modelo com esse nome neste tipo.' : error.message };
+      if (!data || !data.length) return { ok: false, erro: 'Nada foi alterado (sem permissão ou modelo apagado).' };
+      try { window.VPLog?.registrar?.({ modulo: 'Etiquetas', acao: 'Alterou modelo de etiqueta', alvo: 'MODELO', alvo_id: id, detalhe: { campos: Object.keys(patch) } }); } catch (e) { /* idem */ }
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  }
+  async function excluirModelo(id) {
+    const sb = sbCli();
+    if (!sb) return { ok: false, erro: 'Supabase indisponível.' };
+    try {
+      const { data, error } = await sb.from('etiqueta_modelos').delete().eq('id', id).select('id');
+      if (error) return { ok: false, erro: error.message };
+      if (!data || !data.length) return { ok: false, erro: 'Nada foi apagado (sem permissão ou já apagado).' };
+      try { window.VPLog?.registrar?.({ modulo: 'Etiquetas', acao: 'Apagou modelo de etiqueta', alvo: 'MODELO', alvo_id: id }); } catch (e) { /* idem */ }
+      return { ok: true };
+    } catch (e) { return { ok: false, erro: e.message }; }
+  }
+
   /* reg: { tipo, modelo, referencia, dados:{itens:[{ref,dados,copias}],…}, quantidade, impressora, adaptador, sucesso, erro, reimpressao, motivo } */
   async function registrarImpressao(reg) {
     const sb = sbCli();
@@ -139,5 +185,5 @@
     } catch (e) { return { linhas: [], erro: e.message }; }
   }
 
-  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarOPsQuadro, buscarEquipamentos, registrarImpressao, listarHistorico };
+  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
 }());
