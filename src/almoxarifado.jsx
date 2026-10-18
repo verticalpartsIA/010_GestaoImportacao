@@ -1143,20 +1143,21 @@ function AlmoxarifadoCustos() {
 }
 
 function AlmoxarifadoPage() {
-  const [aba, setAba] = window.useRouteTab('almoxarifado', 'estoque', ['estoque', 'estrutura', 'custos', 'reposicao', 'necessidade', 'pedidos'], false, true);
+  const [aba, setAba] = window.useRouteTab('almoxarifado', 'estoque', ['estoque', 'estrutura', 'custos', 'reposicao', 'necessidade', 'ajustes', 'pedidos'], false, true);
 
   const emEstoque = aba === 'estoque';
   const emEstrutura = aba === 'estrutura';
   const emCustos = aba === 'custos';
   const emReposicao = aba === 'reposicao';
   const emNecessidade = aba === 'necessidade';
+  const emAjustes = aba === 'ajustes';
 
   const cabecalho = (
     <>
       <div className="page-head">
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Almoxarifado</div>
-          <h1 className="page-head__title">{emEstoque ? 'Estoque' : emEstrutura ? 'Estrutura dos produtos' : emCustos ? 'Custos' : emReposicao ? 'Reposição' : emNecessidade ? 'Necessidade de materiais' : 'Pedidos de compra'}</h1>
+          <h1 className="page-head__title">{emEstoque ? 'Estoque' : emEstrutura ? 'Estrutura dos produtos' : emCustos ? 'Custos' : emReposicao ? 'Reposição' : emNecessidade ? 'Necessidade de materiais' : emAjustes ? 'Ajustes de estoque' : 'Pedidos de compra'}</h1>
           <p className="page-head__sub">{emEstoque
             ? 'Estoque do PCP — cabos de aço, cabos de manobra, corrimãos e componentes dos Quadros de Comando.'
             : emEstrutura
@@ -1167,7 +1168,9 @@ function AlmoxarifadoPage() {
                   ? 'O que comprar e quando: consumo médio real × prazo de chegada (importado ≈ 90 dias), não estoque mínimo.'
                   : emNecessidade
                     ? 'O que falta de material para atender os pedidos já vendidos (carteira) e até quando comprar.'
-                    : 'Compras em andamento no Omie, requisições enviadas pelo PCP e pedidos internos de varejo (com aprovação do Chefe de Logística).'}</p>
+                    : emAjustes
+                      ? 'Ajustes gerados pelas contagens: confirme ou descarte, item a item. Nada é enviado ao Omie nesta etapa.'
+                      : 'Compras em andamento no Omie, requisições enviadas pelo PCP e pedidos internos de varejo (com aprovação do Chefe de Logística).'}</p>
         </div>
       </div>
       <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
@@ -1176,6 +1179,7 @@ function AlmoxarifadoPage() {
         <Button variant={emCustos ? 'primary' : 'ghost'} onClick={() => setAba('custos')}>Custos</Button>
         <Button variant={emReposicao ? 'primary' : 'ghost'} onClick={() => setAba('reposicao')}>Reposição</Button>
         <Button variant={emNecessidade ? 'primary' : 'ghost'} onClick={() => setAba('necessidade')}>Necessidade</Button>
+        <Button variant={emAjustes ? 'primary' : 'ghost'} onClick={() => setAba('ajustes')}>Ajustes</Button>
         <Button variant={aba === 'pedidos' ? 'primary' : 'ghost'} onClick={() => setAba('pedidos')}>Pedidos de compra</Button>
       </div>
     </>
@@ -1186,6 +1190,7 @@ function AlmoxarifadoPage() {
   if (emCustos) return <div className="page fade-in">{cabecalho}<AlmoxarifadoCustos/></div>;
   if (emReposicao) return <div className="page fade-in">{cabecalho}<AlmoxarifadoReposicao/></div>;
   if (emNecessidade) return <div className="page fade-in">{cabecalho}<AlmoxarifadoNecessidade/></div>;
+  if (emAjustes) return <div className="page fade-in">{cabecalho}<AlmoxarifadoAjustes/></div>;
   return <div className="page fade-in">{cabecalho}<AlmoxarifadoPedidos/></div>;
 }
 
