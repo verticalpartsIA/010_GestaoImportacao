@@ -1488,7 +1488,7 @@ function PCPPage({ setRoute, setSubsel }) {
   const ctx = dados && {
     sb, dados, podeCriar, podeEditar, nav, pais: Object.keys(dados.filhos).sort(), abrirOp,
     opId: aba === 'ordens' ? (opId || null) : null, setOpId: (id) => setOpId(id || null),
-    irParaItem: (codigo) => window.pcpIrPara?.(nav, dados.prods[codigo]?.tipo_sped === '01' ? 'cadastro-materias-primas' : 'cadastro-produtos', 'vp_pcp_busca', codigo),
+    irParaItem: (codigo) => window.pcpIrPara?.(nav, window.pcpEhMateriaPrima(codigo) ? 'cadastro-materias-primas' : 'cadastro-produtos', 'vp_pcp_busca', codigo),
   };
 
   return (

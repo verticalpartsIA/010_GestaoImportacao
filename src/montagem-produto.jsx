@@ -140,7 +140,7 @@ function MontagemProdutoPage({ setRoute, setSubsel }) {
 
   const custoTotal = dados && pai ? mpCustoUnit(pai, dados.filhos, dados.prods) : null;
   const irParaItem = (codigo) => {
-    const mp = dados.prods[codigo]?.tipo_sped === '01';
+    const mp = window.pcpEhMateriaPrima(codigo);
     window.pcpIrPara?.({ setRoute, setSubsel }, mp ? 'cadastro-materias-primas' : 'cadastro-produtos', 'vp_pcp_busca', codigo);
   };
   const ctx = dados && { filhos: dados.filhos, prods: dados.prods, abertos: new Set([...abertos, '/' + pai]), alternar, verCusto, podeEditar, editarQtd, remover, irParaItem };

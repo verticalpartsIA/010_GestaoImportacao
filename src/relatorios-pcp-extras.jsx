@@ -155,7 +155,7 @@ function RPEstoque({ ctx }) {
 
   if (erro) return <div style={{ padding: 16, color: 'var(--vp-danger)' }}>Não foi possível carregar: {erro}</div>;
   if (!d) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
-  const doGrupo = d.linhas.filter(l => grupo === 'mp' ? l.p.tipo_sped === '01' : l.p.tipo_sped !== '01');
+  const doGrupo = d.linhas.filter(l => grupo === 'mp' ? window.pcpEhMateriaPrima(l.codigo) : !window.pcpEhMateriaPrima(l.codigo));
   const conta = (...s) => doGrupo.filter(l => s.includes(l.status)).length;
   const q = busca.trim().toLowerCase();
   const visiveis = doGrupo.filter(l => (!filtro || (filtro === 'giro' ? ['sem_giro', 'sem_historico'].includes(l.status) : filtro === 'outros' ? ['fabricado', 'nao_repor'].includes(l.status) : l.status === filtro))
