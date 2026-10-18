@@ -27,6 +27,13 @@ async function almErroFuncao(error, data) {
   } catch (e) { /* corpo não era JSON */ }
   return (error && error.message) || 'Erro desconhecido';
 }
+// Endereço na tabela única de contagem (só as colunas enviadas mudam: a contagem já feita é preservada).
+function upsertEndereco(c, codigo, endereco, quem) {
+  return c.from('importacao_varejo_contagem').upsert({
+    codigo: String(codigo).toUpperCase(), endereco, atualizado_em: new Date().toISOString(), atualizado_por: quem,
+  }, { onConflict: 'codigo' }).select('codigo');
+}
+
 function almSolicitante() {
   return (window.__VP_USER && window.__VP_USER.email) || '';
 }
@@ -511,7 +518,7 @@ function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
     setSaving(true); let ok = 0, falhas = 0;
     for (const i of validos) {
       if (String(i.l.endereco || '').trim().toUpperCase() === i.end) { ok++; continue; }
-      const r = await c.from('pcp_produtos').update({ endereco: i.end }).eq('codigo', i.l.codigo).select('codigo');
+      const r = await upsertEndereco(c, i.l.codigo, i.end, (window.__VP_USER && window.__VP_USER.email) || null);
       if (r.error || !r.data || !r.data.length) falhas++; else ok++;
     }
     window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Importou endereços em massa', alvo: `${ok} item(ns) gravado(s)${falhas ? ', ' + falhas + ' falha(s)' : ''}` });
@@ -611,14 +618,18 @@ function AlmoxarifadoEstoque() {
     if (!c) { setErro('Supabase não carregou.'); setLinhas([]); return; }
     // Sem a alçada "ver_custo" o custo real nem é pedido ao banco: a coluna mostra só um valor de enfeite borrado.
     const pProdutos = c.from('pcp_produtos')
-      .select('codigo, codigo_produto_omie, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade), pcp_estoque_fisico(quantidade, contado_em, contado_por)' + (podeVerCusto ? ', preco_custo, custo_manual, custo_compra, custo_compra_fonte, custo_compra_em' : ''))
+      .select('codigo, codigo_produto_omie, descricao, unidade, familia, estoque_minimo, leadtime_dias, endereco, observacao_interna, pcp_estoque(quantidade)' + (podeVerCusto ? ', preco_custo, custo_manual, custo_compra, custo_compra_fonte, custo_compra_em' : ''))
       .eq('ativo', true).order('familia').order('codigo');
     const pPosicao = c.from('pcp_posicao_compra').select('codigo, reservado, pendente, atualizado_em').range(0, 4999);
     // "A caminho" = o que falta chegar nos pedidos de compra em aberto (lidos 2x/dia); a posição do Omie (1x/dia) fica de reserva.
     const pCompras = c.from('pcp_compras_itens').select('codigo, numero_pedido, data_pedido, data_previsao, quantidade, qtde_recebida, atualizado_em').range(0, 4999);
     c.from('alertas').select('title').like('id', 'pcp-reposicao-%').eq('resolved', false).order('created_at', { ascending: false }).limit(1)
       .then(({ data }) => setAlertaRepos(data && data[0] ? data[0].title : null));
-    Promise.all([pProdutos, pPosicao, pCompras]).then(([rp, rq, rc]) => {
+    // Contagem física e endereço: tabela única da Compras/app de estoque (fase 3) — o que se conta aqui aparece lá e vice-versa.
+    const pContagem = c.from('importacao_varejo_contagem').select('codigo, quantidade, contado_em, contado_por, endereco').range(0, 4999);
+    Promise.all([pProdutos, pPosicao, pCompras, pContagem]).then(([rp, rq, rc, rt]) => {
+      const cont = {};
+      ((rt && rt.data) || []).forEach((x) => { cont[String(x.codigo).toUpperCase()] = x; });
       if (rp.error) { setErro(rp.error.message); setLinhas([]); return; }
       const pos = {};
       let maisRecente = null;
@@ -635,13 +646,15 @@ function AlmoxarifadoEstoque() {
       });
       setComprasEm(comprasMais);
       setLinhas((rp.data || []).map((p) => {
-        const f = Array.isArray(p.pcp_estoque_fisico) ? p.pcp_estoque_fisico[0] : p.pcp_estoque_fisico;   // 1:1, mas tolera as duas formas
+        const ct = cont[String(p.codigo).toUpperCase()];
+        const f = ct && ct.quantidade != null ? ct : null;   // linha só de endereço não é contagem
         const saldo = (p.pcp_estoque || []).reduce((s, e) => s + Number(e.quantidade || 0), 0);
         const ps = pos[p.codigo];
         const cm = cam[p.codigo];
         const reservado = ps && ps.reservado != null ? Number(ps.reservado) : null;
         return {
           ...p,
+          endereco: (ct && ct.endereco) || p.endereco || '',
           saldo,
           temSaldo: (p.pcp_estoque || []).length > 0,
           reservado,
@@ -649,7 +662,7 @@ function AlmoxarifadoEstoque() {
           pedidosAbertos: cm ? cm.pedidos : [],
           disponivel: reservado != null ? saldo - reservado : null,
           fisico: f ? Number(f.quantidade) : null,
-          fisicoEm: f ? f.contado_em : null,
+          fisicoEm: f ? f.contado_em : null,   // data (aaaa-mm-dd) da contagem
           fisicoPor: f ? f.contado_por : null,
           dif: f ? Number(f.quantidade) - saldo : null,
           custo: podeVerCusto ? rpCustoEfetivo(p) : null,   // Omie → compras → manual (relatorios-pcp-custos.jsx)
@@ -675,11 +688,16 @@ function AlmoxarifadoEstoque() {
     if (!(q >= 0)) { window.toast?.('Quantidade inválida.'); return; }
     if (l.fisico != null && Math.abs(q - l.fisico) < 1e-9) return;
     const quem = (window.__VP_USER && window.__VP_USER.email) || null;
-    const agora = new Date().toISOString();
-    const r1 = await c.from('pcp_estoque_fisico').upsert({ codigo: l.codigo, quantidade: q, contado_em: agora, contado_por: quem }, { onConflict: 'codigo' });
+    const hoje = new Date().toISOString().slice(0, 10);
+    const codigo = String(l.codigo).toUpperCase();
+    const r1 = await c.from('importacao_varejo_contagem').upsert({
+      codigo, quantidade: q, saldo_sistemico: l.saldo, contado_em: hoje, contado_por: quem,
+      endereco: l.endereco || null, atualizado_em: new Date().toISOString(), atualizado_por: quem,
+    }, { onConflict: 'codigo' });
     if (r1.error) { window.toast?.('Não foi possível salvar a contagem: ' + r1.error.message); carregar(); return; }
-    const r2 = await c.from('pcp_estoque_contagens').insert({
-      codigo: l.codigo, quantidade_fisica: q, quantidade_omie: l.saldo, diferenca: q - l.saldo, contado_por: quem, contado_em: agora,
+    const r2 = await c.from('importacao_varejo_contagem_hist').insert({
+      codigo, quantidade: q, saldo_sistemico: l.saldo, diferenca: q - l.saldo, contado_em: hoje, contado_por: quem,
+      endereco: l.endereco || null, origem: 'almoxarifado', registrado_por: quem,
     });
     if (r2.error) window.toast?.('Contagem salva, mas o histórico não foi gravado: ' + r2.error.message);
     window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Registrou estoque físico', alvo: `${l.codigo}: físico ${q} × Omie ${l.saldo}` });
@@ -695,7 +713,8 @@ function AlmoxarifadoEstoque() {
     const v = window.EtiquetasCalc?.validarEnderecoNovo?.(novo, l.endereco);
     if (v && !v.ok) { window.toast?.(v.msg, 'error'); carregar(); return; }
     if (v && v.codigo) novo = v.codigo;
-    const r = await c.from('pcp_produtos').update({ endereco: novo || null }).eq('codigo', l.codigo).select('codigo');
+    const quem = (window.__VP_USER && window.__VP_USER.email) || null;
+    const r = await upsertEndereco(c, l.codigo, novo || null, quem);
     if (r.error || !r.data || r.data.length === 0) { window.toast?.('Não foi possível salvar o endereço' + (r.error ? ': ' + r.error.message : '.')); carregar(); return; }
     window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Definiu o endereço do item', alvo: `${l.codigo}: ${novo || '(vazio)'}` });
     carregar();
