@@ -48,6 +48,26 @@
     return [id, setId];
   }
 
+  /* Destaque da coluna sob o mouse nas tabelas do PCP (a linha é CSS). Uso: onMouseOver/onMouseLeave={window.pcpColHover}. */
+  function pcpColHover(e) {
+    const t = e.currentTarget; const c = e.target.closest ? e.target.closest('td,th') : null;
+    const i = c ? c.cellIndex : -1;
+    if (t.__hc === i) return;
+    t.querySelectorAll('.pcp-col-hot').forEach(x => x.classList.remove('pcp-col-hot'));
+    t.__hc = i;
+    if (i < 0) return;
+    t.querySelectorAll('tr').forEach(r => { if (r.cells.length > 2 && r.cells[i]) r.cells[i].classList.add('pcp-col-hot'); });
+  }
+
   window.useRotaItem = useRotaItem;
   window.useRotaId = useRotaId;
+  window.pcpColHover = pcpColHover;
+
+  /* Vale para TODA table.pcp-grid e table.ci-table (inclusive as futuras), sem precisar ligar tabela por tabela. */
+  function pcpColDelegado(e) {
+    const t = e.target && e.target.closest ? e.target.closest('table.pcp-grid, table.ci-table, table.tab-cruz, table.t') : null;
+    if (t) { pcpColHover({ currentTarget: t, target: e.target }); return; }
+    document.querySelectorAll('table.pcp-grid, table.ci-table, table.tab-cruz, table.t').forEach(x => { if (x.__hc !== undefined && x.__hc !== -1) pcpColHover({ currentTarget: x, target: document.body }); });
+  }
+  document.addEventListener('mouseover', pcpColDelegado);
 }());

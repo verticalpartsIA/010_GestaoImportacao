@@ -247,7 +247,7 @@ function ProjetoElevadorEspecificacao({ abas }) {
       </div>
 
       <div className="table-wrap">
-        <table className="t">
+        <table className="t tab-cruz">
           <thead><tr><th>Referência</th><th>Nº Cotação</th><th>Unidades</th><th>Anexos</th><th>Status</th><th></th></tr></thead>
           <tbody>
             {projetos.length === 0 && (
@@ -699,7 +699,7 @@ function ProjetoElevadorDesenhos({ abas }) {
       </Card>
 
       <div className="table-wrap">
-        <table className="t">
+        <table className="t tab-cruz">
           <thead><tr><th>Prédio / Cliente</th><th>Nº Cotação</th><th>Equipamento(s)</th><th>Documento</th><th>Arquivo</th><th>Tamanho</th><th>Salvo por</th><th>Data</th><th style={{ width: 230 }}></th></tr></thead>
           <tbody>
             {loading && <tr><td colSpan={99}><div style={{ padding: 24 }}>Carregando…</div></td></tr>}

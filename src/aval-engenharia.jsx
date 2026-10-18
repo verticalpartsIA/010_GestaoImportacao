@@ -72,7 +72,7 @@ function AvalEngenhariaCard({ versao }) {
       {linhas !== null && linhas.length === 0 && !erro && <div className="muted small">Nenhuma cotação com Projeto de Instalação salvo ainda. Salve o projeto da obra com o Nº da cotação para ele entrar aqui.</div>}
       {linhas !== null && linhas.length > 0 && (
         <div className="table-wrap">
-          <table className="t">
+          <table className="t tab-cruz">
             <thead><tr><th>Nº Cotação</th><th>Cliente</th><th>Aval Engenharia</th><th>Projetos</th></tr></thead>
             <tbody>
               {linhas.map((l) => (

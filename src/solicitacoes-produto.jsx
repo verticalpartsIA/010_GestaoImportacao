@@ -326,7 +326,7 @@ function ListaView({ solicitacoes, loading, podeCriar, filtroStatus, filtroTipo,
         </div>
       ) : (
         <div style={styles.tabelaContainer}>
-          <table style={styles.tabela}>
+          <table className="tab-cruz" style={styles.tabela}>
             <thead>
               <tr style={styles.theadTr}>
                 <th style={styles.th}>SOLICITAÇÃO</th>

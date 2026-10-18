@@ -1261,3 +1261,11 @@ select.input { appearance: none; -webkit-appearance: none; background-image: lin
 .w-full { width: 100%; }
 .fade-in { animation: fadeIn .2s var(--ease-out); }
 .slide-up { animation: slideUp .25s var(--ease-out); }
+
+/* :is(table.t:not(.pcp-grid), table.tab-cruz) (opt-in): linhas intercaladas; linha e coluna acendem ao passar o mouse (coluna marcada por src/rota-pcp.js). */
+:is(table.t:not(.pcp-grid), table.tab-cruz) tbody tr:nth-child(even) td { background: color-mix(in srgb, var(--vp-gray-50) 55%, transparent); }
+:is(table.t:not(.pcp-grid), table.tab-cruz) tbody tr:hover td { background: color-mix(in srgb, var(--vp-yellow) 16%, var(--vp-gray-50)); }
+:is(table.t:not(.pcp-grid), table.tab-cruz) tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 0 var(--vp-yellow); }
+:is(table.t:not(.pcp-grid), table.tab-cruz) tbody td.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 9%, var(--vp-gray-50)); }
+:is(table.t:not(.pcp-grid), table.tab-cruz) thead th.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 28%, var(--vp-gray-50)); }
+:is(table.t:not(.pcp-grid), table.tab-cruz) tbody tr:hover td.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 34%, var(--vp-gray-50)); }

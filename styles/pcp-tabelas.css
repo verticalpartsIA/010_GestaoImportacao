@@ -67,3 +67,8 @@ table.t.pcp-grid tbody tr:nth-child(even) td.pcp-acao { background: color-mix(in
 table.t.pcp-grid tbody tr:hover td.pcp-acao { background: color-mix(in srgb, var(--vp-yellow) 16%, var(--vp-gray-50)); }
 table.t.pcp-grid.pcp-estoque thead th, table.t.pcp-grid.pcp-estoque tbody td { padding-left: 8px; padding-right: 8px; }
 table.t.pcp-grid.pcp-estoque input.input[type="number"] { width: 78px !important; }
+
+/* Toda table.pcp-grid: coluna sob o mouse acende mais fraco que a linha; o cruzamento fica mais forte (mira). */
+table.t.pcp-grid tbody td.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 9%, var(--vp-gray-50)); }
+table.t.pcp-grid thead th.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 28%, var(--vp-gray-50)); color: var(--fg1, inherit); }
+table.t.pcp-grid tbody tr:hover td.pcp-col-hot { background: color-mix(in srgb, var(--vp-yellow) 34%, var(--vp-gray-50)); }

@@ -79,7 +79,7 @@ function ContratosSociaisPage() {
             {itens.length === 0 ? 'Nenhum contrato social salvo ainda. Clique em "Salvar contrato social".' : 'Nenhum resultado para a busca.'}
           </div>
         ) : (
-          <table className="table" style={{ width: '100%' }}>
+          <table className="table tab-cruz" style={{ width: '100%' }}>
             <thead><tr>
               <th>Cliente</th><th>CNPJ/CPF</th><th>Arquivo</th><th>Tamanho</th><th>Salvo por</th><th>Data</th><th style={{ width: 150 }}></th>
             </tr></thead>
