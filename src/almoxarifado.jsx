@@ -530,7 +530,7 @@ function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
     <Modal title="Importar endereços" onClose={onClose} width={640}
       footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={!validos.length || saving} onClick={aplicar}>{saving ? 'Gravando…' : `Gravar ${validos.length} endereço(s)`}</Button></>}>
       <div className="stack" style={{ gap: 10 }}>
-        <div className="small muted">Cole uma linha por item: <b>código;endereço</b> (também aceita o que vem copiado de uma planilha, com tab). O endereço é só do PCP — nada vai ao Omie.</div>
+        <div className="small muted">Cole uma linha por item: <b>código;endereço</b> ou <b>código;descrição;endereço</b> (o que vem do botão "Copiar lista sem endereço"; também aceita o que vem copiado de uma planilha, com tab). O endereço é só do PCP — nada vai ao Omie.</div>
         <textarea className="input" rows={7} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'VPMP-178;R2A4\nVPEL-229;R3B1'} style={{ fontFamily: 'monospace', fontSize: 12 }}/>
         {itens.length > 0 && (
           <div className="table-wrap" style={{ maxHeight: 220, overflowY: 'auto', border: 0 }}>
@@ -747,7 +747,7 @@ function AlmoxarifadoEstoque() {
   const enderecosLivres = (window.EtiquetasCalc?.todosEnderecos?.() || []).map((e) => e.codigo).filter((c) => !usadosEnd.has(c));
   const semEndereco = linhas.filter((l) => !String(l.endereco || '').trim());
   const copiarSemEndereco = () => {
-    const txt = semEndereco.map((l) => `${l.codigo};${String(l.descricao || '').replace(/[;\t\r\n]+/g, ' ')};`).join('\n');
+    const txt = semEndereco.map((l) => `${l.codigo};${String(l.descricao || '').replace(/[;\t\r\n]+/g, ' ').replace(/\s+/g, ' ').trim()};`).join('\n');
     const ok = () => window.toast?.(`${semEndereco.length} itens copiados. Cole na planilha, preencha a 3ª coluna e cole em "Importar endereços".`, 'success');
     if (navigator.clipboard?.writeText) navigator.clipboard.writeText(txt).then(ok).catch(() => window.prompt('Copie a lista:', txt)); else window.prompt('Copie a lista:', txt);
   };
