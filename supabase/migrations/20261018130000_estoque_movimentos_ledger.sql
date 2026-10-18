@@ -65,7 +65,7 @@ begin
     v_cod  := upper(new.payload #>> '{meta,codigo}');
     v_tipo := new.payload #>> '{meta,tipo}';
     v_qtd  := (new.payload #>> '{meta,quantidade}')::numeric;
-    if v_cod is not null and v_qtd is not null and v_tipo in ('ENT', 'SAI', 'SLD') and v_tipo <> 'SLD' then
+    if v_cod is not null and v_qtd is not null and v_tipo in ('ENT', 'SAI') then
       insert into public.estoque_movimentos (codigo, quantidade, origem, enviar_omie, status_omie, referencia, chave, observacao)
       values (v_cod, case when v_tipo = 'SAI' then -v_qtd else v_qtd end, 'pcp_ajuste', true, 'enviado', new.id::text, 'fila:' || new.id,
               left(coalesce(new.payload #>> '{param,obs}', ''), 200))
