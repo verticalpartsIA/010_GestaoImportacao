@@ -14,6 +14,8 @@
 //                                                                    reenviar o mesmo id é seguro — vira duplicado)
 //   { "acao": "lista", "sessao_id": "<uuid>" }
 //     -> 200 { "itens": [ { codigo, descricao, endereco, rodada_atual, recontar, contado_nesta_rodada } ] }   (SEM saldo)
+//   { "acao": "saldo", "codigos": ["VPEL-031", ...] }   (até 50)
+//     -> 200 { "saldos": [ { codigo, saldo } ] }   (só quem tem alçada "saida"/"revisar"; item sem registro de estoque não volta)
 //   Regras que o app precisa respeitar (o SQL devolve o erro por evento): `tipo` do evento = `tipo` da sessão (sessão de
 //   'inventario' só aceita 'inventario'; de 'contagem', 'contagem'); contagem/inventário exigem `sessao_id` e código da lista
 //   da sessão; recebimento/saída NÃO usam sessão (recebimento pede `referencia` ou `observacao`; saída pede `finalidade`);
@@ -115,6 +117,17 @@ Deno.serve(async (req) => {
       const r = await rpc("estoque_sessao_lista_email", { p_email: email, p_sessao: sessao });
       if (!r.ok) return resp(req, { error: String(r.data?.message || "não foi possível ler a lista") }, r.status >= 500 ? 502 : 400);
       return resp(req, { itens: r.data ?? [] });
+    }
+
+    // 3a') saldo de poucos itens (aviso "Acima do saldo" da Saída) — o catálogo inteiro não é mais público
+    if (body.acao === "saldo") {
+      if (!Array.isArray(body.codigos) || body.codigos.length === 0 || body.codigos.length > 50
+          || !body.codigos.every((c: unknown) => typeof c === "string" && c.length > 0 && c.length <= 60)) {
+        return resp(req, { error: "esperado { codigos: [até 50 códigos] }" }, 400);
+      }
+      const r = await rpc("estoque_saldo_email", { p_email: email, p_codigos: body.codigos });
+      if (!r.ok) return resp(req, { error: String(r.data?.message || "não foi possível ler o saldo") }, r.status >= 500 ? 502 : 400);
+      return resp(req, { saldos: r.data ?? [] });
     }
 
     // 3b) lote de eventos
