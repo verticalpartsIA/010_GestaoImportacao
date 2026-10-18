@@ -196,3 +196,42 @@ test('modelos novos: rolos 100x50 e 100x100 e ZPL com a página certa', () => {
   const zr = E.renderZPL(r, E.dadosRecebimento({ codigo: 'VPEL-156', descricao: 'Rolete ção', quantidade: 4, unidade: 'UN' }), { dpi: 203 });
   assert.match(zr.zpl, /\^LL400/); assert.match(zr.zpl, /VPEL-156/);
 });
+
+test('fase 4: palete, ID-TAG, OP do quadro e avaria — dados e QR', () => {
+  const pal = E.dadosPalete({ codigo: 'pal-scvp-1', pi: 'SCVP1', embarque: '146', data: '17/10/2026', itens: [{ codigo: 'VPEL-156', quantidade: 40 }, { codigo: 'VPEL-157', quantidade: 5 }] });
+  assert.equal(pal.qr, 'PAL:PAL-SCVP-1'); assert.equal(pal.total_txt, '2 item(ns)'); assert.match(pal.itens_txt, /VPEL-156 x40 · VPEL-157 x5/);
+  const muitos = E.dadosPalete({ codigo: 'P', itens: Array.from({ length: 9 }, (_, i) => ({ codigo: 'C' + i, quantidade: 1 })) });
+  assert.match(muitos.itens_txt, /\+3 item\(ns\)/);
+  const tag = E.dadosIdTag({ codigo: 'vpel-el0985-1', cliente: 'AKAI', predio: 'Loja', cidade: 'Praia Grande', uf: 'SP', cotacao: 985 });
+  assert.equal(tag.qr, 'EQP:VPEL-EL0985-1'); assert.equal(tag.obra_txt, 'Loja · Praia Grande/SP'); assert.equal(tag.cotacao_txt, 'Cotação Nº 985');
+  const op = E.dadosOpQuadro({ numero: 'OP-0001', produto: 'VPEL-709b', serie: '' });
+  assert.equal(op.qr, 'OP:OP-0001'); assert.match(op.serie_txt, /____/);
+  assert.equal(E.dadosOpQuadro({ numero: '1', serie: 'S123' }).serie_txt, 'Nº de série: S123');
+  const av = E.dadosAvaria({ codigo: 'VPEL-156', descricao: 'Rolete', quantidade: 2, unidade: 'UN', motivo: 'amassado', responsavel: 'Tiago', data: '18/10/2026' });
+  assert.equal(av.qr, 'VPEL-156'); assert.equal(av.quem_txt, 'Por: Tiago · 18/10/2026');
+  for (const id of ['PALETE_100x50', 'IDTAG_100x50', 'OP_QUADRO_100x50', 'AVARIA_100x50']) {
+    const m = E.modeloPorId(id); assert.ok(m, id);
+    const dados = { PALETE_100x50: pal, IDTAG_100x50: tag, OP_QUADRO_100x50: op, AVARIA_100x50: av }[id];
+    const z = E.renderZPL(m, dados, { dpi: 203 }); assert.match(z.zpl, /\^XA[\s\S]*\^XZ/);
+  }
+});
+
+test('fase 3: modelos da empresa — registro, validação e campos protegidos', () => {
+  const base = E.modeloPorId('ITEM_100x50');
+  const copia = () => ({ ...JSON.parse(JSON.stringify(base)), id: 'x', tipo: 'ITEM' });
+  assert.deepEqual(E.validarModelo(copia(), base), []);
+  const semQr = copia(); semQr.elementos = semQr.elementos.filter((e) => e.tipo !== 'qr');
+  assert.ok(E.validarModelo(semQr, base).some((m) => /QR Code/.test(m)));
+  const fora = copia(); fora.elementos[1].x = 90; fora.elementos[1].w = 30;
+  assert.ok(E.validarModelo(fora, base).some((m) => /sai da etiqueta/.test(m)));
+  const campo = copia(); campo.elementos.push({ tipo: 'texto', campo: '{inexistente}', x: 5, y: 5, w: 20, h: 4 });
+  assert.ok(E.validarModelo(campo, base).some((m) => /não existe neste tipo/.test(m)));
+  const pequeno = copia(); pequeno.elementos.find((e) => e.tipo === 'qr').w = 8;
+  assert.ok(E.validarModelo(pequeno, base).some((m) => /QR muito pequeno/.test(m)));
+  E.registrarModelos([{ id: 'u1', tipo: 'ITEM', nome: 'Item da casa', base_id: 'ITEM_100x50', largura_mm: 100, altura_mm: 50, campos: base.campos, elementos: base.elementos, ativo: true }, { id: 'u2', tipo: 'ITEM', nome: 'Inativo', base_id: 'ITEM_100x50', largura_mm: 100, altura_mm: 50, campos: [], elementos: [], ativo: false }]);
+  assert.equal(E.modeloPorId('C:u1').nome, 'Item da casa');
+  assert.equal(E.modelosDoTipo('ITEM').length, 2);   // padrão + 1 ativo (o inativo não aparece)
+  assert.equal(E.modelosDaEmpresa().length, 2);
+  E.registrarModelos([]);
+  assert.equal(E.modeloPorId('C:u1'), null);
+});

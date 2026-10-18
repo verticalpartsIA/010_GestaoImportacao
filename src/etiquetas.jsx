@@ -56,6 +56,10 @@ const ETQ_TIPOS = [
   { id: 'ITEM', nome: 'Item', modelo: 'ITEM_100x50', desc: 'Produto: QR e Code 128 com o código' },
   { id: 'RECEBIMENTO', nome: 'Recebimento', modelo: 'RECEBIMENTO_100x50', desc: 'Carga que chegou: P.I., fornecedor, item e quantidade' },
   { id: 'SEPARACAO', nome: 'Separação', modelo: 'SEPARACAO_100x100', desc: 'Volume n/N de um pedido de venda (rolo 100 × 100)' },
+  { id: 'PALETE', nome: 'Palete', modelo: 'PALETE_100x50', desc: 'Palete inteiro: código, P.I. e itens com quantidade' },
+  { id: 'IDTAG_EQUIPAMENTO', nome: 'ID-TAG', modelo: 'IDTAG_100x50', desc: 'Identifica cada elevador (VPEL-EL0985-1…)' },
+  { id: 'OP_QUADRO', nome: 'OP / série do quadro', modelo: 'OP_QUADRO_100x50', desc: 'OP do PCP e nº de série do quadro de comando' },
+  { id: 'AVARIA', nome: 'Avaria', modelo: 'AVARIA_100x50', desc: 'Material danificado, retido' },
 ];
 const etqHoje = () => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 const ETQ_ROLOS = ['100x50', '100x100'];
@@ -164,7 +168,9 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const [copias, setCopias] = React.useState(1);
   const [usarDv, setUsarDv] = React.useState(etqLerDv());
   const tipoInfo = ETQ_TIPOS.find((t) => t.id === tipo);
-  const modelo = C.modeloPorId(tipoInfo.modelo);
+  const opcoesModelo = C.modelosDoTipo(tipo);
+  const [modeloEscolhido, setModeloEscolhido] = React.useState({});
+  const modelo = C.modeloPorId(modeloEscolhido[tipo]) && C.modeloPorId(modeloEscolhido[tipo]).tipo === tipo && (C.modeloPorId(modeloEscolhido[tipo]).ativo !== false) ? C.modeloPorId(modeloEscolhido[tipo]) : C.modeloPorId(tipoInfo.modelo);
   const perfil = cfg ? ETQ_IMP().perfilPorId(cfg.perfilId) : null;
   const avisoRolo = cfg && modelo && cfg.rolo !== `${modelo.largura_mm}x${modelo.altura_mm}`
     ? `O rolo informado (${cfg.rolo.replace('x', ' × ')} mm) não confere com o modelo (${modelo.largura_mm} × ${modelo.altura_mm} mm). Troque o rolo ou ajuste o campo "Rolo carregado".` : null;
@@ -228,10 +234,41 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     const t = setTimeout(() => { S.listarPedidos(qPed).then(setPeds); }, 300);
     return () => clearTimeout(t);
   }, [tipo, qPed]);
+  /* Palete: reaproveita a escolha da P.I. e dos itens do Recebimento */
+  const [palCod, setPalCod] = React.useState('');
+  const palCodigo = (palCod.trim() || (piSel ? `PAL-${piSel.numero_pi}-1` : '')).toUpperCase();
+  const palDados = () => C.dadosPalete({ codigo: palCodigo, pi: piSel.numero_pi, embarque: piSel.embarque, data: etqHoje(), itens: itensPi.filter((i) => recSel.has(i.codigo_produto)).map((i) => ({ codigo: i.codigo_produto, quantidade: recQtd[i.codigo_produto], unidade: i.unidade })) });
+  /* ID-TAG */
+  const [qCot, setQCot] = React.useState('');
+  const [obraTag, setObraTag] = React.useState({ obra: null, erro: null, buscou: false });
+  const [tagSel, setTagSel] = React.useState(() => new Set());
+  const buscarTag = async () => { const r = await S.buscarEquipamentos(qCot.trim()); setObraTag({ ...r, buscou: true }); setTagSel(new Set(r.obra ? r.obra.equipamentos : [])); };
+  const tagDados = (cod) => C.dadosIdTag({ codigo: cod, cliente: obraTag.obra.clienteNome, predio: obraTag.obra.predio, cidade: obraTag.obra.cidade, uf: obraTag.obra.uf, cotacao: obraTag.obra.numeroCotacao });
+  /* OP / série do quadro */
+  const [qOp, setQOp] = React.useState('');
+  const [ops, setOps] = React.useState({ ops: [], erro: null });
+  const [opSel, setOpSel] = React.useState(null);
+  const [opSerie, setOpSerie] = React.useState('');
+  React.useEffect(() => {
+    if (tipo !== 'OP_QUADRO') return undefined;
+    const t = setTimeout(() => { S.listarOPsQuadro(qOp).then(setOps); }, 300);
+    return () => clearTimeout(t);
+  }, [tipo, qOp]);
+  const opDados = () => C.dadosOpQuadro({ numero: opSel.numero, produto: opSel.produto, titulo: opSel.titulo, cliente: opSel.cliente, serie: opSerie, data: etqHoje() });
+  /* Avaria */
+  const [avQtd, setAvQtd] = React.useState('');
+  const [avMotivo, setAvMotivo] = React.useState('');
+  const avItem = Array.from(selItem.values())[0] || null;
+  const avDados = () => C.dadosAvaria({ codigo: avItem.codigo, descricao: avItem.descricao, quantidade: avQtd, unidade: avItem.unidade, motivo: avMotivo, responsavel: (window.__VP_USER && (window.__VP_USER.name || window.__VP_USER.email || '')).split('@')[0], data: etqHoje() });
+
   const sepN = Math.max(1, Math.min(99, Math.floor(Number(sepTotal) || 1)));
   const sepDados = (v) => C.dadosSeparacao({ pedido: pedSel.numero_pedido, volume: v, total_volumes: sepN, cliente: pedSel.cliente_nome, separador: sepPor, data: etqHoje() });
 
   const linhasParaImprimir = () => {
+    if (tipo === 'PALETE') return [{ ref: palCodigo, dados: palDados(), copias }];
+    if (tipo === 'IDTAG_EQUIPAMENTO') return obraTag.obra.equipamentos.filter((c) => tagSel.has(c)).map((c) => ({ ref: c, dados: tagDados(c), copias }));
+    if (tipo === 'OP_QUADRO') return [{ ref: opSel.numero, dados: opDados(), copias }];
+    if (tipo === 'AVARIA') return [{ ref: avItem.codigo, dados: avDados(), copias }];
     if (tipo === 'RECEBIMENTO') return itensPi.filter((i) => recSel.has(i.codigo_produto)).map((i) => ({ ref: i.codigo_produto, dados: recDados(i), copias }));
     if (tipo === 'SEPARACAO') {
       const ini = Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1)));
@@ -243,12 +280,16 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     }
     return Array.from(selItem.values()).map((p) => ({ ref: p.codigo, dados: C.dadosItem(p), copias }));
   };
-  const nSel = tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
+  const nSel = tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
   const primeiraRef = tipo === 'ENDERECO'
     ? (Array.from(selEnd)[0] || (filtrados[0] && filtrados[0].codigo))
     : (Array.from(selItem.keys())[0] || (achados.itens[0] && achados.itens[0].codigo));
   const dadosPrevia = React.useMemo(() => {
     try {
+      if (tipo === 'PALETE') return piSel && recSel.size && palCodigo ? palDados() : null;
+      if (tipo === 'IDTAG_EQUIPAMENTO') { const c = obraTag.obra && (obraTag.obra.equipamentos.find((x) => tagSel.has(x)) || obraTag.obra.equipamentos[0]); return c ? tagDados(c) : null; }
+      if (tipo === 'OP_QUADRO') return opSel ? opDados() : null;
+      if (tipo === 'AVARIA') return avItem ? avDados() : null;
       if (tipo === 'RECEBIMENTO') { const i = itensPi.find((x) => recSel.has(x.codigo_produto)) || itensPi[0]; return piSel && i ? recDados(i) : null; }
       if (tipo === 'SEPARACAO') return pedSel ? sepDados(Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1)))) : null;
       if (!primeiraRef) return null;
@@ -256,11 +297,11 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
       const p = selItem.get(primeiraRef) || achados.itens.find((x) => x.codigo === primeiraRef);
       return p ? C.dadosItem(p) : null;
     } catch (e) { return null; }
-  }, [tipo, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor]);
+  }, [tipo, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor, palCod, obraTag, tagSel, opSel, opSerie, avQtd, avMotivo]);
 
   const copiasValidas = Math.max(1, Math.min(50, Math.floor(Number(copias) || 1)));
   const totalEtiquetas = nSel * copiasValidas;
-  const disparar = () => imprimir({ tipo, modeloId: tipoInfo.modelo, itens: linhasParaImprimir().map((l) => ({ ...l, copias: copiasValidas })), opcoes: { dv: usarDv } });
+  const disparar = () => imprimir({ tipo, modeloId: modelo.id, itens: linhasParaImprimir().map((l) => ({ ...l, copias: copiasValidas })), opcoes: { dv: usarDv } });
 
   return (
     <div>
@@ -268,12 +309,80 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
         {ETQ_TIPOS.map((t) => (
           <button key={t.id} className={'btn btn--sm' + (tipo === t.id ? ' btn--primary' : '')} onClick={() => setTipo(t.id)} title={t.desc}>{t.nome}</button>
         ))}
-        <span style={{ fontSize: 12, color: 'var(--fg3)', alignSelf: 'center' }}>Palete, ID-TAG, OP e avaria entram nas próximas fases.</span>
+        <span style={{ fontSize: 12, color: 'var(--fg3)', alignSelf: 'center' }}>Os tipos novos de QR (PED, PAL, EQP, OP) estão registrados na issue #862.</span>
       </div>
 
       <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.4fr) minmax(300px, 1fr)', gap: 16, alignItems: 'start' }}>
         <div>
-          {tipo === 'RECEBIMENTO' ? (
+          {tipo === 'IDTAG_EQUIPAMENTO' ? (
+            <>
+              <div style={{ display: 'flex', gap: 8, marginBottom: 8, alignItems: 'center' }}>
+                <input className="input" placeholder="Nº da cotação (ex.: 985)" value={qCot} onChange={(e) => setQCot(e.target.value)} onKeyDown={(e) => { if (e.key === 'Enter') buscarTag(); }} style={{ width: 200 }}/>
+                <button className="btn btn--sm" onClick={buscarTag} disabled={!(Number(qCot) > 0)}>Buscar equipamentos</button>
+              </div>
+              {obraTag.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>{obraTag.erro}</div> : null}
+              {obraTag.buscou && !obraTag.obra && !obraTag.erro ? <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Nenhuma cotação com esse número.</div> : null}
+              {obraTag.obra ? (
+                <>
+                  <div style={{ fontSize: 12, marginBottom: 6 }}><b style={{ fontWeight: 600 }}>{obraTag.obra.clienteNome || '—'}</b> · {obraTag.obra.predio || '—'} · {obraTag.obra.cidade}/{obraTag.obra.uf}</div>
+                  <div className="card table-wrap" style={{ maxHeight: 280, overflow: 'auto' }}>
+                    <table className="t pcp-grid">
+                      <thead><tr><th style={{ width: 34 }}><input type="checkbox" aria-label="Marcar todos" checked={obraTag.obra.equipamentos.length > 0 && obraTag.obra.equipamentos.every((c) => tagSel.has(c))} onChange={(e) => setTagSel(e.target.checked ? new Set(obraTag.obra.equipamentos) : new Set())}/></th><th>Equipamento</th></tr></thead>
+                      <tbody>
+                        {obraTag.obra.equipamentos.map((c) => (
+                          <tr key={c}><td><input type="checkbox" checked={tagSel.has(c)} onChange={() => setTagSel((s) => { const n = new Set(s); n.has(c) ? n.delete(c) : n.add(c); return n; })}/></td><td><b style={{ fontWeight: 600 }}>{c}</b></td></tr>
+                        ))}
+                        {!obraTag.obra.equipamentos.length ? <tr><td colSpan={2} style={{ color: 'var(--fg3)' }}>Esta cotação ainda não tem equipamentos com código (Proposta/Precificação).</td></tr> : null}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              ) : null}
+            </>
+          ) : tipo === 'OP_QUADRO' ? (
+            <>
+              <input className="input" placeholder="Buscar OP por número, produto ou cliente…" value={qOp} onChange={(e) => setQOp(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
+              {ops.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>Não consegui buscar: {ops.erro}</div> : null}
+              <div className="card table-wrap" style={{ maxHeight: 240, overflow: 'auto', marginBottom: 10 }}>
+                <table className="t pcp-grid">
+                  <thead><tr><th>OP</th><th>Produto</th><th>Cliente</th><th>Série (MES)</th></tr></thead>
+                  <tbody>
+                    {ops.ops.map((o) => (
+                      <tr key={o.id} onClick={() => { setOpSel(o); setOpSerie(o.serie || ''); }} style={{ cursor: 'pointer', background: opSel && opSel.id === o.id ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
+                        <td><b style={{ fontWeight: 600 }}>{o.numero}</b></td><td>{o.produto || o.titulo || '—'}</td><td>{o.cliente || '—'}</td><td>{o.serie || '—'}</td>
+                      </tr>
+                    ))}
+                    {!ops.ops.length ? <tr><td colSpan={4} style={{ color: 'var(--fg3)' }}>Nenhuma OP de quadro encontrada.</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+              {opSel ? <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>Nº de série <input className="input" value={opSerie} onChange={(e) => setOpSerie(e.target.value)} style={{ width: 220 }}/><span style={{ color: 'var(--fg3) ' }}>Em branco imprime a linha para escrever à mão. Se a OP já tem série no MES, ela vem preenchida.</span></label> : null}
+            </>
+          ) : tipo === 'AVARIA' ? (
+            <>
+              <input className="input" placeholder="Buscar produto por código ou descrição (mín. 2 letras)…" value={qItem} onChange={(e) => setQItem(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
+              <div className="card table-wrap" style={{ maxHeight: 200, overflow: 'auto', marginBottom: 10 }}>
+                <table className="t pcp-grid">
+                  <thead><tr><th>Código</th><th>Descrição</th><th>Un.</th></tr></thead>
+                  <tbody>
+                    {achados.itens.map((p) => (
+                      <tr key={p.codigo} onClick={() => setSelItem(new Map([[p.codigo, p]]))} style={{ cursor: 'pointer', background: selItem.has(p.codigo) ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
+                        <td><b style={{ fontWeight: 600 }}>{p.codigo}</b></td><td>{p.descricao}</td><td>{p.unidade}</td>
+                      </tr>
+                    ))}
+                    {!achados.itens.length ? <tr><td colSpan={3} style={{ color: 'var(--fg3)' }}>{qItem.trim().length < 2 ? 'Digite para buscar.' : 'Nenhum produto ativo encontrado.'}</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+              {avItem ? (
+                <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Quantidade avariada<input className="input" type="number" min="0" value={avQtd} onChange={(e) => setAvQtd(e.target.value)} style={{ width: 120 }}/></label>
+                  <label style={{ fontSize: 12, display: 'grid', gap: 3, flex: 1, minWidth: 240 }}>Motivo (obrigatório)<input className="input" value={avMotivo} onChange={(e) => setAvMotivo(e.target.value)} placeholder="ex.: caixa amassada, peça trincada"/></label>
+                </div>
+              ) : <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Escolha o produto, informe a quantidade e o motivo.</div>}
+            </>
+          ) : null}
+          {tipo === 'RECEBIMENTO' || tipo === 'PALETE' ? (
             <>
               <input className="input" placeholder="Buscar P.I. por número ou fornecedor…" value={qPi} onChange={(e) => setQPi(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
               {pis.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>Não consegui buscar: {pis.erro}</div> : null}
@@ -292,9 +401,16 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
               </div>
               {piSel ? (
                 <>
-                  <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>NF de entrada (opcional)
-                    <input className="input" value={recNf} onChange={(e) => setRecNf(e.target.value)} style={{ width: 160 }}/>
-                  </label>
+                  {tipo === 'RECEBIMENTO' ? (
+                    <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>NF de entrada (opcional)
+                      <input className="input" value={recNf} onChange={(e) => setRecNf(e.target.value)} style={{ width: 160 }}/>
+                    </label>
+                  ) : (
+                    <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}>Código do palete
+                      <input className="input" value={palCod} placeholder={`PAL-${piSel.numero_pi}-1`} onChange={(e) => setPalCod(e.target.value)} style={{ width: 220 }}/>
+                      <span style={{ color: 'var(--fg3)' }}>1 etiqueta com os itens marcados. Mais de 6 itens: os demais saem como "+N".</span>
+                    </label>
+                  )}
                   <div className="card table-wrap" style={{ maxHeight: 260, overflow: 'auto' }}>
                     <table className="t pcp-grid">
                       <thead><tr><th style={{ width: 34 }}><input type="checkbox" aria-label="Marcar todos os itens" checked={itensPi.length > 0 && itensPi.every((i) => recSel.has(i.codigo_produto))} onChange={(e) => setRecSel(e.target.checked ? new Set(itensPi.map((i) => i.codigo_produto)) : new Set())}/></th><th>Código</th><th>Descrição</th><th>Qtd. recebida</th></tr></thead>
@@ -410,6 +526,13 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
         </div>
 
         <div style={{ position: 'sticky', top: 12 }}>
+          {opcoesModelo.length > 1 ? (
+            <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>Modelo
+              <select className="input" aria-label="Modelo" style={{ width: 'auto' }} value={modelo.id} onChange={(e) => setModeloEscolhido((m) => ({ ...m, [tipo]: e.target.value }))}>
+                {opcoesModelo.map((m) => <option key={m.id} value={m.id}>{m.nome}{m.empresa ? ' (da empresa)' : ' (padrão)'} — {m.largura_mm} × {m.altura_mm}</option>)}
+              </select>
+            </label>
+          ) : null}
           <EtqPreview modelo={modelo} dados={dadosPrevia}/>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
             <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>Cópias de cada
@@ -431,67 +554,219 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
 }
 
 /* ---------- Aba Modelos ---------- */
-function EtqModelos() {
+const etqExemploDe = (m) => {
   const C = ETQ_CALC();
-  const exemplo = (m) => (m.tipo === 'ENDERECO' ? C.dadosEndereco('R2A4', { dv: true })
-    : m.tipo === 'RECEBIMENTO' ? C.dadosRecebimento({ data: '17/10/2026', embarque: '146', pi: 'SCVP260522-2', fornecedor: 'Ningbo Senchen', codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', quantidade: 40, unidade: 'UN', nf: '11082199' })
-    : m.tipo === 'SEPARACAO' ? C.dadosSeparacao({ pedido: '30570', volume: 2, total_volumes: 5, cliente: 'AKAI KB MAGAZINE', separador: 'Tiago', data: '17/10/2026 14:32' })
-    : m.tipo === 'ITEM' ? C.dadosItem({ codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', unidade: 'UN', familia: 'VPEL', endereco: 'R2A4' }) : C.DADOS_TESTE);
+  const t = m.tipo;
+  return t === 'ENDERECO' ? C.dadosEndereco('R2A4', { dv: true })
+    : t === 'RECEBIMENTO' ? C.dadosRecebimento({ data: '17/10/2026', embarque: '146', pi: 'SCVP260522-2', fornecedor: 'Ningbo Senchen', codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', quantidade: 40, unidade: 'UN', nf: '11082199' })
+    : t === 'SEPARACAO' ? C.dadosSeparacao({ pedido: '30570', volume: 2, total_volumes: 5, cliente: 'AKAI KB MAGAZINE', separador: 'Tiago', data: '17/10/2026 14:32' })
+    : t === 'PALETE' ? C.dadosPalete({ codigo: 'PAL-SCVP260522-1', pi: 'SCVP260522-2', embarque: '146', data: '17/10/2026', itens: [{ codigo: 'VPEL-156', quantidade: 40 }, { codigo: 'VPEL-157', quantidade: 12 }] })
+    : t === 'IDTAG_EQUIPAMENTO' ? C.dadosIdTag({ codigo: 'VPEL-EL0985-1', cliente: 'AKAI KB MAGAZINE', predio: 'Loja em Shopping', cidade: 'Praia Grande', uf: 'SP', cotacao: 985 })
+    : t === 'OP_QUADRO' ? C.dadosOpQuadro({ numero: 'OP-0001', produto: 'VPEL-709b Quadro 30 kW 380 V', cliente: 'VITALTEC', serie: 'QC-2610-0007', data: '17/10/2026' })
+    : t === 'AVARIA' ? C.dadosAvaria({ codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', quantidade: 2, unidade: 'UN', motivo: 'caixa amassada', responsavel: 'tiago', data: '17/10/2026' })
+    : t === 'ITEM' ? C.dadosItem({ codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', unidade: 'UN', familia: 'VPEL', endereco: 'R2A4' }) : C.DADOS_TESTE;
+};
+
+/* ---------- Editor visual de modelo da empresa ----------
+   Arrastar o elemento na prévia ou digitar x/y/w/h (mm). Elementos QR e Code 128 do padrão não podem ser apagados. */
+function EtqEditor({ modeloId, caps, aoSair }) {
+  const C = ETQ_CALC(), S = ETQ_STORE();
+  const original = C.modeloPorId('C:' + modeloId);
+  const padrao = original ? C.modeloPorId(original.base_id) : null;
+  const [nome, setNome] = React.useState(original ? original.nome : '');
+  const [els, setEls] = React.useState(() => original ? JSON.parse(JSON.stringify(original.elementos)) : []);
+  const [sel, setSel] = React.useState(0);
+  const [salvando, setSalvando] = React.useState(false);
+  const [msg, setMsg] = React.useState('');
+  const areaRef = React.useRef(null);
+  const { pronto } = useEtqBwip();
+  if (!original || !padrao) return <div><button className="btn btn--sm" onClick={aoSair}>← Modelos</button><p style={{ color: 'var(--fg3)' }}>Modelo não encontrado (pode ter sido apagado).</p></div>;
+  const W = original.largura_mm, H = original.altura_mm;
+  const dados = etqExemploDe(original);
+  const modeloEdit = { ...original, elementos: els };
+  const erros = C.validarModelo(modeloEdit, padrao);
+  const html = C.renderSVG(modeloEdit, dados, { barcode: pronto ? etqBarcode : null });
+  const alturaEl = (el) => (el.tipo === 'qr' ? el.w : el.tipo === 'linha' ? (el.esp || 0.4) + 1 : el.h);
+  const protegido = (el) => (el.tipo === 'qr' || el.tipo === 'code128') && padrao.elementos.some((o) => o.tipo === el.tipo && o.campo === el.campo);
+  const mexer = (i, patch) => setEls((l) => l.map((e, k) => (k === i ? { ...e, ...patch } : e)));
+  const arrastar = (ev, i) => {
+    ev.preventDefault(); setSel(i);
+    const rect = areaRef.current.getBoundingClientRect();
+    const x0 = ev.clientX, y0 = ev.clientY, ex = Number(els[i].x), ey = Number(els[i].y);
+    const mover = (e) => {
+      const dx = (e.clientX - x0) * (W / rect.width), dy = (e.clientY - y0) * (H / rect.height);
+      mexer(i, { x: Math.max(0, Math.round((ex + dx) * 2) / 2), y: Math.max(0, Math.round((ey + dy) * 2) / 2) });
+    };
+    const soltar = () => { window.removeEventListener('pointermove', mover); window.removeEventListener('pointerup', soltar); };
+    window.addEventListener('pointermove', mover); window.addEventListener('pointerup', soltar);
+  };
+  const nomeEl = (el, i) => `${i + 1}. ${{ texto: 'Texto', qr: 'QR', code128: 'Barras', caixa: 'Borda', linha: 'Linha' }[el.tipo] || el.tipo} ${el.campo || ''}`;
+  const adicionar = (tipoEl, campo) => {
+    const base = tipoEl === 'texto' ? { tipo: 'texto', campo, x: 4, y: 4, w: 40, h: 4 } : tipoEl === 'linha' ? { tipo: 'linha', x: 4, y: 4, w: 40, esp: 0.4 } : { tipo: tipoEl, campo, x: 4, y: 4, w: 24, h: 8 };
+    setEls((l) => [...l, base]); setSel(els.length);
+  };
+  const salvar = async () => {
+    if (nome.trim().length < 3) { setMsg('Dê um nome de pelo menos 3 letras.'); return; }
+    if (erros.length) { setMsg('Corrija antes de salvar: ' + erros[0]); return; }
+    setSalvando(true);
+    const r = await S.salvarModelo(modeloId, { nome: nome.trim(), elementos: els });
+    setSalvando(false);
+    if (!r.ok) { setMsg(r.erro); return; }
+    etqToast('Modelo salvo.'); aoSair(true);
+  };
+  const e = els[sel];
+  const num = (k, passo) => (
+    <label style={{ fontSize: 11, display: 'grid', gap: 2 }}>{k}<input className="input" type="number" step={passo || 0.5} value={e[k] ?? ''} onChange={(ev) => mexer(sel, { [k]: ev.target.value === '' ? '' : Number(ev.target.value) })} style={{ width: 80 }}/></label>
+  );
   return (
     <div>
-      <p style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 0 }}>Modelos padrão (não editáveis). Copiar e personalizar um modelo da empresa chega na fase 3; por ora o layout é o mesmo para qualquer impressora.</p>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 16 }}>
-        {C.MODELOS.map((m) => (
-          <div key={m.id} className="card" style={{ padding: 14 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
-              <b style={{ fontWeight: 600 }}>{m.nome}</b><span className="pcp-tag">{m.tipo}</span>
-            </div>
-            <div style={{ fontSize: 12, color: 'var(--fg2)', marginBottom: 10 }}>{m.proposito}</div>
-            <EtqPreview modelo={m} dados={exemplo(m)} largura={360}/>
-            <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 8 }}>Campos: {m.campos.join(', ')}</div>
+      <div style={{ display: 'flex', gap: 8, alignItems: 'center', marginBottom: 10, flexWrap: 'wrap' }}>
+        <button className="btn btn--sm" onClick={() => aoSair(false)}>← Modelos</button>
+        <input className="input" aria-label="Nome do modelo" value={nome} onChange={(ev) => setNome(ev.target.value)} style={{ width: 280 }} disabled={!caps.editar_modelos}/>
+        <span className="pcp-tag">{original.tipo}</span>
+        <span style={{ fontSize: 12, color: 'var(--fg3)' }}>{W} × {H} mm · baseado em {padrao.nome}</span>
+        <button className="btn btn--primary btn--sm" onClick={salvar} disabled={!caps.editar_modelos || salvando}>{salvando ? 'Salvando…' : 'Salvar modelo'}</button>
+      </div>
+      {!caps.editar_modelos ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 8 }}>Você não tem a alçada para editar modelos; só pode ver.</div> : null}
+      {msg ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 8 }}>{msg}</div> : null}
+      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 1.3fr) minmax(300px, 1fr)', gap: 16, alignItems: 'start' }}>
+        <div>
+          <div ref={areaRef} style={{ position: 'relative', width: 560, maxWidth: '100%', border: '1px solid var(--line, #ccc)', background: '#fff', touchAction: 'none' }}>
+            <div dangerouslySetInnerHTML={{ __html: html }}/>
+            {els.map((el, i) => (el.tipo === 'caixa' ? null : (
+              <div key={i} onPointerDown={(ev) => arrastar(ev, i)} title={nomeEl(el, i)}
+                style={{ position: 'absolute', left: `${(el.x / W) * 100}%`, top: `${(el.y / H) * 100}%`, width: `${(el.w / W) * 100}%`, height: `${(alturaEl(el) / H) * 100}%`, outline: i === sel ? '2px solid #e6b800' : '1px dashed rgba(0,0,0,.25)', cursor: 'move', background: i === sel ? 'rgba(230,184,0,.12)' : 'transparent' }}/>
+            )))}
           </div>
-        ))}
+          <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 4 }}>Arraste o elemento na prévia (passo de 0,5 mm) ou digite as medidas ao lado. A fonte real é a da impressora.</div>
+        </div>
+        <div>
+          <div className="card table-wrap" style={{ maxHeight: 190, overflow: 'auto', marginBottom: 8 }}>
+            <table className="t pcp-grid"><tbody>
+              {els.map((el, i) => (
+                <tr key={i} onClick={() => setSel(i)} style={{ cursor: 'pointer', background: i === sel ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
+                  <td>{nomeEl(el, i)}{protegido(el) ? ' 🔒' : ''}</td>
+                  <td style={{ width: 70 }}><button className="btn btn--sm" disabled={protegido(el)} title={protegido(el) ? 'Elemento obrigatório do tipo: pode mudar de lugar, não ser apagado.' : 'Apagar elemento'} onClick={(ev) => { ev.stopPropagation(); setEls((l) => l.filter((_, k) => k !== i)); setSel(0); }}>Apagar</button></td>
+                </tr>
+              ))}
+            </tbody></table>
+          </div>
+          {e ? (
+            <div className="card" style={{ padding: 10, marginBottom: 8 }}>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                {num('x')}{num('y')}{num('w')}
+                {e.tipo === 'texto' || e.tipo === 'code128' ? num('h') : null}
+                {e.tipo === 'caixa' || e.tipo === 'linha' ? num('esp', 0.1) : null}
+                {e.tipo === 'texto' ? num('linhas', 1) : null}
+              </div>
+              {e.tipo === 'texto' ? (
+                <div style={{ display: 'flex', gap: 8, marginTop: 8, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                  <label style={{ fontSize: 11, display: 'grid', gap: 2 }}>Conteúdo (campo {'{nome}'} ou texto fixo)
+                    <input className="input" value={e.campo || ''} onChange={(ev) => mexer(sel, { campo: ev.target.value })} style={{ width: 230 }}/>
+                  </label>
+                  <label style={{ fontSize: 11, display: 'grid', gap: 2 }}>Alinhamento
+                    <select className="input" value={e.alinhamento || 'esq'} onChange={(ev) => mexer(sel, { alinhamento: ev.target.value === 'esq' ? undefined : ev.target.value })} style={{ width: 90 }}><option value="esq">Esquerda</option><option value="centro">Centro</option><option value="dir">Direita</option></select>
+                  </label>
+                </div>
+              ) : null}
+            </div>
+          ) : null}
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 8, alignItems: 'center' }}>
+            <span style={{ fontSize: 12, color: 'var(--fg3)' }}>Adicionar:</span>
+            <button className="btn btn--sm" onClick={() => adicionar('texto', 'Texto fixo')}>Texto fixo</button>
+            <button className="btn btn--sm" onClick={() => adicionar('linha')}>Linha</button>
+            <select className="input" aria-label="Adicionar campo" style={{ width: 'auto' }} value="" onChange={(ev) => { if (ev.target.value) adicionar('texto', '{' + ev.target.value + '}'); }}>
+              <option value="">+ campo do tipo…</option>
+              {(original.campos || []).filter((c) => c !== 'qr' && c !== 'barras').map((c) => <option key={c} value={c}>{c}</option>)}
+            </select>
+          </div>
+          {erros.length ? <ul style={{ margin: 0, paddingLeft: 18, fontSize: 12, color: 'var(--vp-danger)' }}>{erros.slice(0, 5).map((m, i) => <li key={i}>{m}</li>)}</ul> : <div style={{ fontSize: 12, color: 'var(--fg3)' }}>✓ Modelo válido.</div>}
+        </div>
       </div>
     </div>
   );
 }
 
-/* ---------- Aba Histórico ---------- */
-function EtqHistorico({ caps, reimprimir, ocupado, versao }) {
-  const [estado, setEstado] = React.useState({ linhas: null, erro: null });
-  const [motivoDe, setMotivoDe] = React.useState(null);
-  const [motivo, setMotivo] = React.useState('');
-  React.useEffect(() => { ETQ_STORE().listarHistorico(200).then((r) => setEstado({ linhas: r.linhas, erro: r.erro })); }, [versao]);
-  if (estado.erro) return <div className="card" style={{ padding: 14, color: 'var(--vp-danger)' }}>Não consegui ler o histórico: {estado.erro}</div>;
-  if (estado.linhas === null) return <div style={{ color: 'var(--fg3)' }}>Carregando…</div>;
+/* ---------- Aba Modelos ---------- */
+function EtqModelos({ caps, empresa, recarregar }) {
+  const C = ETQ_CALC(), S = ETQ_STORE();
+  const [editando, setEditando] = window.useRotaItem('etiquetas', 'modelos');
+  const [copiando, setCopiando] = React.useState(null);   // { base, nome }
+  const [apagando, setApagando] = React.useState(null);
+  const [msg, setMsg] = React.useState('');
+  const copiar = async () => {
+    const r = await S.copiarModelo(copiando.base, copiando.nome);
+    if (!r.ok) { setMsg(r.erro); return; }
+    setCopiando(null); setMsg('');
+    await recarregar();
+    setEditando(r.modelo.id);
+  };
+  if (editando) return <EtqEditor key={editando + (C.modeloPorId('C:' + editando) ? '-ok' : '-esperando')} modeloId={editando} caps={caps} aoSair={async (salvou) => { if (salvou) await recarregar(); setEditando(null); }}/>;
+  const card = (m, extra) => (
+    <div key={m.id} className="card" style={{ padding: 14, opacity: m.empresa && !m.ativo ? 0.6 : 1 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', gap: 8, marginBottom: 6 }}>
+        <b style={{ fontWeight: 600 }}>{m.nome}</b><span className="pcp-tag">{m.tipo}</span>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--fg2)', marginBottom: 10 }}>{m.proposito}</div>
+      <EtqPreview modelo={m} dados={etqExemploDe(m)} largura={360}/>
+      <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 8 }}>Campos: {m.campos.join(', ')}</div>
+      {extra}
+    </div>
+  );
   return (
-    <div className="card table-wrap" style={{ overflowX: 'auto' }}>
-      <table className="t pcp-grid">
-        <thead><tr><th>Quando</th><th>Quem</th><th>Tipo</th><th>Referência</th><th>Qtd.</th><th>Impressora</th><th>Resultado</th><th></th></tr></thead>
-        <tbody>
-          {estado.linhas.map((l) => (
-            <React.Fragment key={l.id}>
-              <tr>
-                <td>{etqData(l.impresso_em)}</td><td>{l.usuario}</td><td>{l.tipo}{l.reimpressao ? <span className="pcp-tag" style={{ marginLeft: 6 }}>reimpressão</span> : null}</td>
-                <td style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.referencia || ''}>{l.referencia || '—'}</td>
-                <td>{l.quantidade}</td><td>{l.impressora || '—'}</td>
-                <td>{l.sucesso ? 'ok' : <span style={{ color: 'var(--vp-danger)' }} title={l.erro || ''}>falhou</span>}{l.motivo ? <div style={{ fontSize: 10, color: 'var(--fg3)' }}>motivo: {l.motivo}</div> : null}</td>
-                <td>{l.sucesso && l.dados && Array.isArray(l.dados.itens) ? <button className="btn btn--sm" disabled={!caps.reimprimir || ocupado} title={!caps.reimprimir ? 'Falta a alçada de reimpressão.' : undefined} onClick={() => { setMotivoDe(l.id); setMotivo(''); }}>Reimprimir</button> : null}</td>
-              </tr>
-              {motivoDe === l.id ? (
-                <tr><td colSpan={8} style={{ background: 'var(--bg2, #f6f6f6)' }}>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
-                    <input className="input" placeholder="Motivo da reimpressão (mín. 5 letras)" value={motivo} onChange={(e) => setMotivo(e.target.value)} style={{ minWidth: 320 }}/>
-                    <button className="btn btn--sm btn--primary" disabled={motivo.trim().length < 5 || ocupado} onClick={async () => { const ok = await reimprimir(l, motivo.trim()); if (ok) setMotivoDe(null); }}>Reimprimir agora</button>
-                    <button className="btn btn--sm" onClick={() => setMotivoDe(null)}>Cancelar</button>
-                  </div>
-                </td></tr>
-              ) : null}
-            </React.Fragment>
-          ))}
-          {!estado.linhas.length ? <tr><td colSpan={8} style={{ color: 'var(--fg3)' }}>Nenhuma impressão registrada ainda.</td></tr> : null}
-        </tbody>
-      </table>
+    <div>
+      <p style={{ fontSize: 13, color: 'var(--fg2)', marginTop: 0 }}>Os modelos padrão não mudam. Para personalizar, copie um modelo: a cópia é da empresa, fica na lista do tipo e pode ser editada, desativada ou apagada. O QR e o código de barras do padrão são obrigatórios (o app de estoque lê esses conteúdos).</p>
+      {msg ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 8 }}>{msg}</div> : null}
+      {empresa.length ? (
+        <>
+          <h3 style={{ fontSize: 14, margin: '8px 0' }}>Modelos da empresa</h3>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 16, marginBottom: 20 }}>
+            {empresa.map((m) => card(m, (
+              <div style={{ display: 'flex', gap: 6, marginTop: 8, flexWrap: 'wrap' }}>
+                <button className="btn btn--sm" onClick={() => setEditando(m.uuid)}>{caps.editar_modelos ? 'Editar' : 'Ver'}</button>
+                <button className="btn btn--sm" disabled={!caps.editar_modelos} onClick={async () => { const r = await S.salvarModelo(m.uuid, { ativo: !m.ativo }); if (!r.ok) setMsg(r.erro); await recarregar(); }}>{m.ativo ? 'Desativar' : 'Ativar'}</button>
+                <button className="btn btn--sm" disabled={!caps.editar_modelos} onClick={() => setCopiando({ base: m, nome: m.nome + ' (cópia)' })}>Copiar</button>
+                <button className="btn btn--sm" disabled={!caps.editar_modelos} onClick={() => setApagando(m)}>Apagar</button>
+                {!m.ativo ? <span style={{ fontSize: 11, color: 'var(--fg3)', alignSelf: 'center' }}>inativo: não aparece em Gerar</span> : null}
+              </div>
+            )))}
+          </div>
+        </>
+      ) : null}
+      <h3 style={{ fontSize: 14, margin: '8px 0' }}>Modelos padrão</h3>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 16 }}>
+        {C.MODELOS.map((m) => card(m, m.tipo === 'TESTE' ? null : (
+          <div style={{ marginTop: 8 }}>
+            <button className="btn btn--sm" disabled={!caps.editar_modelos} title={!caps.editar_modelos ? 'Falta a alçada para criar modelos da empresa.' : 'Cria uma cópia editável'} onClick={() => setCopiando({ base: m, nome: m.nome + ' — da empresa' })}>Copiar e personalizar</button>
+          </div>
+        )))}
+      </div>
+      {copiando ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'grid', placeItems: 'center', zIndex: 60 }} onClick={() => setCopiando(null)}>
+          <div className="card" style={{ padding: 18, width: 420, background: 'var(--bg, #fff)' }} onClick={(e) => e.stopPropagation()}>
+            <b style={{ fontWeight: 600 }}>Copiar "{copiando.base.nome}"</b>
+            <label style={{ fontSize: 12, display: 'grid', gap: 3, margin: '10px 0' }}>Nome da cópia
+              <input className="input" autoFocus value={copiando.nome} onChange={(e) => setCopiando({ ...copiando, nome: e.target.value })}/>
+            </label>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn btn--sm" onClick={() => setCopiando(null)}>Cancelar</button>
+              <button className="btn btn--sm btn--primary" disabled={copiando.nome.trim().length < 3} onClick={copiar}>Copiar e editar</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
+      {apagando ? (
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.4)', display: 'grid', placeItems: 'center', zIndex: 60 }} onClick={() => setApagando(null)}>
+          <div className="card" style={{ padding: 18, width: 420, background: 'var(--bg, #fff)' }} onClick={(e) => e.stopPropagation()}>
+            <b style={{ fontWeight: 600 }}>Apagar "{apagando.nome}"?</b>
+            <p style={{ fontSize: 13 }}>O histórico de impressões continua guardado. Reimprimir uma etiqueta antiga feita com este modelo deixará de ser possível.</p>
+            <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+              <button className="btn btn--sm" onClick={() => setApagando(null)}>Não apagar</button>
+              <button className="btn btn--sm btn--primary" onClick={async () => { const r = await S.excluirModelo(apagando.uuid); if (!r.ok) setMsg(r.erro); setApagando(null); await recarregar(); }}>Sim, apagar</button>
+            </div>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }
@@ -500,7 +775,9 @@ function EtqHistorico({ caps, reimprimir, ocupado, versao }) {
 function EtiquetasPage() {
   const C = ETQ_CALC(), EI = ETQ_IMP(), S = ETQ_STORE();
   const [aba, setAba] = window.useRouteTab('etiquetas', 'gerar', ['gerar', 'modelos', 'historico'], false, true);
-  const [caps, setCaps] = React.useState({ carregado: false, ver: false, imprimir: false, reimprimir: false });
+  const [caps, setCaps] = React.useState({ carregado: false, ver: false, imprimir: false, reimprimir: false, editar_modelos: false });
+  const [empresa, setEmpresa] = React.useState([]);
+  const [modVersao, setModVersao] = React.useState(0);
   const [cfg, setCfgEstado] = React.useState(() => EI.lerEscolha());
   const [ocupado, setOcupado] = React.useState(false);
   const [versao, setVersao] = React.useState(0);
@@ -510,11 +787,18 @@ function EtiquetasPage() {
 
   React.useEffect(() => {
     let vivo = true;
-    Promise.all([S.temCapacidade('ver'), S.temCapacidade('imprimir'), S.temCapacidade('reimprimir')]).then(([ver, imprimir, reimprimir]) => {
-      if (vivo) setCaps({ carregado: true, ver, imprimir, reimprimir });
+    Promise.all([S.temCapacidade('ver'), S.temCapacidade('imprimir'), S.temCapacidade('reimprimir'), S.temCapacidade('editar_modelos')]).then(([ver, imprimir, reimprimir, editar_modelos]) => {
+      if (vivo) setCaps({ carregado: true, ver, imprimir, reimprimir, editar_modelos });
     });
     return () => { vivo = false; };
   }, []);
+  const recarregarModelos = React.useCallback(async () => {
+    const r = await S.listarModelos();
+    C.registrarModelos(r.modelos);
+    setEmpresa(C.modelosDaEmpresa());
+    setModVersao((v) => v + 1);
+  }, []);
+  React.useEffect(() => { recarregarModelos(); }, []);
 
   /* Envia as etiquetas e registra no histórico. Devolve true se saiu. */
   const executar = React.useCallback(async ({ tipo, modeloId, itens, opcoes, reimpressao, motivo }) => {
@@ -586,8 +870,8 @@ function EtiquetasPage() {
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
         {abas.map(([id, nome]) => <button key={id} className={'btn btn--sm' + (aba === id ? ' btn--primary' : '')} onClick={() => setAba(id)}>{nome}</button>)}
       </div>
-      {aba === 'gerar' ? <EtqGerar cfg={cfg} caps={caps} ocupado={ocupado} imprimir={executar}/> : null}
-      {aba === 'modelos' ? <EtqModelos/> : null}
+      {aba === 'gerar' ? <EtqGerar key={modVersao} cfg={cfg} caps={caps} ocupado={ocupado} imprimir={executar}/> : null}
+      {aba === 'modelos' ? <EtqModelos caps={caps} empresa={empresa} recarregar={recarregarModelos}/> : null}
       {aba === 'historico' ? <EtqHistorico caps={caps} reimprimir={reimprimir} ocupado={ocupado} versao={versao}/> : null}
     </div>
   );
