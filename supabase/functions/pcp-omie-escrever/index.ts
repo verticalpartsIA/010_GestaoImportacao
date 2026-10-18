@@ -240,6 +240,67 @@ Deno.serve(async (req) => {
       return json({ fila_id: fila.id, ...r }, r.ok ? 200 : 502);
     }
 
+    /* ---------- enviar movimento do livro-razão (estoque_movimentos) ---------- */
+    // Etapa 3 da fase 4: um ajuste de contagem JÁ CONFIRMADO por uma pessoa vai ao Omie, um por vez.
+    // Chave determinística (MOV- + id do movimento): repetir nunca lança duas vezes (a fila tem chave única e o Omie recusa a repetida).
+    // Só envia movimento 'confirmado' com enviar_omie=true; depois de ok o movimento vira 'enviado'.
+    if (acao === "enviar_movimento") {
+      const movId = String(b?.movimento_id || "");
+      if (!/^[0-9a-f-]{36}$/i.test(movId)) return json({ error: "Movimento inválido." }, 400);
+      const mov = (await pg("GET", `estoque_movimentos?select=*&id=eq.${movId}`))?.[0];
+      if (!mov) return json({ error: "Movimento não encontrado." }, 404);
+      if (mov.status_omie === "enviado") return json({ error: "Este movimento já foi enviado ao Omie." }, 409);
+      if (mov.status_omie !== "confirmado") return json({ error: "Só dá para enviar um ajuste já confirmado." }, 409);
+      if (mov.enviar_omie !== true) return json({ error: "Este movimento não deve ser enviado ao Omie." }, 409);
+      const codigo = String(mov.codigo).toUpperCase();
+      const qtdSinal = Number(mov.quantidade);
+      if (!Number.isFinite(qtdSinal) || qtdSinal === 0 || Math.abs(qtdSinal) > 10_000_000) return json({ error: "Quantidade inválida." }, 400);
+      const tipo = qtdSinal > 0 ? "ENT" : "SAI";
+      const quantidade = Math.abs(qtdSinal);
+      const chave = "MOV-" + movId.replace(/-/g, "").slice(0, 18);
+
+      // Já existe na fila? (clique repetido ou falha ao marcar o movimento da outra vez)
+      const exist = (await pg("GET", `pcp_omie_fila?select=id,status,payload&chave=eq.${chave}`))?.[0];
+      const marcar = async (filaId: string) => pg("PATCH", `estoque_movimentos?id=eq.${movId}`, { status_omie: "enviado", observacao: `${mov.observacao || ""} · enviado ao Omie (fila ${filaId})`.slice(0, 400) }, "return=minimal");
+      if (exist?.status === "enviado") { await marcar(exist.id); return json({ ok: true, ja_enviado: true, fila_id: exist.id }); }
+      if (exist?.status === "pendente") return json({ error: "Envio em andamento. Aguarde e confira de novo." }, 409);
+      if (exist?.status === "erro") {
+        if (simular) return json({ simulado: true, reenvio: true, ajuste: exist.payload?.param });
+        const r = await executar({ id: exist.id, payload: exist.payload, tipo: "ajuste_estoque" });
+        if (r.ok) await marcar(exist.id);
+        return json({ fila_id: exist.id, ...r }, r.ok ? 200 : 502);
+      }
+
+      // Produto: cadastro do PCP; senão o catálogo da Compras (mesmo código do Omie).
+      let idProd: number | null = null; let valor = 0;
+      const p = (await carregarProdutos([codigo])).get(codigo);
+      if (p?.codigo_produto_omie) { idProd = Number(p.codigo_produto_omie); valor = custoDe(p); }
+      if (!idProd || !(valor > 0)) {
+        const ip = (await pg("GET", `importacao_varejo_produtos?select=codigo_produto_omie&codigo=eq.${encodeURIComponent(codigo)}`))?.[0];
+        const ie = (await pg("GET", `importacao_varejo_estoque?select=cmc&codigo=eq.${encodeURIComponent(codigo)}`))?.[0];
+        if (!idProd && ip?.codigo_produto_omie) idProd = Number(ip.codigo_produto_omie);
+        if (!(valor > 0) && Number(ie?.cmc) > 0) valor = Number(ie.cmc);
+      }
+      if (!idProd) return json({ error: "Produto sem código do Omie — sincronize antes." }, 400);
+      const valorInformado = Number(b?.valor);
+      if (valorInformado > 0) valor = valorInformado;
+      if (!(valor > 0)) return json({ error: "Informe o valor unitário (R$): o produto não tem custo cadastrado e o Omie exige um valor." }, 400);
+      const payload = {
+        endpoint: "estoque/ajuste", call: "IncluirAjusteEstoque",
+        param: {
+          codigo_local_estoque: LOCAL_ESTOQUE_VERTICAL_MP, id_prod: idProd, cod_int_ajuste: chave,
+          data: hoje(), tipo, quan: String(quantidade), valor, origem: "AJU", motivo: "INV",
+          obs: `Contagem de estoque — ${solicitante} — ${String(mov.observacao || "").slice(0, 200)}`,
+        },
+        meta: { codigo, tipo, quantidade, valor, movimento_id: movId },
+      };
+      if (simular) return json({ simulado: true, ajuste: payload.param });
+      const [fila] = await pg("POST", "pcp_omie_fila", [{ tipo: "ajuste_estoque", chave, solicitante_email: solicitante, payload }]);
+      const r = await executar({ id: fila.id, payload, tipo: "ajuste_estoque" });
+      if (r.ok) await marcar(fila.id);
+      return json({ fila_id: fila.id, ...r }, r.ok ? 200 : 502);
+    }
+
     /* ---------- baixa de produção: concluir a OP → matéria-prima SAI, produto acabado ENTRA ---------- */
     // Só OP com produto acabado (frente quadro etc.). OP de corte (sem produto) NÃO movimenta: o item cortado
     // é vendido direto no pedido e a NF do Omie já dá a saída — baixar aqui duplicaria.

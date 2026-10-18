@@ -62,6 +62,42 @@ function AlmoxarifadoAjustes() {
   }, [filtro]);
   React.useEffect(() => { setLinhas(null); carregar(); }, [carregar]);
 
+  // Etapa 3: envio REAL ao Omie, um ajuste confirmado por vez. Simula primeiro (nada é gravado) e só envia depois do "OK" da pessoa.
+  const enviarOmie = async (l) => {
+    const c = window.__VP_SB && window.__VP_SB.sb;
+    if (!c) return;
+    const quem = (window.__VP_USER && window.__VP_USER.email) || '';
+    const chamar = async (simular, valor) => {
+      const { data, error } = await c.functions.invoke('pcp-omie-escrever', { body: { acao: 'enviar_movimento', movimento_id: l.id, solicitante: quem, simular, ...(valor ? { valor } : {}) } });
+      if (error || !data || data.error || data.ok === false) {
+        let msg = (data && (data.error || data.erro)) || '';
+        if (!msg && error && error.context && typeof error.context.json === 'function') { try { const j = await error.context.json(); msg = j.error || j.erro || ''; } catch (e) {} }
+        throw new Error(msg || (error && error.message) || 'falha');
+      }
+      return data;
+    };
+    setOcupado(l.id);
+    try {
+      let valor = null;
+      let sim;
+      try { sim = await chamar(true); }
+      catch (e) {
+        if (!/valor unit/i.test(e.message)) throw e;
+        const v = window.prompt('Este produto não tem custo cadastrado e o Omie exige um valor. Informe o valor unitário (R$):');
+        valor = Number(String(v || '').replace(',', '.'));
+        if (!(valor > 0)) return;
+        sim = await chamar(true, valor);
+      }
+      const a = sim.ajuste || {};
+      const ok = window.confirm('Enviar ao Omie AGORA?\n\n' + l.codigo + ' — ' + (a.tipo === 'ENT' ? 'ENTRADA' : 'SAÍDA') + ' de ' + a.quan + ' un.\nLocal: VERTICAL MP · valor unitário R$ ' + a.valor + (sim.reenvio ? '\n(repetição de um envio que deu erro antes)' : '') + '\n\nIsso altera o estoque no Omie.');
+      if (!ok) return;
+      const r = await chamar(false, valor);
+      window.VPLog?.registrar?.({ modulo: 'Almoxarifado', acao: 'Enviou ajuste de estoque ao Omie', alvo: `${l.codigo}: ${ajeQtd(l.quantidade)}` });
+      window.toast?.(r.ja_enviado ? 'Esse ajuste já estava no Omie; marcado como enviado.' : 'Ajuste enviado ao Omie.', 'success');
+    } catch (e) { window.toast?.('Não foi possível enviar ao Omie: ' + (e.message || e), 'error'); }
+    finally { setOcupado(null); carregar(); }
+  };
+
   const decidir = async (l, confirmar) => {
     const c = window.__VP_SB && window.__VP_SB.sb;
     if (!c) return;
@@ -75,7 +111,7 @@ function AlmoxarifadoAjustes() {
   };
 
   return (
-    <Card title="Ajustes de estoque vindos de contagem" sub="Cada contagem com diferença vira um ajuste. Confirmar registra a decisão; o envio ao Omie ainda não está ligado.">
+    <Card title="Ajustes de estoque vindos de contagem" sub="Cada contagem com diferença vira um ajuste. Confirmar registra a decisão; depois, 'Enviar ao Omie' lança o ajuste no estoque do Omie (um por vez, com conferência).">
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 12 }}>
         {AJE_FILTROS.map((f) => <Button key={f.id} variant={filtro === f.id ? 'primary' : 'ghost'} onClick={() => setFiltro(f.id)}>{f.label}</Button>)}
         <Button variant="ghost" onClick={() => { setLinhas(null); carregar(); }}>Atualizar</Button>
@@ -104,6 +140,7 @@ function AlmoxarifadoAjustes() {
                         <Button variant="primary" disabled={!podeDecidir || ocupado === l.id} onClick={() => decidir(l, true)}>Confirmar</Button>{' '}
                         <Button variant="ghost" disabled={!podeDecidir || ocupado === l.id} onClick={() => decidir(l, false)}>Descartar</Button>
                       </> : null}
+                      {l.status_omie === 'confirmado' && l.enviar_omie ? <Button variant="primary" disabled={!podeDecidir || ocupado === l.id} onClick={() => enviarOmie(l)}>{ocupado === l.id ? 'Enviando…' : 'Enviar ao Omie'}</Button> : null}
                     </td>
                   </tr>
                 );
