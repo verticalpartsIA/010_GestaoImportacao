@@ -350,9 +350,10 @@ function AlmModalHistoricoContagem({ prod, onClose }) {
   React.useEffect(() => {
     const c = window.__VP_SB && window.__VP_SB.sb;
     if (!c) { setLinhas([]); return; }
-    c.from('pcp_estoque_contagens').select('quantidade_fisica, quantidade_omie, diferenca, contado_por, contado_em')
-      .eq('codigo', prod.codigo).order('contado_em', { ascending: false }).limit(50)
-      .then(({ data }) => setLinhas(data || []));
+    // Fonte única (fase 3): importacao_varejo_contagem_hist — a mesma que a Compras e o app de estoque usam.
+    c.from('importacao_varejo_contagem_hist').select('quantidade, saldo_sistemico, diferenca, registrado_por, registrado_em')
+      .eq('codigo', String(prod.codigo).toUpperCase()).order('registrado_em', { ascending: false }).limit(50)
+      .then(({ data }) => setLinhas((data || []).map((h) => ({ quantidade_fisica: h.quantidade, quantidade_omie: h.saldo_sistemico, diferenca: h.diferenca, contado_por: h.registrado_por, contado_em: h.registrado_em }))));
   }, [prod.codigo]);
   return (
     <Modal title={'Histórico de contagens — ' + prod.codigo} onClose={onClose} width={620} footer={<Button variant="ghost" onClick={onClose}>Fechar</Button>}>
@@ -410,8 +411,8 @@ function AlmModalAcerto({ prod, onClose, onDone }) {
   React.useEffect(() => {
     const c = window.__VP_SB && window.__VP_SB.sb;
     if (!c) { setUltima(null); return; }
-    c.from('pcp_estoque_contagens').select('quantidade_omie, contado_em').eq('codigo', prod.codigo).order('contado_em', { ascending: false }).limit(1)
-      .then(({ data }) => setUltima((data && data[0]) || null));
+    c.from('importacao_varejo_contagem_hist').select('saldo_sistemico, registrado_em').eq('codigo', String(prod.codigo).toUpperCase()).order('registrado_em', { ascending: false }).limit(1)
+      .then(({ data }) => setUltima((data && data[0]) ? { quantidade_omie: data[0].saldo_sistemico, contado_em: data[0].registrado_em } : null));
   }, [prod.codigo]);
 
   // Prévia: a função monta o ajuste e devolve, sem gravar em lugar nenhum (simular: true). Refaz ao informar o valor unitário.
@@ -725,7 +726,7 @@ function AlmoxarifadoEstoque() {
     if (!c) return;
     setSincronizando(true);
     try {
-      const { data, error } = await c.functions.invoke('sync-pcp-omie', { body: { escopo: 'tudo' } });
+      const { data, error } = await c.functions.invoke('sync-estoque-omie', { body: {} });
       if (error) throw error;
       if (data && data.ok === false) {
         // Os dados foram gravados; só alguns itens deram aviso (ex.: produto sem vínculo no Omie).
@@ -832,7 +833,7 @@ function AlmoxarifadoEstoque() {
             <span title={'A sincronização terminou, mas com avisos de cadastro no Omie:\n' + ultimaSync.avisos.join('\n')}>{ultimaSync.avisos.length} aviso(s) de cadastro</span>
           </Badge>
         )}
-        <Button variant="primary" disabled={sincronizando} onClick={sincronizar}>{sincronizando ? 'Sincronizando…' : 'Sincronizar com Omie'}</Button>
+        <Button variant="primary" disabled={sincronizando} onClick={sincronizar}>{sincronizando ? 'Sincronizando…' : 'Sincronizar estoque (Omie)'}</Button>
       </div>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginBottom: 12 }}>
         <div className="card pcp-total" onClick={() => setFiltro('zerados')} style={{ padding: 14, flex: '1 1 170px', cursor: 'pointer', borderLeft: nZerados ? '4px solid var(--vp-yellow)' : undefined }}>
