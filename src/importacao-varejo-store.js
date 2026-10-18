@@ -252,8 +252,34 @@
     return mapa;
   }
 
-  async function carregar() {
-    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+  /* Pacote cru da tela: o que a Edge Function + as 5 consultas devolvem, no mesmo formato, venha de onde vier. */
+  function indexar(lista, valor) {
+    const m = {};
+    (lista || []).forEach((l) => { m[String(l.codigo).toUpperCase()] = valor ? valor(l) : l; });
+    return m;
+  }
+
+  /* Caminho RÁPIDO (18/10/2026): uma só chamada ao banco (iv_compras_carga) devolve tudo. Antes: 1 Edge Function + ~9 viagens em fila. */
+  async function carregarPacoteRapido(c) {
+    const { data, error } = await c.rpc('iv_compras_carga');
+    if (error) throw new Error(error.message || 'iv_compras_carga falhou');
+    if (!data || !Array.isArray(data.items) || !data.items.length) throw new Error('iv_compras_carga sem itens');
+    return {
+      data: { items: data.items, lastEstoqueSyncAt: data.lastEstoqueSyncAt, lastGiroSyncAt: data.lastGiroSyncAt },
+      mapa: indexar(data.contagens),
+      sugs: indexar(data.sugestoes),
+      revs: indexar(data.revisoes),
+      minOmie: indexar(data.minimoOmie, (l) => Math.ceil(Number(l.minimo_omie) || 0)),
+      caminho: indexar(data.caminho, (l) => ({
+        aCaminho: Number(l.a_caminho) || 0, chegouSemNota: Number(l.chegou_sem_nota) || 0,
+        compradoPi: Number(l.comprado_pi) || 0, detalhes: l.detalhes || [],
+      })),
+      avisoContagem: null,
+    };
+  }
+
+  /* Caminho ANTIGO (reserva): Edge Function + consultas, como era até 17/10/2026. Só roda se o rápido falhar. */
+  async function carregarPacoteAntigo(c) {
     const { data, error } = await c.functions.invoke('list-importacao-varejo', { body: {} });
     if (error) throw new Error((window.extrairErroFuncao && window.extrairErroFuncao(error)) || error.message || 'Falha ao consultar Importação Varejo.');
     if (data && data.error) throw new Error(data.error);
@@ -268,6 +294,15 @@
     try { minOmie = await carregarMinimoOmie(); } catch (e) { console.warn('[ImportacaoVarejo] sem mínimo do Omie', e); }
     let caminho = {};
     try { caminho = await carregarACaminho(); } catch (e) { console.warn('[ImportacaoVarejo] sem "a caminho" (P.I. × notas)', e); }
+    return { data, mapa, sugs, revs, minOmie, caminho, avisoContagem };
+  }
+
+  async function carregar() {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    let pacote;
+    try { pacote = await carregarPacoteRapido(c); }
+    catch (e) { console.warn('[ImportacaoVarejo] carga rápida indisponível, usando o caminho antigo', e); pacote = await carregarPacoteAntigo(c); }
+    const { data, mapa, sugs, revs, minOmie, caminho, avisoContagem } = pacote;
     const hoje = new Date();
     data.items = (data.items || []).map((i) => {
       const cod = String(i.codigo).toUpperCase();
