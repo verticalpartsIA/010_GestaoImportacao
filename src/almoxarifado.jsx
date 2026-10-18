@@ -502,7 +502,7 @@ function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
   const [saving, setSaving] = React.useState(false);
   const porCodigo = React.useMemo(() => Object.fromEntries(linhas.map((l) => [l.codigo.toUpperCase(), l])), [linhas]);
   const itens = React.useMemo(() => texto.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).map((x) => {
-    const [cod, ...resto] = x.split(/[;\t]/); const end = resto.join(' ').trim().toUpperCase().slice(0, 60);
+    const [cod, ...resto] = x.split(/[;\t]/); const end = (resto.length > 1 ? resto[resto.length - 1] : resto.join(' ')).trim().toUpperCase().slice(0, 60);   // código;descrição;endereço usa o último campo
     const l = porCodigo[String(cod || '').trim().toUpperCase()];
     const v = end && window.EtiquetasCalc?.validarEnderecoNovo ? window.EtiquetasCalc.validarEnderecoNovo(end, l && l.endereco) : { ok: true, codigo: end };
     return { cod: String(cod || '').trim(), end: v.ok && v.codigo ? v.codigo : end, l, endInvalido: !v.ok, endMsg: v.msg };
@@ -741,6 +741,15 @@ function AlmoxarifadoEstoque() {
 
   linhas.forEach((l) => { l.faltas = almFaltas(l, podeVerCusto); });   // campo derivado (não vem do banco)
   const EPS = 1e-9;
+  // Facilita o preenchimento dos endereços: sugere só posições que existem no galpão e ainda não têm item.
+  const usadosEnd = new Set(linhas.map((l) => String(l.endereco || '').trim().toUpperCase()).filter(Boolean));
+  const enderecosLivres = (window.EtiquetasCalc?.todosEnderecos?.() || []).map((e) => e.codigo).filter((c) => !usadosEnd.has(c));
+  const semEndereco = linhas.filter((l) => !String(l.endereco || '').trim());
+  const copiarSemEndereco = () => {
+    const txt = semEndereco.map((l) => `${l.codigo};${String(l.descricao || '').replace(/[;\t\r\n]+/g, ' ')};`).join('\n');
+    const ok = () => window.toast?.(`${semEndereco.length} itens copiados. Cole na planilha, preencha a 3ª coluna e cole em "Importar endereços".`, 'success');
+    if (navigator.clipboard?.writeText) navigator.clipboard.writeText(txt).then(ok).catch(() => window.prompt('Copie a lista:', txt)); else window.prompt('Copie a lista:', txt);
+  };
   const abaixoMin = (l) => l.temSaldo && l.estoque_minimo != null && l.saldo < Number(l.estoque_minimo);
   const FILTROS = [
     { id: 'todos', label: 'Todos', fn: () => true },
@@ -844,7 +853,9 @@ function AlmoxarifadoEstoque() {
         ))}
         <span style={{ flex: 1 }}/>
         <Button size="sm" variant={mostrarContar ? 'primary' : 'ghost'} title="Os 20 itens que mais precisam de contagem hoje" onClick={() => setMostrarContar((v) => !v)}>Contar hoje ({fila.length})</Button>
+        {podeContar && semEndereco.length > 0 && <Button size="sm" variant="ghost" title="Copia 'código;descrição;' dos itens sem endereço. Cole numa planilha, preencha a 3ª coluna e cole de volta em Importar endereços." onClick={copiarSemEndereco}>Copiar lista sem endereço ({semEndereco.length})</Button>}
         {podeContar && <Button size="sm" variant="ghost" title="Gravar endereços de muitos itens de uma vez (código;endereço)" onClick={() => setModalEnd(true)}>Importar endereços</Button>}
+        {podeContar && <datalist id="alm-enderecos-livres">{enderecosLivres.map((c) => <option key={c} value={c}/>)}</datalist>}
         <Button size="sm" variant="ghost" title="Mostrar ou esconder Família, Mínimo, Custo e Lead time" onClick={alternarCols}>{maisCols ? '◂ Menos colunas' : 'Mais colunas ▸'}</Button>
         <span className="muted" style={{ fontSize: 12 }}>
           <span title="Cadastro completo = vínculo com o Omie e endereço (e custo, para quem vê custos). Lead time e mínimo do Omie não contam.">Cadastro completo: {nCompletos} de {linhas.length}</span> · Contagem: {nContados} de {linhas.length}{nDif > 0 ? ` · ${nDif} com diferença` : ''}
@@ -941,7 +952,10 @@ function AlmoxarifadoEstoque() {
                     <td>
                       {podeContar
                         ? <input className="input" type="text" maxLength={60} placeholder="falta" key={l.codigo + '-end-' + (l.endereco || '')}
-                            defaultValue={l.endereco || ''} style={{ width: 76 }} title="Endereço na prateleira (só do PCP)" onBlur={(e) => salvarEndereco(l, e.target.value)}/>
+                            defaultValue={l.endereco || ''} style={{ width: 76 }} list="alm-enderecos-livres" data-end-input="1"
+                            title="Endereço na prateleira (só do PCP). Digite ou escolha um livre; Enter grava e vai para o próximo item."
+                            onKeyDown={(e) => { if (e.key !== 'Enter') return; e.preventDefault(); const todos = Array.from(document.querySelectorAll('input[data-end-input]')); const i = todos.indexOf(e.target); e.target.blur(); const prox = todos[i + 1]; if (prox) setTimeout(() => prox.focus(), 0); }}
+                            onBlur={(e) => salvarEndereco(l, e.target.value)}/>
                         : (l.endereco || <span style={{ color: 'var(--fg3)' }}>falta</span>)}
                       {mesmoEnd(l).length > 0 && <span style={{ color: 'var(--vp-warning-ink, #b45309)', cursor: 'help', marginLeft: 4 }} title={'Mesmo endereço de: ' + mesmoEnd(l).slice(0, 6).join(', ')}>⚠</span>}
                     </td>
