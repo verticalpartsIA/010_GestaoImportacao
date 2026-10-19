@@ -22,6 +22,8 @@
       obs: 'Térmica direta. 203 dpi, 104 mm de largura útil. O Browser Print não lista a ZD220 oficialmente: confirmar na bancada.' },
     { id: 'zebra-zd230', marca: 'Zebra', modelo: 'ZD230', dpi: 203, largura_max_mm: 104, linguagem: 'zpl', implementado: true, conexoes: 'USB / Ethernet',
       obs: 'Mesma família da ZD220. Confirmar na bancada.' },
+    { id: 'zebra-zt230', marca: 'Zebra', modelo: 'ZT230 (300 dpi)', dpi: 300, largura_max_mm: 104, linguagem: 'zpl', implementado: true, conexoes: 'USB / Ethernet / Serial',
+      obs: 'Industrial, 300 dpi (12 pontos/mm), 104 mm de largura útil. É a ZDesigner ZT230-300dpi ZPL instalada aqui; o Browser Print a lista como Zebra USB.' },
     { id: 'zebra-zt421', marca: 'Zebra', modelo: 'ZT421', dpi: 203, largura_max_mm: null, linguagem: 'zpl', implementado: true, conexoes: 'USB / Ethernet',
       obs: 'Industrial; existe em 203 e 300 dpi. Ajuste a resolução ao modelo comprado.' },
     { id: 'zebra-generica', marca: 'Zebra', modelo: 'Outro modelo Zebra (ZPL)', dpi: 203, largura_max_mm: null, linguagem: 'zpl', implementado: true, conexoes: 'USB / rede',
@@ -40,6 +42,7 @@
     const txt = `${imp && imp.nome || ''} ${imp && imp.fabricante || ''}`.toLowerCase();
     if (/zd\s*220/.test(txt)) return perfilPorId('zebra-zd220');
     if (/zd\s*230/.test(txt)) return perfilPorId('zebra-zd230');
+    if (/zt\s*230/.test(txt)) return perfilPorId('zebra-zt230');
     if (/zt\s*4\d\d/.test(txt)) return perfilPorId('zebra-zt421');
     if (/l\s*42/.test(txt) && /elgin/.test(txt)) return perfilPorId('elgin-l42-pro');
     if (/os[-\s]?214|os[-\s]?2140|argox/.test(txt)) return perfilPorId('argox-os214plus');
@@ -109,11 +112,21 @@
   // Escolha por computador (não é segredo; fica no navegador do posto).
   const CHAVE = 'vp_etiquetas_impressora';
   function lerEscolha() { try { return JSON.parse(localStorage.getItem(CHAVE) || 'null'); } catch (e) { return null; } }
+  // Perfil lembrado por impressora (o Browser Print só informa um código, então o modelo não dá para adivinhar: a pessoa escolhe uma vez).
+  const CHAVE_PERFIS = 'vp_etiquetas_perfis';
+  const chavePerfil = (imp) => `${imp && imp.adaptador}|${imp && imp.id}`;
+  function lerPerfis() { try { return JSON.parse(localStorage.getItem(CHAVE_PERFIS) || '{}') || {}; } catch (e) { return {}; } }
+  function lembrarPerfil(imp, perfilId) {
+    if (!imp || !imp.id || !perfilPorId(perfilId)) return;
+    try { const m = lerPerfis(); m[chavePerfil(imp)] = perfilId; localStorage.setItem(CHAVE_PERFIS, JSON.stringify(m)); } catch (e) { /* vale só nesta sessão */ }
+  }
+  // Perfil lembrado para essa impressora; sem lembrança, o mais parecido pelo nome.
+  function perfilDaImpressora(imp) { return perfilPorId(lerPerfis()[chavePerfil(imp)]) || casarPerfil(imp); }
   function salvarEscolha(esc) { try { localStorage.setItem(CHAVE, JSON.stringify(esc)); } catch (e) { /* sem armazenamento: vale só nesta sessão */ } }
 
   window.EtiquetasImpressoras = {
     PERFIS, perfilPorId, casarPerfil, NAVEGADOR,
-    detectarBrowserPrint, enviarBrowserPrint, imprimirNavegador, detectarTodas, lerEscolha, salvarEscolha,
+    detectarBrowserPrint, enviarBrowserPrint, imprimirNavegador, detectarTodas, lerEscolha, salvarEscolha, lembrarPerfil, perfilDaImpressora,
     _resetarBase: () => { bpBase = null; },
   };
 }());

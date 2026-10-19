@@ -151,12 +151,12 @@ test('HTML de impressão: página com o tamanho do modelo e sem margem', () => {
   assert.equal((h.match(/class="pg"/g) || []).length, 2);
 });
 
-test('modelos padrão: largura 100 (altura 50 ou 100), ids únicos, campos usados existem em dados de exemplo', () => {
+test('modelos padrão: largura 100 (altura 50, 100 ou 150), ids únicos, campos usados existem em dados de exemplo', () => {
   const ids = E.MODELOS.map((m) => m.id);
   assert.equal(new Set(ids).size, ids.length);
   for (const m of E.MODELOS) {
     assert.equal(m.largura_mm, 100);
-    assert.ok(m.altura_mm === 50 || m.altura_mm === 100);
+    assert.ok([50, 100, 150].includes(m.altura_mm));
     for (const el of m.elementos) if (el.campo) {
       for (const c of (el.campo.match(/\{(\w+)\}/g) || [])) assert.ok(m.campos.includes(c.slice(1, -1)), `${m.id}: ${c} não está em campos`);
     }
@@ -234,4 +234,84 @@ test('fase 3: modelos da empresa — registro, validação e campos protegidos',
   assert.equal(E.modelosDaEmpresa().length, 2);
   E.registrarModelos([]);
   assert.equal(E.modeloPorId('C:u1'), null);
+});
+
+test('rolo: largura × comprimento, colunas e limite da impressora', () => {
+  const zt = { largura_max_mm: 104 };
+  const a = E.geometriaRolo({ largura_mm: '100', altura_mm: '150', colunas: '1' }, zt);
+  assert.ok(a.ok); assert.equal(a.largura, 100); assert.equal(a.altura, 150); assert.equal(a.larguraTotal, 100);
+  const b = E.geometriaRolo({ largura_mm: 30, altura_mm: 50, colunas: 2, espaco_mm: 3 }, zt);
+  assert.ok(b.ok); assert.equal(b.larguraTotal, 63);
+  assert.ok(!E.geometriaRolo({ largura_mm: 60, altura_mm: 50, colunas: 2, espaco_mm: 3 }, zt).ok, '123 mm não cabe numa impressora de 104 mm');
+  assert.ok(!E.geometriaRolo({ largura_mm: '', altura_mm: 50 }).ok);
+  assert.ok(!E.geometriaRolo({ largura_mm: 30, altura_mm: 50, colunas: 1.5 }).ok);
+  const leg = E.geometriaRolo({ rolo: '100x100' });   // formato antigo guardado no navegador
+  assert.equal(leg.largura, 100); assert.equal(leg.altura, 100); assert.equal(leg.colunas, 1);
+});
+
+test('adaptarModelo: mesma medida não mexe; outra medida usa escala única e centraliza', () => {
+  const m = E.modeloPorId('ITEM_100x50');
+  assert.equal(E.adaptarModelo(m, 100, 50).ajustado, false);
+  const g = E.adaptarModelo(m, 100, 150);   // mais alto: escala 1, sobra 100 mm na vertical, centralizado
+  assert.equal(g.escala, 1); assert.equal(g.modelo.altura_mm, 150);
+  assert.equal(g.modelo.elementos[0].y, m.elementos[0].y + 50);
+  const p = E.adaptarModelo(m, 30, 50);   // mais estreito: escala 0,3
+  assert.ok(Math.abs(p.escala - 0.3) < 1e-9);
+  for (const el of p.modelo.elementos) assert.ok(el.x >= 0 && el.x + (el.w || 0) <= 30.001, 'tudo dentro dos 30 mm');
+  const t = E.adaptarModelo(m, 200, 100, { ampliar: false });
+  assert.equal(t.escala, 1, 'o teste não é ampliado');
+});
+
+test('ZPL com 2 colunas: rolo de 63 mm, 2 etiquetas por linha, linhas iguais usam ^PQ', () => {
+  const m = E.adaptarModelo(E.modeloPorId('ENDERECO_VIGA_100x50'), 30, 50).modelo;
+  const A = E.dadosEndereco('R1A1'), B = E.dadosEndereco('R1A3'), C = E.dadosEndereco('R1A5');
+  const r = E.renderZPLLinhas(m, [{ dados: A, copias: 2 }, { dados: B, copias: 1 }, { dados: C, copias: 1 }], { dpi: 203, colunas: 2, espaco: 3 });
+  assert.equal(r.etiquetas, 4);
+  assert.equal(r.blocos.length, 2, 'linha 1 = A A; linha 2 = B C');
+  assert.match(r.blocos[0], /\^PW504/);   // 63 mm × 8
+  assert.match(r.blocos[0], /\^PQ1/);
+  assert.equal((r.blocos[1].match(/\^BQN/g) || []).length, 2, 'dois QR na mesma linha');
+  assert.match(r.blocos[1], /\^FO(2[6-9]\d|3\d\d),/, 'a 2ª etiqueta começa depois de 33 mm (264 pontos)');
+  const iguais = E.renderZPLLinhas(m, [{ dados: A, copias: 10 }], { dpi: 203, colunas: 2, espaco: 3 });
+  assert.equal(iguais.blocos.length, 1); assert.match(iguais.blocos[0], /\^PQ5/);
+  const um = E.renderZPLLinhas(m, [{ dados: A, copias: 3 }], { dpi: 203, colunas: 1 });
+  assert.match(um.blocos[0], /\^PQ3/);
+});
+
+test('SVG da linha: largura do rolo inteiro e uma etiqueta por coluna', () => {
+  const m = E.modeloPorId('ITEM_100x50');
+  const svg = E.renderSVGLinha(m, [E.dadosItem({ codigo: 'A1' }), E.dadosItem({ codigo: 'B2' })], { colunas: 2, espaco: 4 });
+  assert.match(svg, /viewBox="0 0 204 50"/);
+  assert.match(svg, /width="204mm" height="50mm"/);
+  assert.match(svg, />A1</); assert.match(svg, />B2</);
+  assert.doesNotMatch(E.renderSVGLinha(m, [E.dadosItem({ codigo: 'A1' })], { fluido: true }), /width="100mm"/);
+});
+
+test('ajuste fino de posição: desloca os campos no ZPL e valida o limite', () => {
+  const m = E.modeloPorId('TESTE_100x50');
+  const base = E.renderZPL(m, E.DADOS_TESTE, { dpi: 300 }).zpl;
+  const desl = E.renderZPL(m, E.DADOS_TESTE, { dpi: 300, desl_x_mm: 2, desl_y_mm: 1 }).zpl;
+  const fo = (z) => z.match(/\^FO(\d+),(\d+)/g);
+  const a = fo(base), b = fo(desl);
+  assert.equal(a.length, b.length);
+  const [ax, ay] = /\^FO(\d+),(\d+)/.exec(a[1]).slice(1).map(Number), [bx, by] = /\^FO(\d+),(\d+)/.exec(b[1]).slice(1).map(Number);
+  assert.equal(bx - ax, 24); assert.equal(by - ay, 12);   // 2 mm e 1 mm a 300 dpi (12 pontos/mm)
+  const neg = E.renderZPL(m, E.DADOS_TESTE, { dpi: 300, desl_x_mm: -50 }).zpl;
+  assert.doesNotMatch(neg, /\^FO-/, '^FO nunca recebe negativo');
+  assert.ok(E.geometriaRolo({ largura_mm: 100, altura_mm: 50, desl_x_mm: 3, desl_y_mm: -2 }).ok);
+  assert.ok(!E.geometriaRolo({ largura_mm: 100, altura_mm: 50, desl_x_mm: 12 }).ok);
+  assert.equal(E.geometriaRolo({ largura_mm: 100, altura_mm: 50 }).deslX, 0);
+});
+
+test('separação: há modelo para 100x50, 100x100 e 100x150 e o conteúdo ocupa ~95% da etiqueta', () => {
+  const ms = E.modelosDoTipo('SEPARACAO');
+  assert.deepEqual(ms.map((m) => m.altura_mm).sort((a, b) => a - b), [50, 100, 150]);
+  for (const m of ms) {
+    const xs = m.elementos.filter((e) => e.tipo !== 'caixa' && e.tipo !== 'linha');
+    const dir = Math.max(...xs.map((e) => e.x + e.w)), baixo = Math.max(...xs.map((e) => e.y + (e.tipo === 'qr' ? e.w : e.h)));
+    assert.ok(dir >= m.largura_mm * 0.93, `${m.id}: largura usada ${dir}`);
+    assert.ok(baixo <= m.altura_mm - 1, `${m.id}: nada passa da borda`);
+    const z = E.renderZPL(m, E.dadosSeparacao({ pedido: '26078', volume: 1, total_volumes: 3, cliente: 'CONCESSIONARIA CATEDRAL SPE S.A.', destino: 'EXP', separador: 'Gelson Simões', data: '19/10/2026' }), { dpi: 300 });
+    assert.ok(!z.avisos.some((a) => /não cabe|pequeno|cortado/.test(a)), `${m.id}: ${z.avisos.join(' | ')}`);
+  }
 });
