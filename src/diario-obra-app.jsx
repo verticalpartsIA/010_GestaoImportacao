@@ -115,7 +115,9 @@
     );
   }
 
-  function ItemLinha({ item, status, selecionado, fotos, observacao, enviando, onToggle, onAbrirCamera, onObservacao }) {
+  function fmtDia(iso) { return iso ? iso.split('-').reverse().join('/') : '—'; }
+
+  function ItemLinha({ item, status, selecionado, fotos, observacao, enviando, dataConclusao, dataMinima, dataMaxima, onToggle, onAbrirCamera, onObservacao, onData }) {
     const flegado = status && status.flegado;
     return (
       <div style={{
@@ -129,7 +131,9 @@
           <div style={{ flex: 1 }}>
             <div style={{ fontSize: 14, fontWeight: 600 }}>{item.texto}</div>
             {flegado && (
-              <div style={{ fontSize: 11.5, color: '#0a7a3d', marginTop: 2 }}>✓ Feito em {fmtDataHora(status.flegado_em)}</div>
+              <div style={{ fontSize: 11.5, color: '#0a7a3d', marginTop: 2 }}>
+                ✓ {status.concluido_em ? `Concluído em ${fmtDia(status.concluido_em)} · enviado ${fmtDataHora(status.flegado_em)}` : `Feito em ${fmtDataHora(status.flegado_em)}`}
+              </div>
             )}
             {flegado && status.fotos && status.fotos.length > 0 && (
               <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
@@ -146,6 +150,13 @@
                   📷 {fotos.length > 0 ? `${fotos.length} foto(s) — tirar outra` : 'Tirar foto (obrigatório)'}
                 </button>
                 <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>Só vale foto tirada agora pela câmera.</div>
+                <label style={{ display: 'block', marginTop: 8, fontSize: 12, color: '#444' }}>
+                  Dia em que concluiu esta etapa
+                  <input type="date" value={dataConclusao} disabled={enviando}
+                    min={dataMinima} max={dataMaxima}
+                    onChange={(e) => onData(item.id, e.target.value)}
+                    style={{ display: 'block', marginTop: 4, fontSize: 14, padding: 6, border: '1px solid #ddd', borderRadius: 6 }} />
+                </label>
                 {fotos.length > 0 && (
                   <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
                     {fotos.map((f, i) => <img key={i} src={f.preview} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4 }} />)}
@@ -174,6 +185,7 @@
     const [fotos, setFotos] = React.useState({});
     const [observacoes, setObservacoes] = React.useState({});
     const [enviando, setEnviando] = React.useState(false);
+    const [datas, setDatas] = React.useState({});
     const [cameraItem, setCameraItem] = React.useState(null);
     const fallbackInput = React.useRef(null);
     const fallbackItem = React.useRef(null);
@@ -189,6 +201,8 @@
     if (estado === undefined) return <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Carregando…</div>;
     if (estado === null) return <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Link não encontrado ou expirado.</div>;
 
+    const hoje = window.AcompanhamentoObraStore.hojeSP();
+    const dataMinima = new Date(Date.parse(hoje + 'T00:00:00Z') - window.AcompanhamentoObraStore.CONCLUIDO_EM_JANELA_DIAS * 864e5).toISOString().slice(0, 10);
     const statusPorItem = {};
     (estado.status || []).forEach((s) => { statusPorItem[s.item_id] = s; });
     const itens = (estado.status || [])
@@ -202,6 +216,7 @@
 
     const toggle = (itemId) => {
       setSelecionados((p) => { const n = { ...p }; if (n[itemId]) delete n[itemId]; else n[itemId] = true; return n; });
+      setDatas((p) => (p[itemId] ? p : { ...p, [itemId]: hoje }));
     };
 
     const aparelho = () => (navigator.userAgent || '').slice(0, 140);
@@ -266,11 +281,11 @@
             const url = await window.AcompanhamentoObraStore.uploadFoto(estado.link.dossier_id, itemId, f.file);
             urls.push(url); fotosMeta.push({ url, ...(f.meta || {}) });
           }
-          itensHoje.push({ item_id: itemId, fotos: urls, fotos_meta: fotosMeta, observacao: (observacoes[itemId] || '').trim() || null });
+          itensHoje.push({ item_id: itemId, fotos: urls, fotos_meta: fotosMeta, concluido_em: datas[itemId] || hoje, observacao: (observacoes[itemId] || '').trim() || null });
         }
         await window.AcompanhamentoObraStore.registrarLancamento(estado.link.dossier_id, itensHoje, null);
         window.alert('Enviado! Obrigado — até amanhã.');
-        setSelecionados({}); setFotos({}); setObservacoes({});
+        setSelecionados({}); setFotos({}); setObservacoes({}); setDatas({});
         carregar();
       } catch (e) {
         window.alert('Erro ao enviar: ' + e.message);
@@ -302,6 +317,8 @@
         {itens.map((item) => (
           <ItemLinha key={item.id} item={item} status={statusPorItem[item.id]}
             selecionado={!!selecionados[item.id]} fotos={fotos[item.id] || []} observacao={observacoes[item.id] || ''} enviando={enviando}
+            dataConclusao={datas[item.id] || hoje} dataMinima={dataMinima} dataMaxima={hoje}
+            onData={(id, v) => setDatas((p) => ({ ...p, [id]: v }))}
             onToggle={toggle} onAbrirCamera={abrirCamera} onObservacao={onObservacao} />
         ))}
 

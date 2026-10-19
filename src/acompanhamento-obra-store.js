@@ -124,7 +124,37 @@
     return data.publicUrl;
   }
 
-  /* itensHoje: [{ item_id, fotos: [url,...], observacao? }]. observacao é
+  /* Data de hoje no fuso de São Paulo (aaaa-mm-dd) — o servidor e o celular do montador podem estar em outro fuso. */
+  function hojeSP() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  }
+  const CONCLUIDO_EM_JANELA_DIAS = 60;
+  /* Vazio => hoje. Recusa formato inválido, data futura e data mais de 60 dias atrás. */
+  function validarConcluidoEm(valor) {
+    const hoje = hojeSP();
+    const v = (valor || hoje);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || isNaN(Date.parse(v + 'T00:00:00Z'))) throw new Error('Data de conclusão inválida.');
+    if (v > hoje) throw new Error('A data de conclusão não pode ser no futuro.');
+    const dias = (Date.parse(hoje + 'T00:00:00Z') - Date.parse(v + 'T00:00:00Z')) / 864e5;
+    if (dias > CONCLUIDO_EM_JANELA_DIAS) throw new Error(`A data de conclusão não pode ser de mais de ${CONCLUIDO_EM_JANELA_DIAS} dias atrás.`);
+    return v;
+  }
+
+  /* Correção da data real pelo operador (alçada instalacao.editar_status_obra). A data de envio não muda. */
+  async function corrigirConcluidoEm(dossierId, itemId, data, operadorEmail) {
+    const c = sb();
+    const v = validarConcluidoEm(data);
+    const { error } = await c.from('acompanhamento_obra_status')
+      .update({ concluido_em: v }).eq('dossier_id', dossierId).eq('item_id', itemId).eq('flegado', true);
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Instalação', acao: 'Corrigiu a data de conclusão de uma etapa da obra', alvo_id: dossierId,
+      ator_nome: operadorEmail || null, detalhe: { itemId, concluido_em: v },
+    });
+    return v;
+  }
+
+  /* itensHoje: [{ item_id, fotos: [url,...], observacao?, concluido_em? }]. observacao é
      opcional — texto livre de quem flegou (ex.: dificuldade encontrada),
      nunca bloqueia o envio. Add-only: itens já flegados são ignorados
      aqui (o Montador não consegue re-enviar um item já travado — a tela
@@ -145,9 +175,12 @@
     const novos = itensHoje.filter((i) => !jaFlegados.has(i.item_id));
     if (!novos.length) throw new Error('Os itens selecionados já estavam marcados.');
 
+    // Data real em que a etapa foi concluída (ver validarConcluidoEm); sem informar, vale hoje.
+    novos.forEach((i) => { i.concluido_em = validarConcluidoEm(i.concluido_em); });
+
     const agora = new Date().toISOString();
     await Promise.all(novos.map((i) => c.from('acompanhamento_obra_status')
-      .upsert({ dossier_id: dossierId, item_id: i.item_id, flegado: true, flegado_em: agora, fotos: i.fotos, observacao: i.observacao || null, flegado_por: flegadoPor || null, desflegado_por: null, desflegado_em: null }, { onConflict: 'dossier_id,item_id' })));
+      .upsert({ dossier_id: dossierId, item_id: i.item_id, flegado: true, flegado_em: agora, concluido_em: i.concluido_em, fotos: i.fotos, observacao: i.observacao || null, flegado_por: flegadoPor || null, desflegado_por: null, desflegado_em: null }, { onConflict: 'dossier_id,item_id' })));
 
     const { error } = await c.from('acompanhamento_obra_lancamentos').insert({
       dossier_id: dossierId,
@@ -204,7 +237,7 @@
   async function desflegarItem(dossierId, itemId, operadorEmail) {
     const c = sb();
     const { error } = await c.from('acompanhamento_obra_status')
-      .update({ flegado: false, desflegado_por: operadorEmail || null, desflegado_em: new Date().toISOString() })
+      .update({ flegado: false, concluido_em: null, desflegado_por: operadorEmail || null, desflegado_em: new Date().toISOString() })
       .eq('dossier_id', dossierId).eq('item_id', itemId);
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({
@@ -263,5 +296,6 @@
   window.AcompanhamentoObraStore = {
     listarItens, obterLink, criarOuObterLink, obterEstadoDossier, obterEstadoPorToken,
     uploadFoto, registrarLancamento, flegarItensOperador, desflegarItem, resumoProgresso, resumoProgressoBatch,
+    hojeSP, validarConcluidoEm, corrigirConcluidoEm, CONCLUIDO_EM_JANELA_DIAS,
   };
 }());

@@ -1576,6 +1576,7 @@ function TabAcompanhamentoObra({ dossier }) {
   const [selecionados, setSelecionados] = React.useState({});
   const [fotos, setFotos] = React.useState({});
   const [observacoes, setObservacoes] = React.useState({});
+  const [datas, setDatas] = React.useState({});
 
   const carregar = React.useCallback(() => {
     Promise.all([store.obterEstadoDossier(dossier.id), store.obterLink(dossier.id)])
@@ -1614,6 +1615,18 @@ function TabAcompanhamentoObra({ dossier }) {
     finally { setBusy(false); }
   };
 
+  const corrigirConclusao = async (itemId, data) => {
+    if (!data) return;
+    if (!window.confirm('Corrigir o dia em que esta etapa foi concluída para ' + data.split('-').reverse().join('/') + '? A data de envio não muda.')) return;
+    setBusy(true);
+    try {
+      await store.corrigirConcluidoEm(dossier.id, itemId, data, window.__VP_USER?.email);
+      window.toast?.('Data de conclusão corrigida.', 'success');
+      carregar();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setBusy(false); }
+  };
+
   const toggleSelecionar = (itemId) => {
     setSelecionados((p) => { const n = { ...p }; if (n[itemId]) delete n[itemId]; else n[itemId] = true; return n; });
   };
@@ -1644,11 +1657,11 @@ function TabAcompanhamentoObra({ dossier }) {
       for (const itemId of ids) {
         const urls = [];
         for (const f of fotos[itemId]) urls.push(await store.uploadFoto(dossier.id, itemId, f.file));
-        itensHoje.push({ item_id: itemId, fotos: urls, observacao: (observacoes[itemId] || '').trim() || null });
+        itensHoje.push({ item_id: itemId, fotos: urls, concluido_em: datas[itemId] || store.hojeSP(), observacao: (observacoes[itemId] || '').trim() || null });
       }
       await store.flegarItensOperador(dossier.id, itensHoje, window.__VP_USER?.email);
       window.toast?.('Atividade(s) flegada(s).', 'success');
-      setSelecionados({}); setFotos({}); setObservacoes({});
+      setSelecionados({}); setFotos({}); setObservacoes({}); setDatas({});
       carregar();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setBusy(false); }
@@ -1726,6 +1739,19 @@ function TabAcompanhamentoObra({ dossier }) {
                             {s.flegado_por ? ` · por ${s.flegado_por}` : ' · pelo Montador'}
                           </div>
                         )}
+                        {s.flegado && (
+                          <div style={{ fontSize: 11, color: 'var(--fg2)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span>Concluído em:</span>
+                            {podeEditar ? (
+                              <input type="date" value={s.concluido_em || ''} disabled={busy} max={store.hojeSP()}
+                                onChange={(e) => corrigirConclusao(item.id, e.target.value)}
+                                title="Dia real em que a etapa foi concluída em campo. A data de envio não muda." style={{ fontSize: 12, padding: '2px 4px' }} />
+                            ) : (
+                              <b>{s.concluido_em ? s.concluido_em.split('-').reverse().join('/') : 'não informado (vale a data de envio)'}</b>
+                            )}
+                            {podeEditar && !s.concluido_em && <span style={{ color: 'var(--fg3)' }}>não informado — vale a data de envio</span>}
+                          </div>
+                        )}
                         {s.desflegado_em && !s.flegado && (
                           <div style={{ fontSize: 11, color: 'var(--vp-warning-ink)', marginTop: 4 }}>
                             Desflegado por {s.desflegado_por || '—'} em {new Date(s.desflegado_em).toLocaleString('pt-BR')}
@@ -1745,6 +1771,11 @@ function TabAcompanhamentoObra({ dossier }) {
                         )}
                         {!s.flegado && selecionado && (
                           <div style={{ marginTop: 8 }}>
+                            <label style={{ display: 'block', fontSize: 11, color: 'var(--fg2)', marginBottom: 6 }}>
+                              Dia em que concluiu{' '}
+                              <input type="date" value={datas[item.id] || store.hojeSP()} max={store.hojeSP()} disabled={busy}
+                                onChange={(e) => setDatas((p) => ({ ...p, [item.id]: e.target.value }))} style={{ fontSize: 12, padding: '2px 4px' }} />
+                            </label>
                             <label style={{ fontSize: 11, color: 'var(--vp-info)', border: '1px solid var(--vp-info)', borderRadius: 6, padding: '4px 8px', display: 'inline-block', cursor: 'pointer' }}>
                               📷 {fotosItem.length > 0 ? `${fotosItem.length} foto(s) anexada(s)` : 'Anexar foto (obrigatório)'}
                               <input type="file" accept="image/*" multiple hidden disabled={busy}
