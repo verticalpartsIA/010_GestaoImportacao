@@ -715,8 +715,13 @@
       cliente = data;
     }
 
-    const ufFaturamento = cliente ? cliente.endereco_estado : null;
-    const ufDestino = formulario.local_obra_estado || ufFaturamento;
+    /* 19/10/2026 — UF sempre normalizada (sem espaço, maiúscula): a cotação 988 tinha "BA " (espaço no fim)
+       em local_obra_estado, o DIFAL não achava o estado na tabela e saía "não encontrado" mesmo sendo devido
+       (cliente não contribuinte, uso e consumo). */
+    const normUf = (v) => (v ? String(v).trim().toUpperCase() : null) || null;
+    const ufFaturamento = normUf(cliente ? cliente.endereco_estado : null);
+    const ufEntregaNorm = normUf(formulario.local_obra_estado);
+    const ufDestino = ufEntregaNorm || ufFaturamento;
 
     /* 15/10/2026 — ICMS da venda vem da regra por UF de destino (Atualização de Custos › Regras de ICMS),
        não mais do 4% global (alíquota interestadual de importado; SP→SP é 12%). Resolvida ANTES da 1ª
@@ -760,7 +765,7 @@
     // ufFaturamento/ufDestino e a regra de ICMS já foram resolvidos acima, antes da 1ª passada.
     const estadoDestino = await window.DifalEngine.buscarEstado(ufDestino);
     const difal = window.DifalEngine.calcular({
-      ufFaturamento, ufEntrega: formulario.local_obra_estado,
+      ufFaturamento, ufEntrega: ufEntregaNorm,
       finalidadeCompra: formulario.finalidade_compra, contribuinteIcms: cliente ? cliente.contribuinte_icms : null,
       valorOperacao: valorOperacaoDifal, estadoDestino,
     });
