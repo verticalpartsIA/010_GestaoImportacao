@@ -6,8 +6,9 @@
      aguardando — contrato assinado, importação ou homologação do instalador,
                   com o equipamento ainda não entregue na obra
    Fases antes do contrato (análise técnica, proposta…) não entram no mapa.
-   A posição é o CENTRO DA CIDADE da obra (o dossiê só tem cidade/UF);
-   várias obras na mesma cidade são espalhadas num pequeno círculo.
+   Posição: a gravada no dossiê (latitude/longitude, vinda do endereço
+   completo); sem ela, o centro da cidade. Obras no mesmo ponto são
+   espalhadas num pequeno círculo.
    window.MapaObrasCalc
    ============================================================ */
 (function () {
@@ -44,5 +45,45 @@
     return [centro.lat + raio * Math.sin(ang), centro.lon + raio * Math.cos(ang) * fatorLon];
   }
 
-  window.MapaObrasCalc = { SITUACOES, classificar, chaveCidade, espalhar };
+  const limpo = (v) => String(v == null ? '' : v).trim();
+  function cepFormatado(cep) {
+    const d = limpo(cep).replace(/\D/g, '');
+    return d.length === 8 ? d.slice(0, 5) + '-' + d.slice(5) : '';
+  }
+
+  /* "Avenida X, 70 - Boqueirão, Praia Grande/SP · CEP 11700-005" (só as partes que existem). */
+  function enderecoTexto(d) {
+    if (!d) return '';
+    const rua = [limpo(d.endereco_logradouro), limpo(d.endereco_numero)].filter(Boolean).join(', ');
+    const ruaComp = [rua, limpo(d.endereco_complemento)].filter(Boolean).join(' ');
+    const local = [limpo(d.city), limpo(d.state)].filter(Boolean).join('/');
+    const partes = [[ruaComp, limpo(d.endereco_bairro)].filter(Boolean).join(' - '), local].filter(Boolean).join(', ');
+    const cep = cepFormatado(d.endereco_cep);
+    return [partes, cep ? 'CEP ' + cep : ''].filter(Boolean).join(' · ');
+  }
+
+  /* Consultas ao geocodificador, da mais precisa para a menos precisa.
+     Sem rua nem CEP não há consulta (a obra fica no centro da cidade, sem gravar nada). */
+  function consultasGeocode(d) {
+    if (!d) return [];
+    const cidade = limpo(d.city), uf = limpo(d.state);
+    const out = [];
+    const rua = limpo(d.endereco_logradouro);
+    if (rua && cidade) {
+      out.push({ precisao: 'endereco', q: [[rua, limpo(d.endereco_numero)].filter(Boolean).join(' '), cidade, uf, 'Brasil'].filter(Boolean).join(', ') });
+    }
+    const cep = cepFormatado(d.endereco_cep);
+    if (cep) out.push({ precisao: 'cep', q: [cep, cidade, uf, 'Brasil'].filter(Boolean).join(', ') });
+    return out;
+  }
+
+  /* Posição gravada no dossiê vale; senão null (o mapa tenta o endereço, depois a cidade). */
+  function posicaoGravada(d) {
+    const lat = Number(d && d.latitude), lon = Number(d && d.longitude);
+    if (!d || d.latitude == null || d.longitude == null || !isFinite(lat) || !isFinite(lon)) return null;
+    if (Math.abs(lat) > 90 || Math.abs(lon) > 180) return null;
+    return { lat, lon, precisao: d.geo_precisao || 'manual' };
+  }
+
+  window.MapaObrasCalc = { SITUACOES, classificar, chaveCidade, espalhar, cepFormatado, enderecoTexto, consultasGeocode, posicaoGravada };
 }());

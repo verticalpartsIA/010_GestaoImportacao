@@ -34,3 +34,20 @@ test('espalhar: 1 obra fica no centro; várias ficam em pontos diferentes perto 
   pts.forEach((p) => { assert.ok(Math.abs(p[0] - c.lat) < 0.05 && Math.abs(p[1] - c.lon) < 0.05); });
   assert.equal(M.espalhar(null, 0, 1), null);
 });
+
+test('enderecoTexto e consultasGeocode usam o endereço completo quando existe', () => {
+  const d = { endereco_logradouro: 'Avenida Presidente Costa e Silva', endereco_numero: '70', endereco_bairro: 'Boqueirão', endereco_cep: '11700005', city: 'Praia Grande', state: 'SP' };
+  assert.equal(M.enderecoTexto(d), 'Avenida Presidente Costa e Silva, 70 - Boqueirão, Praia Grande/SP · CEP 11700-005');
+  const q = M.consultasGeocode(d);
+  assert.equal(q[0].precisao, 'endereco');
+  assert.equal(q[0].q, 'Avenida Presidente Costa e Silva 70, Praia Grande, SP, Brasil');
+  assert.equal(q[1].precisao, 'cep');
+  assert.deepEqual(M.consultasGeocode({ city: 'Osasco', state: 'SP' }), []);
+  assert.equal(M.enderecoTexto({ city: 'Osasco', state: 'SP' }), 'Osasco/SP');
+});
+
+test('posicaoGravada só aceita coordenada válida', () => {
+  assert.deepEqual(M.posicaoGravada({ latitude: -24.0, longitude: -46.4, geo_precisao: 'endereco' }), { lat: -24, lon: -46.4, precisao: 'endereco' });
+  assert.equal(M.posicaoGravada({ latitude: null, longitude: -46 }), null);
+  assert.equal(M.posicaoGravada({ latitude: 200, longitude: -46 }), null);
+});
