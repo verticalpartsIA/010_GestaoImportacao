@@ -774,6 +774,11 @@
         const predKey = (node.predecessores[0] || {}).key;
         const predRow = predKey ? await garantirNo(numeroCotacao, predKey) : null;
         await nascerNo(numeroCotacao, node, predRow ? predRow.id : null, alvoId);
+        /* Compra liberada pelos 3 avais → nasce a P.I. automática (rascunho). Só onde o PIStore existe
+           (sistema interno); nas páginas públicas a tela de P.I. faz a varredura de segurança. */
+        if (node.key === 'COMPRA_LIBERADA' && window.PIStore && window.PIStore.criarRascunhoAutomatico) {
+          await window.PIStore.criarRascunhoAutomatico(numeroCotacao);
+        }
       }
     } catch (e) {
       console.warn('[GatilhosEngine] onEvento falhou', e);
