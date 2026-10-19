@@ -226,6 +226,27 @@ function EIRolagens({ form, set }) {
     set('houve_rolagem')(true);
     setNova({ nova_data: '', motivo: '', data_comunicacao: '' });
   };
+  /* Avisos de data suspeita (só avisam, nunca bloqueiam) — regra em rolagens-calc.js. */
+  const RC = window.RolagensCalc;
+  const hist = form.historico_rolagens || [];
+  const avisosNova = RC && nova.nova_data
+    ? RC.avisosDaRolagem({ ...nova, data_anterior: form.etd_atual || form.etd_original || '' }, hist[hist.length - 1] || null)
+    : [];
+  const avisosHist = {};
+  (RC ? RC.conferir(hist) : []).forEach((a) => { avisosHist[a.indice] = a.avisos; });
+  const [editando, setEditando] = React.useState(null);
+  /* Corrige uma rolagem já registrada. Se a nova data mudar, a rolagem seguinte (que partia dela)
+     e, na última, o ETD atual acompanham. */
+  const editarLinha = (i, campo, valor) => {
+    const l = hist.map((r) => ({ ...r }));
+    const antigo = l[i][campo];
+    l[i][campo] = valor;
+    if (campo === 'nova_data') {
+      if (l[i + 1] && l[i + 1].data_anterior === antigo) l[i + 1].data_anterior = valor;
+      if (i === l.length - 1 && form.etd_atual === antigo) set('etd_atual')(valor);
+    }
+    set('historico_rolagens')(l);
+  };
   return (
     <div>
       <div className="row gap-2" style={{ marginBottom: 8 }}>
@@ -243,14 +264,45 @@ function EIRolagens({ form, set }) {
           <PIField label="Data comunicação"><PIInput type="date" value={nova.data_comunicacao} onChange={(v) => setNova((n) => ({ ...n, data_comunicacao: v }))}/></PIField>
           <PIField label="Motivo"><PIInput value={nova.motivo} onChange={(v) => setNova((n) => ({ ...n, motivo: v }))}/></PIField>
         </div>
+        {avisosNova.length > 0 && (
+          <div style={{ marginTop: 8, padding: '6px 10px', borderRadius: 6, background: '#fef3c7', color: '#92400e', fontSize: 12 }}>
+            {avisosNova.map((a, k) => <div key={k}>⚠ {a}</div>)}
+          </div>
+        )}
         <div style={{ textAlign: 'right', marginTop: 8 }}><Button variant="outline" size="sm" onClick={registrar} disabled={!nova.nova_data}>Registrar rolagem</Button></div>
       </div>
       {(form.historico_rolagens || []).length > 0 && (
         <div className="table-wrap" style={{ marginTop: 10 }}>
           <table className="t">
-            <thead><tr><th>#</th><th>Data anterior</th><th>Nova data</th><th>Motivo</th><th>Comunicação</th></tr></thead>
-            <tbody>{form.historico_rolagens.map((r, i) => <tr key={i}><td>{i + 1}ª</td><td>{eiFmtDate(r.data_anterior)}</td><td>{eiFmtDate(r.nova_data)}</td><td>{r.motivo || '—'}</td><td>{eiFmtDate(r.data_comunicacao)}</td></tr>)}</tbody>
+            <thead><tr><th>#</th><th>Data anterior</th><th>Nova data</th><th>Motivo</th><th>Comunicação</th><th></th></tr></thead>
+            <tbody>{form.historico_rolagens.map((r, i) => {
+              const av = avisosHist[i];
+              if (editando === i) return (
+                <tr key={i}>
+                  <td>{i + 1}ª</td><td>{eiFmtDate(r.data_anterior)}</td>
+                  <td><PIInput type="date" value={r.nova_data || ''} onChange={(v) => editarLinha(i, 'nova_data', v)}/></td>
+                  <td><PIInput value={r.motivo || ''} onChange={(v) => editarLinha(i, 'motivo', v)}/></td>
+                  <td><PIInput type="date" value={r.data_comunicacao || ''} onChange={(v) => editarLinha(i, 'data_comunicacao', v)}/></td>
+                  <td><Button variant="ghost" size="sm" onClick={() => setEditando(null)}>Pronto</Button></td>
+                </tr>
+              );
+              return (
+                <tr key={i} style={av ? { background: '#fffbeb' } : undefined}>
+                  <td>{i + 1}ª</td><td>{eiFmtDate(r.data_anterior)}</td><td>{eiFmtDate(r.nova_data)}</td><td>{r.motivo || '—'}</td><td>{eiFmtDate(r.data_comunicacao)}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {av && <span title={av.join('\n')} style={{ color: '#b45309', fontWeight: 700, marginRight: 6, cursor: 'help' }}>⚠ Conferir</span>}
+                    <Button variant="ghost" size="sm" onClick={() => setEditando(i)}>Corrigir</Button>
+                  </td>
+                </tr>
+              );
+            })}</tbody>
           </table>
+          {Object.keys(avisosHist).length > 0 && (
+            <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 6, background: '#fef3c7', color: '#92400e', fontSize: 12 }}>
+              {Object.keys(avisosHist).map((i) => avisosHist[i].map((a, k) => <div key={i + '-' + k}>⚠ {Number(i) + 1}ª rolagem: {a}</div>))}
+              <div style={{ marginTop: 4 }}>Use "Corrigir" na linha e depois salve o embarque.</div>
+            </div>
+          )}
         </div>
       )}
     </div>
