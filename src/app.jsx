@@ -71,7 +71,7 @@ const ROUTE_TITLE = {
   "rh-homologacao": "Homologação de Instaladores",
   "cadastro-instaladores": "Empresas Instaladoras",
   "cadastro-custos": "Atualização de Custos",
-  importacao: "Importação",
+  importacao: "Rastreio Marítimo",
   "importacao-detail": "Detalhe de Embarque",
   "importacao-rastreamento": "Rastreamento de Navios",
   compras: "Importação Varejo",

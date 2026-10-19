@@ -375,8 +375,8 @@ function ImportacaoPage({ setRoute, setSubsel }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Importação</div>
-          <h1 className="page-head__title">Importação</h1>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Rastreio Marítimo</div>
+          <h1 className="page-head__title">Rastreio Marítimo</h1>
           <p className="page-head__sub">Embarques em trânsito + rastreamento marítimo por AIS</p>
         </div>
         <div className="page-head__r">
