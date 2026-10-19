@@ -315,3 +315,9 @@ test('separação: há modelo para 100x50, 100x100 e 100x150 e o conteúdo ocupa
     assert.ok(!z.avisos.some((a) => /não cabe|pequeno|cortado/.test(a)), `${m.id}: ${z.avisos.join(' | ')}`);
   }
 });
+
+test('impressão pelo navegador: o CSS de tamanho vale só para o SVG da página, não para os aninhados (colunas, QR, barras)', () => {
+  const h = E.htmlImpressao(['<svg></svg>'], 63, 50);
+  assert.match(h, /\.pg>svg\{/);
+  assert.doesNotMatch(h, /\.pg svg\{/);
+});

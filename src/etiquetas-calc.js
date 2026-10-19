@@ -667,7 +667,7 @@
   function htmlImpressao(paginasSvg, larguraMm, alturaMm) {
     const css = `@page{size:${larguraMm}mm ${alturaMm}mm;margin:0}html,body{margin:0;padding:0;background:#fff}` +
       `.pg{width:${larguraMm}mm;height:${alturaMm}mm;overflow:hidden;page-break-after:always;break-after:page}` +
-      `.pg:last-child{page-break-after:auto;break-after:auto}.pg svg{display:block;width:${larguraMm}mm;height:${alturaMm}mm}`;
+      `.pg:last-child{page-break-after:auto;break-after:auto}.pg>svg{display:block;width:${larguraMm}mm;height:${alturaMm}mm}`;
     return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Etiquetas</title><style>${css}</style></head><body>` +
       paginasSvg.map((s) => `<div class="pg">${s}</div>`).join('') + '</body></html>';
   }
