@@ -40,14 +40,40 @@
   }
 
   // Data/hora local gravada pela câmera (EXIF DateTimeOriginal); null se o arquivo não tiver.
+  // Lê a tag 0x9003 (DateTimeOriginal) do bloco Exif do JPEG — não qualquer data solta no arquivo,
+  // senão imagem antiga reexportada (com DateTime recente) passaria pela conferência.
+  function lerExifTiff(dv, base) {
+    const little = dv.getUint16(base) === 0x4949;
+    const u16 = (o) => dv.getUint16(o, little);
+    const u32 = (o) => dv.getUint32(o, little);
+    if (u16(base + 2) !== 42) return null;
+    const achar = (ifd, tag) => {
+      const n = u16(ifd);
+      for (let i = 0; i < n; i++) { const e = ifd + 2 + i * 12; if (u16(e) === tag) return { tipo: u16(e + 2), cont: u32(e + 4), val: e + 8 }; }
+      return null;
+    };
+    const ptr = achar(base + u32(base + 4), 0x8769);
+    if (!ptr) return null;
+    const t = achar(base + u32(ptr.val), 0x9003);
+    if (!t || t.tipo !== 2 || t.cont < 19) return null;
+    const o = base + u32(t.val);
+    let s = ''; for (let i = 0; i < 19; i++) s += String.fromCharCode(dv.getUint8(o + i));
+    const m = s.match(/^(\d{4}):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)$/);
+    return m ? new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]) : null;
+  }
   async function lerDataExif(file) {
     try {
-      const buf = await file.slice(0, 200000).arrayBuffer();
-      let s = ''; const u8 = new Uint8Array(buf);
-      for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
-      const m = s.match(/(20\d\d):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/);
-      if (!m) return null;
-      return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+      const dv = new DataView(await file.slice(0, 262144).arrayBuffer());
+      if (dv.getUint16(0) !== 0xFFD8) return null;
+      let off = 2;
+      while (off + 10 < dv.byteLength) {
+        if (dv.getUint8(off) !== 0xFF) return null;
+        const marker = dv.getUint8(off + 1);
+        if (marker === 0xDA) return null;
+        if (marker === 0xE1 && dv.getUint32(off + 4) === 0x45786966 && dv.getUint16(off + 8) === 0) return lerExifTiff(dv, off + 10);
+        off += 2 + dv.getUint16(off + 2);
+      }
+      return null;
     } catch (e) { return null; }
   }
 
@@ -63,7 +89,7 @@
           if (!vivo) { stream.getTracks().forEach((t) => t.stop()); return; }
           streamRef.current = stream;
           const v = videoRef.current;
-          if (v) { v.srcObject = stream; v.play().then(() => setPronto(true)).catch(() => setPronto(true)); }
+          if (v) { v.srcObject = stream; v.play().then(() => { if (vivo) setPronto(true); }).catch(() => { if (vivo) onIndisponivel(); }); }
         })
         .catch(() => { if (vivo) onIndisponivel(); });
       return () => { vivo = false; if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop()); };
@@ -151,6 +177,7 @@
     const [cameraItem, setCameraItem] = React.useState(null);
     const fallbackInput = React.useRef(null);
     const fallbackItem = React.useRef(null);
+    const [fallbackPendente, setFallbackPendente] = React.useState(null);
 
     const carregar = React.useCallback(() => {
       if (!token || !window.AcompanhamentoObraStore) return;
@@ -195,10 +222,12 @@
       else usarFallback(itemId);
     };
     const usarFallback = (itemId) => {
-      setCameraItem(null);
+      setCameraItem(null); setFallbackPendente(null);
       fallbackItem.current = itemId;
       if (fallbackInput.current) { fallbackInput.current.value = ''; fallbackInput.current.click(); }
     };
+    // A câmera da página falhou depois do toque original: o seletor só abre com um novo toque do usuário.
+    const camaraFalhou = (itemId) => { setCameraItem(null); setFallbackPendente(itemId); };
     const onFallbackArquivos = async (e) => {
       const itemId = fallbackItem.current;
       const files = Array.from(e.target.files || []);
@@ -280,7 +309,18 @@
           <CameraCaptura qtd={(fotos[cameraItem] || []).length}
             onFoto={(blob) => onCapturada(cameraItem, blob)}
             onConcluir={() => setCameraItem(null)}
-            onIndisponivel={() => usarFallback(cameraItem)} />
+            onIndisponivel={() => camaraFalhou(cameraItem)} />
+        )}
+        {fallbackPendente && (
+          <div style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,.6)', zIndex: 60, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 20 }}>
+            <div style={{ background: '#fff', borderRadius: 10, padding: 18, maxWidth: 360, textAlign: 'center' }}>
+              <div style={{ fontSize: 14, marginBottom: 12 }}>A câmera não abriu dentro da página. Use a câmera do aparelho — só vale foto tirada agora.</div>
+              <button type="button" onClick={() => usarFallback(fallbackPendente)}
+                style={{ width: '100%', background: '#0066cc', color: '#fff', border: 'none', borderRadius: 8, padding: 12, fontSize: 15, fontWeight: 700 }}>📷 Abrir câmera do aparelho</button>
+              <button type="button" onClick={() => setFallbackPendente(null)}
+                style={{ marginTop: 8, background: 'none', border: 'none', color: '#666', fontSize: 13 }}>Cancelar</button>
+            </div>
+          </div>
         )}
 
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid #ddd', padding: 12 }}>
