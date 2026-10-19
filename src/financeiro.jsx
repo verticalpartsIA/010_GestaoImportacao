@@ -1397,6 +1397,7 @@ const ALCADAS_PROPOSTAS = [
   { modulo: 'propostas', capacidade: 'excluir', label: 'Exclui propostas', hint: 'Apaga a proposta de vez — sem volta.' },
   { modulo: 'quadro_comando', capacidade: 'decidir_fabricacao', label: 'Decide fabricar interno ou comprar pronto (Quadro de Comando)', hint: 'Sem isso, a Origem de Fabricação do Quadro de Comando fica travada em "Fabricar interno".' },
   { modulo: 'instalacao', capacidade: 'editar_status_obra', label: 'Edita status do Acompanhamento de Obra', hint: 'Pode desflegar uma atividade do Diário de Obra e avançar/reverter manualmente o status do card em Cadastro de Instaladores.' },
+  { modulo: 'fabricacao', capacidade: 'editar_status_quadro', label: 'Edita status da Evolução da Fabricação', hint: 'Pode desmarcar uma etapa da fabricação do quadro de comando marcada por engano.' },
   { modulo: 'decisoes', capacidade: 'ceo', label: 'Atua como CEO (Central de Decisões)', hint: 'Aprova/reprova qualquer decisão que hoje só o CEO decide (envio de proposta, desconto acima de 7%, etc.), além do e-mail fixo do Diego — uso normal: só pra teste. Só vale pra decisões criadas depois de conceder.' },
   { modulo: 'decisoes', capacidade: 'gestor_comercial', label: 'Atua como Gestor Comercial (Central de Decisões)', hint: 'Aprova/reprova qualquer decisão que hoje só o Gestor Comercial decide (liberar envio de proposta ao cliente, desconto até 7%, pagamento de parcela ao instalador), além dos e-mails fixos de Regiane/Guilherme. Só vale pra decisões criadas depois de conceder.' },
 ];

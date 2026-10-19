@@ -194,6 +194,13 @@
       .in('status', ['aguardando', 'em_producao'])
       .order('prazo_entrega', { ascending: true });
     if (error) throw error;
+    /* Mesma ambiguidade de cardinalidade do embed já normalizada em
+       obterEstadoOrdem (ver comentário lá) — repetida aqui pra cada linha. */
+    (data || []).forEach((r) => {
+      if (r && r.quadros_comando && Array.isArray(r.quadros_comando.quadros_comando_maquina)) {
+        r.quadros_comando.quadros_comando_maquina = r.quadros_comando.quadros_comando_maquina[0] || null;
+      }
+    });
     return data || [];
   }
 
