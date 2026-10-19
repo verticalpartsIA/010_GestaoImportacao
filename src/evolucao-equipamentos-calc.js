@@ -163,15 +163,19 @@
     let atrasoNavio = 0;
 
     const rol = Array.isArray(e.historico_rolagens) ? e.historico_rolagens : [];
-    rol.forEach((r) => {
+    const RC = (typeof window !== 'undefined' && window.RolagensCalc) || null;
+    const suspeitas = {};
+    (RC ? RC.conferir(rol) : []).forEach((a) => { suspeitas[a.indice] = a.avisos; });
+    rol.forEach((r, i) => {
       const de = paraData(r && r.data_anterior), para = paraData(r && r.nova_data);
       if (!de || !para) return;
       const n = dias(de, para);
       const motivo = String((r && r.motivo) || '').trim();
+      const conferir = suspeitas[i] ? ' · ⚠ data a conferir no Embarque' : '';
       lista.push({ categoria: 'navio', etapa: 'embarque', origem: 'interna', data: para, dias: n,
-        gravidade: n > 7 ? 'alta' : 'media',
-        titulo: n >= 0 ? `Rolagem do navio (+${n} dia${n === 1 ? '' : 's'})` : `Saída antecipada (${n} dias)`,
-        detalhe: `${nomeEmb ? nomeEmb + ': ' : ''}saída ${fmt(de)} → ${fmt(para)}${motivo ? ' · ' + motivo : ' · motivo não informado'}` });
+        gravidade: n > 7 ? 'alta' : 'media', conferir: !!suspeitas[i],
+        titulo: n >= 0 ? `Rolagem do navio (+${n} dia${n === 1 ? '' : 's'})` : `Nova data antes da prevista (${n} dias)`,
+        detalhe: `${nomeEmb ? nomeEmb + ': ' : ''}saída ${fmt(de)} → ${fmt(para)}${motivo ? ' · ' + motivo : ' · motivo não informado'}${conferir}` });
     });
     const etdAtual = paraData(e.etd_atual);
     if (rol.length) {

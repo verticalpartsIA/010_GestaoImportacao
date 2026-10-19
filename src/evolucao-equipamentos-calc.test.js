@@ -88,3 +88,14 @@ test('ocorrências: canal verde e embarque sem rolagem não geram nada; porto pa
   assert.equal(r.porCategoria.logistica.length, 1);
   assert.equal(r.porCategoria.logistica[0].dias, 35);
 });
+
+test('ocorrências: rolagem com data suspeita é marcada para conferir', () => {
+  require('./rolagens-calc.js');
+  const emb = { nome_embarque: '145º', etd_atual: '2026-09-17', historico_rolagens: [
+    { data_anterior: '2026-08-26', nova_data: '2026-08-09', data_comunicacao: '2026-08-26' },
+    { data_anterior: '2026-08-09', nova_data: '2026-09-17', data_comunicacao: '2026-08-09' }] };
+  const r = C.ocorrencias(emb, null, { hoje });
+  assert.equal(r.lista.filter((o) => o.conferir).length, 2);
+  assert.match(r.lista[0].detalhe, /conferir/);
+  assert.equal(r.diasAtraso, 22);
+});
