@@ -75,10 +75,11 @@ function EvPasso({ p, atual, atrasada, ok }) {
    a cabeça é o efeito (atraso). As espinhas sem ocorrência ficam cinza — já estão no desenho
    para receber as Ocorrências de Obra e os atrasos combinados de projeto/contrato. */
 const EV_GRAV_COR = { alta: "#dc2626", media: "#d97706" };
-function EvEspinha({ oc }) {
+function EvEspinha({ oc, abrir }) {
   const C = window.EvolucaoEquipamentosCalc;
   const cats = C.CATEGORIAS_OCORRENCIA;
-  const [aberto, setAberto] = React.useState(false);
+  const [aberto, setAberto] = React.useState(!!abrir);
+  React.useEffect(() => { setAberto(!!abrir); }, [abrir]);
   if (!oc || !oc.lista.length) return <div className="ev-meta" style={{ marginTop: 10 }}>Sem ocorrências ou atrasos registrados.</div>;
   const corCat = (k) => {
     const l = oc.porCategoria[k] || [];
@@ -132,7 +133,7 @@ function EvEspinha({ oc }) {
   );
 }
 
-function EvCard({ item, onAbrirDossie, onVerNoMapa }) {
+function EvCard({ item, onAbrirDossie, onVerNoMapa, abrirOcorrencias }) {
   const S = window.MapaObrasCalc.SITUACOES[item.obra.situacao];
   const { linha } = item;
   const idxAtual = linha.passos.findIndex((p) => p.key === linha.atualKey);
@@ -178,7 +179,7 @@ function EvCard({ item, onAbrirDossie, onVerNoMapa }) {
             ok={idxAtual === -1 ? true : i <= idxAtual} />
         ))}
       </div>
-      <EvEspinha oc={item.oc}/>
+      <EvEspinha oc={item.oc} abrir={abrirOcorrencias}/>
     </div>
   );
 }
@@ -327,7 +328,7 @@ function EvolucaoEquipamentos({ obras, dados, onAbrirDossie, onVerNoMapa }) {
             </div>
             {lista.length === 0
               ? <div style={{ fontSize: 13, color: "var(--fg3)", padding: "8px 0 4px" }}>Nenhum equipamento{q ? " com esta busca" : ""}.</div>
-              : lista.map((it) => <EvCard key={it.key} item={it} onAbrirDossie={onAbrirDossie} onVerNoMapa={onVerNoMapa}/>)}
+              : lista.map((it) => <EvCard key={it.key} item={it} onAbrirDossie={onAbrirDossie} onVerNoMapa={onVerNoMapa} abrirOcorrencias={soOc}/>)}
           </section>
         );
       })}
