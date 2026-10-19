@@ -4,7 +4,8 @@
    Monta a linha do tempo de UM equipamento a partir de dados que já existem:
      - dossier_obra (abertura, fase, equipamento entregue)
      - equipamentos_obra (previsões e datas reais por nº de série)
-     - embarques_importacao da cotação (saída da fábrica, chegada a Santos, entrega)
+     - embarques_importacao da cotação (saída da fábrica, chegada a Santos, entrega);
+       sem cotação, TEMPORARIAMENTE pelo nº de série da P.I. (embarquesPorSerie)
      - acompanhamento_obra_status (Diário de Obra: início e marcos 50/75/100%)
    Cada etapa sai como 'feito' (data real), 'previsto' (data prevista),
    'pendente' (sem data) ou 'pulado' (não se aplica / fase já passou sem data).
@@ -54,6 +55,34 @@
     return ok.slice().sort((a, b) => String(b.updated_at || b.created_at || '').localeCompare(String(a.updated_at || a.created_at || '')))[0];
   }
 
+  const normSerie = (v) => String(v == null ? '' : v).trim().toUpperCase();
+
+  /* TEMPORÁRIO (19/10/2026): obras antigas não têm Nº de cotação. Liga o embarque ao
+     equipamento pelo nº de série gravado na P.I. (pi_importacao.numeros_serie → embarque_id).
+     A regra definitiva é pelo Nº da cotação — que sempre vence quando existe.
+     pis: [{ numeros_serie: [...], embarque_id }]; embarques: [{ id, ... }].
+     Devolve { 'SERIE': embarque } (mais recente quando a série aparece em 2+ P.I.). */
+  function embarquesPorSerie(pis, embarques) {
+    const porId = {};
+    (embarques || []).forEach((e) => { if (e && e.id) porId[e.id] = e; });
+    const listas = {};
+    (pis || []).forEach((p) => {
+      const emb = p && porId[p.embarque_id];
+      if (!emb) return;
+      (p.numeros_serie || []).forEach((sr) => { const k = normSerie(sr); if (k) (listas[k] = listas[k] || []).push(emb); });
+    });
+    const out = {};
+    Object.keys(listas).forEach((k) => { const e = escolherEmbarque(listas[k]); if (e) out[k] = e; });
+    return out;
+  }
+
+  /* Cotação primeiro (regra definitiva); nº de série só quando a obra não tem embarque pela cotação. */
+  function embarqueDoEquipamento(embCotacao, porSerie, serie) {
+    if (embCotacao) return { embarque: embCotacao, origem: 'cotacao' };
+    const e = porSerie && serie ? porSerie[normSerie(serie)] : null;
+    return e ? { embarque: e, origem: 'serie' } : { embarque: null, origem: null };
+  }
+
   /**
    * @param d   dossier_obra
    * @param eq  equipamentos_obra (ou null quando o dossiê não tem equipamento cadastrado)
@@ -100,5 +129,5 @@
     return { passos, atualKey: atual ? atual.key : null, atrasada, pct: Math.round(Number(prog.pct) || 0) };
   }
 
-  window.EvolucaoEquipamentosCalc = { ETAPAS, paraData, escolherEmbarque, montarLinha };
+  window.EvolucaoEquipamentosCalc = { ETAPAS, paraData, escolherEmbarque, embarquesPorSerie, embarqueDoEquipamento, montarLinha };
 }());

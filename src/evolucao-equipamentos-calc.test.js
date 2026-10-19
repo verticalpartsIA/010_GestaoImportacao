@@ -55,3 +55,15 @@ test('escolherEmbarque ignora arquivado e pega o mais recente', () => {
   assert.equal(e.id, 'c');
   assert.equal(C.escolherEmbarque([]), null);
 });
+
+test('embarque pelo nº de série da P.I. (temporário): cotação vence; série casa sem espaço/maiúscula', () => {
+  const embs = [{ id: 'e1', nome_embarque: '143º', updated_at: '2026-09-01' }, { id: 'e2', nome_embarque: '144º', updated_at: '2026-09-20' }];
+  const pis = [{ numeros_serie: ['500.0393'], embarque_id: 'e1' }, { numeros_serie: ['500.0393 ', 'vpel-1'], embarque_id: 'e2' }, { numeros_serie: ['500.0400'], embarque_id: null }];
+  const m = C.embarquesPorSerie(pis, embs);
+  assert.equal(m['500.0393'].id, 'e2');
+  assert.equal(m['VPEL-1'].id, 'e2');
+  assert.equal(m['500.0400'], undefined);
+  assert.equal(C.embarqueDoEquipamento(null, m, ' 500.0393').origem, 'serie');
+  assert.equal(C.embarqueDoEquipamento({ id: 'x' }, m, '500.0393').embarque.id, 'x');
+  assert.equal(C.embarqueDoEquipamento(null, m, null).embarque, null);
+});

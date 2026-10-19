@@ -5,7 +5,8 @@
    agrupada em: em instalação, a caminho da obra e já entregues.
    Só leitura. Regras em evolucao-equipamentos-calc.js.
    Fontes: dossier_obra (via Mapa de Obras), equipamentos_obra,
-   embarques_importacao (pelo Nº da cotação) e o Diário de Obra
+   embarques_importacao (pelo Nº da cotação; nas obras antigas, temporariamente,
+   pelo nº de série da P.I.) e o Diário de Obra
    (AcompanhamentoObraStore.resumoProgressoBatch).
    ============================================================ */
 
@@ -90,6 +91,12 @@ function EvCard({ item, onAbrirDossie, onVerNoMapa }) {
               o.instaladores && o.instaladores.length ? "Instalador: " + o.instaladores.join(", ") : null,
               o.vistorias ? `${o.vistorias} vistoria(s) concluída(s)` : null].filter(Boolean).join(" · ")}
           </div>
+          {item.embarque && (
+            <div className="ev-meta" title={item.origemEmbarque === "serie" ? "Ligado pelo nº de série gravado na P.I. (provisório, até a obra ter Nº de cotação)" : "Ligado pelo Nº da cotação"}>
+              Embarque: <b style={{ color: "var(--fg2)" }}>{String(item.embarque.nome_embarque || "").trim() || "sem nome"}</b>
+              {item.origemEmbarque === "serie" ? " · pelo nº de série da P.I." : " · pela cotação"}
+            </div>
+          )}
         </div>
         <div className="ev-pct">
           {o.situacao !== "aguardando" && (
@@ -130,14 +137,34 @@ function EvolucaoEquipamentos({ obras, onAbrirDossie, onVerNoMapa }) {
       try {
         const [eqRes, embRes, prog] = await Promise.all([
           ids.length ? sb.from("equipamentos_obra").select("id, dossier_id, numero_serie, tipo, previsao_chegada_material, chegada_real_material, previsao_inicio, data_real_inicio, previsao_termino, data_real_termino").in("dossier_id", ids) : { data: [] },
-          cotacoes.length ? sb.from("embarques_importacao").select("id, numero_cotacao, etd_original, etd_atual, eta_santos, data_entrega, data_limite_entrega, arquivado, updated_at, created_at").in("numero_cotacao", cotacoes) : { data: [] },
+          cotacoes.length ? sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, data_entrega, data_limite_entrega, arquivado, updated_at, created_at").in("numero_cotacao", cotacoes) : { data: [] },
           window.AcompanhamentoObraStore && ids.length ? window.AcompanhamentoObraStore.resumoProgressoBatch(ids).catch(() => ({})) : {},
         ]);
         if (eqRes.error) throw eqRes.error;
         if (embRes.error) throw embRes.error;
-        if (vivo) { setExtra({ equips: eqRes.data || [], embarques: embRes.data || [], prog: prog || {} }); setErro(null); }
+        /* TEMPORÁRIO: obras sem Nº de cotação acham o embarque pelo nº de série gravado na P.I.
+           (pi_importacao.numeros_serie → embarque_id). A regra definitiva é pela cotação. */
+        let pis = [], embSerie = [];
+        const series = Array.from(new Set((eqRes.data || []).flatMap((e) => {
+          const t = String(e.numero_serie || "").trim();
+          return t ? [t, String(e.numero_serie)] : [];
+        })));
+        if (series.length) {
+          try {
+            const piRes = await sb.from("pi_importacao").select("id, numeros_serie, embarque_id").overlaps("numeros_serie", series).not("embarque_id", "is", null);
+            if (piRes.error) throw piRes.error;
+            pis = piRes.data || [];
+            const embIds = Array.from(new Set(pis.map((p) => p.embarque_id)));
+            if (embIds.length) {
+              const r = await sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, data_entrega, data_limite_entrega, arquivado, updated_at, created_at").in("id", embIds);
+              if (r.error) throw r.error;
+              embSerie = r.data || [];
+            }
+          } catch (e) { console.warn("[Evolução] embarque pelo nº de série não carregou", e); }
+        }
+        if (vivo) { setExtra({ equips: eqRes.data || [], embarques: embRes.data || [], pis, embSerie, prog: prog || {} }); setErro(null); }
       } catch (e) {
-        if (vivo) { setErro("Não foi possível carregar a evolução: " + (e.message || e)); setExtra({ equips: [], embarques: [], prog: {} }); }
+        if (vivo) { setErro("Não foi possível carregar a evolução: " + (e.message || e)); setExtra({ equips: [], embarques: [], pis: [], embSerie: [], prog: {} }); }
       }
     })();
     return () => { vivo = false; };
@@ -149,12 +176,17 @@ function EvolucaoEquipamentos({ obras, onAbrirDossie, onVerNoMapa }) {
     const eqPor = {}, embPor = {};
     extra.equips.forEach((e) => { (eqPor[e.dossier_id] = eqPor[e.dossier_id] || []).push(e); });
     extra.embarques.forEach((e) => { (embPor[e.numero_cotacao] = embPor[e.numero_cotacao] || []).push(e); });
+    const porSerie = C.embarquesPorSerie(extra.pis || [], extra.embSerie || []);
     const out = [];
     obras.forEach((o) => {
-      const ctx = { embarque: C.escolherEmbarque(embPor[o.numero_cotacao]), progresso: extra.prog[o.id] };
+      const embCot = C.escolherEmbarque(embPor[o.numero_cotacao]);
+      const montar = (e) => {
+        const emb = C.embarqueDoEquipamento(embCot, porSerie, e && e.numero_serie);
+        return { embarque: emb.embarque, origemEmbarque: emb.origem, linha: C.montarLinha(o, e, { embarque: emb.embarque, progresso: extra.prog[o.id] }) };
+      };
       const lista = (eqPor[o.id] || []).slice().sort((a, b) => String(a.numero_serie || "").localeCompare(String(b.numero_serie || ""), "pt-BR", { numeric: true }));
-      if (!lista.length) out.push({ key: o.id, obra: o, serie: null, linha: C.montarLinha(o, null, ctx) });
-      else lista.forEach((e) => out.push({ key: o.id + ":" + e.id, obra: o, serie: e.numero_serie, linha: C.montarLinha(o, e, ctx) }));
+      if (!lista.length) out.push({ key: o.id, obra: o, serie: null, ...montar(null) });
+      else lista.forEach((e) => out.push({ key: o.id + ":" + e.id, obra: o, serie: e.numero_serie, ...montar(e) }));
     });
     return out;
   }, [obras, extra]);
@@ -164,7 +196,7 @@ function EvolucaoEquipamentos({ obras, onAbrirDossie, onVerNoMapa }) {
     if (!ver[it.obra.situacao]) return false;
     if (!q) return true;
     const o = it.obra;
-    return [it.serie, o.id, o.client_name, o.building_name, o.city, o.status_master, (o.instaladores || []).join(" "), o.numero_cotacao]
+    return [it.serie, it.embarque && it.embarque.nome_embarque, o.id, o.client_name, o.building_name, o.city, o.status_master, (o.instaladores || []).join(" "), o.numero_cotacao]
       .filter((x) => x != null).join(" ").toLowerCase().includes(q);
   });
 
@@ -222,7 +254,7 @@ function EvolucaoEquipamentos({ obras, onAbrirDossie, onVerNoMapa }) {
       })}
       {obras && extra && (
         <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 16 }}>
-          As datas vêm do cadastro de equipamentos do Dossiê (previsões e datas reais), do embarque da cotação (saída da fábrica e chegada a Santos) e do Diário de Obra preenchido pelo montador (início e 50/75/100%). Etapa marcada como "sem data" já passou, mas a data não foi registrada.
+          As datas vêm do cadastro de equipamentos do Dossiê (previsões e datas reais), do embarque da cotação (saída da fábrica e chegada a Santos — pelo Nº da cotação ou, nas obras antigas, pelo nº de série gravado na P.I.) e do Diário de Obra preenchido pelo montador (início e 50/75/100%). Etapa marcada como "sem data" já passou, mas a data não foi registrada.
         </div>
       )}
     </div>
