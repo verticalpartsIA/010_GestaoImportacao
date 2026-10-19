@@ -130,20 +130,29 @@
   }
   const CONCLUIDO_EM_JANELA_DIAS = 60;
   /* Vazio => hoje. Recusa formato inválido, data futura e data mais de 60 dias atrás. */
-  function validarConcluidoEm(valor) {
-    const hoje = hojeSP();
-    const v = (valor || hoje);
+  /* Dia (fuso de São Paulo) de um instante ISO — usado como teto na correção: não dá para concluir depois do envio. */
+  function diaSP(iso) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+  }
+  /* referencia = dia de envio (aaaa-mm-dd); sem informar, vale hoje (marcação nova). O banco repete a mesma regra (trigger). */
+  function validarConcluidoEm(valor, referencia) {
+    const ref = referencia || hojeSP();
+    const v = (valor || ref);
     if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || isNaN(Date.parse(v + 'T00:00:00Z'))) throw new Error('Data de conclusão inválida.');
-    if (v > hoje) throw new Error('A data de conclusão não pode ser no futuro.');
-    const dias = (Date.parse(hoje + 'T00:00:00Z') - Date.parse(v + 'T00:00:00Z')) / 864e5;
-    if (dias > CONCLUIDO_EM_JANELA_DIAS) throw new Error(`A data de conclusão não pode ser de mais de ${CONCLUIDO_EM_JANELA_DIAS} dias atrás.`);
+    if (v > ref) throw new Error(referencia ? 'A data de conclusão não pode ser depois do dia do envio.' : 'A data de conclusão não pode ser no futuro.');
+    const dias = (Date.parse(ref + 'T00:00:00Z') - Date.parse(v + 'T00:00:00Z')) / 864e5;
+    if (dias > CONCLUIDO_EM_JANELA_DIAS) throw new Error(`A data de conclusão não pode ser de mais de ${CONCLUIDO_EM_JANELA_DIAS} dias antes do envio.`);
     return v;
   }
 
   /* Correção da data real pelo operador (alçada instalacao.editar_status_obra). A data de envio não muda. */
   async function corrigirConcluidoEm(dossierId, itemId, data, operadorEmail) {
     const c = sb();
-    const v = validarConcluidoEm(data);
+    const { data: atual, error: errLeitura } = await c.from('acompanhamento_obra_status')
+      .select('flegado, flegado_em').eq('dossier_id', dossierId).eq('item_id', itemId).maybeSingle();
+    if (errLeitura) throw errLeitura;
+    if (!atual || !atual.flegado || !atual.flegado_em) throw new Error('Só dá para informar a data de uma etapa já marcada como feita.');
+    const v = validarConcluidoEm(data, diaSP(atual.flegado_em));
     const { error } = await c.from('acompanhamento_obra_status')
       .update({ concluido_em: v }).eq('dossier_id', dossierId).eq('item_id', itemId).eq('flegado', true);
     if (error) throw error;
@@ -296,6 +305,6 @@
   window.AcompanhamentoObraStore = {
     listarItens, obterLink, criarOuObterLink, obterEstadoDossier, obterEstadoPorToken,
     uploadFoto, registrarLancamento, flegarItensOperador, desflegarItem, resumoProgresso, resumoProgressoBatch,
-    hojeSP, validarConcluidoEm, corrigirConcluidoEm, CONCLUIDO_EM_JANELA_DIAS,
+    hojeSP, diaSP, validarConcluidoEm, corrigirConcluidoEm, CONCLUIDO_EM_JANELA_DIAS,
   };
 }());

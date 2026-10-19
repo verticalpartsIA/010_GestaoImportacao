@@ -1743,7 +1743,7 @@ function TabAcompanhamentoObra({ dossier }) {
                           <div style={{ fontSize: 11, color: 'var(--fg2)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
                             <span>Concluído em:</span>
                             {podeEditar ? (
-                              <input type="date" value={s.concluido_em || ''} disabled={busy} max={store.hojeSP()}
+                              <input type="date" value={s.concluido_em || ''} disabled={busy} max={s.flegado_em ? store.diaSP(s.flegado_em) : store.hojeSP()}
                                 onChange={(e) => corrigirConclusao(item.id, e.target.value)}
                                 title="Dia real em que a etapa foi concluída em campo. A data de envio não muda." style={{ fontSize: 12, padding: '2px 4px' }} />
                             ) : (
