@@ -647,7 +647,13 @@ function PIPage() {
     window.PIStore.listarTodas().then(setPis).catch(() => setPis([]));
     window.__VP_SB?.sb?.from('embarques_importacao').select('id, nome_embarque, referencia_embarque, awb_bl').order('created_at', { ascending: false }).then(({ data }) => setEmbarques(data || []));
   }, []);
-  React.useEffect(() => { reload(); }, [reload]);
+  React.useEffect(() => {
+    reload();
+    /* Rede de segurança da P.I. automática: compra já liberada e ainda sem P.I. ganha o rascunho. */
+    window.PIStore.sincronizarRascunhosAutomaticos().then((n) => {
+      if (n > 0) { reload(); window.toast?.(`${n} P.I. automática(s) criada(s) a partir de compra liberada — confira e informe o número da P.I.`, 'success'); }
+    });
+  }, [reload]);
 
   const embarquesMap = React.useMemo(() => Object.fromEntries(embarques.map((e) => [e.id, e])), [embarques]);
 
@@ -733,7 +739,7 @@ function PIPage() {
               const prod = pi.producao || {};
               return (
                 <tr key={pi.id}>
-                  <td className="mono">{pi.numero_pi}</td>
+                  <td className="mono">{pi.numero_pi}{window.PIStore.ehRascunhoAutomatico(pi) && <div><Badge variant="warning">Rascunho automático</Badge></div>}</td>
                   <td className="mono small">{pi.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', pi.numero_cotacao) : <span className="muted">—</span>}</td>
                   <td>{pi.fornecedor || '—'}</td>
                   <td>{fmtDate(pi.data_abertura)}</td>
