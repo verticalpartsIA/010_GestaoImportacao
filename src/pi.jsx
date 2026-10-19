@@ -380,6 +380,56 @@ function PIProducaoSection({ value, onChange, piId }) {
   );
 }
 
+/* ---------- Status em semáforo + instrução ao passar o mouse ---------- */
+/* Verde = tudo certo · Amarelo = em andamento · Vermelho = parada esperando algo · Cinza = cancelada. */
+const PI_SEMAFORO = {
+  'Concluída': { cor: '#1f9d55', fundo: 'rgba(31,157,85,.14)' },
+  'Em andamento': { cor: '#d99a00', fundo: 'rgba(245,184,0,.20)' },
+  'Aguardando documentos': { cor: '#d6342a', fundo: 'rgba(214,52,42,.14)' },
+  'Cancelada': { cor: '#8a8a8a', fundo: 'rgba(138,138,138,.16)' },
+};
+/* Diz ao operador, com base nos dados reais da P.I., o que falta ou o que vem a seguir. */
+function piInstrucaoStatus(pi, embarque) {
+  const itens = pi.itens || [];
+  const rascunho = window.PIStore.ehRascunhoAutomatico(pi) || String(pi.numero_pi || '').startsWith('RASCUNHO-');
+  const semCodigo = itens.filter((i) => !String(i.codigo_produto || '').trim()).length;
+  const semNcm = itens.filter((i) => !String(i.ncm || '').trim()).length;
+  const falta = [];
+  if (rascunho) falta.push('• Proforma Invoice (P.I.) assinada do fornecedor — informe o número real no lugar do provisório');
+  if (!itens.length) falta.push('• Itens da P.I. (nenhum item lançado)');
+  else {
+    if (semCodigo) falta.push(`• Código do produto em ${semCodigo} de ${itens.length} item(ns)`);
+    if (semNcm) falta.push(`• NCM em ${semNcm} de ${itens.length} item(ns)`);
+  }
+  if (!pi.data_abertura) falta.push('• Data de abertura da P.I.');
+  if (!pi.fornecedor) falta.push('• Fornecedor');
+  const quitado = pi.valor_total ? window.PIStore.calcValorQuitado(pi) / pi.valor_total * 100 : 0;
+  switch (pi.status) {
+    case 'Aguardando documentos':
+      return falta.length ? 'Aguardando documentos. Falta:\n' + falta.join('\n') + '\n\nClique em Editar para completar.'
+        : 'Aguardando documentos, mas os dados da P.I. estão completos. Se já recebeu tudo, mude o status para "Em andamento" ao editar.';
+    case 'Em andamento': {
+      const prox = [];
+      if (quitado < 100) prox.push(`• Pagamento: ${Math.round(quitado)}% pago`);
+      if (!embarque) prox.push('• Vincular a um embarque (botão do elo)');
+      if ((pi.producao || {}).status !== 'Concluída') prox.push('• Produção ainda não concluída');
+      return 'Em andamento.' + (prox.length ? '\nPendente:\n' + prox.join('\n') : '\nTudo em dia — conclua a P.I. quando o embarque chegar.');
+    }
+    case 'Concluída': return 'Concluída: pagamento, produção e embarque finalizados.';
+    case 'Cancelada': return 'Cancelada: esta P.I. não segue mais no fluxo.';
+    default: return pi.status || '';
+  }
+}
+function PIStatusSemaforo({ pi, embarque }) {
+  const m = PI_SEMAFORO[pi.status] || PI_SEMAFORO['Em andamento'];
+  return (
+    <span title={piInstrucaoStatus(pi, embarque)} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '3px 10px', borderRadius: 999, background: m.fundo, color: m.cor, fontSize: 12, fontWeight: 700, whiteSpace: 'nowrap', cursor: 'help' }}>
+      <span style={{ width: 10, height: 10, borderRadius: '50%', background: m.cor, boxShadow: `0 0 0 2px ${m.fundo}` }}/>
+      {pi.status}
+    </span>
+  );
+}
+
 /* ---------- Formulário completo (Nova/Editar P.I.) ---------- */
 const PI_EMPTY = {
   numero_pi: '', fornecedor: '', incoterms: '', data_solicitacao_pagamento: '', numero_requisicao: '', numero_cotacao: '',
@@ -722,11 +772,13 @@ function PIPage() {
         </select>
       </div>
 
-      <div className="table-wrap">
+      {/* Cabeçalho congelado: a tabela rola dentro da própria caixa e o <thead> fica preso no topo. */}
+      <div className="table-wrap" style={{ maxHeight: 'calc(100vh - 290px)', overflowY: 'auto' }}>
         <table className="t">
           <thead><tr>
-            <th>Nº P.I.</th><th>Nº Cotação</th><th>Fornecedor</th><th>Abertura</th><th>Status</th><th>Produção</th>
-            <th>Valor total</th><th>Itens</th><th>% paga</th><th>Embarque</th><th></th>
+            {['Nº P.I.', 'Nº Cotação', 'Fornecedor', 'Abertura', 'Status', 'Produção', 'Valor total', 'Itens', '% paga', 'Embarque', ''].map((h, i) => (
+              <th key={i} style={{ position: 'sticky', top: 0, zIndex: 2 }}>{h}</th>
+            ))}
           </tr></thead>
           <tbody>
             {filtered.length === 0 && (
@@ -743,7 +795,7 @@ function PIPage() {
                   <td className="mono small">{pi.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', pi.numero_cotacao) : <span className="muted">—</span>}</td>
                   <td>{pi.fornecedor || '—'}</td>
                   <td>{fmtDate(pi.data_abertura)}</td>
-                  <td><StatusBadge status={pi.status}/></td>
+                  <td><PIStatusSemaforo pi={pi} embarque={embarque}/></td>
                   <td>{prod.status ? <StatusBadge status={prod.status}/> : <span className="muted small">—</span>}</td>
                   <td className="cell-money">{pi.valor_total ? window.PIStore.fmtMoeda(pi.valor_total, pi.moeda) : '—'}</td>
                   <td>{itens.length}</td>
