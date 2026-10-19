@@ -11,6 +11,8 @@ test('perfil: casa o nome reportado com o perfil de fábrica', () => {
   assert.equal(I.casarPerfil({ nome: 'ZDesigner ZD220-203dpi ZPL' }).id, 'zebra-zd220');
   assert.equal(I.casarPerfil({ nome: 'ZD230' }).id, 'zebra-zd230');
   assert.equal(I.casarPerfil({ nome: 'ZT421' }).id, 'zebra-zt421');
+  assert.equal(I.casarPerfil({ nome: 'ZDesigner ZT230-300dpi ZPL' }).id, 'zebra-zt230');
+  assert.equal(I.perfilPorId('zebra-zt230').dpi, 300);
   assert.equal(I.casarPerfil({ nome: 'Impressora X', fabricante: 'Zebra Technologies' }).id, 'zebra-generica');
   assert.equal(I.casarPerfil({ nome: 'L42 Pro', fabricante: 'Elgin' }).id, 'elgin-l42-pro');
   assert.equal(I.casarPerfil({ nome: 'Argox OS-214 Plus' }).id, 'argox-os214plus');
@@ -78,4 +80,16 @@ test('detectarTodas: sempre oferece o navegador; erro de um adaptador não derru
   const r = await I.detectarTodas(async () => { throw new Error('Failed to fetch'); });
   assert.deepEqual(r.impressoras.map((i) => i.adaptador), ['navegador']);
   assert.ok(r.erros['zebra-browser-print']);
+});
+
+test('perfil lembrado por impressora tem prioridade sobre o palpite pelo nome', () => {
+  const mem = {}; global.localStorage = { getItem: (k) => (k in mem ? mem[k] : null), setItem: (k, v) => { mem[k] = String(v); } };
+  const imp = { adaptador: 'zebra-browser-print', id: '52j151101840', nome: '52j151101840', fabricante: 'Zebra Technologies' };
+  assert.equal(I.perfilDaImpressora(imp).id, 'zebra-generica');
+  I.lembrarPerfil(imp, 'zebra-zt230');
+  assert.equal(I.perfilDaImpressora(imp).id, 'zebra-zt230');
+  assert.equal(I.perfilDaImpressora({ adaptador: 'zebra-browser-print', id: 'outra', nome: 'outra' }).id, 'generica');
+  I.lembrarPerfil(imp, 'perfil-que-nao-existe');
+  assert.equal(I.perfilDaImpressora(imp).id, 'zebra-zt230', 'perfil inválido é ignorado');
+  delete global.localStorage;
 });

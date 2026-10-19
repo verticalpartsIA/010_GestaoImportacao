@@ -67,7 +67,8 @@ test.describe('Etiquetas', () => {
       const impressora = page.getByLabel('Impressora', { exact: true });
       await expect(impressora.locator('option', { hasText: 'ZD220' })).toHaveCount(1, { timeout: 20_000 });
       await expect(page.getByLabel('Perfil da impressora')).toHaveValue('zebra-zd220');
-      await expect(page.getByLabel('Rolo carregado', { exact: true })).toHaveValue('100x50');
+      await expect(page.getByLabel('Largura da etiqueta (mm)', { exact: true })).toHaveValue('100');
+      await expect(page.getByLabel('Comprimento da etiqueta (mm)', { exact: true })).toHaveValue('50');
       await expect(page.getByText('Imprime direto na impressora')).toBeVisible();
 
       // lista de endereços (236 + EXP, das regras) e prévia com o código de barras desenhado
@@ -97,17 +98,25 @@ test.describe('Etiquetas', () => {
       expect(escritas[1].data).toContain('^FDDV 9^FS');
       expect(escritas[1].data).toContain('^FDMA,END:R2A4^FS');
 
-      // rolo diferente do modelo: não imprime
-      await page.getByLabel('Rolo carregado', { exact: true }).selectOption('100x100');
-      await expect(page.getByText(/não confere com o modelo/).first()).toBeVisible();
+      // rolo mais largo do que a impressora aceita (ZD220 = 104 mm): não imprime
+      await page.getByLabel('Largura da etiqueta (mm)', { exact: true }).fill('120');
+      await expect(page.getByText(/a impressora aceita até 104 mm/).first()).toBeVisible();
       await expect(page.getByRole('button', { name: /Imprimir 2 etiquetas/ })).toBeDisabled();
 
-      // teste de bancada
-      await page.getByLabel('Rolo carregado', { exact: true }).selectOption('100x50');
-      await page.getByRole('button', { name: 'Etiqueta de teste' }).click();
+      // etiqueta de outro tamanho: o modelo se ajusta (prévia e ZPL no tamanho novo) e imprime
+      await page.getByLabel('Largura da etiqueta (mm)', { exact: true }).fill('100');
+      await page.getByLabel('Comprimento da etiqueta (mm)', { exact: true }).fill('150');
+      await expect(page.locator('svg[viewBox="0 0 100 150"]').first()).toBeVisible({ timeout: 20_000 });
+      await page.getByRole('button', { name: /Imprimir 2 etiquetas/ }).click();
       await expect.poll(() => escritas.length, { timeout: 20_000 }).toBe(3);
-      expect(escritas[2].data).toContain('^FDMA,END:R2A4^FS');
-      expect(escritas[2].data).toContain('_C3_A7');      // "ç" enviado como UTF-8 em hexadecimal
+      expect(escritas[2].data).toContain('^LL1200');      // 150 mm a 203 dpi
+
+      // teste de bancada
+      await page.getByLabel('Comprimento da etiqueta (mm)', { exact: true }).fill('50');
+      await page.getByRole('button', { name: 'Etiqueta de teste' }).click();
+      await expect.poll(() => escritas.length, { timeout: 20_000 }).toBe(4);
+      expect(escritas[3].data).toContain('^FDMA,END:R2A4^FS');
+      expect(escritas[3].data).toContain('_C3_A7');      // "ç" enviado como UTF-8 em hexadecimal
 
       expect(erros, erros.join('\n')).toEqual([]);
     } finally {
@@ -124,7 +133,7 @@ test.describe('Etiquetas', () => {
       await page.addInitScript(COM_ALCADA);
       await page.goto('/logistica/etiquetas');
       await expect(page.getByLabel('Perfil da impressora')).toHaveValue('zebra-zd220', { timeout: 60_000 });
-      await expect(page.getByLabel('Rolo carregado', { exact: true })).toHaveValue('100x100');   // o que a pessoa já tinha informado não se perde
+      await expect(page.getByLabel('Comprimento da etiqueta (mm)', { exact: true })).toHaveValue('100');   // o que a pessoa já tinha informado (formato antigo 100x100) não se perde
     } finally {
       await new Promise((ok) => server.close(ok));
     }
@@ -145,7 +154,7 @@ test.describe('Etiquetas', () => {
     }
   });
 
-  test('aba Modelos mostra os 9 modelos padrão com prévia', async ({ page }) => {
+  test('aba Modelos mostra os 11 modelos padrão com prévia', async ({ page }) => {
     await page.addInitScript(COM_ALCADA);
     await page.goto('/logistica/etiquetas/modelos');
     await expect(page.getByText('Endereço — viga horizontal', { exact: true })).toBeVisible({ timeout: 60_000 });
@@ -154,8 +163,10 @@ test.describe('Etiquetas', () => {
     await expect(page.getByText('Recebimento — carga que chegou', { exact: true })).toBeVisible();
     await expect(page.getByText('Separação — volume do pedido', { exact: true })).toBeVisible();
     for (const n of ['Palete — conteúdo e origem', 'ID-TAG do equipamento', 'OP do quadro — número de série', 'Avaria — material retido']) await expect(page.getByText(n, { exact: true })).toBeVisible();
-    await expect(page.locator('svg[viewBox="0 0 100 50"]')).toHaveCount(8, { timeout: 20_000 });
-    await expect(page.locator('svg[viewBox="0 0 100 100"]')).toHaveCount(1);
+    // só o SVG de cada prévia (div > svg); o SVG aninhado da etiqueta dentro dele não conta
+    await expect(page.locator('div > svg[viewBox="0 0 100 50"]')).toHaveCount(9, { timeout: 20_000 });   // 8 padrão + Separação deitada
+    await expect(page.locator('div > svg[viewBox="0 0 100 100"]')).toHaveCount(1);
+    await expect(page.locator('div > svg[viewBox="0 0 100 150"]')).toHaveCount(1);
   });
 
   test('tipos da fase 2 e 4 abrem sem erro na aba Gerar', async ({ page }) => {

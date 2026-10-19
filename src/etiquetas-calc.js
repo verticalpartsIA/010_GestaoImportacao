@@ -244,15 +244,49 @@
       campos: ['pedido_txt', 'volume_txt', 'cliente_txt', 'destino_txt', 'separador_txt', 'data_txt', 'qr', 'barras'],
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 99, esp: 0.5 },
-        { tipo: 'texto', campo: '{pedido_txt}', x: 5, y: 5, w: 55, h: 9 },
-        { tipo: 'texto', campo: '{volume_txt}', x: 60, y: 6, w: 35, h: 8, alinhamento: 'dir' },
+        { tipo: 'texto', campo: '{pedido_txt}', x: 5, y: 5, w: 58, h: 8.5 },
+        { tipo: 'texto', campo: '{volume_txt}', x: 63, y: 6.5, w: 32, h: 6, alinhamento: 'dir' },
         { tipo: 'linha', x: 5, y: 17, w: 90, esp: 0.5 },
         { tipo: 'texto', campo: '{cliente_txt}', x: 5, y: 20, w: 90, h: 6, linhas: 2 },
         { tipo: 'qr', campo: '{qr}', x: 5, y: 36, w: 40 },
-        { tipo: 'texto', campo: '{destino_txt}', x: 50, y: 38, w: 45, h: 7 },
+        { tipo: 'texto', campo: '{destino_txt}', x: 50, y: 38, w: 45, h: 6.5 },
         { tipo: 'texto', campo: '{separador_txt}', x: 50, y: 50, w: 45, h: 4.5, linhas: 2 },
         { tipo: 'texto', campo: '{data_txt}', x: 50, y: 64, w: 45, h: 4.5 },
         { tipo: 'code128', campo: '{barras}', x: 5, y: 82, w: 90, h: 12 },
+      ],
+    },
+    {
+      id: 'SEPARACAO_100x50', tipo: 'SEPARACAO', nome: 'Separação — volume do pedido (100 × 50, deitada)', largura_mm: 100, altura_mm: 50,
+      proposito: 'Mesma etiqueta de volume, aproveitando a largura toda do rolo 100 × 50 mm (conteúdo ocupa cerca de 95% da etiqueta).',
+      campos: ['pedido_txt', 'volume_txt', 'cliente_txt', 'destino_txt', 'separador_txt', 'data_txt', 'qr', 'barras'],
+      elementos: [
+        { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.5 },
+        { tipo: 'texto', campo: '{pedido_txt}', x: 3, y: 2.5, w: 54, h: 8 },
+        { tipo: 'texto', campo: '{volume_txt}', x: 58, y: 4, w: 39, h: 6, alinhamento: 'dir' },
+        { tipo: 'linha', x: 3, y: 12.5, w: 94, esp: 0.5 },
+        { tipo: 'texto', campo: '{cliente_txt}', x: 3, y: 14.5, w: 94, h: 4.5, linhas: 2 },
+        { tipo: 'qr', campo: '{qr}', x: 3, y: 25, w: 22 },
+        { tipo: 'texto', campo: '{destino_txt}', x: 28, y: 25, w: 69, h: 6 },
+        { tipo: 'texto', campo: '{separador_txt}', x: 28, y: 31.5, w: 69, h: 4 },
+        { tipo: 'texto', campo: '{data_txt}', x: 28, y: 36, w: 69, h: 4 },
+        { tipo: 'code128', campo: '{barras}', x: 28, y: 42, w: 69, h: 6 },
+      ],
+    },
+    {
+      id: 'SEPARACAO_100x150', tipo: 'SEPARACAO', nome: 'Separação — volume do pedido (100 × 150)', largura_mm: 100, altura_mm: 150,
+      proposito: 'Mesma etiqueta de volume para o rolo 100 × 150 mm, com letras e QR grandes (conteúdo ocupa cerca de 95% da etiqueta).',
+      campos: ['pedido_txt', 'volume_txt', 'cliente_txt', 'destino_txt', 'separador_txt', 'data_txt', 'qr', 'barras'],
+      elementos: [
+        { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 149, esp: 0.5 },
+        { tipo: 'texto', campo: '{pedido_txt}', x: 5, y: 6, w: 90, h: 11 },
+        { tipo: 'texto', campo: '{volume_txt}', x: 5, y: 19, w: 90, h: 11 },
+        { tipo: 'linha', x: 5, y: 33, w: 90, esp: 0.5 },
+        { tipo: 'texto', campo: '{cliente_txt}', x: 5, y: 37, w: 90, h: 7.5, linhas: 3 },
+        { tipo: 'qr', campo: '{qr}', x: 5, y: 66, w: 44 },
+        { tipo: 'texto', campo: '{destino_txt}', x: 52, y: 68, w: 43, h: 6.5 },
+        { tipo: 'texto', campo: '{separador_txt}', x: 52, y: 79, w: 43, h: 5, linhas: 3 },
+        { tipo: 'texto', campo: '{data_txt}', x: 52, y: 98, w: 43, h: 5 },
+        { tipo: 'code128', campo: '{barras}', x: 5, y: 122, w: 90, h: 20 },
       ],
     },
     {
@@ -413,17 +447,60 @@
     return { texto: s.slice(0, Math.max(1, max - 1)) + (utf8 ? '…' : '.'), cortado: true };
   }
 
-  /* opcoes: { dpi = 203, utf8 = true, copias = 1 } -> { zpl, avisos[] } (uma etiqueta; ^PQ repete as cópias) */
-  function renderZPL(modelo, dados, opcoes) {
-    const o = Object.assign({ dpi: 203, utf8: true, copias: 1 }, opcoes || {});
+  /* ---------- Rolo carregado: tamanho da etiqueta, colunas e ajuste do modelo ---------- */
+  // Largura = lado que passa pela cabeça de impressão; comprimento (altura) = sentido em que o rolo sai. Colunas = etiquetas lado a lado.
+  const ROLO_LIM = { min: 10, maxL: 200, maxA: 400, maxCols: 6, maxEsp: 20, maxDesl: 10 };
+  function geometriaRolo(cfg, perfil) {
+    const c = cfg || {};
+    const num = (v) => Number(String(v).replace(',', '.'));
+    const leg = /^(\d+(?:[.,]\d+)?)x(\d+(?:[.,]\d+)?)$/.exec(String(c.rolo || '').replace(/\s/g, ''));   // formato antigo "100x50"
+    const tem = (v) => v !== undefined && v !== null;   // campo vazio (''): conta como inválido, não volta ao padrão
+    const largura = tem(c.largura_mm) ? num(c.largura_mm) : (leg ? num(leg[1]) : 100);
+    const altura = tem(c.altura_mm) ? num(c.altura_mm) : (leg ? num(leg[2]) : 50);
+    const colunas = tem(c.colunas) ? num(c.colunas) : 1;
+    const espaco = tem(c.espaco_mm) ? num(c.espaco_mm) : 3;
+    const dx = tem(c.desl_x_mm) ? num(c.desl_x_mm) : 0, dy = tem(c.desl_y_mm) ? num(c.desl_y_mm) : 0;
+    let erro = null;
+    if (!Number.isFinite(largura) || largura < ROLO_LIM.min || largura > ROLO_LIM.maxL) erro = `Informe a largura da etiqueta (de ${ROLO_LIM.min} a ${ROLO_LIM.maxL} mm).`;
+    else if (!Number.isFinite(altura) || altura < ROLO_LIM.min || altura > ROLO_LIM.maxA) erro = `Informe o comprimento da etiqueta (de ${ROLO_LIM.min} a ${ROLO_LIM.maxA} mm).`;
+    else if (!Number.isInteger(colunas) || colunas < 1 || colunas > ROLO_LIM.maxCols) erro = `Etiquetas por linha: use um número inteiro de 1 a ${ROLO_LIM.maxCols}.`;
+    else if (colunas > 1 && (!Number.isFinite(espaco) || espaco < 0 || espaco > ROLO_LIM.maxEsp)) erro = `O espaço entre colunas deve ficar entre 0 e ${ROLO_LIM.maxEsp} mm.`;
+    else if (!Number.isFinite(dx) || !Number.isFinite(dy) || Math.abs(dx) > ROLO_LIM.maxDesl || Math.abs(dy) > ROLO_LIM.maxDesl) erro = `O ajuste de posição deve ficar entre -${ROLO_LIM.maxDesl} e ${ROLO_LIM.maxDesl} mm.`;
+    const cols = Number.isInteger(colunas) && colunas >= 1 ? colunas : 1;
+    const esp = cols > 1 && Number.isFinite(espaco) && espaco >= 0 ? espaco : 0;
+    const larguraTotal = Number.isFinite(largura) ? Math.round((cols * largura + (cols - 1) * esp) * 100) / 100 : 0;
+    if (!erro && perfil && perfil.largura_max_mm && larguraTotal > perfil.largura_max_mm) {
+      erro = `O rolo fica com ${larguraTotal} mm de largura (${cols} × ${largura}${cols > 1 ? ` + espaços de ${esp}` : ''}) e a impressora aceita até ${perfil.largura_max_mm} mm.`;
+    }
+    return { ok: !erro, erro, largura: Number.isFinite(largura) ? largura : 100, altura: Number.isFinite(altura) ? altura : 50, colunas: cols, espaco: esp, larguraTotal, deslX: Number.isFinite(dx) ? dx : 0, deslY: Number.isFinite(dy) ? dy : 0 };
+  }
+
+  /* Ajusta um modelo (desenhado para o próprio tamanho) a outro tamanho de etiqueta: escala única (não distorce) e centraliza.
+     opcoes.ampliar === false: só reduz (usado na etiqueta de teste, cujas réguas têm de continuar valendo 10 e 50 mm). */
+  function adaptarModelo(modelo, largura, altura, opcoes) {
+    const Lm = Number(modelo.largura_mm), Am = Number(modelo.altura_mm);
+    if (Lm === Number(largura) && Am === Number(altura)) return { modelo, escala: 1, ajustado: false };
+    let s = Math.min(largura / Lm, altura / Am);
+    if (opcoes && opcoes.ampliar === false) s = Math.min(1, s);
+    const dx = (largura - Lm * s) / 2, dy = (altura - Am * s) / 2;
+    const r = (v) => Math.round(v * 1000) / 1000;
+    const elementos = (modelo.elementos || []).map((el) => {
+      const o = Object.assign({}, el);
+      o.x = r(el.x * s + dx); o.y = r(el.y * s + dy);
+      for (const k of ['w', 'h', 'esp']) if (o[k] != null) o[k] = r(o[k] * s);
+      return o;
+    });
+    return { modelo: Object.assign({}, modelo, { largura_mm: Number(largura), altura_mm: Number(altura), elementos }), escala: s, ajustado: true };
+  }
+
+  // Elementos de UMA etiqueta em ZPL; dx = deslocamento horizontal em pontos (para as colunas do rolo).
+  function zplCorpo(modelo, dados, o, dx) {
     const avisos = [];
     const d = (mm) => mmParaDots(mm, o.dpi);
-    const W = d(modelo.largura_mm), H = d(modelo.altura_mm);
-    const z = ['^XA'];
-    if (o.utf8) z.push('^CI28');
-    z.push(`^PW${W}`, `^LL${H}`, '^LH0,0');
+    const z = [];
     for (const el of modelo.elementos) {
-      const x = d(el.x), y = d(el.y);
+      // Ajuste fino de posição (calibração): soma o deslocamento a cada campo; ^FO não aceita negativo, então trava em 0.
+      const x = Math.max(0, d(el.x) + (dx || 0) + d(o.desl_x_mm || 0)), y = Math.max(0, d(el.y) + d(o.desl_y_mm || 0));
       if (el.tipo === 'caixa') {
         const esp = Math.max(1, d(el.esp || 0.4));
         z.push(`^FO${x},${y}^GB${d(el.w)},${d(el.h)},${esp}^FS`);
@@ -459,8 +536,55 @@
         z.push(`^BY${Math.max(2, barra)}`, `^FO${x},${y}^BCN,${Math.max(8, d(el.h))},N,N,N,A^FH_^FD${zplTexto(dado, true)}^FS`);
       }
     }
-    z.push(`^PQ${Math.max(1, Math.floor(Number(o.copias) || 1))}`, '^XZ');
-    return { zpl: z.join('\n'), avisos };
+    return { linhas: z, avisos };
+  }
+
+  /* opcoes: { dpi = 203, utf8 = true, copias = 1 } -> { zpl, avisos[] } (uma etiqueta; ^PQ repete as cópias) */
+  function renderZPL(modelo, dados, opcoes) {
+    const o = Object.assign({ dpi: 203, utf8: true, copias: 1 }, opcoes || {});
+    const d = (mm) => mmParaDots(mm, o.dpi);
+    const z = ['^XA'];
+    if (o.utf8) z.push('^CI28');
+    z.push(`^PW${d(modelo.largura_mm)}`, `^LL${d(modelo.altura_mm)}`, '^LH0,0');
+    const c = zplCorpo(modelo, dados, o, 0);
+    z.push(...c.linhas, `^PQ${Math.max(1, Math.floor(Number(o.copias) || 1))}`, '^XZ');
+    return { zpl: z.join('\n'), avisos: c.avisos };
+  }
+
+  /* Rolo com várias etiquetas por linha: junta as etiquetas (cada item × suas cópias) em linhas de `colunas`.
+     Cada linha vira um formato ZPL com a largura do rolo inteiro; linhas seguidas iguais usam ^PQ.
+     itens: [{ dados, copias }] -> { blocos: [zpl por linha (ou grupo de linhas iguais)], avisos[], etiquetas, linhas } */
+  function renderZPLLinhas(modelo, itens, opcoes) {
+    const o = Object.assign({ dpi: 203, utf8: true, colunas: 1, espaco: 3 }, opcoes || {});
+    const d = (mm) => mmParaDots(mm, o.dpi);
+    const cols = Math.max(1, Math.floor(Number(o.colunas) || 1));
+    const esp = cols > 1 ? Number(o.espaco) || 0 : 0;
+    const lista = [];
+    for (const it of itens) for (let i = 0; i < Math.max(1, Math.floor(Number(it.copias) || 1)); i++) lista.push(it.dados);
+    const passo = d(Number(modelo.largura_mm) + esp);
+    const Wtot = d(cols * Number(modelo.largura_mm) + (cols - 1) * esp), H = d(modelo.altura_mm);
+    const avisos = new Set();
+    const linhas = [];
+    for (let i = 0; i < lista.length; i += cols) {
+      const grupo = lista.slice(i, i + cols);
+      const chave = JSON.stringify(grupo);
+      const ult = linhas[linhas.length - 1];
+      if (ult && ult.chave === chave) { ult.n += 1; continue; }
+      linhas.push({ chave, grupo, n: 1 });
+    }
+    const blocos = linhas.map((ln) => {
+      const z = ['^XA'];
+      if (o.utf8) z.push('^CI28');
+      z.push(`^PW${Wtot}`, `^LL${H}`, '^LH0,0');
+      ln.grupo.forEach((dados, c) => {
+        const r = zplCorpo(modelo, dados, o, c * passo);
+        z.push(...r.linhas);
+        r.avisos.forEach((a) => avisos.add(a));
+      });
+      z.push(`^PQ${ln.n}`, '^XZ');
+      return z.join('\n');
+    });
+    return { blocos, avisos: Array.from(avisos), etiquetas: lista.length, linhas: linhas.reduce((n, l) => n + l.n, 0) };
   }
 
   /* ---------- SVG (pré-visualização e impressão pelo navegador) ---------- */
@@ -499,7 +623,7 @@
         const t = aplicar(el.campo, dados);
         if (!t.trim()) continue;
         const linhas = el.linhas || 1;
-        const maxChars = Math.max(1, Math.floor(el.w / (el.h * 0.5))) * 1;
+        const maxChars = Math.max(1, Math.floor(el.w / (el.h * 0.55))) * 1;   // mesma regra do ZPL: a prévia corta onde a impressora corta
         const partes = quebrar(t, maxChars, linhas);
         const anc = el.alinhamento === 'dir' ? 'end' : el.alinhamento === 'centro' ? 'middle' : 'start';
         const tx = el.alinhamento === 'dir' ? el.x + el.w : el.alinhamento === 'centro' ? el.x + el.w / 2 : el.x;
@@ -518,11 +642,32 @@
     p.push('</svg>');
     return p.join('');
   }
+  /* Uma linha do rolo: `colunas` etiquetas lado a lado (listaDados[i] = dados da coluna i; coluna sem dados fica em branco).
+     opcoes: { barcode, colunas, espaco, fluido (sem tamanho fixo, para a prévia), moldura (contorno cinza de cada etiqueta, só na prévia) } */
+  function renderSVGLinha(modelo, listaDados, opcoes) {
+    const o = Object.assign({ colunas: 1, espaco: 3 }, opcoes || {});
+    const cols = Math.max(1, Math.floor(Number(o.colunas) || 1));
+    const esp = cols > 1 ? Number(o.espaco) || 0 : 0;
+    const L = Number(modelo.largura_mm), A = Number(modelo.altura_mm);
+    const W = num(cols * L + (cols - 1) * esp);
+    const tam = o.fluido ? '' : ` width="${W}mm" height="${A}mm"`;
+    const p = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${A}"${tam} font-family="Arial, Helvetica, sans-serif">`, `<rect x="0" y="0" width="${W}" height="${A}" fill="#fff"/>`];
+    for (let c = 0; c < cols; c++) {
+      const dados = (listaDados || [])[c];
+      if (!dados) continue;
+      const x = num(c * (L + esp) + (Number(o.desl_x_mm) || 0)), y = num(Number(o.desl_y_mm) || 0);
+      const inner = renderSVG(modelo, dados, { barcode: o.barcode }).replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+      p.push(`<svg x="${x}" y="${y}" width="${L}" height="${A}" viewBox="0 0 ${L} ${A}">${inner}</svg>`);
+    }
+    if (o.moldura) for (let c = 0; c < cols; c++) p.push(`<rect x="${num(c * (L + esp))}" y="0" width="${L}" height="${A}" fill="none" stroke="#9aa" stroke-width="0.3" stroke-dasharray="1.5 1"/>`);
+    p.push('</svg>');
+    return p.join('');
+  }
   // Documento de impressão pelo navegador: uma página por etiqueta, tamanho exato em mm, sem margem.
   function htmlImpressao(paginasSvg, larguraMm, alturaMm) {
     const css = `@page{size:${larguraMm}mm ${alturaMm}mm;margin:0}html,body{margin:0;padding:0;background:#fff}` +
       `.pg{width:${larguraMm}mm;height:${alturaMm}mm;overflow:hidden;page-break-after:always;break-after:page}` +
-      `.pg:last-child{page-break-after:auto;break-after:auto}.pg svg{display:block;width:${larguraMm}mm;height:${alturaMm}mm}`;
+      `.pg:last-child{page-break-after:auto;break-after:auto}.pg>svg{display:block;width:${larguraMm}mm;height:${alturaMm}mm}`;
     return `<!doctype html><html lang="pt-BR"><head><meta charset="utf-8"><title>Etiquetas</title><style>${css}</style></head><body>` +
       paginasSvg.map((s) => `<div class="pg">${s}</div>`).join('') + '</body></html>';
   }
@@ -542,6 +687,7 @@
   window.EtiquetasCalc = {
     DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo, registrarModelos, modelosDaEmpresa, validarModelo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
-    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderSVG, htmlImpressao,
+    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, renderSVG, renderSVGLinha, htmlImpressao,
+    ROLO_LIM, geometriaRolo, adaptarModelo,
   };
 }());

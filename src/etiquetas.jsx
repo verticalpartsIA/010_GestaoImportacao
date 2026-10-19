@@ -55,14 +55,20 @@ const ETQ_TIPOS = [
   { id: 'ENDERECO', nome: 'Endereço', modelo: 'ENDERECO_VIGA_100x50', desc: 'Posição do porta-palete (QR END:R2A4)' },
   { id: 'ITEM', nome: 'Item', modelo: 'ITEM_100x50', desc: 'Produto: QR e Code 128 com o código' },
   { id: 'RECEBIMENTO', nome: 'Recebimento', modelo: 'RECEBIMENTO_100x50', desc: 'Carga que chegou: P.I., fornecedor, item e quantidade' },
-  { id: 'SEPARACAO', nome: 'Separação', modelo: 'SEPARACAO_100x100', desc: 'Volume n/N de um pedido de venda (rolo 100 × 100)' },
+  { id: 'SEPARACAO', nome: 'Separação', modelo: 'SEPARACAO_100x100', desc: 'Volume n/N de um pedido de venda (100 × 50, 100 × 100 ou 100 × 150)' },
   { id: 'PALETE', nome: 'Palete', modelo: 'PALETE_100x50', desc: 'Palete inteiro: código, P.I. e itens com quantidade' },
   { id: 'IDTAG_EQUIPAMENTO', nome: 'ID-TAG', modelo: 'IDTAG_100x50', desc: 'Identifica cada elevador (VPEL-EL0985-1…)' },
   { id: 'OP_QUADRO', nome: 'OP / série do quadro', modelo: 'OP_QUADRO_100x50', desc: 'OP do PCP e nº de série do quadro de comando' },
   { id: 'AVARIA', nome: 'Avaria', modelo: 'AVARIA_100x50', desc: 'Material danificado, retido' },
 ];
 const etqHoje = () => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
-const ETQ_ROLOS = ['100x50', '100x100'];
+// Valores crus dos campos do rolo (podem estar vazios enquanto a pessoa digita); sem eles, vale o formato antigo "100x50".
+function etqEntradaRolo(cfg) {
+  const leg = ETQ_CALC().geometriaRolo({ rolo: cfg && cfg.rolo });
+  const tem = (v) => v !== undefined && v !== null;
+  const c = cfg || {};
+  return { largura: tem(c.largura_mm) ? c.largura_mm : leg.largura, altura: tem(c.altura_mm) ? c.altura_mm : leg.altura, colunas: tem(c.colunas) ? c.colunas : 1, espaco: tem(c.espaco_mm) ? c.espaco_mm : 3, deslX: tem(c.desl_x_mm) ? c.desl_x_mm : 0, deslY: tem(c.desl_y_mm) ? c.desl_y_mm : 0 };
+}
 const etqChaveDv = 'vp_etiquetas_dv';
 const etqLerDv = () => { try { return localStorage.getItem(etqChaveDv) === '1'; } catch (e) { return false; } };
 const etqSalvarDv = (v) => { try { localStorage.setItem(etqChaveDv, v ? '1' : '0'); } catch (e) { /* vale só nesta sessão */ } };
@@ -70,15 +76,20 @@ const etqData = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { 
 const etqToast = (m) => { if (window.toast) window.toast(m); };
 
 /* Pré-visualização: SVG em mm do próprio modelo, com os mesmos dados que vão para a impressora. */
-function EtqPreview({ modelo, dados, largura }) {
+function EtqPreview({ modelo, dados, largura, colunas, espaco, nota }) {
   const { pronto, erro } = useEtqBwip();
-  const html = React.useMemo(() => (modelo && dados ? ETQ_CALC().renderSVG(modelo, dados, { barcode: pronto ? etqBarcode : null }) : ''), [modelo, dados, pronto]);
+  const cols = colunas || 1;
+  const html = React.useMemo(() => (modelo && dados ? ETQ_CALC().renderSVGLinha(modelo, Array.from({ length: cols }, () => dados), { barcode: pronto ? etqBarcode : null, colunas: cols, espaco, fluido: true, moldura: cols > 1 }) : ''), [modelo, dados, pronto, cols, espaco]);
   if (!modelo || !dados) return <div style={{ color: 'var(--fg3)', fontSize: 13 }}>Selecione algo para ver a etiqueta.</div>;
+  // Mesma proporção do rolo real: a largura da prévia acompanha o formato (rolo alto fica estreito) em vez de esticar.
+  const Wtot = cols * modelo.largura_mm + (cols - 1) * (cols > 1 ? Number(espaco) || 0 : 0);
+  const larg = largura || Math.min(380, Math.round(420 * Wtot / modelo.altura_mm));
   return (
     <div>
-      <div style={{ width: largura || 380, maxWidth: '100%', border: '1px solid var(--line, #ccc)', boxShadow: '0 1px 4px rgba(0,0,0,.12)', background: '#fff' }} dangerouslySetInnerHTML={{ __html: html }}/>
+      <div style={{ width: larg, maxWidth: '100%', border: '1px solid var(--line, #ccc)', boxShadow: '0 1px 4px rgba(0,0,0,.12)', background: '#fff' }} dangerouslySetInnerHTML={{ __html: html }}/>
       <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 4 }}>
-        {modelo.nome} · {modelo.largura_mm} × {modelo.altura_mm} mm · prévia aproximada (a fonte real é a da impressora)
+        {modelo.nome} · etiqueta {modelo.largura_mm} × {modelo.altura_mm} mm{cols > 1 ? ` · ${cols} por linha (rolo de ${Math.round(Wtot * 100) / 100} mm)` : ''} · prévia aproximada (a fonte real é a da impressora)
+        {nota ? <div>{nota}</div> : null}
         {erro ? <span style={{ color: 'var(--vp-danger)' }}> · {erro}</span> : null}
       </div>
     </div>
@@ -105,7 +116,7 @@ function EtqPainelImpressora({ cfg, setCfg, podeImprimir, aoTestar, ocupado }) {
         if (atual && atual.id) return atual;   // escolha salva que não aparece agora (impressora desligada): mantém, o envio avisa
       }
       const alvo = real || r.impressoras[0];
-      const perfil = EI.casarPerfil(alvo);
+      const perfil = EI.perfilDaImpressora(alvo);
       return { adaptador: alvo.adaptador, id: alvo.id, nome: alvo.nome, bruto: alvo.bruto, perfilId: perfil.id, utf8: atual ? atual.utf8 !== false : true, rolo: (atual && atual.rolo) || '100x50', auto: true };
     });
   }, []);
@@ -122,10 +133,11 @@ function EtqPainelImpressora({ cfg, setCfg, podeImprimir, aoTestar, ocupado }) {
   const escolher = (valor) => {
     const imp = opcoes.find((i) => i.adaptador + '|' + i.id === valor);
     if (!imp) return;
-    const p = EI.casarPerfil(imp);
+    const p = EI.perfilDaImpressora(imp);
     setCfg({ ...(cfg || {}), adaptador: imp.adaptador, id: imp.id, nome: imp.nome.replace(' (não detectada agora)', ''), bruto: imp.bruto, perfilId: p.id, utf8: cfg ? cfg.utf8 !== false : true, rolo: (cfg && cfg.rolo) || '100x50', auto: false });
   };
   const usaZpl = cfg && cfg.adaptador === 'zebra-browser-print' && perfil && perfil.implementado;
+  const geo = { ...ETQ_CALC().geometriaRolo(cfg, perfil), entrada: etqEntradaRolo(cfg) };
   return (
     <div className="card" style={{ padding: 14, marginBottom: 14 }}>
       <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
@@ -135,21 +147,52 @@ function EtqPainelImpressora({ cfg, setCfg, podeImprimir, aoTestar, ocupado }) {
           </select>
         </label>
         <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Perfil
-          <select className="input" aria-label="Perfil da impressora" style={{ width: 'auto' }} value={cfg ? cfg.perfilId : ''} onChange={(e) => setCfg({ ...cfg, perfilId: e.target.value })}>
+          <select className="input" aria-label="Perfil da impressora" style={{ width: 'auto' }} value={cfg ? cfg.perfilId : ''} onChange={(e) => { EI.lembrarPerfil(cfg, e.target.value); setCfg({ ...cfg, perfilId: e.target.value }); }}>
             {EI.PERFIS.map((p) => <option key={p.id} value={p.id}>{p.marca !== '—' ? p.marca + ' ' : ''}{p.modelo}</option>)}
           </select>
         </label>
-        <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Rolo carregado
-          <select className="input" aria-label="Rolo carregado" style={{ width: 'auto' }} value={cfg ? cfg.rolo : '100x50'} onChange={(e) => setCfg({ ...cfg, rolo: e.target.value })}>
-            {ETQ_ROLOS.map((r) => <option key={r} value={r}>{r.replace('x', ' × ')} mm</option>)}
-          </select>
+        <div style={{ fontSize: 12, display: 'grid', gap: 3 }}>
+          <span title="Tamanho de UMA etiqueta. Largura = o lado que passa pela cabeça de impressão; Comprimento = o sentido em que o rolo sai.">Rolo carregado — tamanho da etiqueta (mm)</span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'flex-start' }}>
+            <div style={{ display: 'grid', gap: 2 }}>
+              <input className="input" type="number" min="10" max="200" step="0.5" aria-label="Largura da etiqueta (mm)" title="Largura (mm)" placeholder="Largura" style={{ width: 84 }}
+                value={geo.entrada.largura} onChange={(e) => setCfg({ ...cfg, largura_mm: e.target.value })}/>
+              <span style={{ fontSize: 11, color: 'var(--fg3)' }}><b style={{ fontWeight: 600 }}>Largura</b> ↔</span>
+            </div>
+            <span style={{ paddingTop: 8 }}>×</span>
+            <div style={{ display: 'grid', gap: 2 }}>
+              <input className="input" type="number" min="10" max="400" step="0.5" aria-label="Comprimento da etiqueta (mm)" title="Altura / comprimento (mm)" placeholder="Altura" style={{ width: 96 }}
+                value={geo.entrada.altura} onChange={(e) => setCfg({ ...cfg, altura_mm: e.target.value })}/>
+              <span style={{ fontSize: 11, color: 'var(--fg3)' }}><b style={{ fontWeight: 600 }}>Altura</b> / Comprimento ↕</span>
+            </div>
+            <span style={{ color: 'var(--fg3)', paddingTop: 8 }}>mm</span>
+          </div>
+        </div>
+        <label style={{ fontSize: 12, display: 'grid', gap: 3 }} title="Quantas etiquetas ficam lado a lado no rolo (ex.: 30 × 50 mm, 2 por linha).">Etiquetas por linha
+          <input className="input" type="number" min="1" max="6" step="1" aria-label="Etiquetas por linha" style={{ width: 90 }}
+            value={geo.entrada.colunas} onChange={(e) => setCfg({ ...cfg, colunas: e.target.value })}/>
         </label>
+        <label style={{ fontSize: 12, display: 'grid', gap: 3 }} title="Calibração: se a impressão sai colada à esquerda, aumente este valor. Negativo move para a esquerda. Use a etiqueta de teste para ajustar.">Ajuste → (mm)
+          <input className="input" type="number" min="-10" max="10" step="0.5" aria-label="Deslocar para a direita (mm)" style={{ width: 84 }}
+            value={geo.entrada.deslX} onChange={(e) => setCfg({ ...cfg, desl_x_mm: e.target.value })}/>
+        </label>
+        <label style={{ fontSize: 12, display: 'grid', gap: 3 }} title="Calibração: se a impressão sai colada ao topo, aumente este valor. Negativo move para cima. Use a etiqueta de teste para ajustar.">Ajuste ↓ (mm)
+          <input className="input" type="number" min="-10" max="10" step="0.5" aria-label="Deslocar para baixo (mm)" style={{ width: 84 }}
+            value={geo.entrada.deslY} onChange={(e) => setCfg({ ...cfg, desl_y_mm: e.target.value })}/>
+        </label>
+        {geo.colunas > 1 ? (
+          <label style={{ fontSize: 12, display: 'grid', gap: 3 }} title="Vão entre uma etiqueta e a do lado, medido no rolo.">Espaço entre colunas (mm)
+            <input className="input" type="number" min="0" max="20" step="0.5" aria-label="Espaço entre colunas (mm)" style={{ width: 90 }}
+              value={geo.entrada.espaco} onChange={(e) => setCfg({ ...cfg, espaco_mm: e.target.value })}/>
+          </label>
+        ) : null}
         <label style={{ fontSize: 12, display: 'flex', gap: 5, alignItems: 'center', paddingBottom: 8 }} title="Desligue se a impressora imprimir acento errado: o acento é removido (ç vira c).">
           <input type="checkbox" checked={cfg ? cfg.utf8 !== false : true} onChange={(e) => setCfg({ ...cfg, utf8: e.target.checked })}/>acentos na impressora
         </label>
         <button className="btn btn--sm" onClick={detectar} disabled={det.lendo}>{det.lendo ? 'Procurando…' : 'Detectar de novo'}</button>
         <button className="btn btn--sm" onClick={aoTestar} disabled={!podeImprimir || ocupado || !cfg} title="Imprime uma etiqueta com borda, acentos, QR, código de barras e réguas de 10 e 50 mm">Etiqueta de teste</button>
       </div>
+      {geo.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginTop: 8 }}>{geo.erro}</div> : null}
       <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 8 }}>
         {usaZpl
           ? <>Imprime direto na impressora (ZPL pelo Zebra Browser Print). </>
@@ -170,10 +213,18 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const tipoInfo = ETQ_TIPOS.find((t) => t.id === tipo);
   const opcoesModelo = C.modelosDoTipo(tipo);
   const [modeloEscolhido, setModeloEscolhido] = React.useState({});
-  const modelo = C.modeloPorId(modeloEscolhido[tipo]) && C.modeloPorId(modeloEscolhido[tipo]).tipo === tipo && (C.modeloPorId(modeloEscolhido[tipo]).ativo !== false) ? C.modeloPorId(modeloEscolhido[tipo]) : C.modeloPorId(tipoInfo.modelo);
   const perfil = cfg ? ETQ_IMP().perfilPorId(cfg.perfilId) : null;
-  const avisoRolo = cfg && modelo && cfg.rolo !== `${modelo.largura_mm}x${modelo.altura_mm}`
-    ? `O rolo informado (${cfg.rolo.replace('x', ' × ')} mm) não confere com o modelo (${modelo.largura_mm} × ${modelo.altura_mm} mm). Troque o rolo ou ajuste o campo "Rolo carregado".` : null;
+  // O modelo se ajusta ao rolo carregado (escala única, centralizado); só não imprime se o rolo é inválido ou não cabe na impressora.
+  const geo = C.geometriaRolo(cfg, perfil);
+  // Modelo escolhido à mão; senão o que tem exatamente o tamanho da etiqueta carregada (aproveita a etiqueta toda); senão o padrão do tipo.
+  const modeloManual = C.modeloPorId(modeloEscolhido[tipo]);
+  const modelo = modeloManual && modeloManual.tipo === tipo && modeloManual.ativo !== false ? modeloManual
+    : (opcoesModelo.find((m) => Number(m.largura_mm) === geo.largura && Number(m.altura_mm) === geo.altura) || C.modeloPorId(tipoInfo.modelo));
+  const avisoRolo = geo.erro;
+  const ajuste = modelo ? C.adaptarModelo(modelo, geo.largura, geo.altura) : null;
+  const modeloRolo = ajuste ? ajuste.modelo : modelo;
+  const notaAjuste = ajuste && ajuste.ajustado
+    ? `Modelo desenhado para ${modelo.largura_mm} × ${modelo.altura_mm} mm, ajustado à etiqueta de ${geo.largura} × ${geo.altura} mm (${Math.round(ajuste.escala * 100)}% do tamanho, centralizado).` + (ajuste.escala < 0.6 ? ' Fica bem reduzida: confira se o QR e o código de barras continuam legíveis.' : '') : null;
 
   /* Endereço */
   const [ends, setEnds] = React.useState(null);
@@ -453,7 +504,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
                   <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Separado por<input className="input" value={sepPor} onChange={(e) => setSepPor(e.target.value)} style={{ width: 180 }}/></label>
                 </div>
               ) : <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Escolha um pedido. Imprime uma etiqueta por volume (1/N … N/N).</div>}
-              <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>Rolo de 100 × 100 mm. O QR leva "PED:número" — formato novo, ainda a registrar na issue #862 antes de o app de estoque ler.</div>
+              <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>Modelos para etiqueta de 100 × 50, 100 × 100 e 100 × 150 mm (escolhido pelo tamanho da etiqueta carregada). O QR leva "PED:número" — formato novo, ainda a registrar na issue #862 antes de o app de estoque ler.</div>
             </>
           ) : tipo === 'ENDERECO' ? (
             <>
@@ -533,7 +584,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
               </select>
             </label>
           ) : null}
-          <EtqPreview modelo={modelo} dados={dadosPrevia}/>
+          <EtqPreview modelo={modeloRolo} dados={dadosPrevia} colunas={geo.colunas} espaco={geo.espaco} nota={notaAjuste}/>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
             <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>Cópias de cada
               <input className="input" type="number" min="1" max="50" value={copias} onChange={(e) => setCopias(e.target.value)} style={{ width: 70 }}/>
@@ -802,31 +853,44 @@ function EtiquetasPage() {
 
   /* Envia as etiquetas e registra no histórico. Devolve true se saiu. */
   const executar = React.useCallback(async ({ tipo, modeloId, itens, opcoes, reimpressao, motivo }) => {
-    const modelo = C.modeloPorId(modeloId);
-    if (!modelo) { etqToast('Modelo de etiqueta desconhecido.'); return false; }
+    const modeloBase = C.modeloPorId(modeloId);
+    if (!modeloBase) { etqToast('Modelo de etiqueta desconhecido.'); return false; }
     const escolha = cfg || { adaptador: 'navegador', id: 'navegador', nome: EI.NAVEGADOR.nome, perfilId: 'generica', utf8: true, rolo: '100x50' };
-    if (escolha.rolo !== `${modelo.largura_mm}x${modelo.altura_mm}`) { etqToast(`O rolo informado (${escolha.rolo.replace('x', ' × ')} mm) não confere com o modelo (${modelo.largura_mm} × ${modelo.altura_mm} mm).`); return false; }
     const perfil = EI.perfilPorId(escolha.perfilId) || EI.perfilPorId('generica');
+    const geo = C.geometriaRolo(escolha, perfil);
+    if (!geo.ok) { etqToast(geo.erro); return false; }
+    // O modelo se ajusta ao rolo carregado. A etiqueta de teste nunca é ampliada (as réguas continuam valendo 10 e 50 mm).
+    const ajuste = C.adaptarModelo(modeloBase, geo.largura, geo.altura, { ampliar: tipo !== 'TESTE' });
+    const modelo = ajuste.modelo;
     const viaZpl = escolha.adaptador === 'zebra-browser-print' && perfil.implementado;
     const total = itens.reduce((n, it) => n + it.copias, 0);
     setOcupado(true);
     let erro = null, avisos = [];
+    if (ajuste.ajustado && ajuste.escala < 0.6) avisos.push(`Modelo reduzido a ${Math.round(ajuste.escala * 100)}% para caber em ${geo.largura} × ${geo.altura} mm`);
     try {
+      const imp = { adaptador: escolha.adaptador, id: escolha.id, nome: escolha.nome, bruto: escolha.bruto };
       if (viaZpl) {
-        const blocos = itens.map((it) => { const r = C.renderZPL(modelo, it.dados, { dpi: perfil.dpi, utf8: escolha.utf8 !== false, copias: it.copias }); avisos.push(...r.avisos); return r.zpl; });
-        const imp = { adaptador: escolha.adaptador, id: escolha.id, nome: escolha.nome, bruto: escolha.bruto };
+        let blocos;
+        if (geo.colunas > 1) {
+          const r = C.renderZPLLinhas(modelo, itens, { dpi: perfil.dpi, utf8: escolha.utf8 !== false, colunas: geo.colunas, espaco: geo.espaco, desl_x_mm: geo.deslX, desl_y_mm: geo.deslY });
+          avisos.push(...r.avisos); blocos = r.blocos;
+        } else {
+          blocos = itens.map((it) => { const r = C.renderZPL(modelo, it.dados, { dpi: perfil.dpi, utf8: escolha.utf8 !== false, copias: it.copias, desl_x_mm: geo.deslX, desl_y_mm: geo.deslY }); avisos.push(...r.avisos); return r.zpl; });
+        }
         for (let i = 0; i < blocos.length; i += 100) await EI.enviarBrowserPrint(imp, blocos.slice(i, i + 100).join('\n'));   // lotes de 100 (limite de 2 MB por envio do Browser Print)
       } else {
         await etqCarregarBwip();
+        const lista = [];
+        itens.forEach((it) => { for (let i = 0; i < it.copias; i++) lista.push(it.dados); });
         const paginas = [];
-        itens.forEach((it) => { const svg = C.renderSVG(modelo, it.dados, { barcode: etqBarcode }); for (let i = 0; i < it.copias; i++) paginas.push(svg); });
-        await EI.imprimirNavegador(C.htmlImpressao(paginas, modelo.largura_mm, modelo.altura_mm));
+        for (let i = 0; i < lista.length; i += geo.colunas) paginas.push(C.renderSVGLinha(modelo, lista.slice(i, i + geo.colunas), { barcode: etqBarcode, colunas: geo.colunas, espaco: geo.espaco, desl_x_mm: geo.deslX, desl_y_mm: geo.deslY }));
+        await EI.imprimirNavegador(C.htmlImpressao(paginas, geo.larguraTotal, geo.altura));
       }
     } catch (e) { erro = e.message || String(e); }
     const ref = itens.length === 1 ? itens[0].ref : `${itens[0] && itens[0].ref} … ${itens[itens.length - 1] && itens[itens.length - 1].ref} (${itens.length} códigos)`;
     const reg = await S.registrarImpressao({
       tipo, modelo: modeloId, referencia: ref, quantidade: total, impressora: escolha.nome, adaptador: viaZpl ? 'zebra-browser-print/zpl' : 'navegador',
-      dados: { itens: itens.map((it) => ({ ref: it.ref, dados: it.dados, copias: it.copias })), opcoes: opcoes || {}, avisos },
+      dados: { itens: itens.map((it) => ({ ref: it.ref, dados: it.dados, copias: it.copias })), opcoes: opcoes || {}, avisos, rolo: { largura_mm: geo.largura, altura_mm: geo.altura, colunas: geo.colunas, espaco_mm: geo.espaco, desl_x_mm: geo.deslX, desl_y_mm: geo.deslY } },
       sucesso: !erro, erro, reimpressao: !!reimpressao, motivo,
     });
     setOcupado(false);
