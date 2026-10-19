@@ -234,7 +234,14 @@
         marcoIdx++;
       }
     });
-    return { criado: true, pct: Math.round(acumulado), marcos, iniciadoEm };
+    /* 100% só com TODOS os itens flegados (inclui Pendências/acabamento);
+       enquanto houver item aberto, o teto é 99% e o arredondamento é para baixo. */
+    /* Também exige que as linhas devolvidas cubram o checklist completo (pesos somam 100):
+       link antigo sem alguma linha semeada não pode virar 100% só porque o que existe está marcado. */
+    const pesoTotal = ordenados.reduce((a, s) => a + (Number(s.acompanhamento_obra_itens?.peso) || 0), 0);
+    const completo = ordenados.every((s) => s.flegado) && pesoTotal >= 100 - 0.001;
+    const pct = completo ? 100 : Math.min(99, Math.floor(acumulado + 0.001));
+    return { criado: true, pct, marcos, iniciadoEm };
   }
 
   /* 1 query em lote pra N dossiês — usado por
