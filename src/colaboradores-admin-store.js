@@ -256,6 +256,7 @@
       ]},
       { modulo: 'carga-maquina', label: 'Carga Máquina' },
       { modulo: 'montagem-produto', label: 'Montagem do Produto' },
+      { modulo: 'lista-fios', label: 'Lista de fios do quadro (Montagem do Produto)' },
       { modulo: 'simulacao-producao', label: 'Simulação' },
       { modulo: 'mes', label: 'MES — Sistema de Execução da Manufatura' },
       { modulo: 'mes-cadastros', label: 'MES — Cadastros do chão de fábrica' },
@@ -316,10 +317,10 @@
     'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
     'Entrega & Documentação': ['databook', 'handover'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
-    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas'],
+    'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas'],
     /* Fabricação saiu de Logística Interna (17/10/2026). Logística Interna mantém a lista completa de propósito: quem já tinha o grupo alocado não perde nada. */
     /* Matérias-Primas e Produtos passaram a morar aqui no menu (18/10/2026); continuam também em Cadastros Mestres acima, para ninguém perder a alçada já concedida. */
-    'Fabricação': ['pcp', 'mes', 'mes-cadastros', 'carga-maquina', 'cadastro-materias-primas', 'cadastro-produtos', 'montagem-produto', 'simulacao-producao', 'relatorios-pcp'],
+    'Fabricação': ['pcp', 'mes', 'mes-cadastros', 'carga-maquina', 'cadastro-materias-primas', 'cadastro-produtos', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'relatorios-pcp'],
     'Administração': ['logs'],
   };
 
