@@ -234,7 +234,11 @@
         marcoIdx++;
       }
     });
-    return { criado: true, pct: Math.round(acumulado), marcos, iniciadoEm };
+    /* 100% só com TODOS os itens flegados (inclui Pendências/acabamento);
+       enquanto houver item aberto, o teto é 99% e o arredondamento é para baixo. */
+    const todosFlegados = ordenados.every((s) => s.flegado);
+    const pct = todosFlegados ? 100 : Math.min(99, Math.floor(acumulado + 0.001));
+    return { criado: true, pct, marcos, iniciadoEm };
   }
 
   /* 1 query em lote pra N dossiês — usado por
