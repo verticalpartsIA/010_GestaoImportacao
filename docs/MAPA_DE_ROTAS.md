@@ -14,7 +14,7 @@
 - O 1º segmento (**módulo**) vem do `BREADCRUMB_MAP` do `shell.jsx` via `MODULE_SLUG` do `router.js`; só o 2º segmento (a rota) decide o que abre.
 - A **aba padrão** deixa a URL limpa (sem o último segmento). Aba inválida na URL cai na padrão.
 - Abas entram na URL com `window.useRouteTab(rota, padrão, [válidas], comId?)` (em `router.js`).
-- Rotas no roteador: **83** · itens de menu: **72** · telas com abas na URL: **15**.
+- Rotas no roteador: **84** · itens de menu: **73** · telas com abas na URL: **15**.
 
 ## Verificações automáticas
 
@@ -48,8 +48,6 @@
 |---|---|---|---|---|
 | Clientes | `cadastro-clientes` | `/cadastros/cadastro-clientes` | — | — |
 | Fornecedores | `cadastro-fornecedores` | `/cadastros/cadastro-fornecedores` | — | — |
-| Matérias-Primas | `cadastro-materias-primas` | `/cadastros/cadastro-materias-primas` | — | — |
-| Produtos | `cadastro-produtos` | `/cadastros/cadastro-produtos` | — | — |
 
 ### Comercial | Pré-venda
 
@@ -84,7 +82,7 @@
 | RFQ | `rfq-importacao` | `/gestao-importacao/rfq-importacao` | — | — |
 | IMS | `ims-importacao` | `/gestao-importacao/ims-importacao` | — | — |
 | Embarques | `embarques-importacao` | `/gestao-importacao/embarques-importacao` | — | — |
-| Importação | `importacao` | `/gestao-importacao/importacao[/<aba>]` | **embarques**, documentos, aduana | — |
+| Rastreio Marítimo | `importacao` | `/gestao-importacao/importacao[/<aba>]` | **embarques**, documentos, aduana | — |
 | Análise de Preços | `gi-analise-precos` | `/gestao-importacao/gi-analise-precos` | — | — |
 | Importação Varejo | `compras` | `/logistica/compras` | — | — |
 | Cotações de Varejo | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | — | — |
@@ -111,6 +109,7 @@
 | Vistorias de Obras | `vistorias-envio` | `/engenharia/vistorias-envio[/<aba>]` | questionarios, **despacho**, calendario | — |
 | Resultado Vistorias de Obras | `vistorias` | `/engenharia/vistorias` | — | id na URL (passthrough) |
 | Instalação em Campo | `instalacao` | `/engenharia/instalacao` | — | — |
+| Mapa de Obras | `mapa-obras` | `/engenharia/mapa-obras` | — | — |
 | Cronograma | `cronograma` | `/engenharia/cronograma` | — | — |
 | ART | `art` | `/engenharia/art` | — | — |
 
@@ -135,17 +134,24 @@
 
 | Item do menu | Rota | Endereço | Abas (padrão em **negrito**) | Detalhe por id |
 |---|---|---|---|---|
-| Almoxarifado | `almoxarifado` | `/logistica/almoxarifado[/<aba>]` | **estoque**, estrutura, custos, reposicao, necessidade, pedidos | — |
-| Carga Máquina | `carga-maquina` | `/logistica/carga-maquina[/<aba>]` | **capacidade**, maquinas, roteiro, recursos | — |
-| Montagem do Produto | `montagem-produto` | `/logistica/montagem-produto` | — | — |
-| Simulação | `simulacao-producao` | `/logistica/simulacao-producao` | — | — |
-| PCP | `pcp` | `/logistica/pcp[/<aba>]` | **ordens**, fila, pedidos, planejamento, controle | — |
-| MES | `mes` | `/logistica/mes[/<aba>]` | **kanban**, painel, ordens, apontamentos, tv | — |
-| MES · Cadastros | `mes-cadastros` | `/logistica/mes-cadastros` | — | — |
-| Relatórios | `relatorios-pcp` | `/logistica/relatorios-pcp[/<aba>]` | **painel**, pedidos, precos, producao, perdas, estoque, fluxo, clientes, fotos | — |
+| Almoxarifado | `almoxarifado` | `/logistica/almoxarifado[/<aba>]` | **estoque**, estrutura, custos, reposicao, necessidade, ajustes, pedidos | — |
 | Expedição | `expedicao` | `/logistica/expedicao` | — | — |
 | Separação | `separacao` | `/logistica/separacao` | — | — |
 | Etiquetas | `etiquetas` | `/logistica/etiquetas[/<aba>]` | **gerar**, modelos, historico | — |
+
+### Fabricação
+
+| Item do menu | Rota | Endereço | Abas (padrão em **negrito**) | Detalhe por id |
+|---|---|---|---|---|
+| PCP | `pcp` | `/logistica/pcp[/<aba>]` | **ordens**, fila, pedidos, planejamento, controle | — |
+| MES | `mes` | `/logistica/mes[/<aba>]` | **kanban**, painel, ordens, apontamentos, tv | — |
+| MES · Cadastros | `mes-cadastros` | `/logistica/mes-cadastros` | — | — |
+| Carga Máquina | `carga-maquina` | `/logistica/carga-maquina[/<aba>]` | **capacidade**, maquinas, roteiro, recursos | — |
+| Matérias-Primas | `cadastro-materias-primas` | `/geral/cadastro-materias-primas` | — | — |
+| Produtos | `cadastro-produtos` | `/geral/cadastro-produtos` | — | — |
+| Montagem do Produto | `montagem-produto` | `/logistica/montagem-produto` | — | — |
+| Simulação | `simulacao-producao` | `/logistica/simulacao-producao` | — | — |
+| Relatórios | `relatorios-pcp` | `/logistica/relatorios-pcp[/<aba>]` | **painel**, pedidos, precos, producao, perdas, estoque, fluxo, clientes, fotos | — |
 
 ### Administração
 
@@ -178,7 +184,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 |---|---|---|---|---|
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `central-documentos.jsx:79` |
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `rh-homologacao` | `/rh/rh-homologacao` | `central-documentos.jsx:81` |
-| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:342` |
+| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:343` |
 | (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:431` |
 | (CVDetalhe em cotacoes-varejo.jsx) | (acionado por um handler — ver o código) | `cadastro-fornecedores` | `/cadastros/cadastro-fornecedores` | `cotacoes-varejo.jsx:323` |
 | (CVLista em cotacoes-varejo.jsx) | Ir para Importação Varejo | `compras` | `/logistica/compras` | `cotacoes-varejo.jsx:49` |
@@ -234,6 +240,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | leads | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:942` |
 | leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:862` |
 | leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:917` |
+| mapa-obras | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `mapa-obras.jsx:88` |
 | ncm-catalogo | (acionado por um handler — ver o código) | `ficha-tecnica` | `/engenharia/ficha-tecnica` | `ncm-catalogo.jsx:424` |
 | ncm-detail | (acionado por um handler — ver o código) | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:848` |
 | ncm-detail | Voltar para Solicitações NCM | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:854` |
@@ -264,9 +271,10 @@ São abas de formulário/modal, filtros, modos de visualização e passos de ass
 | `formulario-quadro-comando-publico.jsx:246` | ? | `passo` | `0` | (modal/componente interno) |
 | `ims.jsx:75` | IMSForm | `tab` | `'identificacao'` | `ims-importacao` |
 | `ims.jsx:342` | IMSPage | `activeTab` | `'todos'` | `ims-importacao` |
+| `lista-fios.jsx:46` | ListaFiosView | `aba` | `'fios'` | (modal/componente interno) |
 | `logistica.jsx:1787` | EmailInbox | `modoCompose` | `'responder'` | `inbox` |
 | `ncm-catalogo.jsx:681` | NcmKanbanPage | `view` | `"kanban"` | `ncm-kanban` |
-| `pi.jsx:395` | PIForm | `tab` | `'id'` | `pi-importacao` |
+| `pi.jsx:445` | PIForm | `tab` | `'id'` | `pi-importacao` |
 | `precificacao-elevador.jsx:435` | ModalAcrescentarEquipamento | `modo` | `grupos.length ? 'identico' : '` | (modal/componente interno) |
 | `precificacao-memoria.jsx:46` | PZMemoriaCalculo | `aba` | `'resumo'` | (modal/componente interno) |
 | `precificacao.jsx:20` | PrecificacaoPage | `modo` | `'elevador'` | `precificacao` |

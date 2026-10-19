@@ -100,6 +100,7 @@ const NAV_GROUPS = [
     { id: "vistorias-envio", label: "Vistorias de Obras", icon: "send" },
     { id: "vistorias", label: "Resultado Vistorias de Obras", icon: "history" },
     { id: "instalacao", label: "Instalação em Campo", icon: "hardhat" },
+    { id: "mapa-obras", label: "Mapa de Obras", icon: "pin" },
     { id: "cronograma", label: "Cronograma", icon: "clock" },
     { id: "art", label: "ART", icon: "scale" },
   ]},
@@ -405,6 +406,7 @@ const BREADCRUMB_MAP = {
   "vistorias-envio": { module: "Instalação & Entrega", page: "Vistorias de Obras", icon: "send" },
   vistorias:     { module: "Instalação & Entrega", page: "Resultado Vistorias de Obras", icon: "history" },
   instalacao:    { module: "Instalação & Entrega", page: "Instalação em Campo", icon: "hardhat" },
+  "mapa-obras":  { module: "Instalação & Entrega", page: "Mapa de Obras", icon: "pin" },
   art:           { module: "Instalação & Entrega", page: "ART de Instalação", icon: "scale" },
   cronograma:    { module: "Instalação & Entrega", page: "Cronograma de Instalação", icon: "clock" },
   databook:      { module: "Instalação & Entrega", page: "Data Book & Termo", icon: "fileSearch" },
@@ -441,6 +443,7 @@ const MODULE_HOME = {
 
 /* Ajuda contextual por rota — texto curto do que a tela faz / próximos passos. */
 const HELP_TOPICS = {
+  "mapa-obras": "Mapa das obras da VerticalParts: amarelo = em andamento, verde = concluída, azul = aguardando os equipamentos (contrato assinado, importação ou homologação do instalador). Passe o mouse sobre um ponto para ver a obra (em andamento: status e quem está instalando) e clique para abrir o Dossiê. Os cartões de cima ligam/desligam cada grupo no mapa. A posição é o centro da cidade da obra.",
   "mes-cadastros": "A base do chão de fábrica (MES). Frentes: as linhas de produção (quadro, fiação, botoeiras, cabos de aço…). Postos: as bancadas e máquinas de cada frente (são os mesmos recursos da Carga Máquina, agora ligados a uma frente). Etapas modelo: as etapas que toda OP nova herda, com tipo (produção ou inspeção) e nº de operadores. Jornada: o horário normal da fábrica. Operadores: o posto onde cada colaborador costuma trabalhar. Nada é apagado: itens saem de uso ao serem desativados.",
   dashboard: "Visão geral do dia: KPIs, tarefas de hoje, projetos em andamento (Gantt/Lista/Kanban) e alertas críticos.",
   notificacoes: "Seu painel de avisos: o sistema escreve aqui quando algo importante acontece (proposta aprovada, decisão esperando por você, prazo vencido, resposta por e-mail). Um aviso só informa: para agir, clique em Abrir origem e resolva na tela certa. Marcar como lida e Arquivar valem só para você; em Arquivadas fica o que você guardou; Preferências escolhe o que aparece para você aqui e no sino. Os avisos somem sozinhos (informativos em 14 dias, os demais em 45).",
