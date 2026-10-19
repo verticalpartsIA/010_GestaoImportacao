@@ -60,10 +60,11 @@
     if (error) throw error;
 
     if (itens.length) {
-      await c.from('fabricacao_quadro_status').upsert(
+      const { error: errSeed } = await c.from('fabricacao_quadro_status').upsert(
         itens.map((it) => ({ ordem_id: ordemId, item_id: it.id, flegado: false })),
         { onConflict: 'ordem_id,item_id', ignoreDuplicates: true }
       );
+      if (errSeed) throw errSeed;
     }
     return link;
   }
@@ -75,11 +76,11 @@
      quadro_comando_id — o embed vem null, sem quebrar nada. */
   async function obterEstadoOrdem(ordemId) {
     const c = sb();
-    const [{ data: ordem }, { data: status }, { data: ocorrencias }] = await Promise.all([
+    const [{ data: ordem, error: errOrdem }, { data: status, error: errStatus }, { data: ocorrencias, error: errOcorrencias }] = await Promise.all([
       c.from('pcp_ordens')
         .select(`id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id,
           quadros_comando (
-            numero_pedido, numero_cotacao, cliente_id,
+            numero_pedido, numero_cotacao, cliente_id, fabricante_comando, modelo_comando,
             clientes ( razao_social, nome_fantasia ),
             quadros_comando_maquina ( modelo_maquina, fabricante_maquina, potencia_kw, tensao_v ),
             quadros_comando_bom_itens ( sku, descricao )
@@ -88,6 +89,17 @@
       c.from('fabricacao_quadro_status').select('*, fabricacao_quadro_itens(id, texto, ordem, peso)').eq('ordem_id', ordemId),
       c.from('fabricacao_quadro_ocorrencias').select('*').eq('ordem_id', ordemId).order('aberta_em', { ascending: false }),
     ]);
+    if (errOrdem) throw errOrdem;
+    if (errStatus) throw errStatus;
+    if (errOcorrencias) throw errOcorrencias;
+    /* quadros_comando_maquina pode vir como array ou objeto dependendo de
+       como o PostgREST infere a cardinalidade do embed — mesma ambiguidade
+       já documentada e normalizada em pcp.jsx:PCPPedidosQuadro
+       (`Array.isArray(r.quadros_comando_maquina) ? r.quadros_comando_maquina[0] : r.quadros_comando_maquina`).
+       Normaliza aqui pra Task 4 não precisar redescobrir isso. */
+    if (ordem && ordem.quadros_comando && Array.isArray(ordem.quadros_comando.quadros_comando_maquina)) {
+      ordem.quadros_comando.quadros_comando_maquina = ordem.quadros_comando.quadros_comando_maquina[0] || null;
+    }
     return { ordem: ordem || null, status: status || [], ocorrencias: ocorrencias || [] };
   }
 
