@@ -760,7 +760,11 @@
       margemDesejadaPct: pz.margem_desejada_pct != null ? pz.margem_desejada_pct : (params.margemMinimaPct || 0.2),
       contingenciaValor: pz.contingencia_valor, outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
     });
-    const valorOperacaoDifal = pass1V2.precificacao.precoVendaProposta > 0 ? pass1V2.precificacao.precoVendaProposta : pass1.precificacao.precoVendaProposta;
+    /* 19/10/2026 — REGRA do Financeiro (cotação 988): o DIFAL incide SÓ no preço do EQUIPAMENTO (produto),
+       nunca no total nem em equipamento + serviço. A base é o preço de venda × (1 − % de serviços),
+       o mesmo `precoVendaProduto` que o motor já separa (30% de serviços ⇒ DIFAL sobre 70% do preço). */
+    const pv2 = pass1V2.precificacao, pv1 = pass1.precificacao;
+    const valorOperacaoDifal = pv2.precoVendaProposta > 0 ? pv2.precoVendaProduto : pv1.precoVendaProduto;
 
     // ufFaturamento/ufDestino e a regra de ICMS já foram resolvidos acima, antes da 1ª passada.
     const estadoDestino = await window.DifalEngine.buscarEstado(ufDestino);
