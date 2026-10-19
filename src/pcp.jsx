@@ -1255,6 +1255,11 @@ function pcpMontarPedidoQuadro(b, extra) {
   if (esc.botoeiras_logo_cliente) botoeiras.push(ck('gravação', 'Gravar logo do cliente nas botoeiras', (det('cop') || (forn('cop') ? 1 : 0)) + (det('lop') || (forn('lop') ? lopTotal : 0)) || null, 'un.', null));
   if (temFuracao) botoeiras.push(ck('furação', 'Furação do totem (botoeira de cabina)', null, null, esc.botoeiras_furacoes_totem === 'custom' ? esc.botoeiras_furacoes_custom : esc.botoeiras_furacoes_totem));
 
+  // Lista de fios (Montagem do Produto): a lista manda nos códigos que cobre (fio, terminais, conectores) — as linhas equivalentes
+  // da estrutura do Omie/formulário saem, para não contar em dobro. Variante sem bitola cadastrada: não aplica (extra.fiacao.ok === false).
+  if (extra && extra.fiacao && extra.fiacao.ok && window.FiacaoQuadro && !fora('quadro_comando')) {
+    materiaisQuadro = window.FiacaoQuadro.aplicarAosMateriais(materiaisQuadro, extra.fiacao).materiais;
+  }
   const frentes = [];
   if (!fora('quadro_comando') && (materiaisQuadro.length || forn('quadro_comando'))) frentes.push({ sufixo: 'Q', frente: 'quadro', titulo: 'Quadro de comando', origemMat, etapas: [['Separar materiais', 'Almoxarifado'], ['Montagem do quadro', 'Produção'], ['Qualidade / aprovação', 'Qualidade']], materiais: materiaisQuadro, checklist: [] });
   if (fiacao.length) frentes.push({ sufixo: 'F', frente: 'fiacao', titulo: 'Fiação e cabos', etapas: [['Separar materiais', 'Almoxarifado'], ['Corte', 'Produção'], ['Montagem / fiação', 'Produção'], ['Qualidade / aprovação', 'Qualidade']], materiais: [], checklist: fiacao });
@@ -1351,21 +1356,24 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
     const pedidosOmie = Object.values(grupos).filter(g => !g.some(x => comMae.has(String(x.codigo_pedido))))
       .map(g => ({ codigo_pedido: g[0].codigo_pedido, numero_pedido: g[0].numero_pedido, cliente_nome: g[0].cliente_nome, etapa: g[0].etapa, data_pedido: g[0].data_pedido }));
     const bundle = { quadro: q.data, paradas: pa.data || [], bom: bo.data || [], cortes: co.data || [], maquina: ma.data };
+    let fiacao = null;
+    try { fiacao = r.variante && window.lfCalcularParaVariante ? await window.lfCalcularParaVariante(sb, r.variante) : null; } catch (e) { fiacao = null; }
+    if (fiacao && !fiacao.ok) window.toast?.(fiacao.motivo);
     const vkey = ((q.data && q.data.escopo_fornecimento && q.data.escopo_fornecimento.quadro_comando) || {}).detalhe || r.variante;
     setPreparo({
-      bundle, pedidosOmie,
+      bundle, pedidosOmie, fiacao,
       opcoes: { pedido_codigo: '', produto: variantes[vkey] || '', cliente: (cl.data && (cl.data.razao_social || cl.data.nome_fantasia)) || '', previsao_inicio: '', prazo_entrega: '' },
     });
     setBusy(false);
   };
-  const montagem = preparo ? pcpMontarPedidoQuadro(preparo.bundle, { dados, produto: preparo.opcoes.produto }) : null;
+  const montagem = preparo ? pcpMontarPedidoQuadro(preparo.bundle, { dados, produto: preparo.opcoes.produto, fiacao: preparo.fiacao }) : null;
   const criar = async () => {
     const o = preparo.opcoes;
     if (montagem.frentes.some(f => f.frente === 'quadro') && !o.produto) { window.toast?.('Escolha o produto do quadro de comando.'); return; }
     if (!o.pedido_codigo && !window.confirm('Nenhum pedido de venda do Omie foi escolhido. Sem ele, esta produção NÃO aparece na Emissão de NF nem na Expedição, e o pedido pode gerar outro conjunto de OPs em "Pedidos para Produzir". Criar mesmo assim?')) return;
     setBusy(true);
     try {
-      const mae = await pcpGerarPedidoQuadro(sb, preparo.bundle, o, { dados, produto: o.produto });
+      const mae = await pcpGerarPedidoQuadro(sb, preparo.bundle, o, { dados, produto: o.produto, fiacao: preparo.fiacao });
       window.toast?.(`${mae.numero} criada com ${montagem.frentes.length} frente(s).`);
       try { sessionStorage.setItem('vp_pcp_op', ''); } catch (e) { /* ok */ }
       setPreparo(null); await carregar();

@@ -146,6 +146,8 @@ function MontagemProdutoPage({ setRoute, setSubsel }) {
   const ctx = dados && { filhos: dados.filhos, prods: dados.prods, abertos: new Set([...abertos, '/' + pai]), alternar, verCusto, podeEditar, editarQtd, remover, irParaItem };
   const itensSelecionaveis = dados ? Object.keys(dados.prods).sort() : [];
 
+  if (pai === 'lista-de-fios' && window.ListaFiosView) return <window.ListaFiosView setPai={setPai}/>;
+
   return (
     <div className="page fade-in">
       <div className="page-head">
@@ -163,6 +165,7 @@ function MontagemProdutoPage({ setRoute, setSubsel }) {
             <option value="">Selecione o produto…</option>
             {pais.map(c => <option key={c} value={c}>{c} — {dados.prods[c]?.descricao || ''}</option>)}
           </select>
+          <button className="btn btn--ghost" onClick={() => setPai('lista-de-fios')}>Lista de fios do quadro</button>
         </div>
         {!pai && <div style={{ padding: 24, color: 'var(--fg3)' }}>Escolha um produto para ver a estrutura.</div>}
         {pai && (<>
