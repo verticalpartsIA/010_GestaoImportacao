@@ -70,6 +70,68 @@ function EvPasso({ p, atual, atrasada, ok }) {
   );
 }
 
+
+/* Espinha de peixe (Ishikawa) das ocorrências do equipamento: cada espinha é uma categoria,
+   a cabeça é o efeito (atraso). As espinhas sem ocorrência ficam cinza — já estão no desenho
+   para receber as Ocorrências de Obra e os atrasos combinados de projeto/contrato. */
+const EV_GRAV_COR = { alta: "#dc2626", media: "#d97706" };
+function EvEspinha({ oc }) {
+  const C = window.EvolucaoEquipamentosCalc;
+  const cats = C.CATEGORIAS_OCORRENCIA;
+  const [aberto, setAberto] = React.useState(false);
+  if (!oc || !oc.lista.length) return <div className="ev-meta" style={{ marginTop: 10 }}>Sem ocorrências ou atrasos registrados.</div>;
+  const corCat = (k) => {
+    const l = oc.porCategoria[k] || [];
+    if (!l.length) return "var(--border)";
+    return l.some((o) => o.gravidade === "alta") ? EV_GRAV_COR.alta : EV_GRAV_COR.media;
+  };
+  const Y = 72, X0 = 16, XH = 590;
+  const xs = [110, 215, 320, 425, 530];
+  return (
+    <div style={{ marginTop: 12, borderTop: "1px dashed var(--border)", paddingTop: 10 }}>
+      <button type="button" className="btn btn--sm btn--ghost" onClick={() => setAberto((v) => !v)} style={{ padding: "2px 6px" }}>
+        {aberto ? "▾" : "▸"} Ocorrências e atrasos: <b style={{ marginLeft: 4, color: EV_GRAV_COR[oc.lista.some((o) => o.gravidade === "alta") ? "alta" : "media"] }}>{oc.lista.length}</b>
+        {oc.diasAtraso > 0 && <span style={{ marginLeft: 6, color: "var(--fg3)" }}>· ~{oc.diasAtraso} dia(s) de atraso conhecido</span>}
+      </button>
+      {aberto && (
+        <div>
+          <svg viewBox="0 0 760 150" style={{ width: "100%", maxWidth: 760, height: "auto", display: "block", marginTop: 6 }} role="img" aria-label="Espinha de peixe das ocorrências">
+            <line x1={X0} y1={Y} x2={XH} y2={Y} stroke="var(--fg3)" strokeWidth="3"/>
+            <polygon points={`${XH},${Y - 8} ${XH + 14},${Y} ${XH},${Y + 8}`} fill="var(--fg3)"/>
+            <rect x={XH + 16} y={Y - 30} width="140" height="60" rx="8" fill="none" stroke={EV_GRAV_COR.alta} strokeWidth="2"/>
+            <text x={XH + 86} y={Y - 8} textAnchor="middle" style={{ fontSize: 13, fontWeight: 700, fill: EV_GRAV_COR.alta }}>Atraso</text>
+            <text x={XH + 86} y={Y + 12} textAnchor="middle" style={{ fontSize: 12, fill: "var(--fg2)" }}>{oc.diasAtraso > 0 ? `~${oc.diasAtraso} dia(s)` : "sem dias medidos"}</text>
+            {cats.map((c, i) => {
+              const cima = i % 2 === 0;
+              const x = xs[i], yp = cima ? 14 : 136;
+              const n = (oc.porCategoria[c.key] || []).length;
+              const cor = corCat(c.key);
+              return (
+                <g key={c.key}>
+                  <line x1={x - 46} y1={yp} x2={x} y2={Y} stroke={cor} strokeWidth={n ? 3 : 2}/>
+                  <text x={x - 46} y={cima ? yp - 2 : yp + 12} textAnchor="middle" style={{ fontSize: 11.5, fontWeight: n ? 700 : 500, fill: n ? cor : "var(--fg3)" }}>
+                    {c.rotulo}{n ? ` (${n})` : ""}
+                  </text>
+                </g>
+              );
+            })}
+          </svg>
+          <div style={{ display: "grid", gap: 4, marginTop: 6 }}>
+            {cats.filter((c) => (oc.porCategoria[c.key] || []).length).map((c) => (oc.porCategoria[c.key]).map((o, j) => (
+              <div key={c.key + j} style={{ fontSize: 12, display: "flex", gap: 8, alignItems: "baseline" }}>
+                <span style={{ width: 8, height: 8, borderRadius: "50%", background: EV_GRAV_COR[o.gravidade] || EV_GRAV_COR.media, flex: "0 0 8px", transform: "translateY(-1px)" }}/>
+                <span style={{ color: "var(--fg3)", minWidth: 132 }}>{c.rotulo}</span>
+                <span><b>{o.titulo}</b>{o.detalhe ? " — " + o.detalhe : ""}</span>
+              </div>
+            )))}
+          </div>
+          <div className="ev-meta" style={{ marginTop: 6 }}>Por enquanto só aparecem as ocorrências que o sistema já registra (rolagem do navio, mudança de ETA, canal da aduana, previsões vencidas). Ocorrências de Obra e atrasos combinados de projeto/contrato entram aqui quando forem lançados.</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function EvCard({ item, onAbrirDossie, onVerNoMapa }) {
   const S = window.MapaObrasCalc.SITUACOES[item.obra.situacao];
   const { linha } = item;
@@ -116,15 +178,16 @@ function EvCard({ item, onAbrirDossie, onVerNoMapa }) {
             ok={idxAtual === -1 ? true : i <= idxAtual} />
         ))}
       </div>
+      <EvEspinha oc={item.oc}/>
     </div>
   );
 }
 
-function EvolucaoEquipamentos({ obras, onAbrirDossie, onVerNoMapa }) {
+/* Carrega e monta as linhas do tempo + ocorrências. Usado pelo Mapa de Obras (uma carga só,
+   compartilhada entre o mapa e a aba Evolução). */
+function useEvolucaoItens(obras) {
   const [extra, setExtra] = React.useState(null);
   const [erro, setErro] = React.useState(null);
-  const [busca, setBusca] = React.useState("");
-  const [ver, setVer] = React.useState({ andamento: true, aguardando: true, concluida: true });
 
   React.useEffect(() => {
     if (!obras) return undefined;
@@ -137,7 +200,7 @@ function EvolucaoEquipamentos({ obras, onAbrirDossie, onVerNoMapa }) {
       try {
         const [eqRes, embRes, prog] = await Promise.all([
           ids.length ? sb.from("equipamentos_obra").select("id, dossier_id, numero_serie, tipo, previsao_chegada_material, chegada_real_material, previsao_inicio, data_real_inicio, previsao_termino, data_real_termino").in("dossier_id", ids) : { data: [] },
-          cotacoes.length ? sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, data_entrega, data_limite_entrega, arquivado, updated_at, created_at").in("numero_cotacao", cotacoes) : { data: [] },
+          cotacoes.length ? sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, data_entrega, data_limite_entrega, arquivado, updated_at, created_at, houve_rolagem, historico_rolagens, historico_eta, canal_parametrizacao").in("numero_cotacao", cotacoes) : { data: [] },
           window.AcompanhamentoObraStore && ids.length ? window.AcompanhamentoObraStore.resumoProgressoBatch(ids).catch(() => ({})) : {},
         ]);
         if (eqRes.error) throw eqRes.error;
@@ -156,7 +219,7 @@ function EvolucaoEquipamentos({ obras, onAbrirDossie, onVerNoMapa }) {
             pis = piRes.data || [];
             const embIds = Array.from(new Set(pis.map((p) => p.embarque_id)));
             if (embIds.length) {
-              const r = await sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, data_entrega, data_limite_entrega, arquivado, updated_at, created_at").in("id", embIds);
+              const r = await sb.from("embarques_importacao").select("id, nome_embarque, numero_cotacao, etd_original, etd_atual, eta_santos, data_entrega, data_limite_entrega, arquivado, updated_at, created_at, houve_rolagem, historico_rolagens, historico_eta, canal_parametrizacao").in("id", embIds);
               if (r.error) throw r.error;
               embSerie = r.data || [];
             }
@@ -182,7 +245,8 @@ function EvolucaoEquipamentos({ obras, onAbrirDossie, onVerNoMapa }) {
       const embCot = C.escolherEmbarque(embPor[o.numero_cotacao]);
       const montar = (e) => {
         const emb = C.embarqueDoEquipamento(embCot, porSerie, e && e.numero_serie);
-        return { embarque: emb.embarque, origemEmbarque: emb.origem, linha: C.montarLinha(o, e, { embarque: emb.embarque, progresso: extra.prog[o.id] }) };
+        const linha = C.montarLinha(o, e, { embarque: emb.embarque, progresso: extra.prog[o.id] });
+        return { embarque: emb.embarque, origemEmbarque: emb.origem, linha, oc: C.ocorrencias(emb.embarque, linha, {}) };
       };
       const lista = (eqPor[o.id] || []).slice().sort((a, b) => String(a.numero_serie || "").localeCompare(String(b.numero_serie || ""), "pt-BR", { numeric: true }));
       if (!lista.length) out.push({ key: o.id, obra: o, serie: null, ...montar(null) });
@@ -191,9 +255,20 @@ function EvolucaoEquipamentos({ obras, onAbrirDossie, onVerNoMapa }) {
     return out;
   }, [obras, extra]);
 
+  return { itens, erro, carregado: !!(obras && extra) };
+}
+
+function EvolucaoEquipamentos({ obras, dados, onAbrirDossie, onVerNoMapa }) {
+  const { itens, erro, carregado } = dados || { itens: [], erro: null, carregado: false };
+  const extra = carregado;
+  const [busca, setBusca] = React.useState("");
+  const [ver, setVer] = React.useState({ andamento: true, aguardando: true, concluida: true });
+  const [soOc, setSoOc] = React.useState(false);
+
   const q = busca.trim().toLowerCase();
   const filtrados = itens.filter((it) => {
     if (!ver[it.obra.situacao]) return false;
+    if (soOc && !it.oc.lista.length) return false;
     if (!q) return true;
     const o = it.obra;
     return [it.serie, it.embarque && it.embarque.nome_embarque, o.id, o.client_name, o.building_name, o.city, o.status_master, (o.instaladores || []).join(" "), o.numero_cotacao]
@@ -228,6 +303,10 @@ function EvolucaoEquipamentos({ obras, onAbrirDossie, onVerNoMapa }) {
       <div className="row sb" style={{ gap: 12, flexWrap: "wrap", marginBottom: 4 }}>
         <input className="input" style={{ flex: "1 1 280px", maxWidth: 460 }} placeholder="Buscar por nº de série, cliente, obra, cidade, instalador…"
           value={busca} onChange={(e) => setBusca(e.target.value)} />
+        <label className="row" style={{ gap: 6, fontSize: 12, cursor: "pointer" }}>
+          <input type="checkbox" checked={soOc} onChange={(e) => setSoOc(e.target.checked)}/>
+          Só com ocorrência ({itens.filter((it) => it.oc.lista.length).length})
+        </label>
         <div className="ev-legenda">
           <span><i style={{ background: "#16a34a", borderColor: "#16a34a" }}/>Feito</span>
           <span><i style={{ background: "#fef3c7", borderColor: "#f59e0b" }}/>Etapa atual</span>
@@ -262,3 +341,4 @@ function EvolucaoEquipamentos({ obras, onAbrirDossie, onVerNoMapa }) {
 }
 
 window.EvolucaoEquipamentos = EvolucaoEquipamentos;
+window.useEvolucaoItens = useEvolucaoItens;

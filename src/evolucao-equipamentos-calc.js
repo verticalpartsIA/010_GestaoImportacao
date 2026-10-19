@@ -129,5 +129,105 @@
     return { passos, atualKey: atual ? atual.key : null, atrasada, pct: Math.round(Number(prog.pct) || 0) };
   }
 
-  window.EvolucaoEquipamentosCalc = { ETAPAS, paraData, escolherEmbarque, embarquesPorSerie, embarqueDoEquipamento, montarLinha };
+
+  /* ---------- Ocorrências e atrasos (espinha de peixe) — 19/10/2026 ----------
+     Cada ocorrência cai numa "espinha" (categoria) e aponta para a etapa da linha do tempo
+     onde aconteceu. Hoje só existem as internas que o banco já registra (rolagem/ETD do
+     navio, mudança de ETA, canal da aduana, previsão vencida). As Ocorrências de Obra e os
+     atrasos combinados de projeto/contrato entram por ctx.extras quando existirem. */
+  const CATEGORIAS_OCORRENCIA = [
+    { key: 'contrato',  rotulo: 'Projeto e contrato' },
+    { key: 'navio',     rotulo: 'Navio e frete' },
+    { key: 'aduana',    rotulo: 'Aduana' },
+    { key: 'logistica', rotulo: 'Logística até a obra' },
+    { key: 'obra',      rotulo: 'Obra e instalação' },
+  ];
+  const DIA = 86400000;
+  const dias = (a, b) => Math.round((inicioDoDia(b) - inicioDoDia(a)) / DIA);
+  const fmt = (d) => (d ? String(d.getDate()).padStart(2, '0') + '/' + String(d.getMonth() + 1).padStart(2, '0') + '/' + d.getFullYear() : '');
+  const CAT_DA_ETAPA = { embarque: 'navio', porto: 'navio', obra: 'logistica', inicio: 'obra', m50: 'obra', m75: 'obra', fim: 'obra', entrega: 'obra' };
+  const DIAS_PORTO_SEM_ENTREGA = 10;
+
+  /**
+   * @param emb   embarque ligado ao equipamento (ou null)
+   * @param linha resultado de montarLinha
+   * @param ctx   { hoje, extras: [{categoria, etapa, titulo, detalhe, data, dias, gravidade, origem}] }
+   * @returns { lista, porCategoria, diasAtraso }
+   */
+  function ocorrencias(emb, linha, ctx) {
+    ctx = ctx || {};
+    const hoje = inicioDoDia(ctx.hoje || new Date());
+    const lista = [];
+    const e = emb || {};
+    const nomeEmb = String(e.nome_embarque || '').trim();
+    let atrasoNavio = 0;
+
+    const rol = Array.isArray(e.historico_rolagens) ? e.historico_rolagens : [];
+    rol.forEach((r) => {
+      const de = paraData(r && r.data_anterior), para = paraData(r && r.nova_data);
+      if (!de || !para) return;
+      const n = dias(de, para);
+      const motivo = String((r && r.motivo) || '').trim();
+      lista.push({ categoria: 'navio', etapa: 'embarque', origem: 'interna', data: para, dias: n,
+        gravidade: n > 7 ? 'alta' : 'media',
+        titulo: n >= 0 ? `Rolagem do navio (+${n} dia${n === 1 ? '' : 's'})` : `Saída antecipada (${n} dias)`,
+        detalhe: `${nomeEmb ? nomeEmb + ': ' : ''}saída ${fmt(de)} → ${fmt(para)}${motivo ? ' · ' + motivo : ' · motivo não informado'}` });
+    });
+    const etdAtual = paraData(e.etd_atual);
+    if (rol.length) {
+      const primeira = paraData(rol[0] && rol[0].data_anterior);
+      if (primeira && etdAtual) atrasoNavio = Math.max(0, dias(primeira, etdAtual));
+    } else {
+      const etd0 = paraData(e.etd_original);
+      if (etd0 && etdAtual && dias(etd0, etdAtual) > 0) {
+        atrasoNavio = dias(etd0, etdAtual);
+        lista.push({ categoria: 'navio', etapa: 'embarque', origem: 'interna', data: etdAtual, dias: atrasoNavio, gravidade: atrasoNavio > 7 ? 'alta' : 'media',
+          titulo: `Saída do navio adiada (+${atrasoNavio} dias)`, detalhe: `${nomeEmb ? nomeEmb + ': ' : ''}previsto ${fmt(etd0)}, saiu/sai ${fmt(etdAtual)}` });
+      }
+    }
+    const hEta = Array.isArray(e.historico_eta) ? e.historico_eta : [];
+    hEta.forEach((h) => {
+      const de = paraData(h && (h.data_anterior || h.eta_anterior)), para = paraData(h && (h.nova_data || h.eta_nova || h.eta));
+      if (!de || !para) return;
+      const n = dias(de, para);
+      if (!n) return;
+      const motivo = String((h && h.motivo) || '').trim();
+      lista.push({ categoria: 'navio', etapa: 'porto', origem: 'interna', data: para, dias: n, gravidade: n > 7 ? 'alta' : 'media',
+        titulo: n > 0 ? `Chegada a Santos adiada (+${n} dias)` : `Chegada a Santos antecipada (${n} dias)`,
+        detalhe: `${nomeEmb ? nomeEmb + ': ' : ''}ETA ${fmt(de)} → ${fmt(para)}${motivo ? ' · ' + motivo : ''}` });
+    });
+    const canal = String(e.canal_parametrizacao || '').trim().toLowerCase();
+    if (canal && canal !== 'verde') {
+      const grave = canal === 'vermelho' || canal === 'cinza';
+      lista.push({ categoria: 'aduana', etapa: 'porto', origem: 'interna', data: null, dias: null, gravidade: grave ? 'alta' : 'media',
+        titulo: `Canal ${canal.charAt(0).toUpperCase() + canal.slice(1)} na aduana`,
+        detalhe: `${nomeEmb ? nomeEmb + ': ' : ''}parametrização ${grave ? 'com conferência física/documental (costuma atrasar a liberação)' : 'com conferência documental'}` });
+    }
+    const passo = (k) => ((linha && linha.passos) || []).find((p) => p.key === k) || {};
+    const eta = paraData(e.eta_santos);
+    if (eta && passo('porto').estado === 'feito' && passo('obra').estado !== 'feito' && passo('obra').estado !== 'pulado') {
+      const n = dias(eta, hoje);
+      if (n > DIAS_PORTO_SEM_ENTREGA) lista.push({ categoria: 'logistica', etapa: 'obra', origem: 'interna', data: eta, dias: n, gravidade: n > 30 ? 'alta' : 'media',
+        titulo: `${n} dias desde a chegada a Santos sem entrega na obra`, detalhe: `${nomeEmb ? nomeEmb + ': ' : ''}chegou em ${fmt(eta)}` });
+    }
+    let atrasoPrev = 0;
+    if (linha && linha.atrasada && linha.atualKey) {
+      const p = passo(linha.atualKey);
+      if (p.data) {
+        atrasoPrev = dias(p.data, hoje);
+        lista.push({ categoria: CAT_DA_ETAPA[linha.atualKey] || 'obra', etapa: linha.atualKey, origem: 'interna', data: p.data, dias: atrasoPrev,
+          gravidade: atrasoPrev > 30 ? 'alta' : 'media', titulo: `Previsão vencida há ${atrasoPrev} dia${atrasoPrev === 1 ? '' : 's'}`,
+          detalhe: `${p.rotulo || linha.atualKey}: previsto para ${fmt(p.data)}` });
+      }
+    }
+    (ctx.extras || []).forEach((x) => { if (x && x.titulo) lista.push({ origem: 'obra', gravidade: 'media', etapa: null, data: null, dias: null, ...x, categoria: CATEGORIAS_OCORRENCIA.some((c) => c.key === x.categoria) ? x.categoria : 'obra' }); });
+
+    const porCategoria = {};
+    CATEGORIAS_OCORRENCIA.forEach((c) => { porCategoria[c.key] = []; });
+    lista.forEach((o) => porCategoria[o.categoria].push(o));
+    const extrasDias = (ctx.extras || []).reduce((s, x) => s + (Number(x && x.dias) > 0 ? Number(x.dias) : 0), 0);
+    return { lista, porCategoria, diasAtraso: atrasoNavio + Math.max(0, atrasoPrev) + extrasDias };
+  }
+
+  window.EvolucaoEquipamentosCalc = { ETAPAS, CATEGORIAS_OCORRENCIA, paraData, escolherEmbarque, embarquesPorSerie, embarqueDoEquipamento, montarLinha, ocorrencias };
 }());
