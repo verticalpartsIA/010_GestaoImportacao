@@ -29,8 +29,10 @@
     if (!(n >= 0)) throw new Error('n precisa ser >= 0');
     const f = feriados || new Set();
     let ms = paraMs(ini), falta = n;
+    const limite = ms + 3650 * DIA_MS; // mesmo teto da função SQL: nunca fica em laço
     while (falta > 0) {
       ms += DIA_MS;
+      if (ms > limite) throw new Error('Calendário sem dia útil suficiente a partir de ' + ini);
       if (!ehFimDeSemana(ms) && !f.has(paraIso(ms))) falta--;
     }
     return paraIso(ms);

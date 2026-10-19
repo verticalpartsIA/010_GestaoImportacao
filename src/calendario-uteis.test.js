@@ -30,3 +30,8 @@ test('mês com mais feriados rende menos dias úteis', () => {
   const fev = diasUteis('2026-02-01', '2026-02-28', feriados), out = diasUteis('2026-10-01', '2026-10-31', feriados);
   assert.equal(fev, 18); assert.equal(out, 21);
 });
+
+test('calendário todo feriado: erro claro em vez de laço/NULL', () => {
+  const tudo = new Set(); for (let ms = Date.parse('2026-10-06T00:00:00Z'); ms < Date.parse('2037-01-01T00:00:00Z'); ms += 864e5) tudo.add(new Date(ms).toISOString().slice(0, 10));
+  assert.throws(() => somarDiasUteis('2026-10-05', 1, tudo), /sem dia útil suficiente/);
+});
