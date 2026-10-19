@@ -4,9 +4,10 @@
    estilo Claro/Escuro/Ruas/Satélite). Um ponto por dossiê de obra:
    em andamento (amarelo), concluída (verde), aguardando equipamentos (azul).
    Passar o mouse mostra a obra; em andamento mostra também o status e quem
-   está instalando. Clique abre o Dossiê da Obra. Só leitura.
-   Posição = centro da cidade da obra (Nominatim/OpenStreetMap, guardado no
-   navegador) — o dossiê não tem endereço completo nem coordenada.
+   está instalando. Clique abre o Dossiê da Obra.
+   Posição: a gravada no dossiê (latitude/longitude). Sem ela, o mapa localiza
+   o endereço completo do dossiê (Nominatim/OpenStreetMap) e grava a posição
+   no dossiê; sem endereço, usa o centro da cidade (guardado no navegador).
    ============================================================ */
 
 const MO_MAP_STYLES = [
@@ -48,12 +49,34 @@ async function moGeocodificarCidades(cidades, onProgresso) {
   return cache;
 }
 
+/* Localiza o endereço completo da obra. Só aceita resultado a até 60 km do centro da
+   cidade (quando conhecido) — o Nominatim às vezes devolve uma rua homônima em outro lugar. */
+async function moGeocodificarEndereco(o, centroCidade) {
+  const consultas = window.MapaObrasCalc.consultasGeocode(o);
+  for (let i = 0; i < consultas.length; i++) {
+    const c = consultas[i];
+    try {
+      if (i > 0) await new Promise((res) => setTimeout(res, 1100));
+      const r = await fetch("https://nominatim.openstreetmap.org/search?format=jsonv2&limit=1&countrycodes=br&q=" + encodeURIComponent(c.q));
+      if (!r.ok) continue;
+      const d = await r.json();
+      if (!Array.isArray(d) || !d.length) continue;
+      const pos = { lat: Number(d[0].lat), lon: Number(d[0].lon), precisao: c.precisao };
+      if (!isFinite(pos.lat) || !isFinite(pos.lon)) continue;
+      if (centroCidade && window.DistanciaObra && window.DistanciaObra.haversineKm(centroCidade, pos) > 60) continue;
+      return pos;
+    } catch (_) { /* falha de rede: tenta a próxima consulta ou deixa no centro da cidade */ }
+  }
+  return null;
+}
+
 function moTooltip(o) {
   const sit = window.MapaObrasCalc.SITUACOES[o.situacao];
   const linhas = [
     `<div style="font-weight:700;font-size:13px;margin-bottom:2px">${moEsc(o.client_name || o.building_name || o.id)}</div>`,
     o.client_name && o.building_name ? `<div style="font-size:12px;color:#475569;max-width:280px;white-space:normal">${moEsc(o.building_name)}</div>` : "",
-    `<div style="font-size:12px;margin-top:4px">${moEsc(String(o.city || "").trim())}${o.state ? "/" + moEsc(String(o.state).trim()) : ""} · ${moEsc(o.id)}${o.numero_cotacao ? " · Cotação Nº " + moEsc(o.numero_cotacao) : ""}</div>`,
+    `<div style="font-size:12px;margin-top:4px;max-width:300px;white-space:normal">${moEsc(window.MapaObrasCalc.enderecoTexto(o) || "Endereço não informado")}</div>`,
+    `<div style="font-size:11px;color:#64748b">${moEsc(o.id)}${o.numero_cotacao ? " · Cotação Nº " + moEsc(o.numero_cotacao) : ""} · ${o.pos ? (o.pos.precisao === "cep" ? "posição pelo CEP" : "posição pelo endereço") : "posição aproximada (centro da cidade)"}</div>`,
     `<div style="margin-top:6px"><span style="display:inline-block;width:9px;height:9px;border-radius:50%;background:${sit.cor};margin-right:6px"></span><b>${moEsc(sit.rotulo)}</b></div>`,
   ];
   if (o.situacao === "andamento") {
@@ -95,7 +118,7 @@ function MapaObrasPage({ setRoute, setSubsel }) {
     (async () => {
       try {
         const { data: dossies, error } = await sb.from("dossier_obra")
-          .select("id, client_name, building_name, city, state, equip_type, status_master, numero_cotacao, equipamento_entregue, equipamento_entregue_em, parceiro_instalador_id, updated_at");
+          .select("id, client_name, building_name, city, state, equip_type, status_master, numero_cotacao, equipamento_entregue, equipamento_entregue_em, parceiro_instalador_id, updated_at, endereco_logradouro, endereco_numero, endereco_complemento, endereco_bairro, endereco_cep, latitude, longitude, geo_precisao");
         if (error) throw error;
         const lista = (dossies || [])
           .map((d) => ({ ...d, situacao: window.MapaObrasCalc.classificar(d) }))
@@ -118,7 +141,7 @@ function MapaObrasPage({ setRoute, setSubsel }) {
         ((vin && vin.data) || []).forEach((v) => { (extras[v.dossier_id] = extras[v.dossier_id] || []).push(v.parceiro_instalador_id); });
         const final = lista.map((d) => {
           const insts = [d.parceiro_instalador_id, ...(extras[d.id] || [])].filter(Boolean).map((id) => nomes[id]).filter(Boolean);
-          return { ...d, instaladores: Array.from(new Set(insts)), vistorias: vistorias[d.id] || 0, chave: window.MapaObrasCalc.chaveCidade(d.city, d.state) };
+          return { ...d, instaladores: Array.from(new Set(insts)), vistorias: vistorias[d.id] || 0, chave: window.MapaObrasCalc.chaveCidade(d.city, d.state), pos: window.MapaObrasCalc.posicaoGravada(d) };
         });
         if (vivo) { setObras(final); setErro(null); }
       } catch (e) {
@@ -128,16 +151,36 @@ function MapaObrasPage({ setRoute, setSubsel }) {
     return () => { vivo = false; };
   }, [recarregar]);
 
-  /* Geocodifica as cidades que ainda não estão guardadas no navegador. */
+  /* 1º as cidades que ainda não estão guardadas no navegador (centro da cidade, para quem
+     não tem endereço); depois o endereço completo das obras que ainda não têm posição,
+     gravando a posição no próprio dossiê (uma vez só). Tudo em fila: o Nominatim pede
+     no máximo 1 consulta por segundo. */
+  const tentouEndRef = React.useRef(new Set());
   React.useEffect(() => {
     if (!obras || !obras.length) return undefined;
     const vistas = new Map();
     obras.forEach((o) => { if (o.chave && !vistas.has(o.chave)) vistas.set(o.chave, { chave: o.chave, cidade: o.city, uf: o.state }); });
     const cidades = Array.from(vistas.values());
-    if (!cidades.some((c) => !(c.chave in moLerCacheGeo()))) return undefined;
+    const faltaCidade = cidades.some((c) => !(c.chave in moLerCacheGeo()));
+    const semPos = obras.filter((o) => !o.pos && !tentouEndRef.current.has(o.id) && window.MapaObrasCalc.consultasGeocode(o).length);
+    if (!faltaCidade && !semPos.length) return undefined;
     let vivo = true;
     setGeocodificando(true);
-    moGeocodificarCidades(cidades, (c) => { if (vivo) setGeo(c); }).finally(() => { if (vivo) setGeocodificando(false); });
+    (async () => {
+      const cache = faltaCidade ? await moGeocodificarCidades(cidades, (c) => { if (vivo) setGeo(c); }) : moLerCacheGeo();
+      for (const o of semPos) {
+        if (!vivo) return;
+        tentouEndRef.current.add(o.id);
+        await new Promise((res) => setTimeout(res, 1100));
+        const achou = await moGeocodificarEndereco(o, cache[o.chave]);
+        if (achou && vivo) {
+          setObras((lista) => (lista || []).map((x) => (x.id === o.id ? { ...x, pos: achou } : x)));
+          try {
+            if (window.__DOSSIER && window.__DOSSIER.salvarPosicao) await window.__DOSSIER.salvarPosicao(o.id, achou.lat, achou.lon, achou.precisao);
+          } catch (e) { console.warn("[MapaObras] posição não gravada no dossiê", o.id, e); }
+        }
+      }
+    })().finally(() => { if (vivo) setGeocodificando(false); });
     return () => { vivo = false; };
   }, [obras]);
 
@@ -164,12 +207,20 @@ function MapaObrasPage({ setRoute, setSubsel }) {
   React.useEffect(() => {
     const map = mapRef.current, grp = grpRef.current; if (!map || !grp || !window.L) return;
     grp.clearLayers();
-    const porCidade = new Map();
-    visiveis.forEach((o) => { if (o.chave && geo[o.chave]) { if (!porCidade.has(o.chave)) porCidade.set(o.chave, []); porCidade.get(o.chave).push(o); } });
+    /* Agrupa por ponto: posição do endereço (arredondada) ou centro da cidade; obras no mesmo ponto ficam lado a lado. */
+    const grupos = new Map();
+    visiveis.forEach((o) => {
+      let chave = null, centro = null;
+      if (o.pos) { chave = "p:" + o.pos.lat.toFixed(4) + "," + o.pos.lon.toFixed(4); centro = o.pos; }
+      else if (o.chave && geo[o.chave]) { chave = "c:" + o.chave; centro = geo[o.chave]; }
+      if (!chave) return;
+      if (!grupos.has(chave)) grupos.set(chave, { centro, lista: [] });
+      grupos.get(chave).lista.push(o);
+    });
     const pontos = [];
-    porCidade.forEach((lista, chave) => {
+    grupos.forEach(({ centro, lista }) => {
       lista.forEach((o, i) => {
-        const pos = window.MapaObrasCalc.espalhar(geo[chave], i, lista.length);
+        const pos = window.MapaObrasCalc.espalhar(centro, i, lista.length);
         if (!pos) return;
         pontos.push(pos);
         const cor = window.MapaObrasCalc.SITUACOES[o.situacao].cor;
@@ -187,7 +238,8 @@ function MapaObrasPage({ setRoute, setSubsel }) {
   }, [visiveis, geo, geocodificando, abrirDossie]);
 
   const contagem = (s) => (obras || []).filter((o) => o.situacao === s).length;
-  const semLocal = (obras || []).filter((o) => !o.chave || geo[o.chave] === null);
+  const semLocal = (obras || []).filter((o) => !o.pos && (!o.chave || geo[o.chave] === null));
+  const semEndereco = (obras || []).filter((o) => !o.pos).length;
   const S = (window.MapaObrasCalc || {}).SITUACOES || {};
 
   return (
@@ -220,7 +272,7 @@ function MapaObrasPage({ setRoute, setSubsel }) {
             {Object.keys(S).map((k) => (
               <span key={k} className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: S[k].cor, display: "inline-block" }}/>{S[k].rotulo}</span>
             ))}
-            {geocodificando && <span style={{ color: "var(--fg3)" }}>Localizando cidades no mapa…</span>}
+            {geocodificando && <span style={{ color: "var(--fg3)" }}>Localizando endereços no mapa…</span>}
           </div>
           <div className="row" style={{ gap: 4 }}>
             {MO_MAP_STYLES.map((s) => (
@@ -232,7 +284,7 @@ function MapaObrasPage({ setRoute, setSubsel }) {
         <div ref={elRef} style={{ height: "min(68vh, 640px)", minHeight: 380, borderRadius: 6, overflow: "hidden", border: "1px solid var(--border)" }}/>
         {obras === null && <div style={{ fontSize: 12, color: "var(--fg3)", marginTop: 8 }}>Carregando obras…</div>}
         <div style={{ fontSize: 11, color: "var(--fg3)", marginTop: 8 }}>
-          A posição é o centro da cidade da obra (o dossiê guarda só cidade e UF); obras da mesma cidade aparecem lado a lado.
+          A posição vem do endereço completo gravado no Dossiê da Obra. {semEndereco > 0 && `${semEndereco} obra(s) ainda sem endereço localizado aparecem no centro da cidade — preencha o endereço no Dossiê (botão "Editar endereço").`}
           {semLocal.length > 0 && ` ${semLocal.length} obra(s) sem cidade localizada não aparecem no mapa: ${semLocal.slice(0, 6).map((o) => o.id).join(", ")}${semLocal.length > 6 ? "…" : ""}.`}
         </div>
       </Card>
