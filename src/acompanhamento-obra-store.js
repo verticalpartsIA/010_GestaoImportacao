@@ -236,8 +236,11 @@
     });
     /* 100% só com TODOS os itens flegados (inclui Pendências/acabamento);
        enquanto houver item aberto, o teto é 99% e o arredondamento é para baixo. */
-    const todosFlegados = ordenados.every((s) => s.flegado);
-    const pct = todosFlegados ? 100 : Math.min(99, Math.floor(acumulado + 0.001));
+    /* Também exige que as linhas devolvidas cubram o checklist completo (pesos somam 100):
+       link antigo sem alguma linha semeada não pode virar 100% só porque o que existe está marcado. */
+    const pesoTotal = ordenados.reduce((a, s) => a + (Number(s.acompanhamento_obra_itens?.peso) || 0), 0);
+    const completo = ordenados.every((s) => s.flegado) && pesoTotal >= 100 - 0.001;
+    const pct = completo ? 100 : Math.min(99, Math.floor(acumulado + 0.001));
     return { criado: true, pct, marcos, iniciadoEm };
   }
 
