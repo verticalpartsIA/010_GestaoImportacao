@@ -39,6 +39,7 @@ Fornecedores ──► Cotações a Fornecedor ──► (preço do fornecedor) 
 | Prazos & Pendências | Gatilhos (motor) | etapas da cadeia de cada cotação | `gatilhos-engine.js` |
 | Dashboard | Propostas, Contratos, Leads | indicadores | `supabase.js` (confirmar) |
 | Inbox | E-mails enviados (Propostas, Contratos, Cotações) | vínculo por Nº de cotação ou referência | `logistica.jsx` |
+| Mapa de Obras | Dossiê da Obra, equipamentos_obra, Embarque, P.I. (nº de série), Diário de Obra, Instaladores, Vistorias | obra/fase/endereço, datas, navio/rolagens/ETA/canal, andamento | `mapa-obras.jsx`, `evolucao-equipamentos.jsx` (`useEvolucaoItens`) |
 
 ## Quem doa para quem (visão reversa)
 
@@ -48,6 +49,7 @@ Fornecedores ──► Cotações a Fornecedor ──► (preço do fornecedor) 
 - **Formulários** → Precificação, Propostas, Cotações a Fornecedor, Projeto de Elevadores, Controle de Cotações.
 - **Precificação** → Propostas, Central de Decisões, Aval Financeiro (margem).
 - **Propostas** → Contratos (Venda e Instalador), Avais, Dossiê, Inbox.
+- **Dossiê da Obra, Embarque e Diário de Obra** → Mapa de Obras (só leitura; o Mapa grava de volta só a posição no Dossiê).
 - **Contrato de Venda** → Aval Jurídico (vincula o contrato), Desenho de Instalação, Projeto de Elevadores.
 
 ## Como registrar uma relação nova

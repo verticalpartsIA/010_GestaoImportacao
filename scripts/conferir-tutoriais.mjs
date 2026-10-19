@@ -18,6 +18,7 @@ const noMenu = Object.fromEntries([...bloco.matchAll(/(?:(\w+)|"([^"]+)"):\s*"([
 // Chave = caminho do tutorial (pai/tela). Tela sem lista aqui aparece como aviso "desatualização não conferida".
 const TELAS = {
   'geral/central-de-decisoes': ['src/decisoes.jsx', 'src/decisoes-store.js'],
+  'obras-instalacao/mapa-de-obras': ['src/mapa-obras.jsx', 'src/mapa-obras-calc.js', 'src/evolucao-equipamentos.jsx', 'src/evolucao-equipamentos-calc.js', 'src/rolagens-calc.js'],
   'geral/dashboard': ['src/dashboard.jsx'],
   'geral/notificacoes': ['src/notificacoes-processamento.js', 'src/notificacoes-lidas-store.js'],
   'geral/prazos-e-pendencias': ['src/gatilhos-engine.js'],
