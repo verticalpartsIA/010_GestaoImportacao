@@ -106,6 +106,9 @@ function MapaObrasPage({ setRoute, setSubsel }) {
   const [geocodificando, setGeocodificando] = React.useState(false);
   const [filtro, setFiltro] = React.useState({ andamento: true, concluida: true, aguardando: true });
   const [recarregar, setRecarregar] = React.useState(0);
+  const [aba, setAba] = window.useRouteTab("mapa-obras", "mapa", ["mapa", "evolucao"]);
+  const [foco, setFoco] = React.useState(null);
+  const marcadoresRef = React.useRef({});
 
   const abrirDossie = React.useCallback((id) => {
     if (setSubsel && setRoute) { setSubsel(id); setRoute("dossier-obra"); }
@@ -207,6 +210,7 @@ function MapaObrasPage({ setRoute, setSubsel }) {
   React.useEffect(() => {
     const map = mapRef.current, grp = grpRef.current; if (!map || !grp || !window.L) return;
     grp.clearLayers();
+    marcadoresRef.current = {};
     /* Agrupa por ponto: posição do endereço (arredondada) ou centro da cidade; obras no mesmo ponto ficam lado a lado. */
     const grupos = new Map();
     visiveis.forEach((o) => {
@@ -225,7 +229,7 @@ function MapaObrasPage({ setRoute, setSubsel }) {
         pontos.push(pos);
         const cor = window.MapaObrasCalc.SITUACOES[o.situacao].cor;
         const icone = window.L.divIcon({ className: "", html: `<div style="width:16px;height:16px;border-radius:50%;background:${cor};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.4);cursor:pointer"></div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
-        window.L.marker(pos, { icon: icone, zIndexOffset: o.situacao === "andamento" ? 1000 : 0 })
+        marcadoresRef.current[o.id] = window.L.marker(pos, { icon: icone, zIndexOffset: o.situacao === "andamento" ? 1000 : 0 })
           .addTo(grp)
           .bindTooltip(moTooltip(o), { direction: "top", offset: [0, -8], opacity: 1 })
           .on("click", () => abrirDossie(o.id));
@@ -236,6 +240,29 @@ function MapaObrasPage({ setRoute, setSubsel }) {
       if (!geocodificando) ajustouRef.current = true;
     }
   }, [visiveis, geo, geocodificando, abrirDossie]);
+
+  /* Aba visível de novo: o Leaflet precisa recalcular o tamanho (estava escondido). "Ver no mapa" da
+     Evolução centraliza o ponto da obra e abre o balão. */
+  React.useEffect(() => {
+    if (aba !== "mapa") return undefined;
+    const map = mapRef.current; if (!map) return undefined;
+    const t = setTimeout(() => {
+      map.invalidateSize();
+      if (!foco) return;
+      const mk = marcadoresRef.current[foco];
+      if (elRef.current && elRef.current.scrollIntoView) elRef.current.scrollIntoView({ block: "center", behavior: "smooth" });
+      if (mk) { ajustouRef.current = true; map.setView(mk.getLatLng(), 15); mk.openTooltip(); }
+      else window.toast && window.toast("Esta obra ainda não tem posição no mapa (falta endereço ou cidade).", "warning");
+      setFoco(null);
+    }, 120);
+    return () => clearTimeout(t);
+  }, [aba, foco, visiveis, geo]);
+
+  const verNoMapa = (id) => {
+    const o = (obras || []).find((x) => x.id === id);
+    if (o && !filtro[o.situacao]) setFiltro((f) => ({ ...f, [o.situacao]: true }));
+    setFoco(id); setAba("mapa");
+  };
 
   const contagem = (s) => (obras || []).filter((o) => o.situacao === s).length;
   const semLocal = (obras || []).filter((o) => !o.pos && (!o.chave || geo[o.chave] === null));
@@ -248,13 +275,27 @@ function MapaObrasPage({ setRoute, setSubsel }) {
         <div className="page-head__l">
           <div className="page-head__eyebrow"><span className="vp-rule"/>Obras & Instalação · Mapa</div>
           <h1 className="page-head__title">Mapa de Obras</h1>
-          <p className="page-head__sub">Onde a VerticalParts está instalando, onde já concluiu e onde aguarda os equipamentos. Passe o mouse sobre um ponto para ver a obra; clique para abrir o dossiê.</p>
+          <p className="page-head__sub">{aba === "evolucao"
+            ? "A linha do tempo de cada equipamento: os que já foram entregues, os que estão sendo instalados e os que ainda vão chegar na obra."
+            : "Onde a VerticalParts está instalando, onde já concluiu e onde aguarda os equipamentos. Passe o mouse sobre um ponto para ver a obra; clique para abrir o dossiê."}</p>
         </div>
         <div className="page-head__r">
           <Button variant="outline" icon="refresh" onClick={() => { ajustouRef.current = false; setObras(null); setRecarregar((n) => n + 1); }}>Atualizar</Button>
         </div>
       </div>
 
+      <div className="tbar" style={{ marginBottom: 14 }}>
+        <div className="seg">
+          <button type="button" className={aba === "mapa" ? "is-active" : ""} onClick={() => setAba("mapa")}>Mapa</button>
+          <button type="button" className={aba === "evolucao" ? "is-active" : ""} onClick={() => setAba("evolucao")}>Evolução dos equipamentos</button>
+        </div>
+      </div>
+
+      {aba === "evolucao" && window.EvolucaoEquipamentos && (
+        <window.EvolucaoEquipamentos obras={obras} onAbrirDossie={abrirDossie} onVerNoMapa={verNoMapa}/>
+      )}
+
+      <div style={{ display: aba === "mapa" ? "block" : "none" }}>
       <div className="grid-3" style={{ marginBottom: 16 }}>
         {["andamento", "concluida", "aguardando"].map((s) => (
           <KPI key={s} label={S[s] ? S[s].rotulo : s} value={obras ? String(contagem(s)) : "…"}
@@ -288,6 +329,7 @@ function MapaObrasPage({ setRoute, setSubsel }) {
           {semLocal.length > 0 && ` ${semLocal.length} obra(s) sem cidade localizada não aparecem no mapa: ${semLocal.slice(0, 6).map((o) => o.id).join(", ")}${semLocal.length > 6 ? "…" : ""}.`}
         </div>
       </Card>
+      </div>
     </div>
   );
 }
