@@ -1473,6 +1473,11 @@ function PrecificacaoElevadorDetalhe({ id, onVoltar, setRoute, setSubsel }) {
                   onCeo={(patch) => setPz((p) => { const novo = { ...(p.valores_sugeridos_ceo || {}) }; Object.keys(patch).forEach((k) => { if (patch[k] == null) delete novo[k]; else novo[k] = patch[k]; }); return { ...p, valores_sugeridos_ceo: novo }; })}
                   onAplicar={(campo, valor) => { set(campo)(valor); window.toast?.('Alavanca ajustada — clique em Calcular para refazer o preço.', 'info'); }}/>
               <div><span className="up-eyebrow muted">{quantidadeEquipamentos > 1 ? 'Total da cotação — soma dos equipamentos acima' : 'Preço de venda total'}</span><div className="cell-money" style={{ fontSize: 20, fontWeight: 800 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProposta)}</div></div>
+              {/* 19/10/2026 — pedido do Financeiro: o total se divide em Equipamento e Mão de obra (serviços), pelo "% de Serviços" aplicado. */}
+              <div className="row gap-3">
+                <div><span className="up-eyebrow muted">Equipamento ({fmtPct2(1 - (Number(pz.percentual_servicos) || 0))})</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaProduto)}</div></div>
+                <div><span className="up-eyebrow muted">Mão de obra ({fmtPct2(Number(pz.percentual_servicos) || 0)})</span><div className="cell-money" style={{ fontSize: 16 }}>{fmtBRL2(resultadoV2.precificacao.precoVendaServicos)}</div></div>
+              </div>
               <div className="row gap-3">
                 <div>
                   <span className="up-eyebrow muted">Margem efetiva</span>

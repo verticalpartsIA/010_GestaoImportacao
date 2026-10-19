@@ -768,15 +768,16 @@
 
     // ufFaturamento/ufDestino e a regra de ICMS já foram resolvidos acima, antes da 1ª passada.
     const estadoDestino = await window.DifalEngine.buscarEstado(ufDestino);
-    const difal = window.DifalEngine.calcular({
+    const calcularDifal = (valorOperacao) => window.DifalEngine.calcular({
       ufFaturamento, ufEntrega: ufEntregaNorm,
       finalidadeCompra: formulario.finalidade_compra, contribuinteIcms: cliente ? cliente.contribuinte_icms : null,
-      valorOperacao: valorOperacaoDifal, estadoDestino,
+      valorOperacao, estadoDestino,
     });
-    const difalCustoRs = difal.responsavel_recolhimento === 'emitente_verticalparts' ? difal.valor_difal : 0;
+    let difal = calcularDifal(valorOperacaoDifal);
+    let difalCustoRs = difal.responsavel_recolhimento === 'emitente_verticalparts' ? difal.valor_difal : 0;
 
     // 2ª passada — já com o custo do DIFAL (quando é da VerticalParts) refletido no lucro.
-    const resultado = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs });
+    let resultado = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs });
 
     // V2 (custo econômico completo) roda lado a lado, mesmo baseInputs +
     // DIFAL da 2ª passada — nunca substitui o V1 (`resultado`, ainda o
@@ -793,7 +794,20 @@
       contingenciaValor: pz.contingencia_valor,
       outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
     };
-    const resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras });
+    let resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras });
+
+    /* 19/10/2026 — o DIFAL incide EXATAMENTE no preço do equipamento FINAL (cotação 988: R$ 10.684.587,30). O custo do DIFAL
+       entra no preço, então a base e o preço final dependem um do outro: repete até a base igualar o equipamento final (centavos). */
+    let baseDifal = valorOperacaoDifal;
+    for (let it = 0; it < 30; it++) {
+      const equipFinal = resultadoV2.precificacao.precoVendaProduto;
+      if (!(equipFinal > 0) || Math.abs(equipFinal - baseDifal) < 0.005) break;
+      baseDifal = equipFinal;
+      difal = calcularDifal(baseDifal);
+      difalCustoRs = difal.responsavel_recolhimento === 'emitente_verticalparts' ? difal.valor_difal : 0;
+      resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras });
+    }
+    resultado = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs });
 
     /* Duas modalidades de entrega (issue "Precificação real"): 90 dias
        (container exclusivo, frete mais caro) × 120 dias (container
