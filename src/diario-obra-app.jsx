@@ -21,7 +21,75 @@
     return isNaN(d.getTime()) ? '—' : d.toLocaleDateString('pt-BR') + ', ' + d.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   }
 
-  function ItemLinha({ item, status, selecionado, fotos, observacao, enviando, onToggle, onFotos, onObservacao }) {
+  /* ---- Foto só da câmera (19/10/2026): já apareceram obras com foto de outra obra.
+     Camada 2: captura dentro da página (getUserMedia → canvas), sem caminho para arquivo guardado.
+     Camada 3 (fallback do <input capture>): confere a data do EXIF — foto antiga/sem data é recusada. */
+  const TOLERANCIA_FOTO_MIN = 10;
+
+  let _geoCache = null;
+  function obterLocalizacao() {
+    if (_geoCache && Date.now() - _geoCache.t < 60000) return Promise.resolve(_geoCache.v);
+    return new Promise((resolve) => {
+      if (!navigator.geolocation) return resolve(null);
+      navigator.geolocation.getCurrentPosition(
+        (p) => { const v = { lat: p.coords.latitude, lng: p.coords.longitude, precisao_m: Math.round(p.coords.accuracy) }; _geoCache = { t: Date.now(), v }; resolve(v); },
+        () => resolve(null),
+        { enableHighAccuracy: true, timeout: 6000, maximumAge: 30000 }
+      );
+    });
+  }
+
+  // Data/hora local gravada pela câmera (EXIF DateTimeOriginal); null se o arquivo não tiver.
+  async function lerDataExif(file) {
+    try {
+      const buf = await file.slice(0, 200000).arrayBuffer();
+      let s = ''; const u8 = new Uint8Array(buf);
+      for (let i = 0; i < u8.length; i += 8192) s += String.fromCharCode.apply(null, u8.subarray(i, i + 8192));
+      const m = s.match(/(20\d\d):(\d\d):(\d\d) (\d\d):(\d\d):(\d\d)/);
+      if (!m) return null;
+      return new Date(+m[1], +m[2] - 1, +m[3], +m[4], +m[5], +m[6]);
+    } catch (e) { return null; }
+  }
+
+  function CameraCaptura({ qtd, onFoto, onConcluir, onIndisponivel }) {
+    const videoRef = React.useRef(null);
+    const streamRef = React.useRef(null);
+    const [pronto, setPronto] = React.useState(false);
+    React.useEffect(() => {
+      let vivo = true;
+      if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) { onIndisponivel(); return undefined; }
+      navigator.mediaDevices.getUserMedia({ video: { facingMode: { ideal: 'environment' }, width: { ideal: 1920 } }, audio: false })
+        .then((stream) => {
+          if (!vivo) { stream.getTracks().forEach((t) => t.stop()); return; }
+          streamRef.current = stream;
+          const v = videoRef.current;
+          if (v) { v.srcObject = stream; v.play().then(() => setPronto(true)).catch(() => setPronto(true)); }
+        })
+        .catch(() => { if (vivo) onIndisponivel(); });
+      return () => { vivo = false; if (streamRef.current) streamRef.current.getTracks().forEach((t) => t.stop()); };
+    }, []);
+    const capturar = () => {
+      const v = videoRef.current;
+      if (!v || !v.videoWidth) return;
+      const c = document.createElement('canvas');
+      c.width = v.videoWidth; c.height = v.videoHeight;
+      c.getContext('2d').drawImage(v, 0, 0);
+      c.toBlob((blob) => { if (blob) onFoto(blob); }, 'image/jpeg', 0.85);
+    };
+    return (
+      <div style={{ position: 'fixed', inset: 0, background: '#000', zIndex: 50, display: 'flex', flexDirection: 'column' }}>
+        <video ref={videoRef} playsInline muted style={{ flex: 1, width: '100%', objectFit: 'cover', minHeight: 0 }} />
+        <div style={{ padding: 14, display: 'flex', gap: 10, alignItems: 'center', background: '#111' }}>
+          <button type="button" onClick={onConcluir}
+            style={{ flex: 1, background: '#333', color: '#fff', border: 'none', borderRadius: 8, padding: 14, fontSize: 14 }}>Concluir{qtd ? ` (${qtd})` : ''}</button>
+          <button type="button" onClick={capturar} disabled={!pronto}
+            style={{ flex: 2, background: '#22c55e', color: '#04240f', border: 'none', borderRadius: 8, padding: 14, fontSize: 15, fontWeight: 800, opacity: pronto ? 1 : 0.5 }}>📷 Tirar foto</button>
+        </div>
+      </div>
+    );
+  }
+
+  function ItemLinha({ item, status, selecionado, fotos, observacao, enviando, onToggle, onAbrirCamera, onObservacao }) {
     const flegado = status && status.flegado;
     return (
       <div style={{
@@ -47,11 +115,11 @@
             )}
             {!flegado && selecionado && (
               <div style={{ marginTop: 8 }}>
-                <label style={{ fontSize: 12, color: '#0066cc', border: '1px solid #0066cc', borderRadius: 6, padding: '6px 10px', display: 'inline-block', cursor: 'pointer' }}>
-                  📷 {fotos.length > 0 ? `${fotos.length} foto(s) anexada(s)` : 'Anexar foto (obrigatório)'}
-                  <input type="file" accept="image/*" capture="environment" multiple hidden disabled={enviando}
-                    onChange={(e) => onFotos(item.id, e.target.files)} />
-                </label>
+                <button type="button" disabled={enviando} onClick={() => onAbrirCamera(item.id)}
+                  style={{ fontSize: 12, color: '#0066cc', background: '#fff', border: '1px solid #0066cc', borderRadius: 6, padding: '6px 10px', display: 'inline-block', cursor: 'pointer' }}>
+                  📷 {fotos.length > 0 ? `${fotos.length} foto(s) — tirar outra` : 'Tirar foto (obrigatório)'}
+                </button>
+                <div style={{ fontSize: 11, color: '#888', marginTop: 4 }}>Só vale foto tirada agora pela câmera.</div>
                 {fotos.length > 0 && (
                   <div style={{ display: 'flex', gap: 6, marginTop: 6, flexWrap: 'wrap' }}>
                     {fotos.map((f, i) => <img key={i} src={f.preview} alt="" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4 }} />)}
@@ -80,6 +148,9 @@
     const [fotos, setFotos] = React.useState({});
     const [observacoes, setObservacoes] = React.useState({});
     const [enviando, setEnviando] = React.useState(false);
+    const [cameraItem, setCameraItem] = React.useState(null);
+    const fallbackInput = React.useRef(null);
+    const fallbackItem = React.useRef(null);
 
     const carregar = React.useCallback(() => {
       if (!token || !window.AcompanhamentoObraStore) return;
@@ -105,11 +176,45 @@
       setSelecionados((p) => { const n = { ...p }; if (n[itemId]) delete n[itemId]; else n[itemId] = true; return n; });
     };
 
-    const onFotos = async (itemId, fileList) => {
-      const files = Array.from(fileList || []);
-      if (!files.length) return;
-      const previews = files.map((f) => ({ file: f, preview: URL.createObjectURL(f) }));
-      setFotos((p) => ({ ...p, [itemId]: [...(p[itemId] || []), ...previews] }));
+    const aparelho = () => (navigator.userAgent || '').slice(0, 140);
+    const addFoto = (itemId, entrada) => setFotos((p) => ({ ...p, [itemId]: [...(p[itemId] || []), entrada] }));
+
+    // Foto tirada pela câmera da própria página (camada 2).
+    const onCapturada = async (itemId, blob) => {
+      const geo = await obterLocalizacao();
+      const file = new File([blob], 'camera.jpg', { type: 'image/jpeg' });
+      addFoto(itemId, {
+        file, preview: URL.createObjectURL(blob),
+        meta: { origem: 'camera', capturado_em: new Date().toISOString(), aparelho: aparelho(), lat: geo ? geo.lat : null, lng: geo ? geo.lng : null, precisao_m: geo ? geo.precisao_m : null },
+      });
+    };
+
+    // Plano B quando a câmera da página não abre: abre o seletor com capture e confere a data do EXIF (camada 3).
+    const abrirCamera = (itemId) => {
+      if (navigator.mediaDevices && navigator.mediaDevices.getUserMedia) setCameraItem(itemId);
+      else usarFallback(itemId);
+    };
+    const usarFallback = (itemId) => {
+      setCameraItem(null);
+      fallbackItem.current = itemId;
+      if (fallbackInput.current) { fallbackInput.current.value = ''; fallbackInput.current.click(); }
+    };
+    const onFallbackArquivos = async (e) => {
+      const itemId = fallbackItem.current;
+      const files = Array.from(e.target.files || []);
+      if (!itemId || !files.length) return;
+      const geo = await obterLocalizacao();
+      const recusadas = [];
+      for (const f of files) {
+        const quando = await lerDataExif(f);
+        const idadeMin = quando ? Math.abs(Date.now() - quando.getTime()) / 60000 : null;
+        if (idadeMin === null || idadeMin > TOLERANCIA_FOTO_MIN) { recusadas.push(f.name); continue; }
+        addFoto(itemId, {
+          file: f, preview: URL.createObjectURL(f),
+          meta: { origem: 'camera-exif', capturado_em: quando.toISOString(), aparelho: aparelho(), lat: geo ? geo.lat : null, lng: geo ? geo.lng : null, precisao_m: geo ? geo.precisao_m : null },
+        });
+      }
+      if (recusadas.length) window.alert('Foto não aceita: só vale foto tirada agora, pela câmera. Não é possível enviar imagem da galeria.\n\nRecusadas: ' + recusadas.join(', '));
     };
 
     const onObservacao = (itemId, texto) => {
@@ -126,12 +231,12 @@
       try {
         const itensHoje = [];
         for (const itemId of idsSelecionados) {
-          const urls = [];
+          const urls = []; const fotosMeta = [];
           for (const f of fotos[itemId]) {
             const url = await window.AcompanhamentoObraStore.uploadFoto(estado.link.dossier_id, itemId, f.file);
-            urls.push(url);
+            urls.push(url); fotosMeta.push({ url, ...(f.meta || {}) });
           }
-          itensHoje.push({ item_id: itemId, fotos: urls, observacao: (observacoes[itemId] || '').trim() || null });
+          itensHoje.push({ item_id: itemId, fotos: urls, fotos_meta: fotosMeta, observacao: (observacoes[itemId] || '').trim() || null });
         }
         await window.AcompanhamentoObraStore.registrarLancamento(estado.link.dossier_id, itensHoje, null);
         window.alert('Enviado! Obrigado — até amanhã.');
@@ -167,8 +272,16 @@
         {itens.map((item) => (
           <ItemLinha key={item.id} item={item} status={statusPorItem[item.id]}
             selecionado={!!selecionados[item.id]} fotos={fotos[item.id] || []} observacao={observacoes[item.id] || ''} enviando={enviando}
-            onToggle={toggle} onFotos={onFotos} onObservacao={onObservacao} />
+            onToggle={toggle} onAbrirCamera={abrirCamera} onObservacao={onObservacao} />
         ))}
+
+        <input ref={fallbackInput} type="file" accept="image/*" capture="environment" multiple hidden onChange={onFallbackArquivos} />
+        {cameraItem && (
+          <CameraCaptura qtd={(fotos[cameraItem] || []).length}
+            onFoto={(blob) => onCapturada(cameraItem, blob)}
+            onConcluir={() => setCameraItem(null)}
+            onIndisponivel={() => usarFallback(cameraItem)} />
+        )}
 
         <div style={{ position: 'fixed', left: 0, right: 0, bottom: 0, background: '#fff', borderTop: '1px solid #ddd', padding: 12 }}>
           <button onClick={enviar} disabled={enviando || !Object.keys(selecionados).length}
