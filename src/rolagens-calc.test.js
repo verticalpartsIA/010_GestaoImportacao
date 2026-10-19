@@ -23,3 +23,11 @@ test('rolagens coerentes e campos vazios não geram aviso', () => {
   ]), []);
   assert.deepEqual(R.conferir(null), []);
 });
+
+test('histórico do ETA: grava só mudança real, com motivo e quem', () => {
+  assert.deepEqual(R.registrarMudancaEta([], '', '2026-10-19'), []);
+  assert.deepEqual(R.registrarMudancaEta([], '2026-10-19', '2026-10-19'), []);
+  const h = R.registrarMudancaEta([], '2026-10-19', '2026-10-24', { motivo: ' Fila no porto ', data_comunicacao: '2026-10-18', por: 'op@x', registrado_em: 'T' });
+  assert.deepEqual(h, [{ data_anterior: '2026-10-19', nova_data: '2026-10-24', data_comunicacao: '2026-10-18', motivo: 'Fila no porto', por: 'op@x', registrado_em: 'T' }]);
+  assert.equal(R.registrarMudancaEta(h, '2026-10-24', '2026-10-26').length, 2);
+});
