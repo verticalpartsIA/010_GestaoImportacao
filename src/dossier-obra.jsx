@@ -330,7 +330,7 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
         {/* ---- BARRA DE PROGRESSO ---- */}
         <div style={{ marginTop: 20 }}>
           <div style={{ fontSize: 12, marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Progresso do projeto</span>
+            <span title="Posição do dossiê no fluxo de status. O avanço da instalação em campo está em Acompanhamento de Obra.">Etapa do dossiê no fluxo</span>
             <span style={{ fontWeight: 600 }}>{Math.round(progressoPct)}%</span>
           </div>
           <div style={{ background: 'rgba(255, 255, 255, 0.2)', height: 6, borderRadius: 3, overflow: 'hidden' }}>

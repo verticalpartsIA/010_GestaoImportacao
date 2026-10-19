@@ -197,7 +197,8 @@
       .sort((a, b) => a.ordem - b.ordem);
     const total = itens.length;
     const feitos = (estado.status || []).filter((s) => s.flegado).length;
-    const pct = total ? Math.round((feitos / total) * 100) : 0;
+    // Mesma conta ponderada do sistema (resumoProgresso) para o montador e o operador verem o mesmo número.
+    const pct = total ? window.AcompanhamentoObraStore.resumoProgresso(estado.status || []).pct : 0;
 
     const toggle = (itemId) => {
       setSelecionados((p) => { const n = { ...p }; if (n[itemId]) delete n[itemId]; else n[itemId] = true; return n; });
