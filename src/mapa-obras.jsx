@@ -70,7 +70,24 @@ async function moGeocodificarEndereco(o, centroCidade) {
   return null;
 }
 
-function moTooltip(o) {
+/* Equipamentos da obra (aba Evolução) dentro do balão do mapa. */
+function moEquipamentosHtml(eqs) {
+  if (!eqs || !eqs.length) return "";
+  const lin = eqs.slice(0, 6).map((it) => {
+    const l = it.linha;
+    const p = l.passos.find((x) => x.key === l.atualKey);
+    const etapa = p ? (p.rotulo + (p.data && p.estado === "previsto" ? " (prev. " + p.data.toLocaleDateString("pt-BR") + ")" : "")) : "Concluído";
+    const nOc = it.oc ? it.oc.lista.length : 0;
+    return `<div style="font-size:12px;margin-top:2px;max-width:320px;white-space:normal"><b style="font-family:ui-monospace,monospace">${moEsc(it.serie || "sem nº de série")}</b> · ${moEsc(etapa)}`
+      + (it.obra.situacao !== "aguardando" ? ` · ${l.pct}%` : "")
+      + (l.atrasada ? ` · <span style="color:#dc2626;font-weight:600">previsão vencida</span>` : "")
+      + (nOc ? ` · <span style="color:#d97706;font-weight:600">${nOc} ocorrência(s)</span>` : "") + `</div>`;
+  });
+  if (eqs.length > 6) lin.push(`<div style="font-size:11px;color:#64748b">+ ${eqs.length - 6} equipamento(s)</div>`);
+  return `<div style="margin-top:6px;padding-top:6px;border-top:1px solid #e2e8f0"><div style="font-size:11px;color:#64748b;font-weight:600">Equipamentos (${eqs.length})</div>${lin.join("")}</div>`;
+}
+
+function moTooltip(o, eqs) {
   const sit = window.MapaObrasCalc.SITUACOES[o.situacao];
   const linhas = [
     `<div style="font-weight:700;font-size:13px;margin-bottom:2px">${moEsc(o.client_name || o.building_name || o.id)}</div>`,
@@ -89,6 +106,7 @@ function moTooltip(o) {
   } else {
     linhas.push(`<div style="font-size:12px;margin-top:4px">Fase: <b>${moEsc(o.status_master)}</b>${o.instaladores.length ? " · Instalado por " + moEsc(o.instaladores.join(", ")) : ""}</div>`);
   }
+  linhas.push(moEquipamentosHtml(eqs));
   linhas.push(`<div style="font-size:11px;color:#64748b;margin-top:6px">Clique para abrir o Dossiê da Obra</div>`);
   return linhas.join("");
 }
@@ -109,6 +127,13 @@ function MapaObrasPage({ setRoute, setSubsel }) {
   const [aba, setAba] = window.useRouteTab("mapa-obras", "mapa", ["mapa", "evolucao"]);
   const [foco, setFoco] = React.useState(null);
   const marcadoresRef = React.useRef({});
+  /* Equipamentos e ocorrências (mesma carga da aba Evolução). */
+  const evo = window.useEvolucaoItens(obras);
+  const eqPorObra = React.useMemo(() => {
+    const m = {};
+    (evo.itens || []).forEach((it) => { (m[it.obra.id] = m[it.obra.id] || []).push(it); });
+    return m;
+  }, [evo.itens]);
 
   const abrirDossie = React.useCallback((id) => {
     if (setSubsel && setRoute) { setSubsel(id); setRoute("dossier-obra"); }
@@ -228,10 +253,13 @@ function MapaObrasPage({ setRoute, setSubsel }) {
         if (!pos) return;
         pontos.push(pos);
         const cor = window.MapaObrasCalc.SITUACOES[o.situacao].cor;
-        const icone = window.L.divIcon({ className: "", html: `<div style="width:16px;height:16px;border-radius:50%;background:${cor};border:2px solid #fff;box-shadow:0 0 0 1px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.4);cursor:pointer"></div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
+        const eqs = eqPorObra[o.id] || [];
+        const alerta = eqs.some((it) => it.linha.atrasada || (it.oc && it.oc.lista.some((x) => x.gravidade === "alta")));
+        const anel = alerta ? "0 0 0 3px #dc2626," : "";
+        const icone = window.L.divIcon({ className: "", html: `<div style="width:16px;height:16px;border-radius:50%;background:${cor};border:2px solid #fff;box-shadow:${anel}0 0 0 1px rgba(0,0,0,.35),0 1px 3px rgba(0,0,0,.4);cursor:pointer"></div>`, iconSize: [16, 16], iconAnchor: [8, 8] });
         marcadoresRef.current[o.id] = window.L.marker(pos, { icon: icone, zIndexOffset: o.situacao === "andamento" ? 1000 : 0 })
           .addTo(grp)
-          .bindTooltip(moTooltip(o), { direction: "top", offset: [0, -8], opacity: 1 })
+          .bindTooltip(moTooltip(o, eqs), { direction: "top", offset: [0, -8], opacity: 1 })
           .on("click", () => abrirDossie(o.id));
       });
     });
@@ -239,7 +267,7 @@ function MapaObrasPage({ setRoute, setSubsel }) {
       map.fitBounds(window.L.latLngBounds(pontos), { padding: [40, 40], maxZoom: 11 });
       if (!geocodificando) ajustouRef.current = true;
     }
-  }, [visiveis, geo, geocodificando, abrirDossie]);
+  }, [visiveis, geo, geocodificando, abrirDossie, eqPorObra]);
 
   /* Aba visível de novo: o Leaflet precisa recalcular o tamanho (estava escondido). "Ver no mapa" da
      Evolução centraliza o ponto da obra e abre o balão. */
@@ -292,14 +320,14 @@ function MapaObrasPage({ setRoute, setSubsel }) {
       </div>
 
       {aba === "evolucao" && window.EvolucaoEquipamentos && (
-        <window.EvolucaoEquipamentos obras={obras} onAbrirDossie={abrirDossie} onVerNoMapa={verNoMapa}/>
+        <window.EvolucaoEquipamentos obras={obras} dados={evo} onAbrirDossie={abrirDossie} onVerNoMapa={verNoMapa}/>
       )}
 
       <div style={{ display: aba === "mapa" ? "block" : "none" }}>
       <div className="grid-3" style={{ marginBottom: 16 }}>
         {["andamento", "concluida", "aguardando"].map((s) => (
           <KPI key={s} label={S[s] ? S[s].rotulo : s} value={obras ? String(contagem(s)) : "…"}
-            sub={filtro[s] ? "no mapa — clique para ocultar" : "oculto — clique para mostrar"}
+            sub={(evo.carregado ? `${(evo.itens || []).filter((it) => it.obra.situacao === s).length} equipamento(s) · ` : "") + (filtro[s] ? "no mapa — clique para ocultar" : "oculto — clique para mostrar")}
             onClick={() => setFiltro((f) => ({ ...f, [s]: !f[s] }))}
             style={{ boxShadow: filtro[s] ? `inset 4px 0 0 ${S[s] && S[s].cor}` : "none", opacity: filtro[s] ? 1 : 0.55 }}/>
         ))}
@@ -313,6 +341,7 @@ function MapaObrasPage({ setRoute, setSubsel }) {
             {Object.keys(S).map((k) => (
               <span key={k} className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: S[k].cor, display: "inline-block" }}/>{S[k].rotulo}</span>
             ))}
+            <span className="row" style={{ gap: 6 }}><span style={{ width: 10, height: 10, borderRadius: "50%", background: "#fff", boxShadow: "0 0 0 3px #dc2626", display: "inline-block" }}/>Contorno vermelho: previsão vencida ou ocorrência grave</span>
             {geocodificando && <span style={{ color: "var(--fg3)" }}>Localizando endereços no mapa…</span>}
           </div>
           <div className="row" style={{ gap: 4 }}>

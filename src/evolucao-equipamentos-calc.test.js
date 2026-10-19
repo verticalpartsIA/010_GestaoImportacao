@@ -67,3 +67,24 @@ test('embarque pelo nº de série da P.I. (temporário): cotação vence; série
   assert.equal(C.embarqueDoEquipamento({ id: 'x' }, m, '500.0393').embarque.id, 'x');
   assert.equal(C.embarqueDoEquipamento(null, m, null).embarque, null);
 });
+
+test('ocorrências: rolagens do navio, canal vermelho, previsão vencida e extras', () => {
+  const emb = { nome_embarque: '150º', etd_atual: '2026-10-13', eta_santos: '2026-10-12', canal_parametrizacao: 'Vermelho',
+    historico_rolagens: [{ data_anterior: '2026-10-01', nova_data: '2026-10-09', motivo: 'cut-off' }, { data_anterior: '2026-10-09', nova_data: '2026-10-13', motivo: 'Atraso do Navio' }] };
+  const linha = C.montarLinha({ status_master: 'Importação' }, { previsao_chegada_material: '2026-10-09' }, { hoje, embarque: emb });
+  const r = C.ocorrencias(emb, linha, { hoje, extras: [{ categoria: 'contrato', titulo: 'Projeto aprovado com atraso', dias: 3 }] });
+  assert.equal(r.porCategoria.navio.filter((o) => o.etapa === 'embarque').length, 2);
+  assert.equal(r.porCategoria.aduana[0].gravidade, 'alta');
+  assert.equal(r.porCategoria.contrato.length, 1);
+  assert.equal(r.porCategoria.logistica.length, 1); // previsão de chegada na obra vencida
+  assert.equal(r.diasAtraso, 12 + 10 + 3);
+});
+
+test('ocorrências: canal verde e embarque sem rolagem não geram nada; porto parado vira logística', () => {
+  assert.equal(C.ocorrencias({ canal_parametrizacao: 'Verde', etd_original: '2026-08-01', etd_atual: '2026-08-01' }, null, { hoje }).lista.length, 0);
+  const emb = { eta_santos: '2026-09-14', etd_atual: '2026-08-16' };
+  const linha = C.montarLinha({ status_master: 'Importação' }, null, { hoje, embarque: emb });
+  const r = C.ocorrencias(emb, linha, { hoje });
+  assert.equal(r.porCategoria.logistica.length, 1);
+  assert.equal(r.porCategoria.logistica[0].dias, 35);
+});
