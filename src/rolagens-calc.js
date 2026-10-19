@@ -3,7 +3,8 @@
    embarque (embarques_importacao.historico_rolagens) e aponta datas
    que parecem digitadas errado (19/10/2026). Só AVISA: nunca altera
    nem bloqueia a gravação. Usado pela tela do Embarque e pela
-   Evolução dos equipamentos (Mapa de Obras).
+   Evolução dos equipamentos (Mapa de Obras). Também monta o
+   histórico de mudanças do ETA Santos (registrarMudancaEta).
    window.RolagensCalc
    ============================================================ */
 (function () {
@@ -47,5 +48,24 @@
     return out;
   }
 
-  window.RolagensCalc = { avisosDaRolagem, conferir };
+  /* Histórico do ETA Santos (embarques_importacao.historico_eta, 19/10/2026): ao salvar o
+     embarque com o ETA diferente do que estava gravado, acrescenta uma linha
+     { data_anterior, nova_data, data_comunicacao, motivo, por }. ETA preenchido pela 1ª vez
+     (sem valor anterior) não é mudança. Mesmo formato das rolagens do ETD. */
+  function registrarMudancaEta(historico, anterior, nova, extra) {
+    const l = Array.isArray(historico) ? historico.slice() : [];
+    const a = String(anterior || '').slice(0, 10), n = String(nova || '').slice(0, 10);
+    if (!a || !n || a === n) return l;
+    const x = extra || {};
+    l.push({
+      data_anterior: a, nova_data: n,
+      data_comunicacao: x.data_comunicacao || '',
+      motivo: String(x.motivo || '').trim(),
+      por: x.por || '',
+      registrado_em: x.registrado_em || new Date().toISOString(),
+    });
+    return l;
+  }
+
+  window.RolagensCalc = { avisosDaRolagem, conferir, registrarMudancaEta };
 }());
