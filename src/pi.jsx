@@ -420,7 +420,7 @@ function piInstrucaoStatus(pi, embarque) {
       if (quitado < 100) aberto.push(`• Pagamento: só ${Math.round(quitado)}% pago`);
       if ((pi.producao || {}).status !== 'Concluída') aberto.push('• Produção não marcada como concluída');
       if (!embarque) aberto.push('• Sem embarque vinculado');
-      return aberto.length ? 'Marcada como Concluída, mas confira:\n' + aberto.join('\n') : 'Concluída: pagamento, produção e embarque em dia.';
+      return aberto.length ? 'Marcada como Concluída, mas confira:\n' + aberto.join('\n') : 'Concluída: pagamento e produção em dia; embarque vinculado (a etapa do embarque não é conferida aqui).';
     }
     case 'Cancelada': return 'Cancelada: esta P.I. não segue mais no fluxo.';
     default: return pi.status || '';
