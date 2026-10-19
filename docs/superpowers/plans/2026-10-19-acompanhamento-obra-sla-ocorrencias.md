@@ -8,7 +8,7 @@ Plano (19/10/2026). Nada disto está construído. Cada fase vira PR próprio; mi
 - Obras quase completas: 7 a 23 dias úteis no total (DOS-M050, M011, M048, M012). Mediana ~12. Tamanhos de elevador misturados.
 - GPS no EXIF: 3 de 130 fotos. Aparelhos: Xiaomi 95, Samsung 30, Realme 5.
 
-## Fase 1 — Data real da etapa (base de tudo)
+## Fase 1 — Data real da etapa (base de tudo) — FEITA em 19/10/2026 (coluna concluido_em, RPC, campo no link do montador, correção pelo operador)
 - Coluna nova `acompanhamento_obra_status.concluido_em` (date). O link do montador pede, ao marcar cada item, "Dia em que concluiu" (padrão: hoje; não aceita data futura nem anterior ao início da obra).
 - Mantém `flegado_em` (envio) como está. O SLA usa `concluido_em`; sem ele, cai em `flegado_em`.
 - Operador (alçada `instalacao.editar_status_obra`) pode corrigir `concluido_em`, com log em `vp_logs`.
@@ -41,7 +41,7 @@ Plano (19/10/2026). Nada disto está construído. Cada fase vira PR próprio; mi
 - Função de leitura `public_acompanhamento_cliente_obter(token)`: progresso ponderado, etapas com data e foto, ocorrências aprovadas, previsão original x atual.
 - Página baseada em `status-obra.html`; atualiza a cada poucos minutos. Revogável; validade a definir.
 
-## Fase 0 — Só foto da câmera (decisão do usuário, 19/10/2026)
+## Fase 0 — Só foto da câmera (decisão do usuário, 19/10/2026) — FEITA (PR #981)
 Motivo: já apareceram obras com fotos de outras obras (imagem da galeria).
 - O botão "Anexar foto" abre direto a câmera. Galeria/arquivos não são aceitos; tentativa de enviar da galeria mostra aviso.
 - Camada 1 (apresentação): `<input type="file" accept="image/*" capture="environment">`. Em parte dos aparelhos o navegador ainda oferece a galeria; por isso a camada 2.
