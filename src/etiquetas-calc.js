@@ -153,6 +153,7 @@
       endereco_txt: t(r.endereco) ? `ENDEREÇO: ${enderecoLimpo(r.endereco)}` : '',
       volume_txt: `VOLUME ${vol} / ${total}`,
       pedido_txt: t(r.pedido),
+      qr: t(r.nf),
     };
   }
 
@@ -324,16 +325,17 @@
       // (o ZPL não gira QR/imagem) e ainda não pode ser copiado/editado.
       id: 'EXPEDICAO_100x150', tipo: 'EXPEDICAO', nome: 'Expedição — volume da NF (100 × 150)', largura_mm: 100, altura_mm: 150, girar: 90,
       proposito: 'Etiqueta de volume da expedição: remetente, nº da NF, destinatário, transportadora, endereço, volume n/N e nº do pedido na faixa preta. Rolo 100 × 150 mm.',
-      campos: ['remetente_txt', 'remetente_end', 'nf_txt', 'destinatario_txt', 'transportadora_txt', 'endereco_txt', 'volume_txt', 'pedido_txt'],
+      campos: ['remetente_txt', 'remetente_end', 'nf_txt', 'destinatario_txt', 'transportadora_txt', 'endereco_txt', 'volume_txt', 'pedido_txt', 'qr'],
       elementos: [
         { tipo: 'imagem', src: 'logo', x: 6, y: 6, w: 24, h: 5 },
         { tipo: 'texto', campo: '{remetente_txt}', x: 6, y: 14, w: 114, h: 5.2, alinhamento: 'centro' },
         { tipo: 'texto', campo: '{remetente_end}', x: 6, y: 21, w: 114, h: 3.8, linhas: 2, alinhamento: 'centro', peso: 'normal' },
         { tipo: 'texto', campo: '{nf_txt}', x: 6, y: 33, w: 114, h: 10, alinhamento: 'centro' },
-        { tipo: 'texto', campo: '{destinatario_txt}', x: 6, y: 48, w: 114, h: 4.4, linhas: 2, peso: 'normal' },
-        { tipo: 'texto', campo: '{transportadora_txt}', x: 6, y: 62, w: 114, h: 4.6 },
-        { tipo: 'texto', campo: '{endereco_txt}', x: 6, y: 71, w: 114, h: 4.2, linhas: 3, peso: 'normal' },
+        { tipo: 'texto', campo: '{destinatario_txt}', x: 6, y: 48, w: 88, h: 4.4, linhas: 2, peso: 'normal' },
+        { tipo: 'texto', campo: '{transportadora_txt}', x: 6, y: 62, w: 88, h: 4.6 },
+        { tipo: 'texto', campo: '{endereco_txt}', x: 6, y: 71, w: 88, h: 4.2, linhas: 3, peso: 'normal' },
         { tipo: 'texto', campo: '{volume_txt}', x: 6, y: 90, w: 114, h: 6.5, alinhamento: 'dir' },
+        { tipo: 'qr', campo: '{qr}', x: 98, y: 46, w: 22 },
         { tipo: 'caixa', preenchido: true, x: 124, y: 6, w: 20, h: 90 },
         { tipo: 'texto', campo: '{pedido_txt}', rot: 90, cor: 'branco', x: 124, y: 6, w: 20, h: 90, tam: 13 },
       ],
