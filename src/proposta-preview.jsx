@@ -437,23 +437,26 @@ function PreviewEspecTabela({ data }) {
 /* ---------- Página 7: Acabamento (tabela) ---------- */
 function PreviewAcabamentoTabela({ data }) {
   const ed = data.elevador;
-  /* acabamentosCats (novo, dinâmico — categorias/campos com checkbox
-     "ativo", igual à Ficha Técnica): só entra no PDF o que está marcado.
-     Sem acabamentosCats (proposta antiga, nunca reaberta no editor novo):
-     cai no formato fixo de sempre — mostra o que estiver preenchido. */
-  const linhas = window.PropostaOpcoes ? window.PropostaOpcoes.linhasAcabamento(ed) : [];
+  /* Blocos vêm de PropostaOpcoes.perfisAcabamento (fonte única de preview e PDF): 1 por perfil de tipo
+     (Carga / Passageiro / Panorâmico) quando a proposta tem perfis; senão 1 bloco global, como sempre — só os campos
+     marcados "ativo" e preenchidos entram (acabamentosCats, ou o formato fixo da proposta antiga). */
+  const O = window.PropostaOpcoes;
+  const blocos = O ? O.perfisAcabamento(ed) : [];
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
         <PdfHeader numero={data.numero}/>
         <h2 className="pdf-sec-title">Acabamento</h2>
         <div className="pdf-sec-rule"/>
-        {linhas.length ? (
-          <table className="pdf-table2">
-            <thead><tr><th>Item</th><th>Elevador de Passageiros</th></tr></thead>
-            <tbody>{linhas.map(([k, v], i) => <tr key={i}><td>{k}</td><td>{v}</td></tr>)}</tbody>
-          </table>
-        ) : <Vazio>Preencha os acabamentos na aba "Acabamentos".</Vazio>}
+        {blocos.length ? blocos.map((b) => (
+          <div key={b.id} style={{ breakInside: "avoid", marginBottom: 14 }}>
+            {b.nome ? <h3 className="pdf-sub-title">{O.tituloPerfil(b)}</h3> : null}
+            <table className="pdf-table2">
+              <thead><tr><th>Item</th><th>{b.rotulo}</th></tr></thead>
+              <tbody>{b.linhas.map(([k, v], i) => <tr key={i}><td>{k}</td><td>{v}</td></tr>)}</tbody>
+            </table>
+          </div>
+        )) : <Vazio>Preencha os acabamentos na aba "Acabamentos".</Vazio>}
       </div>
       <PdfFooter/>
     </div>

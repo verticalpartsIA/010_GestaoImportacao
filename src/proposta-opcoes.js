@@ -190,6 +190,75 @@
     ].filter(([, v]) => v);
   }
 
+  /* ---- Perfis por tipo de equipamento (Carga / Passageiro / Panorâmico) — fase 1: acabamentos ----
+     `elevador.perfis[]` = { id, nome, tipo, unidadeIds[], codigos[], acabamentosCats[] }. Proposta SEM perfis (todas as
+     antigas e as de 1 só tipo) continua exatamente como era: um bloco global (`acabamentosCats`/`acabamentos`). */
+  const semAcento = (s) => String(s == null ? '' : s).normalize('NFD').replace(/[̀-ͯ]/g, '').trim().toLowerCase();
+  function tipoChave(tipo) {
+    const n = semAcento(tipo);
+    if (n === 'carga') return 'carga';
+    if (n === 'panoramico') return 'panoramico';
+    if (n === 'passageiro' || n === 'passageiros') return 'passageiro';
+    return '';
+  }
+  /* Rótulo singular ("Elevador de Carga"). Tipo em branco/desconhecido cai em `padrao` (o texto fixo de antes). */
+  function rotuloTipo(tipo, padrao) {
+    const k = tipoChave(tipo);
+    if (k === 'carga') return 'Elevador de Carga';
+    if (k === 'panoramico') return 'Elevador Panorâmico';
+    if (k === 'passageiro') return 'Elevador de Passageiros';
+    if (padrao) return padrao;
+    return String(tipo || '').trim() ? `Elevador ${String(tipo).trim()}` : 'Elevador de Passageiros';
+  }
+  function nomePerfil(tipo) {
+    const k = tipoChave(tipo);
+    if (k === 'carga') return 'Elevadores de Carga';
+    if (k === 'panoramico') return 'Elevadores Panorâmicos';
+    if (k === 'passageiro') return 'Elevadores de Passageiros';
+    return String(tipo || '').trim() ? `Elevadores ${String(tipo).trim()}` : 'Elevadores';
+  }
+  /* ["VPEL-EL0990-1".."-5"] → "VPEL-EL0990-1 a -5"; faixas separadas por vírgula; sem número no fim, lista os códigos. */
+  function faixaCodigos(codigos) {
+    const lista = (Array.isArray(codigos) ? codigos : []).map((c) => String(c || '').trim()).filter(Boolean);
+    if (!lista.length) return '';
+    const partes = lista.map((c) => { const m = /^(.*-)(\d+)$/.exec(c); return m ? { c, pre: m[1], n: Number(m[2]), ok: true } : { c, ok: false }; });
+    if (partes.some((p) => !p.ok)) return lista.join(', ');
+    partes.sort((a, b) => (a.pre === b.pre ? a.n - b.n : a.pre < b.pre ? -1 : 1));
+    const faixas = [];
+    partes.forEach((p) => {
+      const ult = faixas[faixas.length - 1];
+      if (ult && ult.pre === p.pre && p.n === ult.fim + 1) { ult.fim = p.n; ult.qtd += 1; }
+      else faixas.push({ pre: p.pre, ini: p.n, fim: p.n, qtd: 1 });
+    });
+    return faixas.map((f, i) => {
+      const ini = i === 0 || faixas[i - 1].pre !== f.pre ? `${f.pre}${f.ini}` : `-${f.ini}`;
+      if (f.qtd === 1) return ini;
+      return f.qtd === 2 ? `${ini} e -${f.fim}` : `${ini} a -${f.fim}`;
+    }).join(', ');
+  }
+  /* Blocos da página ACABAMENTO — fonte única de PDF e preview. Com `perfis`: 1 bloco por perfil que tenha linha
+     preenchida. Sem `perfis`: 1 bloco global (como sempre), rotulado pelo tipo SE todas as especificações têm o mesmo
+     tipo conhecido (antes dizia "Elevador de Passageiros" até para carga). */
+  function perfisAcabamento(ed) {
+    const e = ed || {};
+    const perfis = Array.isArray(e.perfis) ? e.perfis : [];
+    if (!perfis.length) {
+      const tipos = [...new Set((e.especificacoes || []).map((s) => tipoChave(s && s.carac)))];
+      const unico = tipos.length === 1 && tipos[0] ? (e.especificacoes || [])[0].carac : '';
+      const linhas = linhasAcabamento(e);
+      return linhas.length ? [{ id: 'geral', nome: null, tipo: unico, codigos: [], rotulo: rotuloTipo(unico, 'Elevador de Passageiros'), linhas }] : [];
+    }
+    return perfis.map((p) => ({
+      id: p.id, nome: p.nome || nomePerfil(p.tipo), tipo: p.tipo || '', codigos: Array.isArray(p.codigos) ? p.codigos : [],
+      rotulo: rotuloTipo(p.tipo), linhas: linhasAcabamento({ acabamentosCats: p.acabamentosCats || [] }),
+    })).filter((b) => b.linhas.length);
+  }
+  /* Título do bloco de um perfil: "Elevadores de Carga — VPEL-EL0990-1 a -5". */
+  function tituloPerfil(b) {
+    const f = faixaCodigos(b && b.codigos);
+    return [b && b.nome, f].filter(Boolean).join(' — ');
+  }
+
   /* Blocos da página AJUSTES E IMPOSTOS — fonte única de PDF e preview. A seção "Ajustes, Impostos e Câmbio" do editor
      tem campos "da página" (clausulaCambial, faturamentoTexto, taxasInclusas, taxasExcluidas) e campos gerais
      (cambio, faturamento, reajuste, taxasIn, taxasOut). Tudo o que o vendedor digitar entra: o campo da página vence;
@@ -342,5 +411,5 @@
   /* Lista da página Responsabilidades (itens preenchidos). */
   const itensTexto = (arr) => (Array.isArray(arr) ? arr : []).map((x) => String(x == null ? '' : x).trim()).filter(Boolean);
 
-  window.PropostaOpcoes = { semDifal, blocosCondicoes, itensNomeados, itensTexto, c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, blocosAjustes, eqInfo, linhasEspecEscEst, resumoEscEst, linhasEspecificidades, blocosInstalacao, _num: num };
+  window.PropostaOpcoes = { semDifal, blocosCondicoes, itensNomeados, itensTexto, c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, tipoChave, rotuloTipo, nomePerfil, faixaCodigos, perfisAcabamento, tituloPerfil, blocosAjustes, eqInfo, linhasEspecEscEst, resumoEscEst, linhasEspecificidades, blocosInstalacao, _num: num };
 }());

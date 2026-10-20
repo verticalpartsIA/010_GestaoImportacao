@@ -424,7 +424,10 @@ function S_EspecElevador({ d, set }) {
 /* ---- Acabamentos: campo com checkbox "ativo" (só o marcado entra no PDF)
    + valor inline quando marcado — mesmo padrão da Ficha Técnica. ---- */
 function S_AcabField({ fld, onToggle, onValue, onRemove }) {
-  const opts = fld.opcoesKey ? OPTIONS[fld.opcoesKey] : null;
+  const base = fld.opcoesKey ? OPTIONS[fld.opcoesKey] : null;
+  /* Valor herdado do Formulário (ex.: "Aço 430", "COP-05C") pode não estar na lista parcial do editor: entra como
+     opção para o select mostrar o que está gravado em vez de parecer vazio. */
+  const opts = base && fld.valor && !base.some((o) => (o.value || o) === fld.valor) ? [fld.valor, ...base] : base;
   return (
     <div className="pe-acab-row">
       <label className={"pe-acab-check" + (fld.ativo ? " on" : "")}>
@@ -509,13 +512,19 @@ function S_Acabamentos({ d, set }) {
     return () => { cancelado = true; };
   }, []);
 
-  const cats = engine ? engine.garantirCats(d.elevador) : [];
+  /* Perfis por tipo de equipamento (Carga / Passageiro / Panorâmico): cotação com 2+ tipos tem abas, cada uma com os
+     SEUS acabamentos. Sem perfis (proposta antiga ou de 1 tipo só) tudo funciona como sempre, no bloco global. */
+  const perfis = Array.isArray(d.elevador.perfis) ? d.elevador.perfis : [];
+  const [perfilId, setPerfilId] = React.useState(null);
+  const perfil = perfis.length ? (perfis.find((p) => p.id === perfilId) || perfis[0]) : null;
+
+  const cats = engine ? engine.garantirCats(perfil ? { acabamentosCats: perfil.acabamentosCats } : d.elevador) : [];
 
   /* Só na 1ª vez (proposta ainda sem acabamentosCats): grava o resultado da
      migração como estado real, pra não ficar recalculando do legado a
      cada render. */
   React.useEffect(() => {
-    if (engine && !(Array.isArray(d.elevador.acabamentosCats) && d.elevador.acabamentosCats.length)) {
+    if (engine && !perfil && !(Array.isArray(d.elevador.acabamentosCats) && d.elevador.acabamentosCats.length)) {
       set("elevador.acabamentosCats", cats);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -523,7 +532,17 @@ function S_Acabamentos({ d, set }) {
 
   if (!engine) return <div className="pe-hint">Carregando…</div>;
 
-  const updateCats = (novo) => set("elevador.acabamentosCats", novo);
+  const updateCats = (novo) => {
+    if (!perfil) { set("elevador.acabamentosCats", novo); return; }
+    set("elevador.perfis", perfis.map((p) => p.id !== perfil.id ? p : { ...p, acabamentosCats: novo }));
+  };
+  const copiarDe = (outroId) => {
+    const outro = perfis.find((p) => p.id === outroId);
+    if (!outro || !perfil) return;
+    if (!window.confirm(`Copiar os acabamentos de "${outro.nome}" para "${perfil.nome}"? O que está preenchido aqui será substituído.`)) return;
+    updateCats(JSON.parse(JSON.stringify(engine.garantirCats({ acabamentosCats: outro.acabamentosCats }))));
+  };
+  const contaCod = (p) => (Array.isArray(p.codigos) && p.codigos.length) || (Array.isArray(p.unidadeIds) ? p.unidadeIds.length : 0);
 
   const toggleField = (catId, k) => updateCats(cats.map((c) => c.id !== catId ? c : {
     ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, ativo: !f.ativo }),
@@ -563,6 +582,30 @@ function S_Acabamentos({ d, set }) {
 
   return (
     <div className="pe-acab">
+      {perfil && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }} role="tablist" aria-label="Perfil por tipo de equipamento">
+            {perfis.map((p) => (
+              <button key={p.id} type="button" role="tab" aria-selected={p.id === perfil.id} onClick={() => setPerfilId(p.id)}
+                style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", font: "inherit", fontSize: 13,
+                  border: "1px solid " + (p.id === perfil.id ? "#111" : "#d4d4d4"),
+                  background: p.id === perfil.id ? "#FFC72C" : "#fff", color: "#111", fontWeight: p.id === perfil.id ? 600 : 400 }}>
+                {p.nome} ({contaCod(p)})
+              </button>
+            ))}
+          </div>
+          <div className="pe-hint" style={{ marginBottom: 6 }}>
+            Estes acabamentos valem só para {window.PropostaOpcoes ? window.PropostaOpcoes.faixaCodigos(perfil.codigos) || perfil.nome : perfil.nome}.
+            Vieram do Formulário e você pode ajustar.
+          </div>
+          {perfis.length > 1 && (
+            <select className="pe-input" style={{ maxWidth: 280 }} value="" onChange={(e) => { if (e.target.value) copiarDe(e.target.value); }}>
+              <option value="">Copiar de outro perfil…</option>
+              {perfis.filter((p) => p.id !== perfil.id).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+          )}
+        </div>
+      )}
       {cats.map((c) => (
         <div className="pe-acab-cat" key={c.id}>
           <div className="pe-acab-cat-head">
@@ -1138,6 +1181,30 @@ function S_Conteudo({ d, set }) {
 
   return (
     <div className="pe-acab">
+      {perfil && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }} role="tablist" aria-label="Perfil por tipo de equipamento">
+            {perfis.map((p) => (
+              <button key={p.id} type="button" role="tab" aria-selected={p.id === perfil.id} onClick={() => setPerfilId(p.id)}
+                style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", font: "inherit", fontSize: 13,
+                  border: "1px solid " + (p.id === perfil.id ? "#111" : "#d4d4d4"),
+                  background: p.id === perfil.id ? "#FFC72C" : "#fff", color: "#111", fontWeight: p.id === perfil.id ? 600 : 400 }}>
+                {p.nome} ({contaCod(p)})
+              </button>
+            ))}
+          </div>
+          <div className="pe-hint" style={{ marginBottom: 6 }}>
+            Estes acabamentos valem só para {window.PropostaOpcoes ? window.PropostaOpcoes.faixaCodigos(perfil.codigos) || perfil.nome : perfil.nome}.
+            Vieram do Formulário e você pode ajustar.
+          </div>
+          {perfis.length > 1 && (
+            <select className="pe-input" style={{ maxWidth: 280 }} value="" onChange={(e) => { if (e.target.value) copiarDe(e.target.value); }}>
+              <option value="">Copiar de outro perfil…</option>
+              {perfis.filter((p) => p.id !== perfil.id).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+            </select>
+          )}
+        </div>
+      )}
       {cats.map((c) => (
         <div className="pe-acab-cat" key={c.id}>
           <div className="pe-acab-cat-head">

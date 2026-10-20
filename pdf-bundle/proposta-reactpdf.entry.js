@@ -453,12 +453,18 @@ function PgEspecTabela(S, data) {
 
 function PgAcabamento(S, data) {
   const OPa = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
-  const linhas = OPa ? OPa.linhasAcabamento(data.elevador) : [];
+  /* Mesmos blocos do preview (PropostaOpcoes.perfisAcabamento): 1 por perfil de tipo, ou 1 global como sempre. */
+  const blocos = OPa ? OPa.perfisAcabamento(data.elevador) : [];
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, 'Acabamento'),
     h(View, { style: S.secRule, key: 'r' }),
-    linhas.length ? Tabela2(S, [{ label: 'Item', flex: 1 }, { label: 'Elevador de Passageiros', flex: 1 }], linhas, 't') : Vazio(S, 'Preencha os acabamentos na aba "Acabamentos".'),
+    ...(blocos.length
+      ? blocos.map((b, i) => h(View, { key: 'b' + i, wrap: false, style: { marginBottom: pt(14) } }, [
+          b.nome ? h(Text, { style: S.subTitle, key: 'st' }, OPa.tituloPerfil(b)) : null,
+          Tabela2(S, [{ label: 'Item', flex: 1 }, { label: b.rotulo, flex: 1 }], b.linhas, 't'),
+        ].filter(Boolean)))
+      : [Vazio(S, 'Preencha os acabamentos na aba "Acabamentos".')]),
     PdfFooter(S),
   ]);
 }

@@ -223,6 +223,58 @@
     return out;
   }
 
+  /* ---------- Perfis por tipo de equipamento (acabamentos) ----------
+     Cotação com 2+ TIPOS (Carga / Passageiro / Panorâmico) ganha 1 perfil por tipo, com os acabamentos herdados da
+     Unidade do Formulário daquele tipo (primeira do grupo). 1 tipo só → [] (a proposta segue com o bloco global de
+     sempre). Valores vão como estão no Formulário (sem "traduzir" para as listas do editor: a lista do editor é
+     parcial e traduzir por palpite poderia trocar o acabamento certo). */
+  function montarPerfis(fontes, especificacoes) {
+    const O = window.PropostaOpcoes;
+    const engine = window.PropostaAcabamentosEngine;
+    if (!O || !engine) return [];
+    const unidades = (fontes && fontes.unidades) || [];
+    const envio = (fontes && fontes.cotacao && fontes.cotacao.dados_envio && fontes.cotacao.dados_envio.unidades) || [];
+    const grupos = new Map();
+    (especificacoes || []).forEach((e) => {
+      const u = unidades.find((x) => x.id === e.unidadeId) || envio.find((x) => x.unidade_id === e.unidadeId) || {};
+      const tipo = String(e.carac || u.tipo || '').trim();
+      const chave = O.tipoChave(tipo) || ('x:' + tipo.toLowerCase());
+      if (!grupos.has(chave)) grupos.set(chave, { tipo, unidadeIds: [], codigos: [], unidade: u });
+      const g = grupos.get(chave);
+      if (e.unidadeId) g.unidadeIds.push(e.unidadeId);
+      (Array.isArray(e.codigos) ? e.codigos : []).forEach((c) => { if (!g.codigos.includes(c)) g.codigos.push(c); });
+    });
+    if (grupos.size < 2) return [];
+    const dim = (l, a) => ((l || a) ? `${l || '?'} x ${a || '?'}mm` : '');
+    return [...grupos.entries()].map(([chave, g]) => {
+      const u = g.unidade || {};
+      const abertura = String(u.porta_tipo_abertura || '').trim();
+      const legado = {
+        modeloCabine: u.modelo || '',
+        acabamentoMat: u.aco_cabina || '',
+        subTeto: u.teto_falso || '',
+        painelOperacao: u.botoeira_cabine || '',
+        pisoCabina: u.piso_cabina || '',
+        modeloPorta: abertura ? `Automática ${abertura}` : '',
+        dimPortaCabine: dim(u.porta_largura_mm, u.porta_altura_mm),
+        acabPortaCabine: u.acabamento_porta_cabina || '',
+        portasPavimento: u.acabamento_porta_pavimento || '',
+        botoeirasPavimento: u.botoeira_pavimento || '',
+      };
+      return {
+        id: 'perfil_' + chave.replace(/[^a-z0-9]+/g, '_'),
+        nome: O.nomePerfil(g.tipo),
+        tipo: g.tipo,
+        unidadeIds: g.unidadeIds,
+        codigos: g.codigos,
+        acabamentosCats: [engine.catNativaFromLegacy(legado)],
+      };
+    }).sort((a, b) => {
+      const n = (p) => { const m = /-(\d+)$/.exec(p.codigos[0] || ''); return m ? Number(m[1]) : Infinity; };
+      return n(a) - n(b);
+    });
+  }
+
   /* ---------- Prefill no formato do PropostaEditor ---------- */
   function montarPrefill(fontes) {
     if (!fontes || !fontes.encontrado) return null;
@@ -372,6 +424,8 @@
     if (especificacoes.length || Object.keys(valores).length) {
       prefill.elevador = {};
       if (especificacoes.length) prefill.elevador.especificacoes = especificacoes;
+      const perfis = montarPerfis(fontes, especificacoes);
+      if (perfis.length) prefill.elevador.perfis = perfis;
       if (Object.keys(valores).length) prefill.elevador.valores = valores;
     }
     return prefill;
@@ -453,5 +507,5 @@
     return partes.join(' · ');
   }
 
-  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, montarBlocoEscadaEsteira };
+  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, montarPerfis, montarBlocoEscadaEsteira };
 }());
