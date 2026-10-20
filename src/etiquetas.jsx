@@ -422,7 +422,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
                   <tbody>
                     {ops.ops.map((o) => (
                       <tr key={o.id} onClick={() => { setOpSel(o); setOpSerie(o.serie || ''); }} style={{ cursor: 'pointer', background: opSel && opSel.id === o.id ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
-                        <td><b style={{ fontWeight: 600 }}>{o.numero}</b></td><td>{o.produto || o.titulo || '—'}</td><td>{o.cliente || '—'}</td><td>{o.serie || '—'}</td>
+                        <td><b style={{ fontWeight: 600 }}>{o.numero_pedido ? `${o.numero}-${o.numero_pedido}` : o.numero}</b></td><td>{o.produto || o.titulo || '—'}</td><td>{o.cliente || '—'}</td><td>{o.serie || '—'}</td>
                       </tr>
                     ))}
                     {!ops.ops.length ? <tr><td colSpan={4} style={{ color: 'var(--fg3)' }}>Nenhuma OP de quadro encontrada.</td></tr> : null}

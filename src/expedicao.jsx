@@ -291,7 +291,7 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
                   <tr>
                     <td><b style={{ fontWeight: 500 }}>{p.numero_pedido}</b></td>
                     <td style={{ minWidth: 220 }}>{p.cliente_nome || '—'}</td>
-                    <td>{mae ? <button className="pcp-cod" onClick={() => { try { sessionStorage.setItem('vp_pcp_op', mae.id); } catch (e) { /* ok */ } setSubsel && setSubsel(null); setRoute && setRoute('pcp'); }}>{mae.numero}</button> : <span style={{ color: 'var(--fg3)' }}>OP não criada</span>}{mae && <span className="pcp-tag" style={{ marginLeft: 6 }}>{mae.status === 'concluida' ? 'concluída' : mae.status.replace('_', ' ')}</span>}
+                    <td>{mae ? <button className="pcp-cod" onClick={() => { try { sessionStorage.setItem('vp_pcp_op', mae.id); } catch (e) { /* ok */ } setSubsel && setSubsel(null); setRoute && setRoute('pcp'); }}>{p.numero_pedido ? `${mae.numero}-${p.numero_pedido}` : mae.numero}</button> : <span style={{ color: 'var(--fg3)' }}>OP não criada</span>}{mae && <span className="pcp-tag" style={{ marginLeft: 6 }}>{mae.status === 'concluida' ? 'concluída' : mae.status.replace('_', ' ')}</span>}
                       {opAberta && p.faturado && s !== 'entregue' ? <div style={{ fontSize: 10, color: 'var(--vp-danger)' }} title="Tem NF, mas a OP-mãe do pedido ainda não foi concluída. Confira a produção antes de despachar.">⚠ produção ainda aberta</div> : null}</td>
                     <td>{p.faturado ? <>{p.numero_nf ? <b style={{ fontWeight: 500 }}>NF {p.numero_nf}</b> : 'NF emitida'} <span style={{ color: 'var(--fg3)' }}>{expData(p.data_faturamento)}</span>{s === 'pronto' && p.data_faturamento ? <div style={{ fontSize: 10, color: atr ? 'var(--vp-danger)' : 'var(--fg3)' }}>emitida {expQuando(expDias(p.data_faturamento, hoje))}{lim ? ` · prazo ${expData(lim)}` : ''}</div> : null}</> : <span style={{ color: 'var(--fg3)' }}>não emitida</span>}</td>
                     <td>{expData(p.data_previsao)}</td>
@@ -319,7 +319,7 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
                           <button className="btn btn--sm" style={{ marginTop: 6 }} disabled={!itens.length} onClick={() => imprimirRomaneio(p)}>Imprimir romaneio</button>
                         </div>
                         <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignContent: 'flex-start' }}>
-                          {opAberta && <div style={{ flex: '1 1 100%', fontSize: 12, color: 'var(--vp-danger)' }}>⚠ A OP-mãe {mae.numero} deste pedido ainda não foi concluída. Confira a produção antes de despachar.</div>}
+                          {opAberta && <div style={{ flex: '1 1 100%', fontSize: 12, color: 'var(--vp-danger)' }}>⚠ A OP-mãe {p.numero_pedido ? `${mae.numero}-${p.numero_pedido}` : mae.numero} deste pedido ainda não foi concluída. Confira a produção antes de despachar.</div>}
                           {s !== 'entregue' && (<>
                             <label style={{ fontSize: 12 }}><input type="checkbox" checked={!!form.retirada} disabled={!podeEditar || s === 'despachado'} onChange={e => setForm({ ...form, retirada: e.target.checked })}/> Retirada pelo cliente</label>
                             {!form.retirada && <input className="input" list="exp-transps" placeholder="Transportadora" value={form.transportadora} disabled={!podeEditar || s === 'despachado'} onChange={e => setForm({ ...form, transportadora: e.target.value })} style={{ width: 200 }}/>}

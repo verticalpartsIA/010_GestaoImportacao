@@ -196,7 +196,7 @@ function EmissaoNFPage({ setRoute, setSubsel }) {
                   <td><b style={{ fontWeight: 500 }}>{g.numero}</b>{g.regs.length > 1 && <div style={{ fontSize: 10, color: 'var(--fg3)' }}>{g.regs.length} registros</div>}</td>
                   <td style={{ minWidth: 200 }}>{g.regs[0].cliente_nome || '—'}<div style={{ fontSize: 10, color: 'var(--fg3)' }}>{g.regs[0].cliente_documento || ''}</div></td>
                   <td className="text-right">{nfMoeda(r.valor)}</td>
-                  <td>{r.mae ? <><button className="pcp-cod" onClick={() => { try { sessionStorage.setItem('vp_pcp_op', r.mae.id); } catch (e) { /* ok */ } setSubsel && setSubsel(null); setRoute && setRoute('pcp'); }}>{r.mae.numero}</button><span className="pcp-tag" style={{ marginLeft: 6 }}>{r.mae.status === 'concluida' ? 'concluída' : r.mae.status.replace('_', ' ')}</span></> : <span style={{ color: 'var(--fg3)' }}>sem OP no PCP</span>}</td>
+                  <td>{r.mae ? <><button className="pcp-cod" onClick={() => { try { sessionStorage.setItem('vp_pcp_op', r.mae.id); } catch (e) { /* ok */ } setSubsel && setSubsel(null); setRoute && setRoute('pcp'); }}>{g.numero ? `${r.mae.numero}-${g.numero}` : r.mae.numero}</button><span className="pcp-tag" style={{ marginLeft: 6 }}>{r.mae.status === 'concluida' ? 'concluída' : r.mae.status.replace('_', ' ')}</span></> : <span style={{ color: 'var(--fg3)' }}>sem OP no PCP</span>}</td>
                   <td style={{ minWidth: 210 }}>
                     <span className="pcp-tag" style={cor[r.situacao] ? { background: cor[r.situacao] } : undefined}>{rotulo[r.situacao]}</span>
                     {g.regs.map(x => (
