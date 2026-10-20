@@ -1046,7 +1046,7 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
         <div style={{ marginTop: 10 }}>
           <div className="row gap-2">
             <Button variant="outline" size="sm" icon="fileText" onClick={() => setVerResp(true)}>Ver resposta do fornecedor</Button>
-            <Button variant="ghost" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>Reenviar por e-mail</Button>
+            <Button variant="ghost" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>Reenviar (nova revisão) por e-mail</Button>
             <Button variant="ghost" size="sm" icon="refresh" disabled={busy} onClick={() => onPedirRevisao(grupo)}>Pedir nova revisão</Button>
           </div>
           {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}
@@ -1059,8 +1059,8 @@ function FECotacaoFornecedorGrupo({ grupo, cot, numeroCotacao, onEnviar, onPedir
             <FEInput value={recipient.telefone} onChange={setR('telefone')} placeholder="WhatsApp (DDI+DDD+número)"/>
           </div>
           <div className="row gap-2" style={{ marginTop: 8 }}>
-            <Button variant="outline" size="sm" icon="message" disabled={busy} onClick={() => onEnviar(grupo, 'whatsapp', recipient)}>{cot ? 'Reenviar por WhatsApp' : 'WhatsApp'}</Button>
-            <Button variant="outline" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>{cot ? 'Reenviar por e-mail' : 'E-mail'}</Button>
+            <Button variant="outline" size="sm" icon="message" disabled={busy} onClick={() => onEnviar(grupo, 'whatsapp', recipient)}>{cot && cot.status !== 'rascunho' ? 'Reenviar (nova revisão) por WhatsApp' : 'WhatsApp'}</Button>
+            <Button variant="outline" size="sm" icon="mail" disabled={busy || !recipient.email} onClick={() => onEnviar(grupo, 'email', recipient)}>{cot && cot.status !== 'rascunho' ? 'Reenviar (nova revisão) por e-mail' : 'E-mail'}</Button>
             <Button variant="ghost" size="sm" icon="copy" disabled={busy} onClick={() => onEnviar(grupo, 'link', recipient)}>Copiar link</Button>
           </div>
         </div>
@@ -1136,13 +1136,33 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
     setEnviando(key);
     try {
       let cot = cotacaoDoGrupo(grupo);
-      if (!cot) cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
+      /* 20/10 — regra do usuário: do 2º envio em diante o fornecedor recebe
+         um documento NOVO com letra (VPEL-EL0990-A, -B…) e um aviso em
+         PT/EN/中文 de que é nova versão — nunca o mesmo link/documento de
+         novo (ele acharia que é o mesmo formulário). "Já enviada" = tem
+         data de envio ou saiu de rascunho. Rascunho de revisão que falhou
+         ao enviar é reaproveitado (não gasta outra letra). */
+      let novaVersao = null;
+      if (cot && (cot.sent_at || cot.status !== 'rascunho')) {
+        if (!window.confirm(`${grupo.fornecedor} já recebeu a cotação ${cot.numero_documento}${cot.status === 'respondido' ? ' e já respondeu' : ' (ainda sem resposta)'}.\n\nO reenvio cria uma NOVA REVISÃO (com letra e link novo) e avisa o fornecedor, em português, inglês e chinês, de que é uma nova versão. O documento anterior continua salvo.\n\nContinuar?`)) return;
+        const anterior = cot;
+        cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
+        novaVersao = { revisao: cot.revisao, anterior: anterior.numero_documento, anteriorRespondida: anterior.status === 'respondido' || !!anterior.responded_at };
+        await reload();
+      } else if (!cot) {
+        cot = await store.gerar(formularioId, grupo.unidades, grupo.fornecedor, numeroCotacao, grupo.categoriaProduto);
+      } else if (cot.revisao) {
+        /* rascunho de revisão (ex.: "Pedir nova revisão" ou envio que falhou): ainda é a 1ª saída DESTE documento, mas é versão nova para o fornecedor */
+        const anteriorDoc = cotacoes.filter((x) => x.id !== cot.id && x.fornecedor === cot.fornecedor && x.categoria_produto === cot.categoria_produto && (x.sent_at || x.status !== 'rascunho'))
+          .sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)))[0];
+        if (anteriorDoc) novaVersao = { revisao: cot.revisao, anterior: anteriorDoc.numero_documento, anteriorRespondida: anteriorDoc.status === 'respondido' || !!anteriorDoc.responded_at };
+      }
       const url = store.cotacaoUrl(cot.token);
       const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.etapaId('cotacao', numeroCotacao)}` : '';
       /* 06/10 — assunto e corpo em PT-BR / EN-US / 中文 (fonte única no store). */
       const unidTxt = grupo.unidades.map((u) => u.identificador).join(', ');
       const { subject: assuntoRfq, text: msg } = store.mensagemRfq({
-        numeroDocumento: cot.numero_documento, numeroTxt, url, linkJaEnviadoEmDoisCanais: true,
+        numeroDocumento: cot.numero_documento, numeroTxt, url, linkJaEnviadoEmDoisCanais: true, novaVersao,
         descricaoPt: `da(s) unidade(s) ${unidTxt}`, descricaoEn: `of unit(s) ${unidTxt}`, descricaoZh: `单元 ${unidTxt} `,
       });
       let registrar = true; // só registra "enviado" quando o envio de fato aconteceu

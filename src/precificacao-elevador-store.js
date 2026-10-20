@@ -506,10 +506,26 @@
     const pzPorCotacao = {}; (precificacoes || []).forEach((p) => { if (p.cotacao_fornecedor_id) pzPorCotacao[p.cotacao_fornecedor_id] = p; });
     const pzPorFormulario = {}; (precificacoes || []).forEach((p) => { if (!p.cotacao_fornecedor_id) pzPorFormulario[p.formulario_elevador_id] = p; });
 
+    /* 20/10 — revisão mais nova do MESMO fornecedor/categoria (A, B…) marca a
+       anterior como "substituída" na fila, pra ninguém precificar a versão
+       velha sem perceber. Falha de leitura não derruba a fila. */
+    const { data: irmas } = formularioIds.length
+      ? await c.from('cotacoes_elevador_fornecedor').select('id, formulario_elevador_id, fornecedor, categoria_produto, numero_documento, created_at')
+          .in('formulario_elevador_id', formularioIds).is('excluido_em', null)
+      : { data: [] };
+    const substituidaPor = (cot, createdAt) => {
+      const novas = (irmas || []).filter((x) => x.id !== cot.id && x.formulario_elevador_id === cot.formulario_elevador_id
+        && x.fornecedor === cot.fornecedor && x.categoria_produto === cot.categoria_produto && String(x.created_at) > String(createdAt));
+      novas.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      return novas[0] ? novas[0].numero_documento : null;
+    };
+    const criadoEm = {}; (irmas || []).forEach((x) => { criadoEm[x.id] = x.created_at; });
+
     const daCotacao = (cots || []).map((cot) => {
       const form = formPorId[cot.formulario_elevador_id] || {};
       const pz = pzPorCotacao[cot.id];
       return {
+        substituidaPor: criadoEm[cot.id] ? substituidaPor(cot, criadoEm[cot.id]) : null,
         cotacaoFornecedorId: cot.id, numeroDocumentoFornecedor: cot.numero_documento, fornecedor: cot.fornecedor,
         formularioElevadorId: cot.formulario_elevador_id, numeroCotacao: form.numero_cotacao ?? null,
         clienteNome: (form.clientes && form.clientes.razao_social) || null, clienteCnpj: (form.clientes && form.clientes.cnpj) || null,
