@@ -53,6 +53,13 @@ const FQ_CSS = `
 .fq-oc-dot.aberta.sem-frente{background:#dc2626;box-shadow:0 0 0 0 rgba(220,38,38,.5)}
 .fq-oc-dot.resolvida{background:#16a34a}
 .fq-link-box{background:var(--vp-info-tint);border:1px solid var(--vp-info);border-radius:6px;padding:10px;margin-top:10px;font-size:12px;word-break:break-all}
+.fq-fiacao{margin-top:16px;border-top:1px dashed var(--border);padding-top:12px}
+.fq-fiacao-h{font-size:13px;font-weight:700;margin-bottom:8px}
+.fq-fiacao-item{display:flex;align-items:flex-start;gap:10px;padding:8px 10px;border:1px solid var(--border);border-radius:8px;margin-bottom:6px;cursor:pointer}
+.fq-fiacao-item.feito{border-color:#16a34a;background:#f0fdf4}
+.fq-fiacao-item.is-disabled{cursor:default}
+.fq-fiacao-check{width:20px;height:20px;margin-top:1px;flex:0 0 20px}
+.fq-concluido{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#0a7a3d;background:#dcfce7;border-radius:999px;padding:4px 12px;margin-top:8px}
 `;
 
 function fqData(v) {
@@ -115,6 +122,40 @@ function FQPasso({ s, atual, pausado, podeDesmarcar, busy, onToggle }) {
       <span className="fq-rot">{item.texto}</span>
       {flegado && <span className="fq-dt">{fqData(s.flegado_em) || 'sem data'}</span>}
     </label>
+  );
+}
+
+/* Itens extras de fiação (Cabo de Manobra/Passadiço/Topo do Carro/Poço) —
+   só aparece quando o store já determinou fiacaoAplicavel (OP ou OP-mãe
+   ligada a um Pedido de Venda, ver fabricacao-quadro-store.js). Cada item
+   é flegável independente, sem ordem entre si (decisão do usuário,
+   20/10/2026) — por isso é uma lista simples, não a trilha do Quadro. */
+function FQFiacaoItem({ s, podeDesmarcar, busy, onToggle }) {
+  const item = s.fabricacao_quadro_itens;
+  const flegado = s.flegado;
+  const bloqueadoParaDesmarcar = flegado && !podeDesmarcar;
+  return (
+    <label className={'fq-fiacao-item' + (flegado ? ' feito' : '') + (busy || bloqueadoParaDesmarcar ? ' is-disabled' : '')}>
+      <input type="checkbox" className="fq-fiacao-check" checked={flegado} disabled={busy || bloqueadoParaDesmarcar}
+        onChange={(e) => onToggle(item.id, e.target.checked)} aria-label={item.texto} />
+      <div style={{ flex: 1 }}>
+        <div style={{ fontSize: 13, fontWeight: 600 }}>{item.texto}</div>
+        {item.descricao && <div className="fq-meta">{item.descricao}</div>}
+        {flegado && <div className="fq-dt">{fqData(s.flegado_em) || 'sem data'}</div>}
+      </div>
+    </label>
+  );
+}
+
+function FQFiacao({ fiacaoStatus, podeDesmarcar, busy, onToggle }) {
+  if (!fiacaoStatus || !fiacaoStatus.length) return null;
+  return (
+    <div className="fq-fiacao">
+      <div className="fq-fiacao-h">Fiação (elevador completo)</div>
+      {fiacaoStatus.map((s) => (
+        <FQFiacaoItem key={s.item_id} s={s} podeDesmarcar={podeDesmarcar} busy={busy} onToggle={onToggle} />
+      ))}
+    </div>
   );
 }
 
@@ -184,6 +225,30 @@ function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar }) {
     else if (podeDesmarcar) desmarcar(itemId);
   };
 
+  const marcarFiacao = async (itemId) => {
+    setBusy(true);
+    try {
+      await window.FabricacaoQuadroStore.marcarEtapaFiacao(ordem.id, itemId, window.__VP_USER?.email);
+      await onRecarregar();
+    } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const desmarcarFiacao = async (itemId) => {
+    if (!window.confirm('Desmarcar este item de fiação?')) return;
+    setBusy(true);
+    try {
+      await window.FabricacaoQuadroStore.desmarcarEtapaFiacao(ordem.id, itemId, window.__VP_USER?.email);
+      await onRecarregar();
+    } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const onToggleFiacao = (itemId, checked) => {
+    if (checked) marcarFiacao(itemId);
+    else if (podeDesmarcar) desmarcarFiacao(itemId);
+  };
+
   const gerarLink = async () => {
     setBusy(true);
     try {
@@ -230,6 +295,12 @@ function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar }) {
 
   const { pct, atualId, pausado, statusMerged } = resumo;
   const idxAtual = statusMerged.findIndex((s) => s.item_id === atualId);
+  const fiacaoStatus = estado.fiacaoStatus || [];
+  const fiacaoCompleta = !fiacaoStatus.length || fiacaoStatus.every((s) => s.flegado);
+  /* "Concluído" (decisão do usuário, 20/10/2026) é um rótulo calculado,
+     nunca um clique a mais: Quadro 100% E (sem fiação aplicável OU os 4
+     itens de fiação flegados). */
+  const concluido = pct === 100 && fiacaoCompleta;
 
   return (
     <div className="fq-card">
@@ -246,6 +317,7 @@ function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar }) {
               ordem.prazo_entrega ? 'Prazo: ' + fqData(ordem.prazo_entrega) : null]
               .filter(Boolean).join(' · ')}
           </div>
+          {concluido && <div className="fq-concluido">✓ Concluído</div>}
         </div>
         <div className="fq-pct">
           <div className="fq-anel" title="Progresso ponderado da fabricação"
@@ -280,6 +352,8 @@ function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar }) {
         ))}
       </div>
 
+      <FQFiacao fiacaoStatus={fiacaoStatus} podeDesmarcar={podeDesmarcar} busy={busy} onToggle={onToggleFiacao} />
+
       <FQOcorrencias ocorrencias={estado.ocorrencias} />
     </div>
   );
@@ -294,8 +368,8 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
 
   const carregarEstado = React.useCallback(async (ordemId) => {
     try {
-      const { status, ocorrencias } = await window.FabricacaoQuadroStore.obterEstadoOrdem(ordemId);
-      setEstados((prev) => ({ ...prev, [ordemId]: { status, ocorrencias } }));
+      const { status, ocorrencias, fiacaoAplicavel, fiacaoStatus } = await window.FabricacaoQuadroStore.obterEstadoOrdem(ordemId);
+      setEstados((prev) => ({ ...prev, [ordemId]: { status, ocorrencias, fiacaoAplicavel, fiacaoStatus } }));
     } catch (e) {
       setEstados((prev) => ({ ...prev, [ordemId]: { erro: e.message || String(e) } }));
     }

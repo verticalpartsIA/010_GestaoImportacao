@@ -44,6 +44,61 @@
     return data || [];
   }
 
+  /* Catálogo fixo dos 4 itens extras de fiação (Cabo de Manobra, Fiação
+     Passadiço, Fiação Topo do Carro, Fiação de Poço) — ver comentário em
+     obterEstadoOrdem/fiacaoAplicavelParaOrdem sobre quando eles entram. */
+  async function listarFiacaoItens() {
+    const c = sb();
+    const { data, error } = await c.from('fabricacao_quadro_fiacao_itens').select('*').order('ordem');
+    if (error) throw error;
+    return data || [];
+  }
+
+  /* Mesma mescla de mergeStatusComItens (fabricacao-quadro-calc.js), mas
+     pros itens de fiação — mantida separada do motor do Quadro de
+     propósito (fiação não tem peso/percentual, cada item é um booleano
+     independente; nunca mexe em FabricacaoQuadroCalc). A chave
+     `fabricacao_quadro_itens` no objeto devolvido é só pra reaproveitar,
+     sem duplicar, os componentes de UI que já sabem renderizar esse
+     formato (FQPasso/FQPEtapaLinha) — não é um erro de nome, é o mesmo
+     "shape" de propósito. */
+  function mergeFiacaoStatus(itens, status) {
+    const porItem = {};
+    (status || []).forEach((s) => { porItem[s.item_id] = s; });
+    return (itens || []).map((it) => {
+      const s = porItem[it.id];
+      return {
+        item_id: it.id,
+        flegado: !!(s && s.flegado),
+        flegado_em: s ? s.flegado_em : null,
+        flegado_por: s ? s.flegado_por : null,
+        fabricacao_quadro_itens: it,
+      };
+    });
+  }
+
+  /* A OP do Quadro (ou a OP-mãe dela, via ordem_mae_id) está vinculada a um
+     Pedido de Venda do Omie? Decisão do usuário (20/10/2026): os 4 itens
+     de fiação só entram quando a resposta é sim (elevador completo) —
+     quadro avulso (sem pedido_codigo em nenhum dos dois) continua só com
+     as 6 etapas de sempre. `pedido_codigo` é o mesmo campo que já liga a
+     Emissão de NF/Expedição/Painel; algumas rotas de geração de OP
+     gravam ele direto na OP do quadro (fila "Pedidos para Produzir"),
+     outras só na OP-mãe (assistente "Pedidos de Quadro") — por isso
+     confere os dois lugares. */
+  async function fiacaoAplicavelParaOrdem(ordem) {
+    if (!ordem) return false;
+    if (ordem.pedido_codigo != null) return true;
+    if (!ordem.ordem_mae_id) return false;
+    const c = sb();
+    const { data, error } = await c.from('pcp_ordens').select('pedido_codigo').eq('id', ordem.ordem_mae_id).maybeSingle();
+    if (error) {
+      console.warn('[FabricacaoQuadroStore] fiacaoAplicavelParaOrdem: falha ao buscar a OP-mãe — assumindo sem fiação extra.', error);
+      return false;
+    }
+    return !!(data && data.pedido_codigo != null);
+  }
+
   async function obterLink(ordemId) {
     const c = sb();
     const { data } = await c.from('fabricacao_quadro_links').select('*').eq('ordem_id', ordemId).maybeSingle();
@@ -107,7 +162,7 @@
     const [itens, headerResult, statusResult, ocorrenciasResult] = await Promise.all([
       listarItens(),
       c.from('pcp_ordens')
-        .select('id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id')
+        .select('id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id, pedido_codigo, ordem_mae_id')
         .eq('id', ordemId).maybeSingle(),
       c.from('fabricacao_quadro_status').select('*, fabricacao_quadro_itens(id, texto, ordem, peso)').eq('ordem_id', ordemId),
       c.from('fabricacao_quadro_ocorrencias').select('*').eq('ordem_id', ordemId).order('aberta_em', { ascending: false }),
@@ -139,7 +194,27 @@
     const status = (window.FabricacaoQuadroCalc && window.FabricacaoQuadroCalc.mergeStatusComItens)
       ? window.FabricacaoQuadroCalc.mergeStatusComItens(itens, statusRows)
       : (statusRows || []);
-    return { ordem: ordem || null, status, ocorrencias: ocorrencias || [] };
+
+    /* Fiação extra (Cabo de Manobra/Passadiço/Topo do Carro/Poço) — só
+       quando a OP (ou a OP-mãe) tem Pedido de Venda vinculado, ver
+       fiacaoAplicavelParaOrdem. Sem isso, fiacaoStatus sai vazio e a tela
+       simplesmente não mostra a seção — comportamento idêntico ao de
+       antes desta feature pra quadro avulso. */
+    const fiacaoAplicavel = await fiacaoAplicavelParaOrdem(ordem);
+    let fiacaoStatus = [];
+    if (fiacaoAplicavel) {
+      const [fiacaoItens, fiacaoStatusResult] = await Promise.all([
+        listarFiacaoItens(),
+        c.from('fabricacao_quadro_fiacao_status').select('*').eq('ordem_id', ordemId),
+      ]);
+      if (fiacaoStatusResult.error) {
+        console.warn('[FabricacaoQuadroStore] obterEstadoOrdem: falha ao buscar o status da fiação extra — seguindo com a seção vazia.', fiacaoStatusResult.error);
+      } else {
+        fiacaoStatus = mergeFiacaoStatus(fiacaoItens, fiacaoStatusResult.data);
+      }
+    }
+
+    return { ordem: ordem || null, status, ocorrencias: ocorrencias || [], fiacaoAplicavel, fiacaoStatus };
   }
 
   /* Busca o cabeçalho do Quadro de Comando (cliente/modelo/máquina/BOM) a
@@ -241,6 +316,36 @@
     });
   }
 
+  /* Mesmo papel de marcarEtapa/desmarcarEtapa, mas pros 4 itens extras de
+     fiação (tabela própria, ver migration 20261020150000) — flegadoPor
+     null quando vem do link público, e-mail/label quando é de dentro do
+     sistema, mesma regra de desmarcar só por dentro (gate fica na tela). */
+  async function marcarEtapaFiacao(ordemId, itemId, flegadoPor) {
+    const c = sb();
+    const { error } = await c.from('fabricacao_quadro_fiacao_status')
+      .upsert(
+        { ordem_id: ordemId, item_id: itemId, flegado: true, flegado_em: new Date().toISOString(), flegado_por: flegadoPor || null },
+        { onConflict: 'ordem_id,item_id' }
+      );
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'PCP', acao: 'Marcou etapa de fiação extra da fabricação do quadro', alvo_id: ordemId,
+      ator_nome: flegadoPor || null, detalhe: { itemId },
+    });
+  }
+
+  async function desmarcarEtapaFiacao(ordemId, itemId, operadorEmail) {
+    const c = sb();
+    const { error } = await c.from('fabricacao_quadro_fiacao_status')
+      .update({ flegado: false })
+      .eq('ordem_id', ordemId).eq('item_id', itemId);
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'PCP', acao: 'Desmarcou etapa de fiação extra da fabricação do quadro', alvo_id: ordemId,
+      ator_nome: operadorEmail || null, detalhe: { itemId },
+    });
+  }
+
   /* Não chamada por nenhuma das 2 telas hoje — obterEstadoOrdem já
      devolve a lista de ocorrências embutida (ver acima), que é tudo que
      evolucao-fabricacao-quadro.jsx/fabricacao-quadro-app.jsx precisam.
@@ -334,6 +439,6 @@
   window.FabricacaoQuadroStore = {
     listarItens, obterLink, criarOuObterLink, obterEstadoOrdem, obterEstadoPorToken,
     marcarEtapa, desmarcarEtapa, listarOcorrencias, abrirOcorrencia, resolverOcorrencia,
-    listarOPsAbertas,
+    listarOPsAbertas, listarFiacaoItens, marcarEtapaFiacao, desmarcarEtapaFiacao,
   };
 }());
