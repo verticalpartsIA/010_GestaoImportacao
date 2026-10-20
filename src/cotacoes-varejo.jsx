@@ -100,6 +100,11 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
             </div>
           ))}
           <div className="muted">{resp.lead_time_dias ? resp.lead_time_dias + ' d' : '— d'}{moq > 0 ? ' · MOQ ' + cvFmtNum(moq) : ''}</div>
+          {Array.isArray(resp.fotos_fornecedor) && resp.fotos_fornecedor.length > 0 && (
+            <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', margin: '3px 0' }} title="Fotos enviadas pelo fornecedor">
+              {resp.fotos_fornecedor.map((u) => <a key={u} href={u} target="_blank" rel="noopener noreferrer"><img src={u} alt="foto do fornecedor" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border, #ccc)' }} /></a>)}
+            </div>
+          )}
           {resp.obs && <div className="muted" title={resp.obs} style={{ maxWidth: 190, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>💬 {resp.obs}</div>}
           {resp.historico && resp.historico.length > 0 && (
             <div className="muted" title={resp.historico.map((h) => 'Rodada ' + h.rodada + ': ' + (h.faixas || []).map((f) => cvFmtMoeda(f.preco, resp._moeda) + (f.min > 1 ? ' (≥' + f.min + ')' : '')).join(' · ')).join('\n')}>
@@ -252,6 +257,20 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
     try { const url = await S.enviarFoto(item.codigo, file); await S.atualizarItem(item.id, { foto_url: url }); await carregar(); window.toast?.('Foto salva no banco de fotos (' + item.codigo + ').', 'success'); }
     catch (e) { window.toast?.('Erro ao salvar a foto: ' + (e.message || e), 'error'); }
   };
+  const addFotosManuais = async (item, files) => {
+    let atual = item;
+    try {
+      for (const f of Array.from(files || [])) {
+        if ((atual.fotos_manuais || []).length >= S.MAX_FOTOS_MANUAIS) { window.toast?.('Máximo de ' + S.MAX_FOTOS_MANUAIS + ' fotos manuais — as demais foram ignoradas.', 'warning'); break; }
+        atual = { ...atual, fotos_manuais: await S.adicionarFotoManual(atual, f) };
+      }
+      await carregar();
+    } catch (e) { window.toast?.('Erro ao enviar a foto: ' + (e.message || e), 'error'); await carregar(); }
+  };
+  const tirarFotoManual = async (item, url) => {
+    if (!window.confirm('Remover esta foto?')) return;
+    try { await S.removerFotoManual(item, url); await carregar(); } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+  };
   const editarItem = async (item, campo, valor) => { try { await S.atualizarItem(item.id, { [campo]: valor }); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
   const tirarItem = async (item) => { if (!window.confirm('Tirar ' + item.codigo + ' deste lote?')) return; try { await S.removerItem(item.id); await carregar(); } catch (e) { window.toast?.(String(e.message || e), 'error'); } };
 
@@ -351,6 +370,20 @@ function CVDetalhe({ loteId, onVoltar, setRoute }) {
                 return (
                   <tr key={it.id}>
                     <td>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', maxWidth: 190, marginBottom: 4 }}>
+                        {(it.fotos_manuais || []).map((u) => (
+                          <span key={u} style={{ position: 'relative' }}>
+                            <a href={u} target="_blank" rel="noopener noreferrer"><img src={u} alt={it.codigo + ' (manual)'} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6, border: '2px solid var(--vp-yellow, #f6c000)' }} /></a>
+                            {editavel && <button type="button" title="Remover esta foto" onClick={() => tirarFotoManual(it, u)} style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, border: 0, background: '#c00', color: '#fff', fontSize: 11, lineHeight: '18px', cursor: 'pointer', padding: 0 }}>×</button>}
+                          </span>
+                        ))}
+                      </div>
+                      {editavel && (it.fotos_manuais || []).length < S.MAX_FOTOS_MANUAIS && (
+                        <label className="small" style={{ cursor: 'pointer', display: 'inline-block', marginBottom: 4, color: 'var(--vp-info, #1d6fd1)' }} title="Até 5 fotos manuais por produto (o fornecedor vê junto com as do banco)">
+                          + foto manual ({(it.fotos_manuais || []).length}/{S.MAX_FOTOS_MANUAIS})
+                          <input type="file" accept="image/*" multiple style={{ display: 'none' }} onChange={(e) => { addFotosManuais(it, e.target.files); e.target.value = ''; }} />
+                        </label>
+                      )}
                       <label style={{ cursor: editavel ? 'pointer' : 'default' }} title={editavel ? 'Trocar a foto (fica no banco de fotos, nomeada pelo código)' : ''}>
                         {it.foto_url ? <span style={{ display: 'inline-flex', gap: 4 }}><img src={it.foto_url} alt={it.codigo} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />{it.foto_url2 && <img src={it.foto_url2} alt={it.codigo + ' (2)'} style={{ width: 52, height: 52, objectFit: 'cover', borderRadius: 6 }} />}</span> :<div style={{ width: 52, height: 52, border: '1px dashed var(--border, #ccc)', borderRadius: 6, display: 'grid', placeItems: 'center', fontSize: 10, color: 'var(--fg3)' }}>sem foto</div>}
                         {editavel && <input type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => trocarFoto(it, e.target.files && e.target.files[0])} />}
