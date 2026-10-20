@@ -1009,6 +1009,9 @@ function CISendModal({ record, onClose, onSent }) {
   const [sent, setSent] = _ciUS(false);
   const [copied, setCopied] = _ciUS(false);
   const [sending, setSending] = _ciUS(false);
+  /* 20/10 — aval do CEO por WhatsApp: quando o envio fica travado esperando o Diego, oferece reenviar o pedido (e reabrir se ele recusou). */
+  const [aval, setAval] = _ciUS(null);
+  const [reenviando, setReenviando] = _ciUS(false);
 
   const pretty = window.CIStore.prettyUrl(record.token);
   const real = window.CIStore.signUrl(record.token);
@@ -1037,7 +1040,12 @@ function CISendModal({ record, onClose, onSent }) {
       const gate = await window.DecisoesStore.podeContratarInstalador(numeroCotacao, {
         contratoInstaladorId: record.id, contratada: record.contratada_nome, valor: record.valor_total,
       });
-      if (!gate.ok) { window.toast ? window.toast(gate.motivo, 'warning') : alert(gate.motivo); return; }
+      if (!gate.ok) {
+        window.toast ? window.toast(gate.motivo, 'warning') : alert(gate.motivo);
+        setAval(gate.reenviavel && gate.decisaoId ? { decisaoId: gate.decisaoId, motivo: gate.motivo } : null);
+        return;
+      }
+      setAval(null);
     }
     setSending(true);
     try {
@@ -1088,6 +1096,16 @@ function CISendModal({ record, onClose, onSent }) {
     }
   };
 
+  const reenviarAval = async () => {
+    if (!aval || reenviando) return;
+    setReenviando(true);
+    try {
+      await window.DecisoesStore.reenviarAvalWhatsApp(aval.decisaoId);
+      window.toast?.('Pedido de aval reenviado ao Diego por WhatsApp. Quando ele responder SIM, clique em Enviar de novo.', 'success');
+    } catch (e) { window.toast?.('Erro ao reenviar o aval: ' + (e.message || e), 'error'); }
+    finally { setReenviando(false); }
+  };
+
   return (
     <div className="ci-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="ci-modal">
@@ -1104,6 +1122,14 @@ function CISendModal({ record, onClose, onSent }) {
             <span className="ci-mini-title">{record.contratada_nome}</span>
             <div className="ci-mini-row"><span>{record.objeto_resumo}</span><b>{valorFmt}</b></div>
           </div>
+          {!sent && aval && (
+            <div style={{ background: '#FFF8E1', border: '1px solid #F5C518', borderRadius: 6, padding: '10px 12px', marginBottom: 12, fontSize: 13 }}>
+              <b>Falta o aval do Diego.</b> {aval.motivo}
+              <div style={{ marginTop: 8 }}>
+                <button className="ci-btn ci-btn--ghost" onClick={reenviarAval} disabled={reenviando}>{reenviando ? 'Reenviando…' : 'Reenviar pedido de aval ao Diego (WhatsApp)'}</button>
+              </div>
+            </div>
+          )}
           {!sent ? (
             <>
               <label className="ci-mini-label" style={{ display: 'block', marginBottom: 8 }}>Link único e seguro</label>
