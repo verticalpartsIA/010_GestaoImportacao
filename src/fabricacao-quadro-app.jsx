@@ -17,6 +17,17 @@
    window.FabricacaoQuadroStore (Task 3, Supabase) — nenhum cálculo
    de progresso/pausa mora aqui.
 
+   Fix do review final (19/10/2026): `estado.status` já vem SEMPRE como
+   o checklist completo (listarItens() mesclado com
+   fabricacao_quadro_status) — o self-heal mora dentro do store
+   (obterEstadoOrdem), não aqui, pra cobrir também a tela interna
+   (evolucao-fabricacao-quadro.jsx) com uma correção só. Esta tela nunca
+   deve voltar a usar `estado.status` como se fossem as linhas cruas do
+   banco sem mesclar — ver fabricacao-quadro-store.js:obterEstadoOrdem.
+   `estado === null` aqui significa estritamente "token não existe";
+   falha de rede/consulta vira `erroCarregar`, nunca `estado === null`
+   (ver FabricacaoQuadroApp).
+
    Produz: mounted React root em #fq-root. Sem exports (página
    standalone, como diario-obra-app.jsx).
    ============================================================ */
@@ -204,13 +215,25 @@
   function FabricacaoQuadroApp() {
     const [token] = React.useState(tokenDoPath);
     const [estado, setEstado] = React.useState(undefined);
+    // Fix do review final (Finding 2, 19/10/2026): `estado === null` só
+    // pode significar "token realmente não existe" (link morto/expirado).
+    // Uma falha transitória de rede/consulta é um problema BEM diferente
+    // — nunca pode mostrar a mesma mensagem de "link morto" pro operador
+    // do quadro, que não tem nada de errado com o link dele. Por isso o
+    // catch de obterEstadoPorToken NUNCA cai em setEstado(null): ele seta
+    // erroCarregar, e só obterEstadoPorToken() resolvendo com `null`
+    // (token que não existe mesmo, ver fabricacao-quadro-store.js) zera
+    // a tela pra "Link não encontrado ou expirado.".
+    const [erroCarregar, setErroCarregar] = React.useState(null);
     const [marcandoId, setMarcandoId] = React.useState(null);
     const [enviandoOcorrencia, setEnviandoOcorrencia] = React.useState(false);
     const [resolvendoId, setResolvendoId] = React.useState(null);
 
     const carregar = React.useCallback(() => {
       if (!token || !window.FabricacaoQuadroStore) return;
-      window.FabricacaoQuadroStore.obterEstadoPorToken(token).then(setEstado).catch(() => setEstado(null));
+      window.FabricacaoQuadroStore.obterEstadoPorToken(token)
+        .then((e) => { setErroCarregar(null); setEstado(e); })
+        .catch((e) => { setErroCarregar((e && e.message) || String(e) || 'Falha desconhecida.'); });
     }, [token]);
     React.useEffect(() => { carregar(); }, [carregar]);
 
@@ -218,7 +241,23 @@
     // token ausente ou link inexistente/expirado nunca deixa a tela em
     // branco.
     if (!token) return <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Link inválido.</div>;
-    if (estado === undefined) return <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Carregando…</div>;
+    if (estado === undefined) {
+      // Falhou já na 1ª carga: ainda não há nada pra mostrar, mas o
+      // texto precisa deixar claro que o link PODE estar certo (ver nota
+      // acima) — "Tente de novo" em vez de "Link não encontrado".
+      if (erroCarregar) {
+        return (
+          <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>
+            <div>Erro ao carregar. Tente de novo.</div>
+            <button type="button" onClick={carregar}
+              style={{ marginTop: 14, padding: '8px 16px', borderRadius: 6, border: '1px solid #ddd', background: '#fff', cursor: 'pointer', fontSize: 13 }}>
+              Tentar de novo
+            </button>
+          </div>
+        );
+      }
+      return <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Carregando…</div>;
+    }
     if (estado === null) return <div style={{ padding: 40, textAlign: 'center', color: '#888' }}>Link não encontrado ou expirado.</div>;
 
     const ordemId = estado.link.ordem_id;
@@ -287,6 +326,20 @@
           </div>
           <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}>{feitos}/{total} etapas feitas — {pct}%</div>
         </div>
+
+        {/* Falha ao RECARREGAR depois que a tela já tinha dados (ex.: depois
+            de marcar/relatar/resolver) — o que já estava na tela continua
+            visível (nunca vira "Link não encontrado"), só avisa que a
+            última atualização não pegou e oferece tentar de novo. */}
+        {erroCarregar && (
+          <div style={{ background: '#fffbeb', border: '1px solid #f59e0b', borderRadius: 8, padding: 10, marginBottom: 14, fontSize: 12, color: '#92400e', display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+            <span>Não foi possível atualizar agora. O que está na tela pode estar desatualizado.</span>
+            <button type="button" onClick={carregar}
+              style={{ padding: '4px 10px', borderRadius: 6, border: '1px solid #92400e', background: '#fff', color: '#92400e', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>
+              Atualizar
+            </button>
+          </div>
+        )}
 
         {pausado && (
           <div style={{ background: '#fef2f2', border: '1px solid #dc2626', borderRadius: 8, padding: 12, marginBottom: 14 }}>

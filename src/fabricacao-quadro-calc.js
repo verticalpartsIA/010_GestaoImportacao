@@ -20,6 +20,18 @@
    'aberta' sem frente de trabalho (tem_frente_trabalho === false) —
    outra ocorrência aberta COM frente de trabalho não pausa nada.
 
+   mergeStatusComItens(itens, status) (fix do review final, 19/10/2026):
+   junta o checklist fixo (listarItens(), N itens do catálogo) com o que
+   já foi flegado de uma OP (fabricacao_quadro_status) — item sem linha
+   no banco ainda (OP nunca teve link gerado, ou a semeadura de
+   criarOuObterLink falhou parcialmente) entra como "não flegado", pra
+   resumoProgresso/etapaAtualId sempre verem a lista completa do
+   catálogo, nunca só o que por acaso já existe no banco. Extraído daqui
+   (em vez de duplicado em dois arquivos) porque tanto a tela interna
+   (evolucao-fabricacao-quadro.jsx, que já fazia esse merge antes desta
+   mudança) quanto a página pública (fabricacao-quadro-app.jsx, que
+   confiava demais na semeadura) precisam do mesmo resultado.
+
    window.FabricacaoQuadroCalc
    ============================================================ */
 (function () {
@@ -55,5 +67,20 @@
     return (ocorrencias || []).some((o) => o.status === 'aberta' && o.tem_frente_trabalho === false);
   }
 
-  window.FabricacaoQuadroCalc = { resumoProgresso, etapaAtualId, estaPausado };
+  function mergeStatusComItens(itens, status) {
+    const porItem = {};
+    (status || []).forEach((s) => { porItem[s.item_id] = s; });
+    return (itens || []).map((it) => {
+      const s = porItem[it.id];
+      return {
+        item_id: it.id,
+        flegado: !!(s && s.flegado),
+        flegado_em: s ? s.flegado_em : null,
+        flegado_por: s ? s.flegado_por : null,
+        fabricacao_quadro_itens: it,
+      };
+    });
+  }
+
+  window.FabricacaoQuadroCalc = { resumoProgresso, etapaAtualId, estaPausado, mergeStatusComItens };
 })();

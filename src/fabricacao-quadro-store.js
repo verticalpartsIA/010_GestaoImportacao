@@ -14,9 +14,15 @@
    de dentro do sistema), mesmo padrão de
    acompanhamento-obra-store.js:registrarLancamento.
 
-   O cálculo de progresso/pausa NÃO mora aqui — vem de
-   window.FabricacaoQuadroCalc (Task 2, fabricacao-quadro-calc.js),
-   puro e já testado. Este arquivo só busca/grava linhas.
+   O cálculo de progresso/pausa (resumoProgresso/etapaAtualId/
+   estaPausado) NÃO mora aqui — fica em window.FabricacaoQuadroCalc
+   (fabricacao-quadro-calc.js), puro e já testado, chamado pelas telas
+   (evolucao-fabricacao-quadro.jsx / fabricacao-quadro-app.jsx). Este
+   arquivo só chama em Calc o helper mergeStatusComItens (fix do review
+   final, 19/10/2026): obterEstadoOrdem sempre devolve o checklist
+   completo (catálogo inteiro + o que já foi flegado), nunca confiando
+   que criarOuObterLink semeou todas as linhas — ver comentário na
+   própria função.
 
    window.FabricacaoQuadroStore
    ============================================================ */
@@ -73,10 +79,33 @@
      (cliente/máquina, via quadro_comando_id) e os itens do BOM do quadro
      (sku/descricao), que alimentam o datalist de "código do produto" do
      modal de ocorrência. OPs que não são de frente='quadro' não têm
-     quadro_comando_id — o embed vem null, sem quebrar nada. */
+     quadro_comando_id — o embed vem null, sem quebrar nada.
+
+     Fix do review final (19/10/2026):
+     1) status SEMPRE sai como o checklist completo do catálogo
+        (listarItens() + fabricacao_quadro_status mesclados via
+        FabricacaoQuadroCalc.mergeStatusComItens) — nunca os status crus.
+        Isso corrige a página pública (fabricacao-quadro-app.jsx), que
+        antes usava estado.status direto e confiava cegamente que
+        criarOuObterLink tinha semeado as 6 linhas; se a semeadura falhar
+        parcialmente (ou o catálogo crescer), a página pública mostrava
+        "0/0 etapas — 0%" em silêncio. A tela interna já fazia esse merge
+        no próprio componente (evolucao-fabricacao-quadro.jsx) — fazer
+        aqui também, sem remover o merge de lá, é inofensivo (mesclar um
+        array já mesclado é idempotente) e corrige as DUAS telas de uma
+        vez só.
+     2) A consulta de cabeçalho (pcp_ordens + quadros_comando + clientes +
+        quadros_comando_maquina + quadros_comando_bom_itens) deixou de ser
+        fatal: ela só alimenta uma linha de exibição (cliente/modelo) no
+        topo da tela, não é necessária pro operador flegar etapa nem
+        relatar ocorrência. Uma falha transitória nela não pode mais
+        derrubar a tela inteira — vira warning e segue com `ordem: null`.
+        As consultas de status/ocorrências continuam fatais (lançam):
+        são as únicas que o operador realmente precisa pra funcionar. */
   async function obterEstadoOrdem(ordemId) {
     const c = sb();
-    const [{ data: ordem, error: errOrdem }, { data: status, error: errStatus }, { data: ocorrencias, error: errOcorrencias }] = await Promise.all([
+    const [itens, headerResult, statusResult, ocorrenciasResult] = await Promise.all([
+      listarItens(),
       c.from('pcp_ordens')
         .select(`id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id,
           quadros_comando (
@@ -89,9 +118,17 @@
       c.from('fabricacao_quadro_status').select('*, fabricacao_quadro_itens(id, texto, ordem, peso)').eq('ordem_id', ordemId),
       c.from('fabricacao_quadro_ocorrencias').select('*').eq('ordem_id', ordemId).order('aberta_em', { ascending: false }),
     ]);
-    if (errOrdem) throw errOrdem;
+    const { data: statusRows, error: errStatus } = statusResult;
+    const { data: ocorrencias, error: errOcorrencias } = ocorrenciasResult;
     if (errStatus) throw errStatus;
     if (errOcorrencias) throw errOcorrencias;
+
+    let ordem = null;
+    if (headerResult.error) {
+      console.warn('[FabricacaoQuadroStore] obterEstadoOrdem: falha ao buscar o cabeçalho (cliente/modelo) da OP ' + ordemId + ' — seguindo sem esses dados (não impede marcar etapa/relatar ocorrência).', headerResult.error);
+    } else {
+      ordem = headerResult.data || null;
+    }
     /* quadros_comando_maquina pode vir como array ou objeto dependendo de
        como o PostgREST infere a cardinalidade do embed — mesma ambiguidade
        já documentada e normalizada em pcp.jsx:PCPPedidosQuadro
@@ -100,15 +137,45 @@
     if (ordem && ordem.quadros_comando && Array.isArray(ordem.quadros_comando.quadros_comando_maquina)) {
       ordem.quadros_comando.quadros_comando_maquina = ordem.quadros_comando.quadros_comando_maquina[0] || null;
     }
-    return { ordem: ordem || null, status: status || [], ocorrencias: ocorrencias || [] };
+
+    const status = (window.FabricacaoQuadroCalc && window.FabricacaoQuadroCalc.mergeStatusComItens)
+      ? window.FabricacaoQuadroCalc.mergeStatusComItens(itens, statusRows)
+      : (statusRows || []);
+    return { ordem: ordem || null, status, ocorrencias: ocorrencias || [] };
   }
 
   /* Token do link (fixo por OP) -> acha a OP e delega pra obterEstadoOrdem,
-     mesmo papel de acompanhamento-obra-store.js:obterEstadoPorToken (sem a
-     RPC pública de lá — essa tela ainda não tem o mesmo endurecimento). */
+     mesmo papel de acompanhamento-obra-store.js:obterEstadoPorToken.
+
+     Segurança (Finding 3 do review final, 19/10/2026): diferente do
+     Diário de Obra (que lê por uma RPC pública dedicada,
+     acompanhamento-obra-store.js:obterEstadoPorToken), esta página
+     pública ainda lê diretamente, com a chave anon, as 5 tabelas abaixo
+     — ela só continua funcionando enquanto todas elas seguirem
+     anon-legíveis. O endurecimento progressivo da issue #571 pode fechar
+     qualquer uma destas tabelas antes de esta tela ganhar sua própria RPC
+     `public_fabricacao_obter` (ainda não construída — depende de
+     migration não aplicada, fora do escopo desta correção):
+       - fabricacao_quadro_links (resolve o token)
+       - pcp_ordens (cabeçalho da OP)
+       - quadros_comando (cabeçalho do quadro, embutido em pcp_ordens)
+       - clientes (nome do cliente, embutido em quadros_comando)
+       - quadros_comando_bom_itens (datalist de "código do produto" da
+         ocorrência, embutido em quadros_comando)
+     (fabricacao_quadro_status/_itens/_ocorrencias também são lidas por
+     obterEstadoOrdem, mas essas 5 acima são as que fazem esta tela
+     divergir do padrão já endurecido do Diário de Obra.)
+
+     Erro de leitura (Finding 2): `null` aqui significa estritamente
+     "token não existe" (link realmente não encontrado/expirado) — nunca
+     o resultado de uma falha de consulta. Qualquer erro real na consulta
+     do link, ou qualquer erro vindo de obterEstadoOrdem (status/
+     ocorrências), é relançado (throw) pra quem chamou NÃO confundir
+     "falha transitória" com "link morto" (ver fabricacao-quadro-app.jsx). */
   async function obterEstadoPorToken(token) {
     const c = sb();
-    const { data: link } = await c.from('fabricacao_quadro_links').select('*').eq('token', token).maybeSingle();
+    const { data: link, error: errLink } = await c.from('fabricacao_quadro_links').select('*').eq('token', token).maybeSingle();
+    if (errLink) throw errLink;
     if (!link) return null;
     const estado = await obterEstadoOrdem(link.ordem_id);
     return { link, ...estado };
@@ -147,6 +214,13 @@
     });
   }
 
+  /* Não chamada por nenhuma das 2 telas hoje — obterEstadoOrdem já
+     devolve a lista de ocorrências embutida (ver acima), que é tudo que
+     evolucao-fabricacao-quadro.jsx/fabricacao-quadro-app.jsx precisam.
+     Mantida exportada por simetria com o resto do store (toda entidade
+     tem seu listar próprio) e pra um consumidor futuro que precise só
+     das ocorrências, sem pagar o custo das outras 2 consultas de
+     obterEstadoOrdem. */
   async function listarOcorrencias(ordemId) {
     const c = sb();
     const { data, error } = await c.from('fabricacao_quadro_ocorrencias').select('*').eq('ordem_id', ordemId).order('aberta_em', { ascending: false });
@@ -167,14 +241,26 @@
     });
   }
 
+  /* alvo_id = ordem_id da ocorrência (não o id da própria ocorrência),
+     igual às outras 3 funções de mutação deste arquivo (marcarEtapa/
+     desmarcarEtapa/abrirOcorrencia) — fix do review final (19/10/2026):
+     o id da ocorrência fica em detalhe.ocorrenciaId, pra toda a
+     auditoria de uma OP continuar grepável por um único id (alvo_id). A
+     função não recebe ordemId como parâmetro (só o id da ocorrência),
+     então o `.select()` abaixo recupera o ordem_id da própria linha
+     atualizada, sem precisar de uma consulta extra nem mudar a
+     assinatura (único chamador, fabricacao-quadro-app.jsx, só passa o
+     id da ocorrência). */
   async function resolverOcorrencia(ocorrenciaId) {
     const c = sb();
-    const { error } = await c.from('fabricacao_quadro_ocorrencias')
+    const { data, error } = await c.from('fabricacao_quadro_ocorrencias')
       .update({ status: 'resolvida', resolvida_em: new Date().toISOString() })
-      .eq('id', ocorrenciaId);
+      .eq('id', ocorrenciaId)
+      .select('ordem_id').maybeSingle();
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({
-      modulo: 'PCP', acao: 'Resolveu ocorrência na fabricação do quadro', alvo_id: ocorrenciaId,
+      modulo: 'PCP', acao: 'Resolveu ocorrência na fabricação do quadro', alvo_id: data ? data.ordem_id : null,
+      detalhe: { ocorrenciaId },
     });
   }
 
