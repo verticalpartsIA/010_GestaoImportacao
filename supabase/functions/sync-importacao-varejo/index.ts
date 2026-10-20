@@ -114,9 +114,20 @@ type ProdutoOmie = {
   ncm: string;
   lead_time: number;
   inativo: string;
+  codigo_familia?: number;
   recomendacoes_fiscais?: { origem_mercadoria?: string };
 };
 type ListarProdutosResp = { total_de_paginas: number; produto_servico_cadastro: ProdutoOmie[] };
+
+// Família CORRIMÕES do Omie (id numérico): entra inteira no varejo mesmo com origem
+// fiscal diferente de 1 (VPP-1697/1877 são origem 6, VPP-1699 é 0...) — decisão do
+// usuário em 20/10/2026, o hub precisa espelhar todos os corrimãos do Omie.
+const FAMILIA_CORRIMAOS = 603466084;
+function qualificaComoVarejo(p: ProdutoOmie): boolean {
+  if (p.inativo === "S") return false;
+  if (p.recomendacoes_fiscais?.origem_mercadoria === "1") return true;
+  return p.codigo_familia === FAMILIA_CORRIMAOS && !/^TESTE/i.test(p.descricao || "");
+}
 
 async function processarCatalogo(cursor: Cursor): Promise<Cursor> {
   // Achados reais (30/09), os 2 juntos — sem qualquer um dos dois o Omie
@@ -137,7 +148,7 @@ async function processarCatalogo(cursor: Cursor): Promise<Cursor> {
   });
 
   const qualificam = (resp.produto_servico_cadastro || []).filter(
-    (p) => p.recomendacoes_fiscais?.origem_mercadoria === "1" && p.inativo !== "S",
+    (p) => qualificaComoVarejo(p),
   );
 
   if (qualificam.length) {
