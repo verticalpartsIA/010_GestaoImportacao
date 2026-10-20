@@ -1594,4 +1594,6 @@ function PCPPage({ setRoute, setSubsel }) {
   );
 }
 
-Object.assign(window, { PCPPage });
+// pcpNumeroOp é compartilhado com outras telas que mostram número de OP (Emissão de NF, Expedição,
+// MES, Etiquetas) — pcp.jsx carrega antes delas em index.html.
+Object.assign(window, { PCPPage, pcpNumeroOp });

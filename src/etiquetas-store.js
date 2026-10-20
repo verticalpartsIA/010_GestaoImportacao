@@ -101,7 +101,7 @@
     const sb = sbCli();
     if (!sb) return { ops: [], erro: 'Supabase indisponível.' };
     try {
-      const { data, error } = await sb.from('pcp_ordens').select('id, numero, titulo, produto, cliente, status, quantidade').eq('frente', 'quadro').neq('status', 'cancelada').order('created_at', { ascending: false }).limit(100);
+      const { data, error } = await sb.from('pcp_ordens').select('id, numero, titulo, produto, cliente, status, quantidade, pedido_codigo').eq('frente', 'quadro').neq('status', 'cancelada').order('created_at', { ascending: false }).limit(100);
       if (error) return { ops: [], erro: error.message };
       const t = String(texto || '').trim().toLowerCase();
       let ops = data || [];
@@ -112,7 +112,16 @@
         const r = await sb.from('mes_ordens').select('ordem_id, numero_serie').in('ordem_id', ids);
         (r.data || []).forEach((m) => { if (m.numero_serie) series[m.ordem_id] = m.numero_serie; });
       }
-      return { ops: ops.slice(0, 40).map((o) => ({ ...o, serie: series[o.id] || '' })), erro: null };
+      // Nº do pedido do Omie (só para EXIBIÇÃO na tela de escolha — nunca entra no QR/código de barras
+      // impresso: op_txt/qr/barras de dadosOpQuadro continuam usando o `numero` puro da OP, formato já
+      // registrado na issue #862).
+      const codigosPedido = Array.from(new Set(ops.map((o) => o.pedido_codigo).filter((c) => c != null)));
+      let pedidosNumero = {};
+      if (codigosPedido.length) {
+        const rp = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido').in('codigo_pedido', codigosPedido);
+        (rp.data || []).forEach((p) => { pedidosNumero[p.codigo_pedido] = p.numero_pedido; });
+      }
+      return { ops: ops.slice(0, 40).map((o) => ({ ...o, serie: series[o.id] || '', numero_pedido: pedidosNumero[o.pedido_codigo] || null })), erro: null };
     } catch (e) { return { ops: [], erro: e.message }; }
   }
 
