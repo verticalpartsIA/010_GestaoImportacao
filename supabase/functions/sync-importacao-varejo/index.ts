@@ -125,7 +125,9 @@ type ListarProdutosResp = { total_de_paginas: number; produto_servico_cadastro: 
 const FAMILIA_CORRIMAOS = 603466084;
 function qualificaComoVarejo(p: ProdutoOmie): boolean {
   if (p.inativo === "S") return false;
-  if (p.recomendacoes_fiscais?.origem_mercadoria === "1") return true;
+  const origem = p.recomendacoes_fiscais?.origem_mercadoria;
+  // 1 = importação direta; 6 = importação direta sem similar nacional (decisão 20/10/2026).
+  if (origem === "1" || origem === "6") return true;
   return p.codigo_familia === FAMILIA_CORRIMAOS && !/^TESTE/i.test(p.descricao || "");
 }
 
