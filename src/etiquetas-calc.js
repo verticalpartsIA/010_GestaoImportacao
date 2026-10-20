@@ -20,6 +20,10 @@
 (function () {
   'use strict';
 
+  /* Logo da VerticalParts em preto e branco (impressão térmica), embutido para a impressão não depender de rede. */
+  const LOGO_PRETO = 'data:image/png;base64,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';
+  const REMETENTE = { nome: 'VERTICALPARTS', endereco: 'Rua Armandina Braga de Almeida, 383, Jardim Santa Emilia, Guarulhos - SP, CEP 07141-003' };
+
   /* ---------- Endereço ---------- */
   const END_RE = /^R([1-4])([A-J])([1-8])$/;
   const VAOS = 'ABCDEFGHIJ';
@@ -124,6 +128,31 @@
       data_txt: t(r.data),
       qr: `PED:${pedido}`,
       barras: pedido,
+    };
+  }
+
+  // Expedição: 1 etiqueta por volume de uma NF já emitida. Os dados vêm do pedido faturado (pcp_pedidos): nº da NF, volumes,
+  // destinatário, transportadora e endereço. A faixa preta lateral leva o nº do pedido de venda. Sem QR: igual à etiqueta de hoje.
+  function enderecoLimpo(txt) {
+    let e = String(txt == null ? '' : txt).trim();
+    e = e.replace(/\b([A-ZÀ-Ú][A-ZÀ-Ú\s.'-]*?)\s*\(([A-Z]{2})\)\s*\/\s*\2\b/, '$1/$2');   // "CAMPINA GRANDE (PB)/PB" -> "CAMPINA GRANDE/PB"
+    e = e.replace(/(\d{5})-?(\d{3})\s*$/, 'CEP $1-$2');                                           // "58400258" -> "CEP 58400-258"
+    return e;
+  }
+  function dadosExpedicaoVolume(r) {
+    const t = (v) => String(v == null ? '' : v).trim();
+    const total = Math.max(1, Math.floor(Number(r.total_volumes) || 1));
+    const vol = Math.max(1, Math.min(total, Math.floor(Number(r.volume) || 1)));
+    const transp = /retira/i.test(t(r.transportadora)) ? 'RETIRA FOB' : t(r.transportadora);
+    return {
+      remetente_txt: `REMETENTE: ${REMETENTE.nome}`,
+      remetente_end: `Endereço: ${REMETENTE.endereco}`,
+      nf_txt: `NOTA FISCAL: ${t(r.nf)}`,
+      destinatario_txt: `DESTINATÁRIO: ${t(r.destinatario)}`,
+      transportadora_txt: transp ? `TRANSPORTADORA: ${transp}` : '',
+      endereco_txt: t(r.endereco) ? `ENDEREÇO: ${enderecoLimpo(r.endereco)}` : '',
+      volume_txt: `VOLUME ${vol} / ${total}`,
+      pedido_txt: t(r.pedido),
     };
   }
 
@@ -290,6 +319,26 @@
       ],
     },
     {
+      // largura_mm × altura_mm = a etiqueta física (100 × 150, rolo em pé). O desenho é feito DEITADO (150 × 100, como a etiqueta
+      // de hoje) e girado 90° na impressão: as coordenadas dos elementos ficam no desenho deitado. Só imprime pelo navegador
+      // (o ZPL não gira QR/imagem) e ainda não pode ser copiado/editado.
+      id: 'EXPEDICAO_100x150', tipo: 'EXPEDICAO', nome: 'Expedição — volume da NF (100 × 150)', largura_mm: 100, altura_mm: 150, girar: 90,
+      proposito: 'Etiqueta de volume da expedição: remetente, nº da NF, destinatário, transportadora, endereço, volume n/N e nº do pedido na faixa preta. Rolo 100 × 150 mm.',
+      campos: ['remetente_txt', 'remetente_end', 'nf_txt', 'destinatario_txt', 'transportadora_txt', 'endereco_txt', 'volume_txt', 'pedido_txt'],
+      elementos: [
+        { tipo: 'imagem', src: 'logo', x: 6, y: 6, w: 24, h: 5 },
+        { tipo: 'texto', campo: '{remetente_txt}', x: 6, y: 14, w: 114, h: 5.2, alinhamento: 'centro' },
+        { tipo: 'texto', campo: '{remetente_end}', x: 6, y: 21, w: 114, h: 3.8, linhas: 2, alinhamento: 'centro', peso: 'normal' },
+        { tipo: 'texto', campo: '{nf_txt}', x: 6, y: 33, w: 114, h: 10, alinhamento: 'centro' },
+        { tipo: 'texto', campo: '{destinatario_txt}', x: 6, y: 48, w: 114, h: 4.4, linhas: 2, peso: 'normal' },
+        { tipo: 'texto', campo: '{transportadora_txt}', x: 6, y: 62, w: 114, h: 4.6 },
+        { tipo: 'texto', campo: '{endereco_txt}', x: 6, y: 71, w: 114, h: 4.2, linhas: 3, peso: 'normal' },
+        { tipo: 'texto', campo: '{volume_txt}', x: 6, y: 90, w: 114, h: 6.5, alinhamento: 'dir' },
+        { tipo: 'caixa', preenchido: true, x: 124, y: 6, w: 20, h: 90 },
+        { tipo: 'texto', campo: '{pedido_txt}', rot: 90, cor: 'branco', x: 124, y: 6, w: 20, h: 90, tam: 13 },
+      ],
+    },
+    {
       id: 'PALETE_100x50', tipo: 'PALETE', nome: 'Palete — conteúdo e origem', largura_mm: 100, altura_mm: 50,
       proposito: 'Identifica um palete inteiro: código, P.I./embarque e os itens com quantidade. Não baixa estoque nem escreve no Omie.',
       campos: ['titulo', 'codigo', 'origem', 'data_txt', 'itens_txt', 'total_txt', 'qr', 'barras'],
@@ -380,6 +429,7 @@
       id: 'C:' + l.id, tipo: l.tipo, nome: l.nome, largura_mm: Number(l.largura_mm), altura_mm: Number(l.altura_mm),
       proposito: 'Modelo da empresa (cópia de ' + l.base_id + ').', campos: l.campos || [], elementos: l.elementos || [],
       empresa: true, ativo: l.ativo !== false, base_id: l.base_id, uuid: l.id,
+      girar: (MODELOS.find((m) => m.id === l.base_id) || {}).girar,
     }));
   }
   const modeloPorId = (id) => MODELOS.find((m) => m.id === id) || CUSTOM.find((m) => m.id === id) || null;
@@ -480,14 +530,17 @@
   function adaptarModelo(modelo, largura, altura, opcoes) {
     const Lm = Number(modelo.largura_mm), Am = Number(modelo.altura_mm);
     if (Lm === Number(largura) && Am === Number(altura)) return { modelo, escala: 1, ajustado: false };
-    let s = Math.min(largura / Lm, altura / Am);
+    // Modelo girado: o desenho fica deitado (Am × Lm), então a escala e o centramento são calculados nesse quadro.
+    const g = !!modelo.girar;
+    const Ld = g ? Am : Lm, Ad = g ? Lm : Am, Lt = g ? altura : largura, At = g ? largura : altura;
+    let s = Math.min(Lt / Ld, At / Ad);
     if (opcoes && opcoes.ampliar === false) s = Math.min(1, s);
-    const dx = (largura - Lm * s) / 2, dy = (altura - Am * s) / 2;
+    const dx = (Lt - Ld * s) / 2, dy = (At - Ad * s) / 2;
     const r = (v) => Math.round(v * 1000) / 1000;
     const elementos = (modelo.elementos || []).map((el) => {
       const o = Object.assign({}, el);
       o.x = r(el.x * s + dx); o.y = r(el.y * s + dy);
-      for (const k of ['w', 'h', 'esp']) if (o[k] != null) o[k] = r(o[k] * s);
+      for (const k of ['w', 'h', 'esp', 'tam']) if (o[k] != null) o[k] = r(o[k] * s);
       return o;
     });
     return { modelo: Object.assign({}, modelo, { largura_mm: Number(largura), altura_mm: Number(altura), elementos }), escala: s, ajustado: true };
@@ -542,6 +595,7 @@
   /* opcoes: { dpi = 203, utf8 = true, copias = 1 } -> { zpl, avisos[] } (uma etiqueta; ^PQ repete as cópias) */
   function renderZPL(modelo, dados, opcoes) {
     const o = Object.assign({ dpi: 203, utf8: true, copias: 1 }, opcoes || {});
+    if (modelo.girar) return { zpl: '', avisos: ['Este modelo é girado e só imprime pelo diálogo do navegador.'] };
     const d = (mm) => mmParaDots(mm, o.dpi);
     const z = ['^XA'];
     if (o.utf8) z.push('^CI28');
@@ -555,6 +609,7 @@
      Cada linha vira um formato ZPL com a largura do rolo inteiro; linhas seguidas iguais usam ^PQ.
      itens: [{ dados, copias }] -> { blocos: [zpl por linha (ou grupo de linhas iguais)], avisos[], etiquetas, linhas } */
   function renderZPLLinhas(modelo, itens, opcoes) {
+    if (modelo.girar) return { blocos: [], avisos: ['Este modelo é girado e só imprime pelo diálogo do navegador.'], etiquetas: 0, linhas: 0 };
     const o = Object.assign({ dpi: 203, utf8: true, colunas: 1, espaco: 3 }, opcoes || {});
     const d = (mm) => mmParaDots(mm, o.dpi);
     const cols = Math.max(1, Math.floor(Number(o.colunas) || 1));
@@ -608,27 +663,75 @@
     if (out.length > linhas) { out.length = linhas; out[linhas - 1] = out[linhas - 1].slice(0, Math.max(1, maxChars - 1)) + '…'; }
     return out;
   }
+  // Largura estimada de um texto em Arial (em múltiplos do corpo da letra): maiúscula é larga, minúscula é estreita. Só para modelos girados.
+  function larguraEm(texto, negrito) {
+    let w = 0;
+    for (const c of String(texto)) {
+      if (c === ' ') w += 0.28;
+      else if (/[0-9]/.test(c)) w += 0.56;
+      else if (/[A-ZÀ-Ú]/.test(c)) w += negrito ? 0.72 : 0.67;
+      else if (/[a-zà-ú]/.test(c)) w += negrito ? 0.56 : 0.5;
+      else w += 0.34;
+    }
+    return w;
+  }
+  function quebrarPorLargura(texto, larguraMm, corpoMm, negrito, linhas) {
+    const cabe = (t) => larguraEm(t, negrito) * corpoMm <= larguraMm + 0.01;
+    const out = []; let atual = '';
+    for (const pal of String(texto).split(/\s+/).filter(Boolean)) {
+      const tent = atual ? atual + ' ' + pal : pal;
+      if (cabe(tent)) atual = tent; else { if (atual) out.push(atual); atual = pal; }
+    }
+    if (atual) out.push(atual);
+    if (out.length > linhas) {
+      out.length = linhas;
+      let u = out[linhas - 1];
+      while (u.length > 1 && !cabe(u + '…')) u = u.slice(0, -1);
+      out[linhas - 1] = u + '…';
+    }
+    return out;
+  }
   /* opcoes.barcode(tipo, texto) -> string <svg> (tipo 'qr' | 'code128'); sem ela, desenha um retângulo de aviso. */
   function renderSVG(modelo, dados, opcoes) {
     const bc = opcoes && opcoes.barcode;
     const W = modelo.largura_mm, H = modelo.altura_mm;
+    const g = modelo.girar ? Number((opcoes && opcoes.girar) || modelo.girar) : 0;   // modelo girado: 90 = horário, 270 = anti-horário
     const p = [`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 ${W} ${H}" width="${W}mm" height="${H}mm" font-family="Arial, Helvetica, sans-serif">`,
       `<rect x="0" y="0" width="${W}" height="${H}" fill="#fff"/>`];
+    if (g) p.push(g === 270 ? `<g transform="translate(0 ${H}) rotate(-90)">` : `<g transform="translate(${W} 0) rotate(90)">`);
     for (const el of modelo.elementos) {
       if (el.tipo === 'caixa') {
-        p.push(`<rect x="${el.x}" y="${el.y}" width="${el.w}" height="${el.h}" fill="none" stroke="#000" stroke-width="${el.esp || 0.4}"/>`);
+        p.push(el.preenchido
+          ? `<rect x="${el.x}" y="${el.y}" width="${el.w}" height="${el.h}" fill="#000"/>`
+          : `<rect x="${el.x}" y="${el.y}" width="${el.w}" height="${el.h}" fill="none" stroke="#000" stroke-width="${el.esp || 0.4}"/>`);
+      } else if (el.tipo === 'imagem') {
+        if (el.src === 'logo') p.push(`<image x="${el.x}" y="${el.y}" width="${el.w}" height="${el.h}" preserveAspectRatio="xMinYMid meet" href="${LOGO_PRETO}"/>`);
       } else if (el.tipo === 'linha') {
         p.push(`<rect x="${el.x}" y="${el.y}" width="${el.w}" height="${el.esp || 0.4}" fill="#000"/>`);
       } else if (el.tipo === 'texto') {
         const t = aplicar(el.campo, dados);
         if (!t.trim()) continue;
+        const peso = el.peso === 'normal' ? 400 : 700, cor = el.cor === 'branco' ? '#fff' : '#000';
+        if (el.rot === 90) {   // texto na vertical, numa linha só, centrado na caixa (w × h); encolhe se não couber no comprimento
+          const tam = Math.min(el.tam || el.w * 0.7, el.h / (t.length * 0.62));
+          const cx = el.x + el.w / 2, cy = el.y + el.h / 2;
+          p.push(`<text x="${num(cx)}" y="${num(cy)}" font-size="${num(tam)}" font-weight="${peso}" fill="${cor}" text-anchor="middle" dominant-baseline="central" transform="rotate(90 ${num(cx)} ${num(cy)})">${escXml(t)}</text>`);
+          continue;
+        }
         const linhas = el.linhas || 1;
-        const maxChars = Math.max(1, Math.floor(el.w / (el.h * 0.55))) * 1;   // mesma regra do ZPL: a prévia corta onde a impressora corta
-        const partes = quebrar(t, maxChars, linhas);
+        let corpo = el.h, partes;
+        if (modelo.girar) {   // modelos só de navegador: mede a largura real do texto e encolhe a letra de linha única antes de cortar
+          const negrito = peso === 700;
+          if (linhas === 1 && larguraEm(t, negrito) * corpo > el.w) corpo = Math.max(el.w / larguraEm(t, negrito), el.h * 0.6);
+          partes = quebrarPorLargura(t, el.w, corpo, negrito, linhas);
+        } else {
+          const maxChars = Math.max(1, Math.floor(el.w / (el.h * 0.55))) * 1;   // mesma regra do ZPL: a prévia corta onde a impressora corta
+          partes = quebrar(t, maxChars, linhas);
+        }
         const anc = el.alinhamento === 'dir' ? 'end' : el.alinhamento === 'centro' ? 'middle' : 'start';
         const tx = el.alinhamento === 'dir' ? el.x + el.w : el.alinhamento === 'centro' ? el.x + el.w / 2 : el.x;
         partes.forEach((linha, i) => {
-          p.push(`<text x="${num(tx)}" y="${num(el.y + el.h * 0.82 + i * el.h * 1.15)}" font-size="${num(el.h)}" font-weight="700" text-anchor="${anc}">${escXml(linha)}</text>`);
+          p.push(`<text x="${num(tx)}" y="${num(el.y + el.h * 0.82 + i * el.h * 1.15)}" font-size="${num(corpo)}" font-weight="${peso}" fill="${cor}" text-anchor="${anc}">${escXml(linha)}</text>`);
         });
       } else if (el.tipo === 'qr' || el.tipo === 'code128') {
         const dado = aplicar(el.campo, dados);
@@ -639,6 +742,7 @@
         p.push(emb || `<rect x="${el.x}" y="${el.y}" width="${el.w}" height="${h}" fill="#eee" stroke="#999" stroke-width="0.2"/><text x="${el.x + 1}" y="${el.y + h / 2}" font-size="2.5" fill="#666">${el.tipo === 'qr' ? 'QR' : 'Code 128'}</text>`);
       }
     }
+    if (g) p.push('</g>');
     p.push('</svg>');
     return p.join('');
   }
@@ -656,7 +760,7 @@
       const dados = (listaDados || [])[c];
       if (!dados) continue;
       const x = num(c * (L + esp) + (Number(o.desl_x_mm) || 0)), y = num(Number(o.desl_y_mm) || 0);
-      const inner = renderSVG(modelo, dados, { barcode: o.barcode }).replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
+      const inner = renderSVG(modelo, dados, { barcode: o.barcode, girar: o.girar }).replace(/^[\s\S]*?<svg[^>]*>/, '').replace(/<\/svg>\s*$/, '');
       p.push(`<svg x="${x}" y="${y}" width="${L}" height="${A}" viewBox="0 0 ${L} ${A}">${inner}</svg>`);
     }
     if (o.moldura) for (let c = 0; c < cols; c++) p.push(`<rect x="${num(c * (L + esp))}" y="0" width="${L}" height="${A}" fill="none" stroke="#9aa" stroke-width="0.3" stroke-dasharray="1.5 1"/>`);
@@ -687,7 +791,7 @@
   window.EtiquetasCalc = {
     DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo, registrarModelos, modelosDaEmpresa, validarModelo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
-    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, renderSVG, renderSVGLinha, htmlImpressao,
+    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, LOGO_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, renderSVG, renderSVGLinha, htmlImpressao,
     ROLO_LIM, geometriaRolo, adaptarModelo,
   };
 }());

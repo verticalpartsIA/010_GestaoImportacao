@@ -154,7 +154,7 @@ test.describe('Etiquetas', () => {
     }
   });
 
-  test('aba Modelos mostra os 11 modelos padrão com prévia', async ({ page }) => {
+  test('aba Modelos mostra os 12 modelos padrão com prévia', async ({ page }) => {
     await page.addInitScript(COM_ALCADA);
     await page.goto('/logistica/etiquetas/modelos');
     await expect(page.getByText('Endereço — viga horizontal', { exact: true })).toBeVisible({ timeout: 60_000 });
@@ -166,7 +166,36 @@ test.describe('Etiquetas', () => {
     // só o SVG de cada prévia (div > svg); o SVG aninhado da etiqueta dentro dele não conta
     await expect(page.locator('div > svg[viewBox="0 0 100 50"]')).toHaveCount(9, { timeout: 20_000 });   // 8 padrão + Separação deitada
     await expect(page.locator('div > svg[viewBox="0 0 100 100"]')).toHaveCount(1);
-    await expect(page.locator('div > svg[viewBox="0 0 100 150"]')).toHaveCount(1);
+    await expect(page.locator('div > svg[viewBox="0 0 100 150"]')).toHaveCount(2);   // Separação 100 × 150 + Expedição (girada)
+    await expect(page.getByText('Expedição — volume da NF (100 × 150)', { exact: true })).toBeVisible();
+  });
+
+  test('Expedição: escolhe a NF, pega os volumes dela e mostra a etiqueta girada no rolo 100 × 150', async ({ page }) => {
+    await page.addInitScript(() => {
+      let valor;
+      Object.defineProperty(window, 'EtiquetasStore', {
+        configurable: true,
+        get() { return valor; },
+        set(v) {
+          v.temCapacidade = async () => true;
+          v.listarNotasFaturadas = async () => ({ erro: null, notas: [{ codigo_pedido: 1, numero_pedido: '28988', numero_nf: '22019', cliente_nome: 'BAR DO CUSCUZ E RESTAURANTE LTDA',
+            cliente_endereco: 'RUA DOUTOR SEVERINO RIBEIRO CRUZ, 771, CENTRO, CAMPINA GRANDE (PB)/PB, 58400258', transportadora_nome: 'CLIENTE RETIRA', volumes: 19, data_faturamento: '2026-10-20' }] });
+          valor = v;
+        },
+      });
+    });
+    await page.goto('/logistica/etiquetas/gerar');
+    await page.getByRole('button', { name: 'Expedição (NF)', exact: true }).click({ timeout: 60_000 });
+    await page.getByLabel('Largura da etiqueta (mm)', { exact: true }).fill('100');
+    await page.getByLabel('Comprimento da etiqueta (mm)', { exact: true }).fill('150');
+    await page.locator('tr', { hasText: '22019' }).click();
+    await expect(page.getByLabel('Total de volumes da NF')).toHaveValue('19');
+    await expect(page.getByRole('button', { name: /Imprimir 19 etiquetas/ })).toBeEnabled();
+    const previa = page.locator('div > svg[viewBox="0 0 100 150"]').first();
+    await expect(previa).toContainText('22019');
+    await expect(previa).toContainText('VOLUME 1 / 19');
+    await expect(previa).toContainText('28988');
+    await expect(page.getByLabel('Sentido da impressão')).toBeVisible();
   });
 
   test('tipos da fase 2 e 4 abrem sem erro na aba Gerar', async ({ page }) => {
