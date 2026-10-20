@@ -277,6 +277,37 @@
     });
   }
 
+  /* ---------- "Separar por tipo" numa proposta que já tem texto digitado no bloco único ----------
+     Cria os perfis (montarPerfis) e NÃO joga fora o que o vendedor digitou: o bloco global é de UM dos tipos — o perfil
+     cuja cabine herdada do Formulário é a mesma digitada ("Modelo da Cabine") fica com os acabamentos e o texto digitados.
+     Sem perfil correspondente nada é sobrescrito (todos nascem do Formulário + texto-base) e o bloco global fica
+     guardado, só deixa de aparecer. Devolve { perfis, origemId, origemNome }; perfis = [] se não há 2+ tipos. */
+  function perfisAPartirDaProposta(elevador, fontes) {
+    const O = window.PropostaOpcoes;
+    const engine = window.PropostaAcabamentosEngine;
+    const ed = elevador || {};
+    const perfis = montarPerfis(fontes || { unidades: [], cotacao: null }, ed.especificacoes || []);
+    if (!perfis.length || !O || !engine) return { perfis, origemId: null, origemNome: null };
+    const modeloDe = (cats) => {
+      const c = (cats || []).flatMap((x) => x.campos || []).find((f) => f.k === 'modeloCabine' && f.ativo);
+      return c ? String(c.valor || '').trim() : '';
+    };
+    const catsGlobais = (Array.isArray(ed.acabamentosCats) && ed.acabamentosCats.length) ? ed.acabamentosCats : [engine.catNativaFromLegacy(ed.acabamentos)];
+    const digitado = O.linhasAcabamento(ed).length > 0;
+    const modeloGlobal = digitado ? (modeloDe(catsGlobais) || String((ed.acabamentos || {}).modeloCabine || '').trim()) : '';
+    const origem = modeloGlobal ? perfis.find((p) => modeloDe(p.acabamentosCats) === modeloGlobal) : null;
+    if (!origem) return { perfis, origemId: null, origemNome: null };
+    const clone = (x) => JSON.parse(JSON.stringify(x));
+    origem.acabamentosCats = clone(catsGlobais);
+    if ((ed.beneficios || []).length) origem.beneficios = clone(ed.beneficios);
+    if ((ed.diferenciais || []).length) origem.diferenciais = clone(ed.diferenciais);
+    if ((ed.recursosNomeados || []).length) origem.recursosNomeados = clone(ed.recursosNomeados);
+    if (Object.values(ed.caracteristicasEquip || {}).some(Boolean)) origem.caracteristicasEquip = clone(ed.caracteristicasEquip);
+    if (String(ed.textoModelos || '').trim()) origem.textoModelos = ed.textoModelos;
+    delete origem.conteudoCats; // o editor refaz as categorias a partir dos campos acima
+    return { perfis, origemId: origem.id, origemNome: origem.nome };
+  }
+
   /* ---------- Prefill no formato do PropostaEditor ---------- */
   function montarPrefill(fontes) {
     if (!fontes || !fontes.encontrado) return null;
@@ -509,5 +540,5 @@
     return partes.join(' · ');
   }
 
-  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, montarPerfis, montarBlocoEscadaEsteira };
+  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, montarPerfis, perfisAPartirDaProposta, montarBlocoEscadaEsteira };
 }());

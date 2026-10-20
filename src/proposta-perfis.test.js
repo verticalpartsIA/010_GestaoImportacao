@@ -171,3 +171,47 @@ test('conteudo-engine: garantirCatsPerfil só traz as 4 categorias do perfil; ca
   assert.equal(leg.caracteristicasEquip.comando, 'cmd');
   assert.deepEqual(leg.recursosNomeados, [{ nome: 'N', desc: 'D' }]);
 });
+
+/* ---------- Fase 3: "Separar por tipo" em proposta que já tem texto digitado (caso da 990) ---------- */
+const campo = (nome, valor, k) => ({ k, nome, tipo: 'text', ativo: true, valor });
+const catGlobal = (modelo) => [{ id: 'acab_nativos', nome: 'Acabamentos', custom: false, campos: [
+  campo('Modelo da Cabine', modelo, 'modeloCabine'), campo('Piso da Cabina', 'Mármore Resinado', 'pisoCabina'),
+] }];
+
+test('perfisAPartirDaProposta (990): o que foi digitado fica no tipo de origem (cabine igual); os outros nascem do Formulário', () => {
+  const w = carregar();
+  const ed = { especificacoes: esp990, acabamentosCats: catGlobal('VP-200'), beneficios: ['Texto digitado'], textoModelos: 'Linha digitada',
+    recursosNomeados: [{ nome: 'R', desc: 'digitado' }], caracteristicasEquip: { comando: 'cmd digitado' } };
+  const r = w.PropostaHeranca.perfisAPartirDaProposta(ed, { unidades: unidades990, cotacao: null });
+  assert.equal(r.origemNome, 'Elevadores de Passageiros');
+  const pass = r.perfis.find((p) => p.tipo === 'Passageiro');
+  const carga = r.perfis.find((p) => p.tipo === 'Carga');
+  const linhas = (p) => Object.fromEntries(w.PropostaOpcoes.perfisAcabamento({ perfis: [p] })[0].linhas);
+  assert.equal(linhas(pass)['Piso da Cabina'], 'Mármore Resinado');          // digitado
+  assert.deepEqual(pass.beneficios, ['Texto digitado']);
+  assert.equal(pass.textoModelos, 'Linha digitada');
+  assert.equal(pass.caracteristicasEquip.comando, 'cmd digitado');
+  assert.equal(linhas(carga)['Modelo da Cabine'], 'VP-301');                 // herdado do Formulário
+  assert.ok(!carga.beneficios.includes('Texto digitado'));                   // texto do passageiro NÃO vaza p/ carga
+  assert.notEqual(carga.textoModelos, 'Linha digitada');
+});
+
+test('perfisAPartirDaProposta: sem perfil correspondente nada é sobrescrito; sem digitação só cria os perfis', () => {
+  const w = carregar();
+  const fontes = { unidades: unidades990, cotacao: null };
+  const semMatch = w.PropostaHeranca.perfisAPartirDaProposta({ especificacoes: esp990, acabamentosCats: catGlobal('VP-XXX'), beneficios: ['digitado'] }, fontes);
+  assert.equal(semMatch.origemId, null);
+  assert.ok(semMatch.perfis.every((p) => !p.beneficios.includes('digitado')));
+  const vazio = w.PropostaHeranca.perfisAPartirDaProposta({ especificacoes: esp990 }, fontes);
+  assert.equal(vazio.perfis.length, 3);
+  assert.equal(vazio.origemId, null);
+});
+
+test('perfisAPartirDaProposta: 1 tipo só → sem perfis; Formulário indisponível → perfis sem acabamentos (não inventa)', () => {
+  const w = carregar();
+  const um = w.PropostaHeranca.perfisAPartirDaProposta({ especificacoes: [{ carac: 'Carga', codigos: ['X-1'] }] }, { unidades: [], cotacao: null });
+  assert.deepEqual(um.perfis, []);
+  const sem = w.PropostaHeranca.perfisAPartirDaProposta({ especificacoes: esp990 }, { unidades: [], cotacao: null });
+  assert.equal(sem.perfis.length, 3);
+  assert.deepEqual(w.PropostaOpcoes.perfisAcabamento({ perfis: sem.perfis }), []);
+});

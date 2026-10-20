@@ -487,6 +487,53 @@ function S_AcabAddCategoryModal({ onAdd, onClose }) {
   );
 }
 
+/* "Separar por tipo": proposta com equipamentos de tipos diferentes (Carga / Passageiro / Panorâmico) mas um único bloco de
+   acabamentos/texto. Cria os perfis a partir do Formulário (+ texto-base) e preserva o que o vendedor já digitou no perfil
+   de origem. Aparece só quando há 2+ tipos e ainda não há perfis; "Voltar ao bloco único" desfaz (o bloco global nunca
+   é apagado, só deixa de valer enquanto há perfis). */
+function S_SepararPorTipo({ d, set, perfis }) {
+  const [busy, setBusy] = React.useState(false);
+  const O = window.PropostaOpcoes;
+  const H = window.PropostaHeranca;
+  const tipos = O ? O.contagemPorTipo(d.elevador).filter((x) => O.tipoChave(x.tipo)) : [];
+  if (perfis.length > 0) {
+    return (
+      <div style={{ marginBottom: 10 }}>
+        <button type="button" className="pe-acab-addfield" style={{ marginTop: 0 }}
+          onClick={() => { if (window.confirm("Voltar ao bloco único? Os perfis por tipo deixam de valer (o texto digitado nelas se perde) e o bloco único anterior volta a aparecer.")) set("elevador.perfis", []); }}>
+          ↩ Voltar ao bloco único
+        </button>
+      </div>
+    );
+  }
+  if (!O || !H || tipos.length < 2) return null;
+  const nomes = tipos.map((x) => O.nomePerfil(x.tipo)).join(", ").replace(/, ([^,]*)$/, " e $1");
+  const separar = async () => {
+    if (!window.confirm(`Separar por tipo (${nomes})? Cada tipo passa a ter os seus acabamentos e textos, herdados do Formulário. O que já está digitado fica no tipo de origem (quando der para identificar) e nada é apagado.`)) return;
+    setBusy(true);
+    try {
+      let fontes = null;
+      const num = String(d.numeroCotacao || "").trim();
+      if (num) { try { const f = await H.buscarFontes(num); fontes = f && f.encontrado ? f : null; } catch (e) { fontes = null; } }
+      const r = H.perfisAPartirDaProposta(d.elevador, fontes || { unidades: [], cotacao: null });
+      if (!r.perfis.length) { window.toast?.("Não encontrei 2 ou mais tipos de equipamento nas especificações.", "warning"); return; }
+      set("elevador.perfis", r.perfis);
+      window.toast?.(
+        (fontes ? "Separado por tipo com os dados do Formulário." : "Separado por tipo (sem Formulário encontrado — acabamentos em branco).")
+        + (r.origemNome ? ` O que você já digitou ficou em "${r.origemNome}".` : " Revise cada aba."),
+        "success");
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="pe-hint" style={{ marginBottom: 12, padding: "10px 12px", border: "1px solid #FFC72C", borderRadius: 8, background: "#FFF9E5" }}>
+      Esta proposta tem equipamentos de tipos diferentes ({nomes}) mas um único conjunto de acabamentos e texto — o que vale para um tipo aparece para todos.{" "}
+      <button type="button" className="pe-acab-addfield" style={{ marginTop: 6, display: "block" }} disabled={busy} onClick={separar}>
+        {busy ? "Separando…" : "Separar por tipo"}
+      </button>
+    </div>
+  );
+}
+
 /* Categorias/campos dinâmicos com checkbox "ativo" — mesmo padrão da Ficha
    Técnica (engenharia/ficha-tecnica): o vendedor marca o que quer que entre
    na proposta e pode criar campo/categoria novos, que ficam disponíveis
@@ -582,6 +629,7 @@ function S_Acabamentos({ d, set }) {
 
   return (
     <div className="pe-acab">
+      <S_SepararPorTipo d={d} set={set} perfis={perfis}/>
       {perfil && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }} role="tablist" aria-label="Perfil por tipo de equipamento">
@@ -1197,6 +1245,7 @@ function S_Conteudo({ d, set }) {
 
   return (
     <div className="pe-acab">
+      <S_SepararPorTipo d={d} set={set} perfis={perfis}/>
       {perfis.length > 0 && (
         <div style={{ marginBottom: 14 }}>
           <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }} role="tablist" aria-label="Conteúdo por tipo de equipamento">
