@@ -321,3 +321,24 @@ test('impressão pelo navegador: o CSS de tamanho vale só para o SVG da página
   assert.match(h, /\.pg>svg\{/);
   assert.doesNotMatch(h, /\.pg svg\{/);
 });
+
+test('Expedição: etiqueta de volume da NF (modelo girado, rolo 100 x 150)', () => {
+  const m = E.modeloPorId('EXPEDICAO_100x150');
+  assert.ok(m && m.girar === 90);
+  assert.equal(m.largura_mm, 100); assert.equal(m.altura_mm, 150);
+  const d = E.dadosExpedicaoVolume({ nf: '22019', pedido: '28988', volume: 13, total_volumes: 19, destinatario: 'BAR DO CUSCUZ E RESTAURANTE LTDA', transportadora: 'CLIENTE RETIRA',
+    endereco: 'RUA DOUTOR SEVERINO RIBEIRO CRUZ, 771, CENTRO, CAMPINA GRANDE (PB)/PB, 58400258' });
+  assert.equal(d.nf_txt, 'NOTA FISCAL: 22019');
+  assert.equal(d.volume_txt, 'VOLUME 13 / 19');
+  assert.equal(d.pedido_txt, '28988');
+  assert.equal(d.transportadora_txt, 'TRANSPORTADORA: RETIRA FOB');
+  assert.match(d.endereco_txt, /CAMPINA GRANDE\/PB, CEP 58400-258$/);
+  assert.match(E.renderSVG(m, d, {}), /rotate\(90\)/);
+  assert.match(E.renderSVG(m, d, { girar: 270 }), /rotate\(-90\)/);
+  assert.equal(E.renderZPL(m, d).zpl, '');                  // modelo girado só sai pelo navegador
+  assert.deepEqual(E.renderZPLLinhas(m, [{ dados: d, copias: 2 }], {}).blocos, []);
+  // rolo menor: a escala é calculada no desenho deitado (150 × 100), não na folha em pé
+  const a = E.adaptarModelo(m, 100, 100);
+  assert.ok(Math.abs(a.escala - 100 / 150) < 1e-9);
+  assert.equal(E.adaptarModelo(m, 100, 150).ajustado, false);
+});

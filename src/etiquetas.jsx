@@ -56,6 +56,7 @@ const ETQ_TIPOS = [
   { id: 'ITEM', nome: 'Item', modelo: 'ITEM_100x50', desc: 'Produto: QR e Code 128 com o código' },
   { id: 'RECEBIMENTO', nome: 'Recebimento', modelo: 'RECEBIMENTO_100x50', desc: 'Carga que chegou: P.I., fornecedor, item e quantidade' },
   { id: 'SEPARACAO', nome: 'Separação', modelo: 'SEPARACAO_100x100', desc: 'Volume n/N de um pedido de venda (100 × 50, 100 × 100 ou 100 × 150)' },
+  { id: 'EXPEDICAO', nome: 'Expedição (NF)', modelo: 'EXPEDICAO_100x150', desc: 'Volumes 1/N de uma NF emitida (rolo 100 × 150): destinatário, transportadora, nº do pedido' },
   { id: 'PALETE', nome: 'Palete', modelo: 'PALETE_100x50', desc: 'Palete inteiro: código, P.I. e itens com quantidade' },
   { id: 'IDTAG_EQUIPAMENTO', nome: 'ID-TAG', modelo: 'IDTAG_100x50', desc: 'Identifica cada elevador (VPEL-EL0985-1…)' },
   { id: 'OP_QUADRO', nome: 'OP / série do quadro', modelo: 'OP_QUADRO_100x50', desc: 'OP do PCP e nº de série do quadro de comando' },
@@ -69,6 +70,8 @@ function etqEntradaRolo(cfg) {
   const c = cfg || {};
   return { largura: tem(c.largura_mm) ? c.largura_mm : leg.largura, altura: tem(c.altura_mm) ? c.altura_mm : leg.altura, colunas: tem(c.colunas) ? c.colunas : 1, espaco: tem(c.espaco_mm) ? c.espaco_mm : 3, deslX: tem(c.desl_x_mm) ? c.desl_x_mm : 0, deslY: tem(c.desl_y_mm) ? c.desl_y_mm : 0 };
 }
+const etqChaveGirar = 'vp_etiquetas_girar';
+const etqLerGirar = () => { try { return localStorage.getItem(etqChaveGirar) === '270' ? 270 : 90; } catch (e) { return 90; } };
 const etqChaveDv = 'vp_etiquetas_dv';
 const etqLerDv = () => { try { return localStorage.getItem(etqChaveDv) === '1'; } catch (e) { return false; } };
 const etqSalvarDv = (v) => { try { localStorage.setItem(etqChaveDv, v ? '1' : '0'); } catch (e) { /* vale só nesta sessão */ } };
@@ -76,10 +79,10 @@ const etqData = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { 
 const etqToast = (m) => { if (window.toast) window.toast(m); };
 
 /* Pré-visualização: SVG em mm do próprio modelo, com os mesmos dados que vão para a impressora. */
-function EtqPreview({ modelo, dados, largura, colunas, espaco, nota }) {
+function EtqPreview({ modelo, dados, largura, colunas, espaco, nota, girar }) {
   const { pronto, erro } = useEtqBwip();
   const cols = colunas || 1;
-  const html = React.useMemo(() => (modelo && dados ? ETQ_CALC().renderSVGLinha(modelo, Array.from({ length: cols }, () => dados), { barcode: pronto ? etqBarcode : null, colunas: cols, espaco, fluido: true, moldura: cols > 1 }) : ''), [modelo, dados, pronto, cols, espaco]);
+  const html = React.useMemo(() => (modelo && dados ? ETQ_CALC().renderSVGLinha(modelo, Array.from({ length: cols }, () => dados), { barcode: pronto ? etqBarcode : null, colunas: cols, espaco, fluido: true, moldura: cols > 1, girar: modelo.girar ? etqLerGirar() : undefined }) : ''), [modelo, dados, pronto, cols, espaco, girar]);
   if (!modelo || !dados) return <div style={{ color: 'var(--fg3)', fontSize: 13 }}>Selecione algo para ver a etiqueta.</div>;
   // Mesma proporção do rolo real: a largura da prévia acompanha o formato (rolo alto fica estreito) em vez de esticar.
   const Wtot = cols * modelo.largura_mm + (cols - 1) * (cols > 1 ? Number(espaco) || 0 : 0);
@@ -285,6 +288,19 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     const t = setTimeout(() => { S.listarPedidos(qPed).then(setPeds); }, 300);
     return () => clearTimeout(t);
   }, [tipo, qPed]);
+  /* Expedição: escolhe a NF já emitida; o nº de volumes vem da NF (editável) e imprime 1..N */
+  const [qNf, setQNf] = React.useState('');
+  const [nfs, setNfs] = React.useState({ notas: [], erro: null });
+  const [nfSel, setNfSel] = React.useState(null);
+  const [expTotal, setExpTotal] = React.useState(1);
+  const [expDe, setExpDe] = React.useState(1);
+  const [girarSentido, setGirarSentido] = React.useState(etqLerGirar());
+  const mudarGirar = (v) => { setGirarSentido(v); try { localStorage.setItem(etqChaveGirar, String(v)); } catch (e) { /* vale só nesta sessão */ } };
+  React.useEffect(() => {
+    if (tipo !== 'EXPEDICAO') return undefined;
+    const t = setTimeout(() => { S.listarNotasFaturadas(qNf).then(setNfs); }, 300);
+    return () => clearTimeout(t);
+  }, [tipo, qNf]);
   /* Palete: reaproveita a escolha da P.I. e dos itens do Recebimento */
   const [palCod, setPalCod] = React.useState('');
   const palCodigo = (palCod.trim() || (piSel ? `PAL-${piSel.numero_pi}-1` : '')).toUpperCase();
@@ -315,7 +331,12 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const sepN = Math.max(1, Math.min(99, Math.floor(Number(sepTotal) || 1)));
   const sepDados = (v) => C.dadosSeparacao({ pedido: pedSel.numero_pedido, volume: v, total_volumes: sepN, cliente: pedSel.cliente_nome, separador: sepPor, data: etqHoje() });
 
+  const expN = Math.max(1, Math.min(99, Math.floor(Number(expTotal) || 1)));
+  const expIni = Math.max(1, Math.min(expN, Math.floor(Number(expDe) || 1)));
+  const expDados = (v) => C.dadosExpedicaoVolume({ nf: nfSel.numero_nf, pedido: nfSel.numero_pedido, volume: v, total_volumes: expN, destinatario: nfSel.cliente_nome, transportadora: nfSel.transportadora_nome, endereco: nfSel.cliente_endereco });
+
   const linhasParaImprimir = () => {
+    if (tipo === 'EXPEDICAO') return Array.from({ length: expN - expIni + 1 }, (_, k) => expIni + k).map((v) => ({ ref: `NF ${nfSel.numero_nf} vol ${v}/${expN}`, dados: expDados(v), copias }));
     if (tipo === 'PALETE') return [{ ref: palCodigo, dados: palDados(), copias }];
     if (tipo === 'IDTAG_EQUIPAMENTO') return obraTag.obra.equipamentos.filter((c) => tagSel.has(c)).map((c) => ({ ref: c, dados: tagDados(c), copias }));
     if (tipo === 'OP_QUADRO') return [{ ref: opSel.numero, dados: opDados(), copias }];
@@ -331,7 +352,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     }
     return Array.from(selItem.values()).map((p) => ({ ref: p.codigo, dados: C.dadosItem(p), copias }));
   };
-  const nSel = tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
+  const nSel = tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'EXPEDICAO' ? (nfSel ? expN - expIni + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
   const primeiraRef = tipo === 'ENDERECO'
     ? (Array.from(selEnd)[0] || (filtrados[0] && filtrados[0].codigo))
     : (Array.from(selItem.keys())[0] || (achados.itens[0] && achados.itens[0].codigo));
@@ -342,13 +363,14 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
       if (tipo === 'OP_QUADRO') return opSel ? opDados() : null;
       if (tipo === 'AVARIA') return avItem ? avDados() : null;
       if (tipo === 'RECEBIMENTO') { const i = itensPi.find((x) => recSel.has(x.codigo_produto)) || itensPi[0]; return piSel && i ? recDados(i) : null; }
+      if (tipo === 'EXPEDICAO') return nfSel ? expDados(expIni) : null;
       if (tipo === 'SEPARACAO') return pedSel ? sepDados(Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1)))) : null;
       if (!primeiraRef) return null;
       if (tipo === 'ENDERECO') return C.dadosEndereco(primeiraRef, { dv: usarDv });
       const p = selItem.get(primeiraRef) || achados.itens.find((x) => x.codigo === primeiraRef);
       return p ? C.dadosItem(p) : null;
     } catch (e) { return null; }
-  }, [tipo, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor, palCod, obraTag, tagSel, opSel, opSerie, avQtd, avMotivo]);
+  }, [tipo, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor, nfSel, expN, expIni, palCod, obraTag, tagSel, opSel, opSerie, avQtd, avMotivo]);
 
   const copiasValidas = Math.max(1, Math.min(50, Math.floor(Number(copias) || 1)));
   const totalEtiquetas = nSel * copiasValidas;
@@ -480,6 +502,35 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
                 </>
               ) : <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Escolha uma P.I. para listar os itens.</div>}
             </>
+          ) : tipo === 'EXPEDICAO' ? (
+            <>
+              <input className="input" placeholder="Buscar NF, pedido ou cliente…" value={qNf} onChange={(e) => setQNf(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
+              {nfs.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>Não consegui buscar: {nfs.erro}</div> : null}
+              <div className="card table-wrap" style={{ maxHeight: 260, overflow: 'auto', marginBottom: 10 }}>
+                <table className="t pcp-grid">
+                  <thead><tr><th>NF</th><th>Pedido</th><th>Cliente</th><th>Transportadora</th><th>Volumes</th><th>Faturada em</th></tr></thead>
+                  <tbody>
+                    {nfs.notas.map((n) => (
+                      <tr key={n.codigo_pedido} onClick={() => { setNfSel(n); setExpTotal(n.volumes || 1); setExpDe(1); }} style={{ cursor: 'pointer', background: nfSel && nfSel.codigo_pedido === n.codigo_pedido ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
+                        <td><b style={{ fontWeight: 600 }}>{n.numero_nf}</b></td><td>{n.numero_pedido}</td><td>{n.cliente_nome || '—'}</td><td>{n.transportadora_nome || '—'}</td><td>{n.volumes ?? '—'}</td><td>{n.data_faturamento ? n.data_faturamento.split('-').reverse().join('/') : '—'}</td>
+                      </tr>
+                    ))}
+                    {!nfs.notas.length ? <tr><td colSpan={6} style={{ color: 'var(--fg3)' }}>Nenhuma NF faturada encontrada.</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+              {nfSel ? (
+                <>
+                  <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'flex-end' }}>
+                    <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Total de volumes da NF<input className="input" type="number" min="1" max="99" value={expTotal} onChange={(e) => setExpTotal(e.target.value)} style={{ width: 110 }}/></label>
+                    <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Imprimir a partir do volume<input className="input" type="number" min="1" max="99" value={expDe} onChange={(e) => setExpDe(e.target.value)} style={{ width: 110 }}/></label>
+                  </div>
+                  {!nfSel.volumes ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginTop: 6 }}>Esta NF não tem o número de volumes no Omie. Informe o total acima antes de imprimir.</div> : null}
+                  {nfSel.volumes && Number(expTotal) !== nfSel.volumes ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginTop: 6 }}>Atenção: a NF tem {nfSel.volumes} volume(s) no Omie e você está imprimindo para {expN}.</div> : null}
+                </>
+              ) : <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Escolha uma NF. O total de volumes vem do Omie e imprime 1/N … N/N.</div>}
+              <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>Feita para o rolo de 100 × 150 mm (informe-o em "Rolo carregado"). Só NF já emitida aparece aqui (pedido faturado no Omie). O destinatário e o endereço vêm do cadastro do pedido; confira com a NF. Imprime só pelo diálogo do navegador.</div>
+            </>
           ) : tipo === 'SEPARACAO' ? (
             <>
               <input className="input" placeholder="Buscar pedido por número ou cliente…" value={qPed} onChange={(e) => setQPed(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
@@ -584,7 +635,15 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
               </select>
             </label>
           ) : null}
-          <EtqPreview modelo={modeloRolo} dados={dadosPrevia} colunas={geo.colunas} espaco={geo.espaco} nota={notaAjuste}/>
+          {modelo.girar ? (
+            <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 8 }}>Sentido da impressão
+              <select className="input" aria-label="Sentido da impressão" style={{ width: 'auto' }} value={girarSentido} onChange={(e) => mudarGirar(Number(e.target.value))}>
+                <option value={90}>Topo da etiqueta à direita</option>
+                <option value={270}>Topo da etiqueta à esquerda</option>
+              </select>
+            </label>
+          ) : null}
+          <EtqPreview modelo={modeloRolo} dados={dadosPrevia} colunas={geo.colunas} espaco={geo.espaco} nota={notaAjuste} girar={girarSentido}/>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
             <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>Cópias de cada
               <input className="input" type="number" min="1" max="50" value={copias} onChange={(e) => setCopias(e.target.value)} style={{ width: 70 }}/>
@@ -611,6 +670,7 @@ const etqExemploDe = (m) => {
   return t === 'ENDERECO' ? C.dadosEndereco('R2A4', { dv: true })
     : t === 'RECEBIMENTO' ? C.dadosRecebimento({ data: '17/10/2026', embarque: '146', pi: 'SCVP260522-2', fornecedor: 'Ningbo Senchen', codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', quantidade: 40, unidade: 'UN', nf: '11082199' })
     : t === 'SEPARACAO' ? C.dadosSeparacao({ pedido: '30570', volume: 2, total_volumes: 5, cliente: 'AKAI KB MAGAZINE', separador: 'Tiago', data: '17/10/2026 14:32' })
+    : t === 'EXPEDICAO' ? C.dadosExpedicaoVolume({ nf: '22019', pedido: '28988', volume: 13, total_volumes: 19, destinatario: 'BAR DO CUSCUZ E RESTAURANTE LTDA', transportadora: 'CLIENTE RETIRA', endereco: 'RUA DOUTOR SEVERINO RIBEIRO CRUZ, 771, CENTRO, CAMPINA GRANDE (PB)/PB, 58400258' })
     : t === 'PALETE' ? C.dadosPalete({ codigo: 'PAL-SCVP260522-1', pi: 'SCVP260522-2', embarque: '146', data: '17/10/2026', itens: [{ codigo: 'VPEL-156', quantidade: 40 }, { codigo: 'VPEL-157', quantidade: 12 }] })
     : t === 'IDTAG_EQUIPAMENTO' ? C.dadosIdTag({ codigo: 'VPEL-EL0985-1', cliente: 'AKAI KB MAGAZINE', predio: 'Loja em Shopping', cidade: 'Praia Grande', uf: 'SP', cotacao: 985 })
     : t === 'OP_QUADRO' ? C.dadosOpQuadro({ numero: 'OP-0001', produto: 'VPEL-709b Quadro 30 kW 380 V', cliente: 'VITALTEC', serie: 'QC-2610-0007', data: '17/10/2026' })
@@ -788,7 +848,7 @@ function EtqModelos({ caps, empresa, recarregar }) {
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(420px, 1fr))', gap: 16 }}>
         {C.MODELOS.map((m) => card(m, m.tipo === 'TESTE' ? null : (
           <div style={{ marginTop: 8 }}>
-            <button className="btn btn--sm" disabled={!caps.editar_modelos} title={!caps.editar_modelos ? 'Falta a alçada para criar modelos da empresa.' : 'Cria uma cópia editável'} onClick={() => setCopiando({ base: m, nome: m.nome + ' — da empresa' })}>Copiar e personalizar</button>
+            <button className="btn btn--sm" disabled={!caps.editar_modelos || !!m.girar} title={m.girar ? 'Este modelo é girado: ainda não pode ser copiado.' : !caps.editar_modelos ? 'Falta a alçada para criar modelos da empresa.' : 'Cria uma cópia editável'} onClick={() => setCopiando({ base: m, nome: m.nome + ' — da empresa' })}>Copiar e personalizar</button>
           </div>
         )))}
       </div>
@@ -862,7 +922,7 @@ function EtiquetasPage() {
     // O modelo se ajusta ao rolo carregado. A etiqueta de teste nunca é ampliada (as réguas continuam valendo 10 e 50 mm).
     const ajuste = C.adaptarModelo(modeloBase, geo.largura, geo.altura, { ampliar: tipo !== 'TESTE' });
     const modelo = ajuste.modelo;
-    const viaZpl = escolha.adaptador === 'zebra-browser-print' && perfil.implementado;
+    const viaZpl = escolha.adaptador === 'zebra-browser-print' && perfil.implementado && !modelo.girar;   // modelo girado só sai pelo navegador
     const total = itens.reduce((n, it) => n + it.copias, 0);
     setOcupado(true);
     let erro = null, avisos = [];
@@ -883,7 +943,7 @@ function EtiquetasPage() {
         const lista = [];
         itens.forEach((it) => { for (let i = 0; i < it.copias; i++) lista.push(it.dados); });
         const paginas = [];
-        for (let i = 0; i < lista.length; i += geo.colunas) paginas.push(C.renderSVGLinha(modelo, lista.slice(i, i + geo.colunas), { barcode: etqBarcode, colunas: geo.colunas, espaco: geo.espaco, desl_x_mm: geo.deslX, desl_y_mm: geo.deslY }));
+        for (let i = 0; i < lista.length; i += geo.colunas) paginas.push(C.renderSVGLinha(modelo, lista.slice(i, i + geo.colunas), { barcode: etqBarcode, colunas: geo.colunas, espaco: geo.espaco, desl_x_mm: geo.deslX, desl_y_mm: geo.deslY, girar: modelo.girar ? etqLerGirar() : undefined }));
         await EI.imprimirNavegador(C.htmlImpressao(paginas, geo.larguraTotal, geo.altura));
       }
     } catch (e) { erro = e.message || String(e); }

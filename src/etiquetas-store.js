@@ -78,6 +78,24 @@
     } catch (e) { return { pedidos: [], erro: e.message }; }
   }
 
+  // NFs já emitidas no Omie (pedido faturado com nº de NF), para a etiqueta de volume da Expedição. Um registro por NF: um mesmo
+  // pedido com entrega parcial tem mais de uma NF. O nº de volumes e a transportadora vêm do próprio pedido.
+  async function listarNotasFaturadas(texto) {
+    const sb = sbCli();
+    if (!sb) return { notas: [], erro: 'Supabase indisponível.' };
+    try {
+      const { data, error } = await sb.from('pcp_pedidos')
+        .select('codigo_pedido, numero_pedido, numero_nf, cliente_nome, cliente_endereco, transportadora_nome, volumes, peso_bruto, data_faturamento')
+        .eq('faturado', true).eq('cancelado', false).not('numero_nf', 'is', null)
+        .order('data_faturamento', { ascending: false }).order('numero_nf', { ascending: false }).limit(300);
+      if (error) return { notas: [], erro: error.message };
+      const q = String(texto || '').trim().toLowerCase();
+      let notas = data || [];
+      if (q) notas = notas.filter((n) => [n.numero_nf, n.numero_pedido, n.cliente_nome].some((v) => String(v || '').toLowerCase().includes(q)));
+      return { notas: notas.slice(0, 60), erro: null };
+    } catch (e) { return { notas: [], erro: e.message }; }
+  }
+
   // OPs de quadro de comando (PCP) abertas ou concluídas recentes, para a etiqueta de OP/série.
   async function listarOPsQuadro(texto) {
     const sb = sbCli();
@@ -185,5 +203,5 @@
     } catch (e) { return { linhas: [], erro: e.message }; }
   }
 
-  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
+  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
 }());
