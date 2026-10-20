@@ -248,10 +248,23 @@
       const linhas = linhasAcabamento(e);
       return linhas.length ? [{ id: 'geral', nome: null, tipo: unico, codigos: [], rotulo: rotuloTipo(unico, 'Elevador de Passageiros'), linhas }] : [];
     }
-    return perfis.map((p) => ({
+    return juntarIguais(perfis.map((p) => ({
       id: p.id, nome: p.nome || nomePerfil(p.tipo), tipo: p.tipo || '', codigos: Array.isArray(p.codigos) ? p.codigos : [],
       rotulo: rotuloTipo(p.tipo), linhas: linhasAcabamento({ acabamentosCats: p.acabamentosCats || [] }),
-    })).filter((b) => b.linhas.length);
+    })).filter((b) => b.linhas.length), (b) => JSON.stringify([b.tipo, b.linhas]));
+  }
+  /* Perfis por EQUIPAMENTO de um mesmo tipo e com conteúdo idêntico saem UMA vez só no PDF/preview, com os códigos
+     somados (ex.: 4 cargas iguais → "Elevadores de Carga — VPEL-EL0990-2 a -5"). Conteúdo diferente = blocos separados. */
+  function juntarIguais(blocos, chave) {
+    const out = [];
+    const idx = new Map();
+    blocos.forEach((b) => {
+      const k = chave(b);
+      if (idx.has(k)) { const alvo = out[idx.get(k)]; alvo.codigos = [...alvo.codigos, ...b.codigos.filter((c) => !alvo.codigos.includes(c))]; return; }
+      idx.set(k, out.length);
+      out.push({ ...b, codigos: b.codigos.slice() });
+    });
+    return out;
   }
   /* Título do bloco de um perfil: "Elevadores de Carga — VPEL-EL0990-1 a -5". */
   function tituloPerfil(b) {
@@ -264,14 +277,14 @@
   function perfisConteudo(ed) {
     const e = ed || {};
     const perfis = Array.isArray(e.perfis) ? e.perfis : [];
-    return perfis.map((p) => ({
+    return juntarIguais(perfis.map((p) => ({
       id: p.id, nome: p.nome || nomePerfil(p.tipo), tipo: p.tipo || '', codigos: Array.isArray(p.codigos) ? p.codigos : [],
       textoModelos: p.textoModelos || '',
       beneficios: Array.isArray(p.beneficios) ? p.beneficios.filter(Boolean) : [],
       diferenciais: Array.isArray(p.diferenciais) ? p.diferenciais.filter(Boolean) : [],
       caracteristicasEquip: p.caracteristicasEquip || {},
       recursosNomeados: Array.isArray(p.recursosNomeados) ? p.recursosNomeados.filter((r) => r && (r.nome || r.desc)) : [],
-    }));
+    })), (b) => JSON.stringify([b.tipo, b.textoModelos, b.beneficios, b.diferenciais, b.caracteristicasEquip, b.recursosNomeados]));
   }
   /* Quantos equipamentos físicos por tipo, na ordem em que aparecem: [{chave, tipo, qtd}]. */
   function contagemPorTipo(ed) {

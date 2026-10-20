@@ -215,3 +215,72 @@ test('perfisAPartirDaProposta: 1 tipo só → sem perfis; Formulário indisponí
   assert.equal(sem.perfis.length, 3);
   assert.deepEqual(w.PropostaOpcoes.perfisAcabamento({ perfis: sem.perfis }), []);
 });
+
+/* ---- Por EQUIPAMENTO (Unidade): mesma granularidade da seção Especificações Técnicas ---- */
+test('montarPerfis modo "equipamento" (990): 1 perfil por especificação, cada um com os acabamentos DA SUA Unidade', () => {
+  const { PropostaHeranca: H } = carregar();
+  const perfis = H.montarPerfis({ unidades: unidades990, cotacao: null }, esp990, 'equipamento');
+  assert.equal(perfis.length, 4);
+  assert.deepEqual(perfis.map((p) => p.codigos), [
+    ['VPEL-EL0990-1'], ['VPEL-EL0990-2', 'VPEL-EL0990-3', 'VPEL-EL0990-4', 'VPEL-EL0990-5'], ['VPEL-EL0990-6'], ['VPEL-EL0990-7', 'VPEL-EL0990-8', 'VPEL-EL0990-9'],
+  ]);
+  assert.deepEqual(perfis.map((p) => p.unidadeIds), [['FEU-A'], ['FEU-B'], ['FEU-D'], ['FEU-C']]);
+  assert.equal(new Set(perfis.map((p) => p.id)).size, 4); // ids únicos
+});
+
+test('montarPerfis modo "equipamento": 1 especificação só → [] (nada a separar)', () => {
+  const { PropostaHeranca: H } = carregar();
+  assert.deepEqual(H.montarPerfis({ unidades: unidades990, cotacao: null }, [esp990[0]], 'equipamento'), []);
+});
+
+test('perfisAPartirDaProposta modo "equipamento": o digitado vai para TODOS os equipamentos de mesma cabine', () => {
+  const { PropostaHeranca: H, PropostaAcabamentosEngine: engine } = carregar();
+  const ed = {
+    especificacoes: esp990,
+    acabamentos: { modeloCabine: 'VP-301', acabamentoMat: 'Digitado' },
+  };
+  const unidades = unidades990.concat([U('FEU-E', 'Carga', { modelo: 'VP-301' })]);
+  const espMais = esp990.concat([{ unidadeId: 'FEU-E', carac: 'Carga', codigos: ['VPEL-EL0990-10'] }]);
+  ed.especificacoes = espMais;
+  const r = H.perfisAPartirDaProposta(ed, { unidades, cotacao: null }, 'equipamento');
+  const comDigitado = r.perfis.filter((p) => JSON.stringify(p.acabamentosCats).includes('Digitado'));
+  assert.equal(comDigitado.length, 3); // FEU-A, FEU-B e FEU-E (todas VP-301)
+  assert.ok(r.origemNome);
+  assert.ok(engine);
+});
+
+test('dividirPerfisPorEquipamento: perfil por tipo vira 1 por especificação, copiando o conteúdo; perfil de 1 especificação fica igual', () => {
+  const { PropostaHeranca: H } = carregar();
+  const porTipo = H.montarPerfis({ unidades: unidades990, cotacao: null }, esp990);
+  assert.equal(porTipo.length, 3);
+  porTipo.find((p) => p.tipo === 'Carga').textoModelos = 'Linha carga digitada';
+  const r = H.dividirPerfisPorEquipamento({ perfis: porTipo, especificacoes: esp990 });
+  assert.equal(r.length, 4);
+  const cargas = r.filter((p) => p.tipo === 'Carga');
+  assert.equal(cargas.length, 2);
+  assert.ok(cargas.every((p) => p.textoModelos === 'Linha carga digitada'));
+  assert.deepEqual(cargas.map((p) => p.codigos.length), [1, 4]);
+  assert.equal(new Set(r.map((p) => p.id)).size, 4);
+  assert.notEqual(cargas[0].acabamentosCats, cargas[1].acabamentosCats); // cópias independentes
+});
+
+test('perfisAcabamento/perfisConteudo: perfis de mesmo tipo e conteúdo idêntico saem juntos (códigos somados); diferentes ficam separados', () => {
+  const { PropostaHeranca: H, PropostaOpcoes: O } = carregar();
+  const perfis = H.montarPerfis({ unidades: [
+    U('FEU-A', 'Carga', { modelo: 'VP-301', aco_cabina: 'Aço 430' }),
+    U('FEU-B', 'Carga', { modelo: 'VP-301', aco_cabina: 'Aço 430' }),
+    U('FEU-C', 'Carga', { modelo: 'VP-999', aco_cabina: 'Aço 304' }),
+  ], cotacao: null }, [
+    { unidadeId: 'FEU-A', carac: 'Carga', codigos: ['VPEL-EL0991-1'] },
+    { unidadeId: 'FEU-B', carac: 'Carga', codigos: ['VPEL-EL0991-2'] },
+    { unidadeId: 'FEU-C', carac: 'Carga', codigos: ['VPEL-EL0991-3'] },
+  ], 'equipamento');
+  assert.equal(perfis.length, 3);
+  const ac = O.perfisAcabamento({ perfis });
+  assert.equal(ac.length, 2);
+  assert.deepEqual(ac[0].codigos, ['VPEL-EL0991-1', 'VPEL-EL0991-2']);
+  assert.deepEqual(ac[1].codigos, ['VPEL-EL0991-3']);
+  const co = O.perfisConteudo({ perfis });
+  assert.equal(co.length, 1); // mesmo texto-base de Carga nos 3
+  assert.equal(co[0].codigos.length, 3);
+});

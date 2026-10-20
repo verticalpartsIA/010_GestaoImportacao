@@ -228,17 +228,22 @@
      Unidade do Formulário daquele tipo (primeira do grupo). 1 tipo só → [] (a proposta segue com o bloco global de
      sempre). Valores vão como estão no Formulário (sem "traduzir" para as listas do editor: a lista do editor é
      parcial e traduzir por palpite poderia trocar o acabamento certo). */
-  function montarPerfis(fontes, especificacoes) {
+  function montarPerfis(fontes, especificacoes, modo) {
+    const porEquipamento = modo === 'equipamento';
     const O = window.PropostaOpcoes;
     const engine = window.PropostaAcabamentosEngine;
     if (!O || !engine) return [];
     const unidades = (fontes && fontes.unidades) || [];
     const envio = (fontes && fontes.cotacao && fontes.cotacao.dados_envio && fontes.cotacao.dados_envio.unidades) || [];
     const grupos = new Map();
-    (especificacoes || []).forEach((e) => {
+    (especificacoes || []).forEach((e, idx) => {
       const u = unidades.find((x) => x.id === e.unidadeId) || envio.find((x) => x.unidade_id === e.unidadeId) || {};
       const tipo = String(e.carac || u.tipo || '').trim();
-      const chave = O.tipoChave(tipo) || ('x:' + tipo.toLowerCase());
+      /* modo 'equipamento': 1 perfil por especificação (Unidade) — a mesma granularidade da seção Especificações Técnicas.
+         modo padrão ('tipo'): 1 perfil por tipo (Carga / Passageiro / Panorâmico). */
+      const chave = porEquipamento
+        ? 'u' + (e.unidadeId || idx)
+        : (O.tipoChave(tipo) || ('x:' + tipo.toLowerCase()));
       if (!grupos.has(chave)) grupos.set(chave, { tipo, unidadeIds: [], codigos: [], unidade: u });
       const g = grupos.get(chave);
       if (e.unidadeId) g.unidadeIds.push(e.unidadeId);
@@ -262,7 +267,7 @@
         botoeirasPavimento: u.botoeira_pavimento || '',
       };
       return {
-        id: 'perfil_' + chave.replace(/[^a-z0-9]+/g, '_'),
+        id: 'perfil_' + chave.toLowerCase().replace(/[^a-z0-9]+/g, '_'),
         nome: O.nomePerfil(g.tipo),
         tipo: g.tipo,
         unidadeIds: g.unidadeIds,
@@ -282,11 +287,11 @@
      cuja cabine herdada do Formulário é a mesma digitada ("Modelo da Cabine") fica com os acabamentos e o texto digitados.
      Sem perfil correspondente nada é sobrescrito (todos nascem do Formulário + texto-base) e o bloco global fica
      guardado, só deixa de aparecer. Devolve { perfis, origemId, origemNome }; perfis = [] se não há 2+ tipos. */
-  function perfisAPartirDaProposta(elevador, fontes) {
+  function perfisAPartirDaProposta(elevador, fontes, modo) {
     const O = window.PropostaOpcoes;
     const engine = window.PropostaAcabamentosEngine;
     const ed = elevador || {};
-    const perfis = montarPerfis(fontes || { unidades: [], cotacao: null }, ed.especificacoes || []);
+    const perfis = montarPerfis(fontes || { unidades: [], cotacao: null }, ed.especificacoes || [], modo);
     if (!perfis.length || !O || !engine) return { perfis, origemId: null, origemNome: null };
     const modeloDe = (cats) => {
       const c = (cats || []).flatMap((x) => x.campos || []).find((f) => f.k === 'modeloCabine' && f.ativo);
@@ -295,17 +300,47 @@
     const catsGlobais = (Array.isArray(ed.acabamentosCats) && ed.acabamentosCats.length) ? ed.acabamentosCats : [engine.catNativaFromLegacy(ed.acabamentos)];
     const digitado = O.linhasAcabamento(ed).length > 0;
     const modeloGlobal = digitado ? (modeloDe(catsGlobais) || String((ed.acabamentos || {}).modeloCabine || '').trim()) : '';
-    const origem = modeloGlobal ? perfis.find((p) => modeloDe(p.acabamentosCats) === modeloGlobal) : null;
-    if (!origem) return { perfis, origemId: null, origemNome: null };
+    /* Todo perfil cuja cabine herdada é a digitada recebe o que foi digitado (no modo por equipamento podem ser vários). */
+    const origens = modeloGlobal ? perfis.filter((p) => modeloDe(p.acabamentosCats) === modeloGlobal) : [];
+    if (!origens.length) return { perfis, origemId: null, origemNome: null };
     const clone = (x) => JSON.parse(JSON.stringify(x));
-    origem.acabamentosCats = clone(catsGlobais);
-    if ((ed.beneficios || []).length) origem.beneficios = clone(ed.beneficios);
-    if ((ed.diferenciais || []).length) origem.diferenciais = clone(ed.diferenciais);
-    if ((ed.recursosNomeados || []).length) origem.recursosNomeados = clone(ed.recursosNomeados);
-    if (Object.values(ed.caracteristicasEquip || {}).some(Boolean)) origem.caracteristicasEquip = clone(ed.caracteristicasEquip);
-    if (String(ed.textoModelos || '').trim()) origem.textoModelos = ed.textoModelos;
-    delete origem.conteudoCats; // o editor refaz as categorias a partir dos campos acima
-    return { perfis, origemId: origem.id, origemNome: origem.nome };
+    origens.forEach((origem) => {
+      origem.acabamentosCats = clone(catsGlobais);
+      if ((ed.beneficios || []).length) origem.beneficios = clone(ed.beneficios);
+      if ((ed.diferenciais || []).length) origem.diferenciais = clone(ed.diferenciais);
+      if ((ed.recursosNomeados || []).length) origem.recursosNomeados = clone(ed.recursosNomeados);
+      if (Object.values(ed.caracteristicasEquip || {}).some(Boolean)) origem.caracteristicasEquip = clone(ed.caracteristicasEquip);
+      if (String(ed.textoModelos || '').trim()) origem.textoModelos = ed.textoModelos;
+      delete origem.conteudoCats; // o editor refaz as categorias a partir dos campos acima
+    });
+    // 1 origem = só o nome (como sempre); várias (modo por equipamento) = nome + faixa de códigos para distinguir
+    const nomes = origens.length === 1 ? [origens[0].nome] : origens.map((o) => (O.faixaCodigos(o.codigos) ? `${o.nome} — ${O.faixaCodigos(o.codigos)}` : o.nome));
+    return { perfis, origemId: origens[0].id, origemNome: nomes.join('; ') };
+  }
+
+  /* ---------- Dividir perfis já separados por TIPO em 1 perfil por EQUIPAMENTO (especificação) ----------
+     Quem já clicou "Separar por tipo" não perde nada: cada perfil com 2+ especificações vira N cópias (acabamentos e
+     textos iguais aos do perfil de origem, prontas para editar uma a uma). Perfil com 1 especificação só fica como está. */
+  function dividirPerfisPorEquipamento(elevador) {
+    const ed = elevador || {};
+    const perfis = Array.isArray(ed.perfis) ? ed.perfis : [];
+    const specs = ed.especificacoes || [];
+    const clone = (x) => JSON.parse(JSON.stringify(x));
+    const out = [];
+    perfis.forEach((p) => {
+      const ids = Array.isArray(p.unidadeIds) ? p.unidadeIds : [];
+      if (ids.length < 2) { out.push(clone(p)); return; }
+      ids.forEach((uid) => {
+        const sp = specs.find((e) => e.unidadeId === uid) || {};
+        const novo = clone(p);
+        novo.id = p.id + '_u_' + String(uid).toLowerCase().replace(/[^a-z0-9]+/g, '_');
+        novo.unidadeIds = [uid];
+        novo.codigos = Array.isArray(sp.codigos) ? sp.codigos.slice() : [];
+        out.push(novo);
+      });
+    });
+    const n = (p) => { const m = /-(\d+)$/.exec((p.codigos || [])[0] || ''); return m ? Number(m[1]) : Infinity; };
+    return out.sort((a, b) => n(a) - n(b));
   }
 
   /* ---------- Prefill no formato do PropostaEditor ---------- */
@@ -540,5 +575,5 @@
     return partes.join(' · ');
   }
 
-  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, montarPerfis, perfisAPartirDaProposta, montarBlocoEscadaEsteira };
+  window.PropostaHeranca = { buscarFontes, montarPrefill, prefillPorNumeroCotacao, resumoFontes, montarAtivos, montarEspecificacoes, montarPerfis, perfisAPartirDaProposta, dividirPerfisPorEquipamento, montarBlocoEscadaEsteira };
 }());
