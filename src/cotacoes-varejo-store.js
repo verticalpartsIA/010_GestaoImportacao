@@ -288,7 +288,34 @@
     return banco;
   }
 
+  /* ---------- Fotos manuais do operador (até 5 por item do lote) ---------- */
+  const MAX_FOTOS_MANUAIS = 5;
+  async function adicionarFotoManual(item, file) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (!file || !/^image\//.test(file.type || '')) throw new Error('Escolha um arquivo de imagem.');
+    if (file.size > 8 * 1024 * 1024) throw new Error('Imagem maior que 8 MB.');
+    const atuais = Array.isArray(item.fotos_manuais) ? item.fotos_manuais : [];
+    if (atuais.length >= MAX_FOTOS_MANUAIS) throw new Error('Máximo de ' + MAX_FOTOS_MANUAIS + ' fotos manuais por produto.');
+    const ext = ((file.name || '').split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+    const path = 'cotacoes-varejo/' + item.lote_id + '/' + item.id + '/' + Date.now() + '-' + uuidCurto().slice(0, 6) + '.' + ext;
+    const up = await c.storage.from(FOTOS_BUCKET).upload(path, file, { upsert: false, contentType: file.type });
+    if (up.error) throw up.error;
+    const url = c.storage.from(FOTOS_BUCKET).getPublicUrl(path).data.publicUrl;
+    const novas = atuais.concat([url]);
+    const { error } = await c.from('iv_cotacao_itens').update({ fotos_manuais: novas }).eq('id', item.id);
+    if (error) throw error;
+    return novas;
+  }
+  async function removerFotoManual(item, url) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const novas = (Array.isArray(item.fotos_manuais) ? item.fotos_manuais : []).filter((u) => u !== url);
+    const { error } = await c.from('iv_cotacao_itens').update({ fotos_manuais: novas }).eq('id', item.id);
+    if (error) throw error;
+    return novas;
+  }
+
   window.CotacoesVarejoStore = {
+    MAX_FOTOS_MANUAIS, adicionarFotoManual, removerFotoManual,
     portalUrl, codigosEmCotacao, listarLotes, obterLote, criarLote, atualizarLote, atualizarItem, removerItem, cancelarLote,
     fornecedoresCadastrados, convidarFornecedor, removerConvite, atualizarConvite, marcarEnviado, novaRodada,
     textoConvite, enviarPorEmail, whatsAppHref, salvarDecisoes, aprovarLote, fotosDoBanco, enviarFoto, resolverFotos,
