@@ -358,6 +358,16 @@ app.get('/diario-obra/:token', (_req, res) => {
   res.sendFile(path.join(__dirname, 'diario-obra.html'));
 });
 
+/* ---------- Fabricação do Quadro de Comando (link do operador) ----------
+   /fabricacao-quadro/<token> → entrega fabricacao-quadro.html. O token é
+   lido no client (fabricacao_quadro_links.token). Link fixo por OP de
+   quadro, gerado pela tela interna (Evolução da Fabricação) — sem SSO,
+   quem tem o link flega as etapas e relata falta de material. */
+app.get('/fabricacao-quadro/:token', (_req, res) => {
+  res.setHeader('Cache-Control', 'no-cache');
+  res.sendFile(path.join(__dirname, 'fabricacao-quadro.html'));
+});
+
 /* ---------- Termo de Entrega (assinatura digital) ----------
    /termo-entrega/<token> → entrega termo-entrega.html. O token é lido no
    client (dossier_obra.termo_entrega_token). Cliente e/ou supervisor
@@ -390,7 +400,7 @@ const NO_CACHE_EXT = ['.html', '.js', '.jsx', '.css', '.json'];
    MODULE_SLUG em src/router.js). Todo o resto responde 404. */
 const PUBLIC_ROOT_FILES = new Set([
   'index.html', 'index-print.html', 'assinar.html', 'cotacao.html', 'cotacao-elevador-fornecedor.html', 'cotacao-varejo.html', 'separacao-tv.html',
-  'diario-obra.html', 'formulario-cliente.html', 'status-obra.html', 'termo-entrega.html',
+  'diario-obra.html', 'fabricacao-quadro.html', 'formulario-cliente.html', 'status-obra.html', 'termo-entrega.html',
   'vistoria-execucao.html', 'formulario-quadro-comando-publico.html', 'recibo-instalador.html', 'colors_and_type.css', 'favicon.ico',
 ]);
 /* TreinamentoVP: tutoriais passo a passo (páginas HTML estáticas, uma pasta por tela). O botão "Ajuda" do
