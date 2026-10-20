@@ -85,6 +85,8 @@ function Portal() {
       return { item_id: i.id, faixas, lead_time_dias: x.lt === '' ? null : Math.round(num(x.lt)), moq: x.moq === '' ? null : num(x.moq), obs: x.obs, foto_fornecedor: x.foto, fotos_fornecedor: x.fotos };
     }).filter((r) => r.faixas.length || r.lead_time_dias != null || r.moq != null || r.obs || (r.fotos_fornecedor || []).length);
     if (!respostas.length) { setErro(T('Fill in at least one price.', 'Preencha ao menos um preço.', '请至少填写一个价格。')); setEnviando(false); return; }
+    const semFoto = respostas.filter((r) => r.faixas.length && !(r.fotos_fornecedor || []).length).length;
+    if (semFoto && !window.confirm(T(semFoto + ' priced item(s) have no photo of your product. Send anyway?', semFoto + ' item(ns) com preço estão sem foto do seu produto. Enviar mesmo assim?', semFoto + ' 个已报价产品没有您的产品照片。仍要提交吗？'))) { setEnviando(false); return; }
     const { data, error } = await sbc().rpc('public_ivc_responder', { p_token: token, p_respostas: respostas, p_moeda: moeda });
     setEnviando(false);
     if (error || !data || !data.ok) {
@@ -155,8 +157,10 @@ function Portal() {
                   <td style={td}><input style={{ ...inp, width: 80 }} inputMode="numeric" value={x.lt} disabled={encerrado} onChange={(e) => set(i.id, 'lt', e.target.value)} /></td>
                   <td style={td}><input style={{ ...inp, width: 80 }} inputMode="decimal" value={x.moq} disabled={encerrado} onChange={(e) => set(i.id, 'moq', e.target.value)} /></td>
                   <td style={td}>
+                    <div style={{ fontSize: 11, color: '#8a6d00', marginBottom: 3 }}>{T('Does your product match? Say if it is identical or different (size, material, finish…).', 'Seu produto atende? Diga se é idêntico ou se há diferenças (medida, material, acabamento…).', '您的产品是否符合？请说明是否一致或有差异（尺寸、材质、表面处理等）。')}</div>
                     <textarea style={{ ...inp, minHeight: 54 }} value={x.obs} disabled={encerrado} onChange={(e) => set(i.id, 'obs', e.target.value)} />
                     <div style={{ marginTop: 6, fontSize: 12 }}>
+                      <div style={{ color: '#8a6d00', marginBottom: 3 }}>{T('Please send photos of YOUR product so we can compare.', 'Envie fotos do SEU produto para podermos comparar.', '请上传您产品的照片，以便我们对比。')}</div>
                       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
                         {x.fotos.map((u) => (
                           <span key={u} style={{ position: 'relative' }}>

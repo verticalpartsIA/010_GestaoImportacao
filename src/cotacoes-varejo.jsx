@@ -100,18 +100,22 @@ function CVCelula({ resp, qtdRef, melhor, editavel, valorQtd, onQtd, onTudo }) {
             </div>
           ))}
           <div className="muted">{resp.lead_time_dias ? resp.lead_time_dias + ' d' : '— d'}{moq > 0 ? ' · MOQ ' + cvFmtNum(moq) : ''}</div>
-          {Array.isArray(resp.fotos_fornecedor) && resp.fotos_fornecedor.length > 0 && (
-            <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', margin: '3px 0' }} title="Fotos enviadas pelo fornecedor">
-              {resp.fotos_fornecedor.map((u) => <a key={u} href={u} target="_blank" rel="noopener noreferrer"><img src={u} alt="foto do fornecedor" style={{ width: 40, height: 40, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border, #ccc)' }} /></a>)}
-            </div>
-          )}
-          {resp.obs && <div className="muted" title={resp.obs} style={{ maxWidth: 190, whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>💬 {resp.obs}</div>}
           {resp.historico && resp.historico.length > 0 && (
             <div className="muted" title={resp.historico.map((h) => 'Rodada ' + h.rodada + ': ' + (h.faixas || []).map((f) => cvFmtMoeda(f.preco, resp._moeda) + (f.min > 1 ? ' (≥' + f.min + ')' : '')).join(' · ')).join('\n')}>
               rodada {resp.rodada} · antes: {cvFmtMoeda(((resp.historico[resp.historico.length - 1].faixas || [])[0] || {}).preco, resp._moeda)}
             </div>
           )}
           {aplicada && aplicada.abaixoMin && <div style={{ color: 'var(--vp-amber-700, #b45309)' }}>⚠ vende a partir de {cvFmtNum(aplicada.min)}</div>}
+        </div>
+      )}
+      {resp && Array.isArray(resp.fotos_fornecedor) && resp.fotos_fornecedor.length > 0 && (
+        <div style={{ display: 'flex', gap: 3, flexWrap: 'wrap', margin: '4px 0' }} title="Fotos do produto enviadas pelo fornecedor">
+          {resp.fotos_fornecedor.map((u) => <a key={u} href={u} target="_blank" rel="noopener noreferrer"><img src={u} alt="foto do fornecedor" style={{ width: 44, height: 44, objectFit: 'cover', borderRadius: 4, border: '1px solid var(--border, #ccc)' }} /></a>)}
+        </div>
+      )}
+      {resp && resp.obs && (
+        <div className="small" style={{ margin: '4px 0', padding: '4px 6px', background: 'rgba(246,192,0,.15)', borderLeft: '3px solid var(--vp-yellow, #f6c000)', borderRadius: 4, maxWidth: 210, whiteSpace: 'pre-wrap', overflowWrap: 'anywhere' }}>
+          <b>Obs. do fornecedor:</b> {resp.obs}
         </div>
       )}
       {editavel && (
