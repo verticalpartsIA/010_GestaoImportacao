@@ -107,13 +107,7 @@
     const [itens, headerResult, statusResult, ocorrenciasResult] = await Promise.all([
       listarItens(),
       c.from('pcp_ordens')
-        .select(`id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id,
-          quadros_comando (
-            numero_pedido, numero_cotacao, cliente_id, fabricante_comando, modelo_comando,
-            clientes ( razao_social, nome_fantasia ),
-            quadros_comando_maquina ( modelo_maquina, fabricante_maquina, potencia_kw, tensao_v ),
-            quadros_comando_bom_itens ( sku, descricao )
-          )`)
+        .select('id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id')
         .eq('id', ordemId).maybeSingle(),
       c.from('fabricacao_quadro_status').select('*, fabricacao_quadro_itens(id, texto, ordem, peso)').eq('ordem_id', ordemId),
       c.from('fabricacao_quadro_ocorrencias').select('*').eq('ordem_id', ordemId).order('aberta_em', { ascending: false }),
@@ -125,23 +119,56 @@
 
     let ordem = null;
     if (headerResult.error) {
-      console.warn('[FabricacaoQuadroStore] obterEstadoOrdem: falha ao buscar o cabeçalho (cliente/modelo) da OP ' + ordemId + ' — seguindo sem esses dados (não impede marcar etapa/relatar ocorrência).', headerResult.error);
+      console.warn('[FabricacaoQuadroStore] obterEstadoOrdem: falha ao buscar o cabeçalho da OP ' + ordemId + ' — seguindo sem esses dados (não impede marcar etapa/relatar ocorrência).', headerResult.error);
     } else {
       ordem = headerResult.data || null;
     }
-    /* quadros_comando_maquina pode vir como array ou objeto dependendo de
-       como o PostgREST infere a cardinalidade do embed — mesma ambiguidade
-       já documentada e normalizada em pcp.jsx:PCPPedidosQuadro
-       (`Array.isArray(r.quadros_comando_maquina) ? r.quadros_comando_maquina[0] : r.quadros_comando_maquina`).
-       Normaliza aqui pra Task 4 não precisar redescobrir isso. */
-    if (ordem && ordem.quadros_comando && Array.isArray(ordem.quadros_comando.quadros_comando_maquina)) {
-      ordem.quadros_comando.quadros_comando_maquina = ordem.quadros_comando.quadros_comando_maquina[0] || null;
+
+    if (ordem && ordem.quadro_comando_id) {
+      const quadroResult = await buscarQuadroComando(ordem.quadro_comando_id);
+      if (quadroResult.error) {
+        console.warn('[FabricacaoQuadroStore] obterEstadoOrdem: falha ao buscar o cabeçalho (cliente/modelo) do Quadro de Comando ' + ordem.quadro_comando_id + ' — seguindo sem esses dados.', quadroResult.error);
+        ordem.quadros_comando = null;
+      } else {
+        ordem.quadros_comando = quadroResult.data || null;
+      }
+    } else if (ordem) {
+      ordem.quadros_comando = null;
     }
 
     const status = (window.FabricacaoQuadroCalc && window.FabricacaoQuadroCalc.mergeStatusComItens)
       ? window.FabricacaoQuadroCalc.mergeStatusComItens(itens, statusRows)
       : (statusRows || []);
     return { ordem: ordem || null, status, ocorrencias: ocorrencias || [] };
+  }
+
+  /* Busca o cabeçalho do Quadro de Comando (cliente/modelo/máquina/BOM) a
+     partir do seu próprio id — SEMPRE em uma consulta separada de
+     pcp_ordens, nunca aninhada a partir dela (`pcp_ordens.quadro_comando_id`
+     não tem FK declarada no banco para `quadros_comando.id`; sem FK o
+     PostgREST não consegue montar o embed e lança "Could not find a
+     relationship between 'pcp_ordens' and 'quadros_comando' in the schema
+     cache" — bug real visto em produção em 20/10/2026). As demais relações
+     daqui pra baixo (clientes, quadros_comando_maquina,
+     quadros_comando_bom_itens) TÊM FK e continuam aninhadas normalmente.
+     Mesmo padrão de duas consultas separadas já usado em
+     pcp.jsx:PCPPedidosQuadro por este mesmo motivo. */
+  async function buscarQuadroComando(quadroComandoId) {
+    const c = sb();
+    const result = await c.from('quadros_comando')
+      .select(`numero_pedido, numero_cotacao, cliente_id, fabricante_comando, modelo_comando,
+        clientes ( razao_social, nome_fantasia ),
+        quadros_comando_maquina ( modelo_maquina, fabricante_maquina, potencia_kw, tensao_v ),
+        quadros_comando_bom_itens ( sku, descricao )
+      `)
+      .eq('id', quadroComandoId).maybeSingle();
+    if (!result.error && result.data && Array.isArray(result.data.quadros_comando_maquina)) {
+      /* quadros_comando_maquina pode vir como array ou objeto dependendo de
+         como o PostgREST infere a cardinalidade do embed — mesma ambiguidade
+         já documentada e normalizada em pcp.jsx:PCPPedidosQuadro. */
+      result.data.quadros_comando_maquina = result.data.quadros_comando_maquina[0] || null;
+    }
+    return result;
   }
 
   /* Token do link (fixo por OP) -> acha a OP e delega pra obterEstadoOrdem,
@@ -270,24 +297,38 @@
   async function listarOPsAbertas() {
     const c = sb();
     const { data, error } = await c.from('pcp_ordens')
-      .select(`id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id,
-        quadros_comando (
-          numero_pedido, cliente_id,
-          clientes ( razao_social, nome_fantasia ),
-          quadros_comando_maquina ( modelo_maquina, potencia_kw, tensao_v )
-        )`)
+      .select('id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id')
       .eq('frente', 'quadro')
       .in('status', ['aguardando', 'em_producao'])
       .order('prazo_entrega', { ascending: true });
     if (error) throw error;
-    /* Mesma ambiguidade de cardinalidade do embed já normalizada em
-       obterEstadoOrdem (ver comentário lá) — repetida aqui pra cada linha. */
-    (data || []).forEach((r) => {
-      if (r && r.quadros_comando && Array.isArray(r.quadros_comando.quadros_comando_maquina)) {
-        r.quadros_comando.quadros_comando_maquina = r.quadros_comando.quadros_comando_maquina[0] || null;
+    const ordens = data || [];
+
+    /* quadro_comando_id não tem FK para quadros_comando.id — ver comentário
+       em buscarQuadroComando/obterEstadoOrdem. Busca os cabeçalhos únicos
+       numa 2ª consulta (sem repetir por OP) e junta em JS. */
+    const ids = Array.from(new Set(ordens.map((r) => r.quadro_comando_id).filter(Boolean)));
+    let porId = {};
+    if (ids.length) {
+      const { data: quadros, error: errQuadros } = await c.from('quadros_comando')
+        .select(`id, numero_pedido, cliente_id,
+          clientes ( razao_social, nome_fantasia ),
+          quadros_comando_maquina ( modelo_maquina, potencia_kw, tensao_v )
+        `)
+        .in('id', ids);
+      if (errQuadros) {
+        console.warn('[FabricacaoQuadroStore] listarOPsAbertas: falha ao buscar os cabeçalhos dos Quadros de Comando — seguindo sem esses dados.', errQuadros);
+      } else {
+        (quadros || []).forEach((q) => {
+          if (Array.isArray(q.quadros_comando_maquina)) {
+            q.quadros_comando_maquina = q.quadros_comando_maquina[0] || null;
+          }
+          porId[q.id] = q;
+        });
       }
-    });
-    return data || [];
+    }
+    ordens.forEach((r) => { r.quadros_comando = porId[r.quadro_comando_id] || null; });
+    return ordens;
   }
 
   window.FabricacaoQuadroStore = {
