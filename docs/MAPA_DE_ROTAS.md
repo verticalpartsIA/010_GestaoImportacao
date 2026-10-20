@@ -168,7 +168,7 @@
 | `lead-detail` | `/crm/lead-detail/<id>` | — | id na URL (busca no banco) | volta para `leads` |
 | `formulario-elevador` | `/comercial/formulario-elevador/<id>` | — | id na URL (passthrough) | — |
 | `formulario-quadro-comando` | `/comercial/formulario-quadro-comando/<id>[/<aba>]` | **escopo**, configuracao, cabina, paradas, maquina, componentes, geometria, resultado | id na URL (passthrough) | — |
-| `cotacao-fornecedor-detail` | `/comercial/cotacao-fornecedor-detail/<id>[/<aba>]` | **detalhes**, tratativas | id na URL (busca no banco) | volta para `cotacoes-fornecedor` |
+| `cotacao-fornecedor-detail` | `/comercial/cotacao-fornecedor-detail/<id>[/<aba>]` | **detalhes**, tratativas, imagens, documentos | id na URL (busca no banco) | volta para `cotacoes-fornecedor` |
 | `proposta-editor` | `/comercial/proposta-editor/<id>` | — | id na URL (envelope) | — |
 | `contrato-editor` | `/juridico/contrato-editor/<id>` | — | id na URL (busca no banco) | volta para `juridico` |
 | `importacao-detail` | `/gestao-importacao/importacao-detail/<id>` | — | id na URL (busca no banco) | volta para `importacao` |
