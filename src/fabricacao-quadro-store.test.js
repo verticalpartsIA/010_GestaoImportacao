@@ -57,11 +57,18 @@ function carrega(tabelas) {
 
 const plain = (x) => JSON.parse(JSON.stringify(x));
 
+const FIACAO_ITENS = [
+  { id: 'fi-1', codigo: 'cabo_manobra', texto: 'Cabo de Manobra — Corte e Pinagem', ordem: 1 },
+  { id: 'fi-2', codigo: 'fiacao_passadico', texto: 'Fiação Passadiço — Corte e Pinagem', ordem: 2 },
+  { id: 'fi-3', codigo: 'fiacao_topo_carro', texto: 'Fiação Topo do Carro — Corte e Pinagem', ordem: 3 },
+  { id: 'fi-4', codigo: 'fiacao_poco', texto: 'Fiação de Poço — Corte e Pinagem', ordem: 4 },
+];
+
 function base() {
   return {
     pcp_ordens: [
-      { id: 'op-1', numero: 'OP-0001', titulo: 'Quadro X', produto: null, cliente: null, numero_cotacao: 955, status: 'em_producao', prazo_entrega: '2026-11-01', previsao_inicio: null, data_abertura: '2026-10-01', quadro_comando_id: 'qc-1', frente: 'quadro' },
-      { id: 'op-2', numero: 'OP-0002', titulo: 'OP sem quadro', produto: null, cliente: null, numero_cotacao: null, status: 'aguardando', prazo_entrega: '2026-11-05', previsao_inicio: null, data_abertura: '2026-10-02', quadro_comando_id: null, frente: 'quadro' },
+      { id: 'op-1', numero: 'OP-0001', titulo: 'Quadro X', produto: null, cliente: null, numero_cotacao: 955, status: 'em_producao', prazo_entrega: '2026-11-01', previsao_inicio: null, data_abertura: '2026-10-01', quadro_comando_id: 'qc-1', frente: 'quadro', pedido_codigo: null, ordem_mae_id: null },
+      { id: 'op-2', numero: 'OP-0002', titulo: 'OP sem quadro', produto: null, cliente: null, numero_cotacao: null, status: 'aguardando', prazo_entrega: '2026-11-05', previsao_inicio: null, data_abertura: '2026-10-02', quadro_comando_id: null, frente: 'quadro', pedido_codigo: null, ordem_mae_id: null },
     ],
     quadros_comando: [
       { id: 'qc-1', numero_pedido: 'PED-10', numero_cotacao: 955, cliente_id: 'cli-1', fabricante_comando: 'WEG', modelo_comando: 'CFW-11' },
@@ -69,8 +76,41 @@ function base() {
     fabricacao_quadro_status: [],
     fabricacao_quadro_ocorrencias: [],
     fabricacao_quadro_itens: [],
+    fabricacao_quadro_fiacao_itens: FIACAO_ITENS,
+    fabricacao_quadro_fiacao_status: [],
   };
 }
+
+test('obterEstadoOrdem: OP com pedido_codigo próprio — fiacaoAplicavel true e os 4 itens vêm mesclados', async () => {
+  const t = base();
+  t.pcp_ordens[0].pedido_codigo = 12345;
+  t.fabricacao_quadro_fiacao_status = [{ item_id: 'fi-1', ordem_id: 'op-1', flegado: true, flegado_em: '2026-10-20T10:00:00Z', flegado_por: 'fabrica@verticalparts.com.br' }];
+  const store = carrega(t);
+  const estado = await store.obterEstadoOrdem('op-1');
+  assert.equal(estado.fiacaoAplicavel, true);
+  assert.equal(estado.fiacaoStatus.length, 4);
+  const caboManobra = estado.fiacaoStatus.find((s) => s.fabricacao_quadro_itens.codigo === 'cabo_manobra');
+  assert.equal(caboManobra.flegado, true);
+  const poco = estado.fiacaoStatus.find((s) => s.fabricacao_quadro_itens.codigo === 'fiacao_poco');
+  assert.equal(poco.flegado, false);
+});
+
+test('obterEstadoOrdem: OP sem pedido_codigo mas a OP-mãe tem — fiacaoAplicavel true via ordem_mae_id', async () => {
+  const t = base();
+  t.pcp_ordens.push({ id: 'op-mae-1', numero: 'OP-0003', titulo: 'Pedido', frente: 'pedido', pedido_codigo: 999, ordem_mae_id: null, quadro_comando_id: null });
+  t.pcp_ordens[0].ordem_mae_id = 'op-mae-1';
+  const store = carrega(t);
+  const estado = await store.obterEstadoOrdem('op-1');
+  assert.equal(estado.fiacaoAplicavel, true);
+  assert.equal(estado.fiacaoStatus.length, 4);
+});
+
+test('obterEstadoOrdem: sem pedido_codigo em nenhum dos dois — fiacaoAplicavel false e fiacaoStatus vazio (comportamento idêntico ao de antes)', async () => {
+  const store = carrega(base());
+  const estado = await store.obterEstadoOrdem('op-1');
+  assert.equal(estado.fiacaoAplicavel, false);
+  assert.equal(estado.fiacaoStatus.length, 0);
+});
 
 test('obterEstadoOrdem: não lança "Could not find a relationship" — busca o Quadro de Comando numa 2ª consulta e preenche ordem.quadros_comando', async () => {
   const store = carrega(base());

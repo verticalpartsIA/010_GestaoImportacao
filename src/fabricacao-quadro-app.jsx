@@ -275,11 +275,31 @@
     const total = status.length;
     const bomItens = bomItensDoQuadro(ordem);
     const tp = cabecalhoTensaoPotencia(ordem);
+    // Fiação extra (Cabo de Manobra/Passadiço/Topo do Carro/Poço) — só vem
+    // preenchida quando a OP está vinculada a um Pedido de Venda do Omie
+    // (ver fabricacao-quadro-store.js:fiacaoAplicavelParaOrdem). Sem isso
+    // fiacaoStatus sai [] e a seção abaixo nem aparece — quadro avulso
+    // continua exatamente como antes desta feature.
+    const fiacaoStatus = estado.fiacaoStatus || [];
+    const fiacaoCompleta = !fiacaoStatus.length || fiacaoStatus.every((s) => s.flegado);
+    const concluido = pct === 100 && fiacaoCompleta;
 
     const marcar = async (itemId) => {
       setMarcandoId(itemId);
       try {
         await window.FabricacaoQuadroStore.marcarEtapa(ordemId, itemId, null);
+        carregar();
+      } catch (e) {
+        window.alert('Erro ao marcar etapa: ' + (e.message || e));
+      } finally {
+        setMarcandoId(null);
+      }
+    };
+
+    const marcarFiacao = async (itemId) => {
+      setMarcandoId(itemId);
+      try {
+        await window.FabricacaoQuadroStore.marcarEtapaFiacao(ordemId, itemId, null);
         carregar();
       } catch (e) {
         window.alert('Erro ao marcar etapa: ' + (e.message || e));
@@ -325,6 +345,11 @@
             <div style={{ background: pausado ? '#dc2626' : '#22c55e', height: '100%', width: pct + '%' }} />
           </div>
           <div style={{ fontSize: 12, opacity: 0.85, marginTop: 6 }}>{feitos}/{total} etapas feitas — {pct}%</div>
+          {concluido && (
+            <div style={{ marginTop: 10, display: 'inline-block', background: '#dcfce7', color: '#0a7a3d', fontWeight: 700, fontSize: 12.5, borderRadius: 999, padding: '4px 12px' }}>
+              ✓ Tudo concluído
+            </div>
+          )}
         </div>
 
         {/* Falha ao RECARREGAR depois que a tela já tinha dados (ex.: depois
@@ -355,6 +380,15 @@
         {itensOrdenados.map((s) => (
           <FQPEtapaLinha key={s.item_id} s={s} busy={marcandoId === s.item_id} onMarcar={marcar} />
         ))}
+
+        {fiacaoStatus.length > 0 && (
+          <div style={{ marginTop: 18 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, marginBottom: 8 }}>Fiação (elevador completo)</div>
+            {fiacaoStatus.map((s) => (
+              <FQPEtapaLinha key={s.item_id} s={s} busy={marcandoId === s.item_id} onMarcar={marcarFiacao} />
+            ))}
+          </div>
+        )}
 
         <RelatarFaltaMaterial ordemId={ordemId} bomItens={bomItens} enviando={enviandoOcorrencia} onEnviar={relatarFalta} />
 
