@@ -80,7 +80,8 @@
   }
 
   /* extrair(texto, unidades) → { moeda, valores:[{valor,linha,tipo,unidadeId,confianca}], termos:{...}, avisos:[] } */
-  function extrair(textoBruto, unidades) {
+  function extrair(textoBruto, unidades, opts) {
+    const minValor = opts && opts.minValor != null ? opts.minValor : 100;   // varejo: peça de US$ 4,10 é preço de verdade
     const texto = limparCitacao(textoBruto);
     const linhas = texto.split('\n').map((l) => l.trim()).filter(Boolean);
     const valores = [];
@@ -94,7 +95,7 @@
           const v = numeroDe(m[1] || m[2]);
           // ignora anos, números pequenos, percentuais ("30%") e prazos/medidas ("30 days", "2000mm") sem moeda
           const depois = linha.slice(m.index + m[0].length, m.index + m[0].length + 8);
-          if (v == null || v < 100 || (v >= 1990 && v <= 2100 && !/[$€¥]|usd|rmb|cny|eur/i.test(m[0]))) continue;
+          if (v == null || v < minValor || (v >= 1990 && v <= 2100 && !/[$€¥]|usd|rmb|cny|eur/i.test(m[0]))) continue;
           if (/^\s*(%|days?|dias|months?|meses|kg|mm|pcs|sets?\b)/i.test(depois)) continue;
           achados.push(v);
         }
