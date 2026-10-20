@@ -167,7 +167,7 @@
 | `lead-detail` | `/crm/lead-detail/<id>` | — | id na URL (busca no banco) | volta para `leads` |
 | `formulario-elevador` | `/comercial/formulario-elevador/<id>` | — | id na URL (passthrough) | — |
 | `formulario-quadro-comando` | `/comercial/formulario-quadro-comando/<id>[/<aba>]` | **escopo**, configuracao, cabina, paradas, maquina, componentes, geometria, resultado | id na URL (passthrough) | — |
-| `cotacao-fornecedor-detail` | `/comercial/cotacao-fornecedor-detail/<id>[/<aba>]` | **detalhes**, tratativas | id na URL (busca no banco) | volta para `cotacoes-fornecedor` |
+| `cotacao-fornecedor-detail` | `/comercial/cotacao-fornecedor-detail/<id>[/<aba>]` | **detalhes**, tratativas, imagens, documentos | id na URL (busca no banco) | volta para `cotacoes-fornecedor` |
 | `proposta-editor` | `/comercial/proposta-editor/<id>` | — | id na URL (envelope) | — |
 | `contrato-editor` | `/juridico/contrato-editor/<id>` | — | id na URL (busca no banco) | volta para `juridico` |
 | `importacao-detail` | `/gestao-importacao/importacao-detail/<id>` | — | id na URL (busca no banco) | volta para `importacao` |
@@ -240,7 +240,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | leads | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `comercial.jsx:942` |
 | leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:862` |
 | leads | (acionado por um handler — ver o código) | `lead-detail` | `/crm/lead-detail` | `comercial.jsx:917` |
-| mapa-obras | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `mapa-obras.jsx:114` |
+| mapa-obras | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `mapa-obras.jsx:139` |
 | ncm-catalogo | (acionado por um handler — ver o código) | `ficha-tecnica` | `/engenharia/ficha-tecnica` | `ncm-catalogo.jsx:424` |
 | ncm-detail | (acionado por um handler — ver o código) | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:848` |
 | ncm-detail | Voltar para Solicitações NCM | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:854` |
@@ -267,7 +267,7 @@ São abas de formulário/modal, filtros, modos de visualização e passos de ass
 | `decisoes.jsx:301` | DecisoesPage | `modoAdmin` | `false` | `decisoes` |
 | `dossier-obra.jsx:825` | TermoEntregaPanel | `modo` | `'self_service'` | `dossier-obra`, `status-obras` |
 | `dossier-obra.jsx:1508` | FormAdicionarItemTemplate | `etapa` | `''` | `dossier-obra`, `status-obras` |
-| `embarques-importacao.jsx:278` | EmbarqueImportacaoForm | `tab` | `'identificacao'` | `embarques-importacao` |
+| `embarques-importacao.jsx:375` | EmbarqueImportacaoForm | `tab` | `'identificacao'` | `embarques-importacao` |
 | `formulario-quadro-comando-publico.jsx:246` | ? | `passo` | `0` | (modal/componente interno) |
 | `ims.jsx:75` | IMSForm | `tab` | `'identificacao'` | `ims-importacao` |
 | `ims.jsx:342` | IMSPage | `activeTab` | `'todos'` | `ims-importacao` |
