@@ -331,6 +331,7 @@ test('Expedição: etiqueta de volume da NF (modelo girado, rolo 100 x 150)', ()
   assert.equal(d.nf_txt, 'NOTA FISCAL: 22019');
   assert.equal(d.volume_txt, 'VOLUME 13 / 19');
   assert.equal(d.pedido_txt, '28988');
+  assert.equal(d.qr, '22019');
   assert.equal(d.transportadora_txt, 'TRANSPORTADORA: RETIRA FOB');
   assert.match(d.endereco_txt, /CAMPINA GRANDE\/PB, CEP 58400-258$/);
   assert.match(E.renderSVG(m, d, {}), /rotate\(90\)/);
