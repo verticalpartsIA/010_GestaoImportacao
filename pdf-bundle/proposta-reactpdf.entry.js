@@ -388,7 +388,7 @@ function PgSaudacao(S, data) {
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.p, key: 'p1' }, 'Prezados Senhores(as):'),
-    h(Text, { style: S.p, key: 'p2' }, `Proposta Comercial para o fornecimento de ${qtd} Elevador(es) de Passageiros.`),
+    h(Text, { style: S.p, key: 'p2' }, `Proposta Comercial para o fornecimento de ${(typeof window !== 'undefined' && window.PropostaOpcoes) ? window.PropostaOpcoes.resumoFornecimento(data.elevador) : qtd + ' Elevador(es) de Passageiros'}.`),
     ...(tabelas.length ? tabelas : [Vazio(S, 'A definir.')]),
     h(Text, { style: [S.p, { marginTop: pt(10) }], key: 'm' }, 'Marca: VerticalParts'),
     PdfFooter(S),
@@ -398,15 +398,24 @@ function PgSaudacao(S, data) {
 function PgMarketing(S, data) {
   const ed = data.elevador || {};
   const OPm = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
-  const titulo = ['Elevador de Passageiros', OPm ? OPm.modelosDistintos(ed.especificacoes) : ((ed.especificacoes || [])[0] || {}).modelo].filter(Boolean).join(' ');
+  const modelos = OPm ? OPm.modelosDistintos(ed.especificacoes) : ((ed.especificacoes || [])[0] || {}).modelo;
+  const titulo = OPm ? OPm.tituloEquipamentos(ed, modelos) : ['Elevador de Passageiros', modelos].filter(Boolean).join(' ');
+  /* Com perfis por tipo cada um tem a SUA linha de modelos/benefícios/diferenciais; sem perfis, os campos globais. */
+  const blocos = OPm ? OPm.perfisConteudo(ed) : [];
+  const secao = (b, comTitulo, k) => h(View, { key: k, style: { marginBottom: pt(12) } }, [
+    comTitulo ? h(Text, { style: S.subTitle, key: 'pt' }, OPm.tituloPerfil(b)) : null,
+    b.textoModelos ? h(View, { key: 'modelos' }, [comTitulo ? null : h(Text, { style: S.subTitle, key: 't' }, 'Linha de Modelos'), h(Text, { style: S.p, key: 'p' }, b.textoModelos)].filter(Boolean)) : null,
+    (b.beneficios || []).length ? h(View, { key: 'benef' }, [h(Text, { style: S.subTitle, key: 't' }, 'Benefícios'), Lista(S, b.beneficios, 'l')]) : null,
+    (b.diferenciais || []).length ? h(View, { key: 'dif' }, [h(Text, { style: S.subTitle, key: 't' }, 'Diferenciais em Relação ao Mercado'), Lista(S, b.diferenciais, 'l')]) : null,
+  ].filter(Boolean));
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, titulo),
     h(View, { style: S.secRule, key: 'r' }),
     ed.textoProposta ? h(Text, { style: S.p, key: 'p' }, ed.textoProposta) : Vazio(S),
-    ed.textoModelos ? h(View, { key: 'modelos' }, [h(Text, { style: S.subTitle, key: 't' }, 'Linha de Modelos'), h(Text, { style: S.p, key: 'p' }, ed.textoModelos)]) : null,
-    (ed.beneficios || []).length ? h(View, { key: 'benef' }, [h(Text, { style: S.subTitle, key: 't' }, 'Benefícios'), Lista(S, ed.beneficios, 'l')]) : null,
-    (ed.diferenciais || []).length ? h(View, { key: 'dif' }, [h(Text, { style: S.subTitle, key: 't' }, 'Diferenciais em Relação ao Mercado'), Lista(S, ed.diferenciais, 'l')]) : null,
+    ...(blocos.length
+      ? blocos.map((b, i) => secao(b, true, 'pf' + i))
+      : [secao({ textoModelos: ed.textoModelos, beneficios: ed.beneficios, diferenciais: ed.diferenciais }, false, 'g')]),
     PdfFooter(S),
   ]);
 }
@@ -470,23 +479,50 @@ function PgAcabamento(S, data) {
 }
 
 function PgCaracteristicas(S, data) {
-  const c = (data.elevador || {}).caracteristicasEquip || {};
+  const OPc = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  const blocos = OPc ? OPc.perfisConteudo(data.elevador || {}) : [];
+  const campos = (c, k) => [
+    h(Text, { style: S.subTitle, key: k + 's1' }, 'Alimentação Elétrica'),
+    c.alimentacao ? h(Text, { style: S.p, key: k + 'p1' }, c.alimentacao) : Vazio(S),
+    h(Text, { style: S.subTitle, key: k + 's2' }, 'Sistema de Comando de Controle'),
+    c.comando ? h(Text, { style: S.p, key: k + 'p2' }, c.comando) : Vazio(S),
+    h(Text, { style: S.subTitle, key: k + 's3' }, 'Máquina de Tração'),
+    c.tracao ? h(Text, { style: S.p, key: k + 'p3' }, c.tracao) : Vazio(S),
+  ];
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, 'Características Principais'),
     h(View, { style: S.secRule, key: 'r' }),
-    h(Text, { style: S.subTitle, key: 's1' }, 'Alimentação Elétrica'),
-    c.alimentacao ? h(Text, { style: S.p, key: 'p1' }, c.alimentacao) : Vazio(S),
-    h(Text, { style: S.subTitle, key: 's2' }, 'Sistema de Comando de Controle'),
-    c.comando ? h(Text, { style: S.p, key: 'p2' }, c.comando) : Vazio(S),
-    h(Text, { style: S.subTitle, key: 's3' }, 'Máquina de Tração'),
-    c.tracao ? h(Text, { style: S.p, key: 'p3' }, c.tracao) : Vazio(S),
+    ...(blocos.length
+      ? blocos.map((b, i) => h(View, { key: 'pf' + i, wrap: false, style: { marginBottom: pt(14) } }, [
+          h(Text, { style: [S.subTitle, { textDecoration: 'underline' }], key: 'pt' }, OPc.tituloPerfil(b)),
+          ...campos(b.caracteristicasEquip || {}, 'c' + i),
+        ]))
+      : campos((data.elevador || {}).caracteristicasEquip || {}, 'g')),
     PdfFooter(S),
   ]);
 }
 
 function PgItensNomeados(S, data, titulo, campo, vazioTxt) {
   const itens = (data.elevador || {})[campo] || [];
+  /* Recursos Inclusos é por perfil (Carga / Passageiro / Panorâmico); Infraestrutura continua global. */
+  const OPr = (typeof window !== 'undefined') ? window.PropostaOpcoes : null;
+  const blocos = (campo === 'recursosNomeados' && OPr) ? OPr.perfisConteudo(data.elevador || {}).filter((b) => b.recursosNomeados.length) : [];
+  if (blocos.length) {
+    return h(Page, { size: 'A4', style: S.page }, [
+      PdfHeader(S, data.numero),
+      h(Text, { style: S.secTitle, key: 't' }, titulo),
+      h(View, { style: S.secRule, key: 'r' }),
+      ...blocos.map((b, bi) => h(View, { key: 'pf' + bi, style: { marginBottom: pt(14) } }, [
+        h(Text, { style: S.subTitle, key: 'pt' }, OPr.tituloPerfil(b)),
+        ...b.recursosNomeados.map((it, i) => h(View, { style: S.namedItem, key: i }, [
+          h(Text, { style: S.namedItemLbl, key: 'n' }, it.nome),
+          h(Text, { style: S.namedItemTxt, key: 'd' }, it.desc),
+        ])),
+      ])),
+      PdfFooter(S),
+    ]);
+  }
   return h(Page, { size: 'A4', style: S.page }, [
     PdfHeader(S, data.numero),
     h(Text, { style: S.secTitle, key: 't' }, titulo),

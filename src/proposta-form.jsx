@@ -1121,18 +1121,34 @@ function S_Conteudo({ d, set }) {
     return () => { cancelado = true; };
   }, []);
 
-  const cats = engine ? engine.garantirCats(d.elevador) : [];
+  /* Perfis por tipo de equipamento (fase 2): com perfis, cada um tem os SEUS benefícios/diferenciais/características/
+     recursos/linha de modelos; a aba "Geral" guarda o que vale para a proposta inteira (infraestrutura, responsabilidades). */
+  const perfis = Array.isArray(d.elevador.perfis) ? d.elevador.perfis : [];
+  const [aba, setAba] = React.useState(null); // id do perfil ou "geral"
+  const emGeral = perfis.length > 0 && aba === "geral";
+  const perfil = perfis.length && !emGeral ? (perfis.find((p) => p.id === aba) || perfis[0]) : null;
+  const contaCod = (p) => (Array.isArray(p.codigos) && p.codigos.length) || (Array.isArray(p.unidadeIds) ? p.unidadeIds.length : 0);
 
-  const persistirCats = (novosCats) => {
-    set("elevador.conteudoCats", novosCats);
+  const catsTodas = engine ? engine.garantirCats(d.elevador) : [];
+  const cats = !engine ? [] : perfil ? engine.garantirCatsPerfil(perfil) : emGeral ? engine.catsGerais(catsTodas) : catsTodas;
+
+  const persistirGlobal = (completo) => {
+    set("elevador.conteudoCats", completo);
     if (!engine) return;
-    const legado = engine.derivarLegado(novosCats);
+    const legado = engine.derivarLegado(completo);
     Object.keys(legado).forEach((k) => set(`elevador.${k}`, legado[k]));
+  };
+  const persistirCats = (novosCats) => {
+    if (perfil) {
+      set("elevador.perfis", perfis.map((p) => p.id !== perfil.id ? p : { ...p, conteudoCats: novosCats, ...engine.legadoDoPerfil(novosCats) }));
+      return;
+    }
+    persistirGlobal(emGeral ? [...catsTodas.filter(engine.ehDoPerfil), ...novosCats] : novosCats);
   };
 
   React.useEffect(() => {
     if (engine && !(Array.isArray(d.elevador.conteudoCats) && d.elevador.conteudoCats.length)) {
-      persistirCats(cats);
+      persistirGlobal(catsTodas);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libLoaded]);
@@ -1181,27 +1197,29 @@ function S_Conteudo({ d, set }) {
 
   return (
     <div className="pe-acab">
-      {perfil && (
+      {perfis.length > 0 && (
         <div style={{ marginBottom: 14 }}>
-          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }} role="tablist" aria-label="Perfil por tipo de equipamento">
-            {perfis.map((p) => (
-              <button key={p.id} type="button" role="tab" aria-selected={p.id === perfil.id} onClick={() => setPerfilId(p.id)}
-                style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", font: "inherit", fontSize: 13,
-                  border: "1px solid " + (p.id === perfil.id ? "#111" : "#d4d4d4"),
-                  background: p.id === perfil.id ? "#FFC72C" : "#fff", color: "#111", fontWeight: p.id === perfil.id ? 600 : 400 }}>
-                {p.nome} ({contaCod(p)})
-              </button>
-            ))}
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }} role="tablist" aria-label="Conteúdo por tipo de equipamento">
+            {[...perfis.map((p) => ({ id: p.id, rotulo: `${p.nome} (${contaCod(p)})` })), { id: "geral", rotulo: "Geral" }].map((t) => {
+              const ativa = emGeral ? t.id === "geral" : (perfil && t.id === perfil.id);
+              return (
+                <button key={t.id} type="button" role="tab" aria-selected={!!ativa} onClick={() => setAba(t.id)}
+                  style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", font: "inherit", fontSize: 13,
+                    border: "1px solid " + (ativa ? "#111" : "#d4d4d4"), background: ativa ? "#FFC72C" : "#fff", color: "#111", fontWeight: ativa ? 600 : 400 }}>
+                  {t.rotulo}
+                </button>
+              );
+            })}
           </div>
           <div className="pe-hint" style={{ marginBottom: 6 }}>
-            Estes acabamentos valem só para {window.PropostaOpcoes ? window.PropostaOpcoes.faixaCodigos(perfil.codigos) || perfil.nome : perfil.nome}.
-            Vieram do Formulário e você pode ajustar.
+            {perfil
+              ? `Benefícios, diferenciais, características e recursos valem só para ${window.PropostaOpcoes ? window.PropostaOpcoes.faixaCodigos(perfil.codigos) || perfil.nome : perfil.nome}. O texto-base do tipo é um rascunho — revise.`
+              : "Infraestrutura e responsabilidades valem para a proposta inteira."}
           </div>
-          {perfis.length > 1 && (
-            <select className="pe-input" style={{ maxWidth: 280 }} value="" onChange={(e) => { if (e.target.value) copiarDe(e.target.value); }}>
-              <option value="">Copiar de outro perfil…</option>
-              {perfis.filter((p) => p.id !== perfil.id).map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
-            </select>
+          {perfil && (
+            <PEField label="Linha de modelos (este perfil)" tag="descrição da linha">
+              <PETextarea rows={2} value={perfil.textoModelos || ""} onChange={(v) => set("elevador.perfis", perfis.map((p) => p.id !== perfil.id ? p : { ...p, textoModelos: v }))} placeholder="Linha de elevadores…"/>
+            </PEField>
           )}
         </div>
       )}
@@ -1317,6 +1335,8 @@ function S_ContSidebarNav({ d, set, isActive, icon, onHeaderClick }) {
     store && store.saveCategoryToLibrary({ id, nome });
   };
 
+  /* Com perfis por tipo, benefícios/recursos são editados nas abas do painel "Conteúdo da Proposta" (cada perfil tem os seus). */
+  const temPerfis = Array.isArray(d.elevador.perfis) && d.elevador.perfis.length > 0;
   const IconComp = icon || Icon.bolt;
   const totalAtivos = cats.reduce((s, c) => s + c.campos.filter((f) => f.ativo).length, 0);
 
@@ -1326,10 +1346,10 @@ function S_ContSidebarNav({ d, set, isActive, icon, onHeaderClick }) {
         onClick={() => { onHeaderClick(); setExpanded((e) => !e); }}>
         <span className="pe__sidenav-icon"><IconComp/></span>
         <span style={{ flex: 1 }}>Conteúdo da Proposta</span>
-        {totalAtivos > 0 && <span className="pe__conttree-badge">{totalAtivos}</span>}
+        {!temPerfis && totalAtivos > 0 && <span className="pe__conttree-badge">{totalAtivos}</span>}
         <svg className={"pe__conttree-chev" + (expanded ? " on" : "")} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
       </div>
-      {expanded && (
+      {expanded && !temPerfis && (
         <div className="pe__conttree-body">
           {cats.map((c) => {
             const aberto = !!openCat[c.id];

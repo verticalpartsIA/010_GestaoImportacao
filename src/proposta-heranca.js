@@ -268,6 +268,8 @@
         unidadeIds: g.unidadeIds,
         codigos: g.codigos,
         acabamentosCats: [engine.catNativaFromLegacy(legado)],
+        /* Conteúdo comercial do perfil (fase 2): texto-base do tipo + alimentação/tração reais da Unidade. */
+        ...(window.PropostaTextosBase ? window.PropostaTextosBase.paraTipo(O.tipoChave(g.tipo), u) : {}),
       };
     }).sort((a, b) => {
       const n = (p) => { const m = /-(\d+)$/.exec(p.codigos[0] || ''); return m ? Number(m[1]) : Infinity; };

@@ -8,7 +8,7 @@ const path = require('node:path');
 
 function carregar() {
   global.window = {};
-  for (const f of ['proposta-opcoes.js', 'proposta-acabamentos-engine.js', 'proposta-heranca.js']) {
+  for (const f of ['proposta-opcoes.js', 'proposta-acabamentos-engine.js', 'proposta-conteudo-engine.js', 'proposta-textos-base.js', 'proposta-heranca.js']) {
     new Function('window', fs.readFileSync(path.join(__dirname, f), 'utf8'))(global.window);
   }
   return global.window;
@@ -107,4 +107,67 @@ test('montarPerfis: 1 tipo só → [] (proposta segue com o bloco global de semp
   const esp = [{ unidadeId: 'FEU-A', carac: 'Carga', codigos: ['X-1'] }, { unidadeId: 'FEU-B', carac: 'Carga', codigos: ['X-2'] }];
   assert.deepEqual(w.PropostaHeranca.montarPerfis({ unidades: unidades990, cotacao: null }, esp), []);
   assert.deepEqual(w.PropostaHeranca.montarPerfis({ unidades: [], cotacao: null }, []), []);
+});
+
+/* ---------- Fase 2: texto/conteúdo por perfil ---------- */
+
+test('resumoFornecimento: 1 tipo, vários tipos e retrocompat (cotação 990 = 9 equipamentos)', () => {
+  const { PropostaOpcoes: O } = carregar();
+  const ed990 = { especificacoes: esp990.map((e) => ({ ...e, qtd: e.codigos.length })) };
+  assert.equal(O.resumoFornecimento(ed990), '9 Elevadores (5 de Carga, 1 de Passageiros e 3 Panorâmicos)');
+  assert.equal(O.resumoFornecimento({ especificacoes: [{ carac: 'Carga', codigos: ['A-1', 'A-2'], qtd: 2 }] }), '2 Elevador(es) de Carga');
+  // proposta antiga: sem tipo conhecido → texto fixo de antes
+  assert.equal(O.resumoFornecimento({ especificacoes: [{ carac: '', qtd: 3 }] }), '3 Elevador(es) de Passageiros');
+  assert.equal(O.resumoFornecimento({ valores: { quantidade: '4' } }), '4 Elevador(es) de Passageiros');
+});
+
+test('tituloEquipamentos: 1 tipo usa o rótulo do tipo; vários viram "Elevadores"', () => {
+  const { PropostaOpcoes: O } = carregar();
+  assert.equal(O.tituloEquipamentos({ especificacoes: [{ carac: 'Carga', qtd: 1 }] }, 'GEF'), 'Elevador de Carga GEF');
+  assert.equal(O.tituloEquipamentos({ especificacoes: esp990 }, 'GEF, GEO, GEP-MRL'), 'Elevadores GEF, GEO, GEP-MRL');
+  assert.equal(O.tituloEquipamentos({}, 'GEF'), 'Elevador de Passageiros GEF');
+});
+
+test('perfisConteudo: cada perfil com os SEUS textos; sem perfis devolve [] (renderer usa o global)', () => {
+  const { PropostaOpcoes: O } = carregar();
+  assert.deepEqual(O.perfisConteudo({ beneficios: ['x'] }), []);
+  const b = O.perfisConteudo({ perfis: [
+    { id: 'a', tipo: 'Carga', codigos: ['VPEL-EL0990-1'], beneficios: ['carga', ''], recursosNomeados: [{ nome: 'R', desc: 'd' }, {}] },
+    { id: 'b', tipo: 'Passageiro', codigos: ['VPEL-EL0990-6'] },
+  ] });
+  assert.deepEqual(b[0].beneficios, ['carga']);
+  assert.equal(b[0].recursosNomeados.length, 1);
+  assert.deepEqual(b[1].beneficios, []);          // perfil sem texto NÃO herda o do outro (nem o global)
+  assert.equal(b[0].nome, 'Elevadores de Carga');
+});
+
+test('montarPerfis: conteúdo-base por tipo — carga não leva texto de passageiro; alimentação/tração vêm da Unidade', () => {
+  const w = carregar();
+  const unid = unidades990.map((u) => (u.id === 'FEU-A' ? { ...u, tensao_principal: '380', tracao: '2:1' } : u));
+  const perfis = w.PropostaHeranca.montarPerfis({ unidades: unid, cotacao: null }, esp990);
+  const carga = perfis.find((p) => p.tipo === 'Carga');
+  const pass = perfis.find((p) => p.tipo === 'Passageiro');
+  const nomes = (p) => p.recursosNomeados.map((r) => r.nome);
+  assert.ok(!nomes(carga).includes('Despacho de Carro Lotado'));
+  assert.ok(!nomes(carga).includes('Ventiladores de Cabine'));
+  assert.ok(nomes(pass).includes('Despacho de Carro Lotado'));
+  assert.ok(!carga.beneficios.join(' ').includes('viagens seguras e confortáveis'));
+  assert.match(carga.caracteristicasEquip.alimentacao, /^Trifásico, 380V/);
+  assert.match(carga.caracteristicasEquip.tracao, /tração 2:1/);
+  assert.equal(pass.caracteristicasEquip.alimentacao, '');           // Unidade sem tensão → não inventa
+  assert.ok(carga.caracteristicasEquip.comando.length > 20);
+});
+
+test('conteudo-engine: garantirCatsPerfil só traz as 4 categorias do perfil; catsGerais as outras; legadoDoPerfil volta ao formato de render', () => {
+  const w = carregar();
+  const E = w.PropostaConteudoEngine;
+  const perfil = { beneficios: ['b1'], diferenciais: ['d1'], caracteristicasEquip: { comando: 'cmd' }, recursosNomeados: [{ nome: 'N', desc: 'D' }] };
+  const cats = E.garantirCatsPerfil(perfil);
+  assert.deepEqual(cats.filter((c) => !c.custom).map((c) => c.id).sort(), [...E.IDS_PERFIL].sort());
+  const todas = E.garantirCats({});
+  assert.deepEqual(E.catsGerais(todas).map((c) => c.id).sort(), ['cont_infraestrutura', 'cont_resp_comprador', 'cont_resp_vendedor']);
+  const leg = E.legadoDoPerfil(cats);
+  assert.deepEqual(leg.beneficios, ['b1']);
+  assert.equal(leg.caracteristicasEquip.comando, 'cmd');
+  assert.deepEqual(leg.recursosNomeados, [{ nome: 'N', desc: 'D' }]);
 });

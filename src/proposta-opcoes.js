@@ -259,6 +259,61 @@
     return [b && b.nome, f].filter(Boolean).join(' — ');
   }
 
+  /* Conteúdo comercial por perfil (fase 2): 1 bloco por perfil, com os textos PRÓPRIOS dele. Proposta sem perfis
+     devolve [] — quem chama usa os campos globais de sempre (ed.beneficios, ed.recursosNomeados…). */
+  function perfisConteudo(ed) {
+    const e = ed || {};
+    const perfis = Array.isArray(e.perfis) ? e.perfis : [];
+    return perfis.map((p) => ({
+      id: p.id, nome: p.nome || nomePerfil(p.tipo), tipo: p.tipo || '', codigos: Array.isArray(p.codigos) ? p.codigos : [],
+      textoModelos: p.textoModelos || '',
+      beneficios: Array.isArray(p.beneficios) ? p.beneficios.filter(Boolean) : [],
+      diferenciais: Array.isArray(p.diferenciais) ? p.diferenciais.filter(Boolean) : [],
+      caracteristicasEquip: p.caracteristicasEquip || {},
+      recursosNomeados: Array.isArray(p.recursosNomeados) ? p.recursosNomeados.filter((r) => r && (r.nome || r.desc)) : [],
+    }));
+  }
+  /* Quantos equipamentos físicos por tipo, na ordem em que aparecem: [{chave, tipo, qtd}]. */
+  function contagemPorTipo(ed) {
+    const e = ed || {};
+    const mapa = new Map();
+    (e.especificacoes || []).forEach((s) => {
+      const tipo = String((s && s.carac) || '').trim();
+      const chave = tipoChave(tipo) || ('x:' + semAcento(tipo));
+      const n = (Array.isArray(s && s.codigos) && s.codigos.length) || Number(s && s.qtd) || 1;
+      if (!mapa.has(chave)) mapa.set(chave, { chave, tipo, qtd: 0 });
+      mapa.get(chave).qtd += n;
+    });
+    return [...mapa.values()];
+  }
+  /* Frase da saudação: "9 Elevadores (5 de Carga, 1 de Passageiros e 3 Panorâmicos)". 1 tipo conhecido → "N Elevador(es)
+     de Carga"; sem tipo conhecido → o texto fixo de antes ("de Passageiros"). */
+  function resumoFornecimento(ed) {
+    const e = ed || {};
+    const g = contagemPorTipo(e);
+    const total = g.reduce((s, x) => s + x.qtd, 0) || Number(e.valores && e.valores.quantidade) || 1;
+    const conhecidos = g.filter((x) => tipoChave(x.tipo));
+    if (g.length > 1 && conhecidos.length === g.length) {
+      const parte = (x) => {
+        const k = tipoChave(x.tipo);
+        return k === 'panoramico' ? `${x.qtd} ${x.qtd === 1 ? 'Panorâmico' : 'Panorâmicos'}` : `${x.qtd} de ${k === 'carga' ? 'Carga' : 'Passageiros'}`;
+      };
+      const ps = g.map(parte);
+      const lista = ps.length > 1 ? `${ps.slice(0, -1).join(', ')} e ${ps[ps.length - 1]}` : ps[0];
+      return `${total} ${total === 1 ? 'Elevador' : 'Elevadores'} (${lista})`;
+    }
+    const tipo = g.length === 1 && conhecidos.length === 1 ? g[0].tipo : '';
+    const k = tipoChave(tipo);
+    const de = k === 'carga' ? 'de Carga' : k === 'panoramico' ? 'Panorâmico(s)' : 'de Passageiros';
+    return k === 'panoramico' ? `${total} Elevador(es) Panorâmico(s)` : `${total} Elevador(es) ${de}`;
+  }
+  /* Título da página de apresentação: "Elevador de Carga GEF" (1 tipo), "Elevadores GEF, GEO, GEP-MRL" (vários). */
+  function tituloEquipamentos(ed, modelos) {
+    const g = contagemPorTipo(ed).filter((x) => tipoChave(x.tipo));
+    const base = g.length > 1 ? 'Elevadores' : rotuloTipo(g.length === 1 ? g[0].tipo : '', 'Elevador de Passageiros');
+    return [base, modelos].filter(Boolean).join(' ');
+  }
+
   /* Blocos da página AJUSTES E IMPOSTOS — fonte única de PDF e preview. A seção "Ajustes, Impostos e Câmbio" do editor
      tem campos "da página" (clausulaCambial, faturamentoTexto, taxasInclusas, taxasExcluidas) e campos gerais
      (cambio, faturamento, reajuste, taxasIn, taxasOut). Tudo o que o vendedor digitar entra: o campo da página vence;
@@ -411,5 +466,5 @@
   /* Lista da página Responsabilidades (itens preenchidos). */
   const itensTexto = (arr) => (Array.isArray(arr) ? arr : []).map((x) => String(x == null ? '' : x).trim()).filter(Boolean);
 
-  window.PropostaOpcoes = { semDifal, blocosCondicoes, itensNomeados, itensTexto, c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, tipoChave, rotuloTipo, nomePerfil, faixaCodigos, perfisAcabamento, tituloPerfil, blocosAjustes, eqInfo, linhasEspecEscEst, resumoEscEst, linhasEspecificidades, blocosInstalacao, _num: num };
+  window.PropostaOpcoes = { semDifal, blocosCondicoes, itensNomeados, itensTexto, c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, tipoChave, rotuloTipo, nomePerfil, faixaCodigos, perfisAcabamento, tituloPerfil, perfisConteudo, contagemPorTipo, resumoFornecimento, tituloEquipamentos, blocosAjustes, eqInfo, linhasEspecEscEst, resumoEscEst, linhasEspecificidades, blocosInstalacao, _num: num };
 }());

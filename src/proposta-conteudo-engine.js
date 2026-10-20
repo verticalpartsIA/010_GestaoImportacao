@@ -148,7 +148,32 @@
     };
   }
 
+  /* Perfis por tipo de equipamento: cada perfil tem os SEUS Benefícios, Diferenciais, Características Principais e
+     Recursos Inclusos (+ Linha de Modelos). Infraestrutura e Responsabilidades são contratuais e ficam globais. */
+  const IDS_PERFIL = ['cont_beneficios', 'cont_diferenciais', 'cont_caracteristicas', 'cont_recursos'];
+  const ehDoPerfil = (c) => IDS_PERFIL.includes(c.id);
+
+  /* Categorias editáveis de UM perfil — as 4 do perfil (a partir de perfil.conteudoCats ou, na falta, dos campos
+     prontos do perfil) + as categorias custom da biblioteca. */
+  function garantirCatsPerfil(perfil) {
+    const p = perfil || {};
+    const existentes = (Array.isArray(p.conteudoCats) && p.conteudoCats.length)
+      ? p.conteudoCats
+      : catsNativasFromLegacy(p).filter(ehDoPerfil);
+    return mergeComBiblioteca(existentes);
+  }
+
+  /* Campos prontos pra render a partir das categorias do perfil (só os 4 que são do perfil). */
+  function legadoDoPerfil(cats) {
+    const l = derivarLegado(cats);
+    return { beneficios: l.beneficios, diferenciais: l.diferenciais, caracteristicasEquip: l.caracteristicasEquip, recursosNomeados: l.recursosNomeados };
+  }
+
+  /* Cats do bloco GERAL quando a proposta tem perfis: tira as 4 que passaram a ser de cada perfil. */
+  function catsGerais(cats) { return (cats || []).filter((c) => !ehDoPerfil(c)); }
+
   window.PropostaConteudoEngine = {
+    IDS_PERFIL, ehDoPerfil, garantirCatsPerfil, legadoDoPerfil, catsGerais,
     CATEGORIAS_NATIVAS,
     normalizeNome, slugCategoria, fieldKey,
     catsNativasFromLegacy, setLibraryExtras, mergeComBiblioteca, garantirCats, derivarLegado,
