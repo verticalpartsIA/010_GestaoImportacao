@@ -15,7 +15,7 @@ Plano (19/10/2026). Nada disto está construído. Cada fase vira PR próprio; mi
 - Backfill: `concluido_em = data do EXIF` quando existir (hoje coincide com o envio); não inventar datas.
 - Atualizar `public_diario_obter` e a função de gravação do lançamento para levar o campo.
 
-## Fase 2 — Calendário de dias úteis
+## Fase 2 — Calendário de dias úteis — FEITA em 19/10/2026 (tabela calendario_feriados 2026-2028, dias_uteis, somar_dias_uteis, src/calendario-uteis.js)
 - Tabela `calendario_feriados` (data, descrição, abrangência: nacional / SP).
 - Função `dias_uteis(data_ini, data_fim)` descontando fim de semana e feriados. Feriado ponte entra como linha manual.
 - O mês com mais feriados fica mais longo sozinho; a gordura NÃO cobre calendário.
