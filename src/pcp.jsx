@@ -1137,6 +1137,8 @@ function PCPFilaProducao({ ctx, abrirOp }) {
   const [maes, setMaes] = React.useState({});
   const [busy, setBusy] = React.useState(false);
   const [preparo, setPreparo] = React.useState(null);
+  const [abertos, setAbertos] = React.useState({});
+  const alternar = (cod) => setAbertos(a => ({ ...a, [cod]: !a[cod] }));
 
   const carregar = React.useCallback(async () => {
     const { data: p } = await sb.from('pcp_pedidos').select('*').eq('etapa', '20').eq('cancelado', false).eq('so_separacao', false).order('data_previsao', { ascending: true }).limit(200);
@@ -1225,19 +1227,44 @@ function PCPFilaProducao({ ctx, abrirOp }) {
               const its = itens[p.codigo_pedido] || [];
               const pcp = its.filter(x => x.item_pcp), outros = its.filter(x => !x.item_pcp);
               const mae = maes[p.codigo_pedido];
+              const aberto = !!abertos[p.codigo_pedido];
               return (
-                <tr key={p.codigo_pedido}>
-                  <td><b style={{ fontWeight: 500 }}>{p.numero_pedido}</b></td>
+                <React.Fragment key={p.codigo_pedido}>
+                <tr>
+                  <td><button className="pcp-cod" onClick={() => alternar(p.codigo_pedido)} title={aberto ? 'Recolher os itens do pedido' : 'Ver todos os itens do pedido'} aria-expanded={aberto}>{aberto ? '▾' : '▸'} {p.numero_pedido}</button></td>
                   <td>{p.origem === 'ordem_servico' ? <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--accent-bg, #fff3cd)', color: 'var(--accent-fg, #7a5c00)' }} title="Veio de uma Ordem de Serviço do Omie (cliente de licitação, Capex/Opex)">Serviço</span> : 'Pedido'}</td>
                   <td style={{ minWidth: 200 }}>{p.cliente_nome || '—'}</td>
                   <td>{pcpData(p.data_previsao)}</td>
                   <td style={{ minWidth: 220 }}>{pcp.map(x => `${x.codigo}${x.codigo_original ? ' (' + x.codigo_original + ')' : ''} × ${pcpFmt(x.quantidade)}`).join(', ') || '—'}</td>
-                  <td className="text-right">{outros.length || '—'}</td>
+                  <td className="text-right">{outros.length ? <button className="pcp-cod" onClick={() => alternar(p.codigo_pedido)} title="Ver os itens">{outros.length}</button> : '—'}</td>
                   <td className="text-right">{pcpMoeda(p.valor_total)}</td>
                   <td>{mae
                     ? <button className="pcp-cod" onClick={() => abrirOp(mae.id)}>{p.numero_pedido ? `${mae.numero}-${p.numero_pedido}` : mae.numero}</button>
                     : (podeCriar ? <button className="btn btn--sm" disabled={busy} onClick={() => setPreparo({ pedido: p, opcoes: { previsao_inicio: '', prazo_entrega: p.data_previsao || '' } })}>Gerar OPs</button> : '—')}</td>
                 </tr>
+                {aberto && (
+                  <tr>
+                    <td colSpan={8} style={{ background: 'var(--bg2, #fafafa)', padding: '8px 16px' }}>
+                      <table className="t pcp-grid" style={{ width: '100%' }}>
+                        <thead><tr><th>#</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd.</th><th>Un.</th><th>Tipo</th></tr></thead>
+                        <tbody>
+                          {its.map((x, i) => (
+                            <tr key={x.seq ?? i}>
+                              <td>{x.seq ?? i + 1}</td>
+                              <td>{x.codigo || '—'}</td>
+                              <td>{x.descricao || '—'}</td>
+                              <td className="text-right">{pcpFmt(x.quantidade)}</td>
+                              <td>{x.unidade || '—'}</td>
+                              <td>{x.item_pcp ? <b style={{ fontWeight: 500 }}>Item do PCP</b> : <span style={{ color: 'var(--fg3)' }}>Outro item</span>}</td>
+                            </tr>
+                          ))}
+                          {its.length === 0 && <tr><td colSpan={6} style={{ color: 'var(--fg3)' }}>Este pedido não tem itens gravados.</td></tr>}
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
             {pedidos.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum pedido ou Ordem de Serviço liberado com quadro, corrimão ou cabo. Use “Buscar liberados no Omie”.</td></tr>}
