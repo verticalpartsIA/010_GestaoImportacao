@@ -28,5 +28,7 @@ insert into public.pcp_servico_quadro (n_cod_servico, codigo, descricao) values
   (9003471082, 'VPSVC-059', 'Serviço de Substituição de Quadro de Comandos - Elevador')
 on conflict (n_cod_servico) do nothing;
 
+-- RLS fechada (regra do projeto desde a segurança real #571: toda tabela nova nasce fechada,
+-- nunca "allow_all" como as tabelas pequenas antigas pcp_quadro_variante/pcp_codigo_alias) —
+-- só a Edge Function sync-pcp-os (service_role) lê esta tabela; o navegador nunca precisa dela.
 alter table public.pcp_servico_quadro enable row level security;
-create policy allow_all_pcp_servico_quadro on public.pcp_servico_quadro for all using (true) with check (true);
