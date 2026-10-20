@@ -412,7 +412,7 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
               <tr key={item.cotacaoFornecedorId || ('direto-' + item.formularioElevadorId)} style={{ cursor: 'pointer' }} onClick={() => abrir(item)}>
                 <td className="mono">{item.numeroCotacao ?? '—'}</td>
                 <td>{item.clienteNome || '—'}</td>
-                <td>{item.direto ? <span className="small" title="Preço combinado por fora — sem Cotação a Fornecedor">Direto (sem fornecedor)</span> : item.fornecedor}</td>
+                <td>{item.direto ? <span className="small" title="Preço combinado por fora — sem Cotação a Fornecedor">Direto (sem fornecedor)</span> : <>{item.fornecedor}{item.numeroDocumentoFornecedor ? <span className="muted small mono"> · {item.numeroDocumentoFornecedor}</span> : null}{item.substituidaPor ? <span className="small" style={{ color: 'var(--vp-danger)', fontWeight: 700 }} title={`O fornecedor recebeu uma revisão mais nova (${item.substituidaPor}). Precifique a revisão mais nova.`}> · substituída por {item.substituidaPor}</span> : null}</>}</td>
                 <td>{item.respondedAt ? new Date(item.respondedAt).toLocaleDateString('pt-BR') : '—'}</td>
                 <td>{item.direto ? <span className="muted small">—</span> : <StatusBadge status={window.CotacaoElevadorFornecedorStore.statusGroupLabel(item.statusCotacao)}/>}</td>
                 <td>{item.precificacaoStatus ? <StatusBadge status={item.precificacaoStatus === 'finalizado' ? 'Aprovada' : item.precificacaoStatus === 'calculado' ? 'Em análise' : 'Recebida'}/> : <span className="muted small">Não iniciada</span>}</td>
