@@ -343,3 +343,12 @@ test('Expedição: etiqueta de volume da NF (modelo girado, rolo 100 x 150)', ()
   assert.ok(Math.abs(a.escala - 100 / 150) < 1e-9);
   assert.equal(E.adaptarModelo(m, 100, 150).ajustado, false);
 });
+
+test('Separação — etiqueta AGUARDA (pedido parcial) usa o mesmo modelo com outro texto', () => {
+  const d = E.dadosSeparacao({ pedido: '29501', cliente: 'AKAI', aguarda: 'operação: VPEL-710a, VPB-148' });
+  assert.equal(d.volume_txt, 'PARCIAL');
+  assert.equal(d.destino_txt, 'AGUARDA');
+  assert.equal(d.separador_txt, 'operação: VPEL-710a, VPB-148');
+  assert.equal(d.qr, 'PED:29501');
+  assert.equal(E.dadosSeparacao({ pedido: '1' }).destino_txt, 'Destino: EXP');
+});

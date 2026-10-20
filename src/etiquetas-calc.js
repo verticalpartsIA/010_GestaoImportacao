@@ -119,12 +119,13 @@
     const pedido = t(r.pedido);
     const total = Math.max(1, Math.floor(Number(r.total_volumes) || 1));
     const vol = Math.max(1, Math.min(total, Math.floor(Number(r.volume) || 1)));
+    const aguarda = t(r.aguarda);   // etiqueta AGUARDA: pedido parcial (o que falta vem em r.aguarda). Mesmo modelo, outro texto.
     return {
       pedido_txt: `PEDIDO ${pedido}`,
-      volume_txt: `VOL ${vol} / ${total}`,
+      volume_txt: aguarda ? 'PARCIAL' : `VOL ${vol} / ${total}`,
       cliente_txt: t(r.cliente) ? `Cliente: ${t(r.cliente)}` : '',
-      destino_txt: 'Destino: EXP',
-      separador_txt: t(r.separador) ? `Separado por: ${t(r.separador)}` : '',
+      destino_txt: aguarda ? 'AGUARDA' : 'Destino: EXP',
+      separador_txt: aguarda ? aguarda.slice(0, 70) : (t(r.separador) ? `Separado por: ${t(r.separador)}` : ''),
       data_txt: t(r.data),
       qr: `PED:${pedido}`,
       barras: pedido,
