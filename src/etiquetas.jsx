@@ -283,6 +283,14 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const [sepTotal, setSepTotal] = React.useState(1);
   const [sepDe, setSepDe] = React.useState(1);
   const [sepPor, setSepPor] = React.useState('');
+  const [sepAguarda, setSepAguarda] = React.useState('');   // etiqueta AGUARDA (pedido parcial); vem da tela Separação
+  React.useEffect(() => {
+    let pre = null;
+    try { pre = JSON.parse(sessionStorage.getItem('vp_etq_prefill') || 'null'); sessionStorage.removeItem('vp_etq_prefill'); } catch (e) { pre = null; }
+    if (!pre || pre.tipo !== 'SEPARACAO') return;
+    setTipo('SEPARACAO'); setQPed(pre.pedido || ''); setSepAguarda(pre.aguarda || ''); setSepTotal(1); setSepDe(1);
+    S.listarPedidos(pre.pedido || '').then((r) => { setPeds(r); const achou = (r.pedidos || []).find((p) => String(p.numero_pedido) === String(pre.pedido)); if (achou) setPedSel(achou); });
+  }, []);
   React.useEffect(() => {
     if (tipo !== 'SEPARACAO') return undefined;
     const t = setTimeout(() => { S.listarPedidos(qPed).then(setPeds); }, 300);
@@ -329,7 +337,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const avDados = () => C.dadosAvaria({ codigo: avItem.codigo, descricao: avItem.descricao, quantidade: avQtd, unidade: avItem.unidade, motivo: avMotivo, responsavel: (window.__VP_USER && (window.__VP_USER.name || window.__VP_USER.email || '')).split('@')[0], data: etqHoje() });
 
   const sepN = Math.max(1, Math.min(99, Math.floor(Number(sepTotal) || 1)));
-  const sepDados = (v) => C.dadosSeparacao({ pedido: pedSel.numero_pedido, volume: v, total_volumes: sepN, cliente: pedSel.cliente_nome, separador: sepPor, data: etqHoje() });
+  const sepDados = (v) => C.dadosSeparacao({ pedido: pedSel.numero_pedido, volume: v, total_volumes: sepN, cliente: pedSel.cliente_nome, separador: sepPor, aguarda: sepAguarda, data: etqHoje() });
 
   const expN = Math.max(1, Math.min(99, Math.floor(Number(expTotal) || 1)));
   const expIni = Math.max(1, Math.min(expN, Math.floor(Number(expDe) || 1)));
@@ -370,7 +378,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
       const p = selItem.get(primeiraRef) || achados.itens.find((x) => x.codigo === primeiraRef);
       return p ? C.dadosItem(p) : null;
     } catch (e) { return null; }
-  }, [tipo, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor, nfSel, expN, expIni, palCod, obraTag, tagSel, opSel, opSerie, avQtd, avMotivo]);
+  }, [tipo, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor, sepAguarda, nfSel, expN, expIni, palCod, obraTag, tagSel, opSel, opSerie, avQtd, avMotivo]);
 
   const copiasValidas = Math.max(1, Math.min(50, Math.floor(Number(copias) || 1)));
   const totalEtiquetas = nSel * copiasValidas;
@@ -553,6 +561,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
                   <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Total de volumes<input className="input" type="number" min="1" max="99" value={sepTotal} onChange={(e) => setSepTotal(e.target.value)} style={{ width: 90 }}/></label>
                   <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Imprimir a partir do volume<input className="input" type="number" min="1" max="99" value={sepDe} onChange={(e) => setSepDe(e.target.value)} style={{ width: 90 }}/></label>
                   <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Separado por<input className="input" value={sepPor} onChange={(e) => setSepPor(e.target.value)} style={{ width: 180 }}/></label>
+                  <label style={{ fontSize: 12, display: 'grid', gap: 3 }}>Aviso AGUARDA (pedido parcial)<input className="input" value={sepAguarda} placeholder="vazio = etiqueta de volume" maxLength={70} onChange={(e) => setSepAguarda(e.target.value)} style={{ width: 300 }}/></label>
                 </div>
               ) : <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Escolha um pedido. Imprime uma etiqueta por volume (1/N … N/N).</div>}
               <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>Modelos para etiqueta de 100 × 50, 100 × 100 e 100 × 150 mm (escolhido pelo tamanho da etiqueta carregada). O QR leva "PED:número" — formato novo, ainda a registrar na issue #862 antes de o app de estoque ler.</div>

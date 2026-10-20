@@ -109,7 +109,9 @@ function SeparacaoTvAba({ caps }) {
 const sepMin = (m) => { const n = Math.max(0, Math.round(m || 0)); const h = Math.floor(n / 60); return h ? `${h}h ${String(n % 60).padStart(2, '0')}min` : `${n}min`; };
 const sepQtd = (v) => { const n = Number(v) || 0; return Number.isInteger(n) ? String(n) : n.toLocaleString('pt-BR', { maximumFractionDigits: 2 }); };
 const sepNome = (e) => (e || '').split('@')[0];
-const SEP_STATUS = { livre: ['Aguardando', 'warning'], em_separacao: ['Em separação', 'info'], separado: ['Separado', 'success'] };
+const SEP_STATUS = { livre: ['Aguardando', 'warning'], em_separacao: ['Em separação', 'info'], parcial: ['Parcial — aguardando', 'neutral'], separado: ['Separado', 'success'] };
+const SEP_SIT = { na_operacao: 'Na operação', aguardando_chegada: 'Aguardando chegada', falta: 'Falta' };
+const SEP_SIT_AJUDA = { na_operacao: 'Foi para fabricação/operação (ex.: cabo para pinar). Escreva o que fez.', aguardando_chegada: 'Ainda não chegou (ex.: importação). Escreva o que se sabe.', falta: 'Não há estoque. Escreva o motivo.' };
 
 async function sepChamar(acao, args) {
   const sb = SEP_SB();
@@ -119,11 +121,27 @@ async function sepChamar(acao, args) {
   return data;
 }
 
-function SepDetalhe({ codigo, caps, voltar, onMudou }) {
+// Texto da etiqueta AGUARDA: o que falta, em poucas palavras (a etiqueta é pequena).
+function sepTextoAguarda(itens) {
+  const p = (itens || []).filter((i) => i.pendencia);
+  const por = (s) => p.filter((i) => i.pendencia.situacao === s).map((i) => i.codigo);
+  const partes = [];
+  if (por('na_operacao').length) partes.push('operação: ' + por('na_operacao').join(', '));
+  if (por('aguardando_chegada').length) partes.push('chegando: ' + por('aguardando_chegada').join(', '));
+  if (por('falta').length) partes.push('falta: ' + por('falta').join(', '));
+  return partes.join(' · ');
+}
+function sepImprimirAguarda(pedido, itens) {
+  try { sessionStorage.setItem('vp_etq_prefill', JSON.stringify({ tipo: 'SEPARACAO', pedido: String(pedido.numero_pedido), aguarda: sepTextoAguarda(itens) })); } catch (e) { /* ok */ }
+  if (window.pcpIrParaUrl) window.pcpIrParaUrl('/logistica/etiquetas/gerar');
+}
+
+function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
   const [d, setD] = React.useState(null);
   const [erro, setErro] = React.useState(null);
   const [ocupado, setOcupado] = React.useState(false);
   const [campos, setCampos] = React.useState({});   // por código do item: { qtd, endereco }
+  const [pend, setPend] = React.useState(null);     // { codigo, situacao, obs } — formulário de pendência aberto
 
   const carregar = React.useCallback(async () => {
     try { setD(await sepChamar('itens', { codigo_pedido: codigo })); setErro(null); }
@@ -143,79 +161,119 @@ function SepDetalhe({ codigo, caps, voltar, onMudou }) {
   }
   async function concluir() {
     const faltam = (d.itens || []).filter((i) => Number(i.qtd_separada) < Number(i.qtd_pedida)).length;
-    if (faltam && !window.confirm(`Faltam ${faltam} item(ns) para separar. Concluir mesmo assim, com falta?`)) return;
-    agir('concluir', { forcar: faltam > 0 }, 'Pedido separado.', 'Concluiu a separação');
+    if (faltam && !window.confirm(`${faltam} item(ns) ficam com falta justificada. Concluir mesmo assim?`)) return;
+    agir('concluir', null, 'Pedido separado.', 'Concluiu a separação');
+  }
+  async function salvarPend() {
+    if (!pend.obs || pend.obs.trim().length < 3) { sepToast('Escreva a observação: é obrigatória.'); return; }
+    await agir('pendenciar', { codigo: pend.codigo, situacao: pend.situacao, obs: pend.obs.trim() }, 'Registrado.', 'Item pendente: ' + SEP_SIT[pend.situacao]);
+    setPend(null);
   }
 
-  if (erro && !d) return <div><button className="btn btn--sm" onClick={voltar}>← Pedidos</button><div style={{ background: '#fdecec', border: '1px solid #e49a9a', padding: 12, borderRadius: 10, marginTop: 12 }}>{erro}</div></div>;
+  if (erro && !d) return <div>{!embutido && <button className="btn btn--sm" onClick={voltar}>← Pedidos</button>}<div style={{ background: '#fdecec', border: '1px solid #e49a9a', padding: 12, borderRadius: 10, marginTop: 12 }}>{erro}</div></div>;
   if (!d) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
   const p = d.pedido, eu = (window.__VP_USER && window.__VP_USER.email || '').toLowerCase();
   const meu = p.pego_por && p.pego_por.toLowerCase() === eu;
   const podeAgir = caps.saida;
-  const [rot, vari] = SEP_STATUS[p.status] || SEP_STATUS.livre;
   const itens = d.itens || [];
+  const abertas = itens.filter((i) => i.pendencia);
+  const semResolver = itens.filter((i) => Number(i.qtd_separada) < Number(i.qtd_pedida) && !i.pendencia).length;
+  const parcial = p.status === 'em_separacao' && abertas.length > 0 && semResolver === 0;
+  const [rot, vari] = SEP_STATUS[parcial ? 'parcial' : p.status] || SEP_STATUS.livre;
+  const travaConcluir = abertas.some((i) => i.pendencia.situacao !== 'falta');
+  const editavel = podeAgir && meu && p.status === 'em_separacao';
   const set = (c, k, v) => setCampos((m) => ({ ...m, [c]: { ...(m[c] || {}), [k]: v } }));
 
   return (
     <div>
       <div style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap', marginBottom: 12 }}>
-        <button className="btn btn--sm" onClick={voltar}>← Pedidos</button>
-        <h2 style={{ margin: 0 }}>Pedido {p.numero_pedido}</h2>
+        {!embutido && <button className="btn btn--sm" onClick={voltar}>← Pedidos</button>}
+        {!embutido && <h2 style={{ margin: 0 }}>Pedido {p.numero_pedido}</h2>}
         <Badge variant={vari}>{rot}</Badge>
         <span style={{ color: 'var(--fg3)' }}>{p.cliente || '—'}{p.pego_por ? ` · com ${sepNome(p.pego_por)} desde ${sepData(p.pego_em)}` : ''}{p.separado_em ? ` · separado por ${sepNome(p.separado_por)} em ${sepData(p.separado_em)}` : ''}</span>
         <span style={{ flex: 1 }} />
         {podeAgir && p.status === 'livre' && <button className="btn btn--sm btn--primary" disabled={ocupado} onClick={() => agir('pegar', null, 'Pedido seu. Pode separar.', 'Pegou o pedido')}>Pegar pedido</button>}
         {podeAgir && p.status === 'em_separacao' && !meu && <button className="btn btn--sm btn--primary" disabled={ocupado} onClick={() => agir('assumir', null, 'Você assumiu o pedido.', 'Assumiu o pedido')}>Assumir de {sepNome(p.pego_por)}</button>}
         {podeAgir && p.status === 'em_separacao' && <button className="btn btn--sm" disabled={ocupado} onClick={() => agir('soltar', null, 'Pedido liberado para outra pessoa.', 'Soltou o pedido')}>Soltar</button>}
-        {podeAgir && meu && p.status === 'em_separacao' && <button className="btn btn--sm btn--primary" disabled={ocupado} onClick={concluir}>Concluir separação</button>}
+        {parcial && <button className="btn btn--sm" onClick={() => sepImprimirAguarda(p, itens)}>Imprimir etiqueta AGUARDA</button>}
+        {editavel && !travaConcluir && semResolver === 0 && <button className="btn btn--sm btn--primary" disabled={ocupado} onClick={concluir}>Concluir separação</button>}
       </div>
+      {parcial && <div style={{ background: '#eef4ff', border: '1px solid #9db8e8', padding: 10, borderRadius: 10, marginBottom: 12, fontSize: 13 }}>Parcial — o que dá para separar já foi separado. Falta: {sepTextoAguarda(itens)}. Imprima a etiqueta AGUARDA para identificar o material. Quando o item voltar, marque "Chegou" e separe-o; o pedido conclui quando não restar pendência.</div>}
       {!podeAgir && <div style={{ background: '#fff7df', border: '1px solid #e6c766', padding: 10, borderRadius: 10, marginBottom: 12, fontSize: 13 }}>Você só consulta. Para separar é preciso a alçada "VP Estoque › Saída" (a mesma do celular), em Administração › Alçadas.</div>}
       {erro && <div style={{ background: '#fdecec', border: '1px solid #e49a9a', padding: 10, borderRadius: 10, marginBottom: 12 }}>{erro}</div>}
-      <Card title="Itens do pedido" sub="Escolha o endereço de onde tirou, informe a quantidade e clique em Separar. Não dá para separar mais que o pedido. Separar não baixa o estoque (a NF de saída baixa).">
-        <div className="table-wrap">
-          <table className="t pcp-grid">
-            <thead><tr><th>Código</th><th>Descrição</th><th style={{ textAlign: 'right' }}>Pedido</th><th style={{ textAlign: 'right' }}>Separado</th><th>De onde saiu</th>{podeAgir && meu && p.status === 'em_separacao' && <th>Separar agora</th>}</tr></thead>
-            <tbody>
-              {itens.map((i) => {
-                const completo = Number(i.qtd_separada) >= Number(i.qtd_pedida);
-                const c = campos[i.codigo] || {};
-                const end = c.endereco != null ? c.endereco : ((i.enderecos || [])[0] || '');
-                const falta = Number(i.qtd_pedida) - Number(i.qtd_separada);
-                return (
-                  <tr key={i.codigo}>
-                    <td><b>{i.codigo}</b></td>
-                    <td style={{ maxWidth: 320 }}>{i.descricao || '—'}</td>
+      <div className="table-wrap">
+        <table className="t pcp-grid">
+          <thead><tr><th>Código</th><th>Descrição</th><th style={{ textAlign: 'right' }}>Pedido</th><th style={{ textAlign: 'right' }}>Separado</th><th>Situação</th>{editavel && <th>Ação</th>}</tr></thead>
+          <tbody>
+            {itens.map((i) => {
+              const completo = Number(i.qtd_separada) >= Number(i.qtd_pedida);
+              const c = campos[i.codigo] || {};
+              const end = c.endereco != null ? c.endereco : ((i.enderecos || [])[0] || '');
+              const falta = Number(i.qtd_pedida) - Number(i.qtd_separada);
+              const pd = i.pendencia;
+              const abrindo = pend && pend.codigo === i.codigo;
+              return (
+                <React.Fragment key={i.codigo}>
+                  <tr>
+                    <td><b>{i.codigo}</b>{i.fabricado_pcp && <div><Badge variant="outline">Fabricado pelo PCP</Badge></div>}</td>
+                    <td style={{ maxWidth: 300 }}>{i.descricao || '—'}</td>
                     <td style={{ textAlign: 'right' }}>{sepQtd(i.qtd_pedida)} {i.unidade || ''}</td>
                     <td style={{ textAlign: 'right', color: completo ? 'var(--vp-success, #1a8f4a)' : undefined, fontWeight: 600 }}>{sepQtd(i.qtd_separada)}</td>
-                    <td>
+                    <td style={{ maxWidth: 340 }}>
                       {(i.separacoes || []).map((s) => (
                         <div key={s.endereco} style={{ fontSize: 12 }}>
                           {s.endereco}: {sepQtd(s.qtd)}{' '}
-                          {podeAgir && meu && p.status === 'em_separacao' && <a href="#" title="Desfazer esta quantidade" onClick={(ev) => { ev.preventDefault(); agir('separar', { codigo: i.codigo, endereco: s.endereco, quantidade: -Number(s.qtd) }, 'Quantidade desfeita.', 'Desfez separação'); }}>desfazer</a>}
+                          {editavel && <a href="#" title="Desfazer esta quantidade" onClick={(ev) => { ev.preventDefault(); agir('separar', { codigo: i.codigo, endereco: s.endereco, quantidade: -Number(s.qtd) }, 'Quantidade desfeita.', 'Desfez separação'); }}>desfazer</a>}
                         </div>
                       ))}
-                      {!(i.separacoes || []).length && <span style={{ color: 'var(--fg3)', fontSize: 12 }}>{(i.enderecos || []).length ? 'endereço conhecido: ' + i.enderecos.join(', ') : 'sem endereço cadastrado'}</span>}
+                      {pd && <div style={{ fontSize: 12 }}><Badge variant="warning">{SEP_SIT[pd.situacao]}</Badge> <i>{pd.obs}</i> <span style={{ color: 'var(--fg3)' }}>— {sepNome(pd.por)}, {sepData(pd.em)}</span></div>}
+                      {!(i.separacoes || []).length && !pd && <span style={{ color: 'var(--fg3)', fontSize: 12 }}>{(i.enderecos || []).length ? 'endereço conhecido: ' + i.enderecos.join(', ') : 'sem endereço cadastrado'}</span>}
                     </td>
-                    {podeAgir && meu && p.status === 'em_separacao' && (
+                    {editavel && (
                       <td style={{ whiteSpace: 'nowrap' }}>
-                        <input className="input" style={{ width: 80 }} placeholder="Endereço" list={'ends-' + i.codigo} value={end} onChange={(e) => set(i.codigo, 'endereco', e.target.value.toUpperCase())} />
-                        <datalist id={'ends-' + i.codigo}>{(i.enderecos || []).map((e) => <option key={e} value={e} />)}</datalist>{' '}
-                        <input className="input" style={{ width: 70 }} placeholder={falta > 0 ? sepQtd(falta) : '0'} value={c.qtd || ''} onChange={(e) => set(i.codigo, 'qtd', e.target.value)} />{' '}
-                        <button className="btn btn--sm" disabled={ocupado || completo} onClick={() => {
-                          const q = Number(String(c.qtd || falta).replace(',', '.'));
-                          if (!(q > 0)) { sepToast('Informe a quantidade.'); return; }
-                          if (!end.trim()) { sepToast('Informe o endereço de onde tirou.'); return; }
-                          agir('separar', { codigo: i.codigo, endereco: end.trim(), quantidade: q }, null, 'Separou item').then(() => set(i.codigo, 'qtd', ''));
-                        }}>Separar</button>
+                        {!completo && (
+                          <div>
+                            <input className="input" style={{ width: 80 }} placeholder="Endereço" list={'ends-' + codigo + i.codigo} value={end} onChange={(e) => set(i.codigo, 'endereco', e.target.value.toUpperCase())} />
+                            <datalist id={'ends-' + codigo + i.codigo}>{(i.enderecos || []).map((e) => <option key={e} value={e} />)}</datalist>{' '}
+                            <input className="input" style={{ width: 64 }} placeholder={falta > 0 ? sepQtd(falta) : '0'} value={c.qtd || ''} onChange={(e) => set(i.codigo, 'qtd', e.target.value)} />{' '}
+                            <button className="btn btn--sm" disabled={ocupado} onClick={() => {
+                              const q = Number(String(c.qtd || falta).replace(',', '.'));
+                              if (!(q > 0)) { sepToast('Informe a quantidade.'); return; }
+                              if (!end.trim()) { sepToast('Informe o endereço de onde tirou.'); return; }
+                              agir('separar', { codigo: i.codigo, endereco: end.trim(), quantidade: q }, null, 'Separou item').then(() => set(i.codigo, 'qtd', ''));
+                            }}>Separar</button>
+                          </div>
+                        )}
+                        {!completo && !pd && !abrindo && (
+                          <div style={{ marginTop: 4 }}>
+                            {Object.keys(SEP_SIT).map((k) => <button key={k} className="btn btn--sm" style={{ marginRight: 4 }} title={SEP_SIT_AJUDA[k]} onClick={() => setPend({ codigo: i.codigo, situacao: k, obs: '' })}>{SEP_SIT[k]}</button>)}
+                          </div>
+                        )}
+                        {pd && pd.situacao !== 'falta' && <button className="btn btn--sm btn--primary" style={{ marginTop: 4 }} disabled={ocupado} title="O item voltou: separe-o logo em seguida" onClick={() => agir('resolver', { codigo: i.codigo }, 'Chegou. Agora separe o item.', 'Item chegou')}>Chegou</button>}
+                        {pd && <button className="btn btn--sm" style={{ marginTop: 4, marginLeft: 4 }} onClick={() => setPend({ codigo: i.codigo, situacao: pd.situacao, obs: pd.obs })}>Editar</button>}
                       </td>
                     )}
                   </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
-      </Card>
+                  {abrindo && (
+                    <tr><td colSpan={6} style={{ background: '#fafafa' }}>
+                      <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                        <b>{i.codigo}</b>
+                        <select className="input" style={{ width: 'auto' }} value={pend.situacao} onChange={(e) => setPend({ ...pend, situacao: e.target.value })}>
+                          {Object.keys(SEP_SIT).map((k) => <option key={k} value={k}>{SEP_SIT[k]}</option>)}
+                        </select>
+                        <input className="input" style={{ minWidth: 320, flex: 1 }} autoFocus maxLength={300} placeholder={SEP_SIT_AJUDA[pend.situacao]} value={pend.obs} onChange={(e) => setPend({ ...pend, obs: e.target.value })} onKeyDown={(e) => { if (e.key === 'Enter') salvarPend(); }} />
+                        <button className="btn btn--sm btn--primary" disabled={ocupado} onClick={salvarPend}>Salvar</button>
+                        <button className="btn btn--sm" onClick={() => setPend(null)}>Cancelar</button>
+                      </div>
+                    </td></tr>
+                  )}
+                </React.Fragment>
+              );
+            })}
+          </tbody>
+        </table>
+      </div>
+      <div style={{ fontSize: 12, color: 'var(--fg3)', marginTop: 8 }}>Separe o que está no estoque. O que não dá para separar agora (na operação, aguardando chegada ou falta) exige observação. Separar não baixa o estoque (a NF de saída baixa).</div>
     </div>
   );
 }
@@ -225,6 +283,7 @@ function SepPedidosAba({ caps, irTv }) {
   const [erro, setErro] = React.useState(null);
   const [filtro, setFiltro] = React.useState('abertos');
   const [busca, setBusca] = React.useState('');
+  const [expandidos, setExpandidos] = React.useState(() => new Set());
   const [aberto, setAberto] = window.useRotaItem('separacao', 'pedidos');
 
   const carregar = React.useCallback(async () => {
@@ -239,21 +298,21 @@ function SepPedidosAba({ caps, irTv }) {
     if (!l) { sepToast('Ainda não há link de TV. Gere um na aba Painel TV.'); irTv(); return; }
     sepCopiar(sepUrl(l.token));
   }
+  const alternar = (id) => setExpandidos((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
 
   if (aberto) return <SepDetalhe codigo={aberto} caps={caps} voltar={() => setAberto('')} onMudou={carregar} />;
 
   const sla = (dados && dados.sla_min) || 240;
-  const lista = ((dados && dados.pedidos) || []).filter((p) => {
+  const todos = (dados && dados.pedidos) || [];
+  const lista = todos.filter((p) => {
     if (filtro === 'abertos' && p.status === 'separado') return false;
-    if (filtro === 'livre' && p.status !== 'livre') return false;
-    if (filtro === 'em_separacao' && p.status !== 'em_separacao') return false;
-    if (filtro === 'separado' && p.status !== 'separado') return false;
+    if (filtro !== 'abertos' && filtro !== 'todos' && p.status !== filtro) return false;
     const b = busca.trim().toLowerCase();
     return !b || String(p.numero_pedido).toLowerCase().includes(b) || String(p.cliente || '').toLowerCase().includes(b);
   });
-  const cont = (st) => ((dados && dados.pedidos) || []).filter((p) => p.status === st).length;
-  const atrasados = ((dados && dados.pedidos) || []).filter((p) => p.status !== 'separado' && p.decorrido_min >= sla).length;
-  const filtros = [['abertos', 'A separar'], ['livre', `Aguardando (${cont('livre')})`], ['em_separacao', `Em separação (${cont('em_separacao')})`], ['separado', `Separados hoje (${cont('separado')})`], ['todos', 'Todos']];
+  const cont = (st) => todos.filter((p) => p.status === st).length;
+  const atrasados = todos.filter((p) => (p.status === 'livre' || p.status === 'em_separacao') && p.decorrido_min >= sla).length;
+  const filtros = [['abertos', 'A separar'], ['livre', `Aguardando (${cont('livre')})`], ['em_separacao', `Em separação (${cont('em_separacao')})`], ['parcial', `Parcial — aguardando (${cont('parcial')})`], ['separado', `Separados hoje (${cont('separado')})`], ['todos', 'Todos']];
 
   return (
     <div>
@@ -267,28 +326,36 @@ function SepPedidosAba({ caps, irTv }) {
         <button className="btn btn--sm" onClick={carregar}>Atualizar</button>
       </div>
       {erro && <div style={{ background: '#fdecec', border: '1px solid #e49a9a', padding: 12, borderRadius: 10, marginBottom: 12 }}>{erro}</div>}
-      <Card title="Pedidos a separar" sub={`Pedidos do Omie na etapa "Separar estoque" (atualizados a cada 30 min) e os separados hoje. SLA: ${sepMin(sla)} úteis desde a entrada no hub. Clique no pedido para separar.`}>
+      <Card title="Pedidos a separar" sub={`Pedidos do Omie na etapa "Separar estoque" (atualizados a cada 30 min) e os separados hoje. SLA: ${sepMin(sla)} úteis desde a entrada no hub (para de contar quando separa ou fica parcial). Clique na seta para ver os itens.`}>
         <div className="table-wrap">
           <table className="t pcp-grid">
-            <thead><tr><th>Pedido</th><th>Cliente</th><th>Previsão</th><th>Itens separados</th><th>Situação</th><th>Com</th><th>SLA</th></tr></thead>
+            <thead><tr><th style={{ width: 28 }}></th><th>Pedido</th><th>Cliente</th><th>Previsão</th><th>Itens separados</th><th>Situação</th><th>Com</th><th>SLA</th></tr></thead>
             <tbody>
               {lista.map((p) => {
                 const [rot, vari] = SEP_STATUS[p.status] || SEP_STATUS.livre;
                 const est = p.decorrido_min >= sla;
+                const aberta = expandidos.has(p.codigo_pedido);
                 return (
-                  <tr key={p.codigo_pedido} style={{ cursor: 'pointer' }} onClick={() => setAberto(String(p.codigo_pedido))}>
-                    <td><b>{p.numero_pedido}</b></td>
-                    <td>{p.cliente || '—'}</td>
-                    <td>{p.data_previsao ? new Date(p.data_previsao + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
-                    <td>{p.separados}/{p.itens}</td>
-                    <td><Badge variant={vari}>{rot}</Badge></td>
-                    <td>{sepNome(p.pego_por || p.separado_por) || '—'}</td>
-                    <td style={{ color: est && p.status !== 'separado' ? 'var(--vp-danger)' : undefined, fontWeight: est ? 700 : 400 }}>{sepMin(p.decorrido_min)}{est ? (p.status === 'separado' ? ' (fora)' : ' ⚠') : ''}</td>
-                  </tr>
+                  <React.Fragment key={p.codigo_pedido}>
+                    <tr style={{ cursor: 'pointer' }} onClick={() => alternar(p.codigo_pedido)}>
+                      <td>{aberta ? '▾' : '▸'}</td>
+                      <td><b>{p.numero_pedido}</b> <a href="#" title="Abrir em página própria (link direto)" onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); setAberto(String(p.codigo_pedido)); }}>abrir</a></td>
+                      <td>{p.cliente || '—'}</td>
+                      <td>{p.data_previsao ? new Date(p.data_previsao + 'T12:00:00').toLocaleDateString('pt-BR') : '—'}</td>
+                      <td>{p.separados}/{p.itens}{p.pendentes > 0 ? ` · ${p.pendentes} pendente(s)` : ''}</td>
+                      <td><Badge variant={vari}>{rot}</Badge></td>
+                      <td>{sepNome(p.pego_por || p.separado_por) || '—'}</td>
+                      <td style={{ color: est && (p.status === 'livre' || p.status === 'em_separacao') ? 'var(--vp-danger)' : undefined, fontWeight: est ? 700 : 400 }}>
+                        {sepMin(p.decorrido_min)}{est ? (p.status === 'livre' || p.status === 'em_separacao' ? ' ⚠' : ' (fora)') : ''}
+                        {p.status === 'parcial' && p.espera_min != null ? <div style={{ fontSize: 11, fontWeight: 400, color: 'var(--fg3)' }}>esperando há {sepMin(p.espera_min)}</div> : null}
+                      </td>
+                    </tr>
+                    {aberta && <tr><td colSpan={8} style={{ background: '#fafafa', padding: 14 }}><SepDetalhe codigo={String(p.codigo_pedido)} caps={caps} onMudou={carregar} embutido /></td></tr>}
+                  </React.Fragment>
                 );
               })}
-              {dados && !lista.length && <tr><td colSpan={7} style={{ padding: 18, color: 'var(--fg3)' }}>Nenhum pedido neste filtro.</td></tr>}
-              {!dados && !erro && <tr><td colSpan={7} style={{ padding: 18, color: 'var(--fg3)' }}>Carregando…</td></tr>}
+              {dados && !lista.length && <tr><td colSpan={8} style={{ padding: 18, color: 'var(--fg3)' }}>Nenhum pedido neste filtro.</td></tr>}
+              {!dados && !erro && <tr><td colSpan={8} style={{ padding: 18, color: 'var(--fg3)' }}>Carregando…</td></tr>}
             </tbody>
           </table>
         </div>
