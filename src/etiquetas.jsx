@@ -9,7 +9,7 @@
    - Impressora Zebra (Browser Print) com perfil ZPL imprime em ZPL nativo; qualquer outra (ou perfil sem renderizador) cai no
      diálogo de impressão do navegador, com uma página por etiqueta no tamanho exato.
    - O DV do endereço nasce DESLIGADO: a fórmula é proposta e ainda não foi aprovada; só ligue depois da aprovação, antes de imprimir as 236.
-   - Aba e etiqueta em edição ficam na URL (useRouteTab): /logistica/etiquetas/gerar | modelos | historico.
+   - Aba e etiqueta em edição ficam na URL (useRouteTab): /logistica/etiquetas/gerar/<tipo> | modelos | historico.
    ============================================================ */
 
 const ETQ_CALC = () => window.EtiquetasCalc;
@@ -62,6 +62,9 @@ const ETQ_TIPOS = [
   { id: 'OP_QUADRO', nome: 'OP / série do quadro', modelo: 'OP_QUADRO_100x50', desc: 'OP do PCP e nº de série do quadro de comando' },
   { id: 'AVARIA', nome: 'Avaria', modelo: 'AVARIA_100x50', desc: 'Material danificado, retido' },
 ];
+// Endereço de cada tipo na URL: /logistica/etiquetas/gerar/<slug>
+const ETQ_SLUG_TIPO = { ENDERECO: 'endereco', ITEM: 'item', RECEBIMENTO: 'recebimento', SEPARACAO: 'separacao', EXPEDICAO: 'expedicao-nf', PALETE: 'palete', IDTAG_EQUIPAMENTO: 'id-tag', OP_QUADRO: 'op-serie-quadro', AVARIA: 'avaria' };
+const ETQ_TIPO_SLUG = Object.fromEntries(Object.entries(ETQ_SLUG_TIPO).map(([k, v]) => [v, k]));
 const etqHoje = () => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 // Valores crus dos campos do rolo (podem estar vazios enquanto a pessoa digita); sem eles, vale o formato antigo "100x50".
 function etqEntradaRolo(cfg) {
@@ -210,7 +213,10 @@ function EtqPainelImpressora({ cfg, setCfg, podeImprimir, aoTestar, ocupado }) {
 /* ---------- Aba Gerar ---------- */
 function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const C = ETQ_CALC(), S = ETQ_STORE();
-  const [tipo, setTipo] = React.useState('ENDERECO');
+  const [segTipo, setSegTipo] = window.useRotaItem('etiquetas', 'gerar');
+  const tipo = ETQ_TIPO_SLUG[segTipo] || 'ENDERECO';
+  const setTipo = (id, opts) => setSegTipo(ETQ_SLUG_TIPO[id] || 'endereco', opts);
+  React.useEffect(() => { if (!ETQ_TIPO_SLUG[segTipo]) setSegTipo('endereco', { replace: true }); }, [segTipo]);
   const [copias, setCopias] = React.useState(1);
   const [usarDv, setUsarDv] = React.useState(etqLerDv());
   const tipoInfo = ETQ_TIPOS.find((t) => t.id === tipo);
@@ -288,7 +294,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     let pre = null;
     try { pre = JSON.parse(sessionStorage.getItem('vp_etq_prefill') || 'null'); sessionStorage.removeItem('vp_etq_prefill'); } catch (e) { pre = null; }
     if (!pre || pre.tipo !== 'SEPARACAO') return;
-    setTipo('SEPARACAO'); setQPed(pre.pedido || ''); setSepAguarda(pre.aguarda || ''); setSepTotal(1); setSepDe(1);
+    setTipo('SEPARACAO', { replace: true }); setQPed(pre.pedido || ''); setSepAguarda(pre.aguarda || ''); setSepTotal(1); setSepDe(1);
     S.listarPedidos(pre.pedido || '').then((r) => { setPeds(r); const achou = (r.pedidos || []).find((p) => String(p.numero_pedido) === String(pre.pedido)); if (achou) setPedSel(achou); });
   }, []);
   React.useEffect(() => {
