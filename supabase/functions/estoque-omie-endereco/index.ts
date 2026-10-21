@@ -88,6 +88,30 @@ async function idOmieDoProduto(codigo: string): Promise<number> {
   return id;
 }
 
+const LIMITE_OMIE = 60;   // o Omie recusa cConteudo com mais de 60 caracteres
+
+/* O hub guarda a lista completa ("F17 / F18 / … / F30"); no Omie, se passar de 60 caracteres, sequências de 3 ou mais
+   caixas bin da mesma letra viram faixa ("F17 a F30"). O resto do texto fica como está. */
+function compactarParaOmie(txt: string): string {
+  if (txt.length <= LIMITE_OMIE) return txt;
+  const partes = txt.split(/\s*\/\s*/);
+  const bin = (t: string) => /^([B-I])(\d{2})$/.exec(t);
+  const out: string[] = [];
+  let i = 0;
+  while (i < partes.length) {
+    const m = bin(partes[i]);
+    if (!m) { out.push(partes[i]); i++; continue; }
+    let j = i;
+    for (;;) {
+      const atual = bin(partes[j])!, prox = j + 1 < partes.length ? bin(partes[j + 1]) : null;
+      if (prox && prox[1] === atual[1] && Number(prox[2]) === Number(atual[2]) + 1) j++; else break;
+    }
+    if (j - i >= 2) out.push(`${partes[i]} a ${partes[j]}`); else for (let k = i; k <= j; k++) out.push(partes[k]);
+    i = j + 1;
+  }
+  return out.join(" / ");
+}
+
 /* Grava (ou apaga) a característica "Endereço" do produto no Omie. */
 async function gravarNoOmie(nCodProd: number, endereco: string | null) {
   if (!endereco) {
@@ -95,7 +119,7 @@ async function gravarNoOmie(nCodProd: number, endereco: string | null) {
     catch (e) { if (!/n[aã]o (cadastrad|encontrad|possui|existe)/i.test((e as Error).message)) throw e; }   // já não tinha: ok
     return;
   }
-  const dados = { nCodProd, nCodCaract: N_COD_CARACT_ENDERECO, cConteudo: endereco.slice(0, 200) };
+  const dados = { nCodProd, nCodCaract: N_COD_CARACT_ENDERECO, cConteudo: compactarParaOmie(endereco).slice(0, LIMITE_OMIE) };
   try {
     await omie("geral/prodcaract", "AlterarCaractProduto", dados);
   } catch (e) {
