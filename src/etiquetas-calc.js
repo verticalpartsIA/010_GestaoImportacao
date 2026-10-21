@@ -209,6 +209,46 @@
       barras: numero,
     };
   }
+  // Chicote do quadro de comando: fiação fabricada por nós que acompanha o quadro. SEM QR e SEM código de barras (decisão do
+  // usuário): só texto + ícone. Texto principal = "<chicote> | <pedido> <Novo|Modernização>".
+  const CHICOTES = [
+    { codigo: 'QC', descricao: 'Quadro de comando' },
+    { codigo: 'OS', descricao: 'Contato elétrico do limitador de velocidade' },
+    { codigo: 'HW', descricao: 'PAP do motor e contato do volante de inércia' },
+    { codigo: 'MT', descricao: 'Alimentação e monitoramento do freio da máquina e relé térmico' },
+    { codigo: 'BA', descricao: 'Fim de curso e trinco da porta de pavimento' },
+    { codigo: 'BB', descricao: 'Comunicação MODbus para o display de pavimento' },
+    { codigo: 'BC', descricao: 'Interfone do poço' },
+    { codigo: 'BD', descricao: 'Limite de redução de velocidade superior' },
+    { codigo: 'BE', descricao: 'Limite de redução de velocidade inferior' },
+    { codigo: 'PT1', descricao: 'Conexões para proteção térmica do motor e dispositivos do poço' },
+    { codigo: 'PT2', descricao: 'Conexões para proteção térmica do motor e dispositivos do poço' },
+    { codigo: 'CABO DE MANOBRA', descricao: 'Cabo plano de manobra principal' },
+    { codigo: 'GS1', descricao: 'Contato de trinco da porta de cabina' },
+    { codigo: 'DC1', descricao: 'Alimentação e sinal do inversor / módulo do operador de porta' },
+    { codigo: 'FAN', descricao: 'Iluminação e ventilação da cabina' },
+    { codigo: 'RDZ', descricao: 'Sensor de nivelamento de cabina' },
+    { codigo: 'SOS', descricao: 'Contato do freio de segurança da cunha da cabina' },
+    { codigo: 'DEN1', descricao: 'Sinais do inversor / módulo do operador de porta' },
+    { codigo: 'EDP1', descricao: 'Alimentação e sinal da barreira eletrônica' },
+    { codigo: 'SL', descricao: 'Sinalização em LED e sirene de 24V' },
+    { codigo: 'WT1', descricao: 'Pesador de carga digital' },
+    // POW1 só existe quando o elevador tem casa de máquinas (tipo de aplicação MR).
+    { codigo: 'POW1', descricao: 'Alimentação independente de luz e ventilador da cabina', soCasaMaquinas: true },
+  ];
+  const chicoteTipoObra = (v) => (String(v || '').toLowerCase().startsWith('modern') ? 'Modernização' : String(v || '').toLowerCase() === 'novo' ? 'Novo' : '');
+  function chicoteDisponivel(c, tipoAplicacao) { return !c.soCasaMaquinas || String(tipoAplicacao || '').toUpperCase() === 'MR'; }
+  function dadosChicote(r) {
+    const t = (v) => String(v == null ? '' : v).trim();
+    const c = CHICOTES.find((x) => x.codigo === t(r.chicote).toUpperCase()) || { codigo: t(r.chicote).toUpperCase(), descricao: t(r.descricao) };
+    const obra = chicoteTipoObra(r.tipo_obra);
+    return {
+      marca_txt: 'VERTICALPARTS',
+      chicote_txt: `${c.codigo} | ${t(r.pedido)}${obra ? ' ' + obra : ''}`,
+      desc_txt: c.descricao,
+    };
+  }
+
   // Avaria: material retido. QR = código do item (contrato do tipo Item).
   function dadosAvaria(r) {
     const t = (v) => String(v == null ? '' : v).trim();
@@ -361,6 +401,17 @@
         { tipo: 'qr', campo: '{qr}', x: 98, y: 46, w: 22 },
         { tipo: 'caixa', preenchido: true, x: 124, y: 6, w: 20, h: 90 },
         { tipo: 'texto', campo: '{pedido_txt}', rot: 90, cor: 'branco', x: 124, y: 6, w: 20, h: 90, tam: 13 },
+      ],
+    },
+    {
+      id: 'CHICOTE_50x30', tipo: 'CHICOTE_QUADRO', nome: 'Chicote do quadro (50 × 30, 2 colunas)', largura_mm: 50, altura_mm: 30,
+      proposito: 'Identifica a fiação fabricada que acompanha o quadro de comando: "FAN | 1212 Modernização" e a função do chicote. Só texto e ícone (sem QR nem código de barras). Rolo de 2 etiquetas de 50 × 30 mm lado a lado.',
+      campos: ['marca_txt', 'chicote_txt', 'desc_txt'],
+      elementos: [
+        { tipo: 'imagem', src: 'icone', x: 2, y: 2, w: 6, h: 6 },
+        { tipo: 'texto', campo: '{marca_txt}', x: 10, y: 3.2, w: 38, h: 3.4, peso: 'normal' },
+        { tipo: 'texto', campo: '{chicote_txt}', x: 2, y: 10, w: 46, h: 4.2, linhas: 2 },
+        { tipo: 'texto', campo: '{desc_txt}', x: 2, y: 20.5, w: 46, h: 2.6, linhas: 3, peso: 'normal' },
       ],
     },
     {
@@ -893,7 +944,7 @@
     DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo, registrarModelos, modelosDaEmpresa, validarModelo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
     tipoEndereco, listaEnderecos, normalizarPrateleira, rotuloEndereco,
-    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, renderSVG, renderSVGLinha, htmlImpressao,
+    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, CHICOTES, chicoteDisponivel, chicoteTipoObra, dadosChicote, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, renderSVG, renderSVGLinha, htmlImpressao,
     ROLO_LIM, geometriaRolo, adaptarModelo,
   };
 }());

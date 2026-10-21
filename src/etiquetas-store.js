@@ -96,6 +96,27 @@
     } catch (e) { return { notas: [], erro: e.message }; }
   }
 
+  // Pedidos de quadro de comando (Formulário do Quadro) para a etiqueta de chicote. Só existe etiqueta para pedido que existe aqui.
+  async function listarPedidosQuadro(texto) {
+    const sb = sbCli();
+    if (!sb) return { pedidos: [], erro: 'Supabase indisponível.' };
+    try {
+      const { data, error } = await sb.from('quadros_comando').select('id, numero_pedido, numero_cotacao, tipo_aplicacao, novo_ou_modernizacao, status, cliente_id, created_at').is('excluido_em', null).not('numero_pedido', 'is', null).order('numero_pedido', { ascending: false }).limit(300);
+      if (error) return { pedidos: [], erro: error.message };
+      let pedidos = data || [];
+      const t = String(texto || '').trim().toLowerCase();
+      const ids = Array.from(new Set(pedidos.map((p) => p.cliente_id).filter(Boolean)));
+      const nomes = {};
+      if (ids.length) {
+        const rc = await sb.from('clientes').select('id, razao_social').in('id', ids);
+        (rc.data || []).forEach((c) => { nomes[c.id] = c.razao_social; });
+      }
+      pedidos = pedidos.map((p) => ({ ...p, cliente: nomes[p.cliente_id] || '' }));
+      if (t) pedidos = pedidos.filter((p) => String(p.numero_pedido).includes(t) || String(p.cliente || '').toLowerCase().includes(t));
+      return { pedidos: pedidos.slice(0, 60), erro: null };
+    } catch (e) { return { pedidos: [], erro: e.message }; }
+  }
+
   // OPs de quadro de comando (PCP) abertas ou concluídas recentes, para a etiqueta de OP/série.
   async function listarOPsQuadro(texto) {
     const sb = sbCli();
@@ -212,5 +233,5 @@
     } catch (e) { return { linhas: [], erro: e.message }; }
   }
 
-  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
+  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarPedidosQuadro, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
 }());
