@@ -96,6 +96,18 @@
     } catch (e) { return { notas: [], erro: e.message }; }
   }
 
+  // Número e tipo de obra de uma OP de quadro pelo texto: "Montagem — OS 1212 (Modernização) — Quadro 1/9" ou, na OP-mãe,
+  // "OS 1212 — Modernização de Quadro de Comando"; sem "OS", usa o nº do pedido do Omie. Sem número = sem pedido (não gera etiqueta).
+  function pedidoDaOp(tituloOp, tituloMae, numeroOmie) {
+    const tipoDe = (x) => (/moderniz/i.test(x) ? 'modernizacao' : /\bnovo\b/i.test(x) ? 'novo' : '');
+    for (const tx of [tituloOp, tituloMae]) {
+      const m = String(tx || '').match(/\bOS\s*(\d+)/i);
+      if (m) return { numero: m[1], obra: tipoDe(tx) };
+    }
+    if (numeroOmie) return { numero: String(numeroOmie), obra: tipoDe(`${tituloOp || ''} ${tituloMae || ''}`) };
+    return null;
+  }
+
   // Pedidos de quadro de comando (Formulário do Quadro) para a etiqueta de chicote. Só existe etiqueta para pedido que existe aqui.
   async function listarPedidosQuadro(texto) {
     const sb = sbCli();
@@ -111,9 +123,35 @@
         const rc = await sb.from('clientes').select('id, razao_social').in('id', ids);
         (rc.data || []).forEach((c) => { nomes[c.id] = c.razao_social; });
       }
-      pedidos = pedidos.map((p) => ({ ...p, cliente: nomes[p.cliente_id] || '' }));
-      if (t) pedidos = pedidos.filter((p) => String(p.numero_pedido).includes(t) || String(p.cliente || '').toLowerCase().includes(t));
-      return { pedidos: pedidos.slice(0, 60), erro: null };
+      pedidos = pedidos.map((p) => ({ ...p, cliente: nomes[p.cliente_id] || '', origem: 'quadro', ops: [] }));
+      // Os quadros da tela "Evolução da Fabricação" (OPs de quadro abertas) também entram: o pedido vem do quadro ligado à OP ou,
+      // sem quadro (OS do Omie, ex. "OS 1212 (Modernização)"), do título da OP / da OP-mãe. OPs do mesmo pedido viram uma linha só.
+      const rops = await sb.from('pcp_ordens').select('id, numero, titulo, cliente, status, quadro_comando_id, ordem_mae_id, pedido_codigo').eq('frente', 'quadro').in('status', ['aguardando', 'em_producao']).order('numero');
+      if (!rops.error) {
+        const ops = rops.data || [];
+        const maes = {};
+        const maeIds = Array.from(new Set(ops.map((o) => o.ordem_mae_id).filter(Boolean)));
+        if (maeIds.length) { const rm = await sb.from('pcp_ordens').select('id, titulo, pedido_codigo').in('id', maeIds); (rm.data || []).forEach((m) => { maes[m.id] = m; }); }
+        const cods = Array.from(new Set(ops.map((o) => o.pedido_codigo || (maes[o.ordem_mae_id] || {}).pedido_codigo).filter((c) => c != null)));
+        const numPed = {};
+        if (cods.length) { const rp = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido').in('codigo_pedido', cods); (rp.data || []).forEach((p) => { numPed[p.codigo_pedido] = p.numero_pedido; }); }
+        const porQuadro = {};
+        pedidos.forEach((p) => { porQuadro[p.id] = p; });
+        const grupos = {};
+        ops.forEach((o) => {
+          const q = o.quadro_comando_id && porQuadro[o.quadro_comando_id];
+          if (q) { q.ops.push(o.numero); return; }
+          const mae = maes[o.ordem_mae_id] || {};
+          const id = pedidoDaOp(o.titulo, mae.titulo, numPed[o.pedido_codigo || mae.pedido_codigo]);
+          if (!id) return;
+          const k = `${id.numero}|${id.obra}`;
+          if (!grupos[k]) grupos[k] = { id: `op:${k}`, numero_pedido: id.numero, tipo_aplicacao: null, novo_ou_modernizacao: id.obra, cliente: o.cliente || '', origem: 'op', ops: [] };
+          grupos[k].ops.push(o.numero);
+        });
+        pedidos = pedidos.concat(Object.values(grupos));
+      }
+      if (t) pedidos = pedidos.filter((p) => String(p.numero_pedido).toLowerCase().includes(t) || String(p.cliente || '').toLowerCase().includes(t) || (p.ops || []).some((n) => String(n).toLowerCase().includes(t)));
+      return { pedidos: pedidos.slice(0, 80), erro: null };
     } catch (e) { return { pedidos: [], erro: e.message }; }
   }
 
@@ -233,5 +271,5 @@
     } catch (e) { return { linhas: [], erro: e.message }; }
   }
 
-  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarPedidosQuadro, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
+  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarPedidosQuadro, pedidoDaOp, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
 }());
