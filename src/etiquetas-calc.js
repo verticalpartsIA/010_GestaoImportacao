@@ -246,6 +246,7 @@
       marca_txt: 'VERTICALPARTS',
       chicote_txt: `${c.codigo} | ${t(r.pedido)}${obra ? ' ' + obra : ''}`,
       desc_txt: c.descricao,
+      rodape_txt: [t(r.op), t(r.cliente)].filter(Boolean).join(' · '),
     };
   }
 
@@ -406,12 +407,13 @@
     {
       id: 'CHICOTE_50x30', tipo: 'CHICOTE_QUADRO', nome: 'Chicote do quadro (50 × 30, 2 colunas)', largura_mm: 50, altura_mm: 30,
       proposito: 'Identifica a fiação fabricada que acompanha o quadro de comando: "FAN | 1212 Modernização" e a função do chicote. Só texto e ícone (sem QR nem código de barras). Rolo de 2 etiquetas de 50 × 30 mm lado a lado.',
-      campos: ['marca_txt', 'chicote_txt', 'desc_txt'],
+      campos: ['marca_txt', 'chicote_txt', 'desc_txt', 'rodape_txt'],
       elementos: [
         { tipo: 'imagem', src: 'icone', x: 2, y: 2, w: 6, h: 6 },
         { tipo: 'texto', campo: '{marca_txt}', x: 10, y: 3.2, w: 38, h: 3.4, peso: 'normal' },
         { tipo: 'texto', campo: '{chicote_txt}', x: 2, y: 10, w: 46, h: 4.2, linhas: 2 },
-        { tipo: 'texto', campo: '{desc_txt}', x: 2, y: 20.5, w: 46, h: 2.6, linhas: 3, peso: 'normal' },
+        { tipo: 'texto', campo: '{desc_txt}', x: 2, y: 19.8, w: 46, h: 2.6, linhas: 2, peso: 'normal' },
+        { tipo: 'texto', campo: '{rodape_txt}', x: 2, y: 26.5, w: 46, h: 2.2 },
       ],
     },
     {

@@ -352,7 +352,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const chiLista = chiPed ? C.CHICOTES.filter((c) => C.chicoteDisponivel(c, chiAplic)) : [];
   const escolherPedidoChi = (p) => { setChiPed(p); setChiCasa(false); setChiSel(new Set(C.CHICOTES.filter((c) => C.chicoteDisponivel(c, p.tipo_aplicacao)).map((c) => c.codigo))); };
   const mudarCasaChi = (v) => { setChiCasa(v); setChiSel((a) => { const n = new Set(a); if (v) n.add('POW1'); else n.delete('POW1'); return n; }); };
-  const chiDados = (c) => C.dadosChicote({ chicote: c.codigo, pedido: chiPed.numero_pedido, tipo_obra: chiPed.novo_ou_modernizacao });
+  const chiDados = (c) => C.dadosChicote({ chicote: c.codigo, pedido: chiPed.numero_pedido, tipo_obra: chiPed.novo_ou_modernizacao, cliente: chiPed.cliente, op: chiPed.ops && chiPed.ops.length === 1 ? chiPed.ops[0] : '' });
   /* Avaria */
   const [avQtd, setAvQtd] = React.useState('');
   const [avMotivo, setAvMotivo] = React.useState('');
@@ -755,7 +755,7 @@ const etqExemploDe = (m) => {
     : t === 'PALETE' ? C.dadosPalete({ codigo: 'PAL-SCVP260522-1', pi: 'SCVP260522-2', embarque: '146', data: '17/10/2026', itens: [{ codigo: 'VPEL-156', quantidade: 40 }, { codigo: 'VPEL-157', quantidade: 12 }] })
     : t === 'IDTAG_EQUIPAMENTO' ? C.dadosIdTag({ codigo: 'VPEL-EL0985-1', cliente: 'AKAI KB MAGAZINE', predio: 'Loja em Shopping', cidade: 'Praia Grande', uf: 'SP', cotacao: 985 })
     : t === 'OP_QUADRO' ? C.dadosOpQuadro({ numero: 'OP-0001', produto: 'VPEL-709b Quadro 30 kW 380 V', cliente: 'VITALTEC', serie: 'QC-2610-0007', data: '17/10/2026' })
-    : t === 'CHICOTE_QUADRO' ? C.dadosChicote({ chicote: 'FAN', pedido: '1212', tipo_obra: 'modernizacao' })
+    : t === 'CHICOTE_QUADRO' ? C.dadosChicote({ chicote: 'FAN', pedido: '1212', tipo_obra: 'modernizacao', cliente: 'CONCESSIONARIA DO BLOCO SUL S.A.', op: 'OP-0003-Q1' })
     : t === 'AVARIA' ? C.dadosAvaria({ codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', quantidade: 2, unidade: 'UN', motivo: 'caixa amassada', responsavel: 'tiago', data: '17/10/2026' })
     : t === 'ITEM' ? C.dadosItem({ codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', unidade: 'UN', familia: 'VPEL', endereco: 'R2A4' }) : C.DADOS_TESTE;
 };
