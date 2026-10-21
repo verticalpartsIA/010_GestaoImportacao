@@ -402,3 +402,13 @@ test('Chicote do quadro (50 x 30): "FAN | 1212 Modernização", só texto e íco
     assert.ok(!z.avisos.some((a) => /cortado/.test(a)), `${c.codigo}: ${z.avisos.join(' | ')}`);
   }
 });
+
+test('Chicote: rodapé com OP e cliente (identifica de quem é o quadro)', () => {
+  const d = E.dadosChicote({ chicote: 'QC', pedido: '29775', tipo_obra: '', cliente: 'VITALTEC ELEVADORES LTDA', op: 'OP-0004-Q1' });
+  assert.equal(d.chicote_txt, 'QC | 29775');
+  assert.equal(d.rodape_txt, 'OP-0004-Q1 · VITALTEC ELEVADORES LTDA');
+  assert.equal(E.dadosChicote({ chicote: 'QC', pedido: '1', cliente: 'X' }).rodape_txt, 'X');
+  const m = E.modeloPorId('CHICOTE_50x30');
+  const z = E.renderZPL(m, d, { dpi: 203 });
+  assert.ok(!z.avisos.some((a) => /cortado/.test(a)), z.avisos.join(' | '));
+});
