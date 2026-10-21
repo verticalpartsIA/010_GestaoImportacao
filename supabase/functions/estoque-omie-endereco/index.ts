@@ -115,7 +115,7 @@ async function processar(p: Pedido) {
   } catch (e) {
     const msg = (e as Error).message.slice(0, 500);
     await pg("PATCH", `estoque_omie_endereco_fila?codigo=eq.${encodeURIComponent(p.codigo)}&atualizado_em=eq.${marca}`,
-      { status: "erro", erro: msg, tentativas: p.tentativas + 1 }, "return=minimal").catch(() => {});
+      { status: "erro", erro: msg, tentativas: p.tentativas + 1, atualizado_em: new Date().toISOString() }, "return=minimal").catch(() => {});
     return { codigo: p.codigo, ok: false, erro: msg };
   }
 }
