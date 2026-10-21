@@ -150,9 +150,52 @@
         });
         pedidos = pedidos.concat(Object.values(grupos));
       }
+      // Pedidos de venda do PCP (OP-mãe aberta) sem quadro — ex. só cabos de manobra/cabos modulares — também entram: a etiqueta
+      // oferece os cabos do pedido (ver listarCabosDoPedido). Pedido que já está na lista (por quadro/OP) não é repetido.
+      try {
+        const rm = await sb.from('pcp_ordens').select('id, numero, cliente, pedido_codigo').eq('frente', 'pedido').in('status', ['aguardando', 'em_producao']).not('pedido_codigo', 'is', null);
+        const maes = rm.data || [];
+        const cods = Array.from(new Set(maes.map((m) => m.pedido_codigo)));
+        const num = {};
+        if (cods.length) { const rp = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido').in('codigo_pedido', cods); (rp.data || []).forEach((p) => { num[p.codigo_pedido] = p.numero_pedido; }); }
+        const ja = new Set(pedidos.map((p) => String(p.numero_pedido)));
+        maes.forEach((m) => {
+          const n = num[m.pedido_codigo];
+          if (!n || ja.has(String(n))) return;
+          ja.add(String(n));
+          pedidos.push({ id: `ped:${n}`, numero_pedido: n, tipo_aplicacao: null, novo_ou_modernizacao: null, cliente: m.cliente || '', origem: 'pedido', sem_quadro: true, ops: [m.numero] });
+        });
+      } catch (e) { /* lista de quadros segue sem os pedidos só de cabos */ }
       if (t) pedidos = pedidos.filter((p) => String(p.numero_pedido).toLowerCase().includes(t) || String(p.cliente || '').toLowerCase().includes(t) || (p.ops || []).some((n) => String(n).toLowerCase().includes(t)));
       return { pedidos: pedidos.slice(0, 80), erro: null };
     } catch (e) { return { pedidos: [], erro: e.message }; }
+  }
+
+  // Cabos (itens do PCP) de um pedido de venda do Omie: cabos modulares, cabo de manobra, cabo de aço… Cada item traz a OP onde
+  // é fabricado/cortado (OP de corte com o mesmo código) ou, sem ela, a OP-mãe do pedido.
+  async function listarCabosDoPedido(numeroPedido) {
+    const sb = sbCli();
+    if (!sb || numeroPedido == null || numeroPedido === '') return { itens: [], erro: null };
+    try {
+      const rp = await sb.from('pcp_pedidos').select('codigo_pedido').eq('numero_pedido', String(numeroPedido));
+      const cods = (rp.data || []).map((p) => p.codigo_pedido);
+      if (!cods.length) return { itens: [], erro: null };
+      const ri = await sb.from('pcp_pedido_itens').select('codigo, descricao, quantidade, unidade').in('codigo_pedido', cods).eq('item_pcp', true);
+      if (ri.error) return { itens: [], erro: ri.error.message };
+      const cabos = (ri.data || []).filter((i) => /\bcabo\b/i.test(String(i.descricao || '')));
+      if (!cabos.length) return { itens: [], erro: null };
+      const ro = await sb.from('pcp_ordens').select('id, numero, frente').in('pedido_codigo', cods).neq('status', 'cancelada');
+      const ops = ro.data || [];
+      const mae = (ops.find((o) => o.frente === 'pedido') || {}).numero || '';
+      const ids = ops.filter((o) => o.frente !== 'pedido').map((o) => o.id);
+      const porCodigo = {};
+      if (ids.length) {
+        const rm = await sb.from('pcp_ordem_materiais').select('ordem_id, codigo').in('ordem_id', ids);
+        (rm.data || []).forEach((m) => { const o = ops.find((x) => x.id === m.ordem_id); if (o && !porCodigo[m.codigo]) porCodigo[m.codigo] = o.numero; });
+      }
+      const itens = cabos.map((i) => ({ codigo: i.codigo, descricao: i.descricao, quantidade: Number(i.quantidade) || 0, unidade: i.unidade || '', op: porCodigo[i.codigo] || mae })).sort((a, b) => String(a.codigo).localeCompare(String(b.codigo)));
+      return { itens, erro: null };
+    } catch (e) { return { itens: [], erro: e.message }; }
   }
 
   // OPs do PCP que NÃO são pedido nem quadro (corte de cabo de aço, corrimão, cabo elétrico/de manobra…) para a etiqueta de fabricação.
@@ -304,5 +347,5 @@
     } catch (e) { return { linhas: [], erro: e.message }; }
   }
 
-  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarPedidosQuadro, listarOPsFabricacao, pedidoDaOp, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
+  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarPedidosQuadro, listarCabosDoPedido, listarOPsFabricacao, pedidoDaOp, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
 }());

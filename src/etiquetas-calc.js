@@ -274,6 +274,22 @@
     };
   }
 
+  // Cabo do pedido (PCP) na etiqueta de Chicote: "<código> | <pedido>" (ou "<código> | 40 m" para cabo vendido por metro),
+  // descrição curta e rodapé "OP · cliente". Mesmo modelo CHICOTE_50x30 (só texto e ícone).
+  function dadosCaboPedido(r) {
+    const t = (v) => String(v == null ? '' : v).trim();
+    const un = t(r.unidade).toUpperCase();
+    const porMetro = un === 'M' || un === 'MT' || un === 'METRO';
+    const qtd = porMetro ? textoQtdFabricacao(r.quantidade, r.unidade) : '';
+    const desc = t(r.descricao).replace(/\s*-?\s*Ref\.?\s*:.*$/i, '').replace(/\s+para\s+(o\s+)?Elevador\b/i, '').replace(/\s+/g, ' ').trim();
+    return {
+      marca_txt: 'VERTICALPARTS',
+      chicote_txt: `${t(r.codigo)} | ${qtd || t(r.pedido)}`,
+      desc_txt: desc,
+      rodape_txt: [t(r.op), t(r.cliente)].filter(Boolean).join(' · '),
+    };
+  }
+
   // Avaria: material retido. QR = código do item (contrato do tipo Item).
   function dadosAvaria(r) {
     const t = (v) => String(v == null ? '' : v).trim();
@@ -1029,7 +1045,7 @@
     DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo, registrarModelos, modelosDaEmpresa, validarModelo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
     tipoEndereco, listaEnderecos, normalizarPrateleira, rotuloEndereco,
-    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, dadosFabricacao, textoQtdFabricacao, CHICOTES, chicoteDisponivel, chicoteTipoObra, dadosChicote, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, zplImagem, renderZPLImagem, renderSVG, renderSVGLinha, htmlImpressao,
+    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, dadosFabricacao, textoQtdFabricacao, dadosCaboPedido, CHICOTES, chicoteDisponivel, chicoteTipoObra, dadosChicote, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, zplImagem, renderZPLImagem, renderSVG, renderSVGLinha, htmlImpressao,
     ROLO_LIM, geometriaRolo, adaptarModelo,
   };
 }());
