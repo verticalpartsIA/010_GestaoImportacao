@@ -21,6 +21,10 @@
   'use strict';
 
   /* Logo da VerticalParts em preto e branco (impressão térmica), embutido para a impressão não depender de rede. */
+  // Ícone da VerticalParts (círculo com escada rolante e engrenagem), preto e branco para etiqueta térmica pequena.
+  // ICONE_PRETO = PNG para a prévia/navegador; ICONE_BITS = bitmap 1 bit (96 x 96) que o ZPL reamostra para o tamanho pedido.
+  const ICONE_PRETO = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAKAAAACgCAYAAACLz2ctAAAFHklEQVR42u3d3Y6jMAyG4X4W93/L3rOVVhrttIX4983xDJD4iZMQoHpR3i3+4d+LJqORTiOj3WmI0tCIBxUuj251bAQ4YkWlgLc2ZgId8aMCwFsbRwEPiFww8NbGVcADIhcIvLVxNvCtKE7PAB4xb5ABwbesjUWjkA23Z0DwLW57Ax8IN6Zg4DEkpwH0Io3sgNp3gV64ng622RftDerHU9NDK+CN6ubEbVZFvGG9eGkpqNhAfFMDPfKdEBuITwMDPvblMRuGb2IZ/XqmDcMn8O0GyLu44EsDyLALvnKrYAr4QgCS/cD3VbnAV6ZuapoMbl23DcO3+ca3J9X/1jmvF6U7vtYjkA2suBc7zgZ8Hg2QRQf4HrmeqbdhvHhwVw+7dxti8kObDLvB9bMFPc/BV3f00QKAm+d85W9sG/jAl1kuIBztWE/dYB6J75ML3fLKooOv7hDcFZ4Sgge+By944/6qD8NX9in1qRlQSf8PvoeHYFa+4DtaJwPCI8cB34EMSPYD3/EsyDsh4Cs9B6SALwUgwy/4QtqLDAi+1Pa6yH5r8ZXYNeGlpH34Sm3XAbAuPgUfj1Uw+Hbh+wkg8z/wkQEHFfABEHxdADL8go8MCL49+AAIPgCCbx2+fz4jx41o8KW2EQDBl7UA9dfrJWMFDD7mgOBbiQ+A4GMVDL69+ABYI3Daig+AMYF75+cToj6eVG6xaayAwwKXjbBinJ0MGBs4H1AHhuDmgfMCQzEAl+J7EuGnC52S23Vsxd3DpxtoPQGFqmVQDVuERNym0GHEn/w/W3Hg6zfsBQz56wBWw/fJ/3lFGACcgW9TG64E2AXf0/vBJeZv2wGS+RiCR+OrcM0CIPg2FAcg+FbuE1ujNB+Nb/rw5wU6owx8K4dpnohm2AVfB4Cb8Gkbvter9tMwZL7B8KpnwCr4sp+GHt+BDHztIH/TVuW/ES3wjZ//qWKdbVgQvnnJ+/SvxjMPbTAEZ3+N/l2Enz5yf+epZi/azuMAVvwphDuwonYYNAGhkoeKaviqPCET8T6IV7BnST1Dr5qZT806X9fz/z331XHpfnjYjXhT8G4WHvOgRNeKRMz5vCi+p+OWOvUy8IV2ThU5RpmkZ8vxvfNOyFNoTr2Y1Hkh0qo3ncR34qNAOlA3DQCojgCjMt+dueLpeaYKtOtKgBnD7qS5bFl8HQBm3WTWMHxV9qNbAayww1Eh66gxuF/rIfAdx+iB56z85M2Pdbmaw4vC99OxVBR8qyLwjYqLd6tP549ig29ArC7wMRpl1mvax4m+HcYFvpxizRrnBL7Memo4Pj0BcAO+aBAnz6NRQovMrSLwna5zJAzvYutq3klO7yzoy3Pyad9DvdIX4etcvIsra9o5wLc0A3bt3dvweRdTAl+bumoavi6LEDLf+yDb7QIJfAyjmZYMfODLTGTXwMZitduo2LD6THyUaXSbW4GgV8PnDxzHwRebATUEX4V53KqfleAHq38O+FN4NmXDdIAagu/EsaYhVEWAkQgVgM8fhuzgixmCVRxeZOY7ib49vkor2MgS/a2Z3465+rfseErkXhtxu4VV8PFh1/+zwgUfGTB8zrepHPdh4KNkJicDHyVzZDTwUTKnZQY+SuaaQOCjZDoQ8MC39uTA242vO0DgDYi7wAU+LgaEa2NtNBj4uDCy4dr4bvg2DPC4UCASz5nzLCA2j+OUib4DjwqAkZgBcDBE0ZvASHyo4GiQ6+LBbkMeStqeRjiOk/b9pfwBdONuL8AM/D0AAAAASUVORK5CYII=';
+  const ICONE_BITS = { n: 96, hex: '00000000003FFC00000000000000000007FFFFE000000000000000007FFFFFFE0000000000000003FFFFFFFFC00000000000000FFFFFFFFFF00000000000003FFFFFFFFFFC000000000000FFFFFFFFFFFF000000000001FFFFFFFFFFFF800000000007FFFFFFFFFFFFE0000000000FFFFFFFFFFFFFF0000000003FFFFFFFFFFFFFFC000000007FFFFFFFFFFFFFFC00000000FFFFC0FFFFFFF00000000001FFFF007FFFFF800000000003FFFF003FFFFF000000000007FFFE001FFFFE00000000000FFFFE001FFFFC00000000001FFFFE001FFFF800000000003FFFFE001FFFF000000000003FFFFE001FFFE007FFFC00007FFFFE001FFFC00FFFFE0000FFFFFF003FFF803FFFFF0000FFFFFF807FFF007FFFFF0001FFFFFFC0FFFE00FFFFFF8003FFFFFFFFFFFC01FE00000003FFFFFFF3FFF003FC00000007FFFFFF80FFE007F800000007FFFFFF007FC00FF07FFFE00FFFFFFF003F801FE0FFFFF00FFFFFFE001F003FC1FFFFF01FFFFFFE001E007F83FFFFF81FFFFFFE001C00FF07FFFFF01FFFFFFE001801FE0FF000003FFFFFFE001003FC3FC000003FFFFFFE000007F87F8000003FFFFFFE00000FF0FF0000003FFFFFFE00001FE1FE0000007FFFFFFE00003FC3FC0000007FFFFFFE00007F87F80000027FFFFFFE0000FF0FF000000E7FFFFFFE0001FE1FE007FFFE7FFFFFFE0003FC3FC00FFFFEFFFFFFFE0007F83F801FFFFFFFFFFFFE000FFC1F803FFFFFFFFFFFFE001FFE0F807FFFFFFFFFFFFE003FFF0FC07FFFFFFFFFFFFE007E3F87C01FFFFFFFFFFFFC00F80FC7C007FFFFFFFFFFF801F007C3E003FFFFFFFFFFF003E003E3E003FFFFFFFFFFE007E003E3E003FFFFFFFFFFC00FC001E3E007FFFFFFFFFF801FC001E3E00FFFFFFFFFFF003FC001E3E01FFFFF7FFFFE007FE003E3E07FFFFE7FFFFC00FFE003E3E07FFFFE7FFFF801FFF007C3E07FFFFE7FFFF003FDF80FC7E03FFFFE7FFFE007F8FE3F87C01FFFFE3FFFC00FF07FFF8FC00FFFFC2000001FE03FFF0F8007FFFC0000003FC01FFC1F8007FFFC0000007F8607F03F000FFFFC000000FF0F00007F000FFFF8000001FE1FC000FE007FFFF8000003FC3FF007FC07FFFFF8000007F87FFFFFF807FFFFF007FFFFF0FFFFFFF007FFFFF007FFFFE1FFFFFFC003FFFFE007FFFFC3FC7FFF0003FFFFE003FFFF87F81FFC0003FFFFC003FFFF0FF000000003FFFFC00000001FE000000003FFFF800000003FC000000607FFFF000000007F80000007FFFFFF00000000FF00000007FFFFFE00003FFFFE00000007FFFFFC00003FFFFC0180300FFFFFFC00001FFFF803C0380FFFFFF800000FFFE007C07E0FFFFFF0000007FF800FE0FF3FFFFFE000000000001FE1FFFFFFFFC000000000003FFFFFFFFFFF8000000000007FFFFFFFFFFF000000000000FFFFFFFFFFFE000000000001FFFFFFFFFFFC000000000007FFFFFFFFFFF000000000001FFFFFFFFFFFE00000000001FFFFFFFFFFFF800000000000FFFFFFFFFFFF0000000000003FFFFFFFFFFC0000000000000FFFFFFFFFF000000000000003FFFFFFFFC0000000000000007FFFFFFE000000000000000007FFFFE00000000000000000003FFC0000000000' };
   const LOGO_PRETO = 'data:image/png;base64,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';
   const REMETENTE = { nome: 'VERTICALPARTS', endereco: 'Rua Armandina Braga de Almeida, 383, Jardim Santa Emilia, Guarulhos - SP, CEP 07141-003' };
 
@@ -230,7 +234,8 @@
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.4 },
         { tipo: 'qr', campo: '{qr}', x: 4, y: 4, w: 30 },
-        { tipo: 'texto', campo: '{codigo}', x: 38, y: 4, w: 58, h: 16 },
+        { tipo: 'imagem', src: 'icone', x: 86, y: 4, w: 10, h: 10 },
+        { tipo: 'texto', campo: '{codigo}', x: 38, y: 4, w: 46, h: 16 },
         { tipo: 'texto', campo: '{descricao_local}', x: 38, y: 22, w: 58, h: 4.5 },
         { tipo: 'texto', campo: '{lado_texto}', x: 38, y: 29, w: 38, h: 5 },
         { tipo: 'texto', campo: '{dv_texto}', x: 78, y: 29, w: 18, h: 5, alinhamento: 'dir' },
@@ -244,11 +249,24 @@
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.4 },
         { tipo: 'qr', campo: '{qr}', x: 4, y: 4, w: 24 },
-        { tipo: 'texto', campo: '{codigo}', x: 32, y: 4, w: 64, h: 9 },
+        { tipo: 'imagem', src: 'icone', x: 88, y: 4, w: 8, h: 8 },
+        { tipo: 'texto', campo: '{codigo}', x: 32, y: 4, w: 54, h: 9 },
         { tipo: 'texto', campo: '{descricao}', x: 32, y: 14.5, w: 64, h: 4.6, linhas: 2 },
         { tipo: 'texto', campo: '{linha_unidade}', x: 32, y: 26.5, w: 64, h: 4.2 },
         { tipo: 'texto', campo: '{endereco_txt}', x: 32, y: 31.5, w: 64, h: 3.8 },
         { tipo: 'code128', campo: '{barras}', x: 4, y: 37, w: 92, h: 9 },
+      ],
+    },
+    {
+      id: 'ITEM_50x30', tipo: 'ITEM', nome: 'Item — contagem às cegas (50 × 30, 2 colunas)', largura_mm: 50, altura_mm: 30,
+      proposito: 'Etiqueta pequena para colar no produto e fazer a contagem às cegas (sem saldo). Rolo de 2 etiquetas de 50 × 30 mm lado a lado: informe Etiquetas por linha = 2. QR e Code 128 levam o código do produto.',
+      campos: ['codigo', 'descricao', 'linha_unidade', 'endereco_txt', 'qr', 'barras'],
+      elementos: [
+        { tipo: 'imagem', src: 'icone', x: 2, y: 2, w: 6.5, h: 6.5 },
+        { tipo: 'texto', campo: '{codigo}', x: 10, y: 2.4, w: 38, h: 5 },
+        { tipo: 'texto', campo: '{descricao}', x: 2, y: 10, w: 31, h: 3, linhas: 3 },
+        { tipo: 'qr', campo: '{qr}', x: 35, y: 9.5, w: 12.5 },
+        { tipo: 'code128', campo: '{barras}', x: 1, y: 23.2, w: 48, h: 5.5 },
       ],
     },
     {
@@ -257,7 +275,8 @@
       campos: ['titulo', 'origem', 'fornecedor', 'codigo', 'descricao', 'quantidade_txt', 'nf_txt', 'conferencia', 'qr', 'barras'],
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.4 },
-        { tipo: 'texto', campo: '{titulo}', x: 4, y: 2.5, w: 92, h: 5.5 },
+        { tipo: 'imagem', src: 'icone', x: 89, y: 2, w: 7, h: 6.5 },
+        { tipo: 'texto', campo: '{titulo}', x: 4, y: 2.5, w: 82, h: 5.5 },
         { tipo: 'linha', x: 4, y: 9, w: 92, esp: 0.4 },
         { tipo: 'qr', campo: '{qr}', x: 4, y: 11, w: 22 },
         { tipo: 'texto', campo: '{origem}', x: 30, y: 11, w: 66, h: 4 },
@@ -275,7 +294,8 @@
       campos: ['pedido_txt', 'volume_txt', 'cliente_txt', 'destino_txt', 'separador_txt', 'data_txt', 'qr', 'barras'],
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 99, esp: 0.5 },
-        { tipo: 'texto', campo: '{pedido_txt}', x: 5, y: 5, w: 58, h: 8.5 },
+        { tipo: 'imagem', src: 'icone', x: 5, y: 5, w: 7, h: 7 },
+        { tipo: 'texto', campo: '{pedido_txt}', x: 13, y: 5.5, w: 50, h: 7.5 },
         { tipo: 'texto', campo: '{volume_txt}', x: 63, y: 6.5, w: 32, h: 6, alinhamento: 'dir' },
         { tipo: 'linha', x: 5, y: 17, w: 90, esp: 0.5 },
         { tipo: 'texto', campo: '{cliente_txt}', x: 5, y: 20, w: 90, h: 6, linhas: 2 },
@@ -292,7 +312,8 @@
       campos: ['pedido_txt', 'volume_txt', 'cliente_txt', 'destino_txt', 'separador_txt', 'data_txt', 'qr', 'barras'],
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.5 },
-        { tipo: 'texto', campo: '{pedido_txt}', x: 3, y: 2.5, w: 54, h: 8 },
+        { tipo: 'imagem', src: 'icone', x: 3, y: 3, w: 7, h: 7 },
+        { tipo: 'texto', campo: '{pedido_txt}', x: 11, y: 3.5, w: 46, h: 6.5 },
         { tipo: 'texto', campo: '{volume_txt}', x: 58, y: 4, w: 39, h: 6, alinhamento: 'dir' },
         { tipo: 'linha', x: 3, y: 12.5, w: 94, esp: 0.5 },
         { tipo: 'texto', campo: '{cliente_txt}', x: 3, y: 14.5, w: 94, h: 4.5, linhas: 2 },
@@ -309,7 +330,8 @@
       campos: ['pedido_txt', 'volume_txt', 'cliente_txt', 'destino_txt', 'separador_txt', 'data_txt', 'qr', 'barras'],
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 149, esp: 0.5 },
-        { tipo: 'texto', campo: '{pedido_txt}', x: 5, y: 6, w: 90, h: 11 },
+        { tipo: 'imagem', src: 'icone', x: 5, y: 6, w: 11, h: 11 },
+        { tipo: 'texto', campo: '{pedido_txt}', x: 19, y: 6, w: 76, h: 11 },
         { tipo: 'texto', campo: '{volume_txt}', x: 5, y: 19, w: 90, h: 11 },
         { tipo: 'linha', x: 5, y: 33, w: 90, esp: 0.5 },
         { tipo: 'texto', campo: '{cliente_txt}', x: 5, y: 37, w: 90, h: 7.5, linhas: 3 },
@@ -348,7 +370,8 @@
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.4 },
         { tipo: 'qr', campo: '{qr}', x: 4, y: 4, w: 26 },
-        { tipo: 'texto', campo: '{titulo}', x: 34, y: 3, w: 40, h: 4.5 },
+        { tipo: 'imagem', src: 'icone', x: 34, y: 2.5, w: 6, h: 6 },
+        { tipo: 'texto', campo: '{titulo}', x: 42, y: 3, w: 32, h: 4.5 },
         { tipo: 'texto', campo: '{total_txt}', x: 74, y: 3.5, w: 22, h: 4, alinhamento: 'dir' },
         { tipo: 'texto', campo: '{codigo}', x: 34, y: 9, w: 62, h: 9 },
         { tipo: 'texto', campo: '{origem}', x: 34, y: 20, w: 62, h: 4 },
@@ -362,7 +385,8 @@
       campos: ['titulo', 'codigo', 'cliente_txt', 'obra_txt', 'cotacao_txt', 'qr', 'barras'],
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.4 },
-        { tipo: 'texto', campo: '{titulo}', x: 4, y: 3, w: 92, h: 4.5 },
+        { tipo: 'imagem', src: 'icone', x: 89, y: 2, w: 7, h: 6.5 },
+        { tipo: 'texto', campo: '{titulo}', x: 4, y: 3, w: 82, h: 4.5 },
         { tipo: 'linha', x: 4, y: 9, w: 92, esp: 0.4 },
         { tipo: 'qr', campo: '{qr}', x: 4, y: 12, w: 28 },
         { tipo: 'texto', campo: '{codigo}', x: 36, y: 12, w: 60, h: 7 },
@@ -378,7 +402,8 @@
       campos: ['titulo', 'op_txt', 'produto_txt', 'cliente_txt', 'serie_txt', 'data_txt', 'qr', 'barras'],
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.4 },
-        { tipo: 'texto', campo: '{titulo}', x: 4, y: 3, w: 70, h: 4.5 },
+        { tipo: 'imagem', src: 'icone', x: 4, y: 2, w: 6.5, h: 6.5 },
+        { tipo: 'texto', campo: '{titulo}', x: 13, y: 3, w: 57, h: 4.5 },
         { tipo: 'texto', campo: '{data_txt}', x: 70, y: 3.5, w: 26, h: 4, alinhamento: 'dir' },
         { tipo: 'linha', x: 4, y: 9, w: 92, esp: 0.4 },
         { tipo: 'qr', campo: '{qr}', x: 4, y: 12, w: 28 },
@@ -395,7 +420,8 @@
       campos: ['titulo', 'codigo', 'descricao', 'quantidade_txt', 'motivo_txt', 'quem_txt', 'qr', 'barras'],
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 1.2 },
-        { tipo: 'texto', campo: '{titulo}', x: 4, y: 3, w: 92, h: 6.5 },
+        { tipo: 'imagem', src: 'icone', x: 88, y: 2.5, w: 8, h: 8 },
+        { tipo: 'texto', campo: '{titulo}', x: 4, y: 3, w: 82, h: 6.5 },
         { tipo: 'linha', x: 4, y: 11, w: 92, esp: 0.6 },
         { tipo: 'qr', campo: '{qr}', x: 4, y: 14, w: 24 },
         { tipo: 'texto', campo: '{codigo}', x: 32, y: 14, w: 64, h: 6 },
@@ -549,6 +575,33 @@
     return { modelo: Object.assign({}, modelo, { largura_mm: Number(largura), altura_mm: Number(altura), elementos }), escala: s, ajustado: true };
   }
 
+  // Ícone reamostrado para n x n pontos (média de cada quadradinho; preto se mais da metade for preto) em ^GFA.
+  function zplIcone(n) {
+    n = Math.max(8, Math.floor(n));
+    const m = ICONE_BITS.n, bpr = Math.ceil(m / 8);
+    const px = (xx, yy) => (parseInt(ICONE_BITS.hex.substr((yy * bpr + (xx >> 3)) * 2, 2), 16) >> (7 - (xx & 7))) & 1;
+    const rowBytes = Math.ceil(n / 8);
+    let hex = '';
+    for (let j = 0; j < n; j++) {
+      const y0 = Math.floor(j * m / n), y1 = Math.max(y0 + 1, Math.floor((j + 1) * m / n));
+      for (let b = 0; b < rowBytes; b++) {
+        let v = 0;
+        for (let k = 0; k < 8; k++) {
+          const i = b * 8 + k; let bit = 0;
+          if (i < n) {
+            const x0 = Math.floor(i * m / n), x1 = Math.max(x0 + 1, Math.floor((i + 1) * m / n));
+            let soma = 0, tot = 0;
+            for (let yy = y0; yy < y1; yy++) for (let xx = x0; xx < x1; xx++) { soma += px(xx, yy); tot++; }
+            bit = soma * 2 > tot ? 1 : 0;
+          }
+          v = (v << 1) | bit;
+        }
+        hex += (v < 16 ? '0' : '') + v.toString(16).toUpperCase();
+      }
+    }
+    return `^GFA,${rowBytes * n},${rowBytes * n},${rowBytes},${hex}`;
+  }
+
   // Elementos de UMA etiqueta em ZPL; dx = deslocamento horizontal em pontos (para as colunas do rolo).
   function zplCorpo(modelo, dados, o, dx) {
     const avisos = [];
@@ -573,6 +626,9 @@
         if (c.cortado) avisos.push(`Texto cortado para caber: "${bruto}"`);
         const al = el.alinhamento === 'dir' ? 'R' : el.alinhamento === 'centro' ? 'C' : 'L';
         z.push(`^FO${x},${y}^FB${w},${linhas},0,${al},0^A0N,${h},0^FH_^FD${zplTexto(c.texto, o.utf8)}^FS`);
+      } else if (el.tipo === 'imagem') {
+        if (el.src === 'icone') z.push(`^FO${x},${y}${zplIcone(d(Math.min(el.w, el.h)))}^FS`);
+        else avisos.push('Logo grande não é impresso por ZPL (use o ícone ou imprima pelo navegador).');
       } else if (el.tipo === 'qr') {
         const dado = aplicar(el.campo, dados);
         if (!dado) continue;
@@ -708,7 +764,8 @@
           ? `<rect x="${el.x}" y="${el.y}" width="${el.w}" height="${el.h}" fill="#000"/>`
           : `<rect x="${el.x}" y="${el.y}" width="${el.w}" height="${el.h}" fill="none" stroke="#000" stroke-width="${el.esp || 0.4}"/>`);
       } else if (el.tipo === 'imagem') {
-        if (el.src === 'logo') p.push(`<image x="${el.x}" y="${el.y}" width="${el.w}" height="${el.h}" preserveAspectRatio="xMinYMid meet" href="${LOGO_PRETO}"/>`);
+        if (el.src === 'icone') p.push(`<image x="${el.x}" y="${el.y}" width="${el.w}" height="${el.h}" preserveAspectRatio="xMidYMid meet" href="${ICONE_PRETO}"/>`);
+        else if (el.src === 'logo') p.push(`<image x="${el.x}" y="${el.y}" width="${el.w}" height="${el.h}" preserveAspectRatio="xMinYMid meet" href="${LOGO_PRETO}"/>`);
       } else if (el.tipo === 'linha') {
         p.push(`<rect x="${el.x}" y="${el.y}" width="${el.w}" height="${el.esp || 0.4}" fill="#000"/>`);
       } else if (el.tipo === 'texto') {
@@ -794,7 +851,7 @@
   window.EtiquetasCalc = {
     DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo, registrarModelos, modelosDaEmpresa, validarModelo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
-    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, LOGO_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, renderSVG, renderSVGLinha, htmlImpressao,
+    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, renderSVG, renderSVGLinha, htmlImpressao,
     ROLO_LIM, geometriaRolo, adaptarModelo,
   };
 }());
