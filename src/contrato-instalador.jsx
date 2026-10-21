@@ -714,6 +714,23 @@ function CIStepObjeto({ s, set, errors }) {
       <div className="ci-field-group">
         <h3 className="ci-group-title">Escopo</h3>
         <CITextArea label="Descrição dos serviços *" value={s.descricaoServicos} onChange={(v) => set('descricaoServicos', v)} rows={3} placeholder="Detalhe os serviços (montagem, alinhamento, testes, etc.)" error={errors.descricaoServicos} />
+        {s.equipamento === 'elevador' && !remocao && (
+          <div className="ci-field-group ci-field-group--cond">
+            <h3 className="ci-group-title">Fases da montagem (opcional)</h3>
+            <div className="ci-hint" style={{ marginBottom: 6 }}>As fases marcadas entram na cláusula 1.2, somadas à descrição acima. O texto de cada fase pode ser editado. Esta opção só existe para elevador.</div>
+            {window.CI.FASES_MONTAGEM.map(f => {
+              const on = !!(s.fasesAtivas || {})[f.id];
+              const txt = (s.fasesTexto || {})[f.id];
+              const padrao = f.texto.replace(/\{andares\}/g, window.CI.andaresDe(s));
+              return (
+                <div key={f.id}>
+                  <CICheckRow checked={on} onChange={(v) => set('fasesAtivas', { ...(s.fasesAtivas || {}), [f.id]: v })} label={f.label} />
+                  {on && <CITextArea label="" value={txt != null ? txt : padrao} onChange={(v) => set('fasesTexto', { ...(s.fasesTexto || {}), [f.id]: v })} rows={3} />}
+                </div>
+              );
+            })}
+          </div>
+        )}
         <CITextArea label="Local do serviço *" value={s.localServico} onChange={(v) => set('localServico', v)} rows={2} placeholder="Endereço completo de onde será realizado o serviço" hint="Endereço da obra onde o serviço acontece." error={errors.localServico} />
       </div>
     </div>

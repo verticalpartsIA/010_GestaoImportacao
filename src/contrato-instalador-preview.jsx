@@ -20,7 +20,7 @@ function CI_ClauseItem({ it }) {
     );
   }
   return (
-    <div className="ci-doc-item">
+    <div className={'ci-doc-item' + (it.destaque ? ' ci-doc-destaque' : '')}>
       <p>{it.n ? <span className="ci-doc-n">{it.n}</span> : null}{it.text}</p>
       {it.list && (
         it.listType === 'alpha'
