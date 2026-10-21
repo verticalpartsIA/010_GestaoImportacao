@@ -220,7 +220,7 @@ test.describe('Etiquetas', () => {
     await expect(page.getByRole('button', { name: /Imprimir/ })).toBeDisabled();   // sem pedido não há etiqueta
     await page.locator('tr', { hasText: '1212' }).click();
     await expect(page.getByText('POW1', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
     // prévia com 2 colunas: cada coluna mostra uma etiqueta DIFERENTE (QC e OS), não a mesma repetida
     await page.getByLabel('Largura da etiqueta (mm)', { exact: true }).fill('50');
     await page.getByLabel('Comprimento da etiqueta (mm)', { exact: true }).fill('30');
@@ -230,13 +230,13 @@ test.describe('Etiquetas', () => {
     await expect(previa2).toContainText('OS | 1212');
     await page.locator('tr', { hasText: '1070' }).click();
     await expect(page.getByText('POW1', { exact: true })).toHaveCount(0);
-    await expect(page.getByRole('button', { name: /Imprimir 21 etiquetas/ })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
     // quadro vindo da Evolução da Fabricação (OP sem cadastro de aplicação): POW1 só se marcar casa de máquinas
     await page.locator('tr', { hasText: '1500' }).click();
     await expect(page.getByText('Use Cópias = 2', { exact: false })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Imprimir 21 etiquetas/ })).toBeEnabled();
-    await page.getByLabel(/tem casa de máquinas/).check();
     await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
+    await page.getByLabel(/tem casa de máquinas/).check();
+    await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
   });
 
   test('o rolo e o ajuste ficam salvos por tipo de etiqueta e voltam sozinhos ao trocar de tipo', async ({ page }) => {
