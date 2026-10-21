@@ -233,6 +233,7 @@
     { codigo: 'EDP1', descricao: 'Alimentação e sinal da barreira eletrônica' },
     { codigo: 'SL', descricao: 'Sinalização em LED e sirene de 24V' },
     { codigo: 'WT1', descricao: 'Pesador de carga digital' },
+    { codigo: 'DZ', descricao: 'Zona de porta' },
     // POW1 só existe quando o elevador tem casa de máquinas (tipo de aplicação MR).
     { codigo: 'POW1', descricao: 'Alimentação independente de luz e ventilador da cabina', soCasaMaquinas: true },
   ];
