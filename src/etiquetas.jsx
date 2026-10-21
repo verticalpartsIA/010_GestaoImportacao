@@ -40,6 +40,43 @@ function etqBarcode(tipo, texto) {
     return tipo === 'qr' ? b.toSVG({ bcid: 'qrcode', text: texto, eclevel: 'M' }) : b.toSVG({ bcid: 'code128', text: texto, includetext: false, height: 10 });
   } catch (e) { return null; }
 }
+/* Modelos girados (Expedição): o desenho (SVG, o mesmo da prévia e do navegador) é rasterizado em preto e branco no tamanho exato da
+   etiqueta em pontos da impressora e vai como imagem (^GFA). Devolve { bits, largura, altura }. */
+function etqRasterizar(svg, largura, altura) {
+  return new Promise((ok, no) => {
+    const img = new Image();
+    const url = URL.createObjectURL(new Blob([svg], { type: 'image/svg+xml;charset=utf-8' }));
+    img.onload = () => {
+      try {
+        const cv = document.createElement('canvas');
+        cv.width = largura; cv.height = altura;
+        const cx = cv.getContext('2d', { willReadFrequently: true });
+        cx.fillStyle = '#fff'; cx.fillRect(0, 0, largura, altura);
+        cx.drawImage(img, 0, 0, largura, altura);
+        const px = cx.getImageData(0, 0, largura, altura).data;
+        const bits = new Uint8Array(largura * altura);
+        for (let i = 0; i < bits.length; i++) {
+          const lum = px[i * 4] * 0.299 + px[i * 4 + 1] * 0.587 + px[i * 4 + 2] * 0.114;
+          bits[i] = lum < 170 ? 1 : 0;
+        }
+        URL.revokeObjectURL(url);
+        ok({ bits, largura, altura });
+      } catch (e) { URL.revokeObjectURL(url); no(e); }
+    };
+    img.onerror = () => { URL.revokeObjectURL(url); no(new Error('Não consegui desenhar a etiqueta para enviar à impressora.')); };
+    img.src = url;
+  });
+}
+/* Junta os formatos ZPL em envios de até ~1,5 MB e 100 etiquetas (limite de 2 MB do Browser Print). */
+function etqLotes(blocos) {
+  const lotes = []; let atual = [], tam = 0;
+  for (const b of blocos) {
+    if (atual.length && (atual.length >= 100 || tam + b.length > 1500000)) { lotes.push(atual); atual = []; tam = 0; }
+    atual.push(b); tam += b.length;
+  }
+  if (atual.length) lotes.push(atual);
+  return lotes;
+}
 function useEtqBwip() {
   const [pronto, setPronto] = React.useState(!!window.bwipjs);
   const [erro, setErro] = React.useState(null);
@@ -609,7 +646,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
                   {nfSel.volumes && Number(expTotal) !== nfSel.volumes ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginTop: 6 }}>Atenção: a NF tem {nfSel.volumes} volume(s) no Omie e você está imprimindo para {expN}.</div> : null}
                 </>
               ) : <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Escolha uma NF. O total de volumes vem do Omie e imprime 1/N … N/N.</div>}
-              <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>Feita para o rolo de 100 × 150 mm (informe-o em "Rolo carregado"). Só NF já emitida aparece aqui (pedido faturado no Omie). O destinatário e o endereço vêm do cadastro do pedido; confira com a NF. Imprime só pelo diálogo do navegador.</div>
+              <div style={{ fontSize: 11, color: 'var(--fg3)', marginTop: 6 }}>Feita para o rolo de 100 × 150 mm (informe-o em "Rolo carregado"). Só NF já emitida aparece aqui (pedido faturado no Omie). O destinatário e o endereço vêm do cadastro do pedido; confira com a NF. Na Zebra (Browser Print) sai direto, como imagem; nas demais, pelo diálogo do navegador.</div>
             </>
           ) : tipo === 'SEPARACAO' ? (
             <>
@@ -1066,14 +1103,32 @@ function EtiquetasPage() {
     // O modelo se ajusta ao rolo carregado. A etiqueta de teste nunca é ampliada (as réguas continuam valendo 10 e 50 mm).
     const ajuste = C.adaptarModelo(modeloBase, geo.largura, geo.altura, { ampliar: tipo !== 'TESTE' });
     const modelo = ajuste.modelo;
-    const viaZpl = escolha.adaptador === 'zebra-browser-print' && perfil.implementado && !modelo.girar;   // modelo girado só sai pelo navegador
+    const viaZpl = escolha.adaptador === 'zebra-browser-print' && perfil.implementado;   // modelo girado vai como imagem (ver abaixo)
     const total = itens.reduce((n, it) => n + it.copias, 0);
     setOcupado(true);
     let erro = null, avisos = [];
     if (ajuste.ajustado && ajuste.escala < 0.6) avisos.push(`Modelo reduzido a ${Math.round(ajuste.escala * 100)}% para caber em ${geo.largura} × ${geo.altura} mm`);
     try {
       const imp = { adaptador: escolha.adaptador, id: escolha.id, nome: escolha.nome, bruto: escolha.bruto };
-      if (viaZpl) {
+      if (viaZpl && modelo.girar) {
+        // Modelo girado: gera as mesmas páginas do navegador, rasteriza no tamanho em pontos da impressora e envia como imagem.
+        await etqCarregarBwip();
+        const lista = [];
+        itens.forEach((it) => { for (let i = 0; i < it.copias; i++) lista.push(it.dados); });
+        const W = C.mmParaDots(geo.larguraTotal, perfil.dpi), H = C.mmParaDots(geo.altura, perfil.dpi);
+        const grupos = [];
+        for (let i = 0; i < lista.length; i += geo.colunas) {
+          const svg = C.renderSVGLinha(modelo, lista.slice(i, i + geo.colunas), { barcode: etqBarcode, colunas: geo.colunas, espaco: geo.espaco, desl_x_mm: geo.deslX, desl_y_mm: geo.deslY, girar: etqLerGirar() });
+          const ult = grupos[grupos.length - 1];
+          if (ult && ult.svg === svg) ult.n += 1; else grupos.push({ svg, n: 1 });
+        }
+        const blocos = [];
+        for (const g of grupos) {
+          const r = await etqRasterizar(g.svg, W, H);
+          blocos.push(C.renderZPLImagem(r.bits, r.largura, r.altura, { copias: g.n }));
+        }
+        for (const lote of etqLotes(blocos)) await EI.enviarBrowserPrint(imp, lote.join('\n'));
+      } else if (viaZpl) {
         let blocos;
         if (geo.colunas > 1) {
           const r = C.renderZPLLinhas(modelo, itens, { dpi: perfil.dpi, utf8: escolha.utf8 !== false, colunas: geo.colunas, espaco: geo.espaco, desl_x_mm: geo.deslX, desl_y_mm: geo.deslY });
@@ -1081,7 +1136,7 @@ function EtiquetasPage() {
         } else {
           blocos = itens.map((it) => { const r = C.renderZPL(modelo, it.dados, { dpi: perfil.dpi, utf8: escolha.utf8 !== false, copias: it.copias, desl_x_mm: geo.deslX, desl_y_mm: geo.deslY }); avisos.push(...r.avisos); return r.zpl; });
         }
-        for (let i = 0; i < blocos.length; i += 100) await EI.enviarBrowserPrint(imp, blocos.slice(i, i + 100).join('\n'));   // lotes de 100 (limite de 2 MB por envio do Browser Print)
+        for (const lote of etqLotes(blocos)) await EI.enviarBrowserPrint(imp, lote.join('\n'));   // lotes de até 100 etiquetas / 1,5 MB (limite de 2 MB do Browser Print)
       } else {
         await etqCarregarBwip();
         const lista = [];
@@ -1093,7 +1148,7 @@ function EtiquetasPage() {
     } catch (e) { erro = e.message || String(e); }
     const ref = itens.length === 1 ? itens[0].ref : `${itens[0] && itens[0].ref} … ${itens[itens.length - 1] && itens[itens.length - 1].ref} (${itens.length} códigos)`;
     const reg = await S.registrarImpressao({
-      tipo, modelo: modeloId, referencia: ref, quantidade: total, impressora: escolha.nome, adaptador: viaZpl ? 'zebra-browser-print/zpl' : 'navegador',
+      tipo, modelo: modeloId, referencia: ref, quantidade: total, impressora: escolha.nome, adaptador: viaZpl ? (modelo.girar ? 'zebra-browser-print/imagem' : 'zebra-browser-print/zpl') : 'navegador',
       dados: { itens: itens.map((it) => ({ ref: it.ref, dados: it.dados, copias: it.copias })), opcoes: opcoes || {}, avisos, rolo: { largura_mm: geo.largura, altura_mm: geo.altura, colunas: geo.colunas, espaco_mm: geo.espaco, desl_x_mm: geo.deslX, desl_y_mm: geo.deslY } },
       sucesso: !erro, erro, reimpressao: !!reimpressao, motivo,
     });

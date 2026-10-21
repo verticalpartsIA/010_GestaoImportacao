@@ -413,3 +413,68 @@ test('Chicote: rodapé com OP e cliente (identifica de quem é o quadro)', () =>
   const z = E.renderZPL(m, d, { dpi: 203 });
   assert.ok(!z.avisos.some((a) => /cortado/.test(a)), z.avisos.join(' | '));
 });
+
+/* Decodifica o ^GFA como a Zebra (ASCII compactado) para provar que a imagem enviada é a mesma que saiu do desenho. */
+function decodificarGFA(zpl, largura, altura) {
+  const m = /\^GFA,(\d+),(\d+),(\d+),([^^]*)\^FS/.exec(zpl);
+  assert.ok(m, 'sem ^GFA');
+  const bpr = Number(m[3]);
+  assert.equal(Number(m[1]), bpr * altura);
+  const dados = m[4];
+  const linhas = [];
+  let atual = '';
+  let i = 0;
+  const fechar = () => { linhas.push(atual); atual = ''; };
+  while (i < dados.length) {
+    const c = dados[i];
+    if (c === ':') { linhas.push(linhas[linhas.length - 1]); i++; continue; }
+    if (c === ',') { atual += '0'.repeat(bpr * 2 - atual.length); fechar(); i++; continue; }
+    if (c === '!') { atual += 'F'.repeat(bpr * 2 - atual.length); fechar(); i++; continue; }
+    let n = 1;
+    if (/[G-Y]/.test(c)) { n = c.charCodeAt(0) - 'G'.charCodeAt(0) + 1; i++; }
+    else if (/[g-z]/.test(c)) { n = (c.charCodeAt(0) - 'g'.charCodeAt(0) + 1) * 20; i++; }
+    // contagens somam: G–Y pode vir depois de g–z (ex.: 25 = 20 + 5)
+    let total = n;
+    while (/[G-Yg-z]/.test(dados[i]) && i < dados.length) {
+      const d = dados[i];
+      total += /[G-Y]/.test(d) ? d.charCodeAt(0) - 'G'.charCodeAt(0) + 1 : (d.charCodeAt(0) - 'g'.charCodeAt(0) + 1) * 20;
+      i++;
+    }
+    atual += dados[i].repeat(total); i++;
+    if (atual.length >= bpr * 2) fechar();
+  }
+  assert.equal(linhas.length, altura);
+  const bits = new Uint8Array(largura * altura);
+  linhas.forEach((hex, y) => {
+    assert.equal(hex.length, bpr * 2);
+    for (let x = 0; x < largura; x++) bits[y * largura + x] = (parseInt(hex[Math.floor(x / 8) * 2 + (x % 8 < 4 ? 0 : 1)], 16) >> (3 - (x % 4))) & 1;
+  });
+  return bits;
+}
+
+test('ZPL imagem: compactação não perde nenhum ponto (ida e volta)', () => {
+  const W = 203, H = 90;   // largura que não é múltiplo de 8 de propósito
+  let sem = 7;
+  const rnd = () => { sem = (sem * 1103515245 + 12345) & 0x7fffffff; return sem / 0x7fffffff; };
+  const bits = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (y < 10) bits[y * W + x] = 0;                       // linhas todas brancas
+    else if (y < 20) bits[y * W + x] = 1;                  // todas pretas
+    else if (y >= 30 && y < 40) bits[y * W + x] = x > 50 && x < 160 ? 1 : 0;   // linha repetida
+    else bits[y * W + x] = rnd() < 0.5 ? 1 : 0;            // ruído
+  }
+  const zpl = E.renderZPLImagem(bits, W, H, { copias: 3 });
+  assert.match(zpl, /^\^XA\n\^PW203\n\^LL90\n\^LH0,0\n\^FO0,0\^GFA,/);
+  assert.match(zpl, /\^PQ3\n\^XZ$/);
+  const volta = decodificarGFA(zpl, W, H);
+  assert.deepEqual(Array.from(volta), Array.from(bits));
+});
+
+test('ZPL imagem: etiqueta quase toda branca fica pequena (não estoura o limite do Browser Print)', () => {
+  const W = 1181, H = 1772;   // 100 × 150 mm a 300 dpi
+  const bits = new Uint8Array(W * H);
+  for (let y = 600; y < 700; y++) for (let x = 100; x < 1000; x++) bits[y * W + x] = 1;
+  const zpl = E.renderZPLImagem(bits, W, H);
+  assert.ok(zpl.length < 30000, `ZPL com ${zpl.length} caracteres`);
+  assert.deepEqual(Array.from(decodificarGFA(zpl, W, H)), Array.from(bits));
+});

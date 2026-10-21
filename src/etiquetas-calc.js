@@ -386,8 +386,8 @@
     },
     {
       // largura_mm × altura_mm = a etiqueta física (100 × 150, rolo em pé). O desenho é feito DEITADO (150 × 100, como a etiqueta
-      // de hoje) e girado 90° na impressão: as coordenadas dos elementos ficam no desenho deitado. Só imprime pelo navegador
-      // (o ZPL não gira QR/imagem) e ainda não pode ser copiado/editado.
+      // de hoje) e girado 90° na impressão: as coordenadas dos elementos ficam no desenho deitado. Imprime direto na Zebra como IMAGEM (o desenho
+      // é rasterizado e enviado em ^GFA, já na orientação final) ou pelo navegador; ainda não pode ser copiado/editado.
       id: 'EXPEDICAO_100x150', tipo: 'EXPEDICAO', nome: 'Expedição — volume da NF (100 × 150)', largura_mm: 100, altura_mm: 150, girar: 90,
       proposito: 'Etiqueta de volume da expedição: remetente, nº da NF, destinatário, transportadora, endereço, volume n/N e nº do pedido na faixa preta. Rolo 100 × 150 mm.',
       campos: ['remetente_txt', 'remetente_end', 'nf_txt', 'destinatario_txt', 'transportadora_txt', 'endereco_txt', 'volume_txt', 'pedido_txt', 'qr'],
@@ -755,6 +755,52 @@
     return { blocos, avisos: Array.from(avisos), etiquetas: lista.length, linhas: linhas.reduce((n, l) => n + l.n, 0) };
   }
 
+  /* ---------- Imagem em ZPL (modelos girados: o desenho vira bitmap e a Zebra só imprime a imagem) ----------
+     bits: Uint8Array/array de 0|1 (1 = preto), largura × altura em pontos, linha por linha.
+     Devolve o comando ^GFA com a compressão ASCII da Zebra (G–Y = 1–19 repetições, g–z = 20–400, "," = resto da linha em 0,
+     "!" = resto em F, ":" = linha igual à anterior). */
+  function zplCompactarLinha(hex) {
+    let out = '';
+    let i = 0;
+    while (i < hex.length) {
+      const ch = hex[i];
+      let n = 1;
+      while (i + n < hex.length && hex[i + n] === ch) n++;
+      if (i + n === hex.length && (ch === '0' || ch === 'F')) { out += ch === '0' ? ',' : '!'; break; }
+      i += n;
+      while (n > 0) {
+        if (n >= 20) { const k = Math.min(Math.floor(n / 20) * 20, 400); out += String.fromCharCode('g'.charCodeAt(0) + k / 20 - 1) + ch; n -= k; }
+        else if (n > 1) { out += String.fromCharCode('G'.charCodeAt(0) + n - 2 + 1) + ch; n = 0; }
+        else { out += ch; n = 0; }
+      }
+    }
+    return out;
+  }
+  function zplImagem(bits, largura, altura) {
+    const bpr = Math.ceil(largura / 8);
+    const linhas = [];
+    let anterior = null;
+    for (let y = 0; y < altura; y++) {
+      let hex = '';
+      for (let b = 0; b < bpr; b++) {
+        let v = 0;
+        for (let k = 0; k < 8; k++) { const x = b * 8 + k; v = (v << 1) | (x < largura && bits[y * largura + x] ? 1 : 0); }
+        hex += (v < 16 ? '0' : '') + v.toString(16).toUpperCase();
+      }
+      if (hex === anterior) linhas.push(':');
+      else linhas.push(zplCompactarLinha(hex));
+      anterior = hex;
+    }
+    const total = bpr * altura;
+    return `^GFA,${total},${total},${bpr},${linhas.join('')}`;
+  }
+  /* Um formato ZPL que imprime só a imagem (já na orientação final da etiqueta). */
+  function renderZPLImagem(bits, largura, altura, opcoes) {
+    const o = Object.assign({ copias: 1 }, opcoes || {});
+    return ['^XA', `^PW${largura}`, `^LL${altura}`, '^LH0,0', `^FO0,0${zplImagem(bits, largura, altura)}^FS`,
+      `^PQ${Math.max(1, Math.floor(Number(o.copias) || 1))}`, '^XZ'].join('\n');
+  }
+
   /* ---------- SVG (pré-visualização e impressão pelo navegador) ---------- */
   const escXml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const num = (n) => Math.round(n * 1000) / 1000;
@@ -947,7 +993,7 @@
     DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo, registrarModelos, modelosDaEmpresa, validarModelo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
     tipoEndereco, listaEnderecos, normalizarPrateleira, rotuloEndereco,
-    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, CHICOTES, chicoteDisponivel, chicoteTipoObra, dadosChicote, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, renderSVG, renderSVGLinha, htmlImpressao,
+    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, CHICOTES, chicoteDisponivel, chicoteTipoObra, dadosChicote, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, zplImagem, renderZPLImagem, renderSVG, renderSVGLinha, htmlImpressao,
     ROLO_LIM, geometriaRolo, adaptarModelo,
   };
 }());

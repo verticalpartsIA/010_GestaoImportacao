@@ -261,6 +261,46 @@ test.describe('Etiquetas', () => {
     await expect(page.getByText('Ao ajustar o rolo ou a posição', { exact: false })).toBeVisible();
   });
 
+  test('Expedição na Zebra: sai direto como imagem (^GFA) em 800 × 1200 pontos, um formato por volume', async ({ page }) => {
+    const { server, escritas } = await agenteSimulado();
+    try {
+      const erros = coletarErros(page);
+      await page.addInitScript(LIMPA_ESCOLHA);
+      await page.addInitScript(() => {
+        let valor;
+        Object.defineProperty(window, 'EtiquetasStore', {
+          configurable: true,
+          get() { return valor; },
+          set(v) {
+            v.temCapacidade = async () => true;
+            v.listarNotasFaturadas = async () => ({ erro: null, notas: [{ codigo_pedido: 1, numero_pedido: '28988', numero_nf: '22019', cliente_nome: 'BAR DO CUSCUZ E RESTAURANTE LTDA',
+              cliente_endereco: 'RUA DOUTOR SEVERINO RIBEIRO CRUZ, 771, CENTRO, CAMPINA GRANDE (PB)/PB, 58400258', transportadora_nome: 'CLIENTE RETIRA', volumes: 3, data_faturamento: '2026-10-20' }] });
+            valor = v;
+          },
+        });
+      });
+      await page.goto('/logistica/etiquetas/gerar');
+      const impressora = page.getByLabel('Impressora', { exact: true });
+      await expect(impressora.locator('option', { hasText: 'ZD220' })).toHaveCount(1, { timeout: 60_000 });
+      await page.getByRole('button', { name: 'Expedição (NF)', exact: true }).click();
+      await page.getByLabel('Largura da etiqueta (mm)', { exact: true }).fill('100');
+      await page.getByLabel('Comprimento da etiqueta (mm)', { exact: true }).fill('150');
+      await page.locator('tr', { hasText: '22019' }).click();
+      await expect(page.getByLabel('Total de volumes da NF')).toHaveValue('3');
+      await page.getByRole('button', { name: /Imprimir 3 etiquetas/ }).click();
+      await expect.poll(() => escritas.length, { timeout: 30_000 }).toBe(1);
+      const zpl = escritas[0].data;
+      expect(zpl.match(/\^XA/g).length).toBe(3);                 // um formato por volume (cada um é diferente)
+      expect(zpl).toContain('^PW800');
+      expect(zpl).toContain('^LL1200');
+      expect(zpl).toContain('^GFA,120000,120000,100,');          // 800 × 1200 pontos = 100 bytes por linha × 1200
+      expect(zpl.length).toBeLessThan(400_000);                   // compactado: nada perto do limite de 2 MB do Browser Print
+      expect(erros, erros.join('\n')).toEqual([]);
+    } finally {
+      await new Promise((ok) => server.close(ok));
+    }
+  });
+
   test('tipos da fase 2 e 4 abrem sem erro na aba Gerar', async ({ page }) => {
     await page.addInitScript(COM_ALCADA);
     await page.goto('/logistica/etiquetas/gerar');
