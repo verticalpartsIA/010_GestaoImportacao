@@ -897,6 +897,46 @@ function EtqModelos({ caps, empresa, recarregar }) {
   );
 }
 
+/* ---------- Aba Histórico ---------- */
+function EtqHistorico({ caps, reimprimir, ocupado, versao }) {
+  const [estado, setEstado] = React.useState({ linhas: null, erro: null });
+  const [motivoDe, setMotivoDe] = React.useState(null);
+  const [motivo, setMotivo] = React.useState('');
+  React.useEffect(() => { ETQ_STORE().listarHistorico(200).then((r) => setEstado({ linhas: r.linhas, erro: r.erro })); }, [versao]);
+  if (estado.erro) return <div className="card" style={{ padding: 14, color: 'var(--vp-danger)' }}>Não consegui ler o histórico: {estado.erro}</div>;
+  if (estado.linhas === null) return <div style={{ color: 'var(--fg3)' }}>Carregando…</div>;
+  return (
+    <div className="card table-wrap" style={{ overflowX: 'auto' }}>
+      <table className="t pcp-grid">
+        <thead><tr><th>Quando</th><th>Quem</th><th>Tipo</th><th>Referência</th><th>Qtd.</th><th>Impressora</th><th>Resultado</th><th></th></tr></thead>
+        <tbody>
+          {estado.linhas.map((l) => (
+            <React.Fragment key={l.id}>
+              <tr>
+                <td>{etqData(l.impresso_em)}</td><td>{l.usuario}</td><td>{l.tipo}{l.reimpressao ? <span className="pcp-tag" style={{ marginLeft: 6 }}>reimpressão</span> : null}</td>
+                <td style={{ maxWidth: 240, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={l.referencia || ''}>{l.referencia || '—'}</td>
+                <td>{l.quantidade}</td><td>{l.impressora || '—'}</td>
+                <td>{l.sucesso ? 'ok' : <span style={{ color: 'var(--vp-danger)' }} title={l.erro || ''}>falhou</span>}{l.motivo ? <div style={{ fontSize: 10, color: 'var(--fg3)' }}>motivo: {l.motivo}</div> : null}</td>
+                <td>{l.sucesso && l.dados && Array.isArray(l.dados.itens) ? <button className="btn btn--sm" disabled={!caps.reimprimir || ocupado} title={!caps.reimprimir ? 'Falta a alçada de reimpressão.' : undefined} onClick={() => { setMotivoDe(l.id); setMotivo(''); }}>Reimprimir</button> : null}</td>
+              </tr>
+              {motivoDe === l.id ? (
+                <tr><td colSpan={8} style={{ background: 'var(--bg2, #f6f6f6)' }}>
+                  <div style={{ display: 'flex', gap: 8, alignItems: 'center', flexWrap: 'wrap' }}>
+                    <input className="input" placeholder="Motivo da reimpressão (mín. 5 letras)" value={motivo} onChange={(e) => setMotivo(e.target.value)} style={{ minWidth: 320 }}/>
+                    <button className="btn btn--sm btn--primary" disabled={motivo.trim().length < 5 || ocupado} onClick={async () => { const ok = await reimprimir(l, motivo.trim()); if (ok) setMotivoDe(null); }}>Reimprimir agora</button>
+                    <button className="btn btn--sm" onClick={() => setMotivoDe(null)}>Cancelar</button>
+                  </div>
+                </td></tr>
+              ) : null}
+            </React.Fragment>
+          ))}
+          {!estado.linhas.length ? <tr><td colSpan={8} style={{ color: 'var(--fg3)' }}>Nenhuma impressão registrada ainda.</td></tr> : null}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
 /* ---------- Página ---------- */
 function EtiquetasPage() {
   const C = ETQ_CALC(), EI = ETQ_IMP(), S = ETQ_STORE();
