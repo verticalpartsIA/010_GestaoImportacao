@@ -347,8 +347,11 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     const t = setTimeout(() => { S.listarPedidosQuadro(qChi).then(setPedsChi); }, 300);
     return () => clearTimeout(t);
   }, [tipo, qChi]);
-  const chiLista = chiPed ? C.CHICOTES.filter((c) => C.chicoteDisponivel(c, chiPed.tipo_aplicacao)) : [];
-  const escolherPedidoChi = (p) => { setChiPed(p); setChiSel(new Set(C.CHICOTES.filter((c) => C.chicoteDisponivel(c, p.tipo_aplicacao)).map((c) => c.codigo))); };
+  const [chiCasa, setChiCasa] = React.useState(false);
+  const chiAplic = chiPed ? (chiPed.tipo_aplicacao || (chiCasa ? 'MR' : null)) : null;
+  const chiLista = chiPed ? C.CHICOTES.filter((c) => C.chicoteDisponivel(c, chiAplic)) : [];
+  const escolherPedidoChi = (p) => { setChiPed(p); setChiCasa(false); setChiSel(new Set(C.CHICOTES.filter((c) => C.chicoteDisponivel(c, p.tipo_aplicacao)).map((c) => c.codigo))); };
+  const mudarCasaChi = (v) => { setChiCasa(v); setChiSel((a) => { const n = new Set(a); if (v) n.add('POW1'); else n.delete('POW1'); return n; }); };
   const chiDados = (c) => C.dadosChicote({ chicote: c.codigo, pedido: chiPed.numero_pedido, tipo_obra: chiPed.novo_ou_modernizacao });
   /* Avaria */
   const [avQtd, setAvQtd] = React.useState('');
@@ -467,20 +470,22 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
               {pedsChi.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>Não consegui buscar: {pedsChi.erro}</div> : null}
               <div className="card table-wrap" style={{ maxHeight: 220, overflow: 'auto', marginBottom: 10 }}>
                 <table className="t pcp-grid">
-                  <thead><tr><th>Pedido</th><th>Obra</th><th>Aplicação</th><th>Cliente</th></tr></thead>
+                  <thead><tr><th>Pedido</th><th>Obra</th><th>Aplicação</th><th>Cliente</th><th>Quadros (OP)</th></tr></thead>
                   <tbody>
                     {pedsChi.pedidos.map((p) => (
                       <tr key={p.id} onClick={() => escolherPedidoChi(p)} style={{ cursor: 'pointer', background: chiPed && chiPed.id === p.id ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
-                        <td><b style={{ fontWeight: 600 }}>{p.numero_pedido}</b></td><td>{C.chicoteTipoObra ? C.chicoteTipoObra(p.novo_ou_modernizacao) || '—' : (p.novo_ou_modernizacao || '—')}</td><td>{p.tipo_aplicacao === 'MR' ? 'Com casa de máquinas' : p.tipo_aplicacao === 'MRL' ? 'Sem casa de máquinas' : '—'}</td><td>{p.cliente || '—'}</td>
+                        <td><b style={{ fontWeight: 600 }}>{p.numero_pedido}</b></td><td>{C.chicoteTipoObra ? C.chicoteTipoObra(p.novo_ou_modernizacao) || '—' : (p.novo_ou_modernizacao || '—')}</td><td>{p.tipo_aplicacao === 'MR' ? 'Com casa de máquinas' : p.tipo_aplicacao === 'MRL' ? 'Sem casa de máquinas' : '—'}</td><td>{p.cliente || '—'}</td><td>{p.ops && p.ops.length ? `${p.ops.length} · ${p.ops.slice(0, 3).join(', ')}${p.ops.length > 3 ? '…' : ''}` : '—'}</td>
                       </tr>
                     ))}
-                    {!pedsChi.pedidos.length ? <tr><td colSpan={4} style={{ color: 'var(--fg3)' }}>Nenhum pedido de quadro encontrado. A etiqueta só pode ser criada para um pedido que existe no sistema.</td></tr> : null}
+                    {!pedsChi.pedidos.length ? <tr><td colSpan={5} style={{ color: 'var(--fg3)' }}>Nenhum pedido de quadro encontrado. A etiqueta só pode ser criada para um pedido que existe no sistema.</td></tr> : null}
                   </tbody>
                 </table>
               </div>
               {chiPed ? (
                 <div className="card" style={{ padding: 10 }}>
-                  <div style={{ fontSize: 12, marginBottom: 6 }}><b>Chicotes do pedido {chiPed.numero_pedido}</b> — uma etiqueta por chicote marcado.{chiPed.tipo_aplicacao === 'MR' ? ' Elevador com casa de máquinas: POW1 incluído.' : ' O POW1 só aparece em elevador com casa de máquinas.'}</div>
+                  <div style={{ fontSize: 12, marginBottom: 6 }}><b>Chicotes do pedido {chiPed.numero_pedido}</b> — uma etiqueta por chicote marcado.{chiAplic === 'MR' ? ' Elevador com casa de máquinas: POW1 incluído.' : ' O POW1 só aparece em elevador com casa de máquinas.'}</div>
+                  {!chiPed.tipo_aplicacao ? <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}><input type="checkbox" checked={chiCasa} onChange={(e) => mudarCasaChi(e.target.checked)}/> Este elevador tem casa de máquinas (inclui o POW1) <span style={{ color: 'var(--fg3)' }}>— o cadastro deste pedido não informa a aplicação</span></label> : null}
+                  {chiPed.ops && chiPed.ops.length > 1 ? <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 6 }}>Este pedido tem {chiPed.ops.length} quadros: o jogo de etiquetas é o mesmo para todos. Use <b>Cópias = {chiPed.ops.length}</b> para imprimir um jogo por quadro.</div> : null}
                   <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
                     <button type="button" className="btn btn--ghost btn--sm" onClick={() => setChiSel(new Set(chiLista.map((c) => c.codigo)))}>Marcar todos</button>
                     <button type="button" className="btn btn--ghost btn--sm" onClick={() => setChiSel(new Set())}>Limpar</button>

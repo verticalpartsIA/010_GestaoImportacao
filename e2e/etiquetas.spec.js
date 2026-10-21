@@ -209,6 +209,7 @@ test.describe('Etiquetas', () => {
           v.listarPedidosQuadro = async () => ({ erro: null, pedidos: [
             { id: 'q1', numero_pedido: 1212, tipo_aplicacao: 'MR', novo_ou_modernizacao: 'modernizacao', cliente: 'CLIENTE A' },
             { id: 'q2', numero_pedido: 1070, tipo_aplicacao: 'MRL', novo_ou_modernizacao: 'novo', cliente: 'CLIENTE B' },
+            { id: 'op:1500|modernizacao', numero_pedido: '1500', tipo_aplicacao: null, novo_ou_modernizacao: 'modernizacao', cliente: 'CLIENTE C', origem: 'op', ops: ['OP-0003-Q1', 'OP-0003-Q2'] },
           ] });
           valor = v;
         },
@@ -223,6 +224,12 @@ test.describe('Etiquetas', () => {
     await page.locator('tr', { hasText: '1070' }).click();
     await expect(page.getByText('POW1', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Imprimir 21 etiquetas/ })).toBeEnabled();
+    // quadro vindo da Evolução da Fabricação (OP sem cadastro de aplicação): POW1 só se marcar casa de máquinas
+    await page.locator('tr', { hasText: '1500' }).click();
+    await expect(page.getByText('Use Cópias = 2', { exact: false })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Imprimir 21 etiquetas/ })).toBeEnabled();
+    await page.getByLabel(/tem casa de máquinas/).check();
+    await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
   });
 
   test('tipos da fase 2 e 4 abrem sem erro na aba Gerar', async ({ page }) => {
