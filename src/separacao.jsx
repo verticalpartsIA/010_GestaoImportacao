@@ -328,6 +328,8 @@ function SepPedidosAba({ caps, irTv }) {
       <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginBottom: 12 }}>
         {filtros.map(([k, r]) => <button key={k} className={'btn btn--sm' + (filtro === k ? ' btn--primary' : '')} onClick={() => setFiltro(k)}>{r}</button>)}
         <input className="input" style={{ width: 220 }} placeholder="Buscar pedido ou cliente" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        <button className="btn btn--sm" disabled={!lista.length} title="Abre os itens de todos os pedidos desta lista" onClick={() => setExpandidos(new Set(lista.map((p) => p.codigo_pedido)))}>Expandir tudo</button>
+        <button className="btn btn--sm" disabled={!expandidos.size} onClick={() => setExpandidos(new Set())}>Recolher tudo</button>
         <span style={{ flex: 1 }} />
         {atrasados > 0 && <Badge variant="danger">{atrasados} fora do SLA</Badge>}
         <button className="btn btn--sm" onClick={copiarLinkTv}>Copiar link da TV</button>
