@@ -228,10 +228,10 @@ function S_Proposta({ d, set, herdar, herdando, heranca }) {
           <input className="pe-input" inputMode="numeric" placeholder="ex.: 902"
             value={d.numeroCotacao || ""}
             onChange={(e) => set("numeroCotacao", e.target.value.replace(/\D/g, ""))}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); herdar && herdar(); } }}/>
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); herdar && herdar({ atualizar: true }); } }}/>
           <button type="button" className="pe-heranca__btn"
             disabled={herdando || !String(d.numeroCotacao || "").trim()}
-            onClick={() => herdar && herdar()}>
+            onClick={() => herdar && herdar({ atualizar: true })}>
             {herdando ? "Buscando…" : "Herdar dados"}
           </button>
         </div>
