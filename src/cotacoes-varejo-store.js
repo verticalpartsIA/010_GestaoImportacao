@@ -288,7 +288,81 @@
     return banco;
   }
 
+  /* ---------- Fotos manuais do operador (até 5 por item do lote) ---------- */
+  const MAX_FOTOS_MANUAIS = 5;
+  async function adicionarFotoManual(item, file) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    if (!file || !/^image\//.test(file.type || '')) throw new Error('Escolha um arquivo de imagem.');
+    if (file.size > 8 * 1024 * 1024) throw new Error('Imagem maior que 8 MB.');
+    const atuais = Array.isArray(item.fotos_manuais) ? item.fotos_manuais : [];
+    if (atuais.length >= MAX_FOTOS_MANUAIS) throw new Error('Máximo de ' + MAX_FOTOS_MANUAIS + ' fotos manuais por produto.');
+    const ext = ((file.name || '').split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+    const path = 'cotacoes-varejo/' + item.lote_id + '/' + item.id + '/' + Date.now() + '-' + uuidCurto().slice(0, 6) + '.' + ext;
+    const up = await c.storage.from(FOTOS_BUCKET).upload(path, file, { upsert: false, contentType: file.type });
+    if (up.error) throw up.error;
+    const url = c.storage.from(FOTOS_BUCKET).getPublicUrl(path).data.publicUrl;
+    const novas = atuais.concat([url]);
+    const { error } = await c.from('iv_cotacao_itens').update({ fotos_manuais: novas }).eq('id', item.id);
+    if (error) throw error;
+    return novas;
+  }
+  async function removerFotoManual(item, url) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const novas = (Array.isArray(item.fotos_manuais) ? item.fotos_manuais : []).filter((u) => u !== url);
+    const { error } = await c.from('iv_cotacao_itens').update({ fotos_manuais: novas }).eq('id', item.id);
+    if (error) throw error;
+    return novas;
+  }
+
+  /* ---------- Resposta do fornecedor recebida por E-MAIL (Inbox → mapa do lote), sempre com conferência humana ---------- */
+  /* Convites de lotes em cotação (para escolher quando o e-mail não está ligado a nenhum convite). */
+  async function convitesEmCotacao() {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: lotes, error } = await c.from('iv_cotacao_lotes').select('id, numero').eq('status', 'em_cotacao').order('created_at', { ascending: false }).limit(50);
+    if (error) throw error;
+    if (!(lotes || []).length) return [];
+    const { data: cv, error: e2 } = await c.from('iv_cotacao_convites').select('*').in('lote_id', lotes.map((l) => l.id)).neq('status', 'rascunho');
+    if (e2) throw e2;
+    const num = {}; lotes.forEach((l) => { num[l.id] = l.numero; });
+    return (cv || []).map((x) => ({ ...x, lote_numero: num[x.lote_id] }));
+  }
+  /* respostas: [{ item_id, preco, lead_time_dias, moq, obs }] — preço entra como faixa única a partir de 1 un. */
+  async function registrarRespostaPorEmail(convite, respostas, { emailId, por, moeda, substituir } = {}) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data: lote } = await c.from('iv_cotacao_lotes').select('id, numero, status').eq('id', convite.lote_id).maybeSingle();
+    if (!lote || lote.status !== 'em_cotacao') throw new Error('Este lote não está mais em cotação.');
+    const { data: exist } = await c.from('iv_cotacao_respostas').select('*').eq('convite_id', convite.id);
+    const porItem = {}; (exist || []).forEach((r) => { porItem[r.item_id] = r; });
+    const jaTem = (exist || []).some((r) => Array.isArray(r.faixas) && r.faixas.length);
+    if (jaTem && !substituir) throw new Error('Este fornecedor já respondeu; marque "substituir" para trocar os valores.');
+    let n = 0;
+    for (const r of respostas) {
+      const preco = Number(r.preco) || 0;
+      const faixas = preco > 0 ? [{ min: 1, preco }] : [];
+      if (!faixas.length && r.lead_time_dias == null && r.moq == null && !r.obs) continue;
+      const ex = porItem[r.item_id];
+      const linha = { faixas, lead_time_dias: r.lead_time_dias == null ? null : Math.round(r.lead_time_dias), moq: r.moq == null ? null : r.moq, obs: r.obs ? String(r.obs).slice(0, 2000) : null, rodada: convite.rodada || 1, updated_at: new Date().toISOString() };
+      if (ex) {
+        const hist = ((convite.rodada || 1) > (ex.rodada || 1) && Array.isArray(ex.faixas) && ex.faixas.length)
+          ? (ex.historico || []).concat([{ rodada: ex.rodada, faixas: ex.faixas, lead_time_dias: ex.lead_time_dias, moq: ex.moq, em: ex.updated_at }]) : (ex.historico || []);
+        const { error } = await c.from('iv_cotacao_respostas').update({ ...linha, historico: hist }).eq('id', ex.id);
+        if (error) throw error;
+      } else {
+        const { error } = await c.from('iv_cotacao_respostas').insert({ ...linha, convite_id: convite.id, item_id: r.item_id });
+        if (error) throw error;
+      }
+      n++;
+    }
+    const patch = { status: 'respondido', respondido_em: new Date().toISOString(), updated_at: new Date().toISOString() };
+    if (['USD', 'EUR', 'BRL', 'RMB', 'CNY'].includes(String(moeda || '').toUpperCase())) patch.moeda = String(moeda).toUpperCase();
+    const { error: ec } = await c.from('iv_cotacao_convites').update(patch).eq('id', convite.id);
+    if (ec) throw ec;
+    if (window.VPLog) window.VPLog.registrar({ modulo: 'Cotações de Varejo', acao: 'Registrou resposta do fornecedor recebida por e-mail', alvo: convite.fornecedor_nome, alvo_id: convite.id, detalhe: { lote: lote.numero, itens: n, email_id: emailId || null, por: por || null, substituiu: !!(jaTem && substituir) } });
+    return { itens: n };
+  }
+
   window.CotacoesVarejoStore = {
+    MAX_FOTOS_MANUAIS, adicionarFotoManual, removerFotoManual, convitesEmCotacao, registrarRespostaPorEmail,
     portalUrl, codigosEmCotacao, listarLotes, obterLote, criarLote, atualizarLote, atualizarItem, removerItem, cancelarLote,
     fornecedoresCadastrados, convidarFornecedor, removerConvite, atualizarConvite, marcarEnviado, novaRodada,
     textoConvite, enviarPorEmail, whatsAppHref, salvarDecisoes, aprovarLote, fotosDoBanco, enviarFoto, resolverFotos,

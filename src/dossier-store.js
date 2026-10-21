@@ -70,9 +70,18 @@ window.__DOSSIER = window.__DOSSIER || (() => {
         .select('lead_id, cliente_id').eq('numero_cotacao', proposta.numero_cotacao).limit(1);
       const form = (forms || [])[0] || {};
       const vinc = { proposta_id: proposta.id || null, cliente_id: proposta.cliente_id || form.cliente_id || null, lead_id: form.lead_id || null };
+      const obraProp = (proposta.data_json || {}).obra || {};
       const completar = async (existente) => {
         const patch = {};
         Object.keys(vinc).forEach((k) => { if (vinc[k] && !existente[k]) patch[k] = vinc[k]; });
+        /* Endereço da obra (19/10/2026): só preenche dossiê que ainda não tem endereço. */
+        if (!existente.endereco_logradouro && obraProp.endereco) {
+          patch.endereco_logradouro = obraProp.endereco;
+          if (obraProp.numero) patch.endereco_numero = obraProp.numero;
+          if (obraProp.bairro) patch.endereco_bairro = obraProp.bairro;
+          const cepObra = String(obraProp.cep || '').replace(/\D/g, '');
+          if (cepObra) patch.endereco_cep = cepObra;
+        }
         if (Object.keys(patch).length) {
           const { error } = await sb.from('dossier_obra').update({ ...patch, updated_at: new Date().toISOString() }).eq('id', existente.id);
           if (error) console.warn('[DossierStore] vínculos do dossiê não completados', error);
@@ -84,12 +93,12 @@ window.__DOSSIER = window.__DOSSIER || (() => {
          maybeSingle() dava erro e `existente` ficava undefined — criava um
          terceiro. */
       const { data: existentes } = await sb.from('dossier_obra')
-        .select('id, proposta_id, cliente_id, lead_id').eq('numero_cotacao', proposta.numero_cotacao).order('created_at', { ascending: true }).limit(1);
+        .select('id, proposta_id, cliente_id, lead_id, endereco_logradouro').eq('numero_cotacao', proposta.numero_cotacao).order('created_at', { ascending: true }).limit(1);
       if (existentes && existentes.length) return completar(existentes[0]);
 
       if (vinc.lead_id) {
         const { data: doLead } = await sb.from('dossier_obra')
-          .select('id, proposta_id, cliente_id, lead_id, status_master').eq('lead_id', vinc.lead_id).is('numero_cotacao', null)
+          .select('id, proposta_id, cliente_id, lead_id, status_master, endereco_logradouro').eq('lead_id', vinc.lead_id).is('numero_cotacao', null)
           .order('created_at', { ascending: true }).limit(1);
         if (doLead && doLead.length) {
           const d = doLead[0];
@@ -115,6 +124,10 @@ window.__DOSSIER = window.__DOSSIER || (() => {
         building_name: obra.nome || proposta.titulo || '—',
         city: obra.cidade || null,
         state: obra.uf || null,
+        endereco_logradouro: obra.endereco || null,
+        endereco_numero: obra.numero || null,
+        endereco_bairro: obra.bairro || null,
+        endereco_cep: String(obra.cep || '').replace(/\D/g, '') || null,
         equip_type: proposta.proposal_type || null,
         numero_cotacao: proposta.numero_cotacao,
         proposta_id: vinc.proposta_id,
@@ -183,6 +196,43 @@ window.__DOSSIER = window.__DOSSIER || (() => {
         historico: historico || [],
         analiseTecnica: analiseTecnica || null
       };
+    },
+
+    /* ---- Endereço completo da obra (19/10/2026) ----
+       Grava rua/número/complemento/bairro/CEP/cidade/UF. A posição no mapa
+       (latitude/longitude) é apagada pelo banco quando o endereço muda
+       (trg_dossier_obra_limpa_geo) e o Mapa de Obras a refaz. */
+    async atualizarEndereco(dossierId, e = {}) {
+      const limpa = (v) => { const t = String(v == null ? '' : v).trim(); return t || null; };
+      const cep = String(e.cep || '').replace(/\D/g, '');
+      if (cep && cep.length !== 8) throw new Error('CEP precisa ter 8 dígitos.');
+      const uf = limpa(e.uf);
+      if (uf && !/^[A-Za-z]{2}$/.test(uf)) throw new Error('UF precisa ter 2 letras (ex.: SP).');
+      if (!limpa(e.cidade)) throw new Error('Informe a cidade da obra.');
+      const patch = {
+        endereco_logradouro: limpa(e.logradouro),
+        endereco_numero: limpa(e.numero),
+        endereco_complemento: limpa(e.complemento),
+        endereco_bairro: limpa(e.bairro),
+        endereco_cep: cep || null,
+        city: limpa(e.cidade),
+        state: uf ? uf.toUpperCase() : null,
+        updated_at: new Date().toISOString(),
+        updated_by: window.__VP_USER?.email || null,
+      };
+      const { data, error } = await sb.from('dossier_obra').update(patch).eq('id', dossierId).select('id');
+      if (error) throw error;
+      if (!data || !data.length) throw new Error('O dossiê não foi alterado (sem permissão ou não encontrado).');
+      if (window.VPLog) window.VPLog.registrar({ modulo: 'Dossiê da Obra', acao: 'Atualizou o endereço da obra', alvo: dossierId, alvo_id: dossierId });
+      return patch;
+    },
+
+    /* Posição no mapa: gravada pelo Mapa de Obras ao localizar o endereço, ou à mão. */
+    async salvarPosicao(dossierId, lat, lon, precisao) {
+      const { error } = await sb.from('dossier_obra').update({
+        latitude: lat, longitude: lon, geo_precisao: precisao, geo_atualizado_em: new Date().toISOString(),
+      }).eq('id', dossierId);
+      if (error) throw error;
     },
 
     /* ---- Atualizar status mestre + registra transição ---- */

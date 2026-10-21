@@ -40,6 +40,7 @@ function expLinkRastreio(codigo) {
 }
 
 function ExpedicaoPage({ setRoute, setSubsel }) {
+  const ord = window.useOrdenacao();
   const sb = window.__VP_SB && window.__VP_SB.sb;
   const [dados, setDados] = React.useState(null);
   const [erro, setErro] = React.useState(null);
@@ -229,9 +230,10 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
   base.forEach(p => { if (contagem[situacao(p)] != null) contagem[situacao(p)]++; });
   const nAtrasados = base.filter(atrasado).length;
   const q = busca.trim().toLowerCase();
-  const lista = base.filter(p => filtro === 'todos' || situacao(p) === filtro)
+  const listaBase = base.filter(p => filtro === 'todos' || situacao(p) === filtro)
     .filter(p => !q || (String(p.numero_pedido) + ' ' + (p.cliente_nome || '')).toLowerCase().includes(q))
     .sort((a, b) => filtro === 'pronto' ? String(a.data_faturamento || '9999').localeCompare(String(b.data_faturamento || '9999')) : 0);   // pronto: NF mais antiga primeiro
+  const lista = ord.aplicar(listaBase, { pedido: p => Number(p.numero_pedido), cliente: p => p.cliente_nome, producao: p => (dados.maes[p.codigo_pedido] || {}).numero, nf: p => p.data_faturamento, previsao: p => p.data_previsao, situacao: p => situacao(p) });
   const cor = { aguardando_nf: undefined, pronto: 'color-mix(in srgb, var(--vp-yellow) 40%, transparent)', despachado: 'color-mix(in srgb, #3b82c4 25%, transparent)', entregue: 'color-mix(in srgb, #2e9e5b 25%, transparent)', encerrado: undefined, aberto: undefined };
   const rotulo = { aguardando_nf: 'Aguardando NF', pronto: 'Pronto para expedir', despachado: 'Despachado', entregue: 'Entregue', encerrado: 'Já entregue (Omie/histórico)', aberto: 'Ainda não é venda firme' };
   const kpi = (chave, rot, sub) => (
@@ -277,9 +279,9 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
         <button className="btn btn--sm" disabled={busy} onClick={atualizarOmie} title="Relê no Omie os pedidos ainda não entregues, para pegar NF emitida">{busy ? 'Atualizando…' : 'Atualizar do Omie'}</button>
       </div>
 
-      <div className="card table-wrap" style={{ overflowX: 'auto' }}>
+      <div className="card table-wrap pcp-rolagem" style={{ overflowX: 'auto' }}>
         <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
-          <thead><tr><th>Pedido</th><th>Cliente</th><th>Produção</th><th>NF</th><th>Previsão</th><th>Expedição</th><th></th></tr></thead>
+          <thead><tr>{ord.th('pedido', 'Pedido')}{ord.th('cliente', 'Cliente')}{ord.th('producao', 'Produção')}{ord.th('nf', 'NF')}{ord.th('previsao', 'Previsão')}{ord.th('situacao', 'Expedição')}<th></th></tr></thead>
           <tbody>
             {lista.map(p => {
               const s = situacao(p), x = dados.exps[p.codigo_pedido], mae = dados.maes[p.codigo_pedido];
@@ -291,7 +293,7 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
                   <tr>
                     <td><b style={{ fontWeight: 500 }}>{p.numero_pedido}</b></td>
                     <td style={{ minWidth: 220 }}>{p.cliente_nome || '—'}</td>
-                    <td>{mae ? <button className="pcp-cod" onClick={() => { try { sessionStorage.setItem('vp_pcp_op', mae.id); } catch (e) { /* ok */ } setSubsel && setSubsel(null); setRoute && setRoute('pcp'); }}>{mae.numero}</button> : <span style={{ color: 'var(--fg3)' }}>OP não criada</span>}{mae && <span className="pcp-tag" style={{ marginLeft: 6 }}>{mae.status === 'concluida' ? 'concluída' : mae.status.replace('_', ' ')}</span>}
+                    <td>{mae ? <button className="pcp-cod" onClick={() => { try { sessionStorage.setItem('vp_pcp_op', mae.id); } catch (e) { /* ok */ } setSubsel && setSubsel(null); setRoute && setRoute('pcp'); }}>{p.numero_pedido ? `${mae.numero}-${p.numero_pedido}` : mae.numero}</button> : <span style={{ color: 'var(--fg3)' }}>OP não criada</span>}{mae && <span className="pcp-tag" style={{ marginLeft: 6 }}>{mae.status === 'concluida' ? 'concluída' : mae.status.replace('_', ' ')}</span>}
                       {opAberta && p.faturado && s !== 'entregue' ? <div style={{ fontSize: 10, color: 'var(--vp-danger)' }} title="Tem NF, mas a OP-mãe do pedido ainda não foi concluída. Confira a produção antes de despachar.">⚠ produção ainda aberta</div> : null}</td>
                     <td>{p.faturado ? <>{p.numero_nf ? <b style={{ fontWeight: 500 }}>NF {p.numero_nf}</b> : 'NF emitida'} <span style={{ color: 'var(--fg3)' }}>{expData(p.data_faturamento)}</span>{s === 'pronto' && p.data_faturamento ? <div style={{ fontSize: 10, color: atr ? 'var(--vp-danger)' : 'var(--fg3)' }}>emitida {expQuando(expDias(p.data_faturamento, hoje))}{lim ? ` · prazo ${expData(lim)}` : ''}</div> : null}</> : <span style={{ color: 'var(--fg3)' }}>não emitida</span>}</td>
                     <td>{expData(p.data_previsao)}</td>
@@ -319,7 +321,7 @@ function ExpedicaoPage({ setRoute, setSubsel }) {
                           <button className="btn btn--sm" style={{ marginTop: 6 }} disabled={!itens.length} onClick={() => imprimirRomaneio(p)}>Imprimir romaneio</button>
                         </div>
                         <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignContent: 'flex-start' }}>
-                          {opAberta && <div style={{ flex: '1 1 100%', fontSize: 12, color: 'var(--vp-danger)' }}>⚠ A OP-mãe {mae.numero} deste pedido ainda não foi concluída. Confira a produção antes de despachar.</div>}
+                          {opAberta && <div style={{ flex: '1 1 100%', fontSize: 12, color: 'var(--vp-danger)' }}>⚠ A OP-mãe {p.numero_pedido ? `${mae.numero}-${p.numero_pedido}` : mae.numero} deste pedido ainda não foi concluída. Confira a produção antes de despachar.</div>}
                           {s !== 'entregue' && (<>
                             <label style={{ fontSize: 12 }}><input type="checkbox" checked={!!form.retirada} disabled={!podeEditar || s === 'despachado'} onChange={e => setForm({ ...form, retirada: e.target.checked })}/> Retirada pelo cliente</label>
                             {!form.retirada && <input className="input" list="exp-transps" placeholder="Transportadora" value={form.transportadora} disabled={!podeEditar || s === 'despachado'} onChange={e => setForm({ ...form, transportadora: e.target.value })} style={{ width: 200 }}/>}

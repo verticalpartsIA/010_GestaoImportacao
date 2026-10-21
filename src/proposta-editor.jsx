@@ -837,7 +837,15 @@ function PropostaEditor({ setRoute, subsel }) {
               && lista.every((u) => !Object.entries(u || {}).some(([k, v]) => k !== 'qtd' && v))) {
             base = { ...d, [eq]: { ...d[eq], especificacoes: [] } };
           }
-          return deepMergeHeranca(base, prefill);
+          /* Perfis por tipo (acabamentos): se o vendedor já digitou acabamentos no bloco global, NÃO criamos perfis
+             sozinhos — eles passariam a valer no lugar do que ele digitou e o texto sumiria da proposta. */
+          let pf = prefill;
+          const O = window.PropostaOpcoes;
+          if (pf.elevador && pf.elevador.perfis && O && O.linhasAcabamento(base.elevador).length) {
+            const { perfis: _p, ...restoElev } = pf.elevador;
+            pf = { ...pf, elevador: restoElev };
+          }
+          return deepMergeHeranca(base, pf);
         });
         setHeranca({ tipo: 'ok', texto: 'Herdado de: ' + window.PropostaHeranca.resumoFontes(r.fontes) });
         window.toast?.(`✓ Dados herdados da cotação ${num}`, 'success');

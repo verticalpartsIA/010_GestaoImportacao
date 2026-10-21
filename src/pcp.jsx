@@ -21,6 +21,16 @@ function pcpCorteCodigo(titulo) { const m = /^Corte — (.+)$/.exec(titulo || ''
 function pcpHoje() { return new Date().toISOString().slice(0, 10); }
 function pcpUsuario() { return (window.__VP_USER && window.__VP_USER.email) || null; }
 
+// Número da OP para exibição: acrescenta o nº do pedido do Omie (pedidos de venda e Ordens de
+// Serviço) quando dá pra resolver, ex. "OP-0003-30656" / "OP-0003-Q1-1212" — pedido do usuário
+// (20/10/2026), pra identificar de cabeça a quais pedido/cliente uma OP pertence. Sem pedido
+// vinculado (ou sem conseguir resolver o nº), mostra só o número da OP, como sempre foi — nunca
+// mexe no `numero` gravado no banco, só na exibição.
+function pcpNumeroOp(numero, pedidoCodigo, dados) {
+  const np = pedidoCodigo != null ? dados?.pedidosNumero?.[pedidoCodigo] : null;
+  return np ? `${numero}-${np}` : numero;
+}
+
 // Explode a estrutura até os materiais folha (por 1 unidade, já com perda). Protege contra ciclo.
 function pcpExplodir(raiz, filhos, mult, acc, pilha) {
   (filhos[raiz] || []).forEach(f => {
@@ -247,7 +257,7 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
     if (o.data) { setOp(o.data); setFim(f => ({ ...f, produzida: f.produzida === '' ? o.data.quantidade : f.produzida })); }
     setEtapas(e.data || []); setMats(m.data || []); setLista(ck.data || []); setFilhos(fl.data || []);
     if (o.data && o.data.ordem_mae_id) {
-      const { data: mm } = await sb.from('pcp_ordens').select('id, numero, titulo').eq('id', o.data.ordem_mae_id).single();
+      const { data: mm } = await sb.from('pcp_ordens').select('id, numero, titulo, pedido_codigo').eq('id', o.data.ordem_mae_id).single();
       setMae(mm || null);
     } else setMae(null);
   }, [sb, id]);
@@ -321,6 +331,7 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
   const encerrada = op.status === 'concluida' || op.status === 'cancelada';
   const editavel = podeEditar && !encerrada;
   const ehMae = op.frente === 'pedido';
+  const numeroExibicao = pcpNumeroOp(op.numero, ehMae ? op.pedido_codigo : (mae ? mae.pedido_codigo : null), dados);
   const todasConcluidas = ehMae
     ? filhos.length > 0 && filhos.every(f => f.status === 'concluida' || f.status === 'cancelada')
     : etapas.length > 0 && etapas.every(e => e.status === 'concluida');
@@ -451,14 +462,14 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
     const linhasEt = etapas.map(e => `<tr><td>${e.posicao}</td><td>${pcpEsc(e.nome)}</td><td>${pcpEsc(e.setor || '')}</td><td>${pcpEsc(e.responsavel || '')}</td><td>${pcpData(e.data_prevista)}</td><td>${PCP_ETAPA_STATUS[e.status]}</td></tr>`).join('');
     const w = window.open('', '_blank');
     if (!w) { window.toast?.('Permita pop-ups para imprimir.'); return; }
-    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${pcpEsc(op.numero)}</title><style>
+    w.document.write(`<!doctype html><html><head><meta charset="utf-8"><title>${pcpEsc(numeroExibicao)}</title><style>
       body{font-family:Poppins,Arial,sans-serif;font-weight:300;font-size:12px;margin:28px;color:#111}
       h1{font-size:18px;font-weight:500;text-align:center;margin:0 0 14px}
       table{border-collapse:collapse;width:100%;margin:10px 0}th,td{border:1px solid #bbb;padding:5px 8px;text-align:left}th{background:#eee;font-weight:500;font-size:11px;text-transform:uppercase}
       .g{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px 18px;margin-bottom:8px}.g b{font-weight:500}
       .ass{display:flex;gap:40px;margin-top:60px}.ass div{flex:1;border-top:1px solid #111;text-align:center;padding-top:4px}
     </style></head><body>
-      <h1>ORDEM DE PRODUÇÃO ${pcpEsc(op.numero)}</h1>
+      <h1>ORDEM DE PRODUÇÃO ${pcpEsc(numeroExibicao)}</h1>
       <div class="g"><div><b>Produto:</b> ${pcpEsc(op.produto || op.titulo || '')}</div><div><b>Quantidade:</b> ${pcpFmt(op.quantidade, 0)}</div><div><b>Cliente:</b> ${pcpEsc(op.cliente || '—')}</div>
       <div><b>Descrição:</b> ${pcpEsc(prod?.descricao || '')}</div><div><b>Início previsto:</b> ${pcpData(op.previsao_inicio)}</div><div><b>Prazo de entrega:</b> ${pcpData(op.prazo_entrega)}</div>
       <div><b>Abertura:</b> ${pcpData(op.data_abertura)}</div><div><b>Cotação:</b> ${op.numero_cotacao ?? '—'}</div><div><b>Finalização:</b> ${pcpData(op.data_finalizacao)}</div></div>
@@ -479,9 +490,9 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
     <div>
       <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, marginBottom: 12, alignItems: 'center', flexWrap: 'wrap' }}>
         <button className="btn btn--sm" onClick={onVoltar}>← Ordens</button>
-        <b style={{ fontWeight: 500, fontSize: 16 }}>{op.numero}{op.titulo ? ' · ' + op.titulo : ''}</b>
+        <b style={{ fontWeight: 500, fontSize: 16 }}>{numeroExibicao}{op.titulo ? ' · ' + op.titulo : ''}</b>
         <PCPStatusTag status={op.status} mapa={PCP_STATUS}/>
-        {mae && <button className="pcp-cod" title="Abrir o pedido (OP-mãe)" onClick={() => abrir(mae.id)}>pedido {mae.numero}</button>}
+        {mae && <button className="pcp-cod" title="Abrir o pedido (OP-mãe)" onClick={() => abrir(mae.id)}>pedido {pcpNumeroOp(mae.numero, mae.pedido_codigo, dados)}</button>}
         <span style={{ flex: 1 }}/>
         <button className="btn btn--sm" onClick={imprimir}>Imprimir / PDF</button>
         {editavel && op.status === 'aguardando' && <button className="btn btn--sm" onClick={() => atualizarOp({ status: 'em_producao' }, 'Iniciou produção')}>Iniciar produção</button>}
@@ -590,7 +601,7 @@ function PCPOrdemDetalhe({ ctx, id, onVoltar, onMudou, abrir }) {
             <tbody>
               {filhos.map(f => (
                 <tr key={f.id}>
-                  <td><button className="pcp-cod" onClick={() => abrir(f.id)}>{f.numero}</button></td>
+                  <td><button className="pcp-cod" onClick={() => abrir(f.id)}>{pcpNumeroOp(f.numero, op.pedido_codigo, dados)}</button></td>
                   <td>{f.titulo || '—'}</td>
                   <td>{f.produto || '—'}</td>
                   <td><PCPStatusTag status={f.status} mapa={PCP_STATUS}/></td>
@@ -712,6 +723,8 @@ function PCPOrdens({ ctx }) {
   const frentesDe = {};
   filtradas.forEach(o => { if (sobMae(o)) (frentesDe[o.ordem_mae_id] = frentesDe[o.ordem_mae_id] || []).push(o); });
   const lista = filtradas.filter(o => !sobMae(o)).flatMap(o => [o, ...(frentesDe[o.id] || []).sort((a, b) => a.numero.localeCompare(b.numero))]);
+  // Filha pode não ter o próprio pedido_codigo gravado (OPs antigas de "Pedidos de Quadro"); cai pro da OP-mãe.
+  const pedidoCodigoDe = (o) => (o.pedido_codigo != null ? o.pedido_codigo : (o.ordem_mae_id && ((ordens || []).find(x => x.id === o.ordem_mae_id) || {}).pedido_codigo)) ?? null;
 
   return (
     <div>
@@ -738,7 +751,7 @@ function PCPOrdens({ ctx }) {
                 const corteCod = !o.produto ? pcpCorteCodigo(o.titulo) : null;
                 return (
                   <tr key={o.id}>
-                    <td style={{ paddingLeft: 12 + nivel * 22 }}>{nivel ? '↳ ' : ''}<button className="pcp-cod" onClick={() => setAberta(o.id)}>{o.numero}</button></td>
+                    <td style={{ paddingLeft: 12 + nivel * 22 }}>{nivel ? '↳ ' : ''}<button className="pcp-cod" onClick={() => setAberta(o.id)}>{pcpNumeroOp(o.numero, pedidoCodigoDe(o), dados)}</button></td>
                     <td>{o.produto
                       ? <>{o.produto} <span style={{ color: 'var(--fg3)' }}>· {dados.prods[o.produto]?.descricao || ''}</span></>
                       : corteCod
@@ -983,7 +996,7 @@ function PCPControle({ ctx }) {
               const atr = atrasada(o);
               return (
                 <tr key={o.id}>
-                  <td><button className="pcp-cod" onClick={() => ctx.abrirOp(o.id)}>{o.numero}</button></td>
+                  <td><button className="pcp-cod" onClick={() => ctx.abrirOp(o.id)}>{pcpNumeroOp(o.numero, o.pedido_codigo, dados)}</button></td>
                   <td>{o.produto}</td>
                   <td>{pcpData(o.prazo_entrega)}{atr && <div style={{ fontSize: 10, color: 'var(--vp-danger)' }}>{diasAtraso(o)} dia(s) de atraso</div>}</td>
                   <td>{pcpData(o.data_finalizacao)}</td>
@@ -1022,12 +1035,40 @@ async function pcpSyncPedidos(sb, corpo) {
   } catch (e) { return { ok: false, erro: e.message }; }
 }
 
+// Mesma mecânica de pcpSyncPedidos, mas para Ordens de Serviço com serviço de quadro de comando
+// (cliente de licitação — Capex/Opex — compra quadro via serviço, não via produto; regra pedida pelo usuário em 20/10/2026).
+async function pcpSyncOS(sb, corpo) {
+  try {
+    const { data, error } = await sb.functions.invoke('sync-pcp-os', { body: corpo });
+    if (error) {
+      let msg = error.message; try { const j = await error.context.json(); msg = j.error || msg; } catch (e) { /* mantém */ }
+      return { ok: false, erro: msg };
+    }
+    return { ok: !!data && data.ok !== false, dados: data, erro: data && data.erros && data.erros[0] };
+  } catch (e) { return { ok: false, erro: e.message }; }
+}
+
 // Um pedido de venda do Omie vira: OP-mãe (checklist de separação dos itens que NÃO são do PCP) + uma OP por produto do PCP.
 //   produto com estrutura (quadro de comando) → OP de montagem com os materiais da estrutura padrão do Omie × quantidade;
 //   produto sem estrutura (cabo de aço, cabo de manobra, corrimão: cortado sob medida) → OP de corte com o material em metros.
-function pcpPlanoDoPedido(itens, dados) {
+// Ordem de Serviço (origem 'ordem_servico'): cada unidade do serviço de quadro é um QUADRO FÍSICO SEPARADO (1 OP/1 link cada),
+// nunca agregado numa OP só com quantidade N — pedido explícito do usuário (20/10/2026), já usado manualmente na OS 1212.
+function pcpPlanoDoPedido(itens, dados, origem) {
   const pcp = itens.filter(i => i.item_pcp);
   const outros = itens.filter(i => !i.item_pcp);
+  if (origem === 'ordem_servico') {
+    const frentes = [];
+    pcp.forEach(i => {
+      const total = Math.max(1, Math.round(Number(i.quantidade) || 1));
+      for (let n = 1; n <= total; n++) {
+        frentes.push({
+          codigo: i.codigo, qtd: 1, tipo: 'quadro', servico: true, indice: n, total,
+          descricao: dados.prods[i.codigo]?.descricao || i.descricao || i.codigo, unidade: dados.prods[i.codigo]?.unidade || i.unidade || null,
+        });
+      }
+    });
+    return { frentes, outros };
+  }
   const porCodigo = {}; pcp.forEach(i => { porCodigo[i.codigo] = (porCodigo[i.codigo] || 0) + Number(i.quantidade); });
   const frentes = Object.keys(porCodigo).map(codigo => {
     const qtd = porCodigo[codigo];
@@ -1038,13 +1079,17 @@ function pcpPlanoDoPedido(itens, dados) {
 }
 
 async function pcpGerarOpsDoPedido(sb, pedido, itens, dados, opcoes) {
-  const plano = pcpPlanoDoPedido(itens, dados);
+  const origem = pedido.origem || 'pedido_venda';
+  const plano = pcpPlanoDoPedido(itens, dados, origem);
   const quem = pcpUsuario();
+  const ehOS = origem === 'ordem_servico';
   const { data: mae, error: e0 } = await sb.from('pcp_ordens').insert({
-    titulo: `Pedido ${pedido.numero_pedido}${pedido.cliente_nome ? ' — ' + pedido.cliente_nome : ''}`, frente: 'pedido', pedido_codigo: pedido.codigo_pedido,
+    titulo: `${ehOS ? 'OS' : 'Pedido'} ${pedido.numero_pedido}${pedido.cliente_nome ? ' — ' + pedido.cliente_nome : ''}`, frente: 'pedido', pedido_codigo: pedido.codigo_pedido,
     quantidade: 1, cliente: pedido.cliente_nome || null, prazo_entrega: opcoes.prazo_entrega || pedido.data_previsao || null,
     previsao_inicio: opcoes.previsao_inicio || null, criado_por: quem,
-    observacao: `Gerada do pedido de venda ${pedido.numero_pedido} do Omie (etapa 20 — Separar estoque / produção).`,
+    observacao: ehOS
+      ? `Gerada da Ordem de Serviço ${pedido.numero_pedido} do Omie (serviço de quadro de comando — cliente de licitação, Capex/Opex).`
+      : `Gerada do pedido de venda ${pedido.numero_pedido} do Omie (etapa 20 — Separar estoque / produção).`,
   }).select('id, numero').single();
   if (e0 || !mae) throw new Error(e0?.message || 'sem permissão');
   if (plano.outros.length) {
@@ -1057,10 +1102,14 @@ async function pcpGerarOpsDoPedido(sb, pedido, itens, dados, opcoes) {
   for (const f of plano.frentes) {
     const quadro = f.tipo === 'quadro';
     const n = quadro ? ++nQ : ++nC;
+    // Serviço: f.codigo é um código de SERVIÇO do Omie (ex. VPSVC-033), não um produto real —
+    // não grava em `produto` (corromperia a Baixa de Produção no Omie, que espera código de produto).
+    const titulo = f.servico ? `Montagem — OS ${pedido.numero_pedido} — Quadro ${f.indice}/${f.total}` : (quadro ? `Montagem — ${f.codigo}` : `Corte — ${f.codigo}`);
     const { data: op, error } = await sb.from('pcp_ordens').insert({
-      numero: `${mae.numero}-${quadro ? 'Q' : 'C'}${n}`, titulo: quadro ? `Montagem — ${f.codigo}` : `Corte — ${f.codigo}`, frente: quadro ? 'quadro' : 'corte',
-      ordem_mae_id: mae.id, pedido_codigo: pedido.codigo_pedido, produto: quadro ? f.codigo : null, quantidade: quadro ? f.qtd : 1,
+      numero: `${mae.numero}-${quadro ? 'Q' : 'C'}${n}`, titulo, frente: quadro ? 'quadro' : 'corte',
+      ordem_mae_id: mae.id, pedido_codigo: pedido.codigo_pedido, produto: (quadro && !f.servico) ? f.codigo : null, quantidade: quadro ? f.qtd : 1,
       cliente: pedido.cliente_nome || null, prazo_entrega: opcoes.prazo_entrega || pedido.data_previsao || null, previsao_inicio: opcoes.previsao_inicio || null, criado_por: quem,
+      observacao: f.servico ? `Serviço ${f.codigo} (${f.descricao}) — materiais a partir dos componentes já baixados na Ordem de Serviço no Omie (sem Formulário de Quadro cadastrado).` : null,
     }).select('id').single();
     if (error || !op) throw new Error(error?.message || 'sem permissão');
     const etapas = (quadro
@@ -1068,14 +1117,16 @@ async function pcpGerarOpsDoPedido(sb, pedido, itens, dados, opcoes) {
       : [['Separar materiais', 'Almoxarifado'], ['Corte', 'Produção'], ['Qualidade / aprovação', 'Qualidade']]).map(([nome, setor], i) => ({ ordem_id: op.id, posicao: i + 1, nome, setor }));
     let r = await sb.from('pcp_ordem_etapas').insert(etapas); if (r.error) throw new Error(r.error.message);
     if (quadro) {
-      const mats = pcpMateriaisOmie(dados, f.codigo).map(m => ({ ...m, necessario: m.quantidade_unit * f.qtd, ordem_id: op.id }));
-      if (mats.length) { r = await sb.from('pcp_ordem_materiais').insert(mats); if (r.error) throw new Error(r.error.message); }
+      if (!f.servico) {
+        const mats = pcpMateriaisOmie(dados, f.codigo).map(m => ({ ...m, necessario: m.quantidade_unit * f.qtd, ordem_id: op.id }));
+        if (mats.length) { r = await sb.from('pcp_ordem_materiais').insert(mats); if (r.error) throw new Error(r.error.message); }
+      }
     } else {
       r = await sb.from('pcp_ordem_materiais').insert([{ ordem_id: op.id, codigo: f.codigo, descricao: f.descricao, unidade: f.unidade || 'M', quantidade_unit: f.qtd, necessario: f.qtd }]); if (r.error) throw new Error(r.error.message);
       r = await sb.from('pcp_ordem_checklist').insert([{ ordem_id: op.id, posicao: 0, grupo: 'corte', descricao: `${pcpFmt(f.qtd)} ${f.unidade || 'm'} de ${f.codigo}`, quantidade: f.qtd, unidade: f.unidade || 'm', observacao: f.descricao }]); if (r.error) throw new Error(r.error.message);
     }
   }
-  window.VPLog?.registrar?.({ modulo: 'PCP', acao: 'Gerou OPs do pedido do Omie', alvo: `${mae.numero} ← pedido ${pedido.numero_pedido} (${plano.frentes.length} frente(s))` });
+  window.VPLog?.registrar?.({ modulo: 'PCP', acao: ehOS ? 'Gerou OPs da Ordem de Serviço do Omie' : 'Gerou OPs do pedido do Omie', alvo: `${mae.numero} ← ${ehOS ? 'OS' : 'pedido'} ${pedido.numero_pedido} (${plano.frentes.length} frente(s))` });
   return mae;
 }
 
@@ -1086,6 +1137,8 @@ function PCPFilaProducao({ ctx, abrirOp }) {
   const [maes, setMaes] = React.useState({});
   const [busy, setBusy] = React.useState(false);
   const [preparo, setPreparo] = React.useState(null);
+  const [abertos, setAbertos] = React.useState({});
+  const alternar = (cod) => setAbertos(a => ({ ...a, [cod]: !a[cod] }));
 
   const carregar = React.useCallback(async () => {
     const { data: p } = await sb.from('pcp_pedidos').select('*').eq('etapa', '20').eq('cancelado', false).eq('so_separacao', false).order('data_previsao', { ascending: true }).limit(200);
@@ -1102,16 +1155,24 @@ function PCPFilaProducao({ ctx, abrirOp }) {
 
   const buscarOmie = async () => {
     setBusy(true);
-    const r = await pcpSyncPedidos(sb, { etapa: '20' });
+    const [rPedido, rOs] = await Promise.all([pcpSyncPedidos(sb, { etapa: '20' }), pcpSyncOS(sb, { etapa: '20' })]);
     setBusy(false);
-    if (!r.ok) window.toast?.('Não foi possível ler o Omie: ' + (r.erro || 'erro')); else window.toast?.(`Omie lido: ${r.dados.lidos} pedido(s) na etapa 20; ${r.dados.gravados} gravado(s) (os sem quadro, corrimão ou cabo ficam só na fila de separação do almoxarifado).`);
+    const partes = [];
+    partes.push(rPedido.ok
+      ? `Pedidos de venda: ${rPedido.dados.lidos} lido(s), ${rPedido.dados.gravados} gravado(s)`
+      : `Pedidos de venda: erro — ${rPedido.erro || 'falha'}`);
+    partes.push(rOs.ok
+      ? `Ordens de serviço: ${rOs.dados.lidas} lida(s), ${rOs.dados.gravadas} gravada(s)`
+      : `Ordens de serviço: erro — ${rOs.erro || 'falha'}`);
+    window.toast?.(partes.join(' · '));
     carregar();
   };
   const criar = async () => {
     setBusy(true);
     try {
       const mae = await pcpGerarOpsDoPedido(sb, preparo.pedido, itens[preparo.pedido.codigo_pedido] || [], dados, preparo.opcoes);
-      window.toast?.(`${mae.numero} criada com ${pcpPlanoDoPedido(itens[preparo.pedido.codigo_pedido] || [], dados).frentes.length} OP(s) de produção.`);
+      const numExib = preparo.pedido.numero_pedido ? `${mae.numero}-${preparo.pedido.numero_pedido}` : mae.numero;
+      window.toast?.(`${numExib} criada com ${pcpPlanoDoPedido(itens[preparo.pedido.codigo_pedido] || [], dados, preparo.pedido.origem).frentes.length} OP(s) de produção.`);
       setPreparo(null); await carregar();
     } catch (e) { window.toast?.('Não foi possível gerar as OPs: ' + e.message); }
     setBusy(false);
@@ -1119,7 +1180,7 @@ function PCPFilaProducao({ ctx, abrirOp }) {
 
   if (!pedidos) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
   const ultima = pedidos.reduce((m, p) => (p.atualizado_em > m ? p.atualizado_em : m), '');
-  const plano = preparo ? pcpPlanoDoPedido(itens[preparo.pedido.codigo_pedido] || [], dados) : null;
+  const plano = preparo ? pcpPlanoDoPedido(itens[preparo.pedido.codigo_pedido] || [], dados, preparo.pedido.origem) : null;
 
   return (
     <div>
@@ -1127,12 +1188,12 @@ function PCPFilaProducao({ ctx, abrirOp }) {
         <b style={{ fontWeight: 500 }}>{pedidos.filter(p => !maes[p.codigo_pedido]).length} aguardando OP</b>
         <span style={{ fontSize: 12, color: 'var(--fg3)' }}>{ultima ? 'Omie lido em ' + new Date(ultima).toLocaleString('pt-BR') : 'Ainda não lido do Omie'}</span>
         <span style={{ flex: 1 }}/>
-        <button className="btn btn--sm btn--primary" disabled={busy} onClick={buscarOmie} title="Lê no Omie os pedidos de venda na etapa 20 (Separar estoque / produção)">{busy ? 'Lendo o Omie…' : 'Buscar pedidos liberados no Omie'}</button>
+        <button className="btn btn--sm btn--primary" disabled={busy} onClick={buscarOmie} title="Lê no Omie os pedidos de venda e as Ordens de Serviço com quadro de comando, ambos na etapa 20">{busy ? 'Lendo o Omie…' : 'Buscar liberados no Omie'}</button>
       </div>
 
       {preparo && (
         <div className="card pcp-total" style={{ padding: 14, marginBottom: 14 }}>
-          <b style={{ fontWeight: 500, fontSize: 15 }}>Gerar OPs do pedido {preparo.pedido.numero_pedido} — {preparo.pedido.cliente_nome}</b>
+          <b style={{ fontWeight: 500, fontSize: 15 }}>Gerar OPs {preparo.pedido.origem === 'ordem_servico' ? 'da OS' : 'do pedido'} {preparo.pedido.numero_pedido} — {preparo.pedido.cliente_nome}</b>
           <div className="pcp-toolbar" style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', margin: '10px 0' }}>
             <label style={{ fontSize: 12, color: 'var(--fg3)' }}>Início <input className="input" type="date" value={preparo.opcoes.previsao_inicio} onChange={e => setPreparo({ ...preparo, opcoes: { ...preparo.opcoes, previsao_inicio: e.target.value } })}/></label>
             <label style={{ fontSize: 12, color: 'var(--fg3)' }}>Prazo <input className="input" type="date" value={preparo.opcoes.prazo_entrega} onChange={e => setPreparo({ ...preparo, opcoes: { ...preparo.opcoes, prazo_entrega: e.target.value } })}/></label>
@@ -1142,10 +1203,11 @@ function PCPFilaProducao({ ctx, abrirOp }) {
             <tbody>
               <tr><td><b style={{ fontWeight: 500 }}>OP-mãe (o pedido)</b></td><td>{plano.outros.length ? `Checklist de separação com ${plano.outros.length} item(ns) que não são fabricados (botoeiras, máquina, portas…)` : 'Sem itens de separação'}</td></tr>
               {plano.frentes.map(f => (
-                <tr key={f.codigo}>
-                  <td>{f.tipo === 'quadro' ? 'Montagem' : 'Corte'} — {f.codigo}</td>
-                  <td>{f.tipo === 'quadro' ? `${pcpFmt(f.qtd, 0)} un. · materiais da estrutura padrão do Omie (${(pcpMateriaisOmie(dados, f.codigo)).length} itens) · etapas: Separar → Montagem → Qualidade`
-                    : `${pcpFmt(f.qtd)} ${f.unidade || 'm'} de ${f.descricao} · etapas: Separar → Corte → Qualidade`}</td>
+                <tr key={f.servico ? `${f.codigo}-${f.indice}` : f.codigo}>
+                  <td>{f.servico ? `Montagem — Quadro ${f.indice}/${f.total}` : `${f.tipo === 'quadro' ? 'Montagem' : 'Corte'} — ${f.codigo}`}</td>
+                  <td>{f.servico ? `Serviço ${f.codigo} (${f.descricao}) · 1 quadro físico, materiais a partir dos componentes já baixados na OS · etapas: Separar → Montagem → Qualidade`
+                    : (f.tipo === 'quadro' ? `${pcpFmt(f.qtd, 0)} un. · materiais da estrutura padrão do Omie (${(pcpMateriaisOmie(dados, f.codigo)).length} itens) · etapas: Separar → Montagem → Qualidade`
+                    : `${pcpFmt(f.qtd)} ${f.unidade || 'm'} de ${f.descricao} · etapas: Separar → Corte → Qualidade`)}</td>
                 </tr>
               ))}
             </tbody>
@@ -1159,32 +1221,58 @@ function PCPFilaProducao({ ctx, abrirOp }) {
 
       <div className="card table-wrap" style={{ overflowX: 'auto' }}>
         <table className="t pcp-grid pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
-          <thead><tr><th>Pedido</th><th>Cliente</th><th>Previsão</th><th>Itens do PCP</th><th className="text-right">Outros itens</th><th className="text-right">Total do pedido</th><th>OP no PCP</th></tr></thead>
+          <thead><tr><th>Pedido</th><th>Origem</th><th>Cliente</th><th>Previsão</th><th>Itens do PCP</th><th className="text-right">Outros itens</th><th className="text-right">Total do pedido</th><th>OP no PCP</th></tr></thead>
           <tbody>
             {pedidos.map(p => {
               const its = itens[p.codigo_pedido] || [];
               const pcp = its.filter(x => x.item_pcp), outros = its.filter(x => !x.item_pcp);
               const mae = maes[p.codigo_pedido];
+              const aberto = !!abertos[p.codigo_pedido];
               return (
-                <tr key={p.codigo_pedido}>
-                  <td><b style={{ fontWeight: 500 }}>{p.numero_pedido}</b></td>
+                <React.Fragment key={p.codigo_pedido}>
+                <tr>
+                  <td><button className="pcp-cod" onClick={() => alternar(p.codigo_pedido)} title={aberto ? 'Recolher os itens do pedido' : 'Ver todos os itens do pedido'} aria-expanded={aberto}>{aberto ? '▾' : '▸'} {p.numero_pedido}</button></td>
+                  <td>{p.origem === 'ordem_servico' ? <span style={{ fontSize: 11, padding: '2px 6px', borderRadius: 4, background: 'var(--accent-bg, #fff3cd)', color: 'var(--accent-fg, #7a5c00)' }} title="Veio de uma Ordem de Serviço do Omie (cliente de licitação, Capex/Opex)">Serviço</span> : 'Pedido'}</td>
                   <td style={{ minWidth: 200 }}>{p.cliente_nome || '—'}</td>
                   <td>{pcpData(p.data_previsao)}</td>
                   <td style={{ minWidth: 220 }}>{pcp.map(x => `${x.codigo}${x.codigo_original ? ' (' + x.codigo_original + ')' : ''} × ${pcpFmt(x.quantidade)}`).join(', ') || '—'}</td>
-                  <td className="text-right">{outros.length || '—'}</td>
+                  <td className="text-right">{outros.length ? <button className="pcp-cod" onClick={() => alternar(p.codigo_pedido)} title="Ver os itens">{outros.length}</button> : '—'}</td>
                   <td className="text-right">{pcpMoeda(p.valor_total)}</td>
                   <td>{mae
-                    ? <button className="pcp-cod" onClick={() => abrirOp(mae.id)}>{mae.numero}</button>
+                    ? <button className="pcp-cod" onClick={() => abrirOp(mae.id)}>{p.numero_pedido ? `${mae.numero}-${p.numero_pedido}` : mae.numero}</button>
                     : (podeCriar ? <button className="btn btn--sm" disabled={busy} onClick={() => setPreparo({ pedido: p, opcoes: { previsao_inicio: '', prazo_entrega: p.data_previsao || '' } })}>Gerar OPs</button> : '—')}</td>
                 </tr>
+                {aberto && (
+                  <tr>
+                    <td colSpan={8} style={{ background: 'var(--bg2, #fafafa)', padding: '8px 16px' }}>
+                      <table className="t pcp-grid" style={{ width: '100%' }}>
+                        <thead><tr><th>#</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd.</th><th>Un.</th><th>Tipo</th></tr></thead>
+                        <tbody>
+                          {its.map((x, i) => (
+                            <tr key={x.seq ?? i}>
+                              <td>{x.seq ?? i + 1}</td>
+                              <td>{x.codigo || '—'}</td>
+                              <td>{x.descricao || '—'}</td>
+                              <td className="text-right">{pcpFmt(x.quantidade)}</td>
+                              <td>{x.unidade || '—'}</td>
+                              <td>{x.item_pcp ? <b style={{ fontWeight: 500 }}>Item do PCP</b> : <span style={{ color: 'var(--fg3)' }}>Outro item</span>}</td>
+                            </tr>
+                          ))}
+                          {its.length === 0 && <tr><td colSpan={6} style={{ color: 'var(--fg3)' }}>Este pedido não tem itens gravados.</td></tr>}
+                        </tbody>
+                      </table>
+                    </td>
+                  </tr>
+                )}
+                </React.Fragment>
               );
             })}
-            {pedidos.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum pedido liberado com quadro, corrimão ou cabo. Use “Buscar pedidos liberados no Omie”.</td></tr>}
+            {pedidos.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum pedido ou Ordem de Serviço liberado com quadro, corrimão ou cabo. Use “Buscar liberados no Omie”.</td></tr>}
           </tbody>
         </table>
       </div>
       <div style={{ marginTop: 8, fontSize: 12, color: 'var(--fg3)' }}>
-        Aqui chega o pedido para disparar a fabricação: pedidos de venda do Omie na etapa <b style={{ fontWeight: 500 }}>20 — Separar Estoque / Produção</b> que têm quadro de comando, corrimão ou cabo. Pedidos que já viraram OP mostram o número da OP-mãe. Para detalhar um quadro com escopo, geometria e botoeiras use a aba “Pedidos de Quadro”.
+        Aqui chega o pedido para disparar a fabricação: pedidos de venda e Ordens de Serviço (clientes de licitação, Capex/Opex) do Omie na etapa <b style={{ fontWeight: 500 }}>20 — Separar Estoque / Produção</b> que têm quadro de comando, corrimão ou cabo. Pedidos que já viraram OP mostram o número da OP-mãe. Para detalhar um quadro com escopo, geometria e botoeiras use a aba “Pedidos de Quadro”.
       </div>
     </div>
   );
@@ -1301,6 +1389,9 @@ async function pcpGerarPedidoQuadro(sb, b, opcoes, extra) {
     const { data: op, error } = await sb.from('pcp_ordens').insert({
       numero: `${mae.numero}-${f.sufixo}`, titulo: f.titulo, frente: f.frente, ordem_mae_id: mae.id, quadro_comando_id: b.quadro.id,
       produto: f.frente === 'quadro' ? opcoes.produto : null, quantidade: 1, cliente: opcoes.cliente || null,
+      // Mesmo pedido_codigo da OP-mãe — pedido do usuário (20/10/2026): sem isso, telas que leem só a OP
+      // filha (ex. Controle) não conseguem mostrar o nº do pedido do Omie junto do número da OP.
+      pedido_codigo: opcoes.pedido_codigo ? Number(opcoes.pedido_codigo) : null,
       numero_cotacao: PCP_ESCOPO_NUM(b.quadro.numero_cotacao), previsao_inicio: opcoes.previsao_inicio || null, prazo_entrega: opcoes.prazo_entrega || null, criado_por: quem,
     }).select('id').single();
     if (error || !op) throw new Error(error?.message || 'sem permissão');
@@ -1324,7 +1415,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
   const carregar = React.useCallback(async () => {
     const [q, o, v] = await Promise.all([
       sb.from('quadros_comando').select('id, numero_pedido, numero_cotacao, status, novo_ou_modernizacao, cliente_id, created_at, escopo_fornecimento, quadros_comando_paradas(count), quadros_comando_bom_itens(count), quadros_comando_trechos_corte(count), quadros_comando_maquina(potencia_kw, tensao_v)').is('excluido_em', null).order('created_at', { ascending: false }).limit(200),
-      sb.from('pcp_ordens').select('id, numero, quadro_comando_id, status').eq('frente', 'pedido'),
+      sb.from('pcp_ordens').select('id, numero, quadro_comando_id, status, pedido_codigo').eq('frente', 'pedido'),
       sb.from('pcp_quadro_variante').select('variante, codigo_produto'),
     ]);
     const m = {}; (o.data || []).forEach(x => { m[x.quadro_comando_id] = x; });
@@ -1374,7 +1465,9 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
     setBusy(true);
     try {
       const mae = await pcpGerarPedidoQuadro(sb, preparo.bundle, o, { dados, produto: o.produto, fiacao: preparo.fiacao });
-      window.toast?.(`${mae.numero} criada com ${montagem.frentes.length} frente(s).`);
+      const pedidoOmie = o.pedido_codigo ? (preparo.pedidosOmie || []).find(x => String(x.codigo_pedido) === String(o.pedido_codigo)) : null;
+      const numExib = pedidoOmie ? `${mae.numero}-${pedidoOmie.numero_pedido}` : mae.numero;
+      window.toast?.(`${numExib} criada com ${montagem.frentes.length} frente(s).`);
       try { sessionStorage.setItem('vp_pcp_op', ''); } catch (e) { /* ok */ }
       setPreparo(null); await carregar();
     } catch (e) { window.toast?.('Não foi possível gerar as OPs: ' + e.message); }
@@ -1437,7 +1530,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
                   <td>{m && m.potencia_kw ? `${m.potencia_kw} kW / ${m.tensao_v} V` : '—'}</td>
                   <td className="text-right">{r.nParadas}</td><td className="text-right">{r.nBom}</td><td className="text-right">{r.nCortes}</td>
                   <td><span className="pcp-tag">{r.status}</span></td>
-                  <td>{mae ? <button className="pcp-cod" onClick={() => abrirOp(mae.id)}>{mae.numero}</button>
+                  <td>{mae ? <button className="pcp-cod" onClick={() => abrirOp(mae.id)}>{pcpNumeroOp(mae.numero, mae.pedido_codigo, dados)}</button>
                     : (podeCriar ? <button className="btn btn--sm" disabled={!pronto || busy} title={pronto ? '' : 'Preencha o escopo, as paradas ou a lista de materiais no formulário do quadro'} onClick={() => preparar(r)}>Gerar OPs</button> : '—')}</td>
                 </tr>
               );
@@ -1477,14 +1570,16 @@ function PCPPage({ setRoute, setSubsel }) {
       sb.from('pcp_estrutura').select('codigo_pai, codigo_filho, quantidade, perda_pct').limit(5000),
       sb.from('pcp_produtos').select('codigo, descricao, unidade, tipo_sped').eq('ativo', true).limit(5000),
       sb.from('pcp_estoque').select('codigo, quantidade').limit(10000),
-    ]).then(([e, p, s]) => {
+      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido').limit(5000),
+    ]).then(([e, p, s, pd]) => {
       if (!vivo) return;
-      const err = e.error || p.error || s.error;
+      const err = e.error || p.error || s.error || pd.error;
       if (err) { setErro(err.message); return; }
       const filhos = {}; (e.data || []).forEach(l => { (filhos[l.codigo_pai] = filhos[l.codigo_pai] || []).push(l); });
       const prods = {}; (p.data || []).forEach(l => { prods[l.codigo] = l; });
       const estoque = {}; (s.data || []).forEach(l => { estoque[l.codigo] = (estoque[l.codigo] || 0) + Number(l.quantidade || 0); });
-      setDados({ filhos, prods, estoque });
+      const pedidosNumero = {}; (pd.data || []).forEach(l => { pedidosNumero[l.codigo_pedido] = l.numero_pedido; });
+      setDados({ filhos, prods, estoque, pedidosNumero });
     });
     const T = window.PropostaStore;
     Promise.resolve(T?.temCapacidade?.('pcp', 'criar')).then(v => { if (vivo) setPodeCriar(!!v); }).catch(() => {});
@@ -1526,4 +1621,6 @@ function PCPPage({ setRoute, setSubsel }) {
   );
 }
 
-Object.assign(window, { PCPPage });
+// pcpNumeroOp é compartilhado com outras telas que mostram número de OP (Emissão de NF, Expedição,
+// MES, Etiquetas) — pcp.jsx carrega antes delas em index.html.
+Object.assign(window, { PCPPage, pcpNumeroOp });

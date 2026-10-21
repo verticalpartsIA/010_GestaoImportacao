@@ -506,10 +506,26 @@
     const pzPorCotacao = {}; (precificacoes || []).forEach((p) => { if (p.cotacao_fornecedor_id) pzPorCotacao[p.cotacao_fornecedor_id] = p; });
     const pzPorFormulario = {}; (precificacoes || []).forEach((p) => { if (!p.cotacao_fornecedor_id) pzPorFormulario[p.formulario_elevador_id] = p; });
 
+    /* 20/10 — revisão mais nova do MESMO fornecedor/categoria (A, B…) marca a
+       anterior como "substituída" na fila, pra ninguém precificar a versão
+       velha sem perceber. Falha de leitura não derruba a fila. */
+    const { data: irmas } = formularioIds.length
+      ? await c.from('cotacoes_elevador_fornecedor').select('id, formulario_elevador_id, fornecedor, categoria_produto, numero_documento, created_at')
+          .in('formulario_elevador_id', formularioIds).is('excluido_em', null)
+      : { data: [] };
+    const substituidaPor = (cot, createdAt) => {
+      const novas = (irmas || []).filter((x) => x.id !== cot.id && x.formulario_elevador_id === cot.formulario_elevador_id
+        && x.fornecedor === cot.fornecedor && x.categoria_produto === cot.categoria_produto && String(x.created_at) > String(createdAt));
+      novas.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
+      return novas[0] ? novas[0].numero_documento : null;
+    };
+    const criadoEm = {}; (irmas || []).forEach((x) => { criadoEm[x.id] = x.created_at; });
+
     const daCotacao = (cots || []).map((cot) => {
       const form = formPorId[cot.formulario_elevador_id] || {};
       const pz = pzPorCotacao[cot.id];
       return {
+        substituidaPor: criadoEm[cot.id] ? substituidaPor(cot, criadoEm[cot.id]) : null,
         cotacaoFornecedorId: cot.id, numeroDocumentoFornecedor: cot.numero_documento, fornecedor: cot.fornecedor,
         formularioElevadorId: cot.formulario_elevador_id, numeroCotacao: form.numero_cotacao ?? null,
         clienteNome: (form.clientes && form.clientes.razao_social) || null, clienteCnpj: (form.clientes && form.clientes.cnpj) || null,
@@ -715,8 +731,13 @@
       cliente = data;
     }
 
-    const ufFaturamento = cliente ? cliente.endereco_estado : null;
-    const ufDestino = formulario.local_obra_estado || ufFaturamento;
+    /* 19/10/2026 — UF sempre normalizada (sem espaço, maiúscula): a cotação 988 tinha "BA " (espaço no fim)
+       em local_obra_estado, o DIFAL não achava o estado na tabela e saía "não encontrado" mesmo sendo devido
+       (cliente não contribuinte, uso e consumo). */
+    const normUf = (v) => (v ? String(v).trim().toUpperCase() : null) || null;
+    const ufFaturamento = normUf(cliente ? cliente.endereco_estado : null);
+    const ufEntregaNorm = normUf(formulario.local_obra_estado);
+    const ufDestino = ufEntregaNorm || ufFaturamento;
 
     /* 15/10/2026 — ICMS da venda vem da regra por UF de destino (Atualização de Custos › Regras de ICMS),
        não mais do 4% global (alíquota interestadual de importado; SP→SP é 12%). Resolvida ANTES da 1ª
@@ -755,19 +776,24 @@
       margemDesejadaPct: pz.margem_desejada_pct != null ? pz.margem_desejada_pct : (params.margemMinimaPct || 0.2),
       contingenciaValor: pz.contingencia_valor, outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
     });
-    const valorOperacaoDifal = pass1V2.precificacao.precoVendaProposta > 0 ? pass1V2.precificacao.precoVendaProposta : pass1.precificacao.precoVendaProposta;
+    /* 19/10/2026 — REGRA do Financeiro (cotação 988): o DIFAL incide SÓ no preço do EQUIPAMENTO (produto),
+       nunca no total nem em equipamento + serviço. A base é o preço de venda × (1 − % de serviços),
+       o mesmo `precoVendaProduto` que o motor já separa (30% de serviços ⇒ DIFAL sobre 70% do preço). */
+    const pv2 = pass1V2.precificacao, pv1 = pass1.precificacao;
+    const valorOperacaoDifal = pv2.precoVendaProposta > 0 ? pv2.precoVendaProduto : pv1.precoVendaProduto;
 
     // ufFaturamento/ufDestino e a regra de ICMS já foram resolvidos acima, antes da 1ª passada.
     const estadoDestino = await window.DifalEngine.buscarEstado(ufDestino);
-    const difal = window.DifalEngine.calcular({
-      ufFaturamento, ufEntrega: formulario.local_obra_estado,
+    const calcularDifal = (valorOperacao) => window.DifalEngine.calcular({
+      ufFaturamento, ufEntrega: ufEntregaNorm,
       finalidadeCompra: formulario.finalidade_compra, contribuinteIcms: cliente ? cliente.contribuinte_icms : null,
-      valorOperacao: valorOperacaoDifal, estadoDestino,
+      valorOperacao, estadoDestino,
     });
-    const difalCustoRs = difal.responsavel_recolhimento === 'emitente_verticalparts' ? difal.valor_difal : 0;
+    let difal = calcularDifal(valorOperacaoDifal);
+    let difalCustoRs = difal.responsavel_recolhimento === 'emitente_verticalparts' ? difal.valor_difal : 0;
 
     // 2ª passada — já com o custo do DIFAL (quando é da VerticalParts) refletido no lucro.
-    const resultado = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs });
+    let resultado = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs });
 
     // V2 (custo econômico completo) roda lado a lado, mesmo baseInputs +
     // DIFAL da 2ª passada — nunca substitui o V1 (`resultado`, ainda o
@@ -784,7 +810,20 @@
       contingenciaValor: pz.contingencia_valor,
       outrosCustosNaoRecuperaveisRs: pz.outros_custos_nao_recuperaveis_rs,
     };
-    const resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras });
+    let resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras });
+
+    /* 19/10/2026 — o DIFAL incide EXATAMENTE no preço do equipamento FINAL (cotação 988: R$ 10.684.587,30). O custo do DIFAL
+       entra no preço, então a base e o preço final dependem um do outro: repete até a base igualar o equipamento final (centavos). */
+    let baseDifal = valorOperacaoDifal;
+    for (let it = 0; it < 30; it++) {
+      const equipFinal = resultadoV2.precificacao.precoVendaProduto;
+      if (!(equipFinal > 0) || Math.abs(equipFinal - baseDifal) < 0.005) break;
+      baseDifal = equipFinal;
+      difal = calcularDifal(baseDifal);
+      difalCustoRs = difal.responsavel_recolhimento === 'emitente_verticalparts' ? difal.valor_difal : 0;
+      resultadoV2 = window.PrecificacaoElevadorEngine.calcularV2({ ...baseInputs, difalCustoRs, ...v2Extras });
+    }
+    resultado = window.PrecificacaoElevadorEngine.calcular({ ...baseInputs, difalCustoRs });
 
     /* Duas modalidades de entrega (issue "Precificação real"): 90 dias
        (container exclusivo, frete mais caro) × 120 dias (container

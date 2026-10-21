@@ -73,6 +73,13 @@ Ligação do módulo: **ainda não ligado** (sem tutorial de módulo no menu).
 | contratos-minutas | `/juridico/juridico` ("Contratos & Minutas") | — |
 | aval-juridico | `aval-juridico` | `aval-juridico` |
 
+### obras-instalacao — "Obras & Instalação"
+Ligação do módulo: **ainda não ligado** (sem tutorial de módulo no menu).
+
+| Tela | Rota | Ligação |
+|---|---|---|
+| mapa-de-obras | `mapa-obras` (`/engenharia/mapa-obras`, aba `/evolucao`) | — |
+
 ## Fora do roteiro (decisão do usuário)
 
 - **Emissão de NF**: usada pela Expedição. Só entra se pedirem tutorial para o perfil da Expedição.

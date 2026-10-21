@@ -235,5 +235,57 @@
     return { nome: file.name, url: data.publicUrl, tipo: file.type, tamanho: file.size, path };
   }
 
-  window.TratativasStore = { listarPorCotacao, listarEmails, listarHistoricoInterno, enviar, uploadAnexo };
+  /* 20/10 — abas "Imagens" e "Documentos" da cotação a fornecedor: TUDO o que o FORNECEDOR mandou, só lendo.
+       1) anexos do formulário do link (cotacoes_elevador_fornecedor_anexos, bucket privado cotacao-fornecedor-anexos);
+       2) anexos dos e-mails de ENTRADA ligados a esta cotação — mesma regra de listarEmails (referencia_id, ou Nº da
+          cotação só com 1 fornecedor e remetente contato do RFQ). E-mail de entrada vindo de dentro da casa
+          (@verticalparts.com.br / @vpsistema.com — ex.: alguém respondendo em cópia) NÃO conta como do fornecedor.
+     Os anexos dos e-mails já foram guardados pelo read-inbox no bucket emails-anexos; o link é assinado pela Edge
+     Function sign-email-anexos (a mesma que o Inbox usa). Nada é copiado nem gravado.
+     Devolve [{ id, nome, tipo, tamanho, quando, origem, remetente, assunto, emailId, url }] (separar/agrupar = CfArquivosCalc). */
+  const DOMINIO_INTERNO_RE = /@(verticalparts\.com\.br|vpsistema\.com)\s*$/i;
+  async function listarArquivosFornecedor({ cotacaoFornecedorId, numeroCotacao, formularioId } = {}) {
+    const c = sb(); if (!c || !cotacaoFornecedorId) return [];
+    const out = [];
+    const cef = window.CotacaoElevadorFornecedorStore;
+    try {
+      const portal = cef && cef.listarAnexosResposta ? await cef.listarAnexosResposta(cotacaoFornecedorId) : [];
+      const urls = await Promise.all((portal || []).map((a) => (a.path && cef.urlAssinadaAnexoResposta) ? cef.urlAssinadaAnexoResposta(a.path, 3600).catch(() => null) : null));
+      (portal || []).forEach((a, i) => out.push({
+        id: 'f:' + a.id, nome: a.nome_arquivo, tipo: a.tipo_arquivo, tamanho: a.tamanho_bytes, quando: a.created_at,
+        origem: 'formulario', remetente: null, assunto: 'Formulário do link (resposta do fornecedor)', emailId: null, url: urls[i] || null,
+      }));
+    } catch (e) { console.warn('[Arquivos do fornecedor] anexos do formulário', e); }
+
+    try {
+      const emails = (await listarEmails({ cotacaoFornecedorId, numeroCotacao, formularioId }))
+        .filter((e) => e.direcao === 'entrada' && !DOMINIO_INTERNO_RE.test(String(e.de_email || '')));
+      const ids = emails.map((e) => e.id);
+      if (ids.length) {
+        const { data: comAnexos, error } = await c.from('emails_projeto').select('id, anexos').in('id', ids);
+        if (error) throw error;
+        const anexosPor = new Map((comAnexos || []).map((r) => [r.id, Array.isArray(r.anexos) ? r.anexos : []]));
+        const itens = [];
+        emails.forEach((e) => (anexosPor.get(e.id) || []).forEach((a, i) => {
+          if (!a || !a.path) return;
+          itens.push({
+            id: 'e:' + e.id + ':' + i, nome: a.filename || String(a.path).split('/').pop(), tipo: a.content_type, tamanho: a.size,
+            quando: e.data_mensagem, origem: 'email', remetente: e.de_email, assunto: e.assunto, emailId: e.id, path: a.path, url: null,
+          });
+        }));
+        const paths = [...new Set(itens.map((x) => x.path))];
+        const urls = {};
+        for (let i = 0; i < paths.length; i += 100) {
+          try {
+            const { data: sg, error: e2 } = await c.functions.invoke('sign-email-anexos', { body: { paths: paths.slice(i, i + 100) } });
+            if (!e2 && sg && sg.urls) Object.assign(urls, sg.urls);
+          } catch (_) { /* sem link: o arquivo aparece, mas sem abrir */ }
+        }
+        itens.forEach((x) => { x.url = urls[x.path] || null; delete x.path; out.push(x); });
+      }
+    } catch (e) { console.warn('[Arquivos do fornecedor] anexos dos e-mails', e); }
+    return out;
+  }
+
+  window.TratativasStore = { listarPorCotacao, listarEmails, listarHistoricoInterno, listarArquivosFornecedor, enviar, uploadAnexo };
 }());

@@ -483,7 +483,7 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
   const [cot, setCot] = React.useState(cotInicial);
   const [verResp, setVerResp] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
-  const [tab, setTab] = window.useRouteTab('cotacao-fornecedor-detail', 'detalhes', ['detalhes', 'tratativas'], true);
+  const [tab, setTab] = window.useRouteTab('cotacao-fornecedor-detail', 'detalhes', ['detalhes', 'tratativas', 'imagens', 'documentos'], true);
   // Pré-condições financeiras da decisão de compra (contrato assinado + sinal
   // pago + aval), avaliadas na carga. Sem isso, o botão "Decidir comprar"
   // parecia clicável mas falhava só num toast — e a linha do tempo mostrava
@@ -580,6 +580,8 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
         <div className="seg">
           <button className={tab === 'detalhes' ? 'is-active' : ''} onClick={() => setTab('detalhes')}>Detalhes</button>
           <button className={tab === 'tratativas' ? 'is-active' : ''} onClick={() => setTab('tratativas')}>Tratativas</button>
+          <button className={tab === 'imagens' ? 'is-active' : ''} onClick={() => setTab('imagens')}>Imagens</button>
+          <button className={tab === 'documentos' ? 'is-active' : ''} onClick={() => setTab('documentos')}>Documentos</button>
         </div>
       </div>
 
@@ -621,6 +623,10 @@ function CotacaoFornecedorDetalhe({ cot: cotInicial, setRoute }) {
 
       {tab === 'tratativas' && (
         <CfTratativas cotacaoFornecedorId={cot.id} cot={cot} numeroCotacao={cot.dados_envio?.header?.numero_cotacao ?? (window.MasterIdEngine?.parseNumeroCotacao?.(cot.numero_documento) ?? null)}/>
+      )}
+
+      {(tab === 'imagens' || tab === 'documentos') && window.CfArquivosFornecedor && (
+        <window.CfArquivosFornecedor tipo={tab} cot={cot} numeroCotacao={cot.dados_envio?.header?.numero_cotacao ?? (window.MasterIdEngine?.parseNumeroCotacao?.(cot.numero_documento) ?? null)}/>
       )}
 
       {verResp && <FECotacaoRespostaModal cot={cot} onClose={() => setVerResp(false)}/>}

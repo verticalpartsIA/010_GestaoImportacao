@@ -342,11 +342,33 @@
 
   /* ---------- 06/10 — assunto e corpo do RFQ em PT-BR / EN-US / 中文 ----------
      Fonte única pro Formulário de Elevador e pro Quadro de Comando. */
-  function mensagemRfq({ numeroDocumento, numeroTxt, descricaoPt, descricaoEn, descricaoZh, url, linkJaEnviadoEmDoisCanais }) {
-    const subject = `Cotação técnica ${numeroDocumento} — VerticalParts | Technical quotation ${numeroDocumento} — VerticalParts | 技术询价 ${numeroDocumento} — VerticalParts`;
+  /* 20/10 — `novaVersao` ({ revisao, anterior, anteriorRespondida }) só vem
+     preenchido quando este envio é uma revisão de um documento que JÁ foi
+     enviado ao MESMO fornecedor: o aviso em PT/EN/中文 evita que ele ache que
+     é o mesmo formulário de novo. Sem `novaVersao`, o texto é o de sempre. */
+  function avisoNovaVersao(nv) {
+    if (!nv || !nv.revisao) return '';
+    const ant = nv.anterior || '';
+    const respondida = !!nv.anteriorRespondida;
+    return (
+      `⚠ NOVA VERSÃO / NEW VERSION / 新版本 — Revisão / Revision / 修订 ${nv.revisao}\n` +
+      (respondida
+        ? `Esta é uma nova versão da cotação ${ant}, que já foi precificada por vocês. As especificações podem ter mudado: por favor cotem novamente usando ESTE novo link e desconsiderem o anterior.\n` +
+          `This is a new version of quotation ${ant}, which you have already priced. The specifications may have changed: please quote again using THIS new link and disregard the previous one.\n` +
+          `这是询价 ${ant} 的新版本，您此前已报过价。规格可能已变更：请使用此新链接重新报价，并忽略之前的链接。`
+        : `Esta é uma nova versão da cotação ${ant} enviada anteriormente (ainda sem resposta). Não é o mesmo documento: por favor responda usando ESTE novo link e desconsidere o anterior.\n` +
+          `This is a new version of quotation ${ant} sent earlier (no reply yet). It is not the same document: please reply using THIS new link and disregard the previous one.\n` +
+          `这是此前发送的询价 ${ant} 的新版本（尚未收到回复）。这不是同一份文件：请使用此新链接回复，并忽略之前的链接。`) +
+      `\n\n`
+    );
+  }
+
+  function mensagemRfq({ numeroDocumento, numeroTxt, descricaoPt, descricaoEn, descricaoZh, url, linkJaEnviadoEmDoisCanais, novaVersao }) {
+    const sufRev = novaVersao && novaVersao.revisao ? ` (Revisão ${novaVersao.revisao} / Revision ${novaVersao.revisao} / 修订 ${novaVersao.revisao})` : '';
+    const subject = `Cotação técnica ${numeroDocumento} — VerticalParts | Technical quotation ${numeroDocumento} — VerticalParts | 技术询价 ${numeroDocumento} — VerticalParts${sufRev}`;
     const numEn = (numeroTxt || '').replace('Cotação Nº', 'Quotation No.');
     const numZh = (numeroTxt || '').replace('Cotação Nº', '询价编号');
-    let text =
+    let text = avisoNovaVersao(novaVersao) +
       `🇧🇷 Português (Brasil)\n` +
       `Solicitação de cotação técnica ${numeroDocumento}${numeroTxt || ''} — VerticalParts\n` +
       `Segue o link com as especificações ${descricaoPt} para cotação:\n${url}\n\n` +
@@ -460,7 +482,13 @@
     const { data: existentes, error: exErr } = await c.from('cotacoes_elevador_fornecedor')
       .select('revisao').eq('formulario_elevador_id', formularioElevadorId).eq('categoria_produto', categoria);
     if (exErr) throw exErr;
-    const maiorRevisao = (existentes || []).reduce((max, r) => (r.revisao && r.revisao > max ? r.revisao : max), '');
+    /* 20/10 — compara por tamanho e depois por letra: "AA" vem depois de "Z"
+       (a comparação de texto simples punha "AA" antes de "B"). */
+    const maiorRevisao = (existentes || []).reduce((max, r) => {
+      if (!r.revisao) return max;
+      const maior = r.revisao.length !== max.length ? r.revisao.length > max.length : r.revisao > max;
+      return maior ? r.revisao : max;
+    }, '');
     const revisao = (existentes && existentes.length) ? window.MasterIdEngine.proximaRevisao(maiorRevisao || null) : null;
     const numero_documento = window.MasterIdEngine.masterId({ categoriaProduto: categoria, numeroCotacao, revisao });
 

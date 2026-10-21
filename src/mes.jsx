@@ -44,7 +44,7 @@ function MESLiberar({ ctx, onFechar }) {
   React.useEffect(() => {
     (async () => {
       const [o, m] = await Promise.all([
-        sb.from('pcp_ordens').select('id, numero, titulo, produto, cliente, prazo_entrega, status, frente').eq('frente', 'quadro').in('status', ['aguardando', 'em_producao']).order('created_at', { ascending: false }).limit(200),
+        sb.from('pcp_ordens').select('id, numero, titulo, produto, cliente, prazo_entrega, status, frente, pedido_codigo').eq('frente', 'quadro').in('status', ['aguardando', 'em_producao']).order('created_at', { ascending: false }).limit(200),
         sb.from('mes_ordens').select('ordem_id').limit(5000),
       ]);
       const jaTem = new Set((m.data || []).map(x => x.ordem_id));
@@ -67,7 +67,7 @@ function MESLiberar({ ctx, onFechar }) {
         {lista && !lista.length && <div style={{ color: 'var(--fg3)' }}>Nenhuma OP de quadro (frente "quadro") disponível. Gere em PCP › Pedidos de Quadro.</div>}
         {lista && lista.map(op => (
           <div key={op.id} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid var(--border)' }}>
-            <div style={{ flex: 1 }}><b>{op.numero}</b> · {op.titulo || op.produto || '—'}<div style={{ fontSize: 12, color: 'var(--fg3)' }}>{op.cliente || '—'} · prazo {mesData(op.prazo_entrega)}</div></div>
+            <div style={{ flex: 1 }}><b>{window.pcpNumeroOp(op.numero, op.pedido_codigo, ctx)}</b> · {op.titulo || op.produto || '—'}<div style={{ fontSize: 12, color: 'var(--fg3)' }}>{op.cliente || '—'} · prazo {mesData(op.prazo_entrega)}</div></div>
             <button className="btn btn--sm btn--primary" disabled={busy || !ctx.podeEditar} onClick={() => liberar(op)}>Liberar</button>
           </div>
         ))}
@@ -104,7 +104,7 @@ function MESDetalhe({ ctx, id, onVoltar }) {
 
   const carregar = React.useCallback(async () => {
     const [m, h, bl, mt] = await Promise.all([
-      sb.from('mes_ordens').select('*, op:pcp_ordens(numero, titulo, produto, cliente, prazo_entrega, quantidade, observacao, status)').eq('ordem_id', id).maybeSingle(),
+      sb.from('mes_ordens').select('*, op:pcp_ordens(numero, titulo, produto, cliente, prazo_entrega, quantidade, observacao, status, pedido_codigo)').eq('ordem_id', id).maybeSingle(),
       sb.from('mes_historico').select('*').eq('ordem_id', id).order('created_at', { ascending: false }).limit(200),
       sb.from('mes_bloqueios').select('*').eq('ordem_id', id).order('inicio', { ascending: false }),
       sb.from('pcp_ordem_materiais').select('*').eq('ordem_id', id).order('codigo'),
@@ -288,7 +288,7 @@ function MESDetalhe({ ctx, id, onVoltar }) {
   return (
     <div>
       <button className="btn btn--sm" onClick={onVoltar} style={{ marginBottom: 12 }}>← Voltar</button>
-      <h2 style={{ margin: '0 0 4px' }}>{d.op.numero} · {d.op.titulo || d.op.produto || '—'}{bloqueada && <span className="pcp-tag" style={{ marginLeft: 8, background: 'color-mix(in srgb, var(--vp-danger) 25%, transparent)' }}>BLOQUEADA</span>}{ctx.ncAbertas[id] && <span className="pcp-tag" style={{ marginLeft: 8, background: 'color-mix(in srgb, var(--mes-retrabalho) 30%, transparent)' }}>EM RETRABALHO</span>}</h2>
+      <h2 style={{ margin: '0 0 4px' }}>{window.pcpNumeroOp(d.op.numero, d.op.pedido_codigo, ctx)} · {d.op.titulo || d.op.produto || '—'}{bloqueada && <span className="pcp-tag" style={{ marginLeft: 8, background: 'color-mix(in srgb, var(--vp-danger) 25%, transparent)' }}>BLOQUEADA</span>}{ctx.ncAbertas[id] && <span className="pcp-tag" style={{ marginLeft: 8, background: 'color-mix(in srgb, var(--mes-retrabalho) 30%, transparent)' }}>EM RETRABALHO</span>}</h2>
       <div style={{ color: 'var(--fg3)', marginBottom: 12 }}>{d.op.cliente || '—'} · qtd {d.op.quantidade} · prazo <span style={{ color: mesPrazoCor(d.op, atual === 'EXPEDIDO') }}>{mesData(d.op.prazo_entrega)}</span> · progresso <b>{prog}%</b></div>
       <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap', marginBottom: 12 }}>
         {etapas.filter(e => e.ativo).sort((a, b) => a.sequencia - b.sequencia).map(e => {
@@ -655,7 +655,7 @@ function MESApontamentos({ ctx }) {
   const { sb, etapas } = ctx;
   const [ex, setEx] = React.useState(null);
   React.useEffect(() => {
-    sb.from('mes_execucoes').select('*, op:pcp_ordens(numero, cliente)').order('iniciada_em', { ascending: false }).limit(300).then(r => setEx(r.data || []));
+    sb.from('mes_execucoes').select('*, op:pcp_ordens(numero, cliente, pedido_codigo)').order('iniciada_em', { ascending: false }).limit(300).then(r => setEx(r.data || []));
   }, [sb]);
   if (!ex) return <div style={{ padding: 24, color: 'var(--fg3)' }}>Carregando…</div>;
   const nome = (c) => (etapas.find(e => e.codigo === c) || {}).nome || c;
@@ -680,7 +680,7 @@ function MESApontamentos({ ctx }) {
           <tbody>
             {ex.map(x => (
               <tr key={x.id}>
-                <td>{x.op ? x.op.numero : '—'}</td><td>{x.op ? x.op.cliente || '—' : '—'}</td><td>{nome(x.etapa_codigo)}</td><td>{x.operador || '—'}</td>
+                <td>{x.op ? window.pcpNumeroOp(x.op.numero, x.op.pedido_codigo, ctx) : '—'}</td><td>{x.op ? x.op.cliente || '—' : '—'}</td><td>{nome(x.etapa_codigo)}</td><td>{x.operador || '—'}</td>
                 <td>{new Date(x.iniciada_em).toLocaleString('pt-BR')}</td><td>{x.concluida_em ? new Date(x.concluida_em).toLocaleString('pt-BR') : 'em andamento'}</td>
                 <td>{min(x.duracao_min)}</td><td>{min(x.pausa_min)}</td>
               </tr>
@@ -753,7 +753,7 @@ function MESTv({ ctx }) {
         <tbody>
           {abertas.map(l => { const [st, cor] = status(l); const p = mesProgresso(etapas, l.etapa_atual); return (
             <tr key={l.ordem_id}>
-              <td><b>{l.op.numero}</b></td><td>{l.op.cliente || '—'}</td><td>{l.op.titulo || l.op.produto || '—'}</td><td>{mesNomeEtapa(etapas, l.etapa_atual)}</td>
+              <td><b>{window.pcpNumeroOp(l.op.numero, l.op.pedido_codigo, ctx)}</b></td><td>{l.op.cliente || '—'}</td><td>{l.op.titulo || l.op.produto || '—'}</td><td>{mesNomeEtapa(etapas, l.etapa_atual)}</td>
               <td>{(operadores[l.ordem_id] || '—').split('@')[0]}</td>
               <td style={{ minWidth: 120 }}><div style={{ height: 12, background: 'var(--vp-gray-100)', borderRadius: 6 }}><div style={{ width: p + '%', height: 12, background: 'var(--vp-success)', borderRadius: 6 }}/></div>{p}%</td>
               <td>{mesData(l.op.prazo_entrega)}</td><td style={{ color: cor, fontWeight: 700 }}>{st}</td>
@@ -790,7 +790,7 @@ function MESKanban({ ctx }) {
             <div style={{ fontWeight: 700, fontSize: 13, marginBottom: 8 }}>{c} <span style={{ color: 'var(--fg3)' }}>({cards.length})</span></div>
             {cards.map(l => (
               <div key={l.ordem_id} className="card" onClick={() => ctx.abrir(l.ordem_id)} style={{ cursor: 'pointer', padding: 10, marginBottom: 8, borderLeft: '5px solid ' + (ctx.bloqueadas[l.ordem_id] ? 'var(--fg2)' : ctx.ncAbertas[l.ordem_id] ? 'var(--mes-retrabalho)' : mesPrazoCor(l.op, false)), fontSize: 12, opacity: ctx.bloqueadas[l.ordem_id] ? 0.8 : 1 }}>
-                <b>{l.op.numero}</b> · {l.op.cliente || '—'}{ctx.bloqueadas[l.ordem_id] && <span className="pcp-tag" style={{ marginLeft: 6 }}>BLOQUEADA</span>}{ctx.ncAbertas[l.ordem_id] && <span className="pcp-tag" style={{ marginLeft: 6 }}>RETRABALHO</span>}
+                <b>{window.pcpNumeroOp(l.op.numero, l.op.pedido_codigo, ctx)}</b> · {l.op.cliente || '—'}{ctx.bloqueadas[l.ordem_id] && <span className="pcp-tag" style={{ marginLeft: 6 }}>BLOQUEADA</span>}{ctx.ncAbertas[l.ordem_id] && <span className="pcp-tag" style={{ marginLeft: 6 }}>RETRABALHO</span>}
                 <div>{l.op.titulo || l.op.produto || '—'}</div>
                 <div style={{ color: 'var(--fg3)' }}>{mesNomeEtapa(etapas, l.etapa_atual)} · {mesProgresso(etapas, l.etapa_atual)}%</div>
                 <div style={{ color: 'var(--fg3)' }}>{mesDur(l.etapa_desde)} na etapa · prazo {mesData(l.op.prazo_entrega)}</div>
@@ -812,7 +812,7 @@ function MESOrdens({ ctx }) {
         <tbody>
           {linhas.map(l => (
             <tr key={l.ordem_id} style={{ cursor: 'pointer' }} onClick={() => ctx.abrir(l.ordem_id)}>
-              <td>{l.op.numero}</td><td>{l.op.cliente || '—'}</td><td>{l.op.titulo || l.op.produto || '—'}</td>
+              <td>{window.pcpNumeroOp(l.op.numero, l.op.pedido_codigo, ctx)}</td><td>{l.op.cliente || '—'}</td><td>{l.op.titulo || l.op.produto || '—'}</td>
               <td>{mesNomeEtapa(etapas, l.etapa_atual)}</td><td>{mesProgresso(etapas, l.etapa_atual)}%</td>
               <td style={{ color: mesPrazoCor(l.op, l.etapa_atual === 'EXPEDIDO') }}>{mesData(l.op.prazo_entrega)}</td>
             </tr>
@@ -838,20 +838,24 @@ function MESPage() {
   const [liberar, setLiberar] = React.useState(false);
   const [podeEditar, setPodeEditar] = React.useState(false);
 
+  const [pedidosNumero, setPedidosNumero] = React.useState({});
+
   const recarregar = React.useCallback(async () => {
     if (!sb) { setErro('Supabase indisponível.'); return; }
-    const [e, m, bq, nq, ox] = await Promise.all([
+    const [e, m, bq, nq, ox, pd] = await Promise.all([
       sb.from('mes_etapas').select('*').order('sequencia'),
-      sb.from('mes_ordens').select('*, op:pcp_ordens(numero, titulo, produto, cliente, prazo_entrega)').order('liberada_em', { ascending: false }).limit(500),
+      sb.from('mes_ordens').select('*, op:pcp_ordens(numero, titulo, produto, cliente, prazo_entrega, pedido_codigo)').order('liberada_em', { ascending: false }).limit(500),
       sb.from('mes_bloqueios').select('ordem_id').is('fim', null).limit(1000),
       sb.from('mes_nc').select('ordem_id, status').limit(5000),
       sb.from('mes_execucoes').select('ordem_id, operador').eq('status', 'em_andamento').limit(1000),
+      sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido').limit(5000),
     ]);
     if (e.error || m.error) { setErro((e.error || m.error).message); return; }
     setEtapas(e.data || []); setLinhas(m.data || []);
     const b = {}; (bq.data || []).forEach(x => { b[x.ordem_id] = true; }); setBloqueadas(b);
     const n = {}; (nq.data || []).forEach(x => { if (x.status !== 'fechada') n[x.ordem_id] = true; }); setNcAbertas(n); setNcTodas(nq.data || []);
     const o = {}; (ox.data || []).forEach(x => { o[x.ordem_id] = x.operador; }); setOperadores(o);
+    const pn = {}; (pd.data || []).forEach(x => { pn[x.codigo_pedido] = x.numero_pedido; }); setPedidosNumero(pn);
   }, [sb]);
   React.useEffect(() => {
     recarregar();
@@ -860,7 +864,7 @@ function MESPage() {
     return () => clearInterval(t);
   }, [recarregar]);
 
-  const ctx = etapas && linhas && { sb, etapas, linhas, bloqueadas, ncAbertas, ncTodas, operadores, podeEditar, recarregar, abrir: (id) => setOpId(id) };
+  const ctx = etapas && linhas && { sb, etapas, linhas, bloqueadas, ncAbertas, ncTodas, operadores, podeEditar, recarregar, abrir: (id) => setOpId(id), pedidosNumero };
   return (
     <div className="page fade-in">
       <div className="page-head">

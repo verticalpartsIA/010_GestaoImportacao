@@ -78,12 +78,89 @@
     } catch (e) { return { pedidos: [], erro: e.message }; }
   }
 
+  // NFs já emitidas no Omie (pedido faturado com nº de NF), para a etiqueta de volume da Expedição. Um registro por NF: um mesmo
+  // pedido com entrega parcial tem mais de uma NF. O nº de volumes e a transportadora vêm do próprio pedido.
+  async function listarNotasFaturadas(texto) {
+    const sb = sbCli();
+    if (!sb) return { notas: [], erro: 'Supabase indisponível.' };
+    try {
+      const { data, error } = await sb.from('pcp_pedidos')
+        .select('codigo_pedido, numero_pedido, numero_nf, cliente_nome, cliente_endereco, transportadora_nome, volumes, peso_bruto, data_faturamento')
+        .eq('faturado', true).eq('cancelado', false).not('numero_nf', 'is', null)
+        .order('data_faturamento', { ascending: false }).order('numero_nf', { ascending: false }).limit(300);
+      if (error) return { notas: [], erro: error.message };
+      const q = String(texto || '').trim().toLowerCase();
+      let notas = data || [];
+      if (q) notas = notas.filter((n) => [n.numero_nf, n.numero_pedido, n.cliente_nome].some((v) => String(v || '').toLowerCase().includes(q)));
+      return { notas: notas.slice(0, 60), erro: null };
+    } catch (e) { return { notas: [], erro: e.message }; }
+  }
+
+  // Número e tipo de obra de uma OP de quadro pelo texto: "Montagem — OS 1212 (Modernização) — Quadro 1/9" ou, na OP-mãe,
+  // "OS 1212 — Modernização de Quadro de Comando"; sem "OS", usa o nº do pedido do Omie. Sem número = sem pedido (não gera etiqueta).
+  function pedidoDaOp(tituloOp, tituloMae, numeroOmie) {
+    const tipoDe = (x) => (/moderniz/i.test(x) ? 'modernizacao' : /\bnovo\b/i.test(x) ? 'novo' : '');
+    for (const tx of [tituloOp, tituloMae]) {
+      const m = String(tx || '').match(/\bOS\s*(\d+)/i);
+      if (m) return { numero: m[1], obra: tipoDe(tx) };
+    }
+    if (numeroOmie) return { numero: String(numeroOmie), obra: tipoDe(`${tituloOp || ''} ${tituloMae || ''}`) };
+    return null;
+  }
+
+  // Pedidos de quadro de comando (Formulário do Quadro) para a etiqueta de chicote. Só existe etiqueta para pedido que existe aqui.
+  async function listarPedidosQuadro(texto) {
+    const sb = sbCli();
+    if (!sb) return { pedidos: [], erro: 'Supabase indisponível.' };
+    try {
+      const { data, error } = await sb.from('quadros_comando').select('id, numero_pedido, numero_cotacao, tipo_aplicacao, novo_ou_modernizacao, status, cliente_id, created_at').is('excluido_em', null).not('numero_pedido', 'is', null).order('numero_pedido', { ascending: false }).limit(300);
+      if (error) return { pedidos: [], erro: error.message };
+      let pedidos = data || [];
+      const t = String(texto || '').trim().toLowerCase();
+      const ids = Array.from(new Set(pedidos.map((p) => p.cliente_id).filter(Boolean)));
+      const nomes = {};
+      if (ids.length) {
+        const rc = await sb.from('clientes').select('id, razao_social').in('id', ids);
+        (rc.data || []).forEach((c) => { nomes[c.id] = c.razao_social; });
+      }
+      pedidos = pedidos.map((p) => ({ ...p, cliente: nomes[p.cliente_id] || '', origem: 'quadro', ops: [] }));
+      // Os quadros da tela "Evolução da Fabricação" (OPs de quadro abertas) também entram: o pedido vem do quadro ligado à OP ou,
+      // sem quadro (OS do Omie, ex. "OS 1212 (Modernização)"), do título da OP / da OP-mãe. OPs do mesmo pedido viram uma linha só.
+      const rops = await sb.from('pcp_ordens').select('id, numero, titulo, cliente, status, quadro_comando_id, ordem_mae_id, pedido_codigo').eq('frente', 'quadro').in('status', ['aguardando', 'em_producao']).order('numero');
+      if (!rops.error) {
+        const ops = rops.data || [];
+        const maes = {};
+        const maeIds = Array.from(new Set(ops.map((o) => o.ordem_mae_id).filter(Boolean)));
+        if (maeIds.length) { const rm = await sb.from('pcp_ordens').select('id, titulo, pedido_codigo').in('id', maeIds); (rm.data || []).forEach((m) => { maes[m.id] = m; }); }
+        const cods = Array.from(new Set(ops.map((o) => o.pedido_codigo || (maes[o.ordem_mae_id] || {}).pedido_codigo).filter((c) => c != null)));
+        const numPed = {};
+        if (cods.length) { const rp = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido').in('codigo_pedido', cods); (rp.data || []).forEach((p) => { numPed[p.codigo_pedido] = p.numero_pedido; }); }
+        const porQuadro = {};
+        pedidos.forEach((p) => { porQuadro[p.id] = p; });
+        const grupos = {};
+        ops.forEach((o) => {
+          const q = o.quadro_comando_id && porQuadro[o.quadro_comando_id];
+          if (q) { q.ops.push(o.numero); return; }
+          const mae = maes[o.ordem_mae_id] || {};
+          const id = pedidoDaOp(o.titulo, mae.titulo, numPed[o.pedido_codigo || mae.pedido_codigo]);
+          if (!id) return;
+          const k = `${id.numero}|${id.obra}`;
+          if (!grupos[k]) grupos[k] = { id: `op:${k}`, numero_pedido: id.numero, tipo_aplicacao: null, novo_ou_modernizacao: id.obra, cliente: o.cliente || '', origem: 'op', ops: [] };
+          grupos[k].ops.push(o.numero);
+        });
+        pedidos = pedidos.concat(Object.values(grupos));
+      }
+      if (t) pedidos = pedidos.filter((p) => String(p.numero_pedido).toLowerCase().includes(t) || String(p.cliente || '').toLowerCase().includes(t) || (p.ops || []).some((n) => String(n).toLowerCase().includes(t)));
+      return { pedidos: pedidos.slice(0, 80), erro: null };
+    } catch (e) { return { pedidos: [], erro: e.message }; }
+  }
+
   // OPs de quadro de comando (PCP) abertas ou concluídas recentes, para a etiqueta de OP/série.
   async function listarOPsQuadro(texto) {
     const sb = sbCli();
     if (!sb) return { ops: [], erro: 'Supabase indisponível.' };
     try {
-      const { data, error } = await sb.from('pcp_ordens').select('id, numero, titulo, produto, cliente, status, quantidade').eq('frente', 'quadro').neq('status', 'cancelada').order('created_at', { ascending: false }).limit(100);
+      const { data, error } = await sb.from('pcp_ordens').select('id, numero, titulo, produto, cliente, status, quantidade, pedido_codigo').eq('frente', 'quadro').neq('status', 'cancelada').order('created_at', { ascending: false }).limit(100);
       if (error) return { ops: [], erro: error.message };
       const t = String(texto || '').trim().toLowerCase();
       let ops = data || [];
@@ -94,7 +171,16 @@
         const r = await sb.from('mes_ordens').select('ordem_id, numero_serie').in('ordem_id', ids);
         (r.data || []).forEach((m) => { if (m.numero_serie) series[m.ordem_id] = m.numero_serie; });
       }
-      return { ops: ops.slice(0, 40).map((o) => ({ ...o, serie: series[o.id] || '' })), erro: null };
+      // Nº do pedido do Omie (só para EXIBIÇÃO na tela de escolha — nunca entra no QR/código de barras
+      // impresso: op_txt/qr/barras de dadosOpQuadro continuam usando o `numero` puro da OP, formato já
+      // registrado na issue #862).
+      const codigosPedido = Array.from(new Set(ops.map((o) => o.pedido_codigo).filter((c) => c != null)));
+      let pedidosNumero = {};
+      if (codigosPedido.length) {
+        const rp = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido').in('codigo_pedido', codigosPedido);
+        (rp.data || []).forEach((p) => { pedidosNumero[p.codigo_pedido] = p.numero_pedido; });
+      }
+      return { ops: ops.slice(0, 40).map((o) => ({ ...o, serie: series[o.id] || '', numero_pedido: pedidosNumero[o.pedido_codigo] || null })), erro: null };
     } catch (e) { return { ops: [], erro: e.message }; }
   }
 
@@ -185,5 +271,5 @@
     } catch (e) { return { linhas: [], erro: e.message }; }
   }
 
-  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
+  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarPedidosQuadro, pedidoDaOp, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
 }());

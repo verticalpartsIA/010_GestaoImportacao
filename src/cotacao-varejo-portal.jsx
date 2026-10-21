@@ -7,6 +7,7 @@ const { useState, useEffect } = React;
 
 const T = (en, pt, zh) => en + ' · ' + pt + ' · ' + zh;
 const NFAIXAS = 3;
+const MAX_FOTOS = 5;
 
 function tokenDaUrl() {
   const p = window.location.pathname.split('/').filter(Boolean);
@@ -17,7 +18,7 @@ function sbc() { return window.__VP_SB.sb; }
 function inicial(item, resp) {
   const f = ((resp && resp.faixas) || []).map((x) => ({ min: String(x.min), preco: String(x.preco) }));
   while (f.length < NFAIXAS) f.push({ min: f.length === 0 ? '1' : '', preco: '' });
-  return { f, lt: resp && resp.lead_time_dias != null ? String(resp.lead_time_dias) : '', moq: resp && resp.moq != null ? String(resp.moq) : '', obs: (resp && resp.obs) || '', foto: (resp && resp.foto_fornecedor) || '' };
+  return { f, lt: resp && resp.lead_time_dias != null ? String(resp.lead_time_dias) : '', moq: resp && resp.moq != null ? String(resp.moq) : '', obs: (resp && resp.obs) || '', foto: (resp && resp.foto_fornecedor) || '', fotos: (resp && Array.isArray(resp.fotos_fornecedor)) ? resp.fotos_fornecedor : [] };
 }
 function num(v) { const n = Number(String(v).replace(',', '.')); return Number.isFinite(n) ? n : 0; }
 
@@ -33,6 +34,7 @@ function Portal() {
   const [enviando, setEnviando] = useState(false);
   const [feito, setFeito] = useState(false);
   const [erro, setErro] = useState(null);
+  const [subindo, setSubindo] = useState(null);
 
   useEffect(() => {
     sbc().rpc('public_ivc_obter', { p_token: token }).then(({ data, error }) => {
@@ -55,14 +57,36 @@ function Portal() {
   const set = (id, campo, v) => setForm((p) => ({ ...p, [id]: { ...p[id], [campo]: v } }));
   const setFaixa = (id, idx, campo, v) => setForm((p) => { const f = p[id].f.map((x, i) => (i === idx ? { ...x, [campo]: v } : x)); return { ...p, [id]: { ...p[id], f } }; });
 
+  const addFotos = async (itemId, files) => {
+    const lista = Array.from(files || []).filter((f) => /^image\//.test(f.type || ''));
+    if (!lista.length) return;
+    setSubindo(itemId); setErro(null);
+    try {
+      let fotos = (form[itemId] && form[itemId].fotos) || [];
+      for (const f of lista) {
+        if (fotos.length >= MAX_FOTOS) break;
+        if (f.size > 8 * 1024 * 1024) { setErro(T('Image larger than 8 MB was skipped.', 'Imagem maior que 8 MB foi ignorada.', '已跳过超过 8 MB 的图片。')); continue; }
+        const ext = ((f.name || '').split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '').slice(0, 5) || 'jpg';
+        const path = 'cotacoes-varejo/fornecedor/' + token + '/' + itemId + '/' + Date.now() + '-' + Math.random().toString(16).slice(2, 8) + '.' + ext;
+        const up = await sbc().storage.from('engenharia').upload(path, f, { upsert: false, contentType: f.type });
+        if (up.error) throw up.error;
+        fotos = fotos.concat([sbc().storage.from('engenharia').getPublicUrl(path).data.publicUrl]);
+        set(itemId, 'fotos', fotos);
+      }
+    } catch (e) { setErro(T('Could not upload the photo. Try again.', 'Não foi possível enviar a foto. Tente novamente.', '图片上传失败，请重试。')); }
+    setSubindo(null);
+  };
+
   const enviar = async () => {
     setEnviando(true); setErro(null);
     const respostas = itens.map((i) => {
       const x = form[i.id];
       const faixas = x.f.filter((r) => num(r.preco) > 0).map((r) => ({ min: Math.max(1, num(r.min) || 1), preco: num(r.preco) }));
-      return { item_id: i.id, faixas, lead_time_dias: x.lt === '' ? null : Math.round(num(x.lt)), moq: x.moq === '' ? null : num(x.moq), obs: x.obs, foto_fornecedor: x.foto };
-    }).filter((r) => r.faixas.length || r.lead_time_dias != null || r.moq != null || r.obs);
+      return { item_id: i.id, faixas, lead_time_dias: x.lt === '' ? null : Math.round(num(x.lt)), moq: x.moq === '' ? null : num(x.moq), obs: x.obs, foto_fornecedor: x.foto, fotos_fornecedor: x.fotos };
+    }).filter((r) => r.faixas.length || r.lead_time_dias != null || r.moq != null || r.obs || (r.fotos_fornecedor || []).length);
     if (!respostas.length) { setErro(T('Fill in at least one price.', 'Preencha ao menos um preço.', '请至少填写一个价格。')); setEnviando(false); return; }
+    const semFoto = respostas.filter((r) => r.faixas.length && !(r.fotos_fornecedor || []).length).length;
+    if (semFoto && !window.confirm(T(semFoto + ' priced item(s) have no photo of your product. Send anyway?', semFoto + ' item(ns) com preço estão sem foto do seu produto. Enviar mesmo assim?', semFoto + ' 个已报价产品没有您的产品照片。仍要提交吗？'))) { setEnviando(false); return; }
     const { data, error } = await sbc().rpc('public_ivc_responder', { p_token: token, p_respostas: respostas, p_moeda: moeda });
     setEnviando(false);
     if (error || !data || !data.ok) {
@@ -116,7 +140,7 @@ function Portal() {
               const x = form[i.id]; if (!x) return null;
               return (
                 <tr key={i.id}>
-                  <td style={td}><div style={{ display: 'flex', gap: 6 }}>{[i.foto_url, i.foto_url2].filter(Boolean).map((u, k) => <a key={k} href={u} target="_blank" rel="noopener noreferrer" title="Click to enlarge · 点击放大"><img src={u} alt={i.codigo} style={{ width: 96, height: 96, objectFit: 'contain', background: '#fff', border: '1px solid #e5e5df', borderRadius: 6 }} /></a>)}{!i.foto_url && <div style={{ width: 64, height: 64, background: '#f0f0ec', borderRadius: 6 }} />}</div></td>
+                  <td style={td}><div style={{ display: 'flex', gap: 6 }}>{[i.foto_url, i.foto_url2].concat(i.fotos_manuais || []).filter(Boolean).map((u, k) => <a key={k} href={u} target="_blank" rel="noopener noreferrer" title="Click to enlarge · 点击放大"><img src={u} alt={i.codigo} style={{ width: 96, height: 96, objectFit: 'contain', background: '#fff', border: '1px solid #e5e5df', borderRadius: 6 }} /></a>)}{!i.foto_url && !(i.fotos_manuais || []).length && <div style={{ width: 64, height: 64, background: '#f0f0ec', borderRadius: 6 }} />}</div></td>
                   <td style={{ ...td, fontFamily: 'monospace', whiteSpace: 'nowrap' }}>{i.codigo}</td>
                   <td style={{ ...td, maxWidth: 260 }}>{i.descricao}{i.obs_vp && <div style={{ fontSize: 12, color: '#8a6d00', marginTop: 4 }}>VerticalParts: {i.obs_vp}</div>}</td>
                   <td style={{ ...td, textAlign: 'right', whiteSpace: 'nowrap' }}><b>{Number(i.quantidade).toLocaleString('en-US')}</b> {i.unidade || ''}</td>
@@ -133,8 +157,25 @@ function Portal() {
                   <td style={td}><input style={{ ...inp, width: 80 }} inputMode="numeric" value={x.lt} disabled={encerrado} onChange={(e) => set(i.id, 'lt', e.target.value)} /></td>
                   <td style={td}><input style={{ ...inp, width: 80 }} inputMode="decimal" value={x.moq} disabled={encerrado} onChange={(e) => set(i.id, 'moq', e.target.value)} /></td>
                   <td style={td}>
+                    <div style={{ fontSize: 11, color: '#8a6d00', marginBottom: 3 }}>{T('Does your product match? Say if it is identical or different (size, material, finish…).', 'Seu produto atende? Diga se é idêntico ou se há diferenças (medida, material, acabamento…).', '您的产品是否符合？请说明是否一致或有差异（尺寸、材质、表面处理等）。')}</div>
                     <textarea style={{ ...inp, minHeight: 54 }} value={x.obs} disabled={encerrado} onChange={(e) => set(i.id, 'obs', e.target.value)} />
-                    <input style={{ ...inp, marginTop: 4, fontSize: 12 }} placeholder={T('Your photo/drawing link (optional)', 'Link da sua foto/desenho (opcional)', '您的图片/图纸链接（可选）')} value={x.foto} disabled={encerrado} onChange={(e) => set(i.id, 'foto', e.target.value)} />
+                    <div style={{ marginTop: 6, fontSize: 12 }}>
+                      <div style={{ color: '#8a6d00', marginBottom: 3 }}>{T('Please send photos of YOUR product so we can compare.', 'Envie fotos do SEU produto para podermos comparar.', '请上传您产品的照片，以便我们对比。')}</div>
+                      <div style={{ display: 'flex', gap: 4, flexWrap: 'wrap' }}>
+                        {x.fotos.map((u) => (
+                          <span key={u} style={{ position: 'relative' }}>
+                            <a href={u} target="_blank" rel="noopener noreferrer"><img src={u} alt="" style={{ width: 56, height: 56, objectFit: 'cover', borderRadius: 6, border: '1px solid #ccc' }} /></a>
+                            {!encerrado && <button type="button" onClick={() => set(i.id, 'fotos', x.fotos.filter((y) => y !== u))} style={{ position: 'absolute', top: -6, right: -6, width: 18, height: 18, borderRadius: 9, border: 0, background: '#c00', color: '#fff', fontSize: 11, lineHeight: '18px', cursor: 'pointer', padding: 0 }}>×</button>}
+                          </span>
+                        ))}
+                      </div>
+                      {!encerrado && x.fotos.length < MAX_FOTOS && (
+                        <label style={{ display: 'inline-block', marginTop: 4, padding: '5px 10px', border: '1px dashed #999', borderRadius: 6, cursor: 'pointer' }}>
+                          {subindo === i.id ? '…' : T('+ Your photos (' + x.fotos.length + '/' + MAX_FOTOS + ')', '+ Suas fotos (' + x.fotos.length + '/' + MAX_FOTOS + ')', '+ 您的图片（' + x.fotos.length + '/' + MAX_FOTOS + '）')}
+                          <input type="file" accept="image/*" multiple style={{ display: 'none' }} disabled={subindo === i.id} onChange={(e) => { addFotos(i.id, e.target.files); e.target.value = ''; }} />
+                        </label>
+                      )}
+                    </div>
                   </td>
                 </tr>
               );

@@ -1002,13 +1002,16 @@ function CIStepRevisao({ s, set, errors }) {
 /* ============================================================
    SEND MODAL — WhatsApp / E-mail / Link copiável
    ============================================================ */
-function CISendModal({ record, onClose, onSent }) {
+function CISendModalLegacy({ record, onClose, onSent }) {
   const [channel, setChannel] = _ciUS(record.channel || 'whatsapp');
   const [contact, setContact] = _ciUS((record.recipient && record.recipient.contact) || '');
   const [name, setName] = _ciUS((record.recipient && record.recipient.name) || record.responsavel_nome || '');
   const [sent, setSent] = _ciUS(false);
   const [copied, setCopied] = _ciUS(false);
   const [sending, setSending] = _ciUS(false);
+  /* 20/10 — aval do CEO por WhatsApp: quando o envio fica travado esperando o Diego, oferece reenviar o pedido (e reabrir se ele recusou). */
+  const [aval, setAval] = _ciUS(null);
+  const [reenviando, setReenviando] = _ciUS(false);
 
   const pretty = window.CIStore.prettyUrl(record.token);
   const real = window.CIStore.signUrl(record.token);
@@ -1037,7 +1040,12 @@ function CISendModal({ record, onClose, onSent }) {
       const gate = await window.DecisoesStore.podeContratarInstalador(numeroCotacao, {
         contratoInstaladorId: record.id, contratada: record.contratada_nome, valor: record.valor_total,
       });
-      if (!gate.ok) { window.toast ? window.toast(gate.motivo, 'warning') : alert(gate.motivo); return; }
+      if (!gate.ok) {
+        window.toast ? window.toast(gate.motivo, 'warning') : alert(gate.motivo);
+        setAval(gate.reenviavel && gate.decisaoId ? { decisaoId: gate.decisaoId, motivo: gate.motivo } : null);
+        return;
+      }
+      setAval(null);
     }
     setSending(true);
     try {
@@ -1088,6 +1096,16 @@ function CISendModal({ record, onClose, onSent }) {
     }
   };
 
+  const reenviarAval = async () => {
+    if (!aval || reenviando) return;
+    setReenviando(true);
+    try {
+      await window.DecisoesStore.reenviarAvalWhatsApp(aval.decisaoId);
+      window.toast?.('Pedido de aval reenviado ao Diego por WhatsApp. Quando ele responder SIM, clique em Enviar de novo.', 'success');
+    } catch (e) { window.toast?.('Erro ao reenviar o aval: ' + (e.message || e), 'error'); }
+    finally { setReenviando(false); }
+  };
+
   return (
     <div className="ci-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="ci-modal">
@@ -1104,6 +1122,14 @@ function CISendModal({ record, onClose, onSent }) {
             <span className="ci-mini-title">{record.contratada_nome}</span>
             <div className="ci-mini-row"><span>{record.objeto_resumo}</span><b>{valorFmt}</b></div>
           </div>
+          {!sent && aval && (
+            <div style={{ background: '#FFF8E1', border: '1px solid #F5C518', borderRadius: 6, padding: '10px 12px', marginBottom: 12, fontSize: 13 }}>
+              <b>Falta o aval do Diego.</b> {aval.motivo}
+              <div style={{ marginTop: 8 }}>
+                <button className="ci-btn ci-btn--ghost" onClick={reenviarAval} disabled={reenviando}>{reenviando ? 'Reenviando…' : 'Reenviar pedido de aval ao Diego (WhatsApp)'}</button>
+              </div>
+            </div>
+          )}
           {!sent ? (
             <>
               <label className="ci-mini-label" style={{ display: 'block', marginBottom: 8 }}>Link único e seguro</label>
@@ -1161,6 +1187,112 @@ function CISendModal({ record, onClose, onSent }) {
       </div>
     </div>
   );
+}
+
+/* 21/10 — rascunho: "Enviar" = pedir o aval do Diego. O WhatsApp do montador fica gravado no contrato; quando o Diego responder SIM
+   (WhatsApp ou Central de Decisões) o banco marca o contrato como enviado e dispara os avisos de assinatura. O link NÃO aparece aqui
+   antes disso (e o servidor recusa a assinatura de rascunho sem aval). */
+function CIPedirAvalModal({ record, onClose, onSent }) {
+  const [name, setName] = _ciUS((record.recipient && record.recipient.name) || record.responsavel_nome || '');
+  const [contact, setContact] = _ciUS((record.recipient && record.recipient.contact) || '');
+  const [estado, setEstado] = _ciUS(null);          // null | 'aguardando_aval' | 'enviado'
+  const [decisaoId, setDecisaoId] = _ciUS(null);
+  const [busy, setBusy] = _ciUS(false);
+  const [reenviando, setReenviando] = _ciUS(false);
+  const digitos = (contact || '').replace(/\D/g, '');
+
+  const pedir = async () => {
+    if (busy) return;
+    if (digitos.length < 10) { window.toast?.('Informe o WhatsApp do montador com DDD — é para onde vai o link depois do aval.', 'warning'); return; }
+    setBusy(true);
+    try {
+      const r = await window.CIStore.pedirEnvio(record.id, name, contact);
+      if (r.estado === 'aguardando_aval') {
+        const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(record.master_id) ?? null;
+        const gate = await window.DecisoesStore.podeContratarInstalador(numeroCotacao, {
+          contratoInstaladorId: record.id, contratada: record.contratada_nome, valor: record.valor_total,
+        });
+        setDecisaoId(gate.decisaoId || null);
+        if (gate.ok) { window.toast?.('O aval já estava aprovado — atualize a tela.', 'info'); }
+      }
+      setEstado(r.estado);
+      onSent && onSent();
+    } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+    finally { setBusy(false); }
+  };
+
+  const reenviar = async () => {
+    if (!decisaoId || reenviando) return;
+    setReenviando(true);
+    try { await window.DecisoesStore.reenviarAvalWhatsApp(decisaoId); window.toast?.('Pedido de aval reenviado ao Diego por WhatsApp.', 'success'); }
+    catch (e) { window.toast?.('Erro ao reenviar o aval: ' + (e.message || e), 'error'); }
+    finally { setReenviando(false); }
+  };
+
+  return (
+    <div className="ci-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="ci-modal">
+        <div className="ci-modal-head">
+          <div>
+            <h2>{estado === 'enviado' ? 'Links enviados' : estado === 'aguardando_aval' ? 'Aguardando o aval do Diego' : 'Enviar para assinatura'}</h2>
+            <p>{estado ? 'Você não precisa fazer mais nada neste contrato.' : 'O Diego autoriza por WhatsApp; depois do SIM os links saem sozinhos.'}</p>
+          </div>
+          <button className="ci-modal-x" onClick={onClose}>✕</button>
+        </div>
+        <div className="ci-modal-body">
+          <div className="ci-mini">
+            <span className="ci-mini-num">{record.numero_documento}</span>
+            <span className="ci-mini-title">{record.contratada_nome}</span>
+            <div className="ci-mini-row"><span>{record.objeto_resumo}</span><b>{record.valor_total ? 'R$ ' + window.CI.fmtMoeda(record.valor_total) : '—'}</b></div>
+          </div>
+          {!estado && (
+            <>
+              <div style={{ background: '#FFF8E1', border: '1px solid #F5C518', borderRadius: 6, padding: '10px 12px', marginBottom: 12, fontSize: 13 }}>
+                <b>Como funciona:</b> o Diego recebe a pergunta no WhatsApp e responde SIM ou NÃO. <b>SIM:</b> o Diego, a Juliana e o Maurício recebem o link de assinatura (em qualquer ordem) e você recebe o link do montador para encaminhar. <b>NÃO:</b> nada é enviado e o Maurício é avisado.
+              </div>
+              <div className="ci-field">
+                <label>Nome do montador</label>
+                <input className="ci-input" value={name} onChange={(e) => setName(e.target.value)} placeholder="Nome do signatário" />
+              </div>
+              <div className="ci-field">
+                <label>WhatsApp do montador (com DDD) — obrigatório</label>
+                <input className="ci-input" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="(11) 99999-0000" />
+              </div>
+            </>
+          )}
+          {estado === 'aguardando_aval' && (
+            <div className="ci-sent-ok">
+              <div className="ci-check">⏳</div>
+              <h3>Pedido de aval enviado ao Diego</h3>
+              <p>Quando ele responder <b>SIM</b>, os links de assinatura saem automaticamente. Se responder <b>NÃO</b>, o Maurício é avisado e nada é enviado.</p>
+              {decisaoId && <button className="ci-btn ci-btn--ghost" onClick={reenviar} disabled={reenviando}>{reenviando ? 'Reenviando…' : 'Reenviar pedido de aval ao Diego (WhatsApp)'}</button>}
+            </div>
+          )}
+          {estado === 'enviado' && (
+            <div className="ci-sent-ok">
+              <div className="ci-check">✓</div>
+              <h3>Aval já aprovado — links enviados</h3>
+              <p>O Diego, a Juliana e o Maurício receberam o link. Você recebe no WhatsApp o link para encaminhar ao montador.</p>
+            </div>
+          )}
+        </div>
+        <div className="ci-modal-foot">
+          {!estado ? (
+            <>
+              <button className="ci-btn ci-btn--ghost" onClick={onClose}>Cancelar</button>
+              <button className="ci-btn ci-btn--primary" onClick={pedir} disabled={busy}>{busy ? 'Enviando…' : 'Pedir aval e enviar →'}</button>
+            </>
+          ) : (
+            <button className="ci-btn ci-btn--primary" onClick={onClose}>Concluir</button>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function CISendModal(props) {
+  return props.record && props.record.status === 'rascunho' ? <CIPedirAvalModal {...props} /> : <CISendModalLegacy {...props} />;
 }
 
 /* ============================================================
@@ -1551,7 +1683,7 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
           <div className="ci-drawer-sec">
             <h3 className="ci-drawer-sec-title">Ações</h3>
             <div className="ci-drawer-actions">
-              <a className="ci-btn ci-btn--ghost" href={signUrl} target="_blank" rel="noopener">Abrir link de assinatura ↗</a>
+              {rec.status !== 'rascunho' && <a className="ci-btn ci-btn--ghost" href={signUrl} target="_blank" rel="noopener">Abrir link de assinatura ↗</a>}
               {(rec.status === 'enviado' || rec.status === 'visualizado' || rec.status === 'expirado' || rec.status === 'rascunho') &&
                 <button className="ci-btn ci-btn--primary" onClick={() => ciReenviar(rec, onResend)}>{rec.status === 'rascunho' ? 'Enviar' : 'Reenviar link'}</button>}
               {rec.status === 'rascunho' && <button className="ci-btn ci-btn--danger" onClick={del}>Excluir rascunho</button>}
@@ -1663,7 +1795,7 @@ function CIDashboard() {
                   <td onClick={(e) => e.stopPropagation()}>
                     <div className="ci-cell-actions">
                       <button className="ci-icon-btn" title="Auditoria" onClick={() => setDrawerId(c.id)}>👁</button>
-                      <a className="ci-icon-btn" title="Abrir assinatura" href={window.CIStore.signUrl(c.token)} target="_blank" rel="noopener">🔗</a>
+                      {c.status !== 'rascunho' && <a className="ci-icon-btn" title="Abrir assinatura" href={window.CIStore.signUrl(c.token)} target="_blank" rel="noopener">🔗</a>}
                       {(c.status === 'enviado' || c.status === 'visualizado' || c.status === 'rascunho' || c.status === 'expirado') &&
                         <button className="ci-mini-btn" onClick={() => ciReenviar(c, (r) => { setSendRec(r); refresh(); })}>{c.status === 'rascunho' ? 'Enviar' : 'Reenviar'}</button>}
                     </div>

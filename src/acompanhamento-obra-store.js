@@ -124,7 +124,46 @@
     return data.publicUrl;
   }
 
-  /* itensHoje: [{ item_id, fotos: [url,...], observacao? }]. observacao é
+  /* Data de hoje no fuso de São Paulo (aaaa-mm-dd) — o servidor e o celular do montador podem estar em outro fuso. */
+  function hojeSP() {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date());
+  }
+  const CONCLUIDO_EM_JANELA_DIAS = 60;
+  /* Vazio => hoje. Recusa formato inválido, data futura e data mais de 60 dias atrás. */
+  /* Dia (fuso de São Paulo) de um instante ISO — usado como teto na correção: não dá para concluir depois do envio. */
+  function diaSP(iso) {
+    return new Intl.DateTimeFormat('en-CA', { timeZone: 'America/Sao_Paulo', year: 'numeric', month: '2-digit', day: '2-digit' }).format(new Date(iso));
+  }
+  /* referencia = dia de envio (aaaa-mm-dd); sem informar, vale hoje (marcação nova). O banco repete a mesma regra (trigger). */
+  function validarConcluidoEm(valor, referencia) {
+    const ref = referencia || hojeSP();
+    const v = (valor || ref);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(v) || isNaN(Date.parse(v + 'T00:00:00Z'))) throw new Error('Data de conclusão inválida.');
+    if (v > ref) throw new Error(referencia ? 'A data de conclusão não pode ser depois do dia do envio.' : 'A data de conclusão não pode ser no futuro.');
+    const dias = (Date.parse(ref + 'T00:00:00Z') - Date.parse(v + 'T00:00:00Z')) / 864e5;
+    if (dias > CONCLUIDO_EM_JANELA_DIAS) throw new Error(`A data de conclusão não pode ser de mais de ${CONCLUIDO_EM_JANELA_DIAS} dias antes do envio.`);
+    return v;
+  }
+
+  /* Correção da data real pelo operador (alçada instalacao.editar_status_obra). A data de envio não muda. */
+  async function corrigirConcluidoEm(dossierId, itemId, data, operadorEmail) {
+    const c = sb();
+    const { data: atual, error: errLeitura } = await c.from('acompanhamento_obra_status')
+      .select('flegado, flegado_em').eq('dossier_id', dossierId).eq('item_id', itemId).maybeSingle();
+    if (errLeitura) throw errLeitura;
+    if (!atual || !atual.flegado || !atual.flegado_em) throw new Error('Só dá para informar a data de uma etapa já marcada como feita.');
+    const v = validarConcluidoEm(data, diaSP(atual.flegado_em));
+    const { error } = await c.from('acompanhamento_obra_status')
+      .update({ concluido_em: v }).eq('dossier_id', dossierId).eq('item_id', itemId).eq('flegado', true);
+    if (error) throw error;
+    if (window.VPLog) window.VPLog.registrar({
+      modulo: 'Instalação', acao: 'Corrigiu a data de conclusão de uma etapa da obra', alvo_id: dossierId,
+      ator_nome: operadorEmail || null, detalhe: { itemId, concluido_em: v },
+    });
+    return v;
+  }
+
+  /* itensHoje: [{ item_id, fotos: [url,...], observacao?, concluido_em? }]. observacao é
      opcional — texto livre de quem flegou (ex.: dificuldade encontrada),
      nunca bloqueia o envio. Add-only: itens já flegados são ignorados
      aqui (o Montador não consegue re-enviar um item já travado — a tela
@@ -145,9 +184,12 @@
     const novos = itensHoje.filter((i) => !jaFlegados.has(i.item_id));
     if (!novos.length) throw new Error('Os itens selecionados já estavam marcados.');
 
+    // Data real em que a etapa foi concluída (ver validarConcluidoEm); sem informar, vale hoje.
+    novos.forEach((i) => { i.concluido_em = validarConcluidoEm(i.concluido_em); });
+
     const agora = new Date().toISOString();
     await Promise.all(novos.map((i) => c.from('acompanhamento_obra_status')
-      .upsert({ dossier_id: dossierId, item_id: i.item_id, flegado: true, flegado_em: agora, fotos: i.fotos, observacao: i.observacao || null, flegado_por: flegadoPor || null, desflegado_por: null, desflegado_em: null }, { onConflict: 'dossier_id,item_id' })));
+      .upsert({ dossier_id: dossierId, item_id: i.item_id, flegado: true, flegado_em: agora, concluido_em: i.concluido_em, fotos: i.fotos, observacao: i.observacao || null, flegado_por: flegadoPor || null, desflegado_por: null, desflegado_em: null }, { onConflict: 'dossier_id,item_id' })));
 
     const { error } = await c.from('acompanhamento_obra_lancamentos').insert({
       dossier_id: dossierId,
@@ -204,7 +246,7 @@
   async function desflegarItem(dossierId, itemId, operadorEmail) {
     const c = sb();
     const { error } = await c.from('acompanhamento_obra_status')
-      .update({ flegado: false, desflegado_por: operadorEmail || null, desflegado_em: new Date().toISOString() })
+      .update({ flegado: false, concluido_em: null, desflegado_por: operadorEmail || null, desflegado_em: new Date().toISOString() })
       .eq('dossier_id', dossierId).eq('item_id', itemId);
     if (error) throw error;
     if (window.VPLog) window.VPLog.registrar({
@@ -234,7 +276,14 @@
         marcoIdx++;
       }
     });
-    return { criado: true, pct: Math.round(acumulado), marcos, iniciadoEm };
+    /* 100% só com TODOS os itens flegados (inclui Pendências/acabamento);
+       enquanto houver item aberto, o teto é 99% e o arredondamento é para baixo. */
+    /* Também exige que as linhas devolvidas cubram o checklist completo (pesos somam 100):
+       link antigo sem alguma linha semeada não pode virar 100% só porque o que existe está marcado. */
+    const pesoTotal = ordenados.reduce((a, s) => a + (Number(s.acompanhamento_obra_itens?.peso) || 0), 0);
+    const completo = ordenados.every((s) => s.flegado) && pesoTotal >= 100 - 0.001;
+    const pct = completo ? 100 : Math.min(99, Math.floor(acumulado + 0.001));
+    return { criado: true, pct, marcos, iniciadoEm };
   }
 
   /* 1 query em lote pra N dossiês — usado por
@@ -256,5 +305,6 @@
   window.AcompanhamentoObraStore = {
     listarItens, obterLink, criarOuObterLink, obterEstadoDossier, obterEstadoPorToken,
     uploadFoto, registrarLancamento, flegarItensOperador, desflegarItem, resumoProgresso, resumoProgressoBatch,
+    hojeSP, diaSP, validarConcluidoEm, corrigirConcluidoEm, CONCLUIDO_EM_JANELA_DIAS,
   };
 }());

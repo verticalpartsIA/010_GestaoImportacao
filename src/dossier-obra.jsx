@@ -136,6 +136,80 @@ const DOSSIER_TAB_LABEL = {
   pendencias: 'Pendências', responsaveis: 'Responsáveis', historico: 'Histórico',
 };
 
+/* Endereço completo da obra (19/10/2026): alimenta o Mapa de Obras (posição exata).
+   O CEP preenche rua/bairro/cidade/UF só nos campos vazios; o número é sempre digitado. */
+function DossierEnderecoModal({ dossier, onClose, onSalvo }) {
+  const [f, setF] = React.useState({
+    cep: dossier.endereco_cep || '', logradouro: dossier.endereco_logradouro || '', numero: dossier.endereco_numero || '',
+    complemento: dossier.endereco_complemento || '', bairro: dossier.endereco_bairro || '',
+    cidade: (dossier.city || '').trim(), uf: (dossier.state || '').trim(),
+  });
+  const [buscando, setBuscando] = React.useState(false);
+  const [salvando, setSalvando] = React.useState(false);
+  const [erro, setErro] = React.useState(null);
+  const set = (k) => (e) => setF((x) => ({ ...x, [k]: e.target.value }));
+
+  const buscarCep = async () => {
+    setErro(null);
+    if (!window.EnderecoAPI) { setErro('Consulta de CEP indisponível.'); return; }
+    setBuscando(true);
+    try {
+      const r = await window.EnderecoAPI.buscarCEP(f.cep);
+      setF((x) => ({
+        ...x,
+        cep: r.cep || x.cep,
+        logradouro: x.logradouro || r.logradouro || '',
+        bairro: x.bairro || r.bairro || '',
+        cidade: x.cidade || r.cidade || '',
+        uf: x.uf || r.estado || '',
+      }));
+    } catch (e) { setErro(e.message || 'CEP não encontrado.'); }
+    finally { setBuscando(false); }
+  };
+
+  const salvar = async () => {
+    setErro(null); setSalvando(true);
+    try {
+      await window.__DOSSIER.atualizarEndereco(dossier.id, f);
+      window.toast && window.toast('Endereço da obra salvo. O Mapa de Obras vai localizar o ponto exato.', 'success');
+      onSalvo();
+    } catch (e) { setErro(e.message || String(e)); }
+    finally { setSalvando(false); }
+  };
+
+  const campo = { width: '100%', padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box' };
+  const rot = { fontSize: 11, fontWeight: 600, color: 'var(--fg2)', marginBottom: 4, display: 'block' };
+  return (
+    <div onClick={onClose} style={{ position: 'fixed', inset: 0, background: 'rgba(0,0,0,0.45)', zIndex: 1000, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 16 }}>
+      <div onClick={(e) => e.stopPropagation()} style={{ background: 'var(--bg, #fff)', borderRadius: 8, padding: 24, width: 'min(560px, 100%)', maxHeight: '90vh', overflow: 'auto' }}>
+        <div style={{ fontSize: 18, fontWeight: 700, marginBottom: 4 }}>Endereço da obra</div>
+        <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 16 }}>Onde o equipamento será instalado (não o endereço da sede do cliente). Usado pelo Mapa de Obras.</div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr auto', gap: 8, alignItems: 'end', marginBottom: 12 }}>
+          <label><span style={rot}>CEP</span><input style={campo} value={f.cep} onChange={set('cep')} placeholder="00000-000" inputMode="numeric"/></label>
+          <button type="button" className="btn btn--outline" onClick={buscarCep} disabled={buscando}>{buscando ? 'Buscando…' : 'Buscar CEP'}</button>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: 8, marginBottom: 12 }}>
+          <label><span style={rot}>Rua / Avenida</span><input style={campo} value={f.logradouro} onChange={set('logradouro')}/></label>
+          <label><span style={rot}>Número</span><input style={campo} value={f.numero} onChange={set('numero')}/></label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8, marginBottom: 12 }}>
+          <label><span style={rot}>Complemento</span><input style={campo} value={f.complemento} onChange={set('complemento')} placeholder="Bloco, torre…"/></label>
+          <label><span style={rot}>Bairro</span><input style={campo} value={f.bairro} onChange={set('bairro')}/></label>
+        </div>
+        <div style={{ display: 'grid', gridTemplateColumns: '3fr 1fr', gap: 8, marginBottom: 12 }}>
+          <label><span style={rot}>Cidade</span><input style={campo} value={f.cidade} onChange={set('cidade')}/></label>
+          <label><span style={rot}>UF</span><input style={campo} value={f.uf} onChange={set('uf')} maxLength={2}/></label>
+        </div>
+        {erro && <div style={{ color: 'var(--vp-danger)', fontSize: 13, marginBottom: 12 }}>{erro}</div>}
+        <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8 }}>
+          <button type="button" className="btn btn--outline" onClick={onClose} disabled={salvando}>Cancelar</button>
+          <button type="button" className="btn btn--primary" onClick={salvar} disabled={salvando}>{salvando ? 'Salvando…' : 'Salvar endereço'}</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 function DossierObraPage({ dossierId, setRoute, setSubsel }) {
   const [dossier, setDossier] = React.useState(null);
   const [loading, setLoading] = React.useState(true);
@@ -144,6 +218,7 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
   const [activeTab, setActiveTab] = React.useState(() =>
     (window.VpRouter && window.VpRouter.parseLocation().tab) || 'visao-geral');
   const [modalOpen, setModalOpen] = React.useState(null);
+  const [editandoEndereco, setEditandoEndereco] = React.useState(false);
 
   React.useEffect(() => {
     carregarDossier();
@@ -201,6 +276,10 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
 
   return (
     <div style={{ padding: '24px' }}>
+      {editandoEndereco && (
+        <DossierEnderecoModal dossier={dossier} onClose={() => setEditandoEndereco(false)}
+          onSalvo={() => { setEditandoEndereco(false); carregarDossier(); }}/>
+      )}
       {/* ---- HEADER DO DOSSIER ---- */}
       <div style={{
         background: 'var(--vp-info)',
@@ -220,9 +299,15 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
             <div style={{ fontSize: 14, opacity: 0.9 }}>
               Cliente: <b>{dossier.client_name}</b>
             </div>
-            <div style={{ fontSize: 14, opacity: 0.9 }}>
-              {dossier.city && dossier.state ? `${dossier.city}, ${dossier.state}` : 'Localização não informada'}
-              {dossier.equip_type && ` · ${dossier.equip_type}`}
+            <div style={{ fontSize: 14, opacity: 0.9, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <span>
+                {(window.MapaObrasCalc && window.MapaObrasCalc.enderecoTexto(dossier)) || 'Endereço da obra não informado'}
+                {dossier.equip_type && ` · ${dossier.equip_type}`}
+              </span>
+              <button type="button" onClick={() => setEditandoEndereco(true)}
+                style={{ background: 'rgba(255,255,255,0.18)', color: 'white', border: '1px solid rgba(255,255,255,0.5)', borderRadius: 12, padding: '2px 10px', fontSize: 12, cursor: 'pointer' }}>
+                {dossier.endereco_logradouro ? 'Editar endereço' : 'Informar endereço'}
+              </button>
             </div>
             {dossier.propostaVinculada ? (
               <div style={{ fontSize: 12, opacity: 0.9, marginTop: 6, display: 'inline-flex', alignItems: 'center', gap: 6,
@@ -245,7 +330,7 @@ function DossierObraPage({ dossierId, setRoute, setSubsel }) {
         {/* ---- BARRA DE PROGRESSO ---- */}
         <div style={{ marginTop: 20 }}>
           <div style={{ fontSize: 12, marginBottom: 8, display: 'flex', justifyContent: 'space-between' }}>
-            <span>Progresso do projeto</span>
+            <span title="Posição do dossiê no fluxo de status. O avanço da instalação em campo está em Acompanhamento de Obra.">Etapa do dossiê no fluxo</span>
             <span style={{ fontWeight: 600 }}>{Math.round(progressoPct)}%</span>
           </div>
           <div style={{ background: 'rgba(255, 255, 255, 0.2)', height: 6, borderRadius: 3, overflow: 'hidden' }}>
@@ -1491,6 +1576,7 @@ function TabAcompanhamentoObra({ dossier }) {
   const [selecionados, setSelecionados] = React.useState({});
   const [fotos, setFotos] = React.useState({});
   const [observacoes, setObservacoes] = React.useState({});
+  const [datas, setDatas] = React.useState({});
 
   const carregar = React.useCallback(() => {
     Promise.all([store.obterEstadoDossier(dossier.id), store.obterLink(dossier.id)])
@@ -1529,6 +1615,18 @@ function TabAcompanhamentoObra({ dossier }) {
     finally { setBusy(false); }
   };
 
+  const corrigirConclusao = async (itemId, data) => {
+    if (!data) return;
+    if (!window.confirm('Corrigir o dia em que esta etapa foi concluída para ' + data.split('-').reverse().join('/') + '? A data de envio não muda.')) return;
+    setBusy(true);
+    try {
+      await store.corrigirConcluidoEm(dossier.id, itemId, data, window.__VP_USER?.email);
+      window.toast?.('Data de conclusão corrigida.', 'success');
+      carregar();
+    } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
+    finally { setBusy(false); }
+  };
+
   const toggleSelecionar = (itemId) => {
     setSelecionados((p) => { const n = { ...p }; if (n[itemId]) delete n[itemId]; else n[itemId] = true; return n; });
   };
@@ -1559,11 +1657,11 @@ function TabAcompanhamentoObra({ dossier }) {
       for (const itemId of ids) {
         const urls = [];
         for (const f of fotos[itemId]) urls.push(await store.uploadFoto(dossier.id, itemId, f.file));
-        itensHoje.push({ item_id: itemId, fotos: urls, observacao: (observacoes[itemId] || '').trim() || null });
+        itensHoje.push({ item_id: itemId, fotos: urls, concluido_em: datas[itemId] || store.hojeSP(), observacao: (observacoes[itemId] || '').trim() || null });
       }
       await store.flegarItensOperador(dossier.id, itensHoje, window.__VP_USER?.email);
       window.toast?.('Atividade(s) flegada(s).', 'success');
-      setSelecionados({}); setFotos({}); setObservacoes({});
+      setSelecionados({}); setFotos({}); setObservacoes({}); setDatas({});
       carregar();
     } catch (e) { window.toast?.('Erro: ' + e.message, 'error'); }
     finally { setBusy(false); }
@@ -1641,6 +1739,19 @@ function TabAcompanhamentoObra({ dossier }) {
                             {s.flegado_por ? ` · por ${s.flegado_por}` : ' · pelo Montador'}
                           </div>
                         )}
+                        {s.flegado && (
+                          <div style={{ fontSize: 11, color: 'var(--fg2)', marginTop: 4, display: 'flex', alignItems: 'center', gap: 6, flexWrap: 'wrap' }}>
+                            <span>Concluído em:</span>
+                            {podeEditar ? (
+                              <input type="date" value={s.concluido_em || ''} disabled={busy} max={s.flegado_em ? store.diaSP(s.flegado_em) : store.hojeSP()}
+                                onChange={(e) => corrigirConclusao(item.id, e.target.value)}
+                                title="Dia real em que a etapa foi concluída em campo. A data de envio não muda." style={{ fontSize: 12, padding: '2px 4px' }} />
+                            ) : (
+                              <b>{s.concluido_em ? s.concluido_em.split('-').reverse().join('/') : 'não informado (vale a data de envio)'}</b>
+                            )}
+                            {podeEditar && !s.concluido_em && <span style={{ color: 'var(--fg3)' }}>não informado — vale a data de envio</span>}
+                          </div>
+                        )}
                         {s.desflegado_em && !s.flegado && (
                           <div style={{ fontSize: 11, color: 'var(--vp-warning-ink)', marginTop: 4 }}>
                             Desflegado por {s.desflegado_por || '—'} em {new Date(s.desflegado_em).toLocaleString('pt-BR')}
@@ -1660,6 +1771,11 @@ function TabAcompanhamentoObra({ dossier }) {
                         )}
                         {!s.flegado && selecionado && (
                           <div style={{ marginTop: 8 }}>
+                            <label style={{ display: 'block', fontSize: 11, color: 'var(--fg2)', marginBottom: 6 }}>
+                              Dia em que concluiu{' '}
+                              <input type="date" value={datas[item.id] || store.hojeSP()} max={store.hojeSP()} disabled={busy}
+                                onChange={(e) => setDatas((p) => ({ ...p, [item.id]: e.target.value }))} style={{ fontSize: 12, padding: '2px 4px' }} />
+                            </label>
                             <label style={{ fontSize: 11, color: 'var(--vp-info)', border: '1px solid var(--vp-info)', borderRadius: 6, padding: '4px 8px', display: 'inline-block', cursor: 'pointer' }}>
                               📷 {fotosItem.length > 0 ? `${fotosItem.length} foto(s) anexada(s)` : 'Anexar foto (obrigatório)'}
                               <input type="file" accept="image/*" multiple hidden disabled={busy}

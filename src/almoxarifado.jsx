@@ -28,6 +28,10 @@ async function almErroFuncao(error, data) {
   return (error && error.message) || 'Erro desconhecido';
 }
 // Endereço na tabela única de contagem (só as colunas enviadas mudam: a contagem já feita é preservada).
+/* Um produto pode ter VÁRIOS endereços ("R2I8 / R2H8 / H23"): porta-palete (compartilhado por vários produtos, normal) e/ou caixa bin
+   nas prateleiras do MEZANINO (letra B–I + número, uma caixa por produto). Só a caixa bin repetida merece aviso de conflito. */
+const binsDoEndereco = (txt) => (window.EtiquetasCalc?.listaEnderecos?.(txt) || []).filter((e) => e.tipo === 'prateleira').map((e) => e.codigo);
+const temMezanino = (txt) => binsDoEndereco(txt).length > 0;
 function upsertEndereco(c, codigo, endereco, quem) {
   return c.from('importacao_varejo_contagem').upsert({
     codigo: String(codigo).toUpperCase(), endereco, atualizado_em: new Date().toISOString(), atualizado_por: quem,
@@ -503,17 +507,20 @@ function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
   const [saving, setSaving] = React.useState(false);
   const porCodigo = React.useMemo(() => Object.fromEntries(linhas.map((l) => [l.codigo.toUpperCase(), l])), [linhas]);
   const itens = React.useMemo(() => texto.split(/\r?\n/).map((x) => x.trim()).filter(Boolean).map((x) => {
-    const [cod, ...resto] = x.split(/[;\t]/); const end = (resto.length > 1 ? resto[resto.length - 1] : resto.join(' ')).trim().toUpperCase().slice(0, 60);   // código;descrição;endereço usa o último campo
+    const [cod, ...resto] = x.split(/[;\t]/); const end = (resto.length > 1 ? resto[resto.length - 1] : resto.join(' ')).trim().toUpperCase().slice(0, 200);   // código;descrição;endereço usa o último campo
     const l = porCodigo[String(cod || '').trim().toUpperCase()];
     const v = end && window.EtiquetasCalc?.validarEnderecoNovo ? window.EtiquetasCalc.validarEnderecoNovo(end, l && l.endereco) : { ok: true, codigo: end };
     return { cod: String(cod || '').trim(), end: v.ok && v.codigo ? v.codigo : end, l, endInvalido: !v.ok, endMsg: v.msg };
   }), [texto, porCodigo]);
   const validos = itens.filter((i) => i.l && i.end && !i.endInvalido);
   const usos = {};      // endereço (normalizado) -> códigos, somando os já cadastrados e os do arquivo
-  linhas.forEach((l) => { const e = String(l.endereco || '').trim().toUpperCase(); if (e) (usos[e] = usos[e] || new Set()).add(l.codigo); });
-  validos.forEach((i) => { (usos[i.end] = usos[i.end] || new Set()).add(i.l.codigo); });
-  validos.forEach((i) => { const antes = String(i.l.endereco || '').trim().toUpperCase(); if (antes && antes !== i.end && usos[antes]) usos[antes].delete(i.l.codigo); });
-  const repetido = (i) => (usos[i.end] && usos[i.end].size > 1) ? Array.from(usos[i.end]).filter((c) => c !== i.l.codigo) : [];
+  linhas.forEach((l) => binsDoEndereco(l.endereco).forEach((b) => { (usos[b] = usos[b] || new Set()).add(l.codigo); }));
+  validos.forEach((i) => {
+    const novos = binsDoEndereco(i.end);
+    binsDoEndereco(i.l.endereco).forEach((b) => { if (!novos.includes(b) && usos[b]) usos[b].delete(i.l.codigo); });
+    novos.forEach((b) => { (usos[b] = usos[b] || new Set()).add(i.l.codigo); });
+  });
+  const repetido = (i) => { const out = new Set(); binsDoEndereco(i.end).forEach((b) => { if (usos[b] && usos[b].size > 1) usos[b].forEach((c) => { if (c !== i.l.codigo) out.add(c); }); }); return Array.from(out); };
   const aplicar = async () => {
     const c = window.__VP_SB && window.__VP_SB.sb; if (!c) return;
     setSaving(true); let ok = 0, falhas = 0;
@@ -530,7 +537,7 @@ function AlmModalImportarEnderecos({ linhas, onClose, onDone }) {
     <Modal title="Importar endereços" onClose={onClose} width={640}
       footer={<><Button variant="ghost" onClick={onClose}>Cancelar</Button><Button variant="primary" disabled={!validos.length || saving} onClick={aplicar}>{saving ? 'Gravando…' : `Gravar ${validos.length} endereço(s)`}</Button></>}>
       <div className="stack" style={{ gap: 10 }}>
-        <div className="small muted">Cole uma linha por item: <b>código;endereço</b> ou <b>código;descrição;endereço</b> (o que vem do botão "Copiar lista sem endereço"; também aceita o que vem copiado de uma planilha, com tab). O endereço é só do PCP — nada vai ao Omie.</div>
+        <div className="small muted">Cole uma linha por item: <b>código;endereço</b> ou <b>código;descrição;endereço</b> — vários endereços do mesmo item separados por <b>/</b>, ex.: <b>R2I8 / R2H8 / H23</b> (o que vem do botão "Copiar lista sem endereço"; também aceita o que vem copiado de uma planilha, com tab). O endereço é só do PCP — nada vai ao Omie.</div>
         <textarea className="input" rows={7} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder={'VPMP-178;R2A4\nVPEL-229;R3B1'} style={{ fontFamily: 'monospace', fontSize: 12 }}/>
         {itens.length > 0 && (
           <div className="table-wrap" style={{ maxHeight: 220, overflowY: 'auto', border: 0 }}>
@@ -709,7 +716,7 @@ function AlmoxarifadoEstoque() {
   const salvarEndereco = async (l, valor) => {
     const c = window.__VP_SB && window.__VP_SB.sb;
     if (!c) return;
-    let novo = String(valor || '').trim().slice(0, 60);
+    let novo = String(valor || '').trim().slice(0, 200);
     if (novo === String(l.endereco || '').trim()) return;
     const v = window.EtiquetasCalc?.validarEnderecoNovo?.(novo, l.endereco);
     if (v && !v.ok) { window.toast?.(v.msg, 'error'); carregar(); return; }
@@ -743,7 +750,7 @@ function AlmoxarifadoEstoque() {
   linhas.forEach((l) => { l.faltas = almFaltas(l, podeVerCusto); });   // campo derivado (não vem do banco)
   const EPS = 1e-9;
   // Facilita o preenchimento dos endereços: sugere só posições que existem no galpão e ainda não têm item.
-  const usadosEnd = new Set(linhas.map((l) => String(l.endereco || '').trim().toUpperCase()).filter(Boolean));
+  const usadosEnd = new Set(linhas.flatMap((l) => (window.EtiquetasCalc?.listaEnderecos?.(l.endereco) || []).map((e) => e.codigo)));
   const enderecosLivres = (window.EtiquetasCalc?.todosEnderecos?.() || []).map((e) => e.codigo).filter((c) => !usadosEnd.has(c));
   const semEndereco = linhas.filter((l) => !String(l.endereco || '').trim());
   const copiarSemEndereco = () => {
@@ -790,8 +797,8 @@ function AlmoxarifadoEstoque() {
       {children}{ordem.chave === chave ? (ordem.dir === 1 ? ' ▲' : ' ▼') : ''}
     </th>
   );
-  const porEnd = {}; linhas.forEach((l) => { const e = String(l.endereco || '').trim().toUpperCase(); if (e) (porEnd[e] = porEnd[e] || []).push(l.codigo); });
-  const mesmoEnd = (l) => { const e = String(l.endereco || '').trim().toUpperCase(); return e && porEnd[e] && porEnd[e].length > 1 ? porEnd[e].filter((c) => c !== l.codigo) : []; };
+  const porEnd = {}; linhas.forEach((l) => binsDoEndereco(l.endereco).forEach((b) => { (porEnd[b] = porEnd[b] || []).push(l.codigo); }));
+  const mesmoEnd = (l) => { const out = new Set(); binsDoEndereco(l.endereco).forEach((b) => { if (porEnd[b] && porEnd[b].length > 1) porEnd[b].forEach((c) => { if (c !== l.codigo) out.add(c); }); }); return Array.from(out); };
   const nZerados = linhas.filter((l) => !l.temSaldo || l.saldo <= 0).length;
   const valorEstoque = podeVerCusto ? linhas.reduce((s, l) => s + (l.temSaldo && l.saldo > 0 && l.custo > 0 ? l.saldo * l.custo : 0), 0) : null;
   const semCustoComSaldo = podeVerCusto ? linhas.filter((l) => l.temSaldo && l.saldo > 0 && !(l.custo > 0)).length : 0;
@@ -885,7 +892,7 @@ function AlmoxarifadoEstoque() {
         </Card>
       )}
       <Card title="Estoque do PCP" sub="Saldo do Omie × contagem real da prateleira · clique no título da coluna para ordenar">
-        <div className="table-wrap" style={{ border: 0 }}>
+        <div className="table-wrap pcp-rolagem" style={{ border: 0 }}>
           <table className="t pcp-grid pcp-estoque pcp-cruz" onMouseOver={window.pcpColHover} onMouseLeave={window.pcpColHover}>
             <thead>
               <tr>
@@ -952,12 +959,13 @@ function AlmoxarifadoEstoque() {
                     </td>}
                     <td>
                       {podeContar
-                        ? <input className="input" type="text" maxLength={60} placeholder="falta" key={l.codigo + '-end-' + (l.endereco || '')}
-                            defaultValue={l.endereco || ''} style={{ width: 76 }} list="alm-enderecos-livres" data-end-input="1"
-                            title="Endereço na prateleira (só do PCP). Digite ou escolha um livre; Enter grava e vai para o próximo item."
+                        ? <input className="input" type="text" maxLength={200} placeholder="falta" key={l.codigo + '-end-' + (l.endereco || '')}
+                            defaultValue={l.endereco || ''} style={{ width: 150 }} list="alm-enderecos-livres" data-end-input="1"
+                            title="Endereços do item. Vários: separe com / (ex.: R2I8 / R2H8 / H23). Porta-palete: R2A4. Prateleira do mezanino: Letra-Nº (G23). Enter grava e vai para o próximo item."
                             onKeyDown={(e) => { if (e.key !== 'Enter') return; e.preventDefault(); const todos = Array.from(document.querySelectorAll('input[data-end-input]')); const i = todos.indexOf(e.target); e.target.blur(); const prox = todos[i + 1]; if (prox) setTimeout(() => prox.focus(), 0); }}
                             onBlur={(e) => salvarEndereco(l, e.target.value)}/>
                         : (l.endereco || <span style={{ color: 'var(--fg3)' }}>falta</span>)}
+                      {temMezanino(l.endereco) && <span className="small muted" style={{ marginLeft: 4 }} title="Tem caixa bin nas prateleiras do mezanino">mezanino</span>}
                       {mesmoEnd(l).length > 0 && <span style={{ color: 'var(--vp-warning-ink, #b45309)', cursor: 'help', marginLeft: 4 }} title={'Mesmo endereço de: ' + mesmoEnd(l).slice(0, 6).join(', ')}>⚠</span>}
                     </td>
                     {maisCols && <td className="text-right">{almFmt(l.leadtime_dias)}</td>}

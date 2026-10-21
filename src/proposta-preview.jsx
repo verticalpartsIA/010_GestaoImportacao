@@ -318,7 +318,7 @@ function PreviewSaudacao({ data }) {
       <div className="pe__pdf-inner">
         <PdfHeader numero={data.numero}/>
         <p>Prezados Senhores(as):</p>
-        <p>Proposta Comercial para o fornecimento de {qtd} Elevador(es) de Passageiros.</p>
+        <p>Proposta Comercial para o fornecimento de {window.PropostaOpcoes ? window.PropostaOpcoes.resumoFornecimento(ed) : `${qtd} Elevador(es) de Passageiros`}.</p>
         {rows.length ? (
           <table className="pdf-table2" style={{ fontSize: "0.86em" }}>
             <thead><tr><th>Equipamento</th><th>Modelo</th><th>Capacidade</th><th style={{ textAlign: "center" }}>Paradas</th></tr></thead>
@@ -342,8 +342,35 @@ function PreviewSaudacao({ data }) {
 /* ---------- Página 5: Marketing do equipamento ---------- */
 function PreviewElevadorMarketing({ data }) {
   const ed = data.elevador;
-  const s = (ed.especificacoes || [])[0] || {};
-  const titulo = ["Elevador de Passageiros", window.PropostaOpcoes ? window.PropostaOpcoes.modelosDistintos(ed.especificacoes) : s.modelo].filter(Boolean).join(" ");
+  const O = window.PropostaOpcoes;
+  const modelos = O ? O.modelosDistintos(ed.especificacoes) : ((ed.especificacoes || [])[0] || {}).modelo;
+  const titulo = O ? O.tituloEquipamentos(ed, modelos) : ["Elevador de Passageiros", modelos].filter(Boolean).join(" ");
+  /* Com perfis por tipo (Carga / Passageiro / Panorâmico) cada um tem a SUA linha de modelos, benefícios e diferenciais;
+     sem perfis, os campos globais de sempre. */
+  const blocos = O ? O.perfisConteudo(ed) : [];
+  const Secao = ({ b, comTitulo }) => (
+    <div style={{ marginBottom: 12 }}>
+      {comTitulo ? <h3 className="pdf-sub-title" style={{ marginTop: 14 }}>{O.tituloPerfil(b)}</h3> : null}
+      {b.textoModelos ? (
+        <>
+          {comTitulo ? null : <h3 className="pdf-sub-title">Linha de Modelos</h3>}
+          <p>{b.textoModelos}</p>
+        </>
+      ) : null}
+      {b.beneficios?.length ? (
+        <>
+          <h3 className="pdf-sub-title">Benefícios</h3>
+          <ul className="pdf-list">{b.beneficios.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        </>
+      ) : null}
+      {b.diferenciais?.length ? (
+        <>
+          <h3 className="pdf-sub-title">Diferenciais em Relação ao Mercado</h3>
+          <ul className="pdf-list">{b.diferenciais.map((x, i) => <li key={i}>{x}</li>)}</ul>
+        </>
+      ) : null}
+    </div>
+  );
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
@@ -351,27 +378,9 @@ function PreviewElevadorMarketing({ data }) {
         <h2 className="pdf-sec-title">{titulo}</h2>
         <div className="pdf-sec-rule"/>
         {ed.textoProposta ? <p>{ed.textoProposta}</p> : <Vazio>Descreva a linha do produto neste campo.</Vazio>}
-
-        {ed.textoModelos ? (
-          <>
-            <h3 className="pdf-sub-title">Linha de Modelos</h3>
-            <p>{ed.textoModelos}</p>
-          </>
-        ) : null}
-
-        {ed.beneficios?.length ? (
-          <>
-            <h3 className="pdf-sub-title">Benefícios</h3>
-            <ul className="pdf-list">{ed.beneficios.map((b, i) => <li key={i}>{b}</li>)}</ul>
-          </>
-        ) : null}
-
-        {ed.diferenciais?.length ? (
-          <>
-            <h3 className="pdf-sub-title">Diferenciais em Relação ao Mercado</h3>
-            <ul className="pdf-list">{ed.diferenciais.map((b, i) => <li key={i}>{b}</li>)}</ul>
-          </>
-        ) : null}
+        {blocos.length
+          ? blocos.map((b) => <Secao key={b.id} b={b} comTitulo/>)
+          : <Secao b={{ textoModelos: ed.textoModelos, beneficios: ed.beneficios, diferenciais: ed.diferenciais }}/>}
       </div>
       <PdfFooter/>
     </div>
@@ -437,23 +446,26 @@ function PreviewEspecTabela({ data }) {
 /* ---------- Página 7: Acabamento (tabela) ---------- */
 function PreviewAcabamentoTabela({ data }) {
   const ed = data.elevador;
-  /* acabamentosCats (novo, dinâmico — categorias/campos com checkbox
-     "ativo", igual à Ficha Técnica): só entra no PDF o que está marcado.
-     Sem acabamentosCats (proposta antiga, nunca reaberta no editor novo):
-     cai no formato fixo de sempre — mostra o que estiver preenchido. */
-  const linhas = window.PropostaOpcoes ? window.PropostaOpcoes.linhasAcabamento(ed) : [];
+  /* Blocos vêm de PropostaOpcoes.perfisAcabamento (fonte única de preview e PDF): 1 por perfil de tipo
+     (Carga / Passageiro / Panorâmico) quando a proposta tem perfis; senão 1 bloco global, como sempre — só os campos
+     marcados "ativo" e preenchidos entram (acabamentosCats, ou o formato fixo da proposta antiga). */
+  const O = window.PropostaOpcoes;
+  const blocos = O ? O.perfisAcabamento(ed) : [];
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
         <PdfHeader numero={data.numero}/>
         <h2 className="pdf-sec-title">Acabamento</h2>
         <div className="pdf-sec-rule"/>
-        {linhas.length ? (
-          <table className="pdf-table2">
-            <thead><tr><th>Item</th><th>Elevador de Passageiros</th></tr></thead>
-            <tbody>{linhas.map(([k, v], i) => <tr key={i}><td>{k}</td><td>{v}</td></tr>)}</tbody>
-          </table>
-        ) : <Vazio>Preencha os acabamentos na aba "Acabamentos".</Vazio>}
+        {blocos.length ? blocos.map((b) => (
+          <div key={b.id} style={{ breakInside: "avoid", marginBottom: 14 }}>
+            {b.nome ? <h3 className="pdf-sub-title">{O.tituloPerfil(b)}</h3> : null}
+            <table className="pdf-table2">
+              <thead><tr><th>Item</th><th>{b.rotulo}</th></tr></thead>
+              <tbody>{b.linhas.map(([k, v], i) => <tr key={i}><td>{k}</td><td>{v}</td></tr>)}</tbody>
+            </table>
+          </div>
+        )) : <Vazio>Preencha os acabamentos na aba "Acabamentos".</Vazio>}
       </div>
       <PdfFooter/>
     </div>
@@ -462,19 +474,32 @@ function PreviewAcabamentoTabela({ data }) {
 
 /* ---------- Página 8: Características Principais (elétrica/comando/tração) ---------- */
 function PreviewCaracteristicasEquip({ data }) {
-  const c = data.elevador.caracteristicasEquip || {};
+  const O = window.PropostaOpcoes;
+  const blocos = O ? O.perfisConteudo(data.elevador) : [];
+  const Campos = ({ c }) => (
+    <>
+      <h3 className="pdf-sub-title">Alimentação Elétrica</h3>
+      {c.alimentacao ? <p>{c.alimentacao}</p> : <Vazio>A preencher.</Vazio>}
+      <h3 className="pdf-sub-title">Sistema de Comando de Controle</h3>
+      {c.comando ? <p>{c.comando}</p> : <Vazio>A preencher.</Vazio>}
+      <h3 className="pdf-sub-title">Máquina de Tração</h3>
+      {c.tracao ? <p>{c.tracao}</p> : <Vazio>A preencher.</Vazio>}
+    </>
+  );
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
         <PdfHeader numero={data.numero}/>
         <h2 className="pdf-sec-title">Características Principais</h2>
         <div className="pdf-sec-rule"/>
-        <h3 className="pdf-sub-title">Alimentação Elétrica</h3>
-        {c.alimentacao ? <p>{c.alimentacao}</p> : <Vazio>A preencher.</Vazio>}
-        <h3 className="pdf-sub-title">Sistema de Comando de Controle</h3>
-        {c.comando ? <p>{c.comando}</p> : <Vazio>A preencher.</Vazio>}
-        <h3 className="pdf-sub-title">Máquina de Tração</h3>
-        {c.tracao ? <p>{c.tracao}</p> : <Vazio>A preencher.</Vazio>}
+        {blocos.length
+          ? blocos.map((b) => (
+            <div key={b.id} style={{ marginBottom: 14 }}>
+              <h3 className="pdf-sub-title" style={{ marginTop: 14, textDecoration: "underline" }}>{O.tituloPerfil(b)}</h3>
+              <Campos c={b.caracteristicasEquip || {}}/>
+            </div>
+          ))
+          : <Campos c={data.elevador.caracteristicasEquip || {}}/>}
       </div>
       <PdfFooter/>
     </div>
@@ -483,19 +508,29 @@ function PreviewCaracteristicasEquip({ data }) {
 
 /* ---------- Página 9: Recursos Inclusos ---------- */
 function PreviewRecursosNomeados({ data }) {
+  const O = window.PropostaOpcoes;
+  const blocos = O ? O.perfisConteudo(data.elevador).filter((b) => b.recursosNomeados.length) : [];
   const itens = data.elevador.recursosNomeados || [];
+  const Itens = ({ lista }) => lista.map((it, i) => (
+    <div className="pdf-named-item" key={i}>
+      <b>{it.nome}:</b>
+      <p>{it.desc}</p>
+    </div>
+  ));
   return (
     <div className="pe__pdf">
       <div className="pe__pdf-inner">
         <PdfHeader numero={data.numero}/>
         <h2 className="pdf-sec-title">Recursos Inclusos</h2>
         <div className="pdf-sec-rule"/>
-        {itens.length ? itens.map((it, i) => (
-          <div className="pdf-named-item" key={i}>
-            <b>{it.nome}:</b>
-            <p>{it.desc}</p>
-          </div>
-        )) : <Vazio>Adicione os recursos inclusos no equipamento.</Vazio>}
+        {blocos.length
+          ? blocos.map((b) => (
+            <div key={b.id} style={{ marginBottom: 14 }}>
+              <h3 className="pdf-sub-title" style={{ marginTop: 14 }}>{O.tituloPerfil(b)}</h3>
+              <Itens lista={b.recursosNomeados}/>
+            </div>
+          ))
+          : itens.length ? <Itens lista={itens}/> : <Vazio>Adicione os recursos inclusos no equipamento.</Vazio>}
       </div>
       <PdfFooter/>
     </div>

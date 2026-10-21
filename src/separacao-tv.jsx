@@ -31,6 +31,7 @@ const ROTULO = {
   chegou: (n) => `Chegou o pedido ${n}`,
   pego: (n) => `Pedido ${n}: separação iniciada`,
   separado: (n) => `Pedido ${n} separado`,
+  parcial: (n) => `Pedido ${n}: parcial — aguardando fabricação/chegada`,
   voltou: (n) => `Pedido ${n} voltou para a fila`,
   saiu: (n) => `Pedido ${n} saiu da fila`,
 };
@@ -40,9 +41,10 @@ function detectarEventos(antes, depois) {
   const mapaDepois = new Map(depois.map((p) => [p.id, p]));
   depois.forEach((p) => {
     const a = mapaAntes.get(p.id);
-    if (!a) { ev.push({ tipo: p.status === 'separado' ? 'separado' : p.status === 'em_separacao' ? 'pego' : 'chegou', n: p.numero_pedido }); return; }
+    if (!a) { ev.push({ tipo: p.status === 'separado' ? 'separado' : p.status === 'parcial' ? 'parcial' : p.status === 'em_separacao' ? 'pego' : 'chegou', n: p.numero_pedido }); return; }
     if (a.status === p.status) return;
     if (p.status === 'separado') ev.push({ tipo: 'separado', n: p.numero_pedido });
+    else if (p.status === 'parcial') ev.push({ tipo: 'parcial', n: p.numero_pedido });
     else if (p.status === 'em_separacao') ev.push({ tipo: 'pego', n: p.numero_pedido });
     else ev.push({ tipo: 'voltou', n: p.numero_pedido });
   });
@@ -56,8 +58,9 @@ function Caixa({ children }) {
 
 function Cartao({ p, sla }) {
   const sep = p.status === 'separado';
-  const cor = corSla(p.decorrido_min, sla);
-  const atrasado = p.decorrido_min >= sla;
+  const par = p.status === 'parcial';
+  const cor = par ? '#8fb4ff' : corSla(p.decorrido_min, sla);
+  const atrasado = !par && p.decorrido_min >= sla;
   const pct = Math.min(100, sla > 0 ? (p.decorrido_min / sla) * 100 : 0);
   const MAX = 10;
   const itens = p.itens || [];
@@ -71,15 +74,18 @@ function Cartao({ p, sla }) {
         <div style={{ width: pct + '%', height: 10, background: cor, borderRadius: 6 }} />
       </div>
       <div style={{ fontSize: 'clamp(11px, 1vw, 15px)', color: COR.mudo, marginBottom: 8 }}>
-        {sep
+        {par
+          ? `Aguardando fabricação/chegada há ${fmtMin(p.espera_min)} · separação do almoxarifado levou ${fmtMin(p.decorrido_min)} (meta ${fmtMin(sla)})`
+          : sep
           ? (atrasado ? `Separado fora do SLA (meta ${fmtMin(sla)})` : `Separado dentro do SLA (meta ${fmtMin(sla)})`)
           : (atrasado ? `SLA estourado há ${fmtMin(p.decorrido_min - sla)} (meta ${fmtMin(sla)})` : `Restam ${fmtMin(sla - p.decorrido_min)} do SLA (meta ${fmtMin(sla)})`)}
       </div>
       <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>
         {itens.slice(0, MAX).map((i) => {
           const completo = Number(i.separada) >= Number(i.pedida);
+          const pendente = !completo && i.pendente;
           return (
-            <span key={i.codigo} style={{ fontSize: 'clamp(12px, 1.2vw, 19px)', fontWeight: 600, padding: '3px 9px', borderRadius: 8, border: `1px solid ${completo ? COR.verde : COR.borda}`, color: completo ? COR.verde : COR.texto, background: '#101010' }}>
+            <span key={i.codigo} style={{ fontSize: 'clamp(12px, 1.2vw, 19px)', fontWeight: 600, padding: '3px 9px', borderRadius: 8, border: `1px solid ${completo ? COR.verde : pendente ? '#8fb4ff' : COR.borda}`, color: completo ? COR.verde : pendente ? '#8fb4ff' : COR.texto, background: '#101010' }}>
               {i.codigo} <span style={{ color: COR.mudo, fontWeight: 500 }}>{qtd(i.separada)}/{qtd(i.pedida)}</span>
             </span>
           );
@@ -194,9 +200,10 @@ function Painel() {
   const pedidos = dados.pedidos || [];
   const aguardando = pedidos.filter((p) => p.status === 'aguardando');
   const emSep = pedidos.filter((p) => p.status === 'em_separacao');
+  const parciais = pedidos.filter((p) => p.status === 'parcial');
   const separados = pedidos.filter((p) => p.status === 'separado').sort((a, b) => String(b.separado_em).localeCompare(String(a.separado_em)));
   const tot = dados.totais || {};      // totais sem corte (as listas acima vêm limitadas por coluna); sem `totais` (RPC antiga), cai nas listas
-  const nAguardando = tot.aguardando ?? aguardando.length, nEmSep = tot.em_separacao ?? emSep.length, nSeparados = tot.separados ?? separados.length;
+  const nAguardando = tot.aguardando ?? aguardando.length, nEmSep = tot.em_separacao ?? emSep.length, nSeparados = tot.separados ?? separados.length, nParcial = tot.parcial ?? parciais.length;
   const atrasados = tot.atrasados ?? [...aguardando, ...emSep].filter((p) => p.decorrido_min >= sla).length;
   const hora = agora.toLocaleTimeString('pt-BR', { timeZone: 'America/Sao_Paulo', hour: '2-digit', minute: '2-digit', second: '2-digit' });
   const data = agora.toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo', weekday: 'long', day: '2-digit', month: 'long' });
@@ -235,9 +242,10 @@ function Painel() {
         </div>
       )}
 
-      <div className="st-grade" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr)', gap: 18, alignItems: 'start' }}>
+      <div className="st-grade" style={{ display: 'grid', gridTemplateColumns: 'minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) minmax(0, 1fr)', gap: 18, alignItems: 'start' }}>
         <Coluna titulo="AGUARDANDO" cor={COR.amarelo} lista={aguardando} total={nAguardando} sla={sla} vazio="Nenhum pedido na fila." larga />
         <Coluna titulo="EM SEPARAÇÃO" cor="#4da3ff" lista={emSep} total={nEmSep} sla={sla} vazio="Ninguém separando agora." />
+        <Coluna titulo="AGUARDANDO FABRICAÇÃO" cor="#8fb4ff" lista={parciais} total={nParcial} sla={sla} vazio="Nenhum pedido parcial." />
         <Coluna titulo="SEPARADOS HOJE" cor={COR.verde} lista={separados} total={nSeparados} sla={sla} vazio="Nenhum separado hoje." />
       </div>
 

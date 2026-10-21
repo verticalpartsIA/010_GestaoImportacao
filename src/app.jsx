@@ -25,6 +25,7 @@ const ROUTE_TITLE = {
   almoxarifado: "Almoxarifado",
   "carga-maquina": "Carga Máquina",
   "montagem-produto": "Montagem do Produto",
+  "evolucao-fabricacao": "Evolução da Fabricação",
   "simulacao-producao": "Simulação",
   "relatorios-pcp": "Relatórios do PCP",
   expedicao: "Expedição",
@@ -63,6 +64,7 @@ const ROUTE_TITLE = {
   "contrato-instalador": "Contrato Instalador",
   vistorias: "Resultado Vistorias de Obras",
   instalacao: "Instalação em Campo",
+  "mapa-obras": "Mapa de Obras",
   "central-documentos": "Central de Documentos",
   art: "ART de Instalação",
   cronograma: "Cronograma de Instalação",
@@ -71,7 +73,7 @@ const ROUTE_TITLE = {
   "rh-homologacao": "Homologação de Instaladores",
   "cadastro-instaladores": "Empresas Instaladoras",
   "cadastro-custos": "Atualização de Custos",
-  importacao: "Importação",
+  importacao: "Rastreio Marítimo",
   "importacao-detail": "Detalhe de Embarque",
   "importacao-rastreamento": "Rastreamento de Navios",
   compras: "Importação Varejo",
@@ -388,6 +390,7 @@ function App() {
       case "vistorias-envio": return <VistoriasEnvio setRoute={setRoute}/>;
       case "vistorias": return <VistoriasObras obraId={subsel} setRoute={setRoute}/>;
       case "instalacao": return <InstalacaoPage/>;
+      case "mapa-obras": return <window.MapaObrasPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "central-documentos": return <window.CentralDocumentosPage setRoute={setRoute} setSubsel={setSubsel} subsel={subsel}/>;
       case "art": return <ArtPage setRoute={setRoute}/>;
       case "cronograma": return <CronogramaPage/>;
@@ -417,6 +420,7 @@ function App() {
       case "relatorios-pcp": return <window.RelatoriosPCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "simulacao-producao": return <window.SimulacaoProducaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "evolucao-fabricacao": return <window.EvolucaoFabricacaoQuadroPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "pcp": return <window.PCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "mes": return <window.MESPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "mes-cadastros": return <window.MESCadastrosPage setRoute={setRoute} setSubsel={setSubsel}/>;

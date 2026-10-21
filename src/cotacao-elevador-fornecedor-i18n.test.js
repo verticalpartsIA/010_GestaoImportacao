@@ -88,3 +88,19 @@ test('e-mail do quadro de comando: sem a frase de "mesmo link" e sem número', (
   assert.ok(!/same link/.test(m.text));
   assert.ok(CJK.test(m.text));
 });
+
+test('nova revisão: aviso de "nova versão" em PT, EN e 中文 + sufixo no assunto', () => {
+  const base = { numeroDocumento: 'VPEL-EL0990-A', numeroTxt: ' — Cotação Nº VPCT-0990', url: 'https://x/c/novo', linkJaEnviadoEmDoisCanais: true, descricaoPt: 'p', descricaoEn: 'e', descricaoZh: 'z' };
+  const resp = store.mensagemRfq({ ...base, novaVersao: { revisao: 'A', anterior: 'VPEL-EL0990', anteriorRespondida: true } });
+  assert.match(resp.text, /NOVA VERSÃO \/ NEW VERSION/);
+  assert.match(resp.text, /nova versão da cotação VPEL-EL0990, que já foi precificada/);
+  assert.match(resp.text, /new version of quotation VPEL-EL0990, which you have already priced/);
+  assert.ok(resp.text.includes('新版本') && resp.text.includes('您此前已报过价'));
+  assert.match(resp.subject, /^Cotação técnica VPEL-EL0990-A/);
+  assert.match(resp.subject, /Revisão A/);
+  const semResp = store.mensagemRfq({ ...base, novaVersao: { revisao: 'B', anterior: 'VPEL-EL0990-A', anteriorRespondida: false } });
+  assert.match(semResp.text, /ainda sem resposta/);
+  assert.ok(!/já foi precificada/.test(semResp.text));
+  const primeira = store.mensagemRfq(base);
+  assert.ok(!/NOVA VERSÃO/.test(primeira.text) && !/Revisão/.test(primeira.subject));
+});

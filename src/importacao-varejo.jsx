@@ -516,7 +516,8 @@ function ImportacaoVarejoPage({ setRoute }) {
   }, []);
   React.useEffect(() => { carregar(); }, [carregar]);
 
-  const filtrados = React.useMemo(() => {
+  const ord = window.useOrdenacao();
+  const filtradosBase = React.useMemo(() => {
     const q = busca.trim().toLowerCase();
     return items.filter((i) => {
       const combinaTexto = !q || i.codigo.toLowerCase().includes(q) || i.descricao.toLowerCase().includes(q) || (i.ultimoFornecedorNome || '').toLowerCase().includes(q);
@@ -532,6 +533,7 @@ function ImportacaoVarejoPage({ setRoute }) {
       return combinaTexto && combinaCor && combinaCurva && combinaCont && combinaTend;
     });
   }, [items, busca, corFiltro, curvaFiltro, contFiltro, tendFiltro, soRevisar, soDiaD, caminhoFiltro]);
+  const filtrados = React.useMemo(() => ord.aplicar(filtradosBase, { codigo: i=>i.codigo, descricao: i=>i.descricao, endereco: i=>i.endereco, curva: i=>i.curva, fisico: i=>i.estoqueFisico, reservado: i=>i.estoqueReservado, disponivel: i=>i.estoqueDisponivel, contado: i=>(i.contagem&&i.contagem.quantidade!=null?Number(i.contagem.quantidade):null), acuracidade: i=>(i.acuracia?(i.acuracia.ok?0:Math.abs(i.acuracia.diferenca||0)):null), minomie: i=>i.estoqueMinimo, minsug: i=>i.estMinSug, maxsug: i=>i.estMaxSug, pendente: i=>i.pendenteOmie, comprado: i=>i.comprado, caminho: i=>i.caminhoTotal, sugestao: i=>(i.precisaRevisao?null:i.sugestaoCompra), tendencia: i=>i.estTendenciaPct, fornecedor: i=>i.ultimoFornecedorNome, preco: i=>i.ultimoPrecoUnitario, diad: i=>(i.precisaRevisao?null:i.estDiaDDias) }), [filtradosBase, ord.ord.chave, ord.ord.dir]); // eslint-disable-line
   const nParaRevisar = React.useMemo(() => items.filter((i) => i.precisaRevisao).length, [items]);
   const resumoCaminho = React.useMemo(() => {
     const lista = items.filter((i) => i.caminhoTotal > 0);
@@ -819,26 +821,26 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
                 />
               </th>
             )}
-            <th>Código</th>
-            <th>Descrição</th>
-            <th>Endereço</th>
-            <th className="text-center">Curva</th>
-            <th className="text-right">Físico</th>
-            <th className="text-right">Reservado</th>
-            <th className="text-right">Disponível</th>
-            <th className="text-right" title="Quantidade contada na prateleira. Vale por 30 dias e passa a mandar na sugestão de compra.">Contado</th>
-            <th className="text-center" title="OK = a contagem bateu com o saldo do sistema no dia da contagem">Acuracidade</th>
-            <th className="text-right" title="Mínimo cadastrado à mão no Omie (número inteiro). O mínimo que o sistema recomenda está na coluna ao lado.">Mín. Omie</th>
-            <th className="text-right" title="Sugerido pelo sistema a partir das vendas reais do Omie (6 meses): ponto de pedido = demanda × prazo + segurança. Atualiza todo dia.">Mín. sug.</th>
-            <th className="text-right" title="Sugerido pelo sistema: mínimo + demanda de um ciclo de compra (60 dias). Atualiza todo dia.">Máx. sug.</th>
-            <th className="text-right">Pendente</th>
-            <th className="text-right" title="Pedido feito pelo comprador (requisição ou lançamento manual) que ainda não virou P.I.">Comprado</th>
-            <th className="text-right" title="Já tem P.I.: embarcado, chegou sem nota lançada, ou comprado e ainda não embarcou. Sai daqui quando a nota de importação é lançada no Omie. Clique para ver o detalhe.">A caminho</th>
-            <th className="text-right">Sugestão</th>
-            <th title="Dia D = data-limite para decidir o pedido = hoje + (dias de cobertura da posição − prazo total). Prazo total = criar e decidir o pedido (importados: 45 + 5 d) + prazo de chegada. Vermelho: já passou; âmbar: faltam até 15 dias.">Dia D</th>
-            <th title="Vendas mês a mês dos últimos 12 meses. Seta = últimos 3 meses × 3 meses anteriores. Ponto verde = mês de maior venda; ponto vermelho = mês de menor venda.">Tendência (12 meses)</th>
-            <th>Último Fornecedor</th>
-            <th className="text-right">Último Preço Unit.</th>
+            {ord.th('codigo', 'Código')}
+            {ord.th('descricao', 'Descrição')}
+            {ord.th('endereco', 'Endereço')}
+            {ord.th('curva', 'Curva', {className: 'text-center'})}
+            {ord.th('fisico', 'Físico', {className: 'text-right'})}
+            {ord.th('reservado', 'Reservado', {className: 'text-right'})}
+            {ord.th('disponivel', 'Disponível', {className: 'text-right'})}
+            {ord.th('contado', 'Contado', {className: 'text-right', title: 'Quantidade contada na prateleira. Vale por 30 dias e passa a mandar na sugestão de compra.'})}
+            {ord.th('acuracidade', 'Acuracidade', {className: 'text-center', title: 'OK = a contagem bateu com o saldo do sistema no dia da contagem'})}
+            {ord.th('minomie', 'Mín. Omie', {className: 'text-right', title: 'Mínimo cadastrado à mão no Omie (número inteiro). O mínimo que o sistema recomenda está na coluna ao lado.'})}
+            {ord.th('minsug', 'Mín. sug.', {className: 'text-right', title: 'Sugerido pelo sistema a partir das vendas reais do Omie (6 meses): ponto de pedido = demanda × prazo + segurança. Atualiza todo dia.'})}
+            {ord.th('maxsug', 'Máx. sug.', {className: 'text-right', title: 'Sugerido pelo sistema: mínimo + demanda de um ciclo de compra (60 dias). Atualiza todo dia.'})}
+            {ord.th('pendente', 'Pendente', {className: 'text-right'})}
+            {ord.th('comprado', 'Comprado', {className: 'text-right', title: 'Pedido feito pelo comprador (requisição ou lançamento manual) que ainda não virou P.I.'})}
+            {ord.th('caminho', 'A caminho', {className: 'text-right', title: 'Já tem P.I.: embarcado, chegou sem nota lançada, ou comprado e ainda não embarcou. Sai daqui quando a nota de importação é lançada no Omie. Clique para ver o detalhe.'})}
+            {ord.th('sugestao', 'Sugestão', {className: 'text-right'})}
+            {ord.th('diad', 'Dia D', {title: 'Dia D = data-limite para decidir o pedido = hoje + (dias de cobertura da posição − prazo total). Prazo total = criar e decidir o pedido (importados: 45 + 5 d) + prazo de chegada. Vermelho: já passou; âmbar: faltam até 15 dias.'})}
+            {ord.th('tendencia', 'Tendência (12 meses)', {title: 'Vendas mês a mês dos últimos 12 meses. Seta = últimos 3 meses × 3 meses anteriores. Ponto verde = mês de maior venda; ponto vermelho = mês de menor venda.'})}
+            {ord.th('fornecedor', 'Último Fornecedor')}
+            {ord.th('preco', 'Último Preço Unit.', {className: 'text-right'})}
             <th></th>
           </tr></thead>
           <tbody>
@@ -862,7 +864,7 @@ table.t.pcp-grid.iv-grid thead th{position:sticky;top:0;z-index:3;background:var
                       )}
                     </td>
                     <td>
-                      <IVCelulaEditavel valor={item.endereco} podeEditar={podeGerenciar} placeholder="ex.: R2A4" largura={90}
+                      <IVCelulaEditavel valor={item.endereco} podeEditar={podeGerenciar} placeholder="ex.: R2I8 / R2H8 / H23" largura={150}
                         onSave={(v) => salvarContagemItem(item, { endereco: v })} />
                     </td>
                     <td className="text-center"><IVCurvaBadge curva={item.curva} /></td>

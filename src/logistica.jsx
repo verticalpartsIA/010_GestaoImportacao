@@ -375,8 +375,8 @@ function ImportacaoPage({ setRoute, setSubsel }) {
     <div className="page fade-in">
       <div className="page-head">
         <div className="page-head__l">
-          <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Importação</div>
-          <h1 className="page-head__title">Importação</h1>
+          <div className="page-head__eyebrow"><span className="vp-rule"/>Logística · Rastreio Marítimo</div>
+          <h1 className="page-head__title">Rastreio Marítimo</h1>
           <p className="page-head__sub">Embarques em trânsito + rastreamento marítimo por AIS</p>
         </div>
         <div className="page-head__r">
@@ -1565,6 +1565,7 @@ const INBOX_REFERENCIA_TIPO_LABEL = {
   contrato_venda: 'Contrato de Venda',
   contrato_instalador: 'Contrato Instalador',
   tratativa_cotacao: 'Tratativa',
+  cotacao_varejo: 'Cotação de varejo',
 };
 
 /* 07/10 — MÃO DUPLA Inbox ⇄ Tratativas (cotação a fornecedor). A Tratativa de cada cotação a
@@ -1741,6 +1742,7 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
   /* "Pedir decisão" (04/10): decisão ligada ao e-mail aberto na Central de Decisões. Também é o destino do "Ver documento" do cartão
      (subsel = id do e-mail): abre o e-mail; se ele não está nas listas carregadas, pesquisa o assunto no histórico e abre. */
   const [pedirDecisaoAberto, setPedirDecisaoAberto] = React.useState(false);
+  const [precoVarejoAberto, setPrecoVarejoAberto] = React.useState(false);   // 20/10: resposta de fornecedor de COTAÇÃO DE VAREJO por e-mail → mapa do lote, com confirmação
   const [precoEmailAberto, setPrecoEmailAberto] = React.useState(false);   // "Extrair preço" (04/10): propõe preço/condições do e-mail do fornecedor; só grava após conferência
   const [tickDecisao, setTickDecisao] = React.useState(0);
   const decisoesDoEmail = (window.useDecisoesDoEmail || (() => []))(active ? active.id : null, tickDecisao);
@@ -2254,6 +2256,9 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
       {modalMarcador && window.InboxModalMarcador && (
         <window.InboxModalMarcador marcadores={mk.marcadores} caps={capsOrg} onCriar={mk.criar} onClose={() => setModalMarcador(false)}/>
       )}
+      {precoVarejoAberto && active && window.InboxModalPrecoVarejo && (
+        <window.InboxModalPrecoVarejo email={active} eu={eu} onClose={() => setPrecoVarejoAberto(false)} onRegistrado={() => setPrecoVarejoAberto(false)}/>
+      )}
       {precoEmailAberto && active && window.InboxModalPrecoEmail && (
         <window.InboxModalPrecoEmail email={active} eu={eu} onClose={() => setPrecoEmailAberto(false)} onRegistrado={() => { setPrecoEmailAberto(false); }}/>
       )}
@@ -2442,6 +2447,9 @@ function EmailInbox({ setRoute, setSubsel, subsel }) {
                     )}
                     {pode('editar') && !ehEnviado(active) && (active.numeroCotacao != null || active.referenciaTipo === 'cotacao_fornecedor') && window.InboxModalPrecoEmail && (
                       <Button variant="ghost" size="sm" icon="dollar" title="Lê o e-mail do fornecedor, propõe os preços e as condições e registra a resposta depois que você conferir" onClick={() => setPrecoEmailAberto(true)}>Extrair preço</Button>
+                    )}
+                    {pode('editar') && !ehEnviado(active) && window.InboxModalPrecoVarejo && (active.referenciaTipo === 'cotacao_varejo' || (active.numeroCotacao == null && !active.referenciaTipo)) && (
+                      <Button variant="ghost" size="sm" icon="dollar" title="Resposta de fornecedor de uma Cotação de Varejo: propõe os preços e lança no mapa do lote depois que você conferir" onClick={() => setPrecoVarejoAberto(true)}>Preço p/ cotação de varejo</Button>
                     )}
                     {INBOX_TIPOS_COTACAO_FORNECEDOR.includes(active.referenciaTipo) && (
                       <Button variant="ghost" size="sm" icon="message" title="Abre a cotação a fornecedor deste e-mail, na aba Tratativas (histórico único da conversa)" onClick={async () => {

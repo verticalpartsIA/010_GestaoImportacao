@@ -226,6 +226,27 @@ function EIRolagens({ form, set }) {
     set('houve_rolagem')(true);
     setNova({ nova_data: '', motivo: '', data_comunicacao: '' });
   };
+  /* Avisos de data suspeita (só avisam, nunca bloqueiam) — regra em rolagens-calc.js. */
+  const RC = window.RolagensCalc;
+  const hist = form.historico_rolagens || [];
+  const avisosNova = RC && nova.nova_data
+    ? RC.avisosDaRolagem({ ...nova, data_anterior: form.etd_atual || form.etd_original || '' }, hist[hist.length - 1] || null)
+    : [];
+  const avisosHist = {};
+  (RC ? RC.conferir(hist) : []).forEach((a) => { avisosHist[a.indice] = a.avisos; });
+  const [editando, setEditando] = React.useState(null);
+  /* Corrige uma rolagem já registrada. Se a nova data mudar, a rolagem seguinte (que partia dela)
+     e, na última, o ETD atual acompanham. */
+  const editarLinha = (i, campo, valor) => {
+    const l = hist.map((r) => ({ ...r }));
+    const antigo = l[i][campo];
+    l[i][campo] = valor;
+    if (campo === 'nova_data') {
+      if (l[i + 1] && l[i + 1].data_anterior === antigo) l[i + 1].data_anterior = valor;
+      if (i === l.length - 1 && form.etd_atual === antigo) set('etd_atual')(valor);
+    }
+    set('historico_rolagens')(l);
+  };
   return (
     <div>
       <div className="row gap-2" style={{ marginBottom: 8 }}>
@@ -243,13 +264,89 @@ function EIRolagens({ form, set }) {
           <PIField label="Data comunicação"><PIInput type="date" value={nova.data_comunicacao} onChange={(v) => setNova((n) => ({ ...n, data_comunicacao: v }))}/></PIField>
           <PIField label="Motivo"><PIInput value={nova.motivo} onChange={(v) => setNova((n) => ({ ...n, motivo: v }))}/></PIField>
         </div>
+        {avisosNova.length > 0 && (
+          <div style={{ marginTop: 8, padding: '6px 10px', borderRadius: 6, background: '#fef3c7', color: '#92400e', fontSize: 12 }}>
+            {avisosNova.map((a, k) => <div key={k}>⚠ {a}</div>)}
+          </div>
+        )}
         <div style={{ textAlign: 'right', marginTop: 8 }}><Button variant="outline" size="sm" onClick={registrar} disabled={!nova.nova_data}>Registrar rolagem</Button></div>
       </div>
       {(form.historico_rolagens || []).length > 0 && (
         <div className="table-wrap" style={{ marginTop: 10 }}>
           <table className="t">
-            <thead><tr><th>#</th><th>Data anterior</th><th>Nova data</th><th>Motivo</th><th>Comunicação</th></tr></thead>
-            <tbody>{form.historico_rolagens.map((r, i) => <tr key={i}><td>{i + 1}ª</td><td>{eiFmtDate(r.data_anterior)}</td><td>{eiFmtDate(r.nova_data)}</td><td>{r.motivo || '—'}</td><td>{eiFmtDate(r.data_comunicacao)}</td></tr>)}</tbody>
+            <thead><tr><th>#</th><th>Data anterior</th><th>Nova data</th><th>Motivo</th><th>Comunicação</th><th></th></tr></thead>
+            <tbody>{form.historico_rolagens.map((r, i) => {
+              const av = avisosHist[i];
+              if (editando === i) return (
+                <tr key={i}>
+                  <td>{i + 1}ª</td><td>{eiFmtDate(r.data_anterior)}</td>
+                  <td><PIInput type="date" value={r.nova_data || ''} onChange={(v) => editarLinha(i, 'nova_data', v)}/></td>
+                  <td><PIInput value={r.motivo || ''} onChange={(v) => editarLinha(i, 'motivo', v)}/></td>
+                  <td><PIInput type="date" value={r.data_comunicacao || ''} onChange={(v) => editarLinha(i, 'data_comunicacao', v)}/></td>
+                  <td><Button variant="ghost" size="sm" onClick={() => setEditando(null)}>Pronto</Button></td>
+                </tr>
+              );
+              return (
+                <tr key={i} style={av ? { background: '#fffbeb' } : undefined}>
+                  <td>{i + 1}ª</td><td>{eiFmtDate(r.data_anterior)}</td><td>{eiFmtDate(r.nova_data)}</td><td>{r.motivo || '—'}</td><td>{eiFmtDate(r.data_comunicacao)}</td>
+                  <td style={{ whiteSpace: 'nowrap' }}>
+                    {av && <span title={av.join('\n')} style={{ color: '#b45309', fontWeight: 700, marginRight: 6, cursor: 'help' }}>⚠ Conferir</span>}
+                    <Button variant="ghost" size="sm" onClick={() => setEditando(i)}>Corrigir</Button>
+                  </td>
+                </tr>
+              );
+            })}</tbody>
+          </table>
+          {Object.keys(avisosHist).length > 0 && (
+            <div style={{ marginTop: 6, padding: '6px 10px', borderRadius: 6, background: '#fef3c7', color: '#92400e', fontSize: 12 }}>
+              {Object.keys(avisosHist).map((i) => avisosHist[i].map((a, k) => <div key={i + '-' + k}>⚠ {Number(i) + 1}ª rolagem: {a}</div>))}
+              <div style={{ marginTop: 4 }}>Use "Corrigir" na linha e depois salve o embarque.</div>
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
+/* ---------- ETA Santos com histórico de mudanças (19/10/2026) ----------
+   Mudar o ETA de um embarque já salvo grava a mudança em historico_eta ao salvar
+   (regra em RolagensCalc.registrarMudancaEta). Motivo e data da comunicação são opcionais. */
+function EIEtaSantos({ form, set, etaSalvo, mudanca, setMudanca }) {
+  const mudou = !!(etaSalvo && form.eta_santos && String(form.eta_santos).slice(0, 10) !== String(etaSalvo).slice(0, 10));
+  const hist = form.historico_eta || [];
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div className="grid-3" style={{ gap: 10 }}>
+        <PIField label="ETA Santos"><PIInput type="date" value={form.eta_santos} onChange={set('eta_santos')}/></PIField>
+      </div>
+      {mudou && (
+        <div style={{ marginTop: 8, padding: 10, borderRadius: 6, background: '#eff6ff', border: '1px solid #bfdbfe' }}>
+          <div className="small" style={{ fontWeight: 700, marginBottom: 6 }}>
+            ETA mudou de {eiFmtDate(etaSalvo)} para {eiFmtDate(form.eta_santos)} — vai para o histórico ao salvar
+          </div>
+          <div className="grid-3" style={{ gap: 10 }}>
+            <PIField label="Data da comunicação"><PIInput type="date" value={mudanca.data_comunicacao} onChange={(v) => setMudanca((m) => ({ ...m, data_comunicacao: v }))}/></PIField>
+            <PIField label="Motivo (opcional)"><PIInput value={mudanca.motivo} onChange={(v) => setMudanca((m) => ({ ...m, motivo: v }))} placeholder="ex.: atraso do navio, fila no porto"/></PIField>
+          </div>
+        </div>
+      )}
+      {hist.length > 0 && (
+        <div className="table-wrap" style={{ marginTop: 10 }}>
+          <table className="t">
+            <thead><tr><th>#</th><th>ETA anterior</th><th>Novo ETA</th><th>Dias</th><th>Motivo</th><th>Comunicação</th><th>Registrado por</th></tr></thead>
+            <tbody>{hist.map((h, i) => {
+              const a = h.data_anterior ? new Date(h.data_anterior + 'T12:00:00') : null;
+              const n = h.nova_data ? new Date(h.nova_data + 'T12:00:00') : null;
+              const d = a && n ? Math.round((n - a) / 86400000) : null;
+              return (
+                <tr key={i}>
+                  <td>{i + 1}ª</td><td>{eiFmtDate(h.data_anterior)}</td><td>{eiFmtDate(h.nova_data)}</td>
+                  <td style={{ color: d > 0 ? '#b45309' : d < 0 ? '#15803d' : undefined, fontWeight: 600 }}>{d == null ? '—' : (d > 0 ? '+' + d : d)}</td>
+                  <td>{h.motivo || '—'}</td><td>{eiFmtDate(h.data_comunicacao)}</td><td>{h.por || '—'}</td>
+                </tr>
+              );
+            })}</tbody>
           </table>
         </div>
       )}
@@ -277,6 +374,14 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
   const [form, setForm] = React.useState(() => (initialData ? { ...EI_EMPTY, ...initialData } : EI_EMPTY));
   const [tab, setTab] = React.useState('identificacao');
   const set = (field) => (v) => setForm((f) => ({ ...f, [field]: v }));
+  const etaSalvo = isEdit && initialData ? initialData.eta_santos : null;
+  const [mudancaEta, setMudancaEta] = React.useState(() => ({ data_comunicacao: new Date().toISOString().slice(0, 10), motivo: '' }));
+  const enviar = () => {
+    const RC = window.RolagensCalc;
+    const hist = RC ? RC.registrarMudancaEta(form.historico_eta, etaSalvo, form.eta_santos,
+      { ...mudancaEta, por: (window.__VP_USER && window.__VP_USER.email) || '' }) : (form.historico_eta || []);
+    onSubmit({ ...form, historico_eta: hist });
+  };
   // Mesma regra do _payload no store: P.I. vinculada manda; senão o que já
   // está gravado no embarque (ou foi escolhido ao herdar containers).
   const numeroCotacaoEmbarque = window.EmbarquesImportacaoStore.resumoPIs(pis || []).numeroCotacao ?? form.numero_cotacao ?? null;
@@ -365,8 +470,8 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
             <PIField label="Data registro DUIMP"><PIInput type="date" value={form.data_registro_di} onChange={set('data_registro_di')}/></PIField>
             <PIField label="Canal parametrização"><PISelect value={form.canal_parametrizacao} onChange={set('canal_parametrizacao')} options={EI_CANAIS}/></PIField>
             <PIField label="Última data free time"><PIInput type="date" value={form.ultima_data_free_time} onChange={set('ultima_data_free_time')}/></PIField>
-            <PIField label="ETA Santos"><PIInput type="date" value={form.eta_santos} onChange={set('eta_santos')}/></PIField>
           </div>
+          <EIEtaSantos form={form} set={set} etaSalvo={etaSalvo} mudanca={mudancaEta} setMudanca={setMudancaEta}/>
           {form.canal_parametrizacao && form.canal_parametrizacao !== 'Verde' && (
             <div style={{ marginTop: 14, padding: 12, background: '#fff8e6', border: '1px solid #FBB039', borderRadius: 6 }}>
               <p className="small" style={{ margin: '0 0 8px', fontWeight: 700, color: '#8a5a00' }}>
@@ -423,7 +528,7 @@ function EmbarqueImportacaoForm({ initialData, isEdit, pis, onSubmit, onCancel, 
 
       <div className="row" style={{ justifyContent: 'flex-end', gap: 8, marginTop: 16 }}>
         <Button variant="ghost" onClick={onCancel}>Cancelar</Button>
-        <Button variant="primary" onClick={() => onSubmit(form)} disabled={saving}>{saving ? 'Salvando…' : (isEdit ? 'Salvar alterações' : 'Cadastrar embarque')}</Button>
+        <Button variant="primary" onClick={enviar} disabled={saving}>{saving ? 'Salvando…' : (isEdit ? 'Salvar alterações' : 'Cadastrar embarque')}</Button>
       </div>
     </Card>
   );

@@ -655,6 +655,19 @@
     if (cur) await lancarCustoReal(cur);
   }
 
+  /* 21/10 — "Enviar" de um rascunho = pedir o aval do Diego. Grava o WhatsApp do montador (contrato continua em rascunho) e, se o
+     aval já estava aprovado, o banco dispara os avisos na hora. Devolve { estado: 'aguardando_aval' | 'enviado' }. */
+  async function pedirEnvio(id, nome, contato) {
+    const c = sb(); if (!c) throw new Error('Supabase não carregado');
+    const { data, error } = await c.rpc('ci_pedir_envio', { p_id: id, p_nome: nome || null, p_contato: contato || null });
+    if (error) throw error;
+    if (!data || !data.ok) {
+      const m = { sem_sessao: 'Entre no sistema para enviar.', contato_invalido: 'Informe o WhatsApp do montador com DDD.', nao_encontrado: 'Contrato não encontrado.' };
+      throw new Error(m[data && data.erro] || (data && data.erro && String(data.erro).indexOf('status_') === 0 ? 'Este contrato já foi enviado.' : 'Não foi possível pedir o envio.'));
+    }
+    return data;
+  }
+
   window.CIStore = {
     STATUS,
     processarEfeitoFila,
@@ -663,7 +676,7 @@
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
     listAll, listPainel, getById, getByToken,
     createDraft, updateFormState, reservarNumero,
-    markSent, markViewed, markSigned, refuse,
+    markSent, pedirEnvio, markViewed, markSigned, refuse,
     sweepExpired, remove, anularAssinatura, reabrirAnulado,
     getPublicIP, deviceLabel, sha256Hex,
   };

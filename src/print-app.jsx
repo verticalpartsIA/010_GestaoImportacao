@@ -16,7 +16,7 @@ const PRINT_SCREENS = [
   { id: "engenharia",     title: "Engenharia",                 module: "Operações",   role: "engenharia", sub: "laudo · BOM · vistoria técnica" },
   { id: "juridico",       title: "Jurídico & Contratos",       module: "Operações",   role: "admin",      sub: "redator ✂️ páginas confidenciais" },
   { id: "instalacao",     title: "Instalação em Campo",        module: "Operações",   role: "admin",      sub: "equipes · checklist obra" },
-  { id: "importacao",     title: "Importação",                 module: "Logística",   role: "admin",      sub: "embarques · BL · ETA tracking" },
+  { id: "importacao",     title: "Rastreio Marítimo",           module: "Logística",   role: "admin",      sub: "embarques · BL · ETA tracking" },
   { id: "importacao-detail", title: "Embarque — Detalhe",      module: "Logística",   role: "admin",      sub: "navio · timeline · documentos" },
   { id: "importacao-rastreamento", title: "Mapa de Navios",    module: "Logística",   role: "admin",      sub: "MarineTraffic API · rota Shanghai → Santos" },
   { id: "inbox",           title: "Inbox",                     module: "Geral",       role: "admin",      sub: "IMAP · caixa compartilhada suporte@vpsistema.com" },

@@ -424,7 +424,10 @@ function S_EspecElevador({ d, set }) {
 /* ---- Acabamentos: campo com checkbox "ativo" (só o marcado entra no PDF)
    + valor inline quando marcado — mesmo padrão da Ficha Técnica. ---- */
 function S_AcabField({ fld, onToggle, onValue, onRemove }) {
-  const opts = fld.opcoesKey ? OPTIONS[fld.opcoesKey] : null;
+  const base = fld.opcoesKey ? OPTIONS[fld.opcoesKey] : null;
+  /* Valor herdado do Formulário (ex.: "Aço 430", "COP-05C") pode não estar na lista parcial do editor: entra como
+     opção para o select mostrar o que está gravado em vez de parecer vazio. */
+  const opts = base && fld.valor && !base.some((o) => (o.value || o) === fld.valor) ? [fld.valor, ...base] : base;
   return (
     <div className="pe-acab-row">
       <label className={"pe-acab-check" + (fld.ativo ? " on" : "")}>
@@ -484,6 +487,76 @@ function S_AcabAddCategoryModal({ onAdd, onClose }) {
   );
 }
 
+/* "Separar por tipo": proposta com equipamentos de tipos diferentes (Carga / Passageiro / Panorâmico) mas um único bloco de
+   acabamentos/texto. Cria os perfis a partir do Formulário (+ texto-base) e preserva o que o vendedor já digitou no perfil
+   de origem. Aparece só quando há 2+ tipos e ainda não há perfis; "Voltar ao bloco único" desfaz (o bloco global nunca
+   é apagado, só deixa de valer enquanto há perfis). */
+function S_SepararPorTipo({ d, set, perfis }) {
+  const [busy, setBusy] = React.useState(false);
+  const O = window.PropostaOpcoes;
+  const H = window.PropostaHeranca;
+  const tipos = O ? O.contagemPorTipo(d.elevador).filter((x) => O.tipoChave(x.tipo)) : [];
+  const nEspec = (d.elevador.especificacoes || []).length;
+  const btn = { marginTop: 0, display: "inline-block", marginRight: 8 };
+  if (perfis.length > 0) {
+    const divisivel = H && perfis.some((p) => Array.isArray(p.unidadeIds) && p.unidadeIds.length > 1);
+    return (
+      <div style={{ marginBottom: 10 }}>
+        {divisivel && (
+          <button type="button" className="pe-acab-addfield" style={btn}
+            onClick={() => {
+              if (!window.confirm("Separar cada equipamento? Cada especificação passa a ter o seu próprio bloco, começando com uma cópia do que está preenchido no tipo dela. Nada é apagado.")) return;
+              set("elevador.perfis", H.dividirPerfisPorEquipamento(d.elevador));
+              window.toast?.("Cada equipamento agora tem o seu bloco. Ajuste um por um.", "success");
+            }}>
+            Separar cada equipamento
+          </button>
+        )}
+        <button type="button" className="pe-acab-addfield" style={btn}
+          onClick={() => { if (window.confirm("Voltar ao bloco único? Os blocos por equipamento/tipo deixam de valer (o texto digitado neles se perde) e o bloco único anterior volta a aparecer.")) set("elevador.perfis", []); }}>
+          ↩ Voltar ao bloco único
+        </button>
+      </div>
+    );
+  }
+  if (!O || !H || nEspec < 2) return null;
+  const nomes = tipos.map((x) => O.nomePerfil(x.tipo)).join(", ").replace(/, ([^,]*)$/, " e $1");
+  const separar = async (modo) => {
+    const porEquip = modo === "equipamento";
+    if (!window.confirm(porEquip
+      ? "Separar por equipamento? Cada especificação (Unidade) ganha o seu próprio bloco de acabamentos e texto, herdado do Formulário. O que já está digitado fica no equipamento de origem (quando der para identificar) e nada é apagado."
+      : `Separar por tipo (${nomes})? Cada tipo passa a ter os seus acabamentos e textos, herdados do Formulário. O que já está digitado fica no tipo de origem (quando der para identificar) e nada é apagado.`)) return;
+    setBusy(true);
+    try {
+      let fontes = null;
+      const num = String(d.numeroCotacao || "").trim();
+      if (num) { try { const f = await H.buscarFontes(num); fontes = f && f.encontrado ? f : null; } catch (e) { fontes = null; } }
+      const r = H.perfisAPartirDaProposta(d.elevador, fontes || { unidades: [], cotacao: null }, modo);
+      if (!r.perfis.length) { window.toast?.(porEquip ? "Não encontrei 2 ou mais equipamentos nas especificações." : "Não encontrei 2 ou mais tipos de equipamento nas especificações.", "warning"); return; }
+      set("elevador.perfis", r.perfis);
+      window.toast?.(
+        (fontes ? "Separado com os dados do Formulário." : "Separado (sem Formulário encontrado — acabamentos em branco).")
+        + (r.origemNome ? ` O que você já digitou ficou em "${r.origemNome}".` : " Revise cada bloco."),
+        "success");
+    } finally { setBusy(false); }
+  };
+  return (
+    <div className="pe-hint" style={{ marginBottom: 12, padding: "10px 12px", border: "1px solid #FFC72C", borderRadius: 8, background: "#FFF9E5" }}>
+      Esta proposta tem {nEspec} especificações{tipos.length > 1 ? ` de tipos diferentes (${nomes})` : ""} mas um único conjunto de acabamentos e texto — o que vale para um equipamento aparece para todos.
+      <div style={{ marginTop: 6 }}>
+        <button type="button" className="pe-acab-addfield" style={btn} disabled={busy} onClick={() => separar("equipamento")}>
+          {busy ? "Separando…" : "Separar por equipamento"}
+        </button>
+        {tipos.length > 1 && (
+          <button type="button" className="pe-acab-addfield" style={btn} disabled={busy} onClick={() => separar("tipo")}>
+            Separar por tipo
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
 /* Categorias/campos dinâmicos com checkbox "ativo" — mesmo padrão da Ficha
    Técnica (engenharia/ficha-tecnica): o vendedor marca o que quer que entre
    na proposta e pode criar campo/categoria novos, que ficam disponíveis
@@ -491,39 +564,11 @@ function S_AcabAddCategoryModal({ onAdd, onClose }) {
    propostas_lib_categorias/propostas_lib_campos, PropostaAcabamentosStore).
    Os 13 campos que já existiam viram a categoria nativa "Acabamentos" —
    proposta salva antes dessa mudança migra sozinha, sem perder valor. */
-function S_Acabamentos({ d, set }) {
+/* Editor das categorias/campos de acabamento de UM conjunto (o bloco único da proposta ou o de um equipamento). */
+function S_AcabEditor({ cats, updateCats }) {
   const engine = window.PropostaAcabamentosEngine;
   const store = window.PropostaAcabamentosStore;
-  const [libLoaded, setLibLoaded] = React.useState(false);
   const [modal, setModal] = React.useState(null); // { type: 'campo'|'categoria', catId? }
-
-  React.useEffect(() => {
-    let cancelado = false;
-    (async () => {
-      if (!store || !engine) return;
-      const lib = await store.loadLibrary();
-      if (cancelado) return;
-      engine.setLibraryExtras(lib);
-      setLibLoaded((n) => !n); // força recomputar cats com a lib carregada
-    })();
-    return () => { cancelado = true; };
-  }, []);
-
-  const cats = engine ? engine.garantirCats(d.elevador) : [];
-
-  /* Só na 1ª vez (proposta ainda sem acabamentosCats): grava o resultado da
-     migração como estado real, pra não ficar recalculando do legado a
-     cada render. */
-  React.useEffect(() => {
-    if (engine && !(Array.isArray(d.elevador.acabamentosCats) && d.elevador.acabamentosCats.length)) {
-      set("elevador.acabamentosCats", cats);
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [libLoaded]);
-
-  if (!engine) return <div className="pe-hint">Carregando…</div>;
-
-  const updateCats = (novo) => set("elevador.acabamentosCats", novo);
 
   const toggleField = (catId, k) => updateCats(cats.map((c) => c.id !== catId ? c : {
     ...c, campos: c.campos.map((f) => f.k !== k ? f : { ...f, ativo: !f.ativo }),
@@ -562,7 +607,7 @@ function S_Acabamentos({ d, set }) {
   };
 
   return (
-    <div className="pe-acab">
+    <>
       {cats.map((c) => (
         <div className="pe-acab-cat" key={c.id}>
           <div className="pe-acab-cat-head">
@@ -593,6 +638,87 @@ function S_Acabamentos({ d, set }) {
       {modal?.type === "categoria" && (
         <S_AcabAddCategoryModal onClose={() => setModal(null)} onAdd={(nome) => { addCategory(nome); setModal(null); }}/>
       )}
+    </>
+  );
+}
+
+function S_Acabamentos({ d, set }) {
+  const engine = window.PropostaAcabamentosEngine;
+  const store = window.PropostaAcabamentosStore;
+  const [libLoaded, setLibLoaded] = React.useState(false);
+
+  React.useEffect(() => {
+    let cancelado = false;
+    (async () => {
+      if (!store || !engine) return;
+      const lib = await store.loadLibrary();
+      if (cancelado) return;
+      engine.setLibraryExtras(lib);
+      setLibLoaded((n) => !n); // força recomputar cats com a lib carregada
+    })();
+    return () => { cancelado = true; };
+  }, []);
+
+  /* Perfis (um por equipamento/Unidade ou um por tipo): cotação separada ganha um bloco por perfil, TODOS abertos e
+     editáveis um a um — o mesmo desenho de "Especificações Técnicas". Sem perfis (proposta antiga ou que nunca foi
+     separada) tudo funciona como sempre, no bloco único. */
+  const perfis = Array.isArray(d.elevador.perfis) ? d.elevador.perfis : [];
+  const O = window.PropostaOpcoes;
+
+  const catsGlobais = engine ? engine.garantirCats(d.elevador) : [];
+
+  /* Só na 1ª vez (proposta ainda sem acabamentosCats): grava o resultado da
+     migração como estado real, pra não ficar recalculando do legado a
+     cada render. */
+  React.useEffect(() => {
+    if (engine && !perfis.length && !(Array.isArray(d.elevador.acabamentosCats) && d.elevador.acabamentosCats.length)) {
+      set("elevador.acabamentosCats", catsGlobais);
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [libLoaded]);
+
+  if (!engine) return <div className="pe-hint">Carregando…</div>;
+
+  const atualizarPerfil = (id, novo) => set("elevador.perfis", perfis.map((p) => p.id !== id ? p : { ...p, acabamentosCats: novo }));
+  const copiarDe = (destino, outroId) => {
+    const outro = perfis.find((p) => p.id === outroId);
+    if (!outro) return;
+    const rot = (p) => (O && O.tituloPerfil({ nome: p.nome, codigos: p.codigos })) || p.nome;
+    if (!window.confirm(`Copiar os acabamentos de "${rot(outro)}" para "${rot(destino)}"? O que está preenchido aqui será substituído.`)) return;
+    atualizarPerfil(destino.id, JSON.parse(JSON.stringify(engine.garantirCats({ acabamentosCats: outro.acabamentosCats }))));
+  };
+
+  return (
+    <div className="pe-acab">
+      <S_SepararPorTipo d={d} set={set} perfis={perfis}/>
+      {perfis.length === 0 && (
+        <S_AcabEditor cats={catsGlobais} updateCats={(novo) => set("elevador.acabamentosCats", novo)}/>
+      )}
+      {perfis.map((p, i) => {
+        const titulo = (O && O.tituloPerfil({ nome: p.nome, codigos: p.codigos })) || p.nome;
+        return (
+          <div className="pe-rep" key={p.id}>
+            <div className="pe-rep__head">
+              <div>
+                <span className="pe-rep__idx">{String(i + 1).padStart(2, "0")}</span>
+                {titulo} <span style={{ opacity: .55, fontFamily: "var(--font-mono)", fontSize: 11, marginLeft: 6 }}>de {perfis.length}</span>
+              </div>
+            </div>
+            <div className="pe-rep__body">
+              <div className="pe-hint" style={{ marginBottom: 6 }}>
+                Estes acabamentos valem só para {(O && O.faixaCodigos(p.codigos)) || p.nome}. Vieram do Formulário e você pode ajustar.
+              </div>
+              {perfis.length > 1 && (
+                <select className="pe-input" style={{ maxWidth: 320, marginBottom: 10 }} value="" onChange={(e) => { if (e.target.value) copiarDe(p, e.target.value); }}>
+                  <option value="">Copiar de outro equipamento…</option>
+                  {perfis.filter((x) => x.id !== p.id).map((x) => <option key={x.id} value={x.id}>{(O && O.tituloPerfil({ nome: x.nome, codigos: x.codigos })) || x.nome}</option>)}
+                </select>
+              )}
+              <S_AcabEditor cats={engine.garantirCats({ acabamentosCats: p.acabamentosCats })} updateCats={(novo) => atualizarPerfil(p.id, novo)}/>
+            </div>
+          </div>
+        );
+      })}
     </div>
   );
 }
@@ -1078,18 +1204,34 @@ function S_Conteudo({ d, set }) {
     return () => { cancelado = true; };
   }, []);
 
-  const cats = engine ? engine.garantirCats(d.elevador) : [];
+  /* Perfis por tipo de equipamento (fase 2): com perfis, cada um tem os SEUS benefícios/diferenciais/características/
+     recursos/linha de modelos; a aba "Geral" guarda o que vale para a proposta inteira (infraestrutura, responsabilidades). */
+  const perfis = Array.isArray(d.elevador.perfis) ? d.elevador.perfis : [];
+  const [aba, setAba] = React.useState(null); // id do perfil ou "geral"
+  const emGeral = perfis.length > 0 && aba === "geral";
+  const perfil = perfis.length && !emGeral ? (perfis.find((p) => p.id === aba) || perfis[0]) : null;
+  const contaCod = (p) => (Array.isArray(p.codigos) && p.codigos.length) || (Array.isArray(p.unidadeIds) ? p.unidadeIds.length : 0);
 
-  const persistirCats = (novosCats) => {
-    set("elevador.conteudoCats", novosCats);
+  const catsTodas = engine ? engine.garantirCats(d.elevador) : [];
+  const cats = !engine ? [] : perfil ? engine.garantirCatsPerfil(perfil) : emGeral ? engine.catsGerais(catsTodas) : catsTodas;
+
+  const persistirGlobal = (completo) => {
+    set("elevador.conteudoCats", completo);
     if (!engine) return;
-    const legado = engine.derivarLegado(novosCats);
+    const legado = engine.derivarLegado(completo);
     Object.keys(legado).forEach((k) => set(`elevador.${k}`, legado[k]));
+  };
+  const persistirCats = (novosCats) => {
+    if (perfil) {
+      set("elevador.perfis", perfis.map((p) => p.id !== perfil.id ? p : { ...p, conteudoCats: novosCats, ...engine.legadoDoPerfil(novosCats) }));
+      return;
+    }
+    persistirGlobal(emGeral ? [...catsTodas.filter(engine.ehDoPerfil), ...novosCats] : novosCats);
   };
 
   React.useEffect(() => {
     if (engine && !(Array.isArray(d.elevador.conteudoCats) && d.elevador.conteudoCats.length)) {
-      persistirCats(cats);
+      persistirGlobal(catsTodas);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [libLoaded]);
@@ -1138,6 +1280,33 @@ function S_Conteudo({ d, set }) {
 
   return (
     <div className="pe-acab">
+      <S_SepararPorTipo d={d} set={set} perfis={perfis}/>
+      {perfis.length > 0 && (
+        <div style={{ marginBottom: 14 }}>
+          <div style={{ display: "flex", flexWrap: "wrap", gap: 6, marginBottom: 6 }} role="tablist" aria-label="Conteúdo por tipo de equipamento">
+            {[...perfis.map((p) => ({ id: p.id, rotulo: `${(window.PropostaOpcoes && window.PropostaOpcoes.tituloPerfil({ nome: p.nome, codigos: p.codigos })) || p.nome} (${contaCod(p)})` })), { id: "geral", rotulo: "Geral" }].map((t) => {
+              const ativa = emGeral ? t.id === "geral" : (perfil && t.id === perfil.id);
+              return (
+                <button key={t.id} type="button" role="tab" aria-selected={!!ativa} onClick={() => setAba(t.id)}
+                  style={{ padding: "6px 12px", borderRadius: 999, cursor: "pointer", font: "inherit", fontSize: 13,
+                    border: "1px solid " + (ativa ? "#111" : "#d4d4d4"), background: ativa ? "#FFC72C" : "#fff", color: "#111", fontWeight: ativa ? 600 : 400 }}>
+                  {t.rotulo}
+                </button>
+              );
+            })}
+          </div>
+          <div className="pe-hint" style={{ marginBottom: 6 }}>
+            {perfil
+              ? `Benefícios, diferenciais, características e recursos valem só para ${window.PropostaOpcoes ? window.PropostaOpcoes.faixaCodigos(perfil.codigos) || perfil.nome : perfil.nome}. O texto-base do tipo é um rascunho — revise.`
+              : "Infraestrutura e responsabilidades valem para a proposta inteira."}
+          </div>
+          {perfil && (
+            <PEField label="Linha de modelos (este perfil)" tag="descrição da linha">
+              <PETextarea rows={2} value={perfil.textoModelos || ""} onChange={(v) => set("elevador.perfis", perfis.map((p) => p.id !== perfil.id ? p : { ...p, textoModelos: v }))} placeholder="Linha de elevadores…"/>
+            </PEField>
+          )}
+        </div>
+      )}
       {cats.map((c) => (
         <div className="pe-acab-cat" key={c.id}>
           <div className="pe-acab-cat-head">
@@ -1250,6 +1419,8 @@ function S_ContSidebarNav({ d, set, isActive, icon, onHeaderClick }) {
     store && store.saveCategoryToLibrary({ id, nome });
   };
 
+  /* Com perfis por tipo, benefícios/recursos são editados nas abas do painel "Conteúdo da Proposta" (cada perfil tem os seus). */
+  const temPerfis = Array.isArray(d.elevador.perfis) && d.elevador.perfis.length > 0;
   const IconComp = icon || Icon.bolt;
   const totalAtivos = cats.reduce((s, c) => s + c.campos.filter((f) => f.ativo).length, 0);
 
@@ -1259,10 +1430,10 @@ function S_ContSidebarNav({ d, set, isActive, icon, onHeaderClick }) {
         onClick={() => { onHeaderClick(); setExpanded((e) => !e); }}>
         <span className="pe__sidenav-icon"><IconComp/></span>
         <span style={{ flex: 1 }}>Conteúdo da Proposta</span>
-        {totalAtivos > 0 && <span className="pe__conttree-badge">{totalAtivos}</span>}
+        {!temPerfis && totalAtivos > 0 && <span className="pe__conttree-badge">{totalAtivos}</span>}
         <svg className={"pe__conttree-chev" + (expanded ? " on" : "")} width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.4" strokeLinecap="round" strokeLinejoin="round"><path d="m9 18 6-6-6-6"/></svg>
       </div>
-      {expanded && (
+      {expanded && !temPerfis && (
         <div className="pe__conttree-body">
           {cats.map((c) => {
             const aberto = !!openCat[c.id];

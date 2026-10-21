@@ -233,6 +233,7 @@
         /* 13/10/2026: declarada no vpsistema; antes sem caixa nesta tela. */
         { chave: 'editar_status_obra', label: 'Edita status do Acompanhamento de Obra' },
       ]},
+      { modulo: 'mapa-obras', label: 'Mapa de Obras' },
       { modulo: 'status-obras', label: 'Status de Obras' },
       { modulo: 'linha-do-tempo', label: 'Linha do Tempo da Cotação' },
       { modulo: 'art', label: 'ART' },
@@ -314,7 +315,7 @@
     'Contratos & Jurídico': ['contrato-venda-equipamentos', 'aval-juridico', 'juridico'],
     'Suprimentos & Importação': ['importacao', 'gi-painel', 'pi-importacao', 'rfq-importacao', 'ims-importacao', 'embarques-importacao', 'gi-analise-precos', 'compras', 'cotacoes-varejo', 'pedidos-acompanhamento'],
     'Engenharia & Produto': ['engenharia', 'eng-projeto-elevadores', 'eng-configurador', 'desenho-tecnico', 'solicitacoes-produto', 'ficha-tecnica', 'ncm-catalogo', 'linha-do-tempo'],
-    'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'cronograma', 'art'],
+    'Obras & Instalação': ['status-obras', 'vistorias', 'instalacao', 'mapa-obras', 'cronograma', 'art'],
     'Entrega & Documentação': ['databook', 'handover'],
     'Parceiros & Instaladores': ['cadastro-instaladores', 'rh-homologacao', 'contrato-instalador'],
     'Logística Interna': ['almoxarifado', 'carga-maquina', 'montagem-produto', 'lista-fios', 'simulacao-producao', 'pcp', 'mes', 'mes-cadastros', 'relatorios-pcp', 'expedicao', 'separacao', 'etiquetas'],

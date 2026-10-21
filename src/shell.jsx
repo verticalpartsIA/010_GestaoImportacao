@@ -72,7 +72,7 @@ const NAV_GROUPS = [
     { id: "rfq-importacao", label: "RFQ", icon: "fileSearch", indent: true },
     { id: "ims-importacao", label: "IMS", icon: "package", indent: true },
     { id: "embarques-importacao", label: "Embarques", icon: "ship", indent: true },
-    { id: "importacao", label: "Importação", icon: "ship", indent: true },
+    { id: "importacao", label: "Rastreio Marítimo", icon: "ship", indent: true },
     { id: "gi-analise-precos", label: "Análise de Preços", icon: "calculator", indent: true },
     { id: "compras", label: "Importação Varejo", icon: "truck" },
     { id: "cotacoes-varejo", label: "Cotações de Varejo", icon: "fileSearch" },
@@ -100,6 +100,7 @@ const NAV_GROUPS = [
     { id: "vistorias-envio", label: "Vistorias de Obras", icon: "send" },
     { id: "vistorias", label: "Resultado Vistorias de Obras", icon: "history" },
     { id: "instalacao", label: "Instalação em Campo", icon: "hardhat" },
+    { id: "mapa-obras", label: "Mapa de Obras", icon: "pin" },
     { id: "cronograma", label: "Cronograma", icon: "clock" },
     { id: "art", label: "ART", icon: "scale" },
   ]},
@@ -138,6 +139,7 @@ const NAV_GROUPS = [
     { id: "cadastro-materias-primas", label: "Matérias-Primas", icon: "layers" },
     { id: "cadastro-produtos", label: "Produtos", icon: "package" },
     { id: "montagem-produto", label: "Montagem do Produto", icon: "layers" },
+    { id: "evolucao-fabricacao", label: "Evolução da Fabricação", icon: "history" },
     { id: "simulacao-producao", label: "Simulação", icon: "history" },
     { id: "relatorios-pcp", label: "Relatórios", icon: "fileText" },
   ]},
@@ -378,7 +380,7 @@ const BREADCRUMB_MAP = {
   "desenho-tecnico": { module: "Engenharia", page: "Desenho Técnico ER | ES", icon: "ruler" },
   "solicitacoes-produto": { module: "Engenharia", page: "Solicitações de Produto", icon: "inbox" },
   "ficha-tecnica":   { module: "Engenharia", page: "Ficha Técnica", icon: "fileText" },
-  importacao:    { module: "Importação", page: "Gestão Importação — Importação (AIS)", icon: "ship" },
+  importacao:    { module: "Importação", page: "Gestão Importação — Rastreio Marítimo (AIS)", icon: "ship" },
   "pi-importacao": { module: "Importação", page: "Gestão Importação — P.I.", icon: "fileText" },
   "rfq-importacao": { module: "Importação", page: "Gestão Importação — RFQ", icon: "fileSearch" },
   "ims-importacao": { module: "Importação", page: "Gestão Importação — IMS", icon: "package" },
@@ -393,6 +395,7 @@ const BREADCRUMB_MAP = {
   almoxarifado: { module: "Logística", page: "Almoxarifado", icon: "package" },
   "carga-maquina": { module: "Logística", page: "Carga Máquina", icon: "calculator" },
   "montagem-produto": { module: "Logística", page: "Montagem do Produto", icon: "layers" },
+  "evolucao-fabricacao": { module: "Logística", page: "Evolução da Fabricação", icon: "history" },
   "simulacao-producao": { module: "Logística", page: "Simulação", icon: "history" },
   "relatorios-pcp": { module: "Logística", page: "Relatórios", icon: "fileText" },
   expedicao: { module: "Logística", page: "Expedição", icon: "truck" },
@@ -405,6 +408,7 @@ const BREADCRUMB_MAP = {
   "vistorias-envio": { module: "Instalação & Entrega", page: "Vistorias de Obras", icon: "send" },
   vistorias:     { module: "Instalação & Entrega", page: "Resultado Vistorias de Obras", icon: "history" },
   instalacao:    { module: "Instalação & Entrega", page: "Instalação em Campo", icon: "hardhat" },
+  "mapa-obras":  { module: "Instalação & Entrega", page: "Mapa de Obras", icon: "pin" },
   art:           { module: "Instalação & Entrega", page: "ART de Instalação", icon: "scale" },
   cronograma:    { module: "Instalação & Entrega", page: "Cronograma de Instalação", icon: "clock" },
   databook:      { module: "Instalação & Entrega", page: "Data Book & Termo", icon: "fileSearch" },
@@ -441,6 +445,7 @@ const MODULE_HOME = {
 
 /* Ajuda contextual por rota — texto curto do que a tela faz / próximos passos. */
 const HELP_TOPICS = {
+  "mapa-obras": "Duas abas. Mapa: amarelo = em andamento, verde = concluída, azul = aguardando os equipamentos; passe o mouse sobre um ponto para ver a obra (em andamento: status e quem está instalando) e clique para abrir o Dossiê. A posição vem do endereço da obra no Dossiê (sem endereço, centro da cidade). Evolução dos equipamentos: uma linha do tempo por equipamento (obra aberta, saída da fábrica, chegada ao Brasil e na obra, início, 50%, 75%, conclusão e entrega), com datas reais, previstas e a etapa atual; \"Ver no mapa\" leva ao ponto da obra.",
   "mes-cadastros": "A base do chão de fábrica (MES). Frentes: as linhas de produção (quadro, fiação, botoeiras, cabos de aço…). Postos: as bancadas e máquinas de cada frente (são os mesmos recursos da Carga Máquina, agora ligados a uma frente). Etapas modelo: as etapas que toda OP nova herda, com tipo (produção ou inspeção) e nº de operadores. Jornada: o horário normal da fábrica. Operadores: o posto onde cada colaborador costuma trabalhar. Nada é apagado: itens saem de uso ao serem desativados.",
   dashboard: "Visão geral do dia: KPIs, tarefas de hoje, projetos em andamento (Gantt/Lista/Kanban) e alertas críticos.",
   notificacoes: "Seu painel de avisos: o sistema escreve aqui quando algo importante acontece (proposta aprovada, decisão esperando por você, prazo vencido, resposta por e-mail). Um aviso só informa: para agir, clique em Abrir origem e resolva na tela certa. Marcar como lida e Arquivar valem só para você; em Arquivadas fica o que você guardou; Preferências escolhe o que aparece para você aqui e no sino. Os avisos somem sozinhos (informativos em 14 dias, os demais em 45).",
@@ -474,6 +479,7 @@ const HELP_TOPICS = {
    ver CLAUDE.md, seção "Tutoriais"). Tutorial novo = uma linha aqui: rota do app → pasta.
    Rota sem linha: o item "Treinamento" do menu "?" (src/ajuda-suporte.jsx) aparece apagado ("em breve"). */
 const TUTORIAIS = {
+  "mapa-obras": "obras-instalacao/mapa-de-obras",
   dashboard: "geral/dashboard",
   decisoes: "geral/central-de-decisoes",
   notificacoes: "geral/notificacoes",
