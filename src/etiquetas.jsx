@@ -387,8 +387,20 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   }, [tipo, qChi]);
   const [chiCasa, setChiCasa] = React.useState(false);
   const chiAplic = chiPed ? (chiPed.tipo_aplicacao || (chiCasa ? 'MR' : null)) : null;
-  const chiLista = chiPed ? C.CHICOTES.filter((c) => C.chicoteDisponivel(c, chiAplic)) : [];
-  const escolherPedidoChi = (p) => { setChiPed(p); setChiCasa(false); setChiSel(new Set(C.CHICOTES.filter((c) => C.chicoteDisponivel(c, p.tipo_aplicacao)).map((c) => c.codigo))); };
+  const chiLista = chiPed && !chiPed.sem_quadro ? C.CHICOTES.filter((c) => C.chicoteDisponivel(c, chiAplic)) : [];
+  // Cabos do pedido (PCP): cada um com quantas etiquetas imprimir (peças = 1 por peça; cabo por metro = 1).
+  const [chiCabos, setChiCabos] = React.useState({ itens: [], erro: null });
+  const [caboSel, setCaboSel] = React.useState(() => new Map());
+  const escolherPedidoChi = (p) => {
+    setChiPed(p); setChiCasa(false);
+    setChiSel(new Set(p.sem_quadro ? [] : C.CHICOTES.filter((c) => C.chicoteDisponivel(c, p.tipo_aplicacao)).map((c) => c.codigo)));
+    setChiCabos({ itens: [], erro: null }); setCaboSel(new Map());
+    S.listarCabosDoPedido(p.numero_pedido).then((r) => {
+      setChiCabos(r);
+      setCaboSel(new Map(r.itens.map((i) => [i.codigo, /^(M|MT|METRO)$/i.test(String(i.unidade || '').trim()) ? 1 : Math.max(1, Math.min(99, Math.round(i.quantidade) || 1))])));
+    });
+  };
+  const caboLinhas = () => chiPed ? chiCabos.itens.filter((i) => caboSel.has(i.codigo)).flatMap((i) => Array.from({ length: Math.max(1, Math.min(99, Math.floor(Number(caboSel.get(i.codigo)) || 1))) }, (_, k) => ({ ref: `${i.codigo} ${k + 1}`, dados: C.dadosCaboPedido({ codigo: i.codigo, descricao: i.descricao, quantidade: i.quantidade, unidade: i.unidade, pedido: chiPed.numero_pedido, cliente: chiPed.cliente, op: i.op }) }))) : [];
   const mudarCasaChi = (v) => { setChiCasa(v); setChiSel((a) => { const n = new Set(a); if (v) n.add('POW1'); else n.delete('POW1'); return n; }); };
   const chiDados = (c) => C.dadosChicote({ chicote: c.codigo, pedido: chiPed.numero_pedido, tipo_obra: chiPed.novo_ou_modernizacao, cliente: chiPed.cliente, op: chiPed.ops && chiPed.ops.length === 1 ? chiPed.ops[0] : '' });
   /* Fabricação (OP do PCP) */
@@ -425,7 +437,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     if (tipo === 'PALETE') return [{ ref: palCodigo, dados: palDados(), copias }];
     if (tipo === 'IDTAG_EQUIPAMENTO') return obraTag.obra.equipamentos.filter((c) => tagSel.has(c)).map((c) => ({ ref: c, dados: tagDados(c), copias }));
     if (tipo === 'OP_QUADRO') return [{ ref: opSel.numero, dados: opDados(), copias }];
-    if (tipo === 'CHICOTE_QUADRO') return chiLista.filter((c) => chiSel.has(c.codigo)).map((c) => ({ ref: `${c.codigo} ${chiPed.numero_pedido}`, dados: chiDados(c), copias }));
+    if (tipo === 'CHICOTE_QUADRO') return chiLista.filter((c) => chiSel.has(c.codigo)).map((c) => ({ ref: `${c.codigo} ${chiPed.numero_pedido}`, dados: chiDados(c), copias })).concat(caboLinhas().map((l) => ({ ...l, copias })));
     if (tipo === 'FABRICACAO_OP') return Array.from({ length: fabN }, (_, k) => k + 1).map((k) => ({ ref: fabOp.numero, dados: fabDados(k), copias }));
     if (tipo === 'AVARIA') return [{ ref: avItem.codigo, dados: avDados(), copias }];
     if (tipo === 'RECEBIMENTO') return itensPi.filter((i) => recSel.has(i.codigo_produto)).map((i) => ({ ref: i.codigo_produto, dados: recDados(i), copias }));
@@ -439,7 +451,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     }
     return Array.from(selItem.values()).map((p) => ({ ref: p.codigo, dados: C.dadosItem(p), copias }));
   };
-  const nSel = tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'CHICOTE_QUADRO' ? (chiPed ? chiLista.filter((c) => chiSel.has(c.codigo)).length : 0) : tipo === 'FABRICACAO_OP' ? (fabOp && fabMat ? fabN : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'EXPEDICAO' ? (nfSel ? expN - expIni + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
+  const nSel = tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'CHICOTE_QUADRO' ? (chiPed ? chiLista.filter((c) => chiSel.has(c.codigo)).length + caboLinhas().length : 0) : tipo === 'FABRICACAO_OP' ? (fabOp && fabMat ? fabN : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'EXPEDICAO' ? (nfSel ? expN - expIni + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
   const primeiraRef = tipo === 'ENDERECO'
     ? (Array.from(selEnd)[0] || (filtrados[0] && filtrados[0].codigo))
     : (Array.from(selItem.keys())[0] || (achados.itens[0] && achados.itens[0].codigo));
@@ -448,7 +460,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
       if (tipo === 'PALETE') return piSel && recSel.size && palCodigo ? palDados() : null;
       if (tipo === 'IDTAG_EQUIPAMENTO') { const c = obraTag.obra && (obraTag.obra.equipamentos.find((x) => tagSel.has(x)) || obraTag.obra.equipamentos[0]); return c ? tagDados(c) : null; }
       if (tipo === 'OP_QUADRO') return opSel ? opDados() : null;
-      if (tipo === 'CHICOTE_QUADRO') { const c = chiLista.find((x) => chiSel.has(x.codigo)); return chiPed && c ? chiDados(c) : null; }
+      if (tipo === 'CHICOTE_QUADRO') { const c = chiLista.find((x) => chiSel.has(x.codigo)); if (chiPed && c) return chiDados(c); const cl = caboLinhas(); return chiPed && cl[0] ? cl[0].dados : null; }
       if (tipo === 'FABRICACAO_OP') return fabOp && fabMat ? fabDados(1) : null;
       if (tipo === 'AVARIA') return avItem ? avDados() : null;
       if (tipo === 'RECEBIMENTO') { const i = itensPi.find((x) => recSel.has(x.codigo_produto)) || itensPi[0]; return piSel && i ? recDados(i) : null; }
@@ -549,13 +561,14 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
               </div>
               {chiPed ? (
                 <div className="card" style={{ padding: 10 }}>
-                  <div style={{ fontSize: 12, marginBottom: 6 }}><b>Chicotes do pedido {chiPed.numero_pedido}</b> — uma etiqueta por chicote marcado.{chiAplic === 'MR' ? ' Elevador com casa de máquinas: POW1 incluído.' : ' O POW1 só aparece em elevador com casa de máquinas.'}</div>
-                  {!chiPed.tipo_aplicacao ? <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}><input type="checkbox" checked={chiCasa} onChange={(e) => mudarCasaChi(e.target.checked)}/> Este elevador tem casa de máquinas (inclui o POW1) <span style={{ color: 'var(--fg3)' }}>— o cadastro deste pedido não informa a aplicação</span></label> : null}
-                  {chiPed.ops && chiPed.ops.length > 1 ? <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 6 }}>Este pedido tem {chiPed.ops.length} quadros: o jogo de etiquetas é o mesmo para todos. Use <b>Cópias = {chiPed.ops.length}</b> para imprimir um jogo por quadro.</div> : null}
-                  <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                  {chiPed.sem_quadro ? <div style={{ fontSize: 12, marginBottom: 6, color: 'var(--fg3)' }}>Pedido {chiPed.numero_pedido} sem quadro de comando: só os cabos dele, abaixo.</div> : null}
+                  {chiPed.sem_quadro ? null : <div style={{ fontSize: 12, marginBottom: 6 }}><b>Chicotes do pedido {chiPed.numero_pedido}</b> — uma etiqueta por chicote marcado.{chiAplic === 'MR' ? ' Elevador com casa de máquinas: POW1 incluído.' : ' O POW1 só aparece em elevador com casa de máquinas.'}</div>}
+                  {!chiPed.tipo_aplicacao && !chiPed.sem_quadro ? <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}><input type="checkbox" checked={chiCasa} onChange={(e) => mudarCasaChi(e.target.checked)}/> Este elevador tem casa de máquinas (inclui o POW1) <span style={{ color: 'var(--fg3)' }}>— o cadastro deste pedido não informa a aplicação</span></label> : null}
+                  {chiPed.ops && chiPed.ops.length > 1 && !chiPed.sem_quadro ? <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 6 }}>Este pedido tem {chiPed.ops.length} quadros: o jogo de etiquetas é o mesmo para todos. Use <b>Cópias = {chiPed.ops.length}</b> para imprimir um jogo por quadro.</div> : null}
+                  {chiPed.sem_quadro ? null : <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
                     <button type="button" className="btn btn--ghost btn--sm" onClick={() => setChiSel(new Set(chiLista.map((c) => c.codigo)))}>Marcar todos</button>
                     <button type="button" className="btn btn--ghost btn--sm" onClick={() => setChiSel(new Set())}>Limpar</button>
-                  </div>
+                  </div>}
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 4 }}>
                     {chiLista.map((c) => (
                       <label key={c.codigo} style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'baseline' }}>
@@ -564,6 +577,18 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
                       </label>
                     ))}
                   </div>
+                  {chiCabos.itens.length ? (
+                    <div style={{ marginTop: 10 }}>
+                      <div style={{ fontSize: 12, marginBottom: 6 }}><b>Cabos do pedido {chiPed.numero_pedido} (PCP)</b> — marque o cabo e diga quantas etiquetas (1 por peça; cabo por metro, 1 por lance).</div>
+                      {chiCabos.itens.map((i) => (
+                        <label key={i.codigo} style={{ fontSize: 12, display: 'flex', gap: 8, alignItems: 'center', marginBottom: 3 }}>
+                          <input type="checkbox" checked={caboSel.has(i.codigo)} onChange={(e) => setCaboSel((m) => { const n = new Map(m); if (e.target.checked) n.set(i.codigo, /^(M|MT|METRO)$/i.test(String(i.unidade || '').trim()) ? 1 : Math.max(1, Math.min(99, Math.round(i.quantidade) || 1))); else n.delete(i.codigo); return n; })}/>
+                          <span style={{ flex: 1 }}><b style={{ fontWeight: 600 }}>{i.codigo}</b> <span style={{ color: 'var(--fg3)' }}>{i.descricao}</span> — {C.textoQtdFabricacao(i.quantidade, i.unidade) || i.quantidade}{i.op ? ` · ${i.op}` : ''}</span>
+                          {caboSel.has(i.codigo) ? <input className="input" type="number" min="1" max="99" value={caboSel.get(i.codigo)} onChange={(e) => setCaboSel((m) => new Map(m).set(i.codigo, e.target.value))} style={{ width: 64 }} title="Quantas etiquetas"/> : null}
+                        </label>
+                      ))}
+                    </div>
+                  ) : chiPed.sem_quadro ? <div style={{ fontSize: 12, color: 'var(--fg3)' }}>Este pedido não tem cabo cadastrado como item do PCP.</div> : null}
                 </div>
               ) : null}
             </>

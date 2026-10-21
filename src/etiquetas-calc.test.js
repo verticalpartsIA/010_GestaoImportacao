@@ -491,3 +491,14 @@ test('Fabricação da OP (50 x 30): uma etiqueta por peça, só texto, nada cort
   const z = E.renderZPL(m, d, { dpi: 203 });
   assert.ok(!z.avisos.some((a) => /cort/i.test(a)), z.avisos.join('; '));
 });
+
+test('Cabo do pedido na etiqueta de Chicote: código | pedido, descrição curta, OP e cliente', () => {
+  const m = E.modeloPorId('CHICOTE_50x30');
+  const d = E.dadosCaboPedido({ codigo: 'VPB-098', descricao: 'Cabo Elétrico Modular para Conexão do Circuito de Porta de Pavimento para Elevador 4.0M - Ref.: BST', quantidade: 9, unidade: 'PC', pedido: '30463', cliente: 'LEANDRO MOTTA', op: 'OP-0007' });
+  assert.equal(d.chicote_txt, 'VPB-098 | 30463');
+  assert.ok(!/Ref\./.test(d.desc_txt));
+  assert.equal(d.rodape_txt, 'OP-0007 · LEANDRO MOTTA');
+  const metro = E.dadosCaboPedido({ codigo: 'VPEL-529n', descricao: 'Cabo Manobra Elétrico com 23 Vias (NACIONAL) - Ref.: DRAKA', quantidade: 40, unidade: 'M', pedido: '30463', op: 'OP-0007-C1' });
+  assert.equal(metro.chicote_txt, 'VPEL-529n | 40 m');
+  assert.ok(E.renderZPL(m, d, { dpi: 203 }).zpl.includes('VPB-098'));
+});
