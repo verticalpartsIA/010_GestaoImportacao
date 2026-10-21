@@ -478,3 +478,16 @@ test('ZPL imagem: etiqueta quase toda branca fica pequena (não estoura o limite
   assert.ok(zpl.length < 30000, `ZPL com ${zpl.length} caracteres`);
   assert.deepEqual(Array.from(decodificarGFA(zpl, W, H)), Array.from(bits));
 });
+
+test('Fabricação da OP (50 x 30): uma etiqueta por peça, só texto, nada cortado', () => {
+  const m = E.modeloPorId('FABRICACAO_50x30');
+  assert.equal(m.largura_mm, 50); assert.equal(m.altura_mm, 30);
+  assert.ok(!m.elementos.some((e) => e.tipo === 'qr' || e.tipo === 'barras'));
+  const d = E.dadosFabricacao({ codigo: 'VPEL-692', descricao: 'Cabo de aço 8 mm', quantidade: 12.5, unidade: 'M', op: 'OP-0007-C1', pedido: '30445', cliente: 'MIHL', peca: 2, total_pecas: 4 });
+  assert.equal(d.item_txt, 'VPEL-692 | 12,5 m');
+  assert.equal(d.peca_txt, '2/4');
+  assert.equal(d.rodape_txt, 'OP-0007-C1 · 30445 · MIHL');
+  assert.equal(E.dadosFabricacao({ codigo: 'X', total_pecas: 1 }).peca_txt, '');
+  const z = E.renderZPL(m, d, { dpi: 203 });
+  assert.ok(!z.avisos.some((a) => /cort/i.test(a)), z.avisos.join('; '));
+});

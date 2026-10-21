@@ -154,7 +154,7 @@ test.describe('Etiquetas', () => {
     }
   });
 
-  test('aba Modelos mostra os 13 modelos padrão com prévia', async ({ page }) => {
+  test('aba Modelos mostra os 14 modelos padrão com prévia', async ({ page }) => {
     await page.addInitScript(COM_ALCADA);
     await page.goto('/logistica/etiquetas/modelos');
     await expect(page.getByText('Endereço — viga horizontal', { exact: true })).toBeVisible({ timeout: 60_000 });
@@ -162,7 +162,7 @@ test.describe('Etiquetas', () => {
     await expect(page.getByText('Teste de bancada', { exact: true })).toBeVisible();
     await expect(page.getByText('Recebimento — carga que chegou', { exact: true })).toBeVisible();
     await expect(page.getByText('Separação — volume do pedido', { exact: true })).toBeVisible();
-    for (const n of ['Palete — conteúdo e origem', 'ID-TAG do equipamento', 'OP do quadro — número de série', 'Avaria — material retido', 'Chicote do quadro (50 × 30, 2 colunas)']) await expect(page.getByText(n, { exact: true })).toBeVisible();
+    for (const n of ['Palete — conteúdo e origem', 'ID-TAG do equipamento', 'OP do quadro — número de série', 'Avaria — material retido', 'Chicote do quadro (50 × 30, 2 colunas)', 'Fabricação da OP (50 × 30, 2 colunas)']) await expect(page.getByText(n, { exact: true })).toBeVisible();
     // só o SVG de cada prévia (div > svg); o SVG aninhado da etiqueta dentro dele não conta
     await expect(page.locator('div > svg[viewBox="0 0 100 50"]')).toHaveCount(9, { timeout: 20_000 });   // 8 padrão + Separação deitada
     await expect(page.locator('div > svg[viewBox="0 0 100 100"]')).toHaveCount(1);
