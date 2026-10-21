@@ -154,7 +154,7 @@ test.describe('Etiquetas', () => {
     }
   });
 
-  test('aba Modelos mostra os 12 modelos padrão com prévia', async ({ page }) => {
+  test('aba Modelos mostra os 13 modelos padrão com prévia', async ({ page }) => {
     await page.addInitScript(COM_ALCADA);
     await page.goto('/logistica/etiquetas/modelos');
     await expect(page.getByText('Endereço — viga horizontal', { exact: true })).toBeVisible({ timeout: 60_000 });
@@ -162,7 +162,7 @@ test.describe('Etiquetas', () => {
     await expect(page.getByText('Teste de bancada', { exact: true })).toBeVisible();
     await expect(page.getByText('Recebimento — carga que chegou', { exact: true })).toBeVisible();
     await expect(page.getByText('Separação — volume do pedido', { exact: true })).toBeVisible();
-    for (const n of ['Palete — conteúdo e origem', 'ID-TAG do equipamento', 'OP do quadro — número de série', 'Avaria — material retido']) await expect(page.getByText(n, { exact: true })).toBeVisible();
+    for (const n of ['Palete — conteúdo e origem', 'ID-TAG do equipamento', 'OP do quadro — número de série', 'Avaria — material retido', 'Chicote do quadro (50 × 30, 2 colunas)']) await expect(page.getByText(n, { exact: true })).toBeVisible();
     // só o SVG de cada prévia (div > svg); o SVG aninhado da etiqueta dentro dele não conta
     await expect(page.locator('div > svg[viewBox="0 0 100 50"]')).toHaveCount(9, { timeout: 20_000 });   // 8 padrão + Separação deitada
     await expect(page.locator('div > svg[viewBox="0 0 100 100"]')).toHaveCount(1);
@@ -196,6 +196,33 @@ test.describe('Etiquetas', () => {
     await expect(previa).toContainText('VOLUME 1 / 19');
     await expect(previa).toContainText('28988');
     await expect(page.getByLabel('Sentido da impressão')).toBeVisible();
+  });
+
+  test('Chicote do quadro: escolhe o pedido que existe, uma etiqueta por chicote, POW1 só com casa de máquinas', async ({ page }) => {
+    await page.addInitScript(() => {
+      let valor;
+      Object.defineProperty(window, 'EtiquetasStore', {
+        configurable: true,
+        get() { return valor; },
+        set(v) {
+          v.temCapacidade = async () => true;
+          v.listarPedidosQuadro = async () => ({ erro: null, pedidos: [
+            { id: 'q1', numero_pedido: 1212, tipo_aplicacao: 'MR', novo_ou_modernizacao: 'modernizacao', cliente: 'CLIENTE A' },
+            { id: 'q2', numero_pedido: 1070, tipo_aplicacao: 'MRL', novo_ou_modernizacao: 'novo', cliente: 'CLIENTE B' },
+          ] });
+          valor = v;
+        },
+      });
+    });
+    await page.goto('/logistica/etiquetas/gerar');
+    await page.getByRole('button', { name: 'Chicote do quadro', exact: true }).click({ timeout: 60_000 });
+    await expect(page.getByRole('button', { name: /Imprimir/ })).toBeDisabled();   // sem pedido não há etiqueta
+    await page.locator('tr', { hasText: '1212' }).click();
+    await expect(page.getByText('POW1', { exact: true })).toBeVisible();
+    await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
+    await page.locator('tr', { hasText: '1070' }).click();
+    await expect(page.getByText('POW1', { exact: true })).toHaveCount(0);
+    await expect(page.getByRole('button', { name: /Imprimir 21 etiquetas/ })).toBeEnabled();
   });
 
   test('tipos da fase 2 e 4 abrem sem erro na aba Gerar', async ({ page }) => {

@@ -380,3 +380,25 @@ test('Item 50 x 30 (contagem às cegas, 2 colunas): ícone, QR e Code 128 do có
   assert.ok(g.ok);
   assert.ok(!/saldo|qtd/i.test(JSON.stringify(m.campos)));
 });
+
+test('Chicote do quadro (50 x 30): "FAN | 1212 Modernização", só texto e ícone, POW1 só com casa de máquinas', () => {
+  const m = E.modeloPorId('CHICOTE_50x30');
+  assert.ok(m && m.largura_mm === 50 && m.altura_mm === 30 && m.tipo === 'CHICOTE_QUADRO');
+  assert.ok(!m.elementos.some((e) => e.tipo === 'qr' || e.tipo === 'code128'), 'sem QR nem código de barras');
+  assert.equal(E.CHICOTES.length, 22);
+  assert.ok(E.CHICOTES.find((c) => c.codigo === 'FAN'));
+  const d = E.dadosChicote({ chicote: 'FAN', pedido: '1212', tipo_obra: 'modernizacao' });
+  assert.equal(d.chicote_txt, 'FAN | 1212 Modernização');
+  assert.equal(d.desc_txt, 'Iluminação e ventilação da cabina');
+  assert.equal(E.dadosChicote({ chicote: 'qc', pedido: 1070, tipo_obra: 'novo' }).chicote_txt, 'QC | 1070 Novo');
+  const pow = E.CHICOTES.find((c) => c.codigo === 'POW1');
+  assert.equal(E.chicoteDisponivel(pow, 'MR'), true);
+  assert.equal(E.chicoteDisponivel(pow, 'MRL'), false);
+  assert.equal(E.chicoteDisponivel(pow, null), false);
+  assert.equal(E.chicoteDisponivel(E.CHICOTES.find((c) => c.codigo === 'OS'), 'MRL'), true);
+  // cabe na etiqueta mesmo com o maior texto
+  for (const c of E.CHICOTES) {
+    const z = E.renderZPL(m, E.dadosChicote({ chicote: c.codigo, pedido: '1212', tipo_obra: 'modernizacao' }), { dpi: 203 });
+    assert.ok(!z.avisos.some((a) => /cortado/.test(a)), `${c.codigo}: ${z.avisos.join(' | ')}`);
+  }
+});
