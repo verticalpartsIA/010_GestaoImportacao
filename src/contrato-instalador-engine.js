@@ -231,6 +231,7 @@
       r_rg:'', r_cpf:'', r_mesmoEndereco: true,
       r_rua:'', r_numero:'', r_bairro:'', r_cidade:'', r_estado:'', r_cep:'',
       equipamento: 'elevador', quantidade: 1, localServico:'', descricaoServicos:'',
+      fasesAtivas: {}, fasesTexto: {},   // fases de montagem (só elevador): { f1: true } / texto editado por fase
       tipoElevador: 'social', capacidadeCarga:'', cargaEspecial: false,
       paradas: '5', paradasCustom:'', destino:'',
       obraCidade:'', obraEstado:'', distancia:'', distanciaAuto:true,
@@ -288,6 +289,27 @@
     return km >= 100;
   }
   function isRemocao(s) { return s.modalidade === 'remocao' || s.modalidade === 'remocao_adequacao'; }
+
+  /* Fases de montagem de elevador (opcionais, só elevador): texto-padrão editável por fase.
+     {andares} vira o nº de paradas do equipamento. */
+  const FASES_MONTAGEM = [
+    { id:'f1', label:'Fase 1 (Estrutura e Caixa)', texto:'Fase 1 (Estrutura e Caixa): Fixação de suportes, alinhamento, prumo e montagem das guias (cabine e contra-peso), instalação do limitador de velocidade e montagem da estrutura do contra-peso;' },
+    { id:'f2', label:'Fase 2 (Mecânica e Tracionamento)', texto:'Fase 2 (Mecânica e Tracionamento): Instalação da máquina de tração (MRL), passagem de cabos de aço (tracionamento), montagem da armação de cabine (chassis) e instalação do sistema de freio de segurança;' },
+    { id:'f3', label:'Fase 3 (Cabine e Portas)', texto:'Fase 3 (Cabine e Portas): Montagem dos painéis da cabine, subteto, botoeiras, instalação dos operadores de porta e portas de pavimento em todos os {andares} andares;' },
+    { id:'f4', label:'Fase 4 (Elétrica e Ajustes Finais)', texto:'Fase 4 (Elétrica e Ajustes Finais): Lançamento de cabos de manobra, fixação do quadro de comando, fiação de poço, sensores de leitura, ajustes de nivelamento, testes dinâmicos e preparação para vistoria.' },
+  ];
+  function andaresDe(s) {
+    const n = s.paradas === 'Personalizado' ? s.paradasCustom : s.paradas;
+    return String(n || '').trim() || '___';
+  }
+  function fasesDoContrato(s) {
+    if (s.equipamento !== 'elevador' || isRemocao(s)) return [];
+    const ativas = s.fasesAtivas || {}, txt = s.fasesTexto || {};
+    return FASES_MONTAGEM.filter(f => ativas[f.id]).map(f => {
+      const t = (txt[f.id] != null && String(txt[f.id]).trim()) ? String(txt[f.id]).trim() : f.texto;
+      return t.replace(/\{andares\}/g, andaresDe(s));
+    });
+  }
 
   function activeConditionals(s) {
     const list = [];
@@ -410,7 +432,11 @@
        não é a de 2 parcelas (3 parcelas usa até 5.1.3, personalizado usa
        um número de itens variável). */
     const lastN = items.length ? items[items.length - 1].n : '5.1';
-    items.push({ n: bumpItemNumber(lastN), text:'Dados bancários da CONTRATADA:', bank:{ banco, ag, conta, pix } });
+    const nBanco = bumpItemNumber(lastN);
+    items.push({ n: nBanco, text:'Dados bancários da CONTRATADA:', bank:{ banco, ag, conta, pix } });
+    /* Trava de pagamento pelo envio diário do Acompanhamento de Obra (21/10/2026) — cláusula em destaque. */
+    const nTrava = String(nBanco).split('.')[0] + '.2';
+    items.push({ n: nTrava, destaque: true, text:'LIBERAÇÃO DOS PAGAMENTOS PELO ENVIO DIÁRIO DO ACOMPANHAMENTO DE OBRA: a CONTRATADA deverá enviar, DIARIAMENTE e a cada etapa concluída, o checklist do Acompanhamento de Obra pelo link individual que lhe for fornecido pela CONTRATANTE. Os envios registram o andamento real da obra e calculam, automaticamente, o seu percentual de evolução. Os pagamentos previstos no item 5.1 vinculados à metade da execução e à finalização somente serão liberados quando o percentual correspondente constar dos envios feitos. A ausência dos envios diários SUSPENDE a liberação de qualquer pagamento até a regularização, sem incidência de multa, juros ou correção sobre o período de suspensão. Solicitação de pagamento, por qualquer meio, não substitui nem antecipa os envios: quem libera os pagamentos são exclusivamente os envios do checklist.' });
     return items;
   }
 
@@ -452,6 +478,8 @@
     if (equips.length) objetoItems.push({ n:'1.1.1', text:`Equipamento${equips.length > 1 ? 's' : ''} objeto deste contrato (nº de série / identificação): ${equips.join(', ')}.` });
     if (s.descricaoServicos && s.descricaoServicos.trim()) objetoItems.push({ n:'1.2', text:'Descrição dos serviços: ' + s.descricaoServicos.trim() });
     else objetoItems.push({ n:'1.2', text:'Descrição dos serviços: (detalhar os serviços a executar)' });
+    const fases = fasesDoContrato(s);
+    if (fases.length) objetoItems.push({ n:'1.2.1', text:'A CONTRATADA executará as seguintes etapas:', list: fases });
     objetoItems.push({ n:'1.3', text:'Local do serviço: ' + vBlank(s.localServico, '(endereço completo de onde será realizado o serviço)') });
     if (isRemocao(s)) {
       const lbl = s.modalidade === 'remocao_adequacao' ? 'Local da nova instalação' : 'Destino do equipamento removido';
@@ -629,7 +657,7 @@
     dividirEmParcelas, inteiroExtensoGen, logradouro,
     equipamentosDoContrato, slugEquipamento, numeroBaseContrato, proximoNumeroLivre,
     defaultState, pad2,
-    isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals,
+    isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals, FASES_MONTAGEM, fasesDoContrato, andaresDe,
     buildContract,
   };
 }());
