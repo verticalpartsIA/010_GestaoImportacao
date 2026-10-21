@@ -155,8 +155,8 @@ test('modelos padrão: largura 100 (altura 50, 100 ou 150), ids únicos, campos 
   const ids = E.MODELOS.map((m) => m.id);
   assert.equal(new Set(ids).size, ids.length);
   for (const m of E.MODELOS) {
-    assert.equal(m.largura_mm, 100);
-    assert.ok([50, 100, 150].includes(m.altura_mm));
+    assert.ok([50, 100].includes(m.largura_mm));
+    assert.ok([30, 50, 100, 150].includes(m.altura_mm));
     for (const el of m.elementos) if (el.campo) {
       for (const c of (el.campo.match(/\{(\w+)\}/g) || [])) assert.ok(m.campos.includes(c.slice(1, -1)), `${m.id}: ${c} não está em campos`);
     }
@@ -230,7 +230,7 @@ test('fase 3: modelos da empresa — registro, validação e campos protegidos',
   assert.ok(E.validarModelo(pequeno, base).some((m) => /QR muito pequeno/.test(m)));
   E.registrarModelos([{ id: 'u1', tipo: 'ITEM', nome: 'Item da casa', base_id: 'ITEM_100x50', largura_mm: 100, altura_mm: 50, campos: base.campos, elementos: base.elementos, ativo: true }, { id: 'u2', tipo: 'ITEM', nome: 'Inativo', base_id: 'ITEM_100x50', largura_mm: 100, altura_mm: 50, campos: [], elementos: [], ativo: false }]);
   assert.equal(E.modeloPorId('C:u1').nome, 'Item da casa');
-  assert.equal(E.modelosDoTipo('ITEM').length, 2);   // padrão + 1 ativo (o inativo não aparece)
+  assert.equal(E.modelosDoTipo('ITEM').length, 3);   // 2 padrões (100x50 e 50x30) + 1 ativo (o inativo não aparece)
   assert.equal(E.modelosDaEmpresa().length, 2);
   E.registrarModelos([]);
   assert.equal(E.modeloPorId('C:u1'), null);
@@ -351,4 +351,17 @@ test('Separação — etiqueta AGUARDA (pedido parcial) usa o mesmo modelo com o
   assert.equal(d.separador_txt, 'operação: VPEL-710a, VPB-148');
   assert.equal(d.qr, 'PED:29501');
   assert.equal(E.dadosSeparacao({ pedido: '1' }).destino_txt, 'Destino: EXP');
+});
+
+test('Item 50 x 30 (contagem às cegas, 2 colunas): ícone, QR e Code 128 do código, sem saldo; ZPL com ícone', () => {
+  const m = E.modeloPorId('ITEM_50x30');
+  assert.ok(m && m.largura_mm === 50 && m.altura_mm === 30);
+  const d = E.dadosItem({ codigo: 'VPEL-EL0990-1', descricao: 'Polia de tração' });
+  const z = E.renderZPL(m, d, { dpi: 203 });
+  assert.ok(!z.avisos.some((a) => /não cabe|pequeno|cortado/.test(a)), z.avisos.join(' | '));
+  assert.match(z.zpl, /\^GFA,/);
+  assert.match(E.renderSVG(m, d, {}), /data:image\/png/);
+  const g = E.geometriaRolo({ largura_mm: 50, altura_mm: 30, colunas: 2, espaco_mm: 3 }, { largura_max_mm: 104 });
+  assert.ok(g.ok);
+  assert.ok(!/saldo|qtd/i.test(JSON.stringify(m.campos)));
 });
