@@ -124,7 +124,20 @@
   function perfilDaImpressora(imp) { return perfilPorId(lerPerfis()[chavePerfil(imp)]) || casarPerfil(imp); }
   function salvarEscolha(esc) { try { localStorage.setItem(CHAVE, JSON.stringify(esc)); } catch (e) { /* sem armazenamento: vale só nesta sessão */ } }
 
+  // Configuração do rolo lembrada POR TIPO de etiqueta (por computador): tamanho da etiqueta, etiquetas por linha, espaço e ajuste de posição.
+  // A impressora e o perfil continuam sendo uma escolha só (acima); aqui vai só o que muda de um tipo para outro.
+  const CHAVE_TIPOS = 'vp_etiquetas_config_por_tipo';
+  const CAMPOS_ROLO = ['largura_mm', 'altura_mm', 'colunas', 'espaco_mm', 'desl_x_mm', 'desl_y_mm'];
+  function camposRolo(cfg) { const o = {}; CAMPOS_ROLO.forEach((k) => { if (cfg && cfg[k] !== undefined && cfg[k] !== null) o[k] = cfg[k]; }); return o; }
+  function lerPorTipo() { try { return JSON.parse(localStorage.getItem(CHAVE_TIPOS) || '{}') || {}; } catch (e) { return {}; } }
+  function gravarPorTipo(tipo, campos) {
+    if (!tipo) return;
+    try { const m = lerPorTipo(); m[tipo] = camposRolo(campos); localStorage.setItem(CHAVE_TIPOS, JSON.stringify(m)); } catch (e) { /* vale só nesta sessão */ }
+  }
+  function esquecerPorTipo(tipo) { try { const m = lerPorTipo(); delete m[tipo]; localStorage.setItem(CHAVE_TIPOS, JSON.stringify(m)); } catch (e) { /* ignora */ } }
+
   window.EtiquetasImpressoras = {
+    CAMPOS_ROLO, camposRolo, lerPorTipo, gravarPorTipo, esquecerPorTipo,
     PERFIS, perfilPorId, casarPerfil, NAVEGADOR,
     detectarBrowserPrint, enviarBrowserPrint, imprimirNavegador, detectarTodas, lerEscolha, salvarEscolha, lembrarPerfil, perfilDaImpressora,
     _resetarBase: () => { bpBase = null; },

@@ -221,6 +221,13 @@ test.describe('Etiquetas', () => {
     await page.locator('tr', { hasText: '1212' }).click();
     await expect(page.getByText('POW1', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
+    // prévia com 2 colunas: cada coluna mostra uma etiqueta DIFERENTE (QC e OS), não a mesma repetida
+    await page.getByLabel('Largura da etiqueta (mm)', { exact: true }).fill('50');
+    await page.getByLabel('Comprimento da etiqueta (mm)', { exact: true }).fill('30');
+    await page.getByLabel('Etiquetas por linha', { exact: true }).fill('2');
+    const previa2 = page.locator('div > svg[viewBox*="0 0 103"]').first();
+    await expect(previa2).toContainText('QC | 1212');
+    await expect(previa2).toContainText('OS | 1212');
     await page.locator('tr', { hasText: '1070' }).click();
     await expect(page.getByText('POW1', { exact: true })).toHaveCount(0);
     await expect(page.getByRole('button', { name: /Imprimir 21 etiquetas/ })).toBeEnabled();
@@ -230,6 +237,28 @@ test.describe('Etiquetas', () => {
     await expect(page.getByRole('button', { name: /Imprimir 21 etiquetas/ })).toBeEnabled();
     await page.getByLabel(/tem casa de máquinas/).check();
     await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
+  });
+
+  test('o rolo e o ajuste ficam salvos por tipo de etiqueta e voltam sozinhos ao trocar de tipo', async ({ page }) => {
+    await page.addInitScript(COM_ALCADA);
+    await page.goto('/logistica/etiquetas/gerar/chicote-quadro');
+    const larg = page.getByLabel('Largura da etiqueta (mm)', { exact: true });
+    const comp = page.getByLabel('Comprimento da etiqueta (mm)', { exact: true });
+    await expect(larg).toBeVisible({ timeout: 60_000 });
+    await larg.fill('50'); await comp.fill('30');
+    await page.getByLabel('Etiquetas por linha', { exact: true }).fill('2');
+    await expect(page.getByText('Rolo e ajuste de posição lembrados', { exact: false })).toBeVisible();
+    // outro tipo, outro rolo
+    await page.getByRole('button', { name: 'Item', exact: true }).click();
+    await larg.fill('100'); await comp.fill('50');
+    await page.getByLabel('Etiquetas por linha', { exact: true }).fill('1');
+    // volta ao Chicote: o rolo 50 x 30 em 2 colunas volta sozinho
+    await page.getByRole('button', { name: 'Chicote do quadro', exact: true }).click();
+    await expect(larg).toHaveValue('50');
+    await expect(comp).toHaveValue('30');
+    await expect(page.getByLabel('Etiquetas por linha', { exact: true })).toHaveValue('2');
+    await page.getByRole('button', { name: 'Esquecer' }).click();
+    await expect(page.getByText('Ao ajustar o rolo ou a posição', { exact: false })).toBeVisible();
   });
 
   test('tipos da fase 2 e 4 abrem sem erro na aba Gerar', async ({ page }) => {
