@@ -167,11 +167,26 @@ test('modelos padrão: largura 100 (altura 50, 100 ou 150), ids únicos, campos 
 test('validarEnderecoNovo: aceita existente (normaliza), recusa inexistente, preserva antigo igual', () => {
   assert.deepEqual(E.validarEnderecoNovo(' end: r2a4 ', null), { ok: true, codigo: 'R2A4', antigo: false, msg: '' });
   assert.equal(E.validarEnderecoNovo('exp', null).codigo, 'EXP');
-  assert.equal(E.validarEnderecoNovo('', 'G13').codigo, null);
+  assert.equal(E.validarEnderecoNovo('', 'R01 05').codigo, null);
   assert.equal(E.validarEnderecoNovo('R1J1', null).ok, false);
-  assert.equal(E.validarEnderecoNovo('G14', 'G13').ok, false);
-  const igual = E.validarEnderecoNovo('g13', 'G13');
+  assert.equal(E.validarEnderecoNovo('Z14', 'R01 05').ok, false);
+  assert.equal(E.validarEnderecoNovo('A05', null).ok, false);   // prateleira é só B–I
+  assert.equal(E.validarEnderecoNovo('G31', null).ok, false);   // e só 1–30
+  const igual = E.validarEnderecoNovo('r01 05', 'R01 05');   // texto antigo igual ao gravado passa
   assert.equal(igual.ok, true); assert.equal(igual.antigo, true);
+});
+
+test('vários endereços: porta-palete + prateleira do mezanino, separados por "/", sem repetidos', () => {
+  const v = E.validarEnderecoNovo('r2i8 / R2H8, h9;H09 / H24', null);
+  assert.deepEqual(v, { ok: true, codigo: 'R2I8 / R2H8 / H09 / H24', antigo: false, msg: '' });
+  assert.deepEqual(E.listaEnderecos('R4J5 / R4J3 / R4I3 / R4H5 / R4F3').map((e) => e.codigo), ['R4J5', 'R4J3', 'R4I3', 'R4H5', 'R4F3']);
+  assert.deepEqual(E.listaEnderecos('R2J4 / I24').map((e) => e.tipo), ['porta_palete', 'prateleira']);
+  assert.equal(E.validarEnderecoNovo('R2I8 / R9Z9', null).ok, false);          // um pedaço ruim recusa o conjunto
+  assert.equal(E.validarEnderecoNovo('R1J1 / G14', null).ok, false);           // R1J1 não existe
+  const antigo = E.validarEnderecoNovo('R01 05 / 09 / H23', 'R01 05 / 09');    // pedaço antigo preservado, novo validado
+  assert.equal(antigo.ok, true); assert.equal(antigo.antigo, true);
+  assert.equal(E.rotuloEndereco('g27'), 'Mezanino · Prateleira G27');
+  assert.equal(E.tipoEndereco('EXP'), 'expedicao');
 });
 
 test('recebimento: QR e barras = código do item (contrato do tipo Item), textos montados', () => {
