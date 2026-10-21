@@ -155,6 +155,39 @@
     } catch (e) { return { pedidos: [], erro: e.message }; }
   }
 
+  // OPs do PCP que NÃO são pedido nem quadro (corte de cabo de aço, corrimão, cabo elétrico/de manobra…) para a etiqueta de fabricação.
+  // `etiquetada` = já houve impressão desse tipo para a OP (histórico de etiquetas).
+  async function listarOPsFabricacao(texto) {
+    const sb = sbCli();
+    if (!sb) return { ops: [], erro: 'Supabase indisponível.' };
+    try {
+      const { data, error } = await sb.from('pcp_ordens').select('id, numero, titulo, produto, cliente, status, frente, pedido_codigo, ordem_mae_id, prazo_entrega').not('frente', 'in', '(pedido,quadro)').in('status', ['aguardando', 'em_producao']).order('created_at', { ascending: false }).limit(150);
+      if (error) return { ops: [], erro: error.message };
+      let ops = data || [];
+      const t = String(texto || '').trim().toLowerCase();
+      const ids = ops.map((o) => o.id);
+      const mats = {};
+      if (ids.length) {
+        const rm = await sb.from('pcp_ordem_materiais').select('ordem_id, codigo, descricao, necessario, unidade').in('ordem_id', ids);
+        (rm.data || []).forEach((m) => { (mats[m.ordem_id] = mats[m.ordem_id] || []).push(m); });
+      }
+      const maeIds = Array.from(new Set(ops.map((o) => o.ordem_mae_id).filter(Boolean)));
+      const maes = {};
+      if (maeIds.length) { const rmae = await sb.from('pcp_ordens').select('id, pedido_codigo').in('id', maeIds); (rmae.data || []).forEach((m) => { maes[m.id] = m; }); }
+      const cods = Array.from(new Set(ops.map((o) => o.pedido_codigo || (maes[o.ordem_mae_id] || {}).pedido_codigo).filter((c) => c != null)));
+      const numPed = {};
+      if (cods.length) { const rp = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido').in('codigo_pedido', cods); (rp.data || []).forEach((p) => { numPed[p.codigo_pedido] = p.numero_pedido; }); }
+      const rh = await sb.from('etiqueta_impressoes').select('referencia, impresso_em').eq('tipo', 'FABRICACAO_OP').eq('sucesso', true).order('impresso_em', { ascending: false }).limit(500);
+      const hist = rh.data || [];
+      ops = ops.map((o) => {
+        const h = hist.find((x) => String(x.referencia || '').startsWith(o.numero));
+        return { ...o, materiais: mats[o.id] || [], numero_pedido: numPed[o.pedido_codigo || (maes[o.ordem_mae_id] || {}).pedido_codigo] || '', etiquetada: h ? h.impresso_em : null };
+      });
+      if (t) ops = ops.filter((o) => [o.numero, o.titulo, o.cliente, o.numero_pedido, ...(o.materiais || []).map((m) => m.codigo)].some((v) => String(v || '').toLowerCase().includes(t)));
+      return { ops: ops.slice(0, 80), erro: null };
+    } catch (e) { return { ops: [], erro: e.message }; }
+  }
+
   // OPs de quadro de comando (PCP) abertas ou concluídas recentes, para a etiqueta de OP/série.
   async function listarOPsQuadro(texto) {
     const sb = sbCli();
@@ -271,5 +304,5 @@
     } catch (e) { return { linhas: [], erro: e.message }; }
   }
 
-  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarPedidosQuadro, pedidoDaOp, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
+  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarPedidosQuadro, listarOPsFabricacao, pedidoDaOp, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
 }());

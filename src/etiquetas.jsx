@@ -98,10 +98,11 @@ const ETQ_TIPOS = [
   { id: 'IDTAG_EQUIPAMENTO', nome: 'ID-TAG', modelo: 'IDTAG_100x50', desc: 'Identifica cada elevador (VPEL-EL0985-1…)' },
   { id: 'OP_QUADRO', nome: 'OP / série do quadro', modelo: 'OP_QUADRO_100x50', desc: 'OP do PCP e nº de série do quadro de comando' },
   { id: 'AVARIA', nome: 'Avaria', modelo: 'AVARIA_100x50', desc: 'Material danificado, retido' },
+  { id: 'FABRICACAO_OP', nome: 'Fabricação (OP do PCP)', modelo: 'FABRICACAO_50x30', desc: 'Peça cortada/fabricada no PCP: cabo de aço, corrimão, cabo elétrico e de manobra (50 × 30, só texto)' },
   { id: 'CHICOTE_QUADRO', nome: 'Chicote do quadro', modelo: 'CHICOTE_50x30', desc: 'Fiação que acompanha o quadro: "FAN | 1212 Modernização" (50 × 30, só texto)' },
 ];
 // Endereço de cada tipo na URL: /logistica/etiquetas/gerar/<slug>
-const ETQ_SLUG_TIPO = { ENDERECO: 'endereco', ITEM: 'item', RECEBIMENTO: 'recebimento', SEPARACAO: 'separacao', EXPEDICAO: 'expedicao-nf', PALETE: 'palete', IDTAG_EQUIPAMENTO: 'id-tag', OP_QUADRO: 'op-serie-quadro', AVARIA: 'avaria', CHICOTE_QUADRO: 'chicote-quadro' };
+const ETQ_SLUG_TIPO = { ENDERECO: 'endereco', ITEM: 'item', RECEBIMENTO: 'recebimento', SEPARACAO: 'separacao', EXPEDICAO: 'expedicao-nf', PALETE: 'palete', IDTAG_EQUIPAMENTO: 'id-tag', OP_QUADRO: 'op-serie-quadro', AVARIA: 'avaria', CHICOTE_QUADRO: 'chicote-quadro', FABRICACAO_OP: 'fabricacao-op' };
 const ETQ_TIPO_SLUG = Object.fromEntries(Object.entries(ETQ_SLUG_TIPO).map(([k, v]) => [v, k]));
 const etqHoje = () => new Date().toLocaleDateString('pt-BR', { timeZone: 'America/Sao_Paulo' });
 // Valores crus dos campos do rolo (podem estar vazios enquanto a pessoa digita); sem eles, vale o formato antigo "100x50".
@@ -390,6 +391,22 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const escolherPedidoChi = (p) => { setChiPed(p); setChiCasa(false); setChiSel(new Set(C.CHICOTES.filter((c) => C.chicoteDisponivel(c, p.tipo_aplicacao)).map((c) => c.codigo))); };
   const mudarCasaChi = (v) => { setChiCasa(v); setChiSel((a) => { const n = new Set(a); if (v) n.add('POW1'); else n.delete('POW1'); return n; }); };
   const chiDados = (c) => C.dadosChicote({ chicote: c.codigo, pedido: chiPed.numero_pedido, tipo_obra: chiPed.novo_ou_modernizacao, cliente: chiPed.cliente, op: chiPed.ops && chiPed.ops.length === 1 ? chiPed.ops[0] : '' });
+  /* Fabricação (OP do PCP) */
+  const [qFab, setQFab] = React.useState('');
+  const [opsFab, setOpsFab] = React.useState({ ops: [], erro: null });
+  const [fabOp, setFabOp] = React.useState(null);
+  const [fabPecas, setFabPecas] = React.useState('1');
+  const [fabComp, setFabComp] = React.useState('');
+  React.useEffect(() => {
+    if (tipo !== 'FABRICACAO_OP') return undefined;
+    const t = setTimeout(() => { S.listarOPsFabricacao(qFab).then(setOpsFab); }, 300);
+    return () => clearTimeout(t);
+  }, [tipo, qFab]);
+  const fabMat = fabOp ? ((fabOp.materiais || [])[0] || null) : null;
+  const fabN = Math.max(1, Math.min(200, Math.floor(Number(fabPecas) || 1)));
+  const fabTotal = fabMat ? Number(fabMat.necessario) || 0 : 0;
+  const fabQtd = Number(String(fabComp).replace(',', '.')) > 0 ? Number(String(fabComp).replace(',', '.')) : (fabTotal > 0 ? Math.round((fabTotal / fabN) * 100) / 100 : 0);
+  const fabDados = (k) => C.dadosFabricacao({ codigo: fabMat ? fabMat.codigo : fabOp.produto, descricao: fabMat ? fabMat.descricao : (fabOp.titulo || ''), quantidade: fabQtd, unidade: fabMat ? fabMat.unidade : '', op: fabOp.numero, pedido: fabOp.numero_pedido, cliente: fabOp.cliente, peca: k, total_pecas: fabN });
   /* Avaria */
   const [avQtd, setAvQtd] = React.useState('');
   const [avMotivo, setAvMotivo] = React.useState('');
@@ -409,6 +426,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     if (tipo === 'IDTAG_EQUIPAMENTO') return obraTag.obra.equipamentos.filter((c) => tagSel.has(c)).map((c) => ({ ref: c, dados: tagDados(c), copias }));
     if (tipo === 'OP_QUADRO') return [{ ref: opSel.numero, dados: opDados(), copias }];
     if (tipo === 'CHICOTE_QUADRO') return chiLista.filter((c) => chiSel.has(c.codigo)).map((c) => ({ ref: `${c.codigo} ${chiPed.numero_pedido}`, dados: chiDados(c), copias }));
+    if (tipo === 'FABRICACAO_OP') return Array.from({ length: fabN }, (_, k) => k + 1).map((k) => ({ ref: fabOp.numero, dados: fabDados(k), copias }));
     if (tipo === 'AVARIA') return [{ ref: avItem.codigo, dados: avDados(), copias }];
     if (tipo === 'RECEBIMENTO') return itensPi.filter((i) => recSel.has(i.codigo_produto)).map((i) => ({ ref: i.codigo_produto, dados: recDados(i), copias }));
     if (tipo === 'SEPARACAO') {
@@ -421,7 +439,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     }
     return Array.from(selItem.values()).map((p) => ({ ref: p.codigo, dados: C.dadosItem(p), copias }));
   };
-  const nSel = tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'CHICOTE_QUADRO' ? (chiPed ? chiLista.filter((c) => chiSel.has(c.codigo)).length : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'EXPEDICAO' ? (nfSel ? expN - expIni + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
+  const nSel = tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'CHICOTE_QUADRO' ? (chiPed ? chiLista.filter((c) => chiSel.has(c.codigo)).length : 0) : tipo === 'FABRICACAO_OP' ? (fabOp && fabMat ? fabN : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'EXPEDICAO' ? (nfSel ? expN - expIni + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
   const primeiraRef = tipo === 'ENDERECO'
     ? (Array.from(selEnd)[0] || (filtrados[0] && filtrados[0].codigo))
     : (Array.from(selItem.keys())[0] || (achados.itens[0] && achados.itens[0].codigo));
@@ -431,6 +449,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
       if (tipo === 'IDTAG_EQUIPAMENTO') { const c = obraTag.obra && (obraTag.obra.equipamentos.find((x) => tagSel.has(x)) || obraTag.obra.equipamentos[0]); return c ? tagDados(c) : null; }
       if (tipo === 'OP_QUADRO') return opSel ? opDados() : null;
       if (tipo === 'CHICOTE_QUADRO') { const c = chiLista.find((x) => chiSel.has(x.codigo)); return chiPed && c ? chiDados(c) : null; }
+      if (tipo === 'FABRICACAO_OP') return fabOp && fabMat ? fabDados(1) : null;
       if (tipo === 'AVARIA') return avItem ? avDados() : null;
       if (tipo === 'RECEBIMENTO') { const i = itensPi.find((x) => recSel.has(x.codigo_produto)) || itensPi[0]; return piSel && i ? recDados(i) : null; }
       if (tipo === 'EXPEDICAO') return nfSel ? expDados(expIni) : null;
@@ -545,6 +564,42 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
                       </label>
                     ))}
                   </div>
+                </div>
+              ) : null}
+            </>
+          ) : tipo === 'FABRICACAO_OP' ? (
+            <>
+              <input className="input" placeholder="Buscar OP por número, código do material, pedido ou cliente…" value={qFab} onChange={(e) => setQFab(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
+              {opsFab.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>Não consegui buscar: {opsFab.erro}</div> : null}
+              <div className="card table-wrap" style={{ maxHeight: 240, overflow: 'auto', marginBottom: 10 }}>
+                <table className="t pcp-grid">
+                  <thead><tr><th>OP</th><th>Material</th><th>Qtd. total</th><th>Pedido</th><th>Cliente</th><th>Etiqueta</th></tr></thead>
+                  <tbody>
+                    {opsFab.ops.map((o) => {
+                      const m = (o.materiais || [])[0];
+                      return (
+                        <tr key={o.id} onClick={() => { setFabOp(o); setFabPecas('1'); setFabComp(''); }} style={{ cursor: 'pointer', background: fabOp && fabOp.id === o.id ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
+                          <td><b style={{ fontWeight: 600 }}>{o.numero}</b></td><td>{m ? `${m.codigo} — ${m.descricao || ''}` : (o.produto || o.titulo || '—')}</td><td>{m ? C.textoQtdFabricacao(m.necessario, m.unidade) || '—' : '—'}</td><td>{o.numero_pedido || '—'}</td><td>{o.cliente || '—'}</td>
+                          <td>{o.etiquetada ? <span style={{ color: 'var(--vp-success, #2e7d32)' }}>✓ impressa {new Date(o.etiquetada).toLocaleDateString('pt-BR')}</span> : <span style={{ color: 'var(--fg3)' }}>ainda não</span>}</td>
+                        </tr>
+                      );
+                    })}
+                    {!opsFab.ops.length ? <tr><td colSpan={6} style={{ color: 'var(--fg3)' }}>Nenhuma OP de fabricação aberta no PCP.</td></tr> : null}
+                  </tbody>
+                </table>
+              </div>
+              {fabOp ? (
+                <div className="card" style={{ padding: 10, fontSize: 12 }}>
+                  {!fabMat ? <div style={{ color: 'var(--vp-danger)' }}>Esta OP não tem material cadastrado; não há o que etiquetar.</div> : (
+                    <>
+                      <div style={{ marginBottom: 6 }}><b>{fabOp.numero}</b> — uma etiqueta por peça. Total da OP: <b>{C.textoQtdFabricacao(fabTotal, fabMat.unidade) || '—'}</b>.</div>
+                      <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center' }}>
+                        <label>Nº de peças <input className="input" type="number" min="1" max="200" value={fabPecas} onChange={(e) => setFabPecas(e.target.value)} style={{ width: 80 }}/></label>
+                        <label>Comprimento/quantidade por peça <input className="input" value={fabComp} placeholder={fabTotal > 0 ? String(Math.round((fabTotal / fabN) * 100) / 100) : ''} onChange={(e) => setFabComp(e.target.value)} style={{ width: 110 }}/></label>
+                      </div>
+                      <div style={{ color: 'var(--fg3)', marginTop: 6 }}>O PCP guarda só o total da OP; o nº de peças e o tamanho de cada uma você informa aqui. Em branco, o total é dividido igualmente.</div>
+                    </>
+                  )}
                 </div>
               ) : null}
             </>
@@ -793,6 +848,7 @@ const etqExemploDe = (m) => {
     : t === 'IDTAG_EQUIPAMENTO' ? C.dadosIdTag({ codigo: 'VPEL-EL0985-1', cliente: 'AKAI KB MAGAZINE', predio: 'Loja em Shopping', cidade: 'Praia Grande', uf: 'SP', cotacao: 985 })
     : t === 'OP_QUADRO' ? C.dadosOpQuadro({ numero: 'OP-0001', produto: 'VPEL-709b Quadro 30 kW 380 V', cliente: 'VITALTEC', serie: 'QC-2610-0007', data: '17/10/2026' })
     : t === 'CHICOTE_QUADRO' ? C.dadosChicote({ chicote: 'FAN', pedido: '1212', tipo_obra: 'modernizacao', cliente: 'CONCESSIONARIA DO BLOCO SUL S.A.', op: 'OP-0003-Q1' })
+    : t === 'FABRICACAO_OP' ? C.dadosFabricacao({ codigo: 'VPEL-692', descricao: 'Cabo de aço 8 mm', quantidade: 12.5, unidade: 'M', op: 'OP-0007-C1', pedido: '30445', cliente: 'MIHL', peca: 1, total_pecas: 4 })
     : t === 'AVARIA' ? C.dadosAvaria({ codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', quantidade: 2, unidade: 'UN', motivo: 'caixa amassada', responsavel: 'tiago', data: '17/10/2026' })
     : t === 'ITEM' ? C.dadosItem({ codigo: 'VPEL-156', descricao: 'Rolete para correia Poly-V 6PK', unidade: 'UN', familia: 'VPEL', endereco: 'R2A4' }) : C.DADOS_TESTE;
 };
