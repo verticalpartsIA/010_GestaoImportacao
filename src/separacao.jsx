@@ -216,10 +216,10 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
                 <React.Fragment key={i.codigo}>
                   <tr>
                     <td><b>{i.codigo}</b>{i.fabricado_pcp && <div><Badge variant="outline">Fabricado pelo PCP</Badge></div>}</td>
-                    <td style={{ maxWidth: 300 }}>{i.descricao || '—'}</td>
+                    <td style={{ minWidth: 240, maxWidth: 320, whiteSpace: 'normal', overflowWrap: 'anywhere', wordBreak: 'break-word' }}>{i.descricao || '—'}</td>
                     <td style={{ textAlign: 'right' }}>{sepQtd(i.qtd_pedida)} {i.unidade || ''}</td>
                     <td style={{ textAlign: 'right', color: completo ? 'var(--vp-success, #1a8f4a)' : undefined, fontWeight: 600 }}>{sepQtd(i.qtd_separada)}</td>
-                    <td style={{ maxWidth: 340 }}>
+                    <td style={{ minWidth: 200, maxWidth: 340, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>
                       {(i.separacoes || []).map((s) => (
                         <div key={s.endereco} style={{ fontSize: 12 }}>
                           {s.endereco}: {sepQtd(s.qtd)}{' '}
@@ -230,7 +230,7 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
                       {!(i.separacoes || []).length && !pd && <span style={{ color: 'var(--fg3)', fontSize: 12 }}>{(i.enderecos || []).length ? 'endereço conhecido: ' + i.enderecos.join(', ') : 'sem endereço cadastrado'}</span>}
                     </td>
                     {editavel && (
-                      <td style={{ whiteSpace: 'nowrap' }}>
+                      <td style={{ minWidth: 260, whiteSpace: 'normal' }}>
                         {!completo && (
                           <div>
                             <input className="input" style={{ width: 80 }} placeholder="Endereço" list={'ends-' + codigo + i.codigo} value={end} onChange={(e) => set(i.codigo, 'endereco', e.target.value.toUpperCase())} />
@@ -278,13 +278,22 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
   );
 }
 
+const SEP_SLUG_POR_FILTRO = { abertos: 'a-separar', livre: 'aguardando', em_separacao: 'em-separacao', parcial: 'parcial', separado: 'separados-hoje', todos: 'todos' };
+const SEP_FILTRO_POR_SLUG = Object.fromEntries(Object.entries(SEP_SLUG_POR_FILTRO).map(([k, v]) => [v, k]));
+const lastFiltro = { current: 'abertos' };
+
 function SepPedidosAba({ caps, irTv }) {
   const [dados, setDados] = React.useState(null);
   const [erro, setErro] = React.useState(null);
-  const [filtro, setFiltro] = React.useState('abertos');
   const [busca, setBusca] = React.useState('');
   const [expandidos, setExpandidos] = React.useState(() => new Set());
-  const [aberto, setAberto] = window.useRotaItem('separacao', 'pedidos');
+  // O 3º segmento da URL é o filtro (/pedidos/aguardando) ou, se não for um filtro, o pedido aberto (/pedidos/<código>).
+  const [seg, setSeg] = window.useRotaItem('separacao', 'pedidos');
+  const filtro = SEP_FILTRO_POR_SLUG[seg] || (seg ? (lastFiltro.current || 'abertos') : 'abertos');
+  const aberto = seg && !SEP_FILTRO_POR_SLUG[seg] ? seg : '';
+  if (SEP_FILTRO_POR_SLUG[seg]) lastFiltro.current = SEP_FILTRO_POR_SLUG[seg];
+  const setFiltro = (k) => { lastFiltro.current = k; setSeg(SEP_SLUG_POR_FILTRO[k]); };
+  const setAberto = (id) => setSeg(id || SEP_SLUG_POR_FILTRO[lastFiltro.current || 'abertos']);
 
   const carregar = React.useCallback(async () => {
     try { setDados(await sepChamar('fila')); setErro(null); } catch (e) { setErro(e.message); }
