@@ -83,10 +83,10 @@ const etqData = (iso) => { try { return new Date(iso).toLocaleString('pt-BR', { 
 const etqToast = (m) => { if (window.toast) window.toast(m); };
 
 /* Pré-visualização: SVG em mm do próprio modelo, com os mesmos dados que vão para a impressora. */
-function EtqPreview({ modelo, dados, largura, colunas, espaco, nota, girar }) {
+function EtqPreview({ modelo, dados, lista, largura, colunas, espaco, nota, girar }) {
   const { pronto, erro } = useEtqBwip();
   const cols = colunas || 1;
-  const html = React.useMemo(() => (modelo && dados ? ETQ_CALC().renderSVGLinha(modelo, Array.from({ length: cols }, () => dados), { barcode: pronto ? etqBarcode : null, colunas: cols, espaco, fluido: true, moldura: cols > 1, girar: modelo.girar ? etqLerGirar() : undefined }) : ''), [modelo, dados, pronto, cols, espaco, girar]);
+  const html = React.useMemo(() => (modelo && dados ? ETQ_CALC().renderSVGLinha(modelo, (lista && lista.length ? lista.slice(0, cols) : Array.from({ length: cols }, () => dados)), { barcode: pronto ? etqBarcode : null, colunas: cols, espaco, fluido: true, moldura: cols > 1, girar: modelo.girar ? etqLerGirar() : undefined }) : ''), [modelo, dados, lista, pronto, cols, espaco, girar]);
   if (!modelo || !dados) return <div style={{ color: 'var(--fg3)', fontSize: 13 }}>Selecione algo para ver a etiqueta.</div>;
   // Mesma proporção do rolo real: a largura da prévia acompanha o formato (rolo alto fica estreito) em vez de esticar.
   const Wtot = cols * modelo.largura_mm + (cols - 1) * (cols > 1 ? Number(espaco) || 0 : 0);
@@ -406,6 +406,16 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   }, [tipo, primeiraRef, usarDv, selItem, achados, piSel, recSel, recQtd, recNf, pedSel, sepN, sepDe, sepPor, sepAguarda, nfSel, expN, expIni, palCod, obraTag, tagSel, opSel, opSerie, chiPed, chiSel, avQtd, avMotivo]);
 
   const copiasValidas = Math.max(1, Math.min(50, Math.floor(Number(copias) || 1)));
+  // Prévia com várias colunas: cada coluna mostra a PRÓXIMA etiqueta da fila (a impressão também preenche as colunas em sequência),
+  // não a mesma etiqueta repetida.
+  const listaPrevia = (() => {
+    try {
+      if (!nSel || geo.colunas < 2) return null;
+      const out = [];
+      for (const l of linhasParaImprimir()) for (let i = 0; i < copiasValidas && out.length < geo.colunas; i++) out.push(l.dados);
+      return out.length ? out : null;
+    } catch (e) { return null; }
+  })();
   const totalEtiquetas = nSel * copiasValidas;
   const disparar = () => imprimir({ tipo, modeloId: modelo.id, itens: linhasParaImprimir().map((l) => ({ ...l, copias: copiasValidas })), opcoes: { dv: usarDv } });
 
@@ -714,7 +724,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
               </select>
             </label>
           ) : null}
-          <EtqPreview modelo={modeloRolo} dados={dadosPrevia} colunas={geo.colunas} espaco={geo.espaco} nota={notaAjuste} girar={girarSentido}/>
+          <EtqPreview modelo={modeloRolo} dados={dadosPrevia} lista={listaPrevia} colunas={geo.colunas} espaco={geo.espaco} nota={notaAjuste} girar={girarSentido}/>
           <div style={{ display: 'flex', gap: 10, alignItems: 'center', marginTop: 14, flexWrap: 'wrap' }}>
             <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center' }}>Cópias de cada
               <input className="input" type="number" min="1" max="50" value={copias} onChange={(e) => setCopias(e.target.value)} style={{ width: 70 }}/>
