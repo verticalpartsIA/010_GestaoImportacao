@@ -1014,9 +1014,31 @@ function EtiquetasPage() {
   const [cfg, setCfgEstado] = React.useState(() => EI.lerEscolha());
   const [ocupado, setOcupado] = React.useState(false);
   const [versao, setVersao] = React.useState(0);
+  // Configuração do rolo lembrada por tipo de etiqueta (por computador). Mudou o rolo na aba Gerar → grava para o tipo que está aberto;
+  // abriu outro tipo que já tem configuração salva → ela volta sozinha (a impressora e o perfil não mudam).
+  const [segTipoUrl] = window.useRotaItem('etiquetas', 'gerar');
+  const tipoGerar = aba === 'gerar' ? (ETQ_TIPO_SLUG[segTipoUrl] || 'ENDERECO') : null;
+  const tipoRef = React.useRef(null);
+  tipoRef.current = tipoGerar;
+  const [salvos, setSalvos] = React.useState(() => EI.lerPorTipo());
   const setCfg = React.useCallback((v) => {
-    setCfgEstado((atual) => { const novo = typeof v === 'function' ? v(atual) : v; if (novo) EI.salvarEscolha(novo); return novo; });
+    setCfgEstado((atual) => {
+      const novo = typeof v === 'function' ? v(atual) : v;
+      if (novo) {
+        EI.salvarEscolha(novo);
+        const antes = JSON.stringify(EI.camposRolo(atual)), depois = JSON.stringify(EI.camposRolo(novo));
+        if (tipoRef.current && antes !== depois) { EI.gravarPorTipo(tipoRef.current, novo); setTimeout(() => setSalvos(EI.lerPorTipo()), 0); }
+      }
+      return novo;
+    });
   }, []);
+  React.useEffect(() => {
+    if (!tipoGerar) return;
+    const salvo = EI.lerPorTipo()[tipoGerar];
+    if (!salvo || !Object.keys(salvo).length) return;
+    setCfgEstado((atual) => { const novo = { ...(atual || {}), ...salvo }; EI.salvarEscolha(novo); return novo; });
+  }, [tipoGerar]);
+  const esquecerTipo = () => { EI.esquecerPorTipo(tipoGerar); setSalvos(EI.lerPorTipo()); etqToast('Configuração deste tipo esquecida (o rolo atual continua até você mudar).'); };
 
   React.useEffect(() => {
     let vivo = true;
@@ -1113,6 +1135,13 @@ function EtiquetasPage() {
         </div>
       </div>
       <EtqPainelImpressora cfg={cfg} setCfg={setCfg} podeImprimir={caps.imprimir} aoTestar={testar} ocupado={ocupado}/>
+      {tipoGerar ? (
+        <div style={{ fontSize: 12, color: 'var(--fg3)', margin: '-6px 0 12px' }}>
+          {salvos[tipoGerar] && Object.keys(salvos[tipoGerar]).length
+            ? <>💾 Rolo e ajuste de posição lembrados para <b>{(ETQ_TIPOS.find((t) => t.id === tipoGerar) || {}).nome}</b> neste computador — ao mudar acima, a configuração deste tipo é atualizada. <button type="button" className="btn btn--ghost btn--sm" onClick={esquecerTipo}>Esquecer</button></>
+            : <>Ao ajustar o rolo ou a posição, a configuração fica salva para <b>{(ETQ_TIPOS.find((t) => t.id === tipoGerar) || {}).nome}</b> neste computador.</>}
+        </div>
+      ) : null}
       <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
         {abas.map(([id, nome]) => <button key={id} className={'btn btn--sm' + (aba === id ? ' btn--primary' : '')} onClick={() => setAba(id)}>{nome}</button>)}
       </div>
