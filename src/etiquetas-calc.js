@@ -836,21 +836,63 @@
       paginasSvg.map((s) => `<div class="pg">${s}</div>`).join('') + '</body></html>';
   }
 
-  /* Confere um endereço digitado à mão (regra do galpão, a mesma do app de estoque). Só vale para valor NOVO:
-     se o texto é igual ao que já estava gravado (endereço antigo, ex.: "G13"), passa sem mexer — nunca apagamos dado existente.
-     Devolve { ok, codigo, antigo, msg }; codigo = forma canônica (R2A4) ou null quando vazio. */
+  /* ---------- Vários endereços por produto ----------
+     Um produto pode ocupar mais de um porta-palete ("R2I8 / R2H8") e/ou caixas bin nas prateleiras do MEZANINO
+     (letra B–I + número 1–30, ex.: "H23 / H24"). O texto é o dado que o banco guarda; estoque_produto_enderecos é derivado dele
+     (mesmas regras do estoque_enderecos_parse). Separadores: "/", "," e ";". */
+  const PRATELEIRA_RE = /^([B-I])(0?[1-9]|[12][0-9]|30)$/;
+  function normalizarPrateleira(token) {
+    const m = PRATELEIRA_RE.exec(normalizarEndereco(token));
+    return m ? m[1] + m[2].padStart(2, '0') : null;
+  }
+  // tipo de UM endereço: 'porta_palete' | 'expedicao' | 'prateleira' | 'legado' (texto antigo que não bate com o galpão)
+  function tipoEndereco(token) {
+    const p = parseEndereco(token);
+    if (p) return p.tipo === 'expedicao' ? 'expedicao' : 'porta_palete';
+    return normalizarPrateleira(token) ? 'prateleira' : 'legado';
+  }
+  // "R2I8 / R2H8 / h9" → [{ codigo:'R2I8', tipo:'porta_palete' }, { codigo:'R2H8', ... }, { codigo:'H09', tipo:'prateleira' }] (sem repetidos)
+  function listaEnderecos(texto) {
+    const vistos = new Set(), out = [];
+    for (const bruto of String(texto == null ? '' : texto).split(/[\/,;]+/)) {
+      const norm = normalizarEndereco(bruto);
+      if (!norm) continue;
+      const tipo = tipoEndereco(norm);
+      const codigo = tipo === 'porta_palete' ? parseEndereco(norm).codigo : tipo === 'prateleira' ? normalizarPrateleira(norm) : norm;
+      if (vistos.has(codigo)) continue;
+      vistos.add(codigo); out.push({ codigo, tipo });
+    }
+    return out;
+  }
+  const ROTULO_TIPO = { porta_palete: 'Porta-palete', expedicao: 'Expedição', prateleira: 'Mezanino · Prateleira', legado: 'Endereço antigo' };
+  function rotuloEndereco(token) {
+    const t = tipoEndereco(token);
+    if (t === 'porta_palete') return textoEndereco(token);
+    if (t === 'prateleira') return `Mezanino · Prateleira ${normalizarPrateleira(token)}`;
+    return ROTULO_TIPO[t];
+  }
+
+  /* Confere o endereço digitado à mão (regra do galpão, a mesma do app de estoque): um ou VÁRIOS endereços separados por "/".
+     Cada um precisa ser porta-palete que existe (R2A4), EXP ou prateleira do mezanino (G23). Só vale para valor NOVO:
+     um pedaço igual a um que já estava gravado (endereço antigo, ex.: "R01 05") passa sem mexer — nunca apagamos dado existente.
+     Devolve { ok, codigo, antigo, msg }; codigo = forma canônica ("R2I8 / R2H8 / H23") ou null quando vazio. */
   function validarEnderecoNovo(texto, anterior) {
     const bruto = String(texto == null ? '' : texto).trim();
     if (!bruto) return { ok: true, codigo: null, antigo: false, msg: '' };
-    const p = parseEndereco(bruto);
-    if (p) return { ok: true, codigo: p.codigo, antigo: false, msg: '' };
-    if (anterior != null && normalizarEndereco(bruto) === normalizarEndereco(anterior)) return { ok: true, codigo: bruto, antigo: true, msg: '' };
-    return { ok: false, codigo: null, antigo: false, msg: `Endereço "${bruto}" não existe no galpão. Use o formato R<rua><vão><nível>, ex.: R2A4 (ruas 1–4, vãos A–J, níveis 1–8) ou EXP.` };
+    const antes = new Set(listaEnderecos(anterior).map((e) => e.codigo));
+    const itens = listaEnderecos(bruto);
+    const ruins = itens.filter((e) => e.tipo === 'legado' && !antes.has(e.codigo));
+    if (ruins.length) {
+      return { ok: false, codigo: null, antigo: false, msg: `Endereço "${ruins[0].codigo}" não existe no galpão. Use porta-palete R<rua><vão><nível>, ex.: R2A4 (ruas 1–4, vãos A–J, níveis 1–8), EXP, ou prateleira do mezanino Letra-Nº, ex.: G23 (B–I, 1–30). Para vários, separe com "/".` };
+    }
+    const antigo = itens.some((e) => e.tipo === 'legado');
+    return { ok: true, codigo: antigo && itens.length === 1 ? bruto : itens.map((e) => e.codigo).join(' / '), antigo, msg: '' };
   }
 
   window.EtiquetasCalc = {
     DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo, registrarModelos, modelosDaEmpresa, validarModelo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
+    tipoEndereco, listaEnderecos, normalizarPrateleira, rotuloEndereco,
     dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, renderSVG, renderSVGLinha, htmlImpressao,
     ROLO_LIM, geometriaRolo, adaptarModelo,
   };
