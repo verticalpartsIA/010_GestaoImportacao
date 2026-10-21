@@ -801,7 +801,12 @@ function PropostaEditor({ setRoute, subsel }) {
   const [herdando, setHerdando] = React.useState(false);
   const [heranca, setHeranca] = React.useState(null);
 
-  const herdar = React.useCallback(async () => {
+  const herdar = React.useCallback(async (opts) => {
+    /* `atualizar` só vem do CLIQUE no botão (nunca da herança automática ao abrir):
+       a Precificação foi recalculada depois da 1ª herança e o merge só preenche
+       campo vazio, então o preço novo nunca entrava ("clico em Herdar e o valor
+       não muda"). No clique explícito os VALORES passam a seguir a Precificação. */
+    const atualizar = !!(opts && opts.atualizar === true);
     const num = String(data.numeroCotacao || '').trim();
     if (!num) return;
     if (!window.PropostaHeranca) {
@@ -828,6 +833,26 @@ function PropostaEditor({ setRoute, subsel }) {
           const bloco = window.PropostaHeranca.montarBlocoEscadaEsteira(r.fontes, eq);
           if (bloco) prefill[eq] = bloco;
         }
+        /* Atualiza os preços: troca itens/parcelas/forma de pagamento/opção 90d pelos da
+           Precificação atual. Só pede confirmação se algo vai mudar de verdade. */
+        let valoresNovos = null;
+        if (atualizar && eq === 'elevador' && prefill.elevador && prefill.elevador.valores
+            && Array.isArray(prefill.elevador.valores.itens) && prefill.elevador.valores.itens.length) {
+          const v = prefill.elevador.valores;
+          const atuais = (data.elevador && data.elevador.valores) || {};
+          const mudou = JSON.stringify(atuais.itens || []) !== JSON.stringify(v.itens)
+            || JSON.stringify(atuais.parcelas || []) !== JSON.stringify(v.parcelas || []);
+          if (!mudou) {
+            window.toast?.('Os valores já estão iguais aos da Precificação.', 'info');
+          } else if (confirm('A Precificação desta cotação tem valores diferentes dos da proposta.\n\n'
+              + 'Atualizar equipamentos, valores e parcelas com os da Precificação?\n'
+              + '(Descontos e parcelas ajustados na mão serão substituídos.)')) {
+            valoresNovos = {
+              itens: v.itens, parcelas: v.parcelas, formaTipo: v.formaTipo,
+              qtdParcelas: v.qtdParcelas, forma: v.forma, opcao90: v.opcao90 || null, escolhaEntrega: null,
+            };
+          }
+        }
         setData((d) => {
           /* A lista padrão de escada/esteira nasce com 1 unidade em branco, e o
              merge só preenche lista vazia: sem esvaziá-la a herança não entrava. */
@@ -845,7 +870,11 @@ function PropostaEditor({ setRoute, subsel }) {
             const { perfis: _p, ...restoElev } = pf.elevador;
             pf = { ...pf, elevador: restoElev };
           }
-          return deepMergeHeranca(base, pf);
+          const merged = deepMergeHeranca(base, pf);
+          if (valoresNovos) {
+            merged.elevador = { ...merged.elevador, valores: { ...(merged.elevador.valores || {}), ...valoresNovos } };
+          }
+          return merged;
         });
         setHeranca({ tipo: 'ok', texto: 'Herdado de: ' + window.PropostaHeranca.resumoFontes(r.fontes) });
         window.toast?.(`✓ Dados herdados da cotação ${num}`, 'success');
@@ -855,7 +884,7 @@ function PropostaEditor({ setRoute, subsel }) {
     } finally {
       setHerdando(false);
     }
-  }, [data.numeroCotacao, eq]);
+  }, [data.numeroCotacao, data.elevador, eq]);
 
   /* Auto-herda uma vez ao abrir — pedido do usuário 19/08: "conforme os
      inputs forem acontecendo a proposta vai se auto preenchendo". Uma
