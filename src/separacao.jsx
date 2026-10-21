@@ -309,6 +309,11 @@ function SepPedidosAba({ caps, irTv }) {
     sepCopiar(sepUrl(l.token));
   }
   const alternar = (id) => setExpandidos((s) => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; });
+  // Ao abrir um pedido, traz a linha para a vista (com vários abertos o último ficava fora do alcance).
+  const abrirLinha = (ev, id) => {
+    const tr = ev.currentTarget; const abrindo = !expandidos.has(id); alternar(id);
+    if (abrindo) setTimeout(() => { try { tr.scrollIntoView({ block: 'nearest', behavior: 'smooth' }); } catch (e) {} }, 60);
+  };
 
   if (aberto) return <SepDetalhe codigo={aberto} caps={caps} voltar={() => setAberto('')} onMudou={carregar} />;
 
@@ -350,7 +355,7 @@ function SepPedidosAba({ caps, irTv }) {
                 const aberta = expandidos.has(p.codigo_pedido);
                 return (
                   <React.Fragment key={p.codigo_pedido}>
-                    <tr style={{ cursor: 'pointer' }} onClick={() => alternar(p.codigo_pedido)}>
+                    <tr style={{ cursor: 'pointer' }} onClick={(ev) => abrirLinha(ev, p.codigo_pedido)}>
                       <td>{aberta ? '▾' : '▸'}</td>
                       <td><b>{p.numero_pedido}</b> <a href="#" title="Abrir em página própria (link direto)" onClick={(ev) => { ev.preventDefault(); ev.stopPropagation(); setAberto(String(p.codigo_pedido)); }}>abrir</a></td>
                       <td>{p.cliente || '—'}</td>
@@ -373,6 +378,7 @@ function SepPedidosAba({ caps, irTv }) {
           </table>
         </div>
       </Card>
+      <div style={{ height: 160 }} />
     </div>
   );
 }
