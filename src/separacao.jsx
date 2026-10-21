@@ -283,6 +283,7 @@ const SEP_FILTRO_POR_SLUG = Object.fromEntries(Object.entries(SEP_SLUG_POR_FILTR
 const lastFiltro = { current: 'abertos' };
 
 function SepPedidosAba({ caps, irTv }) {
+  const ord = window.useOrdenacao();
   const [dados, setDados] = React.useState(null);
   const [erro, setErro] = React.useState(null);
   const [busca, setBusca] = React.useState('');
@@ -313,12 +314,13 @@ function SepPedidosAba({ caps, irTv }) {
 
   const sla = (dados && dados.sla_min) || 240;
   const todos = (dados && dados.pedidos) || [];
-  const lista = todos.filter((p) => {
+  const listaBase = todos.filter((p) => {
     if (filtro === 'abertos' && p.status === 'separado') return false;
     if (filtro !== 'abertos' && filtro !== 'todos' && p.status !== filtro) return false;
     const b = busca.trim().toLowerCase();
     return !b || String(p.numero_pedido).toLowerCase().includes(b) || String(p.cliente || '').toLowerCase().includes(b);
   });
+  const lista = ord.aplicar(listaBase, { pedido: (p) => Number(p.numero_pedido), cliente: (p) => p.cliente, previsao: (p) => p.data_previsao, itens: (p) => (p.itens ? p.separados / p.itens : 0), situacao: (p) => (SEP_STATUS[p.status] || SEP_STATUS.livre)[0], com: (p) => sepNome(p.pego_por || p.separado_por), sla: (p) => p.decorrido_min });
   const cont = (st) => todos.filter((p) => p.status === st).length;
   const atrasados = todos.filter((p) => (p.status === 'livre' || p.status === 'em_separacao') && p.decorrido_min >= sla).length;
   const filtros = [['abertos', 'A separar'], ['livre', `Aguardando (${cont('livre')})`], ['em_separacao', `Em separação (${cont('em_separacao')})`], ['parcial', `Parcial — aguardando (${cont('parcial')})`], ['separado', `Separados hoje (${cont('separado')})`], ['todos', 'Todos']];
@@ -338,9 +340,9 @@ function SepPedidosAba({ caps, irTv }) {
       </div>
       {erro && <div style={{ background: '#fdecec', border: '1px solid #e49a9a', padding: 12, borderRadius: 10, marginBottom: 12 }}>{erro}</div>}
       <Card title="Pedidos a separar" sub={`Pedidos do Omie na etapa "Separar estoque" (atualizados a cada 30 min) e os separados hoje. SLA: ${sepMin(sla)} úteis desde a entrada no hub (para de contar quando separa ou fica parcial). Clique na seta para ver os itens.`}>
-        <div className="table-wrap">
+        <div className="table-wrap pcp-rolagem">
           <table className="t pcp-grid">
-            <thead><tr><th style={{ width: 28 }}></th><th>Pedido</th><th>Cliente</th><th>Previsão</th><th>Itens separados</th><th>Situação</th><th>Com</th><th>SLA</th></tr></thead>
+            <thead><tr><th style={{ width: 28 }}></th>{ord.th('pedido', 'Pedido')}{ord.th('cliente', 'Cliente')}{ord.th('previsao', 'Previsão')}{ord.th('itens', 'Itens separados')}{ord.th('situacao', 'Situação')}{ord.th('com', 'Com')}{ord.th('sla', 'SLA')}</tr></thead>
             <tbody>
               {lista.map((p) => {
                 const [rot, vari] = SEP_STATUS[p.status] || SEP_STATUS.livre;
