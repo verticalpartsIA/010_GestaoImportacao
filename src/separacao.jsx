@@ -384,7 +384,7 @@ function SepPedidosAba({ caps, irTv }) {
 }
 
 function SeparacaoPage() {
-  const [aba, setAba] = window.useRouteTab('separacao', 'pedidos', ['pedidos', 'tv'], false, true);
+  const [aba, setAba] = window.useRouteTab('separacao', 'pedidos', ['pedidos', 'tv', 'tipos'], false, true);
   const [caps, setCaps] = React.useState({ carregado: false, ver: false, editar: false, saida: false });
   React.useEffect(() => {
     let vivo = true;
@@ -411,9 +411,11 @@ function SeparacaoPage() {
       <div style={{ display: 'flex', gap: 8, marginBottom: 12, flexWrap: 'wrap' }}>
         <button className={'btn btn--sm' + (aba === 'pedidos' ? ' btn--primary' : '')} onClick={() => setAba('pedidos')}>Pedidos a separar</button>
         <button className={'btn btn--sm' + (aba === 'tv' ? ' btn--primary' : '')} onClick={() => setAba('tv')}>Painel TV</button>
+        <button className={'btn btn--sm' + (aba === 'tipos' ? ' btn--primary' : '')} onClick={() => setAba('tipos')}>Tipos de item</button>
       </div>
       {caps.carregado && aba === 'pedidos' && <SepPedidosAba caps={caps} irTv={() => setAba('tv')} />}
       {caps.carregado && aba === 'tv' && <SeparacaoTvAba caps={caps} />}
+      {caps.carregado && aba === 'tipos' && <SeparacaoTiposAba caps={caps} />}
     </div>
   );
 }
