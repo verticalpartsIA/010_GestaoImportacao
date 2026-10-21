@@ -249,12 +249,12 @@
       elementos: [
         { tipo: 'caixa', x: 0.5, y: 0.5, w: 99, h: 49, esp: 0.4 },
         { tipo: 'qr', campo: '{qr}', x: 4, y: 4, w: 24 },
-        { tipo: 'imagem', src: 'icone', x: 88, y: 4, w: 8, h: 8 },
         { tipo: 'texto', campo: '{codigo}', x: 32, y: 4, w: 54, h: 9 },
         { tipo: 'texto', campo: '{descricao}', x: 32, y: 14.5, w: 64, h: 4.6, linhas: 2 },
         { tipo: 'texto', campo: '{linha_unidade}', x: 32, y: 26.5, w: 64, h: 4.2 },
         { tipo: 'texto', campo: '{endereco_txt}', x: 32, y: 31.5, w: 64, h: 3.8 },
         { tipo: 'code128', campo: '{barras}', x: 4, y: 37, w: 92, h: 9 },
+        { tipo: 'imagem', src: 'icone', x: 88, y: 4, w: 8, h: 8 },
       ],
     },
     {
