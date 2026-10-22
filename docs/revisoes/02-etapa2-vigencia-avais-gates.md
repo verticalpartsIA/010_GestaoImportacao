@@ -39,7 +39,7 @@ Novo comportamento quando a revisão R aprovada tem uma aprovada anterior P na f
 ## 5. Pedido de revisão, SLA e avisos
 - Solicitação nova (qualquer trilha, inclusive depois de aprovada) gera: evento `PROPOSTA_REVISAO_SOLICITADA` com `detalhe.revisao`, `detalhe.trilha`; alerta **individual** ao vendedor e ao Gestor Comercial, e à liderança da trilha (financeira → Financeiro, técnica → Engenharia, jurídica → Jurídico). Via trigger em `proposta_solicitacoes_revisao` que **só insere em `alertas`** (id determinístico, falha engolida — mesmo padrão do alerta do Inbox).
 - Depois de aprovada: evento próprio `CLIENTE_PEDIU_REVISAO_POS_APROVACAO` que **não reabre etapas já encerradas** do motor; cria só o nó "Analisar pedido de revisão".
-- **SLA interno para aceitar/recusar/pedir informação: 8 horas úteis** — escolha minha, editável (`SLA_HORAS`), o responsável não definiu.
+- **SLA interno para aceitar/recusar/pedir informação: 12 horas úteis** (definido pelo responsável em 22/10), editável (`SLA_HORAS`).
 - `PROPOSTA_REENVIADA` fecha o nó quando a revisão que atende a solicitação é enviada.
 
 ## 6. Diff categorizado (módulo puro e testável `proposta-revisoes-calc.js`)
@@ -81,3 +81,6 @@ Cada passo atrás da flag, testado em transação desfeita; **autorização expl
 1. Mudança **técnica** numa revisão aprovada invalida o Projeto de Instalação já assinado (reassinatura) ou só avisa a Engenharia?
 2. Gestor Comercial aprova **toda** revisão antes de enviar (proposto) ou só as que mudam preço/escopo?
 3. SLA de 8 h úteis para analisar o pedido do cliente serve?
+
+## 13. Atualização 22/10 (respostas do responsável)
+Item 1 (mudança técnica): só revisão **de Projeto** reabre o Aval Engenharia; ver `03-`. Item 2: Gestor aprova toda revisão. Item 3: SLA de 12 h úteis.
