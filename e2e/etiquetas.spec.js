@@ -225,7 +225,7 @@ test.describe('Etiquetas', () => {
     await expect(page.locator('tbody tr').first()).toContainText('1500');
     await page.locator('tr', { hasText: '1212' }).click();
     await expect(page.getByText('POW1', { exact: true })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /Imprimir 24 etiquetas/ })).toBeEnabled();
     // prévia com 2 colunas: cada coluna mostra uma etiqueta DIFERENTE (QC e OS), não a mesma repetida
     await page.getByLabel('Largura da etiqueta (mm)', { exact: true }).fill('50');
     await page.getByLabel('Comprimento da etiqueta (mm)', { exact: true }).fill('30');
@@ -235,15 +235,15 @@ test.describe('Etiquetas', () => {
     await expect(previa2).toContainText('OS | 1212');
     await page.locator('tr', { hasText: '1070' }).click();
     await expect(page.getByText('POW1', { exact: true })).toBeVisible();   // #1057: todos os chicotes ficam sempre visíveis; sem casa de máquinas o POW1 só não vem marcado (22 etiquetas, abaixo)
-    await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
     // quadro vindo da Evolução da Fabricação (OP sem cadastro de aplicação): POW1 só se marcar casa de máquinas
     await page.locator('tr', { hasText: '1500' }).click();
     await expect(page.getByText('Use Cópias = 2', { exact: false })).toBeVisible();
-    await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
-    await page.getByLabel(/tem casa de máquinas/).check();
     await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
+    await page.getByLabel(/tem casa de máquinas/).check();
+    await expect(page.getByRole('button', { name: /Imprimir 24 etiquetas/ })).toBeEnabled();
     await page.getByLabel(/tem porta oposta/).check();
-    await expect(page.getByRole('button', { name: /Imprimir 27 etiquetas/ })).toBeEnabled();   // + GS2, EDP2, DC2, DEN2
+    await expect(page.getByRole('button', { name: /Imprimir 28 etiquetas/ })).toBeEnabled();   // + GS2, EDP2, DC2, DEN2 (+ ETOK fixo, #1060, já contado)
   });
 
   test('Chicote avulso: pedido e cliente digitados à mão e chicote acrescentado manualmente', async ({ page }) => {
@@ -253,10 +253,10 @@ test.describe('Etiquetas', () => {
     await expect(page.getByRole('button', { name: /Imprimir/ })).toBeDisabled();   // sem número de pedido não imprime
     await page.getByLabel('Nº do pedido').fill('9999');
     await page.getByLabel('Cliente', { exact: true }).fill('CLIENTE AVULSO');
-    await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
     await page.getByPlaceholder('Código (ex. DZ2)').fill('xy9');
     await page.getByRole('button', { name: 'Acrescentar', exact: true }).click();
-    await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
+    await expect(page.getByRole('button', { name: /Imprimir 24 etiquetas/ })).toBeEnabled();
     await expect(page.getByText('QC | 9999').first()).toBeVisible();
   });
 
