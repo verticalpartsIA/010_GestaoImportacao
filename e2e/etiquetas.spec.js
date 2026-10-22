@@ -239,6 +239,20 @@ test.describe('Etiquetas', () => {
     await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
   });
 
+  test('Chicote avulso: pedido e cliente digitados à mão e chicote acrescentado manualmente', async ({ page }) => {
+    await page.addInitScript(COM_ALCADA);
+    await page.goto('/logistica/etiquetas/gerar/chicote-quadro');
+    await page.getByLabel('Etiqueta avulsa', { exact: false }).check({ timeout: 60_000 });
+    await expect(page.getByRole('button', { name: /Imprimir/ })).toBeDisabled();   // sem número de pedido não imprime
+    await page.getByLabel('Nº do pedido').fill('9999');
+    await page.getByLabel('Cliente', { exact: true }).fill('CLIENTE AVULSO');
+    await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
+    await page.getByPlaceholder('Código (ex. DZ2)').fill('xy9');
+    await page.getByRole('button', { name: 'Acrescentar', exact: true }).click();
+    await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
+    await expect(page.getByText('QC | 9999').first()).toBeVisible();
+  });
+
   test('o rolo e o ajuste ficam salvos por tipo de etiqueta e voltam sozinhos ao trocar de tipo', async ({ page }) => {
     await page.addInitScript(COM_ALCADA);
     await page.goto('/logistica/etiquetas/gerar/chicote-quadro');
