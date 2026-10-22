@@ -218,6 +218,11 @@ test.describe('Etiquetas', () => {
     await page.goto('/logistica/etiquetas/gerar');
     await page.getByRole('button', { name: 'Chicote do quadro', exact: true }).click({ timeout: 60_000 });
     await expect(page.getByRole('button', { name: /Imprimir/ })).toBeDisabled();   // sem pedido não há etiqueta
+    // setas do título: maior → menor / menor → maior
+    await page.getByRole('button', { name: 'Pedido: menor para maior' }).click();
+    await expect(page.locator('tbody tr').first()).toContainText('1070');
+    await page.getByRole('button', { name: 'Pedido: maior para menor' }).click();
+    await expect(page.locator('tbody tr').first()).toContainText('1500');
     await page.locator('tr', { hasText: '1212' }).click();
     await expect(page.getByText('POW1', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();

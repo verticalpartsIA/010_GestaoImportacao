@@ -378,6 +378,16 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   /* Chicote do quadro */
   const [qChi, setQChi] = React.useState('');
   const [pedsChi, setPedsChi] = React.useState({ pedidos: [], erro: null });
+  // Ordem da lista de pedidos: clicar nas setas do título da coluna (▲ menor→maior, ▼ maior→menor).
+  const [chiOrd, setChiOrd] = React.useState({ col: '', dir: 1 });
+  const chiValor = (p, col) => col === 'ops' ? (p.ops || []).length : col === 'obra' ? (C.chicoteTipoObra ? C.chicoteTipoObra(p.novo_ou_modernizacao) : '') : col === 'aplic' ? (p.tipo_aplicacao || '') : String(p[col === 'pedido' ? 'numero_pedido' : 'cliente'] == null ? '' : p[col === 'pedido' ? 'numero_pedido' : 'cliente']);
+  const chiPedidosOrd = chiOrd.col ? pedsChi.pedidos.slice().sort((a, b) => { const x = chiValor(a, chiOrd.col), y = chiValor(b, chiOrd.col); return (typeof x === 'number' ? x - y : String(x).localeCompare(String(y), 'pt-BR', { numeric: true, sensitivity: 'base' })) * chiOrd.dir; }) : pedsChi.pedidos;
+  const chiTh = (col, rotulo) => (
+    <th>{rotulo} <span style={{ whiteSpace: 'nowrap' }}>
+      <button type="button" aria-label={`${rotulo}: menor para maior`} title="Menor → maior" onClick={() => setChiOrd({ col, dir: 1 })} style={{ border: 0, background: 'none', cursor: 'pointer', padding: '0 1px', fontSize: 10, color: chiOrd.col === col && chiOrd.dir === 1 ? 'var(--fg1, #000)' : 'var(--fg3)' }}>▲</button>
+      <button type="button" aria-label={`${rotulo}: maior para menor`} title="Maior → menor" onClick={() => setChiOrd({ col, dir: -1 })} style={{ border: 0, background: 'none', cursor: 'pointer', padding: '0 1px', fontSize: 10, color: chiOrd.col === col && chiOrd.dir === -1 ? 'var(--fg1, #000)' : 'var(--fg3)' }}>▼</button>
+    </span></th>
+  );
   const [chiPedSel, setChiPed] = React.useState(null);
   // Pedido avulso: número e cliente digitados à mão (não precisa existir no sistema).
   const [chiManual, setChiManual] = React.useState({ ativo: false, numero: '', cliente: '', obra: '' });
@@ -578,9 +588,9 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
               {pedsChi.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>Não consegui buscar: {pedsChi.erro}</div> : null}
               <div className="card table-wrap" style={{ maxHeight: 220, overflow: 'auto', marginBottom: 10 }}>
                 <table className="t pcp-grid">
-                  <thead><tr><th>Pedido</th><th>Obra</th><th>Aplicação</th><th>Cliente</th><th>Quadros (OP)</th></tr></thead>
+                  <thead><tr>{chiTh('pedido', 'Pedido')}{chiTh('obra', 'Obra')}{chiTh('aplic', 'Aplicação')}{chiTh('cliente', 'Cliente')}{chiTh('ops', 'Quadros (OP)')}</tr></thead>
                   <tbody>
-                    {pedsChi.pedidos.map((p) => (
+                    {chiPedidosOrd.map((p) => (
                       <tr key={p.id} onClick={() => escolherPedidoChi(p)} style={{ cursor: 'pointer', background: chiPed && chiPed.id === p.id ? 'var(--vp-yellow-soft, #fff6c2)' : undefined }}>
                         <td><b style={{ fontWeight: 600 }}>{p.numero_pedido}</b></td><td>{C.chicoteTipoObra ? C.chicoteTipoObra(p.novo_ou_modernizacao) || '—' : (p.novo_ou_modernizacao || '—')}</td><td>{p.tipo_aplicacao === 'MR' ? 'Com casa de máquinas' : p.tipo_aplicacao === 'MRL' ? 'Sem casa de máquinas' : '—'}</td><td>{p.cliente || '—'}</td><td>{p.ops && p.ops.length ? `${p.ops.length} · ${p.ops.slice(0, 3).join(', ')}${p.ops.length > 3 ? '…' : ''}` : '—'}</td>
                       </tr>
