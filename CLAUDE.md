@@ -1829,3 +1829,11 @@ Pedido do usuário: ao desmarcar uma caixa na aba Gerar › Chicote do quadro, o
 - **Regra nova:** a lista mostra **sempre todos** os `C.CHICOTES` (+ os acrescentados à mão, guardados em `localStorage vp_etiquetas_chicotes_extra`); marcar/desmarcar só decide o que imprime. "Casa de máquinas" e "porta oposta" **apenas pré-marcam** (`mudarCasaChi`/`mudarPortaChi`, e a seleção inicial em `escolherPedidoChi`, continuam usando `chicoteDisponivel`). Não volte a filtrar a lista por disponibilidade.
 - A lista de **cabos do pedido (PCP)** já mostrava todos; desmarcar só esconde o campo "quantas etiquetas". Não mexido.
 - `etiquetas.jsx` v+1 no `index.html`. Validado por Babel, `npm test` (722) e cache-bust; sem clique real no navegador.
+
+## Etiquetas › Chicote do quadro — ETOK fixo (22/10/2026, PR #1060, squash `4d007dc`)
+
+Pedido do usuário: o chicote **ETOK — Em Produção**, que só aparecia por ter sido acrescentado à mão (guardado no `localStorage` de um computador, com "×"), precisa aparecer em **todo quadro**; só se desmarca para não imprimir.
+- Entrou em `C.CHICOTES` (`etiquetas-calc.js` v25) sem `soCasaMaquinas`/`soPortaOposta`, então vem marcado em qualquer pedido. Lista agora tem **28** chicotes (teste ajustado). **Não volte a tratá-lo como "extra"** (sem × e sem depender do navegador).
+- Extras antigos do `localStorage` com código já presente em `C.CHICOTES` são descartados na leitura (`etiquetas.jsx` v28) — sem duplicata.
+- Chicote novo que deva ser fixo = acrescentar em `C.CHICOTES` e subir o teste de contagem; "Acrescentar chicote" continua só para casos por computador.
+- Validado por `npm test` (722) e cache-bust; sem clique real no navegador.
