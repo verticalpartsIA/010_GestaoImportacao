@@ -515,7 +515,7 @@
         avulsa = await criarDecisao({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo_diego', referenciaTabela: 'contratos_instalador', referenciaId: contratoId, contexto: { ...contexto, avulso: true } });
       }
       if (avulsa.status === 'reprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${avulsa.decidido_por || ''}): ${avulsa.motivo || 'sem motivo informado'}.` };
-      if (avulsa.status !== 'aprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador (contrato avulso, sem Proposta). O pedido de aval foi enviado ao Diego por WhatsApp (ele responde SIM ou NÃO).' };
+      if (avulsa.status !== 'aprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reenvioPendente: !!(avulsa.contexto && avulsa.contexto.reenvioPendente), motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador (contrato avulso, sem Proposta). O pedido de aval foi enviado ao Diego por WhatsApp (ele responde SIM ou NÃO).' };
       return { ok: true };
     }
     let decisoes = await listarPorCotacao(numeroCotacao);
@@ -525,7 +525,7 @@
     }
     decisao = await garantirAtiva(decisao);
     if (decisao.status === 'reprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
-    if (decisao.status !== 'aprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador. O pedido de aval foi enviado ao Diego por WhatsApp (ele responde SIM ou NÃO).' };
+    if (decisao.status !== 'aprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reenvioPendente: !!(decisao.contexto && decisao.contexto.reenvioPendente), motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador. O pedido de aval foi enviado ao Diego por WhatsApp (ele responde SIM ou NÃO).' };
     return { ok: true };
   }
 
