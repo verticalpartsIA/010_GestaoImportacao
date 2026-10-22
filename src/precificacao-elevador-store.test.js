@@ -3,8 +3,9 @@ const test = require('node:test');
 const assert = require('node:assert/strict');
 
 global.window = global.window || {};
+require('./master-id-engine.js');
 require('./precificacao-elevador-store.js');
-const { parseContainerNo, classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO } = window.PrecificacaoElevadorStore;
+const { parseContainerNo, classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO, criar } = window.PrecificacaoElevadorStore;
 
 /* Fake mínimo de window.__VP_SB.sb — só o suficiente pra obter()/salvar()
    (select().eq().single() e update().eq()) contra uma "tabela" em memória. */
@@ -368,4 +369,86 @@ test('GRI — herda do cadastro só em linha vazia e entra no aviso de divergên
   assert.equal(manual.gri_rs, 1500, 'nunca sobrescreve valor digitado');
   const div = divergenciasContainerComCadastro([{ tipo_tamanho: "40'HC", quantidade: 1, preco_rs: 36450.4, gri_rs: 1500 }], custos);
   assert.deepEqual(div.map((d) => [d.campo, d.atual, d.cadastro]), [['gri_rs', 1500, 2000]]);
+});
+
+/* ============================================================
+   criar() — cada revisão do fornecedor ganha numero_documento próprio
+   (22/10, achado real: cotação 990 virou revisão B, "VPPC-0990" já
+   existia pra original e o Financeiro não conseguia abrir precificação nova)
+   ============================================================ */
+
+/* Fake de window.__VP_SB.sb cobrindo a cadeia inteira de criar()/montarRascunho()
+   pro caso mais simples (sem unidades/custos — só o que o teste precisa exercitar:
+   numeração). `insercoesQuePodemFalhar` simula colisão de numero_documento (23505)
+   nas primeiras N tentativas de insert em precificacoes_elevador. */
+function makeFakeSbCriar({ revisaoCotacao, insercoesQuePodemFalhar = 0 } = {}) {
+  let tentativasInsert = 0;
+  const inseridos = [];
+  return {
+    from(tabela) {
+      return {
+        select(cols) {
+          return {
+            eq(_col, _val) {
+              const single = async () => {
+                if (tabela === 'formularios_elevador') return { data: { numero_cotacao: 990 }, error: null };
+                if (tabela === 'cotacoes_elevador_fornecedor') {
+                  return { data: { dados_envio: { unidades: [] }, respostas: { itens: [] }, cambio_na_resposta_usd_brl: null, revisao: revisaoCotacao }, error: null };
+                }
+                if (tabela === 'parametros_fiscais_elevador') {
+                  return { data: { mark_up_padrao_pct: 0.405, mark_up_padrao_expresso_pct: 0.381, margem_minima_pct: 0.2, comissao_vendedor_pct: 0, comissao_indicacao_pct: 0 }, error: null };
+                }
+                return { data: null, error: null };
+              };
+              const maybeSingle = async () => {
+                if (tabela === 'cotacoes_elevador_fornecedor' && cols === 'revisao') return { data: { revisao: revisaoCotacao }, error: null };
+                return (await single());
+              };
+              return { single, maybeSingle };
+            },
+          };
+        },
+        insert(obj) {
+          return {
+            select() {
+              return {
+                single: async () => {
+                  if (tabela !== 'precificacoes_elevador') return { data: obj, error: null };
+                  tentativasInsert += 1;
+                  if (tentativasInsert <= insercoesQuePodemFalhar) return { data: null, error: { code: '23505', message: 'duplicate key' } };
+                  inseridos.push(obj);
+                  return { data: { id: 'pz-' + tentativasInsert, ...obj }, error: null };
+                },
+              };
+            },
+          };
+        },
+      };
+    },
+    _inseridos: () => inseridos,
+    _tentativas: () => tentativasInsert,
+  };
+}
+
+test('criar(): com cotação do fornecedor já na revisão B, nasce VPPC-0990-B (não colide com a original)', async () => {
+  const fake = makeFakeSbCriar({ revisaoCotacao: 'B' });
+  window.__VP_SB = { sb: fake };
+  const pz = await criar('FORM-1', 'COT-B');
+  assert.equal(pz.numero_documento, 'VPPC-0990-B');
+  assert.equal(fake._tentativas(), 1, 'sem colisão, grava na 1ª tentativa');
+});
+
+test('criar(): colisão real (corrida/caso legado) tenta a próxima letra livre em vez de falhar', async () => {
+  const fake = makeFakeSbCriar({ revisaoCotacao: 'B', insercoesQuePodemFalhar: 1 });
+  window.__VP_SB = { sb: fake };
+  const pz = await criar('FORM-1', 'COT-B');
+  assert.equal(pz.numero_documento, 'VPPC-0990-C', 'colidiu em B, repetiu com a próxima letra (C)');
+  assert.equal(fake._tentativas(), 2);
+});
+
+test('criar(): sem revisão na cotação do fornecedor (original), número sai igual a antes (sem sufixo)', async () => {
+  const fake = makeFakeSbCriar({ revisaoCotacao: null });
+  window.__VP_SB = { sb: fake };
+  const pz = await criar('FORM-1', 'COT-ORIGINAL');
+  assert.equal(pz.numero_documento, 'VPPC-0990');
 });

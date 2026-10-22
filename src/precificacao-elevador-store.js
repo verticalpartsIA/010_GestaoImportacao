@@ -660,17 +660,39 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const rascunho = await montarRascunho(formularioElevadorId, cotacaoFornecedorId);
     delete rascunho._formulario;
-    let numero_documento;
-    if (rascunho.numero_cotacao != null) {
-      numero_documento = window.MasterIdEngine.etapaId('precificacao', rascunho.numero_cotacao);
-    } else {
+
+    if (rascunho.numero_cotacao == null) {
       const { data, error } = await c.rpc('gerar_numero_precificacao_elevador');
       if (error) throw error;
-      numero_documento = data;
+      const { data: pz, error: e2 } = await c.from('precificacoes_elevador').insert({ ...rascunho, numero_documento: data }).select().single();
+      if (e2) throw e2;
+      return pz;
     }
-    const { data, error } = await c.from('precificacoes_elevador').insert({ ...rascunho, numero_documento }).select().single();
-    if (error) throw error;
-    return data;
+
+    /* 22/10 — cada revisão do fornecedor (A, B…) ganha sua PRÓPRIA precificação:
+       reaproveita a mesma letra já atribuída à cotação do fornecedor
+       (cotacoes_elevador_fornecedor.revisao). Sem isso "VPPC-0990" colide
+       (numero_documento é UNIQUE) assim que a 990 original já tem precificação
+       e o fornecedor responde de novo — achado real: a cotação virou revisão B,
+       o Financeiro clicava pra abrir e levava erro, nunca conseguindo reavaliar
+       o preço com os novos valores. O retry (próxima letra livre) é só defesa
+       de corrida/caso legado — na prática já nasce certo na 1ª tentativa. */
+    let revisaoCotacao = null;
+    if (cotacaoFornecedorId) {
+      const { data: cf } = await c.from('cotacoes_elevador_fornecedor').select('revisao').eq('id', cotacaoFornecedorId).maybeSingle();
+      revisaoCotacao = (cf && cf.revisao) || null;
+    }
+    let letra = revisaoCotacao;
+    let ultimoErro = null;
+    for (let tentativa = 0; tentativa < 30; tentativa++) {
+      const numero_documento = window.MasterIdEngine.etapaId('precificacao', rascunho.numero_cotacao, letra);
+      const { data: pz, error } = await c.from('precificacoes_elevador').insert({ ...rascunho, numero_documento }).select().single();
+      if (!error) return pz;
+      ultimoErro = error;
+      if (error.code !== '23505') throw error;   // só repete em duplicidade de numero_documento
+      letra = window.MasterIdEngine.proximaRevisao(letra);
+    }
+    throw ultimoErro || new Error('Não foi possível gerar um número de precificação livre.');
   }
 
   async function obter(id) {
