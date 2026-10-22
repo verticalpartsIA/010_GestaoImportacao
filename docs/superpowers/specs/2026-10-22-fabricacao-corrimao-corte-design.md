@@ -1,6 +1,6 @@
 # Fabricação Corrimão + Fabricação Corte + envio direto da Separação — spec
 
-Data: 2026-10-22 · Status: **SPECIFY + CLARIFY (aguardando respostas do Gelson)** · Nenhum código foi escrito.
+Data: 2026-10-22 · Status: **CLARIFY respondido, PLAN/TASKS/ANALYZE prontos, aguardando OK para IMPLEMENT** · Nenhum código foi escrito.
 Fluxo: Constitution → Specify → Clarify → Plan → Tasks → Analyze → Implement.
 
 ## 0. Constitution (regras permanentes que valem aqui)
@@ -41,20 +41,38 @@ Não existe `CONSTITUTION.md`; a constituição do projeto é o `CLAUDE.md`. As 
 ### 2.1 Respostas já dadas
 - A OP é criada na hora, ao enviar da Separação. Corte também terá tela própria.
 
-### 2.2 Perguntas em aberto (bloqueiam o Plan)
-1. **Etapas do Corrimão** (ordem e peso para o %): quais são? (o quadro tem 6 fixas.)
-2. **Etapas do Corte**: hoje são Separar → Corte → Qualidade; a trilha da tela é essa ou outra? Precisa registrar medida/nº de pedaços?
-3. **Unidade da OP do corrimão**: por corrimão, por emenda ou por metro? (escada = 2 corrimões.) E a quantidade da OP vem da quantidade do item do pedido?
-4. **OP-mãe (conflito real).** "Gerar OPs" cria 1 OP-mãe por pedido e **some o botão** quando ela existe. Se a Separação criar a OP-mãe, o PCP não consegue mais gerar as OPs do quadro desse pedido. Opções: (a) a Separação cria só a OP-filha, **sem mãe** (`pedido_codigo` preenchido; a mãe nasce depois no Gerar OPs e adota as filhas); (b) a Separação cria a mãe e o Gerar OPs passa a **completar** a mãe existente. Qual?
-5. **Quadro na Separação**: só Corte e Corrimão no botão (quadro segue por Pedidos de Quadro)? Recomendado.
-6. **Quem pode enviar**: alçada `pcp.criar` (já existe) ou a de Separação (`estoque.saida`)?
-7. **Anti-duplicata**: item já virou OP (por Gerar OPs ou pela Separação) → bloquear e mostrar o número da OP. Confirma?
-8. **Link público e ocorrências** iguais ao do quadro (token por OP, sem login, "Relatar falta", "Chegou — resolver") para as duas telas?
+### 2.2 Decisões do Gelson (22/10/2026)
+1. **OP-mãe = (a):** a Separação cria só a OP-filha, **sem mãe** (com `pedido_codigo` preenchido). A mãe nasce depois no "Gerar OPs", que **adota** as filhas já existentes.
+2. **Etapas do Corrimão (6, nesta ordem):** Medir · Cortar · Trabalhar as pontas · Aplicar as camadas · Vulcanizar · Dar acabamento final. Pesos iguais por padrão (editáveis no banco).
+3. **Corte registra sobras:** se sobrar, informa quanto sobrou (campo na conclusão da OP).
+4. **Quadro NÃO é destino na Separação** (interpretação adotada; quadro segue por Pedidos de Quadro).
+5. **Unidade da OP do corrimão = por corrimão**, como o quadro é por quadro (quantidade do item = nº de OPs/unidades).
+6. **Quem envia: Magda** (Magda Torres, `magda.torres@verticalparts.com.br`) + administradores, por alçada nova.
+7. **Anti-duplicata:** item que já virou OP é bloqueado, mostrando o número da OP. (Concordo.)
+8. **Link público e ocorrências** iguais ao quadro, para as duas telas. (Concordo.)
 
-## 3. PLAN / 4. TASKS / 5. ANALYZE / 6. IMPLEMENT
+**Suposição minha, a conferir:** as etapas do Corte ficam como hoje (Separar → Corte → Qualidade), sem número de pedaços — só as sobras. Se a trilha for outra, é só trocar a lista de etapas.
 
-Preenchidos depois das respostas da seção 2.2. Esboço já visível:
-- Banco (migration fechada): `fabricacao_corrimao_*` e `fabricacao_corte_*` (itens/links/status/ocorrências) + RPCs públicas por token; uma RPC `separacao_enviar_fabricacao` (ou ação nova do `separacao_hub`) que valida a alçada, checa duplicata e cria a OP.
-- Front: 2 telas + 2 páginas públicas + store/calc por destino reaproveitando `FabricacaoQuadroCalc`; botão em `separacao.jsx`; classificação por família em `pcp.jsx` (`pcpPlanoDoPedido`).
-- Testes: calc (progresso/pausa), classificação por família, duplicata, RLS (anon negado).
-- Riscos já vistos: OP-mãe (2.2-4); corrimão com estrutura caindo em `frente='quadro'` se a classificação não mudar; dois lugares criando OP para o mesmo item.
+## 3. PLAN
+- **Banco (1 migration, fechada):** `fabricacao_corrimao_*` e `fabricacao_corte_*` (itens/links/status/ocorrências), `authenticated`+`vp_usuario_ativo()`; chão de fábrica só por RPC `SECURITY DEFINER` com token (`public_fabcorr_*`, `public_fabcorte_*`). Corte: coluna `sobra` (numérico, nulo) na conclusão. RPC `separacao_enviar_fabricacao(pedido, item, destino)` valida alçada nova `separacao.enviar_fabricacao`, bloqueia duplicata (devolve o nº da OP) e cria a OP-filha (`frente` `corrimao`|`corte`, `pedido_codigo`, sem `ordem_mae_id`). Não altera `estoque_separacao_chamar` nem `separacao_hub` existente (função nova).
+- **Front:** `fabricacao-corrimao.jsx`/`fabricacao-corte.jsx` (+ store/calc reaproveitando `FabricacaoQuadroCalc`), páginas públicas por token, botão "Enviar para Corte/Corrimão" em `separacao.jsx` (item `na_operacao`), rotas `/logistica/fabricacao-corrimao` e `/logistica/fabricacao-corte` (router, app, shell, alçada, mapa de rotas).
+- **PCP:** `pcpPlanoDoPedido` passa a classificar por **família** (quadro/corrimão/corte) e "Gerar OPs" adota filhas existentes sob a mãe.
+
+## 4. TASKS
+1. Migration + RPCs + testes SQL (anon negado, duplicata, alçada). *(precisa de CONFIRMO)*
+2. calc/store por destino + testes de progresso/pausa.
+3. Telas internas Corrimão e Corte + páginas públicas.
+4. Botão na Separação + alçada + bloqueio de duplicata.
+5. Classificação por família e adoção de filhas no Gerar OPs + testes.
+6. Rotas/menu/`?v=`/mapa de rotas; CLAUDE.md; avisar tutorial da Separação desatualizado.
+
+## 5. ANALYZE (conflitos, lacunas, riscos)
+- **OP-mãe:** resolvido por 1(a); risco restante = Gerar OPs duplicar filha — cobre-se com a adoção por (pedido, item) e teste.
+- **Corrimão com estrutura caindo em `quadro`:** corrigido pela classificação por família (task 5); sem ela, o bug persiste.
+- **Constituição:** tabelas fechadas + RPC por token (as do quadro usam `allow_all`, padrão antigo — **não copiar**).
+- **Lacuna:** não existe código de corrimão "por corrimão" quando a Escada leva 2; a quantidade do item define o nº de OPs/unidades — conferir com um pedido real.
+- **Lacuna:** Magda precisa receber a alçada em Administração › Alçadas (concessão manual).
+- **Não testável sem clique real:** envio da Separação e páginas públicas; validar em navegador após a migration.
+
+## 6. IMPLEMENT
+Aguardando o OK do Gelson e o **"CONFIRMO"** para aplicar a migration.
