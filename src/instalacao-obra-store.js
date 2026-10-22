@@ -227,7 +227,7 @@
     }
 
     // 1. Contrato assinado (via proposta_id — contratos_venda_equipamentos não tem numero_cotacao direto)
-    const { data: propostaDaCotacao } = await c.from('propostas').select('id').eq('numero_cotacao', numeroCotacao).maybeSingle();
+    const { data: propostaDaCotacao } = await c.from('propostas').select('id').eq('numero_cotacao', numeroCotacao).eq('vigencia', 'vigente').limit(1).maybeSingle();
     let contrato = null;
     if (propostaDaCotacao) {
       const { data } = await c.from('contratos_venda_equipamentos').select('signed_at').eq('proposta_id', propostaDaCotacao.id).or('status.is.null,status.neq.em_preenchimento').maybeSingle();
@@ -237,7 +237,7 @@
     itens.push({ chave: 'contrato', ok: contratoAssinado, label: 'Contrato assinado', detalhe: contratoAssinado ? fmtData(contrato.signed_at) : 'Pendente' });
 
     // 2. Entrada paga (sinal)
-    const { data: aval } = await c.from('avais_financeiros').select('sinal_pago').eq('numero_cotacao', numeroCotacao).maybeSingle();
+    const { data: aval } = await c.from('avais_financeiros').select('sinal_pago').eq('numero_cotacao', numeroCotacao).order('sinal_pago', { ascending: false }).limit(1).maybeSingle();
     const sinalPago = !!(aval && aval.sinal_pago);
     itens.push({ chave: 'sinal', ok: sinalPago, label: 'Entrada (sinal) paga', detalhe: sinalPago ? 'Confirmado' : 'Pendente' });
 

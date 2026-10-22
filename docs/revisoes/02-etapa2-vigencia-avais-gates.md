@@ -84,3 +84,16 @@ Cada passo atrás da flag, testado em transação desfeita; **autorização expl
 
 ## 13. Atualização 22/10 (respostas do responsável)
 Item 1 (mudança técnica): só revisão **de Projeto** reabre o Aval Engenharia; ver `03-`. Item 2: Gestor aprova toda revisão. Item 3: SLA de 12 h úteis.
+
+## 14. Etapa 2.2 — avais por revisão (22/10/2026): implementado, NÃO aplicado em produção
+**Banco** (`supabase/migrations/20261022190000_avais_por_revisao.sql`, testes em `supabase/tests/revisoes/etapa2-avais.sql`, todos passando no Postgres local):
+- Novo `fn_avais_abrir_na_proposta`: sem outra proposta da família com aval → comportamento de sempre; **revisão aprovada herda** os avais da aprovada anterior quando o que cada um avalia não mudou, e **reabre só o que mudou** (na dúvida, reabre).
+  - **Financeiro avalia**: `valor_total`, `precificacao_id`, `valores`, `condicoesPagto`, `ajustes`. Reabre = `pendente_consulta`, Aval de Pagamento e aprovação do CEO zerados; **o sinal pago acompanha** (é um fato da cotação).
+  - **Jurídico avalia**: partes (cliente), obra, `ajustes`, `prazo`, `garantia`, `condicoesPagto`, `responsabilidades`, `infraestrutura`. Reabre = `pendente`.
+  - **Projeto (`especificacoes`/`ativos`) não reabre nenhum dos dois** — é o Aval Engenharia (por cotação), decisão do responsável de 22/10.
+  - `ajustes` entra nos dois grupos de propósito (contém texto de cláusula e câmbio/impostos): conservador.
+  - `contrato_venda_id` nunca é copiado (o contrato continua ligado ao aval da proposta que o originou).
+  - Alerta por revisão (`avais-abertos-<id>`) diz o que foi mantido ou reaberto. Colunas novas: `herdado_de_proposta_id`, `motivo_reabertura`.
+- Cenários testados: só acabamento muda (herda os dois); só valor muda (Financeiro reabre, sinal permanece); cláusula/prazo/cliente mudam (Jurídico reabre); só especificação muda (nenhum reabre); idempotência; anterior sem aval; hash estável.
+**Código** (branch, ainda não mesclada): `aval-financeiro-store.js` v16 e `aval-juridico-store.js` v4 (`getByNumeroCotacao` prefere o aval da revisão VIGENTE; `listarFila` só vigentes/pendentes de aditivo), `comissionamento-store.js` v3 (comissão só da vigente), `instalacao-obra-store.js` v16 (proposta vigente e sinal pago sem `maybeSingle` que quebraria com 2 linhas), `decisoes-store.js` v26 (aprovação do CEO lida do aval vigente). +3 testes; suíte 720.
+**Ainda pendente (decisão/confirmação)**: `contrato-venda-store.listarPropostasAguardandoContrato` (arquivo da área blindada de assinatura), Dashboard (`supabase.js`) e `notificacoes-lidas-store.js` (contagem em dobro), `precificacao-elevador-store.criarPropostaAutomatica` (usa `maybeSingle` por cotação; hoje protegido pela trava de duplicidade do `salvar`), `proposta-store`/`assinar-app` (blindadas).

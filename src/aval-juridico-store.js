@@ -35,8 +35,19 @@
     return data || null;
   }
 
+  /* Revisões comerciais (22/10/2026): uma cotação pode ter mais de uma proposta (original + revisões A, B…);
+     os avais que valem são os da revisão VIGENTE. Sem vigente com aval, cai no jeito antigo (mais recente da cotação). */
+  async function propostaVigenteId(c, numeroCotacao) {
+    try {
+      const { data } = await c.from('propostas').select('id').eq('numero_cotacao', numeroCotacao).eq('vigencia', 'vigente').limit(1).maybeSingle();
+      return data ? data.id : null;
+    } catch (e) { return null; }
+  }
+
   async function getByNumeroCotacao(numeroCotacao) {
     const c = sb(); if (!c || numeroCotacao == null) return null;
+    const vid = await propostaVigenteId(c, numeroCotacao);
+    if (vid) { const v = await getByPropostaId(vid); if (v) return v; }
     const { data } = await c.from('avais_juridicos').select('*')
       .eq('numero_cotacao', numeroCotacao).order('criado_em', { ascending: false }).limit(1).maybeSingle();
     return data || null;
@@ -108,7 +119,7 @@
     const [{ data: propostas, error }, { data: contratos }] = await Promise.all([
       c.from('propostas')
         .select('id, numero_documento, titulo, valor_total, numero_cotacao, data_json, aprovada_em')
-        .eq('status', 'aprovada').order('aprovada_em', { ascending: false }),
+        .eq('status', 'aprovada').in('vigencia', ['vigente', 'pendente_aditivo']).order('aprovada_em', { ascending: false }),
       c.from('contratos_venda_equipamentos')
         .select('id, numero_documento, status, comprador_razao_social, valor_total_num, proposta_id, signed_at')
         .or('status.is.null,status.neq.em_preenchimento'), // rascunho do assistente não é contrato

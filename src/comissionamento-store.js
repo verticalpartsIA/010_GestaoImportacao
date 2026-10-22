@@ -52,7 +52,7 @@
     const c = sb(); if (!c) return [];
     const { data: propostas } = await c.from('propostas')
       .select('id, numero_documento, numero_cotacao, titulo, valor_total, aprovada_em')
-      .eq('status', 'aprovada').order('aprovada_em', { ascending: false }).limit(50);
+      .eq('status', 'aprovada').eq('vigencia', 'vigente').order('aprovada_em', { ascending: false }).limit(50);
     if (!propostas || !propostas.length) return [];
     const { data: comissoes } = await c.from('comissoes').select('proposta_id');
     const jaGerado = new Set((comissoes || []).map((x) => x.proposta_id).filter(Boolean));
