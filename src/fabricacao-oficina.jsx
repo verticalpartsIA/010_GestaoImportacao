@@ -54,7 +54,7 @@ function FOCard({ ordem, destino, podeDesmarcar, onRecarregar }) {
     <div className="fo-card">
       <div className="fo-head">
         <div>
-          <div className="fo-tit">{ordem.numero}{ordem.numero_pedido ? ` · Pedido ${ordem.numero_pedido}` : ''}{un ? ` · unidade ${un.n}/${un.de}` : ''}</div>
+          <div className="fo-tit">{ordem.numero}{(ordem.numero_pedido_omie || ordem.numero_pedido) ? ` · Pedido Omie ${ordem.numero_pedido_omie || ordem.numero_pedido}` : ''}{un ? ` · unidade ${un.n}/${un.de}` : ''}</div>
           <div className="fo-sub">{ordem.titulo}</div>
           <div className="fo-meta">{ordem.cliente || 'Cliente não informado'}{ordem.item_codigo ? ' · ' + ordem.item_codigo : ''}{ordem.prazo_entrega ? ' · entrega ' + U.fmtData(ordem.prazo_entrega) : ''}{destino === 'corte' && ordem.quantidade ? ' · qtd ' + ordem.quantidade : ''}</div>
           {pausado && <div className="fo-pausa">PAUSADA — falta de material</div>}

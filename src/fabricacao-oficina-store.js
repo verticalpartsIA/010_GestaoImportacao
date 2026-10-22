@@ -61,7 +61,7 @@
     const c = sb();
     const incluirConcluidas = !!(opcoes && opcoes.concluidas);
     let q = c.from('pcp_ordens')
-      .select('id, numero, titulo, quantidade, cliente, prazo_entrega, status, pedido_codigo, item_codigo, unidade_seq, data_finalizacao, created_at')
+      .select('id, numero, titulo, quantidade, cliente, prazo_entrega, status, pedido_codigo, item_codigo, unidade_seq, numero_pedido_omie, itens_pedido, data_finalizacao, created_at')
       .eq('frente', destino).order('created_at', { ascending: false }).limit(300);
     q = incluirConcluidas ? q.in('status', ['aguardando', 'em_producao', 'concluida']) : q.in('status', ['aguardando', 'em_producao']);
     const { data: ordens, error } = await q;

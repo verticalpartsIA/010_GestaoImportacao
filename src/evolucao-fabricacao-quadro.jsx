@@ -345,7 +345,9 @@ function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar }) {
   };
 
   const cliente = fqCliente(ordem);
-  const nPedido = (ordem.quadros_comando && ordem.quadros_comando.numero_pedido) || null;
+  const nPedido = (ordem.quadros_comando && ordem.quadros_comando.numero_pedido) || null; // interno do site
+  const nPedidoOmie = ordem.numero_pedido_omie || null;
+  const itensPedido = Array.isArray(ordem.itens_pedido) ? ordem.itens_pedido : [];
   const tp = fqTensaoPotencia(ordem);
   const linkUrl = link ? window.location.origin + '/fabricacao-quadro/' + link.token : null;
 
@@ -386,11 +388,12 @@ function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar }) {
           </div>
           <div className="fq-cliente">{cliente}</div>
           <div className="fq-meta">
-            {[nPedido ? 'Nº Pedido: ' + nPedido : null, tp ? 'Tensão/Potência: ' + tp : null,
+            {[nPedidoOmie ? 'Pedido Omie: ' + nPedidoOmie : null, nPedido ? (nPedidoOmie ? 'Pedido de quadro interno: ' : 'Nº Pedido: ') + nPedido : null, tp ? 'Tensão/Potência: ' + tp : null,
               ordem.numero_cotacao ? 'Cotação Nº ' + ordem.numero_cotacao : null,
               ordem.prazo_entrega ? 'Prazo: ' + fqData(ordem.prazo_entrega) : null]
               .filter(Boolean).join(' · ')}
           </div>
+          {itensPedido.length > 0 && <div className="fq-meta">Itens do pedido: {itensPedido.join(', ')}</div>}
           {concluido && <div className="fq-concluido">✓ Concluído</div>}
         </div>
         <div className="fq-pct">
