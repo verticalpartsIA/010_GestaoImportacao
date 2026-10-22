@@ -1140,11 +1140,13 @@ function PCPFilaProducao({ ctx, abrirOp }) {
   const [abertos, setAbertos] = React.useState({});
   const [enviados, setEnviados] = React.useState({});   // 'codigo_pedido|codigo_item' → nº de quadros já enviados a Pedidos de Quadro
   const [enviando, setEnviando] = React.useState(null);
+  const [codigosQuadro, setCodigosQuadro] = React.useState(new Set());   // produtos que são quadro de comando (pcp_quadro_variante) — só estes podem ir para Pedidos de Quadro
   const alternar = (cod) => setAbertos(a => ({ ...a, [cod]: !a[cod] }));
 
   // Envia UM item do pedido do Omie (ex.: o quadro VPEL-702b) para a aba "Pedidos de Quadro": cria o pedido de quadro (1 por unidade)
   // já com o escopo "Quadro de comando = fornecer" e o vínculo com o pedido do Omie em configuracao.origem_omie.
   const enviarParaQuadro = async (p, x) => {
+    if (!codigosQuadro.has(x.codigo)) { window.toast?.('Só quadro de comando pode ir para Pedidos de Quadro.'); return; }
     const qtd = Math.max(1, Math.round(Number(x.quantidade) || 1));
     const ja = enviados[`${p.codigo_pedido}|${x.codigo}`] || 0;
     if (ja >= qtd) { window.toast?.('Este item já foi enviado para Pedidos de Quadro.'); return; }
@@ -1168,6 +1170,7 @@ function PCPFilaProducao({ ctx, abrirOp }) {
   };
 
   const carregar = React.useCallback(async () => {
+    sb.from('pcp_quadro_variante').select('codigo_produto').then(({ data }) => setCodigosQuadro(new Set((data || []).map(v => v.codigo_produto).filter(Boolean))));
     sb.from('quadros_comando').select('configuracao').is('excluido_em', null).order('created_at', { ascending: false }).limit(1000).then(({ data }) => {
       const e = {};
       (data || []).forEach(q => { const o = q.configuracao && q.configuracao.origem_omie; if (o) { const k = `${o.codigo_pedido}|${o.item_codigo}`; e[k] = (e[k] || 0) + 1; } });
@@ -1288,7 +1291,7 @@ function PCPFilaProducao({ ctx, abrirOp }) {
                               <td className="text-right">{pcpFmt(x.quantidade)}</td>
                               <td>{x.unidade || '—'}</td>
                               <td>{x.item_pcp ? <b style={{ fontWeight: 500 }}>Item do PCP</b> : <span style={{ color: 'var(--fg3)' }}>Outro item</span>}</td>
-                              <td>{x.item_pcp && p.origem !== 'ordem_servico' ? (() => {
+                              <td>{x.item_pcp && p.origem !== 'ordem_servico' && codigosQuadro.has(x.codigo) ? (() => {
                                 const k = `${p.codigo_pedido}|${x.codigo}`, qtd = Math.max(1, Math.round(Number(x.quantidade) || 1)), ja = enviados[k] || 0;
                                 return ja >= qtd
                                   ? <span className="pcp-tag" title="Já criado na aba Pedidos de Quadro">Enviado{qtd > 1 ? ` (${ja}/${qtd})` : ''}</span>
