@@ -11,6 +11,24 @@
      é criado inline e atribuído a window.__VP_SB.sb antes de carregar este script. */
   function sb() { return (window.__VP_SB || {}).sb; }
 
+  /* 22/10 (Task 5) — WhatsApp do montador vem do CADASTRO (parceiros_instaladores.telefone), não só digitado.
+     Acha o parceiro pelo acordo de preço do contrato (parceiro_instalador_id) e, sem acordo, pelo nome da contratada. */
+  async function telefoneDoCadastro(rec) {
+    const c = sb();
+    if (!c || !rec) return null;
+    try {
+      let parceiroId = null;
+      const ac = await c.from('instalador_acordos').select('parceiro_instalador_id').eq('contrato_id', rec.id).not('parceiro_instalador_id', 'is', null).limit(1);
+      if (ac && ac.data && ac.data[0]) parceiroId = ac.data[0].parceiro_instalador_id;
+      let q = c.from('parceiros_instaladores').select('id, nome, telefone, contato').limit(1);
+      q = parceiroId ? q.eq('id', parceiroId) : q.eq('nome', rec.contratada_nome || '');
+      const { data } = await q;
+      const p = data && data[0];
+      if (!p || String(p.telefone || '').replace(/\D/g, '').length < 10) return null;
+      return { telefone: p.telefone, nome: p.contato || p.nome, parceiro: p.nome };
+    } catch (e) { return null; }
+  }
+
   /* ---------- IDs / token público ---------- */
   function uuid() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -730,7 +748,7 @@
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
     listAll, listPainel, getById, getByToken,
     createDraft, updateFormState, reservarNumero, salvarEdicao, logDaRevisaoAtual,
-    markSent, pedirEnvio, markViewed, markSigned, refuse,
+    markSent, pedirEnvio, telefoneDoCadastro, markViewed, markSigned, refuse,
     sweepExpired, remove, anularAssinatura, reabrirAnulado,
     getPublicIP, deviceLabel, sha256Hex,
   };
