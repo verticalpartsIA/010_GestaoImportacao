@@ -394,7 +394,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const chiPed = chiManual.ativo ? { id: 'manual', numero_pedido: chiManual.numero.trim(), cliente: chiManual.cliente.trim(), novo_ou_modernizacao: chiManual.obra, tipo_aplicacao: null, ops: [], manual: true } : chiPedSel;
   const chiPronto = !!(chiPed && String(chiPed.numero_pedido).trim());
   // Chicotes acrescentados à mão (como o DZ): ficam guardados neste navegador.
-  const [chiExtras, setChiExtras] = React.useState(() => { try { return JSON.parse(localStorage.getItem('vp_etiquetas_chicotes_extra') || '[]'); } catch (e) { return []; } });
+  const [chiExtras, setChiExtras] = React.useState(() => { try { return JSON.parse(localStorage.getItem('vp_etiquetas_chicotes_extra') || '[]').filter((x) => !C.CHICOTES.some((c) => c.codigo === x.codigo)); } catch (e) { return []; } });
   const [chiNovo, setChiNovo] = React.useState({ codigo: '', descricao: '' });
   const gravarExtras = (l) => { setChiExtras(l); try { localStorage.setItem('vp_etiquetas_chicotes_extra', JSON.stringify(l)); } catch (e) { /* sem armazenamento */ } };
   const addChiExtra = () => {

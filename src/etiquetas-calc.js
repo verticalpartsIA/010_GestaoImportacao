@@ -241,6 +241,8 @@
     { codigo: 'EDP2', descricao: 'Alimentação e sinal da barreira eletrônica', soPortaOposta: true },
     { codigo: 'DC2', descricao: 'Alimentação e sinal do inversor / módulo do operador de porta', soPortaOposta: true },
     { codigo: 'DEN2', descricao: 'Sinais do inversor / módulo do operador de porta', soPortaOposta: true },
+    // Fixo: aparece em todo quadro (só desmarca para não imprimir).
+    { codigo: 'ETOK', descricao: 'Em Produção' },
   ];
   const chicoteTipoObra = (v) => (String(v || '').toLowerCase().startsWith('modern') ? 'Modernização' : String(v || '').toLowerCase() === 'novo' ? 'Novo' : '');
   function chicoteDisponivel(c, tipoAplicacao, portaOposta) { return (!c.soCasaMaquinas || String(tipoAplicacao || '').toUpperCase() === 'MR') && (!c.soPortaOposta || !!portaOposta); }
