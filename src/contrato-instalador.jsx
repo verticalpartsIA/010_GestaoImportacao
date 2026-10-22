@@ -1279,6 +1279,10 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
           contratoInstaladorId: record.id, contratada: record.contratada_nome, valor: record.valor_total,
         });
         setDecisaoId(gate.decisaoId || null);
+        if (!gate.ok && !gate.reprovada && gate.reenvioPendente && gate.decisaoId) {
+          try { await window.DecisoesStore.reenviarAvalWhatsApp(gate.decisaoId); window.toast?.('Nova revisão do contrato: o pedido de aval foi enviado de novo ao Diego.', 'success'); }
+          catch (e2) { window.toast?.('O aval foi reaberto, mas o pedido ao Diego não saiu (' + (e2.message || e2) + '). Use "Reenviar pedido de aval".', 'warning'); }
+        }
         if (gate.ok) { window.toast?.('O aval já estava aprovado — atualize a tela.', 'info'); }
         else if (gate.reprovada) {
           /* O Diego já respondeu NÃO a este contrato: nada foi pedido de novo. A pessoa conversa com ele e reenvia daqui. */
@@ -1451,8 +1455,10 @@ function ciValidateStep(idx, s) {
   return e;
 }
 
-function CIWizard({ onCreated, initial }) {
-  const [s, setS] = _ciUS(initial || window.CI.defaultState());
+function CIWizard({ onCreated, initial, editando, onSaved, onCancelEdit }) {
+  const [s, setS] = _ciUS(editando ? { ...window.CI.defaultState(), ...(editando.form_state || {}) } : (initial || window.CI.defaultState()));
+  const [motivoModal, setMotivoModal] = _ciUS(false);
+  const [motivo, setMotivo] = _ciUS('');
   const [step, setStep] = _ciUS(0);
   const [errors, setErrors] = _ciUS({});
   const [sendRec, setSendRec] = _ciUS(null);
@@ -1509,10 +1515,35 @@ function CIWizard({ onCreated, initial }) {
     }
   };
 
+  const salvarEdicao = async (motivoTxt) => {
+    if (!editando || creating) return;
+    setCreating(true);
+    try {
+      const r = await window.CIStore.salvarEdicao(editando.id, s, { motivo: motivoTxt, esperado: editando.atualizado_em });
+      setMotivoModal(false);
+      onSaved && onSaved(r);
+    } catch (e) {
+      alert('Não foi possível salvar: ' + (e.message || e));
+    } finally {
+      setCreating(false);
+    }
+  };
+  const handleSaveEdit = () => {
+    if (!completeAll()) return;
+    if (editando.status === 'rascunho') salvarEdicao(null); else { setMotivo(''); setMotivoModal(true); }
+  };
+
   const StepComp = [CIStepModalidade, CIStepPartes, CIStepObjeto, CIStepLogistica, CIStepPagamento, CIStepRevisao][step];
 
   return (
     <div className="ci-wiz">
+      {editando && (
+        <div className="ci-cond-alert" style={{ margin: '0 0 8px', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
+          <span><span className="ci-cond-dot"></span><b>Editando {editando.numero_documento}</b> — revisão {editando.revisao || 1} ({(window.CIStore.STATUS[editando.status] || {}).label || editando.status}).
+            {editando.status === 'rascunho' ? ' Rascunho: a alteração vale no próprio contrato.' : ' Contrato já enviado: ao salvar nasce uma NOVA revisão (a atual fica no histórico, o aval do Diego é pedido de novo e todos assinam de novo).'}</span>
+          <button type="button" className="ci-btn ci-btn--ghost" onClick={onCancelEdit}>Cancelar edição</button>
+        </div>
+      )}
       <nav className="ci-stepbar">
         {CI_WIZ_STEPS.map((st, i) => (
           <button key={st.id} className={'ci-stepbar-item' + (i === step ? ' is-active' : '') + (i < step ? ' is-done' : '')} onClick={() => goTo(i)}>
@@ -1533,7 +1564,7 @@ function CIWizard({ onCreated, initial }) {
             <span className="ci-form-foot-meta">Passo {step + 1} de {CI_WIZ_STEPS.length}</span>
             {step < CI_WIZ_STEPS.length - 1
               ? <button className="ci-btn ci-btn--dark" onClick={goNext}>Avançar →</button>
-              : <button className="ci-btn ci-btn--primary" onClick={handleCreateAndSend} disabled={creating}>{creating ? 'Gerando…' : 'Gerar e enviar para assinatura →'}</button>}
+              : <button className="ci-btn ci-btn--primary" onClick={editando ? handleSaveEdit : handleCreateAndSend} disabled={creating}>{editando ? (creating ? 'Salvando…' : 'Salvar alterações') : (creating ? 'Gerando…' : 'Gerar e enviar para assinatura →')}</button>}
           </div>
         </div>
         <div className="ci-preview-col">
@@ -1551,6 +1582,24 @@ function CIWizard({ onCreated, initial }) {
         </div>
       </div>
 
+      {motivoModal && editando && (
+        <div className="ci-modal-backdrop">
+          <div className="ci-modal">
+            <div className="ci-modal-head"><div><h2>Criar nova revisão do contrato</h2><p>{editando.numero_documento} — revisão {(editando.revisao || 1) + 1}</p></div></div>
+            <div className="ci-modal-body">
+              <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Este contrato já foi enviado. Ele <b>não será sobrescrito</b>: a revisão atual, com as assinaturas e o hash dela, fica guardada como histórico. Os links atuais deixam de funcionar, a fila de assinaturas e as parcelas pendentes são canceladas, e a nova revisão volta a <b>rascunho</b>: precisa de <b>novo aval do Diego</b> e de <b>novas assinaturas</b> de todos. Uma assinatura antiga não vale para o documento novo.</div>
+              <div className="ci-field" style={{ marginTop: 10 }}>
+                <label>Motivo da alteração (obrigatório, mínimo 10 letras)</label>
+                <textarea className="ci-input" rows={3} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: endereço da obra corrigido a pedido do Jurídico" />
+              </div>
+            </div>
+            <div className="ci-modal-foot">
+              <button className="ci-btn ci-btn--ghost" onClick={() => setMotivoModal(false)} disabled={creating}>Voltar</button>
+              <button className="ci-btn ci-btn--primary" onClick={() => salvarEdicao(motivo)} disabled={creating || motivo.trim().length < 10}>{creating ? 'Salvando…' : 'Criar nova revisão'}</button>
+            </div>
+          </div>
+        </div>
+      )}
       {sendRec && <CISendModal record={sendRec} onClose={() => { const r = sendRec; setSendRec(null); setS(window.CI.defaultState()); setStep(0); onCreated && onCreated(r); }} onSent={() => {}} />}
     </div>
   );
@@ -1594,9 +1643,9 @@ function CIEmailRespondidoBadge({ contratoId }) {
 
 const CI_TL_SEQ = ['rascunho', 'enviado', 'visualizado', 'assinado'];
 
-function CITimeline({ rec }) {
+function CITimeline({ rec, onVer }) {
   const byStatus = {};
-  (rec.log || []).forEach(l => { byStatus[l.status] = l; });
+  window.CIStore.logDaRevisaoAtual(rec).forEach(l => { byStatus[l.status] = l; });
   const terminal = (rec.status === 'expirado' || rec.status === 'recusado') ? rec.status : null;
   const curIdx = CI_TL_SEQ.indexOf(rec.status);
   const steps = CI_TL_SEQ.map((sid, i) => {
@@ -1629,6 +1678,7 @@ function CITimeline({ rec }) {
                  achado real do Contrato de Venda, cotação 955/AKAI) */}
               {s.entry && s.entry.meta && s.entry.meta.nome ? ' · Por ' + s.entry.meta.nome : ''}
               {s.entry && s.entry.meta && s.entry.meta.motivo ? <div>Motivo: {s.entry.meta.motivo}</div> : ''}
+              {s.entry && onVer ? <div><button type="button" className="ci-mini-btn" onClick={() => onVer(null)}>Visualizar documento</button></div> : null}
             </div>
           </div>
         </div>
@@ -1687,8 +1737,9 @@ function CIFilaAssinaturas({ rec, podeEditar }) {
   );
 }
 
-function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
+function CIAuditDrawer({ rec, onClose, onResend, onRefresh, onEditar }) {
   const a = rec.audit || {};
+  const [ver, setVer] = _ciUS(undefined);   // undefined = fechado; null = revisão atual; número = revisão anterior
   const del = async () => {
     if (!window.confirm('Excluir este rascunho? Esta ação não pode ser desfeita.')) return;
     try {
@@ -1726,6 +1777,7 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
   return (
     <div className="ci-drawer-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
       <div className="ci-drawer">
+        {ver !== undefined && <CIDocViewer rec={rec} revisao={ver} onClose={() => setVer(undefined)} />}
         <div className="ci-drawer-head">
           <div>
             <h2>{rec.numero_documento}</h2>
@@ -1737,7 +1789,7 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
         <div className="ci-drawer-body">
           <div className="ci-drawer-sec">
             <h3 className="ci-drawer-sec-title">Linha do tempo</h3>
-            <CITimeline rec={rec} />
+            <CITimeline rec={rec} onVer={(r) => setVer(r)} />
           </div>
           <div className="ci-drawer-sec">
             <h3 className="ci-drawer-sec-title">Trilha de auditoria</h3>
@@ -1766,10 +1818,27 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
               </div>
             )}
           </div>
+          {(rec.revisoes || []).length > 0 && (
+            <div className="ci-drawer-sec">
+              <h3 className="ci-drawer-sec-title">Revisões anteriores (histórico imutável)</h3>
+              <div className="ci-audit-rows">
+                {(rec.revisoes || []).map((x) => (
+                  <div key={x.revisao} style={{ marginBottom: 8 }}>
+                    <CIAuditRow k={'Revisão ' + x.revisao} v={(window.CIStore.STATUS[x.status] || {}).label + ' · substituída em ' + window.CIStore.fmtDateTime(x.substituida_em) + ' por ' + (x.substituida_por || '—')} />
+                    {x.motivo && <CIAuditRow k="Motivo" v={x.motivo} />}
+                    {x.audit && x.audit.signedAt && <CIAuditRow k="Assinada por" v={(x.audit.signerName || '') + ' em ' + window.CIStore.fmtDateTime(x.audit.signedAt)} />}
+                    <button type="button" className="ci-mini-btn" onClick={() => setVer(x.revisao)}>Visualizar documento</button>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
           <CIFilaAssinaturas rec={rec} podeEditar={podeAnular} />
           <div className="ci-drawer-sec">
             <h3 className="ci-drawer-sec-title">Ações</h3>
             <div className="ci-drawer-actions">
+              <button className="ci-btn ci-btn--ghost" onClick={() => setVer(null)}>Visualizar documento</button>
+              {podeAnular && onEditar && <button className="ci-btn ci-btn--ghost" onClick={() => onEditar(rec)}>Editar documento{rec.status === 'rascunho' ? '' : ' (cria nova revisão)'}</button>}
               {rec.status !== 'rascunho' && <a className="ci-btn ci-btn--ghost" href={signUrl} target="_blank" rel="noopener">Abrir link de assinatura ↗</a>}
               {(rec.status === 'enviado' || rec.status === 'visualizado' || rec.status === 'expirado' || rec.status === 'rascunho') &&
                 <button className="ci-btn ci-btn--primary" onClick={() => ciReenviar(rec, onResend)}>{rec.status === 'rascunho' ? 'Enviar' : 'Reenviar link'}</button>}
@@ -1777,6 +1846,59 @@ function CIAuditDrawer({ rec, onClose, onResend, onRefresh }) {
               {podeAnular && ['enviado', 'visualizado', 'assinado', 'recusado'].includes(rec.status) && <button className="ci-btn ci-btn--danger" onClick={anular}>Anular assinatura / enviado ao montador errado</button>}
             </div>
           </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+/* 22/10 (Jurídico, Task 11) — Visualizar documento: a revisão atual ou qualquer revisão anterior (histórico imutável). */
+function CIDocViewer({ rec, revisao, onClose }) {
+  const atual = rec.revisao || 1;
+  const snaps = rec.revisoes || [];
+  const [sel, setSel] = _ciUS(revisao == null ? atual : revisao);
+  const [filaAtual, setFilaAtual] = _ciUS([]);
+  _ciUE(() => {
+    let vivo = true;
+    window.DocumentoSignatariosStore.listarPorDocumento('contrato_instalador', rec.id)
+      .then((l) => { if (vivo) setFilaAtual((l || []).filter((x) => x.status !== 'expirado')); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [rec.id]);
+  const snap = sel === atual ? null : snaps.find((x) => x.revisao === sel);
+  const doc = snap ? snap.doc : rec.doc;
+  const au = (snap ? snap.audit : rec.audit) || {};
+  const fila = snap ? (snap.fila || []) : filaAtual;   // Diego/Juliana/Maurício: a fila viva (atual) ou a guardada na revisão
+  const status = snap ? snap.status : rec.status;
+  const st = window.CIStore.STATUS[status] || window.CIStore.STATUS.rascunho;
+  const assinaturas = au.signedAt
+    ? [{ papel: 'Contratada (instalador)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }]
+    : [];
+  return (
+    <div className="ci-modal-backdrop" onClick={(e) => { if (e.target === e.currentTarget) onClose(); }}>
+      <div className="ci-modal" style={{ maxWidth: 920, width: '94vw' }}>
+        <div className="ci-modal-head">
+          <div>
+            <h2>{rec.numero_documento} — revisão {sel}{snap ? ' (substituída)' : ' (atual)'}</h2>
+            <p>
+              {st.label}{status === 'rascunho' ? ' — minuta, ainda não enviada' : ''}
+              {snap ? ` · substituída em ${window.CIStore.fmtDateTime(snap.substituida_em)} por ${snap.substituida_por || '—'}` : ''}
+              {snap && snap.motivo ? ` · motivo: ${snap.motivo}` : ''}
+              {au.hash ? ` · hash ${String(au.hash).slice(0, 16)}…` : ''}
+            </p>
+          </div>
+          <button className="ci-modal-x" onClick={onClose}>✕</button>
+        </div>
+        <div className="ci-modal-body" style={{ maxHeight: '74vh', overflow: 'auto' }}>
+          {(snaps.length > 0) && (
+            <div className="ci-field" style={{ marginBottom: 10 }}>
+              <label>Revisão</label>
+              <select className="ci-input" value={sel} onChange={(e) => setSel(Number(e.target.value))}>
+                {snaps.map((x) => <option key={x.revisao} value={x.revisao}>Revisão {x.revisao} — substituída</option>)}
+                <option value={atual}>Revisão {atual} — atual</option>
+              </select>
+            </div>
+          )}
+          {doc && doc.clauses ? <window.CIContractPreview doc={doc} assinaturas={assinaturas} fila={fila} /> : <p>Documento indisponível.</p>}
         </div>
       </div>
     </div>
@@ -1806,7 +1928,16 @@ function CIDashboard() {
     return () => clearInterval(t);
   }, []);
 
+  const [editRec, setEditRec] = _ciUS(null);
   const drawerRec = drawerId ? contracts.find(c => c.id === drawerId) : null;
+  const [fullRec, setFullRec] = _ciUS(null);   // registro completo (doc, form_state, revisao, revisoes) — a lista do painel não carrega esses campos
+  _ciUE(() => {
+    if (!drawerId) { setFullRec(null); return undefined; }
+    let vivo = true;
+    window.CIStore.getById(drawerId).then((r) => { if (vivo) setFullRec(r); });
+    return () => { vivo = false; };
+  }, [drawerId, drawerRec && drawerRec.status, drawerRec && (drawerRec.log || []).length]);
+  const drawerShown = drawerRec ? { ...(fullRec && fullRec.id === drawerRec.id ? fullRec : {}), ...drawerRec } : null;
 
   const counts = _ciUM(() => {
     const c = { rascunho: 0, enviado: 0, visualizado: 0, assinado: 0 };
@@ -1894,7 +2025,15 @@ function CIDashboard() {
         )}
       </div>
 
-      {drawerRec && <CIAuditDrawer rec={drawerRec} onClose={() => setDrawerId(null)} onResend={(r) => setSendRec(r)} onRefresh={refresh} />}
+      {drawerRec && <CIAuditDrawer rec={drawerShown} onClose={() => setDrawerId(null)} onResend={(r) => setSendRec(r)} onRefresh={refresh}
+        onEditar={async (r) => { const f = await window.CIStore.getById(r.id); if (!f) { alert('Contrato não encontrado.'); return; } setDrawerId(null); setEditRec(f); }} />}
+      {editRec && (
+        <div className="ci-edit-overlay">
+          <CIWizard editando={editRec} onCancelEdit={() => setEditRec(null)}
+            onSaved={(r) => { setEditRec(null); refresh(); setDrawerId(editRec.id);
+              window.toast?.(r.nova_revisao ? ('Revisão ' + r.revisao + ' criada em rascunho. Para enviar, clique em "Enviar": o Diego será consultado de novo.' + (r.aviso ? ' ' + r.aviso : '')) : 'Rascunho atualizado.', r.aviso ? 'warning' : 'success'); }} />
+        </div>
+      )}
       {sendRec && <CISendModal record={sendRec} onClose={() => setSendRec(null)} onSent={refresh} />}
     </div>
   );
