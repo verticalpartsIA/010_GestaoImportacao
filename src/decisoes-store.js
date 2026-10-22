@@ -29,6 +29,8 @@
     /* 20/10/2026: aval de contratação de montador é SEMPRE do Diego (decisão dele por WhatsApp) — nunca de quem tem a alçada 'ceo'
        por extensão (ex.: Gelson). Papel separado de 'ceo' justamente para extrasPorAlcada('ceo') não entrar aqui. */
     ceo_diego: ['diego@verticalparts.com.br'],
+    /* 22/10/2026: quem libera o envio do contrato do montador passou a ser a Juliana (decisão do Jurídico/Diego). */
+    aval_instalador: ['juliana@verticalparts.com.br'],
     owner: ['gelson.simoes@verticalparts.com.br'],
     gestor_comercial: ['regiane.rocha@verticalparts.com.br', 'guilherme@verticalparts.com.br'],
     rh: ['karla.silva@verticalparts.com.br'],                    // 16/10/2026: Karla é a líder de RH (Gelson)
