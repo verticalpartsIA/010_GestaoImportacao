@@ -250,6 +250,18 @@ Deno.serve(async (req) => {
       const rows = await pgSelect<{ codigo_pedido: number }>("pcp_pedidos", `select=codigo_pedido&codigo_pedido=in.(${codigosEtapa10.join(",")})`);
       for (const r of rows) jaGravados.add(Number(r.codigo_pedido));
     }
+    // Vendedor do pedido: codVend → nome (geral/vendedores, uma leitura por execução; falha = sem nome, nunca derruba o sync).
+    let vendedores: Map<number, string> | null = null;
+    const nomeVendedor = async (cod: number): Promise<string | null> => {
+      if (!vendedores) {
+        vendedores = new Map();
+        try {
+          const r = await omie<any>("geral/vendedores", "ListarVendedores", { pagina: 1, registros_por_pagina: 100, apenas_importado_api: "N" });
+          for (const v of r.cadastro || []) vendedores.set(Number(v.codigo), String(v.nome || "").trim());
+        } catch (e) { erros.push(`vendedores: ${(e as Error).message}`); }
+      }
+      return vendedores.get(cod) || null;
+    };
     for (const p of pedidos) {
       const c = p.cabecalho || {};
       // Etapa 10 é só previsão (pcp_previsao_pedidos, via {"etapa":"10"}): um pedido novo nessa etapa nunca entra em pcp_pedidos, em qualquer modo de leitura (#843 C4).
@@ -270,6 +282,9 @@ Deno.serve(async (req) => {
       }
       const end = cli ? [cli.endereco, cli.endereco_numero, cli.bairro, [cli.cidade, cli.estado].filter(Boolean).join("/"), cli.cep].filter(Boolean).join(", ") : null;
       const fone = cli && cli.telefone1_numero ? `${cli.telefone1_ddd ? "(" + cli.telefone1_ddd + ") " : ""}${cli.telefone1_numero}` : null;
+
+      const vendedorCodigo = Number(p.informacoes_adicionais?.codVend) || null;
+      const vendedorNome = vendedorCodigo ? await nomeVendedor(vendedorCodigo) : null;
 
       // Nome da transportadora (no Omie ela é um cadastro de cliente/fornecedor); reaproveita o cache de consultas.
       let transpNome: string | null = null;
@@ -295,6 +310,7 @@ Deno.serve(async (req) => {
         cancelado: ic.cancelado === "S", volumes: fr.quantidade_volumes ?? null, peso_bruto: fr.peso_bruto ?? null,
         modalidade_frete: fr.modalidade != null ? String(fr.modalidade) : null, transportadora_codigo: fr.codigo_transportadora || null, transportadora_nome: transpNome,
         so_separacao: soSeparacao, atualizado_em: new Date().toISOString(),
+        ...(vendedorCodigo ? { vendedor_codigo: vendedorCodigo, ...(vendedorNome ? { vendedor_nome: vendedorNome } : {}) } : {}),
       }], "codigo_pedido");
       await pgDelete("pcp_pedido_itens", `codigo_pedido=eq.${c.codigo_pedido}`);
       await pgInsert("pcp_pedido_itens", todos.map((x: any) => ({
