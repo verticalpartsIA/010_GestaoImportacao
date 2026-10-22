@@ -261,6 +261,7 @@ begin
     select r.id into v_alvo from public.propostas r
      where r.numero_cotacao = p_numero and public.proposta_tipo_norm(r.proposal_type) = v_tipo
        and r.reativada_em is not null
+       and r.status not in ('recusada', 'cancelada', 'expirada')
        and r.reativada_em >= coalesce((
              select max(greatest(coalesce(o.aprovada_em, '-infinity'), coalesce(o.sent_at, '-infinity')))
                from public.propostas o
@@ -328,6 +329,27 @@ create trigger trg_propostas_vigencia after update of status, reativada_em on pu
   for each row when (old.status is distinct from new.status or old.reativada_em is distinct from new.reativada_em)
   execute function public.trg_propostas_vigencia();
 
+-- Assinatura do Contrato de Venda também recalcula vigência: uma revisão `pendente_aditivo` (a original já tem
+-- contrato assinado) só vira vigente quando o contrato DELA é assinado — e isso só muda `contratos_venda_equipamentos`,
+-- nunca `propostas`, então o trigger acima nunca via essa mudança (achado real do Codex, PR #1054).
+create or replace function public.trg_contratos_venda_vigencia() returns trigger
+language plpgsql security definer set search_path = public as $$
+declare p public.propostas;
+begin
+  if new.proposta_id is null then return null; end if;
+  if tg_op = 'UPDATE' and old.signed_at is not distinct from new.signed_at and old.status is not distinct from new.status then
+    return null;
+  end if;
+  select * into p from public.propostas where id = new.proposta_id;
+  if found and p.numero_cotacao is not null then
+    perform public.proposta_aplicar_vigencia(p.numero_cotacao, p.proposal_type);
+  end if;
+  return null;
+end $$;
+drop trigger if exists trg_contratos_venda_vigencia on public.contratos_venda_equipamentos;
+create trigger trg_contratos_venda_vigencia after insert or update of signed_at, status on public.contratos_venda_equipamentos
+  for each row execute function public.trg_contratos_venda_vigencia();
+
 -- Guarda de exclusão: revisão/proposta enviada não some por ação usual (RN-022). Administrador pode.
 create or replace function public.propostas_guarda_exclusao() returns trigger
 language plpgsql security definer set search_path = public as $$
@@ -373,7 +395,7 @@ begin
   if b.numero_cotacao is null then return jsonb_build_object('ok', false, 'erro', 'sem_numero_cotacao'); end if;
   if b.status = 'rascunho' then return jsonb_build_object('ok', false, 'erro', 'base_em_rascunho'); end if;
   if not (public.vp_eh_admin() or public.vp_tem_capacidade('propostas', 'criar_revisao')
-          or b.vendedor_id = (public.vp_perfil()).id) then
+          or coalesce(b.vendedor_id = (public.vp_perfil()).id, false)) then
     return jsonb_build_object('ok', false, 'erro', 'sem_permissao');
   end if;
 
@@ -488,7 +510,7 @@ begin
   if coalesce(length(trim(p_texto)), 0) < 5 then return jsonb_build_object('ok', false, 'erro', 'texto_curto'); end if;
   select * into p from public.propostas where id = p_proposta_id;
   if not found then return jsonb_build_object('ok', false, 'erro', 'inexistente'); end if;
-  if not (public.vp_eh_admin() or public.vp_tem_capacidade('propostas', 'criar_revisao') or p.vendedor_id = (public.vp_perfil()).id) then
+  if not (public.vp_eh_admin() or public.vp_tem_capacidade('propostas', 'criar_revisao') or coalesce(p.vendedor_id = (public.vp_perfil()).id, false)) then
     return jsonb_build_object('ok', false, 'erro', 'sem_permissao');
   end if;
   insert into public.proposta_solicitacoes_revisao
@@ -519,7 +541,7 @@ begin
   select * into s from public.proposta_solicitacoes_revisao where id = p_id for update;
   if not found then return jsonb_build_object('ok', false, 'erro', 'inexistente'); end if;
   select * into p from public.propostas where id = s.proposta_id;
-  if not (public.vp_eh_admin() or public.vp_tem_capacidade('propostas', 'criar_revisao') or p.vendedor_id = (public.vp_perfil()).id) then
+  if not (public.vp_eh_admin() or public.vp_tem_capacidade('propostas', 'criar_revisao') or coalesce(p.vendedor_id = (public.vp_perfil()).id, false)) then
     return jsonb_build_object('ok', false, 'erro', 'sem_permissao');
   end if;
   update public.proposta_solicitacoes_revisao set status = p_decisao, decidida_em = now(),
@@ -560,7 +582,7 @@ begin
   if p_origem not in ('email', 'whatsapp', 'reuniao', 'manual') then return jsonb_build_object('ok', false, 'erro', 'origem_invalida'); end if;
   select * into p from public.propostas where id = p_proposta_id;
   if not found then return jsonb_build_object('ok', false, 'erro', 'inexistente'); end if;
-  if not (public.vp_eh_admin() or public.vp_tem_capacidade('propostas', 'criar_revisao') or p.vendedor_id = (public.vp_perfil()).id) then
+  if not (public.vp_eh_admin() or public.vp_tem_capacidade('propostas', 'criar_revisao') or coalesce(p.vendedor_id = (public.vp_perfil()).id, false)) then
     return jsonb_build_object('ok', false, 'erro', 'sem_permissao');
   end if;
   insert into public.proposta_alinhamentos (proposta_id, trilha, estado, por_nome, por_papel, por_contato, origem, prova)
@@ -590,6 +612,7 @@ begin
   revoke execute on function public.proposta_aplicar_vigencia(int, text) from public, anon, authenticated;
   revoke execute on function public._prev_evento(int, uuid, text, jsonb, text) from public, anon, authenticated;
   revoke execute on function public.trg_propostas_vigencia() from public, anon, authenticated;
+  revoke execute on function public.trg_contratos_venda_vigencia() from public, anon, authenticated;
   revoke execute on function public.propostas_token_sync() from public, anon, authenticated;
   revoke execute on function public.propostas_guarda_exclusao() from public, anon, authenticated;
 end $$;
