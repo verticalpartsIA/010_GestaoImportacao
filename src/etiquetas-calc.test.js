@@ -385,7 +385,8 @@ test('Chicote do quadro (50 x 30): "FAN | 1212 Modernização", só texto e íco
   const m = E.modeloPorId('CHICOTE_50x30');
   assert.ok(m && m.largura_mm === 50 && m.altura_mm === 30 && m.tipo === 'CHICOTE_QUADRO');
   assert.ok(!m.elementos.some((e) => e.tipo === 'qr' || e.tipo === 'code128'), 'sem QR nem código de barras');
-  assert.equal(E.CHICOTES.length, 27);   // 23 + 4 da porta oposta
+  assert.equal(E.CHICOTES.length, 28);   // 23 + 4 da porta oposta + ETOK fixo
+  assert.ok(E.chicoteDisponivel(E.CHICOTES.find((c) => c.codigo === 'ETOK'), 'MRL', false), 'ETOK em todo quadro');
   assert.equal(E.CHICOTES.find((c) => c.codigo === 'DZ').descricao, 'Zona de porta');
   assert.ok(E.CHICOTES.find((c) => c.codigo === 'FAN'));
   const d = E.dadosChicote({ chicote: 'FAN', pedido: '1212', tipo_obra: 'modernizacao' });
