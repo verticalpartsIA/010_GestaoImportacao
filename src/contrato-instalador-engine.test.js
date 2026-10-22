@@ -119,3 +119,24 @@ test('1.1.1 — equipamento removido da seleção sai do texto (detalhes seguem 
   const t = CI.buildContract(s, 'X').clauses[0].items.find((i) => i.n === '1.1.1').text;
   assert.match(t, /Elevador B/); assert.doesNotMatch(t, /Elevador A|nº de série 1/);
 });
+
+const itensPag = (s) => CI.buildContract(s, 'VPNI-T').clauses.find((c) => c.id === 'pagamento').items;
+test('5.1 — data prevista por parcela: opcional, só aparece quando informada (2, 3 e personalizado)', () => {
+  const s = CI.defaultState();
+  s.valorTotal = '10.000,00';
+  s.formaPagamento = '2';
+  assert.doesNotMatch(itensPag(s).map((i) => i.text).join(' '), /data prevista/);          // sem data, texto como antes
+  s.datasParcelas = ['2026-10-26', '', ''];
+  let t = itensPag(s);
+  assert.match(t.find((i) => i.n === '5.1.1').text, /início dos trabalhos \(data prevista: 26\/10\/2026\);$/);
+  assert.doesNotMatch(t.find((i) => i.n === '5.1.2').text, /data prevista/);               // só a que foi informada
+  s.formaPagamento = '3'; s.datasParcelas = ['', '', '2026-11-27'];
+  t = itensPag(s);
+  assert.match(t.find((i) => i.n === '5.1.3').text, /nota fiscal de serviço \(data prevista: 27\/11\/2026\)\.$/);
+  s.formaPagamento = 'custom';
+  s.parcelas = [{ valor: '5.000,00', data: '2026-10-26', descricao: 'entrada' }, { valor: '5.000,00', data: '', descricao: 'entrega' }];
+  t = itensPag(s);
+  assert.match(t.find((i) => i.n === '5.1.1').text, /entrada \(data prevista: 26\/10\/2026\);$/);
+  assert.doesNotMatch(t.find((i) => i.n === '5.1.2').text, /data prevista/);
+  assert.equal(t.find((i) => i.bank).n, '5.1.3');                                          // numeração dos dados bancários intacta
+});
