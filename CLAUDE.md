@@ -1837,3 +1837,10 @@ Pedido do usuário: o chicote **ETOK — Em Produção**, que só aparecia por t
 - Extras antigos do `localStorage` com código já presente em `C.CHICOTES` são descartados na leitura (`etiquetas.jsx` v28) — sem duplicata.
 - Chicote novo que deva ser fixo = acrescentar em `C.CHICOTES` e subir o teste de contagem; "Acrescentar chicote" continua só para casos por computador.
 - Validado por `npm test` (722) e cache-bust; sem clique real no navegador.
+
+## Etiquetas › Chicote do quadro — lista completa também em pedido só do PCP (22/10/2026, PR #1062, squash `785e77b`)
+
+Caso real: pedido 30614 (OP-0021, só itens do PCP, sem quadro de comando) mostrava apenas o ETOK — `chiPed.sem_quadro` esvaziava `C.CHICOTES`. **Regra do usuário: os chicotes nunca somem, só aumentam.**
+- `etiquetas.jsx` v29: `chiLista = C.CHICOTES + extras` sempre que há pedido escolhido; a seleção inicial também não depende de `sem_quadro`. A caixa só decide a impressão; casa de máquinas/porta oposta só pré-marcam. Os avisos/caixas "casa de máquinas", "porta oposta" e o "Marcar todos/Limpar" aparecem em pedido sem quadro também.
+- **Não reintroduza `sem_quadro` como filtro da lista de chicotes** (ele ainda existe em `etiquetas-store.js` só como marca do pedido; os cabos do pedido continuam listados abaixo).
+- Validado por Babel e `npm test` (722); sem clique real no navegador.
