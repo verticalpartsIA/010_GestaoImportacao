@@ -378,7 +378,22 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   /* Chicote do quadro */
   const [qChi, setQChi] = React.useState('');
   const [pedsChi, setPedsChi] = React.useState({ pedidos: [], erro: null });
-  const [chiPed, setChiPed] = React.useState(null);
+  const [chiPedSel, setChiPed] = React.useState(null);
+  // Pedido avulso: número e cliente digitados à mão (não precisa existir no sistema).
+  const [chiManual, setChiManual] = React.useState({ ativo: false, numero: '', cliente: '', obra: '' });
+  const chiPed = chiManual.ativo ? { id: 'manual', numero_pedido: chiManual.numero.trim(), cliente: chiManual.cliente.trim(), novo_ou_modernizacao: chiManual.obra, tipo_aplicacao: null, ops: [], manual: true } : chiPedSel;
+  const chiPronto = !!(chiPed && String(chiPed.numero_pedido).trim());
+  // Chicotes acrescentados à mão (como o DZ): ficam guardados neste navegador.
+  const [chiExtras, setChiExtras] = React.useState(() => { try { return JSON.parse(localStorage.getItem('vp_etiquetas_chicotes_extra') || '[]'); } catch (e) { return []; } });
+  const [chiNovo, setChiNovo] = React.useState({ codigo: '', descricao: '' });
+  const gravarExtras = (l) => { setChiExtras(l); try { localStorage.setItem('vp_etiquetas_chicotes_extra', JSON.stringify(l)); } catch (e) { /* sem armazenamento */ } };
+  const addChiExtra = () => {
+    const codigo = chiNovo.codigo.trim().toUpperCase().replace(/\s+/g, '');
+    if (!codigo || codigo.length > 12) return;
+    if (C.CHICOTES.some((c) => c.codigo === codigo) || chiExtras.some((c) => c.codigo === codigo)) { setChiSel((a) => new Set(a).add(codigo)); setChiNovo({ codigo: '', descricao: '' }); return; }
+    gravarExtras(chiExtras.concat([{ codigo, descricao: chiNovo.descricao.trim() }]));
+    setChiSel((a) => new Set(a).add(codigo)); setChiNovo({ codigo: '', descricao: '' });
+  };
   const [chiSel, setChiSel] = React.useState(() => new Set());
   React.useEffect(() => {
     if (tipo !== 'CHICOTE_QUADRO') return undefined;
@@ -387,13 +402,13 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   }, [tipo, qChi]);
   const [chiCasa, setChiCasa] = React.useState(false);
   const chiAplic = chiPed ? (chiPed.tipo_aplicacao || (chiCasa ? 'MR' : null)) : null;
-  const chiLista = chiPed && !chiPed.sem_quadro ? C.CHICOTES.filter((c) => C.chicoteDisponivel(c, chiAplic)) : [];
+  const chiLista = chiPed ? (chiPed.sem_quadro ? [] : C.CHICOTES.filter((c) => C.chicoteDisponivel(c, chiAplic))).concat(chiExtras.map((c) => ({ ...c, extra: true }))) : [];
   // Cabos do pedido (PCP): cada um com quantas etiquetas imprimir (peças = 1 por peça; cabo por metro = 1).
   const [chiCabos, setChiCabos] = React.useState({ itens: [], erro: null });
   const [caboSel, setCaboSel] = React.useState(() => new Map());
   const escolherPedidoChi = (p) => {
-    setChiPed(p); setChiCasa(false);
-    setChiSel(new Set(p.sem_quadro ? [] : C.CHICOTES.filter((c) => C.chicoteDisponivel(c, p.tipo_aplicacao)).map((c) => c.codigo)));
+    setChiManual((m) => ({ ...m, ativo: false })); setChiPed(p); setChiCasa(false);
+    setChiSel(new Set((p.sem_quadro ? [] : C.CHICOTES.filter((c) => C.chicoteDisponivel(c, p.tipo_aplicacao)).map((c) => c.codigo)).concat(chiExtras.map((c) => c.codigo))));
     setChiCabos({ itens: [], erro: null }); setCaboSel(new Map());
     S.listarCabosDoPedido(p.numero_pedido).then((r) => {
       setChiCabos(r);
@@ -451,7 +466,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
     }
     return Array.from(selItem.values()).map((p) => ({ ref: p.codigo, dados: C.dadosItem(p), copias }));
   };
-  const nSel = tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'CHICOTE_QUADRO' ? (chiPed ? chiLista.filter((c) => chiSel.has(c.codigo)).length + caboLinhas().length : 0) : tipo === 'FABRICACAO_OP' ? (fabOp && fabMat ? fabN : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'EXPEDICAO' ? (nfSel ? expN - expIni + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
+  const nSel = tipo === 'PALETE' ? (piSel && recSel.size && palCodigo ? 1 : 0) : tipo === 'IDTAG_EQUIPAMENTO' ? tagSel.size : tipo === 'OP_QUADRO' ? (opSel ? 1 : 0) : tipo === 'CHICOTE_QUADRO' ? (chiPronto ? chiLista.filter((c) => chiSel.has(c.codigo)).length + caboLinhas().length : 0) : tipo === 'FABRICACAO_OP' ? (fabOp && fabMat ? fabN : 0) : tipo === 'AVARIA' ? (avItem && Number(avQtd) > 0 && avMotivo.trim().length >= 3 ? 1 : 0) : tipo === 'RECEBIMENTO' ? recSel.size : tipo === 'SEPARACAO' ? (pedSel ? sepN - Math.max(1, Math.min(sepN, Math.floor(Number(sepDe) || 1))) + 1 : 0) : tipo === 'EXPEDICAO' ? (nfSel ? expN - expIni + 1 : 0) : tipo === 'ENDERECO' ? selEnd.size : selItem.size;
   const primeiraRef = tipo === 'ENDERECO'
     ? (Array.from(selEnd)[0] || (filtrados[0] && filtrados[0].codigo))
     : (Array.from(selItem.keys())[0] || (achados.itens[0] && achados.itens[0].codigo));
@@ -460,7 +475,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
       if (tipo === 'PALETE') return piSel && recSel.size && palCodigo ? palDados() : null;
       if (tipo === 'IDTAG_EQUIPAMENTO') { const c = obraTag.obra && (obraTag.obra.equipamentos.find((x) => tagSel.has(x)) || obraTag.obra.equipamentos[0]); return c ? tagDados(c) : null; }
       if (tipo === 'OP_QUADRO') return opSel ? opDados() : null;
-      if (tipo === 'CHICOTE_QUADRO') { const c = chiLista.find((x) => chiSel.has(x.codigo)); if (chiPed && c) return chiDados(c); const cl = caboLinhas(); return chiPed && cl[0] ? cl[0].dados : null; }
+      if (tipo === 'CHICOTE_QUADRO') { const c = chiLista.find((x) => chiSel.has(x.codigo)); if (!chiPronto) return null; if (c) return chiDados(c); const cl = caboLinhas(); return cl[0] ? cl[0].dados : null; }
       if (tipo === 'FABRICACAO_OP') return fabOp && fabMat ? fabDados(1) : null;
       if (tipo === 'AVARIA') return avItem ? avDados() : null;
       if (tipo === 'RECEBIMENTO') { const i = itensPi.find((x) => recSel.has(x.codigo_produto)) || itensPi[0]; return piSel && i ? recDados(i) : null; }
@@ -544,6 +559,19 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
             </>
           ) : tipo === 'CHICOTE_QUADRO' ? (
             <>
+              <div className="card" style={{ padding: 10, marginBottom: 10 }}>
+                <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: chiManual.ativo ? 8 : 0 }}>
+                  <input type="checkbox" checked={chiManual.ativo} onChange={(e) => { const ativo = e.target.checked; setChiManual((m) => ({ ...m, ativo })); if (ativo) { setChiCasa(false); setChiCabos({ itens: [], erro: null }); setCaboSel(new Map()); setChiSel(new Set(C.CHICOTES.filter((c) => !c.soCasaMaquinas).map((c) => c.codigo).concat(chiExtras.map((c) => c.codigo)))); } }}/>
+                  <b style={{ fontWeight: 600 }}>Etiqueta avulsa</b> <span style={{ color: 'var(--fg3)' }}>— digitar o pedido e o cliente à mão (não precisa existir no sistema)</span>
+                </label>
+                {chiManual.ativo ? (
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+                    <label style={{ fontSize: 12 }}>Nº do pedido <input className="input" value={chiManual.numero} maxLength={20} onChange={(e) => setChiManual((m) => ({ ...m, numero: e.target.value }))} style={{ width: 130 }}/></label>
+                    <label style={{ fontSize: 12 }}>Cliente <input className="input" value={chiManual.cliente} maxLength={60} onChange={(e) => setChiManual((m) => ({ ...m, cliente: e.target.value }))} style={{ width: 260 }}/></label>
+                    <label style={{ fontSize: 12 }}>Obra <select className="input" value={chiManual.obra} onChange={(e) => setChiManual((m) => ({ ...m, obra: e.target.value }))}><option value="">—</option><option value="novo">Novo</option><option value="modernizacao">Modernização</option></select></label>
+                  </div>
+                ) : null}
+              </div>
               <input className="input" placeholder="Buscar o pedido do quadro por número ou cliente…" value={qChi} onChange={(e) => setQChi(e.target.value)} style={{ width: '100%', marginBottom: 8 }}/>
               {pedsChi.erro ? <div style={{ fontSize: 12, color: 'var(--vp-danger)', marginBottom: 6 }}>Não consegui buscar: {pedsChi.erro}</div> : null}
               <div className="card table-wrap" style={{ maxHeight: 220, overflow: 'auto', marginBottom: 10 }}>
@@ -561,6 +589,7 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
               </div>
               {chiPed ? (
                 <div className="card" style={{ padding: 10 }}>
+                  {chiPed.manual && !chiPronto ? <div style={{ fontSize: 12, marginBottom: 6, color: 'var(--vp-danger)' }}>Digite o número do pedido para liberar as etiquetas.</div> : null}
                   {chiPed.sem_quadro ? <div style={{ fontSize: 12, marginBottom: 6, color: 'var(--fg3)' }}>Pedido {chiPed.numero_pedido} sem quadro de comando: só os cabos dele, abaixo.</div> : null}
                   {chiPed.sem_quadro ? null : <div style={{ fontSize: 12, marginBottom: 6 }}><b>Chicotes do pedido {chiPed.numero_pedido}</b> — uma etiqueta por chicote marcado.{chiAplic === 'MR' ? ' Elevador com casa de máquinas: POW1 incluído.' : ' O POW1 só aparece em elevador com casa de máquinas.'}</div>}
                   {!chiPed.tipo_aplicacao && !chiPed.sem_quadro ? <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}><input type="checkbox" checked={chiCasa} onChange={(e) => mudarCasaChi(e.target.checked)}/> Este elevador tem casa de máquinas (inclui o POW1) <span style={{ color: 'var(--fg3)' }}>— o cadastro deste pedido não informa a aplicação</span></label> : null}
@@ -573,9 +602,16 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
                     {chiLista.map((c) => (
                       <label key={c.codigo} style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'baseline' }}>
                         <input type="checkbox" checked={chiSel.has(c.codigo)} onChange={(e) => setChiSel((a) => { const n = new Set(a); if (e.target.checked) n.add(c.codigo); else n.delete(c.codigo); return n; })}/>
-                        <span><b style={{ fontWeight: 600 }}>{c.codigo}</b> <span style={{ color: 'var(--fg3)' }}>{c.descricao}</span></span>
+                        <span><b style={{ fontWeight: 600 }}>{c.codigo}</b> <span style={{ color: 'var(--fg3)' }}>{c.descricao}</span>{c.extra ? <button type="button" className="btn btn--ghost btn--sm" title="Tirar este chicote da lista" onClick={(e) => { e.preventDefault(); gravarExtras(chiExtras.filter((x) => x.codigo !== c.codigo)); setChiSel((s0) => { const n = new Set(s0); n.delete(c.codigo); return n; }); }} style={{ marginLeft: 6 }}>×</button> : null}</span>
                       </label>
                     ))}
+                  </div>
+                  <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center', marginTop: 8 }}>
+                    <span style={{ fontSize: 12 }}><b>Acrescentar chicote:</b></span>
+                    <input className="input" placeholder="Código (ex. DZ2)" value={chiNovo.codigo} maxLength={12} onChange={(e) => setChiNovo((n) => ({ ...n, codigo: e.target.value }))} onKeyDown={(e) => { if (e.key === 'Enter') addChiExtra(); }} style={{ width: 130 }}/>
+                    <input className="input" placeholder="Descrição (opcional)" value={chiNovo.descricao} maxLength={60} onChange={(e) => setChiNovo((n) => ({ ...n, descricao: e.target.value }))} onKeyDown={(e) => { if (e.key === 'Enter') addChiExtra(); }} style={{ width: 240 }}/>
+                    <button type="button" className="btn btn--sm" onClick={addChiExtra} disabled={!chiNovo.codigo.trim()}>Acrescentar</button>
+                    <span style={{ fontSize: 11, color: 'var(--fg3)' }}>Fica guardado neste computador para os próximos pedidos.</span>
                   </div>
                   {chiCabos.itens.length ? (
                     <div style={{ marginTop: 10 }}>
