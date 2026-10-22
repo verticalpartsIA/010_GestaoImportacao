@@ -117,7 +117,7 @@
   <!-- Roteamento por URL (Fase 1 da roteirização, issue #279) — carrega
        depois do guard de SSO (mexe só na query string, nunca no pathname)
        e antes de shell.jsx/app.jsx, que o consomem. -->
-  <script src="/src/router.js?v=34"></script>
+  <script src="/src/router.js?v=35"></script>
 
   <script src="/src/notificacoes-processamento.js?v=5"></script>
   <script src="/src/notificacoes-lidas-store.js?v=2"></script>
@@ -125,7 +125,7 @@
   <!-- Administração — espelho de colaboradores (vpsistema) + alocação de
        módulos do VP Gestão. Carrega cedo pra enriquecer window.__VP_USER
        (foto + grupos alocados) assim que a identidade SSO chegar. -->
-  <script src="/src/colaboradores-admin-store.js?v=45"></script>
+  <script src="/src/colaboradores-admin-store.js?v=46"></script>
 
   <!-- Registro central de atividades (auditoria global) -->
   <script src="/src/vp-log.js?v=4"></script>
@@ -182,7 +182,7 @@
   <script type="text/vp-jsx" src="/src/primitives.jsx?v=8"></script>
   <script type="text/vp-jsx" src="/src/toast.jsx?v=6"></script>
   <script type="text/vp-jsx" src="/src/ajuda-suporte.jsx?v=3"></script>
-  <script type="text/vp-jsx" src="/src/shell.jsx?v=122"></script>
+  <script type="text/vp-jsx" src="/src/shell.jsx?v=123"></script>
   <script type="text/vp-jsx" src="/src/dashboard.jsx?v=23"></script>
   <script type="text/vp-jsx" src="/src/comercial.jsx?v=42"></script>
   <script type="text/vp-jsx" src="/src/crm.jsx?v=1"></script>
@@ -274,6 +274,10 @@
   <script src="/src/fabricacao-quadro-calc.js?v=2"></script>
   <script src="/src/fabricacao-quadro-store.js?v=5"></script>
   <script type="text/vp-jsx" src="/src/evolucao-fabricacao-quadro.jsx?v=3"></script>
+  <script src="/src/fabricacao-oficina-calc.js?v=1"></script>
+  <script src="/src/fabricacao-oficina-store.js?v=1"></script>
+  <script type="text/vp-jsx" src="/src/fabricacao-oficina-ui.jsx?v=1"></script>
+  <script type="text/vp-jsx" src="/src/fabricacao-oficina.jsx?v=1"></script>
   <script type="text/vp-jsx" src="/src/inbox-triagem.jsx?v=5"></script>
   <script type="text/vp-jsx" src="/src/inbox-gmail.jsx?v=5"></script>
   <script type="text/vp-jsx" src="/src/inbox-organizar.jsx?v=1"></script>
@@ -300,7 +304,7 @@
   <script type="text/vp-jsx" src="/src/almoxarifado.jsx?v=39"></script>
   <script type="text/vp-jsx" src="/src/ajustes-estoque.jsx?v=2"></script>
   <script type="text/vp-jsx" src="/src/almoxarifado-compras.jsx?v=3"></script>
-  <script type="text/vp-jsx" src="/src/pcp.jsx?v=35"></script>
+  <script type="text/vp-jsx" src="/src/pcp.jsx?v=36"></script>
   <script type="text/vp-jsx" src="/src/painel-producao-pcp.jsx?v=3"></script>
   <script type="text/vp-jsx" src="/src/painel-perdas-pcp.jsx?v=4"></script>
   <script src="/src/pcp-etapas-omie.js?v=1"></script>
@@ -310,7 +314,7 @@
   <script type="text/vp-jsx" src="/src/relatorios-pcp-extras.jsx?v=4"></script>
   <script type="text/vp-jsx" src="/src/relatorios-pcp.jsx?v=18"></script>
   <script type="text/vp-jsx" src="/src/expedicao.jsx?v=8"></script>
-  <script type="text/vp-jsx" src="/src/separacao.jsx?v=7"></script>
+  <script type="text/vp-jsx" src="/src/separacao.jsx?v=8"></script>
   <script src="/src/etiquetas-calc.js?v=24"></script>
   <script src="/src/etiquetas-impressoras.js?v=4"></script>
   <script src="/src/etiquetas-store.js?v=10"></script>
@@ -458,6 +462,6 @@
   <script type="text/vp-jsx" src="/src/vp-copiloto.jsx?v=11"></script>
 
   <!-- Main app last -->
-  <script type="text/vp-jsx" src="/src/app.jsx?v=104"></script>
+  <script type="text/vp-jsx" src="/src/app.jsx?v=105"></script>
 </body>
 </html>

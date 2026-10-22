@@ -14,7 +14,7 @@
 - O 1º segmento (**módulo**) vem do `BREADCRUMB_MAP` do `shell.jsx` via `MODULE_SLUG` do `router.js`; só o 2º segmento (a rota) decide o que abre.
 - A **aba padrão** deixa a URL limpa (sem o último segmento). Aba inválida na URL cai na padrão.
 - Abas entram na URL com `window.useRouteTab(rota, padrão, [válidas], comId?)` (em `router.js`).
-- Rotas no roteador: **85** · itens de menu: **74** · telas com abas na URL: **16**.
+- Rotas no roteador: **87** · itens de menu: **76** · telas com abas na URL: **16**.
 
 ## Verificações automáticas
 
@@ -151,6 +151,8 @@
 | Produtos | `cadastro-produtos` | `/geral/cadastro-produtos` | — | — |
 | Montagem do Produto | `montagem-produto` | `/logistica/montagem-produto` | — | — |
 | Evolução da Fabricação | `evolucao-fabricacao` | `/logistica/evolucao-fabricacao` | — | — |
+| Fabricação Corrimão | `fabricacao-corrimao` | `/logistica/fabricacao-corrimao` | — | — |
+| Fabricação Corte | `fabricacao-corte` | `/logistica/fabricacao-corte` | — | — |
 | Simulação | `simulacao-producao` | `/logistica/simulacao-producao` | — | — |
 | Relatórios | `relatorios-pcp` | `/logistica/relatorios-pcp[/<aba>]` | **painel**, pedidos, precos, producao, perdas, estoque, fluxo, clientes, fotos | — |
 
@@ -185,7 +187,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 |---|---|---|---|---|
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `central-documentos.jsx:79` |
 | (? em central-documentos.jsx) | (acionado por um handler — ver o código) | `rh-homologacao` | `/rh/rh-homologacao` | `central-documentos.jsx:81` |
-| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:344` |
+| (App em app.jsx) | (acionado por um handler — ver o código) | `dashboard` | `/geral/dashboard` | `app.jsx:346` |
 | (CardContratoInstalador em dossier-obra.jsx) | Abrir no Jurídico → | `contrato-instalador` | `/juridico/contrato-instalador` | `dossier-obra.jsx:516` |
 | (CVDetalhe em cotacoes-varejo.jsx) | (acionado por um handler — ver o código) | `cadastro-fornecedores` | `/cadastros/cadastro-fornecedores` | `cotacoes-varejo.jsx:346` |
 | (CVLista em cotacoes-varejo.jsx) | Ir para Importação Varejo | `compras` | `/logistica/compras` | `cotacoes-varejo.jsx:49` |
@@ -200,8 +202,8 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | (TabEquipamentos em dossier-obra.jsx) | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `dossier-obra.jsx:1052` |
 | art | (acionado por um handler — ver o código) | `status-obras` | `/engenharia/status-obras` | `entrega.jsx:7` |
 | cadastro-instaladores | (acionado por um handler — ver o código) | `dossier-obra` | `/engenharia/dossier-obra` | `cadastro-instaladores.jsx:97` |
-| compras | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `importacao-varejo.jsx:616` |
-| compras | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `importacao-varejo.jsx:860` |
+| compras | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `importacao-varejo.jsx:618` |
+| compras | (acionado por um handler — ver o código) | `cotacoes-varejo` | `/logistica/cotacoes-varejo` | `importacao-varejo.jsx:862` |
 | contrato-editor | Voltar para Contratos | `juridico` | `/juridico/juridico` | `contrato-editor.jsx:258` |
 | contrato-editor | Voltar | `juridico` | `/juridico/juridico` | `contrato-editor.jsx:387` |
 | controle-cotacoes | (acionado por um handler — ver o código) | `formulario-elevador` | `/comercial/formulario-elevador` | `controle-cotacoes.jsx:137` |
@@ -219,7 +221,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | emissao-nf | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `emissao-nf.jsx:199` |
 | engenharia | Abrir obras | `status-obras` | `/engenharia/status-obras` | `operacoes.jsx:273` |
 | engenharia | Abrir obras | `status-obras` | `/engenharia/status-obras` | `operacoes.jsx:322` |
-| expedicao | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `expedicao.jsx:294` |
+| expedicao | (acionado por um handler — ver o código) | `pcp` | `/logistica/pcp` | `expedicao.jsx:296` |
 | formulario-elevador | (acionado por um handler — ver o código) | `controle-cotacoes` | `/comercial/controle-cotacoes` | `formulario-elevador.jsx:1997` |
 | formulario-elevador | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `formulario-elevador.jsx:1995` |
 | formulario-quadro-comando | (acionado por um handler — ver o código) | `formularios` | `/comercial/formularios` | `quadro-comando.jsx:1139` |
@@ -247,7 +249,7 @@ Navegação por `setRoute("destino")` com destino fixo no código. (Destinos cal
 | ncm-detail | Voltar para Solicitações NCM | `ncm-kanban` | `/engenharia/ncm-kanban` | `ncm-catalogo.jsx:854` |
 | ncm-kanban | (acionado por um handler — ver o código) | `ncm-detail` | `/engenharia/ncm-detail` | `ncm-catalogo.jsx:770` |
 | ncm-kanban | (acionado por um handler — ver o código) | `ncm-detail` | `/engenharia/ncm-detail` | `ncm-catalogo.jsx:818` |
-| proposta-editor | (acionado por um handler — ver o código) | `propostas` | `/comercial/propostas` | `proposta-editor.jsx:1014` |
+| proposta-editor | (acionado por um handler — ver o código) | `propostas` | `/comercial/propostas` | `proposta-editor.jsx:1043` |
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:560` |
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:605` |
 | propostas | (acionado por um handler — ver o código) | `proposta-editor` | `/comercial/proposta-editor` | `precificacao.jsx:606` |

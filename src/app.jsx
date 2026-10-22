@@ -26,6 +26,8 @@ const ROUTE_TITLE = {
   "carga-maquina": "Carga Máquina",
   "montagem-produto": "Montagem do Produto",
   "evolucao-fabricacao": "Evolução da Fabricação",
+  "fabricacao-corrimao": "Fabricação Corrimão",
+  "fabricacao-corte": "Fabricação Corte",
   "simulacao-producao": "Simulação",
   "relatorios-pcp": "Relatórios do PCP",
   expedicao: "Expedição",
@@ -421,6 +423,8 @@ function App() {
       case "simulacao-producao": return <window.SimulacaoProducaoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "montagem-produto": return <window.MontagemProdutoPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "evolucao-fabricacao": return <window.EvolucaoFabricacaoQuadroPage setRoute={setRoute} setSubsel={setSubsel}/>;
+      case "fabricacao-corrimao": return <window.FabricacaoCorrimaoPage/>;
+      case "fabricacao-corte": return <window.FabricacaoCortePage/>;
       case "pcp": return <window.PCPPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "mes": return <window.MESPage setRoute={setRoute} setSubsel={setSubsel}/>;
       case "mes-cadastros": return <window.MESCadastrosPage setRoute={setRoute} setSubsel={setSubsel}/>;
