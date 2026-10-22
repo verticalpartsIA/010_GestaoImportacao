@@ -402,7 +402,7 @@
   async function listarOPsAbertas() {
     const c = sb();
     const { data, error } = await c.from('pcp_ordens')
-      .select('id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id')
+      .select('id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id, pedido_codigo')
       .eq('frente', 'quadro')
       .in('status', ['aguardando', 'em_producao'])
       .order('prazo_entrega', { ascending: true });
