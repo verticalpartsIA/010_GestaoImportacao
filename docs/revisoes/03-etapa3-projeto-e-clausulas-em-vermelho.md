@@ -39,7 +39,9 @@ Regras:
 - **Áreas blindadas**: mexe em `assinar-app.jsx`, no bundle de PDF do contrato e no motor do contrato. Só com sua confirmação explícita.
 
 ## 4. Status da Etapa 1 (banco)
-**Pronto no papel e em arquivo; nada aplicado em produção.**
+**APLICADA EM PRODUÇÃO em 22/10/2026** (migration `20261022173232 revisoes_comerciais_etapa1`), depois de ensaio desfeito na própria produção (transação com erro forçado, nada ficou gravado). Conferência pós-aplicação: 332 propostas, todas `vigente`/índice 0; 8 tokens copiados; 1 solicitação legada migrada; 3 índices; 6 tabelas novas com RLS; `anon` não executa as RPCs, `authenticated` executa. Nenhuma tela usa as revisões ainda — o comportamento do sistema não mudou, exceto: proposta já enviada só pode ser excluída por Administrador.
+
+*(Texto original do status anterior: pronto no papel e em arquivo.)*
 - Migration: `supabase/migrations/20261022100000_revisoes_comerciais_etapa1.sql` (aditiva, idempotente).
 - Testes: `supabase/tests/revisoes/` — `bash supabase/tests/revisoes/run-local.sh` sobe um Postgres 16 descartável, aplica a migration **duas vezes** e roda 16 grupos de teste + concorrência. **Resultado em 22/10: todos passaram.**
 - O teste achou e corrigiu um defeito de desenho: `proposta_tokens` só seria preenchida no backfill; agora um gatilho a mantém em dia.
@@ -50,3 +52,6 @@ Regras:
 - Seu **"pode aplicar"** para a Etapa 1 no banco (primeiro o ensaio desfeito; só depois a aplicação).
 - Validar com a Engenharia a lista de campos de **Projeto** (§2).
 - Confirmar a proposta de **letra** para revisão de contrato antes da assinatura (§3).
+
+## 6. Ensaio na produção (22/10) — achado
+Ao aprovar a revisão `A` no ensaio, o gatilho atual `trg_avais_abrir_na_proposta` criou **mais um Aval Financeiro e mais um Aval Jurídico** para a mesma cotação. É a duplicação prevista; a Etapa 2 (herdar/reabrir avais por revisão) precisa estar pronta **antes** de qualquer tela criar revisão para valer.
