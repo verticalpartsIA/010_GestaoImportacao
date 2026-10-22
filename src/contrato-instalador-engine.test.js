@@ -78,3 +78,44 @@ test('equipamentos — ativos marcados da Proposta + manuais, sem duplicata, e c
   assert.match(it.text, /Equipamentos objeto deste contrato.*VPEL-EL0955-1, VPEL-EL0955-3, SN-77\./);
   assert.equal(CI.buildContract(CI.defaultState(), 'X').clauses[0].items.some((i) => i.n === '1.1.1'), false);
 });
+
+const itensObjeto = (s) => CI.buildContract(s, 'VPNI-T').clauses[0].items;
+test('1.1.1 — equipamento descrito com tipo + nº de série + dossiê (não só o código do dossiê)', () => {
+  const s = CI.defaultState();
+  s.equipamentosManuais = ['DOS-M055'];
+  s.equipamentosDetalhe = [{ dossier: 'DOS-M055', serie: '500.0395', descricao: 'Elevador Panorâmico – 1000 – 2 – 4– MRL – 1 Porta', tipo: 'elevador' }];
+  const t = itensObjeto(s).find((i) => i.n === '1.1.1').text;
+  assert.match(t, /Elevador Panorâmico.*nº de série 500\.0395; Dossiê DOS-M055/);
+  assert.equal((t.match(/DOS-M055/g) || []).length, 1);   // não repete o dossiê como se fosse outro equipamento
+  s.equipamentosDetalhe[0].serie = '';
+  assert.match(itensObjeto(s).find((i) => i.n === '1.1.1').text, /nº de série não informado/);   // ausência dita, nada inventado
+});
+
+test('1.2 — descrição livre opcional quando há fase marcada com texto; ":" solto não vale', () => {
+  const s = CI.defaultState();
+  s.descricaoServicos = ':';
+  assert.equal(CI.descricaoServicosValida(s), false);                       // zero fases + descrição vazia
+  assert.match(itensObjeto(s).find((i) => i.n === '1.2').text, /detalhar os serviços/);
+  s.fasesAtivas = { f1: true };
+  assert.equal(CI.descricaoServicosValida(s), true);                        // uma fase
+  const it = itensObjeto(s).find((i) => i.n === '1.2');
+  assert.match(it.text, /executará as seguintes etapas/); assert.equal(it.list.length, 1);
+  assert.equal(itensObjeto(s).some((i) => i.n === '1.2.1'), false);
+  s.fasesAtivas = { f1: true, f2: true, f3: true, f4: true };
+  assert.equal(itensObjeto(s).find((i) => i.n === '1.2').list.length, 4);   // quatro fases
+  s.descricaoServicos = 'Montagem completa';
+  assert.equal(itensObjeto(s).find((i) => i.n === '1.2').text, 'Descrição dos serviços: Montagem completa');
+  assert.equal(itensObjeto(s).find((i) => i.n === '1.2.1').list.length, 4); // livre + fases somadas
+  s.descricaoServicos = ''; s.fasesTexto = { f1: '  ', f2: '', f3: '', f4: '' };
+  assert.equal(CI.descricaoServicosValida(s), false);                       // fase marcada com texto apagado não supre
+  assert.equal(itensObjeto(s).some((i) => /Descrição dos serviços: :/.test(i.text || '')), false);
+});
+
+test('1.1.1 — equipamento removido da seleção sai do texto (detalhes seguem a seleção atual)', () => {
+  const s = CI.defaultState();
+  s.equipamentosManuais = ['DOS-A', 'DOS-B'];
+  s.equipamentosDetalhe = [{ dossier: 'DOS-A', serie: '1', descricao: 'Elevador A' }, { dossier: 'DOS-B', serie: '2', descricao: 'Elevador B' }];
+  s.equipamentosManuais = ['DOS-B'];   // usuário removeu o chip do DOS-A
+  const t = CI.buildContract(s, 'X').clauses[0].items.find((i) => i.n === '1.1.1').text;
+  assert.match(t, /Elevador B/); assert.doesNotMatch(t, /Elevador A|nº de série 1/);
+});
