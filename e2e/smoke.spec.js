@@ -62,6 +62,7 @@ const PAGINAS_PUBLICAS = [
   { url: '/diario-obra/e2e-token', root: '#do-root' },
   { url: '/termo-entrega/e2e-token', root: '#te-root' },
   { url: '/recibo/e2e-token', root: '#rc-root' },
+  { url: '/fabricacao-oficina/e2e-token', root: '#fo-root' },
 ];
 
 test.describe('Páginas públicas', () => {

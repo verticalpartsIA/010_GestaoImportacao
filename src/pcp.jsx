@@ -1073,7 +1073,9 @@ function pcpPlanoDoPedido(itens, dados, origem) {
   const frentes = Object.keys(porCodigo).map(codigo => {
     const qtd = porCodigo[codigo];
     const montagem = (dados.filhos[codigo] || []).length > 0;
-    return { codigo, qtd, tipo: montagem ? 'quadro' : 'corte', descricao: dados.prods[codigo]?.descricao || codigo, unidade: dados.prods[codigo]?.unidade || null };
+    // Corrimão tem estrutura (kit de emenda) mas NÃO é quadro: a família manda (decisão de 22/10/2026) — vai para Fabricação Corrimão.
+    const corrimao = /CORRIM/i.test(String(dados.prods[codigo]?.familia || ''));
+    return { codigo, qtd, tipo: corrimao ? 'corrimao' : (montagem ? 'quadro' : 'corte'), descricao: dados.prods[codigo]?.descricao || codigo, unidade: dados.prods[codigo]?.unidade || null };
   });
   return { frentes, outros };
 }
@@ -1098,8 +1100,30 @@ async function pcpGerarOpsDoPedido(sb, pedido, itens, dados, opcoes) {
     })));
     if (r.error) throw new Error(r.error.message);
   }
+  // Itens que a Separação já enviou para Corte/Corrimão (OP-unidade sem OP-mãe): a mãe adota essas OPs e não cria outra para o mesmo item.
+  const { data: jaEnviadas } = await sb.from('pcp_ordens').select('id, item_codigo').eq('pedido_codigo', pedido.codigo_pedido).not('item_codigo', 'is', null).neq('status', 'cancelada');
+  const adotar = (jaEnviadas || []).map(o => o.id);
+  const itensEnviados = new Set((jaEnviadas || []).map(o => o.item_codigo));
+  if (adotar.length) {
+    const ad = await sb.from('pcp_ordens').update({ ordem_mae_id: mae.id }).in('id', adotar).is('ordem_mae_id', null);
+    if (ad.error) throw new Error(ad.error.message);
+  }
   let nQ = 0, nC = 0;
   for (const f of plano.frentes) {
+    if (!f.servico && itensEnviados.has(String(f.codigo).toUpperCase())) continue;
+    if (f.tipo === 'corrimao') {
+      const porUnidade = ['UN', 'PC', 'PR', 'PAR', 'KIT'].includes(String(f.unidade || '').toUpperCase());
+      const un = porUnidade ? Math.max(1, Math.ceil(Number(f.qtd) || 1)) : 1;
+      for (let i = 1; i <= un; i++) {
+        const { error } = await sb.from('pcp_ordens').insert({
+          titulo: `${f.descricao}${un > 1 ? ` — unidade ${i}/${un}` : ''}`, frente: 'corrimao', ordem_mae_id: mae.id, pedido_codigo: pedido.codigo_pedido,
+          item_codigo: String(f.codigo).toUpperCase(), unidade_seq: i, quantidade: un > 1 ? 1 : (Number(f.qtd) || 1), cliente: pedido.cliente_nome || null,
+          prazo_entrega: opcoes.prazo_entrega || pedido.data_previsao || null, previsao_inicio: opcoes.previsao_inicio || null, criado_por: quem,
+        });
+        if (error) throw new Error(error.message);
+      }
+      continue;
+    }
     const quadro = f.tipo === 'quadro';
     const n = quadro ? ++nQ : ++nC;
     // Serviço: f.codigo é um código de SERVIÇO do Omie (ex. VPSVC-033), não um produto real —
@@ -1239,9 +1263,10 @@ function PCPFilaProducao({ ctx, abrirOp }) {
               <tr><td><b style={{ fontWeight: 500 }}>OP-mãe (o pedido)</b></td><td>{plano.outros.length ? `Checklist de separação com ${plano.outros.length} item(ns) que não são fabricados (botoeiras, máquina, portas…)` : 'Sem itens de separação'}</td></tr>
               {plano.frentes.map(f => (
                 <tr key={f.servico ? `${f.codigo}-${f.indice}` : f.codigo}>
-                  <td>{f.servico ? `Montagem — Quadro ${f.indice}/${f.total}` : `${f.tipo === 'quadro' ? 'Montagem' : 'Corte'} — ${f.codigo}`}</td>
+                  <td>{f.servico ? `Montagem — Quadro ${f.indice}/${f.total}` : `${f.tipo === 'quadro' ? 'Montagem' : (f.tipo === 'corrimao' ? 'Corrimão' : 'Corte')} — ${f.codigo}`}</td>
                   <td>{f.servico ? `Serviço ${f.codigo} (${f.descricao}) · 1 quadro físico, materiais a partir dos componentes já baixados na OS · etapas: Separar → Montagem → Qualidade`
-                    : (f.tipo === 'quadro' ? `${pcpFmt(f.qtd, 0)} un. · materiais da estrutura padrão do Omie (${(pcpMateriaisOmie(dados, f.codigo)).length} itens) · etapas: Separar → Montagem → Qualidade`
+                    : (f.tipo === 'corrimao' ? `${pcpFmt(f.qtd)} ${f.unidade || 'un.'} · 1 OP por corrimão, acompanhada em Fabricação Corrimão (Mede → Corta → Prepara as pontas → Aplica as camadas → Vulcaniza → Acabamento)`
+                    : f.tipo === 'quadro' ? `${pcpFmt(f.qtd, 0)} un. · materiais da estrutura padrão do Omie (${(pcpMateriaisOmie(dados, f.codigo)).length} itens) · etapas: Separar → Montagem → Qualidade`
                     : `${pcpFmt(f.qtd)} ${f.unidade || 'm'} de ${f.descricao} · etapas: Separar → Corte → Qualidade`)}</td>
                 </tr>
               ))}
@@ -1614,7 +1639,7 @@ function PCPPage({ setRoute, setSubsel }) {
     if (!sb) { setErro('Supabase indisponível.'); return; }
     Promise.all([
       sb.from('pcp_estrutura').select('codigo_pai, codigo_filho, quantidade, perda_pct').limit(5000),
-      sb.from('pcp_produtos').select('codigo, descricao, unidade, tipo_sped').eq('ativo', true).limit(5000),
+      sb.from('pcp_produtos').select('codigo, descricao, unidade, tipo_sped, familia').eq('ativo', true).limit(5000),
       sb.from('pcp_estoque').select('codigo, quantidade').limit(10000),
       sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido').limit(5000),
     ]).then(([e, p, s, pd]) => {
