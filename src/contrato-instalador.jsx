@@ -960,6 +960,8 @@ function CIStepPagamento({ s, set, errors }) {
             {errors.parcelas && <span className="ci-field-err">{errors.parcelas}</span>}
           </div>
         )}
+        <CICheckRow checked={s.condicionarUltimaParcela === true} onChange={(v) => set('condicionarUltimaParcela', v)}
+          label="Condicionar a última parcela à aprovação na vistoria técnica e à emissão dos laudos de conformidade (cláusula 5.1, antes dos dados bancários)" />
         {(s.dossierIds || []).length === 0 && s.formaPagamento !== 'custom' && (
           <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Sem obra/dossiê vinculado (Passo 3): só a 1ª parcela ("início dos trabalhos") nasce liberada para pagamento; as demais só liberam automaticamente quando o contrato estiver ligado a um dossiê.</div>
         )}

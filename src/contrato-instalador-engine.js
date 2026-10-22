@@ -240,7 +240,7 @@
       paradas: '5', paradasCustom:'', destino:'',
       obraCidade:'', obraEstado:'', distancia:'', distanciaAuto:true,
       logResponsavel:'contratada', logModo:'despesas', logDiasExtra:'',
-      valorTotal:'', formaPagamento:'2', parcelas:[], datasParcelas:['', '', ''],   // datas previstas das parcelas rápidas (2/3); nas personalizadas é p.data
+      valorTotal:'', formaPagamento:'2', parcelas:[], condicionarUltimaParcela: true, datasParcelas:['', '', ''],   // datas previstas das parcelas rápidas (2/3); nas personalizadas é p.data
       banco:'', agencia:'', conta:'', pix:'',
       cidadeAssinatura: 'Guarulhos',
       dataDia: pad2(hoje.getDate()),
@@ -498,7 +498,19 @@
        fixo em "5.1.3") — senão desalinha sempre que a forma de pagamento
        não é a de 2 parcelas (3 parcelas usa até 5.1.3, personalizado usa
        um número de itens variável). */
-    const lastN = items.length ? items[items.length - 1].n : '5.1';
+    /* Última parcela condicionada à vistoria e aos laudos (redação do Jurídico, 22/10/2026) — imediatamente antes dos dados bancários.
+       Só quando marcado (`=== true`: contratos criados antes não têm a chave e ficam como estavam). O valor é o da última parcela
+       da sequência efetiva, recalculado a cada edição; sem valor válido vira o marcador padrão do documento. */
+    let lastN = items.length ? items[items.length - 1].n : '5.1';
+    if (s.condicionarUltimaParcela === true) {
+      let vUlt = 0;
+      if (s.formaPagamento === '2') vUlt = dividirEmParcelas(valor, 2)[1];
+      else if (s.formaPagamento === '3') vUlt = dividirEmParcelas(valor, 3)[2];
+      else { const pp = (s.parcelas || []); vUlt = pp.length ? moedaParaNumero(pp[pp.length - 1].valor) : 0; }
+      const nCond = bumpItemNumber(lastN);
+      items.push({ n: nCond, text: `A liberação da última parcela (${vUlt ? 'R$ ' + fmtMoeda(vUlt) : 'R$ XX.XXX,XX'}) fica estritamente condicionada à aprovação do equipamento na vistoria técnica realizada pelo Supervisor da CONTRATANTE e à emissão dos laudos de conformidade.` });
+      lastN = nCond;
+    }
     const nBanco = bumpItemNumber(lastN);
     items.push({ n: nBanco, text:'Dados bancários da CONTRATADA:', bank:{ banco, ag, conta, pix } });
     /* Trava de pagamento pelo envio diário do Acompanhamento de Obra (21/10/2026) — cláusula em destaque. */
