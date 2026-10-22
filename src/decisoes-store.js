@@ -44,6 +44,7 @@
   const PAPEL_LABEL = {
     ceo: 'CEO',
     ceo_diego: 'CEO',
+    aval_instalador: 'Aval de contratação',
     owner: 'Dono do Sistema',
     gestor_comercial: 'Gestor Comercial',
     rh: 'RH',
@@ -512,24 +513,24 @@
         .eq('tipo', 'contratacao_mao_obra_ceo').eq('referencia_tabela', 'contratos_instalador').eq('referencia_id', contratoId);
       let avulsa = (existentes || [])[0];
       if (!avulsa) {
-        avulsa = await criarDecisao({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo_diego', referenciaTabela: 'contratos_instalador', referenciaId: contratoId, contexto: { ...contexto, avulso: true } });
+        avulsa = await criarDecisao({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'aval_instalador', referenciaTabela: 'contratos_instalador', referenciaId: contratoId, contexto: { ...contexto, avulso: true } });
       }
       if (avulsa.status === 'reprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${avulsa.decidido_por || ''}): ${avulsa.motivo || 'sem motivo informado'}.` };
-      if (avulsa.status !== 'aprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reenvioPendente: !!(avulsa.contexto && avulsa.contexto.reenvioPendente), motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador (contrato avulso, sem Proposta). O pedido de aval foi enviado ao Diego por WhatsApp (ele responde SIM ou NÃO).' };
+      if (avulsa.status !== 'aprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reenvioPendente: !!(avulsa.contexto && avulsa.contexto.reenvioPendente), motivo: 'Aguardando o aval da Juliana para contratar mão de obra deste parceiro instalador (contrato avulso, sem Proposta). O pedido de aval foi enviado à Juliana por WhatsApp (ela responde SIM ou NÃO).' };
       return { ok: true };
     }
     let decisoes = await listarPorCotacao(numeroCotacao);
     let decisao = decisoes.find((d) => d.tipo === 'contratacao_mao_obra_ceo');
     if (!decisao) {
-      decisao = await criarDecisaoSeNaoExiste({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo_diego', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao, contexto) });
+      decisao = await criarDecisaoSeNaoExiste({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'aval_instalador', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao, contexto) });
     }
     decisao = await garantirAtiva(decisao);
     if (decisao.status === 'reprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
-    if (decisao.status !== 'aprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reenvioPendente: !!(decisao.contexto && decisao.contexto.reenvioPendente), motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador. O pedido de aval foi enviado ao Diego por WhatsApp (ele responde SIM ou NÃO).' };
+    if (decisao.status !== 'aprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reenvioPendente: !!(decisao.contexto && decisao.contexto.reenvioPendente), motivo: 'Aguardando o aval da Juliana para contratar mão de obra deste parceiro instalador. O pedido de aval foi enviado à Juliana por WhatsApp (ela responde SIM ou NÃO).' };
     return { ok: true };
   }
 
-  /* 20/10/2026 — reenvia o pedido de aval ao Diego por WhatsApp (e, se ele recusou antes, reabre a decisão para ele poder dar o SIM).
+  /* 20/10/2026 — reenvia o pedido de aval à Juliana por WhatsApp (e, se ela recusou antes, reabre a decisão para ela poder dar o SIM).
      A função SQL decisao_aval_reenviar confere a sessão e enfileira o aviso (instalador.aval_pendente). */
   async function reenviarAvalWhatsApp(decisaoId) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
