@@ -511,6 +511,7 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
   const [busca, setBusca] = React.useState('');
   const [numPedidos, setNumPedidos] = React.useState({});
   const [pedidos, setPedidos] = React.useState({});
+  const ord = window.useOrdenacao(); // ▲ menor→maior · ▼ maior→menor · 3º clique volta à ordem original (prazo)
   const [abertos, setAbertos] = React.useState({}); // OP aberta pelo botão ▸ (começa tudo recolhido)
 
   const carregarEstado = React.useCallback(async (ordemId) => {
@@ -592,6 +593,19 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
     });
   }, [ordens, busca, estados, numPedidos]);
 
+  const ordensOrdenadas = React.useMemo(() => {
+    if (!ordensFiltradas) return null;
+    const ped = (o) => pedidos[o.pedido_codigo] || {};
+    return ord.aplicar(ordensFiltradas, {
+      prazo: (o) => ped(o).data_previsao || o.prazo_entrega || null,
+      criado: (o) => ped(o).data_pedido || null,
+      progresso: (o) => (resumos[o.id] ? resumos[o.id].pct : null),
+      pedido: (o) => (o.numero_pedido_omie ? Number(o.numero_pedido_omie) : null),
+      cliente: (o) => fqCliente(o),
+      vendedor: (o) => ped(o).vendedor_nome || null,
+    });
+  }, [ordensFiltradas, ord.ord, pedidos, resumos]);
+
   const totalOps = ordens ? ordens.length : 0;
   const listaResumos = Object.values(resumos);
   const pausadas = listaResumos.filter((r) => r.pausado).length;
@@ -638,6 +652,22 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
         </div>
       )}
 
+      {ordens && ordens.length > 1 && (
+        <div className="row" style={{ gap: 6, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+          <span className="fq-meta" style={{ marginRight: 4 }}>Ordenar por:</span>
+          {[['prazo', 'Prazo de entrega'], ['criado', 'Pedido criado em'], ['progresso', 'Progresso'], ['pedido', 'Nº do pedido'], ['cliente', 'Cliente'], ['vendedor', 'Vendedor']].map(([k, r]) => {
+            const ativo = ord.ord.chave === k;
+            return (
+              <Button key={k} variant={ativo ? 'primary' : 'outline'} size="sm" onClick={() => ord.alternar(k)}
+                title={ativo ? (ord.ord.dir === 1 ? 'Menor → maior. Clique para inverter (maior → menor).' : 'Maior → menor. Clique para voltar à ordem original.') : 'Clique para ordenar do menor para o maior'}
+                aria-sort={ativo ? (ord.ord.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+                {r}{ativo ? (ord.ord.dir === 1 ? ' ▲' : ' ▼') : ''}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+
       {ordensFiltradas && ordens.length > 0 && ordensFiltradas.length === 0 && (
         <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma OP encontrada para "{busca}".</div>
       )}
@@ -646,7 +676,7 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
         <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma OP de quadro de comando em aberto no momento.</div>
       )}
 
-      {ordensFiltradas && itens && ordensFiltradas.map((o) => (
+      {ordensOrdenadas && itens && ordensOrdenadas.map((o) => (
         <FQCard key={o.id} ordem={o} itens={itens} estado={estados[o.id]} resumo={resumos[o.id]}
           podeDesmarcar={podeDesmarcar} onRecarregar={() => carregarEstado(o.id)}
           pedido={pedidos[o.pedido_codigo]} aberto={!!abertos[o.id]}
