@@ -43,10 +43,10 @@ Não existe `CONSTITUTION.md`; a constituição do projeto é o `CLAUDE.md`. As 
 
 ### 2.2 Decisões do Gelson (22/10/2026)
 1. **OP-mãe = (a):** a Separação cria só a OP-filha, **sem mãe** (com `pedido_codigo` preenchido). A mãe nasce depois no "Gerar OPs", que **adota** as filhas já existentes.
-2. **Etapas do Corrimão (6, nesta ordem):** Medir · Cortar · Trabalhar as pontas · Aplicar as camadas · Vulcanizar · Dar acabamento final. Pesos iguais por padrão (editáveis no banco).
+2. **Etapas do Corrimão (6, nomes finais, 22/10):** Mede · Corta · Prepara as pontas · Aplica-se as camadas · Vulcaniza · Acabamento. Pesos iguais por padrão (editáveis no banco).
 3. **Corte registra sobras:** se sobrar, informa quanto sobrou (campo na conclusão da OP).
-4. **Quadro NÃO é destino na Separação** (interpretação adotada; quadro segue por Pedidos de Quadro).
-5. **Unidade da OP do corrimão = por corrimão**, como o quadro é por quadro (quantidade do item = nº de OPs/unidades).
+4. **Quadro NÃO é destino na Separação** (o "não" era a outra pergunta: a regra é pedido-pai/unidades, item 5).
+5. **Unidade da OP do corrimão = por corrimão.** O que chega na Separação é um **pedido de venda**; o número do pedido é o **pai** de uma ou mais unidades (2 corrimãos no pedido = 2 OPs-unidade com o mesmo `pedido_codigo`). Vale também para o Corte.
 6. **Quem envia: Magda** (Magda Torres, `magda.torres@verticalparts.com.br`) + administradores, por alçada nova.
 7. **Anti-duplicata:** item que já virou OP é bloqueado, mostrando o número da OP. (Concordo.)
 8. **Link público e ocorrências** iguais ao quadro, para as duas telas. (Concordo.)
