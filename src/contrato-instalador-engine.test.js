@@ -140,3 +140,23 @@ test('5.1 — data prevista por parcela: opcional, só aparece quando informada 
   assert.doesNotMatch(t.find((i) => i.n === '5.1.2').text, /data prevista/);
   assert.equal(t.find((i) => i.bank).n, '5.1.3');                                          // numeração dos dados bancários intacta
 });
+
+test('1.4 — prazo e cronograma: opcional, marcos escolhidos um a um, nada corrigido em silêncio', () => {
+  const s = CI.defaultState();
+  const it = () => CI.buildContract(s, 'X').clauses[0].items.find((i) => i.n === '1.4');
+  assert.equal(it(), undefined);                                                     // bloco desligado: não aparece
+  s.cronograma = { ativo: true, prazoDias: '25', criterio: '', marcos: { inicio: { on: true, data: '2026-10-26' }, tracionamento: { on: false, data: '2026-11-06' }, termino: { on: true, data: '2026-11-27' } } };
+  assert.match(it().text, /prazo total de execução dos serviços objeto deste contrato é de 25 \(vinte e cinco\) dias, observando o seguinte cronograma/);
+  assert.deepEqual(it().list, ['Início previsto: 26/10/2026', 'Término e entrega para vistoria: 27/11/2026']);   // marco desmarcado não sai
+  assert.match(CI.alertaCronograma(s), /32 dias corridos/);                           // exemplo do Jurídico: avisa, não corrige
+  assert.equal(CI.cronogramaDoContrato(s).dias, 25);
+  s.cronograma.criterio = 'corridos'; assert.match(it().text, /25 \(vinte e cinco\) dias corridos,/);
+  s.cronograma.marcos = {}; assert.equal(it().list, undefined); assert.match(it().text, /dias corridos\.$/);   // sem marcos: só o prazo
+  s.cronograma.prazoDias = ''; assert.equal(it(), undefined);                         // ativo sem prazo não publica cláusula vazia
+  s.cronograma = { ativo: true, prazoDias: '25', criterio: '', marcos: { inicio: { on: true, data: '' } } };
+  assert.equal(it().list, undefined);                                                // marco marcado sem data não é impresso
+  s.modalidade = 'remocao'; s.destino = 'Galpão X';
+  const itens = CI.buildContract(s, 'X').clauses[0].items;
+  assert.match(itens.find((i) => i.n === '1.4').text, /Destino do equipamento removido/);   // remoção mantém a 1.4 = destino
+  assert.match(itens.find((i) => i.n === '1.5').text, /prazo total/);
+});

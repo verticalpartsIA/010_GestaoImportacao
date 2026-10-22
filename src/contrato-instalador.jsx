@@ -734,6 +734,41 @@ function CIStepObjeto({ s, set, errors }) {
           </div>
         )}
         <CITextArea label="Local do serviço *" value={s.localServico} onChange={(v) => set('localServico', v)} rows={2} placeholder="Endereço completo de onde será realizado o serviço" hint="Endereço da obra onde o serviço acontece." error={errors.localServico} />
+        <div className="ci-field-group ci-field-group--cond">
+          <h3 className="ci-group-title">Prazo e cronograma (opcional)</h3>
+          {(() => {
+            const c = s.cronograma || { ativo: false, prazoDias: '', criterio: '', marcos: {} };
+            const setC = (patch) => set('cronograma', { ...c, ...patch });
+            const alerta = window.CI.alertaCronograma(s);
+            return (
+              <>
+                <CICheckRow checked={!!c.ativo} onChange={(v) => setC({ ativo: v })} label="Incluir a cláusula de prazo e cronograma de evolução da obra" />
+                {c.ativo && (
+                  <>
+                    <div className="ci-grid">
+                      <CIField label="Prazo total de execução (dias)" required width="narrow" mono value={c.prazoDias} onChange={(v) => setC({ prazoDias: v.replace(/\D/g, '') })} placeholder="25" error={errors.prazoDias} />
+                      <CISelect label="Contagem do prazo (a validar com o Jurídico)" value={c.criterio || ''} onChange={(v) => setC({ criterio: v })}
+                        options={[{ value: '', label: 'Não especificar' }, { value: 'corridos', label: 'Dias corridos' }, { value: 'uteis', label: 'Dias úteis' }]} />
+                    </div>
+                    <div className="ci-field-hint" style={{ margin: '6px 0' }}>Marque só os marcos que valem para este contrato; cada um tem a sua data.</div>
+                    {window.CI.MARCOS_CRONOGRAMA.map((m) => {
+                      const mm = (c.marcos || {})[m.id] || { on: false, data: '' };
+                      const setM = (patch) => setC({ marcos: { ...(c.marcos || {}), [m.id]: { ...mm, ...patch } } });
+                      return (
+                        <div key={m.id} style={{ display: 'flex', gap: 10, alignItems: 'center', flexWrap: 'wrap' }}>
+                          <CICheckRow checked={!!mm.on} onChange={(v) => setM({ on: v })} label={m.label} />
+                          {mm.on && <CIField label="" type="date" width="narrow" value={mm.data || ''} onChange={(v) => setM({ data: v })} />}
+                        </div>
+                      );
+                    })}
+                    {errors.cronograma && <span className="ci-field-err">{errors.cronograma}</span>}
+                    {alerta && <div className="ci-cond-alert"><span className="ci-cond-dot"></span>{alerta}</div>}
+                  </>
+                )}
+              </>
+            );
+          })()}
+        </div>
       </div>
     </div>
   );
@@ -1381,6 +1416,11 @@ function ciValidateStep(idx, s) {
     if (!window.CI.equipamentosDoContrato(s).length) e.equipamentos = 'Informe ao menos um equipamento (nº de série, nº do projeto ou ativo da Proposta) coberto por este contrato.';
     if (!window.CI.descricaoServicosValida(s)) e.descricaoServicos = 'Descreva os serviços a executar ou marque ao menos uma fase da montagem.';
     obrig('localServico', 'Informe o endereço onde o serviço será realizado.');
+    if (s.cronograma && s.cronograma.ativo) {
+      if (!(parseInt(String(s.cronograma.prazoDias || '').replace(/\D/g, ''), 10) > 0)) e.prazoDias = 'Informe o prazo total em dias.';
+      const semData = window.CI.MARCOS_CRONOGRAMA.filter((m) => { const mm = (s.cronograma.marcos || {})[m.id]; return mm && mm.on && !window.CI.dataBR(mm.data); });
+      if (semData.length) e.cronograma = 'Informe a data de: ' + semData.map((m) => m.label).join(', ') + '.';
+    }
     if (s.equipamento === 'elevador' && s.paradas === 'Personalizado') obrig('paradasCustom', 'Informe a quantidade de paradas.');
     if (window.CI.isRemocao(s)) obrig('destino', 'Informe o destino / local.');
   }
