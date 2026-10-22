@@ -1260,13 +1260,14 @@ function CISendModalLegacy({ record, onClose, onSent }) {
 function CIPedirAvalModal({ record, onClose, onSent }) {
   const [name, setName] = _ciUS((record.recipient && record.recipient.name) || record.responsavel_nome || '');
   const [contact, setContact] = _ciUS((record.recipient && record.recipient.contact) || '');
+  const tocouRef = React.useRef(false);   // a pessoa já mexeu no campo: a resposta tardia do cadastro não sobrescreve
   const [cad, setCad] = _ciUS(null);                // telefone do CADASTRO do montador (Cadastros › Instaladores)
   _ciUE(() => {
     let vivo = true;
     window.CIStore.telefoneDoCadastro(record).then((t) => {
       if (!vivo || !t) return;
       setCad(t);
-      setContact((atual) => (String(atual || '').replace(/\D/g, '').length >= 10 ? atual : t.telefone));   // só preenche se estiver vazio
+      if (!tocouRef.current) setContact((atual) => (String(atual || '').trim() ? atual : t.telefone));   // só preenche campo vazio e nunca tocado
     });
     return () => { vivo = false; };
   }, [record.id]);
@@ -1343,10 +1344,10 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
               </div>
               <div className="ci-field">
                 <label>WhatsApp do montador (com DDD) — obrigatório</label>
-                <input className="ci-input" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="(11) 99999-0000" />
+                <input className="ci-input" value={contact} onChange={(e) => { tocouRef.current = true; setContact(e.target.value); }} placeholder="(11) 99999-0000" />
                 {cad && String(cad.telefone).replace(/\D/g, '') === digitos && <small style={{ color: '#2e7d32' }}>✓ Número do cadastro do montador ({cad.parceiro}).</small>}
                 {cad && String(cad.telefone).replace(/\D/g, '') !== digitos && (
-                  <small style={{ color: '#b26a00' }}>O cadastro do montador tem outro número: {cad.telefone}. <a href="#" onClick={(e) => { e.preventDefault(); setContact(cad.telefone); }}>Usar o do cadastro</a></small>
+                  <small style={{ color: '#b26a00' }}>O cadastro do montador tem outro número: {cad.telefone}. <a href="#" onClick={(e) => { e.preventDefault(); tocouRef.current = true; setContact(cad.telefone); }}>Usar o do cadastro</a></small>
                 )}
                 {!cad && <small style={{ color: '#666' }}>Sem telefone no cadastro deste montador — digite aqui e atualize o cadastro em Cadastros › Instaladores.</small>}
               </div>
