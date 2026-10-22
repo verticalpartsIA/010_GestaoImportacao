@@ -97,3 +97,8 @@ Letras (A…Z, AA); duas criações simultâneas na mesma família; retry com me
 1. **Aprovação da revisão quando já há Contrato assinado**: quem decide o aditivo? Proposta padrão: **Jurídico** decide; **Financeiro** também quando valor muda; Gestor comercial só reativa/envia. (Responsável ainda não respondeu esta pergunta.)
 2. **Reativação renova a validade e mantém o mesmo link/token?** Proposta: sim, mesmo token, validade renovada e registrada; se preço/câmbio precisar mudar, obrigatoriamente vira nova letra.
 3. **Alinhamento do cliente por trilha** (cliente "OK" em comercial/financeiro/técnico/jurídico, informativo, sem substituir a assinatura): fica para a Etapa 3 se o responsável quiser.
+
+## 10. Decisões fechadas em 22/10 (após a Etapa 1)
+- Aditivo com Contrato já assinado: **Jurídico decide; Financeiro também quando o valor muda** (segue a sugestão).
+- Reativação: **muda o link** — cada link tem a sua versão. Substitui o §5.3 "mesmo token": a reativação emite token novo (tabela `proposta_tokens`), o antigo vira só leitura. Detalhes em `02-` §9.
+- **Alinhamento do cliente por trilha**: entra no escopo (informativo, não substitui a assinatura). Desenho em `02-` §8.
