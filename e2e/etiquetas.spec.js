@@ -237,6 +237,8 @@ test.describe('Etiquetas', () => {
     await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
     await page.getByLabel(/tem casa de máquinas/).check();
     await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
+    await page.getByLabel(/tem porta oposta/).check();
+    await expect(page.getByRole('button', { name: /Imprimir 27 etiquetas/ })).toBeEnabled();   // + GS2, EDP2, DC2, DEN2
   });
 
   test('Chicote avulso: pedido e cliente digitados à mão e chicote acrescentado manualmente', async ({ page }) => {
