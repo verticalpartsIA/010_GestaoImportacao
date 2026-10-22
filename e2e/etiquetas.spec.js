@@ -234,7 +234,7 @@ test.describe('Etiquetas', () => {
     await expect(previa2).toContainText('QC | 1212');
     await expect(previa2).toContainText('OS | 1212');
     await page.locator('tr', { hasText: '1070' }).click();
-    await expect(page.getByText('POW1', { exact: true })).toHaveCount(0);
+    await expect(page.getByText('POW1', { exact: true })).toBeVisible();   // #1057: todos os chicotes ficam sempre visíveis; sem casa de máquinas o POW1 só não vem marcado (22 etiquetas, abaixo)
     await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
     // quadro vindo da Evolução da Fabricação (OP sem cadastro de aplicação): POW1 só se marcar casa de máquinas
     await page.locator('tr', { hasText: '1500' }).click();
