@@ -231,6 +231,9 @@
       r_rg:'', r_cpf:'', r_mesmoEndereco: true,
       r_rua:'', r_numero:'', r_bairro:'', r_cidade:'', r_estado:'', r_cep:'',
       equipamento: 'elevador', quantidade: 1, localServico:'', descricaoServicos:'',
+      /* Cláusula de prazo e cronograma (pedido do Jurídico, 22/10/2026) — bloco opcional; marcos escolhidos um a um, cada um com a sua data.
+         criterio '' = não qualifica o prazo (corridos/úteis é decisão do Jurídico, ainda pendente). */
+      cronograma: { ativo: false, prazoDias: '', criterio: '', marcos: {} },
       equipamentosDetalhe: [],   // [{dossier, serie, descricao, tipo}] vindos do Dossiê/equipamentos_obra (cláusula 1.1.1)
       fasesAtivas: {}, fasesTexto: {},   // fases de montagem (só elevador): { f1: true } / texto editado por fase
       tipoElevador: 'social', capacidadeCarga:'', cargaEspecial: false,
@@ -316,6 +319,42 @@
     det.forEach((e) => { if (e.serie) cobertos.add(String(e.serie).trim()); if (e.dossier) cobertos.add(String(e.dossier).trim()); });
     equipamentosDoContrato(s).forEach((v) => { if (!cobertos.has(v)) itens.push(v); });
     return itens;
+  }
+  const MARCOS_CRONOGRAMA = [
+    { id:'inicio', label:'Início previsto' },
+    { id:'tracionamento', label:'Previsão de tracionamento' },
+    { id:'cabine', label:'Previsão de cabine e portas' },
+    { id:'termino', label:'Término e entrega para vistoria' },
+  ];
+  const ISO_DATA = /^(\d{4})-(\d{2})-(\d{2})$/;
+  function dataBR(iso) { const m = String(iso || '').match(ISO_DATA); return m ? m[3] + '/' + m[2] + '/' + m[1] : ''; }
+  function _ms(iso) { const m = String(iso || '').match(ISO_DATA); return m ? Date.UTC(+m[1], +m[2] - 1, +m[3]) : null; }
+  function diasCorridosEntre(a, b) { const x = _ms(a), y = _ms(b); return x == null || y == null ? null : Math.round((y - x) / 86400000); }
+  function diasUteisEntre(a, b) {   // segunda a sexta, sem feriados; conta de a (exclusive) até b (inclusive)
+    const x = _ms(a), y = _ms(b); if (x == null || y == null || y < x) return null;
+    let n = 0; for (let t = x + 86400000; t <= y; t += 86400000) { const d = new Date(t).getUTCDay(); if (d !== 0 && d !== 6) n++; }
+    return n;
+  }
+  /* Cronograma efetivo: só se ativo, com prazo > 0; marcos só os marcados COM data válida. */
+  function cronogramaDoContrato(s) {
+    const c = s.cronograma || {};
+    const dias = parseInt(String(c.prazoDias || '').replace(/\D/g, ''), 10);
+    if (!c.ativo || !(dias > 0)) return null;
+    const marcos = (c.marcos || {});
+    const itens = MARCOS_CRONOGRAMA.filter((m) => marcos[m.id] && marcos[m.id].on && dataBR(marcos[m.id].data)).map((m) => ({ id: m.id, texto: m.label + ': ' + dataBR(marcos[m.id].data) }));
+    return { dias, criterio: c.criterio === 'corridos' || c.criterio === 'uteis' ? c.criterio : '', itens };
+  }
+  /* Aviso (nunca altera nada): início→término não bate com o prazo informado. */
+  function alertaCronograma(s) {
+    const c = s.cronograma || {}; const dias = parseInt(String(c.prazoDias || '').replace(/\D/g, ''), 10);
+    const m = c.marcos || {}; const a = m.inicio && m.inicio.on && m.inicio.data, b = m.termino && m.termino.on && m.termino.data;
+    if (!c.ativo || !(dias > 0) || !a || !b) return '';
+    const corr = diasCorridosEntre(a, b), ute = diasUteisEntre(a, b);
+    if (corr == null) return '';
+    if (corr < 0) return 'O término está antes do início.';
+    const confere = c.criterio === 'uteis' ? ute === dias : corr === dias;
+    if (confere) return '';
+    return 'Do início ao término há ' + corr + ' dias corridos (' + ute + ' úteis), mas o prazo informado é de ' + dias + '. Nada foi alterado: confirme com o Jurídico qual contagem vale.';
   }
   function andaresDe(s) {
     const n = s.paradas === 'Personalizado' ? s.paradasCustom : s.paradas;
@@ -525,6 +564,14 @@
       const lbl = s.modalidade === 'remocao_adequacao' ? 'Local da nova instalação' : 'Destino do equipamento removido';
       objetoItems.push({ n:'1.4', text:`${lbl}: ` + vBlank(s.destino, '(informar o destino / local)') });
     }
+    const cron = cronogramaDoContrato(s);
+    if (cron) {
+      const nCron = isRemocao(s) ? '1.5' : '1.4';   // em remoção a 1.4 já é o destino do equipamento
+      const crit = cron.criterio === 'corridos' ? ' corridos' : cron.criterio === 'uteis' ? ' úteis' : '';
+      const it = { n: nCron, text: `A CONTRATADA declara ciência e concordância de que o prazo total de execução dos serviços objeto deste contrato é de ${cron.dias} (${inteiroExtenso(cron.dias)}) dias${crit}${cron.itens.length ? ', observando o seguinte cronograma de evolução da obra:' : '.'}` };
+      if (cron.itens.length) it.list = cron.itens.map((x) => x.texto);
+      objetoItems.push(it);
+    }
     clauses.push({ id:'objeto', titulo:'DO OBJETO', baseNum:1, items:objetoItems });
 
     /* EQUIPAMENTO ESPECIAL (condicional) */
@@ -697,7 +744,7 @@
     dividirEmParcelas, inteiroExtensoGen, logradouro,
     equipamentosDoContrato, slugEquipamento, numeroBaseContrato, proximoNumeroLivre,
     defaultState, pad2,
-    isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals, dataPrevistaTxt, FASES_MONTAGEM, fasesDoContrato, andaresDe, descricaoLivreTemTexto, descricaoServicosValida, equipamentosDescritos,
+    isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals, dataPrevistaTxt, MARCOS_CRONOGRAMA, cronogramaDoContrato, alertaCronograma, diasCorridosEntre, diasUteisEntre, dataBR, FASES_MONTAGEM, fasesDoContrato, andaresDe, descricaoLivreTemTexto, descricaoServicosValida, equipamentosDescritos,
     buildContract,
   };
 }());
