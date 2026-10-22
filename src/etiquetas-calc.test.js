@@ -385,7 +385,7 @@ test('Chicote do quadro (50 x 30): "FAN | 1212 Modernização", só texto e íco
   const m = E.modeloPorId('CHICOTE_50x30');
   assert.ok(m && m.largura_mm === 50 && m.altura_mm === 30 && m.tipo === 'CHICOTE_QUADRO');
   assert.ok(!m.elementos.some((e) => e.tipo === 'qr' || e.tipo === 'code128'), 'sem QR nem código de barras');
-  assert.equal(E.CHICOTES.length, 23);
+  assert.equal(E.CHICOTES.length, 27);   // 23 + 4 da porta oposta
   assert.equal(E.CHICOTES.find((c) => c.codigo === 'DZ').descricao, 'Zona de porta');
   assert.ok(E.CHICOTES.find((c) => c.codigo === 'FAN'));
   const d = E.dadosChicote({ chicote: 'FAN', pedido: '1212', tipo_obra: 'modernizacao' });
@@ -501,4 +501,15 @@ test('Cabo do pedido na etiqueta de Chicote: código | pedido, descrição curta
   const metro = E.dadosCaboPedido({ codigo: 'VPEL-529n', descricao: 'Cabo Manobra Elétrico com 23 Vias (NACIONAL) - Ref.: DRAKA', quantidade: 40, unidade: 'M', pedido: '30463', op: 'OP-0007-C1' });
   assert.equal(metro.chicote_txt, 'VPEL-529n | 40 m');
   assert.ok(E.renderZPL(m, d, { dpi: 203 }).zpl.includes('VPB-098'));
+});
+
+test('Chicotes da porta oposta (GS2, EDP2, DC2, DEN2) só com a opção marcada', () => {
+  const cods = ['GS2', 'EDP2', 'DC2', 'DEN2'];
+  cods.forEach((k) => {
+    const c = E.CHICOTES.find((x) => x.codigo === k);
+    assert.ok(c, k);
+    assert.equal(E.chicoteDisponivel(c, 'MRL', false), false);
+    assert.equal(E.chicoteDisponivel(c, 'MRL', true), true);
+  });
+  assert.equal(E.dadosChicote({ chicote: 'GS2', pedido: '1212', tipo_obra: 'novo' }).desc_txt, 'Contato de trinco da porta de cabina');
 });
