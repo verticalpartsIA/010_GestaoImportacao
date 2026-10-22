@@ -106,6 +106,17 @@ function fqMergeStatus(itens, status) {
   });
 }
 
+function fqNorm(v) {
+  return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+/* Texto pesquisável da OP: obra (título/produto/cliente), nº da OP e
+   códigos do pedido (pedido de venda, nº do pedido do quadro, cotação). */
+function fqTextoBusca(o) {
+  const q = o.quadros_comando || {};
+  return fqNorm([o.numero, o.titulo, o.produto, fqCliente(o), o.pedido_codigo, q.numero_pedido, o.numero_cotacao].join(' | '));
+}
+
 function FQPasso({ s, atual, pausado, podeDesmarcar, busy, onToggle }) {
   const item = s.fabricacao_quadro_itens;
   const flegado = s.flegado;
@@ -365,6 +376,7 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
   const [estados, setEstados] = React.useState({});
   const [erroGeral, setErroGeral] = React.useState(null);
   const [podeDesmarcar, setPodeDesmarcar] = React.useState(false);
+  const [busca, setBusca] = React.useState('');
 
   const carregarEstado = React.useCallback(async (ordemId) => {
     try {
@@ -417,6 +429,13 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
     return out;
   }, [itens, ordens, estados]);
 
+  const ordensFiltradas = React.useMemo(() => {
+    if (!ordens) return null;
+    const termos = fqNorm(busca).split(/\s+/).filter(Boolean);
+    if (!termos.length) return ordens;
+    return ordens.filter((o) => { const t = fqTextoBusca(o); return termos.every((x) => t.includes(x)); });
+  }, [ordens, busca]);
+
   const totalOps = ordens ? ordens.length : 0;
   const listaResumos = Object.values(resumos);
   const pausadas = listaResumos.filter((r) => r.pausado).length;
@@ -449,11 +468,25 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
         </div>
       )}
 
+      {ordens && ordens.length > 0 && (
+        <div className="row" style={{ gap: 10, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+          <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por obra, OP ou código do pedido…" aria-label="Buscar por obra, OP ou código do pedido"
+            style={{ flex: '1 1 320px', maxWidth: 480, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, background: 'var(--bg-elev, var(--bg, #fff))', color: 'var(--fg1)' }} />
+          {busca && <Button variant="outline" size="sm" onClick={() => setBusca('')}>Limpar</Button>}
+          {busca && <span className="fq-meta">{ordensFiltradas.length} de {totalOps} OP(s)</span>}
+        </div>
+      )}
+
+      {ordensFiltradas && ordens.length > 0 && ordensFiltradas.length === 0 && (
+        <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma OP encontrada para "{busca}".</div>
+      )}
+
       {ordens && ordens.length === 0 && (
         <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma OP de quadro de comando em aberto no momento.</div>
       )}
 
-      {ordens && itens && ordens.map((o) => (
+      {ordensFiltradas && itens && ordensFiltradas.map((o) => (
         <FQCard key={o.id} ordem={o} itens={itens} estado={estados[o.id]} resumo={resumos[o.id]}
           podeDesmarcar={podeDesmarcar} onRecarregar={() => carregarEstado(o.id)} />
       ))}

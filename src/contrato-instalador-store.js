@@ -11,6 +11,24 @@
      é criado inline e atribuído a window.__VP_SB.sb antes de carregar este script. */
   function sb() { return (window.__VP_SB || {}).sb; }
 
+  /* 22/10 (Task 5) — WhatsApp do montador vem do CADASTRO (parceiros_instaladores.telefone), não só digitado.
+     Acha o parceiro pelo acordo de preço do contrato (parceiro_instalador_id) e, sem acordo, pelo nome da contratada. */
+  async function telefoneDoCadastro(rec) {
+    const c = sb();
+    if (!c || !rec) return null;
+    try {
+      let parceiroId = null;
+      const ac = await c.from('instalador_acordos').select('parceiro_instalador_id').eq('contrato_id', rec.id).not('parceiro_instalador_id', 'is', null).limit(1);
+      if (ac && ac.data && ac.data[0]) parceiroId = ac.data[0].parceiro_instalador_id;
+      let q = c.from('parceiros_instaladores').select('id, nome, telefone, contato').limit(1);
+      q = parceiroId ? q.eq('id', parceiroId) : q.eq('nome', rec.contratada_nome || '');
+      const { data } = await q;
+      const p = data && data[0];
+      if (!p || String(p.telefone || '').replace(/\D/g, '').length < 10) return null;
+      return { telefone: p.telefone, nome: p.contato || p.nome, parceiro: p.nome };
+    } catch (e) { return null; }
+  }
+
   /* ---------- IDs / token público ---------- */
   function uuid() {
     if (window.crypto && crypto.randomUUID) return crypto.randomUUID();
@@ -668,6 +686,60 @@
     return data;
   }
 
+  /* 22/10 (Jurídico, Task 11) — editar o documento. Rascunho: edita no próprio lugar (com controle de concorrência).
+     Já enviado/assinado: NOVA REVISÃO — a anterior (documento, dados, assinatura e hash) fica em `revisoes`, o contrato volta a
+     rascunho com link novo, a fila de assinaturas e as parcelas pendentes saem e o aval do Diego é reaberto. Nada é sobrescrito. */
+  async function salvarEdicao(id, formState, opts) {
+    opts = opts || {};
+    const c = sb(); if (!c) throw new Error('Supabase indisponível');
+    const cur = await getById(id);
+    if (!cur) throw new Error('Contrato não encontrado.');
+    const fs = { ...formState };
+    const doc = window.CI.buildContract(fs, cur.numero_documento);
+    const eq = (window.CI.EQUIPAMENTOS.find(e => e.id === fs.equipamento) || {}).label || '';
+    const modal = (window.CI.MODALIDADES.find(m => m.id === fs.modalidade) || {}).label || '';
+    const u = window.__VP_USER || {};
+    const cols = {
+      nome: u.nome || u.email || '', titulo: doc.titulo, contratada_nome: doc.contratada.razao, contratada_cnpj: doc.contratada.cnpj,
+      responsavel_nome: doc.contratada.responsavel, responsavel_cpf: doc.contratada.cpf, valor_total: String(window.CI.moedaParaNumero(fs.valorTotal)),
+      objeto_resumo: `${fs.quantidade || 1}× ${eq} · ${modal}`, master_id: fs.masterId || '', proposta_id: fs.propostaId || '',
+      ativos_indices: fs.ativosIndices || [], dossier_ids: fs.dossierIds || [],
+    };
+    const { data, error } = await c.rpc('ci_salvar_edicao', { p_id: id, p_form_state: fs, p_doc: doc, p_cols: cols, p_motivo: opts.motivo || null, p_esperado: opts.esperado || null });
+    if (error) throw error;
+    if (!data || !data.ok) {
+      const msg = {
+        sem_sessao: 'Sessão não identificada — entre de novo pelo portal.',
+        sem_permissao: 'Você não tem a alçada "Contrato Instalador › Editar".',
+        nao_encontrado: 'Contrato não encontrado.',
+        conflito: 'Outra pessoa alterou este contrato enquanto você editava. Feche a edição, abra de novo e refaça a alteração.',
+        motivo_curto: 'Explique o motivo da nova revisão (mínimo 10 letras).',
+        parcela_paga: 'Há parcela já paga neste contrato — fale com o Financeiro antes de criar uma nova revisão.',
+        recibo_ativo: 'Há recibo vinculado a este contrato — cancele o recibo antes de criar uma nova revisão.',
+      }[data && data.erro];
+      throw new Error(msg || 'Não foi possível salvar a alteração.');
+    }
+    if (data.nova_revisao || data.refazer_parcelas) {   // rascunho editado também refaz as parcelas pendentes (o banco já as removeu)
+      try { await window.ContratoInstaladorParcelasStore.criarParcelas(id, fs); }
+      catch (e) { console.warn('[CIStore] nova revisão: parcelas não recriadas', e); data.aviso = 'As parcelas de pagamento não foram recriadas (' + (e.message || 'erro') + '). Avise o Financeiro.'; }
+      try { for (const d of (fs.dossierIds || [])) { if (window.InstaladorAcordosStore) await window.InstaladorAcordosStore.vincularContrato(d, id); } }
+      catch (e) { console.warn('[CIStore] nova revisão: acordo não religado', e); }
+    }
+    try {
+      window.VPLog?.registrar({ modulo: 'Contrato Instalador', acao: data.nova_revisao ? 'Criou a revisão ' + data.revisao + ' do contrato' : 'Editou o rascunho do contrato', alvo: cur.numero_documento, alvo_id: id,
+        detalhe: data.nova_revisao ? { motivo: opts.motivo, revisaoAnterior: data.revisao - 1 } : null });
+    } catch (_) { /* log nunca impede */ }
+    return { ...data, rec: await getById(id) };
+  }
+
+  /* Eventos do log que pertencem à revisão ATUAL (a linha do tempo recomeça a cada nova revisão; as anteriores ficam em `revisoes`). */
+  function logDaRevisaoAtual(rec) {
+    const log = (rec && rec.log) || [];
+    let ini = 0;
+    log.forEach((l, i) => { if (l && l.meta && l.meta.nova_revisao) ini = i; });
+    return log.slice(ini);
+  }
+
   window.CIStore = {
     STATUS,
     processarEfeitoFila,
@@ -675,8 +747,8 @@
     fmtDateTime, fmtDate, relative,
     signUrl, prettyUrl, whatsAppHref, mailtoHref,
     listAll, listPainel, getById, getByToken,
-    createDraft, updateFormState, reservarNumero,
-    markSent, pedirEnvio, markViewed, markSigned, refuse,
+    createDraft, updateFormState, reservarNumero, salvarEdicao, logDaRevisaoAtual,
+    markSent, pedirEnvio, telefoneDoCadastro, markViewed, markSigned, refuse,
     sweepExpired, remove, anularAssinatura, reabrirAnulado,
     getPublicIP, deviceLabel, sha256Hex,
   };

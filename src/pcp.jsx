@@ -1138,9 +1138,44 @@ function PCPFilaProducao({ ctx, abrirOp }) {
   const [busy, setBusy] = React.useState(false);
   const [preparo, setPreparo] = React.useState(null);
   const [abertos, setAbertos] = React.useState({});
+  const [enviados, setEnviados] = React.useState({});   // 'codigo_pedido|codigo_item' → nº de quadros já enviados a Pedidos de Quadro
+  const [enviando, setEnviando] = React.useState(null);
+  const [codigosQuadro, setCodigosQuadro] = React.useState(new Set());   // produtos que são quadro de comando (pcp_quadro_variante) — só estes podem ir para Pedidos de Quadro
   const alternar = (cod) => setAbertos(a => ({ ...a, [cod]: !a[cod] }));
 
+  // Envia UM item do pedido do Omie (ex.: o quadro VPEL-702b) para a aba "Pedidos de Quadro": cria o pedido de quadro (1 por unidade)
+  // já com o escopo "Quadro de comando = fornecer" e o vínculo com o pedido do Omie em configuracao.origem_omie.
+  const enviarParaQuadro = async (p, x) => {
+    if (!codigosQuadro.has(x.codigo)) { window.toast?.('Só quadro de comando pode ir para Pedidos de Quadro.'); return; }
+    const qtd = Math.max(1, Math.round(Number(x.quantidade) || 1));
+    const ja = enviados[`${p.codigo_pedido}|${x.codigo}`] || 0;
+    if (ja >= qtd) { window.toast?.('Este item já foi enviado para Pedidos de Quadro.'); return; }
+    const falta = qtd - ja;
+    if (!window.confirm(`Enviar ${x.codigo} do pedido ${p.numero_pedido} para Pedidos de Quadro?\n\nSerá criado ${falta} pedido(s) de quadro (1 por unidade). Depois, em "Pedidos de Quadro", complete o formulário e use "Gerar OPs".`)) return;
+    setEnviando(`${p.codigo_pedido}|${x.codigo}`);
+    try {
+      const quem = pcpUsuario();
+      const rows = Array.from({ length: falta }, (_, i) => ({
+        origem_fabricacao: 'interno', criado_por: quem,
+        escopo_fornecimento: { quadro_comando: { decisao: 'fornecer' } },
+        configuracao: { origem_omie: { codigo_pedido: p.codigo_pedido, numero_pedido: p.numero_pedido, item_codigo: x.codigo, item_descricao: x.descricao || null, cliente_nome: p.cliente_nome || null, unidade: ja + i + 1, total: qtd, prazo: p.data_previsao || null } },
+      }));
+      const r = await sb.from('quadros_comando').insert(rows).select('id, numero_pedido');
+      if (r.error) throw new Error(r.error.message);
+      window.VPLog?.registrar?.({ modulo: 'PCP', acao: 'Enviou item do pedido do Omie para Pedidos de Quadro', alvo: `pedido ${p.numero_pedido} · ${x.codigo} × ${falta}` });
+      window.toast?.(`${x.codigo} enviado: pedido(s) de quadro ${(r.data || []).map(q => q.numero_pedido).join(', ')}. Veja na aba "Pedidos de Quadro".`);
+      await carregar();
+    } catch (e) { window.toast?.('Não foi possível enviar: ' + e.message); }
+    setEnviando(null);
+  };
+
   const carregar = React.useCallback(async () => {
+    sb.from('pcp_quadro_variante').select('codigo_produto').then(({ data }) => setCodigosQuadro(new Set((data || []).map(v => v.codigo_produto).filter(Boolean))));
+    sb.from('quadros_comando').select('configuracao').is('excluido_em', null).order('created_at', { ascending: false }).limit(1000).then(({ data }) => {
+      const e = {};
+      (data || []).forEach(q => { const o = q.configuracao && q.configuracao.origem_omie; if (o) { const k = `${o.codigo_pedido}|${o.item_codigo}`; e[k] = (e[k] || 0) + 1; } });
+      setEnviados(e);
+    });
     const { data: p } = await sb.from('pcp_pedidos').select('*').eq('etapa', '20').eq('cancelado', false).eq('so_separacao', false).order('data_previsao', { ascending: true }).limit(200);
     const ids = (p || []).map(x => x.codigo_pedido);
     const [i, o] = await Promise.all([
@@ -1246,7 +1281,7 @@ function PCPFilaProducao({ ctx, abrirOp }) {
                   <tr>
                     <td colSpan={8} style={{ background: 'var(--bg2, #fafafa)', padding: '8px 16px' }}>
                       <table className="t pcp-grid" style={{ width: '100%' }}>
-                        <thead><tr><th>#</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd.</th><th>Un.</th><th>Tipo</th></tr></thead>
+                        <thead><tr><th>#</th><th>Código</th><th>Descrição</th><th className="text-right">Qtd.</th><th>Un.</th><th>Tipo</th><th>Pedidos de Quadro</th></tr></thead>
                         <tbody>
                           {its.map((x, i) => (
                             <tr key={x.seq ?? i}>
@@ -1256,9 +1291,15 @@ function PCPFilaProducao({ ctx, abrirOp }) {
                               <td className="text-right">{pcpFmt(x.quantidade)}</td>
                               <td>{x.unidade || '—'}</td>
                               <td>{x.item_pcp ? <b style={{ fontWeight: 500 }}>Item do PCP</b> : <span style={{ color: 'var(--fg3)' }}>Outro item</span>}</td>
+                              <td>{x.item_pcp && p.origem !== 'ordem_servico' && codigosQuadro.has(x.codigo) ? (() => {
+                                const k = `${p.codigo_pedido}|${x.codigo}`, qtd = Math.max(1, Math.round(Number(x.quantidade) || 1)), ja = enviados[k] || 0;
+                                return ja >= qtd
+                                  ? <span className="pcp-tag" title="Já criado na aba Pedidos de Quadro">Enviado{qtd > 1 ? ` (${ja}/${qtd})` : ''}</span>
+                                  : (podeCriar ? <button className="btn btn--sm" disabled={enviando === k} onClick={() => enviarParaQuadro(p, x)} title="Cria o pedido de quadro deste item na aba Pedidos de Quadro">{enviando === k ? 'Enviando…' : ja ? `Enviar o restante (${qtd - ja})` : 'Enviar para Pedidos de Quadro'}</button> : '—');
+                              })() : '—'}</td>
                             </tr>
                           ))}
-                          {its.length === 0 && <tr><td colSpan={6} style={{ color: 'var(--fg3)' }}>Este pedido não tem itens gravados.</td></tr>}
+                          {its.length === 0 && <tr><td colSpan={7} style={{ color: 'var(--fg3)' }}>Este pedido não tem itens gravados.</td></tr>}
                         </tbody>
                       </table>
                     </td>
@@ -1414,7 +1455,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
 
   const carregar = React.useCallback(async () => {
     const [q, o, v] = await Promise.all([
-      sb.from('quadros_comando').select('id, numero_pedido, numero_cotacao, status, novo_ou_modernizacao, cliente_id, created_at, escopo_fornecimento, quadros_comando_paradas(count), quadros_comando_bom_itens(count), quadros_comando_trechos_corte(count), quadros_comando_maquina(potencia_kw, tensao_v)').is('excluido_em', null).order('created_at', { ascending: false }).limit(200),
+      sb.from('quadros_comando').select('id, numero_pedido, numero_cotacao, status, novo_ou_modernizacao, cliente_id, created_at, escopo_fornecimento, configuracao, quadros_comando_paradas(count), quadros_comando_bom_itens(count), quadros_comando_trechos_corte(count), quadros_comando_maquina(potencia_kw, tensao_v)').is('excluido_em', null).order('created_at', { ascending: false }).limit(200),
       sb.from('pcp_ordens').select('id, numero, quadro_comando_id, status, pedido_codigo').eq('frente', 'pedido'),
       sb.from('pcp_quadro_variante').select('variante, codigo_produto'),
     ]);
@@ -1422,7 +1463,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
     const vv = {}; (v.data || []).forEach(x => { vv[x.variante] = x.codigo_produto; });
     setMaes(m); setVariantes(vv);
     const cnt = (x) => (x && x[0] && x[0].count) || 0;
-    setLinhas((q.data || []).map(r => ({ ...r, nParadas: cnt(r.quadros_comando_paradas), nBom: cnt(r.quadros_comando_bom_itens), nCortes: cnt(r.quadros_comando_trechos_corte), variante: pcpVarianteDe(r.quadros_comando_maquina) })));
+    setLinhas((q.data || []).map(r => ({ ...r, nParadas: cnt(r.quadros_comando_paradas), nBom: cnt(r.quadros_comando_bom_itens), nCortes: cnt(r.quadros_comando_trechos_corte), variante: pcpVarianteDe(r.quadros_comando_maquina), origemOmie: (r.configuracao && r.configuracao.origem_omie) || null })));
   }, [sb]);
   React.useEffect(() => { carregar(); }, [carregar]);
 
@@ -1450,10 +1491,15 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
     let fiacao = null;
     try { fiacao = r.variante && window.lfCalcularParaVariante ? await window.lfCalcularParaVariante(sb, r.variante) : null; } catch (e) { fiacao = null; }
     if (fiacao && !fiacao.ok) window.toast?.(fiacao.motivo);
+    const origemOmie = (q.data && q.data.configuracao && q.data.configuracao.origem_omie) || null;
     const vkey = ((q.data && q.data.escopo_fornecimento && q.data.escopo_fornecimento.quadro_comando) || {}).detalhe || r.variante;
     setPreparo({
       bundle, pedidosOmie, fiacao,
-      opcoes: { pedido_codigo: '', produto: variantes[vkey] || '', cliente: (cl.data && (cl.data.razao_social || cl.data.nome_fantasia)) || '', previsao_inicio: '', prazo_entrega: '' },
+      opcoes: {
+        // Pedido de quadro enviado da fila "Pedidos para Produzir": já vem com o pedido do Omie, o produto (item do pedido) e o prazo.
+        pedido_codigo: origemOmie && pedidosOmie.some(x => String(x.codigo_pedido) === String(origemOmie.codigo_pedido)) ? String(origemOmie.codigo_pedido) : '',
+        produto: (origemOmie && origemOmie.item_codigo) || variantes[vkey] || '',
+        cliente: (cl.data && (cl.data.razao_social || cl.data.nome_fantasia)) || (origemOmie && origemOmie.cliente_nome) || '', previsao_inicio: '', prazo_entrega: (origemOmie && origemOmie.prazo) || '' },
     });
     setBusy(false);
   };
@@ -1524,7 +1570,7 @@ function PCPPedidosQuadro({ ctx, abrirOp }) {
               const m = Array.isArray(r.quadros_comando_maquina) ? r.quadros_comando_maquina[0] : r.quadros_comando_maquina;
               return (
                 <tr key={r.id}>
-                  <td><b style={{ fontWeight: 500 }}>{r.numero_pedido}</b></td>
+                  <td><b style={{ fontWeight: 500 }}>{r.numero_pedido}</b>{r.origemOmie && <div style={{ fontSize: 11, color: 'var(--fg3)' }} title={`${r.origemOmie.item_codigo} — ${r.origemOmie.item_descricao || ''}`}>Omie {r.origemOmie.numero_pedido} · {r.origemOmie.item_codigo}{r.origemOmie.total > 1 ? ` (${r.origemOmie.unidade}/${r.origemOmie.total})` : ''}</div>}</td>
                   <td>{r.numero_cotacao || '—'}</td>
                   <td>{r.novo_ou_modernizacao === 'modernizacao' ? 'Modernização' : r.novo_ou_modernizacao === 'novo' ? 'Novo' : '—'}</td>
                   <td>{m && m.potencia_kw ? `${m.potencia_kw} kW / ${m.tensao_v} V` : '—'}</td>

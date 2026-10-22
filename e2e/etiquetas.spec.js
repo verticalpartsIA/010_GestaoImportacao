@@ -218,6 +218,11 @@ test.describe('Etiquetas', () => {
     await page.goto('/logistica/etiquetas/gerar');
     await page.getByRole('button', { name: 'Chicote do quadro', exact: true }).click({ timeout: 60_000 });
     await expect(page.getByRole('button', { name: /Imprimir/ })).toBeDisabled();   // sem pedido não há etiqueta
+    // setas do título: maior → menor / menor → maior
+    await page.getByRole('button', { name: 'Pedido: menor para maior' }).click();
+    await expect(page.locator('tbody tr').first()).toContainText('1070');
+    await page.getByRole('button', { name: 'Pedido: maior para menor' }).click();
+    await expect(page.locator('tbody tr').first()).toContainText('1500');
     await page.locator('tr', { hasText: '1212' }).click();
     await expect(page.getByText('POW1', { exact: true })).toBeVisible();
     await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
@@ -237,6 +242,22 @@ test.describe('Etiquetas', () => {
     await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
     await page.getByLabel(/tem casa de máquinas/).check();
     await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
+    await page.getByLabel(/tem porta oposta/).check();
+    await expect(page.getByRole('button', { name: /Imprimir 27 etiquetas/ })).toBeEnabled();   // + GS2, EDP2, DC2, DEN2
+  });
+
+  test('Chicote avulso: pedido e cliente digitados à mão e chicote acrescentado manualmente', async ({ page }) => {
+    await page.addInitScript(COM_ALCADA);
+    await page.goto('/logistica/etiquetas/gerar/chicote-quadro');
+    await page.getByLabel('Etiqueta avulsa', { exact: false }).check({ timeout: 60_000 });
+    await expect(page.getByRole('button', { name: /Imprimir/ })).toBeDisabled();   // sem número de pedido não imprime
+    await page.getByLabel('Nº do pedido').fill('9999');
+    await page.getByLabel('Cliente', { exact: true }).fill('CLIENTE AVULSO');
+    await expect(page.getByRole('button', { name: /Imprimir 22 etiquetas/ })).toBeEnabled();
+    await page.getByPlaceholder('Código (ex. DZ2)').fill('xy9');
+    await page.getByRole('button', { name: 'Acrescentar', exact: true }).click();
+    await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();
+    await expect(page.getByText('QC | 9999').first()).toBeVisible();
   });
 
   test('o rolo e o ajuste ficam salvos por tipo de etiqueta e voltam sozinhos ao trocar de tipo', async ({ page }) => {

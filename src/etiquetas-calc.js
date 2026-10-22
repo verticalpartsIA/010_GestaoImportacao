@@ -236,9 +236,14 @@
     { codigo: 'DZ', descricao: 'Zona de porta' },
     // POW1 só existe quando o elevador tem casa de máquinas (tipo de aplicação MR).
     { codigo: 'POW1', descricao: 'Alimentação independente de luz e ventilador da cabina', soCasaMaquinas: true },
+    // Só quando o elevador tem porta oposta (2ª porta de cabina): fiação a mais para atender essa porta.
+    { codigo: 'GS2', descricao: 'Contato de trinco da porta de cabina', soPortaOposta: true },
+    { codigo: 'EDP2', descricao: 'Alimentação e sinal da barreira eletrônica', soPortaOposta: true },
+    { codigo: 'DC2', descricao: 'Alimentação e sinal do inversor / módulo do operador de porta', soPortaOposta: true },
+    { codigo: 'DEN2', descricao: 'Sinais do inversor / módulo do operador de porta', soPortaOposta: true },
   ];
   const chicoteTipoObra = (v) => (String(v || '').toLowerCase().startsWith('modern') ? 'Modernização' : String(v || '').toLowerCase() === 'novo' ? 'Novo' : '');
-  function chicoteDisponivel(c, tipoAplicacao) { return !c.soCasaMaquinas || String(tipoAplicacao || '').toUpperCase() === 'MR'; }
+  function chicoteDisponivel(c, tipoAplicacao, portaOposta) { return (!c.soCasaMaquinas || String(tipoAplicacao || '').toUpperCase() === 'MR') && (!c.soPortaOposta || !!portaOposta); }
   function dadosChicote(r) {
     const t = (v) => String(v == null ? '' : v).trim();
     const c = CHICOTES.find((x) => x.codigo === t(r.chicote).toUpperCase()) || { codigo: t(r.chicote).toUpperCase(), descricao: t(r.descricao) };
