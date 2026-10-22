@@ -164,6 +164,20 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
     if (faltam && !window.confirm(`${faltam} item(ns) ficam com falta justificada. Concluir mesmo assim?`)) return;
     agir('concluir', null, 'Pedido separado.', 'Concluiu a separação');
   }
+  // Cria a(s) OP(s)-unidade do item e manda para a tela de Fabricação Corrimão/Corte (RPC separacao_enviar_fabricacao).
+  async function enviarFab(item, destino) {
+    const nome = destino === 'corrimao' ? 'Corrimão' : 'Corte';
+    if (!window.confirm(`Enviar ${item.codigo} para Fabricação ${nome}? A OP é criada agora.`)) return;
+    setOcupado(true);
+    try {
+      const r = await window.FabricacaoOficinaStore.enviarDaSeparacao(codigo, item.codigo, destino);
+      const nums = (r.ops || []).map((o) => o.numero).join(', ');
+      sepToast(`Enviado para ${nome}: ${nums}.`);
+      window.VPLog?.registrar?.({ modulo: 'Separação', acao: 'Enviou item para Fabricação ' + nome, alvo: `Pedido ${d.pedido.numero_pedido} — ${item.codigo} (${nums})` });
+      await carregar(); onMudou();
+    } catch (e) { sepToast((e.message || '').replace(/^fabricação: /, '')); }
+    setOcupado(false);
+  }
   async function salvarPend() {
     if (!pend.obs || pend.obs.trim().length < 3) { sepToast('Escreva a observação: é obrigatória.'); return; }
     await agir('pendenciar', { codigo: pend.codigo, situacao: pend.situacao, obs: pend.obs.trim() }, 'Registrado.', 'Item pendente: ' + SEP_SIT[pend.situacao]);
@@ -227,6 +241,12 @@ function SepDetalhe({ codigo, caps, voltar, onMudou, embutido }) {
                         </div>
                       ))}
                       {pd && <div style={{ fontSize: 12 }}><Badge variant="warning">{SEP_SIT[pd.situacao]}</Badge> <i>{pd.obs}</i> <span style={{ color: 'var(--fg3)' }}>— {sepNome(pd.por)}, {sepData(pd.em)}</span></div>}
+                      {pd && pd.situacao === 'na_operacao' && caps.enviarFab && (
+                        <div style={{ marginTop: 4 }}>
+                          <button className="btn btn--sm" disabled={ocupado} title="Cria a OP e leva o item para a tela de Fabricação Corte" onClick={() => enviarFab(i, 'corte')}>Enviar para Corte</button>{' '}
+                          <button className="btn btn--sm" disabled={ocupado} title="Cria a OP e leva o item para a tela de Fabricação Corrimão" onClick={() => enviarFab(i, 'corrimao')}>Enviar para Corrimão</button>
+                        </div>
+                      )}
                       {!(i.separacoes || []).length && !pd && <span style={{ color: 'var(--fg3)', fontSize: 12 }}>{(i.enderecos || []).length ? 'endereço conhecido: ' + i.enderecos.join(', ') : 'sem endereço cadastrado'}</span>}
                     </td>
                     {editavel && (
@@ -385,12 +405,12 @@ function SepPedidosAba({ caps, irTv }) {
 
 function SeparacaoPage() {
   const [aba, setAba] = window.useRouteTab('separacao', 'pedidos', ['pedidos', 'tv'], false, true);
-  const [caps, setCaps] = React.useState({ carregado: false, ver: false, editar: false, saida: false });
+  const [caps, setCaps] = React.useState({ carregado: false, ver: false, editar: false, saida: false, enviarFab: false });
   React.useEffect(() => {
     let vivo = true;
     const cap = async (m, c) => { try { return !!(await window.PropostaStore?.temCapacidade?.(m, c)); } catch (e) { return false; } };
-    Promise.all([cap('separacao', 'ver'), cap('separacao', 'editar'), cap('estoque', 'saida')]).then(([ver, editar, saida]) => {
-      if (vivo) setCaps({ carregado: true, ver, editar, saida });
+    Promise.all([cap('separacao', 'ver'), cap('separacao', 'editar'), cap('estoque', 'saida'), cap('separacao', 'enviar_fabricacao')]).then(([ver, editar, saida, enviarFab]) => {
+      if (vivo) setCaps({ carregado: true, ver, editar, saida, enviarFab });
     });
     return () => { vivo = false; };
   }, []);
