@@ -123,7 +123,7 @@ test('1.1.1 — equipamento removido da seleção sai do texto (detalhes seguem 
 const itensPag = (s) => CI.buildContract(s, 'VPNI-T').clauses.find((c) => c.id === 'pagamento').items;
 test('5.1 — data prevista por parcela: opcional, só aparece quando informada (2, 3 e personalizado)', () => {
   const s = CI.defaultState();
-  s.valorTotal = '10.000,00';
+  s.valorTotal = '10.000,00'; s.condicionarUltimaParcela = false;   // este teste é só das datas
   s.formaPagamento = '2';
   assert.doesNotMatch(itensPag(s).map((i) => i.text).join(' '), /data prevista/);          // sem data, texto como antes
   s.datasParcelas = ['2026-10-26', '', ''];
@@ -159,4 +159,28 @@ test('1.4 — prazo e cronograma: opcional, marcos escolhidos um a um, nada corr
   const itens = CI.buildContract(s, 'X').clauses[0].items;
   assert.match(itens.find((i) => i.n === '1.4').text, /Destino do equipamento removido/);   // remoção mantém a 1.4 = destino
   assert.match(itens.find((i) => i.n === '1.5').text, /prazo total/);
+});
+
+test('5.1 — última parcela condicionada à vistoria e laudos: valor da última parcela da sequência, antes dos dados bancários', () => {
+  const s = CI.defaultState();
+  s.valorTotal = '9.750,00'; s.formaPagamento = 'custom';
+  s.parcelas = [{ valor: '2.437,50', descricao: 'entrada' }, { valor: '2.437,50', descricao: 'tracionamento' }, { valor: '2.437,50', descricao: 'porta' }, { valor: '2.437,50', descricao: 'entrega' }];
+  const it = () => CI.buildContract(s, 'X').clauses.find((c) => c.id === 'pagamento').items;
+  let t = it();
+  const cond = t.find((i) => /liberação da última parcela/.test(i.text));
+  assert.match(cond.text, /última parcela \(R\$ 2\.437,50\) fica estritamente condicionada à aprovação do equipamento na vistoria técnica realizada pelo Supervisor da CONTRATANTE e à emissão dos laudos de conformidade\./);
+  assert.equal(cond.n, '5.1.5'); assert.equal(t.find((i) => i.bank).n, '5.1.6');                   // numeração dos dados bancários acompanha
+  assert.equal(t.indexOf(cond) + 1, t.indexOf(t.find((i) => i.bank)));                              // imediatamente antes dos dados bancários
+  s.parcelas[3].valor = '3.000,00';                                                                   // editou a última: recalcula
+  assert.match(it().find((i) => /liberação da última parcela/.test(i.text)).text, /R\$ 3\.000,00/);
+  s.parcelas = s.parcelas.slice(0, 2);                                                                // removeu parcelas: a última passa a ser a 2ª
+  assert.match(it().find((i) => /liberação da última parcela/.test(i.text)).text, /R\$ 2\.437,50/);
+  s.formaPagamento = '2'; s.valorTotal = '10.000,00';
+  assert.match(it().find((i) => /liberação da última parcela/.test(i.text)).text, /R\$ 5\.000,00/);   // 2 parcelas
+  s.formaPagamento = '3'; s.valorTotal = '10.000,00';
+  assert.match(it().find((i) => /liberação da última parcela/.test(i.text)).text, /R\$ 3\.333,34/);   // 3 parcelas, resto na última
+  s.condicionarUltimaParcela = false;
+  assert.equal(it().some((i) => /liberação da última parcela/.test(i.text)), false);                  // desmarcado: some
+  delete s.condicionarUltimaParcela;
+  assert.equal(it().some((i) => /liberação da última parcela/.test(i.text)), false);                  // contrato antigo (sem a chave): inalterado
 });
