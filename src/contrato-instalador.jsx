@@ -1260,6 +1260,16 @@ function CISendModalLegacy({ record, onClose, onSent }) {
 function CIPedirAvalModal({ record, onClose, onSent }) {
   const [name, setName] = _ciUS((record.recipient && record.recipient.name) || record.responsavel_nome || '');
   const [contact, setContact] = _ciUS((record.recipient && record.recipient.contact) || '');
+  const [cad, setCad] = _ciUS(null);                // telefone do CADASTRO do montador (Cadastros › Instaladores)
+  _ciUE(() => {
+    let vivo = true;
+    window.CIStore.telefoneDoCadastro(record).then((t) => {
+      if (!vivo || !t) return;
+      setCad(t);
+      setContact((atual) => (String(atual || '').replace(/\D/g, '').length >= 10 ? atual : t.telefone));   // só preenche se estiver vazio
+    });
+    return () => { vivo = false; };
+  }, [record.id]);
   const [estado, setEstado] = _ciUS(null);          // null | 'aguardando_aval' | 'enviado'
   const [decisaoId, setDecisaoId] = _ciUS(null);
   const [busy, setBusy] = _ciUS(false);
@@ -1334,6 +1344,11 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
               <div className="ci-field">
                 <label>WhatsApp do montador (com DDD) — obrigatório</label>
                 <input className="ci-input" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="(11) 99999-0000" />
+                {cad && String(cad.telefone).replace(/\D/g, '') === digitos && <small style={{ color: '#2e7d32' }}>✓ Número do cadastro do montador ({cad.parceiro}).</small>}
+                {cad && String(cad.telefone).replace(/\D/g, '') !== digitos && (
+                  <small style={{ color: '#b26a00' }}>O cadastro do montador tem outro número: {cad.telefone}. <a href="#" onClick={(e) => { e.preventDefault(); setContact(cad.telefone); }}>Usar o do cadastro</a></small>
+                )}
+                {!cad && <small style={{ color: '#666' }}>Sem telefone no cadastro deste montador — digite aqui e atualize o cadastro em Cadastros › Instaladores.</small>}
               </div>
             </>
           )}
