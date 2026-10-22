@@ -701,7 +701,7 @@
       }[data && data.erro];
       throw new Error(msg || 'Não foi possível salvar a alteração.');
     }
-    if (data.nova_revisao) {
+    if (data.nova_revisao || data.refazer_parcelas) {   // rascunho editado também refaz as parcelas pendentes (o banco já as removeu)
       try { await window.ContratoInstaladorParcelasStore.criarParcelas(id, fs); }
       catch (e) { console.warn('[CIStore] nova revisão: parcelas não recriadas', e); data.aviso = 'As parcelas de pagamento não foram recriadas (' + (e.message || 'erro') + '). Avise o Financeiro.'; }
       try { for (const d of (fs.dossierIds || [])) { if (window.InstaladorAcordosStore) await window.InstaladorAcordosStore.vincularContrato(d, id); } }

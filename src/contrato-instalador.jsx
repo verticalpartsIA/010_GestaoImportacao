@@ -1857,9 +1857,17 @@ function CIDocViewer({ rec, revisao, onClose }) {
   const atual = rec.revisao || 1;
   const snaps = rec.revisoes || [];
   const [sel, setSel] = _ciUS(revisao == null ? atual : revisao);
+  const [filaAtual, setFilaAtual] = _ciUS([]);
+  _ciUE(() => {
+    let vivo = true;
+    window.DocumentoSignatariosStore.listarPorDocumento('contrato_instalador', rec.id)
+      .then((l) => { if (vivo) setFilaAtual((l || []).filter((x) => x.status !== 'expirado')); }).catch(() => {});
+    return () => { vivo = false; };
+  }, [rec.id]);
   const snap = sel === atual ? null : snaps.find((x) => x.revisao === sel);
   const doc = snap ? snap.doc : rec.doc;
   const au = (snap ? snap.audit : rec.audit) || {};
+  const fila = snap ? (snap.fila || []) : filaAtual;   // Diego/Juliana/Maurício: a fila viva (atual) ou a guardada na revisão
   const status = snap ? snap.status : rec.status;
   const st = window.CIStore.STATUS[status] || window.CIStore.STATUS.rascunho;
   const assinaturas = au.signedAt
@@ -1890,7 +1898,7 @@ function CIDocViewer({ rec, revisao, onClose }) {
               </select>
             </div>
           )}
-          {doc && doc.clauses ? <window.CIContractPreview doc={doc} assinaturas={assinaturas} /> : <p>Documento indisponível.</p>}
+          {doc && doc.clauses ? <window.CIContractPreview doc={doc} assinaturas={assinaturas} fila={fila} /> : <p>Documento indisponível.</p>}
         </div>
       </div>
     </div>
@@ -1922,6 +1930,14 @@ function CIDashboard() {
 
   const [editRec, setEditRec] = _ciUS(null);
   const drawerRec = drawerId ? contracts.find(c => c.id === drawerId) : null;
+  const [fullRec, setFullRec] = _ciUS(null);   // registro completo (doc, form_state, revisao, revisoes) — a lista do painel não carrega esses campos
+  _ciUE(() => {
+    if (!drawerId) { setFullRec(null); return undefined; }
+    let vivo = true;
+    window.CIStore.getById(drawerId).then((r) => { if (vivo) setFullRec(r); });
+    return () => { vivo = false; };
+  }, [drawerId, drawerRec && drawerRec.status, drawerRec && (drawerRec.log || []).length]);
+  const drawerShown = drawerRec ? { ...(fullRec && fullRec.id === drawerRec.id ? fullRec : {}), ...drawerRec } : null;
 
   const counts = _ciUM(() => {
     const c = { rascunho: 0, enviado: 0, visualizado: 0, assinado: 0 };
@@ -2009,7 +2025,8 @@ function CIDashboard() {
         )}
       </div>
 
-      {drawerRec && <CIAuditDrawer rec={drawerRec} onClose={() => setDrawerId(null)} onResend={(r) => setSendRec(r)} onRefresh={refresh} onEditar={(r) => { setDrawerId(null); setEditRec(r); }} />}
+      {drawerRec && <CIAuditDrawer rec={drawerShown} onClose={() => setDrawerId(null)} onResend={(r) => setSendRec(r)} onRefresh={refresh}
+        onEditar={async (r) => { const f = await window.CIStore.getById(r.id); if (!f) { alert('Contrato não encontrado.'); return; } setDrawerId(null); setEditRec(f); }} />}
       {editRec && (
         <div className="ci-edit-overlay">
           <CIWizard editando={editRec} onCancelEdit={() => setEditRec(null)}
