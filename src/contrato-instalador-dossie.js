@@ -121,7 +121,7 @@
     }
     patch.equipamentosDetalhe = detalharEquipamentos(dossie, equipamentos);
     const local = localDaObra(dossie);
-    if (local) patch.localServico = local;
+    patch.localServico = local;   // vazio de propósito quando o Dossiê não tem endereço: não deixa o de outro Dossiê pegar carona
     if (acordo && Number(acordo.valor_combinado) > 0) {
       patch.valorTotal = mask(String(Math.round(Number(acordo.valor_combinado) * 100)));
       Object.assign(patch, formaPagamentoDoAcordo(acordo.parcelas_qtd, acordo.valor_combinado, mask));
@@ -171,8 +171,7 @@
     const enderecos = new Set(lista.map((d) => montarEnderecoObra(d)).filter(Boolean));
     if (enderecos.size > 1) avisos.push('Os Dossiês têm endereços de obra diferentes: o contrato usa o do 1º — confira o "Local do serviço" no Passo 3.');
     const local = localDaObra(primeiro);
-    if (local) patch.localServico = `${local} (Dossiês: ${ids.join(', ')})`;
-    else delete patch.localServico;
+    patch.localServico = local ? `${local} (Dossiês: ${ids.join(', ')})` : '';
     const semAcordo = ids.filter((id) => !porId[id]);
     if (semAcordo.length) {
       avisos.push(`Falta o preço combinado de: ${semAcordo.join(', ')} (Pagamentos a Instaladores › Preços combinados). O valor total não foi preenchido.`);

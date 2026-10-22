@@ -71,7 +71,7 @@ test('Local do serviço = endereço da obra, nunca a descrição do equipamento 
 });
 test('Sem endereço no Dossiê: não preenche o local e avisa', () => {
   const r = D.montarPatchVarios({ dossies: [doss('DOS-M013', { endereco_logradouro: null })], acordos: {}, mask });
-  assert.equal(r.patch.localServico, undefined);
+  assert.equal(r.patch.localServico, '');   // vazio explícito (não herda o endereço do Dossiê anterior)
   assert.ok(r.avisos.some((a) => /endereço da obra/.test(a)));
   assert.equal(r.patch.equipamentosDetalhe[0].serie, '');   // sem linha em equipamentos_obra: série em branco, descrição do Dossiê
 });

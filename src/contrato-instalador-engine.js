@@ -305,7 +305,8 @@
   function descricaoServicosValida(s) { return descricaoLivreTemTexto(s) || fasesDoContrato(s).length > 0; }
   /* Cláusula 1.1.1 — cada equipamento com descrição + nº de série + identificação. Ausência é dita, nunca inventada. */
   function equipamentosDescritos(s) {
-    const det = (s.equipamentosDetalhe || []).filter((e) => e && (e.descricao || e.serie || e.dossier));
+    const cobertosSel = new Set(equipamentosDoContrato(s));   // só o que ainda está selecionado (chip removido sai do texto)
+    const det = (s.equipamentosDetalhe || []).filter((e) => e && (e.descricao || e.serie || e.dossier) && (cobertosSel.has(String(e.dossier || '').trim()) || cobertosSel.has(String(e.serie || '').trim())));
     const itens = det.map((e) => {
       const partes = [e.serie ? 'nº de série ' + e.serie : 'nº de série não informado'];
       if (e.dossier) partes.push('Dossiê ' + e.dossier);

@@ -514,7 +514,7 @@
       if (!avulsa) {
         avulsa = await criarDecisao({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo_diego', referenciaTabela: 'contratos_instalador', referenciaId: contratoId, contexto: { ...contexto, avulso: true } });
       }
-      if (avulsa.status === 'reprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, motivo: `Contratação reprovada pelo CEO (${avulsa.decidido_por || ''}): ${avulsa.motivo || 'sem motivo informado'}.` };
+      if (avulsa.status === 'reprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${avulsa.decidido_por || ''}): ${avulsa.motivo || 'sem motivo informado'}.` };
       if (avulsa.status !== 'aprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador (contrato avulso, sem Proposta). O pedido de aval foi enviado ao Diego por WhatsApp (ele responde SIM ou NÃO).' };
       return { ok: true };
     }
@@ -524,7 +524,7 @@
       decisao = await criarDecisaoSeNaoExiste({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo_diego', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao, contexto) });
     }
     decisao = await garantirAtiva(decisao);
-    if (decisao.status === 'reprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, motivo: `Contratação reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+    if (decisao.status === 'reprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
     if (decisao.status !== 'aprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador. O pedido de aval foi enviado ao Diego por WhatsApp (ele responde SIM ou NÃO).' };
     return { ok: true };
   }

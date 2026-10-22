@@ -1233,7 +1233,7 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
         });
         setDecisaoId(gate.decisaoId || null);
         if (gate.ok) { window.toast?.('O aval já estava aprovado — atualize a tela.', 'info'); }
-        else if (gate.reenviavel) {
+        else if (gate.reprovada) {
           /* O Diego já respondeu NÃO a este contrato: nada foi pedido de novo. A pessoa conversa com ele e reenvia daqui. */
           setMotivoNao(gate.motivo || 'O Diego respondeu NÃO.');
           setEstado('reprovado');

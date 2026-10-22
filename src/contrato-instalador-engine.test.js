@@ -110,3 +110,12 @@ test('1.2 — descrição livre opcional quando há fase marcada com texto; ":" 
   assert.equal(CI.descricaoServicosValida(s), false);                       // fase marcada com texto apagado não supre
   assert.equal(itensObjeto(s).some((i) => /Descrição dos serviços: :/.test(i.text || '')), false);
 });
+
+test('1.1.1 — equipamento removido da seleção sai do texto (detalhes seguem a seleção atual)', () => {
+  const s = CI.defaultState();
+  s.equipamentosManuais = ['DOS-A', 'DOS-B'];
+  s.equipamentosDetalhe = [{ dossier: 'DOS-A', serie: '1', descricao: 'Elevador A' }, { dossier: 'DOS-B', serie: '2', descricao: 'Elevador B' }];
+  s.equipamentosManuais = ['DOS-B'];   // usuário removeu o chip do DOS-A
+  const t = CI.buildContract(s, 'X').clauses[0].items.find((i) => i.n === '1.1.1').text;
+  assert.match(t, /Elevador B/); assert.doesNotMatch(t, /Elevador A|nº de série 1/);
+});
