@@ -50,8 +50,9 @@
           <div className="fo-head">
             <div>
               <div className="fo-meta">{destino === 'corrimao' ? 'Fabricação de corrimão' : 'Fabricação — corte'}</div>
-              <div className="fo-tit">{ordem.numero}{un ? ` · unidade ${un.n}/${un.de}` : ''}</div>
+              <div className="fo-tit">{ordem.numero}{ordem.numero_pedido_omie ? ` · Pedido Omie ${ordem.numero_pedido_omie}` : ''}{un ? ` · unidade ${un.n}/${un.de}` : ''}</div>
               <div className="fo-sub">{ordem.titulo}</div>
+              {Array.isArray(ordem.itens_pedido) && ordem.itens_pedido.length > 0 && <div className="fo-meta">Itens do pedido: {ordem.itens_pedido.join(', ')}</div>}
               <div className="fo-meta">{ordem.cliente || ''}{ordem.prazo_entrega ? ' · entrega ' + U.fmtData(ordem.prazo_entrega) : ''}{destino === 'corte' && ordem.quantidade ? ' · qtd ' + ordem.quantidade : ''}</div>
               {pausado && <div className="fo-pausa">PAUSADA — falta de material</div>}
               {ordem.status === 'concluida' && <div className="fo-ok">✓ Concluída</div>}

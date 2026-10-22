@@ -1437,14 +1437,17 @@ function pcpMontarPedidoQuadro(b, extra) {
 async function pcpGerarPedidoQuadro(sb, b, opcoes, extra) {
   const montagem = pcpMontarPedidoQuadro(b, extra);
   const quem = pcpUsuario();
+  // Raiz: o nº do pedido do Omie aparece no título; o nº do pedido de quadro (sequência interna do site) fica como referência.
+  let numOmie = null;
+  if (opcoes.pedido_codigo) { const r = await sb.from('pcp_pedidos').select('numero_pedido').eq('codigo_pedido', Number(opcoes.pedido_codigo)).limit(1); numOmie = r.data && r.data[0] ? r.data[0].numero_pedido : null; }
   const { data: mae, error: e0 } = await sb.from('pcp_ordens').insert({
-    titulo: `Pedido ${b.quadro.numero_pedido}${opcoes.cliente ? ' — ' + opcoes.cliente : ''}`, frente: 'pedido', quadro_comando_id: b.quadro.id,
+    titulo: numOmie ? `Pedido Omie ${numOmie} (quadro interno ${b.quadro.numero_pedido})${opcoes.cliente ? ' — ' + opcoes.cliente : ''}` : `Pedido ${b.quadro.numero_pedido}${opcoes.cliente ? ' — ' + opcoes.cliente : ''}`, frente: 'pedido', quadro_comando_id: b.quadro.id,
     quantidade: 1, cliente: opcoes.cliente || null, numero_cotacao: PCP_ESCOPO_NUM(b.quadro.numero_cotacao),
     previsao_inicio: opcoes.previsao_inicio || null, prazo_entrega: opcoes.prazo_entrega || null, criado_por: quem,
     // Vínculo com o pedido de venda do Omie (escolhido na hora de gerar): é por `pedido_codigo` que Emissão de NF, Expedição, o
     // Painel e a fila "Pedidos para Produzir" acham a OP-mãe. O nº do pedido do quadro é uma sequência interna, NÃO o nº do Omie.
     pedido_codigo: opcoes.pedido_codigo ? Number(opcoes.pedido_codigo) : null,
-    observacao: `Gerada do pedido de quadro Nº ${b.quadro.numero_pedido} (${b.quadro.novo_ou_modernizacao || 'sem tipo'}).`,
+    observacao: `Gerada do pedido de quadro Nº ${b.quadro.numero_pedido} (${b.quadro.novo_ou_modernizacao || 'sem tipo'})${numOmie ? ` — pedido Omie ${numOmie}` : ''}.`,
   }).select('id, numero').single();
   if (e0 || !mae) throw new Error(e0?.message || 'sem permissão');
   if (montagem.separacao.length) {
