@@ -1556,7 +1556,7 @@ function CIWizard({ onCreated, initial, editando, onSaved, onCancelEdit }) {
       {editando && (
         <div className="ci-cond-alert" style={{ margin: '0 0 8px', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <span><span className="ci-cond-dot"></span><b>Editando {editando.numero_documento}</b> — revisão {editando.revisao || 1} ({(window.CIStore.STATUS[editando.status] || {}).label || editando.status}).
-            {editando.status === 'rascunho' ? ' Rascunho: a alteração vale no próprio contrato.' : ' Contrato já enviado: ao salvar nasce uma NOVA revisão (a atual fica no histórico, o aval do Diego é pedido de novo e todos assinam de novo).'}</span>
+            {editando.status === 'rascunho' ? ' Rascunho: a alteração vale no próprio contrato.' : ' Contrato já enviado: ao salvar nasce uma NOVA revisão (a atual fica no histórico, o aval do Diego já dado continua valendo e todos assinam de novo).'}</span>
           <button type="button" className="ci-btn ci-btn--ghost" onClick={onCancelEdit}>Cancelar edição</button>
         </div>
       )}
@@ -1603,7 +1603,7 @@ function CIWizard({ onCreated, initial, editando, onSaved, onCancelEdit }) {
           <div className="ci-modal">
             <div className="ci-modal-head"><div><h2>Criar nova revisão do contrato</h2><p>{editando.numero_documento} — revisão {(editando.revisao || 1) + 1}</p></div></div>
             <div className="ci-modal-body">
-              <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Este contrato já foi enviado. Ele <b>não será sobrescrito</b>: a revisão atual, com as assinaturas e o hash dela, fica guardada como histórico. Os links atuais deixam de funcionar, a fila de assinaturas e as parcelas pendentes são canceladas, e a nova revisão volta a <b>rascunho</b>: precisa de <b>novo aval do Diego</b> e de <b>novas assinaturas</b> de todos. Uma assinatura antiga não vale para o documento novo.</div>
+              <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Este contrato já foi enviado. Ele <b>não será sobrescrito</b>: a revisão atual, com as assinaturas e o hash dela, fica guardada como histórico. Os links atuais deixam de funcionar, a fila de assinaturas e as parcelas pendentes são canceladas, e a nova revisão volta a <b>rascunho</b>: o aval do Diego já dado continua valendo, mas é preciso <b>novas assinaturas</b> de todos. Uma assinatura antiga não vale para o documento novo.</div>
               <div className="ci-field" style={{ marginTop: 10 }}>
                 <label>Motivo da alteração (obrigatório, mínimo 10 letras)</label>
                 <textarea className="ci-input" rows={3} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: endereço da obra corrigido a pedido do Jurídico" />
@@ -2047,7 +2047,7 @@ function CIDashboard() {
         <div className="ci-edit-overlay">
           <CIWizard editando={editRec} onCancelEdit={() => setEditRec(null)}
             onSaved={(r) => { setEditRec(null); refresh(); setDrawerId(editRec.id);
-              window.toast?.(r.nova_revisao ? ('Revisão ' + r.revisao + ' criada em rascunho. Para enviar, clique em "Enviar": o Diego será consultado de novo.' + (r.aviso ? ' ' + r.aviso : '')) : 'Rascunho atualizado.', r.aviso ? 'warning' : 'success'); }} />
+              window.toast?.(r.nova_revisao ? ('Revisão ' + r.revisao + ' criada em rascunho. Para enviar, clique em "Enviar" (o aval do Diego já dado continua valendo).' + (r.aviso ? ' ' + r.aviso : '')) : 'Rascunho atualizado.', r.aviso ? 'warning' : 'success'); }} />
         </div>
       )}
       {sendRec && <CISendModal record={sendRec} onClose={() => setSendRec(null)} onSent={refresh} />}
