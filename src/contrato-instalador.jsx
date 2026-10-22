@@ -274,15 +274,16 @@ function CIDossieEntrada({ s, setMany }) {
     try {
       const sb = window.__VP_SB?.sb;
       const { data: achados, error } = await sb.from('dossier_obra')
-        .select('id, client_name, building_name, city, state, equip_type, parceiro_instalador_id, cliente_id').in('id', ids);
+        .select('id, client_name, building_name, city, state, equip_type, parceiro_instalador_id, cliente_id, endereco_logradouro, endereco_numero, endereco_complemento, endereco_bairro, endereco_cep').in('id', ids);
       if (error) throw error;
+      const { data: equipamentos } = await sb.from('equipamentos_obra').select('dossier_id, numero_serie, descricao, tipo').in('dossier_id', ids);
       const mapa = {}; (achados || []).forEach((d) => { mapa[d.id] = d; });
       const faltando = ids.filter((id) => !mapa[id]);
       if (faltando.length) { setEstado({ tipo: 'erro', msg: `Dossiê não encontrado: ${faltando.join(', ')}. Confira o número (ex.: DOS-M013).` }); setBuscando(false); return; }
       const dossies = ids.map((id) => mapa[id]);
       const acordos = {};
       for (const id of ids) { const a = await window.InstaladorAcordosStore?.obterAtivoPorDossier(id); if (a) acordos[id] = a; }
-      const r = window.CIDossie.montarPatchVarios({ dossies, acordos, mask: window.CI.maskMoeda });
+      const r = window.CIDossie.montarPatchVarios({ dossies, acordos, mask: window.CI.maskMoeda, equipamentos: equipamentos || [] });
       if (r.erro) { setEstado({ tipo: 'erro', msg: r.erro }); setBuscando(false); return; }
       const patch = r.patch;
       const parceiroId = (acordos[ids[0]] && acordos[ids[0]].parceiro_instalador_id) || dossies.map((d) => d.parceiro_instalador_id).find(Boolean)
@@ -713,7 +714,7 @@ function CIStepObjeto({ s, set, errors }) {
       )}
       <div className="ci-field-group">
         <h3 className="ci-group-title">Escopo</h3>
-        <CITextArea label="Descrição dos serviços *" value={s.descricaoServicos} onChange={(v) => set('descricaoServicos', v)} rows={3} placeholder="Detalhe os serviços (montagem, alinhamento, testes, etc.)" error={errors.descricaoServicos} />
+        <CITextArea label={window.CI.fasesDoContrato(s).length ? 'Descrição dos serviços (opcional — há fases marcadas)' : 'Descrição dos serviços *'} value={s.descricaoServicos} onChange={(v) => set('descricaoServicos', v)} rows={3} placeholder="Detalhe os serviços (montagem, alinhamento, testes, etc.)" error={errors.descricaoServicos} />
         {s.equipamento === 'elevador' && !remocao && (
           <div className="ci-field-group ci-field-group--cond">
             <h3 className="ci-group-title">Fases da montagem (opcional)</h3>
@@ -1216,6 +1217,7 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
   const [decisaoId, setDecisaoId] = _ciUS(null);
   const [busy, setBusy] = _ciUS(false);
   const [reenviando, setReenviando] = _ciUS(false);
+  const [motivoNao, setMotivoNao] = _ciUS('');
   const digitos = (contact || '').replace(/\D/g, '');
 
   const pedir = async () => {
@@ -1231,6 +1233,13 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
         });
         setDecisaoId(gate.decisaoId || null);
         if (gate.ok) { window.toast?.('O aval já estava aprovado — atualize a tela.', 'info'); }
+        else if (gate.reenviavel) {
+          /* O Diego já respondeu NÃO a este contrato: nada foi pedido de novo. A pessoa conversa com ele e reenvia daqui. */
+          setMotivoNao(gate.motivo || 'O Diego respondeu NÃO.');
+          setEstado('reprovado');
+          onSent && onSent();
+          return;
+        }
       }
       setEstado(r.estado);
       onSent && onSent();
@@ -1241,7 +1250,7 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
   const reenviar = async () => {
     if (!decisaoId || reenviando) return;
     setReenviando(true);
-    try { await window.DecisoesStore.reenviarAvalWhatsApp(decisaoId); window.toast?.('Pedido de aval reenviado ao Diego por WhatsApp.', 'success'); }
+    try { await window.DecisoesStore.reenviarAvalWhatsApp(decisaoId); window.toast?.('Pedido de aval reenviado ao Diego por WhatsApp.', 'success'); if (estado === 'reprovado') setEstado('aguardando_aval'); }
     catch (e) { window.toast?.('Erro ao reenviar o aval: ' + (e.message || e), 'error'); }
     finally { setReenviando(false); }
   };
@@ -1251,7 +1260,7 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
       <div className="ci-modal">
         <div className="ci-modal-head">
           <div>
-            <h2>{estado === 'enviado' ? 'Links enviados' : estado === 'aguardando_aval' ? 'Aguardando o aval do Diego' : 'Enviar para assinatura'}</h2>
+            <h2>{estado === 'reprovado' ? 'Aval recusado pelo Diego' : estado === 'enviado' ? 'Links enviados' : estado === 'aguardando_aval' ? 'Aguardando o aval do Diego' : 'Enviar para assinatura'}</h2>
             <p>{estado ? 'Você não precisa fazer mais nada neste contrato.' : 'O Diego autoriza por WhatsApp; depois do SIM os links saem sozinhos.'}</p>
           </div>
           <button className="ci-modal-x" onClick={onClose}>✕</button>
@@ -1276,6 +1285,15 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
                 <input className="ci-input" value={contact} onChange={(e) => setContact(e.target.value)} placeholder="(11) 99999-0000" />
               </div>
             </>
+          )}
+          {estado === 'reprovado' && (
+            <div className="ci-sent-ok">
+              <div className="ci-check">✋</div>
+              <h3>O Diego respondeu NÃO a este contrato</h3>
+              <p>{motivoNao}</p>
+              <p>Converse com ele e, quando houver acordo, reenvie o pedido: ele volta a ser perguntado por WhatsApp e pode responder SIM. O contrato continua em rascunho e nada foi enviado ao montador. Se o contrato precisar mudar, ajuste-o <b>antes</b> de reenviar.</p>
+              {decisaoId && <button className="ci-btn ci-btn--primary" onClick={reenviar} disabled={reenviando}>{reenviando ? 'Reenviando…' : 'Reenviar pedido de aval ao Diego (WhatsApp)'}</button>}
+            </div>
           )}
           {estado === 'aguardando_aval' && (
             <div className="ci-sent-ok">
@@ -1351,7 +1369,7 @@ function ciValidateStep(idx, s) {
   }
   if (idx === 2) {
     if (!window.CI.equipamentosDoContrato(s).length) e.equipamentos = 'Informe ao menos um equipamento (nº de série, nº do projeto ou ativo da Proposta) coberto por este contrato.';
-    obrig('descricaoServicos', 'Descreva os serviços a executar.');
+    if (!window.CI.descricaoServicosValida(s)) e.descricaoServicos = 'Descreva os serviços a executar ou marque ao menos uma fase da montagem.';
     obrig('localServico', 'Informe o endereço onde o serviço será realizado.');
     if (s.equipamento === 'elevador' && s.paradas === 'Personalizado') obrig('paradasCustom', 'Informe a quantidade de paradas.');
     if (window.CI.isRemocao(s)) obrig('destino', 'Informe o destino / local.');

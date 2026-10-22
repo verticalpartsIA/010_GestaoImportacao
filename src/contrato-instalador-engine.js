@@ -231,6 +231,7 @@
       r_rg:'', r_cpf:'', r_mesmoEndereco: true,
       r_rua:'', r_numero:'', r_bairro:'', r_cidade:'', r_estado:'', r_cep:'',
       equipamento: 'elevador', quantidade: 1, localServico:'', descricaoServicos:'',
+      equipamentosDetalhe: [],   // [{dossier, serie, descricao, tipo}] vindos do Dossiê/equipamentos_obra (cláusula 1.1.1)
       fasesAtivas: {}, fasesTexto: {},   // fases de montagem (só elevador): { f1: true } / texto editado por fase
       tipoElevador: 'social', capacidadeCarga:'', cargaEspecial: false,
       paradas: '5', paradasCustom:'', destino:'',
@@ -298,6 +299,23 @@
     { id:'f3', label:'Fase 3 (Cabine e Portas)', texto:'Fase 3 (Cabine e Portas): Montagem dos painéis da cabine, subteto, botoeiras, instalação dos operadores de porta e portas de pavimento em todos os {andares} andares;' },
     { id:'f4', label:'Fase 4 (Elétrica e Ajustes Finais)', texto:'Fase 4 (Elétrica e Ajustes Finais): Lançamento de cabos de manobra, fixação do quadro de comando, fiação de poço, sensores de leitura, ajustes de nivelamento, testes dinâmicos e preparação para vistoria.' },
   ];
+  /* Descrição livre só conta se tiver letra ou número (um ":" solto não é descrição). Com fase marcada e com texto,
+     a descrição livre é opcional (pedido do Jurídico, 22/10/2026). */
+  function descricaoLivreTemTexto(s) { return /[\p{L}\p{N}]/u.test(String(s.descricaoServicos || '')); }
+  function descricaoServicosValida(s) { return descricaoLivreTemTexto(s) || fasesDoContrato(s).length > 0; }
+  /* Cláusula 1.1.1 — cada equipamento com descrição + nº de série + identificação. Ausência é dita, nunca inventada. */
+  function equipamentosDescritos(s) {
+    const det = (s.equipamentosDetalhe || []).filter((e) => e && (e.descricao || e.serie || e.dossier));
+    const itens = det.map((e) => {
+      const partes = [e.serie ? 'nº de série ' + e.serie : 'nº de série não informado'];
+      if (e.dossier) partes.push('Dossiê ' + e.dossier);
+      return (e.descricao ? e.descricao + ' ' : '') + '(' + partes.join('; ') + ')';
+    });
+    const cobertos = new Set();
+    det.forEach((e) => { if (e.serie) cobertos.add(String(e.serie).trim()); if (e.dossier) cobertos.add(String(e.dossier).trim()); });
+    equipamentosDoContrato(s).forEach((v) => { if (!cobertos.has(v)) itens.push(v); });
+    return itens;
+  }
   function andaresDe(s) {
     const n = s.paradas === 'Personalizado' ? s.paradasCustom : s.paradas;
     return String(n || '').trim() || '___';
@@ -305,8 +323,9 @@
   function fasesDoContrato(s) {
     if (s.equipamento !== 'elevador' || isRemocao(s)) return [];
     const ativas = s.fasesAtivas || {}, txt = s.fasesTexto || {};
-    return FASES_MONTAGEM.filter(f => ativas[f.id]).map(f => {
-      const t = (txt[f.id] != null && String(txt[f.id]).trim()) ? String(txt[f.id]).trim() : f.texto;
+    /* Fase marcada com o texto apagado NÃO conta (checkbox sem texto não supre a descrição). */
+    return FASES_MONTAGEM.filter(f => ativas[f.id] && !(txt[f.id] != null && !String(txt[f.id]).trim())).map(f => {
+      const t = (txt[f.id] != null) ? String(txt[f.id]).trim() : f.texto;
       return t.replace(/\{andares\}/g, andaresDe(s));
     });
   }
@@ -475,11 +494,23 @@
       { n:'1.1', text: escopoFrase(s) },
     ];
     const equips = equipamentosDoContrato(s);
-    if (equips.length) objetoItems.push({ n:'1.1.1', text:`Equipamento${equips.length > 1 ? 's' : ''} objeto deste contrato (nº de série / identificação): ${equips.join(', ')}.` });
-    if (s.descricaoServicos && s.descricaoServicos.trim()) objetoItems.push({ n:'1.2', text:'Descrição dos serviços: ' + s.descricaoServicos.trim() });
-    else objetoItems.push({ n:'1.2', text:'Descrição dos serviços: (detalhar os serviços a executar)' });
+    if (equips.length) {
+      const desc = equipamentosDescritos(s);
+      const plural = desc.length > 1 ? 's' : '';
+      objetoItems.push({ n:'1.1.1', text: (s.equipamentosDetalhe && s.equipamentosDetalhe.length)
+        ? `Equipamento${plural} objeto deste contrato: ${desc.join('; ')}.`
+        : `Equipamento${plural} objeto deste contrato (nº de série / identificação): ${desc.join(', ')}.` });
+    }
     const fases = fasesDoContrato(s);
-    if (fases.length) objetoItems.push({ n:'1.2.1', text:'A CONTRATADA executará as seguintes etapas:', list: fases });
+    const temLivre = descricaoLivreTemTexto(s);
+    if (temLivre) {
+      objetoItems.push({ n:'1.2', text:'Descrição dos serviços: ' + String(s.descricaoServicos).trim() });
+      if (fases.length) objetoItems.push({ n:'1.2.1', text:'A CONTRATADA executará as seguintes etapas:', list: fases });
+    } else if (fases.length) {
+      objetoItems.push({ n:'1.2', text:'Descrição dos serviços: a CONTRATADA executará as seguintes etapas:', list: fases });
+    } else {
+      objetoItems.push({ n:'1.2', text:'Descrição dos serviços: (detalhar os serviços a executar)' });
+    }
     objetoItems.push({ n:'1.3', text:'Local do serviço: ' + vBlank(s.localServico, '(endereço completo de onde será realizado o serviço)') });
     if (isRemocao(s)) {
       const lbl = s.modalidade === 'remocao_adequacao' ? 'Local da nova instalação' : 'Destino do equipamento removido';
@@ -657,7 +688,7 @@
     dividirEmParcelas, inteiroExtensoGen, logradouro,
     equipamentosDoContrato, slugEquipamento, numeroBaseContrato, proximoNumeroLivre,
     defaultState, pad2,
-    isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals, FASES_MONTAGEM, fasesDoContrato, andaresDe,
+    isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals, FASES_MONTAGEM, fasesDoContrato, andaresDe, descricaoLivreTemTexto, descricaoServicosValida, equipamentosDescritos,
     buildContract,
   };
 }());
