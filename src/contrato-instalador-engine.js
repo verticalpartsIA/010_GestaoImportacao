@@ -237,7 +237,7 @@
       paradas: '5', paradasCustom:'', destino:'',
       obraCidade:'', obraEstado:'', distancia:'', distanciaAuto:true,
       logResponsavel:'contratada', logModo:'despesas', logDiasExtra:'',
-      valorTotal:'', formaPagamento:'2', parcelas:[],
+      valorTotal:'', formaPagamento:'2', parcelas:[], datasParcelas:['', '', ''],   // datas previstas das parcelas rápidas (2/3); nas personalizadas é p.data
       banco:'', agencia:'', conta:'', pix:'',
       cidadeAssinatura: 'Guarulhos',
       dataDia: pad2(hoje.getDate()),
@@ -408,7 +408,15 @@
     return `Faz parte do escopo desse serviço a ${verboModalidade(s)} de ${qtd} (${inteiroExtensoGen(qtd, fem)}) ${qtd > 1 ? eq.plural : eq.label} da Marca Vertical Parts.`;
   }
 
+  /* Data PREVISTA de cada parcela (opcional; não é a data de pagamento). Aceita ISO (aaaa-mm-dd) ou texto já formatado. */
+  function dataPrevistaTxt(v) {
+    const t = String(v || '').trim();
+    if (!t) return '';
+    const m = t.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    return ' (data prevista: ' + (m ? m[3] + '/' + m[2] + '/' + m[1] : t) + ')';
+  }
   function buildPagamentoItems(s) {
+    const dp = (s.datasParcelas || []);
     const valor = moedaParaNumero(s.valorTotal);
     const valorFmt = valor ? 'R$ ' + fmtMoeda(valor) : 'R$ XX.XXX,XX';
     const valorExt = valor ? ' (' + valorExtenso(valor) + ')' : ' (valor por extenso)';
@@ -418,16 +426,16 @@
       const f = (v) => v ? 'R$ ' + fmtMoeda(v) : 'R$ XX.XXX,XX';
       const e = (v) => v ? ' (' + valorExtenso(v) + ')' : ' (valor por extenso)';
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago em 2 (duas) parcelas via depósito em conta bancária, da seguinte forma:` });
-      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos;` });
-      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} após a finalização do serviço, com o equipamento apto ao pleno funcionamento e mediante nota fiscal de serviço.` });
+      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos${dataPrevistaTxt(dp[0])};` });
+      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} após a finalização do serviço, com o equipamento apto ao pleno funcionamento e mediante nota fiscal de serviço${dataPrevistaTxt(dp[1])}.` });
     } else if (s.formaPagamento === '3') {
       const [p1, p2, p3] = dividirEmParcelas(valor, 3);
       const f = (v) => v ? 'R$ ' + fmtMoeda(v) : 'R$ XX.XXX,XX';
       const e = (v) => v ? ' (' + valorExtenso(v) + ')' : ' (valor por extenso)';
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago em 3 (três) parcelas via depósito em conta bancária, da seguinte forma:` });
-      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos;` });
-      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} na metade da execução dos serviços;` });
-      items.push({ n:'5.1.3', text:`${f(p3)}${e(p3)} após a finalização do serviço, mediante nota fiscal de serviço.` });
+      items.push({ n:'5.1.1', text:`${f(p1)}${e(p1)} na data de início dos trabalhos${dataPrevistaTxt(dp[0])};` });
+      items.push({ n:'5.1.2', text:`${f(p2)}${e(p2)} na metade da execução dos serviços${dataPrevistaTxt(dp[1])};` });
+      items.push({ n:'5.1.3', text:`${f(p3)}${e(p3)} após a finalização do serviço, mediante nota fiscal de serviço${dataPrevistaTxt(dp[2])}.` });
     } else {
       items.push({ n:'5.1', text:`Pelos serviços prestados, a CONTRATANTE pagará à CONTRATADA o valor total de ${valorFmt}${valorExt}, a ser pago via depósito em conta bancária, da seguinte forma:` });
       const parc = (s.parcelas && s.parcelas.length) ? s.parcelas : [];
@@ -438,8 +446,8 @@
           const pv = moedaParaNumero(p.valor);
           const pf = pv ? 'R$ ' + fmtMoeda(pv) : 'R$ XX.XXX,XX';
           const pe = pv ? ' (' + valorExtenso(pv) + ')' : '';
-          const quando = p.descricao && p.descricao.trim() ? p.descricao.trim() : (p.data ? 'em ' + p.data : '');
-          items.push({ n:'5.1.'+(i+1), text:`${pf}${pe}${quando ? ' — ' + quando : ''};` });
+          const quando = p.descricao && p.descricao.trim() ? p.descricao.trim() : '';
+          items.push({ n:'5.1.'+(i+1), text:`${pf}${pe}${quando ? ' — ' + quando : ''}${dataPrevistaTxt(p.data)};` });
         });
       }
     }
@@ -689,7 +697,7 @@
     dividirEmParcelas, inteiroExtensoGen, logradouro,
     equipamentosDoContrato, slugEquipamento, numeroBaseContrato, proximoNumeroLivre,
     defaultState, pad2,
-    isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals, FASES_MONTAGEM, fasesDoContrato, andaresDe, descricaoLivreTemTexto, descricaoServicosValida, equipamentosDescritos,
+    isCargaEspecial, isLongaDistancia, isRemocao, activeConditionals, dataPrevistaTxt, FASES_MONTAGEM, fasesDoContrato, andaresDe, descricaoLivreTemTexto, descricaoServicosValida, equipamentosDescritos,
     buildContract,
   };
 }());

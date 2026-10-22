@@ -8,7 +8,7 @@ const { useState: _ciUS, useEffect: _ciUE, useMemo: _ciUM, useRef: _ciUR } = Rea
 /* ============================================================
    FORM FIELDS (compartilhados pelo wizard)
    ============================================================ */
-function CIField({ label, value, onChange, placeholder, mask, error, hint, required, mono, width }) {
+function CIField({ label, value, onChange, placeholder, mask, error, hint, required, mono, width, type }) {
   const handle = (e) => {
     let v = e.target.value;
     if (mask && window.CI[mask]) v = window.CI[mask](v);
@@ -19,6 +19,7 @@ function CIField({ label, value, onChange, placeholder, mask, error, hint, requi
       <label>{label}{required && <span className="ci-req">*</span>}</label>
       <input
         className={'ci-input' + (mono ? ' ci-input--mono' : '') + (error ? ' ci-input--error' : '')}
+        type={type}
         value={value || ''}
         onChange={handle}
         placeholder={placeholder}
@@ -887,6 +888,14 @@ function CIStepPagamento({ s, set, errors }) {
           { value: '3', label: '3 parcelas' },
           { value: 'custom', label: 'Personalizado' },
         ]} />
+        {(s.formaPagamento === '2' || s.formaPagamento === '3') && (
+          <div className="ci-grid" style={{ marginTop: 8 }}>
+            {Array.from({ length: Number(s.formaPagamento) }).map((_, i) => (
+              <CIField key={i} label={`${i + 1}ª parcela — data prevista (opcional)`} type="date" width="narrow" value={(s.datasParcelas || [])[i] || ''}
+                onChange={(v) => { const a = [...(s.datasParcelas || ['', '', ''])]; a[i] = v; set('datasParcelas', a); }} />
+            ))}
+          </div>
+        )}
         {s.formaPagamento === 'custom' && (
           <div className="ci-parcelas">
             {(s.parcelas || []).map((p, i) => (
@@ -898,6 +907,7 @@ function CIStepPagamento({ s, set, errors }) {
                     <input className="ci-input-bare ci-input--mono" value={p.valor} onChange={(e) => updateParcela(i, 'valor', e.target.value)} placeholder="0,00" inputMode="numeric" />
                   </div>
                   <input className="ci-input" value={p.descricao} onChange={(e) => updateParcela(i, 'descricao', e.target.value)} placeholder="Descrição / marco (ex.: na assinatura)" />
+                  <input className="ci-input" type="date" title="Data prevista (opcional)" value={/^\d{4}-\d{2}-\d{2}$/.test(p.data || '') ? p.data : ''} onChange={(e) => updateParcela(i, 'data', e.target.value)} />
                 </div>
                 <button type="button" className="ci-parcela-del" onClick={() => removeParcela(i)}>✕</button>
               </div>
