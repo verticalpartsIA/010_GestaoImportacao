@@ -224,7 +224,8 @@ test.describe('Etiquetas', () => {
     await page.getByRole('button', { name: 'Pedido: maior para menor' }).click();
     await expect(page.locator('tbody tr').first()).toContainText('1500');
     await page.locator('tr', { hasText: '1212' }).click();
-    await expect(page.getByText('POW1', { exact: true })).toBeVisible();
+    // MR vem com casa de máquinas: POW1 aparece pré-marcado (chicoteDisponivel decide o chiSel inicial).
+    await expect(page.getByRole('checkbox', { name: /POW1/ })).toBeChecked();
     await expect(page.getByRole('button', { name: /Imprimir 24 etiquetas/ })).toBeEnabled();   // 23 do filtro + ETOK fixo
     // prévia com 2 colunas: cada coluna mostra uma etiqueta DIFERENTE (QC e OS), não a mesma repetida
     await page.getByLabel('Largura da etiqueta (mm)', { exact: true }).fill('50');
@@ -234,7 +235,9 @@ test.describe('Etiquetas', () => {
     await expect(previa2).toContainText('QC | 1212');
     await expect(previa2).toContainText('OS | 1212');
     await page.locator('tr', { hasText: '1070' }).click();
-    await expect(page.getByText('POW1', { exact: true })).toHaveCount(0);
+    // 22/10 — desde #1057 todos os chicotes ficam SEMPRE visíveis (marcar/desmarcar só decide o que imprime);
+    // POW1 continua aparecendo pra MRL, só não vem pré-marcado (chicoteDisponivel só decide o chiSel inicial).
+    await expect(page.getByRole('checkbox', { name: /POW1/ })).not.toBeChecked();
     await expect(page.getByRole('button', { name: /Imprimir 23 etiquetas/ })).toBeEnabled();   // 22 do filtro + ETOK fixo
     // quadro vindo da Evolução da Fabricação (OP sem cadastro de aplicação): POW1 só se marcar casa de máquinas
     await page.locator('tr', { hasText: '1500' }).click();
