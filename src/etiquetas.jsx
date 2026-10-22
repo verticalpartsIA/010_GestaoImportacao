@@ -414,13 +414,13 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
   const [chiPorta, setChiPorta] = React.useState(false);   // porta oposta: acrescenta GS2, EDP2, DC2 e DEN2
   const chiAplic = chiPed ? (chiPed.tipo_aplicacao || (chiCasa ? 'MR' : null)) : null;
   // Todos os chicotes ficam SEMPRE visíveis; marcar/desmarcar só decide quais imprimem (casa de máquinas e porta oposta apenas pré-marcam).
-  const chiLista = chiPed ? (chiPed.sem_quadro ? [] : C.CHICOTES).concat(chiExtras.map((c) => ({ ...c, extra: true }))) : [];
+  const chiLista = chiPed ? C.CHICOTES.concat(chiExtras.map((c) => ({ ...c, extra: true }))) : [];
   // Cabos do pedido (PCP): cada um com quantas etiquetas imprimir (peças = 1 por peça; cabo por metro = 1).
   const [chiCabos, setChiCabos] = React.useState({ itens: [], erro: null });
   const [caboSel, setCaboSel] = React.useState(() => new Map());
   const escolherPedidoChi = (p) => {
     setChiManual((m) => ({ ...m, ativo: false })); setChiPed(p); setChiCasa(false); setChiPorta(false);
-    setChiSel(new Set((p.sem_quadro ? [] : C.CHICOTES.filter((c) => C.chicoteDisponivel(c, p.tipo_aplicacao, false)).map((c) => c.codigo)).concat(chiExtras.map((c) => c.codigo))));
+    setChiSel(new Set((C.CHICOTES.filter((c) => C.chicoteDisponivel(c, p.tipo_aplicacao, false)).map((c) => c.codigo)).concat(chiExtras.map((c) => c.codigo))));
     setChiCabos({ itens: [], erro: null }); setCaboSel(new Map());
     S.listarCabosDoPedido(p.numero_pedido).then((r) => {
       setChiCabos(r);
@@ -603,12 +603,12 @@ function EtqGerar({ cfg, caps, imprimir, ocupado }) {
               {chiPed ? (
                 <div className="card" style={{ padding: 10 }}>
                   {chiPed.manual && !chiPronto ? <div style={{ fontSize: 12, marginBottom: 6, color: 'var(--vp-danger)' }}>Digite o número do pedido para liberar as etiquetas.</div> : null}
-                  {chiPed.sem_quadro ? <div style={{ fontSize: 12, marginBottom: 6, color: 'var(--fg3)' }}>Pedido {chiPed.numero_pedido} sem quadro de comando: só os cabos dele, abaixo.</div> : null}
-                  {chiPed.sem_quadro ? null : <div style={{ fontSize: 12, marginBottom: 6 }}><b>Chicotes do pedido {chiPed.numero_pedido}</b> — uma etiqueta por chicote marcado.{chiAplic === 'MR' ? ' Elevador com casa de máquinas: POW1 já vem marcado.' : ' O POW1 só vem marcado em elevador com casa de máquinas; marque se precisar.'}</div>}
-                  {!chiPed.tipo_aplicacao && !chiPed.sem_quadro ? <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}><input type="checkbox" checked={chiCasa} onChange={(e) => mudarCasaChi(e.target.checked)}/> Este elevador tem casa de máquinas (inclui o POW1) <span style={{ color: 'var(--fg3)' }}>— o cadastro deste pedido não informa a aplicação</span></label> : null}
-                  {!chiPed.sem_quadro ? <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}><input type="checkbox" checked={chiPorta} onChange={(e) => mudarPortaChi(e.target.checked)}/> Este elevador tem porta oposta (inclui GS2, EDP2, DC2 e DEN2)</label> : null}
-                  {chiPed.ops && chiPed.ops.length > 1 && !chiPed.sem_quadro ? <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 6 }}>Este pedido tem {chiPed.ops.length} quadros: o jogo de etiquetas é o mesmo para todos. Use <b>Cópias = {chiPed.ops.length}</b> para imprimir um jogo por quadro.</div> : null}
-                  {chiPed.sem_quadro ? null : <div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
+                  
+                  {<div style={{ fontSize: 12, marginBottom: 6 }}><b>Chicotes do pedido {chiPed.numero_pedido}</b> — uma etiqueta por chicote marcado.{chiAplic === 'MR' ? ' Elevador com casa de máquinas: POW1 já vem marcado.' : ' O POW1 só vem marcado em elevador com casa de máquinas; marque se precisar.'}</div>}
+                  {!chiPed.tipo_aplicacao ? <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}><input type="checkbox" checked={chiCasa} onChange={(e) => mudarCasaChi(e.target.checked)}/> Este elevador tem casa de máquinas (inclui o POW1) <span style={{ color: 'var(--fg3)' }}>— o cadastro deste pedido não informa a aplicação</span></label> : null}
+                  {true ? <label style={{ fontSize: 12, display: 'flex', gap: 6, alignItems: 'center', marginBottom: 6 }}><input type="checkbox" checked={chiPorta} onChange={(e) => mudarPortaChi(e.target.checked)}/> Este elevador tem porta oposta (inclui GS2, EDP2, DC2 e DEN2)</label> : null}
+                  {chiPed.ops && chiPed.ops.length > 1 ? <div style={{ fontSize: 12, color: 'var(--fg3)', marginBottom: 6 }}>Este pedido tem {chiPed.ops.length} quadros: o jogo de etiquetas é o mesmo para todos. Use <b>Cópias = {chiPed.ops.length}</b> para imprimir um jogo por quadro.</div> : null}
+                  {<div style={{ display: 'flex', gap: 8, marginBottom: 6 }}>
                     <button type="button" className="btn btn--ghost btn--sm" onClick={() => setChiSel(new Set(chiLista.map((c) => c.codigo)))}>Marcar todos</button>
                     <button type="button" className="btn btn--ghost btn--sm" onClick={() => setChiSel(new Set())}>Limpar</button>
                   </div>}
