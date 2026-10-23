@@ -464,7 +464,9 @@ function CISeletorProposta({ propostaId, ativosIndices, onSelecionarProposta, on
 
   if (!propostas || !propostas.length) return null;
   const selecionada = propostas.find((p) => p.id === propostaId);
-  const ativos = (selecionada && selecionada.data_json && selecionada.data_json.ativos) || [];
+  /* Equipamento ocultado na Proposta não é vendido, logo não é instalado (visão comercial). */
+  const djSel = selecionada && selecionada.data_json;
+  const ativos = (djSel && (window.PropostaOpcoes ? window.PropostaOpcoes.projetar(djSel, 'elevador') : djSel).ativos) || [];
 
   return (
     <div className="ci-field-group">
@@ -654,7 +656,7 @@ function CIStepObjeto({ s, set, errors }) {
     set('numeroCotacao', p.numero_cotacao ?? window.MasterIdEngine?.parseNumeroCotacao?.(p.master_id) ?? null);
     /* Snapshot dos ativos (com custoInstalacaoMaoDeObraRs por equipamento) —
        usado no Passo 5 pra sugerir o Valor total (Fase 3b da granularidade). */
-    set('ativosSnapshot', (p.data_json && p.data_json.ativos) || []);
+    set('ativosSnapshot', (p.data_json && (window.PropostaOpcoes ? window.PropostaOpcoes.projetar(p.data_json, 'elevador') : p.data_json).ativos) || []);
     const valores = p.data_json?.elevador?.valores;
     if (valores?.quantidade) set('quantidade', Number(valores.quantidade) || s.quantidade);
   };

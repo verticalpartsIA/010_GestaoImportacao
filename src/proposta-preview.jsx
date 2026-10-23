@@ -24,7 +24,9 @@
 // 210mm em px a 96dpi (largura "de projeto" real da página — ver .pe__pdf)
 const PE_PAGE_PX = 793.7;
 
-function PEPreview({ data, eq, overlay, bare }) {
+function PEPreview({ data: dataBruta, eq, overlay, bare }) {
+  /* Equipamentos ocultados na seção 09 não existem para o cliente (visão comercial; dado integral intacto). */
+  const data = window.PropostaOpcoes ? window.PropostaOpcoes.projetar(dataBruta, eq) : dataBruta;
   const eqLabel = eq === "elevador" ? "elevador" : eq === "escada" ? "escada" : "esteira";
   const eqName = eq === "elevador" ? "Elevador" : eq === "escada" ? "Escada Rolante" : "Esteira Rolante";
 

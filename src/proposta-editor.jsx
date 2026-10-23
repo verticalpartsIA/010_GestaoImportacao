@@ -372,7 +372,9 @@ function tempoRelativo(ts) {
 /* Total da proposta a partir do que está no formulário (preço unitário ×
    quantidade da aba ativa) — o mesmo número que o cliente vê no PDF e que
    agora também vai pra coluna valor_total, alimentando a listagem. */
-function calcularValorTotal(data, eq) {
+function calcularValorTotal(dataBruta, eq) {
+  /* Total COMERCIAL: equipamentos ocultados na seção 09 não entram (proposta-opcoes.js › projetar). */
+  const data = window.PropostaOpcoes ? window.PropostaOpcoes.projetar(dataBruta, eq) : dataBruta;
   const v = (data[eq] && data[eq].valores) || {};
   /* Mais de 1 equipamento (v.itens): soma item a item, pra refletir na
      hora um desconto aprovado nalgum deles — senão o total ficava preso
@@ -650,6 +652,7 @@ function PropostaEditor({ setRoute, subsel }) {
      enviar, ou pra REpublicar depois de editar uma proposta já enviada. */
   const publicar = React.useCallback(async () => {
     if (publicando || !window.PropostaStore) return;
+    if (window.PropostaOpcoes?.semEquipamentoVisivel(data, eq)) { window.toast?.('Todos os equipamentos estão ocultos — reexiba ao menos um antes de publicar.', 'warning'); return; }
     setPublicando(true);
     try {
       let id = recordId;
@@ -673,13 +676,14 @@ function PropostaEditor({ setRoute, subsel }) {
     } finally {
       setPublicando(false);
     }
-  }, [publicando, recordId, saveToSupabase]);
+  }, [publicando, recordId, saveToSupabase, data, eq]);
 
   // Salva e abre o modal de envio por assinatura digital — gera o link
   // público (/assinar/:token) igual ao Contrato Instalador/Venda, em vez de
   // só marcar status='enviada' sem nunca produzir nenhum link real.
   const abrirEnvio = React.useCallback(async () => {
     if (!window.PropostaStore) { window.toast?.('Store de assinatura não carregado.', 'error'); return; }
+    if (window.PropostaOpcoes?.semEquipamentoVisivel(data, eq)) { window.toast?.('Todos os equipamentos estão ocultos — reexiba ao menos um antes de enviar.', 'warning'); return; }
     const numeroCotacao = window.MasterIdEngine?.parseNumeroCotacao?.(data.numeroCotacao) ?? null;
     if (window.DecisoesStore && numeroCotacao != null) {
       const gate = await window.DecisoesStore.podeEnviarProposta(numeroCotacao);
@@ -969,7 +973,7 @@ function PropostaEditor({ setRoute, subsel }) {
           if (au.signedAt) assinaturas = [{ papel: 'Cliente (contratante)', nome: au.signerName || '', em: au.signedAt, dispositivo: au.signDevice, ip: au.signIp, hash: au.hash, imagem: /^data:image\//.test(au.signatureData || '') ? au.signatureData : null }];
         }
       } catch (e) { console.warn('Assinatura digital não carregada pro PDF da proposta:', e); }
-      const r = await window.PropostaReactPdf.baixar(data, filename, assinaturas, eq);
+      const r = await window.PropostaReactPdf.baixar(window.PropostaOpcoes ? window.PropostaOpcoes.projetar(data, eq) : data, filename, assinaturas, eq);
       /* Sem este aviso, uma falha de carregamento de imagem produzia um
          PDF completo mas SEM logo nem foto de capa, e ninguém ficava
          sabendo até abrir o arquivo (achado 20/08). */
@@ -1248,7 +1252,7 @@ function PropostaEditor({ setRoute, subsel }) {
                   fill={f}
                   collapsed={isCollapsed}
                   onToggle={() => setCollapsed((c) => ({ ...c, [s.id]: !c[s.id] }))}>
-                  {renderSection(s.id, eq, data, set, { herdar, herdando, heranca, recordId })}
+                  {renderSection(s.id, eq, data, set, { herdar, herdando, heranca, recordId, travada })}
                 </PESection>
               );
             })}
@@ -1322,7 +1326,7 @@ function renderSection(sid, eq, data, set, extras) {
     case "conteudo": return <S_Conteudo d={data} set={set}/>;
     case "fotos": return <S_FotosEquipamento d={data} set={set}/>;
 
-    case "valores": return <S_Valores d={data} set={set} eq={eq} recordId={extras.recordId}/>;
+    case "valores": return <S_Valores d={data} set={set} eq={eq} recordId={extras.recordId} travada={!!extras.travada}/>;
     case "acabamentosLista": return <S_AcabamentoEscEst d={data} set={set} eq={eq}/>;
     case "caracteristicasTec": return <S_CaracTecEscEst d={data} set={set} eq={eq}/>;
     case "responsabilidades": return <S_Responsabilidades d={data} set={set} eq={eq}/>;
