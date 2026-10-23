@@ -510,7 +510,7 @@
        anterior como "substituída" na fila, pra ninguém precificar a versão
        velha sem perceber. Falha de leitura não derruba a fila. */
     const { data: irmas } = formularioIds.length
-      ? await c.from('cotacoes_elevador_fornecedor').select('id, formulario_elevador_id, fornecedor, categoria_produto, numero_documento, created_at')
+      ? await c.from('cotacoes_elevador_fornecedor').select('id, formulario_elevador_id, fornecedor, categoria_produto, numero_documento, revisao, created_at')
           .in('formulario_elevador_id', formularioIds).is('excluido_em', null)
       : { data: [] };
     const mesmaFamilia = (cot) => (irmas || []).filter((x) => x.id !== cot.id && x.formulario_elevador_id === cot.formulario_elevador_id
@@ -530,8 +530,22 @@
        foram mandadas ao fornecedor por e-mail/WhatsApp — numero_documento
        NUNCA é reescrito aqui. Só o RÓTULO exibido nesta fila ganha "-A"
        quando a original não tem letra mas já tem uma irmã (nova versão
-       existe de verdade). Família de 1 versão só continua sem letra. */
-    const rotuloComLetra = (cot) => (cot.revisao || !mesmaFamilia(cot).length) ? cot.numero_documento : `${cot.numero_documento}-A`;
+       existe de verdade). Família de 1 versão só continua sem letra.
+
+       23/10 — achado real do Codex (PR #1073): numa família CRIADA ANTES
+       desta mudança (regra antiga: original sem letra, 1º reenvio já
+       nascia "A" — ver "RFQ ao fornecedor — letra de revisão em todo
+       reenvio", 20/10), uma irmã de verdade pode JÁ ser "…-A". Forçar
+       "-A" na original colidiria com o rótulo dela (duas linhas mostrando
+       o mesmo número). Só sintetiza "-A" quando nenhuma irmã REAL já usa
+       essa letra — caso colida, deixa a original sem letra (rótulo
+       ambíguo é pior que nenhum). */
+    const rotuloComLetra = (cot) => {
+      if (cot.revisao) return cot.numero_documento;
+      const irmasReais = mesmaFamilia(cot);
+      if (!irmasReais.length || irmasReais.some((x) => x.revisao === 'A')) return cot.numero_documento;
+      return `${cot.numero_documento}-A`;
+    };
 
     const daCotacao = (cots || []).map((cot) => {
       const form = formPorId[cot.formulario_elevador_id] || {};

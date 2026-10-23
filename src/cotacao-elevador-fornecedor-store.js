@@ -479,17 +479,21 @@
     const ehQuadroComando = categoria === 'quadro_comando';
     const tipo_formulario = ehQuadroComando ? 'quadro_comando' : tipoFormularioPara(unidades[0].tipo);
 
-    /* 23/10 — achado real ao implementar a letra obrigatória desde a 1ª
-       versão (ver `revisao` abaixo): esta busca nunca filtrou por
-       `fornecedor`, só formulário+categoria — com 2+ fornecedores cotando
-       a mesma categoria do mesmo formulário, o 1º envio a um fornecedor
-       NOVO herdava a letra mais alta já usada por OUTRO fornecedor (ex.:
-       fornecedor X já em "C", 1º envio ao fornecedor Y nascia "D" em vez
-       de "A"). Cada fornecedor tem sua PRÓPRIA sequência de revisão —
-       mesmo escopo que `mesmaFamilia`/`novaVersao` já usam no resto do
-       sistema (precificacao-elevador-store.js, formulario-elevador.jsx). */
+    /* 23/10 — achado real do Codex (PR #1073): esta busca é escopada só por
+       formulário+categoria, NUNCA por fornecedor — e tem que continuar
+       assim. numero_documento é UNIQUE GLOBAL na tabela (migration
+       20260722250000) e masterId() não leva o nome do fornecedor no
+       código — só categoria+Nº cotação+revisão. Se 2 fornecedores
+       cotassem a mesma categoria do mesmo formulário com sequências de
+       letra INDEPENDENTES, o 1º envio de cada um geraria o MESMO
+       numero_documento ("VPEL-EL0990-A" pros dois) e o 2º insert
+       quebraria por violar a constraint única. A letra tem que ser uma
+       sequência ÚNICA por (formulário, categoria), compartilhada entre
+       todos os fornecedores que cotam ali — é o que já garante
+       numero_documento nunca repetir. (Cheguei a escopar por fornecedor
+       nesta mesma sessão — revertido depois de confirmar a constraint.) */
     const { data: existentes, error: exErr } = await c.from('cotacoes_elevador_fornecedor')
-      .select('revisao').eq('formulario_elevador_id', formularioElevadorId).eq('categoria_produto', categoria).eq('fornecedor', fornecedor);
+      .select('revisao').eq('formulario_elevador_id', formularioElevadorId).eq('categoria_produto', categoria);
     if (exErr) throw exErr;
     /* 20/10 — compara por tamanho e depois por letra: "AA" vem depois de "Z"
        (a comparação de texto simples punha "AA" antes de "B"). */
@@ -499,10 +503,11 @@
       return maior ? r.revisao : max;
     }, '');
     /* 23/10 (pedido do usuário) — a PRÓPRIA versão original passa a ganhar
-       letra (sempre "A" pro 1º envio a este fornecedor), não só os
-       reenvios. Antes: 1ª cotação sem letra, 2ª vira "A", 3ª vira "B"...
-       Agora: 1ª já nasce "A", 2ª "B", 3ª "C"... "desde quando o formulário
-       volte" — cotações já existentes (antes de hoje) continuam gravadas
+       letra (sempre "A" pro 1º envio desta categoria/formulário, a
+       QUALQUER fornecedor), não só os reenvios. Antes: 1ª cotação sem
+       letra, 2ª vira "A", 3ª vira "B"... Agora: 1ª já nasce "A", 2ª "B",
+       3ª "C"... "desde quando o formulário volte" — cotações já existentes
+       (antes de hoje) continuam gravadas
        como foram mandadas de verdade ao fornecedor; não é reescrito aqui. */
     const revisao = window.MasterIdEngine.proximaRevisao(maiorRevisao || null);
     const numero_documento = window.MasterIdEngine.masterId({ categoriaProduto: categoria, numeroCotacao, revisao });
