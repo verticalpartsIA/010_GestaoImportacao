@@ -1166,7 +1166,7 @@ function CISendModalLegacy({ record, onClose, onSent }) {
     setReenviando(true);
     try {
       await window.DecisoesStore.reenviarAvalWhatsApp(aval.decisaoId);
-      window.toast?.('Pedido de aval reenviado ao Diego por WhatsApp. Quando ele responder SIM, clique em Enviar de novo.', 'success');
+      window.toast?.('Pedido de aval reenviado à Juliana por WhatsApp. Quando ela responder SIM, clique em Enviar de novo.', 'success');
     } catch (e) { window.toast?.('Erro ao reenviar o aval: ' + (e.message || e), 'error'); }
     finally { setReenviando(false); }
   };
@@ -1189,9 +1189,9 @@ function CISendModalLegacy({ record, onClose, onSent }) {
           </div>
           {!sent && aval && (
             <div style={{ background: '#FFF8E1', border: '1px solid #F5C518', borderRadius: 6, padding: '10px 12px', marginBottom: 12, fontSize: 13 }}>
-              <b>Falta o aval do Diego.</b> {aval.motivo}
+              <b>Falta o aval da Juliana.</b> {aval.motivo}
               <div style={{ marginTop: 8 }}>
-                <button className="ci-btn ci-btn--ghost" onClick={reenviarAval} disabled={reenviando}>{reenviando ? 'Reenviando…' : 'Reenviar pedido de aval ao Diego (WhatsApp)'}</button>
+                <button className="ci-btn ci-btn--ghost" onClick={reenviarAval} disabled={reenviando}>{reenviando ? 'Reenviando…' : 'Reenviar pedido de aval à Juliana (WhatsApp)'}</button>
               </div>
             </div>
           )}
@@ -1291,13 +1291,13 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
         });
         setDecisaoId(gate.decisaoId || null);
         if (!gate.ok && !gate.reprovada && gate.reenvioPendente && gate.decisaoId) {
-          try { await window.DecisoesStore.reenviarAvalWhatsApp(gate.decisaoId); window.toast?.('Nova revisão do contrato: o pedido de aval foi enviado de novo ao Diego.', 'success'); }
-          catch (e2) { window.toast?.('O aval foi reaberto, mas o pedido ao Diego não saiu (' + (e2.message || e2) + '). Use "Reenviar pedido de aval".', 'warning'); }
+          try { await window.DecisoesStore.reenviarAvalWhatsApp(gate.decisaoId); window.toast?.('Nova revisão do contrato: o pedido de aval foi enviado de novo à Juliana.', 'success'); }
+          catch (e2) { window.toast?.('O aval foi reaberto, mas o pedido à Juliana não saiu (' + (e2.message || e2) + '). Use "Reenviar pedido de aval".', 'warning'); }
         }
         if (gate.ok) { window.toast?.('O aval já estava aprovado — atualize a tela.', 'info'); }
         else if (gate.reprovada) {
-          /* O Diego já respondeu NÃO a este contrato: nada foi pedido de novo. A pessoa conversa com ele e reenvia daqui. */
-          setMotivoNao(gate.motivo || 'O Diego respondeu NÃO.');
+          /* A Juliana já respondeu NÃO a este contrato: nada foi pedido de novo. A pessoa conversa com ela e reenvia daqui. */
+          setMotivoNao(gate.motivo || 'A Juliana respondeu NÃO.');
           setEstado('reprovado');
           onSent && onSent();
           return;
@@ -1312,7 +1312,7 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
   const reenviar = async () => {
     if (!decisaoId || reenviando) return;
     setReenviando(true);
-    try { await window.DecisoesStore.reenviarAvalWhatsApp(decisaoId); window.toast?.('Pedido de aval reenviado ao Diego por WhatsApp.', 'success'); if (estado === 'reprovado') setEstado('aguardando_aval'); }
+    try { await window.DecisoesStore.reenviarAvalWhatsApp(decisaoId); window.toast?.('Pedido de aval reenviado à Juliana por WhatsApp.', 'success'); if (estado === 'reprovado') setEstado('aguardando_aval'); }
     catch (e) { window.toast?.('Erro ao reenviar o aval: ' + (e.message || e), 'error'); }
     finally { setReenviando(false); }
   };
@@ -1322,8 +1322,8 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
       <div className="ci-modal">
         <div className="ci-modal-head">
           <div>
-            <h2>{estado === 'reprovado' ? 'Aval recusado pelo Diego' : estado === 'enviado' ? 'Links enviados' : estado === 'aguardando_aval' ? 'Aguardando o aval do Diego' : 'Enviar para assinatura'}</h2>
-            <p>{estado ? 'Você não precisa fazer mais nada neste contrato.' : 'O Diego autoriza por WhatsApp; depois do SIM os links saem sozinhos.'}</p>
+            <h2>{estado === 'reprovado' ? 'Aval recusado pela Juliana' : estado === 'enviado' ? 'Links enviados' : estado === 'aguardando_aval' ? 'Aguardando o aval da Juliana' : 'Enviar para assinatura'}</h2>
+            <p>{estado ? 'Você não precisa fazer mais nada neste contrato.' : 'A Juliana autoriza por WhatsApp; depois do SIM os links saem sozinhos.'}</p>
           </div>
           <button className="ci-modal-x" onClick={onClose}>✕</button>
         </div>
@@ -1336,7 +1336,7 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
           {!estado && (
             <>
               <div style={{ background: '#FFF8E1', border: '1px solid #F5C518', borderRadius: 6, padding: '10px 12px', marginBottom: 12, fontSize: 13 }}>
-                <b>Como funciona:</b> o Diego recebe a pergunta no WhatsApp e responde SIM ou NÃO. <b>SIM:</b> o Diego, a Juliana e o Maurício recebem o link de assinatura (em qualquer ordem) e você recebe o link do montador para encaminhar. <b>NÃO:</b> nada é enviado e o Maurício é avisado.
+                <b>Como funciona:</b> a Juliana recebe a pergunta no WhatsApp e responde SIM ou NÃO. <b>SIM:</b> o Diego, a Juliana e o Maurício recebem o link de assinatura (em qualquer ordem) e você recebe o link do montador para encaminhar. <b>NÃO:</b> nada é enviado e o Maurício é avisado.
               </div>
               <div className="ci-field">
                 <label>Nome do montador</label>
@@ -1356,18 +1356,18 @@ function CIPedirAvalModal({ record, onClose, onSent }) {
           {estado === 'reprovado' && (
             <div className="ci-sent-ok">
               <div className="ci-check">✋</div>
-              <h3>O Diego respondeu NÃO a este contrato</h3>
+              <h3>A Juliana respondeu NÃO a este contrato</h3>
               <p>{motivoNao}</p>
               <p>Converse com ele e, quando houver acordo, reenvie o pedido: ele volta a ser perguntado por WhatsApp e pode responder SIM. O contrato continua em rascunho e nada foi enviado ao montador. Se o contrato precisar mudar, ajuste-o <b>antes</b> de reenviar.</p>
-              {decisaoId && <button className="ci-btn ci-btn--primary" onClick={reenviar} disabled={reenviando}>{reenviando ? 'Reenviando…' : 'Reenviar pedido de aval ao Diego (WhatsApp)'}</button>}
+              {decisaoId && <button className="ci-btn ci-btn--primary" onClick={reenviar} disabled={reenviando}>{reenviando ? 'Reenviando…' : 'Reenviar pedido de aval à Juliana (WhatsApp)'}</button>}
             </div>
           )}
           {estado === 'aguardando_aval' && (
             <div className="ci-sent-ok">
               <div className="ci-check">⏳</div>
-              <h3>Pedido de aval enviado ao Diego</h3>
-              <p>Quando ele responder <b>SIM</b>, os links de assinatura saem automaticamente. Se responder <b>NÃO</b>, o Maurício é avisado e nada é enviado.</p>
-              {decisaoId && <button className="ci-btn ci-btn--ghost" onClick={reenviar} disabled={reenviando}>{reenviando ? 'Reenviando…' : 'Reenviar pedido de aval ao Diego (WhatsApp)'}</button>}
+              <h3>Pedido de aval enviado à Juliana</h3>
+              <p>Quando ela responder <b>SIM</b>, os links de assinatura saem automaticamente. Se responder <b>NÃO</b>, o Maurício é avisado e nada é enviado.</p>
+              {decisaoId && <button className="ci-btn ci-btn--ghost" onClick={reenviar} disabled={reenviando}>{reenviando ? 'Reenviando…' : 'Reenviar pedido de aval à Juliana (WhatsApp)'}</button>}
             </div>
           )}
           {estado === 'enviado' && (
@@ -1556,7 +1556,7 @@ function CIWizard({ onCreated, initial, editando, onSaved, onCancelEdit }) {
       {editando && (
         <div className="ci-cond-alert" style={{ margin: '0 0 8px', display: 'flex', gap: 12, alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap' }}>
           <span><span className="ci-cond-dot"></span><b>Editando {editando.numero_documento}</b> — revisão {editando.revisao || 1} ({(window.CIStore.STATUS[editando.status] || {}).label || editando.status}).
-            {editando.status === 'rascunho' ? ' Rascunho: a alteração vale no próprio contrato.' : ' Contrato já enviado: ao salvar nasce uma NOVA revisão (a atual fica no histórico, o aval do Diego já dado continua valendo e todos assinam de novo).'}</span>
+            {editando.status === 'rascunho' ? ' Rascunho: a alteração vale no próprio contrato.' : ' Contrato já enviado: ao salvar nasce uma NOVA revisão (a atual fica no histórico, o aval já dado continua valendo e todos assinam de novo).'}</span>
           <button type="button" className="ci-btn ci-btn--ghost" onClick={onCancelEdit}>Cancelar edição</button>
         </div>
       )}
@@ -1603,7 +1603,7 @@ function CIWizard({ onCreated, initial, editando, onSaved, onCancelEdit }) {
           <div className="ci-modal">
             <div className="ci-modal-head"><div><h2>Criar nova revisão do contrato</h2><p>{editando.numero_documento} — revisão {(editando.revisao || 1) + 1}</p></div></div>
             <div className="ci-modal-body">
-              <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Este contrato já foi enviado. Ele <b>não será sobrescrito</b>: a revisão atual, com as assinaturas e o hash dela, fica guardada como histórico. Os links atuais deixam de funcionar, a fila de assinaturas e as parcelas pendentes são canceladas, e a nova revisão volta a <b>rascunho</b>: o aval do Diego já dado continua valendo, mas é preciso <b>novas assinaturas</b> de todos. Uma assinatura antiga não vale para o documento novo.</div>
+              <div className="ci-cond-alert"><span className="ci-cond-dot"></span>Este contrato já foi enviado. Ele <b>não será sobrescrito</b>: a revisão atual, com as assinaturas e o hash dela, fica guardada como histórico. Os links atuais deixam de funcionar, a fila de assinaturas e as parcelas pendentes são canceladas, e a nova revisão volta a <b>rascunho</b>: o aval já dado continua valendo, mas é preciso <b>novas assinaturas</b> de todos. Uma assinatura antiga não vale para o documento novo.</div>
               <div className="ci-field" style={{ marginTop: 10 }}>
                 <label>Motivo da alteração (obrigatório, mínimo 10 letras)</label>
                 <textarea className="ci-input" rows={3} value={motivo} onChange={(e) => setMotivo(e.target.value)} placeholder="Ex.: endereço da obra corrigido a pedido do Jurídico" />
@@ -2047,7 +2047,7 @@ function CIDashboard() {
         <div className="ci-edit-overlay">
           <CIWizard editando={editRec} onCancelEdit={() => setEditRec(null)}
             onSaved={(r) => { setEditRec(null); refresh(); setDrawerId(editRec.id);
-              window.toast?.(r.nova_revisao ? ('Revisão ' + r.revisao + ' criada em rascunho. Para enviar, clique em "Enviar" (o aval do Diego já dado continua valendo).' + (r.aviso ? ' ' + r.aviso : '')) : 'Rascunho atualizado.', r.aviso ? 'warning' : 'success'); }} />
+              window.toast?.(r.nova_revisao ? ('Revisão ' + r.revisao + ' criada em rascunho. Para enviar, clique em "Enviar" (o aval já dado continua valendo).' + (r.aviso ? ' ' + r.aviso : '')) : 'Rascunho atualizado.', r.aviso ? 'warning' : 'success'); }} />
         </div>
       )}
       {sendRec && <CISendModal record={sendRec} onClose={() => setSendRec(null)} onSent={refresh} />}
