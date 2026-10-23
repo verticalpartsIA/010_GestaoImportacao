@@ -553,6 +553,12 @@
       return {
         substituidaPor: criadoEm[cot.id] ? substituidaPor(cot, criadoEm[cot.id]) : null,
         cotacaoFornecedorId: cot.id, numeroDocumentoFornecedor: rotuloComLetra(cot), fornecedor: cot.fornecedor,
+        /* 23/10 (pedido do usuário) — a letra desta LINHA (a revisão real
+           deste documento, nunca sintetizada) passa a acompanhar o Nº da
+           cotação ("mãe") exibido na fila, não só o numero_documento do
+           fornecedor. Null quando o documento não tem letra própria (não
+           inventa "-A" aqui — mesma cautela do rotuloComLetra acima). */
+        revisao: cot.revisao || null,
         formularioElevadorId: cot.formulario_elevador_id, numeroCotacao: form.numero_cotacao ?? null,
         clienteNome: (form.clientes && form.clientes.razao_social) || null, clienteCnpj: (form.clientes && form.clientes.cnpj) || null,
         respondedAt: cot.responded_at, precificacaoId: pz ? pz.id : null, precificacaoStatus: pz ? pz.status : null,
