@@ -82,6 +82,8 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
   const [showExcluir, setShowExcluir] = React.useState(false);
   const [motivoExclusao, setMotivoExclusao] = React.useState('');
   const [excluindo, setExcluindo] = React.useState(false);
+  const [busca, setBusca] = React.useState(''); // 23/10 (pedido do usuário) — busca + ordenação
+  const ord = window.useOrdenacao();
 
   const carregar = React.useCallback(async () => {
     try {
@@ -121,14 +123,28 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
 
   const filtradas = React.useMemo(() => {
     if (!rows) return [];
+    const termo = busca.trim().toLowerCase();
     return rows.filter((r) => {
       if (tab === 'aguardando' && !CF_AGUARDANDO.includes(r.status)) return false;
       if (tab !== 'todos' && tab !== 'aguardando' && r.status !== tab) return false;
       if (fFornecedor !== 'Todos' && r.fornecedor !== fFornecedor) return false;
       if (fCategoria !== 'Todos' && r.categoria_produto !== fCategoria) return false;
-      return true;
+      if (!termo) return true;
+      const numCot = r.dados_envio?.header?.numero_cotacao ?? r.formularios_elevador?.numero_cotacao;
+      return [r.numero_documento, cfPredioLabel(r), r.fornecedor, numCot != null ? String(numCot) : null]
+        .some((v) => (v || '').toString().toLowerCase().includes(termo));
     });
-  }, [rows, tab, fFornecedor, fCategoria]);
+  }, [rows, tab, fFornecedor, fCategoria, busca]);
+
+  const linhasOrdenadas = ord.aplicar(filtradas, {
+    numeroDocumento: (c) => c.numero_documento,
+    numeroCotacao: (c) => c.dados_envio?.header?.numero_cotacao ?? c.formularios_elevador?.numero_cotacao,
+    predio: (c) => cfPredioLabel(c),
+    fornecedor: (c) => c.fornecedor,
+    categoria: (c) => cfCategoriaLabel(c.categoria_produto),
+    enviadoEm: (c) => (c.sent_at ? new Date(c.sent_at).getTime() : null),
+    status: (c) => c.status,
+  });
 
   if (rows === null) return <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando…</div>;
 
@@ -161,6 +177,8 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
           <option value="Todos">Todas as categorias</option>
           {store.CATEGORIAS_PRODUTO.map((c) => <option key={c.value} value={c.value}>{c.label}</option>)}
         </select>
+        <input className="input" placeholder="Buscar Nº Documento, Nº Cotação, prédio/cliente ou fornecedor…" value={busca}
+          onChange={(e) => setBusca(e.target.value)} style={{ minWidth: 280 }}/>
         <span className="small" style={{ color: 'var(--fg3)' }}>{filtradas.length} cotação(ões)</span>
       </div>
 
@@ -182,7 +200,7 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
       )}
 
       <Card title="Cotações enviadas" sub="Clique numa linha para abrir o detalhe e as tratativas">
-      <div className="table-wrap" style={{ border: 0 }}>
+      <div className="table-wrap table-wrap--sticky" style={{ border: 0 }}>
         <table className="t pcp-grid">
           <thead><tr>
             <th style={{ width: 32 }}>
@@ -190,13 +208,13 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
                 checked={filtradas.length > 0 && filtradas.every((c) => selecionadas.has(c.id))}
                 onChange={(e) => setSelecionadas(e.target.checked ? new Set(filtradas.map((c) => c.id)) : new Set())}/>
             </th>
-            <th>Nº Documento</th>
-            <th>Nº Cotação</th>
-            <th>Prédio / Cliente</th>
-            <th>Fornecedor</th>
-            <th>Categoria</th>
-            <th>Enviado em</th>
-            <th>Status</th>
+            {ord.th('numeroDocumento', 'Nº Documento')}
+            {ord.th('numeroCotacao', 'Nº Cotação')}
+            {ord.th('predio', 'Prédio / Cliente')}
+            {ord.th('fornecedor', 'Fornecedor')}
+            {ord.th('categoria', 'Categoria')}
+            {ord.th('enviadoEm', 'Enviado em')}
+            {ord.th('status', 'Status')}
             <th></th>
           </tr></thead>
           <tbody>
@@ -205,7 +223,7 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
                 Nenhum registro encontrado com os filtros atuais.
               </td></tr>
             )}
-            {filtradas.map((c) => (
+            {linhasOrdenadas.map((c) => (
               <tr key={c.id} style={{ cursor: 'pointer' }} onClick={() => { setSubsel(c); setRoute('cotacao-fornecedor-detail'); }}>
                 <td onClick={(e) => e.stopPropagation()}>
                   <input type="checkbox" aria-label={`Selecionar ${c.numero_documento}`}

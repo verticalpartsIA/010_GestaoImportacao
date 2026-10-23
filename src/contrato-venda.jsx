@@ -1471,6 +1471,10 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
   const [sendRec, setSendRec] = _cvUS(null);
   const [aguardando, setAguardando] = _cvUS([]);
   const [rascunhos, setRascunhos] = _cvUS([]);
+  // 23/10 (pedido do usuário) — ordenação por coluna, uma instância por tabela.
+  const ordAguardando = window.useOrdenacao();
+  const ordRascunhos = window.useOrdenacao();
+  const ordContratos = window.useOrdenacao();
 
   const excluirRascunho = async (r) => {
     if (!window.confirm('Excluir este rascunho (' + (r.comprador_razao_social || 'sem comprador') + ')? Não dá pra desfazer.')) return;
@@ -1526,6 +1530,22 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
     return l ? window.CVStore.relative(l.at) : '';
   };
 
+  const aguardandoOrd = ordAguardando.aplicar(aguardando, {
+    proposta: (p) => p.numero_documento, cliente: (p) => p.data_json?.cliente?.nome || p.titulo,
+    valor: (p) => (p.valor_total != null ? Number(p.valor_total) : null),
+    assinada: (p) => (p.aprovada_em ? new Date(p.aprovada_em).getTime() : null),
+  });
+  const rascunhosOrd = ordRascunhos.aplicar(rascunhos, {
+    comprador: (r) => r.comprador_razao_social, objeto: (r) => r.objeto_resumo,
+    valor: (r) => r.valor_total_num, criadoPor: (r) => (((r.log || [])[0] || {}).meta || {}).por,
+    atualizado: (r) => (r.atualizado_em ? new Date(r.atualizado_em).getTime() : null),
+  });
+  const filteredOrd = ordContratos.aplicar(filtered, {
+    contrato: (c) => c.numero_documento, objeto: (c) => c.objeto_resumo,
+    valor: (c) => c.valor_total_num, status: (c) => c.status,
+    atividade: (c) => { const l = (c.log || [])[c.log.length - 1]; return l ? new Date(l.at).getTime() : null; },
+  });
+
   return (
     <div className="ci-dash">
       <div className="ci-dash-stats">
@@ -1550,9 +1570,12 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
             <h2>Propostas assinadas aguardando contrato <span className="ci-cell-num">({aguardando.length})</span></h2>
           </div>
           <table className="ci-table">
-            <thead><tr><th>Proposta</th><th>Cliente</th><th>Valor</th><th>Assinada</th><th style={{ textAlign: 'right' }}>Ação</th></tr></thead>
+            <thead><tr>
+              {ordAguardando.th('proposta', 'Proposta')}{ordAguardando.th('cliente', 'Cliente')}{ordAguardando.th('valor', 'Valor')}
+              {ordAguardando.th('assinada', 'Assinada')}<th style={{ textAlign: 'right' }}>Ação</th>
+            </tr></thead>
             <tbody>
-              {aguardando.map((p) => (
+              {aguardandoOrd.map((p) => (
                 <tr key={p.id}>
                   <td><div className="ci-cell-num">{p.numero_documento}</div><div className="ci-cell-resp">{p.master_id || ''}</div></td>
                   <td><div className="ci-cell-co">{p.data_json?.cliente?.nome || p.titulo || '—'}</div></td>
@@ -1576,9 +1599,12 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
             <h2>Rascunhos em preenchimento <span className="ci-cell-num">({rascunhos.length})</span></h2>
           </div>
           <table className="ci-table">
-            <thead><tr><th>Comprador</th><th>Objeto</th><th>Valor</th><th>Criado por</th><th>Atualizado</th><th style={{ textAlign: 'right' }}>Ações</th></tr></thead>
+            <thead><tr>
+              {ordRascunhos.th('comprador', 'Comprador')}{ordRascunhos.th('objeto', 'Objeto')}{ordRascunhos.th('valor', 'Valor')}
+              {ordRascunhos.th('criadoPor', 'Criado por')}{ordRascunhos.th('atualizado', 'Atualizado')}<th style={{ textAlign: 'right' }}>Ações</th>
+            </tr></thead>
             <tbody>
-              {rascunhos.map((r) => {
+              {rascunhosOrd.map((r) => {
                 const por = (((r.log || [])[0] || {}).meta || {}).por;
                 return (
                   <tr key={r.id}>
@@ -1613,14 +1639,16 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
         ) : filtered.length === 0 ? (
           <div className="ci-empty">Nenhum contrato {filter !== 'todos' ? 'com este status' : ''}. Crie um novo no gerador.</div>
         ) : (
+          <div className="ci-table-scroll">
           <table className="ci-table">
             <thead>
               <tr>
-                <th>Contrato</th><th>Objeto</th><th>Valor</th><th>Status</th><th>Atividade</th><th style={{ textAlign: 'right' }}>Ações</th>
+                {ordContratos.th('contrato', 'Contrato')}{ordContratos.th('objeto', 'Objeto')}{ordContratos.th('valor', 'Valor')}
+                {ordContratos.th('status', 'Status')}{ordContratos.th('atividade', 'Atividade')}<th style={{ textAlign: 'right' }}>Ações</th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(c => (
+              {filteredOrd.map(c => (
                 <tr key={c.id} onClick={() => setDrawerId(c.id)}>
                   <td><div className="ci-cell-co">{c.comprador_razao_social}</div><div className="ci-cell-num">{c.numero_documento}</div></td>
                   <td><div className="ci-cell-obj">{c.objeto_resumo}</div><div className="ci-cell-resp">{c.responsavel_nome || '—'}</div></td>
@@ -1639,6 +1667,7 @@ function CVDashboard({ onCriarDeProposta, onContinuarRascunho }) {
               ))}
             </tbody>
           </table>
+          </div>
         )}
       </div>
 

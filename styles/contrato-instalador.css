@@ -289,6 +289,11 @@
 .ci-panel-search input { padding: 7px 10px; font-size: 12px; border: 1px solid var(--ci-line); border-radius: 3px; min-width: 280px; }
 .ci-empty { padding: 40px 20px; text-align: center; color: var(--ci-fg3); font-size: 13px; }
 
+/* 23/10 — cabeçalho fixo opt-in (pedido do usuário) na lista principal do
+   Painel do Contrato de Venda, que pode crescer bastante; os painéis
+   curtos (aguardando/rascunhos) não precisam. */
+.ci-table-scroll { max-height: 70vh; overflow-y: auto; }
+.ci-table-scroll .ci-table thead th { position: sticky; top: 0; z-index: 1; }
 .ci-table { width: 100%; border-collapse: collapse; }
 .ci-table thead th { padding: 10px 16px; text-align: left; font-size: 10px; font-weight: 800; letter-spacing: .12em; text-transform: uppercase; color: var(--ci-fg3); background: var(--ci-bg-1); border-bottom: 1px solid var(--ci-line); }
 .ci-table tbody tr { cursor: pointer; transition: background .1s; }

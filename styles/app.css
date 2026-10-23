@@ -914,6 +914,14 @@ table.t tbody tr:hover { background: var(--vp-gray-50); }
 table.t tbody tr:hover td:first-child { box-shadow: inset 3px 0 0 0 var(--vp-yellow); }
 table.t tbody tr:last-child td { border-bottom: 0; }
 
+/* 23/10 — cabeçalho fixo opt-in (pedido do usuário, várias telas de lista):
+   .table-wrap--sticky dá rolagem vertical própria à tabela (sem depender da
+   altura de cada página, que varia tela a tela) e o cabeçalho acompanha a
+   rolagem. Lista curta não aciona a barra (max-height só limita, não força).
+   Classe nova — não muda nada nas ~45 telas que já usam .table-wrap puro. */
+.table-wrap--sticky { max-height: 70vh; overflow-y: auto; }
+.table-wrap--sticky table.t thead th { position: sticky; top: 0; z-index: 1; }
+
 .cell-main { font-weight: 600; color: var(--fg1); }
 .cell-sub { font-size: 11px; color: var(--fg3); margin-top: 2px; font-family: var(--font-mono); }
 .cell-money { font-variant-numeric: tabular-nums; font-weight: 600; text-align: right; }
