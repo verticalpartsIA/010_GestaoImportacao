@@ -190,6 +190,9 @@
     if (!cur.data_json || !Object.keys(cur.data_json).length) {
       throw new Error('Salve a proposta antes de publicar.');
     }
+    if (window.PropostaOpcoes && window.PropostaOpcoes.semEquipamentoVisivel(cur.data_json, cur.proposal_type)) {
+      throw new Error('Todos os equipamentos estão ocultos — reexiba ao menos um antes de publicar.');
+    }
     const now = new Date().toISOString();
     const jaPublicada = !!cur.publicado_em;
     const versao = jaPublicada ? (Number(cur.version) || 1) + 1 : (Number(cur.version) || 1);
@@ -310,6 +313,9 @@
        Só conta como reenvio-pós-revisão se a revisão foi ACEITA — reenviar
        sem decisão registrada (recusada_interna nunca chega aqui, o editor
        não deixa editar) continua dando PROPOSTA_ENVIADA normal. */
+    if (window.PropostaOpcoes && window.PropostaOpcoes.semEquipamentoVisivel(cur.data_json, cur.proposal_type)) {
+      throw new Error('Todos os equipamentos estão ocultos — reexiba ao menos um antes de enviar.');
+    }
     const foiRevisaoAceita = cur.status === 'revisao_solicitada' && cur.revisao_decisao === 'aceita';
     const now = new Date();
     const expires = new Date(now.getTime() + 7*24*3600*1000);
@@ -757,6 +763,20 @@
     return { destravada_em: now, destravada_por: por };
   }
 
+  /* Quem pode ocultar/reexibir equipamento na proposta (23/10/2026): o DONO (vendedor_id da proposta) ou quem tem a
+     alçada de líder (propostas.destravar_aprovada — Regiane; Administrador passa). Proposta ainda não salva = do próprio
+     usuário. Checagem de interface (RLS aberta, issue #571) — a trava de status continua em salvar(). */
+  async function podeOcultarEquipamento(id) {
+    if (!id) return true;
+    try {
+      if (await temCapacidade('propostas', 'destravar_aprovada')) return true;
+      const c = sb(); if (!c) return false;
+      const { data: row } = await c.from('propostas').select('vendedor_id').eq('id', id).maybeSingle();
+      const meu = await resolverVendedorId();
+      return !!(row && meu && row.vendedor_id === meu);
+    } catch (e) { return false; }
+  }
+
   /* Excluir — pedido do usuário 19/08, fase de muito teste no ar: precisa
      de um jeito rápido de limpar propostas de teste. Gate pela mesma
      alçada 'excluir' (módulo 'propostas'), não hardcoded — quem não tem
@@ -966,6 +986,6 @@
     salvar,
     resolverEscopoVisibilidade, resetEscopoVisibilidadeCache,
     resolverPerfilAtual, temCapacidade, podeConcederAlcadas, resetAlcadasCache,
-    listarAlcadas, concederAlcada, destravar, excluir,
+    listarAlcadas, concederAlcada, destravar, excluir, podeOcultarEquipamento,
   };
 }());

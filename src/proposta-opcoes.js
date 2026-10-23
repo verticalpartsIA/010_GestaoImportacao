@@ -94,7 +94,7 @@
   /* Total (equipamentos) do que está "oficial" agora — igual a calcularValorTotal do editor,
      sem o DIFAL; usado pra gravar valor_total depois da escolha. */
   function totalOficial(d, eq) {
-    const v = valores(d, eq);
+    const v = valores(projetar(d, eq), eq);
     if (Array.isArray(v.itens) && v.itens.length) return v.itens.reduce((s, it) => s + num(it.valorUnit) * (Number(it.quantidade) || 1), 0);
     return num(v.valorUnit) * (Number(v.quantidade) || 1);
   }
@@ -127,7 +127,8 @@
      os 27 elevadores de uma proposta de 27, cada um com seu valor unitário — nunca "6 × valor" numa linha só.
      O código de cada um vem de data.ativos (VPEL-EL0963-1…N) pelo `unidadeId` do item; item sem `unidadeId`
      (proposta herdada antes desta regra) cai em "<código> (k/N)". `original` só existe com desconto ativo. */
-  function linhasUnitarias(d, eq) {
+  function linhasUnitarias(d0, eq) {
+    const d = projetar(d0, eq);
     const v = valores(d, eq);
     const ativos = Array.isArray(d && d.ativos) ? d.ativos : [];
     const fonte = (Array.isArray(v.itens) && v.itens.length) ? v.itens : [v];
@@ -479,5 +480,76 @@
   /* Lista da página Responsabilidades (itens preenchidos). */
   const itensTexto = (arr) => (Array.isArray(arr) ? arr : []).map((x) => String(x == null ? '' : x).trim()).filter(Boolean);
 
-  window.PropostaOpcoes = { semDifal, blocosCondicoes, itensNomeados, itensTexto, c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, tipoChave, rotuloTipo, nomePerfil, faixaCodigos, perfisAcabamento, tituloPerfil, perfisConteudo, contagemPorTipo, resumoFornecimento, tituloEquipamentos, blocosAjustes, eqInfo, linhasEspecEscEst, resumoEscEst, linhasEspecificidades, blocosInstalacao, _num: num };
+  /* ---- Ocultar / reexibir equipamento individual (VPPR-0990, 23/10/2026) ----
+     Estado em elevador.valores.ocultos = [códigos físicos]. É só a decisão COMERCIAL: itens/ativos/especificacoes
+     gravados ficam íntegros (nada é apagado). projetar() devolve a visão comercial (cópia) — preview, PDF, assinatura,
+     contrato, total e parcelas leem dela. Chave = código do item (valores.itens[].id), nunca unidadeId nem codigoAtivo
+     (este pode apontar para outro equipamento do grupo). Sem `ocultos` devolve o MESMO objeto (propostas antigas). */
+  function ocultosDe(d, eq) {
+    const o = valores(d, eq).ocultos;
+    return Array.isArray(o) ? o.map(String).filter(Boolean) : [];
+  }
+  function projetar(d, eq) {
+    const chave = eq || 'elevador';
+    const oc = ocultosDe(d, chave);
+    if (!oc.length || !d || !d[chave]) return d;
+    const set = new Set(oc);
+    const ed = d[chave];
+    const v = ed.valores || {};
+    const itens = Array.isArray(v.itens) ? v.itens.filter((it) => !set.has(String(it && it.id))) : v.itens;
+    const nv = { ...v, ocultos: [] };
+    if (Array.isArray(itens)) {
+      nv.itens = itens;
+      nv.quantidade = String(itens.reduce((s, it) => s + (Math.max(1, Math.round(parseFloat(it.quantidade) || 1))), 0));
+      if (!itens.length) { nv.valorUnit = '0'; nv.quantidade = '0'; }
+    }
+    const filtraCods = (c) => (Array.isArray(c) ? c.filter((x) => !set.has(String(x))) : c);
+    const especs = Array.isArray(ed.especificacoes) ? ed.especificacoes.map((s) => {
+      if (!s) return s;
+      if (!Array.isArray(s.codigos) || !s.codigos.length) return set.has(String(s.id)) ? null : s;
+      const cods = filtraCods(s.codigos);
+      if (cods.length === s.codigos.length) return s;
+      if (!cods.length) return null;
+      return { ...s, codigos: cods, qtd: cods.length, id: cods.length === 1 ? cods[0] : faixaCodigos(cods) };
+    }).filter(Boolean) : ed.especificacoes;
+    const perfis = Array.isArray(ed.perfis) ? ed.perfis.map((p) => {
+      if (!p || !Array.isArray(p.codigos) || !p.codigos.length) return p;
+      const cods = filtraCods(p.codigos);
+      return cods.length === p.codigos.length ? p : (cods.length ? { ...p, codigos: cods } : null);
+    }).filter(Boolean) : ed.perfis;
+    const out = { ...d, [chave]: { ...ed, valores: nv } };
+    if (especs !== undefined) out[chave].especificacoes = especs;
+    if (perfis !== undefined) out[chave].perfis = perfis;
+    if (Array.isArray(d.ativos)) out.ativos = d.ativos.filter((a) => !set.has(String((a && (a.codigo || a.identificador)) || '')));
+    return out;
+  }
+  /* Não há equipamento comercial visível? (publicar/enviar/assinar são bloqueados nesse caso). */
+  function semEquipamentoVisivel(d, eq) {
+    const v = valores(projetar(d, eq), eq);
+    return !!ocultosDe(d, eq).length && Array.isArray(v.itens) && v.itens.length === 0;
+  }
+  /* Liga/desliga o oculto de UM código e refaz as parcelas (sinal 40% + iguais, centavo exato) sobre o total visível.
+     Devolve { data } ou { data: original, erro }. Não muta `d`. */
+  function alternarOculto(d, codigo, ocultar, eq) {
+    const chave = eq || 'elevador';
+    const v = valores(d, chave);
+    const id = String(codigo || '');
+    const item = (Array.isArray(v.itens) ? v.itens : []).find((it) => String(it && it.id) === id);
+    if (!item) return { data: d, erro: 'Equipamento não encontrado na proposta.' };
+    if (ocultar && temOpcao90(d, chave)) return { data: d, erro: 'Proposta com opção de entrega em 90 dias (1 equipamento): não há equipamento para ocultar.' };
+    if (ocultar && item.descontoPendente) return { data: d, erro: 'Este equipamento tem um pedido de desconto aguardando aprovação. Resolva o desconto antes de ocultar.' };
+    const atual = ocultosDe(d, chave);
+    const novos = ocultar ? (atual.includes(id) ? atual : [...atual, id]) : atual.filter((x) => x !== id);
+    let nv = { ...v, ocultos: novos };
+    let nd = { ...d, [chave]: { ...d[chave], valores: nv } };
+    if (v.formaTipo === 'parcelado' || (Array.isArray(v.parcelas) && v.parcelas.length)) {
+      const total = totalOficial(nd, chave);
+      const qtd = Number(v.qtdParcelas) || (v.parcelas || []).length || 5;
+      nv = { ...nv, parcelas: total > 0 && v.formaTipo !== 'vista' ? parcelasPadrao(qtd, total) : [] };
+      nd = { ...nd, [chave]: { ...nd[chave], valores: nv } };
+    }
+    return { data: nd };
+  }
+
+  window.PropostaOpcoes = { semDifal, blocosCondicoes, itensNomeados, itensTexto, c2, textoBR, parcelasPadrao, TEXTOS, temOpcoes, temOpcao90, opcoes, aplicarEscolha, totalOficial, modalidadeEscolhida, ocultosDe, projetar, semEquipamentoVisivel, alternarOculto, montarOpcao90, linhasUnitarias, totaisValores, ordenarEspecs, resumoEquipamentos, paradasDe, modelosDistintos, linhasAcabamento, tipoChave, rotuloTipo, nomePerfil, faixaCodigos, perfisAcabamento, tituloPerfil, perfisConteudo, contagemPorTipo, resumoFornecimento, tituloEquipamentos, blocosAjustes, eqInfo, linhasEspecEscEst, resumoEscEst, linhasEspecificidades, blocosInstalacao, _num: num };
 }());

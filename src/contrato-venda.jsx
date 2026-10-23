@@ -630,7 +630,8 @@ function CVWizard({ onCreated, initial, prefillProposta, rascunho }) {
      sem redigitar (a Proposta já tem os dados vindos do Formulário +
      Precificação — ver Fase 1). */
   const aplicarProposta = (p) => {
-    const dj = p.data_json || {};
+    /* Equipamentos ocultados na Proposta não vão para o contrato (visão comercial; ver proposta-opcoes.js › projetar). */
+    const dj = window.PropostaOpcoes ? window.PropostaOpcoes.projetar(p.data_json || {}, 'elevador') : (p.data_json || {});
     const cli = dj.cliente || {};
     const obra = dj.obra || {};
     const valores = dj.elevador?.valores || {};

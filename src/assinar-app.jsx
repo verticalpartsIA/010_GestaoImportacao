@@ -252,7 +252,9 @@ function SgApp() {
   const propostaRender = (rec) => {
     const r = window.PropostaStore.conteudoRenderizavel(rec);
     const O = window.PropostaOpcoes;
-    return (O && opcaoEntrega) ? { ...r, data: O.aplicarEscolha(r.data, opcaoEntrega) } : r;
+    const rr = (O && opcaoEntrega) ? { ...r, data: O.aplicarEscolha(r.data, opcaoEntrega) } : r;
+    // Equipamentos ocultos na proposta não aparecem para o cliente (visão comercial; PEPreview/PDF recebem já projetado).
+    return O && rr && rr.data ? { ...rr, data: O.projetar(rr.data, rr.eq) } : rr;
   };
 
   /* Mount: localiza o contrato e marca como visualizado */
