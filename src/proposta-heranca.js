@@ -22,8 +22,18 @@
 
   /* ---------- Busca as fontes a partir do Nº da Cotação ----------
      numeroCotacao é o inteiro que o vendedor conhece (ex.: 902), o mesmo
-     que vem sendo continuado desde a planilha histórica. */
-  async function buscarFontes(numeroCotacao) {
+     que vem sendo continuado desde a planilha histórica.
+
+     opts.precificacaoId (23/10, achado real do Codex/PR #1070): quando o
+     chamador JÁ sabe qual Precificação quer (ex.: abriu ela na tela, ou
+     acabou de aprová-la) — pina a busca NAQUELA precificação específica em
+     vez de aplicar a heurística "finalizado > mais recente" abaixo. Sem
+     isso, pedir o prefill de uma revisão B (status 'calculado', ainda não
+     aprovada) enquanto a revisão original já está 'finalizado' sempre
+     devolvia os preços/ativos da ORIGINAL — a Proposta nascia rotulada
+     "-B" mas com o conteúdo errado (da revisão anterior). */
+  async function buscarFontes(numeroCotacao, opts) {
+    const { precificacaoId } = opts || {};
     const c = sb();
     if (!c) throw new Error('Supabase não carregado');
     // Aceita tanto o nº puro (898) quanto o Master ID completo (VPEL-EL0898).
@@ -52,15 +62,22 @@
        maturidade do pipeline (aprovada > em análise > respondida > última).
        Entre as precificações do mesmo Nº de Cotação, prioriza a que foi
        explicitamente aprovada (issue #4) — sem isso, a Proposta podia puxar
-       um rascunho de cálculo nunca revisado só por ser o mais recente. */
+       um rascunho de cálculo nunca revisado só por ser o mais recente.
+       Com precificacaoId, essa heurística some de propósito: o chamador
+       mandou qual é, e a cotação do fornecedor vem só do vínculo DELA
+       (nunca do "melhor" entre as cotações da família inteira). */
     const lista = cotacoes || [];
     const listaPz = precificacoes || [];
-    const precificacao = listaPz.find((p) => p.status === 'finalizado') || listaPz[0] || null;
-    const cotacao = (precificacao && lista.find((x) => x.id === precificacao.cotacao_fornecedor_id))
-      || lista.find((x) => x.status === 'aprovada')
-      || lista.find((x) => x.status === 'em_analise')
-      || lista.find((x) => x.status === 'respondido')
-      || lista[0] || null;
+    const precificacao = precificacaoId
+      ? (listaPz.find((p) => p.id === precificacaoId) || null)
+      : (listaPz.find((p) => p.status === 'finalizado') || listaPz[0] || null);
+    const cotacao = precificacaoId
+      ? (precificacao ? (lista.find((x) => x.id === precificacao.cotacao_fornecedor_id) || null) : null)
+      : ((precificacao && lista.find((x) => x.id === precificacao.cotacao_fornecedor_id))
+          || lista.find((x) => x.status === 'aprovada')
+          || lista.find((x) => x.status === 'em_analise')
+          || lista.find((x) => x.status === 'respondido')
+          || lista[0] || null);
 
     return {
       encontrado: true,
@@ -559,9 +576,10 @@
     };
   }
 
-  /* Atalho usado pelo editor: número → prefill (ou null se não achar). */
-  async function prefillPorNumeroCotacao(numeroCotacao) {
-    const fontes = await buscarFontes(numeroCotacao);
+  /* Atalho usado pelo editor: número → prefill (ou null se não achar).
+     opts.precificacaoId — ver buscarFontes(). */
+  async function prefillPorNumeroCotacao(numeroCotacao, opts) {
+    const fontes = await buscarFontes(numeroCotacao, opts);
     if (!fontes.encontrado) return { encontrado: false, numeroCotacao: fontes.numeroCotacao };
     return { encontrado: true, prefill: montarPrefill(fontes), fontes };
   }

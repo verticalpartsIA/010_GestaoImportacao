@@ -505,7 +505,7 @@ function PropostasPage({ setRoute, setSubsel }) {
   const carregar = React.useCallback(() => {
     if (!escopo) return;
     let q = window.__VP_SB.sb.from('propostas')
-      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em, revisao_texto, clientes(razao_social, cnpj), perfis(nome, email)');
+      .select('id, numero_documento, titulo, status, valor_total, master_id, numero_cotacao, proposal_type, criado_em, revisao_texto, vigencia, substituida_por_id, clientes(razao_social, cnpj), perfis(nome, email)');
     if (!escopo.veTudo && escopo.vendedorId) q = q.eq('vendedor_id', escopo.vendedorId);
     q.order('criado_em', { ascending: false }).limit(300)
       .then(({ data }) => setRows(data || []));
@@ -551,7 +551,13 @@ function PropostasPage({ setRoute, setSubsel }) {
      "de onde vêm os dados da proposta" (antes vivia em Precificação). */
   const abrirDaPrecificacao = async (pz) => {
     try {
-      const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao);
+      /* precificacaoId: pz.id — pina NESTA precificação (achado real do
+         Codex, 23/10): a tela "Prontas para enviar" pode listar uma
+         revisão B ainda só 'calculado' enquanto a original já está
+         'finalizado'; sem o pin, prefillPorNumeroCotacao() prefere a
+         'finalizado' e devolveria os preços da revisão ERRADA, mesmo com
+         o Nº da Proposta rotulado "-B" (ver `letra` abaixo). */
+      const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao, { precificacaoId: pz.id });
       if (!r.encontrado) {
         window.toast?.('Não foi possível localizar o formulário desta cotação.', 'error');
         return;
@@ -581,14 +587,31 @@ function PropostasPage({ setRoute, setSubsel }) {
   const EQUIPAMENTO_LABEL = { elevador: 'Elevador', escada: 'Escada Rolante', esteira: 'Esteira Rolante' };
 
   /* 23/10 — mesmo aviso que a fila da Precificação já mostra ("substituída
-     por VPEL-EL0990-B") pra quando o fornecedor manda uma revisão nova: aqui
-     é a Proposta mais antiga da MESMA cotação+tipo sendo sucedida por uma
-     mais nova (criado_em maior) — sinal de que o vendedor já tem uma
-     proposta mais atual pra enviar, a desta linha ficou pra trás. */
+     por VPEL-EL0990-B") pra quando o fornecedor manda uma revisão nova.
+     Fonte PRIMÁRIA: vigencia/substituida_por_id (colunas reais do sistema
+     "Revisões Comerciais", migration 20261022100000/PR #1054, mantidas por
+     proposta_aplicar_vigencia() — ao contrário de "mais nova por
+     criado_em", essas colunas sabem que uma proposta APROVADA continua
+     vigente mesmo com um rascunho mais novo por cima, achado real do
+     Codex nesta mesma revisão). Só cai pro heurístico (mais nova por
+     criado_em) quando vigencia ainda não foi calculada pro par (ex.:
+     sibling recém-criado por este fluxo, 'em_negociacao', cujo trigger só
+     roda ao mudar de status — substituida_por_id ainda null). */
   const substituidasPor = React.useMemo(() => {
+    const porId = {}; (rows || []).forEach((p) => { porId[p.id] = p; });
     const map = {};
     (rows || []).forEach((p) => {
-      if (p.numero_cotacao == null) return;
+      if (p.numero_cotacao == null || p.vigencia === 'vigente') return; // vigência já diz que esta é a atual
+      if (p.substituida_por_id) {
+        // Vigência já calculada pelo motor real — confia nela, mesmo sem
+        // achar a linha-alvo na página (não arrisca o heurístico por cima).
+        const alvo = porId[p.substituida_por_id];
+        if (alvo) map[p.id] = alvo.numero_documento;
+        return;
+      }
+      // vigencia != 'vigente' mas o motor ainda não apontou quem a sucede
+      // (ex.: sibling recém-criado 'em_negociacao' — o trigger só roda ao
+      // mudar de status) — heurístico só pra não deixar a tela muda.
       const irmas = (rows || []).filter((o) => o.id !== p.id && o.numero_cotacao === p.numero_cotacao && o.proposal_type === p.proposal_type);
       const maisNovas = irmas.filter((o) => String(o.criado_em) > String(p.criado_em));
       maisNovas.sort((a, b) => String(b.criado_em).localeCompare(String(a.criado_em)));

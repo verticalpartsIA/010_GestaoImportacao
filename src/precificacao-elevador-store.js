@@ -988,7 +988,13 @@
     const jaTemEstaRevisao = (existentes || []).some((p) => (window.MasterIdEngine.parseRevisao(p.numero_documento) || null) === letra);
     if (jaTemEstaRevisao) return;
 
-    const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao);
+    /* precificacaoId: pz.id — pina NESTA precificação (achado real do Codex,
+       23/10): sem isso, prefillPorNumeroCotacao() prefere qualquer
+       precificação 'finalizado' da família, e se a original já estava
+       finalizada quando esta (revisão B) acabou de ser aprovada, o prefill
+       podia devolver os preços da original mesmo a Proposta nascendo
+       rotulada "-B". */
+    const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao, { precificacaoId: pz.id });
     if (!r.encontrado) return;
     const numero = window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao, letra);
     const valorUnit = Number((r.prefill.elevador || {}).valores?.valorUnit) || 0;
