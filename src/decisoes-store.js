@@ -603,8 +603,9 @@
     if (decisao.status === 'reprovada') return { ok: false, motivo: `Compra do equipamento reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
     if (decisao.status !== 'aprovada') {
       // Aprovado pela tela Aval Financeiro (avais_financeiros.aprovacao_ceo_em) também vale — mesma regra, outra porta.
-      const { data: av } = await sb().from('avais_financeiros').select('aprovacao_ceo_em').eq('numero_cotacao', numeroCotacao).limit(1);
-      if (av && av[0] && av[0].aprovacao_ceo_em) return { ok: true };
+      const afs = window.AvalFinanceiroStore;
+      const avVig = afs && afs.getByNumeroCotacao ? await afs.getByNumeroCotacao(numeroCotacao) : null;   // aval da revisão VIGENTE (22/10)
+      if (avVig && avVig.aprovacao_ceo_em) return { ok: true };
       return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para comprar o equipamento deste pedido.' };
     }
     return { ok: true };

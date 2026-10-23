@@ -145,3 +145,39 @@ test('AvalEngenhariaStore.resumir — a cotação só fica OK com TODOS os Proje
   r = S.resumir(d, [{ documento_id: 'p1', status: 'assinado' }, { documento_id: 'p2', status: 'recusado' }, { documento_id: 'p2', status: 'enviado' }]);
   assert.equal(r['955'].estado, 'aguardando');
 });
+
+/* ---- Revisões comerciais (22/10/2026): o aval que vale é o da revisão VIGENTE ---- */
+function fakeRastreado(respostas, calls) {
+  return { from(nome) {
+    const reg = (op) => (...a) => { calls.push([nome, op, ...a]); return q; };
+    const q = { select: reg('select'), eq: reg('eq'), in: reg('in'), order: reg('order'), limit: reg('limit'),
+      maybeSingle: async () => ({ data: respostas[nome] ?? null, error: null }),
+      then: (res) => res({ data: respostas[nome + '[]'] ?? [], error: null }) };
+    return q;
+  } };
+}
+
+test('getByNumeroCotacao — prefere o aval da proposta VIGENTE da cotação', async () => {
+  const calls = [];
+  window.__VP_SB = { sb: fakeRastreado({ propostas: { id: 'pV' }, avais_financeiros: { id: 'aV', proposta_id: 'pV' } }, calls) };
+  const r = await window.AvalFinanceiroStore.getByNumeroCotacao(955);
+  assert.equal(r.id, 'aV');
+  assert.ok(calls.some((c) => c[0] === 'propostas' && c[1] === 'eq' && c[2] === 'vigencia' && c[3] === 'vigente'), 'procura a proposta vigente');
+  assert.ok(calls.some((c) => c[0] === 'avais_financeiros' && c[1] === 'eq' && c[2] === 'proposta_id' && c[3] === 'pV'), 'lê o aval pela proposta vigente');
+});
+
+test('getByNumeroCotacao — sem proposta vigente, cai no jeito antigo (por Nº da cotação)', async () => {
+  const calls = [];
+  window.__VP_SB = { sb: fakeRastreado({ propostas: null, avais_financeiros: { id: 'aAntigo' } }, calls) };
+  const r = await window.AvalFinanceiroStore.getByNumeroCotacao(955);
+  assert.equal(r.id, 'aAntigo');
+  assert.ok(calls.some((c) => c[0] === 'avais_financeiros' && c[1] === 'eq' && c[2] === 'numero_cotacao'));
+});
+
+test('listarFila — só propostas aprovadas VIGENTES (ou pendentes de aditivo), nunca a revisão antiga', async () => {
+  const calls = [];
+  window.__VP_SB = { sb: fakeRastreado({ 'propostas[]': [] }, calls) };
+  await window.AvalFinanceiroStore.listarFila();
+  const filtro = calls.find((c) => c[0] === 'propostas' && c[1] === 'in');
+  assert.deepEqual(filtro.slice(2), ['vigencia', ['vigente', 'pendente_aditivo']]);
+});
