@@ -854,13 +854,19 @@
           numeroAnterior = ant ? ant.numero_cotacao : null;
         }
         if (!existing?.id || numeroAnterior !== payload.numero_cotacao) {
-          /* Um Nº de cotação, uma proposta por tipo de equipamento — outra
-             pessoa não pode "pegar" o Nº de uma proposta que já existe. */
+          /* Um Nº de cotação, uma proposta por tipo de equipamento POR
+             REVISÃO — outra pessoa não pode "pegar" o Nº de uma proposta
+             que já existe, mas uma revisão nova do fornecedor (Nº com
+             sufixo de letra próprio, ver master-id-engine.js) tem direito à
+             SUA própria proposta ao lado da anterior (23/10 — pedido do
+             usuário: a proposta precisa dizer qual revisão venceu). */
+          const letraNova = window.MasterIdEngine.parseRevisao(chave);
           const { data: dup, error: dupErr } = await c.from('propostas')
-            .select('id, numero_documento').eq('numero_cotacao', payload.numero_cotacao).eq('proposal_type', eq).limit(1);
+            .select('id, numero_documento').eq('numero_cotacao', payload.numero_cotacao).eq('proposal_type', eq);
           if (dupErr) throw dupErr;
-          if (dup && dup.length && dup[0].id !== existing?.id) {
-            return { erro: `A cotação Nº ${payload.numero_cotacao} já tem a proposta ${dup[0].numero_documento}. Abra essa proposta em vez de criar outra com o mesmo Nº.` };
+          const conflito = (dup || []).find((d) => d.id !== existing?.id && (window.MasterIdEngine.parseRevisao(d.numero_documento) || null) === letraNova);
+          if (conflito) {
+            return { erro: `A cotação Nº ${payload.numero_cotacao} já tem a proposta ${conflito.numero_documento}. Abra essa proposta em vez de criar outra com o mesmo Nº.` };
           }
           if (eq === 'elevador') {
             const { data: precif, error: precifErr } = await c.from('precificacoes_elevador')

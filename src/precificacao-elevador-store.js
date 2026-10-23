@@ -967,11 +967,30 @@
   async function criarPropostaAutomatica(pz) {
     const c = sb();
     if (!c || pz.numero_cotacao == null || !window.PropostaHeranca || !window.PropostaStore || !window.MasterIdEngine) return;
-    const { data: existente } = await c.from('propostas').select('id').eq('numero_cotacao', pz.numero_cotacao).maybeSingle();
-    if (existente) return; // já tem proposta pra essa cotação — não duplica
+
+    /* 23/10 — mesma letra de revisão que criar() já usa pra dar Nº próprio à
+       Precificação (cotacoes_elevador_fornecedor.revisao) agora também vira
+       o sufixo da Proposta (VPPR-0990-B) — pedido do usuário: depois de
+       instalado, a Proposta tem que dizer qual revisão de preço venceu.
+       Sem letra (cotação original, ou direto-pra-precificação sem
+       cotacao_fornecedor_id) o Nº sai igual a sempre: VPPR-0990. */
+    let letra = null;
+    if (pz.cotacao_fornecedor_id) {
+      const { data: cf } = await c.from('cotacoes_elevador_fornecedor').select('revisao').eq('id', pz.cotacao_fornecedor_id).maybeSingle();
+      letra = (cf && cf.revisao) || null;
+    }
+
+    /* "Já tem proposta" agora é escopado POR REVISÃO, não só pelo Nº da
+       cotação — senão a revisão B nunca criaria a Proposta dela, barrada
+       pela Proposta já existente da revisão original/anterior. */
+    const { data: existentes } = await c.from('propostas').select('id, numero_documento')
+      .eq('numero_cotacao', pz.numero_cotacao).eq('proposal_type', 'elevador');
+    const jaTemEstaRevisao = (existentes || []).some((p) => (window.MasterIdEngine.parseRevisao(p.numero_documento) || null) === letra);
+    if (jaTemEstaRevisao) return;
+
     const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao);
     if (!r.encontrado) return;
-    const numero = window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao);
+    const numero = window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao, letra);
     const valorUnit = Number((r.prefill.elevador || {}).valores?.valorUnit) || 0;
     const quantidade = Number((r.prefill.elevador || {}).valores?.quantidade) || 1;
     /* deepMergeProposta (não deepMergeHeranca): proposta nova (editId: null),
@@ -1072,7 +1091,7 @@
     devolverParaVendas,
     listarParametrosFiscais, salvarParametrosFiscais,
     listarPendentes, criar, obter, salvar, calcularEsalvar,
-    camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,
+    camposObrigatoriosFaltando, aprovar, criarPropostaAutomatica, ressincronizarDoFornecedor,
     parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto, divergenciasContainerComCadastro,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra, renumerarPorParadas, montarBaseInputs,
     acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO,
