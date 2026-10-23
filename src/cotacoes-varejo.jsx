@@ -32,6 +32,8 @@ const CV_STATUS_CONVITE = {
 function CVLista({ onAbrir, setRoute }) {
   const [lotes, setLotes] = React.useState(null);
   const [erro, setErro] = React.useState(null);
+  const [busca, setBusca] = React.useState(''); // 23/10 (pedido do usuário)
+  const ord = window.useOrdenacao();
   const carregar = React.useCallback(() => {
     setErro(null);
     window.CotacoesVarejoStore.listarLotes().then(setLotes).catch((e) => { setErro(e.message || String(e)); setLotes([]); });
@@ -53,26 +55,47 @@ function CVLista({ onAbrir, setRoute }) {
       {erro && <div className="alert danger" style={{ marginBottom: 16 }}><Icon.warning /><div><div className="alert__title">Erro ao consultar</div><div className="alert__sub">{erro}</div></div></div>}
       {lotes === null ? <div style={{ textAlign: 'center', padding: '60px 0', color: 'var(--fg3)', fontSize: 13 }}>Carregando lotes…</div> : (
         <Card>
-          <div className="table-wrap">
+          <div style={{ display: 'flex', gap: 8, margin: '0 0 12px', flexWrap: 'wrap' }}>
+            <input className="input" placeholder="Buscar por nº do lote, descrição ou quem criou…" value={busca}
+              onChange={(e) => setBusca(e.target.value)} style={{ minWidth: 280 }}/>
+          </div>
+          <div className="table-wrap table-wrap--sticky">
             <table className="t">
-              <thead><tr><th>Lote</th><th>Descrição</th><th>Status</th><th className="text-right">Itens</th><th className="text-right">Fornecedores</th><th className="text-right">Responderam</th><th>Criado por</th><th>Criado em</th></tr></thead>
+              <thead><tr>
+                {ord.th('lote', 'Lote')}{ord.th('descricao', 'Descrição')}{ord.th('status', 'Status')}
+                {ord.th('itens', 'Itens', { className: 'text-right' })}{ord.th('fornecedores', 'Fornecedores', { className: 'text-right' })}
+                {ord.th('responderam', 'Responderam', { className: 'text-right' })}{ord.th('criadoPor', 'Criado por')}{ord.th('criadoEm', 'Criado em')}
+              </tr></thead>
               <tbody>
-                {lotes.length === 0 && <tr><td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum lote ainda. Na Importação Varejo, marque os produtos e clique em "Pedir cotação".</td></tr>}
-                {lotes.map((l) => {
-                  const st = CV_STATUS_LOTE[l.status] || CV_STATUS_LOTE.rascunho;
-                  return (
-                    <tr key={l.id} style={{ cursor: 'pointer' }} onClick={() => onAbrir(l.id)}>
-                      <td className="mono"><b>{l.numero}</b></td>
-                      <td>{l.titulo || '—'}</td>
-                      <td><Badge variant={st.variant}>{st.label}</Badge></td>
-                      <td className="text-right">{l.qtdItens}</td>
-                      <td className="text-right">{l.qtdFornecedores}</td>
-                      <td className="text-right">{l.qtdRespondidos}/{l.qtdFornecedores}</td>
-                      <td>{l.criado_por_nome || l.criado_por || '—'}</td>
-                      <td>{cvFmtData(l.created_at)}</td>
-                    </tr>
-                  );
-                })}
+                {(() => {
+                  const termo = busca.trim().toLowerCase();
+                  const filtrados = !termo ? lotes : lotes.filter((l) =>
+                    [l.numero, l.titulo, l.criado_por_nome, l.criado_por].some((v) => (v || '').toString().toLowerCase().includes(termo)));
+                  const linhas = ord.aplicar(filtrados, {
+                    lote: (l) => l.numero, descricao: (l) => l.titulo,
+                    status: (l) => (CV_STATUS_LOTE[l.status] || CV_STATUS_LOTE.rascunho).label,
+                    itens: (l) => l.qtdItens, fornecedores: (l) => l.qtdFornecedores, responderam: (l) => l.qtdRespondidos,
+                    criadoPor: (l) => l.criado_por_nome || l.criado_por,
+                    criadoEm: (l) => (l.created_at ? new Date(l.created_at).getTime() : null),
+                  });
+                  if (lotes.length === 0) return <tr><td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum lote ainda. Na Importação Varejo, marque os produtos e clique em "Pedir cotação".</td></tr>;
+                  if (linhas.length === 0) return <tr><td colSpan={8} style={{ textAlign: 'center', padding: 28, color: 'var(--fg3)' }}>Nenhum resultado para "{busca}".</td></tr>;
+                  return linhas.map((l) => {
+                    const st = CV_STATUS_LOTE[l.status] || CV_STATUS_LOTE.rascunho;
+                    return (
+                      <tr key={l.id} style={{ cursor: 'pointer' }} onClick={() => onAbrir(l.id)}>
+                        <td className="mono"><b>{l.numero}</b></td>
+                        <td>{l.titulo || '—'}</td>
+                        <td><Badge variant={st.variant}>{st.label}</Badge></td>
+                        <td className="text-right">{l.qtdItens}</td>
+                        <td className="text-right">{l.qtdFornecedores}</td>
+                        <td className="text-right">{l.qtdRespondidos}/{l.qtdFornecedores}</td>
+                        <td>{l.criado_por_nome || l.criado_por || '—'}</td>
+                        <td>{cvFmtData(l.created_at)}</td>
+                      </tr>
+                    );
+                  });
+                })()}
               </tbody>
             </table>
           </div>

@@ -43,7 +43,7 @@ test('extrairNumeros aceita vírgula, "e", linhas e ignora repetição', () => {
   assert.deepEqual(D.extrairNumeros('dos-m013 e dos-m014\nDOS-M013'), ['DOS-M013', 'DOS-M014']);
   assert.deepEqual(D.extrairNumeros(''), []);
 });
-const doss = (id, extra) => Object.assign({ id, building_name: 'Elevador de Passageiros – 600 – 10 – 29,2 – MRL – 1 Porta ', equip_type: 'elevador', city: 'São Paulo', state: 'SP', client_name: 'PRIVILEGIO SPE', cliente_id: 'c1', parceiro_instalador_id: null }, extra || {});
+const doss = (id, extra) => Object.assign({ id, building_name: 'Elevador de Passageiros – 600 – 10 – 29,2 – MRL – 1 Porta ', equip_type: 'elevador', city: 'São Paulo', state: 'SP', client_name: 'PRIVILEGIO SPE', cliente_id: 'c1', parceiro_instalador_id: null, endereco_logradouro: 'R. Padre João', endereco_numero: '418', endereco_bairro: 'Penha', endereco_cep: '03637-000' }, extra || {});
 test('montarPatchVarios: 2 Dossiês, mesma empresa — soma valor, 2 equipamentos, 1 contrato', () => {
   const r = D.montarPatchVarios({ dossies: [doss('DOS-M013'), doss('DOS-M014')],
     acordos: { 'DOS-M013': { id: 'A1', parceiro_instalador_id: 'MNT-1', valor_combinado: 18000, parcelas_qtd: 3 }, 'DOS-M014': { id: 'A2', parceiro_instalador_id: 'MNT-1', valor_combinado: 17500.5, parcelas_qtd: 3 } }, mask });
@@ -59,4 +59,19 @@ test('montarPatchVarios: sem acordo em um dos Dossiês não preenche o valor e a
   const r = D.montarPatchVarios({ dossies: [doss('DOS-M013'), doss('DOS-M014', { building_name: 'Elevador de Carga – 2000 – 08 – 23,5 – MRL' })],
     acordos: { 'DOS-M013': { id: 'A1', parceiro_instalador_id: 'MNT-1', valor_combinado: 18000, parcelas_qtd: 2 } }, mask });
   assert.equal(r.erro, null); assert.equal(r.patch.valorTotal, undefined); assert.equal(r.avisos.length, 2);
+});
+
+test('Local do serviço = endereço da obra, nunca a descrição do equipamento (22/10/2026)', () => {
+  const d = doss('DOS-M055', { building_name: 'Elevador Panorâmico – 1000 – 2 – 4– MRL – 1 Porta ', client_name: 'LAR E CONSTRUCAO QUASE TUDO LTDA  ', city: 'Paraty', state: 'RJ',
+    endereco_logradouro: 'Av. Roberto Silveira', endereco_numero: 's/n', endereco_bairro: 'Parque Ypê', endereco_cep: '23970-000' });
+  const p = D.montarPatch({ dossie: d, acordo: null, mask, equipamentos: [{ dossier_id: 'DOS-M055', numero_serie: '500.0395', descricao: 'Elevador Panorâmico – 1000 – 2 – 4– MRL – 1 Porta', tipo: 'elevador' }] });
+  assert.equal(p.localServico, 'Obra LAR E CONSTRUCAO QUASE TUDO LTDA — Av. Roberto Silveira, s/n, Parque Ypê, Paraty/RJ - CEP: 23970-000');
+  assert.doesNotMatch(p.localServico, /MRL/);
+  assert.deepEqual(p.equipamentosDetalhe, [{ dossier: 'DOS-M055', serie: '500.0395', descricao: 'Elevador Panorâmico – 1000 – 2 – 4– MRL – 1 Porta', tipo: 'elevador' }]);
+});
+test('Sem endereço no Dossiê: não preenche o local e avisa', () => {
+  const r = D.montarPatchVarios({ dossies: [doss('DOS-M013', { endereco_logradouro: null })], acordos: {}, mask });
+  assert.equal(r.patch.localServico, '');   // vazio explícito (não herda o endereço do Dossiê anterior)
+  assert.ok(r.avisos.some((a) => /endereço da obra/.test(a)));
+  assert.equal(r.patch.equipamentosDetalhe[0].serie, '');   // sem linha em equipamentos_obra: série em branco, descrição do Dossiê
 });

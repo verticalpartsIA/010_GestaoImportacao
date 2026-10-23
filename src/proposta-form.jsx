@@ -228,10 +228,10 @@ function S_Proposta({ d, set, herdar, herdando, heranca }) {
           <input className="pe-input" inputMode="numeric" placeholder="ex.: 902"
             value={d.numeroCotacao || ""}
             onChange={(e) => set("numeroCotacao", e.target.value.replace(/\D/g, ""))}
-            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); herdar && herdar(); } }}/>
+            onKeyDown={(e) => { if (e.key === "Enter") { e.preventDefault(); herdar && herdar({ atualizar: true }); } }}/>
           <button type="button" className="pe-heranca__btn"
             disabled={herdando || !String(d.numeroCotacao || "").trim()}
-            onClick={() => herdar && herdar()}>
+            onClick={() => herdar && herdar({ atualizar: true })}>
             {herdando ? "Buscando…" : "Herdar dados"}
           </button>
         </div>
@@ -817,8 +817,9 @@ function S_ItemDescontoLog({ log }) {
   );
 }
 
-function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
+function S_ItensValores({ eq, itens, onChangeItens, proposta, ocultos, onToggleOculto, bloqueioOcultar, ocupado, podeOcultarMais }) {
   const [modalItem, setModalItem] = React.useState(null);
+  const ocSet = new Set(ocultos || []);
   const engine = window.PropostaDesconto;
   const fmt = (n) => "R$ " + (Number(n) || 0).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 
@@ -850,15 +851,24 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
 
   return (
     <div style={{ marginBottom: 16 }}>
-      {itens.map((it) => {
+      {[...itens.filter((x) => !ocSet.has(x.id)), ...itens.filter((x) => ocSet.has(x.id))].map((it, idx, arr) => {
+        const oculto = ocSet.has(it.id);
+        const primeiroOculto = oculto && !(idx > 0 && ocSet.has(arr[idx - 1].id));
         const original = engine ? engine.parseNum(it.valorOriginal ?? it.valorUnit) : Number(it.valorUnit) || 0;
         const atual = engine ? engine.parseNum(it.valorUnit) : Number(it.valorUnit) || 0;
         const qtd = Number(it.quantidade) || 1;
         const temDesconto = it.desconto && atual < original;
         return (
-          <div key={it.id} className="pe-acab-cat">
+          <React.Fragment key={it.id}>
+          {primeiroOculto && (
+            <div className="small muted" style={{ margin: "14px 0 6px", fontWeight: 600 }}>
+              Equipamentos ocultos da proposta ({arr.filter((x) => ocSet.has(x.id)).length}) — não aparecem para o cliente nem entram no total
+            </div>
+          )}
+          <div className="pe-acab-cat" style={oculto ? { opacity: 0.6, borderStyle: "dashed" } : undefined}>
             <div className="pe-acab-cat-head">
               <span className="pe-acab-cat-nome">{it.id || it.equipamento}</span>
+              {oculto && <span className="pe-tag" style={{ marginLeft: 8 }}>Oculto</span>}
             </div>
             <div className="row gap-2" style={{ alignItems: "baseline", flexWrap: "wrap" }}>
               {temDesconto && <span className="small muted" style={{ textDecoration: "line-through" }}>{fmt(original * qtd)}</span>}
@@ -874,9 +884,17 @@ function S_ItensValores({ eq, itens, onChangeItens, proposta }) {
               {temDesconto && !it.descontoPendente && (
                 <button type="button" className="pe-acab-addfield" onClick={() => remover(it)}>Remover desconto</button>
               )}
+              {onToggleOculto && (oculto || podeOcultarMais) && (
+                <button type="button" className="pe-acab-addfield" disabled={!!ocupado || !!bloqueioOcultar || (!oculto && !!it.descontoPendente)}
+                  title={bloqueioOcultar || (!oculto && it.descontoPendente ? "Resolva o pedido de desconto antes de ocultar" : (oculto ? "Volta a aparecer na proposta, no PDF e no total" : "Tira este equipamento da proposta, do PDF e do total (o dado continua guardado)"))}
+                  onClick={() => onToggleOculto(it, !oculto)}>
+                  {oculto ? "Reexibir na proposta" : "Ocultar da proposta"}
+                </button>
+              )}
             </div>
             <S_ItemDescontoLog log={it.descontoLog}/>
           </div>
+          </React.Fragment>
         );
       })}
       {modalItem && (
@@ -895,8 +913,18 @@ function gerarParcelasAutomaticas(qtd, total) {
 }
 const QTD_PARCELAS_OPTIONS = Array.from({ length: 11 }, (_, i) => String(i + 2)); // 2..12
 
-function S_Valores({ d, set, eq, recordId }) {
+function S_Valores({ d, set, eq, recordId, travada }) {
   const v = d[eq].valores;
+  const O = window.PropostaOpcoes;
+  /* Ocultar/reexibir equipamento individual (VPPR-0990): dono da proposta ou Líder (alçada), proposta destravada. */
+  const [podeOcultar, setPodeOcultar] = React.useState(!recordId);
+  const [ocupado, setOcupado] = React.useState(false);
+  React.useEffect(() => {
+    let cancelado = false;
+    if (!recordId || !window.PropostaStore || !window.PropostaStore.podeOcultarEquipamento) { setPodeOcultar(true); return undefined; }
+    window.PropostaStore.podeOcultarEquipamento(recordId).then((ok) => { if (!cancelado) setPodeOcultar(ok); });
+    return () => { cancelado = true; };
+  }, [recordId]);
   const u = (k) => (val) => set(`${eq}.valores.${k}`, val);
   const parcelas = v.parcelas || [];
   const setParcelas = (arr) => set(`${eq}.valores.parcelas`, arr);
@@ -905,7 +933,9 @@ function S_Valores({ d, set, eq, recordId }) {
   const qtd = parseFloat(v.quantidade) || 0;
   const unit = parseFloat((v.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0;
   /* DIFAL não aparece na proposta (Financeiro, 13/10/2026): o preço de venda já o contém. */
-  const totalEq = temItens
+  const totalEq = temItens && O
+    ? O.totalOficial(d, eq) // só os equipamentos visíveis (ocultos ficam de fora)
+    : temItens
     ? v.itens.reduce((s, it) => s + (parseFloat((it.valorUnit || "0").toString().replace(/\./g, "").replace(",", ".")) || 0) * (Number(it.quantidade) || 1), 0)
     : qtd * unit;
   const totalDifal = totalEq; // nome histórico: é o total da proposta
@@ -956,6 +986,51 @@ function S_Valores({ d, set, eq, recordId }) {
     setParcelas(gerarParcelasAutomaticas(qtd, totalDifal));
   };
 
+  const ocultosAtuais = O ? O.ocultosDe(d, eq) : [];
+  const bloqueioOcultar = travada ? "Proposta enviada ao cliente está travada — peça o destrave ao Líder."
+    : !podeOcultar ? "Só o dono da proposta ou a Regiane (Líder) pode ocultar/reexibir equipamentos."
+    : (O && O.temOpcao90(d, eq)) ? "Proposta com entrega em 90 dias (1 equipamento): não há equipamento para ocultar." : "";
+  const alternarOculto = async (item, ocultar) => {
+    if (ocupado || !O) return;
+    const r = O.alternarOculto(d, item.id, ocultar, eq);
+    if (r.erro) { window.toast?.(r.erro, "warning"); return; }
+    const antes = O.totalOficial(d, eq), depois = O.totalOficial(r.data, eq);
+    const rs = (n) => "R$ " + formatBR(n);
+    const msg = ocultar
+      ? `Ocultar ${item.id}?
+
+Ele deixa de aparecer na proposta, no PDF e no contrato, e sai do total:
+${rs(antes)} → ${rs(depois)}
+As parcelas serão recalculadas. Você pode reexibir depois.` + (O.qtdVisiveis(r.data, eq) <= O.MINIMO_VISIVEIS ? `
+
+ATENÇÃO — limite de ocultação: depois desta ação a proposta fica com ${O.MINIMO_VISIVEIS} equipamentos, que é o mínimo. O botão "Ocultar" some dos demais.
+Motivo: a Precificação é calculada com o container dividido por 2 só quando a cotação tem UM equipamento; com 2 ou mais o container é pago inteiro e rateado. Se o cliente quer um único equipamento, peça uma Precificação própria.` : "")
+      : `Reexibir ${item.id}?
+
+Ele volta para a proposta, o PDF e o total:
+${rs(antes)} → ${rs(depois)}
+As parcelas serão recalculadas.`;
+    if (!window.confirm(msg)) return;
+    setOcupado(true);
+    const anterior = { ocultos: v.ocultos || [], parcelas: v.parcelas || [] };
+    set(`${eq}.valores.ocultos`, r.data[eq].valores.ocultos);
+    set(`${eq}.valores.parcelas`, r.data[eq].valores.parcelas);
+    try {
+      if (recordId && window.PropostaStore) {
+        const valorTotal = typeof calcularValorTotal === "function" ? calcularValorTotal(r.data, eq) : undefined;
+        const res = await window.PropostaStore.salvar({ data: r.data, eq, editId: recordId, valorTotal });
+        if (res && res.erro) {
+          set(`${eq}.valores.ocultos`, anterior.ocultos);
+          set(`${eq}.valores.parcelas`, anterior.parcelas);
+          window.toast?.("Não foi possível salvar: " + res.erro, "error");
+          return;
+        }
+        try { window.VPLog?.registrar({ modulo: "Propostas", acao: ocultar ? "Ocultou equipamento da proposta" : "Reexibiu equipamento na proposta", alvo: "Proposta", alvo_id: recordId, detalhe: { codigo: item.id, valor: item.valorUnit, total_antes: antes, total_depois: depois } }); } catch (_) {}
+      }
+      window.toast?.(ocultar ? `${item.id} oculto da proposta.` : `${item.id} reexibido na proposta.`, "success");
+    } finally { setOcupado(false); }
+  };
+
   const propostaRef = { id: recordId, numeroCotacao: d.numeroCotacao, cliente: d.cliente, titulo: d.cliente?.nome };
 
   /* Solicitar/remover desconto precisa ficar salvo na hora, não só no state
@@ -980,6 +1055,11 @@ function S_Valores({ d, set, eq, recordId }) {
           itens={v.itens}
           proposta={propostaRef}
           onChangeItens={persistirItens}
+          ocultos={ocultosAtuais}
+          onToggleOculto={O ? alternarOculto : null}
+          bloqueioOcultar={bloqueioOcultar}
+          ocupado={ocupado}
+          podeOcultarMais={!O || O.podeOcultarMais(d, eq)}
         />
       ) : (
         <div className="pe-grid cols-4">
@@ -1000,6 +1080,12 @@ function S_Valores({ d, set, eq, recordId }) {
               <PESelect value={String(qtdParcelas || "")} onChange={aplicarQtdParcelas} options={QTD_PARCELAS_OPTIONS}/>
             </PEField>
           )}
+        </div>
+      )}
+      {temItens && O && ocultosAtuais.length > 0 && (
+        <div className="small" style={{ margin: "0 0 12px", padding: "8px 10px", background: "var(--vp-warning-tint, #f8eed7)", borderRadius: 6 }}>
+          <b>Total comercial: R$ {formatBR(totalEq)}</b> — {ocultosAtuais.length} equipamento{ocultosAtuais.length > 1 ? "s" : ""} oculto{ocultosAtuais.length > 1 ? "s" : ""} (não entra{ocultosAtuais.length > 1 ? "m" : ""} no total, PDF nem contrato).
+          {O.semEquipamentoVisivel(d, eq) && <div style={{ color: "#b00020", marginTop: 4 }}>Todos os equipamentos estão ocultos: não será possível publicar nem enviar até reexibir pelo menos um.</div>}
         </div>
       )}
       {temItens && (

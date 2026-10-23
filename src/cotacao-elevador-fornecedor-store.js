@@ -479,6 +479,19 @@
     const ehQuadroComando = categoria === 'quadro_comando';
     const tipo_formulario = ehQuadroComando ? 'quadro_comando' : tipoFormularioPara(unidades[0].tipo);
 
+    /* 23/10 — achado real do Codex (PR #1073): esta busca é escopada só por
+       formulário+categoria, NUNCA por fornecedor — e tem que continuar
+       assim. numero_documento é UNIQUE GLOBAL na tabela (migration
+       20260722250000) e masterId() não leva o nome do fornecedor no
+       código — só categoria+Nº cotação+revisão. Se 2 fornecedores
+       cotassem a mesma categoria do mesmo formulário com sequências de
+       letra INDEPENDENTES, o 1º envio de cada um geraria o MESMO
+       numero_documento ("VPEL-EL0990-A" pros dois) e o 2º insert
+       quebraria por violar a constraint única. A letra tem que ser uma
+       sequência ÚNICA por (formulário, categoria), compartilhada entre
+       todos os fornecedores que cotam ali — é o que já garante
+       numero_documento nunca repetir. (Cheguei a escopar por fornecedor
+       nesta mesma sessão — revertido depois de confirmar a constraint.) */
     const { data: existentes, error: exErr } = await c.from('cotacoes_elevador_fornecedor')
       .select('revisao').eq('formulario_elevador_id', formularioElevadorId).eq('categoria_produto', categoria);
     if (exErr) throw exErr;
@@ -489,7 +502,14 @@
       const maior = r.revisao.length !== max.length ? r.revisao.length > max.length : r.revisao > max;
       return maior ? r.revisao : max;
     }, '');
-    const revisao = (existentes && existentes.length) ? window.MasterIdEngine.proximaRevisao(maiorRevisao || null) : null;
+    /* 23/10 (pedido do usuário) — a PRÓPRIA versão original passa a ganhar
+       letra (sempre "A" pro 1º envio desta categoria/formulário, a
+       QUALQUER fornecedor), não só os reenvios. Antes: 1ª cotação sem
+       letra, 2ª vira "A", 3ª vira "B"... Agora: 1ª já nasce "A", 2ª "B",
+       3ª "C"... "desde quando o formulário volte" — cotações já existentes
+       (antes de hoje) continuam gravadas
+       como foram mandadas de verdade ao fornecedor; não é reescrito aqui. */
+    const revisao = window.MasterIdEngine.proximaRevisao(maiorRevisao || null);
     const numero_documento = window.MasterIdEngine.masterId({ categoriaProduto: categoria, numeroCotacao, revisao });
 
     const row = {

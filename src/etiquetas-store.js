@@ -150,9 +150,85 @@
         });
         pedidos = pedidos.concat(Object.values(grupos));
       }
+      // Pedidos de venda do PCP (OP-mãe aberta) sem quadro — ex. só cabos de manobra/cabos modulares — também entram: a etiqueta
+      // oferece os cabos do pedido (ver listarCabosDoPedido). Pedido que já está na lista (por quadro/OP) não é repetido.
+      try {
+        const rm = await sb.from('pcp_ordens').select('id, numero, cliente, pedido_codigo').eq('frente', 'pedido').in('status', ['aguardando', 'em_producao']).not('pedido_codigo', 'is', null);
+        const maes = rm.data || [];
+        const cods = Array.from(new Set(maes.map((m) => m.pedido_codigo)));
+        const num = {};
+        if (cods.length) { const rp = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido').in('codigo_pedido', cods); (rp.data || []).forEach((p) => { num[p.codigo_pedido] = p.numero_pedido; }); }
+        const ja = new Set(pedidos.map((p) => String(p.numero_pedido)));
+        maes.forEach((m) => {
+          const n = num[m.pedido_codigo];
+          if (!n || ja.has(String(n))) return;
+          ja.add(String(n));
+          pedidos.push({ id: `ped:${n}`, numero_pedido: n, tipo_aplicacao: null, novo_ou_modernizacao: null, cliente: m.cliente || '', origem: 'pedido', sem_quadro: true, ops: [m.numero] });
+        });
+      } catch (e) { /* lista de quadros segue sem os pedidos só de cabos */ }
       if (t) pedidos = pedidos.filter((p) => String(p.numero_pedido).toLowerCase().includes(t) || String(p.cliente || '').toLowerCase().includes(t) || (p.ops || []).some((n) => String(n).toLowerCase().includes(t)));
       return { pedidos: pedidos.slice(0, 80), erro: null };
     } catch (e) { return { pedidos: [], erro: e.message }; }
+  }
+
+  // Cabos (itens do PCP) de um pedido de venda do Omie: cabos modulares, cabo de manobra, cabo de aço… Cada item traz a OP onde
+  // é fabricado/cortado (OP de corte com o mesmo código) ou, sem ela, a OP-mãe do pedido.
+  async function listarCabosDoPedido(numeroPedido) {
+    const sb = sbCli();
+    if (!sb || numeroPedido == null || numeroPedido === '') return { itens: [], erro: null };
+    try {
+      const rp = await sb.from('pcp_pedidos').select('codigo_pedido').eq('numero_pedido', String(numeroPedido));
+      const cods = (rp.data || []).map((p) => p.codigo_pedido);
+      if (!cods.length) return { itens: [], erro: null };
+      const ri = await sb.from('pcp_pedido_itens').select('codigo, descricao, quantidade, unidade').in('codigo_pedido', cods).eq('item_pcp', true);
+      if (ri.error) return { itens: [], erro: ri.error.message };
+      const cabos = (ri.data || []).filter((i) => /\bcabo\b/i.test(String(i.descricao || '')));
+      if (!cabos.length) return { itens: [], erro: null };
+      const ro = await sb.from('pcp_ordens').select('id, numero, frente').in('pedido_codigo', cods).neq('status', 'cancelada');
+      const ops = ro.data || [];
+      const mae = (ops.find((o) => o.frente === 'pedido') || {}).numero || '';
+      const ids = ops.filter((o) => o.frente !== 'pedido').map((o) => o.id);
+      const porCodigo = {};
+      if (ids.length) {
+        const rm = await sb.from('pcp_ordem_materiais').select('ordem_id, codigo').in('ordem_id', ids);
+        (rm.data || []).forEach((m) => { const o = ops.find((x) => x.id === m.ordem_id); if (o && !porCodigo[m.codigo]) porCodigo[m.codigo] = o.numero; });
+      }
+      const itens = cabos.map((i) => ({ codigo: i.codigo, descricao: i.descricao, quantidade: Number(i.quantidade) || 0, unidade: i.unidade || '', op: porCodigo[i.codigo] || mae })).sort((a, b) => String(a.codigo).localeCompare(String(b.codigo)));
+      return { itens, erro: null };
+    } catch (e) { return { itens: [], erro: e.message }; }
+  }
+
+  // OPs do PCP que NÃO são pedido nem quadro (corte de cabo de aço, corrimão, cabo elétrico/de manobra…) para a etiqueta de fabricação.
+  // `etiquetada` = já houve impressão desse tipo para a OP (histórico de etiquetas).
+  async function listarOPsFabricacao(texto) {
+    const sb = sbCli();
+    if (!sb) return { ops: [], erro: 'Supabase indisponível.' };
+    try {
+      const { data, error } = await sb.from('pcp_ordens').select('id, numero, titulo, produto, cliente, status, frente, pedido_codigo, ordem_mae_id, prazo_entrega').not('frente', 'in', '(pedido,quadro)').in('status', ['aguardando', 'em_producao']).order('created_at', { ascending: false }).limit(150);
+      if (error) return { ops: [], erro: error.message };
+      let ops = data || [];
+      const t = String(texto || '').trim().toLowerCase();
+      const ids = ops.map((o) => o.id);
+      const mats = {};
+      if (ids.length) {
+        const rm = await sb.from('pcp_ordem_materiais').select('ordem_id, codigo, descricao, necessario, unidade').in('ordem_id', ids);
+        (rm.data || []).forEach((m) => { (mats[m.ordem_id] = mats[m.ordem_id] || []).push(m); });
+      }
+      const maeIds = Array.from(new Set(ops.map((o) => o.ordem_mae_id).filter(Boolean)));
+      const maes = {};
+      if (maeIds.length) { const rmae = await sb.from('pcp_ordens').select('id, pedido_codigo').in('id', maeIds); (rmae.data || []).forEach((m) => { maes[m.id] = m; }); }
+      const cods = Array.from(new Set(ops.map((o) => o.pedido_codigo || (maes[o.ordem_mae_id] || {}).pedido_codigo).filter((c) => c != null)));
+      const numPed = {};
+      if (cods.length) { const rp = await sb.from('pcp_pedidos').select('codigo_pedido, numero_pedido').in('codigo_pedido', cods); (rp.data || []).forEach((p) => { numPed[p.codigo_pedido] = p.numero_pedido; }); }
+      const rh = await sb.from('etiqueta_impressoes').select('referencia, impresso_em').eq('tipo', 'FABRICACAO_OP').eq('sucesso', true).order('impresso_em', { ascending: false }).limit(500);
+      const hist = rh.data || [];
+      ops = ops.map((o) => {
+        const h = hist.find((x) => String(x.referencia || '').startsWith(o.numero));
+        return { ...o, materiais: mats[o.id] || [], numero_pedido: numPed[o.pedido_codigo || (maes[o.ordem_mae_id] || {}).pedido_codigo] || '', etiquetada: h ? h.impresso_em : null };
+      });
+      if (t) ops = ops.filter((o) => [o.numero, o.titulo, o.cliente, o.numero_pedido, ...(o.materiais || []).map((m) => m.codigo)].some((v) => String(v || '').toLowerCase().includes(t)));
+      return { ops: ops.slice(0, 80), erro: null };
+    } catch (e) { return { ops: [], erro: e.message }; }
   }
 
   // OPs de quadro de comando (PCP) abertas ou concluídas recentes, para a etiqueta de OP/série.
@@ -271,5 +347,5 @@
     } catch (e) { return { linhas: [], erro: e.message }; }
   }
 
-  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarPedidosQuadro, pedidoDaOp, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
+  window.EtiquetasStore = { temCapacidade, listarEnderecos, buscarItens, listarPIs, listarPedidos, listarNotasFaturadas, listarPedidosQuadro, listarCabosDoPedido, listarOPsFabricacao, pedidoDaOp, listarOPsQuadro, buscarEquipamentos, listarModelos, copiarModelo, salvarModelo, excluirModelo, registrarImpressao, listarHistorico };
 }());

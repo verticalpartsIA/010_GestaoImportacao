@@ -162,7 +162,7 @@
     const [itens, headerResult, statusResult, ocorrenciasResult] = await Promise.all([
       listarItens(),
       c.from('pcp_ordens')
-        .select('id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id, pedido_codigo, ordem_mae_id')
+        .select('id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id, pedido_codigo, ordem_mae_id, numero_pedido_omie, itens_pedido')
         .eq('id', ordemId).maybeSingle(),
       c.from('fabricacao_quadro_status').select('*, fabricacao_quadro_itens(id, texto, ordem, peso)').eq('ordem_id', ordemId),
       c.from('fabricacao_quadro_ocorrencias').select('*').eq('ordem_id', ordemId).order('aberta_em', { ascending: false }),
@@ -402,7 +402,7 @@
   async function listarOPsAbertas() {
     const c = sb();
     const { data, error } = await c.from('pcp_ordens')
-      .select('id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id')
+      .select('id, numero, titulo, produto, cliente, numero_cotacao, status, prazo_entrega, previsao_inicio, data_abertura, quadro_comando_id, pedido_codigo, numero_pedido_omie, itens_pedido')
       .eq('frente', 'quadro')
       .in('status', ['aguardando', 'em_producao'])
       .order('prazo_entrega', { ascending: true });

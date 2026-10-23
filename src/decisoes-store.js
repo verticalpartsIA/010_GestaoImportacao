@@ -29,6 +29,8 @@
     /* 20/10/2026: aval de contratação de montador é SEMPRE do Diego (decisão dele por WhatsApp) — nunca de quem tem a alçada 'ceo'
        por extensão (ex.: Gelson). Papel separado de 'ceo' justamente para extrasPorAlcada('ceo') não entrar aqui. */
     ceo_diego: ['diego@verticalparts.com.br'],
+    /* 22/10/2026: quem libera o envio do contrato do montador passou a ser a Juliana (decisão do Jurídico/Diego). */
+    aval_instalador: ['juliana@verticalparts.com.br'],
     owner: ['gelson.simoes@verticalparts.com.br'],
     gestor_comercial: ['regiane.rocha@verticalparts.com.br', 'guilherme@verticalparts.com.br'],
     rh: ['karla.silva@verticalparts.com.br'],                    // 16/10/2026: Karla é a líder de RH (Gelson)
@@ -44,6 +46,7 @@
   const PAPEL_LABEL = {
     ceo: 'CEO',
     ceo_diego: 'CEO',
+    aval_instalador: 'Aval de contratação',
     owner: 'Dono do Sistema',
     gestor_comercial: 'Gestor Comercial',
     rh: 'RH',
@@ -512,24 +515,24 @@
         .eq('tipo', 'contratacao_mao_obra_ceo').eq('referencia_tabela', 'contratos_instalador').eq('referencia_id', contratoId);
       let avulsa = (existentes || [])[0];
       if (!avulsa) {
-        avulsa = await criarDecisao({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo_diego', referenciaTabela: 'contratos_instalador', referenciaId: contratoId, contexto: { ...contexto, avulso: true } });
+        avulsa = await criarDecisao({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'aval_instalador', referenciaTabela: 'contratos_instalador', referenciaId: contratoId, contexto: { ...contexto, avulso: true } });
       }
-      if (avulsa.status === 'reprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, motivo: `Contratação reprovada pelo CEO (${avulsa.decidido_por || ''}): ${avulsa.motivo || 'sem motivo informado'}.` };
-      if (avulsa.status !== 'aprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador (contrato avulso, sem Proposta). O pedido de aval foi enviado ao Diego por WhatsApp (ele responde SIM ou NÃO).' };
+      if (avulsa.status === 'reprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${avulsa.decidido_por || ''}): ${avulsa.motivo || 'sem motivo informado'}.` };
+      if (avulsa.status !== 'aprovada') return { ok: false, decisaoId: avulsa.id, reenviavel: true, reenvioPendente: !!(avulsa.contexto && avulsa.contexto.reenvioPendente), motivo: 'Aguardando o aval da Juliana para contratar mão de obra deste parceiro instalador (contrato avulso, sem Proposta). O pedido de aval foi enviado à Juliana por WhatsApp (ela responde SIM ou NÃO).' };
       return { ok: true };
     }
     let decisoes = await listarPorCotacao(numeroCotacao);
     let decisao = decisoes.find((d) => d.tipo === 'contratacao_mao_obra_ceo');
     if (!decisao) {
-      decisao = await criarDecisaoSeNaoExiste({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'ceo_diego', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao, contexto) });
+      decisao = await criarDecisaoSeNaoExiste({ tipo: 'contratacao_mao_obra_ceo', papelRequerido: 'aval_instalador', numeroCotacao, contexto: await contextoDaCotacao(numeroCotacao, contexto) });
     }
     decisao = await garantirAtiva(decisao);
-    if (decisao.status === 'reprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, motivo: `Contratação reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
-    if (decisao.status !== 'aprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, motivo: 'Aguardando aprovação do CEO (Diego) para contratar mão de obra deste parceiro instalador. O pedido de aval foi enviado ao Diego por WhatsApp (ele responde SIM ou NÃO).' };
+    if (decisao.status === 'reprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reprovada: true, motivo: `Contratação reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
+    if (decisao.status !== 'aprovada') return { ok: false, decisaoId: decisao.id, reenviavel: true, reenvioPendente: !!(decisao.contexto && decisao.contexto.reenvioPendente), motivo: 'Aguardando o aval da Juliana para contratar mão de obra deste parceiro instalador. O pedido de aval foi enviado à Juliana por WhatsApp (ela responde SIM ou NÃO).' };
     return { ok: true };
   }
 
-  /* 20/10/2026 — reenvia o pedido de aval ao Diego por WhatsApp (e, se ele recusou antes, reabre a decisão para ele poder dar o SIM).
+  /* 20/10/2026 — reenvia o pedido de aval à Juliana por WhatsApp (e, se ela recusou antes, reabre a decisão para ela poder dar o SIM).
      A função SQL decisao_aval_reenviar confere a sessão e enfileira o aviso (instalador.aval_pendente). */
   async function reenviarAvalWhatsApp(decisaoId) {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
@@ -603,8 +606,9 @@
     if (decisao.status === 'reprovada') return { ok: false, motivo: `Compra do equipamento reprovada pelo CEO (${decisao.decidido_por || ''}): ${decisao.motivo || 'sem motivo informado'}.` };
     if (decisao.status !== 'aprovada') {
       // Aprovado pela tela Aval Financeiro (avais_financeiros.aprovacao_ceo_em) também vale — mesma regra, outra porta.
-      const { data: av } = await sb().from('avais_financeiros').select('aprovacao_ceo_em').eq('numero_cotacao', numeroCotacao).limit(1);
-      if (av && av[0] && av[0].aprovacao_ceo_em) return { ok: true };
+      const afs = window.AvalFinanceiroStore;
+      const avVig = afs && afs.getByNumeroCotacao ? await afs.getByNumeroCotacao(numeroCotacao) : null;   // aval da revisão VIGENTE (22/10)
+      if (avVig && avVig.aprovacao_ceo_em) return { ok: true };
       return { ok: false, motivo: 'Aguardando aprovação do CEO (Diego) para comprar o equipamento deste pedido.' };
     }
     return { ok: true };

@@ -233,11 +233,19 @@
     { codigo: 'EDP1', descricao: 'Alimentação e sinal da barreira eletrônica' },
     { codigo: 'SL', descricao: 'Sinalização em LED e sirene de 24V' },
     { codigo: 'WT1', descricao: 'Pesador de carga digital' },
+    { codigo: 'DZ', descricao: 'Zona de porta' },
     // POW1 só existe quando o elevador tem casa de máquinas (tipo de aplicação MR).
     { codigo: 'POW1', descricao: 'Alimentação independente de luz e ventilador da cabina', soCasaMaquinas: true },
+    // Só quando o elevador tem porta oposta (2ª porta de cabina): fiação a mais para atender essa porta.
+    { codigo: 'GS2', descricao: 'Contato de trinco da porta de cabina', soPortaOposta: true },
+    { codigo: 'EDP2', descricao: 'Alimentação e sinal da barreira eletrônica', soPortaOposta: true },
+    { codigo: 'DC2', descricao: 'Alimentação e sinal do inversor / módulo do operador de porta', soPortaOposta: true },
+    { codigo: 'DEN2', descricao: 'Sinais do inversor / módulo do operador de porta', soPortaOposta: true },
+    // Fixo: aparece em todo quadro (só desmarca para não imprimir).
+    { codigo: 'ETOK', descricao: 'Em Produção' },
   ];
   const chicoteTipoObra = (v) => (String(v || '').toLowerCase().startsWith('modern') ? 'Modernização' : String(v || '').toLowerCase() === 'novo' ? 'Novo' : '');
-  function chicoteDisponivel(c, tipoAplicacao) { return !c.soCasaMaquinas || String(tipoAplicacao || '').toUpperCase() === 'MR'; }
+  function chicoteDisponivel(c, tipoAplicacao, portaOposta) { return (!c.soCasaMaquinas || String(tipoAplicacao || '').toUpperCase() === 'MR') && (!c.soPortaOposta || !!portaOposta); }
   function dadosChicote(r) {
     const t = (v) => String(v == null ? '' : v).trim();
     const c = CHICOTES.find((x) => x.codigo === t(r.chicote).toUpperCase()) || { codigo: t(r.chicote).toUpperCase(), descricao: t(r.descricao) };
@@ -246,6 +254,45 @@
       marca_txt: 'VERTICALPARTS',
       chicote_txt: `${c.codigo} | ${t(r.pedido)}${obra ? ' ' + obra : ''}`,
       desc_txt: c.descricao,
+      rodape_txt: [t(r.op), t(r.cliente)].filter(Boolean).join(' · '),
+    };
+  }
+
+  // Fabricação (OP do PCP): cabos de aço, corrimãos, cabos elétricos e de manobra cortados sob medida. Uma etiqueta por PEÇA cortada,
+  // só texto (sem QR nem código de barras): "<código> | <comprimento>", "peça n/N", descrição e rodapé "OP · pedido · cliente".
+  function textoQtdFabricacao(valor, unidade) {
+    const n = Number(String(valor == null ? '' : valor).replace(',', '.'));
+    if (!isFinite(n) || n <= 0) return '';
+    const un = String(unidade || '').trim().toUpperCase();
+    const txt = n.toLocaleString('pt-BR', { maximumFractionDigits: 2 });
+    return un === 'M' || un === 'MT' || un === 'METRO' ? `${txt} m` : `${txt}${un ? ' ' + un.toLowerCase() : ''}`;
+  }
+  function dadosFabricacao(r) {
+    const t = (v) => String(v == null ? '' : v).trim();
+    const total = Math.max(1, Math.floor(Number(r.total_pecas) || 1));
+    const peca = Math.max(1, Math.min(total, Math.floor(Number(r.peca) || 1)));
+    const qtd = textoQtdFabricacao(r.quantidade, r.unidade);
+    return {
+      marca_txt: 'VERTICALPARTS',
+      peca_txt: total > 1 ? `${peca}/${total}` : '',
+      item_txt: qtd ? `${t(r.codigo)} | ${qtd}` : t(r.codigo),
+      desc_txt: t(r.descricao),
+      rodape_txt: [t(r.op), t(r.pedido), t(r.cliente)].filter(Boolean).join(' · '),
+    };
+  }
+
+  // Cabo do pedido (PCP) na etiqueta de Chicote: "<código> | <pedido>" (ou "<código> | 40 m" para cabo vendido por metro),
+  // descrição curta e rodapé "OP · cliente". Mesmo modelo CHICOTE_50x30 (só texto e ícone).
+  function dadosCaboPedido(r) {
+    const t = (v) => String(v == null ? '' : v).trim();
+    const un = t(r.unidade).toUpperCase();
+    const porMetro = un === 'M' || un === 'MT' || un === 'METRO';
+    const qtd = porMetro ? textoQtdFabricacao(r.quantidade, r.unidade) : '';
+    const desc = t(r.descricao).replace(/\s*-?\s*Ref\.?\s*:.*$/i, '').replace(/\s+para\s+(o\s+)?Elevador\b/i, '').replace(/\s+/g, ' ').trim();
+    return {
+      marca_txt: 'VERTICALPARTS',
+      chicote_txt: `${t(r.codigo)} | ${qtd || t(r.pedido)}`,
+      desc_txt: desc,
       rodape_txt: [t(r.op), t(r.cliente)].filter(Boolean).join(' · '),
     };
   }
@@ -385,8 +432,8 @@
     },
     {
       // largura_mm × altura_mm = a etiqueta física (100 × 150, rolo em pé). O desenho é feito DEITADO (150 × 100, como a etiqueta
-      // de hoje) e girado 90° na impressão: as coordenadas dos elementos ficam no desenho deitado. Só imprime pelo navegador
-      // (o ZPL não gira QR/imagem) e ainda não pode ser copiado/editado.
+      // de hoje) e girado 90° na impressão: as coordenadas dos elementos ficam no desenho deitado. Imprime direto na Zebra como IMAGEM (o desenho
+      // é rasterizado e enviado em ^GFA, já na orientação final) ou pelo navegador; ainda não pode ser copiado/editado.
       id: 'EXPEDICAO_100x150', tipo: 'EXPEDICAO', nome: 'Expedição — volume da NF (100 × 150)', largura_mm: 100, altura_mm: 150, girar: 90,
       proposito: 'Etiqueta de volume da expedição: remetente, nº da NF, destinatário, transportadora, endereço, volume n/N e nº do pedido na faixa preta. Rolo 100 × 150 mm.',
       campos: ['remetente_txt', 'remetente_end', 'nf_txt', 'destinatario_txt', 'transportadora_txt', 'endereco_txt', 'volume_txt', 'pedido_txt', 'qr'],
@@ -412,6 +459,19 @@
         { tipo: 'imagem', src: 'icone', x: 2, y: 2, w: 6, h: 6 },
         { tipo: 'texto', campo: '{marca_txt}', x: 10, y: 3.2, w: 38, h: 3.4, peso: 'normal' },
         { tipo: 'texto', campo: '{chicote_txt}', x: 2, y: 10, w: 46, h: 4.2, linhas: 2 },
+        { tipo: 'texto', campo: '{desc_txt}', x: 2, y: 19.8, w: 46, h: 2.6, linhas: 2, peso: 'normal' },
+        { tipo: 'texto', campo: '{rodape_txt}', x: 2, y: 26.5, w: 46, h: 2.2 },
+      ],
+    },
+    {
+      id: 'FABRICACAO_50x30', tipo: 'FABRICACAO_OP', nome: 'Fabricação da OP (50 × 30, 2 colunas)', largura_mm: 50, altura_mm: 30,
+      proposito: 'Etiqueta de cada peça fabricada no PCP (cabo de aço, corrimão, cabo elétrico, cabo de manobra): código e comprimento, peça n/N, descrição e rodapé com OP, pedido e cliente. Só texto e ícone. Rolo de 2 etiquetas de 50 × 30 mm lado a lado.',
+      campos: ['marca_txt', 'peca_txt', 'item_txt', 'desc_txt', 'rodape_txt'],
+      elementos: [
+        { tipo: 'imagem', src: 'icone', x: 2, y: 2, w: 6, h: 6 },
+        { tipo: 'texto', campo: '{marca_txt}', x: 10, y: 3.2, w: 26, h: 3.4, peso: 'normal' },
+        { tipo: 'texto', campo: '{peca_txt}', x: 36, y: 3.2, w: 12, h: 3.6, alinhamento: 'dir' },
+        { tipo: 'texto', campo: '{item_txt}', x: 2, y: 10, w: 46, h: 4.2, linhas: 2 },
         { tipo: 'texto', campo: '{desc_txt}', x: 2, y: 19.8, w: 46, h: 2.6, linhas: 2, peso: 'normal' },
         { tipo: 'texto', campo: '{rodape_txt}', x: 2, y: 26.5, w: 46, h: 2.2 },
       ],
@@ -754,6 +814,52 @@
     return { blocos, avisos: Array.from(avisos), etiquetas: lista.length, linhas: linhas.reduce((n, l) => n + l.n, 0) };
   }
 
+  /* ---------- Imagem em ZPL (modelos girados: o desenho vira bitmap e a Zebra só imprime a imagem) ----------
+     bits: Uint8Array/array de 0|1 (1 = preto), largura × altura em pontos, linha por linha.
+     Devolve o comando ^GFA com a compressão ASCII da Zebra (G–Y = 1–19 repetições, g–z = 20–400, "," = resto da linha em 0,
+     "!" = resto em F, ":" = linha igual à anterior). */
+  function zplCompactarLinha(hex) {
+    let out = '';
+    let i = 0;
+    while (i < hex.length) {
+      const ch = hex[i];
+      let n = 1;
+      while (i + n < hex.length && hex[i + n] === ch) n++;
+      if (i + n === hex.length && (ch === '0' || ch === 'F')) { out += ch === '0' ? ',' : '!'; break; }
+      i += n;
+      while (n > 0) {
+        if (n >= 20) { const k = Math.min(Math.floor(n / 20) * 20, 400); out += String.fromCharCode('g'.charCodeAt(0) + k / 20 - 1) + ch; n -= k; }
+        else if (n > 1) { out += String.fromCharCode('G'.charCodeAt(0) + n - 2 + 1) + ch; n = 0; }
+        else { out += ch; n = 0; }
+      }
+    }
+    return out;
+  }
+  function zplImagem(bits, largura, altura) {
+    const bpr = Math.ceil(largura / 8);
+    const linhas = [];
+    let anterior = null;
+    for (let y = 0; y < altura; y++) {
+      let hex = '';
+      for (let b = 0; b < bpr; b++) {
+        let v = 0;
+        for (let k = 0; k < 8; k++) { const x = b * 8 + k; v = (v << 1) | (x < largura && bits[y * largura + x] ? 1 : 0); }
+        hex += (v < 16 ? '0' : '') + v.toString(16).toUpperCase();
+      }
+      if (hex === anterior) linhas.push(':');
+      else linhas.push(zplCompactarLinha(hex));
+      anterior = hex;
+    }
+    const total = bpr * altura;
+    return `^GFA,${total},${total},${bpr},${linhas.join('')}`;
+  }
+  /* Um formato ZPL que imprime só a imagem (já na orientação final da etiqueta). */
+  function renderZPLImagem(bits, largura, altura, opcoes) {
+    const o = Object.assign({ copias: 1 }, opcoes || {});
+    return ['^XA', `^PW${largura}`, `^LL${altura}`, '^LH0,0', `^FO0,0${zplImagem(bits, largura, altura)}^FS`,
+      `^PQ${Math.max(1, Math.floor(Number(o.copias) || 1))}`, '^XZ'].join('\n');
+  }
+
   /* ---------- SVG (pré-visualização e impressão pelo navegador) ---------- */
   const escXml = (s) => String(s == null ? '' : s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]));
   const num = (n) => Math.round(n * 1000) / 1000;
@@ -946,7 +1052,7 @@
     DV_PESOS, validarEnderecoNovo, MODELOS, DADOS_TESTE, modeloPorId, modelosDoTipo, registrarModelos, modelosDaEmpresa, validarModelo,
     normalizarEndereco, parseEndereco, dvEndereco, textoEndereco, todosEnderecos,
     tipoEndereco, listaEnderecos, normalizarPrateleira, rotuloEndereco,
-    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, CHICOTES, chicoteDisponivel, chicoteTipoObra, dadosChicote, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, renderSVG, renderSVGLinha, htmlImpressao,
+    dadosEndereco, dadosItem, dadosRecebimento, dadosSeparacao, dadosExpedicaoVolume, dadosFabricacao, textoQtdFabricacao, dadosCaboPedido, CHICOTES, chicoteDisponivel, chicoteTipoObra, dadosChicote, LOGO_PRETO, ICONE_PRETO, REMETENTE, dadosPalete, dadosIdTag, dadosOpQuadro, dadosAvaria, aplicar, pontosPorMm, mmParaDots, qrModulos, zplTexto, renderZPL, renderZPLLinhas, zplImagem, renderZPLImagem, renderSVG, renderSVGLinha, htmlImpressao,
     ROLO_LIM, geometriaRolo, adaptarModelo,
   };
 }());

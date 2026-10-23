@@ -385,7 +385,9 @@ test('Chicote do quadro (50 x 30): "FAN | 1212 Modernização", só texto e íco
   const m = E.modeloPorId('CHICOTE_50x30');
   assert.ok(m && m.largura_mm === 50 && m.altura_mm === 30 && m.tipo === 'CHICOTE_QUADRO');
   assert.ok(!m.elementos.some((e) => e.tipo === 'qr' || e.tipo === 'code128'), 'sem QR nem código de barras');
-  assert.equal(E.CHICOTES.length, 22);
+  assert.equal(E.CHICOTES.length, 28);   // 23 + 4 da porta oposta + ETOK fixo
+  assert.ok(E.chicoteDisponivel(E.CHICOTES.find((c) => c.codigo === 'ETOK'), 'MRL', false), 'ETOK em todo quadro');
+  assert.equal(E.CHICOTES.find((c) => c.codigo === 'DZ').descricao, 'Zona de porta');
   assert.ok(E.CHICOTES.find((c) => c.codigo === 'FAN'));
   const d = E.dadosChicote({ chicote: 'FAN', pedido: '1212', tipo_obra: 'modernizacao' });
   assert.equal(d.chicote_txt, 'FAN | 1212 Modernização');
@@ -411,4 +413,104 @@ test('Chicote: rodapé com OP e cliente (identifica de quem é o quadro)', () =>
   const m = E.modeloPorId('CHICOTE_50x30');
   const z = E.renderZPL(m, d, { dpi: 203 });
   assert.ok(!z.avisos.some((a) => /cortado/.test(a)), z.avisos.join(' | '));
+});
+
+/* Decodifica o ^GFA como a Zebra (ASCII compactado) para provar que a imagem enviada é a mesma que saiu do desenho. */
+function decodificarGFA(zpl, largura, altura) {
+  const m = /\^GFA,(\d+),(\d+),(\d+),([^^]*)\^FS/.exec(zpl);
+  assert.ok(m, 'sem ^GFA');
+  const bpr = Number(m[3]);
+  assert.equal(Number(m[1]), bpr * altura);
+  const dados = m[4];
+  const linhas = [];
+  let atual = '';
+  let i = 0;
+  const fechar = () => { linhas.push(atual); atual = ''; };
+  while (i < dados.length) {
+    const c = dados[i];
+    if (c === ':') { linhas.push(linhas[linhas.length - 1]); i++; continue; }
+    if (c === ',') { atual += '0'.repeat(bpr * 2 - atual.length); fechar(); i++; continue; }
+    if (c === '!') { atual += 'F'.repeat(bpr * 2 - atual.length); fechar(); i++; continue; }
+    let n = 1;
+    if (/[G-Y]/.test(c)) { n = c.charCodeAt(0) - 'G'.charCodeAt(0) + 1; i++; }
+    else if (/[g-z]/.test(c)) { n = (c.charCodeAt(0) - 'g'.charCodeAt(0) + 1) * 20; i++; }
+    // contagens somam: G–Y pode vir depois de g–z (ex.: 25 = 20 + 5)
+    let total = n;
+    while (/[G-Yg-z]/.test(dados[i]) && i < dados.length) {
+      const d = dados[i];
+      total += /[G-Y]/.test(d) ? d.charCodeAt(0) - 'G'.charCodeAt(0) + 1 : (d.charCodeAt(0) - 'g'.charCodeAt(0) + 1) * 20;
+      i++;
+    }
+    atual += dados[i].repeat(total); i++;
+    if (atual.length >= bpr * 2) fechar();
+  }
+  assert.equal(linhas.length, altura);
+  const bits = new Uint8Array(largura * altura);
+  linhas.forEach((hex, y) => {
+    assert.equal(hex.length, bpr * 2);
+    for (let x = 0; x < largura; x++) bits[y * largura + x] = (parseInt(hex[Math.floor(x / 8) * 2 + (x % 8 < 4 ? 0 : 1)], 16) >> (3 - (x % 4))) & 1;
+  });
+  return bits;
+}
+
+test('ZPL imagem: compactação não perde nenhum ponto (ida e volta)', () => {
+  const W = 203, H = 90;   // largura que não é múltiplo de 8 de propósito
+  let sem = 7;
+  const rnd = () => { sem = (sem * 1103515245 + 12345) & 0x7fffffff; return sem / 0x7fffffff; };
+  const bits = new Uint8Array(W * H);
+  for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+    if (y < 10) bits[y * W + x] = 0;                       // linhas todas brancas
+    else if (y < 20) bits[y * W + x] = 1;                  // todas pretas
+    else if (y >= 30 && y < 40) bits[y * W + x] = x > 50 && x < 160 ? 1 : 0;   // linha repetida
+    else bits[y * W + x] = rnd() < 0.5 ? 1 : 0;            // ruído
+  }
+  const zpl = E.renderZPLImagem(bits, W, H, { copias: 3 });
+  assert.match(zpl, /^\^XA\n\^PW203\n\^LL90\n\^LH0,0\n\^FO0,0\^GFA,/);
+  assert.match(zpl, /\^PQ3\n\^XZ$/);
+  const volta = decodificarGFA(zpl, W, H);
+  assert.deepEqual(Array.from(volta), Array.from(bits));
+});
+
+test('ZPL imagem: etiqueta quase toda branca fica pequena (não estoura o limite do Browser Print)', () => {
+  const W = 1181, H = 1772;   // 100 × 150 mm a 300 dpi
+  const bits = new Uint8Array(W * H);
+  for (let y = 600; y < 700; y++) for (let x = 100; x < 1000; x++) bits[y * W + x] = 1;
+  const zpl = E.renderZPLImagem(bits, W, H);
+  assert.ok(zpl.length < 30000, `ZPL com ${zpl.length} caracteres`);
+  assert.deepEqual(Array.from(decodificarGFA(zpl, W, H)), Array.from(bits));
+});
+
+test('Fabricação da OP (50 x 30): uma etiqueta por peça, só texto, nada cortado', () => {
+  const m = E.modeloPorId('FABRICACAO_50x30');
+  assert.equal(m.largura_mm, 50); assert.equal(m.altura_mm, 30);
+  assert.ok(!m.elementos.some((e) => e.tipo === 'qr' || e.tipo === 'barras'));
+  const d = E.dadosFabricacao({ codigo: 'VPEL-692', descricao: 'Cabo de aço 8 mm', quantidade: 12.5, unidade: 'M', op: 'OP-0007-C1', pedido: '30445', cliente: 'MIHL', peca: 2, total_pecas: 4 });
+  assert.equal(d.item_txt, 'VPEL-692 | 12,5 m');
+  assert.equal(d.peca_txt, '2/4');
+  assert.equal(d.rodape_txt, 'OP-0007-C1 · 30445 · MIHL');
+  assert.equal(E.dadosFabricacao({ codigo: 'X', total_pecas: 1 }).peca_txt, '');
+  const z = E.renderZPL(m, d, { dpi: 203 });
+  assert.ok(!z.avisos.some((a) => /cort/i.test(a)), z.avisos.join('; '));
+});
+
+test('Cabo do pedido na etiqueta de Chicote: código | pedido, descrição curta, OP e cliente', () => {
+  const m = E.modeloPorId('CHICOTE_50x30');
+  const d = E.dadosCaboPedido({ codigo: 'VPB-098', descricao: 'Cabo Elétrico Modular para Conexão do Circuito de Porta de Pavimento para Elevador 4.0M - Ref.: BST', quantidade: 9, unidade: 'PC', pedido: '30463', cliente: 'LEANDRO MOTTA', op: 'OP-0007' });
+  assert.equal(d.chicote_txt, 'VPB-098 | 30463');
+  assert.ok(!/Ref\./.test(d.desc_txt));
+  assert.equal(d.rodape_txt, 'OP-0007 · LEANDRO MOTTA');
+  const metro = E.dadosCaboPedido({ codigo: 'VPEL-529n', descricao: 'Cabo Manobra Elétrico com 23 Vias (NACIONAL) - Ref.: DRAKA', quantidade: 40, unidade: 'M', pedido: '30463', op: 'OP-0007-C1' });
+  assert.equal(metro.chicote_txt, 'VPEL-529n | 40 m');
+  assert.ok(E.renderZPL(m, d, { dpi: 203 }).zpl.includes('VPB-098'));
+});
+
+test('Chicotes da porta oposta (GS2, EDP2, DC2, DEN2) só com a opção marcada', () => {
+  const cods = ['GS2', 'EDP2', 'DC2', 'DEN2'];
+  cods.forEach((k) => {
+    const c = E.CHICOTES.find((x) => x.codigo === k);
+    assert.ok(c, k);
+    assert.equal(E.chicoteDisponivel(c, 'MRL', false), false);
+    assert.equal(E.chicoteDisponivel(c, 'MRL', true), true);
+  });
+  assert.equal(E.dadosChicote({ chicote: 'GS2', pedido: '1212', tipo_obra: 'novo' }).desc_txt, 'Contato de trinco da porta de cabina');
 });

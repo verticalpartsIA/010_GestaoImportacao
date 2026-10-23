@@ -485,7 +485,7 @@
   async function listarPendentes() {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data: cots, error } = await c.from('cotacoes_elevador_fornecedor')
-      .select('id, numero_documento, fornecedor, formulario_elevador_id, status, responded_at, categoria_produto')
+      .select('id, numero_documento, revisao, fornecedor, formulario_elevador_id, status, responded_at, categoria_produto')
       .in('status', ['respondido', 'em_analise', 'aprovada']).eq('categoria_produto', 'elevador').order('responded_at', { ascending: false });
     if (error) throw error;
 
@@ -510,23 +510,55 @@
        anterior como "substituída" na fila, pra ninguém precificar a versão
        velha sem perceber. Falha de leitura não derruba a fila. */
     const { data: irmas } = formularioIds.length
-      ? await c.from('cotacoes_elevador_fornecedor').select('id, formulario_elevador_id, fornecedor, categoria_produto, numero_documento, created_at')
+      ? await c.from('cotacoes_elevador_fornecedor').select('id, formulario_elevador_id, fornecedor, categoria_produto, numero_documento, revisao, created_at')
           .in('formulario_elevador_id', formularioIds).is('excluido_em', null)
       : { data: [] };
+    const mesmaFamilia = (cot) => (irmas || []).filter((x) => x.id !== cot.id && x.formulario_elevador_id === cot.formulario_elevador_id
+      && x.fornecedor === cot.fornecedor && x.categoria_produto === cot.categoria_produto);
     const substituidaPor = (cot, createdAt) => {
-      const novas = (irmas || []).filter((x) => x.id !== cot.id && x.formulario_elevador_id === cot.formulario_elevador_id
-        && x.fornecedor === cot.fornecedor && x.categoria_produto === cot.categoria_produto && String(x.created_at) > String(createdAt));
+      const novas = mesmaFamilia(cot).filter((x) => String(x.created_at) > String(createdAt));
       novas.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
       return novas[0] ? novas[0].numero_documento : null;
     };
     const criadoEm = {}; (irmas || []).forEach((x) => { criadoEm[x.id] = x.created_at; });
+
+    /* 23/10 (pedido do usuário) — a letra de revisão é obrigatória em toda
+       família com 2+ versões, mesmo na ORIGINAL: o 1º envio só passou a
+       ganhar letra própria a partir de hoje (ver gerar() em
+       cotacao-elevador-fornecedor-store.js); cotações já existentes com a
+       original sem letra (revisao null) continuam gravadas exatamente como
+       foram mandadas ao fornecedor por e-mail/WhatsApp — numero_documento
+       NUNCA é reescrito aqui. Só o RÓTULO exibido nesta fila ganha "-A"
+       quando a original não tem letra mas já tem uma irmã (nova versão
+       existe de verdade). Família de 1 versão só continua sem letra.
+
+       23/10 — achado real do Codex (PR #1073): numa família CRIADA ANTES
+       desta mudança (regra antiga: original sem letra, 1º reenvio já
+       nascia "A" — ver "RFQ ao fornecedor — letra de revisão em todo
+       reenvio", 20/10), uma irmã de verdade pode JÁ ser "…-A". Forçar
+       "-A" na original colidiria com o rótulo dela (duas linhas mostrando
+       o mesmo número). Só sintetiza "-A" quando nenhuma irmã REAL já usa
+       essa letra — caso colida, deixa a original sem letra (rótulo
+       ambíguo é pior que nenhum). */
+    const rotuloComLetra = (cot) => {
+      if (cot.revisao) return cot.numero_documento;
+      const irmasReais = mesmaFamilia(cot);
+      if (!irmasReais.length || irmasReais.some((x) => x.revisao === 'A')) return cot.numero_documento;
+      return `${cot.numero_documento}-A`;
+    };
 
     const daCotacao = (cots || []).map((cot) => {
       const form = formPorId[cot.formulario_elevador_id] || {};
       const pz = pzPorCotacao[cot.id];
       return {
         substituidaPor: criadoEm[cot.id] ? substituidaPor(cot, criadoEm[cot.id]) : null,
-        cotacaoFornecedorId: cot.id, numeroDocumentoFornecedor: cot.numero_documento, fornecedor: cot.fornecedor,
+        cotacaoFornecedorId: cot.id, numeroDocumentoFornecedor: rotuloComLetra(cot), fornecedor: cot.fornecedor,
+        /* 23/10 (pedido do usuário) — a letra desta LINHA (a revisão real
+           deste documento, nunca sintetizada) passa a acompanhar o Nº da
+           cotação ("mãe") exibido na fila, não só o numero_documento do
+           fornecedor. Null quando o documento não tem letra própria (não
+           inventa "-A" aqui — mesma cautela do rotuloComLetra acima). */
+        revisao: cot.revisao || null,
         formularioElevadorId: cot.formulario_elevador_id, numeroCotacao: form.numero_cotacao ?? null,
         clienteNome: (form.clientes && form.clientes.razao_social) || null, clienteCnpj: (form.clientes && form.clientes.cnpj) || null,
         respondedAt: cot.responded_at, precificacaoId: pz ? pz.id : null, precificacaoStatus: pz ? pz.status : null,
@@ -660,17 +692,57 @@
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const rascunho = await montarRascunho(formularioElevadorId, cotacaoFornecedorId);
     delete rascunho._formulario;
-    let numero_documento;
-    if (rascunho.numero_cotacao != null) {
-      numero_documento = window.MasterIdEngine.etapaId('precificacao', rascunho.numero_cotacao);
-    } else {
+
+    if (rascunho.numero_cotacao == null) {
       const { data, error } = await c.rpc('gerar_numero_precificacao_elevador');
       if (error) throw error;
-      numero_documento = data;
+      const { data: pz, error: e2 } = await c.from('precificacoes_elevador').insert({ ...rascunho, numero_documento: data }).select().single();
+      if (e2) throw e2;
+      return pz;
     }
-    const { data, error } = await c.from('precificacoes_elevador').insert({ ...rascunho, numero_documento }).select().single();
-    if (error) throw error;
-    return data;
+
+    /* 22/10 — cada revisão do fornecedor (A, B…) ganha sua PRÓPRIA precificação:
+       reaproveita a mesma letra já atribuída à cotação do fornecedor
+       (cotacoes_elevador_fornecedor.revisao). Sem isso "VPPC-0990" colide
+       (numero_documento é UNIQUE) assim que a 990 original já tem precificação
+       e o fornecedor responde de novo — achado real: a cotação virou revisão B,
+       o Financeiro clicava pra abrir e levava erro, nunca conseguindo reavaliar
+       o preço com os novos valores. O retry (próxima letra livre) é só defesa
+       de corrida/caso legado — na prática já nasce certo na 1ª tentativa. */
+    let revisaoCotacao = null;
+    if (cotacaoFornecedorId) {
+      const { data: cf } = await c.from('cotacoes_elevador_fornecedor').select('revisao').eq('id', cotacaoFornecedorId).maybeSingle();
+      revisaoCotacao = (cf && cf.revisao) || null;
+    }
+    let letra = revisaoCotacao;
+    let ultimoErro = null;
+    for (let tentativa = 0; tentativa < 30; tentativa++) {
+      const numero_documento = window.MasterIdEngine.etapaId('precificacao', rascunho.numero_cotacao, letra);
+      const { data: pz, error } = await c.from('precificacoes_elevador').insert({ ...rascunho, numero_documento }).select().single();
+      if (!error) return pz;
+      ultimoErro = error;
+      if (error.code !== '23505') throw error;   // só repete em duplicidade de numero_documento
+
+      /* 23/10 (achado de review, corrigido antes de reportar) — corrida real:
+         2 usuários clicam "Abrir" na mesma linha ao mesmo tempo (ou
+         duplo-clique), ambos leem o mesmo revisaoCotacao e tentam o MESMO
+         numero_documento; o 1º cria a precificação desta cotação/formulário,
+         o 2º colide (23505). Sem esta checagem, o 2º avançava direto pra
+         próxima letra livre e criava uma 2ª precificação pra MESMA cotação a
+         fornecedor/formulário direto — listarPendentes() indexa por
+         cotacao_fornecedor_id/formulario_elevador_id sem ordenação (última
+         linha lida vence), então o trabalho feito na 1ª podia sumir da fila
+         sem aviso. Sempre reaproveitar a que já existe pra esta MESMA
+         entidade antes de tentar outra letra — só avança quando a colisão é
+         de outra cotação de verdade (nunca visto em produção). */
+      const { data: existente } = cotacaoFornecedorId
+        ? await c.from('precificacoes_elevador').select('*').eq('cotacao_fornecedor_id', cotacaoFornecedorId).order('created_at', { ascending: true }).limit(1).maybeSingle()
+        : await c.from('precificacoes_elevador').select('*').eq('formulario_elevador_id', formularioElevadorId).is('cotacao_fornecedor_id', null).order('created_at', { ascending: true }).limit(1).maybeSingle();
+      if (existente) return existente;
+
+      letra = window.MasterIdEngine.proximaRevisao(letra);
+    }
+    throw ultimoErro || new Error('Não foi possível gerar um número de precificação livre.');
   }
 
   async function obter(id) {
@@ -927,11 +999,36 @@
   async function criarPropostaAutomatica(pz) {
     const c = sb();
     if (!c || pz.numero_cotacao == null || !window.PropostaHeranca || !window.PropostaStore || !window.MasterIdEngine) return;
-    const { data: existente } = await c.from('propostas').select('id').eq('numero_cotacao', pz.numero_cotacao).maybeSingle();
-    if (existente) return; // já tem proposta pra essa cotação — não duplica
-    const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao);
+
+    /* 23/10 — mesma letra de revisão que criar() já usa pra dar Nº próprio à
+       Precificação (cotacoes_elevador_fornecedor.revisao) agora também vira
+       o sufixo da Proposta (VPPR-0990-B) — pedido do usuário: depois de
+       instalado, a Proposta tem que dizer qual revisão de preço venceu.
+       Sem letra (cotação original, ou direto-pra-precificação sem
+       cotacao_fornecedor_id) o Nº sai igual a sempre: VPPR-0990. */
+    let letra = null;
+    if (pz.cotacao_fornecedor_id) {
+      const { data: cf } = await c.from('cotacoes_elevador_fornecedor').select('revisao').eq('id', pz.cotacao_fornecedor_id).maybeSingle();
+      letra = (cf && cf.revisao) || null;
+    }
+
+    /* "Já tem proposta" agora é escopado POR REVISÃO, não só pelo Nº da
+       cotação — senão a revisão B nunca criaria a Proposta dela, barrada
+       pela Proposta já existente da revisão original/anterior. */
+    const { data: existentes } = await c.from('propostas').select('id, numero_documento')
+      .eq('numero_cotacao', pz.numero_cotacao).eq('proposal_type', 'elevador');
+    const jaTemEstaRevisao = (existentes || []).some((p) => (window.MasterIdEngine.parseRevisao(p.numero_documento) || null) === letra);
+    if (jaTemEstaRevisao) return;
+
+    /* precificacaoId: pz.id — pina NESTA precificação (achado real do Codex,
+       23/10): sem isso, prefillPorNumeroCotacao() prefere qualquer
+       precificação 'finalizado' da família, e se a original já estava
+       finalizada quando esta (revisão B) acabou de ser aprovada, o prefill
+       podia devolver os preços da original mesmo a Proposta nascendo
+       rotulada "-B". */
+    const r = await window.PropostaHeranca.prefillPorNumeroCotacao(pz.numero_cotacao, { precificacaoId: pz.id });
     if (!r.encontrado) return;
-    const numero = window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao);
+    const numero = window.MasterIdEngine.etapaId('proposta', pz.numero_cotacao, letra);
     const valorUnit = Number((r.prefill.elevador || {}).valores?.valorUnit) || 0;
     const quantidade = Number((r.prefill.elevador || {}).valores?.quantidade) || 1;
     /* deepMergeProposta (não deepMergeHeranca): proposta nova (editId: null),
@@ -1032,7 +1129,7 @@
     devolverParaVendas,
     listarParametrosFiscais, salvarParametrosFiscais,
     listarPendentes, criar, obter, salvar, calcularEsalvar,
-    camposObrigatoriosFaltando, aprovar, ressincronizarDoFornecedor,
+    camposObrigatoriosFaltando, aprovar, criarPropostaAutomatica, ressincronizarDoFornecedor,
     parseContainerNo, buscarContainerCustoPorIso, enriquecerContainersComCusto, divergenciasContainerComCadastro,
     classificarMaoDeObraUnidade, buscarMaoDeObraAutomatica, atualizarMaoDeObra, renumerarPorParadas, montarBaseInputs,
     acrescentarEquipamento, removerEquipamento, restaurarEquipamentoMO,

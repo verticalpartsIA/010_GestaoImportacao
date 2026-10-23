@@ -1158,7 +1158,11 @@ function FECotacaoFornecedorModal({ formularioId, unidades, numeroCotacao, onClo
         if (anteriorDoc) novaVersao = { revisao: cot.revisao, anterior: anteriorDoc.numero_documento, anteriorRespondida: anteriorDoc.status === 'respondido' || !!anteriorDoc.responded_at };
       }
       const url = store.cotacaoUrl(cot.token);
-      const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.etapaId('cotacao', numeroCotacao)}` : '';
+      /* 23/10 (pedido do usuário) — "Cotação Nº VPCT-0990" no e-mail/WhatsApp
+         ao fornecedor passa a levar a MESMA letra de revisão deste
+         documento (cot.revisao) — antes saía sempre sem letra, mesmo num
+         reenvio já lettered. */
+      const numeroTxt = numeroCotacao != null ? ` — Cotação Nº ${window.MasterIdEngine.etapaId('cotacao', numeroCotacao, cot.revisao)}` : '';
       /* 06/10 — assunto e corpo em PT-BR / EN-US / 中文 (fonte única no store). */
       const unidTxt = grupo.unidades.map((u) => u.identificador).join(', ');
       const { subject: assuntoRfq, text: msg } = store.mensagemRfq({

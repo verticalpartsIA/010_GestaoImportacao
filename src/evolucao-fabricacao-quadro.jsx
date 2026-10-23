@@ -59,6 +59,11 @@ const FQ_CSS = `
 .fq-fiacao-item.feito{border-color:#16a34a;background:#f0fdf4}
 .fq-fiacao-item.is-disabled{cursor:default}
 .fq-fiacao-check{width:20px;height:20px;margin-top:1px;flex:0 0 20px}
+.fq-toggle{border:1px solid var(--border);background:transparent;border-radius:6px;width:30px;height:30px;display:grid;place-items:center;cursor:pointer;color:var(--fg2);font-size:14px;flex:0 0 30px}
+.fq-toggle:hover{background:var(--bg-hover, rgba(0,0,0,.05))}
+.fq-resumo{margin-top:8px;font-size:12.5px;color:var(--fg2);display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.fq-info{display:flex;gap:6px 18px;flex-wrap:wrap;margin-top:6px;font-size:12px;color:var(--fg3)}
+.fq-info b{color:var(--fg1);font-weight:600}
 .fq-concluido{display:inline-flex;align-items:center;gap:6px;font-size:12.5px;font-weight:700;color:#0a7a3d;background:#dcfce7;border-radius:999px;padding:4px 12px;margin-top:8px}
 `;
 
@@ -71,6 +76,40 @@ function fqDataHora(v) {
   if (!v) return null;
   const d = new Date(v);
   return Number.isNaN(d.getTime()) ? null : d.toLocaleString('pt-BR');
+}
+
+/* Datas puras 'AAAA-MM-DD' (pcp_pedidos.data_pedido/data_previsao, pcp_ordens.prazo_entrega): sem new Date('aaaa-mm-dd'),
+   que cai um dia no fuso do Brasil. */
+function fqDataISO(v) {
+  const m = /^(\d{4})-(\d{2})-(\d{2})/.exec(String(v || ''));
+  return m ? `${m[3]}/${m[2]}/${m[1]}` : null;
+}
+function fqHojeISO() {
+  const d = new Date();
+  return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+}
+/* Dias úteis (seg–sex) de 'de' (exclusive) até 'ate' (inclusive); negativo se 'ate' já passou. Feriados não considerados
+   (mesma regra de pcp-pedido-sla.js). */
+function fqDiasUteis(de, ate) {
+  const p = (x) => { const [a, m, d] = x.slice(0, 10).split('-').map(Number); return new Date(a, m - 1, d); };
+  let a = p(de); const b = p(ate);
+  const sinal = b >= a ? 1 : -1;
+  let n = 0;
+  while (a.getTime() !== b.getTime()) {
+    a.setDate(a.getDate() + sinal);
+    const w = a.getDay();
+    if (w !== 0 && w !== 6) n += sinal;
+  }
+  return n;
+}
+/* SLA do prazo de entrega: quanto falta (ou quanto passou) em dias úteis. */
+function fqSlaPrazo(prazoISO) {
+  if (!prazoISO) return null;
+  const n = fqDiasUteis(fqHojeISO(), prazoISO);
+  if (n < 0) return { texto: `Atrasada ${Math.abs(n)} dia(s) útil(eis)`, variant: 'danger' };
+  if (n === 0) return { texto: 'Vence hoje', variant: 'warning' };
+  if (n <= 2) return { texto: `Faltam ${n} dia(s) útil(eis)`, variant: 'warning' };
+  return { texto: `No prazo · faltam ${n} dias úteis`, variant: 'success' };
 }
 
 function fqCliente(ordem) {
@@ -104,6 +143,19 @@ function fqMergeStatus(itens, status) {
       fabricacao_quadro_itens: it,
     };
   });
+}
+
+function fqNorm(v) {
+  return String(v == null ? '' : v).normalize('NFD').replace(/[\u0300-\u036f]/g, '').toLowerCase();
+}
+
+/* Texto pesquisável da OP: obra (título/produto/cliente), nº da OP e
+   códigos do pedido (pedido de venda, nº do pedido do quadro, cotação). */
+function fqTextoBusca(o, extra) {
+  const q = o.quadros_comando || {};
+  const e = extra || {};
+  return fqNorm([o.numero, o.titulo, o.produto, fqCliente(o), o.pedido_codigo, q.numero_pedido, o.numero_cotacao,
+    e.numeroPedidoOmie, (e.codigosFalta || []).join(' ')].join(' | '));
 }
 
 function FQPasso({ s, atual, pausado, podeDesmarcar, busy, onToggle }) {
@@ -159,7 +211,21 @@ function FQFiacao({ fiacaoStatus, podeDesmarcar, busy, onToggle }) {
   );
 }
 
-function FQOcorrencias({ ocorrencias }) {
+function FQOcorrencias({ ocorrencias, bomItens, busy, onAbrir, onResolver }) {
+  const [aberto, setAberto] = React.useState(false);
+  const [codigo, setCodigo] = React.useState('');
+  const [temFrente, setTemFrente] = React.useState(null);
+  const descricaoDoCodigo = React.useMemo(() => {
+    const alvo = codigo.trim().toLowerCase();
+    const it = alvo && (bomItens || []).find((b) => (b.sku || '').toLowerCase() === alvo);
+    return it ? it.descricao : null;
+  }, [codigo, bomItens]);
+  const podeEnviar = codigo.trim().length > 0 && temFrente !== null && !busy;
+  const enviar = async () => {
+    if (!podeEnviar) return;
+    const ok = await onAbrir(codigo.trim(), descricaoDoCodigo, temFrente);
+    if (ok) { setCodigo(''); setTemFrente(null); setAberto(false); }
+  };
   const lista = React.useMemo(() => {
     const l = [...(ocorrencias || [])];
     l.sort((a, b) => (a.status === 'aberta' ? 0 : 1) - (b.status === 'aberta' ? 0 : 1));
@@ -184,14 +250,36 @@ function FQOcorrencias({ ocorrencias }) {
                 {' · desde ' + (fqDataHora(oc.aberta_em) || '—')}
               </div>
             </div>
+            {aberta && <Button variant="outline" size="sm" disabled={busy} onClick={() => onResolver(oc.id)}>Chegou — resolver</Button>}
           </div>
         );
       })}
+      {!aberto && <div style={{ marginTop: 8 }}><Button variant="outline" size="sm" onClick={() => setAberto(true)}>+ Criar ocorrência</Button></div>}
+      {aberto && (
+        <div style={{ marginTop: 10, padding: 12, border: '1px solid var(--border)', borderRadius: 8 }}>
+          <div className="fq-oc-h">Nova ocorrência — falta de material</div>
+          <input type="text" list={'fq-bom-' + (bomItens && bomItens.length ? 'dl' : 'x')} value={codigo} disabled={busy}
+            onChange={(e) => setCodigo(e.target.value)} placeholder="Código do produto que falta (ex.: VPMP-303)"
+            aria-label="Código do produto que falta"
+            style={{ width: '100%', maxWidth: 420, padding: '8px 10px', border: '1px solid var(--border)', borderRadius: 6, fontSize: 13, boxSizing: 'border-box', background: 'var(--bg-elev, var(--bg, #fff))', color: 'var(--fg1)' }} />
+          <datalist id="fq-bom-dl">{(bomItens || []).map((b) => <option key={b.sku} value={b.sku}>{b.descricao}</option>)}</datalist>
+          {descricaoDoCodigo && <div className="fq-meta">{descricaoDoCodigo}</div>}
+          <div className="fq-meta" style={{ margin: '8px 0 4px' }}>Tem frente de trabalho para continuar enquanto espera?</div>
+          <div className="row" style={{ gap: 8, flexWrap: 'wrap' }}>
+            <Button variant={temFrente === true ? 'primary' : 'outline'} size="sm" disabled={busy} onClick={() => setTemFrente(true)}>Sim, tem</Button>
+            <Button variant={temFrente === false ? 'primary' : 'outline'} size="sm" disabled={busy} onClick={() => setTemFrente(false)}>Não, vai parar</Button>
+          </div>
+          <div className="row" style={{ gap: 8, marginTop: 10 }}>
+            <Button variant="primary" size="sm" disabled={!podeEnviar} onClick={enviar}>Registrar ocorrência</Button>
+            <Button variant="outline" size="sm" disabled={busy} onClick={() => setAberto(false)}>Cancelar</Button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
 
-function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar }) {
+function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar, pedido, aberto, onToggleAberto }) {
   const [link, setLink] = React.useState(null);
   const [busy, setBusy] = React.useState(false);
 
@@ -270,9 +358,41 @@ function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar }) {
     catch (e) { window.toast?.('Não foi possível copiar — copie manualmente abaixo.', 'warning'); }
   };
 
+  const bomItens = React.useMemo(() => {
+    const lista = (estado && estado.ordem && estado.ordem.quadros_comando && estado.ordem.quadros_comando.quadros_comando_bom_itens) || [];
+    const porSku = {}; lista.forEach((it) => { if (it && it.sku && !porSku[it.sku]) porSku[it.sku] = it; });
+    return Object.values(porSku);
+  }, [estado]);
+  const abrirOcorrencia = async (codigo, descricao, temFrente) => {
+    setBusy(true);
+    try {
+      await window.FabricacaoQuadroStore.abrirOcorrencia(ordem.id, codigo, descricao, temFrente);
+      window.toast?.('Ocorrência registrada.', 'success');
+      await onRecarregar();
+      return true;
+    } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); return false; }
+    finally { setBusy(false); }
+  };
+  const resolverOcorrencia = async (id) => {
+    setBusy(true);
+    try {
+      await window.FabricacaoQuadroStore.resolverOcorrencia(id);
+      window.toast?.('Ocorrência resolvida.', 'success');
+      await onRecarregar();
+    } catch (e) { window.toast?.('Erro: ' + (e.message || e), 'error'); }
+    finally { setBusy(false); }
+  };
+
   const cliente = fqCliente(ordem);
-  const nPedido = (ordem.quadros_comando && ordem.quadros_comando.numero_pedido) || null;
+  const nPedido = (ordem.quadros_comando && ordem.quadros_comando.numero_pedido) || null; // interno do site
+  const nPedidoOmie = ordem.numero_pedido_omie || null;
+  const itensPedido = Array.isArray(ordem.itens_pedido) ? ordem.itens_pedido : [];
   const tp = fqTensaoPotencia(ordem);
+  // Prazo de entrega prometido = previsão do pedido no Omie; sem pedido ligado, o prazo da própria OP.
+  const prazoISO = (pedido && pedido.data_previsao) || ordem.prazo_entrega || null;
+  const sla = fqSlaPrazo(prazoISO);
+  const criadoEm = fqDataISO(pedido && pedido.data_pedido);
+  const vendedor = pedido && pedido.vendedor_nome;
   const linkUrl = link ? window.location.origin + '/fabricacao-quadro/' + link.token : null;
 
   if (estado && estado.erro) {
@@ -312,14 +432,24 @@ function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar }) {
           </div>
           <div className="fq-cliente">{cliente}</div>
           <div className="fq-meta">
-            {[nPedido ? 'Nº Pedido: ' + nPedido : null, tp ? 'Tensão/Potência: ' + tp : null,
-              ordem.numero_cotacao ? 'Cotação Nº ' + ordem.numero_cotacao : null,
-              ordem.prazo_entrega ? 'Prazo: ' + fqData(ordem.prazo_entrega) : null]
+            {[nPedidoOmie ? 'Pedido Omie: ' + nPedidoOmie : null, nPedido ? (nPedidoOmie ? 'Pedido de quadro interno: ' : 'Nº Pedido: ') + nPedido : null, tp ? 'Tensão/Potência: ' + tp : null,
+              ordem.numero_cotacao ? 'Cotação Nº ' + ordem.numero_cotacao : null]
               .filter(Boolean).join(' · ')}
           </div>
+          <div className="fq-info">
+            <span>Pedido criado em: <b>{criadoEm || '—'}</b></span>
+            <span>Vendedor: <b>{vendedor || '—'}</b></span>
+            <span>Prazo de entrega: <b>{fqDataISO(prazoISO) || '—'}</b></span>
+            {sla && !concluido && <Badge variant={sla.variant}>SLA: {sla.texto}</Badge>}
+          </div>
+          {itensPedido.length > 0 && <div className="fq-meta">Itens do pedido: {itensPedido.join(', ')}</div>}
           {concluido && <div className="fq-concluido">✓ Concluído</div>}
         </div>
         <div className="fq-pct">
+          <button type="button" className="fq-toggle" onClick={onToggleAberto} aria-expanded={aberto}
+            title={aberto ? 'Recolher' : 'Expandir etapas, fiação e ocorrências'} aria-label={aberto ? 'Recolher OP' : 'Expandir OP'}>
+            {aberto ? '▾' : '▸'}
+          </button>
           <div className="fq-anel" title="Progresso ponderado da fabricação"
             style={{ background: `conic-gradient(${pausado ? 'var(--vp-danger)' : 'var(--vp-success)'} ${pct * 3.6}deg, var(--border) 0)` }}>
             <span>{pct}%</span>
@@ -330,7 +460,16 @@ function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar }) {
         </div>
       </div>
 
-      {pausado && (
+      {!aberto && (
+        <div className="fq-resumo">
+          {concluido ? <span>Todas as etapas concluídas.</span>
+            : <span>Etapa atual: <b>{idxAtual >= 0 ? statusMerged[idxAtual].fabricacao_quadro_itens.texto : '—'}</b></span>}
+          {pausado && <Badge variant="danger">Pausada</Badge>}
+          {(estado.ocorrencias || []).some((o) => o.status === 'aberta') && <Badge variant="warning">Ocorrência aberta</Badge>}
+        </div>
+      )}
+
+      {aberto && pausado && (
         <div className="alert danger" style={{ marginTop: 10, borderRadius: 6 }}>
           <div>
             <div className="alert__title">⏸ Fabricação pausada</div>
@@ -339,22 +478,26 @@ function FQCard({ ordem, itens, estado, resumo, podeDesmarcar, onRecarregar }) {
         </div>
       )}
 
-      {linkUrl && (
+      {aberto && linkUrl && (
         <div className="fq-link-box">
           Link fixo do quadro (mande pro operador): <a href={linkUrl} target="_blank" rel="noopener noreferrer">{linkUrl}</a>
         </div>
       )}
 
-      <div className="fq-trilha" role="list" aria-label="Etapas da fabricação do quadro">
-        {statusMerged.map((s, i) => (
-          <FQPasso key={s.item_id} s={s} atual={i === idxAtual} pausado={pausado}
-            podeDesmarcar={podeDesmarcar} busy={busy} onToggle={onToggle} />
-        ))}
-      </div>
+      {aberto && (
+        <>
+          <div className="fq-trilha" role="list" aria-label="Etapas da fabricação do quadro">
+            {statusMerged.map((s, i) => (
+              <FQPasso key={s.item_id} s={s} atual={i === idxAtual} pausado={pausado}
+                podeDesmarcar={podeDesmarcar} busy={busy} onToggle={onToggle} />
+            ))}
+          </div>
 
-      <FQFiacao fiacaoStatus={fiacaoStatus} podeDesmarcar={podeDesmarcar} busy={busy} onToggle={onToggleFiacao} />
+          <FQFiacao fiacaoStatus={fiacaoStatus} podeDesmarcar={podeDesmarcar} busy={busy} onToggle={onToggleFiacao} />
 
-      <FQOcorrencias ocorrencias={estado.ocorrencias} />
+          <FQOcorrencias ocorrencias={estado.ocorrencias} bomItens={bomItens} busy={busy} onAbrir={abrirOcorrencia} onResolver={resolverOcorrencia} />
+        </>
+      )}
     </div>
   );
 }
@@ -365,11 +508,16 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
   const [estados, setEstados] = React.useState({});
   const [erroGeral, setErroGeral] = React.useState(null);
   const [podeDesmarcar, setPodeDesmarcar] = React.useState(false);
+  const [busca, setBusca] = React.useState('');
+  const [numPedidos, setNumPedidos] = React.useState({});
+  const [pedidos, setPedidos] = React.useState({});
+  const ord = window.useOrdenacao(); // ▲ menor→maior · ▼ maior→menor · 3º clique volta à ordem original (prazo)
+  const [abertos, setAbertos] = React.useState({}); // OP aberta pelo botão ▸ (começa tudo recolhido)
 
   const carregarEstado = React.useCallback(async (ordemId) => {
     try {
-      const { status, ocorrencias, fiacaoAplicavel, fiacaoStatus } = await window.FabricacaoQuadroStore.obterEstadoOrdem(ordemId);
-      setEstados((prev) => ({ ...prev, [ordemId]: { status, ocorrencias, fiacaoAplicavel, fiacaoStatus } }));
+      const { ordem, status, ocorrencias, fiacaoAplicavel, fiacaoStatus } = await window.FabricacaoQuadroStore.obterEstadoOrdem(ordemId);
+      setEstados((prev) => ({ ...prev, [ordemId]: { ordem, status, ocorrencias, fiacaoAplicavel, fiacaoStatus } }));
     } catch (e) {
       setEstados((prev) => ({ ...prev, [ordemId]: { erro: e.message || String(e) } }));
     }
@@ -384,6 +532,23 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
       setItens(it);
       setOrdens(ops);
       setErroGeral(null);
+      // Nº do pedido de venda do Omie (a busca aceita o número que o cliente/vendas conhece, não só o código interno)
+      try {
+        const cods = [...new Set(ops.map((o) => o.pedido_codigo).filter((x) => x != null))];
+        if (cods.length) {
+          const sbc = window.__VP_SB.sb;
+          const { data: ps } = await sbc.from('pcp_pedidos').select('codigo_pedido, numero_pedido, data_pedido, data_previsao').in('codigo_pedido', cods);
+          const m = {}, info = {};
+          (ps || []).forEach((p) => { m[p.codigo_pedido] = p.numero_pedido; info[p.codigo_pedido] = { ...p }; });
+          // Vendedor em consulta à parte: se a coluna ainda não existir no banco, só some o campo (nada mais quebra).
+          try {
+            const { data: vs, error: ev } = await sbc.from('pcp_pedidos').select('codigo_pedido, vendedor_nome').in('codigo_pedido', cods);
+            if (!ev) (vs || []).forEach((v) => { if (info[v.codigo_pedido]) info[v.codigo_pedido].vendedor_nome = v.vendedor_nome; });
+          } catch (e) { /* sem vendedor */ }
+          setNumPedidos(m);
+          setPedidos(info);
+        }
+      } catch (e) { /* a busca segue pelos outros campos */ }
       await Promise.all(ops.map((o) => carregarEstado(o.id)));
     } catch (e) {
       setErroGeral(e.message || String(e));
@@ -417,6 +582,30 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
     return out;
   }, [itens, ordens, estados]);
 
+  const ordensFiltradas = React.useMemo(() => {
+    if (!ordens) return null;
+    const termos = fqNorm(busca).split(/\s+/).filter(Boolean);
+    if (!termos.length) return ordens;
+    return ordens.filter((o) => {
+      const oc = (estados[o.id] && estados[o.id].ocorrencias) || [];
+      const t = fqTextoBusca(o, { numeroPedidoOmie: numPedidos[o.pedido_codigo], codigosFalta: oc.map((x) => x.codigo_produto) });
+      return termos.every((x) => t.includes(x));
+    });
+  }, [ordens, busca, estados, numPedidos]);
+
+  const ordensOrdenadas = React.useMemo(() => {
+    if (!ordensFiltradas) return null;
+    const ped = (o) => pedidos[o.pedido_codigo] || {};
+    return ord.aplicar(ordensFiltradas, {
+      prazo: (o) => ped(o).data_previsao || o.prazo_entrega || null,
+      criado: (o) => ped(o).data_pedido || null,
+      progresso: (o) => (resumos[o.id] ? resumos[o.id].pct : null),
+      pedido: (o) => (o.numero_pedido_omie ? Number(o.numero_pedido_omie) : null),
+      cliente: (o) => fqCliente(o),
+      vendedor: (o) => ped(o).vendedor_nome || null,
+    });
+  }, [ordensFiltradas, ord.ord, pedidos, resumos]);
+
   const totalOps = ordens ? ordens.length : 0;
   const listaResumos = Object.values(resumos);
   const pausadas = listaResumos.filter((r) => r.pausado).length;
@@ -449,13 +638,49 @@ function EvolucaoFabricacaoQuadroPage({ setRoute, setSubsel }) {
         </div>
       )}
 
+      {ordens && ordens.length > 0 && (
+        <div className="row" style={{ gap: 10, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+          <input type="search" value={busca} onChange={(e) => setBusca(e.target.value)}
+            placeholder="Buscar por código, cliente ou nº do pedido…" aria-label="Buscar por código, cliente ou número do pedido"
+            style={{ flex: '1 1 320px', maxWidth: 480, padding: '8px 12px', border: '1px solid var(--border)', borderRadius: 8, fontSize: 13, background: 'var(--bg-elev, var(--bg, #fff))', color: 'var(--fg1)' }} />
+          {busca && <Button variant="outline" size="sm" onClick={() => setBusca('')}>Limpar</Button>}
+          <Button variant="outline" size="sm" onClick={() => {
+            const todosAbertos = ordensFiltradas.length > 0 && ordensFiltradas.every((o) => abertos[o.id]);
+            setAbertos((a) => { const n = { ...a }; ordensFiltradas.forEach((o) => { n[o.id] = !todosAbertos; }); return n; });
+          }}>{ordensFiltradas.length > 0 && ordensFiltradas.every((o) => abertos[o.id]) ? '▾ Recolher todas' : '▸ Expandir todas'}</Button>
+          {busca && <span className="fq-meta">{ordensFiltradas.length} de {totalOps} OP(s)</span>}
+        </div>
+      )}
+
+      {ordens && ordens.length > 1 && (
+        <div className="row" style={{ gap: 6, alignItems: 'center', marginBottom: 14, flexWrap: 'wrap' }}>
+          <span className="fq-meta" style={{ marginRight: 4 }}>Ordenar por:</span>
+          {[['prazo', 'Prazo de entrega'], ['criado', 'Pedido criado em'], ['progresso', 'Progresso'], ['pedido', 'Nº do pedido'], ['cliente', 'Cliente'], ['vendedor', 'Vendedor']].map(([k, r]) => {
+            const ativo = ord.ord.chave === k;
+            return (
+              <Button key={k} variant={ativo ? 'primary' : 'outline'} size="sm" onClick={() => ord.alternar(k)}
+                title={ativo ? (ord.ord.dir === 1 ? 'Menor → maior. Clique para inverter (maior → menor).' : 'Maior → menor. Clique para voltar à ordem original.') : 'Clique para ordenar do menor para o maior'}
+                aria-sort={ativo ? (ord.ord.dir === 1 ? 'ascending' : 'descending') : 'none'}>
+                {r}{ativo ? (ord.ord.dir === 1 ? ' ▲' : ' ▼') : ''}
+              </Button>
+            );
+          })}
+        </div>
+      )}
+
+      {ordensFiltradas && ordens.length > 0 && ordensFiltradas.length === 0 && (
+        <div style={{ padding: '30px 0', textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma OP encontrada para "{busca}".</div>
+      )}
+
       {ordens && ordens.length === 0 && (
         <div style={{ padding: '40px 0', textAlign: 'center', color: 'var(--fg3)', fontSize: 13 }}>Nenhuma OP de quadro de comando em aberto no momento.</div>
       )}
 
-      {ordens && itens && ordens.map((o) => (
+      {ordensOrdenadas && itens && ordensOrdenadas.map((o) => (
         <FQCard key={o.id} ordem={o} itens={itens} estado={estados[o.id]} resumo={resumos[o.id]}
-          podeDesmarcar={podeDesmarcar} onRecarregar={() => carregarEstado(o.id)} />
+          podeDesmarcar={podeDesmarcar} onRecarregar={() => carregarEstado(o.id)}
+          pedido={pedidos[o.pedido_codigo]} aberto={!!abertos[o.id]}
+          onToggleAberto={() => setAbertos((a) => ({ ...a, [o.id]: !a[o.id] }))} />
       ))}
     </div>
   );
