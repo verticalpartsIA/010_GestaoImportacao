@@ -276,7 +276,7 @@ function CotacaoElevadorFornecedorApp() {
       <div className="co-intro-head">
         <h1>Solicitação de Cotação Técnica · Technical Quotation Request · 技术询价请求</h1>
         <div className="co-num">
-          {cot.numero_documento}{header.numero_cotacao != null ? ` · Project / Cotação Nº / 项目编号 ${window.MasterIdEngine.etapaId('cotacao', header.numero_cotacao)}` : ''} · {header.data}
+          {cot.numero_documento}{header.numero_cotacao != null ? ` · Project / Cotação Nº / 项目编号 ${window.MasterIdEngine.etapaId('cotacao', header.numero_cotacao, cot.revisao)}` : ''} · {header.data}
         </div>
         {!readOnly && (
           <p className="co-lead">
@@ -300,7 +300,7 @@ function CotacaoElevadorFornecedorApp() {
       <div className="co-block">
         <div className="co-sec-lbl">Dados gerais do projeto / Project data / 项目概况</div>
         <CefSpecTable linhas={[
-          ['Nº da Cotação', 'Project Name', header.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', header.numero_cotacao) : header.numero_cotacao, '项目名称/询价编号'],
+          ['Nº da Cotação', 'Project Name', header.numero_cotacao != null ? window.MasterIdEngine.etapaId('cotacao', header.numero_cotacao, cot.revisao) : header.numero_cotacao, '项目名称/询价编号'],
           ['País', 'Country', header.pais, '国家'],
           ['Norma de projeto', 'Design Standard', header.norma_projeto, '设计标准'],
           ['Voltagem — Elevador', 'Main Power', header.tensao_principal, '电梯主电源电压'],

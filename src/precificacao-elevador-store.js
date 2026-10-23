@@ -485,7 +485,7 @@
   async function listarPendentes() {
     const c = sb(); if (!c) throw new Error('Supabase não carregado');
     const { data: cots, error } = await c.from('cotacoes_elevador_fornecedor')
-      .select('id, numero_documento, fornecedor, formulario_elevador_id, status, responded_at, categoria_produto')
+      .select('id, numero_documento, revisao, fornecedor, formulario_elevador_id, status, responded_at, categoria_produto')
       .in('status', ['respondido', 'em_analise', 'aprovada']).eq('categoria_produto', 'elevador').order('responded_at', { ascending: false });
     if (error) throw error;
 
@@ -510,23 +510,49 @@
        anterior como "substituída" na fila, pra ninguém precificar a versão
        velha sem perceber. Falha de leitura não derruba a fila. */
     const { data: irmas } = formularioIds.length
-      ? await c.from('cotacoes_elevador_fornecedor').select('id, formulario_elevador_id, fornecedor, categoria_produto, numero_documento, created_at')
+      ? await c.from('cotacoes_elevador_fornecedor').select('id, formulario_elevador_id, fornecedor, categoria_produto, numero_documento, revisao, created_at')
           .in('formulario_elevador_id', formularioIds).is('excluido_em', null)
       : { data: [] };
+    const mesmaFamilia = (cot) => (irmas || []).filter((x) => x.id !== cot.id && x.formulario_elevador_id === cot.formulario_elevador_id
+      && x.fornecedor === cot.fornecedor && x.categoria_produto === cot.categoria_produto);
     const substituidaPor = (cot, createdAt) => {
-      const novas = (irmas || []).filter((x) => x.id !== cot.id && x.formulario_elevador_id === cot.formulario_elevador_id
-        && x.fornecedor === cot.fornecedor && x.categoria_produto === cot.categoria_produto && String(x.created_at) > String(createdAt));
+      const novas = mesmaFamilia(cot).filter((x) => String(x.created_at) > String(createdAt));
       novas.sort((a, b) => String(b.created_at).localeCompare(String(a.created_at)));
       return novas[0] ? novas[0].numero_documento : null;
     };
     const criadoEm = {}; (irmas || []).forEach((x) => { criadoEm[x.id] = x.created_at; });
+
+    /* 23/10 (pedido do usuário) — a letra de revisão é obrigatória em toda
+       família com 2+ versões, mesmo na ORIGINAL: o 1º envio só passou a
+       ganhar letra própria a partir de hoje (ver gerar() em
+       cotacao-elevador-fornecedor-store.js); cotações já existentes com a
+       original sem letra (revisao null) continuam gravadas exatamente como
+       foram mandadas ao fornecedor por e-mail/WhatsApp — numero_documento
+       NUNCA é reescrito aqui. Só o RÓTULO exibido nesta fila ganha "-A"
+       quando a original não tem letra mas já tem uma irmã (nova versão
+       existe de verdade). Família de 1 versão só continua sem letra.
+
+       23/10 — achado real do Codex (PR #1073): numa família CRIADA ANTES
+       desta mudança (regra antiga: original sem letra, 1º reenvio já
+       nascia "A" — ver "RFQ ao fornecedor — letra de revisão em todo
+       reenvio", 20/10), uma irmã de verdade pode JÁ ser "…-A". Forçar
+       "-A" na original colidiria com o rótulo dela (duas linhas mostrando
+       o mesmo número). Só sintetiza "-A" quando nenhuma irmã REAL já usa
+       essa letra — caso colida, deixa a original sem letra (rótulo
+       ambíguo é pior que nenhum). */
+    const rotuloComLetra = (cot) => {
+      if (cot.revisao) return cot.numero_documento;
+      const irmasReais = mesmaFamilia(cot);
+      if (!irmasReais.length || irmasReais.some((x) => x.revisao === 'A')) return cot.numero_documento;
+      return `${cot.numero_documento}-A`;
+    };
 
     const daCotacao = (cots || []).map((cot) => {
       const form = formPorId[cot.formulario_elevador_id] || {};
       const pz = pzPorCotacao[cot.id];
       return {
         substituidaPor: criadoEm[cot.id] ? substituidaPor(cot, criadoEm[cot.id]) : null,
-        cotacaoFornecedorId: cot.id, numeroDocumentoFornecedor: cot.numero_documento, fornecedor: cot.fornecedor,
+        cotacaoFornecedorId: cot.id, numeroDocumentoFornecedor: rotuloComLetra(cot), fornecedor: cot.fornecedor,
         formularioElevadorId: cot.formulario_elevador_id, numeroCotacao: form.numero_cotacao ?? null,
         clienteNome: (form.clientes && form.clientes.razao_social) || null, clienteCnpj: (form.clientes && form.clientes.cnpj) || null,
         respondedAt: cot.responded_at, precificacaoId: pz ? pz.id : null, precificacaoStatus: pz ? pz.status : null,
