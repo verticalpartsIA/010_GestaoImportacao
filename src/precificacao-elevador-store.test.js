@@ -381,7 +381,7 @@ test('GRI — herda do cadastro só em linha vazia e entra no aviso de divergên
    pro caso mais simples (sem unidades/custos — só o que o teste precisa exercitar:
    numeração). `insercoesQuePodemFalhar` simula colisão de numero_documento (23505)
    nas primeiras N tentativas de insert em precificacoes_elevador. */
-function makeFakeSbCriar({ revisaoCotacao, insercoesQuePodemFalhar = 0 } = {}) {
+function makeFakeSbCriar({ revisaoCotacao, insercoesQuePodemFalhar = 0, existentePzNaColisao = null } = {}) {
   let tentativasInsert = 0;
   const inseridos = [];
   return {
@@ -389,7 +389,7 @@ function makeFakeSbCriar({ revisaoCotacao, insercoesQuePodemFalhar = 0 } = {}) {
       return {
         select(cols) {
           return {
-            eq(_col, _val) {
+            eq(col, _val) {
               const single = async () => {
                 if (tabela === 'formularios_elevador') return { data: { numero_cotacao: 990 }, error: null };
                 if (tabela === 'cotacoes_elevador_fornecedor') {
@@ -402,9 +402,15 @@ function makeFakeSbCriar({ revisaoCotacao, insercoesQuePodemFalhar = 0 } = {}) {
               };
               const maybeSingle = async () => {
                 if (tabela === 'cotacoes_elevador_fornecedor' && cols === 'revisao') return { data: { revisao: revisaoCotacao }, error: null };
+                // busca de "existente" na colisão (criar()'s retry loop) — select('*').eq(cotacao_fornecedor_id/formulario_elevador_id, ...)
+                if (tabela === 'precificacoes_elevador' && cols === '*' && (col === 'cotacao_fornecedor_id' || col === 'formulario_elevador_id')) {
+                  return { data: existentePzNaColisao, error: null };
+                }
                 return (await single());
               };
-              return { single, maybeSingle };
+              // encadeia .is()/.order()/.limit() (busca de "existente") sem mudar o resultado final
+              const chain = { single, maybeSingle, is: () => chain, order: () => chain, limit: () => chain };
+              return chain;
             },
           };
         },
@@ -438,12 +444,21 @@ test('criar(): com cotação do fornecedor já na revisão B, nasce VPPC-0990-B 
   assert.equal(fake._tentativas(), 1, 'sem colisão, grava na 1ª tentativa');
 });
 
-test('criar(): colisão real (corrida/caso legado) tenta a próxima letra livre em vez de falhar', async () => {
-  const fake = makeFakeSbCriar({ revisaoCotacao: 'B', insercoesQuePodemFalhar: 1 });
+test('criar(): colisão de verdade com OUTRA cotação (sem registro já criado pra esta) tenta a próxima letra livre', async () => {
+  const fake = makeFakeSbCriar({ revisaoCotacao: 'B', insercoesQuePodemFalhar: 1, existentePzNaColisao: null });
   window.__VP_SB = { sb: fake };
   const pz = await criar('FORM-1', 'COT-B');
   assert.equal(pz.numero_documento, 'VPPC-0990-C', 'colidiu em B, repetiu com a próxima letra (C)');
   assert.equal(fake._tentativas(), 2);
+});
+
+test('criar(): corrida real (2 cliques simultâneos) — reaproveita a precificação que o 1º clique já criou, não duplica', async () => {
+  const jaCriada = { id: 'pz-existente', numero_documento: 'VPPC-0990-B', cotacao_fornecedor_id: 'COT-B' };
+  const fake = makeFakeSbCriar({ revisaoCotacao: 'B', insercoesQuePodemFalhar: 1, existentePzNaColisao: jaCriada });
+  window.__VP_SB = { sb: fake };
+  const pz = await criar('FORM-1', 'COT-B');
+  assert.equal(pz.id, 'pz-existente', 'devolve a precificação já criada pela OUTRA chamada, não cria uma 2ª');
+  assert.equal(fake._inseridos().length, 0, 'nenhum insert vingou — a 1ª colidiu, a checagem de existente achou a da corrida e parou ali');
 });
 
 test('criar(): sem revisão na cotação do fornecedor (original), número sai igual a antes (sem sufixo)', async () => {

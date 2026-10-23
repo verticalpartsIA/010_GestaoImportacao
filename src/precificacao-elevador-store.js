@@ -690,6 +690,24 @@
       if (!error) return pz;
       ultimoErro = error;
       if (error.code !== '23505') throw error;   // só repete em duplicidade de numero_documento
+
+      /* 23/10 (achado de review, corrigido antes de reportar) — corrida real:
+         2 usuários clicam "Abrir" na mesma linha ao mesmo tempo (ou
+         duplo-clique), ambos leem o mesmo revisaoCotacao e tentam o MESMO
+         numero_documento; o 1º cria a precificação desta cotação/formulário,
+         o 2º colide (23505). Sem esta checagem, o 2º avançava direto pra
+         próxima letra livre e criava uma 2ª precificação pra MESMA cotação a
+         fornecedor/formulário direto — listarPendentes() indexa por
+         cotacao_fornecedor_id/formulario_elevador_id sem ordenação (última
+         linha lida vence), então o trabalho feito na 1ª podia sumir da fila
+         sem aviso. Sempre reaproveitar a que já existe pra esta MESMA
+         entidade antes de tentar outra letra — só avança quando a colisão é
+         de outra cotação de verdade (nunca visto em produção). */
+      const { data: existente } = cotacaoFornecedorId
+        ? await c.from('precificacoes_elevador').select('*').eq('cotacao_fornecedor_id', cotacaoFornecedorId).order('created_at', { ascending: true }).limit(1).maybeSingle()
+        : await c.from('precificacoes_elevador').select('*').eq('formulario_elevador_id', formularioElevadorId).is('cotacao_fornecedor_id', null).order('created_at', { ascending: true }).limit(1).maybeSingle();
+      if (existente) return existente;
+
       letra = window.MasterIdEngine.proximaRevisao(letra);
     }
     throw ultimoErro || new Error('Não foi possível gerar um número de precificação livre.');
