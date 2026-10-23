@@ -410,7 +410,12 @@ function PrecificacaoElevadorPage({ setRoute, setSubsel, modo, setModo, subsel }
             )}
             {(pendentes || []).map((item) => (
               <tr key={item.cotacaoFornecedorId || ('direto-' + item.formularioElevadorId)} style={{ cursor: 'pointer' }} onClick={() => abrir(item)}>
-                <td className="mono">{item.numeroCotacao ?? '—'}</td>
+                {/* 23/10 (pedido do usuário) — a letra de revisão também aparece
+                   na "mãe" (Nº da cotação), não só no numero_documento do
+                   fornecedor: item.revisao é a revisão REAL deste documento
+                   (nunca sintetizada — ver listarPendentes()), então não há
+                   risco de colidir com outro documento real da família. */}
+                <td className="mono">{item.numeroCotacao != null ? window.MasterIdEngine.etapaId('cotacao', item.numeroCotacao, item.revisao) : '—'}</td>
                 <td>{item.clienteNome || '—'}</td>
                 <td>{item.direto ? <span className="small" title="Preço combinado por fora — sem Cotação a Fornecedor">Direto (sem fornecedor)</span> : <>{item.fornecedor}{item.numeroDocumentoFornecedor ? <span className="muted small mono"> · {item.numeroDocumentoFornecedor}</span> : null}{item.substituidaPor ? <span className="small" style={{ color: 'var(--vp-danger)', fontWeight: 700 }} title={`O fornecedor recebeu uma revisão mais nova (${item.substituidaPor}). Precifique a revisão mais nova.`}> · substituída por {item.substituidaPor}</span> : null}</>}</td>
                 <td>{item.respondedAt ? new Date(item.respondedAt).toLocaleDateString('pt-BR') : '—'}</td>
