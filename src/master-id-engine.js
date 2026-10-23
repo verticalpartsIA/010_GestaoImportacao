@@ -61,11 +61,20 @@
     obra: 'VPOB',
   };
 
-  function etapaId(etapa, numero) {
+  /* revisao (opcional, 22/10): sufixo de letra (A, B...) pendurado no final —
+     mesma letra que cotacoes_elevador_fornecedor.revisao já usa pra revisão de
+     fornecedor. Sem ela (chamada com 2 args, como sempre foi), o Nº sai igual
+     a antes — retrocompatível. Existe pra dar Nº PRÓPRIO a cada revisão de uma
+     mesma etapa (ex.: precificação de uma 2ª resposta do fornecedor), evitando
+     colisão no numero_documento UNIQUE quando a etapa da revisão anterior já
+     existe (achado real: cotação 990 virou revisão B e a Precificação não
+     conseguia abrir um registro novo porque "VPPC-0990" já estava em uso). */
+  function etapaId(etapa, numero, revisao) {
     const prefixo = PREFIXO_ETAPA[etapa];
     if (!prefixo) throw new Error(`Master ID: sem PREFIXO-ETAPA definido para etapa "${etapa}"`);
     if (numero == null) throw new Error('Master ID: numero é obrigatório');
-    return `${prefixo}-${String(numero).padStart(4, '0')}`;
+    const base = `${prefixo}-${String(numero).padStart(4, '0')}`;
+    return revisao ? `${base}-${revisao}` : base;
   }
 
   /* 1º envio ao fornecedor não tem sufixo de revisão. Cada reenvio (troca de
