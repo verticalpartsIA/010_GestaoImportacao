@@ -131,7 +131,11 @@ function CotacoesFornecedorPage({ setRoute, setSubsel }) {
       if (fCategoria !== 'Todos' && r.categoria_produto !== fCategoria) return false;
       if (!termo) return true;
       const numCot = r.dados_envio?.header?.numero_cotacao ?? r.formularios_elevador?.numero_cotacao;
-      return [r.numero_documento, cfPredioLabel(r), r.fornecedor, numCot != null ? String(numCot) : null]
+      /* 23/10 — achado real do Codex (PR #1079): faltava o rótulo formatado
+         (ex. "VPCT-0950-B", com a letra de revisão) que a coluna "Nº
+         Cotação" mostra — só o número cru não acha o que está na tela. */
+      const numCotFormatado = numCot != null ? window.MasterIdEngine.etapaId('cotacao', numCot, r.revisao) : null;
+      return [r.numero_documento, cfPredioLabel(r), r.fornecedor, numCot != null ? String(numCot) : null, numCotFormatado]
         .some((v) => (v || '').toString().toLowerCase().includes(termo));
     });
   }, [rows, tab, fFornecedor, fCategoria, busca]);

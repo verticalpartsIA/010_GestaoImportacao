@@ -343,7 +343,12 @@ function ordenarFiltrarPendentes(pendentes, busca, ord) {
   const termo = (busca || '').trim().toLowerCase();
   const filtrados = !termo ? pendentes : pendentes.filter((item) => {
     const numero = item.numeroCotacao != null ? String(item.numeroCotacao) : '';
-    return numero.includes(termo) || (item.clienteNome || '').toLowerCase().includes(termo)
+    /* 23/10 — achado real do Codex (PR #1079): a busca só comparava o
+       número cru (ex. "950"), nunca o rótulo formatado que a própria
+       coluna "Cotação Nº" mostra (ex. "VPCT-0950-B", com a letra de
+       revisão) — colar o que está visível na tela não achava nada. */
+    const numeroFormatado = item.numeroCotacao != null ? window.MasterIdEngine.etapaId('cotacao', item.numeroCotacao, item.revisao).toLowerCase() : '';
+    return numero.includes(termo) || numeroFormatado.includes(termo) || (item.clienteNome || '').toLowerCase().includes(termo)
       || (item.fornecedor || '').toLowerCase().includes(termo) || (item.numeroDocumentoFornecedor || '').toLowerCase().includes(termo);
   });
   return ord.aplicar(filtrados, {
